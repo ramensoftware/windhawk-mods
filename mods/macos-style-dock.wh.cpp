@@ -2,7 +2,7 @@
 // @id              macos-style-dock
 // @name            MacOS Style Dock
 // @description     Turns the Windows 11 taskbar into a macOS-style dock with magnifying icons
-// @version         1.1
+// @version         1.1.1
 // @author          Zach Vaughn
 // @github          https://github.com/zachvdev
 // @include         explorer.exe
@@ -13,6 +13,21 @@
 
 // ==WindhawkModReadme==
 /*
+> **Warning: don't install Windows' November 2026 update (KB5132061, build
+> 26200.9974) yet.** Microsoft hasn't published the symbols for its new
+> taskbar.dll, which this mod, like many taskbar mods, needs to find parts of
+> the taskbar. On that build the dock can disappear (especially with Auto-hide
+> on Hybrid or On), size changes don't apply until Explorer restarts, and
+> right-click menus open in the wrong place.
+>
+> If it's already installed, uninstall it (Settings → Windows Update → Update
+> history → Uninstall updates, or Settings → System → Recovery → Advanced
+> startup → Troubleshoot → Advanced options → Uninstall Updates → Uninstall
+> latest quality update), then pause updates. If the taskbar has disappeared,
+> turn off "Automatically hide the taskbar" in Windows' taskbar settings. Once
+> Microsoft publishes the symbols, the mod should work on the new build as is,
+> and this note will be removed.
+
 # MacOS Style Dock
 
 Turns the Windows 11 taskbar into a macOS-style dock: frosted glass, icons
@@ -116,9 +131,10 @@ If your icon looks too big or small, adjust it:
 
 ## Using the dock
 
-- **App names on hover**, in macOS-style labels. Windows' window previews
-  open when you click an app with more than one window. Turn on "Window
-  previews" to also see them on hover, just above the label.
+- **App names on hover**, in macOS-style labels. Turn "Show tooltips" off to
+  get Windows' own tooltips back. Windows' window previews open when you
+  click an app with more than one window. Turn on "Window previews" to also
+  see them on hover, just above the label.
 - **Rearranging.** Drag apps anywhere between File Explorer and the Recycle
   Bin. While you drag, icons stop magnifying, and the one you're moving fades
   slightly.
@@ -128,6 +144,10 @@ If your icon looks too big or small, adjust it:
   above it.
 - **Windows stay reachable.** With Auto-hide on Hybrid, drop a window so low
   that its title bar is under the dock, and it moves back up, as on a Mac.
+  Windows doesn't let the dock move apps run as administrator, so for those
+  the dock slides away instead, until the window's dragged back up.
+- **Task View** hides the dock, whatever Auto-hide is set to, and its row of
+  desktops sits at the bottom of the screen.
 
 ## Hot corners
 
@@ -151,9 +171,10 @@ background.
 
 Only the dock hides; the hot corners keep working.
 
-- **Hybrid** (the default): the dock slides away while a window is maximized.
-  Windows always have the whole screen, so the dock floats over their bottom
-  edge and nothing moves when it shows or hides.
+- **Hybrid** (the default): the dock slides away while a window is maximized,
+  or snapped down to the bottom of the screen (as in Snap layouts). Windows
+  always have the whole screen, so the dock floats over their bottom edge and
+  nothing moves when it shows or hides.
 - **On:** the dock is always hidden.
 - **Off:** the dock is always shown, and windows stop at its top.
 
@@ -215,8 +236,9 @@ Icon dragging and right-click menu placement follow his "Taskbar Multirow",
 keeping the taskbar shown follows his "Taskbar auto-hide when maximized",
 turning off hover previews follows his "Disable Taskbar Thumbnails", and
 placing them follows his "Taskbar on top" (all GPL-3.0). Hybrid dots follow
-notdominicc's way of reshaping Windows' own indicators. The squircle corners
-use PaintCode's measurements of Apple's curve.
+notdominicc's way of reshaping Windows' own indicators, and moving Task View's
+row of desktops follows Asteski's "Task View Customizer". The squircle
+corners use PaintCode's measurements of Apple's curve.
 */
 // ==/WindhawkModReadme==
 
@@ -254,8 +276,9 @@ use PaintCode's measurements of Apple's curve.
     $name: Auto-hide
     $description: >-
       On: hidden until the pointer reaches the bottom of the screen below it.
-      Hybrid: hidden only while a window is maximized, and windows always get
-      the whole screen. Off: windows stop at the dock. Default is Hybrid.
+      Hybrid: hidden only while a window is maximized or snapped, and windows
+      always get the whole screen. Off: windows stop at the dock. Default is
+      Hybrid.
     $options:
     - never: "Off"
     - always: "On"
@@ -315,7 +338,9 @@ use PaintCode's measurements of Apple's curve.
     $description: At the right end of the dock. Default is on.
   - tooltips: true
     $name: Show tooltips
-    $description: App names above icons on hover. Default is on.
+    $description: >-
+      App names above icons on hover. Off, Windows' own tooltips show instead.
+      Default is on.
   - indicators: dots
     $name: Running indicators
     $description: >-
@@ -620,15 +645,16 @@ void LoadSettings() {
         return false;
     };
 
+    // Fallbacks match each setting's documented default.
     s.size = percent(L"dock.size");
-    s.theme = (Theme)ChoiceSetting(L"dock.color", {L"auto", L"dark", L"light", L"custom"}, 0);
+    s.theme = (Theme)ChoiceSetting(L"dock.color", {L"auto", L"dark", L"light", L"custom"}, 2);
     if (s.theme == Theme::Custom && !hex(L"dock.customColor", s.customColor)) {
-        s.theme = Theme::System;
+        s.theme = Theme::Light;
     }
     s.opacity = percent(L"dock.opacity");
     s.blur = percent(L"dock.blur");
     s.border = (Border)ChoiceSetting(L"dock.border", {L"mac", L"standard", L"none"}, 0);
-    s.autoHide = (AutoHide)ChoiceSetting(L"dock.autoHide", {L"never", L"always", L"hybrid"}, 0);
+    s.autoHide = (AutoHide)ChoiceSetting(L"dock.autoHide", {L"never", L"always", L"hybrid"}, 2);
 
     s.paddingH = percent(L"spacing.horizontal");
     s.paddingV = percent(L"spacing.vertical");
@@ -880,13 +906,16 @@ void Try(F&& f, PCWSTR what = nullptr) {
 // SHELL JOBS
 // =============================================================================
 // Recycling and emptying the Recycle Bin run one at a time on a thread pool
-// thread, as they can show Windows' own dialogs.
+// thread, as they can show Windows' own dialogs. The pool can run two callbacks
+// at once, so a lock keeps them in order.
 
 std::mutex g_shellJobsLock;
+std::mutex g_shellJobRunning;
 std::list<std::function<void()>> g_shellJobs;
 PTP_WORK g_shellJobWork = nullptr;
 
 void CALLBACK RunShellJob(PTP_CALLBACK_INSTANCE, PVOID, PTP_WORK) {
+    std::lock_guard running(g_shellJobRunning);
     std::function<void()> job;
     {
         std::lock_guard lock(g_shellJobsLock);
@@ -1326,12 +1355,19 @@ void ApplyCollapsed(wux::FrameworkElement const& el) {
     if (el.Visibility() != Visibility::Collapsed) el.Visibility(Visibility::Collapsed);
 }
 
-// Windows' own tooltip, replaced by the dock's labels.
+// Windows' own tooltip, replaced by the dock's labels. With the labels off, it's
+// put back.
 void HideStockToolTip(wux::FrameworkElement const& button) {
     auto value = wuxc::ToolTipService::GetToolTip(button);
     auto tip = value ? value.try_as<wuxc::ToolTip>() : nullptr;
-    if (!tip || FindOverride(tip, wux::UIElement::VisibilityProperty())) return;
-    Track(tip, wux::UIElement::VisibilityProperty(), ApplyCollapsed);
+    if (!tip) return;
+    auto dp = wux::UIElement::VisibilityProperty();
+    if (!g_settings.tooltips) {
+        if (FindOverride(tip, dp)) Release(tip, dp);
+        return;
+    }
+    if (FindOverride(tip, dp)) return;
+    Track(tip, dp, ApplyCollapsed);
     ApplyCollapsed(tip);
 }
 
@@ -2169,7 +2205,7 @@ IconPixels MakeSquircleIcon(std::vector<BYTE> source, int w, int h) {
     };
     bool tile = aspect >= kTileMinAspect && solid >= kTileMinCoverage * bw * bh && sx1 >= 0 &&
                 flat(false, false) && flat(false, true) && flat(true, false) && flat(true, true);
-    bool light = lightness / weight >= kDarkTileFrom;
+    bool light = weight > 0 && lightness / weight >= kDarkTileFrom;
 
     int t = std::max(w, h), size = (int)std::ceil(t * kMacIconScale);
     float o = (size - t) / 2.0f;
@@ -2246,11 +2282,11 @@ wuxm::ImageSource CachedSquircle(wuxm::ImageSource const& stock) {
     return nullptr;
 }
 
-// Tiles are forgotten when their color changes since `old`, and drawn again as
-// the buttons are next processed.
+// Tiles are forgotten when their color or the size they're drawn at changes
+// since `old`, and drawn again as the buttons are next processed.
 void RecolorSquircles(Settings const& old) {
     auto& s = g_settings;
-    bool same = old.tileColor == s.tileColor &&
+    bool same = old.size == s.size && old.scale == s.scale && old.tileColor == s.tileColor &&
                 (s.tileColor != TileColor::Custom ||
                  std::equal(std::begin(s.tileCustomColor), std::end(s.tileCustomColor),
                             std::begin(old.tileCustomColor)));
@@ -2956,7 +2992,7 @@ void ColorDots(Plate& p) {
     }
 }
 
-// Hides dots in `panel` whose buttons aren't among `icons`.
+// Hides every dot, as while dragging.
 void HideDots() {
     for (auto& i : *g_indicators) HideDot(i);
 }
@@ -3019,6 +3055,7 @@ void CheckDragging() {
     if (g_dragging && !(GetAsyncKeyState(primary) & 0x8000)) EndDragging();
 }
 
+// Hides dots in `panel` whose buttons aren't among `icons`.
 void HideStrayDots(wuxc::Panel const& panel, std::vector<Icon> const& icons) {
     for (auto& i : *g_indicators) {
         if (!i.dot || i.dotPanel.get() != panel) continue;
@@ -3137,6 +3174,7 @@ float g_pointerX = 0;
 bool g_dockExpanded = false;  // magnified, or about to be
 bool g_anchorLeftEnd = true;  // which end stays put as the dock grows
 float g_maxGrowth = 0, g_lastGrowth = 0;
+float g_growLeftEase = 0;     // what's left of a jump when the end that stays put switches
 
 // Scales the icon from its bottom edge, shifts it by `tx`, and moves it down
 // onto the dock.
@@ -3168,7 +3206,7 @@ void SetAppsDividerShift(Plate& p, float tx) {
 void BuildRow(wux::UIElement const& parent) {
     std::vector<RowItem> old = std::move(g_row);
     Plate* oldPlate = GetRowPlate(g_rowParent.get());
-    if (g_rowParent.get() != parent) g_maxGrowth = g_lastGrowth = 0;
+    if (g_rowParent.get() != parent) g_maxGrowth = g_lastGrowth = g_growLeftEase = 0;
     g_row.clear();
     g_rowParent = nullptr;
 
@@ -3498,6 +3536,7 @@ bool g_dockRevealed = false;
 float g_dockShown = 1;  // 0 hidden to 1 shown, animated
 int g_dockAwayTicks = 0;
 bool g_windowMaximized = false;  // for Hybrid
+bool g_taskViewOpen = false;
 
 void StartFrames();
 void ScheduleOverWindows(bool autoHide);
@@ -3505,7 +3544,7 @@ bool IsFlyout(HWND hwnd, bool popups);
 int StripHeight(UINT dpi);
 
 bool DockHides() {
-    return g_settings.autoHide == AutoHide::On ||
+    return g_settings.autoHide == AutoHide::On || g_taskViewOpen ||
            (g_settings.autoHide == AutoHide::Hybrid && g_windowMaximized);
 }
 bool DockHidden() { return DockHides() && !g_dockRevealed; }
@@ -3542,10 +3581,10 @@ bool DockSpanOn(RECT const& m, LONG& left, LONG& right) {
 }
 
 // ---- Hybrid ----
-// Maximized means spanning a dock's screen from edge to edge and reaching down
-// to the dock. A window merely touching the dock doesn't count. Checked when a
-// window moves, shows, hides, closes or comes to the front, at most every
-// kMaximizedCheckMs, rather than polled.
+// Maximized means spanning a dock's screen from edge to edge, or being snapped
+// (as in Snap layouts), and reaching down to the dock. A window merely touching
+// the dock doesn't count. Checked when a window moves, shows, hides, closes or
+// comes to the front, at most every kMaximizedCheckMs, rather than polled.
 
 constexpr UINT kMaximizedCheckMs = 50;
 std::vector<HWINEVENTHOOK> g_windowEventHooks;
@@ -3568,10 +3607,61 @@ bool IsAppWindow(HWND w) {
     return true;
 }
 
+// Snapped by Windows, as in Snap layouts (on builds that can tell).
+bool IsSnapped(HWND w) {
+    using IsWindowArranged_t = BOOL(WINAPI*)(HWND hwnd);
+    static auto isArranged = (IsWindowArranged_t)GetProcAddress(GetModuleHandle(L"user32.dll"),
+                                                                "IsWindowArranged");
+    return isArranged && isArranged(w);
+}
+
+// How far above the dock's strip a window's top is kept, for its title bar.
+int TitleBarHeight(UINT dpi) {
+    return GetSystemMetricsForDpi(SM_CYCAPTION, dpi) +
+           GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) +
+           GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+}
+
+DWORD IntegrityLevel(HANDLE token) {
+    alignas(TOKEN_MANDATORY_LABEL) BYTE buffer[sizeof(TOKEN_MANDATORY_LABEL) +
+                                                SECURITY_MAX_SID_SIZE];
+    DWORD size;
+    if (!GetTokenInformation(token, TokenIntegrityLevel, buffer, sizeof(buffer), &size)) {
+        return 0;
+    }
+    PSID sid = ((TOKEN_MANDATORY_LABEL*)buffer)->Label.Sid;
+    return *GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1);
+}
+
+// An app run as administrator, whose windows Windows doesn't let Explorer move.
+bool IsAboveExplorer(HWND w) {
+    static DWORD explorer = [] {
+        HANDLE token = nullptr;
+        DWORD level = OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)
+                          ? IntegrityLevel(token)
+                          : 0;
+        if (token) CloseHandle(token);
+        return level;
+    }();
+    DWORD pid = 0;
+    GetWindowThreadProcessId(w, &pid);
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    HANDLE token = nullptr;
+    bool above = !process || !OpenProcessToken(process, TOKEN_QUERY, &token) ||
+                 IntegrityLevel(token) > explorer;
+    if (token) CloseHandle(token);
+    if (process) CloseHandle(process);
+    return above;
+}
+
+// Also true for an administrator's window left with its title bar under the
+// dock, which can't be moved back up (see KeepTitleBarAboveDock): the dock
+// makes way for it instead.
 bool IsWindowMaximized() {
     struct Screen {
         RECT rect;
         LONG dockTop;  // where the dock's strip starts
+        LONG lowest;   // the lowest a window's top can be, its title bar above that
     };
     std::vector<Screen> screens;
     ForEachTaskbarWindow([&screens](HWND tb, bool) {
@@ -3580,7 +3670,8 @@ bool IsWindowMaximized() {
         UINT dpiX, dpiY;
         if (GetMonitorInfo(monitor, &mi) &&
             SUCCEEDED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) {
-            screens.push_back({mi.rcMonitor, mi.rcMonitor.bottom - StripHeight(dpiY)});
+            LONG dockTop = mi.rcMonitor.bottom - StripHeight(dpiY);
+            screens.push_back({mi.rcMonitor, dockTop, dockTop - TitleBarHeight(dpiY)});
         }
     });
     struct Search {
@@ -3597,8 +3688,13 @@ bool IsWindowMaximized() {
                 return TRUE;
             }
             for (auto& s : *search.screens) {
-                if (r.left <= s.rect.left + 1 && r.right >= s.rect.right - 1 &&
-                    r.top < s.dockTop && r.bottom >= s.dockTop - 1) {
+                bool wide = r.left <= s.rect.left + 1 && r.right >= s.rect.right - 1;
+                bool on = r.left < s.rect.right && r.right > s.rect.left;
+                bool covered = (wide || (on && IsSnapped(w))) && r.top < s.dockTop &&
+                               r.bottom >= s.dockTop - 1;
+                bool stuck = on && r.top > s.lowest && r.top < s.rect.bottom &&
+                             IsAboveExplorer(w);
+                if (covered || stuck) {
                     search.found = true;
                     return FALSE;
                 }
@@ -3667,8 +3763,10 @@ void WatchWindows(bool watch) {
 // In Hybrid, Windows keeps no room for the dock, so a window can be dragged
 // down until its title bar is under it, where it can't be grabbed again. As on
 // a Mac, one dropped there moves back up until its title bar is just above the
-// dock. With Auto-hide Off, Windows stops title bars above the dock's strip
-// itself; with On, the dock's hidden.
+// dock. Windows doesn't let Explorer move an administrator's windows, so for
+// those the dock slides away instead (see IsWindowMaximized). With Auto-hide
+// Off, Windows stops title bars above the dock's strip itself; with On, the
+// dock's hidden.
 
 HWINEVENTHOOK g_windowDropHook = nullptr;
 
@@ -3692,10 +3790,7 @@ void KeepTitleBarAboveDock(HWND w) {
         !GetWindowRect(w, &window)) {
         return;
     }
-    int titleBar = GetSystemMetricsForDpi(SM_CYCAPTION, dpiY) +
-                   GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpiY) +
-                   GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpiY);
-    LONG lowest = mi.rcMonitor.bottom - StripHeight(dpiY) - titleBar;
+    LONG lowest = mi.rcMonitor.bottom - StripHeight(dpiY) - TitleBarHeight(dpiY);
     if (r.top <= lowest) return;
     SetWindowPos(w, nullptr, window.left, window.top - (r.top - lowest), 0, 0,
                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
@@ -3720,10 +3815,87 @@ void WatchWindowDrops(bool watch) {
                                        OnWindowDropped, 0, 0, WINEVENT_OUTOFCONTEXT);
 }
 
+// ---- Task View ----
+// The dock slides away while Task View's open, whatever Auto-hide is set to,
+// and the tray with it, so Task View's row of desktops can sit at the bottom
+// (see TASK VIEW).
+
+std::vector<HWINEVENTHOOK> g_taskViewHooks;
+HWND g_taskViewWindow = nullptr;
+
+// Explorer's full-screen Task View window, on the MultitaskingView thread.
+bool IsTaskViewWindow(HWND w) {
+    constexpr DWORD kAppChromeBand = 5;  // ZBID_IMMERSIVE_APPCHROME
+    using GetWindowBand_t = BOOL(WINAPI*)(HWND hwnd, DWORD* band);
+    static auto getWindowBand =
+        (GetWindowBand_t)GetProcAddress(GetModuleHandle(L"user32.dll"), "GetWindowBand");
+    DWORD pid = 0, band = 0;
+    DWORD tid = GetWindowThreadProcessId(w, &pid);
+    WCHAR cls[64];
+    BOOL cloaked = FALSE;
+    if (!tid || pid != GetCurrentProcessId() || !IsWindowVisible(w) ||
+        (SUCCEEDED(DwmGetWindowAttribute(w, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+         cloaked) ||
+        !GetClassName(w, cls, ARRAYSIZE(cls)) || wcscmp(cls, L"XamlExplorerHostIslandWindow") ||
+        !getWindowBand || !getWindowBand(w, &band) || band != kAppChromeBand) {
+        return false;
+    }
+    HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, tid);
+    if (!thread) return false;
+    PWSTR description = nullptr;
+    bool found = SUCCEEDED(GetThreadDescription(thread, &description)) && description &&
+                 !wcscmp(description, L"MultitaskingView");
+    if (description) LocalFree(description);
+    CloseHandle(thread);
+    return found;
+}
+
+void SetTaskViewOpen(HWND w) {
+    if ((w != nullptr) == g_taskViewOpen) return;
+    g_taskViewWindow = w;
+    g_taskViewOpen = w != nullptr;
+    g_dockRevealed = false;
+    g_dockAwayTicks = 0;
+    ScheduleOverWindows(false);  // the clip
+    StartFrames();
+}
+
+void CALLBACK OnTaskViewEvent(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG idChild,
+                              DWORD, DWORD) {
+    if (g_unloading || !hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
+    bool shown = event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_UNCLOAKED;
+    if (!shown && hwnd == g_taskViewWindow) {
+        SetTaskViewOpen(nullptr);
+    } else if (shown && !g_taskViewOpen && !(GetAsyncKeyState(VK_MENU) & 0x8000) &&
+               IsTaskViewWindow(hwnd)) {
+        SetTaskViewOpen(hwnd);  // not Alt+Tab, which shares its thread
+    }
+}
+
+// On the taskbar's thread, like WatchWindows. Explorer's own windows only.
+void WatchTaskView(bool watch) {
+    if (watch == !g_taskViewHooks.empty()) return;
+    if (!watch) {
+        for (HWINEVENTHOOK hook : g_taskViewHooks) UnhookWinEvent(hook);
+        g_taskViewHooks.clear();
+        SetTaskViewOpen(nullptr);
+        return;
+    }
+    constexpr std::pair<DWORD, DWORD> kEvents[] = {
+        {EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE},  // and EVENT_OBJECT_SHOW
+        {EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED},
+    };
+    for (auto [first, last] : kEvents) {
+        HWINEVENTHOOK hook = SetWinEventHook(first, last, nullptr, OnTaskViewEvent,
+                                             GetCurrentProcessId(), 0, WINEVENT_OUTOFCONTEXT);
+        if (hook) g_taskViewHooks.push_back(hook);
+    }
+}
+
 // ---- Polling ----
 
 void UpdateAutoHide(POINT p, RECT const& m, UINT dpi, bool held, bool fullscreen) {
-    if (!DockHides()) return;
+    if (!DockHides() || g_taskViewOpen) return;
     LONG left = 0, right = 0;
     bool inSpan = DockSpanOn(m, left, right) && p.x >= left && p.x <= right;
     if (!g_dockRevealed) {
@@ -3878,8 +4050,11 @@ void DrawLabel(std::wstring const& text, POINT tip, float scale) {
         g.SetTextRenderingHint(gp::TextRenderingHintAntiAliasGridFit);
         g.MeasureString(text.c_str(), (INT)text.size(), &font, gp::PointF(0, 0), &format, &bounds);
     }
-    int w = (int)std::ceil(bounds.Width + 2 * kLabelPadX * scale);
     int h = (int)std::round(kLabelHeight * scale);
+    // Never narrower than the round ends and the arrow's base, or a short name's
+    // arrow would run into the curves.
+    float minWidth = h + 2 * (kLabelArrowHalf + kLabelArrowBase) * scale;
+    int w = (int)std::ceil(std::max(bounds.Width + 2 * kLabelPadX * scale, minWidth));
     int height = h + (int)std::ceil(kLabelArrow * scale) + 1;
     RECT rect{tip.x - w / 2, tip.y - height, tip.x - w / 2 + w, tip.y};
     if (g_label.shown && text == g_label.text && EqualRect(&rect, &g_label.rect)) return;
@@ -4106,6 +4281,7 @@ void OnFrame() {
     // `growLeft`. As on a Mac, the end away from the pointer stays put.
     float total = 0;
     for (size_t i = 0; i < g_row.size(); i++) total += (scales[i] - 1.0f) * g_row[i].width;
+    bool anchorWas = g_anchorLeftEnd;
     if (over) {
         if (!g_row.empty()) {
             auto& first = g_row.front();
@@ -4120,7 +4296,18 @@ void OnFrame() {
         g_maxGrowth = total;
     }
     g_lastGrowth = total;
-    float growLeft = g_anchorLeftEnd ? g_maxGrowth / 2 : total - g_maxGrowth / 2;
+    auto growLeftFor = [&](bool leftEnd) {
+        return leftEnd ? g_maxGrowth / 2 : total - g_maxGrowth / 2;
+    };
+    // Switching which end stays put would jump the dock by the difference, as
+    // the pointer crosses its middle; the jump eases out instead.
+    if (g_anchorLeftEnd != anchorWas) {
+        g_growLeftEase += growLeftFor(anchorWas) - growLeftFor(g_anchorLeftEnd);
+    }
+    g_growLeftEase *= 1.0f - alpha;
+    if (std::fabs(g_growLeftEase) < 0.05f) g_growLeftEase = 0;
+    else settled = false;
+    float growLeft = growLeftFor(g_anchorLeftEnd) + g_growLeftEase;
 
     Plate* plate = GetRowPlate(rowParent);
     auto beforeAppsDivider = plate ? plate->beforeAppsDivider.get() : nullptr;
@@ -4366,6 +4553,7 @@ void UpdatePolling() {
     WatchWindows(hybrid);
     if (hybrid) ScheduleMaximizedCheck();  // as things are now, at the new dock size
     WatchWindowDrops(hybrid);
+    WatchTaskView(!g_unloading);
 }
 
 // Windows drops keypresses we send while an administrator window is in front.
@@ -4420,16 +4608,18 @@ void OnPollTimer() {
     GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
     float scale = dpiY / 96.0f;
 
-    bool held = (GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000;
-    QUERY_USER_NOTIFICATION_STATE state;
-    bool fullscreen = SUCCEEDED(SHQueryUserNotificationState(&state)) &&
-                      (state == QUNS_RUNNING_D3D_FULL_SCREEN || state == QUNS_BUSY ||
-                       state == QUNS_PRESENTATION_MODE);
-    bool blocked = held || fullscreen;
     constexpr int edge = 2;
     bool bottom = p.y >= m.bottom - 1 - edge;
     bool inLeft = bottom && p.x <= m.left + edge;
     bool inRight = bottom && p.x >= m.right - 1 - edge;
+    bool held = (GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000;
+    // Only asked at the bottom edge, the only place the answer is used (the
+    // corners, and revealing a hidden dock), rather than on every poll.
+    QUERY_USER_NOTIFICATION_STATE state;
+    bool fullscreen = bottom && SUCCEEDED(SHQueryUserNotificationState(&state)) &&
+                      (state == QUNS_RUNNING_D3D_FULL_SCREEN || state == QUNS_BUSY ||
+                       state == QUNS_PRESENTATION_MODE);
+    bool blocked = held || fullscreen;
 
     if (g_settings.leftCorner != LeftCorner::Off) {
         int away = (int)(40 * scale);
@@ -4503,6 +4693,8 @@ void ProcessButton(wux::FrameworkElement const& button) {
     });
 }
 
+void HookTaskView();
+
 void NoteTaskbarFrame(wux::FrameworkElement const& frame) {
     if (!frame) return;
     for (auto& f : g_frames) {
@@ -4512,6 +4704,7 @@ void NoteTaskbarFrame(wux::FrameworkElement const& frame) {
     MarkPlatesDirty();
     ScheduleOverWindows(true);
     UpdatePolling();
+    HookTaskView();
 
     // While Windows starts, Explorer can leave the taskbar behind windows.
     // Applying auto-hide and the app bars again over the next seconds fixes it.
@@ -4805,6 +4998,7 @@ void ResetAll() {
     StopFrames();
     WatchWindows(false);
     WatchWindowDrops(false);
+    WatchTaskView(false);
     Try(DestroyLabel);
     Try(RemovePlates);
     g_d2d = nullptr;
@@ -5082,7 +5276,8 @@ void WINAPI TaskListButton_OnDragCompletedGesture_Hook(void* pThis) {
 // ---- File Explorer first ----
 // Moved there for real by the taskbar's own drag, its drop aimed before every
 // app. Again whenever an app's dropped before it. Given up after a few tries in
-// a row, in case it ever goes wrong.
+// a row, in case it ever goes wrong; the count starts over whenever File
+// Explorer is found first, however it got there.
 
 bool g_movingExplorer = false;
 winrt::weak_ref<wux::FrameworkElement> g_explorerMoved;  // this time round
@@ -5136,6 +5331,8 @@ void MoveExplorerNow() {
     auto name = UserValueName(L"explorerMoves");
     int tries = Wh_GetIntValue(name.c_str(), 0);
     if (!g_settings.explorerFirst || g_dragging || !explorer || !CanMoveExplorer(explorer, tries)) {
+        // A drag started in the meantime: tried again once it's over.
+        if (g_dragging) g_explorerMoved = nullptr;
         return;
     }
     Try([&] {
@@ -5153,10 +5350,15 @@ void MoveExplorerNow() {
     MarkPlatesDirty();
 }
 
+// File Explorer is first: the tries start over. Storage is read once a session,
+// and again only after a move.
 void NoteExplorerFirst() {
-    if (!g_explorerMoved.get()) return;
+    static bool checked = false;
+    if (checked && !g_explorerMoved.get()) return;
+    checked = true;
     g_explorerMoved = nullptr;
-    Wh_SetIntValue(UserValueName(L"explorerMoves").c_str(), 0);
+    auto name = UserValueName(L"explorerMoves");
+    if (Wh_GetIntValue(name.c_str(), 0)) Wh_SetIntValue(name.c_str(), 0);
 }
 
 // =============================================================================
@@ -5825,6 +6027,249 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND after, int X, int Y, int cx, int c
 }
 
 // =============================================================================
+// TASK VIEW
+// =============================================================================
+// The dock's away while Task View's open (see AUTO-HIDE), so its row of
+// desktops sits at the bottom of the screen, as far up as it's in from the
+// sides, not above the taskbar (as in Asteski's "Task View Customizer"). Task View is
+// found from its own Loaded handlers: adding one is hooked, then each such
+// handler, which gets the element it's for. It's changed, and put back, on its
+// own thread.
+
+constexpr wchar_t kTaskViewRoot[] =
+    L"WindowsInternal.ComposableShell.Experiences.Switcher.TaskViewTimeline";
+
+using LoadedAdd_t = HRESULT(WINAPI*)(void* pThis, void* handler, winrt::event_token* token);
+using HandlerInvoke_t = HRESULT(WINAPI*)(void* pThis, void* sender, void* args);
+
+struct HandlerHook {
+    void* target;
+    HandlerInvoke_t original;
+};
+
+// What Task View had, to put back.
+struct TaskViewLayout {
+    DWORD thread = 0;
+    winrt::weak_ref<wuxc::Grid> grid;
+    winrt::weak_ref<wux::FrameworkElement> desktops, windows;
+    std::vector<wux::GridLength> rows;
+    std::array<wf::IInspectable, 4> desktopValues, windowValues;  // null where unset
+};
+
+LoadedAdd_t LoadedAdd_Original;
+std::mutex g_taskViewMutex;
+[[clang::no_destroy]] std::list<HandlerHook> g_handlerHooks;
+[[clang::no_destroy]] std::list<TaskViewLayout> g_taskViews;  // left behind, not freed, at unload
+
+// The properties set on the row of desktops and the windows.
+std::array<wux::DependencyProperty, 4> TaskViewProperties() {
+    return {wuxc::Grid::RowProperty(), wuxc::Grid::RowSpanProperty(),
+            wux::FrameworkElement::VerticalAlignmentProperty(),
+            wux::FrameworkElement::MarginProperty()};
+}
+
+std::array<wf::IInspectable, 4> ReadTaskViewValues(wux::FrameworkElement const& el) {
+    std::array<wf::IInspectable, 4> values;
+    auto properties = TaskViewProperties();
+    for (size_t i = 0; i < properties.size(); i++) {
+        auto value = el.ReadLocalValue(properties[i]);
+        if (value != wux::DependencyProperty::UnsetValue()) values[i] = value;
+    }
+    return values;
+}
+
+void PutBackTaskViewValues(wux::FrameworkElement const& el,
+                           std::array<wf::IInspectable, 4> const& values) {
+    auto properties = TaskViewProperties();
+    for (size_t i = 0; i < properties.size(); i++) {
+        if (values[i]) el.SetValue(properties[i], values[i]);
+        else el.ClearValue(properties[i]);
+    }
+}
+
+void PlaceTaskViewPart(wux::FrameworkElement const& el, int row,
+                       wux::VerticalAlignment alignment, wux::Thickness margin) {
+    if (wuxc::Grid::GetRow(el) != row) wuxc::Grid::SetRow(el, row);
+    if (wuxc::Grid::GetRowSpan(el) != 1) wuxc::Grid::SetRowSpan(el, 1);
+    if (el.VerticalAlignment() != alignment) el.VerticalAlignment(alignment);
+    auto m = el.Margin();
+    if (m.Left != margin.Left || m.Top != margin.Top || m.Right != margin.Right ||
+        m.Bottom != margin.Bottom) {
+        el.Margin(margin);
+    }
+}
+
+// Under Task View's root, an ancestor of `el`: its grid holds the row of
+// desktops and the windows, in a row each.
+void LayOutTaskView(wux::FrameworkElement const& el) {
+    wux::DependencyObject root = el;
+    for (int i = 0; root && i < 16 && winrt::get_class_name(root) != kTaskViewRoot; i++) {
+        root = wuxm::VisualTreeHelper::GetParent(root);
+    }
+    if (!root || winrt::get_class_name(root) != kTaskViewRoot) return;
+    wuxc::Grid grid{nullptr};
+    ForEachDescendant(root, 1, [&grid](wux::FrameworkElement const& child) {
+        if (!grid && child.Name() == L"RootGridElement") grid = child.try_as<wuxc::Grid>();
+        return false;
+    });
+    if (!grid || grid.RowDefinitions().Size() != 2) return;
+    wux::FrameworkElement desktops{nullptr}, windows{nullptr};
+    for (auto const& child : grid.Children()) {
+        auto part = child.try_as<wux::FrameworkElement>();
+        if (part && part.Name() == L"VirtualDesktopBar") desktops = part;
+        if (part && part.Name() == L"SwitchItemListControl") windows = part;
+    }
+    if (!desktops || !windows) return;
+
+    {
+        std::lock_guard lock(g_taskViewMutex);
+        DWORD thread = GetCurrentThreadId();
+        g_taskViews.remove_if([thread](auto& v) { return v.thread == thread && !v.grid.get(); });
+        bool known = std::any_of(g_taskViews.begin(), g_taskViews.end(), [&](auto& v) {
+            return v.thread == thread && v.grid.get() == grid;
+        });
+        if (!known) {
+            auto& v = g_taskViews.emplace_back();
+            v.thread = thread;
+            v.grid = winrt::make_weak(grid);
+            v.desktops = winrt::make_weak(desktops);
+            v.windows = winrt::make_weak(windows);
+            for (auto const& row : grid.RowDefinitions()) v.rows.push_back(row.Height());
+            v.desktopValues = ReadTaskViewValues(desktops);
+            v.windowValues = ReadTaskViewValues(windows);
+        }
+    }
+
+    auto rows = grid.RowDefinitions();
+    wux::GridLength star{1, wux::GridUnitType::Star}, fit{1, wux::GridUnitType::Auto};
+    if (rows.GetAt(0).Height() != star) rows.GetAt(0).Height(star);
+    if (rows.GetAt(1).Height() != fit) rows.GetAt(1).Height(fit);
+    auto d = desktops.Margin(), w = windows.Margin();
+    PlaceTaskViewPart(windows, 0, wux::VerticalAlignment::Stretch, {w.Left, w.Top, w.Right, 0});
+    PlaceTaskViewPart(desktops, 1, wux::VerticalAlignment::Bottom,
+                      {d.Left, d.Top, d.Right, d.Left});  // as far up as in from the side
+}
+
+// On the calling thread, the Task Views it owns.
+void PutBackTaskViews() {
+    DWORD thread = GetCurrentThreadId();
+    std::list<TaskViewLayout> mine;
+    {
+        std::lock_guard lock(g_taskViewMutex);
+        for (auto it = g_taskViews.begin(); it != g_taskViews.end();) {
+            auto next = std::next(it);
+            if (it->thread == thread) mine.splice(mine.end(), g_taskViews, it);
+            it = next;
+        }
+    }
+    for (auto& v : mine) {
+        Try([&] {
+            auto grid = v.grid.get();
+            auto rows = grid ? grid.RowDefinitions() : nullptr;
+            if (rows && rows.Size() == v.rows.size()) {
+                for (uint32_t i = 0; i < rows.Size(); i++) rows.GetAt(i).Height(v.rows[i]);
+            }
+            if (auto desktops = v.desktops.get()) PutBackTaskViewValues(desktops, v.desktopValues);
+            if (auto windows = v.windows.get()) PutBackTaskViewValues(windows, v.windowValues);
+        });
+    }
+}
+
+void RestoreTaskViews() {
+    std::vector<DWORD> threads;
+    {
+        std::lock_guard lock(g_taskViewMutex);
+        for (auto& v : g_taskViews) {
+            if (std::find(threads.begin(), threads.end(), v.thread) == threads.end()) {
+                threads.push_back(v.thread);
+            }
+        }
+    }
+    for (DWORD thread : threads) {
+        HWND w = nullptr;
+        EnumThreadWindows(
+            thread,
+            [](HWND h, LPARAM l) -> BOOL {
+                *(HWND*)l = h;
+                return FALSE;
+            },
+            (LPARAM)&w);
+        if (w) RunFromWindowThread(w, [](void*) { PutBackTaskViews(); }, nullptr);
+    }
+}
+
+bool IsTaskViewCode(void* address) {
+    HMODULE module = nullptr;
+    if (!address || !GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                        (LPCWSTR)address, &module)) {
+        return false;
+    }
+    return module == GetModuleHandle(L"WindowsInternal.ComposableShell.Experiences.Switcher.dll") ||
+           module == GetModuleHandle(L"twinui.pcshell.dll");
+}
+
+HRESULT WINAPI HandlerInvoke_Hook(void* pThis, void* sender, void* args) {
+    void* target = (*(void***)pThis)[3];
+    HandlerInvoke_t original = nullptr;
+    {
+        std::lock_guard lock(g_taskViewMutex);
+        for (auto& h : g_handlerHooks) {
+            if (h.target == target) original = h.original;
+        }
+    }
+    if (!original) return E_UNEXPECTED;
+    HRESULT hr = original(pThis, sender, args);
+    if (!g_unloading && sender) {
+        Try([&] {
+            wf::IInspectable source;
+            winrt::copy_from_abi(source, sender);
+            if (auto el = source.try_as<wux::FrameworkElement>()) LayOutTaskView(el);
+        });
+    }
+    return hr;
+}
+
+// A Loaded handler Task View adds: its Invoke is hooked, once per kind.
+HRESULT WINAPI LoadedAdd_Hook(void* pThis, void* handler, winrt::event_token* token) {
+    void* caller = __builtin_return_address(0);
+    HRESULT hr = LoadedAdd_Original(pThis, handler, token);
+    void* target = handler ? (*(void***)handler)[3] : nullptr;
+    if (FAILED(hr) || g_unloading || !target ||
+        (!IsTaskViewCode(caller) && !IsTaskViewCode(target))) {
+        return hr;
+    }
+    {
+        std::lock_guard lock(g_taskViewMutex);
+        for (auto& h : g_handlerHooks) {
+            if (h.target == target) return hr;
+        }
+        auto& h = g_handlerHooks.emplace_back(HandlerHook{target, nullptr});
+        if (!WindhawkUtils::SetFunctionHook((HandlerInvoke_t)target, HandlerInvoke_Hook,
+                                            &h.original)) {
+            g_handlerHooks.pop_back();
+            return hr;
+        }
+    }
+    Wh_ApplyHookOperations();
+    return hr;
+}
+
+// On a XAML thread, for the slot shared by every element's add_Loaded.
+void HookTaskView() {
+    static bool hooked = false;
+    if (std::exchange(hooked, true)) return;
+    Try([] {
+        wuxc::Grid probe;
+        auto vtable = *(void***)winrt::get_abi(probe.as<wux::IFrameworkElement>());
+        if (WindhawkUtils::SetFunctionHook((LoadedAdd_t)vtable[43], LoadedAdd_Hook,
+                                           &LoadedAdd_Original)) {
+            Wh_ApplyHookOperations();
+        }
+    });
+}
+
+// =============================================================================
 // HOOKS: MAXIMIZED WINDOWS
 // =============================================================================
 // Maximized windows reach down to the dock, and magnified icons rise over them:
@@ -5927,7 +6372,7 @@ HRGN TaskbarRegion(HWND tb) {
     if (!DockFullyHidden()) {
         return CreateRectRgn(0, std::max(0, height - StripHeight(dpi)), width, height);
     }
-    if (!TrayShown()) return CreateRectRgn(0, 0, 0, 0);
+    if (!TrayShown() || g_taskViewOpen) return CreateRectRgn(0, 0, 0, 0);
     int trayWidth = g_trayWidth > 0 ? g_trayWidth : MulDiv(200, dpi, 96);
     int trayHeight = MulDiv((int)kStockTaskbarHeight, dpi, 96);
     return CreateRectRgn(std::max(0, width - trayWidth), height - trayHeight, width, height);
@@ -6340,6 +6785,7 @@ void Wh_ModAfterInit() {
 // normal height and icon size.
 void Wh_ModBeforeUninit() {
     g_unloading = true;
+    RestoreTaskViews();
 
     // The elements first, so the taskbar sizes its icons itself below. Then any
     // cancelled async work's callbacks, which the taskbar's thread runs meanwhile.
