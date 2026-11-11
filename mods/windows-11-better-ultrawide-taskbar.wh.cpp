@@ -812,6 +812,22 @@ SettingField const& SettingDefinition(PCWSTR key) {
         if (std::wstring_view(field.key) == key) return field;
     throw std::logic_error("Unknown setting");
 }
+// A setting's row, resolved at compile time: the editor names its rows by key, and a key not in the table fails the build.
+consteval size_t FieldIndex(std::wstring_view key) {
+    for (size_t i = 0; i < std::size(kSettingFields); ++i)
+        if (key == kSettingFields[i].key) return i;
+    throw std::logic_error("Unknown setting");
+}
+// The editor's rows in the order shown, every row once: a repeat, a missing row or an unknown key fails the build.
+consteval std::array<size_t, std::size(kSettingFields)> DisplayOrder(std::wstring_view const (&keys)[std::size(kSettingFields)]) {
+    std::array<size_t, std::size(kSettingFields)> rows{};
+    bool shown[std::size(kSettingFields)]{};
+    for (size_t i = 0; i < rows.size(); ++i) {
+        rows[i] = FieldIndex(keys[i]);
+        if (std::exchange(shown[rows[i]], true)) throw std::logic_error("Row shown twice");
+    }
+    return rows;
+}
 
 int LocalInt(settingsjson::JsonObject const& settings, PCWSTR key) {
     if (settings) {
@@ -1989,64 +2005,103 @@ void UpdateEditorSection(EditorSection& section,bool available=true) {
         section.header.Content(winrt::box_value(label));
 }
 
+// liquid.X and ui.glassX are the same glass extras in the same order, so UpdateEditorEnabled applies one rule set to both
+// blocks at the UI block's offset.
+constexpr size_t kLiquidExtras = FieldIndex(L"liquid.rimRefraction"), kUiExtras = FieldIndex(L"ui.glassRimRefraction"),
+    kGlassExtras = FieldIndex(L"liquid.boundaryFade") + 1 - kLiquidExtras;
+consteval bool ParallelGlassExtras() {
+    if (FieldIndex(L"ui.glassBoundaryFade") + 1 - kUiExtras != kGlassExtras) return false;
+    for (size_t option = 0; option < kGlassExtras; ++option) {
+        std::wstring_view liquid = kSettingFields[kLiquidExtras + option].key, ui = kSettingFields[kUiExtras + option].key;
+        if (!liquid.starts_with(L"liquid.") || !ui.starts_with(L"ui.glass")) return false;
+        liquid.remove_prefix(7);
+        ui.remove_prefix(8);
+        if (liquid.empty() || liquid.size() != ui.size() || liquid[0] - L'a' + L'A' != ui[0] || liquid.substr(1) != ui.substr(1))
+            return false;
+    }
+    return true;
+}
+static_assert(ParallelGlassExtras());
+
 void UpdateEditorEnabled(SettingsEditor& editor) {
-    bool liquid = editor.controls[0].input.as<Controls::ComboBox>().SelectedIndex() == int(DockTheme::Liquid);
-    bool custom = editor.controls[9].input.as<Controls::ComboBox>().SelectedIndex() == 0;
-    int model = editor.controls[20].input.as<Controls::ComboBox>().SelectedIndex();
+    bool liquid = editor.controls[FieldIndex(L"theme")].input.as<Controls::ComboBox>().SelectedIndex() == int(DockTheme::Liquid);
+    bool custom = editor.controls[FieldIndex(L"liquid.preset")].input.as<Controls::ComboBox>().SelectedIndex() == 0;
+    int model = editor.controls[FieldIndex(L"liquid.model")].input.as<Controls::ComboBox>().SelectedIndex();
     bool snell = model == 1;
-    bool rim = editor.controls[29].input.as<Controls::ComboBox>().SelectedIndex() == 2;
-    int uiModel = editor.controls[41].input.as<Controls::ComboBox>().SelectedIndex();
+    bool rim = editor.controls[FieldIndex(L"liquid.lighting")].input.as<Controls::ComboBox>().SelectedIndex() == 2;
+    int uiModel = editor.controls[FieldIndex(L"ui.glassModel")].input.as<Controls::ComboBox>().SelectedIndex();
     bool uiSnell = uiModel == 1;
-    bool uiRim = editor.controls[52].input.as<Controls::ComboBox>().SelectedIndex() == 2;
-    int shape = editor.controls[110].input.as<Controls::Primitives::Selector>().SelectedIndex();
-    bool separate = editor.controls[112].input.as<Controls::Primitives::Selector>().SelectedIndex() ==
+    bool uiRim = editor.controls[FieldIndex(L"ui.glassLighting")].input.as<Controls::ComboBox>().SelectedIndex() == 2;
+    int shape = editor.controls[FieldIndex(L"shape")].input.as<Controls::Primitives::Selector>().SelectedIndex();
+    bool separate = editor.controls[FieldIndex(L"layout")].input.as<Controls::Primitives::Selector>().SelectedIndex() ==
         int(DockLayout::Separate);
+    // A border's color, custom color, thickness and opacity follow its toggle; the custom color also needs Custom chosen.
+    struct Border { size_t toggle, color, customColor, width, opacity; };
+    constexpr Border borders[]{
+        {FieldIndex(L"dockBorder"), FieldIndex(L"dockBorderColor"), FieldIndex(L"dockBorderCustomColor"),
+         FieldIndex(L"dockBorderWidth"), FieldIndex(L"dockBorderOpacity")},
+        {FieldIndex(L"ui.bodyBorder"), FieldIndex(L"ui.bodyBorderColor"), FieldIndex(L"ui.bodyBorderCustomColor"),
+         FieldIndex(L"ui.bodyBorderWidth"), FieldIndex(L"ui.bodyBorderOpacity")}};
     for (size_t i = 0; i < editor.controls.size(); ++i) {
         bool enabled = true;
-        if (i == 6) enabled &= shape == int(DockShape::Island); // Edge and Edge arc sit on the screen edge.
-        if (i == 113) enabled &= separate && shape == int(DockShape::EdgeArc); // Only Separate Edge arc has facing flares.
-        if (i == 118) enabled &= separate;
-        if (i == 115) enabled &= editor.controls[114].input.as<Controls::ToggleSwitch>().IsOn();
-        if (i == 117 || i == 119) enabled &= editor.controls[116].input.as<Controls::ToggleSwitch>().IsOn();
-        if (i == 8 || i == 9) enabled &= liquid;
-        if (kSettingFields[i].page == 1 && i != 9) enabled &= liquid && custom;
-        if (i == 2) enabled &= editor.trayEnabled.IsOn();
-        if (i == 10) enabled &= !snell && model < 3;
-        if (i == 22) enabled &= snell || model >= 3 ||
-            editor.controls[61].slider.Value()>0 || editor.controls[62].slider.Value()>0;
-        if (i >= 23 && i <= 24) enabled &= snell;
-        if (i == 14) enabled &= !rim;
-        if (i >= 30 && i <= 32) enabled &= rim;
-        if (i == 34 || i == 35) enabled &= editor.controls[33].slider.Value() > 0;
-        if (i == 36) enabled &= editor.controls[1].input.as<Controls::ComboBox>().SelectedIndex() == int(FontColorMode::Adaptive);
-        if ((i >= 101 && i <= 104) || (i >= 106 && i <= 109)) {
-            size_t toggle = i < 105 ? 100 : 105;
-            enabled &= editor.controls[toggle].input.as<Controls::ToggleSwitch>().IsOn();
-            if (i == toggle + 2) enabled &= editor.controls[toggle+1].input.as<Controls::ComboBox>().SelectedIndex() == 3;
+        if (i == FieldIndex(L"edgeDistance")) enabled &= shape == int(DockShape::Island); // Edge and Edge arc sit on the screen edge.
+        if (i == FieldIndex(L"innerArcs")) enabled &= separate && shape == int(DockShape::EdgeArc); // Only Separate Edge arc has facing flares.
+        if (i == FieldIndex(L"barDistance")) enabled &= separate;
+        if (i == FieldIndex(L"trayReduction")) enabled &= editor.controls[FieldIndex(L"smallerTray")].input.as<Controls::ToggleSwitch>().IsOn();
+        if (i == FieldIndex(L"slantAngle") || i == FieldIndex(L"concaveRadius"))
+            enabled &= editor.controls[FieldIndex(L"slantedEnds")].input.as<Controls::ToggleSwitch>().IsOn();
+        if (i == FieldIndex(L"button.liquidLayer") || i == FieldIndex(L"liquid.preset")) enabled &= liquid;
+        if (kSettingFields[i].page == 1 && i != FieldIndex(L"liquid.preset")) enabled &= liquid && custom;
+        if (i == FieldIndex(L"tray.grayscale")) enabled &= editor.trayEnabled.IsOn();
+        if (i == FieldIndex(L"liquid.zRadius")) enabled &= !snell && model < 3;
+        if (i == FieldIndex(L"liquid.bezelWidth")) enabled &= snell || model >= 3 ||
+            editor.controls[FieldIndex(L"liquid.cornerBoost")].slider.Value()>0 ||
+            editor.controls[FieldIndex(L"liquid.rippleStrength")].slider.Value()>0;
+        if (i == FieldIndex(L"liquid.thickness") || i == FieldIndex(L"liquid.refractiveIndex")) enabled &= snell;
+        if (i == FieldIndex(L"liquid.specular")) enabled &= !rim;
+        if (i == FieldIndex(L"liquid.lightAngle") || i == FieldIndex(L"liquid.rimOpacity") || i == FieldIndex(L"liquid.rimSaturation"))
+            enabled &= rim;
+        if (i == FieldIndex(L"liquid.shadowBlur") || i == FieldIndex(L"liquid.shadowOffset"))
+            enabled &= editor.controls[FieldIndex(L"liquid.shadowOpacity")].slider.Value() > 0;
+        if (i == FieldIndex(L"adaptive.windowSeconds"))
+            enabled &= editor.controls[FieldIndex(L"fontColor")].input.as<Controls::ComboBox>().SelectedIndex() ==
+                int(FontColorMode::Adaptive);
+        for (auto const& border : borders)
+            if (i == border.color || i == border.customColor || i == border.width || i == border.opacity) {
+                enabled &= editor.controls[border.toggle].input.as<Controls::ToggleSwitch>().IsOn();
+                if (i == border.customColor)
+                    enabled &= editor.controls[border.color].input.as<Controls::ComboBox>().SelectedIndex() == 3;
+            }
+        if (i == FieldIndex(L"ui.panelDepth")) enabled &= !uiSnell && uiModel < 3;
+        if (i == FieldIndex(L"ui.glassBezelWidth")) enabled &= uiSnell || uiModel >= 3 ||
+            editor.controls[FieldIndex(L"ui.glassCornerBoost")].slider.Value()>0 ||
+            editor.controls[FieldIndex(L"ui.glassRippleStrength")].slider.Value()>0;
+        if (i == FieldIndex(L"ui.glassThickness") || i == FieldIndex(L"ui.glassRefractiveIndex")) enabled &= uiSnell;
+        if (i == FieldIndex(L"ui.panelHighlights")) enabled &= !uiRim;
+        if (i == FieldIndex(L"ui.glassLightAngle") || i == FieldIndex(L"ui.glassRimOpacity") || i == FieldIndex(L"ui.glassRimSaturation"))
+            enabled &= uiRim;
+        bool uiExtra = i >= kUiExtras && i < kUiExtras + kGlassExtras;
+        if (uiExtra || (i >= kLiquidExtras && i < kLiquidExtras + kGlassExtras)) {
+            // Each rule names its liquid row; the UI block's is the same extra at the block's offset.
+            auto row = [uiExtra](size_t liquidRow) { return uiExtra ? liquidRow - kLiquidExtras + kUiExtras : liquidRow; };
+            int selectedModel = uiExtra ? uiModel : model;
+            int glints = editor.controls[row(FieldIndex(L"liquid.glintMode"))].input.as<Controls::ComboBox>().SelectedIndex();
+            if (i == row(FieldIndex(L"liquid.rimRefraction"))) enabled &= selectedModel >= 3;
+            if (i == row(FieldIndex(L"liquid.rimWidth"))) enabled &= selectedModel == 3;
+            if (i == row(FieldIndex(L"liquid.bevelSharpness"))) enabled &= selectedModel == 4;
+            if (i == row(FieldIndex(L"liquid.rippleWavelength")))
+                enabled &= editor.controls[row(FieldIndex(L"liquid.rippleStrength"))].slider.Value() > 0;
+            if (i == row(FieldIndex(L"liquid.frostEdge")))
+                enabled &= editor.controls[uiExtra ? FieldIndex(L"ui.panelBlur") : FieldIndex(L"liquid.blur")].slider.Value()>0;
+            if (i == row(FieldIndex(L"liquid.dye"))) enabled &= editor.controls[row(FieldIndex(L"liquid.dyeStrength"))].slider.Value() > 0;
+            if (i == row(FieldIndex(L"liquid.fluidRadius")) || i == row(FieldIndex(L"liquid.fluidViscosity")))
+                enabled &= editor.controls[row(FieldIndex(L"liquid.fluidStrength"))].slider.Value() > 0;
+            if (i == row(FieldIndex(L"liquid.glintStrength")) || i == row(FieldIndex(L"liquid.glintSize"))) enabled &= glints > 0;
+            if (i == row(FieldIndex(L"liquid.glintSpeed"))) enabled &= glints == 1;
         }
-        if (i == 39) enabled &= !uiSnell && uiModel < 3;
-        if (i == 43) enabled &= uiSnell || uiModel >= 3 ||
-            editor.controls[81].slider.Value()>0 || editor.controls[82].slider.Value()>0;
-        if (i >= 44 && i <= 45) enabled &= uiSnell;
-        if (i == 40) enabled &= !uiRim;
-        if (i >= 53 && i <= 55) enabled &= uiRim;
-        if (i >= 58 && i < 98) {
-            size_t base = i < 78 ? 58 : 78, option = i - base;
-            int selectedModel = i < 78 ? model : uiModel;
-            int glints = editor.controls[base+15].input.as<Controls::ComboBox>().SelectedIndex();
-            if (option == 0) enabled &= selectedModel >= 3;
-            if (option == 1) enabled &= selectedModel == 3;
-            if (option == 2) enabled &= selectedModel == 4;
-            if (option == 5) enabled &= editor.controls[base+4].slider.Value() > 0;
-            if (option == 8) enabled &= editor.controls[i<78 ? 18 : 37].slider.Value()>0;
-            if (option == 10) enabled &= editor.controls[base+11].slider.Value() > 0;
-            if (option == 13 || option == 14) enabled &= editor.controls[base+12].slider.Value() > 0;
-            if (option == 16 || option == 18) enabled &= glints > 0;
-            if (option == 17) enabled &= glints == 1;
-        }
-        bool expert = (kSettingFields[i].page==1 && i!=9) ||
-            (kSettingFields[i].page==3 && i!=56 && i!=57);
-        editor.controls[i].card.Visibility((i==9 ? liquid : !expert || enabled)
+        bool expert = (kSettingFields[i].page==1 && i!=FieldIndex(L"liquid.preset")) ||
+            (kSettingFields[i].page==3 && i!=FieldIndex(L"ui.panelOpacity") && i!=FieldIndex(L"ui.glassEdgeHighlight"));
+        editor.controls[i].card.Visibility((i==FieldIndex(L"liquid.preset") ? liquid : !expert || enabled)
             ?Visibility::Visible:Visibility::Collapsed);
         editor.controls[i].input.IsEnabled(editor.valid && enabled);
         if (editor.controls[i].slider) editor.controls[i].slider.IsEnabled(editor.valid && enabled);
@@ -2086,7 +2141,7 @@ void RebuildTrayRows(SettingsEditor& editor) {
     editor.trayRows.clear(); // Revoke handlers before removing their buttons.
     editor.trayList.Children().Clear();
     bool enabled = editor.trayEnabled.IsOn();
-    bool grayscale = enabled && editor.controls[2].input.as<Controls::ToggleSwitch>().IsOn();
+    bool grayscale = enabled && editor.controls[FieldIndex(L"tray.grayscale")].input.as<Controls::ToggleSwitch>().IsOn();
     for (auto const& item : editor.catalog) {
         auto card = Markup::XamlReader::Load(LR"XAML(
 <Border xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -2123,8 +2178,8 @@ void RebuildTrayRows(SettingsEditor& editor) {
             detail.Text(L"Custom icon saved · Disabled");
         } else if (custom) {
             auto const& paths = override->second;
-            bool light = editor.controls[1].input.as<Controls::ComboBox>().SelectedIndex() == 1 ||
-                (editor.controls[1].input.as<Controls::ComboBox>().SelectedIndex() != 2 &&
+            int color = editor.controls[FieldIndex(L"fontColor")].input.as<Controls::ComboBox>().SelectedIndex();
+            bool light = color == 1 || (color != 2 &&
                  editor.content.RequestedTheme() == ElementTheme::Dark);
             auto const& path = light ? paths.light : paths.dark;
             detail.Text(paths.Adaptive() ? L"Follows text color · " + path : path);
@@ -2201,7 +2256,7 @@ void ChooseTrayImage(SettingsEditor& editor, std::wstring const& key) {
 }
 
 bool CatalogPreviewLight(SettingsEditor const& editor) {
-    int color = editor.controls[1].input.as<Controls::ComboBox>().SelectedIndex();
+    int color = editor.controls[FieldIndex(L"fontColor")].input.as<Controls::ComboBox>().SelectedIndex();
     return color == int(FontColorMode::Light) ||
         (color != int(FontColorMode::Dark) && editor.content.RequestedTheme() == ElementTheme::Dark);
 }
@@ -3316,17 +3371,37 @@ void CreateEditorContent(SettingsEditor& editor) {
     editor.trayList = find(L"TrayList").as<Controls::StackPanel>();
     editor.trayStatus = find(L"TrayStatus").as<Controls::TextBlock>();
     editor.syncing = true;
-    constexpr size_t displayOrder[]{
-        0, 1, 36, 100, 101, 102, 103, 104, 112, 118, 110, 111, 113, 116, 117, 119, 114, 115, 3, 4, 5, 6, 7, 8, 98, 99, 19, 2,
-        9, 20, 21, 10, 22, 23, 24, 11, 25, 12, 26,
-        29, 14, 13, 15, 30, 31, 32, 16, 17, 18, 27, 28, 33, 34, 35,
-        58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77,
-        105, 106, 107, 108, 109, 56, 57,
-        41, 42, 38, 39, 43, 44, 45, 46, 47, 48,
-        52, 40, 51, 53, 54, 55,
-        37, 49, 50,
-        78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97};
-    static_assert(std::size(displayOrder) == std::size(kSettingFields));
+    constexpr auto displayOrder = DisplayOrder({
+        L"theme", L"fontColor", L"adaptive.windowSeconds", L"dockBorder", L"dockBorderColor",
+        L"dockBorderCustomColor", L"dockBorderWidth", L"dockBorderOpacity", L"layout", L"barDistance", L"shape",
+        L"alignment", L"innerArcs", L"slantedEnds", L"slantAngle", L"concaveRadius", L"smallerTray",
+        L"trayReduction", L"cornerRadius", L"buttonCornerRadius", L"buttonVerticalPadding", L"edgeDistance",
+        L"button.border", L"button.liquidLayer", L"tray.highlightPadding", L"tray.highlightRadius", L"tray.enabled",
+        L"tray.grayscale",
+        L"liquid.preset", L"liquid.model", L"liquid.surface", L"liquid.zRadius", L"liquid.bezelWidth",
+        L"liquid.thickness", L"liquid.refractiveIndex", L"liquid.refraction", L"liquid.magnification",
+        L"liquid.chromaticAberration", L"liquid.distortion",
+        L"liquid.lighting", L"liquid.specular", L"liquid.edgeHighlight", L"liquid.fresnel", L"liquid.lightAngle",
+        L"liquid.rimOpacity", L"liquid.rimSaturation", L"liquid.opacity", L"liquid.brightness", L"liquid.blur",
+        L"liquid.saturation", L"liquid.tint", L"liquid.shadowOpacity", L"liquid.shadowBlur", L"liquid.shadowOffset",
+        L"liquid.rimRefraction", L"liquid.rimWidth", L"liquid.bevelSharpness", L"liquid.cornerBoost",
+        L"liquid.rippleStrength", L"liquid.rippleWavelength", L"liquid.edgeWidth", L"liquid.edgeSoftness",
+        L"liquid.frostEdge", L"liquid.dispersion", L"liquid.dye", L"liquid.dyeStrength", L"liquid.fluidStrength",
+        L"liquid.fluidRadius", L"liquid.fluidViscosity", L"liquid.glintMode", L"liquid.glintStrength",
+        L"liquid.glintSpeed", L"liquid.glintSize", L"liquid.boundaryFade",
+        L"ui.bodyBorder", L"ui.bodyBorderColor", L"ui.bodyBorderCustomColor", L"ui.bodyBorderWidth",
+        L"ui.bodyBorderOpacity", L"ui.panelOpacity", L"ui.glassEdgeHighlight",
+        L"ui.glassModel", L"ui.glassSurface", L"ui.panelRefraction", L"ui.panelDepth", L"ui.glassBezelWidth",
+        L"ui.glassThickness", L"ui.glassRefractiveIndex", L"ui.glassMagnification", L"ui.glassDistortion",
+        L"ui.glassChromaticAberration",
+        L"ui.glassLighting", L"ui.panelHighlights", L"ui.glassFresnel", L"ui.glassLightAngle", L"ui.glassRimOpacity",
+        L"ui.glassRimSaturation",
+        L"ui.panelBlur", L"ui.glassBrightness", L"ui.glassSaturation",
+        L"ui.glassRimRefraction", L"ui.glassRimWidth", L"ui.glassBevelSharpness", L"ui.glassCornerBoost",
+        L"ui.glassRippleStrength", L"ui.glassRippleWavelength", L"ui.glassEdgeWidth", L"ui.glassEdgeSoftness",
+        L"ui.glassFrostEdge", L"ui.glassDispersion", L"ui.glassDye", L"ui.glassDyeStrength",
+        L"ui.glassFluidStrength", L"ui.glassFluidRadius", L"ui.glassFluidViscosity", L"ui.glassGlintMode",
+        L"ui.glassGlintStrength", L"ui.glassGlintSpeed", L"ui.glassGlintSize", L"ui.glassBoundaryFade"});
     std::array<Controls::StackPanel,4> containers{appearance,liquid,tray,ui};
     auto targets=containers;
     std::array<Controls::Primitives::ToggleButton,4> disclosures{nullptr,nullptr,nullptr,nullptr};
@@ -3334,16 +3409,18 @@ void CreateEditorContent(SettingsEditor& editor) {
         auto const& field = kSettingFields[i];
         auto& control = editor.controls[i];
         auto fields = targets[field.page];
-        PCWSTR section = i == 98 ? L"Tray highlights" : i == 0 ? L"Style & color" : i == 112 ? L"Dock layout" :
-            i == 3 ? L"Geometry" :
-            i == 7 ? L"Buttons" : i == 9 ? L"Material" : i == 21 ? L"Surface" :
-            i == 11 ? L"Refraction" : i == 29 ? L"Lighting" :
-            i == 16 ? L"Finish" : i == 33 ? L"Shadow" :
-            i == 105 ? L"Window appearance" : i == 41 ? L"Glass shape" :
-            i == 52 ? L"Lighting" : i == 37 ? L"Finish" :
-            i == 58 || i == 78 ? L"Edge shaping" :
-            i == 66 || i == 86 ? L"Frost & color" :
-            i == 70 || i == 90 ? L"Interaction & glints" : nullptr;
+        PCWSTR section = i == FieldIndex(L"tray.highlightPadding") ? L"Tray highlights" :
+            i == FieldIndex(L"theme") ? L"Style & color" : i == FieldIndex(L"layout") ? L"Dock layout" :
+            i == FieldIndex(L"cornerRadius") ? L"Geometry" :
+            i == FieldIndex(L"button.border") ? L"Buttons" : i == FieldIndex(L"liquid.preset") ? L"Material" :
+            i == FieldIndex(L"liquid.surface") ? L"Surface" :
+            i == FieldIndex(L"liquid.refraction") ? L"Refraction" : i == FieldIndex(L"liquid.lighting") ? L"Lighting" :
+            i == FieldIndex(L"liquid.opacity") ? L"Finish" : i == FieldIndex(L"liquid.shadowOpacity") ? L"Shadow" :
+            i == FieldIndex(L"ui.bodyBorder") ? L"Window appearance" : i == FieldIndex(L"ui.glassModel") ? L"Glass shape" :
+            i == FieldIndex(L"ui.glassLighting") ? L"Lighting" : i == FieldIndex(L"ui.panelBlur") ? L"Finish" :
+            i == FieldIndex(L"liquid.rimRefraction") || i == FieldIndex(L"ui.glassRimRefraction") ? L"Edge shaping" :
+            i == FieldIndex(L"liquid.frostEdge") || i == FieldIndex(L"ui.glassFrostEdge") ? L"Frost & color" :
+            i == FieldIndex(L"liquid.fluidStrength") || i == FieldIndex(L"ui.glassFluidStrength") ? L"Interaction & glints" : nullptr;
         if (section) {
             fields=containers[field.page];
             disclosures[field.page]=nullptr;
@@ -3507,33 +3584,33 @@ void CreateEditorContent(SettingsEditor& editor) {
         control.input.VerticalAlignment(VerticalAlignment::Center);
         Automation::AutomationProperties::SetName(control.input, field.label);
         Automation::AutomationProperties::SetAutomationId(control.input, field.key);
-        PCWSTR help = i == 3 || i == 4 ? L"Rounded corners are limited to half the visible shape's width or height." :
-            i == 5 ? L"Space above and below each button background. Icons and click targets keep their native size." :
-            i == 110 ? L"Island floats off the screen edge with every corner rounded. Edge sits on the screen edge, square where it meets it. Edge arc also curves out along the screen edge at each side, like a tab." :
-            i == 113 ? L"With Separate and Edge arc, the facing sides of the two bars also curve out along the screen edge, with the same arc as the outer sides." :
-            i == 118 ? L"How far apart Separate's two bars are where they come nearest. Arcs and slanted ends on their facing sides move the bars apart, so the curves never touch. On a monitor too narrow for the dock, the bars close in, down to the curves touching, before the buttons move left." :
-            i == 114 ? L"Lowers the tray's side of the dock on the side away from the screen edge. Unified joins the two heights with an S curve before the tray; Separate shortens the tray bar." :
-            i == 115 ? L"How much lower the tray side is. The limit is the dock's height less 24 DIP, so the tray band keeps at least 24 DIP." :
-            i == 116 ? L"Curves the dock's ends out toward the screen edge, the facing ends of Separate's two bars too. Every convex curve rounds at the dock's corner radius as far as each curve allows, and every concave one at Concave radius up to the room the convex curves leave. The curves keep clear of the buttons and the tray; every end sits 24 DIP from its nearest icon. With Smaller tray, the step to the tray becomes an S of the same kind, at least 24 DIP from the last button's icon. Where the dock is too wide for its monitor, the tray's end meets the screen's side square." :
-            i == 117 ? L"How steep the middle of the curve is, from the screen edge: higher is steeper and narrower." :
-            i == 119 ? L"The radius of the slanted ends' concave curves: where Edge arc's ends flare onto the screen edge and where Smaller tray's step lands. The dock corner radius sets the convex ones. Where an end is too short for both, the concave curves take the room the convex ones leave; Smaller tray's step rounds its concave curve as far as the rest of the step allows, so a short step changes no other curve." :
-            i == 111 ? L"Whole group centers the buttons and the tray together. Button area centers Start through the last app; the tray follows on the right." :
-            i == 112 ? L"Unified is one dock around the buttons and the tray. Separate splits it into a button bar and a tray bar, Bar distance apart." :
-            i == 20 || i == 41 ? L"Biconvex curves the glass. Snell traces light through the surface. Dome magnifies. Layered adds a curled rim; Bevel concentrates distortion at the edge." :
-            i == 21 || i == 42 ? L"Circle and squircle are convex; concave bends outward; raised lip blends convex and concave curves." :
-            i == 22 || i == 43 ? L"Width of the curved edge, independent of the glass base thickness." :
-            i == 24 || i == 45 ? L"1.00 does not bend light; ordinary glass is approximately 1.50." :
-            i == 29 || i == 52 ? L"Original and Rich specular use the highlight intensity. At 0%, specular highlights are disabled; refraction and Fresnel remain independent." :
-            i == 56 ? L"Transparency of the floating panels. The main body remains opaque." :
-            i == 57 ? L"Edge glow on the floating panels and glass controls. 0% disables it." :
-            i == 64 || i == 84 ? L"Width of the highlight, independent of refraction. 0 keeps automatic sizing." :
-            i == 66 || i == 86 ? L"Sharp detail retained at the edge of frosted glass. 0 frosts the entire surface." :
-            i == 67 || i == 87 ? L"With refraction links color fringing to the actual displacement of light." :
-            i == 70 || i == 90 ? L"Glass follows pointer motion and settles after it stops. Controls stay in place. Windows animation settings apply." :
-            i == 73 || i == 93 ? L"Optional glints along the glass edge. Windows animation settings apply." :
-            field.page == 3 && i != 37 && i < 98 ? L"Applies to the floating panels and the glass controls." :
-            i == 33 ? L"Shadows follow the dock and are limited to the taskbar's window area." :
-            i == 36 ? L"Average background brightness over this many seconds. Longer windows reduce color changes on animated wallpapers. 0 reacts to each sample." : nullptr;
+        PCWSTR help = i == FieldIndex(L"cornerRadius") || i == FieldIndex(L"buttonCornerRadius") ? L"Rounded corners are limited to half the visible shape's width or height." :
+            i == FieldIndex(L"buttonVerticalPadding") ? L"Space above and below each button background. Icons and click targets keep their native size." :
+            i == FieldIndex(L"shape") ? L"Island floats off the screen edge with every corner rounded. Edge sits on the screen edge, square where it meets it. Edge arc also curves out along the screen edge at each side, like a tab." :
+            i == FieldIndex(L"innerArcs") ? L"With Separate and Edge arc, the facing sides of the two bars also curve out along the screen edge, with the same arc as the outer sides." :
+            i == FieldIndex(L"barDistance") ? L"How far apart Separate's two bars are where they come nearest. Arcs and slanted ends on their facing sides move the bars apart, so the curves never touch. On a monitor too narrow for the dock, the bars close in, down to the curves touching, before the buttons move left." :
+            i == FieldIndex(L"smallerTray") ? L"Lowers the tray's side of the dock on the side away from the screen edge. Unified joins the two heights with an S curve before the tray; Separate shortens the tray bar." :
+            i == FieldIndex(L"trayReduction") ? L"How much lower the tray side is. The limit is the dock's height less 24 DIP, so the tray band keeps at least 24 DIP." :
+            i == FieldIndex(L"slantedEnds") ? L"Curves the dock's ends out toward the screen edge, the facing ends of Separate's two bars too. Every convex curve rounds at the dock's corner radius as far as each curve allows, and every concave one at Concave radius up to the room the convex curves leave. The curves keep clear of the buttons and the tray; every end sits 24 DIP from its nearest icon. With Smaller tray, the step to the tray becomes an S of the same kind, at least 24 DIP from the last button's icon. Where the dock is too wide for its monitor, the tray's end meets the screen's side square." :
+            i == FieldIndex(L"slantAngle") ? L"How steep the middle of the curve is, from the screen edge: higher is steeper and narrower." :
+            i == FieldIndex(L"concaveRadius") ? L"The radius of the slanted ends' concave curves: where Edge arc's ends flare onto the screen edge and where Smaller tray's step lands. The dock corner radius sets the convex ones. Where an end is too short for both, the concave curves take the room the convex ones leave; Smaller tray's step rounds its concave curve as far as the rest of the step allows, so a short step changes no other curve." :
+            i == FieldIndex(L"alignment") ? L"Whole group centers the buttons and the tray together. Button area centers Start through the last app; the tray follows on the right." :
+            i == FieldIndex(L"layout") ? L"Unified is one dock around the buttons and the tray. Separate splits it into a button bar and a tray bar, Bar distance apart." :
+            i == FieldIndex(L"liquid.model") || i == FieldIndex(L"ui.glassModel") ? L"Biconvex curves the glass. Snell traces light through the surface. Dome magnifies. Layered adds a curled rim; Bevel concentrates distortion at the edge." :
+            i == FieldIndex(L"liquid.surface") || i == FieldIndex(L"ui.glassSurface") ? L"Circle and squircle are convex; concave bends outward; raised lip blends convex and concave curves." :
+            i == FieldIndex(L"liquid.bezelWidth") || i == FieldIndex(L"ui.glassBezelWidth") ? L"Width of the curved edge, independent of the glass base thickness." :
+            i == FieldIndex(L"liquid.refractiveIndex") || i == FieldIndex(L"ui.glassRefractiveIndex") ? L"1.00 does not bend light; ordinary glass is approximately 1.50." :
+            i == FieldIndex(L"liquid.lighting") || i == FieldIndex(L"ui.glassLighting") ? L"Original and Rich specular use the highlight intensity. At 0%, specular highlights are disabled; refraction and Fresnel remain independent." :
+            i == FieldIndex(L"ui.panelOpacity") ? L"Transparency of the floating panels. The main body remains opaque." :
+            i == FieldIndex(L"ui.glassEdgeHighlight") ? L"Edge glow on the floating panels and glass controls. 0% disables it." :
+            i == FieldIndex(L"liquid.edgeWidth") || i == FieldIndex(L"ui.glassEdgeWidth") ? L"Width of the highlight, independent of refraction. 0 keeps automatic sizing." :
+            i == FieldIndex(L"liquid.frostEdge") || i == FieldIndex(L"ui.glassFrostEdge") ? L"Sharp detail retained at the edge of frosted glass. 0 frosts the entire surface." :
+            i == FieldIndex(L"liquid.dispersion") || i == FieldIndex(L"ui.glassDispersion") ? L"With refraction links color fringing to the actual displacement of light." :
+            i == FieldIndex(L"liquid.fluidStrength") || i == FieldIndex(L"ui.glassFluidStrength") ? L"Glass follows pointer motion and settles after it stops. Controls stay in place. Windows animation settings apply." :
+            i == FieldIndex(L"liquid.glintMode") || i == FieldIndex(L"ui.glassGlintMode") ? L"Optional glints along the glass edge. Windows animation settings apply." :
+            field.page == 3 && i != FieldIndex(L"ui.panelBlur") && !std::wstring_view(field.key).starts_with(L"ui.bodyBorder") ? L"Applies to the floating panels and the glass controls." :
+            i == FieldIndex(L"liquid.shadowOpacity") ? L"Shadows follow the dock and are limited to the taskbar's window area." :
+            i == FieldIndex(L"adaptive.windowSeconds") ? L"Average background brightness over this many seconds. Longer windows reduce color changes on animated wallpapers. 0 reacts to each sample." : nullptr;
         if (help) {
             Controls::ToolTipService::SetToolTip(control.row, winrt::box_value(help));
             Automation::AutomationProperties::SetHelpText(control.input, help);
@@ -3619,8 +3696,9 @@ void CreateEditorContent(SettingsEditor& editor) {
     editor.enableLiquidClick=editor.enableLiquid.Click(winrt::auto_revoke,
         [&editor](auto const&,auto const&) {
             editor.syncing=true;
-            auto theme=editor.controls[0].input.as<Controls::ComboBox>();
-            if(theme.SelectedIndex()==int(DockTheme::Liquid)) editor.controls[9].input.as<Controls::ComboBox>().SelectedIndex(0);
+            auto theme=editor.controls[FieldIndex(L"theme")].input.as<Controls::ComboBox>();
+            if(theme.SelectedIndex()==int(DockTheme::Liquid))
+                editor.controls[FieldIndex(L"liquid.preset")].input.as<Controls::ComboBox>().SelectedIndex(0);
             else theme.SelectedIndex(int(DockTheme::Liquid));
             editor.syncing=false;EditorChanged(editor);
         });
@@ -9757,11 +9835,12 @@ void ApplyPreviewMetrics(SettingsEditor& editor, TaskbarPreviewMetrics const& me
 // The slider reaches what this taskbar's band leaves the tray, and never drops below the saved value: a shorter
 // taskbar clamps that at runtime, and the editor must not rewrite it.
 void UpdateTrayReductionMaximum(SettingsEditor& editor, settingsjson::JsonObject const& saved) {
-    auto const& field = kSettingFields[115];
+    constexpr size_t row = FieldIndex(L"trayReduction");
+    auto const& field = kSettingFields[row];
     double fit = std::floor(editor.preview.metrics.dockHeight - kMinTrayBand);
     // A lower maximum coerces the slider, which is not an edit: the number beside it stays, and that is what saves.
     bool syncing = std::exchange(editor.syncing, true);
-    editor.controls[115].slider.Maximum(std::clamp(std::max<double>(LocalInt(saved, field.key), fit),
+    editor.controls[row].slider.Maximum(std::clamp(std::max<double>(LocalInt(saved, field.key), fit),
                                                    double(field.minimum), double(field.maximum)));
     editor.syncing = syncing;
 }
@@ -9781,9 +9860,9 @@ void ApplyPreviewButtonAppearance(SettingsEditor& editor,bool accepted) {
     auto& preview=editor.preview;
     bool contrast=HighContrastActive();
     auto theme=contrast?DockTheme::Native:
-        DockTheme(editor.controls[0].input.as<Controls::ComboBox>().SelectedIndex());
-    bool layer=editor.controls[8].input.as<Controls::ToggleSwitch>().IsOn();
-    bool borders=contrast || editor.controls[7].input.as<Controls::ToggleSwitch>().IsOn();
+        DockTheme(editor.controls[FieldIndex(L"theme")].input.as<Controls::ComboBox>().SelectedIndex());
+    bool layer=editor.controls[FieldIndex(L"button.liquidLayer")].input.as<Controls::ToggleSwitch>().IsOn();
+    bool borders=contrast || editor.controls[FieldIndex(L"button.border")].input.as<Controls::ToggleSwitch>().IsOn();
     bool dark=editor.content.RequestedTheme()==ElementTheme::Dark;
     auto colors=ButtonRimColors(dark);
     if(contrast) {
@@ -9844,7 +9923,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
             return editor.controls[index].input.as<Controls::Primitives::Selector>().SelectedIndex();
         };
         bool dark = editor.content.RequestedTheme() == ElementTheme::Dark;
-        auto theme = highContrast ? DockTheme::Native : static_cast<DockTheme>(choice(0));
+        auto theme = highContrast ? DockTheme::Native : static_cast<DockTheme>(choice(FieldIndex(L"theme")));
         bool liquid = theme == DockTheme::Liquid;
         if (!liquid || preview.unavailable) CloseEditorPreview(editor);
         double dockHeight = preview.metrics.dockHeight;
@@ -9856,7 +9935,11 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         // sit on the canvas bottom as a bottom taskbar sits on its screen edge.
         auto style = ReadDockStyle(pageValues);
         bool edge = style.shape != DockShape::Island;
-        double radius = std::min(number(3), dockHeight / 2);
+        double radius = std::min(number(FieldIndex(L"cornerRadius")), dockHeight / 2);
+        double buttonPadding = number(FieldIndex(L"buttonVerticalPadding"));
+        double buttonCorner = number(FieldIndex(L"buttonCornerRadius"));
+        double highlightPadding = number(FieldIndex(L"tray.highlightPadding"));
+        double highlightRadius = number(FieldIndex(L"tray.highlightRadius"));
         double bleed = DockBleed(style.shape, radius);
         double drop = TrayDrop(style, dockHeight);
         // The tray bar wraps the tray content in the dock padding, like the live tray. The ends keep their gap beside the
@@ -9865,7 +9948,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         IconBox buttonIcon{0, (dockHeight - preview.metrics.iconHeight) / 2, (dockHeight + preview.metrics.iconHeight) / 2};
         double iconInset = (buttonWidth - preview.metrics.iconWidth) / 2;
         auto outline = MakeOutline(style, trayWidth, radius, dockHeight, false,
-                                   {number(5), std::min(number(4), buttonWidth / 2), number(98), number(99),
+                                   {buttonPadding, std::min(buttonCorner, buttonWidth / 2), highlightPadding, highlightRadius,
                                     IconBox{16 + iconInset, buttonIcon.top, buttonIcon.bottom},
                                     IconBox{kDockPadding + trayWidth - (102 + preview.clock.Width()),
                                             (dockHeight + drop - 34) / 2, (dockHeight + drop + 34) / 2},
@@ -9882,10 +9965,10 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         FitPreviewCanvas(editor, flare, trayGap - 28);
         double left = preview.margin, trayLeft = left + 16 + 5 * step - 8 + trayGap;
         double y = edge ? preview.height - dockHeight : (preview.height - dockHeight) / 2;
-        auto buttonInsets=GetButtonInsets({0,0},dockHeight,number(5));
+        auto buttonInsets=GetButtonInsets({0,0},dockHeight,buttonPadding);
         double padding=buttonInsets.top;
         double buttonHeight=float(dockHeight-buttonInsets.top-buttonInsets.bottom);
-        double buttonRadius=ButtonClipRadius(buttonWidth,buttonHeight,number(4));
+        double buttonRadius=ButtonClipRadius(buttonWidth,buttonHeight,buttonCorner);
         Controls::Canvas::SetLeft(preview.material, left - flare);
         Controls::Canvas::SetTop(preview.material, y);
         preview.material.Height(dockHeight);
@@ -9896,7 +9979,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
             button.Width(buttonWidth);
             Controls::Canvas::SetLeft(button, left + 16 + i * step);
             button.Height(buttonHeight);
-            button.CornerRadius({number(4),number(4),number(4),number(4)});
+            button.CornerRadius({buttonCorner,buttonCorner,buttonCorner,buttonCorner});
             Controls::Canvas::SetTop(button, y + padding);
         }
         for (size_t i = 0; i < preview.appIcons.size(); ++i) {
@@ -9908,10 +9991,10 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         }
         constexpr double trayOffsets[]{0, 38, 66};
         // The canvas bottom is the screen edge, so Smaller tray's band starts the drop below the dock's top.
-        auto trayInsets=GetButtonInsets(TrayInsets({0,0},false,drop),dockHeight,number(98));
+        auto trayInsets=GetButtonInsets(TrayInsets({0,0},false,drop),dockHeight,highlightPadding);
         preview.trayHighlight.Width(28);
         preview.trayHighlight.Height(dockHeight-trayInsets.top-trayInsets.bottom);
-        preview.trayHighlight.CornerRadius({number(99),number(99),number(99),number(99)});
+        preview.trayHighlight.CornerRadius({highlightRadius,highlightRadius,highlightRadius,highlightRadius});
         preview.trayHighlight.Background(Media::SolidColorBrush(PreviewHighlightColor(dark,highContrast)));
         Controls::Canvas::SetLeft(preview.trayHighlight,trayLeft+trayOffsets[1]);
         Controls::Canvas::SetTop(preview.trayHighlight,y+trayInsets.top);
@@ -9982,11 +10065,11 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
                 // participate; every app lens follows the separate-layer option.
                 for(size_t i=1;i<preview.buttons.size();++i) {
                     bool attention=i==3;
-                    if(!ButtonGlassEnabled(theme,toggle(8))) continue;
+                    if(!ButtonGlassEnabled(theme,toggle(FieldIndex(L"button.liquidLayer")))) continue;
                     float x = static_cast<float>(left + 16 + i * step + buttonWidth / 2);
                     float centerY = static_cast<float>(y + dockHeight / 2);
                     float4 rect{x,centerY,float(buttonWidth/2),float(buttonHeight/2)};
-                    float nativeRadius=float(number(4)),clipRadius=float(buttonRadius);
+                    float nativeRadius=float(buttonCorner),clipRadius=float(buttonRadius);
                     AppendButtonLens(lens,rect,rect,{nativeRadius,nativeRadius,nativeRadius,nativeRadius},
                         {1,clipRadius,clipRadius},attention,(i==1 || attention)?1:0);
                 }
@@ -10024,7 +10107,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         Hosting::ElementCompositionPreview::SetElementChildVisual(preview.material, materialLine);
         ApplyPreviewButtonAppearance(editor,liquid && !preview.unavailable);
 
-        auto mode = highContrast ? FontColorMode::Default : static_cast<FontColorMode>(choice(1));
+        auto mode = highContrast ? FontColorMode::Default : static_cast<FontColorMode>(choice(FieldIndex(L"fontColor")));
         auto foreground = [&](size_t index) {
             bool light = mode == FontColorMode::Light || (mode == FontColorMode::Default && dark);
             if (mode == FontColorMode::Adaptive) {
@@ -10040,7 +10123,8 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
             return Media::SolidColorBrush(color);
         };
         preview.clock.Foreground(foreground(0));
-        auto appColor = editor.trayEnabled.IsOn() && toggle(2) ? GrayscalePixel(0xFF3CC8FAu) : 0xFF3CC8FAu;
+        auto appColor = editor.trayEnabled.IsOn() && toggle(FieldIndex(L"tray.grayscale")) ? GrayscalePixel(0xFF3CC8FAu)
+                                                                                           : 0xFF3CC8FAu;
         preview.icons[0].Foreground(Media::SolidColorBrush(winrt::Windows::UI::Color{
             255, static_cast<BYTE>(appColor >> 16), static_cast<BYTE>(appColor >> 8), static_cast<BYTE>(appColor)}));
         preview.icons[1].Foreground(foreground(1));
@@ -10080,7 +10164,7 @@ void CloseEditorPreview(SettingsEditor& editor) {
     if (preview.liquidHost) preview.liquidHost.Visibility(Visibility::Collapsed);
     ApplyPreviewButtonAppearance(editor,false);
     if(editor.valid && preview.material &&
-       editor.controls[0].input.as<Controls::ComboBox>().SelectedIndex()==int(DockTheme::Liquid))
+       editor.controls[FieldIndex(L"theme")].input.as<Controls::ComboBox>().SelectedIndex()==int(DockTheme::Liquid))
         preview.material.Background(nullptr);
 }
 
@@ -12426,7 +12510,7 @@ void UpdatePreviewForeground(SettingsEditor& editor) {
     auto& preview=editor.preview;
     if(!editor.valid || !preview.canvas || !IsWindowVisible(editor.window) ||
        IsIconic(editor.window) || HighContrastActive() ||
-       editor.controls[1].input.as<Controls::ComboBox>().SelectedIndex()!=int(FontColorMode::Adaptive))
+       editor.controls[FieldIndex(L"fontColor")].input.as<Controls::ComboBox>().SelectedIndex()!=int(FontColorMode::Adaptive))
         return;
     try {
         std::array<FrameworkElement,3> elements{preview.clock,preview.icons[1],preview.icons[2]};
