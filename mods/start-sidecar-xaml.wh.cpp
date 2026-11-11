@@ -4,7 +4,7 @@
 // @name:zh-CN 开始菜单卡片 - Start Sidecar
 // @description Native XAML live cards inside the Windows 11 Start companion layout.
 // @description:zh-CN 在 Windows 11 开始菜单中嵌入原生 XAML 卡片。
-// @version 0.5.3
+// @version 0.5.4
 // @author Yizuka17
 // @github https://github.com/Yizuka17
 // @license MIT
@@ -202,8 +202,6 @@ SOFTWARE.
 #include <functional>
 #include <optional>
 #include <winrt/Windows.UI.Xaml.Automation.h>
-#include <winrt/Windows.UI.Xaml.Hosting.h>
-#include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.System.h>
 
@@ -1279,8 +1277,18 @@ static event_token g_visible{}, g_activated{}, g_closed{}, g_sizeChanged{},
 [[clang::no_destroy]] static c::Border g_shadowSource{nullptr};
 [[clang::no_destroy]] static std::optional<std::vector<c::Border>>
     g_shadowCasters;
+[[clang::no_destroy]] static std::optional<std::vector<c::Grid>> g_shadowMotion;
+struct DetachedShadow {
+    c::Grid surface;
+    c::Grid motion;
+};
+[[clang::no_destroy]] static std::optional<std::vector<DetachedShadow>>
+    g_detachedShadows;
+[[clang::no_destroy]] static c::Canvas g_shadowLayer{nullptr};
+[[clang::no_destroy]] static m::MatrixTransform g_shadowTransform{nullptr};
 [[clang::no_destroy]] static std::optional<
-    std::vector<Windows::UI::Composition::Visual>> g_shadowMotion;
+    m::CompositionTarget::Rendering_revoker> g_shadowRendering;
+static ULONGLONG g_shadowKeepUntil = 0;
 static float g_shadowElevation = 0;
 [[clang::no_destroy]] static c::ScrollViewer g_leftFlank{nullptr},
     g_rightFlank{nullptr};
@@ -1391,7 +1399,7 @@ static void LabelControl(x::FrameworkElement const& control,
     c::ToolTipService::SetToolTip(control, box_value(text));
 }
 
-static void BindSurfaceProperty(c::Border const& target,
+static void BindSurfaceProperty(x::FrameworkElement const& target,
                                 c::Border const& source,
                                 x::DependencyProperty const& property,
                                 const wchar_t* path) {
@@ -1414,7 +1422,55 @@ static void ApplyNativeSurface(c::Border const& card, c::Border const& native) {
     card.CornerRadius(native.CornerRadius());
 }
 
-static c::Grid WrapSurface(c::Border const& card, bool shadow = true) {
+static void SyncShadowAnimation() {
+    if (!g_shadowSource || !g_shadowTransform)
+        return;
+    auto parent =
+        m::VisualTreeHelper::GetParent(g_shadowSource).try_as<x::UIElement>();
+    if (!parent)
+        return;
+    const double width = std::max(1.0, g_shadowSource.ActualWidth());
+    const double height = std::max(1.0, g_shadowSource.ActualHeight());
+    auto transform = g_shadowSource.TransformToVisual(parent);
+    const auto origin = transform.TransformPoint({0, 0});
+    const auto across =
+        transform.TransformPoint({static_cast<float>(width), 0});
+    const auto down = transform.TransformPoint({0, static_cast<float>(height)});
+    const auto offset = g_shadowSource.ActualOffset();
+    m::Matrix matrix{
+        (across.X - origin.X) / width, (across.Y - origin.Y) / width,
+        (down.X - origin.X) / height,  (down.Y - origin.Y) / height,
+        origin.X - offset.x,           origin.Y - offset.y};
+    const auto old = g_shadowTransform.Matrix();
+    if (std::abs(old.M11 - matrix.M11) > 0.00001 ||
+        std::abs(old.M12 - matrix.M12) > 0.00001 ||
+        std::abs(old.M21 - matrix.M21) > 0.00001 ||
+        std::abs(old.M22 - matrix.M22) > 0.00001 ||
+        std::abs(old.OffsetX - matrix.OffsetX) > 0.001 ||
+        std::abs(old.OffsetY - matrix.OffsetY) > 0.001)
+        g_shadowTransform.Matrix(matrix);
+}
+
+static void EnsureShadowAnimation() {
+    if (!g_shadowTransform || g_shadowRendering ||
+        (!svc::visible && GetTickCount64() >= g_shadowKeepUntil))
+        return;
+    // Track the actual shell animation, including private transition transforms
+    // and interactive touch gestures, for as long as Start is visible. Keep a
+    // short tail for the closing animation, then stop requesting render frames.
+    g_shadowRendering.emplace(m::CompositionTarget::Rendering(
+        auto_revoke, [](auto const&, auto const&) {
+            GuardUi([] {
+                SyncShadowAnimation();
+                if (!svc::visible && GetTickCount64() >= g_shadowKeepUntil)
+                    g_shadowRendering.reset();
+            });
+        }));
+}
+
+static c::Grid WrapSurface(c::Border const& card,
+                           bool shadow = true,
+                           bool detached = true) {
     c::Grid surface;
     if (shadow && g_shadowSource) {
         c::Grid motion;
@@ -1429,24 +1485,21 @@ static c::Grid WrapSurface(c::Border const& card, bool shadow = true) {
         BindSurfaceProperty(caster, g_shadowSource,
                             x::UIElement::VisibilityProperty(), L"Visibility");
         motion.Children().Append(caster);
-        surface.Children().Append(motion);
-        // The shell animates its shadow separately from the content. Reference
-        // the compositor's effective values, including independent animations,
-        // rather than sampling the UI-thread base properties every frame.
-        using x::Hosting::ElementCompositionPreview;
-        auto visual = ElementCompositionPreview::GetElementVisual(motion);
-        auto source =
-            ElementCompositionPreview::GetElementVisual(g_shadowSource);
-        auto compositor = visual.Compositor();
-        for (const wchar_t* property : {L"TransformMatrix", L"Opacity"}) {
-            auto expression = compositor.CreateExpressionAnimation(
-                std::wstring(L"source.") + property);
-            expression.SetReferenceParameter(L"source", source);
-            visual.StartAnimation(property, expression);
+        if (!g_shadowTransform)
+            g_shadowTransform = m::MatrixTransform();
+        motion.RenderTransform(g_shadowTransform);
+        BindSurfaceProperty(motion, g_shadowSource,
+                            x::UIElement::OpacityProperty(), L"Opacity");
+        if (detached) {
+            if (!g_detachedShadows)
+                g_detachedShadows.emplace();
+            g_detachedShadows->push_back({surface, motion});
+        } else {
+            surface.Children().Append(motion);
         }
         if (!g_shadowMotion)
             g_shadowMotion.emplace();
-        g_shadowMotion->push_back(visual);
+        g_shadowMotion->push_back(motion);
         if (!g_shadowCasters)
             g_shadowCasters.emplace();
         g_shadowCasters->push_back(caster);
@@ -1455,7 +1508,54 @@ static c::Grid WrapSurface(c::Border const& card, bool shadow = true) {
     return surface;
 }
 
+static x::FrameworkElement Resolve(x::DependencyObject root, std::wstring path);
+
+static void SyncDetachedShadows() {
+    if (!g_layoutReady || !g_layoutRoot || !g_detachedShadows)
+        return;
+    auto host = g_shadowLayer
+                    ? g_shadowLayer.Parent().try_as<c::Grid>()
+                    : Resolve(g_layoutRoot, L"AnimationRoot").try_as<c::Grid>();
+    if (!host)
+        return;
+    if (!g_shadowLayer) {
+        g_shadowLayer = c::Canvas();
+        g_shadowLayer.Name(L"StartSidecarShadowLayer");
+        g_shadowLayer.IsHitTestVisible(false);
+        c::Canvas::SetZIndex(g_shadowLayer, -1);
+        host.Children().InsertAt(0, g_shadowLayer);
+        Track(host.LayoutUpdated(auto_revoke, [](auto const&, auto const&) {
+            GuardUi([] { SyncDetachedShadows(); });
+        }));
+    }
+    auto columns = std::max(1u, host.ColumnDefinitions().Size());
+    auto rows = std::max(1u, host.RowDefinitions().Size());
+    if (c::Grid::GetColumnSpan(g_shadowLayer) != static_cast<int>(columns))
+        c::Grid::SetColumnSpan(g_shadowLayer, columns);
+    if (c::Grid::GetRowSpan(g_shadowLayer) != static_cast<int>(rows))
+        c::Grid::SetRowSpan(g_shadowLayer, rows);
+    for (auto const& entry : *g_detachedShadows) {
+        if (!entry.surface.Parent())
+            continue;
+        if (!entry.motion.Parent())
+            g_shadowLayer.Children().Append(entry.motion);
+        const auto point =
+            entry.surface.TransformToVisual(host).TransformPoint({0, 0});
+        if (c::Canvas::GetLeft(entry.motion) != point.X)
+            c::Canvas::SetLeft(entry.motion, point.X);
+        if (c::Canvas::GetTop(entry.motion) != point.Y)
+            c::Canvas::SetTop(entry.motion, point.Y);
+        if (entry.motion.Width() != entry.surface.ActualWidth())
+            entry.motion.Width(entry.surface.ActualWidth());
+        if (entry.motion.Height() != entry.surface.ActualHeight())
+            entry.motion.Height(entry.surface.ActualHeight());
+    }
+}
+
 static void SyncShadowElevation() {
+    SyncShadowAnimation();
+    EnsureShadowAnimation();
+    SyncDetachedShadows();
     if (!g_shadowSource || !g_shadowCasters)
         return;
     float elevation = g_shadowSource.Translation().z;
@@ -1532,24 +1632,30 @@ static void Save(x::FrameworkElement const& element,
 static void RemoveCard() {
     g_layoutReady = false;
     g_layoutRoot = nullptr;
+    g_shadowRendering.reset();
+    g_shadowTransform = nullptr;
     try {
         if (g_update)
             g_update.Stop();
     } catch (...) {
-    }
-    if (g_shadowMotion) {
-        for (auto const& visual : *g_shadowMotion)
-            GuardUi([&] {
-                visual.StopAnimation(L"TransformMatrix");
-                visual.StopAnimation(L"Opacity");
-            });
-        g_shadowMotion.reset();
     }
     if (g_cardEvents) {
         for (auto const& unsubscribe : *g_cardEvents)
             GuardUi(unsubscribe);
         g_cardEvents.reset();
     }
+    if (g_shadowLayer) {
+        GuardUi([] {
+            if (auto parent = g_shadowLayer.Parent().try_as<c::Grid>()) {
+                uint32_t index;
+                if (parent.Children().IndexOf(g_shadowLayer, index))
+                    parent.Children().RemoveAt(index);
+            }
+        });
+        g_shadowLayer = nullptr;
+    }
+    g_detachedShadows.reset();
+    g_shadowMotion.reset();
     if (g_compactLayer) {
         GuardUi([] {
             if (auto parent = g_compactLayer.Parent().try_as<c::Grid>()) {
@@ -2466,19 +2572,19 @@ static c::ScrollViewer BuildStackedCards(c::Border const& native,
     if (settings.overview) {
         BuildOverview(native, settings);
         CompactOverview(width);
-        stack.Children().Append(WrapSurface(g_card, shadow));
+        stack.Children().Append(WrapSurface(g_card, shadow, false));
     }
     std::vector<c::Border> smallerCards;
-    cards::Populate(native, settings,
-                    [&](c::Border const& card, double weight) {
-                        if (weight > 1.0) {
-                            card.Height(cards::kPanelHeight);
-                            stack.Children().Append(WrapSurface(card, shadow));
-                        } else {
-                            card.MinHeight(142);
-                            smallerCards.push_back(card);
-                        }
-                    });
+    cards::Populate(
+        native, settings, [&](c::Border const& card, double weight) {
+            if (weight > 1.0) {
+                card.Height(cards::kPanelHeight);
+                stack.Children().Append(WrapSurface(card, shadow, false));
+            } else {
+                card.MinHeight(142);
+                smallerCards.push_back(card);
+            }
+        });
     if (!smallerCards.empty()) {
         c::Grid grid;
         grid.ColumnSpacing(6);
@@ -2495,7 +2601,7 @@ static c::ScrollViewer BuildStackedCards(c::Border const& native,
                 row.Height({1, x::GridUnitType::Auto});
                 grid.RowDefinitions().Append(row);
             }
-            auto surface = WrapSurface(smallerCards[i], shadow);
+            auto surface = WrapSurface(smallerCards[i], shadow, false);
             c::Grid::SetColumn(surface, i % columns);
             c::Grid::SetRow(surface, i / columns);
             if (i + 1 == smallerCards.size())
@@ -2547,7 +2653,7 @@ static void BuildCenteredFlanks(c::Grid const& host,
     if (settings.overview) {
         BuildOverview(native, settings);
         CompactOverview(leftWidth);
-        left.Children().Append(WrapSurface(g_card));
+        left.Children().Append(WrapSurface(g_card, true, false));
     }
     const auto moduleCount = cards::ModuleCount(settings);
     unsigned module = 0;
@@ -2561,7 +2667,9 @@ static void BuildCenteredFlanks(c::Grid const& host,
                                : module % 2 == 1;
             movedSmallCard |= useLeft && small;
             ++module;
-            (useLeft ? left : right).Children().Append(WrapSurface(card));
+            (useLeft ? left : right)
+                .Children()
+                .Append(WrapSurface(card, true, false));
         });
     auto makeSide = [&](c::StackPanel const& content, double width,
                         bool atLeft) {
@@ -2988,6 +3096,8 @@ static bool InitializeUi() {
                     if (g_unloading)
                         return;
                     svc::SetVisible(args.Visible());
+                    g_shadowKeepUntil = GetTickCount64() + 1000;
+                    EnsureShadowAnimation();
                     if (args.Visible()) {
                         QueueLayout();
                     } else {
