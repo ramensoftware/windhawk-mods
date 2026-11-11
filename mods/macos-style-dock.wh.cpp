@@ -2,7 +2,7 @@
 // @id              macos-style-dock
 // @name            MacOS Style Dock
 // @description     Turns the Windows 11 taskbar into a macOS-style dock with magnifying icons
-// @version         1.1.1
+// @version         1.1.2
 // @author          Zach Vaughn
 // @github          https://github.com/zachvdev
 // @include         explorer.exe
@@ -13,21 +13,6 @@
 
 // ==WindhawkModReadme==
 /*
-> **Warning: don't install Windows' November 2026 update (KB5132061, build
-> 26200.9974) yet.** Microsoft hasn't published the symbols for its new
-> taskbar.dll, which this mod, like many taskbar mods, needs to find parts of
-> the taskbar. On that build the dock can disappear (especially with Auto-hide
-> on Hybrid or On), size changes don't apply until Explorer restarts, and
-> right-click menus open in the wrong place.
->
-> If it's already installed, uninstall it (Settings → Windows Update → Update
-> history → Uninstall updates, or Settings → System → Recovery → Advanced
-> startup → Troubleshoot → Advanced options → Uninstall Updates → Uninstall
-> latest quality update), then pause updates. If the taskbar has disappeared,
-> turn off "Automatically hide the taskbar" in Windows' taskbar settings. Once
-> Microsoft publishes the symbols, the mod should work on the new build as is,
-> and this note will be removed.
-
 # MacOS Style Dock
 
 Turns the Windows 11 taskbar into a macOS-style dock: frosted glass, icons
@@ -42,6 +27,45 @@ apps, and dragging apps to rearrange them.
 ![The dock](https://i.imgur.com/E1NqVoz.png)
 
 ![The dock in action](https://i.imgur.com/eJXsof7.gif)
+
+## Will it work on my PC?
+
+To see your Windows version, press Win+R, type `winver` and press Enter. To
+see whether your PC is x64 or ARM64, open Settings → System → About and look
+at "System type".
+
+| Your PC | Works? |
+| --- | --- |
+| Windows 11, version 25H2 or 24H2 | Yes |
+| Windows 11, version 23H2 or older | Not supported; Microsoft no longer updates them |
+| Windows 10 | No |
+| Windows Insider builds | Not supported; some have a newer taskbar the dock can't restyle |
+| x64 (Intel or AMD) | Yes |
+| ARM64 (like Snapdragon) | Should work, but not yet tested |
+| Taskbar at the bottom | Yes |
+| Taskbar at the top or a side | No |
+| "Small taskbar buttons" turned on | No |
+| Several monitors | Yes, each taskbar becomes its own dock |
+| ExplorerPatcher, StartAllBack or another Windows 10-style taskbar | No, the dock restyles Windows 11's own taskbar |
+| Other taskbar mods turned on | Turn them off first (see below) |
+
+- **Right after a Windows update**, the dock can misbehave for a few days.
+  Like most taskbar mods, it finds parts of the taskbar through Microsoft's
+  symbol files, which are sometimes published late. Windhawk can fill the
+  gap for mods installed from its catalog, but not for local copies. If the
+  dock acts up just after an update, check back in a few days.
+- **Use the dock's own Auto-hide**, not Windows' "Automatically hide the
+  taskbar". The mod uses Windows' setting behind the scenes and puts it back
+  when it's turned off. If that ever fails (for example, Windhawk was
+  uninstalled while Explorer wasn't running), or the taskbar disappears,
+  turn it off yourself in Windows' taskbar settings.
+- **High resolution icons** need the October 2024 update (KB5044384) or
+  later.
+- **Don't combine it with other taskbar mods**, especially "Taskbar height
+  and icon size", "Taskbar Dock Animation", "Taskbar Dock Animation Plus",
+  "Mac Island & Dock", "Multirow taskbar for Windows 11", "Start button
+  always on the left" or "Disable Taskbar Thumbnails".
+- **Smart App Control** blocks this mod, as it does all Windhawk mods.
 
 ## Getting started
 
@@ -211,34 +235,17 @@ If something glitches or looks wrong:
 3. If it's the app icons, try turning off "Squircle icons", or "High
    resolution icons" if apps' custom icons don't show up.
 
-## Compatibility
-
-- Windows 11 on x64 or ARM64, with the taskbar at the bottom. "Small taskbar
-  buttons" isn't supported. ARM64 support follows m417z's mods and hasn't been
-  tested on an ARM64 PC yet.
-- With several monitors, each taskbar becomes its own dock.
-- Use the dock's own Auto-hide, not Windows' "Automatically hide the
-  taskbar". The mod uses Windows' setting behind the scenes and puts it back
-  when it's turned off. If that ever fails (for example, Windhawk was
-  uninstalled while Explorer wasn't running), turn it off yourself in
-  Windows' taskbar settings.
-- High resolution icons need the October 2024 update (KB5044384) or later.
-- Don't combine with other taskbar mods, especially "Taskbar height and icon
-  size", "Taskbar Dock Animation", "Taskbar Dock Animation Plus", "Mac Island
-  & Dock", "Taskbar Multirow", "Start button always on the left" or "Disable
-  Taskbar Thumbnails".
-- Smart App Control blocks this mod, as it does all Windhawk mods.
-
 ## Credits
 
 The taskbar height code is based on m417z's "Taskbar height and icon size".
-Icon dragging and right-click menu placement follow his "Taskbar Multirow",
-keeping the taskbar shown follows his "Taskbar auto-hide when maximized",
-turning off hover previews follows his "Disable Taskbar Thumbnails", and
-placing them follows his "Taskbar on top" (all GPL-3.0). Hybrid dots follow
-notdominicc's way of reshaping Windows' own indicators, and moving Task View's
-row of desktops follows Asteski's "Task View Customizer". The squircle
-corners use PaintCode's measurements of Apple's curve.
+Icon dragging and right-click menu placement follow his "Multirow taskbar for
+Windows 11", keeping the taskbar shown follows his "Taskbar auto-hide when
+maximized", turning off hover previews follows his "Disable Taskbar
+Thumbnails", and placing them follows his "Taskbar on top for Windows 11"
+(all GPL-3.0). Hybrid dots follow notdominicc's way of reshaping Windows' own
+indicators, and moving Task View's row of desktops follows Asteski's "Task
+View Customizer". The squircle corners use PaintCode's measurements of
+Apple's curve.
 */
 // ==/WindhawkModReadme==
 
@@ -1223,6 +1230,26 @@ void ApplyButtonWidth(Button& b, wux::FrameworkElement const& button) {
     if (root.MinWidth() != g_size.buttonWidth) root.MinWidth(g_size.buttonWidth);
 }
 
+// Below Size 41, buttons are wider than their spot (never narrower than the
+// stock 44px) and overlap through negative margins, so whichever is on top
+// would take clicks meant for its neighbor, under the neighbor's label. Each is
+// clipped to its own spot, which also limits where it takes clicks.
+void ApplyHitClip(wux::FrameworkElement const& button) {
+    auto dp = wux::UIElement::ClipProperty();
+    float overlap = -g_size.buttonMargin;
+    if (overlap <= 0) {
+        if (FindOverride(button, dp)) Release(button, dp);
+        return;
+    }
+    Track(button, dp);
+    wf::Rect want{overlap, -1000, g_size.buttonWidth - 2 * overlap, 3000};
+    auto clip = button.Clip();
+    if (clip && clip.Rect() == want) return;
+    wuxm::RectangleGeometry geometry;
+    geometry.Rect(want);
+    button.Clip(geometry);
+}
+
 // App buttons' first grid column holds the icon, sized for 24px by the taskbar.
 void ApplyIconColumn(Button& b) {
     auto root = b.root.get();
@@ -1706,6 +1733,7 @@ struct Plate {
 
     // The Recycle Bin and its divider, in the panel past the last button.
     wuxc::Grid trash{nullptr};
+    wuxm::CompositeTransform trashTransform{nullptr};  // its magnification, see SetTrashScale
     wuxc::Image trashImage{nullptr};
     wuxc::Border trashMenuAnchor{nullptr};  // at the taskbar's top edge, where jump lists open
     wuxc::Border divider{nullptr};
@@ -2685,11 +2713,17 @@ void HookUpTrash(Plate& p) {
         });
 }
 
+// As wide as its spot in the dock, which its label covers too, so clicks and
+// drops reach it wherever the label shows.
+float TrashWidth() {
+    return std::max(g_size.icon * TrashIconScale(), g_size.trashSlot);
+}
+
 void AddTrash(Plate& p, wuxc::Panel const& panel, wux::UIElement const& row) {
     float size = g_size.icon * TrashIconScale();
     wuxc::Grid trash;
     PlaceInPanel(panel, trash);
-    trash.Width(size);
+    trash.Width(TrashWidth());
     trash.Height(size);
     trash.Background(wuxm::SolidColorBrush(Color{0, 0, 0, 0}));  // clickable everywhere
     wuxc::Image image;
@@ -2713,14 +2747,23 @@ void AddTrash(Plate& p, wuxc::Panel const& panel, wux::UIElement const& row) {
     StartTrash();
 }
 
-// Grows from its bottom edge like a button, and shifts with its divider.
+// Grows from its bottom edge like a button, and shifts with its divider. A
+// XAML transform rather than its composition visual (as for buttons), so the
+// area that takes clicks and drops grows and moves with it: XAML hit-tests by
+// layout and render transforms, not by what composition does to the visual.
 void SetTrashScale(Plate& p, float s, float tx, float dividerTx) {
     if (!p.trash) return;
+    if (!p.trashTransform) {
+        p.trashTransform = wuxm::CompositeTransform();
+        p.trash.RenderTransform(p.trashTransform);
+    }
     float size = g_size.icon * TrashIconScale();
-    auto visual = wuxh::ElementCompositionPreview::GetElementVisual(p.trash);
-    visual.CenterPoint({size / 2, size / 2 + g_size.icon / 2, 0});
-    visual.Scale({s, s, 1});
-    SetTranslation(p.trash, tx);
+    auto& t = p.trashTransform;
+    t.CenterX(TrashWidth() / 2);
+    t.CenterY(size / 2 + g_size.icon / 2);
+    t.ScaleX(s);
+    t.ScaleY(s);
+    t.TranslateX(tx);
     SetTranslation(p.divider, dividerTx);
 }
 
@@ -3418,7 +3461,7 @@ void MeasurePlate(Plate& p) {
                         g_size.trashSlot / 2;
         p.trashCenter -= kTrashShift * g_size.icon / kDefaultIconSize;
         p.baseWidth += g_size.trashSpace;
-        p.trash.Margin({origin.X + p.trashCenter - size / 2, centerY - size / 2, 0, 0});
+        p.trash.Margin({origin.X + p.trashCenter - TrashWidth() / 2, centerY - size / 2, 0, 0});
         p.trash.Visibility(Visibility::Visible);
         placeDivider(p.divider, last, g_size.dividerLeft);
         UpdateTrashIcons();
@@ -4033,32 +4076,54 @@ void LabelShape(Gdiplus::GraphicsPath& path, float w, float h, float scale) {
     path.CloseFigure();
 }
 
+// The label's font, at the screen's `scale`.
+struct LabelFont {
+    Gdiplus::FontFamily family{L"Segoe UI"};
+    Gdiplus::Font font;
+    Gdiplus::StringFormat format;
+
+    explicit LabelFont(float scale)
+        : font(&family, kLabelFontSize * scale, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel) {
+        format.SetAlignment(Gdiplus::StringAlignmentCenter);
+        format.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+        format.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+    }
+};
+
+// How wide `text` is drawn. The label is placed each frame while icons move,
+// so it's measured again only when the name or the scale changes.
+float LabelTextWidth(std::wstring const& text, float scale) {
+    static std::wstring measuredText;
+    static float measuredScale = 0, measuredWidth = 0;
+    if (text == measuredText && scale == measuredScale) return measuredWidth;
+    namespace gp = Gdiplus;
+    LabelFont label(scale);
+    gp::RectF bounds;
+    gp::Bitmap probe(1, 1, PixelFormat32bppPARGB);
+    gp::Graphics g(&probe);
+    g.SetTextRenderingHint(gp::TextRenderingHintAntiAliasGridFit);
+    g.MeasureString(text.c_str(), (INT)text.size(), &label.font, gp::PointF(0, 0), &label.format,
+                    &bounds);
+    measuredText = text;
+    measuredScale = scale;
+    measuredWidth = bounds.Width;
+    return measuredWidth;
+}
+
 // With its arrow's tip at `tip`, on screen.
 void DrawLabel(std::wstring const& text, POINT tip, float scale) {
     namespace gp = Gdiplus;
-    gp::FontFamily family(L"Segoe UI");
-    gp::Font font(&family, kLabelFontSize * scale, gp::FontStyleRegular, gp::UnitPixel);
-    gp::StringFormat format;
-    format.SetAlignment(gp::StringAlignmentCenter);
-    format.SetLineAlignment(gp::StringAlignmentCenter);
-    format.SetFormatFlags(gp::StringFormatFlagsNoWrap);
-
-    gp::RectF bounds;
-    {
-        gp::Bitmap probe(1, 1, PixelFormat32bppPARGB);
-        gp::Graphics g(&probe);
-        g.SetTextRenderingHint(gp::TextRenderingHintAntiAliasGridFit);
-        g.MeasureString(text.c_str(), (INT)text.size(), &font, gp::PointF(0, 0), &format, &bounds);
-    }
     int h = (int)std::round(kLabelHeight * scale);
     // Never narrower than the round ends and the arrow's base, or a short name's
     // arrow would run into the curves.
     float minWidth = h + 2 * (kLabelArrowHalf + kLabelArrowBase) * scale;
-    int w = (int)std::ceil(std::max(bounds.Width + 2 * kLabelPadX * scale, minWidth));
+    int w = (int)std::ceil(std::max(LabelTextWidth(text, scale) + 2 * kLabelPadX * scale,
+                                    minWidth));
     int height = h + (int)std::ceil(kLabelArrow * scale) + 1;
     RECT rect{tip.x - w / 2, tip.y - height, tip.x - w / 2 + w, tip.y};
     if (g_label.shown && text == g_label.text && EqualRect(&rect, &g_label.rect)) return;
 
+    LabelFont label(scale);
     BITMAPINFO bi{};
     bi.bmiHeader = {sizeof(BITMAPINFOHEADER), w, -height, 1, 32, BI_RGB};
     void* bits = nullptr;
@@ -4097,8 +4162,8 @@ void DrawLabel(std::wstring const& text, POINT tip, float scale) {
             Color ink = IsLightColor(r, gr, b) ? kLabelInkOnLight : kLabelInkOnDark;
             gp::SolidBrush inkBrush(GdiColor(ink));
             g.SetTextRenderingHint(gp::TextRenderingHintAntiAliasGridFit);
-            g.DrawString(text.c_str(), (INT)text.size(), &font,
-                         gp::RectF(0, 0, (gp::REAL)w, (gp::REAL)h), &format, &inkBrush);
+            g.DrawString(text.c_str(), (INT)text.size(), &label.font,
+                         gp::RectF(0, 0, (gp::REAL)w, (gp::REAL)h), &label.format, &inkBrush);
         }
         HGDIOBJ old = SelectObject(dc, bmp);
         POINT pos{rect.left, rect.top}, zero{};
@@ -4118,6 +4183,26 @@ void DrawLabel(std::wstring const& text, POINT tip, float scale) {
     g_label = {g_label.hwnd, text, rect, true};
 }
 
+// The taskbar on `monitor`. Finding one enumerates every top-level window, too
+// slow for each frame, so the last one found is kept while it's still there.
+// On the taskbar's thread.
+HWND TaskbarOnMonitor(HMONITOR monitor) {
+    static HWND found = nullptr;
+    DWORD pid = 0;
+    WCHAR cls[32];
+    if (found && GetWindowThreadProcessId(found, &pid) && pid == GetCurrentProcessId() &&
+        GetClassName(found, cls, ARRAYSIZE(cls)) &&
+        (!_wcsicmp(cls, L"Shell_TrayWnd") || !_wcsicmp(cls, L"Shell_SecondaryTrayWnd")) &&
+        MonitorFromWindow(found, MONITOR_DEFAULTTONEAREST) == monitor) {
+        return found;
+    }
+    found = nullptr;
+    ForEachTaskbarWindow([&](HWND tb, bool) {
+        if (!found && MonitorFromWindow(tb, MONITOR_DEFAULTTONEAREST) == monitor) found = tb;
+    });
+    return found;
+}
+
 // A point in the plate's panel, on screen, with the window of the taskbar under
 // the pointer (its content starts at the window's corner). Returns the screen's
 // scale, or 0 when it can't tell.
@@ -4128,10 +4213,7 @@ float PanelToScreen(Plate& p, wf::Point point, POINT& out, RECT& window) {
     POINT cursor;
     HWND taskbar = nullptr;
     if (content && GetCursorPos(&cursor)) {
-        HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
-        ForEachTaskbarWindow([&](HWND tb, bool) {
-            if (!taskbar && MonitorFromWindow(tb, MONITOR_DEFAULTTONEAREST) == monitor) taskbar = tb;
-        });
+        taskbar = TaskbarOnMonitor(MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST));
     }
     if (!taskbar || !GetWindowRect(taskbar, &window)) return 0;
     float scale = (float)root.RasterizationScale();
@@ -4670,6 +4752,7 @@ void ProcessButton(wux::FrameworkElement const& button) {
     Button& b = TrackButton(button);
     ApplySpacing(button);
     ApplyButtonWidth(b, button);
+    ApplyHitClip(button);
     ApplyIconColumn(b);
     HideStockToolTip(button);
     ForEachDescendant(button, 6, [&](wux::FrameworkElement const& el) {
@@ -5105,7 +5188,7 @@ int WINAPI TaskbarFrame_OnPointerExited_Hook(void* pThis, void* pArgs) {
     return result;
 }
 
-// ---- Jump list placement (as in "Taskbar Multirow") ----
+// ---- Jump list placement (as in "Multirow taskbar for Windows 11") ----
 // Centered on where the button is, not where layout put it (File Explorer), and
 // as high as without the room left for the icons' bounce.
 
@@ -5185,7 +5268,7 @@ RECT WINAPI ToRawPixelsInDesktopCoordinates_Hook(wf::Rect const& rect, UINT dpi,
     return ToRawPixelsInDesktopCoordinates_Original(moved, dpi, hWnd);
 }
 
-// ---- Dragging (as in "Taskbar Multirow") ----
+// ---- Dragging (as in "Multirow taskbar for Windows 11") ----
 // While File Explorer is kept first, its drag never starts. Other apps go no
 // further than the first and last spots they can take, where they'd land if
 // dropped there, so nothing jumps on release. Points are in the button row's
@@ -5540,6 +5623,38 @@ void WINAPI SystemTrayFrame_Height_Hook(void* pThis, double value) {
     SystemTrayFrame_Height_Original(pThis, value);
 }
 
+// From SystemTray.dll 2609.4001, newer C++/WinRT sets the frame's Height through
+// consume_general, given the setter as a vcall thunk. Every double setter of its
+// IFrameworkElement goes through there, so only Height, known by the thunk's
+// vtable offset, is changed (as in m417z's "Taskbar height and icon size").
+constexpr size_t kFrameworkElementPutHeightOffset = (6 + 12) * sizeof(void*);
+
+// The thunk loads the method from the vtable: on x64, mov rax, [rcx] then
+// mov rax, [rax+offset]; on ARM64, ldr x16, [x0] then ldr x16, [x16, #offset].
+LONG VcallThunkVtableOffset(void* thunk) {
+#if defined(_M_X64)
+    static const std::regex regex(R"(mov \w+, \[\w+\+0x([0-9a-f]+)\])",
+                                  std::regex_constants::icase);
+#elif defined(_M_ARM64)
+    static const std::regex regex(R"(ldr\s+x\d+, \[x\d+, #0x([0-9a-f]+)\])",
+                                  std::regex_constants::icase);
+#else
+#error "Unsupported architecture"
+#endif
+    return OffsetFromDisasm(thunk, 2, regex);
+}
+
+using SystemTrayFrame_SetDouble_t = void(WINAPI*)(void* pThis, void* method, double* value);
+SystemTrayFrame_SetDouble_t SystemTrayFrame_SetDouble_Original;
+void WINAPI SystemTrayFrame_SetDouble_Hook(void* pThis, void* method, double* value) {
+    if (g_inTrayUpdateFrameSize && g_taskbarHeight > 0 &&
+        VcallThunkVtableOffset(method) == (LONG)kFrameworkElementPutHeightOffset) {
+        double height = g_taskbarHeight;
+        return SystemTrayFrame_SetDouble_Original(pThis, method, &height);
+    }
+    SystemTrayFrame_SetDouble_Original(pThis, method, value);
+}
+
 // ---- The XAML frame ----
 // Without lifting MaxHeight, the frame stays at the stock height.
 
@@ -5882,7 +5997,7 @@ void WINAPI HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old_Hook(void* p
 // ---- Placement ----
 // Windows puts a preview above its app's button, which reaches well past the
 // icons. It's moved to just above the label at its highest, and sideways onto
-// the magnified icon under the pointer (as "Taskbar on top" moves them).
+// the magnified icon under the pointer (as "Taskbar on top for Windows 11" moves them).
 
 constexpr float kPreviewGap = 6;        // between it and the label
 constexpr float kFlyoutStockGap = 12;   // under a flyout, above its app's button
@@ -6592,6 +6707,8 @@ std::vector<COMBINED_SH> GetTrayHooks() {
          &SystemTraySecondaryController_UpdateFrameSize_Original, SystemTray_UpdateFrameSize_Hook<SystemTraySecondaryController_UpdateFrameSize_Original>, true},
         {{LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::SystemTray::SystemTrayFrame>::Height(double)const )"},
          &SystemTrayFrame_Height_Original, SystemTrayFrame_Height_Hook, true},
+        {{LR"(void __cdecl winrt::impl::consume_general<struct winrt::Windows::UI::Xaml::IFrameworkElement,struct winrt::SystemTray::SystemTrayFrame,int (__cdecl winrt::impl::abi<struct winrt::Windows::UI::Xaml::IFrameworkElement,void>::type::*)(double) noexcept,double &>(struct winrt::SystemTray::SystemTrayFrame const *,int (__cdecl winrt::impl::abi<struct winrt::Windows::UI::Xaml::IFrameworkElement,void>::type::*)(double) noexcept,double &))"},
+         &SystemTrayFrame_SetDouble_Original, SystemTrayFrame_SetDouble_Hook, true},
     };
     return {std::make_move_iterator(std::begin(trayHooks)),
             std::make_move_iterator(std::end(trayHooks))};
@@ -6716,6 +6833,35 @@ std::atomic<bool> g_trayHooked = false;
 
 // Hooks whichever taskbar DLLs are loaded and not hooked yet. Returns whether
 // anything new was hooked.
+// Logs the features whose hooks didn't take, for bug reports. When a DLL's
+// symbols can't be had (as right after some Windows updates), every hook in it
+// is missing at once. Only hooks present on all supported builds are listed.
+void LogMissingHooks() {
+    struct {
+        const void* hook;
+        PCWSTR feature;
+    } hooks[] = {
+        {(void*)TrayUI__HandleSettingChange_Original, L"size changes before Explorer restarts"},
+        {(void*)TrayUI__Hide_Original, L"Auto-hide (taskbar.dll)"},
+        {(void*)CTaskListWnd_ComputeJumpViewPosition_Original, L"right-click menu placement"},
+#ifdef _M_ARM64
+        {(void*)TaskbarConfiguration_UpdateFrameSize_Address, L"the taller taskbar"},
+#else
+        {(void*)TaskbarConfiguration_GetFrameSize_Original, L"the taller taskbar"},
+#endif
+        {(void*)TaskbarFrame_OnPointerMoved_Original, L"magnification"},
+        {(void*)TaskbarConfiguration_GetIconHeightInViewPixels_Original, L"High resolution icons"},
+        {(void*)TaskListButton_OnDragStartedGesture_Original, L"Keep File Explorer first"},
+    };
+    int missing = 0;
+    for (auto& h : hooks) {
+        if (h.hook) continue;
+        Wh_Log(L"Not hooked, so not working: %s", h.feature);
+        missing++;
+    }
+    if (!missing) Wh_Log(L"All hooks in place");
+}
+
 bool HookTaskbarModules() {
     bool hooked = false;
     if (HMODULE view = GetModuleHandle(L"Taskbar.View.dll");
@@ -6723,6 +6869,7 @@ bool HookTaskbarModules() {
         bool withTray = !GetModuleHandle(L"SystemTray.dll") && TaskbarViewHasTray(view) &&
                         !g_trayHooked.exchange(true);
         HookTaskbarViewSymbols(view, withTray);
+        LogMissingHooks();
         hooked = true;
     }
     if (HMODULE tray = GetModuleHandle(L"SystemTray.dll"); tray && !g_trayHooked.exchange(true)) {
