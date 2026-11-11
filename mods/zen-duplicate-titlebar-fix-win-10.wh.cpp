@@ -23,14 +23,15 @@ This mod hides the extra Windows-native titlebar buttons and lets Zen's remain.
 
 ## How It Works
 
-- Detects Zen's main browser windows and removes the `WS_SYSMENU` window style, preventing Windows from drawing its native titlebar buttons over Zen's.   
-  Also prevents Zen from restoring that style while the mod is active.
-- The fix involves removing the native Windows system menu from being used on Zen, normally accessible with `alt + space`
-- Only targets `zen.exe`
+- Removes the `WS_SYSMENU` window style from Zen's main browser windows, preventing Windows from drawing its native titlebar buttons over Zen's.   
+- Prevents Zen from restoring that style while the mod is active.
+- Involves removing the native Windows system menu from being used on Zen, normally accessible with `alt + space`.
+- Only targets `zen.exe` main window(s) only, external windows from Zen such as Library or Browser Console are not targetted.
 */
 // ==/WindhawkModReadme==
 
 #include <windows.h>
+#include <atomic>
 #include <cwchar>
 #include <windhawk_utils.h>
 
@@ -53,7 +54,7 @@ using SetWindowLongPtrW_t = decltype(&SetWindowLongPtrW);
 SetWindowPos_t SetWindowPos_Original = nullptr;
 SetWindowLongPtrW_t SetWindowLongPtrW_Original = nullptr;
 
-bool g_active = false;
+std::atomic<bool> g_unloading{false};
 thread_local bool g_internalFrameChange = false;
 
 class InternalFrameChangeGuard {
@@ -193,7 +194,7 @@ void RestoreFix(HWND hwnd) {
 }
 
 void SyncWindow(HWND hwnd) {
-    if (g_internalFrameChange || !IsZenTopLevelWindow(hwnd))
+    if (g_unloading || g_internalFrameChange || !IsZenTopLevelWindow(hwnd))
         return;
 
     LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
@@ -226,7 +227,7 @@ LONG_PTR WINAPI SetWindowLongPtrW_Hook(HWND hwnd, int index,
                                       LONG_PTR newValue) {
     // Only keep WS_SYSMENU suppressed on windows we already identified.
     // Inspect the incoming style, not the current one (F11 restores it).
-    if (index == GWL_STYLE && !g_internalFrameChange &&
+    if (index == GWL_STYLE && !g_unloading && !g_internalFrameChange &&
         (newValue & kRequiredStyles) == kRequiredStyles &&
         IsZenTopLevelWindow(hwnd) && GetPropW(hwnd, kMarker)) {
         newValue &= ~static_cast<LONG_PTR>(WS_SYSMENU);
@@ -271,22 +272,19 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    g_active = true;
     Wh_Log(L"Zen duplicate titlebar fix initialized");
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (g_active)
-        EnumWindows(SyncExistingWindow, 0);
+    EnumWindows(SyncExistingWindow, 0);
 }
 
 void Wh_ModBeforeUninit() {
-    if (g_active)
-        EnumWindows(RestoreExistingWindow, 0);
+    g_unloading = true;
+    EnumWindows(RestoreExistingWindow, 0);
 }
 
 void Wh_ModUninit() {
-    g_active = false;
     Wh_Log(L"Zen duplicate titlebar fix unloaded");
 }
