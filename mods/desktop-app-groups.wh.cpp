@@ -173,6 +173,7 @@ Made for Windows 11.
 #include <shlwapi.h>         // StrRetToBufW, StrCmpLogicalW
 #include <dwmapi.h>          // rounded corners for the popup
 #include <shellscalingapi.h> // GetDpiForMonitor
+#include <sddl.h>            // ConvertSidToStringSidW: your user account's ID as text
 #include <commdlg.h>         // ChooseColorW: Windows' colour picker
 #include <wincodec.h>        // WIC: saving pictures as PNG
 #include <wrl/client.h>      // ComPtr: releases COM objects for us automatically
@@ -816,9 +817,19 @@ std::vector<std::wstring> ReadGroupIniNames(const std::wstring& folderPath) {
 // --- Group data in Windhawk's storage ----------------------------------------
 //
 // Each group's data is one stored text value, named "Group-" plus the
-// folder's ID, holding lines of "name=value" (the same names as in
-// desktop.ini). A list of all the IDs is kept as well, in "Groups", so the
-// mod can tidy up after groups deleted while it wasn't running.
+// folder's ID, holding "name=value" entries (the same names as in
+// desktop.ini), each ending with "*":
+//   IsGroup=1*Order=Notepad.lnk|Paint.lnk*Tint=255*
+// "*" can't appear in a file name, so it can't appear in a value. (Not line
+// breaks: portable Windhawk keeps its storage in an .ini file, which can't
+// hold them.) A list of all the IDs is kept as well, in "Groups", so the mod
+// can tidy up after groups deleted while it wasn't running.
+//
+// Windhawk's storage for a mod is shared by everyone who uses the PC, but
+// each person has their own desktop and their own groups. So the names of
+// these values start with the ID of your Windows account (your "SID", like
+// "S-1-5-21-...-1001-"). Each account has exactly one Explorer showing its
+// desktop, so that Explorer is the only one writing its values.
 //
 // Windhawk doesn't promise its storage functions are safe to use from two
 // threads at once, and both the desktop's thread and the group watcher need
@@ -829,32 +840,68 @@ std::mutex g_storageLock;
 using GroupValues = std::map<std::wstring, std::wstring>;
 std::map<std::wstring, GroupValues> g_groupData;  // Folder ID -> its values.
 
+// The start of the names of this account's values (see above). Set once in
+// Wh_ModInit. "" if Windows couldn't tell us the account's ID.
+std::wstring g_userPrefix;
+
+std::wstring CurrentUserPrefix() {
+    std::wstring prefix;
+    HANDLE token;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        alignas(TOKEN_USER) BYTE buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+        DWORD size = 0;
+        PWSTR sid = nullptr;
+        if (GetTokenInformation(token, TokenUser, buffer, sizeof(buffer), &size) &&
+            ConvertSidToStringSidW(((TOKEN_USER*)buffer)->User.Sid, &sid)) {
+            prefix = std::wstring(sid) + L"-";
+            LocalFree(sid);
+        }
+        CloseHandle(token);
+    }
+    return prefix;
+}
+
+// The full stored name of one of this account's values.
+std::wstring UserValueName(const std::wstring& name) {
+    return g_userPrefix + name;
+}
+
 // Reads a stored text value ("" if there's none). Hold g_storageLock.
-std::wstring ReadStoredText(PCWSTR name) {
+std::wstring ReadStoredText(const std::wstring& name) {
     std::vector<WCHAR> buffer(64 * 1024, L'\0');
-    Wh_GetStringValue(name, buffer.data(), buffer.size());
+    Wh_GetStringValue(name.c_str(), buffer.data(), buffer.size());
     return buffer.data();
 }
 
-// The same, for use without holding the lock.
+// Saves a text value, and checks it reads back the same. Hold g_storageLock.
+bool WriteStoredText(const std::wstring& name, const std::wstring& text) {
+    if (!Wh_SetStringValue(name.c_str(), text.c_str()) || ReadStoredText(name) != text) {
+        Wh_Log(L"Couldn't save \"%s\" in Windhawk's storage", name.c_str());
+        return false;
+    }
+    return true;
+}
+
+// For single values of this account's (UnfinishedGroup), without holding
+// the lock.
 std::wstring LoadStoredText(PCWSTR name) {
     std::lock_guard<std::mutex> lock(g_storageLock);
-    return ReadStoredText(name);
+    return ReadStoredText(UserValueName(name));
 }
 
 void StoreText(PCWSTR name, PCWSTR text) {
     std::lock_guard<std::mutex> lock(g_storageLock);
-    Wh_SetStringValue(name, text);
+    WriteStoredText(UserValueName(name), text);
 }
 
 void DeleteStoredValue(PCWSTR name) {
     std::lock_guard<std::mutex> lock(g_storageLock);
-    Wh_DeleteValue(name);
+    Wh_DeleteValue(UserValueName(name).c_str());
 }
 
 // A file or folder's ID, as text: "V", its drive's serial number (16
-// hexadecimal digits), "F", and its file ID (32 hexadecimal digits). "" if Windows can't tell us (for
-// example, the drive doesn't have file IDs).
+// hexadecimal digits), "F", and its file ID (32 hexadecimal digits). "" if
+// Windows can't tell us (for example, the drive doesn't have file IDs).
 std::wstring FileIdText(HANDLE file) {
     FILE_ID_INFO info = {};
     if (!GetFileInformationByHandleEx(file, FileIdInfo, &info, sizeof(info))) {
@@ -898,43 +945,85 @@ std::wstring GroupIdOf(const std::wstring& folderPath) {
     return id;
 }
 
-// Loads all stored group data into memory. Called once, at startup.
-void LoadStoredGroups() {
-    std::lock_guard<std::mutex> lock(g_storageLock);
-    g_groupData.clear();
-    std::wstring list = ReadStoredText(L"Groups");
+// Turns a stored group back into its values.
+GroupValues ParseStoredGroup(const std::wstring& text) {
+    GroupValues values;
+    for (size_t start = 0; start < text.size();) {
+        // Entries end with "*". (Line breaks are accepted too, from test
+        // versions of the mod.)
+        size_t end = text.find_first_of(L"*\n", start);
+        if (end == std::wstring::npos) {
+            end = text.size();
+        }
+        std::wstring entry = text.substr(start, end - start);
+        start = end + 1;
+        size_t equals = entry.find(L'=');
+        if (equals != std::wstring::npos && equals > 0) {
+            values[entry.substr(0, equals)] = entry.substr(equals + 1);
+        }
+    }
+    return values;
+}
+
+// Splits a list of IDs separated by "|".
+std::vector<std::wstring> SplitIdList(const std::wstring& list) {
+    std::vector<std::wstring> ids;
     for (size_t start = 0; start < list.size();) {
         size_t end = list.find(L'|', start);
         if (end == std::wstring::npos) {
             end = list.size();
         }
-        std::wstring id = list.substr(start, end - start);
+        if (end > start) {
+            ids.push_back(list.substr(start, end - start));
+        }
         start = end + 1;
-        if (id.empty()) {
-            continue;
-        }
-        std::wstring text = ReadStoredText((L"Group-" + id).c_str());
-        GroupValues values;
-        for (size_t lineStart = 0; lineStart < text.size();) {
-            size_t lineEnd = text.find(L'\n', lineStart);
-            if (lineEnd == std::wstring::npos) {
-                lineEnd = text.size();
-            }
-            std::wstring line = text.substr(lineStart, lineEnd - lineStart);
-            lineStart = lineEnd + 1;
-            size_t equals = line.find(L'=');
-            if (equals != std::wstring::npos && equals > 0) {
-                values[line.substr(0, equals)] = line.substr(equals + 1);
-            }
-        }
+    }
+    return ids;
+}
+
+bool SaveGroupIdList();
+bool SaveStoredGroup(const std::wstring& id);
+
+// Loads all of this account's stored group data into memory. Called once, at
+// startup.
+void LoadStoredGroups() {
+    std::lock_guard<std::mutex> lock(g_storageLock);
+    g_groupData.clear();
+    for (const std::wstring& id : SplitIdList(ReadStoredText(UserValueName(L"Groups")))) {
+        GroupValues values = ParseStoredGroup(ReadStoredText(UserValueName(L"Group-" + id)));
         if (!values.empty()) {
             g_groupData[id] = values;
         }
     }
+
+    // Test versions of the mod saved groups without the account's ID in the
+    // names. Take those over, under this account's names.
+    if (g_userPrefix.empty()) {
+        return;
+    }
+    std::vector<std::wstring> oldIds = SplitIdList(ReadStoredText(L"Groups"));
+    if (oldIds.empty()) {
+        return;
+    }
+    bool allSaved = true;
+    for (const std::wstring& id : oldIds) {
+        GroupValues values = ParseStoredGroup(ReadStoredText(L"Group-" + id));
+        if (!values.empty() && g_groupData.find(id) == g_groupData.end()) {
+            g_groupData[id] = values;
+            allSaved = SaveStoredGroup(id) && allSaved;
+        }
+    }
+    if (allSaved && SaveGroupIdList()) {
+        for (const std::wstring& id : oldIds) {
+            Wh_DeleteValue((L"Group-" + id).c_str());
+        }
+        Wh_DeleteValue(L"Groups");
+        Wh_Log(L"Moved %d group(s) from an earlier test version", (int)oldIds.size());
+    }
 }
 
 // Saves the list of IDs. Hold g_storageLock.
-void SaveGroupIdList() {
+bool SaveGroupIdList() {
     std::wstring list;
     for (const auto& group : g_groupData) {
         if (!list.empty()) {
@@ -942,16 +1031,16 @@ void SaveGroupIdList() {
         }
         list += group.first;
     }
-    Wh_SetStringValue(L"Groups", list.c_str());
+    return WriteStoredText(UserValueName(L"Groups"), list);
 }
 
 // Saves one group's data from memory. Hold g_storageLock.
 bool SaveStoredGroup(const std::wstring& id) {
     std::wstring text;
     for (const auto& value : g_groupData[id]) {
-        text += value.first + L"=" + value.second + L"\n";
+        text += value.first + L"=" + value.second + L"*";
     }
-    return Wh_SetStringValue((L"Group-" + id).c_str(), text.c_str());
+    return WriteStoredText(UserValueName(L"Group-" + id), text);
 }
 
 bool GetStoredGroupValue(const std::wstring& id, PCWSTR name, std::wstring* value) {
@@ -980,13 +1069,14 @@ void SetStoredGroupValue(const std::wstring& id, PCWSTR name, PCWSTR value) {
         g_groupData[id].erase(name);
         if (g_groupData[id].empty()) {
             g_groupData.erase(id);
-            Wh_DeleteValue((L"Group-" + id).c_str());
+            Wh_DeleteValue(UserValueName(L"Group-" + id).c_str());
             SaveGroupIdList();
             return;
         }
     }
-    SaveStoredGroup(id);
-    if (isNew) {
+    // (A failed save is logged by WriteStoredText. The value stays in
+    // memory, so it still works until Explorer restarts.)
+    if (SaveStoredGroup(id) && isNew) {
         SaveGroupIdList();
     }
 }
@@ -998,7 +1088,7 @@ void ForgetStoredGroup(const std::wstring& id) {
     }
     std::lock_guard<std::mutex> lock(g_storageLock);
     if (g_groupData.erase(id)) {
-        Wh_DeleteValue((L"Group-" + id).c_str());
+        Wh_DeleteValue(UserValueName(L"Group-" + id).c_str());
         SaveGroupIdList();
     }
 }
@@ -1165,14 +1255,19 @@ bool IsPresetTint(int tint) {
 
 // The all-groups values, kept in memory so they're quick to read from any
 // thread. ("atomic" makes it safe for one thread to read while another
-// writes.)
+// writes.) Like group data, they're stored separately for each Windows
+// account (see "Group data in Windhawk's storage" above).
 std::atomic<int> g_allGroupsValues[kGroupSettingCount];
 
 void LoadAllGroupsSettings() {
     std::lock_guard<std::mutex> lock(g_storageLock);
     for (int id = 0; id < kGroupSettingCount; id++) {
-        g_allGroupsValues[id] =
+        // If this account hasn't saved one yet, start from the value saved by
+        // an earlier version (which wasn't per account), or the default.
+        int earlierValue =
             Wh_GetIntValue(kGroupSettings[id].key, kGroupSettings[id].defaultValue);
+        g_allGroupsValues[id] =
+            Wh_GetIntValue(UserValueName(kGroupSettings[id].key).c_str(), earlierValue);
     }
 }
 
@@ -1183,7 +1278,7 @@ int GetAllGroupsSetting(GroupSettingId id) {
 void SetAllGroupsSetting(GroupSettingId id, int value) {
     g_allGroupsValues[id] = value;
     std::lock_guard<std::mutex> lock(g_storageLock);
-    Wh_SetIntValue(kGroupSettings[id].key, value);
+    Wh_SetIntValue(UserValueName(kGroupSettings[id].key).c_str(), value);
 }
 
 // Does this group have its own value for a setting? If so, it's put in `value`.
@@ -5464,6 +5559,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Desktop App Groups: starting in explorer.exe process %u",
            (unsigned)GetCurrentProcessId());
     LoadSettings();
+    g_userPrefix = CurrentUserPrefix();
     LoadAllGroupsSettings();
     LoadStoredGroups();
     RegisterPlacementMessages();
