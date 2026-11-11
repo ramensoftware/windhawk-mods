@@ -51,10 +51,10 @@ Chinese/English mode.
   change, so a `Ctrl+C` that interrupts a console app and a permanent
   `Shift+Delete` stay quiet. Context-menu copies can be reported too.
 - **Works under elevated windows.** Windows stops calling the keyboard hook while
-  an administrator window has focus; the keys then come from Raw Input, which is
-  delivered per device and ignores both focus and integrity level. A key-state
-  poll stays behind it for anything Raw Input cannot see, such as a remote or a
-  virtual keyboard. See below for what does not work there.
+  an administrator window has focus; the lock keys and Insert then come from Raw
+  Input, which is delivered per device and ignores both focus and integrity
+  level. A key-state poll stays behind it for anything Raw Input cannot see, such
+  as a remote or a virtual keyboard. See below for what does not work there.
 - **Light on resources.** Nothing runs while the card is hidden. A frame takes
   about 0.5 ms at 100% size; the live backdrop and the topmost guard only tick
   while a card is up.
@@ -94,7 +94,8 @@ Chinese/English mode.
   display pipeline. Borderless and windowed games are fine.
 - Behind an **elevated window** the backdrop grab comes back black, so that tip
   falls back to a solid card. The language is still reported there, the IME mode
-  is not.
+  is not. Copy, paste and cut are not either: they need the key the hook is
+  denied, and Raw Input only answers for the lock keys and Insert.
 - The language card needs a keystroke to hang on: switching with the mouse from
   the language bar or an IME status window shows nothing.
 - The card is **left out of screen capture** while the live backdrop runs
@@ -989,27 +990,18 @@ float Lerp(float a, float b, float t) {
 // =============================================================================
 
 using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
-using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
 
 float ScaleForMonitor(HMONITOR monitor) {
     if (!monitor) {
         return 1.0f;
     }
-    // Resolved once: a tip re-reads the DPI of the display it is about to land
-    // on, and LoadLibrary/GetProcAddress on every tip is pure overhead when the
-    // module never goes away in practice.
-    static GetDpiForMonitor_t getDpi = [] {
-        HMODULE shcore = LoadLibraryW(L"shcore.dll");
-        return shcore ? (GetDpiForMonitor_t)GetProcAddress(shcore,
-                                                           "GetDpiForMonitor")
-                      : nullptr;
-    }();
-    if (getDpi) {
-        UINT dpiX = 0, dpiY = 0;
-        if (SUCCEEDED(getDpi(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) &&
-            dpiX > 0) {
-            return (float)dpiX / 96.0f;
-        }
+    // shcore is in the import table (-lshcore), so this is an ordinary call:
+    // a tip re-reads the DPI of the display it is about to land on, and that
+    // should not go through a proc address on every frame.
+    UINT dpiX = 0, dpiY = 0;
+    if (SUCCEEDED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) &&
+        dpiX > 0) {
+        return (float)dpiX / 96.0f;
     }
     HDC dc = GetDC(nullptr);
     int dpi = dc ? GetDeviceCaps(dc, LOGPIXELSX) : 96;
@@ -2410,14 +2402,15 @@ bool g_vkDown[256];
 
 // The lock state itself, and the one place it is allowed to change.
 //
-// It is not read from the system at press time. GetKeyState reports the
-// message-queue mirror of the calling thread, and a thread's mirror is only
-// correct until that thread receives its first keyboard message - the hook
-// thread never receives one, so four taps in a row would read back the same
-// value. GetAsyncKeyState only says "held down", which is not a lock state
-// either. So the state is one flip per captured press, which makes "every press
-// changes it" true by construction, and ResyncKeyState() re-seeds it from the
-// live state on a desktop switch - the one thing that can swallow presses.
+// It is not read from the system at press time. GetKeyState answers out of the
+// calling thread's own copy of the key state: it starts as the live state when
+// the thread is created and only moves forward as that thread processes
+// keyboard input. The hook thread never processes any, so its copy is frozen at
+// load time and four taps in a row would read back the same value.
+// GetAsyncKeyState only says "held down", which is not a lock state either. So
+// the state is one flip per captured press, which makes "every press changes
+// it" true by construction, and ResyncKeyState() re-seeds it from the live state
+// on a desktop switch - the one thing that can swallow presses.
 //
 // Both the hook thread and the UI thread (Raw Input) write this, so mutation is
 // serialised by AllowTip: it settles, per key, which one capture path owns a
@@ -2434,9 +2427,16 @@ HWINEVENTHOOK g_desktopHook;
 DWORD g_selfRid;                   // own integrity level, read once at startup
 bool g_pollRunning;
 bool g_pollDown[kPollKeyCount];    // per key: held down at the last poll
+// Mirrors g_pollRunning for the UI thread, which decides there whether a Raw
+// Input key is worth reporting at all. See HandleRawInput.
+volatile LONG g_hookBlind;
 HWND g_levelHwnd;                  // window the verdict below was measured on
 bool g_levelRaised;
 bool g_levelKnown;
+// The short-lived thread that re-reads the lock state after a desktop switch.
+// Kept so a second switch during its 150 ms sleep doesn't start another one, and
+// so the teardown can wait for its last write. Hook thread only.
+HANDLE g_resyncThread;
 
 // When each key last produced a tip, shared by every capture path so a press is
 // reported once. The press time sits in the upper 62 bits and the path that
@@ -2946,6 +2946,20 @@ bool KeyDownNow(int vk) {
 
 bool CtrlDown() {
     return KeyDownNow(VK_LCONTROL) || KeyDownNow(VK_RCONTROL);
+}
+
+// Ctrl as a *clipboard* modifier, which is a narrower question than CtrlDown().
+//
+// AltGr arrives as Left Ctrl + Right Alt, so CtrlDown() is true for as long as
+// AltGr is held. On Czech, Slovak, Hungarian, Polish and Croatian layouts
+// AltGr+V types "@": claiming a paste on every e-mail address typed is worse
+// than missing a deliberate Ctrl+RightAlt+V, and AltGr+C / AltGr+X would arm
+// the copy and cut intents the same way.
+//
+// Asked of Right Alt specifically, not of "some Alt is down": Ctrl+LeftAlt+C is
+// not AltGr on any layout, and ignoring it would lose a real copy.
+bool ClipCtrlDown() {
+    return CtrlDown() && !KeyDownNow(VK_RMENU);
 }
 
 bool ShiftDown() {
@@ -3492,6 +3506,7 @@ void OnTopmostTick() {
     // raised. Once that is known, stop: the raise is a wasted call and the 30 ms
     // timer behind it would only burn cycles for the rest of the tip.
     if (g_topmostUnfixable) {
+        StopTopmostGuard();
         return;
     }
     if (!FindCoveringWindow(g_hwnd)) {
@@ -3509,6 +3524,11 @@ void OnTopmostTick() {
     if (!g_topmostUnfixable && FindCoveringWindow(g_hwnd)) {
         g_topmostUnfixable = true;
         Wh_Log(L"card still covered after raise #%d", g_topmostRaises);
+        // Nothing more can be done for this tip, and the timer would otherwise
+        // keep firing - at 30 ms once the raise count passed the fast limit -
+        // for as long as the card stays up.
+        StopTopmostGuard();
+        return;
     }
 
     // Something is raising itself over the card over and over. Speed up rather
@@ -3855,6 +3875,13 @@ void HandleClipboardUpdate() {
 // The card window itself is the sink: 1x1, hidden most of the time, and
 // INPUTSINK does not care about either. Keys therefore arrive on the UI thread
 // and go straight to HandleTip - no cross-thread post, no extra window.
+//
+// It is listened to only while the keyboard hook is blind (an elevated window in
+// front). Raw Input reports the physical key even when a low-level-hook remapper
+// - PowerToys Keyboard Manager, AutoHotkey - swallows it, so a Caps Lock remapped
+// to Esc or Ctrl would raise a Caps Lock card on every press and flip the tracked
+// state for a toggle the system never made. Where the hook does see the press,
+// the hook is the better witness and Raw Input has nothing to add.
 // =============================================================================
 
 bool RegisterRawInputKeys(HWND hwnd, bool enable) {
@@ -3950,6 +3977,13 @@ void HandleRawKey(const RAWKEYBOARD& key, ULONGLONG at) {
 }
 
 void HandleRawInput(LPARAM lParam) {
+    // Nothing to add while the hook is working - and a press it would report
+    // here but the hook never saw is a press the hook (or a remapper ahead of
+    // it) ate, not a lock toggle. See the note above.
+    if (InterlockedCompareExchange(&g_hookBlind, 0, 0) == 0) {
+        return;
+    }
+
     const UINT header = sizeof(RAWINPUTHEADER);
 
     UINT size = 0;
@@ -4091,7 +4125,10 @@ constexpr wchar_t kWindowClass[] = L"WindhawkWinTipsOsd";
 
 DWORD WINAPI UiThreadProc(LPVOID) {
     // Only this thread gets per-monitor DPI awareness; the host process
-    // (windhawk.exe) must keep whatever mode it already has.
+    // (windhawk.exe) must keep whatever mode it already has. In Windhawk this
+    // is a no-op - windhawk.exe declares PerMonitorV2 in its manifest - but the
+    // standalone harness that includes this file has no manifest, so the call
+    // is what makes the overlay render at the right size there.
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (user32) {
         auto setContext = (SetThreadDpiAwarenessContext_t)GetProcAddress(
@@ -4289,6 +4326,7 @@ void StartFallbackPoll() {
         g_pollDown[i] = (GetAsyncKeyState(KindToVk((TipKind)i)) & 0x8000) != 0;
     }
     g_pollRunning = true;
+    InterlockedExchange(&g_hookBlind, 1);
     SetTimer(nullptr, kThreadTimerPoll, kPollMs, nullptr);
     Wh_Log(L"fallback poll started");
 }
@@ -4298,6 +4336,7 @@ void StopFallbackPoll() {
         return;
     }
     g_pollRunning = false;
+    InterlockedExchange(&g_hookBlind, 0);
     KillTimer(nullptr, kThreadTimerPoll);
     ZeroMemory(g_pollDown, sizeof(g_pollDown));
     Wh_Log(L"fallback poll stopped");
@@ -4322,10 +4361,14 @@ void CALLBACK ForegroundChangedProc(HWINEVENTHOOK, DWORD event, HWND, LONG, LONG
 // Reads the real lock state and adopts it.
 //
 // On a thread of its own, and that is the point: GetKeyState answers out of the
-// calling thread's message-queue mirror, which is only right until that thread
-// receives its first keyboard message. The hook thread never gets one, so its
-// mirror froze at load time; a thread that never pumps a message at all gets the
-// live state, which is the same reason the startup seed can trust its read.
+// calling thread's own copy of the key state, which starts as the live state
+// when the thread is created and only moves forward as that thread processes
+// keyboard input. A thread that has not processed any yet therefore reports the
+// live state - the same reason the startup seed can trust its read, and exactly
+// what the hook thread, whose copy froze at load time, cannot offer.
+//
+// It reads and nothing else: g_vkDown and g_pollDown belong to the hook thread,
+// which resets them itself before starting this thread.
 DWORD WINAPI ResyncKeyStateThread(LPVOID) {
     // The event arrives as the switch happens; give the desktop a moment to
     // finish coming back, then make sure it really is ours.
@@ -4334,19 +4377,8 @@ DWORD WINAPI ResyncKeyStateThread(LPVOID) {
         return 0;
     }
 
-    bool fresh[kPollKeyCount] = {};
     for (int kind = 0; kind <= kScrollLock; kind++) {
-        fresh[kind] = (GetKeyState(KindToVk((TipKind)kind)) & 1) != 0;
-    }
-    for (int kind = 0; kind <= kScrollLock; kind++) {
-        g_toggleState[kind] = fresh[kind];
-    }
-
-    // Anything that was held when the desktop went away was released somewhere
-    // nothing could see it, so the press state from before the switch is wrong.
-    ZeroMemory(g_vkDown, sizeof(g_vkDown));
-    for (int i = 0; i < kPollKeyCount; i++) {
-        g_pollDown[i] = (GetAsyncKeyState(KindToVk((TipKind)i)) & 0x8000) != 0;
+        g_toggleState[kind] = (GetKeyState(KindToVk((TipKind)kind)) & 1) != 0;
     }
     Wh_Log(L"key state resynced: caps %d num %d scroll %d",
            (int)g_toggleState[kCapsLock], (int)g_toggleState[kNumLock],
@@ -4355,13 +4387,26 @@ DWORD WINAPI ResyncKeyStateThread(LPVOID) {
 }
 
 void ResyncKeyState() {
-    // Detached: the thread reads the state, stores it and exits. Nothing waits
-    // for it, and nothing may - this runs on the hook thread.
-    HANDLE thread =
-        CreateThread(nullptr, 0, ResyncKeyStateThread, nullptr, 0, nullptr);
-    if (thread) {
-        CloseHandle(thread);
+    // A resync already sleeping is as good as a new one: it reads the state
+    // after the switch either way.
+    if (g_resyncThread) {
+        if (WaitForSingleObject(g_resyncThread, 0) == WAIT_TIMEOUT) {
+            return;
+        }
+        CloseHandle(g_resyncThread);
+        g_resyncThread = nullptr;
     }
+    g_resyncThread =
+        CreateThread(nullptr, 0, ResyncKeyStateThread, nullptr, 0, nullptr);
+}
+
+void StopResync() {
+    if (!g_resyncThread) {
+        return;
+    }
+    WaitForSingleObject(g_resyncThread, 1000);
+    CloseHandle(g_resyncThread);
+    g_resyncThread = nullptr;
 }
 
 // The input desktop changed: to the lock screen, to a UAC prompt, or back.
@@ -4376,6 +4421,15 @@ void CALLBACK DesktopChangedProc(HWINEVENTHOOK, DWORD event, HWND, LONG, LONG,
         return;
     }
     if (InputDesktopIsUser()) {
+        // Anything held when the desktop went away was released somewhere
+        // nothing could see it, so the press state from before the switch is
+        // wrong. Cleared here rather than in the resync thread: this is the
+        // thread that owns both tables.
+        ZeroMemory(g_vkDown, sizeof(g_vkDown));
+        for (int i = 0; i < kPollKeyCount; i++) {
+            g_pollDown[i] =
+                (GetAsyncKeyState(KindToVk((TipKind)i)) & 0x8000) != 0;
+        }
         ResyncKeyState();
         RefreshFallbackPoll();
         return;
@@ -4419,15 +4473,23 @@ void StartInputWatch() {
     if (!g_hwnd) {
         return;
     }
-    InputState baseline = CurrentInputState();
-    if (baseline.Usable()) {
-        g_inputLast = baseline;
-        g_inputHasLast = true;
-    } else {
-        // Unreadable in the middle of a switch (fullscreen transition, desktop
-        // recomposition): a baseline from some other app would report the wrong
-        // language, so drop it and take the first good sample instead.
-        g_inputHasLast = false;
+    // A watch that is already running holds a baseline from before the first
+    // key of the combination, which is a better baseline than one taken now:
+    // Win+Space switches on the Space press, and this runs a message later, so
+    // a busy UI thread (a backdrop grab, a frame) could read the *new* layout
+    // and then wait for a change that already happened. Keep what we have.
+    if (!g_inputWatching || !g_inputHasLast) {
+        InputState baseline = CurrentInputState();
+        if (baseline.Usable()) {
+            g_inputLast = baseline;
+            g_inputHasLast = true;
+        } else {
+            // Unreadable in the middle of a switch (fullscreen transition,
+            // desktop recomposition): a baseline from some other app would
+            // report the wrong language, so drop it and take the first good
+            // sample instead.
+            g_inputHasLast = false;
+        }
     }
     g_inputTicks = 0;
     // SetTimer on an id that already runs restarts it, which is what a second
@@ -4571,7 +4633,9 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     PostMessageW(g_hwnd, WM_APP_LANGUAGE_WATCH, 0, 0);
                 }
 
-                int kind = TipKindForVk(vk, CtrlDown(), ShiftDown());
+                // ClipCtrlDown, not CtrlDown: with Right Alt held this is AltGr
+                // and the letter is a character, not a clipboard shortcut.
+                int kind = TipKindForVk(vk, ClipCtrlDown(), ShiftDown());
 
                 if (kind >= 0 &&
                     AllowTip((TipKind)kind, GetTickCount64(), kSourceHook)) {
@@ -4684,6 +4748,9 @@ DWORD WINAPI HookThreadProc(LPVOID) {
     }
     KillTimer(nullptr, kThreadTimerProbe);
     StopFallbackPoll();
+    // The resync thread writes the state this thread reads; it must be gone
+    // before the thread that owns it is.
+    StopResync();
 
     if (g_hook) {
         UnhookWindowsHookEx(g_hook);
