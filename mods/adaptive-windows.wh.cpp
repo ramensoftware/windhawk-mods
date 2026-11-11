@@ -37,14 +37,20 @@ problem in it cannot take down the taskbar or File Explorer.
 - **Respects each app's minimum size.** The grid reshapes itself so no window ends up smaller than
   its app allows or overlaps another one (for example Outlook and Spotify together on a short
   screen). If a chosen layout does not fit, the automatic layout is used.
-- **Free resizing.** Drag a window edge and the grid adapts to the width or height you chose.
+- **Free resizing.** Drag a window edge and the grid adapts to the width or height you chose: the
+  other windows give way while you drag.
   Dragging a window by its title and dropping it over another one swaps the two; dropping it
   anywhere else sends it back to its slot.
 - **Move windows with the keyboard.** Win + Alt + arrows swap the focused window with its neighbor
   on that side.
+- **Move windows with the mouse (radial menu, optional).** Hold the right button (or another one
+  you choose) over a window and a ring appears at the cursor. Move the mouse towards a side: the
+  slot of the neighbor on that side is highlighted. Release and the two windows swap places.
 - **Maximized windows** that return to or enter the grid go back to normal mode and take their slot.
   Turn on *Keep maximized windows maximized* to leave them alone instead: they stay maximized,
-  outside the grid, and take their slot again when they stop being maximized.
+  outside the grid, and take their slot again when they stop being maximized. A maximized window
+  never gets the drawn border, and the drawn border and its glow are clipped to the window's
+  monitor, so they do not spill onto the monitor next to it.
 - **Animated border on the focused window**: color, effect (solid, pulse, rainbow, gradient), line
   width, glow, corner radius and offset, so it can match your rounded corners mod.
 - **Multiple monitors.** Each monitor has its own grid, and windows can be dragged between them,
@@ -66,6 +72,14 @@ Dragging a window border adapts the grid only when all of these are true:
 - You hold the window by its border (within about 12 px of the left, right or bottom edge, or the
   top 5 px) and change its size by more than 6 px. Holding it by the middle or the title bar moves
   the window instead (drop it over another window to swap, anywhere else to send it back).
+
+You do not have to aim at the border: with *Resize a window with Alt + right button* on, hold Alt
+and the right button anywhere over the window and drag sideways or up/down. The side nearest to the
+cursor follows the mouse (the right side if you hold the right half of the window, and so on):
+drag outward to enlarge the window, inward to shrink it. The other windows move out of the way
+while you drag, so nothing overlaps.
+A side against the screen border has no neighbor, so the opposite side is used instead; if neither
+side has a neighbor, the window goes back to its slot.
 
 In the "main left" / "main top" layouts, dragging the divider of the main window changes how much of
 the screen it takes. Each app's minimum size still applies. Your sizes are discarded when a window
@@ -104,6 +118,26 @@ of modifiers for the arrows. With the option on, whenever a hotkey is already ta
 catches that combination with a low-level keyboard hook, so the other program or Windows no longer
 receives it. The hook runs in a thread of its own, exists only while the mod runs, and only for the
 combinations that were already taken.
+
+### Radial menu: moving a window with the mouse
+Off by default. In the settings, choose which button opens it: the right button, the middle button,
+or Alt / Win + the left button. Then press and hold that button over a window of the grid. A ring
+appears where the cursor is. Move the mouse out of the ring to the left, right, up or down: that
+slice of the ring lights up and the slot the window will go to is highlighted. Release the button
+to swap the window with the one in that slot. Esc cancels. If there is no window on that side, the
+slice turns gray and nothing happens. It only considers windows on the same monitor.
+
+The ring has two themes: **Classic** (a flat ring) and **Glass** (a glass tube showing the blurred
+screen behind it, with highlights). The selection color paints the chosen slice
+and the highlight over the window that will receive the one you are moving. By default the colors
+are the focused window border ones, following its effect (pulse, rainbow, gradient); choose
+*Custom* to set the ring color and the selection color yourself. The ring thickness can be set too.
+
+If you release without leaving the ring, the click is passed on to the app when the button is
+released, so a plain right click still opens the context menu. Over a window of the grid,
+dragging with that button no longer works while the option is on; anywhere else (the desktop, the
+taskbar, windows outside the grid) the button behaves as usual. It needs a low-level mouse hook, which only exists while this option
+(or the Alt + right button resize) is on.
 
 ### Works with other animation mods
 Adaptive Windows works together with these two mods:
@@ -151,11 +185,14 @@ Radius"), leave this option on "do not touch" so the two do not fight over the c
 
 ### Ignored windows and limits
 - Settings apply as soon as you save them; there is no need to restart the mod. Changing the
-  **windows to ignore** list also takes windows out of the grid (or brings them in) right away.
-- Tool windows, always-on-top, non-focusable and non-resizable windows (panels, widgets) stay out
-  of the grid, as do the ones in the **windows to ignore** list (part of the title or class,
-  separated by semicolons). The list is empty by default. The Windhawk log says why each window
-  was ignored.
+  **apps that always stay out of the grid** list also takes windows out of the grid (or brings them in)
+  right away.
+- To take one window out of the grid for now, use the float hotkey (Win + Ctrl + T). To keep an
+  app out of the grid always, write its name in that list (for example `spotify;chrome`). A name
+  works if it is the program's name or if it appears in the window title. The list is empty by
+  default.
+- Tool windows, always-on-top, non-focusable and non-resizable windows (panels, widgets) always
+  stay out of the grid. The Windhawk log says why each window was ignored.
 - Windows that refuse to be positioned (a likely case is programs running as administrator) float
   after a few attempts; Win + Alt + Home tries again.
 - Moving windows with the keyboard only considers windows on the same monitor.
@@ -179,13 +216,18 @@ Explorer, então um problema nele não derruba a barra de tarefas nem o Explorad
   janela fique menor do que o app aceita nem sobreponha outra (por exemplo, Outlook e Spotify
   juntos numa tela de pouca altura). Se um layout escolhido não couber, ele usa o automático.
 - **Redimensionamento livre.** Arraste a borda de uma janela e a grade se adapta à largura ou à
-  altura que você escolheu. Arrastar uma janela pelo meio e soltá-la sobre outra troca as duas
+  altura que você escolheu: as outras janelas abrem espaço enquanto você arrasta. Arrastar uma janela pelo meio e soltá-la sobre outra troca as duas
   de lugar; soltá-la em qualquer outro ponto a devolve ao seu espaço.
 - **Mover janelas pelo teclado.** Win + Alt + setas trocam a janela em foco com a vizinha daquele
   lado.
+- **Mover janelas com o mouse (menu radial, opcional).** Segure o botão direito (ou outro que você
+  escolher) sobre uma janela e um anel aparece no cursor. Mova o mouse para um lado: o espaço da
+  vizinha daquele lado é destacado. Solte e as duas janelas trocam de lugar.
 - **Janelas maximizadas** que voltam ou entram na grade passam ao modo normal e assumem o espaço.
   Ligue *Manter janelas maximizadas* para deixá-las em paz: elas continuam maximizadas, fora da
-  grade, e assumem o espaço de novo quando deixam de estar maximizadas.
+  grade, e assumem o espaço de novo quando deixam de estar maximizadas. Uma janela maximizada
+  nunca recebe a borda desenhada, e a borda desenhada e o brilho são recortados no monitor da
+  janela, para não passarem para o monitor ao lado.
 - **Borda animada na janela em foco**: cor, efeito (fixa, pulsar, arco-íris, degradê), largura da
   linha, brilho, raio dos cantos e deslocamento, para alinhar com o seu mod de cantos arredondados.
 - **Vários monitores.** Cada monitor tem a sua própria grade, e as janelas podem ser arrastadas
@@ -208,6 +250,13 @@ Arrastar a borda de uma janela adapta a grade apenas quando todas estas condiç�
 - Você segura a janela pela borda (a cerca de 12 px da lateral esquerda, direita ou de baixo, ou
   nos 5 px de cima) e muda o tamanho em mais de 6 px. Segurar pelo meio ou pela barra de título
   move a janela (solte sobre outra para trocar, ou em qualquer outro ponto para devolvê-la).
+
+Não é preciso mirar na borda: com *Redimensionar a janela com Alt + botão direito* ligado, segure
+Alt e o botão direito em qualquer ponto da janela e arraste para os lados ou para cima/baixo. A
+lateral mais próxima do cursor acompanha o mouse (a direita, se você segurar a metade direita da
+janela, e assim por diante): arraste para fora para aumentar a janela, para dentro para diminuir.
+As outras janelas abrem espaço enquanto você arrasta, sem sobreposição. Uma lateral junto da borda da tela não tem vizinha,
+então vale a lateral oposta; se nenhuma das duas tiver vizinha, a janela volta ao seu espaço.
 
 Nos layouts "principal à esquerda" / "principal em cima", arrastar a divisória da janela principal
 muda a parte da tela que ela ocupa. O tamanho mínimo de cada app continua valendo. Os tamanhos
@@ -246,6 +295,27 @@ outros modificadores para as setas. Com a opção ligada, sempre que um atalho j
 mod captura essa combinação com um gancho de teclado de baixo nível, e o outro programa ou o
 Windows deixa de recebê-la. O gancho roda numa thread própria, só existe enquanto o mod está ligado,
 e só para as combinações que já estavam ocupadas.
+
+### Menu radial: mover a janela com o mouse
+Desligado por padrão. Nas configurações, escolha o botão que o abre: o botão direito, o do meio, ou
+Alt / Win + botão esquerdo. Depois pressione e segure esse botão sobre uma janela da grade. Um anel
+aparece onde o cursor está. Mova o mouse para fora do anel, para a esquerda, direita, cima ou
+baixo: aquela fatia do anel acende e o espaço para onde a janela vai é destacado. Solte o botão
+para trocar a janela de lugar com a que ocupa aquele espaço. Esc cancela. Se não houver janela
+daquele lado, a fatia fica cinza e nada acontece. Só considera janelas do mesmo monitor.
+
+O anel tem dois temas: **Clássico** (anel liso) e **Vidro** (um tubo de vidro que mostra a tela
+desfocada atrás dele, com brilhos). A cor da seleção pinta a fatia escolhida e o
+destaque sobre a janela que vai receber a que você está movendo. Por padrão as cores são as da
+borda da janela em foco, acompanhando o efeito dela (pulsar, arco-íris, degradê); escolha
+*Personalizadas* para definir você mesmo a cor do anel e a cor da seleção. A espessura do anel
+também pode ser escolhida.
+
+Se você soltar sem sair do anel, o clique é repassado ao app no momento em que o botão é solto,
+então um clique direito comum continua abrindo o menu de contexto. Sobre uma janela da grade,
+arrastar com esse botão deixa de funcionar enquanto a opção está ligada; em qualquer outro lugar (a
+área de trabalho, a barra de tarefas, janelas fora da grade) o botão funciona como sempre. Ela precisa de um gancho de mouse de baixo nível, que só
+existe enquanto esta opção (ou o redimensionar com Alt + botão direito) está ligada.
 
 ### Funciona junto com outros mods de animação
 O Adaptive Windows funciona junto com estes dois mods:
@@ -294,11 +364,14 @@ os cantos.
 
 ### Janelas ignoradas e limites
 - As configurações valem assim que você as salva, sem reiniciar o mod. Mudar a lista de
-  **Janelas a ignorar** também tira janelas da grade (ou as traz) na hora.
-- Ficam fora da grade janelas de ferramenta, sempre no topo, sem foco, sem moldura redimensionável
-  (por exemplo, painéis e widgets), e as da lista **Janelas a ignorar** (parte do título ou da
-  classe, separadas por ponto e vírgula). A lista vem vazia por padrão. O log do Windhawk diz por
-  que cada janela foi ignorada.
+  **Aplicativos que ficam sempre fora da grade** também tira janelas da grade (ou as traz) na hora.
+- Para tirar uma janela da grade por enquanto, use o atalho de soltar (Win + Ctrl + T). Para um
+  aplicativo ficar sempre fora da grade, escreva o nome dele nessa lista (por exemplo
+  `spotify;chrome`). Um nome vale se for o nome do programa ou se aparecer no título da janela. A
+  lista vem vazia por padrão.
+- Janelas de ferramenta, sempre no topo, sem foco ou sem moldura redimensionável (por exemplo,
+  painéis e widgets) ficam sempre fora da grade. O log do Windhawk diz por que cada janela foi
+  ignorada.
 - Janelas que não aceitam ser posicionadas (um caso provável são programas executados como
   administrador) passam a flutuar depois de algumas tentativas; Win + Alt + Home tenta de novo.
 - Mover janelas pelo teclado só considera janelas do mesmo monitor.
@@ -427,6 +500,63 @@ os cantos.
   $name:pt-BR: Atalho para reorganizar todas as janelas
   $description: "Re-arranges everything and puts all windows back in the grid. Same format as the other hotkeys (for example Alt+Home or Win+Alt+Home); the key can also be Up, Down, Left, Right, Home or End. Leave empty to turn it off."
   $description:pt-BR: "Reorganiza tudo e devolve todas as janelas à grade. Mesmo formato dos outros atalhos (por exemplo Alt+Home ou Win+Alt+Home); a tecla também pode ser Up, Down, Left, Right, Home ou End. Deixe vazio para desligar."
+- radialMouse: off
+  $name: Radial menu (move a window with the mouse)
+  $name:pt-BR: Menu radial (mover a janela com o mouse)
+  $description: "Press and hold the chosen button over a window of the grid: a ring appears at the cursor. Move the mouse left, right, up or down to pick the neighboring window on that side (its slot is highlighted) and release to swap the two. Esc cancels. If you release without choosing a side, the click goes to the app as usual (when the button is released). Outside the windows of the grid the button works normally. Uses a low-level mouse hook, which only exists while this option is on."
+  $description:pt-BR: "Pressione e segure o botão escolhido sobre uma janela da grade: um anel aparece no cursor. Mova o mouse para a esquerda, direita, cima ou baixo para escolher a janela vizinha daquele lado (o espaço dela é destacado) e solte para trocar as duas de lugar. Esc cancela. Se soltar sem escolher um lado, o clique vai para o app normalmente (no momento em que o botão é solto). Fora das janelas da grade o botão funciona normalmente. Usa um gancho de mouse de baixo nível, que só existe enquanto esta opção está ligada."
+  $options:
+  - off: Off
+  - right: Hold the right button
+  - middle: Hold the middle button
+  - altleft: Alt + hold the left button
+  - winleft: Win + hold the left button
+  $options:pt-BR:
+  - off: Desligado
+  - right: Segurar o botão direito
+  - middle: Segurar o botão do meio
+  - altleft: Alt + segurar o botão esquerdo
+  - winleft: Win + segurar o botão esquerdo
+- radialTheme: classic
+  $name: Radial menu ring theme
+  $name:pt-BR: Tema do anel do menu radial
+  $description: "Glass draws the ring as a glass tube that shows the blurred screen behind it, with highlights and a tinted slice for the selection. The background behind the ring is captured once, when the ring opens."
+  $description:pt-BR: "Vidro desenha o anel como um tubo de vidro que mostra a tela desfocada atrás dele, com brilhos e a fatia da seleção tingida. O fundo atrás do anel é capturado uma vez, quando o anel abre."
+  $options:
+  - classic: Classic (flat ring)
+  - glass: Glass
+  $options:pt-BR:
+  - classic: Clássico (anel liso)
+  - glass: Vidro
+- radialThickness: 0
+  $name: Ring thickness (px at 100% scale, 0 = the theme's own)
+  $name:pt-BR: Espessura do anel (px a 100% de escala, 0 = a do tema)
+  $description: "0 uses the theme's thickness (10 for classic, 20 for glass). Otherwise from 4 to 48. The ring grows outward; the hole in the middle keeps its size."
+  $description:pt-BR: "0 usa a espessura do tema (10 no clássico, 20 no vidro). Senão, de 4 a 48. O anel cresce para fora; o furo do meio mantém o tamanho."
+- radialColors: border
+  $name: Radial menu colors
+  $name:pt-BR: Cores do menu radial
+  $description: "The selection color is used for the chosen slice of the ring and for the highlight over the window that will receive the one being moved. With the border colors, the selection follows the focused window border color and its effect (pulse, rainbow, gradient)."
+  $description:pt-BR: "A cor da seleção vale para a fatia escolhida do anel e para o destaque sobre a janela que vai receber a que está sendo movida. Com as cores da borda, a seleção acompanha a cor da borda da janela em foco e o efeito dela (pulsar, arco-íris, degradê)."
+  $options:
+  - border: Same as the focused window border
+  - custom: Custom (the two colors below)
+  $options:pt-BR:
+  - border: As mesmas da borda da janela em foco
+  - custom: Personalizadas (as duas cores abaixo)
+- radialRingColor: "FFFFFF"
+  $name: Custom ring color (RGB hex)
+  $name:pt-BR: Cor personalizada do anel (RGB hex)
+- radialSelColor: "7B8CFF"
+  $name: Custom selection color (RGB hex)
+  $name:pt-BR: Cor personalizada da seleção (RGB hex)
+  $description: "Also the color of the highlight over the destination window."
+  $description:pt-BR: "Também é a cor do destaque sobre a janela de destino."
+- resizeMouse: false
+  $name: Resize a window with Alt + right button
+  $name:pt-BR: Redimensionar a janela com Alt + botão direito
+  $description: "Hold Alt and the right button anywhere over a window and drag sideways or up/down: the side of the window nearest to the cursor follows the mouse, so dragging outward enlarges the window and dragging inward shrinks it. The other windows make room as you drag. If that side is against the screen edge, the opposite side is used. Esc cancels. An Alt + right click without dragging still reaches the app. Uses the same low-level mouse hook as the radial menu."
+  $description:pt-BR: "Segure Alt e o botão direito em qualquer ponto sobre uma janela e arraste para os lados ou para cima/baixo: a lateral da janela mais próxima do cursor acompanha o mouse, então arrastar para fora aumenta a janela e arrastar para dentro diminui. As outras janelas abrem espaço enquanto você arrasta. Se essa lateral estiver junto da borda da tela, vale a lateral oposta. Esc cancela. Um Alt + clique direito sem arrastar continua chegando ao app. Usa o mesmo gancho de mouse de baixo nível do menu radial."
 - hotkeys: winalt
   $name: Modifiers of the other hotkeys
   $name:pt-BR: Modificadores dos atalhos
@@ -485,10 +615,10 @@ os cantos.
   $description: "0 = flush against the window edge, outside. Positive moves it outward; negative pulls it inside the window. Useful to align it with the corners mod."
   $description:pt-BR: "0 = colada na borda da janela, por fora. Positivo afasta para fora; negativo puxa para dentro da janela. Serve para alinhar com o mod de cantos."
 - ignoreList: ""
-  $name: "Windows to ignore (separate with semicolons; matches part of the title or class)"
-  $name:pt-BR: "Janelas a ignorar (separe por ponto e vírgula; vale para parte do título ou da classe)"
-  $description: "These windows stay free, outside the grid. Useful for bars and panels from other mods. Example: Finder Bar;my-window. Empty by default."
-  $description:pt-BR: "Essas janelas ficam livres, fora da grade. Útil para barras e painéis de outros mods. Exemplo: Finder Bar;minha-janela. Vazio por padrão."
+  $name: "Apps that always stay out of the grid"
+  $name:pt-BR: "Aplicativos que ficam sempre fora da grade"
+  $description: "Write the app names separated by semicolons, for example: spotify;chrome. To take just one window out for now, use the float hotkey (Win+Ctrl+T) instead; this list is for apps you never want in the grid."
+  $description:pt-BR: "Escreva os nomes dos aplicativos separados por ponto e vírgula, por exemplo: spotify;chrome. Para tirar só uma janela por enquanto, use o atalho de soltar (Win+Ctrl+T); esta lista é para aplicativos que você nunca quer na grade."
 */
 // ==/WindhawkModSettings==
 
@@ -546,6 +676,11 @@ struct Config {
     int borderGlow = 0;
     int borderRadius = 8;
     int borderOffset = 0;
+    int radialTheme = 0;       // anel do menu radial: 0 = clássico, 1 = vidro
+    bool radialCustom = false; // false = cores da borda; true = cores próprias do anel e da seleção
+    COLORREF radialRing = RGB(0xFF, 0xFF, 0xFF);
+    COLORREF radialSel = RGB(0x7B, 0x8C, 0xFF);
+    int radialThickness = 0;   // espessura do anel em px a 100% de escala; 0 = a do tema
 };
 
 static Config g_cfg;
@@ -610,13 +745,71 @@ static void LoadIgnoreList() {
     g_ignore = std::move(out);
 }
 
+// Nome do arquivo do programa de um processo, em minúsculas (ex.: "chrome.exe"); vazio se não der para ler.
+static std::wstring ProcessExeName(DWORD pid) {
+    std::wstring name;
+    HANDLE p = pid ? OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid) : nullptr;
+    if (!p) return name;
+    wchar_t path[MAX_PATH] = L"";
+    DWORD len = MAX_PATH;
+    if (QueryFullProcessImageNameW(p, 0, path, &len)) {
+        const wchar_t* base = wcsrchr(path, L'\\');
+        name = Lower(base ? base + 1 : path);
+    }
+    CloseHandle(p);
+    return name;
+}
+
+// Programa dono da janela. Apps da Microsoft Store (Configurações, Calculadora...) têm a moldura no
+// ApplicationFrameHost.exe e o conteúdo no processo do app: nesse caso vale o processo do conteúdo.
+// O resultado fica guardado por janela, porque a consulta é feita a cada evento de janela.
+static std::wstring WindowExeName(HWND h) {
+    struct Entry { HWND h; DWORD pid; std::wstring name; };
+    static std::vector<Entry> cache;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    for (const auto& e : cache)
+        if (e.h == h && e.pid == pid && e.name != L"applicationframehost.exe") return e.name;
+    std::wstring name = ProcessExeName(pid);
+    if (name == L"applicationframehost.exe") {
+        HWND core = FindWindowExW(h, nullptr, L"Windows.UI.Core.CoreWindow", nullptr);
+        DWORD cpid = 0;
+        if (core) GetWindowThreadProcessId(core, &cpid);
+        if (cpid && cpid != pid) {
+            std::wstring inner = ProcessExeName(cpid);
+            if (!inner.empty()) name = inner;
+        }
+    }
+    cache.erase(std::remove_if(cache.begin(), cache.end(), [&](const Entry& e) { return e.h == h; }), cache.end());
+    if (cache.size() >= 128) cache.erase(cache.begin());
+    cache.push_back({h, pid, name});
+    return name;
+}
+
+// Lista de aplicativos que ficam fora da grade. Um item vale se for o nome do programa (com ou sem ".exe":
+// "spotify" = spotify.exe) ou se aparecer no título da janela (ou na classe dela).
 static bool IsIgnored(HWND h, PCWSTR cls) {
+    if (g_ignore.empty()) return false;
+    const std::wstring exe = WindowExeName(h);
     wchar_t title[256] = L"";
     GetWindowTextW(h, title, 256);
-    std::wstring t = Lower(title), c = Lower(cls);
-    for (auto& k : g_ignore)
-        if (t.find(k) != std::wstring::npos || c.find(k) != std::wstring::npos) return true;
+    const std::wstring t = Lower(title), c = Lower(cls);
+    for (const auto& k : g_ignore) {
+        const bool hasExt = k.size() > 4 && k.compare(k.size() - 4, 4, L".exe") == 0;
+        if (!exe.empty() && exe == (hasExt ? k : k + L".exe")) return true;
+        if (!hasExt && (t.find(k) != std::wstring::npos || c.find(k) != std::wstring::npos)) return true;
+    }
     return false;
+}
+
+// "#RRGGBB" ou "RRGGBB" -> cor. Retorna false (e não mexe em out) se o texto não tiver 6 dígitos.
+static bool ParseHexColor(const std::wstring& text, COLORREF* out) {
+    size_t k = 0;
+    while (k < text.size() && (text[k] == L'#' || iswspace(text[k]))) k++;
+    if (text.size() - k < 6) return false;
+    unsigned long v = wcstoul(text.c_str() + k, nullptr, 16);
+    *out = RGB((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF);
+    return true;
 }
 
 static void LoadSettings() {
@@ -659,15 +852,7 @@ static void LoadSettings() {
         c.duration = 450; c.bez = {0.22, 1.0, 0.36, 1.0}; c.entry = EN_RIGHT;
     }
 
-    std::wstring bc = GetStr(L"borderColor");
-    c.borderOn = false;
-    size_t k = 0;
-    while (k < bc.size() && (bc[k] == L'#' || iswspace(bc[k]))) k++;
-    if (bc.size() - k >= 6) {
-        unsigned long v = wcstoul(bc.c_str() + k, nullptr, 16);
-        c.borderColor = RGB((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF);
-        c.borderOn = true;
-    }
+    c.borderOn = ParseHexColor(GetStr(L"borderColor"), &c.borderColor);  // vazio = borda desligada
     {
         std::wstring st = GetStr(L"borderStyle");
         c.borderStyle = st == L"pulse" ? 1 : st == L"rainbow" ? 2 : st == L"gradient" ? 3 : 0;
@@ -676,13 +861,15 @@ static void LoadSettings() {
         c.borderGlow = std::min(60, std::max(0, Wh_GetIntSetting(L"borderGlow")));
         c.borderRadius = std::min(80, std::max(0, Wh_GetIntSetting(L"borderRadius")));
         c.borderOffset = std::min(30, std::max(-30, Wh_GetIntSetting(L"borderOffset")));
-        std::wstring b2 = GetStr(L"borderColor2");
-        size_t q = 0;
-        while (q < b2.size() && (b2[q] == L'#' || iswspace(b2[q]))) q++;
-        if (b2.size() - q >= 6) {
-            unsigned long v = wcstoul(b2.c_str() + q, nullptr, 16);
-            c.borderColor2 = RGB((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF);
-        }
+        ParseHexColor(GetStr(L"borderColor2"), &c.borderColor2);
+    }
+    c.radialTheme = GetStr(L"radialTheme") == L"glass" ? 1 : 0;
+    c.radialCustom = GetStr(L"radialColors") == L"custom";
+    ParseHexColor(GetStr(L"radialRingColor"), &c.radialRing);
+    ParseHexColor(GetStr(L"radialSelColor"), &c.radialSel);
+    {
+        int th = Wh_GetIntSetting(L"radialThickness");
+        c.radialThickness = th <= 0 ? 0 : std::min(48, std::max(4, th));
     }
     g_cfg = c;
 }
@@ -953,7 +1140,9 @@ static bool g_covValid = false;
 
 static void DrawOverlay(HWND t) {
     DWORD cl = 0;
-    if (!t || !IsWindow(t) || !IsWindowVisible(t) || IsIconic(t) ||
+    // Uma janela maximizada ocupa o monitor inteiro: a borda, que é desenhada por FORA da janela, cairia
+    // toda no monitor vizinho. Ela não recebe a borda desenhada.
+    if (!t || !IsWindow(t) || !IsWindowVisible(t) || IsIconic(t) || IsZoomed(t) ||
         (SUCCEEDED(DwmGetWindowAttribute(t, DWMWA_CLOAKED, &cl, sizeof(cl))) && cl)) {
         HideOverlay();
         return;
@@ -1033,6 +1222,23 @@ static void DrawOverlay(HWND t) {
 
     POINT dst{fr.left - m, fr.top - m}, src{0, 0};
     SIZE sz{W, H};
+    // A borda e o brilho ficam por fora da janela; junto da borda da tela eles passariam para o monitor
+    // vizinho. Recorta o desenho no monitor da janela (menos durante um arrasto, quando a janela pode
+    // estar de propósito entre dois monitores).
+    MONITORINFO omi{sizeof(omi)};
+    if (t != g_dragHwnd && GetMonitorInfoW(MonitorFromWindow(t, MONITOR_DEFAULTTONEAREST), &omi)) {
+        RECT full{dst.x, dst.y, dst.x + W, dst.y + H}, clip{};
+        if (!IntersectRect(&clip, &full, &omi.rcMonitor)) {
+            HideOverlay();
+            return;
+        }
+        src.x = clip.left - full.left;
+        src.y = clip.top - full.top;
+        dst.x = clip.left;
+        dst.y = clip.top;
+        sz.cx = clip.right - clip.left;
+        sz.cy = clip.bottom - clip.top;
+    }
     BLENDFUNCTION bf{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
     UpdateLayeredWindow(g_ov, nullptr, &dst, &sz, g_ovDC, &src, 0, &bf, ULW_ALPHA);
     // fica logo acima da janela ativa (e não por cima de tudo)
@@ -1589,6 +1795,13 @@ static void StepAnimations() {
     const UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS;
     for (auto& it : g_items) {
         if (!it.anim) continue;
+        // maximizada no meio da animação: para de movê-la (SetWindowPos numa janela maximizada a deixaria
+        // "maximizada" fora do lugar, sobrando para o monitor vizinho)
+        if (IsZoomed(it.h)) {
+            it.anim = false;
+            it.verifyAt = 0;
+            continue;
+        }
         double t = g_cfg.duration <= 0 ? 1.0 : (now - it.t0) / (double)g_cfg.duration;
         if (t >= 1.0) {
             // fim: posição E tamanho finais (é aqui que as janelas que crescem crescem)
@@ -1627,6 +1840,8 @@ static bool VerifyItems() {
         if (AppCloaked(it.h) && it.verifyTries < 40) { it.verifyTries++; it.verifyAt = now + 100; pending = true; continue; }
         RECT r;
         if (!GetWindowRect(it.h, &r)) { it.verifyAt = 0; continue; }
+        // maximizada depois de organizada: está fora da grade, não é reposicionada
+        if (IsZoomed(it.h)) { it.verifyAt = 0; continue; }
         const RECT& t = it.to;
         bool bad = std::abs(r.left - t.left) > 4 || std::abs(r.top - t.top) > 4 ||
                    std::abs(r.right - t.right) > 4 || std::abs(r.bottom - t.bottom) > 4;
@@ -1695,7 +1910,13 @@ static void CheckZoom(HWND h) {
     if (z == it.zoomed) return;
     it.zoomed = z;
     it.to = RECT{0, 0, 0, 0};
+    if (z) {
+        // passou a maximizada: sai da grade; cancela o que estava pendente para ela
+        it.anim = false;
+        it.verifyAt = 0;
+    }
     Retile();
+    if (h == g_borderHwnd && UseOverlay()) DrawOverlay(h);  // esconde/mostra a borda desenhada
 }
 
 // processa janelas novas que já "assentaram" (título/estilo definidos)
@@ -1839,6 +2060,7 @@ static void SwapItems(size_t i, size_t j) {
 }
 
 static RECT g_dragStart{};
+static bool g_retileResetAll = false;  // o próximo "retile" agendado recalcula o destino de todas as janelas
 static bool g_dragEdge = false;  // o arrasto começou na borda da janela (redimensionar) e não na barra de título (mover)
 static ULONGLONG g_retileAt = 0;  // quando refazer o layout depois de um arrasto
 static HWND g_retileHwnd = nullptr;
@@ -1871,8 +2093,14 @@ static void RunScheduledRetile() {
         GetWindowRect(h, &it.cur);
         it.to = RECT{0, 0, 0, 0};
     }
+    if (g_retileResetAll) {
+        g_retileResetAll = false;
+        for (auto& o : g_items) o.to = RECT{0, 0, 0, 0};
+    }
     Retile();
 }
+
+static void LiveBegin(HWND h, const RECT& start, bool native);
 
 static void OnMoveStart(HWND h) {
     int i = FindItem(h);
@@ -1896,6 +2124,8 @@ static void OnMoveStart(HWND h) {
         }
         g_items[i].anim = false;
         g_dragHwnd = h;
+        // arrasto pela borda de uma janela da grade: as vizinhas acompanham enquanto ela muda de tamanho
+        if (g_dragEdge && !g_items[i].floating) LiveBegin(h, g_dragStart, true);
     }
 }
 
@@ -2016,9 +2246,211 @@ static bool ApplyResize(size_t i, const RECT& now) {
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Redimensionamento ao vivo
+// ---------------------------------------------------------------------------
+// Enquanto uma janela da grade muda de tamanho (pela borda ou com Alt + botão direito), as outras são
+// reposicionadas na hora para ceder ou ocupar o espaço, em vez de só se ajustarem quando o botão é solto.
+//
+// Apps demoram tempos diferentes para se redesenhar (o Explorador de Arquivos e os apps da Microsoft Store
+// são bem mais lentos que os outros). Mandar posições novas sem esperar deixa o app lento cada vez mais
+// para trás e abre buracos entre as janelas. Por isso a grade avança em passos:
+//   1. as janelas que crescem recebem a posição nova;
+//   2. quando elas chegam lá (ou passa um tempo-limite), as que diminuem recebem a delas;
+//   3. só então começa o passo seguinte, já com a posição mais recente do cursor.
+// Assim todas andam no ritmo da mais lenta, e no meio de um passo as janelas se sobrepõem um pouco em vez
+// de deixar um vão.
+
+struct LiveResize {
+    bool active = false;
+    bool native = false;  // true = arrasto pela borda (o Windows move a própria janela); false = Alt + botão direito
+    HWND h = nullptr;     // janela sendo redimensionada
+    RECT start{};         // retângulo dela no início
+    RECT lastNow{};       // último retângulo dela visto (arrasto pela borda)
+    // A grade como estava no início. A cada passo os pesos são recalculados a partir dela (e não do passo
+    // anterior), então o resultado depende só do tamanho atual da janela arrastada.
+    struct Base { HWND h; RECT to; double wx, wy; };
+    std::vector<Base> base;
+    double baseMainFrac = 0;
+    struct Want { HWND h; RECT r; };
+    std::vector<Want> want;     // onde cada janela deve ficar agora
+    std::vector<Want> later;    // as que diminuem neste passo: enviadas depois que as que crescem chegarem
+    std::vector<HWND> waiting;  // janelas cuja chegada estamos esperando
+    int phase = 0;              // 0 = livre, 1 = esperando as que crescem, 2 = esperando as que diminuem
+    double sentAt = 0;
+};
+static LiveResize g_live;
+
+static void LiveBegin(HWND h, const RECT& start, bool native) {
+    LiveResize& L = g_live;
+    if (native && L.active) return;  // um redimensionamento com Alt + botão direito já está em curso
+    L = LiveResize{};
+    L.active = true;
+    L.native = native;
+    L.h = h;
+    L.start = start;
+    L.lastNow = start;
+    for (auto& o : g_items) {
+        o.anim = false;
+        o.applied = RECT{0, 0, 0, 0};
+        L.base.push_back({o.h, o.to, o.wx, o.wy});
+    }
+    L.baseMainFrac = g_mainFrac;
+}
+
+static void LiveEnd() { g_live = LiveResize{}; }
+
+// Devolve a grade ao estado do início (destinos e pesos). Retorna false se alguma janela entrou ou saiu da
+// grade nesse meio tempo: o estado guardado não vale mais.
+static bool LiveRestoreBase() {
+    LiveResize& L = g_live;
+    if (L.base.size() != g_items.size()) return false;
+    for (const auto& b : L.base) {
+        int k = FindItem(b.h);
+        if (k < 0) return false;
+        g_items[k].to = b.to;
+        g_items[k].wx = b.wx;
+        g_items[k].wy = b.wy;
+    }
+    g_mainFrac = L.baseMainFrac;
+    return true;
+}
+
+// Recalcula onde cada janela do monitor deve ficar para o tamanho atual (now) da janela arrastada.
+// Retorna false se a grade mudou e o redimensionamento ao vivo deve ser encerrado.
+static bool LiveCompute(const RECT& now) {
+    LiveResize& L = g_live;
+    int i = FindItem(L.h);
+    if (i < 0 || !LiveRestoreBase()) return false;
+    g_dragStart = L.start;
+    if (!ApplyResize((size_t)i, now)) LiveRestoreBase();  // mudança pequena demais: fica como no início
+    L.want.clear();
+    HMONITOR m = g_items[i].mon;
+    MONITORINFO mi{sizeof(mi)};
+    if (g_monocle || !GetMonitorInfoW(m, &mi)) return true;
+    std::vector<Item*> list;
+    for (auto& it : g_items)
+        if (!it.floating && !IsZoomed(it.h) && !IsIconic(it.h) && it.mon == m) list.push_back(&it);
+    g_scale = MonScale(m);
+    std::vector<SIZE> mins;
+    std::vector<std::pair<double, double>> wts;
+    for (auto* it : list) {
+        mins.push_back(SlotMin(*it));
+        wts.push_back({it->wx, it->wy});
+    }
+    auto slots = ComputeSlots((int)list.size(), UsableArea(m, mi), mins, &wts);
+    for (size_t k = 0; k < list.size() && k < slots.size(); k++) {
+        if (L.native && list[k]->h == L.h) continue;  // no arrasto pela borda, o Windows é quem move a janela
+        const RECT& in = list[k]->lastInset;
+        L.want.push_back({list[k]->h, RECT{slots[k].left - in.left, slots[k].top - in.top, slots[k].right + in.right, slots[k].bottom + in.bottom}});
+    }
+    return true;
+}
+
+static void LiveSend(const LiveResize::Want& w) {
+    int k = FindItem(w.h);
+    if (k < 0) return;
+    Item& it = g_items[k];
+    it.anim = false;
+    it.verifyAt = 0;
+    it.applied = w.r;
+    it.cur = w.r;
+    g_live.waiting.push_back(w.h);
+    if (IsHungAppWindow(w.h)) return;
+    SetWindowPos(w.h, nullptr, w.r.left, w.r.top, w.r.right - w.r.left, w.r.bottom - w.r.top,
+                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS);
+}
+
+// As janelas do passo atual já chegaram onde foram mandadas? (ou passou o tempo-limite)
+static bool LiveSettled() {
+    LiveResize& L = g_live;
+    if (NowMs() - L.sentAt > 120.0) return true;  // app que não responde ou que recusou o tamanho: segue em frente
+    for (HWND h : L.waiting) {
+        int k = FindItem(h);
+        RECT r{};
+        if (k < 0 || !GetWindowRect(h, &r)) continue;
+        const RECT& a = g_items[k].applied;
+        if (std::abs(r.left - a.left) > 2 || std::abs(r.top - a.top) > 2 || std::abs(r.right - a.right) > 2 ||
+            std::abs(r.bottom - a.bottom) > 2)
+            return false;
+    }
+    return true;
+}
+
+// Avança o redimensionamento ao vivo. Chamada a cada volta do laço da thread de trabalho.
+static void LivePump() {
+    LiveResize& L = g_live;
+    if (!L.active) return;
+    if (L.phase != 0) {
+        if (!LiveSettled()) return;
+        L.waiting.clear();
+        if (L.phase == 1 && !L.later.empty()) {
+            for (const auto& w : L.later) LiveSend(w);
+            L.later.clear();
+            L.phase = 2;
+            L.sentAt = NowMs();
+            return;
+        }
+        L.phase = 0;
+    }
+    // novo passo: primeiro as janelas que crescem, depois (na fase seguinte) as que diminuem
+    std::vector<LiveResize::Want> grow;
+    for (const auto& w : L.want) {
+        int k = FindItem(w.h);
+        if (k < 0) continue;
+        RECT cur = g_items[k].applied;
+        if (cur.right <= cur.left) GetWindowRect(w.h, &cur);
+        if (EqualRect(&cur, &w.r)) continue;
+        const LONGLONG areaNow = (LONGLONG)(cur.right - cur.left) * (cur.bottom - cur.top);
+        const LONGLONG areaNew = (LONGLONG)(w.r.right - w.r.left) * (w.r.bottom - w.r.top);
+        if (areaNew >= areaNow) grow.push_back(w);
+        else L.later.push_back(w);
+    }
+    if (grow.empty() && L.later.empty()) return;
+    if (grow.empty()) {
+        for (const auto& w : L.later) LiveSend(w);
+        L.later.clear();
+        L.phase = 2;
+    } else {
+        for (const auto& w : grow) LiveSend(w);
+        L.phase = 1;
+    }
+    L.sentAt = NowMs();
+}
+
+// Arrasto pela borda: acompanha o tamanho que o Windows está dando à janela e ajusta as vizinhas.
+static void NativeLiveTick() {
+    LiveResize& L = g_live;
+    if (!L.active || !L.native) return;
+    RECT r{};
+    if (g_dragHwnd != L.h || !GetWindowRect(L.h, &r)) {
+        LiveEnd();
+        return;
+    }
+    if (!EqualRect(&r, &L.lastNow)) {
+        L.lastNow = r;
+        if (!LiveCompute(r)) {
+            LiveEnd();
+            return;
+        }
+    }
+    LivePump();
+}
+
 static void OnMoveEnd(HWND h) {
     g_dragHwnd = nullptr;
     int i = FindItem(h);
+    if (g_live.active && g_live.native) {
+        // fim do arrasto pela borda com as vizinhas acompanhando: volta à grade do início para que o
+        // cálculo final abaixo parta dela, e pede que todas as janelas sejam conferidas no fim
+        const bool ok = LiveRestoreBase();
+        LiveEnd();
+        g_retileResetAll = true;
+        if (!ok) {
+            ScheduleRetile(h, 60);
+            return;
+        }
+    }
     wchar_t cls[64] = L"", ttl[48] = L"";
     {
         GetClassNameW(h, cls, 64);
@@ -2154,13 +2586,11 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD ev, HWND hwnd, LONG idObj
 // Atalhos
 // ---------------------------------------------------------------------------
 
-// Move a janela em foco na direção da seta: troca de lugar com a janela vizinha naquele lado, procurada pela
-// posição real na tela (mesmo monitor), qualquer que seja o layout. dir: 0 = cima, 1 = esquerda, 2 = direita, 3 = baixo.
-static void SwapFocusedDir(int dir) {
-    HWND fg = GetForegroundWindow();
-    int i = FindItem(fg);
-    if (i < 0 || g_items[i].floating) return;
-    if (g_items[i].to.right <= g_items[i].to.left) return;  // ainda sem posição final calculada
+// Janela vizinha da i-ésima no lado pedido, procurada pela posição real na tela (mesmo monitor), qualquer
+// que seja o layout. dir: 0 = cima, 1 = esquerda, 2 = direita, 3 = baixo. Retorna -1 se não houver.
+static int FindNeighbor(int i, int dir) {
+    if (i < 0 || g_items[i].floating) return -1;
+    if (g_items[i].to.right <= g_items[i].to.left) return -1;  // ainda sem posição final calculada
     auto vis = [&](const Item& it) {
         RECT r = it.to;
         r.left += it.lastInset.left; r.top += it.lastInset.top;
@@ -2196,6 +2626,13 @@ static void SwapFocusedDir(int dir) {
         if (ov <= 0 || gap < -4) continue;  // não é vizinha daquele lado (gap negativo = sobrepõe)
         if (gap < bestGap || (gap == bestGap && ov > bestOv)) { best = (int)j; bestGap = gap; bestOv = ov; }
     }
+    return best;
+}
+
+// Move a janela em foco na direção da seta: troca de lugar com a janela vizinha naquele lado.
+static void SwapFocusedDir(int dir) {
+    int i = FindItem(GetForegroundWindow());
+    int best = FindNeighbor(i, dir);
     if (best < 0) {
         Wh_Log(L"Atalho mover janela (%s): nao ha janela desse lado da que esta em foco",
                dir == 0 ? L"cima" : dir == 1 ? L"esquerda" : dir == 2 ? L"direita" : L"baixo");
@@ -2204,6 +2641,607 @@ static void SwapFocusedDir(int dir) {
     SwapItems((size_t)i, (size_t)best);
     Retile();
 }
+
+// ---------------------------------------------------------------------------
+// Menu radial: mover a janela com o mouse
+// ---------------------------------------------------------------------------
+// Enquanto o botão do mouse escolhido fica pressionado sobre uma janela, um anel aparece no cursor. Mover o
+// mouse para um lado escolhe a janela vizinha daquele lado (o espaço de destino é destacado na tela); soltar o
+// botão troca as duas de lugar. Soltar sem sair do centro do anel devolve o clique ao app; Esc cancela.
+// O gancho de mouse só avisa que o botão foi pressionado/solto; a posição do cursor é lida a cada quadro.
+
+struct Radial {
+    bool active = false;
+    HWND target = nullptr;  // janela que será movida
+    POINT origin{};         // onde o cursor estava quando o menu abriu (centro do anel)
+    int dir = -1;           // direção escolhida (-1 = nenhuma)
+    int nb = -1;            // índice da vizinha naquela direção (-1 = não há)
+    double scale = 1.0;
+    HWND ring = nullptr;
+    HWND prev = nullptr;
+    HDC dc = nullptr;
+    HBITMAP bmp = nullptr;
+    uint32_t* bits = nullptr;
+    int size = 0;
+    int drawnDir = -2;
+    bool drawnOk = false;
+    std::vector<uint32_t> back;  // tema vidro: o que estava na tela sob o anel quando ele abriu, já desfocado
+    int backSize = 0;
+};
+static Radial g_radial;
+
+// Cores do anel: as da borda da janela em foco (acompanhando o efeito dela) ou as escolhidas pelo usuário.
+// A cor da seleção é também a do destaque sobre a janela que vai receber a que está sendo movida.
+static COLORREF RadialSelColor() { return g_cfg.radialCustom ? g_cfg.radialSel : BorderColorNow(); }
+static COLORREF RadialRingColor() { return g_cfg.radialCustom ? g_cfg.radialRing : RGB(255, 255, 255); }
+static bool RadialColorsAnimated() { return !g_cfg.radialCustom && g_cfg.borderStyle != 0; }
+// Medidas do anel. O furo do meio tem tamanho fixo; a espessura (do tema ou a escolhida) cresce para fora.
+static double RadialHalf(double scale) {
+    const int th = g_cfg.radialThickness > 0 ? g_cfg.radialThickness : (g_cfg.radialTheme == 1 ? 20 : 10);
+    return th * scale / 2.0;
+}
+static double RadialRad(double scale) { return 28.0 * scale + RadialHalf(scale); }  // raio do meio do anel
+static int RadialSize(double scale) {
+    const double margin = (g_cfg.radialTheme == 1 ? 10.0 : 8.0) * scale;  // sombra / disco de fundo em volta
+    return std::max(48, (int)std::lround(2.0 * (RadialRad(scale) + RadialHalf(scale) + margin)) + 2);
+}
+
+// Botão que abre o menu radial (opcional): 0 = desligado, 1 = botão do meio, 2 = Alt + botão esquerdo,
+// 3 = Win + botão esquerdo, 4 = botão direito. Um gancho de mouse de baixo nível, numa thread própria, segura o clique e avisa
+// a thread de trabalho; se nada for escolhido, o clique é devolvido ao app.
+static int g_mouseMode = 0;
+static bool g_mouseCanceled = false;  // o menu foi cancelado com Esc: o clique não é devolvido
+static bool g_resizeMouse = false;    // Alt + botão direito redimensiona a janela (opcional, mesmo gancho)
+// O clique não foi sobre uma janela da grade: a thread de trabalho já devolveu o "pressionar" ao app e pede
+// ao gancho que deixe passar o "soltar" verdadeiro. Assim, fora da grade, clicar e arrastar com o botão
+// continuam funcionando normalmente.
+static std::atomic<bool> g_mhPassUp{false};
+static bool g_mouseDownInjected = false;  // só a thread de trabalho usa
+
+static LRESULT CALLBACK RadialPrevProc(HWND h, UINT m, WPARAM w, LPARAM l) {
+    if (m == WM_ERASEBKGND) {
+        RECT rc{};
+        GetClientRect(h, &rc);
+        HBRUSH br = CreateSolidBrush(RadialSelColor());
+        FillRect((HDC)w, &rc, br);
+        DeleteObject(br);
+        return 1;
+    }
+    return DefWindowProcW(h, m, w, l);
+}
+
+static bool RadialEnsureWindows() {
+    static bool reg = false;
+    HINSTANCE inst = GetModuleHandleW(nullptr);
+    if (!reg) {
+        WNDCLASSW wc{};
+        wc.lpfnWndProc = DefWindowProcW;
+        wc.hInstance = inst;
+        wc.lpszClassName = L"AdaptiveWindowsRadialRing";
+        RegisterClassW(&wc);
+        WNDCLASSW wp{};
+        wp.style = CS_HREDRAW | CS_VREDRAW;
+        wp.lpfnWndProc = RadialPrevProc;
+        wp.hInstance = inst;
+        wp.lpszClassName = L"AdaptiveWindowsRadialPreview";
+        RegisterClassW(&wp);
+        reg = true;
+    }
+    const DWORD ex = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST;
+    if (!g_radial.ring)
+        g_radial.ring = CreateWindowExW(ex, L"AdaptiveWindowsRadialRing", L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, inst, nullptr);
+    if (!g_radial.prev) {
+        g_radial.prev = CreateWindowExW(ex, L"AdaptiveWindowsRadialPreview", L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, inst, nullptr);
+        if (g_radial.prev) {
+            SetLayeredWindowAttributes(g_radial.prev, 0, 80, LWA_ALPHA);
+            DWORD round = 2;  // DWMWCP_ROUND
+            DwmSetWindowAttribute(g_radial.prev, 33, &round, sizeof(round));
+        }
+    }
+    return g_radial.ring && g_radial.prev;
+}
+
+static void RadialDestroyWindows() {
+    if (g_radial.ring) DestroyWindow(g_radial.ring);
+    if (g_radial.prev) DestroyWindow(g_radial.prev);
+    if (g_radial.bmp) DeleteObject(g_radial.bmp);
+    if (g_radial.dc) DeleteDC(g_radial.dc);
+    g_radial = Radial{};
+}
+
+// Tema vidro: copia o que está na tela sob o anel (antes de ele aparecer) e desfoca. O anel fica parado
+// onde abriu, então uma cópia só basta; se a cópia falhar, usa um cinza neutro.
+static void RadialCaptureBackdrop() {
+    Radial& R = g_radial;
+    const int S = RadialSize(R.scale);
+    R.back.assign((size_t)S * S, 0x00808080);
+    R.backSize = S;
+    HDC scr = GetDC(nullptr);
+    if (!scr) return;
+    HDC mem = CreateCompatibleDC(scr);
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = S;
+    bi.bmiHeader.biHeight = -S;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP bmp = mem ? CreateDIBSection(mem, &bi, DIB_RGB_COLORS, &bits, nullptr, 0) : nullptr;
+    if (bmp && bits) {
+        HGDIOBJ old = SelectObject(mem, bmp);
+        if (BitBlt(mem, 0, 0, S, S, scr, R.origin.x - S / 2, R.origin.y - S / 2, SRCCOPY)) {
+            GdiFlush();
+            memcpy(R.back.data(), bits, (size_t)S * S * sizeof(uint32_t));
+        }
+        SelectObject(mem, old);
+    }
+    if (bmp) DeleteObject(bmp);
+    if (mem) DeleteDC(mem);
+    ReleaseDC(nullptr, scr);
+
+    // desfoque: média móvel na horizontal e na vertical, duas vezes (aproxima um desfoque gaussiano)
+    const int rad = std::max(2, (int)std::lround(5 * R.scale));
+    std::vector<uint32_t> tmp((size_t)S * S);
+    auto pass = [&](const std::vector<uint32_t>& src, std::vector<uint32_t>& dst, bool horizontal) {
+        for (int a = 0; a < S; a++) {
+            int sr = 0, sg = 0, sb = 0, cnt = 0;
+            auto at = [&](int k) { return horizontal ? src[(size_t)a * S + k] : src[(size_t)k * S + a]; };
+            for (int k = 0; k <= rad && k < S; k++) {
+                uint32_t v = at(k);
+                sr += (v >> 16) & 0xFF;
+                sg += (v >> 8) & 0xFF;
+                sb += v & 0xFF;
+                cnt++;
+            }
+            for (int k = 0; k < S; k++) {
+                uint32_t o = ((uint32_t)(sr / cnt) << 16) | ((uint32_t)(sg / cnt) << 8) | (uint32_t)(sb / cnt);
+                if (horizontal) dst[(size_t)a * S + k] = o;
+                else dst[(size_t)k * S + a] = o;
+                int in = k + rad + 1, out = k - rad;
+                if (in < S) {
+                    uint32_t v = at(in);
+                    sr += (v >> 16) & 0xFF;
+                    sg += (v >> 8) & 0xFF;
+                    sb += v & 0xFF;
+                    cnt++;
+                }
+                if (out >= 0) {
+                    uint32_t v = at(out);
+                    sr -= (v >> 16) & 0xFF;
+                    sg -= (v >> 8) & 0xFF;
+                    sb -= v & 0xFF;
+                    cnt--;
+                }
+            }
+        }
+    };
+    for (int rep = 0; rep < 2; rep++) {
+        pass(R.back, tmp, true);
+        pass(tmp, R.back, false);
+    }
+}
+
+// Um pixel do anel, com as cores já multiplicadas pela transparência (formato do UpdateLayeredWindow).
+static uint32_t RadialPack(double r, double g, double b, double a) {
+    auto c8 = [](double v) { return (uint32_t)std::lround(std::min(255.0, std::max(0.0, v))); };
+    return (c8(a * 255.0) << 24) | (c8(r * a) << 16) | (c8(g * a) << 8) | c8(b * a);
+}
+
+// Tema clássico: anel liso sobre um disco escuro. sel = o pixel está na fatia escolhida.
+static uint32_t RadialPixelClassic(double d, bool sel, COLORREF ringCol, COLORREF selCol, double scale) {
+    const double rad = RadialRad(scale), half = RadialHalf(scale);
+    const double disc = rad + half + 6.0 * scale;  // disco escuro de fundo, para o anel aparecer sobre qualquer janela
+    const double aBack = 0.38 * std::min(1.0, std::max(0.0, disc - d + 0.5));
+    double aRing = std::min(1.0, std::max(0.0, half - std::fabs(d - rad) + 0.5));
+    const COLORREF col = sel ? selCol : ringCol;
+    aRing *= sel ? 1.0 : 0.80;
+    const double A = aRing + aBack * (1.0 - aRing);
+    if (A <= 0) return 0;
+    // anel por cima do disco preto
+    const double k = aRing / A;
+    return RadialPack(GetRValue(col) * k, GetGValue(col) * k, GetBValue(col) * k, A);
+}
+
+// Tema vidro: o anel é um tubo de vidro. Dentro dele aparece o fundo desfocado e
+// deslocado (refração), com brilho do lado da luz (em cima, à esquerda), sombra do lado oposto e um
+// filete claro nas bordas. A fatia escolhida é tingida com a cor da seleção.
+static uint32_t RadialPixelGlass(int x, int y, double dx, double dy, double d, bool sel, COLORREF ringCol, COLORREF selCol) {
+    const Radial& R = g_radial;
+    const int S = R.size;
+    const double sc = R.scale;
+    const double rad = RadialRad(sc), half = RadialHalf(sc);
+    const double off = std::fabs(d - rad);
+    const double cov = std::min(1.0, std::max(0.0, half - off + 0.5));
+    // sombra suave em volta do tubo
+    const double sh = off > half ? 0.26 * std::max(0.0, 1.0 - (off - half) / (8.0 * sc)) : 0.26;
+    if (cov <= 0) return sh > 0.003 ? RadialPack(0, 0, 0, sh * sh / 0.26) : 0;
+    const double ux = d > 0.001 ? dx / d : 0.0, uy = d > 0.001 ? dy / d : 0.0;
+    const double t = std::min(1.0, std::max(-1.0, (d - rad) / half));  // -1 = borda interna, +1 = borda externa
+    // refração: o vidro curvo mostra o fundo puxado em direção ao meio do tubo
+    const double bend = -t * std::fabs(t) * 0.9 * half;
+    const int sx = std::min(S - 1, std::max(0, (int)std::lround(x + ux * bend)));
+    const int sy = std::min(S - 1, std::max(0, (int)std::lround(y + uy * bend)));
+    const uint32_t bk = (R.backSize == S && !R.back.empty()) ? R.back[(size_t)sy * S + sx] : 0x00808080;
+    double c[3] = {(double)((bk >> 16) & 0xFF), (double)((bk >> 8) & 0xFF), (double)(bk & 0xFF)};
+    const double ring[3] = {(double)GetRValue(ringCol), (double)GetGValue(ringCol), (double)GetBValue(ringCol)};
+    const double tint[3] = {(double)GetRValue(selCol), (double)GetGValue(selCol), (double)GetBValue(selCol)};
+    // luz vinda de cima, à esquerda; a "inclinação" do vidro cresce do meio do tubo para as bordas
+    const double facing = -(ux * t * 0.6 + uy * t * 0.8);
+    const double hl = 0.60 * std::pow(std::max(0.0, facing), 1.5);
+    const double sd = 0.30 * std::pow(std::max(0.0, -facing), 1.5);
+    const double edge = 0.50 * std::min(1.0, std::max(0.0, 1.0 - (1.0 - std::fabs(t)) * half / (1.4 * sc)));
+    for (int k = 0; k < 3; k++) {
+        double v = c[k] * 0.80 + ring[k] * 0.20;          // vidro levemente fosco, na cor do anel
+        if (sel) v = v * 0.36 + tint[k] * 0.64;           // fatia escolhida
+        v *= 1.0 - sd;
+        v += (255.0 - v) * hl;
+        v += (255.0 - v) * edge;
+        c[k] = v;
+    }
+    const double A = cov + sh * (1.0 - cov);
+    const double k = cov / A;  // o vidro por cima da sombra preta
+    return RadialPack(c[0] * k, c[1] * k, c[2] * k, A);
+}
+
+// Desenha o anel. dir = fatia destacada (-1 = nenhuma); ok = há uma janela vizinha naquela direção.
+static void RadialDrawRing(int dir, bool ok) {
+    Radial& R = g_radial;
+    const int S = RadialSize(R.scale);
+    if (!R.dc) R.dc = CreateCompatibleDC(nullptr);
+    if (!R.bmp || R.size != S) {
+        if (R.bmp) DeleteObject(R.bmp);
+        BITMAPINFO bi{};
+        bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bi.bmiHeader.biWidth = S;
+        bi.bmiHeader.biHeight = -S;
+        bi.bmiHeader.biPlanes = 1;
+        bi.bmiHeader.biBitCount = 32;
+        bi.bmiHeader.biCompression = BI_RGB;
+        void* bits = nullptr;
+        R.bmp = CreateDIBSection(R.dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+        if (!R.bmp || !bits) return;
+        R.bits = (uint32_t*)bits;
+        R.size = S;
+        SelectObject(R.dc, R.bmp);
+    }
+    const double c = S / 2.0;
+    // ângulo central de cada direção (atan2 com y para baixo): cima, esquerda, direita, baixo
+    static const double kCenter[4] = {-1.5707963, 3.1415927, 0.0, 1.5707963};
+    const COLORREF ringCol = RadialRingColor();
+    const COLORREF selCol = ok ? RadialSelColor() : RGB(150, 150, 150);
+    const bool glass = g_cfg.radialTheme == 1;
+    for (int y = 0; y < S; y++) {
+        for (int x = 0; x < S; x++) {
+            const double dx = x + 0.5 - c, dy = y + 0.5 - c;
+            const double d = std::sqrt(dx * dx + dy * dy);
+            bool sel = false;
+            if (dir >= 0) {
+                double diff = std::fabs(std::atan2(dy, dx) - kCenter[dir]);
+                if (diff > 3.1415927) diff = 6.2831853 - diff;
+                sel = diff <= 0.7853982;
+            }
+            R.bits[(size_t)y * S + x] = glass ? RadialPixelGlass(x, y, dx, dy, d, sel, ringCol, selCol)
+                                              : RadialPixelClassic(d, sel, ringCol, selCol, R.scale);
+        }
+    }
+    POINT dst{R.origin.x - S / 2, R.origin.y - S / 2}, src{0, 0};
+    SIZE sz{S, S};
+    BLENDFUNCTION bf{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    UpdateLayeredWindow(R.ring, nullptr, &dst, &sz, R.dc, &src, 0, &bf, ULW_ALPHA);
+    SetWindowPos(R.ring, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    R.drawnDir = dir;
+    R.drawnOk = ok;
+}
+
+// Fecha o menu. Retorna true se a janela foi movida.
+static bool RadialEnd(bool apply) {
+    Radial& R = g_radial;
+    if (!R.active) return false;
+    R.active = false;
+    if (R.ring) ShowWindow(R.ring, SW_HIDE);
+    if (R.prev) ShowWindow(R.prev, SW_HIDE);
+    int i = FindItem(R.target);
+    if (!apply || i < 0 || R.dir < 0) {
+        Wh_Log(L"Menu radial: cancelado");
+        return false;
+    }
+    int nb = FindNeighbor(i, R.dir);
+    if (nb < 0) {
+        Wh_Log(L"Menu radial: nao ha janela desse lado");
+        return false;
+    }
+    Wh_Log(L"Menu radial: janela movida para %s", R.dir == 0 ? L"cima" : R.dir == 1 ? L"a esquerda" : R.dir == 2 ? L"a direita" : L"baixo");
+    SwapItems((size_t)i, (size_t)nb);
+    Retile();
+    return true;
+}
+
+// Abre o menu para a janela da grade que está sob o cursor. Retorna true se abriu.
+static bool RadialBegin() {
+    Radial& R = g_radial;
+    if (R.active) return false;
+    POINT pt{};
+    GetCursorPos(&pt);
+    HWND under = WindowFromPoint(pt);
+    if (under) under = GetAncestor(under, GA_ROOT);
+    int i = FindItem(under);
+    if (i < 0 || g_items[i].floating || IsZoomed(g_items[i].h)) return false;
+    if (!RadialEnsureWindows()) return false;
+    R.target = g_items[i].h;
+    R.origin = pt;
+    R.dir = -1;
+    R.nb = -1;
+    R.scale = MonScale(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST));
+    R.active = true;
+    if (g_cfg.radialTheme == 1) RadialCaptureBackdrop();  // antes de o anel aparecer na tela
+    RadialDrawRing(-1, false);
+    return true;
+}
+
+static bool KeyIsDown(int vk);
+
+// Chamada a cada volta do laço da thread de trabalho enquanto o menu está aberto.
+static void RadialTick() {
+    Radial& R = g_radial;
+    if (!R.active) return;
+    int i = FindItem(R.target);
+    if (i < 0 || KeyIsDown(VK_ESCAPE)) {
+        g_mouseCanceled = true;
+        RadialEnd(false);
+        return;
+    }
+    POINT pt{};
+    GetCursorPos(&pt);
+    const double dx = pt.x - R.origin.x, dy = pt.y - R.origin.y;
+    const double dead = 22.0 * R.scale;  // dentro do centro do anel nada é escolhido
+    int dir = -1;
+    if (dx * dx + dy * dy >= dead * dead) {
+        if (std::fabs(dx) >= std::fabs(dy)) dir = dx < 0 ? 1 : 2;
+        else dir = dy < 0 ? 0 : 3;
+    }
+    int nb = dir >= 0 ? FindNeighbor(i, dir) : -1;
+    R.dir = dir;
+    const bool animated = RadialColorsAnimated();  // cores da borda com efeito (pulsar, arco-íris, degradê)
+    if (dir != R.drawnDir || (nb >= 0) != R.drawnOk || (animated && dir >= 0)) RadialDrawRing(dir, nb >= 0);
+    if (animated && nb >= 0 && nb == R.nb) InvalidateRect(R.prev, nullptr, TRUE);
+    if (nb == R.nb) return;
+    R.nb = nb;
+    if (nb < 0) {
+        ShowWindow(R.prev, SW_HIDE);
+        return;
+    }
+    // destaca o espaço para onde a janela vai (a área visível da vizinha)
+    const Item& o = g_items[nb];
+    RECT v = o.to;
+    v.left += o.lastInset.left;
+    v.top += o.lastInset.top;
+    v.right -= o.lastInset.right;
+    v.bottom -= o.lastInset.bottom;
+    SetWindowPos(R.prev, HWND_TOPMOST, v.left, v.top, v.right - v.left, v.bottom - v.top, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    SetWindowPos(R.ring, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);  // o anel fica por cima do destaque
+}
+
+// Devolve ao app um evento de botão que o gancho de mouse segurou. btn: 0 = esquerdo, 1 = meio, 2 = direito.
+// Eventos injetados são ignorados pelo gancho.
+static void InjectButton(int btn, bool down) {
+    static const DWORD kDown[3] = {MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_RIGHTDOWN};
+    static const DWORD kUp[3] = {MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_RIGHTUP};
+    INPUT in{};
+    in.type = INPUT_MOUSE;
+    in.mi.dwFlags = down ? kDown[btn] : kUp[btn];
+    SendInput(1, &in, sizeof(INPUT));
+}
+
+static void ReinjectClick(int btn) {
+    InjectButton(btn, true);
+    InjectButton(btn, false);
+}
+
+// O botão foi pressionado fora de uma janela da grade: devolve o "pressionar" ao app já, para que clicar e
+// arrastar funcionem como sempre, e pede ao gancho que deixe passar o "soltar".
+static void MousePassThrough(int btn) {
+    InjectButton(btn, true);
+    g_mouseDownInjected = true;
+    g_mhPassUp = true;
+}
+
+// O gancho avisou do "soltar" depois de um clique devolvido ao app. Retorna true se o caso foi tratado aqui
+// (o gancho segurou o "soltar" antes de ver o pedido para deixá-lo passar: devolve-o agora).
+static bool MouseFinishPassThrough(int btn) {
+    if (!g_mouseDownInjected) return false;
+    g_mouseDownInjected = false;
+    g_mhPassUp = false;
+    InjectButton(btn, false);
+    return true;
+}
+
+// O gancho de mouse avisou que o botão do menu radial foi pressionado (down) ou solto.
+// O clique foi segurado pelo gancho; se o menu não moveu nada, ele é devolvido ao app aqui.
+static void OnRadialMouse(bool down) {
+    const int btn = g_mouseMode == 1 ? 1 : g_mouseMode == 4 ? 2 : 0;
+    if (down) {
+        g_mouseCanceled = false;
+        g_mouseDownInjected = false;
+        if (!RadialBegin()) MousePassThrough(btn);
+        return;
+    }
+    if (MouseFinishPassThrough(btn)) return;
+    const bool wasActive = g_radial.active;
+    const bool chose = wasActive && g_radial.dir >= 0;
+    const bool moved = RadialEnd(true);
+    // não devolve o clique se a janela foi movida, se uma direção foi escolhida (mesmo sem vizinha) ou se foi cancelado com Esc
+    if (moved || chose || g_mouseCanceled) return;
+    ReinjectClick(btn);
+}
+
+// ---------------------------------------------------------------------------
+// Redimensionar com Alt + botão direito
+// ---------------------------------------------------------------------------
+// Segurar Alt + botão direito sobre uma janela e arrastar: a lateral mais próxima do cursor (no eixo do
+// arrasto) acompanha o mouse, para aumentar ou diminuir a janela. Ao soltar, a grade se ajusta como quando a borda da janela é arrastada (ApplyResize).
+
+struct MouseResize {
+    bool active = false;
+    HWND h = nullptr;
+    POINT origin{};
+    RECT start{};   // retângulo da janela quando o botão foi pressionado
+    RECT last{};    // retângulo pedido pelo cursor (a grade pode limitar o que a janela de fato ocupa)
+    int edge = -1;  // lateral em movimento: 0 = cima, 1 = esquerda, 2 = direita, 3 = baixo; -1 = ainda não escolhida
+    LONG minW = 0, minH = 0;
+    double scale = 1.0;
+};
+static MouseResize g_mres;
+static bool g_mresCanceled = false;
+
+static void MouseResizeBegin() {
+    MouseResize& R = g_mres;
+    if (R.active || g_live.active) return;
+    POINT pt{};
+    GetCursorPos(&pt);
+    HWND under = WindowFromPoint(pt);
+    if (under) under = GetAncestor(under, GA_ROOT);
+    int i = FindItem(under);
+    if (i < 0 || IsZoomed(under)) return;
+    Item& it = g_items[i];
+    R = MouseResize{};
+    R.h = under;
+    R.origin = pt;
+    GetWindowRect(under, &R.start);
+    R.last = R.start;
+    R.minW = std::max<LONG>(120, std::max(it.minW, it.lW));
+    R.minH = std::max<LONG>(80, std::max(it.minH, it.lH));
+    R.scale = MonScale(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST));
+    R.active = true;
+}
+
+// Fecha o modo. apply = ajustar a grade ao novo tamanho; senão a janela volta ao espaço dela.
+static void MouseResizeFinish(bool apply) {
+    MouseResize& R = g_mres;
+    if (!R.active) return;
+    R.active = false;
+    if (R.edge < 0) return;  // não chegou a arrastar: nada mudou
+    g_dragHwnd = nullptr;
+    int i = FindItem(R.h);
+    if (i < 0) {
+        LiveEnd();
+        return;
+    }
+    Item& it = g_items[i];
+    if (it.floating) {
+        if (!apply) {
+            SetWindowPos(R.h, nullptr, R.start.left, R.start.top, R.start.right - R.start.left, R.start.bottom - R.start.top,
+                         SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS);
+        }
+        return;
+    }
+    // pesos finais calculados a partir da grade do início do arrasto (ou os do início, se cancelado)
+    g_dragStart = R.start;
+    if (LiveRestoreBase() && apply && ApplyResize((size_t)i, R.last)) {
+        Wh_Log(L"Alt + botao direito: janela redimensionada, grade ajustada");
+    } else {
+        LiveRestoreBase();
+    }
+    LiveEnd();
+    // as janelas já estão praticamente no lugar: a grade só confere e acerta o que faltar
+    for (auto& o : g_items) {
+        o.anim = false;
+        o.to = RECT{0, 0, 0, 0};
+    }
+    ScheduleRetile(R.h, 30);
+}
+
+// Chamada a cada volta do laço da thread de trabalho enquanto o botão está pressionado.
+static void MouseResizeTick() {
+    MouseResize& R = g_mres;
+    if (!R.active) return;
+    int i = FindItem(R.h);
+    if (i < 0) {
+        R.active = false;
+        g_dragHwnd = nullptr;
+        LiveEnd();
+        return;
+    }
+    if (KeyIsDown(VK_ESCAPE)) {
+        g_mresCanceled = true;
+        MouseResizeFinish(false);
+        return;
+    }
+    const bool floating = g_items[i].floating;
+    POINT pt{};
+    GetCursorPos(&pt);
+    const LONG dx = pt.x - R.origin.x, dy = pt.y - R.origin.y;
+    if (R.edge < 0) {
+        // O primeiro movimento escolhe o eixo (horizontal ou vertical); a lateral é a da metade da janela onde
+        // o cursor estava. Assim, arrastar para fora aumenta a janela e arrastar para dentro diminui.
+        const LONG thr = (LONG)std::lround(8 * R.scale);
+        if (std::abs(dx) < thr && std::abs(dy) < thr) return;
+        const bool horizontal = std::abs(dx) >= std::abs(dy);
+        int edge, other;
+        if (horizontal) {
+            const bool rightHalf = R.origin.x >= (R.start.left + R.start.right) / 2;
+            edge = rightHalf ? 2 : 1;
+            other = rightHalf ? 1 : 2;
+        } else {
+            const bool bottomHalf = R.origin.y >= (R.start.top + R.start.bottom) / 2;
+            edge = bottomHalf ? 3 : 0;
+            other = bottomHalf ? 0 : 3;
+        }
+        // na grade, uma lateral junto da borda da tela não tem vizinha para ceder ou receber espaço:
+        // usa a lateral oposta, se ela tiver vizinha
+        if (!floating && FindNeighbor(i, edge) < 0 && FindNeighbor(i, other) >= 0) edge = other;
+        R.edge = edge;
+        g_items[i].anim = false;
+        g_dragHwnd = R.h;  // outros eventos de grade não animam a janela enquanto ela é redimensionada
+        if (!floating) LiveBegin(R.h, R.start, false);
+    }
+    RECT r = R.start;
+    if (R.edge == 1) r.left = std::min(R.start.left + dx, r.right - R.minW);
+    else if (R.edge == 2) r.right = std::max(R.start.right + dx, r.left + R.minW);
+    else if (R.edge == 0) r.top = std::min(R.start.top + dy, r.bottom - R.minH);
+    else r.bottom = std::max(R.start.bottom + dy, r.top + R.minH);
+    const bool changed = !EqualRect(&r, &R.last);
+    R.last = r;
+    if (floating) {
+        // janela solta: só ela muda de tamanho
+        if (changed && !IsHungAppWindow(R.h)) {
+            SetWindowPos(R.h, nullptr, r.left, r.top, r.right - r.left, r.bottom - r.top,
+                         SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS);
+        }
+        return;
+    }
+    // janela da grade: recalcula a grade para a posição do cursor e avança no ritmo das janelas
+    if (changed && !LiveCompute(r)) {
+        // a grade mudou durante o arrasto (janela aberta/fechada): encerra, e a grade se refaz sozinha
+        R.active = false;
+        g_dragHwnd = nullptr;
+        LiveEnd();
+        for (auto& o : g_items) o.to = RECT{0, 0, 0, 0};
+        ScheduleRetile(R.h, 30);
+        return;
+    }
+    LivePump();
+}
+
+// O gancho de mouse avisou que Alt + botão direito foi pressionado (down) ou solto.
+static void OnResizeMouse(bool down) {
+    if (down) {
+        g_mresCanceled = false;
+        g_mouseDownInjected = false;
+        MouseResizeBegin();
+        if (!g_mres.active) MousePassThrough(2);
+        return;
+    }
+    if (MouseFinishPassThrough(2)) return;
+    const bool dragged = g_mres.active && g_mres.edge >= 0;
+    MouseResizeFinish(true);
+    g_mres.active = false;
+    // sem arrasto, foi só um Alt + clique direito: devolve o clique ao app
+    if (!dragged && !g_mresCanceled) ReinjectClick(2);
+}
+
+struct HotkeyDef { int id; UINT mods, vk; };
+static std::vector<HotkeyDef> g_keys;
 
 static void OnHotkey(int id) {
     HWND fg = GetForegroundWindow();
@@ -2423,9 +3461,6 @@ static void RunDisplayRetile() {
     Retile();
 }
 
-struct HotkeyDef { int id; UINT mods, vk; };
-static std::vector<HotkeyDef> g_keys;
-
 // Atalhos que o RegisterHotKey recusou (erro 1409: o Windows ou outro programa já os registrou, como o
 // Win+Alt+Seta para cima). Quando a opção está ligada, um gancho de teclado de baixo nível os captura
 // antes do sistema e avisa a thread de trabalho.
@@ -2521,10 +3556,133 @@ static void StopHookThread() {
     g_hookHeldId = 0;
 }
 
+// ---- gancho de mouse do menu radial (só existe quando a opção está ligada) ----
+static const UINT WM_APP_MOUSE = WM_APP + 3;
+static int g_mhMode = 0;         // cópias de g_mouseMode / g_resizeMouse lidas pela thread do gancho
+static bool g_mhResize = false;  // (escritas com o gancho parado)
+static WPARAM g_mhUpMsg = 0;     // só a thread do gancho usa: mensagem de "soltar" do botão que ela segurou (0 = nenhum)
+static WPARAM g_mhUpCode = 0;    // o que avisar à thread de trabalho quando esse botão for solto
+static DWORD g_mhTarget = 0;
+static HANDLE g_mhThreadH = nullptr;
+static DWORD g_mhThreadId = 0;
+
+// Alt ou Win pressionado e solto sem nenhuma outra tecla abre a barra de menus do app ou o menu Iniciar.
+// Como o clique que viria no meio foi segurado, injeta uma tecla "vazia" para o Windows não ver a tecla sozinha.
+static void MouseHookDummyKey() {
+    INPUT in[2] = {};
+    in[0].type = INPUT_KEYBOARD;
+    in[1].type = INPUT_KEYBOARD;
+    in[0].ki.wVk = 0xFF;
+    in[1].ki.wVk = 0xFF;
+    in[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(2, in, sizeof(INPUT));
+}
+
+// Avisos à thread de trabalho (wParam de WM_APP_MOUSE): 1/0 = menu radial pressionado/solto, 3/2 = redimensionar.
+static LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wp, LPARAM lp) {
+    if (code != HC_ACTION) return CallNextHookEx(nullptr, code, wp, lp);
+    const MSLLHOOKSTRUCT* m = (const MSLLHOOKSTRUCT*)lp;
+    if (m->flags & LLMHF_INJECTED) return CallNextHookEx(nullptr, code, wp, lp);
+    if (g_mhUpMsg && wp == g_mhUpMsg) {
+        g_mhUpMsg = 0;
+        // clique fora da grade, já devolvido ao app: o "soltar" verdadeiro segue normalmente
+        if (g_mhPassUp.exchange(false)) return CallNextHookEx(nullptr, code, wp, lp);
+        PostThreadMessageW(g_mhTarget, WM_APP_MOUSE, g_mhUpCode, 0);
+        return 1;
+    }
+    if (g_mhUpMsg || (wp != WM_LBUTTONDOWN && wp != WM_MBUTTONDOWN && wp != WM_RBUTTONDOWN)) {
+        return CallNextHookEx(nullptr, code, wp, lp);
+    }
+    UINT now = 0;
+    if (KeyIsDown(VK_CONTROL)) now |= MOD_CONTROL;
+    if (KeyIsDown(VK_MENU)) now |= MOD_ALT;
+    if (KeyIsDown(VK_SHIFT)) now |= MOD_SHIFT;
+    if (KeyIsDown(VK_LWIN) || KeyIsDown(VK_RWIN)) now |= MOD_WIN;
+    if (g_mhResize && wp == WM_RBUTTONDOWN && now == MOD_ALT) {
+        g_mhUpMsg = WM_RBUTTONUP;
+        g_mhUpCode = 2;
+        PostThreadMessageW(g_mhTarget, WM_APP_MOUSE, 3, 0);
+        MouseHookDummyKey();
+        return 1;  // segura o clique; ele é devolvido depois se não houver arrasto
+    }
+    WPARAM wantDown = 0, wantUp = 0;
+    UINT wantMods = 0;
+    if (g_mhMode == 1) {
+        wantDown = WM_MBUTTONDOWN;
+        wantUp = WM_MBUTTONUP;
+    } else if (g_mhMode == 2 || g_mhMode == 3) {
+        wantDown = WM_LBUTTONDOWN;
+        wantUp = WM_LBUTTONUP;
+        wantMods = g_mhMode == 2 ? MOD_ALT : MOD_WIN;
+    } else if (g_mhMode == 4) {
+        wantDown = WM_RBUTTONDOWN;
+        wantUp = WM_RBUTTONUP;
+    }
+    if (wantDown && wp == wantDown && now == wantMods) {
+        g_mhUpMsg = wantUp;
+        g_mhUpCode = 0;
+        PostThreadMessageW(g_mhTarget, WM_APP_MOUSE, 1, 0);
+        if (wantMods) MouseHookDummyKey();
+        return 1;  // segura o clique; ele é devolvido depois se nada for escolhido
+    }
+    return CallNextHookEx(nullptr, code, wp, lp);
+}
+
+static DWORD WINAPI MouseHookThread(LPVOID param) {
+    HookStart* st = (HookStart*)param;
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    HHOOK hook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandleW(nullptr), 0);
+    if (!hook) Wh_Log(L"Nao foi possivel instalar o gancho de mouse (erro %lu)", GetLastError());
+    st->ok = hook != nullptr;
+    SetEvent(st->ready);  // st deixa de valer a partir daqui
+    if (!hook) return 0;
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+    UnhookWindowsHookEx(hook);
+    return 0;
+}
+
+static void StopMouseHook() {
+    if (g_mhThreadH) {
+        do {
+            PostThreadMessageW(g_mhThreadId, WM_QUIT, 0, 0);
+        } while (WaitForSingleObject(g_mhThreadH, 100) == WAIT_TIMEOUT);
+        CloseHandle(g_mhThreadH);
+        g_mhThreadH = nullptr;
+    }
+    g_mhUpMsg = 0;
+    g_mhMode = 0;
+    g_mhResize = false;
+    g_mhPassUp = false;
+}
+
+// Chamada só pela thread de trabalho, com o gancho parado.
+static void StartMouseHook() {
+    if (g_mouseMode == 0 && !g_resizeMouse) return;
+    g_mhMode = g_mouseMode;
+    g_mhResize = g_resizeMouse;
+    g_mhTarget = GetCurrentThreadId();
+    HookStart st{CreateEventW(nullptr, TRUE, FALSE, nullptr), false};
+    if (!st.ready) return;
+    g_mhThreadH = CreateThread(nullptr, 0, MouseHookThread, &st, 0, &g_mhThreadId);
+    if (g_mhThreadH) WaitForSingleObject(st.ready, INFINITE);
+    CloseHandle(st.ready);
+    if (g_mhThreadH && !st.ok) {
+        WaitForSingleObject(g_mhThreadH, INFINITE);
+        CloseHandle(g_mhThreadH);
+        g_mhThreadH = nullptr;
+    }
+    if (g_mhThreadH) Wh_Log(L"Gancho de mouse ligado (menu radial: modo %d; redimensionar com Alt + botao direito: %d)", g_mouseMode, (int)g_resizeMouse);
+}
+
 static void UnregisterHotkeys() {
     for (auto& k : g_keys) UnregisterHotKey(nullptr, k.id);
     g_keys.clear();
     StopHookThread();
+    StopMouseHook();
 }
 
 // Registra os atalhos a partir das configurações; pode ser chamada de novo quando elas mudam.
@@ -2563,6 +3721,12 @@ static void RegisterHotkeys() {
         }
     }
     if (!g_hookKeys.empty()) StartHookThread();
+    {
+        std::wstring rm = GetStr(L"radialMouse");
+        g_mouseMode = rm == L"middle" ? 1 : rm == L"altleft" ? 2 : rm == L"winleft" ? 3 : rm == L"right" ? 4 : 0;
+        g_resizeMouse = Wh_GetIntSetting(L"resizeMouse") != 0;
+        StartMouseHook();
+    }
 }
 
 static DWORD WINAPI Worker(LPVOID) {
@@ -2597,8 +3761,17 @@ static DWORD WINAPI Worker(LPVOID) {
             if (msg.message == WM_QUIT) { g_stop = true; break; }
             if (msg.message == WM_HOTKEY || msg.message == WM_APP_LLHK) {
                 OnHotkey((int)msg.wParam);
+            } else if (msg.message == WM_APP_MOUSE) {
+                if (msg.wParam >= 2) OnResizeMouse(msg.wParam == 3);
+                else OnRadialMouse(msg.wParam == 1);
             } else if (msg.message == WM_APP_RELOAD) {
                 Wh_Log(L"Configuracoes alteradas: recarregando");
+                RadialEnd(false);
+                MouseResizeFinish(false);
+                if (g_live.active) {
+                    LiveRestoreBase();
+                    LiveEnd();
+                }
                 LoadSettings();  // g_cfg and friends are only touched by this thread after startup
                 UpdateInterval();
                 RegisterHotkeys();  // atalhos novos valem na hora, sem reiniciar o mod
@@ -2638,6 +3811,9 @@ static DWORD WINAPI Worker(LPVOID) {
         bool verifyPending = VerifyItems();
         double tD = NowMs();
         TickBorder();
+        RadialTick();
+        MouseResizeTick();
+        NativeLiveTick();
         RunScheduledRetile();
         RunDisplayRetile();
         if (AnyAnimating()) {
@@ -2657,6 +3833,8 @@ static DWORD WINAPI Worker(LPVOID) {
             if (BorderAnimated()) wait = std::min<DWORD>(wait, 16);
             if (g_retileAt) wait = std::min<DWORD>(wait, 15);
             if (g_displayAt) wait = std::min<DWORD>(wait, 50);
+            if (g_radial.active || g_mres.active) wait = std::min<DWORD>(wait, 16);
+            if (g_live.active) wait = std::min<DWORD>(wait, 8);
             MsgWaitForMultipleObjectsEx(0, nullptr, wait, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         }
     }
@@ -2673,6 +3851,9 @@ static DWORD WINAPI Worker(LPVOID) {
         }
     }
     DestroyOverlay();
+    RadialEnd(false);
+    MouseResizeFinish(false);
+    RadialDestroyWindows();
     DestroyWatcher();
     // janelas ainda minimizadas voltam a ter a posição normal que tinham antes do mod
     for (auto& e : g_minimized) {
