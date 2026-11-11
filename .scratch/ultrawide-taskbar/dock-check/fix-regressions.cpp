@@ -81,7 +81,9 @@ struct XamlFixture {
     Hosting::DesktopWindowXamlSource island;
     Controls::Grid host, background, buttons, tray;
     Controls::Grid button;
+    Controls::Grid notifyIcon, trayImageHost;
     Controls::Border plate;
+    Controls::Image trayImage;
     Controls::TextBlock text;
     Root root;
     XamlFixture() {
@@ -105,6 +107,17 @@ struct XamlFixture {
         buttons.Children().Append(button);
         text.Text(L"Foreground");
         tray.Children().Append(text);
+        notifyIcon.Name(L"NotifyItemIcon");
+        notifyIcon.Width(32);
+        notifyIcon.Height(48);
+        notifyIcon.HorizontalAlignment(HorizontalAlignment::Left);
+        trayImageHost.Width(16);
+        trayImageHost.Height(16);
+        trayImage.Width(16);
+        trayImage.Height(16);
+        trayImageHost.Children().Append(trayImage);
+        notifyIcon.Children().Append(trayImageHost);
+        tray.Children().Append(notifyIcon);
         host.Children().Append(background);
         host.Children().Append(buttons);
         host.Children().Append(tray);
@@ -135,6 +148,9 @@ struct XamlFixture {
         return brush.ColorStops().GetAt(0).Color().A * plate.Opacity();
     }
     ~XamlFixture() {
+#ifndef UW_BASELINE
+        RestoreTrayIcons(root);
+#endif
         RestoreForeground(root);
         RestoreStatePlates(root);
         island.Content(nullptr);
@@ -363,6 +379,39 @@ void ForegroundChecks() {
                         result.items[0].luminance > 0.98;
     Check(sampledDark && sampledLight,
           "adaptive font samples the composed regional background");
+
+#ifndef UW_BASELINE
+    constexpr UINT foregroundSampleMessage = WM_APP + 47;
+    auto asyncRequest = std::make_unique<ForegroundSampleRequest>(request);
+    HWND previousDispatch = g_dispatch.exchange(sampleWindow.handle);
+    ++g_active;
+    auto rawRequest = asyncRequest.release();
+    bool queued = QueueUserWorkItem(
+        ForegroundSampleWorker, rawRequest, WT_EXECUTEDEFAULT);
+    if (!queued) {
+        delete rawRequest;
+        --g_active;
+    }
+    MSG pending{};
+    ULONGLONG deadline = GetTickCount64() + 2500;
+    while (g_active && GetTickCount64() < deadline &&
+           !PeekMessage(&pending, sampleWindow.handle,
+                        foregroundSampleMessage, foregroundSampleMessage,
+                        PM_NOREMOVE))
+        Sleep(1);
+    bool releasedWithoutUi = !g_active;
+    if (PeekMessage(&pending, sampleWindow.handle, foregroundSampleMessage,
+                    foregroundSampleMessage, PM_REMOVE)) {
+        if (pending.lParam) {
+            delete reinterpret_cast<ForegroundSampleResult*>(pending.lParam);
+            --g_active;
+        }
+    }
+    g_dispatch = previousDispatch;
+    ApplyPendingForegroundSamples();
+    Check(queued && releasedWithoutUi,
+          "adaptive sample worker cannot block mod teardown on UI delivery");
+#endif
     g_fontColorMode = FontColorMode::Default;
 }
 
@@ -407,7 +456,7 @@ void SchedulerChecks() {
     printf("SCHEDULER presents=%u elapsed=%lldms cadence=%.1fHz\n",
            presents, static_cast<long long>(cadenceMs), cadenceHz);
     Check(cadenceHz >= 235,
-        "scheduler permits 240 Hz geometry instead of capping near 60 Hz");
+          "scheduler permits 240 Hz geometry instead of capping near 60 Hz");
 
     lens.center[0] = 3840;
     lens.center[1] = 59.5f;
@@ -736,6 +785,7 @@ int main(int argc, char** argv) {
             regression::ForegroundChecks();
         if (mode == "all" || mode == "scheduler") regression::SchedulerChecks();
 #ifndef UW_BASELINE
+        if (mode == "all" || mode == "tray-icons")
         if (mode == "all" || mode == "capture") regression::CaptureChecks();
         if (mode == "all" || mode == "motion") regression::MotionChecks();
 #endif
