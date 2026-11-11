@@ -173,10 +173,7 @@ page, following Windows animation settings. The settings on the
 **Settings UI** page tune that glass. Panel blur, refraction, depth, and
 highlights apply to the panels and the glass controls. These values live in
 `[settings.ui]`. Saving only UI appearance does not rebuild the taskbar.
-Settings UI changes apply when you save, like the taskbar. The editor no longer
-offers body material or body blur settings. Older settings files may still
-contain `ui.bodyMaterial` and `ui.bodyBlur` keys. The mod ignores them, and the
-next save drops them.
+Settings UI changes apply when you save, like the taskbar.
 The full-height sidebar contains the app header. The renderer applies the continuous
 window mask to the material so its corners remain smooth.
 Floating panels sample the rendered body layer underneath them, with no panel
@@ -802,8 +799,8 @@ constexpr SettingField kSettingFields[]{
     {L"trayReduction", L"Tray height reduction (DIP)", SettingKind::Number, 0, 8, 1, 100},
     {L"slantedEnds", L"Slanted ends", SettingKind::Toggle, 0, 0},
     {L"slantAngle", L"Curve angle (°)", SettingKind::Number, 0, 70, 30, 85},
-    {L"barDistance", L"Bar distance (DIP)", SettingKind::Number, 0, 12, 0, 100},
-    {L"concaveRadius", L"Concave radius (DIP)", SettingKind::Number, 0, 18, 0, 100},
+    {L"barDistance", L"Bar distance (DIP)", SettingKind::Number, 0, static_cast<int>(kBarGap), 0, 100},
+    {L"concaveRadius", L"Concave radius (DIP)", SettingKind::Number, 0, static_cast<int>(kConcaveRadius), 0, 100},
 };
 SettingField const& SettingDefinition(PCWSTR key) {
     for (auto const& field : kSettingFields)
@@ -900,10 +897,9 @@ DockStyle g_dockStyle;
 std::wstring CanonicalTrayId(std::wstring const& text) {
     if (text.empty() || text.size() > 20 ||
         text.find_first_not_of(L"0123456789") != text.npos) return {};
-    wchar_t* end{};
     errno = 0;
-    auto value = wcstoull(text.c_str(), &end, 10);
-    if (errno == ERANGE || *end || !value) return {};
+    auto value = wcstoull(text.c_str(), nullptr, 10);
+    if (errno == ERANGE || !value) return {};
     return std::to_wstring(value);
 }
 
@@ -1850,18 +1846,11 @@ void RefreshEditorBackdropSources(SettingsEditor& editor) noexcept;
 void CloseEditorSurface(SettingsEditor& editor);
 void CloseEditorPreview(SettingsEditor& editor);
 void LayoutEditor(SettingsEditor& editor);
-void ApplyEditorLayout(SettingsEditor& editor, double width, double textScale);
 void UpdatePreviewForeground(SettingsEditor& editor);
-void RequestPreviewMetrics(SettingsEditor& editor);
 void ApplyPreviewMetrics(SettingsEditor& editor, TaskbarPreviewMetrics const& metrics);
 void UpdateTrayReductionMaximum(SettingsEditor& editor, settingsjson::JsonObject const& saved);
-void RequestTrayCatalog(SettingsEditor& editor);
-void RebuildTrayRows(SettingsEditor& editor);
 void ChooseTrayImage(SettingsEditor& editor, std::wstring const& key);
-void QueryTrayCatalog(HWND editor);
 void OpenCatalogPicker(SettingsEditor& editor, std::wstring const& key);
-void CloseCatalogPicker(SettingsEditor& editor);
-void CatalogIconResult(SettingsEditor& editor, UINT_PTR generation);
 FrameworkElement Child(FrameworkElement parent, const wchar_t* name, bool byClass);
 
 void StopEditorMotion(SettingsEditor& editor) noexcept {
@@ -1998,7 +1987,7 @@ void UpdateEditorSection(EditorSection& section,bool available=true) {
 }
 
 void UpdateEditorEnabled(SettingsEditor& editor) {
-    bool liquid = editor.controls[0].input.as<Controls::ComboBox>().SelectedIndex() == 3;
+    bool liquid = editor.controls[0].input.as<Controls::ComboBox>().SelectedIndex() == int(DockTheme::Liquid);
     bool custom = editor.controls[9].input.as<Controls::ComboBox>().SelectedIndex() == 0;
     int model = editor.controls[20].input.as<Controls::ComboBox>().SelectedIndex();
     bool snell = model == 1;
@@ -2026,7 +2015,7 @@ void UpdateEditorEnabled(SettingsEditor& editor) {
         if (i == 14) enabled &= !rim;
         if (i >= 30 && i <= 32) enabled &= rim;
         if (i == 34 || i == 35) enabled &= editor.controls[33].slider.Value() > 0;
-        if (i == 36) enabled &= editor.controls[1].input.as<Controls::ComboBox>().SelectedIndex() == 3;
+        if (i == 36) enabled &= editor.controls[1].input.as<Controls::ComboBox>().SelectedIndex() == int(FontColorMode::Adaptive);
         if ((i >= 101 && i <= 104) || (i >= 106 && i <= 109)) {
             size_t toggle = i < 105 ? 100 : 105;
             enabled &= editor.controls[toggle].input.as<Controls::ToggleSwitch>().IsOn();
@@ -2202,17 +2191,16 @@ void ChooseTrayImage(SettingsEditor& editor, std::wstring const& key) {
         EditorChanged(editor);
         RebuildTrayRows(editor);
     } catch (winrt::hresult_error const& error) {
-        editor.filePicker = nullptr;
         EditorStatus(editor, (L"Cannot use that image. " + std::wstring(error.message())).c_str());
     } catch (...) {
-        editor.filePicker = nullptr;
         EditorStatus(editor, L"Cannot read that image. Choose a supported local image file.");
     }
 }
 
 bool CatalogPreviewLight(SettingsEditor const& editor) {
     int color = editor.controls[1].input.as<Controls::ComboBox>().SelectedIndex();
-    return color == 1 || (color != 2 && editor.content.RequestedTheme() == ElementTheme::Dark);
+    return color == int(FontColorMode::Light) ||
+        (color != int(FontColorMode::Dark) && editor.content.RequestedTheme() == ElementTheme::Dark);
 }
 
 std::shared_ptr<CatalogIconJob> StartCatalogDownload(SettingsEditor& editor, size_t tile = SIZE_MAX) {
@@ -2394,8 +2382,6 @@ void FilterCatalogIcons(SettingsEditor& editor) {
         auto sourceLabel = item.FindName(L"Source").as<Controls::TextBlock>();
         sourceLabel.Text(entry.source == L"native" ? L"Dashboard" :
             entry.source == L"simpleicons" ? L"Simple" : CatalogSourceName(entry.source));
-        sourceLabel.Foreground(Media::SolidColorBrush(CatalogPreviewLight(editor)
-            ? winrt::Windows::UI::Color{255,255,255,255} : winrt::Windows::UI::Color{255,20,22,28}));
         CatalogIconTile tile;
         tile.source = sourceLabel;
         tile.image = item.FindName(L"Thumbnail").as<Controls::Image>();
@@ -3637,13 +3623,12 @@ void CreateEditorContent(SettingsEditor& editor) {
     editor.enableLiquidClick=editor.enableLiquid.Click(winrt::auto_revoke,
         [&editor](auto const&,auto const&) {
             editor.syncing=true;
-            editor.controls[0].input.as<Controls::ComboBox>().SelectedIndex(3);
+            editor.controls[0].input.as<Controls::ComboBox>().SelectedIndex(int(DockTheme::Liquid));
             editor.controls[9].input.as<Controls::ComboBox>().SelectedIndex(0);
             editor.syncing=false;EditorChanged(editor);
         });
     CreateEditorPreview(editor);
     ReloadEditor(editor);
-    UpdateEditorTheme(editor);
 }
 
 // A window that moves, shows or hides under the editor sends no capture frame,
@@ -3876,7 +3861,6 @@ LRESULT CALLBACK SettingsEditorProc(HWND window, UINT message, WPARAM wp, LPARAM
         }
         if (message == WM_COMMAND) {
             int id = LOWORD(wp);
-            if (id == IDCANCEL) { DestroyWindow(window); return 0; }
             if (id == kEditorSave) { SaveEditor(*editor); return 0; }
             if (id == kEditorReload) { ReloadEditor(*editor); RequestPreviewMetrics(*editor); return 0; }
             if (id == kEditorRefreshPreview) { RequestPreviewMetrics(*editor); return 0; }
@@ -4419,7 +4403,7 @@ struct DockOutline {
     std::vector<DockPiece> pieces{DockPiece{}}; // The hull itself by default.
     std::vector<DockPolygon> polygons{}; // Slanted ends: one per bar, with no pieces.
     float radius{};
-    bool atTop{}; // The screen edge is the hull's top; only flares read it.
+    bool atTop{}; // The screen edge is the hull's top; flares, drops, the step and slanted polygons read it.
     // From the last button's edge to the tray content's: Plan puts the tray this far after the buttons. Separate's grows
     // with whatever its facing ends reach toward each other.
     double gap{kGap};
@@ -4524,15 +4508,15 @@ struct DockContent {
 DockOutline SlantedOutline(DockStyle const& style, double trayWidth, double radius, double band, bool atTop,
                            DockContent const& content, double square) {
     double k = std::tan(style.slant * 3.14159265358979323846 / 180), h = std::sqrt(1 + k * k), tau = h - k;
-    double r = radius, bleed = DockBleed(style.shape, radius), drop = TrayDrop(style, band);
+    double bleed = DockBleed(style.shape, radius), drop = TrayDrop(style, band);
     bool arc = style.shape == DockShape::EdgeArc;
-    DockOutline outline{.pieces = {}, .radius = static_cast<float>(r), .atTop = atTop};
+    DockOutline outline{.pieces = {}, .radius = static_cast<float>(radius), .atTop = atTop};
     // A leaning wall of `run` is run * h long. Its far corner takes radius * tau of it, an Island's toe radius / tau
     // more and Edge arc's flare its radius * tau, and a dropped wall's far corner rounds at most at half its band. The
     // convex radius is the corner radius as far as each end allows it alone, and the concave one Concave radius up to
     // the room the convex one leaves on each Edge arc wall, so each slider moves only its own curves. Both layouts have
     // the same walls, so switching them changes no radius. Unified's step answers to itself below.
-    double rounding = r, concave = style.concave;
+    double rounding = radius, concave = style.concave;
     for (double run : {band, band - drop}) {
         rounding = std::min(rounding, run * h / (style.shape == DockShape::Island ? tau + 1 / tau : tau));
         if (run < band) rounding = std::min(rounding, run / 2);
@@ -4549,8 +4533,9 @@ DockOutline SlantedOutline(DockStyle const& style, double trayWidth, double radi
         return Plate{inset, insets.top, bottom, std::min(corner, (bottom - insets.top) / 2)};
     };
     auto buttonInsets = GetButtonInsets({0, 0}, band, content.buttonPadding);
+    auto trayInsets = GetButtonInsets(TrayInsets({0, 0}, false, drop), band, content.trayPadding);
     Plate buttons = plate(kDockPadding, buttonInsets, content.buttonRadius);
-    Plate tray = plate(kDockPadding, GetButtonInsets(TrayInsets({0, 0}, false, drop), band, content.trayPadding), content.trayRadius);
+    Plate tray = plate(kDockPadding, trayInsets, content.trayRadius);
     // Unified's last button, seen from the ramp: it ends a gap before the tray content.
     Plate lastButton = plate(kDockPadding + trayWidth + kGap, buttonInsets, content.buttonRadius);
     auto icon = [](IconBox const& box) { return Plate{box.inset, box.top, box.bottom, 0, true}; };
@@ -4699,7 +4684,6 @@ DockOutline SlantedOutline(DockStyle const& style, double trayWidth, double radi
         // and barGap parts the two.
         double trayBar = trayWidth + 2 * kDockPadding, provisional = -(trayBar + style.barGap);
         bool facingFlared = arc && style.innerArcs;
-        auto trayInsets = GetButtonInsets(TrayInsets({0, 0}, false, drop), band, content.trayPadding);
         Plate lastButtonPlate = plate(kDockPadding - provisional, buttonInsets, content.buttonRadius),
               firstTrayPlate = plate(kDockPadding - trayBar, trayInsets, content.trayRadius);
         auto buttonBar = place(start, {HullEdge::Right, provisional, 1, 0, facingFlared, Role::Facing, lastButtonPlate,
@@ -5355,7 +5339,7 @@ bool HostElementOffset(const BYTE (&code)[8], size_t& offset) {
 }
 
 void* TaskBandInterface(void* object, void* expectedVtable) {
-    if (!object || !expectedVtable) return nullptr;
+    if (!object) return nullptr;
     // Bounded interface search from the existing mods, using checked reads so
     // missing/recreated taskband data cannot cause an unchecked dereference.
     for (size_t i = 0; i < 20; ++i) {
@@ -5372,7 +5356,7 @@ XamlRoot RootFromHost(void* (&host)[2]) {
         void** host;
         ~Release() { if (host[1]) Decref_Original(host[1]); }
     } release{host};
-    if (!host[0] || !host[1] || !g_hostElementOffset) return nullptr;
+    if (!host[0] || !host[1]) return nullptr;
     IUnknown* element{};
     if (!ReadLocal(reinterpret_cast<BYTE*>(host[0]) + g_hostElementOffset, element) || !element)
         return nullptr;
@@ -5541,7 +5525,7 @@ void RestorePanel(HWND window) {
 void RestorePanels(HWND taskbar = nullptr, bool ownProcessOnly = false) {
     HWND window{};
     for (int i = 0; i < 4096 && (window = FindWindowEx(nullptr, window, nullptr, nullptr)); ++i) {
-        if (GetProp(window, kPanelPending)) RemoveProp(window, kPanelPending);
+        RemoveProp(window, kPanelPending);
         if (!GetProp(window, kPanelPosition) ||
             (taskbar && GetProp(window, kPanelTaskbar) != taskbar)) continue;
         DWORD pid{};
@@ -5689,8 +5673,7 @@ struct Placement { double buttonsX; double trayX; };
 
 // One measurement pass over the native layout, taken in Refresh and handed to
 // the dock, follower and liquid stages. Keeping it together stops them
-// disagreeing about geometry or re-reading it from the window mid-pass, and
-// names what used to be eleven positional doubles.
+// disagreeing about geometry or re-reading it from the window mid-pass.
 struct Measurements {
     double host{};
     double origin{};
@@ -5775,7 +5758,6 @@ struct OwnedTranslation {
     float3 applied{};
     bool installed{};
 };
-struct LiquidRenderer;
 struct OwnedDock {
     FrameworkElement background{nullptr};
     Visual visual{nullptr};
@@ -6112,7 +6094,7 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
         float alertTintOpacity{};
         float lensBlend{};
         uint32_t compositorClip{};
-        float bodyMode{}; // 0: taskbar; 1: UI glass; 3: composed; 4: Native; 5: Mica; 6: Acrylic.
+        float bodyMode{}; // 0: taskbar; 3: composed; 4: Native; 6: Acrylic.
         float bodyBlur{};
         float clipPadding{};
         float bodyMaterialTint[4]{};
@@ -6330,9 +6312,6 @@ float roundedDistance(float2 p) {
     if (bodyMode != 0) return continuousDistanceFor(p, halfSize, radius);
     return roundedDistanceFor(p, halfSize, radius);
 }
-float opticalDistance(float2 p) {
-    return opticalDistanceFor(p, halfSize, radius);
-}
 // A wall's flare of radius f: a square box over [wall - f, wall + f] from f inside the screen edge
 // to the piece's edge-side y, less the disc of radius f centred f out from the wall and f inside
 // the edge. The box overlaps the bar by f, so the union with it has no interior zero.
@@ -6452,13 +6431,11 @@ float cornerValue(float2 p, float4 values) {
 }
 float roundedDistanceForCorners(float2 p, float2 size, float4 radii) {
     float cornerRadius = cornerValue(p, radii);
-    if (bodyMode == 1) return continuousDistanceFor(p, size, cornerRadius);
     return roundedDistanceFor(
         p, size, min(cornerRadius, min(size.x, size.y)));
 }
 float opticalDistanceForCorners(float2 p, float2 size, float4 radii) {
     float cornerRadius = cornerValue(p, radii);
-    if (bodyMode == 1) return continuousDistanceFor(p, size, cornerRadius);
     return opticalDistanceFor(
         p, size, min(cornerRadius, min(size.x, size.y)));
 }
@@ -6684,7 +6661,6 @@ float directionalRim(Glass g) {
     return pow(saturate(dot(g.normal.xy, float2(cos(lightAngle), sin(lightAngle)))), 2);
 }
 float3 glassFinish(float3 color, Glass g) {
-    // A depth-dependent lift turns the flat interior into a visible inset fill.
     // Keep all glass neutral unless its Brightness control is changed.
     color *= 1 + brightness;
     float luminance = dot(color, float3(0.299, 0.587, 0.114));
@@ -6802,10 +6778,6 @@ float4 shadePixel(float2 pixel) {
     float3 color = buttonColor;
     if (coverage < 0.999) {
         float3 dockColor = original.rgb;
-        if (bodyMode == 5) {
-            // Windows supplies the blurred wallpaper; apply the theme's Mica tint.
-            dockColor = lerp(dockColor, bodyMaterialTint.rgb, bodyMaterialTint.a);
-        }
         if (bodyMode < 2.5) {
             Glass dock = glassAt(p, halfSize, float4(radius, radius, radius, radius),
                                  zRadius, refraction, 30, 4, 0.35);
@@ -7958,7 +7930,6 @@ float4 ps(VertexOutput input) : SV_Target {
     }
 
     static void CloseSource(std::shared_ptr<Source> const& source) {
-        if (!source) return;
         std::lock_guard lifecycleLock(source->lifecycleMutex);
         source->active.store(false, std::memory_order_release);
         // Drain an in-flight copy, but do not hold this lock while WinRT closes
@@ -8453,13 +8424,13 @@ float4 ps(VertexOutput input) : SV_Target {
             SchedulePresentLocked();
         } catch (...) {
             HRESULT error = winrt::to_hresult().value;
-            HRESULT removed = device ? device->GetDeviceRemovedReason() : S_OK;
+            HRESULT removed = device->GetDeviceRemovedReason();
             {
                 std::lock_guard lock(mutex);
                 if (FAILED(removed)) failure = removed;
             }
             Wh_Log(L"[UWLIQUID] frame failed hwnd=%p hr=%08X removed=%08X",
-                   source ? source->window : nullptr, error, removed);
+                   source->window, error, removed);
         }
         try {
             if (frame) {
@@ -9352,8 +9323,8 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
             PostMessageW(editor.window, kEditorThemeMessage, 0, 0);
             return;
         }
-        RECT rect{};
-        if (!GetClientRect(editor.window, &rect) || rect.right <= 0 || rect.bottom <= 0) return;
+        RECT rect = shapeBounds;
+        if (rect.right <= 0 || rect.bottom <= 0) return;
         UINT width = rect.right, height = rect.bottom;
         POINT origin{};
         if (!ClientToScreen(editor.window, &origin)) winrt::throw_last_error();
@@ -9633,8 +9604,10 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
         }
         if (!editor.backgroundRenderer->UpdateGeometry(rect, width, height, lens))
             throw winrt::hresult_error(E_FAIL, L"Settings glass device unavailable");
-        if (!InSendMessage()) editor.backgroundRenderer->SetBodyVisual(editor.bodySample);
-        if (!InSendMessage()) editor.backgroundRenderer->UpdateSources();
+        if (!InSendMessage()) {
+            editor.backgroundRenderer->SetBodyVisual(editor.bodySample);
+            editor.backgroundRenderer->UpdateSources();
+        }
         editor.liquidBackground.Visibility(Visibility::Visible);
         SetTimer(editor.window, kEditorBackdropTimerId, 250, nullptr);
         UpdateEditorCaption(editor);
@@ -10430,7 +10403,6 @@ bool PublishTray(Root& root, double shift) {
            GetLastError());
     return false;
 }
-
 
 FrameworkElement Child(FrameworkElement parent, const wchar_t* name,
                        bool byClass) {
@@ -11391,7 +11363,7 @@ void RestoreStatePlate(Root::StatePlate& state) {
     RestorePlateFill(state);
     if(state.templateValues) for(auto property:{PlateProperty::MaxHeight,PlateProperty::MinHeight}) {
         try {state.templateValues->Remove(property);}
-        catch (...) {Wh_Log(L"[UWITEM] tray height limit restore failed");}
+        catch (...) {Wh_Log(L"[UWITEM] tray height limit restore failed hr=%08X",winrt::to_hresult().value);}
     }
     // A rejected property restore must not strand other owned properties,
     // the composition clip or the rim. Each attempt keeps its ownership check.
@@ -11432,10 +11404,8 @@ void RestoreStatePlate(Root::StatePlate& state) {
         }
     }
     try {
-        bool clipMatch =
-            state.clip && state.visual && state.visual.Clip() == state.clip;
         if (state.clip) {
-            if (clipMatch)
+            if (state.visual && state.visual.Clip() == state.clip)
                 state.visual.Clip(nullptr);
             else
                 Wh_Log(L"[UWITEM] state plate clip ownership lost");
@@ -11918,11 +11888,7 @@ bool HighContrastActive() {
 void PrepareGlass(Root& root) {
     auto& dock=root.dock;
     bool native = g_theme == DockTheme::Native;
-    if ((native && g_dockBorder.width <= 0) || dock.materialBlocked) {
-        RestoreGlass(root);
-        return;
-    }
-    if (HighContrastActive()) {
+    if ((native && g_dockBorder.width <= 0) || dock.materialBlocked || HighContrastActive()) {
         RestoreGlass(root);
         return;
     }
@@ -11940,10 +11906,8 @@ void PrepareGlass(Root& root) {
             RestoreGlass(root);
         }
         auto grid = Child(dock.background, L"Windows.UI.Xaml.Controls.Grid", true);
-        auto fillElement = Child(grid, L"BackgroundFill");
-        auto strokeElement = Child(grid, L"BackgroundStroke");
-        auto fill = fillElement ? fillElement.try_as<Shapes::Rectangle>() : nullptr;
-        auto stroke = strokeElement ? strokeElement.try_as<Shapes::Rectangle>() : nullptr;
+        auto fill = Child(grid, L"BackgroundFill").try_as<Shapes::Rectangle>();
+        auto stroke = Child(grid, L"BackgroundStroke").try_as<Shapes::Rectangle>();
         if (!fill || !stroke || Hosting::ElementCompositionPreview::GetElementChildVisual(dock.background))
             throw winrt::hresult_error(E_NOTIMPL, L"Background tree or child visual unavailable");
         auto originalFill = fill.ReadLocalValue(Shapes::Shape::FillProperty());
@@ -12504,11 +12468,9 @@ DWORD WINAPI ForegroundSampleWorker(void* raw) {
         auto result = std::make_unique<ForegroundSampleResult>();
         CaptureForegroundSamples(*request, *result);
         if (!g_stopping) {
-            {
-                std::lock_guard lock(g_foregroundResultsMutex);
-                if (g_stopping) return 0;
-                g_foregroundResults.push_back(std::move(result));
-            }
+            std::lock_guard lock(g_foregroundResultsMutex);
+            if (g_stopping) return 0;
+            g_foregroundResults.push_back(std::move(result));
         }
     } catch (...) {
     }
@@ -13208,11 +13170,10 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
     std::vector<uintptr_t> seen;
     for (int i = 0; i < count; ++i) {
         auto child = Media::VisualTreeHelper::GetChild(repeater, i).try_as<FrameworkElement>();
-        if (!child) continue;
+        if (!child || winrt::get_class_name(child) != L"Taskbar.TaskListButton") continue;
         auto slot = Controls::Primitives::LayoutInformation::GetLayoutSlot(child);
         bool eligible = child.Visibility() == Visibility::Visible &&
                         EligibleSlot(slot.X, slot.Width, repeater.ActualWidth());
-        if (winrt::get_class_name(child) != L"Taskbar.TaskListButton") continue;
         auto identity = CanonicalIdentity(child);
         seen.push_back(identity);
         // Identity alone is unambiguous here: the erase_if above dropped every
@@ -13238,9 +13199,7 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
         if (!eligible && source->life != Root::Source::Life::Hiding) seen.pop_back();
     }
     std::erase_if(root.sources, [&](auto& source) {
-        if (std::find(seen.begin(), seen.end(), source.identity) != seen.end())
-            return false;
-        return true;
+        return std::find(seen.begin(), seen.end(), source.identity) == seen.end();
     });
     // ExperienceToggleButton already owns an Offset implicit animation on this
     // handout Visual. Start follows native centering but never participates in
@@ -13332,7 +13291,7 @@ void RestoreRoot(Root& root) {
     root.layout.Clear();
     WithdrawTray(root);
     try { RestoreTrayIcons(root); }
-    catch (...) { Wh_Log(L"[UWICON] restoration-error"); }
+    catch (...) { Wh_Log(L"[UWTRAY] restoration-error"); }
     try { RestoreForeground(root); }
     catch (...) { Wh_Log(L"[UWFONT] restoration-error"); }
     try { StopFollower(root); }
@@ -13697,12 +13656,9 @@ void RememberRootLayout(Root& root) {
 }
 
 void OnLayout(winrt::weak_ref<FrameworkElement> const& weak, bool notification) {
-    if (g_stopping) return;
     ActiveScope active;
     if (g_stopping || GetCurrentThreadId() != g_ownerThread || g_busy) return;
-    FrameworkElement frame{nullptr};
-    try { frame = weak.get(); }
-    catch (...) { Wh_Log(L"[UWPOS] layout owner unavailable"); return; }
+    auto frame = weak.get();
     if (!frame) return;
     BusyScope busy;
     for (auto& root : g_roots) {
@@ -13757,7 +13713,7 @@ winrt::weak_ref<FrameworkElement> MotionEvent(
             auto frame = winrt::make_weak(root.frame);
             source->life = next;
             root.sourceLifecyclePending=true;
-            if (refresh && !g_busy) OnLayout(frame);
+            if (refresh) OnLayout(frame);
             return frame;
         }
     } catch (...) { Wh_Log(L"[UWFOLLOW] lifecycle failed hr=%08X", winrt::to_hresult().value); }
@@ -13835,7 +13791,6 @@ HRESULT WINAPI ComputeJumpViewPosition_Hook(
 }
 
 void DiscoverExisting(HWND taskbar);
-bool QueueTaskbarDiscovery(HWND taskbar);
 void ApplySavedSettings(HWND editor);
 
 void RefreshWatchedFrames() {
