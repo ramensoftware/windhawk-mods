@@ -10406,9 +10406,10 @@ void WithdrawTray(Root& root) {
 
 void RestoreTrayIcons(Root& root);
 // Losing or replacing the association releases what was published and owned under the old HWND before the
-// handle is forgotten: RestoreTrayIcons finds its states by that key. RestoreRoot keeps the association for a
-// reversible fallback, so it is not routed through here.
+// handle is forgotten: the renderer captures that window, and RestoreTrayIcons finds its states by that key.
+// RestoreRoot keeps the association for a reversible fallback, so it is not routed through here.
 void DropTaskbar(Root& root) {
+    StopLiquid(root);
     WithdrawTray(root);
     try { RestoreTrayIcons(root); }
     catch (...) { Wh_Log(L"[UWTRAY] restoration-error"); }
@@ -10458,10 +10459,7 @@ bool ResolveTaskbar(Root& root, double host) {
             match = nullptr;
         break;
     }
-    if (match != root.taskbar) {
-        StopLiquid(root);
-        DropTaskbar(root);
-    }
+    if (match != root.taskbar) DropTaskbar(root);
     if (!match) {
         if (!root.mappingReported)
             Wh_Log(L"[UWPANEL] no unambiguous taskbar mapping frame=%p host=%.3f scale=%.3f",
