@@ -1,10 +1,8 @@
 // ==WindhawkMod==
 // @id              desktop-icon-dock
 // @name            Desktop Icon Dock
-// @name:zh-CN      桌面图标 Dock
-// @description     A standalone macOS-style dock: drag shortcuts, files and folders onto it, reorder them, drag them out to put them back on the desktop; shortcuts are copied into a dock-owned folder so desktop cleanups do not affect the dock; optional glass panel
-// @description:zh-CN 独立的 macOS 风格 Dock：把快捷方式、文件和文件夹拖进来，拖动排序，拖出放回桌面；快捷方式会复制到 Dock 自己的目录，清理桌面不影响 Dock；可选液态玻璃面板
-// @version         1.1.3
+// @description     A standalone macOS-style dock: drag shortcuts, files and folders onto it, reorder them, drag them out to put them back on the desktop; shortcuts are copied into a dock-owned folder so desktop cleanups do not affect the dock; six background styles from clear to Liquid Glass
+// @version         2.1.2
 // @author          yizqq0721
 // @github          https://github.com/yizqq0721
 // @include         explorer.exe
@@ -19,7 +17,8 @@
 Turns shortcuts, files and folders that you drag onto it into a centered
 macOS-style dock. The dock is an independent list, not a mirror of the
 desktop. A fully transparent background is used by default, showing only the
-icons; an optional Liquid Glass panel is available.
+icons; choose one of five panel materials for a visible background: Clear,
+Frosted, Acrylic, Mica, or Liquid Glass.
 
 ![Desktop Icon Dock preview](https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/main/images/dock-preview-transparent.jpg)
 
@@ -56,13 +55,15 @@ magnified with its label shown.*
   are drawn, so the dock blends into the wallpaper; transparent areas of the
   dock window are click-through, so desktop right-click and clicks keep
   working.
-- **Optional Liquid Glass panel**: enabled by turning off "Transparent
-  background". Blurred wallpaper backdrop, milky glass tint, specular rim and
-  a hover glow. The backdrop is sampled from the screen above the dock and
-  works with Wallpaper Engine and other animated wallpapers.
-- **Name labels**: hovering an icon shows a name pill above it; in transparent
-  mode the pill stays at a fixed position instead of jumping while icons
-  scale.
+- **Six background styles**: Transparent, Clear, Frosted, Acrylic, Mica and
+  Liquid Glass. Each style is a tuned material preset with its own blur, tint,
+  saturation, noise, rim and highlight treatment; the backdrop is sampled from
+  the screen above the dock and works with Wallpaper Engine and other animated
+  wallpapers. "Panel tone" can force a light or dark material, or follow the
+  wallpaper automatically.
+- **Name labels**: hovering an icon shows a name pill above it, using the
+  active panel tone; in transparent mode the pill stays at a fixed position
+  instead of jumping while icons scale.
 - **Native interaction**: left click opens an item; right click opens that
   item's native Explorer context menu (open, send to, create shortcut,
   properties, delete, ...).
@@ -78,6 +79,25 @@ magnified with its label shown.*
   unloaded. Off by default, so the desktop remains available as a drag source.
 - **Icon cache with cleanup**: icons are cached per item path and reused;
   virtual items such as the Recycle Bin refresh their icons periodically.
+
+## Background styles
+
+- **Transparent** (default): only the icons and their shadows are drawn, so
+  the dock blends into the wallpaper. Transparent areas remain click-through.
+- **Clear**: a thin translucent tint with a light rim and no blur, like a clear
+  shell. It is the lightest visible panel.
+- **Frosted**: a balanced blur, a soft milky tint, and fine noise. It is the
+  safest general-purpose glass material.
+- **Acrylic**: stronger blur, higher saturation, a thicker tint, and more
+  visible grain, similar to a Windows flyout.
+- **Mica**: a wallpaper-tinted, low-saturation, nearly opaque panel. It is
+  quiet, power-friendly, and suited to an always-visible dock.
+- **Liquid Glass**: a milky blur with a specular rim, an iridescent inner
+  line, pointer-following highlights, and a subtle edge refraction. Its tone
+  adapts to the wallpaper automatically.
+
+Each style also follows the **Panel tone** setting: Light, Dark, or Auto. The
+transparent style ignores the tone.
 
 ## How it works
 
@@ -133,12 +153,11 @@ desktop icons.
 | Neighbor spread (%) | 60 | How much neighboring icons move aside while magnifying |
 | Smoothing speed | 16 | Higher is snappier, lower is softer |
 | Bottom offset | 10 | Gap between the dock and the taskbar, in pixels at 100% DPI |
-| Transparent background | On | Show only the icons; turn off to use the Liquid Glass panel |
-| Glass opacity (%) | 24 | Glass mode only: strength of the milky tint |
-| Glass blur | 20 | Glass mode only: backdrop blur strength |
+| Background style | Transparent | Transparent, Clear, Frosted, Acrylic, Mica or Liquid Glass |
+| Panel tone | Auto | Light, Dark or Auto (follow the wallpaper) for panel styles |
 | Show labels | On | Show a name pill for the hovered item |
 | Hide original desktop icons | Off | Hide the system desktop icons while the dock is active by hiding the desktop list view in memory; they are shown again when the mod is unloaded |
-| Backdrop refresh interval (s) | 20 | How often the blurred backdrop (used by the glass panel and the label pill) is re-sampled; 0 disables refresh |
+| Backdrop refresh interval (s) | 20 | How often the blurred backdrop used by the panel is re-sampled; 0 disables refresh |
 
 ## How it differs from existing mods
 
@@ -156,8 +175,9 @@ not a launcher that stays on top of other windows.
 - **Desktop integration**: hiding the system desktop icons in memory and
   opening the native Explorer context menu both work with the shell's desktop
   view from the mod's own process, without injecting into the running shell.
-- **Screen-sampled glass**: the backdrop and the name pills sample the screen
-  area behind the dock, which requires a desktop-level window.
+- **Screen-sampled panel**: the panel backdrop is sampled from the screen
+  above the dock, which requires a desktop-level window. Name pills use the
+  active panel tone instead of a second glass surface.
 
 ## Compatibility and limitations
 
@@ -196,20 +216,6 @@ not a launcher that stays on top of other windows.
   deletes the mod's storage, including the list and the shortcut copies, when
   the mod is removed.
 
-## 中文说明
-
-本模组把快捷方式、文件和文件夹变成一个居中的 macOS 风格 Dock，默认使用全透明背景；关闭“透明背景”后会显示液态玻璃面板。
-
-- 从桌面、资源管理器或 `shell:Desktop` 窗口把项目拖到 Dock 上即可添加，落点决定插入位置，重复项目会被忽略。快捷方式（`.lnk` / `.url`）会复制到 Dock 自己的目录，删除桌面上的原快捷方式不影响 Dock；文件和文件夹按路径引用。
-- 按住图标在 Dock 内拖动可实时排序；拖到 Dock 外、在桌面上松手会把项目放回桌面，图标落在松手位置。项目原本就在桌面上时移动原图标；否则在桌面新建指向它的快捷方式，原文件或文件夹保持原位；对于复制进来的快捷方式会优先使用原快捷方式，不会产生多余的 `(2)` 副本；在其他窗口上松手则项目留在 Dock。回收站等虚拟项目仅从 Dock 移除；Dock 副本在放回桌面后删除。移除最后一项后显示空状态提示。
-- Dock 是独立列表，不同步桌面；列表保存在 Windhawk 模组存储的 `items.tsv` 中，并按当前用户 SID 分目录，顺序即显示顺序，重启 Explorer 后保持；快捷方式副本位于同一目录的 `Items` 子目录。卸载模组时 Windhawk 会删除整个存储目录。
-- 图标支持悬停放大、相邻图标让位和名称标签；左键打开，右键打开资源管理器原生菜单。
-- “隐藏原始桌面图标”默认关闭；开启后仅在内存中隐藏桌面列表视图，卸载模组后自动恢复。
-- 解析失败的项目会跳过显示但保留在存储中，每 30 秒只重试此前失败的项目；回收站等虚拟项目的图标会定期刷新。
-- 与 Quick Launch Dock 等启动器 Dock 的区别：本模组位于桌面层级（所有普通窗口之下）、不抢焦点，支持把项目拖回桌面并复用原快捷方式，还提供隐藏系统桌面图标和屏幕采样玻璃背景；这些行为通过 Shell 桌面视图完成，模组本身运行在独立的 explorer.exe tool-mod 进程中，与正在运行的 Shell 进程分离（Windhawk 主程序为 32 位，无法承载本 x86-64 模组）。
-- 仅支持 x86-64 的 Windows 10/11，且只在主显示器底部显示。
-
-各设置项的说明见上方英文表格。
 */
 // ==/WindhawkModReadme==
 
@@ -217,69 +223,51 @@ not a launcher that stays on top of other windows.
 /*
 - IconSize: 48
   $name: Icon size
-  $name:zh-CN: 图标大小
   $description: Base icon size in pixels (at 100% DPI scaling)
-  $description:zh-CN: 图标的基础像素大小（100% DPI 缩放时）
 - Spacing: 10
   $name: Icon spacing
-  $name:zh-CN: 图标间距
   $description: Gap between icons at rest, in pixels
-  $description:zh-CN: 静止状态下图标之间的像素间距
 - MaxScale: 175
   $name: Maximum scale (%)
-  $name:zh-CN: 最大放大比例（%）
   $description: How large the hovered icon grows (175 = 1.75x)
-  $description:zh-CN: 鼠标悬停时图标的最大放大倍数（175 = 1.75 倍）
 - EffectRadius: 160
   $name: Effect radius
-  $name:zh-CN: 效果半径
   $description: Distance from the cursor where magnification fades out, in pixels
-  $description:zh-CN: 放大效果从光标向外衰减的距离（像素）
 - SpacingFactor: 60
   $name: Neighbor spread (%)
-  $name:zh-CN: 相邻扩散（%）
   $description: How much neighboring icons move aside while magnifying
-  $description:zh-CN: 放大时相邻图标向外让位的程度
 - Smoothing: 16
   $name: Smoothing speed
-  $name:zh-CN: 平滑速度
   $description: Higher is snappier, lower is softer
-  $description:zh-CN: 数值越大越跟手，越小越柔和
 - BottomOffset: 10
   $name: Bottom offset
-  $name:zh-CN: 底部偏移
   $description: Gap between the dock and the taskbar, in pixels
-  $description:zh-CN: Dock 与任务栏之间的间距（像素）
-- TransparentBackground: true
-  $name: Transparent background
-  $name:zh-CN: 透明背景
-  $description: Show only the icons and skip the glass panel
-  $description:zh-CN: 只显示图标，不使用玻璃背景
-- GlassOpacity: 24
-  $name: Glass opacity (%)
-  $name:zh-CN: 玻璃不透明度（%）
-  $description: Glass mode only (Transparent background off) - strength of the milky tint
-  $description:zh-CN: 仅玻璃模式（关闭透明背景）时生效：乳白色调的强度
-- GlassBlur: 20
-  $name: Glass blur
-  $name:zh-CN: 玻璃模糊
-  $description: Glass mode only (Transparent background off) - backdrop blur strength
-  $description:zh-CN: 仅玻璃模式（关闭透明背景）时生效：背景模糊强度
+- BackgroundStyle: transparent
+  $name: Background style
+  $description: Panel material used when the dock has a background. "Transparent" draws only the icons.
+  $options:
+  - transparent: Transparent (icons only)
+  - clear: Clear shell
+  - frosted: Frosted glass
+  - acrylic: Acrylic
+  - mica: Mica
+  - liquid: Liquid Glass
+- Tone: auto
+  $name: Panel tone
+  $description: Light, dark, or automatic based on the wallpaper behind the dock. Ignored by the transparent style.
+  $options:
+  - auto: Auto (follow wallpaper)
+  - light: Light
+  - dark: Dark
 - ShowLabels: true
   $name: Show labels
-  $name:zh-CN: 显示名称
-  $description: Show the name of the hovered item in a floating glass pill
-  $description:zh-CN: 悬停时在浮动玻璃标签中显示名称
+  $description: Show the name of the hovered item in a floating name pill
 - HideDesktopIcons: false
   $name: Hide original desktop icons
-  $name:zh-CN: 隐藏原始桌面图标
   $description: Hide the original desktop icons while the dock is active by hiding the desktop list view in memory; restored on unload. Off by default so the desktop stays available as a drag source
-  $description:zh-CN: 启用 Dock 时在内存中隐藏桌面列表视图，不修改系统设置；卸载时恢复。默认关闭，便于随时从桌面拖入项目
 - BackdropRefreshSeconds: 20
   $name: Backdrop refresh interval (s)
-  $name:zh-CN: 背景刷新间隔（秒）
-  $description: How often the blurred backdrop used by the glass panel and the label pill is re-sampled; 0 disables refresh
-  $description:zh-CN: 多久重新采样一次玻璃面板和名称标签所使用的模糊背景；0 表示不自动刷新
+  $description: How often the blurred backdrop used by the panel is re-sampled; 0 disables refresh
 */
 // ==/WindhawkModSettings==
 
@@ -336,6 +324,21 @@ constexpr int kMaintenanceSeconds = 30;
 constexpr int kDragThresholdPx = 5;
 constexpr double kPi = 3.14159265358979323846;
 
+enum class PanelStyle {
+    Transparent,
+    Clear,
+    Frosted,
+    Acrylic,
+    Mica,
+    Liquid,
+};
+
+enum class PanelTone {
+    Auto,
+    Light,
+    Dark,
+};
+
 struct Settings {
     int iconSize = 48;
     int spacing = 10;
@@ -344,9 +347,8 @@ struct Settings {
     int spacingFactor = 60;
     int smoothing = 16;
     int bottomOffset = 10;
-    int transparentBackground = 1;
-    int glassOpacity = 24;
-    int glassBlur = 20;
+    PanelStyle backgroundStyle = PanelStyle::Transparent;
+    PanelTone tone = PanelTone::Auto;
     int showLabels = 1;
     int hideDesktopIcons = 0;
     int backdropRefreshSeconds = 20;
@@ -377,7 +379,10 @@ std::unique_ptr<Bitmap> g_glowTexture;
 std::unique_ptr<Bitmap> g_shadowTexture;
 std::unique_ptr<Bitmap> g_noiseTexture;
 std::unique_ptr<Bitmap> g_backdrop;
+std::unique_ptr<Bitmap> g_backdropRefracted;
 bool g_backdropValid = false;
+double g_backdropLuminance = 0.5;
+bool g_autoLightPanel = true;
 std::chrono::steady_clock::time_point g_backdropCaptureTime;
 
 struct LayoutMetrics {
@@ -569,6 +574,219 @@ void AddRoundedRect(GraphicsPath& path, const RectF& rect, float radius) {
     path.CloseFigure();
 }
 
+PanelStyle ParsePanelStyle(const std::wstring& value) {
+    if (value == L"clear") return PanelStyle::Clear;
+    if (value == L"frosted") return PanelStyle::Frosted;
+    if (value == L"acrylic") return PanelStyle::Acrylic;
+    if (value == L"mica") return PanelStyle::Mica;
+    if (value == L"liquid") return PanelStyle::Liquid;
+    return PanelStyle::Transparent;
+}
+
+PanelTone ParsePanelTone(const std::wstring& value) {
+    if (value == L"light") return PanelTone::Light;
+    if (value == L"dark") return PanelTone::Dark;
+    return PanelTone::Auto;
+}
+
+int StyleBlurPx(PanelStyle style) {
+    switch (style) {
+        case PanelStyle::Frosted:
+            return 16;
+        case PanelStyle::Acrylic:
+            return 22;
+        case PanelStyle::Mica:
+            return 30;
+        case PanelStyle::Liquid:
+            return 18;
+        default:
+            return 0;
+    }
+}
+
+double StyleSaturation(PanelStyle style) {
+    switch (style) {
+        case PanelStyle::Frosted:
+            return 1.15;
+        case PanelStyle::Acrylic:
+            return 1.80;
+        case PanelStyle::Mica:
+            return 0.88;
+        case PanelStyle::Liquid:
+            return 1.40;
+        default:
+            return 1.0;
+    }
+}
+
+double StyleContrast(PanelStyle style) {
+    switch (style) {
+        case PanelStyle::Acrylic:
+            return 1.04;
+        case PanelStyle::Mica:
+            return 0.98;
+        case PanelStyle::Liquid:
+            return 1.01;
+        default:
+            return 1.0;
+    }
+}
+
+bool IsTransparentStyle() {
+    return g_settings.backgroundStyle == PanelStyle::Transparent;
+}
+
+bool ResolveLightPanel() {
+    if (g_settings.backgroundStyle == PanelStyle::Transparent) return true;
+    if (g_settings.tone == PanelTone::Light) return true;
+    if (g_settings.tone == PanelTone::Dark) return false;
+    return g_autoLightPanel;
+}
+
+struct PanelPalette {
+    bool light = true;
+    BYTE tintR = 247;
+    BYTE tintG = 250;
+    BYTE tintB = 255;
+    BYTE tintAlpha = 0;
+    BYTE shadeAlpha = 0;
+    BYTE bottomShadeAlpha = 0;
+    BYTE glossAlpha = 0;
+    float glossHeight = 0.0f;
+    BYTE bottomLightAlpha = 0;
+    float bottomLightHeight = 0.0f;
+    BYTE rimDarkAlpha = 0;
+    BYTE rimWhiteTop = 0;
+    BYTE rimWhiteBottom = 0;
+    float rimWidth = 1.0f;
+    BYTE iridescentAlpha = 0;
+    BYTE noiseAlpha = 0;
+    BYTE shadowAlpha = 0;
+    float shadowSpread = 1.0f;
+    BYTE specularAlpha = 0;
+    BYTE glossLineAlpha = 0;
+    bool drawBackdrop = true;
+    bool useRefraction = false;
+};
+
+PanelPalette BuildPanelPalette() {
+    PanelPalette p;
+    bool light = ResolveLightPanel();
+    p.light = light;
+
+    switch (g_settings.backgroundStyle) {
+        case PanelStyle::Clear:
+            p.drawBackdrop = false;
+            p.tintR = light ? 255 : 8;
+            p.tintG = light ? 255 : 10;
+            p.tintB = light ? 255 : 14;
+            p.tintAlpha = light ? 20 : 78;
+            p.glossAlpha = light ? 26 : 20;
+            p.glossHeight = 0.24f;
+            p.bottomLightAlpha = 8;
+            p.bottomLightHeight = 0.14f;
+            p.rimDarkAlpha = 18;
+            p.rimWhiteTop = light ? 88 : 58;
+            p.rimWhiteBottom = 32;
+            p.rimWidth = 1.0f;
+            p.shadowAlpha = 6;
+            p.shadowSpread = 0.9f;
+            p.glossLineAlpha = light ? 72 : 58;
+            break;
+        case PanelStyle::Frosted:
+            p.tintR = light ? 250 : 18;
+            p.tintG = light ? 252 : 21;
+            p.tintB = light ? 255 : 28;
+            p.tintAlpha = light ? 34 : 66;
+            p.shadeAlpha = light ? 10 : 12;
+            p.bottomShadeAlpha = 24;
+            p.glossAlpha = 48;
+            p.glossHeight = 0.30f;
+            p.bottomLightAlpha = 16;
+            p.bottomLightHeight = 0.16f;
+            p.rimDarkAlpha = 24;
+            p.rimWhiteTop = 140;
+            p.rimWhiteBottom = 40;
+            p.rimWidth = 1.2f;
+            p.noiseAlpha = 7;
+            p.shadowAlpha = 7;
+            p.shadowSpread = 1.05f;
+            p.glossLineAlpha = 110;
+            break;
+        case PanelStyle::Acrylic:
+            p.tintR = light ? 245 : 24;
+            p.tintG = light ? 248 : 28;
+            p.tintB = light ? 252 : 38;
+            p.tintAlpha = light ? 56 : 90;
+            p.shadeAlpha = light ? 22 : 24;
+            p.bottomShadeAlpha = 32;
+            p.glossAlpha = 32;
+            p.glossHeight = 0.24f;
+            p.bottomLightAlpha = 12;
+            p.bottomLightHeight = 0.14f;
+            p.rimDarkAlpha = 26;
+            p.rimWhiteTop = 90;
+            p.rimWhiteBottom = 28;
+            p.rimWidth = 1.1f;
+            p.noiseAlpha = 12;
+            p.shadowAlpha = 8;
+            p.shadowSpread = 1.15f;
+            p.glossLineAlpha = 75;
+            break;
+        case PanelStyle::Mica:
+            p.tintR = light ? 236 : 28;
+            p.tintG = light ? 239 : 31;
+            p.tintB = light ? 244 : 38;
+            p.tintAlpha = light ? 184 : 188;
+            p.rimDarkAlpha = 16;
+            p.rimWhiteTop = 45;
+            p.rimWhiteBottom = 20;
+            p.rimWidth = 1.0f;
+            p.noiseAlpha = 4;
+            p.shadowAlpha = 5;
+            p.shadowSpread = 1.0f;
+            p.glossLineAlpha = 30;
+            break;
+        case PanelStyle::Liquid:
+            p.tintR = light ? 247 : 14;
+            p.tintG = light ? 250 : 17;
+            p.tintB = light ? 255 : 24;
+            p.tintAlpha = light ? 58 : 72;
+            p.shadeAlpha = light ? 12 : 14;
+            p.bottomShadeAlpha = 38;
+            p.glossAlpha = 68;
+            p.glossHeight = 0.32f;
+            p.bottomLightAlpha = 26;
+            p.bottomLightHeight = 0.18f;
+            p.rimDarkAlpha = 30;
+            p.rimWhiteTop = 180;
+            p.rimWhiteBottom = 55;
+            p.rimWidth = 1.4f;
+            p.iridescentAlpha = light ? 40 : 30;
+            p.noiseAlpha = 5;
+            p.shadowAlpha = 9;
+            p.shadowSpread = 1.25f;
+            p.specularAlpha = light ? 110 : 90;
+            p.glossLineAlpha = 150;
+            p.useRefraction = true;
+            break;
+        default:
+            p.drawBackdrop = false;
+            break;
+    }
+    return p;
+}
+
+Color TintColor(const PanelPalette& palette, int alpha) {
+    return Color((BYTE)ClampInt(alpha, 0, 255), palette.tintR, palette.tintG,
+                 palette.tintB);
+}
+
+Color PanelTextColor(const PanelPalette& palette, int alpha) {
+    return palette.light ? Color((BYTE)ClampInt(alpha, 0, 255), 28, 30, 36)
+                         : Color((BYTE)ClampInt(alpha, 0, 255), 248, 250, 255);
+}
+
 void LoadSettings() {
     Settings s;
     s.iconSize = ClampInt(Wh_GetIntSetting(L"IconSize"), 24, 128);
@@ -578,9 +796,27 @@ void LoadSettings() {
     s.spacingFactor = ClampInt(Wh_GetIntSetting(L"SpacingFactor"), 0, 100);
     s.smoothing = ClampInt(Wh_GetIntSetting(L"Smoothing"), 1, 60);
     s.bottomOffset = ClampInt(Wh_GetIntSetting(L"BottomOffset"), 0, 300);
-    s.transparentBackground = Wh_GetIntSetting(L"TransparentBackground") ? 1 : 0;
-    s.glassOpacity = ClampInt(Wh_GetIntSetting(L"GlassOpacity"), 0, 100);
-    s.glassBlur = ClampInt(Wh_GetIntSetting(L"GlassBlur"), 0, 80);
+
+    PCWSTR styleValue = Wh_GetStringSetting(L"BackgroundStyle");
+    std::wstring styleText = styleValue ? styleValue : L"";
+    if (styleValue) Wh_FreeStringSetting(styleValue);
+    if (!styleText.empty()) {
+        s.backgroundStyle = ParsePanelStyle(styleText);
+    } else {
+        // Upgrades from 1.x have the old keys but not BackgroundStyle yet.
+        int legacyTransparent = Wh_GetIntSetting(L"TransparentBackground");
+        int legacyOpacity = Wh_GetIntSetting(L"GlassOpacity");
+        int legacyBlur = Wh_GetIntSetting(L"GlassBlur");
+        s.backgroundStyle = (!legacyTransparent &&
+                             (legacyOpacity > 0 || legacyBlur > 0))
+                                ? PanelStyle::Liquid
+                                : PanelStyle::Transparent;
+    }
+
+    PCWSTR toneValue = Wh_GetStringSetting(L"Tone");
+    if (toneValue && *toneValue) s.tone = ParsePanelTone(toneValue);
+    if (toneValue) Wh_FreeStringSetting(toneValue);
+
     s.showLabels = Wh_GetIntSetting(L"ShowLabels") ? 1 : 0;
     s.hideDesktopIcons = Wh_GetIntSetting(L"HideDesktopIcons") ? 1 : 0;
     s.backdropRefreshSeconds =
@@ -1197,6 +1433,159 @@ void BoxBlurBitmap(Bitmap& bitmap, int radius) {
     bitmap.UnlockBits(&data);
 }
 
+double ComputeBitmapLuminance(Bitmap& bitmap) {
+    int width = (int)bitmap.GetWidth();
+    int height = (int)bitmap.GetHeight();
+    if (width < 1 || height < 1) return 0.5;
+
+    BitmapData data{};
+    Rect rect(0, 0, width, height);
+    if (bitmap.LockBits(&rect, ImageLockModeRead, PixelFormat32bppPARGB,
+                        &data) != Ok) {
+        return 0.5;
+    }
+
+    int stepX = std::max(1, width / 32);
+    int stepY = std::max(1, height / 16);
+    double sum = 0.0;
+    int count = 0;
+    for (int y = 0; y < height; y += stepY) {
+        BYTE* row = (BYTE*)data.Scan0 + (size_t)y * data.Stride;
+        for (int x = 0; x < width; x += stepX) {
+            BYTE* p = row + x * 4;
+            sum += 0.0722 * p[0] + 0.7152 * p[1] + 0.2126 * p[2];
+            ++count;
+        }
+    }
+    bitmap.UnlockBits(&data);
+    return count ? ClampDouble(sum / (count * 255.0), 0.0, 1.0) : 0.5;
+}
+
+void AdjustBackdropBitmap(Bitmap& bitmap, double saturation, double contrast) {
+    if (std::fabs(saturation - 1.0) < 0.001 &&
+        std::fabs(contrast - 1.0) < 0.001) {
+        return;
+    }
+
+    int width = (int)bitmap.GetWidth();
+    int height = (int)bitmap.GetHeight();
+    BitmapData data{};
+    Rect rect(0, 0, width, height);
+    if (bitmap.LockBits(&rect, ImageLockModeRead | ImageLockModeWrite,
+                        PixelFormat32bppPARGB, &data) != Ok) {
+        return;
+    }
+
+    for (int y = 0; y < height; ++y) {
+        BYTE* row = (BYTE*)data.Scan0 + (size_t)y * data.Stride;
+        for (int x = 0; x < width; ++x) {
+            BYTE* p = row + x * 4;
+            double b = p[0];
+            double g = p[1];
+            double r = p[2];
+            double luma = 0.299 * r + 0.587 * g + 0.114 * b;
+            r = luma + (r - luma) * saturation;
+            g = luma + (g - luma) * saturation;
+            b = luma + (b - luma) * saturation;
+            r = (r - 128.0) * contrast + 128.0;
+            g = (g - 128.0) * contrast + 128.0;
+            b = (b - 128.0) * contrast + 128.0;
+            p[2] = (BYTE)ClampInt((int)lround(r), 0, 255);
+            p[1] = (BYTE)ClampInt((int)lround(g), 0, 255);
+            p[0] = (BYTE)ClampInt((int)lround(b), 0, 255);
+        }
+    }
+    bitmap.UnlockBits(&data);
+}
+
+// Samples the blurred backdrop inward near the edges to fake a lens bend.
+// The small 1/4-size bitmap makes the per-pixel pass cheap.
+std::unique_ptr<Bitmap> BuildRefractedBackdrop(Bitmap& source,
+                                               int strengthPercent) {
+    if (strengthPercent <= 0) return nullptr;
+    int width = (int)source.GetWidth();
+    int height = (int)source.GetHeight();
+    if (width < 4 || height < 4) return nullptr;
+
+    auto dest = std::make_unique<Bitmap>(width, height, PixelFormat32bppPARGB);
+    if (dest->GetLastStatus() != Ok) return nullptr;
+
+    BitmapData srcData{};
+    BitmapData dstData{};
+    Rect rect(0, 0, width, height);
+    if (source.LockBits(&rect, ImageLockModeRead, PixelFormat32bppPARGB,
+                        &srcData) != Ok) {
+        return nullptr;
+    }
+    if (dest->LockBits(&rect, ImageLockModeWrite, PixelFormat32bppPARGB,
+                       &dstData) != Ok) {
+        source.UnlockBits(&srcData);
+        return nullptr;
+    }
+
+    const double band = std::max(2.0, std::min(width, height) * 0.14);
+    const double maxOffset = strengthPercent / 100.0 * 2.2;
+    auto sample = [&](int x, int y, int channel) -> BYTE {
+        x = ClampInt(x, 0, width - 1);
+        y = ClampInt(y, 0, height - 1);
+        BYTE* p = (BYTE*)srcData.Scan0 + (size_t)y * srcData.Stride + x * 4;
+        return p[channel];
+    };
+
+    for (int y = 0; y < height; ++y) {
+        BYTE* outRow = (BYTE*)dstData.Scan0 + (size_t)y * dstData.Stride;
+        for (int x = 0; x < width; ++x) {
+            BYTE* out = outRow + x * 4;
+            int dLeft = x;
+            int dRight = width - 1 - x;
+            int dTop = y;
+            int dBottom = height - 1 - y;
+            int d = std::min(std::min(dLeft, dRight), std::min(dTop, dBottom));
+            out[3] = 255;
+            if (d >= band) {
+                out[0] = sample(x, y, 0);
+                out[1] = sample(x, y, 1);
+                out[2] = sample(x, y, 2);
+                continue;
+            }
+
+            double t = 1.0 - (double)d / band;
+            double offset = maxOffset * t * t;
+            int sx = x;
+            int sy = y;
+            if (std::min(dLeft, dRight) <= std::min(dTop, dBottom)) {
+                sx = x + (dLeft <= dRight ? (int)lround(offset)
+                                           : -(int)lround(offset));
+            } else {
+                sy = y + (dTop <= dBottom ? (int)lround(offset)
+                                           : -(int)lround(offset));
+            }
+            double redOffset = offset * 1.3;
+            double blueOffset = offset * 0.7;
+            int rx = sx;
+            int ry = sy;
+            int bx = sx;
+            int by = sy;
+            if (std::min(dLeft, dRight) <= std::min(dTop, dBottom)) {
+                int dir = dLeft <= dRight ? 1 : -1;
+                rx = x + dir * (int)lround(redOffset);
+                bx = x + dir * (int)lround(blueOffset);
+            } else {
+                int dir = dTop <= dBottom ? 1 : -1;
+                ry = y + dir * (int)lround(redOffset);
+                by = y + dir * (int)lround(blueOffset);
+            }
+            out[2] = sample(rx, ry, 2);
+            out[1] = sample(sx, sy, 1);
+            out[0] = sample(bx, by, 0);
+        }
+    }
+
+    source.UnlockBits(&srcData);
+    dest->UnlockBits(&dstData);
+    return dest;
+}
+
 void ComputeLayout() {
     int count = (int)g_items.size();
     g_labelFont.reset();
@@ -1340,6 +1729,16 @@ void CaptureBackdrop() {
         return;
     }
 
+    if (IsTransparentStyle()) {
+        g_backdrop.reset();
+        g_backdropRefracted.reset();
+        g_backdropValid = false;
+        return;
+    }
+
+    g_backdropValid = false;
+    g_backdropRefracted.reset();
+
     MONITORINFO monitorInfo{};
     monitorInfo.cbSize = sizeof(monitorInfo);
     HMONITOR monitor = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
@@ -1349,6 +1748,7 @@ void CaptureBackdrop() {
                         (int)(monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left));
     int capH = g_layout.panelHeight;
     int capX = g_windowX + (g_windowWidth - capW) / 2;
+    // Sample above the window so the layered dock itself is not captured.
     int capY = g_windowY - capH;
     if (capX < monitorInfo.rcMonitor.left) capX = monitorInfo.rcMonitor.left;
     if (capX + capW > monitorInfo.rcMonitor.right)
@@ -1402,11 +1802,30 @@ void CaptureBackdrop() {
         graphics.SetPixelOffsetMode(PixelOffsetModeHighQuality);
         graphics.DrawImage(&source, Rect(0, 0, smallW, smallH), 0, 0, capW, capH,
                            UnitPixel);
-        int blurRadius = (int)lround(g_settings.glassBlur / 4.0);
+        int blurRadius = (int)lround(
+            StyleBlurPx(g_settings.backgroundStyle) * g_dpiScale / 4.0);
+        blurRadius = ClampInt(blurRadius, 0, 20);
         if (blurRadius > 0) {
             BoxBlurBitmap(*small, blurRadius);
             BoxBlurBitmap(*small, blurRadius);
         }
+        AdjustBackdropBitmap(*small, StyleSaturation(g_settings.backgroundStyle),
+                             StyleContrast(g_settings.backgroundStyle));
+
+        g_backdropLuminance = ComputeBitmapLuminance(*small);
+        if (g_settings.tone == PanelTone::Auto) {
+            if (g_backdropLuminance > 0.58) {
+                g_autoLightPanel = true;
+            } else if (g_backdropLuminance < 0.42) {
+                g_autoLightPanel = false;
+            }
+        }
+
+        g_backdropRefracted.reset();
+        if (g_settings.backgroundStyle == PanelStyle::Liquid) {
+            g_backdropRefracted = BuildRefractedBackdrop(*small, 35);
+        }
+
         g_backdrop = std::move(small);
         g_backdropValid = true;
         g_backdropCaptureTime = std::chrono::steady_clock::now();
@@ -1416,111 +1835,190 @@ void CaptureBackdrop() {
     DeleteObject(dib);
 }
 
-void DrawPanelShadow(Graphics& graphics, const RectF& panel, float radius) {
+void DrawPanelShadow(Graphics& graphics, const RectF& panel, float radius,
+                     const PanelPalette& palette) {
+    if (palette.shadowAlpha == 0) return;
+    double step = 1.6 * g_dpiScale * palette.shadowSpread;
     for (int i = 5; i >= 1; --i) {
-        double expand = i * 1.6 * g_dpiScale;
+        double expand = i * step;
         RectF shadowRect(panel.X - (REAL)expand, panel.Y - (REAL)(expand * 0.5) + 2.0f,
                          panel.Width + (REAL)(expand * 2.0f),
                          panel.Height + (REAL)(expand * 2.0f));
         GraphicsPath path;
         AddRoundedRect(path, shadowRect, radius + (float)expand);
-        SolidBrush brush(Color(7, 0, 0, 0));
+        SolidBrush brush(Color(palette.shadowAlpha, 0, 0, 0));
         graphics.FillPath(&brush, &path);
     }
 }
 
 void DrawPanelRim(Graphics& graphics, GraphicsPath& panelPath, const RectF& panel,
-                  float radius) {
-    Pen darkPen(Color(40, 18, 24, 34), 1.0f);
-    graphics.DrawPath(&darkPen, &panelPath);
+                  float radius, const PanelPalette& palette) {
+    if (palette.rimDarkAlpha) {
+        Pen darkPen(Color(palette.rimDarkAlpha, 18, 24, 34), 1.0f);
+        graphics.DrawPath(&darkPen, &panelPath);
+    }
 
-    LinearGradientBrush rimBrush(
-        RectF(panel.X, panel.Y, panel.Width, panel.Height),
-        Color(235, 255, 255, 255), Color(55, 255, 255, 255),
-        LinearGradientModeVertical);
-    Pen rimPen(&rimBrush, (REAL)(1.4 * g_dpiScale));
-    graphics.DrawPath(&rimPen, &panelPath);
+    if (palette.rimWhiteTop || palette.rimWhiteBottom) {
+        LinearGradientBrush rimBrush(
+            RectF(panel.X, panel.Y, panel.Width, panel.Height),
+            Color(palette.rimWhiteTop, 255, 255, 255),
+            Color(palette.rimWhiteBottom, 255, 255, 255),
+            LinearGradientModeVertical);
+        Pen rimPen(&rimBrush, (REAL)(palette.rimWidth * g_dpiScale));
+        graphics.DrawPath(&rimPen, &panelPath);
+    }
 
-    RectF innerRect(panel.X + 1.5f, panel.Y + 1.5f, panel.Width - 3.0f,
-                    panel.Height - 3.0f);
-    GraphicsPath innerPath;
-    AddRoundedRect(innerPath, innerRect, std::max(1.0f, radius - 1.5f));
+    if (palette.iridescentAlpha) {
+        RectF innerRect(panel.X + 1.5f, panel.Y + 1.5f, panel.Width - 3.0f,
+                        panel.Height - 3.0f);
+        GraphicsPath innerPath;
+        AddRoundedRect(innerPath, innerRect, std::max(1.0f, radius - 1.5f));
 
-    Color iridColors[] = {Color(0, 255, 255, 255), Color(60, 120, 220, 255),
-                          Color(45, 255, 190, 255), Color(60, 255, 150, 210),
-                          Color(0, 255, 255, 255)};
-    REAL iridPositions[] = {0.0f, 0.25f, 0.5f, 0.75f, 1.0f};
-    LinearGradientBrush iridBrush(
-        RectF(panel.X, panel.Y, panel.Width, panel.Height), Color(0, 255, 255, 255),
-        Color(0, 255, 255, 255), LinearGradientModeHorizontal);
-    iridBrush.SetInterpolationColors(iridColors, iridPositions, 5);
-    Pen iridPen(&iridBrush, 1.0f);
-    graphics.DrawPath(&iridPen, &innerPath);
+        BYTE a = palette.iridescentAlpha;
+        Color iridColors[] = {
+            Color(0, 255, 255, 255), Color((BYTE)(a * 0.65), 120, 220, 255),
+            Color((BYTE)(a * 0.45), 255, 190, 255),
+            Color((BYTE)(a * 0.60), 150, 255, 220),
+            Color(0, 255, 255, 255)};
+        REAL iridPositions[] = {0.0f, 0.25f, 0.5f, 0.75f, 1.0f};
+        LinearGradientBrush iridBrush(
+            RectF(panel.X, panel.Y, panel.Width, panel.Height),
+            Color(0, 255, 255, 255), Color(0, 255, 255, 255),
+            LinearGradientModeHorizontal);
+        iridBrush.SetInterpolationColors(iridColors, iridPositions, 5);
+        Pen iridPen(&iridBrush, 1.0f);
+        graphics.DrawPath(&iridPen, &innerPath);
+    }
 
-    Color glossColors[] = {Color(0, 255, 255, 255), Color(180, 255, 255, 255),
-                           Color(0, 255, 255, 255)};
-    REAL glossPositions[] = {0.0f, 0.5f, 1.0f};
-    LinearGradientBrush glossBrush(
-        RectF(panel.X, panel.Y, panel.Width, 2.0f), Color(0, 255, 255, 255),
-        Color(0, 255, 255, 255), LinearGradientModeHorizontal);
-    glossBrush.SetInterpolationColors(glossColors, glossPositions, 3);
-    Pen glossPen(&glossBrush, (REAL)(1.3 * g_dpiScale));
-    GraphicsPath glossLine;
-    glossLine.AddLine(panel.X + radius * 0.8f, panel.Y + 1.0f,
-                      panel.X + panel.Width - radius * 0.8f, panel.Y + 1.0f);
-    graphics.DrawPath(&glossPen, &glossLine);
+    if (palette.glossLineAlpha) {
+        Color glossColors[] = {Color(0, 255, 255, 255),
+                               Color(palette.glossLineAlpha, 255, 255, 255),
+                               Color(0, 255, 255, 255)};
+        REAL glossPositions[] = {0.0f, 0.5f, 1.0f};
+        LinearGradientBrush glossBrush(
+            RectF(panel.X, panel.Y, panel.Width, 2.0f),
+            Color(0, 255, 255, 255), Color(0, 255, 255, 255),
+            LinearGradientModeHorizontal);
+        glossBrush.SetInterpolationColors(glossColors, glossPositions, 3);
+        Pen glossPen(&glossBrush, (REAL)(1.3 * g_dpiScale));
+        GraphicsPath glossLine;
+        glossLine.AddLine(panel.X + radius * 0.8f, panel.Y + 1.0f,
+                          panel.X + panel.Width - radius * 0.8f, panel.Y + 1.0f);
+        graphics.DrawPath(&glossPen, &glossLine);
+    }
 }
 
-void DrawGlassPanel(Graphics& graphics, const RectF& panel, float radius) {
+void DrawSpecularHighlight(Graphics& graphics, const RectF& panel,
+                           const PanelPalette& palette) {
+    if (palette.specularAlpha == 0) return;
+
+    double centerX;
+    if (g_mouseXValid && g_intensity > 0.01) {
+        centerX = ClampDouble(g_lastMouseX, panel.X + panel.Width * 0.12,
+                              panel.X + panel.Width * 0.88);
+    } else {
+        centerX = panel.X + panel.Width * 0.22;
+    }
+    double centerY = panel.Y + panel.Height * 0.14;
+    double radiusX = panel.Width * 0.42;
+    double radiusY = panel.Height * 0.62;
+    RectF ellipse((REAL)(centerX - radiusX), (REAL)(centerY - radiusY),
+                  (REAL)(radiusX * 2.0), (REAL)(radiusY * 2.0));
+
+    GraphicsPath path;
+    path.AddEllipse(ellipse);
+    PathGradientBrush brush(&path);
+    brush.SetCenterPoint(PointF((REAL)centerX, (REAL)centerY));
+    brush.SetCenterColor(Color(
+        (BYTE)ClampInt((int)lround(palette.specularAlpha *
+                                   (0.55 + 0.45 * g_intensity)),
+                       0, 255),
+        255, 255, 255));
+    Color surround(0, 255, 255, 255);
+    int count = 1;
+    brush.SetSurroundColors(&surround, &count);
+    graphics.FillPath(&brush, &path);
+}
+
+void DrawPanel(Graphics& graphics, const RectF& panel, float radius,
+               const PanelPalette& palette) {
+    if (IsTransparentStyle()) return;
+
     GraphicsPath panelPath;
     AddRoundedRect(panelPath, panel, radius);
 
-    DrawPanelShadow(graphics, panel, radius);
+    DrawPanelShadow(graphics, panel, radius, palette);
 
     GraphicsState state = graphics.Save();
     graphics.SetClip(&panelPath, CombineModeReplace);
 
-    if (g_backdropValid && g_backdrop) {
-        graphics.DrawImage(g_backdrop.get(), panel);
-        SolidBrush tint(Color((BYTE)lround(255.0 * g_settings.glassOpacity / 100.0),
-                              247, 250, 255));
-        graphics.FillRectangle(&tint, panel);
-    } else {
+    bool drewBackdrop = false;
+    if (palette.drawBackdrop) {
+        Bitmap* backdrop = nullptr;
+        if (palette.useRefraction && g_backdropRefracted) {
+            backdrop = g_backdropRefracted.get();
+        } else if (g_backdropValid && g_backdrop) {
+            backdrop = g_backdrop.get();
+        }
+        if (backdrop) {
+            graphics.DrawImage(backdrop, panel);
+            drewBackdrop = true;
+        }
+    }
+
+    if (!drewBackdrop && palette.drawBackdrop) {
         LinearGradientBrush fallback(
-            panel, Color(205, 228, 234, 242), Color(165, 196, 205, 218),
+            panel,
+            TintColor(palette, std::min(255, (int)palette.tintAlpha + 90)),
+            TintColor(palette, std::min(255, (int)palette.tintAlpha + 55)),
             LinearGradientModeVertical);
         graphics.FillRectangle(&fallback, panel);
     }
 
-    SolidBrush shadeTint(Color(26, 6, 10, 18));
-    graphics.FillRectangle(&shadeTint, panel);
+    if (palette.tintAlpha) {
+        SolidBrush tint(TintColor(palette, palette.tintAlpha));
+        graphics.FillRectangle(&tint, panel);
+    }
 
-    {
+    if (palette.shadeAlpha) {
+        SolidBrush shadeTint(Color(palette.shadeAlpha, 6, 10, 18));
+        graphics.FillRectangle(&shadeTint, panel);
+    }
+
+    if (palette.bottomShadeAlpha) {
         RectF shadeRect(panel.X, panel.Y + panel.Height * 0.52f, panel.Width,
                         panel.Height * 0.48f);
-        LinearGradientBrush shade(shadeRect, Color(0, 0, 0, 0), Color(70, 6, 10, 16),
+        LinearGradientBrush shade(shadeRect, Color(0, 0, 0, 0),
+                                  Color(palette.bottomShadeAlpha, 6, 10, 16),
                                   LinearGradientModeVertical);
         graphics.FillRectangle(&shade, shadeRect);
     }
-    {
-        RectF glossRect(panel.X, panel.Y, panel.Width, panel.Height * 0.40f);
-        LinearGradientBrush gloss(glossRect, Color(92, 255, 255, 255),
-                                  Color(0, 255, 255, 255), LinearGradientModeVertical);
+
+    if (palette.glossAlpha && palette.glossHeight > 0.0f) {
+        RectF glossRect(panel.X, panel.Y, panel.Width,
+                        panel.Height * palette.glossHeight);
+        LinearGradientBrush gloss(
+            glossRect, Color(palette.glossAlpha, 255, 255, 255),
+            Color(0, 255, 255, 255), LinearGradientModeVertical);
         graphics.FillRectangle(&gloss, glossRect);
     }
-    {
-        float lightHeight = panel.Height * 0.18f;
+
+    if (palette.bottomLightAlpha && palette.bottomLightHeight > 0.0f) {
+        float lightHeight = panel.Height * palette.bottomLightHeight;
         RectF lightRect(panel.X, panel.Y + panel.Height - lightHeight, panel.Width,
                         lightHeight);
         LinearGradientBrush light(lightRect, Color(0, 255, 255, 255),
-                                  Color(30, 255, 255, 255),
+                                  Color(palette.bottomLightAlpha, 255, 255, 255),
                                   LinearGradientModeVertical);
         graphics.FillRectangle(&light, lightRect);
     }
 
-    if (g_noiseTexture) {
-        TextureBrush noise(g_noiseTexture.get(), WrapModeTile);
-        graphics.FillPath(&noise, &panelPath);
+    if (g_noiseTexture && palette.noiseAlpha) {
+        int passes = palette.noiseAlpha >= 9 ? 2 : 1;
+        for (int pass = 0; pass < passes; ++pass) {
+            TextureBrush noise(g_noiseTexture.get(), WrapModeTile);
+            graphics.FillPath(&noise, &panelPath);
+        }
     }
 
     if (g_layout.maxScale > 1.0) {
@@ -1546,9 +2044,11 @@ void DrawGlassPanel(Graphics& graphics, const RectF& panel, float radius) {
                          0.10 * g_intensity);
     }
 
+    DrawSpecularHighlight(graphics, panel, palette);
+
     graphics.Restore(state);
 
-    DrawPanelRim(graphics, panelPath, panel, radius);
+    DrawPanelRim(graphics, panelPath, panel, radius, palette);
 }
 
 void DrawItemLabel(Graphics& graphics, int index, double panelTopNow) {
@@ -1613,40 +2113,35 @@ void DrawItemLabel(Graphics& graphics, int index, double panelTopNow) {
     GraphicsState state = graphics.Save();
     graphics.SetClip(&pillPath, CombineModeReplace);
 
-    if (g_backdropValid && g_backdrop) {
-        REAL fade = (REAL)alpha;
-        ColorMatrix matrix{};
-        matrix.m[0][0] = fade;
-        matrix.m[1][1] = fade;
-        matrix.m[2][2] = fade;
-        matrix.m[3][3] = fade;
-        matrix.m[4][4] = 1.0f;
-        ImageAttributes attributes;
-        attributes.SetColorMatrix(&matrix);
-        graphics.DrawImage(g_backdrop.get(), pill, 0, 0, (REAL)g_backdrop->GetWidth(),
-                           (REAL)g_backdrop->GetHeight(), UnitPixel, &attributes);
-        SolidBrush milk(Color((BYTE)(lround(170 * alpha)), 246, 249, 252));
-        graphics.FillPath(&milk, &pillPath);
-    } else {
-        SolidBrush milk(Color((BYTE)(lround(220 * alpha)), 240, 244, 248));
-        graphics.FillPath(&milk, &pillPath);
-    }
+    PanelPalette palette = BuildPanelPalette();
+    BYTE fillAlpha =
+        (BYTE)ClampInt((int)lround((palette.light ? 234.0 : 222.0) * alpha), 0,
+                       255);
+    SolidBrush fill(TintColor(palette, fillAlpha));
+    graphics.FillPath(&fill, &pillPath);
 
     {
         RectF glossRect(pill.X, pill.Y, pill.Width, pill.Height * 0.55f);
-        LinearGradientBrush gloss(glossRect,
-                                  Color((BYTE)(lround(120 * alpha)), 255, 255, 255),
-                                  Color(0, 255, 255, 255),
-                                  LinearGradientModeVertical);
+        LinearGradientBrush gloss(
+            glossRect,
+            Color((BYTE)ClampInt((int)lround((palette.light ? 110.0 : 60.0) *
+                                             alpha),
+                                 0, 255),
+                  255, 255, 255),
+            Color(0, 255, 255, 255), LinearGradientModeVertical);
         graphics.FillRectangle(&gloss, glossRect);
     }
     graphics.Restore(state);
 
-    Pen rim(Color((BYTE)(lround(180 * alpha)), 255, 255, 255),
+    Pen rim(Color((BYTE)ClampInt((int)lround((palette.light ? 180.0 : 95.0) *
+                                             alpha),
+                                 0, 255),
+                  255, 255, 255),
             (REAL)(1.0 * g_dpiScale));
     graphics.DrawPath(&rim, &pillPath);
 
-    SolidBrush textBrush(Color((BYTE)(lround(235 * alpha)), 30, 32, 38));
+    SolidBrush textBrush(PanelTextColor(
+        palette, (int)lround(235.0 * alpha)));
     RectF textRect(pill.X + (REAL)padX, pill.Y, pill.Width - (REAL)(padX * 2.0),
                    pill.Height);
     graphics.DrawString(item.name.c_str(), -1, g_labelFont.get(), textRect, &format,
@@ -1711,17 +2206,26 @@ void DrawEmptyState(Graphics& graphics, const RECT& panelRect) {
         graphics.FillPath(&shadow, &shadowPath);
     }
 
-    bool glass = !g_settings.transparentBackground;
+    bool hasPanel = !IsTransparentStyle();
     bool active = g_externalDragActive;
-    Color fill = glass
-                     ? Color(active ? 165 : 120, 248, 250, 254)
-                     : Color(active ? 82 : 46, 18, 20, 26);
+    PanelPalette palette = BuildPanelPalette();
+    Color fill;
+    if (hasPanel) {
+        int fillAlpha = active ? std::min(235, (int)palette.tintAlpha + 110)
+                               : std::min(215, (int)palette.tintAlpha + 90);
+        fill = TintColor(palette, fillAlpha);
+    } else {
+        fill = Color(active ? 82 : 46, 18, 20, 26);
+    }
     SolidBrush fillBrush(fill);
     graphics.FillPath(&fillBrush, &panelPath);
 
-    Pen borderPen(glass ? Color((BYTE)(active ? 170 : 130), 35, 40, 50)
-                        : Color((BYTE)(active ? 235 : 155), 255, 255, 255),
-                 (REAL)std::max(1.0, 1.4 * g_dpiScale));
+    Pen borderPen(
+        hasPanel ? (palette.light
+                        ? Color((BYTE)(active ? 180 : 140), 35, 40, 50)
+                        : Color((BYTE)(active ? 200 : 150), 255, 255, 255))
+                 : Color((BYTE)(active ? 235 : 155), 255, 255, 255),
+        (REAL)std::max(1.0, 1.4 * g_dpiScale));
     borderPen.SetDashStyle(DashStyleDash);
     graphics.DrawPath(&borderPen, &panelPath);
 
@@ -1743,10 +2247,10 @@ void DrawEmptyState(Graphics& graphics, const RECT& panelRect) {
                         panel.Width - (REAL)(padX * 2.0),
                         panel.Height * 0.30f);
 
-    Color primaryColor = glass ? Color(232, 30, 32, 38)
-                               : Color(238, 255, 255, 255);
-    Color secondaryColor = glass ? Color(165, 42, 46, 54)
-                                 : Color(172, 255, 255, 255);
+    Color primaryColor = hasPanel ? PanelTextColor(palette, 232)
+                                  : Color(238, 255, 255, 255);
+    Color secondaryColor = hasPanel ? PanelTextColor(palette, 165)
+                                    : Color(172, 255, 255, 255);
     SolidBrush primaryBrush(primaryColor);
     SolidBrush secondaryBrush(secondaryColor);
     const wchar_t* primaryText =
@@ -1769,7 +2273,7 @@ void DrawDropBackdrop(Graphics& graphics, const RECT& panelRect) {
     float radius = (float)(g_layout.panelHeightRest * 0.36);
     GraphicsPath path;
     AddRoundedRect(path, panel, radius);
-    if (g_settings.transparentBackground) {
+    if (IsTransparentStyle()) {
         // Any non-zero alpha makes the whole panel a valid OLE drop target,
         // including the otherwise click-through gaps between icons.
         SolidBrush fill(Color(24, 255, 255, 255));
@@ -1873,7 +2377,7 @@ void RenderFrame() {
                                (double)g_layout.panelMaxWidth);
     double x = (g_layout.windowWidth - width) * 0.5;
     double labelAnchor = 0.0;
-    if (g_settings.transparentBackground) {
+    if (IsTransparentStyle()) {
         labelAnchor = g_layout.panelBottom - g_layout.panelHeightMax;
     } else {
         double panelTopNow = CurrentPanelTop();
@@ -1881,7 +2385,7 @@ void RenderFrame() {
         RectF panel((REAL)x, (REAL)panelTopNow, (REAL)width,
                     (REAL)panelHeightNow);
         float radius = (float)(panelHeightNow * 0.36);
-        DrawGlassPanel(graphics, panel, radius);
+        DrawPanel(graphics, panel, radius, BuildPanelPalette());
         labelAnchor = panelTopNow;
     }
     if (g_externalDragActive) {
@@ -1912,7 +2416,7 @@ bool IsPointerOverDock(POINT screenPoint) {
     HWND under = WindowFromPoint(screenPoint);
     if (!under) return false;
     bool overDock = (under == g_hwnd);
-    if (!overDock && g_settings.transparentBackground) {
+    if (!overDock && IsTransparentStyle()) {
         // Fully transparent pixels are click-through, so accept the desktop
         // windows underneath as hovering the dock area.
         wchar_t className[64] = L"";
@@ -1934,8 +2438,7 @@ bool IsPointerOverDock(POINT screenPoint) {
 
 void UpdateHoverPollTimer() {
     if (!g_hwnd) return;
-    bool wantPoll =
-        g_settings.transparentBackground && g_dockShown && !g_items.empty();
+    bool wantPoll = IsTransparentStyle() && g_dockShown && !g_items.empty();
     if (wantPoll && !g_hoverPollRunning) {
         SetTimer(g_hwnd, kTimerHoverPoll, kHoverPollMs, nullptr);
         g_hoverPollRunning = true;
@@ -3046,7 +3549,8 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                         RefreshVirtualIconCache();
                     }
                     EnsureDesktopIconsHidden();
-                    if (g_settings.backdropRefreshSeconds > 0 && !g_menuOpen &&
+                    if (g_settings.backdropRefreshSeconds > 0 &&
+                        !IsTransparentStyle() && !g_menuOpen &&
                         now - g_backdropCaptureTime >
                             std::chrono::seconds(g_settings.backdropRefreshSeconds)) {
                         CaptureBackdrop();
@@ -3434,6 +3938,7 @@ int RunDockThread() {
     g_activeMenu3.Reset();
     DestroyFrameBuffer();
     g_backdrop.reset();
+    g_backdropRefracted.reset();
     g_backdropValid = false;
     g_iconCache.clear();
     g_items.clear();
