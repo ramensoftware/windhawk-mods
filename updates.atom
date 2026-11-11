@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-11T08:00:33.000Z</updated>
+    <updated>2026-11-11T10:03:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mac Island & Dock 3.1.1]]></title>
+        <id>https://windhawk.net/mods/mac-island-dock#6625a8c8aa81f686b06ea934207e5bbd3b140d73</id>
+        <link href="https://windhawk.net/mods/mac-island-dock"/>
+        <updated>2026-11-11T10:03:02.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>Fixes</strong></p>
+<ul>
+<li>The island no longer crashes inside Windows' media controls while media apps or a browser's videos (like YouTube in Chrome) keep changing: a media session that goes away (or stops being the one shown) is kept with its handlers for 10 seconds before the media thread lets it go, since Windows may still be calling it on its own threads (also when the media thread stops, without keeping the island waiting). If the island's process ever crashes (an NTSTATUS exit code), the explorer part starts it again, at most 3 times in 10 minutes, and only when it was Windhawk's own <code>windhawk.exe</code> at Explorer's integrity level (decided at its hello, while it runs), launched with <code>CreateProcessInternalW</code> like the tool mod snippet. On Windhawk 2.0 the island runs in <code>windhawk-mod.exe</code>, which Windhawk starts itself, so the mod doesn't start it again there.</li>
+<li>With the Fixed style's notches minimized, a notification's app icon peeks out only of the notch with the bell, not out of every notch, and no longer for the app you're using (a taskbar badge from the app in front).</li>
+<li>A click on a notification opens its app when the app's own notification handler doesn't answer (its COM activation fails within 5 seconds), instead of doing nothing: the island falls back to the app's window, its tray icon or the app itself.</li>
+<li>An app's own counter on its taskbar button (like WhatsApp's) no longer keeps its icon on the island as a waiting notification while the list is empty (&quot;No notifications&quot;, so no &quot;Clear all&quot; to dismiss it): it counts as seen when the app comes to the front (or is in front when it changes) or its icon on the island is clicked, and shows again when the counter goes away and comes back or its number grows.</li>
+<li>Sleep in the power button's menu no longer hibernates PCs with Modern Standby: with no S1-S3, it turns the screen off like Start &gt; Sleep instead of calling SetSuspendState.</li>
+<li>QQ's and WeChat's message preview shows again when hovering their icon in the taskbar's tray with tray icons on the island: the island answers Shell_NotifyIconGetRect with its own place only while the mouse is on that icon on the island (#7157).</li>
+<li>The settings window takes much less of the processor in its first seconds: the preview's hint, the &quot;+ Line&quot; glow and the other hints that only fade or pulse draw at most 30 times a second instead of at the monitor's rate.</li>
+<li>Dock: games' icons (like Steam's) and other apps without an icon of their own in the Start menu no longer go empty when Windows' icon cache is out of date (an empty picture now counts as none and the next source is tried), nor show a small icon magnified: the last fallback reads the window's program's icon from the file as big as the dock shows it, before the window's own 32 px icon (#7207).</li>
+<li>Right after a Windows update whose <code>taskbar.dll</code> symbols Microsoft hasn't published yet (KB5132061, <code>taskbar.dll</code> 10.0.26100.9974, was 🔴 on the symbol cache's status page), the explorer part no longer stops as a whole. <code>ExplorerModInit</code> returned FALSE when <code>HookTaskbarDllSymbols</code> failed, so the island lost its tray icons too, which need no symbols (subclass and <code>WM_COPYDATA</code>). Now the taskbar stays as Windows draws it (<code>g_taskbarSymbols</code> false: no symbol hook is set, and <code>GetTaskbarXamlRoot</code>/<code>GetSecondaryTaskbarXamlRoot</code> return null instead of calling a symbol pointer), <code>ApplyToTaskbar</code> counts the main taskbar as ready so the late start goes on, and the tray icons and the apps asking for attention keep reaching the island. The explorer part keeps the <code>taskbar.dll</code> version without symbols in the mod's storage (<code>taskbarNoSymbols</code>, cleared once they load), and the main island shows a sticky notice saying why, once per version and only when the chosen taskbar needs them (the dock, the transparent taskbar, only the apps, or the tray hidden). Its &quot;Details&quot; button, or a click on it, opens the island's What's new, where this fix tells why (the whole text may not fit a smaller notice). The dock comes back once the symbols are published and load with Explorer (its next start). Without <code>taskbar.dll</code> at all, it still returns FALSE.</li>
+<li>The islands no longer stall every few seconds on PCs with apps chosen for the visualizer (since 3.1). Each island, every 3 s, read all the default output's audio sessions again once per chosen app, each read making a new <code>IAudioSessionManager2</code>, asking for every session's state and process and opening each program (~12 ms a read), all on the islands' thread: with 8 apps on 3 islands a tick took 30 ms to over a second, found with a per-message timing log and by sampling the thread. Now one list (<code>g_audioSessions</code>) is read at most every 1.5 s for every island and app, the output's session manager is kept (made again for another default output or after a failure), each program's file is looked up once per process, and the list is released with the islands, before <code>CoUninitialize</code>.</li>
+</ul>
+]]></content>
+        <author>
+            <name>caliberda</name>
+            <uri>https://github.com/cesarkali</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Auto-Pause on Disconnect 1.0.0]]></title>
         <id>https://windhawk.net/mods/auto-pause-on-disconnect#e9a03e6c7c6b4128f898d5f8e204198ed180d85c</id>
@@ -860,111 +884,6 @@ This implementation is distributed under GPL-3.0-or-later.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mac OS 27 Finder Bar 1.0.0]]></title>
-        <id>https://windhawk.net/mods/mac-os-27-finder-bar#490977e5b6cf20cdba95d86f1203e8f8be44e012</id>
-        <link href="https://windhawk.net/mods/mac-os-27-finder-bar"/>
-        <updated>2026-11-10T00:01:58.000Z</updated>
-        <content type="html"><![CDATA[<h1>Mac OS 27 Finder Bar</h1>
-<p>A <a href="https://windhawk.net">Windhawk</a> mod that adds a macOS 27-style menu bar to the top of the screen in Windows 11: the menus of the app in front on the left, and system status, Control Center, notifications and the clock on the right, all in live glass.</p>
-<p>Available in English, Português, Español, Français, Deutsch, Italiano and 中文（简体）. The language follows Windows automatically, or can be picked in the settings.</p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/bar.png" alt="The bar"></p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/control-center.png" alt="Control Center"></p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/notifications.png" alt="Notifications"></p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/logo-menu.png" alt="Logo menu"></p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/settings.png" alt="Settings window"></p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/control-center.gif" alt="Control Center in action"></p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/weather.gif" alt="Animated weather widget"></p>
-<hr>
-<h2>Left side</h2>
-<ul>
-<li><strong>Logo menu</strong>: About This PC, System Settings, Microsoft Store (both with pending update counts), Force Quit, Show Desktop, Sleep, Hibernate, Restart, Shut Down, Lock Screen, Sign Out and <strong>Menu Bar Settings…</strong></li>
-<li><strong>Active app name</strong> (shown as <em>Finder</em> for the desktop and File Explorer, a name you can change): hide the app, hide others, open file location, close window, quit, force quit</li>
-<li><strong>Global menu</strong>:
-<ul>
-<li>apps with a classic menu bar (Win32): the app's real menus</li>
-<li>modern apps: the app's menu bar read through UI Automation when it exists</li>
-<li>browsers, File Explorer, Office, VS Code and other apps: ready-made menus that send the app's own keyboard shortcuts</li>
-<li>a <strong>Window</strong> menu with the app's open windows</li>
-</ul>
-</li>
-<li><strong>Help</strong> menu with a search across all the app's menus; ← → move between menus (optional Ctrl+F2 opens the bar from the keyboard)</li>
-</ul>
-<h2>Right side</h2>
-<ul>
-<li><strong>Display</strong>: dark mode, night light, projection modes</li>
-<li>Keyboard layout (when there is more than one), emoji, on-screen keyboard</li>
-<li><strong>Battery</strong> (percentage, charging, time remaining), <strong>Wi-Fi</strong> (current network, available and known networks), <strong>Bluetooth</strong> and <strong>Sound</strong> (scroll on the icon to change the volume, right-click to mute, switch output and input)</li>
-<li><strong>Now Playing</strong>: the song name scrolls across the bar when it doesn't fit; the panel has a large-cover or compact layout and a progress bar drawn as a line, a colored line or a wave</li>
-<li><strong>Focus</strong> (when Do Not Disturb is on), <strong>Search</strong> (Windows Search or Siri Plus Launchpad), <strong>microphone and camera</strong> (the icons turn orange and green while an app uses them, as on the Mac; click to see which apps use them and mute the microphone), <strong>Weather</strong> (Open-Meteo, MET Norway or wttr.in, no account needed) and the <strong>Notifications</strong> button</li>
-<li><strong>Clock</strong>: the calendar and your agenda from your own .ics files, imported right from the settings window. Date and time formats are configurable</li>
-<li>An arrow collapses the icons that don't fit; each icon can be turned on or off in the settings</li>
-</ul>
-<h2>Control Center</h2>
-<p>Wi-Fi, Bluetooth, media playing, dark mode, Do Not Disturb, brightness, sound and audio output, plus tiles you can add: night light, airplane mode, screenshot, <strong>screen recording</strong>, <strong>power mode</strong>, <strong>energy saver</strong> (one click turns it on and off), <strong>magnifier</strong>, lock screen, calculator, Task Manager, emoji and show desktop.</p>
-<ul>
-<li><strong>Edit Controls</strong> lets you add, remove, move and resize tiles</li>
-<li>Clicking <strong>power mode</strong> opens a box under Edit Controls, as wide as the panel, with the Windows 11 power modes and power plans (repeated plans are hidden)</li>
-<li>Tile names that don't fit scroll when the mouse is over the tile</li>
-<li>Tiles can be pills or rounded squares; a tile that is on shows a colored circle or turns into a whole white pill</li>
-<li>Optional: blur and dim the screen while the Control Center is open; cascade or fade animation when it opens</li>
-</ul>
-<h2>Notice pills</h2>
-<p>Small glass pills drop from the bar for headphones, audio output, low battery, charger, Focus, Caps Lock, USB devices and drives, finished downloads, copy and cut, screenshots and screen recordings. Pills you can act on (open and edit a screenshot or recording, open a download, reply to a message) stay 2.5 times longer and are kept in the bell panel; the rest only show in the pill. Volume, brightness and Bluetooth changes can show as floating pills too. The pill's style (glass, liquid glass or dark), size, position, duration and opening and closing animations are all configurable.</p>
-<h2>Notifications</h2>
-<p>Turn on <strong>Windows notifications</strong> in logo → <strong>Menu Bar Settings…</strong> → <strong>Notice pills</strong> (off by default) and the bar shows your apps' notifications:</p>
-<ul>
-<li>in the pill and in the bell panel, grouped by app</li>
-<li><strong>reply</strong> to messages (like WhatsApp) right from the pill, when the app supports replies</li>
-<li><strong>drag</strong> a notification aside in the panel to clear it</li>
-<li><strong>Only the bar shows notifications</strong>: optional; Windows' own banners move off the screen while the bar shows them, and come back when the option or the mod is turned off</li>
-</ul>
-<h2>Bar and glass</h2>
-<ul>
-<li>Bar background: fully transparent (default), Windows blur glass, or liquid glass (experimental); opaque when the active app is maximized (optional)</li>
-<li><strong>Live glass</strong>: panels blur what's behind them in real time, with an experimental liquid glass with edge refraction (on by default)</li>
-<li>Menus use their own frosted glass (with a transparency slider) or <strong>the same glass as the Control Center</strong></li>
-<li>Light, dark or automatic theme, nine selection colors for the bar and menus, font, font size, icon size and bar height</li>
-<li>Hides with full-screen apps, can hide automatically until the mouse touches the top, and shows on every monitor (each optional)</li>
-</ul>
-<h2>Settings</h2>
-<p>Logo → <strong>Menu Bar Settings…</strong> opens a window in the same style as Siri Plus Launchpad: sections on the left with search, every setting applied live without restarting the bar. It's the only place for those settings. Windhawk's settings page has the few the window doesn't: font, glass tints, theme, the name shown for the desktop, ready-made menus, Control Center tile look, opening animation, tray click, the app update count and .ics file paths, plus <strong>Reset the bar's settings</strong>, which puts the window's options back to their defaults if the bar ever doesn't show up.</p>
-<h2>What changes Windows settings</h2>
-<p>Some Control Center tiles and menu items change real Windows settings, the same ones Windows' own quick settings change. They stay changed after the mod is turned off, as they would if you used Windows' quick settings:</p>
-<ul>
-<li><strong>Dark mode</strong>: the app and system light/dark theme (sets both to the same value)</li>
-<li><strong>Night light</strong>: on or off</li>
-<li><strong>Power mode and power plan</strong>: picking a power mode also switches the plan to Balanced, as Windows requires</li>
-<li><strong>Energy saver</strong> and <strong>Do Not Disturb</strong></li>
-<li><strong>Brightness</strong>, <strong>default audio device</strong>, <strong>volume and mute</strong>, <strong>microphone mute</strong>, <strong>Wi-Fi and Bluetooth radios</strong>, <strong>Wi-Fi network</strong> and <strong>display mode</strong> (projection)</li>
-</ul>
-<p>Nothing is changed unless you click the matching tile or item.</p>
-<h2>Network use</h2>
-<p>The mod only goes online for features you set up yourself (the calendar reads local .ics files only, never the network):</p>
-<ul>
-<li><strong>Weather</strong>, once you pick a place: the place search uses OpenStreetMap Nominatim or Open-Meteo, and the forecast comes from the service you choose (Open-Meteo, MET Norway or wttr.in) with the place's coordinates rounded to about 1 km. Turning the weather icon off stops all requests.</li>
-<li><strong>App update count</strong> (off by default, in Windhawk's settings): runs <code>winget upgrade</code>, which checks winget's sources online. The mod doesn't accept winget's source agreements for you. The Windows Update count is offline.</li>
-</ul>
-<h2>Privacy</h2>
-<p>The copy pill only says &quot;Copied&quot; or &quot;Cut&quot;: it never shows what was copied, and it skips anything an app marks as private (password managers do), the same way Windows' clipboard history does.</p>
-<h2>How it runs</h2>
-<p>The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so if it ever fails, the taskbar and desktop keep working. Explorer keeps only a small hook that copies the tray icons' registrations to the bar. If that process is ended by hand, turn the mod off and on again in Windhawk to bring the bar back.</p>
-<h2>Known limitations</h2>
-<ul>
-<li>Apps without a classic menu bar use ready-made menus based on keyboard shortcuts.</li>
-<li>Bluetooth lists classic (non-BLE) devices and opens Settings to connect and disconnect.</li>
-<li>Power mode and energy saver use undocumented Windows functions; if Windows refuses, the tile opens the matching Settings page.</li>
-<li>Screen recording uses Win+Shift+R and needs an up-to-date Snipping Tool.</li>
-<li>Replying from the pill works with apps that register a notification activator with Windows; otherwise the pill opens the app and copies your text.</li>
-<li>With live glass (and the bar's liquid background), the bar and panels don't show up in screenshots.</li>
-<li>If Windhawk itself runs as administrator (portable mode started elevated), the bar doesn't show the tray icons: letting the shell's tray data reach an elevated bar would also let any app send it fake icons.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Thiago Silva</name>
-            <uri>https://github.com/brideinflame-rgb</uri>
         </author>
     </entry>
 </feed>

@@ -10432,7 +10432,7 @@
         "ratingUsers": 778,
         "reviews": 6,
         "trendingSorting": 26.645749156811284,
-        "updated": 1794243679000,
+        "updated": 1794391382000,
         "users": 19921
       },
       "metadata": {
@@ -10448,7 +10448,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Mac Island & Dock",
-        "version": "3.1.0"
+        "version": "3.1.1"
       }
     },
     "mac-magnifying-cursor": {
