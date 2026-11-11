@@ -81,7 +81,9 @@ cursor follows the mouse (the right side if you hold the right half of the windo
 drag outward to enlarge the window, inward to shrink it. The other windows move out of the way
 while you drag, so nothing overlaps.
 A side against the screen border has no neighbor, so the opposite side is used instead; if neither
-side has a neighbor, the window goes back to its slot.
+side has a neighbor, the window goes back to its slot. Esc cancels. AltSnap / AltDrag use the same
+Alt + right button gesture: if you run one of them too, change the gesture there or leave this
+option off, otherwise windows of the grid are resized by this mod and the other windows by them.
 
 In the "main left" / "main top" layouts, dragging the divider of the main window changes how much of
 the screen it takes. Each app's minimum size still applies. Your sizes are discarded when a window
@@ -144,7 +146,7 @@ are the focused window border ones, following its effect (pulse, rainbow, gradie
 If you release without leaving the ring, the click is passed on to the app when the button is
 released, so a plain right click still opens the context menu. Over a window of the grid,
 dragging with that button no longer works while the option is on; anywhere else (the desktop, the
-taskbar, windows outside the grid) the button behaves as usual. It needs a low-level mouse hook, which only exists while this option
+taskbar, windows outside the grid) the click is not touched at all. It needs a low-level mouse hook, which only exists while this option
 (or the Alt + right button resize) is on.
 
 ### Works with other animation mods
@@ -268,7 +270,10 @@ Alt e o botão direito em qualquer ponto da janela e arraste para os lados ou pa
 lateral mais próxima do cursor acompanha o mouse (a direita, se você segurar a metade direita da
 janela, e assim por diante): arraste para fora para aumentar a janela, para dentro para diminuir.
 As outras janelas abrem espaço enquanto você arrasta, sem sobreposição. Uma lateral junto da borda da tela não tem vizinha,
-então vale a lateral oposta; se nenhuma das duas tiver vizinha, a janela volta ao seu espaço.
+então vale a lateral oposta; se nenhuma das duas tiver vizinha, a janela volta ao seu espaço. Esc
+cancela. O AltSnap / AltDrag usam o mesmo gesto de Alt + botão direito: se você também usa um deles,
+troque o gesto lá ou deixe esta opção desligada; senão as janelas da grade são redimensionadas por
+este mod e as demais por eles.
 
 Nos layouts "principal à esquerda" / "principal em cima", arrastar a divisória da janela principal
 muda a parte da tela que ela ocupa. O tamanho mínimo de cada app continua valendo. Os tamanhos
@@ -332,7 +337,7 @@ também pode ser escolhida.
 Se você soltar sem sair do anel, o clique é repassado ao app no momento em que o botão é solto,
 então um clique direito comum continua abrindo o menu de contexto. Sobre uma janela da grade,
 arrastar com esse botão deixa de funcionar enquanto a opção está ligada; em qualquer outro lugar (a
-área de trabalho, a barra de tarefas, janelas fora da grade) o botão funciona como sempre. Ela precisa de um gancho de mouse de baixo nível, que só
+área de trabalho, a barra de tarefas, janelas fora da grade) o clique nem é tocado. Ela precisa de um gancho de mouse de baixo nível, que só
 existe enquanto esta opção (ou o redimensionar com Alt + botão direito) está ligada.
 
 ### Funciona junto com outros mods de animação
@@ -652,6 +657,7 @@ os cantos.
 #include <string>
 #include <vector>
 #include <atomic>
+#include <mutex>
 #include <cstdint>
 
 #ifndef DWMWA_BORDER_COLOR
@@ -962,7 +968,7 @@ static DWORD g_threadId = 0;
 static std::atomic<bool> g_stop{false};
 
 static const UINT WM_APP_RELOAD = WM_APP + 1;
-static const int HK_FLOAT = 1, HK_MONOCLE = 2, HK_LEFT = 3, HK_RIGHT = 4, HK_RETILE = 5, HK_LAYOUT = 6, HK_UP = 7, HK_DOWN = 8;
+static const int HK_FLOAT = 1, HK_MONOCLE = 2, HK_LEFT = 3, HK_RIGHT = 4, HK_RETILE = 5, HK_LAYOUT = 6, HK_UP = 7, HK_DOWN = 8, HK_ESC = 9;
 
 static int FindItem(HWND h) {
     for (size_t i = 0; i < g_items.size(); i++)
@@ -3274,6 +3280,18 @@ struct HotkeyDef { int id; UINT mods, vk; };
 static std::vector<HotkeyDef> g_keys;
 
 static void OnHotkey(int id) {
+    if (id == HK_ESC) {
+        // Esc com o menu radial ou o redimensionamento pelo mouse em curso: cancela (a tecla não chega ao app)
+        if (g_radial.active) {
+            g_mouseCanceled = true;
+            RadialEnd(false);
+        }
+        if (g_mres.active) {
+            g_mresCanceled = true;
+            MouseResizeFinish(false);
+        }
+        return;
+    }
     HWND fg = GetForegroundWindow();
     switch (id) {
         case HK_FLOAT: {
@@ -3588,6 +3606,18 @@ static void StopHookThread() {
 
 // ---- gancho de mouse do menu radial (só existe quando a opção está ligada) ----
 static const UINT WM_APP_MOUSE = WM_APP + 3;
+// Retângulos das janelas que o mod administra, para o gancho decidir na hora: um clique fora de todos eles
+// passa intocado (sem ser segurado e reenviado). A thread de trabalho atualiza a lista; o gancho só lê.
+static std::mutex g_mhRectsLock;
+static std::vector<RECT> g_mhRects;
+
+static bool MousePointOverManaged(POINT pt) {
+    std::lock_guard<std::mutex> lock(g_mhRectsLock);
+    for (const RECT& r : g_mhRects)
+        if (PtInRect(&r, pt)) return true;
+    return false;
+}
+
 static int g_mhMode = 0;         // cópias de g_mouseMode / g_resizeMouse lidas pela thread do gancho
 static bool g_mhResize = false;  // (escritas com o gancho parado)
 static WPARAM g_mhUpMsg = 0;     // só a thread do gancho usa: mensagem de "soltar" do botão que ela segurou (0 = nenhum)
@@ -3623,6 +3653,8 @@ static LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wp, LPARAM lp) {
     if (g_mhUpMsg || (wp != WM_LBUTTONDOWN && wp != WM_MBUTTONDOWN && wp != WM_RBUTTONDOWN)) {
         return CallNextHookEx(nullptr, code, wp, lp);
     }
+    // fora das janelas administradas (área de trabalho, barra de tarefas, outros apps) o clique segue intocado
+    if (!MousePointOverManaged(m->pt)) return CallNextHookEx(nullptr, code, wp, lp);
     UINT now = 0;
     if (KeyIsDown(VK_CONTROL)) now |= MOD_CONTROL;
     if (KeyIsDown(VK_MENU)) now |= MOD_ALT;
@@ -3689,9 +3721,30 @@ static void StopMouseHook() {
     g_mhPassUp = false;
 }
 
+// Atualiza a lista de retângulos lida pelo gancho de mouse: onde cada janela administrada está e para onde
+// está indo. Chamada pela thread de trabalho a cada volta do laço (no máximo ~20 vezes por segundo).
+static void RefreshHookRects(bool force = false) {
+    if (!force && !g_mhThreadH) return;
+    static double last = 0;
+    const double now = NowMs();
+    if (!force && now - last < 50.0) return;
+    last = now;
+    std::vector<RECT> rects;
+    rects.reserve(g_items.size());
+    for (const auto& it : g_items) {
+        RECT r{};
+        if (IsIconic(it.h) || !GetWindowRect(it.h, &r)) continue;
+        if (it.to.right > it.to.left) UnionRect(&r, &r, &it.to);
+        rects.push_back(r);
+    }
+    std::lock_guard<std::mutex> lock(g_mhRectsLock);
+    g_mhRects.swap(rects);
+}
+
 // Chamada só pela thread de trabalho, com o gancho parado.
 static void StartMouseHook() {
     if (g_mouseMode == 0 && !g_resizeMouse) return;
+    RefreshHookRects(true);
     g_mhMode = g_mouseMode;
     g_mhResize = g_resizeMouse;
     g_mhTarget = GetCurrentThreadId();
@@ -3802,6 +3855,7 @@ static DWORD WINAPI Worker(LPVOID) {
                     LiveRestoreBase();
                     LiveEnd();
                 }
+                const bool keptMaximized = g_cfg.keepMaximized;
                 LoadSettings();  // g_cfg and friends are only touched by this thread after startup
                 UpdateInterval();
                 RegisterHotkeys();  // atalhos novos valem na hora, sem reiniciar o mod
@@ -3820,7 +3874,9 @@ static DWORD WINAPI Worker(LPVOID) {
                                           g_minimized.end());
                     }
                     EnumWindows(EnumProc, 0);  // ...e traz as que deixaram de constar
-                    if (!g_cfg.keepMaximized)
+                    // só devolve as maximizadas à grade se foi essa a opção que o usuário acabou de desligar;
+                    // salvar qualquer outra configuração não mexe nelas
+                    if (keptMaximized && !g_cfg.keepMaximized)
                         for (const auto& it : g_items)
                             if (!it.floating && IsZoomed(it.h)) ShowWindowAsync(it.h, SW_RESTORE);
                 }
@@ -3843,6 +3899,22 @@ static DWORD WINAPI Worker(LPVOID) {
         TickBorder();
         RadialTick();
         MouseResizeTick();
+        {
+            // Enquanto o menu radial ou o redimensionamento pelo mouse está em curso, Esc é registrado como
+            // atalho global: assim ele cancela a ação sem chegar ao app que está sob o cursor.
+            static bool wanted = false, grabbed = false;
+            const bool need = g_radial.active || g_mres.active;
+            if (need != wanted) {
+                wanted = need;
+                if (need) {
+                    grabbed = RegisterHotKey(nullptr, HK_ESC, 0, VK_ESCAPE) != 0;
+                } else if (grabbed) {
+                    UnregisterHotKey(nullptr, HK_ESC);
+                    grabbed = false;
+                }
+            }
+        }
+        RefreshHookRects();
         NativeLiveTick();
         RunScheduledRetile();
         RunDisplayRetile();
