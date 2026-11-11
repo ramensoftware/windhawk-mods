@@ -2,7 +2,7 @@
 // @id              taskbar-left-speed-meter
 // @name            Taskbar Left Speed Meter
 // @description     Displays real-time Internet download and upload speed on the bottom-left corner of the taskbar with custom colors and fonts.
-// @version         1.1.0
+// @version         1.1.1
 // @author          RAKIBUL ISLAM SANI
 // @github          https://github.com/rakibulislamsani
 // @include         windhawk.exe
@@ -66,12 +66,13 @@ On Windows 11 with centered taskbar icons, this docks in the empty bottom-left c
 #include <shellapi.h>
 #include <windhawk_utils.h>
 #include <atomic>
-#include <stdlib.h>
+#include <map>
 #include <stdio.h>
 
 #define TIMER_ID 1001
 #define WM_REFRESH_SETTINGS (WM_APP + 1)
 #define TRANSPARENT_COLOR RGB(255, 0, 255)
+#define MIN_SAMPLE_INTERVAL_MS 200
 
 std::atomic<HWND> hOverlayWnd{NULL};
 HANDLE hThread = NULL;
@@ -85,7 +86,13 @@ int g_fontSize = 13;
 int g_posX = 20;
 BOOL g_hideOnFullscreen = TRUE;
 
-ULONG64 prevInBytes = 0, prevOutBytes = 0;
+struct IfCounters {
+    ULONG64 in;
+    ULONG64 out;
+};
+
+// Previous counters tracked per network interface (keyed by InterfaceLuid).
+std::map<ULONG64, IfCounters> g_prevCounters;
 ULONGLONG prevTickCount = 0;
 bool hasBaseline = false;
 wchar_t displayText[128] = L"▼ 0.0 KB/s\n▲ 0.0 KB/s";
@@ -129,15 +136,14 @@ COLORREF HexToColorRef(PCWSTR hexColor) {
 }
 
 void LoadSettings() {
-    WindhawkUtils::StringSetting colorSetting(L"textColor");
+    // StringSetting::make actually reads the setting via Wh_GetStringSetting
+    // and frees it correctly when it goes out of scope.
+    auto colorSetting = WindhawkUtils::StringSetting::make(L"textColor");
     g_textColor = HexToColorRef(colorSetting.get());
 
-    WindhawkUtils::StringSetting fontSetting(L"fontName");
-    if (fontSetting.get() && wcslen(fontSetting.get()) > 0) {
-        wcsncpy_s(g_fontName, 64, fontSetting.get(), _TRUNCATE);
-    } else {
-        wcsncpy_s(g_fontName, 64, L"Segoe UI", _TRUNCATE);
-    }
+    auto fontSetting = WindhawkUtils::StringSetting::make(L"fontName");
+    wcsncpy_s(g_fontName, ARRAYSIZE(g_fontName),
+              *fontSetting.get() ? fontSetting.get() : L"Segoe UI", _TRUNCATE);
 
     g_isBold = Wh_GetIntSetting(L"isBold") != 0;
 
@@ -150,9 +156,9 @@ void LoadSettings() {
     g_hideOnFullscreen = Wh_GetIntSetting(L"hideOnFullscreen") != 0;
 }
 
-void FetchNetworkTraffic(ULONG64 *inBytes, ULONG64 *outBytes) {
-    *inBytes = 0;
-    *outBytes = 0;
+// Reads the current counters of every counted interface.
+void FetchInterfaceCounters(std::map<ULONG64, IfCounters>& out) {
+    out.clear();
     PMIB_IF_TABLE2 pTable = NULL;
 
     if (GetIfTable2(&pTable) == NO_ERROR) {
@@ -161,12 +167,31 @@ void FetchNetworkTraffic(ULONG64 *inBytes, ULONG64 *outBytes) {
             if (row.InterfaceAndOperStatusFlags.HardwareInterface &&
                 !row.InterfaceAndOperStatusFlags.FilterInterface &&
                 row.Type != MIB_IF_TYPE_LOOPBACK) {
-                *inBytes += row.InOctets;
-                *outBytes += row.OutOctets;
+                out[row.InterfaceLuid.Value] = { row.InOctets, row.OutOctets };
             }
         }
         FreeMibTable(pTable);
     }
+}
+
+// Computes bytes transferred since the last sample, per interface.
+// Interfaces that appeared since the last sample only set a new baseline,
+// and interfaces that disappeared are simply dropped, so neither distorts the result.
+void SampleDeltas(ULONG64* dIn, ULONG64* dOut) {
+    *dIn = 0;
+    *dOut = 0;
+
+    std::map<ULONG64, IfCounters> cur;
+    FetchInterfaceCounters(cur);
+
+    for (const auto& kv : cur) {
+        auto it = g_prevCounters.find(kv.first);
+        if (it == g_prevCounters.end()) continue;
+        if (kv.second.in >= it->second.in) *dIn += kv.second.in - it->second.in;
+        if (kv.second.out >= it->second.out) *dOut += kv.second.out - it->second.out;
+    }
+
+    g_prevCounters.swap(cur);
 }
 
 BOOL ShouldHideMeter(HWND hTaskbar) {
@@ -227,39 +252,50 @@ void RefreshSpeed() {
 
     if (!hTaskbar) {
         hasBaseline = false;
+        g_prevCounters.clear();
         if (hWnd && IsWindowVisible(hWnd)) {
             ShowWindow(hWnd, SW_HIDE);
         }
         return;
     }
 
-    ULONG64 curIn = 0, curOut = 0;
-    FetchNetworkTraffic(&curIn, &curOut);
     ULONGLONG curTick = GetTickCount64();
+    bool textUpdated = false;
 
     if (!hasBaseline) {
-        prevInBytes = curIn;
-        prevOutBytes = curOut;
+        // First sample: only store the baseline, show 0.
+        ULONG64 dIn, dOut;
+        SampleDeltas(&dIn, &dOut);
         prevTickCount = curTick;
         hasBaseline = true;
+    } else {
+        ULONGLONG elapsedMs = curTick - prevTickCount;
+
+        // Too short an interval gives unreliable (spiky) speeds - keep previous text.
+        if (elapsedMs >= MIN_SAMPLE_INTERVAL_MS) {
+            ULONG64 dIn = 0, dOut = 0;
+            SampleDeltas(&dIn, &dOut);
+            prevTickCount = curTick;
+
+            double seconds = elapsedMs / 1000.0;
+            double downSpeed = (double)dIn / seconds / 1024.0;
+            double upSpeed = (double)dOut / seconds / 1024.0;
+
+            wchar_t downStr[64], upStr[64];
+            if (downSpeed >= 1024.0)
+                swprintf(downStr, 64, L"▼ %.2f MB/s", downSpeed / 1024.0);
+            else
+                swprintf(downStr, 64, L"▼ %.1f KB/s", downSpeed);
+
+            if (upSpeed >= 1024.0)
+                swprintf(upStr, 64, L"▲ %.2f MB/s", upSpeed / 1024.0);
+            else
+                swprintf(upStr, 64, L"▲ %.1f KB/s", upSpeed);
+
+            swprintf(displayText, 128, L"%s\n%s", downStr, upStr);
+            textUpdated = true;
+        }
     }
-
-    ULONGLONG elapsedMs = curTick - prevTickCount;
-    if (elapsedMs == 0) elapsedMs = 1;
-
-    double downSpeed = 0.0;
-    double upSpeed = 0.0;
-
-    if (curIn >= prevInBytes) {
-        downSpeed = (double)(curIn - prevInBytes) / (elapsedMs / 1000.0) / 1024.0;
-    }
-    if (curOut >= prevOutBytes) {
-        upSpeed = (double)(curOut - prevOutBytes) / (elapsedMs / 1000.0) / 1024.0;
-    }
-
-    prevInBytes = curIn;
-    prevOutBytes = curOut;
-    prevTickCount = curTick;
 
     if (ShouldHideMeter(hTaskbar)) {
         if (hWnd && IsWindowVisible(hWnd)) {
@@ -272,23 +308,12 @@ void RefreshSpeed() {
         }
     }
 
-    wchar_t downStr[64], upStr[64];
-    if (downSpeed >= 1024.0)
-        swprintf(downStr, 64, L"▼ %.2f MB/s", downSpeed / 1024.0);
-    else
-        swprintf(downStr, 64, L"▼ %.1f KB/s", downSpeed);
-
-    if (upSpeed >= 1024.0)
-        swprintf(upStr, 64, L"▲ %.2f MB/s", upSpeed / 1024.0);
-    else
-        swprintf(upStr, 64, L"▲ %.1f KB/s", upSpeed);
-
-    swprintf(displayText, 128, L"%s\n%s", downStr, upStr);
-
     UpdatePosition(hTaskbar);
     if (hWnd) {
+        // Repaint on text update, or when settings (color/font) changed.
         InvalidateRect(hWnd, NULL, TRUE);
     }
+    (void)textUpdated;
 }
 
 LRESULT CALLBACK OverlayProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -355,7 +380,7 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
     wc.lpfnWndProc = OverlayProc;
     wc.hInstance = hInst;
     wc.lpszClassName = L"WindhawkTaskbarLeftMeterWindow";
-    
+
     if (!RegisterClass(&wc)) {
         Wh_Log(L"RegisterClass failed: %u", GetLastError());
         return 0;
@@ -377,9 +402,7 @@ DWORD WINAPI OverlayThreadProc(LPVOID lpParam) {
 
     if (createdWnd) {
         SetLayeredWindowAttributes(createdWnd, TRANSPARENT_COLOR, 0, LWA_COLORKEY);
-        FetchNetworkTraffic(&prevInBytes, &prevOutBytes);
-        prevTickCount = GetTickCount64();
-        hasBaseline = true;
+        // RefreshSpeed sets the baseline itself on its first call (hasBaseline == false).
         RefreshSpeed();
         SetTimer(createdWnd, TIMER_ID, 1000, NULL);
     }
