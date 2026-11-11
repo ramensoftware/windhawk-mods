@@ -2,7 +2,7 @@
 // @id              pwa-tray-center
 // @name            PWA Tray Center
 // @description     One tray icon for all your Chrome PWAs: hide windows to the PWA Tray Center, control media, see notifications and launch installed apps from a Fluent flyout
-// @version         0.5.600
+// @version         0.5.610
 // @author          Proponent
 // @github          https://github.com/JJProponent
 // @include         chrome.exe
@@ -9217,7 +9217,11 @@ void TrySubclass(HWND hWnd) {
                                                        0)) {
         std::lock_guard<std::mutex> lock(g_mutex);
         g_windows.erase(hWnd);
+        return;
     }
+    // Only the real browser gets here: the processes that just forward a command line
+    // never create a top-level Chrome window, so they start no tray icon to leave behind.
+    EnsureCenter();
 }
 
 BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
@@ -9280,7 +9284,6 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     EnumWindows(EnumWindowsProc, 0);
-    EnsureCenter();  // the shortcut is registered from the start
 }
 
 
