@@ -92,6 +92,31 @@ struct ModSettings {
     int iconSizePx = 16, iconPaddingPx = 2;
 } g_settings;
 
+// The symbol hooks and c_trayStatic offsets only fit the downloaded build
+// (msdl key 9DA06364 / 3EE000).
+static bool IsPinnedExplorer() {
+    auto* base = (BYTE*)GetModuleHandleW(nullptr);
+    auto* nt = (IMAGE_NT_HEADERS*)(base + ((IMAGE_DOS_HEADER*)base)->e_lfanew);
+    return nt->FileHeader.TimeDateStamp == 0x9DA06364 &&
+           nt->OptionalHeader.SizeOfImage == 0x3EE000;
+}
+static bool IsWin26100OrGreater() {
+    if (HMODULE ntdll = GetModuleHandleW(L"ntdll.dll")) {
+        auto fn = (LONG (WINAPI*)(LPOSVERSIONINFOW))GetProcAddress(ntdll, "RtlGetVersion");
+        OSVERSIONINFOW vi = {sizeof(vi)};
+        if (fn && fn(&vi) == 0)
+            return vi.dwMajorVersion > 10 || (vi.dwMajorVersion == 10 && vi.dwBuildNumber >= 26100);
+    }
+    return true;
+}
+static HMODULE GetModHandle() {
+    HMODULE h = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&IsPinnedExplorer, &h);
+    return h;
+}
+static constexpr size_t kMaxSavedOrder = 100;
+
 static HMODULE g_hExplorer = nullptr, g_hShell32 = nullptr, g_hBthprops = nullptr, g_hExplorerFrame = nullptr;
 static volatile LONG g_stopThread = 0;
 static HANDLE g_hInitThread = nullptr;
@@ -149,6 +174,7 @@ static bool VerifySha256(HANDLE hFile) {
 }
 
 static void EnsureShellReadyImpl() {
+    if (!IsWin26100OrGreater()) return;
     WCHAR dir[MAX_PATH];
     if (!Wh_GetModStoragePath(dir, MAX_PATH)) return;
     std::wstring sDir = dir, finalPath = sDir + L"\\explorer.exe", tmpPath = sDir + L"\\explorer.exe.download";
@@ -198,9 +224,22 @@ static GetModuleFileNameW_t g_origGetModuleFileNameW = nullptr;
 
 static DWORD WINAPI GetModuleFileNameW_Hook(HMODULE hModule, LPWSTR lpFilename, DWORD nSize) {
     if (!hModule) {
-        WCHAR sysRoot[MAX_PATH];
-        GetEnvironmentVariableW(L"SystemRoot", sysRoot, MAX_PATH);
-        return (DWORD)wsprintfW(lpFilename, L"%s\\explorer.exe", sysRoot);
+        WCHAR path[MAX_PATH];
+        UINT dirLen = GetWindowsDirectoryW(path, ARRAYSIZE(path));
+        if (dirLen && dirLen + 14 <= ARRAYSIZE(path)) {
+            wcscpy_s(path + dirLen, ARRAYSIZE(path) - dirLen, L"\\explorer.exe");
+            DWORD len = dirLen + 13;
+            if (len < nSize) {
+                wmemcpy(lpFilename, path, len + 1);
+                return len;
+            }
+            if (nSize) {
+                wmemcpy(lpFilename, path, nSize - 1);
+                lpFilename[nSize - 1] = L'\0';
+            }
+            SetLastError(ERROR_INSUFFICIENT_BUFFER);
+            return nSize;
+        }
     }
     return g_origGetModuleFileNameW(hModule, lpFilename, nSize);
 }
@@ -248,8 +287,6 @@ static SetWindowPos_t g_origSetWindowPos = nullptr;
 static bool IsSndVolFlyoutWnd(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) return false;
     LONG style = GetWindowLongW(hWnd, GWL_STYLE);
-    // Из-за тем оформления стандартные диалоги могут получать рамки и системные меню.
-    // Ослабляем проверку: любой диалог не-потомок в sndvol - это флайаут
     if (style & WS_CHILD) return false;
     WCHAR cls[32] = {};
     return GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) && wcscmp(cls, L"#32770") == 0;
@@ -343,8 +380,6 @@ static HRESULT __cdecl Hook_CTray_InitializeTrayUIComponent(void* pThis) {
 #define IDS_TASKMANAGER     24743
 #define IDS_SETTINGS        2128
 
-// Маркер в dwItemData пункта "Диспетчер задач" - позволяет найти пункт
-// даже если его ID сдвинулся после Shell_MergeMenus
 #define TASKMGR_ITEM_MAGIC  0x5441534B // 'TASK'
 
 using LoadMenuW_t = decltype(&LoadMenuW);
@@ -361,7 +396,6 @@ static void LaunchTaskManager() {
     WCHAR szCmdLine[MAX_PATH];
     if (GetSystemDirectoryW(szCmdLine, MAX_PATH)) {
         wcscat_s(szCmdLine, L"\\taskmgr.exe");
-
         STARTUPINFOW si = {sizeof(si)};
         PROCESS_INFORMATION pi = {};
         if (CreateProcessW(nullptr, szCmdLine, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
@@ -401,18 +435,14 @@ static const WCHAR* GetLockToolbarsText(WCHAR* buf, int size) {
 static void EnhanceTaskbarMenu(HMENU hMenu) {
     HMENU hPopup = GetSubMenu(hMenu, 0);
     if (!hPopup) hPopup = hMenu;
-
     for (int i = GetMenuItemCount(hPopup) - 1; i >= 0; i--) {
         MENUITEMINFOW mii = {sizeof(mii), MIIM_FTYPE | MIIM_ID | MIIM_SUBMENU};
         if (GetMenuItemInfoW(hPopup, i, TRUE, &mii) && !(mii.fType & MFT_SEPARATOR) && !mii.hSubMenu)
             DeleteMenu(hPopup, i, MF_BYPOSITION);
     }
-
     WCHAR buf[256];
     AppendMenuW(hPopup, MF_STRING, IDM_SHOWDESKTOP, LoadStr(g_hShell32, IDS_SHOWDESKTOP, buf, 256, L"Show the desktop"));
     AppendMenuW(hPopup, MF_SEPARATOR, 0, nullptr);
-
-    // Task Manager: помечаем пункт маркером в dwItemData
     {
         WCHAR tmBuf[256];
         const WCHAR* tmText = LoadStr(g_hShell32, IDS_TASKMANAGER, tmBuf, 256, L"Task Manager");
@@ -423,13 +453,11 @@ static void EnhanceTaskbarMenu(HMENU hMenu) {
         miiTaskMgr.dwTypeData = const_cast<LPWSTR>(tmText);
         InsertMenuItemW(hPopup, GetMenuItemCount(hPopup), TRUE, &miiTaskMgr);
     }
-
     AppendMenuW(hPopup, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hPopup, MF_STRING, IDM_LOCKTASKBAR, GetLockToolbarsText(buf, 256));
     AppendMenuW(hPopup, MF_STRING, IDM_SETTINGS, LoadStr(g_hBthprops, IDS_SETTINGS, buf, 256, L"Taskbar settings"));
 }
 
-// Находит актуальный ID пункта диспетчера задач (с учётом смещения после Shell_MergeMenus)
 static UINT FindTaskManagerCmdId(HMENU hMenu) {
     if (!hMenu || !IsMenu(hMenu)) return 0;
     int count = GetMenuItemCount(hMenu);
@@ -463,16 +491,24 @@ static HMENU WINAPI LoadMenuW_Hook(HINSTANCE hInstance, LPCWSTR lpMenuName) {
     return g_origLoadMenuW(hInstance, lpMenuName);
 }
 
+static bool IsTaskbarMenuTarget(HWND hWnd) {
+    HWND root = hWnd ? GetAncestor(hWnd, GA_ROOT) : nullptr;
+    if (!root) return false;
+    WCHAR cls[32] = {};
+    if (!GetClassNameW(root, cls, ARRAYSIZE(cls))) return false;
+    return !wcscmp(cls, L"Shell_TrayWnd") || !wcscmp(cls, L"Shell_SecondaryTrayWnd");
+}
+
 static BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y, int nReserved, HWND hWnd, const RECT* prcRect) {
+    if (!IsTaskbarMenuTarget(hWnd))
+        return g_origTrackPopupMenu(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
     UINT taskMgrId = FindTaskManagerCmdId(hMenu);
     bool addedReturnCmd = false;
     if (taskMgrId != 0 && !(uFlags & TPM_RETURNCMD) && !(uFlags & TPM_NONOTIFY)) {
         uFlags |= TPM_RETURNCMD;
         addedReturnCmd = true;
     }
-
     BOOL ret = g_origTrackPopupMenu(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
-
     if (taskMgrId != 0) {
         if ((UINT)ret == taskMgrId) {
             LaunchTaskManager();
@@ -510,8 +546,8 @@ struct TRAYNOTIFYDATAW {
 #pragma pack(pop)
 
 static constexpr DWORD TRAY_SIGNATURE = 0x34753423;
-static constexpr UINT WM_MOD_INIT_TRAY = WM_USER + 0x2610;
-static constexpr UINT WM_MOD_UNINIT_TRAY = WM_USER + 0x2611;
+static UINT WM_MOD_INIT_TRAY = 0;
+static UINT WM_MOD_UNINIT_TRAY = 0;
 static constexpr UINT WM_MOD_RELAYOUT = WM_USER + 0x2612;
 static constexpr UINT_PTR TIMER_ID_CLOCK = 0x26100;
 
@@ -617,7 +653,6 @@ static HICON CreateActionCenterIcon() {
     HGDIOBJ oldBmp = SelectObject(dc, hBmp);
     RECT rc = {0, 0, sz, sz};
     FillRectColor(dc, rc, RGB(0, 0, 0));
-
     HFONT hFont = CreateFontW(-24, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                               OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
                               DEFAULT_PITCH | FF_DONTCARE, L"Segoe MDL2 Assets");
@@ -629,7 +664,6 @@ static HICON CreateActionCenterIcon() {
     if (oldFont) SelectObject(dc, oldFont);
     if (hFont) DeleteObject(hFont);
     GdiFlush();
-
     bool anyPixel = false;
     for (int i = 0; i < sz * sz; ++i) {
         DWORD a = (bits[i] >> 16) & 0xFF;
@@ -647,10 +681,8 @@ static HICON CreateActionCenterIcon() {
             bits[(26 - i) * sz + (8 + i)] = 0xFFFFFFFF;
         }
     }
-
     SelectObject(dc, oldBmp);
     DeleteDC(dc);
-
     HBITMAP hMask = CreateBitmap(sz, sz, 1, 1, nullptr);
     ICONINFO ii = {TRUE, 0, 0, hMask, hBmp};
     HICON hIcon = CreateIconIndirect(&ii);
@@ -689,15 +721,28 @@ static std::wstring GetIconPersistKey(const TrayIconEntry& e) {
 static void LoadSavedIconOrder() {
     std::lock_guard<std::mutex> lock(g_trayMutex);
     g_savedOrder.clear();
-    WCHAR buf[8192] = {};
-    if (Wh_GetStringValue(L"IconOrder", buf, ARRAYSIZE(buf)) > 0) {
+    std::vector<WCHAR> buf(32768);
+    if (Wh_GetStringValue(L"IconOrder", buf.data(), (DWORD)buf.size()) > 0) {
         WCHAR* ctx = nullptr;
-        for (WCHAR* tok = wcstok_s(buf, L";", &ctx); tok; tok = wcstok_s(nullptr, L";", &ctx))
-            if (*tok) g_savedOrder.push_back(tok);
+        for (WCHAR* tok = wcstok_s(buf.data(), L";", &ctx); tok; tok = wcstok_s(nullptr, L";", &ctx)) {
+            if (*tok) {
+                g_savedOrder.push_back(tok);
+                if (g_savedOrder.size() >= kMaxSavedOrder) break;
+            }
+        }
     }
 }
 
 static void SaveIconOrderLocked() {
+    if (g_savedOrder.size() > kMaxSavedOrder) {
+        for (auto it = g_savedOrder.begin(); it != g_savedOrder.end() && g_savedOrder.size() > kMaxSavedOrder;) {
+            bool inUse = false;
+            for (auto& e : g_trayIcons) if (e.persistKey == *it) { inUse = true; break; }
+            if (!inUse) it = g_savedOrder.erase(it);
+            else ++it;
+        }
+        while (g_savedOrder.size() > kMaxSavedOrder) g_savedOrder.erase(g_savedOrder.begin());
+    }
     std::wstring s;
     for (const auto& k : g_savedOrder) {
         if (!k.empty()) {
@@ -711,8 +756,6 @@ static void SaveIconOrderLocked() {
 static int EnsureKeyInOrderLocked(const TrayIconEntry& e) {
     for (size_t i = 0; i < g_savedOrder.size(); ++i)
         if (g_savedOrder[i] == e.persistKey) return (int)i;
-
-    // By default, keep Action Center at the far right when new icons are discovered
     if (!(e.hasGuid && IsSameGuid(e.guidItem, kGuidActionCenter)) && !g_savedOrder.empty()) {
         WCHAR acBuf[64] = {};
         StringFromGUID2(kGuidActionCenter, acBuf, ARRAYSIZE(acBuf));
@@ -883,7 +926,6 @@ static int ClockExtent(HWND hWnd, bool vertical, int w, int h, ClockInfo* out) {
     SelectObject(dc, old);
     DeleteObject(f);
     ReleaseDC(hWnd, dc);
-
     ci.timeW = st.cx;
     ci.dateW = sd.cx;
     ci.lineH = tm.tmHeight;
@@ -960,22 +1002,18 @@ static void EnsureReBarSubclassedOnUIThread() {
 static void Relayout() {
     if (!g_hTrayWnd || !IsWindow(g_hTrayWnd) || !g_hNotifyWnd || !IsWindow(g_hNotifyWnd)) return;
     EnsureReBarSubclassedOnUIThread();
-
     RECT rn = {};
     bool vert = false;
     if (!ComputeNotifyRect(&rn, &vert)) return;
-
     int nw = rn.right - rn.left, nh = rn.bottom - rn.top;
     int rx = 0, ry = 0, rcx = 0, rcy = 0;
     bool haveRebar = g_hReBarWnd && IsWindow(g_hReBarWnd);
     if (haveRebar) FitRebarRect(vert, rn, &rx, &ry, &rcx, &rcy);
-
     RECT rcCur = {};
     GetWindowRect(g_hNotifyWnd, &rcCur);
     POINT pc = {rcCur.left, rcCur.top};
     ScreenToClient(g_hTrayWnd, &pc);
     bool needNotify = (pc.x != rn.left || pc.y != rn.top || rcCur.right - rcCur.left != nw || rcCur.bottom - rcCur.top != nh);
-
     bool needRebar = false;
     if (haveRebar) {
         RECT rr = {};
@@ -984,7 +1022,6 @@ static void Relayout() {
         ScreenToClient(g_hTrayWnd, &pr);
         needRebar = (pr.x != rx || pr.y != ry || rr.right - rr.left != rcx || rr.bottom - rr.top != rcy);
     }
-
     if (needNotify && needRebar) {
         HDWP dwp = BeginDeferWindowPos(2);
         if (dwp) dwp = DeferWindowPos(dwp, g_hNotifyWnd, HWND_TOP, rn.left, rn.top, nw, nh, SWP_NOACTIVATE | SWP_SHOWWINDOW);
@@ -999,7 +1036,6 @@ static void Relayout() {
     } else if (needRebar) {
         SetWindowPos(g_hReBarWnd, nullptr, rx, ry, rcx, rcy, SWP_NOZORDER | SWP_NOACTIVATE);
     }
-
     InvalidateRect(g_hNotifyWnd, nullptr, FALSE);
 }
 
@@ -1034,10 +1070,9 @@ static void ApplyNotifyIconDataLocked(TrayIconEntry& e, const NOTIFYICONDATA32W&
 }
 
 static BOOL HandleTrayCopyData(PCOPYDATASTRUCT pcds) {
-    if (!pcds || pcds->dwData != 1 || !pcds->lpData || pcds->cbData < sizeof(DWORD) * 2) return FALSE;
+    if (!pcds || pcds->dwData != 1 || !pcds->lpData || pcds->cbData < sizeof(TRAYNOTIFYDATAW)) return FALSE;
     const auto* p = reinterpret_cast<const TRAYNOTIFYDATAW*>(pcds->lpData);
     if (p->dwSignature != TRAY_SIGNATURE) return FALSE;
-
     const NOTIFYICONDATA32W& nid = p->nid;
     BOOL handled = FALSE;
     {
@@ -1083,15 +1118,9 @@ static bool SlotToScreen(const RECT& slot, RECT* out) {
     if (IsRectEmpty(&slot) || !g_hNotifyWnd || !IsWindow(g_hNotifyWnd)) return false;
     *out = slot;
     MapWindowPoints(g_hNotifyWnd, nullptr, (POINT*)out, 2);
-
-    // Центрируем и уменьшаем границы передаваемого прямоугольника (хитбокса) до 24px.
-    // Из-за теней тем оформления панель задач Win11 имеет высокие невидимые границы,
-    // отталкиваясь от которых флайауты (питание и т.д.) "висят в воздухе". Стягивая хитбокс
-    // к иконкам, мы заставляем флайауты корректно привязываться вплотную.
     int cx = (out->left + out->right) / 2;
     int cy = (out->top + out->bottom) / 2;
     int s = ScaleForDpi(g_hNotifyWnd, 24);
-    
     if ((out->bottom - out->top) > s) {
         out->top = cy - s / 2;
         out->bottom = cy + s / 2;
@@ -1100,7 +1129,6 @@ static bool SlotToScreen(const RECT& slot, RECT* out) {
         out->left = cx - s / 2;
         out->right = cx + s / 2;
     }
-
     return true;
 }
 
@@ -1127,24 +1155,6 @@ static void UpdateTooltipText(const WCHAR* text) {
     SendMessageW(g_hTooltipWnd, TTM_ACTIVATE, (text && text[0]) ? TRUE : FALSE, 0);
 }
 
-static DWORD WINAPI LaunchSndvolThread(LPVOID lpParam) {
-    POINT pt = *(POINT*)lpParam;
-    delete (POINT*)lpParam;
-
-    WCHAR sys32[MAX_PATH] = {}, cmdLine[1024] = {};
-    GetSystemDirectoryW(sys32, MAX_PATH);
-    wsprintfW(cmdLine, L"\"%s\\SndVol.exe\" -f %u", sys32, (DWORD)MAKELONG((SHORT)pt.x, (SHORT)pt.y));
-
-    STARTUPINFOW si = {sizeof(si)};
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION pi = {};
-    if (CreateProcessW(nullptr, cmdLine, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-    }
-    return 0;
-}
-
 static void LaunchClassicVolume(POINT anchor) {
     static DWORD lastTick = 0;
     DWORD now = GetTickCount();
@@ -1155,9 +1165,16 @@ static void LaunchClassicVolume(POINT anchor) {
         SetPropW(g_hTrayWnd, L"WH_VolY", (HANDLE)(INT_PTR)anchor.y);
         SetPropW(g_hTrayWnd, L"WH_VolSet", (HANDLE)(UINT_PTR)(now ? now : 1));
     }
-    POINT* p = new POINT(anchor);
-    if (HANDLE hThread = CreateThread(nullptr, 0, LaunchSndvolThread, p, 0, nullptr)) CloseHandle(hThread);
-    else delete p;
+    WCHAR sys32[MAX_PATH] = {}, cmdLine[1024] = {};
+    if (!GetSystemDirectoryW(sys32, MAX_PATH)) return;
+    wsprintfW(cmdLine, L"\"%s\\SndVol.exe\" -f %u", sys32, (DWORD)MAKELONG((SHORT)anchor.x, (SHORT)anchor.y));
+    STARTUPINFOW si = {sizeof(si)};
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    PROCESS_INFORMATION pi = {};
+    if (CreateProcessW(nullptr, cmdLine, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    }
 }
 
 static const GUID kClsidWin32Clock = {0x0A323554A, 0x0FE1, 0x4E49, {0xae, 0xe1, 0x67, 0x22, 0x46, 0x5d, 0x79, 0x9f}};
@@ -1171,13 +1188,9 @@ static void HandleClockClick(HWND hWnd) {
     if (FindWindowW(L"ClockFlyoutWindow", nullptr)) return;
     RECT rc = g_rcClock;
     MapWindowPoints(hWnd, nullptr, (POINT*)&rc, 2);
-
-    // Стяжка хитбокса, как и в SlotToScreen, чтобы окно часов не висело в воздухе
-    // из-за высоких невидимых теней тем оформления в Win11
     int cx = (rc.left + rc.right) / 2;
     int cy = (rc.top + rc.bottom) / 2;
     int s = ScaleForDpi(hWnd, 24);
-    
     if ((rc.bottom - rc.top) > s) {
         rc.top = cy - s / 2;
         rc.bottom = cy + s / 2;
@@ -1186,7 +1199,6 @@ static void HandleClockClick(HWND hWnd) {
         rc.left = cx - s / 2;
         rc.right = cx + s / 2;
     }
-
     IWin32Clock* p = nullptr;
     if (SUCCEEDED(CoCreateInstance(kClsidWin32Clock, nullptr, CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER, kIidWin32Clock, (void**)&p)) && p) {
         p->ShowWin32Clock(hWnd, &rc);
@@ -1218,18 +1230,14 @@ static void PostToIcon(int iconIdx, UINT mouseMsg, POINT ptScreen, bool withSele
         guid = it.guidItem;
         slot = it.rcSlot;
     }
-
     if (IsSameGuid(guid, kGuidActionCenter)) {
         if (mouseMsg == WM_LBUTTONUP) OpenFlyoutUri(L"ms-actioncenter:");
         return;
     }
-
     if (!hTarget || !IsWindow(hTarget)) return;
-
     DWORD pid = 0;
     GetWindowThreadProcessId(hTarget, &pid);
     bool inExplorer = (pid == GetCurrentProcessId());
-
     if ((mouseMsg == WM_LBUTTONDOWN || mouseMsg == WM_LBUTTONUP) && inExplorer && IsSameGuid(guid, kGuidVolume)) {
         if (mouseMsg == WM_LBUTTONUP) {
             POINT anchor = ptScreen;
@@ -1239,16 +1247,13 @@ static void PostToIcon(int iconIdx, UINT mouseMsg, POINT ptScreen, bool withSele
         }
         return;
     }
-
     if (mouseMsg == WM_LBUTTONUP && inExplorer && !g_settings.legacyPowerFlyout &&
         g_settings.quickSettingsFallback && IsSameGuid(guid, kGuidPower)) {
         OpenFlyoutUri(L"ms-actioncenter:controlcenter/&showFooter=true");
         return;
     }
-
     if (!uCallback) return;
     if (mouseMsg != WM_MOUSEMOVE && pid) AllowSetForegroundWindow(pid);
-
     bool v4 = uVersion >= NOTIFYICON_VERSION_4;
     if (mouseMsg == WM_RBUTTONUP && withSelect) {
         if (inExplorer) {
@@ -1287,33 +1292,27 @@ static void PaintTrayNotifyWnd(HWND hWnd, HDC hdc) {
     GetClientRect(hWnd, &rc);
     int w = rc.right - rc.left, h = rc.bottom - rc.top;
     if (w <= 0 || h <= 0) return;
-
     bool vert = IsTrayVertical();
     HDC mem = CreateCompatibleDC(hdc);
     HBITMAP bmp = CreateCompatibleBitmap(hdc, w, h);
     HGDIOBJ oldBmp = SelectObject(mem, bmp);
-
     COLORREF bg, fg;
     DrawTrayBackground(hWnd, mem, rc, &bg, &fg);
     COLORREF hoverCol = MixColor(bg, fg, 18);
     bool darkText = Luma(fg) < 128;
-
     HFONT font = CreateTrayFont(hWnd);
     HGDIOBJ oldFont = SelectObject(mem, font);
     SetBkMode(mem, TRANSPARENT);
     SetTextColor(mem, fg);
-
     int iconSize = ScaleForDpi(hWnd, g_settings.iconSizePx);
     int slotW = iconSize + ScaleForDpi(hWnd, g_settings.iconPaddingPx);
     int sdSize = DesktopBtnSize(hWnd);
     int margin = ScaleForDpi(hWnd, vert ? 4 : 6);
-
     ClockInfo ci;
     int clockExt = ClockExtent(hWnd, vert, w, h, &ci);
     int cols = vert ? GridCols(hWnd, w, slotW) : 1;
     int gridX0 = vert ? (w - cols * slotW) / 2 : 0;
     int x = margin, visIdx = 0;
-
     bool haveDrop = false;
     int dropX = 0, dropT = 0, dropB = 0;
     {
@@ -1330,10 +1329,8 @@ static void PaintTrayNotifyWnd(HWND hWnd, HDC hdc) {
             if (!vert) x += slotW;
             visIdx++;
             it.rcSlot = slot;
-
             if ((g_settings.hoverEffect && (int)i == g_hoveredIconIdx && !g_dragging) || (g_dragging && (int)i == g_dragIdx))
                 FillRectColor(mem, slot, hoverCol);
-
             HICON toDraw = it.hIcon;
             if (g_settings.recolorIcons && darkText) {
                 if (it.monoKind < 0) it.monoKind = ClassifyIcon(it.hIcon);
@@ -1348,7 +1345,6 @@ static void PaintTrayNotifyWnd(HWND hWnd, HDC hdc) {
             }
             DrawIconEx(mem, slot.left + (slotW - iconSize) / 2, slot.top + ((slot.bottom - slot.top) - iconSize) / 2,
                        toDraw, iconSize, iconSize, 0, nullptr, DI_NORMAL);
-
             if (g_dragging && (int)i == g_dropIdx) {
                 haveDrop = true;
                 dropX = (g_dropIdx > g_dragIdx) ? slot.right : slot.left;
@@ -1361,7 +1357,6 @@ static void PaintTrayNotifyWnd(HWND hWnd, HDC hdc) {
         int s2 = ScaleForDpi(hWnd, 2);
         FillRectColor(mem, {dropX - 1, dropT + s2, dropX + 1, dropB - s2}, fg);
     }
-
     SetRectEmpty(&g_rcDesktop);
     if (sdSize > 0) {
         g_rcDesktop = vert ? RECT{0, h - sdSize, w, h} : RECT{w - sdSize, 0, w, h};
@@ -1370,13 +1365,11 @@ static void PaintTrayNotifyWnd(HWND hWnd, HDC hdc) {
                         : RECT{g_rcDesktop.left, s4, g_rcDesktop.left + 1, h - s4};
         FillRectColor(mem, sep, MixColor(bg, fg, 35));
     }
-
     RECT rcClock = vert ? RECT{0, h - sdSize - clockExt, w, h - sdSize} : RECT{x, 0, w - sdSize, h};
     SetRectEmpty(&g_rcClock);
     if (rcClock.left < rcClock.right && rcClock.top < rcClock.bottom) {
         g_rcClock = rcClock;
         if (g_settings.hoverEffect && g_clockHovered) FillRectColor(mem, rcClock, hoverCol);
-
         int top = rcClock.top + ((rcClock.bottom - rcClock.top) - (ci.twoLines ? 2 : 1) * ci.lineH) / 2;
         RECT r1 = {rcClock.left, top, rcClock.right, top + ci.lineH};
         DrawTextW(mem, ci.time, -1, &r1, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
@@ -1385,7 +1378,6 @@ static void PaintTrayNotifyWnd(HWND hWnd, HDC hdc) {
             DrawTextW(mem, ci.date, -1, &r2, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         }
     }
-
     SelectObject(mem, oldFont);
     DeleteObject(font);
     BitBlt(hdc, 0, 0, w, h, mem, 0, 0, SRCCOPY);
@@ -1440,7 +1432,6 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
     switch (uMsg) {
         case WM_ERASEBKGND:
             return 1;
-
         case WM_WINDOWPOSCHANGING: {
             WINDOWPOS* wp = reinterpret_cast<WINDOWPOS*>(lParam);
             RECT rn = {};
@@ -1455,7 +1446,6 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
             }
             break;
         }
-
         case WM_PAINT: {
             PAINTSTRUCT ps = {};
             HDC hdc = BeginPaint(hWnd, &ps);
@@ -1463,11 +1453,9 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
             EndPaint(hWnd, &ps);
             return 0;
         }
-
         case WM_PRINTCLIENT:
             PaintTrayNotifyWnd(hWnd, (HDC)wParam);
             return 0;
-
         case WM_SIZE:
             if (g_hTooltipWnd) {
                 TOOLINFOW ti = {sizeof(ti), 0, hWnd, 1};
@@ -1475,19 +1463,12 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
                 SendMessageW(g_hTooltipWnd, TTM_NEWTOOLRECTW, 0, (LPARAM)&ti);
             }
             break;
-
         case WM_THEMECHANGED:
         case WM_SETTINGCHANGE:
         case WM_SYSCOLORCHANGE:
         case WM_DWMCOLORIZATIONCOLORCHANGED:
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
-
-        case WM_MOD_RELAYOUT:
-            ScheduleClockTick(hWnd);
-            Relayout();
-            return 0;
-
         case WM_TIMER:
             if (wParam == TIMER_ID_CLOCK) {
                 ScheduleClockTick(hWnd);
@@ -1495,7 +1476,6 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
                 return 0;
             }
             break;
-
         case WM_CAPTURECHANGED:
             if (g_dragIdx >= 0) {
                 g_dragIdx = g_dropIdx = -1;
@@ -1503,7 +1483,6 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
             break;
-
         case WM_MOUSEMOVE: {
             if (!g_trackingMouse) {
                 TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, hWnd, 0};
@@ -1511,7 +1490,6 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
                 g_trackingMouse = true;
             }
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-
             if (g_dragIdx >= 0 && (wParam & MK_LBUTTON)) {
                 if (!g_dragging && (abs(pt.x - g_dragStart.x) > GetSystemMetrics(SM_CXDRAG) ||
                                     abs(pt.y - g_dragStart.y) > GetSystemMetrics(SM_CYDRAG)))
@@ -1522,7 +1500,6 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
                 }
                 return 0;
             }
-
             WCHAR tip[160] = {};
             int idx = -1;
             HitKind k = HitTest(pt, &idx, tip, ARRAYSIZE(tip));
@@ -1547,7 +1524,6 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
             }
             return 0;
         }
-
         case WM_MOUSELEAVE:
             g_trackingMouse = false;
             if (g_hoveredIconIdx != -1 || g_clockHovered) {
@@ -1557,7 +1533,6 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
                 if (g_settings.hoverEffect) InvalidateRect(hWnd, nullptr, FALSE);
             }
             return 0;
-
         case WM_LBUTTONDOWN: {
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             int idx;
@@ -1572,11 +1547,9 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
             }
             return 0;
         }
-
         case WM_LBUTTONUP: {
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}, ps = pt;
             ClientToScreen(hWnd, &ps);
-
             if (g_dragIdx >= 0) {
                 int from = g_dragIdx, to = g_dropIdx;
                 bool wasDrag = g_dragging;
@@ -1590,7 +1563,6 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
                             TrayIconEntry e = g_trayIcons[from];
                             g_trayIcons.erase(g_trayIcons.begin() + from);
                             g_trayIcons.insert(g_trayIcons.begin() + to, e);
-
                             if (!keyFrom.empty() && !keyTo.empty() && keyFrom != keyTo) {
                                 g_savedOrder.erase(std::remove(g_savedOrder.begin(), g_savedOrder.end(), keyFrom), g_savedOrder.end());
                                 auto itTo = std::find(g_savedOrder.begin(), g_savedOrder.end(), keyTo);
@@ -1611,14 +1583,12 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
-
             int idx;
             HitKind k = HitTest(pt, &idx, nullptr, 0);
             if (k == HIT_ICON) PostToIcon(idx, WM_LBUTTONUP, ps, false);
             else if (k == HIT_DESKTOP && g_hTrayWnd) PostMessageW(g_hTrayWnd, WM_COMMAND, 419, 0);
             return 0;
         }
-
         case WM_LBUTTONDBLCLK:
         case WM_RBUTTONDOWN:
         case WM_MBUTTONDOWN:
@@ -1630,7 +1600,6 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
             if (HitTest(pt, &idx, nullptr, 0) == HIT_ICON) PostToIcon(idx, uMsg, ps, false);
             return 0;
         }
-
         case WM_RBUTTONUP: {
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}, ps = pt;
             ClientToScreen(hWnd, &ps);
@@ -1640,6 +1609,11 @@ static LRESULT HandleNotifyWndMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
                 return 0;
             }
         }
+    }
+    if (uMsg == WM_MOD_RELAYOUT) {
+        ScheduleClockTick(hWnd);
+        Relayout();
+        return 0;
     }
     return isSubclass ? DefSubclassProc(hWnd, uMsg, wParam, lParam) : DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
@@ -1662,43 +1636,37 @@ static LRESULT CALLBACK NotifyWndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
 // ============================================================================
 static void CreateOrAttachNotifyWndOnUIThread(HWND hTrayWnd) {
     if (g_hNotifyWnd && IsWindow(g_hNotifyWnd)) return;
-
     if (HWND hExisting = FindWindowExW(hTrayWnd, nullptr, L"TrayNotifyWnd", nullptr)) {
         g_hNotifyWnd = hExisting;
         g_weCreatedNotifyWnd = false;
         if (SetWindowSubclass(hExisting, NotifyWndSubclassProc, 1, 0)) g_notifySubclassed = true;
     } else {
-        WNDCLASSEXW wc = {sizeof(wc)};
-        if (!GetClassInfoExW(g_hExplorer, L"TrayNotifyWnd", &wc)) {
-            wc = {sizeof(wc), CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW, CustomNotifyWndProc, 0, 0,
-                  g_hExplorer, nullptr, LoadCursorW(nullptr, IDC_ARROW), nullptr, nullptr, L"TrayNotifyWnd", nullptr};
-            if (RegisterClassExW(&wc)) g_weRegisteredClass = true;
-        }
+        HMODULE hMod = GetModHandle();
+        if (!hMod) return;
+        WNDCLASSEXW wc = {sizeof(wc), CS_DBLCLKS | CS_HREDRAW | CS_VREDRAW, CustomNotifyWndProc, 0, 0,
+                          hMod, nullptr, LoadCursorW(nullptr, IDC_ARROW), nullptr, nullptr, L"TrayNotifyWnd", nullptr};
+        if (!RegisterClassExW(&wc)) return;
+        g_weRegisteredClass = true;
         g_hNotifyWnd = CreateWindowExW(0, L"TrayNotifyWnd", L"", WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
-                                       0, 0, 120, 40, hTrayWnd, nullptr, g_hExplorer, nullptr);
+                                       0, 0, 120, 40, hTrayWnd, nullptr, hMod, nullptr);
         if (!g_hNotifyWnd) {
-            if (g_weRegisteredClass) {
-                UnregisterClassW(L"TrayNotifyWnd", g_hExplorer);
-                g_weRegisteredClass = false;
-            }
+            UnregisterClassW(L"TrayNotifyWnd", hMod);
+            g_weRegisteredClass = false;
             return;
         }
         g_weCreatedNotifyWnd = true;
         if (SetWindowSubclass(g_hNotifyWnd, NotifyWndSubclassProc, 1, 0)) g_notifySubclassed = true;
     }
-
     g_hTooltipWnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, TOOLTIPS_CLASSW, nullptr,
                                     WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX, CW_USEDEFAULT, CW_USEDEFAULT,
-                                    CW_USEDEFAULT, CW_USEDEFAULT, g_hNotifyWnd, nullptr, g_hExplorer, nullptr);
+                                    CW_USEDEFAULT, CW_USEDEFAULT, g_hNotifyWnd, nullptr, GetModHandle(), nullptr);
     if (g_hTooltipWnd) {
         TOOLINFOW ti = {sizeof(ti), TTF_SUBCLASS, g_hNotifyWnd, 1, {}, nullptr, const_cast<LPWSTR>(L"")};
         GetClientRect(g_hNotifyWnd, &ti.rect);
         SendMessageW(g_hTooltipWnd, TTM_ADDTOOLW, 0, (LPARAM)&ti);
     }
-
     ScheduleClockTick(g_hNotifyWnd);
     Relayout();
-
     if (UINT msg = RegisterWindowMessageW(L"TaskbarCreated"))
         SendNotifyMessageW(HWND_BROADCAST, msg, 0, 0);
 }
@@ -1720,11 +1688,9 @@ static LRESULT CALLBACK ReBarWndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam
             POINT p0 = {rr.left, rr.top};
             MapWindowPoints(nullptr, g_hTrayWnd, &p0, 1);
             GetWindowRect(g_hNotifyWnd, &nr);
-
             bool trayChanging = ((rn.right - rn.left) != (nr.right - nr.left)) || ((rn.bottom - rn.top) != (nr.bottom - nr.top));
             DWORD now = GetTickCount();
             bool forceAllow = !g_rebarAnchorInit || (g_rebarAllowMoveUntil != 0 && (INT32)(g_rebarAllowMoveUntil - now) >= 0);
-
             if (trayChanging && !forceAllow) {
                 FitRebarRect(vert, rn, &wp->x, &wp->y, &wp->cx, &wp->cy);
                 wp->flags = (wp->flags | SWP_NOMOVE) & ~SWP_NOSIZE;
@@ -1755,12 +1721,10 @@ static void UninitCustomTrayOnUIThread() {
     }
     if (g_hTooltipWnd && IsWindow(g_hTooltipWnd)) DestroyWindow(g_hTooltipWnd);
     g_hTooltipWnd = nullptr;
-
     if (g_rebarSubclassed && g_hReBarWnd && IsWindow(g_hReBarWnd))
         RemoveWindowSubclass(g_hReBarWnd, ReBarWndSubclassProc, 1);
     g_rebarSubclassed = g_rebarAnchorInit = false;
     g_rebarAllowMoveUntil = 0;
-
     if (g_hNotifyWnd && IsWindow(g_hNotifyWnd)) {
         KillTimer(g_hNotifyWnd, TIMER_ID_CLOCK);
         if (g_notifySubclassed) RemoveWindowSubclass(g_hNotifyWnd, NotifyWndSubclassProc, 1);
@@ -1769,20 +1733,21 @@ static void UninitCustomTrayOnUIThread() {
         g_weCreatedNotifyWnd = false;
     }
     g_hNotifyWnd = nullptr;
-
     if (g_weRegisteredClass) {
-        UnregisterClassW(L"TrayNotifyWnd", g_hExplorer);
+        if (HMODULE hMod = GetModHandle()) UnregisterClassW(L"TrayNotifyWnd", hMod);
         g_weRegisteredClass = false;
     }
 }
 
 static LRESULT CALLBACK TrayWndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR) {
     if (uMsg == WM_NCDESTROY) {
+        UninitCustomTrayOnUIThread();
+        g_hTrayWnd = nullptr;
         RemoveWindowSubclass(hWnd, TrayWndSubclassProc, uIdSubclass);
         g_traySubclassed = false;
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
-    if (uMsg == WM_MOD_UNINIT_TRAY) {
+    if (WM_MOD_UNINIT_TRAY && uMsg == WM_MOD_UNINIT_TRAY) {
         UninitCustomTrayOnUIThread();
         RemoveWindowSubclass(hWnd, TrayWndSubclassProc, uIdSubclass);
         g_traySubclassed = false;
@@ -1790,7 +1755,6 @@ static LRESULT CALLBACK TrayWndSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
     }
     if (uMsg == WM_COPYDATA && HandleTrayCopyData(reinterpret_cast<PCOPYDATASTRUCT>(lParam))) return TRUE;
     if (uMsg == WM_SETTINGCHANGE && wParam == 0 && lParam && wcscmp((LPCWSTR)lParam, L"TraySettings") == 0) return 0;
-
     LRESULT res = DefSubclassProc(hWnd, uMsg, wParam, lParam);
     switch (uMsg) {
         case WM_SIZE:
@@ -1830,7 +1794,8 @@ static void InitCustomTrayOnUIThread(HWND hTray) {
 static LRESULT CALLBACK InitCallWndProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode >= 0 && lParam) {
         const CWPSTRUCT* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
-        if (cwp->hwnd == g_hTrayWnd && cwp->message == WM_MOD_INIT_TRAY) InitCustomTrayOnUIThread(g_hTrayWnd);
+        if (WM_MOD_INIT_TRAY && cwp->hwnd == g_hTrayWnd && cwp->message == WM_MOD_INIT_TRAY)
+            InitCustomTrayOnUIThread(g_hTrayWnd);
     }
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
@@ -1879,17 +1844,15 @@ BOOL Wh_ModInit() {
     GetModuleFileNameW(nullptr, exePath, MAX_PATH);
     const WCHAR* exeName = wcsrchr(exePath, L'\\');
     exeName = exeName ? exeName + 1 : exePath;
-
     HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
-    if (!hKernelBase) hKernelBase = LoadLibraryW(L"kernelbase.dll");
 
     if (_wcsicmp(exeName, L"userinit.exe") == 0) {
         g_processType = ProcessType::Userinit;
+        if (!IsWin26100OrGreater()) return FALSE;
         if (void* pRegQuery = hKernelBase ? (void*)GetProcAddress(hKernelBase, "RegQueryValueExW") : nullptr)
             Wh_SetFunctionHook(pRegQuery, (void*)RegQueryValueExW_Hook, (void**)&g_origRegQueryValueExW);
         return TRUE;
     }
-
     if (_wcsicmp(exeName, L"sndvol.exe") == 0) {
         g_processType = ProcessType::SndVol;
         Wh_SetFunctionHook((void*)SetWindowPos, (void*)SetWindowPos_Hook, (void**)&g_origSetWindowPos);
@@ -1897,24 +1860,25 @@ BOOL Wh_ModInit() {
     }
 
     g_processType = ProcessType::Explorer;
+    if (!IsPinnedExplorer()) return FALSE;
+    WM_MOD_INIT_TRAY = RegisterWindowMessageW(L"WH_26100_INIT_TRAY");
+    WM_MOD_UNINIT_TRAY = RegisterWindowMessageW(L"WH_26100_UNINIT_TRAY");
+
     LoadSettings();
     LoadSavedIconOrder();
     {
         std::lock_guard<std::mutex> lock(g_trayMutex);
         SyncActionCenterIconLocked();
     }
-
     g_hExplorer = GetModuleHandleW(nullptr);
     g_hShell32 = GetModuleHandleW(L"shell32.dll");
     if (!g_hShell32) g_hShell32 = LoadLibraryW(L"shell32.dll");
-    g_hBthprops = LoadLibraryExW(L"bthprops.cpl", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    g_hBthprops = LoadLibraryExW(L"bthprops.cpl", nullptr,
+        LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE | LOAD_LIBRARY_SEARCH_SYSTEM32);
     g_hExplorerFrame = GetModuleHandleW(L"explorerframe.dll");
 
-    // Fake Explorer path hook
     if (void* pGetModFn = hKernelBase ? (void*)GetProcAddress(hKernelBase, "GetModuleFileNameW") : nullptr)
         Wh_SetFunctionHook(pGetModFn, (void*)GetModuleFileNameW_Hook, (void**)&g_origGetModuleFileNameW);
-
-    // Taskbar Context Menu Fix hooks
     Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook, (void**)&g_origLoadMenuW);
     Wh_SetFunctionHook((void*)TrackPopupMenu, (void*)TrackPopupMenu_Hook, (void**)&g_origTrackPopupMenu);
 
@@ -1927,18 +1891,17 @@ BOOL Wh_ModInit() {
          &g_pTrayUI_CreateInstance, nullptr, false},
         {{L"struct CTrayStatic c_trayStatic"}, &g_pTrayStatic, nullptr, false},
     };
-
     if (!WindhawkUtils::HookSymbols(g_hExplorer, explorerexe_hooks, ARRAYSIZE(explorerexe_hooks))) {
-        Wh_Log(L"[ERROR] HookSymbols failed");
+        if (g_hBthprops) { FreeLibrary(g_hBthprops); g_hBthprops = nullptr; }
+        std::lock_guard<std::mutex> lock(g_trayMutex);
+        for (auto& it : g_trayIcons) FreeEntryIcons(it);
+        g_trayIcons.clear();
         return FALSE;
     }
-
     if (void* pRegQuery = hKernelBase ? (void*)GetProcAddress(hKernelBase, "RegQueryValueExW") : nullptr)
         Wh_SetFunctionHook(pRegQuery, (void*)RegQueryValueExW_Hook, (void**)&g_origRegQueryValueExW);
-
     if (void* pGetRect = g_hShell32 ? (void*)GetProcAddress(g_hShell32, "Shell_NotifyIconGetRect") : nullptr)
         Wh_SetFunctionHook(pGetRect, (void*)Shell_NotifyIconGetRect_Hook, (void**)&g_origGetRect);
-
     return TRUE;
 }
 
@@ -1968,22 +1931,19 @@ void Wh_ModUninit() {
         return;
     }
     if (g_processType != ProcessType::Explorer) return;
-
     InterlockedExchange(&g_stopThread, 1);
     if (g_hInitThread) {
-        WaitForSingleObject(g_hInitThread, 2000);
+        WaitForSingleObject(g_hInitThread, INFINITE);
         CloseHandle(g_hInitThread);
         g_hInitThread = nullptr;
     }
-    if (g_traySubclassed && g_hTrayWnd && IsWindow(g_hTrayWnd))
+    if (WM_MOD_UNINIT_TRAY && g_traySubclassed && g_hTrayWnd && IsWindow(g_hTrayWnd))
         SendMessageW(g_hTrayWnd, WM_MOD_UNINIT_TRAY, 0, 0);
-
     {
         std::lock_guard<std::mutex> lock(g_trayMutex);
         for (auto& it : g_trayIcons) FreeEntryIcons(it);
         g_trayIcons.clear();
     }
-
     if (g_hBthprops) {
         FreeLibrary(g_hBthprops);
         g_hBthprops = nullptr;
