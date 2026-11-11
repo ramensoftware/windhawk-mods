@@ -26,6 +26,7 @@ While similar to [Win10 taskbar on Win11 24H2 or later](https://windhawk.net/mod
 * UWP apps display normally on the taskbar alongside Win32 applications.
 * The system tray is completely custom-built, meaning other mods targeting the notification area **will not work**.
 * The language indicator is currently unavailable, but will be added in a future update.
+* The Notification Center is not implemented.
 
 To restore the network icon, you can install the [Restore legacy network tray](https://windhawk.net/mods/restore-legacy-network-tray) mod, or use any other network indicator of your choice.
 
@@ -248,18 +249,20 @@ static SetWindowPos_t g_origSetWindowPos = nullptr;
 static bool IsSndVolFlyoutWnd(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) return false;
     LONG style = GetWindowLongW(hWnd, GWL_STYLE);
-    if ((style & WS_CHILD) || (style & (WS_THICKFRAME | WS_MINIMIZEBOX | WS_SYSMENU))) return false;
+    // Из-за тем оформления стандартные диалоги могут получать рамки и системные меню.
+    // Ослабляем проверку: любой диалог не-потомок в sndvol - это флайаут
+    if (style & WS_CHILD) return false;
     WCHAR cls[32] = {};
     return GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) && wcscmp(cls, L"#32770") == 0;
 }
 
 static bool CalcSndVolFlyoutPos(int w, int h, int* outX, int* outY) {
-    if (w <= 30 || h <= 30) return false;
+    if (w <= 0 || h <= 0) return false;
     HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (!hTray) return false;
 
     DWORD tick = (DWORD)(UINT_PTR)GetPropW(hTray, L"WH_VolSet");
-    if (!tick || (GetTickCount() - tick > 2000)) return false;
+    if (!tick || (GetTickCount() - tick > 5000)) return false;
 
     POINT pt = {(int)(INT_PTR)GetPropW(hTray, L"WH_VolX"), (int)(INT_PTR)GetPropW(hTray, L"WH_VolY")};
     HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
@@ -1026,10 +1029,26 @@ static BOOL HandleTrayCopyData(PCOPYDATASTRUCT pcds) {
 // ============================================================================
 static bool SlotToScreen(const RECT& slot, RECT* out) {
     if (IsRectEmpty(&slot) || !g_hNotifyWnd || !IsWindow(g_hNotifyWnd)) return false;
-    RECT wr = {};
-    if (!GetWindowRect(g_hNotifyWnd, &wr)) return false;
     *out = slot;
-    OffsetRect(out, wr.left, wr.top);
+    MapWindowPoints(g_hNotifyWnd, nullptr, (POINT*)out, 2);
+
+    // Центрируем и уменьшаем границы передаваемого прямоугольника (хитбокса) до 24px.
+    // Из-за теней тем оформления панель задач Win11 имеет высокие невидимые границы,
+    // отталкиваясь от которых флайауты (питание и т.д.) "висят в воздухе". Стягивая хитбокс
+    // к иконкам, мы заставляем флайауты корректно привязываться вплотную.
+    int cx = (out->left + out->right) / 2;
+    int cy = (out->top + out->bottom) / 2;
+    int s = ScaleForDpi(g_hNotifyWnd, 24);
+    
+    if ((out->bottom - out->top) > s) {
+        out->top = cy - s / 2;
+        out->bottom = cy + s / 2;
+    }
+    if ((out->right - out->left) > s) {
+        out->left = cx - s / 2;
+        out->right = cx + s / 2;
+    }
+
     return true;
 }
 
@@ -1100,6 +1119,22 @@ static void HandleClockClick(HWND hWnd) {
     if (FindWindowW(L"ClockFlyoutWindow", nullptr)) return;
     RECT rc = g_rcClock;
     MapWindowPoints(hWnd, nullptr, (POINT*)&rc, 2);
+
+    // Стяжка хитбокса, как и в SlotToScreen, чтобы окно часов не висело в воздухе
+    // из-за высоких невидимых теней тем оформления в Win11
+    int cx = (rc.left + rc.right) / 2;
+    int cy = (rc.top + rc.bottom) / 2;
+    int s = ScaleForDpi(hWnd, 24);
+    
+    if ((rc.bottom - rc.top) > s) {
+        rc.top = cy - s / 2;
+        rc.bottom = cy + s / 2;
+    }
+    if ((rc.right - rc.left) > s) {
+        rc.left = cx - s / 2;
+        rc.right = cx + s / 2;
+    }
+
     IWin32Clock* p = nullptr;
     if (SUCCEEDED(CoCreateInstance(kClsidWin32Clock, nullptr, CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER, kIidWin32Clock, (void**)&p)) && p) {
         p->ShowWin32Clock(hWnd, &rc);
@@ -1831,7 +1866,7 @@ BOOL Wh_ModInit() {
     Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook, (void**)&g_origLoadMenuW);
     Wh_SetFunctionHook((void*)TrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx);
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK explorerexe_hooks[] = {
         {{L"public: bool __cdecl wil::details::FeatureImpl<struct __WilFeatureTraits_Feature_DisableWin10Taskbar>::__private_IsEnabled(void)"},
          &g_origDisableWin10Taskbar, Hook_Feature_DisableWin10Taskbar_IsEnabled, false},
         {{L"private: long __cdecl CTray::InitializeTrayUIComponent(void)"},
@@ -1841,7 +1876,7 @@ BOOL Wh_ModInit() {
         {{L"struct CTrayStatic c_trayStatic"}, &g_pTrayStatic, nullptr, false},
     };
 
-    if (!WindhawkUtils::HookSymbols(g_hExplorer, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(g_hExplorer, explorerexe_hooks, ARRAYSIZE(explorerexe_hooks))) {
         Wh_Log(L"[ERROR] HookSymbols failed");
         return FALSE;
     }
