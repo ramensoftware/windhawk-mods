@@ -44,9 +44,6 @@ LoadMenuW_t LoadMenuW_Original;
 using TrackPopupMenu_t = decltype(&TrackPopupMenu);
 TrackPopupMenu_t TrackPopupMenu_Original;
 
-using TrackPopupMenuEx_t = decltype(&TrackPopupMenuEx);
-TrackPopupMenuEx_t TrackPopupMenuEx_Original;
-
 static thread_local bool g_inTrackPopupMenu = false;
 
 static void LaunchTaskManager() {
@@ -170,7 +167,7 @@ static UINT FindTaskManagerCmdId(HMENU hMenu) {
     return 0;
 }
 
-// Общая логика для TrackPopupMenu / TrackPopupMenuEx.
+// Общая логика для TrackPopupMenu.
 static UINT GetTaskManagerIdForMenu(HMENU hMenu, HWND hWnd) {
     if (!IsTaskbarWindow(hWnd)) return 0;
     return FindTaskManagerCmdId(hMenu);
@@ -222,37 +219,6 @@ BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y, int nRes
     return ret;
 }
 
-BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, LPTPMPARAMS lptpm) {
-    if (g_inTrackPopupMenu) {
-        return TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
-    }
-
-    UINT taskMgrId = GetTaskManagerIdForMenu(hMenu, hWnd);
-    bool addedReturnCmd = false;
-    if (taskMgrId != 0 && !(uFlags & TPM_RETURNCMD)) {
-        uFlags |= TPM_RETURNCMD;
-        addedReturnCmd = true;
-    }
-
-    g_inTrackPopupMenu = true;
-    BOOL ret = TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
-    g_inTrackPopupMenu = false;
-
-    if (taskMgrId != 0) {
-        if ((UINT)ret == taskMgrId) {
-            LaunchTaskManager();
-            return addedReturnCmd ? TRUE : 0;
-        } else if (addedReturnCmd) {
-            if (ret != 0) {
-                PostMessageW(hWnd, WM_COMMAND, MAKEWPARAM(ret, 0), 0);
-            }
-            return TRUE;
-        }
-    }
-
-    return ret;
-}
-
 BOOL Wh_ModInit() {
     g_explorerModule = GetModuleHandleW(nullptr);
     g_shell32Module = GetModuleHandleW(L"shell32.dll");
@@ -261,7 +227,6 @@ BOOL Wh_ModInit() {
 
     Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook, (void**)&LoadMenuW_Original);
     Wh_SetFunctionHook((void*)TrackPopupMenu, (void*)TrackPopupMenu_Hook, (void**)&TrackPopupMenu_Original);
-    Wh_SetFunctionHook((void*)TrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&TrackPopupMenuEx_Original);
 
     return TRUE;
 }
