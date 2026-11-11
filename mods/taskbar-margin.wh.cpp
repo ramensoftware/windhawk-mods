@@ -663,9 +663,12 @@ bool ApplyMarginToTaskbar(HWND hTaskbarWnd, XamlRoot xamlRoot)
         // applied), while the app list margin only affects the list
         // itself.
         //
-        // The target is always computed from the element's original
-        // margin, which the remove pass restores before every apply, so
-        // the reservation can never accumulate.
+        // The target is computed from the element's current margin. The
+        // remove pass restores the right component before every apply,
+        // so the reservation does not accumulate. The one exception is a
+        // right component that another mod changed in the meantime: the
+        // remove pass has to leave it alone, and the width it already
+        // holds is then counted as part of the original here.
         // The app list is a direct child of the RootGrid.
         auto appList = FindChildByName(rootGrid, L"TaskbarFrameRepeater");
         if (!appList)
@@ -737,21 +740,35 @@ void RemoveAppliedMargins()
                 {
                     if (applied.hasOriginalMargin)
                     {
-                        // Undo only the mod's own value: another mod may
-                        // have changed the margin in the meantime. If the
-                        // replaced value was not a local value, clear the
-                        // property instead of writing the saved value
-                        // back, so that it is not pinned as a local value.
-                        if (element.Margin() == applied.appliedMargin)
+                        // Undo only the right component, the only one
+                        // this mod changed: another mod may have changed
+                        // the other components of the same margin in the
+                        // meantime (taskbar-system-info, for example,
+                        // sets the left component of this element's
+                        // margin), and those are not this mod's to
+                        // restore. The component is restored only if it
+                        // still holds the value this mod set.
+                        auto currentMargin = element.Margin();
+                        if (currentMargin.Right ==
+                            applied.appliedMargin.Right)
                         {
-                            if (applied.hadLocalMargin)
+                            if (!applied.hadLocalMargin &&
+                                currentMargin == applied.appliedMargin)
                             {
-                                element.Margin(applied.originalMargin);
+                                // The replaced value was not a local
+                                // value and nothing else changed: clear
+                                // the property instead of writing the
+                                // saved value back, so that a value from
+                                // the template or a style is not pinned
+                                // as a local value.
+                                element.ClearValue(
+                                    FrameworkElement::MarginProperty());
                             }
                             else
                             {
-                                element.ClearValue(
-                                    FrameworkElement::MarginProperty());
+                                currentMargin.Right =
+                                    applied.originalMargin.Right;
+                                element.Margin(currentMargin);
                             }
                         }
                     }
