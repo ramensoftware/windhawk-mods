@@ -5711,23 +5711,37 @@ double ButtonsCenter(double host, double tray, DockStyle const& style, double ga
 // it, and how far past the hull's right edge the tray's outer end runs square (NAN for its curve). Where the dock is
 // too wide, in this order: that end goes square as soon as the hull and its curve would run off the screen, and if the
 // tray content itself would, Separate's gap narrows down to its facing curves touching and then the buttons move
-// left. `normal` and `touching` are the outline at Bar distance and at 0. With the alignment, the one place where the
-// dock goes is decided.
+// left. The outline at Bar distance sets the gap and how far the tray end curves out before the dock is placed, reading
+// only the band; Separate's at 0 is how far the gap may narrow. With the alignment, the one place where the dock goes
+// is decided.
 constexpr double kSquareSlack = 64; // Past the screen's side, so the square end stays off screen while buttons animate.
 struct DockFit { double buttonsCenter{}, gap{kGap}, barGap{kBarGap}, square = NAN; };
-DockFit FitDock(double host, double buttons, double tray, DockStyle const& style, DockOutline const& normal,
-                DockOutline const& touching) {
+DockFit FitDock(double host, double buttons, double tray, DockStyle const& style, double radius, double band,
+                DockContent const& content) {
+    auto normal = MakeOutline(style, tray, radius, band, false, content);
+    DockStyle touching = style;
+    touching.barGap = 0;
+    double touchingGap = style.layout == DockLayout::Separate
+        ? MakeOutline(touching, tray, radius, band, false, content).gap : normal.gap;
     // The tray content's right edge for a gap: Whole group's moves by half the gap, as the group centres.
     bool group = style.alignment == DockAlignment::Group;
     auto right = [&](double gap) { return ButtonsCenter(host, tray, style, gap) + buttons / 2 + gap + tray; };
     DockFit fit{ButtonsCenter(host, tray, style, normal.gap), normal.gap, style.barGap};
     if (right(fit.gap) + kDockPadding + normal.reach <= host) return fit;
-    double narrow = std::clamp((right(fit.gap) - host) * (group ? 2 : 1), 0.0, normal.gap - touching.gap);
+    double narrow = std::clamp((right(fit.gap) - host) * (group ? 2 : 1), 0.0, normal.gap - touchingGap);
     fit.gap -= narrow;
     fit.barGap -= narrow;
     fit.buttonsCenter = ButtonsCenter(host, tray, style, fit.gap) - std::max(0.0, right(fit.gap) - host);
     fit.square = host - (fit.buttonsCenter + buttons / 2 + fit.gap + tray + kDockPadding) + kSquareSlack;
     return fit;
+}
+
+// The outline the dock draws where FitDock put it: the fitting one at its Bar distance, square where it said so. The
+// curve FitDock accepted is this outline's, so a curved fit stays on the host without a second look at its reach.
+DockOutline PlacedOutline(DockFit const& fit, DockStyle style, double tray, double radius, double band, bool atTop,
+                          DockContent const& content) {
+    style.barGap = fit.barGap;
+    return MakeOutline(style, tray, radius, band, atTop, content, fit.square);
 }
 
 bool Plan(double host, double buttons, double tray, double nativeCenter,
@@ -13470,16 +13484,7 @@ void Refresh(Root& root) {
         early.trayInsets = TrayInsets(early.insets, early.atTop, TrayDrop(g_dockStyle, band));
         icons = MeasureDockIcons(content, start, repeater, tray, background, early);
     }
-    // The outline sets the gap from the buttons to the tray and how far its tray end curves out, before it is placed:
-    // it reads only the band. Separate's at Bar distance 0 is how far the gap may narrow.
-    DockFit fit{};
-    if (band > 0) {
-        auto normal = MakeOutline(g_dockStyle, trayWidth, radius, band, false, content);
-        DockStyle touching = g_dockStyle;
-        touching.barGap = 0;
-        fit = FitDock(host, buttons, trayWidth, g_dockStyle, normal,
-                      g_dockStyle.layout == DockLayout::Separate ? MakeOutline(touching, trayWidth, radius, band, false, content) : normal);
-    }
+    DockFit fit = band > 0 ? FitDock(host, buttons, trayWidth, g_dockStyle, radius, band, content) : DockFit{};
     // Keep the full centered repeater budget. Account for the native strip's
     // layout offset without reading per-button animation transforms.
     bool supported = !overflowing && background.ActualWidth() > 0 && band > 0 &&
@@ -13542,13 +13547,7 @@ void Refresh(Root& root) {
         last = change;
         Wh_Log(L"[UWSLANT] mirror host %.1f, tray %.1f wide, centre %.1f; %ls", m.host, m.trayWidth, m.center, icons.c_str());
     }
-    // At FitDock's Bar distance, square where it said so or where the tray end's curve still runs off screen.
-    DockStyle placed = g_dockStyle;
-    placed.barGap = fit.barGap;
-    m.outline = MakeOutline(placed, trayWidth, radius, band, m.atTop, content, fit.square);
-    double hullRight = buttonsCenter + buttons / 2 + gap + trayWidth + kDockPadding;
-    if (!std::isfinite(fit.square) && hullRight + m.outline.reach > host)
-        m.outline = MakeOutline(placed, trayWidth, radius, band, m.atTop, content, host - hullRight + kSquareSlack);
+    m.outline = PlacedOutline(fit, g_dockStyle, trayWidth, radius, band, m.atTop, content);
     root.measurements = m;
     root.measurementsReady = true;
     if (!PrepareDock(root.dock, background, m.insets, m.outline)) {
