@@ -122,7 +122,7 @@ combinations that were already taken.
 ### Radial menu: moving a window with the mouse
 Off by default. In the settings, choose which button opens it: the right button, the middle button,
 or Alt / Win + the left button. Then press and hold that button over a window of the grid. A ring
-appears where the cursor is. Move the mouse out of the ring to the left, right, up or down: that
+appears where the cursor is (after a brief hold, so a quick click does not flash it). Move the mouse out of the ring to the left, right, up or down: that
 slice of the ring lights up and the slot the window will go to is highlighted. Release the button
 to swap the window with the one in that slot. Esc cancels. If there is no window on that side, the
 slice turns gray and nothing happens. It only considers windows on the same monitor.
@@ -299,7 +299,7 @@ e só para as combinações que já estavam ocupadas.
 ### Menu radial: mover a janela com o mouse
 Desligado por padrão. Nas configurações, escolha o botão que o abre: o botão direito, o do meio, ou
 Alt / Win + botão esquerdo. Depois pressione e segure esse botão sobre uma janela da grade. Um anel
-aparece onde o cursor está. Mova o mouse para fora do anel, para a esquerda, direita, cima ou
+aparece onde o cursor está (depois de um instante, para não piscar num clique rápido). Mova o mouse para fora do anel, para a esquerda, direita, cima ou
 baixo: aquela fatia do anel acende e o espaço para onde a janela vai é destacado. Solte o botão
 para trocar a janela de lugar com a que ocupa aquele espaço. Esc cancela. Se não houver janela
 daquele lado, a fatia fica cinza e nada acontece. Só considera janelas do mesmo monitor.
@@ -2665,6 +2665,8 @@ struct Radial {
     int size = 0;
     int drawnDir = -2;
     bool drawnOk = false;
+    bool shown = false;     // o anel já apareceu (ele espera um instante, para não piscar num clique rápido)
+    double beganAt = 0;
     std::vector<uint32_t> back;  // tema vidro: o que estava na tela sob o anel quando ele abriu, já desfocado
     int backSize = 0;
 };
@@ -2974,8 +2976,9 @@ static bool RadialBegin() {
     R.nb = -1;
     R.scale = MonScale(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST));
     R.active = true;
-    if (g_cfg.radialTheme == 1) RadialCaptureBackdrop();  // antes de o anel aparecer na tela
-    RadialDrawRing(-1, false);
+    R.shown = false;  // o anel só aparece se o botão continuar pressionado ou o mouse se mover (RadialTick)
+    R.beganAt = NowMs();
+    R.drawnDir = -2;
     return true;
 }
 
@@ -2994,6 +2997,15 @@ static void RadialTick() {
     POINT pt{};
     GetCursorPos(&pt);
     const double dx = pt.x - R.origin.x, dy = pt.y - R.origin.y;
+    if (!R.shown) {
+        // Um clique rápido (para abrir o menu de contexto, por exemplo) não mostra o anel: ele aparece
+        // depois de o botão ficar pressionado por um instante, ou assim que o mouse começa a se mover.
+        const double moved = 6.0 * R.scale;
+        if (NowMs() - R.beganAt < 180.0 && dx * dx + dy * dy < moved * moved) return;
+        R.shown = true;
+        if (g_cfg.radialTheme == 1) RadialCaptureBackdrop();  // antes de o anel aparecer na tela
+        RadialDrawRing(-1, false);
+    }
     const double dead = 22.0 * R.scale;  // dentro do centro do anel nada é escolhido
     int dir = -1;
     if (dx * dx + dy * dy >= dead * dead) {
