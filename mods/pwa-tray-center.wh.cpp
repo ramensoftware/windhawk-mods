@@ -2,7 +2,7 @@
 // @id              pwa-tray-center
 // @name            PWA Tray Center
 // @description     One tray icon for all your Chrome PWAs: hide windows to the PWA Tray Center, control media, see notifications and launch installed apps from a Fluent flyout
-// @version         0.5.540
+// @version         0.5.600
 // @author          Proponent
 // @github          https://github.com/JJProponent
 // @include         chrome.exe
@@ -19,7 +19,7 @@ Adds a **"Hide to PWA Tray Center"** item to the window menu of installed Chrome
 ![Hide to PWA Tray Center in the window menu](https://raw.githubusercontent.com/JJProponent/Image-s-/main/RMB%20Place.jpg)
 
 - Hidden windows keep running (music plays, etc.)
-- One tray icon appears for all hidden PWAs (shows with first hidden, disappears when last restored)
+- One tray icon for all PWAs. By default it stays in the tray. With *Always show tray icon* turned off (Settings → Advanced), it appears only while PWAs are hidden and disappears when the last one is restored
 
 ![PWA Tray Center flyout](https://raw.githubusercontent.com/JJProponent/Image-s-/main/Main%20app.jpg)
 
@@ -177,6 +177,8 @@ enum class NotifPos { TopLeft, TopRight, BottomLeft, BottomRight, Top, Bottom };
 enum class NotifDismiss { Swipe, Click };
 std::atomic<int> g_notifPos{(int)NotifPos::BottomRight};
 std::atomic<int> g_notifDismiss{(int)NotifDismiss::Swipe};
+std::atomic<int> g_showNotes{1};
+std::atomic<int> g_trayAlways{1};  // 1 = the tray icon stays even with nothing hidden
 
 UINT g_trayMsg = 0;
 UINT g_taskbarCreatedMsg = 0;
@@ -469,8 +471,10 @@ enum PrefId {
     kPrefCardCover,
     kPrefShowVolume,
     kPrefAppDisplay,
+    kPrefNotes,
     kPrefNotifPos,
     kPrefNotifDismiss,
+    kPrefTrayAlways,
     kPrefDiag,
     kPrefCount,
 };
@@ -497,8 +501,10 @@ std::atomic<int>* PrefValue(int id) {
         case kPrefCardCover: return &g_cardCover;
         case kPrefShowVolume: return &g_showVolume;
         case kPrefAppDisplay: return &g_appDisplay;
+        case kPrefNotes: return &g_showNotes;
         case kPrefNotifPos: return &g_notifPos;
         case kPrefNotifDismiss: return &g_notifDismiss;
+        case kPrefTrayAlways: return &g_trayAlways;
         case kPrefDiag: return &g_showDiag;
     }
     return nullptr;
@@ -512,8 +518,10 @@ PCWSTR PrefKey(int id) {
         case kPrefCardCover: return L"prefCardCover";
         case kPrefShowVolume: return L"prefShowVolume";
         case kPrefAppDisplay: return L"prefAppDisplay";
+        case kPrefNotes: return L"prefShowNotes";
         case kPrefNotifPos: return L"prefNotifPos";
         case kPrefNotifDismiss: return L"prefNotifDismiss";
+        case kPrefTrayAlways: return L"prefTrayAlways";
         case kPrefDiag: return L"prefDiagnostics";
     }
     return L"";
@@ -526,12 +534,15 @@ int PrefDefault(int id) {
         case kPrefAppDisplay: return (int)AppDisplay::Both;
         case kPrefNotifPos: return (int)NotifPos::BottomRight;
         case kPrefNotifDismiss: return (int)NotifDismiss::Swipe;
+        case kPrefNotes: return 1;
+        case kPrefTrayAlways: return 1;
         default: return 0;  // toggles: media compact off, Chrome volume and diagnostics below
     }
 }
 
 bool PrefIsToggle(int id) {
-    return id == kPrefMediaCompact || id == kPrefShowVolume || id == kPrefDiag;
+    return id == kPrefMediaCompact || id == kPrefShowVolume || id == kPrefNotes ||
+           id == kPrefTrayAlways || id == kPrefDiag;
 }
 
 int PrefOptionCount(int id) {
@@ -1816,7 +1827,7 @@ void GetWorkSnapshot(std::vector<MediaInfo>& media,
 // Animation
 // ---------------------------------------------------------------------------
 
-enum Ease { kEaseLinear = 0, kEaseOut = 1 };
+enum Ease { kEaseLinear = 0, kEaseOut = 1, kEaseIn = 2 };
 
 // Fluent motion: "fast out, slow in" is cubic-bezier(0,0,0,1) for things that
 // enter. Everything else moves linearly.
@@ -1824,6 +1835,8 @@ float ApplyEase(int ease, float x) {
     switch (ease) {
         case kEaseOut:
             return (float)CubicBezierY(0, 0, 0, 1, x);
+        case kEaseIn:
+            return (float)CubicBezierY(1, 0, 1, 1, x);
         default:
             return x;
     }
@@ -2072,6 +2085,10 @@ struct Note {
     int swipeDir = 0;     // -1 left, +1 right, 0 both ways
     float ttl = kNoteHideMs;
     Tween enter;          // slide-in progress, 0 to 1
+    Tween leave;          // leaving: accelerates out to the edge, 0 to 1
+    Tween yT;             // glide to the place in the stack
+    float leaveFrom = 0;  // swipe offset when the leave began
+    bool leaveStarted = false;
 };
 
 // Press spring of one pressable element: its scale now, and its speed.
@@ -2157,6 +2174,13 @@ struct Panel {
     int selectedTab = kTabMedia;
     Tween tabPos[kTabCount];
     Tween slideX, slideA, openDy, openAlpha, menuT, menuDy;
+    Tween exitX, exitA;                   // the tab being left: slides out and fades
+    int exitTab = -1;
+    Tween indX;                           // centre x of the tab indicator
+    Tween barA;                           // alpha of the scrollbar
+    ULONGLONG barTick = 0;                // last scroll, or pointer move over the list
+    Tween scrollTw[kTabCount];            // drawn scroll of each tab
+    Tween chipTw;                         // drawn scroll of the category chips
     int dragTab = -1;
     bool dragging = false;
     float dragStartX = 0;
@@ -3715,6 +3739,7 @@ void LayoutNotes(Panel& p) {
         if (n.fresh) {
             n.y = n.targetY;
             n.fresh = false;
+            TweenJump(n.yT, n.targetY);
         }
         used += n.h + kNoteGap;
     }
@@ -3729,6 +3754,7 @@ bool StepNotes(Panel& p, float dt) {
     const float ms = dt * 1000.0f;
     const float k = 1.0f - std::exp(-dt * 16.0f);
     const float away = kNoteW + 60.0f;
+    const ULONGLONG now = NowMs();
     for (auto& n : p.notes) {
         // Hovering and swiping pause the auto hide.
         const bool hover = p.hovered == MakeId(kHitNote, n.id);
@@ -3739,19 +3765,31 @@ bool StepNotes(Panel& p, float dt) {
                 n.leaveDir = EdgeDir();
             }
         }
-        TweenStep(n.enter, NowMs());
-        n.y += (n.targetY - n.y) * k;
+        // A leaving note starts from where it is (also after a swipe) and accelerates out.
+        if (n.leaving && !n.leaveStarted) {
+            n.leaveStarted = true;
+            n.leaveFrom = n.dragDx;
+            TweenJump(n.leave, 0.0f);
+            TweenSet(n.leave, 1.0f, 167, kEaseIn);
+        }
+        // The stack glides to the new places, decelerating (Fluent enter curve).
+        if (!n.leaving && n.yT.to != n.targetY) {
+            TweenSet(n.yT, n.targetY, 167, kEaseOut);
+        }
+        TweenStep(n.leave, now);
+        TweenStep(n.enter, now);
+        TweenStep(n.yT, now);
+        n.y = n.yT.v;
         if (n.leaving) {
-            n.dragDx += (n.leaveDir * away - n.dragDx) * k;
+            n.dragDx = n.leaveFrom + (n.leaveDir * away - n.leaveFrom) * n.leave.v;
         } else if (!n.dragging) {
             n.dragDx += (0.0f - n.dragDx) * k;  // springs back after a swipe
         }
     }
     p.notes.erase(std::remove_if(p.notes.begin(), p.notes.end(),
-                                 [&](const Note& n) {
-                                     return n.leaving &&
-                                            std::fabs(n.dragDx -
-                                                      n.leaveDir * away) < 1.0f;
+                                 [](const Note& n) {
+                                     return n.leaving && n.leaveStarted &&
+                                            n.leave.dur == 0 && n.leave.v >= 1.0f;
                                  }),
                   p.notes.end());
     return true;  // keep frames coming so the auto hide keeps counting
@@ -3771,7 +3809,7 @@ void DrawNotes(Panel& p) {
         const float x = n.x + n.dragDx + edge * (1.0f - e) * (kNoteW + 24.0f);
         float fade = e;
         if (n.leaving) {
-            fade *= Clamp01(1.0f - std::fabs(n.dragDx) / (kNoteW * 0.6f));
+            fade *= 1.0f - n.leave.v;
         }
         AddHit(p, MakeId(kHitNote, n.id), Rc(x, n.y, kNoteW, n.h));
         if (fade <= 0.01f) {
@@ -3823,6 +3861,9 @@ void PushNote(Panel& p,
     if (g_panelMode == (int)PanelMode::Hermes) {
         return;  // Hermes shows no notifications
     }
+    if (!g_showNotes) {
+        return;  // notes are switched off in Settings
+    }
     size_t live = 0;
     Note* oldest = nullptr;
     for (auto& n : p.notes) {
@@ -3862,6 +3903,10 @@ bool UpdateAnims(Panel& p, ULONGLONG now) {
     active |= TweenStep(p.slideA, now);
     active |= TweenStep(p.menuT, now);
     active |= TweenStep(p.menuDy, now);
+    active |= TweenStep(p.exitX, now);
+    active |= TweenStep(p.exitA, now);
+    active |= TweenStep(p.indX, now);
+    active |= TweenStep(p.barA, now);
     for (int i = 0; i < kTabCount; ++i) {
         active |= TweenStep(p.tabPos[i], now);
     }
@@ -3889,27 +3934,25 @@ bool UpdateAnims(Panel& p, ULONGLONG now) {
     if (!p.hlKey.empty() && now - p.hlTick < 1450) {
         active = true;
     }
-    float k = 1.0f - std::exp(-dt * 20.0f);
+    // Scrolling follows its target along the Fluent decelerate curve, 167 ms. A new
+    // target starts from where the list is now, so repeated wheel notches blend.
     {
-        float maxChip = (std::max)(0.0f, p.chipContentW - kPanelW);
+        const float maxChip = (std::max)(0.0f, p.chipContentW - kPanelW);
         p.chipScrollT = (std::max)(0.0f, (std::min)(p.chipScrollT, maxChip));
-        float diff = p.chipScrollT - p.chipScroll;
-        if (std::fabs(diff) > 0.3f) {
-            p.chipScroll += diff * k;
-            active = true;
-        } else {
-            p.chipScroll = p.chipScrollT;
+        if (p.chipTw.to != p.chipScrollT) {
+            TweenSet(p.chipTw, p.chipScrollT, 167, kEaseOut);
         }
+        active |= TweenStep(p.chipTw, now);
+        p.chipScroll = p.chipTw.v;
     }
     for (int i = 0; i < kTabCount; ++i) {
         ClampScroll(p, i);
-        float diff = p.scrollT[i] - p.scrollC[i];
-        if (std::fabs(diff) > 0.3f) {
-            p.scrollC[i] += diff * k;
-            active = true;
-        } else {
-            p.scrollC[i] = p.scrollT[i];
+        Tween& tw = p.scrollTw[i];
+        if (tw.to != p.scrollT[i]) {
+            TweenSet(tw, p.scrollT[i], 167, kEaseOut);
         }
+        active |= TweenStep(tw, now);
+        p.scrollC[i] = tw.v;
     }
     return active;
 }
@@ -4036,7 +4079,7 @@ void DrawTabs(Panel& p) {
     }
 
     // Selected tab indicator.
-    float cx = p.tabPos[p.selectedTab].v + tw / 2;
+    float cx = p.indX.v;
     FillRR(p, Rc(cx - 10, kTabsY + kTabsH - 4, 20, 3), 1.5f, t.accent);
 }
 
@@ -5064,8 +5107,10 @@ const SettingRow kSettingRows[] = {
     {kPrefMediaCompact, true, L"Compact view", L"\xF232", nullptr, false},
     {kPrefShowVolume, true, L"Chrome volume", L"\xE767", nullptr, false},
     {kPrefAppDisplay, false, L"App view", L"\xF207", kOptAppDisplay, false},
+    {kPrefNotes, true, L"Pop-up notifications", L"\xE7ED", nullptr, false},
     {kPrefNotifPos, false, L"Position", L"\xE707", kOptNotifPos, false},
     {kPrefNotifDismiss, false, L"Dismiss with", L"\xE8B0", kOptNotifDismiss, false},
+    {kPrefTrayAlways, true, L"Always show tray icon", L"\xE7E7", nullptr, false},
     {kPrefDiag, true, L"Diagnostics", L"\xF196", nullptr, false},
 };
 
@@ -5073,8 +5118,8 @@ const SettingGroup kSettingGroups[] = {
     {L"\xE7C4", L"Panel", 0, 3},
     {L"\xE768", L"Media", 3, 3},
     {L"\xF2CE", L"PWAs", 6, 1},
-    {L"\xE7E7", L"Notifications", 7, 2},
-    {L"\xE756", L"Advanced", 9, 1},
+    {L"\xE7E7", L"Notifications", 7, 3},
+    {L"\xE756", L"Advanced", 10, 2},
 };
 
 constexpr int kSettingRowCount = (int)(sizeof(kSettingRows) / sizeof(kSettingRows[0]));
@@ -5237,13 +5282,21 @@ void DrawScrollbar(Panel& p, float top, float bottom) {
     if (contentH <= viewH + 1 || viewH <= 0) {
         return;
     }
+    // Shown while the pointer is over the list or it was scrolled, then it fades out.
+    const bool show = NowMs() - p.barTick < 1000;
+    if ((p.barA.to > 0.5f) != show) {
+        TweenSet(p.barA, show ? 1.0f : 0.0f, show ? 83 : 167, kEaseLinear);
+    }
+    if (p.barA.v <= 0.001f) {
+        return;
+    }
     float trackTop = tab == kTabMedia ? top : bottom - viewH;
     float thumbH = (std::max)(24.0f, viewH * viewH / contentH);
     float maxScroll = contentH - viewH;
     float frac = maxScroll > 0 ? p.scrollC[tab] / maxScroll : 0;
     frac = frac < 0 ? 0 : (frac > 1 ? 1 : frac);
     float y = trackTop + 2 + frac * (viewH - thumbH - 4);
-    FillRR(p, Rc(kPanelW - 6, y, 3, thumbH), 1.5f, WithAlpha(p.th.track, 0.9f));
+    FillRR(p, Rc(kPanelW - 6, y, 3, thumbH), 1.5f, WithAlpha(p.th.track, 0.9f * p.barA.v));
 }
 
 void DrawMenu(Panel& p) {
@@ -5914,6 +5967,27 @@ void BuildDiagReport(Panel& p) {
     p.diagTick = GetTickCount64();
 }
 
+// Draws the content of one tab.
+void DrawTabContent(Panel& p, int tab, float top, float bottom) {
+    switch (tab) {
+        case kTabMedia:
+            DrawMediaTab(p, top, bottom);
+            break;
+        case kTabApps:
+            DrawAppsTab(p, top, bottom);
+            break;
+        case kTabNotifs:
+            DrawNotifsTab(p, top, bottom);
+            break;
+        case kTabLibrary:
+            DrawLibraryTab(p, top, bottom);
+            break;
+        case kTabSettings:
+            DrawSettingsTab(p, top, bottom);
+            break;
+    }
+}
+
 void DrawPanel(Panel& p) {
     ID2D1RenderTarget* rt = p.rt.p;
     if (!p.target) {
@@ -5979,25 +6053,18 @@ void DrawPanel(Panel& p) {
     PushClip(p, clip);
     D2D1_RECT_F saveClip = p.hitClip;
     p.hitClip = clip;
+    // The tab being left slides out and fades (no input); the new one slides in.
+    if (p.exitTab >= 0 && p.exitTab != p.selectedTab && p.exitA.v > 0.001f) {
+        p.ox = p.exitX.v;
+        p.alpha = p.openAlpha.v * p.exitA.v;
+        const bool saveHits = p.hitsOn;
+        p.hitsOn = false;
+        DrawTabContent(p, p.exitTab, top, bottom);
+        p.hitsOn = saveHits;
+    }
     p.ox = p.slideX.v;
     p.alpha = p.openAlpha.v * p.slideA.v;
-    switch (p.selectedTab) {
-        case kTabMedia:
-            DrawMediaTab(p, top, bottom);
-            break;
-        case kTabApps:
-            DrawAppsTab(p, top, bottom);
-            break;
-        case kTabNotifs:
-            DrawNotifsTab(p, top, bottom);
-            break;
-        case kTabLibrary:
-            DrawLibraryTab(p, top, bottom);
-            break;
-        case kTabSettings:
-            DrawSettingsTab(p, top, bottom);
-            break;
-    }
+    DrawTabContent(p, p.selectedTab, top, bottom);
     ClampScroll(p, p.selectedTab);
     DrawScrollbar(p, top, p.selectedTab == kTabLibrary ? kLibGridBottom : bottom);
     p.ox = 0;
@@ -6107,6 +6174,16 @@ void ClosePanelLocal() {
 }
 
 
+// Moves the tab indicator under the selected tab, animated or at once.
+void SyncIndicator(Panel& p, bool animate) {
+    const float target = SlotX(SlotOf(p, p.selectedTab)) + TabW() / 2;
+    if (animate) {
+        TweenSet(p.indX, target, 167, kEaseOut);
+    } else {
+        TweenJump(p.indX, target);
+    }
+}
+
 void SaveTabOrder(const Panel& p) {
     Wh_SetStringValue(L"tabOrder", SerializeTabOrder(p.order).c_str());
 }
@@ -6138,6 +6215,9 @@ void MoveTabToSlot(Panel& p, int tab, int slot) {
         }
         TweenSet(p.tabPos[t], SlotX(SlotOf(p, t)), 167, kEaseOut);
     }
+    if (!(p.dragging && tab == p.selectedTab)) {
+        SyncIndicator(p, true);
+    }
     StartAnim(p);
 }
 
@@ -6146,7 +6226,13 @@ void SelectTab(Panel& p, int tab) {
         return;
     }
     int dir = SlotOf(p, tab) > SlotOf(p, p.selectedTab) ? 1 : -1;
+    p.exitTab = p.selectedTab;
+    TweenJump(p.exitX, 0.0f);
+    TweenSet(p.exitX, -28.0f * dir, 83, kEaseIn);
+    TweenJump(p.exitA, 1.0f);
+    TweenSet(p.exitA, 0.0f, 83, kEaseIn);
     p.selectedTab = tab;
+    SyncIndicator(p, true);
     TweenJump(p.slideX, 28.0f * dir);
     TweenSet(p.slideX, 0.0f, 167, kEaseOut);
     TweenJump(p.slideA, 0.0f);
@@ -6689,6 +6775,11 @@ void ApplyPref(Panel& p, int id, int value) {
         case kPrefMediaCompact:
             p.scrollT[kTabMedia] = 0;
             p.scrollC[kTabMedia] = 0;
+            break;
+        case kPrefTrayAlways:
+            if (HWND host = g_hostHwnd.load()) {
+                PostMessageW(host, kMsgListChanged, 0, 0);
+            }
             break;
         case kPrefDiag:
             ResizePanelForDiag(p);
@@ -7524,6 +7615,9 @@ void UpdateTabDrag(Panel& p, float fx) {
     float nx = p.dragOrigX + (fx - p.dragStartX);
     nx = (std::max)(kPad, (std::min)(nx, kPanelW - kPad - tw));
     TweenJump(p.tabPos[p.dragTab], nx);
+    if (p.dragTab == p.selectedTab) {
+        TweenJump(p.indX, nx + tw / 2);
+    }
     int slot = (int)std::lround((nx - kPad) / tw);
     slot = (std::max)(0, (std::min)(slot, kTabCount - 1));
     MoveTabToSlot(p, p.dragTab, slot);
@@ -7654,6 +7748,12 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_MOUSEMOVE: {
             float fx = toDipX(lParam);
             float fy = toDipY(lParam);
+            if (fy >= kContentTop && fy < kContentBottom) {
+                if (NowMs() - p->barTick > 1000) {
+                    InvalidateRect(hwnd, nullptr, FALSE);  // wakes the scrollbar
+                }
+                p->barTick = NowMs();
+            }
             if (!p->tracking) {
                 TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, hwnd, 0};
                 TrackMouseEvent(&tme);
@@ -8036,6 +8136,7 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 ReleaseCapture();
                 if (wasDrag) {
                     TweenSet(p->tabPos[tab], SlotX(SlotOf(*p, tab)), 167, kEaseOut);
+                    SyncIndicator(*p, true);
                     SaveTabOrder(*p);
                     StartAnim(*p);
                 } else {
@@ -8079,6 +8180,7 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             float fx = (float)pt.x * DipPerDevicePx(*p);
             float fy = (float)pt.y * DipPerDevicePx(*p);
             float notches = (float)(short)HIWORD(wParam) / 120.0f;
+            p->barTick = NowMs();
             if (g_showDiag && fy >= kPanelH) {
                 p->diagScroll = (std::max)(0.0f, (std::min)(p->diagScroll - notches * 48.0f, p->diagMax));
                 StartAnim(*p);
@@ -8142,12 +8244,26 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (p->dragTab >= 0) {
                 p->dragTab = -1;
                 p->dragging = false;
+                SyncIndicator(*p, true);
                 for (int t = 0; t < kTabCount; ++t) {
                     TweenSet(p->tabPos[t], SlotX(SlotOf(*p, t)), 167, kEaseOut);
                 }
                 StartAnim(*p);
             }
             return 0;
+
+        case WM_SYSCOMMAND:
+            switch (wParam & 0xFFF0) {
+                case SC_MINIMIZE:
+                case SC_MAXIMIZE:
+                case SC_SIZE:
+                case SC_MOVE:
+                case SC_KEYMENU:
+                    return 0;
+                default:
+                    break;
+            }
+            break;
 
         case WM_SYSKEYDOWN:
             // Alt combinations arrive here.
@@ -8218,6 +8334,9 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     return 0;
                 }
                 ShowPendingHiddenNotes(*p);
+                if (p->barA.v > 0.0f || p->barA.to > 0.5f) {
+                    InvalidateRect(hwnd, nullptr, FALSE);  // lets the scrollbar fade out
+                }
                 // Redraw only when something on screen has changed.
                 std::wstring sig = PanelStateSignature(*p);
                 bool playing = false;
@@ -8393,6 +8512,7 @@ void ShowPanel(HWND host) {
     for (int slot = 0; slot < kTabCount; ++slot) {
         TweenJump(p->tabPos[p->order[slot]], SlotX(slot));
     }
+    SyncIndicator(*p, false);
     TweenJump(p->slideX, 0.0f);
     TweenJump(p->slideA, 1.0f);
     TweenJump(p->openDy, 0.0f);
@@ -8411,7 +8531,8 @@ void ShowPanel(HWND host) {
 
     RequestMediaPoll(2500);
     CollectWindowsSnapshot();
-    if (!RefreshData(*p)) {
+    if (!RefreshData(*p) && IsHermes()) {
+        // Hermes is a quick flyout for hidden windows: nothing hidden, nothing to show.
         ReleasePanelBitmaps(*p);
         delete p;
         return;
@@ -8431,7 +8552,10 @@ void ShowPanel(HWND host) {
     g_panel = p;
     // Overlapped window with no GDI surface: DirectComposition shows the swap chain,
     // and DWM draws the system backdrop (Mica) behind its transparent pixels.
-    const DWORD kPanelStyle = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN;
+    // No window menu and no minimize / maximize boxes: a minimized tool window has
+    // no taskbar button and no Alt+Tab entry, so it could not be brought back.
+    // The caption and the thick frame stay, Mica needs them.
+    const DWORD kPanelStyle = WS_CAPTION | WS_THICKFRAME | WS_CLIPCHILDREN;
     // WS_EX_TOOLWINDOW keeps the panel out of Alt+Tab and the taskbar, as it was when it was a popup.
     HWND hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP, kPanelClass,
                                 L"", kPanelStyle, x, y, p->pxW, p->pxH, nullptr, nullptr,
@@ -8602,12 +8726,12 @@ void RemoveTrayIcon(HWND host) {
 // Adds, updates or removes the tray icon according to the hidden windows.
 void SyncTray(HWND host) {
     std::vector<HWND> hidden = HiddenSnapshot();
-    if (hidden.empty()) {
+    if (hidden.empty() && IsHermes()) {
+        ClosePanelLocal();  // Hermes shows nothing without hidden windows
+    }
+    if (hidden.empty() && !g_trayAlways) {
         RemoveTrayIcon(host);
         KillTimer(host, kHostTimer);
-        if (IsHermes()) {
-            ClosePanelLocal();
-        }
         return;
     }
 
@@ -8617,8 +8741,11 @@ void SyncTray(HWND host) {
     }
     bool badge = unread > 0;
     bool dark = IsSystemDark();
-    std::wstring tip = L"PWA Tray Center \x00B7 " + std::to_wstring(hidden.size()) +
-                       (hidden.size() == 1 ? L" app" : L" apps");
+    std::wstring tip = L"PWA Tray Center";
+    if (!hidden.empty()) {
+        tip += L" \x00B7 " + std::to_wstring(hidden.size()) +
+               (hidden.size() == 1 ? L" app" : L" apps");
+    }
     if (unread > 0) {
         tip += L" \x00B7 " + std::to_wstring(unread) + L" unread";
     }
@@ -8827,6 +8954,9 @@ DWORD WINAPI CenterThreadProc(LPVOID) {
     if (host) {
         ApplyHotkey(host, g_hotkey.load());
         UpdateMouseHotkeyHook();
+    }
+    if (host) {
+        PostMessageW(host, kMsgListChanged, 0, 0);  // shows the tray icon if it is always on
     }
     SetEvent(g_centerReady);
 
@@ -9150,6 +9280,7 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     EnumWindows(EnumWindowsProc, 0);
+    EnsureCenter();  // the shortcut is registered from the start
 }
 
 
