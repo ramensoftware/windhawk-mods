@@ -12277,6 +12277,7 @@ BOOL Init() {
         return FALSE;
     }
     if (!GetFloatCornerRadiusForCurrentStyle_Original) {
+        // udwm.dll
         WindhawkUtils::SYMBOL_HOOK fallbackHooks[] = {
             {
                 {LR"(private: float __cdecl CTopLevelWindow::GetRadiusFromCornerStyle(void))",
