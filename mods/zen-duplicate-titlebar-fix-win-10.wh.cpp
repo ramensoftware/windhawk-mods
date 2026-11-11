@@ -26,7 +26,7 @@ This mod hides the extra Windows-native titlebar buttons and lets Zen's remain.
 - Removes the `WS_SYSMENU` window style from Zen's main browser windows, preventing Windows from drawing its native titlebar buttons over Zen's.   
 - Prevents Zen from restoring that style while the mod is active.
 - Involves removing the native Windows system menu from being used on Zen, normally accessible with `alt + space`.
-- Only targets `zen.exe` main window(s) only, external windows from Zen such as Library or Browser Console are not targetted.
+- Only targets `zen.exe` for it's main window(s), external windows from Zen such as Library or Browser Console are not targetted.
 */
 // ==/WindhawkModReadme==
 
