@@ -227,9 +227,9 @@ nothing failed.
 | :---: | :---: |
 | ![Dock default layout](https://raw.githubusercontent.com/Louis047/manage-assets/refs/heads/main/windhawk-mods/windowswitcher%2B%2B/dock-layout/DL-Default.png) | ![Dock without central preview](https://raw.githubusercontent.com/Louis047/manage-assets/refs/heads/main/windhawk-mods/windowswitcher%2B%2B/dock-layout/DL-CentralPreviewDisabled.png) |
 
-| Dock with bottom icons and overflow chevron |
-| :---: |
-| ![Dock with bottom icons and overflow chevron](https://raw.githubusercontent.com/Louis047/manage-assets/refs/heads/main/windhawk-mods/windowswitcher%2B%2B/dock-layout/DL-IconBottom-OverflowChevron.png) |
+| Dock with bottom icons and overflow chevron | Dock grid view with grouped window indicators |
+| :---: | :---: |
+| ![Dock with bottom icons and overflow chevron](https://raw.githubusercontent.com/Louis047/manage-assets/refs/heads/main/windhawk-mods/windowswitcher%2B%2B/dock-layout/DL-IconBottom-OverflowChevron.png) | ![Dock grid view with grouped window indicators](https://raw.githubusercontent.com/Louis047/manage-assets/refs/heads/main/windhawk-mods/windowswitcher%2B%2B/dock-layout/DL-GridView-GRP-Window-Indicator.png) |
 
 */
 // ==/WindhawkModReadme==
@@ -667,6 +667,9 @@ nothing failed.
         - dockGridColumns: 7
           $name: Grid Columns
           $description: Maximum columns per page. The grid uses fewer columns when space is limited.
+        - dockGridCenterRows: false
+          $name: Center Partial Grid Rows
+          $description: Center the icons of a grid row that has fewer icons than the column count.
         - dockSwitcherPadding: 11
           $name: Dock Layout Padding (px)
           $description: Padding between the switcher border and the dock elements, in pixels.
@@ -1412,6 +1415,7 @@ struct Settings {
     bool dockUseGrid;
     int dockGridRows;
     int dockGridColumns;
+    bool dockGridCenterRows;
     WCHAR dockCloseButtonPosition[32];
     WCHAR dockGroupIndicatorPosition[32];
     // Grouped indicator
@@ -9817,6 +9821,11 @@ static void ComputeDockLayout(const MONITORINFO& mi, UINT dpiX, UINT dpiY) {
         if (i >= g_layoutStartIndex && i < g_layoutStartIndex + visibleCount) {
             int idx = i - g_layoutStartIndex;
             int cellX = stripStartX + (idx % columns) * (cellW + spacing);
+            if (g_settings.dockUseGrid && g_settings.dockGridCenterRows) {
+                // Center a row that holds fewer icons than the column count.
+                int rowIcons = std::min(columns, visibleCount - idx / columns * columns);
+                cellX += (columns - rowIcons) * (cellW + spacing) / 2;
+            }
             int cellY = g_rcDockIconStrip.top + (idx / columns) * (cellH + rowSpacing);
             w.rcCell = { cellX, cellY, cellX + cellW, cellY + cellH };
             if (showPreview && i == g_selectedIndex) {
@@ -20862,6 +20871,7 @@ static void LoadSettings() {
     g_settings.dockUseGrid = Wh_GetIntSetting(L"Appearance.DockLayout.dockUseGrid") != 0;
     g_settings.dockGridRows = std::clamp(LoadIntSetting(L"Appearance.DockLayout.dockGridRows", 2), 1, 32);
     g_settings.dockGridColumns = std::clamp(LoadIntSetting(L"Appearance.DockLayout.dockGridColumns", 7), 1, 32);
+    g_settings.dockGridCenterRows = Wh_GetIntSetting(L"Appearance.DockLayout.dockGridCenterRows") != 0;
     g_settings.dockSwitcherPadding = LoadIntSetting(L"Appearance.DockLayout.dockSwitcherPadding", 11);
     if (g_settings.dockSwitcherPadding < 0) g_settings.dockSwitcherPadding = 11;
 
