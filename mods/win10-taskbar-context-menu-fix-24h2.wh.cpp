@@ -12,7 +12,7 @@
 // ==WindhawkModReadme==
 /*
 The taskbar context menu (when clicking on the taskbar empty area) does not appear when
-running the Windows 10 taskbar on Windows 11 24H2 or Windows 11 25H2.
+running the Windows 10 taskbar on Windows 11 24H2, Windows 11 25H2 and later.
 This mod restores the menu.
 */
 // ==/WindhawkModReadme==
@@ -50,20 +50,18 @@ TrackPopupMenuEx_t TrackPopupMenuEx_Original;
 static thread_local bool g_inTrackPopupMenu = false;
 
 static void LaunchTaskManager() {
-    wchar_t szCmdLine[MAX_PATH];
-    if (GetSystemDirectoryW(szCmdLine, MAX_PATH)) {
-        wcscat_s(szCmdLine, L"\\taskmgr.exe");
-
-        STARTUPINFOW si = { sizeof(si) };
-        PROCESS_INFORMATION pi = { 0 };
-        if (CreateProcessW(nullptr, szCmdLine, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-            CloseHandle(pi.hThread);
-            CloseHandle(pi.hProcess);
-            return;
-        }
+    // taskmgr.exe запрашивает highestAvailable, поэтому CreateProcessW для
+    // администратора падает с ERROR_ELEVATION_REQUIRED. ShellExecuteW с полным
+    // путём покрывает оба случая.
+    wchar_t szPath[MAX_PATH];
+    UINT len = GetSystemDirectoryW(szPath, MAX_PATH);
+    if (len == 0 || len >= MAX_PATH) {
+        return;
     }
-
-    ShellExecuteW(nullptr, nullptr, L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL);
+    if (wcscat_s(szPath, L"\\taskmgr.exe") != 0) {
+        return;
+    }
+    ShellExecuteW(nullptr, nullptr, szPath, nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 static wchar_t* LoadStr(HMODULE hMod, UINT id, wchar_t* buf, int size) {
@@ -81,7 +79,7 @@ static wchar_t* GetLockToolbarsText(wchar_t* buf, int size) {
                 MENUITEMINFOW mii = {0};
                 mii.cbSize = sizeof(mii);
                 mii.fMask = MIIM_SUBMENU;
-                
+
                 if (GetMenuItemInfoW(hMenu, i, TRUE, &mii) && mii.hSubMenu) {
                     for (int j = 0; j < GetMenuItemCount(mii.hSubMenu); j++) {
                         MENUITEMINFOW subMii = {0};
@@ -90,8 +88,8 @@ static wchar_t* GetLockToolbarsText(wchar_t* buf, int size) {
                         wchar_t text[256] = {0};
                         subMii.dwTypeData = text;
                         subMii.cch = 255;
-                        
-                        if (GetMenuItemInfoW(mii.hSubMenu, j, TRUE, &subMii) && 
+
+                        if (GetMenuItemInfoW(mii.hSubMenu, j, TRUE, &subMii) &&
                             subMii.wID == IDM_LOCKTOOLBARS) {
                             wcsncpy_s(buf, size, text, _TRUNCATE);
                             DestroyMenu(hMenu);
@@ -103,7 +101,7 @@ static wchar_t* GetLockToolbarsText(wchar_t* buf, int size) {
             DestroyMenu(hMenu);
         }
     }
-    
+
     // Fallback на английский
     return nullptr;
 }
@@ -146,27 +144,36 @@ static void EnhanceTaskbarMenu(HMENU hMenu) {
     AppendMenuW(hPopup, MF_STRING, IDM_SETTINGS, str ? str : L"Taskbar settings");
 }
 
-// Находит актуальный ID пункта диспетчера задач (с учетом смещения после Shell_MergeMenus)
+// Окно-владелец меню должно быть панелью задач (основной или на дополнительном мониторе).
+static bool IsTaskbarWindow(HWND hWnd) {
+    if (!hWnd) return false;
+    wchar_t cls[32];
+    if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return false;
+    return wcscmp(cls, L"Shell_TrayWnd") == 0 ||
+           wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0;
+}
+
+// Находит актуальный ID пункта диспетчера задач (с учётом смещения после
+// Shell_MergeMenus, который копирует item data вместе со смещённым ID).
+// Пункт определяется только по маркеру.
 static UINT FindTaskManagerCmdId(HMENU hMenu) {
     if (!hMenu) return 0;
     int count = GetMenuItemCount(hMenu);
     for (int i = 0; i < count; i++) {
         MENUITEMINFOW mii = { sizeof(mii) };
-        mii.fMask = MIIM_ID | MIIM_DATA | MIIM_FTYPE;
-        if (GetMenuItemInfoW(hMenu, i, TRUE, &mii) && !(mii.fType & MFT_SEPARATOR)) {
-            if (mii.dwItemData == TASKMGR_ITEM_MAGIC && mii.wID != 0) {
-                return mii.wID;
-            }
-            if (mii.wID >= IDM_TASKMANAGER) {
-                UINT offset = mii.wID - IDM_TASKMANAGER;
-                if (GetMenuState(hMenu, IDM_SHOWDESKTOP + offset, MF_BYCOMMAND) != (UINT)-1 &&
-                    GetMenuState(hMenu, IDM_SETTINGS + offset, MF_BYCOMMAND) != (UINT)-1) {
-                    return mii.wID;
-                }
-            }
+        mii.fMask = MIIM_ID | MIIM_DATA;
+        if (GetMenuItemInfoW(hMenu, i, TRUE, &mii) &&
+            mii.dwItemData == TASKMGR_ITEM_MAGIC) {
+            return mii.wID;
         }
     }
     return 0;
+}
+
+// Общая логика для TrackPopupMenu / TrackPopupMenuEx.
+static UINT GetTaskManagerIdForMenu(HMENU hMenu, HWND hWnd) {
+    if (!IsTaskbarWindow(hWnd)) return 0;
+    return FindTaskManagerCmdId(hMenu);
 }
 
 HMENU WINAPI LoadMenuW_Hook(HINSTANCE hInstance, LPCWSTR lpMenuName) {
@@ -188,7 +195,7 @@ BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y, int nRes
         return TrackPopupMenu_Original(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
     }
 
-    UINT taskMgrId = FindTaskManagerCmdId(hMenu);
+    UINT taskMgrId = GetTaskManagerIdForMenu(hMenu, hWnd);
     bool addedReturnCmd = false;
     if (taskMgrId != 0 && !(uFlags & TPM_RETURNCMD)) {
         uFlags |= TPM_RETURNCMD;
@@ -203,8 +210,11 @@ BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y, int nRes
         if ((UINT)ret == taskMgrId) {
             LaunchTaskManager();
             return addedReturnCmd ? TRUE : 0;
-        } else if (addedReturnCmd && ret != 0 && hWnd) {
-            PostMessageW(hWnd, WM_COMMAND, MAKEWPARAM(ret, 0), 0);
+        } else if (addedReturnCmd) {
+            if (ret != 0) {
+                PostMessageW(hWnd, WM_COMMAND, MAKEWPARAM(ret, 0), 0);
+            }
+            // Без TPM_RETURNCMD закрытие меню без выбора — не ошибка.
             return TRUE;
         }
     }
@@ -217,7 +227,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
         return TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
     }
 
-    UINT taskMgrId = FindTaskManagerCmdId(hMenu);
+    UINT taskMgrId = GetTaskManagerIdForMenu(hMenu, hWnd);
     bool addedReturnCmd = false;
     if (taskMgrId != 0 && !(uFlags & TPM_RETURNCMD)) {
         uFlags |= TPM_RETURNCMD;
@@ -232,8 +242,10 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
         if ((UINT)ret == taskMgrId) {
             LaunchTaskManager();
             return addedReturnCmd ? TRUE : 0;
-        } else if (addedReturnCmd && ret != 0 && hWnd) {
-            PostMessageW(hWnd, WM_COMMAND, MAKEWPARAM(ret, 0), 0);
+        } else if (addedReturnCmd) {
+            if (ret != 0) {
+                PostMessageW(hWnd, WM_COMMAND, MAKEWPARAM(ret, 0), 0);
+            }
             return TRUE;
         }
     }
@@ -244,7 +256,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
 BOOL Wh_ModInit() {
     g_explorerModule = GetModuleHandleW(nullptr);
     g_shell32Module = GetModuleHandleW(L"shell32.dll");
-    g_bthpropsModule = LoadLibraryW(L"bthprops.cpl");
+    g_bthpropsModule = LoadLibraryExW(L"bthprops.cpl", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     g_explorerframeModule = GetModuleHandleW(L"explorerframe.dll");
 
     Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook, (void**)&LoadMenuW_Original);
