@@ -4,7 +4,7 @@
 // @name:zh-CN 开始菜单卡片 - Start Sidecar
 // @description Native XAML live cards inside the Windows 11 Start companion layout.
 // @description:zh-CN 在 Windows 11 开始菜单中嵌入原生 XAML 卡片。
-// @version 0.5.4
+// @version 0.6.1
 // @author Yizuka17
 // @github https://github.com/Yizuka17
 // @license MIT
@@ -47,17 +47,17 @@
   $name: "System overview: CPU / GPU"
   $name:zh-CN: "系统概览：CPU / GPU"
 - showMedia: true
-  $name: "Bottom row: media controls"
-  $name:zh-CN: "下方模块：系统媒体控制（SMTC）"
+  $name: "Card: media controls"
+  $name:zh-CN: "卡片：系统媒体控制（SMTC）"
 - showQuickSettings: true
-  $name: "Bottom row: quick settings"
-  $name:zh-CN: "下方模块：快速设置"
+  $name: "Card: quick settings"
+  $name:zh-CN: "卡片：快速设置"
 - showNetwork: true
-  $name: "Bottom row: network status and speed"
-  $name:zh-CN: "下方模块：网络状态和速度"
+  $name: "Card: network status and speed"
+  $name:zh-CN: "卡片：网络状态和速度"
 - showStorage: true
-  $name: "Bottom row: system drive space"
-  $name:zh-CN: "下方模块：系统盘空间"
+  $name: "Card: system drive space"
+  $name:zh-CN: "卡片：系统盘空间"
 - showVolume: true
   $name: "Quick settings: volume"
   $name:zh-CN: "快速设置：音量"
@@ -79,12 +79,13 @@ The interface uses English by default and also supports Simplified Chinese.
 Cards outside the native menu reuse Start's shadow when available.
 The mod makes no outbound requests.
 
-With a centered taskbar and enough horizontal room, the cards use both sides
-of Start. Phone Link stays in its native column. On a narrow display, the
-cards move into a scrollable section below Start.
-If there is too little vertical space to add that section, a **Cards** button
-opens them inside Start instead. The layout updates when the display rotates
-or its work area changes.
+Cards are packed into the actual free rectangles around Start and Phone Link.
+The overview, media player, and smaller controls can use different sides or rows
+above and below the menu. The native menu keeps its original position and size.
+Card sizes adapt to the available space, including portrait displays and taskbars
+at different edges. A scrollable section or an in-menu **Cards** button is used
+only when the individual cards cannot fit. The layout updates when the display,
+menu position, or Phone Link visibility changes.
 
 Available cards:
 
@@ -1273,7 +1274,6 @@ static event_token g_visible{}, g_activated{}, g_closed{}, g_sizeChanged{},
     g_layoutTimer{nullptr};
 [[clang::no_destroy]] static c::Border g_card{nullptr};
 [[clang::no_destroy]] static c::Grid g_host{nullptr};
-[[clang::no_destroy]] static c::Grid g_sideOverview{nullptr};
 [[clang::no_destroy]] static c::Border g_shadowSource{nullptr};
 [[clang::no_destroy]] static std::optional<std::vector<c::Border>>
     g_shadowCasters;
@@ -1290,10 +1290,6 @@ struct DetachedShadow {
     m::CompositionTarget::Rendering_revoker> g_shadowRendering;
 static ULONGLONG g_shadowKeepUntil = 0;
 static float g_shadowElevation = 0;
-[[clang::no_destroy]] static c::ScrollViewer g_leftFlank{nullptr},
-    g_rightFlank{nullptr};
-[[clang::no_destroy]] static std::optional<std::vector<c::ColumnDefinition>>
-    g_addedColumns;
 [[clang::no_destroy]] static c::TextBlock g_clock{nullptr}, g_date{nullptr},
     g_battery{nullptr}, g_power{nullptr}, g_memory{nullptr},
     g_available{nullptr};
@@ -1306,59 +1302,277 @@ static bool g_layoutReady = false;
 [[clang::no_destroy]] static c::Button g_compactButton{nullptr},
     g_compactBack{nullptr};
 static int g_layoutAttempts = 0;
+// Rectangular free-space packing. This has no dependency on screen orientation
+// or taskbar alignment; the native menu and companion are fixed obstacles.
+namespace packing {
+struct Rect {
+    double x = 0, y = 0, w = 0, h = 0;
+    double Right() const { return x + w; }
+    double Bottom() const { return y + h; }
+    bool operator==(Rect const&) const = default;
+};
+struct Size {
+    double w, h;
+    bool compact = false;
+};
+struct Spec {
+    std::vector<Size> sizes;
+    double idealWidth = 0, minWidth = 0;
+    bool overview = false;
+};
+struct Placement {
+    Rect rect;
+    bool compact = false;
+};
+inline bool Intersects(Rect const& a, Rect const& b) {
+    return a.x < b.Right() - 0.01 && b.x < a.Right() - 0.01 &&
+           a.y < b.Bottom() - 0.01 && b.y < a.Bottom() - 0.01;
+}
+inline bool Contains(Rect const& a, Rect const& b) {
+    return b.x >= a.x - 0.01 && b.y >= a.y - 0.01 &&
+           b.Right() <= a.Right() + 0.01 && b.Bottom() <= a.Bottom() + 0.01;
+}
+inline Rect Inflate(Rect r, double gap) {
+    return {r.x - gap, r.y - gap, r.w + gap * 2, r.h + gap * 2};
+}
+inline Rect Union(Rect const& a, Rect const& b) {
+    return {std::min(a.x, b.x), std::min(a.y, b.y),
+            std::max(a.Right(), b.Right()) - std::min(a.x, b.x),
+            std::max(a.Bottom(), b.Bottom()) - std::min(a.y, b.y)};
+}
+inline std::vector<Rect> Subtract(std::vector<Rect> const& free,
+                                  Rect const& used) {
+    std::vector<Rect> next;
+    for (auto const& r : free) {
+        if (!Intersects(r, used)) {
+            next.push_back(r);
+            continue;
+        }
+        if (used.x > r.x)
+            next.push_back({r.x, r.y, used.x - r.x, r.h});
+        if (used.Right() < r.Right())
+            next.push_back({used.Right(), r.y, r.Right() - used.Right(), r.h});
+        if (used.y > r.y)
+            next.push_back({r.x, r.y, r.w, used.y - r.y});
+        if (used.Bottom() < r.Bottom())
+            next.push_back(
+                {r.x, used.Bottom(), r.w, r.Bottom() - used.Bottom()});
+    }
+    for (size_t i = 0; i < next.size();) {
+        bool redundant = next[i].w < 1 || next[i].h < 1;
+        for (size_t j = 0; j < next.size() && !redundant; ++j)
+            redundant = i != j && Contains(next[j], next[i]) &&
+                        (next[j] != next[i] || j < i);
+        if (redundant)
+            next.erase(next.begin() + i);
+        else
+            ++i;
+    }
+    return next;
+}
+inline std::vector<Rect> Free(Rect const& bounds,
+                              Rect const& obstacle,
+                              double gap) {
+    return Subtract({bounds}, Inflate(obstacle, gap));
+}
+struct State {
+    std::vector<Rect> free;
+    std::vector<Placement> placed;
+    Rect hull;
+    double cost = 0;
+    double Rank() const { return cost + hull.w * hull.h * 0.0007; }
+};
+inline void FillRows(std::vector<Placement>& plan,
+                     Rect const& bounds,
+                     Rect const& native,
+                     double gap) {
+    Rect hull = native;
+    for (auto const& p : plan)
+        hull = Union(hull, p.rect);
+    for (size_t i = 0; i < plan.size(); ++i) {
+        if (plan[i].rect.h > 200)
+            continue;
+        std::vector<size_t> row;
+        for (size_t j = 0; j < plan.size(); ++j)
+            if (std::abs(plan[j].rect.y - plan[i].rect.y) < 0.5 &&
+                std::abs(plan[j].rect.h - plan[i].rect.h) < 0.5)
+                row.push_back(j);
+        if (row.empty() || i != row.front())
+            continue;
+        std::sort(row.begin(), row.end(), [&](auto a, auto b) {
+            return plan[a].rect.x < plan[b].rect.x;
+        });
+        Rect band{
+            std::max(bounds.x, hull.x), plan[i].rect.y,
+            std::min(bounds.Right(), hull.Right()) - std::max(bounds.x, hull.x),
+            plan[i].rect.h};
+        if (Intersects(band, Inflate(native, gap)))
+            continue;
+        bool clear = true;
+        for (size_t j = 0; j < plan.size(); ++j)
+            if (std::find(row.begin(), row.end(), j) == row.end() &&
+                Intersects(band, Inflate(plan[j].rect, gap)))
+                clear = false;
+        double sum = 0;
+        for (auto index : row)
+            sum += plan[index].rect.w;
+        const double room = band.w - gap * (row.size() - 1);
+        if (!clear || room < sum || sum <= 0)
+            continue;
+        double x = band.x;
+        for (auto index : row) {
+            auto& r = plan[index].rect;
+            r.x = x;
+            r.w *= room / sum;
+            x = r.Right() + gap;
+        }
+    }
+}
+inline std::vector<Placement> Solve(Rect const& bounds,
+                                    Rect const& native,
+                                    std::vector<Spec> const& specs,
+                                    double gap) {
+    if (bounds.w <= 0 || bounds.h <= 0)
+        return {};
+    std::vector<State> states{{Free(bounds, native, gap), {}, native, 0}};
+    const bool flanks =
+        native.x - bounds.x >= 230 && bounds.Right() - native.Right() >= 230;
+    for (auto const& spec : specs) {
+        std::vector<State> next;
+        for (auto const& state : states) {
+            std::vector<Placement> seen;
+            for (auto const& space : state.free) {
+                auto sizes = spec.sizes;
+                if (!spec.overview && space.w >= spec.minWidth &&
+                    space.h >= 164) {
+                    const auto h = std::min(176.0, space.h);
+                    for (double w : {spec.idealWidth, spec.minWidth,
+                                     std::min(space.w, spec.idealWidth * 1.4)})
+                        sizes.push_back({w, h});
+                }
+                for (auto const& size : sizes) {
+                    if (size.w > space.w || size.h > space.h)
+                        continue;
+                    for (double x :
+                         {space.x, space.Right() - size.w,
+                          std::clamp(native.x, space.x, space.Right() - size.w),
+                          std::clamp(native.Right() - size.w, space.x,
+                                     space.Right() - size.w)})
+                        for (double y :
+                             {space.y, space.Bottom() - size.h,
+                              std::clamp(native.y, space.y,
+                                         space.Bottom() - size.h),
+                              std::clamp(native.Bottom() - size.h, space.y,
+                                         space.Bottom() - size.h)}) {
+                            Rect rect{x, y, size.w, size.h};
+                            if (std::any_of(seen.begin(), seen.end(),
+                                            [&](auto const& p) {
+                                                return p.rect == rect &&
+                                                       p.compact ==
+                                                           size.compact;
+                                            }))
+                                continue;
+                            seen.push_back({rect, size.compact});
+                            State candidate = state;
+                            candidate.free =
+                                Subtract(state.free, Inflate(rect, gap));
+                            candidate.placed.push_back({rect, size.compact});
+                            candidate.hull = Union(state.hull, rect);
+                            const auto dx =
+                                std::max({native.x - rect.Right(),
+                                          rect.x - native.Right(), 0.0});
+                            const auto dy =
+                                std::max({native.y - rect.Bottom(),
+                                          rect.y - native.Bottom(), 0.0});
+                            candidate.cost += (dx + dy) * 0.3;
+                            if (flanks && dy > 0)
+                                candidate.cost += 32;
+                            if (spec.overview)
+                                candidate.cost += size.compact ? 35 : -60;
+                            else
+                                candidate.cost +=
+                                    std::abs(size.w - spec.idealWidth) * 0.08;
+                            next.push_back(std::move(candidate));
+                        }
+                }
+            }
+        }
+        if (next.empty())
+            return {};
+        std::stable_sort(
+            next.begin(), next.end(),
+            [](auto const& a, auto const& b) { return a.Rank() < b.Rank(); });
+        if (next.size() > 32)
+            next.resize(32);
+        states = std::move(next);
+    }
+    auto result = states.front().placed;
+    FillRows(result, bounds, native, gap);
+    return result;
+}
+}  // namespace packing
+
 struct WorkArea {
-    double width = INFINITY, height = INFINITY;
+    double width = 0, height = 0, left = 0, top = 0;
     bool operator==(WorkArea const&) const = default;
 };
 static WorkArea g_workArea;
-static bool g_centeredTaskbar = false;
+struct NativeGeometry {
+    packing::Rect menu, occupied;
+    double hostX = 0, hostY = 0;
+    bool phoneVisible = false;
+    bool operator==(NativeGeometry const&) const = default;
+};
+static NativeGeometry g_nativeGeometry;
+[[clang::no_destroy]] static c::Canvas g_cardsLayer{nullptr};
+struct PackedCard {
+    c::Border card;
+    packing::Rect rect;
+    bool overview;
+};
+[[clang::no_destroy]] static std::optional<std::vector<PackedCard>>
+    g_packedCards;
+
+struct NativeProperty {
+    x::FrameworkElement element;
+    x::DependencyProperty property;
+    f::IInspectable value;
+    x::Data::Binding binding{nullptr};
+};
+[[clang::no_destroy]] static std::optional<std::vector<NativeProperty>>
+    g_nativeProperties;
+[[clang::no_destroy]] static std::optional<std::vector<c::ColumnDefinition>>
+    g_nativeColumns;
+[[clang::no_destroy]] static std::optional<std::vector<c::RowDefinition>>
+    g_nativeRows;
+static void RestoreNativeBounds();
 
 static WorkArea GetWorkArea() {
     const HWND hwnd = g_hwnd.load();
     MONITORINFO monitor{sizeof(monitor)};
+    RECT client{};
+    POINT origin{};
     const auto dpi = GetDpiForWindow(hwnd);
-    if (!dpi ||
+    if (!dpi || !GetClientRect(hwnd, &client) ||
+        !ClientToScreen(hwnd, &origin) ||
         !GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
                          &monitor))
         return {};
-    return {(monitor.rcWork.right - monitor.rcWork.left) * 96.0 / dpi,
-            (monitor.rcWork.bottom - monitor.rcWork.top) * 96.0 / dpi};
+    const double scale = 96.0 / dpi;
+    const auto left = std::max(0L, monitor.rcWork.left - origin.x);
+    const auto top = std::max(0L, monitor.rcWork.top - origin.y);
+    const auto right = std::min(client.right, monitor.rcWork.right - origin.x);
+    const auto bottom =
+        std::min(client.bottom, monitor.rcWork.bottom - origin.y);
+    return {std::max(0L, right - left) * scale,
+            std::max(0L, bottom - top) * scale, left * scale, top * scale};
 }
 
-static bool IsCenteredTaskbar() {
-    DWORD alignment = 1, size = sizeof(alignment);
-    auto status = RegGetValueW(
-        HKEY_CURRENT_USER,
-        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-        L"TaskbarAl", RRF_RT_REG_DWORD, nullptr, &alignment, &size);
-    if (status == ERROR_FILE_NOT_FOUND)
-        alignment = 1;
-    else if (status != ERROR_SUCCESS)
-        return false;
-    if (alignment != 1)
-        return false;
-
-    RECT rect{};
-    const auto taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (taskbar && GetWindowRect(taskbar, &rect))
-        return rect.right - rect.left >= rect.bottom - rect.top;
-    APPBARDATA bar{sizeof(bar)};
-    return !SHAppBarMessage(ABM_GETTASKBARPOS, &bar) ||
-           bar.rc.right - bar.rc.left >= bar.rc.bottom - bar.rc.top;
-}
-
-struct SavedProperty {
-    x::FrameworkElement element{nullptr};
-    x::DependencyProperty property{nullptr};
-    f::IInspectable value{nullptr};
-    x::Data::Binding binding{nullptr};
-};
-[[clang::no_destroy]] static std::optional<std::vector<SavedProperty>> g_saved;
 [[clang::no_destroy]] static std::optional<std::vector<std::function<void()>>>
     g_cardEvents;
 static void RemoveBottom();
 static void UpdateBottom(svc::Data const&);
-static bool BuildBottom(x::DependencyObject const&, c::Border const&, double);
+static void QueueLayout();
 
 template <typename F>
 static void GuardUi(F&& action) noexcept {
@@ -1376,21 +1590,6 @@ template <typename Revoker>
 static void Track(Revoker revoker) {
     auto subscription = std::make_shared<Revoker>(std::move(revoker));
     g_cardEvents->emplace_back([subscription] { subscription->revoke(); });
-}
-
-static void WatchVisibility(
-    x::UIElement const& element,
-    x::DependencyPropertyChangedCallback const& handler) {
-    auto property = x::UIElement::VisibilityProperty();
-    auto token = element.RegisterPropertyChangedCallback(property, handler);
-    try {
-        g_cardEvents->emplace_back([element, property, token] {
-            element.UnregisterPropertyChangedCallback(property, token);
-        });
-    } catch (...) {
-        element.UnregisterPropertyChangedCallback(property, token);
-        throw;
-    }
 }
 
 static void LabelControl(x::FrameworkElement const& control,
@@ -1616,113 +1815,48 @@ static x::FrameworkElement Resolve(x::DependencyObject root,
         start = slash + 1;
     }
 }
-static void Save(x::FrameworkElement const& element,
-                 x::DependencyProperty const& property) {
-    for (auto const& old : *g_saved)
-        if (old.element == element && old.property == property)
-            return;
-    SavedProperty saved;
-    saved.element = element;
-    saved.property = property;
-    saved.value = element.ReadLocalValue(property);
-    if (auto expression = element.GetBindingExpression(property))
-        saved.binding = expression.ParentBinding();
-    g_saved->push_back(saved);
-}
 static void RemoveCard() {
     g_layoutReady = false;
     g_layoutRoot = nullptr;
     g_shadowRendering.reset();
     g_shadowTransform = nullptr;
-    try {
+    GuardUi([] {
         if (g_update)
             g_update.Stop();
-    } catch (...) {
-    }
+    });
     if (g_cardEvents) {
         for (auto const& unsubscribe : *g_cardEvents)
             GuardUi(unsubscribe);
         g_cardEvents.reset();
     }
-    if (g_shadowLayer) {
-        GuardUi([] {
-            if (auto parent = g_shadowLayer.Parent().try_as<c::Grid>()) {
-                uint32_t index;
-                if (parent.Children().IndexOf(g_shadowLayer, index))
-                    parent.Children().RemoveAt(index);
-            }
+    for (auto const& layer : {g_shadowLayer.try_as<x::FrameworkElement>(),
+                              g_cardsLayer.try_as<x::FrameworkElement>(),
+                              g_compactLayer.try_as<x::FrameworkElement>()}) {
+        GuardUi([&] {
+            if (layer)
+                if (auto parent = layer.Parent().try_as<c::Panel>()) {
+                    uint32_t index;
+                    if (parent.Children().IndexOf(layer, index))
+                        parent.Children().RemoveAt(index);
+                }
         });
-        g_shadowLayer = nullptr;
     }
+    RestoreNativeBounds();
+    RemoveBottom();
+    g_shadowLayer = g_cardsLayer = nullptr;
+    g_packedCards.reset();
     g_detachedShadows.reset();
     g_shadowMotion.reset();
-    if (g_compactLayer) {
-        GuardUi([] {
-            if (auto parent = g_compactLayer.Parent().try_as<c::Grid>()) {
-                uint32_t index;
-                if (parent.Children().IndexOf(g_compactLayer, index))
-                    parent.Children().RemoveAt(index);
-            }
-        });
-        g_compactBack = g_compactButton = nullptr;
-        g_compactPanel = nullptr;
-        g_compactLayer = nullptr;
-    }
-    RemoveBottom();
-    try {
-        if (g_host) {
-            for (auto const& flank : {g_leftFlank, g_rightFlank}) {
-                uint32_t at;
-                if (flank && g_host.Children().IndexOf(flank, at))
-                    g_host.Children().RemoveAt(at);
-            }
-        }
-        if (g_host && g_sideOverview) {
-            uint32_t at;
-            if (g_host.Children().IndexOf(g_sideOverview, at))
-                g_host.Children().RemoveAt(at);
-        }
-        if (g_host && g_addedColumns) {
-            for (auto const& column : *g_addedColumns) {
-                uint32_t at;
-                if (g_host.ColumnDefinitions().IndexOf(column, at))
-                    g_host.ColumnDefinitions().RemoveAt(at);
-            }
-        }
-    } catch (...) {
-    }
-    if (g_saved)
-        for (auto it = g_saved->rbegin(); it != g_saved->rend(); ++it)
-            try {
-                if (it->binding)
-                    x::Data::BindingOperations::SetBinding(
-                        it->element, it->property, it->binding);
-                else if (it->value == x::DependencyProperty::UnsetValue())
-                    it->element.ClearValue(it->property);
-                else
-                    it->element.SetValue(it->property, it->value);
-            } catch (...) {
-            }
-    g_saved.reset();
-    g_addedColumns.reset();
-    g_leftFlank = nullptr;
-    g_rightFlank = nullptr;
-    g_sideOverview = nullptr;
     g_shadowCasters.reset();
     g_shadowSource = nullptr;
     g_shadowElevation = 0;
+    g_compactBack = g_compactButton = nullptr;
+    g_compactPanel = nullptr;
+    g_compactLayer = nullptr;
     g_card = nullptr;
     g_host = nullptr;
-    g_clock = nullptr;
-    g_date = nullptr;
-    g_battery = nullptr;
-    g_power = nullptr;
-    g_memory = nullptr;
-    g_available = nullptr;
-    g_title = nullptr;
-    g_powerSource = nullptr;
-    g_cpu = nullptr;
-    g_gpu = nullptr;
+    g_clock = g_date = g_battery = g_power = g_memory = g_available = nullptr;
+    g_title = g_powerSource = g_cpu = g_gpu = nullptr;
 }
 static void UpdateData() {
     SyncShadowElevation();
@@ -1994,14 +2128,6 @@ inline void Update(svc::Data const& data) {
 }  // namespace mediaCard
 
 namespace cards {
-[[clang::no_destroy]] inline c::Border bottom{nullptr};
-[[clang::no_destroy]] inline c::Grid parent{nullptr};
-[[clang::no_destroy]] inline x::FrameworkElement mainMenu{nullptr},
-    companion{nullptr};
-[[clang::no_destroy]] inline std::optional<std::vector<c::RowDefinition>> rows;
-[[clang::no_destroy]] inline std::optional<std::vector<c::Border>> tiles;
-inline std::vector<double> tileWeights;
-[[clang::no_destroy]] inline c::Grid tileGrid{nullptr};
 [[clang::no_destroy]] inline c::TextBlock networkName{nullptr},
     networkState{nullptr}, download{nullptr}, upload{nullptr},
     storageName{nullptr}, storageValue{nullptr}, storageDetail{nullptr},
@@ -2015,9 +2141,6 @@ inline bool updating = false;
 inline ULONGLONG volumeTouched = 0, brightnessTouched = 0;
 inline void Remove() {
     mediaCard::Remove();
-    tiles.reset();
-    tileWeights.clear();
-    tileGrid = nullptr;
     networkName = nullptr;
     networkState = nullptr;
     download = nullptr;
@@ -2027,25 +2150,6 @@ inline void Remove() {
     storageDetail = nullptr;
     storageFree = nullptr;
     storageProgress = nullptr;
-    try {
-        if (parent && bottom) {
-            uint32_t index;
-            if (parent.Children().IndexOf(bottom, index))
-                parent.Children().RemoveAt(index);
-        }
-        if (parent && rows)
-            for (auto const& row : *rows) {
-                uint32_t index;
-                if (parent.RowDefinitions().IndexOf(row, index))
-                    parent.RowDefinitions().RemoveAt(index);
-            }
-    } catch (...) {
-    }
-    rows.reset();
-    bottom = nullptr;
-    parent = nullptr;
-    mainMenu = nullptr;
-    companion = nullptr;
     volumeLabel = nullptr;
     brightnessLabel = nullptr;
     volume = nullptr;
@@ -2072,10 +2176,6 @@ inline c::TextBlock Text(const wchar_t* value, double size = 14) {
     text.TextTrimming(x::TextTrimming::CharacterEllipsis);
     return text;
 }
-inline void Height(x::FrameworkElement const& element, double height) {
-    Save(element, x::FrameworkElement::HeightProperty());
-    element.Height(height);
-}
 inline bool Visible(x::DependencyObject node) {
     for (int i = 0; node && i < 8; i++) {
         if (auto element = node.try_as<x::FrameworkElement>()) {
@@ -2087,45 +2187,6 @@ inline bool Visible(x::DependencyObject node) {
         node = m::VisualTreeHelper::GetParent(node);
     }
     return true;
-}
-inline void Reflow() {
-    if (!bottom || !tileGrid || !tiles || tiles->empty() || !mainMenu)
-        return;
-    double width = mainMenu.ActualWidth();
-    if (width < 100)
-        width = mainMenu.Width();
-    if (!std::isfinite(width) || width < 100)
-        return;
-    if (companion && Visible(companion))
-        width += companion.ActualWidth();
-    if (g_sideOverview)
-        width += g_sideOverview.Width() + g_sideOverview.Margin().Left;
-    bottom.Width(width);
-    tileGrid.Width(width);
-    double totalWeight = 0;
-    for (auto weight : tileWeights)
-        totalWeight += weight;
-    for (uint32_t i = 0; i < tiles->size(); i++) {
-        auto const& tile = (*tiles)[i];
-        double cell = width * tileWeights[i] / totalWeight;
-        double cardWidth = std::max(60.0, cell - (i ? 4 : 0));
-        tileGrid.ColumnDefinitions().GetAt(i).Width(
-            {cell, x::GridUnitType::Pixel});
-        tile.Width(cardWidth);
-        tile.MaxWidth(cardWidth);
-        if (auto child = tile.Child().try_as<x::FrameworkElement>()) {
-            auto padding = tile.Padding(), border = tile.BorderThickness();
-            double innerWidth =
-                std::max(1.0, cardWidth - padding.Left - padding.Right -
-                                  border.Left - border.Right);
-            // Let Border arrange its child to the actual content slot,
-            // including border thickness and layout rounding. Forcing
-            // cardWidth-24 overflowed that slot and clipped the right edge of
-            // the media artwork.
-            child.Width(NAN);
-            child.MaxWidth(innerWidth);
-        }
-    }
 }
 inline constexpr double kPanelHeight = 176;
 inline constexpr double kGap = 4;
@@ -2259,107 +2320,6 @@ static void Populate(c::Border const& native,
     }
 }
 
-static void AttachRow(x::DependencyObject const& root,
-                      c::Grid const& animation,
-                      x::FrameworkElement const& main,
-                      x::FrameworkElement const& frame,
-                      double panelHeight) {
-    // Preserve the original menu and companion height. Extend the native
-    // height enforcer as well so Start measures the added row as part of its
-    // surface rather than clipping it at the old 750-DIP frame boundary.
-    const double oldHeight = main.ActualHeight();
-    const double totalHeight = oldHeight + panelHeight + kGap;
-    const double framePadding =
-        std::max(0.0, frame.ActualHeight() - animation.ActualHeight());
-    rows.emplace();
-    Height(main, oldHeight);
-    if (auto phone = Resolve(root, L"RightCompanion"))
-        Height(phone, oldHeight);
-    parent = animation;
-    if (animation.RowDefinitions().Size() == 0) {
-        c::RowDefinition first;
-        first.Height({oldHeight, x::GridUnitType::Pixel});
-        animation.RowDefinitions().Append(first);
-        rows->push_back(first);
-    }
-    auto row = animation.RowDefinitions().Size();
-    c::RowDefinition added;
-    added.Height({panelHeight + kGap, x::GridUnitType::Pixel});
-    animation.RowDefinitions().Append(added);
-    rows->push_back(added);
-    Height(animation, totalHeight);
-    Save(frame, x::FrameworkElement::MaxHeightProperty());
-    frame.MaxHeight(INFINITY);
-    Height(frame, totalHeight + framePadding);
-    if (auto enforcer = Resolve(root, L"MaxHeightEnforcer"))
-        Height(enforcer, totalHeight + framePadding);
-    bottom = c::Border();
-    bottom.Name(L"StartSidecarBottomModules");
-    bottom.Margin({0, kGap, 0, 0});
-    bottom.Height(panelHeight);
-    bottom.HorizontalAlignment(x::HorizontalAlignment::Stretch);
-    c::Grid::SetColumn(bottom, c::Grid::GetColumn(main));
-    c::Grid::SetColumnSpan(
-        bottom, std::max(1u, animation.ColumnDefinitions().Size() -
-                                 (uint32_t)c::Grid::GetColumn(main)));
-    c::Grid::SetRow(bottom, row);
-    animation.Children().Append(bottom);
-}
-
-inline bool Build(x::DependencyObject const& root,
-                  c::Border const& native,
-                  double panelHeight) {
-    auto settings = std::atomic_load(&svc::config);
-    if (!HasCards(*settings))
-        return true;
-    auto animation = Resolve(root, L"AnimationRoot").try_as<c::Grid>();
-    auto main = Resolve(root, L"MainMenu");
-    auto frame = Resolve(root, L"FrameRoot");
-    if (!animation || !main || !frame || main.ActualHeight() < 100)
-        return false;
-    mainMenu = main;
-    companion = Resolve(root, L"RightCompanionContainerGrid");
-    tiles.emplace();
-    AttachRow(root, animation, main, frame, panelHeight);
-    c::Grid grid;
-    tileGrid = grid;
-    bottom.Child(grid);
-    int column = 0;
-    auto add = [&](c::Border const& card, double weight) {
-        auto padding = card.Padding();
-        padding.Top = padding.Bottom =
-            std::min(padding.Top, std::max(0.0, (panelHeight - 152) / 2));
-        card.Padding(padding);
-        c::ColumnDefinition definition;
-        definition.Width({200, x::GridUnitType::Pixel});
-        grid.ColumnDefinitions().Append(definition);
-        auto surface = WrapSurface(card);
-        c::Grid::SetColumn(surface, column);
-        surface.Margin({column ? 4.0 : 0, 0, 0, 0});
-        grid.Children().Append(surface);
-        tiles->push_back(card);
-        tileWeights.push_back(weight);
-        column++;
-    };
-    Populate(native, *settings, add);
-    const auto sizeChanged = [](auto const&, auto const&) {
-        GuardUi([] { Reflow(); });
-    };
-    Track(main.SizeChanged(auto_revoke, sizeChanged));
-    if (companion) {
-        Track(companion.SizeChanged(auto_revoke, sizeChanged));
-        for (x::DependencyObject node = companion; node && node != animation;
-             node = m::VisualTreeHelper::GetParent(node)) {
-            if (auto element = node.try_as<x::UIElement>()) {
-                WatchVisibility(element, [](auto const&, auto const&) {
-                    GuardUi([] { Reflow(); });
-                });
-            }
-        }
-    }
-    Reflow();
-    return true;
-}
 inline void Update(svc::Data const& data) {
     mediaCard::Update(data);
     wchar_t text[192];
@@ -2442,12 +2402,6 @@ static void RemoveBottom() {
 static void UpdateBottom(svc::Data const& data) {
     cards::Update(data);
 }
-static bool BuildBottom(x::DependencyObject const& root,
-                        c::Border const& native,
-                        double panelHeight) {
-    return cards::Build(root, native, panelHeight);
-}
-
 static x::FrameworkElement OverviewElement(const wchar_t* name) {
     auto element = g_card.FindName(name).try_as<x::FrameworkElement>();
     if (!element)
@@ -2455,8 +2409,16 @@ static x::FrameworkElement OverviewElement(const wchar_t* name) {
     return element;
 }
 
+static void WireOverview() {
+    auto button = OverviewElement(L"SettingsButton").as<c::Button>();
+    Track(button.Click(auto_revoke, [](auto const&, auto const&) {
+        ShellExecuteW(nullptr, L"open", L"ms-settings:about", nullptr, nullptr,
+                      SW_SHOWNORMAL);
+    }));
+}
 static void BuildOverview(c::Border const& nativeBorder,
-                          svc::Config const& settings) {
+                          svc::Config const& settings,
+                          bool wire = true) {
     g_card = x::Markup::XamlReader::Load(kMarkup).as<c::Border>();
     ApplyNativeSurface(g_card, nativeBorder);
     g_clock = OverviewElement(L"ClockValue").as<c::TextBlock>();
@@ -2490,29 +2452,31 @@ static void BuildOverview(c::Border const& nativeBorder,
                                          : x::Visibility::Collapsed);
     auto button = OverviewElement(L"SettingsButton").as<c::Button>();
     button.Content(box_value(Tr(L"System settings", L"系统设置")));
-    Track(button.Click(auto_revoke, [](auto const&, auto const&) {
-        ShellExecuteW(nullptr, L"open", L"ms-settings:about", nullptr, nullptr,
-                      SW_SHOWNORMAL);
-    }));
+    if (wire)
+        WireOverview();
 }
 
 static void CompactOverview(double width) {
-    auto layout = g_card.Child().as<c::Grid>();
-    auto oldStack = OverviewElement(L"OverviewScroll")
-                        .as<c::ScrollViewer>()
-                        .Content()
-                        .as<c::StackPanel>();
-    auto settings = OverviewElement(L"SettingsButton").as<c::Button>();
     std::vector<x::FrameworkElement> metrics;
-    auto children = oldStack.Children();
-    for (uint32_t i = 1; i < children.Size(); ++i) {
-        auto child = children.GetAt(i);
-        if (child.Visibility() == x::Visibility::Visible)
-            metrics.push_back(child.as<x::FrameworkElement>());
+    for (const wchar_t* name :
+         {L"TimeTile", L"BatteryTile", L"MemoryTile", L"PerformanceTile"}) {
+        auto element = OverviewElement(name);
+        if (element.Visibility() == x::Visibility::Visible)
+            metrics.push_back(element);
     }
-    auto title = children.GetAt(0).as<c::TextBlock>();
-    children.Clear();
-    layout.Children().Clear();
+    auto title = OverviewElement(L"DeviceTitle").as<c::TextBlock>();
+    auto settings = OverviewElement(L"SettingsButton").as<c::Button>();
+    auto detach = [](x::FrameworkElement const& element) {
+        if (auto panel = element.Parent().try_as<c::Panel>()) {
+            uint32_t index;
+            if (panel.Children().IndexOf(element, index))
+                panel.Children().RemoveAt(index);
+        }
+    };
+    detach(title);
+    detach(settings);
+    for (auto const& metric : metrics)
+        detach(metric);
     g_card.Child(nullptr);
 
     c::StackPanel content;
@@ -2618,124 +2582,6 @@ static c::ScrollViewer BuildStackedCards(c::Border const& native,
     return scroll;
 }
 
-static void BuildStackedRow(x::DependencyObject const& root,
-                            c::Grid const& host,
-                            c::Grid const& main,
-                            x::FrameworkElement const& frame,
-                            c::Border const& native,
-                            svc::Config const& settings,
-                            double width,
-                            double maxHeight) {
-    auto scroll = BuildStackedCards(native, settings, width);
-    UpdateData();
-    auto stack = scroll.Content().as<c::StackPanel>();
-    stack.Measure({static_cast<float>(width), INFINITY});
-    const double height =
-        std::min(maxHeight, static_cast<double>(stack.DesiredSize().Height));
-    cards::AttachRow(root, host, main, frame, height);
-    cards::bottom.Name(L"StartSidecarStackedModules");
-    cards::bottom.Width(width);
-    cards::bottom.HorizontalAlignment(x::HorizontalAlignment::Left);
-    cards::bottom.Child(scroll);
-}
-
-static void BuildCenteredFlanks(c::Grid const& host,
-                                c::Grid const& main,
-                                c::Border const& native,
-                                svc::Config const& settings,
-                                double leftWidth,
-                                double rightWidth,
-                                double gap) {
-    g_host = host;
-    c::StackPanel left, right;
-    left.Spacing(6);
-    right.Spacing(6);
-    if (settings.overview) {
-        BuildOverview(native, settings);
-        CompactOverview(leftWidth);
-        left.Children().Append(WrapSurface(g_card, true, false));
-    }
-    const auto moduleCount = cards::ModuleCount(settings);
-    unsigned module = 0;
-    bool movedSmallCard = false;
-    cards::Populate(
-        native, settings, [&](c::Border const& card, double weight) {
-            const bool small = weight <= 1;
-            card.MinHeight(small ? 142 : cards::kPanelHeight);
-            bool useLeft = settings.overview
-                               ? moduleCount >= 4 && small && !movedSmallCard
-                               : module % 2 == 1;
-            movedSmallCard |= useLeft && small;
-            ++module;
-            (useLeft ? left : right)
-                .Children()
-                .Append(WrapSurface(card, true, false));
-        });
-    auto makeSide = [&](c::StackPanel const& content, double width,
-                        bool atLeft) {
-        c::ScrollViewer scroll;
-        scroll.Name(atLeft ? L"StartSidecarCenteredLeft"
-                           : L"StartSidecarCenteredRight");
-        scroll.HorizontalScrollMode(c::ScrollMode::Disabled);
-        scroll.HorizontalScrollBarVisibility(c::ScrollBarVisibility::Disabled);
-        scroll.VerticalScrollBarVisibility(c::ScrollBarVisibility::Auto);
-        scroll.Width(width);
-        scroll.Height(main.ActualHeight());
-        scroll.VerticalAlignment(x::VerticalAlignment::Top);
-        scroll.HorizontalAlignment(atLeft ? x::HorizontalAlignment::Left
-                                          : x::HorizontalAlignment::Right);
-        scroll.Margin(atLeft ? x::Thickness{0, 0, gap, 0}
-                             : x::Thickness{gap, 0, 0, 0});
-        scroll.Content(content);
-        return scroll;
-    };
-    if (left.Children().Size()) {
-        const auto index = c::Grid::GetColumn(main);
-        // Keep the existing Start/Phone Link columns and their spans together.
-        for (auto child : host.Children()) {
-            auto element = child.try_as<x::FrameworkElement>();
-            if (!element)
-                continue;
-            const auto column = c::Grid::GetColumn(element);
-            const auto span = c::Grid::GetColumnSpan(element);
-            if (column >= index) {
-                Save(element, c::Grid::ColumnProperty());
-                c::Grid::SetColumn(element, column + 1);
-            } else if (column + span > index) {
-                Save(element, c::Grid::ColumnSpanProperty());
-                c::Grid::SetColumnSpan(element, span + 1);
-            }
-        }
-        c::ColumnDefinition column;
-        column.Width({leftWidth + gap, x::GridUnitType::Pixel});
-        host.ColumnDefinitions().InsertAt(index, column);
-        g_addedColumns->push_back(column);
-        g_leftFlank = makeSide(left, leftWidth, true);
-        c::Grid::SetColumn(g_leftFlank, index);
-        c::Grid::SetRow(g_leftFlank, c::Grid::GetRow(main));
-        host.Children().Append(g_leftFlank);
-    }
-    if (right.Children().Size()) {
-        const auto index = host.ColumnDefinitions().Size();
-        c::ColumnDefinition column;
-        column.Width({rightWidth + gap, x::GridUnitType::Pixel});
-        host.ColumnDefinitions().Append(column);
-        g_addedColumns->push_back(column);
-        g_rightFlank = makeSide(right, rightWidth, false);
-        c::Grid::SetColumn(g_rightFlank, index);
-        c::Grid::SetRow(g_rightFlank, c::Grid::GetRow(main));
-        host.Children().Append(g_rightFlank);
-    }
-    Track(main.SizeChanged(auto_revoke, [](auto const&, auto const& args) {
-        GuardUi([&] {
-            if (g_leftFlank)
-                g_leftFlank.Height(args.NewSize().Height);
-            if (g_rightFlank)
-                g_rightFlank.Height(args.NewSize().Height);
-        });
-    }));
-}
-
 static void ShowCompactPanel(bool show, bool focus) {
     if (!g_compactPanel || !g_compactButton)
         return;
@@ -2832,179 +2678,419 @@ static void BuildCompact(c::Grid const& main,
     main.Children().Append(g_compactLayer);
 }
 
-static void RefreshLayout(x::UIElement const& root,
-                          WorkArea work,
-                          bool centered = false) {
+static f::Point LayoutOrigin(x::DependencyObject element,
+                             x::DependencyObject const& root) {
+    f::Point origin{};
+    for (unsigned depth = 0; element && element != root && depth < 64;
+         ++depth) {
+        if (auto ui = element.try_as<x::UIElement>()) {
+            auto offset = ui.ActualOffset();
+            origin.X += offset.x;
+            origin.Y += offset.y;
+        }
+        element = m::VisualTreeHelper::GetParent(element);
+    }
+    return origin;
+}
+static NativeGeometry ReadNativeGeometry(x::DependencyObject const& root,
+                                         c::Grid const& host,
+                                         c::Grid const& main,
+                                         x::FrameworkElement const& phone) {
+    auto origin = LayoutOrigin(main, root);
+    auto hostOrigin = LayoutOrigin(host, root);
+    NativeGeometry geometry{
+        {origin.X, origin.Y, main.ActualWidth(), main.ActualHeight()},
+        {},
+        hostOrigin.X,
+        hostOrigin.Y,
+        false};
+    geometry.occupied = geometry.menu;
+    if (phone && cards::Visible(phone) && phone.ActualWidth() > 1 &&
+        phone.ActualHeight() > 1) {
+        auto at = LayoutOrigin(phone, root);
+        geometry.occupied = packing::Union(
+            geometry.menu,
+            {at.X, at.Y, phone.ActualWidth(), phone.ActualHeight()});
+        geometry.phoneVisible = true;
+    }
+    return geometry;
+}
+
+static void SaveNative(x::FrameworkElement const& element,
+                       x::DependencyProperty const& property) {
+    for (auto const& saved : *g_nativeProperties)
+        if (saved.element == element && saved.property == property)
+            return;
+    NativeProperty saved{element, property, element.ReadLocalValue(property)};
+    if (auto expression = element.GetBindingExpression(property))
+        saved.binding = expression.ParentBinding();
+    g_nativeProperties->push_back(std::move(saved));
+}
+static void RestoreNativeBounds() {
+    GuardUi([] {
+        if (g_host && g_nativeColumns)
+            for (auto const& column : *g_nativeColumns) {
+                uint32_t index;
+                if (g_host.ColumnDefinitions().IndexOf(column, index))
+                    g_host.ColumnDefinitions().RemoveAt(index);
+            }
+        if (g_host && g_nativeRows)
+            for (auto const& row : *g_nativeRows) {
+                uint32_t index;
+                if (g_host.RowDefinitions().IndexOf(row, index))
+                    g_host.RowDefinitions().RemoveAt(index);
+            }
+    });
+    if (g_nativeProperties)
+        for (auto it = g_nativeProperties->rbegin();
+             it != g_nativeProperties->rend(); ++it)
+            GuardUi([&] {
+                if (it->binding)
+                    x::Data::BindingOperations::SetBinding(
+                        it->element, it->property, it->binding);
+                else if (it->value == x::DependencyProperty::UnsetValue())
+                    it->element.ClearValue(it->property);
+                else
+                    it->element.SetValue(it->property, it->value);
+            });
+    g_nativeProperties.reset();
+    g_nativeColumns.reset();
+    g_nativeRows.reset();
+}
+static void ExpandHostBounds(x::DependencyObject const& root,
+                             c::Grid const& host,
+                             c::Grid const& main,
+                             x::FrameworkElement const& phone,
+                             std::vector<packing::Rect> const& cards) {
+    auto frame = Resolve(root, L"FrameRoot");
+    if (!frame)
+        throw hresult_error(E_FAIL, L"Native frame is unavailable");
+    g_host = host;
+    g_nativeProperties.emplace();
+    g_nativeColumns.emplace();
+    g_nativeRows.emplace();
+    const auto original = g_nativeGeometry;
+    const double oldWidth = host.ActualWidth(), oldHeight = host.ActualHeight();
+    const auto frameOffset = frame.ActualOffset();
+    const double paddingWidth = std::max(0.0, frame.ActualWidth() - oldWidth);
+    const double paddingHeight =
+        std::max(0.0, frame.ActualHeight() - oldHeight);
+    packing::Rect hull{original.hostX, original.hostY, oldWidth, oldHeight};
+    for (auto const& rect : cards)
+        hull = packing::Union(hull, rect);
+    const double left = std::max(0.0, original.hostX - hull.x);
+    const double top = std::max(0.0, original.hostY - hull.y);
+    const double right =
+        std::max(0.0, hull.Right() - original.hostX - oldWidth);
+    const double bottom =
+        std::max(0.0, hull.Bottom() - original.hostY - oldHeight);
+    std::vector<x::FrameworkElement> nativeChildren;
+    for (auto child : host.Children())
+        if (auto element = child.try_as<x::FrameworkElement>())
+            nativeChildren.push_back(element);
+    auto column = [&](double size, bool first) {
+        c::ColumnDefinition added;
+        added.Width({size, x::GridUnitType::Pixel});
+        if (first)
+            host.ColumnDefinitions().InsertAt(0, added);
+        else
+            host.ColumnDefinitions().Append(added);
+        g_nativeColumns->push_back(added);
+    };
+    auto row = [&](double size, bool first) {
+        c::RowDefinition added;
+        added.Height({size, x::GridUnitType::Pixel});
+        if (first)
+            host.RowDefinitions().InsertAt(0, added);
+        else
+            host.RowDefinitions().Append(added);
+        g_nativeRows->push_back(added);
+    };
+    if (host.ColumnDefinitions().Size() == 0)
+        column(oldWidth, false);
+    if (host.RowDefinitions().Size() == 0)
+        row(oldHeight, false);
+    if (left > 0)
+        column(left, true);
+    if (right > 0)
+        column(right, false);
+    if (top > 0)
+        row(top, true);
+    if (bottom > 0)
+        row(bottom, false);
+    for (auto const& child : nativeChildren) {
+        if (left > 0) {
+            SaveNative(child, c::Grid::ColumnProperty());
+            c::Grid::SetColumn(child, c::Grid::GetColumn(child) + 1);
+        }
+        if (top > 0) {
+            SaveNative(child, c::Grid::RowProperty());
+            c::Grid::SetRow(child, c::Grid::GetRow(child) + 1);
+        }
+    }
+    for (auto const& element : {main.as<x::FrameworkElement>(), phone})
+        if (element) {
+            SaveNative(element, x::FrameworkElement::HeightProperty());
+            element.Height(element.ActualHeight());
+        }
+    const double width = oldWidth + left + right;
+    const double height = oldHeight + top + bottom;
+    for (auto const& element : {host.as<x::FrameworkElement>(), frame}) {
+        SaveNative(element, x::FrameworkElement::WidthProperty());
+        SaveNative(element, x::FrameworkElement::HeightProperty());
+        SaveNative(element, x::FrameworkElement::MaxWidthProperty());
+        SaveNative(element, x::FrameworkElement::MaxHeightProperty());
+        element.MaxWidth(INFINITY);
+        element.MaxHeight(INFINITY);
+    }
+    host.Width(width);
+    host.Height(height);
+    frame.Width(width + paddingWidth);
+    frame.Height(height + paddingHeight);
+    SaveNative(frame, x::FrameworkElement::MarginProperty());
+    SaveNative(frame, x::FrameworkElement::HorizontalAlignmentProperty());
+    SaveNative(frame, x::FrameworkElement::VerticalAlignmentProperty());
+    frame.HorizontalAlignment(x::HorizontalAlignment::Left);
+    frame.VerticalAlignment(x::VerticalAlignment::Top);
+    // Anchor the native menu; growth goes into the free regions, rather than
+    // letting the larger frame recenter the native menu or activate a clip.
+    frame.Margin({frameOffset.x - left, frameOffset.y - top, 0, 0});
+    for (const wchar_t* name :
+         {L"MaxHeightEnforcer", L"DropShadowDismissTarget"})
+        if (auto enforcer = Resolve(root, name)) {
+            SaveNative(enforcer, x::FrameworkElement::HeightProperty());
+            SaveNative(enforcer, c::Grid::RowProperty());
+            SaveNative(enforcer, c::Grid::RowSpanProperty());
+            enforcer.Height(height + paddingHeight);
+            c::Grid::SetRow(enforcer, 0);
+            c::Grid::SetRowSpan(enforcer, host.RowDefinitions().Size());
+        }
+    if (auto element = root.try_as<x::FrameworkElement>())
+        element.UpdateLayout();
+    auto after = ReadNativeGeometry(root, host, main, phone);
+    const double dx = original.menu.x - after.menu.x;
+    const double dy = original.menu.y - after.menu.y;
+    if (std::abs(dx) > 0.01 || std::abs(dy) > 0.01) {
+        auto margin = frame.Margin();
+        margin.Left += dx;
+        margin.Top += dy;
+        frame.Margin(margin);
+        root.as<x::FrameworkElement>().UpdateLayout();
+    }
+    g_nativeGeometry = ReadNativeGeometry(root, host, main, phone);
+}
+
+static void CreateCardsLayer(c::Grid const& host) {
+    g_host = host;
+    g_cardsLayer = c::Canvas();
+    g_cardsLayer.Name(L"StartSidecarCardsLayer");
+    c::Grid::SetColumnSpan(g_cardsLayer,
+                           std::max(1u, host.ColumnDefinitions().Size()));
+    c::Grid::SetRowSpan(g_cardsLayer,
+                        std::max(1u, host.RowDefinitions().Size()));
+    // The host bounds include every card, while the native menu's own position
+    // and size stay anchored. All host adjustments are restored on teardown.
+    host.Children().Append(g_cardsLayer);
+}
+static void PlaceInCardsLayer(x::FrameworkElement const& element,
+                              packing::Rect const& rect) {
+    element.Width(rect.w);
+    element.Height(rect.h);
+    c::Canvas::SetLeft(element, rect.x - g_nativeGeometry.hostX);
+    c::Canvas::SetTop(element, rect.y - g_nativeGeometry.hostY);
+    g_cardsLayer.Children().Append(element);
+}
+
+static void RefreshLayout(x::UIElement const& root, WorkArea work) {
     try {
+        auto main = Resolve(root, L"MainMenu").try_as<c::Grid>();
+        auto host = Resolve(root, L"AnimationRoot").try_as<c::Grid>();
+        auto phone = Resolve(root, L"RightCompanion");
+        if (!main || !host || main.ActualWidth() < 100 ||
+            main.ActualHeight() < 100)
+            return;
+        auto geometry = ReadNativeGeometry(root, host, main, phone);
         if (g_layoutReady && g_layoutRoot == root && g_workArea == work &&
-            g_centeredTaskbar == centered && (!g_card || g_card.Parent()) &&
-            (!g_sideOverview || g_sideOverview.Parent()) &&
-            (!cards::bottom || cards::bottom.Parent()) &&
-            (!g_compactLayer || g_compactLayer.Parent()) &&
-            (!g_leftFlank || g_leftFlank.Parent()) &&
-            (!g_rightFlank || g_rightFlank.Parent())) {
+            g_nativeGeometry == geometry && (!g_card || g_card.Parent()) &&
+            (!g_cardsLayer || g_cardsLayer.Parent()) &&
+            (!g_compactLayer || g_compactLayer.Parent())) {
             UpdateData();
             if (g_core && g_core.Visible() && g_update)
                 g_update.Start();
             return;
         }
         RemoveCard();
-        if (auto element = root.try_as<x::FrameworkElement>())
-            element.UpdateLayout();
+        root.as<x::FrameworkElement>().UpdateLayout();
+        geometry = ReadNativeGeometry(root, host, main, phone);
         g_layoutRoot = root;
         g_workArea = work;
-        g_centeredTaskbar = centered;
-        auto settings = std::atomic_load(&svc::config);
-        auto nativeBorder =
-            Resolve(root, L"RightCompanion/CompanionRoot/AcrylicBorder")
-                .try_as<c::Border>();
-        if (!nativeBorder)
-            nativeBorder =
-                Resolve(root, L"MainMenu/AcrylicBorder").try_as<c::Border>();
-        if (!nativeBorder) {
-            return;
-        }
-        auto main = Resolve(root, L"MainMenu").try_as<c::Grid>();
-        auto host = Resolve(root, L"AnimationRoot").try_as<c::Grid>();
-        auto frame = Resolve(root, L"FrameRoot");
-        if (!main || !host || !frame || main.ActualWidth() < 100 ||
-            main.ActualHeight() < 100)
+        g_nativeGeometry = geometry;
+        g_cardEvents.emplace();
+        auto native =
+            Resolve(root, L"MainMenu/AcrylicBorder").try_as<c::Border>();
+        if (!native)
             return;
         for (const wchar_t* name :
-             {L"StartDropShadow", L"RootGridDropShadow", L"DropShadow",
-              L"RightCompanionDropShadow"}) {
+             {L"StartDropShadow", L"RootGridDropShadow", L"DropShadow"})
             if (auto shadow = Find(host, name).try_as<c::Border>()) {
                 g_shadowSource = shadow;
                 break;
             }
-        }
-        g_saved.emplace();
-        g_addedColumns.emplace();
-        g_cardEvents.emplace();
-        double oldWidth = host.ActualWidth();
-        if (host.ColumnDefinitions().Size() == 0 && oldWidth < 20)
-            return;
-        double width = settings->overviewWidth;
-        auto companion = Resolve(root, L"RightCompanion");
-        auto companionContainer = Resolve(root, L"RightCompanionContainerGrid");
+        const auto settings = std::atomic_load(&svc::config);
         double gap = settings->cardGap;
         if (gap < 0) {
-            gap = companion ? std::max(companion.Margin().Left,
-                                       companion.Margin().Right)
-                            : 0;
-            if (gap <= 0 && companion && companionContainer)
-                gap =
-                    companionContainer.ActualWidth() - companion.ActualWidth();
-            gap = std::clamp(gap, 0.0, 24.0);
-        } else
-            gap = std::clamp(gap, 0.0, 24.0);
-        // Reserve the companion's configured width even when it is collapsed,
-        // so expanding Phone Link cannot push our overview off the display.
-        double companionWidth =
-            companionContainer ? companionContainer.ActualWidth() : 0;
-        if (companionContainer && std::isfinite(companionContainer.Width()))
-            companionWidth =
-                std::max(companionWidth, companionContainer.Width());
-        const bool bottomEnabled = cards::HasCards(*settings);
-        // FrameRoot's native trailing margins reserve room for shadow falloff.
-        // Keep that space outside the explicit height instead of overflowing
-        // its layout slot and activating XAML's implicit layout clip.
-        const auto frameMargin = frame.Margin();
-        const double marginWidth = frameMargin.Left + frameMargin.Right;
-        const double marginHeight = frameMargin.Top + frameMargin.Bottom;
-        const double requiredWidth =
-            std::max(oldWidth, main.ActualWidth() + companionWidth) +
-            std::max(0.0, frame.ActualWidth() - oldWidth) +
-            (settings->overview ? width + gap : 0) + marginWidth;
-        const double nativeHeight =
-            main.ActualHeight() +
-            std::max(0.0, frame.ActualHeight() - host.ActualHeight()) +
-            marginHeight;
-        const double panelHeight = std::min(
-            cards::kPanelHeight, work.height - nativeHeight - cards::kGap);
-        const double requiredHeight =
-            nativeHeight +
-            (bottomEnabled ? std::max(164.0, panelHeight) + cards::kGap : 0);
-        const bool portrait = work.height > work.width;
-        const double flankWidth = std::clamp(width, 230.0, 290.0);
-        const bool leftFlank =
-            settings->overview || cards::ModuleCount(*settings) > 1;
-        const double centeredWidth = requiredWidth -
-                                     (settings->overview ? width + gap : 0) +
-                                     (leftFlank ? width + gap : 0) +
-                                     (bottomEnabled ? flankWidth + gap : 0);
-        const bool centeredFits =
-            centered && !portrait && centeredWidth + 4 <= work.width &&
-            nativeHeight <= work.height && host.ColumnDefinitions().Size() &&
-            main.Parent() == host;
-        if ((settings->overview || bottomEnabled) && centeredFits) {
-            BuildCenteredFlanks(host, main, nativeBorder, *settings, width,
-                                flankWidth, gap);
+            gap =
+                phone ? std::max(phone.Margin().Left, phone.Margin().Right) : 0;
+            if (gap <= 0)
+                gap = 4;
+        }
+        gap = std::clamp(gap, 0.0, 24.0);
+        // Keep shadow falloff inside the popup's work area, on every side.
+        const packing::Rect bounds{work.left + 12, work.top + 12,
+                                   std::max(0.0, work.width - 48),
+                                   std::max(0.0, work.height - 48)};
+        auto free = packing::Free(bounds, geometry.occupied, gap);
+        packing::Rect overflow;
+        for (auto const& r : free)
+            if (r.w >= 230 && r.h >= 164 && r.w * r.h > overflow.w * overflow.h)
+                overflow = r;
+
+        auto watch = [&] {
+            Track(host.LayoutUpdated(
+                auto_revoke,
+                [root, host, main, phone](auto const&, auto const&) {
+                    if (!g_layoutReady || !svc::visible)
+                        return;
+                    GuardUi([&] {
+                        if (ReadNativeGeometry(root, host, main, phone) !=
+                            g_nativeGeometry) {
+                            g_layoutReady = false;
+                            QueueLayout();
+                        }
+                    });
+                }));
+        };
+        if ((!settings->overview && !cards::HasCards(*settings))) {
             g_layoutReady = true;
-            UpdateData();
-            if (g_update)
-                g_update.Start();
+            watch();
             return;
         }
-        if ((settings->overview || bottomEnabled) &&
-            (portrait || centered || requiredWidth > work.width ||
-             requiredHeight > work.height)) {
-            auto mainBackground =
-                Resolve(main, L"AcrylicBorder").try_as<c::Border>();
-            const auto surface = mainBackground ? mainBackground : nativeBorder;
-            const double widthBelow = std::min(
-                main.ActualWidth(),
-                work.width - std::max(0.0, frame.ActualWidth() - oldWidth) -
-                    marginWidth);
-            const double heightBelow = work.height - nativeHeight - cards::kGap;
-            if (heightBelow >= 164 && widthBelow >= 230)
-                BuildStackedRow(root, host, main, frame, surface, *settings,
-                                widthBelow, heightBelow);
-            else
-                BuildCompact(main, surface, *settings, work);
-            g_layoutReady = true;
-            UpdateData();
-            if (g_update)
-                g_update.Start();
-            return;
-        }
-        if (!settings->overview) {
-            g_layoutReady = BuildBottom(root, nativeBorder, panelHeight);
-            if (g_layoutReady) {
-                UpdateData();
-                if (g_update)
-                    g_update.Start();
+        if (overflow.w == 0) {
+            BuildCompact(main, native, *settings, work);
+        } else {
+            std::vector<packing::Spec> specs;
+            if (settings->overview) {
+                BuildOverview(native, *settings, false);
+                packing::Spec overview;
+                overview.overview = true;
+                overview.sizes.push_back(
+                    {static_cast<double>(settings->overviewWidth),
+                     std::max(500.0, geometry.menu.h), false});
+                std::vector<double> widths{
+                    static_cast<double>(settings->overviewWidth), 330, 650,
+                    geometry.menu.w, bounds.w};
+                for (auto const& space : free) {
+                    const double width =
+                        std::min<double>(settings->overviewWidth, space.w);
+                    if (width >=
+                            std::min(230.0, double(settings->overviewWidth)) &&
+                        (space.Right() <= geometry.occupied.x ||
+                         space.x >= geometry.occupied.Right()))
+                        overview.sizes.push_back(
+                            {width, std::max(500.0, geometry.menu.h), false});
+                    if (space.w >= 230)
+                        widths.push_back(space.w);
+                }
+                std::sort(widths.begin(), widths.end());
+                widths.erase(std::unique(widths.begin(), widths.end()),
+                             widths.end());
+                for (double width : widths) {
+                    if (width < 230 || width > bounds.w)
+                        continue;
+                    CompactOverview(width);
+                    g_card.Width(width);
+                    g_card.Measure({static_cast<float>(width), INFINITY});
+                    overview.sizes.push_back(
+                        {width, std::ceil(g_card.DesiredSize().Height), true});
+                }
+                specs.push_back(std::move(overview));
             }
-            return;
+            std::vector<std::pair<c::Border, double>> modules;
+            cards::Populate(native, *settings,
+                            [&](auto const& card, double weight) {
+                                modules.emplace_back(card, weight);
+                                const double ideal = weight > 1     ? 420
+                                                     : weight == 1  ? 200
+                                                     : weight > 0.7 ? 180
+                                                                    : 150;
+                                const double minimum = weight > 1     ? 240
+                                                       : weight == 1  ? 180
+                                                       : weight > 0.7 ? 170
+                                                                      : 150;
+                                specs.push_back({{}, ideal, minimum, false});
+                            });
+            auto plan = packing::Solve(bounds, geometry.occupied, specs, gap);
+            std::vector<packing::Rect> extents;
+            if (plan.size() == specs.size())
+                for (auto const& item : plan)
+                    extents.push_back(item.rect);
+            else
+                extents.push_back(overflow);
+            ExpandHostBounds(root, host, main, phone, extents);
+            CreateCardsLayer(host);
+            if (plan.size() == specs.size()) {
+                if (settings->overview) {
+                    if (plan.front().compact) {
+                        CompactOverview(plan.front().rect.w);
+                        WireOverview();
+                    } else {
+                        BuildOverview(native, *settings);
+                    }
+                }
+                g_packedCards.emplace();
+                for (size_t i = 0; i < plan.size(); ++i) {
+                    const bool overview = settings->overview && i == 0;
+                    auto card =
+                        overview
+                            ? g_card
+                            : modules[i - unsigned(settings->overview)].first;
+                    auto const& rect = plan[i].rect;
+                    if (!overview) {
+                        auto padding = card.Padding();
+                        padding.Top = padding.Bottom =
+                            std::min(10.0, std::max(0.0, (rect.h - 152) / 2));
+                        card.Padding(padding);
+                    }
+                    card.Width(rect.w);
+                    card.MaxWidth(rect.w);
+                    card.Height(rect.h);
+                    if (auto child =
+                            card.Child().try_as<x::FrameworkElement>()) {
+                        auto padding = card.Padding(),
+                             border = card.BorderThickness();
+                        child.MaxWidth(std::max(
+                            1.0, rect.w - padding.Left - padding.Right -
+                                     border.Left - border.Right));
+                    }
+                    PlaceInCardsLayer(WrapSurface(card), rect);
+                    g_packedCards->push_back({card, rect, overview});
+                }
+            } else {
+                // A scrollable section is the fallback only after individual
+                // cards could not be packed into the actual surrounding gaps.
+                for (auto const& unsubscribe : *g_cardEvents)
+                    GuardUi(unsubscribe);
+                g_cardEvents->clear();
+                cards::Remove();
+                modules.clear();
+                g_card = nullptr;
+                auto scroll = BuildStackedCards(native, *settings, overflow.w);
+                scroll.Name(L"StartSidecarOverflow");
+                PlaceInCardsLayer(scroll, overflow);
+            }
         }
-        BuildOverview(nativeBorder, *settings);
-        g_card.ClearValue(x::FrameworkElement::WidthProperty());
-        g_sideOverview = WrapSurface(g_card);
-        g_sideOverview.Width(width);
-        g_sideOverview.HorizontalAlignment(x::HorizontalAlignment::Left);
-        g_sideOverview.Margin({gap, 0, 0, 0});
-        g_sideOverview.VerticalAlignment(x::VerticalAlignment::Stretch);
-        g_host = host;
-        uint32_t existing = host.ColumnDefinitions().Size();
-        if (existing == 0) {
-            c::ColumnDefinition original;
-            original.Width({oldWidth, x::GridUnitType::Pixel});
-            host.ColumnDefinitions().Append(original);
-            g_addedColumns->push_back(original);
-            existing = 1;
-        }
-        c::ColumnDefinition added;
-        added.Width({width + gap, x::GridUnitType::Pixel});
-        host.ColumnDefinitions().Append(added);
-        g_addedColumns->push_back(added);
-        c::Grid::SetColumn(g_sideOverview, existing);
-        c::Grid::SetRow(g_sideOverview, 0);
-        host.Children().Append(g_sideOverview);
-        g_layoutReady = BuildBottom(root, nativeBorder, panelHeight);
-        if (!g_layoutReady) {
-            RemoveCard();
-            return;
-        }
+        g_layoutReady = true;
+        watch();
         UpdateData();
         if (g_update)
             g_update.Start();
@@ -3017,11 +3103,12 @@ static void RefreshLayout(x::UIElement const& root,
         Wh_Log(L"Unexpected Start Sidecar layout error");
     }
 }
+
 static void EnsureLayout() {
     if (g_unloading || !svc::visible)
         return;
     if (auto window = x::Window::Current(); window && window.Content())
-        RefreshLayout(window.Content(), GetWorkArea(), IsCenteredTaskbar());
+        RefreshLayout(window.Content(), GetWorkArea());
 }
 static void QueueLayout() {
     if (g_unloading || !svc::visible || !g_layoutTimer)
