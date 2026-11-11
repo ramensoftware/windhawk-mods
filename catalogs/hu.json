@@ -939,6 +939,34 @@
         "version": "1.2.0"
       }
     },
+    "auto-pause-on-disconnect": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794384033000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794384033000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "DpakB",
+        "compilerOptions": "-lole32 -luser32 -lshell32",
+        "description": "Pause, mute or unmute automatically when an external audio device connects or disconnects (wired headphones, Bluetooth, USB DAC).",
+        "donateUrl": "https://buymeacoffee.com/dpakb",
+        "github": "https://github.com/DeepakBalaraman",
+        "homepage": "https://dpakb.com",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Auto-Pause on Disconnect",
+        "twitter": "https://twitter.com/dpakb_",
+        "version": "1.0.0"
+      }
+    },
     "auto-refresh-rate": {
       "details": {
         "defaultSorting": 1780,

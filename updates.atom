@@ -2,12 +2,67 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-11T07:03:50.000Z</updated>
+    <updated>2026-11-11T08:00:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Auto-Pause on Disconnect 1.0.0]]></title>
+        <id>https://windhawk.net/mods/auto-pause-on-disconnect#e9a03e6c7c6b4128f898d5f8e204198ed180d85c</id>
+        <link href="https://windhawk.net/mods/auto-pause-on-disconnect"/>
+        <updated>2026-11-11T08:00:33.000Z</updated>
+        <content type="html"><![CDATA[<h1>Auto-Pause on Disconnect</h1>
+<p>Pauses what you were listening to when the headphones go away: the 3.5 mm cable
+pulled out, a Bluetooth headset dropped, a USB DAC unplugged. The action lands
+after Windows has moved the sound back to the built-in speakers, so there is no
+one-second blast through them.</p>
+<p><img src="https://raw.githubusercontent.com/DeepakBalaraman/auto-pause-on-disconnect/master/assets/auto-pause-sample.gif" alt="Auto-Pause in action"></p>
+<p>It does not have to be a pause. The action is a setting, and so is whether it
+runs on a disconnect, on a connect, or both.</p>
+<h2>Features</h2>
+<ul>
+<li>Watches the default output device, so wired, Bluetooth and USB removals are
+caught the same way.</li>
+<li>Toggle play/pause, mute the output, or unmute it.</li>
+<li>Waits 300 ms by default before acting, which is enough for Windows to finish
+moving the stream. Adjustable.</li>
+<li>Repeats inside one second are folded into a single action. One unplug raises
+several notifications, and play/pause is a toggle.</li>
+<li>Only acts while an app is actually playing by default, so it never starts
+playback on its own.</li>
+<li>Switching the output by hand is left alone; the old device has to be gone for
+the action to run.</li>
+</ul>
+<h2>Settings</h2>
+<ul>
+<li><strong>When a device disconnects</strong> and <strong>When a device connects</strong> pick the
+direction. Connects are off by default, because plugging headphones in moves
+the default output too.</li>
+<li><strong>Audio role to watch</strong> is Multimedia by default, or Console, or Both.</li>
+<li><strong>Action</strong> is Toggle play/pause, Mute the default output, or Unmute it.</li>
+<li><strong>Delay before acting (ms)</strong> is how long Windows gets before the action runs,
+0 to 3000.</li>
+<li><strong>Ignore repeats within (ms)</strong> is the window used to fold the burst, 0 to 5000.</li>
+<li><strong>Act only while audio is playing</strong> keeps the toggle from starting playback.</li>
+</ul>
+<h2>Good to know</h2>
+<p>Play/pause is a toggle, not a pause: if playback was already stopped, it starts
+again. Leaving <em>Act only while audio is playing</em> on keeps it honest, and the
+Windows disconnect sound is not counted as playback.</p>
+<p>The mute action applies to whichever device is the default after the switch,
+which is normally the internal speakers. Pair <em>When a device connects</em> with
+unmute if the headset should bring the sound back when it returns.</p>
+<p>The mod runs in a small process of its own rather than inside Explorer, and uses
+the Windows Core Audio API. The notification callback only wakes a worker thread;
+the delay, the playback check and the media key all happen there.</p>
+]]></content>
+        <author>
+            <name>DpakB</name>
+            <uri>https://github.com/DeepakBalaraman</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Fast Navigation 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-fast-navigation#2dcb30a8ddc4a006602cc07657f173ef8ab5bfb6</id>
@@ -910,22 +965,6 @@ This implementation is distributed under GPL-3.0-or-later.</p>
         <author>
             <name>Thiago Silva</name>
             <uri>https://github.com/brideinflame-rgb</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.1/10 UAC Recreation 1.2.0]]></title>
-        <id>https://windhawk.net/mods/win7-uac-recreation#d6dbe47b119ed3d072863bd4ade4ef14b2ce95bd</id>
-        <link href="https://windhawk.net/mods/win7-uac-recreation"/>
-        <updated>2026-11-09T23:05:22.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved Unicode case-insensitive matching for native Yes and No buttons</li>
-<li>Added a best-effort fallback using localized system button labels when they agree with known translations</li>
-<li>Added optional debug logging for unrecognized button names and automation IDs</li>
-</ul>
-]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

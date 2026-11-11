@@ -2,12 +2,67 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-11T07:03:50.000Z</updated>
+    <updated>2026-11-11T08:00:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Auto-Pause on Disconnect 1.0.0]]></title>
+        <id>https://windhawk.net/mods/auto-pause-on-disconnect#e9a03e6c7c6b4128f898d5f8e204198ed180d85c</id>
+        <link href="https://windhawk.net/mods/auto-pause-on-disconnect"/>
+        <updated>2026-11-11T08:00:33.000Z</updated>
+        <content type="html"><![CDATA[<h1>Auto-Pause on Disconnect</h1>
+<p>Pauses what you were listening to when the headphones go away: the 3.5 mm cable
+pulled out, a Bluetooth headset dropped, a USB DAC unplugged. The action lands
+after Windows has moved the sound back to the built-in speakers, so there is no
+one-second blast through them.</p>
+<p><img src="https://raw.githubusercontent.com/DeepakBalaraman/auto-pause-on-disconnect/master/assets/auto-pause-sample.gif" alt="Auto-Pause in action"></p>
+<p>It does not have to be a pause. The action is a setting, and so is whether it
+runs on a disconnect, on a connect, or both.</p>
+<h2>Features</h2>
+<ul>
+<li>Watches the default output device, so wired, Bluetooth and USB removals are
+caught the same way.</li>
+<li>Toggle play/pause, mute the output, or unmute it.</li>
+<li>Waits 300 ms by default before acting, which is enough for Windows to finish
+moving the stream. Adjustable.</li>
+<li>Repeats inside one second are folded into a single action. One unplug raises
+several notifications, and play/pause is a toggle.</li>
+<li>Only acts while an app is actually playing by default, so it never starts
+playback on its own.</li>
+<li>Switching the output by hand is left alone; the old device has to be gone for
+the action to run.</li>
+</ul>
+<h2>Settings</h2>
+<ul>
+<li><strong>When a device disconnects</strong> and <strong>When a device connects</strong> pick the
+direction. Connects are off by default, because plugging headphones in moves
+the default output too.</li>
+<li><strong>Audio role to watch</strong> is Multimedia by default, or Console, or Both.</li>
+<li><strong>Action</strong> is Toggle play/pause, Mute the default output, or Unmute it.</li>
+<li><strong>Delay before acting (ms)</strong> is how long Windows gets before the action runs,
+0 to 3000.</li>
+<li><strong>Ignore repeats within (ms)</strong> is the window used to fold the burst, 0 to 5000.</li>
+<li><strong>Act only while audio is playing</strong> keeps the toggle from starting playback.</li>
+</ul>
+<h2>Good to know</h2>
+<p>Play/pause is a toggle, not a pause: if playback was already stopped, it starts
+again. Leaving <em>Act only while audio is playing</em> on keeps it honest, and the
+Windows disconnect sound is not counted as playback.</p>
+<p>The mute action applies to whichever device is the default after the switch,
+which is normally the internal speakers. Pair <em>When a device connects</em> with
+unmute if the headset should bring the sound back when it returns.</p>
+<p>The mod runs in a small process of its own rather than inside Explorer, and uses
+the Windows Core Audio API. The notification callback only wakes a worker thread;
+the delay, the playback check and the media key all happen there.</p>
+]]></content>
+        <author>
+            <name>DpakB</name>
+            <uri>https://github.com/DeepakBalaraman</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Fast Navigation 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-fast-navigation#2dcb30a8ddc4a006602cc07657f173ef8ab5bfb6</id>
@@ -2132,98 +2187,6 @@ ler o valor <code>Category</code> de cada app.</p>
         <author>
             <name>Feuer</name>
             <uri>https://github.com/feuerdraws</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Super Shortcuts for Mouse 1.0]]></title>
-        <id>https://windhawk.net/mods/super-mouse-shortcuts#321695c7119455bea8b3de7bfc2f32e6062f27c8</id>
-        <link href="https://windhawk.net/mods/super-mouse-shortcuts"/>
-        <updated>2026-11-07T19:00:18.000Z</updated>
-        <content type="html"><![CDATA[<h1>Super Shortcuts for Mouse</h1>
-<p><strong>English</strong> · <a href="#t%C3%BCrk%C3%A7e">Türkçe</a> · <a href="#deutsch">Deutsch</a> · <a href="#fran%C3%A7ais">Français</a> · <a href="#%D1%80%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9">Русский</a></p>
-<p>Hold a mouse button, then click or scroll with another one to run an action on
-the <strong>window under the cursor</strong>: close, minimize, maximize or restore it, snap
-it, toggle always-on-top, skip to the next / previous track, play / pause,
-change the volume, show the desktop, switch virtual desktops, take a screenshot
-and more.</p>
-<h2>How it works</h2>
-<ul>
-<li><strong>Hold button</strong> (choose in the settings):
-<ul>
-<li>Right mouse button (default)</li>
-<li>Back (side) mouse button</li>
-<li>Forward (side) mouse button</li>
-</ul>
-</li>
-<li>While it is held, these inputs are available as triggers, and each can be
-assigned any action in the settings: left click, middle click, scroll wheel up /
-down, the other side button, and the right button (side-button mode only).</li>
-<li>Window actions always apply to the window under the mouse cursor, not to the
-active window.</li>
-<li>Default mapping: left click = close, middle click = play / pause, wheel up =
-maximize, wheel down = minimize, Back = previous track, Forward = next track,
-right click (side-button mode) = always on top.</li>
-<li>If you press and release the hold button without using any trigger, it works as a
-normal click (context menu, browser back / forward...). Right-button drags are
-detected and passed through to the application unchanged.</li>
-<li>The language (English, Turkish, German, French, Russian) follows your Windows
-display language automatically. Other languages fall back to English.</li>
-</ul>
-<h2>Notes</h2>
-<ul>
-<li>The mod runs in <code>windhawk.exe</code> and uses a global low-level mouse hook.</li>
-<li>Windows that run as administrator ignore requests from a non-elevated process.
-To control them, run Windhawk as administrator.</li>
-<li>Synthetic mouse events from other programs are not affected, and the mod is
-disabled while a fullscreen app / game is active (can be turned off).</li>
-<li>&quot;None&quot; assigned to a trigger blocks that input while the hold button is down.</li>
-</ul>
-<hr>
-<h2>Türkçe</h2>
-<p>Bir fare tuşunu basılı tutup başka bir tuşa tıklayarak ya da tekerleği çevirerek
-<strong>imlecin altındaki pencerede</strong> işlev çalıştırın: kapat, simge durumuna küçült,
-büyüt, eski boyuta getir, yasla, her zaman üstte, sonraki / önceki şarkı,
-oynat / duraklat, ses, masaüstünü göster, sanal masaüstü değiştir, ekran
-görüntüsü ve daha fazlası.</p>
-<ul>
-<li>Basılı tutulacak tuş: sağ fare tuşu (varsayılan), Geri veya İleri yan tuşu.</li>
-<li>Tuş basılıyken sol tık, orta tık, tekerlek yukarı / aşağı, diğer yan tuş ve
-(yalnızca yan tuş modunda) sağ tık tetikleyici olarak kullanılabilir; her birine
-ayarlardan istediğiniz işlevi atayabilirsiniz.</li>
-<li>Pencere işlevleri her zaman etkin pencereye değil, fare imlecinin altındaki
-pencereye uygulanır.</li>
-<li>Tuşa hiçbir tetikleyici kullanmadan basıp bırakırsanız normal tıklama gibi çalışır.</li>
-<li>Dil, Windows görüntü dilinize göre otomatik seçilir; desteklenmeyen diller için
-İngilizce kullanılır.</li>
-<li>Yönetici olarak çalışan pencereleri de kontrol etmek için Windhawk'u yönetici
-olarak çalıştırın. Tam ekran uygulama / oyun açıkken mod devre dışı kalır.</li>
-</ul>
-<hr>
-<h2>Deutsch</h2>
-<p>Halten Sie eine Maustaste gedrückt und klicken oder scrollen Sie mit einer anderen,
-um eine Aktion für das <strong>Fenster unter dem Mauszeiger</strong> auszuführen: schließen,
-minimieren, maximieren, andocken, immer im Vordergrund, Titel überspringen,
-Wiedergabe/Pause, Lautstärke, Desktop anzeigen, virtuelle Desktops wechseln,
-Screenshot und mehr. Die Sprache folgt automatisch der Windows-Anzeigesprache
-(sonst Englisch).</p>
-<hr>
-<h2>Français</h2>
-<p>Maintenez un bouton de la souris, puis cliquez ou faites défiler avec un autre
-pour exécuter une action sur la <strong>fenêtre située sous le curseur</strong> : fermer,
-réduire, agrandir, ancrer, toujours au premier plan, changer de piste,
-lecture/pause, volume, afficher le bureau, changer de bureau virtuel, capture
-d'écran, etc. La langue suit automatiquement celle de Windows (sinon l'anglais).</p>
-<hr>
-<h2>Русский</h2>
-<p>Удерживайте одну кнопку мыши и щёлкайте или прокручивайте колесо другой, чтобы
-выполнить действие над <strong>окном под курсором</strong>: закрыть, свернуть, развернуть,
-прикрепить, поверх всех окон, переключить трек, воспроизведение/пауза, громкость,
-показать рабочий стол, сменить виртуальный рабочий стол, снимок экрана и другое.
-Язык выбирается автоматически по языку интерфейса Windows (иначе английский).</p>
-]]></content>
-        <author>
-            <name>DahaSakinOlamazdim</name>
-            <uri>https://github.com/DahaSakinOlamazdim</uri>
         </author>
     </entry>
 </feed>
