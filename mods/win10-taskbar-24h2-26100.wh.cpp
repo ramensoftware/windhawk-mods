@@ -26,6 +26,7 @@ While similar to [Win10 taskbar on Win11 24H2 or later](https://windhawk.net/mod
 * UWP apps display normally on the taskbar alongside Win32 applications.
 * The system tray is completely custom-built, meaning other mods targeting the notification area **will not work**.
 * The language indicator is currently unavailable, but will be added in a future update.
+* The Notification Center is not implemented.
 
 To restore the network icon, you can install the [Restore legacy network tray](https://windhawk.net/mods/restore-legacy-network-tray) mod, or use any other network indicator of your choice.
 
@@ -343,14 +344,34 @@ static HRESULT __cdecl Hook_CTray_InitializeTrayUIComponent(void* pThis) {
 #define IDS_TASKMANAGER     24743
 #define IDS_SETTINGS        2128
 
+// Маркер в dwItemData пункта "Диспетчер задач" - позволяет найти пункт
+// даже если его ID сдвинулся после Shell_MergeMenus
+#define TASKMGR_ITEM_MAGIC  0x5441534B // 'TASK'
+
 using LoadMenuW_t = decltype(&LoadMenuW);
 static LoadMenuW_t g_origLoadMenuW = nullptr;
 
-using TrackPopupMenuEx_t = decltype(&TrackPopupMenuEx);
-static TrackPopupMenuEx_t g_origTrackPopupMenuEx = nullptr;
+using TrackPopupMenu_t = decltype(&TrackPopupMenu);
+static TrackPopupMenu_t g_origTrackPopupMenu = nullptr;
 
 static const WCHAR* LoadStr(HMODULE hMod, UINT id, WCHAR* buf, int size, const WCHAR* fallback) {
     return (hMod && LoadStringW(hMod, id, buf, size) > 0) ? buf : fallback;
+}
+
+static void LaunchTaskManager() {
+    WCHAR szCmdLine[MAX_PATH];
+    if (GetSystemDirectoryW(szCmdLine, MAX_PATH)) {
+        wcscat_s(szCmdLine, L"\\taskmgr.exe");
+
+        STARTUPINFOW si = {sizeof(si)};
+        PROCESS_INFORMATION pi = {};
+        if (CreateProcessW(nullptr, szCmdLine, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+            return;
+        }
+    }
+    ShellExecuteW(nullptr, nullptr, L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 static const WCHAR* GetLockToolbarsText(WCHAR* buf, int size) {
@@ -391,10 +412,43 @@ static void EnhanceTaskbarMenu(HMENU hMenu) {
     WCHAR buf[256];
     AppendMenuW(hPopup, MF_STRING, IDM_SHOWDESKTOP, LoadStr(g_hShell32, IDS_SHOWDESKTOP, buf, 256, L"Show the desktop"));
     AppendMenuW(hPopup, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hPopup, MF_STRING, IDM_TASKMANAGER, LoadStr(g_hShell32, IDS_TASKMANAGER, buf, 256, L"Task Manager"));
+
+    // Task Manager: помечаем пункт маркером в dwItemData
+    {
+        WCHAR tmBuf[256];
+        const WCHAR* tmText = LoadStr(g_hShell32, IDS_TASKMANAGER, tmBuf, 256, L"Task Manager");
+        MENUITEMINFOW miiTaskMgr = {sizeof(miiTaskMgr)};
+        miiTaskMgr.fMask = MIIM_ID | MIIM_STRING | MIIM_DATA;
+        miiTaskMgr.wID = IDM_TASKMANAGER;
+        miiTaskMgr.dwItemData = TASKMGR_ITEM_MAGIC;
+        miiTaskMgr.dwTypeData = const_cast<LPWSTR>(tmText);
+        InsertMenuItemW(hPopup, GetMenuItemCount(hPopup), TRUE, &miiTaskMgr);
+    }
+
     AppendMenuW(hPopup, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hPopup, MF_STRING, IDM_LOCKTASKBAR, GetLockToolbarsText(buf, 256));
     AppendMenuW(hPopup, MF_STRING, IDM_SETTINGS, LoadStr(g_hBthprops, IDS_SETTINGS, buf, 256, L"Taskbar settings"));
+}
+
+// Находит актуальный ID пункта диспетчера задач (с учётом смещения после Shell_MergeMenus)
+static UINT FindTaskManagerCmdId(HMENU hMenu) {
+    if (!hMenu || !IsMenu(hMenu)) return 0;
+    int count = GetMenuItemCount(hMenu);
+    for (int i = 0; i < count; i++) {
+        MENUITEMINFOW mii = {sizeof(mii)};
+        mii.fMask = MIIM_ID | MIIM_DATA | MIIM_FTYPE;
+        if (GetMenuItemInfoW(hMenu, i, TRUE, &mii) && !(mii.fType & MFT_SEPARATOR)) {
+            if (mii.dwItemData == TASKMGR_ITEM_MAGIC && mii.wID != 0)
+                return mii.wID;
+            if (mii.wID >= IDM_TASKMANAGER) {
+                UINT offset = mii.wID - IDM_TASKMANAGER;
+                if (GetMenuState(hMenu, IDM_SHOWDESKTOP + offset, MF_BYCOMMAND) != (UINT)-1 &&
+                    GetMenuState(hMenu, IDM_SETTINGS + offset, MF_BYCOMMAND) != (UINT)-1)
+                    return mii.wID;
+            }
+        }
+    }
+    return 0;
 }
 
 static HMENU WINAPI LoadMenuW_Hook(HINSTANCE hInstance, LPCWSTR lpMenuName) {
@@ -410,24 +464,24 @@ static HMENU WINAPI LoadMenuW_Hook(HINSTANCE hInstance, LPCWSTR lpMenuName) {
     return g_origLoadMenuW(hInstance, lpMenuName);
 }
 
-static BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hWnd, LPTPMPARAMS lptpm) {
-    BOOL ret = g_origTrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
-    if (ret >= IDM_TASKMANAGER && (uFlags & TPM_RETURNCMD)) {
-        WCHAR cls[32] = {};
-        HWND root = GetAncestor(hWnd, GA_ROOT);
-        if (root && GetClassNameW(root, cls, ARRAYSIZE(cls)) &&
-            (_wcsicmp(cls, L"Shell_TrayWnd") == 0 || _wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0) &&
-            GetMenuState(hMenu, ret - IDM_TASKMANAGER + IDM_SHOWDESKTOP, MF_BYCOMMAND) != (UINT)-1 &&
-            GetMenuState(hMenu, ret - IDM_TASKMANAGER + IDM_SETTINGS, MF_BYCOMMAND) != (UINT)-1) {
-            WCHAR itemText[256], tmText[256];
-            const WCHAR* expected = LoadStr(g_hShell32, IDS_TASKMANAGER, tmText, 256, L"Task Manager");
-            if (GetMenuStringW(hMenu, ret, itemText, 256, MF_BYCOMMAND) > 0 && wcscmp(itemText, expected) == 0) {
-                WCHAR path[MAX_PATH];
-                GetSystemDirectoryW(path, ARRAYSIZE(path));
-                wcscat_s(path, L"\\Taskmgr.exe");
-                ShellExecuteW(nullptr, nullptr, path, nullptr, nullptr, SW_SHOWNORMAL);
-                return 0;
-            }
+static BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y, int nReserved, HWND hWnd, const RECT* prcRect) {
+    UINT taskMgrId = FindTaskManagerCmdId(hMenu);
+    bool addedReturnCmd = false;
+    if (taskMgrId != 0 && !(uFlags & TPM_RETURNCMD) && !(uFlags & TPM_NONOTIFY)) {
+        uFlags |= TPM_RETURNCMD;
+        addedReturnCmd = true;
+    }
+
+    BOOL ret = g_origTrackPopupMenu(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
+
+    if (taskMgrId != 0) {
+        if ((UINT)ret == taskMgrId) {
+            LaunchTaskManager();
+            return addedReturnCmd ? TRUE : 0;
+        }
+        if (addedReturnCmd && ret != 0 && hWnd) {
+            PostMessageW(hWnd, WM_COMMAND, MAKEWPARAM(ret, 0), 0);
+            return TRUE;
         }
     }
     return ret;
@@ -1863,9 +1917,9 @@ BOOL Wh_ModInit() {
 
     // Taskbar Context Menu Fix hooks
     Wh_SetFunctionHook((void*)LoadMenuW, (void*)LoadMenuW_Hook, (void**)&g_origLoadMenuW);
-    Wh_SetFunctionHook((void*)TrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&g_origTrackPopupMenuEx);
+    Wh_SetFunctionHook((void*)TrackPopupMenu, (void*)TrackPopupMenu_Hook, (void**)&g_origTrackPopupMenu);
 
-    WindhawkUtils::SYMBOL_HOOK explorerexe_hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{L"public: bool __cdecl wil::details::FeatureImpl<struct __WilFeatureTraits_Feature_DisableWin10Taskbar>::__private_IsEnabled(void)"},
          &g_origDisableWin10Taskbar, Hook_Feature_DisableWin10Taskbar_IsEnabled, false},
         {{L"private: long __cdecl CTray::InitializeTrayUIComponent(void)"},
@@ -1875,7 +1929,7 @@ BOOL Wh_ModInit() {
         {{L"struct CTrayStatic c_trayStatic"}, &g_pTrayStatic, nullptr, false},
     };
 
-    if (!WindhawkUtils::HookSymbols(g_hExplorer, explorerexe_hooks, ARRAYSIZE(explorerexe_hooks))) {
+    if (!WindhawkUtils::HookSymbols(g_hExplorer, hooks, ARRAYSIZE(hooks))) {
         Wh_Log(L"[ERROR] HookSymbols failed");
         return FALSE;
     }
