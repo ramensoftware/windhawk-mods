@@ -8,8 +8,8 @@
 // @include         explorer.exe
 // @include         sndvol.exe
 // @include         userinit.exe
-// @architecture    x86-64
-// @compilerOptions -lcomctl32 -lgdi32 -luser32 -lshell32 -lole32 -luxtheme -lurlmon -lbcrypt
+// @architecture    amd64
+// @compilerOptions -lcomctl32 -lgdi32 -luser32 -lshell32 -lole32 -luxtheme -lurlmon -lbcrypt -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -46,8 +46,14 @@ To restore the network icon, you can install the [Restore legacy network tray](h
   $name: Show Seconds in Tray Clock
 - hoverEffect: false
   $name: Highlight icons/clock under the mouse
-- recolorIcons: true
-  $name: Recolor white monochrome icons on light background
+- trayColorMode: auto
+  $name: Tray icons and clock text color
+  $description: Single setting for monochrome tray icons and clock text.
+  $options:
+  - auto: Automatic contrast with taskbar background
+  - white: Always white
+  - black: Always black
+  - system: Follow Windows light/dark mode
 - legacyPowerFlyout: true
   $name: Legacy (Win32) power/battery flyout
 - quickSettingsFallback: true
@@ -85,10 +91,18 @@ To restore the network icon, you can install the [Restore legacy network tray](h
 enum class ProcessType { Explorer, SndVol, Userinit };
 static ProcessType g_processType = ProcessType::Explorer;
 
+enum TrayColorMode {
+    TrayColor_Auto = 0,
+    TrayColor_White = 1,
+    TrayColor_Black = 2,
+    TrayColor_System = 3,
+};
+
 struct ModSettings {
     bool trayEnabled = true, showActionCenterIcon = true, showSeconds = false;
-    bool hoverEffect = false, recolorIcons = true, legacyPowerFlyout = true;
+    bool hoverEffect = false, legacyPowerFlyout = true;
     bool quickSettingsFallback = true, showDesktopButton = false;
+    int trayColorMode = TrayColor_Auto; // 0=auto, 1=white, 2=black, 3=system
     int iconSizePx = 16, iconPaddingPx = 2;
 } g_settings;
 
@@ -603,6 +617,37 @@ static COLORREF MixColor(COLORREF a, COLORREF b, int pctB) {
 }
 
 static int Luma(COLORREF c) { return (299 * GetRValue(c) + 587 * GetGValue(c) + 114 * GetBValue(c)) / 1000; }
+
+static bool IsWindowsDarkMode() {
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                      0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS) {
+        DWORD val = 1, size = sizeof(val), type = 0;
+        bool haveVal = false;
+        if (RegQueryValueExW(hKey, L"SystemUsesLightTheme", nullptr, &type, (LPBYTE)&val, &size) == ERROR_SUCCESS &&
+            type == REG_DWORD) {
+            haveVal = true;
+        } else {
+            val = 1; size = sizeof(val); type = 0;
+            if (RegQueryValueExW(hKey, L"AppsUseLightTheme", nullptr, &type, (LPBYTE)&val, &size) == ERROR_SUCCESS &&
+                type == REG_DWORD) {
+                haveVal = true;
+            }
+        }
+        RegCloseKey(hKey);
+        if (haveVal)
+            return val == 0;
+    }
+    if (HMODULE hUx = GetModuleHandleW(L"uxtheme.dll")) {
+        typedef bool (WINAPI *ShouldUseDarkModeFn)(void);
+        if (auto fnSys = (ShouldUseDarkModeFn)GetProcAddress(hUx, MAKEINTRESOURCEA(138)))
+            return fnSys();
+        if (auto fnApp = (ShouldUseDarkModeFn)GetProcAddress(hUx, MAKEINTRESOURCEA(132)))
+            return fnApp();
+    }
+    return false;
+}
 
 static void FillRectColor(HDC dc, const RECT& rc, COLORREF c) {
     HBRUSH br = CreateSolidBrush(c);
@@ -1273,15 +1318,36 @@ static void PostToIcon(int iconIdx, UINT mouseMsg, POINT ptScreen, bool withSele
 // Painting & Hit testing
 // ============================================================================
 static void DrawTrayBackground(HWND hWnd, HDC dc, const RECT& rc, COLORREF* pBg, COLORREF* pFg) {
-    COLORREF bg = GetSysColor(COLOR_BTNFACE), fg = GetSysColor(COLOR_BTNTEXT);
+    COLORREF sysBg = GetSysColor(COLOR_BTNFACE), sysFg = GetSysColor(COLOR_BTNTEXT);
+    COLORREF bg = sysBg;
     FillRectColor(dc, rc, bg);
     RECT rcCopy = rc;
+    COLORREF taskbarBg = bg;
+    bool haveTaskbarBg = false;
     if (IsThemeActive() && SUCCEEDED(DrawThemeParentBackground(hWnd, dc, &rcCopy))) {
         COLORREF px = GetPixel(dc, rc.left + 1, (rc.top + rc.bottom) / 2);
         if (px != CLR_INVALID) {
+            taskbarBg = px;
+            haveTaskbarBg = true;
             bg = px;
-            fg = (Luma(px) < 140) ? RGB(255, 255, 255) : RGB(0, 0, 0);
         }
+    }
+    COLORREF fg = sysFg;
+    switch (g_settings.trayColorMode) {
+        case TrayColor_White:
+            fg = RGB(255, 255, 255);
+            break;
+        case TrayColor_Black:
+            fg = RGB(0, 0, 0);
+            break;
+        case TrayColor_System:
+            fg = IsWindowsDarkMode() ? RGB(255, 255, 255) : RGB(0, 0, 0);
+            break;
+        case TrayColor_Auto:
+        default:
+            if (haveTaskbarBg)
+                fg = (Luma(taskbarBg) < 140) ? RGB(255, 255, 255) : RGB(0, 0, 0);
+            break;
     }
     *pBg = bg;
     *pFg = fg;
@@ -1293,9 +1359,27 @@ static void PaintTrayNotifyWnd(HWND hWnd, HDC hdc) {
     int w = rc.right - rc.left, h = rc.bottom - rc.top;
     if (w <= 0 || h <= 0) return;
     bool vert = IsTrayVertical();
-    HDC mem = CreateCompatibleDC(hdc);
-    HBITMAP bmp = CreateCompatibleBitmap(hdc, w, h);
-    HGDIOBJ oldBmp = SelectObject(mem, bmp);
+    HPAINTBUFFER hPB = nullptr;
+    HDC mem = nullptr;
+    HDC memDC = nullptr;
+    HBITMAP bmp = nullptr;
+    HGDIOBJ oldBmp = nullptr;
+    bool useBuffered = IsThemeActive() ? true : false;
+    if (useBuffered) {
+        hPB = BeginBufferedPaint(hdc, &rc, BPBF_COMPOSITED, nullptr, &mem);
+        if (!hPB || !mem) {
+            if (hPB) EndBufferedPaint(hPB, FALSE);
+            hPB = nullptr;
+            mem = nullptr;
+            useBuffered = false;
+        }
+    }
+    if (!useBuffered) {
+        memDC = CreateCompatibleDC(hdc);
+        bmp = CreateCompatibleBitmap(hdc, w, h);
+        oldBmp = SelectObject(memDC, bmp);
+        mem = memDC;
+    }
     COLORREF bg, fg;
     DrawTrayBackground(hWnd, mem, rc, &bg, &fg);
     COLORREF hoverCol = MixColor(bg, fg, 18);
@@ -1332,7 +1416,7 @@ static void PaintTrayNotifyWnd(HWND hWnd, HDC hdc) {
             if ((g_settings.hoverEffect && (int)i == g_hoveredIconIdx && !g_dragging) || (g_dragging && (int)i == g_dragIdx))
                 FillRectColor(mem, slot, hoverCol);
             HICON toDraw = it.hIcon;
-            if (g_settings.recolorIcons && darkText) {
+            if (darkText) {
                 if (it.monoKind < 0) it.monoKind = ClassifyIcon(it.hIcon);
                 if (it.monoKind == 1) {
                     if (!it.hTinted || it.tintFor != fg) {
@@ -1367,23 +1451,49 @@ static void PaintTrayNotifyWnd(HWND hWnd, HDC hdc) {
     }
     RECT rcClock = vert ? RECT{0, h - sdSize - clockExt, w, h - sdSize} : RECT{x, 0, w - sdSize, h};
     SetRectEmpty(&g_rcClock);
+    HTHEME hClockTheme = nullptr;
+    DTTOPTS dttOpts = {sizeof(dttOpts)};
+    bool useThemeText = false;
+    if (useBuffered) {
+        hClockTheme = OpenThemeData(hWnd, L"WINDOW");
+        if (hClockTheme) {
+            dttOpts.dwFlags = DTT_COMPOSITED | DTT_TEXTCOLOR;
+            dttOpts.crText = fg;
+            useThemeText = true;
+        }
+    }
     if (rcClock.left < rcClock.right && rcClock.top < rcClock.bottom) {
         g_rcClock = rcClock;
         if (g_settings.hoverEffect && g_clockHovered) FillRectColor(mem, rcClock, hoverCol);
         int top = rcClock.top + ((rcClock.bottom - rcClock.top) - (ci.twoLines ? 2 : 1) * ci.lineH) / 2;
         RECT r1 = {rcClock.left, top, rcClock.right, top + ci.lineH};
-        DrawTextW(mem, ci.time, -1, &r1, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        if (useThemeText) {
+            if (FAILED(DrawThemeTextEx(hClockTheme, mem, 1, 1, ci.time, -1, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX, &r1, &dttOpts)))
+                DrawTextW(mem, ci.time, -1, &r1, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        } else {
+            DrawTextW(mem, ci.time, -1, &r1, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        }
         if (ci.twoLines) {
             RECT r2 = {rcClock.left, top + ci.lineH, rcClock.right, top + 2 * ci.lineH};
-            DrawTextW(mem, ci.date, -1, &r2, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+            if (useThemeText) {
+                if (FAILED(DrawThemeTextEx(hClockTheme, mem, 1, 1, ci.date, -1, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX, &r2, &dttOpts)))
+                    DrawTextW(mem, ci.date, -1, &r2, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+            } else {
+                DrawTextW(mem, ci.date, -1, &r2, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+            }
         }
     }
+    if (hClockTheme) CloseThemeData(hClockTheme);
     SelectObject(mem, oldFont);
     DeleteObject(font);
-    BitBlt(hdc, 0, 0, w, h, mem, 0, 0, SRCCOPY);
-    SelectObject(mem, oldBmp);
-    DeleteObject(bmp);
-    DeleteDC(mem);
+    if (useBuffered) {
+        EndBufferedPaint(hPB, TRUE);
+    } else {
+        BitBlt(hdc, 0, 0, w, h, mem, 0, 0, SRCCOPY);
+        SelectObject(mem, oldBmp);
+        DeleteObject(bmp);
+        DeleteDC(memDC);
+    }
 }
 
 enum HitKind { HIT_NONE, HIT_ICON, HIT_CLOCK, HIT_DESKTOP };
@@ -1828,7 +1938,16 @@ static void LoadSettings() {
     g_settings.showActionCenterIcon = Wh_GetIntSetting(L"showActionCenterIcon") != 0;
     g_settings.showSeconds = Wh_GetIntSetting(L"showSeconds") != 0;
     g_settings.hoverEffect = Wh_GetIntSetting(L"hoverEffect") != 0;
-    g_settings.recolorIcons = Wh_GetIntSetting(L"recolorIcons") != 0;
+    LPCWSTR sMode = Wh_GetStringSetting(L"trayColorMode");
+    int mode = TrayColor_Auto;
+    if (sMode) {
+        if (lstrcmpiW(sMode, L"white") == 0) mode = TrayColor_White;
+        else if (lstrcmpiW(sMode, L"black") == 0) mode = TrayColor_Black;
+        else if (lstrcmpiW(sMode, L"system") == 0) mode = TrayColor_System;
+        else mode = TrayColor_Auto;
+        Wh_FreeStringSetting(sMode);
+    }
+    g_settings.trayColorMode = mode;
     g_settings.legacyPowerFlyout = Wh_GetIntSetting(L"legacyPowerFlyout") != 0;
     g_settings.quickSettingsFallback = Wh_GetIntSetting(L"quickSettingsFallback") != 0;
     g_settings.showDesktopButton = Wh_GetIntSetting(L"showDesktopButton") != 0;
