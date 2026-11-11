@@ -2,7 +2,7 @@
 // @id              pbid-tweaks
 // @name            Skins & Tools for Power BI
 // @description     Skins for the Power BI Desktop window, plus layout, filter, theme, interaction, color and mock-up tools, injected from inside Power BI with no extra programs
-// @version         1.2.0
+// @version         1.2.1
 // @author          Analytic Endeavors
 // @github          https://github.com/ae-reid-havens
 // @include         PBIDesktop.exe
@@ -94,10 +94,15 @@ the extras, every key, and where choices are kept.
 **Extras (menu):** a splash when a skin is picked, short notes on visual errors and finished
 refreshes, confetti when a refresh finishes, optional sounds; each has a Try button.
 
-**Hidden surprises:** there is an Easter egg in here, found with a classic cheat code, and the
-Power BI 95 style has a Begin menu. They only animate and draw over the window for a few seconds
-(some of it pretends to crash; any key brings the report back) and change nothing in the report.
-The "Hidden surprises" setting turns both off.
+**Hidden surprises:** there is an Easter egg in here, Chaos Mode, found with a classic cheat
+code, and the Power BI 95 style has a Begin menu. Chaos Mode is a mode: once on, it stays on (an
+assistant called Barry, the Power BI 95 look, jokes and click gags) until you leave it by pressing
+**Esc twice**, or by typing the code again. A small note at the bottom of the window says so for
+as long as it is on. While it is on, each page with a pie or donut chart shows a fake blue crash
+screen once; any key or click brings the report back, and that key still does its usual job
+(Ctrl+S still saves). The Begin menu's programs animate and draw over the window for a few
+seconds. Neither changes anything in the report, and their sounds play only when Skin sounds is on
+(it is off by default). The "Hidden surprises" setting turns both off.
 
 **What it reads and keeps:**
 - **Files:** for a report saved as a Power BI project (.pbip), the mod reads that report's own
@@ -109,10 +114,18 @@ The "Hidden surprises" setting turns both off.
   and "Sound file for the refresh confetti" reads that one audio file when Power BI starts and
   when the settings are saved. The mod itself writes no files.
 - **Stencil's Build** copies a PowerShell script to the clipboard and changes nothing by itself.
-  Only when you paste and run it yourself does it write into the report project folder: new
-  visual files (and for a new page its page.json, with pages.json first backed up to a
-  .stencil-backup folder beside the .Report folder, then updated to list the page). It never
-  overwrites a file that exists.
+  Only when you paste and run it yourself does it write into the report project folder. Each file
+  that exists is copied to a .stencil-backup folder beside the .Report folder before it changes:
+  - Building visuals writes new visual files only (a visual file that exists stops the script
+    before it writes anything), and for a new page its page.json, with pages.json backed up and
+    then updated to list the page.
+  - Card frames (Convert to background, or "with frames as background") write one new SVG under
+    StaticResources\RegisteredResources, then rewrite definition\report.json (to register it)
+    and the page's page.json (to make it the page background). Both are backed up first and
+    written through temporary files, so a failed write leaves the originals.
+  - With -Replace, on a page that already has a frames image, the old frames image is moved into
+    the backups (unless something else in the report uses it), and a script run again with
+    -Replace writes its own image again.
 - **Browser storage:** choices made inside Power BI (the skin and Classic's style, the switches,
   each tool's settings, Stencil blocks and templates) are kept in the Power BI page's own localStorage under the key `pbid-skins`;
   conveniences for the viewer (folded menu sections, the last help tab, the dock tab, the
@@ -154,6 +167,7 @@ leaves something looking wrong, pick "None", which puts Power BI back exactly as
   $name: Confetti when a refresh finishes
 - sounds: false
   $name: Skin sounds
+  $description: A few synthesized notes when a skin is picked or a refresh finishes. The sounds of the hidden surprises play only while this is on too
 - cheer: ""
   $name: Sound file for the refresh confetti
   $description: Full path to an .mp3, .wav, .ogg or .m4a under 2 MB, played with the confetti when a refresh finishes; empty for none. Read when Power BI starts and when the settings are saved. A "with the cheer sound" switch appears under Confetti in the menu
@@ -164,7 +178,7 @@ leaves something looking wrong, pick "None", which puts Power BI back exactly as
   $name: Visual count in the status bar
 - surprises: true
   $name: Hidden surprises
-  $description: A hidden Easter egg, found with a classic cheat code, and the Begin menu of Classic's Power BI 95 style. Everything it does is on screen only and goes away when it ends. Off leaves out both, and its key watcher
+  $description: A hidden Easter egg, found with a classic cheat code, and the Begin menu of Classic's Power BI 95 style. The Easter egg is a mode that stays on until you press Esc twice or type the code again; everything it does is on screen only, and its sounds follow Skin sounds. Off leaves out both, and its key watcher
 - keepReportFilterColors: false
   $name: Keep the report's Filters pane colors
   $description: Skins paint the Filters pane like the other panes; turn this on while designing the report's own filter pane formatting
@@ -1004,16 +1018,20 @@ LR"PBT(e('aria-pressed') !== 'true';
     if (pinned && ((box && box.contains(e.target)) || pinned.contains(e.target))) return;
     hide();
   }, true);
+  // The badge's own hover handlers, run again on purpose. Power BI's Report view page has no
+  // PointerEvent constructor (Model and Table view have one), so a MouseEvent stands in there;
+  // without it the click threw before show(el) and the card never pinned.
+  const pointerEnter = el => { const E = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent; el.dispatchEvent(new E('pointerenter', { bubbles: false })); };
   pbt.on(document, 'click', e => {
     if (!e.isTrusted || !e.target.closest) return;
     const el = e.target.closest('[data-pbt-pin]');
     // A control inside the badge with a tip of its own (a Colors swatch) keeps its own click.
     if (!el || !el._pbtTipBuild || e.target.closest('[data-pbt-tip]') !== el) return;
     // Unpinned under the pointer: the badge's own hover outlines come back at once.
-    if (pinned === el) { hide(); if (el.matches(':hover')) el.dispatchEvent(new PointerEvent('pointerenter', { bubbles: false })); return; }
+    if (pinned === el) { hide(); if (el.matches(':hover')) pointerEnter(el); return; }
     if (pinned) hide();
     // Its outlines and its visual's, drawn again in case a pinned card held them back.
-    el.dispatchEvent(new PointerEvent('pointerenter', { bubbles: false }));
+    pointerEnter(el);
     show(el);
     if (!open) return;
     pinned = el;
@@ -1057,11 +1075,11 @@ pbt.start = () => {
     if (!pbt.current()) return;
     if (!document.body || (isReport && !document.querySelector('titlebar'))) return void setTimeout(boot, 250);
     pbt.style('pbt-base', PBT_BASE_CSS);
-    for (const m of pbt.modules) { try { m.start && m.start(); } catch (e) { pbt.log(`${m.name} start: ${e.stack}`); } }
+    f)PBT"
+LR"PBT(or (const m of pbt.modules) { try { m.start && m.start(); } catch (e) { pbt.log(`${m.name} start: ${e.stack}`); } }
     if (isReport) pbt.every(400, () => { pbt.checkPin(); if (document.querySelector('.pbt-nudge, .pbt-rail')) pbt.nudgeBadges(); });
     observer.observe(document.body, { childList: true, subtree: true });
-  };)PBT"
-LR"PBT(
+  };
   boot();
   return `pbid-tweaks gen ${gen} (${pbt.modules.map(m => m.name).join(', ')})`;
 };
@@ -1172,12 +1190,12 @@ const project = {
     const report = json.get('definition/report.json') || {};
     const tc = report.themeCollection || {};
     // The custom theme over the base theme, when the project carries the base theme's file
-    // (StaticResources/SharedResources/BaseThemes); either alone when only one is there.
+    // (StaticResources/SharedResources/BaseT)PBT"
+LR"PBT(hemes); either alone when only one is there.
     const find = name => name && [...json.keys()].find(p => p.startsWith('StaticResources/') && (p.endsWith(`/${name}`) || p.endsWith(`/${name}.json`)));
     const customName = tc.customTheme && tc.customTheme.name;
     const baseName = tc.baseTheme && tc.baseTheme.name;
-    const)PBT"
-LR"PBT( custom = find(customName) ? json.get(find(customName)) : null;
+    const custom = find(customName) ? json.get(find(customName)) : null;
     const base = find(baseName) ? json.get(find(baseName)) : null;
     const theme = custom && base ? this.mergeTheme(base, custom) : custom || base || null;
     const themeName = custom ? customName : base ? baseName : customName || baseName || '';
@@ -1273,12 +1291,12 @@ LR"PBT( custom = find(customName) ? json.get(find(customName)) : null;
     const norm = s => ALIAS[s] || s;
     const kind = norm(this.letters(v.kind));
     let typeOk = f => kind && norm(this.letters(f.type)) === kind;
-    if (!page.visuals.some(typeOk)) {
+    if (!page.visuals)PBT"
+LR"PBT(.some(typeOk)) {
       const pre = f => { const t = norm(this.letters(f.type)); return kind && t && (t.startsWith(kind.slice(0, 6)) || kind.startsWith(t.slice(0, 6))); };
       if (page.visuals.filter(pre).length === 1) typeOk = pre;
     }
-    const same = f => Math.abs(f.x - v.x) <= tol && Math.abs(f.y - v.y) <= tol && Math)PBT"
-LR"PBT(.abs(f.w - v.w) <= tol && Math.abs(f.h - v.h) <= tol;
+    const same = f => Math.abs(f.x - v.x) <= tol && Math.abs(f.y - v.y) <= tol && Math.abs(f.w - v.w) <= tol && Math.abs(f.h - v.h) <= tol;
     const typed = page.visuals.filter(typeOk);
     const exact = typed.filter(same);
     if (exact.length === 1) return { file: exact[0], reason: '' };
@@ -1371,14 +1389,14 @@ function themeVariables() {
   };
   for (const sheet of document.styleSheets) {
     if (sheet.ownerNode && sheet.ownerNode.dataset && 'pbt' in sheet.ownerNode.dataset) continue;
-    let list; try { list = sheet.cssRules; } catch { continue; }
+    let list; try { list )PBT"
+LR"PBT(= sheet.cssRules; } catch { continue; }
     const walk = l => {
       for (const r of l) {
         if (r.selectorText && r.style) {
           const parts = r.selectorText.split(',').map(s => s.trim());
           const themed = parts.map(p => (p.match(/^\[data-theme="([^"]+)"\]$/) || [])[1]).filter(Boolean);
-          if (the)PBT"
-LR"PBT(med.length) { for (const t of themed) { if (!byTheme.has(t)) byTheme.set(t, new Map()); take(r, byTheme.get(t)); } }
+          if (themed.length) { for (const t of themed) { if (!byTheme.has(t)) byTheme.set(t, new Map()); take(r, byTheme.get(t)); } }
           else if (parts.includes(':root')) take(r, base);
           else if (parts.every(p => /^\.fui-FluentProvider[\w-]*$/.test(p))) take(r, fui);
         }
@@ -1475,9 +1493,9 @@ function skinCss(id, skin) {
   const ramp = skin.palette.ramp.map(([s, d]) => [color.grey(color.parse(s)), color.parse(d)]).sort((a, b) => a[0] - b[0]);
   const ground = ramp[0][1], text = ramp[ramp.length - 1][1];
   const disabled = color.hex(color.mix(text, ground, 0.45)), faint = color.hex(color.mix(text, ground, 0.7));
-  const onBrand = color.hsl(color.parse(skin.palette.accent)).l > 0.6 ? '#111111' : '#ffffff';
-  const pinned = `--colorNeutralForegroundDisabled: ${disabled}; --colorNeutralForegroundDisabled2: ${disabled}; --colorNeutralForeground4: ${disabled}; --colorNeutralStrokeDisabled: ${faint}; --colorNeutralForegroundOnBrand: ${onBra)PBT"
-LR"PBT(nd}; --colorBrandForegroundOnBrand: ${onBrand};`;
+  )PBT"
+LR"PBT(const onBrand = color.hsl(color.parse(skin.palette.accent)).l > 0.6 ? '#111111' : '#ffffff';
+  const pinned = `--colorNeutralForegroundDisabled: ${disabled}; --colorNeutralForegroundDisabled2: ${disabled}; --colorNeutralForeground4: ${disabled}; --colorNeutralStrokeDisabled: ${faint}; --colorNeutralForegroundOnBrand: ${onBrand}; --colorBrandForegroundOnBrand: ${onBrand};`;
   // The editor follows the mode (vs-dark or vs), not the reference theme, so its tokens get a
   // remap of their own polarity when the two differ.
   const editor = document.querySelector('.monaco-editor');
@@ -1573,11 +1591,11 @@ const skins = {
     // what is drawn, so a skin applied for a test shows as itself.
     pbt.modules.forEach(m => m.onApplied && m.onApplied(id));
     if (!relayout) return;
-    // Fonts and paddings just changed. A resize lets Power BI re-measure its ribbon groups, but
+    // Fonts and paddings just changed. A resize lets Power BI)PBT"
+LR"PBT( re-measure its ribbon groups, but
     // not its tab underline (placed from tab widths measured when the tab was opened), so the
     // underline is moved back under the open tab directly. Skins hide it; this matters for None.
-    // Timers rather than animation frames, which a covered window does not get. A copy stopped in)PBT"
-LR"PBT(
+    // Timers rather than animation frames, which a covered window does not get. A copy stopped in
     // the meantime leaves the rest to its stop().
     setTimeout(() => { if (pbt.current()) window.dispatchEvent(new Event('resize')); }, 30);
     for (const ms of [60, 400]) setTimeout(() => { if (pbt.current()) this.alignUnderline(); }, ms);
@@ -1673,10 +1691,10 @@ const FEATURES = {
   // A sound with the confetti: the file built into the mod or named in its settings (or in
   // tweaks.json "cheer"), embedded as PBT_CHEER. The switch shows only when a file is there;
   // Confetti's Try plays both when it is on.
-  // Shown as the Cheer pill on the confetti row (toggle), not as a row of its own.
+  // Shown as the Cheer pill on the confetti row (toggle), not as a row of )PBT"
+LR"PBT(its own.
   refreshCheer: { label: 'Cheer', inline: true, sound: true, pillTip: 'Play a cheer with the confetti', desc: 'The cheer plays with the confetti. Confetti alone when this is off.', available: () => typeof PBT_CHEER !== 'undefined' && !!PBT_CHEER },
-  sounds: { label: 'Skin sounds', desc: 'A few synthesized notes whe)PBT"
-LR"PBT(n a skin is picked or a refresh finishes. No audio files.', tryLabel: 'Try', helpTry: 'Play this skin\'s notes', tryTip: 'Play this skin\'s notes now', run: () => pbt.fun && pbt.fun.play(pbt.skins[pbt.skin.current] || pbt.skins[pbt.cfg.skin], true) },
+  sounds: { label: 'Skin sounds', desc: 'A few synthesized notes when a skin is picked or a refresh finishes, and the sounds of the hidden surprises. No audio files.', tryLabel: 'Try', helpTry: 'Play this skin\'s notes', tryTip: 'Play this skin\'s notes now', run: () => pbt.fun && pbt.fun.play(pbt.skins[pbt.skin.current] || pbt.skins[pbt.cfg.skin], true) },
   visualCount: { label: 'Visual count in the status bar', desc: 'The chip shows how many visuals the open page has; more than 20 turns it amber.' },
   reportFilterPane: { label: "Keep the report's Filters pane colors", desc: "Show the report's own filter pane formatting while you design it, instead of the skin's paint." },
 };
@@ -1768,13 +1786,13 @@ const menu = {
     const section = (id, title, key, blurb, ...body) => {
       // Skins fold by themselves once a skin has been picked (unfolding is remembered as well).
       const folded = !!pbt.ui.get(`menu.${id}`, id === 'skins' && !!pbt.skins[this.shownSkin()]);
-      const s = pbt.el('div', { class: `pbt-section${folded ? ' pbt-folded' : ''}`, dataset: { section: id } });
+      const s = pbt.e)PBT"
+LR"PBT(l('div', { class: `pbt-section${folded ? ' pbt-folded' : ''}`, dataset: { section: id } });
       const btn = pbt.tip(pbt.el('button', { class: 'pbt-sect', 'aria-expanded': String(!folded), onclick: e => {
         e.stopPropagation();
         const now = s.classList.toggle('pbt-folded');
         btn.setAttribute('aria-expanded', String(!now));
-        pbt.ui.set(`)PBT"
-LR"PBT(menu.${id}`, now);
+        pbt.ui.set(`menu.${id}`, now);
       } }, pbt.el('span', { class: 'pbt-chev', 'aria-hidden': 'true', text: '\u25be' }), pbt.el('span', { text: title })), `${title}\n${blurb ? `${blurb}\n` : ''}Click to fold or unfold this section; the menu remembers it.`);
       s.append(pbt.el('h4', {}, btn, key ? pbt.el('span', { class: 'pbt-key', text: key }) : null), pbt.el('div', { class: 'pbt-body' }, ...body));
       return s;
@@ -1837,14 +1855,14 @@ LR"PBT(menu.${id}`, now);
       pbt.el('span', { class: 'pbt-q', text: '?' }), pbt.el('span', { class: 'pbt-name', text: 'Help and keys' }), pbt.el('span', { class: 'pbt-key', text: 'Ctrl+Alt+H' })),
       'Help and keys\nWhat the skins, the tools and the extras do, every key, and where choices are kept.'));
     // The credit line under everything (pbt.fingerprint, page/00-core.js).
-    m.append(pbt.el('div', { class: 'pbt-blurb', text: pbt.fingerprint.credit }));
+    m.append(pbt.el('div', { class: 'pbt-blurb', text: pbt.finger)PBT"
+LR"PBT(print.credit }));
 
     document.body.append(m);
     // Anchored above the chip by its bottom edge, so folding a section or dragging the handle
     // grows or shrinks it upward; never taller than the room above the chip.
     const a = (anchor && anchor.isConnected ? anchor : document.querySelector('section.statusBar') || document.body).getBoundingClientRect();
-   )PBT"
-LR"PBT( const r = m.getBoundingClientRect();
+    const r = m.getBoundingClientRect();
     m.style.left = `${Math.max(8, Math.min(a.left, innerWidth - r.width - 8))}px`;
     m.style.bottom = `${Math.max(8, innerHeight - a.top + 6)}px`;
     m.style.maxHeight = `${Math.max(200, a.top - 14)}px`;
@@ -1934,12 +1952,12 @@ pbt.page = {
       // difference. The scale must be Power BI's own (see geometry), or edges near a half pixel
       // read one off.
       const x = edge(r.left - g.rect.left), y = edge(r.top - g.rect.top);
-      const right = edge(r.right - g.rect.left), bottom = edge(r.bottom - g.rect.top);
+      const right = e)PBT"
+LR"PBT(dge(r.right - g.rect.left), bottom = edge(r.bottom - g.rect.top);
       return { i, el, r, kind, typeName, title, x, y, w: +(right - x).toFixed(1), h: +(bottom - y).toFixed(1) };
     }).filter(v => v.w > 0 && v.h > 0);
     // Below 100% zoom two report pixels can draw at the same screen pixel, so the reading can be
-    // 1 px off. With the report's project files )PBT"
-LR"PBT(loaded, a visual whose saved position and size
+    // 1 px off. With the report's project files loaded, a visual whose saved position and size
     // draw exactly where it is drawn takes the saved values (v.fromFile); one moved since the save
     // keeps the reading.
     if (!opts.raw && g.scale < 0.999 && pbt.project && pbt.project.get()) {
@@ -2026,13 +2044,13 @@ function analyse(vs, cfg = {}) {
 
   // Distances: the nearest neighbour that overlaps on the other axis, else the page edge.
   for (const a of out) {
-    const v = a.v;
+    const)PBT"
+LR"PBT( v = a.v;
     const dirs = {
       left: b => (v.y < b.y + b.h && b.y < v.y + v.h) && b.x + b.w <= v.x ? v.x - (b.x + b.w) : null,
       right: b => (v.y < b.y + b.h && b.y < v.y + v.h) && b.x >= v.x + v.w ? b.x - (v.x + v.w) : null,
       up: b => (v.x < b.x + b.w && b.x < v.x + v.w) && b.y + b.h <= v.y ? v.y - (b.y + b.h) : null,
-      down: b => (v.x < b.x + b.)PBT"
-LR"PBT(w && b.x < v.x + v.w) && b.y >= v.y + v.h ? b.y - (v.y + v.h) : null,
+      down: b => (v.x < b.x + b.w && b.x < v.x + v.w) && b.y >= v.y + v.h ? b.y - (v.y + v.h) : null,
     };
     const toPage = { left: v.x, right: pageW ? pageW - (v.x + v.w) : null, up: v.y, down: pageH ? pageH - (v.y + v.h) : null };
     for (const [dir, fn] of Object.entries(dirs)) {
@@ -2130,9 +2148,9 @@ const qa = {
   card(a, g) {
     const { v, findings, shared, suggest } = a;
     const el = pbt.el;
-    const edgeFindings = findings.filter(f => f.kind === 'edge'), gapFindings = findings.filter(f => f.kind === 'gap'), gridFinding = findings.find(f => f.kind === 'grid');
-    const badge = edgeFindings.length ? ['bad', `${edgeFindings.length} edge${edgeFindings.length === 1 ? '' : 's'} off`] : gapFindings.length ? ['bad', `${gapFindings.length} odd gap${gapFindings.length === 1 ? '' : 's'}`] : findings.some(f => f.kind === 'spill') ? ['bad', 'off the page'] : gridFinding ? ['of)PBT"
-LR"PBT(f', 'off the grid'] : ['ok', 'aligned'];
+    const edgeFindings = findings.filter(f => f.kind === 'edge'), gapFindings = findings.filter(f => f.kind === 'gap'))PBT"
+LR"PBT(, gridFinding = findings.find(f => f.kind === 'grid');
+    const badge = edgeFindings.length ? ['bad', `${edgeFindings.length} edge${edgeFindings.length === 1 ? '' : 's'} off`] : gapFindings.length ? ['bad', `${gapFindings.length} odd gap${gapFindings.length === 1 ? '' : 's'}`] : findings.some(f => f.kind === 'spill') ? ['bad', 'off the page'] : gridFinding ? ['off', 'off the grid'] : ['ok', 'aligned'];
     const delta = (now, want) => want === now ? null : el('i', { text: `${want > now ? '\u25bc' : '\u25b2'}${Math.abs(+(want - now).toFixed(1))}` });
     const kpi = (label, now, want) => el('div', {}, el('small', { text: label }), el('strong', {}, String(now), delta(now, want)));
     const rows = [];
@@ -2181,14 +2199,14 @@ LR"PBT(f', 'off the grid'] : ['ok', 'aligned'];
     return bar;
   },
 
-  // Stencil's blocks on this page, while Stencil is on, checked with the visuals by the same rules.
+  // Stencil's blocks on this page, while Stencil is on, checked with the v)PBT"
+LR"PBT(isuals by the same rules.
   // A block a built visual already covers is left out (pbt.stencil.qaBlocks), so the same
   // rectangle is not counted twice. Each reads as a block: its type plus "block", its label with
   // "(block)". Their places are in the draw's signature, so a block added, moved or removed is
   // picked up on the next tick.
   blocks(g) {
-    cons)PBT"
-LR"PBT(t st = pbt.stencil;
+    const st = pbt.stencil;
     if (!st || !st.on || !st.qaBlocks) return [];
     return st.qaBlocks(g).map(b => ({ i: `st-${b.id}`, x: b.x, y: b.y, w: b.w, h: b.h, kind: `${b.typeLabel} block`, title: b.label ? `${b.label} (block)` : '', block: true }));
   },
@@ -2267,7 +2285,8 @@ LR"PBT(t st = pbt.stencil;
       const bad = s.edges + s.gaps + s.spills;
       const parts = [`${s.visuals} visuals`, bad ? `${bad} with an edge or gap to look at` : 'edges and gaps in order', s.usual != null ? `usual gap ${s.usual} px` : null, s.snap ? `${s.onGrid} of ${s.visuals} on the ${s.grid} px grid` : null];
       pbt.toast(`${parts.filter(Boolean).join(', ')}. Hover a label for its card; hover a visual for its gaps.`, { title: 'Layout QA', tone: bad ? 'bad' : 'good', ms: 6000 });
-      if (pbt.fun) pbt.fun.say(bad ? 'qaBad' : 'qaGood');
+      if (pbt.fun) pbt.fun.say(bad ? 'qaBad)PBT"
+LR"PBT(' : 'qaGood');
     }
   },
 
@@ -2277,8 +2296,7 @@ LR"PBT(t st = pbt.stencil;
     const g = this.geometry;
     const rx = (e.clientX - g.rect.left) / g.scale, ry = (e.clientY - g.rect.top) / g.scale;
     let idx = -1;
-    // A label belongs to)PBT"
-LR"PBT( its visual even where it hangs over another one (a text box behind a row of cards).
+    // A label belongs to its visual even where it hangs over another one (a text box behind a row of cards).
     const over = e.target && e.target.closest && e.target.closest('.pbt-box[data-index]');
     if (over) idx = this.result.visuals.findIndex(a => String(a.v.i) === over.dataset.index);
     if (idx < 0) this.result.visuals.forEach((a, i) => { const v = a.v; if (rx >= v.x && rx <= v.x + v.w && ry >= v.y && ry <= v.y + v.h && (idx < 0 || v.w * v.h < this.result.visuals[idx].v.w * this.result.visuals[idx].v.h)) idx = i; });
@@ -2361,14 +2379,14 @@ LR"PBT( its visual even where it hangs over another one (a text box behind a row
           const across = horizontal
             ? ((r.top + r.bottom) / 2 >= lr.top ? lr.top - GAP - r.bottom : lr.top + GAP - r.top)
             : ((r.left + r.right) / 2 >= lr.left ? lr.left - GAP - r.right : lr.left + GAP - r.left);
-          const step = Math.max(6, (horizontal ? r.width : r.height) / 2);
+          const step = Math.max(6, (horizontal ? r.wid)PBT"
+LR"PBT(th : r.height) / 2);
           const span = horizontal ? hb.width : hb.height;
           const move = (along, side) => horizontal ? [along, side] : [side, along];
           tries.push(move(0, across));
           for (let k = 1; k * step <= span; k++) for (const s of [1, -1]) for (const side of [0, across]) tries.push(move(s * k * step, side));
         } else {
-   )PBT"
-LR"PBT(       const sx = r.width / 2 + GAP, sy = r.height + GAP;
+          const sx = r.width / 2 + GAP, sy = r.height + GAP;
           for (let k = 1; k <= 4; k++) tries.push([0, -k * sy], [0, k * sy], [-k * sx, 0], [k * sx, 0]);
         }
         best = tries.find(([dx, dy]) => { const q = at(dx, dy); return inside(q) && free(q); }) || [0, 0];
@@ -2460,7 +2478,8 @@ const SETTLE_MAX = 3000;
 // is read again on the next pass once it is this old.
 const FRESH_MS = 10000;
 // Power BI applies a slicer pick or a filter change a moment after the click. A read counts as
-// fresh only when it began at least DIRTY_SETTLE ms after the last change, and the pass a change
+// fresh only when it began at least DIRTY_SETTLE ms after the last chang)PBT"
+LR"PBT(e, and the pass a change
 // schedules runs DIRTY_PASS ms after it (each new change moves it later).
 const DIRTY_SETTLE = 1500;
 const DIRTY_PASS = 2000;
@@ -2476,8 +2495,7 @@ const filtermap = {
   // ---- the Filters pane ----
   sections() {
     const out = {};
-    for (const cap of)PBT"
-LR"PBT( document.querySelectorAll('.outspacePane .caption')) {
+    for (const cap of document.querySelectorAll('.outspacePane .caption')) {
       const t = cap.textContent.trim().toLowerCase();
       const header = cap.closest('.header');
       const box = header && header.parentElement;
@@ -2569,13 +2587,13 @@ LR"PBT( document.querySelectorAll('.outspacePane .caption')) {
   },
   // Power BI's own list of what affects the visual, as [{ heading, items }]; null when the
   // visual has no filter button (shapes, some text boxes). The hover goes to the visual's top-left
-  // corner, its title area, so no data point opens a tooltip; the caller hides the popup and the
+  // corner, its title a)PBT"
+LR"PBT(rea, so no data point opens a tooltip; the caller hides the popup and the
   // header icons while it runs (quiet).
   async popup(v) {
     const r = v.el.getBoundingClientRect(), x = r.left + Math.min(10, r.width / 4), y = r.top + Math.min(8, r.height / 4);
     const t = document.elementFromPoint(x, y);
-    if (t) for (const type of ['pointerover', 'mouseover', 'po)PBT"
-LR"PBT(intermove', 'mousemove']) t.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, view: window }));
+    if (t) for (const type of ['pointerover', 'mouseover', 'pointermove', 'mousemove']) t.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, view: window }));
     const b = await fwait(() => v.el.querySelector('.vcFilterRestatementBtn'), 800);
     if (!b) { this.unhover(t, x, y); return null; }
     // The list takes keyboard focus when it opens and hands it back on closing, and that focus event
@@ -2666,15 +2684,15 @@ LR"PBT(intermove', 'mousemove']) t.dispatchEvent(new MouseEvent(type, { bubbles:
     if (p) { const pages = pbt.project.get().pages; if (pages.filter(x => x.displayName === p.displayName).length > 1) name = pages[i] && pages[i].displayName === p.displayName ? pages[i].name : ''; }
     return `${name}|${i}|${tabs[i].textContent}`;
   },
-  // Everything kept belongs to one set of project files: when the mod hands over new ones (another
+  // Everything kept belongs to one set of project files: when the m)PBT"
+LR"PBT(od hands over new ones (another
   // report opened, or a save), every list read so far goes stale and is read again; for another
   // report (a new folder, or files appearing or going) what was kept is dropped as well.
   cacheRaw: undefined,
   syncRaw() {
     const raw = (pbt.project && pbt.project.raw) || null;
     if (raw === this.cacheRaw) return;
-    const sam)PBT"
-LR"PBT(e = !!raw && !!this.cacheRaw && raw.root === this.cacheRaw.root;
+    const same = !!raw && !!this.cacheRaw && raw.root === this.cacheRaw.root;
     this.cacheRaw = raw;
     this.readAt.clear(); this.round = null;
     this.paneSigs.clear();
@@ -2770,20 +2788,21 @@ LR"PBT(e = !!raw && !!this.cacheRaw && raw.root === this.cacheRaw.root;
     const run = this.chain.then(async () => {
       if (gen !== this.gen) { this.pending--; return undefined; }
       this.busy = true;
-      try { return await fn(gen); } finally { this.busy = false; this.pending--; }
+   )PBT"
+LR"PBT(   try { return await fn(gen); } finally { this.busy = false; this.pending--; }
     }, () => { this.pending--; });
     this.chain = run.catch(() => {});
     return run;
   },
   // Resolves when nothing is running or queued.
   async idle() { while (this.pending) await this.chain; },
-  // Power BI's list for every visual, out of sight. Requests while one is queued jo)PBT"
-LR"PBT(in it; a pass
+  // Power BI's list for every visual, out of sight. Requests while one is queued join it; a pass
   // waits while a dropdown, menu or text field of yours is open, and stops after 15 s, carrying on
   // from the next unread visual in a follow-up pass.
-  // A list read is kept until something could have changed it (dirtyAt): a real click or key
-  // anywhere but the page tabs, a change in the Filters pane's page or report filters, a bulk
-  // action, new project files, Rescan or turning the map on; and never longer than FRESH_MS. A read
+  // A list read is kept until something could have changed it (dirtyAt): a real click or key on
+  // the report canvas or in the Filters pane, an undo or redo (touchesFilters), a change in the
+  // Filters pane's page or report filters, a bulk action, new project files, Rescan or turning the
+  // map on; and never longer than FRESH_MS. A read
   // that began within DIRTY_SETTLE ms of a change may hold the list from before it (Power BI was
   // still applying it), so it is shown but read again. A pass reads only the visuals whose list is
   // not fresh, so coming back soon to a page you only looked at reads nothing.
@@ -2869,7 +2888,8 @@ LR"PBT(in it; a pass
   retryPass(ms) {
     if (document.hidden) { this.stale = true; return; }
     clearTimeout(this.retryTimer);
-    this.retryTimer = setTimeout(() => { if (this.on) this.refreshPopups(); }, ms);
+    this.retryTimer = setTimeout)PBT"
+LR"PBT((() => { if (this.on) this.refreshPopups(); }, ms);
   },
 
   // ---- scan the page ----
@@ -2878,8 +2898,7 @@ LR"PBT(in it; a pass
   // announce (turning the map on, Rescan) reads every list again; otherwise lists still fresh
   // are kept.
   // A scan whose map is turned off (or stopped) meanwhile ends at its next step.
-  async scan)PBT"
-LR"PBT((announce) {
+  async scan(announce) {
     const gen = this.gen, alive = () => gen === this.gen && this.on;
     this.pageName = this.pageNow();
     if (announce) { this.readAt.clear(); this.round = null; }
@@ -2959,15 +2978,15 @@ LR"PBT((announce) {
   savedFields(v, ctx) {
     const p = pbt.project, raw = p && p.raw;
     if (!ctx.page || !raw || !Array.isArray(raw.files)) return null;
-    if (this.fieldCacheRaw !== raw) { this.fieldCache = new Map(); this.fieldCacheRaw = raw; }
+    if (this.fieldCacheRaw !== raw) { this.)PBT"
+LR"PBT(fieldCache = new Map(); this.fieldCacheRaw = raw; }
     const hit = p.match(v, ctx.page, ctx.tol);
     if (!hit.file) return null;
     // The full path on the visual's own page, so a visual of the same name on another page is
     // never read in its place.
     const path = `definition/pages/${ctx.page.name}/visuals/${hit.file.name}/visual.json`;
     if (this.fieldCache.has(path)) return this.fieldCache.get(path);
-    )PBT"
-LR"PBT(const file = raw.files.find(x => x.path === path);
+    const file = raw.files.find(x => x.path === path);
     let json = null;
     try { json = file ? JSON.parse(file.text) : null; } catch {}
     if (!json) return null;
@@ -3037,14 +3056,14 @@ LR"PBT(const file = raw.files.find(x => x.path === path);
     const host = this.host = el('div', { class: 'pbt-fm', 'data-pbt': '', style: `left:${g.rect.left}px;top:${g.rect.top}px;width:${g.rect.width}px;height:${g.rect.height}px` });
     const live = pbt.page.visuals(g);
     const passes = pbt.passes();
-    for (const row of this.result.rows) {
+    for (const row of this.)PBT"
+LR"PBT(result.rows) {
       if (!passes && !this.reportable(row)) continue;
       const v = live.find(x => x.el === row.v.el) || row.v;
       const n = this.counts(row.items);
       // A chip is a letter and a count ("V1"); the badge is grey information like every finding
       // that is not a fault. While the pointer is on the badge (or its card is open) the words
-      // ("1 visual") show in a panel raised over the badge:)PBT"
-LR"PBT( it grows up and to the left from the
+      // ("1 visual") show in a panel raised over the badge: it grows up and to the left from the
       // badge's bottom-right corner, wraps onto lines above within its own visual's width, and
       // leaves the chips in place. The badge itself never changes size on hover, so nothing moves
       // under the pointer and no neighbour's rail is covered.
@@ -3109,9 +3128,9 @@ LR"PBT( it grows up and to the left from the
       item('other', others, 'slicers', `${others} of ${rows.length} visuals filtered by slicers & cross-filters\nA slicer, a cross-filter or a selection in another visual.`),
       passes.fine,
       el('span', { class: 'pbt-strip-seg' }, passes.sw,
-        button({ class: 'pbt-strip-grid', text: 'Rescan' }, () => this.scan(true), 'Rescan\nReads every visual again, out of sight. The map also updates by itself when a filter changes or you click a slicer or a visual.'),
-        rows.some(r => r.unknown) ? button({ class: 'pbt-strip-grid', text: 'Read each visual' }, () => this.readEachVisual(), 'Read each visual\nSome visuals are not in the project files, so their hidden filters)PBT"
-LR"PBT( are unknown. This selects each visual in turn to read its cards, then puts the selection back. Setting the report project folder avoids it.') : null,
+        butto)PBT"
+LR"PBT(n({ class: 'pbt-strip-grid', text: 'Rescan' }, () => this.scan(true), 'Rescan\nReads every visual again, out of sight. The map also updates by itself when a filter changes or you click a slicer or a visual.'),
+        rows.some(r => r.unknown) ? button({ class: 'pbt-strip-grid', text: 'Read each visual' }, () => this.readEachVisual(), 'Read each visual\nSome visuals are not in the project files, so their hidden filters are unknown. This selects each visual in turn to read its cards, then puts the selection back. Setting the report project folder avoids it.') : null,
         button({ class: 'pbt-strip-grid', text: 'Visual filters \u25be' }, e => this.menu(e.currentTarget), 'Hide, show, lock or unlock visual-level filters\nFor the selected visual, this page or every page.'),
         button({ class: 'pbt-strip-help', text: '?' }, () => { if (pbt.help) { pbt.help.close(); pbt.help.open(); pbt.help.show('filters'); } }, 'What the badges mean\nOpens the help page at Filter map.')));
     pbt.placeStrip(bar, 'filters', g);
@@ -3188,7 +3207,8 @@ LR"PBT( are unknown. This selects each visual in turn to read its cards, then pu
       if (!await this.selectNow(vs[i], live)) continue;
       if (!await fwait(() => vs[i].el.classList.contains('selected') && this.sections().visual, 1200)) continue;
       if (!live()) break;
-      n += await this.applyToSelected(action);
+      n)PBT"
+LR"PBT( += await this.applyToSelected(action);
       this.live.set(this.key(vs[i]), this.readCards(this.sections().visual));
       progress(i + 1, vs.length, n);
     }
@@ -3196,8 +3216,7 @@ LR"PBT( are unknown. This selects each visual in turn to read its cards, then pu
   },
   tabs() { return [...document.querySelectorAll('.carouselScrollPane li.section')].filter(li => li.offsetParent !== null); },
   bulk(action, scope) { return this.exclusive(gen => this.bulkRun(action, scope, gen)); },
-  async bulkRun(action, s)PBT"
-LR"PBT(cope, gen) {
+  async bulkRun(action, scope, gen) {
     this.cancel = false;
     const verb = { hide: 'Hid', show: 'Showed', lock: 'Locked', unlock: 'Unlocked' }[action];
     const ing = { hide: 'Hiding', show: 'Showing', lock: 'Locking', unlock: 'Unlocking' }[action];
@@ -3235,9 +3254,12 @@ LR"PBT(cope, gen) {
           this.deselect();
           pages++;
         }
-        const back = this.tabs()[start];
+        // A stop (the map turned off, or the mod disabled: gen moved on) leaves the page where it is
+        // and says nothing, as the this-page branch does; Esc still goes back to your page.
+        const back = gen === this.gen ? this.tabs()[start] : null;
         if (back && !back.classList.contains('selected')) { (back.querySelector('[role="tab"]') || back).click(); await fwait(() => { const t = this.tabs()[start]; return !!t && t.classList.contains('selected'); }, 4000); await fsleep(800); }
       }
+      if (gen !== this.gen) return n;
       pbt.toast(`${verb} ${n} visual-level filter${n === 1 ? '' : 's'}${scope === 'report' ? ` on ${pages} page${pages === 1 ? '' : 's'}` : ''}${this.cancel ? ' (stopped)' : stuck ? ` (stopped: page ${stuck} did not open)` : ''}. Save to keep it.`, { title: 'Filter map', ms: 6000, tone: this.cancel || stuck ? 'warn' : 'info' });
       return n;
     } finally {
@@ -3273,7 +3295,8 @@ LR"PBT(cope, gen) {
     b.append(glyph);
     b.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); });
     b.addEventListener('click', e => { e.stopPropagation(); this.menu(b); });
-    pbt.tip(b, 'Visual-level filters, all at once\nHide, show, lock or unlock them on the selected visual, this page or every page.');
+    pbt.tip(b, 'Visual)PBT"
+LR"PBT(-level filters, all at once\nHide, show, lock or unlock them on the selected visual, this page or every page.');
     if (more) more.before(b); else target.header.append(b);
   },
 
@@ -3283,18 +3306,62 @@ LR"PBT(cope, gen) {
     if (!this.on) { this.halt(); this.result = null; pbt.toast('Filter map off'); return; }
     this.scan(true);
   },
+  // Whether a real click or key can have changed what filters a visual, so that every list read so
+  // far goes stale: one on the report canvas (a slicer, a cross-filter, a bookmark or drill
+  // button, a click on the empty canvas that clears a cross-filter), one in the Filters pane, one
+  // in the Bookmarks pane or its View bar (applying a bookmark changes filters and slicers), and an
+  // undo or redo (Ctrl+Z, Ctrl+Y, or Power BI's Undo and Redo buttons). A popup (a dropdown
+  // slicer's list, a filter card's dropdown, a visual's or a bookmark's menu) counts when it was
+  // opened from one of those places: the last click outside any popup said where (fromZone).
+  // Everything else changes no filter: the ribbon, the Format, Visualizations, Fields and Selection
+  // panes, a save. A change those make to the page
+  // or report filters still shows in the Filters pane (notePane), and a save brings new project
+  // files (syncRaw); a field dragged into "Filters on this visual" is dropped in the Filters pane.
+  // Never counted: synthetic events (this tool's own), its own controls and Ctrl+Alt keys, a
+  // modifier key on its own, the page tabs (a page change is read once the new page has settled),
+  // and typing in a text field until Enter commits it (the formula bar, a search box, a title).
+  // Where those places are, from Power BI's own scripts (desktop.min.js, Power BI Desktop of
+  // 2026-10): the Bookmarks pane is the Angular component <bookmarks-pane-content> (its list is
+  // <bookmark-tree> of <bookmark-node>), and the bar shown by the pane's View button is
+  // <bookmark-play>. The title bar's Undo and Redo are ribbon controls with the ids "undo" and
+  // "redo" (TitlebarToolbarFactory, rendered by the ribbon's React toolbar, which passes the
+  // control id on as the element id); the Home ribbon's split button is "undoRedoSplit". Seen live
+  // on 2026-11-10: button#undo and button#redo inside titlebar-toolbar, with data-unique-id
+  // "Ribbon-undo" and "Ribbon-redo". Those are matched first; a button labelled Undo or Redo, or whose tooltip names Ctrl+Z or Ctrl+Y, is
+  // the fallback for a build that renders them differently.
+  FILTER_ZONES: '.displayAreaViewport, .displayArea, .outspacePane, bookmarks-pane-content, bookmark-tree, bookmark-play',
+  UNDO_IDS: '#undo, #redo, [id^="undoRedoSplit"], [data-unique-id="Ribbon-undo"], [data-unique-id="Ribbon-redo"]',
+  fromZone: false,
+  touchesFilters(e) {
+    const t = e && e.target;
+    if (!e.isTrusted || !t || !t.closest || t.closest('[data-pbt]') || t.closest('.carouselScrollPane')) return false;
+    const zone = n => !!n.closest(this.FILTER_ZONES);
+    const inPopup = !!t.closest('.cdk-overlay-container, .ms-Layer');
+    if (e.type === 'pointerdown') { if (!inPopup) this.fromZone = zone(t); return false; }
+    if (e.type === 'keyup') {
+      if (/^(Control|Alt|Shift|Meta|AltGraph)$/.test(e.key) || (e.ctrlKey && e.altKey && pbt.hotkeys.some(h => h.key === (e.key || '').toLowerCase()))) return false;
+      const typing = typingIn((e.composedPath && e.composedPath()[0]) || t);
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && /^[zy]$/i.test(e.key || '')) return !typing;
+      if (typing && e.key !== 'Enter') return false;
+    } else {
+      if (t.closest(this.UNDO_IDS)) return true;
+      const b = t.closest('button, [role="button"], [role="menuitem"]');
+      const label = b ? `${b.getAttribute('aria-label') || ''} ${b.getAttribute('title') || ''}`.trim() : '';
+      if (/^(undo|redo)\b|ctrl\s*\+\s*[zy]\b/i.test(label)) return true;
+    }
+    return zone(t) || (inPopup && this.fromZone);
+  },
   start() {
     pbt.hotkey('f', 'Filter map', () => this.toggle(), {
       id: 'filters',
       tool: true, active: () => this.on,
-      desc: 'A badge on every visual: its visual, page and report filters and what else filters it (slicers, cross-filters). Hover a badge for the list; hide or lock visual filters o)PBT"
-LR"PBT(n a visual, a page or every page.',
+      desc: 'A badge on every visual: its visual, page and report filters and what else filters it (slicers, cross-filters). Hover a badge for the list; hide or lock visual filters on a visual, a page or every page.',
       tip: 'Filter map\nReads visual filters from the report project folder and the Filters pane, and slicers and cross-filters from Power BI\'s own list for each visual, out of sight; it updates itself when a filter changes.',
     });
     // Updates by themselves: a change in the Filters pane (a filter added, edited, hidden, a visual
-    // selected) refreshes from the pane at once; a real click or key (a slicer pick, a cross-filter)
-    // refreshes Power BI's lists once Power BI has applied it (dirty). Synthetic events (this tool's
-    // own) are ignored.
+    // selected) refreshes from the pane at once; a real click or key that can change a filter
+    // (touchesFilters: a slicer pick, a cross-filter, an undo) refreshes Power BI's lists once
+    // Power BI has applied it (dirty). Synthetic events (this tool's own) are ignored.
     this.syncRaw();
     let paneTimer = 0;
     pbt.cleanups.push(() => { clearTimeout(paneTimer); clearTimeout(this.refreshTimer); });
@@ -3302,23 +3369,14 @@ LR"PBT(n a visual, a page or every page.',
     // redraw waits for a running pass, which redraws when it ends.
     const paneObserver = new MutationObserver(() => { clearTimeout(paneTimer); paneTimer = setTimeout(() => this.refreshPane(), 250); });
     pbt.cleanups.push(() => paneObserver.disconnect());
-    const canvasChange = e => {
-      // Any real click or key of yours (a slicer, a bookmark, undo, a field moved in the
-      // Visualizations pane, a filter edited in the Filters pane) may change what filters a
-      // visual, so every list read so far goes stale, even while the map is off, and with the map
-      // on a pass follows once Power BI has applied it. A pass started while a dropdown or text
-      // field of yours is open waits for it. Exceptions that change no filter: this tool's own
-      // controls, its Ctrl+Alt keys, a modifier key on its own, and the page tabs (a page change
-      // is read once the new page has settled).
-      if (!e.isTrusted || !e.target || !e.target.closest || e.target.closest('[data-pbt]') || e.target.closest('.carouselScrollPane')) return;
-      if (e.type === 'keyup' && (/^(Control|Alt|Shift|Meta|AltGraph)$/.test(e.key) || (e.ctrlKey && e.altKey && pbt.hotkeys.some(h => h.key === (e.key || '').toLowerCase())))) return;
-      // Typing in a text field (the formula bar, a search box, a title) changes no filter until it
-      // is committed, so only Enter counts there; otherwise every keystroke would start a pass.
-      if (e.type === 'keyup' && e.key !== 'Enter' && typingIn((e.composedPath && e.composedPath()[0]) || e.target)) return;
-      this.dirty();
-    };
+    // Even while the map is off, so the lists it has kept are not shown as fresh when it comes back;
+    // with the map on, a pass follows once Power BI has applied the change. A pass started while a
+    // dropdown or text field of yours is open waits for it.
+    const canvasChange = e => { if (this.touchesFilters(e)) this.dirty(); };
     pbt.on(document, 'visibilitychange', () => { if (!document.hidden && this.stale && this.on) { this.stale = false; this.refreshPopups(); } });
-    pbt.on(document, 'pointerup', canvasChange, true);
+    pbt.on(document, 'pointerdown', canvasChange, true);
+    pbt.o)PBT"
+LR"PBT(n(document, 'pointerup', canvasChange, true);
     pbt.on(document, 'keyup', canvasChange, true);
     // Keep the overlay on its visuals while the page moves, rescan after a page change, and keep
     // the pane button in place (the pane re-renders its sections often).
@@ -3380,8 +3438,7 @@ LR"PBT(n a visual, a page or every page.',
         if (c !== count) { count = c; last = performance.now(); }
         if (c > 0 && performance.now() - last >= SETTLE_QUIET) return;
       }
-    } finally { if (mo)PBT"
-LR"PBT() mo.disconnect(); }
+    } finally { if (mo) mo.disconnect(); }
   },
   // Turning the map off, or stopping, ends running work: the generation changes, queued
   // operations skip, loops return at their next check, bulk runs see cancel, and no timer starts
@@ -3433,7 +3490,8 @@ pbt.module(filtermap);
 // cannot be highlighted are dimmed.
 
 const CHOICES = [
-  { id: 'none', aria: /^none$/i, label: 'None', verb: 'No interaction', tip: 'The selected visual does not filter or highlight it.' },
+  { id: 'none', aria: /^none$/i, label: 'None', verb: 'No interaction',)PBT"
+LR"PBT( tip: 'The selected visual does not filter or highlight it.' },
   { id: 'filter', aria: /^filter$/i, label: 'Filter', verb: 'Filter', tip: 'The selected visual filters it.' },
   { id: 'highlight', aria: /^highlight$/i, label: 'Highlight', verb: 'Highlight', tip: 'The selected visual highlights its matching part (charts only).' },
 ];
@@ -3499,8 +3557,7 @@ const interactions = {
     const wants = c => !!c && c.enabled && !c.active;
     const pick = t => t.choices.find(x => x.id === id);
     const offered = st.targets.filter(t => { const c = pick(t); return c && c.enabled; }).length;
-    const todo = st.tar)PBT"
-LR"PBT(gets.filter(t => wants(pick(t))).map(t => t.v.el);
+    const todo = st.targets.filter(t => wants(pick(t))).map(t => t.v.el);
     const before = st.targets.filter(t => t.active === id).length;
     const sourceEl = st.source && st.source.el;
     const run = this.run = { id, done: 0, total: todo.length };
@@ -3516,7 +3573,9 @@ LR"PBT(gets.filter(t => wants(pick(t))).map(t => t.v.el);
       for (const el of todo) {
         // The page is read again before each press: a press can redraw the other visuals'
         // headers, and the run stops if Edit interactions closes, the tool is turned off or
-        // another visual is selected.
+        // another visual is selected. A disable (pbt.remove) ends the run on the spot, with no bar
+        // drawn again and no pbt-ia class put back: this copy of the page code is no longer current.
+        if (!pbt.current()) return pressed;
         const now = this.on ? this.state() : null;
         if (!this.on) { stopped = 'the Interactions tool was turned off'; break; }
         if (!now) { stopped = 'Edit interactions was closed'; break; }
@@ -3535,6 +3594,7 @@ LR"PBT(gets.filter(t => wants(pick(t))).map(t => t.v.el);
     } finally {
       this.run = null;
     }
+    if (!pbt.current()) return pressed;
     // The result is checked by counting, not by trusting the clicks: every visual that was set
     // before plus every press should now show the choice.
     const after = this.state();
@@ -3549,7 +3609,8 @@ LR"PBT(gets.filter(t => wants(pick(t))).map(t => t.v.el);
       warn = true;
       text = `No visual offers ${choice.label}`;
     } else if (!run.total) {
-      text = `All ${offered} already ${choice.label}`;
+      text = `All ${offe)PBT"
+LR"PBT(red} already ${choice.label}`;
     } else if (missed) {
       warn = true;
       text = `${pressed - missed} of ${run.total} set, ${missed} failed`;
@@ -3618,8 +3679,7 @@ LR"PBT(gets.filter(t => wants(pick(t))).map(t => t.v.el);
       const n = offers(c.id);
       const how = `Clicks each visual's ${c.label} icon, the same as doing it by hand; Ctrl+Z undoes them one at a time.`;
       let label = `${c.label} for all`, off = n === 0;
-      let tip =)PBT"
-LR"PBT( `${c.verb} for every other visual\n${c.tip} ${how}${counts[c.id] === total ? `\nAll ${total} are already set to ${c.label}.` : ''}`;
+      let tip = `${c.verb} for every other visual\n${c.tip} ${how}${counts[c.id] === total ? `\nAll ${total} are already set to ${c.label}.` : ''}`;
       if (c.id === 'highlight' && n && n < total) {
         label = `Highlight ${n} of ${total}`;
         tip = `Highlight for ${n} of ${total} visuals\nOnly ${n} of the ${total} visuals offer Highlight; the other ${total - n} (cards and other visuals without highlight) stay as they are. While the pointer is here, the visuals that change are outlined and the ones that cannot are dimmed. ${how}`;
@@ -3649,7 +3709,8 @@ LR"PBT( `${c.verb} for every other visual\n${c.tip} ${how}${counts[c.id] === tot
     const host = this.host;
     setStyle(host, 'left', `${g.rect.left}px`);
     setStyle(host, 'top', `${g.rect.top}px`);
-    setStyle(host, 'width', `${g.rect.width}px`);
+    setStyle(host, 'width)PBT"
+LR"PBT(', `${g.rect.width}px`);
     setStyle(host, 'height', `${g.rect.height}px`);
     const top = s.y * g.scale - 34;
     setStyle(bar, 'left', `${Math.max(0, s.x * g.scale)}px`);
@@ -3714,8 +3775,7 @@ pbt.module(interactions);
 const ST_TYPES = [
   { id: 'card', label: 'Card', visual: 'card', glyph: 'pbi-glyph-contactcard', w: 200, h: 120 },
   { id: 'column', label: 'Column chart', visual: 'clusteredColumnChart', glyph: 'pbi-glyph-barchartvertical', w: 400, h: 280 },
-  { id: 'bar', label: 'Bar chart', visual: 'clusteredBarChart', glyph: 'pbi-glyph-barchart', w: 400, h: )PBT"
-LR"PBT(280 },
+  { id: 'bar', label: 'Bar chart', visual: 'clusteredBarChart', glyph: 'pbi-glyph-barchart', w: 400, h: 280 },
   { id: 'line', label: 'Line chart', visual: 'lineChart', glyph: 'pbi-glyph-chart', w: 400, h: 280 },
   { id: 'table', label: 'Table', visual: 'tableEx', glyph: 'pbi-glyph-table', w: 400, h: 280 },
   { id: 'slicer', label: 'Slicer', visual: 'slicer', glyph: 'pbi-glyph-checkbox', w: 200, h: 100 },
@@ -3737,7 +3797,8 @@ const ST_MORE = [
   { id: 'waterfall', group: 'Bar and column', label: 'Waterfall chart', visual: 'waterfallChart', glyph: 'pbi-glyph-barchartvertical', w: 400, h: 280 },
   { id: 'funnel', group: 'Bar and column', label: 'Funnel', visual: 'funnel', glyph: 'pbi-glyph-barchart', w: 400, h: 280 },
   { id: 'area', group: 'Line and area', label: 'Area chart', visual: 'areaChart', glyph: 'pbi-glyph-chart', w: 400, h: 280 },
-  { id: 'stackedArea', group: 'Line and area', label: 'Stacked area chart', visual: 'stackedAreaChart', glyph: 'pbi-glyph-chart', w: 400, h: 280 },
+  { id: 'stackedArea', group: 'L)PBT"
+LR"PBT(ine and area', label: 'Stacked area chart', visual: 'stackedAreaChart', glyph: 'pbi-glyph-chart', w: 400, h: 280 },
   { id: 'lineStackedColumn', group: 'Line and area', label: 'Line and stacked column chart', visual: 'lineStackedColumnComboChart', glyph: 'pbi-glyph-chart', w: 400, h: 280 },
   { id: 'lineClusteredColumn', group: 'Line and area', label: 'Line and clustered column chart', visual: 'lineClusteredColumnComboChart', glyph: 'pbi-glyph-chart', w: 400, h: 280 },
   { id: 'scatter', group: 'Other charts', label: 'Scatter chart', visual: 'scatterChart', glyph: ST_ANY, w: 400, h: 280 },
@@ -3772,8 +3833,7 @@ const ST_DRAG_PX = 4;
 // tooltips and the toast after a click say the same), and what it needs when no report files are
 // loaded.
 const ST_CONVERT_STEPS = '1. This copies a script. 2. Paste it into PowerShell and press Enter. 3. Close and reopen the report in Power BI to see the visuals.';
-const ST_NEEDS_PBIP = 'The report must)PBT"
-LR"PBT( be a .pbip project that Power BI opened; the mod finds its files by itself.';
+const ST_NEEDS_PBIP = 'The report must be a .pbip project that Power BI opened; the mod finds its files by itself.';
 // Converting blocks into a background of frames (rounded card shapes drawn in one SVG that is the
 // page's background image), in the same three steps.
 const ST_FRAMES_STEPS = '1. This copies a script. 2. Paste it into PowerShell and press Enter. 3. Close and reopen the report in Power BI to see the frames.';
@@ -3796,7 +3856,8 @@ const ST_PRESETS = [
     ['slicer', 'Slicer 1', 32, 88, 224, 192], ['slicer', 'Slicer 2', 32, 296, 224, 192], ['slicer', 'Slicer 3', 32, 504, 224, 184],
     ['card', 'KPI 1', 272, 88, 312, 120], ['card', 'KPI 2', 600, 88, 312, 120], ['card', 'KPI 3', 928, 88, 320, 120],
     ['column', 'By category', 272, 224, 480, 464], ['table', 'Details', 768, 224, 480, 464]] },
-  { id: 'slicer-bar', name: 'Slicer bar', desc: 'Slicers in a row under the title, then cards and two charts.', blocks: [ST_TITLE,
+  { id: 'slicer-bar', name: 'Slicer bar', desc: ')PBT"
+LR"PBT(Slicers in a row under the title, then cards and two charts.', blocks: [ST_TITLE,
     ['slicer', 'Slicer 1', 32, 88, 292, 64], ['slicer', 'Slicer 2', 340, 88, 292, 64], ['slicer', 'Slicer 3', 648, 88, 292, 64], ['slicer', 'Slicer 4', 956, 88, 292, 64],
     ['card', 'KPI 1', 32, 168, 292, 112], ['card', 'KPI 2', 340, 168, 292, 112], ['card', 'KPI 3', 648, 168, 292, 112], ['card', 'KPI 4', 956, 168, 292, 112],
     ['column', 'By category', 32, 296, 600, 392], ['line', 'Trend', 648, 296, 600, 392]] },
@@ -3845,8 +3906,7 @@ const stencil = {
   types: ST_ALL,
 
   // ---- pure core (fixtures in scripts/tool-check.mjs) ----
-  // A value to the)PBT"
-LR"PBT( nearest line within tol, else to the grid.
+  // A value to the nearest line within tol, else to the grid.
   snapTo(v, lines, grid, tol) {
     let best = null;
     for (const l of lines) { const d = Math.abs(l - v); if (d <= tol && (best === null || d < Math.abs(best - v))) best = l; }
@@ -3886,7 +3946,8 @@ LR"PBT( nearest line within tol, else to the grid.
   },
   // The files a build writes: { files: [{ path, text }], page, appendPage }. spec: { project
   // (pbt.project.get()), page (an existing page's name) or newPage ({ displayName, width,
-  // height }), blocks, schema, rand (0..1, for tests) }.
+  // height }), bloc)PBT"
+LR"PBT(ks, schema, rand (0..1, for tests) }.
   files(spec) {
     const { project, blocks } = spec;
     const rand = spec.rand || Math.random;
@@ -3937,8 +3998,7 @@ LR"PBT( nearest line within tol, else to the grid.
       build ? '# Writes only new files under definition\\pages (never one that exists); pages.json is backed up before a new page joins it.' : null,
       frames ? '# Frames: one new SVG under StaticResources\\RegisteredResources, registered in report.json and set as the page background in page.json; both are backed up first.' : null,
       frames && !build ? '# A page that already has a background image is left alone: change the last line from } to } -Replace to replace it.' : null,
-      fram)PBT"
-LR"PBT(es && build ? '# A page that already has a background image keeps it: the frames are skipped and the visuals are still built.' : null,
+      frames && build ? '# A page that already has a background image keeps it: the frames are skipped and the visuals are still built.' : null,
       '# Everything runs as one block, so a refusal stops it all even when pasted line by line into a console.',
       frames && !build ? '& { param([switch]$Replace)' : '& {',
       "$ErrorActionPreference = 'Stop'",
@@ -3972,7 +4032,8 @@ LR"PBT(es && build ? '# A page that already has a background image keeps it: the
       "if ($fr.page -cnotmatch '^[A-Za-z0-9_-]{1,64}$') { throw \"Refused page: $($fr.page)\" }",
       `if ($fr.item -cnotmatch '${ST_FRAMES_ITEM.source}') { throw "Refused image name: $($fr.item)" }`,
       "$rj = Join-Path $root 'definition/report.json'",
-      '$gj = Join-Path $root "definition/pages/$($fr.page)/page.json"',
+      '$gj = Join-Path $root "definition/pages/$($fr.page)/pag)PBT"
+LR"PBT(e.json"',
       '$img = Join-Path $root "StaticResources/RegisteredResources/$($fr.item)"',
       'if (-not (Test-Path -LiteralPath $rj)) { throw "Not a report folder (no definition/report.json): $root" }',
       '$rep = [IO.File]::ReadAllText($rj) | ConvertFrom-Json @cj',
@@ -4027,8 +4088,7 @@ LR"PBT(es && build ? '# A page that already has a background image keeps it: the
       "if ($fr.page -cne $b.appendPage) { Copy-Item -LiteralPath $gj (Join-Path $bk ('page-' + $fr.page + '-' + $stamp + '.json')) }",
       // Whether this run creates the image file, so a failed write can remove it again.
       '$imgNew = -not (Test-Path -LiteralPath $img)',
-      // The image joins the RegisteredResources package (made when the report has none )PBT"
-LR"PBT(yet).
+      // The image joins the RegisteredResources package (made when the report has none yet).
       "$pk = @($rep.resourcePackages | Where-Object { $_ -and $_.name -ceq 'RegisteredResources' })[0]",
       'if (-not $pk) {',
       "  $pk = [pscustomobject]@{ name = 'RegisteredResources'; type = 'RegisteredResources'; items = @() }",
@@ -4058,7 +4118,8 @@ LR"PBT(yet).
       // The frames image this one replaces is unregistered and moved into the backups only when
       // nothing else uses it: no other JSON file under definition (other pages, visuals, bookmarks),
       // nothing in report.json beyond its registration (a wallpaper, say), and nothing left on this
-      // page. Otherwise it stays registered and on disk, and only this page's background changes.
+      // page. Otherwise it stay)PBT"
+LR"PBT(s registered and on disk, and only this page's background changes.
       '$oldPath = $null',
       `if ($oldItem -and $oldItem -cne $fr.item -and $oldItem -cmatch '${ST_FRAMES_ITEM.source}') {`,
       '  $here = @([IO.Path]::GetFullPath($rj), [IO.Path]::GetFullPath($gj))',
@@ -4106,8 +4167,7 @@ LR"PBT(yet).
   // The stencil as an SVG at report size (blocks as labelled boxes), for Figma and the like.
   svg(blocks, w, h) {
     const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    const rects = blocks.map(b => `  <g><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="4" fill="#e8f1fb" stroke="#4a7fc1" stroke-dasharray="6 4"/><text x="${b.x + 8}" y="${b.y + 18}" font-family="Segoe UI, sans-serif" font-size="12" fill="#1f3b5c">${esc(b.label || ST_TYPE[b.type].la)PBT"
-LR"PBT(bel)}</text><text x="${b.x + 8}" y="${b.y + 34}" font-family="Segoe UI, sans-serif" font-size="10" fill="#5b7390">${esc(ST_TYPE[b.type].label)} \u00b7 ${b.w} \u00d7 ${b.h}</text></g>`);
+    const rects = blocks.map(b => `  <g><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="4" fill="#e8f1fb" stroke="#4a7fc1" stroke-dasharray="6 4"/><text x="${b.x + 8}" y="${b.y + 18}" font-family="Segoe UI, sans-serif" font-size="12" fill="#1f3b5c">${esc(b.label || ST_TYPE[b.type].label)}</text><text x="${b.x + 8}" y="${b.y + 34}" font-family="Segoe UI, sans-serif" font-size="10" fill="#5b7390">${esc(ST_TYPE[b.type].label)} \u00b7 ${b.w} \u00d7 ${b.h}</text></g>`);
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">\n  <rect width="${w}" height="${h}" fill="#ffffff"/>\n${rects.join('\n')}\n</svg>\n`;
   },
 
@@ -4138,7 +4198,8 @@ LR"PBT(bel)}</text><text x="${b.x + 8}" y="${b.y + 34}" font-family="Segoe UI, s
       stroke: stroke || ST_FRAME_LOOK.stroke,
       width: width !== null ? width : ST_FRAME_LOOK.width,
       radius: radius !== null ? radius : ST_FRAME_LOOK.radius,
-      fromTheme: !!(fill || stroke),
+      fromTheme: !!(fill || )PBT"
+LR"PBT(stroke),
     };
   },
   // The frames as one SVG at the page's size, to map 1:1 onto it: each frame a rounded rectangle
@@ -4203,8 +4264,7 @@ LR"PBT(bel)}</text><text x="${b.x + 8}" y="${b.y + 34}" font-family="Segoe UI, s
         const a = Math.min(Math.max(0, snap(Math.min(Math.max(0, v), Math.max(0, span - g)))), Math.max(0, span - g));
         return [a, Math.min(span, Math.max(a + g, snap(v + size)))];
       };
-      const [x0, x1] = edge(x * sx, bw * sx, w), [y0, y1] = edge(y * sy, bh * sy)PBT"
-LR"PBT(, h);
+      const [x0, x1] = edge(x * sx, bw * sx, w), [y0, y1] = edge(y * sy, bh * sy, h);
       const b = { id: newId(i), type, label, x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
       if (group) b.group = group;
       return b;
@@ -4246,7 +4306,8 @@ LR"PBT(, h);
     return this.rawTemplates().find(t => t && typeof t.name === 'string' && t.id !== exceptId && t.name.trim().toLowerCase() === n) || null;
   },
   // Saves this page's blocks as a template named name; a template of the same name (any case) is
-  // replaced and keeps its place in the list. Returns the template, or null with nothing saved.
+  // replaced and keeps its place in the list. Returns the templat)PBT"
+LR"PBT(e, or null with nothing saved.
   saveTemplate(name) {
     const g = this.g || this.geometry(), list = this.blocks();
     name = String(name || '').trim().slice(0, 80);
@@ -4308,8 +4369,7 @@ LR"PBT(, h);
     const out = new Set(), pre = `definition/pages/${(page && page.name) || ''}/visuals/`;
     for (const f of files || []) {
       if (!f.path.startsWith(pre) || !f.path.endsWith('/visual.json') || !/"isHidden"\s*:\s*true/.test(f.text)) continue;
-      try { const v = JSON.parse(f.text); if (v.isHidden === true) out.add(v.name || f.pa)PBT"
-LR"PBT(th.slice(pre.length).split('/')[0]); } catch {}
+      try { const v = JSON.parse(f.text); if (v.isHidden === true) out.add(v.name || f.path.slice(pre.length).split('/')[0]); } catch {}
     }
     return out;
   },
@@ -4353,7 +4413,8 @@ LR"PBT(th.slice(pre.length).split('/')[0]); } catch {}
   // A small picture of a layout for the menu.
   thumb(preset) {
     const ns = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(ns, 'svg');
+    const svg )PBT"
+LR"PBT(= document.createElementNS(ns, 'svg');
     svg.setAttribute('viewBox', '0 0 1280 720');
     svg.setAttribute('class', 'pbt-st-thumb');
     svg.setAttribute('aria-hidden', 'true');
@@ -4413,8 +4474,7 @@ LR"PBT(th.slice(pre.length).split('/')[0]); } catch {}
     // Checked again only when the stored blocks or the root change; reportKey runs on every draw.
     if (this.adoptSeen === all && this.adoptRoot === root) return;
     this.adoptSeen = all; this.adoptRoot = root;
-    // A root takes blo)PBT"
-LR"PBT(cks once per session, so clearing every block it holds does not bring a
+    // A root takes blocks once per session, so clearing every block it holds does not bring a
     // copied set straight back.
     this.adopted = this.adopted || new Set();
     if (this.adopted.has(root)) return;
@@ -4456,7 +4516,8 @@ LR"PBT(cks once per session, so clearing every block it holds does not bring a
   commit(list, { undoable = true } = {}) {
     const rk = this.reportKey(), pk = this.pageKey(), tab = this.tabName();
     if (!pk) return;
-    if (undoable) { this.undo.push(JSON.stringify(this.blocks())); if (this.undo.length > 100) this.undo.shift(); this.redo = []; }
+    if (undoable) { this.undo.push(JSON.stringify(this.blocks())); if (this.undo.length > 100) this.undo.shift(); this.redo )PBT"
+LR"PBT(= []; }
     const all = { ...(pbt.cfg.stencil || {}) };
     const page = { ...(all[rk] || {}) };
     if (tab && tab !== pk) delete page[tab];
@@ -4520,8 +4581,7 @@ LR"PBT(cks once per session, so clearing every block it holds does not bring a
     const k = String(kind || '').toLowerCase().replace(/100\s*%/g, 'hundredpercent').replace(/[^a-z]/g, '').replace(/visual$/, '');
     return TYPE_ALIAS[k] || k;
   },
-  // The same name with the equivalences the stencil always had: clustered, stacked and 100% s)PBT"
-LR"PBT(tacked
+  // The same name with the equivalences the stencil always had: clustered, stacked and 100% stacked
   // bars are one bar chart (and the same for columns), every kind of slicer is a slicer, and a
   // title, a text and a smart narrative block all build a text box.
   typeMatchKey(kind) {
@@ -4562,7 +4622,8 @@ LR"PBT(tacked
   // report reopens.
   savedIds(page, list) {
     const vs = (page && page.visuals) || [];
-    return new Set(list.filter(b => vs.some(v => Math.abs(v.x - b.x) <= 1 && Math.abs(v.y - b.y) <= 1 && Math.abs(v.w - b.w) <= 1 && Math.abs(v.h - b.h) <= 1 && this.sameType(v.type, b.type))).map(b => b.id));
+    return new Set(list.filter(b => vs.some(v => Math.abs(v.x - b.x) <= 1 && Math.abs(v.y - b.y) <= 1 && Math.abs(v.w - b.w) <= 1 && Math.abs(v.h - b.h) <= 1)PBT"
+LR"PBT( && this.sameType(v.type, b.type))).map(b => b.id));
   },
 
   // ---- pointer editing (edit mode) ----
@@ -4626,8 +4687,7 @@ LR"PBT(tacked
       for (const m of d.members) { const x = this.work.find(o => o.id === m.id); if (x) { x.x = m.x + nx - d.box.x; x.y = m.y + ny - d.box.y; } }
     } else if (d.kind === 'move') {
       const b = this.work.find(x => x.id === d.r0.id);
-      b.x = clamp(this.snapSpan(d.r0.x + p.x - d.p0.x, b.w, d.lines.)PBT"
-LR"PBT(xs, grid, tol), 0, g.w - b.w);
+      b.x = clamp(this.snapSpan(d.r0.x + p.x - d.p0.x, b.w, d.lines.xs, grid, tol), 0, g.w - b.w);
       b.y = clamp(this.snapSpan(d.r0.y + p.y - d.p0.y, b.h, d.lines.ys, grid, tol), 0, g.h - b.h);
     } else if (d.kind === 'resize') {
       const b = this.work.find(x => x.id === d.r0.id), r = d.r0;
@@ -4668,7 +4728,8 @@ LR"PBT(xs, grid, tol), 0, g.w - b.w);
     if (JSON.stringify(list) === d.before) { this.sig = ''; this.draw(); return; }
     this.undo.push(d.before);
     this.redo = [];
-    this.commit(list, { undoable: false });
+    this.commit(list, {)PBT"
+LR"PBT( undoable: false });
   },
   onKey(e) {
     if (!this.on || this.mode !== 'edit' || (e.ctrlKey && e.altKey)) return;
@@ -4731,8 +4792,7 @@ LR"PBT(xs, grid, tol), 0, g.w - b.w);
   isDefaultLabel(b) {
     const t = ST_TYPE[b.type];
     if (!b.label) return true;
-    return )PBT"
-LR"PBT(!!t && b.label.startsWith(`${t.label} `) && /^\d+$/.test(b.label.slice(t.label.length + 1));
+    return !!t && b.label.startsWith(`${t.label} `) && /^\d+$/.test(b.label.slice(t.label.length + 1));
   },
   // One block becomes another type, as one undo step: same place and size, and a name the user
   // typed stays; a default name becomes the new type's default name.
@@ -4774,7 +4834,8 @@ LR"PBT(!!t && b.label.startsWith(`${t.label} `) && /^\d+$/.test(b.label.slice(t.
     }
     const b = { id: this.newId(), type: c.type, label, x: at.x, y: at.y, w, h };
     this.clip = { ...c, x: at.x, y: at.y };
-    this.sel = b.id;
+   )PBT"
+LR"PBT( this.sel = b.id;
     this.commit([...list, b]);
   },
   copyPage() {
@@ -4831,8 +4892,7 @@ LR"PBT(!!t && b.label.startsWith(`${t.label} `) && /^\d+$/.test(b.label.slice(t.
   },
   // The build for this page or a new one, or { error } when it cannot be built. withFrames (the
   // copied script with "with frames as background" on) adds the page's frames; the development
-  // build never asks for them, so a )PBT"
-LR"PBT(frames problem cannot stop it.
+  // build never asks for them, so a frames problem cannot stop it.
   plan(newPage, withFrames) {
     const project = this.project();
     const list = this.blocks();
@@ -4865,7 +4925,8 @@ LR"PBT(frames problem cannot stop it.
     try {
       const build = this.files({ project, page: page && page.name, newPage: newPage ? { displayName: `${display} (stencil)`, width: g ? g.w : 1280, height: g ? g.h : 720 } : null, blocks: todo, schema });
       // "with frames as background" on: every block on the page (built or not) gets its frame on
-      // the page the visuals go to, in the same script.
+      // the page the visuals go to, in the same script.)PBT"
+LR"PBT(
       let frames = null;
       if (withFrames) {
         const np = newPage ? JSON.parse(build.files[0].text) : null;
@@ -4895,14 +4956,23 @@ LR"PBT(frames problem cannot stop it.
   },
   // A page saved a moment ago reaches the files the tools read about 2 s later (the mod reads them
   // again after each save). A build asked for in between waits for that read, up to 4 s, and tries
-  // once more; only then is the page reported as not saved.
+  // once more; only then is the page reported as not saved. stop() calls endSaveWait with no retry,
+  // so a copy of the page code that has been stopped never builds, copies or toasts afterwards (a
+  // new copy sends pbt-project while it boots, which would otherwise finish this wait at once).
   waitForSave(retry) {
     if (this.saveWait) return true;
     pbt.toast('Reading the saved report\u2026', { title: 'Stencil', ms: 2500 });
-    const done = () => { window.removeEventListener('pbt-project', done); clearTimeout(this.saveWait); this.saveWait = 0; retry(); };
+    const done = () => { this.endSaveWait(); retry(); };
+    this.saveDone = done;
     window.addEventListener('pbt-project', done);
     this.saveWait = setTimeout(done, 4000);
     return true;
+  },
+  endSaveWait() {
+    if (this.saveDone) window.removeEventListener('pbt-project', this.saveDone);
+    clearTimeout(this.saveWait);
+    this.saveWait = 0;
+    this.saveDone = null;
   },
   build(newPage, given, waited) {
     const b = given || this.plan(newPage);
@@ -4922,8 +4992,7 @@ LR"PBT(frames problem cannot stop it.
   },
   // The injector's answer to pbtBuild.
   built(result) {
-    this.building =)PBT"
-LR"PBT( false;
+    this.building = false;
     if (!result || !result.ok) { pbt.toast(`Nothing written: ${(result && result.error) || 'no answer from the injector'}`, { title: 'Stencil', tone: 'bad', ms: 8000 }); return; }
     // Blocks built onto a new page move there with their visuals, so they show as built.
     const lb = result.move;
@@ -4953,7 +5022,8 @@ LR"PBT( false;
     pbt.toast(ST_CONVERT_STEPS, { title: `Convert to visuals${newPage ? ': new page' : ''}${b.frames ? ', with frames' : ''}`, ms: 15000 });
     return true;
   },
-  // "Convert to background": copies the frames script, then says in three steps what to do with it.
+  // "Convert to background": copies the fra)PBT"
+LR"PBT(mes script, then says in three steps what to do with it.
   copyBackground(waited) {
     const b = this.planFrames();
     if (b.unsaved && !waited) return this.waitForSave(() => this.copyBackground(true));
@@ -5012,8 +5082,7 @@ LR"PBT( false;
       const replaces = list.length ? `\nReplaces the ${list.length} block${list.length === 1 ? '' : 's'} on this page; Ctrl+Z in edit mode brings them back.` : '';
       const search = el('input', { class: 'pbt-st-search', type: 'search', placeholder: 'Search layouts and templates', 'aria-label': 'Search layouts and templates' });
       const pane = el('div', { class: 'pbt-st-pick' });
-      //)PBT"
-LR"PBT( editing: { id, mode: 'rename' | 'delete' } for the one saved template being renamed or
+      // editing: { id, mode: 'rename' | 'delete' } for the one saved template being renamed or
       // deleted, else null. pending: the open rename box's finish, so a name still being typed is
       // kept before any other picker action and when the picker closes (a click on a tile takes
       // no focus, so the box would not blur). settle() runs it and is false when the name was
@@ -5035,7 +5104,8 @@ LR"PBT( editing: { id, mode: 'rename' | 'delete' } for the one saved template be
           for (const [k, v] of Object.entries({ viewBox: '0 0 16 16', width: 12, height: 12, 'aria-hidden': 'true' })) svg.setAttribute(k, v);
           for (const dd of ds) {
             const path = document.createElementNS(ns, 'path');
-            for (const [k, v] of Object.entries({ d: dd, fill: 'none', stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })) path.setAttribute(k, v);
+            for (const [k, v] of Object.entries({ d: dd, fill: 'none', stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'roun)PBT"
+LR"PBT(d', 'stroke-linejoin': 'round' })) path.setAttribute(k, v);
             svg.append(path);
           }
           return pbt.tip(el('button', { class: 'pbt-st-tile-act', 'aria-label': `${label} ${p.name}`, onpointerdown: swallow, onclick: e => { e.stopPropagation(); if (settle()) run(); } }, svg), label);
@@ -5088,8 +5158,7 @@ LR"PBT( editing: { id, mode: 'rename' | 'delete' } for the one saved template be
       const render = () => {
         // A rename box drawn again sets pending again; one that goes is dropped.
         pending = null;
-        const )PBT"
-LR"PBT(custom = this.templates();
+        const custom = this.templates();
         const { builtIn, custom: mine } = this.filterLayouts(search.value, custom);
         const focusable = [];
         const grid = rows => { const kids = rows.map(([node, keys]) => { focusable.push(...keys); return node; }); return el('div', { class: 'pbt-st-tiles' }, ...kids); };
@@ -5112,7 +5181,8 @@ LR"PBT(custom = this.templates();
         else if (e.key === 'ArrowDown') { e.preventDefault(); const first = items.find(x => x !== search && !x.disabled); if (first) first.focus(); }
         else if (e.key === 'Enter') { e.preventDefault(); const first = pane.querySelector('.pbt-st-tile[data-preset]'); if (first) first.click(); }
       });
-      search.addEventListener('input', () => { editing = null; pane.scrollTop = 0; render(); });
+      search)PBT"
+LR"PBT(.addEventListener('input', () => { editing = null; pane.scrollTop = 0; render(); });
       render();
       setTimeout(() => search.focus(), 0);
       body = [
@@ -5171,8 +5241,7 @@ LR"PBT(custom = this.templates();
       body = [
         el('div', { class: 'pbt-fm-menu-head', text: 'Stencil' }),
         item('pbi-glyph-fittopage', 'Start from a layout', () => this.menu(anchor, 'presets'), `Start from a layout\n${ST_PRESETS.length} starter layouts (KPI rows, slicer sidebars, chart grids, detail tables and more)${saved ? ` and your ${saved} saved template${saved === 1 ? '' : 's'}` : ''}, scaled to this page; adjust them, then build.`),
-        item('pbi-glyph-add', 'Save as template', () => this.menu(anchor, 'save'), 'Save as template\nKeeps this page\'s)PBT"
-LR"PBT( blocks as a named layout, listed under "Your templates" in Start from a layout and scaled to fit any page.', !list.length),
+        item('pbi-glyph-add', 'Save as template', () => this.menu(anchor, 'save'), 'Save as template\nKeeps this page\'s blocks as a named layout, listed under "Your templates" in Start from a layout and scaled to fit any page.', !list.length),
         sep(),
         dev ? item('pbi-glyph-add', 'Build on this page', () => this.menu(anchor, 'page'), `Build on this page\nEach block not built yet becomes a real visual with no fields, titled with its label, at its exact position.${noProject}`, !project || !list.length) : null,
         dev ? item('pbi-glyph-page', 'Build as a new page', () => this.menu(anchor, 'new'), `Build as a new page\nThe same visuals on a new page named after this one; pages.json is backed up first.${noProject}`, !project || !list.length) : null,
@@ -5182,7 +5251,8 @@ LR"PBT( blocks as a named layout, listed under "Your templates" in Start from a 
         item('pbi-glyph-code', 'Convert to background', () => { close(); this.copyBackground(); }, `Convert to background\nDraws a card-style frame behind each group of blocks (and each block in no group) as one SVG, the page's background image: pixel exact and nothing extra to render. Styled from the report theme when it sets a visual background or border. Save the report first.\n${ST_FRAMES_STEPS}${noProject}`, !project || !list.length),
         sep(),
         item('pbi-glyph-download', 'Copy page into stencil', () => { close(); this.copyPage(); }, 'Copy page into stencil\nEvery visual on this page becomes a block at its position, to redesign from.'),
-        item('pbi-glyph-copy', 'Copy as SVG', () => { close(); this.copySvg(); }, 'Copy as SVG\nThe blocks as labelled boxes at report size, to paste into Figma or another design tool.', !list.length),
+     )PBT"
+LR"PBT(   item('pbi-glyph-copy', 'Copy as SVG', () => { close(); this.copySvg(); }, 'Copy as SVG\nThe blocks as labelled boxes at report size, to paste into Figma or another design tool.', !list.length),
         sep(),
         item('pbi-glyph-checkmark', 'Clear built blocks', () => { close(); this.clear(true); }, 'Clear built blocks\nRemoves the blocks whose visual now sits on the page.', !list.length),
         item('pbi-glyph-eraser', 'Clear this page\'s stencil', () => { close(); this.clear(false); }, 'Clear this page\'s stencil\nRemoves every block on this page; Ctrl+Z in edit mode brings them back.', !list.length),
@@ -5225,8 +5295,7 @@ LR"PBT( blocks as a named layout, listed under "Your templates" in Start from a 
     if (b && edit) {
       const num = (key, label) => {
         const i = el('input', { class: 'pbt-st-num', type: 'number', step: '1', 'aria-label': label, value: String(b[key]) });
-        i.addEventListener('keydown', e => { e.stopPro)PBT"
-LR"PBT(pagation(); if (e.key === 'Enter') i.blur(); if (e.key === 'Escape') { i.value = String(b[key]); i.blur(); } });
+        i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') i.blur(); if (e.key === 'Escape') { i.value = String(b[key]); i.blur(); } });
         i.addEventListener('change', () => { const v = Math.round(Number(i.value)); if (!Number.isFinite(v)) return; const l = this.blocks(), x = l.find(y => y.id === b.id); if (!x) return; x[key] = Math.max(key === 'w' || key === 'h' ? 8 : 0, v); this.commit(l); });
         return pbt.tip(el('label', { class: 'pbt-st-field' }, el('span', { text: label }), i), `${label === 'w' ? 'Width' : label === 'h' ? 'Height' : label} in report pixels\nType a value and press Enter.`);
       };
@@ -5241,7 +5310,8 @@ LR"PBT(pagation(); if (e.key === 'Enter') i.blur(); if (e.key === 'Escape') { i.
         for (const [k, v] of Object.entries({ d: dd, fill: 'none', stroke: 'currentColor', 'stroke-width': '1.2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })) p.setAttribute(k, v);
         trash.append(p);
       }
-      const del = button({ class: 'pbt-strip-grid pbt-st-del', 'aria-label': 'Delete block' }, () => this.remove(b.id), 'Delete block (Delete)\nRemoves the selected block; Ctrl+Z brings it back.', trash);
+      const del = button({ class: 'pbt-strip-grid pbt-st-del', 'aria-label': 'Delete block' }, () => this.remove(b.id), 'Delet)PBT"
+LR"PBT(e block (Delete)\nRemoves the selected block; Ctrl+Z brings it back.', trash);
       fields = el('span', { class: 'pbt-strip-seg pbt-st-fields' }, pbt.tip(name, 'Label\nThe visual\'s title when built (a text box\'s text). Double-click a block to edit it.'), num('x', 'x'), num('y', 'y'), num('w', 'w'), num('h', 'h'), del);
     }
     const count = pbt.tip(el('span', { class: 'pbt-strip-item' }, el('b', { text: String(list.length) }), el('span', { text: `block${list.length === 1 ? '' : 's'}${built.size ? ` \u00b7 ${built.size} built` : ''}` })),
@@ -5279,8 +5349,7 @@ LR"PBT(pagation(); if (e.key === 'Enter') i.blur(); if (e.key === 'Escape') { i.
     const d = this.drag;
     const grid = this.grid();
     const empty = !document.querySelector('.displayArea .visualContainer');
-    const sig = JSON.stringify([g.rect.left)PBT"
-LR"PBT(, g.rect.top, g.rect.width, g.rect.height, g.w, g.h, empty, this.mode, this.type, this.sel, list, [...built], d && d.rect, grid, pbt.stripOrder.filter(n => (pbt.stripTools()[n] || {}).on), !!pbt.cfg.stencilFrames]);
+    const sig = JSON.stringify([g.rect.left, g.rect.top, g.rect.width, g.rect.height, g.w, g.h, empty, this.mode, this.type, this.sel, list, [...built], d && d.rect, grid, pbt.stripOrder.filter(n => (pbt.stripTools()[n] || {}).on), !!pbt.cfg.stencilFrames]);
     if (sig === this.sig && this.host && this.host.isConnected) return;
     this.sig = sig;
     const el = pbt.el;
@@ -5304,7 +5373,8 @@ LR"PBT(, g.rect.top, g.rect.width, g.rect.height, g.w, g.h, empty, this.mode, th
     for (const b of list) {
       const t = ST_TYPE[b.type] || ST_TYPE.card;
       const sel = this.mode === 'edit' && b.id === this.sel;
-      const node = el('div', { class: `pbt-st-block${sel ? ' pbt-st-sel' : ''}${built.has(b.id) ? ' pbt-st-built' : ''}`, dataset: { id: b.id, type: b.type }, style: `left:${px(b.x)};top:${px(b.y)};width:${px(b.w)};height:${px(b.h)}` },
+      const node = el('div', { class: `pbt-st-block${sel ? ' pbt-st-sel' : ''}${built.has(b.id) ? ' pbt-st-built' : ''}`, dataset: { id: b.id, type: b.type }, style: `left:${px(b.x)};top:${px(b.y)};width)PBT"
+LR"PBT(:${px(b.w)};height:${px(b.h)}` },
         // A built block's visual says what it is; the block keeps only a check mark in its corner.
         built.has(b.id) ? el('span', { class: 'pbt-st-tag pbt-st-tag-built' }, el('span', { class: 'pbt-st-check', text: '\u2713' }))
           : el('span', { class: 'pbt-st-tag' }, el('span', { class: `glyphicon glyph-small ${t.glyph}`, 'aria-hidden': 'true' }), el('span', { text: b.label || t.label })),
@@ -5344,7 +5414,7 @@ LR"PBT(, g.rect.top, g.rect.width, g.rect.height, g.w, g.h, empty, this.mode, th
     pbt.on(window, 'keydown', e => this.onKey(e), { capture: true });
     pbt.every(300, () => { if (this.on && !this.drag && !(document.activeElement && document.activeElement.tagName === 'INPUT' && document.activeElement.closest('.pbt-st-strip'))) this.draw(); });
   },
-  stop() { this.clearHost(); document.querySelectorAll('.pbt-st-menu').forEach(m => m.remove()); },
+  stop() { this.endSaveWait(); this.clearHost(); document.querySelectorAll('.pbt-st-menu').forEach(m => m.remove()); },
 };
 pbt.stencil = stencil;
 pbt.module(stencil);
@@ -5355,8 +5425,7 @@ pbt.module(stencil);
 //
 // With the report's project files (page/05-project.js), each visual's saved formatting (its
 // objects and container objects) is compared with the theme: the visual style for its type, then
-// for every visual ("*"), then the title text class for title font,)PBT"
-LR"PBT( size and color. Three kinds
+// for every visual ("*"), then the title text class for title font, size and color. Three kinds
 // of finding:
 // - theme: the visual sets a property the theme sets, to a different value;
 // - palette: the visual sets a color that is not one of the theme's colors;
@@ -5390,7 +5459,8 @@ const theme = {
 
   // ---- the pure core ----
   norm(v) {
-    if (typeof v === 'string') {
+    if (typeof v === 'string') {)PBT"
+LR"PBT(
       const s = v.trim();
       if (/^#[0-9a-f]{3,8}$/i.test(s)) { const h = s.length === 4 ? '#' + [...s.slice(1)].map(c => c + c).join('') : s.slice(0, 7); return h.toUpperCase(); }
       return s.replace(/^['"]|['"]$/g, '').split(',')[0].trim().toLowerCase();
@@ -5460,8 +5530,7 @@ const theme = {
           if (setters >= 3 && top && top[1] / setters >= 0.6 && top[0] !== JSON.stringify(this.norm(v))) rows.push({ kind: 'page', key: k, label: label(k), value: v, want: JSON.parse(top[0]), note: `${top[1]} of ${setters} visuals on the page that set it` });
           else rows.push({ kind: 'info', key: k, label: label(k), value: v, note: 'no theme default' });
         }
-        if (is)PBT"
-LR"PBT(Color && colors.length && !this.onPalette(v, colors)) rows.push({ kind: 'palette', key: k, label: label(k), value: v, note: 'not one of the theme\'s colors' });
+        if (isColor && colors.length && !this.onPalette(v, colors)) rows.push({ kind: 'palette', key: k, label: label(k), value: v, note: 'not one of the theme\'s colors' });
       }
       out.set(f.name, rows);
     }
@@ -5496,7 +5565,8 @@ LR"PBT(Color && colors.length && !this.onPalette(v, colors)) rows.push({ kind: '
       if (have.length < 3) continue;
       const m = new Map();
       for (const x of have) { const n = JSON.stringify(this.norm(x.d[k])); m.set(n, (m.get(n) || 0) + 1); }
-      const [top, n] = [...m.entries()].sort((a, b) => b[1] - a[1])[0];
+      const [top, n] = [...m.entries())PBT"
+LR"PBT(].sort((a, b) => b[1] - a[1])[0];
       if (n / have.length < 0.6) continue;
       for (const x of have) if (JSON.stringify(this.norm(x.d[k])) !== top) out.get(x.v).push({ kind: 'page', key: k, label: label(k), value: x.d[k], want: JSON.parse(top), note: `${n} of ${have.length} visuals on the page` });
     }
@@ -5557,8 +5627,7 @@ LR"PBT(Color && colors.length && !this.onPalette(v, colors)) rows.push({ kind: '
     const el = v.el, k = String(item.key || '').toLowerCase(), q = sel => [...el.querySelectorAll(sel)];
     if (k.startsWith('subtitle')) return q('[class*="subTitle" i], [class*="subtitle" i]').slice(0, 1).concat(q('.visualTitle')).slice(0, 1);
     if (k.startsWith('title')) return q('.visualTitle').slice(0, 1);
-    if (k.startsWith('categoryaxis')))PBT"
-LR"PBT( return q('g.x.axis, .xAxisLabel').slice(0, 2);
+    if (k.startsWith('categoryaxis')) return q('g.x.axis, .xAxisLabel').slice(0, 2);
     if (k.startsWith('valueaxis')) return q('g.y.axis, .yAxisLabel').slice(0, 2);
     if (k.startsWith('legend')) return q('[class*="legend" i]').slice(0, 1);
     if (k.startsWith('labels') || k.startsWith('datalabels')) return q('.labelGraphicsContext text, .label-container text, [class*="dataLabel" i]').slice(0, 20);
@@ -5588,7 +5657,8 @@ LR"PBT( return q('g.x.axis, .xAxisLabel').slice(0, 2);
       return r;
     };
     const line0 = (i, n) => el('div', { class: 'pbt-card-row' },
-      n ? pbt.pinNum(n) : el('span', { class: `pbt-card-dot pbt-dot-${dot[i.kind]}` }),
+      n ? pbt.pi)PBT"
+LR"PBT(nNum(n) : el('span', { class: `pbt-card-dot pbt-dot-${dot[i.kind]}` }),
       el('span', { text: i.kind === 'palette' ? `${i.label} ${this.fmt(i.value)}: ${i.note}.` : i.kind === 'info' ? `${i.label}: ${this.fmt(i.value)} (${i.note})` : `${i.label}: ${this.fmt(i.value)} here, ${i.kind === 'theme' ? 'theme' : 'most'} ${this.fmt(i.want)}${i.kind === 'page' ? ` (${i.note})` : ''}` }),
       i.kind === 'theme' || i.kind === 'page' ? el('span', { class: 'pbt-card-fix', text: `\u2192 ${this.fmt(i.want)}`, 'aria-label': `${i.kind === 'theme' ? 'Theme value' : 'Most of the page'}: ${this.fmt(i.want)}` }) : el('span', { class: 'pbt-card-fix' }));
     const rows = off.map((i, n) => line(i, n + 1));
@@ -5623,8 +5693,7 @@ LR"PBT( return q('g.x.axis, .xAxisLabel').slice(0, 2);
     if (!g) { this.clear(); return; }
     const res = this.analyse();
     if (!res) { this.clear(); return; }
-    c)PBT"
-LR"PBT(onst sig = JSON.stringify([g.rect.left, g.rect.top, g.rect.width, pbt.passes(), this.pageShown(res), res.mode, res.rows.map(r => [r.v.x, r.v.y, r.v.w, r.v.h, r.missing, r.stale, r.items.map(i => [i.kind, i.key, i.value, i.want])])]);
+    const sig = JSON.stringify([g.rect.left, g.rect.top, g.rect.width, pbt.passes(), this.pageShown(res), res.mode, res.rows.map(r => [r.v.x, r.v.y, r.v.w, r.v.h, r.missing, r.stale, r.items.map(i => [i.kind, i.key, i.value, i.want])])]);
     if (sig === this.sig && this.host && this.host.isConnected) return;
     this.sig = sig;
     if (this.host) this.host.remove();
@@ -5657,7 +5726,8 @@ LR"PBT(onst sig = JSON.stringify([g.rect.left, g.rect.top, g.rect.width, pbt.pas
     const offRows = res.rows.filter(r => r.items.some(i => pageOnly ? i.kind === 'page' : i.kind === 'theme' || i.kind === 'palette'));
     const pageRows = pageOnly ? [] : res.rows.filter(r => r.items.some(i => i.kind === 'page'));
     const counts = new Map();
-    // Visuals per setting (a background that is both off theme and off palette counts once).
+    // )PBT"
+LR"PBT(Visuals per setting (a background that is both off theme and off palette counts once).
     for (const r of res.rows) for (const l of new Set(this.findings(r, res).map(i => i.label))) counts.set(l, (counts.get(l) || 0) + 1);
     // The setting most often off fits the strip; the tooltip lists up to six with their counts.
     const order = [...counts.entries()].sort((a, b) => b[1] - a[1]);
@@ -5698,8 +5768,7 @@ LR"PBT(onst sig = JSON.stringify([g.rect.left, g.rect.top, g.rect.width, pbt.pas
     pbt.hotkey('t', 'Theme check', () => this.toggle(), {
       id: 'theme',
       tool: true, active: () => this.on,
-      desc: 'A badge)PBT"
-LR"PBT( on every visual that sets formatting differently from the report theme ("3 differ from theme"), colors outside the theme included; settings that differ from most of the page are grey information, off by default. Uses the report project folder; without it, compares visuals with each other.',
+      desc: 'A badge on every visual that sets formatting differently from the report theme ("3 differ from theme"), colors outside the theme included; settings that differ from most of the page are grey information, off by default. Uses the report project folder; without it, compares visuals with each other.',
       tip: 'Theme check\nReads each visual\'s saved formatting from the report project folder and compares it with the theme; without the folder it compares what each visual draws with most of the page.',
     });
     pbt.every(600, () => { if (this.on) this.draw(false); });
@@ -5726,7 +5795,8 @@ pbt.module(theme);
 // data label, the visual's background, the page), on the fill or the outline the point falls on,
 // composited as the browser paints them (a see-through ancestor shared with the text blends the
 // two together). Power BI turns pointer events off on many SVG parts, which hit-testing would
-// skip, so the scan switches them on inside the canvas for its duration (html.pbt-ct-probe).
+// skip, so the scan switches them on inside )PBT"
+LR"PBT(the canvas for its duration (html.pbt-ct-probe).
 // Text over an image, a canvas or a gradient, or outside the window, is listed as not checked,
 // never guessed; a visual with nothing measured gets no contrast verdict.
 //
@@ -5794,8 +5864,7 @@ const colors = {
   // One visual's findings: each text pair or mark color (fg and bg as the eye sees them) with its
   // ratio and target, failing first; items that could not be measured are left out.
   judge(items, cfg) {
-    co)PBT"
-LR"PBT(nst out = items.filter(i => !i.skip && (i.kind !== 'mark' || cfg.marks)).map(i => {
+    const out = items.filter(i => !i.skip && (i.kind !== 'mark' || cfg.marks)).map(i => {
       const r = this.ratio(i.fg, i.bg);
       const need = this.target(cfg.level, i.large, i.kind);
       return { ...i, ratio: r, need, pass: r >= need };
@@ -5825,7 +5894,8 @@ LR"PBT(nst out = items.filter(i => !i.skip && (i.kind !== 'mark' || cfg.marks)).
   tolerance() { return (pbt.cfg.lint && pbt.cfg.lint.tolerance) || 12; },
   // Colors and fonts one visual draws: { colors: Map(hex -> Set of uses), fonts, els: Map(hex ->
   // elements) }. Parents come before children in document order, so whether a subtree is left out
-  // and how see-through it is are carried down without walking up from every element.
+  // )PBT"
+LR"PBT(and how see-through it is are carried down without walking up from every element.
   scan(el) {
     const found = new Map(), fonts = new Set(), els = new Map();
     const add = (value, alpha, where, node) => {
@@ -5897,8 +5967,7 @@ LR"PBT(nst out = items.filter(i => !i.skip && (i.kind !== 'mark' || cfg.marks)).
       else outer = this.over(l, outer);
     }
     const flat = c => this.over({ ...c, a: c.a * groupAlpha }, outer);
-    return { fg)PBT"
-LR"PBT(: flat(this.over(top, inner)), bg: flat(inner) };
+    return { fg: flat(this.over(top, inner)), bg: flat(inner) };
   },
   opacity(el, stop) {
     let o = 1;
@@ -5931,7 +6000,8 @@ LR"PBT(: flat(this.over(top, inner)), bg: flat(inner) };
         try {
           const m = e.getScreenCTM(), p = m && new DOMPoint(x, y).matrixTransform(m.inverse());
           if (p && e.isPointInFill) inFill = tag !== 'line' && e.isPointInFill(p);
-          if (p && e.isPointInStroke && cs.stroke !== 'none') inStroke = e.isPointInStroke(p);
+          if (p && e.isPointInStroke && cs.stroke !== 'no)PBT"
+LR"PBT(ne') inStroke = e.isPointInStroke(p);
         } catch {}
         const paint = inStroke && (!inFill || cs.fill === 'none') ? cs.stroke : inFill ? cs.fill : 'none';
         if (paint === 'none') continue;
@@ -6002,8 +6072,7 @@ LR"PBT(: flat(this.over(top, inner)), bg: flat(inner) };
     for (let i = 0; i < nodes.length && i < CT_NODES; i++) {
       const n = nodes[i];
       const svg = n instanceof SVGElement, tag = n.tagName.toLowerCase();
-      // A)PBT"
-LR"PBT(n element's own text: HTML elements, SVG <text> and <tspan> (Power BI puts a label's color
+      // An element's own text: HTML elements, SVG <text> and <tspan> (Power BI puts a label's color
       // on the tspan); a <title> is a tooltip, not drawn. The cheap tests come first.
       if (svg && tag !== 'text' && tag !== 'tspan') continue;
       const text = [...n.childNodes].filter(c => c.nodeType === 3).map(c => c.textContent).join('').trim();
@@ -6025,7 +6094,8 @@ LR"PBT(n element's own text: HTML elements, SVG <text> and <tspan> (Power BI put
       const back = this.behind(cx, cy, e => (e !== n && n.contains(e)) || (e instanceof SVGElement && /^(text|tspan)$/i.test(e.tagName)), stop, grp);
       const label = text.length > 40 ? `${text.slice(0, 39)}\u2026` : text;
       if (back.image || back.unseen) { items.push({ kind: 'text', text: label, skip: back.image ? 'image' : 'unseen' }); continue; }
-      const { fg: fgEff, bg } = this.paint({ ...fg, a }, back.layers, grp ? this.opacity(grp, stop) : 1);
+      const { fg:)PBT"
+LR"PBT( fgEff, bg } = this.paint({ ...fg, a }, back.layers, grp ? this.opacity(grp, stop) : 1);
       items.push({ kind: 'text', text: label, fg: fgEff, bg, large: this.isLarge(px, weight), px, weight, role: this.roleOf(n, v, px), els: [n] });
     }
     return { items, truncated: nodes.length > CT_NODES };
@@ -6085,8 +6155,7 @@ LR"PBT(n element's own text: HTML elements, SVG <text> and <tspan> (Power BI put
           v, judged: this.judge(items, cfg), truncated: t.truncated,
           skipped: items.filter(i => i.skip === 'image').length, unseen: items.filter(i => i.skip === 'unseen').length,
           texts: t.items.length,
-          colors: pal.colors, fonts: pal.fonts,)PBT"
-LR"PBT( els: pal.els,
+          colors: pal.colors, fonts: pal.fonts, els: pal.els,
           off: this.offPalette(pal.colors),
           fontsOff: allowed.length ? [...pal.fonts].filter(f => !allowed.includes(f.toLowerCase())) : [],
         };
@@ -6122,7 +6191,8 @@ LR"PBT( els: pal.els,
     if (row.fontsOff.length) parts.push(`${row.fontsOff.length} other font${row.fontsOff.length === 1 ? '' : 's'}`);
     if (parts.length) return parts.join(' \u00b7 ');
     const v = this.verdict(row, cfg);
-    return v === 'not checked' ? 'contrast not checked' : v === 'partly checked' ? 'partly checked' : '\u2713 colors';
+    r)PBT"
+LR"PBT(eturn v === 'not checked' ? 'contrast not checked' : v === 'partly checked' ? 'partly checked' : '\u2713 colors';
   },
   // Red when anything is hard to read, amber when only off palette, green when all is measured and
   // fine, grey when the text could not be measured (or only in part). CO_SEV maps the tone to the
@@ -6169,8 +6239,7 @@ LR"PBT( els: pal.els,
     if (!row.off.length) rows.push(note('ok', `Every color is within ${this.tolerance()} of a palette color.`, 'off'));
     if (row.fontsOff.length) rows.push(note('edge', `Fonts outside ${(pbt.cfg.lint.fonts || []).join(', ')}: ${row.fontsOff.join(', ')}`));
     const drawn = [...row.colors.keys()];
-    rows.push(note('grid', `Drawn: ${drawn.length ? drawn.slice(0, 10).join(', ') +)PBT"
-LR"PBT( (drawn.length > 10 ? ` and ${drawn.length - 10} more` : '') : 'neutrals only'}; fonts ${[...row.fonts].join(', ') || 'none'}`));
+    rows.push(note('grid', `Drawn: ${drawn.length ? drawn.slice(0, 10).join(', ') + (drawn.length > 10 ? ` and ${drawn.length - 10} more` : '') : 'neutrals only'}; fonts ${[...row.fonts].join(', ') || 'none'}`));
     return el('div', { class: 'pbt-card' },
       el('header', {}, el('b', { text: v.title || v.kind }), v.title ? el('span', { class: 'pbt-card-type', text: v.kind }) : null,
         el('span', { class: `pbt-card-badge pbt-sev-${CO_SEV[tone]}`, text: this.label(row, cfg) })),
@@ -6191,7 +6260,8 @@ LR"PBT( (drawn.length > 10 ? ` and ${drawn.length - 10} more` : '') : 'neutrals 
     const offCount = res.rows.reduce((n, r) => n + r.off.length, 0);
     const offVis = res.rows.filter(r => r.off.length).length;
     const swallow = e => { e.stopPropagation(); e.preventDefault(); };
-    const button = (attrs, run, tip) => pbt.tip(el('button', { ...attrs, onpointerdown: swallow, onclick: e => { e.stopPropagation(); run(); } }), tip);
+    const button = (attrs, run, tip) => pbt.tip(el('button', { ...attrs, onpointe)PBT"
+LR"PBT(rdown: swallow, onclick: e => { e.stopPropagation(); run(); } }), tip);
     const item = (cls, n, text, tip) => pbt.tip(el('span', { class: 'pbt-strip-item', dataset: { count: cls } }, el('span', { class: `pbt-card-dot pbt-dot-${cls}` }), n != null ? el('b', { text: String(n) }) : null, el('span', { text })), tip);
     const passes = pbt.passItems(res.rows.filter(r => !this.reportable(r)).length, res.rows.length, `Nothing measured falls below ${cfg.level} and every color is on the palette. Visuals not checked or checked in part say so on their card.`);
     const set = (k, val) => { pbt.cfg.contrast = { ...cfg, [k]: val }; pbt.save(); this.sig = ''; this.draw(false); };
@@ -6222,8 +6292,7 @@ LR"PBT( (drawn.length > 10 ? ` and ${drawn.length - 10} more` : '') : 'neutrals 
     // The scan is the heavy part: on the timer it runs only after the page changed (a mutation,
     // a move, a zoom, a scroll, another tool's strip) or the settings did.
     const g0 = pbt.page.geometry();
-    const cheap = g0 && JSON.stringify([g0.rect.left, g0.rect.top, g0.rect.width, g0.rect.height, g0.scale, this.cfgNow(), pbt.cfg.li)PBT"
-LR"PBT(nt || {}, this.sourceShort(), pbt.passes(), pbt.stripOrder.filter(n => (pbt.stripTools()[n] || {}).on)]);
+    const cheap = g0 && JSON.stringify([g0.rect.left, g0.rect.top, g0.rect.width, g0.rect.height, g0.scale, this.cfgNow(), pbt.cfg.lint || {}, this.sourceShort(), pbt.passes(), pbt.stripOrder.filter(n => (pbt.stripTools()[n] || {}).on)]);
     if (!announce && !this.dirty && cheap === this.cheap && this.host && this.host.isConnected) return;
     this.dirty = false;
     this.cheap = cheap;
@@ -6247,7 +6316,8 @@ LR"PBT(nt || {}, this.sourceShort(), pbt.passes(), pbt.stripOrder.filter(n => (p
       if (!passes && !this.reportable(row)) continue;
       const v = row.v, { off } = this.numbered(row);
       const tone = this.tone(row, res.cfg);
-      const b = pbt.tip(el('div', { class: `pbt-co-badge pbt-co-${tone} pbt-sev-${CO_SEV[tone]}` }, el('b', { text: this.label(row, res.cfg) })), () => this.card(row, res.cfg));
+      const b = pbt.tip(el('div', { class: `pbt-co-badge pbt-co-${tone} pbt-sev-${CO_SEV[tone]}` }, el('b', { text: this.l)PBT"
+LR"PBT(abel(row, res.cfg) })), () => this.card(row, res.cfg));
       // Each stray color as a swatch: pointing at one outlines every part drawn in it (with its
       // number from the card), clicking copies its hex.
       for (const { hex, n } of off) {
@@ -6305,8 +6375,7 @@ LR"PBT(nt || {}, this.sourceShort(), pbt.passes(), pbt.stripOrder.filter(n => (p
     // A style change counts only when its paint changed: Power BI restyles a visual's header on
     // every hover (the Filter map's own hovers too), which is no reason for a rescan.
     const paint = s => (String(s || '').match(/(?:^|;)\s*(?:fill|stroke|color|opacity|fill-opacity|stroke-opacity|background(?:-color)?)\s*:[^;]*/g) || []).join(';');
-    this.recolor = new MutationObserver(ms => { if (ms.some(m => m.attributeName !== 'style' || paint(m.oldValue) !== paint(m.target.getAt)PBT"
-LR"PBT(tribute('style')))) this.dirty = true; });
+    this.recolor = new MutationObserver(ms => { if (ms.some(m => m.attributeName !== 'style' || paint(m.oldValue) !== paint(m.target.getAttribute('style')))) this.dirty = true; });
     pbt.cleanups.push(() => this.recolor.disconnect());
     pbt.every(2000, () => { if (this.on) this.draw(false); });
   },
@@ -6339,7 +6408,8 @@ const fun = {
       const s = pbt.el('div', { class: 'pbt-splash', 'data-pbt': '' }, pbt.el('div', {}, skin.splash[0], pbt.el('small', { text: skin.splash[1] || '' })));
       document.body.append(s);
       setTimeout(() => s.remove(), 2000);
-    }
+    })PBT"
+LR"PBT(
     this.play(skin);
   },
 
@@ -6413,8 +6483,7 @@ const fun = {
           ctx.rotate(-p.r); ctx.font = `bold ${p.s * 1.8}px "Lucida Console", monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           ctx.fillText(p.s > 9.5 ? '1' : '0', 0, 0);
           break;
-        case 'streak': // light trail along the direction of travel: a faint wide )PBT"
-LR"PBT(band and a bright core (no canvas blur, which is slow)
+        case 'streak': // light trail along the direction of travel: a faint wide band and a bright core (no canvas blur, which is slow)
           ctx.rotate(Math.atan2(p.vy, p.vx) - p.r);
           ctx.globalAlpha = 0.3; ctx.fillRect(-p.s * 2.5, -2.5, p.s * 2.5, 5);
           ctx.globalAlpha = 1; ctx.fillRect(-p.s * 2.5, -1, p.s * 2.5, 2);
@@ -6453,7 +6522,8 @@ LR"PBT(band and a bright core (no canvas blur, which is slow)
   refreshEvent: 'pbt-refreshed',
   armRefresh() {
     const da = document.querySelector('.displayArea');
-    if (!da) return;
+ )PBT"
+LR"PBT(   if (!da) return;
     if (this.refresh) this.refresh.mo.disconnect();
     const state = this.refresh = { count: 0, last: 0, t0: Date.now(), mo: null };
     state.mo = new MutationObserver(m => { state.count += m.length; state.last = Date.now(); });
@@ -6532,8 +6602,7 @@ const ribbon = {
     }
     // Each group sits in a "groupContainer" inside one flex row; ours goes at the end of that row.
     const lastWrap = groups[groups.length - 1].closest('[class*="groupContainer"]');
-    const row = lastWrap && lastWrap.parentElemen)PBT"
-LR"PBT(t;
+    const row = lastWrap && lastWrap.parentElement;
     if (!row) return;
     // A group left behind by an earlier copy of the script never stays beside ours.
     document.querySelectorAll('.pbt-rgroup').forEach(g => { if (g !== this.group) g.remove(); });
@@ -6563,7 +6632,8 @@ LR"PBT(t;
     this.group = pbt.el('div', { class: 'pbt-rgroup', 'data-pbt': '', role: 'group', 'aria-label': 'Skins' },
       pbt.el('div', { class: 'pbt-rgroup-body' },
         pbt.el('div', { class: 'pbt-rgallery' },
-          btn('off', 'None', 'repeating-linear-gradient(45deg, #888 0 3px, transparent 3px 6px)'),
+          btn('off', 'None', 're)PBT"
+LR"PBT(peating-linear-gradient(45deg, #888 0 3px, transparent 3px 6px)'),
           pbt.skin.ids().map(id => btn(id, pbt.skins[id].short || pbt.skins[id].name, pbt.swatch(pbt.skins[id])))),
         styles || null),
       pbt.tip(pbt.el('label', { class: 'pbt-rgroup-label pbt-groupLabel', text: 'Skins' }), 'Skins\nRestyle the window around your report; the report page itself is never changed. The status bar chip and Ctrl+Alt+K open the full menu.'));
@@ -6625,8 +6695,7 @@ const help = {
         const s = pbt.skins[id];
         return el('div', { class: 'pbt-help-skin' }, el('span', { class: 'pbt-sw', style: `background:${pbt.swatch(s)}` }), el('b', { text: s.name }), s.inspiredBy ? el('span', { text: ` ${s.inspiredBy}` }) : null);
       })));
-)PBT"
-LR"PBT(
+
     const legend = rows => el('div', { class: 'pbt-legend' }, ...rows.flatMap(([cls, text]) => [el('span', { class: cls }), el('span', { text })]));
     const qaCfg = pbt.cfg.qa || {}, gridNow = qaCfg.grid || 8, nearNow = qaCfg.nearMiss || 8;
     const qa = section('qa', h3('Layout QA', hk('g')),
@@ -6646,7 +6715,8 @@ LR"PBT(
       pts(
         ['Hover a label', 'position, size, each finding with the neighbours involved, and the fixing value (an arrow on x, y, width or height marks the change).'],
         ['Click a label', 'copies x, y, w, h; Shift+click, the suggested values for the Format pane\'s Properties.'],
-        ['Aligned', 'an edge as many neighbours share as nearly miss, so one visual off a row is reported, not the row. Centers count only if neither edge on that axis lines up.'],
+        ['Aligned', 'an edge as many neighbours share as nearly miss, so one visual off a row is reported, not the row. Centers count)PBT"
+LR"PBT( only if neither edge on that axis lines up.'],
         ['Strip', 'page size, visual count, edges off, odd gaps vs the usual gap, visuals on the grid, grid picker (4 to 20 px, qa.grid), grid check (qa.snap), this help.'],
         ['Settings', `qa.nearMiss (${nearNow}), how far off is a miss; pageSize pins the page size.`]),
       h3('When to snap'),
@@ -6692,8 +6762,7 @@ LR"PBT(
       legend([
         ['pbt-lg-off', 'Theme: the visual sets something the theme sets, to another value (a title size of 16 where the theme says 14).'],
         ['pbt-lg-bad', 'Palette: the visual sets a color that is not one of the theme\'s colors.'],
- )PBT"
-LR"PBT(       ['pbt-lg-guide', 'Page (information): the theme leaves it open, and most visuals on the page that set it use another value (one hidden title among shown ones).'],
+        ['pbt-lg-guide', 'Page (information): the theme leaves it open, and most visuals on the page that set it use another value (one hidden title among shown ones).'],
       ]),
       pts(
         ['Project files', '(Settings): saved formatting vs the theme file\'s style for the visual type, then for every visual, then the title text class. Save to check later changes.'],
@@ -6713,7 +6782,8 @@ LR"PBT(       ['pbt-lg-guide', 'Page (information): the theme leaves it open, an
       pts(
         ['Blocks', 'report pixels on the Layout QA grid, saved per report and page.'],
         ['Edit', 'in the strip makes the page a drawing surface that takes no clicks until Done or Esc.'],
-        ['Draw', 'pick a type in the strip (card, column, bar or line chart, table, slicer, title, text), or "\u2026" for every other Power BI visual (stacked and 100% charts, area, combo, pie, donut, map, gauge, KPI, matrix, button, image, shape, the AI visuals and more), then drag on the page. A click without a drag draws nothing; on empty page it just deselects. Drag a block to move, its handles to resize.'],
+        ['Draw', 'pick a type in the strip (card, column, bar or line chart, table, slicer, title, text), or "\u2026" for every other Power BI visual (stacked and 100% charts, area, combo, pie, donut, map, gauge, KPI, matrix, b)PBT"
+LR"PBT(utton, image, shape, the AI visuals and more), then drag on the page. A click without a drag draws nothing; on empty page it just deselects. Drag a block to move, its handles to resize.'],
         ['Change type', 'with a block selected, picking a type (strip or "\u2026") changes that block in place: same place and size, and a name you typed stays. One Ctrl+Z undoes it.'],
         ['Snap', 'to the grid and to edges of visuals and blocks; hold Alt for 1 px steps.'],
         ['Exact', 'type the selected block\'s x, y, width, height and label in the strip.']),
@@ -6742,8 +6812,7 @@ LR"PBT(       ['pbt-lg-guide', 'Page (information): the theme leaves it open, an
         ['Frames', '"Convert to background" in the Build menu copies a script that draws a card-style frame behind each group and each lone block, as one SVG that becomes the page\'s background image (theme colors when the theme sets them; report.json and page.json are backed up; an existing background image is replaced only with -Replace). "with frames as background" adds the same frames to Convert to visuals.'],
         ['SVG', '"Copy as SVG" copies the blocks at report size, for Figma or another design tool.']));
 
-    const co = section('colors', h3('Colors', `${hk('l')} )PBT"
-LR"PBT(or ${hk('a')}`),
+    const co = section('colors', h3('Colors', `${hk('l')} or ${hk('a')}`),
       lead('One badge per visual with something to fix, in plain words: "1 hard to read", "2 off palette", or both.'),
       pts(
         ['Badge color', 'red if anything is hard to read; amber if the only finding is a color off the palette.'],
@@ -6763,7 +6832,8 @@ LR"PBT(or ${hk('a')}`),
         ['Not checked', 'text over an image or gradient (listed as not checked), text a custom visual draws into a canvas (unreadable), and the rest of accessibility: alt text, tab order, meaning carried by color alone.']),
       h3('Off palette'),
       pts(
-        ['Reads', 'the colors each visual drew (fills, strokes, text, backgrounds); lists those off the palette with where used and the nearest palette color.'],
+        ['Reads', 'the colors each visual drew (fills, strokes, text, backgrounds); lists those off the palette with where used and the nearest palette )PBT"
+LR"PBT(color.'],
         ['Always pass', 'greys, white and black.'],
         ['Not read', 'the visual header, Power BI\'s invisible hover targets, anything fully see-through; so every skin gives the same verdict.'],
         ['Palette', `the report theme's colors when project files are loaded (data colors plus good, neutral, bad, foreground, background and accents), else the settings palette; the strip names which. Now: ${pbt.colors.source()}.`]),
@@ -6777,7 +6847,7 @@ LR"PBT(or ${hk('a')}`),
         el('b', { text: def.label }), el('span', { text: `: ${def.desc} ` }),
         def.run ? button(def.helpTry || def.tryLabel || 'Try', def.tryTip, def.run) : null,
         el('span', { class: 'pbt-state', text: pbt.feature(f) ? 'on' : 'off' }))),
-        el('li', {}, el('b', { text: 'The Konami code' }), el('span', { text: ' does something to the page (the Hidden surprises setting turns it off).' }))),
+        el('li', {}, el('b', { text: 'The Konami code' }), el('span', { text: ' does something to the page until you press Esc twice or type the code again (the Hidden surprises setting turns it off; its sounds follow Skin sounds).' }))),
       p('Switch each one in the menu (status bar chip or Ctrl+Alt+K).'));
 
     const keys = section('keys', h3('Keys'),
@@ -6804,8 +6874,7 @@ LR"PBT(or ${hk('a')}`),
       p(pbt.project && pbt.project.get() ? `Project files: ${pbt.project.get().root} (${pbt.project.get().pages.length} pages, theme ${pbt.project.get().themeName || 'none'}).` : 'Project files: none loaded.'));
 
     // Tabs, one section at a time, so the page stays short on a laptop; the last tab is remembered.
-    // The tools in th)PBT"
-LR"PBT(e one order the menu and the dock use (pbt.JOBS).
+    // The tools in the one order the menu and the dock use (pbt.JOBS).
     this.tabs = [['skins', 'Skins', [intro, skins]], ['stencil', 'Stencil', [st]], ['qa', 'Layout QA', [qa]], ['filters', 'Filter map', [fm]], ['theme', 'Theme check', [th]], ['colors', 'Colors', [co]], ['interactions', 'Interactions', [ia]], ['extras', 'Extras', [extras]], ['keys', 'Keys', [keys]], ['settings', 'Settings', [settings]]];
     const current = this.tabs.some(t => t[0] === pbt.ui.get('help.tab')) ? pbt.ui.get('help.tab') : 'skins';
     const nav = el('nav', { role: 'tablist' }, ...this.tabs.map(([id, text]) =>
@@ -6819,7 +6888,8 @@ LR"PBT(e one order the menu and the dock use (pbt.JOBS).
 
     // The footer under every tab: whose work this is, then the provenance fingerprint, small and
     // muted (pbt.fingerprint, page/00-core.js).
-    const footer = el('footer', { class: 'pbt-help-foot' }, el('span', { text: pbt.fingerprint.credit }), el('span', { class: 'pbt-help-fp', text: pbt.fingerprint.code }));
+    const footer = el('footer', { class: 'pbt-help-foot' }, el('span', { text: pbt.fingerprint.credit }), el('span',)PBT"
+LR"PBT( { class: 'pbt-help-fp', text: pbt.fingerprint.code }));
 
     this.backdrop = el('div', { class: 'pbt-help-backdrop', 'data-pbt': '', 'data-ae-fp': pbt.fingerprint.code, onpointerdown: e => { if (e.target === this.backdrop) this.close(); } });
     this.panel = el('div', { class: 'pbt-help', 'data-pbt': '', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Help and keys', tabindex: '-1',
@@ -6894,8 +6964,7 @@ LR"PBT(e one order the menu and the dock use (pbt.JOBS).
     this.panel.querySelectorAll('[role="tab"]').forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === id)));
     this.panel.querySelectorAll('.pbt-tabpanel').forEach(p => { p.hidden = p.dataset.tab !== id; });
     this.panel.scrollTop = 0;
-    )PBT"
-LR"PBT(pbt.ui.set('help.tab', id);
+    pbt.ui.set('help.tab', id);
   },
   close() {
     if (this.backdrop) this.backdrop.remove();
@@ -6917,11 +6986,15 @@ pbt.module(help);
 // Right Left Right B A) turns it on and off; Esc twice within a second also turns it off. On, it
 // shows a banner with an 8-bit fanfare, switches on the Power BI 95 look (pbt.retro95, a separate
 // module) when that is loaded, and brings in Barry, an unhelpful bar chart assistant with googly
-// eyes. A pie or donut chart on the page gets a fake blue crash screen, G drops every visual to
+// eyes. It stays on until it is left, and a small note at the bottom of the window says how for as
+// long as it is on. A pie or donut chart on the page gets a fake blue crash screen once per page
+// (any key or click dismisses it, and the key still reaches Power BI), G drops every visual to
 // the bottom of the canvas and floats it back, and a finished refresh plays a dial-up handshake,
 // confetti and an achievement. Everything is drawn on top of the report: visuals move only by a
 // Web Animations translate that is cancelled afterwards, nothing in the report or its files
-// changes, every sound is synthesized with WebAudio, and off() leaves the page as it was.
+// changes, every sound is synthesized with WebAudio and plays only while the Skin sounds switch
+// is on (as the Begin-menu programs in page/82 to 84 do), and off() leaves the page as it wa)PBT"
+LR"PBT(s.
 //
 // Contract, so the lead can inject this file on its own into a page where the mod already runs:
 // - It needs only `pbt` (window.__pbt) in scope. Everything else sits inside one block, so its
@@ -6983,8 +7056,7 @@ pbt.module(help);
     model: ['Back from Model view. Mind the spaghetti.', 'Model view! So many lines. So few of them mine.'],
     idle: ['Still there? I could make it worse while you wait.', 'Thirty seconds of silence. Is the refresh still going?', 'Thinking about pie charts? Me too.'],
     refresh: ['Refreshing... a good time for coffee.', 'Refresh started. Pray to the gateway.', 'Refresh! Hold on, I\'m dialing in.'],
-    achievement: ['Used CALCULATE without)PBT"
-LR"PBT( crying', 'Refreshed on a Friday', 'Survived a many-to-many', 'Renamed Sheet1', 'Zero pie charts harmed', 'Got the filter context right first time', 'Turned off a bidirectional filter'],
+    achievement: ['Used CALCULATE without crying', 'Refreshed on a Friday', 'Survived a many-to-many', 'Renamed Sheet1', 'Zero pie charts harmed', 'Got the filter context right first time', 'Turned off a bidirectional filter'],
   };
   const CHAOS_INTRO = 'Hi! I\'m Barry. It looks like you\'re building a report. Would you like me to make it worse?';
   const CHAOS_PIE = 'We don\'t talk about pie charts.';
@@ -6996,9 +7068,13 @@ LR"PBT( crying', 'Refreshed on a Friday', 'Survived a many-to-many', 'Renamed Sh
 .pbt-chaos-banner b { display: block; font: 900 min(14vw, 150px)/1 Impact, "Arial Black", sans-serif; letter-spacing: .04em; color: #fff; background: linear-gradient(90deg, #ff3b3b, #ffb000, #ffe600, #2bd96b, #2aa8ff, #b84dff, #ff3b3b); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(4px 4px 0 #000); animation: pbt-chaos-rainbow .6s linear infinite, pbt-chaos-shake .12s linear infinite; }
 .pbt-chaos-banner small { display: block; margin-top: 10px; font: 700 22px/1.2 "Lucida Console", Consolas, monospace; color: #fff; text-shadow: 2px 2px 0 #000; }
 @keyframes pbt-chaos-fade { 0% { opacity: 0; } 8% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes pbt-chaos-zoom { 0% { transform: scale(.2) rotate(-12deg); } 30% { transform: scale(1.08) rotate(2deg); } 100% { transform: scale(1) rotate(0); } }
+@keyframes pbt-chao)PBT"
+LR"PBT(s-zoom { 0% { transform: scale(.2) rotate(-12deg); } 30% { transform: scale(1.08) rotate(2deg); } 100% { transform: scale(1) rotate(0); } }
 @keyframes pbt-chaos-rainbow { to { background-position: 200% 0; } }
 @keyframes pbt-chaos-shake { 0% { transform: translate(0, 0); } 25% { transform: translate(2px, -1px); } 50% { transform: translate(-1px, 2px); } 75% { transform: translate(-2px, -1px); } 100% { transform: translate(0, 0); } }
+
+.pbt-toast.pbt-chaos-exit { position: fixed; left: 50%; bottom: 76px; z-index: 2147483001; max-width: min(420px, 80vw); padding: 6px 12px; font-size: 12px; pointer-events: none; transform: translateX(-50%); }
+.pbt-toast.pbt-chaos-exit.pbt-in { transform: translateX(-50%); }
 
 .pbt-chaos-barry { position: fixed; right: 28px; bottom: 40px; z-index: 2147483003; width: 128px; height: 141px; pointer-events: none; animation: pbt-chaos-in .8s cubic-bezier(.3, 1.6, .5, 1) both; }
 .pbt-chaos-barry > svg { position: absolute; inset: 0; width: 128px; height: 141px; pointer-events: auto; cursor: pointer; overflow: visible; animation: pbt-chaos-bob 1.6s ease-in-out infinite alternate; }
@@ -7029,8 +7105,7 @@ LR"PBT( crying', 'Refreshed on a Friday', 'Survived a many-to-many', 'Renamed Sh
 .pbt-chaos-ach svg { width: 44px; height: 44px; flex: none; }
 .pbt-chaos-ach small { display: block; color: #f2c94c; font: 700 11px/1.2 "Segoe UI", sans-serif; letter-spacing: .14em; }
 .pbt-chaos-ach b { display: block; font: 700 17px/1.3 "Segoe UI", sans-serif; color: #fff; }
-@keyframes pbt-chaos-ach { 0% { opacity: 0; transform: translate(-50%, 60px); } 10% { opacity: 1; transform: translate(-50%, 0); } 88% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: transl)PBT"
-LR"PBT(ate(-50%, 20px); } }
+@keyframes pbt-chaos-ach { 0% { opacity: 0; transform: translate(-50%, 60px); } 10% { opacity: 1; transform: translate(-50%, 0); } 88% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, 20px); } }
 
 .pbt-chaos-bars, .pbt-chaos-pie { transform-box: fill-box; transform-origin: 50% 50%; }
 .pbt-chaos-slot { position: fixed; z-index: 2147483002; box-sizing: border-box; overflow: hidden; pointer-events: none; text-align: center; white-space: nowrap; -webkit-mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent); mask-image: linear-gradient(transparent, #000 18%, #000 82%, transparent); }
@@ -7052,7 +7127,8 @@ LR"PBT(ate(-50%, 20px); } }
     for (const [k, v] of Object.entries(props)) {
       if (v == null) continue;
       if (k === 'class') e.className = v;
-      else if (k === 'text') e.textContent = v;
+      else if)PBT"
+LR"PBT( (k === 'text') e.textContent = v;
       else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
       else e.setAttribute(k, v);
     }
@@ -7071,7 +7147,7 @@ LR"PBT(ate(-50%, 20px); } }
     started: false, on: false, base: [], live: [], timers: new Set(), els: new Set(),
     konami: 0, escAt: 0, ctx: null, master: null, ctxT: null, bags: {},
     barry: null, bubble: null, text: null, actions: null, pupils: [], typing: null, hideAt: null,
-    lastSaid: 0, closed: false, crashed: new Set(), crashEl: null, crashPct: 0,
+    lastSaid: 0, closed: false, crashed: new Set(), crashEl: null, exitEl: null, crashPct: 0,
     pageKey: '', count: 0, pageAt: 0, lastActive: 0, idleSaid: false, pendingView: null,
     grav: null, mouse: null, eyeQueued: false,
     // The click eggs: Web Animations on Power BI's own elements (all cancelled by off()), cards
@@ -7115,6 +7191,8 @@ LR"PBT(ate(-50%, 20px); } }
 
   // ---- sounds: oscillators and filtered noise, no audio files ----
   const audio = () => {
+    // Silent unless Skin sounds is on (off by default), like every other sound of the mod.
+    if (!pbt.feature('sounds')) return null;
     try {
       if (!S.ctx || S.ctx.state === 'closed') {
         S.ctx = new AudioContext();
@@ -7144,8 +7222,7 @@ LR"PBT(ate(-50%, 20px); } }
     } catch {}
   };
   // A burst of filtered white noise that dies away.
-  const no)PBT"
-LR"PBT(ise = ({ at = 0, len = 0.1, vol = 0.1, type = 'bandpass', f = 2000, q = 1 }) => {
+  const noise = ({ at = 0, len = 0.1, vol = 0.1, type = 'bandpass', f = 2000, q = 1 }) => {
     const ctx = audio();
     if (!ctx) return;
     try {
@@ -7165,7 +7242,8 @@ LR"PBT(ise = ({ at = 0, len = 0.1, vol = 0.1, type = 'bandpass', f = 2000, q = 1
     // A bell and a shimmer of coins.
     kaching() {
       noise({ len: 0.3, vol: 0.05, type: 'highpass', f: 6000 });
-      tone({ type: 'triangle', f: 1975.5, at: 0.02, len: 0.16, vol: 0.07 });
+      tone({ type: 'triangle', f: 1975.5, at: 0.02, len: 0.1)PBT"
+LR"PBT(6, vol: 0.07 });
       tone({ type: 'triangle', f: 2637, at: 0.13, len: 0.55, vol: 0.07 });
       tone({ type: 'sine', f: 3951, at: 0.13, len: 0.5, vol: 0.02 });
     },
@@ -7251,8 +7329,7 @@ LR"PBT(ise = ({ at = 0, len = 0.1, vol = 0.1, type = 'bandpass', f = 2000, q = 1
     };
     // The pie he turns into when he is fed up: bigger, googlier eyes that wobble further.
     const googly = (cx, cy) => {
-      const white = )PBT"
-LR"PBT(svgEl('circle', { cx, cy, r: 8.5, fill: '#fff', stroke: '#1d1d1d', 'stroke-width': 1.4 });
+      const white = svgEl('circle', { cx, cy, r: 8.5, fill: '#fff', stroke: '#1d1d1d', 'stroke-width': 1.4 });
       const pupil = svgEl('circle', { cx, cy, r: 4, fill: '#111' });
       S.pupils.push({ white, pupil, cx, cy, m: 4.5 });
       return [white, pupil];
@@ -7266,7 +7343,8 @@ LR"PBT(svgEl('circle', { cx, cy, r: 8.5, fill: '#fff', stroke: '#1d1d1d', 'strok
         svgEl('rect', { class: 'pbt-chaos-bar', x: 69, y: 38, width: 22, height: 62, rx: 3, fill: '#5ad1ff', ...line }),
         svgEl('rect', { class: 'pbt-chaos-bar', x: 38, y: 12, width: 25, height: 88, rx: 3, fill: '#2aac94', ...line }),
         svgEl('path', { d: 'M44 47 Q50.5 54 57 47', fill: 'none', stroke: '#0d3b33', 'stroke-width': 2.4, 'stroke-linecap': 'round' }),
-        svgEl('g', { class: 'pbt-chaos-eyes' }, eye(44, 29), eye(57.5, 29))),
+        svgEl('g', { class: 'pbt-chaos-eyes' }, eye(4)PBT"
+LR"PBT(4, 29), eye(57.5, 29))),
       svgEl('g', { class: 'pbt-chaos-pie', opacity: 0 },
         svgEl('circle', { cx: 50, cy: 62, r: 36, fill: '#2aac94', ...line }),
         svgEl('path', { d: 'M50 62 L50 26 A36 36 0 0 1 81.18 80 Z', fill: '#f2c94c', ...line }),
@@ -7364,8 +7442,7 @@ LR"PBT(svgEl('circle', { cx, cy, r: 8.5, fill: '#fff', stroke: '#1d1d1d', 'strok
     say(nextLine('joke'), { force: true });
   };
   const fedUp = () => {
-    if (!)PBT"
-LR"PBT(S.on || S.fed || S.crashEl) return false;
+    if (!S.on || S.fed || S.crashEl) return false;
     const f = S.fed = { stage: 'red', anims: [] };
     const keep = a => { if (a) f.anims.push(a); return a; };
     say('I\'m a bar chart, not a button!', { force: true, hold: 9000, buttons: [] });
@@ -7382,7 +7459,8 @@ LR"PBT(S.on || S.fed || S.crashEl) return false;
         { transform: 'none', opacity: 1 },
         { transform: 'rotate(120deg) scale(.6, .3)', opacity: 0.85, offset: 0.5 },
         { transform: 'rotate(300deg) scale(0)', opacity: 0 },
-      ], { duration: 1500, easing: 'ease-in', fill: 'forwards' }));
+      ], { duration: 1500, eas)PBT"
+LR"PBT(ing: 'ease-in', fill: 'forwards' }));
       keep(anim(S.barry.querySelector('.pbt-chaos-pie'), [
         { transform: 'rotate(-270deg) scale(0)', opacity: 0 },
         { transform: 'rotate(-90deg) scale(.4)', opacity: 1, offset: 0.35 },
@@ -7486,8 +7564,7 @@ LR"PBT(S.on || S.fed || S.crashEl) return false;
   // ---- gravity: a Web Animations translate on each visual container, cancelled afterwards ----
   const gravity = () => {
     if (S.grav) return false;
-    const da = document)PBT"
-LR"PBT(.querySelector('.displayArea');
+    const da = document.querySelector('.displayArea');
     if (!da) return false;
     const floor = Math.min(da.getBoundingClientRect().bottom, innerHeight);
     const items = containers().map(el => ({ el, r: el.getBoundingClientRect() })).filter(v => v.r.width > 0 && v.r.height > 0 && typeof v.el.animate === 'function');
@@ -7504,7 +7581,8 @@ LR"PBT(.querySelector('.displayArea');
       g.anims.push(v.el.animate([
         { translate: '0 0', rotate: '0deg', easing: 'cubic-bezier(.55, 0, 1, .45)' },
         { translate: `0 ${d}px`, rotate: `${v.tilt}deg`, offset: 0.55, easing: 'cubic-bezier(0, .55, .45, 1)' },
-        { translate: `0 ${d - b}px`, rotate: `${v.tilt}deg`, offset: 0.72, easing: 'cubic-bezier(.55, 0, 1, .45)' },
+        { translate: `0 ${d - b}px`, rotate: `${v.tilt}deg`, offs)PBT"
+LR"PBT(et: 0.72, easing: 'cubic-bezier(.55, 0, 1, .45)' },
         { translate: `0 ${d}px`, rotate: `${v.tilt}deg`, offset: 0.86, easing: 'cubic-bezier(0, .55, .45, 1)' },
         { translate: `0 ${d - b2}px`, rotate: `${v.tilt}deg`, offset: 0.93, easing: 'cubic-bezier(.55, 0, 1, .45)' },
         { translate: `0 ${d}px`, rotate: `${v.tilt}deg` },
@@ -7592,8 +7670,7 @@ LR"PBT(.querySelector('.displayArea');
     if (!val) return false;
     ensureStyle();
     S.slots.add(v);
-    const { n, r, cs, txt } = val, vr = v.getBoundingCl)PBT"
-LR"PBT(ientRect(), svg = n.namespaceURI === SVG_NS;
+    const { n, r, cs, txt } = val, vr = v.getBoundingClientRect(), svg = n.namespaceURI === SVG_NS;
     // The value's drawn font size: its CSS size through the zoom (and any SVG scaling), checked
     // against the height it really takes.
     let size = (parseFloat(cs.fontSize) || 16) * scaleOf(v);
@@ -7607,7 +7684,8 @@ LR"PBT(ientRect(), svg = n.namespaceURI === SVG_NS;
     const make = lookalike(txt), items = [txt];
     for (let i = 0; i < 16; i += 1) items.push(i % 6 === 4 ? SLOT_ENDS[Math.floor(Math.random() * SLOT_ENDS.length)] : make());
     items.push(end);
-    const reel = htmlEl('div', {}, items.map(t => htmlEl('div', { text: t, style: `height:${h}px` })));
+    const reel = htmlEl('div', {}, it)PBT"
+LR"PBT(ems.map(t => htmlEl('div', { text: t, style: `height:${h}px` })));
     const box = track(htmlEl('div', { class: 'pbt-chaos-slot', 'aria-hidden': 'true' }, reel));
     box.style.cssText = `left:${r.left + r.width / 2 - w / 2}px;top:${r.top + r.height / 2 - h / 2}px;width:${w}px;height:${h}px;font:${fontAt(size)};line-height:${h}px;color:${svg ? cs.fill : cs.color}`;
     document.body.append(box);
@@ -7685,8 +7763,7 @@ LR"PBT(ientRect(), svg = n.namespaceURI === SVG_NS;
     later(() => {
       if (!S.popping.has(bar)) return;
       const r = bar.getBoundingClientRect();
-      const a2 = anim(bar, [{ transform: at(1.3, 1.2), opacity: 1 }, { transform: at(1.7, 1.5), opacity: 0 }], )PBT"
-LR"PBT({ duration: 110, fill: 'forwards' });
+      const a2 = anim(bar, [{ transform: at(1.3, 1.2), opacity: 1 }, { transform: at(1.7, 1.5), opacity: 0 }], { duration: 110, fill: 'forwards' });
       sound.pop();
       bits(r, color);
       // Two seconds later it grows back from its base: up for a column, out from the axis for a bar.
@@ -7712,7 +7789,8 @@ LR"PBT({ duration: 110, fill: 'forwards' });
     S.hits.set(v, list);
     if (list.length >= 8) { S.hits.delete(v); runaway(v); }
   };
-  // The container's current translate (Web Animations included), in screen pixels.
+  /)PBT"
+LR"PBT(/ The container's current translate (Web Animations included), in screen pixels.
   const offsetOf = run => {
     const m = String(getComputedStyle(run.v).translate || '').match(/-?[\d.]+(?:e-?\d+)?/g);
     return m ? [(+m[0] || 0) * run.scale, (+m[1] || 0) * run.scale] : [0, 0];
@@ -7797,9 +7875,18 @@ LR"PBT({ duration: 110, fill: 'forwards' });
   // ---- the banner ----
   const banner = () => {
     const el = track(htmlEl('div', { class: 'pbt-chaos-banner', 'aria-hidden': 'true' }, htmlEl('div', {}, htmlEl('b', { text: 'CHAOS MODE' }), htmlEl('small', { text: 'you asked for this' }))));
-    document.body.ap)PBT"
-LR"PBT(pend(el);
+    document.body.append(el);
     later(() => drop(el), 2000);
+  };
+
+  // ---- how to leave: a small note in the mod's toast style, on screen for as long as Chaos Mode is
+  // on (it goes with the rest of S.els in off()). It takes no clicks. ----
+  const exitNote = () => {
+    if (S.exitEl && S.exitEl.isConnected) return;
+    const el = S.exitEl = track(htmlEl('div', { class: 'pbt-toast pbt-chaos-exit', role: 'status' },
+      htmlEl('span', { text: 'Chaos Mode is on. To leave it, press Esc twice, or type the code again.' })));
+    document.body.append(el);
+    requestAnimationFrame(() => el.classList.add('pbt-in'));
   };
 
   const ensureStyle = () => {
@@ -7808,7 +7895,8 @@ LR"PBT(pend(el);
     if (s.textContent !== CHAOS_CSS) s.textContent = CHAOS_CSS;
   };
   const retro = how => { try { if (pbt.retro95 && typeof pbt.retro95[how] === 'function') pbt.retro95[how]('chaos'); } catch {} };
-  // Ends every registered real-visual effect (page/82 to 84) that is running.
+  // Ends every registered real-visual effect (page/82 to 84) that is runn)PBT"
+LR"PBT(ing.
   const stopFx = () => {
     const fx = pbt.chaosFx || {};
     for (const id of Object.keys(fx)) { const f = fx[id]; if (f && typeof f.stop === 'function') { try { f.stop(); } catch {} } }
@@ -7844,8 +7932,8 @@ LR"PBT(pend(el);
   // ---- keys: the Konami code, Esc twice, G, the backup keys, and any key on the crash screen ----
   const onKey = e => {
     if (S.crashEl) {
-      // The crash screen takes the key, so it never reaches the report.
-      e.preventDefault(); e.stopImmediatePropagation();
+      // Any key dismisses the crash screen and still reaches Power BI as usual (Ctrl+S saves, a
+      // shortcut runs); it only counts for nothing here, so it is neither half of Esc twice nor G.
       if (!e.repeat) dismissCrash();
       return;
     }
@@ -7923,13 +8011,13 @@ LR"PBT(pend(el);
       later(() => {
         if (!S.on) return;
         retro('on');
+        exitNote();
         intro();
         S.pageKey = pageKey(); S.count = visualCount(); S.pageAt = Date.now();
         const iv = setInterval(safe(tick), 1000);
         S.live.push(() => clearInterval(iv));
         // A pie or donut on this page crashes once Barry's intro has been read, never before.
-        later(() => { if (S.on && S.pageKey === pageKey()) maybeCrash(); }, CHAOS_INTRO.length * 24 + 2400))PBT"
-LR"PBT(;
+        later(() => { if (S.on && S.pageKey === pageKey()) maybeCrash(); }, CHAOS_INTRO.length * 24 + 2400);
       }, 2000);
       listen(S.live, document, 'pointermove', e => {
         active();
@@ -7940,7 +8028,8 @@ LR"PBT(;
       listen(S.live, document, 'pointerdown', e => {
         active();
         const v = containerOf(e.target);
-        if (!v || !isSlicer(v)) return;
+        i)PBT"
+LR"PBT(f (!v || !isSlicer(v)) return;
         react('slicer');
         slicerHit(v);
       }, true);
@@ -7986,7 +8075,7 @@ LR"PBT(;
       // back exactly as they were (no inline style was ever written to them).
       [...S.anims].forEach(unanim);
       S.slots.clear(); S.popping.clear(); S.hits.clear(); S.tri = null; S.pokes = [];
-      S.crashEl = null;
+      S.crashEl = null; S.exitEl = null;
       [...S.els].forEach(drop);
       S.konami = 0; S.pendingView = null; S.choosing = 0;
       // Programs launched from the Begin menu end with Chaos Mode, so no visual stays moved,
@@ -8040,8 +8129,7 @@ LR"PBT(;
       const styleText = vc.map(e => e.getAttribute('style')).join('|');
       const nodes = [...document.querySelectorAll('[data-pbt]')].map(e => `${e.tagName.toLowerCase()}${e.id ? `#${e.id}` : ''}${(e.getAttribute('class') || '').trim().split(/\s+/).filter(Boolean).map(c => `.${c}`).join('')}`);
       const anims = document.getAnimations().filter(a => a.effect && a.effect.target && a.effect.target.closest && a.effect.target.closest('.displayArea')).length;
-      return { styles: styleText.length, pbtNodes: nodes.length, page: pageKey(), containers: vc.length, style)PBT"
-LR"PBT(Text, nodes, anims };
+      return { styles: styleText.length, pbtNodes: nodes.length, page: pageKey(), containers: vc.length, styleText, nodes, anims };
     },
     // Whether Chaos Mode is on: one flag, cheap enough for a click handler (state() is not).
     isOn() { return S.on; },
@@ -8051,6 +8139,8 @@ LR"PBT(Text, nodes, anims };
         barry: !!(S.barry && S.barry.isConnected), closed: S.closed,
         bubble: S.bubble && !S.bubble.hidden ? (S.text && S.text.textContent) || '' : null,
         crash: !!S.crashEl, crashPct: S.crashEl ? S.crashPct : null,
+        exitNote:)PBT"
+LR"PBT( !!(S.exitEl && S.exitEl.isConnected),
         gravity: !!S.grav, banner: !!document.querySelector('.pbt-chaos-banner'),
         achievement: (document.querySelector('.pbt-chaos-ach b') || {}).textContent || null,
         page: S.pageKey, visuals: S.count, pie: (() => { try { return hasPie(); } catch { return null; } })(),
@@ -8147,15 +8237,15 @@ function r95ThemeCss() {
   // reference wherever it names a concrete color, as the skins do, so a token lands on the same
   // silver in both modes; everything else is read in the current mode.
   const current = document.documentElement.getAttribute('data-theme') || '';
-  const root = new Map(), dark = new Map(), mode = new Map(),)PBT"
-LR"PBT( fui = new Map();
+  const root = new Map(), dark = new Map(), mode = new Map(), fui = new Map();
   const take = (rule, m) => { for (let i = 0; i < rule.style.length; i++) { const p = rule.style[i]; if (p.startsWith('--')) m.set(p, rule.style.getPropertyValue(p).trim()); } };
   const walk = list => {
     for (const r of list) {
       if (r.selectorText && r.style) {
         const parts = r.selectorText.split(',').map(s => s.trim());
         for (const p of parts) {
-          const th = (p.match(/^\[data-theme="([^"]+)"\]$/) || [])[1];
+          const th =)PBT"
+LR"PBT( (p.match(/^\[data-theme="([^"]+)"\]$/) || [])[1];
           if (th === 'dark') take(r, dark);
           if (th && th === current) take(r, mode);
         }
@@ -8206,9 +8296,9 @@ const R95_SVG = {
   jukebox: `<path d='M3.5 21.5V9a7.5 7.5 0 0 1 15 0v12.5z' fill='#b03000' stroke='#000'/><path d='M6 21V9.5a5 5 0 0 1 10 0V21' fill='none' stroke='#ffd800' stroke-width='1.4'/><rect x='8.5' y='10.5' width='5' height='3.5' fill='#80ffff' stroke='#000' stroke-width='.5'/><path d='M8.5 16.5h5M8.5 18.5h5M8.5 20.5h5' stroke='#400000'/>`,
   wheel: `<path d='M11 12L20 12A9 9 0 0 1 15.5 19.79Z' fill='#e00000'/><path d='M11 12L15.5 19.79A9 9 0 0 1 6.5 19.79Z' fill='#ffd800'/><path d='M11 12L6.5 19.79A9 9 0 0 1 2 12Z' fill='#00a000'/><path d='M11 12L2 12A9 9 0 0 1 6.5 4.21Z' fill='#0050e0'/><path d='M11 12L6.5 4.21A9 9 0 0 1 15.5 4.21Z' fill='#c000c0'/><path d='M11 12L15.5 4.21A9 9 0 0 1 20 12Z' fill='#ff8000'/><circle cx='11' cy='12' r='9' fill='none' stroke='#000'/><circle cx='11' cy='12' r='1.6' fill='#fff' stroke='#000' stroke-width='.6'/><path d='M8.5 .8h5L11 4.5z' fill='#fff' stroke='#000' stroke-width='.8'/>`,
   rave: `<rect x='.5' y='.5' width='21' height='21' fill='#200040' stroke='#000'/><path d='M5 7.5L12 21M5 7.5L20 16' stroke='#fff' stroke-width='.6' opacity='.7'/><rect x='2' y='14' width='3' height='7' fill='#ff00ff'/><rect x='6.5' y='11' width='3' height='10' fill='#00ffff'/><rect x='11' y='16' width='3' height='5' fill='#80ff00'/><rect x='15.5' y='12' width='3' height='9' fill='#ffff00'/><circle cx='5' cy='4.5' r='3' fill='#d8d8d8' stroke='#fff' stroke-width='.5'/><path d='M2 4.5h6M5 1.5v6' stroke='#808080' stroke-width='.5'/>`,
-  blackhole: `<rect x='.5' y='.5' width='21' height='21' fill='#000020' stroke='#000'/><path d='M3 3h.01M18 4h.01M4 18h.01M19 17h.01M15 2h.01' stroke='#fff' stroke-width='1.2' stroke-linecap='round'/><ellipse cx='11' cy='11' rx='9' ry='3.5' fill='none' stroke='#ff9000' stroke-width='1.6' transform='rotate(-20 11 11)'/><circle cx='11' cy='11' r='4.5' fill='#000' stroke='#a060ff'/>`)PBT"
-LR"PBT(,
-  hammer: `<rect x='1.5' y='1.5' width='14' height='14' fill='#c8f0ff' stroke='#000'/><path d='M8 8L1.5 5M8 8L5 1.5M8 8L13 1.5M8 8L15.5 10M8 8L10 15.5M8 8L1.5 13M4 4.5L6.5 3M11.5 4L14 6M12 12L9 13' stroke='#000' stroke-width='.7' fill='none'/><path d='M20.5 20.5l-8-8' stroke='#8b4513' stroke-width='2.2' stroke-linecap='round'/><path d='M13.9 9L16 11.1L11.1 16L9 13.9Z' fill='#808080' stroke='#000' stroke-width='.7'/>`,
+  blackhole: `<rect x='.5' y='.5' width='21' height='21' fill='#000020' stroke='#000'/><path d='M3 3h.01M18 4h.01M4 18h.01M19 17h.01M15 2h.01' stroke='#fff' stroke-width='1.2' stroke-linecap='round'/><ellipse cx='11' cy='11' rx='9' ry='3.5' fill='none' stroke='#ff9000' stroke-width='1.6' transform='rotate(-20 11 11)'/><circle cx='11' cy='11' r='4.5' fill='#000' stroke='#a060ff'/>`,
+  hammer: `<rect x='1.5' y='1.5' width='14' height='14' fill='#c8f0ff' stroke='#000'/><path d='M8 8L1.5 5M8 8L5 1.5M8 8L13 1.5M8 8L15.5 10M8 8L10 15.5M8 8L1.5 13M4 4.5L6.5 3M11.5 4L14 6M12 12L9 13' stroke='#000' stroke-width='.7' fill='none'/><path d='M20.5 20.5l-8-8' stroke='#8b4513' stroke-width='2.2' stroke-linecap='round'/><path d='M13.9 9L16 11.1L11.1 16L9 13.9Z' fill='#808080' stroke='#000' stroke-w)PBT"
+LR"PBT(idth='.7'/>`,
   cups: `<rect x='.5' y='17' width='21' height='4.5' fill='#2e7d32' stroke='#000'/><circle cx='11' cy='15.3' r='1.7' fill='#fff' stroke='#000' stroke-width='.5'/><path d='M1 17L2.5 9h3L7 17z' fill='#d00000' stroke='#000' stroke-width='.7'/><path d='M8 12L9.5 4h3L14 12z' fill='#d00000' stroke='#000' stroke-width='.7'/><path d='M15 17L16.5 9h3L21 17z' fill='#d00000' stroke='#000' stroke-width='.7'/><path d='M1.8 14h4.4M8.8 9h4.4M15.8 14h4.4' stroke='#ff9090'/>`,
 };
 const R95_ICON_CSS = Object.entries(R95_SVG).map(([id, body]) =>
@@ -8272,12 +8362,12 @@ ${P} titlebar-toolbar svg .OfficeIconColors_m20 { fill: transparent !important; 
 ${P} titlebar account .imageAvatarIcon { color: #ffffff !important; background: transparent !important; }
 ${P}:not([data-pbt-skin]) .windowControls button { color: #ffffff !important; }
 ${P}:not([data-pbt-skin]) .windowControls svg [class^="OfficeIconColors"] { fill: currentColor !important; }
-${P} div.r)PBT"
-LR"PBT(ibbonSearchOuter { background: #ffffff !important; box-shadow: var(--r95-in) !important; border: 0 !important; }
+${P} div.ribbonSearchOuter { background: #ffffff !important; box-shadow: var(--r95-in) !important; border: 0 !important; }
 ${P} div.ribbonSearchOuter * { background-color: transparent !important; border-color: transparent !important; }
 ${P} div.ribbonSearchOuter :is(input, svg, span, i) { color: #000000 !important; }
 ${P} div.ribbonSearchOuter input::placeholder { color: #4a4a4a !important; opacity: 1 !important; }
-${P} .farPeripheralControls button { background: #c0c0c0 !important; color: #000000 !important; border: 0 !important; box-shadow: var(--r95-out) !important; }
+$)PBT"
+LR"PBT({P} .farPeripheralControls button { background: #c0c0c0 !important; color: #000000 !important; border: 0 !important; box-shadow: var(--r95-out) !important; }
 ${P} .farPeripheralControls button * { color: #000000 !important; }
 ${P} .farPeripheralControls svg :is(path, [class^="OfficeIconColors"]) { fill: currentColor !important; }
 
@@ -8327,11 +8417,11 @@ ${P} :is(.pane-header, .outspacePane .paneHeader) :is(h2, .pane-title, .sidePane
 ${P} .outspacePane.outspacePaneCollapsed { background: var(--r95-title) !important; color: #ffffff !important; }
 ${P} .outspacePane.outspacePaneCollapsed * { color: #ffffff !important; }
 ${P} .outspacePane.outspacePaneCollapsed .paneHeader { background: transparent !important; margin: 0 !important; }
-:is(${P} .sidePane, ${PF} .outspacePane) .paneContents :is(div, span, section, label, p, h3, h4, a):not([class*="glyph" i]):not([class*="i)PBT"
-LR"PBT(con" i]) { color: #000000; }
+:is(${P} .sidePane, ${PF} .outspacePane) .paneContents :is(div, span, section, label, p, h3, h4, a):not([class*="glyph" i]):not([class*="icon" i]) { color: #000000; }
 :is(${P} .sidePane, ${PF} .outspacePane) :is(input, textarea, search-box-modern) { background: #ffffff !important; color: #000000 !important; box-shadow: var(--r95-in) !important; border-color: transparent !important; }
 :is(${P} .sidePane, ${PF} .outspacePane) search-box-modern input { box-shadow: none !important; }
-:is(${P} .sidePane, ${PF} .outspacePane) :is(input, textarea)::placeholder { color: #4a4a4a !important; opacity: 1 !important; }
+:is(${P} .sidePane, ${PF} .outspacePane) :is(input, textarea)::)PBT"
+LR"PBT(placeholder { color: #4a4a4a !important; opacity: 1 !important; }
 /* Filter cards and the "Add data fields here" wells: Power BI draws them with light grey 1px borders
    (#c8c8c8 and #b4b4b4) that vanish on the silver pane. Cards become raised panels, wells sunken
    white fields, both with the black and white bevel edges. Only the well boxes themselves: the card
@@ -8389,11 +8479,11 @@ ${P} *:not(.displayArea, .displayArea *)::-webkit-scrollbar-corner { background:
 /* The Begin menu: a raised panel above the Begin button, a navy band down its left side. */
 ${P} .pbt-r95-menu {
   position: fixed; z-index: 2147483004; display: flex; box-sizing: border-box; min-width: 280px; padding: 3px;
-  background: #c0c0c0 !important; color: #000000 !important; box-shadow: var(--r95-o)PBT"
-LR"PBT(ut) !important; font: 11px ${R95_FONT} !important; user-select: none;
+  background: #c0c0c0 !important; color: #000000 !important; box-shadow: var(--r95-out) !important; font: 11px ${R95_FONT} !important; user-select: none;
 }
 ${P} .pbt-r95-band { display: flex; align-items: flex-end; justify-content: center; flex: none; width: 24px; padding-bottom: 6px; background: linear-gradient(0deg, #000080, #1084d0); }
-${P} .pbt-r95-band span { writing-mode: vertical-rl; transform: rotate(180deg); color: #c0c0c0; font: 18px ${R95_FONT} !important; white-space: nowrap; }
+${P} .pbt-r95-band span { writing-mode: vertical-rl; transform: rotate(180deg); color: #c0c0c0; font: 18px ${R95_FONT} !important; white-space: nowrap; })PBT"
+LR"PBT(
 ${P} .pbt-r95-band b { color: #ffffff; font-weight: bold; }
 ${P} .pbt-r95-items { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 ${P} .pbt-r95-item {
@@ -8454,12 +8544,12 @@ ${P} .pbt-r95-dlg {
   background: #c0c0c0 !important; color: #000000 !important; box-shadow: var(--r95-out) !important; font: 11px ${R95_FONT} !important;
 }
 ${P} .pbt-r95-dlg-title { height: 20px; line-height: 20px; padding: 0 6px; background: var(--r95-title); color: #ffffff; font-weight: bold; }
-${P})PBT"
-LR"PBT( .pbt-r95-dlg-body { display: grid; gap: 10px; padding: 12px 12px 10px; }
+${P} .pbt-r95-dlg-body { display: grid; gap: 10px; padding: 12px 12px 10px; }
 ${P} .pbt-r95-prog { display: flex; gap: 2px; height: 20px; box-sizing: border-box; padding: 3px; background: #ffffff; box-shadow: var(--r95-in); }
 ${P} .pbt-r95-prog i { flex: 1; background: #000080; }
 ${P} .pbt-r95-prog-green i { background: #008000; }
-${P} .pbt-r95-field { display: flex; align-items: center; height: 22px; padding: 0 5px; background: #ffffff; box-shadow: var(--r95-in); font: 12px ${R95_FONT}; white-space: pre; }
+${P} .pbt-r95-field { display: flex; align-items: center; height: 22px; padding: )PBT"
+LR"PBT(0 5px; background: #ffffff; box-shadow: var(--r95-in); font: 12px ${R95_FONT}; white-space: pre; }
 ${P} .pbt-r95-caret { width: 1px; height: 14px; margin-left: 1px; background: #000000; animation: pbt-r95-blink 1s steps(1) infinite; }
 @keyframes pbt-r95-blink { 50% { opacity: 0; } }
 ${P} .pbt-r95-btns { display: flex; justify-content: flex-end; gap: 6px; }
@@ -8565,8 +8655,7 @@ const retro95 = {
   noSkin() {
     const s = pbt.skin;
     const now = s && s.current;
-    if (!s || !now || now === 'off' || !pbt.skins[now]) return ')PBT"
-LR"PBT(';
+    if (!s || !now || now === 'off' || !pbt.skins[now]) return '';
     s.apply('off');
     return now;
   },
@@ -8580,7 +8669,8 @@ LR"PBT(';
     const was = this.active;
     // The programs from the Begin menu go with the look.
     if (was) this.stopFx();
-    // The skin to draw again is the saved choice, not the one that was set aside: None picked
+    // The skin to draw again is the saved choice)PBT"
+LR"PBT(, not the one that was set aside: None picked
     // while the look was on stays None, and a skin picked meanwhile comes back.
     const back = was && pbt.cfg.skin;
     this.prevSkin = '';
@@ -8682,15 +8772,15 @@ LR"PBT(';
       const f = pbt.el('div', { class: 'pbt-r95-folder' }, row,
         pbt.el('div', { class: 'pbt-r95-sub', role: 'menu', 'aria-label': label },
           ...(children.length ? children : [pbt.el('div', { class: 'pbt-r95-item pbt-r95-empty', text: '(Empty)' })])));
-      row.addEventListener('mouseenter', () => hov)PBT"
-LR"PBT(er(f));
+      row.addEventListener('mouseenter', () => hover(f));
       return f;
     };
     const joke = text => () => this.joke(text);
     // The real-visual effects (page/82 to 84) register themselves in pbt.chaosFx; each is a program
     // in its folder under Programs, and launching one first stops any effect still running.
     const fx = pbt.chaosFx || {};
-    const ids = [...R95_FX_ORDER.filter(id => fx[id]), ...Object.keys(fx).filter(id => !R95_FX_ORDER.includes(id) && fx[id] && typeof fx[id].run === 'function')];
+    const ids = [...R95_FX_ORDER.filter(id => fx[id]), ...Object.keys(fx).filter(id => !R95_FX_ORDER.in)PBT"
+LR"PBT(cludes(id) && fx[id] && typeof fx[id].run === 'function')];
     const program = id => item((R95_FX_PLACE[id] || [])[1] || 'app', fx[id].name || id, () => this.launch(id));
     const programs = [
       ...R95_FOLDERS.map(name => [name, ids.filter(id => (R95_FX_PLACE[id] || [])[0] === name)])
@@ -8786,15 +8876,15 @@ LR"PBT(er(f));
   // The Begin menu's joke items, each a short animation and then its line: 'excel' (an export
   // dialog whose progress bar stalls, then the sheet flies into Begin), 'rename' (a rename box
   // that types FINAL, FINAL_v2, FINAL_v2_REAL and settles on Sheet1 (2)), 'reboot' (every visual
-  // powers down to grey, a reboot dialog runs, the visuals flash ba)PBT"
-LR"PBT(ck on one by one) and 'find' (a
+  // powers down to grey, a reboot dialog runs, the visuals flash back on one by one) and 'find' (a
   // magnifying glass searches the page and draws a relationship line between two visuals).
   // Overlays carry data-pbt-r95 and animations on Power BI's visuals are Web Animations only, all
   // ended by endGag(), which off() calls. One gag at a time; a new one ends the last.
   gag(id) {
     if (!this.active) return false;
     this.endGag();
-    const G = this.gagRun = { timers: new Set(), anims: new Set(), els: new Set() };
+    const G = this.gagRun = { tim)PBT"
+LR"PBT(ers: new Set(), anims: new Set(), els: new Set() };
     const later = (ms, fn) => {
       const t = setTimeout(() => { G.timers.delete(t); if (this.gagRun === G) { try { fn(); } catch {} } }, ms);
       G.timers.add(t);
@@ -8894,13 +8984,13 @@ LR"PBT(ck on one by one) and 'find' (a
     }
 
     if (id === 'find') {
-      const rects = visuals().map(v )PBT"
-LR"PBT(=> v.getBoundingClientRect());
+      const rects = visuals().map(v => v.getBoundingClientRect());
       if (rects.length < 2) { this.endGag(); this.joke('Found it. It was hiding behind the date table.'); return true; }
       const mid = r => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
       // Two visuals to join, and a search path over up to four others that ends between them.
       const order = rects.map((_, i) => i).sort(() => Math.random() - 0.5);
-      const A = mid(rects[order[0]]), B = mid(rects[order[1]]);
+      co)PBT"
+LR"PBT(nst A = mid(rects[order[0]]), B = mid(rects[order[1]]);
       const path = [...order.slice(2, 6).map(i => mid(rects[i])), A, { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }];
       const glass = mk('pbt-r95-glass');
       glass.innerHTML = "<svg viewBox='0 0 64 64' width='72' height='72'><circle cx='26' cy='26' r='18' fill='rgba(191,239,255,.35)' stroke='#000' stroke-width='5'/><path d='M39 39l18 18' stroke='#000' stroke-width='8' stroke-linecap='round'/></svg>";
@@ -8982,8 +9072,7 @@ pbt.module(retro95);
 // - It needs no style element: every node it adds is inline styled, marked data-pbt, and removed
 //   when its effect ends, so window.__pbt.chaos.audit() reads the same before and after.
 {
-  if (pbt.fxSound && typeof pbt.fxSound.remove === 'function') { try { pbt.fxSound.re)PBT"
-LR"PBT(move(); } catch {} }
+  if (pbt.fxSound && typeof pbt.fxSound.remove === 'function') { try { pbt.fxSound.remove(); } catch {} }
 
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const svgEl = (tag, attrs = {}, ...kids) => {
@@ -8992,7 +9081,8 @@ LR"PBT(move(); } catch {} }
     for (const c of kids.flat()) if (c != null) e.append(c);
     return e;
   };
-  // Built with createElement only, like pbt.el, in case the app turns on Trusted Types.
+  // Built with createElement only, like pbt.el, in case the app turns on T)PBT"
+LR"PBT(rusted Types.
   const htmlEl = (tag, props = {}, text) => {
     const e = document.createElement(tag);
     for (const [k, v] of Object.entries(props)) if (v != null) e.setAttribute(k, v);
@@ -9016,6 +9106,8 @@ LR"PBT(move(); } catch {} }
     S.closeT = setTimeout(() => { S.closeT = null; if (!Object.keys(S.runs).length) closeAudio(); }, 3000);
   };
   const audio = () => {
+    // Silent unless Skin sounds is on (off by default), like every other sound of the mod.
+    if (!pbt.feature('sounds')) return null;
     clearTimeout(S.closeT); S.closeT = null;
     try {
       if (!S.ctx || S.ctx.state === 'closed') {
@@ -9100,13 +9192,13 @@ LR"PBT(move(); } catch {} }
       tone({ dest, type: 'square', f: f / 2, at, len: 0.22, vol: 0.018, attack: 0.008, decay: true, lp: 1400 });
     },
     kick(dest, at = 0, vol = 0.32) { tone({ dest, type: 'sine', f: 150, f2: 42, at, len: 0.26, vol, attack: 0.003, decay: true }); noise({ dest, at, len: 0.015, vol: vol * 0.3, type: 'lowpass', f: 1500 }); },
-    snare(dest, at = 0, vol = 0.2) { noise({ dest, at, len: 0.17, vol, type: 'bandpass', f: 1900, q: 0.7 }); tone({ dest, type: 'triangle', f: 200, f2: 160)PBT"
-LR"PBT(, at, len: 0.09, vol: vol * 0.5, attack: 0.002, decay: true }); },
+    snare(dest, at = 0, vol = 0.2) { noise({ dest, at, len: 0.17, vol, type: 'bandpass', f: 1900, q: 0.7 }); tone({ dest, type: 'triangle', f: 200, f2: 160, at, len: 0.09, vol: vol * 0.5, attack: 0.002, decay: true }); },
     hat(dest, at = 0, vol = 0.1) { noise({ dest, at, len: 0.05, vol, type: 'highpass', f: 7500 }); },
   };
 
   // ==== Barry and Chaos Mode ====
-  const barry = text => { try { if (pbt.chaos && typeof pbt.chaos.say === 'function') pbt.chaos.say(text); } catch {} };
+  const barry = text => { try { if (pbt.chaos && typeof pbt.ch)PBT"
+LR"PBT(aos.say === 'function') pbt.chaos.say(text); } catch {} };
   // isOn() is one flag; state() builds a full report (it scans the page for pies), too much per click.
   const chaosOn = () => { try { return !!(pbt.chaos && (typeof pbt.chaos.isOn === 'function' ? pbt.chaos.isOn() : pbt.chaos.state().on)); } catch { return false; } };
 
@@ -9203,12 +9295,12 @@ LR"PBT(, at, len: 0.09, vol: vol * 0.5, attack: 0.002, decay: true }); },
 
   // ==== one run of an effect: its frame, timers, nodes, animations and sound, all undone by end ====
   const newRun = id => {
-   )PBT"
-LR"PBT( const r = { id, raf: 0, timers: new Set(), els: new Set(), anims: new Set(), bus: newBus(), done: false, resolve: null, chaos: chaosOn(), checkedAt: 0 };
+    const r = { id, raf: 0, timers: new Set(), els: new Set(), anims: new Set(), bus: newBus(), done: false, resolve: null, chaos: chaosOn(), checkedAt: 0 };
     r.promise = new Promise(res => { r.resolve = res; });
     return r;
   };
-  const later = (r, fn, ms) => { const t = setTimeout(() => { r.timers.delete(t); safe(fn)(); }, ms); r.timers.add(t); return t; };
+  const later = (r, fn, ms) => { const t )PBT"
+LR"PBT(= setTimeout(() => { r.timers.delete(t); safe(fn)(); }, ms); r.timers.add(t); return t; };
   const add = (r, el) => { r.els.add(el); document.body.append(el); return el; };
   const anim = (r, el, frames, opts) => {
     if (!el || typeof el.animate !== 'function') return null;
@@ -9300,11 +9392,11 @@ LR"PBT( const r = { id, raf: 0, timers: new Set(), els: new Set(), anims: new Se
       const e = c.eye, k = 0.0025;
       const tx = clamp(-ax * k, -2.6, 2.6), ty = clamp(-ay * k, -2.6, 2.6);
       e[2] += ((tx - e[0]) * 120 - e[2] * 9) * dt; e[3] += ((ty - e[1]) * 120 - e[3] * 9) * dt;
-      e[0] = clamp(e[0] + e[2] * dt, -3, 3); e[1] = clamp(e[1] + e[3] * dt,)PBT"
-LR"PBT( -3, 3);
+      e[0] = clamp(e[0] + e[2] * dt, -3, 3); e[1] = clamp(e[1] + e[3] * dt, -3, 3);
       cart.eyes.forEach(ey => { ey.pupil.setAttribute('cx', (ey.cx + e[0]).toFixed(2)); ey.pupil.setAttribute('cy', (ey.cy + e[1]).toFixed(2)); });
     };
-    const roll = d => { c.spin = (c.spin + (d / 6) * (180 / Math.PI)) % 360; cart.wheels.forEach(([w, cx]) => w.setAttribute('transform', `rotate(${c.spin.toFixed(1)} ${cx} 41)`)); };
+    const roll = d => { c.spin = (c.spin + (d / 6) * (180 / Math.PI)) % 360; cart.wheels.forEach(([w, cx]) =>)PBT"
+LR"PBT( w.setAttribute('transform', `rotate(${c.spin.toFixed(1)} ${cx} 41)`)); };
     const fly = (x, y, now) => {
       const a = (c.ang || 0) * Math.PI / 180, sp = Math.max(c.v, 320);
       c.fly = { x, y, vx: Math.max(340, sp * Math.cos(a)), vy: Math.min(-280, sp * Math.sin(a) - 320), t0: now };
@@ -9417,9 +9509,9 @@ LR"PBT( -3, 3);
       });
     }
     const glow = '#5ad1ff';
-    const head = add(r, htmlEl('div', { 'aria-hidden': 'true', style: `position:fixed;left:0;top:0;width:3px;height:10px;z-index:2147483002;)PBT"
-LR"PBT(pointer-events:none;border-radius:2px;background:linear-gradient(${glow}00, ${glow}, ${glow}00);box-shadow:0 0 10px 3px ${glow}99, 0 0 22px 6px ${glow}55;will-change:transform` }));
-    const dot = add(r, htmlEl('div', { 'aria-hidden': 'true', style: `position:fixed;left:0;top:0;width:14px;height:14px;margin:-7px 0 0 -7px;z-index:2147483002;pointer-events:none;box-sizing:border-box;border-radius:50%;background:#fff;border:3px solid ${glow};box-shadow:0 0 12px 4px ${glow}aa;will-change:translate,scale` }));
+    const head = add(r, htmlEl('div', { 'aria-hidden': 'true', style: `position:fixed;left:0;top:0;width:3px;height:10px;z-index:2147483002;pointer-events:none;border-radius:2px;background:linear-gradient(${glow}00, ${glow}, ${glow}00);box-shadow:0 0 10px 3px ${glow}99, 0 0 22px 6px ${glow}55;will-change:transform` }));
+    const dot = add(r, htmlEl('div', { 'aria-hidden': 'true', style: `position:fixed;left:0)PBT"
+LR"PBT(;top:0;width:14px;height:14px;margin:-7px 0 0 -7px;z-index:2147483002;pointer-events:none;box-sizing:border-box;border-radius:50%;background:#fff;border:3px solid ${glow};box-shadow:0 0 12px 4px ${glow}aa;will-change:translate,scale` }));
     const t0 = performance.now() + lead * 1000;
     let lastNote = -1;
     const SYMBOLS = ['\u266a', '\u266b', '\u266a', '\u2669'];
@@ -9520,13 +9612,13 @@ LR"PBT(pointer-events:none;border-radius:2px;background:linear-gradient(${glow}0
     name: 'fxSound',
     start() {
       if (S.started) return 'already started';
-      // Off with the "Hidden surprises" setting: no listener a)PBT"
-LR"PBT(t all.
+      // Off with the "Hidden surprises" setting: no listener at all.
       if (!pbt.feature('surprises')) return 'off (Hidden surprises setting)';
       S.started = true;
       const h = safe(onPointer);
       document.addEventListener('pointerdown', h, { capture: true, passive: true });
-      S.base.push(() => document.removeEventListener('pointerdown', h, { capture: true, passive: true }));
+      S.base.push(() => document.removeEventLi)PBT"
+LR"PBT(stener('pointerdown', h, { capture: true, passive: true }));
       return 'started';
     },
     stop() {
@@ -9628,14 +9720,14 @@ LR"PBT(t all.
     run.timers.add(t);
   });
   const at = (run, ms, fn) => {
-    const t = setTimeout(() => )PBT"
-LR"PBT({ run.timers.delete(t); if (!run.ended) safe(fn)(); }, ms);
+    const t = setTimeout(() => { run.timers.delete(t); if (!run.ended) safe(fn)(); }, ms);
     run.timers.add(t);
     return t;
   };
   const ani = (run, el, frames, opts) => {
     if (!el || typeof el.animate !== 'function' || run.ended) return null;
-    try { const a = el.animate(frames, opts); run.anims.add(a); return a; } catch (e) { log(e); return null; }
+    try { const a = el.animate(frames, opts); run.ani)PBT"
+LR"PBT(ms.add(a); return a; } catch (e) { log(e); return null; }
   };
   const drop = (run, a) => { if (a) { run.anims.delete(a); try { a.cancel(); } catch {} } };
   const own = (run, el) => { el.setAttribute('data-pbt', ''); run.els.add(el); return el; };
@@ -9655,6 +9747,8 @@ LR"PBT({ run.timers.delete(t); if (!run.ended) safe(fn)(); }, ms);
 
   // == sounds: oscillators and filtered noise, no audio files ==
   const audio = () => {
+    // Silent unless Skin sounds is on (off by default), like every other sound of the mod.
+    if (!pbt.feature('sounds')) return null;
     try {
       if (!F.ctx || F.ctx.state === 'closed') {
         F.ctx = new AudioContext();
@@ -9758,10 +9852,10 @@ LR"PBT({ run.timers.delete(t); if (!run.ended) safe(fn)(); }, ms);
       lfo.frequency.value = 23; depth.gain.value = 16;
       lfo.connect(depth).connect(o.frequency);
       f1.type = 'bandpass'; f1.frequency.value = 520; f1.Q.value = 3;
-      f2.type = 'band)PBT"
-LR"PBT(pass'; f2.frequency.value = 1150; f2.Q.value = 5;
+      f2.type = 'bandpass'; f2.frequency.value = 1150; f2.Q.value = 5;
       o.connect(f1).connect(mix); o.connect(f2).connect(mix);
-      g.gain.setValueAtTime(0.0001, t);
+      g.gain.setValueAtT)PBT"
+LR"PBT(ime(0.0001, t);
       g.gain.exponentialRampToValueAtTime(0.8, t + 0.04);
       g.gain.setValueAtTime(0.65, t + 0.5);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
@@ -9848,12 +9942,12 @@ LR"PBT(pass'; f2.frequency.value = 1150; f2.Q.value = 5;
     const R = clamp(Math.min(RT - L, BT - T) * 0.1, 36, 120), S = R * 6;
     const layer = (inset, css) => {
       const d = document.createElement('div');
-      d.style.cssText = `position:absolute;inset:${inset}%)PBT"
-LR"PBT(;border-radius:50%;pointer-events:none;${css}`;
+      d.style.cssText = `position:absolute;inset:${inset}%;border-radius:50%;pointer-events:none;${css}`;
       return d;
     };
     const ringMask = (a, b, c, d) => {
-      const g = `radial-gradient(circle closest-side,transparent ${a}%,#000 ${b}%,#000 ${c}%,transparent ${d}%)`;
+      const g = `radial-gr)PBT"
+LR"PBT(adient(circle closest-side,transparent ${a}%,#000 ${b}%,#000 ${c}%,transparent ${d}%)`;
       return `-webkit-mask-image:${g};mask-image:${g};`;
     };
     // Layers, outside in: a lens ring that bends the report behind it (a backdrop filter), the glowing
@@ -9930,8 +10024,8 @@ LR"PBT(;border-radius:50%;pointer-events:none;${css}`;
       await wait(run, (back.length - 1) * g2 + OUT + 200);
 
       sfx.close();
-      ani(run, wrap, [{ trans)PBT"
-LR"PBT(form: 'scale(1) rotate(0deg)' }, { transform: 'scale(0.001) rotate(200deg)' }], { duration: 650, easing: 'cubic-bezier(.6, 0, .9, .4)', fill: 'forwards' });
+      ani(run, wrap, [{ transform: 'scale(1) rotate(0deg)' }, { transform: 'scale(0.001) rotate(200deg)' }], { duration: 650, easing: 'cubic-bezier(.6, 0, .9, .4)', )PBT"
+LR"PBT(fill: 'forwards' });
       await wait(run, 700);
       end(run, true);
     });
@@ -10036,11 +10130,11 @@ LR"PBT(form: 'scale(1) rotate(0deg)' }, { transform: 'scale(0.001) rotate(200deg
     proto.removeAttribute('tabindex');
     Object.assign(proto.style, { position: 'absolute', left: '0px', top: '0px', margin: '0', width: `${b.w}px`, height: `${b.h}px`, boxSizing: 'border-box', pointerEvents: 'none' });
     const clones = shards.map((s, i) => {
-      con)PBT"
-LR"PBT(st c = i ? proto.cloneNode(true) : proto;
+      const c = i ? proto.cloneNode(true) : proto;
       c.setAttribute('data-pbt', '');
       copyCanvases(b.el, c);
-      c.style.clipPath = `polygon(${s.pts.map(([x, y]) => `${r2(x)}px ${r2(y)}px`).join(', ')})`;
+      c.style.clipPath = `p)PBT"
+LR"PBT(olygon(${s.pts.map(([x, y]) => `${r2(x)}px ${r2(y)}px`).join(', ')})`;
       return c;
     });
     stage.append(clones[0]);
@@ -10136,10 +10230,10 @@ LR"PBT(st c = i ? proto.cloneNode(true) : proto;
       return '';
     };
     return list
-      .map(c => { const b = c.el.querySelector('iframe') ? null : box(c.el); return b && onScreen(b) ? Object.a)PBT"
-LR"PBT(ssign(b, { title: c.title || labelOf(c.el) }) : null; })
+      .map(c => { const b = c.el.querySelector('iframe') ? null : box(c.el); return b && onScreen(b) ? Object.assign(b, { title: c.title || labelOf(c.el) }) : null; })
       .filter(Boolean)
-      .sort((a, b) => (Math.abs(a.r.top - b.r.top) > 8 ? a.r.top - b.r.top : a.r.left - b.r.left))
+      .sort((a, b) => (Math.abs(a.r.top - b.r.top) > 8 ?)PBT"
+LR"PBT( a.r.top - b.r.top : a.r.left - b.r.left))
       .slice(0, 3);
   };
   const cleanTitle = t => { const s = String(t || '').replace(/\s+/g, ' ').trim(); return s.length > 40 ? `${s.slice(0, 38).trim()}...` : s; };
@@ -10257,13 +10351,13 @@ LR"PBT(ssign(b, { title: c.title || labelOf(c.el) }) : null; })
 
       // Face up again, then the verdict.
       flip(false);
-      await wa)PBT"
-LR"PBT(it(run, 320 + n * 70);
+      await wait(run, 320 + n * 70);
       if (guessed === target) {
         sfx.ding();
         speak('Lucky guess.', 2500);
         hop(target);
-      } else {
+   )PBT"
+LR"PBT(   } else {
         sfx.buzzer();
         speak(guessed < 0 ? "Too slow. It's this one." : "Wrong. It's this one.", 2500);
         wiggle(target);
@@ -10377,10 +10471,10 @@ LR"PBT(it(run, 320 + n * 70);
 // - Test calls: window.__pbt.chaosFx.wheel.run(), window.__pbt.chaosFx.rave.run().
 //   rave.run({ hue: 'svg' }) puts the color cycle on each chart's svg instead of on each bar, in
 //   case the host draws no CSS filter on SVG shapes.
-// - Barry (pbt.chaos.say) comments when Chaos Mode is on; ot)PBT"
-LR"PBT(herwise the effects run silently.
+// - Barry (pbt.chaos.say) comments when Chaos Mode is on; otherwise the effects run silently.
 {
-  if (pbt.fxParty && typeof pbt.fxParty.remove === 'function') { try { pbt.fxParty.remove(); } catch {} }
+  if (pbt.fxParty && typeof pbt.fxParty.remove === 'function') { try { pbt.fxParty.remove(); } catch)PBT"
+LR"PBT( {} }
 
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const safe = fn => function (...args) { try { return fn.apply(this, args); } catch (e) { try { pbt.log && pbt.log(`fx-party: ${e && e.stack}`); } catch {} } };
@@ -10439,6 +10533,8 @@ LR"PBT(herwise the effects run silently.
 
   // ==== sound: one AudioContext made when first needed, a gain bus per run, closed when idle ====
   const audio = () => {
+    // Silent unless Skin sounds is on (off by default), like every other sound of the mod.
+    if (!pbt.feature('sounds')) return null;
     try {
       clearTimeout(F.closeTimer);
       if (!F.ctx || F.ctx.state === 'closed') {
@@ -10492,8 +10588,8 @@ LR"PBT(herwise the effects run silently.
     const bus = busOf(run);
     if (!bus || !F.noiseBuf) return;
     try {
-     )PBT"
-LR"PBT( const ctx = F.ctx, n = ctx.createBufferSource(), flt = ctx.createBiquadFilter(), g = ctx.createGain();
+    )PBT"
+LR"PBT(  const ctx = F.ctx, n = ctx.createBufferSource(), flt = ctx.createBiquadFilter(), g = ctx.createGain();
       n.buffer = F.noiseBuf; flt.type = type; flt.frequency.value = f; flt.Q.value = q;
       g.gain.setValueAtTime(vol, t);
       g.gain.exponentialRampToValueAtTime(0.0001, t + len);
@@ -10589,8 +10685,8 @@ LR"PBT( const ctx = F.ctx, n = ctx.createBufferSource(), flt = ctx.createBiquadF
       const d = Math.hypot(r.left + r.width / 2 - tx, r.top + r.height / 2 - ty);
       if (d < screen.r * 0.9 && (!best || d < best.d)) best = { d, txt };
     }
-    return best ? best.txt.slice(0, 48) : `Slice)PBT"
-LR"PBT( ${k + 1}`;
+    return best ? best.txt.slice(0, 48) : `Slic)PBT"
+LR"PBT(e ${k + 1}`;
   };
   // A pointer of our own: a red flap on a gold hub, hinged at the hub, tip down on the rim.
   const makePointer = (x, y, k) => {
@@ -10679,8 +10775,8 @@ LR"PBT( ${k + 1}`;
         }
       } catch {}
     }, landed + 150);
-    // Back to w)PBT"
-LR"PBT(here Power BI drew it: the nearest whole turn, then every animation is cancelled.
+    // Back to )PBT"
+LR"PBT(where Power BI drew it: the nearest whole turn, then every animation is cancelled.
     later(run, () => {
       const r = norm(total), home = r > 180 ? total + (360 - r) : total - r;
       animate(run, g, [{ transform: rot(total) }, { transform: rot(home) }], { duration: BACK, easing: 'ease-in-out', fill: 'forwards' });
@@ -10774,8 +10870,8 @@ LR"PBT(here Power BI drew it: the nearest whole turn, then every animation is ca
     const L = Math.max(0, p.left), T = Math.max(0, p.top), W = Math.min(innerWidth, p.right) - L, H = Math.min(innerHeight, p.bottom) - T;
     if (W > 0 && H > 0) {
       const light = div(`position:fixed;left:${L}px;top:${T}px;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:2147483001;mix-blend-mode:screen;opacity:0`);
-      const beams = div('position:absolute;left:-100%;top:-5%;width:300%;height:260%;tran)PBT"
-LR"PBT(sform-origin:50% 0;background:repeating-conic-gradient(from 0deg at 50% 0%, rgba(255,40,190,.6) 0deg 5deg, transparent 5deg 16deg, rgba(0,210,255,.6) 16deg 21deg, transparent 21deg 32deg, rgba(255,225,0,.55) 32deg 37deg, transparent 37deg 48deg)');
+      const beams = div('position:absolute;left:-100%;top:-5%;width:300%;height:260%;tra)PBT"
+LR"PBT(nsform-origin:50% 0;background:repeating-conic-gradient(from 0deg at 50% 0%, rgba(255,40,190,.6) 0deg 5deg, transparent 5deg 16deg, rgba(0,210,255,.6) 16deg 21deg, transparent 21deg 32deg, rgba(255,225,0,.55) 32deg 37deg, transparent 37deg 48deg)');
       const dots = div('position:absolute;inset:0;background-image:radial-gradient(circle, rgba(255,255,255,.9) 0 1.5px, transparent 2.5px), radial-gradient(circle, rgba(255,130,230,.8) 0 1.5px, transparent 2.5px);background-size:110px 80px, 150px 110px;background-position:0 0, 40px 30px');
       light.append(beams, dots);
       document.body.append(light);
@@ -11135,7 +11231,7 @@ static bool InPowerBiData(const wchar_t* p, size_t k) {
 }
 
 // Calls still running inside this module's hooks (a CreateFileW can block for seconds on a slow
-// or online-only path); Wh_ModUninit waits for them before the image may go.
+// or online-only path) or its hand-over windows; Wh_ModUninit waits for them before the image may go.
 static std::atomic<long> g_hookCalls{0};
 struct HookCall {
     HookCall() { g_hookCalls++; }
@@ -11416,13 +11512,16 @@ static std::vector<Tracked*> g_tracked;  // under g_lock
 // ---- the reader's hand-overs: posted, never sent ----
 // The reader never waits on Power BI's threads: it posts each web view's new files to a
 // message-only window this mod made on that web view's thread, and the thread runs the work from its
-// own message loop, where any posted message is handled. Each window's procedure is in this module,
-// so Wh_ModUninit keeps the image loaded while one is left.
+// own message loop, where any posted message is handled. The window class itself uses the
+// system's DefWindowProcW, and each window gets this module's procedure only once it exists: a
+// window or class left behind after a disable then never points into code that is gone (see
+// Wh_ModUninit), and a later copy of the mod that finds the class still registered makes working
+// windows from it all the same.
 static const wchar_t kPushClass[] = L"pbid-tweaks report hand-over";
 constexpr UINT kPushMsg = WM_APP + 0x5A1;
-// Every hand-over window made, for Wh_ModUninit to count the ones still there. Windows go with
+// Every hand-over window made, for Wh_ModUninit to find any still there. Windows go with
 // DropPushWindow, or with their thread when it ends; a window taken down with its thread gets no
-// WM_NCDESTROY, so the count is made from the windows that still exist, not from messages.
+// WM_NCDESTROY, so Wh_ModUninit checks each handle for a window that still exists.
 static std::mutex g_pushLock;
 static std::vector<HWND> g_pushList;
 static LRESULT CALLBACK PushWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp);
@@ -11430,22 +11529,17 @@ static HWND MakePushWindow() {
     HMODULE self = nullptr;
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast<LPCWSTR>(&PushWndProc), &self);
     WNDCLASSW wc = {};
-    wc.lpfnWndProc = PushWndProc;
+    wc.lpfnWndProc = DefWindowProcW;
     wc.hInstance = self;
     wc.lpszClassName = kPushClass;
-    RegisterClassW(&wc);  // fails harmlessly when this image has registered it already
+    RegisterClassW(&wc);  // fails harmlessly when the class is registered already
     HWND w = CreateWindowExW(0, kPushClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, self, nullptr);
-    if (w) { std::lock_guard<std::mutex> lock(g_pushLock); g_pushList.push_back(w); }
+    if (w) {
+        SetWindowLongPtrW(w, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(PushWndProc));
+        std::lock_guard<std::mutex> lock(g_pushLock);
+        g_pushList.push_back(w);
+    }
     return w;
-}
-// The hand-over windows that still exist: by handle, and with this class name, since Windows may
-// give a gone window's handle to a new window.
-static long PushWindowsLeft() {
-    std::lock_guard<std::mutex> lock(g_pushLock);
-    long n = 0;
-    wchar_t cls[64];
-    for (HWND h : g_pushList) if (IsWindow(h) && GetClassNameW(h, cls, 64) && wcscmp(cls, kPushClass) == 0) n++;
-    return n;
 }
 // Set by Wh_ModBeforeUninit, in the same g_lock block that takes g_tracked: from then on no web
 // view is given the script and no new handler is made, so nothing can join the list too late.
@@ -11589,8 +11683,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
 static DWORD WINAPI ProjectWorker(void*);
 
 BOOL Wh_ModInit() {
-    // A fresh image starts with these false. An image kept loaded by the last-resort pin in
-    // Wh_ModUninit keeps its globals, and when the mod is enabled again it must hook again.
+    // A fresh image starts with these false; they are set here all the same, so a start never
+    // depends on how an earlier copy of the mod ended.
     g_unloading = false;
     g_loaderHooked = false;
     g_envHooked = false;
@@ -11710,9 +11804,25 @@ static BOOL CALLBACK FirstWindow(HWND window, LPARAM out) {
     return FALSE;
 }
 
-// The window to reach a tracked web view's thread through: the one its controller was made for,
-// else any other window of the same thread (the web view may have moved to a new parent).
+// Whether `window` still exists, belongs to `thread` and is one of this mod's hand-over windows
+// (Windows may give a gone window's handle to a new one).
+static bool IsPushWindowOf(HWND window, DWORD thread) {
+    wchar_t cls[64];
+    return window && IsWindow(window) && GetWindowThreadProcessId(window, nullptr) == thread &&
+           GetClassNameW(window, cls, 64) && wcscmp(cls, kPushClass) == 0;
+}
+
+// The window to reach a tracked web view's thread through. First the web view's own hand-over
+// window: it is this mod's window on exactly that thread, so it reaches the thread for as long as
+// it exists, also when the thread has no top-level window left (EnumThreadWindows never lists a
+// message-only window), and the work message never goes to a window of Power BI's. TakeBack then
+// destroys that same window from inside the thread hook, before its procedure would see the work
+// message; the work has run by then (RunOnWindowThread reports it), and the procedure is still
+// loaded during Wh_ModBeforeUninit, so a message delivered to the window after that is harmless.
+// Else the window its controller was made for, else any other window of the same thread (the web
+// view may have moved to a new parent).
 static HWND WindowOf(Tracked* t) {
+    if (IsPushWindowOf(t->push, t->thread)) return t->push;
     HWND window = t->window;
     if (!IsWindow(window) || GetWindowThreadProcessId(window, nullptr) != t->thread) {
         window = nullptr;
@@ -11781,6 +11891,7 @@ static LRESULT CALLBACK PushWndProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
         for (auto it = g_pushList.begin(); it != g_pushList.end(); ++it) if (*it == w) { g_pushList.erase(it); break; }
     }
     if (msg == kPushMsg) {
+        HookCall in;  // Wh_ModUninit waits for a hand-over still running here
         auto* work = reinterpret_cast<ProjectWork*>(lp);
         ProjectPush p{work->t, work->script.get(), work->push.get()};
         PushOnThread(&p);
@@ -11884,35 +11995,46 @@ void Wh_ModBeforeUninit() {
     Wh_Log(L"before uninit: script taken back out of %d of %d web views", done, (int)tracked.size());
 }
 
-// Code WebView2 may still call (a handler it holds) stays loaded; see Wh_ModUninit.
-static void KeepModuleLoaded() {
-    HMODULE module = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN, reinterpret_cast<LPCWSTR>(&KeepModuleLoaded), &module);
+// A hand-over window Wh_ModBeforeUninit could not reach: its thread is still running, but the
+// thread hook could not be set on it. Its procedure goes back to the system's DefWindowProcW
+// (allowed from any thread of the same process), so no message can reach this module's code once
+// the image is gone. Hand-overs still queued for it stay in the queue unread, a few bytes each.
+static long RetargetPushWindowsLeft() {
+    std::lock_guard<std::mutex> lock(g_pushLock);
+    long n = 0;
+    wchar_t cls[64];
+    for (HWND h : g_pushList) {
+        if (!IsWindow(h) || !GetClassNameW(h, cls, 64) || wcscmp(cls, kPushClass) != 0) continue;
+        SetWindowLongPtrW(h, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(DefWindowProcW));
+        n++;
+    }
+    g_pushList.clear();
+    return n;
 }
 
 // By now Windhawk has taken the hooks off, so no new handler can appear. Completions still to come
 // (a script registration or a controller in flight) arrive on Power BI's own threads and let go of
-// their handlers. Each handler's code is in this module, so it is unloaded only once WebView2 holds
-// none. A handler still held after 15 seconds means a creation that never finished; then, and only
-// then, the module stays loaded rather than leave WebView2 a pointer into freed memory. A module
-// kept loaded that way is never unloaded, so a later disable does not wait again.
-static bool g_pinned = false;  // not reset by Wh_ModInit: a pinned image keeps it
+// their handlers, and hook calls that started before the hooks came off (a CreateFileW on a slow
+// path can take seconds) finish. The code of both is in this module, so this waits until they are
+// gone: the same kind of wait the plain SendMessage in RunOnWindowThread and the join of the reader
+// thread already make. Like outlook-refined, the wait is bounded at two minutes, and when the bound
+// runs out the mod logs what is still held and lets Windhawk unload it anyway. The other choice,
+// keeping the image loaded for the rest of the session, leaves a reference Windhawk does not
+// expect and makes an update load a second copy beside the first; a completion WebView2 has not
+// delivered in two minutes, or a file open that has not returned in two minutes, is taken to be one
+// that will not come back, and that is the trade-off accepted here.
 void Wh_ModUninit() {
-    // Hook calls that started before the hooks came off (a CreateFileW on a slow path can take
-    // seconds) are waited for too, and so is a hand-over window TakeBack could not reach.
-    if (!g_pinned) for (int i = 0; i < 300 && (g_liveHandlers > 0 || g_hookCalls > 0); i++) Sleep(50);
-    long live = g_liveHandlers.load(), calls = g_hookCalls.load(), windows = PushWindowsLeft();
-    if ((live > 0 || calls > 0 || windows > 0) && !g_pinned) {
-        KeepModuleLoaded();
-        g_pinned = true;
-    } else if (!g_pinned) {
-        // The last H_Release (or hook) lowers its count a few instructions before it returns out of this module.
-        Sleep(200);
-        HMODULE self = nullptr;
-        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast<LPCWSTR>(&PushWndProc), &self);
-        UnregisterClassW(kPushClass, self);
-    }
-    // Closed only once no hook call is left that could still set it; a kept image keeps it.
-    if (g_wake && !g_pinned) { CloseHandle(g_wake); g_wake = nullptr; }
-    Wh_Log(L"uninit: %ld handler(s), %ld hook call(s), %ld window(s) still held%s", live, calls, windows, g_pinned ? L"; module kept loaded" : L"");
+    long windows = RetargetPushWindowsLeft();
+    for (int i = 0; i < 2400 && (g_liveHandlers > 0 || g_hookCalls > 0); i++) Sleep(50);
+    long live = g_liveHandlers.load(), calls = g_hookCalls.load();
+    if (live > 0 || calls > 0) Wh_Log(L"uninit: %ld handler(s) and %ld hook call(s) still held after two minutes; unloading anyway", live, calls);
+    // The last H_Release (or hook) lowers its count a few instructions before it returns out of this module.
+    Sleep(200);
+    // Fails harmlessly while a window of the class is left; the class uses DefWindowProcW, never this module.
+    HMODULE self = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast<LPCWSTR>(&PushWndProc), &self);
+    UnregisterClassW(kPushClass, self);
+    // Closed only once no hook call is left that could still set it; otherwise it is left open.
+    if (g_wake && calls == 0) { CloseHandle(g_wake); g_wake = nullptr; }
+    Wh_Log(L"uninit: %ld handler(s), %ld hook call(s) still held; %ld hand-over window(s) given back to the system", live, calls, windows);
 }
