@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              pwa-tray-center
-// @name            PWA Center
-// @description     One tray icon for all your Chrome PWAs: hide windows to the PWA Center, control media, see notifications and launch installed apps from a Fluent flyout
-// @version         0.5.320
+// @name            PWA Tray Center
+// @description     One tray icon for all your Chrome PWAs: hide windows to the PWA Tray Center, control media, see notifications and launch installed apps from a Fluent flyout
+// @version         0.5.540
 // @author          Proponent
 // @github          https://github.com/JJProponent
 // @include         chrome.exe
@@ -12,29 +12,30 @@
 
 // ==WindhawkModReadme==
 /*
-## PWA Center
+## PWA Tray Center
 
-Adds a **"Hide to PWA Center"** item to the window menu of installed Chrome PWA windows (right-click title bar).
+Adds a **"Hide to PWA Tray Center"** item to the window menu of installed Chrome PWA windows (right-click title bar).
 
-![Hide to PWA Center in the window menu](https://raw.githubusercontent.com/JJProponent/Image-s-/main/RMB%20Place.jpg)
+![Hide to PWA Tray Center in the window menu](https://raw.githubusercontent.com/JJProponent/Image-s-/main/RMB%20Place.jpg)
 
 - Hidden windows keep running (music plays, etc.)
 - One tray icon appears for all hidden PWAs (shows with first hidden, disappears when last restored)
 
-![PWA Center flyout](https://raw.githubusercontent.com/JJProponent/Image-s-/main/Main%20app.jpg)
+![PWA Tray Center flyout](https://raw.githubusercontent.com/JJProponent/Image-s-/main/Main%20app.jpg)
 
 ### Tray Icon
 
-![PWA Center tray icon](https://raw.githubusercontent.com/JJProponent/Image-s-/main/Tray%20place.jpg)
+![PWA Tray Center tray icon](https://raw.githubusercontent.com/JJProponent/Image-s-/main/Tray%20place.jpg)
 
-- **Left click** → opens PWA Center (Fluent flyout, rounded corners, Mica backdrop)
+- **Left click** → opens PWA Tray Center (Fluent flyout, rounded corners, Mica or solid backdrop, chosen in Settings)
 - **Right click** → menu: *Show all* / *Quit all*
+- **Center mode** (Settings → Panel): *Hermes (Quick)* closes on a click outside, *Titan (Pinned)* stays open
 
 ### Tabs
 
 | Tab | Description |
 |-----|-------------|
-| **Media** | Cards for each Chrome media session: cover, title, artist, PWA source, prev/play-pause/next, draggable progress bar. Right-click for controls. Compact view: 3 covers per row. |
+| **Media** | Cards for each Chrome media session: cover, title, artist, PWA source, prev/play-pause/next, draggable progress bar. Right-click for controls. Cover style (small, full or none) and compact view (3 covers per row) are set in Settings. |
 | **Apps** | Hidden PWAs. Left-click to show, right-click for Show/Quit. Badge shows unread counter. |
 | **Notifications** | Toast notifications from Windows notification center. Falls back to unread counter from window title (e.g. `(3) Inbox`). |
 | **Library** | All installed Chrome PWAs. Left-click to launch/show. Drag to reorder. Right-click for Open/Quit/categories. Search field + category chips for filtering. |
@@ -167,6 +168,7 @@ std::atomic<int> g_backdrop{(int)Backdrop::Mica};
 std::atomic<int> g_appDisplay{(int)AppDisplay::Both};
 std::atomic<int> g_showVolume{1};
 std::atomic<int> g_mediaCompact{0};
+std::atomic<int> g_cardCover{0};  // 1 = the cover fills the media card, 0 = small cover on the left
 std::atomic<int> g_panelMode{(int)PanelMode::Titan};
 // Shortcut that opens the panel: virtual key in the low 16 bits, MOD_* flags above. 0 = none.
 std::atomic<int> g_hotkey{0};
@@ -464,6 +466,7 @@ enum PrefId {
     kPrefPanelMode = 0,
     kPrefBackdrop,
     kPrefMediaCompact,
+    kPrefCardCover,
     kPrefShowVolume,
     kPrefAppDisplay,
     kPrefNotifPos,
@@ -479,6 +482,7 @@ const wchar_t* const kOptAppDisplay[] = {L"Icon and name", L"Icons only", L"Name
 const wchar_t* const kOptNotifPos[] = {L"Top left", L"Top right", L"Bottom left",
                                        L"Bottom right", L"Top center", L"Bottom center"};
 const wchar_t* const kOptNotifDismiss[] = {L"Swipe", L"Click"};
+const wchar_t* const kOptCardCover[] = {L"Small cover", L"Full cover", L"No cover"};
 
 template <size_t N>
 int OptionCount(const wchar_t* const (&)[N]) {
@@ -490,6 +494,7 @@ std::atomic<int>* PrefValue(int id) {
         case kPrefPanelMode: return &g_panelMode;
         case kPrefBackdrop: return &g_backdrop;
         case kPrefMediaCompact: return &g_mediaCompact;
+        case kPrefCardCover: return &g_cardCover;
         case kPrefShowVolume: return &g_showVolume;
         case kPrefAppDisplay: return &g_appDisplay;
         case kPrefNotifPos: return &g_notifPos;
@@ -504,6 +509,7 @@ PCWSTR PrefKey(int id) {
         case kPrefPanelMode: return L"prefPanelMode";
         case kPrefBackdrop: return L"prefBackdrop";
         case kPrefMediaCompact: return L"prefMediaCompact";
+        case kPrefCardCover: return L"prefCardCover";
         case kPrefShowVolume: return L"prefShowVolume";
         case kPrefAppDisplay: return L"prefAppDisplay";
         case kPrefNotifPos: return L"prefNotifPos";
@@ -535,6 +541,7 @@ int PrefOptionCount(int id) {
         case kPrefAppDisplay: return OptionCount(kOptAppDisplay);
         case kPrefNotifPos: return OptionCount(kOptNotifPos);
         case kPrefNotifDismiss: return OptionCount(kOptNotifDismiss);
+        case kPrefCardCover: return OptionCount(kOptCardCover);
         default: return 2;  // toggles
     }
 }
@@ -1201,7 +1208,7 @@ using winrt::Windows::Media::Control::
 using winrt::Windows::Media::Control::
     GlobalSystemMediaTransportControlsSessionPlaybackStatus;
 
-constexpr int kCoverPx = 160;
+constexpr int kCoverPx = 320;
 
 struct MediaInfo {
     std::wstring key;         // "<source aumid>#<ordinal>"
@@ -2067,6 +2074,35 @@ struct Note {
     Tween enter;          // slide-in progress, 0 to 1
 };
 
+// Press spring of one pressable element: its scale now, and its speed.
+struct PressSpring {
+    float scale = 1.0f;
+    float vel = 0.0f;
+};
+
+// Drawing transform of the panel, uniform: x' = s * x + tx, y' = s * y + ty.
+struct Xf {
+    float s = 1.0f;
+    float tx = 0.0f;
+    float ty = 0.0f;
+};
+
+// The element that was just dropped: it glides from the pointer to its slot.
+struct Settle {
+    bool active = false;
+    bool placed = false;        // its slot is known: it has been drawn at its place
+    int id = 0;                 // hit id of the element at its slot
+    bool settleX = false;       // glides along x
+    bool settleY = false;       // glides along y
+    float gx = 0, gy = 0;       // centre of the ghost at the drop (DIP)
+    float offX = 0, offY = 0;   // from the ghost to the slot, set when placed
+    ULONGLONG tDrop = 0;        // when it was dropped
+    ULONGLONG t0 = 0;           // when the glide started (once placed)
+};
+
+// Glide duration, Material 3 emphasized decelerate curve.
+constexpr float kSettleMs = 220.0f;
+
 struct Panel {
     HWND hwnd = nullptr;
     int dpi = 96;
@@ -2146,6 +2182,8 @@ struct Panel {
     float gridTileW = 0, gridTileH = 0;  // size of the last drawn grid tile
     int libDragTab = -1;                 // tab the drag started on
     int libDragKind = kHitNone;          // hit kind of the dragged item
+    int dragPressId = 0;                 // hit id of the dragged element, it stays pressed during the drag
+    float grabX = 0, grabY = 0;          // grab point, from the centre of the dragged element (DIP)
     // Saved orders of the PWAs, Media and Notifications tabs (keys of items).
     std::vector<std::wstring> orderApps, orderMedia, orderNotifs;
     std::wstring stateSig;  // what was on screen last time, to skip redraws
@@ -2181,9 +2219,9 @@ struct Panel {
     bool nativeMenuActive = false;  // a native popup menu is running its loop
     bool hotkeyListening = false;   // waiting for a key combination in Settings
     bool closeAfterMenu = false;    // close requested while that menu was open
-    float pressScale = 1.0f;        // Fluent press spring of the play/pause button
-    float pressVel = 0.0f;
-    int springIdx = -1;             // media card whose play/pause button is spring-animated
+    Xf xf;                                         // current drawing transform (press springs)
+    std::unordered_map<int, PressSpring> springs;  // press springs of pressable elements, by hit id
+    Settle settle;                                 // glide of the element just dropped
 
     // Title bar.
     bool closeHover = false;
@@ -3447,44 +3485,165 @@ void ClampScroll(Panel& p, int tab) {
     p.scrollT[tab] = (std::max)(0.0f, (std::min)(p.scrollT[tab], maxScroll));
 }
 
-// Press spring for the play/pause button, with Material 3 Expressive spatial values
-// (stiffness and damping ratio, mass 1). Pressing settles quickly without bounce;
-// release bounces back a little, the way Pixel buttons do.
+// Press spring, shared by every pressable element of the panel: transport buttons,
+// PWA and library tiles, the speaker badge and the hidden counter. Pressing scales
+// the element to kPressScale, releasing bounces it back. Material 3 Expressive
+// spatial values (stiffness and damping ratio, mass 1): pressing settles without
+// bounce, release bounces a little.
 constexpr float kPressScale = 0.9f;
 constexpr float kPressStiffness = 1400.0f;   // standard spatial fast
 constexpr float kPressDamping = 0.9f;
 constexpr float kReleaseStiffness = 800.0f;  // expressive spatial fast
 constexpr float kReleaseDamping = 0.6f;
 
-// Advances the spring by dt seconds. Returns true while it is still moving.
-// The velocity carries over when the target changes mid-motion, so a quick
-// tap or a release during the press animation stays continuous.
-bool StepPressSpring(Panel& p, float dt) {
-    float target = 1.0f;
-    bool pressing = false;
-    if (KindOf(p.pressed) == kHitMediaPlay && p.hovered == p.pressed) {
-        target = kPressScale;
-        pressing = true;
+// Elements that get a press spring.
+bool IsSpringKind(int kind) {
+    return kind == kHitMediaPlay || kind == kHitMediaPrev || kind == kHitMediaNext ||
+           kind == kHitMediaCard || kind == kHitTile || kind == kHitTileMedia ||
+           kind == kHitHiddenBadge;
+}
+
+// Scale of an element's spring, 1 when it has none.
+float SpringScale(const Panel& p, int id) {
+    auto it = p.springs.find(id);
+    return it == p.springs.end() ? 1.0f : it->second.scale;
+}
+
+// Advances every spring by dt seconds. A press starts a spring for the element
+// under it; a spring that has settled back to 1 is dropped. Returns true while a
+// spring is still moving.
+bool StepSprings(Panel& p, float dt) {
+    if (p.pressed != kHitNone && p.hovered == p.pressed && IsSpringKind(KindOf(p.pressed))) {
+        p.springs.try_emplace(p.pressed);
     }
-    const float k = pressing ? kPressStiffness : kReleaseStiffness;
-    const float zeta = pressing ? kPressDamping : kReleaseDamping;
-    const float c = 2.0f * zeta * std::sqrt(k);  // damping coefficient
-    const float h = 0.002f;  // fixed sub-step keeps the integration stable
-    float t = dt;
-    while (t > 0) {
-        float s = t < h ? t : h;
-        float acc = -k * (p.pressScale - target) - c * p.pressVel;
-        p.pressVel += acc * s;
-        p.pressScale += p.pressVel * s;
-        t -= s;
+    // A drag keeps the dragged element pressed, wherever the pointer goes.
+    if (p.libDragging && IsSpringKind(KindOf(p.dragPressId))) {
+        p.springs.try_emplace(p.dragPressId);
     }
-    bool settled = std::fabs(p.pressScale - target) < 0.0005f &&
-                   std::fabs(p.pressVel) < 0.01f;
-    if (settled) {
-        p.pressScale = target;
-        p.pressVel = 0.0f;
+    bool active = false;
+    for (auto it = p.springs.begin(); it != p.springs.end();) {
+        PressSpring& s = it->second;
+        const bool pressing = p.libDragging
+                                  ? it->first == p.dragPressId
+                                  : (p.pressed == it->first && p.hovered == it->first);
+        const float target = pressing ? kPressScale : 1.0f;
+        const float k = pressing ? kPressStiffness : kReleaseStiffness;
+        const float zeta = pressing ? kPressDamping : kReleaseDamping;
+        const float c = 2.0f * zeta * std::sqrt(k);  // damping coefficient
+        const float h = 0.002f;  // fixed sub-step keeps the integration stable
+        float t = dt;
+        while (t > 0) {
+            const float step = t < h ? t : h;
+            const float acc = -k * (s.scale - target) - c * s.vel;
+            s.vel += acc * step;
+            s.scale += s.vel * step;
+            t -= step;
+        }
+        const bool settled = std::fabs(s.scale - target) < 0.0005f &&
+                             std::fabs(s.vel) < 0.01f;
+        if (settled) {
+            s.scale = target;
+            s.vel = 0.0f;
+        } else {
+            active = true;
+        }
+        if (settled && !pressing) {
+            it = p.springs.erase(it);
+        } else {
+            ++it;
+        }
     }
-    return !settled;
+    return active;
+}
+
+// Sends the panel's current transform to Direct2D.
+void ApplyXf(Panel& p) {
+    D2D1_MATRIX_3X2_F m = {};
+    m.m11 = p.xf.s;
+    m.m22 = p.xf.s;
+    m.dx = p.xf.tx;
+    m.dy = p.xf.ty;
+    p.rt->SetTransform(&m);
+}
+
+// Offset (DIP) that is still left for the element `id` drawn in rectangle r. The
+// first draw after the drop fixes its slot; the offset then shrinks to 0 along the curve.
+void SettleOffset(Panel& p, int id, const D2D1_RECT_F& r, float& dx, float& dy) {
+    dx = 0;
+    dy = 0;
+    Settle& s = p.settle;
+    if (!s.active || id != s.id) {
+        return;
+    }
+    const ULONGLONG now = NowMs();
+    if (!s.placed) {
+        if (now - s.tDrop > 250) {
+            s.active = false;  // never drawn at its place: no glide
+            return;
+        }
+        s.offX = s.settleX ? s.gx - (r.left + r.right) / 2 : 0;
+        s.offY = s.settleY ? s.gy - (r.top + r.bottom) / 2 : 0;
+        s.placed = true;
+        s.t0 = now;
+    }
+    const float x = Clamp01((float)(now - s.t0) / kSettleMs);
+    const float k = 1.0f - (float)CubicBezierY(0.05, 0.7, 0.1, 1.0, x);
+    dx = s.offX * k;
+    dy = s.offY * k;
+    if (x >= 1.0f) {
+        s.active = false;
+    }
+}
+
+// Scales what is drawn next by the press spring of `id`, about the centre of `r`.
+// Returns the transform before it; EndSpring restores it, so springs nest (the
+// speaker badge of a tile scales on its own, on top of the tile's scale).
+Xf BeginSpring(Panel& p, int id, const D2D1_RECT_F& r) {
+    const Xf prev = p.xf;
+    const float s = SpringScale(p, id);
+    // The panel offsets are part of the drawn coordinates, so they are part of the centre.
+    const float cx = (r.left + r.right) / 2 + p.ox;
+    const float cy = (r.top + r.bottom) / 2 + p.oy;
+    float dx = 0, dy = 0;
+    SettleOffset(p, id, r, dx, dy);
+    const Xf inner = {s, cx * (1 - s) + dx, cy * (1 - s) + dy};
+    p.xf = {inner.s * prev.s, prev.s * inner.tx + prev.tx, prev.s * inner.ty + prev.ty};
+    ApplyXf(p);
+    return prev;
+}
+
+void EndSpring(Panel& p, const Xf& prev) {
+    p.xf = prev;
+    ApplyXf(p);
+}
+
+// Starts the glide of the element just dropped. `index` is where it is now, or where
+// it came from if it was dropped outside. Its press spring moves along with it.
+void BeginSettle(Panel& p, int kind, int index) {
+    const int oldKey = p.dragPressId;
+    const int newKey = MakeId(kind, index);
+    if (oldKey != newKey) {
+        auto it = p.springs.find(oldKey);
+        if (it != p.springs.end()) {
+            const PressSpring s = it->second;
+            p.springs.erase(it);
+            p.springs[newKey] = s;
+        }
+    }
+    Settle& s = p.settle;
+    s.active = true;
+    s.placed = false;
+    s.id = newKey;
+    // Compact covers move in a grid, so they glide along both axes; full cards
+    // only up and down, chips only sideways.
+    s.settleX = kind == kHitTile || kind == kHitChip ||
+                (kind == kHitMediaCard && g_mediaCompact);
+    s.settleY = kind != kHitChip;
+    s.gx = p.libDragX - p.grabX;
+    s.gy = p.libDragY - p.grabY;
+    s.tDrop = NowMs();
+    s.offX = 0;
+    s.offY = 0;
 }
 
 // DIP per device pixel of the panel (the drawing is scaled by ui).
@@ -3724,7 +3883,8 @@ bool UpdateAnims(Panel& p, ULONGLONG now) {
     if (dt > 0.05f) {
         dt = 0.05f;
     }
-    active |= StepPressSpring(p, dt);
+    active |= StepSprings(p, dt);
+    active |= p.settle.active;
     active |= StepNotes(p, dt);
     if (!p.hlKey.empty() && now - p.hlTick < 1450) {
         active = true;
@@ -3779,7 +3939,7 @@ void DrawTitleBar(Panel& p) {
     DrawTxt(p, kGlyphAllApps, p.fIcon.p, Rc(kPad, iconY, iconSize, iconSize), t.accent);
     
     float titleX = kPad + iconSize + 8.0f;
-    const std::wstring titleText = L"PWA Center";
+    const std::wstring titleText = L"PWA Tray Center";
     float titleW = MeasureW(titleText, p.fBody.p);
     DrawTxt(p, titleText, p.fBody.p, Rc(titleX, 0, titleW + 4, kTitleBarH), t.text);
     
@@ -3805,9 +3965,11 @@ void DrawTitleBar(Panel& p) {
     AddHit(p, hiddenId, hiddenPill);
     
     // Draw hidden count pill badge (Win11 style) with hover effect
+    const Xf prevPill = BeginSpring(p, hiddenId, hiddenPill);
     FillRR(p, hiddenPill, 9.0f, WithAlpha(t.textSecondary, 0.15f));
     DrawHoverBg(p, hiddenId, hiddenPill, 9.0f);  // Fluent hover effect
     DrawTxt(p, hiddenText.c_str(), p.fBadge.p, hiddenPill, WithAlpha(t.textSecondary, 0.75f));
+    EndSpring(p, prevPill);
     
     // Close button on the far right
     D2D1_RECT_F closeRect = Rc(kPanelW - kCloseButtonW, 0, kCloseButtonW, kTitleBarH);
@@ -3945,6 +4107,8 @@ constexpr float kWaveStroke = 6.0f;    // DIP, the bar's thickness
 constexpr float kSeparatorW = 5.0f;    // DIP, the vertical separator
 constexpr float kSeparatorH = 20.0f;   // DIP
 constexpr float kSeparatorGap = 5.0f;  // visible gap between the bar and the separator
+constexpr float kSeparatorDotR = 3.0f;  // DIP, radius of the solid dot that replaces the separator in the compact view
+constexpr float kSeparatorDotGap = 2.0f;  // DIP, gap on each side of that dot
 
 // Strokes an open polyline with round caps. Points are in panel coordinates.
 void StrokePolyline(Panel& p, const std::vector<D2D1_POINT_2F>& pts,
@@ -3974,7 +4138,7 @@ void StrokePolyline(Panel& p, const std::vector<D2D1_POINT_2F>& pts,
 // `track` is the bar's rectangle in panel coordinates before the scroll offset;
 // its vertical centre is the bar's centre line.
 void DrawWavyTrack(Panel& p, const D2D1_RECT_F& track, double frac, bool playing,
-                   bool separator) {
+                   bool separator, bool dot = false) {
     const float cy = (track.top + track.bottom) / 2.0f;
     const float left = track.left;
     const float right = track.right;
@@ -3988,7 +4152,9 @@ void DrawWavyTrack(Panel& p, const D2D1_RECT_F& track, double frac, bool playing
 
     // Both parts stop short of the separator: the distance from its centre to the
     // end of each part is half its width, the gap, and the round cap of the bar.
-    const float reach = kSeparatorW / 2.0f + kSeparatorGap + kWaveStroke / 2.0f;
+    const float reach = (dot ? kSeparatorDotR + kSeparatorDotGap
+                             : kSeparatorW / 2.0f + kSeparatorGap) +
+                        kWaveStroke / 2.0f;
     const float xA = xEnd - reach;  // end of the played part
     const float xB = xEnd + reach;  // start of the unplayed part
 
@@ -4025,9 +4191,13 @@ void DrawWavyTrack(Panel& p, const D2D1_RECT_F& track, double frac, bool playing
 
     // The thick separator: always visible while the track can be seeked (Pixel style).
     if (separator) {
-        FillRR(p, Rc(xEnd - kSeparatorW / 2.0f, cy - kSeparatorH / 2.0f, kSeparatorW,
-                     kSeparatorH),
-               kSeparatorW / 2.0f, p.th.accent);
+        if (dot) {
+            FillCircle(p, xEnd, cy, kSeparatorDotR, p.th.accent);
+        } else {
+            FillRR(p, Rc(xEnd - kSeparatorW / 2.0f, cy - kSeparatorH / 2.0f, kSeparatorW,
+                         kSeparatorH),
+                   kSeparatorW / 2.0f, p.th.accent);
+        }
     }
 }
 
@@ -4036,8 +4206,8 @@ void DrawPlayButton(Panel& p, int i, const MediaInfo& m, const D2D1_RECT_F& rPla
     const Theme& t = p.th;
     const int idPlay = MakeId(kHitMediaPlay, i);
     // Play / pause: accent filled circle.
-    float cx = (rPlay.left + rPlay.right) / 2;
-    float cy = (rPlay.top + rPlay.bottom) / 2;
+    const float cx = (rPlay.left + rPlay.right) / 2;
+    const float cy = (rPlay.top + rPlay.bottom) / 2;
     D2D1_COLOR_F fill = t.accent;
     if (!m.canToggle) {
         fill = t.track;
@@ -4049,28 +4219,104 @@ void DrawPlayButton(Panel& p, int i, const MediaInfo& m, const D2D1_RECT_F& rPla
             fill = t.accentHover;
         }
     }
-    // Scale about the button center (the panel offsets are already in the
-    // coordinates, so they are part of the center too).
-    const float ps = i == p.springIdx ? p.pressScale : 1.0f;
-    D2D1_MATRIX_3X2_F identity = {};
-    identity.m11 = 1.0f;
-    identity.m22 = 1.0f;
-    D2D1_MATRIX_3X2_F scaled = {};
-    scaled.m11 = ps;
-    scaled.m22 = ps;
-    scaled.dx = (cx + p.ox) * (1 - ps);
-    scaled.dy = (cy + p.oy) * (1 - ps);
-    p.rt->SetTransform(ps != 1.0f ? &scaled : &identity);
+    const Xf prev = BeginSpring(p, idPlay, rPlay);
     FillCircle(p, cx, cy, 20.0f, fill);
-    DrawTxt(p, m.playing ? kGlyphPause : kGlyphPlay, p.fIconBig.p, rPlay,
-            t.onAccent);
-    p.rt->SetTransform(&identity);
+    DrawTxt(p, m.playing ? kGlyphPause : kGlyphPlay, p.fIconBig.p, rPlay, t.onAccent);
+    EndSpring(p, prev);
+}
+
+// Previous / next button of a media card. Its look is the same as before (hover
+// fill with the fade); it has the press spring of play / pause.
+void DrawSkipButton(Panel& p, int i, int kind, const D2D1_RECT_F& r, PCWSTR glyph,
+                    bool enabled) {
+    const Theme& t = p.th;
+    const int id = MakeId(kind, i);
+    if (enabled) {
+        AddHit(p, id, r);
+    }
+    const Xf prev = BeginSpring(p, id, r);
+    if (enabled) {
+        DrawHoverBg(p, id, r, kRadiusCtl);
+    }
+    DrawTxt(p, glyph, p.fIcon.p, r, enabled ? t.text : WithAlpha(t.textSecondary, 0.5f));
+    EndSpring(p, prev);
 }
 
 ID2D1Bitmap* MediaSourceBitmap(Panel& p, const MediaInfo& m);
 
 // Normal card: the cover and text, then the transport buttons.
 constexpr float kMediaCardH = 172.0f;
+// Opacity of the cover that fills a media card (1 = opaque).
+constexpr float kCardCoverOpacity = 0.7f;
+
+// Draws a picture over a rounded rectangle: the picture fills the rectangle (centre
+// crop, no stretching) at the given opacity. The mask follows the panel's transform,
+// so a pressed card shrinks its cover with it.
+void DrawCoverFill(Panel& p, ID2D1Bitmap* bmp, const D2D1_RECT_F& r, float radius,
+                   float opacity) {
+    if (!bmp) {
+        return;
+    }
+    // The press spring scales the panel's drawing, so the rectangle is worked out in
+    // device space here. The layer and the picture are then drawn with no transform,
+    // so the mask and the picture always have the same size.
+    const D2D1_RECT_F o = Off(p, r);
+    const float s = p.xf.s;
+    const D2D1_RECT_F dst = {o.left * s + p.xf.tx, o.top * s + p.xf.ty,
+                             o.right * s + p.xf.tx, o.bottom * s + p.xf.ty};
+    const float w = dst.right - dst.left;
+    const float h = dst.bottom - dst.top;
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+
+    D2D1_MATRIX_3X2_F identity = {};
+    identity.m11 = 1.0f;
+    identity.m22 = 1.0f;
+    p.rt->SetTransform(&identity);
+
+    D2D1_ROUNDED_RECT rr = {dst, radius * s, radius * s};
+    ID2D1RoundedRectangleGeometry* mask = nullptr;
+    if (SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(&rr, &mask))) {
+        D2D1_LAYER_PARAMETERS lp = {};
+        lp.contentBounds = D2D1_RECT_F{-1e6f, -1e6f, 1e6f, 1e6f};
+        lp.geometricMask = mask;
+        lp.maskAntialiasMode = D2D1_ANTIALIAS_MODE_PER_PRIMITIVE;
+        lp.maskTransform = identity;
+        lp.opacity = p.alpha * opacity;
+        lp.layerOptions = D2D1_LAYER_OPTIONS_NONE;
+        p.rt->PushLayer(&lp, nullptr);
+
+        // Centre crop of the square picture, so that it covers the whole rectangle.
+        const D2D1_SIZE_F sz = bmp->GetSize();
+        float srcW = sz.width;
+        float srcH = sz.height;
+        if (w / h > sz.width / sz.height) {
+            srcH = sz.width * h / w;
+        } else {
+            srcW = sz.height * w / h;
+        }
+        const D2D1_RECT_F src = {(sz.width - srcW) / 2, (sz.height - srcH) / 2,
+                                 (sz.width + srcW) / 2, (sz.height + srcH) / 2};
+        // Cubic filter (16 samples) for the stretch; the layer carries the opacity.
+        // The transform maps the cropped part of the picture onto the card.
+        const float k = w / srcW;
+        D2D1_MATRIX_3X2_F scale = {};
+        scale.m11 = k;
+        scale.m22 = k;
+        scale.dx = dst.left;
+        scale.dy = dst.top;
+        p.rt->SetTransform(&scale);
+        const D2D1_POINT_2F at = {0.0f, 0.0f};
+        p.dc->DrawImage(bmp, &at, &src, D2D1_INTERPOLATION_MODE_CUBIC,
+                        D2D1_COMPOSITE_MODE_SOURCE_OVER);
+        p.rt->SetTransform(&identity);
+        p.rt->PopLayer();
+        mask->Release();
+    }
+
+    ApplyXf(p);  // back to the panel's transform for what is drawn next
+}
 
 void DrawMediaCard(Panel& p, int i, const MediaInfo& m, float y) {
     const Theme& t = p.th;
@@ -4078,7 +4324,29 @@ void DrawMediaCard(Panel& p, int i, const MediaInfo& m, float y) {
     D2D1_RECT_F card = Rc(kPad, y, W - 2 * kPad, kMediaCardH);
     // Added first, so the buttons on top of it win the hit test.
     AddHit(p, MakeId(kHitMediaCard, i), card);
+    const Xf prevCard = BeginSpring(p, MakeId(kHitMediaCard, i), card);
     FillRR(p, card, kRadiusCtl, t.card);
+    // Cover style: the cover fills the card, slightly transparent, under the text and
+    // the controls; or it is a small square on the left.
+    {
+        auto it = p.covers.find(m.key);
+        const bool hasCover = it != p.covers.end() && it->second.bmp;
+        if (g_cardCover == 1) {
+            if (hasCover) {
+                DrawCoverFill(p, it->second.bmp, card, kRadiusCtl, kCardCoverOpacity);
+            } else {
+                DrawTxt(p, L"\xE90B", p.fIconHuge.p, card, WithAlpha(t.textSecondary, 0.25f));
+            }
+        } else if (g_cardCover == 0) {
+            const D2D1_RECT_F small = Rc(kPad + 12, y + 12, 64, 64);
+            if (hasCover) {
+                DrawBmp(p, it->second.bmp, small);
+            } else {
+                FillRR(p, small, kRadiusCtl, t.hover);
+                DrawTxt(p, L"\xE90B", p.fIconBig.p, small, t.textSecondary);
+            }
+        }
+    }
     StrokeRR(p, card, kRadiusCtl, t.cardBorder);
     const float hl = MediaHighlight(p, m.key);
     if (hl > 0.0f) {
@@ -4088,16 +4356,7 @@ void DrawMediaCard(Panel& p, int i, const MediaInfo& m, float y) {
     }
 
     float L = kPad + 12;
-    D2D1_RECT_F cover = Rc(L, y + 12, 64, 64);
-    auto ce = p.covers.find(m.key);
-    if (ce != p.covers.end() && ce->second.bmp) {
-        DrawBmp(p, ce->second.bmp, cover);
-    } else {
-        FillRR(p, cover, kRadiusCtl, t.hover);
-        DrawTxt(p, L"\xE90B", p.fIconBig.p, cover, t.textSecondary);
-    }
-
-    float tx = L + 76;
+    float tx = g_cardCover ? L : L + 76;
     float tw = W - kPad - 12 - tx;
     DrawScrollingLine(p, m.title, p.fName.p, Rc(tx, y + 12, tw, 22), t.text, m.playing);
     DrawScrollingLine(p, m.artist, p.fBody.p, Rc(tx, y + 34, tw, 18), t.textSecondary,
@@ -4141,27 +4400,10 @@ void DrawMediaCard(Panel& p, int i, const MediaInfo& m, float y) {
     D2D1_RECT_F rPrev = Rc(x0, y + 124, 40, 40);
     D2D1_RECT_F rPlay = Rc(x0 + 52, y + 124, 40, 40);
     D2D1_RECT_F rNext = Rc(x0 + 104, y + 124, 40, 40);
-    int idPrev = MakeId(kHitMediaPrev, i);
-    int idNext = MakeId(kHitMediaNext, i);
-
-    struct Btn {
-        int id;
-        const D2D1_RECT_F* r;
-        PCWSTR glyph;
-        bool enabled;
-    } btns[] = {{idPrev, &rPrev, kGlyphPrev, m.canPrev},
-                {idNext, &rNext, kGlyphNext, m.canNext}};
-    for (const Btn& b : btns) {
-        if (b.enabled) {
-            AddHit(p, b.id, *b.r);
-            DrawHoverBg(p, b.id, *b.r, kRadiusCtl);
-        }
-        DrawTxt(p, b.glyph, p.fIcon.p, *b.r,
-                b.enabled ? t.text : WithAlpha(t.textSecondary, 0.5f));
-    }
-
+    DrawSkipButton(p, i, kHitMediaPrev, rPrev, kGlyphPrev, m.canPrev);
+    DrawSkipButton(p, i, kHitMediaNext, rNext, kGlyphNext, m.canNext);
     DrawPlayButton(p, i, m, rPlay);
-
+    EndSpring(p, prevCard);
 }
 
 // Chrome volume bar, pinned to the bottom of the Media tab.
@@ -4243,7 +4485,7 @@ void DrawCoverProgress(Panel& p, int i, const MediaInfo& m, const D2D1_RECT_F& r
         DrawTxt(p, L"-" + FormatTime((std::max)(0LL, dur - pos)), p.fTimeRight.p,
                 Rc(L + trackW / 2, labelTop, trackW / 2, 14.0f), labelCol);
     }
-    DrawWavyTrack(p, track, frac, m.playing, m.canSeek);
+    DrawWavyTrack(p, track, frac, m.playing, m.canSeek, true);
 }
 
 // Compact view: only the cover, with the normal card's border. Hover darkens it
@@ -4254,6 +4496,7 @@ void DrawMediaCover(Panel& p, int i, const MediaInfo& m, const D2D1_RECT_F& r) {
     const int playId = MakeId(kHitMediaPlay, i);
     const int seekId = MakeId(kHitMediaSeek, i);
     AddHit(p, cardId, r);  // right click and hover target
+    const Xf prevCover = BeginSpring(p, cardId, r);
 
     // One fade for the whole tile: on while the cursor is over the tile, its button
     // or its progress bar. Moving between them keeps it steady.
@@ -4273,7 +4516,7 @@ void DrawMediaCover(Panel& p, int i, const MediaInfo& m, const D2D1_RECT_F& r) {
     // The cover fades out, a grey panel fades in under it.
     p.alpha = baseAlpha * (1.0f - hv);
     auto ce = p.covers.find(m.key);
-    if (ce != p.covers.end() && ce->second.bmp) {
+    if (ce != p.covers.end() && ce->second.bmp && g_cardCover != 2) {
         DrawBmp(p, ce->second.bmp, r);
     } else {
         FillRR(p, r, kRadiusCtl, t.hover);
@@ -4316,6 +4559,7 @@ void DrawMediaCover(Panel& p, int i, const MediaInfo& m, const D2D1_RECT_F& r) {
         StrokeRR(p, r, kRadiusCtl, WithAlpha(t.accent, hl));
         StrokeRR(p, r, kRadiusCtl, WithAlpha(t.accent, hl));
     }
+    EndSpring(p, prevCover);
 }
 
 void DrawMediaTab(Panel& p, float top, float bottom) {
@@ -4357,7 +4601,7 @@ void DrawMediaTab(Panel& p, float top, float bottom) {
             p.alpha = baseAlpha * 0.85f;
             p.hitsOn = false;
             DrawMediaCover(p, p.libDownIdx, p.media[p.libDownIdx],
-                           Rc(p.libDragX - cell / 2, p.libDragY - cell / 2, cell, cell));
+                           Rc(p.libDragX - p.grabX - cell / 2, p.libDragY - p.grabY - cell / 2, cell, cell));
             p.hitsOn = saveHits;
             p.alpha = baseAlpha;
         }
@@ -4382,7 +4626,7 @@ void DrawMediaTab(Panel& p, float top, float bottom) {
             const bool saveHits = p.hitsOn;
             p.alpha = baseAlpha * 0.85f;
             p.hitsOn = false;
-            DrawMediaCard(p, p.libDownIdx, p.media[p.libDownIdx], p.libDragY - kMediaCardH / 2);
+            DrawMediaCard(p, p.libDownIdx, p.media[p.libDownIdx], p.libDragY - p.grabY - kMediaCardH / 2);
             p.hitsOn = saveHits;
             p.alpha = baseAlpha;
         }
@@ -4397,11 +4641,12 @@ void DrawMediaTab(Panel& p, float top, float bottom) {
 }
 
 // One tile of the Apps / Library grids.
-void DrawTile(Panel& p, int id, const D2D1_RECT_F& r, const TileData& d) {
+void DrawTile(Panel& p, int id, const D2D1_RECT_F& r, const TileData& d, int springId = -1) {
     const Theme& t = p.th;
     float w = r.right - r.left;
     float h = r.bottom - r.top;
     AddHit(p, id, r);
+    const Xf prevTile = BeginSpring(p, springId < 0 ? id : springId, r);
     FillRR(p, r, kRadiusCtl, t.card);
     StrokeRR(p, r, kRadiusCtl, t.cardBorder);
     DrawHoverBg(p, id, r, kRadiusCtl);
@@ -4462,9 +4707,12 @@ void DrawTile(Panel& p, int id, const D2D1_RECT_F& r, const TileData& d) {
                                    ? Rc(r.right - 19, r.bottom - 19, 18, 18)
                                    : Rc(r.right - 26, r.top + (h - 20) / 2, 20, 20);
         AddHit(p, iconId, ib);
+        const Xf prevIcon = BeginSpring(p, iconId, ib);
         DrawHoverBg(p, iconId, ib, kRadiusCtl);
         DrawTxt(p, kGlyphVol3, p.fMenuIcon.p, ib, t.text);
+        EndSpring(p, prevIcon);
     }
+    EndSpring(p, prevTile);
 }
 
 // Lays the tiles out in a grid starting at `top` (already scrolled). Returns
@@ -4525,7 +4773,7 @@ void DrawDragGhost(Panel& p, const TileData& d) {
     p.alpha = baseAlpha * 0.85f;
     p.hitsOn = false;  // the ghost must not become a drop target
     DrawTile(p, MakeId(kHitTile, 0xFFFE),
-             Rc(p.libDragX - tw / 2, p.libDragY - th / 2, tw, th), d);
+             Rc(p.libDragX - p.grabX - tw / 2, p.libDragY - p.grabY - th / 2, tw, th), d, p.dragPressId);
     p.hitsOn = saveHits;
     p.alpha = baseAlpha;
 }
@@ -4602,6 +4850,7 @@ void DrawNotifsTab(Panel& p, float top, float bottom) {
         }
         int id = MakeId(kHitRow, (int)i);
         AddHit(p, id, r);
+        const Xf prevRow = BeginSpring(p, id, r);
         FillRR(p, r, kRadiusCtl, t.card);
         StrokeRR(p, r, kRadiusCtl, t.cardBorder);
         DrawHoverBg(p, id, r, kRadiusCtl);
@@ -4621,6 +4870,7 @@ void DrawNotifsTab(Panel& p, float top, float bottom) {
         DrawTxt(p, row.title, p.fName.p, Rc(tx, r.top + 6, tw, 20), t.text);
         DrawTxt(p, row.body, p.fBodyWrap.p, Rc(tx, r.top + 27, tw, 34),
                 t.textSecondary);
+        EndSpring(p, prevRow);
     }
     if (drag && p.libDownIdx < (int)p.rows.size()) {
         const NotifRow& row = p.rows[p.libDownIdx];
@@ -4629,7 +4879,7 @@ void DrawNotifsTab(Panel& p, float top, float bottom) {
         const bool saveHits = p.hitsOn;
         p.alpha = baseAlpha * 0.85f;
         p.hitsOn = false;
-        const D2D1_RECT_F gr = Rc(kPad, p.libDragY - 32, kPanelW - 2 * kPad, 64);
+        const D2D1_RECT_F gr = Rc(kPad, p.libDragY - p.grabY - 32, kPanelW - 2 * kPad, 64);
         FillRR(p, gr, kRadiusCtl, t.card);
         StrokeRR(p, gr, kRadiusCtl, t.cardBorder);
         if (ID2D1Bitmap* b = AppBitmap(p, a)) {
@@ -4675,6 +4925,7 @@ void DrawChips(Panel& p, float y) {
             continue;  // the dragged chip is drawn under the pointer
         }
         AddHit(p, id, r);
+        const Xf prevChip = BeginSpring(p, id, r);
         bool sel = !isAdd && (int)i == p.chipSel;
         if (sel) {
             FillRR(p, r, kRadiusCtl, t.accent);
@@ -4692,6 +4943,7 @@ void DrawChips(Panel& p, float y) {
             FillRR(p, r, kRadiusCtl, WithAlpha(t.accent, 0.25f));
             StrokeRR(p, r, kRadiusCtl, t.accent);
         }
+        EndSpring(p, prevChip);
         x += w + gap;
     }
     p.chipContentW = (x - gap) - startX + 2 * kPad;
@@ -4708,7 +4960,7 @@ void DrawChips(Panel& p, float y) {
         const bool saveHits = p.hitsOn;
         p.alpha = baseAlpha * 0.85f;
         p.hitsOn = false;
-        const D2D1_RECT_F gr = Rc(p.libDragX - p.chipGhostW / 2, y, p.chipGhostW, h);
+        const D2D1_RECT_F gr = Rc(p.libDragX - p.grabX - p.chipGhostW / 2, y, p.chipGhostW, h);
         FillRR(p, gr, kRadiusCtl, t.accent);
         DrawTxt(p, g_categories[p.libDownIdx - 1].name, p.fCenter.p, gr, t.onAccent);
         p.alpha = baseAlpha;
@@ -4808,6 +5060,7 @@ const SettingRow kSettingRows[] = {
     {kPrefPanelMode, false, L"Center mode", L"\xE718", kOptPanelMode, false},
     {kPrefBackdrop, false, L"Backdrop", L"\xE771", kOptBackdrop, false},
     {-1, false, L"Open shortcut", kGlyphRename, nullptr, true},
+    {kPrefCardCover, false, L"Cover style", L"\xE8B9", kOptCardCover, false},
     {kPrefMediaCompact, true, L"Compact view", L"\xF232", nullptr, false},
     {kPrefShowVolume, true, L"Chrome volume", L"\xE767", nullptr, false},
     {kPrefAppDisplay, false, L"App view", L"\xF207", kOptAppDisplay, false},
@@ -4818,10 +5071,10 @@ const SettingRow kSettingRows[] = {
 
 const SettingGroup kSettingGroups[] = {
     {L"\xE7C4", L"Panel", 0, 3},
-    {L"\xE768", L"Media", 3, 2},
-    {L"\xF2CE", L"PWAs", 5, 1},
-    {L"\xE7E7", L"Notifications", 6, 2},
-    {L"\xE756", L"Advanced", 8, 1},
+    {L"\xE768", L"Media", 3, 3},
+    {L"\xF2CE", L"PWAs", 6, 1},
+    {L"\xE7E7", L"Notifications", 7, 2},
+    {L"\xE756", L"Advanced", 9, 1},
 };
 
 constexpr int kSettingRowCount = (int)(sizeof(kSettingRows) / sizeof(kSettingRows[0]));
@@ -5623,7 +5876,7 @@ void BuildDiagReport(Panel& p) {
         s += t;
         s += L"\n";
     };
-    line(std::wstring(L"PWA Center ") + kAppVersion);
+    line(std::wstring(L"PWA Tray Center ") + kAppVersion);
     line(L"Windows build " + std::to_wstring(GetWindowsBuild()));
     line(std::wstring(L"Center: ") + kOptPanelMode[g_panelMode.load()] + L", backdrop " +
          kOptBackdrop[g_backdrop.load()]);
@@ -6752,10 +7005,6 @@ void OnContextMenu(Panel& p, int hit, float x, float y) {
         items.push_back(mp);
         items.push_back(mprev);
         items.push_back(mnext);
-        items.push_back(MakeSep());
-        MenuItem view = MakeItem(kCmdToggleMediaView, L"Compact view");
-        view.checked = g_mediaCompact != 0;
-        items.push_back(view);
         if (target) {
             ctx.hwnd = target;
             items.push_back(MakeSep());
@@ -7322,6 +7571,22 @@ LRESULT CALLBACK MouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
 
 void ShowPendingHiddenNotes(Panel& p);
 
+// Remembers where the press grabbed the dragged element, measured from its centre.
+// The ghost keeps that point under the pointer, so the element does not jump to
+// the pointer when the drag starts.
+void SetGrab(Panel& p, int id) {
+    for (size_t i = p.hits.size(); i-- > 0;) {
+        if (p.hits[i].id == id) {
+            const D2D1_RECT_F& r = p.hits[i].r;
+            p.grabX = p.libDownX - (r.left + r.right) / 2;
+            p.grabY = p.libDownY - (r.top + r.bottom) / 2;
+            return;
+        }
+    }
+    p.grabX = 0;
+    p.grabY = 0;
+}
+
 LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_NCCREATE && g_panel) {
         g_panel->hwnd = hwnd;
@@ -7484,6 +7749,8 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 const float dy = fy - p->libDownY;
                 if (!p->libDragging && dx * dx + dy * dy > 36.0f) {
                     p->libDragging = true;
+                    p->dragPressId = MakeId(p->libDragKind, p->libDownIdx);
+                    SetGrab(*p, p->dragPressId);
                     p->pressed = kHitNone;  // the release must not launch the app
                 }
                 if (p->libDragging) {
@@ -7516,6 +7783,7 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_LBUTTONDOWN: {
             float fx = toDipX(lParam);
             float fy = toDipY(lParam);
+            p->settle.active = false;
             
             // Check if clicking close button
             if (p->closeHover && fy < kTitleBarH) {
@@ -7621,9 +7889,6 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     SetCapture(hwnd);
                 }
             }
-            if (KindOf(hit) == kHitMediaPlay) {
-                p->springIdx = IndexOf(hit);
-            }
             StartAnim(*p);
             return 0;
         }
@@ -7659,10 +7924,15 @@ LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 ReleaseCapture();
                 if (dragged) {
                     p->pressed = kHitNone;
-                    if (kind == kHitChip) {
-                        ReorderCategories(*p, from, to);
-                    } else {
-                        ReorderDragged(*p, tab, from, to);
+                    // The element glides from the pointer to its slot. Dropped outside,
+                    // it glides back to where it came from.
+                    BeginSettle(*p, kind, to >= 0 ? to : from);
+                    if (to >= 0) {
+                        if (kind == kHitChip) {
+                            ReorderCategories(*p, from, to);
+                        } else {
+                            ReorderDragged(*p, tab, from, to);
+                        }
                     }
                     InvalidateRect(hwnd, nullptr, FALSE);
                     return 0;
@@ -8052,7 +8322,7 @@ void ShowPendingHiddenNotes(Panel& p) {
             }
         }
         if (found && found->hidden) {
-            PushNote(p, NotifSeverity::Info, L"Hidden to PWA Center", found->name,
+            PushNote(p, NotifSeverity::Info, L"Hidden to PWA Tray Center", found->name,
                      nullptr, AppBitmap(p, *found));
         } else if (IsWindow(item.first)) {
             keep.push_back(item);
@@ -8347,7 +8617,7 @@ void SyncTray(HWND host) {
     }
     bool badge = unread > 0;
     bool dark = IsSystemDark();
-    std::wstring tip = L"PWA Center \x00B7 " + std::to_wstring(hidden.size()) +
+    std::wstring tip = L"PWA Tray Center \x00B7 " + std::to_wstring(hidden.size()) +
                        (hidden.size() == 1 ? L" app" : L" apps");
     if (unread > 0) {
         tip += L" \x00B7 " + std::to_wstring(unread) + L" unread";
@@ -8549,7 +8819,7 @@ DWORD WINAPI CenterThreadProc(LPVOID) {
     const bool registered = RegisterClassExW(&wc) != 0;
 
     HWND host = registered
-                    ? CreateWindowExW(WS_EX_TOOLWINDOW, kHostClass, L"PWA Center",
+                    ? CreateWindowExW(WS_EX_TOOLWINDOW, kHostClass, L"PWA Tray Center",
                                       WS_POPUP, 0, 0, 0, 0, nullptr, nullptr,
                                       hInstance, nullptr)
                     : nullptr;
@@ -8677,7 +8947,7 @@ void HideFromMenu(HWND hWnd) {
     }
     if (!HideToCenter(hWnd)) {
         MessageBeep(MB_ICONWARNING);
-        Wh_Log(L"PWA Center could not start, so the window stays visible.");
+        Wh_Log(L"PWA Tray Center could not start, so the window stays visible.");
     }
 }
 
@@ -8697,7 +8967,7 @@ void QuitWindow(HWND hWnd) {
     NotifyListChanged();
 }
 
-// Adds the "Hide to PWA Center" item right above "Close" (SC_CLOSE). Does
+// Adds the "Hide to PWA Tray Center" item right above "Close" (SC_CLOSE). Does
 // nothing if the item is already there. Called every time the window menu is
 // opened, since the browser can rebuild the menu items on its own.
 void EnsureWindowMenuItem(HWND hWnd, HMENU menu) {
@@ -8709,7 +8979,7 @@ void EnsureWindowMenuItem(HWND hWnd, HMENU menu) {
         return;
     }
 
-    PCWSTR text = L"Hide to PWA Center";
+    PCWSTR text = L"Hide to PWA Tray Center";
 
     BOOL ok = InsertMenuW(menu, SC_CLOSE, MF_BYCOMMAND | MF_STRING,
                           kMenuIdHideToCenter, text);
