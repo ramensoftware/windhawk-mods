@@ -26,7 +26,6 @@ While similar to [Win10 taskbar on Win11 24H2 or later](https://windhawk.net/mod
 * UWP apps display normally on the taskbar alongside Win32 applications.
 * The system tray is completely custom-built, meaning other mods targeting the notification area **will not work**.
 * The language indicator is currently unavailable, but will be added in a future update.
-* The Notification Center is not implemented.
 
 To restore the network icon, you can install the [Restore legacy network tray](https://windhawk.net/mods/restore-legacy-network-tray) mod, or use any other network indicator of your choice.
 
