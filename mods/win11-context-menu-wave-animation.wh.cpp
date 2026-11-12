@@ -1161,12 +1161,13 @@ static void AnimThreadProc() {
 
             for (auto& a : currentAnims) {
                 // Real Acrylic blur is now captured in fusedPixels!
-                // During the 3D ripple animation, keep real window at alpha=0 so only the ripple is seen:
-                SetLayeredWindowAttributes(a.hwnd, 0, 0, LWA_ALPHA);
+                // Keep real window at alpha=1 (still invisible under the overlay, while keeping
+                // the menu hit-testable so clicks during the ripple reach the menu items):
+                SetLayeredWindowAttributes(a.hwnd, 0, 1, LWA_ALPHA);
             }
 
             // A hook may have cancelled/superseded some of these windows while we were
-            // capturing; its restore ran before the call above, so undo our alpha 0.
+            // capturing; its restore ran before the call above, so undo our alpha 1.
             std::vector<HWND> untracked;
             {
                 std::lock_guard<std::mutex> lock(g_animMutex);
