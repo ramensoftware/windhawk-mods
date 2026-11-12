@@ -7,7 +7,7 @@
 // @description:de-DE Heftet Dateien und Ordner im Datei-Explorer in ihrem übergeordneten Ordner an
 // @description:pt-BR Fixa arquivos e pastas na pasta que os contém no Explorador de Arquivos
 // @description:zh-CN 在文件资源管理器中将文件和文件夹固定在各自的上级文件夹内
-// @version         1.0.1
+// @version         1.0.2
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -16,7 +16,7 @@
 // @architecture    amd64
 // @compilerOptions -lruntimeobject -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdi32 -lcomctl32 -ladvapi32
 // ==/WindhawkMod==
-// Build: 24
+// Build: 25
 
 // ==WindhawkModReadme==
 /*
@@ -1728,6 +1728,15 @@ bool DrawPinnedIndicator(HDC dc, const RECT& icon, const RECT& shortcut) {
     return result;
 }
 
+bool HookExplorerCommandBar(HMODULE extensions, auto* original, auto detour) {
+    const WindhawkUtils::SYMBOL_HOOK fileExplorerExtensionsDllHooks[]{
+        {{LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))"},
+         original, detour},
+    };
+    return WindhawkUtils::HookSymbols(extensions, fileExplorerExtensionsDllHooks,
+                                      std::size(fileExplorerExtensionsDllHooks));
+}
+
 #ifndef EXPLORER_ITEM_PINS_TEST
 IndicatorPins indicatorPins;
 std::optional<PinStore> nativePinStore;
@@ -2454,11 +2463,7 @@ void HookCommandSymbols(bool apply) noexcept try {
     if (!extensions || commandSymbolsAttempted.exchange(true)) return;
     const std::scoped_lock lock(commandHooksMutex);
     if (!commandUiActive) return;
-    const WindhawkUtils::SYMBOL_HOOK hooks[] = {{
-        {LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))"},
-        &commandBarManagerSetBarOriginal, CommandBarManagerSetBarHook,
-    }};
-    if (!WindhawkUtils::HookSymbols(extensions, hooks, ARRAYSIZE(hooks))) {
+    if (!HookExplorerCommandBar(extensions, &commandBarManagerSetBarOriginal, CommandBarManagerSetBarHook)) {
         Wh_Log(L"File Explorer command bar symbol is unavailable");
         return;
     }
