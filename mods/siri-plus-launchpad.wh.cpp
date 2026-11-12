@@ -257,7 +257,7 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   $options:
   - glass: Clear glass
   - light: Light
-  - blackglass: Custom liquid glass
+  - tintedliquid: Custom liquid glass
   - siri: Siri (macOS 27 gradient)
   - dark: Dark
   - oled: OLED (deep black)
@@ -265,7 +265,7 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   $options:pt-BR:
   - glass: Vidro transparente
   - light: Claro
-  - blackglass: Vidro líquido personalizado
+  - tintedliquid: Vidro líquido personalizado
   - siri: Siri (degradê do macOS 27)
   - dark: Escuro
   - oled: OLED (preto profundo)
@@ -370,8 +370,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     $description: The icons and the window under a right-click menu are blurred. 100 = default, up to 200
     $description:pt-BR: "Os ícones e a janela sob um menu de clique direito ficam desfocados. 100 = padrão, até 200"
   - menuSelection: glass
-    $name: "Clear glass theme: selection in menus"
-    $name:pt-BR: "Tema Vidro transparente: seleção nos menus"
+    $name: "Clear glass and Custom liquid glass themes: selection in menus"
+    $name:pt-BR: "Temas Vidro transparente e Vidro líquido personalizado: seleção nos menus"
     $description: How the item under the mouse is highlighted in the menus. Colored and Frosted use the selection color
     $description:pt-BR: "Como o item sob o mouse fica destacado nos menus. Colorida e Fosca usam a cor da seleção"
     $options:
@@ -383,8 +383,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     - color: Colorida (como no macOS)
     - frosted: Cor fosca
   - menuSelectionColor: "#447FEF"
-    $name: "Clear glass theme: selection color"
-    $name:pt-BR: "Tema Vidro transparente: cor da seleção"
+    $name: "Clear glass and Custom liquid glass themes: selection color"
+    $name:pt-BR: "Temas Vidro transparente e Vidro líquido personalizado: cor da seleção"
     $description: "Starts with the macOS blue (#447FEF)"
     $description:pt-BR: "Começa com o azul do macOS (#447FEF)"
   - glassStyle: liquid
@@ -401,17 +401,17 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     $name:pt-BR: "Vidro líquido: refração nas bordas (%)"
     $description: "How much the liquid glass bends what is behind it"
     $description:pt-BR: "Quanto o vidro líquido curva o que está atrás dele"
-  - blackLevel: 100
+  - tintLevel: 100
     $name: "Custom liquid glass theme: color strength at the top (%)"
     $name:pt-BR: "Tema Vidro líquido personalizado: força da cor no topo (%)"
     $description: "100 = solid at the top; lower lets the background show through the dark part too"
     $description:pt-BR: "100 = sólido no topo; menos deixa o fundo aparecer também na parte escura"
-  - blackReach: 29
+  - tintReach: 29
     $name: "Custom liquid glass theme: how far down the color goes (%)"
     $name:pt-BR: "Tema Vidro líquido personalizado: até onde a cor desce (%)"
     $description: "Where the color gives way to the clear glass: lower values keep it near the top, higher values bring it down"
     $description:pt-BR: "Onde a cor dá lugar ao vidro transparente: valores baixos a mantêm perto do topo, valores altos a trazem para baixo"
-  - blackColor: "#050505"
+  - tintColor: "#050505"
     $name: "Custom liquid glass theme: glass color"
     $name:pt-BR: "Tema Vidro líquido personalizado: cor do vidro"
     $description: "Starts black (#050505); any color works"
@@ -1518,7 +1518,7 @@ std::wstring ToLower(std::wstring text) {
 ////////////////////////////////////////////////////////////////////////////////
 // Settings
 
-enum class Theme { Custom, Light, Glass, Siri, Dark, Oled, Black };
+enum class Theme { Custom, Light, Glass, Siri, Dark, Oled, Tinted };
 enum class Anim { Zoom, Fade, Slide, Crt };
 enum class Indexer { Auto, Everything, Windows, Scan };
 
@@ -1544,9 +1544,9 @@ struct Settings {
     bool glassLiquid = true;       // glass themes: refraction (liquid glass) instead of the live blur
     int refraction = 70;          // liquid glass: how far the edges bend the background (%)
     bool liveGlass = true;        // liquid glass: picture retaken while open (hides the launcher from captures)
-    int blackLevel = 100;         // Custom liquid glass theme: how solid the color is at the top (%)
-    int blackReach = 29;          // Custom liquid glass theme: how far down the color goes before the clear glass (%)
-    D2D1_COLOR_F blackColor = D2D1::ColorF(0x050505);   // Custom liquid glass theme: the color of the glass
+    int tintLevel = 100;         // Custom liquid glass theme: how solid the color is at the top (%)
+    int tintReach = 29;          // Custom liquid glass theme: how far down the color goes before the clear glass (%)
+    D2D1_COLOR_F tintColor = D2D1::ColorF(0x050505);   // Custom liquid glass theme: the color of the glass
     bool light = false;           // light mode (any theme): no liquid glass, no live blur, no blur behind menus, no shadows, at most 60 fps
     int maxFps = 0;               // frame rate limit (0 = the monitor's)
     bool cpuDraw = false;         // draw with the processor (no graphics card)
@@ -3387,7 +3387,7 @@ constexpr int kCfgSectionCount = (int)ARRAYSIZE(kCfgSections);
 const CfgOpt kOptMode[] = {{L"siriOriginal", L"Original Siri", L"Siri original"}, {L"siri", L"Floating", L"Flutuante"},
                            {L"window", L"Window", L"Janela"}, {L"fullscreen", L"Fullscreen", L"Tela cheia"}};
 const CfgOpt kOptTheme[] = {{L"glass", L"Clear glass", L"Vidro transparente"}, {L"light", L"Light", L"Claro"},
-                            {L"blackglass", L"Custom liquid glass", L"Vidro líquido personalizado"}, {L"siri", L"Siri gradient", L"Degradê Siri"}, {L"dark", L"Dark", L"Escuro"},
+                            {L"tintedliquid", L"Custom liquid glass", L"Vidro líquido personalizado"}, {L"siri", L"Siri gradient", L"Degradê Siri"}, {L"dark", L"Dark", L"Escuro"},
                             {L"oled", L"OLED (deep black)", L"OLED (preto profundo)"}, {L"custom", L"Custom", L"Personalizado"}};
 const CfgOpt kOptGlass[] = {{L"frosted", L"Translucent glass", L"Vidro translúcido"}, {L"liquid", L"Liquid glass", L"Vidro líquido"}};
 const CfgOpt kOptClipKeep[] = {{L"always", L"Until Windows restarts", L"Até o Windows reiniciar"}, {L"15m", L"15 minutes", L"15 minutos"},
@@ -3468,14 +3468,14 @@ const CfgItem kCfgItems[] = {
      L"Videos move inside the glass, but the launcher no longer shows in screenshots and recordings. Used the next time it opens",
      L"Vídeos se mexem dentro do vidro, mas o menu deixa de aparecer em prints e gravações. Vale na próxima vez que abrir",
      0, 0, 0, nullptr, nullptr, 0},
-    {1, kCfgGroup, L"#g.black", L"Custom liquid glass", L"Vidro líquido personalizado", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {1, kCfgSlider, L"appearance.blackLevel", L"Color strength at the top", L"Força da cor no topo",
+    {1, kCfgGroup, L"#g.tinted", L"Custom liquid glass", L"Vidro líquido personalizado", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgSlider, L"appearance.tintLevel", L"Color strength at the top", L"Força da cor no topo",
      L"100 = solid at the top; lower lets the background show through the dark part too. The clear part follows Glass transparency",
      L"100 = sólido no topo; menos deixa o fundo aparecer também na parte escura. A parte transparente segue a Transparência do vidro", 0, 100, 1, L"%", nullptr, 0},
-    {1, kCfgSlider, L"appearance.blackReach", L"How far down the color goes", L"Até onde a cor desce",
+    {1, kCfgSlider, L"appearance.tintReach", L"How far down the color goes", L"Até onde a cor desce",
      L"Where the color gives way to the clear glass: lower values keep it near the top, higher values bring it down",
      L"Onde a cor dá lugar ao vidro transparente: valores baixos a mantêm perto do topo, valores altos a trazem para baixo", 0, 100, 1, L"%", nullptr, 0},
-    {1, kCfgColor, L"appearance.blackColor", L"Glass color", L"Cor do vidro",
+    {1, kCfgColor, L"appearance.tintColor", L"Glass color", L"Cor do vidro",
      L"Starts black; any color works. Light colors get dark text", L"Começa preto; qualquer cor funciona. Cores claras ganham texto escuro",
      0, 0, 0, nullptr, nullptr, 0},
     {1, kCfgToggle, L"appearance.glassEffect", L"Glass effect on Light, Dark and OLED", L"Efeito vidro nos temas Claro, Escuro e OLED",
@@ -3745,7 +3745,7 @@ void CfgRefreshValues() {
         g_cfgValues[it.key] = CfgIsInt(it) ? std::to_wstring(CfgInt(it.key)) : CfgStr(it.key);
     }
     g_cfgValues[L"appearance.transparency"] = std::to_wstring(g_settings.glassTransparency);   // the active theme's own
-    g_cfgValues[L"appearance.blur"] = std::to_wstring(g_settings.blurAmount);                   // Custom liquid glass starts at 0
+    g_cfgValues[L"appearance.blur"] = std::to_wstring(g_settings.blurAmount);                   // the active theme's own too
     if (g_cfgOverridesDirty) SaveCfgOverrides();
 }
 
@@ -3811,9 +3811,9 @@ const CfgDefault kCfgDefaults[] = {
     {L"appearance.refraction", L"70"},
     {L"appearance.glassEffect", L"1"},
     {L"appearance.liveGlass", L"1"},
-    {L"appearance.blackLevel", L"100"},
-    {L"appearance.blackReach", L"29"},
-    {L"appearance.blackColor", L"#050505"},
+    {L"appearance.tintLevel", L"100"},
+    {L"appearance.tintReach", L"29"},
+    {L"appearance.tintColor", L"#050505"},
     {L"custom.color", L"#1e1e1e"},
     {L"custom.opacity", L"60"},
     {L"custom.shading", L"70"},
@@ -3883,7 +3883,7 @@ PCWSTR ThemeName(Theme t) {
     switch (t) {
         case Theme::Light: return L"light";
         case Theme::Siri: return L"siri";
-        case Theme::Black: return L"blackglass";
+        case Theme::Tinted: return L"tintedliquid";
         case Theme::Dark: return L"dark";
         case Theme::Oled: return L"oled";
         case Theme::Custom: return L"custom";
@@ -3910,12 +3910,21 @@ int ThemeTransparency(Theme t, int fromWindhawk) {
     if (!g_themeTransparencyLoaded) LoadThemeTransparency();
     auto found = g_themeTransparency.find(ThemeName(t));
     if (found != g_themeTransparency.end()) return found->second;
+    // (the same store also keeps each theme's own blur, under "<theme>#blur")
     // Light and OLED start solid and Custom liquid glass starts fully clear below its color,
     // unless the Windhawk setting was moved from its default (80): then it counts
     if (fromWindhawk != 80) return fromWindhawk;
-    return (t == Theme::Light || t == Theme::Oled) ? 0 : t == Theme::Black ? 100 : fromWindhawk;
+    return (t == Theme::Light || t == Theme::Oled) ? 0 : t == Theme::Tinted ? 100 : fromWindhawk;
 }
 
+// The blur chosen in the panel is kept for each theme. Without one, Custom liquid glass starts with no blur
+// (the bent picture stays sharp) while the general setting is at its default (60)
+int ThemeBlur(Theme t, int general) {
+    if (!g_themeTransparencyLoaded) LoadThemeTransparency();
+    auto found = g_themeTransparency.find(std::wstring(ThemeName(t)) + L"#blur");
+    if (found != g_themeTransparency.end()) return found->second;
+    return t == Theme::Tinted && general == 60 ? 0 : general;
+}
 void LoadSettings() {
     ++g_cfgVersion;
     Settings s;
@@ -3940,15 +3949,14 @@ void LoadSettings() {
 
     // ② Theme (one for every mode)
     std::wstring theme = S(L"theme");
-    s.theme = theme == L"light" ? Theme::Light : theme == L"siri" ? Theme::Siri : theme == L"blackglass" ? Theme::Black : theme == L"custom" ? Theme::Custom
+    s.theme = theme == L"light" ? Theme::Light : theme == L"siri" ? Theme::Siri : theme == L"tintedliquid" ? Theme::Tinted : theme == L"custom" ? Theme::Custom
             : theme == L"dark" ? Theme::Dark : theme == L"oled" ? Theme::Oled : Theme::Glass;
 
     // ③ Appearance
     s.glassTransparency = ThemeTransparency(s.theme, std::clamp(I(L"appearance.transparency"), 0, 100));
     s.cornerRadius = std::clamp(I(L"appearance.cornerRadius"), 0, 60);
     s.blurAmount = std::clamp(I(L"appearance.blur"), 0, 100);
-    // Custom liquid glass starts with no background blur (the bent picture stays sharp), unless the blur was moved from its default (60)
-    if (s.theme == Theme::Black && s.blurAmount == 60) s.blurAmount = 0;
+    s.blurAmount = ThemeBlur(s.theme, s.blurAmount);
     s.menuBlur = std::clamp(I(L"appearance.menuBlur"), 0, 200);
     {
         std::wstring c = S(L"appearance.menuTextColor");
@@ -3961,9 +3969,9 @@ void LoadSettings() {
     s.glassLiquid = S(L"appearance.glassStyle") == L"liquid";
     s.refraction = std::clamp(I(L"appearance.refraction"), 0, 100);
     s.liveGlass = I(L"appearance.liveGlass") != 0;
-    s.blackLevel = std::clamp(I(L"appearance.blackLevel"), 0, 100);
-    s.blackReach = std::clamp(I(L"appearance.blackReach"), 0, 100);
-    s.blackColor = ParseColor(S(L"appearance.blackColor"), D2D1::ColorF(0x050505));
+    s.tintLevel = std::clamp(I(L"appearance.tintLevel"), 0, 100);
+    s.tintReach = std::clamp(I(L"appearance.tintReach"), 0, 100);
+    s.tintColor = ParseColor(S(L"appearance.tintColor"), D2D1::ColorF(0x050505));
     s.light = S(L"performance") == L"light";
     s.maxFps = std::clamp(_wtoi(S(L"frameRate").c_str()), 0, 240);
     if (s.light) s.maxFps = s.maxFps > 0 ? std::min(s.maxFps, 60) : 60;
@@ -4040,7 +4048,7 @@ void LoadSettings() {
     }
 
     Theme active = s.theme;
-    s.darkText = active == Theme::Light ? true : active == Theme::Black ? Luma(s.blackColor) > 0.6f
+    s.darkText = active == Theme::Light ? true : active == Theme::Tinted ? Luma(s.tintColor) > 0.6f
                : active != Theme::Custom ? false : Luma(s.siri ? s.siriPanelColor : s.tint) > 0.6f;
     // Text color chosen in the settings (every theme but Custom); automatic: clear glass follows the background
     if (active != Theme::Custom) {
@@ -5806,13 +5814,13 @@ bool LiveBlurOn() { return !g_settings.light && g_glassOk && g_transparencyOn &&
 // Margin the window keeps around themed shapes so their shadow is not cut
 float ThemeShadowMargin(float s) {
     switch (ActiveTheme()) {
-        case Theme::Glass: case Theme::Light: case Theme::Siri: case Theme::Dark: case Theme::Oled: case Theme::Black: return std::round(18 * s);
+        case Theme::Glass: case Theme::Light: case Theme::Siri: case Theme::Dark: case Theme::Oled: case Theme::Tinted: return std::round(18 * s);
         default: return 0.0f;
     }
 }
 
 // The themes where the selection in menus can be colored (Clear glass and Custom liquid glass)
-bool MenuSelectionTheme() { Theme t = ActiveTheme(); return t == Theme::Glass || t == Theme::Black; }
+bool MenuSelectionTheme() { Theme t = ActiveTheme(); return t == Theme::Glass || t == Theme::Tinted; }
 // Base color for popups (context menu) that matches the theme
 D2D1_COLOR_F ThemeMenuColor() {
     switch (ActiveTheme()) {
@@ -5821,7 +5829,7 @@ D2D1_COLOR_F ThemeMenuColor() {
         case Theme::Siri: return D2D1::ColorF(0.08f, 0.08f, 0.09f, 0.82f);
         case Theme::Dark: return D2D1::ColorF(0.13f, 0.13f, 0.14f, 0.86f);
         case Theme::Oled: return D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.97f);
-        case Theme::Black: return Alpha(g_settings.blackColor, 0.90f);
+        case Theme::Tinted: return Alpha(g_settings.tintColor, 0.90f);
         default: return Alpha(g_settings.siri ? g_settings.siriPanelColor : g_settings.tint, 0.70f);
     }
 }
@@ -8090,7 +8098,7 @@ bool LiquidSetting() {
     // whole window, and bending all of it (and retaking it live) is far too heavy for every frame
     if (!g_settings.siri || g_settings.light) return false;
     Theme t = ActiveTheme();
-    bool glassTheme = t == Theme::Glass || t == Theme::Siri || t == Theme::Black ||
+    bool glassTheme = t == Theme::Glass || t == Theme::Siri || t == Theme::Tinted ||
                       ((t == Theme::Light || t == Theme::Dark || t == Theme::Oled) && g_settings.glassEffect);
     return glassTheme && g_settings.glassLiquid;
 }
@@ -8313,7 +8321,7 @@ void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, 
         if (theme == Theme::Glass) {
             DrawThemeShadow(r, radius, 0.16f, 10 * s, 4 * s);   // small, discreet: just a sense of depth
         } else {
-            DrawThemeShadow(r, radius, theme == Theme::Light ? 0.14f : (theme == Theme::Oled || theme == Theme::Black) ? 0.30f : 0.18f, 10 * s, 4 * s);
+            DrawThemeShadow(r, radius, theme == Theme::Light ? 0.14f : (theme == Theme::Oled || theme == Theme::Tinted) ? 0.30f : 0.18f, 10 * s, 4 * s);
         }
     }
 
@@ -8340,23 +8348,23 @@ void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, 
         {0.55f, D2D1::ColorF(0.11f, 0.11f, 0.13f, 0.54f)},
         {1.0f, D2D1::ColorF(0.30f, 0.29f, 0.34f, 0.26f)},
     };
-    // Custom liquid glass (Theme::Black): the color is solid at the top and gives way to clear glass further down, where the bent background shows.
+    // Custom liquid glass (Theme::Tinted): the color is solid at the top and gives way to clear glass further down, where the bent background shows.
     // Three separate settings: how solid the top is, where the change happens, and (Glass transparency) how clear the rest is
-    const D2D1_COLOR_F bc = g_settings.blackColor;
-    float blackTop = g_settings.blackLevel / 100.0f;
-    float blackBottom = std::min(blackTop, (100 - transparency) / 100.0f * 0.8f);   // 80 % = a light veil, 100 % = fully clear
+    const D2D1_COLOR_F bc = g_settings.tintColor;
+    float tintTop = g_settings.tintLevel / 100.0f;
+    float tintBottom = std::min(tintTop, (100 - transparency) / 100.0f * 0.8f);   // 80 % = a light veil, 100 % = fully clear
     // Light mode has no blur and no refraction: a see-through bottom would show the page behind it sharp, under the text
-    if (g_settings.light) blackBottom = std::max(blackBottom, std::min(blackTop, 0.55f));
+    if (g_settings.light) tintBottom = std::max(tintBottom, std::min(tintTop, 0.55f));
     // The change is spread over a wide stretch and follows an S curve with no corners (it starts and ends with no slope),
     // in many small steps: the color thins out evenly, with no visible line where it begins or ends
-    float reach = std::clamp(g_settings.blackReach / 100.0f, 0.0f, 1.0f), soft = 0.48f;
-    constexpr int kBlackStops = 25;
-    D2D1_GRADIENT_STOP blackBody[kBlackStops];
-    for (int i = 0; i < kBlackStops; i++) {
-        float t = i / (float)(kBlackStops - 1);
+    float reach = std::clamp(g_settings.tintReach / 100.0f, 0.0f, 1.0f), soft = 0.48f;
+    constexpr int kTintStops = 25;
+    D2D1_GRADIENT_STOP tintBody[kTintStops];
+    for (int i = 0; i < kTintStops; i++) {
+        float t = i / (float)(kTintStops - 1);
         float u = std::clamp((t - (reach - soft)) / (2 * soft), 0.0f, 1.0f);
         float e = u * u * u * (u * (u * 6 - 15) + 10);   // smootherstep
-        blackBody[i] = {t, Alpha(bc, blackTop + (blackBottom - blackTop) * e)};
+        tintBody[i] = {t, Alpha(bc, tintTop + (tintBottom - tintTop) * e)};
     }
     // Dark (macOS dark material): neutral graphite over the live blur
     D2D1_GRADIENT_STOP darkBody[3] = {
@@ -8375,15 +8383,15 @@ void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, 
         for (int i = 0; i < 3; i++) stops[i].color.a = std::min(1.0f, stops[i].color.a * density);
     const D2D1_GRADIENT_STOP* body = theme == Theme::Light ? lightBody : theme == Theme::Glass ? glassBody : theme == Theme::Dark ? darkBody
                                    : theme == Theme::Oled ? oledBody : siriBody;
-    if (auto brush = theme == Theme::Black ? MakeGradient(blackBody, kBlackStops, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.bottom))
+    if (auto brush = theme == Theme::Tinted ? MakeGradient(tintBody, kTintStops, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.bottom))
                                            : MakeGradient(body, 3, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.bottom)))
         g_target->FillRectangle(r, brush.Get());
     // A fully clear glass would let the mouse fall through to what is behind (pixels with no alpha are not hit)
     g_brush->SetColor(D2D1::ColorF(0, 0, 0, 1 / 255.0f));
     g_target->FillRectangle(r, g_brush.Get());
-    const bool optics = theme == Theme::Siri || theme == Theme::Black || (g_settings.glassEffect && (theme == Theme::Light || theme == Theme::Dark || theme == Theme::Oled));
+    const bool optics = theme == Theme::Siri || theme == Theme::Tinted || (g_settings.glassEffect && (theme == Theme::Light || theme == Theme::Dark || theme == Theme::Oled));
     // How strong the glass light is: softer on the light theme (white on white) and on OLED (keeps the black deep)
-    const float ok = theme == Theme::Light ? 0.7f : theme == Theme::Oled ? 0.6f : theme == Theme::Black ? 0.5f : 1.0f;
+    const float ok = theme == Theme::Light ? 0.7f : theme == Theme::Oled ? 0.6f : theme == Theme::Tinted ? 0.5f : 1.0f;
     if (optics) {
         // Glass optics over the tint: a sheen on the upper part, light bouncing back along the bottom,
         // and the thickness of the glass as a faint bright band just inside the edge
@@ -8445,7 +8453,7 @@ void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, 
         }
         return;
     }
-    if (theme == Theme::Black) {
+    if (theme == Theme::Tinted) {
         // Custom liquid glass: the light gathers along the bottom edge, where the glass is clear, as a fine bright line
         // that climbs the round corners and fades out; the top keeps only a faint edge so the color stays deep
         D2D1_GRADIENT_STOP glowLine[4] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.0f)}, {0.62f, D2D1::ColorF(1, 1, 1, 0.0f)},
@@ -9667,8 +9675,8 @@ void Open() {
     UpdateAutoTextColor();   // before the launcher shows: what is behind it now
     g_shown = true; g_closing = false; g_appear = g_settings.siri ? 1.0f : 0.0f; Render(); ShowWindow(g_wnd, SW_SHOW);
     ForceForeground(g_wnd); PlaceWindows(); Render(); StartFrames();
-    // The app list follows installs by itself (WatchApps); as a fallback it is also read again when opening, at most every 30 s
-    if (!g_appsLoaded || Now() - g_appsTime > 30 || g_appsIconPixels != IconPixels()) StartLoadingApps();
+    // The app list follows installs by itself (WatchApps); as a fallback it is also read again when opening, at most every 5 minutes
+    if (!g_appsLoaded || Now() - g_appsTime > 300 || g_appsIconPixels != IconPixels()) StartLoadingApps();
 }
 
 void Close() {
@@ -10452,12 +10460,14 @@ DWORD g_winKeyThreadId;
 constexpr BYTE kMaskKey = 0xE8;
 LRESULT CALLBACK WinKeyHook(int code, WPARAM wParam, LPARAM lParam) {
     static bool winDown = false, alone = false;
+    static DWORD lastDown = 0;   // the key of the last key-down, 0 after a key-up (autorepeat only repeats the most recent key)
     const KBDLLHOOKSTRUCT* key = (const KBDLLHOOKSTRUCT*)lParam;
     if (code == HC_ACTION && !(key->flags & LLKHF_INJECTED)) {
         const bool win = key->vkCode == VK_LWIN || key->vkCode == VK_RWIN;
         const bool down = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
         if (win && down) {
-            if (!winDown) { winDown = true; alone = true; }
+            // (after Win+L the key-up happens on the lock screen, unseen: winDown alone can't be trusted)
+            if (!winDown || lastDown != key->vkCode) { winDown = true; alone = true; }
         } else if (win) {
             const bool open = winDown && alone && g_winKeyEnabled.load();
             if (winDown && alone && !open) g_winKeyPassed = GetTickCount();
@@ -10473,17 +10483,25 @@ LRESULT CALLBACK WinKeyHook(int code, WPARAM wParam, LPARAM lParam) {
         } else if (down) {
             alone = false;   // Win + another key: a Windows shortcut, not the launcher
         }
+        lastDown = down ? key->vkCode : 0;
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 // Where the Start buttons are on screen (one per taskbar), as last found by FindStartButtons
 std::mutex g_startRectsLock;
 RECT g_startRects[4];
+HWND g_startTaskbars[4];   // the taskbar each Start button belongs to
 int g_startRectCount;
 bool OnStartButton(POINT pt) {
-    std::lock_guard<std::mutex> lock(g_startRectsLock);
-    for (int i = 0; i < g_startRectCount; i++) if (PtInRect(&g_startRects[i], pt)) return true;
-    return false;
+    HWND taskbar = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_startRectsLock);
+        for (int i = 0; i < g_startRectCount && !taskbar; i++)
+            if (PtInRect(&g_startRects[i], pt)) taskbar = g_startTaskbars[i];
+    }
+    // The taskbar must really be under the mouse: not covered by a fullscreen window, not slid away, not under the launcher.
+    // (WindowFromPoint only asks windows of the calling thread, and the hook's thread has none: it doesn't wait on anyone)
+    return taskbar && GetAncestor(WindowFromPoint(pt), GA_ROOT) == taskbar;
 }
 // A left click on a Start button opens the launcher; the taskbar never gets it, so Start stays closed
 HHOOK g_startClickHook;
@@ -10563,6 +10581,7 @@ void FindStartButtons() {
     }
     if (!g_uiaStartCondition) return;
     RECT found[4];
+    HWND owners[4];
     int count = 0;
     auto ask = [&](HWND taskbar) {
         ComPtr<IUIAutomationElement> root, button;
@@ -10570,13 +10589,16 @@ void FindStartButtons() {
         if (count < 4 && SUCCEEDED(g_uia->ElementFromHandle(taskbar, &root)) && root &&
             SUCCEEDED(root->FindFirst(TreeScope_Descendants, g_uiaStartCondition.Get(), &button)) && button &&
             SUCCEEDED(button->get_CurrentBoundingRectangle(&rc)) && rc.right > rc.left && rc.bottom > rc.top)
+        {
+            owners[count] = taskbar;
             found[count++] = rc;
+        }
     };
     if (HWND main = FindWindowW(L"Shell_TrayWnd", nullptr)) ask(main);
     for (HWND other = nullptr; (other = FindWindowExW(nullptr, other, L"Shell_SecondaryTrayWnd", nullptr)) != nullptr;) ask(other);
     std::lock_guard<std::mutex> lock(g_startRectsLock);
     g_startRectCount = count;
-    for (int i = 0; i < count; i++) g_startRects[i] = found[i];
+    for (int i = 0; i < count; i++) { g_startRects[i] = found[i]; g_startTaskbars[i] = owners[i]; }
 }
 
 void WatchStart() {
@@ -10599,7 +10621,18 @@ bool StartMenuVisible() {
 }
 // Closes Windows' Start menu (it has the keyboard while it is open): Esc
 void DismissStartMenu() {
-    if (!StartMenuVisible() || GetForegroundWindow() == g_wnd) return;
+    if (!StartMenuVisible()) return;
+    // Only when Start itself has the keyboard: another app must never get this Esc
+    DWORD pid = 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+    bool start = false;
+    if (HANDLE process = pid ? OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid) : nullptr) {
+        WCHAR path[MAX_PATH];
+        DWORD size = ARRAYSIZE(path);
+        if (QueryFullProcessImageNameW(process, 0, path, &size)) start = ToLower(PathFindFileNameW(path)) == L"startmenuexperiencehost.exe";
+        CloseHandle(process);
+    }
+    if (!start) return;
     INPUT keys[2] = {};
     keys[0].type = keys[1].type = INPUT_KEYBOARD;
     keys[0].ki.wVk = keys[1].ki.wVk = VK_ESCAPE;
@@ -11329,18 +11362,18 @@ std::wstring CfgLockReason(const CfgItem& it) {
     if ((k == L"appearance.blur" || k == L"appearance.menuBlur") && light)
         return note(L"Turned off by Light performance mode", L"Desligado pelo modo de desempenho Leve");
     if (k == L"appearance.menuSelection" || k == L"appearance.menuSelectionColor") {
-        if (theme != L"glass" && theme != L"blackglass")
+        if (theme != L"glass" && theme != L"tintedliquid")
             return note(L"Only for the Clear glass and Custom liquid glass themes", L"Só para os temas Vidro transparente e Vidro líquido personalizado");
         if (k == L"appearance.menuSelectionColor" && CfgNow(L"appearance.menuSelection") == L"glass")
             return note(L"Only with the Colored or Frosted color selection", L"Só com a seleção Colorida ou Cor fosca");
     }
-    if ((k == L"appearance.blackLevel" || k == L"appearance.blackReach" || k == L"appearance.blackColor") && theme != L"blackglass")
+    if ((k == L"appearance.tintLevel" || k == L"appearance.tintReach" || k == L"appearance.tintColor") && theme != L"tintedliquid")
         return note(L"Only for the Custom liquid glass theme", L"Só para o tema Vidro líquido personalizado");
     if (k == L"appearance.glassEffect" && !lightDarkOled)
         return note(L"Only for the Light, Dark and OLED themes", L"Só para os temas Claro, Escuro e OLED");
     if (k == L"appearance.glassStyle" || k == L"appearance.refraction" || k == L"appearance.liveGlass") {
         if (light) return note(L"Turned off by Light performance mode", L"Desligado pelo modo de desempenho Leve");
-        const bool glassy = theme == L"glass" || theme == L"siri" || theme == L"blackglass" || (lightDarkOled && CfgNowOn(L"appearance.glassEffect"));
+        const bool glassy = theme == L"glass" || theme == L"siri" || theme == L"tintedliquid" || (lightDarkOled && CfgNowOn(L"appearance.glassEffect"));
         if (!glassy)
             return note(L"Needs a theme with glass: Clear glass, Custom liquid glass, Siri gradient, or Light, Dark and OLED with the glass effect",
                         L"Precisa de um tema com vidro: Vidro transparente, Vidro líquido personalizado, Degradê Siri, ou Claro, Escuro e OLED com o efeito vidro");
@@ -12029,9 +12062,10 @@ void CfgApplySettings() {
 void CfgSet(const CfgItem& it, const std::wstring& value, bool save = true) {
     ++g_cfgVersion;
     if (!g_cfgOverridesLoaded) LoadCfgOverrides();
-    if (!wcscmp(it.key, L"appearance.transparency")) {   // kept for the active theme only
+    const bool themeBlur = !wcscmp(it.key, L"appearance.blur");
+    if (themeBlur || !wcscmp(it.key, L"appearance.transparency")) {   // kept for the active theme only
         if (!g_themeTransparencyLoaded) LoadThemeTransparency();
-        g_themeTransparency[ThemeName(g_settings.theme)] = std::clamp(_wtoi(value.c_str()), 0, 100);
+        g_themeTransparency[std::wstring(ThemeName(g_settings.theme)) + (themeBlur ? L"#blur" : L"")] = std::clamp(_wtoi(value.c_str()), 0, 100);
         if (save) SaveThemeTransparency();
         g_cfgValues[it.key] = value;
         CfgApplySettings();
@@ -12043,7 +12077,10 @@ void CfgSet(const CfgItem& it, const std::wstring& value, bool save = true) {
     if (save) SaveCfgOverrides(); else g_cfgOverridesDirty = true;
     g_cfgValues[it.key] = value;
     CfgApplySettings();
-    if (!wcscmp(it.key, L"theme")) g_cfgValues[L"appearance.transparency"] = std::to_wstring(g_settings.glassTransparency);
+    if (!wcscmp(it.key, L"theme")) {   // the new theme's own transparency and blur
+        g_cfgValues[L"appearance.transparency"] = std::to_wstring(g_settings.glassTransparency);
+        g_cfgValues[L"appearance.blur"] = std::to_wstring(g_settings.blurAmount);
+    }
 }
 
 // One setting back to its default (as an override when Windhawk has another value)
@@ -12068,7 +12105,7 @@ bool CfgThemeChanged() {   // (drawn with every frame of the Appearance section:
 bool CfgThemeChangedNow() {
     if (!g_cfgOverridesLoaded) LoadCfgOverrides();
     if (!g_themeTransparencyLoaded) LoadThemeTransparency();
-    if (g_themeTransparency.count(ThemeName(g_settings.theme))) return true;
+    if (g_themeTransparency.count(ThemeName(g_settings.theme)) || g_themeTransparency.count(std::wstring(ThemeName(g_settings.theme)) + L"#blur")) return true;
     for (const CfgDefault& d : kCfgDefaults) {
         const CfgItem* it = CfgFind(d.key);
         if (!it || (it->section != 1 && !(it->section == 2 && g_settings.theme == Theme::Custom))) continue;
@@ -12142,6 +12179,7 @@ void CfgResetTheme() {
     if (!g_cfgOverridesLoaded) LoadCfgOverrides();
     if (!g_themeTransparencyLoaded) LoadThemeTransparency();
     g_themeTransparency.erase(ThemeName(g_settings.theme));
+    g_themeTransparency.erase(std::wstring(ThemeName(g_settings.theme)) + L"#blur");
     for (const CfgDefault& d : kCfgDefaults) {
         const CfgItem* it = CfgFind(d.key);
         if (!it || (it->section != 1 && !(it->section == 2 && g_settings.theme == Theme::Custom))) continue;
@@ -13636,7 +13674,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 KillTimer(hwnd, kTimerAppsChanged);
                 if (g_appsLoaded) StartLoadingApps();
             }
-            else if (wParam == kTimerFirstLoad && OwnsTaskbar()) { KillTimer(hwnd, kTimerFirstLoad); if (!g_appsLoaded) StartLoadingApps(); }
+            else if (wParam == kTimerFirstLoad && OwnsTaskbar()) {
+                KillTimer(hwnd, kTimerFirstLoad);
+                WatchStart();   // (only the explorer.exe that is the shell: another one would add its own hooks and launcher)
+                if (!g_appsLoaded) StartLoadingApps();
+            }
             return 0;
         case WM_ACTIVATE:
             if (LOWORD(wParam) == WA_INACTIVE && g_shown && !g_closing && !g_dialogOpen) {
@@ -14217,7 +14259,6 @@ DWORD WINAPI StartThread(void*) {
         SetTimer(wnd, kTimerFirstLoad, 3000, nullptr);
         AddClipboardFormatListener(wnd);
         WatchApps(wnd);
-        WatchStart();
         CreateGlassWindow(instance);
     }
     SetEvent(g_readyEvent);
