@@ -7,16 +7,16 @@
 // @description:de-DE Heftet Dateien und Ordner im Datei-Explorer in ihrem übergeordneten Ordner an
 // @description:pt-BR Fixa arquivos e pastas na pasta que os contém no Explorador de Arquivos
 // @description:zh-CN 在文件资源管理器中将文件和文件夹固定在各自的上级文件夹内
-// @version         1.0.2
+// @version         1.1.0
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
 // @license         MIT
 // @include         explorer.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lruntimeobject -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdi32 -lcomctl32 -ladvapi32
 // ==/WindhawkMod==
-// Build: 25
+// Build: 26
 
 // ==WindhawkModReadme==
 /*
@@ -38,7 +38,7 @@ Explorer Item Pins keeps selected files and folders at the top of their parent f
 
 ## Platforms
 
-The mod requires [Windhawk](https://windhawk.net/) and Windows 11 x64 with the tabbed File Explorer. Tested on Windows 11 26H2 (build `26300.9974`) with Windhawk 1.7.3. Compatibility with other Explorer builds depends on available symbols and compatible internal interfaces.
+The mod requires [Windhawk](https://windhawk.net/) and Windows 11 x64 or ARM64 with the tabbed File Explorer. Tested in File Explorer on Windows 11 26H2 x64 (build `26300.9974`) with Windhawk 1.7.3. ARM64 verification covers native compilation, symbol resolution, and automated tests. Compatibility with other Explorer builds depends on available symbols and compatible internal interfaces.
 
 ## Data exchange
 
@@ -152,6 +152,7 @@ The tests cover storage, concurrent access, pin operations, sorting, grouping, a
 #include <string_view>
 #include <system_error>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -720,69 +721,76 @@ PinNames ReadPinNames(const PinStore& store, const fs::path& folder) {
 namespace {
 
 using CompareViewItems = int (*)(const void*, const void*, void*);
+using GetComparedItem = HRESULT (*)(IUnknown*, const void*, IShellFolder*, void*, REFIID, void**);
+using RunViewSort = BOOL (*)(void*);
 
-// Layout of the synchronous merge-sort request in the supported shell binary.
-struct ViewSortBatch {
-    int count;
-    void* items;
-    int itemSize;
-    CompareViewItems compare;
-    void* compareContext;
-};
+// Keep the folder snapshot for one synchronous sort. The request stays opaque.
+class SortPins {
+public:
+    explicit SortPins(FindFolderPins findPins) : findPins_(findPins), previous_(std::exchange(current, this)) {}
+    ~SortPins() { current = previous_; }
+    SortPins(const SortPins&) = delete;
+    SortPins& operator=(const SortPins&) = delete;
 
-static_assert(offsetof(ViewSortBatch, compare) == 0x18);
-static_assert(offsetof(ViewSortBatch, compareContext) == 0x20);
+    bool Needed() const { return !folder_ || (names_ && !names_->empty()); }
 
-using SortViewBatch = BOOL (*)(ViewSortBatch*);
-
-struct NativeOrdering {
-    SortViewBatch sort;
-    CompareViewItems compare;
-};
-
-// Keep offline initialization for these verified images, including builds whose
-// symbols are temporarily unavailable. Other images use Windhawk's resolver.
-constexpr GUID storagePdb{0x6ebed4d4, 0x5734, 0x9fc4, {0x9e, 0x3e, 0x8d, 0xe5, 0x0b, 0x33, 0x0f, 0x0f}};
-constexpr GUID shellPdb{0x617696ae, 0x77ca, 0x0846, {0x74, 0x3e, 0x0c, 0x34, 0x54, 0xe1, 0x7c, 0x05}};
-constexpr GUID storagePdb9974{0x63a99e08, 0xa6bc, 0x71de, {0x16, 0x8a, 0xd4, 0xf5, 0x4b, 0x00, 0x12, 0x59}};
-constexpr GUID shellPdb9974{0x64708141, 0x4aa5, 0xc991, {0xb8, 0xa9, 0x4f, 0x15, 0xc5, 0xba, 0x60, 0x02}};
-
-unsigned char* CheckedImage(HMODULE module, const GUID& expectedPdb, DWORD lastRva) {
-    if (!module) return nullptr;
-    auto* image = reinterpret_cast<unsigned char*>(module);
-    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(image);
-    const auto* pe = reinterpret_cast<const IMAGE_NT_HEADERS64*>(image + dos->e_lfanew);
-    if (pe->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64) return nullptr;
-
-    const auto& debug = pe->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
-    const auto size = pe->OptionalHeader.SizeOfImage;
-    if (!debug.VirtualAddress || debug.VirtualAddress >= size || debug.Size > size - debug.VirtualAddress ||
-        lastRva >= size) return nullptr;
-
-    const auto* entries = reinterpret_cast<const IMAGE_DEBUG_DIRECTORY*>(image + debug.VirtualAddress);
-    for (DWORD i = 0; i < debug.Size / sizeof(*entries); ++i) {
-        const auto& entry = entries[i];
-        constexpr DWORD codeViewHeaderSize = 24;
-        if (entry.Type != IMAGE_DEBUG_TYPE_CODEVIEW || !entry.AddressOfRawData ||
-            entry.AddressOfRawData >= size || entry.SizeOfData < codeViewHeaderSize ||
-            entry.SizeOfData > size - entry.AddressOfRawData) continue;
-        const auto* data = image + entry.AddressOfRawData;
-        DWORD age = 0;
-        std::memcpy(&age, data + 20, sizeof(age));
-        if (age == 1 && std::memcmp(data, "RSDS", 4) == 0 &&
-            std::memcmp(data + 4, &expectedPdb, sizeof(expectedPdb)) == 0) return image;
+    const PinNames* ForFolder(IShellFolder& folder) {
+        if (folder_.Get() != &folder) {
+            folder_ = &folder;
+            names_.reset();
+            try {
+                Microsoft::WRL::ComPtr<IPersistFolder2> parent;
+                if (SUCCEEDED(folder_.As(&parent))) {
+                    if (const auto path = FileSystemFolderPath(*parent.Get())) names_ = findPins_(*path);
+                }
+            } catch (...) {
+                // Keep the stock order if the folder snapshot is unavailable.
+            }
+        }
+        return names_.get();
     }
-    return nullptr;
+
+    inline static thread_local SortPins* current = nullptr;
+
+private:
+    FindFolderPins findPins_;
+    SortPins* previous_;
+    Microsoft::WRL::ComPtr<IShellFolder> folder_;
+    PinNamesSnapshot names_;
+};
+
+[[maybe_unused]] BOOL RunSortWithPins(FindFolderPins findPins, RunViewSort original, void* request) {
+    const SortPins scope(findPins);
+    return original(request);
 }
 
-[[maybe_unused]] std::optional<NativeOrdering> FindNativeOrdering(HMODULE storage) {
-    constexpr DWORD sortRva = 0x1537e8;
-    constexpr DWORD compareRva = 0x155190;
-    auto image = CheckedImage(storage, storagePdb, compareRva);
-    if (!image) image = CheckedImage(storage, storagePdb9974, compareRva);
-    if (!image) return std::nullopt;
-    return NativeOrdering{reinterpret_cast<SortViewBatch>(image + sortRva),
-                          reinterpret_cast<CompareViewItems>(image + compareRva)};
+struct ChildId : IUnknown {
+    virtual PCUITEMID_CHILD STDMETHODCALLTYPE GetPtr() = 0;
+};
+
+struct ViewComparison {
+    const void* left;
+    const void* right;
+    Microsoft::WRL::ComPtr<IShellFolder> folder;
+    Microsoft::WRL::ComPtr<ChildId> leftId;
+    Microsoft::WRL::ComPtr<ChildId> rightId;
+    inline static thread_local ViewComparison* current = nullptr;
+};
+
+[[maybe_unused]] HRESULT GetComparedItemWithPins(GetComparedItem original, IUnknown* store, const void* key,
+                                                 IShellFolder* folder, void* viewState, REFIID iid, void** output) {
+    const auto result = original(store, key, folder, viewState, iid, output);
+    constexpr GUID childIdInterface{0xc412bf5b, 0x91ea, 0x4904, {0xb3, 0x4a, 0x85, 0x55, 0x04, 0xfb, 0xbf, 0x0b}};
+    const auto comparison = ViewComparison::current;
+    if (comparison && iid == childIdInterface && SUCCEEDED(result) && output && *output && folder &&
+        (key == comparison->left || key == comparison->right)) {
+        if (!comparison->folder) comparison->folder = folder;
+        if (comparison->folder.Get() == folder) {
+            auto& child = key == comparison->left ? comparison->leftId : comparison->rightId;
+            child = static_cast<ChildId*>(*output);
+        }
+    }
+    return result;
 }
 
 std::wstring_view LeafName(std::wstring_view path) {
@@ -790,75 +798,40 @@ std::wstring_view LeafName(std::wstring_view path) {
     return separator == std::wstring_view::npos ? path : path.substr(separator + 1);
 }
 
-// The native comparer gets the child PIDL through these shell interfaces.
-struct ViewCompareContext {
-    IShellFolder* folder;
-    IUnknown* itemResolver;
-};
-
-bool IsPinnedViewItem(const ViewCompareContext& view, const void* item, const PinNames& names) {
-    using Microsoft::WRL::ComPtr;
-    constexpr GUID iidPidlAccessor{0xc412bf5b, 0x91ea, 0x4904, {0xb3, 0x4a, 0x85, 0x55, 0x04, 0xfb, 0xbf, 0x0b}};
-    using Bind = HRESULT (*)(IUnknown*, const void*, IShellFolder*, IBindCtx*, REFIID, void**);
-    using GetId = PCUITEMID_CHILD (*)(IUnknown*);
-    const auto bind = reinterpret_cast<Bind>((*reinterpret_cast<void***>(view.itemResolver))[8]);
-    ComPtr<IUnknown> accessor;
-    if (FAILED(bind(view.itemResolver, item, view.folder, nullptr, iidPidlAccessor,
-                    reinterpret_cast<void**>(accessor.GetAddressOf()))) || !accessor) return false;
-    const auto getId = reinterpret_cast<GetId>((*reinterpret_cast<void***>(accessor.Get()))[3]);
-    const auto id = getId(accessor.Get());
-    if (!id) return false;
-
-    STRRET display{};
-    if (FAILED(view.folder->GetDisplayNameOf(id, SHGDN_INFOLDER | SHGDN_FORPARSING, &display))) return false;
-    PWSTR rawName = nullptr;
-    const HRESULT nameResult = StrRetToStrW(&display, id, &rawName);
-    const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> name(rawName, CoTaskMemFree);
-    if (FAILED(nameResult) || !name) return false;
-
-    return names.contains(LeafName(name.get()));
-}
-
-struct PinnedComparison {
-    CompareViewItems original;
-    ViewCompareContext* view;
-    const PinNames& names;
-
-    static int Compare(const void* left, const void* right, void* context) {
-        const auto& state = *static_cast<const PinnedComparison*>(context);
-        const bool pinnedLeft = IsPinnedViewItem(*state.view, left, state.names);
-        const bool pinnedRight = IsPinnedViewItem(*state.view, right, state.names);
-        if (pinnedLeft != pinnedRight) return pinnedLeft ? -1 : 1;
-        return state.original(left, right, state.view);
+[[maybe_unused]] int CompareWithPins(CompareViewItems original, const void* left, const void* right, void* context) {
+    const auto pins = SortPins::current;
+    if (!pins || !pins->Needed()) return original(left, right, context);
+    ViewComparison comparison{left, right, {}, {}, {}};
+    int stock;
+    {
+        struct RestoreComparison {
+            ViewComparison* previous;
+            ~RestoreComparison() { ViewComparison::current = previous; }
+        } restore{std::exchange(ViewComparison::current, &comparison)};
+        stock = original(left, right, context);
     }
-};
-
-[[maybe_unused]] BOOL SortWithPins(FindFolderPins findPins, SortViewBatch sort, CompareViewItems compare,
-                                  ViewSortBatch* batch) {
-    if (!batch || batch->count < 2 || batch->compare != compare || !batch->compareContext) return sort(batch);
-
-    auto* view = static_cast<ViewCompareContext*>(batch->compareContext);
-    if (!view->folder || !view->itemResolver) return sort(batch);
-    PinNamesSnapshot names;
+    if (!comparison.folder || !comparison.leftId || !comparison.rightId) return stock;
     try {
-        Microsoft::WRL::ComPtr<IPersistFolder2> folder;
-        if (SUCCEEDED(view->folder->QueryInterface(IID_PPV_ARGS(&folder))) && folder) {
-            if (const auto path = FileSystemFolderPath(*folder.Get())) names = findPins(*path);
-        }
+        const auto* names = pins->ForFolder(*comparison.folder.Get());
+        if (!names || names->empty()) return stock;
+        const auto isPinned = [&](ChildId& child) {
+            const auto id = child.GetPtr();
+            STRRET display{};
+            if (!id || FAILED(comparison.folder->GetDisplayNameOf(id, SHGDN_INFOLDER | SHGDN_FORPARSING, &display))) {
+                return false;
+            }
+            PWSTR raw = nullptr;
+            const auto status = StrRetToStrW(&display, id, &raw);
+            const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> name(raw, CoTaskMemFree);
+            return SUCCEEDED(status) && name && names->contains(LeafName(name.get()));
+        };
+        const bool pinnedLeft = isPinned(*comparison.leftId.Get());
+        const bool pinnedRight = isPinned(*comparison.rightId.Get());
+        if (pinnedLeft != pinnedRight) return pinnedLeft ? -1 : 1;
     } catch (...) {
-        // A malformed store or an inaccessible folder must leave sorting available.
+        // A pin lookup failure leaves the native comparison result intact.
     }
-    if (!names || names->empty()) return sort(batch);
-
-    PinnedComparison pinned{compare, view, *names};
-    // The native request lives on the caller's stack. Its scratch pointer is
-    // stored immediately after these fields and must stay in the same request.
-    batch->compare = PinnedComparison::Compare;
-    batch->compareContext = &pinned;
-    const BOOL result = sort(batch);
-    batch->compareContext = view;
-    batch->compare = compare;
-    return result;
+    return stock;
 }
 
 constexpr DWORD pinnedGroupId = 0x56494e50;
@@ -869,12 +842,15 @@ struct GroupList : IUnknown {
 };
 
 using GroupBatch = HRESULT (*)(const unsigned char*, void*);
-using AssignGroup = HRESULT (*)(IUnknown*, IUnknown*, void*, IShellFolder2*, DWORD);
+using AssignGroup = HRESULT (*)(IUnknown*, IUnknown*, REFPROPERTYKEY, IShellFolder2*, DWORD);
 using GroupInfo = HRESULT (*)(IUnknown*, DWORD, IUnknown**);
 using ApplyGroups = HRESULT (*)(const unsigned char*, GroupList*, UINT*);
 using SetGrouping = HRESULT (*)(IFolderView2*, REFPROPERTYKEY, BOOL);
 using RegisterGroup = HRESULT (*)(IUnknown*, DWORD);
 using MakeGroup = HRESULT (*)(DWORD, UINT64, const PROPERTYKEY*, DWORD, IUnknown*, PCWSTR, IUnknown**);
+using ReadGroupValue = HRESULT (*)(IUnknown*, REFPROPERTYKEY, PROPVARIANT*);
+using WriteGroupValue = HRESULT (*)(IUnknown*, REFPROPERTYKEY, const PROPVARIANT&, DWORD);
+using GetGroupAt = HRESULT (*)(GroupList*, UINT, IUnknown**);
 
 struct NativeGrouping {
     GroupBatch batch;
@@ -887,33 +863,10 @@ struct NativeGrouping {
     MakeGroup make;
     void* rangeCategory;
     void* textCategory;
+    ReadGroupValue readValue;
+    WriteGroupValue writeValue;
+    GetGroupAt getGroupAt;
 };
-
-[[maybe_unused]] SetGrouping FindKnownSetGrouping(HMODULE shell) {
-    constexpr DWORD oldRva = 0x2e8ae0;
-    constexpr DWORD updatedRva = 0x2e8e50;
-    if (const auto image = CheckedImage(shell, shellPdb, oldRva)) {
-        return reinterpret_cast<SetGrouping>(image + oldRva);
-    }
-    if (const auto image = CheckedImage(shell, shellPdb9974, updatedRva)) {
-        return reinterpret_cast<SetGrouping>(image + updatedRva);
-    }
-    return nullptr;
-}
-
-[[maybe_unused]] std::optional<NativeGrouping> FindNativeGrouping(HMODULE storage, SetGrouping setGrouping) {
-    const auto updated = CheckedImage(storage, storagePdb9974, 0x5bcf00);
-    const auto image = updated ? updated : CheckedImage(storage, storagePdb, 0x5bcb30);
-    if (!image || !setGrouping) return std::nullopt;
-    return NativeGrouping{
-        reinterpret_cast<GroupBatch>(image + 0x153e50), reinterpret_cast<AssignGroup>(image + 0x1641f0),
-        reinterpret_cast<GroupInfo>(image + (updated ? 0x22fcf0 : 0x22fc90)), reinterpret_cast<GroupInfo>(image + 0x16f0c0),
-        reinterpret_cast<ApplyGroups>(image + 0x16eab8), setGrouping,
-        reinterpret_cast<RegisterGroup>(image + 0x1642dc), reinterpret_cast<MakeGroup>(image + (updated ? 0x22fdac : 0x22fd4c)),
-        image + (updated ? 0x248790 : 0x248730),
-        image + (updated ? 0x5bcf00 : 0x5bcb30),
-    };
-}
 
 struct PinText {
     PCWSTR pin;
@@ -985,9 +938,7 @@ private:
     return original(batch, result);
 }
 
-bool IsPinnedGroupItem(IUnknown* row, const PinNames& names) {
-    using ReadValue = HRESULT (*)(IUnknown*, REFPROPERTYKEY, PROPVARIANT*);
-    const auto read = reinterpret_cast<ReadValue>((*reinterpret_cast<void***>(row))[3]);
+bool IsPinnedGroupItem(ReadGroupValue read, IUnknown* row, const PinNames& names) {
     PROPVARIANT path{};
     const HRESULT result = read(row, PKEY_ParsingPath, &path);
     const bool pinned = SUCCEEDED(result) && path.vt == VT_LPWSTR && path.pwszVal &&
@@ -997,19 +948,20 @@ bool IsPinnedGroupItem(IUnknown* row, const PinNames& names) {
 }
 
 [[maybe_unused]] HRESULT AssignWithPins(const NativeGrouping& api, IUnknown* category, IUnknown* row,
-                                        void* item, IShellFolder2* context, DWORD flags) {
+                                        REFPROPERTYKEY property, IShellFolder2* context, DWORD flags) {
     const auto* names = GroupingPins::ForFolder(context);
-    if (!names || names->empty() || !row) return api.assign(category, row, item, context, flags);
+    if (!names || names->empty() || !row || !category) return api.assign(category, row, property, context, flags);
     const auto categoryMethod = (*reinterpret_cast<void***>(category))[6];
+    const auto rowMethods = *reinterpret_cast<void***>(row);
+    const auto read = reinterpret_cast<ReadGroupValue>(rowMethods[3]);
+    const auto set = reinterpret_cast<WriteGroupValue>(rowMethods[5]);
     if ((categoryMethod != api.rangeCategory && categoryMethod != api.textCategory) ||
-        !IsPinnedGroupItem(row, *names)) return api.assign(category, row, item, context, flags);
-
-    using SetCategory = HRESULT (*)(IUnknown*, void*, const PROPVARIANT*, DWORD);
-    const auto set = reinterpret_cast<SetCategory>((*reinterpret_cast<void***>(row))[5]);
+        (api.readValue && read != api.readValue) || (api.writeValue && set != api.writeValue) ||
+        !IsPinnedGroupItem(read, row, *names)) return api.assign(category, row, property, context, flags);
     PROPVARIANT group{};
     group.vt = VT_UI4;
     group.ulVal = pinnedGroupId;
-    const auto result = set(row, item, &group, flags);
+    const auto result = set(row, property, group, flags);
     return SUCCEEDED(result) ? api.remember(category, pinnedGroupId) : result;
 }
 
@@ -1066,7 +1018,8 @@ std::optional<DWORD> NativeGroupId(IUnknown& group) {
 [[maybe_unused]] HRESULT ApplyWithPins(const NativeGrouping& api, const unsigned char* view, GroupList* groups,
                                        UINT* added) {
     UINT count = 0;
-    if (!groups || FAILED(groups->GetCount(&count))) return api.apply(view, groups, added);
+    if (!groups || (*reinterpret_cast<GetGroupAt* const*>(groups))[4] != api.getGroupAt ||
+        FAILED(groups->GetCount(&count))) return api.apply(view, groups, added);
     for (UINT i = 0; i < count; ++i) {
         Microsoft::WRL::ComPtr<IUnknown> group;
         if (FAILED(groups->GetAt(i, group.GetAddressOf())) || !group || NativeGroupId(*group.Get()) != pinnedGroupId) continue;
@@ -1112,22 +1065,57 @@ std::optional<DWORD> NativeGroupId(IUnknown& group) {
 
 using DrawItemImage = HRESULT (*)(const unsigned char*, HDC, const RECT*);
 using PaintFolderImage = void (*)(void*, HDC, const RECT*, const RECT*, RECT*, RECT*);
+using ConstructImageRenderer = void* (*)(void*, IUnknown*, IUnknown*);
+using DestroyImageRenderer = void (*)(void*);
+using ReadImageValue = HRESULT (*)(IUnknown*, int, REFPROPERTYKEY, PROPVARIANT*, int*);
+using DrawCachedIcon = HRESULT (*)(IUnknown*, IMAGELISTDRAWPARAMS*);
+using FillCachedOverlay = HRESULT (*)(IUnknown*, IUnknown*, HRESULT, DWORD, const IMAGELISTDRAWPARAMS*, DWORD*);
 
-constexpr GUID framePdb{0x468742f3, 0xd41c, 0x3441, {0xa5, 0x02, 0x2f, 0xbf, 0xfe, 0xf9, 0xa6, 0x56}};
-constexpr GUID framePdb9974{0xf8886b4f, 0x52b8, 0x73ab, {0x4a, 0x57, 0x43, 0xf3, 0x89, 0x20, 0x9a, 0xce}};
+struct ImageSource {
+    IUnknown* services;
+    IUnknown* item;
+};
 
-[[maybe_unused]] DrawItemImage FindKnownImageRenderer(HMODULE storage) {
-    constexpr DWORD draw = 0x16d730;
-    auto image = CheckedImage(storage, storagePdb, draw);
-    if (!image) image = CheckedImage(storage, storagePdb9974, draw);
-    return image ? reinterpret_cast<DrawItemImage>(image + draw) : nullptr;
-}
+class ImageSources {
+public:
+    void Set(const void* renderer, ImageSource source) {
+        const std::scoped_lock lock(mutex_);
+        sources_.insert_or_assign(renderer, source);
+    }
 
-[[maybe_unused]] PaintFolderImage FindKnownFolderImagePaint(HMODULE frame) {
-    constexpr DWORD paint = 0xbde30;
-    auto image = CheckedImage(frame, framePdb, paint);
-    if (!image) image = CheckedImage(frame, framePdb9974, paint);
-    return image ? reinterpret_cast<PaintFolderImage>(image + paint) : nullptr;
+    void Erase(const void* renderer) {
+        const std::scoped_lock lock(mutex_);
+        sources_.erase(renderer);
+    }
+
+    std::optional<ImageSource> Find(const void* renderer) {
+        const std::scoped_lock lock(mutex_);
+        const auto found = sources_.find(renderer);
+        return found == sources_.end() ? std::nullopt : std::optional(found->second);
+    }
+
+private:
+    std::mutex mutex_;
+    std::unordered_map<const void*, ImageSource> sources_;
+};
+
+struct ImageMethods {
+    ReadImageValue readItem;
+    ReadImageValue readFolderItem;
+    DrawCachedIcon draw;
+    FillCachedOverlay fill;
+};
+
+[[maybe_unused]] std::optional<fs::path> ItemImagePath(const ImageMethods& methods, const ImageSource& source) {
+    if (!source.item) return std::nullopt;
+    const auto read = reinterpret_cast<ReadImageValue>((*reinterpret_cast<void***>(source.item))[3]);
+    if (!read || (read != methods.readItem && read != methods.readFolderItem)) return std::nullopt;
+    PROPVARIANT path{};
+    const std::unique_ptr<PROPVARIANT, decltype(&PropVariantClear)> cleanup(&path, PropVariantClear);
+    int state = 0;
+    if (FAILED(read(source.item, 0, PKEY_ParsingPath, &path, &state)) ||
+        state != 1 || path.vt != VT_LPWSTR || !path.pwszVal) return std::nullopt;
+    return fs::path(path.pwszVal);
 }
 
 class FolderImagePaintScope {
@@ -1369,20 +1357,6 @@ private:
     bool waitingForCapacity_ = false;
 };
 
-std::optional<fs::path> ItemImagePath(const unsigned char* image) {
-    auto* source = *reinterpret_cast<IUnknown* const*>(image + 0x28);
-    if (!source) return std::nullopt;
-    using GetValues = HRESULT (*)(IUnknown*, DWORD, const PROPERTYKEY*, PROPVARIANT*, ULONG*);
-    const auto read = reinterpret_cast<GetValues>((*reinterpret_cast<void***>(source))[3]);
-    ULONG found = 0;
-    PROPVARIANT path{};
-    const auto clear = [](PROPVARIANT* value) { PropVariantClear(value); };
-    const std::unique_ptr<PROPVARIANT, decltype(clear)> cleanup(&path, clear);
-    if (FAILED(read(source, 0, &PKEY_ParsingPath, &path, &found)) || found != 1 ||
-        path.vt != VT_LPWSTR || !path.pwszVal) return std::nullopt;
-    return fs::path(path.pwszVal);
-}
-
 HWND ExplorerFrameForPaint(HDC dc) {
     auto frame = GetAncestor(WindowFromDC(dc), GA_ROOT);
     if (!WindowHasClass(frame, L"CabinetWClass")) frame = GetActiveWindow();
@@ -1549,7 +1523,7 @@ int ShortcutOverlaySlot() {
     return 0;
 }
 
-RECT MeasureShortcutOverlay(IUnknown* cache, IUnknown* item, HDC dc, int width, int height) {
+RECT MeasureShortcutOverlay(const ImageMethods& methods, ImageSource source, HDC dc, int width, int height) {
     const int slot = ShortcutOverlaySlot();
     if (!slot) return {};
 
@@ -1568,8 +1542,6 @@ RECT MeasureShortcutOverlay(IUnknown* cache, IUnknown* item, HDC dc, int width, 
 
     // Render a stock icon with and without the shell's link overlay. The native
     // compositor supplies the overlay footprint for this size, including rounding.
-    using DrawCachedIcon = HRESULT (*)(IUnknown*, IMAGELISTDRAWPARAMS*);
-    const auto draw = reinterpret_cast<DrawCachedIcon>((*reinterpret_cast<void***>(cache))[16]);
     IMAGELISTDRAWPARAMS params{};
     params.cbSize = sizeof(params);
     params.i = SIID_DOCNOASSOC;
@@ -1585,7 +1557,7 @@ RECT MeasureShortcutOverlay(IUnknown* cache, IUnknown* item, HDC dc, int width, 
     const auto render = [&](UINT style) {
         std::fill_n(pixels, count, background);
         params.fStyle = style;
-        const auto result = draw(cache, &params);
+        const auto result = methods.draw(source.services, &params);
         GdiFlush();
         return result;
     };
@@ -1593,11 +1565,9 @@ RECT MeasureShortcutOverlay(IUnknown* cache, IUnknown* item, HDC dc, int width, 
     constexpr HRESULT missingOverlay = 0x10;
     if (SUCCEEDED(overlayResult) && (overlayResult & missingOverlay)) {
         // Use Explorer's own cache-miss path when this folder has no ready link overlay.
-        using FillCachedOverlay = HRESULT (*)(IUnknown*, IUnknown*, HRESULT, DWORD, IMAGELISTDRAWPARAMS*, int*);
-        const auto fill = reinterpret_cast<FillCachedOverlay>((*reinterpret_cast<void***>(cache))[17]);
         constexpr DWORD loadOverlayOnly = 2;
-        int state = 0;
-        if (item) fill(cache, item, overlayResult, loadOverlayOnly, &params, &state);
+        DWORD state = 0;
+        if (source.item) methods.fill(source.services, source.item, overlayResult, loadOverlayOnly, &params, &state);
         GdiFlush();
     }
     if (FAILED(render(nativeDrawStyle))) return {};
@@ -1611,11 +1581,13 @@ RECT MeasureShortcutOverlay(IUnknown* cache, IUnknown* item, HDC dc, int width, 
     return bounds;
 }
 
-RECT ShortcutOverlayBounds(const unsigned char* image, HDC dc, const RECT& icon) {
-    // The verified renderer layout holds the shell icon cache at this offset.
-    auto* cache = *reinterpret_cast<IUnknown* const*>(image + 0x20);
+RECT ShortcutOverlayBounds(const ImageMethods& methods, ImageSource source, HDC dc, const RECT& icon) {
+    const auto cache = source.services;
     const int width = icon.right - icon.left, height = icon.bottom - icon.top;
     if (!cache || width <= 0 || height <= 0 || width > 1024 || height > 1024) return {};
+    const auto vtable = *reinterpret_cast<void** const*>(cache);
+    if (vtable[16] != reinterpret_cast<void*>(methods.draw) ||
+        vtable[17] != reinterpret_cast<void*>(methods.fill)) return {};
     struct Overlay {
         IUnknown* cache = nullptr;
         int width = 0;
@@ -1634,8 +1606,7 @@ RECT ShortcutOverlayBounds(const unsigned char* image, HDC dc, const RECT& icon)
     }
     const auto now = GetTickCount64();
     if (!IsRectEmpty(&size->bounds) || now < size->retry.time) return size->bounds;
-    auto* item = *reinterpret_cast<IUnknown* const*>(image + 0x28);
-    size->bounds = MeasureShortcutOverlay(cache, item, dc, width, height);
+    size->bounds = MeasureShortcutOverlay(methods, source, dc, width, height);
     if (IsRectEmpty(&size->bounds)) size->retry.AfterFailure(dc, now);
     return size->bounds;
 }
@@ -1712,20 +1683,11 @@ bool DrawPinnedIndicator(HDC dc, const RECT& icon, const RECT& shortcut) {
     return DrawPinnedIndicator(dc, icon, shortcut, cache, LoadNavigationPin);
 }
 
-[[maybe_unused]] HRESULT DrawWithIndicator(const PinStore& store, IndicatorPins& pins, DrawItemImage original,
-                                          const unsigned char* image, HDC dc, const RECT* rect, bool folderView) {
-    const auto result = original(image, dc, rect);
-    if (FAILED(result) || !folderView || !rect) return result;
-
-    try {
-        const auto path = ItemImagePath(image);
-        if (path && pins.Contains(store, *path)) {
-            DrawPinnedIndicator(dc, *rect, ShortcutOverlayBounds(image, dc, *rect));
-        }
-    } catch (...) {
-        // Keep the standard icon if a property or pin snapshot is unavailable.
-    }
-    return result;
+[[maybe_unused]] bool DrawItemPin(const PinStore& store, IndicatorPins& pins, const ImageMethods& methods,
+                                 const ImageSource& source, HDC dc, const RECT& rect) {
+    const auto path = ItemImagePath(methods, source);
+    return path && pins.Contains(store, *path) &&
+           DrawPinnedIndicator(dc, rect, ShortcutOverlayBounds(methods, source, dc, rect));
 }
 
 bool HookExplorerCommandBar(HMODULE extensions, auto* original, auto detour) {
@@ -2519,9 +2481,14 @@ void StopNativeCommands() noexcept {
 #endif
 
 struct StorageFunctions {
-    NativeOrdering ordering;
+    RunViewSort sort;
+    CompareViewItems compare;
+    GetComparedItem getComparedItem;
     NativeGrouping grouping;
     DrawItemImage draw;
+    ConstructImageRenderer construct;
+    DestroyImageRenderer destroy;
+    ImageMethods imageMethods;
 };
 
 bool IsStorageCode(HMODULE storage, const auto address) {
@@ -2532,41 +2499,15 @@ bool IsStorageCode(HMODULE storage, const auto address) {
            (region.Protect & (PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY));
 }
 
-bool UsesStorageOperands(HMODULE storage, const auto address, std::initializer_list<std::string_view> operands) {
-    if (!IsStorageCode(storage, address)) return false;
-    const auto pc = reinterpret_cast<DWORD64>(address);
-    DWORD64 base = 0;
-    const auto function = RtlLookupFunctionEntry(pc, &base, nullptr);
-    if (!function || base != reinterpret_cast<DWORD64>(storage) || base + function->BeginAddress != pc ||
-        function->EndAddress <= function->BeginAddress) return false;
-
-    // Decode only the beginning of the already resolved function. Check the
-    // operands that expose its private layout, without using code to find addresses.
-    const auto size = std::min<size_t>(function->EndAddress - function->BeginAddress, 1024);
-    auto expected = operands.begin();
-    auto* code = reinterpret_cast<unsigned char*>(address);
-    constexpr size_t maxInstructionSize = 15;
-    for (size_t offset = 0; offset + maxInstructionSize <= size; ) {
-        WH_DISASM_RESULT instruction{};
-        if (!Wh_Disasm(code + offset, &instruction) || !instruction.length || instruction.length > size - offset) break;
-        if (instruction.length == expected->size() && std::memcmp(code + offset, expected->data(), instruction.length) == 0 &&
-            ++expected == operands.end()) return true;
-        offset += instruction.length;
-    }
-    return false;
-}
-
-std::optional<StorageFunctions> FindStorageSymbols(HMODULE storage, SetGrouping setGrouping, bool indicator) {
-    using namespace std::string_view_literals;
+[[maybe_unused]] std::optional<StorageFunctions> FindStorageFunctions(HMODULE storage, SetGrouping setGrouping, bool indicator) {
+    if (!storage || !setGrouping) return std::nullopt;
     StorageFunctions native{};
     native.grouping.setGrouping = setGrouping;
-    void* merge = nullptr;
-    void* imageIndex = nullptr;
     // windows.storage.dll
     const WindhawkUtils::SYMBOL_HOOK hooks[]{
-        {{L"static  _DSA_MergeSort()"}, &native.ordering.sort},
-        {{L"static  _DSA_MergeSort2()"}, &merge},
-        {{L"int __cdecl DVCompareColumns(struct tagITEMKEY const *,struct tagITEMKEY const *,__int64)"}, &native.ordering.compare},
+        {{L"static  _DSA_MergeSort()"}, &native.sort},
+        {{L"int __cdecl DVCompareColumns(struct tagITEMKEY const *,struct tagITEMKEY const *,__int64)"}, &native.compare},
+        {{L"public: virtual long __cdecl CItemStore::GetItem(struct tagITEMKEY const *,struct IShellFolder *,struct IViewStateInfo *,struct _GUID const &,void * *)"}, &native.getComparedItem},
         {{L"public: virtual long __cdecl CDVCategoryQueueItem::Run(struct IServiceProvider *)"}, &native.grouping.batch},
         {{L"public: virtual long __cdecl CBaseCategorizer::SetCategory(struct ICategorizableItem *,struct _tagpropertykey const &,struct IShellFolder2 *,enum SETCAT_FLAGS)"}, &native.grouping.assign},
         {{L"protected: virtual long __cdecl CBaseCategorizer::OnGetCategoryDescription(unsigned long,struct ICategoryDescription * *)"}, &native.grouping.rangeInfo},
@@ -2576,57 +2517,35 @@ std::optional<StorageFunctions> FindStorageSymbols(HMODULE storage, SetGrouping 
         {{L"long __cdecl CreateCategoryDescriptionWithUIntSortOrder(unsigned long,unsigned __int64,struct _tagpropertykey const &,enum CATEGORYINFO_FLAGS,struct IFilterCondition *,unsigned short *,struct ICategoryDescription * *)"}, &native.grouping.make},
         {{L"protected: virtual long __cdecl CFilterConditionCategorizer::OnGetItemCategory(struct ICategorizableItem *,struct IShellFolder2 *,struct tagPROPVARIANT *)"}, &native.grouping.rangeCategory},
         {{L"protected: virtual long __cdecl CDetailCategorizer::OnGetItemCategory(struct ICategorizableItem *,struct IShellFolder2 *,struct tagPROPVARIANT *)"}, &native.grouping.textCategory},
+        {{L"public: virtual long __cdecl CCategorizableItemOnItemStore::GetValue(struct _tagpropertykey const &,struct tagPROPVARIANT *)"}, &native.grouping.readValue},
+        {{L"public: virtual long __cdecl CCategorizableItemOnItemStore::SetCategory(struct _tagpropertykey const &,struct tagPROPVARIANT const &,enum SETCAT_FLAGS)"}, &native.grouping.writeValue},
+        {{L"public: virtual long __cdecl CCategoryArray::GetAt(unsigned int,struct ICategoryDescription * *)"}, &native.grouping.getGroupAt},
         {{L"public: virtual long __cdecl CDefImageRenderer::Draw(struct HDC__ *,struct tagRECT const *)"}, &native.draw, nullptr, true},
-        {{L"private: int __cdecl CDefImageRenderer::_GetImageIndex(void)"}, &imageIndex, nullptr, true},
+        {{L"public: __cdecl CDefImageRenderer::CDefImageRenderer(struct IImageServices *,struct IItem *)"}, &native.construct, nullptr, true},
+        {{L"public: __cdecl CDefImageRenderer::~CDefImageRenderer(void)"}, &native.destroy, nullptr, true},
+        {{L"public: virtual long __cdecl CItem::GetValue(enum VALUE_ACCESS_MODE,struct _tagpropertykey const &,struct tagPROPVARIANT *,enum VALUE_STATE *)"}, &native.imageMethods.readItem, nullptr, true},
+        {{L"public: virtual long __cdecl CDefItem::GetValue(enum VALUE_ACCESS_MODE,struct _tagpropertykey const &,struct tagPROPVARIANT *,enum VALUE_STATE *)"}, &native.imageMethods.readFolderItem, nullptr, true},
+        {{L"public: virtual long __cdecl CImageManager::Draw(struct _IMAGELISTDRAWPARAMS *)"}, &native.imageMethods.draw, nullptr, true},
+        {{L"public: virtual long __cdecl CImageManager::OnIdealImageUnavailable(struct IItem *,long,enum IMAGE_QUALITY_FLAGS,struct _IMAGELISTDRAWPARAMS const *,unsigned long *)"}, &native.imageMethods.fill, nullptr, true},
     };
-    constexpr size_t indicatorSymbolCount = 2;
+    constexpr size_t indicatorSymbolCount = 7;
     const auto count = std::size(hooks) - (indicator ? 0 : indicatorSymbolCount);
     if (!WindhawkUtils::HookSymbols(storage, hooks, count)) return std::nullopt;
 
-    // Merge request count and scratch, callback and context, then the compare
-    // context's folder and item store. The store's bind method is at slot 8.
-    if (!UsesStorageOperands(storage, native.ordering.sort, {"\x8b\x29"sv, "\x48\x63\x59\x10"sv, "\x4c\x8d\x77\x28"sv}) ||
-        !UsesStorageOperands(storage, merge, {"\x48\x8b\xd9"sv, "\x48\x8b\x43\x18"sv, "\x4c\x8b\x43\x20"sv}) ||
-        !UsesStorageOperands(storage, native.ordering.compare,
-                             {"\x49\x8b\xf8"sv, "\x48\x8b\x4f\x08"sv, "\x4c\x8b\x07"sv, "\x48\x8b\x40\x40"sv})) {
-        Wh_Log(L"The Windows.Storage sort request or comparer layout has changed");
-        return std::nullopt;
-    }
-
-    // Verify the category, row and group-array calls the grouping hooks mirror.
-    constexpr auto slot3 = "\x48\x8b\x40\x18"sv;
-    if (!UsesStorageOperands(storage, native.grouping.assign, {"\x48\x8b\x40\x30"sv, "\x48\x8b\x40\x28"sv}) ||
-        !UsesStorageOperands(storage, native.grouping.rangeCategory, {slot3}) ||
-        !UsesStorageOperands(storage, native.grouping.textCategory, {slot3}) ||
-        !UsesStorageOperands(storage, native.grouping.apply, {slot3, "\x48\x8b\x40\x20"sv, slot3}) ||
-        !IsStorageCode(storage, native.grouping.remember) || !IsStorageCode(storage, native.grouping.make)) {
-        Wh_Log(L"The Windows.Storage grouping interfaces have changed");
-        return std::nullopt;
-    }
-
-    // The image services and item offsets, plus the compositor's draw/fill slots.
-    if (indicator && (!UsesStorageOperands(storage, native.draw,
-            {"\x4c\x8b\xf1"sv, "\x49\x8b\x4e\x20"sv, "\x48\x8b\x80\x80\0\0\0"sv,
-             "\x49\x8b\x56\x28"sv, "\x48\x8b\x80\x88\0\0\0"sv}) ||
-        !UsesStorageOperands(storage, imageIndex, {"\x48\x8b\x49\x28"sv, "\x48\x8b\x01"sv, slot3}))) {
+    const auto valid = [storage](auto... addresses) { return (IsStorageCode(storage, addresses) && ...); };
+    if (!valid(native.sort, native.compare, native.getComparedItem, native.grouping.batch, native.grouping.assign,
+               native.grouping.rangeInfo, native.grouping.textInfo, native.grouping.apply, native.grouping.remember,
+               native.grouping.make, native.grouping.rangeCategory, native.grouping.textCategory,
+               native.grouping.readValue, native.grouping.writeValue, native.grouping.getGroupAt)) return std::nullopt;
+    if (indicator && !valid(native.draw, native.construct, native.destroy, native.imageMethods.readItem,
+                            native.imageMethods.readFolderItem, native.imageMethods.draw, native.imageMethods.fill)) {
         native.draw = nullptr;
-        Wh_Log(L"The Windows.Storage indicator renderer layout has changed");
+        Wh_Log(L"File Explorer indicator symbols are unavailable");
     }
     return native;
 }
 
-[[maybe_unused]] std::optional<StorageFunctions> FindStorageFunctions(HMODULE storage, SetGrouping setGrouping, bool indicator) {
-    if (!storage || !setGrouping) return std::nullopt;
-    if (const auto ordering = FindNativeOrdering(storage)) {
-        if (const auto grouping = FindNativeGrouping(storage, setGrouping)) {
-            return StorageFunctions{*ordering, *grouping, indicator ? FindKnownImageRenderer(storage) : nullptr};
-        }
-    }
-    return FindStorageSymbols(storage, setGrouping, indicator);
-}
-
 [[maybe_unused]] SetGrouping FindSetGrouping(HMODULE shell) {
-    if (const auto known = FindKnownSetGrouping(shell)) return known;
     SetGrouping setGrouping = nullptr;
     const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[]{
         {{L"public: virtual long __cdecl CDefView::SetGroupBy(struct _tagpropertykey const &,int)"}, &setGrouping},
@@ -2635,7 +2554,6 @@ std::optional<StorageFunctions> FindStorageSymbols(HMODULE storage, SetGrouping 
 }
 
 [[maybe_unused]] PaintFolderImage FindFolderImagePaint(HMODULE frame) {
-    if (const auto known = FindKnownFolderImagePaint(frame)) return known;
     PaintFolderImage paint = nullptr;
     const WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[]{
         {{L"public: virtual void __cdecl UIImage::Paint(struct HDC__ *,struct tagRECT const *,struct tagRECT const *,struct tagRECT *,struct tagRECT *)"},
@@ -2645,16 +2563,21 @@ std::optional<StorageFunctions> FindStorageSymbols(HMODULE storage, SetGrouping 
 }
 
 #ifndef EXPLORER_ITEM_PINS_TEST
-SortViewBatch nativeSortOriginal = nullptr;
-CompareViewItems nativeCompare = nullptr;
+RunViewSort nativeSortOriginal = nullptr;
+CompareViewItems nativeCompareOriginal = nullptr;
+GetComparedItem nativeGetComparedItemOriginal = nullptr;
 NativeGrouping nativeGrouping{};
 SetGrouping nativeSetGroupingTarget = nullptr;
 DrawItemImage nativeImageOriginal = nullptr;
 PaintFolderImage nativeFolderImagePaintOriginal = nullptr;
+ConstructImageRenderer nativeConstructImageOriginal = nullptr;
+DestroyImageRenderer nativeDestroyImageOriginal = nullptr;
+ImageSources nativeImageSources;
+ImageMethods nativeImageMethods{};
 HMODULE ownedExplorerFrame = nullptr;
 HMODULE ownedShell = nullptr;
 HMODULE ownedStorage = nullptr;
-bool indicatorHooksReady = false;
+std::atomic_bool indicatorHooksReady = false;
 std::atomic_bool indicatorEnabled;
 
 struct ModSettings {
@@ -2674,16 +2597,25 @@ PinNamesSnapshot NativeFolderPins(const fs::path& folder) {
     return indicatorPins.Snapshot(*nativePinStore, folder);
 }
 
-BOOL NativeSortHook(ViewSortBatch* batch) {
-    return SortWithPins(NativeFolderPins, nativeSortOriginal, nativeCompare, batch);
+BOOL NativeSortHook(void* request) {
+    return RunSortWithPins(NativeFolderPins, nativeSortOriginal, request);
+}
+
+int NativeCompareHook(const void* left, const void* right, void* context) {
+    return CompareWithPins(nativeCompareOriginal, left, right, context);
+}
+
+HRESULT NativeGetComparedItemHook(IUnknown* store, const void* key, IShellFolder* folder, void* viewState,
+                                  REFIID iid, void** output) {
+    return GetComparedItemWithPins(nativeGetComparedItemOriginal, store, key, folder, viewState, iid, output);
 }
 
 HRESULT NativeGroupBatchHook(const unsigned char* batch, void* result) {
     return GroupWithPins(NativeFolderPins, nativeGrouping.batch, batch, result);
 }
 
-HRESULT NativeAssignGroupHook(IUnknown* category, IUnknown* row, void* item, IShellFolder2* context, DWORD flags) {
-    return AssignWithPins(nativeGrouping, category, row, item, context, flags);
+HRESULT NativeAssignGroupHook(IUnknown* category, IUnknown* row, REFPROPERTYKEY property, IShellFolder2* context, DWORD flags) {
+    return AssignWithPins(nativeGrouping, category, row, property, context, flags);
 }
 
 HRESULT NativeRangeInfoHook(IUnknown* category, DWORD group, IUnknown** output) {
@@ -2708,13 +2640,33 @@ void NativeFolderImagePaintHook(void* image, HDC dc, const RECT* bounds, const R
 }
 
 HRESULT NativeImageHook(const unsigned char* image, HDC dc, const RECT* rect) {
-    if (!indicatorEnabled.load(std::memory_order_relaxed)) return nativeImageOriginal(image, dc, rect);
-    return DrawWithIndicator(*nativePinStore, indicatorPins, nativeImageOriginal, image, dc, rect,
-                             FolderImagePaintScope::Active());
+    const auto result = nativeImageOriginal(image, dc, rect);
+    if (FAILED(result) || !rect || !FolderImagePaintScope::Active() ||
+        !indicatorEnabled.load(std::memory_order_relaxed)) return result;
+    try {
+        const auto source = nativeImageSources.Find(image);
+        if (source) DrawItemPin(*nativePinStore, indicatorPins, nativeImageMethods, *source, dc, *rect);
+    } catch (...) {
+        // Keep the stock image when the item or its pin snapshot is unavailable.
+    }
+    return result;
 }
 
-bool HookNativeIndicator(DrawItemImage draw) {
-    if (!draw) return false;
+void* NativeConstructImageHook(void* renderer, IUnknown* services, IUnknown* item) {
+    const auto result = nativeConstructImageOriginal(renderer, services, item);
+    if (indicatorHooksReady && services && item) {
+        try { nativeImageSources.Set(renderer, {services, item}); } catch (...) {}
+    }
+    return result;
+}
+
+void NativeDestroyImageHook(void* renderer) {
+    nativeImageSources.Erase(renderer);
+    nativeDestroyImageOriginal(renderer);
+}
+
+bool HookNativeIndicator(const StorageFunctions& native) {
+    if (!native.draw) return false;
     auto frame = GetModuleHandleW(L"ExplorerFrame.dll");
     if (!frame) {
         ownedExplorerFrame = LoadLibraryExW(L"ExplorerFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -2722,11 +2674,14 @@ bool HookNativeIndicator(DrawItemImage draw) {
     }
     const auto paint = FindFolderImagePaint(frame);
     if (!paint) return false;
-    if (!WindhawkUtils::SetFunctionHook(paint, NativeFolderImagePaintHook, &nativeFolderImagePaintOriginal)) {
+    nativeImageMethods = native.imageMethods;
+    if (!WindhawkUtils::SetFunctionHook(native.destroy, NativeDestroyImageHook, &nativeDestroyImageOriginal) ||
+        !WindhawkUtils::SetFunctionHook(native.construct, NativeConstructImageHook, &nativeConstructImageOriginal) ||
+        !WindhawkUtils::SetFunctionHook(paint, NativeFolderImagePaintHook, &nativeFolderImagePaintOriginal)) {
         Wh_Log(L"Could not hook the folder image painter");
         return false;
     }
-    if (!WindhawkUtils::SetFunctionHook(draw, NativeImageHook, &nativeImageOriginal)) {
+    if (!WindhawkUtils::SetFunctionHook(native.draw, NativeImageHook, &nativeImageOriginal)) {
         Wh_Log(L"Could not hook the pinned indicator renderer");
         return false;
     }
@@ -2785,10 +2740,11 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Cannot initialize pin storage (%hs)", error.what());
         return FALSE;
     }
-    nativeCompare = native->ordering.compare;
     nativeGrouping = native->grouping;
     nativeSetGroupingTarget = setGrouping;
-    if (!SetFunctionHook(native->ordering.sort, NativeSortHook, &nativeSortOriginal) ||
+    if (!SetFunctionHook(native->getComparedItem, NativeGetComparedItemHook, &nativeGetComparedItemOriginal) ||
+        !SetFunctionHook(native->compare, NativeCompareHook, &nativeCompareOriginal) ||
+        !SetFunctionHook(native->sort, NativeSortHook, &nativeSortOriginal) ||
         !SetFunctionHook(native->grouping.batch, NativeGroupBatchHook, &nativeGrouping.batch) ||
         !SetFunctionHook(native->grouping.assign, NativeAssignGroupHook, &nativeGrouping.assign) ||
         !SetFunctionHook(native->grouping.rangeInfo, NativeRangeInfoHook, &nativeGrouping.rangeInfo) ||
@@ -2798,7 +2754,7 @@ BOOL Wh_ModInit() {
     if (!moduleWork.Start()) return FALSE;
     ownedStorage = storage.release();
     ownedShell = shell.release();
-    indicatorHooksReady = HookNativeIndicator(native->draw);
+    indicatorHooksReady = HookNativeIndicator(*native);
     indicatorEnabled.store(settings.indicator, std::memory_order_relaxed);
     PrepareNativeCommands();
     return TRUE;
