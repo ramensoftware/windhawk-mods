@@ -18,7 +18,7 @@
 
 # Musician's Toolkit
 
-![Sample Screenshot](https://raw.githubusercontent.com/DeepakBalaraman/musicians-toolkit/master/assets/screenshot-1.1.0.png)
+![Sample Screenshot of toolkit](https://raw.githubusercontent.com/DeepakBalaraman/musicians-toolkit/master/assets/screenshot-1.1.0.png)
 
 A chord library, a song analyzer, a tuner, a metronome, a strumming trainer, a
 circle of fifths, a tap tempo and a note drill, for guitar, ukulele and piano.
