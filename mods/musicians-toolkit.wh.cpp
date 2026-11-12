@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              musicians-toolkit
 // @name            Musician's Toolkit
-// @description     An all-in-one toolkit flyout for musicians: a chord library, a song analyzer, a metronome, a tuner, a tap tempo calculator, a strumming pattern builder, the circle of fifths and a timed note trainer for guitar, ukulele and piano.
-// @version         1.1.0
+// @description     An all-in-one toolkit flyout for musicians: a chord library, a metronome, a tuner, a tap tempo calculator, a strumming pattern builder, the circle of fifths and a timed note trainer for guitar, ukulele and piano.
+// @version         1.2.0
 // @author          DpakB
 // @homepage        https://dpakb.com
 // @github          https://github.com/DeepakBalaraman
@@ -10,7 +10,7 @@
 // @donateUrl       https://buymeacoffee.com/dpakb
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -luser32 -lgdi32 -lshell32 -ladvapi32 -lole32 -lwinmm -lwinhttp -luuid
+// @compilerOptions -luser32 -lgdi32 -lshell32 -ladvapi32 -lole32 -lwinmm
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -18,12 +18,12 @@
 
 # Musician's Toolkit
 
-![Sample Screenshot in action](https://raw.githubusercontent.com/DeepakBalaraman/musicians-toolkit/master/assets/screenshot-1.1.0.png)
+![Sample Screenshot in action](https://raw.githubusercontent.com/DeepakBalaraman/musicians-toolkit/master/assets/screenshot.png)
 
-A chord library, a song analyzer, a tuner, a metronome, a strumming trainer, a
-circle of fifths, a tap tempo and a note drill, for guitar, ukulele and piano.
-All of it lives in one small panel that stays on top of your other windows, so
-you can keep it beside your DAW, tab app or video lesson.
+A chord library, a tuner, a metronome, a strumming trainer, a circle of fifths,
+a tap tempo and a note drill, for guitar, ukulele and piano. All of it lives in
+one small panel that stays on top of your other windows, so you can keep it
+beside your DAW, tab app or video lesson.
 
 Press **Win+Y** to open it and pick a tool from the menu in the top left.
 **Ctrl+Tab** cycles through them. Close it with the **x**, with **Esc**, or
@@ -48,45 +48,6 @@ letter, and the one you settle on is drawn underneath.
   keyboard, and **Space** or **Enter** do too, so one hand can stay on the
   arrows while the other types.
 - **Instrument** - **Shift+Tab** cycles guitar, ukulele and piano.
-
-## Song Analyzer
-
-Paste a link to a song or a video, or pick a file, and the panel has it
-transcribed: the chords measure by measure, the key, the tempo and the meter.
-It then plays like a chord player, with the chart under a playhead.
-
-- **Link or file** - paste a URL and press **Space** (or click **Analyze**),
-  or press **Ctrl+O** and pick an audio or video file from disk.
-- **Chart** - one row per measure, the chords placed at the moment they are
-  played and the beats ticked off behind them. The row the song is in is lit,
-  the playhead sweeps across it, and the chart scrolls by itself to keep up.
-- **Transport** - **Space** plays and pauses, **Left** and **Right** skip five
-  seconds, **Ctrl** with an arrow steps a measure, **Home** and **End** jump to
-  the two ends. The circular button, the scrubber under the strip and any point
-  on the chart all seek as well.
-- **Now playing** - the strip above the chart names the chord sounding, the one
-  coming next and how far into the song you are.
-- **Audio** - a file you picked from disk plays while the chart follows it,
-  driven by the media clock so the chord on screen is the chord you hear. A
-  link gets its audio the same way: a link that points straight at an audio
-  file is downloaded by the mod itself, and a page such as YouTube or
-  SoundCloud is fetched with [yt-dlp](https://github.com/yt-dlp/yt-dlp) when it
-  is installed. Set the path to `yt-dlp.exe` under Settings > Analyzer, or leave
-  it empty and the usual install folders and **PATH** are searched. Without an
-  extractor a link plays silently, with the chart keeping time on its own. While
-  a chart has nothing the player can take - a link with no audio, or a video
-  file - the chip beside the URL field turns into **Audio**, so the song can be
-  picked by hand and played under that same chart without a second run.
-- **Progress** - the bar under the chart shows the run as it goes, step by
-  step. **Space** cancels a run that is taking too long.
-- **Acappella** - for a solo vocal recording, which is measured differently.
-- **Export** - PDF, MIDI, MusicXML, text, CSV or JSON. The file lands in
-  `Downloads\MusiciansToolkit` (or the folder set under Settings > Analyzer)
-  and opens straight away.
-- **Online** - the audio is sent to [magic-chords.dev](https://magic-chords.dev)
-  to be analyzed, so this tool needs an internet connection. The free service
-  takes 12 runs an hour; a run keeps going if you close the panel and is still
-  there when you come back.
 
 ## Tap Tempo
 
@@ -201,14 +162,13 @@ listens and you play it before the clock runs out.
 - **Tab** - play the chord on the card, or step through the pattern list.
 - **Shift+Tab** - switch instruments.
 - **Space / Enter** - play the chord on the card as well; Space also taps the
-  tempo, starts the trainer, works the transport and cancels an analyzer run.
+  tempo and starts the trainer.
 - **Up / Down** - move through search results, step the metronome, hop
   between the rings of the circle.
 - **Left / Right** - step through fingerings, halve or double a tap tempo,
   change the metronome's meter.
 - **D U X M R, A G T, C** - lay strokes in the strumming grid, add accents,
   ghosts and ties, clear the bar.
-- **Ctrl+O** - pick a song or video file for the analyzer.
 - **Tray icon** - a click opens or closes the panel, a right click names every
   tool so one can be opened in a single step.
 - **Esc** - clear the search, or close the panel when the search is empty.
@@ -223,8 +183,6 @@ listens and you play it before the clock runs out.
 - **Shortcut** - the key and modifiers that open the panel.
 - **Metronome** - volume, background playback, default meter and subdivision.
 - **Chords** - hide the finger numbers.
-- **Analyzer** - the API address, acappella mode, and where exports are
-  saved.
 - **Tap tempo** - how long a pause resets the taps, and whether Space or
   Enter count as taps.
 - **Tuner** - reference pitch.
@@ -240,7 +198,6 @@ The source code of this mod can be found in this [GitHub Repo](https://github.co
 
 - The chord library comes from [chords-db](https://github.com/tombatossals/chords-db)
 by David Rubert (MIT). It is packed into the mod, so there is nothing to
-- Song analyzer is powered by [Magic Chords Public API](https://magic-chords.dev/api)
 download and no internet connection needed.
 */
 // ==/WindhawkModReadme==
@@ -253,7 +210,6 @@ download and no internet connection needed.
     $description: "The tool the panel opens on when you press Win+Y."
     $options:
       - chords: Chords
-      - analyzer: Song analyzer
       - tempo: Tap tempo
       - metronome: Metronome
       - tuner: Tuner
@@ -448,19 +404,6 @@ download and no internet connection needed.
     $options:
       - chromatic: Chromatic
       - naturals: Naturals only
-- Analyzer:
-  - BaseUrl: https://magic-chords.dev
-    $name: API base URL
-    $description: "Where the Magic Chords API lives, for a self-hosted instance."
-  - Acappella: false
-    $name: Acappella mode
-    $description: "Send acappella mode, for solo vocal recordings."
-  - ExportFolder: ""
-    $name: Export folder
-    $description: "Where exports are saved. Leave empty for Downloads\\MusiciansToolkit."
-  - Extractor: ""
-    $name: Link audio (yt-dlp)
-    $description: "Path to yt-dlp.exe, which fetches a pasted link's audio so YouTube and the like play in the player. Install it with winget install yt-dlp, or leave empty to look on PATH and in the usual install folders."
 */
 // ==/WindhawkModSettings==
 
@@ -472,8 +415,6 @@ download and no internet connection needed.
 #include <mmreg.h>
 #include <mmsystem.h>
 #include <shellapi.h>
-#include <shobjidl.h>
-#include <winhttp.h>
 
 #include <algorithm>
 #include <atomic>
@@ -2152,320 +2093,6 @@ int TunerNearestString(int midi) {
     return best > 1 ? -1 : nearest;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// JSON
-//
-// The Magic Chords API documents its request bodies but leaves every response
-// schema empty, so the replies are read with this small parser instead of being
-// trusted. UTF-8 arrives from WinHTTP and is widened once; malformed input just
-// returns false, because this runs inside windhawk.exe where an exception would
-// take the process down.
-
-struct JsonValue {
-    enum Type { Null, Bool, Number, String, Array, Object };
-    Type type = Null;
-    bool boolean = false;
-    double number = 0.0;
-    std::wstring text;
-    std::vector<JsonValue> items;
-    std::vector<std::pair<std::wstring, JsonValue>> members;
-
-    const JsonValue* Find(PCWSTR key) const {
-        if (type != Object) {
-            return nullptr;
-        }
-        for (const auto& member : members) {
-            if (member.first == key) {
-                return &member.second;
-            }
-        }
-        return nullptr;
-    }
-    std::wstring Str(PCWSTR key) const {
-        const JsonValue* value = Find(key);
-        return value && value->type == String ? value->text : std::wstring();
-    }
-    double Num(PCWSTR key, double fallback = 0.0) const {
-        const JsonValue* value = Find(key);
-        return value && value->type == Number ? value->number : fallback;
-    }
-    const JsonValue* At(size_t index) const {
-        return type == Array && index < items.size() ? &items[index] : nullptr;
-    }
-    size_t Size() const { return type == Array ? items.size() : 0; }
-};
-
-class JsonReader {
-  public:
-    JsonReader(const wchar_t* text, size_t length)
-        : cursor_(text), end_(text + length) {}
-
-    bool Parse(JsonValue& out) {
-        Skip();
-        if (!Value(out, 0)) {
-            return false;
-        }
-        Skip();
-        return cursor_ == end_;
-    }
-
-  private:
-    void Skip() {
-        while (cursor_ < end_ && iswspace(*cursor_)) {
-            cursor_++;
-        }
-    }
-
-    bool Eat(wchar_t c) {
-        Skip();
-        if (cursor_ < end_ && *cursor_ == c) {
-            cursor_++;
-            return true;
-        }
-        return false;
-    }
-
-    bool Peek(wchar_t c) {
-        Skip();
-        return cursor_ < end_ && *cursor_ == c;
-    }
-
-    bool Word(PCWSTR word) {
-        const size_t length = wcslen(word);
-        if (static_cast<size_t>(end_ - cursor_) < length ||
-            wcsncmp(cursor_, word, length) != 0) {
-            return false;
-        }
-        cursor_ += length;
-        return true;
-    }
-
-    bool Value(JsonValue& out, int depth) {
-        if (depth > 64) {
-            return false;
-        }
-        Skip();
-        if (cursor_ >= end_) {
-            return false;
-        }
-        switch (*cursor_) {
-            case L'{':
-                return Object(out, depth);
-            case L'[':
-                return Array(out, depth);
-            case L'"':
-                out.type = JsonValue::String;
-                return String(out.text);
-            case L't':
-                out.type = JsonValue::Bool;
-                out.boolean = true;
-                return Word(L"true");
-            case L'f':
-                out.type = JsonValue::Bool;
-                out.boolean = false;
-                return Word(L"false");
-            case L'n':
-                out.type = JsonValue::Null;
-                return Word(L"null");
-            default:
-                return Number(out);
-        }
-    }
-
-    bool Number(JsonValue& out) {
-        const wchar_t* start = cursor_;
-        if (cursor_ < end_ && *cursor_ == L'-') {
-            cursor_++;
-        }
-        while (cursor_ < end_ && iswdigit(*cursor_)) {
-            cursor_++;
-        }
-        if (cursor_ < end_ && *cursor_ == L'.') {
-            cursor_++;
-            while (cursor_ < end_ && iswdigit(*cursor_)) {
-                cursor_++;
-            }
-        }
-        if (cursor_ < end_ && (*cursor_ == L'e' || *cursor_ == L'E')) {
-            cursor_++;
-            if (cursor_ < end_ && (*cursor_ == L'+' || *cursor_ == L'-')) {
-                cursor_++;
-            }
-            while (cursor_ < end_ && iswdigit(*cursor_)) {
-                cursor_++;
-            }
-        }
-        if (cursor_ == start) {
-            return false;
-        }
-        const std::wstring token(start, cursor_);
-        out.type = JsonValue::Number;
-        out.number = wcstod(token.c_str(), nullptr);
-        return true;
-    }
-
-    bool Hex4(unsigned& value) {
-        if (end_ - cursor_ < 4) {
-            return false;
-        }
-        value = 0;
-        for (int i = 0; i < 4; i++) {
-            const wchar_t c = cursor_[i];
-            int digit = -1;
-            if (c >= L'0' && c <= L'9') {
-                digit = c - L'0';
-            } else if (c >= L'a' && c <= L'f') {
-                digit = c - L'a' + 10;
-            } else if (c >= L'A' && c <= L'F') {
-                digit = c - L'A' + 10;
-            }
-            if (digit < 0) {
-                return false;
-            }
-            value = (value << 4) | static_cast<unsigned>(digit);
-        }
-        cursor_ += 4;
-        return true;
-    }
-
-    bool String(std::wstring& out) {
-        if (!Eat(L'"')) {
-            return false;
-        }
-        out.clear();
-        while (cursor_ < end_) {
-            const wchar_t c = *cursor_++;
-            if (c == L'"') {
-                return true;
-            }
-            if (c != L'\\') {
-                out += c;
-                continue;
-            }
-            if (cursor_ >= end_) {
-                return false;
-            }
-            const wchar_t escaped = *cursor_++;
-            switch (escaped) {
-                case L'"':
-                case L'\\':
-                case L'/':
-                    out += escaped;
-                    break;
-                case L'b':
-                    out += L'\b';
-                    break;
-                case L'f':
-                    out += L'\f';
-                    break;
-                case L'n':
-                    out += L'\n';
-                    break;
-                case L'r':
-                    out += L'\r';
-                    break;
-                case L't':
-                    out += L'\t';
-                    break;
-                case L'u': {
-                    unsigned code = 0;
-                    if (!Hex4(code)) {
-                        return false;
-                    }
-                    if (code >= 0xD800 && code <= 0xDBFF &&
-                        end_ - cursor_ >= 6 && cursor_[0] == L'\\' &&
-                        cursor_[1] == L'u') {
-                        const wchar_t* save = cursor_;
-                        cursor_ += 2;
-                        unsigned low = 0;
-                        if (Hex4(low) && low >= 0xDC00 && low <= 0xDFFF) {
-                            code = 0x10000 + ((code - 0xD800) << 10) +
-                                   (low - 0xDC00);
-                        } else {
-                            cursor_ = save;
-                        }
-                    }
-                    if (code >= 0x10000) {
-                        code -= 0x10000;
-                        out += static_cast<wchar_t>(0xD800 + (code >> 10));
-                        out += static_cast<wchar_t>(0xDC00 + (code & 0x3FF));
-                    } else {
-                        out += static_cast<wchar_t>(code);
-                    }
-                    break;
-                }
-                default:
-                    return false;
-            }
-        }
-        return false;
-    }
-
-    bool Array(JsonValue& out, int depth) {
-        if (!Eat(L'[')) {
-            return false;
-        }
-        out.type = JsonValue::Array;
-        if (Eat(L']')) {
-            return true;
-        }
-        for (;;) {
-            out.items.emplace_back();
-            if (!Value(out.items.back(), depth + 1)) {
-                return false;
-            }
-            if (Eat(L',')) {
-                continue;
-            }
-            return Eat(L']');
-        }
-    }
-
-    bool Object(JsonValue& out, int depth) {
-        if (!Eat(L'{')) {
-            return false;
-        }
-        out.type = JsonValue::Object;
-        if (Eat(L'}')) {
-            return true;
-        }
-        for (;;) {
-            std::wstring key;
-            if (!String(key) || !Eat(L':')) {
-                return false;
-            }
-            out.members.emplace_back(std::move(key), JsonValue());
-            if (!Value(out.members.back().second, depth + 1)) {
-                return false;
-            }
-            if (Eat(L',')) {
-                continue;
-            }
-            return Eat(L'}');
-        }
-    }
-
-    const wchar_t* cursor_;
-    const wchar_t* end_;
-};
-
-bool JsonParse(const std::string& utf8, JsonValue& out) {
-    out = JsonValue();
-    if (utf8.empty()) {
-        return false;
-    }
-    const int length = MultiByteToWideChar(
-        CP_UTF8, 0, utf8.c_str(), static_cast<int>(utf8.size()), nullptr, 0);
-    if (length <= 0) {
-        return false;
-    }
-    std::wstring wide(static_cast<size_t>(length), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), static_cast<int>(utf8.size()),
-                        &wide[0], length);
-    JsonReader reader(wide.c_str(), wide.size());
-    return reader.Parse(out);
-}
-
 struct Settings {
     int theme = kThemeAuto;
     std::wstring accentChoice = L"accent";
@@ -2481,8 +2108,8 @@ struct Settings {
     // On by default: the tray icon is the way back to the panel when the
     // shortcut is forgotten or has been taken by another app.
     bool showTrayIcon = true;
-    // The order matches the Tool enum: chords, analyzer, tempo, metronome,
-    // tuner, strumming, circle of fifths, note trainer.
+    // The order matches the Tool enum: chords, tempo, metronome, tuner,
+    // strumming, circle of fifths, note trainer.
     int defaultTool = 0;
     bool showFingerings = false;
     int defaultInstrument = 0;
@@ -2504,16 +2131,6 @@ struct Settings {
     bool circlePlayOnSelect = true;
     int trainerSeconds = 5;  // Time allowed per note.
     bool trainerNaturals = false;
-    // The song analyzer talks to the Magic Chords API. The base URL is a
-    // setting so a self-hosted instance works too; the folder is where the
-    // exported PDF, MIDI, MusicXML and text files land.
-    std::wstring analyzerBaseUrl = L"https://magic-chords.dev";
-    bool analyzerAcappella = false;
-    std::wstring analyzerExportFolder;
-    // A pasted link carries no file of its own, so the player borrows yt-dlp
-    // to fetch one when it is installed. Empty means "look for it" rather
-    // than "there is none", which is what the search in the player does.
-    std::wstring analyzerExtractor;
     // The toggle shortcut. Win+Y is the default, but any key with any mix of
     // modifiers can be set in the options.
     WORD hotkeyVk = 'Y';
@@ -2628,14 +2245,13 @@ bool ParseHotkeyKey(const std::wstring& raw, WORD& vk, std::wstring& label) {
 Settings LoadSettings() {
     Settings s;
     const std::wstring startTool = GetStringSetting(L"Startup.DefaultTool");
-    s.defaultTool = startTool == L"analyzer"  ? 1
-                    : startTool == L"tempo"   ? 2
-                    : startTool == L"metronome" ? 3
-                    : startTool == L"tuner"   ? 4
-                    : startTool == L"strum"   ? 5
-                    : startTool == L"circle"  ? 6
-                    : startTool == L"trainer" ? 7
-                                              : 0;
+    s.defaultTool = startTool == L"tempo"     ? 1
+                    : startTool == L"metronome" ? 2
+                    : startTool == L"tuner"     ? 3
+                    : startTool == L"strum"     ? 4
+                    : startTool == L"circle"    ? 5
+                    : startTool == L"trainer"   ? 6
+                                                : 0;
     const std::wstring theme = GetStringSetting(L"Appearance.Theme");
     s.theme = theme == L"light" ? kThemeLight
               : theme == L"dark" ? kThemeDark
@@ -2765,22 +2381,6 @@ Settings LoadSettings() {
         std::clamp(trainerSeconds == 0 ? 5 : trainerSeconds, 2, 20);
     const std::wstring trainerNoteSet = GetStringSetting(L"NoteTrainer.NoteSet");
     s.trainerNaturals = trainerNoteSet == L"naturals";
-
-    // The analyzer. A settings file written before this tool has none of these,
-    // so the base URL falls back to the public service and the folder to empty,
-    // which means Downloads\MusiciansToolkit when an export runs.
-    const std::wstring analyzerBase = GetStringSetting(L"Analyzer.BaseUrl");
-    s.analyzerBaseUrl =
-        analyzerBase.empty() ? L"https://magic-chords.dev" : analyzerBase;
-    while (!s.analyzerBaseUrl.empty() && s.analyzerBaseUrl.back() == L'/') {
-        s.analyzerBaseUrl.pop_back();
-    }
-    const std::wstring analyzerAcappella =
-        GetStringSetting(L"Analyzer.Acappella");
-    s.analyzerAcappella = !analyzerAcappella.empty() &&
-                          Wh_GetIntSetting(L"Analyzer.Acappella") != 0;
-    s.analyzerExportFolder = GetStringSetting(L"Analyzer.ExportFolder");
-    s.analyzerExtractor = GetStringSetting(L"Analyzer.Extractor");
 
     // The toggle shortcut. The key defaults to Y and Win is the default
     // modifier, so an older settings file keeps opening on Win+Y. Reading the
@@ -3433,119 +3033,8 @@ struct NoteTrainerState {
 
 NoteTrainerState g_trainer;
 
-////////////////////////////////////////////////////////////////////////////////
-// Song analyzer state
-//
-// The request thread only ever writes this state under the lock and then posts
-// kMessageAnalyzer; the panel reads it under the same lock while painting. A
-// run keeps going when the panel closes or another tool is picked, because it
-// takes about a minute and the public quota is small.
-
-constexpr int kAnalyzerFormatCount = 6;
-// The chart reads like a lead sheet: one measure per row, and five rows fit
-// the card at every scale with room for a chord above its beat ticks.
-constexpr int kAnalyzerRows = 5;
-PCWSTR kAnalyzerFormats[kAnalyzerFormatCount] = {L"pdf", L"midi", L"musicxml",
-                                                 L"txt", L"csv",  L"json"};
-PCWSTR kAnalyzerFormatLabels[kAnalyzerFormatCount] = {
-    L"PDF", L"MIDI", L"MusicXML", L"Text", L"CSV", L"JSON"};
-PCWSTR kAnalyzerFormatExtensions[kAnalyzerFormatCount] = {
-    L"pdf", L"mid", L"musicxml", L"txt", L"csv", L"json"};
-
-enum AnalyzerPhase {
-    kAnalyzerIdle,
-    kAnalyzerSubmitting,
-    kAnalyzerRunning,
-    kAnalyzerReady,
-    kAnalyzerFailed,
-};
-
-// One chord cell. The service reports a slot per detected onset, so a bar with
-// two chords arrives as two cells and each keeps its own slice of the measure.
-// That timing is what puts the playhead on the chord actually being strummed.
-struct AnalyzerBar {
-    std::wstring chord;  // Empty where the service heard no chord (its "N").
-    double start = 0.0;  // Seconds from the top of the piece.
-    double end = 0.0;
-};
-
-// One measure row: where it sits in the song, and the slice of the bar list it
-// owns. Rows are contiguous, so the playhead always finds one.
-struct AnalyzerMeasure {
-    double start = 0.0;
-    double end = 0.0;
-    int first = 0;  // First bar of this measure.
-    int count = 0;
-};
-
-struct AnalyzerState {
-    int phase = kAnalyzerIdle;
-    std::wstring jobId;
-    std::wstring source;
-    std::wstring status;
-    std::wstring error;
-    std::wstring key;
-    std::wstring tempo;
-    std::wstring meter;
-    std::wstring duration;
-    std::wstring exportNote;
-    std::vector<AnalyzerBar> bars;
-    std::vector<AnalyzerMeasure> measures;
-    std::wstring audioPath;  // Local file to play; empty until one is had.
-    // A link's song is fetched on its own thread and parked here, then taken
-    // on the panel thread, because the media player is only driven there.
-    std::wstring pendingAudio;
-    bool audioFetched = false;  // audioPath was downloaded, so it is ours.
-    int beats = 4;           // Beat ticks drawn across a measure.
-    int scroll = 0;          // First visible measure row.
-    int progress = 0;
-    double length = 0.0;     // Seconds of song, 0 when the service omits it.
-    double position = 0.0;   // Playhead, in seconds.
-    double anchorMs = 0.0;   // NowMs() the playhead was last set, for the clock.
-    bool busy = false;
-    bool playing = false;
-    bool audioOpen = false;  // The MCI device is holding audioPath open.
-};
-
-AnalyzerState g_analyzer;
-SRWLOCK g_analyzerLock = SRWLOCK_INIT;
-std::atomic<bool> g_analyzerCancel(false);
-// Bumped by every submission. A fetch that started for the last link cannot
-// hand its song to the run that replaced it.
-std::atomic<unsigned> g_analyzerEpoch(0);
-HANDLE g_analyzerThread = nullptr;
-// Workers that were still busy when a newer one was wanted. Their handles are
-// kept rather than dropped, because the unload path has to be able to wait for
-// them: a thread running this module's code after it is unloaded is a crash.
-std::vector<HANDLE> g_analyzerRetired;
-bool g_analyzerAcappella = false;
-bool g_analyzerSeeded = false;
-// A wheel turn or a drag on the chart holds the view still for a moment, so
-// looking ahead does not turn into a tug of war with the playhead.
-constexpr double kAnalyzerFollowHoldMs = 2400.0;
-double g_analyzerFollowUntil = 0.0;
-// Dragging the scrubber parks the media clock and moves the playhead only, so
-// a fast drag does not restart the audio on every pixel.
-bool g_scrubbing = false;
-
-// The URL field keeps a caret and a selection anchor, both counted in
-// characters; Browse and Space submit whatever it holds.
-struct AnalyzerInput {
-    std::wstring text;
-    int caret = 0;
-    int anchor = 0;
-    bool focused = false;
-};
-
-AnalyzerInput g_analyzerInput;
-// The first character the URL field shows. A link is usually wider than the box,
-// so the field slides forward to keep the caret - and the end of the link being
-// edited - in view.
-int g_analyzerFieldStart = 0;
-
 enum Tool {
     kToolChords,
-    kToolAnalyzer,
     kToolTempo,
     kToolMetronome,
     kToolTuner,
@@ -3557,8 +3046,6 @@ enum Tool {
 
 PCWSTR ToolLabel(int tool) {
     switch (tool) {
-        case kToolAnalyzer:
-            return L"Song analyzer";
         case kToolTempo:
             return L"Tap tempo";
         case kToolMetronome:
@@ -3629,15 +3116,6 @@ enum Hit {
     kHitTrainerStart,
     kHitTrainerInst,
     kHitTrainerNaturals,
-    kHitAnalyzerField,
-    kHitAnalyzerBrowse,
-    kHitAnalyzerAction,
-    kHitAnalyzerAcappella,
-    kHitAnalyzerExport,
-    kHitAnalyzerExportRow,
-    kHitAnalyzerPlay,
-    kHitAnalyzerScrub,
-    kHitAnalyzerBar,
 };
 
 struct HitResult {
@@ -3780,29 +3258,6 @@ struct Layout {
     RECT trainerScore{};
     RECT trainerStreak{};
     RECT trainerHint{};
-
-    // Song analyzer, in the same rectangle once more. A URL field with a Browse
-    // chip beside it, the transport row under that, the now-playing strip with
-    // its play button and clock, the scrubber, the measure chart, the key and
-    // tempo line, the status line and the export list over the chart.
-    RECT analyzerPad{};
-    RECT analyzerField{};
-    RECT analyzerBrowse{};
-    RECT analyzerAction{};
-    RECT analyzerAcappella{};
-    RECT analyzerExport{};
-    RECT analyzerNow{};
-    RECT analyzerPlay{};
-    RECT analyzerNowChord{};
-    RECT analyzerNowNext{};
-    RECT analyzerNowTime{};
-    RECT analyzerScrub{};
-    RECT analyzerChart{};
-    RECT analyzerMeta{};
-    RECT analyzerStatus{};
-    RECT analyzerHint{};
-    RECT analyzerExportMenu{};
-    RECT analyzerExportRow[kAnalyzerFormatCount]{};
 };
 
 int S(float dip) {
@@ -3810,94 +3265,6 @@ int S(float dip) {
 }
 
 Layout g_layout;
-
-// The analyzer chart reads like a lead sheet: one measure per row, its cells
-// laid across a time-scaled lane, the measure number in a gutter on the left.
-// Rows are all the same height, so paint and hit-testing read the same box for
-// the same row, and a cell is placed by its own timing rather than by index.
-int AnalyzerRowHeight() {
-    const RECT& chart = g_layout.analyzerChart;
-    return std::max(
-        1, static_cast<int>(chart.bottom - chart.top) / kAnalyzerRows);
-}
-
-RECT AnalyzerRowRect(int row) {
-    const RECT& chart = g_layout.analyzerChart;
-    const int height = AnalyzerRowHeight();
-    const int top = static_cast<int>(chart.top) + row * height;
-    return {chart.left, top, chart.right,
-            std::min(top + height, static_cast<int>(chart.bottom))};
-}
-
-int AnalyzerGutter() {
-    return S(24.0f);
-}
-
-float AnalyzerLaneLeft() {
-    return static_cast<float>(g_layout.analyzerChart.left) +
-           static_cast<float>(AnalyzerGutter());
-}
-
-float AnalyzerLaneRight() {
-    return static_cast<float>(g_layout.analyzerChart.right) - S(6.0f);
-}
-
-// Where a moment inside a measure lands across the lane. The span is clamped,
-// so a slot that rounds a hair past its measure still draws inside the row.
-float AnalyzerTimeToX(const AnalyzerMeasure& measure, double time) {
-    const float left = AnalyzerLaneLeft();
-    const float width = std::max(1.0f, AnalyzerLaneRight() - left);
-    const double span = measure.end - measure.start;
-    if (span <= 0.0) {
-        return left;
-    }
-    const double ratio = std::clamp((time - measure.start) / span, 0.0, 1.0);
-    return left + static_cast<float>(ratio) * width;
-}
-
-// A point on the chart, read back as a song position: the row picks the
-// measure, the lane picks the moment inside it.
-struct AnalyzerSpot {
-    int measure = -1;  // Row hit, as an index into measures.
-    int bar = -1;      // Cell under the pointer, or -1 for a gap.
-    double time = 0.0;
-};
-
-AnalyzerSpot AnalyzerSpotAt(POINT pt) {
-    AnalyzerSpot spot;
-    const RECT& chart = g_layout.analyzerChart;
-    if (!PtInRect(&chart, pt)) {
-        return spot;
-    }
-    const int row =
-        (static_cast<int>(pt.y) - static_cast<int>(chart.top)) /
-        AnalyzerRowHeight();
-    if (row < 0 || row >= kAnalyzerRows) {
-        return spot;
-    }
-    const float left = AnalyzerLaneLeft();
-    const float width = std::max(1.0f, AnalyzerLaneRight() - left);
-    const float ratio =
-        std::clamp((static_cast<float>(pt.x) - left) / width, 0.0f, 1.0f);
-    AcquireSRWLockShared(&g_analyzerLock);
-    const int index = g_analyzer.scroll + row;
-    if (index >= 0 && index < static_cast<int>(g_analyzer.measures.size())) {
-        const AnalyzerMeasure& measure = g_analyzer.measures[index];
-        spot.measure = index;
-        spot.time = measure.start +
-                    static_cast<double>(ratio) *
-                        std::max(0.0, measure.end - measure.start);
-        for (int i = 0; i < measure.count; i++) {
-            const AnalyzerBar& bar = g_analyzer.bars[measure.first + i];
-            if (spot.time >= bar.start && spot.time < bar.end) {
-                spot.bar = measure.first + i;
-                break;
-            }
-        }
-    }
-    ReleaseSRWLockShared(&g_analyzerLock);
-    return spot;
-}
 
 // Defined with the strumming state further down, but the layout needs it.
 int StrumSlotCount();
@@ -4386,69 +3753,6 @@ void ComputeLayout() {
                        trainerTop + S(294)};
     l.trainerHint = {l.trainerPad.left, trainerTop + S(396), l.trainerPad.right,
                      trainerTop + S(414)};
-
-    // Song analyzer, laid out in the same rectangle once more. A URL field and
-    // a Browse chip on top, the transport row under it, the now-playing strip
-    // with its play button and clock, the scrubber, the measure chart, the key
-    // and tempo line and the status line, with the export list unrolling over
-    // the middle of the card from the Export chip.
-    l.analyzerPad = l.metroPad;
-    const int analyzerTop = l.analyzerPad.top;
-    const int analyzerLeft = l.analyzerPad.left + S(16);
-    const int analyzerRight = l.analyzerPad.right - S(16);
-    l.analyzerBrowse = {analyzerRight - S(70), analyzerTop + S(4),
-                        analyzerRight, analyzerTop + S(32)};
-    l.analyzerField = {analyzerLeft, analyzerTop + S(4),
-                       l.analyzerBrowse.left - S(6), analyzerTop + S(32)};
-    l.analyzerAction = {analyzerLeft, analyzerTop + S(38),
-                        analyzerLeft + S(92), analyzerTop + S(66)};
-    l.analyzerAcappella = {l.analyzerAction.right + S(6), analyzerTop + S(38),
-                           l.analyzerAction.right + S(98),
-                           analyzerTop + S(66)};
-    l.analyzerExport = {analyzerRight - S(68), analyzerTop + S(38),
-                        analyzerRight, analyzerTop + S(66)};
-
-    // The now-playing strip: the play button, the chord under the playhead,
-    // the one coming next and the clock, all in one framed bar so the player
-    // reads as a single unit rather than as loose pieces.
-    l.analyzerNow = {analyzerLeft, analyzerTop + S(72), analyzerRight,
-                     analyzerTop + S(124)};
-    l.analyzerPlay = {analyzerLeft + S(7), analyzerTop + S(79),
-                      analyzerLeft + S(47), analyzerTop + S(117)};
-    l.analyzerNowTime = {analyzerRight - S(80), analyzerTop + S(78),
-                         analyzerRight - S(8), analyzerTop + S(116)};
-    l.analyzerNowChord = {l.analyzerPlay.right + S(12), analyzerTop + S(76),
-                          l.analyzerNowTime.left - S(6),
-                          analyzerTop + S(105)};
-    l.analyzerNowNext = {l.analyzerNowChord.left, analyzerTop + S(105),
-                         l.analyzerNowTime.left - S(6), analyzerTop + S(121)};
-
-    // A thin scrubber over the whole song. The hit box is taller than the line
-    // it draws, so the track is easy to grab.
-    l.analyzerScrub = {analyzerLeft + S(2), analyzerTop + S(128),
-                       analyzerRight - S(2), analyzerTop + S(146)};
-
-    // Five measure rows, a little over thirty DIP each: enough for the chord
-    // above its beat ticks without the chart turning into a spreadsheet.
-    l.analyzerChart = {analyzerLeft, analyzerTop + S(150), analyzerRight,
-                       analyzerTop + S(306)};
-    l.analyzerMeta = {analyzerLeft, analyzerTop + S(312), analyzerRight,
-                      analyzerTop + S(330)};
-    l.analyzerStatus = {analyzerLeft, analyzerTop + S(334), analyzerRight,
-                        analyzerTop + S(380)};
-    l.analyzerHint = {l.analyzerPad.left, analyzerTop + S(396),
-                      l.analyzerPad.right, analyzerTop + S(414)};
-    const int exportRowHeight = S(26);
-    const int exportMenuTop = l.analyzerExport.bottom + S(4);
-    l.analyzerExportMenu = {
-        analyzerRight - S(150), exportMenuTop, analyzerRight,
-        exportMenuTop + S(8) + exportRowHeight * kAnalyzerFormatCount};
-    for (int i = 0; i < kAnalyzerFormatCount; i++) {
-        const int rowTop = exportMenuTop + S(4) + i * exportRowHeight;
-        l.analyzerExportRow[i] = {l.analyzerExportMenu.left + S(4), rowTop,
-                                  l.analyzerExportMenu.right - S(4),
-                                  rowTop + exportRowHeight};
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4839,9 +4143,6 @@ constexpr UINT_PTR kPulseTimer = 4;
 constexpr UINT_PTR kTunerTimer = 5;
 constexpr UINT_PTR kMenuAnimTimer = 6;
 constexpr UINT_PTR kTrainerTimer = 7;
-// The analyzer player ticks at thirty frames a second, which is what keeps the
-// playhead and the media clock in step.
-constexpr UINT_PTR kAnalyzerTimer = 8;
 constexpr double kOpenDurationMs = 190.0;
 constexpr double kCloseDurationMs = 140.0;
 constexpr float kSlideDistance = 14.0f;
@@ -4883,24 +4184,6 @@ void TrainerResetScore();
 void TrainerSetInstrument(int instrument);
 void SetTool(int tool);
 void Repaint();
-void AnalyzerHalt();
-void AnalyzerHaltAudio();
-void AnalyzerBrowse();
-void AnalyzerCancel();
-void AnalyzerExport(int format);
-void AnalyzerScrollBy(int rows);
-void AnalyzerSubmitUrl();
-void AnalyzerFetchLinkAudio(const std::wstring& url);
-void AnalyzerAudioHalt();
-// The card's state predicates are read by the footer and the card, which are
-// painted before any of the analyzer's own functions are defined.
-bool AnalyzerBusy();
-bool AnalyzerReady();
-bool AnalyzerHasAudio();
-bool AnalyzerPlayablePath(const std::wstring& path, bool fetched);
-// Reading a song off the disk is the worker's job, so a large file never stalls
-// the panel while it is being read.
-bool AnalyzerReadFile(const std::wstring& path, std::vector<uint8_t>& out);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Popup lists
@@ -4924,7 +4207,6 @@ MenuState g_tunerMenu;
 MenuState g_strumMenu;     // The chord the strings are fretted to.
 MenuState g_patternMenu;   // The pattern the grid is set to.
 MenuState g_meterMenu;     // The meter the pattern list is filtered by.
-MenuState g_exportMenu;    // The formats the analyzer can export.
 
 enum MenuKind {
     kMenuNone = 0,
@@ -4934,7 +4216,6 @@ enum MenuKind {
     kMenuStrumChord = 4,
     kMenuStrumPattern = 5,
     kMenuStrumMeter = 6,
-    kMenuAnalyzerExport = 7,
 };
 
 bool MenuHit(const MenuState& m) {
@@ -4952,7 +4233,7 @@ bool MenuAnimating(const MenuState& m) {
 bool AnyMenuAnimating() {
     return MenuAnimating(g_toolMenu) || MenuAnimating(g_tunerMenu) ||
            MenuAnimating(g_strumMenu) || MenuAnimating(g_patternMenu) ||
-           MenuAnimating(g_meterMenu) || MenuAnimating(g_exportMenu);
+           MenuAnimating(g_meterMenu);
 }
 
 void StartMenuAnimTimer() {
@@ -5031,8 +4312,6 @@ int MenuRowCount(const MenuState& m) {
         }
         case kMenuStrumMeter:
             return kSignatureCount;
-        case kMenuAnalyzerExport:
-            return kAnalyzerFormatCount;
         default:
             break;
     }
@@ -5080,9 +4359,6 @@ void UpdateMenuAnimations() {
     }
     if (MenuAnimating(g_meterMenu)) {
         moved = MenuStep(g_meterMenu, g_meterMenu.target != 0) || moved;
-    }
-    if (MenuAnimating(g_exportMenu)) {
-        moved = MenuStep(g_exportMenu, g_exportMenu.target != 0) || moved;
     }
     if (moved) {
         Repaint();
@@ -5391,8 +4667,6 @@ void FinishClose() {
     MenuReset(g_strumMenu);
     MenuReset(g_patternMenu);
     MenuReset(g_meterMenu);
-    MenuReset(g_exportMenu);
-    g_analyzerInput.focused = false;
 }
 
 void UpdateAnimation() {
@@ -5497,20 +4771,17 @@ void CloseFlyout() {
     if (g_phase == kPhaseClosed || g_phase == kPhaseClosing) {
         return;
     }
-    if (g_dragging || g_selecting || g_scrubbing) {
+    if (g_dragging || g_selecting) {
         g_dragging = false;
         g_selecting = false;
-        g_scrubbing = false;
         ReleaseCapture();
     }
     g_sliding = false;
     g_phase = kPhaseClosing;
     g_phaseStart = NowMs();
-    // Nothing half-typed survives the close, so the next open starts clean, and
-    // the song is released with the panel it was playing in.
+    // Nothing half-typed survives the close, so the next open starts clean.
     g_tempoEntry.active = false;
     g_tempoEntry.count = 0;
-    AnalyzerHaltAudio();
     SetTimer(g_panel.Hwnd(), kAnimationTimer, 8, nullptr);
 }
 
@@ -9734,539 +9005,6 @@ void PaintTrainer(Surface& s, const Theme& t) {
                 t.textFaint);
 }
 
-// The x coordinate of a caret position inside the analyzer's URL field. Only
-// the visible window is measured, so the caret lands on the glyph under it
-// while the link is scrolled.
-int AnalyzerFieldEdge(int index) {
-    const int left = static_cast<int>(g_layout.analyzerField.left) + S(10);
-    const int count = static_cast<int>(g_analyzerInput.text.size());
-    index = std::clamp(index, 0, count);
-    const int start = std::clamp(g_analyzerFieldStart, 0, count);
-    if (index <= start) {
-        return left;  // Everything before the window sits on its left edge.
-    }
-    HFONT font = g_fonts.Get(S(static_cast<float>(kFontSearch)), FW_NORMAL);
-    const std::wstring visible = g_analyzerInput.text.substr(
-        static_cast<size_t>(start), static_cast<size_t>(index - start));
-    return left + g_text.Measure(font, visible).cx;
-}
-
-// The caret position nearest to a click in the field.
-int AnalyzerFieldIndex(int x) {
-    const int count = static_cast<int>(g_analyzerInput.text.size());
-    const int start = std::clamp(g_analyzerFieldStart, 0, count);
-    int best = start;
-    int bestDistance = std::abs(x - AnalyzerFieldEdge(start));
-    for (int i = start + 1; i <= count; i++) {
-        const int distance = std::abs(x - AnalyzerFieldEdge(i));
-        if (distance < bestDistance) {
-            bestDistance = distance;
-            best = i;
-        }
-    }
-    return best;
-}
-
-// Slides the visible window so the caret stays inside the box, dropping
-// characters off the front. Without this a long link hides the very end the
-// caret is editing, and a caret you cannot see is a guess.
-void AnalyzerFieldFollow() {
-    const RECT& field = g_layout.analyzerField;
-    const int width = (field.right - S(8)) - (field.left + S(10));
-    const int count = static_cast<int>(g_analyzerInput.text.size());
-    if (width <= 0) {
-        g_analyzerFieldStart = 0;
-        return;
-    }
-    HFONT font = g_fonts.Get(S(static_cast<float>(kFontSearch)), FW_NORMAL);
-    auto tail = [&](int from) {
-        return g_analyzerInput.text.substr(
-            static_cast<size_t>(from),
-            static_cast<size_t>(g_analyzerInput.caret - from));
-    };
-    // The field may now be longer than it shows, so the window slides back as
-    // far as it can, then forward until the caret and the text behind it fit.
-    int start = std::clamp(g_analyzerFieldStart, 0, count);
-    if (start > g_analyzerInput.caret) {
-        start = g_analyzerInput.caret;
-    }
-    while (start > 0 &&
-           g_text.Measure(font, tail(start - 1)).cx <= width) {
-        start--;
-    }
-    while (start < g_analyzerInput.caret &&
-           g_text.Measure(font, tail(start)).cx > width) {
-        start++;
-    }
-    g_analyzerFieldStart = start;
-}
-
-// The chord that sounds at a moment: the last cell to start at or before it.
-// Empty cells are the service's rests, so the readout walks back to the last
-// chord that actually rings. Caller holds g_analyzerLock.
-int AnalyzerChordAtLocked(double time) {
-    int best = -1;
-    const int count = static_cast<int>(g_analyzer.bars.size());
-    for (int i = 0; i < count; i++) {
-        const AnalyzerBar& bar = g_analyzer.bars[i];
-        if (bar.start > time) {
-            break;
-        }
-        if (!bar.chord.empty()) {
-            best = i;
-        }
-    }
-    return best;
-}
-
-// The chord after a cell, which is what the strip previews. Caller holds the
-// lock, like the reader above.
-int AnalyzerNextChordLocked(int bar) {
-    const int count = static_cast<int>(g_analyzer.bars.size());
-    for (int i = bar + 1; i < count; i++) {
-        if (!g_analyzer.bars[i].chord.empty()) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-// The measure the playhead is in, or -1 before the chart starts.
-int AnalyzerMeasureAtLocked(double time) {
-    const int count = static_cast<int>(g_analyzer.measures.size());
-    for (int i = count - 1; i >= 0; i--) {
-        if (g_analyzer.measures[i].start <= time + 0.0001) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-// m:ss, for the clock beside the chord and for the length of the piece.
-std::wstring AnalyzerClock(double seconds) {
-    const int total = std::max(0, static_cast<int>(seconds));
-    std::wstring text = std::to_wstring(total / 60);
-    text += L":";
-    const int rest = total % 60;
-    if (rest < 10) {
-        text += L"0";
-    }
-    text += std::to_wstring(rest);
-    return text;
-}
-
-// The analyzer card: a URL field, the transport row, the now-playing strip,
-// the scrubber, the measure chart, the key and tempo line and the status line.
-// The whole card reads g_analyzer under the shared lock, so a poll or a tick
-// landing mid paint is either seen completely or not at all.
-void PaintAnalyzer(Surface& s, const Theme& t) {
-    const RECT& card = g_layout.analyzerPad;
-    FillRoundRect(s, L(card.left), L(card.top), L(card.right), L(card.bottom),
-                  S(kCardRadius), t.card);
-    StrokeRoundRect(s, L(card.left) + 0.5f, L(card.top) + 0.5f,
-                    L(card.right) - 0.5f, L(card.bottom) - 0.5f, S(kCardRadius),
-                    S(1.0f), t.stroke);
-
-    AcquireSRWLockShared(&g_analyzerLock);
-    const int phase = g_analyzer.phase;
-    const bool busy = phase == kAnalyzerSubmitting || phase == kAnalyzerRunning;
-    const bool ready = phase == kAnalyzerReady;
-    const bool failed = phase == kAnalyzerFailed;
-    const bool playing = g_analyzer.playing;
-    // Having a path is not the same as having sound: a video is analyzed
-    // happily but cannot be handed to the media player, so its chart counts as
-    // one with nothing to play and keeps the Audio chip.
-    const bool hasAudio =
-        AnalyzerPlayablePath(g_analyzer.audioPath, g_analyzer.audioFetched);
-    const int count = static_cast<int>(g_analyzer.bars.size());
-    const int measureCount = static_cast<int>(g_analyzer.measures.size());
-    const double length = g_analyzer.length;
-    const double position =
-        length > 0.0 ? std::clamp(g_analyzer.position, 0.0, length)
-                     : std::max(0.0, g_analyzer.position);
-    const int beats = std::clamp(g_analyzer.beats, 2, 16);
-
-    HFONT chipFont =
-        g_fonts.Get(S(static_cast<float>(kFontTab)), kWeightSemiBold);
-    HFONT fieldFont =
-        g_fonts.Get(S(static_cast<float>(kFontSearch)), FW_NORMAL);
-    HFONT smallFont = g_fonts.Get(S(static_cast<float>(kFontFoot)), FW_NORMAL);
-    HFONT numberFont = g_fonts.Get(S(static_cast<float>(kFontFret)), FW_NORMAL);
-    HFONT chordFont =
-        g_fonts.Get(S(static_cast<float>(kFontChord)), kWeightSemiBold);
-    HFONT barFont =
-        g_fonts.Get(S(static_cast<float>(kFontRow)), kWeightSemiBold);
-
-    // The URL field, with a selection and a blinking caret like the search box.
-    const RECT& field = g_layout.analyzerField;
-    const bool focused = g_analyzerInput.focused;
-    FillRoundRect(s, L(field.left), L(field.top), L(field.right),
-                  L(field.bottom), S(kControlRadius),
-                  focused ? t.controlHover : t.control);
-    StrokeRoundRect(s, L(field.left) + 0.5f, L(field.top) + 0.5f,
-                    L(field.right) - 0.5f, L(field.bottom) - 0.5f,
-                    S(kControlRadius), S(1.0f),
-                    focused ? WithAlpha(t.accent, 0.55f) : t.stroke);
-    RECT fieldText = field;
-    fieldText.left += S(10);
-    fieldText.right -= S(8);
-    if (g_analyzerInput.text.empty()) {
-        g_text.Draw(s, fieldFont, L"Paste a song or video URL", fieldText,
-                    DT_LEFT | DT_VCENTER | DT_SINGLELINE, t.textFaint);
-    } else {
-        const int start = std::min(g_analyzerInput.caret, g_analyzerInput.anchor);
-        const int end = std::max(g_analyzerInput.caret, g_analyzerInput.anchor);
-        const float selLeft = L(AnalyzerFieldEdge(start));
-        const float selRight =
-            std::min(L(AnalyzerFieldEdge(end)), L(fieldText.right));
-        if (selRight > selLeft) {
-            const float cy = (L(field.top) + L(field.bottom)) * 0.5f;
-            FillRoundRect(s, selLeft - S(1.0f), cy - S(9.0f),
-                          selRight + S(1.0f), cy + S(9.0f), S(2.0f),
-                          t.selection);
-        }
-        // Only the visible window is drawn, so a long link shows the end the
-        // caret is editing rather than the part before it.
-        const int window = std::clamp(
-            g_analyzerFieldStart, 0,
-            static_cast<int>(g_analyzerInput.text.size()));
-        g_text.Draw(s, fieldFont,
-                    g_analyzerInput.text.substr(static_cast<size_t>(window)),
-                    fieldText, DT_LEFT | DT_VCENTER | DT_SINGLELINE, t.text);
-    }
-    if (focused && g_windowActive &&
-        g_analyzerInput.caret == g_analyzerInput.anchor) {
-        const double blink = fmod(NowMs() - g_caretStart, 1060.0);
-        if (blink < 530.0) {
-            const float x = std::min(L(AnalyzerFieldEdge(g_analyzerInput.caret)),
-                                     L(fieldText.right) - S(2.0f));
-            const float cy = (L(field.top) + L(field.bottom)) * 0.5f;
-            FillRoundRect(s, x, cy - S(9.0f), x + S(1.6f), cy + S(9.0f),
-                          S(0.8f), t.accent);
-        }
-    }
-
-    // The chip offers the one thing the card still lacks. Before a chart there
-    // is no song at all, so it browses; a chart with nothing the media player
-    // can take - a silent link, a video file - turns it into Audio, and once a
-    // playable song is on the card it browses again.
-    const bool attach = ready && !hasAudio;
-    PaintChip(s, t, g_layout.analyzerBrowse, attach ? L"Audio" : L"Browse",
-              chipFont, false, g_hover.id == kHitAnalyzerBrowse);
-    PaintChip(s, t, g_layout.analyzerAction, busy ? L"Cancel" : L"Analyze",
-              chipFont, busy, g_hover.id == kHitAnalyzerAction);
-    PaintChip(s, t, g_layout.analyzerAcappella, L"Acappella", chipFont,
-              g_analyzerAcappella, g_hover.id == kHitAnalyzerAcappella);
-    PaintChip(s, t, g_layout.analyzerExport,
-              MenuHit(g_exportMenu) ? L"Export \x25B4" : L"Export", chipFont,
-              false, g_hover.id == kHitAnalyzerExport, ready);
-
-    // The now-playing strip. Everything in it is one thought: what is sounding
-    // now, what comes next, and how far into the song that is.
-    const RECT& now = g_layout.analyzerNow;
-    FillRoundRect(s, L(now.left), L(now.top), L(now.right), L(now.bottom),
-                  S(10.0f), t.control);
-    StrokeRoundRect(s, L(now.left) + 0.5f, L(now.top) + 0.5f,
-                    L(now.right) - 0.5f, L(now.bottom) - 0.5f, S(10.0f),
-                    S(1.0f), t.stroke);
-
-    const bool canPlay = ready && measureCount > 0;
-    const bool playHot = g_hover.id == kHitAnalyzerPlay;
-    const RECT& play = g_layout.analyzerPlay;
-    if (playing) {
-        FillRoundRect(s, L(play.left), L(play.top), L(play.right),
-                      L(play.bottom), S(9.0f),
-                      playHot ? t.controlHover : t.control);
-        StrokeRoundRect(s, L(play.left) + 0.5f, L(play.top) + 0.5f,
-                        L(play.right) - 0.5f, L(play.bottom) - 0.5f, S(9.0f),
-                        S(1.0f), WithAlpha(t.accent, 0.55f));
-    } else if (canPlay) {
-        FillRoundRect(s, L(play.left), L(play.top), L(play.right),
-                      L(play.bottom), S(9.0f),
-                      WithAlpha(t.accent, playHot ? 1.0f : 0.92f));
-    } else {
-        FillRoundRect(s, L(play.left), L(play.top), L(play.right),
-                      L(play.bottom), S(9.0f), t.control);
-    }
-    PaintGlyph(s, L(play.left + play.right) * 0.5f,
-               L(play.top + play.bottom) * 0.5f,
-               playing ? L'\xE769' : L'\xE768', S(17.0f),
-               playing ? t.text
-                       : canPlay ? t.onAccent : WithAlpha(t.textMuted, 0.35f));
-
-    // The chord under the playhead, and the one coming after it.
-    int currentBar = -1;
-    int nextBar = -1;
-    if (count > 0) {
-        currentBar = AnalyzerChordAtLocked(position);
-        nextBar = AnalyzerNextChordLocked(currentBar);
-    }
-    std::wstring chordText;
-    std::wstring nextText;
-    if (count == 0) {
-        chordText = L"\x2014";
-        if (busy) {
-            nextText = L"Analyzing\x2026";
-        } else if (ready) {
-            nextText = L"No chords detected";
-        } else if (failed) {
-            nextText = L"Try another link or file";
-        } else {
-            nextText = L"Paste a link or browse for a file";
-        }
-    } else {
-        chordText = currentBar >= 0 ? g_analyzer.bars[currentBar].chord
-                                    : std::wstring(L"\x2014");
-        if (nextBar >= 0) {
-            nextText = L"Next  ";
-            nextText += g_analyzer.bars[nextBar].chord;
-        } else {
-            nextText = L"Last chord";
-        }
-    }
-    g_text.Draw(s, chordFont, chordText, g_layout.analyzerNowChord,
-                DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
-                count > 0 && currentBar >= 0 ? t.text : t.textFaint);
-    g_text.Draw(s, smallFont, nextText, g_layout.analyzerNowNext,
-                DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS,
-                count > 0 ? t.textMuted : t.textFaint);
-
-    std::wstring clockText;
-    if (length > 0.0) {
-        clockText = AnalyzerClock(position);
-        clockText += L" / ";
-        clockText += AnalyzerClock(length);
-    } else if (count > 0) {
-        clockText = AnalyzerClock(position);
-    } else {
-        clockText = L"\x2014";
-    }
-    g_text.Draw(s, smallFont, clockText, g_layout.analyzerNowTime,
-                DT_RIGHT | DT_VCENTER | DT_SINGLELINE, t.textMuted);
-
-    // The scrubber: the whole song on one line, its knob where the playhead is.
-    const RECT& scrub = g_layout.analyzerScrub;
-    const float trackLeft = L(scrub.left) + S(4.0f);
-    const float trackRight = L(scrub.right) - S(4.0f);
-    const float trackMid = (L(scrub.top) + L(scrub.bottom)) * 0.5f;
-    const float trackHalf = S(2.0f);
-    FillRoundRect(s, trackLeft, trackMid - trackHalf, trackRight,
-                  trackMid + trackHalf, trackHalf, t.control);
-    const bool scrubbable = length > 0.0 && count > 0;
-    if (scrubbable) {
-        const float ratio =
-            Clamp01(static_cast<float>(position / length));
-        const float knobX = trackLeft + (trackRight - trackLeft) * ratio;
-        if (knobX > trackLeft + trackHalf) {
-            FillRoundRect(s, trackLeft, trackMid - trackHalf, knobX,
-                          trackMid + trackHalf, trackHalf, t.accent);
-        }
-        const bool knobHot = g_hover.id == kHitAnalyzerScrub || g_scrubbing;
-        FillCircle(s, knobX, trackMid, knobHot ? S(5.5f) : S(4.0f), t.accent);
-        StrokeCircle(s, knobX, trackMid, knobHot ? S(5.5f) : S(4.0f), S(1.5f),
-                     WithAlpha(t.text, 0.35f));
-    }
-
-    // The chart. Five measure rows, one per line, each laid out on its own time
-    // axis with the beats ticked off behind the chords and a playhead sweeping
-    // the row the song is in. Long songs scroll a measure at a time.
-    const RECT& chart = g_layout.analyzerChart;
-    FillRoundRect(s, L(chart.left), L(chart.top), L(chart.right),
-                  L(chart.bottom), S(8.0f), t.control);
-    if (measureCount == 0) {
-        std::wstring message = L"Paste a link, or browse for a file";
-        Color ink = t.textFaint;
-        if (busy) {
-            message = L"Analyzing\x2026";
-            ink = t.textMuted;
-        } else if (failed) {
-            message = g_analyzer.error.empty() ? L"The analysis failed"
-                                              : g_analyzer.error;
-            ink = t.textMuted;
-        } else if (ready) {
-            message = L"No chords detected";
-        }
-        RECT area = chart;
-        area.left += S(14);
-        area.right -= S(14);
-        g_text.Draw(s, fieldFont, message, area,
-                    DT_CENTER | DT_VCENTER | DT_WORDBREAK, ink);
-    } else {
-        const int maxScroll = std::max(0, measureCount - kAnalyzerRows);
-        const int scroll = std::clamp(g_analyzer.scroll, 0, maxScroll);
-        const int currentMeasure = AnalyzerMeasureAtLocked(position);
-        const float laneLeft = AnalyzerLaneLeft();
-        const float laneRight = AnalyzerLaneRight();
-        for (int row = 0; row < kAnalyzerRows; row++) {
-            const int index = scroll + row;
-            if (index >= measureCount) {
-                break;
-            }
-            const AnalyzerMeasure& measure = g_analyzer.measures[index];
-            const RECT rowRect = AnalyzerRowRect(row);
-            const float rowTop = L(rowRect.top);
-            const float rowBottom = L(rowRect.bottom);
-            const bool current = index == currentMeasure;
-            if (current) {
-                FillRoundRect(s, L(rowRect.left) + S(2.0f), rowTop + S(1.0f),
-                              L(rowRect.right) - S(2.0f), rowBottom - S(1.0f),
-                              S(4.0f), t.selection);
-            }
-            RECT number = rowRect;
-            number.left += S(4);
-            number.right = rowRect.left + AnalyzerGutter() - S(6);
-            g_text.Draw(s, numberFont, std::to_wstring(index + 1), number,
-                        DT_RIGHT | DT_VCENTER | DT_SINGLELINE,
-                        current ? t.textMuted : t.textFaint);
-
-            // Beat ticks behind the chords, so the rhythm of the row reads even
-            // where a chord holds for several beats.
-            for (int beat = 1; beat < beats; beat++) {
-                const double time =
-                    measure.start + (measure.end - measure.start) * beat / beats;
-                const float x = AnalyzerTimeToX(measure, time);
-                StrokeLine(s, {x, rowTop + S(4.0f)},
-                           {x, rowBottom - S(4.0f)}, S(1.0f),
-                           WithAlpha(t.grid, 0.22f));
-            }
-            if (index + 1 < measureCount) {
-                FillRoundRect(s, laneLeft - S(2.0f), rowBottom - S(0.5f),
-                              laneRight, rowBottom + S(0.5f), S(0.5f),
-                              t.stroke);
-            }
-
-            for (int i = 0; i < measure.count; i++) {
-                const int barIndex = measure.first + i;
-                const AnalyzerBar& bar = g_analyzer.bars[barIndex];
-                float cellLeft = AnalyzerTimeToX(measure, bar.start) + S(1.5f);
-                float cellRight = AnalyzerTimeToX(measure, bar.end) - S(1.5f);
-                // A very short cell still has to hold a chord name.
-                cellRight = std::max(cellRight, cellLeft + S(14.0f));
-                cellRight = std::min(cellRight, laneRight);
-                const bool cellCurrent =
-                    current && position >= bar.start && position < bar.end;
-                const bool cellHot = g_hover.id == kHitAnalyzerBar &&
-                                     g_hover.index == barIndex;
-                if (cellCurrent) {
-                    FillRoundRect(s, cellLeft, rowTop + S(5.0f), cellRight,
-                                  rowBottom - S(5.0f), S(5.0f),
-                                  WithAlpha(t.accent, 0.18f));
-                } else if (cellHot) {
-                    FillRoundRect(s, cellLeft, rowTop + S(5.0f), cellRight,
-                                  rowBottom - S(5.0f), S(5.0f),
-                                  WithAlpha(t.text, 0.07f));
-                }
-                if (bar.chord.empty()) {
-                    continue;
-                }
-                RECT label{static_cast<LONG>(cellLeft), rowRect.top,
-                           static_cast<LONG>(cellRight), rowRect.bottom};
-                label.left += S(2);
-                label.right -= S(2);
-                g_text.Draw(s, barFont, bar.chord, label,
-                            DT_CENTER | DT_VCENTER | DT_SINGLELINE |
-                                DT_END_ELLIPSIS,
-                            cellCurrent ? t.accent
-                                        : current ? t.text : t.textMuted);
-            }
-
-            // The playhead, drawn over the cells so the chord it is crossing
-            // still reads through it.
-            if (current && measure.end > measure.start) {
-                const float x = AnalyzerTimeToX(measure, position);
-                StrokeLine(s, {x, rowTop + S(2.0f)}, {x, rowBottom - S(2.0f)},
-                           S(2.2f), t.accent);
-                FillCircle(s, x, rowTop + S(2.0f), S(2.6f), t.accent);
-            }
-        }
-    }
-
-    // The key, tempo, meter and length the analysis found.
-    std::wstring meta;
-    auto append = [&meta](const std::wstring& part) {
-        if (part.empty()) {
-            return;
-        }
-        if (!meta.empty()) {
-            meta += L"  \x00B7  ";
-        }
-        meta += part;
-    };
-    append(g_analyzer.key);
-    append(g_analyzer.tempo);
-    append(g_analyzer.meter);
-    append(g_analyzer.duration);
-    g_text.Draw(s, smallFont, meta, g_layout.analyzerMeta,
-                DT_CENTER | DT_VCENTER | DT_SINGLELINE, t.textMuted);
-
-    // The progress bar while a run is live, and one line of status under it.
-    const RECT& status = g_layout.analyzerStatus;
-    if (busy) {
-        RECT bar = status;
-        bar.bottom = bar.top + S(5);
-        FillRoundRect(s, L(bar.left), L(bar.top), L(bar.right), L(bar.bottom),
-                      S(2.5f), t.control);
-        const float fill =
-            static_cast<float>(L(bar.right) - L(bar.left)) *
-            Clamp01(static_cast<float>(g_analyzer.progress) / 100.0f);
-        if (fill > S(2.0f)) {
-            FillRoundRect(s, L(bar.left), L(bar.top), L(bar.left) + fill,
-                          L(bar.bottom), S(2.5f), t.accent);
-        }
-    }
-    std::wstring line;
-    Color ink = t.textMuted;
-    if (failed) {
-        line = g_analyzer.error;
-        ink = t.text;
-    } else if (busy) {
-        line = g_analyzer.status;
-    } else if (!g_analyzer.exportNote.empty()) {
-        line = g_analyzer.exportNote;
-        ink = t.accent;
-    } else if (ready) {
-        line = g_analyzer.source;
-        line += L"  \x00B7  ";
-        line += std::to_wstring(measureCount);
-        line += measureCount == 1 ? L" measure" : L" measures";
-        line += L"  \x00B7  ";
-        line += std::to_wstring(count);
-        line += count == 1 ? L" chord" : L" chords";
-    } else {
-        line = L"Chords, key and tempo, from any link or file";
-        ink = t.textFaint;
-    }
-    RECT lineBox = status;
-    lineBox.top += S(10);
-    g_text.Draw(s, smallFont, line, lineBox,
-                DT_CENTER | DT_TOP | DT_WORDBREAK, ink);
-
-    const bool linkOnly = ready && !hasAudio;
-    ReleaseSRWLockShared(&g_analyzerLock);
-
-    g_text.Draw(s, smallFont,
-                linkOnly ? L"No audio for this link \x00B7 Audio attaches one"
-                         : L"The audio is sent to magic-chords.dev \x00B7 12 runs an hour",
-                g_layout.analyzerHint,
-                DT_CENTER | DT_VCENTER | DT_SINGLELINE, t.textFaint);
-}
-
-// The six export formats, unrolled downward from the Export chip. It shares the
-// popup shell and rows with every other list, so it rolls and fades alike.
-void PaintAnalyzerExportMenu(Surface& s, const Theme& t) {
-    const RECT reveal =
-        PaintListShell(s, t, g_layout.analyzerExportMenu, g_exportMenu.progress);
-    ListItem items[kAnalyzerFormatCount];
-    for (int i = 0; i < kAnalyzerFormatCount; i++) {
-        items[i].label = kAnalyzerFormatLabels[i];
-        items[i].hovered =
-            (g_hover.id == kHitAnalyzerExportRow && g_hover.index == i) ||
-            g_exportMenu.cursor == i;
-    }
-    PaintListRows(s, t, items, kAnalyzerFormatCount, g_layout.analyzerExportRow,
-                  reveal);
-}
-
 // One Fluent keycap: the shortcut key in a small rounded box, the way the shell
 // draws shortcut hints in its own tips.
 void PaintKeycap(Surface& s,
@@ -10306,24 +9044,6 @@ void PaintFooter(Surface& s, const Theme& t) {
             {L"\x2190\x2192", L"fingering"},
             {L"Esc", L"close"}
         };
-    } else if (g_app.tool == kToolAnalyzer) {
-        // The hints change with the card: a chart that is ready is a player,
-        // and one that is not is a form.
-        if (AnalyzerReady()) {
-            items = {
-                {L"Space", L"play / pause"},
-                {L"\x2190\x2192", L"seek"},
-                {L"\x2191\x2193", L"chart"},
-                {L"Esc", L"close"}
-            };
-        } else {
-            items = {
-                {L"Space", AnalyzerBusy() ? L"cancel" : L"analyze"},
-                {L"\x2191\x2193", L"chart"},
-                {L"Ctrl+O", L"browse"},
-                {L"Esc", L"close"}
-            };
-        }
     } else if (g_app.tool == kToolTempo) {
         items = {
             {TapKeyLabel(), L"tap"},
@@ -10461,8 +9181,6 @@ void PaintPanel(Surface& s) {
         PaintSearch(s, t);
         PaintResults(s, t);
         PaintCard(s, t);
-    } else if (g_app.tool == kToolAnalyzer) {
-        PaintAnalyzer(s, t);
     } else if (g_app.tool == kToolTempo) {
         PaintTempo(s, t);
     } else if (g_app.tool == kToolMetronome) {
@@ -10491,9 +9209,6 @@ void PaintPanel(Surface& s) {
     }
     if (g_app.tool == kToolStrum && MenuVisual(g_meterMenu)) {
         PaintStrumMeterMenu(s, t);  // Last, so it sits over the meter select.
-    }
-    if (g_app.tool == kToolAnalyzer && MenuVisual(g_exportMenu)) {
-        PaintAnalyzerExportMenu(s, t);
     }
 }
 
@@ -10557,60 +9272,6 @@ HitResult HitTest(POINT pt) {
     }
     if (PtInRect(&g_layout.toolSelect, pt)) {
         hit.id = kHitToolSelect;
-        return hit;
-    }
-    if (g_app.tool == kToolAnalyzer) {
-        if (MenuVisual(g_exportMenu)) {
-            // The open list owns the pointer until it closes; a click on one of
-            // its rows is the only one that exports.
-            for (int i = 0; i < kAnalyzerFormatCount; i++) {
-                if (PtInRect(&g_layout.analyzerExportRow[i], pt)) {
-                    hit.id = kHitAnalyzerExportRow;
-                    hit.index = i;
-                    return hit;
-                }
-            }
-            return hit;
-        }
-        if (PtInRect(&g_layout.analyzerField, pt)) {
-            hit.id = kHitAnalyzerField;
-            return hit;
-        }
-        if (PtInRect(&g_layout.analyzerBrowse, pt)) {
-            hit.id = kHitAnalyzerBrowse;
-            return hit;
-        }
-        if (PtInRect(&g_layout.analyzerAction, pt)) {
-            hit.id = kHitAnalyzerAction;
-            return hit;
-        }
-        if (PtInRect(&g_layout.analyzerAcappella, pt)) {
-            hit.id = kHitAnalyzerAcappella;
-            return hit;
-        }
-        if (PtInRect(&g_layout.analyzerExport, pt)) {
-            hit.id = kHitAnalyzerExport;
-            return hit;
-        }
-        if (PtInRect(&g_layout.analyzerPlay, pt)) {
-            hit.id = kHitAnalyzerPlay;
-            return hit;
-        }
-        if (PtInRect(&g_layout.analyzerScrub, pt)) {
-            hit.id = kHitAnalyzerScrub;
-            return hit;
-        }
-        // The chart is one target: a click anywhere on a row seeks to that
-        // moment rather than selecting a cell.
-        const AnalyzerSpot spot = AnalyzerSpotAt(pt);
-        if (spot.measure >= 0) {
-            hit.id = kHitAnalyzerBar;
-            hit.index = spot.bar;
-            return hit;
-        }
-        if (PtInRect(&g_layout.header, pt)) {
-            hit.id = kHitHeader;
-        }
         return hit;
     }
     if (g_app.tool == kToolTempo) {
@@ -10969,7 +9630,6 @@ HitResult HitTest(POINT pt) {
 // Input
 
 constexpr UINT kMessageSettings = WM_APP + 1;
-constexpr UINT kMessageAnalyzer = WM_APP + 2;
 constexpr int kHotkeyToggle = 1;
 constexpr size_t kMaxQueryLength = 48;
 
@@ -11041,7 +9701,6 @@ void SetTool(int tool) {
     MenuReset(g_strumMenu);
     MenuReset(g_patternMenu);
     MenuReset(g_meterMenu);
-    MenuReset(g_exportMenu);
     // The microphone only lives while the tuner is on screen.
     if (g_app.tool == kToolTuner) {
         TunerHalt();
@@ -11054,15 +9713,9 @@ void SetTool(int tool) {
     if (g_app.tool == kToolStrum) {
         StrumHalt();
     }
-    // The song keeps playing only while its own card is up, so the media clock
-    // is handed back the moment the tool changes.
-    if (g_app.tool == kToolAnalyzer) {
-        AnalyzerHaltAudio();
-    }
     // A tempo field belongs to the card it was opened on, so it goes with it.
     g_tempoEntry.active = false;
     g_tempoEntry.count = 0;
-    g_analyzerInput.focused = false;
     g_app.tool = static_cast<Tool>(tool);
     if (g_selecting) {
         g_selecting = false;
@@ -12331,2240 +10984,6 @@ void TrainerTick() {
     Repaint();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Song analyzer
-//
-// The whole contract below was checked against the live service, because
-// openapi.json leaves every response schema empty and the docs page is wrong on
-// several points:
-//
-//   POST /api/v1/analyze/url   {"url":...}             -> 202 {job_id,status}
-//   POST /api/v1/analyze       multipart field "file"  -> 202 {job_id,status}
-//   GET  /api/v1/jobs/{id}     running  -> {status,progress_percentage,message}
-//                              done     -> {status:"complete"}
-//                              failed   -> {status:"error",error_key,message}
-//   GET  /api/v1/jobs/{id}/result -> duration, tempo, key, time_signature,
-//                                    layout.measures[].slot.label, segments[]
-//   GET  /api/v1/jobs/{id}/export?format=pdf|midi|musicxml|txt|csv|json
-//                              -> the file, with Content-Disposition
-//
-// Two facts shape the code: URL validation is asynchronous, so a 202 is never
-// treated as success until the first poll agrees; and failures carry a human
-// sentence in "message", which is what the card shows.
-
-struct AnalyzerRequest {
-    int kind = 0;  // 0 URL, 1 upload, 2 export.
-    unsigned epoch = 0;  // The run this request belongs to.
-    std::wstring baseUrl;
-    std::wstring url;
-    std::wstring filename;
-    std::wstring jobId;
-    std::wstring source;
-    std::wstring exportFolder;
-    std::wstring filePath;  // Where the song is read from, on the worker.
-    std::vector<uint8_t> file;
-    int format = 0;
-    bool acappella = false;
-};
-
-struct HttpResult {
-    int status = 0;  // 0 when nothing came back at all.
-    std::string body;
-    std::wstring contentType;
-    std::wstring disposition;
-    int retryAfter = 0;
-    bool tooLarge = false;  // The answer was bigger than this module will take.
-};
-
-std::string NarrowText(const std::wstring& text) {
-    if (text.empty()) {
-        return std::string();
-    }
-    const int length = WideCharToMultiByte(CP_UTF8, 0, text.c_str(),
-                                           static_cast<int>(text.size()),
-                                           nullptr, 0, nullptr, nullptr);
-    std::string out(static_cast<size_t>(length), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, text.c_str(),
-                        static_cast<int>(text.size()), &out[0], length, nullptr,
-                        nullptr);
-    return out;
-}
-
-// JSON string escaping for the one body this tool builds by hand.
-void AppendJsonString(std::string& out, const std::wstring& text) {
-    out += '"';
-    for (wchar_t c : text) {
-        if (c == L'"') {
-            out += "\\\"";
-        } else if (c == L'\\') {
-            out += "\\\\";
-        } else if (c == L'\n') {
-            out += "\\n";
-        } else if (c == L'\r') {
-            out += "\\r";
-        } else if (c == L'\t') {
-            out += "\\t";
-        } else if (c < 0x20) {
-            char escape[8];
-            wsprintfA(escape, "\\u%04x", static_cast<unsigned>(c));
-            out += escape;
-        } else {
-            out += NarrowText(std::wstring(1, c));
-        }
-    }
-    out += '"';
-}
-
-PCWSTR MimeForFile(const std::wstring& path) {
-    const size_t dot = path.find_last_of(L'.');
-    std::wstring ext =
-        dot == std::wstring::npos ? std::wstring() : path.substr(dot + 1);
-    for (wchar_t& c : ext) {
-        c = static_cast<wchar_t>(towlower(c));
-    }
-    if (ext == L"mp3") {
-        return L"audio/mpeg";
-    }
-    if (ext == L"wav") {
-        return L"audio/wav";
-    }
-    if (ext == L"flac") {
-        return L"audio/flac";
-    }
-    if (ext == L"m4a" || ext == L"aac") {
-        return L"audio/mp4";
-    }
-    if (ext == L"ogg" || ext == L"opus") {
-        return L"audio/ogg";
-    }
-    if (ext == L"mp4" || ext == L"m4v") {
-        return L"video/mp4";
-    }
-    if (ext == L"webm" || ext == L"mkv") {
-        return L"video/webm";
-    }
-    return L"application/octet-stream";
-}
-
-std::wstring FileNameOf(const std::wstring& path) {
-    const size_t slash = path.find_last_of(L"\\/");
-    return slash == std::wstring::npos ? path : path.substr(slash + 1);
-}
-
-std::string BuildMultipart(const std::vector<uint8_t>& file,
-                           const std::wstring& filename,
-                           PCWSTR mime,
-                           const std::string& boundary) {
-    std::string body;
-    body += "--" + boundary + "\r\n";
-    body += "Content-Disposition: form-data; name=\"file\"; filename=\"";
-    body += NarrowText(filename);
-    body += "\"\r\nContent-Type: ";
-    body += NarrowText(mime);
-    body += "\r\n\r\n";
-    if (!file.empty()) {
-        body.append(reinterpret_cast<const char*>(file.data()), file.size());
-    }
-    body += "\r\n--" + boundary + "--\r\n";
-    return body;
-}
-
-// One blocking WinHTTP request. The cancel flag is checked between every step
-// and inside the read loop, and the timeouts keep a stalled request from
-// holding the unload path for longer than it has to.
-bool HttpRequest(PCWSTR verb,
-                 const std::wstring& url,
-                 const std::string* body,
-                 PCWSTR contentType,
-                 HttpResult& out) {
-    out = HttpResult();
-    if (g_analyzerCancel.load()) {
-        return false;
-    }
-    URL_COMPONENTS parts{};
-    parts.dwStructSize = sizeof(parts);
-    parts.dwSchemeLength = static_cast<DWORD>(-1);
-    parts.dwHostNameLength = static_cast<DWORD>(-1);
-    parts.dwUrlPathLength = static_cast<DWORD>(-1);
-    parts.dwExtraInfoLength = static_cast<DWORD>(-1);
-    if (!WinHttpCrackUrl(url.c_str(), static_cast<DWORD>(url.size()), 0,
-                         &parts)) {
-        Wh_Log(L"Analyzer: bad URL (%s)", url.c_str());
-        return false;
-    }
-    const std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
-    std::wstring path(parts.lpszUrlPath, parts.dwUrlPathLength);
-    if (parts.dwExtraInfoLength) {
-        path.append(parts.lpszExtraInfo, parts.dwExtraInfoLength);
-    }
-    const bool secure = parts.nScheme == INTERNET_SCHEME_HTTPS;
-
-    HINTERNET session =
-        WinHttpOpen(L"MusiciansToolkit",
-                    WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME,
-                    WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!session) {
-        Wh_Log(L"Analyzer: WinHttpOpen failed (%u)", GetLastError());
-        return false;
-    }
-    WinHttpSetTimeouts(session, 8000, 8000, 8000, 15000);
-
-    bool ok = false;
-    HINTERNET connect = WinHttpConnect(session, host.c_str(), parts.nPort, 0);
-    if (!connect) {
-        Wh_Log(L"Analyzer: WinHttpConnect failed (%u)", GetLastError());
-    } else {
-        HINTERNET request = WinHttpOpenRequest(
-            connect, verb, path.c_str(), nullptr, WINHTTP_NO_REFERER,
-            WINHTTP_DEFAULT_ACCEPT_TYPES, secure ? WINHTTP_FLAG_SECURE : 0);
-        if (!request) {
-            Wh_Log(L"Analyzer: WinHttpOpenRequest failed (%u)",
-                   GetLastError());
-        } else {
-            // A song link usually redirects to a CDN before the bytes start,
-            // and the API may move between hosts, so a redirect is followed
-            // rather than treated as the final answer.
-            DWORD redirects = WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS;
-            WinHttpSetOption(request, WINHTTP_OPTION_REDIRECT_POLICY,
-                             &redirects, sizeof(redirects));
-            std::wstring headers;
-            if (contentType && *contentType) {
-                headers = L"Content-Type: ";
-                headers += contentType;
-                headers += L"\r\n";
-            }
-            // The total length has to carry the body as well. Passing zero
-            // here while a body is supplied makes the send fail at once with
-            // ERROR_INVALID_PARAMETER, which reads as an unreachable server.
-            const DWORD bodyLength =
-                body ? static_cast<DWORD>(body->size()) : 0;
-            const BOOL sent = WinHttpSendRequest(
-                request,
-                headers.empty() ? WINHTTP_NO_ADDITIONAL_HEADERS
-                                : headers.c_str(),
-                headers.empty() ? 0 : static_cast<DWORD>(-1),
-                bodyLength ? const_cast<char*>(body->data()) : nullptr,
-                bodyLength, bodyLength, 0);
-            BOOL received = FALSE;
-            if (!sent) {
-                Wh_Log(L"Analyzer: WinHttpSendRequest failed (%u)",
-                       GetLastError());
-            } else if (!g_analyzerCancel.load()) {
-                received = WinHttpReceiveResponse(request, nullptr);
-                if (!received) {
-                    Wh_Log(L"Analyzer: WinHttpReceiveResponse failed (%u)",
-                           GetLastError());
-                }
-            }
-            if (received) {
-                DWORD status = 0;
-                DWORD size = sizeof(status);
-                WinHttpQueryHeaders(
-                    request,
-                    WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                    WINHTTP_HEADER_NAME_BY_INDEX, &status, &size,
-                    WINHTTP_NO_HEADER_INDEX);
-                out.status = static_cast<int>(status);
-
-                auto readHeader = [&](DWORD query, std::wstring& value) {
-                    wchar_t buffer[1024];
-                    DWORD length = sizeof(buffer);
-                    value.clear();
-                    if (WinHttpQueryHeaders(request, query,
-                                            WINHTTP_HEADER_NAME_BY_INDEX,
-                                            buffer, &length,
-                                            WINHTTP_NO_HEADER_INDEX)) {
-                        value.assign(buffer, length / sizeof(wchar_t));
-                        while (!value.empty() && value.back() == L'\0') {
-                            value.pop_back();
-                        }
-                    }
-                };
-                readHeader(WINHTTP_QUERY_CONTENT_TYPE, out.contentType);
-                readHeader(WINHTTP_QUERY_CONTENT_DISPOSITION,
-                           out.disposition);
-                std::wstring retry;
-                readHeader(WINHTTP_QUERY_RETRY_AFTER, retry);
-                if (!retry.empty()) {
-                    out.retryAfter = _wtoi(retry.c_str());
-                }
-
-                for (;;) {
-                    if (g_analyzerCancel.load()) {
-                        break;
-                    }
-                    DWORD available = 0;
-                    if (!WinHttpQueryDataAvailable(request, &available) ||
-                        available == 0) {
-                        ok = true;
-                        break;
-                    }
-                    if (out.body.size() + available > 64u * 1024 * 1024) {
-                        // A chart is small and an export is bounded, so reaching
-                        // this means the answer is not something to keep: what
-                        // arrived is dropped rather than written out as a file
-                        // that would only turn out to be half of itself.
-                        out.tooLarge = true;
-                        Wh_Log(L"Analyzer: the answer passed 64 MB");
-                        break;
-                    }
-                    const size_t offset = out.body.size();
-                    out.body.resize(offset + available);
-                    DWORD read = 0;
-                    if (!WinHttpReadData(request, &out.body[offset], available,
-                                         &read)) {
-                        ok = false;
-                        break;
-                    }
-                    out.body.resize(offset + read);
-                    if (read == 0) {
-                        ok = true;
-                        break;
-                    }
-                }
-            }
-            WinHttpCloseHandle(request);
-        }
-        WinHttpCloseHandle(connect);
-    }
-    WinHttpCloseHandle(session);
-    return ok;
-}
-
-// One sentence out of any of the three error shapes the service uses.
-std::wstring HttpErrorText(const HttpResult& result) {
-    JsonValue doc;
-    if (JsonParse(result.body, doc)) {
-        std::wstring text = doc.Str(L"error");
-        if (text.empty()) {
-            const JsonValue* detail = doc.Find(L"detail");
-            if (detail) {
-                if (detail->type == JsonValue::String) {
-                    text = detail->text;
-                } else if (detail->type == JsonValue::Array) {
-                    const JsonValue* first = detail->At(0);
-                    if (first) {
-                        text = first->Str(L"msg");
-                    }
-                }
-            }
-        }
-        if (text.empty()) {
-            text = doc.Str(L"message");
-        }
-        if (!text.empty()) {
-            return text;
-        }
-    }
-    if (result.status == 0) {
-        return L"Couldn't reach the analyzer";
-    }
-    if (result.status == 429) {
-        return L"The hourly quota is used up, try again later";
-    }
-    std::wstring text = L"The service answered HTTP ";
-    text += std::to_wstring(result.status);
-    return text;
-}
-
-void AnalyzerPost() {
-    if (g_messageWindow) {
-        PostMessageW(g_messageWindow, kMessageAnalyzer, 0, 0);
-    }
-}
-
-// A run that has been replaced - the card moved on to another song - says
-// nothing at all, so it cannot paint over what came after it.
-bool AnalyzerStale(unsigned epoch) {
-    return g_analyzerEpoch.load() != epoch;
-}
-
-void AnalyzerFail(const std::wstring& text, unsigned epoch) {
-    if (AnalyzerStale(epoch)) {
-        return;
-    }
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    g_analyzer.phase = kAnalyzerFailed;
-    g_analyzer.busy = false;
-    g_analyzer.error = text.empty() ? L"The analysis failed" : text;
-    g_analyzer.status.clear();
-    g_analyzer.progress = 0;
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-    AnalyzerPost();
-}
-
-void AnalyzerNote(const std::wstring& text) {
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    g_analyzer.exportNote = text;
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-    AnalyzerPost();
-}
-
-void AnalyzerCancelled(unsigned epoch) {
-    if (AnalyzerStale(epoch)) {
-        return;
-    }
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    g_analyzer.phase = kAnalyzerIdle;
-    g_analyzer.busy = false;
-    g_analyzer.status = L"Cancelled";
-    // The status line is only painted for a live run, so the cancel is said on
-    // the note line instead, which is the one that survives the run.
-    g_analyzer.exportNote = L"Cancelled";
-    g_analyzer.progress = 0;
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-    AnalyzerPost();
-}
-
-void AnalyzerSleep(int ms) {
-    while (ms > 0) {
-        if (g_analyzerCancel.load()) {
-            return;
-        }
-        const int step = std::min(ms, 100);
-        Sleep(static_cast<DWORD>(step));
-        ms -= step;
-    }
-}
-
-// Turns the result payload into the chart the player runs on. Each measure
-// carries its own slice of the song and its slots carry per-beat timing, which
-// is what puts the playhead on the chord being strummed rather than on the bar
-// it belongs to. A missing layout (a silent clip, which the service still
-// accepts) falls back to the segments, and "N" is its word for no chord.
-void AnalyzerApplyResult(const HttpResult& response,
-                         const std::wstring& source,
-                         unsigned epoch) {
-    JsonValue doc;
-    if (!JsonParse(response.body, doc)) {
-        AnalyzerFail(L"Couldn't read the analysis", epoch);
-        return;
-    }
-
-    std::vector<AnalyzerBar> bars;
-    std::vector<AnalyzerMeasure> measures;
-    double length = doc.Num(L"duration", 0.0);
-    int beats = 0;  // Zero until the layout or the meter says otherwise.
-
-    // Slot times are absolute across the piece. The guard covers the day a
-    // response reports them from the top of their measure instead, which would
-    // otherwise stack every cell against the left edge of its row.
-    auto slotTime = [](double measureStart, double time) {
-        return time < measureStart - 0.05 ? measureStart + time : time;
-    };
-
-    const JsonValue* layout = doc.Find(L"layout");
-    if (layout && layout->type == JsonValue::Object) {
-        const double layoutBeats = layout->Num(L"beats_per_measure", 0.0);
-        if (layoutBeats >= 2.0 && layoutBeats <= 16.0) {
-            beats = static_cast<int>(lround(layoutBeats));
-        }
-        const JsonValue* list = layout->Find(L"measures");
-        if (list && list->type == JsonValue::Array) {
-            double previousEnd = 0.0;
-            for (size_t i = 0; i < list->Size(); i++) {
-                const JsonValue* node = list->At(i);
-                AnalyzerMeasure measure;
-                measure.start = node->Num(L"start", previousEnd);
-                measure.end = node->Num(L"end", measure.start);
-                if (measure.end <= measure.start) {
-                    measure.end = measure.start + 0.001;
-                }
-                measure.first = static_cast<int>(bars.size());
-                const JsonValue* slots = node->Find(L"slots");
-                if (slots && slots->type == JsonValue::Array &&
-                    slots->Size() > 0) {
-                    for (size_t j = 0; j < slots->Size(); j++) {
-                        const JsonValue* slot = slots->At(j);
-                        AnalyzerBar bar;
-                        bar.chord = slot->Str(L"label");
-                        if (bar.chord == L"N") {
-                            bar.chord.clear();
-                        }
-                        bar.start = std::clamp(
-                            slotTime(measure.start,
-                                     slot->Num(L"start", measure.start)),
-                            measure.start, measure.end);
-                        bar.end = std::clamp(
-                            slotTime(measure.start, slot->Num(L"end", measure.end)),
-                            bar.start, measure.end);
-                        bars.push_back(bar);
-                        measure.count++;
-                    }
-                } else {
-                    // No per-beat slots, so the measure's own chord spans it.
-                    std::wstring label = node->Str(L"label");
-                    const JsonValue* slot = node->Find(L"slot");
-                    if (slot) {
-                        const std::wstring fromSlot = slot->Str(L"label");
-                        if (!fromSlot.empty()) {
-                            label = fromSlot;
-                        }
-                    }
-                    if (label == L"N") {
-                        label.clear();
-                    }
-                    bars.push_back({label, measure.start, measure.end});
-                    measure.count = 1;
-                }
-                measures.push_back(measure);
-                previousEnd = measure.end;
-            }
-        }
-    }
-
-    // No layout at all: the segments still carry timing, so they are grouped
-    // into rows of one measure apiece to keep the chart readable.
-    if (bars.empty()) {
-        const JsonValue* segments = doc.Find(L"segments");
-        if (segments && segments->type == JsonValue::Array) {
-            for (size_t i = 0; i < segments->Size(); i++) {
-                const JsonValue* node = segments->At(i);
-                AnalyzerBar bar;
-                bar.chord = node->Str(L"label");
-                if (bar.chord == L"N") {
-                    bar.chord.clear();
-                }
-                bar.start = node->Num(L"start", 0.0);
-                bar.end = node->Num(L"end", bar.start);
-                bars.push_back(bar);
-            }
-        }
-        const int perRow = std::clamp(beats > 0 ? beats : 4, 2, 8);
-        for (size_t i = 0; i < bars.size(); i += perRow) {
-            AnalyzerMeasure measure;
-            const size_t last = std::min(bars.size(), i + perRow) - 1;
-            measure.start = bars[i].start;
-            measure.end = bars[last].end;
-            if (measure.end <= measure.start) {
-                measure.end = measure.start + 0.001;
-            }
-            measure.first = static_cast<int>(i);
-            measure.count = static_cast<int>(last - i) + 1;
-            measures.push_back(measure);
-        }
-    }
-
-    std::wstring key;
-    const JsonValue* harmony = doc.Find(L"harmonic_analysis");
-    if (harmony) {
-        const JsonValue* summary = harmony->Find(L"summary");
-        if (summary) {
-            key = summary->Str(L"key");
-        }
-    }
-    if (key.empty()) {
-        key = doc.Str(L"key");
-    }
-    const double tempo = doc.Num(L"tempo", 0.0);
-    std::wstring tempoText;
-    if (tempo > 0.0) {
-        tempoText = std::to_wstring(lround(tempo));
-        tempoText += L" BPM";
-    }
-    std::wstring meter = doc.Str(L"time_signature");
-    if (beats == 0) {
-        const int meterBeats = _wtoi(meter.c_str());
-        if (meterBeats >= 2 && meterBeats <= 12) {
-            beats = meterBeats;
-        }
-    }
-    if (beats == 0) {
-        beats = 4;
-    }
-    if (length <= 0.0 && !measures.empty()) {
-        length = measures.back().end;
-    }
-    std::wstring durationText;
-    if (length > 0.0) {
-        durationText = AnalyzerClock(length);
-    }
-
-    const int measureCount = static_cast<int>(measures.size());
-    const int chordCount = static_cast<int>(bars.size());
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    if (g_analyzerEpoch.load() != epoch) {
-        // The card moved on to another song while this one was being read, so
-        // the chart is not this thread's to publish.
-        ReleaseSRWLockExclusive(&g_analyzerLock);
-        return;
-    }
-    g_analyzer.phase = kAnalyzerReady;
-    g_analyzer.busy = false;
-    g_analyzer.progress = 100;
-    g_analyzer.error.clear();
-    g_analyzer.exportNote.clear();
-    g_analyzer.source = source;
-    g_analyzer.key = key;
-    g_analyzer.tempo = tempoText;
-    g_analyzer.meter = meter;
-    g_analyzer.duration = durationText;
-    g_analyzer.beats = std::clamp(beats, 2, 16);
-    g_analyzer.scroll = 0;
-    g_analyzer.bars = std::move(bars);
-    g_analyzer.measures = std::move(measures);
-    g_analyzer.length = length;
-    g_analyzer.position = 0.0;
-    g_analyzer.anchorMs = NowMs();
-    g_analyzer.playing = false;
-    g_analyzer.status = chordCount == 0 ? L"No chords detected"
-                                        : L"Analysis complete";
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-    Wh_Log(L"Analyzer: ready with %d measures, %d chords", measureCount,
-           chordCount);
-    AnalyzerPost();
-}
-
-void AnalyzerRunJob(AnalyzerRequest& request) {
-    const std::wstring base = request.baseUrl;
-    const unsigned epoch = request.epoch;
-    std::wstring jobId;
-    HttpResult response;
-    bool sent = false;
-    if (request.kind == 0) {
-        std::string body = "{\"url\":";
-        AppendJsonString(body, request.url);
-        body += ",\"acappella\":";
-        body += request.acappella ? "true" : "false";
-        body += "}";
-        sent = HttpRequest(L"POST", base + L"/api/v1/analyze/url", &body,
-                           L"application/json", response);
-    } else {
-        // The song is read here, not on the panel thread, so choosing a large
-        // file never leaves the flyout frozen while its bytes are fetched.
-        if (request.file.empty() &&
-            !AnalyzerReadFile(request.filePath, request.file)) {
-            AnalyzerFail(L"Couldn't read that file, or it is over 100 MB", epoch);
-            return;
-        }
-        const std::string boundary = "----MusiciansToolkitBoundary";
-        const std::string body =
-            BuildMultipart(request.file, request.filename,
-                           MimeForFile(request.filename), boundary);
-        std::wstring type = L"multipart/form-data; boundary=";
-        type.append(boundary.begin(), boundary.end());
-        sent = HttpRequest(L"POST", base + L"/api/v1/analyze", &body,
-                           type.c_str(), response);
-    }
-    // Another run may own the card by now; a straggler that has been overtaken
-    // must not report on, or draw over, the song that replaced it.
-    if (AnalyzerStale(epoch)) {
-        return;
-    }
-    if (g_analyzerCancel.load()) {
-        AnalyzerCancelled(epoch);
-        return;
-    }
-    if (!sent) {
-        AnalyzerFail(L"Couldn't reach the analyzer", epoch);
-        return;
-    }
-    if (response.status != 200 && response.status != 202) {
-        AnalyzerFail(HttpErrorText(response), epoch);
-        return;
-    }
-    JsonValue envelope;
-    if (JsonParse(response.body, envelope)) {
-        jobId = envelope.Str(L"job_id");
-    }
-    if (jobId.empty()) {
-        AnalyzerFail(L"The service didn't start a job", epoch);
-        return;
-    }
-    {
-        AcquireSRWLockExclusive(&g_analyzerLock);
-        g_analyzer.jobId = jobId;
-        g_analyzer.phase = kAnalyzerRunning;
-        g_analyzer.progress = 0;
-        g_analyzer.status = L"Queued";
-        ReleaseSRWLockExclusive(&g_analyzerLock);
-        AnalyzerPost();
-    }
-
-    const double deadline = NowMs() + 15.0 * 60.0 * 1000.0;
-    bool complete = false;
-    while (!g_analyzerCancel.load() && NowMs() < deadline) {
-        if (AnalyzerStale(epoch)) {
-            return;
-        }
-        HttpResult poll;
-        if (HttpRequest(L"GET", base + L"/api/v1/jobs/" + jobId, nullptr,
-                        nullptr, poll)) {
-            if (poll.status == 200) {
-                JsonValue doc;
-                if (JsonParse(poll.body, doc)) {
-                    const std::wstring state = doc.Str(L"status");
-                    if (state == L"complete" || state == L"completed" ||
-                        state == L"succeeded") {
-                        complete = true;
-                        break;
-                    }
-                    if (state == L"error" || state == L"failed") {
-                        std::wstring text = doc.Str(L"message");
-                        if (text.empty()) {
-                            text = doc.Str(L"error_key");
-                        }
-                        if (text.empty()) {
-                            text = HttpErrorText(poll);
-                        }
-                        AnalyzerFail(text, epoch);
-                        return;
-                    }
-                    const int percent =
-                        static_cast<int>(lround(doc.Num(L"progress_percentage",
-                                                        0.0)));
-                    std::wstring message = doc.Str(L"message");
-                    if (message.empty()) {
-                        message = L"Analyzing\x2026";
-                    }
-                    if (AnalyzerStale(epoch)) {
-                        return;
-                    }
-                    AcquireSRWLockExclusive(&g_analyzerLock);
-                    g_analyzer.phase = kAnalyzerRunning;
-                    g_analyzer.progress = std::clamp(percent, 0, 100);
-                    g_analyzer.status = message;
-                    ReleaseSRWLockExclusive(&g_analyzerLock);
-                    AnalyzerPost();
-                }
-            } else if (poll.status == 429) {
-                AnalyzerSleep(std::max(1500, poll.retryAfter * 1000));
-                continue;
-            } else if (poll.status > 0) {
-                AnalyzerFail(HttpErrorText(poll), epoch);
-                return;
-            }
-        } else if (g_analyzerCancel.load()) {
-            break;
-        }
-        AnalyzerSleep(1500);
-    }
-    if (g_analyzerCancel.load()) {
-        AnalyzerCancelled(epoch);
-        return;
-    }
-    if (!complete) {
-        AnalyzerFail(L"The analysis took too long", epoch);
-        return;
-    }
-
-    {
-        AcquireSRWLockExclusive(&g_analyzerLock);
-        g_analyzer.status = L"Reading the chords\x2026";
-        ReleaseSRWLockExclusive(&g_analyzerLock);
-        AnalyzerPost();
-    }
-    HttpResult result;
-    if (!HttpRequest(L"GET", base + L"/api/v1/jobs/" + jobId + L"/result",
-                     nullptr, nullptr, result)) {
-        if (g_analyzerCancel.load()) {
-            AnalyzerCancelled(epoch);
-        } else {
-            AnalyzerFail(L"Couldn't fetch the analysis", epoch);
-        }
-        return;
-    }
-    if (result.status != 200 || result.body.empty()) {
-        AnalyzerFail(HttpErrorText(result), epoch);
-        return;
-    }
-    if (AnalyzerStale(epoch)) {
-        return;
-    }
-    AnalyzerApplyResult(result, request.source, epoch);
-    // The chart is up; now the sound. A file the user picked is already on
-    // disk, so this only does anything for a pasted link.
-    AnalyzerFetchLinkAudio(request.url);
-}
-
-// The export lands in the configured folder, or Downloads\MusiciansToolkit,
-// keeps the server's own filename when it sends one, and opens through the
-// shell so the PDF or MIDI is in front of the player. A failure is reported in
-// the note line rather than as a failed run: the chart and the song are still
-// there, and losing them over an export would be wrong.
-void AnalyzerRunExport(AnalyzerRequest& request) {
-    HttpResult response;
-    const std::wstring url = request.baseUrl + L"/api/v1/jobs/" +
-                             request.jobId + L"/export?format=" +
-                             kAnalyzerFormats[request.format];
-    if (!HttpRequest(L"GET", url, nullptr, nullptr, response)) {
-        if (g_analyzerCancel.load()) {
-            AnalyzerNote(L"Cancelled");
-        } else if (response.tooLarge) {
-            AnalyzerNote(L"The export is too large to save");
-        } else {
-            AnalyzerNote(L"Couldn't reach the analyzer");
-        }
-        return;
-    }
-    if (response.status == 409) {
-        AnalyzerNote(L"The analysis is not finished yet");
-        return;
-    }
-    if (response.status != 200 || response.body.empty()) {
-        AnalyzerNote(HttpErrorText(response));
-        return;
-    }
-
-    std::wstring folder = request.exportFolder;
-    if (folder.empty()) {
-        wchar_t profile[MAX_PATH];
-        const DWORD length = GetEnvironmentVariableW(L"USERPROFILE", profile,
-                                                     MAX_PATH);
-        if (length == 0 || length >= MAX_PATH) {
-            AnalyzerNote(L"Couldn't find a folder to save in");
-            return;
-        }
-        folder = profile;
-        folder += L"\\Downloads\\MusiciansToolkit";
-    }
-    const size_t slash = folder.find_last_of(L'\\');
-    if (slash != std::wstring::npos) {
-        CreateDirectoryW(folder.substr(0, slash).c_str(), nullptr);
-    }
-    CreateDirectoryW(folder.c_str(), nullptr);
-
-    std::wstring name;
-    const size_t key = response.disposition.find(L"filename=");
-    if (key != std::wstring::npos) {
-        name = response.disposition.substr(key + 9);
-        if (!name.empty() && name.front() == L'"') {
-            name = name.substr(1);
-        }
-        const size_t quote = name.find(L'"');
-        if (quote != std::wstring::npos) {
-            name = name.substr(0, quote);
-        }
-        const size_t nameSlash = name.find_last_of(L"\\/");
-        if (nameSlash != std::wstring::npos) {
-            name = name.substr(nameSlash + 1);
-        }
-    }
-    if (name.empty()) {
-        name = L"analysis.";
-        name += kAnalyzerFormatExtensions[request.format];
-    }
-    const std::wstring path = folder + L"\\" + name;
-
-    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
-                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
-        AnalyzerNote(L"Couldn't save the export");
-        return;
-    }
-    DWORD written = 0;
-    const BOOL ok =
-        WriteFile(file, response.body.data(),
-                  static_cast<DWORD>(response.body.size()), &written, nullptr);
-    CloseHandle(file);
-    if (!ok) {
-        AnalyzerNote(L"Couldn't save the export");
-        return;
-    }
-    {
-        AcquireSRWLockExclusive(&g_analyzerLock);
-        g_analyzer.exportNote = L"Saved ";
-        g_analyzer.exportNote += name;
-        ReleaseSRWLockExclusive(&g_analyzerLock);
-        AnalyzerPost();
-    }
-    ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr,
-                  SW_SHOWNORMAL);
-}
-
-DWORD WINAPI AnalyzerThreadProc(LPVOID param) {
-    AnalyzerRequest* request = static_cast<AnalyzerRequest*>(param);
-    if (request) {
-        if (request->kind == 2) {
-            AnalyzerRunExport(*request);
-        } else {
-            AnalyzerRunJob(*request);
-        }
-        delete request;
-    }
-    return 0;
-}
-
-// A worker that was still busy when a newer one started. Its handle cannot be
-// simply dropped - the unload path has to be able to wait for it - so it is
-// kept here, and the ones that have finished since are let go first, so a long
-// session does not hoard a handle for every song that was started in a hurry.
-void AnalyzerRetire(HANDLE thread) {
-    for (size_t i = 0; i < g_analyzerRetired.size();) {
-        if (WaitForSingleObject(g_analyzerRetired[i], 0) == WAIT_OBJECT_0) {
-            CloseHandle(g_analyzerRetired[i]);
-            g_analyzerRetired.erase(g_analyzerRetired.begin() + i);
-        } else {
-            i++;
-        }
-    }
-    g_analyzerRetired.push_back(thread);
-}
-
-void AnalyzerStartRequest(AnalyzerRequest* request) {
-    if (g_analyzerThread) {
-        // An earlier thread can still be here: an export, a run the user has
-        // just cancelled, or a job that is fetching its audio. A job that has
-        // already published its chart only fetches sound from here on, so its
-        // handle is simply kept for the unload path rather than waited on.
-        // Anything that could still write to the card is told to stop and
-        // waited for first, because a straggler handed a fresh stop flag would
-        // carry on polling for the song that replaced it.
-        if (AnalyzerReady()) {
-            AnalyzerRetire(g_analyzerThread);
-        } else {
-            g_analyzerCancel.store(true);
-            if (WaitForSingleObject(g_analyzerThread, 5000) == WAIT_OBJECT_0) {
-                CloseHandle(g_analyzerThread);
-            } else {
-                AnalyzerRetire(g_analyzerThread);
-            }
-        }
-        g_analyzerThread = nullptr;
-    }
-    g_analyzerCancel.store(false);
-    g_analyzerThread =
-        CreateThread(nullptr, 0, AnalyzerThreadProc, request, 0, nullptr);
-    if (!g_analyzerThread) {
-        const unsigned epoch = request->epoch;
-        delete request;
-        AnalyzerFail(L"Couldn't start the analysis thread", epoch);
-    }
-}
-
-// Leaving the mod: stop the worker and wait for it, so no thread is left
-// running code in a module that is about to be unloaded, and hand the song back
-// to the media player.
-void AnalyzerHalt() {
-    g_analyzerCancel.store(true);
-    AnalyzerHaltAudio();
-    if (g_analyzerThread) {
-        WaitForSingleObject(g_analyzerThread, 16000);
-        CloseHandle(g_analyzerThread);
-        g_analyzerThread = nullptr;
-    }
-    // A worker that was still busy when a newer one started is waited for too,
-    // so nothing is left executing this module once it has unloaded.
-    for (HANDLE thread : g_analyzerRetired) {
-        WaitForSingleObject(thread, 16000);
-        CloseHandle(thread);
-    }
-    g_analyzerRetired.clear();
-    // The worker may have just started a fetch, so it is joined last and the
-    // file it left behind goes with the mod.
-    AnalyzerAudioHalt();
-}
-
-bool AnalyzerBusy() {
-    AcquireSRWLockShared(&g_analyzerLock);
-    const bool busy = g_analyzer.phase == kAnalyzerSubmitting ||
-                      g_analyzer.phase == kAnalyzerRunning;
-    ReleaseSRWLockShared(&g_analyzerLock);
-    return busy;
-}
-
-bool AnalyzerReady() {
-    AcquireSRWLockShared(&g_analyzerLock);
-    const bool ready = g_analyzer.phase == kAnalyzerReady;
-    ReleaseSRWLockShared(&g_analyzerLock);
-    return ready;
-}
-
-bool AnalyzerHasAudio() {
-    AcquireSRWLockShared(&g_analyzerLock);
-    const bool has =
-        AnalyzerPlayablePath(g_analyzer.audioPath, g_analyzer.audioFetched);
-    ReleaseSRWLockShared(&g_analyzerLock);
-    return has;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Song analyzer player
-//
-// A local file plays through the media control interface, which winmm already
-// brought in for the metronome, so the chord under the playhead is the chord
-// you hear. A bare link has no audio to play back: the chart then follows the
-// song's own timing off the wall clock, which is the same walk minus the sound.
-
-constexpr PCWSTR kAnalyzerAlias = L"musiciansToolkitSong";
-
-bool AnalyzerMci(bool log, const std::wstring& command) {
-    const MCIERROR error = mciSendStringW(command.c_str(), nullptr, 0, nullptr);
-    if (error == 0) {
-        return true;
-    }
-    if (log) {
-        wchar_t text[128] = {};
-        mciGetErrorStringW(error, text, 128);
-        Wh_Log(L"Analyzer: \"%s\" failed (%u: %s)", command.c_str(),
-               static_cast<unsigned>(error), text);
-    }
-    return false;
-}
-
-std::wstring AnalyzerMciCommand(PCWSTR verb) {
-    std::wstring command(verb);
-    command += L" ";
-    command += kAnalyzerAlias;
-    return command;
-}
-
-// Only plain audio containers are handed to the media player: a video file
-// would open a window of its own over the panel, which is not a chord chart.
-std::wstring AnalyzerExtension(const std::wstring& path) {
-    const size_t dot = path.find_last_of(L'.');
-    if (dot == std::wstring::npos) {
-        return std::wstring();
-    }
-    std::wstring extension = path.substr(dot + 1);
-    for (wchar_t& c : extension) {
-        c = static_cast<wchar_t>(towlower(c));
-    }
-    return extension;
-}
-
-bool AnalyzerAudioExtension(const std::wstring& path) {
-    const std::wstring extension = AnalyzerExtension(path);
-    return extension == L"mp3" || extension == L"wav" || extension == L"wma" ||
-           extension == L"m4a" || extension == L"aac" || extension == L"aif" ||
-           extension == L"aiff" || extension == L"ogg" ||
-           extension == L"opus" || extension == L"flac";
-}
-
-// A fetch can land in a container the picker would turn down - webm and m4b
-// are where an audio-only stream often ends up - and those are safe to play
-// here because there is no picture in them to open a window with.
-bool AnalyzerStreamExtension(const std::wstring& path) {
-    const std::wstring extension = AnalyzerExtension(path);
-    return AnalyzerAudioExtension(path) || extension == L"webm" ||
-           extension == L"m4b";
-}
-
-// Whether the song on the card is one the media player will actually take. A
-// video picked for analysis has a path like any other but no sound the panel
-// can play, so for it the chip keeps offering an audio file.
-bool AnalyzerPlayablePath(const std::wstring& path, bool fetched) {
-    if (path.empty()) {
-        return false;
-    }
-    return fetched ? AnalyzerStreamExtension(path)
-                   : AnalyzerAudioExtension(path);
-}
-
-void AnalyzerAudioClose() {
-    AnalyzerMci(false, AnalyzerMciCommand(L"close"));
-}
-
-// Opens the file for playback. The media driver handles compressed audio and
-// the wave driver the plain PCM files, so both are tried in that order; a
-// format neither takes simply plays silently, with the chart still keeping
-// time, rather than leaving a broken transport on screen. A song fetched for a
-// link may arrive in a stream container, so the caller says whether that is
-// allowed for this file.
-bool AnalyzerAudioOpen(const std::wstring& path, bool stream = false) {
-    AnalyzerAudioClose();
-    if (path.empty() || !(stream ? AnalyzerStreamExtension(path)
-                                 : AnalyzerAudioExtension(path))) {
-        return false;
-    }
-    std::wstring command = L"open \"";
-    command += path;
-    command += L"\" type mpegvideo alias ";
-    command += kAnalyzerAlias;
-    if (!AnalyzerMci(false, command)) {
-        std::wstring plain = L"open \"";
-        plain += path;
-        plain += L"\" alias ";
-        plain += kAnalyzerAlias;
-        if (!AnalyzerMci(true, plain)) {
-            return false;
-        }
-    }
-    AnalyzerMci(true, AnalyzerMciCommand(L"set") + L" time format milliseconds");
-    return true;
-}
-
-bool AnalyzerAudioPosition(int& ms) {
-    wchar_t text[32] = {};
-    const std::wstring command = AnalyzerMciCommand(L"status") + L" position";
-    if (mciSendStringW(command.c_str(), text, 32, nullptr) != 0) {
-        return false;
-    }
-    ms = _wtoi(text);  // The time format was set to milliseconds on open.
-    return true;
-}
-
-bool AnalyzerAudioStopped() {
-    wchar_t text[32] = {};
-    const std::wstring command = AnalyzerMciCommand(L"status") + L" mode";
-    if (mciSendStringW(command.c_str(), text, 32, nullptr) != 0) {
-        return false;
-    }
-    return wcscmp(text, L"stopped") == 0;
-}
-
-// Resuming is always "play from": the media driver refuses to resume after a
-// seek while it is paused, so every start hands it the spot as well.
-void AnalyzerAudioPlayFrom(double position) {
-    const int ms = std::max(0, static_cast<int>(lround(position * 1000.0)));
-    AnalyzerMci(true,
-                AnalyzerMciCommand(L"play") + L" from " + std::to_wstring(ms));
-}
-
-void AnalyzerAudioPauseDevice() {
-    AnalyzerMci(false, AnalyzerMciCommand(L"pause"));
-}
-
-void AnalyzerAudioSeekDevice(double position) {
-    const int ms = std::max(0, static_cast<int>(lround(position * 1000.0)));
-    AnalyzerMci(false,
-                AnalyzerMciCommand(L"seek") + L" to " + std::to_wstring(ms));
-}
-
-// Where the playhead is, without moving it.
-double AnalyzerPosition() {
-    AcquireSRWLockShared(&g_analyzerLock);
-    const double position = g_analyzer.position;
-    const double length = g_analyzer.length;
-    ReleaseSRWLockShared(&g_analyzerLock);
-    return length > 0.0 ? std::clamp(position, 0.0, length)
-                        : std::max(0.0, position);
-}
-
-double AnalyzerLength() {
-    AcquireSRWLockShared(&g_analyzerLock);
-    const double length = g_analyzer.length;
-    ReleaseSRWLockShared(&g_analyzerLock);
-    return length;
-}
-
-// Scrolls the chart so the row the playhead is in is on screen. A seek calls
-// this too, so jumping to the end of a song shows the end rather than the top.
-void AnalyzerReveal() {
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    const int count = static_cast<int>(g_analyzer.measures.size());
-    if (count > 0) {
-        int index = 0;
-        for (int i = count - 1; i >= 0; i--) {
-            if (g_analyzer.measures[i].start <= g_analyzer.position + 0.0001) {
-                index = i;
-                break;
-            }
-        }
-        const int maxScroll = std::max(0, count - kAnalyzerRows);
-        int scroll = g_analyzer.scroll;
-        if (index < scroll) {
-            scroll = index;
-        } else if (index >= scroll + kAnalyzerRows) {
-            scroll = index - kAnalyzerRows + 1;
-        }
-        g_analyzer.scroll = std::clamp(scroll, 0, maxScroll);
-    }
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-}
-
-// The follow proper: the chart walks with the song, but a wheel turn or a drag
-// holds the view still for a moment first, so looking ahead is not undone on
-// the very next frame.
-void AnalyzerFollow() {
-    if (NowMs() < g_analyzerFollowUntil) {
-        return;
-    }
-    bool playing = false;
-    AcquireSRWLockShared(&g_analyzerLock);
-    playing = g_analyzer.playing;
-    ReleaseSRWLockShared(&g_analyzerLock);
-    if (playing) {
-        AnalyzerReveal();
-    }
-}
-
-// Stops the song without touching the panel, for the paths where drawing would
-// be wasted or wrong: closing the flyout, switching tools, unloading the mod.
-void AnalyzerHaltAudio() {
-    bool open = false;
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    open = g_analyzer.audioOpen;
-    g_analyzer.audioOpen = false;
-    g_analyzer.playing = false;
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-    g_scrubbing = false;
-    if (open) {
-        AnalyzerAudioClose();
-    }
-    if (g_panel.Hwnd()) {
-        KillTimer(g_panel.Hwnd(), kAnalyzerTimer);
-    }
-}
-
-void AnalyzerPlay() {
-    double length = 0.0;
-    double position = 0.0;
-    std::wstring path;
-    bool open = false;
-    bool fetched = false;
-    bool hasChart = false;
-    AcquireSRWLockShared(&g_analyzerLock);
-    length = g_analyzer.length;
-    position = g_analyzer.position;
-    path = g_analyzer.audioPath;
-    open = g_analyzer.audioOpen;
-    fetched = g_analyzer.audioFetched;
-    hasChart = g_analyzer.phase == kAnalyzerReady && !g_analyzer.measures.empty();
-    ReleaseSRWLockShared(&g_analyzerLock);
-    if (!hasChart) {
-        return;
-    }
-    // Pressing play on the last chord starts the song over.
-    if (length > 0.0 && position >= length - 0.05) {
-        position = 0.0;
-    }
-    if (!open && !path.empty()) {
-        open = AnalyzerAudioOpen(path, fetched);
-    }
-    {
-        AcquireSRWLockExclusive(&g_analyzerLock);
-        g_analyzer.position = position;
-        g_analyzer.anchorMs = NowMs();
-        g_analyzer.playing = true;
-        g_analyzer.audioOpen = open;
-        // "Audio ready" has been answered by the press itself.
-        g_analyzer.exportNote.clear();
-        ReleaseSRWLockExclusive(&g_analyzerLock);
-    }
-    if (open) {
-        AnalyzerAudioPlayFrom(position);
-    }
-    if (g_panel.Hwnd()) {
-        SetTimer(g_panel.Hwnd(), kAnalyzerTimer, 33, nullptr);
-    }
-    Repaint();
-}
-
-void AnalyzerPause() {
-    bool playing = false;
-    bool open = false;
-    double position = 0.0;
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    playing = g_analyzer.playing;
-    open = g_analyzer.audioOpen;
-    position = g_analyzer.position;
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-    if (!playing) {
-        return;
-    }
-    // The media clock has the last word on where the song stopped.
-    if (open) {
-        int ms = 0;
-        if (AnalyzerAudioPosition(ms)) {
-            position = static_cast<double>(ms) / 1000.0;
-        }
-        AnalyzerAudioPauseDevice();
-    }
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    g_analyzer.playing = false;
-    g_analyzer.position = position;
-    g_analyzer.anchorMs = NowMs();
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-    if (g_panel.Hwnd()) {
-        KillTimer(g_panel.Hwnd(), kAnalyzerTimer);
-    }
-    Repaint();
-}
-
-void AnalyzerTogglePlay() {
-    bool playing = false;
-    AcquireSRWLockShared(&g_analyzerLock);
-    playing = g_analyzer.playing;
-    ReleaseSRWLockShared(&g_analyzerLock);
-    if (playing) {
-        AnalyzerPause();
-    } else {
-        AnalyzerPlay();
-    }
-}
-
-// Moves the playhead. While the scrubber is being dragged the media clock is
-// parked and only the chart moves, so a fast drag does not restart the audio on
-// every pixel; the release hands the new spot to the device in one go.
-void AnalyzerSeekTo(double seconds, bool syncAudio = true) {
-    double length = 0.0;
-    bool playing = false;
-    bool open = false;
-    double position = 0.0;
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    length = g_analyzer.length;
-    open = g_analyzer.audioOpen;
-    playing = g_analyzer.playing;
-    position = std::clamp(seconds, 0.0,
-                          length > 0.0 ? length : std::max(0.0, seconds));
-    g_analyzer.position = position;
-    g_analyzer.anchorMs = NowMs();
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-    if (open && syncAudio) {
-        if (playing) {
-            AnalyzerAudioPlayFrom(position);
-        } else {
-            AnalyzerAudioSeekDevice(position);
-        }
-    } else if (open && playing) {
-        AnalyzerAudioPauseDevice();
-    }
-    AnalyzerReveal();
-    Repaint();
-}
-
-void AnalyzerSeekBy(double delta) {
-    AnalyzerSeekTo(AnalyzerPosition() + delta);
-}
-
-// Ctrl+Left/Right: the start of the previous or next measure, which is how
-// someone who knows the song jumps around it.
-void AnalyzerStepMeasure(int direction) {
-    double target = 0.0;
-    bool found = false;
-    AcquireSRWLockShared(&g_analyzerLock);
-    const int count = static_cast<int>(g_analyzer.measures.size());
-    const double position = g_analyzer.position;
-    int index = -1;
-    for (int i = count - 1; i >= 0; i--) {
-        if (g_analyzer.measures[i].start <= position + 0.0001) {
-            index = i;
-            break;
-        }
-    }
-    if (index >= 0) {
-        const int last = std::max(0, count - 1);
-        // A press partway into a measure rewinds to its own downbeat before it
-        // steps past it, the way a transport's previous button behaves.
-        const double here = g_analyzer.measures[index].start;
-        int step = index + direction;
-        if (direction < 0 && position > here + 0.5) {
-            step = index;
-        }
-        target = g_analyzer.measures[std::clamp(step, 0, last)].start;
-        found = true;
-    }
-    ReleaseSRWLockShared(&g_analyzerLock);
-    if (found) {
-        AnalyzerSeekTo(target);
-    }
-}
-
-// The scrubber and the chart both seek by position: this one reads the track.
-void AnalyzerScrubAt(int x, bool syncAudio) {
-    const double length = AnalyzerLength();
-    if (length <= 0.0) {
-        return;
-    }
-    const RECT& scrub = g_layout.analyzerScrub;
-    const float left = static_cast<float>(scrub.left) + S(4.0f);
-    const float width =
-        std::max(1.0f, static_cast<float>(scrub.right - scrub.left) - S(8.0f));
-    const float ratio = Clamp01((static_cast<float>(x) - left) / width);
-    AnalyzerSeekTo(static_cast<double>(ratio) * length, syncAudio);
-}
-
-// The drag let go: whatever the playhead was last on becomes the new spot for
-// the media clock as well, and playback picks up from there if it was running.
-void AnalyzerScrubCommit() {
-    g_scrubbing = false;
-    const double position = AnalyzerPosition();
-    if (AnalyzerLength() <= 0.0) {
-        Repaint();
-        return;
-    }
-    AnalyzerSeekTo(position, true);
-}
-
-// Moves the playhead on. With a file open the media clock is the authority, so
-// the chart agrees with the sound; without one the wall clock stands in.
-// Returns true when the song reached its end.
-bool AnalyzerAdvance() {
-    bool playing = false;
-    bool open = false;
-    double length = 0.0;
-    AcquireSRWLockShared(&g_analyzerLock);
-    playing = g_analyzer.playing;
-    open = g_analyzer.audioOpen;
-    length = g_analyzer.length;
-    ReleaseSRWLockShared(&g_analyzerLock);
-    if (!playing) {
-        return false;
-    }
-    const double now = NowMs();
-    double played = -1.0;
-    bool mediaStopped = false;
-    if (open) {
-        int ms = 0;
-        if (AnalyzerAudioPosition(ms)) {
-            played = static_cast<double>(ms) / 1000.0;
-        }
-        mediaStopped = AnalyzerAudioStopped();
-    }
-    bool ended = false;
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    if (g_analyzer.playing) {
-        if (played >= 0.0) {
-            g_analyzer.position = played;
-        } else {
-            g_analyzer.position += (now - g_analyzer.anchorMs) / 1000.0;
-        }
-        g_analyzer.anchorMs = now;
-        const bool atEnd = length > 0.0 && g_analyzer.position >= length;
-        // A device that stopped on its own ends the walk as well; the guard
-        // keeps a just-started device from reading as finished.
-        const bool deviceDone = mediaStopped && g_analyzer.position > 0.2;
-        if (atEnd || deviceDone) {
-            if (atEnd) {
-                g_analyzer.position = length;
-            }
-            g_analyzer.playing = false;
-            ended = true;
-        }
-    }
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-    return ended;
-}
-
-// One frame of the player: the clock, the follow, the paint.
-void AnalyzerTick() {
-    if (g_scrubbing) {
-        return;
-    }
-    bool playing = false;
-    AcquireSRWLockShared(&g_analyzerLock);
-    playing = g_analyzer.playing;
-    ReleaseSRWLockShared(&g_analyzerLock);
-    if (!playing) {
-        // Nothing is walking, so the tick has no work left; parking it here
-        // keeps a stray timer from painting the panel at thirty frames a second.
-        if (g_panel.Hwnd()) {
-            KillTimer(g_panel.Hwnd(), kAnalyzerTimer);
-        }
-        return;
-    }
-    if (AnalyzerAdvance()) {
-        AnalyzerAudioPauseDevice();
-        if (g_panel.Hwnd()) {
-            KillTimer(g_panel.Hwnd(), kAnalyzerTimer);
-        }
-    }
-    AnalyzerFollow();
-    Repaint();
-}
-
-// Clears the card for a fresh run. Called on the panel thread before the
-// request thread is started, so the old chart is gone the moment it submits.
-void AnalyzerBegin(const std::wstring& source, const std::wstring& audioPath) {
-    AnalyzerHaltAudio();
-    // Anything still downloading belongs to the run before this one, so it is
-    // told to drop what it finds.
-    g_analyzerEpoch.fetch_add(1);
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    g_analyzer.phase = kAnalyzerSubmitting;
-    g_analyzer.busy = true;
-    g_analyzer.progress = 0;
-    g_analyzer.status = L"Submitting\x2026";
-    g_analyzer.error.clear();
-    g_analyzer.exportNote.clear();
-    g_analyzer.source = source;
-    g_analyzer.key.clear();
-    g_analyzer.tempo.clear();
-    g_analyzer.meter.clear();
-    g_analyzer.duration.clear();
-    g_analyzer.bars.clear();
-    g_analyzer.measures.clear();
-    g_analyzer.audioPath = audioPath;
-    g_analyzer.pendingAudio.clear();
-    g_analyzer.audioFetched = false;
-    g_analyzer.scroll = 0;
-    g_analyzer.length = 0.0;
-    g_analyzer.position = 0.0;
-    g_analyzer.anchorMs = NowMs();
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-    MenuReset(g_exportMenu);
-    Repaint();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Link audio
-//
-// A pasted link has no file behind it, so the player goes and gets one: a URL
-// that is itself an audio file is downloaded with the same WinHTTP helper the
-// analyzer uses, and a page (YouTube, SoundCloud and the rest) is handed to
-// yt-dlp when one is installed. Either way the song lands in a folder of our
-// own and then plays exactly like a file picked from disk - the media clock
-// drives the chart, so the chord on screen is the chord being heard.
-//
-// The fetch runs on its own thread: the analysis worker is joined quickly by
-// the submit path, and a download can take a minute.
-
-constexpr PCWSTR kAnalyzerAudioWildcard = L"song.*";
-constexpr PCWSTR kAnalyzerAudioTemplate = L"song.%(ext)s";
-
-HANDLE g_analyzerAudioThread = nullptr;
-std::atomic<bool> g_analyzerAudioCancel(false);
-
-std::wstring AnalyzerEnvironment(PCWSTR name) {
-    wchar_t buffer[MAX_PATH * 2];
-    const DWORD length = GetEnvironmentVariableW(name, buffer, MAX_PATH * 2);
-    if (length == 0 || length >= MAX_PATH * 2) {
-        return std::wstring();
-    }
-    return std::wstring(buffer, length);
-}
-
-bool AnalyzerIsFile(const std::wstring& path) {
-    const DWORD attributes = GetFileAttributesW(path.c_str());
-    return attributes != INVALID_FILE_ATTRIBUTES &&
-           !(attributes & FILE_ATTRIBUTE_DIRECTORY);
-}
-
-// Where fetched songs live. LocalAppData keeps them out of the user's music
-// and out of anything that gets synced; the pair of CreateDirectory calls
-// covers a profile where neither level exists yet.
-std::wstring AnalyzerAudioFolder() {
-    auto under = [](PCWSTR variable) {
-        std::wstring root = AnalyzerEnvironment(variable);
-        if (root.empty()) {
-            return std::wstring();
-        }
-        root += L"\\MusiciansToolkit\\Audio";
-        return root;
-    };
-    std::wstring folder = under(L"LOCALAPPDATA");
-    if (folder.empty()) {
-        folder = under(L"TEMP");
-    }
-    if (folder.empty()) {
-        return std::wstring();
-    }
-    const size_t slash = folder.find_last_of(L'\\');
-    if (slash != std::wstring::npos) {
-        CreateDirectoryW(folder.substr(0, slash).c_str(), nullptr);
-    }
-    CreateDirectoryW(folder.c_str(), nullptr);
-    return folder;
-}
-
-// Empties the folder before a download, so a run can never pick up the song
-// before it. It only ever runs against our own folder.
-void AnalyzerClearAudioFolder(const std::wstring& folder) {
-    if (folder.empty()) {
-        return;
-    }
-    WIN32_FIND_DATAW entry{};
-    const std::wstring pattern = folder + L"\\" + kAnalyzerAudioWildcard;
-    HANDLE find = FindFirstFileW(pattern.c_str(), &entry);
-    if (find == INVALID_HANDLE_VALUE) {
-        return;
-    }
-    do {
-        if (!(entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-            DeleteFileW((folder + L"\\" + entry.cFileName).c_str());
-        }
-    } while (FindNextFileW(find, &entry));
-    FindClose(find);
-}
-
-// The extractor: the configured path first, then the places the usual
-// installers put it, then PATH. yt-dlp and its ancestor youtube-dl both work.
-std::wstring AnalyzerExtractorPath() {
-    if (!g_settings.analyzerExtractor.empty() &&
-        AnalyzerIsFile(g_settings.analyzerExtractor)) {
-        return g_settings.analyzerExtractor;
-    }
-    std::vector<std::wstring> candidates;
-    const std::wstring local = AnalyzerEnvironment(L"LOCALAPPDATA");
-    if (!local.empty()) {
-        candidates.push_back(local + L"\\Microsoft\\WinGet\\Links\\yt-dlp.exe");
-    }
-    const std::wstring profile = AnalyzerEnvironment(L"USERPROFILE");
-    if (!profile.empty()) {
-        candidates.push_back(profile + L"\\scoop\\shims\\yt-dlp.exe");
-    }
-    const std::wstring programData = AnalyzerEnvironment(L"PROGRAMDATA");
-    if (!programData.empty()) {
-        candidates.push_back(programData + L"\\chocolatey\\bin\\yt-dlp.exe");
-    }
-    for (const std::wstring& path : candidates) {
-        if (AnalyzerIsFile(path)) {
-            return path;
-        }
-    }
-    const std::wstring search = AnalyzerEnvironment(L"PATH");
-    size_t start = 0;
-    while (start < search.size()) {
-        size_t stop = search.find(L';', start);
-        if (stop == std::wstring::npos) {
-            stop = search.size();
-        }
-        std::wstring entry = Trim(search.substr(start, stop - start));
-        if (!entry.empty() && entry.back() != L'\\') {
-            entry += L'\\';
-        }
-        const PCWSTR names[] = {L"yt-dlp.exe", L"youtube-dl.exe"};
-        for (PCWSTR name : names) {
-            const std::wstring path = entry + name;
-            if (AnalyzerIsFile(path)) {
-                return path;
-            }
-        }
-        start = stop + 1;
-    }
-    return std::wstring();
-}
-
-// A link that is itself an audio file: the extension is read off the path, so
-// a page whose query string happens to mention mp3 is not mistaken for one.
-bool AnalyzerDirectAudioUrl(const std::wstring& url, std::wstring& extension) {
-    std::wstring path = url;
-    const size_t stop = path.find_first_of(L"?#");
-    if (stop != std::wstring::npos) {
-        path.resize(stop);
-    }
-    const size_t slash = path.find_last_of(L'/');
-    const std::wstring name =
-        slash == std::wstring::npos ? path : path.substr(slash + 1);
-    if (name.empty() || !AnalyzerAudioExtension(name)) {
-        return false;
-    }
-    extension = AnalyzerExtension(name);
-    return true;
-}
-
-// The bytes come back through the analyzer's own WinHTTP helper, so a link
-// that points straight at a song needs no outside tool at all.
-bool AnalyzerDownloadUrl(const std::wstring& url, const std::wstring& path) {
-    HttpResult file;
-    if (!HttpRequest(L"GET", url, nullptr, nullptr, file) || file.status != 200 ||
-        file.body.size() < 4096) {
-        return false;
-    }
-    // A link can answer with a page - a login wall, a moved song, an error
-    // document - and a few kilobytes of HTML is not a song; writing it to disk
-    // would only make the media player fail later, without saying why.
-    const std::wstring type = Lower(file.contentType);
-    if (type.rfind(L"text/", 0) == 0 || type.find(L"html") != std::wstring::npos ||
-        type.find(L"json") != std::wstring::npos) {
-        Wh_Log(L"Analyzer: the link answered %s, not audio", type.c_str());
-        return false;
-    }
-    HANDLE handle = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
-                                CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (handle == INVALID_HANDLE_VALUE) {
-        return false;
-    }
-    DWORD written = 0;
-    const BOOL ok = WriteFile(handle, file.body.data(),
-                              static_cast<DWORD>(file.body.size()), &written,
-                              nullptr);
-    CloseHandle(handle);
-    return ok && written == file.body.size();
-}
-
-// Hands the link to the extractor and waits for it, watching the cancel flag
-// so closing the mod or starting another run does not leave a download behind.
-// The audio format is asked for by name so a picture never comes along, and
-// nothing here needs ffmpeg: the stream is saved as it arrives.
-bool AnalyzerRunExtractor(const std::wstring& exe,
-                          const std::wstring& url,
-                          const std::wstring& folder,
-                          std::wstring& outPath) {
-    if (url.empty() || url.find(L'"') != std::wstring::npos) {
-        return false;
-    }
-    if (!url.empty() && url.compare(0, 4, L"http") != 0) {
-        return false;  // Only links are handed over, never a local path.
-    }
-    AnalyzerClearAudioFolder(folder);
-    std::wstring command = L"\"";
-    command += exe;
-    command += L"\" --no-playlist --no-warnings --no-progress --no-mtime";
-    command += L" --force-overwrites --socket-timeout 20 --retries 2";
-    command += L" -f \"bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best\"";
-    command += L" -o \"";
-    command += folder;
-    command += L"\\";
-    command += kAnalyzerAudioTemplate;
-    command += L"\" \"";
-    command += url;
-    command += L"\"";
-    std::vector<wchar_t> line(command.begin(), command.end());
-    line.push_back(L'\0');
-
-    STARTUPINFOW startup{};
-    startup.cb = sizeof(startup);
-    startup.dwFlags = STARTF_USESHOWWINDOW;
-    startup.wShowWindow = SW_HIDE;
-    PROCESS_INFORMATION process{};
-    if (!CreateProcessW(nullptr, line.data(), nullptr, nullptr, FALSE,
-                        CREATE_NO_WINDOW, nullptr, folder.c_str(), &startup,
-                        &process)) {
-        Wh_Log(L"Analyzer: the extractor wouldn't start (%u)", GetLastError());
-        return false;
-    }
-    // Four minutes is generous for one song, and the loop wakes often enough
-    // that a cancel does not wait on it.
-    const double deadline = NowMs() + 240000.0;
-    DWORD code = 1;
-    for (;;) {
-        if (WaitForSingleObject(process.hProcess, 200) == WAIT_OBJECT_0) {
-            break;
-        }
-        if (g_analyzerAudioCancel.load() || NowMs() > deadline) {
-            TerminateProcess(process.hProcess, 1);
-            WaitForSingleObject(process.hProcess, 2000);
-            break;
-        }
-    }
-    GetExitCodeProcess(process.hProcess, &code);
-    CloseHandle(process.hThread);
-    CloseHandle(process.hProcess);
-    if (code != 0) {
-        Wh_Log(L"Analyzer: the extractor exited with %u", code);
-        return false;
-    }
-    WIN32_FIND_DATAW entry{};
-    HANDLE find =
-        FindFirstFileW((folder + L"\\" + kAnalyzerAudioWildcard).c_str(), &entry);
-    if (find == INVALID_HANDLE_VALUE) {
-        return false;
-    }
-    // The directory listing is in no particular order, and a stray cover image
-    // or a part file may sit beside the song, so the first entry the media
-    // player could take is the one that counts.
-    std::wstring found;
-    do {
-        const std::wstring candidate = folder + L"\\" + entry.cFileName;
-        if (!(entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
-            AnalyzerStreamExtension(candidate)) {
-            found = candidate;
-            break;
-        }
-    } while (FindNextFileW(find, &entry));
-    FindClose(find);
-    outPath = found;
-    return !outPath.empty();
-}
-
-// The fetch, as one thread at a time. The epoch says which run asked for it.
-struct AnalyzerAudioJob {
-    std::wstring url;
-    unsigned epoch = 0;
-};
-
-// Parks a finished song for the panel thread, or leaves a note when there is
-// none. A fetch whose run has moved on drops what it found instead.
-void AnalyzerAudioSettle(const std::wstring& path,
-                         const std::wstring& note,
-                         unsigned epoch) {
-    bool keep = false;
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    const bool current =
-        g_analyzerEpoch.load() == epoch && g_analyzer.phase == kAnalyzerReady;
-    if (current) {
-        if (!path.empty() && g_analyzer.audioPath.empty()) {
-            g_analyzer.pendingAudio = path;
-            g_analyzer.exportNote = note;
-            keep = true;
-        } else if (path.empty()) {
-            g_analyzer.exportNote = note;  // Why there is no sound.
-        }
-        // A song that arrives after the user attached one of their own is
-        // dropped quietly: the card already has a song, and its own note is
-        // the one that tells the truth.
-    }
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-    if (!path.empty() && !keep) {
-        DeleteFileW(path.c_str());
-    }
-    AnalyzerPost();
-}
-
-DWORD WINAPI AnalyzerAudioThreadProc(LPVOID param) {
-    AnalyzerAudioJob* job = static_cast<AnalyzerAudioJob*>(param);
-    if (!job) {
-        return 0;
-    }
-    const std::wstring url = job->url;
-    const unsigned epoch = job->epoch;
-    delete job;
-
-    const std::wstring folder = AnalyzerAudioFolder();
-    if (folder.empty()) {
-        AnalyzerAudioSettle(std::wstring(), L"No folder to hold the audio",
-                            epoch);
-        return 0;
-    }
-    std::wstring path;
-    std::wstring extension;
-    if (AnalyzerDirectAudioUrl(url, extension)) {
-        const std::wstring target = folder + L"\\song." + extension;
-        AnalyzerClearAudioFolder(folder);
-        if (AnalyzerDownloadUrl(url, target)) {
-            path = target;
-        }
-    } else {
-        const std::wstring exe = AnalyzerExtractorPath();
-        if (exe.empty()) {
-            AnalyzerAudioSettle(std::wstring(),
-                                L"No audio for a link \x00B7 install yt-dlp, or click Audio",
-                                epoch);
-            return 0;
-        }
-        if (!AnalyzerRunExtractor(exe, url, folder, path)) {
-            path.clear();
-        }
-    }
-    if (g_analyzerAudioCancel.load()) {
-        // Cancelled mid-download: nothing is handed on, nothing is left.
-        AnalyzerClearAudioFolder(folder);
-        return 0;
-    }
-    if (path.empty()) {
-        // Whatever the extractor did leave behind is no song we can play, so it
-        // goes with the failure rather than waiting for the next fetch.
-        AnalyzerClearAudioFolder(folder);
-        AnalyzerAudioSettle(std::wstring(),
-                            L"Couldn't fetch the audio for this link", epoch);
-        return 0;
-    }
-    AnalyzerAudioSettle(path, L"Audio ready \x00B7 press play", epoch);
-    return 0;
-}
-
-// Starts the fetch for a link. Called on the analysis thread once the chart is
-// up, so the chart is usable while the sound is still on its way.
-void AnalyzerFetchLinkAudio(const std::wstring& url) {
-    if (url.empty() || g_analyzerCancel.load()) {
-        return;
-    }
-    const unsigned epoch = g_analyzerEpoch.load();
-    {
-        AcquireSRWLockExclusive(&g_analyzerLock);
-        if (g_analyzer.phase != kAnalyzerReady ||
-            g_analyzerEpoch.load() != epoch || !g_analyzer.audioPath.empty() ||
-            g_analyzer.source != url) {
-            // A newer run owns the card by now.
-            ReleaseSRWLockExclusive(&g_analyzerLock);
-            return;
-        }
-        g_analyzer.exportNote = L"Fetching the audio\x2026";
-        ReleaseSRWLockExclusive(&g_analyzerLock);
-        AnalyzerPost();
-    }
-    if (g_analyzerAudioThread) {
-        // Only one fetch runs at a time: two would share the one folder and
-        // delete each other's song, so the older one is given up first.
-        g_analyzerAudioCancel.store(true);
-        if (WaitForSingleObject(g_analyzerAudioThread, 3000) != WAIT_OBJECT_0) {
-            // It is still in there and cannot be stopped in time. Its own settling
-            // finds the card has moved on and says nothing, so the truth is said
-            // here instead of leaving the note claiming a fetch that is not to be.
-            AnalyzerNote(L"Couldn't fetch the audio for this link");
-            return;
-        }
-        CloseHandle(g_analyzerAudioThread);
-        g_analyzerAudioThread = nullptr;
-    }
-    g_analyzerAudioCancel.store(false);
-    AnalyzerAudioJob* job = new AnalyzerAudioJob();
-    job->url = url;
-    job->epoch = epoch;
-    g_analyzerAudioThread =
-        CreateThread(nullptr, 0, AnalyzerAudioThreadProc, job, 0, nullptr);
-    if (!g_analyzerAudioThread) {
-        delete job;
-        AnalyzerNote(L"Couldn't start the audio fetch");
-    }
-}
-
-// The panel thread takes the song: it becomes what the transport plays, and if
-// the silent walk is already running it hands over mid-song rather than
-// stopping and starting again. A fetched file is ours, so it can be thrown
-// away when the card has moved on; a file the user picked never is.
-void AnalyzerUseAudio(const std::wstring& path, bool fetched) {
-    bool playing = false;
-    bool open = false;
-    double position = 0.0;
-    bool ready = false;
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    ready = g_analyzer.phase == kAnalyzerReady;
-    if (ready) {
-        playing = g_analyzer.playing;
-        open = g_analyzer.audioOpen;
-        position = g_analyzer.position;
-        g_analyzer.audioPath = path;
-        g_analyzer.audioFetched = fetched;
-        g_analyzer.audioOpen = false;
-        if (!fetched) {
-            g_analyzer.exportNote = L"Audio attached";
-        }
-    }
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-    if (!ready) {
-        if (fetched) {
-            DeleteFileW(path.c_str());  // The card was cleared on its way.
-        }
-        return;
-    }
-    if (playing) {
-        if (AnalyzerAudioOpen(path, fetched)) {
-            AnalyzerAudioPlayFrom(position);
-            AcquireSRWLockExclusive(&g_analyzerLock);
-            g_analyzer.audioOpen = true;
-            g_analyzer.anchorMs = NowMs();
-            g_analyzer.exportNote.clear();
-            ReleaseSRWLockExclusive(&g_analyzerLock);
-        } else {
-            AnalyzerNote(fetched ? L"Couldn't play the audio from this link"
-                                 : L"Couldn't play that file");
-        }
-    } else if (open) {
-        // A paused song still holds its old file open; letting go now means the
-        // next press opens the one that is on the card. The open itself closes
-        // the old device first, so this only frees the handle early.
-        AnalyzerAudioClose();
-    }
-    Repaint();
-}
-
-// Stops a fetch in flight and clears what it downloaded. Runs on the unload
-// path, after the media player has let go of the file.
-void AnalyzerAudioHalt() {
-    g_analyzerAudioCancel.store(true);
-    bool joined = true;
-    if (g_analyzerAudioThread) {
-        // The extractor gives up within a fifth of a second and a download
-        // within one read, so a wait this long is enough. A thread that is
-        // still in there after it may be writing, so its folder is left alone
-        // rather than emptied underneath it.
-        if (WaitForSingleObject(g_analyzerAudioThread, 20000) != WAIT_OBJECT_0) {
-            Wh_Log(L"Analyzer: the audio fetch outlasted the unload");
-            joined = false;
-        }
-        CloseHandle(g_analyzerAudioThread);
-        g_analyzerAudioThread = nullptr;
-    }
-    if (joined) {
-        AnalyzerClearAudioFolder(AnalyzerAudioFolder());
-    }
-}
-
-void AnalyzerSubmitUrl() {
-    if (AnalyzerBusy()) {
-        return;
-    }
-    const std::wstring url = Trim(g_analyzerInput.text);
-    if (url.empty()) {
-        AnalyzerNote(L"Paste a link first");
-        return;
-    }
-    // The chart comes first and the sound follows: the link's audio is
-    // fetched once the analysis lands, on a thread of its own.
-    AnalyzerBegin(url, std::wstring());
-    // The link is in; the keyboard belongs to the transport from here.
-    g_analyzerInput.focused = false;
-    AnalyzerRequest* request = new AnalyzerRequest();
-    request->kind = 0;
-    request->epoch = g_analyzerEpoch.load();
-    request->baseUrl = g_settings.analyzerBaseUrl;
-    request->url = url;
-    request->source = url;
-    request->acappella = g_analyzerAcappella;
-    AnalyzerStartRequest(request);
-}
-
-void AnalyzerSubmitFile(const std::wstring& path) {
-    if (AnalyzerBusy()) {
-        return;
-    }
-    const std::wstring name = FileNameOf(path);
-    // The full path stays with the card, so the player can open the file the
-    // chart was built from once the analysis lands.
-    AnalyzerBegin(name, path);
-    // The name is in; the keyboard belongs to the transport from here.
-    g_analyzerInput.focused = false;
-    AnalyzerRequest* request = new AnalyzerRequest();
-    request->kind = 1;
-    request->epoch = g_analyzerEpoch.load();
-    request->baseUrl = g_settings.analyzerBaseUrl;
-    request->filename = name;
-    request->source = name;
-    request->acappella = g_analyzerAcappella;
-    request->filePath = path;
-    AnalyzerStartRequest(request);
-}
-
-bool AnalyzerReadFile(const std::wstring& path, std::vector<uint8_t>& out) {
-    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
-                              nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
-                              nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
-        return false;
-    }
-    LARGE_INTEGER size{};
-    bool ok = GetFileSizeEx(file, &size) && size.QuadPart > 0 &&
-              size.QuadPart <= 100ll * 1024 * 1024;
-    out.clear();
-    if (ok) {
-        out.resize(static_cast<size_t>(size.QuadPart));
-        size_t total = 0;
-        while (total < out.size()) {
-            DWORD read = 0;
-            const DWORD want = static_cast<DWORD>(
-                std::min<size_t>(out.size() - total, 1u << 20));
-            if (!ReadFile(file, out.data() + total, want, &read, nullptr) ||
-                read == 0) {
-                ok = false;
-                break;
-            }
-            total += read;
-        }
-        if (ok) {
-            out.resize(total);
-        }
-    }
-    CloseHandle(file);
-    return ok;
-}
-
-// The shell's own file picker, shared by the two ways a song reaches the
-// card: a file to analyze, and a file to play under a chart. COM is already
-// STA in the panel thread, so the dialog simply runs here.
-bool AnalyzerPickAudio(PCWSTR title,
-                       PCWSTR label,
-                       PCWSTR pattern,
-                       std::wstring& path) {
-    IFileOpenDialog* dialog = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
-                                CLSCTX_INPROC_SERVER, IID_IFileOpenDialog,
-                                reinterpret_cast<void**>(&dialog)))) {
-        AnalyzerNote(L"Couldn't open the file picker");
-        return false;
-    }
-    COMDLG_FILTERSPEC filter[] = {{label, pattern}};
-    dialog->SetFileTypes(1, filter);
-    dialog->SetTitle(title);
-    FILEOPENDIALOGOPTIONS options = 0;
-    if (SUCCEEDED(dialog->GetOptions(&options))) {
-        dialog->SetOptions(options | FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST);
-    }
-    if (SUCCEEDED(dialog->Show(g_panel.Hwnd()))) {
-        IShellItem* item = nullptr;
-        if (SUCCEEDED(dialog->GetResult(&item))) {
-            PWSTR raw = nullptr;
-            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &raw))) {
-                path = raw;
-                CoTaskMemFree(raw);
-            }
-            item->Release();
-        }
-    }
-    dialog->Release();
-    return !path.empty();
-}
-
-void AnalyzerBrowse() {
-    if (AnalyzerBusy()) {
-        return;
-    }
-    std::wstring path;
-    if (!AnalyzerPickAudio(
-            L"Choose a song to analyze", L"Audio and video",
-            L"*.mp3;*.wav;*.flac;*.m4a;*.aac;*.ogg;*.opus;*.mp4;*.webm;*.mkv",
-            path)) {
-        return;
-    }
-    // The file is handed over by its path: the worker reads it, so a big song
-    // does not hold the panel up while it is fetched.
-    AnalyzerSubmitFile(path);
-}
-
-// A chart built from a link has no file of its own. When the link could not
-// bring its audio - no extractor installed, or a fetch that failed - the song
-// can still be handed over by hand: the same picker, the same transport, and
-// no second analysis.
-void AnalyzerAttachAudio() {
-    if (!AnalyzerReady() || AnalyzerBusy()) {
-        return;
-    }
-    std::wstring path;
-    if (!AnalyzerPickAudio(L"Choose the song this chart was made from", L"Audio",
-                           L"*.mp3;*.wav;*.flac;*.m4a;*.aac;*.ogg;*.opus;*.wma",
-                           path)) {
-        return;
-    }
-    if (!AnalyzerAudioExtension(path)) {
-        AnalyzerNote(L"That file is not audio \x00B7 pick an mp3, m4a or wav");
-        return;
-    }
-    AnalyzerUseAudio(path, false);
-}
-
-void AnalyzerCancel() {
-    bool busy = false;
-    AcquireSRWLockShared(&g_analyzerLock);
-    busy = g_analyzer.phase == kAnalyzerSubmitting ||
-           g_analyzer.phase == kAnalyzerRunning;
-    ReleaseSRWLockShared(&g_analyzerLock);
-    if (!busy) {
-        return;
-    }
-    g_analyzerCancel.store(true);
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    g_analyzer.status = L"Stopping\x2026";
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-    Repaint();
-}
-
-void AnalyzerExport(int format) {
-    if (format < 0 || format >= kAnalyzerFormatCount) {
-        return;
-    }
-    std::wstring jobId;
-    AcquireSRWLockShared(&g_analyzerLock);
-    const int phase = g_analyzer.phase;
-    jobId = g_analyzer.jobId;
-    ReleaseSRWLockShared(&g_analyzerLock);
-    if (phase != kAnalyzerReady || jobId.empty()) {
-        return;
-    }
-    AnalyzerRequest* request = new AnalyzerRequest();
-    request->kind = 2;
-    request->baseUrl = g_settings.analyzerBaseUrl;
-    request->jobId = jobId;
-    request->format = format;
-    request->exportFolder = g_settings.analyzerExportFolder;
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    g_analyzer.exportNote = L"Exporting\x2026";
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-    Repaint();
-    AnalyzerStartRequest(request);
-}
-
-void AnalyzerScrollBy(int rows) {
-    AcquireSRWLockExclusive(&g_analyzerLock);
-    const int count = static_cast<int>(g_analyzer.measures.size());
-    const int maxScroll = std::max(0, count - kAnalyzerRows);
-    g_analyzer.scroll = std::clamp(g_analyzer.scroll + rows, 0, maxScroll);
-    ReleaseSRWLockExclusive(&g_analyzerLock);
-    // A hand on the chart outranks the follow for a couple of seconds, so a
-    // look ahead stays where it was put.
-    g_analyzerFollowUntil = NowMs() + kAnalyzerFollowHoldMs;
-    Repaint();
-}
-
-// The URL field's editing. It keeps a caret and an anchor, so a paste can
-// replace a selection and Ctrl+A marks the whole link, exactly like the search
-// box in the chord tool.
-void AnalyzerSetCaret(int index, bool extend) {
-    g_analyzerInput.caret =
-        std::clamp(index, 0, static_cast<int>(g_analyzerInput.text.size()));
-    if (!extend) {
-        g_analyzerInput.anchor = g_analyzerInput.caret;
-    }
-    AnalyzerFieldFollow();
-}
-
-void AnalyzerDeleteSelection() {
-    const int start =
-        std::min(g_analyzerInput.caret, g_analyzerInput.anchor);
-    const int end = std::max(g_analyzerInput.caret, g_analyzerInput.anchor);
-    if (start == end) {
-        return;
-    }
-    g_analyzerInput.text.erase(static_cast<size_t>(start),
-                               static_cast<size_t>(end - start));
-    g_analyzerInput.caret = start;
-    g_analyzerInput.anchor = start;
-}
-
-void AnalyzerTypeChar(wchar_t c) {
-    if (g_analyzerInput.text.size() >= 512) {
-        return;
-    }
-    AnalyzerDeleteSelection();
-    g_analyzerInput.text.insert(
-        static_cast<size_t>(g_analyzerInput.caret), 1, c);
-    g_analyzerInput.caret++;
-    g_analyzerInput.anchor = g_analyzerInput.caret;
-    AnalyzerFieldFollow();
-    g_caretStart = NowMs();
-    Repaint();
-}
-
-void AnalyzerErase(bool forward) {
-    if (g_analyzerInput.caret != g_analyzerInput.anchor) {
-        AnalyzerDeleteSelection();
-    } else if (forward) {
-        if (g_analyzerInput.caret <
-            static_cast<int>(g_analyzerInput.text.size())) {
-            g_analyzerInput.text.erase(
-                static_cast<size_t>(g_analyzerInput.caret), 1);
-        }
-    } else if (g_analyzerInput.caret > 0) {
-        g_analyzerInput.text.erase(
-            static_cast<size_t>(g_analyzerInput.caret - 1), 1);
-        g_analyzerInput.caret--;
-        g_analyzerInput.anchor = g_analyzerInput.caret;
-    }
-    AnalyzerFieldFollow();
-    g_caretStart = NowMs();
-    Repaint();
-}
-
-void AnalyzerClearField() {
-    g_analyzerInput.text.clear();
-    g_analyzerInput.caret = 0;
-    g_analyzerInput.anchor = 0;
-    g_analyzerFieldStart = 0;
-    Repaint();
-}
-
-void AnalyzerPaste() {
-    std::wstring pasted;
-    if (OpenClipboard(g_panel.Hwnd())) {
-        HANDLE handle = GetClipboardData(CF_UNICODETEXT);
-        if (handle) {
-            const wchar_t* raw =
-                static_cast<const wchar_t*>(GlobalLock(handle));
-            if (raw) {
-                pasted = raw;
-                GlobalUnlock(handle);
-            }
-        }
-        CloseClipboard();
-    }
-    std::wstring clean;
-    for (wchar_t c : pasted) {
-        if (c >= 32 && c != 127) {
-            clean += c;
-        }
-    }
-    if (clean.empty()) {
-        return;
-    }
-    AnalyzerDeleteSelection();
-    const size_t room = 512 - g_analyzerInput.text.size();
-    if (clean.size() > room) {
-        clean.resize(room);
-    }
-    g_analyzerInput.text.insert(
-        static_cast<size_t>(g_analyzerInput.caret), clean);
-    g_analyzerInput.caret += static_cast<int>(clean.size());
-    g_analyzerInput.anchor = g_analyzerInput.caret;
-    AnalyzerFieldFollow();
-    g_caretStart = NowMs();
-    Repaint();
-}
-
-bool AnalyzerFieldActive() {
-    return g_app.tool == kToolAnalyzer && g_analyzerInput.focused;
-}
-
 // refit is set when the whole meter changes, so a preset or a signature step
 // picks up the grouping that meter is normally felt in; the steppers leave a
 // group the player chose alone.
@@ -14709,11 +11128,6 @@ void ApplySettings() {
         g_trainer.defaultsApplied = true;
         g_trainer.naturals = g_settings.trainerNaturals;
     }
-    if (!g_analyzerSeeded ||
-        previous.analyzerAcappella != g_settings.analyzerAcappella) {
-        g_analyzerSeeded = true;
-        g_analyzerAcappella = g_settings.analyzerAcappella;
-    }
     MetronomeSync();
     // The reference pitch follows the settings; the panel never edits it.
     g_tuner.reference = g_settings.tunerReference;
@@ -14819,13 +11233,6 @@ void OnMouseMove(HWND hwnd, POINT pt) {
                          std::max(static_cast<int>(work.top),
                                   static_cast<int>(work.bottom) - g_layout.height));
         PresentPanel(false);
-        return;
-    }
-
-    if (g_scrubbing) {
-        // Dragging the track moves the playhead, and only the playhead: the
-        // media clock is parked until the drag lets go.
-        AnalyzerScrubAt(static_cast<int>(pt.x), false);
         return;
     }
 
@@ -14972,24 +11379,6 @@ void OnMouseDown(HWND hwnd, POINT pt) {
             Repaint();
         }
         return;
-    }
-    if (g_app.tool == kToolAnalyzer && MenuVisual(g_exportMenu) &&
-        (hit.id == kHitNone || hit.id == kHitToolSelect)) {
-        // The format list covers the lower card, so a click outside it - or on
-        // the header, which belongs to the tool picker - puts it away.
-        MenuHide(g_exportMenu);
-        Repaint();
-        if (hit.id == kHitToolSelect) {
-            g_pressed = hit;
-            MenuShow(g_toolMenu, kMenuTools, g_app.tool);
-            g_hover = HitResult();
-            Repaint();
-        }
-        return;
-    }
-    // Anything but the URL field takes the caret away from it.
-    if (g_app.tool == kToolAnalyzer && hit.id != kHitAnalyzerField) {
-        g_analyzerInput.focused = false;
     }
     g_pressed = hit;
     switch (hit.id) {
@@ -15236,67 +11625,6 @@ void OnMouseDown(HWND hwnd, POINT pt) {
         case kHitTrainerStart:
             TrainerToggle();
             break;
-        case kHitAnalyzerField:
-            SetFocus(hwnd);
-            g_analyzerInput.focused = true;
-            // The link is longer than the field, so a click parks the caret at
-            // the end of it rather than guessing at a glyph.
-            AnalyzerSetCaret(static_cast<int>(g_analyzerInput.text.size()),
-                             false);
-            Repaint();
-            break;
-        case kHitAnalyzerBrowse:
-            // The chip carries the card's missing half: a song to analyze, or
-            // the audio for a chart that came from a link and has none.
-            if (AnalyzerReady() && !AnalyzerHasAudio()) {
-                AnalyzerAttachAudio();
-            } else {
-                AnalyzerBrowse();
-            }
-            break;
-        case kHitAnalyzerAction:
-            if (AnalyzerBusy()) {
-                AnalyzerCancel();
-            } else {
-                AnalyzerSubmitUrl();
-            }
-            break;
-        case kHitAnalyzerAcappella:
-            g_analyzerAcappella = !g_analyzerAcappella;
-            Repaint();
-            break;
-        case kHitAnalyzerPlay:
-            AnalyzerTogglePlay();
-            break;
-        case kHitAnalyzerScrub:
-            // Taking the track parks the clock and sets the playhead where the
-            // pointer landed; the release hands that spot to the media player.
-            g_scrubbing = true;
-            SetCapture(hwnd);
-            AnalyzerScrubAt(static_cast<int>(pt.x), false);
-            break;
-        case kHitAnalyzerBar: {
-            // A click on the chart jumps to the moment under the pointer, which
-            // is the whole point of a chart that is drawn to scale.
-            const AnalyzerSpot spot = AnalyzerSpotAt(pt);
-            if (spot.measure >= 0) {
-                AnalyzerSeekTo(spot.time);
-            }
-            break;
-        }
-        case kHitAnalyzerExport:
-            if (MenuHit(g_exportMenu)) {
-                MenuHide(g_exportMenu);
-            } else {
-                MenuShow(g_exportMenu, kMenuAnalyzerExport, 0);
-                g_hover = HitResult();
-            }
-            Repaint();
-            break;
-        case kHitAnalyzerExportRow:
-            MenuHide(g_exportMenu);
-            AnalyzerExport(hit.index);
-            break;
         case kHitHeader:
             g_dragging = true;
             GetCursorPos(&g_dragCursor);
@@ -15350,11 +11678,6 @@ void OnMouseDown(HWND hwnd, POINT pt) {
 
 void OnMouseUp() {
     g_pressed = HitResult();
-    if (g_scrubbing) {
-        ReleaseCapture();
-        AnalyzerScrubCommit();
-        return;
-    }
     if (g_dragging || g_sliding || g_selecting) {
         g_dragging = false;
         g_sliding = false;
@@ -15371,11 +11694,6 @@ void OnWheel(HWND hwnd, WPARAM wParam, POINT pt) {
         return;
     }
     const int direction = delta > 0 ? -1 : 1;
-    if (g_app.tool == kToolAnalyzer) {
-        // The wheel walks the bars a line at a time.
-        AnalyzerScrollBy(direction);
-        return;
-    }
     if (g_app.tool == kToolTempo) {
         // The wheel fine tunes the tempo one BPM at a time, ten with Shift.
         const bool shift = GetKeyState(VK_SHIFT) < 0;
@@ -15478,142 +11796,6 @@ void OnKeyDown(WPARAM key) {
             Repaint();
             return;
         }
-    }
-    if (g_app.tool == kToolAnalyzer) {
-        if (MenuHit(g_exportMenu)) {
-            if (key == VK_ESCAPE) {
-                MenuHide(g_exportMenu);
-                Repaint();
-                return;
-            }
-            if (key == VK_RETURN) {
-                const int format = g_exportMenu.cursor;
-                MenuHide(g_exportMenu);
-                if (format >= 0 && format < kAnalyzerFormatCount) {
-                    AnalyzerExport(format);
-                }
-                Repaint();
-                return;
-            }
-            if (key == VK_UP || key == VK_DOWN) {
-                MenuMoveCursor(g_exportMenu, key == VK_DOWN ? 1 : -1);
-                Repaint();
-                return;
-            }
-            return;  // Every other key is the list's while it is up.
-        }
-        if (ctrl && key == 'O') {
-            AnalyzerBrowse();
-            return;
-        }
-        if (key == VK_ESCAPE && AnalyzerBusy()) {
-            AnalyzerCancel();
-            return;
-        }
-        if (g_analyzerInput.focused) {
-            const int length = static_cast<int>(g_analyzerInput.text.size());
-            if (key == VK_BACK) {
-                AnalyzerErase(false);
-                return;
-            }
-            if (key == VK_DELETE) {
-                AnalyzerErase(true);
-                return;
-            }
-            if (key == VK_LEFT || key == VK_RIGHT) {
-                AnalyzerSetCaret(g_analyzerInput.caret +
-                                     (key == VK_RIGHT ? 1 : -1),
-                                 shift);
-                Repaint();
-                return;
-            }
-            if (key == VK_HOME || key == VK_END) {
-                AnalyzerSetCaret(key == VK_HOME ? 0 : length, shift);
-                Repaint();
-                return;
-            }
-            if (ctrl && key == 'A') {
-                AnalyzerSetCaret(0, false);
-                AnalyzerSetCaret(length, true);
-                Repaint();
-                return;
-            }
-            if (ctrl && key == 'V') {
-                AnalyzerPaste();
-                return;
-            }
-            if (key == VK_SPACE) {
-                // A link has no spaces in it, so Space belongs to the transport:
-                // it plays a ready chart, cancels a run, and only submits what
-                // is typed when there is nothing else for it to do.
-                if (AnalyzerBusy()) {
-                    AnalyzerCancel();
-                } else if (AnalyzerReady()) {
-                    AnalyzerTogglePlay();
-                } else {
-                    AnalyzerSubmitUrl();
-                }
-                return;
-            }
-            if (key == VK_RETURN) {
-                if (AnalyzerBusy()) {
-                    AnalyzerCancel();
-                } else {
-                    AnalyzerSubmitUrl();
-                }
-                return;
-            }
-            if (key == VK_ESCAPE) {
-                if (!g_analyzerInput.text.empty()) {
-                    AnalyzerClearField();
-                } else {
-                    g_analyzerInput.focused = false;
-                    CloseFlyout();
-                }
-                return;
-            }
-            return;
-        }
-        if (key == VK_ESCAPE) {
-            CloseFlyout();
-            return;
-        }
-        if (key == VK_RETURN) {
-            g_analyzerInput.focused = true;
-            SetFocus(g_panel.Hwnd());
-            Repaint();
-            return;
-        }
-        if (key == VK_SPACE) {
-            if (AnalyzerBusy()) {
-                AnalyzerCancel();
-            } else if (AnalyzerReady()) {
-                AnalyzerTogglePlay();
-            } else {
-                AnalyzerSubmitUrl();
-            }
-            return;
-        }
-        if (AnalyzerReady()) {
-            // The transport: a five second skip, a measure with Ctrl held, and
-            // the two ends. They only mean something once there is a chart.
-            if (key == VK_LEFT || key == VK_RIGHT) {
-                if (ctrl) {
-                    AnalyzerStepMeasure(key == VK_RIGHT ? 1 : -1);
-                } else {
-                    AnalyzerSeekBy(key == VK_RIGHT ? 5.0 : -5.0);
-                }
-                return;
-            }
-            if (key == VK_HOME || key == VK_END) {
-                AnalyzerSeekTo(key == VK_HOME ? 0.0 : AnalyzerLength());
-                return;
-            }
-        }
-        if (key == VK_UP || key == VK_DOWN) {
-            AnalyzerScrollBy(key == VK_DOWN ? 1 : -1);
-        }
-        return;
     }
     if (g_app.tool == kToolTempo) {
         if (key == VK_ESCAPE) {
@@ -16052,6 +12234,9 @@ constexpr UINT kTrayMenuTool = 100;  // The tool index is added to this.
 
 UINT g_taskbarCreated = 0;
 bool g_trayAdded = false;
+// A click that has just taken the panel's focus away is not also a request to
+// open it again, so the icon stays quiet until this moment has passed.
+double g_trayIgnoreUntil = 0.0;
 // A double click arrives as up, double-click, up. Without this the second up
 // would undo what the first one opened.
 bool g_traySkipClick = false;
@@ -16141,9 +12326,12 @@ HICON TrayBuildIcon(int size) {
             }
             const float alpha = static_cast<float>(inside) / (samples * 255.0f);
             const float white = static_cast<float>(note) / inside;
+            // The colour is left unmultiplied: a 32-bit bitmap hands the shell
+            // its coverage in the alpha channel, and folding that into the
+            // colour as well would darken the rim of the plate.
             const auto channel = [&](float base) {
-                const float value = (base + (1.0f - base) * white) * alpha;
-                return static_cast<uint32_t>(Clamp01(value) * 255.0f + 0.5f);
+                return static_cast<uint32_t>(
+                    Clamp01(base + (1.0f - base) * white) * 255.0f + 0.5f);
             };
             art[static_cast<size_t>(y) * size + x] =
                 (static_cast<uint32_t>(alpha * 255.0f + 0.5f) << 24) |
@@ -16194,48 +12382,6 @@ HICON TrayBuildIcon(int size) {
     return icon;
 }
 
-// Puts the icon in the notification area. Called on the panel thread, because
-// that is the thread the icon reports its clicks to.
-void TrayAdd() {
-    if (g_trayAdded || !g_settings.showTrayIcon || !g_panel.Hwnd()) {
-        return;
-    }
-    if (!g_taskbarCreated) {
-        g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
-    }
-    if (!g_trayIcon) {
-        const int size = static_cast<int>(GetSystemMetrics(SM_CXSMICON));
-        g_trayIcon = TrayBuildIcon(size > 0 ? size : 16);
-    }
-    if (!g_trayIcon) {
-        Wh_Log(L"Couldn't draw the tray icon");
-        return;
-    }
-    NOTIFYICONDATAW data{};
-    data.cbSize = sizeof(data);
-    data.hWnd = g_panel.Hwnd();
-    data.uID = kTrayIconId;
-    data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
-    data.uCallbackMessage = kMessageTray;
-    data.hIcon = g_trayIcon;
-    // The shortcut is the other way in, so the tooltip names it as well.
-    std::wstring tip = L"Musician's Toolkit";
-    if (!g_settings.hotkeyText.empty()) {
-        tip += L"  \x00B7  ";
-        tip += g_settings.hotkeyText;
-    }
-    const size_t length =
-        std::min<size_t>(tip.size(), ARRAYSIZE(data.szTip) - 1);
-    std::copy(tip.begin(), tip.begin() + length, data.szTip);
-    if (!Shell_NotifyIconW(NIM_ADD, &data)) {
-        // Explorer may not be up yet; its "TaskbarCreated" broadcast adds the
-        // icon once it is.
-        Wh_Log(L"Couldn't add the tray icon: %u", GetLastError());
-        return;
-    }
-    g_trayAdded = true;
-}
-
 // Takes the icon away and lets go of the picture it was showing.
 void TrayHalt() {
     if (g_panel.Hwnd()) {
@@ -16252,11 +12398,87 @@ void TrayHalt() {
     }
 }
 
+// Draws the icon and fills in the structure the shell is handed. The picture is
+// kept between calls, so a redraw only happens when it was let go of.
+bool TrayPrepare(NOTIFYICONDATAW& data) {
+    if (!g_taskbarCreated) {
+        g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+        if (g_taskbarCreated) {
+            // Explorer runs higher up the integrity ladder than a normal app,
+            // so the broadcast it sends when it restarts is filtered out of
+            // this window unless it is allowed through by hand.
+            ChangeWindowMessageFilterEx(g_panel.Hwnd(), g_taskbarCreated,
+                                        MSGFLT_ALLOW, nullptr);
+        }
+    }
+    if (!g_trayIcon) {
+        const int size = static_cast<int>(GetSystemMetrics(SM_CXSMICON));
+        g_trayIcon = TrayBuildIcon(size > 0 ? size : 16);
+    }
+    if (!g_trayIcon) {
+        Wh_Log(L"Couldn't draw the tray icon");
+        return false;
+    }
+    data = NOTIFYICONDATAW();
+    data.cbSize = sizeof(data);
+    data.hWnd = g_panel.Hwnd();
+    data.uID = kTrayIconId;
+    data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    data.uCallbackMessage = kMessageTray;
+    data.hIcon = g_trayIcon;
+    // The shortcut is the other way in, so the tooltip names it as well.
+    std::wstring tip = L"Musician's Toolkit";
+    if (!g_settings.hotkeyText.empty()) {
+        tip += L"  \x00B7  ";
+        tip += g_settings.hotkeyText;
+    }
+    const size_t length =
+        std::min<size_t>(tip.size(), ARRAYSIZE(data.szTip) - 1);
+    std::copy(tip.begin(), tip.begin() + length, data.szTip);
+    return true;
+}
+
+// Hands the icon to the shell: nothing to show takes it away, and an icon that
+// is already up is modified rather than put up again, which is what keeps it
+// where the user dropped it.
+void TrayPublish() {
+    if (!g_settings.showTrayIcon || !g_panel.Hwnd()) {
+        TrayHalt();
+        return;
+    }
+    NOTIFYICONDATAW data{};
+    if (!TrayPrepare(data)) {
+        return;
+    }
+    if (!Shell_NotifyIconW(g_trayAdded ? NIM_MODIFY : NIM_ADD, &data)) {
+        // Explorer may not be up yet; its "TaskbarCreated" broadcast adds the
+        // icon once it is.
+        Wh_Log(L"Couldn't put the tray icon up: %u", GetLastError());
+        return;
+    }
+    g_trayAdded = true;
+}
+
+// Puts the icon up, unless it is already there. Called on the panel thread,
+// because that is the thread the icon reports its clicks to.
+void TrayAdd() {
+    if (g_trayAdded || !g_settings.showTrayIcon || !g_panel.Hwnd()) {
+        return;
+    }
+    TrayPublish();
+}
+
 // Follows the settings: the icon appears or goes, and it is redrawn so it wears
 // the new accent colour.
 void TrayRefresh() {
-    TrayHalt();
-    TrayAdd();
+    // The shell copies the picture as it takes it, so the one it was showing is
+    // released once the new one is in place.
+    HICON previous = g_trayIcon;
+    g_trayIcon = nullptr;
+    TrayPublish();
+    if (previous) {
+        DestroyIcon(previous);
+    }
 }
 
 // The menu behind a right click: the panel itself, then every tool, so one can
@@ -16314,6 +12536,11 @@ void TrayOnMessage(LPARAM event) {
                 g_traySkipClick = false;  // The tail of a double click.
                 return;
             }
+            if (NowMs() < g_trayIgnoreUntil) {
+                // This is the click that took the focus away a moment ago, so
+                // it has already done its work on the panel.
+                return;
+            }
             ToggleFlyout();
             return;
         case WM_LBUTTONDBLCLK:
@@ -16367,6 +12594,9 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
                     POINT{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
             return 0;
         case WM_KEYDOWN:
+            if (g_phase == kPhaseClosed) {
+                return 0;  // The panel is not on screen, so the key is not its.
+            }
             // Alt combinations belong to the shell, not to the flyout.
             if (!(lParam & (1 << 29))) {
                 // A held key auto repeats, which would read as a very fast
@@ -16380,7 +12610,6 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
                     (transportKey && (g_app.tool == kToolTempo ||
                                       g_app.tool == kToolMetronome ||
                                       g_app.tool == kToolStrum ||
-                                      g_app.tool == kToolAnalyzer ||
                                       g_app.tool == kToolCircle ||
                                       g_app.tool == kToolTrainer)) ||
                     (g_app.tool == kToolChords && transportKey) ||
@@ -16394,6 +12623,9 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
             }
             return 0;
         case WM_CHAR: {
+            if (g_phase == kPhaseClosed) {
+                return 0;
+            }
             const wchar_t c = static_cast<wchar_t>(wParam);
             if (c >= 32 && c != 127) {
                 if (TempoEntryType(c)) {
@@ -16405,11 +12637,6 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
                     c != L' ') {
                     AppendQueryChar(c);
                 }
-                if (c != L' ' && AnalyzerFieldActive() &&
-                    !MenuHit(g_exportMenu)) {
-                    AnalyzerTypeChar(c);
-                    return 0;  // A character went into the URL field.
-                }
             }
             return 0;
         }
@@ -16417,8 +12644,7 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
             if (wParam == kAnimationTimer) {
                 UpdateAnimation();
             } else if (wParam == kCaretTimer && g_phase != kPhaseClosed &&
-                       (g_searchFocused || TempoEntryActive() ||
-                        AnalyzerFieldActive()) &&
+                       (g_searchFocused || TempoEntryActive()) &&
                        g_windowActive) {
                 Repaint();  // Moves the blinking caret along.
             } else if (wParam == kFlashTimer) {
@@ -16494,12 +12720,6 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
                     return 0;
                 }
                 UpdateMenuAnimations();
-            } else if (wParam == kAnalyzerTimer) {
-                if (g_phase == kPhaseClosed || g_app.tool != kToolAnalyzer) {
-                    KillTimer(hwnd, kAnalyzerTimer);
-                } else {
-                    AnalyzerTick();
-                }
             }
             return 0;
         case WM_ACTIVATE: {
@@ -16511,6 +12731,10 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
             g_windowActive = !inactive;
             if (inactive) {
                 if (g_settings.closeOnFocusLoss && g_phase == kPhaseOpen) {
+                    // The panel is folding away because the pointer went to
+                    // the notification area, so the button that is still on its
+                    // way up from the icon must not open it straight back.
+                    g_trayIgnoreUntil = NowMs() + 300.0;
                     CloseFlyout();
                 }
             } else if (g_phase != kPhaseClosed) {
@@ -16525,8 +12749,7 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
                 LPCWSTR cursor = IDC_ARROW;
                 if (g_dragging || g_hover.id == kHitHeader) {
                     cursor = IDC_SIZEALL;
-                } else if (g_selecting || g_hover.id == kHitSearch ||
-                           g_hover.id == kHitAnalyzerField) {
+                } else if (g_selecting || g_hover.id == kHitSearch) {
                     cursor = IDC_IBEAM;
                 } else if (g_hover.id == kHitTab || g_hover.id == kHitRow ||
                            g_hover.id == kHitClose ||
@@ -16550,14 +12773,6 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
                            g_hover.id == kHitTunerMenuRow ||
                            g_hover.id == kHitTunerString ||
                            g_hover.id == kHitStrumTempo ||
-                           g_hover.id == kHitAnalyzerBrowse ||
-                           g_hover.id == kHitAnalyzerAction ||
-                           g_hover.id == kHitAnalyzerAcappella ||
-                           g_hover.id == kHitAnalyzerExport ||
-                           g_hover.id == kHitAnalyzerExportRow ||
-                           g_hover.id == kHitAnalyzerPlay ||
-                           g_hover.id == kHitAnalyzerScrub ||
-                           g_hover.id == kHitAnalyzerBar ||
                            g_hover.id == kHitPrevious ||
                            g_hover.id == kHitNext || g_hover.id == kHitDot) {
                     cursor = IDC_HAND;
@@ -16578,6 +12793,28 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
             return HTCLIENT;
         case WM_DPICHANGED:
             return 0;
+        case WM_SETTINGCHANGE: {
+            // The tray icon is drawn in the accent color, so it is put back
+            // when that color moved - otherwise a closed panel would leave the
+            // old one in the notification area until the next settings edit.
+            const Color accent =
+                ResolveAccent(g_settings.accentChoice, g_settings.customAccent);
+            if (accent.r != g_accent.r || accent.g != g_accent.g ||
+                accent.b != g_accent.b) {
+                // The icon is drawn from g_accent, so the new color is taken
+                // first and the icon is then rebuilt around it.
+                g_accent = accent;
+                TrayRefresh();
+            }
+            // The app theme and the accent color live in the registry, so a
+            // theme switch redraws the panel with the new colors.
+            if (g_phase != kPhaseClosed) {
+                ApplySettings();
+                Render();
+                PresentPanel(false);
+            }
+            return 0;
+        }
         case WM_CLOSE:
             CloseFlyout();
             return 0;
@@ -16634,44 +12871,6 @@ LRESULT CALLBACK MessageWndProc(HWND hwnd,
             RepositionPanel();
             TrayRefresh();
             return 0;
-        case kMessageAnalyzer: {
-            // The worker finished a step; drawing happens on this thread only.
-            // A song fetched for a link is taken here too, because the media
-            // player is driven from this thread and nowhere else.
-            std::wstring fetched;
-            AcquireSRWLockExclusive(&g_analyzerLock);
-            fetched.swap(g_analyzer.pendingAudio);
-            ReleaseSRWLockExclusive(&g_analyzerLock);
-            if (!fetched.empty()) {
-                AnalyzerUseAudio(fetched, true);
-            }
-            if (g_phase != kPhaseClosed) {
-                Repaint();
-            }
-            return 0;
-        }
-        case WM_SETTINGCHANGE: {
-            // The tray icon is drawn in the accent color, so it is put back
-            // when that color moved - otherwise a closed panel would leave the
-            // old one in the notification area until the next settings edit.
-            const Color accent =
-                ResolveAccent(g_settings.accentChoice, g_settings.customAccent);
-            if (accent.r != g_accent.r || accent.g != g_accent.g ||
-                accent.b != g_accent.b) {
-                // The icon is drawn from g_accent, so the new color is taken
-                // first and the icon is then rebuilt around it.
-                g_accent = accent;
-                TrayRefresh();
-            }
-            // The app theme and the accent color live in the registry, so a
-            // theme switch redraws the panel with the new colors.
-            if (g_phase != kPhaseClosed) {
-                ApplySettings();
-                Render();
-                PresentPanel(false);
-            }
-            return 0;
-        }
         case WM_CLOSE:
             DestroyWindow(hwnd);
             return 0;
@@ -16787,9 +12986,6 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     TunerHalt();
     TrainerHalt();
     StrumHalt();
-    // The analyzer's worker may still be mid-request, so it is stopped before
-    // the windows it reports to go away.
-    AnalyzerHalt();
     // And let any chord or scale clip finish before the process unwinds.
     ClipStop();
     DestroyWindows();
