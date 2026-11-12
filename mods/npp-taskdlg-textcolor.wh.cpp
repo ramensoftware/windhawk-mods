@@ -2,13 +2,14 @@
 // @id              npp-taskdlg-textcolor
 // @name            Notepad++ Dark Dialog Fix
 // @description     Readable text in Notepad++ Save and confirm dialogs when dark mode is on
-// @version         1.0.1
+// @version         1.0.2
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
 // @homepage        https://github.com/DavidHiFi/davids-windhawk-mods
 // @license         MIT
 // @include         notepad++.exe
 // @compilerOptions -luxtheme
+// @donateUrl       https://ko-fi.com/DavidHiFi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
