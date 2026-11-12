@@ -4,7 +4,7 @@
 // @name:zh-CN 开始菜单卡片 - Start Sidecar
 // @description Native XAML live cards inside the Windows 11 Start companion layout.
 // @description:zh-CN 在 Windows 11 开始菜单中嵌入原生 XAML 卡片。
-// @version 0.6.2
+// @version 0.6.3
 // @author Yizuka17
 // @github https://github.com/Yizuka17
 // @license MIT
@@ -246,7 +246,7 @@ struct Data {
     // Only encoded image bytes cross apartments; SMTC streams stay on the
     // worker.
     std::shared_ptr<const std::vector<uint8_t>> art, mediaLogo, mediaLogoLight,
-        mediaLogoDark;
+        mediaLogoDark, mediaHeaderLogoLight, mediaHeaderLogoDark;
     uint64_t artRevision = 0;
 };
 inline std::shared_ptr<Config> config = std::make_shared<Config>();
@@ -975,7 +975,8 @@ static std::shared_ptr<const std::vector<uint8_t>> PackageBytes(
 }
 static std::pair<std::shared_ptr<const std::vector<uint8_t>>,
                  std::shared_ptr<const std::vector<uint8_t>>>
-ThemedAppLogos(Windows::ApplicationModel::AppInfo const& app) {
+ThemedAppLogos(Windows::ApplicationModel::AppInfo const& app,
+               unsigned desiredPixels = 192) {
     if (!app || !app.Package())
         return {};
     const std::filesystem::path root(
@@ -1046,10 +1047,11 @@ ThemedAppLogos(Windows::ApplicationModel::AppInfo const& app) {
             const double form = (light ? lightForm : darkForm)     ? 0
                                 : (light ? lightTheme : darkTheme) ? 1
                                                                    : 2;
-            // One sharp image also serves the larger no-artwork fallback.
+            // Header and no-artwork fallback use independently sized assets.
             const double score =
-                form * 10000 +
-                (pixels >= 192 ? pixels - 192 : 1000 + 192 - pixels);
+                form * 10000 + (pixels >= desiredPixels
+                                    ? pixels - desiredPixels
+                                    : 1000 + desiredPixels - pixels);
             if (score < best[light]) {
                 best[light] = score;
                 chosen[light] = item.path();
@@ -1287,6 +1289,8 @@ inline void MediaWorker() {
                     next.mediaLogo.reset();
                     next.mediaLogoLight.reset();
                     next.mediaLogoDark.reset();
+                    next.mediaHeaderLogoLight.reset();
+                    next.mediaHeaderLogoDark.reset();
                     ++next.artRevision;
                 }
                 next.mediaApp = source;
@@ -1315,6 +1319,8 @@ inline void MediaWorker() {
                                 next.mediaLogo.reset();
                                 next.mediaLogoLight.reset();
                                 next.mediaLogoDark.reset();
+                                next.mediaHeaderLogoLight.reset();
+                                next.mediaHeaderLogoDark.reset();
                             }
                             auto display = app.DisplayInfo();
                             auto name = display.DisplayName();
@@ -1329,6 +1335,14 @@ inline void MediaWorker() {
                                         std::move(themed.first);
                                     next.mediaLogoDark =
                                         std::move(themed.second);
+                                    // Match MediaPeek's 64-pixel header asset;
+                                    // keep the large variant for the cover
+                                    // slot.
+                                    auto header = ThemedAppLogos(app, 64);
+                                    next.mediaHeaderLogoLight =
+                                        std::move(header.first);
+                                    next.mediaHeaderLogoDark =
+                                        std::move(header.second);
                                     if (next.mediaLogoLight ||
                                         next.mediaLogoDark)
                                         ++next.artRevision;
@@ -1442,6 +1456,8 @@ inline void MediaWorker() {
             data.mediaLogo = next.mediaLogo;
             data.mediaLogoLight = next.mediaLogoLight;
             data.mediaLogoDark = next.mediaLogoDark;
+            data.mediaHeaderLogoLight = next.mediaHeaderLogoLight;
+            data.mediaHeaderLogoDark = next.mediaHeaderLogoDark;
             data.artRevision = next.artRevision;
         }
         if (WaitForMultipleObjects(2, events, FALSE, visible ? 200 : 0) ==
@@ -2154,7 +2170,8 @@ namespace mediaCard {
 // Session selection continues to follow the system's current media session.
 [[clang::no_destroy]] inline c::Grid view{nullptr};
 [[clang::no_destroy]] inline std::shared_ptr<const std::vector<uint8_t>>
-    shownLogo, shownArt;
+    shownLogo, shownAppLogo, shownArt;
+inline int shownLogoPixels = 0, shownAppLogoPixels = 0;
 inline ULONGLONG optimisticUntil = 0;
 inline bool optimisticPlaying = false;
 
@@ -2213,6 +2230,8 @@ inline constexpr wchar_t markup[] =
 inline void Remove() {
     view = nullptr;
     shownLogo.reset();
+    shownAppLogo.reset();
+    shownLogoPixels = shownAppLogoPixels = 0;
     shownArt.reset();
     optimisticUntil = 0;
 }
@@ -2260,12 +2279,15 @@ inline c::Grid Build() {
     return view;
 }
 inline void Image(const wchar_t* name,
-                  std::shared_ptr<const std::vector<uint8_t>> const& bytes) {
+                  std::shared_ptr<const std::vector<uint8_t>> const& bytes,
+                  int decodePixels = 0) {
     auto element = Element(name);
     m::Imaging::BitmapImage bitmap{nullptr};
     if (bytes)
         try {
             bitmap = m::Imaging::BitmapImage();
+            if (decodePixels > 0)
+                bitmap.DecodePixelWidth(decodePixels);
             com_ptr<::IStream> memory;
             memory.attach(
                 SHCreateMemStream(bytes->data(), (UINT)bytes->size()));
@@ -2316,11 +2338,30 @@ inline void Update(svc::Data const& data) {
     auto themed = view.ActualTheme() == x::ElementTheme::Light
                       ? data.mediaLogoLight
                       : data.mediaLogoDark;
-    auto logo = themed ? themed : data.mediaLogo;
-    if (shownLogo != logo) {
+    auto appLogo = themed ? themed : data.mediaLogo;
+    auto header = view.ActualTheme() == x::ElementTheme::Light
+                      ? data.mediaHeaderLogoLight
+                      : data.mediaHeaderLogoDark;
+    auto logo = header ? header : appLogo;
+    if (!appLogo)
+        appLogo = logo;
+    double scale = 1;
+    if (auto root = view.XamlRoot())
+        scale = root.RasterizationScale();
+    if (!std::isfinite(scale) || scale <= 0)
+        scale = 1;
+    // Decode icons at physical display size, including after a DPI change.
+    const int headerPixels = static_cast<int>(std::ceil(16 * scale));
+    const int appPixels = static_cast<int>(std::ceil(92 * scale));
+    if (shownLogo != logo || shownLogoPixels != headerPixels) {
         shownLogo = logo;
-        Image(L"HeaderLogo", logo);
-        Image(L"PlayerAppIcon", logo);
+        shownLogoPixels = headerPixels;
+        Image(L"HeaderLogo", logo, headerPixels);
+    }
+    if (shownAppLogo != appLogo || shownAppLogoPixels != appPixels) {
+        shownAppLogo = appLogo;
+        shownAppLogoPixels = appPixels;
+        Image(L"PlayerAppIcon", appLogo, appPixels);
     }
     if (shownArt != data.art) {
         shownArt = data.art;
@@ -2329,8 +2370,8 @@ inline void Update(svc::Data const& data) {
     Element(L"HeaderFallback")
         .Visibility(logo ? x::Visibility::Collapsed : x::Visibility::Visible);
     Element(L"ArtFallback")
-        .Visibility(logo || data.art ? x::Visibility::Collapsed
-                                     : x::Visibility::Visible);
+        .Visibility(appLogo || data.art ? x::Visibility::Collapsed
+                                        : x::Visibility::Visible);
     Element(L"PlayerAppIcon")
         .Visibility(data.art ? x::Visibility::Collapsed
                              : x::Visibility::Visible);
