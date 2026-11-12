@@ -1,3 +1,11 @@
+## 1.3.1 ([Nov 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4dc76a62bf5ef66ddbdc69d69def009ce65e6f79/mods/disable-windows-shortcuts.wh.cpp))
+
+* Added a `Win+Shift+T` toggle (Snipping Tool text extractor) to Standard Shortcuts.
+* Fixed the Explorer restart prompt not appearing when the mod is uninstalled.
+* Restart prompts now explain the event that triggered them (mod enabled, settings changed, mod disabled, mod uninstalled).
+* The restart prompt shown on unload now closes automatically if the mod is re-enabled while it is open.
+* The restart prompt for restoring shortcuts is skipped when Explorer never had them blocked.
+
 ## 1.3.0 ([Sep 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bd465cf91976360394dd11f5b58ed083080b1c33/mods/disable-windows-shortcuts.wh.cpp))
 
 * Added new shortcuts: `Win+Shift+C` (Charms Menu in Windows 10) and `Win+Shift+R` (Snipping Tool screen recording).

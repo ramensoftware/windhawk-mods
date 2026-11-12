@@ -4469,7 +4469,7 @@
         "ratingUsers": 12,
         "reviews": 0,
         "trendingSorting": 15.784054508264171,
-        "updated": 1793847810000,
+        "updated": 1794513617000,
         "users": 300
       },
       "metadata": {
@@ -4478,13 +4478,13 @@
         ],
         "author": "yizqq0721",
         "compilerOptions": "-lgdiplus -lgdi32 -luser32 -lole32 -loleaut32 -luuid -lshell32 -ladvapi32",
-        "description": "A standalone macOS-style dock: drag shortcuts, files and folders onto it, reorder them, drag them out to put them back on the desktop; shortcuts are copied into a dock-owned folder so desktop cleanups do not affect the dock; optional glass panel",
+        "description": "A standalone macOS-style desktop dock. Drag shortcuts, files and folders in, reorder them, or drag them back to the desktop. It keeps its own list and offers six background styles, from Clear to Liquid Glass.",
         "github": "https://github.com/yizqq0721",
         "include": [
           "explorer.exe"
         ],
         "name": "Desktop Icon Dock",
-        "version": "1.1.3"
+        "version": "2.1.2"
       }
     },
     "desktop-icon-section-autohide": {
@@ -5251,7 +5251,7 @@
         "ratingUsers": 15,
         "reviews": 0,
         "trendingSorting": 0.14896258423103198,
-        "updated": 1790582630000,
+        "updated": 1794513612000,
         "users": 246
       },
       "metadata": {
@@ -5263,7 +5263,7 @@
           "dwm.exe"
         ],
         "name": "Disable Windows Shortcuts",
-        "version": "1.3.0"
+        "version": "1.3.1"
       }
     },
     "discord-balloon-notifs": {
@@ -5681,7 +5681,7 @@
         "rating": 9,
         "ratingBreakdown": [47, 38, 81, 289, 1758],
         "ratingUsers": 2213,
-        "reviews": 2,
+        "reviews": 3,
         "trendingSorting": 11.050756472106109,
         "updated": 1792771331000,
         "users": 74041
@@ -10499,7 +10499,7 @@
         "rating": 10,
         "ratingBreakdown": [11, 5, 16, 64, 722],
         "ratingUsers": 818,
-        "reviews": 6,
+        "reviews": 7,
         "trendingSorting": 25.376358092280192,
         "updated": 1794391382000,
         "users": 20482
