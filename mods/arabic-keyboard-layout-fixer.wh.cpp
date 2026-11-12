@@ -2,7 +2,7 @@
 // @id              arabic-keyboard-layout-fixer
 // @name            Arabic Keyboard Layout Fixer
 // @description     Instantly converts mistyped Arabic/English text with Alt+Z across any application.
-// @version         1.3.0
+// @version         1.3.1
 // @author          Omar
 // @github          https://github.com/uomr
 // @homepage        https://github.com/uomr/keyboard-layout-fixer
@@ -15,7 +15,9 @@
 # Arabic Keyboard Layout Fixer
 
 Fixes the common frustration of typing Arabic text while the keyboard is accidentally set to English (or vice versa).
+
 ![Arabic Keyboard Layout Fixer Demo](https://raw.githubusercontent.com/uomr/keyboard-layout-fixer/main/demo.gif)
+
 ### How to use:
 1. Select/highlight any mistyped text in any app (Notepad, Word, Browser, ERP, etc.).
 2. Press **Alt + Z** (or your custom configured hotkey).
