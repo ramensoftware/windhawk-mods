@@ -230,7 +230,7 @@ listens and you play it before the clock runs out.
 - **Note trainer** - seconds per note, chromatic or naturals.
 
 ## GitHub Repo
-The source code of this mod can be found in this ![GitHub Repo](https://github.com/DeepakBalaraman/musicians-toolkit).
+The source code of this mod can be found in this [GitHub Repo](https://github.com/DeepakBalaraman/musicians-toolkit).
 
 ## Credits
 
