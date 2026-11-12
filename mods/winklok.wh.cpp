@@ -10728,7 +10728,7 @@ namespace cal
     // System DLLs are loaded from System32 only (no search through the application directory or PATH).
     static HMODULE LoadSys32(const wchar_t *name)
     {
-        return LoadLibraryExW(name, nullptr, 0x00000800 /*LOAD_LIBRARY_SEARCH_SYSTEM32*/);
+        return LoadLibraryExW(name, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     }
     // The calendar files live in the mod's own storage folder (Windhawk removes it with the mod), in a subfolder named by
     // the user's SID with owner-only access: that storage folder is shared by every Windows user of the PC.
