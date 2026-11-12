@@ -189,6 +189,12 @@
     "githubId": 289558346,
     "homepages": []
   },
+  "https://github.com/ar4ujo009": {
+    "author": "Ar4ujo_009",
+    "github": "https://github.com/Ar4ujo009",
+    "githubId": 243447623,
+    "homepages": []
+  },
   "https://github.com/ara-hwang": {
     "author": "Ara",
     "github": "https://github.com/ara-hwang",
@@ -1153,6 +1159,12 @@
     "githubId": 62871175,
     "homepages": []
   },
+  "https://github.com/jjproponent": {
+    "author": "Proponent",
+    "github": "https://github.com/JJProponent",
+    "githubId": 265400109,
+    "homepages": []
+  },
   "https://github.com/joeye-233": {
     "author": "Joe Ye",
     "github": "https://github.com/JoeYe-233",
@@ -1392,6 +1404,7 @@
     "githubId": 73234672,
     "homepages": [
       "https://github.com/luizbizzio/recycle-bin-file-preview",
+      "https://github.com/luizbizzio/task-manager-pause-button",
       "https://github.com/luizbizzio/taskbar-zones"
     ]
   },

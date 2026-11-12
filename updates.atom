@@ -2,12 +2,368 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-12T07:03:02.000Z</updated>
+    <updated>2026-11-12T08:05:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Task Manager Pause Button 1.0.0]]></title>
+        <id>https://windhawk.net/mods/task-manager-pause-button#b8a64f42f5edc941234424f16894123290e733b4</id>
+        <link href="https://windhawk.net/mods/task-manager-pause-button"/>
+        <updated>2026-11-12T08:05:22.000Z</updated>
+        <content type="html"><![CDATA[<h1>Task Manager Pause Button</h1>
+<p>Add a native <strong>Pause / Resume</strong> button next to <strong>Run new task</strong> in the
+Windows 11 Task Manager on the Processes and Details pages.</p>
+<p><img src="https://raw.githubusercontent.com/luizbizzio/task-manager-pause-button/main/assets/task-manager-pause-button-cover.png" alt="Task Manager Pause Button"></p>
+<h2>How to use</h2>
+<ol>
+<li>Open Task Manager and select <strong>Processes</strong> or <strong>Details</strong>.</li>
+<li>Click <strong>Pause</strong> to stop the list from updating.</li>
+<li>Click <strong>Resume</strong> to start updating again.</li>
+</ol>
+<p>The button controls Task Manager's refresh hold on Processes and Details.
+The mod does not suspend apps, stop Windows processes, or change the
+Real time update speed setting.</p>
+<h2>Compatibility and limitations</h2>
+<ul>
+<li>Works with the Windows 11 Task Manager XAML interface. Windows updates may
+change private Task Manager functions or controls.</li>
+<li>Uses Task Manager's Ctrl-key refresh hold through <code>GetKeyState</code> calls made
+directly by <code>Taskmgr.exe</code>. While paused, some Task Manager keyboard actions
+may behave as if Ctrl is held, including Run new task (Ctrl+click can open
+Command Prompt instead of the normal dialog). This does not affect other apps.</li>
+<li>Recognizes the tested Task Manager command-bar layout independently of
+display language: one command bar with four native buttons, with Run new
+task in the first position. Falls back to English/Portuguese labels or
+recognizable control identifiers on other layouts. Other Windows versions
+can have different layouts, so all languages/builds are not guaranteed.</li>
+<li>Pause/Resume labels are in English regardless of the Task Manager language.</li>
+<li>Keeps Pause active when moving between Processes and Details. Automatically
+resumes when navigating to another page if the navigation-exit symbol is
+available on your Windows build.</li>
+<li>If the button is missing, close and reopen Task Manager with the mod enabled.</li>
+<li>No settings or background applications are needed.</li>
+</ul>
+<h2>Source and feedback</h2>
+<p><a href="https://github.com/luizbizzio/task-manager-pause-button">GitHub</a></p>
+<p>Author: Luiz Bizzio. License: Apache-2.0.</p>
+]]></content>
+        <author>
+            <name>Luiz Bizzio</name>
+            <uri>https://github.com/luizbizzio</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Quick Look 1.0.0]]></title>
+        <id>https://windhawk.net/mods/quick-look#a2c3b3bf6c8b6e52f87efbd3e6b977fcb23c3b25</id>
+        <link href="https://windhawk.net/mods/quick-look"/>
+        <updated>2026-11-12T08:05:16.000Z</updated>
+        <content type="html"><![CDATA[<h1>Quick Look</h1>
+<p>A native Quick Look preview for Windows File Explorer, packed as a <a href="https://windhawk.net">Windhawk</a> mod.</p>
+<p>Select a file or a folder and press <strong>Space</strong>. That is the whole idea.</p>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/preview.png" alt="Quick Look panel docked in File Explorer"></p>
+<p>Quick Look docks a real panel <strong>inside the File Explorer window</strong>, next to the file list, and previews
+whatever is selected. It is not a floating window: it is a child of the Explorer tab, so it moves with
+it, is clipped to it and, if you want, shrinks the Details columns to reserve its own space, the way
+File Pilot's inspector does.</p>
+<p>Folders open with <strong>Explorer's own file list</strong>, not a copy: the same icons, columns, sorting, view modes
+and scrollbars. Text, images, video, audio, PDF, Word, Excel, PowerPoint, archives and everything else
+have their own preview or a proper fallback. Nothing runs on a timer in the background, and nothing that
+touches the disk ever blocks Explorer.</p>
+<h2>Highlights</h2>
+<ul>
+<li><strong>A panel, not a window.</strong> Space opens it, Space or Esc closes it, the header has a close button for the
+mouse. It docks on the right, or at the bottom when the window is too narrow; drag its edge to change
+its width and the width is remembered.</li>
+<li><strong>Folders, with Explorer's own list.</strong> The preview hosts a real Explorer browser, so icons, columns,
+sorting, grouping and the Details / List / Icons view modes are Explorer's. A view dropdown in the
+header switches between Details, List, Small, Medium, Large and Extra Large icons.</li>
+<li><strong>A real filter, at the same level.</strong> Typing in the filter box shows only the matching direct children
+of the previewed folder, with their original columns, and clearing it brings the folder back. No
+subfolder is ever searched.</li>
+<li><strong>Text and code, detected by content.</strong> No extension list: a file is text when its bytes say so, so
+<code>.ahk</code>, <code>.psd1</code>, <code>.config</code>, extensionless files and anything else just work. UTF-8, UTF-16 LE/BE and the
+ANSI code page are decoded, and the footer reports which one was used, the size and the line count.</li>
+<li><strong>An editor-style toolbar.</strong> Word wrap, line numbers (a wrapped continuation keeps its number once), a
+whitespace inspector that draws spaces as dim dots, and alternating row colors. The four toggles are
+remembered if you want them remembered, and the defaults are settings.</li>
+<li><strong>Search inside the file.</strong> The same filter box keeps only the matching lines, each with its original
+line number, and highlights every match with your Windows accent color.</li>
+<li><strong>Documents without Office.</strong> Word, Excel, PowerPoint, RTF and OpenDocument files are opened as a zip
+of XML parts and reduced to their text, so they preview instantly even when Office is not installed.
+Old binary <code>.doc</code>, <code>.xls</code> and <code>.ppt</code> files use the Windows preview handler when one is registered.</li>
+<li><strong>Images, video and audio.</strong> Images are decoded at full resolution, videos show a frame and audio shows
+its album art, both through the same still-image providers Windows uses.</li>
+<li><strong>PDF.</strong> Rendered by the Windows PDF preview handler, the same component Explorer's preview pane uses,
+hosted inside the panel. Zoom and scroll belong to the handler.</li>
+<li><strong>Archives.</strong> A <code>.zip</code> (and any format the shell exposes as a folder) lists its contents in the native
+list. Formats with no shell namespace fall back to the properties view.</li>
+<li><strong>A fallback that still helps.</strong> Anything else shows the real file icon plus its type, size, modified
+date and full path.</li>
+<li><strong>Colors that follow Windows.</strong> The panel samples Explorer's actual pixels for the background and the
+text, and takes the accent from Windows itself, so light, dark and custom accents look native.</li>
+<li><strong>Explorer never freezes.</strong> Listing a folder, reading a file, decoding an image, building a thumbnail or
+checking a cloud placeholder all run on worker threads. The panel opens at once with a loading state,
+a new selection cancels the previous load, and a file that is only a cloud placeholder is never
+downloaded just to be previewed.</li>
+</ul>
+<p>A few of the things it previews:</p>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/archive.png" alt="Quick Look archive preview"></p>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/text.png" alt="Quick Look text preview"></p>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/images.png" alt="Quick Look image preview"></p>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/pdf.png" alt="Quick Look PDF preview"></p>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/office.png" alt="Quick Look document preview"></p>
+<h2>Install</h2>
+<ol>
+<li>Install <a href="https://windhawk.net">Windhawk</a> (Windows 10 or 11).</li>
+<li>Open <a href="https://windhawk.net/mods/quick-look">Quick Look on windhawk.net</a> and press <strong>Install</strong>.</li>
+<li>Select a file or folder in File Explorer and press <strong>Space</strong>.</li>
+</ol>
+<p>Quick Look is an <strong>injected</strong> mod: it runs inside <code>explorer.exe</code>, which is what lets the panel be a real
+child of the window instead of a window that follows it.</p>
+<h2>Keys</h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Space</strong></td>
+<td>Open or close the preview</td>
+</tr>
+<tr>
+<td><strong>Esc</strong></td>
+<td>Close the preview</td>
+</tr>
+<tr>
+<td><strong>Click the close button</strong></td>
+<td>Close the preview with the mouse</td>
+</tr>
+<tr>
+<td><strong>Shift + wheel</strong></td>
+<td>Scroll a text preview sideways when word wrap is off</td>
+</tr>
+<tr>
+<td><strong>Mouse wheel / drag the bars</strong></td>
+<td>Scroll the preview</td>
+</tr>
+</tbody>
+</table>
+<h2>Settings</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Shrink columns to fit the panel</td>
+<td>On</td>
+<td>Shrinks the file view and scales the Details columns to the space left by the panel. Turn it off to overlay the panel instead.</td>
+</tr>
+<tr>
+<td>Remember the text preview options</td>
+<td>On</td>
+<td>Keeps wrap, line numbers, whitespace dots and alternating rows as you left them for the next window or session.</td>
+</tr>
+<tr>
+<td>Line numbers by default</td>
+<td>Off</td>
+<td>The gutter used when the options are not remembered.</td>
+</tr>
+<tr>
+<td>Alternating rows by default</td>
+<td>Off</td>
+<td>The alternating row color used when the options are not remembered.</td>
+</tr>
+</tbody>
+</table>
+<h2>What each file shows</h2>
+<table>
+<thead>
+<tr>
+<th>Selection</th>
+<th>Preview</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Folder</td>
+<td>Explorer's native list, with a view dropdown, a name filter and file/folder counts</td>
+</tr>
+<tr>
+<td>Text, code, config, logs</td>
+<td>Text with wrap, line numbers, whitespace dots, alternating rows and in-file search</td>
+</tr>
+<tr>
+<td>Word, Excel, PowerPoint, RTF, OpenDocument</td>
+<td>The document text, read directly without Office</td>
+</tr>
+<tr>
+<td>Old <code>.doc</code>, <code>.xls</code>, <code>.ppt</code></td>
+<td>The Windows preview handler when one is installed, otherwise the properties view</td>
+</tr>
+<tr>
+<td>Images (<code>png</code>, <code>jpg</code>, <code>gif</code>, <code>bmp</code>, <code>tif</code>, <code>ico</code>, <code>webp</code>…)</td>
+<td>The decoded image, fitted to the panel</td>
+</tr>
+<tr>
+<td>Video and audio</td>
+<td>A frame or the album art, as Windows produces it</td>
+</tr>
+<tr>
+<td>PDF</td>
+<td>The Windows PDF preview handler, hosted in the panel</td>
+</tr>
+<tr>
+<td>Archives (<code>.zip</code>, and formats with a shell namespace)</td>
+<td>The archive contents in the native list</td>
+</tr>
+<tr>
+<td>Anything else</td>
+<td>The real file icon with type, size, modified date and path</td>
+</tr>
+</tbody>
+</table>
+<h2>How it behaves</h2>
+<ul>
+<li><strong>The panel never navigates.</strong> Double-clicking a folder inside the preview opens its <strong>Properties</strong>;
+it does not enter it. Quick Look is a preview, not a file manager.</li>
+<li><strong>Single click selects.</strong> A double click on empty space does nothing.</li>
+<li><strong>Cloud files are left alone.</strong> A file that is only a placeholder is not downloaded to be previewed.</li>
+<li><strong>Text is capped.</strong> A text preview reads the first 200 KB and says so in the footer.</li>
+</ul>
+<h2>Troubleshooting</h2>
+<ul>
+<li><strong>Space does nothing.</strong> The panel only opens when the file list itself has the focus, so a pending
+rename, an address bar edit or the search box is never hijacked. Click the file list and try again.</li>
+<li><strong>Something looks wrong.</strong> Turn on the Windhawk log for this mod (Advanced tab), reproduce it and
+attach the log to the issue. It is off by default because it adds a line for every step.</li>
+<li><strong>A document shows only text.</strong> That is by design: modern Office and OpenDocument files are read as
+text, so layout, images and colors are not part of the preview.</li>
+</ul>
+<h2>Contributing</h2>
+<p>Bug reports, fixes and new features are welcome. Open an
+<a href="https://github.com/DavidRaveloU/Quick-Look-Windhawk/issues">issue</a> with your Windows build, the mod
+version, the steps to reproduce it and, when it is visual, a screenshot or a short clip.</p>
+<p>For a pull request: fork the
+<a href="https://github.com/DavidRaveloU/Quick-Look-Windhawk">repository</a>, branch from <code>main</code>, change
+<code>quick-look.wh.cpp</code>, confirm it compiles and open the PR describing <strong>what</strong> changed and <strong>why</strong>. One bug
+or feature per PR is much easier to review.</p>
+<h2>License</h2>
+<p>Released under the <strong>MIT License</strong>. See the
+<a href="https://github.com/DavidRaveloU/Quick-Look-Windhawk/blob/main/LICENSE">license file</a>.
+The inflate code that reads Word and OpenDocument files is derived from zlib's <code>puff.c</code> and keeps its
+zlib license notice in the source.</p>
+<p>Copyright (c) 2026-present David Ravelo.</p>
+]]></content>
+        <author>
+            <name>David Ravelo</name>
+            <uri>https://github.com/DavidRaveloU</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[PWA Tray Center 0.5.610]]></title>
+        <id>https://windhawk.net/mods/pwa-tray-center#c6355a5b7a53551df8d85e7992e94a722fd00b58</id>
+        <link href="https://windhawk.net/mods/pwa-tray-center"/>
+        <updated>2026-11-12T08:05:10.000Z</updated>
+        <content type="html"><![CDATA[<h2>PWA Tray Center</h2>
+<p>Adds a <strong>&quot;Hide to PWA Tray Center&quot;</strong> item to the window menu of installed Chrome PWA windows (right-click title bar).</p>
+<p><img src="https://raw.githubusercontent.com/JJProponent/Image-s-/main/RMB%20Place.jpg" alt="Hide to PWA Tray Center in the window menu"></p>
+<ul>
+<li>Hidden windows keep running (music plays, etc.)</li>
+<li>One tray icon for all PWAs. By default it stays in the tray. With <em>Always show tray icon</em> turned off (Settings → Advanced), it appears only while PWAs are hidden and disappears when the last one is restored</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/JJProponent/Image-s-/main/Main%20app.jpg" alt="PWA Tray Center flyout"></p>
+<h3>Tray Icon</h3>
+<p><img src="https://raw.githubusercontent.com/JJProponent/Image-s-/main/Tray%20place.jpg" alt="PWA Tray Center tray icon"></p>
+<ul>
+<li><strong>Left click</strong> → opens PWA Tray Center (Fluent flyout, rounded corners, Mica or solid backdrop, chosen in Settings)</li>
+<li><strong>Right click</strong> → menu: <em>Show all</em> / <em>Quit all</em></li>
+<li><strong>Center mode</strong> (Settings → Panel): <em>Hermes (Quick)</em> closes on a click outside, <em>Titan (Pinned)</em> stays open</li>
+</ul>
+<h3>Tabs</h3>
+<table>
+<thead>
+<tr>
+<th>Tab</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Media</strong></td>
+<td>Cards for each Chrome media session: cover, title, artist, PWA source, prev/play-pause/next, draggable progress bar. Right-click for controls. Cover style (small, full or none) and compact view (3 covers per row) are set in Settings.</td>
+</tr>
+<tr>
+<td><strong>Apps</strong></td>
+<td>Hidden PWAs. Left-click to show, right-click for Show/Quit. Badge shows unread counter.</td>
+</tr>
+<tr>
+<td><strong>Notifications</strong></td>
+<td>Toast notifications from Windows notification center. Falls back to unread counter from window title (e.g. <code>(3) Inbox</code>).</td>
+</tr>
+<tr>
+<td><strong>Library</strong></td>
+<td>All installed Chrome PWAs. Left-click to launch/show. Drag to reorder. Right-click for Open/Quit/categories. Search field + category chips for filtering.</td>
+</tr>
+<tr>
+<td><strong>Settings</strong></td>
+<td>All mod options (Panel, Media, PWAs, Notifications, Advanced). No Windhawk settings needed.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Tabs, cards, and tiles are <strong>drag-to-reorder</strong>; order is remembered.</p>
+</blockquote>
+<blockquote>
+<p><strong>Notifications are not verified yet and may not work.</strong></p>
+</blockquote>
+<h3>Technical Notes</h3>
+<ul>
+<li>Only affects PWA windows (identified by <code>AppUserModelID</code> with <code>_crx_&lt;app id&gt;</code>)</li>
+<li>Regular browser windows and other programs are untouched</li>
+<li>Library reads from Chrome's Web Applications folders (default or <code>--user-data-dir</code>)</li>
+</ul>
+<h3>Chrome Volume</h3>
+<p>Volume bar in Media tab controls Chrome's system-wide volume (same as Windows volume mixer). Dims when no audio session; changes apply when Chrome starts playing. It can be turned on or off in Settings. The level stays as set after the mod is disabled.</p>
+<h3>Limitations</h3>
+<ul>
+<li>Does not keep PWA alive after browser process exits</li>
+<li>Audio may stop if browser freezes or discards background pages (Memory Saver / Efficiency mode)</li>
+</ul>
+]]></content>
+        <author>
+            <name>Proponent</name>
+            <uri>https://github.com/JJProponent</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Middle Click Minimize 1.1.3]]></title>
+        <id>https://windhawk.net/mods/middle-click-minimize#e2e99f8ff147a915abf7e8d2c72cdbb43bfacb4e</id>
+        <link href="https://windhawk.net/mods/middle-click-minimize"/>
+        <updated>2026-11-12T08:05:05.000Z</updated>
+        <content type="html"><![CDATA[<h1>Middle Click Minimize</h1>
+<p>This mod allows you to minimize windows by middle-clicking (using the scroll wheel) directly on the title bar.</p>
+<h2>Exclusions and Conflicts</h2>
+<ul>
+<li><strong>How to exclude programs:</strong> To disable the mod for a specific program (e.g., <code>steam.exe</code> or <code>vivaldi.exe</code>), add it to the custom process exclusion list in the mod's <strong>Advanced</strong> tab in Windhawk.</li>
+<li><strong>Known conflicts:</strong> If you use the &quot;Middle-Click New Tab Chrome/Edge/Brave&quot; mod, middle-clicking the empty tab-strip might minimize the browser instead of opening a new tab. You can add your browser to the exclusion list in the Advanced tab to prevent this.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ar4ujo_009</name>
+            <uri>https://github.com/Ar4ujo009</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WinTips OSD 1.5.2]]></title>
         <id>https://windhawk.net/mods/wintips-osd#3a33b42eeb7bf2faacab922f5e9aeeef8a13bb28</id>
@@ -562,298 +918,6 @@ after an unexpected exit; recovery from a hang or other failure is not guarantee
         <author>
             <name>caliberda</name>
             <uri>https://github.com/cesarkali</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Auto-Pause on Disconnect 1.0.0]]></title>
-        <id>https://windhawk.net/mods/auto-pause-on-disconnect#e9a03e6c7c6b4128f898d5f8e204198ed180d85c</id>
-        <link href="https://windhawk.net/mods/auto-pause-on-disconnect"/>
-        <updated>2026-11-11T08:00:33.000Z</updated>
-        <content type="html"><![CDATA[<h1>Auto-Pause on Disconnect</h1>
-<p>Pauses what you were listening to when the headphones go away: the 3.5 mm cable
-pulled out, a Bluetooth headset dropped, a USB DAC unplugged. The action lands
-after Windows has moved the sound back to the built-in speakers, so there is no
-one-second blast through them.</p>
-<p><img src="https://raw.githubusercontent.com/DeepakBalaraman/auto-pause-on-disconnect/master/assets/auto-pause-sample.gif" alt="Auto-Pause in action"></p>
-<p>It does not have to be a pause. The action is a setting, and so is whether it
-runs on a disconnect, on a connect, or both.</p>
-<h2>Features</h2>
-<ul>
-<li>Watches the default output device, so wired, Bluetooth and USB removals are
-caught the same way.</li>
-<li>Toggle play/pause, mute the output, or unmute it.</li>
-<li>Waits 300 ms by default before acting, which is enough for Windows to finish
-moving the stream. Adjustable.</li>
-<li>Repeats inside one second are folded into a single action. One unplug raises
-several notifications, and play/pause is a toggle.</li>
-<li>Only acts while an app is actually playing by default, so it never starts
-playback on its own.</li>
-<li>Switching the output by hand is left alone; the old device has to be gone for
-the action to run.</li>
-</ul>
-<h2>Settings</h2>
-<ul>
-<li><strong>When a device disconnects</strong> and <strong>When a device connects</strong> pick the
-direction. Connects are off by default, because plugging headphones in moves
-the default output too.</li>
-<li><strong>Audio role to watch</strong> is Multimedia by default, or Console, or Both.</li>
-<li><strong>Action</strong> is Toggle play/pause, Mute the default output, or Unmute it.</li>
-<li><strong>Delay before acting (ms)</strong> is how long Windows gets before the action runs,
-0 to 3000.</li>
-<li><strong>Ignore repeats within (ms)</strong> is the window used to fold the burst, 0 to 5000.</li>
-<li><strong>Act only while audio is playing</strong> keeps the toggle from starting playback.</li>
-</ul>
-<h2>Good to know</h2>
-<p>Play/pause is a toggle, not a pause: if playback was already stopped, it starts
-again. Leaving <em>Act only while audio is playing</em> on keeps it honest, and the
-Windows disconnect sound is not counted as playback.</p>
-<p>The mute action applies to whichever device is the default after the switch,
-which is normally the internal speakers. Pair <em>When a device connects</em> with
-unmute if the headset should bring the sound back when it returns.</p>
-<p>The mod runs in a small process of its own rather than inside Explorer, and uses
-the Windows Core Audio API. The notification callback only wakes a worker thread;
-the delay, the playback check and the media key all happen there.</p>
-]]></content>
-        <author>
-            <name>DpakB</name>
-            <uri>https://github.com/DeepakBalaraman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Fast Navigation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-fast-navigation#2dcb30a8ddc4a006602cc07657f173ef8ab5bfb6</id>
-        <link href="https://windhawk.net/mods/explorer-fast-navigation"/>
-        <updated>2026-11-11T07:03:50.000Z</updated>
-        <content type="html"><![CDATA[<h1>Explorer Fast Navigation</h1>
-<p>Makes folder navigation faster and less visually disruptive in File Explorer by removing intermediate redraw flicker
-and deferring toolbar updates until folder contents are loaded.</p>
-<h2>How it works</h2>
-<p>In Windows 10 and Windows 11, switching folders triggers intermediate window clearing (&quot;Working on it...&quot; placeholder)
-and multiple synchronous redraw events from the Ribbon and XAML command bar before files are enumerated.</p>
-<p>This mod optimizes the navigation pipeline:</p>
-<ul>
-<li><strong>Redraw suppression</strong>: Suppresses intermediate window clears and synchronous redraw flushes during folder transitions.</li>
-<li><strong>Deferred toolbar updates</strong>: Defers Ribbon and XAML command bar state notifications while files are being enumerated,
-flushing them once file enumeration completes (<code>DISPID_FILELISTENUMDONE</code>) or batch processing settles.</li>
-<li><strong>UI freeze reduction</strong>: Prevents the UI thread from locking up during folder switches and column grouping changes,
-lowering CPU repaint spikes.</li>
-<li><strong>Safety fallback</strong>: Incorporates a configurable safety ceiling to ensure pending UI updates always flush even on
-slow network drives or non-responsive storage.</li>
-</ul>
-<h2>Observed results</h2>
-<p>Real-world behavior varies depending on the storage medium and system load:</p>
-<ul>
-<li><strong>High-speed NVMe drives</strong>: Windows virtualizes viewports quickly, but the mod noticeably removes the transient white
-flicker, suppresses UI repaint churn, and keeps window headers responsive.</li>
-<li><strong>Mechanical hard drives and laptops</strong>: On rotational HDDs or resource-constrained mobile CPUs where disk seek times
-and background file enumeration can cause visible stalls, the mod eliminates the intermediate &quot;Working on it...&quot;
-freeze and keeps the Explorer interface smooth during heavy folder browsing and column grouping operations.</li>
-</ul>
-<h2>Settings</h2>
-<ul>
-<li><strong>Defer immediate navigation paints</strong>: Defer immediate activation and layout paints while Explorer switches views.</li>
-<li><strong>Defer classic ribbon updates</strong>: Delay classic ribbon refreshes during navigation.</li>
-<li><strong>Defer XAML command bar updates</strong>: Delay modern command bar refreshes during navigation.</li>
-<li><strong>Defer navigation bar updates</strong>: Delay navigation state updates in classic and modern navigation bars.</li>
-<li><strong>Safety fallback ceiling (ms)</strong>: Maximum time (in ms) to wait before forcing a deferred UI update to flush if
-navigation stalls or on slow storage.</li>
-</ul>
-<h2>Compatibility</h2>
-<ul>
-<li>Windows 11 (21H2, 22H2, 23H2, 24H2)</li>
-<li>Windows 10 (1809 and later)</li>
-<li>Architectures: 64-bit (x86-64, ARM64)</li>
-</ul>
-<h2>Support</h2>
-<p>If you find this mod useful, you can support its development and maintenance:</p>
-<ul>
-<li><a href="https://buymeacoffee.com/gilnett">Support on Buy Me a Coffee</a></li>
-</ul>
-<h2>Credits</h2>
-<ul>
-<li>Based on the original implementation by <strong>Vivy</strong> (<a href="https://x.com/VivyVCCS">@VivyVCCS</a> / <a href="https://github.com/enginelesscc">enginelesscc</a>).</li>
-<li>Modernized, refactored, and maintained by <strong>gilnett</strong>.</li>
-</ul>
-]]></content>
-        <author>
-            <name>gilnett</name>
-            <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Volume Hotkeys & Audio Router 2.6.1]]></title>
-        <id>https://windhawk.net/mods/volume-hotkeys-audio-router#2e78355c5c7e99020f098512940e75feea9327dc</id>
-        <link href="https://windhawk.net/mods/volume-hotkeys-audio-router"/>
-        <updated>2026-11-11T07:03:44.000Z</updated>
-        <content type="html"><![CDATA[<h1>🔊 Volume Hotkeys &amp; Audio Router</h1>
-<p>Volume control for games and setups with several output devices, on Windows 11 and 10: hotkeys for the focused
-game or app, per-app audio routing, volume locks, Deafen and a replacement volume OSD. Its mixer popup opens on a
-hotkey on top of any window — including borderless and fullscreen games — without taking the keyboard focus, so
-games are never minimized. It runs in its own small Windhawk process, not inside Explorer.</p>
-<p><img src="https://raw.githubusercontent.com/mykolazozul/windhawk-mods/516859b3e2e19ca58dddb3d38d9381f20362f913/volume-mixer-popup/mixer.png" alt="Mixer popup (Fluent Flyout layout)"></p>
-<p><img src="https://raw.githubusercontent.com/mykolazozul/windhawk-mods/516859b3e2e19ca58dddb3d38d9381f20362f913/volume-mixer-popup/osd.png" alt="Volume OSD (Windows 11 capsule style)"></p>
-<h2>✨ Highlights</h2>
-<ul>
-<li><strong>Game hotkeys</strong> – change or mute the focused game/app on every device it plays to, without opening anything.
-UWP apps and protected/elevated games are recognized too.</li>
-<li><strong>Per-app audio routing</strong> – send any app to another output device with the ⇄ button or a right-click.</li>
-<li><strong>Volume lock</strong> – pin the volume of an app or device; a watchdog restores it when a game or Windows changes it.
-Locks are kept across restarts and marked with a padlock.</li>
-<li><strong>Deafen background (BETA)</strong> – one hotkey mutes or ducks everything except the focused app and your whitelist;
-pressing it again restores every app individually.</li>
-<li><strong>Custom volume OSD (BETA)</strong> – 9 styles, can replace the Windows volume flyout for the media keys and the volume
-tooltip of the taskbar, draggable. Like the Windows flyout, it stays while the pointer rests on it, and the mouse
-wheel or a click on its bar changes the volume.</li>
-<li><strong>Mixer popup</strong> – volume and mute of every app on every output device at once, with live VU meters (up to
-60 FPS while open); 17 layouts and 22 color themes.</li>
-<li><strong>Correct scaling</strong> – interface scale 30–300 % multiplied by the Windows display scaling of each monitor;
-the popup shrinks automatically when it would not fit on the screen.</li>
-<li><strong>Light on resources</strong> – nothing is polled while the popup is closed: the OSD and the volume locks react to
-Windows audio events, and the keyboard and mouse hooks are installed only while a feature needs them.</li>
-</ul>
-<h2>🎛️ Mixer layouts</h2>
-<p>Modern Cards · Compact Strip · Hi-Fi Studio Meters · Fluent Flyout · Cyber Radial HUD · Studio Mixing Desk ·
-Floating Minimal Pill · Cyberpunk Neon Grid · Retro Cassette · LED Meter Bridge · Arcade Panel ·
-Broadcast Console (dual VU) · Control Center Pills · Frosted Glass Tiles · Retro Terminal ·
-Soft Neumorphic · Vertical Channel Strips.</p>
-<h2>🎨 Themes</h2>
-<p>Windows 11 Mica · Modern Dark · Light Fluent · AMOLED Black · Frosted Glass · System Accent · Classic Blue ·
-Dracula · Nordic Frost · Cyberpunk Neon · Retro Amber · Tokyo Night · Sunset · Catppuccin Mocha · Forest ·
-Monochrome · Deep Ocean · Rosé Pine · Gruvbox · Solarized Dark · Matrix Green · Midnight Gold.</p>
-<h2>📺 OSD styles (BETA)</h2>
-<p>Windows 11 capsule · compact pill · detailed (name, level and device) · circular ring · vertical edge bar ·
-frosted glass · tactical game HUD · stealth dot matrix · Control Center pill.</p>
-<ul>
-<li>Once the pointer moves onto the OSD, it works like the Windows flyout and stays on screen until the pointer
-leaves. The mouse wheel or touchpad scrolling over it changes the volume it shows (the master volume or the
-app), a click or a drag on its bar sets the level, a click on its icon mutes, and a right-click closes it.
-Otherwise clicks pass through it (unless dragging is enabled), and a hidden pointer (games) is ignored.</li>
-<li><strong>Replace the Windows volume flyout</strong>: the media volume keys and the mouse wheel over the taskbar notification
-area (tray icons and clock) go through the mod, so Windows doesn't show its own flyout or the Windows 11 volume
-tooltip. Other volume changes, such as touchpad gestures, headset buttons or laptop hotkey drivers, are made by
-Windows itself; when Windows shows its flyout for one of them, the mod keeps that flyout invisible (it clips
-Explorer's indicator window to an empty region and hides it) and shows its own OSD, which follows every step,
-at 0 % and 100 % too. Only the very first flyout after Explorer starts can show for a moment, before the mod
-knows its window. Brightness and other Windows indicators use the same window and stay visible: Windows
-reports brightness changes, so the brightness indicator shows even at 0 % or 100 % volume, except when the
-brightness itself is already at its limit (then nothing changes and nothing is reported). Airplane mode and
-other rare indicators shown right after an outside volume change, or at 0 % or 100 %, can be hidden as well.
-While the option is on, other tray apps and mods
-that react to the wheel in the notification area (for example Taskbar Volume Control with the tray area as its
-scroll area) don't get it. Volume indicators of manufacturer utilities (laptop or keyboard software) are
-separate programs and aren't affected.</li>
-</ul>
-<h2>⌨️ Hotkeys</h2>
-<table>
-<thead>
-<tr>
-<th>Action</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Open / close mixer</td>
-<td><code>Win+Alt+V</code></td>
-</tr>
-<tr>
-<td>Active app volume up / down</td>
-<td>not assigned</td>
-</tr>
-<tr>
-<td>Active app mute / unmute</td>
-<td>not assigned</td>
-</tr>
-<tr>
-<td>Deafen background (when enabled)</td>
-<td>not assigned</td>
-</tr>
-<tr>
-<td>Master volume up / down / mute</td>
-<td>not assigned</td>
-</tr>
-</tbody>
-</table>
-<p>Only the mixer hotkey is set by default, so the mod doesn't take shortcuts that other apps use.</p>
-<p>Format: <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code>, <code>Win</code> + one key (<code>A</code>–<code>Z</code>, <code>0</code>–<code>9</code>, <code>F1</code>–<code>F24</code>, <code>Up</code>, <code>Down</code>, <code>Left</code>, <code>Right</code>,
-<code>Space</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Num0</code>–<code>Num9</code>, <code>VolumeUp</code>, <code>VolumeDown</code>, <code>Mute</code>…), joined with <code>+</code>.
-Leave a hotkey empty to disable it. On keyboard layouts with AltGr, Right Alt doesn't count as <code>Ctrl+Alt</code>.</p>
-<h2>🖱️ Using the mixer</h2>
-<ul>
-<li>Drag a slider or scroll over it to change the volume.</li>
-<li>Click an app icon to mute or unmute it.</li>
-<li>Click ⇄ (or right-click a row) to route the app to another device or to lock its volume.</li>
-<li>Right-click or double-click a device header to make it the Windows default device.</li>
-<li>Press any key or click outside to close the mixer.</li>
-</ul>
-<h2>🌐 Language</h2>
-<p>The mixer, menus and OSD use <strong>Language → Mod interface language</strong> (automatic, English, Ukrainian, Polish,
-German, French, Spanish, Russian). The settings page is translated into the same languages and follows
-the language of Windhawk itself (<strong>Windhawk → Settings → Language</strong>); other languages show English.</p>
-<h2>⚠️ Notes</h2>
-<ul>
-<li>Features marked BETA (OSD, Deafen background) are off by default. The mod adds no tray icon: the mixer opens
-with its hotkey.</li>
-<li>&quot;Route audio to&quot; uses the same undocumented Windows API as the &quot;App volume and device preferences&quot;
-page of Windows and EarTrumpet; some apps only switch the device after their audio stream restarts.</li>
-<li>While a game or app running as administrator is focused, hotkeys work through standard Windows hotkeys:
-holding volume up/down doesn't repeat there, and <code>Ctrl+Alt</code> combinations don't work there.</li>
-</ul>
-<h2>🧹 What stays after the mod is disabled</h2>
-<p>Like the Windows volume mixer, the mod changes Windows' own audio preferences, and Windows keeps them:</p>
-<ul>
-<li><strong>Output device of an app</strong> chosen with &quot;Route audio to&quot;: stays until you pick &quot;Windows default device&quot; in
-the same menu, or use Settings → System → Sound → Volume mixer → Reset.</li>
-<li><strong>Default output device</strong> chosen in the mixer: stays, like a change made in the Windows sound settings.</li>
-<li><strong>Volume and mute levels</strong> of devices and apps: Windows remembers them, as with any mixer.</li>
-<li><strong>Deafen background</strong>: if the mod stops while Deafen is on (crash, shutdown, power loss), it restores the
-muted and ducked apps the next time it starts.</li>
-<li>Volume locks are stored by the mod and are no longer enforced while it's disabled.</li>
-<li><strong>Windows volume flyout</strong> (with &quot;Replace the Windows volume flyout&quot;): the mod gives Explorer's indicator window
-back its normal shape when it's disabled. If its process is killed instead, the Windows flyout stays invisible
-until Explorer restarts (for example after signing out).</li>
-</ul>
-]]></content>
-        <author>
-            <name>neMik</name>
-            <uri>https://github.com/mykolazozul</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Sleep Countdown Reset 1.0.0]]></title>
-        <id>https://windhawk.net/mods/sleep-countdown-reset#3502d843ba0e5f409fcdd45af40e70ed49edd041</id>
-        <link href="https://windhawk.net/mods/sleep-countdown-reset"/>
-        <updated>2026-11-11T06:01:32.000Z</updated>
-        <content type="html"><![CDATA[<h1>Sleep Countdown Reset</h1>
-<p>Media servers such as Plex keep the PC awake while streaming, but idle time still accumulates. When playback ends and the request is released, Windows checks the expired idle time and sleeps immediately, leaving no time to start the next episode/media/exchange.</p>
-<p>This mod hooks the keep-awake APIs inside each server process. Right before the server releases the request, the mod takes over with its own, for a configurable grace period or, by default, the active power plan's sleep timeout. After this period, if playback does not return, the PC sleeps normally.</p>
-<p>Display timer and monitor state stay under Windows' control. While the grace period runs, <code>powercfg /requests</code> lists the mod's request under SYSTEM.</p>
-<h2>Supported servers</h2>
-<p>Included by default:</p>
-<ul>
-<li><strong>Plex Media Server</strong></li>
-<li><strong>Emby Server</strong> (<code>EmbyServer.exe</code>)</li>
-<li><strong>Jellyfin</strong> (<code>jellyfin.exe</code>): only with the third-party <a href="https://github.com/jonschz/jellyfin-plugin-preventsleep">Prevent Sleep plugin</a>, since Jellyfin alone doesn't keep the PC awake. On PCs with Modern Standby the plugin switches power plans instead, which this mod can't see.</li>
-</ul>
-<p>Can be added (see below):</p>
-<ul>
-<li><strong>Universal Media Server</strong>: <code>javaw.exe</code>, with its &quot;Prevent sleep&quot; option set to <em>Playback</em>. That process name is shared by every Java program, so they all get the grace period.</li>
-<li><strong>qBittorrent</strong> (<code>qbittorrent.exe</code>), with &quot;Inhibit system sleep&quot; enabled: grace period after downloads finish.</li>
-</ul>
-<p>Not needed: remote desktop and game streaming hosts (Sunshine, Parsec, Steam Remote Play). They forward the remote keyboard and mouse as local input, so Windows already counts the user as present.</p>
-<p>Not covered: Windows file sharing (SMB). It runs inside the kernel, with no process to hook.</p>
-<h2>Adding a program</h2>
-<ol>
-<li>While the program is serving, run <code>powercfg /requests</code> in a terminal as administrator. The program must be listed under SYSTEM or EXECUTION.</li>
-<li>In Windhawk, open this mod's <strong>Advanced</strong> tab, add the executable name (e.g. <code>qbittorrent.exe</code>) to the <strong>custom process inclusion list</strong>, and save.</li>
-<li>With debug logging enabled, the log should show <code>hooked SetThreadExecutionState</code> for the new process. If the program runs as a Windows service and nothing shows up, check that Windhawk is allowed to inject into services.</li>
-</ol>
-<h2>Limitation</h2>
-<p>If the server process exits while holding the request, Windows drops it without any API call, and the mod can't see the release.</p>
-]]></content>
-        <author>
-            <name>3DDinosaur</name>
-            <uri>https://github.com/3DDinosaur</uri>
         </author>
     </entry>
 </feed>

@@ -2,12 +2,368 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-12T07:02:56.000Z</updated>
+    <updated>2026-11-12T08:05:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Task Manager Pause Button 1.0.0]]></title>
+        <id>https://windhawk.net/mods/task-manager-pause-button#b8a64f42f5edc941234424f16894123290e733b4</id>
+        <link href="https://windhawk.net/mods/task-manager-pause-button"/>
+        <updated>2026-11-12T08:05:22.000Z</updated>
+        <content type="html"><![CDATA[<h1>Task Manager Pause Button</h1>
+<p>Add a native <strong>Pause / Resume</strong> button next to <strong>Run new task</strong> in the
+Windows 11 Task Manager on the Processes and Details pages.</p>
+<p><img src="https://raw.githubusercontent.com/luizbizzio/task-manager-pause-button/main/assets/task-manager-pause-button-cover.png" alt="Task Manager Pause Button"></p>
+<h2>How to use</h2>
+<ol>
+<li>Open Task Manager and select <strong>Processes</strong> or <strong>Details</strong>.</li>
+<li>Click <strong>Pause</strong> to stop the list from updating.</li>
+<li>Click <strong>Resume</strong> to start updating again.</li>
+</ol>
+<p>The button controls Task Manager's refresh hold on Processes and Details.
+The mod does not suspend apps, stop Windows processes, or change the
+Real time update speed setting.</p>
+<h2>Compatibility and limitations</h2>
+<ul>
+<li>Works with the Windows 11 Task Manager XAML interface. Windows updates may
+change private Task Manager functions or controls.</li>
+<li>Uses Task Manager's Ctrl-key refresh hold through <code>GetKeyState</code> calls made
+directly by <code>Taskmgr.exe</code>. While paused, some Task Manager keyboard actions
+may behave as if Ctrl is held, including Run new task (Ctrl+click can open
+Command Prompt instead of the normal dialog). This does not affect other apps.</li>
+<li>Recognizes the tested Task Manager command-bar layout independently of
+display language: one command bar with four native buttons, with Run new
+task in the first position. Falls back to English/Portuguese labels or
+recognizable control identifiers on other layouts. Other Windows versions
+can have different layouts, so all languages/builds are not guaranteed.</li>
+<li>Pause/Resume labels are in English regardless of the Task Manager language.</li>
+<li>Keeps Pause active when moving between Processes and Details. Automatically
+resumes when navigating to another page if the navigation-exit symbol is
+available on your Windows build.</li>
+<li>If the button is missing, close and reopen Task Manager with the mod enabled.</li>
+<li>No settings or background applications are needed.</li>
+</ul>
+<h2>Source and feedback</h2>
+<p><a href="https://github.com/luizbizzio/task-manager-pause-button">GitHub</a></p>
+<p>Author: Luiz Bizzio. License: Apache-2.0.</p>
+]]></content>
+        <author>
+            <name>Luiz Bizzio</name>
+            <uri>https://github.com/luizbizzio</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Quick Look 1.0.0]]></title>
+        <id>https://windhawk.net/mods/quick-look#a2c3b3bf6c8b6e52f87efbd3e6b977fcb23c3b25</id>
+        <link href="https://windhawk.net/mods/quick-look"/>
+        <updated>2026-11-12T08:05:16.000Z</updated>
+        <content type="html"><![CDATA[<h1>Quick Look</h1>
+<p>A native Quick Look preview for Windows File Explorer, packed as a <a href="https://windhawk.net">Windhawk</a> mod.</p>
+<p>Select a file or a folder and press <strong>Space</strong>. That is the whole idea.</p>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/preview.png" alt="Quick Look panel docked in File Explorer"></p>
+<p>Quick Look docks a real panel <strong>inside the File Explorer window</strong>, next to the file list, and previews
+whatever is selected. It is not a floating window: it is a child of the Explorer tab, so it moves with
+it, is clipped to it and, if you want, shrinks the Details columns to reserve its own space, the way
+File Pilot's inspector does.</p>
+<p>Folders open with <strong>Explorer's own file list</strong>, not a copy: the same icons, columns, sorting, view modes
+and scrollbars. Text, images, video, audio, PDF, Word, Excel, PowerPoint, archives and everything else
+have their own preview or a proper fallback. Nothing runs on a timer in the background, and nothing that
+touches the disk ever blocks Explorer.</p>
+<h2>Highlights</h2>
+<ul>
+<li><strong>A panel, not a window.</strong> Space opens it, Space or Esc closes it, the header has a close button for the
+mouse. It docks on the right, or at the bottom when the window is too narrow; drag its edge to change
+its width and the width is remembered.</li>
+<li><strong>Folders, with Explorer's own list.</strong> The preview hosts a real Explorer browser, so icons, columns,
+sorting, grouping and the Details / List / Icons view modes are Explorer's. A view dropdown in the
+header switches between Details, List, Small, Medium, Large and Extra Large icons.</li>
+<li><strong>A real filter, at the same level.</strong> Typing in the filter box shows only the matching direct children
+of the previewed folder, with their original columns, and clearing it brings the folder back. No
+subfolder is ever searched.</li>
+<li><strong>Text and code, detected by content.</strong> No extension list: a file is text when its bytes say so, so
+<code>.ahk</code>, <code>.psd1</code>, <code>.config</code>, extensionless files and anything else just work. UTF-8, UTF-16 LE/BE and the
+ANSI code page are decoded, and the footer reports which one was used, the size and the line count.</li>
+<li><strong>An editor-style toolbar.</strong> Word wrap, line numbers (a wrapped continuation keeps its number once), a
+whitespace inspector that draws spaces as dim dots, and alternating row colors. The four toggles are
+remembered if you want them remembered, and the defaults are settings.</li>
+<li><strong>Search inside the file.</strong> The same filter box keeps only the matching lines, each with its original
+line number, and highlights every match with your Windows accent color.</li>
+<li><strong>Documents without Office.</strong> Word, Excel, PowerPoint, RTF and OpenDocument files are opened as a zip
+of XML parts and reduced to their text, so they preview instantly even when Office is not installed.
+Old binary <code>.doc</code>, <code>.xls</code> and <code>.ppt</code> files use the Windows preview handler when one is registered.</li>
+<li><strong>Images, video and audio.</strong> Images are decoded at full resolution, videos show a frame and audio shows
+its album art, both through the same still-image providers Windows uses.</li>
+<li><strong>PDF.</strong> Rendered by the Windows PDF preview handler, the same component Explorer's preview pane uses,
+hosted inside the panel. Zoom and scroll belong to the handler.</li>
+<li><strong>Archives.</strong> A <code>.zip</code> (and any format the shell exposes as a folder) lists its contents in the native
+list. Formats with no shell namespace fall back to the properties view.</li>
+<li><strong>A fallback that still helps.</strong> Anything else shows the real file icon plus its type, size, modified
+date and full path.</li>
+<li><strong>Colors that follow Windows.</strong> The panel samples Explorer's actual pixels for the background and the
+text, and takes the accent from Windows itself, so light, dark and custom accents look native.</li>
+<li><strong>Explorer never freezes.</strong> Listing a folder, reading a file, decoding an image, building a thumbnail or
+checking a cloud placeholder all run on worker threads. The panel opens at once with a loading state,
+a new selection cancels the previous load, and a file that is only a cloud placeholder is never
+downloaded just to be previewed.</li>
+</ul>
+<p>A few of the things it previews:</p>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/archive.png" alt="Quick Look archive preview"></p>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/text.png" alt="Quick Look text preview"></p>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/images.png" alt="Quick Look image preview"></p>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/pdf.png" alt="Quick Look PDF preview"></p>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/office.png" alt="Quick Look document preview"></p>
+<h2>Install</h2>
+<ol>
+<li>Install <a href="https://windhawk.net">Windhawk</a> (Windows 10 or 11).</li>
+<li>Open <a href="https://windhawk.net/mods/quick-look">Quick Look on windhawk.net</a> and press <strong>Install</strong>.</li>
+<li>Select a file or folder in File Explorer and press <strong>Space</strong>.</li>
+</ol>
+<p>Quick Look is an <strong>injected</strong> mod: it runs inside <code>explorer.exe</code>, which is what lets the panel be a real
+child of the window instead of a window that follows it.</p>
+<h2>Keys</h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Space</strong></td>
+<td>Open or close the preview</td>
+</tr>
+<tr>
+<td><strong>Esc</strong></td>
+<td>Close the preview</td>
+</tr>
+<tr>
+<td><strong>Click the close button</strong></td>
+<td>Close the preview with the mouse</td>
+</tr>
+<tr>
+<td><strong>Shift + wheel</strong></td>
+<td>Scroll a text preview sideways when word wrap is off</td>
+</tr>
+<tr>
+<td><strong>Mouse wheel / drag the bars</strong></td>
+<td>Scroll the preview</td>
+</tr>
+</tbody>
+</table>
+<h2>Settings</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Shrink columns to fit the panel</td>
+<td>On</td>
+<td>Shrinks the file view and scales the Details columns to the space left by the panel. Turn it off to overlay the panel instead.</td>
+</tr>
+<tr>
+<td>Remember the text preview options</td>
+<td>On</td>
+<td>Keeps wrap, line numbers, whitespace dots and alternating rows as you left them for the next window or session.</td>
+</tr>
+<tr>
+<td>Line numbers by default</td>
+<td>Off</td>
+<td>The gutter used when the options are not remembered.</td>
+</tr>
+<tr>
+<td>Alternating rows by default</td>
+<td>Off</td>
+<td>The alternating row color used when the options are not remembered.</td>
+</tr>
+</tbody>
+</table>
+<h2>What each file shows</h2>
+<table>
+<thead>
+<tr>
+<th>Selection</th>
+<th>Preview</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Folder</td>
+<td>Explorer's native list, with a view dropdown, a name filter and file/folder counts</td>
+</tr>
+<tr>
+<td>Text, code, config, logs</td>
+<td>Text with wrap, line numbers, whitespace dots, alternating rows and in-file search</td>
+</tr>
+<tr>
+<td>Word, Excel, PowerPoint, RTF, OpenDocument</td>
+<td>The document text, read directly without Office</td>
+</tr>
+<tr>
+<td>Old <code>.doc</code>, <code>.xls</code>, <code>.ppt</code></td>
+<td>The Windows preview handler when one is installed, otherwise the properties view</td>
+</tr>
+<tr>
+<td>Images (<code>png</code>, <code>jpg</code>, <code>gif</code>, <code>bmp</code>, <code>tif</code>, <code>ico</code>, <code>webp</code>…)</td>
+<td>The decoded image, fitted to the panel</td>
+</tr>
+<tr>
+<td>Video and audio</td>
+<td>A frame or the album art, as Windows produces it</td>
+</tr>
+<tr>
+<td>PDF</td>
+<td>The Windows PDF preview handler, hosted in the panel</td>
+</tr>
+<tr>
+<td>Archives (<code>.zip</code>, and formats with a shell namespace)</td>
+<td>The archive contents in the native list</td>
+</tr>
+<tr>
+<td>Anything else</td>
+<td>The real file icon with type, size, modified date and path</td>
+</tr>
+</tbody>
+</table>
+<h2>How it behaves</h2>
+<ul>
+<li><strong>The panel never navigates.</strong> Double-clicking a folder inside the preview opens its <strong>Properties</strong>;
+it does not enter it. Quick Look is a preview, not a file manager.</li>
+<li><strong>Single click selects.</strong> A double click on empty space does nothing.</li>
+<li><strong>Cloud files are left alone.</strong> A file that is only a placeholder is not downloaded to be previewed.</li>
+<li><strong>Text is capped.</strong> A text preview reads the first 200 KB and says so in the footer.</li>
+</ul>
+<h2>Troubleshooting</h2>
+<ul>
+<li><strong>Space does nothing.</strong> The panel only opens when the file list itself has the focus, so a pending
+rename, an address bar edit or the search box is never hijacked. Click the file list and try again.</li>
+<li><strong>Something looks wrong.</strong> Turn on the Windhawk log for this mod (Advanced tab), reproduce it and
+attach the log to the issue. It is off by default because it adds a line for every step.</li>
+<li><strong>A document shows only text.</strong> That is by design: modern Office and OpenDocument files are read as
+text, so layout, images and colors are not part of the preview.</li>
+</ul>
+<h2>Contributing</h2>
+<p>Bug reports, fixes and new features are welcome. Open an
+<a href="https://github.com/DavidRaveloU/Quick-Look-Windhawk/issues">issue</a> with your Windows build, the mod
+version, the steps to reproduce it and, when it is visual, a screenshot or a short clip.</p>
+<p>For a pull request: fork the
+<a href="https://github.com/DavidRaveloU/Quick-Look-Windhawk">repository</a>, branch from <code>main</code>, change
+<code>quick-look.wh.cpp</code>, confirm it compiles and open the PR describing <strong>what</strong> changed and <strong>why</strong>. One bug
+or feature per PR is much easier to review.</p>
+<h2>License</h2>
+<p>Released under the <strong>MIT License</strong>. See the
+<a href="https://github.com/DavidRaveloU/Quick-Look-Windhawk/blob/main/LICENSE">license file</a>.
+The inflate code that reads Word and OpenDocument files is derived from zlib's <code>puff.c</code> and keeps its
+zlib license notice in the source.</p>
+<p>Copyright (c) 2026-present David Ravelo.</p>
+]]></content>
+        <author>
+            <name>David Ravelo</name>
+            <uri>https://github.com/DavidRaveloU</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[PWA Tray Center 0.5.610]]></title>
+        <id>https://windhawk.net/mods/pwa-tray-center#c6355a5b7a53551df8d85e7992e94a722fd00b58</id>
+        <link href="https://windhawk.net/mods/pwa-tray-center"/>
+        <updated>2026-11-12T08:05:10.000Z</updated>
+        <content type="html"><![CDATA[<h2>PWA Tray Center</h2>
+<p>Adds a <strong>&quot;Hide to PWA Tray Center&quot;</strong> item to the window menu of installed Chrome PWA windows (right-click title bar).</p>
+<p><img src="https://raw.githubusercontent.com/JJProponent/Image-s-/main/RMB%20Place.jpg" alt="Hide to PWA Tray Center in the window menu"></p>
+<ul>
+<li>Hidden windows keep running (music plays, etc.)</li>
+<li>One tray icon for all PWAs. By default it stays in the tray. With <em>Always show tray icon</em> turned off (Settings → Advanced), it appears only while PWAs are hidden and disappears when the last one is restored</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/JJProponent/Image-s-/main/Main%20app.jpg" alt="PWA Tray Center flyout"></p>
+<h3>Tray Icon</h3>
+<p><img src="https://raw.githubusercontent.com/JJProponent/Image-s-/main/Tray%20place.jpg" alt="PWA Tray Center tray icon"></p>
+<ul>
+<li><strong>Left click</strong> → opens PWA Tray Center (Fluent flyout, rounded corners, Mica or solid backdrop, chosen in Settings)</li>
+<li><strong>Right click</strong> → menu: <em>Show all</em> / <em>Quit all</em></li>
+<li><strong>Center mode</strong> (Settings → Panel): <em>Hermes (Quick)</em> closes on a click outside, <em>Titan (Pinned)</em> stays open</li>
+</ul>
+<h3>Tabs</h3>
+<table>
+<thead>
+<tr>
+<th>Tab</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Media</strong></td>
+<td>Cards for each Chrome media session: cover, title, artist, PWA source, prev/play-pause/next, draggable progress bar. Right-click for controls. Cover style (small, full or none) and compact view (3 covers per row) are set in Settings.</td>
+</tr>
+<tr>
+<td><strong>Apps</strong></td>
+<td>Hidden PWAs. Left-click to show, right-click for Show/Quit. Badge shows unread counter.</td>
+</tr>
+<tr>
+<td><strong>Notifications</strong></td>
+<td>Toast notifications from Windows notification center. Falls back to unread counter from window title (e.g. <code>(3) Inbox</code>).</td>
+</tr>
+<tr>
+<td><strong>Library</strong></td>
+<td>All installed Chrome PWAs. Left-click to launch/show. Drag to reorder. Right-click for Open/Quit/categories. Search field + category chips for filtering.</td>
+</tr>
+<tr>
+<td><strong>Settings</strong></td>
+<td>All mod options (Panel, Media, PWAs, Notifications, Advanced). No Windhawk settings needed.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Tabs, cards, and tiles are <strong>drag-to-reorder</strong>; order is remembered.</p>
+</blockquote>
+<blockquote>
+<p><strong>Notifications are not verified yet and may not work.</strong></p>
+</blockquote>
+<h3>Technical Notes</h3>
+<ul>
+<li>Only affects PWA windows (identified by <code>AppUserModelID</code> with <code>_crx_&lt;app id&gt;</code>)</li>
+<li>Regular browser windows and other programs are untouched</li>
+<li>Library reads from Chrome's Web Applications folders (default or <code>--user-data-dir</code>)</li>
+</ul>
+<h3>Chrome Volume</h3>
+<p>Volume bar in Media tab controls Chrome's system-wide volume (same as Windows volume mixer). Dims when no audio session; changes apply when Chrome starts playing. It can be turned on or off in Settings. The level stays as set after the mod is disabled.</p>
+<h3>Limitations</h3>
+<ul>
+<li>Does not keep PWA alive after browser process exits</li>
+<li>Audio may stop if browser freezes or discards background pages (Memory Saver / Efficiency mode)</li>
+</ul>
+]]></content>
+        <author>
+            <name>Proponent</name>
+            <uri>https://github.com/JJProponent</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Middle Click Minimize 1.1.3]]></title>
+        <id>https://windhawk.net/mods/middle-click-minimize#e2e99f8ff147a915abf7e8d2c72cdbb43bfacb4e</id>
+        <link href="https://windhawk.net/mods/middle-click-minimize"/>
+        <updated>2026-11-12T08:05:05.000Z</updated>
+        <content type="html"><![CDATA[<h1>Middle Click Minimize</h1>
+<p>This mod allows you to minimize windows by middle-clicking (using the scroll wheel) directly on the title bar.</p>
+<h2>Exclusions and Conflicts</h2>
+<ul>
+<li><strong>How to exclude programs:</strong> To disable the mod for a specific program (e.g., <code>steam.exe</code> or <code>vivaldi.exe</code>), add it to the custom process exclusion list in the mod's <strong>Advanced</strong> tab in Windhawk.</li>
+<li><strong>Known conflicts:</strong> If you use the &quot;Middle-Click New Tab Chrome/Edge/Brave&quot; mod, middle-clicking the empty tab-strip might minimize the browser instead of opening a new tab. You can add your browser to the exclusion list in the Advanced tab to prevent this.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ar4ujo_009</name>
+            <uri>https://github.com/Ar4ujo009</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Icons Proximity Reveal 1.0.3]]></title>
         <id>https://windhawk.net/mods/desktop-icons-proximity#b8e1961b145ff09548ed49cb1b1500a788d3887d</id>
@@ -1244,380 +1600,6 @@ a description does.</p>
         <author>
             <name>LyricsPortal</name>
             <uri>https://github.com/LyricsPortal</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Musician's Toolkit 1.0.0]]></title>
-        <id>https://windhawk.net/mods/musicians-toolkit#20099316d68c751106c23fccedb148c6f3543bbf</id>
-        <link href="https://windhawk.net/mods/musicians-toolkit"/>
-        <updated>2026-11-08T22:01:31.000Z</updated>
-        <content type="html"><![CDATA[<h1>Musician's Toolkit</h1>
-<p><img src="https://raw.githubusercontent.com/DeepakBalaraman/musicians-toolkit/master/assets/screenshot.png" alt="Sample Screenshot"></p>
-<p>A chord library, a tuner, a metronome, a strumming trainer, a circle of
-fifths, a tap tempo and a note drill, for guitar, ukulele and piano. All of
-it lives in one small panel that stays on top of your other windows, so you
-can keep it beside your DAW, tab app or video lesson.</p>
-<p>Press <strong>Win+Y</strong> to open it and pick a tool from the menu in the top left.
-<strong>Ctrl+Tab</strong> cycles through them. Close it with the <strong>x</strong>, with <strong>Esc</strong>, or
-with the shortcut again (the shortcut itself is under Settings &gt; Shortcut).
-If you would rather it close whenever you click elsewhere, turn that on under
-Settings &gt; Placement.</p>
-<h2>Chords</h2>
-<p>Start typing and the chord appears as you go: the list narrows with every
-letter, and the one you settle on is drawn underneath.</p>
-<ul>
-<li><strong>Guitar and ukulele</strong> get a fretboard, with barre positions, open strings
-and muted strings all marked.</li>
-<li><strong>Piano</strong> lights up the keys you would hold.</li>
-<li><strong>Fingerings</strong> - the arrow keys, or the slider under the diagram, step
-through the other ways to play the same chord.</li>
-<li><strong>Hear it</strong> - the speaker on the card plays the chord, strummed on an
-acoustic guitar or played on a piano.</li>
-</ul>
-<h2>Tap Tempo</h2>
-<p>Tap the big circle with the mouse, a touchpad or <strong>Space</strong>, and the panel
-works the tempo out from the timing. The bars beneath it show how steady you
-are being, so you can watch yourself settle.</p>
-<ul>
-<li><strong>Half</strong> and <strong>Double</strong> jump to half time or double time.</li>
-<li><strong>Reset</strong> clears the taps and starts a fresh count.</li>
-<li>The scroll wheel nudges the BPM a step at a time.</li>
-</ul>
-<h2>Metronome</h2>
-<p>Set a meter and a tempo, and you have a click that keeps time while you play.</p>
-<ul>
-<li><strong>Meters</strong> - the chips cover 4/4, 3/4, 2/4, 5/4, 6/8, 7/8, 9/8 and 12/8;
-the steppers reach the rest, such as 5/8, 11/8 or 7/16.</li>
-<li><strong>Sound</strong> - a bright click marks the downbeat, a lower one each beat and a
-soft tick the subdivisions, so the bar reads as a pulse.</li>
-<li><strong>Tempo</strong> - the arrows or the wheel step the BPM, or click the number (or
-just start typing) and enter an exact one. <strong>Enter</strong> sets it, <strong>Esc</strong>
-leaves it as it was.</li>
-<li><strong>Background</strong> - the metronome keeps playing after you close the panel,
-which is what you want mid-piece. Switch it off under Settings &gt; Metronome.</li>
-</ul>
-<h2>Tuner</h2>
-<p>Play a note and the needle tells you where you are. The display names the
-note and the arc shows how far off it is, so you can watch it settle in.</p>
-<ul>
-<li><strong>Tunings</strong> - standard, drop and open guitar tunings, several basses,
-ukuleles, mandolins, banjos, the violin family, lap steel, dobro and
-bouzouki.</li>
-<li><strong>Anything else</strong> - the tuner falls back to a chromatic scale, so a
-restrung or homemade instrument tunes just as well.</li>
-<li><strong>Pitch</strong> - concert pitch is adjustable from 415 to 466 Hz (A4 = 440 by
-default) under Settings &gt; Tuner.</li>
-</ul>
-<h2>Strumming Pattern</h2>
-<p>Lay out a bar of strums on a one-measure grid and hear it back in the same
-acoustic voice as the chord library, in time with the tempo.</p>
-<ul>
-<li><strong>Pattern</strong> - the list is grouped by the grid each pattern is written in,
-and holds the ones people actually play: downstrokes, steady eighths,
-D DU D DU, the folk D DU UDU, D D D U D U, the reggae skank, a muted chug,
-a shuffle and straight sixteenths, plus the 2+2+3 and 3+2+2 groupings that
-odd meters are counted in. Picking a pattern moves the grid chips to the
-grid it was notated in, so it arrives ready to play.</li>
-<li><strong>Grid</strong> - click a cell to cycle rest, down, up, muted down and muted up,
-or walk the bar with the arrow keys and type one letter: <strong>D</strong> down, <strong>U</strong>
-up, <strong>X</strong> muted downstroke, <strong>M</strong> muted upstroke, <strong>R</strong> rest.</li>
-<li><strong>Marks</strong> - <strong>A</strong> accents a stroke, <strong>G</strong> turns it into a ghost note and
-<strong>T</strong> ties it into the next cell so it rings on past the beat. <strong>C</strong> clears
-the bar. None of the keys need a modifier, and every one of them is hinted
-along the foot of the card.</li>
-<li><strong>Strings</strong> - pick guitar or ukulele, then fret a chord from the list or
-leave the strings open, so the pattern rings with a voicing you would really
-use.</li>
-<li><strong>Sound</strong> - open strums ring out, palm mute damps them into a rhythm and
-muted turns every stroke into a scratch. A stroke written as a mute stays a
-scratch whatever the sound is set to.</li>
-<li><strong>Meter</strong> - 4/4, 3/4, 2/4, 5/4, 6/8, 7/8, 9/8 or 12/8. The grid chips read
-against the meter's own unit, so 6/8 counts in eighths and its chips offer
-1/8, 1/16, triplet and 1/32.</li>
-<li><strong>Practice</strong> - count-in, loop, and practice mode, which lifts the tempo a
-little at the start of every bar until you reach your target.</li>
-<li><strong>Tempo</strong> - the minus and plus buttons nudge the BPM, or click the number
-(or start typing) to enter one. <strong>Enter</strong> sets it, <strong>Esc</strong> cancels.</li>
-</ul>
-<h2>Circle of Fifths</h2>
-<p>All twelve keys around a ring, each a fifth on from the last. Click either
-ring to select a key and hear it, and the rest of the wheel reads back from
-that selection.</p>
-<ul>
-<li><strong>Wheel</strong> - the majors on the outer ring, their relative minors inside on
-the same spoke. Scroll or use the arrow keys to walk the circle, and press
-<strong>Up / Down</strong> (or <strong>M</strong>) to hop between the rings without leaving the
-fifth.</li>
-<li><strong>Chords of the key</strong> - I, IV and V carry their numeral outside, ii, iii
-and vi inside, so the six chords you would normally play are always in
-view. A minor key lights them the other way round.</li>
-<li><strong>Centre</strong> - the tonic and its seven notes. A minor key uses the natural
-minor, so A minor reads A B C D E F G rather than the major scale of A.</li>
-<li><strong>Theory</strong> - the key signature, the relative and parallel keys, and the
-mode built on each degree.</li>
-<li><strong>Instrument</strong> - pick guitar, piano or ukulele (or press <strong>Tab</strong>) to hear
-the scales and chords in that voice.</li>
-<li><strong>Hear it</strong> - click one of the seven diatonic chips, or press <strong>1</strong>–<strong>7</strong>.</li>
-</ul>
-<h2>Note Trainer</h2>
-<p>A drill for knowing your instrument. A note name appears, the microphone
-listens and you play it before the clock runs out.</p>
-<ul>
-<li><strong>Round</strong> - <strong>Space</strong> starts and stops, and each prompt gets its own timer
-of 2–20 seconds per note, set under Settings &gt; Note trainer.</li>
-<li><strong>Listening</strong> - a note counts the moment it settles in tune, and the
-readout under the prompt shows what the microphone hears right now.</li>
-<li><strong>Feedback</strong> - a correct note flashes green with the points it earned; a
-miss shows the note it was looking for before the next prompt appears.</li>
-<li><strong>Score</strong> - a quick answer is worth up to twice a slow one, and the panel
-keeps your streak, best streak and accuracy. <strong>R</strong> resets it.</li>
-<li><strong>Voices</strong> - <strong>Tab</strong> cycles guitar, ukulele and piano, and <strong>N</strong> (or the
-Naturals chip) keeps the drill to the white notes.</li>
-</ul>
-<h2>Keyboard Shortcuts</h2>
-<ul>
-<li><strong>Win+Y</strong> - open or close the panel.</li>
-<li><strong>Ctrl+Tab</strong> - switch tools.</li>
-<li><strong>Tab</strong> - switch instruments.</li>
-<li><strong>Up / Down</strong> - move through search results, step the metronome, hop
-between the rings of the circle.</li>
-<li><strong>Left / Right</strong> - step through fingerings, halve or double a tap tempo,
-change the metronome's meter.</li>
-<li><strong>D U X M R, A G T, C</strong> - lay strokes in the strumming grid, add accents,
-ghosts and ties, clear the bar.</li>
-<li><strong>Esc</strong> - clear the search, or close the panel when the search is empty.</li>
-</ul>
-<h2>Settings</h2>
-<ul>
-<li><strong>Startup</strong> - the tool and instrument the panel opens with.</li>
-<li><strong>Appearance</strong> - follow Windows or fix light or dark, pick an accent
-colour, set the opacity.</li>
-<li><strong>Placement</strong> - corner, monitor, fine offsets, and whether the panel closes
-when it loses focus.</li>
-<li><strong>Shortcut</strong> - the key and modifiers that open the panel.</li>
-<li><strong>Metronome</strong> - volume, background playback, default meter and subdivision.</li>
-<li><strong>Chords</strong> - hide the finger numbers.</li>
-<li><strong>Tap tempo</strong> - how long a pause resets the taps, and whether Space or
-Enter count as taps.</li>
-<li><strong>Tuner</strong> - reference pitch.</li>
-<li><strong>Strumming</strong> - default grid, count-in, loop, and the practice ramp.</li>
-<li><strong>Circle of fifths</strong> - which ring opens, and whether selecting a key plays
-its scale.</li>
-<li><strong>Note trainer</strong> - seconds per note, chromatic or naturals.</li>
-</ul>
-<p>The chord library comes from <a href="https://github.com/tombatossals/chords-db">chords-db</a>
-by David Rubert (MIT). It is packed into the mod, so there is nothing to
-download and no internet connection needed.</p>
-]]></content>
-        <author>
-            <name>DpakB</name>
-            <uri>https://github.com/DeepakBalaraman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Turn Off Display Without Sleep 1.0.0]]></title>
-        <id>https://windhawk.net/mods/screen-off-no-sleep#167960e458b2b64fa5953d1af0dafc2248bc6583</id>
-        <link href="https://windhawk.net/mods/screen-off-no-sleep"/>
-        <updated>2026-11-08T22:01:22.000Z</updated>
-        <content type="html"><![CDATA[<h1>Turn Off Display Without Sleep</h1>
-<p>On Modern Standby (S0ix) laptops, user-initiated actions—such as clicking &quot;Sleep&quot;
-in the Start menu, pressing a power button configured for sleep, or invoking
-display-off shortcuts—instruct the Windows Power Dependency Coordinator (PDC) to
-transition to sleep. This suspends desktop apps (DAM) and disconnects mobile hotspots.</p>
-<p>However, when Windows turns the display off through a <strong>natural idle timeout</strong>, Modern
-Standby keeps audio streams, downloads, and mobile hotspots running indefinitely.</p>
-<p><strong>Turn Off Display Without Sleep</strong> triggers this natural idle path on demand:</p>
-<ol>
-<li><strong>Instant Pitch-Black Screen</strong>: Creates an instant fullscreen topmost blackout
-overlay across all monitors so the screen appears turned off immediately.</li>
-<li><strong>Dynamic 1-Second Timeout</strong>: Saves your current timeouts and temporarily injects
-a 1-second display idle timeout (<code>VIDEOIDLE</code>) into the active power scheme. Windows
-naturally powers down the monitors via the idle path within ~1–2 seconds without
-suspending background tasks.</li>
-<li><strong>Automatic Restoration</strong>: When hardware display-off (<code>GUID_CONSOLE_DISPLAY_STATE == 0</code>)
-is detected, the original display timeout is immediately restored, and the overlay
-is dismissed.</li>
-<li><strong>Direct-to-Desktop Wake or Optional Lock</strong>:
-<ul>
-<li>By default, your workstation stays unlocked so you return directly to your active
-desktop upon waking the screen—no PIN or Windows Hello delay.</li>
-<li>If desired, enable <strong>Lock workstation after display turns off</strong> to silently lock the
-session in the dark once the screen is powered down.</li>
-</ul>
-</li>
-<li><strong>Failsafe Watchdog</strong>: If the display does not power down within 3 seconds (e.g. due
-to mouse movement or an application holding <code>ES_DISPLAY_REQUIRED</code> / active video playback),
-the overlay is removed and timeouts are restored automatically.</li>
-</ol>
-<h3>What happens on an unclean exit?</h3>
-<p>The 1-second timeout only exists in the power plan for the 1–3 seconds between trigger
-and display power-down. If the tool process is forcefully terminated during those few
-seconds (system crash, power loss, or process kill), the 1-second timeout remains in the
-active power plan until the mod runs again and automatically restores it from storage.
-If the screen turns off after one second of idle while the mod is disabled or uninstalled,
-simply re-adjust &quot;Turn off my screen after&quot; in Windows Settings.</p>
-<hr>
-<h2>Prerequisites</h2>
-<p>To allow this mod to take control of lid-close or power button events, Windows native actions
-must be set to &quot;Do nothing&quot; (0) so Windows does not trigger its built-in sleep transition.</p>
-<p>Run this in an elevated Command Prompt:</p>
-<pre><code class="language-cmd">powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS PBUTTONACTION 0
-powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS PBUTTONACTION 0
-powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0
-powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0
-powercfg /setactive SCHEME_CURRENT
-</code></pre>
-<blockquote>
-<p><strong>Warning</strong>: With the lid action set to &quot;Do nothing&quot;, closing the lid and putting the laptop
-into a backpack or bag will keep the system running (until the regular system sleep timeout).
-Make sure to explicitly sleep or shut down your laptop before bagging it.</p>
-</blockquote>
-<h3>Reverting prerequisites</h3>
-<p>If you disable or uninstall this mod and want to restore the native sleep behavior:</p>
-<pre><code class="language-cmd">powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS PBUTTONACTION 1
-powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS PBUTTONACTION 1
-powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 1
-powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 1
-powercfg /setactive SCHEME_CURRENT
-</code></pre>
-<hr>
-<h2>Triggers</h2>
-<ul>
-<li><strong>Keyboard Shortcut</strong>: Default is <code>Win+Alt+L</code>. Customizable in settings.</li>
-<li><strong>Lid Close</strong>: Triggered automatically when closing the laptop lid. Requires native lid
-close action set to &quot;Do nothing&quot;.</li>
-<li><strong>Power Button</strong>: Supported on devices where the power button is exposed via HID System Control
-(Usage Page <code>0x01</code>, Usages <code>0x80</code>/<code>0x81</code>/<code>0x82</code> or <code>0x0D</code>, such as Microsoft Surface Pro).
-Requires native power button action set to &quot;Do nothing&quot;.
-Not detectable on laptops with ACPI-only power buttons, use Trigger hotkey or Lid close instead.</li>
-<li><strong>External Window Message</strong>: Broadcast <code>WindhawkScreenOffNoSleep_Trigger</code> from external scripts or taskbar shortcuts.</li>
-</ul>
-<hr>
-<h2>Settings</h2>
-<ul>
-<li><strong>Lock workstation after display turns off</strong>: Silently lock in the dark after screen is off.</li>
-<li><strong>Trigger hotkey</strong>: Global hotkey to turn off display (default <code>Win+Alt+L</code>).</li>
-<li><strong>Turn off display on lid close</strong>: Trigger when laptop lid closes.</li>
-<li><strong>Turn off display on power button (HID devices)</strong>: Capture HID power button events.</li>
-</ul>
-]]></content>
-        <author>
-            <name>mirukurusan</name>
-            <uri>https://github.com/mirukurusan</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Logitech Battery Tray 0.1.2]]></title>
-        <id>https://windhawk.net/mods/logitech-battery-tray#f70719f6c2867dd2743e24eab6b2fa36972e0b71</id>
-        <link href="https://windhawk.net/mods/logitech-battery-tray"/>
-        <updated>2026-11-08T19:01:48.000Z</updated>
-        <content type="html"><![CDATA[<h1>Logitech Battery Tray</h1>
-<p>Battery indicators for supported Logitech devices, with automatic discovery,
-charging status and optional percentage labels.</p>
-<h2>Screenshots</h2>
-<p>Horizontal taskbar with a battery tooltip:</p>
-<p><img src="https://raw.githubusercontent.com/umk0/windhawk-mods/a05686db7316fb9dc5520a769165e1341c0fa551/logitech-battery-tray/horizontal.png" alt="Logitech battery indicators on a horizontal taskbar"></p>
-<p>Vertical taskbar with stacked device indicators:</p>
-<p><img src="https://raw.githubusercontent.com/umk0/windhawk-mods/a05686db7316fb9dc5520a769165e1341c0fa551/logitech-battery-tray/vertical.png" alt="Logitech battery indicators on a vertical taskbar"></p>
-<h2>Compatibility and scope</h2>
-<p>Windows 10/11: standard notification icons provide the compatibility backend.
-On supported Windows 11 x64/ARM64 taskbars, Auto uses native XAML battery buttons
-on the primary taskbar. Unrecognized taskbar layouts use notification icons
-instead of an overlay. 32-bit Windows uses notification icons only.
-Native icons show the percentage and a tooltip; charging is green. Windows
-controls their placement and overflow visibility. XAML placement, button styling
-and click-to-open settings do not apply to notification icons.</p>
-<p>Select <strong>Native notification icons</strong> to test or force the compatibility backend.
-Successful compilation is not a claim of runtime testing on every Windows build.</p>
-<p>Unlike BT Battery Monitor (generic Bluetooth battery reporting), this mod reads
-Logitech G HUB and Logitech HID++ battery data, including supported USB receivers.
-It runs in Explorer because its optional XAML backend modifies Explorer's own
-taskbar visual tree. No pairing, firmware or device configuration is changed.</p>
-<h2>Battery sources</h2>
-<p>The XAML backend uses built-in Segoe Fluent Icons and standard Windows buttons
-and tooltips. Its battery glyph changes with the reported charge level, with an
-optional smaller icon indicating the device type.</p>
-<p>G HUB must be running to use its data; direct HID++ reading works independently.
-The G HUB client connects only to 127.0.0.1:9010. It requests /devices/list and
-/battery/&lt;deviceId&gt;/state, subscribes to /battery/state/changed, and uses a
-persistent query connection with a 30-second fallback poll by default. Failed
-connections retry with exponential backoff, up to 60 seconds. Events update
-readings independently of fallback polling.
-Updates cannot arrive earlier than G HUB reports them.</p>
-<p>The HID++ provider reads compatible Logitech devices through Unifying, Bolt,
-LIGHTSPEED, USB and accessible Bluetooth HID++ interfaces. It supports battery
-features 0x1004, 0x1000, 0x1001, 0x1F20 and legacy HID++ 1.0 registers.
-Voltage-based and coarse readings are marked with an approximation sign.
-G HUB readings take priority when available. Models using other protocols may
-not report a battery level; support for every Logitech model is not guaranteed.</p>
-<h2>Discovery and language</h2>
-<p>All detected, supported battery devices are shown by default. No model-specific
-rules are shipped. Optional visibility rules match a device name or model;
-empty rules are ignored, * and ? are supported, and the last match wins.
-The user-facing tooltip contains no internal IDs or provider diagnostics.
-Tooltip translations follow the preferred Windows UI languages, with English
-as fallback. Reload the mod after changing Windows display languages.
-The mod description and settings default to English, with Russian localization
-for Windhawk's Russian interface. Tooltips follow Windows UI languages independently.</p>
-<p>When G HUB stops, HID++ provides readings for compatible devices. Fully
-disconnected devices are hidden; confirmed charging remains visible even when
-the device is inactive. Repeated explicit HID++ offline reports and failed G HUB
-queries use a five-second grace. Missing HID++ replies are treated as an unknown
-connection state, retaining the last reading for up to thirty seconds of failed
-communication. A hidden HID++ device needs two valid readings at
-least one second apart before reappearing, with no intervening failed reading.
-These windows absorb temporary failures, not indefinitely cache charging state.
-Provider requests run outside the taskbar UI thread. Reconnection is automatic.
-Windows HID arrival/removal and receiver notifications trigger rediscovery;
-three-minute scanning also handles devices that do not send connection events.
-An already-open device that missed its initial probe is retried separately,
-with increasing delays up to 60 seconds, without rescanning every HID interface.
-Event-capable HID++ features use the configured fallback interval. ADC (0x1F20)
-and legacy register devices use a two-second poll because they may lack events.
-Presence confirmation temporarily uses a short interval to avoid delayed recovery.
-The XAML UI updates on data, size and theme changes, without a periodic repaint.
-In Auto mode, a transient XAML failure must last 30 seconds before notification
-icons appear; missing taskbar symbols select the compatibility backend immediately.
-While the native fallback is active, unsuccessful XAML attachment attempts back
-off up to 60 seconds. Layout, DPI and theme changes trigger an immediate retry.
-On supported left/right taskbars, indicators are stacked vertically and the
-percentage is placed below the icons. Button width follows the taskbar width;
-the configured button width applies to horizontal taskbars only.</p>
-<h2>Credits and limitations</h2>
-<p>Disable direct HID++ reading before updating device firmware. Persistent HID
-handles are read-only; write access is opened only for each battery/probe request.
-This reduces sharing conflicts, but cannot guarantee compatibility with tools
-that require exclusive access. Firmware updates with this mod have not been tested.</p>
-<p>The G HUB interface is unofficial and may change with G HUB updates.
-XAML root access is adapted from Taskbar Folder Menus by sb4ssman:
-https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp
-G HUB protocol: https://github.com/someweirdhuman/LogiBAT
-G HUB events: https://github.com/bmrussell/LGBattery
-Icons: https://learn.microsoft.com/windows/apps/design/iconography/segoe-fluent-icons-font
-HID++: https://github.com/Logitech/cpg-docs/tree/master/hidpp20
-Battery features: https://github.com/pwr-Solaar/Solaar</p>
-]]></content>
-        <author>
-            <name>uMk0</name>
-            <uri>https://github.com/umk0</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Explorerframe for 24H2 and later 1.0]]></title>
-        <id>https://windhawk.net/mods/classic-explorerframe#d2a11c71d707fe8e7c32b56e5cfa23de18e70f61</id>
-        <link href="https://windhawk.net/mods/classic-explorerframe"/>
-        <updated>2026-11-08T19:01:44.000Z</updated>
-        <content type="html"><![CDATA[<p>Restores classic Explorerframe.dll on Windows 11 24H2 and later. This allows to restore the toolbars in the folder windows, including
-the menubar, the Classic Explorer toolbar from OpenShell package, Quero toolbar and the toolbars provided by the mod
-<a href="https://windhawk.net/mods/flexible-explorer-toolbars-deluxe">Flexible Explorer Toolbars Deluxe</a>, such as the Search bar.</p>
-<p>Note that to enable the menubar you need to install in addition the mod <a href="https://windhawk.net/mods/restore-folder-menubar-25h2">ExplorerFrame and menubar fixes fork</a>.</p>
-<p>This mod downloads the classic Explorerframe.dll from the Microsoft's symbols server and stores it into the mod's storage. You need a working internet access at the first mod's activation.</p>
-<p>Restart Explorer after enabling or disabling the mod. At the first activation the file is downloaded in the background, so wait a few seconds before restarting, otherwise the mod takes effect only at the following Explorer start.</p>
-<p>Mods that hook ExplorerFrame.dll and happen to load before this mod might have no effect, because folder windows don't use the copy they hooked.</p>
-]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

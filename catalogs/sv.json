@@ -10958,6 +10958,29 @@
         "version": "2.1.0"
       }
     },
+    "middle-click-minimize": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794470705000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794470705000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Ar4ujo_009",
+        "description": "Minimizes the window when middle-clicking (scroll wheel) on the title bar.",
+        "github": "https://github.com/Ar4ujo009",
+        "include": [
+          "*"
+        ],
+        "name": "Middle Click Minimize",
+        "version": "1.1.3"
+      }
+    },
     "middle-click-new-tab": {
       "details": {
         "defaultSorting": 742,
@@ -13653,6 +13676,33 @@
         "version": "2.0.0"
       }
     },
+    "pwa-tray-center": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794470710000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794470710000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Proponent",
+        "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lshell32 -luser32 -lgdi32 -ladvapi32 -ldwmapi -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -ld3d11 -ldxgi -ldcomp",
+        "description": "One tray icon for all your Chrome PWAs: hide windows to the PWA Tray Center, control media, see notifications and launch installed apps from a Fluent flyout",
+        "github": "https://github.com/JJProponent",
+        "include": [
+          "chrome.exe"
+        ],
+        "name": "PWA Tray Center",
+        "version": "0.5.610"
+      }
+    },
     "quick-explorer-switcher": {
       "details": {
         "defaultSorting": 1570,
@@ -13728,6 +13778,34 @@
         "license": "MIT",
         "name": "Quick Launch & Media Panel",
         "version": "2.2.0"
+      }
+    },
+    "quick-look": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794470716000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794470716000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "David Ravelo",
+        "compilerOptions": "-lole32 -loleaut32 -lshell32 -luser32 -lgdi32 -lcomctl32 -luuid -luxtheme -ldwmapi -lwindowscodecs -lmsimg32 -ladvapi32 -lshlwapi -lmfplat -lmfreadwrite -lmfuuid -lruntimeobject",
+        "description": "Preview the file or folder selected in File Explorer with Space, in a panel docked inside the window.",
+        "github": "https://github.com/DavidRaveloU",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Quick Look",
+        "version": "1.0.0"
       }
     },
     "quick-settings-media-progress-bar": {
@@ -16230,6 +16308,36 @@
         ],
         "license": "GPL-3.0-only",
         "name": "System Tray Folders",
+        "version": "1.0.0"
+      }
+    },
+    "task-manager-pause-button": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794470722000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794470722000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Luiz Bizzio",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "Add a native Pause/Resume button to Processes and Details in Windows 11 Task Manager.",
+        "donateUrl": "https://github.com/sponsors/luizbizzio",
+        "github": "https://github.com/luizbizzio",
+        "homepage": "https://github.com/luizbizzio/task-manager-pause-button",
+        "include": [
+          "Taskmgr.exe"
+        ],
+        "license": "Apache-2.0",
+        "name": "Task Manager Pause Button",
         "version": "1.0.0"
       }
     },
