@@ -2,7 +2,7 @@
 // @id              macos-minimize-animation
 // @name            MacOS Minimize Animation
 // @description     Smooth macOS-style genie minimize, restore (open) and optional close animations for every window.
-// @version         3.2.0
+// @version         3.2.1
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         *
@@ -277,6 +277,7 @@ Check out the documentation
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>
+#include <new>
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -619,7 +620,11 @@ static ID2D1PathGeometry* CreateQuadGeo(
     factory->CreatePathGeometry(&geo);
     if (!geo) return nullptr;
     ID2D1GeometrySink* sink = nullptr;
-    geo->Open(&sink);
+    if (FAILED(geo->Open(&sink)) || !sink) {
+        if (sink) sink->Release();
+        geo->Release();
+        return nullptr;
+    }
     sink->BeginFigure(p0, D2D1_FIGURE_BEGIN_FILLED);
     sink->AddLine(p1);
     sink->AddLine(p2);
@@ -884,6 +889,26 @@ static void MacGenieFinishClose(MacGenieAnimData* data) {
     }
 }
 
+// Run by both render threads when they couldn't set up rendering (out of memory /
+// GDI objects, or nothing of the canvas on screen): no frame is drawn and the
+// common teardown completes the operation. A minimize hook waiting on the
+// first-frame event is released by the teardown itself, after DWM transitions
+// are back on, so the system animation plays instead. A close hook only cloaks
+// the window once that event fires, so release it here and hold the close for
+// the animation's length - the same order as a played genie, so
+// MacGenieFinishClose never uncloaks before the hook has cloaked.
+static void MacGenieSkipRender(MacGenieAnimData* data) {
+    if (!data->isClosing || !data->hFirstFrameShown) return;
+    SetEvent(data->hFirstFrameShown);
+    // Chunked so an unload (which joins this thread) never waits it out.
+    int remaining = data->durationMs;
+    while (remaining > 0 && !g_unloading.load(std::memory_order_relaxed)) {
+        int chunk = remaining < 20 ? remaining : 20;
+        Sleep(chunk);
+        remaining -= chunk;
+    }
+}
+
 // Ported from Potassiumuncher's genie engine (github.com/Potassiumuncher).
 // The macOS "lamp" curve: maps a mesh vertex (tx,ty in 0..1) at progress p to its
 // warped screen position, given the window rect w and the taskbar icon rect i.
@@ -975,6 +1000,34 @@ static void ClampGenieCanvas(int& left, int& top, int& right, int& bottom,
     if (bottom < winRect.bottom) bottom = winRect.bottom;
     if (left  > dockX - 16)    left  = dockX - 16;   // iGeom is dockX ± 11
     if (right < dockX + 16)    right = dockX + 16;
+}
+
+// Largest snapshot or canvas the genie will allocate: 64 MPixels (256 MB at 32
+// bits). Far above any real monitor setup (two 8K screens side by side fit), so
+// it only stops pathological sizes - e.g. a huge window, which the hook then
+// handles with the system animation instead.
+static const long long MACGENIE_MAX_CANVAS_PIXELS = 64LL * 1024 * 1024;
+
+// Shared by both engines, after ClampGenieCanvas: drop the parts of the canvas
+// that lie outside the virtual screen. No monitor can show them, and both
+// renderers already clip whatever falls outside the canvas, so on-screen output
+// is unchanged - but a window parked far off-screen no longer asks for a canvas
+// spanning tens of thousands of pixels (gigabytes of DIB). Returns false when
+// nothing visible is left or the canvas is still over the cap; the caller then
+// skips rendering.
+static bool ClipGenieCanvasToDesktop(int& left, int& top, int& right, int& bottom) {
+    const int vsLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int vsTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    const int vsWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const int vsHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (vsWidth > 0 && vsHeight > 0) {
+        if (left   < vsLeft)            left   = vsLeft;
+        if (top    < vsTop)             top    = vsTop;
+        if (right  > vsLeft + vsWidth)  right  = vsLeft + vsWidth;
+        if (bottom > vsTop + vsHeight)  bottom = vsTop + vsHeight;
+    }
+    if (right <= left || bottom <= top) return false;
+    return (long long)(right - left) * (bottom - top) <= MACGENIE_MAX_CANVAS_PIXELS;
 }
 
 // -------------------------------------------------------------------------
@@ -1094,6 +1147,7 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     RECT monUnion = GetGenieMonitorUnion(data->targetRect, data->hMon);
     ClampGenieCanvas(boundLeft, boundTop, boundRight, boundBottom,
                      data->targetRect, dockXB, monUnion);
+    bool gdiOk = ClipGenieCanvasToDesktop(boundLeft, boundTop, boundRight, boundBottom);
 
     int vLeft = boundLeft;
     int vTop = boundTop;
@@ -1102,36 +1156,48 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     if (vWidth < 1) vWidth = 1;
     if (vHeight < 1) vHeight = 1;
 
-    HDC hScreenDC = GetDC(NULL);
-    HDC hMemDC = CreateCompatibleDC(hScreenDC);
-
-    BITMAPINFO bmi = {{0}};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = vWidth;
-    bmi.bmiHeader.biHeight = -vHeight;
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-
+    // GDI side of the render target. Any allocation failing (out of memory or GDI
+    // objects) skips the D2D setup and the frame loop below; the common teardown
+    // still completes the operation.
+    HDC hScreenDC = NULL;
+    HDC hMemDC = NULL;
     void* pTargetBits = nullptr;
-    HBITMAP hTargetBmp = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &pTargetBits, NULL, 0);
-    HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, hTargetBmp);
+    HBITMAP hTargetBmp = NULL;
+    HBITMAP hOldBmp = NULL;
+    HWND hGhost = NULL;
+    if (gdiOk) {
+        hScreenDC = GetDC(NULL);
+        if (hScreenDC) hMemDC = CreateCompatibleDC(hScreenDC);
 
-    // Full-screen layered ghost. Created hidden (plain STATIC class, torn down by
-    // this thread) so we keep MINE's in-thread ghost lifecycle instead of HIS's
-    // registered window class + g_activeGhosts vector.
-    HWND hGhost = CreateWindowExW(
-        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
-        L"STATIC", NULL, WS_POPUP,
-        vLeft, vTop, vWidth, vHeight,
-        NULL, NULL, NULL, NULL);
+        BITMAPINFO bmi = {{0}};
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = vWidth;
+        bmi.bmiHeader.biHeight = -vHeight;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+
+        if (hMemDC) hTargetBmp = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &pTargetBits, NULL, 0);
+        if (hTargetBmp) hOldBmp = (HBITMAP)SelectObject(hMemDC, hTargetBmp);
+
+        // Full-screen layered ghost. Created hidden (plain STATIC class, torn down
+        // by this thread) so we keep MINE's in-thread ghost lifecycle instead of
+        // HIS's registered window class + g_activeGhosts vector.
+        hGhost = CreateWindowExW(
+            WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
+            L"STATIC", NULL, WS_POPUP,
+            vLeft, vTop, vWidth, vHeight,
+            NULL, NULL, NULL, NULL);
+
+        gdiOk = hScreenDC && hMemDC && hTargetBmp && pTargetBits && hOldBmp && hGhost;
+    }
 
     // --- Direct2D setup (Potassiumuncher's engine) ---
     ID2D1DCRenderTarget* rt = nullptr;
     ID2D1Bitmap* snapshotBmp = nullptr;
     ID2D1BitmapBrush* bmpBrush = nullptr;
 
-    if (g_d2dFactory) {
+    if (g_d2dFactory && gdiOk) {
         D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
             D2D1_RENDER_TARGET_TYPE_DEFAULT,
             D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
@@ -1155,7 +1221,7 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
             }
         }
     }
-    bool d2dOk = (rt && bmpBrush);
+    bool d2dOk = (gdiOk && rt && bmpBrush);
 
     const double animDur = (double)data->durationMs;
     LARGE_INTEGER qpcFreq, qpcStart, qpcNow;
@@ -1264,9 +1330,16 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
                     float L = left, T = top, R = right, B = bottom;
 
                     g_d2dFactory->CreatePathGeometry(&cachedOutlineGeo);
+                    ID2D1GeometrySink* sink = nullptr;
+                    if (cachedOutlineGeo &&
+                        (FAILED(cachedOutlineGeo->Open(&sink)) || !sink)) {
+                        // Out of memory: no outline this frame (nothing is drawn),
+                        // rebuilt on the next one.
+                        if (sink) sink->Release();
+                        cachedOutlineGeo->Release();
+                        cachedOutlineGeo = nullptr;
+                    }
                     if (cachedOutlineGeo) {
-                        ID2D1GeometrySink* sink = nullptr;
-                        cachedOutlineGeo->Open(&sink);
                         sink->BeginFigure(D2D1::Point2F(L + r, T), D2D1_FIGURE_BEGIN_FILLED);
                         sink->AddLine(D2D1::Point2F(R - r, T));
                         { D2D1_BEZIER_SEGMENT s;
@@ -1415,6 +1488,7 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 
     if (hFrameTimer) { CloseHandle(hFrameTimer); hFrameTimer = nullptr; }
     if (cachedOutlineGeo) { cachedOutlineGeo->Release(); cachedOutlineGeo = nullptr; }
+    if (!d2dOk) MacGenieSkipRender(data);
 
     // -------------------- COMMON TEARDOWN --------------------
     if (data->isRising) {
@@ -1442,12 +1516,15 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     if (snapshotBmp) { snapshotBmp->Release(); snapshotBmp = nullptr; }
     if (rt) { rt->Release(); rt = nullptr; }
 
-    SelectObject(hMemDC, hOldBmp);
-    DeleteObject(hTargetBmp);
+    // Only what was actually created is freed (render setup can stop part-way).
+    if (hMemDC) {
+        if (hOldBmp) SelectObject(hMemDC, hOldBmp);
+        DeleteDC(hMemDC);
+    }
+    if (hTargetBmp) DeleteObject(hTargetBmp);
     DeleteObject(data->hBitmap);   // frees data->pBits (DIB section)
-    DeleteDC(hMemDC);
-    ReleaseDC(NULL, hScreenDC);
-    DestroyWindow(hGhost);
+    if (hScreenDC) ReleaseDC(NULL, hScreenDC);
+    if (hGhost) DestroyWindow(hGhost);
 
     // Unblock the waiting minimize hook (in case we bailed before the first frame
     // was ever composed), then release the event (this thread owns it).
@@ -1600,54 +1677,59 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     RECT monUnion = GetGenieMonitorUnion(data->targetRect, data->hMon);
     ClampGenieCanvas(boundLeft, boundTop, boundRight, boundBottom,
                      data->targetRect, dockX, monUnion);
+    bool renderOk = ClipGenieCanvasToDesktop(boundLeft, boundTop, boundRight, boundBottom);
     int boundW = boundRight - boundLeft;
     int boundH = boundBottom - boundTop;
     if (boundW < 1) boundW = 1;
     if (boundH < 1) boundH = 1;
 
-    // Layered "ghost" window (plain STATIC class - no custom WndProc, so no clash
-    // with the modern engine's ghost class). Created hidden, shown after frame 1.
-    HWND hGhost = CreateWindowExW(
-        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT,
-        L"STATIC", NULL, WS_POPUP,
-        boundLeft, boundTop, boundW, boundH,
-        NULL, NULL, NULL, NULL);
-
-    HDC hScreenDC = GetDC(NULL);
-
-    // Source pixels as a readable 32-bit top-down DIB.
-    HDC hSrcDC = CreateCompatibleDC(hScreenDC);
-    HBITMAP hOldSrc = (HBITMAP)SelectObject(hSrcDC, data->hBitmap);
-
-    BITMAPINFO sbmi;
-    ZeroMemory(&sbmi, sizeof(sbmi));
-    sbmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    sbmi.bmiHeader.biWidth = W;
-    sbmi.bmiHeader.biHeight = -H;       // negative height = top-down
-    sbmi.bmiHeader.biPlanes = 1;
-    sbmi.bmiHeader.biBitCount = 32;
-    sbmi.bmiHeader.biCompression = BI_RGB;
-    BYTE* srcBits = NULL;
-    HBITMAP hSrcDib = CreateDIBSection(hScreenDC, &sbmi, DIB_RGB_COLORS, (void**)&srcBits, NULL, 0);
-    HDC hSrcDibDC = CreateCompatibleDC(hScreenDC);
-    HBITMAP hOldSrcDib = (HBITMAP)SelectObject(hSrcDibDC, hSrcDib);
-    BitBlt(hSrcDibDC, 0, 0, W, H, hSrcDC, 0, 0, SRCCOPY);
-    GdiFlush();
+    // Source pixels: the snapshot itself. It is already a 32-bit top-down W x H
+    // DIB (stride W * 4) and StartMacGenieAnim guarantees it exists, so it is read
+    // in place - no second window-sized copy to allocate.
+    const BYTE* srcBits = (const BYTE*)data->pBits;
     const int srcStride = W * 4;
 
-    // Canvas: 32-bit top-down DIB for genuine per-pixel alpha.
-    BITMAPINFO bmi;
-    ZeroMemory(&bmi, sizeof(bmi));
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = boundW;
-    bmi.bmiHeader.biHeight = -boundH;   // negative height = top-down
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
+    // Everything the frame loop draws with. Any allocation failing (out of memory
+    // or GDI objects, e.g. a process closing several big windows at once) skips
+    // the loop below; the common teardown still completes the operation.
+    HWND hGhost = NULL;
+    HDC hScreenDC = NULL;
     BYTE* pBits = NULL;
-    HBITMAP hCanvas = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, (void**)&pBits, NULL, 0);
-    HDC hCanvasDC = CreateCompatibleDC(hScreenDC);
-    HBITMAP hOldCanvas = (HBITMAP)SelectObject(hCanvasDC, hCanvas);
+    HBITMAP hCanvas = NULL;
+    HDC hCanvasDC = NULL;
+    HBITMAP hOldCanvas = NULL;
+    float* yb = nullptr;
+    if (renderOk) {
+        // Layered "ghost" window (plain STATIC class - no custom WndProc, so no
+        // clash with the modern engine's ghost class). Created hidden, shown after
+        // frame 1.
+        hGhost = CreateWindowExW(
+            WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT,
+            L"STATIC", NULL, WS_POPUP,
+            boundLeft, boundTop, boundW, boundH,
+            NULL, NULL, NULL, NULL);
+
+        hScreenDC = GetDC(NULL);
+
+        // Canvas: 32-bit top-down DIB for genuine per-pixel alpha.
+        BITMAPINFO bmi;
+        ZeroMemory(&bmi, sizeof(bmi));
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = boundW;
+        bmi.bmiHeader.biHeight = -boundH;   // negative height = top-down
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+        if (hScreenDC) {
+            hCanvas = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, (void**)&pBits, NULL, 0);
+            hCanvasDC = CreateCompatibleDC(hScreenDC);
+        }
+        if (hCanvas && hCanvasDC) hOldCanvas = (HBITMAP)SelectObject(hCanvasDC, hCanvas);
+
+        yb = new (std::nothrow) float[H + 1];
+
+        renderOk = hGhost && hScreenDC && hCanvas && pBits && hCanvasDC && hOldCanvas && yb;
+    }
     const int canvasStride = boundW * 4;
 
     const float SPREAD = 0.65f;   // rows nearest the dock lead the morph (the
@@ -1662,8 +1744,6 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
         if (m > 1.0f) m = 1.0f;
         return m * m * (3.0f - 2.0f * m);
     };
-
-    float* yb = new float[H + 1];
 
     // Time-based progress; frames paced at 2x refresh below (no per-frame
     // DwmFlush, same as the modern engine, so the classic warp hits the same
@@ -1690,132 +1770,135 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     }
 
     BOOL firstFrame = TRUE;
-    for (;;) {
-        QueryPerformanceCounter(&qpcNow);
-        const LARGE_INTEGER qpcFrameStart = qpcNow;
-        double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
-        BOOL lastFrame = (elapsedMs >= totalMs);
-        float progress = lastFrame ? 1.0f : (float)(elapsedMs / totalMs);
+    if (renderOk) {
+        for (;;) {
+            QueryPerformanceCounter(&qpcNow);
+            const LARGE_INTEGER qpcFrameStart = qpcNow;
+            double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
+            BOOL lastFrame = (elapsedMs >= totalMs);
+            float progress = lastFrame ? 1.0f : (float)(elapsedMs / totalMs);
 
-        // 0 = full window at its place, 1 = collapsed at the dock; restore reverses.
-        float tt = data->isRising ? (1.0f - progress) : progress;
+            // 0 = full window at its place, 1 = collapsed at the dock; restore reverses.
+            float tt = data->isRising ? (1.0f - progress) : progress;
 
-        float fade = 1.0f;
-        if (tt > 0.8f) fade = (1.0f - tt) / 0.2f;
-        if (fade < 0.0f) fade = 0.0f;
-        if (fade > 1.0f) fade = 1.0f;
+            float fade = 1.0f;
+            if (tt > 0.8f) fade = (1.0f - tt) / 0.2f;
+            if (fade < 0.0f) fade = 0.0f;
+            if (fade > 1.0f) fade = 1.0f;
 
-        memset(pBits, 0, canvasBytes);
+            memset(pBits, 0, canvasBytes);
 
-        // Vertical map: where each source row lands on screen this frame. The rows
-        // nearest the dock lead the morph (bottom-first neck when the dock is
-        // below the window, top-first when it's above), so the spread v is
-        // flipped accordingly.
-        for (int k = 0; k <= H; ++k) {
-            float v = (float)k / (float)H;
-            float e = morphAt(dockAbove ? (1.0f - v) : v, tt);
-            float idY = (float)origTop + (float)H * v;
-            yb[k] = idY + (dockY - idY) * e;
-        }
-
-        int kSeg = 0;
-        for (int yC = 0; yC < boundH; ++yC) {
-            float screenY = (float)(yC + boundTop) + 0.5f;
-            if (screenY < yb[0] || screenY >= yb[H]) continue;
-
-            while (kSeg < H - 1 && yb[kSeg + 1] <= screenY) kSeg++;
-            float segH = yb[kSeg + 1] - yb[kSeg];
-            float frac = segH > 1e-4f ? (screenY - yb[kSeg]) / segH : 0.0f;
-            float v = ((float)kSeg + frac) / (float)H;
-
-            float em = morphAt(dockAbove ? (1.0f - v) : v, tt);
-            float width = (float)W + (neckW - (float)W) * em;
-            if (width < 1.0f) width = 1.0f;
-            float cx = origCenterX + (dockXf - origCenterX) * em;
-            float leftCanvas = (cx - width * 0.5f) - (float)boundLeft;
-
-            int srcRow = (int)(v * (float)H);
-            if (srcRow < 0) srcRow = 0;
-            if (srcRow > H - 1) srcRow = H - 1;
-            const BYTE* srcRowPtr = srcBits + (size_t)srcRow * srcStride;
-            BYTE* dstRowPtr = pBits + (size_t)yC * canvasStride;
-
-            int xStart = (int)leftCanvas;
-            int xEnd   = (int)(leftCanvas + width) + 1;
-            if (xStart < 0) xStart = 0;
-            if (xEnd > boundW) xEnd = boundW;
-
-            float invW = 1.0f / width;
-            for (int xC = xStart; xC < xEnd; ++xC) {
-                float u = ((float)xC + 0.5f - leftCanvas) * invW;
-                if (u < 0.0f || u >= 1.0f) continue;
-                int srcX = (int)(u * (float)W);
-                if (srcX < 0) srcX = 0;
-                if (srcX > W - 1) srcX = W - 1;
-                const BYTE* sp = srcRowPtr + (size_t)srcX * 4;
-                BYTE* dp = dstRowPtr + (size_t)xC * 4;
-                // Snapshots carry premultiplied per-pixel alpha since the v1.5
-                // capture fix (translucent regions have a<255); propagate it so
-                // acrylic areas stay see-through in the classic style too. The
-                // constant alpha below still applies the global fade on top.
-                dp[0] = sp[0];
-                dp[1] = sp[1];
-                dp[2] = sp[2];
-                dp[3] = sp[3];
+            // Vertical map: where each source row lands on screen this frame. The rows
+            // nearest the dock lead the morph (bottom-first neck when the dock is
+            // below the window, top-first when it's above), so the spread v is
+            // flipped accordingly.
+            for (int k = 0; k <= H; ++k) {
+                float v = (float)k / (float)H;
+                float e = morphAt(dockAbove ? (1.0f - v) : v, tt);
+                float idY = (float)origTop + (float)H * v;
+                yb[k] = idY + (dockY - idY) * e;
             }
-        }
 
-        POINT ptDst = { boundLeft, boundTop };
-        SIZE  sz    = { boundW, boundH };
-        POINT ptSrc = { 0, 0 };
-        BLENDFUNCTION bf;
-        bf.BlendOp = AC_SRC_OVER;
-        bf.BlendFlags = 0;
-        bf.SourceConstantAlpha = (BYTE)(255.0f * fade);
-        bf.AlphaFormat = AC_SRC_ALPHA;
-        UpdateLayeredWindow(hGhost, hScreenDC, &ptDst, &sz, hCanvasDC, &ptSrc, 0, &bf, ULW_ALPHA);
+            int kSeg = 0;
+            for (int yC = 0; yC < boundH; ++yC) {
+                float screenY = (float)(yC + boundTop) + 0.5f;
+                if (screenY < yb[0] || screenY >= yb[H]) continue;
 
-        if (firstFrame) {
-            ShowWindow(hGhost, SW_SHOWNOACTIVATE);
-        }
+                while (kSeg < H - 1 && yb[kSeg + 1] <= screenY) kSeg++;
+                float segH = yb[kSeg + 1] - yb[kSeg];
+                float frac = segH > 1e-4f ? (screenY - yb[kSeg]) / segH : 0.0f;
+                float v = ((float)kSeg + frac) / (float)H;
 
-        if (lastFrame) break;
-        if (g_unloading.load(std::memory_order_relaxed)) break;
+                float em = morphAt(dockAbove ? (1.0f - v) : v, tt);
+                float width = (float)W + (neckW - (float)W) * em;
+                if (width < 1.0f) width = 1.0f;
+                float cx = origCenterX + (dockXf - origCenterX) * em;
+                float leftCanvas = (cx - width * 0.5f) - (float)boundLeft;
 
-        // First frame is on screen; release the minimize hook it was holding.
-        // One DwmFlush here matches the modern engine's handoff sync; subsequent
-        // frames are paced by the timer below instead of a per-frame DwmFlush.
-        if (firstFrame) {
-            DwmFlush();
-            firstFrame = FALSE;
-            if (data->hFirstFrameShown) SetEvent(data->hFirstFrameShown);
-        }
+                int srcRow = (int)(v * (float)H);
+                if (srcRow < 0) srcRow = 0;
+                if (srcRow > H - 1) srcRow = H - 1;
+                const BYTE* srcRowPtr = srcBits + (size_t)srcRow * srcStride;
+                BYTE* dstRowPtr = pBits + (size_t)yC * canvasStride;
 
-        // Rate-limit to ~2x refresh so we never busy-spin. The deadline is
-        // measured from the START of the frame, so the period is
-        // max(render, interval), not render + interval (a render faster than
-        // the interval just sleeps the difference; a slower one runs as-is).
-        // Capped wait keeps the g_unloading check responsive. When a frame
-        // overruns its budget, SwitchToThread still yields the quantum.
-        if (hFrameTimer) {
-            LARGE_INTEGER qpcAfter;
-            QueryPerformanceCounter(&qpcAfter);
-            double spentMs = (qpcAfter.QuadPart - qpcFrameStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
-            double waitMs = frameIntervalMs - spentMs;
-            if (waitMs > 0.1) {
-                LARGE_INTEGER due;
-                due.QuadPart = -(LONGLONG)(waitMs * 10000.0);   // 100ns units
-                SetWaitableTimer(hFrameTimer, &due, 0, nullptr, nullptr, FALSE);
-                WaitForSingleObject(hFrameTimer, 100);
+                int xStart = (int)leftCanvas;
+                int xEnd   = (int)(leftCanvas + width) + 1;
+                if (xStart < 0) xStart = 0;
+                if (xEnd > boundW) xEnd = boundW;
+
+                float invW = 1.0f / width;
+                for (int xC = xStart; xC < xEnd; ++xC) {
+                    float u = ((float)xC + 0.5f - leftCanvas) * invW;
+                    if (u < 0.0f || u >= 1.0f) continue;
+                    int srcX = (int)(u * (float)W);
+                    if (srcX < 0) srcX = 0;
+                    if (srcX > W - 1) srcX = W - 1;
+                    const BYTE* sp = srcRowPtr + (size_t)srcX * 4;
+                    BYTE* dp = dstRowPtr + (size_t)xC * 4;
+                    // Snapshots carry premultiplied per-pixel alpha since the v1.5
+                    // capture fix (translucent regions have a<255); propagate it so
+                    // acrylic areas stay see-through in the classic style too. The
+                    // constant alpha below still applies the global fade on top.
+                    dp[0] = sp[0];
+                    dp[1] = sp[1];
+                    dp[2] = sp[2];
+                    dp[3] = sp[3];
+                }
+            }
+
+            POINT ptDst = { boundLeft, boundTop };
+            SIZE  sz    = { boundW, boundH };
+            POINT ptSrc = { 0, 0 };
+            BLENDFUNCTION bf;
+            bf.BlendOp = AC_SRC_OVER;
+            bf.BlendFlags = 0;
+            bf.SourceConstantAlpha = (BYTE)(255.0f * fade);
+            bf.AlphaFormat = AC_SRC_ALPHA;
+            UpdateLayeredWindow(hGhost, hScreenDC, &ptDst, &sz, hCanvasDC, &ptSrc, 0, &bf, ULW_ALPHA);
+
+            if (firstFrame) {
+                ShowWindow(hGhost, SW_SHOWNOACTIVATE);
+            }
+
+            if (lastFrame) break;
+            if (g_unloading.load(std::memory_order_relaxed)) break;
+
+            // First frame is on screen; release the minimize hook it was holding.
+            // One DwmFlush here matches the modern engine's handoff sync; subsequent
+            // frames are paced by the timer below instead of a per-frame DwmFlush.
+            if (firstFrame) {
+                DwmFlush();
+                firstFrame = FALSE;
+                if (data->hFirstFrameShown) SetEvent(data->hFirstFrameShown);
+            }
+
+            // Rate-limit to ~2x refresh so we never busy-spin. The deadline is
+            // measured from the START of the frame, so the period is
+            // max(render, interval), not render + interval (a render faster than
+            // the interval just sleeps the difference; a slower one runs as-is).
+            // Capped wait keeps the g_unloading check responsive. When a frame
+            // overruns its budget, SwitchToThread still yields the quantum.
+            if (hFrameTimer) {
+                LARGE_INTEGER qpcAfter;
+                QueryPerformanceCounter(&qpcAfter);
+                double spentMs = (qpcAfter.QuadPart - qpcFrameStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
+                double waitMs = frameIntervalMs - spentMs;
+                if (waitMs > 0.1) {
+                    LARGE_INTEGER due;
+                    due.QuadPart = -(LONGLONG)(waitMs * 10000.0);   // 100ns units
+                    SetWaitableTimer(hFrameTimer, &due, 0, nullptr, nullptr, FALSE);
+                    WaitForSingleObject(hFrameTimer, 100);
+                } else {
+                    SwitchToThread();   // overran the budget - yield the quantum anyway
+                }
             } else {
-                SwitchToThread();   // overran the budget - yield the quantum anyway
+                Sleep(1);   // last resort: never spin
             }
-        } else {
-            Sleep(1);   // last resort: never spin
         }
     }
 
     if (hFrameTimer) { CloseHandle(hFrameTimer); hFrameTimer = nullptr; }
+    if (!renderOk) MacGenieSkipRender(data);
 
     // -------------------- COMMON TEARDOWN (identical to the modern engine) -----
     if (data->isRising) {
@@ -1838,18 +1921,16 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     }
     if (data->isClosing) MacGenieFinishClose(data);
 
+    // Only what was actually created is freed (render setup can stop part-way).
     delete[] yb;
-    SelectObject(hCanvasDC, hOldCanvas);
-    SelectObject(hSrcDibDC, hOldSrcDib);
-    SelectObject(hSrcDC, hOldSrc);
-    DeleteObject(hCanvas);
-    DeleteObject(hSrcDib);
+    if (hCanvasDC) {
+        if (hOldCanvas) SelectObject(hCanvasDC, hOldCanvas);
+        DeleteDC(hCanvasDC);
+    }
+    if (hCanvas) DeleteObject(hCanvas);
     DeleteObject(data->hBitmap);
-    DeleteDC(hCanvasDC);
-    DeleteDC(hSrcDibDC);
-    DeleteDC(hSrcDC);
-    ReleaseDC(NULL, hScreenDC);
-    DestroyWindow(hGhost);
+    if (hScreenDC) ReleaseDC(NULL, hScreenDC);
+    if (hGhost) DestroyWindow(hGhost);
 
     if (data->hFirstFrameShown) {
         SetEvent(data->hFirstFrameShown);
@@ -1962,7 +2043,11 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
     int rawW = winRect.right - winRect.left;
     int rawH = winRect.bottom - winRect.top;
 
-    if (w <= 0 || h <= 0 || rawW <= 0 || rawH <= 0) {
+    // A window too large to snapshot safely (see MACGENIE_MAX_CANVAS_PIXELS) gets
+    // the system animation instead of a multi-hundred-MB allocation.
+    if (w <= 0 || h <= 0 || rawW <= 0 || rawH <= 0 ||
+        (long long)w * h > MACGENIE_MAX_CANVAS_PIXELS ||
+        (long long)rawW * rawH > MACGENIE_MAX_CANVAS_PIXELS) {
         if (rising) MacGenieUndoRisingHide(hWnd, originalExStyle, cloakHidden);
         else MacGenieSetDwmTransitions(hWnd, TRUE);
         return false;
@@ -2090,16 +2175,25 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
     bmi.bmiHeader.biPlanes = 1;
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
-    data->hBitmap = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &data->pBits, NULL, 0);
+    data->hBitmap = hScreenDC
+        ? CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &data->pBits, NULL, 0)
+        : NULL;
 
-    if (!data->hBitmap || !data->pBits) {
-        ReleaseDC(NULL, hScreenDC);
+    // Undo everything set up so far (snapshot allocation or capture failed, e.g.
+    // the process is out of memory or GDI objects): the hook then performs the
+    // operation itself with the system animation.
+    auto BailOut = [&]() {
+        if (hScreenDC) ReleaseDC(NULL, hScreenDC);
         if (rising) MacGenieUndoRisingHide(hWnd, originalExStyle, cloakHidden);
         else MacGenieSetDwmTransitions(hWnd, TRUE);
         if (data->hBitmap) DeleteObject(data->hBitmap);
         delete data;
         std::lock_guard<std::mutex> lock(g_CacheMutex);
         g_AnimActive.erase(hWnd);
+    };
+
+    if (!data->hBitmap || !data->pBits) {
+        BailOut();
         return false;
     }
 
@@ -2161,6 +2255,7 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
     // cloaked window (the rising-no-cache path), where a screen grab would not.
     auto CaptureNow = [&]() -> bool {
         HDC hTempDC = CreateCompatibleDC(hScreenDC);
+        if (!hTempDC) return false;
         BITMAPINFO bmiTemp = bmi;
         bmiTemp.bmiHeader.biWidth = rawW;
         bmiTemp.bmiHeader.biHeight = -rawH;
@@ -2172,6 +2267,11 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
             return false;
         }
         HBITMAP hOldTempBmp = (HBITMAP)SelectObject(hTempDC, hTempBmp);
+        if (!hOldTempBmp) {
+            DeleteObject(hTempBmp);
+            DeleteDC(hTempDC);
+            return false;
+        }
         // A closing foreground window is grabbed from the screen instead
         // (MrCrustyToast): at close time Chromium's PrintWindow can return only
         // its title-bar band. It is on top, so the grab is the window itself.
@@ -2204,7 +2304,12 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
         }
         // No cached minimize snapshot (e.g. window was already minimized before the
         // mod loaded): snapshot the freshly-restored (cloaked) window directly.
-        if (!fromCache) CaptureNow();
+        // A failed capture (out of memory / GDI objects) would animate an empty
+        // snapshot, so the window is just revealed instead.
+        if (!fromCache && !CaptureNow()) {
+            BailOut();
+            return false;
+        }
     } else {
         // Falling: capture the WINDOW ONLY via PrintWindow (Potassiumuncher's
         // method), NOT a screen BitBlt. A screen grab of the window rect also pulls
@@ -2214,7 +2319,11 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
         // can never bleed in. Tradeoff: DWM acrylic/translucency backdrops aren't
         // part of the window's own render, so translucent windows animate opaque - a
         // documented limitation, far less jarring than the taskbar appearing.
-        CaptureNow();
+        // A failed capture falls back to the system animation, as above.
+        if (!CaptureNow()) {
+            BailOut();
+            return false;
+        }
         // Cache a copy keyed by HWND for the later restore animation (not for a
         // closing window - there's no restore after a close).
         std::lock_guard<std::mutex> lock(g_CacheMutex);

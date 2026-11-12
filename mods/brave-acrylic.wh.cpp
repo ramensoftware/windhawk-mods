@@ -2,7 +2,7 @@
 // @id              brave-acrylic
 // @name            Brave Acrylic
 // @description     Alpha: Native Brave background transparency; requires Translucent Windows
-// @version         3.9
+// @version         4.0
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @homepage        https://github.com/bardelyne/brave-acrylic
@@ -15,7 +15,12 @@
 /*
 # Brave Acrylic
 
-> **Very important — Symbol cache:** Controlled and maintained by **bardelyne**, the author of Brave Acrylic. This is an author-hosted cache, not an official Windhawk service. Our GitHub Actions workflow checks for new Brave releases and prepares small compatibility files from Brave’s official symbols. Windhawk downloads the matching file for your installed Brave build and caches it locally. The large symbol files are processed by the workflow; your PC receives only the small compatibility data.
+> **Very important — Symbol cache:** Controlled and maintained by **bardelyne**, the author of Brave Acrylic. This is an author-hosted cache, not an official Windhawk service. Our GitHub Actions workflow checks for new Brave releases and prepares small compatibility files from Brave’s official symbols. By default, Windhawk downloads only the small cache for your Brave build. The optional **Download symbols from Brave as a fallback** setting is off by default.
+
+> **If the mod isn’t working after a Brave update**
+>
+> - **Wait for the small cache (default).** The workflow checks for new Brave builds every hour. Give it about an hour, then fully exit and reopen Brave. GitHub can delay scheduled runs.
+> - **Download directly from Brave.** If you have a fast connection and enough disk space, enable **Download symbols from Brave as a fallback** in the mod’s Windhawk settings, then fully exit and reopen Brave. On a cache miss, Windhawk can download the full symbols from Brave’s official server. For a recent build, the download was about **1.2 GB** and expanded to about **6 GB** on disk. If symbols are still loading after **five seconds**, Brave opens without acrylic. Keep Brave open and check the **Brave Acrylic** icon in the Windows notification area. When it says **Restart Brave**, fully exit and reopen Brave to apply the effect.
 
 ![Brave Acrylic](https://raw.githubusercontent.com/bardelyne/brave-acrylic/main/assets/brave-acrylic-v3.3.png)
 
@@ -36,31 +41,36 @@ Reveal the Windows backdrop through Brave's vertical tab area, frame, toolbar, a
 
 Windows 11 is the tested environment. Windows 10 is unverified; the backdrop provider and selected effect must support that Windows version. Native ARM64 Brave is unsupported.
 
-The native-popup suggestion method was tested with Brave 1.98.60 and with regular Brave 1.98.62 / Chromium 156, including YouTube with Zen Internet transparency enabled. The current native contract is validated separately against those two official DLL/PDB pairs. Other builds need valid compatibility data for their exact `chrome.dll`. Native interfaces and rendering behavior can change and may require a mod update.
+Native popup suggestions were tested in Brave 1.98, including YouTube with Zen Internet transparency enabled. Version 4.0 adds rounded-content and popup coverage and separates the Toolbar and Address bar options.
 
-The earlier background-only native contract was validated on seven official releases from Brave 1.93.138 through 1.98.62 (Chromium 151–156). This checks the native compatibility data; it is separate from visual testing. See the [compiler study](https://github.com/bardelyne/brave-acrylic/blob/main/docs/compiler-resilience.md).
+The 4.0 compatibility study validated all eight feature groups on one official stable build from each Brave 1.93–1.99 release line (Chromium 151–157). Builds tested from 1.88–1.92 had partial coverage. The study checks matching binaries and symbols. Visual behavior is tested separately. Brave Acrylic uses compatibility data for the exact installed `chrome.dll`. See the [compatibility matrix run](https://github.com/bardelyne/brave-acrylic/actions/runs/42106823647) and [compiler study](https://github.com/bardelyne/brave-acrylic/blob/main/docs/compiler-resilience.md).
 
 ## Fast setup
 
 1. Enable Translucent Windows for `brave.exe` and choose the desired backdrop.
-2. Enable Brave Acrylic. Leave **Vertical tabs background**, **Toolbar**, and **Webpage background** on.
+2. Enable Brave Acrylic. Leave **Vertical tabs background**, **Toolbar**, **Address bar**, and **Webpage background** on.
 3. Close all Brave windows normally and reopen Brave. Exit its background instance too if it stays running.
 4. Optionally use Zen Internet or Stylus to remove backgrounds inside websites, as explained below. Stylus requires custom CSS.
 
 No theme-color setup is required.
+
+Brave's **Show rounded corners on main content areas** setting can remain enabled when the exact-build compatibility data includes rounded webpage support. The mod clears the outer content surround and the outline painter's backing fill while retaining the thin outline and native rounded clipping.
 
 ## Controls
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | **Vertical tabs background** | On | Reveal the backdrop behind the vertical tab area and browser frame. |
-| **Toolbar** | On | Clear the toolbar, bookmarks bar, and unfocused address-field backgrounds. Focused address fields keep their native theme. |
-| **Webpage background** | On | Clear only Chromium's background behind the webpage area, including its default white fallback. Website HTML, CSS, and content are unchanged. Use Zen Internet or Stylus for website backgrounds; Stylus requires custom CSS. |
+| **Toolbar** | On | Clear the toolbar and bookmarks bar backgrounds. |
+| **Address bar** | On | Clear the unfocused address field and, where supported, its hover shadow. The focused field keeps its native appearance. |
+| **Webpage background** | On | Clear only Chromium's background behind the webpage area, including its default white fallback and the fill behind rounded content areas. Native rounded clipping and the thin outline stay intact. Website HTML, CSS, and content are unchanged. Use Zen Internet or Stylus for website backgrounds; Stylus requires custom CSS. |
 | **Acrylic menus** | On | Blur native context menus, the main menu, and submenus. Text, icons, selection, and input stay native. |
-| **Acrylic popups** | On | Blur supported native browser bubbles and the native Extensions manager. Extension and website HTML overlays keep their own styling. |
+| **Acrylic popups** | On | Blur supported native browser bubbles, site information, recent downloads, media controls, and the native Extensions manager. Permission controls, download actions, album art, text and playback buttons keep their native painting. Extension and website HTML overlays keep their own styling. |
 | **Blur search suggestions** | On | Use a native results popup with Windows blur below the input cutout. Typed text, result text and input remain native and sharp. |
-| **Hide duplicate Windows buttons** | Off | Optional workaround that removes the real Windows system-menu style. It can affect Alt+Space, taskbar menus and other window tools. Prefer Brave's **Use compact mode** option in Appearance. |
-| **Use online symbol cache** | On | Let Windhawk download small exact-build files from the author-controlled cache. Turn off to use existing local cached symbols only, then restart Brave. |
+| **Popup background opacity (%)** | 62 | Control the background tint of menus, native popups and suggestions from 0 (transparent) to 100 (opaque). Text, icons and controls retain their native opacity. Restart Brave after changing it. |
+| **Hide duplicate Windows buttons** | On | Hide the extra Windows minimize, maximize and close buttons while keeping Brave’s controls. This can affect Alt+Space, taskbar menus and other window tools. |
+| **Use online symbol cache** | On | Let Windhawk download small exact-build files from the author-controlled cache. |
+| **Download symbols from Brave as a fallback** | Off | Let Windhawk download the full PDB from Brave’s official symbol server if it cannot resolve symbols from the available caches. A tested build used about 1.2 GB of bandwidth and 6.2 GB of disk space. Restart Brave after changing this setting. |
 
 Restart Brave after applying settings, even when a change appears immediately. Some backing views and native popup choices are created with their windows. Webpage backing can apply on tab selection without refreshing the page; restarting after disabling it restores existing renderer defaults. The caption-button option can apply immediately.
 
@@ -88,11 +98,11 @@ Brave's existing transparent-host path enables its compositor to preserve transp
 
 The webpage option clears the native backing during content-view updates and sets Chromium's persistent page-base color when a tab is attached. That value is also used by future renderers, so switching or restoring tabs does not bring the default white background back. Explicit website backgrounds remain visible unless a website-styling extension changes them.
 
-The full native path uses **29 functions**, of which **20 are private hooks**, and one immutable background-class vtable. Each feature has its own dependency set; unavailable features keep their native appearance. The implementation uses no sampled colors, private object-member offsets, guessed screen rectangles, screenshot polling, input forwarding, or GPU hooks. Normal DirectComposition stays enabled, with no special browser launch flag. Windows supplies the backdrop. Acrylic can turn gray when inactive; choose a suitable blur mode in Translucent Windows for the main window if you prefer a persistent effect.
+The full native path uses **36 functions**, of which **24 are private hooks**, and one immutable background-class vtable. Each feature has its own dependency set. Features with missing dependencies keep their native appearance. The rounded webpage effect reads Chromium’s packed paint flags to distinguish the backing fill from the outline. Changes to that layout can affect the rounded webpage effect. The implementation uses no sampled colors, guessed screen rectangles, screenshot polling, input forwarding, or GPU hooks. Normal DirectComposition stays enabled, with no special browser launch flag. Windows supplies the backdrop. Acrylic can turn gray when inactive. Choose a suitable blur mode in Translucent Windows for the main window if you prefer a persistent effect.
 
 ## Menus, popups and suggestions
 
-Native menus and bubbles keep their own theme colors with reduced background alpha. A Windows host-backdrop visual sits underneath Chromium in the same popup window and follows its actual rounded background geometry. There are no extra overlay windows or input forwarding. A private composition worker owns its own dispatcher; disabling the mod closes its targets and joins that worker without changing Brave's dispatcher. If Windows cannot read the host-backdrop capability flag, cleanup removes the visual effect without guessing a prior flag value.
+Native menus and bubbles keep their own theme colors with reduced background alpha. A Windows host-backdrop visual sits underneath Chromium in the same popup window and follows its actual rounded background geometry. There are no extra overlay windows or input forwarding. Where supported, bubble popups use a short fade instead of scaling so their contents and backdrop appear and disappear together. Context menus, the main menu and bookmark menus retain their native animation path. Windows reduced-motion preferences are respected. A private composition worker owns its own dispatcher; disabling the mod closes its targets and joins that worker without changing Brave's dispatcher. If Windows cannot read the host-backdrop capability flag, cleanup removes the visual effect without guessing a prior flag value.
 
 Tab and group hover cards, including their fading text and memory icons, keep their foreground painting. Their separate client and footer backgrounds are removed, while a tint derived from Brave’s own background color sits beneath Chromium’s content. This keeps the tint consistent during transitions and avoids black fade masks. The same native-popup path covers dialogs such as **Restore pages?**. Windows-drawn popup borders are suppressed where supported and their previous value is restored on unload.
 
@@ -102,25 +112,25 @@ Suggestions use Chromium's normal desktop-popup factory instead of its in-window
 
 ## Symbol resolution, privacy and updates
 
-Brave Acrylic resolves exact C++ prototypes and the background-class identity with Windhawk's supported `HookSymbols` / `WH_HOOK_SYMBOLS_OPTIONS::onlineCacheUrl` mechanism. Windhawk handles its ordinary local cache and optional online download. No build-specific addresses are embedded and remote PDB downloads remain disabled. The mod retains local executable-range, unwind-boundary, approved-leaf, thunk and overlap checks before registering hooks.
+Brave Acrylic uses Windhawk’s `HookSymbols` to resolve exact C++ prototypes and the background-class identity. Windhawk checks its local symbol cache and then the author-hosted cache when enabled. If those lookups do not resolve the symbols and the fallback is on, Windhawk can download and unpack the official Brave PDB. Both sources use the mod’s local executable-range, unwind-boundary, approved-leaf, thunk and overlap checks before hooks are registered. The workflow also checks for compiler aliases when generating the small cache.
 
-Small named-symbol files are published under `brave-acrylic-features-v7/` on our [`symbol-cache` branch](https://github.com/bardelyne/brave-acrylic/tree/symbol-cache). They contain the native function locations needed for each Brave build. The service and publishing workflow are controlled and maintained by bardelyne.
+Small named-symbol files are published under `brave-acrylic-features-v9/` on our [`symbol-cache` branch](https://github.com/bardelyne/brave-acrylic/tree/symbol-cache). They contain the native function locations needed for each Brave build. The service and publishing workflow are controlled and maintained by bardelyne.
 
 Windhawk handles compatibility downloads and local caching through its standard mechanism. Our workflow uses pinned actions and checks the official Brave archive and matching symbols before publishing. See [cache hosting](https://github.com/bardelyne/brave-acrylic/blob/main/docs/trusted-pipeline.md) for the technical details.
 
-**No telemetry, uploads or login:** the mod only downloads compatibility data through Windhawk. Browser cookies, history, page content, settings and account details stay on your PC. Turn **Use online symbol cache** off and restart Brave to use suitable existing local cached symbols only.
+**No telemetry, uploads or login.** Windhawk downloads symbol data. The server used for the download receives your IP address and the requested build. Browser cookies, history, page content, settings and account details stay on your PC. Turn both symbol download options off and restart Brave to use local symbols only.
 
-The workflow requests a check **every two hours, with a backup 30 minutes later**. GitHub can delay or drop scheduled starts, so this is not an exact timer. It checks the stable release, asset identities and native contract before downloading large files. Unchanged releases skip browser and PDB downloads. Both generation and publication use the run's same source revision; large official files stay on the GitHub runner. Restart Brave after newly required compatibility data becomes available.
+The workflow checks the stable release, asset identities and native contract before downloading large files. Unchanged releases skip browser and PDB downloads. Both generation and publication use the run's same source revision; large official files stay on the GitHub runner. Restart Brave after newly required compatibility data becomes available.
 
-The extractor handles verified compiler folding according to each function's role, while rejecting unrelated sharing on patched functions. The workflow reports compatibility separately for vertical tabs, the toolbar, webpage backing, menus, popups, and suggestions. A missing or changed function disables only its dependent features. Validated features are still published, and the workflow summary lists unavailable features with their reasons. Invalid files, mismatched symbols, failed downloads, and publishing errors still stop publication.
+The extractor handles verified compiler folding according to each function's role, while rejecting unrelated sharing on patched functions. The workflow reports compatibility separately for vertical tabs, the toolbar, the address bar, webpage backing, menus, popups, suggestions, and rounded webpage backing. A missing or changed function disables only its dependent features. Validated features are still published, and the workflow summary lists unavailable features with their reasons. Invalid files, mismatched symbols, failed downloads, and publishing errors still stop publication.
 
 ## Duplicate corner buttons
 
-If two sets of minimize/maximize/close buttons appear, first enable **Use compact mode** in Brave **Settings → Appearance**. The optional **Hide duplicate Windows buttons** workaround is off on a fresh install because it removes the window's actual `WS_SYSMENU` style. Windows system menus, taskbar interactions, accessibility tools or other window managers may be affected. Disabling the option or unloading the mod restores its recorded style changes.
+**Hide duplicate Windows buttons** is on by default. It removes the window’s `WS_SYSMENU` style, which can affect Alt+Space, taskbar menus, accessibility tools and window managers. Turn the option off to restore the original window style.
 
 ## Troubleshooting
 
-Restart Brave after installing or applying changes: close all windows and its background instance, then reopen normally. Enable Windhawk debug logging to check each feature's availability or a symbol-cache message. For website styling, check Zen Internet's transparency setting and whether that site has a supported style, or check the CSS and site scope of your Stylus style.
+After installing or applying changes, close all Brave windows and its background instance, then reopen normally. If Windhawk cached a failed symbol lookup, enable debug logging in the mod’s Advanced tab before restarting Brave to retry. For website styling, check Zen Internet's transparency setting and whether that site has a supported style, or check the CSS and site scope of your Stylus style.
 
 For reports, include Windows/Brave versions, window type, enabled areas, backdrop configuration, and reproduction steps. See the [advanced reference](https://github.com/bardelyne/brave-acrylic/blob/main/docs/advanced.md), [compatibility data](https://github.com/bardelyne/brave-acrylic/blob/main/docs/compatibility.md), [webview investigation](https://github.com/bardelyne/brave-acrylic/blob/main/docs/webview-background.md), and [changelog](https://github.com/bardelyne/brave-acrylic/blob/main/CHANGELOG.md).
 */
@@ -132,25 +142,36 @@ For reports, include Windows/Brave versions, window type, enabled areas, backdro
   $description: Reveal the backdrop behind the vertical tab area and browser frame.
 - transparentToolbar: true
   $name: Toolbar
-  $description: Reveal the backdrop behind the toolbar, bookmarks bar and unfocused address field.
+  $description: Reveal the backdrop behind the toolbar and bookmarks bar.
+- transparentAddressBar: true
+  $name: Address bar
+  $description: Clear the unfocused address field and, where supported, its hover shadow. The focused field keeps its native appearance.
 - transparentPageBackground: true
   $name: Webpage background
-  $description: Clear only Chromium's background behind the webpage area, including its default white fallback. Website HTML, CSS and content are unchanged. Use Zen Internet or Stylus for website backgrounds; Stylus requires custom CSS.
+  $description: Clear Chromium's webpage backing, including its default white fallback and the fill behind rounded content. The rounded outline and website content stay intact. Use Zen Internet or custom CSS with Stylus for website backgrounds.
 - blurMenus: true
   $name: Acrylic menus
   $description: Blur native context menus and submenus while preserving their theme, rounded corners, text and input.
 - blurPopups: true
   $name: Acrylic popups
-  $description: Blur supported native browser bubbles. Extension and website HTML popups keep their own styling.
+  $description: Blur supported native browser bubbles such as Site information, Recent downloads and Media controls. Extension and website HTML popups keep their own styling.
 - blurSuggestions: true
   $name: Blur search suggestions
   $description: Blur address-bar suggestions below the input field. Typed text, result text and selection stay sharp.
-- hideNativeCaptionButtons: false
+- popupOpacity: 62
+  $name: Popup background opacity (%)
+  #! $min: 0
+  #! $max: 100
+  $description: "Background tint for menus, native popups and search suggestions. 0 is transparent and 100 is opaque; text, icons and controls stay fully visible."
+- hideNativeCaptionButtons: true
   $name: Hide duplicate Windows buttons
-  $description: "Optional workaround: removes the real Windows system-menu style and can affect Alt+Space, taskbar menus, accessibility tools and window managers. Prefer Brave Appearance > Use compact mode. Applies immediately."
+  $description: Hide the extra Windows minimize, maximize and close buttons while keeping Brave’s controls. This removes the Windows system-menu style and can affect Alt+Space, taskbar menus, accessibility tools and window managers. Applies immediately.
 - useOnlineSymbolCache: true
   $name: Use online symbol cache
-  $description: Download small compatibility files from the author-controlled symbol cache. No login, uploads, telemetry or PDB downloads. GitHub sees your IP and requested build URLs. Turn off to use local cached symbols only. Restart Brave after applying changes.
+  $description: Download small compatibility files from the author-controlled symbol cache. GitHub sees your IP and requested build URLs. Restart Brave after applying changes.
+- allowBraveSymbolServerFallback: false
+  $name: Download symbols from Brave as a fallback
+  $description: If the cache cannot resolve symbols, let Windhawk download the full PDB from Brave’s official symbol server. Brave continues after five seconds if symbols are still loading. The Brave Acrylic tray icon tells you when to restart. One tested build downloaded about 1.2 GB and used 6.2 GB on disk.
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
@@ -180,6 +201,7 @@ BOOL Wh_ModInit() {
 #include <array>
 #include <cmath>
 #include <vector>
+#include <chrono>
 
 // Native background roles, MIT, bardelyne.
 // Native ABI: x64 Brave 1.98.60 / Chromium 156. Resolve and validate every
@@ -187,6 +209,7 @@ BOOL Wh_ModInit() {
 
 #include <cstddef>
 #include <string>
+#include <string_view>
 
 namespace BraveBackground {
 struct ClassName {
@@ -201,7 +224,13 @@ using Construct = void *(*)(void *, void *, void *);
 // The native nontrivial unique_ptr parameter is passed indirectly on x64.
 // Only an empty native unique_ptr is supplied; Brave destroys its old object.
 using SetBackground = void (*)(void *, void **);
-enum Area : unsigned { Background = 1, Toolbar = 2, Page = 4, All = Background | Toolbar | Page };
+enum Area : unsigned {
+    Background = 1,
+    Toolbar = 2,
+    Page = 4,
+    AddressBar = 128,
+    All = Background | Toolbar | Page | AddressBar,
+};
 
 struct Context {
     std::atomic<bool> ready{false};
@@ -239,7 +268,10 @@ inline bool IsBackgroundContainer(ClassName name, unsigned areas) {
         {"VerticalTabStripRegionView", Background},
         {"BraveVerticalTabStripRegionView", Background},
         {"VerticalTabStripContainerView", Background},
-        {"BraveVerticalTabStripContainerView", Background}};
+        {"BraveVerticalTabStripContainerView", Background},
+        {"ContentsContainerView", Page},
+        {"MainBackgroundRegionView", Page},
+        {"BraveContentsContainerView", Page}};
     for (const auto &role : roles) {
         const size_t length = std::strlen(role.name);
         if ((areas & role.areas) && length == name.length &&
@@ -289,7 +321,9 @@ static BraveBackground::Context s_background;
 static auto &s_transparencyReady = s_background.ready;
 static std::atomic<unsigned> s_availableAreas{BraveBackground::All};
 static std::atomic<unsigned> s_requestedUi{8 | 16 | 32};
+static std::atomic<unsigned> s_popupOpacity{62};
 static std::atomic<bool> s_chromeAttempted{false}, s_useOnlineSymbolCache{true};
+static std::atomic<bool> s_allowBraveSymbolServerFallback{false};
 static SRWLOCK s_initLock = SRWLOCK_INIT;
 static bool s_stopping = false, s_activateAfterInit = false, s_isBrowserProcess = false;
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
@@ -328,6 +362,52 @@ static bool ClearPageFallback() {
     return s_pageBackgroundScope && s_transparencyReady.load(std::memory_order_acquire) &&
            (s_background.areas.load(std::memory_order_relaxed) & BraveBackground::Page);
 }
+// Brave retains the outline stroke, rounded clip and layout insets.
+namespace RoundedContents {
+using BorderPaint = void (*)(void *, void *);
+using PathPaint = void (*)(void *, const void *, const void *, int);
+static BorderPaint originalBorder = nullptr;
+static PathPaint originalPath = nullptr;
+static std::atomic<bool> available{false};
+static thread_local bool clearBackingFill = false;
+static bool Target(void *view) {
+    if (!view || !available.load(std::memory_order_relaxed) ||
+        !s_transparencyReady.load(std::memory_order_acquire) ||
+        !(s_background.areas.load(std::memory_order_relaxed) & BraveBackground::Page))
+        return false;
+    BraveBackground::ClassName name{};
+    s_background.getClass(view, &name);
+    constexpr std::string_view role = "BraveContentsContainerView";
+    return name.data && name.length == role.size() &&
+           !memcmp(name.data, role.data(), role.size());
+}
+static void BorderHook(void *view, void *canvas) {
+    const bool previous = clearBackingFill;
+    clearBackingFill = canvas && Target(view);
+    originalBorder(view, canvas);
+    clearBackingFill = previous;
+}
+static bool IsBackingFill(const void *flags) {
+    if (!flags)
+        return false;
+    // Chromium x64 CorePaintFlags stores its packed paint options after
+    // SkColor4f, stroke_width and miter_limit. Brave's rounded outline painter
+    // uses kSrc. Match only its fill style, regardless of path draw order.
+    constexpr size_t kPaintOptionsOffset = 24;
+    constexpr uint32_t kStyleMask = 0xC0, kBlendModeMask = 0x1F00, kSourceBlend = 0x100;
+    uint32_t options = 0;
+    memcpy(&options, static_cast<const unsigned char *>(flags) + kPaintOptionsOffset,
+           sizeof(options));
+    return (options & (kStyleMask | kBlendModeMask)) == kSourceBlend;
+}
+static void PathHook(void *canvas, const void *path, const void *flags, int cache) {
+    if (clearBackingFill && IsBackingFill(flags)) {
+        clearBackingFill = false;
+        return;
+    }
+    originalPath(canvas, path, flags, cache);
+}
+} // namespace RoundedContents
 static void PageThemeHook(void *self) {
     PageScope scope;
     s_originalTheme(self);
@@ -352,9 +432,13 @@ static void AttachContentsHook(void *self, void *contents) {
     // No retained objects, member offsets, reloads or selection polling.
     s_originalAttachContents(self, contents);
 }
+static bool AddressBarActive() {
+    return s_transparencyReady.load(std::memory_order_acquire) &&
+           (s_background.areas.load(std::memory_order_relaxed) & BraveBackground::AddressBar);
+}
+
 static bool AddressShouldClear(void *view) {
-    if (!view || !s_transparencyReady.load(std::memory_order_acquire) ||
-        !(s_background.areas.load(std::memory_order_relaxed) & BraveBackground::Toolbar))
+    if (!view || !AddressBarActive())
         return false;
     BraveBackground::ClassName name{};
     s_background.getClass(view, &name);
@@ -370,13 +454,39 @@ static bool AddressShouldClear(void *view) {
     return !(location ? s_locationFocus(view) : s_viewFocus(view));
 }
 
+// Brave passes this value by const reference and copies it into its shadow
+// cache. Leave the original argument, geometry and native layer lifetime alone.
+struct ShadowParameters {
+    int offsetX;
+    int offsetY;
+    int blurRadius;
+    uint32_t color;
+};
+static_assert(sizeof(ShadowParameters) == 16 && offsetof(ShadowParameters, color) == 12);
+using ConstructShadow = void *(*)(void *, void *, const void *, const ShadowParameters *);
+static ConstructShadow s_originalShadow = nullptr;
+
+static void *ConstructShadowHook(void *self, void *view, const void *corners,
+                                 const ShadowParameters *params) {
+    if (view && params && AddressBarActive()) {
+        BraveBackground::ClassName role{};
+        s_background.getClass(view, &role);
+        if (role.data && std::string_view(role.data, role.length) == "BraveLocationBarView") {
+            auto transparent = *params;
+            transparent.color = 0;
+            return s_originalShadow(self, view, corners, &transparent);
+        }
+    }
+    return s_originalShadow(self, view, corners, params);
+}
+
 static bool HasCompleteTransparencyPath() {
     const unsigned areas = s_availableAreas.load(std::memory_order_acquire);
     return areas && s_background.originalPaint && s_background.clear && s_background.getClass &&
            s_background.originalTransparent &&
            (!(areas & BraveBackground::Background) ||
             (s_background.originalConstruct && s_background.setBackground)) &&
-           (!(areas & BraveBackground::Toolbar) || (s_locationFocus && s_viewFocus)) &&
+           (!(areas & BraveBackground::AddressBar) || (s_locationFocus && s_viewFocus)) &&
            (!(areas & BraveBackground::Page) ||
             (s_originalTheme && s_originalReady && s_originalLayerColor && s_setPageBase &&
              s_originalAttachContents));
@@ -594,6 +704,8 @@ static void LoadModSettings() {
         areas |= BraveBackground::Background;
     if (Wh_GetIntSetting(L"transparentToolbar"))
         areas |= BraveBackground::Toolbar;
+    if (Wh_GetIntSetting(L"transparentAddressBar"))
+        areas |= BraveBackground::AddressBar;
     if (Wh_GetIntSetting(L"transparentPageBackground"))
         areas |= BraveBackground::Page;
     s_background.areas.store(areas & s_availableAreas.load(), std::memory_order_relaxed);
@@ -605,10 +717,14 @@ static void LoadModSettings() {
     if (Wh_GetIntSetting(L"blurSuggestions"))
         ui |= 32;
     s_requestedUi = ui;
+    s_popupOpacity.store(static_cast<unsigned>(std::clamp(Wh_GetIntSetting(L"popupOpacity"), 0, 100)),
+                         std::memory_order_relaxed);
     s_hideNativeCaptionButtons.store(Wh_GetIntSetting(L"hideNativeCaptionButtons") != 0,
                                      std::memory_order_relaxed);
     s_useOnlineSymbolCache.store(Wh_GetIntSetting(L"useOnlineSymbolCache") != 0,
                                  std::memory_order_release);
+    s_allowBraveSymbolServerFallback.store(
+        Wh_GetIntSetting(L"allowBraveSymbolServerFallback") != 0, std::memory_order_release);
 }
 
 struct ReadOnlyImage {
@@ -735,14 +851,17 @@ static bool LeafOutsideUnwind(HMODULE module, size_t rva, size_t length) {
 }
 // Windhawk retains standard named-symbol resolution and its own local cache.
 // The author-hosted cache is trusted; local checks validate address structure.
-// No custom HTTP verifier, retry worker, telemetry, or remote PDB fallback.
+// Windhawk handles the optional official PDB fallback when the cache misses.
 static constexpr wchar_t kOnlineSymbolCache[] =
-    L"https://raw.githubusercontent.com/bardelyne/brave-acrylic/symbol-cache/brave-acrylic-features-v7";
+    L"https://raw.githubusercontent.com/bardelyne/brave-acrylic/symbol-cache/brave-acrylic-features-v9";
+static constexpr wchar_t kBraveSymbolServer[] = L"https://brave-symbols.s3.brave.com";
 
 // <feature-kernel>
-static constexpr unsigned kFeatureSlots = 30;
+static constexpr unsigned kFeatureSlots = 37;
 static constexpr unsigned kVertical = 1, kToolbar = 2, kWebpage = 4, kMenus = 8, kPopups = 16,
-                          kSuggestions = 32;
+                          kSuggestions = 32, kRoundedWebpage = 64,
+                          kAddressBar = BraveBackground::AddressBar;
+static constexpr unsigned kPopupFade = 256, kAddressShadow = 512;
 static unsigned CompleteFeatures(const size_t *entries) {
     const auto all = [&](std::initializer_list<unsigned> slots) {
         for (unsigned i : slots)
@@ -750,23 +869,72 @@ static unsigned CompleteFeatures(const size_t *entries) {
                 return false;
         return true;
     };
-    return (all({0, 1, 2, 3, 4, 5}) ? kVertical : 0) | (all({0, 1, 2, 3, 6, 7}) ? kToolbar : 0) |
+    return (all({0, 1, 2, 3, 4, 5}) ? kVertical : 0) | (all({0, 1, 2, 3}) ? kToolbar : 0) |
            (all({0, 1, 2, 3, 8, 9, 10, 11, 12}) ? kWebpage : 0) |
            (all({13, 14, 15, 17}) ? kMenus : 0) |
            (all({0, 1, 2, 13, 14, 16, 17, 25, 26, 27}) ? kPopups : 0) |
-           (all({5, 13, 14, 18, 19, 20, 21, 22, 23, 24, 28, 29}) ? kSuggestions : 0);
+           (all({5, 13, 14, 18, 19, 20, 21, 22, 23, 24, 28, 29}) ? kSuggestions : 0) |
+           (all({0, 1, 2, 3, 8, 9, 10, 11, 12, 30, 31}) ? kRoundedWebpage : 0) |
+           (all({0, 1, 2, 3, 6, 7}) ? kAddressBar : 0);
 }
-static bool FeatureHelperLeaf(const unsigned char *code, unsigned slot, unsigned *length) {
-    const unsigned char bounds[] = {0x48, 0x89, 0xD0, 0x48, 0xC7, 0x02, 0, 0,
-                                    0,    0,    0x48, 0x8B, 0x89, 0,    0, 0,
-                                    0,    0x48, 0x89, 0x4A, 0x08, 0xC3};
-    if (slot != 22)
-        return false;
-    for (unsigned i = 0; i < sizeof(bounds); ++i)
-        if (!(i >= 13 && i < 17) && code[i] != bounds[i])
+static unsigned CompleteOptionalFeatures(const size_t *entries, unsigned features) {
+    return ((features & kPopups) && entries[32] && entries[33] && entries[34] && entries[35]
+                ? kPopupFade
+                : 0) |
+           ((features & kAddressBar) && entries[36] ? kAddressShadow : 0);
+}
+static bool MatchNativeLayout(const unsigned char *code, const unsigned char *pattern,
+                              unsigned length, std::initializer_list<unsigned> displacements) {
+    unsigned start = 0;
+    for (unsigned offset : displacements) {
+        if (memcmp(code + start, pattern + start, offset - start))
             return false;
-    *length = sizeof(bounds);
-    return true;
+        start = offset + 4;
+    }
+    return !memcmp(code + start, pattern + start, length - start);
+}
+
+static bool FeatureHelperLeaf(const unsigned char *code, unsigned slot, unsigned *length) {
+    const auto match = [&](const auto &pattern, std::initializer_list<unsigned> displacements) {
+        if (!MatchNativeLayout(code, pattern, sizeof(pattern), displacements))
+            return false;
+        *length = sizeof(pattern);
+        return true;
+    };
+    constexpr unsigned char bounds[] = {
+        0x48, 0x89, 0xD0, 0x48, 0xC7, 0x02, 0x00, 0x00, 0x00, 0x00, 0x48, 0x8B,
+        0x89, 0x00, 0x00, 0x00, 0x00, 0x48, 0x89, 0x4A, 0x08, 0xC3,
+    };
+    constexpr unsigned char setter[] = {
+        0x41, 0x89, 0xD0, 0x48, 0x81, 0xC1, 0x00, 0x00, 0x00, 0x00, 0x48, 0x8D,
+        0x15, 0x00, 0x00, 0x00, 0x00, 0xE9, 0x00, 0x00, 0x00, 0x00,
+    };
+    // Both native HWND lookup layouts retain their exact control flow.
+    constexpr unsigned char lookup0[] = {
+        0x48, 0x85, 0xC9, 0x74, 0x19, 0x48, 0x89, 0xC8, 0x48, 0x83, 0xB8, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x75, 0x1B, 0x48, 0x8B, 0x80, 0x00, 0x00, 0x00,
+        0x00, 0x48, 0x85, 0xC0, 0x75, 0xEA, 0x31, 0xC0, 0xC3, 0x48, 0x8B, 0x89,
+        0x00, 0x00, 0x00, 0x00, 0x48, 0x85, 0xC9, 0x74, 0x0C, 0x48, 0x8B, 0x91,
+        0x00, 0x00, 0x00, 0x00, 0x48, 0x85, 0xD2, 0x74, 0xE8, 0x48, 0x8B, 0x02,
+        0x48, 0x8B, 0x40, 0x58, 0x48, 0x89, 0xD1, 0x48, 0xFF, 0x25, 0x00, 0x00,
+        0x00, 0x00,
+    };
+    constexpr unsigned char lookup1[] = {
+        0x48, 0x85, 0xC9, 0x74, 0x44, 0x48, 0x89, 0xC8, 0x48, 0x83, 0xB8, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x75, 0x1A, 0x48, 0x8B, 0x80, 0x00, 0x00, 0x00,
+        0x00, 0x48, 0x85, 0xC0, 0x75, 0xEA, 0xEB, 0x29, 0x48, 0x8B, 0x89, 0x00,
+        0x00, 0x00, 0x00, 0x48, 0x85, 0xC9, 0x74, 0x0C, 0x48, 0x8B, 0x91, 0x00,
+        0x00, 0x00, 0x00, 0x48, 0x85, 0xD2, 0x74, 0xE8, 0x48, 0x8B, 0x02, 0x48,
+        0x8B, 0x40, 0x58, 0x48, 0x89, 0xD1, 0x48, 0xFF, 0x25, 0x00, 0x00, 0x00,
+        0x00, 0x31, 0xC0, 0xC3,
+    };
+    if (slot == 22)
+        return match(bounds, {13});
+    if (slot == 34)
+        return match(setter, {6, 13, 18});
+    if (slot == 33)
+        return match(lookup0, {11, 21, 36, 48, 70}) || match(lookup1, {11, 21, 35, 47, 69});
+    return false;
 }
 static bool ValidateFeatureAddresses(HMODULE module, void *const *addresses, size_t *result) {
     ReadOnlyImage image{};
@@ -780,7 +948,8 @@ static bool ValidateFeatureAddresses(HMODULE module, void *const *addresses, siz
                 return false;
             text = &image.sections[i];
         }
-    if (!text)
+    if (!text || text->VirtualAddress > image.size ||
+        text->Misc.VirtualSize > image.size - text->VirtualAddress)
         return false;
     const auto inText = [&](size_t start, size_t length) {
         return start >= text->VirtualAddress &&
@@ -789,17 +958,12 @@ static bool ValidateFeatureAddresses(HMODULE module, void *const *addresses, siz
     };
     struct Span {
         size_t start, length;
+        unsigned slot;
     };
     std::vector<Span> spans;
     std::array<size_t, kFeatureSlots> normalized{};
-    for (unsigned i = 0; i < kFeatureSlots; ++i) {
-        if (!addresses[i])
-            continue;
-        const auto pointer = reinterpret_cast<uintptr_t>(addresses[i]),
-                   base = reinterpret_cast<uintptr_t>(module);
-        if (pointer < base || pointer - base >= image.size)
-            return false;
-        const size_t entry = pointer - base;
+    const auto base = reinterpret_cast<uintptr_t>(module);
+    const auto validate = [&](unsigned i, size_t entry) -> size_t {
         if (i == 24) {
             bool immutable = false;
             for (unsigned n = 0; n < image.count; ++n) {
@@ -811,19 +975,19 @@ static bool ValidateFeatureAddresses(HMODULE module, void *const *addresses, siz
                     16 <= section.Misc.VirtualSize - (entry - section.VirtualAddress))
                     immutable = true;
             }
-            if (!immutable || !image.Contains(entry, 16))
-                return false;
+            if (!immutable || entry % alignof(uintptr_t) || !image.Contains(entry, 16))
+                return 0;
             for (unsigned p = 0; p < 16; p += 8) {
                 uintptr_t method = 0;
                 memcpy(&method, image.base + entry + p, 8);
                 if (method < base || !inText(method - base, 1))
-                    return false;
+                    return 0;
             }
-            normalized[i] = entry;
-            continue;
+            spans.push_back({entry, 16, i});
+            return entry;
         }
         if (!inText(entry, 32))
-            return false;
+            return 0;
         size_t target = entry;
         bool thunk = false;
         if (!FunctionContains(module, entry, 1) && image.base[entry] == 0xE9) {
@@ -832,12 +996,12 @@ static bool ValidateFeatureAddresses(HMODULE module, void *const *addresses, siz
             const int64_t destination = int64_t(entry) + 5 + delta;
             if (destination < 0 || uint64_t(destination) >= image.size ||
                 !LeafOutsideUnwind(module, entry, 5))
-                return false;
+                return 0;
             target = static_cast<size_t>(destination);
             thunk = true;
         }
         if (!inText(target, 32))
-            return false;
+            return 0;
         unsigned length = 32;
         if (!FunctionContains(module, target, 32)) {
             if (i == 3) {
@@ -845,158 +1009,153 @@ static bool ValidateFeatureAddresses(HMODULE module, void *const *addresses, siz
                                     last[] = {0, 0x74, 3, 0x31, 0xC0, 0xC3};
                 if (memcmp(image.base + target, first, 3) ||
                     memcmp(image.base + target + 7, last, 6))
-                    return false;
+                    return 0;
                 length = 13;
             } else if (i == 6 && FocusLeafLayout(image.base + target)) {
-            } else if (!inText(target, 32) || !FeatureHelperLeaf(image.base + target, i, &length))
-                return false;
+            } else if (!inText(target, i == 33 ? 80 : 32) ||
+                       !FeatureHelperLeaf(image.base + target, i, &length))
+                return 0;
             if (!LeafOutsideUnwind(module, target, length))
-                return false;
+                return 0;
+            if (i == 34) {
+                int delta = 0;
+                memcpy(&delta, image.base + target + 18, sizeof(delta));
+                const int64_t destination = int64_t(target) + 22 + delta;
+                if (destination < 0 || !inText(destination, 1) ||
+                    !FunctionContains(module, destination, 1))
+                    return 0;
+            }
         }
-        const auto add = [&](size_t start, size_t count) {
-            for (const auto &span : spans)
-                if (start < span.start + span.length && span.start < start + count)
-                    return false;
-            spans.push_back({start, count});
-            return true;
-        };
-        if (thunk && !add(entry, 5))
-            return false;
-        if (!add(target, length))
-            return false;
-        normalized[i] = target;
+        if (thunk)
+            spans.push_back({entry, 5, i});
+        spans.push_back({target, length, i});
+        return target;
+    };
+    for (unsigned i = 0; i < kFeatureSlots; ++i) {
+        const auto pointer = reinterpret_cast<uintptr_t>(addresses[i]);
+        if (pointer >= base && pointer - base < image.size)
+            normalized[i] = validate(i, pointer - base);
+    }
+    // Reject both roles if they resolve to overlapping code or data. Other
+    // independently validated roles can still provide their features.
+    for (size_t i = 0; i < spans.size(); ++i) {
+        const auto &a = spans[i];
+        for (size_t j = i + 1; j < spans.size(); ++j) {
+            const auto &b = spans[j];
+            if (a.start < b.start + b.length && b.start < a.start + a.length)
+                normalized[a.slot] = normalized[b.slot] = 0;
+        }
     }
     std::copy(normalized.begin(), normalized.end(), result);
     return true;
 }
-static bool ResolveFeatureAddresses(HMODULE module, size_t *result) {
+struct FeatureSymbol {
+    std::wstring_view undecorated;
+    std::wstring_view decorated;
+    std::wstring_view alternate{};
+};
+static constexpr FeatureSymbol kFeatureSymbols[] = {
+    {L"protected: virtual void __cdecl views::View::OnPaintBackground(class gfx::Canvas *)",
+     LR"(?OnPaintBackground@View@views@@MEAAXPEAVCanvas@gfx@@@Z)"},
+    {L"public: void __cdecl gfx::Canvas::DrawColor(unsigned int,enum SkBlendMode)",
+     LR"(?DrawColor@Canvas@gfx@@QEAAXIW4SkBlendMode@@@Z)"},
+    {L"public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits<char> > __cdecl views::View::GetClassNameW(void)const",
+     LR"(?GetClassNameW@View@views@@QEBA?AV?$basic_string_view@DU?$char_traits@D@__Cr@std@@@__Cr@std@@XZ)"},
+    {L"private: virtual bool __cdecl BrowserDesktopWindowTreeHostWin_ChromiumImpl::ShouldWindowContentsBeTransparent(void)const",
+     LR"(?ShouldWindowContentsBeTransparent@BrowserDesktopWindowTreeHostWin_ChromiumImpl@@EEBA_NXZ)"},
+    {L"public: __cdecl BraveVerticalTabStripContainerView::BraveVerticalTabStripContainerView(class BrowserView *,class views::View *)",
+     LR"(??0BraveVerticalTabStripContainerView@@QEAA@PEAVBrowserView@@PEAVView@views@@@Z)"},
+    {L"public: void __cdecl views::View::SetBackground(class std::__Cr::unique_ptr<class views::Background,struct std::__Cr::default_delete<class views::Background> >)",
+     LR"(?SetBackground@View@views@@QEAAXV?$unique_ptr@VBackground@views@@U?$default_delete@VBackground@views@@@__Cr@std@@@__Cr@std@@@Z)"},
+    {L"public: virtual bool __cdecl LocationBarView::HasFocus(void)const",
+     LR"(?HasFocus@LocationBarView@@UEBA_NXZ)"},
+    {L"public: virtual bool __cdecl views::View::HasFocus(void)const",
+     LR"(?HasFocus@View@views@@UEBA_NXZ)"},
+    {L"public: virtual void __cdecl ContentsWebView::OnThemeChanged(void)",
+     LR"(?OnThemeChanged@ContentsWebView@@UEAAXXZ)"},
+    {L"public: virtual void __cdecl ContentsWebView::RenderViewReady(void)",
+     LR"(?RenderViewReady@ContentsWebView@@UEAAXXZ)"},
+    {L"public: virtual void __cdecl ui::LayerAnimator::SetColor(struct SkRGBA4f<3>)",
+     LR"(?SetColor@LayerAnimator@ui@@UEAAXU?$SkRGBA4f@$02@@@Z)"},
+    {L"public: virtual void __cdecl content::WebContentsImpl::SetPageBaseBackgroundColor(class std::__Cr::optional<unsigned int>)",
+     LR"(?SetPageBaseBackgroundColor@WebContentsImpl@content@@UEAAXV?$optional@I@__Cr@std@@@Z)"},
+    {L"public: virtual void __cdecl ContentsWebView::SetWebContents(class content::WebContents *)",
+     LR"(?SetWebContents@ContentsWebView@@UEAAXPEAVWebContents@content@@@Z)"},
+    {L"struct HWND__ * __cdecl views::HWNDForView(class views::View const *)",
+     LR"(?HWNDForView@views@@YAPEAUHWND__@@PEBVView@1@@Z)"},
+    {L"public: unsigned int __cdecl ui::ColorProvider::GetColor(int)const",
+     LR"(?GetColor@ColorProvider@ui@@QEBAIH@Z)"},
+    {L"public: virtual void __cdecl views::MenuScrollViewContainer::OnPaintBackground(class gfx::Canvas *)",
+     LR"(?OnPaintBackground@MenuScrollViewContainer@views@@UEAAXPEAVCanvas@gfx@@@Z)"},
+    {L"public: virtual void __cdecl views::BubbleBackground::Paint(class gfx::Canvas *,class views::View *)const",
+     LR"(?Paint@BubbleBackground@views@@UEBAXPEAVCanvas@gfx@@PEAVView@2@@Z)"},
+    {L"public: virtual void __cdecl cc::RecordPaintCanvas::drawRRect(class SkRRect const &,class cc::PaintFlags const &)",
+     LR"(?drawRRect@RecordPaintCanvas@cc@@UEAAXAEBVSkRRect@@AEBVPaintFlags@2@@Z)"},
+    {L"public: __cdecl RoundedOmniboxResultsFrame::RoundedOmniboxResultsFrame(class views::View *,class LocationBar *,bool)",
+     LR"(??0RoundedOmniboxResultsFrame@@QEAA@PEAVView@views@@PEAVLocationBar@@_N@Z)"},
+    {L"public: virtual __cdecl RoundedOmniboxResultsFrame::~RoundedOmniboxResultsFrame(void)",
+     LR"(??1RoundedOmniboxResultsFrame@@UEAA@XZ)"},
+    {L"private: virtual void __cdecl ui::Layer::SetRoundedCornersFromAnimation(class gfx::RoundedCornersF const &,enum ui::PropertyChangeReason)",
+     LR"(?SetRoundedCornersFromAnimation@Layer@ui@@EEAAXAEBVRoundedCornersF@gfx@@W4PropertyChangeReason@2@@Z)"},
+    {L"public: virtual void __cdecl views::SolidBackground::Paint(class gfx::Canvas *,class views::View *)const",
+     LR"(?Paint@SolidBackground@views@@UEBAXPEAVCanvas@gfx@@PEAVView@2@@Z)"},
+    {L"public: class gfx::Rect __cdecl views::View::GetLocalBounds(void)const",
+     LR"(?GetLocalBounds@View@views@@QEBA?AVRect@gfx@@XZ)"},
+    {L"public: static int __cdecl RoundedOmniboxResultsFrame::GetNonResultSectionHeight(bool)",
+     LR"(?GetNonResultSectionHeight@RoundedOmniboxResultsFrame@@SAH_N@Z)"},
+    {L"const views::SolidBackground::`vftable'",
+     LR"(??_7SolidBackground@views@@6B@)"},
+    {L"public: virtual void __cdecl views::BubbleFrameView::OnThemeChanged(void)",
+     LR"(?OnThemeChanged@BubbleFrameView@views@@UEAAXXZ)"},
+    {L"public: void __cdecl ui::Layer::SetFillsBoundsOpaquely(bool)",
+     LR"(?SetFillsBoundsOpaquely@Layer@ui@@QEAAX_N@Z)",
+     LR"(?SetFillsBoundsOpaquely@Layer@ui@@UEAAX_N@Z)"},
+    {L"public: virtual void __cdecl FadeLabel::OnPaintBackground(class gfx::Canvas *)",
+     LR"(?OnPaintBackground@FadeLabel@@UEAAXPEAVCanvas@gfx@@@Z)"},
+    {L"public: class gfx::Rect __cdecl views::View::GetBoundsInScreen(void)const",
+     LR"(?GetBoundsInScreen@View@views@@QEBA?AVRect@gfx@@XZ)"},
+    {L"public: static void __cdecl RoundedOmniboxResultsFrame::OnBeforeWidgetInit(struct views::Widget::InitParams *,class views::Widget *)",
+     LR"(?OnBeforeWidgetInit@RoundedOmniboxResultsFrame@@SAXPEAUInitParams@Widget@views@@PEAV34@@Z)"},
+    {L"protected: virtual void __cdecl views::View::OnPaintBorder(class gfx::Canvas *)",
+     LR"(?OnPaintBorder@View@views@@MEAAXPEAVCanvas@gfx@@@Z)"},
+    {L"public: virtual void __cdecl cc::RecordPaintCanvas::drawPath(class SkPath const &,class cc::PaintFlags const &,enum cc::UsePaintCache)",
+     LR"(?drawPath@RecordPaintCanvas@cc@@UEAAXAEBVSkPath@@AEBVPaintFlags@2@W4UsePaintCache@2@@Z)"},
+    {L"bool __cdecl wm::AnimateOnChildWindowVisibilityChanged(class aura::Window *,bool)",
+     LR"(?AnimateOnChildWindowVisibilityChanged@wm@@YA_NPEAVWindow@aura@@_N@Z)"},
+    {L"struct HWND__ * __cdecl views::HWNDForNativeWindow(class aura::Window *const)",
+     LR"(?HWNDForNativeWindow@views@@YAPEAUHWND__@@QEAVWindow@aura@@@Z)"},
+    {L"void __cdecl wm::SetWindowVisibilityAnimationType(class aura::Window *,int)",
+     LR"(?SetWindowVisibilityAnimationType@wm@@YAXPEAVWindow@aura@@H@Z)"},
+    {L"void __cdecl wm::SetWindowVisibilityAnimationDuration(class aura::Window *,class base::TimeDelta const &)",
+     LR"(?SetWindowVisibilityAnimationDuration@wm@@YAXPEAVWindow@aura@@AEBVTimeDelta@base@@@Z)"},
+    {L"public: __cdecl ViewShadow::ViewShadow(class views::View *,class gfx::RoundedCornersF const &,struct ViewShadow::ShadowParameters const &)",
+     LR"(??0ViewShadow@@QEAA@PEAVView@views@@AEBVRoundedCornersF@gfx@@AEBUShadowParameters@0@@Z)"},
+};
+static_assert(ARRAYSIZE(kFeatureSymbols) == kFeatureSlots);
+
+static bool ResolveFeatureAddresses(HMODULE module, size_t *result, bool useOnlineCache,
+                                    bool allowFallback) {
     void *addresses[kFeatureSlots]{};
-    // chrome.dll
-    WindhawkUtils::SYMBOL_HOOK chromeHooks[] = {
-        {{L"protected: virtual void __cdecl views::View::OnPaintBackground(class gfx::Canvas *)"},
-         &addresses[0],
-         nullptr,
-         true},
-        {{L"public: void __cdecl gfx::Canvas::DrawColor(unsigned int,enum SkBlendMode)"},
-         &addresses[1],
-         nullptr,
-         true},
-        {{L"public: class std::__Cr::basic_string_view<char,struct std::__Cr::char_traits<char> > __cdecl views::View::GetClassNameW(void)const"},
-         &addresses[2],
-         nullptr,
-         true},
-        {{L"private: virtual bool __cdecl BrowserDesktopWindowTreeHostWin_ChromiumImpl::ShouldWindowContentsBeTransparent(void)const"},
-         &addresses[3],
-         nullptr,
-         true},
-        {{L"public: __cdecl BraveVerticalTabStripContainerView::BraveVerticalTabStripContainerView(class BrowserView *,class views::View *)"},
-         &addresses[4],
-         nullptr,
-         true},
-        {{L"public: void __cdecl views::View::SetBackground(class std::__Cr::unique_ptr<class views::Background,struct std::__Cr::default_delete<class views::Background> >)"},
-         &addresses[5],
-         nullptr,
-         true},
-        {{L"public: virtual bool __cdecl LocationBarView::HasFocus(void)const"},
-         &addresses[6],
-         nullptr,
-         true},
-        {{L"public: virtual bool __cdecl views::View::HasFocus(void)const"},
-         &addresses[7],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl ContentsWebView::OnThemeChanged(void)"},
-         &addresses[8],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl ContentsWebView::RenderViewReady(void)"},
-         &addresses[9],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl ui::LayerAnimator::SetColor(struct SkRGBA4f<3>)"},
-         &addresses[10],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl content::WebContentsImpl::SetPageBaseBackgroundColor(class std::__Cr::optional<unsigned int>)"},
-         &addresses[11],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl ContentsWebView::SetWebContents(class content::WebContents *)"},
-         &addresses[12],
-         nullptr,
-         true},
-        {{L"struct HWND__ * __cdecl views::HWNDForView(class views::View const *)"},
-         &addresses[13],
-         nullptr,
-         true},
-        {{L"public: unsigned int __cdecl ui::ColorProvider::GetColor(int)const"},
-         &addresses[14],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl views::MenuScrollViewContainer::OnPaintBackground(class gfx::Canvas *)"},
-         &addresses[15],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl views::BubbleBackground::Paint(class gfx::Canvas *,class views::View *)const"},
-         &addresses[16],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl cc::RecordPaintCanvas::drawRRect(class SkRRect const &,class cc::PaintFlags const &)"},
-         &addresses[17],
-         nullptr,
-         true},
-        {{L"public: __cdecl RoundedOmniboxResultsFrame::RoundedOmniboxResultsFrame(class views::View *,class LocationBar *,bool)"},
-         &addresses[18],
-         nullptr,
-         true},
-        {{L"public: virtual __cdecl RoundedOmniboxResultsFrame::~RoundedOmniboxResultsFrame(void)"},
-         &addresses[19],
-         nullptr,
-         true},
-        {{L"private: virtual void __cdecl ui::Layer::SetRoundedCornersFromAnimation(class gfx::RoundedCornersF const &,enum ui::PropertyChangeReason)"},
-         &addresses[20],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl views::SolidBackground::Paint(class gfx::Canvas *,class views::View *)const"},
-         &addresses[21],
-         nullptr,
-         true},
-        {{L"public: class gfx::Rect __cdecl views::View::GetLocalBounds(void)const"},
-         &addresses[22],
-         nullptr,
-         true},
-        {{L"public: static int __cdecl RoundedOmniboxResultsFrame::GetNonResultSectionHeight(bool)"},
-         &addresses[23],
-         nullptr,
-         true},
-        {{L"const views::SolidBackground::`vftable'"}, &addresses[24], nullptr, true},
-        {{L"public: virtual void __cdecl views::BubbleFrameView::OnThemeChanged(void)"},
-         &addresses[25],
-         nullptr,
-         true},
-        {{L"public: void __cdecl ui::Layer::SetFillsBoundsOpaquely(bool)"},
-         &addresses[26],
-         nullptr,
-         true},
-        {{L"public: virtual void __cdecl FadeLabel::OnPaintBackground(class gfx::Canvas *)"},
-         &addresses[27],
-         nullptr,
-         true},
-        {{L"public: class gfx::Rect __cdecl views::View::GetBoundsInScreen(void)const"},
-         &addresses[28],
-         nullptr,
-         true},
-        {{L"public: static void __cdecl RoundedOmniboxResultsFrame::OnBeforeWidgetInit(struct views::Widget::InitParams *,class views::Widget *)"},
-         &addresses[29],
-         nullptr,
-         true},
-    };
-    static_assert(ARRAYSIZE(chromeHooks) == kFeatureSlots);
+    WindhawkUtils::SYMBOL_HOOK hooks[kFeatureSlots];
+    for (unsigned i = 0; i < kFeatureSlots; ++i) {
+        const auto &name = kFeatureSymbols[i];
+        if (!allowFallback) {
+            hooks[i] = {{name.undecorated}, &addresses[i], nullptr, true};
+        } else if (name.alternate.empty()) {
+            hooks[i] = {{name.undecorated, name.decorated}, &addresses[i], nullptr, true};
+        } else {
+            hooks[i] = {{name.undecorated, name.decorated, name.alternate},
+                        &addresses[i], nullptr, true};
+        }
+    }
+
+    // Keep the small cache names and avoid undecorating the full PDB.
     WH_HOOK_SYMBOLS_OPTIONS options{};
     options.optionsSize = sizeof(options);
-    options.symbolServer = L"";
-    options.onlineCacheUrl = s_useOnlineSymbolCache.load() ? kOnlineSymbolCache : L"";
-    if (!WindhawkUtils::HookSymbols(module, chromeHooks, ARRAYSIZE(chromeHooks), &options))
+    options.symbolServer = allowFallback ? kBraveSymbolServer : L"";
+    options.onlineCacheUrl = useOnlineCache ? kOnlineSymbolCache : L"";
+    options.noUndecoratedSymbols = allowFallback;
+    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks), &options))
         return false;
     return ValidateFeatureAddresses(module, addresses, result);
 }
@@ -1067,6 +1226,69 @@ static bool PopupWindow(HWND hwnd) {
     return GetClassNameW(hwnd, name, ARRAYSIZE(name)) &&
            (!wcscmp(name, L"Chrome_WidgetWin_0") || !wcscmp(name, L"Chrome_WidgetWin_1"));
 }
+// Bubble contents and their Windows backdrop use a short fade, without scale.
+// Menus do not receive this marker or animation policy.
+namespace PopupTransition {
+using Animate = bool (*)(void *, bool);
+using WindowForNative = HWND (*)(void *);
+using SetType = void (*)(void *, int);
+using SetDuration = void (*)(void *, const long long &);
+static constexpr unsigned kFadeMs = 160;
+static SetType setType = nullptr;
+static SetDuration setDuration = nullptr;
+static bool CanFade();
+static unsigned long long Begin(HWND hwnd, bool visible);
+static void Immediate(HWND hwnd, unsigned long long serial);
+static Animate original = nullptr;
+static WindowForNative windowForNative = nullptr;
+static SRWLOCK lock = SRWLOCK_INIT;
+static std::vector<HWND> windows;
+static bool stopped = false;
+static constexpr wchar_t kProperty[] = L"BraveAcrylic.PopupFade.4.0";
+static HANDLE Owner() { return reinterpret_cast<HANDLE>(&lock); }
+static void Mark(HWND hwnd) {
+    if (!original || !PopupWindow(hwnd) || !Active(Popups) || !UserAllowsTransparency())
+        return;
+    AcquireSRWLockExclusive(&lock);
+    if (!stopped && Active(Popups) && CanFade() && !GetPropW(hwnd, kProperty) &&
+        SetPropW(hwnd, kProperty, Owner()))
+        windows.push_back(hwnd);
+    ReleaseSRWLockExclusive(&lock);
+}
+static void Forget(HWND hwnd) {
+    AcquireSRWLockExclusive(&lock);
+    windows.erase(std::remove(windows.begin(), windows.end(), hwnd), windows.end());
+    ReleaseSRWLockExclusive(&lock);
+}
+static bool AnimateHook(void *window, bool visible) {
+    if (Active(Popups) && UserAllowsTransparency()) {
+        const HWND hwnd = windowForNative(window);
+        if (PopupWindow(hwnd) && GetPropW(hwnd, kProperty) == Owner()) {
+            const auto serial = Begin(hwnd, visible);
+            if (!serial)
+                return original(window, visible);
+            // Chromium's FADE type; transient native properties, not saved preferences.
+            setType(window, 3);
+            const long long duration = kFadeMs * 1000ll; // base::TimeDelta microseconds
+            setDuration(window, duration);
+            const bool animated = original(window, visible);
+            if (!animated)
+                Immediate(hwnd, serial);
+            return animated;
+        }
+    }
+    return original(window, visible);
+}
+static void Clear(bool stop) {
+    AcquireSRWLockExclusive(&lock);
+    stopped |= stop;
+    for (HWND hwnd : windows)
+        if (GetPropW(hwnd, kProperty) == Owner())
+            RemovePropW(hwnd, kProperty);
+    windows.clear();
+    ReleaseSRWLockExclusive(&lock);
+}
+} // namespace PopupTransition
 struct Scope {
     bool enabled;
     HWND previous;
@@ -1082,7 +1304,8 @@ struct Scope {
     }
 };
 static unsigned Tint(unsigned color, bool scoped) {
-    return !scoped ? color : (color & 0x00ffffffu) | ((((color >> 24) * 62u + 50u) / 100u) << 24);
+    return !scoped ? color : (color & 0x00ffffffu) |
+        ((((color >> 24) * s_popupOpacity.load(std::memory_order_relaxed) + 50u) / 100u) << 24);
 }
 
 static thread_local unsigned popupTint = 0;
@@ -1100,16 +1323,30 @@ struct Shape {
 static bool Equal(const Shape &a, const Shape &b) {
     return !memcmp(&a, &b, sizeof(Shape));
 }
+struct Fade {
+    unsigned long long serial = 0;
+    ULONGLONG start = 0;
+    float from = 1, to = 1;
+    unsigned duration = 0;
+};
+static float FadeValue(const Fade &fade, ULONGLONG now) {
+    const float t = fade.duration ? std::min(1.f, static_cast<float>(now - fade.start) / fade.duration) : 1;
+    return fade.from + (fade.to - fade.from) * t;
+}
 struct Request {
     Shape shape{};
+    Fade fade{};
     bool valid = false, applied = false, pending = false;
     unsigned feature = 0;
     bool hoverCard = false;
     unsigned tint = 0;
     bool extensionsMenu = false;
+    bool pageInfo = false, downloads = false, media = false;
 };
 struct State {
     composition::Desktop::DesktopWindowTarget target{nullptr};
+    composition::ContainerVisual root{nullptr};
+    unsigned long long fadeSerial = 0;
     composition::SpriteVisual sprite{nullptr}, shade{nullptr};
     composition::CompositionColorBrush shadeBrush{nullptr};
     composition::CompositionRoundedRectangleGeometry geometry{nullptr};
@@ -1123,7 +1360,15 @@ static std::unordered_map<HWND, Request> requests;
 static HANDLE thread = nullptr, startEvent = nullptr;
 static DWORD threadId = 0;
 static std::atomic<bool> stopping{false};
+static bool workerReady = false, workerFinished = false; // protected by lock
 static constexpr UINT kUpdate = WM_APP + 0x137, kStop = WM_APP + 0x138, kRecheck = WM_APP + 0x139;
+static bool CanQueueLocked() {
+    return !stopping.load() && thread && !workerFinished;
+}
+static void NotifyLocked() {
+    if (workerReady)
+        PostThreadMessageW(threadId, kUpdate, 0, 0);
+}
 static constexpr wchar_t kSettingsClass[] = L"Windhawk.BraveAcrylic.TransparencySettings";
 static LRESULT CALLBACK SettingsWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     if ((message == WM_SETTINGCHANGE || message == WM_THEMECHANGED) &&
@@ -1159,6 +1404,7 @@ static void CALLBACK WindowEvent(HWINEVENTHOOK, DWORD, HWND hwnd, LONG object, L
     if (object != OBJID_WINDOW || child != CHILDID_SELF || IsWindow(hwnd))
         return;
     Destroy(hwnd);
+    PopupTransition::Forget(hwnd);
     AcquireSRWLockExclusive(&lock);
     requests.erase(hwnd);
     ReleaseSRWLockExclusive(&lock);
@@ -1213,6 +1459,9 @@ static DWORD WINAPI Run(void *) {
         if (!settingsWindow)
             throw winrt::hresult_error(HRESULT_FROM_WIN32(GetLastError()));
         RefreshTransparencyAllowed();
+        AcquireSRWLockExclusive(&lock);
+        workerReady = true;
+        ReleaseSRWLockExclusive(&lock);
         SetEvent(startEvent);
         PostThreadMessageW(GetCurrentThreadId(), kUpdate, 0, 0);
         MSG message{};
@@ -1267,22 +1516,38 @@ static DWORD WINAPI Run(void *) {
                                             interop.put_void()));
                                 winrt::check_hresult(interop->CreateDesktopWindowTarget(
                                     hwnd, FALSE, winrt::put_abi(state.target)));
-                                auto root = compositor.CreateContainerVisual();
+                                state.root = compositor.CreateContainerVisual();
                                 state.sprite = compositor.CreateSpriteVisual();
                                 state.geometry = compositor.CreateRoundedRectangleGeometry();
                                 state.sprite.Brush(compositor.CreateHostBackdropBrush());
                                 state.sprite.Clip(compositor.CreateGeometricClip(state.geometry));
-                                root.Children().InsertAtBottom(state.sprite);
+                                state.root.Children().InsertAtBottom(state.sprite);
                                 state.shade = compositor.CreateSpriteVisual();
                                 state.shade.Clip(compositor.CreateGeometricClip(state.geometry));
                                 state.shadeBrush = compositor.CreateColorBrush();
                                 state.shade.Brush(state.shadeBrush);
-                                root.Children().InsertAtTop(state.shade);
-                                state.target.Root(root);
+                                state.root.Children().InsertAtTop(state.shade);
+                                state.target.Root(state.root);
                                 found = slot;
                             }
                             auto &state = found->second;
                             const auto &shape = request.shape;
+                            if (request.feature == Popups && request.fade.serial != state.fadeSerial) {
+                                const auto &fade = request.fade;
+                                const ULONGLONG now = GetTickCount64();
+                                const auto elapsed = now - fade.start;
+                                state.root.StopAnimation(L"Opacity");
+                                state.root.Opacity(fade.to);
+                                if (fade.duration && elapsed < fade.duration) {
+                                    auto animation = compositor.CreateScalarKeyFrameAnimation();
+                                    auto linear = compositor.CreateLinearEasingFunction();
+                                    animation.InsertKeyFrame(0, FadeValue(fade, now), linear);
+                                    animation.InsertKeyFrame(1, fade.to, linear);
+                                    animation.Duration(std::chrono::milliseconds(fade.duration - elapsed));
+                                    state.root.StartAnimation(L"Opacity", animation);
+                                }
+                                state.fadeSerial = fade.serial;
+                            }
                             state.sprite.Offset(
                                 {shape.left * shape.scale, shape.top * shape.scale, 0});
                             state.sprite.Size(
@@ -1329,6 +1594,12 @@ static DWORD WINAPI Run(void *) {
     } catch (...) {
         Wh_Log(L"Popup compositor unavailable");
     }
+    AcquireSRWLockExclusive(&lock);
+    workerReady = false;
+    workerFinished = true;
+    requests.clear();
+    ReleaseSRWLockExclusive(&lock);
+    PopupTransition::Clear(false);
     SetEvent(startEvent);
     if (events)
         UnhookWinEvent(events);
@@ -1383,14 +1654,13 @@ static bool Start() {
             startEvent = nullptr;
         }
     }
-    const bool started = thread != nullptr;
+    const bool started = CanQueueLocked();
     ReleaseSRWLockExclusive(&lock);
     return started;
 }
-static bool Applied(HWND hwnd) {
+static bool CanFade() {
     AcquireSRWLockShared(&lock);
-    const auto found = requests.find(hwnd);
-    const bool result = found != requests.end() && found->second.applied;
+    const bool result = workerReady && CanQueueLocked();
     ReleaseSRWLockShared(&lock);
     return result;
 }
@@ -1422,11 +1692,8 @@ static void Update(HWND hwnd, const RoundRect &input, unsigned feature) {
         return;
     // Initialization is asynchronous: the first paint stays fully native.
     // No UI thread waits for a compositor or a cross-thread window call.
-    if (WaitForSingleObject(thread, 0) == WAIT_OBJECT_0)
-        return;
-    bool notify = false;
     AcquireSRWLockExclusive(&lock);
-    if (!stopping.load()) {
+    if (CanQueueLocked()) {
         auto &request = requests[hwnd];
         const unsigned tint = feature == Popups && popupTintKnown ? Tint(popupTint, true) : 0;
         if (!request.valid || !Equal(request.shape, shape) || request.feature != feature ||
@@ -1436,25 +1703,48 @@ static void Update(HWND hwnd, const RoundRect &input, unsigned feature) {
             request.tint = tint;
             request.valid = true;
             request.pending = true;
-            notify = true;
+            NotifyLocked();
         }
     }
     ReleaseSRWLockExclusive(&lock);
-    if (notify && WaitForSingleObject(startEvent, 0) == WAIT_OBJECT_0)
-        PostThreadMessageW(threadId, kUpdate, 0, 0);
+}
+static unsigned long long FadeBegin(HWND hwnd, bool visible) {
+    unsigned long long serial = 0;
+    AcquireSRWLockExclusive(&lock);
+    if (workerReady && CanQueueLocked()) {
+        auto &request = requests[hwnd];
+        const auto now = GetTickCount64();
+        const float from = request.fade.serial ? FadeValue(request.fade, now) : (visible ? 0.f : 1.f);
+        serial = request.fade.serial + 1;
+        request.fade = {serial, now, from, visible ? 1.f : 0.f, PopupTransition::kFadeMs};
+        if (request.valid && !request.pending)
+            NotifyLocked();
+        request.pending = true;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    return serial;
+}
+static void FadeImmediate(HWND hwnd, unsigned long long serial) {
+    AcquireSRWLockExclusive(&lock);
+    const auto found = requests.find(hwnd);
+    if (!stopping.load() && found != requests.end() && found->second.fade.serial == serial) {
+        found->second.fade.duration = 0;
+        ++found->second.fade.serial;
+        if (!found->second.pending)
+            NotifyLocked();
+        found->second.pending = true;
+    }
+    ReleaseSRWLockExclusive(&lock);
 }
 static void Forget(HWND hwnd) {
-    bool notify = false;
     AcquireSRWLockExclusive(&lock);
     const auto found = requests.find(hwnd);
     if (found != requests.end()) {
         found->second.valid = false;
         found->second.pending = true;
-        notify = true;
+        NotifyLocked();
     }
     ReleaseSRWLockExclusive(&lock);
-    if (notify && thread && WaitForSingleObject(startEvent, 0) == WAIT_OBJECT_0)
-        PostThreadMessageW(threadId, kUpdate, 0, 0);
 }
 static void Stop() {
     AcquireSRWLockExclusive(&lock);
@@ -1479,6 +1769,11 @@ static void Stop() {
     ReleaseSRWLockExclusive(&lock);
 }
 } // namespace Material
+namespace PopupTransition {
+static bool CanFade() { return Material::CanFade(); }
+static unsigned long long Begin(HWND hwnd, bool visible) { return Material::FadeBegin(hwnd, visible); }
+static void Immediate(HWND hwnd, unsigned long long serial) { Material::FadeImmediate(hwnd, serial); }
+} // namespace PopupTransition
 static thread_local unsigned paintFeature = 0;
 static void RoundRectHook(void *canvas, const RoundRect &shape, const void *flags) {
     if (backgroundWindow && Active(paintFeature))
@@ -1516,6 +1811,14 @@ static bool SuppressPopupBackground(void *view) {
     const bool hover = cls == "TabHoverCardBubbleView";
     const bool extensions = cls == "ExtensionsMenuView" || cls == "ExtensionsMenuMainPageView" ||
                             cls == "ExtensionsMenuSitePermissionsPageView";
+    const bool pageInfo = cls == "BravePageInfoBubbleView" || cls == "PageInfoBubbleView" ||
+                          cls == "InternalPageInfoBubbleView" || cls == "PageInfoMainView";
+    const bool downloads = cls == "DownloadBubbleContentsView" || cls == "DownloadDialogView" ||
+                           cls == "DownloadBubblePrimaryView" || cls == "DownloadBubblePartialView";
+    const bool media = cls == "MediaDialogView" || cls == "MediaItemUIListView" ||
+                       cls == "MediaItemUIUpdatedView" || cls == "MediaItemUIView";
+    const bool scrollBacking = cls == "ScrollView" || cls == "ScrollView::Viewport";
+    const bool pageSwitcher = cls == "PageSwitcherView";
     // ScrollView paints its own background, then repeats it on its viewport
     // and (with layered scrolling) its contents. These containers are cleared
     // only after this popup identifies itself as the native Extensions menu.
@@ -1523,7 +1826,8 @@ static bool SuppressPopupBackground(void *view) {
     const bool extensionBacking = cls == "ScrollView" || cls == "ScrollView::Viewport" ||
                                   cls == "View" || cls == "BoxLayoutView" ||
                                   cls == "FlexLayoutView" || cls == "SectionContainer";
-    if (!hover && !extensions && !extensionBacking && cls != "DialogClientView" &&
+    if (!hover && !extensions && !pageInfo && !downloads && !media && !pageSwitcher &&
+        !extensionBacking && cls != "DialogClientView" &&
         cls != "FooterView" && cls != "ImageView" && cls != "FadeLabel")
         return false;
     const auto hwnd = NativeUi::Candidate(view, NativeUi::Popups);
@@ -1537,8 +1841,20 @@ static bool SuppressPopupBackground(void *view) {
         found->second.hoverCard = true;
     if (shaped && extensions)
         found->second.extensionsMenu = true;
+    if (shaped && pageInfo)
+        found->second.pageInfo = true;
+    if (shaped && downloads)
+        found->second.downloads = true;
+    if (shaped && media)
+        found->second.media = true;
     const bool clear = shaped && !hover &&
-                       (extensionBacking ? found->second.extensionsMenu
+                       (pageSwitcher ? found->second.pageInfo
+                        : extensionBacking ? (found->second.extensionsMenu ||
+                                              ((cls == "View" || cls == "FlexLayoutView") &&
+                                               found->second.downloads) ||
+                                              (scrollBacking && (found->second.downloads ||
+                                                                 found->second.pageInfo ||
+                                                                 found->second.media)))
                                          : ((cls != "ImageView" && cls != "FadeLabel") ||
                                             found->second.hoverCard));
     ReleaseSRWLockExclusive(&NativeUi::Material::lock);
@@ -1560,6 +1876,7 @@ static void BubbleThemeHook(void *view) {
     const auto hwnd = NativeUi::Candidate(view, NativeUi::Popups);
     const bool previous = bubbleThemeUpdating;
     bubbleThemeUpdating = hwnd != nullptr;
+    PopupTransition::Mark(hwnd);
     originalBubbleTheme(view);
     bubbleThemeUpdating = previous;
 }
@@ -1840,9 +2157,8 @@ static bool Blur(const void *background, void *view) {
                           radius,
                           radius,
                           scale};
-    bool notify = false;
     AcquireSRWLockExclusive(&Material::lock);
-    if (!Material::stopping) {
+    if (Material::CanQueueLocked()) {
         auto &request = Material::requests[hwnd];
         if (!request.valid || !Material::Equal(request.shape, shape) ||
             request.feature != Suggestions) {
@@ -1851,12 +2167,10 @@ static bool Blur(const void *background, void *view) {
             request.tint = 0;
             request.valid = true;
             request.pending = true;
-            notify = true;
+            Material::NotifyLocked();
         }
     }
     ReleaseSRWLockExclusive(&Material::lock);
-    if (notify && WaitForSingleObject(Material::startEvent, 0) == WAIT_OBJECT_0)
-        PostThreadMessageW(Material::threadId, Material::kUpdate, 0, 0);
     AcquireSRWLockExclusive(&lock);
     const auto current = backgrounds.find(background);
     if (current != backgrounds.end()) {
@@ -1888,16 +2202,15 @@ static void Stop() {
 static void Stop() {
     ready = false;
     Omnibox::Stop();
+    PopupTransition::Clear(true);
     Material::Stop();
 }
 } // namespace NativeUi
 // </native-ui>
 
-static bool ResolveNativeBackground(HMODULE module) {
-    size_t rva[kFeatureSlots]{};
-    if (!ResolveFeatureAddresses(module, rva))
-        return false;
+static void InstallNativeBackgroundHooks(HMODULE module, const size_t *rva) {
     unsigned features = CompleteFeatures(rva);
+    const unsigned optional = CompleteOptionalFeatures(rva, features);
     auto *base = reinterpret_cast<unsigned char *>(module);
     const auto address = [&](unsigned i) -> void * { return rva[i] ? base + rva[i] : nullptr; };
     const auto hook = [&]<typename Function>(unsigned slot, Function callback, Function *original) {
@@ -1910,12 +2223,15 @@ static bool ResolveNativeBackground(HMODULE module) {
     s_locationFocus = reinterpret_cast<NativeFocus>(address(6));
     s_viewFocus = reinterpret_cast<NativeFocus>(address(7));
     s_setPageBase = reinterpret_cast<NativeSetPageBase>(address(11));
-    if ((features & (7 | kPopups)) &&
+    constexpr unsigned windowFeatures = BraveBackground::All;
+    if ((features & (windowFeatures | kPopups)) &&
         !hook(0, ViewOnPaintBackground_Hook, &s_background.originalPaint))
-        features &= ~(7 | kPopups);
-    if ((features & 7) &&
+        features &= ~(windowFeatures | kPopups);
+    if ((features & windowFeatures) &&
         !hook(3, WindowContentsTransparent_Hook, &s_background.originalTransparent))
-        features &= ~7u;
+        features &= ~windowFeatures;
+    if ((features & kAddressBar) && (optional & kAddressShadow))
+        hook(36, ConstructShadowHook, &s_originalShadow);
     if ((features & kVertical) &&
         !hook(4, SidebarConstructor_Hook, &s_background.originalConstruct))
         features &= ~kVertical;
@@ -1924,6 +2240,12 @@ static bool ResolveNativeBackground(HMODULE module) {
          !hook(10, PageLayerColorHook, &s_originalLayerColor) ||
          !hook(12, AttachContentsHook, &s_originalAttachContents)))
         features &= ~kWebpage;
+    if (!(features & kWebpage) ||
+        ((features & kRoundedWebpage) &&
+         (!hook(30, RoundedContents::BorderHook, &RoundedContents::originalBorder) ||
+          !hook(31, RoundedContents::PathHook, &RoundedContents::originalPath))))
+        features &= ~kRoundedWebpage;
+    RoundedContents::available = (features & kRoundedWebpage) != 0;
     NativeUi::windowForView = reinterpret_cast<NativeUi::WindowForView>(address(13));
     if ((features & (kMenus | kPopups | kSuggestions)) &&
         !hook(14, NativeUi::ColorHook, &NativeUi::originalColor))
@@ -1939,6 +2261,13 @@ static bool ResolveNativeBackground(HMODULE module) {
          !hook(26, NativeUi::LayerOpaqueHook, &NativeUi::originalLayerOpaque) ||
          !hook(27, NativeUi::FadeBackgroundHook, &NativeUi::originalFadeBackground)))
         features &= ~kPopups;
+    if ((features & kPopups) && (optional & kPopupFade)) {
+        using namespace NativeUi::PopupTransition;
+        windowForNative = reinterpret_cast<WindowForNative>(address(33));
+        setType = reinterpret_cast<SetType>(address(34));
+        setDuration = reinterpret_cast<SetDuration>(address(35));
+        hook(32, AnimateHook, &original);
+    }
     if (features & kSuggestions) {
         using namespace NativeUi::Omnibox;
         getBounds = reinterpret_cast<Bounds>(address(22));
@@ -1959,13 +2288,184 @@ static bool ResolveNativeBackground(HMODULE module) {
     // Brave's UI/loader thread. It receives setting changes even while idle.
     if (features & s_requestedUi.load())
         NativeUi::Material::Start();
-    s_availableAreas = features & 7;
-    s_background.areas.fetch_and(features & 7);
+    s_availableAreas = features & windowFeatures;
+    s_background.areas.fetch_and(features & windowFeatures);
     const wchar_t *labels[] = {L"Vertical tabs", L"Toolbar", L"Webpage background",
-                               L"Menus",         L"Popups",  L"Search suggestions"};
-    for (unsigned i = 0; i < 6; ++i)
+                               L"Menus",         L"Popups",  L"Search suggestions",
+                               L"Rounded webpage backing", L"Address bar"};
+    for (unsigned i = 0; i < ARRAYSIZE(labels); ++i)
         Wh_Log(L"Brave Acrylic %s: %s %s", WH_MOD_VERSION, labels[i],
                (features & (1u << i)) ? L"available" : L"unavailable; left native");
+}
+
+static constexpr DWORD kBraveSymbolStartupWaitMs = 5000;
+static CONDITION_VARIABLE s_symbolLookupChanged = CONDITION_VARIABLE_INIT;
+static HANDLE s_symbolWorker = nullptr;
+struct SymbolLookup {
+    HMODULE module;
+    bool useOnlineCache;
+    bool finished;
+    bool succeeded;
+    ULONGLONG completedAt;
+    size_t rva[kFeatureSlots];
+};
+static SymbolLookup s_symbolLookup{};
+
+struct SymbolNotification {
+    HANDLE resolver;
+    HANDLE stop;
+    HANDLE thread;
+};
+static SymbolNotification s_symbolNotification{};
+
+static DWORD WaitForSymbolNotification(const HANDLE *handles, DWORD count) {
+    for (;;) {
+        DWORD result = MsgWaitForMultipleObjectsEx(count, handles, INFINITE, QS_ALLINPUT,
+                                                   MWMO_INPUTAVAILABLE);
+        if (result != WAIT_OBJECT_0 + count)
+            return result;
+        MSG message{};
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+            if (message.message == WM_QUIT)
+                return WAIT_FAILED;
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    }
+}
+
+static void ShowSymbolNotification(NOTIFYICONDATAW &icon, PCWSTR status, PCWSTR message,
+                                   DWORD kind) {
+    icon.uFlags = NIF_TIP | NIF_SHOWTIP | NIF_INFO;
+    icon.dwInfoFlags = kind | NIIF_NOSOUND | NIIF_RESPECT_QUIET_TIME;
+    lstrcpynW(icon.szTip, status, ARRAYSIZE(icon.szTip));
+    lstrcpynW(icon.szInfoTitle, L"Brave Acrylic", ARRAYSIZE(icon.szInfoTitle));
+    lstrcpynW(icon.szInfo, message, ARRAYSIZE(icon.szInfo));
+    if (!Shell_NotifyIconW(NIM_MODIFY, &icon))
+        Wh_Log(L"Could not show the Brave Acrylic symbol notification");
+}
+
+static DWORD WINAPI RunSymbolNotifications(void *parameter) {
+    const auto &notification = *static_cast<SymbolNotification *>(parameter);
+    const HANDLE handles[] = {notification.stop, notification.resolver};
+    if (WaitForSingleObject(handles[0], 0) == WAIT_OBJECT_0)
+        return 0;
+    HWND window = CreateWindowExW(0, L"STATIC", L"", WS_OVERLAPPED, 0, 0, 0, 0, nullptr,
+                                  nullptr, nullptr, nullptr);
+    if (!window)
+        return 0;
+
+    NOTIFYICONDATAW icon{};
+    icon.cbSize = sizeof(icon);
+    icon.hWnd = window;
+    icon.uID = 1;
+    icon.uFlags = NIF_ICON | NIF_TIP | NIF_SHOWTIP;
+    icon.hIcon = LoadIcon(nullptr, IDI_INFORMATION);
+    lstrcpynW(icon.szTip, L"Brave Acrylic: preparing symbols", ARRAYSIZE(icon.szTip));
+    if (Shell_NotifyIconW(NIM_ADD, &icon)) {
+        icon.uVersion = NOTIFYICON_VERSION_4;
+        Shell_NotifyIconW(NIM_SETVERSION, &icon);
+        if (WaitForSingleObject(handles[1], 0) == WAIT_TIMEOUT &&
+            WaitForSingleObject(handles[0], 0) == WAIT_TIMEOUT) {
+            ShowSymbolNotification(icon, L"Brave Acrylic: preparing symbols",
+                                   L"Windhawk is preparing Brave symbols in the background. "
+                                   L"You can keep using Brave.", NIIF_INFO);
+        }
+
+        if (WaitForSymbolNotification(handles, ARRAYSIZE(handles)) == WAIT_OBJECT_0 + 1) {
+            AcquireSRWLockShared(&s_initLock);
+            const bool stopping = s_stopping;
+            const bool ready = s_symbolLookup.succeeded && CompleteFeatures(s_symbolLookup.rva);
+            ReleaseSRWLockShared(&s_initLock);
+            if (!stopping) {
+                if (ready) {
+                    ShowSymbolNotification(icon, L"Brave Acrylic: restart Brave",
+                                           L"Brave symbols are ready. Restart Brave to apply "
+                                           L"the available acrylic effects.", NIIF_INFO);
+                } else {
+                    ShowSymbolNotification(icon, L"Brave Acrylic: symbols unavailable",
+                                           L"Windhawk could not prepare compatible Brave symbols. "
+                                           L"See the mod log for details.", NIIF_WARNING);
+                }
+                // Keep the final tooltip available if Windows muted the banner.
+                WaitForSymbolNotification(handles, 1);
+            }
+        }
+        Shell_NotifyIconW(NIM_DELETE, &icon);
+    } else {
+        Wh_Log(L"Could not add the Brave Acrylic symbol status icon");
+    }
+    DestroyWindow(window);
+    return 0;
+}
+
+// Called under s_initLock, only after the startup budget expires.
+static void StartSymbolNotifications() {
+    s_symbolNotification.resolver = s_symbolWorker;
+    s_symbolNotification.stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!s_symbolNotification.stop)
+        return;
+    s_symbolNotification.thread =
+        CreateThread(nullptr, 0, RunSymbolNotifications, &s_symbolNotification, 0, nullptr);
+    if (!s_symbolNotification.thread) {
+        CloseHandle(s_symbolNotification.stop);
+        s_symbolNotification = {};
+    }
+}
+
+static DWORD WINAPI ResolveBraveSymbolsOnWorker(void *) {
+    size_t rva[kFeatureSlots]{};
+    HMODULE retainedModule = nullptr;
+    const HMODULE module = s_symbolLookup.module;
+    bool succeeded = GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                                       reinterpret_cast<LPCWSTR>(module), &retainedModule) &&
+                     ResolveFeatureAddresses(module, rva, s_symbolLookup.useOnlineCache, true);
+    if (retainedModule)
+        FreeLibrary(retainedModule);
+
+    // Publish data only. After a timeout this lookup merely fills Windhawk's
+    // cache for the next launch, even if all addresses are valid.
+    AcquireSRWLockExclusive(&s_initLock);
+    std::copy_n(rva, kFeatureSlots, s_symbolLookup.rva);
+    s_symbolLookup.succeeded = succeeded;
+    s_symbolLookup.finished = true;
+    s_symbolLookup.completedAt = GetTickCount64();
+    WakeAllConditionVariable(&s_symbolLookupChanged);
+    ReleaseSRWLockExclusive(&s_initLock);
+    return 0;
+}
+
+// Called with s_initLock held. Waiting releases it so disabling the mod can
+// close the activation gate before waiting for the uncancellable resolver.
+static bool ResolveBraveSymbolsWithStartupBudget(HMODULE module, size_t *rva,
+                                                bool useOnlineCache) {
+    const ULONGLONG deadline = GetTickCount64() + kBraveSymbolStartupWaitMs;
+    s_symbolLookup.module = module;
+    s_symbolLookup.useOnlineCache = useOnlineCache;
+    s_symbolWorker = CreateThread(nullptr, 0, ResolveBraveSymbolsOnWorker, nullptr, 0, nullptr);
+    if (!s_symbolWorker) {
+        Wh_Log(L"Could not start Brave symbol lookup; leaving Brave unmodified");
+        return false;
+    }
+
+    while (!s_symbolLookup.finished && !s_stopping) {
+        const ULONGLONG now = GetTickCount64();
+        if (now >= deadline ||
+            !SleepConditionVariableSRW(&s_symbolLookupChanged, &s_initLock,
+                                       static_cast<DWORD>(deadline - now), 0)) {
+            break;
+        }
+    }
+    if (s_stopping)
+        return false;
+    if (!s_symbolLookup.finished || s_symbolLookup.completedAt > deadline) {
+        Wh_Log(L"Brave continued without acrylic while symbols finish loading; restart afterward");
+        StartSymbolNotifications();
+        return false;
+    }
+    if (!s_symbolLookup.succeeded)
+        return false;
+    std::copy_n(s_symbolLookup.rva, kFeatureSlots, rva);
     return true;
 }
 
@@ -1976,7 +2476,14 @@ static bool TryInstallChromeHooks(HMODULE module, bool applyNow) {
         return false;
     AcquireSRWLockExclusive(&s_initLock);
     bool installed = false;
-    if (!s_stopping && ResolveNativeBackground(module)) {
+    size_t rva[kFeatureSlots]{};
+    const bool useOnlineCache = s_useOnlineSymbolCache.load();
+    const bool allowFallback = s_allowBraveSymbolServerFallback.load();
+    const bool resolved = !s_stopping &&
+        (allowFallback ? ResolveBraveSymbolsWithStartupBudget(module, rva, useOnlineCache)
+                       : ResolveFeatureAddresses(module, rva, useOnlineCache, false));
+    if (resolved && !s_stopping) {
+        InstallNativeBackgroundHooks(module, rva);
         if (applyNow) {
             installed = Wh_ApplyHookOperations() != FALSE;
             s_transparencyReady.store(installed && HasCompleteTransparencyPath(),
@@ -2044,7 +2551,9 @@ BOOL Wh_ModInit() {
 
     HMODULE chrome = GetModuleHandleW(L"chrome.dll");
     if (chrome) {
-        return TryInstallChromeHooks(chrome, false);
+        // The opt-in PDB lookup belongs to AfterInit when chrome.dll is
+        // already loaded. Do not hold Windhawk's initialization on it.
+        return s_allowBraveSymbolServerFallback.load() || TryInstallChromeHooks(chrome, false);
     }
 
     const HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
@@ -2090,12 +2599,29 @@ void Wh_ModBeforeUninit() {
     s_stopping = true;
     s_activateAfterInit = false;
     s_transparencyReady.store(false, std::memory_order_release);
+    const HANDLE symbolWorker = s_symbolWorker;
+    s_symbolWorker = nullptr;
+    if (s_symbolNotification.stop)
+        SetEvent(s_symbolNotification.stop);
+    WakeAllConditionVariable(&s_symbolLookupChanged);
     ReleaseSRWLockExclusive(&s_initLock);
     NativeUi::Stop();
     // Restore the real WS_SYSMENU bit while the getter/setter hooks are still
     // installed, so Chromium cannot save a stripped style during teardown.
     if (s_isBrowserProcess)
         EnumWindows(SyncNativeCaptionWindow, 0);
+    if (s_symbolNotification.thread) {
+        WaitForSingleObject(s_symbolNotification.thread, INFINITE);
+        CloseHandle(s_symbolNotification.thread);
+        CloseHandle(s_symbolNotification.stop);
+        s_symbolNotification = {};
+    }
+    // Windhawk's symbol lookup cannot be cancelled. The worker must return
+    // before this mod's DLL can be unloaded.
+    if (symbolWorker) {
+        WaitForSingleObject(symbolWorker, INFINITE);
+        CloseHandle(symbolWorker);
+    }
 }
 
 #endif // x64 native background ABI

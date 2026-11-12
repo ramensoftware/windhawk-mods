@@ -2,7 +2,7 @@
 // @id              file-operation-styler
 // @name            File Operation Styler
 // @description     Portable custom presentation for native Explorer file operations with a skin-safe unified presentation.
-// @version         1.3.0
+// @version         1.4.0
 // @author          digART
 // @github          https://github.com/digart11
 // @license         GPL-3.0
@@ -36,14 +36,12 @@ The large progress circle can pause and resume operations, while optional settin
 
 ![File Operation Styler Themes](https://raw.githubusercontent.com/digart11/File-Operation-Styler/master/images/file-operation-styler-themes-1.2.png)
 
-## What's new in 1.3.0
+## What's new in 1.4.0
 
-- Fixed compatibility with newer Windows 11 26H2 builds where the native transfer-rate calculation symbol is unavailable.
-- Fixed the multiple-transfer window extending beyond the screen by introducing a scrollable layout with a fixed footer.
-- Added mouse-wheel and scrollbar navigation for multiple simultaneous file operations.
-- Improved layout handling when operations are added, removed, or completed.
-- Improved Glass text rendering with smoother antialiasing.
-- Improved window resizing compatibility with Explorer's native layout behavior.
+- Added experimental support for third-party file managers that use compatible native Windows copy dialogs.
+- Improved Common Controls compatibility so the mod can also work in other application processes.
+- Third-party file managers can be enabled manually through Windhawk's custom process inclusion list.
+- Preserved the existing Windows Explorer functionality and appearance.
 
 See the [complete changelog](https://github.com/digart11/File-Operation-Styler/blob/master/CHANGELOG.md) for the full release history.
 
@@ -63,6 +61,21 @@ See the [complete changelog](https://github.com/digart11/File-Operation-Styler/b
 - Several built-in themes, including Frosted Glass
 - Windows Acrylic and Custom Blur glass styles
 - Custom colors, fonts, text sizes, and progress thickness
+
+## Using another file manager?
+
+File Operation Styler works automatically with Windows Explorer, but it can also work with some other file managers.
+
+To try it:
+
+1. Open **File Operation Styler > Advanced** in Windhawk.
+2. Find **Custom process inclusion list**.
+3. Add your file manager's actual EXE filename, one per line.
+4. Save and completely restart the file manager.
+
+For example, we tested **OneCommander** with `OneCommander.exe` and **File Pilot 0.8.5** with `FPilot.exe`.
+
+These are examples, not universal executable names. Compatibility depends on the file manager and its version.
 
 ## Customization
 
@@ -258,6 +271,119 @@ namespace DirectUI
 
 namespace
 {
+    // Keep the existing call sites, but bind all four helpers to the SAME v6
+    // module. decltype is unevaluated and adds no COMCTL32 import references.
+    decltype(&::SetWindowSubclass) SetWindowSubclass = nullptr;
+    decltype(&::GetWindowSubclass) GetWindowSubclass = nullptr;
+    decltype(&::RemoveWindowSubclass) RemoveWindowSubclass = nullptr;
+    decltype(&::DefSubclassProc) DefSubclassProc = nullptr;
+    HMODULE g_commonControlsV6Module = nullptr;
+
+    // Called only before hooks/UI initialization, or after all subclasses and
+    // callbacks have been drained by the existing owning-thread teardown.
+    void ShutdownCommonControlsSubclassApi()
+    {
+        SetWindowSubclass = nullptr;
+        GetWindowSubclass = nullptr;
+        RemoveWindowSubclass = nullptr;
+        DefSubclassProc = nullptr;
+        if (g_commonControlsV6Module)
+        {
+            FreeLibrary(g_commonControlsV6Module);
+            g_commonControlsV6Module = nullptr;
+        }
+    }
+
+    bool InitializeCommonControlsSubclassApi()
+    {
+        if (g_commonControlsV6Module)
+            return true;
+
+        wchar_t shellPath[MAX_PATH]{};
+        UINT length = GetSystemDirectoryW(shellPath, ARRAYSIZE(shellPath));
+        constexpr wchar_t shellName[] = L"\\shell32.dll";
+        if (!length || length + ARRAYSIZE(shellName) > ARRAYSIZE(shellPath))
+        {
+            Wh_Log(L"Subclass setup failed: system-directory path unavailable");
+            return false;
+        }
+        lstrcatW(shellPath, shellName);
+
+        // Windows Shell's isolation manifest declares Common Controls v6.
+        // Resource 124 is a Windows implementation detail: if it disappears
+        // or stops selecting v6, fail closed rather than falling back to v5.
+        // No host manifest, process default, or window-creation context changes.
+        ACTCTXW contextInfo{};
+        contextInfo.cbSize = sizeof(contextInfo);
+        contextInfo.dwFlags = ACTCTX_FLAG_RESOURCE_NAME_VALID;
+        contextInfo.lpSource = shellPath;
+        contextInfo.lpResourceName = MAKEINTRESOURCEW(124);
+        HANDLE context = CreateActCtxW(&contextInfo);
+        if (context == INVALID_HANDLE_VALUE)
+        {
+            Wh_Log(L"Subclass setup failed: CreateActCtxW error=%lu", GetLastError());
+            return false;
+        }
+
+        ULONG_PTR cookie = 0;
+        if (!ActivateActCtx(context, &cookie))
+        {
+            Wh_Log(L"Subclass setup failed: ActivateActCtx error=%lu", GetLastError());
+            ReleaseActCtx(context);
+            return false;
+        }
+
+        // SxS redirection under this context selects v6 even in a v5-only
+        // host. The search flag prevents a working-directory DLL fallback.
+        HMODULE module = LoadLibraryExW(
+            L"comctl32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        DWORD loadError = module ? ERROR_SUCCESS : GetLastError();
+        BOOL deactivated = DeactivateActCtx(0, cookie);
+        DWORD deactivateError = deactivated ? ERROR_SUCCESS : GetLastError();
+        ReleaseActCtx(context);
+        if (!module || !deactivated)
+        {
+            Wh_Log(L"Subclass setup failed: load error=%lu deactivate error=%lu",
+                   loadError, deactivateError);
+            if (module)
+                FreeLibrary(module);
+            return false;
+        }
+
+        auto versionFn = reinterpret_cast<HRESULT(CALLBACK *)(DLLVERSIONINFO *)>(
+            GetProcAddress(module, "DllGetVersion"));
+        DLLVERSIONINFO version{};
+        version.cbSize = sizeof(version);
+        auto set = reinterpret_cast<decltype(SetWindowSubclass)>(
+            GetProcAddress(module, "SetWindowSubclass"));
+        auto get = reinterpret_cast<decltype(GetWindowSubclass)>(
+            GetProcAddress(module, "GetWindowSubclass"));
+        auto remove = reinterpret_cast<decltype(RemoveWindowSubclass)>(
+            GetProcAddress(module, "RemoveWindowSubclass"));
+        auto def = reinterpret_cast<decltype(DefSubclassProc)>(
+            GetProcAddress(module, "DefSubclassProc"));
+        if (!versionFn || FAILED(versionFn(&version)) ||
+            version.dwMajorVersion != 6 || !set || !get || !remove || !def)
+        {
+            Wh_Log(L"Subclass setup failed: required v6 exports unavailable "
+                   L"version=%lu.%lu", version.dwMajorVersion, version.dwMinorVersion);
+            FreeLibrary(module);
+            return false;
+        }
+
+        // Publish only the complete API. The explicit LoadLibrary reference
+        // outlives the temporary context and every installed subclass, through
+        // Wh_ModBeforeUninit and ShutdownProgressCircleUi in Wh_ModUninit.
+        SetWindowSubclass = set;
+        GetWindowSubclass = get;
+        RemoveWindowSubclass = remove;
+        DefSubclassProc = def;
+        g_commonControlsV6Module = module;
+        Wh_Log(L"Subclass API initialized: Common Controls %lu.%lu build=%lu",
+               version.dwMajorVersion, version.dwMinorVersion, version.dwBuildNumber);
+        return true;
+    }
+
     HMODULE g_ownedOle32Module = nullptr;
 
     void FreeShellMemory(void *memory)
@@ -13104,10 +13230,16 @@ BOOL Wh_ModInit()
     g_unloading.store(false, std::memory_order_release);
     Wh_Log(L"File Operation Styler " WH_MOD_VERSION L" initialization started");
 
+    if (!InitializeCommonControlsSubclassApi())
+    {
+        return FALSE;
+    }
+
     LoadSettings();
 
     if (!InitializeProgressCircleUi())
     {
+        ShutdownCommonControlsSubclassApi();
         return FALSE;
     }
 
@@ -13116,6 +13248,7 @@ BOOL Wh_ModInit()
     {
         ShutdownProgressCircleUi();
         ReleaseOwnedSkinTargetModules();
+        ShutdownCommonControlsSubclassApi();
         return FALSE;
     }
 
@@ -13155,6 +13288,7 @@ void Wh_ModUninit()
     ShutdownGlassBufferedPaintApi();
     ShutdownDwmApi();
     ShutdownShellMemoryApi();
+    ShutdownCommonControlsSubclassApi();
     Wh_Log(L"File Operation Styler " WH_MOD_VERSION L" uninitialization complete");
 }
 
