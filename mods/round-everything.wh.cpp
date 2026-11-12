@@ -10848,6 +10848,17 @@ using CreateRectangleGeometry_t = long(WINAPI*)(const PointAndSizeL* rect, float
 CreateRectangleGeometry_t CreateRectangleGeometry_Original;
 thread_local bool g_inCreateRectangleGeometry;  // its SetRectangle call is already handled
 void ProbeGeometryDestruction(void* geometry);   // with the content clips, below
+// CRectangleGeometryProxy::Initialize: run once for every rectangle geometry
+// DWM makes, whichever helper makes it - where the probes come from.
+using RectangleGeometryInitialize_t = long(WINAPI*)(void* self, void* channel);
+RectangleGeometryInitialize_t RectangleGeometryInitialize_Original;
+long WINAPI RectangleGeometryInitialize_Hook(void* self, void* channel) {
+    long result = RectangleGeometryInitialize_Original(self, channel);
+    if (result >= 0 && self) {
+        ProbeGeometryDestruction(self);
+    }
+    return result;
+}
 long WINAPI CreateRectangleGeometry_Hook(const PointAndSizeL* rect, float radius,
                                          void** geometry) {
     if (g_animatedWindow3D && g_enabled) {
@@ -10857,8 +10868,8 @@ long WINAPI CreateRectangleGeometry_Hook(const PointAndSizeL* rect, float radius
     g_inCreateRectangleGeometry = true;
     long result = CreateRectangleGeometry_Original(rect, radius, geometry);
     g_inCreateRectangleGeometry = previous;
-    if (result >= 0 && geometry && *geometry) {
-        ProbeGeometryDestruction(*geometry);
+    if (result >= 0 && geometry && *geometry && !RectangleGeometryInitialize_Original) {
+        ProbeGeometryDestruction(*geometry);  // without the Initialize hook below
     }
     return result;
 }
@@ -10921,6 +10932,9 @@ struct GeometryProbe {
 };
 std::vector<GeometryProbe> g_geometryProbes;  // under g_contentClipsMutex
 int g_probeHits = 0, g_probeMisses = 0;       // likewise
+int g_probesMade = 0;                         // likewise
+ULONGLONG g_probeStatusLogged = 0;            // likewise
+std::atomic<unsigned> g_proxyDestructions{0};  // seen by the hook, for the status log
 // Records plus probes: the destructor hook, which runs for every DWM proxy,
 // takes the lock only while there is something to look up.
 std::atomic<size_t> g_geometriesWatched{0};
@@ -10938,14 +10952,24 @@ void EraseContentClipLocked(std::unordered_map<HWND, ContentClip>::iterator it) 
     UpdateGeometriesWatchedLocked();
 }
 
-// Decides from the probes so far (under g_contentClipsMutex): DWM replaces
-// an animation's clip every frame, so with the base destructor in their
-// path rectangle geometries are seen destroyed one after another; a
-// geometry only now and then (an address another proxy reused) is no proof.
-// Misses - a probe still alive after kProbeLifeMs, or an address handed out
-// again without its destruction seen - also come from geometries DWM keeps.
-constexpr ULONGLONG kProbeLifeMs = 2000;
+// Decides from the probes so far (under g_contentClipsMutex). A hit is a
+// watched geometry seen destroyed; a miss is a new rectangle geometry made
+// at an address still watched - the one there before was freed unseen.
+// Geometries DWM keeps (a window's content clip) simply stay watched, and
+// the oldest is let go, uncounted, once kMaxProbes are. With the base
+// destructor in their path, hits come one after another and misses don't
+// come at all; a hit only now and then (an address another proxy reused
+// and was destroyed through it) is no proof.
+constexpr size_t kMaxProbes = 64;
 void JudgeProbesLocked() {
+    // Until the verdict, how the probes are doing (at most once a second).
+    ULONGLONG now = GetTickCount64();
+    if (now - g_probeStatusLogged >= 1000) {
+        g_probeStatusLogged = now;
+        Wh_Log(L"[dwm] rectangle geometries watched: %d made, %d seen destroyed, %d not "
+               L"(%u proxy destructions seen in all)",
+               g_probesMade, g_probeHits, g_probeMisses, g_proxyDestructions.load());
+    }
     int verdict = 0;
     if (g_probeHits >= 8 && g_probeHits >= 4 * g_probeMisses) {
         verdict = 1;
@@ -10958,32 +10982,38 @@ void JudgeProbesLocked() {
     g_geometryDestructionSeen = verdict;
     g_geometryProbes.clear();
     UpdateGeometriesWatchedLocked();
-    Wh_Log(verdict > 0 ? L"[dwm] rectangle geometries are destroyed through CResourceProxy "
-                         L"(%d seen, %d not) - restore corners fitted"
-                       : L"[dwm] rectangle geometries not seen destroyed through "
-                         L"CResourceProxy (%d seen, %d not) - restores keep Windows' "
-                         L"stretched corner",
-           g_probeHits, g_probeMisses);
+    if (verdict > 0) {
+        Wh_Log(L"[dwm] rectangle geometries are destroyed through CResourceProxy (%d seen, "
+               L"%d not) - restore corners fitted",
+               g_probeHits, g_probeMisses);
+    } else {
+        Wh_Log(L"[dwm] rectangle geometries not seen destroyed through CResourceProxy (%d "
+               L"seen, %d not) - restores keep Windows' stretched corner",
+               g_probeHits, g_probeMisses);
+    }
 }
 
-// A rectangle geometry DWM just made (ResourceHelper::CreateRectangleGeometry),
-// watched for its destruction until the question above is settled.
+// A rectangle geometry DWM just made (CRectangleGeometryProxy::Initialize, or
+// without it ResourceHelper::CreateRectangleGeometry), watched for its
+// destruction until the question above is settled.
 void ProbeGeometryDestruction(void* geometry) {
     if (!g_clipGeometryLifetimeTracked || g_geometryDestructionSeen != 0) {
         return;
     }
     std::lock_guard<std::mutex> lock(g_contentClipsMutex);
-    ULONGLONG now = GetTickCount64();
-    for (auto it = g_geometryProbes.begin(); it != g_geometryProbes.end();) {
-        if (it->geometry == geometry || now - it->createdAt > kProbeLifeMs) {
-            g_probeMisses++;
-            it = g_geometryProbes.erase(it);
-        } else {
-            ++it;
+    for (auto it = g_geometryProbes.begin(); it != g_geometryProbes.end(); ++it) {
+        if (it->geometry == geometry) {
+            g_probeMisses++;  // made again where one was watched: freed unseen
+            g_geometryProbes.erase(it);
+            break;
         }
     }
-    if (g_geometryProbes.size() < 32) {
-        g_geometryProbes.push_back({geometry, now});
+    if (g_geometryProbes.size() >= kMaxProbes) {
+        g_geometryProbes.erase(g_geometryProbes.begin());  // kept by DWM: let go
+    }
+    g_geometryProbes.push_back({geometry, GetTickCount64()});
+    if (g_probesMade++ == 0) {
+        Wh_Log(L"[dwm] watching the rectangle geometries DWM makes for their destruction");
     }
     UpdateGeometriesWatchedLocked();
     JudgeProbesLocked();
@@ -11031,6 +11061,9 @@ void ForgetClipGeometry(void* geometry) {
 using ResourceProxyDestructor_t = void(WINAPI*)(void* self);
 ResourceProxyDestructor_t ResourceProxyDestructor_Original;
 void WINAPI ResourceProxyDestructor_Hook(void* self) {
+    if (g_geometryDestructionSeen.load(std::memory_order_relaxed) == 0) {
+        g_proxyDestructions.fetch_add(1, std::memory_order_relaxed);
+    }
     if (g_geometriesWatched.load(std::memory_order_relaxed)) {
         ForgetClipGeometry(self);
     }
@@ -12354,7 +12387,13 @@ BOOL Init() {
             true,
         },
         // The content clip's geometry, destroyed through its base class's
-        // destructor (see ContentClip).
+        // destructor and watched from its creation (see ContentClip).
+        {
+            {LR"(public: long __cdecl CRectangleGeometryProxy::Initialize(struct IDwmChannel *))"},
+            &RectangleGeometryInitialize_Original,
+            RectangleGeometryInitialize_Hook,
+            true,
+        },
         {
             {LR"(protected: virtual __cdecl CResourceProxy::~CResourceProxy(void))",
              LR"(public: virtual __cdecl CResourceProxy::~CResourceProxy(void))"},
@@ -12401,6 +12440,8 @@ BOOL Init() {
              reinterpret_cast<void* const*>(&WindowBorderDestructor_Original)},
             {L"CResourceProxy::~CResourceProxy",
              reinterpret_cast<void* const*>(&ResourceProxyDestructor_Original)},
+            {L"CRectangleGeometryProxy::Initialize",
+             reinterpret_cast<void* const*>(&RectangleGeometryInitialize_Original)},
         });
     // The window radius: decided in GetFloatCornerRadiusForCurrentStyle, or
     // without it in GetRadiusFromCornerStyle; with neither the mod has
@@ -12422,7 +12463,8 @@ BOOL Init() {
     g_objectLifetimesTracked =
         TopLevelWindowDestructor_Original && WindowBorderDestructor_Original;
     g_clipGeometryLifetimeTracked =
-        ResourceProxyDestructor_Original && CreateRectangleGeometry_Original;
+        ResourceProxyDestructor_Original &&
+        (RectangleGeometryInitialize_Original || CreateRectangleGeometry_Original);
     Wh_Log(L"[dwm] clip geometry destructor: %s",
            g_clipGeometryLifetimeTracked
                ? L"CResourceProxy::~CResourceProxy (confirmed on the first animations)"
