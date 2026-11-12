@@ -6186,8 +6186,7 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
         float lensBlend{};
         uint32_t compositorClip{};
         float bodyMode{}; // 0: taskbar; 3: composed; 4: Native; 6: Acrylic.
-        float bodyBlur{};
-        float clipPadding{};
+        float clipPadding[2]{};
         float bodyMaterialTint[4]{};
         float fluidPointer[4]{}; // Position and settled displacement, output pixels.
         float glintClock[4]{}; // Time, pointer present, animation allowed, reserved.
@@ -6261,7 +6260,6 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
     static constexpr char kShader[] = R"(
 Texture2D<float4> backdrop : register(t0);
 Texture2D<float4> blurredBackdrop : register(t1);
-Texture2D<float4> bodyBackdrop : register(t2);
 SamplerState linearClamp : register(s0);
 cbuffer Lens : register(b0) {
     float2 imageSize;
@@ -6311,8 +6309,7 @@ cbuffer Lens : register(b0) {
     float lensBlend;
     uint compositorClip;
     float bodyMode;
-    float bodyBlur;
-    float clipPadding;
+    float2 clipPadding;
     float4 bodyMaterialTint;
     float4 fluidPointer;
     float4 glintClock;
@@ -6575,9 +6572,8 @@ float bevelHeightFor(float inside, float depthRadius) {
     float blend = x * x * x * (x * (x * 6 - 15) + 10);
     return depthRadius * lerp(circle, 1 - circle, blend);
 }
-float3 blurredColor(float2 pixel, bool body) {
-    return body ? bodyBackdrop.SampleLevel(linearClamp, pixel / imageSize, 0).rgb :
-                  blurredBackdrop.SampleLevel(linearClamp, pixel / imageSize, 0).rgb;
+float3 blurredColor(float2 pixel) {
+    return blurredBackdrop.SampleLevel(linearClamp, pixel / imageSize, 0).rgb;
 }
 // One glass surface. The dock and every button are the same material at different
 // scales, so they share this and differ only in the gains handed in.
@@ -6715,7 +6711,7 @@ float3 sharpColor(float2 original, float2 candidate) {
     float4 value = backdrop.SampleLevel(linearClamp, candidate / imageSize, 0);
     return value.a < 0.1 ? backdrop.SampleLevel(linearClamp, original / imageSize, 0).rgb : value.rgb;
 }
-float3 refractedBackdrop(float2 pixel, Glass g, float2 localPoint, float2 halfExtent, bool body) {
+float3 refractedBackdrop(float2 pixel, Glass g, float2 localPoint, float2 halfExtent) {
     float chromaPixels = chroma * 36 * (g.edge * 0.7 + 0.3);
     float2 chromaShift = g.normal.xy * chromaPixels;
     if (coupledChroma > 0.5) chromaShift = -g.shift * chroma;
@@ -6739,11 +6735,11 @@ float3 refractedBackdrop(float2 pixel, Glass g, float2 localPoint, float2 halfEx
         sharp.r = sharpColor(pixel, redPixel).r;
         sharp.b = sharpColor(pixel, bluePixel).b;
     }
-    if ((body ? bodyBlur : blurAmount) > 0.001) {
+    if (blurAmount > 0.001) {
         float3 blurred = float3(
-            blurredColor(redPixel, body).r,
-            blurredColor(greenPixel, body).g,
-            blurredColor(bluePixel, body).b);
+            blurredColor(redPixel).r,
+            blurredColor(greenPixel).g,
+            blurredColor(bluePixel).b);
         sharp = lerp(sharp, blurred, 1 - g.edge * frostEdge);
     }
     return sharp;
@@ -6848,7 +6844,7 @@ float4 shadePixel(float2 pixel) {
                     continuousDistanceFor(panelPoint, nativeRect.zw, cornerValue(panelPoint, lensRadii[i])));
         }
         if (itemMask <= 0) continue;
-        buttonColor = refractedBackdrop(pixel, item, pixel - clipRect.xy, clipRect.zw, false);
+        buttonColor = refractedBackdrop(pixel, item, pixel - clipRect.xy, clipRect.zw);
         buttonColor = glassFinish(buttonColor, item);
         buttonColor = lerp(buttonColor, lensTints[i].rgb,
                            alertTintOpacity * lensTints[i].a);
@@ -6872,7 +6868,7 @@ float4 shadePixel(float2 pixel) {
         if (bodyMode < 2.5) {
             Glass dock = glassAt(p, halfSize, float4(radius, radius, radius, radius),
                                  zRadius, refraction, 30, 4, 0.35);
-            dockColor = refractedBackdrop(pixel, dock, p, halfSize, bodyMode > 0.5);
+            dockColor = refractedBackdrop(pixel, dock, p, halfSize);
             dockColor = glassFinish(dockColor, dock);
             float fresnelAmount;
             dockColor += glassLighting(dock, pixel, p, halfSize, fresnelAmount);
@@ -7041,9 +7037,9 @@ float4 ps(VertexOutput input) : SV_Target {
     winrt::com_ptr<ID3D11RenderTargetView> renderedBodyTarget;
     winrt::com_ptr<ID3D11ShaderResourceView> renderedBodyView;
     // Shared scratch, panel result, and independently blurred window body.
-    winrt::com_ptr<ID3D11Texture2D> blurTextures[3];
-    winrt::com_ptr<ID3D11RenderTargetView> blurTargets[3];
-    winrt::com_ptr<ID3D11ShaderResourceView> blurViews[3];
+    winrt::com_ptr<ID3D11Texture2D> blurTextures[2];
+    winrt::com_ptr<ID3D11RenderTargetView> blurTargets[2];
+    winrt::com_ptr<ID3D11ShaderResourceView> blurViews[2];
     winrt::com_ptr<ID3D11VertexShader> vertexShader;
     winrt::com_ptr<ID3D11PixelShader> pixelShader;
     winrt::com_ptr<ID3D11PixelShader> copyPixelShader;
@@ -7406,7 +7402,7 @@ float4 ps(VertexOutput input) : SV_Target {
         renderedBody = nullptr;
         blurWidth = 0;
         blurHeight = 0;
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < 2; ++i) {
             blurViews[i] = nullptr;
             blurTargets[i] = nullptr;
             blurTextures[i] = nullptr;
@@ -7440,10 +7436,10 @@ float4 ps(VertexOutput input) : SV_Target {
             return false;
         description.Width = std::max(1u, pixelWidth / 2);
         description.Height = std::max(1u, pixelHeight / 2);
-        winrt::com_ptr<ID3D11Texture2D> newBlurTextures[3];
-        winrt::com_ptr<ID3D11RenderTargetView> newBlurTargets[3];
-        winrt::com_ptr<ID3D11ShaderResourceView> newBlurViews[3];
-        for (int i = 0; i < 3; ++i) {
+        winrt::com_ptr<ID3D11Texture2D> newBlurTextures[2];
+        winrt::com_ptr<ID3D11RenderTargetView> newBlurTargets[2];
+        winrt::com_ptr<ID3D11ShaderResourceView> newBlurViews[2];
+        for (int i = 0; i < 2; ++i) {
             if (FAILED(device->CreateTexture2D(
                     &description, nullptr, newBlurTextures[i].put())) ||
                 FAILED(device->CreateRenderTargetView(
@@ -7462,7 +7458,7 @@ float4 ps(VertexOutput input) : SV_Target {
             FAILED(device->CreateRenderTargetView(renderedBody.get(),nullptr,renderedBodyTarget.put())) ||
             FAILED(device->CreateShaderResourceView(renderedBody.get(),nullptr,renderedBodyView.put())))
             return false;
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < 2; ++i) {
             blurTextures[i] = std::move(newBlurTextures[i]);
             blurTargets[i] = std::move(newBlurTargets[i]);
             blurViews[i] = std::move(newBlurViews[i]);
@@ -8614,23 +8610,22 @@ float4 ps(VertexOutput input) : SV_Target {
         D3D11_VIEWPORT full{0,0,float(width),float(height),0,1};
         auto drawGlass = [&](ID3D11RenderTargetView* target, LensConstants parameters,
                               ID3D11ShaderResourceView* sharp,
-                              ID3D11ShaderResourceView* blurred,
-                              ID3D11ShaderResourceView* body, D3D11_VIEWPORT const& viewport) {
+                              ID3D11ShaderResourceView* blurred, D3D11_VIEWPORT const& viewport) {
             parameters.imageSize[0]=float(width); parameters.imageSize[1]=float(height);
             parameters.compositorClip=taskbar!=nullptr;
             context->UpdateSubresource(constants.get(),0,nullptr,&parameters,0,0);
             auto buffer=constants.get();
-            ID3D11ShaderResourceView* inputs[]{sharp,blurred,body};
+            ID3D11ShaderResourceView* inputs[]{sharp,blurred};
             context->OMSetRenderTargets(1,&target,nullptr);
             context->RSSetViewports(1,&viewport);
             context->VSSetShader(vertexShader.get(),nullptr,0);
             context->PSSetShader(pixelShader.get(),nullptr,0);
-            context->PSSetShaderResources(0,3,inputs);
+            context->PSSetShaderResources(0,2,inputs);
             context->PSSetSamplers(0,1,&sample);
             context->PSSetConstantBuffers(0,1,&buffer);
             context->Draw(3,0);
-            ID3D11ShaderResourceView* empty[3]{};
-            context->PSSetShaderResources(0,3,empty);
+            ID3D11ShaderResourceView* empty[2]{};
+            context->PSSetShaderResources(0,2,empty);
             context->OMSetRenderTargets(0,nullptr,nullptr);
         };
         auto blurBackdrop = [&](ID3D11ShaderResourceView* input, float strength, int resultIndex) -> ID3D11ShaderResourceView* {
@@ -8669,12 +8664,10 @@ float4 ps(VertexOutput input) : SV_Target {
         auto effectsLens = lens;
         UpdateEffectsLocked(effectsLens);
         if (lens.bodyMode != 0) {
-            auto bodyBlur=blurBackdrop(compositeView.get(),
-                lens.bodyMode == 1 ? lens.bodyBlur : 0, 2);
             auto bodyLens=effectsLens;
             bodyLens.lensCount=0; // Body first; no panels can feed back into it.
             context->ClearRenderTargetView(renderedBodyTarget.get(),clear);
-            drawGlass(renderedBodyTarget.get(),bodyLens,compositeView.get(),bodyBlur,bodyBlur,full);
+            drawGlass(renderedBodyTarget.get(),bodyLens,compositeView.get(),compositeView.get(),full);
             panelInput=renderedBodyView.get();
         }
         auto blurredView=blurBackdrop(panelInput,lens.optics.blur,1);
@@ -8715,7 +8708,7 @@ float4 ps(VertexOutput input) : SV_Target {
                     presentLens.lensFades[i][0] = 1 - sampledLensOpacity[i];
                 }
         }
-        drawGlass(backTarget.get(),presentLens,panelInput,blurredView,panelInput,full);
+        drawGlass(backTarget.get(),presentLens,panelInput,blurredView,full);
         // Visibility can change after the latency wait. Never block with the
         // renderer mutex held while the UI thread is minimizing or closing it.
         hr = swapChain->Present(0, DXGI_PRESENT_DO_NOT_WAIT);
@@ -8740,7 +8733,7 @@ float4 ps(VertexOutput input) : SV_Target {
                 layer.lensRects[i][axis] += layer.outputOffset[axis];
                 layer.lensNativeRects[i][axis] += layer.outputOffset[axis];
             }
-        drawGlass(layerTarget.get(), layer, panelInput, blurredView, panelInput,
+        drawGlass(layerTarget.get(), layer, panelInput, blurredView,
                   {0, layerRows[0], float(layerWidth), layerRows[1] - layerRows[0], 0, 1});
         hr = layerChain->Present(0, DXGI_PRESENT_DO_NOT_WAIT);
         if (hr == DXGI_ERROR_WAS_STILL_DRAWING) pendingPresent = true;
