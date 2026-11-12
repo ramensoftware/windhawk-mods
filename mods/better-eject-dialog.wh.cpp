@@ -6,6 +6,8 @@
 // @author          Ender
 // @github          https://github.com/EnderDragonEP
 // @twitter         https://twitter.com/NoobieNoodle89
+// @homepage        https://me.noobienoodle89.cc/
+// @donateUrl       https://ko-fi.com/enderdragonep
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcfgmgr32 -lwevtapi -lversion -lole32

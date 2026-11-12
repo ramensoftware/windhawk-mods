@@ -1,11 +1,13 @@
 // ==WindhawkMod==
 // @id              start-button-replacer
 // @name            Start Button Replacer
-// @description     Replace the Windows 11 Start button icon with a custom PNG, JPG or GIF image
-// @version         0.12.4
+// @description     Replace the Windows 11 Start button icon with a custom PNG, JPG or GIF image, or recolor the built-in icon
+// @version         1.0.0
 // @author          Ender
 // @github          https://github.com/EnderDragonEP
 // @twitter         https://twitter.com/NoobieNoodle89
+// @homepage        https://me.noobienoodle89.cc/
+// @donateUrl       https://ko-fi.com/enderdragonep
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject
@@ -17,6 +19,10 @@
 // The TaskbarHost/XamlRoot discovery technique is based on the technique used
 // by Windhawk's official Windows 11 taskbar mods by m417z.
 //
+// The recoloring of the built-in Start icon is based on the "Start button
+// colorizer" mod (taskbar-start-button-colorizer) by m417z, which is published
+// under the GNU General Public License v3.0.
+//
 // This mod:
 //   * Finds the Windows 11 Start button.
 //   * Keeps all original Start button behavior intact.
@@ -27,12 +33,14 @@
 //   * Supports animated GIF playback.
 //   * Supports crossfading normal, hover and pressed images.
 //   * Supports hover/press scale, rotation and opacity effects.
+//   * Recolors the built-in Start icon with a color preset or with hue,
+//     saturation, brightness and opacity effects.
 
 // ==WindhawkModReadme==
 /*
 # Start Button Replacer
 
-Replaces the icon inside the Windows 11 Start button with a custom PNG, JPG or GIF image. Animated GIF playback and hover/pressed effects are optional features.
+Replaces the icon inside the Windows 11 Start button with a custom PNG, JPG or GIF image. Animated GIF playback and hover/pressed effects are optional features. The built-in Windows logo can be recolored instead of, or as a fallback for, a custom image.
 
 ![preview](https://raw.githubusercontent.com/EnderDragonEP/asset/7ae3c6659e0237bf98cc67f52576ebaff8d9fd44/windhawk-mods/start-button-replacer/preview-1.gif)
 
@@ -71,6 +79,15 @@ While the Start menu is shown, pressing the button temporarily uses the pressed 
 
 State images crossfade whenever their applicable duration is greater than zero. Hover transitions use the hover duration; pressed and activated transitions use the pressed duration. Set a duration to `0` to switch instantly.
 
+## Built-in icon color
+
+The built-in Windows logo of the Start button can be recolored:
+
+- **Color**: recolor the icon with the system accent color or with one of the built-in colors, such as red, green or pink.
+- **Effects**: fine tune the icon with the hue shift, saturation, brightness and opacity effects.
+
+These settings affect only the built-in icon, not custom images. The built-in icon is shown when **Image source** is blank, and also while the main image is loading or if it can't be loaded.
+
 ## Notes
 
 For crisp results, use a square image with transparency. Keep animated GIFs reasonably small, such as 64x64 or 128x128. The displayed size is independent from the source image resolution. XAML loads and decodes image sources asynchronously. XAML also caches images by source URI, so after replacing a file at the same path, reload the mod if the previous image remains visible.
@@ -81,9 +98,9 @@ For crisp results, use a square image with transparency. Keep animated GIFs reas
 /*
 - images:
   - imageSource: "https://raw.githubusercontent.com/EnderDragonEP/asset/be76faf00be2a45cb166a4971e67eb32afd4b1fb/windhawk-mods/start-button-replacer/gecko/normal-hover.gif"
-    $name: Image source (required)
+    $name: Image source
     $description: >-
-      Absolute file path, path containing environment variables, or HTTP/HTTPS URL. Supports PNG, JPG and animated GIF. This is the normal image and the final fallback for every other state.
+      Absolute file path, path containing environment variables, or HTTP/HTTPS URL. Supports PNG, JPG and animated GIF. This is the normal image and the final fallback for every other state. Leave blank to keep the built-in icon, which can be recolored below.
   - hoverImageSource: ""
     $name: Hover image source
     $description: >-
@@ -175,6 +192,41 @@ For crisp results, use a square image with transparency. Keep animated GIFs reas
   $name: Animation behavior
   $description: Configure shared animation and accessibility behavior.
 
+- builtInIcon:
+  - color: none
+    $name: Color
+    $description: >-
+      Recolors the built-in icon by setting the hue of its colors, keeping their original saturation and brightness. The system accent color sets the saturation too.
+    $options:
+    - none: Original
+    - accent: System accent color
+    - red: Red
+    - orange: Orange
+    - yellow: Yellow
+    - green: Green
+    - teal: Teal
+    - blue: Blue
+    - purple: Purple
+    - pink: Pink
+  - hue: 0
+    $name: Hue shift
+    $description: >-
+      Rotates the colors of the built-in icon by the given amount of degrees, from 0 to 360, on top of the color which is selected above.
+  - saturation: 100
+    $name: Saturation
+    $description: >-
+      In percent, relative to the original colors. Zero makes the icon gray.
+  - brightness: 100
+    $name: Brightness
+    $description: >-
+      In percent, relative to the original colors. Zero makes the icon black, and values above 100 make the icon lighter, up to white.
+  - opacity: 100
+    $name: Opacity
+    $description: In percent.
+  $name: Built-in icon color
+  $description: >-
+    Recolor the built-in Windows logo. It is shown when Image source is blank or the main image can't be loaded. Custom images aren't affected.
+
 - showImageLoadFailureWarnings: true
   $name: Show image load failure warnings
   $description: >-
@@ -190,8 +242,10 @@ For crisp results, use a square image with transparency. Keep animated GIFs reas
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <functional>
+#include <list>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -202,7 +256,9 @@ For crisp results, use a square image with transparency. Keep animated GIFs reas
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Composition.h>
+#include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.Automation.Peers.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
@@ -216,6 +272,8 @@ For crisp results, use a square image with transparency. Keep animated GIFs reas
 namespace wf = winrt::Windows::Foundation;
 
 namespace wuc = winrt::Windows::UI::Composition;
+
+namespace wuv = winrt::Windows::UI::ViewManagement;
 
 namespace wux = winrt::Windows::UI::Xaml;
 
@@ -264,6 +322,22 @@ enum class IconState : size_t {
 
 constexpr size_t kIconStateCount = static_cast<size_t>(IconState::Count);
 
+// Recoloring of the built-in Start icon.
+struct ColorSettings {
+    // The hue the icon is recolored to, or -1 to keep its original hue.
+    int colorHue = -1;
+
+    // Whether the icon is recolored to match the system accent color.
+    bool accentColor = false;
+
+    int hue = 0;
+    double saturation = 1.0;
+    double brightness = 1.0;
+    double opacity = 1.0;
+
+    bool customizeColors = false;
+};
+
 struct ModSettings {
     std::wstring imageSource;
 
@@ -292,6 +366,8 @@ struct ModSettings {
 
     bool respectSystemAnimations = true;
     bool showImageLoadFailureWarnings = true;
+
+    ColorSettings color;
 };
 
 ModSettings g_settings;
@@ -561,6 +637,46 @@ ModSettings LoadSettings() {
     settings.showImageLoadFailureWarnings =
         Wh_GetIntSetting(L"showImageLoadFailureWarnings") != 0;
 
+    // The hue each of the color options recolors the built-in icon to, in
+    // degrees.
+    static const struct {
+        const wchar_t* name;
+        int hue;
+    } colors[] = {
+        {L"red", 0},    {L"orange", 30}, {L"yellow", 55},  {L"green", 120},
+        {L"teal", 175}, {L"blue", 215},  {L"purple", 275}, {L"pink", 325},
+    };
+
+    std::wstring color = GetStringSetting(L"builtInIcon.color");
+
+    settings.color.accentColor = EqualsIgnoreCase(color, L"accent");
+
+    for (const auto& [name, hue] : colors) {
+        if (EqualsIgnoreCase(color, name)) {
+            settings.color.colorHue = hue;
+            break;
+        }
+    }
+
+    settings.color.hue =
+        std::clamp(Wh_GetIntSetting(L"builtInIcon.hue"), -360, 360);
+
+    settings.color.saturation =
+        std::clamp(Wh_GetIntSetting(L"builtInIcon.saturation"), 0, 1000) /
+        100.0;
+
+    settings.color.brightness =
+        std::clamp(Wh_GetIntSetting(L"builtInIcon.brightness"), 0, 1000) /
+        100.0;
+
+    settings.color.opacity =
+        std::clamp(Wh_GetIntSetting(L"builtInIcon.opacity"), 0, 100) / 100.0;
+
+    settings.color.customizeColors =
+        settings.color.accentColor || settings.color.colorHue >= 0 ||
+        settings.color.hue != 0 || settings.color.saturation != 1 ||
+        settings.color.brightness != 1 || settings.color.opacity != 1;
+
     return settings;
 }
 
@@ -581,6 +697,12 @@ ModSettings GetSettingsSnapshot(uint64_t* generation = nullptr) {
     }
 
     return g_settings;
+}
+
+ColorSettings GetColorSettings() {
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+
+    return g_settings.color;
 }
 
 // -----------------------------------------------------------------------------
@@ -776,8 +898,8 @@ std::wstring BuildImageFailureMessage(
 
     if (mainImageFailed) {
         message +=
-            L"\nNo custom Start icon is applied because Image source is "
-            L"required.";
+            L"\nThe built-in Start icon is used because the main Image "
+            L"source is unavailable.";
     } else if (multipleFailures) {
         message +=
             L"\nThe custom Start icon remains active, using available "
@@ -1709,6 +1831,487 @@ wuxc::Panel FindHostPanel(const wux::FrameworkElement& stockIcon,
     }
 
     return nullptr;
+}
+
+// -----------------------------------------------------------------------------
+// Built-in icon colors
+//
+// Based on the "Start button colorizer" mod by m417z. The icon is recolored
+// regardless of whether a custom image currently covers it, so it's ready
+// whenever the built-in icon is shown: with a blank image source, while the
+// main image is loading, or after it failed to load.
+// -----------------------------------------------------------------------------
+
+struct HslColor {
+    double hue;         // [0, 360)
+    double saturation;  // [0, 1]
+    double lightness;   // [0, 1]
+};
+
+HslColor RgbToHsl(winrt::Windows::UI::Color color) {
+    double r = color.R / 255.0;
+    double g = color.G / 255.0;
+    double b = color.B / 255.0;
+
+    double max = std::max({r, g, b});
+    double min = std::min({r, g, b});
+    double delta = max - min;
+
+    HslColor hsl{
+        .hue = 0,
+        .saturation = 0,
+        .lightness = (max + min) / 2,
+    };
+
+    if (delta > 0) {
+        hsl.saturation = delta / (1 - std::abs(2 * hsl.lightness - 1));
+
+        if (max == r) {
+            hsl.hue = (g - b) / delta;
+        } else if (max == g) {
+            hsl.hue = (b - r) / delta + 2;
+        } else {
+            hsl.hue = (r - g) / delta + 4;
+        }
+
+        hsl.hue *= 60;
+
+        if (hsl.hue < 0) {
+            hsl.hue += 360;
+        }
+    }
+
+    return hsl;
+}
+
+winrt::Windows::UI::Color HslToRgb(HslColor hsl, uint8_t alpha) {
+    double c = (1 - std::abs(2 * hsl.lightness - 1)) * hsl.saturation;
+    double h = hsl.hue / 60;
+    double x = c * (1 - std::abs(std::fmod(h, 2) - 1));
+    double m = hsl.lightness - c / 2;
+
+    double r = 0;
+    double g = 0;
+    double b = 0;
+
+    if (h < 1) {
+        r = c;
+        g = x;
+    } else if (h < 2) {
+        r = x;
+        g = c;
+    } else if (h < 3) {
+        g = c;
+        b = x;
+    } else if (h < 4) {
+        g = x;
+        b = c;
+    } else if (h < 5) {
+        r = x;
+        b = c;
+    } else {
+        r = c;
+        b = x;
+    }
+
+    auto toByte = [m](double value) {
+        return static_cast<uint8_t>(
+            std::lround(std::clamp(value + m, 0.0, 1.0) * 255));
+    };
+
+    return {alpha, toByte(r), toByte(g), toByte(b)};
+}
+
+void ApplyFromTaskbarThread(bool mainTaskbarOnly);
+
+// Set once the built-in icon has been recolored. Until then its brushes are
+// left completely untouched, and there's nothing to restore on unload.
+std::atomic<bool> g_colorsEverCustomized = false;
+
+// The system accent color is tracked from the taskbar thread, which is the
+// thread the icon is recolored from, starting the first time it's needed.
+[[clang::no_destroy]] wuv::UISettings g_uiSettings{nullptr};
+winrt::event_token g_colorValuesChangedToken;
+HslColor g_accentColor;
+
+HslColor QueryAccentColor() {
+    return RgbToHsl(g_uiSettings.GetColorValue(wuv::UIColorType::Accent));
+}
+
+HslColor AccentColor() {
+    if (g_uiSettings) {
+        return g_accentColor;
+    }
+
+    g_uiSettings = wuv::UISettings();
+    g_accentColor = QueryAccentColor();
+
+    auto dispatcherQueue =
+        winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
+
+    if (!dispatcherQueue) {
+        Wh_Log(L"No dispatcher queue; accent color changes aren't tracked");
+        return g_accentColor;
+    }
+
+    // The event is raised on a worker thread.
+    g_colorValuesChangedToken =
+        g_uiSettings.ColorValuesChanged([dispatcherQueue](auto&&, auto&&) {
+            dispatcherQueue.TryEnqueue([] {
+                if (g_unloading || !g_uiSettings) {
+                    return;
+                }
+
+                try {
+                    Wh_Log(L"The system accent color changed");
+
+                    g_accentColor = QueryAccentColor();
+                    ApplyFromTaskbarThread(false);
+                } catch (...) {
+                    Wh_Log(L"Handling an accent color change failed");
+                }
+            });
+        });
+
+    return g_accentColor;
+}
+
+void StopTrackingAccentColor() {
+    if (!g_uiSettings) {
+        return;
+    }
+
+    try {
+        if (g_colorValuesChangedToken) {
+            g_uiSettings.ColorValuesChanged(g_colorValuesChangedToken);
+        }
+    } catch (...) {
+    }
+
+    g_colorValuesChangedToken = {};
+    g_uiSettings = nullptr;
+}
+
+winrt::Windows::UI::Color TransformColor(winrt::Windows::UI::Color color,
+                                         const ColorSettings& settings) {
+    HslColor hsl = RgbToHsl(color);
+
+    if (settings.accentColor) {
+        // The saturation is matched as well, since the hue alone can't
+        // reproduce a gray accent color.
+        HslColor accentColor = AccentColor();
+        hsl.hue = accentColor.hue;
+        hsl.saturation *= accentColor.saturation;
+    } else if (settings.colorHue >= 0) {
+        hsl.hue = settings.colorHue;
+    }
+
+    hsl.hue = std::fmod(hsl.hue + settings.hue, 360);
+
+    if (hsl.hue < 0) {
+        hsl.hue += 360;
+    }
+
+    hsl.saturation = std::clamp(hsl.saturation * settings.saturation, 0.0, 1.0);
+    hsl.lightness = std::clamp(hsl.lightness * settings.brightness, 0.0, 1.0);
+
+    double alpha = std::clamp(color.A / 255.0 * settings.opacity, 0.0, 1.0);
+
+    return HslToRgb(hsl, static_cast<uint8_t>(std::lround(alpha * 255)));
+}
+
+// The colors of the parts of the icon which take part in its animations are
+// set by key frames, which the icon inserts anew every time it starts
+// animating. They are customized as they are inserted, since a property which
+// an animation drives can't be assigned to. Non-null only while the built-in
+// icon creates its animations on the current thread.
+thread_local const ColorSettings* g_iconAnimationColorSettings;
+
+winrt::Windows::UI::Color TransformIconAnimationColor(
+    winrt::Windows::UI::Color value) noexcept {
+    if (!g_iconAnimationColorSettings) {
+        return value;
+    }
+
+    try {
+        return TransformColor(value, *g_iconAnimationColorSettings);
+    } catch (...) {
+        return value;
+    }
+}
+
+using IColorKeyFrameAnimation_InsertKeyFrame_t =
+    HRESULT(WINAPI*)(void* pThis,
+                     float normalizedProgressKey,
+                     winrt::Windows::UI::Color value);
+
+IColorKeyFrameAnimation_InsertKeyFrame_t
+    IColorKeyFrameAnimation_InsertKeyFrame_Original;
+
+HRESULT WINAPI
+IColorKeyFrameAnimation_InsertKeyFrame_Hook(void* pThis,
+                                            float normalizedProgressKey,
+                                            winrt::Windows::UI::Color value) {
+    return IColorKeyFrameAnimation_InsertKeyFrame_Original(
+        pThis, normalizedProgressKey, TransformIconAnimationColor(value));
+}
+
+using IColorKeyFrameAnimation_InsertKeyFrameWithEasingFunction_t =
+    HRESULT(WINAPI*)(void* pThis,
+                     float normalizedProgressKey,
+                     winrt::Windows::UI::Color value,
+                     void* easingFunction);
+
+IColorKeyFrameAnimation_InsertKeyFrameWithEasingFunction_t
+    IColorKeyFrameAnimation_InsertKeyFrameWithEasingFunction_Original;
+
+HRESULT WINAPI IColorKeyFrameAnimation_InsertKeyFrameWithEasingFunction_Hook(
+    void* pThis,
+    float normalizedProgressKey,
+    winrt::Windows::UI::Color value,
+    void* easingFunction) {
+    return IColorKeyFrameAnimation_InsertKeyFrameWithEasingFunction_Original(
+        pThis, normalizedProgressKey, TransformIconAnimationColor(value),
+        easingFunction);
+}
+
+// The vtable of Windows.UI.Composition.IColorKeyFrameAnimation starts with the
+// six methods of IInspectable, followed by the getter and the setter of
+// InterpolationColorSpace.
+constexpr int kInsertKeyFrameVtableIndex = 8;
+constexpr int kInsertKeyFrameWithEasingFunctionVtableIndex = 9;
+
+// All of the color animations of the process share the hooked implementation,
+// which is why the hooks only customize colors while the icon creates its
+// animations. The hooks are set the first time recoloring is actually used.
+void EnsureColorKeyFrameAnimationHooked(const wux::UIElement& element) {
+    static std::atomic<bool> hooked = false;
+
+    if (g_unloading || hooked.exchange(true)) {
+        return;
+    }
+
+    try {
+        auto compositor =
+            wuxh::ElementCompositionPreview::GetElementVisual(element)
+                .Compositor();
+
+        void** vtable = *reinterpret_cast<void***>(
+            winrt::get_abi(compositor.CreateColorKeyFrameAnimation()));
+
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<IColorKeyFrameAnimation_InsertKeyFrame_t>(
+                vtable[kInsertKeyFrameVtableIndex]),
+            IColorKeyFrameAnimation_InsertKeyFrame_Hook,
+            &IColorKeyFrameAnimation_InsertKeyFrame_Original);
+
+        WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<
+                IColorKeyFrameAnimation_InsertKeyFrameWithEasingFunction_t>(
+                vtable[kInsertKeyFrameWithEasingFunctionVtableIndex]),
+            IColorKeyFrameAnimation_InsertKeyFrameWithEasingFunction_Hook,
+            &IColorKeyFrameAnimation_InsertKeyFrameWithEasingFunction_Original);
+
+        Wh_ApplyHookOperations();
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Hooking color key frame animations failed: 0x%08X %s",
+               e.code().value, e.message().c_str());
+    } catch (...) {
+        Wh_Log(L"Hooking color key frame animations failed");
+    }
+}
+
+// The original color is kept in the property set of the brush or of the
+// gradient stop it belongs to, so that applying the effects again, as well as
+// restoring the icon, always start from it. A null settings pointer restores
+// the original color.
+constexpr wchar_t kOriginalColorProperty[] = L"WindhawkOriginalColor";
+
+winrt::Windows::UI::Color CustomizedColor(
+    const wuc::CompositionObject& colorOwner,
+    winrt::Windows::UI::Color currentColor,
+    const ColorSettings* settings) {
+    auto properties = colorOwner.Properties();
+
+    winrt::Windows::UI::Color originalColor;
+
+    if (properties.TryGetColor(kOriginalColorProperty, originalColor) !=
+        wuc::CompositionGetValueStatus::Succeeded) {
+        originalColor = currentColor;
+        properties.InsertColor(kOriginalColorProperty, originalColor);
+    }
+
+    return settings ? TransformColor(originalColor, *settings) : originalColor;
+}
+
+void ApplyBrushColors(const wuc::CompositionBrush& brush,
+                      const ColorSettings* settings) {
+    if (auto colorBrush = brush.try_as<wuc::CompositionColorBrush>()) {
+        colorBrush.Color(
+            CustomizedColor(colorBrush, colorBrush.Color(), settings));
+        return;
+    }
+
+    if (auto gradientBrush = brush.try_as<wuc::CompositionGradientBrush>()) {
+        for (const auto& stop : gradientBrush.ColorStops()) {
+            stop.Color(CustomizedColor(stop, stop.Color(), settings));
+        }
+    }
+}
+
+void EnumShapeBrushes(
+    const wuc::CompositionShape& shape,
+    const std::function<void(const wuc::CompositionBrush&)>& enumCallback) {
+    if (auto containerShape = shape.try_as<wuc::CompositionContainerShape>()) {
+        for (const auto& child : containerShape.Shapes()) {
+            EnumShapeBrushes(child, enumCallback);
+        }
+
+        return;
+    }
+
+    auto spriteShape = shape.try_as<wuc::CompositionSpriteShape>();
+
+    if (!spriteShape) {
+        return;
+    }
+
+    for (const auto& brush :
+         {spriteShape.FillBrush(), spriteShape.StrokeBrush()}) {
+        if (brush) {
+            enumCallback(brush);
+        }
+    }
+}
+
+// The icon is drawn by an animated visual, a tree of shape visuals which the
+// animated visual player of the button creates.
+void EnumVisualBrushes(
+    const wuc::Visual& visual,
+    const std::function<void(const wuc::CompositionBrush&)>& enumCallback) {
+    if (auto shapeVisual = visual.try_as<wuc::ShapeVisual>()) {
+        for (const auto& shape : shapeVisual.Shapes()) {
+            EnumShapeBrushes(shape, enumCallback);
+        }
+    }
+
+    if (auto containerVisual = visual.try_as<wuc::ContainerVisual>()) {
+        for (const auto& child : containerVisual.Children()) {
+            EnumVisualBrushes(child, enumCallback);
+        }
+    }
+}
+
+// Whether the brushes of the built-in icon need to be recolored or restored.
+bool StockIconColorsNeedApplying(const ColorSettings& settings) {
+    return (!g_unloading && settings.customizeColors) ||
+           g_colorsEverCustomized;
+}
+
+void ApplyStockIconColors(const wux::FrameworkElement& icon) {
+    ColorSettings settings = GetColorSettings();
+
+    if (!StockIconColorsNeedApplying(settings)) {
+        return;
+    }
+
+    bool customize = !g_unloading && settings.customizeColors;
+
+    if (customize) {
+        g_colorsEverCustomized = true;
+
+        EnsureColorKeyFrameAnimationHooked(icon);
+    }
+
+    // The player hosts the animated visual as the child visual of the icon
+    // element, not among the children of the visual which backs the element.
+    auto visual = wuxh::ElementCompositionPreview::GetElementChildVisual(icon);
+
+    if (!visual) {
+        Wh_Log(L"The built-in Start icon has no animated visual");
+        return;
+    }
+
+    const ColorSettings* appliedSettings = customize ? &settings : nullptr;
+
+    EnumVisualBrushes(visual,
+                      [appliedSettings](const wuc::CompositionBrush& brush) {
+                          ApplyBrushColors(brush, appliedSettings);
+                      });
+}
+
+// Recolors the built-in icon of the Start button, or restores its original
+// colors if recoloring was turned off or the mod is unloading.
+void ApplyStartButtonColors(const wux::FrameworkElement& startButton) noexcept {
+    try {
+        if (!StockIconColorsNeedApplying(GetColorSettings())) {
+            return;
+        }
+
+        if (auto icon = FindStockStartIcon(startButton)) {
+            ApplyStockIconColors(icon);
+        }
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Recoloring the built-in Start icon failed: 0x%08X %s",
+               e.code().value, e.message().c_str());
+    } catch (...) {
+        Wh_Log(L"Recoloring the built-in Start icon failed");
+    }
+}
+
+// The pending subscriptions to the Loaded event of the Start button icons.
+// Only accessed from the taskbar thread, which is also where they're revoked
+// on unload, rather than by the destructor at process exit.
+[[clang::no_destroy]] std::optional<
+    std::list<wux::FrameworkElement::Loaded_revoker>>
+    g_iconLoadedRevokers{std::in_place};
+
+void ApplyStockIconColorsOnceLoaded(const wux::FrameworkElement& icon) {
+    if (g_unloading || !g_iconLoadedRevokers) {
+        return;
+    }
+
+    // Makes sure that unloading releases the subscription even if the icon
+    // never gets loaded.
+    g_colorsEverCustomized = true;
+
+    g_iconLoadedRevokers->emplace_back();
+    auto revokerIt = std::prev(g_iconLoadedRevokers->end());
+
+    *revokerIt = icon.Loaded(
+        winrt::auto_revoke,
+        [revokerIt](const wf::IInspectable& sender,
+                    const wux::RoutedEventArgs&) {
+            if (!g_iconLoadedRevokers) {
+                return;
+            }
+
+            // Erasing the revoker releases this handler, so nothing captured
+            // may be used afterwards.
+            g_iconLoadedRevokers->erase(revokerIt);
+
+            try {
+                if (auto icon = sender.try_as<wux::FrameworkElement>()) {
+                    ApplyStockIconColors(icon);
+                }
+            } catch (...) {
+                Wh_Log(L"Recoloring the loaded built-in Start icon failed");
+            }
+        });
+}
+
+// Releases the color state which is no longer needed, from the taskbar thread.
+void UpdateColorTrackingFromTaskbarThread() noexcept {
+    try {
+        if (g_unloading) {
+            g_iconLoadedRevokers.reset();
+        }
+
+        if (g_unloading || !GetColorSettings().accentColor) {
+            StopTrackingAccentColor();
+        }
+    } catch (...) {
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -2985,6 +3588,8 @@ bool ApplyToXamlRoot(const wux::XamlRoot& xamlRoot) {
             return false;
         }
 
+        ApplyStartButtonColors(startButton);
+
         return AttachToStartButton(startButton);
     } catch (const winrt::hresult_error& e) {
         Wh_Log(L"ApplyToXamlRoot failed: 0x%08X %s", e.code().value,
@@ -3402,6 +4007,8 @@ bool RunOnTrackedInstanceThreads(RunFromWindowThreadProc_t proc,
 // -----------------------------------------------------------------------------
 
 void ApplyFromTaskbarThread(bool mainTaskbarOnly = false) {
+    UpdateColorTrackingFromTaskbarThread();
+
     EnumThreadWindows(
         GetCurrentThreadId(),
         [](HWND window, LPARAM param) -> BOOL {
@@ -3524,6 +4131,35 @@ void WINAPI CSecondaryTray_InitModelAndHost_Hook(void* pThis,
 // Start button recreation hook
 // -----------------------------------------------------------------------------
 
+// The hooked methods below are members of the button implementation object, of
+// which the second interface pointer is the XAML element. Returns null for the
+// other taskbar buttons, which the mod doesn't customize.
+wux::FrameworkElement GetStartButtonElement(void* pThis) {
+    if (!pThis) {
+        return nullptr;
+    }
+
+    IUnknown* inspectable = reinterpret_cast<IUnknown**>(pThis)[1];
+
+    if (!inspectable) {
+        return nullptr;
+    }
+
+    wux::FrameworkElement element{nullptr};
+
+    inspectable->QueryInterface(winrt::guid_of<wux::FrameworkElement>(),
+                                winrt::put_abi(element));
+
+    if (!element ||
+        winrt::get_class_name(element) != L"Taskbar.ExperienceToggleButton" ||
+        wuxa::AutomationProperties::GetAutomationId(element) !=
+            L"StartButton") {
+        return nullptr;
+    }
+
+    return element;
+}
+
 using ExperienceToggleButton_UpdateButtonPadding_t = void(WINAPI*)(void* pThis);
 
 ExperienceToggleButton_UpdateButtonPadding_t
@@ -3532,37 +4168,146 @@ ExperienceToggleButton_UpdateButtonPadding_t
 void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
     ExperienceToggleButton_UpdateButtonPadding_Original(pThis);
 
-    if (g_unloading || !pThis) {
+    if (g_unloading) {
         return;
     }
 
     try {
-        IUnknown* inspectable = reinterpret_cast<IUnknown**>(pThis)[1];
-
-        if (!inspectable) {
-            return;
+        if (auto startButton = GetStartButtonElement(pThis)) {
+            AttachToStartButton(startButton);
         }
-
-        wux::FrameworkElement element{nullptr};
-
-        inspectable->QueryInterface(winrt::guid_of<wux::FrameworkElement>(),
-                                    winrt::put_abi(element));
-
-        if (!element ||
-            winrt::get_class_name(element) !=
-                L"Taskbar.ExperienceToggleButton" ||
-            wuxa::AutomationProperties::GetAutomationId(element) !=
-                L"StartButton") {
-            return;
-        }
-
-        AttachToStartButton(element);
     } catch (const winrt::hresult_error& e) {
         Wh_Log(L"Handling a recreated Start button failed: 0x%08X %s",
                e.code().value, e.message().c_str());
     } catch (...) {
         Wh_Log(L"Handling a recreated Start button failed");
     }
+}
+
+// -----------------------------------------------------------------------------
+// Built-in icon color hooks
+// -----------------------------------------------------------------------------
+
+// Runs on every state change of the button, which is when the built-in icon is
+// recolored again in case the player recreated the animated visual.
+using ExperienceToggleButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
+
+ExperienceToggleButton_UpdateVisualStates_t
+    ExperienceToggleButton_UpdateVisualStates_Original;
+
+void WINAPI ExperienceToggleButton_UpdateVisualStates_Hook(void* pThis) {
+    ExperienceToggleButton_UpdateVisualStates_Original(pThis);
+
+    try {
+        if (!StockIconColorsNeedApplying(GetColorSettings())) {
+            return;
+        }
+
+        if (auto startButton = GetStartButtonElement(pThis)) {
+            ApplyStartButtonColors(startButton);
+        }
+    } catch (...) {
+        Wh_Log(L"Handling a Start button state change failed");
+    }
+}
+
+// Runs when the built-in icon is created, with the original colors.
+using ExperienceToggleButton_InitializeAnimatedVisualPlayer_t =
+    void(WINAPI*)(void* pThis);
+
+ExperienceToggleButton_InitializeAnimatedVisualPlayer_t
+    ExperienceToggleButton_InitializeAnimatedVisualPlayer_Original;
+
+void WINAPI
+ExperienceToggleButton_InitializeAnimatedVisualPlayer_Hook(void* pThis) {
+    wux::FrameworkElement startButton{nullptr};
+
+    try {
+        if (!g_unloading && GetColorSettings().customizeColors) {
+            startButton = GetStartButtonElement(pThis);
+
+            // The icon creates its animations for the first time in here.
+            if (startButton) {
+                EnsureColorKeyFrameAnimationHooked(startButton);
+            }
+        }
+    } catch (...) {
+        startButton = nullptr;
+    }
+
+    ExperienceToggleButton_InitializeAnimatedVisualPlayer_Original(pThis);
+
+    // Nothing to restore on a fresh icon, and no subscription may be added
+    // once the pending ones have been released.
+    if (!startButton || g_unloading) {
+        return;
+    }
+
+    try {
+        auto icon = FindStockStartIcon(startButton);
+
+        if (!icon) {
+            return;
+        }
+
+        // The player attaches the animated visual to the icon element only
+        // once the element is loaded, which is after the icon is initialized
+        // while the taskbar is being created.
+        if (!wuxh::ElementCompositionPreview::GetElementChildVisual(icon)) {
+            ApplyStockIconColorsOnceLoaded(icon);
+            return;
+        }
+
+        ApplyStockIconColors(icon);
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Recoloring a new built-in Start icon failed: 0x%08X %s",
+               e.code().value, e.message().c_str());
+    } catch (...) {
+        Wh_Log(L"Recoloring a new built-in Start icon failed");
+    }
+}
+
+// Runs whenever the icon recreates the animations which drive it, among them
+// the color animations of its animated parts. There's an animated visual per
+// theme, each with its own implementation.
+using StartIconAnimatedVisual_CreateAnimations_t = void(WINAPI*)(void* pThis);
+
+void CreateIconAnimations(void* pThis,
+                          StartIconAnimatedVisual_CreateAnimations_t original) {
+    struct SettingsGuard {
+        const ColorSettings* saved = g_iconAnimationColorSettings;
+
+        ~SettingsGuard() { g_iconAnimationColorSettings = saved; }
+    } guard;
+
+    ColorSettings settings;
+    bool customize = false;
+
+    try {
+        settings = GetColorSettings();
+        customize = !g_unloading && settings.customizeColors;
+    } catch (...) {
+    }
+
+    g_iconAnimationColorSettings = customize ? &settings : nullptr;
+
+    original(pThis);
+}
+
+StartIconAnimatedVisual_CreateAnimations_t
+    StartDarkAnimatedVisual_CreateAnimations_Original;
+
+void WINAPI StartDarkAnimatedVisual_CreateAnimations_Hook(void* pThis) {
+    CreateIconAnimations(pThis,
+                         StartDarkAnimatedVisual_CreateAnimations_Original);
+}
+
+StartIconAnimatedVisual_CreateAnimations_t
+    StartLightAnimatedVisual_CreateAnimations_Original;
+
+void WINAPI StartLightAnimatedVisual_CreateAnimations_Hook(void* pThis) {
+    CreateIconAnimations(pThis,
+                         StartLightAnimatedVisual_CreateAnimations_Original);
 }
 
 std::atomic<bool> g_taskbarViewDllLoaded = false;
@@ -3574,6 +4319,33 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             {LR"(protected: virtual void __cdecl winrt::Taskbar::implementation::ExperienceToggleButton::UpdateButtonPadding(void))"},
             &ExperienceToggleButton_UpdateButtonPadding_Original,
             ExperienceToggleButton_UpdateButtonPadding_Hook,
+        },
+
+        // The hooks below recolor the built-in icon. They are optional so that
+        // image replacement keeps working if a Windows update removes them.
+        {
+            {LR"(protected: virtual void __cdecl winrt::Taskbar::implementation::ExperienceToggleButton::UpdateVisualStates(void))"},
+            &ExperienceToggleButton_UpdateVisualStates_Original,
+            ExperienceToggleButton_UpdateVisualStates_Hook,
+            true,
+        },
+        {
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::ExperienceToggleButton::InitializeAnimatedVisualPlayer(void))"},
+            &ExperienceToggleButton_InitializeAnimatedVisualPlayer_Original,
+            ExperienceToggleButton_InitializeAnimatedVisualPlayer_Hook,
+            true,
+        },
+        {
+            {LR"(public: void __cdecl winrt::AnimatedVisuals::implementation::StartDark_AnimatedVisual::CreateAnimations(void))"},
+            &StartDarkAnimatedVisual_CreateAnimations_Original,
+            StartDarkAnimatedVisual_CreateAnimations_Hook,
+            true,
+        },
+        {
+            {LR"(public: void __cdecl winrt::AnimatedVisuals::implementation::StartLight_AnimatedVisual::CreateAnimations(void))"},
+            &StartLightAnimatedVisual_CreateAnimations_Original,
+            StartLightAnimatedVisual_CreateAnimations_Hook,
+            true,
         },
     };
 
@@ -3715,10 +4487,8 @@ BOOL Wh_ModInit() {
     ResetReportedImageFailures(settingsGeneration);
 
     if (IsBlank(GetSettingsSnapshot().imageSource)) {
-        Wh_Log(L"No image source is configured; leaving the stock Start icon "
-               L"unchanged");
-
-        return FALSE;
+        Wh_Log(L"No image source is configured; using the built-in Start "
+               L"icon");
     }
 
     if (!HookTaskbarDllSymbols()) {
@@ -3806,6 +4576,12 @@ void Wh_ModBeforeUninit() {
     if (remainingInstances != 0) {
         Wh_Log(L"Critical: %zu Start icon instance(s) couldn't be detached",
                remainingInstances);
+    }
+
+    // With unloading in progress, applying only restores the original colors
+    // of the built-in icon and releases the color tracking state.
+    if (g_colorsEverCustomized) {
+        RunOnAllTaskbarThreads(ApplyAllTaskbarsProc, nullptr);
     }
 }
 
