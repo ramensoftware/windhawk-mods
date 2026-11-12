@@ -12415,13 +12415,13 @@ bool SampleRegionLuminance(uint32_t const* pixels, int width, int height,
     return true;
 }
 
-bool ElementSampleRegion(Root const& root, FrameworkElement const& element,
+bool ElementSampleRegion(UIElement const& frame, FrameworkElement const& element,
                          RECT const& taskbar, UINT dpi, RECT& region) {
     try {
-        if (!root.frame || element.ActualWidth() <= 0 ||
+        if (!frame || element.ActualWidth() <= 0 ||
             element.ActualHeight() <= 0)
             return false;
-        auto bounds = element.TransformToVisual(root.frame).TransformBounds(
+        auto bounds = element.TransformToVisual(frame).TransformBounds(
             {0, 0, static_cast<float>(element.ActualWidth()),
              static_cast<float>(element.ActualHeight())});
         double scale = dpi / 96.0;
@@ -12524,10 +12524,9 @@ void UpdatePreviewForeground(SettingsEditor& editor) {
         if(!GetClientRect(editor.window,&request.bounds)) return;
         POINT origin{};if(!ClientToScreen(editor.window,&origin)) return;
         OffsetRect(&request.bounds,origin.x,origin.y);
-        Root samplingRoot;samplingRoot.frame=editor.content;
         for(size_t i=0;i<elements.size();++i) {
             RECT region{};
-            if(!ElementSampleRegion(samplingRoot,elements[i],request.bounds,editor.dpi,region)) return;
+            if(!ElementSampleRegion(editor.content,elements[i],request.bounds,editor.dpi,region)) return;
             // Do not adapt the preview to another window covering its sample.
             POINT middle{region.left+(region.right-region.left)/2,region.top+(region.bottom-region.top)/2};
             auto visible=WindowFromPoint(middle);
@@ -12725,7 +12724,7 @@ void UpdateAdaptiveForeground(Root& root) {
             auto text = state.element;
             if (!text || !state.owned) continue;
             RECT region{};
-            if (!ElementSampleRegion(root, text, taskbar, dpi, region))
+            if (!ElementSampleRegion(root.frame, text, taskbar, dpi, region))
                 continue;
             OffsetRect(&region, -taskbar.left, -taskbar.top);
             request->items.push_back({state.identity, region});
@@ -12734,7 +12733,7 @@ void UpdateAdaptiveForeground(Root& root) {
             auto element = icon.element.get();
             if (icon.taskbar != root.taskbar || !icon.files.Adaptive() || !element) continue;
             RECT region{};
-            if (!ElementSampleRegion(root, element, taskbar, dpi, region)) continue;
+            if (!ElementSampleRegion(root.frame, element, taskbar, dpi, region)) continue;
             OffsetRect(&region, -taskbar.left, -taskbar.top);
             request->items.push_back({reinterpret_cast<uintptr_t>(winrt::get_abi(element)), region});
         }
