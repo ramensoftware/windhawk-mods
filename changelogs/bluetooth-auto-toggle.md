@@ -1,3 +1,10 @@
+## 1.3.0 ([Nov 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/be32b2a231e9fe3a4047845117ac1dba414903dc/mods/bluetooth-auto-toggle.wh.cpp))
+
+- Changed Default Value
+- Set Placement for toggleOnEveryDeviceConnection
+- Infinite Loop Prevention & Smart Cooldown
+- Zero-Overhead Performance
+
 ## 1.2.0 ([Nov 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5fc3ea8d67b66a7e5825abed0ae317d6c7a0971d/mods/bluetooth-auto-toggle.wh.cpp))
 
 - Added startupBluetoothState setting to enforce Bluetooth power state (ON / OFF / Unchanged) at startup.

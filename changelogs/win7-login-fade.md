@@ -1,3 +1,11 @@
+## 1.6 ([Nov 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/534cc45edf98589c00b0047fc36cc53de49b0b98/mods/win7-login-fade.wh.cpp))
+
+* Delegate monitor off/sleep fades to Winlogon
+* Automatically use the kernel-mode gamma effect on supported systems when the logon/logoff fade type is set to Gamma, instead of providing a separate option that doesn't even work on newer Windows versions
+* Automatically enable the enhanced sleep interception mode on known supported versions
+* Add an alternative way of enabling the natural fade
+* Prevent entering the sleep state when the monitor gets turned off by the idle timer on Modern Standby devices
+
 ## 1.5 ([Sep 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/83a455e97dbd8810c9bd0f441cfa3f61ae3830bf/mods/win7-login-fade.wh.cpp))
 
 * Fix a critical winlogon crash occurring on Windhawk 2.0 alpha 6 (by @m417z)

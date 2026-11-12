@@ -2,12 +2,61 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-12T04:33:02.000Z</updated>
+    <updated>2026-11-12T05:04:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Minimize to tray 1.1.1]]></title>
+        <id>https://windhawk.net/mods/minimize-to-tray#13b147a4d7505612f590bc19bd4a37faab0e90a4</id>
+        <link href="https://windhawk.net/mods/minimize-to-tray"/>
+        <updated>2026-11-12T05:04:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for <a href="https://windhawk.net/mods/touchpad-relaxed-hand-tracking">Touchpad Relaxed Hand Tracking</a></li>
+</ul>
+]]></content>
+        <author>
+            <name>0Allu</name>
+            <uri>https://github.com/0Allu</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Bluetooth Auto Toggle 1.3.0]]></title>
+        <id>https://windhawk.net/mods/bluetooth-auto-toggle#be32b2a231e9fe3a4047845117ac1dba414903dc</id>
+        <link href="https://windhawk.net/mods/bluetooth-auto-toggle"/>
+        <updated>2026-11-12T05:04:04.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Changed Default Value</li>
+<li>Set Placement for toggleOnEveryDeviceConnection</li>
+<li>Infinite Loop Prevention &amp; Smart Cooldown</li>
+<li>Zero-Overhead Performance</li>
+</ul>
+]]></content>
+        <author>
+            <name>Dev-StudioCode</name>
+            <uri>https://github.com/Dev-StudioCode</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Logon & Sleep Fade Restorer 1.6]]></title>
+        <id>https://windhawk.net/mods/win7-login-fade#534cc45edf98589c00b0047fc36cc53de49b0b98</id>
+        <link href="https://windhawk.net/mods/win7-login-fade"/>
+        <updated>2026-11-12T05:03:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Delegate monitor off/sleep fades to Winlogon</li>
+<li>Automatically use the kernel-mode gamma effect on supported systems when the logon/logoff fade type is set to Gamma, instead of providing a separate option that doesn't even work on newer Windows versions</li>
+<li>Automatically enable the enhanced sleep interception mode on known supported versions</li>
+<li>Add an alternative way of enabling the natural fade</li>
+<li>Prevent entering the sleep state when the monitor gets turned off by the idle timer on Modern Standby devices</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Recycle Bin File Preview 1.0.1]]></title>
         <id>https://windhawk.net/mods/recycle-bin-file-preview#9a2bcb726f3456548107f9f8c3256013c0b8dc43</id>
@@ -912,56 +961,6 @@ This implementation is distributed under GPL-3.0-or-later.</p>
         <author>
             <name>Salyts</name>
             <uri>https://github.com/Salyts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Thumbnail Stats 1.7]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnail-stats#9991c026f4999fc45d962f6ecdc027da47dadacf</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnail-stats"/>
-        <updated>2026-11-10T20:03:22.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New &quot;Title at the bottom&quot; option: moves the window name and the close button to a row at the bottom of the thumbnail, closer to the mouse pointer, with configurable top spacing and an optional separator line</li>
-<li>New &quot;Close button&quot; option: show it only when the mouse is over the thumbnail (Windows default) or always</li>
-<li>New &quot;Widen small thumbnails to fit the line&quot; option: thumbnails of small windows are made wide enough to show the whole line instead of shortening it with &quot;…&quot;</li>
-</ul>
-]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 Taskbar Context Menu Fix for Win11 24H2+ 1.3]]></title>
-        <id>https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2#c625b14307c1e1465dab82dc6d657ba2a1cfcc41</id>
-        <link href="https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2"/>
-        <updated>2026-11-10T20:03:17.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix taskmgr item not working on 26100.1</li>
-</ul>
-]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock to Left 2.3.19]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-to-left#a06823eedc04704de05a94fff7778a2410e72068</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-to-left"/>
-        <updated>2026-11-10T20:03:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Support horizontal <code>StackPanel</code> tray layouts alongside <code>Grid</code>.</li>
-<li>Preserve the clock button's margins when moving it.</li>
-<li>Use the measured bounds of unfamiliar taskbar buttons to avoid overlap.</li>
-<li>Retry placement when the clock text size changes. After a width-related fallback, wait for the clock controls or sizing inputs to change before retrying.</li>
-<li>Track native tray extent, reserved width, and obstacle positions separately when comparing layouts.</li>
-<li>Use the native clock position when the taskbar item list is missing, and reuse a valid list on routine layout updates.</li>
-<li>Update the README.</li>
-</ul>
-]]></content>
-        <author>
-            <name>pleromyst</name>
-            <uri>https://github.com/pleromyst</uri>
         </author>
     </entry>
 </feed>
