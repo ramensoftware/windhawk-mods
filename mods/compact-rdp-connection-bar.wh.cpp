@@ -2,7 +2,7 @@
 // @id              compact-rdp-connection-bar
 // @name            Compact RDP connection bar
 // @description     Shrinks the top connection bar, optionally hides pin/quality buttons, keeps drag working
-// @version         2.9.0
+// @version         2.9.1
 // @author          hsb5
 // @github          https://github.com/hsb5
 // @include         mstsc.exe
@@ -116,9 +116,13 @@ static bool g_active  = false;
 static RECT g_textRect;          // hostname zone, bar client coords
 static int  g_textLimitX = 0;    // text may never go past this x (right group)
 static int  g_textNeed   = 0;    // widest hostname measured while painting
+static int  g_dpi        = 96;   // DPI of the bar's monitor, set by ComputeTargets
 static bool g_stale      = false;
 
-static bool t_painting  = false;  // only touched on the bar's own thread
+// Painting happens on the bar's own thread, but both DrawText hooks are called
+// from every thread in the process. Without thread_local a DrawText on another
+// thread during a paint would be moved into the hostname zone too.
+static thread_local bool t_painting = false;
 static bool g_computing = false;  // re-entrancy guard
 static bool g_dumped    = false;  // one-shot structure dump
 
@@ -141,11 +145,36 @@ static LRESULT CALLBACK TbProc(HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
 
 // ---------------------------------------------------------------- helpers
 
-static int DpiOf(HWND h) {
+// GetDpiForWindow gives the DPI of the monitor the window is on, which is what
+// the bar needs on a mixed-DPI setup. It only exists on Windows 10 1607 and
+// later, so fall back to the system DPI when it cannot be resolved.
+typedef UINT (WINAPI* GetDpiForWindow_t)(HWND);
+
+static UINT QueryWindowDpi(HWND h) {
+    static GetDpiForWindow_t pGetDpiForWindow = NULL;
+    static bool resolved = false;
+    if (!resolved) {
+        resolved = true;
+        HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        if (user32)
+            pGetDpiForWindow =
+                (GetDpiForWindow_t)GetProcAddress(user32, "GetDpiForWindow");
+    }
+
+    if (pGetDpiForWindow) {
+        UINT dpi = pGetDpiForWindow(h);
+        if (dpi) return dpi;
+    }
+
     HDC dc = GetDC(h);
-    int dpi = dc ? GetDeviceCaps(dc, LOGPIXELSX) : 96;
+    UINT dpi = dc ? (UINT)GetDeviceCaps(dc, LOGPIXELSX) : 0;
     if (dc) ReleaseDC(h, dc);
-    return dpi > 0 ? dpi : 96;
+    return dpi ? dpi : 96;
+}
+
+static int DpiOf(HWND h) {
+    UINT dpi = QueryWindowDpi(h);
+    return dpi > 0 ? (int)dpi : 96;
 }
 
 static int MeasureText(HDC dc, LPCWSTR text, int cch) {
@@ -184,10 +213,13 @@ static bool ShouldHideId(int id) {
     return (g_hidePin && id == g_pinId) || (g_hideQuality && id == g_qualityId);
 }
 
-// Window buttons on the right toolbar are matched by their bitmap index,
-// which is unique per toolbar (0 minimize, 1 restore, 2 close on mstsc),
-// while their command ids repeat the ids of the left toolbar.
-static bool ShouldHideBmp(int bmp) {
+// Window buttons on the right toolbar are matched by bitmap index (0 minimize,
+// 1 restore, 2 close), because mstsc gives them plain command ids that repeat
+// the ids used by the left toolbar. Their ids happen to equal their bitmap
+// index, which is what tells them apart from the pin/quality group; there the
+// two never coincide.
+static bool ShouldHideWindowButton(int id, int bmp) {
+    if (id != bmp) return false;
     return (g_hideMin && bmp == 0) || (g_hideRestore && bmp == 1) ||
            (g_hideClose && bmp == 2);
 }
@@ -326,7 +358,8 @@ static int NeededWidth(HWND tb) {
         if (!SendMessageW(tb, TB_GETBUTTON, i, (LPARAM)&b)) continue;
 
         // A button we asked to hide, and the toolbar really hid, needs no room.
-        if ((ShouldHideId(b.idCommand) || ShouldHideBmp(b.iBitmap)) &&
+        if ((ShouldHideId(b.idCommand) ||
+             ShouldHideWindowButton(b.idCommand, b.iBitmap)) &&
             IsButtonHidden(tb, b.idCommand)) continue;
 
         RECT ir;
@@ -351,7 +384,8 @@ static void HideMatching(HWND tb) {
         TBBUTTON b;
         ZeroMemory(&b, sizeof(b));
         if (!SendMessageW(tb, TB_GETBUTTON, i, (LPARAM)&b)) continue;
-        if (!ShouldHideId(b.idCommand) && !ShouldHideBmp(b.iBitmap)) continue;
+        if (!ShouldHideId(b.idCommand) &&
+            !ShouldHideWindowButton(b.idCommand, b.iBitmap)) continue;
 
         if (!IsButtonHidden(tb, b.idCommand)) {
             SendMessageW(tb, TB_HIDEBUTTON, (WPARAM)b.idCommand, MAKELPARAM(TRUE, 0));
@@ -460,6 +494,7 @@ static bool ComputeTargets(HWND hwnd) {
         int rightW  = needed[lastIdx];
 
         int dpi = DpiOf(hwnd);
+        g_dpi = dpi;
         int pad = MulDiv(EDGE_PAD, dpi, 96);
         int gap = MulDiv(g_gapWidth, dpi, 96);
 
@@ -642,7 +677,7 @@ static LPRECT RedirectRect(HDC hdc, LPCWSTR text, int cch, LPRECT out) {
     *out = g_textRect;
     int tw = MeasureText(hdc, text, cch);
     if (tw > 0) {
-        int pad = MulDiv(24, 96, 96);
+        int pad = MulDiv(24, g_dpi, 96);
         int need = (int)g_textRect.left + tw + pad;
         if (need > (int)out->right) {
             out->right = (need < g_textLimitX) ? need : g_textLimitX;
@@ -741,7 +776,7 @@ BOOL Wh_ModInit() {
     WindhawkUtils::SetFunctionHook(DrawTextExW, DrawTextExW_Hook, &DrawTextExW_Original);
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
 
-    Wh_Log(L"init 2.9.0: gap=%d pin=%d(id %d) quality=%d(id %d) min=%d restore=%d close=%d debug=%d",
+    Wh_Log(L"init 2.9.1: gap=%d pin=%d(id %d) quality=%d(id %d) min=%d restore=%d close=%d debug=%d",
            g_gapWidth, (int)g_hidePin, g_pinId,
            (int)g_hideQuality, g_qualityId,
            (int)g_hideMin, (int)g_hideRestore, (int)g_hideClose,
@@ -766,19 +801,27 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    RestoreButtons();
-    g_active = false;
-    t_painting = false;
-
+    // Remove every subclass first. Both procs live in this mod's image, so a
+    // bar or toolbar that keeps one crashes mstsc on its next message once the
+    // mod is unloaded. Doing this before RestoreButtons also stops a WM_PAINT
+    // from landing in the gap and recomputing the layout we are undoing.
     HWND desktop = GetDesktopWindow();
     HWND hwnd = NULL;
     DWORD myPid = GetCurrentProcessId();
     while ((hwnd = FindWindowExW(desktop, hwnd, L"BBarWindowClass", NULL)) != NULL) {
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
-        if (pid == myPid)
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, BarProc);
+        if (pid != myPid) continue;
+
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, BarProc);
+
+        HWND tb = NULL;
+        while ((tb = FindWindowExW(hwnd, tb, L"ToolbarWindow32", NULL)) != NULL)
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(tb, TbProc);
     }
+
+    RestoreButtons();
+    g_active = false;
 
     if (g_bbar && IsWindow(g_bbar) && g_haveOrigBar) {
         SetWindowPos(g_bbar, NULL, (int)g_origBar.left, (int)g_origBar.top,
@@ -788,7 +831,6 @@ void Wh_ModUninit() {
 
         for (int i = 0; i < g_tbCount; i++) {
             if (!IsWindow(g_tb[i].hwnd) || !g_tb[i].haveOrig) continue;
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_tb[i].hwnd, TbProc);
             SendMessageW(g_tb[i].hwnd, TB_AUTOSIZE, 0, 0);
             SetWindowPos(g_tb[i].hwnd, NULL, g_tb[i].ox, 0, g_tb[i].ow,
                          (int)(g_origBar.bottom - g_origBar.top),
