@@ -12,7 +12,7 @@
 // @include           LockApp.exe
 // @include           explorer.exe
 // @architecture      x86-64
-// @compilerOptions   -lole32 -loleaut32 -lruntimeobject -lmfplat -lmfreadwrite -lmfuuid -lwinmm -ladvapi32 -luuid -ld3d11 -lgdi32 -luser32 -lshell32 -luxtheme
+// @compilerOptions   -lole32 -loleaut32 -lruntimeobject -lmfplat -lmfreadwrite -lmfuuid -lwinmm -luuid -ld3d11 -lgdi32 -luser32 -lshell32 -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -1639,7 +1639,7 @@ static DWORD GifRun() {
         if (SUCCEEDED(fac->CreateFormatConverter(&cv)) && cv &&
             SUCCEEDED(cv->Initialize(fr, kGuidWicPBGRA, WICBitmapDitherTypeNone, nullptr,
                                      0.0, WICBitmapPaletteTypeCustom)) &&
-            SUCCEEDED(cv->GetSize(&fw, &fh)) && fw && fh && fw <= 8192 && fh <= 8192) {
+            SUCCEEDED(cv->GetSize(&fw, &fh)) && fw && fh && fw <= lw && fh <= lh) {
             frame.resize((size_t)fw * fh);
             ok = SUCCEEDED(cv->CopyPixels(nullptr, fw * 4, (UINT)(frame.size() * 4),
                                           (BYTE*)frame.data()));
@@ -1881,7 +1881,7 @@ void UpdatePasswordScene(DependencyObject const& o, DependencyObject const& l) {
             g_pwGoneTick = GetTickCount();
             // Only a sign-in screen that stayed up for a while counts as "got through"; startup flickers last only 0.2-0.3 s.
             if (GetTickCount() - g_pwShownTick >= 1000)
-            if (!g_previewRole) Wh_SetIntValue(L"pendingStarts", 0);
+                Wh_SetIntValue(L"pendingStarts", 0);
         }
         g_pwScene = pw;
         FileLog(L"Password screen %s", pw ? L"shown" : L"gone");
@@ -2723,6 +2723,7 @@ static DWORD WINAPI PreviewThread(LPVOID) {
 // transparent bitmap and saves it to overlay.bgra for the preview window.
 static bool g_ovWanted = false;
 static std::atomic<int> g_ovState{0};   // 0 = not yet, 1 = capture running, 2 = done
+static std::atomic<int> g_ovRunning{0}; // captures whose coroutine has not finished yet (the session logic never touches it)
 static DWORD g_ovLastTry = 0;
 static DWORD g_ovSession = 0;           // when the current lock session was first seen
 static DWORD g_ovLastMsg = 0;           // last time the hook ran (to detect a suspended LockApp)
@@ -2748,6 +2749,8 @@ static void SaveOverlay(const uint8_t* px, int w, int h) {
 // Renders the visible lock screen pieces one by one and puts each one at its real
 // screen position (RenderTargetBitmap re-lays a big Grid out into a narrow column).
 static winrt::fire_and_forget CaptureOverlayParts(UIElement root) {
+    g_ovRunning++;
+    struct RunGuard { ~RunGuard() { g_ovRunning--; } } runGuard;   // runs on every exit path of the coroutine    
     bool ok = false;
     try {
         auto rootFe = root.try_as<FrameworkElement>();      
@@ -2891,6 +2894,7 @@ static void OvWaitLog(int code, const wchar_t* why) {
 }
 
 static void TryStartOverlayCapture() {
+    if (g_ovRunning.load() > 0) return;   // a previous capture is still pending    
     try {
         auto window = Window::Current();
         auto content = window ? window.Content() : nullptr;
@@ -3259,9 +3263,12 @@ void Wh_ModUninit() {
             SendMessageTimeoutW(pw, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 5000, &r);   // barrier: no hook call still running
         }
         // wait for a pending overlay capture (its continuation finishes on LockApp's UI thread)
-        for (int i = 0; i < 100 && g_ovState.load() == 1; i++) Sleep(50);
-        if (g_ovState.load() == 1) FileLog(L"Overlay: capture still pending at uninit");
-        else Sleep(50);   // let the coroutine frame finish returning
+        for (int i = 0; i < 100 && g_ovRunning.load() > 0; i++) Sleep(50);
+        if (g_ovRunning.load() > 0) FileLog(L"Overlay: capture still pending at uninit");
+        else if (pw && IsWindow(pw)) {
+            DWORD_PTR r2 = 0;
+            SendMessageTimeoutW(pw, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 5000, &r2);   // second barrier: the continuation has fully returned
+        }
     }    
     if (g_previewRole && g_prevThread) {
         g_stop = true;
