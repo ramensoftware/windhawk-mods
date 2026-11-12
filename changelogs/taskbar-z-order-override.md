@@ -1,3 +1,7 @@
+## 0.9.0 ([Nov 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ecfcd33887f2697dd08fc26f659695a18cc325bd/mods/taskbar-z-order-override.wh.cpp))
+
+Adds an optional "raise taskbar when switching windows" switch for topmost mode.
+
 ## 0.8.1 ([Sep 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/47bd3790bfa3878f9eaba84661f0cbc623f1c2b7/mods/taskbar-z-order-override.wh.cpp))
 
 * Updated the author's GitHub profile URL after the username changed from `Meteony` to `Meteoni`.

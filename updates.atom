@@ -2,12 +2,24 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-11T10:03:02.000Z</updated>
+    <updated>2026-11-12T04:02:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Z-Order Override 0.9.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-z-order-override#ecfcd33887f2697dd08fc26f659695a18cc325bd</id>
+        <link href="https://windhawk.net/mods/taskbar-z-order-override"/>
+        <updated>2026-11-12T04:02:17.000Z</updated>
+        <content type="html"><![CDATA[<p>Adds an optional &quot;raise taskbar when switching windows&quot; switch for topmost mode.</p>
+]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mac Island & Dock 3.1.1]]></title>
         <id>https://windhawk.net/mods/mac-island-dock#6625a8c8aa81f686b06ea934207e5bbd3b140d73</id>
@@ -864,21 +876,6 @@ This implementation is distributed under GPL-3.0-or-later.</p>
 <ul>
 <li>Optionally detect the text type and use it as the file extension</li>
 <li>Select the pasted file and enter rename mode (optional)</li>
-</ul>
-]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ExplorerFrame and menubar fixes fork 4.1]]></title>
-        <id>https://windhawk.net/mods/restore-folder-menubar-25h2#7047a595d7d4de175f55b420edfb05d9f832d278</id>
-        <link href="https://windhawk.net/mods/restore-folder-menubar-25h2"/>
-        <updated>2026-11-10T01:04:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add a link to <a href="https://windhawk.net/mods/classic-explorerframe">Classic Explorerframe for 24H2 and later</a> mod</li>
-<li>Minor refactoring</li>
 </ul>
 ]]></content>
         <author>
