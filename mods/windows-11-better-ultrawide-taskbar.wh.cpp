@@ -845,6 +845,11 @@ int LocalInt(settingsjson::JsonObject const& settings, PCWSTR key) {
     }
     return SettingDefinition(key).defaultValue;
 }
+// LocalInt held to its row's minimum..maximum. LocalInt itself stays raw: SettingsDocument writes back what the file holds.
+int LocalClamped(settingsjson::JsonObject const& settings, PCWSTR key) {
+    auto const& field = SettingDefinition(key);
+    return std::clamp(LocalInt(settings, key), field.minimum, field.maximum);
+}
 
 bool LocalBool(settingsjson::JsonObject const& settings, PCWSTR key) {
     if (settings) {
@@ -898,20 +903,14 @@ struct DockStyle {
     double concave{kConcaveRadius}; // Slanted ends: the concave curves' radius, as the corner radius is the convex ones'.
 };
 DockStyle ReadDockStyle(settingsjson::JsonObject const& values) {
-    auto const& reduction = SettingDefinition(L"trayReduction");
-    auto const& angle = SettingDefinition(L"slantAngle");
-    auto const& distance = SettingDefinition(L"barDistance");
-    auto const& concave = SettingDefinition(L"concaveRadius");
     return {DockShape(LocalChoice(values, L"shape")),
             DockAlignment(LocalChoice(values, L"alignment")),
             DockLayout(LocalChoice(values, L"layout")),
             LocalBool(values, L"innerArcs"),
-            LocalBool(values, L"smallerTray") ?
-                std::clamp(LocalInt(values, reduction.key), reduction.minimum, reduction.maximum) : 0.0,
-            LocalBool(values, L"slantedEnds") ?
-                90.0 - std::clamp(LocalInt(values, angle.key), angle.minimum, angle.maximum) : 0.0,
-            std::clamp<double>(LocalInt(values, distance.key), distance.minimum, distance.maximum),
-            std::clamp<double>(LocalInt(values, concave.key), concave.minimum, concave.maximum)};
+            LocalBool(values, L"smallerTray") ? LocalClamped(values, L"trayReduction") : 0.0,
+            LocalBool(values, L"slantedEnds") ? 90.0 - LocalClamped(values, L"slantAngle") : 0.0,
+            double(LocalClamped(values, L"barDistance")),
+            double(LocalClamped(values, L"concaveRadius"))};
 }
 DockStyle g_dockStyle;
 
@@ -2664,7 +2663,7 @@ void ReloadEditor(SettingsEditor& editor) {
             } else if (field.kind == SettingKind::Color) {
                 control.input.as<Controls::TextBox>().Text(LocalString(values, field.key));
             } else {
-                int value = std::clamp(LocalInt(values, field.key), field.minimum, field.maximum);
+                int value = LocalClamped(values, field.key);
                 control.input.as<Controls::TextBox>().Text(EditorNumberText(value, field));
                 control.slider.Value(value / field.displayDivisor);
             }
@@ -5048,61 +5047,58 @@ LiquidSettings ApplyLiquidPreset(std::wstring_view preset,
 }
 
 LiquidSettings ReadLiquidSettings(settingsjson::JsonObject const& settings) {
-    auto percent = [&settings](PCWSTR key, int low, int high) {
-        return std::clamp(LocalInt(settings, key), low, high) / 100.0f;
-    };
+    auto percent = [&settings](PCWSTR key) { return LocalClamped(settings, key) / 100.0f; };
     LiquidSettings result;
     auto choice = [&](PCWSTR key) { return static_cast<float>(LocalChoice(settings, key)); };
-    result.zRadius = static_cast<float>(std::clamp(LocalInt(settings, L"liquid.zRadius"), 1, 100));
-    result.refraction = percent(L"liquid.refraction", 0, 200);
-    result.chroma = percent(L"liquid.chromaticAberration", 0, 30);
-    result.edgeHighlight = percent(L"liquid.edgeHighlight", 0, 100);
-    result.specular = percent(L"liquid.specular", 0, 100);
-    result.fresnel = percent(L"liquid.fresnel", 0, 200);
-    result.opacity = percent(L"liquid.opacity", 0, 100);
-    result.brightness = percent(L"liquid.brightness", -50, 50);
-    result.blur = percent(L"liquid.blur", 0, 100);
+    result.zRadius = float(LocalClamped(settings, L"liquid.zRadius"));
+    result.refraction = percent(L"liquid.refraction");
+    result.chroma = percent(L"liquid.chromaticAberration");
+    result.edgeHighlight = percent(L"liquid.edgeHighlight");
+    result.specular = percent(L"liquid.specular");
+    result.fresnel = percent(L"liquid.fresnel");
+    result.opacity = percent(L"liquid.opacity");
+    result.brightness = percent(L"liquid.brightness");
+    result.blur = percent(L"liquid.blur");
     result.model = choice(L"liquid.model");
     result.surface = choice(L"liquid.surface");
-    result.bezelWidth = static_cast<float>(std::clamp(LocalInt(settings, L"liquid.bezelWidth"), 1, 100));
-    result.thickness = static_cast<float>(std::clamp(LocalInt(settings, L"liquid.thickness"), 1, 200));
-    result.refractiveIndex = percent(L"liquid.refractiveIndex", 100, 250);
-    result.magnification = percent(L"liquid.magnification", 0, 200);
-    result.distortion = percent(L"liquid.distortion", 0, 100);
-    result.saturation = percent(L"liquid.saturation", -100, 100);
-    result.tint = percent(L"liquid.tint", 0, 100);
+    result.bezelWidth = float(LocalClamped(settings, L"liquid.bezelWidth"));
+    result.thickness = float(LocalClamped(settings, L"liquid.thickness"));
+    result.refractiveIndex = percent(L"liquid.refractiveIndex"); // Stored in hundredths, so percent reads the index.
+    result.magnification = percent(L"liquid.magnification");
+    result.distortion = percent(L"liquid.distortion");
+    result.saturation = percent(L"liquid.saturation");
+    result.tint = percent(L"liquid.tint");
     result.lighting = choice(L"liquid.lighting");
-    result.lightAngle = std::clamp(LocalInt(settings, L"liquid.lightAngle"), -180, 180) *
-                        (3.14159265f / 180);
-    result.rimOpacity = percent(L"liquid.rimOpacity", 0, 100);
-    result.rimSaturation = percent(L"liquid.rimSaturation", 0, 1000);
-    result.shadowOpacity = percent(L"liquid.shadowOpacity", 0, 100);
-    result.shadowBlur = static_cast<float>(std::clamp(LocalInt(settings, L"liquid.shadowBlur"), 0, 72));
-    result.shadowOffset = static_cast<float>(std::clamp(LocalInt(settings, L"liquid.shadowOffset"), -40, 40));
-    result.rimRefraction = percent(L"liquid.rimRefraction", 0, 200);
-    result.rimWidth = float(std::clamp(LocalInt(settings, L"liquid.rimWidth"), 1, 60));
-    result.bevelSharpness = float(std::clamp(LocalInt(settings, L"liquid.bevelSharpness"), 2, 32));
-    result.cornerBoost = percent(L"liquid.cornerBoost", 0, 100);
-    result.rippleStrength = percent(L"liquid.rippleStrength", 0, 100);
-    result.rippleWavelength = float(std::clamp(LocalInt(settings, L"liquid.rippleWavelength"), 2, 100));
-    result.edgeWidth = float(std::clamp(LocalInt(settings, L"liquid.edgeWidth"), 0, 100));
-    result.edgeSoftness = percent(L"liquid.edgeSoftness", 10, 400);
-    result.frostEdge = percent(L"liquid.frostEdge", 0, 100);
+    result.lightAngle = LocalClamped(settings, L"liquid.lightAngle") * (3.14159265f / 180);
+    result.rimOpacity = percent(L"liquid.rimOpacity");
+    result.rimSaturation = percent(L"liquid.rimSaturation");
+    result.shadowOpacity = percent(L"liquid.shadowOpacity");
+    result.shadowBlur = float(LocalClamped(settings, L"liquid.shadowBlur"));
+    result.shadowOffset = float(LocalClamped(settings, L"liquid.shadowOffset"));
+    result.rimRefraction = percent(L"liquid.rimRefraction");
+    result.rimWidth = float(LocalClamped(settings, L"liquid.rimWidth"));
+    result.bevelSharpness = float(LocalClamped(settings, L"liquid.bevelSharpness"));
+    result.cornerBoost = percent(L"liquid.cornerBoost");
+    result.rippleStrength = percent(L"liquid.rippleStrength");
+    result.rippleWavelength = float(LocalClamped(settings, L"liquid.rippleWavelength"));
+    result.edgeWidth = float(LocalClamped(settings, L"liquid.edgeWidth"));
+    result.edgeSoftness = percent(L"liquid.edgeSoftness");
+    result.frostEdge = percent(L"liquid.frostEdge");
     result.coupledChroma = choice(L"liquid.dispersion");
     auto dye = LocalString(settings, L"liquid.dye");
     unsigned rgb = wcstoul(dye.c_str() + 1, nullptr, 16);
     result.dyeRed = ((rgb >> 16) & 255) / 255.0f;
     result.dyeGreen = ((rgb >> 8) & 255) / 255.0f;
     result.dyeBlue = (rgb & 255) / 255.0f;
-    result.dyeStrength = percent(L"liquid.dyeStrength", 0, 100);
-    result.fluidStrength = percent(L"liquid.fluidStrength", 0, 100);
-    result.fluidRadius = percent(L"liquid.fluidRadius", 5, 100);
-    result.fluidViscosity = percent(L"liquid.fluidViscosity", 0, 100);
+    result.dyeStrength = percent(L"liquid.dyeStrength");
+    result.fluidStrength = percent(L"liquid.fluidStrength");
+    result.fluidRadius = percent(L"liquid.fluidRadius");
+    result.fluidViscosity = percent(L"liquid.fluidViscosity");
     result.glintMode = choice(L"liquid.glintMode");
-    result.glintStrength = percent(L"liquid.glintStrength", 0, 100);
-    result.glintSpeed = percent(L"liquid.glintSpeed", 1, 100);
-    result.glintSize = percent(L"liquid.glintSize", 5, 100);
-    result.boundaryFade = float(std::clamp(LocalInt(settings, L"liquid.boundaryFade"), 0, 20));
+    result.glintStrength = percent(L"liquid.glintStrength");
+    result.glintSpeed = percent(L"liquid.glintSpeed");
+    result.glintSize = percent(L"liquid.glintSize");
+    result.boundaryFade = float(LocalClamped(settings, L"liquid.boundaryFade"));
     return ApplyLiquidPreset(LocalString(settings, L"liquid.preset"), result);
 }
 
@@ -5110,7 +5106,7 @@ DockBorder ReadBorder(settingsjson::JsonObject const& settings, PCWSTR prefix) {
     if (!LocalBool(settings, prefix)) return {};
     std::wstring key(prefix);
     auto choice = LocalString(settings, (key + L"Color").c_str());
-    auto alpha = uint8_t(std::lround(std::clamp(LocalInt(settings, (key + L"Opacity").c_str()), 0, 100) * 255 / 100.0));
+    auto alpha = uint8_t(std::lround(LocalClamped(settings, (key + L"Opacity").c_str()) * 255 / 100.0));
     winrt::Windows::UI::Color color{alpha, 128, 128, 128};
     if (choice == L"black") color = {alpha, 0, 0, 0};
     else if (choice == L"white") color = {alpha, 255, 255, 255};
@@ -5118,7 +5114,7 @@ DockBorder ReadBorder(settingsjson::JsonObject const& settings, PCWSTR prefix) {
         unsigned rgb = wcstoul(LocalString(settings, (key + L"CustomColor").c_str()).c_str() + 1, nullptr, 16);
         color = {alpha, uint8_t(rgb >> 16), uint8_t(rgb >> 8), uint8_t(rgb)};
     }
-    return {color, std::clamp(LocalInt(settings, (key + L"Width").c_str()), 1, 20) / 2.0f};
+    return {color, LocalClamped(settings, (key + L"Width").c_str()) / 2.0f};
 }
 
 LiquidSettings ReadUiLiquidSettings(settingsjson::JsonObject const& ui, float scale) {
@@ -9494,17 +9490,13 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
         lens.center[1] = lens.halfSize[1] = height / 2.0f;
         lens.radius = windowRadius * scale;
         auto const& ui = editor.savedValues;
-        auto value = [&](PCWSTR key) {
-            auto const& field = SettingDefinition(key);
-            return std::clamp(LocalInt(ui, key), field.minimum, field.maximum);
-        };
         lens.bodyMode = 6; // Acrylic.
         lens.optics = ReadUiLiquidSettings(ui, scale);
         ApplyBorder(lens, ReadBorder(ui, L"ui.bodyBorder"), scale);
         std::fill_n(lens.bodyMaterialTint, 3, dark ? 32.0f / 255 : 243.0f / 255);
         lens.bodyMaterialTint[3] = 0.8f;
         lens.lensRefraction = lens.optics.refraction;
-        lens.lensBlend = value(L"ui.panelOpacity") / 100.0f;
+        lens.lensBlend = LocalClamped(ui, L"ui.panelOpacity") / 100.0f;
         lens.alertTintOpacity = 1;
         using Rect = winrt::Windows::Foundation::Rect;
         size_t lensCap = kMaxButtonLenses - 2; // Keeps room for the two panels.
@@ -14274,18 +14266,14 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags) {
 
 // ---- Mod lifecycle ------------------------------------------------------
 void SetModConfiguration(settingsjson::JsonObject const& local) {
-    g_dockCornerRadius = std::clamp(
-        LocalInt(local, L"cornerRadius"), 0, 100);
-    g_buttonCornerRadius = std::clamp(
-        LocalInt(local, L"buttonCornerRadius"), 0, 100);
-    g_buttonVerticalPadding = std::clamp(
-        LocalInt(local, L"buttonVerticalPadding"), 0, 100);
-    g_trayHighlightPadding=std::clamp(LocalInt(local,L"tray.highlightPadding"),0,100);
-    g_trayHighlightRadius=std::clamp(LocalInt(local,L"tray.highlightRadius"),0,100);
+    g_dockCornerRadius = LocalClamped(local, L"cornerRadius");
+    g_buttonCornerRadius = LocalClamped(local, L"buttonCornerRadius");
+    g_buttonVerticalPadding = LocalClamped(local, L"buttonVerticalPadding");
+    g_trayHighlightPadding = LocalClamped(local, L"tray.highlightPadding");
+    g_trayHighlightRadius = LocalClamped(local, L"tray.highlightRadius");
     g_dockStyle = ReadDockStyle(local);
     // Edge sits on the screen edge: the frame drops the distance and the visible band keeps its height.
-    g_dockEdgeDistance = g_dockStyle.shape != DockShape::Island ? 0 : std::clamp(
-        LocalInt(local, L"edgeDistance"), 0, 100);
+    g_dockEdgeDistance = g_dockStyle.shape != DockShape::Island ? 0 : LocalClamped(local, L"edgeDistance");
     g_keepButtonRim = LocalBool(local, L"button.border");
     g_buttonLiquidLayer = LocalBool(local, L"button.liquidLayer");
     bool trayEnabled = LocalBool(local, L"tray.enabled");
@@ -14294,7 +14282,7 @@ void SetModConfiguration(settingsjson::JsonObject const& local) {
     g_theme = ParseTheme(LocalString(local, L"theme"));
     g_dockBorder = ReadBorder(local, L"dockBorder");
     g_fontColorMode = ParseFontColor(LocalString(local, L"fontColor"));
-    g_adaptiveWindowMs = std::clamp(LocalInt(local, L"adaptive.windowSeconds"), 0, 1000) * 10;
+    g_adaptiveWindowMs = LocalClamped(local, L"adaptive.windowSeconds") * 10; // Hundredths of a second to ms.
     if (g_theme == DockTheme::Liquid) g_liquidSettings = ReadLiquidSettings(local);
     try {
         g_appliedSettingsDocument = SettingsDocument(local);
