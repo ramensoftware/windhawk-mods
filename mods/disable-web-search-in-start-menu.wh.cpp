@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              disable-web-search-in-start-menu
 // @name            Disable Web Search in Start Menu
-// @description     Keeps the Start menu and the search flyout local by hiding web results and web suggestions
+// @description     Keeps the Start menu and taskbar search local by hiding web results and web suggestions
 // @version         1.0.0
 // @author          DpakB
 // @homepage        https://dpakb.com
@@ -9,7 +9,6 @@
 // @twitter         https://twitter.com/dpakb_
 // @donateUrl       https://buymeacoffee.com/dpakb
 // @license         MIT
-// @include         StartMenuExperienceHost.exe
 // @include         SearchHost.exe
 // @include         SearchApp.exe
 // @architecture    x86-64
@@ -21,51 +20,55 @@
 
 ![Before & After](https://raw.githubusercontent.com/DeepakBalaraman/disable-web-search-in-start-menu/master/assets/before-after.jpg)
 
-The search box in the Start menu, and the search flyout it opens on the
-taskbar, mix results from Bing into local results. Windows can be told to stop
-doing that with policies, but those are read when the search UI starts, so
-changing them means a reboot, and the registry entries stay behind afterwards.
+The search UI that the Start menu and the taskbar open mixes results from Bing
+into local results. Windows can be told to stop doing that with settings and
+policies, but they are read when the search UI starts, so changing them means
+signing out, and the registry entries stay behind afterwards.
 
 This mod does the same thing without touching the registry. It sits in the
-processes that draw the Start menu and the search flyout, and answers the
-setting reads as if web search had been turned off. Turning the mod off gives
-the old behavior back the next time the search UI starts.
+search UI process and answers the setting reads as if web search had been
+turned off. Turning the mod off gives the old behavior back the next time the
+search UI starts.
+
+On both Windows 10 and Windows 11, typing in the Start menu hands the query to
+this search UI, so the Start menu search is covered as well.
 
 ## Settings
 
-- **Start menu** hides web results in the Start menu search.
-- **Taskbar search** does the same for the search flyout, which is the window
-  Windows 10 uses for the Start menu search.
+- **Also hide cloud content results** reports the two "Cloud content search"
+  switches from Settings as off. The Windows 11 search UI asks for them before
+  it puts web results in the list, so turning this setting off can bring web
+  results back, and leaving it on also removes OneDrive, Outlook and SharePoint
+  results from search.
 
 ## Notes
 
 - Nothing is written to the registry and no files are touched. The values the
   mod reports are the ones Windows itself uses:
-  - `IsMSACloudSearchEnabled` and `IsAADCloudSearchEnabled`, which are what the
-    "Cloud content search" switches in Settings write. These are the ones the
-    Windows 11 search UI actually asks before it shows web results.
-  - `BingSearchEnabled` and `CortanaConsent`, the older switch and consent
-    state the search UI also reads.
-  - `DisableSearchBoxSuggestions`, `ConnectedSearchUseWeb`, `DisableWebSearch`
-    and `AllowCloudSearch`, the group policy counterparts.
+  - `DisableSearchBoxSuggestions`, `ConnectedSearchUseWeb` and
+    `DisableWebSearch`, the web search policies
+  - `BingSearchEnabled`, the older web results switch
+  - `IsMSACloudSearchEnabled`, `IsAADCloudSearchEnabled` and
+    `AllowCloudSearch`, the cloud content switches, only with the setting above
   If you set any of these yourself, the mod simply agrees.
-- The search UI is a packaged app, so it reaches the registry through the API
-  sets, which end up in kernelbase. Desktop callers use advapi32, which is a
-  separate implementation. Both are hooked, so neither path is missed.
-- If web results survive, turn on the mod's log and open the search UI once.
-  The log lists every read the mod answered, which shows whether the host
-  process asks for these values at all.
+- The search UI is a packaged app and reaches the registry through the API sets,
+  which end up in `kernelbase.dll`. Desktop callers import `advapi32.dll`, whose
+  exports are separate entry points rather than forwarders on current builds.
+  Both are hooked, so neither path is missed.
+- Web results are decided while the search UI sets up, so after enabling the mod
+  or changing a setting, end `SearchHost.exe` in Task Manager. Windows starts it
+  again on the next search, and the new settings are read then.
+- If web results survive, turn on the mod's log and open the search UI once. The
+  log lists every read the mod answered, which shows whether the process asks
+  for these values at all.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- startMenu: true
-  $name: Start menu
-  $description: Hide web results and Bing suggestions in the Start menu search.
-- taskbarSearch: true
-  $name: Taskbar search
-  $description: The same for the search flyout that the taskbar and the Start menu search box open.
+- hideCloudContent: true
+  $name: Also hide cloud content results (OneDrive, Outlook, SharePoint)
+  $description: Report the Cloud content search switches as off, which the Windows 11 search UI asks for before it shows web results. This also hides OneDrive, Outlook and SharePoint results. Turn it off if web results stay hidden without it and you want those results back.
 */
 // ==/WindhawkModSettings==
 
@@ -78,19 +81,14 @@ the old behavior back the next time the search UI starts.
 #include <string>
 #include <unordered_map>
 
-// Which search UI process the DLL ended up in. The three processes are handled
-// the same way, they are just switched on and off by different settings.
-enum ProcessKind {
-    kProcessUnsupported,
-    kProcessStartMenu,
-    kProcessSearchFlyout,
-};
-
 // A registry value the mod answers on its own. Only the name and the answer are
 // stored, the type is always REG_DWORD, which is what all of these values are.
 struct VirtualValue {
     PCWSTR name;
     DWORD value;
+    // Cloud content results come from the user's accounts, not from the web, so
+    // they are only reported when that is asked for.
+    bool cloudContent;
 };
 
 // A key the mod answers for, named relative to the software root of its hive.
@@ -102,34 +100,31 @@ struct VirtualKey {
     size_t valueCount;
 };
 
-// The switches behind "Cloud content search" in Settings, which is what the
-// Windows 11 search UI checks before it puts web results in the list. Both the
-// Microsoft account and the work or school account switches have to be off, so
-// both are answered.
-const VirtualValue kSearchSettingsValues[] = {
-    {L"IsMSACloudSearchEnabled", 0},
-    {L"IsAADCloudSearchEnabled", 0},
-};
-
-// The switch and the consent state the search UI reads from the search key. The
-// value is absent on a stock machine, which counts as enabled.
-const VirtualValue kSearchValues[] = {
-    {L"BingSearchEnabled", 0},
-    {L"CortanaConsent", 0},
-};
-
-// Turns off the web results and the web suggestions of the Start menu search
-// box. This is the policy Windows writes behind "search the web" being gone.
+// Turns off the web results and the web suggestions of the search box. This is
+// the policy Windows writes behind "search the web" being gone.
 const VirtualValue kExplorerPolicyValues[] = {
-    {L"DisableSearchBoxSuggestions", 1},
+    {L"DisableSearchBoxSuggestions", 1, false},
 };
 
-// The Windows Search policy, which the search flyout asks for before it queries
-// the suggestion service at all.
+// The Windows Search policy, which the search UI asks for before it queries the
+// suggestion service at all.
 const VirtualValue kWindowsSearchPolicyValues[] = {
-    {L"ConnectedSearchUseWeb", 0},
-    {L"DisableWebSearch", 1},
-    {L"AllowCloudSearch", 0},
+    {L"ConnectedSearchUseWeb", 0, false},
+    {L"DisableWebSearch", 1, false},
+    {L"AllowCloudSearch", 0, true},
+};
+
+// The older web results switch, which the search UI still reads.
+const VirtualValue kSearchValues[] = {
+    {L"BingSearchEnabled", 0, false},
+};
+
+// The switches behind "Cloud content search" in Settings. The web API layer of
+// the search UI asks for these, and on Windows 11 21H2 they do not appear to be
+// read separately from the web search ones.
+const VirtualValue kSearchSettingsValues[] = {
+    {L"IsMSACloudSearchEnabled", 0, true},
+    {L"IsAADCloudSearchEnabled", 0, true},
 };
 
 // Paths are stored lower case, because that is how they are compared.
@@ -144,13 +139,8 @@ const VirtualKey kVirtualKeys[] = {
      kWindowsSearchPolicyValues, ARRAYSIZE(kWindowsSearchPolicyValues)},
 };
 
-struct Settings {
-    bool startMenu;
-    bool taskbarSearch;
-};
-
-Settings g_settings;
-ProcessKind g_processKind = kProcessUnsupported;
+// Settings are read by the hooks on whichever thread the shell calls them from.
+std::atomic<bool> g_hideCloudContent{false};
 std::atomic<bool> g_initialized{false};
 
 // Keys the callers hold open, with the path the mod matched when they were
@@ -173,6 +163,10 @@ thread_local bool g_inHook = false;
 // keystroke, so only the first few are kept.
 std::atomic<int> g_loggedReads{0};
 const int kMaxLoggedReads = 32;
+
+bool IsActive() {
+    return g_initialized && !g_inHook;
+}
 
 std::wstring ToLowercase(const std::wstring& text) {
     std::wstring lower = text;
@@ -214,7 +208,7 @@ bool IsRootHandle(HKEY hKey) {
            hKey == HKEY_CURRENT_CONFIG;
 }
 
-bool GetTrackedKeyPath(HKEY hKey, std::wstring& path) {
+bool GetTrackedKey(HKEY hKey, TrackedKey& tracked) {
     std::lock_guard<std::mutex> lock(g_trackedMutex);
 
     auto it = g_trackedKeys.find(hKey);
@@ -222,7 +216,7 @@ bool GetTrackedKeyPath(HKEY hKey, std::wstring& path) {
         return false;
     }
 
-    path = it->second.path;
+    tracked = it->second;
     return true;
 }
 
@@ -242,21 +236,6 @@ void TrackKey(HKEY hKey, const std::wstring& path, bool standIn) {
 void UntrackKey(HKEY hKey) {
     std::lock_guard<std::mutex> lock(g_trackedMutex);
     g_trackedKeys.erase(hKey);
-}
-
-bool IsEnabledForThisProcess() {
-    if (!g_initialized || g_inHook) {
-        return false;
-    }
-
-    switch (g_processKind) {
-        case kProcessStartMenu:
-            return g_settings.startMenu;
-        case kProcessSearchFlyout:
-            return g_settings.taskbarSearch;
-        default:
-            return false;
-    }
 }
 
 bool IsVirtualPath(const std::wstring& relative) {
@@ -280,8 +259,13 @@ const VirtualValue* FindVirtualValue(const std::wstring& relative,
         }
 
         for (size_t i = 0; i < key.valueCount; i++) {
-            if (_wcsicmp(key.values[i].name, valueName) == 0) {
-                return &key.values[i];
+            const VirtualValue& value = key.values[i];
+            if (value.cloudContent && !g_hideCloudContent) {
+                continue;
+            }
+
+            if (_wcsicmp(value.name, valueName) == 0) {
+                return &value;
             }
         }
     }
@@ -292,23 +276,37 @@ const VirtualValue* FindVirtualValue(const std::wstring& relative,
 // Builds the relative path of a key a caller asked about. Roots are the common
 // case. Deeper handles come from callers that open a key once and read it
 // repeatedly, and those are known because they were tracked when opened.
+// standIn reports a handle that only stands in for a key that does not exist,
+// which has no other values to offer.
 bool GetRequestedRelativePath(HKEY hKey,
                               LPCWSTR subKey,
-                              std::wstring& relative) {
+                              std::wstring& relative,
+                              bool& standIn) {
+    standIn = false;
+
+    TrackedKey tracked;
+    bool isTracked = GetTrackedKey(hKey, tracked);
+
     if (!subKey) {
-        return GetTrackedKeyPath(hKey, relative);
+        if (!isTracked) {
+            return false;
+        }
+
+        relative = tracked.path;
+        standIn = tracked.standIn;
+        return true;
     }
 
     if (IsRootHandle(hKey)) {
         return GetSoftwareRelativePath(subKey, relative);
     }
 
-    std::wstring base;
-    if (!GetTrackedKeyPath(hKey, base)) {
+    if (!isTracked) {
         return false;
     }
 
-    return GetSoftwareRelativePath(base + L"\\" + subKey, relative);
+    standIn = tracked.standIn;
+    return GetSoftwareRelativePath(tracked.path + L"\\" + subKey, relative);
 }
 
 // Copies a virtual DWORD out the way the registry API would, including the size
@@ -321,10 +319,10 @@ LSTATUS ReturnVirtualDword(DWORD value,
         *type = REG_DWORD;
     }
 
+    // Both APIs reject a request for data without a size, but a caller that
+    // wants neither is just after the existence and the type.
     if (!dataSize) {
-        // Without a size there is nowhere to put the value, so the caller is
-        // only after the type.
-        return ERROR_SUCCESS;
+        return data ? ERROR_INVALID_PARAMETER : ERROR_SUCCESS;
     }
 
     if (!data) {
@@ -352,17 +350,16 @@ void LogAnsweredRead(const std::wstring& path, PCWSTR valueName, DWORD value) {
     g_inHook = false;
 }
 
-using RegOpenKeyExW_t = LSTATUS(WINAPI*)(HKEY, LPCWSTR, DWORD, REGSAM, PHKEY);
-using RegQueryValueExW_t =
-    LSTATUS(WINAPI*)(HKEY, LPCWSTR, LPDWORD, LPDWORD, LPBYTE, LPDWORD);
-using RegGetValueW_t =
-    LSTATUS(WINAPI*)(HKEY, LPCWSTR, LPCWSTR, DWORD, LPDWORD, PVOID, LPDWORD);
-using RegCloseKey_t = LSTATUS(WINAPI*)(HKEY);
+using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
+using RegQueryValueExW_t = decltype(&RegQueryValueExW);
+using RegGetValueW_t = decltype(&RegGetValueW);
+using RegCloseKey_t = decltype(&RegCloseKey);
 
-// Every function has two copies in a process: the advapi32 one that desktop
-// callers import, and the kernelbase one that the API sets resolve to. The
-// search UI is a packaged app and uses the second, which is why hooking only
-// the first one changes nothing.
+// Every function has two entry points in a process: the advapi32 one that
+// desktop callers import, and the kernelbase one that the API sets resolve to.
+// On current builds these are separate addresses, so both are hooked. On a
+// build where advapi32 only forwards, ShareAnExport below keeps the second set
+// from being installed twice.
 RegOpenKeyExW_t RegOpenKeyExW_Original;
 RegOpenKeyExW_t RegOpenKeyExW_System_Original;
 RegQueryValueExW_t RegQueryValueExW_Original;
@@ -422,22 +419,21 @@ LSTATUS RegOpenKeyExW_Impl(RegOpenKeyExW_t original,
                            DWORD ulOptions,
                            REGSAM samDesired,
                            PHKEY phkResult) {
-    if (!IsEnabledForThisProcess() || !lpSubKey || !phkResult) {
+    if (!IsActive() || !lpSubKey || !phkResult) {
         return original(hKey, lpSubKey, ulOptions, samDesired, phkResult);
     }
 
     std::wstring relative;
-    if (!GetRequestedRelativePath(hKey, lpSubKey, relative) ||
+    bool standIn = false;
+    if (!GetRequestedRelativePath(hKey, lpSubKey, relative, standIn) ||
         !IsVirtualPath(relative)) {
         return original(hKey, lpSubKey, ulOptions, samDesired, phkResult);
     }
 
     g_inHook = true;
 
-    LSTATUS status =
-        original(hKey, lpSubKey, ulOptions, samDesired, phkResult);
+    LSTATUS status = original(hKey, lpSubKey, ulOptions, samDesired, phkResult);
 
-    bool standIn = false;
     if (status == ERROR_FILE_NOT_FOUND && IsReadOnlyAccess(samDesired)) {
         if (OpenExistingAncestor(original, hKey, lpSubKey, samDesired,
                                  phkResult)) {
@@ -468,24 +464,23 @@ LSTATUS RegQueryValueExW_Impl(RegQueryValueExW_t original,
                               LPDWORD lpType,
                               LPBYTE lpData,
                               LPDWORD lpcbData) {
-    if (!IsEnabledForThisProcess() || !lpValueName) {
+    if (!IsActive()) {
         return original(hKey, lpValueName, lpReserved, lpType, lpData,
                         lpcbData);
     }
 
     TrackedKey tracked;
-    bool isTracked = false;
-    {
-        std::lock_guard<std::mutex> lock(g_trackedMutex);
-
-        auto it = g_trackedKeys.find(hKey);
-        if (it != g_trackedKeys.end()) {
-            tracked = it->second;
-            isTracked = true;
-        }
+    if (!GetTrackedKey(hKey, tracked)) {
+        return original(hKey, lpValueName, lpReserved, lpType, lpData,
+                        lpcbData);
     }
 
-    if (!isTracked) {
+    // An empty name is the default value, which a stand-in key never had.
+    if (!lpValueName || !*lpValueName) {
+        if (tracked.standIn) {
+            return ERROR_FILE_NOT_FOUND;
+        }
+
         return original(hKey, lpValueName, lpReserved, lpType, lpData,
                         lpcbData);
     }
@@ -508,12 +503,16 @@ LSTATUS RegQueryValueExW_Impl(RegQueryValueExW_t original,
 }
 
 // RegGetValue already takes the type restriction the mod has to respect, since
-// answering a DWORD for a caller that asked for a string would be wrong.
+// answering a DWORD for a caller that asked for a string would be wrong. A call
+// without any type flag is rejected by the real API, so it is left alone.
 bool IsDwordRequested(DWORD flags) {
     const DWORD kTypeMask = 0x0000FFFF;
     DWORD typeFlags = flags & kTypeMask;
-    return typeFlags == 0 || typeFlags == RRF_RT_ANY ||
-           (typeFlags & RRF_RT_REG_DWORD) != 0;
+    if (typeFlags == 0) {
+        return false;
+    }
+
+    return typeFlags == RRF_RT_ANY || (typeFlags & RRF_RT_REG_DWORD) != 0;
 }
 
 LSTATUS RegGetValueW_Impl(RegGetValueW_t original,
@@ -524,19 +523,24 @@ LSTATUS RegGetValueW_Impl(RegGetValueW_t original,
                           LPDWORD pdwType,
                           PVOID pvData,
                           LPDWORD pcbData) {
-    if (!IsEnabledForThisProcess() || !lpValue || !IsDwordRequested(dwFlags)) {
+    if (!IsActive() || !lpValue || !IsDwordRequested(dwFlags)) {
         return original(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData,
                         pcbData);
     }
 
     std::wstring relative;
-    if (!GetRequestedRelativePath(hkey, lpSubKey, relative)) {
+    bool standIn = false;
+    if (!GetRequestedRelativePath(hkey, lpSubKey, relative, standIn)) {
         return original(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData,
                         pcbData);
     }
 
     const VirtualValue* value = FindVirtualValue(relative, lpValue);
     if (!value) {
+        if (standIn) {
+            return ERROR_FILE_NOT_FOUND;
+        }
+
         return original(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData,
                         pcbData);
     }
@@ -628,7 +632,7 @@ bool HookOne(T target, T hook, T* original, PCWSTR moduleName, PCWSTR name) {
         return false;
     }
 
-    if (!WindhawkUtils::Wh_SetFunctionHookT(target, hook, original)) {
+    if (!WindhawkUtils::SetFunctionHook(target, hook, original)) {
         Wh_Log(L"Couldn't hook %s!%s", moduleName, name);
         return false;
     }
@@ -716,38 +720,32 @@ bool ShareAnExport(HMODULE first, HMODULE second) {
     return false;
 }
 
-void LoadSettings() {
-    g_settings.startMenu = Wh_GetIntSetting(L"startMenu") != 0;
-    g_settings.taskbarSearch = Wh_GetIntSetting(L"taskbarSearch") != 0;
-}
-
-void CacheProcessName() {
+// @include already limits the mod to the search UI, but a DLL that ends up in
+// any other process has no business answering registry reads.
+bool IsSearchUiProcess() {
     WCHAR path[MAX_PATH];
     if (!GetModuleFileName(nullptr, path, ARRAYSIZE(path))) {
-        return;
+        return false;
     }
 
     PCWSTR fileName = wcsrchr(path, L'\\');
     fileName = fileName ? fileName + 1 : path;
 
-    if (_wcsicmp(fileName, L"StartMenuExperienceHost.exe") == 0) {
-        g_processKind = kProcessStartMenu;
-    } else if (_wcsicmp(fileName, L"SearchHost.exe") == 0 ||
-               _wcsicmp(fileName, L"SearchApp.exe") == 0) {
-        g_processKind = kProcessSearchFlyout;
-    }
+    return _wcsicmp(fileName, L"SearchHost.exe") == 0 ||
+           _wcsicmp(fileName, L"SearchApp.exe") == 0;
+}
 
-    Wh_Log(L"Host process: %s (kind %d)", fileName, g_processKind);
+void LoadSettings() {
+    g_hideCloudContent = Wh_GetIntSetting(L"hideCloudContent") != 0;
 }
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
     LoadSettings();
-    CacheProcessName();
 
-    if (g_processKind == kProcessUnsupported) {
-        Wh_Log(L"Not a search UI process, nothing to do");
+    if (!IsSearchUiProcess()) {
+        Wh_Log(L"Not the search UI, nothing to do");
         return FALSE;
     }
 
@@ -756,6 +754,11 @@ BOOL Wh_ModInit() {
 
     bool sharesImplementation = advapiModule && kernelBaseModule &&
                                 ShareAnExport(advapiModule, kernelBaseModule);
+
+    if (!kernelBaseModule && !advapiModule) {
+        Wh_Log(L"No registry module");
+        return FALSE;
+    }
 
     bool hooked = false;
 
@@ -772,13 +775,21 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    Wh_Log(L"Cloud content results are %s",
+           g_hideCloudContent.load() ? L"hidden" : L"left alone");
+
     g_initialized = true;
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
+
     LoadSettings();
+
+    // The search UI reads the values while it sets up, so what the mod answers
+    // is only picked up again after it restarts.
+    Wh_Log(L"Settings loaded, restart SearchHost.exe to apply them");
 }
 
 void Wh_ModUninit() {
