@@ -2,7 +2,7 @@
 // @id              chrome-clear-on-exit-keep-sites
 // @name            Chrome clear on exit with keep sites
 // @description     Clears Chrome browsing data on exit while keeping selected website logins.
-// @version         0.4.0
+// @version         0.4.1
 // @author          haniobaid
 // @github          https://github.com/haniobaid
 // @include         chrome.exe
@@ -58,15 +58,12 @@ Chrome can otherwise retain its cached policies for the remainder of that sessio
 The next Chrome start with the mod disabled receives no policies from this mod.
 No administrator prompt, PowerShell helper, or policy-removal permission is needed.
 
-The mod runs only in Chrome's browser process, not its renderer or utility
-processes. It does not change Chrome's real policy registry keys or profile files.
-A private application hive under Windhawk's own mod storage provides genuine
-Windows registry handles; the supplied values live in volatile keys. Files use a
-separate private directory for each user/process instance and are never reused as
-configuration. Completed reads normally remove their backing files. Files can
-remain if a process exits during a read, cleanup fails, or Chrome still holds a
-key during mod unload; those files are inactive and remain within Windhawk's
-removable mod storage. There is no recovery journal to back up.
+The mod runs only in Chrome's browser process and does not change its real policy
+registry keys or profile files. It uses private temporary storage within
+Windhawk's mod storage while cleanup is enabled. Inactive files can remain after
+Chrome exits; a later enabled start attempts to remove verified leftovers when
+they are no longer in use. These files are never reused as configuration or
+needed for backup.
 
 ## Scope and limitations
 
@@ -75,6 +72,10 @@ removable mod storage. There is no recovery journal to back up.
 - Intended for personal installations. Conflicting existing local Chrome policies
   prevent injection; they are never replaced. Chrome's normal cloud-policy
   precedence still applies. Check Windhawk's mod log if the entries do not appear.
+- If a policy view cannot be prepared, Chrome uses its genuine policies for that
+  load. The mod logs the reason; check the policy page to confirm cleanup is active.
+  If private storage could not be initialized, save the mod's settings again to
+  retry. Once storage is ready, reloading Chrome policies retries a failed read.
 - Chrome can show **Managed by your organization** while these policies are active.
   Chrome also disables synchronization of affected data categories.
 - Normal last-window close is the supported cleanup path. Crashes, forced
@@ -84,10 +85,6 @@ removable mod storage. There is no recovery journal to back up.
 
 Back up the source and your Windhawk settings to reproduce the configuration on a
 fresh Windows installation. The source's defaults do not contain your saved list.
-
-If upgrading from the unpublished 0.2/0.3 policy-writing prototype, turn its cleanup
-setting off and approve its removal prompt first. Confirm that its three real
-policies are gone before replacing that prototype with this version.
 
 ## References
 
@@ -119,12 +116,12 @@ policies are gone before replacing that prototype with this version.
 #include <windhawk_utils.h>
 
 #include <algorithm>
+#include <atomic>
 #include <exception>
 #include <map>
 #include <memory>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -256,20 +253,32 @@ constexpr unsigned kOverlayMaxDepth = 32;
 
 thread_local unsigned g_overlayBypass = 0;
 SRWLOCK g_overlayLock = SRWLOCK_INIT;
+std::atomic<size_t> g_overlayTrackedCount{0};
+std::atomic<bool> g_overlayEnabled{false};
+std::atomic<unsigned long long> g_overlayRequestVersion{0};
+std::atomic<bool> g_overlayHooksRemoved{false};
 struct OverlayBypass {
     OverlayBypass() { ++g_overlayBypass; }
     ~OverlayBypass() { --g_overlayBypass; }
 };
+// Metadata only: never call Windows, log, allocate, or release an owning
+// reference while either bookkeeping lock is held.
 struct OverlayLock {
     OverlayLock() { AcquireSRWLockExclusive(&g_overlayLock); }
     ~OverlayLock() { ReleaseSRWLockExclusive(&g_overlayLock); }
 };
+struct OverlayReadLock {
+    OverlayReadLock() { AcquireSRWLockShared(&g_overlayLock); }
+    ~OverlayReadLock() { ReleaseSRWLockShared(&g_overlayLock); }
+};
 LSTATUS OverlayNativeOpen(HKEY key, LPCWSTR name, DWORD options, REGSAM access, PHKEY result) {
-    return (RegOpenKeyExW_Original ? RegOpenKeyExW_Original : RegOpenKeyExW)(
+    return (g_overlayHooksRemoved.load(std::memory_order_acquire) || !RegOpenKeyExW_Original
+                ? RegOpenKeyExW : RegOpenKeyExW_Original)(
         key, name, options, access, result);
 }
 LSTATUS OverlayNativeClose(HKEY key) {
-    return (RegCloseKey_Original ? RegCloseKey_Original : RegCloseKey)(key);
+    return (g_overlayHooksRemoved.load(std::memory_order_acquire) || !RegCloseKey_Original
+                ? RegCloseKey : RegCloseKey_Original)(key);
 }
 struct OverlayKey {
     HKEY value = nullptr;
@@ -298,12 +307,14 @@ bool OverlayMissing(LSTATUS result) {
 
 struct OverlayHive {
     HKEY root = nullptr;
+    std::atomic<unsigned long long> nextSnapshot{0};
     HANDLE directoryHandle = INVALID_HANDLE_VALUE;
     std::wstring directory;
     std::wstring file;
     std::wstring log1;
     std::wstring log2;
     ~OverlayHive() {
+        OverlayBypass bypass;
         if (root) OverlayNativeClose(root);
         if (!file.empty()) {
             // A caller-owned key can keep the hive open after mod unload.
@@ -320,37 +331,187 @@ struct OverlaySnapshot {
     std::shared_ptr<OverlayHive> hive;
     HKEY root = nullptr;
     std::wstring name;
-    bool preserveNativeKeys = false;
+    std::atomic<bool> preserveNativeKeys{false};
     ~OverlaySnapshot() {
+        OverlayBypass bypass;
         // After hooks disappear, Chrome still owns any returned HKEY handles.
         // Keep their native keys intact; closing our references is sufficient.
-        if (!preserveNativeKeys && hive && !name.empty())
+        if (!preserveNativeKeys.load(std::memory_order_acquire) && hive && !name.empty())
             RegDeleteTreeW(hive->root, name.c_str());
         if (root) OverlayNativeClose(root);
     }
 };
-struct OverlayState {
+struct OverlayConfig {
     std::shared_ptr<OverlayHive> hive;
-    std::unordered_map<HKEY, std::shared_ptr<OverlaySnapshot>> clients;
     std::wstring keepJson;
+};
+using OverlayClients = std::map<HKEY, std::shared_ptr<OverlaySnapshot>>;
+struct OverlayState {
+    std::shared_ptr<const OverlayConfig> config;
+    OverlayClients clients;
     const wchar_t* lastErrorAction = nullptr;
     LSTATUS lastErrorCode = ERROR_SUCCESS;
-    unsigned long long nextSnapshot = 0;
-    bool enabled = false;
 };
 // Deliberately not a global owning object: process termination needs no cleanup
 // callback, policy restoration, locks, or calls through trampoline pointers.
 OverlayState* g_overlayState = nullptr;
 
 void OverlayLogError(const wchar_t* action, LSTATUS code) noexcept {
-    if (!g_overlayState || g_overlayState->lastErrorAction != action ||
-        g_overlayState->lastErrorCode != code) {
-        Wh_Log(L"Chrome policy overlay: %s (Windows error %ld). No real Chrome policy was changed.",
-               action, static_cast<long>(code));
+    bool report = true;
+    {
+        OverlayLock lock;
         if (g_overlayState) {
+            report = g_overlayState->lastErrorAction != action ||
+                     g_overlayState->lastErrorCode != code;
             g_overlayState->lastErrorAction = action;
             g_overlayState->lastErrorCode = code;
         }
+    }
+    if (report)
+        Wh_Log(L"Chrome policy overlay: %s (Windows error %ld). No real Chrome policy was changed.",
+               action, static_cast<long>(code));
+}
+
+std::shared_ptr<const OverlayConfig> OverlayCaptureConfig() {
+    std::shared_ptr<const OverlayConfig> result;
+    if (g_overlayEnabled.load(std::memory_order_acquire)) {
+        OverlayReadLock lock;
+        if (g_overlayState) result = g_overlayState->config;
+    }
+    return result;
+}
+std::shared_ptr<OverlaySnapshot> OverlayCaptureParent(HKEY key) {
+    std::shared_ptr<OverlaySnapshot> result;
+    if (g_overlayTrackedCount.load(std::memory_order_acquire)) {
+        OverlayReadLock lock;
+        if (g_overlayState) {
+            auto found = g_overlayState->clients.find(key);
+            if (found != g_overlayState->clients.end()) result = found->second;
+        }
+    }
+    return result;
+}
+
+// Pin stale objects before examining them. Only our exact same-user names and
+// files qualify, and a living/unknown creator is skipped, including the small
+// interval between its CreateDirectory and acquisition of the directory pin.
+bool OverlayCleanupPid(const wchar_t* name, const std::wstring& prefix, DWORD& pid) {
+    std::wstring_view text(name);
+    if (!text.starts_with(prefix)) return false;
+    text.remove_prefix(prefix.size());
+    const size_t dash = text.find(L'-');
+    if (dash == 0 || dash == std::wstring_view::npos || dash > 10) return false;
+    unsigned long long value = 0;
+    for (wchar_t c : text.substr(0, dash)) {
+        if (c < L'0' || c > L'9') return false;
+        value = value * 10 + c - L'0';
+        if (value > MAXDWORD) return false;
+    }
+    if (!value) return false;
+    text.remove_prefix(dash + 1);
+    if (text.size() != 38 || text.front() != L'{' || text.back() != L'}') return false;
+    for (size_t i = 1; i < 37; ++i) {
+        wchar_t c = text[i];
+        if (i == 9 || i == 14 || i == 19 || i == 24) {
+            if (c != L'-') return false;
+        } else if (!((c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f') ||
+                     (c >= L'A' && c <= L'F'))) return false;
+    }
+    pid = static_cast<DWORD>(value);
+    return true;
+}
+bool OverlayCreatorExited(DWORD pid) {
+    if (pid == GetCurrentProcessId()) return false;
+    OverlayHandle process;
+    process.value = OpenProcess(SYNCHRONIZE, FALSE, pid);
+    if (!process.value) return GetLastError() == ERROR_INVALID_PARAMETER;
+    // Opportunistic cleanup only. Never wait, elevate, or block configuration.
+    return WaitForSingleObject(process.value, 0) == WAIT_OBJECT_0;
+}
+bool OverlayOwnedObject(HANDLE handle, PSID owner, bool directory) {
+    BY_HANDLE_FILE_INFORMATION info{};
+    if (!GetFileInformationByHandle(handle, &info) ||
+        (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ||
+        !!(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != directory) return false;
+    PSID actualOwner = nullptr;
+    OverlayLocalMemory security;
+    if (GetSecurityInfo(handle, SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION,
+                        &actualOwner, nullptr, nullptr, nullptr,
+                        reinterpret_cast<PSECURITY_DESCRIPTOR*>(&security.value)) != ERROR_SUCCESS)
+        return false;
+    return actualOwner && EqualSid(owner, actualOwner);
+}
+struct OverlayFindHandle {
+    HANDLE value = INVALID_HANDLE_VALUE;
+    ~OverlayFindHandle() { if (value != INVALID_HANDLE_VALUE) FindClose(value); }
+};
+bool OverlayPruneDirectory(const std::wstring& directory, PSID owner) {
+    OverlayHandle pin;
+    pin.value = CreateFileW(directory.c_str(), DELETE | READ_CONTROL | FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+                            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if (pin.value == INVALID_HANDLE_VALUE || !OverlayOwnedObject(pin.value, owner, true)) return false;
+    constexpr const wchar_t* names[] = {L"view.dat", L"view.dat.LOG1", L"view.dat.LOG2"};
+    bool present[3]{};
+    WIN32_FIND_DATAW entry{};
+    OverlayFindHandle search;
+    const std::wstring pattern = directory + L"\\*";
+    search.value = FindFirstFileW(pattern.c_str(), &entry);
+    if (search.value == INVALID_HANDLE_VALUE) return false;
+    do {
+        if (!wcscmp(entry.cFileName, L".") || !wcscmp(entry.cFileName, L"..")) continue;
+        if (entry.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) return false;
+        unsigned index = 0;
+        while (index < 3 && _wcsicmp(entry.cFileName, names[index])) ++index;
+        if (index == 3 || present[index]) return false;
+        present[index] = true;
+    } while (FindNextFileW(search.value, &entry));
+    if (GetLastError() != ERROR_NO_MORE_FILES) return false;
+    FindClose(search.value);
+    search.value = INVALID_HANDLE_VALUE;
+    OverlayHandle files[3];
+    for (unsigned i = 0; i < 3; ++i) {
+        if (!present[i]) continue;
+        const std::wstring path = directory + L"\\" + names[i];
+        files[i].value = CreateFileW(path.c_str(), DELETE | READ_CONTROL | FILE_READ_ATTRIBUTES,
+                                     FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+                                     FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        if (files[i].value == INVALID_HANDLE_VALUE || !OverlayOwnedObject(files[i].value, owner, false))
+            return false;
+    }
+    FILE_DISPOSITION_INFO dispose{TRUE};
+    for (unsigned i = 0; i < 3; ++i) {
+        if (present[i] && !SetFileInformationByHandle(files[i].value, FileDispositionInfo,
+                                                     &dispose, sizeof(dispose))) return false;
+    }
+    for (auto& file : files) {
+        if (file.value && file.value != INVALID_HANDLE_VALUE) CloseHandle(file.value);
+        file.value = nullptr;
+    }
+    // The native API refuses a non-empty directory. No recursive deletion.
+    return SetFileInformationByHandle(pin.value, FileDispositionInfo, &dispose, sizeof(dispose));
+}
+void OverlayCleanupOldHives(const std::wstring& base, PSID owner, const wchar_t* sid) noexcept {
+    try {
+        const std::wstring prefix = L"overlay-" + std::wstring(sid) + L"-";
+        const std::wstring pattern = base + L"\\" + prefix + L"*";
+        WIN32_FIND_DATAW entry{};
+        OverlayFindHandle search;
+        search.value = FindFirstFileW(pattern.c_str(), &entry);
+        if (search.value == INVALID_HANDLE_VALUE) return;
+        unsigned inspected = 0, removed = 0;
+        do {
+            if (++inspected > 64) break;
+            DWORD pid = 0;
+            if (!(entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+                (entry.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ||
+                !OverlayCleanupPid(entry.cFileName, prefix, pid) || !OverlayCreatorExited(pid)) continue;
+            if (OverlayPruneDirectory(base + L"\\" + entry.cFileName, owner)) ++removed;
+        } while (FindNextFileW(search.value, &entry));
+        if (removed) Wh_Log(L"Removed %u inactive private policy-hive directories from Windhawk storage.", removed);
+    } catch (...) {
+        // Unknown, busy, or unverifiable files never prevent cleanup settings.
+        Wh_Log(L"Skipped private-hive cache cleanup; configuration can continue.");
     }
 }
 
@@ -380,6 +541,7 @@ std::shared_ptr<OverlayHive> OverlayCreateHive() {
     if (!ConvertSidToStringSidW(userSid, reinterpret_cast<LPWSTR*>(&sidText.value)))
         throw OverlayError{static_cast<LSTATUS>(GetLastError()), L"Cannot format the Windows user identifier"};
     const wchar_t* sid = static_cast<const wchar_t*>(sidText.value);
+    OverlayCleanupOldHives(base, userSid, sid);
     GUID guid;
     if (FAILED(CoCreateGuid(&guid)))
         throw OverlayError{ERROR_GEN_FAILURE, L"Cannot generate a private storage identifier"};
@@ -438,18 +600,31 @@ std::shared_ptr<OverlayHive> OverlayCreateHive() {
 }
 
 bool InitializeOverlayStorage() {
-    OverlayLock lock;
-    OverlayBypass bypass;
+    const auto lifecycle = g_overlayRequestVersion.load(std::memory_order_acquire);
     try {
-        if (!g_overlayState) g_overlayState = new OverlayState;
-        // File/hive creation is lazy: installing a disabled mod needs no disk I/O.
-        return true;
-    } catch (const OverlayError& error) {
-        OverlayLogError(error.action, error.code);
+        {
+            OverlayReadLock lock;
+            if (g_overlayHooksRemoved.load(std::memory_order_acquire)) return false;
+            if (g_overlayState) return true;
+        }
+        auto candidate = std::make_unique<OverlayState>();
+        bool initialized = false;
+        {
+            OverlayLock lock;
+            if (!g_overlayHooksRemoved.load(std::memory_order_acquire) &&
+                g_overlayRequestVersion.load(std::memory_order_acquire) == lifecycle) {
+                if (!g_overlayState) {
+                    g_overlayState = candidate.release();
+                }
+                initialized = true;
+            }
+        }
+        // File/hive preparation happens only in enabled SetOverlaySites.
+        return initialized;
     } catch (...) {
-        Wh_Log(L"Chrome policy overlay: storage initialization failed. No real Chrome policy was changed.");
+        Wh_Log(L"Chrome policy overlay: cannot allocate bookkeeping state.");
+        return false;
     }
-    return false;
 }
 
 void OverlayRequireAbsent(HKEY key, const wchar_t* name, REGSAM view) {
@@ -552,22 +727,21 @@ void OverlaySetString(HKEY key, const wchar_t* name, const std::wstring& text) {
                  L"Cannot add a transient Chrome policy");
 }
 
-std::shared_ptr<OverlaySnapshot> OverlayBuildSnapshot(REGSAM view) {
-    OverlayState& state = *g_overlayState;
+std::shared_ptr<OverlaySnapshot> OverlayBuildSnapshot(const OverlayConfig& config, REGSAM view) {
     OverlayPreflight();
     OverlayKey genuine;
     LSTATUS result = OverlayNativeOpen(HKEY_CURRENT_USER, kOverlayChromePath, 0,
                                       KEY_READ | view, &genuine.value);
     if (!OverlayMissing(result)) OverlayCheck(result, L"Cannot read genuine Chrome policy data");
-    if (++state.nextSnapshot == 0)
+    const auto serial = config.hive->nextSnapshot.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (serial == 0)
         throw OverlayError{ERROR_ARITHMETIC_OVERFLOW, L"The private snapshot sequence is exhausted"};
-    if (!state.hive) state.hive = OverlayCreateHive();
     auto snapshot = std::make_shared<OverlaySnapshot>();
-    snapshot->hive = state.hive;
-    std::wstring name = L"View" + std::to_wstring(state.nextSnapshot);
+    snapshot->hive = config.hive;
+    std::wstring name = L"View" + std::to_wstring(serial);
     OverlayKey root;
     DWORD disposition = 0;
-    OverlayCheck(RegCreateKeyExW(state.hive->root, name.c_str(), 0, nullptr,
+    OverlayCheck(RegCreateKeyExW(config.hive->root, name.c_str(), 0, nullptr,
                                 REG_OPTION_VOLATILE, KEY_ALL_ACCESS, nullptr,
                                 &root.value, &disposition),
                  L"Cannot create a volatile policy snapshot");
@@ -579,11 +753,12 @@ std::shared_ptr<OverlaySnapshot> OverlayBuildSnapshot(REGSAM view) {
         OverlayCopyBudget budget;
         OverlayCopyTree(genuine.value, snapshot->root, view, 0, budget);
     }
-    // Recheck the copied data and real policy locations before adding anything.
+    // Retain genuine nested values for native RegGetValue/subkey consumers.
+    // Reject a conflicting owned policy copied during a concurrent HKCU change.
+    // Registry loading does not promise atomicity across the real user/machine hives.
     OverlayCheckPolicyKey(snapshot->root, 0);
-    OverlayPreflight();
     OverlaySetString(snapshot->root, kOverlayOwned[1], kOverlayClearJson);
-    OverlaySetString(snapshot->root, kOverlayOwned[2], state.keepJson);
+    OverlaySetString(snapshot->root, kOverlayOwned[2], config.keepJson);
     const DWORD sessionOnly = 4;
     OverlayCheck(RegSetValueExW(snapshot->root, kOverlayOwned[0], 0, REG_DWORD,
                                reinterpret_cast<const BYTE*>(&sessionOnly), sizeof(sessionOnly)),
@@ -613,45 +788,56 @@ std::wstring OverlayKeepJson(const std::vector<std::wstring>& sites) {
     return result + L"]";
 }
 
-// Returns whether the requested configuration was accepted. Existing native
-// handles keep a complete immutable snapshot; settings affect future root opens.
-// Genuine policy conflicts are checked on every read, not merely on enable.
+bool OverlayPublishConfig(unsigned long long request,
+                          std::shared_ptr<const OverlayConfig> replacement) {
+    std::shared_ptr<const OverlayConfig> retired;
+    bool accepted = false;
+    {
+        OverlayLock lock;
+        if (g_overlayState && g_overlayRequestVersion.load(std::memory_order_acquire) == request) {
+            retired.swap(g_overlayState->config);
+            g_overlayState->config.swap(replacement);
+            g_overlayEnabled.store(!!g_overlayState->config, std::memory_order_release);
+            g_overlayState->lastErrorAction = nullptr;
+            accepted = true;
+        }
+    }
+    // Replaced configuration/hive destructors run after the bookkeeping lock.
+    return accepted;
+}
+
+// Called by AfterInit/settings callbacks, never by a registry hook. A prepared
+// hive is reused while enabled; requests are ordered so an old slow preparation
+// cannot publish after a later disable or settings change.
 bool SetOverlaySites(const std::vector<std::wstring>* sites) {
+    const auto request = g_overlayRequestVersion.fetch_add(1, std::memory_order_acq_rel) + 1;
+    OverlayBypass bypass;
     try {
-        std::wstring json;
-        if (sites) {
-            json = OverlayKeepJson(*sites);
-            if (!InitializeOverlayStorage()) {
-                SetOverlaySites(nullptr);
-                return false;
-            }
+        if (!sites) {
+            OverlayPublishConfig(request, nullptr);
+            return true;
         }
-        OverlayLock lock;
-        OverlayBypass bypass;
-        if (!g_overlayState) return sites == nullptr;
-        g_overlayState->enabled = false;
-        g_overlayState->keepJson = std::move(json);
-        g_overlayState->enabled = sites != nullptr;
-        g_overlayState->lastErrorAction = nullptr;
-        if (g_overlayState->clients.empty()) g_overlayState->hive.reset();
-        return true;
+        bool initialized = false;
+        {
+            OverlayReadLock lock;
+            initialized = g_overlayState &&
+                          !g_overlayHooksRemoved.load(std::memory_order_acquire);
+        }
+        if (!initialized) return false;
+        auto config = std::make_shared<OverlayConfig>();
+        config->keepJson = OverlayKeepJson(*sites);
+        auto current = OverlayCaptureConfig();
+        if (current) config->hive = current->hive;
+        if (!config->hive) config->hive = OverlayCreateHive();
+        return OverlayPublishConfig(request, std::move(config));
     } catch (const OverlayError& error) {
-        OverlayLock lock;
-        OverlayBypass bypass;
-        if (g_overlayState) {
-            g_overlayState->enabled = false;
-            if (g_overlayState->clients.empty()) g_overlayState->hive.reset();
-        }
+        if (!OverlayPublishConfig(request, nullptr)) return false;
         OverlayLogError(error.action, error.code);
     } catch (...) {
-        OverlayLock lock;
-        OverlayBypass bypass;
-        if (g_overlayState) {
-            g_overlayState->enabled = false;
-            if (g_overlayState->clients.empty()) g_overlayState->hive.reset();
-        }
-        Wh_Log(L"Chrome policy overlay: configuration was disabled after an unexpected error.");
+        if (!OverlayPublishConfig(request, nullptr)) return false;
+        OverlayLogError(L"Cannot prepare the requested cleanup configuration", ERROR_NOT_ENOUGH_MEMORY);
     }
+    Wh_Log(L"Save the mod settings or toggle cleanup off/on to retry preparation; Chrome Reload policies alone cannot prepare a hive.");
     return false;
 }
 
@@ -668,46 +854,68 @@ bool OverlayRootPath(HKEY root, LPCWSTR path) {
            CompareStringOrdinal(path, -1, kOverlayChromePath, -1, TRUE) == CSTR_EQUAL;
 }
 void OverlayReportFailure(const wchar_t* action, LSTATUS error) noexcept {
-    try {
+    OverlayLogError(action, error);
+    Wh_Log(L"Chrome will read its genuine policies for this request. Reload policies to retry a complete transient view.");
+}
+
+LSTATUS OverlayRegisterClient(HKEY key, const std::shared_ptr<OverlaySnapshot>& snapshot) {
+    // Allocate the node before locking. std::map node insertion cannot rehash
+    // or allocate while the bookkeeping lock is held.
+    OverlayClients staging;
+    staging.emplace(key, snapshot);
+    auto node = staging.extract(key);
+    OverlayClients::node_type rejected;
+    LSTATUS status = ERROR_CANCELLED;
+    {
         OverlayLock lock;
-        OverlayBypass bypass;
-        OverlayLogError(action, error);
-        if (g_overlayState && g_overlayState->clients.empty()) g_overlayState->hive.reset();
-    } catch (...) {
-        Wh_Log(L"Chrome policy overlay: a transient view could not be prepared; Chrome will read its genuine policies.");
+        if (g_overlayState) {
+            auto inserted = g_overlayState->clients.insert(std::move(node));
+            rejected = std::move(inserted.node);
+            status = inserted.inserted ? ERROR_SUCCESS : ERROR_ALREADY_EXISTS;
+            g_overlayTrackedCount.store(g_overlayState->clients.size(), std::memory_order_release);
+        }
     }
+    return status;
 }
 
 LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY key, LPCWSTR subkey, DWORD options,
                                  REGSAM access, PHKEY result) {
     if (g_overlayBypass) return OverlayNativeOpen(key, subkey, options, access, result);
+    OverlayBypass bypass;
     bool trackedParent = false;
     LSTATUS failure = ERROR_NOT_ENOUGH_MEMORY;
     try {
-        OverlayLock lock;
-        OverlayBypass bypass;
-        if (g_overlayState) {
-            auto parent = g_overlayState->clients.find(key);
-            if (parent != g_overlayState->clients.end()) {
-                trackedParent = true;
-                if (!result) return ERROR_INVALID_PARAMETER;
-                OverlayKey opened;
-                LSTATUS status = OverlayNativeOpen(key, subkey, options, access, &opened.value);
-                if (status != ERROR_SUCCESS) return status;
-                g_overlayState->clients.insert_or_assign(opened.value, parent->second);
-                *result = opened.release();
-                return ERROR_SUCCESS;
-            }
-            if (g_overlayState->enabled && options == 0 && OverlayReadAccess(access) &&
-                OverlayRootPath(key, subkey)) {
-                if (!result) return ERROR_INVALID_PARAMETER;
-                auto snapshot = OverlayBuildSnapshot(access & (KEY_WOW64_32KEY | KEY_WOW64_64KEY));
+        auto parent = OverlayCaptureParent(key);
+        if (parent) {
+            trackedParent = true;
+            if (!result) return ERROR_INVALID_PARAMETER;
+            OverlayKey opened;
+            LSTATUS status = OverlayNativeOpen(key, subkey, options, access, &opened.value);
+            if (status != ERROR_SUCCESS) return status;
+            OverlayCheck(OverlayRegisterClient(opened.value, parent), L"Cannot track a relative policy-key handle");
+            *result = opened.release();
+            return ERROR_SUCCESS;
+        }
+        if (g_overlayEnabled.load(std::memory_order_acquire) && options == 0 &&
+            OverlayReadAccess(access) && OverlayRootPath(key, subkey)) {
+            if (!result) return ERROR_INVALID_PARAMETER;
+            auto config = OverlayCaptureConfig();
+            if (config) {
+                std::shared_ptr<OverlaySnapshot> snapshot;
+                for (unsigned attempt = 0; attempt < 2; ++attempt) {
+                    try {
+                        snapshot = OverlayBuildSnapshot(*config, access & (KEY_WOW64_32KEY | KEY_WOW64_64KEY));
+                        break;
+                    } catch (const OverlayError& error) {
+                        if (attempt || (error.code != ERROR_RETRY && error.code != ERROR_MORE_DATA)) throw;
+                        Wh_Log(L"Chrome policies changed during a snapshot; retrying once.");
+                    }
+                }
                 OverlayKey opened;
                 OverlayCheck(OverlayNativeOpen(snapshot->root, L"", 0, access, &opened.value),
                              L"Cannot open the private policy snapshot for Chrome");
-                g_overlayState->clients.insert_or_assign(opened.value, snapshot);
+                OverlayCheck(OverlayRegisterClient(opened.value, snapshot), L"Cannot track a policy snapshot handle");
                 *result = opened.release();
-                g_overlayState->lastErrorAction = nullptr;
                 return ERROR_SUCCESS;
             }
         }
@@ -717,56 +925,61 @@ LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY key, LPCWSTR subkey, DWORD options,
     } catch (...) {
         OverlayReportFailure(L"Cannot allocate a transient Chrome policy view", ERROR_NOT_ENOUGH_MEMORY);
     }
-    // A relative child must share its parent's lifetime. If bookkeeping failed,
-    // its RAII handle is already closed; never return an untracked replacement.
+    // A child whose bookkeeping failed was closed by RAII; never return an
+    // untracked replacement which could outlive its parent snapshot.
     if (trackedParent) return failure;
-    OverlayBypass bypass;
     return OverlayNativeOpen(key, subkey, options, access, result);
 }
 LSTATUS WINAPI RegCloseKey_Hook(HKEY key) {
-    if (g_overlayBypass) return OverlayNativeClose(key);
-    LSTATUS status = ERROR_INVALID_HANDLE;
-    bool closed = false;
-    try {
-        OverlayLock lock;
-        OverlayBypass bypass;
-        status = OverlayNativeClose(key);
-        closed = true;
-        // Keep the lock across native close + erase to prevent handle reuse
-        // from deleting a different thread's newly registered snapshot handle.
-        if (status == ERROR_SUCCESS && g_overlayState) {
-            g_overlayState->clients.erase(key);
-            if (g_overlayState->clients.empty()) g_overlayState->hive.reset();
-        }
-        return status;
-    } catch (...) {
-        if (closed) return status;
-        OverlayBypass bypass;
+    if (g_overlayBypass || !g_overlayTrackedCount.load(std::memory_order_acquire))
         return OverlayNativeClose(key);
+    OverlayBypass bypass;
+    auto snapshot = OverlayCaptureParent(key);
+    OverlayClients::node_type node;
+    // Retain the mapping while the native close runs unlocked. A concurrent
+    // relative open that still succeeds must be able to retain this snapshot.
+    LSTATUS status = OverlayNativeClose(key);
+    if (status == ERROR_SUCCESS && snapshot) {
+        OverlayLock lock;
+        if (g_overlayState) {
+            auto found = g_overlayState->clients.find(key);
+            if (found != g_overlayState->clients.end() && found->second == snapshot)
+                node = g_overlayState->clients.extract(found);
+            g_overlayTrackedCount.store(g_overlayState->clients.size(), std::memory_order_release);
+        }
     }
+    // Failure leaves its mapping intact without any allocation. If Windows
+    // reuses the numeric HKEY before retirement, duplicate registration fails
+    // conservatively instead of replacing another caller's tracked handle.
+    // Node/snapshot/native-key destruction occurs here, without a held lock.
+    return status;
 }
 
 void ShutdownOverlay() {
-    // Called only after Windhawk has removed the hooks. Trampolines may have
-    // been freed, so all final RAII cleanup must use the real exports instead.
-    RegOpenKeyExW_Original = RegOpenKeyExW;
-    RegCloseKey_Original = RegCloseKey;
-    OverlayLock lock;
+    // Called after hooks are removed, but an in-flight hook can still finish.
+    // Keep original pointers immutable; atomically select native exports for
+    // cleanup and late calls instead of racing readers of those pointers.
+    g_overlayHooksRemoved.store(true, std::memory_order_release);
+    g_overlayRequestVersion.fetch_add(1, std::memory_order_acq_rel);
     OverlayBypass bypass;
-    if (!g_overlayState) return;
-    g_overlayState->enabled = false;
-    for (auto& entry : g_overlayState->clients) entry.second->preserveNativeKeys = true;
-    // Only internal references are released. Caller-owned HKEYs remain native,
-    // valid, and Chrome can close them normally after this DLL has unloaded.
-    g_overlayState->clients.clear();
-    g_overlayState->hive.reset();
-    delete g_overlayState;
-    g_overlayState = nullptr;
+    OverlayState* retired = nullptr;
+    {
+        OverlayLock lock;
+        retired = g_overlayState;
+        g_overlayState = nullptr;
+        g_overlayEnabled.store(false, std::memory_order_release);
+        g_overlayTrackedCount.store(0, std::memory_order_release);
+    }
+    if (!retired) return;
+    for (auto& entry : retired->clients) entry.second->preserveNativeKeys = true;
+    // Only internal references are released. Caller-owned HKEYs stay native and
+    // valid after this DLL unloads. All deletion/closure runs outside the lock.
+    delete retired;
 }
 // END_TRANSIENT_POLICY_OVERLAY
 // BEGIN_POLICY_REFRESH
 // Included inside the mod's anonymous namespace.
-// Required headers: windows.h, shellapi.h, userenv.h, map, string_view.
+// Required headers: windows.h, shellapi.h, userenv.h, string_view.
 // Chromium sources:
 // https://github.com/chromium/chromium/blob/main/components/policy/core/common/policy_loader_win.cc
 // https://github.com/chromium/chromium/blob/main/base/command_line.cc
@@ -774,12 +987,19 @@ void ShutdownOverlay() {
 decltype(&::RegisterGPNotification) RegisterGPNotification_Original = nullptr;
 decltype(&::UnregisterGPNotification) UnregisterGPNotification_Original = nullptr;
 
-// No global C++ destructors run for this state during process termination.
-// Explicit unload releases the heap map and duplicate handles. Windows reclaims
-// them at process exit, when Windhawk does not call the unload callbacks.
+// POD-only globals need no destructor at process termination. The small bounded
+// table is ample for Chrome's two policy events. Nothing under this lock calls
+// Windows, logs, allocates, or destroys an owning C++ object.
+constexpr size_t kPolicyRefreshEventLimit = 64;
+struct PolicyRefreshEvent {
+    HANDLE original;
+    HANDLE duplicate;
+    size_t requests;
+    bool retired;
+};
 SRWLOCK g_policyRefreshLock = SRWLOCK_INIT;
-using PolicyRefreshEvents = std::map<HANDLE, HANDLE>;
-PolicyRefreshEvents* g_policyRefreshEvents = nullptr;
+PolicyRefreshEvent g_policyRefreshEvents[kPolicyRefreshEventLimit]{};
+unsigned long long g_policyRefreshEpoch = 0;
 bool g_policyRefreshStopped = false;
 
 class PolicyRefreshGuard {
@@ -790,122 +1010,194 @@ public:
     PolicyRefreshGuard& operator=(const PolicyRefreshGuard&) = delete;
 };
 
+// Caller holds g_policyRefreshLock. The returned handle is closed only after
+// unlocking. An outstanding request keeps its duplicate alive until release.
+HANDLE RetirePolicyRefreshEvent(PolicyRefreshEvent& entry) {
+    entry.original = nullptr;
+    entry.retired = true;
+    if (entry.requests) {
+        return nullptr;
+    }
+    HANDLE duplicate = entry.duplicate;
+    entry = {};
+    return duplicate;
+}
+
 BOOL WINAPI RegisterGPNotification_Hook(HANDLE event, BOOL machine) {
-    BOOL result = FALSE;
-    DWORD error = ERROR_SUCCESS;
-    bool originalCalled = false;
-    HANDLE unownedDuplicate = nullptr;
-    try {
-        // Serialize registration bookkeeping with unregister and shutdown. The
-        // original API is always called, even if our bookkeeping fails.
+    unsigned long long epoch;
+    bool track;
+    {
         PolicyRefreshGuard lock;
-        result = RegisterGPNotification_Original(event, machine);
-        error = GetLastError();
-        originalCalled = true;
-        if (result && !g_policyRefreshStopped) {
-            if (!g_policyRefreshEvents) {
-                g_policyRefreshEvents = new PolicyRefreshEvents;
-            }
-            if (g_policyRefreshEvents->find(event) ==
-                g_policyRefreshEvents->end()) {
-                if (DuplicateHandle(GetCurrentProcess(), event,
-                                    GetCurrentProcess(), &unownedDuplicate,
-                                    0, FALSE, DUPLICATE_SAME_ACCESS)) {
-                    g_policyRefreshEvents->emplace(event, unownedDuplicate);
-                    unownedDuplicate = nullptr;
-                } else {
-                    Wh_Log(L"Could not retain Chrome's policy refresh event: %lu",
-                           GetLastError());
+        epoch = g_policyRefreshEpoch;
+        track = !g_policyRefreshStopped;
+    }
+    const BOOL result = RegisterGPNotification_Original(event, machine);
+    const DWORD error = GetLastError();
+    bool needsDuplicate = false;
+    if (result && track) {
+        PolicyRefreshGuard lock;
+        if (!g_policyRefreshStopped && g_policyRefreshEpoch == epoch) {
+            needsDuplicate = true;
+            for (const auto& entry : g_policyRefreshEvents) {
+                if (entry.original == event && !entry.retired) {
+                    needsDuplicate = false;
+                    break;
                 }
             }
         }
-    } catch (...) {
-        Wh_Log(L"Could not track Chrome's policy refresh event; its Windows "
-               L"registration remains unchanged.");
     }
-    if (unownedDuplicate) {
-        CloseHandle(unownedDuplicate);
-    }
-    if (!originalCalled) {
-        result = RegisterGPNotification_Original(event, machine);
-        error = GetLastError();
+    if (needsDuplicate) {
+        HANDLE duplicate = nullptr;
+        if (DuplicateHandle(GetCurrentProcess(), event, GetCurrentProcess(),
+                            &duplicate, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
+            bool adopted = false;
+            bool full = false;
+            {
+                PolicyRefreshGuard lock;
+                // A concurrent successful unregister invalidates this attempt.
+                // Missing a refresh event only requires a manual policy reload;
+                // retaining a potentially stale registration would be worse.
+                if (!g_policyRefreshStopped && g_policyRefreshEpoch == epoch) {
+                    bool exists = false;
+                    PolicyRefreshEvent* available = nullptr;
+                    for (auto& entry : g_policyRefreshEvents) {
+                        if (entry.original == event && !entry.retired) {
+                            exists = true;
+                            break;
+                        }
+                        if (!entry.duplicate && !available) {
+                            available = &entry;
+                        }
+                    }
+                    if (!exists && available) {
+                        *available = {event, duplicate, 0, false};
+                        adopted = true;
+                    } else if (!exists) {
+                        full = true;
+                    }
+                }
+            }
+            if (!adopted) {
+                CloseHandle(duplicate);
+            }
+            if (full) {
+                Wh_Log(L"Chrome policy event tracking is full. Use chrome://policy "
+                       L"to reload policies after changing the mod's settings.");
+            }
+        } else {
+            Wh_Log(L"Could not retain Chrome's policy refresh event: %lu",
+                   GetLastError());
+        }
     }
     SetLastError(error);
     return result;
 }
 
 BOOL WINAPI UnregisterGPNotification_Hook(HANDLE event) {
-    BOOL result = FALSE;
-    DWORD error = ERROR_SUCCESS;
-    bool originalCalled = false;
-    try {
+    const BOOL result = UnregisterGPNotification_Original(event);
+    const DWORD error = GetLastError();
+    HANDLE retired = nullptr;
+    if (result) {
         PolicyRefreshGuard lock;
-        result = UnregisterGPNotification_Original(event);
-        error = GetLastError();
-        originalCalled = true;
-        if (result && g_policyRefreshEvents) {
-            auto found = g_policyRefreshEvents->find(event);
-            if (found != g_policyRefreshEvents->end()) {
-                // The documented API unregisters this event, not one reference
-                // to it. Repeated registration must not retain a stale event.
-                CloseHandle(found->second);
-                g_policyRefreshEvents->erase(found);
+        ++g_policyRefreshEpoch;
+        for (auto& entry : g_policyRefreshEvents) {
+            if (entry.original == event && !entry.retired) {
+                retired = RetirePolicyRefreshEvent(entry);
+                break;
             }
         }
-    } catch (...) {
-        Wh_Log(L"Could not update policy refresh bookkeeping during unregister.");
     }
-    if (!originalCalled) {
-        result = UnregisterGPNotification_Original(event);
-        error = GetLastError();
+    if (retired) {
+        CloseHandle(retired);
     }
     SetLastError(error);
     return result;
 }
 
-void RequestPolicyRefresh() {
+void RequestPolicyRefresh(bool logIfUnavailable = true) {
     const DWORD originalError = GetLastError();
-    try {
+    struct CapturedEvent {
+        size_t index;
+        HANDLE duplicate;
+    };
+    CapturedEvent captured[kPolicyRefreshEventLimit]{};
+    size_t count = 0;
+    bool saturated = false;
+    {
         PolicyRefreshGuard lock;
-        if (!g_policyRefreshEvents || g_policyRefreshEvents->empty()) {
-            Wh_Log(L"No Chrome policy event was captured. Use chrome://policy "
-                   L"to reload policies, or restart Chrome.");
-        }
-        if (g_policyRefreshEvents) {
-            for (const auto& [original, duplicate] : *g_policyRefreshEvents) {
-                (void)original;
-                // This wakes Chromium's existing asynchronous loader. It
-                // neither changes Group Policy nor acknowledges completion.
-                if (!SetEvent(duplicate)) {
-                    Wh_Log(L"Could not request Chrome policy refresh: %lu",
-                           GetLastError());
+        if (!g_policyRefreshStopped) {
+            for (size_t i = 0; i < kPolicyRefreshEventLimit; ++i) {
+                auto& entry = g_policyRefreshEvents[i];
+                if (!entry.duplicate || entry.retired) {
+                    continue;
                 }
+                if (entry.requests == static_cast<size_t>(-1)) {
+                    saturated = true;
+                    continue;
+                }
+                ++entry.requests;
+                captured[count++] = {i, entry.duplicate};
             }
         }
-    } catch (...) {
-        Wh_Log(L"Could not request Chrome policy refresh. Use chrome://policy "
+    }
+    if (!count && logIfUnavailable) {
+        Wh_Log(L"No Chrome policy event was captured. Use chrome://policy "
                L"to reload policies, or restart Chrome.");
+    }
+    if (saturated) {
+        Wh_Log(L"Could not retain a policy refresh request. Use chrome://policy "
+               L"to reload policies.");
+    }
+    for (size_t i = 0; i < count; ++i) {
+        bool active;
+        {
+            PolicyRefreshGuard lock;
+            active = !g_policyRefreshEvents[captured[i].index].retired;
+        }
+        // A request lease protects this duplicate from closure or reuse.
+        // Signaling requests an asynchronous reload, not an acknowledgement.
+        if (active && !SetEvent(captured[i].duplicate)) {
+            Wh_Log(L"Could not request Chrome policy refresh: %lu", GetLastError());
+        }
+    }
+    HANDLE retired[kPolicyRefreshEventLimit]{};
+    size_t retiredCount = 0;
+    {
+        PolicyRefreshGuard lock;
+        for (size_t i = 0; i < count; ++i) {
+            auto& entry = g_policyRefreshEvents[captured[i].index];
+            --entry.requests;
+            if (entry.retired && !entry.requests) {
+                retired[retiredCount++] = RetirePolicyRefreshEvent(entry);
+            }
+        }
+    }
+    for (size_t i = 0; i < retiredCount; ++i) {
+        CloseHandle(retired[i]);
     }
     SetLastError(originalError);
 }
 
 void ClearPolicyRefreshEvents() {
     const DWORD originalError = GetLastError();
-    try {
+    HANDLE retired[kPolicyRefreshEventLimit]{};
+    size_t count = 0;
+    {
         PolicyRefreshGuard lock;
-        // Called during unload, after the final refresh request. A concurrent
-        // successful registration must not acquire a new duplicate afterward.
+        // Called during unload, after the final refresh request. Outstanding
+        // requests release their own leases; no new registration can be kept.
         g_policyRefreshStopped = true;
-        if (g_policyRefreshEvents) {
-            for (const auto& [original, duplicate] : *g_policyRefreshEvents) {
-                (void)original;
-                CloseHandle(duplicate);
+        ++g_policyRefreshEpoch;
+        for (auto& entry : g_policyRefreshEvents) {
+            if (entry.duplicate) {
+                if (HANDLE duplicate = RetirePolicyRefreshEvent(entry)) {
+                    retired[count++] = duplicate;
+                }
             }
-            delete g_policyRefreshEvents;
-            g_policyRefreshEvents = nullptr;
         }
-    } catch (...) {
-        Wh_Log(L"Could not release policy refresh bookkeeping.");
+    }
+    for (size_t i = 0; i < count; ++i) {
+        CloseHandle(retired[i]);
     }
     SetLastError(originalError);
 }
@@ -1010,29 +1302,30 @@ BOOL Wh_ModInit() {
     if (!InitializeOverlayStorage()) {
         return FALSE;
     }
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(RegOpenKeyExW),
-                            reinterpret_cast<void*>(RegOpenKeyExW_Hook),
-                            reinterpret_cast<void**>(&RegOpenKeyExW_Original)) ||
-        !Wh_SetFunctionHook(reinterpret_cast<void*>(RegCloseKey),
-                            reinterpret_cast<void*>(RegCloseKey_Hook),
-                            reinterpret_cast<void**>(&RegCloseKey_Original)) ||
-        !Wh_SetFunctionHook(reinterpret_cast<void*>(RegisterGPNotification),
-                            reinterpret_cast<void*>(RegisterGPNotification_Hook),
-                            reinterpret_cast<void**>(&RegisterGPNotification_Original)) ||
-        !Wh_SetFunctionHook(reinterpret_cast<void*>(UnregisterGPNotification),
-                            reinterpret_cast<void*>(UnregisterGPNotification_Hook),
-                            reinterpret_cast<void**>(&UnregisterGPNotification_Original))) {
+    if (!WindhawkUtils::SetFunctionHook(RegOpenKeyExW, RegOpenKeyExW_Hook,
+                                       &RegOpenKeyExW_Original) ||
+        !WindhawkUtils::SetFunctionHook(RegCloseKey, RegCloseKey_Hook,
+                                       &RegCloseKey_Original) ||
+        !WindhawkUtils::SetFunctionHook(RegisterGPNotification,
+                                       RegisterGPNotification_Hook,
+                                       &RegisterGPNotification_Original) ||
+        !WindhawkUtils::SetFunctionHook(UnregisterGPNotification,
+                                       UnregisterGPNotification_Hook,
+                                       &UnregisterGPNotification_Original)) {
         Wh_Log(L"Failed to register the Chrome policy hooks.");
         ShutdownOverlay();
         ClearPolicyRefreshEvents();
         return FALSE;
     }
-    ApplySettings();
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    RequestPolicyRefresh();
+    // Prepare private storage outside registry hooks, after every hook is live.
+    // At normal startup Chrome has not registered its policy events yet; the
+    // initial policy load will see these settings without a refresh warning.
+    ApplySettings();
+    RequestPolicyRefresh(false);
 }
 
 void Wh_ModSettingsChanged() {
