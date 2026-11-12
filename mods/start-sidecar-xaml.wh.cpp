@@ -4,7 +4,7 @@
 // @name:zh-CN 开始菜单卡片 - Start Sidecar
 // @description Native XAML live cards inside the Windows 11 Start companion layout.
 // @description:zh-CN 在 Windows 11 开始菜单中嵌入原生 XAML 卡片。
-// @version 0.6.1
+// @version 0.6.2
 // @author Yizuka17
 // @github https://github.com/Yizuka17
 // @license MIT
@@ -198,6 +198,8 @@ SOFTWARE.
 #include <shlwapi.h>
 #include <knownfolders.h>
 #include <filesystem>
+#include <fstream>
+#include <winrt/Windows.Data.Xml.Dom.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.UI.Text.h>
 #include <functional>
@@ -243,7 +245,8 @@ struct Data {
          toggle = false, brightnessReady = false;
     // Only encoded image bytes cross apartments; SMTC streams stay on the
     // worker.
-    std::shared_ptr<const std::vector<uint8_t>> art, mediaLogo;
+    std::shared_ptr<const std::vector<uint8_t>> art, mediaLogo, mediaLogoLight,
+        mediaLogoDark;
     uint64_t artRevision = 0;
 };
 inline std::shared_ptr<Config> config = std::make_shared<Config>();
@@ -898,6 +901,171 @@ static std::vector<std::pair<DWORD, std::wstring>> SourceProcesses(
             });
     return result;
 }
+// Resolve short SMTC identities through the running app's registered package.
+// Some packaged desktop players publish an executable name instead of an AUMID.
+static Windows::ApplicationModel::AppInfo MediaAppInfo(
+    std::wstring const& source) {
+    using Windows::ApplicationModel::AppInfo;
+    AppInfo fallback{nullptr};
+    try {
+        fallback = AppInfo::GetFromAppUserModelId(source);
+        if (fallback && fallback.Package())
+            return fallback;
+    } catch (...) {
+    }
+    for (auto const& process : SourceProcesses(source)) {
+        HANDLE handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                                    process.first);
+        if (!handle)
+            continue;
+        UINT32 length = 0;
+        std::wstring identity;
+        if (GetApplicationUserModelId(handle, &length, nullptr) ==
+                ERROR_INSUFFICIENT_BUFFER &&
+            length) {
+            std::vector<wchar_t> text(length);
+            if (GetApplicationUserModelId(handle, &length, text.data()) ==
+                ERROR_SUCCESS)
+                identity = text.data();
+        }
+        CloseHandle(handle);
+        if (!identity.empty())
+            try {
+                auto app = AppInfo::GetFromAppUserModelId(identity);
+                if (app)
+                    return app;
+            } catch (...) {
+            }
+    }
+    return fallback;
+}
+static bool WithinPackage(std::filesystem::path const& root,
+                          std::filesystem::path const& file) {
+    std::error_code error;
+    auto base = std::filesystem::weakly_canonical(root, error);
+    if (error)
+        return false;
+    auto resolved = std::filesystem::weakly_canonical(file, error);
+    if (error)
+        return false;
+    auto relative = resolved.lexically_relative(base);
+    if (relative.empty() || relative.is_absolute())
+        return false;
+    for (auto const& part : relative)
+        if (part == L"..")
+            return false;
+    return true;
+}
+static std::shared_ptr<const std::vector<uint8_t>> PackageBytes(
+    std::filesystem::path const& root,
+    std::filesystem::path const& file,
+    size_t maximum) {
+    if (!WithinPackage(root, file))
+        return {};
+    std::ifstream input(file, std::ios::binary | std::ios::ate);
+    const auto size = input ? input.tellg() : std::streampos(-1);
+    if (size <= 0 || uint64_t(size) > maximum)
+        return {};
+    auto bytes = std::make_shared<std::vector<uint8_t>>(size_t(size));
+    input.seekg(0);
+    if (!input.read(reinterpret_cast<char*>(bytes->data()),
+                    std::streamsize(bytes->size())))
+        return {};
+    return bytes;
+}
+static std::pair<std::shared_ptr<const std::vector<uint8_t>>,
+                 std::shared_ptr<const std::vector<uint8_t>>>
+ThemedAppLogos(Windows::ApplicationModel::AppInfo const& app) {
+    if (!app || !app.Package())
+        return {};
+    const std::filesystem::path root(
+        app.Package().InstalledLocation().Path().c_str());
+    auto bytes = PackageBytes(root, root / L"AppxManifest.xml", 512 * 1024);
+    if (!bytes)
+        return {};
+    Windows::Data::Xml::Dom::XmlDocument manifest;
+    DataWriter writer;
+    writer.WriteBytes(*bytes);
+    manifest.LoadXmlFromBuffer(writer.DetachBuffer());
+    std::wstring logo;
+    for (auto const& application :
+         manifest.SelectNodes(L"//*[local-name()='Application']")) {
+        auto id = application.Attributes().GetNamedItem(L"Id");
+        if (!id || id.InnerText() != app.Id())
+            continue;
+        auto visual =
+            application.SelectSingleNode(L"*[local-name()='VisualElements']");
+        auto attribute =
+            visual ? visual.Attributes().GetNamedItem(L"Square44x44Logo")
+                   : nullptr;
+        if (attribute)
+            logo = attribute.InnerText();
+        break;
+    }
+    if (logo.empty() || logo.find(L':') != std::wstring::npos)
+        return {};
+    const auto base = (root / std::filesystem::path(logo)).lexically_normal();
+    if (!WithinPackage(root, base) ||
+        Lower(base.extension().wstring()) != L".png")
+        return {};
+    const auto stem = Lower(base.stem().wstring());
+    std::filesystem::path chosen[2];
+    double best[2] = {INFINITY, INFINITY};
+    std::error_code error;
+    for (auto const& item :
+         std::filesystem::directory_iterator(base.parent_path(), error)) {
+        if (error)
+            break;
+        auto name = Lower(item.path().filename().wstring());
+        if (!name.ends_with(L".png") ||
+            !(name == stem + L".png" || name.starts_with(stem + L".")) ||
+            name.find(L"contrast-") != std::wstring::npos)
+            continue;
+        double pixels = 44;
+        auto target = name.find(L"targetsize-");
+        auto scale = name.find(L"scale-");
+        if (target != std::wstring::npos)
+            pixels = std::wcstoul(name.c_str() + target + 11, nullptr, 10);
+        else if (scale != std::wstring::npos)
+            pixels *=
+                std::wcstoul(name.c_str() + scale + 6, nullptr, 10) / 100.0;
+        if (pixels <= 0 || pixels > 4096)
+            continue;
+        for (unsigned light = 0; light < 2; ++light) {
+            const bool lightForm =
+                name.find(L"altform-lightunplated") != std::wstring::npos;
+            const bool darkForm =
+                name.find(L"altform-unplated") != std::wstring::npos;
+            const bool lightTheme =
+                name.find(L"theme-light") != std::wstring::npos;
+            const bool darkTheme =
+                name.find(L"theme-dark") != std::wstring::npos;
+            if ((light && (darkTheme || darkForm)) ||
+                (!light && (lightTheme || lightForm)))
+                continue;
+            const double form = (light ? lightForm : darkForm)     ? 0
+                                : (light ? lightTheme : darkTheme) ? 1
+                                                                   : 2;
+            // One sharp image also serves the larger no-artwork fallback.
+            const double score =
+                form * 10000 +
+                (pixels >= 192 ? pixels - 192 : 1000 + 192 - pixels);
+            if (score < best[light]) {
+                best[light] = score;
+                chosen[light] = item.path();
+            }
+        }
+    }
+    auto dark = chosen[0].empty()
+                    ? nullptr
+                    : PackageBytes(root, chosen[0], 8 * 1024 * 1024);
+    auto light = chosen[1] == chosen[0] ? dark
+                 : chosen[1].empty()
+                     ? nullptr
+                     : PackageBytes(root, chosen[1], 8 * 1024 * 1024);
+    return {light, dark};
+}
+
 static bool OpenSource(std::wstring const& app) {
     if (app.empty())
         return false;
@@ -1054,7 +1222,7 @@ inline void MediaWorker() {
     CoverRead artwork, logo;
     ULONGLONG retry = 0, propertiesStarted = 0, metadataNext = 0,
               followUpUntil = 0;
-    std::wstring source, artworkKey;
+    std::wstring source, artworkKey, logoIdentity;
     bool artForTrack = false;
     auto detach = [&] {
         watched = nullptr;
@@ -1117,6 +1285,8 @@ inline void MediaWorker() {
                 if (next.mediaApp != source) {
                     next.art.reset();
                     next.mediaLogo.reset();
+                    next.mediaLogoLight.reset();
+                    next.mediaLogoDark.reset();
                     ++next.artRevision;
                 }
                 next.mediaApp = source;
@@ -1131,15 +1301,39 @@ inline void MediaWorker() {
                                  L".exe") == 0)
                         next.mediaSource.resize(next.mediaSource.size() - 4);
                     try {
-                        auto app = Windows::ApplicationModel::AppInfo::
-                            GetFromAppUserModelId(source);
+                        auto app = MediaAppInfo(source);
                         if (app) {
+                            std::wstring identity(source);
+                            if (auto package = app.Package())
+                                identity =
+                                    std::wstring(package.Id().FullName()) +
+                                    L"!" + std::wstring(app.Id());
+                            if (identity != logoIdentity) {
+                                logoIdentity = std::move(identity);
+                                logo.Cancel();
+                                logo.hash = 0;
+                                next.mediaLogo.reset();
+                                next.mediaLogoLight.reset();
+                                next.mediaLogoDark.reset();
+                            }
                             auto display = app.DisplayInfo();
                             auto name = display.DisplayName();
                             if (!name.empty())
                                 next.mediaSource = name;
                             if (!next.mediaLogo)
-                                logo.Start(display.GetLogo({32, 32}));
+                                logo.Start(display.GetLogo({192, 192}));
+                            if (!next.mediaLogoLight && !next.mediaLogoDark)
+                                try {
+                                    auto themed = ThemedAppLogos(app);
+                                    next.mediaLogoLight =
+                                        std::move(themed.first);
+                                    next.mediaLogoDark =
+                                        std::move(themed.second);
+                                    if (next.mediaLogoLight ||
+                                        next.mediaLogoDark)
+                                        ++next.artRevision;
+                                } catch (...) {
+                                }
                         }
                     } catch (...) {
                     }
@@ -1246,6 +1440,8 @@ inline void MediaWorker() {
             data.toggle = next.toggle;
             data.art = next.art;
             data.mediaLogo = next.mediaLogo;
+            data.mediaLogoLight = next.mediaLogoLight;
+            data.mediaLogoDark = next.mediaLogoDark;
             data.artRevision = next.artRevision;
         }
         if (WaitForMultipleObjects(2, events, FALSE, visible ? 200 : 0) ==
@@ -1957,7 +2153,8 @@ namespace mediaCard {
 // Layout and transport styling adapted from this machine's MediaPeek mod.
 // Session selection continues to follow the system's current media session.
 [[clang::no_destroy]] inline c::Grid view{nullptr};
-inline uint64_t imageRevision = UINT64_MAX;
+[[clang::no_destroy]] inline std::shared_ptr<const std::vector<uint8_t>>
+    shownLogo, shownArt;
 inline ULONGLONG optimisticUntil = 0;
 inline bool optimisticPlaying = false;
 
@@ -2015,7 +2212,8 @@ inline constexpr wchar_t markup[] =
 </Grid>)XAML";
 inline void Remove() {
     view = nullptr;
-    imageRevision = UINT64_MAX;
+    shownLogo.reset();
+    shownArt.reset();
     optimisticUntil = 0;
 }
 inline x::FrameworkElement Element(const wchar_t* name) {
@@ -2027,6 +2225,12 @@ inline x::FrameworkElement Element(const wchar_t* name) {
 inline void Update(svc::Data const&);
 inline c::Grid Build() {
     view = x::Markup::XamlReader::Load(markup).as<c::Grid>();
+    Track(view.ActualThemeChanged(auto_revoke, [](auto const&, auto const&) {
+        GuardUi([] {
+            if (view)
+                Update(svc::Snapshot());
+        });
+    }));
     auto previous = Element(L"PreviousButton").as<c::Button>();
     auto play = Element(L"PlayButton").as<c::Button>();
     auto next = Element(L"NextButton").as<c::Button>();
@@ -2109,21 +2313,27 @@ inline void Update(svc::Data const& data) {
     Element(L"PauseGlyph")
         .Visibility(playing ? x::Visibility::Visible
                             : x::Visibility::Collapsed);
-    if (imageRevision != data.artRevision) {
-        imageRevision = data.artRevision;
-        Image(L"HeaderLogo", data.mediaLogo);
-        Image(L"PlayerAppIcon", data.mediaLogo);
-        Image(L"PlayerArt", data.art);
-        Element(L"HeaderFallback")
-            .Visibility(data.mediaLogo ? x::Visibility::Collapsed
-                                       : x::Visibility::Visible);
-        Element(L"ArtFallback")
-            .Visibility(data.mediaLogo || data.art ? x::Visibility::Collapsed
-                                                   : x::Visibility::Visible);
-        Element(L"PlayerAppIcon")
-            .Visibility(data.art ? x::Visibility::Collapsed
-                                 : x::Visibility::Visible);
+    auto themed = view.ActualTheme() == x::ElementTheme::Light
+                      ? data.mediaLogoLight
+                      : data.mediaLogoDark;
+    auto logo = themed ? themed : data.mediaLogo;
+    if (shownLogo != logo) {
+        shownLogo = logo;
+        Image(L"HeaderLogo", logo);
+        Image(L"PlayerAppIcon", logo);
     }
+    if (shownArt != data.art) {
+        shownArt = data.art;
+        Image(L"PlayerArt", data.art);
+    }
+    Element(L"HeaderFallback")
+        .Visibility(logo ? x::Visibility::Collapsed : x::Visibility::Visible);
+    Element(L"ArtFallback")
+        .Visibility(logo || data.art ? x::Visibility::Collapsed
+                                     : x::Visibility::Visible);
+    Element(L"PlayerAppIcon")
+        .Visibility(data.art ? x::Visibility::Collapsed
+                             : x::Visibility::Visible);
 }
 }  // namespace mediaCard
 
