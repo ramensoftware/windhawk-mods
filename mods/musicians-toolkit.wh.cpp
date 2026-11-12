@@ -18,7 +18,7 @@
 
 # Musician's Toolkit
 
-![Sample Screenshot of toolkit](https://raw.githubusercontent.com/DeepakBalaraman/musicians-toolkit/master/assets/screenshot-1.1.0.png)
+![Sample Screenshot in action](https://raw.githubusercontent.com/DeepakBalaraman/musicians-toolkit/master/assets/screenshot-1.1.0.png)
 
 A chord library, a song analyzer, a tuner, a metronome, a strumming trainer, a
 circle of fifths, a tap tempo and a note drill, for guitar, ukulele and piano.
@@ -28,6 +28,8 @@ you can keep it beside your DAW, tab app or video lesson.
 Press **Win+Y** to open it and pick a tool from the menu in the top left.
 **Ctrl+Tab** cycles through them. Close it with the **x**, with **Esc**, or
 with the shortcut again (the shortcut itself is under Settings > Shortcut).
+The icon it puts in the notification area is the other way in: click it to open
+or close the panel, right-click it to jump straight to a tool.
 If you would rather it close whenever you click elsewhere, turn that on under
 Settings > Placement.
 
@@ -207,6 +209,8 @@ listens and you play it before the clock runs out.
 - **D U X M R, A G T, C** - lay strokes in the strumming grid, add accents,
   ghosts and ties, clear the bar.
 - **Ctrl+O** - pick a song or video file for the analyzer.
+- **Tray icon** - a click opens or closes the panel, a right click names every
+  tool so one can be opened in a single step.
 - **Esc** - clear the search, or close the panel when the search is empty.
 
 ## Settings
@@ -214,8 +218,8 @@ listens and you play it before the clock runs out.
 - **Startup** - the tool and instrument the panel opens with.
 - **Appearance** - follow Windows or fix light or dark, pick an accent
   colour, set the opacity.
-- **Placement** - corner, monitor, fine offsets, and whether the panel closes
-  when it loses focus.
+- **Placement** - corner, monitor, fine offsets, whether the panel closes
+  when it loses focus, and whether it keeps a tray icon.
 - **Shortcut** - the key and modifiers that open the panel.
 - **Metronome** - volume, background playback, default meter and subdivision.
 - **Chords** - hide the finger numbers.
@@ -329,6 +333,9 @@ download and no internet connection needed.
   - CloseOnFocusLoss: false
     $name: Close when the panel loses focus
     $description: "Close the panel when you click somewhere else. Off by default, so the panel stays on top while you play; the x button or the shortcut closes it."
+  - ShowTrayIcon: true
+    $name: Show a tray icon
+    $description: "Keep an icon in the notification area while the mod is loaded: a click opens or closes the panel, and a right click jumps straight to a tool."
 - Shortcut:
   - HotkeyKey: Y
     $name: Shortcut key
@@ -2471,6 +2478,9 @@ struct Settings {
     // Off by default, so the panel stays up while you play. The x button and
     // the shortcut close it; only turn this on for the old click-away habit.
     bool closeOnFocusLoss = false;
+    // On by default: the tray icon is the way back to the panel when the
+    // shortcut is forgotten or has been taken by another app.
+    bool showTrayIcon = true;
     // The order matches the Tool enum: chords, analyzer, tempo, metronome,
     // tuner, strumming, circle of fifths, note trainer.
     int defaultTool = 0;
@@ -2654,6 +2664,11 @@ Settings LoadSettings() {
     s.closeOnFocusLoss =
         !closeOnFocusLoss.empty() &&
         Wh_GetIntSetting(L"Placement.CloseOnFocusLoss") != 0;
+    // On unless it was turned off, so a settings file written before the option
+    // existed still gets the icon.
+    const std::wstring showTray = GetStringSetting(L"Placement.ShowTrayIcon");
+    s.showTrayIcon =
+        showTray.empty() ? true : Wh_GetIntSetting(L"Placement.ShowTrayIcon") != 0;
     // Opt out, so numbers stay on even where an older settings file is kept.
     s.showFingerings = Wh_GetIntSetting(L"Chords.HideFingerings") == 0;
     // The setting lives in the Startup group, among the other defaults.
@@ -16019,12 +16034,317 @@ void OnKeyDown(WPARAM key) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Tray icon
+//
+// The panel has no taskbar button, so once it is closed the shortcut is the only
+// way back - and a shortcut can be forgotten, or taken by another app. The
+// notification-area icon is the other door: a click opens or closes the panel, a
+// right click lists the tools so one can be opened in a single step.
+//
+// The icon belongs to the panel window rather than to the message window, which
+// is message-only and so never sees the shell's "TaskbarCreated" broadcast - the
+// one moment an icon has to be put back by hand, when Explorer restarts.
+
+constexpr UINT kMessageTray = WM_APP + 3;
+constexpr UINT kTrayIconId = 1;
+constexpr UINT kTrayMenuToggle = 1;
+constexpr UINT kTrayMenuTool = 100;  // The tool index is added to this.
+
+UINT g_taskbarCreated = 0;
+bool g_trayAdded = false;
+// A double click arrives as up, double-click, up. Without this the second up
+// would undo what the first one opened.
+bool g_traySkipClick = false;
+HICON g_trayIcon = nullptr;
+
+// Draws the icon rather than loading one, because a mod ships as a single file
+// with no assets. It is painted four times too big and averaged down, which is
+// what keeps the circle and the note smooth at sixteen pixels.
+HICON TrayBuildIcon(int size) {
+    if (size < 8) {
+        size = 8;
+    }
+    const int scale = 4;
+    const int big = size * scale;
+    BITMAPINFO info{};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = big;
+    info.bmiHeader.biHeight = -big;  // Top row first, so y counts downwards.
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+
+    HDC dc = CreateCompatibleDC(nullptr);
+    if (!dc) {
+        return nullptr;
+    }
+    void* canvasPixels = nullptr;
+    HBITMAP canvas =
+        CreateDIBSection(dc, &info, DIB_RGB_COLORS, &canvasPixels, nullptr, 0);
+    if (!canvas || !canvasPixels) {
+        if (canvas) {
+            DeleteObject(canvas);
+        }
+        DeleteDC(dc);
+        return nullptr;
+    }
+    HGDIOBJ oldBitmap = SelectObject(dc, canvas);
+    RECT frame{0, 0, big, big};
+    FillRect(dc, &frame, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+    // The two colours carry the two facts the averaging needs: red says "inside
+    // the plate", green says "inside the note", and black is outside both.
+    HBRUSH plate = CreateSolidBrush(RGB(255, 0, 0));
+    HGDIOBJ oldBrush = SelectObject(dc, plate);
+    HGDIOBJ oldPen = SelectObject(dc, GetStockObject(NULL_PEN));
+    const int inset = scale / 2;
+    Ellipse(dc, inset, inset, big - inset, big - inset);
+    SelectObject(dc, GetStockObject(WHITE_BRUSH));
+    const auto px = [&](double unit) {
+        return static_cast<int>(lround(unit * big));
+    };
+    // One eighth note: a round head, a thick stem and a flag off its top.
+    Ellipse(dc, px(0.270), px(0.592), px(0.520), px(0.788));
+    Rectangle(dc, px(0.470), px(0.212), px(0.556), px(0.690));
+    const POINT flag[] = {
+        {px(0.556), px(0.212)},
+        {px(0.742), px(0.318)},
+        {px(0.664), px(0.386)},
+        {px(0.556), px(0.300)},
+    };
+    Polygon(dc, flag, ARRAYSIZE(flag));
+    SelectObject(dc, oldPen);
+    SelectObject(dc, oldBrush);
+    DeleteObject(plate);
+    GdiFlush();  // The pixels below are read back, so the drawing has to be done.
+
+    // Averaging the oversized picture down both antialiases the edges and turns
+    // the two colour channels back into a coverage and a tint.
+    const uint8_t* source = static_cast<const uint8_t*>(canvasPixels);
+    std::vector<uint32_t> art(static_cast<size_t>(size) * size, 0);
+    const int samples = scale * scale;
+    for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++) {
+            int inside = 0;
+            int note = 0;
+            for (int sy = 0; sy < scale; sy++) {
+                const uint8_t* row =
+                    source + (static_cast<size_t>(y * scale + sy) * big +
+                              static_cast<size_t>(x) * scale) *
+                                 4;
+                for (int sx = 0; sx < scale; sx++) {
+                    inside += row[sx * 4 + 2];  // Red: the plate.
+                    note += row[sx * 4 + 1];    // Green: the note on it.
+                }
+            }
+            if (inside == 0) {
+                continue;  // Outside the plate, so the pixel stays clear.
+            }
+            const float alpha = static_cast<float>(inside) / (samples * 255.0f);
+            const float white = static_cast<float>(note) / inside;
+            const auto channel = [&](float base) {
+                const float value = (base + (1.0f - base) * white) * alpha;
+                return static_cast<uint32_t>(Clamp01(value) * 255.0f + 0.5f);
+            };
+            art[static_cast<size_t>(y) * size + x] =
+                (static_cast<uint32_t>(alpha * 255.0f + 0.5f) << 24) |
+                (channel(g_accent.r) << 16) | (channel(g_accent.g) << 8) |
+                channel(g_accent.b);
+        }
+    }
+    SelectObject(dc, oldBitmap);
+    DeleteObject(canvas);
+
+    // The pixels at the size the shell asks for, plus the mask an icon structure
+    // wants even though a 32-bit icon draws from its own alpha.
+    info.bmiHeader.biWidth = size;
+    info.bmiHeader.biHeight = -size;
+    void* iconPixels = nullptr;
+    HBITMAP colour =
+        CreateDIBSection(dc, &info, DIB_RGB_COLORS, &iconPixels, nullptr, 0);
+    if (colour && iconPixels) {
+        std::copy(art.begin(), art.end(), static_cast<uint32_t*>(iconPixels));
+    }
+    HDC maskDc = CreateCompatibleDC(nullptr);
+    HBITMAP mask = CreateBitmap(size, size, 1, 1, nullptr);
+    HICON icon = nullptr;
+    if (maskDc && mask) {
+        HGDIOBJ oldMask = SelectObject(maskDc, mask);
+        RECT maskFrame{0, 0, size, size};
+        FillRect(maskDc, &maskFrame,
+                 static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+        SelectObject(maskDc, oldMask);
+        if (colour) {
+            ICONINFO parts{};
+            parts.fIcon = TRUE;
+            parts.hbmMask = mask;
+            parts.hbmColor = colour;
+            icon = CreateIconIndirect(&parts);
+        }
+    }
+    if (maskDc) {
+        DeleteDC(maskDc);
+    }
+    if (mask) {
+        DeleteObject(mask);
+    }
+    if (colour) {
+        DeleteObject(colour);
+    }
+    DeleteDC(dc);
+    return icon;
+}
+
+// Puts the icon in the notification area. Called on the panel thread, because
+// that is the thread the icon reports its clicks to.
+void TrayAdd() {
+    if (g_trayAdded || !g_settings.showTrayIcon || !g_panel.Hwnd()) {
+        return;
+    }
+    if (!g_taskbarCreated) {
+        g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+    }
+    if (!g_trayIcon) {
+        const int size = static_cast<int>(GetSystemMetrics(SM_CXSMICON));
+        g_trayIcon = TrayBuildIcon(size > 0 ? size : 16);
+    }
+    if (!g_trayIcon) {
+        Wh_Log(L"Couldn't draw the tray icon");
+        return;
+    }
+    NOTIFYICONDATAW data{};
+    data.cbSize = sizeof(data);
+    data.hWnd = g_panel.Hwnd();
+    data.uID = kTrayIconId;
+    data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    data.uCallbackMessage = kMessageTray;
+    data.hIcon = g_trayIcon;
+    // The shortcut is the other way in, so the tooltip names it as well.
+    std::wstring tip = L"Musician's Toolkit";
+    if (!g_settings.hotkeyText.empty()) {
+        tip += L"  \x00B7  ";
+        tip += g_settings.hotkeyText;
+    }
+    const size_t length =
+        std::min<size_t>(tip.size(), ARRAYSIZE(data.szTip) - 1);
+    std::copy(tip.begin(), tip.begin() + length, data.szTip);
+    if (!Shell_NotifyIconW(NIM_ADD, &data)) {
+        // Explorer may not be up yet; its "TaskbarCreated" broadcast adds the
+        // icon once it is.
+        Wh_Log(L"Couldn't add the tray icon: %u", GetLastError());
+        return;
+    }
+    g_trayAdded = true;
+}
+
+// Takes the icon away and lets go of the picture it was showing.
+void TrayHalt() {
+    if (g_panel.Hwnd()) {
+        NOTIFYICONDATAW data{};
+        data.cbSize = sizeof(data);
+        data.hWnd = g_panel.Hwnd();
+        data.uID = kTrayIconId;
+        Shell_NotifyIconW(NIM_DELETE, &data);
+    }
+    g_trayAdded = false;
+    if (g_trayIcon) {
+        DestroyIcon(g_trayIcon);
+        g_trayIcon = nullptr;
+    }
+}
+
+// Follows the settings: the icon appears or goes, and it is redrawn so it wears
+// the new accent colour.
+void TrayRefresh() {
+    TrayHalt();
+    TrayAdd();
+}
+
+// The menu behind a right click: the panel itself, then every tool, so one can
+// be reached without opening the panel first.
+void TrayShowMenu() {
+    HWND owner = g_panel.Hwnd();
+    HMENU menu = CreatePopupMenu();
+    if (!owner || !menu) {
+        if (menu) {
+            DestroyMenu(menu);
+        }
+        return;
+    }
+    const bool open = g_phase == kPhaseOpen || g_phase == kPhaseOpening;
+    AppendMenuW(menu, MF_STRING, kTrayMenuToggle,
+                open ? L"Close the panel" : L"Open the panel");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    for (int tool = 0; tool < kToolCount; tool++) {
+        UINT flags = MF_STRING;
+        if (static_cast<int>(g_app.tool) == tool) {
+            flags |= MF_CHECKED;
+        }
+        AppendMenuW(menu, flags, kTrayMenuTool + tool, ToolLabel(tool));
+    }
+    POINT at{};
+    GetCursorPos(&at);
+    // A menu opened from the notification area needs its owner in front, or it
+    // stays up after the user has clicked somewhere else.
+    SetForegroundWindow(owner);
+    const int command = TrackPopupMenu(
+        menu, TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY, at.x, at.y, 0,
+        owner, nullptr);
+    DestroyMenu(menu);
+    PostMessageW(owner, WM_NULL, 0, 0);
+    if (command == static_cast<int>(kTrayMenuToggle)) {
+        ToggleFlyout();
+        return;
+    }
+    if (command < static_cast<int>(kTrayMenuTool) ||
+        command >= static_cast<int>(kTrayMenuTool) + kToolCount) {
+        return;
+    }
+    // The panel opens first, so the tool it seeds itself with is the one that
+    // gets replaced by the tool that was asked for, not the other way round.
+    if (g_phase != kPhaseOpen && g_phase != kPhaseOpening) {
+        OpenFlyout();
+    }
+    SetTool(command - static_cast<int>(kTrayMenuTool));
+}
+
+void TrayOnMessage(LPARAM event) {
+    switch (LOWORD(event)) {
+        case WM_LBUTTONUP:
+            if (g_traySkipClick) {
+                g_traySkipClick = false;  // The tail of a double click.
+                return;
+            }
+            ToggleFlyout();
+            return;
+        case WM_LBUTTONDBLCLK:
+            g_traySkipClick = true;
+            return;
+        case WM_RBUTTONUP:
+            TrayShowMenu();
+            return;
+        default:
+            break;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Window procedures
 
 LRESULT CALLBACK PanelWndProc(HWND hwnd,
                               UINT message,
                               WPARAM wParam,
                               LPARAM lParam) {
+    if (message == kMessageTray) {
+        TrayOnMessage(lParam);
+        return 0;
+    }
+    if (g_taskbarCreated && message == g_taskbarCreated) {
+        // Explorer restarted, and every icon it was showing went with it, so
+        // this one is put back.
+        g_trayAdded = false;
+        TrayAdd();
+        return 0;
+    }
     switch (message) {
         case WM_MOUSEMOVE:
             OnMouseMove(hwnd, POINT{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
@@ -16312,6 +16632,7 @@ LRESULT CALLBACK MessageWndProc(HWND hwnd,
         case kMessageSettings:
             ApplySettings();
             RepositionPanel();
+            TrayRefresh();
             return 0;
         case kMessageAnalyzer: {
             // The worker finished a step; drawing happens on this thread only.
@@ -16329,7 +16650,19 @@ LRESULT CALLBACK MessageWndProc(HWND hwnd,
             }
             return 0;
         }
-        case WM_SETTINGCHANGE:
+        case WM_SETTINGCHANGE: {
+            // The tray icon is drawn in the accent color, so it is put back
+            // when that color moved - otherwise a closed panel would leave the
+            // old one in the notification area until the next settings edit.
+            const Color accent =
+                ResolveAccent(g_settings.accentChoice, g_settings.customAccent);
+            if (accent.r != g_accent.r || accent.g != g_accent.g ||
+                accent.b != g_accent.b) {
+                // The icon is drawn from g_accent, so the new color is taken
+                // first and the icon is then rebuilt around it.
+                g_accent = accent;
+                TrayRefresh();
+            }
             // The app theme and the accent color live in the registry, so a
             // theme switch redraws the panel with the new colors.
             if (g_phase != kPhaseClosed) {
@@ -16338,6 +16671,7 @@ LRESULT CALLBACK MessageWndProc(HWND hwnd,
                 PresentPanel(false);
             }
             return 0;
+        }
         case WM_CLOSE:
             DestroyWindow(hwnd);
             return 0;
@@ -16401,10 +16735,15 @@ bool CreateWindows() {
     // The shortcut comes from the settings, which ApplySettings has already
     // loaded; now that the message window exists it can actually be hooked.
     ApplyToggleHotkey();
+    // The panel is up, so the icon that opens and closes it can be placed too.
+    TrayRefresh();
     return true;
 }
 
 void DestroyWindows() {
+    // The shell holds the icon, not this window, so it is taken away while the
+    // window it reports to is still there to be named.
+    TrayHalt();
     if (g_messageWindow) {
         UnregisterHotKey(g_messageWindow, kHotkeyToggle);
     }
