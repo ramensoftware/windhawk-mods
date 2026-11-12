@@ -6924,6 +6924,14 @@ float4 ps(VertexOutput input) : SV_Target {
     std::shared_ptr<Source> geometrySource;
     winrt::com_ptr<ID3D11Texture2D> geometryReadback;
     float compositorBounds[4]{};
+    // A compositor value in a probe pixel's 24 colour bits, at 1/16 DIP: the expression that paints it and the read
+    // that undoes it.
+    static std::wstring EncodeDip24(std::wstring const& dip) {
+        std::wstring value = L"Floor((" + dip + L" + 32768) * 16)";
+        return L"ColorRGB(255, Floor(" + value + L" / 65536), Floor(" + value + L" / 256) - Floor(" + value +
+               L" / 65536) * 256, " + value + L" - Floor(" + value + L" / 256) * 256)";
+    }
+    static float DecodeDip24(uint32_t pixel) { return float(pixel & 0xffffffu) / 16 - 32768; }
     struct LensProbe {
         Visual button{nullptr}, anchor{nullptr};
         FrameworkElement plate{nullptr};
@@ -7271,14 +7279,9 @@ float4 ps(VertexOutput input) : SV_Target {
         }
         PCWSTR properties[]{L"Offset.X",L"Offset.Y",L"Size.X",L"Size.Y"};
         for (int i=0; i<4; ++i) {
-            // Encode the evaluated compositor value to 24 bits, at 1/16 DIP.
             // A capture of these 16 offscreen pixels observes native implicit
             // motion; XAML getters only expose its layout destination.
-            std::wstring value = L"Floor((dock." + std::wstring(properties[i]) + L" + 32768) * 16)";
-            auto expression = compositor.CreateExpressionAnimation(
-                L"ColorRGB(255, Floor(" + value + L" / 65536), Floor(" + value +
-                L" / 256) - Floor(" + value + L" / 65536) * 256, " + value +
-                L" - Floor(" + value + L" / 256) * 256)");
+            auto expression = compositor.CreateExpressionAnimation(EncodeDip24(L"dock." + std::wstring(properties[i])));
             expression.SetReferenceParameter(L"dock",geometry);
             dockSamples[i].StartAnimation(L"Color",expression);
         }
@@ -7315,11 +7318,8 @@ float4 ps(VertexOutput input) : SV_Target {
             auto brush = compositor.CreateColorBrush();
             // The button's own place in hull DIP. Not recovered from the hull, which runs ahead of Start while
             // the lead covers a new layout.
-            std::wstring value = L"Floor((" + StripOrigin() + L" + button.Offset.X + local." +
-                std::wstring(component ? L"clipCenter" : L"nativeCenter") + L" + 32768) * 16)";
-            auto expression = compositor.CreateExpressionAnimation(
-                L"ColorRGB(255, Floor("+value+L"/65536), Floor("+value+L"/256)-Floor("+value+
-                L"/65536)*256, "+value+L"-Floor("+value+L"/256)*256)");
+            auto expression = compositor.CreateExpressionAnimation(EncodeDip24(
+                StripOrigin() + L" + button.Offset.X + local." + (component ? L"clipCenter" : L"nativeCenter")));
             expression.SetReferenceParameter(L"geometry",metrics);
             expression.SetReferenceParameter(L"button",button);
             expression.SetReferenceParameter(L"anchor",anchor);
@@ -8335,13 +8335,13 @@ float4 ps(VertexOutput input) : SV_Target {
             }
             auto colors = static_cast<uint32_t*>(map.pData);
             float bounds[4]{};
-            for (int i=0; i<4; ++i) bounds[i] = float(colors[i*2] & 0x00FFFFFFu) / 16 - 32768;
+            for (int i=0; i<4; ++i) bounds[i] = DecodeDip24(colors[i*2]);
             bool changed = !haveCompositorBounds || !std::equal(bounds, bounds+4, compositorBounds);
             for (size_t i=0;i<kMaxButtonLenses && 2*(i+1)<desc.Height;++i) {
                 auto row = reinterpret_cast<uint32_t*>(
                     static_cast<BYTE*>(map.pData) + map.RowPitch*2*(i+1));
-                float nativeX = float(row[0]&0xffffffu)/16-32768;
-                float clipX = float(row[2]&0xffffffu)/16-32768;
+                float nativeX = DecodeDip24(row[0]);
+                float clipX = DecodeDip24(row[2]);
                 uint32_t tag = row[4]&0xffffffu;
                 float opacity = float((row[6]>>16)&255)/255;
                 if (i < lens.lensCount && lensProbes[i].tag &&
