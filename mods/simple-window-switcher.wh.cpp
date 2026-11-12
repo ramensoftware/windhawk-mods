@@ -9387,11 +9387,20 @@ LRESULT CALLBACK ExplorerIpcWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 if (hProc2) {
                     DWORD size = MAX_PATH;
                     if (QueryFullProcessImageNameW(hProc2, 0, exePath, &size)) {
+                        // SHGetFileInfoW creates a new icon on every call. Reuse the
+                        // cached one (the tool copies what it receives), as the AUMID
+                        // branch does, so a repeat request doesn't leak a handle.
+                        std::wstring cacheKey = std::wstring(exePath) + L"_" + std::to_wstring(desiredSizePx);
+                        auto cached = g_uwpIconCache.find(cacheKey);
+                        if (cached != g_uwpIconCache.end()) {
+                            CloseHandle(hProc2);
+                            return (LRESULT)cached->second;
+                        }
                         SHFILEINFOW sfi = {};
                         UINT flags = SHGFI_ICON | SHGFI_USEFILEATTRIBUTES | (desiredSizePx > 24 ? SHGFI_LARGEICON : SHGFI_SMALLICON);
                         if (SHGetFileInfoW(exePath, FILE_ATTRIBUTE_NORMAL, &sfi, sizeof(sfi), flags)) {
                             if (sfi.hIcon) {
-                                g_uwpIconCache[std::wstring(exePath) + L"_" + std::to_wstring(desiredSizePx)] = sfi.hIcon;
+                                g_uwpIconCache[cacheKey] = sfi.hIcon;
                                 CloseHandle(hProc2);
                                 return (LRESULT)sfi.hIcon;
                             }
