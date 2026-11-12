@@ -2,7 +2,7 @@
 // @id              pwa-tray-center
 // @name            PWA Tray Center
 // @description     One tray icon for all your Chrome PWAs: hide windows to the PWA Tray Center, control media, see notifications and launch installed apps from a Fluent flyout
-// @version         0.5.780
+// @version         0.5.790
 // @author          Proponent
 // @github          https://github.com/JJProponent
 // @include         chrome.exe
@@ -4135,7 +4135,7 @@ void DrawTitleBar(Panel& p) {
     D2D1_RECT_F closeRect = Rc(kPanelW - kCloseButtonW, 0, kCloseButtonW, kTitleBarH);
     
     // Windows 11 Fluent Design close button colors
-    // Hover fades the red in and out over 150 ms; the glyph turns white with it.
+    // Hover fades the red in and out over 150 ms. The button draws no glyph.
     const float ch = p.closeT.v;
     if (ch > 0.0f) {
         D2D1_COLOR_F closeBg = p.closePressed ? Col(0xFFA02010) : Col(0xFFC42B1C);
@@ -4750,7 +4750,7 @@ void DrawMediaTab(Panel& p, float top, float bottom) {
             if (drag && (int)i == p.libDownIdx) {
                 continue;  // drawn under the pointer instead
             }
-            const Xf prevMove = BeginMove(p, L"m:" + MediaBaseKey(p.media[i]),
+            const Xf prevMove = BeginMove(p, L"m:" + p.media[i].key,
                                           MakeId(kHitMediaCard, (int)i),
                                           Rc(x, y + p.scrollC[kTabMedia], cell, cell));
             DrawMediaCover(p, (int)i, p.media[i], cr);
@@ -4777,7 +4777,7 @@ void DrawMediaTab(Panel& p, float top, float bottom) {
         const bool drag = DragOn(p, kTabMedia);
         for (size_t i = 0; i < p.media.size(); ++i) {
             if (!(drag && (int)i == p.libDownIdx)) {
-                const Xf prevMove = BeginMove(p, L"m:" + MediaBaseKey(p.media[i]),
+                const Xf prevMove = BeginMove(p, L"m:" + p.media[i].key,
                                               MakeId(kHitMediaCard, (int)i),
                                               Rc(kPad, y + p.scrollC[kTabMedia], kPanelW - 2 * kPad, kMediaCardH));
                 DrawMediaCard(p, (int)i, p.media[i], y);
@@ -4989,7 +4989,7 @@ void DrawAppsTab(Panel& p, float top, float bottom) {
         d.bmp = AppBitmap(p, a);
         d.unread = a.unread;
         d.dim = !a.hidden;
-        d.key = L"a:" + AppKey(a);
+        d.key = L"a:" + std::to_wstring((uintptr_t)a.hwnd);
         std::wstring key;
         for (const auto& m : p.media) {
             if (!m.matchedCrx.empty() && m.matchedCrx == a.crxId) {
@@ -5025,9 +5025,13 @@ void DrawNotifsTab(Panel& p, float top, float bottom) {
         return;
     }
     float y = top - p.scrollC[kTabNotifs];
+    std::unordered_map<std::wstring, int> seenRows;  // keeps keys unique for equal toasts
     const bool drag = DragOn(p, kTabNotifs);
     for (size_t i = 0; i < p.rows.size(); ++i) {
         const NotifRow& row = p.rows[i];
+        const AppInfo& rowApp = p.all[row.appIdx];
+        std::wstring rowKey = AppKey(rowApp) + L"|" + row.title;
+        rowKey += L"#" + std::to_wstring(seenRows[rowKey]++);
         const AppInfo& a = p.all[row.appIdx];
         p.frameHwnds.push_back(a.hwnd);
         D2D1_RECT_F r = Rc(kPad, y, kPanelW - 2 * kPad, 64);
@@ -5040,7 +5044,7 @@ void DrawNotifsTab(Panel& p, float top, float bottom) {
         }
         int id = MakeId(kHitRow, (int)i);
         AddHit(p, id, r);
-        const Xf prevMove = BeginMove(p, AppKey(a) + L"|" + row.title, id,
+        const Xf prevMove = BeginMove(p, rowKey, id,
                                       Rc(r.left, r.top + p.scrollC[kTabNotifs], r.right - r.left, r.bottom - r.top));
         const Xf prevRow = BeginSpring(p, id, r);
         FillRR(p, r, kRadiusCtl, t.card);
@@ -9259,7 +9263,7 @@ void SyncSimpleTray(HWND host) {
             wcsncpy(nid.szTip, tip.c_str(), ARRAYSIZE(nid.szTip) - 1);
             if (found) {
                 nid.uID = found->uid;
-                if (Shell_NotifyIconW(NIM_MODIFY, &nid)) {
+                if (Shell_NotifyIconW(NIM_MODIFY, &nid) || Shell_NotifyIconW(NIM_ADD, &nid)) {
                     if (found->icon) {
                         DestroyIcon(found->icon);
                     }
@@ -9267,7 +9271,18 @@ void SyncSimpleTray(HWND host) {
                     found->badge = badge;
                     found->tip = tip;
                 } else {
+                    // Neither worked: drop the entry, the next sync adds the icon again.
                     DestroyIcon(icon);
+                    const UINT deadUid = found->uid;
+                    for (size_t k = 0; k < g_simpleIcons.size(); ++k) {
+                        if (g_simpleIcons[k].uid == deadUid) {
+                            if (g_simpleIcons[k].icon) {
+                                DestroyIcon(g_simpleIcons[k].icon);
+                            }
+                            g_simpleIcons.erase(g_simpleIcons.begin() + k);
+                            break;
+                        }
+                    }
                 }
             } else {
                 SimpleIcon ic;
@@ -9418,9 +9433,10 @@ LRESULT CALLBACK HostProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     if (g_taskbarCreatedMsg && msg == g_taskbarCreatedMsg) {
-        // Explorer was restarted, the tray icon has to be added again.
+        // Explorer was restarted: the new taskbar knows none of our icons.
         g_trayAdded = false;
-        SyncTray(hwnd);
+        RemoveSimpleIcons(hwnd);  // the NIM_DELETE calls fail harmlessly; the icons are freed
+        SyncTray(hwnd);           // every hidden PWA gets its icon again
         return 0;
     }
 
