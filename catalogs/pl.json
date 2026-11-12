@@ -4572,6 +4572,33 @@
         "version": "0.5"
       }
     },
+    "desktop-icons-proximity": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794466976000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794466976000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "CTabdul15",
+        "compilerOptions": "-lcomctl32 -lgdi32 -lmsimg32 -luser32",
+        "description": "Hide desktop icons until you hover over them or a custom area, with smooth fades and separate icon groups.",
+        "github": "https://github.com/CTabdul15",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Desktop Icons Proximity Reveal",
+        "version": "1.0.3"
+      }
+    },
     "desktop-icons-transparency": {
       "details": {
         "defaultSorting": 4050,
@@ -8468,6 +8495,35 @@
         "version": "1.1"
       }
     },
+    "floating-taskbar": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794466965000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794466965000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "chaochenzhudian",
+        "compilerOptions": "-lgdi32 -lole32 -loleaut32 -lruntimeobject -luser32 -lwindowsapp",
+        "description": "Turns the Windows 11 taskbar into a floating rounded bar with configurable width, height, spacing, corners, colors and gradients. Blank areas click through; tray menus and Quick Settings follow the bar.",
+        "github": "https://github.com/chaochenzhudian",
+        "include": [
+          "explorer.exe",
+          "ShellHost.exe",
+          "ShellExperienceHost.exe"
+        ],
+        "name": "Floating Taskbar",
+        "version": "2.1.13"
+      }
+    },
     "fluid-wallpaper": {
       "details": {
         "defaultSorting": 1660,
@@ -8793,6 +8849,31 @@
         "license": "GPL-2.0",
         "name": "GPU-accelerated explorer.exe list and grid views",
         "version": "1.0.4"
+      }
+    },
+    "gradual-night-light": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794466970000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794466970000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Fenryr",
+        "compilerOptions": "-fms-extensions -ladvapi32 -lgdi32 -lruntimeobject -lshell32 -lwtsapi32",
+        "description": "Gradually adjust Windows Night light strength using a daily schedule.",
+        "github": "https://github.com/soldier93HUN",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Gradual Night Light",
+        "version": "0.4.2"
       }
     },
     "harmful-files-autoaccept": {
@@ -23364,12 +23445,12 @@
         "ratingUsers": 30,
         "reviews": 0,
         "trendingSorting": 26.664111468229336,
-        "updated": 1794243691000,
+        "updated": 1794466982000,
         "users": 476
       },
       "metadata": {
         "author": "DoYouNatureQ",
-        "compilerOptions": "-lgdiplus -lgdi32 -ladvapi32 -lshell32 -lshcore -ldwmapi",
+        "compilerOptions": "-lgdiplus -lgdi32 -ladvapi32 -lshell32 -lshcore -ldwmapi -limm32",
         "description": "Shows a Win11-style floating OSD for Caps/Num/Scroll Lock, Insert and copy/paste/cut",
         "github": "https://github.com/DoYouNatureQ",
         "homepage": "https://github.com/DoYouNatureQ/WinTips",
@@ -23378,7 +23459,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "WinTips OSD",
-        "version": "1.5.1"
+        "version": "1.5.2"
       }
     },
     "winui-context-menu-animation": {

@@ -2,12 +2,214 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-12T06:00:36.000Z</updated>
+    <updated>2026-11-12T07:02:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Icons Proximity Reveal 1.0.3]]></title>
+        <id>https://windhawk.net/mods/desktop-icons-proximity#b8e1961b145ff09548ed49cb1b1500a788d3887d</id>
+        <link href="https://windhawk.net/mods/desktop-icons-proximity"/>
+        <updated>2026-11-12T07:02:56.000Z</updated>
+        <content type="html"><![CDATA[<h1>Desktop Icons Proximity Reveal</h1>
+<p><img src="https://raw.githubusercontent.com/CTabdul15/windhawk-mods/assets/desktop-icons-proximity-preview.gif" alt="Desktop Icons Proximity Reveal demo"></p>
+<p>Hide desktop icons when you are not using them. Hover near an icon or over a
+custom area to fade them back in.</p>
+<p>Features:</p>
+<ul>
+<li>Draw up to 32 reveal areas around your icons.</li>
+<li>Reveal each group separately, or show all icons together.</li>
+<li>Adjust fade speed, hide delay, and hover padding.</li>
+<li>Preview your areas and save them between sessions.</li>
+<li>Keep new folders and shortcuts visible while naming them, then hide them after
+an outside click or a configurable timeout (15 seconds by default).</li>
+<li>Selected icons stay visible until deselected; press <strong>Ctrl+A</strong> to reveal all.
+Disable <strong>Keep selected icons visible</strong> to turn this off.</li>
+<li>Keep icons permanently visible using <strong>Always-visible icons (whitelist)</strong>.
+Enter desktop names separated by semicolons, such as <code>Recycle Bin; Steam; Discord</code>.
+Names ignore case; <code>*</code> and <code>?</code> wildcards are supported.</li>
+</ul>
+<h2>Setup</h2>
+<ol>
+<li>Enable <strong>Show box editor panel</strong> in Settings and apply.</li>
+<li>Click <strong>Edit boxes</strong>. All icons appear, including those outside saved areas.
+Drag around your icons to add areas.</li>
+<li>Click <strong>Save &amp; apply</strong> or <strong>Cancel</strong> to restore normal hiding.
+Switch the panel setting off to close it.</li>
+</ol>
+<p>The panel stays closed at startup. If its setting is already on, switch it off
+and on again to reopen it.</p>
+<p>Separate groups are enabled by default. Without active areas, hovering near any icon
+shows all icons. Recycle Bin and folders work too.</p>
+<h2>How this differs from other mods</h2>
+<p><a href="https://windhawk.net/mods/desktop-icon-section-autohide">Desktop Icon Section Auto-Hide</a>
+uses a single section or box. This mod adds up to 32 separately animated areas,
+a drag-to-draw editor, and temporary visibility for newly created items.
+<a href="https://windhawk.net/mods/flashlight-desktop-icons">Flashlight Desktop Icons</a> and
+<a href="https://windhawk.net/mods/transparent-desktop-icons-spotlight">Spotlight</a> reveal
+icons near the cursor rather than inside saved groups.
+<a href="https://windhawk.net/mods/smooth-desktop-icons-auto-hide">Smooth Desktop Icons Auto-Hide</a>
+and <a href="https://windhawk.net/mods/zen-desktop-toggle-icons">ZenDesktop</a> focus on hiding
+and restoring the desktop as a whole.</p>
+<p><strong>Note:</strong> Requires Windows 10/11 x64. Keep Windows' <strong>Show desktop icons</strong> enabled.
+Hidden icons retain their Windows click targets; icons outside all boxes stay
+hidden unless selected, whitelisted, temporarily revealed, or accessed by keyboard.
+Redraw areas after changing monitors; avoid running other icon hiding mods.</p>
+<p>Rendering hooks adapted from <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-icons-transparency.wh.cpp">Desktop Icons Transparency by zed712969-crypto</a>.</p>
+]]></content>
+        <author>
+            <name>CTabdul15</name>
+            <uri>https://github.com/CTabdul15</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Gradual Night Light 0.4.2]]></title>
+        <id>https://windhawk.net/mods/gradual-night-light#46cd778f855d3036a63dfca46ec94348d2ba0cc1</id>
+        <link href="https://windhawk.net/mods/gradual-night-light"/>
+        <updated>2026-11-12T07:02:50.000Z</updated>
+        <content type="html"><![CDATA[<h1>Gradual Night Light</h1>
+<p>Automatically adjust Windows' native Night light throughout the evening, with
+an editable daily schedule and optional gradual transitions.</p>
+<h2>Default schedule</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Time</th>
+<th>Strength</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stage 1</td>
+<td>19:00</td>
+<td>50</td>
+</tr>
+<tr>
+<td>Stage 2</td>
+<td>20:00</td>
+<td>60</td>
+</tr>
+<tr>
+<td>Stage 3</td>
+<td>21:00</td>
+<td>70</td>
+</tr>
+<tr>
+<td>Off time</td>
+<td>07:00</td>
+<td>Off</td>
+</tr>
+</tbody>
+</table>
+<h2>Settings</h2>
+<ul>
+<li><strong>Off time</strong>: the local time when Night light turns off each day.</li>
+<li><strong>Stages</strong>: add or remove stages with Windhawk's list controls. Each stage has
+a time and a strength from 1 (weakest) to 100 (warmest). Three stages are
+provided by default; between 1 and 96 stages are supported.</li>
+<li><strong>Gradual transitions</strong>: interpolate strength between stages. For example,
+the default schedule produces strength 55 at 19:30. Disable this option to
+change strength only at each stage's start time.</li>
+</ul>
+<p>Times use the local 24-hour <code>HH:MM</code> format. Stages are sorted automatically and
+the schedule repeats daily, including across midnight. All stage times must be
+unique and different from Off time. Invalid settings are reported in the mod
+log; an invalid edit keeps the last valid configuration. If saved settings are
+invalid at startup, the tool stays running without applying a schedule until
+valid settings are saved.</p>
+<p>Night light switches off at Off time and stays off until the next stage. The
+last stage holds its strength until Off time. To fade in from almost no warmth,
+add a stage such as 18:30 with strength 1 before 19:00 with strength 50. Add
+further stages to create a five-stage schedule or a gradual morning fade.</p>
+<h2>Behavior and restoration</h2>
+<p>The scheduler runs in a dedicated Windhawk tool process. Every ten seconds it
+applies the scheduled temperature directly through Windows' display pipeline.
+It also checks after display changes, resume, and session unlock.</p>
+<p>Settings and Quick Settings show Windows' own Night light configuration.
+Windows continues running its own schedule in the background. Its transitions
+can briefly take precedence until the next mod check. The mod pauses while
+Windows previews its strength slider. Disabling the mod reapplies the
+temperature requested by Windows' current settings.</p>
+<p>The mod reads the current user's Night light settings and state from CloudStore.
+It applies all scheduled changes at runtime without writing either record. If
+Windhawk is terminated during a stage, the runtime tint may last until Windows
+next applies Night light or the user signs out.</p>
+<p>If you tested an earlier prerelease, disable it before upgrading so that version
+can restore the settings it saved.</p>
+<h2>Requirements and limitations</h2>
+<p>The mod uses internal Windows Night light display interfaces and the modern
+CloudStore <code>Current</code> layout. The display driver must support Night light.
+The tool launcher supports Windhawk 1.7.3 and newer. The runtime interfaces
+were tested on Windows 11 build 26100, x64, with two displays. HDR and ARM64
+have not been verified. If records are missing, open
+<strong>Settings &gt; System &gt; Display &gt; Night light</strong> once.</p>
+<h2>Technical references</h2>
+<p>The parser and scheduler are independently implemented using the documented
+research below. No external helper, script, or runtime download is required.</p>
+<ul>
+<li><a href="https://github.com/kvnxiao/win-nightlight-cli/blob/main/docs/nightlight-registry-format.md">Night light registry format research</a></li>
+<li><a href="https://github.com/microsoft/bond/blob/master/cpp/inc/bond/protocol/compact_binary.h">Microsoft Bond CompactBinary protocol</a></li>
+<li><a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">Official Windhawk tool mod launcher</a></li>
+</ul>
+]]></content>
+        <author>
+            <name>Fenryr</name>
+            <uri>https://github.com/soldier93HUN</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Floating Taskbar 2.1.13]]></title>
+        <id>https://windhawk.net/mods/floating-taskbar#3631c69d3cd1f3e77c840781f48155f42210fd12</id>
+        <link href="https://windhawk.net/mods/floating-taskbar"/>
+        <updated>2026-11-12T07:02:45.000Z</updated>
+        <content type="html"><![CDATA[<h1>Floating Taskbar</h1>
+<p><img src="https://raw.githubusercontent.com/chaochenzhudian/windhawk-mods/assets/floating-taskbar/assets/floating-taskbar-left.png" alt="Floating Taskbar with left-aligned taskbar icons"></p>
+<p>Left-aligned taskbar layout with the default gradient background.</p>
+<h2>Features</h2>
+<ul>
+<li>Configure the floating bar width, taskbar area height, bottom gap, and
+corner radii.</li>
+<li>Configure the corner radius of taskbar hover highlights.</li>
+<li>Use the system background, a transparent background, translucent color, a
+solid color, a linear gradient, or a custom XAML brush.</li>
+<li>Click through blank areas inside the floating taskbar.</li>
+<li>Keep tray menus and Quick Settings aligned with the right edge of the bar.</li>
+</ul>
+<h2>Settings</h2>
+<p>Widths, area height, spacing, and radii are physical pixels. A taskbar area
+height of 0 follows the system. A custom XAML background that is left empty
+also follows the system background.</p>
+<p>The same physical-pixel values appear differently at different display scales.
+Set the values separately if precise consistency across mixed-DPI monitors is
+required.</p>
+<p>Multi-window taskbar highlights are currently detected from the Chinese and
+English taskbar accessible names. On other Windows display languages, those
+highlights may not be hidden.</p>
+<h2>Differences from other mods</h2>
+<p>Windows 11 Taskbar Styler, Taskbar height and icon size, and MacOS Style Dock
+can also create a floating or unusually sized taskbar. Floating Taskbar also
+adds click-through blank space, tray and Quick Settings alignment, automatic
+tray layout reassertion, and multi-window highlight cleanup. It writes
+properties on the taskbar's <code>RootGrid</code> and <code>BackgroundFill</code>, so combining it
+with a Taskbar Styler theme that styles the same properties is not supported.</p>
+<p>Use Windhawk's normal mod toggle to disable the mod; there is no separate
+enable setting.</p>
+<h2>中文说明</h2>
+<p>将 Windows 11 任务栏变为独立的悬浮圆角条，可调整长度、区域高度、悬浮间距、
+任务栏与待选框圆角，以及背景颜色或渐变。悬浮条内部空白区域可以点击穿透，
+托盘菜单与快速设置面板会对齐悬浮条右端。</p>
+<p>长度、区域高度、间距和圆角使用物理像素。多窗口任务栏高亮目前依靠中文或英文
+辅助功能名称识别，其他显示语言可能不隐藏该高亮。若同时使用 Taskbar Styler
+并修改相同的 <code>RootGrid</code> 或 <code>BackgroundFill</code> 属性，两个 Mod 可能冲突。</p>
+]]></content>
+        <author>
+            <name>chaochenzhudian</name>
+            <uri>https://github.com/chaochenzhudian</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WinPager 0.1.2]]></title>
         <id>https://windhawk.net/mods/winpager#fe7db7aa5add612e6df8048ac9d71384b10936f0</id>
@@ -1416,400 +1618,6 @@ the menubar, the Classic Explorer toolbar from OpenShell package, Quero toolbar 
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Snowfall 1.0]]></title>
-        <id>https://windhawk.net/mods/desktop-snowfall#be5856fcd480efbfe0843219dea54843673763fe</id>
-        <link href="https://windhawk.net/mods/desktop-snowfall"/>
-        <updated>2026-11-08T19:01:39.000Z</updated>
-        <content type="html"><![CDATA[<h1>Desktop Snowfall</h1>
-<p>Snow falls over your desktop. Flakes land on the top edge of your windows and on
-the taskbar and slowly build up snow drifts of different heights.</p>
-<p><img src="https://raw.githubusercontent.com/mikybuilds/desktop-snowfall/main/demo.gif" alt="Desktop Snowfall demo"></p>
-<ul>
-<li>The snow follows the window. Toss a window up and the snow flies up in loose
-clumps and lands back with a little bounce. Pull it down or shrink it from
-the top and the snow hangs in the air for a moment before it falls back onto
-the window.</li>
-<li>Make a window narrower and the snow on the cut-off part falls down.</li>
-<li>Optionally, the snow slides off windows moved sideways: it stays where it is,
-and the part the window slides out from under falls down.</li>
-<li>Sweep the snow off with the mouse cursor - it falls down to the windows below
-or to the taskbar.</li>
-<li>The wind blows powder off the drifts, and now and then a lump slides off a
-window corner.</li>
-<li>Works with the default taskbar, an auto-hidden taskbar (the snow rides along
-when it slides in and out) and custom taskbar styles (for example, floating
-&quot;dock&quot; themes of the Windows 11 Taskbar Styler mod): the snow lies on the
-visible taskbar parts.</li>
-</ul>
-<p>The snow is drawn on the GPU on a transparent, click-through overlay, so it
-never gets in the way of mouse input. The overlay is hidden automatically while
-a fullscreen app (a game or a video) is in the foreground. The mod runs in its
-own process, separately from Explorer.</p>
-<p>The overlay is redrawn every frame, so the snow keeps the GPU a little busy even
-when nothing else on the screen changes. On a laptop running on battery, a lower
-frame rate limit (for example, 30) saves power.</p>
-]]></content>
-        <author>
-            <name>mikybuilds</name>
-            <uri>https://github.com/mikybuilds</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Ubuntu Unity Desktop 1.0]]></title>
-        <id>https://windhawk.net/mods/ubuntu-unity-desktop#c5baa1f5353722223213b7b0379a4b1d9019de07</id>
-        <link href="https://windhawk.net/mods/ubuntu-unity-desktop"/>
-        <updated>2026-11-08T19:01:35.000Z</updated>
-        <content type="html"><![CDATA[<h1>Ubuntu Unity Desktop</h1>
-<p>Turns Windows 11 into the <strong>Ubuntu Unity 7</strong> desktop (Ubuntu 12.04 - 16.04): a panel along the top, the launcher
-along the left and the Dash instead of the Start menu. Everything runs inside Explorer: there is no separate
-program to install, and turning the mod off gives you the normal Windows desktop back right away.</p>
-<h2>What you get</h2>
-<p><strong>The panel (top bar)</strong></p>
-<ul>
-<li>The title of the window in front, and for a maximized window its minimize / restore / close buttons: the
-window loses its own title bar, like in Unity.</li>
-<li><strong>Tabs in the panel</strong>: maximize a browser (Brave, Chrome, Edge, ...) or another window with tabs and its
-whole tab row moves into the panel, with the sites' icons. Click a tab to switch, x to close it, + for a new one.</li>
-<li>Drag a maximized window down out of the panel to restore it, and drop it back on the panel to maximize it.</li>
-<li>Indicators on the right: background apps (tray icons), keyboard language, network, messages, volume (with a
-slider), clock (with a calendar) and the session menu (lock, log out, restart, shut down).</li>
-</ul>
-<p><strong>The launcher (left bar)</strong></p>
-<ul>
-<li>Pinned and running apps, with a pip per open window and an arrow for the app in front. Click to open, switch
-or minimize; right-click to pin / unpin, run as administrator, open the file location or quit.</li>
-<li>Hover for the app's name and live previews of its windows.</li>
-<li>Drag icons to reorder them, onto each other to make a group, or off the launcher to unpin them.</li>
-<li><strong>Music controls</strong> (cover, play / pause, previous / next) slide open under the app that plays music.</li>
-<li><strong>Discord call buttons</strong> (mute, deafen, hang up) slide open under Discord while you're in a call.</li>
-<li>Drag the launcher's right edge to make it (and its icons) bigger or smaller. The trash sits at the bottom.</li>
-</ul>
-<p><strong>The Dash (Start menu)</strong></p>
-<ul>
-<li>Opens with the Windows key, Ctrl+Esc or the button at the top of the launcher.</li>
-<li>Type to search apps, settings and files; lenses and filters like Unity's; widgets (clock, music, weather app, system, disks) on Home.</li>
-<li>Resize it with the grip in its corner (the size is remembered) or maximize it.</li>
-</ul>
-<p><strong>And more</strong></p>
-<ul>
-<li>Unity's animations: windows fly into the launcher when minimized, the launcher icons pop and wiggle, the panel
-and launcher slide away for full-screen games and videos.</li>
-<li>Glass (blur or acrylic), your accent colour or any colour, dark (Ambiance) or light (Radiance) panel.</li>
-</ul>
-<h2>Settings</h2>
-<p>Everything can be adjusted in the mod's settings, grouped by panel, launcher, Dash, look, windows and Windows
-integration: sizes, opacity, glass, clock format, which indicators show, animation speed, tabs in the panel, and
-whether the Windows taskbar is hidden.</p>
-<h2>Good to know</h2>
-<ul>
-<li>Windows 11, 64-bit. The shell lives on the main screen. With the taskbar hidden, other screens have no taskbar
-(and no launcher) at all; their windows stay where they are.</li>
-<li><strong>The taskbar's &quot;automatically hide&quot; setting is turned on while the mod runs</strong> (that gives its room on the screen
-back) and is set back as it was when you turn the mod off. If Explorer is killed or crashes and the mod is
-removed before it runs again, it may stay on: switch it off under Settings &gt; Personalization &gt; Taskbar.</li>
-<li>The Windows key and Ctrl+Esc open the Dash; shortcuts like Win+E, Win+R and Win+Shift+S keep working. If
-Windows' own Start menu opens anyway, the mod closes it and shows the Dash.</li>
-<li>Tabs in the panel read the window's tabs through Windows' accessibility interface. They work best with
-Chromium browsers (Brave, Chrome, Edge, Vivaldi, Opera). The new-tab button and the Discord call buttons are
-found by their names in English and Dutch apps.</li>
-<li>The shell's texts are in English, or in Dutch when Windows is.</li>
-<li>The Dash's weather card opens Windows' own Weather app: the mod itself never connects to the internet.</li>
-</ul>
-]]></content>
-        <author>
-            <name>dion</name>
-            <uri>https://github.com/dismedan-dion</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Lock Screen Live Wallpaper 1.0.0]]></title>
-        <id>https://windhawk.net/mods/lock-screen-live-wallpaper#deb9248a6196aefbbdbd52149d5fba59a6ae0dd8</id>
-        <link href="https://windhawk.net/mods/lock-screen-live-wallpaper"/>
-        <updated>2026-11-08T05:01:41.000Z</updated>
-        <content type="html"><![CDATA[<h1>Lock Screen Live Wallpaper</h1>
-<p>Plays a video as the background of the Windows 11 <strong>lock screen</strong> and the <strong>password / sign-in screen</strong>.</p>
-<p><img src="https://i.imgur.com/cCjmOzL.gif" alt="preview"></p>
-<p><em>Preview video: &quot;Stelle Cosmic Cheerleader&quot; by u/iTaiizor, <a href="https://www.reddit.com/r/iSucrose/comments/1xirh99/stelle_cosmic_cheerleader/">source</a>. Character © HoYoverse. The video is not included in this mod.</em></p>
-<p>The mod runs inside <code>LogonUI.exe</code>, decodes your video with Media Foundation, and feeds the frames into the XAML image elements that Windows normally uses for the lock screen wallpaper. If something looks wrong, a built-in fail-safe restores the original wallpaper.</p>
-<h2>⚠️ Before you start ⚠️</h2>
-<p><code>LogonUI.exe</code> is a protected system process, so Windhawk does not inject into it by default. For this mod to work you must add it to Windhawk's process inclusion list:</p>
-<ol>
-<li>Open Windhawk and go to <strong>Settings</strong> → <strong>Advanced settings</strong> → <strong>More advanced settings</strong>.</li>
-<li>Add <code>LogonUI.exe</code> to the <strong>Process inclusion list</strong> and save.</li>
-</ol>
-<p><img src="https://i.imgur.com/9Biip4G.png" alt="Windhawk advanced settings: process inclusion list"></p>
-<h2>📋 Requirements</h2>
-<ul>
-<li>Windows 11</li>
-<li><code>LogonUI.exe</code> added to Windhawk's process inclusion list (see above)</li>
-<li>A video file that the <strong>SYSTEM</strong> account can read. <code>LogonUI.exe</code> runs as SYSTEM, so network locations, encrypted folders, and cloud-only (not downloaded) files may not work.</li>
-</ul>
-<h2>⚙️ Features</h2>
-<table>
-<thead>
-<tr>
-<th>Feature</th>
-<th>Details</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Video source</td>
-<td>One video file, or a folder (a random video is picked on every lock)</td>
-</tr>
-<tr>
-<td>Formats</td>
-<td><code>mp4</code>, <code>m4v</code>, <code>mov</code>, <code>wmv</code>, <code>avi</code>, <code>mkv</code> (anything Media Foundation can decode on your system; H.264 MP4 is recommended)</td>
-</tr>
-<tr>
-<td>Fit modes</td>
-<td>Cover, fill, fit (letterbox), center</td>
-</tr>
-<tr>
-<td>Playback speed</td>
-<td>25% to 400%</td>
-</tr>
-<tr>
-<td>Hardware decoding</td>
-<td>Decodes on the GPU (D3D11/DXVA) when possible, with automatic fallback to software decoding</td>
-</tr>
-<tr>
-<td>Color adjustments</td>
-<td>Hue, saturation, brightness, contrast, gamma</td>
-</tr>
-<tr>
-<td>Audio</td>
-<td>Plays the video's audio track when the volume is above 0</td>
-</tr>
-<tr>
-<td>Power saving</td>
-<td>Still-frame mode, pause when idle, and optional pause on the password screen</td>
-</tr>
-<tr>
-<td>Boot behavior</td>
-<td>Optionally show the last frame right after boot instead of decoding</td>
-</tr>
-<tr>
-<td>Shutdown screen</td>
-<td>Optionally show the video on the &quot;Shutting down&quot; / &quot;Restarting&quot; screen (off by default, so Windows' own black screen is shown)</td>
-</tr>
-<tr>
-<td>Fail-safe</td>
-<td>Restores the original wallpaper if the lock screen UI changes or the mod misbehaves</td>
-</tr>
-<tr>
-<td>Debug log</td>
-<td>Optional CPU and decode statistics and a UI tree dump</td>
-</tr>
-</tbody>
-</table>
-<h2>📝 Notes on some settings</h2>
-<ul>
-<li><strong>Render width</strong>: internal canvas width (320 to 1920). The height follows your screen's aspect ratio. This is the biggest CPU lever.</li>
-<li><strong>Hardware video decoding</strong>: on (default) decodes with the GPU when possible, which greatly lowers CPU use for 4K or 60 fps videos. Turn it off if playback glitches or the sign-in screen has problems. If the GPU path cannot produce a frame, the mod falls back to software decoding by itself. Changing this setting also re-enables playback if the crash guard turned it off.</li>
-<li><strong>Behavior right after boot</strong>: with <strong>Show last frame</strong>, the first 3 minutes after boot show the last saved frame without decoding. Needs at least one earlier session where the video was playing.</li>
-<li><strong>Audio volume</strong>: 0 means muted. Above 0, audio only plays at 100% speed while the video is playing (not paused, idle-paused, or showing the boot still frame).</li>
-<li><strong>Pause when idle</strong>: freezes the video and mutes the audio after the chosen time without input, and resumes on the next input.</li>
-<li><strong>Play video on the password screen</strong>: on (default) keeps the video playing while you type your password. Off freezes it on the password screen, which can help if playback stutters there, and it plays again on the lock screen.</li>
-<li><strong>Debug log</strong>: also writes <code>debug.log</code> in the mod's storage folder, with CPU and decode statistics every 5 seconds and one UI tree dump. Basic events always go to Windhawk's log (enable logging for the mod in Windhawk to see them).</li>
-<li><strong>Long playback</strong>: the video loops without any time limit. By default it freezes after 5 minutes without input (see <strong>Pause when idle</strong>); set that to 0 if you want it to keep playing while nobody is at the PC.</li>
-</ul>
-<h2>📈 Performance tips</h2>
-<ul>
-<li>Lower <strong>Render width</strong> (the default is 1920; for example try 1280 or 960).</li>
-<li>Videos at 4K or 60 fps are decoded on the GPU when <strong>Hardware video decoding</strong> is on (the default). With it off they are decoded on the CPU and can use several cores; prefer 1080p at 30 fps then.</li>
-<li>Use <strong>Pause</strong> if you only want a still image.</li>
-<li>Keep <strong>Pause when idle</strong> enabled so nothing is decoded while nobody is at the PC.</li>
-<li>If the video stutters while you type your password, turn off <strong>Play video on the password screen</strong>.</li>
-<li>The password screen blurs the wallpaper behind it. A constantly changing background makes Windows redo that blur every frame, which costs some GPU time.</li>
-</ul>
-<h2>🔧 Troubleshooting</h2>
-<ul>
-<li><strong>Normal wallpaper is shown</strong>: make sure <code>LogonUI.exe</code> is in the process inclusion list and the video path is correct, then turn on <strong>Debug log</strong> and read <code>debug.log</code> in the mod's storage folder (see &quot;Files written by the mod&quot;). Look for <code>Failed to open video</code>, <code>Unsupported video format</code>, or <code>FAIL-SAFE TRIPPED</code>. Enable <strong>Debug log</strong> for more detail.</li>
-<li><strong>Video will not open</strong>: try an H.264 MP4 stored somewhere the SYSTEM account can read.</li>
-<li><strong>No sound</strong>: set <strong>Audio volume</strong> above 0 and see the notes above.</li>
-<li><strong>Stuttering</strong>: lower the render width and enable <strong>Debug log</strong>, then check the <code>CPU</code> and <code>UI stalls</code> lines in the log.</li>
-</ul>
-<h2>🤔 How it works</h2>
-<ol>
-<li>A worker thread finds the <code>LogonUI Logon Window</code> and installs a <code>WH_GETMESSAGE</code> hook on its UI thread.</li>
-<li>A decoder thread reads the video as RGB32 through Media Foundation, scales each frame according to the fit mode, applies the color settings, and publishes it to a shared buffer.</li>
-<li>On the UI thread, the newest frame is copied into a <code>WriteableBitmap</code>, which is set as the source of the <code>LockLogonImage</code> and <code>SwapLockLogonImage</code> elements.</li>
-<li>When the mod is unloaded, the original image sources are restored.</li>
-</ol>
-<h2>🛡️ Fail-safe</h2>
-<p>The mod stops itself and restores the original wallpaper for the rest of that <code>LogonUI.exe</code> process when:</p>
-<ul>
-<li>the video decoder fails before producing any frame,</li>
-<li>no video frame is produced within 30 seconds,</li>
-<li>the lock screen elements (<code>LockLogonImage</code> / <code>SwapLockLogonImage</code>) are never found, which usually means a Windows update changed the UI, or</li>
-<li>the UI throws repeated errors (3 within 30 seconds).</li>
-</ul>
-<p>Separately, a crash guard protects the sign-in screen. If two <code>LogonUI.exe</code> sessions in a row end before the decoder shows its first frame (for example because a codec crashes on your video), the mod turns playback off and the normal wallpaper is shown. To turn it back on, change <strong>Video file or folder</strong>, <strong>Render width</strong>, <strong>Fit mode</strong> or <strong>Hardware video decoding</strong> to a different value and keep it. Very short sessions (for example two Ctrl+Alt+Del screens in a row) can also trip it; the same fix applies.</p>
-<h2>📁 Files written by the mod</h2>
-<p>Everything is stored in the mod's own storage folder inside Windhawk's data folder (the path below is for a regular install; a portable Windhawk keeps it elsewhere):</p>
-<p><code>C:\ProgramData\Windhawk\Engine\ModsWritable\mod-storage\lock-screen-live-wallpaper</code></p>
-<p><code>ProgramData</code> is a hidden folder, so paste the path above into the File Explorer address bar to open it. The files are:</p>
-<ul>
-<li><code>debug.log</code>: log file, trimmed automatically after 2 MB</li>
-<li><code>frame_*.bgra</code>: cached first frame, so the lock screen can show something immediately</li>
-<li><code>last.bgra</code>: last shown frame, used by the <strong>Show last frame</strong> boot mode</li>
-</ul>
-<p>You can delete these files at any time; the mod recreates what it needs. The folder is removed automatically when the mod is uninstalled.</p>
-<h2>☕ Support</h2>
-<p>If you enjoy this mod, you can support its development:</p>
-<ul>
-<li><a href="https://ko-fi.com/grn15rens">Ko-fi</a></li>
-<li><a href="https://saweria.co/grn15RenS">Saweria</a> (for Indonesia)</li>
-</ul>
-<h2>ℹ️ Disclaimer</h2>
-<p>Only tested on Windows 11 23H2 and 25H2. This mod runs inside a system UI process (<code>LogonUI.exe</code>), so it includes a fail-safe that restores the original wallpaper if anything goes wrong. As a precaution, keep another way to sign in available while trying it out.</p>
-<hr>
-<h1>Bahasa Indonesia</h1>
-<p>Memutar video sebagai latar belakang <strong>lock screen</strong> dan <strong>layar password / sign-in</strong> Windows 11.</p>
-<p><img src="https://i.imgur.com/cCjmOzL.gif" alt="preview"></p>
-<p><em>Pratinjau video: &quot;Stelle Cosmic Cheerleader&quot; oleh u/iTaiizor, <a href="https://www.reddit.com/r/iSucrose/comments/1xirh99/stelle_cosmic_cheerleader/">sumber</a>. Karakter © HoYoverse. Videonya tidak disertakan dalam mod ini.</em></p>
-<p>Mod ini berjalan di dalam <code>LogonUI.exe</code>, men-decode videomu dengan Media Foundation, lalu memasukkan frame-nya ke elemen gambar XAML yang biasanya dipakai Windows untuk wallpaper lock screen. Jika ada yang tidak beres, fail-safe bawaan akan mengembalikan wallpaper asli.</p>
-<h2>⚠️ Sebelum mulai ⚠️</h2>
-<p><code>LogonUI.exe</code> adalah proses sistem yang dilindungi, jadi Windhawk tidak meng-inject ke dalamnya secara default. Agar mod ini berfungsi, kamu harus menambahkannya ke daftar inklusi proses Windhawk:</p>
-<ol>
-<li>Buka Windhawk lalu pergi ke <strong>Settings</strong> → <strong>Advanced settings</strong> → <strong>More advanced settings</strong>.</li>
-<li>Tambahkan <code>LogonUI.exe</code> ke <strong>Process inclusion list</strong> lalu simpan.</li>
-</ol>
-<p><img src="https://i.imgur.com/9Biip4G.png" alt="pengaturan lanjutan"></p>
-<h2>📋 Persyaratan</h2>
-<ul>
-<li>Windows 11</li>
-<li><code>LogonUI.exe</code> sudah ditambahkan ke daftar inklusi proses Windhawk (lihat di atas)</li>
-<li>File video yang bisa dibaca akun <strong>SYSTEM</strong>. <code>LogonUI.exe</code> berjalan sebagai SYSTEM, sehingga lokasi jaringan, folder terenkripsi, dan file cloud-only (belum diunduh) mungkin tidak berfungsi.</li>
-</ul>
-<h2>⚙️ Fitur</h2>
-<table>
-<thead>
-<tr>
-<th>Fitur</th>
-<th>Keterangan</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Sumber video</td>
-<td>Satu file video, atau satu folder (video dipilih acak setiap kali dikunci)</td>
-</tr>
-<tr>
-<td>Format</td>
-<td><code>mp4</code>, <code>m4v</code>, <code>mov</code>, <code>wmv</code>, <code>avi</code>, <code>mkv</code> (apa pun yang bisa di-decode Media Foundation di sistemmu; MP4 H.264 disarankan)</td>
-</tr>
-<tr>
-<td>Mode fit</td>
-<td>Cover, fill, fit (letterbox), center</td>
-</tr>
-<tr>
-<td>Kecepatan putar</td>
-<td>25% sampai 400%</td>
-</tr>
-<tr>
-<td>Decoding hardware</td>
-<td>Men-decode di GPU (D3D11/DXVA) jika memungkinkan, dengan fallback otomatis ke decoding software</td>
-</tr>
-<tr>
-<td>Penyesuaian warna</td>
-<td>Hue, saturasi, kecerahan, kontras, gamma</td>
-</tr>
-<tr>
-<td>Audio</td>
-<td>Memutar audio video jika volume di atas 0</td>
-</tr>
-<tr>
-<td>Hemat daya</td>
-<td>Mode gambar diam, jeda saat idle, dan opsi jeda di layar password</td>
-</tr>
-<tr>
-<td>Perilaku saat boot</td>
-<td>Opsional menampilkan frame terakhir tepat setelah boot tanpa decoding</td>
-</tr>
-<tr>
-<td>Layar shutdown</td>
-<td>Opsional menampilkan video di layar &quot;Shutting down&quot; / &quot;Restarting&quot; (mati secara default, sehingga layar hitam bawaan Windows yang tampil)</td>
-</tr>
-<tr>
-<td>Fail-safe</td>
-<td>Mengembalikan wallpaper asli jika UI lock screen berubah atau mod bermasalah</td>
-</tr>
-<tr>
-<td>Debug log</td>
-<td>Opsional: statistik CPU dan decode serta dump UI tree</td>
-</tr>
-</tbody>
-</table>
-<h2>📝 Catatan beberapa pengaturan</h2>
-<ul>
-<li><strong>Render width</strong>: lebar kanvas internal (320 sampai 1920). Tinggi mengikuti rasio aspek layarmu. Ini pengaturan yang paling berpengaruh pada CPU.</li>
-<li><strong>Hardware video decoding</strong>: aktif (default) berarti video di-decode oleh GPU jika memungkinkan, sehingga pemakaian CPU turun jauh untuk video 4K atau 60 fps. Matikan jika pemutaran bermasalah atau layar sign-in bermasalah. Jika jalur GPU gagal menghasilkan frame, mod otomatis beralih ke decoding software. Mengubah setting ini juga menyalakan kembali pemutaran jika crash guard sempat mematikannya.</li>
-<li><strong>Behavior right after boot</strong>: dengan <strong>Show last frame</strong>, 3 menit pertama setelah boot menampilkan frame terakhir yang tersimpan tanpa decoding. Butuh minimal satu sesi sebelumnya di mana video sempat diputar.</li>
-<li><strong>Audio volume</strong>: 0 berarti senyap. Di atas 0, audio hanya diputar pada kecepatan 100% dan hanya saat video benar-benar berjalan (bukan saat dijeda, dijeda karena idle, atau menampilkan frame diam setelah boot).</li>
-<li><strong>Pause when idle</strong>: membekukan video dan membisukan audio setelah waktu tertentu tanpa input, lalu lanjut saat ada input berikutnya.</li>
-<li><strong>Play video on the password screen</strong>: aktif (default) berarti video tetap diputar saat kamu mengetik password. Jika dimatikan, video dibekukan di layar password (berguna jika video patah-patah di sana), dan diputar lagi di lock screen.</li>
-<li><strong>Debug log</strong>: juga menulis <code>debug.log</code> di folder penyimpanan mod, berisi statistik CPU dan decode setiap 5 detik dan satu kali dump UI tree. Peristiwa dasar selalu masuk ke log Windhawk (aktifkan logging untuk mod ini di Windhawk untuk melihatnya).</li>
-<li><strong>Pemutaran lama</strong>: video diulang tanpa batas waktu. Secara default video dibekukan setelah 5 menit tanpa input (lihat <strong>Pause when idle</strong>); setel ke 0 kalau kamu ingin video terus berjalan saat tidak ada orang di depan PC.</li>
-</ul>
-<h2>📈 Tips performa</h2>
-<ul>
-<li>Turunkan <strong>Render width</strong> (defaultnya 1920; misalnya coba 1280 atau 960).</li>
-<li>Video 4K atau 60 fps di-decode oleh GPU saat <strong>Hardware video decoding</strong> aktif (default). Jika dimatikan, video di-decode oleh CPU dan bisa memakai beberapa core; pilih 1080p dengan 30 fps.</li>
-<li>Gunakan <strong>Pause</strong> jika kamu hanya ingin gambar diam.</li>
-<li>Biarkan <strong>Pause when idle</strong> aktif agar tidak ada decoding saat tidak ada orang di depan PC.</li>
-<li>Jika video patah-patah saat mengetik password, matikan <strong>Play video on the password screen</strong>.</li>
-<li>Layar password mem-blur wallpaper di belakangnya. Latar yang terus berubah membuat Windows mengulang blur itu di setiap frame, yang memakan sebagian GPU.</li>
-</ul>
-<h2>🔧 Pemecahan masalah</h2>
-<ul>
-<li><strong>Wallpaper normal yang tampil</strong>: pastikan <code>LogonUI.exe</code> ada di daftar inklusi proses dan path video benar, lalu aktifkan <strong>Debug log</strong> dan baca <code>debug.log</code> di folder penyimpanan mod (lihat &quot;File yang ditulis oleh mod&quot;). Cari <code>Failed to open video</code>, <code>Unsupported video format</code>, atau <code>FAIL-SAFE TRIPPED</code>. Aktifkan <strong>Debug log</strong> untuk detail lebih banyak.</li>
-<li><strong>Video tidak mau terbuka</strong>: coba MP4 H.264 yang disimpan di tempat yang bisa dibaca akun SYSTEM.</li>
-<li><strong>Tidak ada suara</strong>: setel <strong>Audio volume</strong> di atas 0 dan baca catatan di atas.</li>
-<li><strong>Patah-patah</strong>: turunkan render width dan aktifkan <strong>Debug log</strong>, lalu cek baris <code>CPU</code> dan <code>UI stalls</code> di log.</li>
-</ul>
-<h2>🤔 Cara kerja</h2>
-<ol>
-<li>Worker thread mencari <code>LogonUI Logon Window</code> dan memasang hook <code>WH_GETMESSAGE</code> pada UI thread-nya.</li>
-<li>Decoder thread membaca video sebagai RGB32 lewat Media Foundation, mengubah ukuran tiap frame sesuai mode fit, menerapkan pengaturan warna, lalu menaruhnya di buffer bersama.</li>
-<li>Di UI thread, frame terbaru disalin ke <code>WriteableBitmap</code>, yang dipasang sebagai source elemen <code>LockLogonImage</code> dan <code>SwapLockLogonImage</code>.</li>
-<li>Saat mod di-unload, source gambar asli dikembalikan.</li>
-</ol>
-<h2>🛡️ Fail-safe</h2>
-<p>Mod berhenti sendiri dan mengembalikan wallpaper asli sampai proses <code>LogonUI.exe</code> itu berakhir, jika:</p>
-<ul>
-<li>decoder video gagal sebelum menghasilkan frame apa pun,</li>
-<li>tidak ada frame video yang dihasilkan dalam 30 detik,</li>
-<li>elemen lock screen (<code>LockLogonImage</code> / <code>SwapLockLogonImage</code>) tidak pernah ditemukan, yang biasanya berarti update Windows mengubah UI, atau</li>
-<li>UI melempar error berulang (3 kali dalam 30 detik).</li>
-</ul>
-<p>Selain itu, ada pelindung crash untuk layar sign-in. Jika dua sesi <code>LogonUI.exe</code> berturut-turut berakhir sebelum decoder menampilkan frame pertama (misalnya karena codec crash pada videomu), mod mematikan pemutaran dan wallpaper normal yang tampil. Untuk menyalakannya lagi, ubah <strong>Video file or folder</strong>, <strong>Render width</strong>, <strong>Fit mode</strong> atau <strong>Hardware video decoding</strong> ke nilai yang berbeda dan biarkan begitu. Sesi yang sangat singkat (misalnya dua kali layar Ctrl+Alt+Del berturut-turut) juga bisa memicunya; solusinya sama.</p>
-<h2>📁 File yang ditulis oleh mod</h2>
-<p>Semuanya disimpan di folder penyimpanan milik mod sendiri, di dalam folder data Windhawk (path di bawah untuk instalasi biasa; Windhawk portabel menyimpannya di tempat lain):</p>
-<p><code>C:\ProgramData\Windhawk\Engine\ModsWritable\mod-storage\lock-screen-live-wallpaper</code></p>
-<p><code>ProgramData</code> adalah folder tersembunyi, jadi tempel path di atas ke address bar File Explorer untuk membukanya. Isinya:</p>
-<ul>
-<li><code>debug.log</code>: file log, dipangkas otomatis setelah 2 MB</li>
-<li><code>frame_*.bgra</code>: cache frame pertama, agar lock screen bisa langsung menampilkan sesuatu</li>
-<li><code>last.bgra</code>: frame terakhir yang ditampilkan, dipakai oleh mode boot <strong>Show last frame</strong></li>
-</ul>
-<p>Kamu boleh menghapus file-file ini kapan saja; mod akan membuat ulang yang dibutuhkan. Folder ini dihapus otomatis saat mod di-uninstall.</p>
-<h2>☕ Dukungan</h2>
-<p>Kalau kamu suka mod ini, kamu bisa mendukung pengembangannya lewat:</p>
-<ul>
-<li><a href="https://saweria.co/grn15RenS">Saweria</a> (untuk Indonesia)</li>
-<li><a href="https://ko-fi.com/grn15rens">Ko-fi</a> (internasional)</li>
-</ul>
-<h2>ℹ️ Peringatan</h2>
-<p>Hanya diuji di Windows 11 23H2 dan 25H2. Mod ini berjalan di dalam proses UI sistem (<code>LogonUI.exe</code>), jadi sudah dilengkapi fail-safe yang mengembalikan wallpaper asli jika ada yang tidak beres. Sebagai langkah berjaga-jaga, siapkan cara lain untuk masuk ke Windows saat mencobanya.</p>
-]]></content>
-        <author>
-            <name>grn15RenS</name>
-            <uri>https://github.com/grn15RenS</uri>
         </author>
     </entry>
 </feed>

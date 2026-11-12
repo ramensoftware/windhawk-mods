@@ -1,3 +1,12 @@
+## 1.5.2 ([Nov 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3a33b42eeb7bf2faacab922f5e9aeeef8a13bb28/mods/wintips-osd.wh.cpp))
+
+* Added an input language tip: Win+Space, Ctrl+Shift, Alt+Shift and Shift inside an IME now show the input language, or the Chinese/English mode inside a Chinese IME. Off by default.
+* The backdrop now keeps refreshing while the card is up (Windows 10 2004 and later), so a video or a scrolling page moves through the blur instead of freezing on the frame it had when the tip appeared. The card excludes itself from its own screen grabs, so it is not picked up by screenshots and recordings while it is visible.
+* Keys pressed while an administrator window has focus now come from Raw Input, which covers Insert and copy/paste/cut there too, not just the lock keys. The key-state poll stays behind it for remote sessions and virtual keyboards. The "Detect toggles under elevated apps" setting is gone: the integrity level of the foreground process is read instead, and the fallback only runs when it is actually needed.
+* Added a topmost guard: a fullscreen game, a recorder or a launcher overlay covering the card is noticed within 100 ms and the card is raised again. When nothing covers it, no other window is touched.
+* The settings page no longer has "Detect toggles under elevated apps"; nothing else was renamed, so existing settings carry over.
+* Rewrote the mod description.
+
 ## 1.5.1 ([Nov 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e935dd1c5404ed3916207e33b4a4b4fcbafe45c7/mods/wintips-osd.wh.cpp))
 
 * `Ctrl+Insert`, `Shift+Insert` and `Shift+Delete` now raise the copy, paste and cut tips, not just `Ctrl+C` / `Ctrl+V` / `Ctrl+X`, since terminal windows still lean on the legacy set. `Ctrl+Shift+Delete` stays silent because browsers and editors use it for something else.

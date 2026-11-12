@@ -2,12 +2,233 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-12T06:00:43.000Z</updated>
+    <updated>2026-11-12T07:03:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[WinTips OSD 1.5.2]]></title>
+        <id>https://windhawk.net/mods/wintips-osd#3a33b42eeb7bf2faacab922f5e9aeeef8a13bb28</id>
+        <link href="https://windhawk.net/mods/wintips-osd"/>
+        <updated>2026-11-12T07:03:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an input language tip: Win+Space, Ctrl+Shift, Alt+Shift and Shift inside an IME now show the input language, or the Chinese/English mode inside a Chinese IME. Off by default.</li>
+<li>The backdrop now keeps refreshing while the card is up (Windows 10 2004 and later), so a video or a scrolling page moves through the blur instead of freezing on the frame it had when the tip appeared. The card excludes itself from its own screen grabs, so it is not picked up by screenshots and recordings while it is visible.</li>
+<li>Keys pressed while an administrator window has focus now come from Raw Input, which covers Insert and copy/paste/cut there too, not just the lock keys. The key-state poll stays behind it for remote sessions and virtual keyboards. The &quot;Detect toggles under elevated apps&quot; setting is gone: the integrity level of the foreground process is read instead, and the fallback only runs when it is actually needed.</li>
+<li>Added a topmost guard: a fullscreen game, a recorder or a launcher overlay covering the card is noticed within 100 ms and the card is raised again. When nothing covers it, no other window is touched.</li>
+<li>The settings page no longer has &quot;Detect toggles under elevated apps&quot;; nothing else was renamed, so existing settings carry over.</li>
+<li>Rewrote the mod description.</li>
+</ul>
+]]></content>
+        <author>
+            <name>DoYouNatureQ</name>
+            <uri>https://github.com/DoYouNatureQ</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Desktop Icons Proximity Reveal 1.0.3]]></title>
+        <id>https://windhawk.net/mods/desktop-icons-proximity#b8e1961b145ff09548ed49cb1b1500a788d3887d</id>
+        <link href="https://windhawk.net/mods/desktop-icons-proximity"/>
+        <updated>2026-11-12T07:02:56.000Z</updated>
+        <content type="html"><![CDATA[<h1>Desktop Icons Proximity Reveal</h1>
+<p><img src="https://raw.githubusercontent.com/CTabdul15/windhawk-mods/assets/desktop-icons-proximity-preview.gif" alt="Desktop Icons Proximity Reveal demo"></p>
+<p>Hide desktop icons when you are not using them. Hover near an icon or over a
+custom area to fade them back in.</p>
+<p>Features:</p>
+<ul>
+<li>Draw up to 32 reveal areas around your icons.</li>
+<li>Reveal each group separately, or show all icons together.</li>
+<li>Adjust fade speed, hide delay, and hover padding.</li>
+<li>Preview your areas and save them between sessions.</li>
+<li>Keep new folders and shortcuts visible while naming them, then hide them after
+an outside click or a configurable timeout (15 seconds by default).</li>
+<li>Selected icons stay visible until deselected; press <strong>Ctrl+A</strong> to reveal all.
+Disable <strong>Keep selected icons visible</strong> to turn this off.</li>
+<li>Keep icons permanently visible using <strong>Always-visible icons (whitelist)</strong>.
+Enter desktop names separated by semicolons, such as <code>Recycle Bin; Steam; Discord</code>.
+Names ignore case; <code>*</code> and <code>?</code> wildcards are supported.</li>
+</ul>
+<h2>Setup</h2>
+<ol>
+<li>Enable <strong>Show box editor panel</strong> in Settings and apply.</li>
+<li>Click <strong>Edit boxes</strong>. All icons appear, including those outside saved areas.
+Drag around your icons to add areas.</li>
+<li>Click <strong>Save &amp; apply</strong> or <strong>Cancel</strong> to restore normal hiding.
+Switch the panel setting off to close it.</li>
+</ol>
+<p>The panel stays closed at startup. If its setting is already on, switch it off
+and on again to reopen it.</p>
+<p>Separate groups are enabled by default. Without active areas, hovering near any icon
+shows all icons. Recycle Bin and folders work too.</p>
+<h2>How this differs from other mods</h2>
+<p><a href="https://windhawk.net/mods/desktop-icon-section-autohide">Desktop Icon Section Auto-Hide</a>
+uses a single section or box. This mod adds up to 32 separately animated areas,
+a drag-to-draw editor, and temporary visibility for newly created items.
+<a href="https://windhawk.net/mods/flashlight-desktop-icons">Flashlight Desktop Icons</a> and
+<a href="https://windhawk.net/mods/transparent-desktop-icons-spotlight">Spotlight</a> reveal
+icons near the cursor rather than inside saved groups.
+<a href="https://windhawk.net/mods/smooth-desktop-icons-auto-hide">Smooth Desktop Icons Auto-Hide</a>
+and <a href="https://windhawk.net/mods/zen-desktop-toggle-icons">ZenDesktop</a> focus on hiding
+and restoring the desktop as a whole.</p>
+<p><strong>Note:</strong> Requires Windows 10/11 x64. Keep Windows' <strong>Show desktop icons</strong> enabled.
+Hidden icons retain their Windows click targets; icons outside all boxes stay
+hidden unless selected, whitelisted, temporarily revealed, or accessed by keyboard.
+Redraw areas after changing monitors; avoid running other icon hiding mods.</p>
+<p>Rendering hooks adapted from <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-icons-transparency.wh.cpp">Desktop Icons Transparency by zed712969-crypto</a>.</p>
+]]></content>
+        <author>
+            <name>CTabdul15</name>
+            <uri>https://github.com/CTabdul15</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Gradual Night Light 0.4.2]]></title>
+        <id>https://windhawk.net/mods/gradual-night-light#46cd778f855d3036a63dfca46ec94348d2ba0cc1</id>
+        <link href="https://windhawk.net/mods/gradual-night-light"/>
+        <updated>2026-11-12T07:02:50.000Z</updated>
+        <content type="html"><![CDATA[<h1>Gradual Night Light</h1>
+<p>Automatically adjust Windows' native Night light throughout the evening, with
+an editable daily schedule and optional gradual transitions.</p>
+<h2>Default schedule</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Time</th>
+<th>Strength</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stage 1</td>
+<td>19:00</td>
+<td>50</td>
+</tr>
+<tr>
+<td>Stage 2</td>
+<td>20:00</td>
+<td>60</td>
+</tr>
+<tr>
+<td>Stage 3</td>
+<td>21:00</td>
+<td>70</td>
+</tr>
+<tr>
+<td>Off time</td>
+<td>07:00</td>
+<td>Off</td>
+</tr>
+</tbody>
+</table>
+<h2>Settings</h2>
+<ul>
+<li><strong>Off time</strong>: the local time when Night light turns off each day.</li>
+<li><strong>Stages</strong>: add or remove stages with Windhawk's list controls. Each stage has
+a time and a strength from 1 (weakest) to 100 (warmest). Three stages are
+provided by default; between 1 and 96 stages are supported.</li>
+<li><strong>Gradual transitions</strong>: interpolate strength between stages. For example,
+the default schedule produces strength 55 at 19:30. Disable this option to
+change strength only at each stage's start time.</li>
+</ul>
+<p>Times use the local 24-hour <code>HH:MM</code> format. Stages are sorted automatically and
+the schedule repeats daily, including across midnight. All stage times must be
+unique and different from Off time. Invalid settings are reported in the mod
+log; an invalid edit keeps the last valid configuration. If saved settings are
+invalid at startup, the tool stays running without applying a schedule until
+valid settings are saved.</p>
+<p>Night light switches off at Off time and stays off until the next stage. The
+last stage holds its strength until Off time. To fade in from almost no warmth,
+add a stage such as 18:30 with strength 1 before 19:00 with strength 50. Add
+further stages to create a five-stage schedule or a gradual morning fade.</p>
+<h2>Behavior and restoration</h2>
+<p>The scheduler runs in a dedicated Windhawk tool process. Every ten seconds it
+applies the scheduled temperature directly through Windows' display pipeline.
+It also checks after display changes, resume, and session unlock.</p>
+<p>Settings and Quick Settings show Windows' own Night light configuration.
+Windows continues running its own schedule in the background. Its transitions
+can briefly take precedence until the next mod check. The mod pauses while
+Windows previews its strength slider. Disabling the mod reapplies the
+temperature requested by Windows' current settings.</p>
+<p>The mod reads the current user's Night light settings and state from CloudStore.
+It applies all scheduled changes at runtime without writing either record. If
+Windhawk is terminated during a stage, the runtime tint may last until Windows
+next applies Night light or the user signs out.</p>
+<p>If you tested an earlier prerelease, disable it before upgrading so that version
+can restore the settings it saved.</p>
+<h2>Requirements and limitations</h2>
+<p>The mod uses internal Windows Night light display interfaces and the modern
+CloudStore <code>Current</code> layout. The display driver must support Night light.
+The tool launcher supports Windhawk 1.7.3 and newer. The runtime interfaces
+were tested on Windows 11 build 26100, x64, with two displays. HDR and ARM64
+have not been verified. If records are missing, open
+<strong>Settings &gt; System &gt; Display &gt; Night light</strong> once.</p>
+<h2>Technical references</h2>
+<p>The parser and scheduler are independently implemented using the documented
+research below. No external helper, script, or runtime download is required.</p>
+<ul>
+<li><a href="https://github.com/kvnxiao/win-nightlight-cli/blob/main/docs/nightlight-registry-format.md">Night light registry format research</a></li>
+<li><a href="https://github.com/microsoft/bond/blob/master/cpp/inc/bond/protocol/compact_binary.h">Microsoft Bond CompactBinary protocol</a></li>
+<li><a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">Official Windhawk tool mod launcher</a></li>
+</ul>
+]]></content>
+        <author>
+            <name>Fenryr</name>
+            <uri>https://github.com/soldier93HUN</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Floating Taskbar 2.1.13]]></title>
+        <id>https://windhawk.net/mods/floating-taskbar#3631c69d3cd1f3e77c840781f48155f42210fd12</id>
+        <link href="https://windhawk.net/mods/floating-taskbar"/>
+        <updated>2026-11-12T07:02:45.000Z</updated>
+        <content type="html"><![CDATA[<h1>Floating Taskbar</h1>
+<p><img src="https://raw.githubusercontent.com/chaochenzhudian/windhawk-mods/assets/floating-taskbar/assets/floating-taskbar-left.png" alt="Floating Taskbar with left-aligned taskbar icons"></p>
+<p>Left-aligned taskbar layout with the default gradient background.</p>
+<h2>Features</h2>
+<ul>
+<li>Configure the floating bar width, taskbar area height, bottom gap, and
+corner radii.</li>
+<li>Configure the corner radius of taskbar hover highlights.</li>
+<li>Use the system background, a transparent background, translucent color, a
+solid color, a linear gradient, or a custom XAML brush.</li>
+<li>Click through blank areas inside the floating taskbar.</li>
+<li>Keep tray menus and Quick Settings aligned with the right edge of the bar.</li>
+</ul>
+<h2>Settings</h2>
+<p>Widths, area height, spacing, and radii are physical pixels. A taskbar area
+height of 0 follows the system. A custom XAML background that is left empty
+also follows the system background.</p>
+<p>The same physical-pixel values appear differently at different display scales.
+Set the values separately if precise consistency across mixed-DPI monitors is
+required.</p>
+<p>Multi-window taskbar highlights are currently detected from the Chinese and
+English taskbar accessible names. On other Windows display languages, those
+highlights may not be hidden.</p>
+<h2>Differences from other mods</h2>
+<p>Windows 11 Taskbar Styler, Taskbar height and icon size, and MacOS Style Dock
+can also create a floating or unusually sized taskbar. Floating Taskbar also
+adds click-through blank space, tray and Quick Settings alignment, automatic
+tray layout reassertion, and multi-window highlight cleanup. It writes
+properties on the taskbar's <code>RootGrid</code> and <code>BackgroundFill</code>, so combining it
+with a Taskbar Styler theme that styles the same properties is not supported.</p>
+<p>Use Windhawk's normal mod toggle to disable the mod; there is no separate
+enable setting.</p>
+<h2>中文说明</h2>
+<p>将 Windows 11 任务栏变为独立的悬浮圆角条，可调整长度、区域高度、悬浮间距、
+任务栏与待选框圆角，以及背景颜色或渐变。悬浮条内部空白区域可以点击穿透，
+托盘菜单与快速设置面板会对齐悬浮条右端。</p>
+<p>长度、区域高度、间距和圆角使用物理像素。多窗口任务栏高亮目前依靠中文或英文
+辅助功能名称识别，其他显示语言可能不隐藏该高亮。若同时使用 Taskbar Styler
+并修改相同的 <code>RootGrid</code> 或 <code>BackgroundFill</code> 属性，两个 Mod 可能冲突。</p>
+]]></content>
+        <author>
+            <name>chaochenzhudian</name>
+            <uri>https://github.com/chaochenzhudian</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[StartPad 1.1]]></title>
         <id>https://windhawk.net/mods/startpad#8ccdb6306ece66d6f8e86ea1297c66b5958e71ac</id>
@@ -633,147 +854,6 @@ until Explorer restarts (for example after signing out).</li>
         <author>
             <name>3DDinosaur</name>
             <uri>https://github.com/3DDinosaur</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mutelith 1.0]]></title>
-        <id>https://windhawk.net/mods/mutelith#96ae8af8587ea08e5b6b93f51fc38e894479d4d5</id>
-        <link href="https://windhawk.net/mods/mutelith"/>
-        <updated>2026-11-11T06:01:26.000Z</updated>
-        <content type="html"><![CDATA[<h1>Mutelith</h1>
-<p>Fixes <strong>Discord double audio when screen sharing</strong> on Windows setups that use
-virtual audio devices, where viewers hear the game or desktop audio twice, or
-hear their own microphone coming back with a delay.</p>
-<table>
-<thead>
-<tr>
-<th>Provider</th>
-<th>Target device (Discord muted)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>SteelSeries Sonar</td>
-<td><code>SteelSeries Sonar - Microphone</code></td>
-</tr>
-<tr>
-<td>FxSound</td>
-<td><code>FxSound Speakers</code></td>
-</tr>
-</tbody>
-</table>
-<p>The provider is detected from the <strong>default output device</strong>.</p>
-<p>While Discord is running, the mod:</p>
-<ol>
-<li>Mutes Discord on the provider's target device and on every device outside
-the provider (speakers, headphones). Only the mute changes, never the
-volume.</li>
-<li>Leaves the provider's other virtual devices alone.</li>
-<li>When the mod is disabled, or the default device switches to another
-provider, unmutes Discord on the devices the rule no longer covers.</li>
-</ol>
-<p>With FxSound, <code>FxSound Speakers</code> is usually the only FxSound device, so every
-other output device is outside the provider and Discord is muted on all of
-them, voice chat included.</p>
-<p>It reacts to Windows audio notifications right away (default device changed,
-device added or removed, new audio session such as a screen share, a muted
-session was unmuted) and also checks every 30 seconds.</p>
-<h2>Windows remembers the mute</h2>
-<p>The mute is Discord's per-app setting in the Volume Mixer, and Windows saves it
-for each output device, so it outlives the mod. The mod records each device it
-muted Discord on and unmutes Discord there once the rule no longer covers it,
-including after a crash. Windows only lets the mod do that while Discord is
-running and to have an audio session on that device. If Discord isn't listed
-for a device in the Volume Mixer when you disable the mod, Discord stays muted
-there: open the Volume Mixer and unmute Discord, or enable the mod again while
-Discord is playing audio on that device and switch the default device away from
-the provider. A mute you set yourself in the Volume Mixer is left alone.</p>
-<h2>Mutelith app</h2>
-<p>This is the same rule as the <a href="https://github.com/Faelayis/Mutelith">Mutelith app</a>.
-<strong>Use one or the other:</strong> while <code>Mutelith.exe</code> is running, the mod does nothing.</p>
-<p>Designed and tested for one virtual audio provider at a time.</p>
-]]></content>
-        <author>
-            <name>Faelayis</name>
-            <uri>https://github.com/Faelayis</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[OSD Custom Pill 4.9.11]]></title>
-        <id>https://windhawk.net/mods/osd-custom-pill#846566ad0a12e2c56705ffe9ce69c613eba3ee9d</id>
-        <link href="https://windhawk.net/mods/osd-custom-pill"/>
-        <updated>2026-11-11T06:01:21.000Z</updated>
-        <content type="html"><![CDATA[<h1>OSD Custom Pill</h1>
-<p>An animated on-screen indicator for volume, brightness and virtual desktops on Windows 11.</p>
-<p><img src="https://raw.githubusercontent.com/yelloxygene/osd-custom-pill-assets/main/osd%20custom%20pill%20GIF.gif" alt="OSD Custom Pill preview"></p>
-<h2>Volume and brightness</h2>
-<p>Shows an icon, a progress bar and the current value. The indicator expands when it appears and retracts when it closes.</p>
-<h2>Elastic deformation</h2>
-<p>Increasing a value moves and stretches the pill to the right; decreasing it moves the pill to the left. Repeated changes build up the deformation. When you release the key, the pill returns with a spring effect.</p>
-<p>The <strong>movement</strong>, <strong>stretching</strong>, <strong>spring damping</strong> and <strong>return strength</strong> can be adjusted independently in the mod settings.</p>
-<h2>Compact mode</h2>
-<p>After several changes in a row, the indicator can become smaller to take up less space. You can choose how many changes activate this mode and when it returns to normal.</p>
-<h2>Size and position</h2>
-<p>Adjust the pill's width, height and distance from the bottom of the screen. Opening and closing delays can also be changed.</p>
-<h2>Virtual desktops</h2>
-<p>Displays the current virtual desktop name or number when switching desktops. This indicator has its own size, position, animation and duration settings.</p>
-<h2>Settings</h2>
-<p>All options are available in Windhawk's <strong>Settings</strong> tab, with translated labels in supported languages. The main groups are:</p>
-<p><strong>Appearance and position</strong> — dimensions and screen placement.</p>
-<p><strong>Opening and closing</strong> — delays and spring response.</p>
-<p><strong>Stretching and rebound</strong> — movement distance, deformation and elastic return.</p>
-<p><strong>Compact mode</strong> — activation threshold and return timing.</p>
-<p><strong>Virtual desktop indicator</strong> — label, dimensions, timing and animation.</p>
-<p>Timing values are in milliseconds. Size values are based on 100% display scaling.</p>
-]]></content>
-        <author>
-            <name>yelloxygene</name>
-            <uri>https://github.com/yelloxygene</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Arabic Keyboard Layout Fixer 1.3.0]]></title>
-        <id>https://windhawk.net/mods/arabic-keyboard-layout-fixer#ed1b621d1514b24642705f2855e0b48466c1afde</id>
-        <link href="https://windhawk.net/mods/arabic-keyboard-layout-fixer"/>
-        <updated>2026-11-11T06:01:15.000Z</updated>
-        <content type="html"><![CDATA[<h1>Arabic Keyboard Layout Fixer</h1>
-<p>Fixes the common frustration of typing Arabic text while the keyboard is accidentally set to English (or vice versa).</p>
-<h3>How to use:</h3>
-<ol>
-<li>Select/highlight any mistyped text in any app (Notepad, Word, Browser, ERP, etc.).</li>
-<li>Press <strong>Alt + Z</strong> (or your custom configured hotkey).</li>
-<li>The text instantly flips to the correct language!</li>
-</ol>
-<h3>Features:</h3>
-<ul>
-<li><strong>Bi-directional (AR &lt;-&gt; EN):</strong> Automatically detects language direction.</li>
-<li><strong>Smart Shift / Caps Lock fix:</strong> Resolves accidental Shift / Caps-Lock misfires.</li>
-<li><strong>Configurable hotkeys:</strong> Customize your hotkey from mod settings without conflicts.</li>
-<li><strong>Universal compatibility:</strong> Works in modern browsers, Office, and legacy Win32/ERP applications.</li>
-<li><strong>Dedicated tool process:</strong> Runs safely as an independent background tool mod.</li>
-<li><strong>Full clipboard preservation:</strong> Restores all clipboard formats (images, files, text) and keeps history clean.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Omar</name>
-            <uri>https://github.com/uomr</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Top Taskbar Bleed 1.2.0]]></title>
-        <id>https://windhawk.net/mods/top-taskbar-bleed#fd16d4dc5e0d1e00d0fe5af20c46178a71d1303f</id>
-        <link href="https://windhawk.net/mods/top-taskbar-bleed"/>
-        <updated>2026-11-11T05:03:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The first four rows of the title bar are sampled instead of one, so a hairline, a recorder border or a row of a gradient can’t decide the color</li>
-<li>New setting “Custom colors”: programs whose maximized windows bleed a fixed #RRGGBB color instead of their sampled title bar, applied as soon as the window has landed, without sampling its title bar</li>
-<li>Programs in “Custom colors” and “Excluded programs” can be named by a piece of their install path (\helium) as well as by executable, for forks that keep another program’s executable name, like Helium running as chrome.exe</li>
-<li>README and setting descriptions updated</li>
-</ul>
-]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
         </author>
     </entry>
 </feed>
