@@ -2,12 +2,137 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-12T04:02:17.000Z</updated>
+    <updated>2026-11-12T04:33:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Recycle Bin File Preview 1.0.1]]></title>
+        <id>https://windhawk.net/mods/recycle-bin-file-preview#9a2bcb726f3456548107f9f8c3256013c0b8dc43</id>
+        <link href="https://windhawk.net/mods/recycle-bin-file-preview"/>
+        <updated>2026-11-12T04:33:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added donation button</li>
+</ul>
+]]></content>
+        <author>
+            <name>Luiz Bizzio</name>
+            <uri>https://github.com/luizbizzio</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Zones 1.0.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-zones#d94ff6f6bb34d8d50367c2a10ac5b3987baeda26</id>
+        <link href="https://windhawk.net/mods/taskbar-zones"/>
+        <updated>2026-11-12T04:32:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added donation button</li>
+</ul>
+]]></content>
+        <author>
+            <name>Luiz Bizzio</name>
+            <uri>https://github.com/luizbizzio</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8/8.1 Taskbar Recreation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win81-taskbar-recreation#065407515062d95879eb965294ebbba68ea309a8</id>
+        <link href="https://windhawk.net/mods/win81-taskbar-recreation"/>
+        <updated>2026-11-12T04:32:52.000Z</updated>
+        <content type="html"><![CDATA[<h1>Windows 7/8/8.1 Taskbar Recreation</h1>
+<p>This mod recreates taskbars inspired by Windows 7, Windows 8 and Windows 8.1
+on Windows 10 and 11. The taskbar runs in a dedicated Explorer process on a
+best-effort basis. Appearance and behavior can vary with
+the Windows build, DPI, taskbar replacement and other shell mods.</p>
+<h2>Features</h2>
+<ul>
+<li>Four skin presets: Windows 7, Windows 8 Beta 8148, Windows 8.0 and Windows 8.1, plus Custom for individual Start options.</li>
+<li>Task buttons, window previews, Jump Lists, notification icons and toolbars.</li>
+<li>An integrated notification area and taskbar, with a fallback to the native bar if the integrated tray cannot start.</li>
+<li>Horizontal and vertical layouts, Aero Peek and classic flyout options.</li>
+<li>Change notification area icon visibility using the Control Panel page that the mod attempts to restore, including on Windows 11; availability and behavior can vary.</li>
+<li>Static taskbar textures and system colors; the textures do not blur live windows behind the bar. Windows 7 skin adds a cursor-following, icon-colored hover glow for running apps.</li>
+<li>Local taskbar pins and ordering: the mod does not change Windows pins. Drag to an empty task area to pin; hover a running app to activate its window.</li>
+<li>An advanced battery flyout option; compatibility may vary between Windows builds.</li>
+<li>Optional secondary taskbars show pins, windows and the shared private tray. Secondary AppBar registration reserves work area when necessary and allowed by the shell. DPI scaling and flyout positioning are best-effort.</li>
+<li>Experimental shell minimize-rectangle support supplies reconstructed button coordinates to Windows, without changing Windows 7 Window Animations Restorer. Availability depends on Windows shell-hook delivery and ordering.</li>
+<li>Optional icon-only horizontal button width: native default, manual logical width, or read-only following of Taskbar height and icon size for standard registry-based Windhawk installations. This does not change icon size or taskbar height and does not hook or modify the other mod. Unsupported installation layouts use the original width.</li>
+</ul>
+<h2>Themes</h2>
+<h3>Windows 7</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7taskskin.png" alt="Windows 7 taskbar"></p>
+<h3>Windows 8 Beta 8148</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8betatask.png" alt="Windows 8 Beta taskbar"></p>
+<h3>Windows 8.0</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8.0task.png" alt="Windows 8.0 taskbar"></p>
+<h3>Windows 8.1</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81task.png" alt="Windows 8.1 taskbar"></p>
+<h3>Custom</h3>
+<p>Choose individual Start options instead of a preset.</p>
+<h2>Installation</h2>
+<ol>
+<li>Install and enable the mod in Windhawk.</li>
+<li>Choose a skin preset in the mod settings.</li>
+<li>Restart the mod after changing settings that require it.</li>
+</ol>
+<h2>Settings</h2>
+<p>The mod settings control the skin, Start button, taskbar layout, notification
+area, previews, flyouts and other behavior. Individual descriptions in
+Windhawk explain their scope and any restart requirements.</p>
+<h2>Behavior and limitations</h2>
+<ul>
+<li>
+<p>The taskbar runs in a separate <code>explorer.exe</code> process on a best-effort basis.
+Notification-page hooks still run in Explorer, and other Explorer mods can
+load in the separate process. A watchdog attempts to restore the native taskbar
+after an unexpected exit; recovery from a hang or other failure is not guaranteed.</p>
+</li>
+<li>
+<p>Skins are approximations; Windows 7 popup frames use the current system's DWM frame when available.</p>
+</li>
+<li>
+<p>The Windows 8 Start corner is illustrated, not a live Start-screen preview.</p>
+</li>
+<li>
+<p>Vertical layout, Aero Peek and classic flyouts may vary between Windows builds.</p>
+</li>
+<li>
+<p>On first use, the mod downloads <code>pnidui.dll</code>, <code>SndVolSSO.dll</code> and <code>batmeter.dll</code>. The advanced battery flyout also downloads <code>stobject.dll</code> and an English or Italian language-pack CAB. Downloaded files are checked against pinned SHA-256 hashes. The Windows 10 1511 <code>stobject.dll</code> is loaded into the dedicated tool process and stays loaded until that process exits.</p>
+</li>
+<li>
+<p>The integrated tray is enabled by default. It creates a private <code>Shell_TrayWnd</code> host and hides the native taskbar. Applications and mods that find the taskbar by class can encounter the private host; tray and AppBar traffic routed to it is processed or forwarded by the mod's UI thread. The host supplies taskbar geometry and forwards wheel input in supported cases, but it does not contain the native taskbar's <code>ReBarWindow32</code>, <code>MSTaskSwWClass</code>, Start button or XAML content. Mods that depend on those windows or content can fail or conflict. Disable the integrated tray and reload the mod if this compatibility trade-off is unsuitable.</p>
+</li>
+<li>
+<p>The integrated tray keeps “Always show all icons” in memory for the current session. It starts from the Windows preference and does not write that preference to the system registry; it is reset when the mod reloads.</p>
+</li>
+<li>
+<p>The Notification Area Icons page uses a private COM provider. The mod attempts to close its hosting window before unloading the Explorer hooks. Behavior has not been verified on every Windows build; if the window cannot be identified or does not respond, close the page before disabling, updating, or reloading the mod.</p>
+</li>
+<li>
+<p>Keep a way to disable the mod or restart Explorer.</p>
+</li>
+<li>
+<p>Windows 11 Taskbar Styler and its skins are technical references; their authors are not involved in this mod.</p>
+</li>
+</ul>
+<h2>Credits</h2>
+<ul>
+<li>WinBoeing777 - Testing on Windows 10 22H2 and Suggestions</li>
+<li>Cips - Testing on Windows 11 25H2</li>
+<li>Kiyaku - Suggestions and Testing</li>
+</ul>
+<h2>Disclaimer</h2>
+<p>This is an independent, unofficial project. It is not affiliated with, endorsed, sponsored or approved by Microsoft Corporation. Windows is a trademark of Microsoft Corporation, used here only to describe the style and compatibility of this mod.</p>
+<p>The mod is provided &quot;as is&quot;, without warranty of any kind, under the GPL-3.0-or-later license. To the maximum extent permitted by law, the author is not responsible for data loss, system instability, blocked updates, or any other damage or consequence arising from the use or misuse of this mod.</p>
+<p>Use at your own risk. You are responsible for how you use the mod and for complying with the licenses and terms of any software or resources it interacts with, including Microsoft's terms for any resources downloaded on first use. Keep a way to disable the mod or restart Explorer.</p>
+]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Z-Order Override 0.9.0]]></title>
         <id>https://windhawk.net/mods/taskbar-z-order-override#ecfcd33887f2697dd08fc26f659695a18cc325bd</id>
@@ -837,50 +962,6 @@ This implementation is distributed under GPL-3.0-or-later.</p>
         <author>
             <name>pleromyst</name>
             <uri>https://github.com/pleromyst</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Minimize Animation 3.2.1]]></title>
-        <id>https://windhawk.net/mods/macos-minimize-animation#fc87ba19584f668f8708b877574eb71b68fea503</id>
-        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
-        <updated>2026-11-10T20:03:06.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a crash (seen mostly in Firefox) when Windows couldn't allocate the animation's bitmap. If an allocation fails, the animation is now skipped and the window still minimizes, restores or closes normally.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Abdullah Masood</name>
-            <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Theme 1.2.9]]></title>
-        <id>https://windhawk.net/mods/classic-theme-enable#fb8301d1b70fb42a7ea75afed4d86e309a61f104</id>
-        <link href="https://windhawk.net/mods/classic-theme-enable"/>
-        <updated>2026-11-10T03:02:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add a link to <a href="https://windhawk.net/mods/classic-explorerframe">Classic Explorerframe for 24H2 and later</a>.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Paste Clipboard Content to Explorer 2.0]]></title>
-        <id>https://windhawk.net/mods/paste-clipboard-content-to-explorer#dfc704860c91247102c2d0699ff3d3b46a05d654</id>
-        <link href="https://windhawk.net/mods/paste-clipboard-content-to-explorer"/>
-        <updated>2026-11-10T02:01:23.000Z</updated>
-        <content type="html"><![CDATA[<p><a href="https://github.com/ramensoftware/windhawk-mods/issues/6778">Add features by user Aliipey</a>:</p>
-<ul>
-<li>Optionally detect the text type and use it as the file extension</li>
-<li>Select the pasted file and enter rename mode (optional)</li>
-</ul>
-]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

@@ -13829,7 +13829,7 @@
         "ratingUsers": 17,
         "reviews": 0,
         "trendingSorting": 22.350891749815634,
-        "updated": 1793462657000,
+        "updated": 1794457982000,
         "users": 632
       },
       "metadata": {
@@ -13839,6 +13839,7 @@
         "author": "Luiz Bizzio",
         "compilerOptions": "-lole32 -lshell32 -lshlwapi -luuid",
         "description": "Preview deleted files in the Recycle Bin using the native File Explorer Preview Pane (Alt+P), without restoring them.",
+        "donateUrl": "https://github.com/sponsors/luizbizzio",
         "github": "https://github.com/luizbizzio",
         "homepage": "https://github.com/luizbizzio/recycle-bin-file-preview",
         "include": [
@@ -13846,7 +13847,7 @@
         ],
         "license": "MIT",
         "name": "Recycle Bin File Preview",
-        "version": "1.0.0"
+        "version": "1.0.1"
       }
     },
     "recycle-bin-original-names": {
@@ -19125,7 +19126,7 @@
         "ratingUsers": 5,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793858591000,
+        "updated": 1794457977000,
         "users": 22
       },
       "metadata": {
@@ -19135,6 +19136,7 @@
         "author": "Luiz Bizzio",
         "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject",
         "description": "Organize Windows 11 taskbar apps into fixed left and right zones. Drag icons between sides and keep their positions when apps open or close.",
+        "donateUrl": "https://github.com/sponsors/luizbizzio",
         "github": "https://github.com/luizbizzio",
         "homepage": "https://github.com/luizbizzio/taskbar-zones",
         "include": [
@@ -19142,7 +19144,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Zones",
-        "version": "1.0.0"
+        "version": "1.0.1"
       }
     },
     "taskmgr-esc": {
@@ -22256,6 +22258,38 @@
       "metadataEnglish": {
         "description": "This mod recreates the Windows 8.1 Start Screen on Windows 10 and Windows 11",
         "name": "Windows 8.1 Start Screen Recreation"
+      }
+    },
+    "win81-taskbar-recreation": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794457972000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794457972000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lgdiplus -lgdi32 -luser32 -ldwmapi -lshell32 -lole32 -luuid -lpropsys -loleaut32 -lshlwapi -lcomctl32 -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lwinhttp -lbcrypt -lwlanapi -lsetupapi -lruntimeobject",
+        "description": "Questa mod ricrea barre delle applicazioni ispirate a Windows 7/8/8.1 su Windows 10 e Windows 11",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0-or-later",
+        "name": "Ricreazione della barra delle applicazioni di Windows 7/8/8.1",
+        "version": "1.0.0"
+      },
+      "metadataEnglish": {
+        "description": "This mod recreates Windows 7/8/8.1-inspired taskbars on Windows 10 and Windows 11",
+        "name": "Windows 7/8/8.1 Taskbar Recreation"
       }
     },
     "win95-nt4-menubars": {
