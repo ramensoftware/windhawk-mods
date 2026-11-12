@@ -2,7 +2,7 @@
 // @id              bookmark-bar-for-file-explorer
 // @name            Bookmark Bar for File Explorer
 // @description     Adds a Chrome-style bookmarks bar to File Explorer with nested folders, drag & drop and a full Bookmark Manager
-// @version         2.5.29
+// @version         2.5.33
 // @author          classiclover75-netizen
 // @github          https://github.com/classiclover75-netizen
 // @include         explorer.exe
@@ -271,10 +271,12 @@ struct ClipboardState {
     bool hasData = false;
     bool isCut = false;
     std::vector<BookmarkNode> nodes;
+    unsigned long long serial = 0;  // a new value for every Cut / Copy
 };
 
 std::mutex g_dataMutex;
 ClipboardState g_clipboard;
+unsigned long long g_clipboardSerial = 0;  // guarded by g_dataMutex
 std::vector<std::wstring> g_undoStack;
 // Per-account bookmarks file in the mod storage folder (set in InitStorage).
 std::wstring g_storageFile;
@@ -285,7 +287,7 @@ std::atomic<bool> g_extensionHookAttempted = false;
 std::atomic<bool> g_frameHookAttempted = false;
 std::atomic<bool> g_bookmarkHotkey = true;
 std::atomic<int> g_themeSetting = 0;  // 0 = system, 1 = light, 2 = dark
-// Window classes registered by this load (reset on every load, see Wh_ModInit)
+std::atomic<bool> g_barInstalledOnce = false;   // a bar was added in this process at least once
 
 // Drag state for rows inside a folder dropdown
 struct FlyoutDragCtx {
@@ -343,6 +345,8 @@ struct BarState {
     int suppressClickIndex = -1;
     int dropTargetFolderBoxIndex = -1;
     int dropReorderInsertIndex = -1;
+    // Which bar items are bookmark folders, taken when a drag starts
+    std::vector<bool> dragFolders;
     winrt::weak_ref<muxc::Button> highlightedBtn;
     mux::Thickness highlightedOldThickness{};
     muxm::Brush highlightedOldBrush{nullptr};
@@ -355,6 +359,13 @@ struct BarState {
 
 [[clang::no_destroy]] thread_local std::optional<std::list<BarState>> g_bars{std::in_place};
 thread_local unsigned g_frameRows = 0;
+// Early header height: see UseEarlyHeight
+thread_local ULONGLONG g_earlyHeightStart = 0;
+thread_local bool g_earlyHeightOff = false;
+thread_local bool g_earlyHeightUsed = false;
+thread_local UINT_PTR g_earlyHeightTimer = 0;
+thread_local std::vector<HWND> g_earlyHeightSeen;  // windows that had their attempt
+constexpr DWORD kEarlyHeightMs = 3000;
 thread_local HHOOK g_messageHook = nullptr;
 thread_local std::vector<HWND> g_frames;
 [[clang::no_destroy]] thread_local std::deque<std::function<void()>> g_frameTasks;
@@ -365,6 +376,7 @@ void RefreshThreadBars();
 void RefreshPanel(const muxc::StackPanel& panel, const std::optional<NodePath>& scope);
 void OpenBookmarkManagerWindow(HWND ownerExplorer, const NodePath& folder);
 void RestoreNudgedIslands();
+void StopEarlyHeightTimer();
 void AddPathsAsBookmarks(HWND owner, const NodePath& folder, const std::vector<std::wstring>& paths);
 using ChoiceButtons = std::vector<std::pair<int, std::wstring>>;
 int ShowChoiceDialog(HWND owner, const std::wstring& heading, const std::wstring& body, const ChoiceButtons& buttons,
@@ -395,6 +407,20 @@ std::wstring NormalizePath(std::wstring path) {
         path.pop_back();
     }
     return path;
+}
+
+// A path typed or pasted by the user: without surrounding spaces and without
+// the quotes that "Copy as path" adds.
+std::wstring CleanTypedPath(std::wstring path) {
+    auto isSpace = [](wchar_t c) { return c == L' ' || c == L'\t' || c == L'\r' || c == L'\n'; };
+    while (!path.empty() && isSpace(path.back())) path.pop_back();
+    size_t start = 0;
+    while (start < path.size() && isSpace(path[start])) ++start;
+    path.erase(0, start);
+    if (path.size() >= 2 && path.front() == L'"' && path.back() == L'"') {
+        path = path.substr(1, path.size() - 2);
+    }
+    return NormalizePath(path);
 }
 
 std::wstring DefaultLabel(const std::wstring& path) {
@@ -517,6 +543,44 @@ BookmarkNode* NodeAt(std::vector<BookmarkNode>& root, const NodePath& path) {
 
 const BookmarkNode* NodeAt(const std::vector<BookmarkNode>& root, const NodePath& path) {
     return NodeAt(const_cast<std::vector<BookmarkNode>&>(root), path);
+}
+
+// What identifies a bookmark besides its position. A position (NodePath) goes
+// stale when the bookmarks change while a menu or dialog is open, so this is
+// compared again before acting on a remembered position.
+struct NodeIdent {
+    NodeType type = NodeType::Item;
+    std::wstring name;
+    std::wstring path;
+};
+
+bool IsSameNode(const BookmarkNode& node, const NodeIdent& ident) {
+    return node.type == ident.type && node.name == ident.name && node.path == ident.path;
+}
+
+// Do both lists have the same bookmark at this position? The root always matches.
+bool SameNodeAt(const std::vector<BookmarkNode>& a, const std::vector<BookmarkNode>& b, const NodePath& p) {
+    if (p.empty()) return true;
+    const BookmarkNode* x = NodeAt(a, p);
+    const BookmarkNode* y = NodeAt(b, p);
+    return x && y && x->type == y->type && x->name == y->name && x->path == y->path;
+}
+
+// Finds the bookmark folder whose (otherwise unused) `path` holds `mark`, clears
+// the mark and returns the folder's position in `cur`.
+bool FindMarkedFolder(std::vector<BookmarkNode>& kids, const std::wstring& mark, NodePath& cur, int depth) {
+    if (depth > kMaxDepth) return false;
+    for (size_t i = 0; i < kids.size(); ++i) {
+        if (kids[i].type != NodeType::FolderBox) continue;
+        cur.push_back(static_cast<int>(i));
+        if (kids[i].path == mark) {
+            kids[i].path.clear();
+            return true;
+        }
+        if (FindMarkedFolder(kids[i].children, mark, cur, depth + 1)) return true;
+        cur.pop_back();
+    }
+    return false;
 }
 
 // Removes empty paths, duplicates, and paths whose ancestor is also selected. Result is sorted.
@@ -901,6 +965,31 @@ struct StoreCache {
 };
 StoreCache g_storeCache;  // guarded by g_dataMutex
 
+// Stamp of the file right after this process last wrote it (guarded by
+// g_dataMutex). Undo steps only apply while the file is still that one.
+bool g_ownWriteValid = false;
+StoreStamp g_ownWriteStamp;
+
+// With "Launch folder windows in a separate process" two explorer.exe processes
+// can save at the same moment. This named mutex makes "check, then write" one
+// step across processes. The wait is bounded, so a stuck process can't block
+// this one; after the wait the save goes on as it did without the mutex.
+HANDLE g_storeMutex = nullptr;
+
+struct StoreProcessLock {
+    HANDLE held = nullptr;
+    StoreProcessLock() {
+        if (!g_storeMutex) return;
+        const DWORD r = WaitForSingleObject(g_storeMutex, 2000);
+        if (r == WAIT_OBJECT_0 || r == WAIT_ABANDONED) held = g_storeMutex;
+    }
+    ~StoreProcessLock() {
+        if (held) ReleaseMutex(held);
+    }
+    StoreProcessLock(const StoreProcessLock&) = delete;
+    StoreProcessLock& operator=(const StoreProcessLock&) = delete;
+};
+
 struct LoadBase {
     bool set = false;    // this thread has loaded at least once
     bool valid = false;  // the last load succeeded
@@ -941,6 +1030,8 @@ void AfterOwnWriteLocked() {
     t_loadBase.set = true;
     t_loadBase.valid = GetStoreStampLocked(stamp);
     t_loadBase.stamp = stamp;
+    g_ownWriteValid = t_loadBase.valid;
+    g_ownWriteStamp = stamp;
 }
 
 void InitStorage() {
@@ -948,6 +1039,7 @@ void InitStorage() {
     g_storageFile.clear();
     g_undoStack.clear();
     g_storeCache = StoreCache{};
+    g_ownWriteValid = false;
     std::wstring dir(32768, L'\0');
     size_t chars = Wh_GetModStoragePath(dir.data(), dir.size());
     if (chars == 0 || chars >= dir.size()) {
@@ -963,6 +1055,11 @@ void InitStorage() {
     std::wstring sid = CurrentUserSid();
     if (sid.empty()) Wh_Log(L"Storage: can't read the account SID; using a shared file");
     g_storageFile = dir + L"\\bookmarks" + (sid.empty() ? std::wstring() : L"-" + sid) + L".json";
+    if (g_storeMutex) CloseHandle(g_storeMutex);
+    const std::wstring mutexName =
+        L"Local\\WindhawkExplorerChromeBookmarksStore" + (sid.empty() ? std::wstring() : L"-" + sid);
+    g_storeMutex = CreateMutexW(nullptr, FALSE, mutexName.c_str());
+    if (!g_storeMutex) Wh_Log(L"Storage: can't create the save mutex (%u)", GetLastError());
 }
 
 std::vector<BookmarkNode> LoadBookmarks() {
@@ -983,6 +1080,7 @@ bool SaveBookmarks(const std::vector<BookmarkNode>& nodes, bool replaceUnreadabl
     bool ok = false;
     bool refreshOnly = false;
     {
+        StoreProcessLock processLock;
         std::lock_guard lock(g_dataMutex);
         std::wstring prev;
         StoreStamp current;
@@ -1017,8 +1115,17 @@ bool SaveBookmarks(const std::vector<BookmarkNode>& nodes) {
 bool UndoLastChange() {
     bool ok = false;
     {
+        StoreProcessLock processLock;
         std::lock_guard lock(g_dataMutex);
         if (g_undoStack.empty()) return false;
+        // Undo steps describe this process's own saves. If the file was changed
+        // by another process since the last one, they no longer apply and must
+        // not overwrite that change.
+        StoreStamp current;
+        if (!GetStoreStampLocked(current) || !g_ownWriteValid || !SameStamp(g_ownWriteStamp, current)) {
+            g_undoStack.clear();
+            return false;
+        }
         std::wstring prev = std::move(g_undoStack.back());
         g_undoStack.pop_back();
         ok = WriteStoreFileLocked(prev);
@@ -1164,14 +1271,28 @@ bool OpenFolderInExplorerNewTab(HWND explorerWindow, const std::wstring& folderP
     return ShellExecuteExW(&sei) != FALSE;
 }
 
+// ShellExecute without the shell's own error dialogs. Such a dialog runs a
+// message loop inside mod code and can't be closed when the mod is unloaded.
+bool ShellOpenQuiet(HWND owner, const wchar_t* verb, const std::wstring& path) {
+    SHELLEXECUTEINFOW sei{};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_NOASYNC;
+    sei.hwnd = owner;
+    sei.lpVerb = verb;
+    sei.lpFile = path.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    return ShellExecuteExW(&sei) != FALSE;
+}
+
 enum class OpenDisposition {
     CurrentTab,
     NewTab,
     NewWindow
 };
 
-void OpenBookmarkTarget(HWND explorerWindow, const std::wstring& path, OpenDisposition disp) {
-    if (path.empty()) return;
+// Returns false when the item could not be opened (the caller tells the user).
+bool OpenBookmarkTarget(HWND explorerWindow, const std::wstring& path, OpenDisposition disp) {
+    if (path.empty()) return true;
 
     std::wstring folderTarget = ResolveFolderShortcut(path);
     if (!folderTarget.empty()) {
@@ -1183,14 +1304,12 @@ void OpenBookmarkTarget(HWND explorerWindow, const std::wstring& path, OpenDispo
             sei.lpVerb = L"opennewwindow";
             sei.lpFile = folderTarget.c_str();
             sei.nShow = SW_SHOWNORMAL;
-            if (!ShellExecuteExW(&sei)) {
-                ShellExecuteW(nullptr, L"explore", folderTarget.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-            }
-            return;
+            if (!ShellExecuteExW(&sei)) ShellOpenQuiet(nullptr, L"explore", folderTarget);
+            return true;
         }
         if (disp == OpenDisposition::NewTab && explorerWindow) {
             OpenFolderInExplorerNewTab(explorerWindow, folderTarget);
-            return;
+            return true;
         }
         ComScope com;
         if (explorerWindow) {
@@ -1199,12 +1318,15 @@ void OpenBookmarkTarget(HWND explorerWindow, const std::wstring& path, OpenDispo
                 if (SUCCEEDED(SHParseDisplayName(folderTarget.c_str(), nullptr, &pidl, 0, nullptr)) && pidl) {
                     browser->BrowseObject(pidl, SBSP_ABSOLUTE | SBSP_SAMEBROWSER);
                     CoTaskMemFree(pidl);
-                    return;
+                    return true;
                 }
             }
         }
     }
-    ShellExecuteW(explorerWindow, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    if (ShellOpenQuiet(explorerWindow, L"open", path)) return true;
+    // No program is associated with this file type: let the user pick one
+    if (GetLastError() == ERROR_NO_ASSOCIATION && ShellOpenQuiet(explorerWindow, L"openas", path)) return true;
+    return false;
 }
 
 // ============================================================================
@@ -1591,7 +1713,7 @@ void QueueOpenTargets(HWND frame, const std::vector<std::wstring>& paths, OpenDi
     if (!IsTrackedFrame(frame)) frame = FindAnyTrackedFrame();
     if (!frame) {
         for (const auto& p : paths) {
-            ShellExecuteW(nullptr, L"open", p.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            ShellOpenQuiet(nullptr, L"open", p);
         }
         return;
     }
@@ -1615,7 +1737,7 @@ void QueueOpenTargets(HWND frame, const std::vector<std::wstring>& paths, OpenDi
 }
 
 void ProcessOpenQueue(HWND frame) {
-    ModalScope scope;  // opening can show shell error dialogs
+    ModalScope scope;  // a failed open shows a message box
     if (!scope.active) return;
     OpenRequest req;
     bool more = false;
@@ -1638,9 +1760,16 @@ void ProcessOpenQueue(HWND frame) {
             return;
         }
     } else {
+        bool opened = true;
         try {
-            OpenBookmarkTarget(frame, req.path, req.disp);
+            opened = OpenBookmarkTarget(frame, req.path, req.disp);
         } catch (...) {}
+        if (!opened && !g_unloading) {
+            // The mod's own box (not the shell's), so it can be closed on unload
+            const std::wstring msg = L"Can’t open “" + req.path +
+                                     L"”.\n\nThe item may have been moved, renamed or deleted.";
+            ModMessageBox(frame, msg.c_str(), kMsgBoxTitle, MB_OK | MB_ICONWARNING);
+        }
     }
     if (more) SetTimer(frame, kOpenTimerId, req.confirmCount > 0 ? 10 : 350, nullptr);
 }
@@ -1931,47 +2060,67 @@ std::wstring PickFileOrFolder(HWND owner, bool pickFolder, bool saveDialog = fal
 void ExportBackupFile(HWND owner) {
     std::wstring path = PickFileOrFolder(owner, false, true, true);
     if (path.empty()) return;
-    std::wstring json = SerializeNodes(LoadBookmarks());
-    int len = WideCharToMultiByte(CP_UTF8, 0, json.data(), static_cast<int>(json.size()), nullptr, 0, nullptr, nullptr);
-    if (len <= 0) return;
-    std::string utf8(len, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, json.data(), static_cast<int>(json.size()), utf8.data(), len, nullptr, nullptr);
-    HANDLE hFile = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hFile != INVALID_HANDLE_VALUE) {
-        DWORD written = 0;
-        WriteFile(hFile, utf8.data(), static_cast<DWORD>(utf8.size()), &written, nullptr);
-        CloseHandle(hFile);
+    const auto nodes = LoadBookmarks();
+    // An unreadable store loads as an empty list: never write that over a backup
+    bool ok = t_loadBase.valid;
+    if (ok) {
+        const std::string utf8 = WideToUtf8(SerializeNodes(nodes));
+        ok = !utf8.empty();
+        if (ok) {
+            HANDLE hFile = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            ok = hFile != INVALID_HANDLE_VALUE;
+            if (ok) {
+                DWORD written = 0;
+                ok = WriteFile(hFile, utf8.data(), static_cast<DWORD>(utf8.size()), &written, nullptr) &&
+                     written == utf8.size();
+                CloseHandle(hFile);
+            }
+        }
+    }
+    if (!ok) {
+        ModMessageBox(owner, L"The bookmarks could not be exported to the selected file.", kMsgBoxTitle,
+                      MB_OK | MB_ICONWARNING);
     }
 }
 
 void ImportBackupFile(HWND owner) {
     std::wstring path = PickFileOrFolder(owner, false, false, true);
     if (path.empty()) return;
+    // The file is read and closed first; messages are shown afterwards
+    std::string utf8;
+    bool readOk = false;
     HANDLE hFile = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hFile == INVALID_HANDLE_VALUE) return;
-    LARGE_INTEGER sz{};
-    if (GetFileSizeEx(hFile, &sz) && sz.QuadPart > 0 && sz.QuadPart < 4 * 1024 * 1024) {
-        std::string utf8(static_cast<size_t>(sz.QuadPart), '\0');
-        DWORD read = 0;
-        if (ReadFile(hFile, utf8.data(), static_cast<DWORD>(utf8.size()), &read, nullptr) && read == utf8.size()) {
-            int wlen = MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), nullptr, 0);
-            if (wlen > 0) {
-                std::wstring wide(wlen, L'\0');
-                MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), wide.data(), wlen);
-                if (!wide.empty() && wide[0] == 0xFEFF) wide.erase(0, 1);  // UTF-8 BOM
-                std::vector<BookmarkNode> nodes;
-                if (!TryDeserializeNodes(wide, nodes) || nodes.empty()) {
-                    // Never replace the current bookmarks with nothing because of a bad file
-                    ModMessageBox(owner, L"The selected file is not a valid bookmarks backup.", kImportMsgBoxTitle,
-                                MB_OK | MB_ICONWARNING);
-                } else if (!SaveBookmarks(nodes, true)) {
-                    ModMessageBox(owner, L"The bookmarks could not be saved.", kImportMsgBoxTitle,
-                                MB_OK | MB_ICONWARNING);
-                }
-            }
+    if (hFile != INVALID_HANDLE_VALUE) {
+        LARGE_INTEGER sz{};
+        // Same limit as the bookmarks file itself, so every export can be imported
+        if (GetFileSizeEx(hFile, &sz) && sz.QuadPart > 0 &&
+            static_cast<unsigned long long>(sz.QuadPart) <= kStorageMaxBytes) {
+            utf8.assign(static_cast<size_t>(sz.QuadPart), '\0');
+            DWORD read = 0;
+            readOk = ReadFile(hFile, utf8.data(), static_cast<DWORD>(utf8.size()), &read, nullptr) && read == utf8.size();
+        }
+        CloseHandle(hFile);
+    }
+    std::vector<BookmarkNode> nodes;
+    bool parsed = false;
+    if (readOk) {
+        int wlen = MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), nullptr, 0);
+        if (wlen > 0) {
+            std::wstring wide(wlen, L'\0');
+            MultiByteToWideChar(CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()), wide.data(), wlen);
+            if (!wide.empty() && wide[0] == 0xFEFF) wide.erase(0, 1);  // UTF-8 BOM
+            parsed = TryDeserializeNodes(wide, nodes) && !nodes.empty();
         }
     }
-    CloseHandle(hFile);
+    if (!parsed) {
+        // Never replace the current bookmarks with nothing because of a bad file
+        ModMessageBox(owner, L"The selected file can’t be read or is not a valid bookmarks backup.",
+                      kImportMsgBoxTitle, MB_OK | MB_ICONWARNING);
+        return;
+    }
+    if (!SaveBookmarks(nodes, true)) {
+        ModMessageBox(owner, L"The bookmarks could not be saved.", kImportMsgBoxTitle, MB_OK | MB_ICONWARNING);
+    }
 }
 
 void CopyTextToClipboard(HWND owner, const std::wstring& text) {
@@ -2120,15 +2269,14 @@ void DoCutOrCopy(const std::vector<NodePath>& rawPaths, bool isCut) {
         if (const BookmarkNode* n = NodeAt(list, p)) nodes.push_back(*n);
     }
     if (nodes.empty()) return;
-    {
-        std::lock_guard lock(g_dataMutex);
-        g_clipboard.hasData = true;
-        g_clipboard.isCut = isCut;
-        g_clipboard.nodes = std::move(nodes);
-    }
-    if (isCut && RemoveNodes(list, paths)) {
-        SaveBookmarks(list);
-    }
+    // Cut: the bookmarks go to the clipboard only once they are really removed,
+    // so a refused save can't leave them in both places
+    if (isCut && (!RemoveNodes(list, paths) || !SaveBookmarks(list))) return;
+    std::lock_guard lock(g_dataMutex);
+    g_clipboard.hasData = true;
+    g_clipboard.isCut = isCut;
+    g_clipboard.nodes = std::move(nodes);
+    g_clipboard.serial = ++g_clipboardSerial;
 }
 
 // Where Chrome pastes: into a selected folder, or right after the selected bookmark.
@@ -2159,13 +2307,8 @@ void DoPaste(const NodePath& folder, int index, HWND owner = nullptr) {
         std::lock_guard lock(g_dataMutex);
         if (!g_clipboard.hasData) return;
         clip = g_clipboard;
-        if (g_clipboard.isCut) {
-            g_clipboard.hasData = false;
-            g_clipboard.isCut = false;
-            g_clipboard.nodes.clear();
-        }
     }
-    std::vector<BookmarkNode> nodes = std::move(clip.nodes);
+    std::vector<BookmarkNode> nodes = clip.nodes;
     if (!clip.isCut) {
         // Pasting a copy adds bookmarks that already exist: ask first
         nodes = ConfirmDuplicates(owner ? owner : GetActiveWindow(), LoadBookmarks(), std::move(nodes));
@@ -2174,7 +2317,31 @@ void DoPaste(const NodePath& folder, int index, HWND owner = nullptr) {
     auto list = LoadBookmarks();
     if (!FolderChildren(list, folder)) return;
     InsertNodes(list, folder, index, nodes);
-    SaveBookmarks(list);
+    if (!SaveBookmarks(list)) return;
+    // A Cut leaves the clipboard only after the bookmarks are safely saved in
+    // their new place. Until then they can still be pasted somewhere else.
+    if (clip.isCut) {
+        std::lock_guard lock(g_dataMutex);
+        if (g_clipboard.hasData && g_clipboard.serial == clip.serial) g_clipboard = ClipboardState{};
+    }
+}
+
+// A Cut that was never pasted would be lost when the mod is unloaded (the
+// clipboard lives in memory only): the bookmarks go back to the end of the bar.
+void RestorePendingCut() {
+    std::vector<BookmarkNode> nodes;
+    {
+        std::lock_guard lock(g_dataMutex);
+        if (!g_clipboard.hasData || !g_clipboard.isCut) return;
+        nodes = g_clipboard.nodes;
+    }
+    if (nodes.empty()) return;
+    auto list = LoadBookmarks();
+    InsertNodes(list, NodePath{}, -1, nodes);
+    if (SaveBookmarks(list)) {
+        std::lock_guard lock(g_dataMutex);
+        g_clipboard = ClipboardState{};
+    }
 }
 
 void DoDelete(const std::vector<NodePath>& paths) {
@@ -2532,7 +2699,7 @@ static LRESULT EditBookmarkWndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARA
                 if (!data->folderOnly) {
                     wchar_t pathBuf[4096]{};
                     GetWindowTextW(data->hPath, pathBuf, ARRAYSIZE(pathBuf));
-                    path = NormalizePath(pathBuf);
+                    path = CleanTypedPath(pathBuf);
                     if (path.empty()) {
                         MessageBeep(MB_ICONWARNING);
                         SetFocus(data->hPath);
@@ -2654,6 +2821,8 @@ bool ShowEditModal(HWND owner, EditDialogData& data) {
         }
     }
     g_threadEditDialog = previousDialog;
+    // The loop can also end on WM_QUIT: the dialog must not outlive its data
+    if (IsWindow(hDlg)) DestroyWindow(hDlg);
     if (msg.message == WM_QUIT) PostQuitMessage(static_cast<int>(msg.wParam));
 
     if (owner) {
@@ -2925,6 +3094,8 @@ int ShowChoiceDialog(HWND owner, const std::wstring& heading, const std::wstring
         }
     }
     g_threadEditDialog = previousDialog;
+    // The loop can also end on WM_QUIT: the dialog must not outlive its data
+    if (IsWindow(hDlg)) DestroyWindow(hDlg);
     if (msg.message == WM_QUIT) PostQuitMessage(static_cast<int>(msg.wParam));
     if (owner) {
         EnableWindow(owner, TRUE);
@@ -2943,11 +3114,17 @@ void EditNodeFlow(HWND owner, const NodePath& path) {
     d.name = n->name;
     d.path = n->path;
     d.folder = ParentOf(path);
+    const NodeIdent original{n->type, n->name, n->path};
     if (!ShowEditModal(owner, d)) return;
 
+    // The bookmarks may have changed while the dialog was open (another window
+    // or process). The edit is applied only if the same bookmark is still here.
     list = LoadBookmarks();
     BookmarkNode* node = NodeAt(list, path);
-    if (!node) return;
+    if (!node || !IsSameNode(*node, original)) {
+        NotifyExplorerBars();
+        return;
+    }
     node->name = d.name;
     if (!d.folderOnly) {
         node->path = d.path;
@@ -3020,6 +3197,7 @@ struct ManagerWindowData {
     HWND hDropLine = nullptr;
     HIMAGELIST hListImages = nullptr;
     HIMAGELIST hTreeImages = nullptr;
+    std::map<std::wstring, int> listIconIndex;  // icon key -> index in hListImages
     HFONT hFontTitle = nullptr;
     HFONT hFontUI = nullptr;
     HFONT hFontIcon = nullptr;
@@ -3187,7 +3365,12 @@ void MgrRebuildTree(ManagerWindowData* d, const std::vector<BookmarkNode>& list)
 void MgrRebuildList(ManagerWindowData* d, const std::vector<BookmarkNode>& list) {
     SendMessageW(d->hList, WM_SETREDRAW, FALSE, 0);
     ListView_DeleteAllItems(d->hList);
-    if (d->hListImages) ImageList_RemoveAll(d->hListImages);
+    // Icons stay in the image list between rebuilds (a search rebuilds the list
+    // on every key press); the list is emptied only when it has grown large
+    if (d->listIconIndex.size() > 400) {
+        if (d->hListImages) ImageList_RemoveAll(d->hListImages);
+        d->listIconIndex.clear();
+    }
     d->displayed.clear();
 
     wchar_t searchBuf[512]{};
@@ -3197,7 +3380,15 @@ void MgrRebuildList(ManagerWindowData* d, const std::vector<BookmarkNode>& list)
 
     auto addRow = [&](const BookmarkNode& n, const NodePath& p) {
         bool isFolder = n.type == NodeType::FolderBox;
-        int icon = AddShellIconToImageList(d->hListImages, n.path, isFolder, MgrS(d, 20));
+        std::wstring iconKey = isFolder ? std::wstring(L"<bookmark-folder>") : n.path;
+        std::transform(iconKey.begin(), iconKey.end(), iconKey.begin(), ::towlower);
+        int icon = -1;
+        if (auto known = d->listIconIndex.find(iconKey); known != d->listIconIndex.end()) {
+            icon = known->second;
+        } else {
+            icon = AddShellIconToImageList(d->hListImages, n.path, isFolder, MgrS(d, 20));
+            if (icon >= 0) d->listIconIndex.emplace(iconKey, icon);
+        }
         LVITEMW lvi{};
         lvi.mask = LVIF_TEXT | LVIF_IMAGE;
         lvi.iItem = static_cast<int>(d->displayed.size());
@@ -3345,6 +3536,7 @@ void MgrCreateListImages(ManagerWindowData* d) {
     ListView_SetImageList(d->hList, images, LVSIL_SMALL);
     if (d->hListImages) ImageList_Destroy(d->hListImages);
     d->hListImages = images;
+    d->listIconIndex.clear();  // indices belonged to the old image list
 }
 
 void MgrApplyTheme(HWND hwnd, ManagerWindowData* d) {
@@ -3450,6 +3642,14 @@ int MgrShowContextMenu(HWND hwnd, ManagerWindowData* d, const std::vector<NodePa
     int cmd = ModTrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_TOPALIGN,
                                 screen.x, screen.y, hwnd);
     DestroyMenu(m);
+    if (cmd) {
+        // The bookmarks may have changed while the menu was open (another window
+        // or process): the command must not act on a different bookmark
+        const auto current = LoadBookmarks();
+        for (const auto& t : targets) {
+            if (!SameNodeAt(list, current, t)) return 0;
+        }
+    }
     return cmd;
 }
 
@@ -3483,10 +3683,8 @@ void MgrExecute(HWND hwnd, ManagerWindowData* d, int cmd, const std::vector<Node
         case CMD_OPEN_ALL:
         case CMD_OPEN_ALL_WINDOW: {
             auto paths = CollectOpenPaths(list, targets);
-            if (cmd == CMD_OPEN_ALL_WINDOW && !paths.empty()) {
-                // First one in a new window, the rest follow it
-                QueueOpenTargets(MgrFrame(d), {paths.front()}, OpenDisposition::NewWindow);
-                paths.erase(paths.begin());
+            if (cmd == CMD_OPEN_ALL_WINDOW) {
+                // Every item in its own new window
                 QueueOpenTargets(MgrFrame(d), paths, OpenDisposition::NewWindow);
             } else {
                 QueueOpenTargets(MgrFrame(d), paths, OpenDisposition::NewTab);
@@ -3700,8 +3898,22 @@ void MgrEndDrag(HWND hwnd, ManagerWindowData* d, bool drop) {
     SetCursor(LoadCursorW(nullptr, IDC_ARROW));
     if (drop && d->dropValid) {
         auto list = LoadBookmarks();
-        if (MoveNodes(list, d->dragPaths, d->dropFolder, d->dropIndex)) {
-            SaveBookmarks(list);
+        // The positions were worked out on the snapshot taken when the drag
+        // began. If the bookmarks changed meanwhile, the move is dropped.
+        bool same = SameNodeAt(d->dragSnapshot, list, d->dropFolder);
+        for (const auto& p : d->dragPaths) {
+            if (!SameNodeAt(d->dragSnapshot, list, p)) same = false;
+        }
+        if (same) {
+            // Keep showing the same folder after the move: mark it, move, then
+            // find it again. (A folder's `path` is unused and never saved.)
+            const std::wstring mark = L"<current-folder>";
+            if (BookmarkNode* cur = NodeAt(list, d->currentFolder)) cur->path = mark;
+            if (MoveNodes(list, d->dragPaths, d->dropFolder, d->dropIndex)) {
+                NodePath found;
+                d->currentFolder = FindMarkedFolder(list, mark, found, 0) ? found : NodePath{};
+                SaveBookmarks(list);
+            }
         }
         std::vector<NodePath> none;
         MgrRefresh(d, &none);
@@ -4308,6 +4520,7 @@ static LRESULT BookmarkManagerWndProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LP
                 d->destroyed = true;
                 SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
             }
+            PostQuitMessage(0);  // ends the manager's own thread (BookmarkManagerThread)
             return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -4330,7 +4543,66 @@ LRESULT CALLBACK BookmarkManagerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     return result;
 }
 
+// ---------------------------------------------------------------------------
+// The Bookmark Manager runs on its own thread. A window created on an Explorer
+// window's thread is destroyed by Windows together with that thread, so the
+// manager used to vanish when the Explorer window it was opened from was
+// closed. Wh_ModUninit closes the manager and waits for this thread to end.
+// ---------------------------------------------------------------------------
+
+void RemoveThreadMessageHook();
+
+std::mutex g_mgrThreadMutex;
+HANDLE g_mgrThread = nullptr;  // guarded by g_mgrThreadMutex
+
+struct MgrThreadParams {
+    HWND owner = nullptr;
+    NodePath folder;
+};
+
+DWORD WINAPI BookmarkManagerThread(LPVOID param) {
+    std::unique_ptr<MgrThreadParams> params(static_cast<MgrThreadParams*>(param));
+    try {
+        ComScope com;  // file dialogs and shell icons
+        // Tab / Enter handling of the manager (see ThreadMessageHook)
+        g_messageHook = SetWindowsHookExW(WH_GETMESSAGE, ThreadMessageHook, nullptr, GetCurrentThreadId());
+        if (g_messageHook) {
+            std::lock_guard lock(g_hooksMutex);
+            g_allHooks.push_back(g_messageHook);
+        }
+
+        HWND w = nullptr;
+        if (!g_unloading) {
+            const RECT wr = CenteredWindowRect(params->owner, 1040, 660, WindowDpi(params->owner));
+            auto* data = new ManagerWindowData();
+            data->hOwnerExplorer = params->owner;
+            data->currentFolder = params->folder;
+            w = CreateWindowExW(0, kMgrClass, L"Bookmarks - File Explorer",
+                                WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_VISIBLE,
+                                wr.left, wr.top, wr.right - wr.left, wr.bottom - wr.top,
+                                nullptr, nullptr, ModuleInstance(), data);
+            if (!w) {
+                delete data;
+            } else {
+                SetForegroundWindow(w);
+            }
+        }
+
+        // WM_DESTROY of the manager posts WM_QUIT, which ends this loop
+        MSG msg{};
+        while (w && IsWindow(w) && GetMessageW(&msg, nullptr, 0, 0) > 0) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    } catch (...) {
+        Wh_Log(L"BookmarkManagerThread: exception");
+    }
+    RemoveThreadMessageHook();
+    return 0;
+}
+
 void OpenBookmarkManagerWindow(HWND ownerExplorer, const NodePath& folder) {
+    if (g_unloading) return;
     {
         std::lock_guard lock(g_mgrNavMutex);
         g_mgrNavPath = folder;
@@ -4342,17 +4614,22 @@ void OpenBookmarkManagerWindow(HWND ownerExplorer, const NodePath& folder) {
         return;
     }
 
-    const RECT wr = CenteredWindowRect(ownerExplorer, 1040, 660, WindowDpi(ownerExplorer));
-    const int x = wr.left, y = wr.top, width = wr.right - wr.left, height = wr.bottom - wr.top;
-
-    auto* data = new ManagerWindowData();
-    data->hOwnerExplorer = ownerExplorer;
-    data->currentFolder = folder;
-
-    HWND w = CreateWindowExW(0, kMgrClass, L"Bookmarks - File Explorer",
-                             WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_VISIBLE,
-                             x, y, width, height, nullptr, nullptr, ModuleInstance(), data);
-    if (!w) delete data;
+    std::lock_guard lock(g_mgrThreadMutex);
+    if (g_unloading) return;  // checked under the lock: Wh_ModUninit waits for this thread
+    if (g_mgrThread) {
+        // Running without a window: it is just starting (or just ending)
+        if (WaitForSingleObject(g_mgrThread, 0) == WAIT_TIMEOUT) return;
+        CloseHandle(g_mgrThread);
+        g_mgrThread = nullptr;
+    }
+    auto* params = new MgrThreadParams();
+    params->owner = ownerExplorer;
+    params->folder = folder;
+    g_mgrThread = CreateThread(nullptr, 0, BookmarkManagerThread, params, 0, nullptr);
+    if (!g_mgrThread) {
+        Wh_Log(L"Bookmark Manager: can't create its thread (%u)", GetLastError());
+        delete params;
+    }
 }
 
 // Registered once in Wh_ModInit and unregistered in Wh_ModUninit.
@@ -4432,6 +4709,10 @@ muxc::MenuFlyout BuildChromeBookmarkContextMenu(const mux::FrameworkElement& anc
     const BookmarkNode* node = path.empty() ? nullptr : NodeAt(list, path);
     const bool canPaste = ClipboardHasData();
     auto weakAnchor = winrt::make_weak(anchor);
+    // Compared again when an item is clicked: the bookmarks may change while
+    // the menu is open, and `path` would then point at a different bookmark
+    std::optional<NodeIdent> ident;
+    if (node) ident = NodeIdent{node->type, node->name, node->path};
 
     // Where "Add..." / "Paste" go (Chrome rules)
     NodePath insertFolder;
@@ -4467,10 +4748,18 @@ muxc::MenuFlyout BuildChromeBookmarkContextMenu(const mux::FrameworkElement& anc
             }};
         TrackAddHandler(mi, mux::UIElement::PointerEnteredEvent(), winrt::box_value(hoverFocus), true);
         TrackAddHandler(mi, mux::UIElement::PointerMovedEvent(), winrt::box_value(hoverFocus), true);
-        TrackEvent(mi, mi.Click([weakAnchor, action, scope](wf::IInspectable const&, mux::RoutedEventArgs const&) {
+        TrackEvent(mi, mi.Click([weakAnchor, action, scope, path, ident](wf::IInspectable const&, mux::RoutedEventArgs const&) {
             mux::FrameworkElement a = weakAnchor.get();
             HWND frame = ExplorerWindowForElement(a);
-            PostToFrame(frame, [frame, action, scope]() {
+            PostToFrame(frame, [frame, action, scope, path, ident]() {
+                if (ident) {
+                    const auto current = LoadBookmarks();
+                    const BookmarkNode* now = NodeAt(current, path);
+                    if (!now || !IsSameNode(*now, *ident)) {
+                        NotifyExplorerBars();  // show what is really there
+                        return;
+                    }
+                }
                 g_pendingScope = scope;
                 action(frame);
             });
@@ -5388,17 +5677,21 @@ void RefreshPanel(const muxc::StackPanel& panel, const std::optional<NodePath>& 
                         st->isDragging = true;
                         st->suppressClickIndex = itemIdx;
                         b.Opacity(0.55);
+                        st->dragFolders.clear();
+                        for (const auto& n : LoadBookmarks()) {
+                            st->dragFolders.push_back(n.type == NodeType::FolderBox);
+                        }
                     }
                     if (!st->isDragging) return;
 
                     args.Handled(true);
                     ClearHighlightVisual(*st);
 
-                    auto curNodes = LoadBookmarks();
-                    if (static_cast<size_t>(itemIdx) >= curNodes.size()) return;
+                    const auto& folders = st->dragFolders;
+                    if (static_cast<size_t>(itemIdx) >= folders.size()) return;
 
                     uint32_t childCount = row.Children().Size();
-                    for (uint32_t j = 0; j < childCount && j < curNodes.size(); ++j) {
+                    for (uint32_t j = 0; j < childCount && j < folders.size(); ++j) {
                         auto targetBtn = row.Children().GetAt(j).try_as<muxc::Button>();
                         if (!targetBtn || static_cast<int>(j) == itemIdx) continue;
 
@@ -5406,7 +5699,7 @@ void RefreshPanel(const muxc::StackPanel& panel, const std::optional<NodePath>& 
                         double w = targetBtn.ActualWidth();
                         double h = targetBtn.ActualHeight();
                         if (localPt.X >= -4 && localPt.X <= w + 4 && localPt.Y >= -8 && localPt.Y <= h + 8) {
-                            if (curNodes[j].type == NodeType::FolderBox &&
+                            if (folders[j] &&
                                 localPt.X >= w * 0.12 && localPt.X <= w * 0.88) {
                                 ApplyHighlightVisual(*st, targetBtn, mux::Thickness{2, 2, 2, 2});
                                 st->dropTargetFolderBoxIndex = static_cast<int>(j);
@@ -5588,9 +5881,6 @@ muxc::Grid FindNavigationGrid(const mux::DependencyObject& root, int depth) {
     return nullptr;
 }
 
-// Removes all bars of this thread from Explorer and restores the original layout.
-// Required on unload: otherwise the bar's event handlers (mod code) could run after
-// the mod is unloaded and crash Explorer.
 // Revokes a dropdown's Opened/Closed handlers, then hides it.
 void CloseTrackedFlyout(OpenFlyout& f) {
     if (!f.flyout) return;
@@ -5697,7 +5987,11 @@ void RemoveBarVisuals(BarState& st) {
     st.createdFirstRow = false;
 }
 
+// Removes all bars of this thread from Explorer and restores the original layout.
+// Required on unload: otherwise the bar's event handlers (mod code) could run after
+// the mod is unloaded and crash Explorer.
 void RemoveThreadBars() {
+    StopEarlyHeightTimer();
     CloseOpenContextMenu();
     if (!g_bars) return;
     for (auto& st : *g_bars) {
@@ -5765,6 +6059,7 @@ void CleanupClosedFrameState(HWND window) {
     ClearIconCache();
     g_frameTasks.clear();
     g_pendingScope.reset();
+    StopEarlyHeightTimer();
     RemoveThreadMessageHook();
 }
 
@@ -5973,12 +6268,20 @@ void TryInstallBar(const muxc::CommandBar& commandBar) {
         grid.InvalidateMeasure();
         host.InvalidateMeasure();
 
+        // Early header height: the header was measured with the bar's height
+        // from the start, so nothing has to be laid out or redrawn again
+        const bool earlyHeight = g_frameRows == 0 && g_earlyHeightUsed && !g_earlyHeightOff &&
+                                 GetTickCount64() - g_earlyHeightStart <= kEarlyHeightMs;
+        g_barInstalledOnce = true;
         RefreshPanel(buttons, std::nullopt);
+        if (earlyHeight) g_frameRows = 1;
         UpdateFrameRowCount();
-        // This window's island must take the new height even when the thread
-        // already showed a bar in another window
-        PostFrameRelayout(state->frame);
-        if (state->frame) SetTimer(state->frame, kBackdropTimerId, 300, nullptr);
+        if (!earlyHeight) {
+            // This window's island must take the new height even when the thread
+            // already showed a bar in another window
+            PostFrameRelayout(state->frame);
+            if (state->frame) SetTimer(state->frame, kBackdropTimerId, 300, nullptr);
+        }
     } catch (...) {
         Wh_Log(L"TryInstallBar failed: %08X", static_cast<unsigned>(winrt::to_hresult().value));
         if (state) {
@@ -6491,11 +6794,86 @@ void WINAPI CommandBarSetterHook(void* self, void* value) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Early header height
+//
+// If the header got taller only after the bar was added, which is after the
+// window was first drawn, the header and the command bar below it would be
+// redrawn and flash black for a moment. So a new window's header is given the
+// bar's height right away, for a few seconds, on the expectation that the bar
+// is about to be added. If no bar shows up in that time (a window without a
+// command bar), the extra height is taken back.
+//
+// Each File Explorer window gets one such attempt. Explorer may reuse a UI
+// thread for a later window, so the attempt belongs to the window, not to the
+// thread.
+// ---------------------------------------------------------------------------
+
+void StopEarlyHeightTimer() {
+    if (g_earlyHeightTimer) {
+        KillTimer(nullptr, g_earlyHeightTimer);
+        g_earlyHeightTimer = 0;
+    }
+}
+
+void CALLBACK EarlyHeightTimerProc(HWND, UINT, UINT_PTR, DWORD) {
+    try {
+        StopEarlyHeightTimer();
+        if (g_unloading || g_frameRows != 0) return;
+        // No bar on this thread: stop reserving room and lay the windows out again
+        g_earlyHeightOff = true;
+        if (g_earlyHeightUsed) {
+            EnumThreadWindows(GetCurrentThreadId(), [](HWND w, LPARAM) -> BOOL {
+                if (IsExplorerFrame(w)) PostFrameRelayout(w);
+                return TRUE;
+            }, 0);
+        }
+    } catch (...) {
+        Wh_Log(L"EarlyHeightTimerProc: exception");
+    }
+}
+
+// Called while this thread shows no bar yet: reserve the bar's height anyway?
+bool UseEarlyHeight() {
+    // Only once a bar was really added in this process (the hooks work here)
+    if (!g_barInstalledOnce) return false;
+    const ULONGLONG now = GetTickCount64();
+    if (g_earlyHeightStart && !g_earlyHeightOff && now - g_earlyHeightStart <= kEarlyHeightMs) {
+        g_earlyHeightUsed = true;
+        return true;
+    }
+    // No attempt is running. Start one if this thread has a File Explorer
+    // window that hasn't had its attempt yet (a new window).
+    std::erase_if(g_earlyHeightSeen, [](HWND w) { return !IsWindow(w); });
+    bool fresh = false;
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND w, LPARAM lp) -> BOOL {
+        if (IsExplorerFrame(w) &&
+            std::find(g_earlyHeightSeen.begin(), g_earlyHeightSeen.end(), w) == g_earlyHeightSeen.end()) {
+            g_earlyHeightSeen.push_back(w);
+            *reinterpret_cast<bool*>(lp) = true;
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&fresh));
+    if (!fresh) return false;
+    StopEarlyHeightTimer();
+    g_earlyHeightUsed = false;
+    g_earlyHeightTimer = SetTimer(nullptr, 0, kEarlyHeightMs, EarlyHeightTimerProc);
+    if (!g_earlyHeightTimer) {
+        g_earlyHeightOff = true;
+        return false;
+    }
+    g_earlyHeightStart = now ? now : 1;
+    g_earlyHeightOff = false;
+    g_earlyHeightUsed = true;
+    return true;
+}
+
 using DesiredSizeGetter = HRESULT(WINAPI*)(void*, SIZE*);
 DesiredSizeGetter g_desiredSizeOriginal = nullptr;
 HRESULT WINAPI DesiredSizeHook(void* self, SIZE* size) {
     HRESULT result = g_desiredSizeOriginal(self, size);
-    if (FAILED(result) || !size || g_unloading || g_frameRows == 0) return result;
+    if (FAILED(result) || !size || g_unloading) return result;
+    if (g_frameRows == 0 && !UseEarlyHeight()) return result;
     const LONG origH = size->cy;
     if (origH >= 80 && origH <= 600) {
         const int extraAt96 = static_cast<int>(kRowHeight) + kNavigationOverhang;
@@ -6514,7 +6892,10 @@ bool HookExplorerFrame(bool apply) {
     WindhawkUtils::SYMBOL_HOOK fileExplorerFrameHooks[] = {{
         {LR"(public: virtual long __cdecl XamlIslandViewAdapter::get_DesiredSizeInPhysicalPixels(struct tagSIZE *))"},
         &g_desiredSizeOriginal, DesiredSizeHook}};
-    if (!WindhawkUtils::HookSymbols(mod, fileExplorerFrameHooks, ARRAYSIZE(fileExplorerFrameHooks)) || !g_desiredSizeOriginal) return false;
+    if (!WindhawkUtils::HookSymbols(mod, fileExplorerFrameHooks, ARRAYSIZE(fileExplorerFrameHooks)) || !g_desiredSizeOriginal) {
+        Wh_Log(L"Windows.UI.FileExplorer.dll: the required symbol was not found; the bar can't be shown");
+        return false;
+    }
     g_frameHooked = true;
     if (apply) Wh_ApplyHookOperations();
     return true;
@@ -6544,7 +6925,10 @@ bool HookExplorerExtension(bool apply) {
         {{LR"(public: struct winrt::fire_and_forget __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl_Wave1::OnDpiChanged(struct winrt::Microsoft::UI::Xaml::XamlRoot,struct winrt::Microsoft::UI::Xaml::XamlRootChangedEventArgs))"},
          &g_onDpiChangedWave1Original, OnDpiChangedWave1Hook, true},
     };
-    if (!WindhawkUtils::HookSymbols(mod, fileExplorerExtensionsHooks, ARRAYSIZE(fileExplorerExtensionsHooks)) || !g_commandBarSetterOriginal) return false;
+    if (!WindhawkUtils::HookSymbols(mod, fileExplorerExtensionsHooks, ARRAYSIZE(fileExplorerExtensionsHooks)) || !g_commandBarSetterOriginal) {
+        Wh_Log(L"FileExplorerExtensions.dll: the required symbol was not found; the bar can't be shown");
+        return false;
+    }
     g_extensionHooked = true;
     if (apply) Wh_ApplyHookOperations();
     return true;
@@ -6577,6 +6961,7 @@ BOOL Wh_ModInit() try {
     g_extensionHooked = false;
     g_frameHookAttempted = false;
     g_extensionHookAttempted = false;
+    g_barInstalledOnce = false;
     {
         std::lock_guard lock(g_dropReadsMutex);
         g_dropReads.emplace();
@@ -6674,11 +7059,25 @@ void Wh_ModUninit() try {
         Sleep(100);
     }
 
-    // 3. Close the Bookmark Manager windows (blocking, on their threads).
-    for (HWND m; (m = FindOwnProcessWindow(kMgrClass)) != nullptr;) {
-        SendMessageW(m, WM_CLOSE, 0, 0);
-        if (IsWindow(m)) DestroyWindow(m);  // only works on its own thread; never loops forever
-        if (IsWindow(m)) break;
+    // 3. Close the Bookmark Manager (blocking, on its own thread) and wait until
+    //    that thread has ended: it runs mod code.
+    for (unsigned pass = 0;; ++pass) {
+        for (HWND m; (m = FindOwnProcessWindow(kMgrClass)) != nullptr;) {
+            SendMessageW(m, WM_CLOSE, 0, 0);
+            if (IsWindow(m)) break;  // tried again in the next pass; never loops forever
+        }
+        HANDLE thread = nullptr;
+        {
+            std::lock_guard lock(g_mgrThreadMutex);
+            thread = g_mgrThread;
+        }
+        if (!thread || WaitForSingleObject(thread, 100) != WAIT_TIMEOUT) break;
+        if (pass == 50) Wh_Log(L"Wh_ModUninit: still waiting for the Bookmark Manager thread");
+    }
+    {
+        std::lock_guard lock(g_mgrThreadMutex);
+        if (g_mgrThread) CloseHandle(g_mgrThread);
+        g_mgrThread = nullptr;
     }
 
     // 4. Remove the bar from every tracked window (on its own thread), then the
@@ -6705,6 +7104,18 @@ void Wh_ModUninit() try {
     }
 
     UnregisterWindowClasses();
+
+    // A Cut that was never pasted goes back to the bar instead of being lost
+    try {
+        RestorePendingCut();
+    } catch (...) {
+        Wh_Log(L"RestorePendingCut: exception");
+    }
+    {
+        std::lock_guard lock(g_dataMutex);
+        if (g_storeMutex) CloseHandle(g_storeMutex);
+        g_storeMutex = nullptr;
+    }
 } catch (...) {
     Wh_Log(L"Wh_ModUninit: exception");
 }
