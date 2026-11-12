@@ -2,7 +2,7 @@
 // @id              taskbar-audio-flipper
 // @name            Taskbar Audio Flipper
 // @description     A taskbar widget that switches between your speakers, headsets and microphones with a click, and turns a webcam on and off
-// @version         1.4.0
+// @version         1.5.0
 // @author          Lucidic15
 // @github          https://github.com/Lucidic15
 // @include         explorer.exe
@@ -32,7 +32,7 @@ On the Output and Input sections:
   as a mute button, like the Windows 11 volume flyout. The output's has a volume mixer too: each
   app using the output, with its icon (click it to mute the app) and volume, and a gear for
   Windows' volume mixer settings. **More volume settings** at the bottom opens Windows' Sound
-  settings.
+  settings. To do without it, turn off **Show volume flyout on hover** in the menu.
 - **Left-click**: switch to the next device.
 - **Scroll**: turn the volume (or microphone level) up or down.
 - **Middle-click**: mute / unmute.
@@ -44,10 +44,14 @@ Anywhere on the widget, **right-click** for the menu. The **Output**, **Input** 
 their section, and the settings for it: picking a device directly, which devices are in the click
 rotation, whether to switch the communications device too, and links to the Windows settings.
 
-**Position** in the mod's settings puts the widget left of the notification area, of the Wi-Fi,
-volume and battery icons, or of the clock, where the taskbar makes room for it. It can also go at
-the left end of the taskbar, over it: that's free when the taskbar's icons are centered and the
-Widgets button is off.
+**Icons only**, in the menu, shows just the sections' icons, without the names, volume levels and
+bars. Switching the output or input then shows its name in a popup for a moment (**Show popup on
+change**, in the Output or Input submenu, turns that off).
+
+**Position**, in the menu or the mod's settings (whichever you changed last), puts the widget left
+of the notification area, of the Wi-Fi, volume and battery icons, or of the clock, where the
+taskbar makes room for it. It can also go at the left end of the taskbar, over it, right of the
+Widgets button: that's free when the taskbar's icons are centered.
 
 **Change icons…**, at the end of the menu, picks other glyphs from the Windows icon font for the
 widget's icons (each kind of device, muted, and the webcam), and for the icons of Taskbar Snipper
@@ -103,7 +107,7 @@ change). Use the app or the mod, not both: each shows its own widget.
 /*
 - position: tray
   $name: Position
-  $description: Where on the taskbar the widget goes. At the left end, it's over the taskbar, which is free when its icons are centered and the Widgets button is off. The Taskbar Snipper and Taskbar RDP Launcher widgets in the same position sit beside it.
+  $description: Where on the taskbar the widget goes. At the left end, it's over the taskbar, right of the Widgets button, which is free when the taskbar's icons are centered. The widget's right-click menu can change this too; whichever you changed last is used. The Taskbar Snipper and Taskbar RDP Launcher widgets in the same position sit beside it.
   $options:
   - tray: Left of the notification area
   - systemIcons: Left of the Wi-Fi, volume and battery icons
@@ -1671,15 +1675,47 @@ enum class Slot {
     Tray,         // Left of the notification area.
     SystemIcons,  // Left of the Wi-Fi, volume and battery icons.
     Clock,        // Left of the clock.
-    Left,         // The left end of the taskbar, over it (free when its icons are centered and the Widgets button is off).
+    Left,         // The left end of the taskbar, over it, right of the Widgets button (free when its icons are centered).
 };
 
+// The slots, as the Position setting and the widget's menu name them.
+struct SlotChoice {
+    Slot slot;
+    const wchar_t* setting;
+    const wchar_t* label;
+};
+
+constexpr SlotChoice kSlotChoices[] = {
+    {Slot::Tray, L"tray", L"Left of the notification area"},
+    {Slot::SystemIcons, L"systemIcons", L"Left of the Wi-Fi, volume and battery icons"},
+    {Slot::Clock, L"clock", L"Left of the clock"},
+    {Slot::Left, L"left", L"At the left end of the taskbar"},
+};
+
+// The slot chosen from the widget's menu, until the Position setting is changed; then the setting's.
 Slot ReadSlot() {
-    auto value = WindhawkUtils::StringSetting::make(L"position");
-    return wcscmp(value, L"systemIcons") == 0 ? Slot::SystemIcons
-           : wcscmp(value, L"clock") == 0     ? Slot::Clock
-           : wcscmp(value, L"left") == 0      ? Slot::Left
-                                              : Slot::Tray;
+    std::wstring setting = WindhawkUtils::StringSetting::make(L"position").get();
+    int chosen = Storage::GetInt(L"Position", -1);
+    if (chosen >= 0 && chosen <= (int)Slot::Left && Storage::GetString(L"PositionSetting") == setting) {
+        return (Slot)chosen;
+    }
+    if (chosen != -1) {
+        // The setting was changed after the slot was chosen: the setting wins.
+        Storage::Delete(L"Position");
+        Storage::Delete(L"PositionSetting");
+    }
+    for (const SlotChoice& choice : kSlotChoices) {
+        if (setting == choice.setting) {
+            return choice.slot;
+        }
+    }
+    return Slot::Tray;
+}
+
+// Keeps the slot chosen from the widget's menu, with the setting it was chosen over.
+void ChooseSlot(Slot slot) {
+    Storage::SetInt(L"Position", (int)slot);
+    Storage::SetString(L"PositionSetting", WindhawkUtils::StringSetting::make(L"position").get());
 }
 
 std::wstring PanelName(Slot slot) {
@@ -1960,6 +1996,7 @@ public:
         StopRetrying();
         ForgetMenu(false);
         ForgetIconPicker(false);
+        StopFollowingWidgetsButton();
         g_menuTarget = nullptr;
         element_ = nullptr;
         if (view_) {
@@ -1968,6 +2005,16 @@ public:
     }
 
     wux::FrameworkElement Element() const { return element_; }
+
+    Slot CurrentSlot() const { return slot_; }
+
+    // Moves the widget to another slot, chosen from its menu, to stay there.
+    void MoveTo(Slot slot) {
+        if (slot != slot_ && taskbar_) {
+            ChooseSlot(slot);
+            Attach(taskbar_, slot, view_);
+        }
+    }
 
     // Whether there's another widget on the left (direction -1) or right (1) in the slot.
     bool CanMove(int direction) {
@@ -1998,12 +2045,20 @@ public:
 
 private:
     void TakeOut() {
+        StopFollowingWidgetsButton();
         try {
             if (element_) {
                 if (auto panel = wuxm::VisualTreeHelper::GetParent(element_).try_as<wuxc::StackPanel>()) {
                     uint32_t index = 0;
                     if (panel.Children().IndexOf(element_, index)) {
                         panel.Children().RemoveAt(index);
+                    }
+                    if (slot_ == Slot::Left && panel.Children().Size() > 0) {
+                        // Back to the left end for the widgets left in it; those that follow the
+                        // Widgets button place it past the button again.
+                        wux::Thickness margin = panel.Margin();
+                        margin.Left = 0;
+                        panel.Margin(margin);
                     }
                     RemovePanelIfEmpty(panel);
                 }
@@ -2039,6 +2094,9 @@ private:
                 }
             }
             panel.Children().InsertAt(index, element_);
+            if (slot_ == Slot::Left) {
+                FollowWidgetsButton();
+            }
             g_bridge->SetDispatcher(element_.Dispatcher(), taskbar_);
             PostToApp(kAttachedMessage, 0, 0);
         } catch (...) {
@@ -2082,10 +2140,78 @@ private:
         }
     }
 
+    // At the left end, the slot's panel goes right of the Widgets button (the weather), which is
+    // there while the taskbar's icons are centered and Widgets is on. It's placed again after each
+    // layout of the taskbar, as the button comes and goes, and its width changes with the weather.
+    // The other widgets in the panel place it too, at the same place.
+    void FollowWidgetsButton() {
+        layoutRevoker_ = element_.LayoutUpdated(winrt::auto_revoke, [this](auto const&, auto const&) { PlacePastWidgetsButton(); });
+        PlacePastWidgetsButton();
+    }
+
+    void StopFollowingWidgetsButton() {
+        layoutRevoker_.revoke();
+        widgetsButton_ = nullptr;
+    }
+
+    void PlacePastWidgetsButton() {
+        try {
+            auto panel = element_ ? wuxm::VisualTreeHelper::GetParent(element_).try_as<wuxc::StackPanel>() : nullptr;
+            auto grid = panel ? wuxm::VisualTreeHelper::GetParent(panel).try_as<wuxc::Grid>() : nullptr;
+            if (!grid) {
+                return;
+            }
+            double left = widgetsButton_ ? WidgetsButtonEnd(widgetsButton_, grid) : 0;
+            if (left <= 0) {
+                widgetsButton_ = FindWidgetsButton(grid, grid, 3);
+                left = widgetsButton_ ? WidgetsButtonEnd(widgetsButton_, grid) : 0;
+            }
+            wux::Thickness margin = panel.Margin();
+            if (std::abs(margin.Left - left) >= 0.5) {
+                margin.Left = left;
+                panel.Margin(margin);
+            }
+        } catch (...) {
+        }
+    }
+
+    // Where the Widgets button ends in the grid, when it's shown at the left end; otherwise 0. With the
+    // taskbar's icons on the left, it's elsewhere, and one the taskbar has put aside is far off to
+    // the left.
+    static double WidgetsButtonEnd(wux::FrameworkElement const& button, wuxc::Grid const& grid) {
+        try {
+            if (button.Visibility() != wux::Visibility::Visible || button.ActualWidth() <= 0) {
+                return 0;
+            }
+            double start = button.TransformToVisual(grid).TransformPoint(winrt::Windows::Foundation::Point{0, 0}).X;
+            return start >= 0 && start < grid.ActualWidth() / 2 ? start + button.ActualWidth() : 0;
+        } catch (...) {
+            return 0;  // Out of the taskbar's layout.
+        }
+    }
+
+    // The Widgets button shown at the left end, among the elements of its name.
+    static wux::FrameworkElement FindWidgetsButton(wux::DependencyObject const& parent, wuxc::Grid const& grid, int depth) {
+        int count = depth > 0 ? wuxm::VisualTreeHelper::GetChildrenCount(parent) : 0;
+        for (int i = 0; i < count; i++) {
+            auto child = wuxm::VisualTreeHelper::GetChild(parent, i);
+            if (auto element = child.try_as<wux::FrameworkElement>();
+                element && element.Name() == L"AugmentedEntryPointButton" && WidgetsButtonEnd(element, grid) > 0) {
+                return element;
+            }
+            if (auto found = FindWidgetsButton(child, grid, depth - 1)) {
+                return found;
+            }
+        }
+        return nullptr;
+    }
+
     HWND taskbar_ = nullptr;
     Slot slot_ = Slot::Tray;
     View* view_ = nullptr;
     wux::FrameworkElement element_{nullptr};
+    wux::FrameworkElement::LayoutUpdated_revoker layoutRevoker_;
+    wux::FrameworkElement widgetsButton_{nullptr};  // The Widgets button, once found, at the left end.
     UINT_PTR retryTimer_ = 0;
     static inline WidgetHost* retrying_ = nullptr;
     int attempts_ = 0;
@@ -2390,14 +2516,16 @@ void AddMenuEntries(winrt::Windows::Foundation::Collections::IVector<wuxc::MenuF
     }
 }
 
-// Commands of the widget's own: moving it among the others in its slot, and the widgets' icons.
+// Commands of the widget's own: moving it among the others in its slot, the widgets' icons, and
+// putting it in another slot (down from kFirstSlotCommand, one for each of kSlotChoices).
 constexpr int kMoveLeftCommand = -1;
 constexpr int kMoveRightCommand = -2;
 constexpr int kChangeIconsCommand = -3;
+constexpr int kFirstSlotCommand = -10;
 
-// Opens the menu where the widget was last right-clicked, with Move left and Move right when other
-// widgets share its slot, and Change icons…. The chosen item goes to the app once the menu has
-// closed, so what it does (a screenshot, say) doesn't have the menu in it.
+// Opens the menu where the widget was last right-clicked, with Position, Move left and Move right
+// when other widgets share its slot, and Change icons…. The chosen item goes to the app once the
+// menu has closed, so what it does (a screenshot, say) doesn't have the menu in it.
 void ShowMenu(const std::vector<MenuEntry>& entries) {
     auto target = g_menuTarget && g_menuTarget.XamlRoot() ? g_menuTarget : g_host->Element();
     if (!target || !target.XamlRoot()) {
@@ -2408,6 +2536,23 @@ void ShowMenu(const std::vector<MenuEntry>& entries) {
     wuxc::MenuFlyout menu;
     AddMenuEntries(menu.Items(), entries, chosen);
     menu.Items().Append(wuxc::MenuFlyoutSeparator());
+    wuxc::MenuFlyoutSubItem position;
+    position.Text(L"Position");
+    for (size_t i = 0; i < std::size(kSlotChoices); i++) {
+        wuxc::MenuFlyoutItem item{nullptr};
+        if (kSlotChoices[i].slot == g_host->CurrentSlot()) {
+            wuxc::ToggleMenuFlyoutItem toggle;
+            toggle.IsChecked(true);
+            item = toggle;
+        } else {
+            item = wuxc::MenuFlyoutItem();
+        }
+        item.Text(kSlotChoices[i].label);
+        int command = kFirstSlotCommand - (int)i;
+        g_menuClicks->push_back(item.Click(winrt::auto_revoke, [chosen, command](auto const&, auto const&) { *chosen = command; }));
+        position.Items().Append(item);
+    }
+    menu.Items().Append(position);
     if (g_host->CanMove(-1) || g_host->CanMove(1)) {
         for (int command : {kMoveLeftCommand, kMoveRightCommand}) {
             wuxc::MenuFlyoutItem item;
@@ -2429,7 +2574,9 @@ void ShowMenu(const std::vector<MenuEntry>& entries) {
             g_host->Move(*chosen == kMoveLeftCommand ? -1 : 1);
         } else if (*chosen == kChangeIconsCommand) {
             PostToApp(kChangeIconsMessage, 0, 0);
-        } else if (*chosen) {
+        } else if (*chosen <= kFirstSlotCommand && kFirstSlotCommand - *chosen < (int)std::size(kSlotChoices)) {
+            g_host->MoveTo(kSlotChoices[kFirstSlotCommand - *chosen].slot);
+        } else if (*chosen > 0) {
             PostToApp(kMenuCommandMessage, *chosen, 0);
         }
     });
@@ -3766,8 +3913,10 @@ WebcamChange SetWebcamEnabled(const std::wstring& instanceId, bool enable, HWND 
 struct Settings {
     bool switchCommunications = true;       // Also make the new output the default communications device.
     bool switchInputCommunications = true;  // Also make the new input the default communications device.
-    bool showPopup = true;                  // Show the popup when the output changes (while the widget isn't showing it).
+    bool showPopup = true;                  // Show a popup when the output (or input) changes, while the widget isn't showing its name.
     bool volumeDing = true;                 // Play the Windows "Default Beep" after changing the output volume.
+    bool iconsOnly = false;                 // The sections show their icons, without names and volumes.
+    bool hoverFlyout = true;                // Hovering the output or input opens its volume flyout.
     bool showOutput = true;
     bool showInput = false;
     bool showWebcam = false;
@@ -3835,6 +3984,8 @@ struct Settings {
         switchInputCommunications = Storage::GetInt(L"SwitchInputCommunications", switchInputCommunications) != 0;
         showPopup = Storage::GetInt(L"ShowPopup", showPopup) != 0;
         volumeDing = Storage::GetInt(L"VolumeDing", volumeDing) != 0;
+        iconsOnly = Storage::GetInt(L"IconsOnly", iconsOnly) != 0;
+        hoverFlyout = Storage::GetInt(L"HoverFlyout", hoverFlyout) != 0;
         showOutput = Storage::GetInt(L"ShowOutput", showOutput) != 0;
         showInput = Storage::GetInt(L"ShowInput", showInput) != 0;
         showWebcam = Storage::GetInt(L"ShowWebcam", showWebcam) != 0;
@@ -3857,6 +4008,8 @@ struct Settings {
         saved = Storage::SetInt(L"SwitchInputCommunications", switchInputCommunications) && saved;
         saved = Storage::SetInt(L"ShowPopup", showPopup) && saved;
         saved = Storage::SetInt(L"VolumeDing", volumeDing) && saved;
+        saved = Storage::SetInt(L"IconsOnly", iconsOnly) && saved;
+        saved = Storage::SetInt(L"HoverFlyout", hoverFlyout) && saved;
         saved = Storage::SetInt(L"ShowOutput", showOutput) && saved;
         saved = Storage::SetInt(L"ShowInput", showInput) && saved;
         saved = Storage::SetInt(L"ShowWebcam", showWebcam) && saved;
@@ -3934,6 +4087,8 @@ struct WebcamStatus {
 struct WidgetContent {
     bool showOutput = false;
     bool showInput = false;
+    bool iconsOnly = false;    // The sections' icons, without their names and volumes.
+    bool hoverFlyout = true;   // Hovering the output or input opens its volume flyout.
     std::optional<AudioStatus> output;
     std::optional<AudioStatus> input;
     std::optional<WebcamStatus> webcam;  // Nothing hides the webcam section.
@@ -4077,6 +4232,7 @@ public:
         for (AudioSection* section : {&output_, &input_}) {
             section->part.Forget();
             section->icon = nullptr;
+            section->lines = nullptr;
             section->name = nullptr;
             section->level = nullptr;
             section->bar = nullptr;
@@ -4087,6 +4243,7 @@ public:
         webcam_.icon = nullptr;
         webcam_.glyph = nullptr;
         webcam_.slash = nullptr;
+        webcam_.lines = nullptr;
         webcam_.name = nullptr;
         webcam_.state = nullptr;
         row_ = nullptr;
@@ -4102,7 +4259,8 @@ public:
         ShowAudio(input_, eCapture, content_.showInput, content_.input, colors);
         ShowWebcam(colors);
         if (flyout_) {
-            bool shown = flyoutPart_ == kOutputPart ? content_.showOutput : content_.showInput;
+            // It goes with its section, or once it's turned off.
+            bool shown = content_.hoverFlyout && (flyoutPart_ == kOutputPart ? content_.showOutput : content_.showInput);
             if (shown) {
                 ShowFlyoutStatus();
             } else {
@@ -4115,6 +4273,7 @@ private:
     struct AudioSection {
         TaskbarXaml::Part part;
         wuxc::FontIcon icon{nullptr};
+        wuxc::StackPanel lines{nullptr};  // The name, level and bar, beside the icon.
         wuxc::TextBlock name{nullptr};
         wuxc::TextBlock level{nullptr};
         wuxc::Grid bar{nullptr};
@@ -4127,6 +4286,7 @@ private:
         wuxc::Grid icon{nullptr};
         wuxc::FontIcon glyph{nullptr};
         wux::Shapes::Line slash{nullptr};
+        wuxc::StackPanel lines{nullptr};  // The name and state, beside the icon.
         wuxc::TextBlock name{nullptr};
         wuxc::TextBlock state{nullptr};
     };
@@ -4170,6 +4330,7 @@ private:
         wuxc::Grid::SetColumn(section.bar, 1);
         second.Children().Append(section.bar);
         lines.Children().Append(second);
+        section.lines = lines;
         auto border = section.part.Make(part, MakeIconAndText(section.icon, lines), part == kOutputPart ? L"Output" : L"Input");
         // Sized to fit the device's name, like the weather widget sizes itself to its text.
         border.MaxWidth(256);
@@ -4181,8 +4342,16 @@ private:
         return border;
     }
 
+    // Icons only: the icon alone, with room on either side, as the taskbar's buttons have.
+    void ShowIconOnly(wux::FrameworkElement const& icon, wux::UIElement const& lines) {
+        bool iconsOnly = content_.iconsOnly;
+        lines.Visibility(iconsOnly ? wux::Visibility::Collapsed : wux::Visibility::Visible);
+        icon.Margin(wux::ThicknessHelper::FromLengths(8, 0, iconsOnly ? 8 : 0, 0));
+    }
+
     void ShowAudio(AudioSection& section, EDataFlow flow, bool shown, const std::optional<AudioStatus>& status, const ThemeColors& colors) {
         section.part.Border().Visibility(shown ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+        ShowIconOnly(section.icon, section.lines);
         section.icon.Glyph(DeviceGlyph(flow, status));
         section.name.Text(DeviceName(flow, status));
         bool hasLevel = status.has_value();
@@ -4226,6 +4395,7 @@ private:
         webcam_.state.Opacity(0.75);
         lines.Children().Append(webcam_.name);
         lines.Children().Append(webcam_.state);
+        webcam_.lines = lines;
         auto border = webcam_.part.Make(kWebcamPart, MakeIconAndText(webcam_.icon, lines), L"Webcam");
         border.MaxWidth(216);  // Longer names are cut short.
         webcam_.part.onHover = [this](bool) { StopHoverTimer(); };
@@ -4239,6 +4409,7 @@ private:
         if (!webcam) {
             return;
         }
+        ShowIconOnly(webcam_.icon, webcam_.lines);
         webcam_.glyph.Glyph(WidgetIcons::Glyph(kWebcamIcon));
         webcam_.icon.Opacity(webcam->busy ? 0.43 : 1.0);
         webcam_.slash.Stroke(Brush(colors.foreground));
@@ -4249,7 +4420,8 @@ private:
 
     // ---- The volume flyout, shown above the output or input section while hovering it, like the
     // Windows 11 volume flyout: the device's name, a volume slider, and the device icon as a mute
-    // button. It opens after a moment of hovering, and closes once the mouse moves away from it.
+    // button. It opens after a moment of hovering (unless it's turned off), and closes once the
+    // mouse moves away from it.
 
     void OnSectionHover(int part, bool entered) {
         if (flyout_ && part == flyoutPart_) {
@@ -4257,7 +4429,7 @@ private:
         }
         StopHoverTimer();
         hoveredPart_ = entered ? part : -1;
-        if (!entered || (flyout_ && flyoutPart_ == part)) {
+        if (!entered || !content_.hoverFlyout || (flyout_ && flyoutPart_ == part)) {
             return;
         }
         if (!hoverTimer_) {
@@ -4716,6 +4888,8 @@ private:
         };
         content_.showOutput = settings_.showOutput;
         content_.showInput = settings_.showInput;
+        content_.iconsOnly = settings_.iconsOnly;
+        content_.hoverFlyout = settings_.hoverFlyout;
         RefreshStatus(false);
         RefreshWebcam();
         // The widget may be in the taskbar already, or will say when it is.
@@ -4800,9 +4974,11 @@ private:
     }
 
     // Reads the default output and input with their volumes, updating the widget when anything
-    // changed. The popup is for the output: it's shown when asked to, or when the output was changed
-    // elsewhere, but only while the widget isn't showing the output already.
-    void RefreshStatus(bool showPopup) {
+    // changed. A popup says which device is in use once it has changed, from the widget (switched,
+    // with the flow switched) or elsewhere, while the widget isn't showing its name: the output's
+    // while its section is hidden or shows just its icon, the input's while its section shows just
+    // its icon.
+    void RefreshStatus(bool switched, EDataFlow switchedFlow = eRender) {
         // A device that can't be read just now keeps its last status.
         bool outputFailed = false;
         bool inputFailed = false;
@@ -4815,6 +4991,7 @@ private:
             input = lastInput_;
         }
         bool outputChanged = hasRefreshed_ && (output ? output->device.id : L"") != (lastOutput_ ? lastOutput_->device.id : L"");
+        bool inputChanged = hasRefreshed_ && lastInput_ && (input ? input->device.id : L"") != lastInput_->device.id;
         if (!hasRefreshed_ || output != lastOutput_ || input != lastInput_) {
             content_.output = output;
             content_.input = input;
@@ -4823,23 +5000,29 @@ private:
         lastOutput_ = output;
         lastInput_ = input;
         hasRefreshed_ = true;
-        if ((showPopup || outputChanged) && settings_.showPopup && !settings_.showOutput) {
-            ShowStatusPopup(output);
+        if (!settings_.showPopup) {
+            return;
+        }
+        if (((switched && switchedFlow == eRender) || outputChanged) && (!settings_.showOutput || settings_.iconsOnly)) {
+            ShowStatusPopup(eRender, output);
+        } else if (((switched && switchedFlow == eCapture) || inputChanged) && settings_.showInput && settings_.iconsOnly) {
+            ShowStatusPopup(eCapture, input);
         }
     }
 
-    void ShowStatusPopup(const std::optional<AudioStatus>& output) {
-        if (!output) {
-            popup_.ShowMessage(L"No output device", L"Enable an output in Windows Sound settings.");
+    void ShowStatusPopup(EDataFlow flow, const std::optional<AudioStatus>& device) {
+        if (!device) {
+            popup_.ShowMessage(flow == eRender ? L"No output device" : L"No input device",
+                               flow == eRender ? L"Enable an output in Windows Sound settings." : L"Enable a microphone in Windows Sound settings.");
             return;
         }
         MessagePopup::Content content;
-        content.title = output->device.name;
-        content.level = output->Percent();
-        content.levelMuted = output->muted;
-        AudioStatus status = *output;
-        content.icon = [status](gp::Graphics& graphics, const gp::RectF& bounds, const gp::Color& color) {
-            DrawDeviceIcon(graphics, eRender, status, bounds, color);
+        content.title = device->device.name;
+        content.level = device->Percent();
+        content.levelMuted = device->muted;
+        AudioStatus status = *device;
+        content.icon = [flow, status](gp::Graphics& graphics, const gp::RectF& bounds, const gp::Color& color) {
+            DrawDeviceIcon(graphics, flow, status, bounds, color);
         };
         popup_.Show(content, 1800);
     }
@@ -4906,7 +5089,7 @@ private:
             popup_.ShowMessage(flow == eRender ? L"Couldn't switch output" : L"Couldn't switch input", L"Windows didn't allow it.");
             return;
         }
-        RefreshStatus(flow == eRender);
+        RefreshStatus(true, flow);
     }
 
     // The chosen webcam's name: the one given in AudioFlipper, or its own.
@@ -5099,11 +5282,12 @@ private:
                 settings_.volumeDing = !settings_.volumeDing;
                 Save();
             }, settings_.volumeDing);
-            submenu.Add(L"Show popup on change", [this]() {
-                settings_.showPopup = !settings_.showPopup;
-                Save();
-            }, settings_.showPopup);
         }
+        // One switch for both: the input's popup is for Icons only.
+        submenu.Add(L"Show popup on change", [this]() {
+            settings_.showPopup = !settings_.showPopup;
+            Save();
+        }, settings_.showPopup);
 
         submenu.AddSeparator();
         // The classic Sound control panel (Playback or Recording tab), where a device can be renamed via
@@ -5161,6 +5345,19 @@ private:
         AddAudioMenu(menu, eRender);
         AddAudioMenu(menu, eCapture);
         AddWebcamMenu(menu);
+        menu.AddSeparator();
+        menu.Add(L"Icons only", [this]() {
+            settings_.iconsOnly = !settings_.iconsOnly;
+            Save();
+            content_.iconsOnly = settings_.iconsOnly;
+            SendContent();
+        }, settings_.iconsOnly);
+        menu.Add(L"Show volume flyout on hover", [this]() {
+            settings_.hoverFlyout = !settings_.hoverFlyout;
+            Save();
+            content_.hoverFlyout = settings_.hoverFlyout;
+            SendContent();
+        }, settings_.hoverFlyout);
         TaskbarXaml::g_bridge->Post([entries = menu.Entries()]() { TaskbarXaml::ShowMenu(entries); });
     }
 
