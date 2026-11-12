@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              musicians-toolkit
 // @name            Musician's Toolkit
-// @description     An all-in-one toolkit flyout for musicians, containing a chord library, a song analyzer, a metronome, a tuner, a tap tempo calculator, a strumming pattern builder, an interactive circle of fifths and a timed note trainer for guitar, ukulele and piano.
+// @description     An all-in-one toolkit flyout for musicians: a chord library, a song analyzer, a metronome, a tuner, a tap tempo calculator, a strumming pattern builder, the circle of fifths and a timed note trainer for guitar, ukulele and piano.
 // @version         1.1.0
 // @author          DpakB
 // @homepage        https://dpakb.com
@@ -18,7 +18,7 @@
 
 # Musician's Toolkit
 
-![Sample Screenshot](https://raw.githubusercontent.com/DeepakBalaraman/musicians-toolkit/master/assets/screenshot.png)
+![Sample Screenshot](https://raw.githubusercontent.com/DeepakBalaraman/musicians-toolkit/master/assets/screenshot-1.1.0.png)
 
 A chord library, a song analyzer, a tuner, a metronome, a strumming trainer, a
 circle of fifths, a tap tempo and a note drill, for guitar, ukulele and piano.
