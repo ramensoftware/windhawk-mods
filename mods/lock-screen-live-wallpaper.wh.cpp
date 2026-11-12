@@ -3340,7 +3340,7 @@ BOOL SettingsChangedImpl(BOOL* bReload) {
 }
 
 // ---------- Tool-mod glue: the preview runs in a dedicated process ----------
-static BOOL WhTool_ModInit() {
+BOOL WhTool_ModInit() {
     g_toolProcess = true;
     // windhawk.exe may be DPI-unaware; this fails harmlessly if the process is already aware.
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -3352,7 +3352,7 @@ static BOOL WhTool_ModInit() {
     return ok;
 }
 
-static void WhTool_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     BOOL reload = TRUE;
     SettingsChangedImpl(&reload);
     if (!reload) return;   // applied in place, the preview window stays open
@@ -3388,7 +3388,7 @@ static HANDLE CreateToolMutexWithRetry() {
     return CreateMutex(nullptr, TRUE, kToolMutexName);   // still taken after ~5 s: the snippet's own check then exits
 }
 
-static void WhTool_ModUninit() {
+void WhTool_ModUninit() {
     ModUninitImpl();
 }
 
@@ -3493,7 +3493,7 @@ BOOL WhSnippet_ModInit() {
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
+static void SpawnToolProcess() {
     if (!g_isToolModProcessLauncher) {
         return;
     }
@@ -3555,6 +3555,13 @@ void Wh_ModAfterInit() {
     CloseHandle(pi.hThread);
 }
 
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+    SpawnToolProcess();
+}
+
 void WhSnippet_ModSettingsChanged() {
     if (g_isToolModProcessLauncher) {
         return;
@@ -3592,7 +3599,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
         // Start the tool process if it is not running (it exits by itself when nothing is requested).
         HANDLE m = OpenMutexW(SYNCHRONIZE, FALSE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (m) CloseHandle(m);
-        else Wh_ModAfterInit();
+        else SpawnToolProcess();
     } else {
         WhTool_ModSettingsChanged();
     }
