@@ -2,7 +2,7 @@
 // @id              compact-rdp-connection-bar
 // @name            Compact RDP connection bar
 // @description     Shrinks the top connection bar, optionally hides pin/quality buttons, keeps drag working
-// @version         2.9.1
+// @version         2.9.2
 // @author          hsb5
 // @github          https://github.com/hsb5
 // @include         mstsc.exe
@@ -27,16 +27,21 @@ The right toolbar carries the window buttons - minimize, restore and close.
 Each can be hidden separately; hide all three and the bar shrinks to the
 hostname alone.
 
+## Screenshots
+
+| Before | After |
+|--------|-------|
+| ![Original wide connection bar](https://raw.githubusercontent.com/hsb5/screenshots/main/Before.png) | ![Compact connection bar with centered hostname](https://raw.githubusercontent.com/hsb5/screenshots/main/After.png) |
+
 ## Settings
 
 - **Text area width** - target width of the hostname zone, scaled for DPI.
   Automatically raised to fit the hostname, so it is never clipped.
-- **Hide pin / quality button** - hide those buttons by command id. Turn on
-  **Debug layout**, open the bar, and read the `btn[i] id=... bmp=...` lines in
-  the log to confirm the ids.
+- **Hide pin / quality button** - hides the pin and quality indicator
+  buttons from the left toolbar.
 - **Hide minimize / restore / close** - hide the window buttons on the
-  right. They are matched by bitmap index (bmp 0/1/2), because mstsc gives
-  those buttons plain command ids that are shared with the left toolbar.
+  right. Hiding the close button removes the only visible way to disconnect;
+  the session can still be closed from the taskbar icon.
 - **Debug layout** - dump the bar, its children and every toolbar button once.
 */
 // ==/WindhawkModReadme==
@@ -52,12 +57,6 @@ hostname alone.
 - hideQualityButton: false
   $name: Hide quality button
   $description: Hides the connection quality indicator
-- pinButtonId: 4
-  $name: Pin button id
-  $description: Command id of the pin button (see debug log)
-- qualityButtonId: 6
-  $name: Quality button id
-  $description: Command id of the quality indicator (see debug log)
 - hideMinimizeButton: false
   $name: Hide minimize button
   $description: Hides the minimize button on the right (bmp 0)
@@ -80,6 +79,8 @@ hostname alone.
 #define MAX_TB      8
 #define MAX_HIDDEN 16
 #define EDGE_PAD    8   // margin mstsc leaves at both ends of the bar, in 96-DPI px
+#define PIN_ID      4   // command id of the pin button in mstsc
+#define QUALITY_ID  6   // command id of the quality indicator in mstsc
 
 // ---------------------------------------------------------------- state
 
@@ -99,8 +100,6 @@ static int    g_tbCount = 0;
 static int  g_gapWidth    = 100;
 static bool g_hidePin     = false;
 static bool g_hideQuality = false;
-static int  g_pinId       = 4;
-static int  g_qualityId   = 6;
 static bool g_hideMin     = false;
 static bool g_hideRestore = false;
 static bool g_hideClose   = false;
@@ -210,7 +209,7 @@ static int HostTextWidth(HWND hwnd) {
 }
 
 static bool ShouldHideId(int id) {
-    return (g_hidePin && id == g_pinId) || (g_hideQuality && id == g_qualityId);
+    return (g_hidePin && id == PIN_ID) || (g_hideQuality && id == QUALITY_ID);
 }
 
 // Window buttons on the right toolbar are matched by bitmap index (0 minimize,
@@ -759,8 +758,6 @@ static void LoadSettings() {
 
     g_hidePin     = Wh_GetIntSetting(L"hidePinButton") != 0;
     g_hideQuality = Wh_GetIntSetting(L"hideQualityButton") != 0;
-    g_pinId       = Wh_GetIntSetting(L"pinButtonId");
-    g_qualityId   = Wh_GetIntSetting(L"qualityButtonId");
     g_hideMin     = Wh_GetIntSetting(L"hideMinimizeButton") != 0;
     g_hideRestore = Wh_GetIntSetting(L"hideRestoreButton") != 0;
     g_hideClose   = Wh_GetIntSetting(L"hideCloseButton") != 0;
@@ -776,9 +773,8 @@ BOOL Wh_ModInit() {
     WindhawkUtils::SetFunctionHook(DrawTextExW, DrawTextExW_Hook, &DrawTextExW_Original);
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
 
-    Wh_Log(L"init 2.9.1: gap=%d pin=%d(id %d) quality=%d(id %d) min=%d restore=%d close=%d debug=%d",
-           g_gapWidth, (int)g_hidePin, g_pinId,
-           (int)g_hideQuality, g_qualityId,
+    Wh_Log(L"init 2.9.2: gap=%d pin=%d quality=%d min=%d restore=%d close=%d debug=%d",
+           g_gapWidth, (int)g_hidePin, (int)g_hideQuality,
            (int)g_hideMin, (int)g_hideRestore, (int)g_hideClose,
            (int)g_debug);
     return TRUE;
