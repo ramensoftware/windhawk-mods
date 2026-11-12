@@ -445,7 +445,7 @@ bool SetInt(const wchar_t* name, int value) {
 }
 
 std::wstring GetString(const wchar_t* name) {
-    std::vector<WCHAR> buffer(64 * 1024);  // The computers and display buttons take a few KB.
+    std::vector<WCHAR> buffer(64 * 1024);  // A list kept in one value before 1.5.0 takes a few KB.
     size_t length = Wh_GetStringValue(ValueName(name).c_str(), buffer.data(), buffer.size());
     return std::wstring(buffer.data(), std::min(length, buffer.size()));
 }
@@ -456,6 +456,80 @@ bool SetString(const wchar_t* name, const std::wstring& value) {
 
 void Delete(const wchar_t* name) {
     Wh_DeleteValue(ValueName(name).c_str());
+}
+
+// Lists of lines are kept one value per line, numbered from 0, with their count ("<list>Count"): a
+// stored value can't hold line breaks in portable Windhawk, which keeps the storage in an INI file.
+std::wstring LineName(const wchar_t* list, int index) {
+    return list + std::to_wstring(index);
+}
+
+std::wstring CountName(const wchar_t* list) {
+    return std::wstring(list) + L"Count";
+}
+
+// Saves the lines that changed, then deletes those a longer list left past them. (Portable Windhawk
+// rewrites its INI file for every value written, so the lines that are the same aren't written.)
+bool SetLines(const wchar_t* list, const std::vector<std::wstring>& lines) {
+    bool saved = true;
+    for (int i = 0; i < (int)lines.size(); i++) {
+        std::wstring name = LineName(list, i);
+        if (GetString(name.c_str()) != lines[i]) {
+            saved = SetString(name.c_str(), lines[i]) && saved;
+        }
+    }
+    int previous = GetInt(CountName(list).c_str(), -1);
+    if (previous != (int)lines.size()) {
+        saved = SetInt(CountName(list).c_str(), (int)lines.size()) && saved;
+    }
+    for (int i = (int)lines.size(); i < previous; i++) {
+        Delete(LineName(list, i).c_str());
+    }
+    return saved;
+}
+
+void DeleteLines(const wchar_t* list) {
+    int count = GetInt(CountName(list).c_str(), 0);
+    for (int i = 0; i < count; i++) {
+        Delete(LineName(list, i).c_str());
+    }
+    Delete(CountName(list).c_str());
+    Delete(list);  // As kept before 1.5.0.
+}
+
+// Before 1.5.0 a list was one value, its lines separated by line breaks. Portable Windhawk 1.7 saved
+// those as spaces (1.6 and earlier kept only the first line), so a value without any goes to
+// splitOld. The first time a list with lines is read, it's saved in the new form and the old value
+// is deleted; if saving fails, the count is dropped so that happens again next time.
+std::vector<std::wstring> GetLines(const wchar_t* list, std::vector<std::wstring> (*splitOld)(const std::wstring&)) {
+    int count = GetInt(CountName(list).c_str(), -1);
+    if (count < 0) {
+        std::wstring value = GetString(list);
+        std::vector<std::wstring> lines = value.find(L'\n') != std::wstring::npos ? Split(value, L'\n') : splitOld(value);
+        if (!lines.empty()) {
+            if (SetLines(list, lines)) {
+                Delete(list);
+            } else {
+                Delete(CountName(list).c_str());
+            }
+        }
+        return lines;
+    }
+    std::vector<std::wstring> lines;
+    for (int i = 0; i < count; i++) {
+        std::wstring line = GetString(LineName(list, i).c_str());
+        if (!line.empty()) {
+            lines.push_back(line);
+        }
+    }
+    return lines;
+}
+
+// An old value without line breaks, for lines that never have a space: a space separates them.
+std::vector<std::wstring> SplitOldSpacelessLines(const std::wstring& value) {
+    std::wstring lines = value;
+    std::replace(lines.begin(), lines.end(), L' ', L'\n');
+    return Split(lines, L'\n');
 }
 
 // The user's folder in the mod's storage, for files.
@@ -3803,14 +3877,15 @@ struct Settings {
             Storage::SetInt(L"Imported", 1);
             return;
         }
-        for (const std::wstring& line : Split(Storage::GetString(L"Connections"), L'\n')) {
+        for (const std::wstring& line : Storage::GetLines(L"Connections", SplitOldConnections)) {
             AddConnectionLine(line);
         }
         currentConnectionKey = Storage::GetString(L"CurrentConnection");
-        for (const std::wstring& line : Split(Storage::GetString(L"DisplayButtons"), L'\n')) {
+        // Display keys ("1920x1080@0,0") have no spaces.
+        for (const std::wstring& line : Storage::GetLines(L"DisplayButtons", Storage::SplitOldSpacelessLines)) {
             AddDisplayButtonLine(line);
         }
-        for (const std::wstring& line : Split(Storage::GetString(L"DisplayIds"), L'\n')) {
+        for (const std::wstring& line : Storage::GetLines(L"DisplayIds", Storage::SplitOldSpacelessLines)) {
             AddDisplayIdsLine(line);
         }
     }
@@ -3834,10 +3909,10 @@ struct Settings {
             }
             idLines.push_back(outputs + L"|" + Join(pairs, L";"));
         }
-        bool saved = Storage::SetString(L"Connections", Join(connectionLines, L"\n"));
+        bool saved = Storage::SetLines(L"Connections", connectionLines);
         saved = Storage::SetString(L"CurrentConnection", currentConnectionKey) && saved;
-        saved = Storage::SetString(L"DisplayButtons", Join(buttonLines, L"\n")) && saved;
-        return Storage::SetString(L"DisplayIds", Join(idLines, L"\n")) && saved;
+        saved = Storage::SetLines(L"DisplayButtons", buttonLines) && saved;
+        return Storage::SetLines(L"DisplayIds", idLines) && saved;
     }
 
     Connection* FindConnection(const std::wstring& key) {
@@ -3890,6 +3965,23 @@ private:
         if (!connections.empty()) {
             Wh_Log(L"Imported %d computers from %s", (int)connections.size(), path.c_str());
         }
+    }
+
+    // Connection lines from before 1.5.0, in a value without line breaks. Each line starts with
+    // "host:" or "file:" and the computer name or file path right after it, so a space, then one of
+    // those, then something other than a space starts a line. (Only a name given with Rename
+    // could also have that.)
+    static std::vector<std::wstring> SplitOldConnections(const std::wstring& value) {
+        std::wstring lines = value;
+        for (const std::wstring start : {L" host:", L" file:"}) {
+            for (size_t at = lines.find(start); at != std::wstring::npos; at = lines.find(start, at + 1)) {
+                size_t next = at + start.size();
+                if (next < lines.size() && !iswspace(lines[next])) {
+                    lines[at] = L'\n';
+                }
+            }
+        }
+        return Split(lines, L'\n');
     }
 
     // <connection key>|<name it was given>, or just the key.
@@ -4014,7 +4106,7 @@ struct DefaultRdpChange {
     // Stored as lines: "existed" or "created", then "<name>\t<line before>\t<value given>…" for each
     // setting, where each line or value is "=" and its text, or "-" for none.
     static std::optional<DefaultRdpChange> Load() {
-        std::vector<std::wstring> lines = Split(Storage::GetString(L"DefaultRdpChange"), L'\n');
+        std::vector<std::wstring> lines = Storage::GetLines(L"DefaultRdpChange", SplitOld);
         if (lines.empty()) {
             return std::nullopt;
         }
@@ -4043,12 +4135,26 @@ struct DefaultRdpChange {
             }
             lines.push_back(line);
         }
-        return Storage::SetString(L"DefaultRdpChange", Join(lines, L"\n"));
+        return Storage::SetLines(L"DefaultRdpChange", lines);
     }
 
-    static void Forget() { Storage::Delete(L"DefaultRdpChange"); }
+    static void Forget() { Storage::DeleteLines(L"DefaultRdpChange"); }
 
 private:
+    // The lines from before 1.5.0, in a value without line breaks. The settings' names have spaces,
+    // but they're the full-screen settings' names, so a line starts at the space before one of
+    // those names and its tab.
+    static std::vector<std::wstring> SplitOld(const std::wstring& value) {
+        std::wstring lines = value;
+        for (const RdpSetting& setting : FullScreenSettings(nullptr)) {
+            std::wstring start = L" " + setting.name + L"\t";
+            for (size_t at = lines.find(start); at != std::wstring::npos; at = lines.find(start, at + 1)) {
+                lines[at] = L'\n';
+            }
+        }
+        return Split(lines, L'\n');
+    }
+
     static std::wstring Encode(const std::optional<std::wstring>& text) { return text ? L"=" + *text : L"-"; }
 
     static std::optional<std::wstring> Decode(const std::wstring& field) {
@@ -4116,7 +4222,8 @@ ULONGLONG ProcessStartTime(HANDLE process) {
 
 std::vector<SessionMark> LoadSessionMarks() {
     std::vector<SessionMark> marks;
-    for (const std::wstring& line : Split(Storage::GetString(L"DefaultRdpSessions"), L'\n')) {
+    // "<process ID>\t<start time>" lines.
+    for (const std::wstring& line : Storage::GetLines(L"DefaultRdpSessions", Storage::SplitOldSpacelessLines)) {
         std::vector<std::wstring> fields = Split(line, L'\t');
         if (fields.size() == 2) {
             marks.push_back({(DWORD)wcstoul(fields[0].c_str(), nullptr, 10), wcstoull(fields[1].c_str(), nullptr, 10)});
@@ -4127,14 +4234,14 @@ std::vector<SessionMark> LoadSessionMarks() {
 
 void SaveSessionMarks(const std::vector<SessionMark>& marks) {
     if (marks.empty()) {
-        Storage::Delete(L"DefaultRdpSessions");
+        Storage::DeleteLines(L"DefaultRdpSessions");
         return;
     }
     std::vector<std::wstring> lines;
     for (const SessionMark& mark : marks) {
         lines.push_back(std::to_wstring(mark.processId) + L"\t" + std::to_wstring(mark.started));
     }
-    Storage::SetString(L"DefaultRdpSessions", Join(lines, L"\n"));
+    Storage::SetLines(L"DefaultRdpSessions", lines);
 }
 
 // The session's process, if it's still running (the same process: ID and start time), or null.
