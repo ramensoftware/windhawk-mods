@@ -5772,6 +5772,9 @@ struct Measurements {
     double visibleDockHeight() const {
         return dockHeight - insets.top - insets.bottom;
     }
+    // Where a button's and a tray item's state plate sit: each band grown by its plate padding.
+    DockInsets plateInsets() const { return GetButtonInsets(insets, dockHeight); }
+    DockInsets trayPlateInsets() const { return GetButtonInsets(trayInsets, dockHeight, g_trayHighlightPadding); }
 };
 
 // The follower's expression terms over `geometry` (a Root's metrics) and `anchor` (Start's handout Visual).
@@ -11166,10 +11169,8 @@ struct NativePlateFill : std::enable_shared_from_this<NativePlateFill> {
     bool updating{};
     bool refreshPending{};
     bool refreshSucceeded{};
-    static DependencyProperty Property(size_t i) {
-        return i ? Controls::Border::BorderBrushProperty() : Controls::Border::BackgroundProperty();
-    }
     static PlateProperty Slot(size_t i) { return i ? PlateProperty::BorderBrush : PlateProperty::Background; }
+    static DependencyProperty Property(size_t i) { return PlateTemplateValues::Property(Slot(i)); }
     static Media::Brush Copy(Media::Brush const& brush) {
         if (!brush) return nullptr;
         auto follow=[](DependencyObject const& target, DependencyObject const& from,
@@ -11463,11 +11464,17 @@ void ApplyPlateAppearance(Root::StatePlate& state, bool glass, bool highContrast
     else ApplyPlateFill(state,ButtonFillOpacity(glass));
 }
 
-std::array<DependencyProperty,3> PlateLayoutProperties() {
-    return {FrameworkElement::MarginProperty(),FrameworkElement::HeightProperty(),
-            FrameworkElement::VerticalAlignmentProperty()};
-}
 constexpr PlateProperty kPlateLayoutSlots[]{PlateProperty::Margin,PlateProperty::Height,PlateProperty::VerticalAlignment};
+
+// One owned plate property: through the template's state setter where the template manages it, else set on the element.
+// Nothing to do while the plate holds the value and, with a template, our setter is in place.
+void ApplyPlateProperty(Root::StatePlate& state, PlateProperty property,
+                        winrt::Windows::Foundation::IInspectable const& value, bool differs) {
+    auto const& values=state.templateValues;
+    if(!differs && (!values || values->Applied(property))) return;
+    if(values && values->Managed(property)) values->Apply(property,value);
+    else state.element.SetValue(PlateTemplateValues::Property(property),value);
+}
 
 void RestoreStatePlate(Root::StatePlate& state) {
     if (!state.element) return;
@@ -11496,17 +11503,18 @@ void RestoreStatePlate(Root::StatePlate& state) {
                winrt::to_hresult().value);
     }
     if (state.layoutOwned) {
-        for(size_t i=0;i<state.originalLayout.size();++i) {
+        for(size_t i=0;i<std::size(kPlateLayoutSlots);++i) {
+            auto slot=kPlateLayoutSlots[i];
             try {
-                if(state.templateValues && state.templateValues->Managed(kPlateLayoutSlots[i])) {
-                    state.templateValues->Remove(kPlateLayoutSlots[i]);
+                if(state.templateValues && state.templateValues->Managed(slot)) {
+                    state.templateValues->Remove(slot);
                     continue;
                 }
-                auto property=PlateLayoutProperties()[i];
-                bool matches=i==0 ? state.element.Margin()==state.appliedMargin :
-                             i==1 ? state.element.Height()==state.appliedHeight :
-                                    state.element.VerticalAlignment()==VerticalAlignment::Top;
+                bool matches=slot==PlateProperty::Margin ? state.element.Margin()==state.appliedMargin :
+                             slot==PlateProperty::Height ? state.element.Height()==state.appliedHeight :
+                                                           state.element.VerticalAlignment()==VerticalAlignment::Top;
                 if(!matches) continue;
+                auto property=PlateTemplateValues::Property(slot);
                 if(state.layoutBindings[i]) state.element.SetBinding(property,state.layoutBindings[i]);
                 else if(state.originalLayout[i]==DependencyProperty::UnsetValue()) state.element.ClearValue(property);
                 else state.element.SetValue(property,state.originalLayout[i]);
@@ -11634,12 +11642,8 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
         }
         double corner=state.trayHighlight?g_trayHighlightRadius:g_buttonCornerRadius;
         state.appliedCorners = {corner,corner,corner,corner};
-        if (plate.CornerRadius() != state.appliedCorners ||
-            (state.templateValues && !state.templateValues->Applied(PlateProperty::CornerRadius))) {
-            if(state.templateValues && state.templateValues->Managed(PlateProperty::CornerRadius))
-                state.templateValues->Apply(PlateProperty::CornerRadius,winrt::box_value(state.appliedCorners));
-            else plate.CornerRadius(state.appliedCorners);
-        }
+        ApplyPlateProperty(state,PlateProperty::CornerRadius,winrt::box_value(state.appliedCorners),
+                           plate.CornerRadius()!=state.appliedCorners);
         // Keep native fills intact unless an accepted liquid lens replaces them.
         // Border visibility follows its separate explicit control.
         ApplyPlateAppearance(state,state.fillHidden,highContrast);
@@ -11652,20 +11656,17 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
         double bottom=transform.TransformPoint(
             {0,float(root.dock.background.ActualHeight()-insets.bottom)}).Y-slot.Y;
         if(state.trayHighlight) {
-            if(plate.MaxHeight()!=INFINITY || !state.templateValues->Applied(PlateProperty::MaxHeight))
-                state.templateValues->Apply(PlateProperty::MaxHeight,winrt::box_value(double(INFINITY)));
-            if(plate.MinHeight()!=0 || !state.templateValues->Applied(PlateProperty::MinHeight))
-                state.templateValues->Apply(PlateProperty::MinHeight,winrt::box_value(0.0));
+            ApplyPlateProperty(state,PlateProperty::MaxHeight,winrt::box_value(double(INFINITY)),plate.MaxHeight()!=INFINITY);
+            ApplyPlateProperty(state,PlateProperty::MinHeight,winrt::box_value(0.0),plate.MinHeight()!=0);
         } else {
             top=std::clamp(top,0.0,double(slot.Height));
             bottom=std::clamp(bottom,top,double(slot.Height));
         }
         if(bottom-top<1) return;
         if(!state.layoutOwned) {
-            auto properties=PlateLayoutProperties();
-            for(size_t i=0;i<properties.size();++i) {
-                state.originalLayout[i]=ReadPlateLocalValue(plate,properties[i],state.layoutBindings[i]);
-            }
+            for(size_t i=0;i<std::size(kPlateLayoutSlots);++i)
+                state.originalLayout[i]=ReadPlateLocalValue(plate,PlateTemplateValues::Property(kPlateLayoutSlots[i]),
+                                                            state.layoutBindings[i]);
             state.layoutOwned=true;
         }
         auto margin=plate.Margin();
@@ -11677,24 +11678,10 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
         // from every readback and restart layout indefinitely.
         state.appliedMargin={margin.Left,float(top),margin.Right,float(double(slot.Height)-bottom)};
         state.appliedHeight=float(bottom-top);
-        if(plate.Margin()!=state.appliedMargin ||
-           (state.templateValues && !state.templateValues->Applied(PlateProperty::Margin))) {
-            if(state.templateValues && state.templateValues->Managed(PlateProperty::Margin))
-                state.templateValues->Apply(PlateProperty::Margin,winrt::box_value(state.appliedMargin));
-            else plate.Margin(state.appliedMargin);
-        }
-        if(plate.Height()!=state.appliedHeight ||
-           (state.templateValues && !state.templateValues->Applied(PlateProperty::Height))) {
-            if(state.templateValues && state.templateValues->Managed(PlateProperty::Height))
-                state.templateValues->Apply(PlateProperty::Height,winrt::box_value(state.appliedHeight));
-            else plate.Height(state.appliedHeight);
-        }
-        if(plate.VerticalAlignment()!=VerticalAlignment::Top ||
-           (state.templateValues && !state.templateValues->Applied(PlateProperty::VerticalAlignment))) {
-            if(state.templateValues && state.templateValues->Managed(PlateProperty::VerticalAlignment))
-                state.templateValues->Apply(PlateProperty::VerticalAlignment,winrt::box_value(VerticalAlignment::Top));
-            else plate.VerticalAlignment(VerticalAlignment::Top);
-        }
+        ApplyPlateProperty(state,PlateProperty::Margin,winrt::box_value(state.appliedMargin),plate.Margin()!=state.appliedMargin);
+        ApplyPlateProperty(state,PlateProperty::Height,winrt::box_value(state.appliedHeight),plate.Height()!=state.appliedHeight);
+        ApplyPlateProperty(state,PlateProperty::VerticalAlignment,winrt::box_value(VerticalAlignment::Top),
+                           plate.VerticalAlignment()!=VerticalAlignment::Top);
         if(state.rim && !g_keepButtonRim) {
             if(Hosting::ElementCompositionPreview::GetElementChildVisual(plate)==state.rim)
                 Hosting::ElementCompositionPreview::SetElementChildVisual(plate,nullptr);
@@ -11778,8 +11765,8 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
 
 void PrepareStatePlates(Root& root, FrameworkElement const& buttons,
                         FrameworkElement const& tray, Measurements const& m) {
-    auto buttonInsets=GetButtonInsets(m.insets,root.dock.background.ActualHeight());
-    auto trayInsets=GetButtonInsets(m.trayInsets,root.dock.background.ActualHeight(),g_trayHighlightPadding);
+    auto buttonInsets=m.plateInsets();
+    auto trayInsets=m.trayPlateInsets();
     std::vector<Controls::Border> plates;
     CollectStatePlates(buttons, plates);
     std::vector<Controls::Border> trayPlates;
@@ -11853,8 +11840,7 @@ bool CommitButtonGlass(Root& root, ButtonGlassSources const& accepted={}) {
             if(!glass && (state.clip || state.fillHidden)) {
                 // Release glass-only clip/rim/fill while retaining configured
                 // native rounding/padding. Other plates still restore if one fails.
-                auto insets=GetButtonInsets(root.measurements.insets,root.dock.background.ActualHeight());
-                PrepareStatePlate(root,state,insets,false);
+                PrepareStatePlate(root,state,root.measurements.plateInsets(),false);
             }
             if(state.element && !state.blocked) ApplyPlateAppearance(state,glass,highContrast);
         } catch (...) {
@@ -13903,7 +13889,7 @@ void RefreshItemStates() {
                         [](auto const& plate) { return plate.trayHighlight && plate.stateRefreshPending; })) continue;
         bool changed=false;
         try {
-            auto insets=GetButtonInsets(root.measurements.insets,root.dock.background.ActualHeight());
+            auto insets=root.measurements.plateInsets();
             for (auto& source : root.sources) {
                 if (!std::exchange(source.stateRefreshPending,false)) continue;
                 if (source.life==Root::Source::Life::Retired) continue;
@@ -13916,7 +13902,7 @@ void RefreshItemStates() {
                     if (plate.buttonOwner==source.identity)
                         PrepareStatePlate(root,plate,insets,glass);
             }
-            auto trayInsets=GetButtonInsets(root.measurements.trayInsets,root.dock.background.ActualHeight(),g_trayHighlightPadding);
+            auto trayInsets=root.measurements.trayPlateInsets();
             for(auto& plate:root.statePlates)
                 if(plate.trayHighlight && std::exchange(plate.stateRefreshPending,false))
                     PrepareStatePlate(root,plate,trayInsets,false);
