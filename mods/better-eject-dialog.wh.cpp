@@ -2,12 +2,10 @@
 // @id              better-eject-dialog
 // @name            Better Eject Dialog
 // @description     Shows which programs are blocking a USB drive from ejecting, and lets you close them, eject automatically, or force-eject
-// @version         1.0.0
+// @version         1.0
 // @author          Ender
 // @github          https://github.com/EnderDragonEP
 // @twitter         https://twitter.com/NoobieNoodle89
-// @homepage        https://me.noobienoodle89.cc/
-// @donateUrl       https://ko-fi.com/enderdragonep
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcfgmgr32 -lwevtapi -lversion -lole32
