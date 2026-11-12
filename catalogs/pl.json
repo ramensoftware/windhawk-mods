@@ -14637,7 +14637,7 @@
         "ratingUsers": 12,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793851243000,
+        "updated": 1794463225000,
         "users": 70
       },
       "metadata": {
@@ -14645,16 +14645,16 @@
           "x86-64"
         ],
         "author": "Deen-0x",
-        "compilerOptions": "-lgdiplus -lgdi32 -lshell32 -lshcore -ldwmapi -lole32 -loleaut32 -lruntimeobject",
-        "description": "Turns the taskbar into a frame around a rounded screen, rounds the monitor corners, and gives every window - maximized included - one corner radius",
+        "compilerOptions": "-lgdiplus -lgdi32 -lshell32 -lshcore -ldwmapi -lole32 -loleaut32 -lruntimeobject -ld3d11",
+        "description": "Turns the taskbar into an acrylic or solid frame around a rounded screen, in the active window's color, rounds the monitor corners, and gives every window - maximized included - one corner radius, a border color and a shadow",
         "github": "https://github.com/Deen-0x",
         "include": [
           "explorer.exe",
           "dwm.exe"
         ],
         "license": "GPL-3.0",
-        "name": "Round Everything",
-        "version": "1.0.0"
+        "name": "Round Everything Interface",
+        "version": "2.0.0"
       }
     },
     "rounded-selection-rectangle": {
@@ -15937,7 +15937,7 @@
         "ratingUsers": 18,
         "reviews": 0,
         "trendingSorting": 25.149687346674582,
-        "updated": 1793754277000,
+        "updated": 1794463243000,
         "users": 324
       },
       "metadata": {
@@ -15945,15 +15945,16 @@
           "x86-64"
         ],
         "author": "Frankh93",
-        "compilerOptions": "-lole32 -loleaut32 -lshell32 -luser32 -lgdi32 -lmsimg32 -luuid -ladvapi32",
+        "compilerOptions": "-lole32 -lshell32 -luser32 -lgdi32 -lmsimg32 -luuid -ladvapi32 -ldwmapi -lpowrprof",
         "description": "macOS-style fullscreen app launcher with pages, folders, and drag-and-drop organization",
+        "donateUrl": "https://www.paypal.me/frankh1993",
         "github": "https://github.com/frankh93",
         "include": [
           "explorer.exe"
         ],
         "license": "MIT",
         "name": "StartPad",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "startup-app-delay-fix": {
@@ -21607,20 +21608,20 @@
         "ratingUsers": 11,
         "reviews": 0,
         "trendingSorting": 3.9598980747235006,
-        "updated": 1793509369000,
+        "updated": 1794463230000,
         "users": 146
       },
       "metadata": {
         "author": "dekvas",
         "compilerOptions": "-lgdiplus -lgdi32 -lshell32 -lcomctl32",
-        "description": "Authentic Windows 7 Clock & Calendar desktop widgets with 8 skins, options dialog, expandable notebook and multi-monitor support.",
+        "description": "Authentic Windows 7 Clock, Calendar & CPU Meter desktop gadgets. Features 8 classic vector clock skins, expandable calendar, real-time dual CPU/RAM meters, and full multi-monitor support.",
         "github": "https://github.com/dekvas",
         "include": [
           "windhawk.exe"
         ],
         "license": "MIT",
         "name": "Windows 7 Desktop Widgets",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "win7-display-control-panel-restorer": {
@@ -23276,6 +23277,32 @@
         "license": "GPL-3.0-or-later",
         "name": "WinKlok",
         "version": "1.1.0"
+      }
+    },
+    "winpager": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794463236000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794463236000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "seanmamasde",
+        "compilerOptions": "-ld2d1 -ldwrite -lwindowscodecs -ldwmapi -lshcore -lruntimeobject -lole32 -luuid -lgdi32",
+        "description": "A KDE Plasma-style virtual desktop pager in the Windows 11 taskbar: live window outlines, click or scroll to switch, drag windows between desktops",
+        "github": "https://github.com/seanmamasde",
+        "homepage": "https://github.com/seanmamasde/WinPager",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "WinPager",
+        "version": "0.1.2"
       }
     },
     "winrar-tweaks": {

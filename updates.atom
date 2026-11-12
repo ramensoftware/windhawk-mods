@@ -2,12 +2,137 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-12T05:04:11.000Z</updated>
+    <updated>2026-11-12T06:00:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[StartPad 1.1]]></title>
+        <id>https://windhawk.net/mods/startpad#8ccdb6306ece66d6f8e86ea1297c66b5958e71ac</id>
+        <link href="https://windhawk.net/mods/startpad"/>
+        <updated>2026-11-12T06:00:43.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Optimized perfomance to make it run smooth in high refresh rates</li>
+<li>Tweaked design overall</li>
+<li>Grouped settings into categories for a better understanding. NOTE: Changes in 1.0 are reset to their defaults.</li>
+<li>Added: Control to change icon label size</li>
+<li>Added: Control to change searchbar size</li>
+</ul>
+]]></content>
+        <author>
+            <name>Frankh93</name>
+            <uri>https://github.com/frankh93</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[WinPager 0.1.2]]></title>
+        <id>https://windhawk.net/mods/winpager#fe7db7aa5add612e6df8048ac9d71384b10936f0</id>
+        <link href="https://windhawk.net/mods/winpager"/>
+        <updated>2026-11-12T06:00:36.000Z</updated>
+        <content type="html"><![CDATA[<h1>WinPager</h1>
+<p>A virtual desktop pager like KDE Plasma's, living in the Windows 11 taskbar.</p>
+<p><img src="https://raw.githubusercontent.com/seanmamasde/WinPager/main/assets/screenshot1.png" alt="WinPager in the taskbar, showing a desktop's windows"></p>
+<p><img src="https://raw.githubusercontent.com/seanmamasde/WinPager/main/assets/screenshot2.png" alt="The on-screen display when switching desktops"></p>
+<ul>
+<li>Shows every virtual desktop with live window outlines, optionally with application icons</li>
+<li>Click a desktop to switch to it; click the current one to open Task View (configurable)</li>
+<li>Scroll over it to flip through desktops</li>
+<li>Drag a window outline onto another desktop to move that window there</li>
+<li>Hover a desktop for a list of its windows; right-click to add or remove desktops</li>
+<li>Ctrl+Shift+Win+Left/Right moves the active window to the neighbouring desktop and follows it</li>
+<li>KWin-style on-screen display when switching, and an option to hide Windows' own &quot;Desktop N&quot; popup</li>
+<li>A pager on each monitor's taskbar, or one on the main taskbar showing all monitors</li>
+<li>Can show only a few desktops at a time, scrolling along with the current one</li>
+<li>Follows light/dark mode and the accent color</li>
+</ul>
+<p>The settings mirror those of Plasma's Pager widget, plus position, theme and the switching popups.</p>
+<p>The mod runs in its own process; it isn't injected into explorer.exe.</p>
+<h2>Notes</h2>
+<ul>
+<li>Windows 11 24H2/25H2 (build 26100 and later) only. Like other virtual desktop tools, it relies on undocumented
+virtual desktop interfaces, so a Windows update can break it. On a build it doesn't know, it shows an error.</li>
+<li>The taskbar doesn't reserve space for it. Next to a centered row of buttons it shows only as many desktops as fit
+(at least the current one); on a left-aligned taskbar, a row of buttons long enough to reach the tray runs under it.</li>
+<li>With &quot;Hide the Windows &quot;Desktop N&quot; popup&quot; on, a volume or brightness popup shown within 0.6 s of a switch is hidden
+too, since Explorer shows both in the same window.</li>
+<li>WinPager is also a standalone app, <a href="https://github.com/seanmamasde/WinPager">WinPager.exe</a>, built from the same
+source. Only one of the two runs at a time: if you switch to the mod, quit WinPager.exe and turn off its
+&quot;Start with Windows&quot;.</li>
+<li>Bugs and ideas: <a href="https://github.com/seanmamasde/WinPager/issues">github.com/seanmamasde/WinPager/issues</a></li>
+</ul>
+]]></content>
+        <author>
+            <name>seanmamasde</name>
+            <uri>https://github.com/seanmamasde</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Desktop Widgets 1.1.0]]></title>
+        <id>https://windhawk.net/mods/win7-desktop-widgets#633d879ea9776cf2c7551dec5912ff59bc901914</id>
+        <link href="https://windhawk.net/mods/win7-desktop-widgets"/>
+        <updated>2026-11-12T06:00:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added authentic Windows 7 CPU &amp; RAM Meter gadget with compact and large modes.</li>
+<li>Implemented real-time CPU and RAM usage sampling with smooth damped needle physics.</li>
+<li>100% pure vector GDI+ rendering (no external image dependencies).</li>
+<li>Fully updated settings descriptions and metadata to English.</li>
+<li>Enhanced multi-monitor DPI scaling and border click-through.</li>
+</ul>
+]]></content>
+        <author>
+            <name>dekvas</name>
+            <uri>https://github.com/dekvas</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Round Everything Interface 2.0.0]]></title>
+        <id>https://windhawk.net/mods/round-everything#e6711b07ff48b99f05d93434a45074cdd135dc9d</id>
+        <link href="https://windhawk.net/mods/round-everything"/>
+        <updated>2026-11-12T06:00:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Renamed to Round Everything Interface (the id stays round-everything; installed copies keep running)</li>
+<li>Themes: Solid (default), Tape, Frost, Bleed, Windows, Eclipse, Phantom, Neon and Custom - each sets the frame, fill, bevel, shadow, monitor corners and the dwm.exe window options; their frame fill and edge line follow the Windows mode, in the colors of Windows' own taskbar with transparency effects off (#EEEEEE|#1C1C1C, #BEBEBE|#404040), unless the theme has colors of its own. A few Overrides (frame thickness, screen radius, monitor corner radius, frame color, gradient angle and color source, fill, work-area inset, window radius) apply on top of any theme</li>
+<li>Settings reorganized into Theme / Overrides / General / Custom theme groups; values saved by 1.0.0 under keys that changed fall back to their defaults. Per-edge thickness overrides moved to a new key (edgeOffsetsClockwise, taskbar's edge first, then clockwise) so 1.0.0's left,top,right,bottom values aren't read in the new order. &quot;Inward offset&quot; is now &quot;Frame thickness&quot;, and the monitor corners are one radius setting (0 turns them off)</li>
+<li>Applying a theme logs its values, with the General and Overrides groups, as the mod's settings in Windhawk's JSON form, in rows broken between values so a column selection copies them whole - ready to paste and tweak as the Custom theme</li>
+<li>Frame color: one color, a gradient of several at a set angle, or a light|dark pair following the Windows mode (each side may be a gradient); &quot;accent&quot; (or an empty color) is the Windows accent in a shade that keeps the taskbar readable - SystemAccentColorDark2 on a dark taskbar, SystemAccentColorLight2 on a light one - and follows the accent and the mode as they change</li>
+<li>Fills: Solid; Custom acrylic (live DWM blur through Windows.UI.Composition, with blur, tint, luminosity, saturation and noise); Windows' default (the taskbar's own light or dark acrylic, following the Windows mode). A gradient frame color fills the solid frame and feeds the acrylic's tint and luminosity. The effect graph holds only the effects that change something. Falls back to a layered frame if composition can't be set up</li>
+<li>One frame, one piece: every fill is the same composition window, under the taskbar too (the taskbar's background is made transparent), so the bevel, edge line and corner arcs run along the taskbar's edge as along the others</li>
+<li>Like Windows' own acrylic, the acrylic fills turn solid while transparency effects are off, and while battery saver is on (the &quot;Solid while battery saver is on&quot; setting, on by default)</li>
+<li>Acrylic glass bevel along the inner edge (two lights, specular, Fresnel, an edge line in its own color, edge shade), rasterized once with the frame; its strengths and the edge line color take a light|dark pair following the Windows mode, and the edge line color &quot;accent&quot; too. The edge line shows its color exactly: at full strength it covers the frame's innermost pixel row</li>
+<li>Inner shadow along the rounded screen (blur, opacity, color, offsets); the color takes &quot;accent&quot; or a light|dark pair too</li>
+<li>One-pixel bezel ring along all four screen edges, inside the taskbar too, also with monitor corners off; the frame thickness is measured from inside it. It stays on screen while the frame re-shapes (a settings change, the taskbar moving)</li>
+<li>Frame color source &quot;Title bar&quot;: the frame takes the color of the maximized window's title bar - its fourth row inside the rounded screen, past the inner shadow, read off the screen the way Top Taskbar Bleed reads it (the app is never asked to render), dominant color, columns under a dialog or flyout left out, nothing read while a thumbnail preview shows or while a window is still zooming in or out. A window seen before gets its last color at once; otherwise the row is read every frame until two readings agree, and the frame eases to it over 350 ms. Hovering a thumbnail until Aero Peek shows a maximized window gives the frame that window's color. Each taskbar switches to the light or dark theme to stay readable (per taskbar, via RequestedTheme; the approach is Top Taskbar Bleed's)</li>
+<li>The work area is always shrunk to the rounded screen (the option is gone), so nothing hides under the frame</li>
+<li>Auto-hide taskbar supported: the frame and the work area stay exactly as with the taskbar docked and the taskbar slides over its band; the mod keeps its own appbar over the taskbar's strip, so toggling auto-hide moves no window</li>
+<li>With Monitors set to the primary one, the other monitors' taskbars are handed back and their windows keep Windows' corners, border and shadow</li>
+<li>dwm.exe: one Window corner radius setting (-1 Windows' own, 0 square, else the radius, maximized windows included); border and shadow on maximized windows - the shadow on the topmost maximized window per monitor only, styles learned from DWM's own calls; custom active/inactive border colors with opacity, defaulting to the accent (active) and #3C3C3C (inactive), each also a light|dark pair following the app mode; stays out of dwm.exe after two DWM restarts within a minute of its own load</li>
+<li>dwm.exe: corners stay rounded through maximize, snap and restore animations - DWM's animation clip, which it eases to square, keeps the radius, and on a restore the window being stretched into place has its own clip fitted to the stretch, so its corners don't widen (the clip's geometry is tracked through its destructor; where that can't be hooked, a restore keeps Windows' stretched corner)</li>
+<li>dwm.exe: apps that draw their whole frame themselves, which Windows leaves square (Autodesk AutoCAD 2013, Design Review), are rounded too - &quot;Round apps Windows leaves square&quot; under General, on by default; maximized, their border and clip are cut to the work area, and they stay rounded while AltSnap drags them see-through</li>
+<li>dwm.exe: the accent border color follows the user's accent as it changes - dwm.exe runs under an account of its own, so the explorer.exe part publishes the accent and the app mode - and maximized windows get Windows' accent border only while &quot;Show accent color on title bars and window borders&quot; is on</li>
+<li>Sturdier against Windows updates: every udwm.dll and taskbar.dll symbol is optional, and one an update renames or drops costs only the feature that uses it (logged by name), with fallbacks for the window radius and the taskbar lookup</li>
+<li>Fix: maximized windows' shadows stacked - the windows that don't hold the shadow now get DWM's own no-shadow style</li>
+<li>Fix: maximized windows sometimes came up without their border - a border update DWM makes without asking for the corner radius first now finds the window maximized all the same</li>
+<li>Fix: with Windows' accent option off, maximized windows could pick up an accent border learned from apps that color their own border</li>
+<li>Fix: with a full-screen screen recorder running, the frame covered the taskbar's icons; it now follows the taskbar down when the shell demotes it</li>
+<li>Fix: clicking a grouped taskbar button hid the frame until its thumbnail flyout closed</li>
+<li>Fix: the bezel ring was missing along the taskbar's two ends</li>
+<li>Fix: saving a setting flashed the bezel ring white for a frame or two</li>
+<li>Fix: the edge line showed lighter or darker than its color - it reached its pixel row at three quarters strength, letting the frame or the content behind show through</li>
+<li>Fix: dragging a window under the acrylic frame stuttered (the frame is composed at alpha 255; 254 made DWM render it through a monitor-sized intermediate surface every frame)</li>
+<li>Fix: content DWM changed behind the frame by itself (a minimized window's last image, a shadow after a handover) stayed in the bands; invisible layered windows under each band are repainted on window events so DWM re-reads the backdrop</li>
+<li>Fix: the ArtCraft apps (PhotoCraft and the rest), which drop the caption while maximized, covered the whole monitor and were taken for full-screen apps - the taskbar dropped behind them and Do not disturb came on. Those apps, told by their program, are now moved to the work area once per maximize; other apps that maximize the same way are left as they are</li>
+<li>Fix: screen capture and color picker overlays (ShareX, Snipping Tool, PowerToys Color Picker and others) were taken for full-screen apps and hid the frame they were capturing</li>
+<li>Fix: Show desktop briefly stretches a secondary taskbar's window over its monitor, and the frame on that monitor was torn down and rebuilt; a taskbar window covering its monitor now keeps the strip it was on, and the frame stays</li>
+<li>Performance: title-bar readings no longer allocate a 1 MB histogram each; DWM border updates no longer look up the taskbar window every time</li>
+</ul>
+]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Minimize to tray 1.1.1]]></title>
         <id>https://windhawk.net/mods/minimize-to-tray#13b147a4d7505612f590bc19bd4a37faab0e90a4</id>
@@ -649,318 +774,6 @@ the provider. A mute you set yourself in the Volume Mixer is left alone.</p>
         <author>
             <name>Deen-0x</name>
             <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Live HUD 1.1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-live-hud-radar#074ed83b4b131627bfd23bf64957fbc721906920</id>
-        <link href="https://windhawk.net/mods/taskbar-live-hud-radar"/>
-        <updated>2026-11-11T05:03:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Hides when the taskbar is auto-hidden or made transparent.</li>
-<li>Smoothly follows the taskbar auto-hide animation with zero delay.</li>
-<li>Detects fullscreen windows (F11, media players, games) much faster.</li>
-<li>Fixed an issue where the HUD would remain visible when the taskbar was retracted.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Lemon</name>
-            <uri>https://github.com/lemon-web-stack</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Translucent Menus 1.0.2]]></title>
-        <id>https://windhawk.net/mods/explorer-translucent-menus#835b475ed345822f8b1527367ac17306e4b85c8e</id>
-        <link href="https://windhawk.net/mods/explorer-translucent-menus"/>
-        <updated>2026-11-11T05:03:02.000Z</updated>
-        <content type="html"><![CDATA[<h1>Explorer Translucent Menus</h1>
-<p>Apply translucent materials to classic Win32 popup menus in File Explorer.
-Windows continues to provide menu items, layout, commands, keyboard navigation,
-and shell extensions. Windows 11's modern context menu is left unchanged.</p>
-<p>This is an Explorer-only, menu-focused alternative to the archived
-<a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a> project.
-It covers classic popup menus hosted by <code>explorer.exe</code>, including desktop and
-File Explorer context menus. It leaves the main Explorer window background,
-ordinary controls, and other processes unchanged.</p>
-<h2>Screenshots</h2>
-<p>Materials in light and dark themes</p>
-<p><img src="https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/01-materials-light-dark.png" alt="materials"></p>
-<p>Tint and transparency adjustments</p>
-<p><img src="https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/02-tint-transparency.png" alt="tint"></p>
-<p>Borders and submenus</p>
-<p><img src="https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/03-border-submenus.png" alt="borders"></p>
-<h2>Requirements</h2>
-<ul>
-<li>Windows 11 22H2 or later (build 22621+), 64-bit.</li>
-<li>Desktop composition and Windows transparency effects enabled.</li>
-<li>No other renderer modifying the same Explorer menus.</li>
-</ul>
-<p>To open a classic context menu on Windows 11, select <strong>Show more options</strong> or
-use <strong>Shift+F10</strong>. Select <strong>Native</strong> to disable all hooks. For a temporary bypass,
-enable <strong>Hold Ctrl to bypass</strong> in the settings, then hold <strong>Ctrl</strong> before opening
-a menu.</p>
-<h2>Materials</h2>
-<table>
-<thead>
-<tr>
-<th>Material</th>
-<th>Tint opacity</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Native</td>
-<td>No modifications</td>
-</tr>
-<tr>
-<td>Solid</td>
-<td>Always opaque</td>
-</tr>
-<tr>
-<td>Transparent</td>
-<td>Adjustable, no blur</td>
-</tr>
-<tr>
-<td>Acrylic</td>
-<td>Adjustable tint over blur</td>
-</tr>
-<tr>
-<td>Modern Acrylic</td>
-<td>Adjustable tint color, fixed opacity</td>
-</tr>
-<tr>
-<td>System Acrylic</td>
-<td>Fixed Windows recipe</td>
-</tr>
-<tr>
-<td>Mica / Mica Alt</td>
-<td>Fixed Windows recipes</td>
-</tr>
-</tbody>
-</table>
-<p>Tint opacity changes the material, not text or icons. Theme selection controls
-the light or dark palette. Hover highlight opacity can be adjusted separately.
-Unrecognized saved material values use Acrylic.</p>
-<h2>Appearance</h2>
-<p>Enable <strong>Hide menu border</strong> to suppress the outline on modified menus. This
-preserves menu dimensions and works with rounded or square corners. Native
-mode and Ctrl bypass retain the complete Windows appearance.
-The option also protects the outline setting from later Shell/UxTheme updates
-while the modified menu is being tracked.</p>
-<p>Legacy icon repair converts copied RGB bitmaps to premultiplied alpha. Optional
-background removal clears only matching corner-connected white, black, or
-magenta regions. Disable background removal for icons with intentional borders.
-Transfers that declare per-pixel alpha, and bitmaps with ambiguous partial
-alpha, retain the original GDI behavior. The mod does not guess whether an
-existing alpha bitmap is straight or premultiplied.</p>
-<h2>Scope and rendering approach</h2>
-<p>This mod keeps the Shell's immersive owner-draw enabled and preserves native
-menu layout, commands, and shell extensions. Effects are scoped to supported
-classic popups while a menu is tracked. Preparation validates resources before
-applying effects and exposes the popup to drawing hooks only after commit.
-Only successful state changes are recorded for cleanup. Unassociated memory
-DCs are left to Windows; owner-draw memory DCs require an exact synchronous
-WM_DRAWITEM match.
-GDI and UxTheme hooks are installed in Explorer, but forward to Windows outside
-a tracked menu. The scope is the popup effect, rather than a replacement for
-Explorer's overall interface rendering.</p>
-<p><a href="https://windhawk.net/mods/translucent-windows">Translucent Windows</a> and
-<a href="https://windhawk.net/mods/win32-ui-modernizer">Win32 UI Modernizer</a> already
-offer translucent classic menus. Translucent Windows shares background-effect
-configuration between windows and flyouts, with menu drawing integrated into
-its broader theme-rendering path. Win32 UI Modernizer lets users disable its
-Explorer section and other general features, but its modern menu modes disable
-immersive owner-draw and also modernize ComboBox dropdowns.</p>
-<p>The purpose of this separate implementation is to provide a dedicated popup
-renderer that retains the Shell's owner-draw path and can accompany a separate
-Explorer background renderer. Restricting process targets or adding material
-presets alone does not provide that rendering behavior. An equivalent mode in
-a broader UI mod would need to isolate menu rendering and preserve immersive
-owner-draw as well.</p>
-<h2>Compatibility</h2>
-<p>Menu effects from these mods conflict when enabled on the same Explorer popups:</p>
-<ul>
-<li><a href="https://windhawk.net/mods/translucent-windows">Translucent Windows</a>:
-<strong>Flyout effects</strong> also renders classic menus, dropdowns, and tooltips.
-Disable that option to remove its flyout effects.</li>
-<li><a href="https://windhawk.net/mods/win32-ui-modernizer">Win32 UI Modernizer</a>: set
-<strong>Menus and dropdowns</strong> to <strong>Native (no modernization)</strong>. Both modern modes
-apply their own acrylic rendering and disable immersive owner-draw.</li>
-</ul>
-<p>These settings turn off their direct menu features. Their remaining Explorer
-effects and shared drawing hooks depend on other settings, so compatibility
-must be evaluated with the configuration in use. To avoid their remaining hooks
-in Explorer while continuing to use them in other applications, exclude
-<code>explorer.exe</code> from their targets in Windhawk's Advanced tab.</p>
-<p>This mod is also compatible with
-<a href="https://github.com/Maplespe/ExplorerBlurMica">ExplorerBlurMica</a>, which supplies
-the main Explorer window backdrop. This mod keeps its effects confined to classic
-popup menus and leaves the main window backdrop to ExplorerBlurMica.</p>
-<p>Unknown owner-drawn menus, custom background brushes, high contrast, remote
-sessions, disabled transparency, and recognized conflicting renderers are
-left unchanged. Settings changes reload the mod. Menu opening animations follow
-the Windows settings and the caller's flags, including when effects are active.</p>
-<p>Menus whose previous system-backdrop value cannot be read stay native. Unreadable
-optional dark-mode and corner preferences are left unchanged. Recorded values
-are restored on live-window cleanup; failed restores remain pending for retry.
-There are no public getters for prior blur regions or extended-frame margins,
-and the Accent getter is unavailable on some builds. Cleanup of those states is
-best-effort, not a lossless restoration guarantee for an unknown renderer. A
-missing border-color snapshot likewise uses the Windows default on cleanup.
-Destroyed popup HWNDs release their window-owned effects without extra resets.</p>
-<p>The implementation uses version-dependent Windows interfaces: the composition
-attribute exports, UxTheme ordinal 74, the DarkMode::Menu theme, menu layout
-message 0x1e2, and Shell window properties. It does not read private Shell item
-structures, patch instructions, download symbols, or replace the menu loop.</p>
-<h2>Troubleshooting</h2>
-<p>Enable log output in Windhawk's Advanced tab to record menu preparation,
-material and border application results, native fallback reasons, and cleanup.
-There is no separate logging setting in this mod. Native mode registers no
-menu hooks, so it reports initialization rather than individual menu openings.</p>
-<h2>Credits and license</h2>
-<p>Informed by <a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a>,
-<a href="https://windhawk.net/mods/translucent-windows">Translucent Windows</a>, and
-<a href="https://github.com/Bolt-Scripts/custom-cached-context-menu">Custom Cached Context Menu</a>.
-This implementation is distributed under GPL-3.0-or-later.</p>
-]]></content>
-        <author>
-            <name>alkali210</name>
-            <uri>https://github.com/alkali210</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Outlook Refined 0.6.2]]></title>
-        <id>https://windhawk.net/mods/outlook-refined#87d003102cd41f3f7d71e51b44ab84ce8a0f1d7f</id>
-        <link href="https://windhawk.net/mods/outlook-refined"/>
-        <updated>2026-11-10T22:02:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Credit the author in the readme, with a link to their site.</li>
-<li>Align the agenda and its divider with the favorites list above them. The agenda was positioned against the navigation pane while the list sits inside Outlook's own scrolling container, so the two halves of the pane never shared an edge.</li>
-<li>Give the folder names back 18px. The element holding the folder tree reserves a scrollbar gutter while its own overflow is hidden, so nothing is ever drawn in it; releasing the reservation takes the pane from 163px of usable width to 181px on a 197px pane and leaves 8px on both sides.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Analytic Endeavors</name>
-            <uri>https://github.com/ae-reid-havens</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Fluent Media Player 1.7.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-fluent-media-player#de5105a2c7c6cfb971bd7e3646713506a961ef71</id>
-        <link href="https://windhawk.net/mods/taskbar-fluent-media-player"/>
-        <updated>2026-11-10T21:00:37.000Z</updated>
-        <content type="html"><![CDATA[<h3>The big ones</h3>
-<ul>
-<li><strong>Its own settings window.</strong> Right-click the player and pick Settings. It's built in the Windows 11 style with Mica, sorted into pages, and changes show on the player while you make them. It comes in 15 languages and follows your Windows language by default.</li>
-<li><strong>Settings live in the mod now.</strong> The first time 1.7 runs, it copies everything from Windhawk's settings page, so you don't lose anything. Save keeps your changes, and closing only warns you if something really differs from what's saved.</li>
-<li><strong>Move any part of the player.</strong> Album art, track info, buttons and the visualizer can each be detached and placed somewhere else on the taskbar or tray, with their own background and monitor.</li>
-<li><strong>Progress bar.</strong> It can sit under any part of the player or the whole thing, on its own line or drawn on top. Click or drag it to seek.</li>
-<li><strong>Vertical taskbars.</strong> If yours is docked left or right, the text and album art turn to read along it and the buttons stack up.</li>
-<li><strong>Monitor buttons.</strong> Pick a monitor by clicking its button, numbered like Windows. Click the selected one again to hide the player. Monitors that aren't connected stay gray and become available when you plug them in.</li>
-</ul>
-<h3>Visualizer</h3>
-<ul>
-<li>&quot;Only listen to the app in the player&quot;, on by default, so a Discord call or a game won't move the bars (Windows 11). (#93, #85)</li>
-<li>New: it can fill the background behind the whole player.</li>
-<li>New: Line style, and a Micro version that fits next to the artist text. (#16)</li>
-<li>Pick which audio device it listens to, including recording devices. (#17, #50)</li>
-<li>Hide it when nothing is playing. (#14)</li>
-<li>Tune each of the 7 frequency bands.</li>
-</ul>
-<h3>Player and layout</h3>
-<ul>
-<li>Set the order of album art, text, buttons and visualizer. (#32)</li>
-<li>&quot;Media player offset&quot; moves the player without making the taskbar wider, which helps with floating Taskbar Styler themes. (#88)</li>
-<li>Reorder the media buttons and right-click menu items.</li>
-<li>Hide the whole player while paused, after a delay you choose. (#14)</li>
-<li>Hide the Windows Widgets button.</li>
-</ul>
-<h3>Text</h3>
-<ul>
-<li>Show the album name instead of the artist, or only when there's no cover. (#38)</li>
-<li>Custom text formats with <code>%title%</code>, <code>%artist%</code>, <code>%album%</code> and <code>%artist_or_album%</code>. (#38)</li>
-<li>Show the playback time (like 2:02/4:24) instead of the artist.</li>
-<li>Hide the text when nothing is playing.</li>
-</ul>
-<h3>Clicks and apps</h3>
-<ul>
-<li>Choose an app to open when you click the player with nothing playing. (#23)</li>
-<li>New click actions: minimize, open or minimize, and close the media app. (#53)</li>
-<li>&quot;Only show these apps&quot; mode, and the app filter moved out of Debug into Behaviour. (#64)</li>
-</ul>
-<h3>Mini player</h3>
-<ul>
-<li>Seek bar, with its own color. (#62)</li>
-<li>Background options: Acrylic, solid color, album colors gradient or blurred cover. (#48)</li>
-<li>Corner radius setting, and the bottom icon row can be turned off. (#84)</li>
-</ul>
-<h3>Settings window extras</h3>
-<ul>
-<li>Choose the window's background: Mica, Mica Alt, Acrylic or Acrylic Thin. Acrylic shows what's behind the window, so it works with live wallpapers that Mica can't see, and has its own transparency and blur sliders.</li>
-<li>The title bar can match the window, stay as Windows draws it, or take any color.</li>
-<li>The page fades at its top and bottom edges while you scroll.</li>
-<li>Any color can follow the album, including the window's own accent, which fades to the new color when the song changes.</li>
-<li>Report a bug from inside the window. You choose whether to attach errors, crash info, the log and your settings. Reports also include your PC name and Windows user name, and the form says so.</li>
-<li>Reset to Windhawk's settings, in Other.</li>
-<li>An Animations switch, which also follows Windows' own setting.</li>
-</ul>
-<h3>Fixes</h3>
-<p><strong>Windows updates</strong></p>
-<ul>
-<li>Works again after the updates that changed the system tray and the September taskbar update. (#69, #78, #79, #83, #89, #91)</li>
-<li>If the button the player sits next to doesn't exist on your build, the player goes to the start of the tray instead of disappearing.</li>
-<li>The player no longer vanishes when Do Not Disturb is on.</li>
-</ul>
-<p><strong>Startup and stability</strong></p>
-<ul>
-<li>If the player doesn't make it onto the taskbar at startup, the mod tries again. (#67, #68, #73, #82)</li>
-<li>Media keys keep working after an Explorer restart. (#52)</li>
-<li>The player corrects itself if it ends up on the wrong side of its tray button.</li>
-<li>Security report: fixes for callback handling, the shell32 and windhawk.exe lookups, image handling and unloading. (#71)</li>
-</ul>
-<p><strong>Which app it follows</strong></p>
-<ul>
-<li>The player stays on the app that's playing instead of a paused one. (#22)</li>
-<li>It no longer flashes another app when tracks change. (#34)</li>
-<li>Ignored apps stay out of session switching, and the ignore list also matches the browser's exe. (#66, #70, #77)</li>
-</ul>
-<p><strong>Album art and colors</strong></p>
-<ul>
-<li>Covers up to 24 MB show up. (#81)</li>
-<li>Old art no longer stays when a browser track has none. (#33)</li>
-<li>The Album color works on the progress bar, the visualizer and everything else, including with album art turned off.</li>
-<li>With no album art, dynamic visualizer colors go back to your normal color. (#58)</li>
-<li>Solid backgrounds survive switching between light and dark. (#57)</li>
-</ul>
-<p><strong>Visualizer</strong></p>
-<ul>
-<li>Keeps reacting when you switch the player to another app, like Clipchamp, Firefox or Snipping Tool.</li>
-<li>Much lower GPU use when nothing is playing. (#41)</li>
-</ul>
-<p><strong>Monitors</strong></p>
-<ul>
-<li>Text scrolling and the visualizer keep working after the player moves to another monitor.</li>
-</ul>
-<p><strong>Input and placement</strong></p>
-<ul>
-<li>Pause works reliably in Zen browser. (#26)</li>
-<li>Right and middle double-click actions fire again.</li>
-<li>&quot;Hide when no media&quot; no longer keeps taking up space. (#14)</li>
-<li>Fixed the gap with &quot;Right of Widgets&quot;, and the player going under the icons with Taskbar Styler &quot;Borderless&quot;. (#74)</li>
-</ul>
-<h3>Not in this version</h3>
-<ul>
-<li>Showing the player on several monitors at the same time is still planned. (#15, #90)</li>
-</ul>
-<h3>Thanks</h3>
-<ul>
-<li>Net-zen for the StackPanel tray patch (#87).</li>
-<li>Everyone who reported bugs and tested the alphas on the Windhawk Discord.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>

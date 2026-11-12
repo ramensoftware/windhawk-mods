@@ -2,12 +2,54 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-12T04:32:52.000Z</updated>
+    <updated>2026-11-12T06:00:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[WinPager 0.1.2]]></title>
+        <id>https://windhawk.net/mods/winpager#fe7db7aa5add612e6df8048ac9d71384b10936f0</id>
+        <link href="https://windhawk.net/mods/winpager"/>
+        <updated>2026-11-12T06:00:36.000Z</updated>
+        <content type="html"><![CDATA[<h1>WinPager</h1>
+<p>A virtual desktop pager like KDE Plasma's, living in the Windows 11 taskbar.</p>
+<p><img src="https://raw.githubusercontent.com/seanmamasde/WinPager/main/assets/screenshot1.png" alt="WinPager in the taskbar, showing a desktop's windows"></p>
+<p><img src="https://raw.githubusercontent.com/seanmamasde/WinPager/main/assets/screenshot2.png" alt="The on-screen display when switching desktops"></p>
+<ul>
+<li>Shows every virtual desktop with live window outlines, optionally with application icons</li>
+<li>Click a desktop to switch to it; click the current one to open Task View (configurable)</li>
+<li>Scroll over it to flip through desktops</li>
+<li>Drag a window outline onto another desktop to move that window there</li>
+<li>Hover a desktop for a list of its windows; right-click to add or remove desktops</li>
+<li>Ctrl+Shift+Win+Left/Right moves the active window to the neighbouring desktop and follows it</li>
+<li>KWin-style on-screen display when switching, and an option to hide Windows' own &quot;Desktop N&quot; popup</li>
+<li>A pager on each monitor's taskbar, or one on the main taskbar showing all monitors</li>
+<li>Can show only a few desktops at a time, scrolling along with the current one</li>
+<li>Follows light/dark mode and the accent color</li>
+</ul>
+<p>The settings mirror those of Plasma's Pager widget, plus position, theme and the switching popups.</p>
+<p>The mod runs in its own process; it isn't injected into explorer.exe.</p>
+<h2>Notes</h2>
+<ul>
+<li>Windows 11 24H2/25H2 (build 26100 and later) only. Like other virtual desktop tools, it relies on undocumented
+virtual desktop interfaces, so a Windows update can break it. On a build it doesn't know, it shows an error.</li>
+<li>The taskbar doesn't reserve space for it. Next to a centered row of buttons it shows only as many desktops as fit
+(at least the current one); on a left-aligned taskbar, a row of buttons long enough to reach the tray runs under it.</li>
+<li>With &quot;Hide the Windows &quot;Desktop N&quot; popup&quot; on, a volume or brightness popup shown within 0.6 s of a switch is hidden
+too, since Explorer shows both in the same window.</li>
+<li>WinPager is also a standalone app, <a href="https://github.com/seanmamasde/WinPager">WinPager.exe</a>, built from the same
+source. Only one of the two runs at a time: if you switch to the mod, quit WinPager.exe and turn off its
+&quot;Start with Windows&quot;.</li>
+<li>Bugs and ideas: <a href="https://github.com/seanmamasde/WinPager/issues">github.com/seanmamasde/WinPager/issues</a></li>
+</ul>
+]]></content>
+        <author>
+            <name>seanmamasde</name>
+            <uri>https://github.com/seanmamasde</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8/8.1 Taskbar Recreation 1.0.0]]></title>
         <id>https://windhawk.net/mods/win81-taskbar-recreation#065407515062d95879eb965294ebbba68ea309a8</id>
@@ -1768,40 +1810,6 @@ found by their names in English and Dutch apps.</li>
         <author>
             <name>grn15RenS</name>
             <uri>https://github.com/grn15RenS</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Quick Share Flyout 1.0.0]]></title>
-        <id>https://windhawk.net/mods/quick-share-flyout#3cef2b9dd0957a2340d46f0aa5f7d14206680a7d</id>
-        <link href="https://windhawk.net/mods/quick-share-flyout"/>
-        <updated>2026-11-08T04:00:25.000Z</updated>
-        <content type="html"><![CDATA[<h1>Quick Share Flyout</h1>
-<p>Opens Google's <a href="https://www.android.com/better-together/quick-share-app/">Quick Share for Windows</a>
-as a flyout above the system tray, like the Windows 11 quick settings, instead
-of a window in the middle of the screen.</p>
-<p><img src="https://raw.githubusercontent.com/0Allu/quick-share-flyout/main/assets/quick-share-flyout-demo.gif" alt="Quick Share Flyout demo"></p>
-<p>Click the Quick Share tray icon to open or close the flyout. If the icon is in
-the tray overflow menu, the flyout opens beside the menu.</p>
-<h2>Features</h2>
-<ul>
-<li>Opens above the tray icon and slides out from the taskbar</li>
-<li>No title bar, with rounded corners</li>
-<li>Stays above other windows, and closes when you click somewhere else</li>
-<li>Drag files onto it from File Explorer</li>
-<li>Moves notifications out of the way while it's open</li>
-<li>Hidden from the taskbar and Alt+Tab</li>
-<li>Adjustable size</li>
-</ul>
-<h2>Sending files</h2>
-<p>Drag files from File Explorer onto the flyout. It stays open while you drag
-and after you drop, until you click somewhere else. Clicking another window
-closes it, so pick the files first, then open the flyout and drag them in.</p>
-<p>You can also right-click files and choose <strong>Send with Quick Share</strong>, or use
-<strong>Select</strong> in the flyout.</p>
-]]></content>
-        <author>
-            <name>0Allu</name>
-            <uri>https://github.com/0Allu</uri>
         </author>
     </entry>
 </feed>
