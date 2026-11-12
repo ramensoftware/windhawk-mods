@@ -8411,9 +8411,10 @@ static bool TouchpadHandlingEnabled() {
 
 // The object hook follows the session. While a session exists it observes
 // show, hide and destroy for live list updates. While hidden, only touchpad
-// handling needs it: the hidden sticky shield suppresses Task View and the
-// native switcher on show. Otherwise no object events are delivered while
-// hidden. The foreground hook (MRU tracking) stays installed throughout.
+// handling with an available precision touchpad reader needs it: the hidden
+// sticky shield suppresses Task View and the native switcher on show.
+// Otherwise no object events are delivered while hidden. The foreground hook
+// (MRU tracking) stays installed throughout.
 enum class ObjectEventHookMode { None, ShowOnly, Full };
 static ObjectEventHookMode s_objectEventHookMode = ObjectEventHookMode::None;
 
@@ -8439,8 +8440,11 @@ static void SetObjectEventHookMode(ObjectEventHookMode mode) {
 }
 
 static void ApplyHiddenObjectEventHook() {
-    SetObjectEventHookMode(TouchpadHandlingEnabled() ? ObjectEventHookMode::ShowOnly
-                                                     : ObjectEventHookMode::None);
+    // Both hidden show consumers also require the reader, so without a precision
+    // touchpad the hook would only deliver events nothing acts on.
+    SetObjectEventHookMode(TouchpadHandlingEnabled() && g_touchpadReaderAvailable.load()
+                               ? ObjectEventHookMode::ShowOnly
+                               : ObjectEventHookMode::None);
 }
 static bool TouchpadStickyLaunchEnabled() {
     return g_touchpadStickyLaunchEnabled.load();
@@ -20700,6 +20704,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             FinishRawTouchpadShield();
         }
         RefreshTouchpadGestureKinds();
+        if (!g_isVisible && !g_isPendingShow) ApplyHiddenObjectEventHook();
         return 0;
     case WM_SWS_SETTINGS_CHANGED:
         ClearStickyTwoFingerTapOwnership();
