@@ -10637,15 +10637,15 @@
         "ratingUsers": 134,
         "reviews": 0,
         "trendingSorting": 14.518081065617052,
-        "updated": 1792310686000,
+        "updated": 1794517301000,
         "users": 3558
       },
       "metadata": {
         "architecture": [
-          "amd64"
+          "x86-64"
         ],
         "author": "Zach Vaughn",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion -lgdi32 -lshell32 -lshcore -ladvapi32",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion -lgdi32 -lshell32 -lshcore -ladvapi32 -ldwmapi -lgdiplus -ld2d1",
         "description": "Turns the Windows 11 taskbar into a macOS-style dock with magnifying icons",
         "github": "https://github.com/zachvdev",
         "include": [
@@ -10653,7 +10653,7 @@
         ],
         "license": "GPL-3.0",
         "name": "MacOS Style Dock",
-        "version": "1.0"
+        "version": "1.1.2"
       }
     },
     "magic-mouse": {
