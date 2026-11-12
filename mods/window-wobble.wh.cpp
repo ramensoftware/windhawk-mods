@@ -2,7 +2,7 @@
 // @id              window-wobble
 // @name            Window Wobble
 // @description     KDE-style spring-physics window dragging, without injecting into dwm.exe
-// @version         1.0.0
+// @version         1.0.1
 // @author          HeyJeay
 // @github          https://github.com/heyjeay
 // @homepage        https://github.com/heyjeay/window-wobble
@@ -562,7 +562,36 @@ struct Mesh {
         settled = false;
     }
 
+    // Semi-implicit Euler is only conditionally stable. The velocity update
+    // multiplies by (1 - d*dt), so any step longer than 2/d amplifies motion
+    // instead of damping it, and the spring adds its own limit at
+    // 2/sqrt(k). The settle constants (k=12000, d=210) put that boundary at
+    // 9.5ms - shorter than a single frame on a 60Hz display. Releasing the
+    // button while the mesh was still moving then grew it without bound: the
+    // window sheared, flew off screen, and only came back when the settle
+    // budget ran out, because a diverging mesh never meets the rest
+    // tolerance. Released at rest it looked fine, since zero displacement
+    // amplifies to zero - which is exactly the "only while still in motion"
+    // part of the report.
+    //
+    // Sub-step so the integrator never sees an interval it cannot handle,
+    // whatever the refresh rate or frame hitch. At 60Hz the settle takes 8
+    // sub-steps of a 289-vertex mesh, which is nothing.
     bool Update(float dt) {
+        if (settled) return false;
+        const float d0 = bandK > 0.0f ? bandD : cfg.damping;
+        const float k0 = bandK > 0.0f ? bandK : cfg.springK;
+        const float limit = fminf(2.0f / fmaxf(d0, 1e-3f),
+                                  2.0f / fmaxf(sqrtf(fmaxf(k0, 1e-3f)), 1e-3f));
+        int steps = (int)ceilf(dt / (0.25f * limit));   // quarter of the limit
+        if (steps < 1)  steps = 1;
+        if (steps > 64) steps = 64;                     // bounded, never a stall
+        const float h = dt / (float)steps;
+        for (int s = 0; s < steps && !settled; ++s) Step(h);
+        return !settled;
+    }
+
+    bool Step(float dt) {
         if (settled) return false;
         const bool band = bandK > 0.0f;
         const float kBase = band ? bandK : cfg.springK;
@@ -614,6 +643,20 @@ struct Mesh {
             pos[n].x += vel[n].x * dt;
             pos[n].y += vel[n].y * dt;
             maxVel = fmaxf(maxVel, fmaxf(fabsf(vel[n].x), fabsf(vel[n].y)));
+        }
+
+        // Belt and braces. Sub-stepping above keeps the integrator stable,
+        // but nothing on screen is worth an off-screen window: if the mesh
+        // ever leaves plausible bounds, or a NaN gets in, drop it flat at
+        // rest so the handoff still has something correct to reveal under.
+        if (!(maxDisp < 1.0e5f) || !(maxVel < 1.0e7f)) {
+            pos = rest;
+            std::fill(vel.begin(), vel.end(), Vec2{0, 0});
+            bandK = bandD = 0.0f;
+            settled = true;
+            Wh_Log(L"mesh left plausible bounds (disp=%g vel=%g) - reset to rest",
+                   (double)maxDisp, (double)maxVel);
+            return false;
         }
 
         // Sub-pixel exactness is invisible, and demanding it kept the mesh
