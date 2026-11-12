@@ -42,7 +42,7 @@
 
 **1.1.0**
 
-- **Preview window**: check fit, colors and speed without locking the PC. Open it from the settings, a hotkey (Ctrl+Alt+P by default, and you can type your own) or a tray icon. It can also draw the real clock, date and status icons over the video.
+- **Preview window**: check fit, colors and speed without locking the PC. Open it from the settings, a hotkey (off by default, type your own such as Ctrl+Alt+P) or a tray icon. It can also draw the real clock, date and status icons over the video.
 - **Animated GIF support**: `gif` files work as a source, alone or inside a folder. GIFs with more than 3840x2160 pixels in total are rejected, because they could use hundreds of MB of memory inside `LogonUI.exe`.
 - **Low battery saver**: lower the frame rate or the render width, or freeze on a still frame, when the battery is low.
 - **Dim**: darken the video so the clock is easier to read.
@@ -94,7 +94,7 @@
 | **Play video on the password screen** | On (default) keeps the video playing while you type your password. Off freezes it on the password screen, which can help if playback stutters there, and it plays again on the lock screen. |
 | **Behavior right after boot** and **Still frame duration after boot** | With **Show last frame**, the first minutes after boot show the last saved frame without decoding. How long is set by **Still frame duration after boot** (10 to 1800 seconds, 180 by default). Needs at least one earlier session where the video was playing. |
 | **Show preview window** | Opens the preview window and keeps it open. Saving the settings refreshes it without closing it, unless a preview option itself changed. You can resize the window (the aspect ratio stays) and it remembers its size and position. `Esc` or the close button hides it, and a hidden or minimized preview does not decode anything. |
-| **Preview hotkey** | A global shortcut that shows or hides the preview window. It is a text field with `Ctrl+Alt+P` as the default: delete the text to turn the hotkey off, or type your own combination, for example `Ctrl+Alt+Shift+P` or `Ctrl+Shift+F12`. Write the modifiers (`Ctrl`, `Alt`, `Shift`, `Win`) and one key joined with `+`; at least one modifier is required. The key can be a letter, a digit, `F1` to `F24`, `Space`, `Tab`, `Enter`, `Esc`, `Insert`, `Delete`, `Home`, `End`, `PgUp`, `PgDn` or an arrow key (`Up`, `Down`, `Left`, `Right`). Many combinations with `Win` are already used by Windows itself. Text that cannot be read is ignored and the log shows `is not valid`. If another program already uses the combination, Windows refuses it and the log shows `RegisterHotKey failed`. While the hotkey is on, the mod keeps a small hidden window inside `explorer.exe` to listen for it. |
+| **Preview hotkey** | A global shortcut that shows or hides the preview window. It is a text field that is empty by default (hotkey off): type a combination to turn it on, for example `Ctrl+Alt+P`, `Ctrl+Alt+Shift+P` or `Ctrl+Shift+F12`. Write the modifiers (`Ctrl`, `Alt`, `Shift`, `Win`) and one key joined with `+`; at least one modifier is required. The key can be a letter, a digit, `F1` to `F24`, `Space`, `Tab`, `Enter`, `Esc`, `Insert`, `Delete`, `Home`, `End`, `PgUp`, `PgDn` or an arrow key (`Up`, `Down`, `Left`, `Right`). Many combinations with `Win` are already used by Windows itself. Text that cannot be read is ignored and the log shows `is not valid`. If another program already uses the combination, Windows refuses it and the log shows `RegisterHotKey failed`. While the hotkey is on, the mod keeps a small hidden window inside `explorer.exe` to listen for it. |
 | **Tray icon** | Left click shows or hides the preview window, right click opens a small menu. |
 | **Preview stays on top** | Keeps the preview window above other windows. When it is off, other windows can cover the preview. |
 | **Clock, date and status icons in the preview** | The clock, date and status icons are drawn by `LockApp.exe`, not by `LogonUI.exe`. The mod captures them from the real lock screen every time you lock the PC (wait about 6 seconds without touching anything), and the preview uses the newest copy, so the clock in the preview shows the time of the last lock. While it renders them, the real clock and date move down for a split second; turn this option off if that bothers you, and the mod stops capturing. Until a copy exists, the preview says so at the bottom. |
@@ -209,7 +209,7 @@ Only tested on Windows 11 23H2 and 25H2. This mod runs inside a system UI proces
 
 **1.1.0**
 
-- **Jendela preview**: cek fit, warna, dan kecepatan tanpa harus mengunci PC. Bisa dibuka dari pengaturan, hotkey (default Ctrl+Alt+P, bisa kamu ganti sendiri), atau tray icon. Jendela ini juga bisa menggambar jam, tanggal, dan ikon status asli di atas videonya.
+- **Jendela preview**: cek fit, warna, dan kecepatan tanpa harus mengunci PC. Bisa dibuka dari pengaturan, hotkey (mati secara default, ketik sendiri misalnya Ctrl+Alt+P), atau tray icon. Jendela ini juga bisa menggambar jam, tanggal, dan ikon status asli di atas videonya.
 - **Dukungan GIF animasi**: file `gif` bisa dipakai sebagai sumber, sendirian atau di dalam folder. GIF dengan lebih dari 3840x2160 piksel secara total ditolak, karena bisa memakai ratusan MB memori di dalam `LogonUI.exe`.
 - **Penghemat baterai**: turunkan frame rate atau lebar render, atau bekukan di satu frame, saat baterai rendah.
 - **Dim**: gelapkan video supaya jam lebih mudah dibaca.
@@ -261,7 +261,7 @@ Only tested on Windows 11 23H2 and 25H2. This mod runs inside a system UI proces
 | **Play video on the password screen** | Aktif (default) berarti video tetap diputar saat kamu mengetik password. Jika dimatikan, video dibekukan di layar password (berguna jika video patah-patah di sana), dan diputar lagi di lock screen. |
 | **Behavior right after boot** dan **Still frame duration after boot** | Dengan **Show last frame**, beberapa menit pertama setelah boot menampilkan frame terakhir yang tersimpan tanpa decoding. Lamanya diatur oleh **Still frame duration after boot** (10 sampai 1800 detik, default 180). Butuh minimal satu sesi sebelumnya di mana video sempat diputar. |
 | **Show preview window** | Membuka jendela preview dan membiarkannya tetap terbuka. Menyimpan pengaturan me-refresh jendelanya tanpa menutupnya, kecuali opsi preview itu sendiri yang berubah. Ukuran jendela bisa diubah (rasio aspek tetap), dan ukuran serta posisinya diingat. `Esc` atau tombol tutup menyembunyikannya, dan preview yang tersembunyi atau di-minimize tidak men-decode apa pun. |
-| **Preview hotkey** | Pintasan global untuk menampilkan atau menyembunyikan jendela preview. Berupa kolom teks dengan isi default `Ctrl+Alt+P`: hapus teksnya untuk mematikan hotkey, atau ketik kombinasimu sendiri, misalnya `Ctrl+Alt+Shift+P` atau `Ctrl+Shift+F12`. Tulis modifier (`Ctrl`, `Alt`, `Shift`, `Win`) dan satu tombol yang digabung dengan `+`; minimal satu modifier wajib ada. Tombolnya bisa huruf, angka, `F1` sampai `F24`, `Space`, `Tab`, `Enter`, `Esc`, `Insert`, `Delete`, `Home`, `End`, `PgUp`, `PgDn`, atau tombol panah (`Up`, `Down`, `Left`, `Right`). Banyak kombinasi dengan `Win` sudah dipakai Windows sendiri. Teks yang tidak terbaca diabaikan dan log menampilkan `is not valid`. Kalau kombinasinya sudah dipakai program lain, Windows menolaknya dan log menampilkan `RegisterHotKey failed`. Selama hotkey aktif, mod menjaga satu jendela tersembunyi kecil di dalam `explorer.exe` untuk mendengarkannya. |
+| **Preview hotkey** | Pintasan global untuk menampilkan atau menyembunyikan jendela preview. Berupa kolom teks yang kosong secara default (hotkey mati): ketik kombinasi untuk menyalakannya, misalnya `Ctrl+Alt+P`, `Ctrl+Alt+Shift+P` atau `Ctrl+Shift+F12`. Tulis modifier (`Ctrl`, `Alt`, `Shift`, `Win`) dan satu tombol yang digabung dengan `+`; minimal satu modifier wajib ada. Tombolnya bisa huruf, angka, `F1` sampai `F24`, `Space`, `Tab`, `Enter`, `Esc`, `Insert`, `Delete`, `Home`, `End`, `PgUp`, `PgDn`, atau tombol panah (`Up`, `Down`, `Left`, `Right`). Banyak kombinasi dengan `Win` sudah dipakai Windows sendiri. Teks yang tidak terbaca diabaikan dan log menampilkan `is not valid`. Kalau kombinasinya sudah dipakai program lain, Windows menolaknya dan log menampilkan `RegisterHotKey failed`. Selama hotkey aktif, mod menjaga satu jendela tersembunyi kecil di dalam `explorer.exe` untuk mendengarkannya. |
 | **Tray icon** | Klik kiri menampilkan atau menyembunyikan jendela preview, klik kanan membuka menu kecil. |
 | **Preview stays on top** | Menjaga jendela preview tetap di atas jendela lain. Kalau dimatikan, jendela lain bisa menutupinya. |
 | **Clock, date and status icons in the preview** | Jam, tanggal, dan ikon status digambar oleh `LockApp.exe`, bukan oleh `LogonUI.exe`. Mod menangkapnya dari lock screen asli setiap kali kamu mengunci PC (tunggu sekitar 6 detik tanpa menyentuh apa pun), dan preview memakai salinan terbaru, jadi jam di preview menunjukkan waktu lock terakhir. Saat merendernya, jam dan tanggal asli bergeser turun sepersekian detik; matikan opsi ini kalau mengganggu, dan mod berhenti menangkap. Sebelum salinannya ada, preview menuliskannya di bagian bawah. |
@@ -354,7 +354,7 @@ Hanya diuji di Windows 11 23H2 dan 25H2. Mod ini berjalan di dalam proses UI sis
 - general:
   - videoPath: ""
     $name: Video file or folder
-    $description: Full path to a video file (mp4 recommended), or a folder with videos (one is picked at random each lock).
+    $description: Full path to a video file (mp4 or gif), or a folder with videos. When it is a folder, "Folder order" below decides which video is used on each lock.
   - folderOrder: random
     $name: Folder order
     $description: When the path is a folder, how the video is chosen on each lock.
@@ -448,16 +448,16 @@ Hanya diuji di Windows 11 23H2 dan 25H2. Mod ini berjalan di dalam proses UI sis
   - enabled: false
     $name: Show preview window
     $description: Opens a window that plays your video with the current fit, color and speed settings, so you can check them without locking the PC. It runs inside explorer.exe and refreshes every time you save the settings. It shows the wallpaper only, not the Windows lock screen UI.
-  - hotkey: Ctrl+Alt+P
+  - hotkey: ""
     $name: Preview hotkey
-    $description: Global shortcut that shows or hides the preview window. Write the modifiers (Ctrl, Alt, Shift, Win) and one key joined with +, for example Ctrl+Alt+Shift+P or Ctrl+Shift+F12. At least one modifier is needed. Clear the text to turn the hotkey off.
+    $description: Global shortcut that shows or hides the preview window. Empty (default) = off. To turn it on, write the modifiers (Ctrl, Alt, Shift, Win) and one key joined with +, for example Ctrl+Alt+P or Ctrl+Shift+F12. At least one modifier is needed.
   - trayIcon: false
     $name: Tray icon
     $description: Adds a tray icon. Left click shows or hides the preview window, right click opens a small menu.
   - alwaysOnTop: true
     $name: Preview stays on top
     $description: Keeps the preview window above other windows.
-  - showOverlay: true
+  - showOverlay: false
     $name: Show clock, date and status icons in the preview
     $description: Draws the clock, date, battery and network icons over the preview video. They are captured from the real lock screen every time you lock the PC (wait about 6 seconds without touching anything) and the newest copy is used. While capturing, the real clock and date move down for a split second; turn this off to stop capturing. Needs the mod to be loaded in LockApp.exe.    
   $name: Preview
@@ -2082,7 +2082,7 @@ void Step() {
         }
 
         bool both = g_imgA && g_imgB;
-        DWORD interval = both ? (light ? 250u : 150u) : (now - g_initTick < 5000 ? 30u : 100u);
+        DWORD interval = both ? (light ? 250u : 1000u) : (now - g_initTick < 5000 ? 30u : 100u);
         if (now - g_lastFind >= interval) {
             g_lastFind = now;
             auto window = Window::Current();
@@ -2246,7 +2246,8 @@ DWORD WINAPI Worker(LPVOID) {
     FileLog(L"Window=%p thread=%u hook=%p", g_wnd, tid, hk);
     while (!g_stop && IsWindow(g_wnd)) {
         PostMessageW(g_wnd, WM_NULL, 0, 0);
-        Sleep(16);
+        Sleep((g_idlePaused.load() || g_decoderDone.load() || !g_decThread) ? 1000
+              : (GetTickCount() - g_initTick < 5000 ? 16 : 200));
     }
     // Exiting because of fail-safe / uninit / window gone: remove the hook so
     // the UI thread has no more overhead.
@@ -2461,6 +2462,7 @@ static void PreviewShow() {
     PreviewLoadOverlay(false);
     if (!g_decThread && !(g_paused && g_cacheHit))
         g_decThread = CreateThread(nullptr, 0, DecodeThread, nullptr, 0, nullptr);
+    SetTimer(g_prevWnd, 1, 33, nullptr);
     ShowWindow(g_prevWnd, IsIconic(g_prevWnd) ? SW_RESTORE : SW_SHOW);
     SetForegroundWindow(g_prevWnd);
 }
@@ -2469,6 +2471,7 @@ static void PreviewHide() {
     if (!g_prevWnd) return;
     PreviewSavePlacement();
     ShowWindow(g_prevWnd, SW_HIDE);
+    KillTimer(g_prevWnd, 1);    
     g_idlePaused = true;   // the decoder parks itself while the window is hidden
 }
 
@@ -2568,7 +2571,7 @@ static LRESULT CALLBACK PreviewProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_TIMER:
         { static int s_ovTick = 0; if (wp == 1 && ++s_ovTick % 60 == 0) PreviewLoadOverlay(false); }
         if (wp == 1 && (g_seq != g_prevLastSeq || g_ovDirty) && TryEnterCriticalSection(&g_cs)) {
-            if (g_prevPx.size() == g_frameBytes)
+            if (g_prevPx.size() == g_frameBytes && g_shared.size() == g_frameBytes)
                 memcpy(g_prevPx.data(), g_shared.data(), g_frameBytes);
             g_prevLastSeq = g_seq;
             PreviewBlendOverlay();
@@ -2719,10 +2722,10 @@ static DWORD WINAPI PreviewThread(LPVOID) {
 // Renders LockScreenTextContent (clock, date, status icons, media controls) to a
 // transparent bitmap and saves it to overlay.bgra for the preview window.
 static bool g_ovWanted = false;
-static int g_ovState = 0;          // 0 = not yet, 1 = capture running, 2 = done (UI thread only)
+static std::atomic<int> g_ovState{0};   // 0 = not yet, 1 = capture running, 2 = done
 static DWORD g_ovLastTry = 0;
-static DWORD g_ovSession = 0;      // when the current lock session was first seen
-static DWORD g_ovLastMsg = 0;      // last time the hook ran (to detect a suspended LockApp)
+static DWORD g_ovSession = 0;           // when the current lock session was first seen
+static DWORD g_ovLastMsg = 0;           // last time the hook ran (to detect a suspended LockApp)
 static void SaveOverlay(const uint8_t* px, int w, int h) {
     CreateDirectoryW(kCacheDir, nullptr);
     HANDLE f = CreateFileW(kOverlayTmp, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
@@ -2794,10 +2797,12 @@ static winrt::fire_and_forget CaptureOverlayParts(UIElement root) {
                     tbk.Padding(oldPad);          // always put the real layout back
                     if (heightChanged) fe.Height(oldH);
                 }
+                if (g_stop) { g_ovState = 0; co_return; }
                 if (!renderedPart) continue;
                 int pw = rtb.PixelWidth(), ph = rtb.PixelHeight();
                 if (pw <= 0 || ph <= 0 || pw > 4096 || ph > 4096) continue;
                 auto buf = co_await rtb.GetPixelsAsync();
+                if (g_stop) { g_ovState = 0; co_return; }                
                 winrt::com_ptr<IBufferByteAccess> bba;
                 winrt::check_hresult(winrt::get_unknown(buf)->QueryInterface(
                     IID_IBufferByteAccess_, bba.put_void()));
@@ -2916,6 +2921,7 @@ static HANDLE g_probeThread = nullptr;
 static std::atomic<HHOOK> g_probeHook{nullptr};
 static DWORD g_probeStart = 0;
 static int g_probeDumps = 0;
+static HWND g_probeWnd = nullptr;
 
 static LRESULT CALLBACK ProbeMsgProc(int code, WPARAM w, LPARAM l) {
     if (code >= 0 && !g_stop) {
@@ -2987,6 +2993,7 @@ static DWORD WINAPI ProbeThread(LPVOID) {
     }
     DWORD tid = GetWindowThreadProcessId(w, nullptr);
     g_probeStart = GetTickCount();
+    g_probeWnd = w;    
     g_ovSession = g_probeStart;    
     HHOOK hk = SetWindowsHookExW(WH_GETMESSAGE, ProbeMsgProc, nullptr, tid);
     g_probeHook = hk;
@@ -3032,6 +3039,10 @@ BOOL Wh_ModInit() {
             g_ovWanted = false;
         }
         FileLog(L"Overlay: LockApp side wanted=%d, file=%s", g_ovWanted ? 1 : 0, kOverlayFile);
+        if (!g_ovWanted && !g_debug) {
+            FileLog(L"LockApp: overlay and debug log are off, mod idle");
+            return FALSE;
+        }        
         return LockAppInit();
     }
     if (Wh_GetModStoragePath(kCacheDir, MAX_PATH) == 0) {
@@ -3116,6 +3127,7 @@ BOOL Wh_ModInit() {
     if (kH < 180) kH = 180;
     if (kH > 4096) kH = 4096;
     g_frameBytes = (size_t)kW * kH * 4;
+    g_shared.assign(g_frameBytes, 0);    
     LoadColorSettings();
     {
         PCWSTR fm = Wh_GetStringSetting(L"general.fitMode");
@@ -3241,7 +3253,15 @@ void Wh_ModUninit() {
             CloseHandle(g_probeThread);
             g_probeThread = nullptr;
         }
-        Sleep(100);   // let a hook call that is still running on the UI thread finish
+        HWND pw = g_probeWnd;
+        if (pw && IsWindow(pw)) {
+            DWORD_PTR r = 0;
+            SendMessageTimeoutW(pw, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 5000, &r);   // barrier: no hook call still running
+        }
+        // wait for a pending overlay capture (its continuation finishes on LockApp's UI thread)
+        for (int i = 0; i < 100 && g_ovState.load() == 1; i++) Sleep(50);
+        if (g_ovState.load() == 1) FileLog(L"Overlay: capture still pending at uninit");
+        else Sleep(50);   // let the coroutine frame finish returning
     }    
     if (g_previewRole && g_prevThread) {
         g_stop = true;
