@@ -164,7 +164,7 @@ released, so a plain right click still opens the context menu. Over a window the
 (in the grid or floating), dragging with that button no longer works while the option is on;
 anywhere else (the desktop, the taskbar, maximized windows, ignored apps) the click is not touched
 at all. It needs a low-level mouse hook, which only exists while this option
-(or the Alt + right button resize) is on.
+(or one of the two Alt gestures, resize or move) is on.
 
 ### Works with other animation mods
 Adaptive Windows works together with these two mods:
@@ -372,7 +372,7 @@ então um clique direito comum continua abrindo o menu de contexto. Sobre uma ja
 administra (na grade ou solta), arrastar com esse botão deixa de funcionar enquanto a opção está
 ligada; em qualquer outro lugar (a área de trabalho, a barra de tarefas, janelas maximizadas, apps
 ignorados) o clique nem é tocado. Ela precisa de um gancho de mouse de baixo nível, que só
-existe enquanto esta opção (ou o redimensionar com Alt + botão direito) está ligada.
+existe enquanto esta opção (ou um dos dois gestos com Alt, redimensionar ou mover) está ligada.
 
 ### Funciona junto com outros mods de animação
 O Adaptive Windows funciona junto com estes dois mods:
