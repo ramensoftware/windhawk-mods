@@ -81,15 +81,19 @@ cursor follows the mouse (the right side if you hold the right half of the windo
 drag outward to enlarge the window, inward to shrink it. The other windows move out of the way
 while you drag, so nothing overlaps.
 A side against the screen border has no neighbor, so the opposite side is used instead; if neither
-side has a neighbor, the window goes back to its slot. Esc cancels. AltSnap / AltDrag use the same
-Alt + right button gesture: if you run one of them too, change the gesture there or leave this
-option off, otherwise windows of the grid are resized by this mod and the other windows by them.
+side has a neighbor, the window goes back to its slot. Esc cancels.
 
 Windows can be moved in a similar way: turn on *Move windows with Alt + left button*, hold Alt and
 the left button anywhere over a window, and drag. A floating window just moves. A window of the
 grid is pulled out of the grid after a short drag (about 40 px) and follows the mouse as a floating
 window. If the radial menu is set to Alt + left button, that gesture opens the menu over windows of
 the grid instead.
+
+**If you also use AltDrag or AltSnap.** They use the same two gestures (Alt + left button to move,
+Alt + right button to resize) on every window. With both running, a drag over a window this mod
+manages goes to this mod, and a drag anywhere else goes to them. To avoid two tools answering the
+same gesture, leave these two options off here (they are off by default) or change the gesture
+there.
 
 In the "main left" / "main top" layouts, dragging the divider of the main window changes how much of
 the screen it takes. Each app's minimum size still applies. Your sizes are discarded when a window
@@ -156,9 +160,10 @@ are the focused window border ones, following its effect (pulse, rainbow, gradie
 *Custom* to set the ring color and the selection color yourself. The ring thickness can be set too.
 
 If you release without leaving the ring, the click is passed on to the app when the button is
-released, so a plain right click still opens the context menu. Over a window of the grid,
-dragging with that button no longer works while the option is on; anywhere else (the desktop, the
-taskbar, windows outside the grid) the click is not touched at all. It needs a low-level mouse hook, which only exists while this option
+released, so a plain right click still opens the context menu. Over a window the mod manages
+(in the grid or floating), dragging with that button no longer works while the option is on;
+anywhere else (the desktop, the taskbar, maximized windows, ignored apps) the click is not touched
+at all. It needs a low-level mouse hook, which only exists while this option
 (or the Alt + right button resize) is on.
 
 ### Works with other animation mods
@@ -283,15 +288,19 @@ lateral mais próxima do cursor acompanha o mouse (a direita, se você segurar a
 janela, e assim por diante): arraste para fora para aumentar a janela, para dentro para diminuir.
 As outras janelas abrem espaço enquanto você arrasta, sem sobreposição. Uma lateral junto da borda da tela não tem vizinha,
 então vale a lateral oposta; se nenhuma das duas tiver vizinha, a janela volta ao seu espaço. Esc
-cancela. O AltSnap / AltDrag usam o mesmo gesto de Alt + botão direito: se você também usa um deles,
-troque o gesto lá ou deixe esta opção desligada; senão as janelas da grade são redimensionadas por
-este mod e as demais por eles.
+cancela.
 
 As janelas podem ser movidas de forma parecida: ligue *Mover janelas com Alt + botão esquerdo*,
 segure Alt e o botão esquerdo em qualquer ponto de uma janela e arraste. Uma janela solta apenas se
 move. Uma janela da grade é arrancada da grade depois de um arrasto curto (uns 40 px) e acompanha o
 mouse como janela solta. Se o menu radial estiver em Alt + botão esquerdo, esse gesto abre o menu
 sobre as janelas da grade.
+
+**Se você também usa o AltDrag ou o AltSnap.** Eles usam os mesmos dois gestos (Alt + botão esquerdo
+para mover, Alt + botão direito para redimensionar) em qualquer janela. Com os dois ligados, um
+arrasto sobre uma janela que este mod administra fica com este mod, e em qualquer outro lugar fica
+com eles. Para não ter duas ferramentas respondendo ao mesmo gesto, deixe estas duas opções
+desligadas aqui (é o padrão) ou troque o gesto lá.
 
 Nos layouts "principal à esquerda" / "principal em cima", arrastar a divisória da janela principal
 muda a parte da tela que ela ocupa. O tamanho mínimo de cada app continua valendo. Os tamanhos
@@ -359,9 +368,10 @@ borda da janela em foco, acompanhando o efeito dela (pulsar, arco-íris, degrad�
 também pode ser escolhida.
 
 Se você soltar sem sair do anel, o clique é repassado ao app no momento em que o botão é solto,
-então um clique direito comum continua abrindo o menu de contexto. Sobre uma janela da grade,
-arrastar com esse botão deixa de funcionar enquanto a opção está ligada; em qualquer outro lugar (a
-área de trabalho, a barra de tarefas, janelas fora da grade) o clique nem é tocado. Ela precisa de um gancho de mouse de baixo nível, que só
+então um clique direito comum continua abrindo o menu de contexto. Sobre uma janela que o mod
+administra (na grade ou solta), arrastar com esse botão deixa de funcionar enquanto a opção está
+ligada; em qualquer outro lugar (a área de trabalho, a barra de tarefas, janelas maximizadas, apps
+ignorados) o clique nem é tocado. Ela precisa de um gancho de mouse de baixo nível, que só
 existe enquanto esta opção (ou o redimensionar com Alt + botão direito) está ligada.
 
 ### Funciona junto com outros mods de animação
@@ -550,8 +560,8 @@ os cantos.
 - radialMouse: off
   $name: Radial menu (move a window with the mouse)
   $name:pt-BR: Menu radial (mover a janela com o mouse)
-  $description: "Press and hold the chosen button over a window of the grid: a ring appears at the cursor. Move the mouse left, right, up or down to pick the neighboring window on that side (its slot is highlighted) and release to swap the two. Keep the cursor still inside the ring until its center fills up and release to take the window out of the grid, or to put a floating window back. Esc cancels. If you release earlier without choosing a side, the click goes to the app as usual (when the button is released). Outside the windows of the grid the button works normally. Uses a low-level mouse hook, which only exists while this option is on."
-  $description:pt-BR: "Pressione e segure o botão escolhido sobre uma janela da grade: um anel aparece no cursor. Mova o mouse para a esquerda, direita, cima ou baixo para escolher a janela vizinha daquele lado (o espaço dela é destacado) e solte para trocar as duas de lugar. Mantenha o cursor parado dentro do anel até o centro encher e solte para tirar a janela da grade, ou para devolver uma janela solta. Esc cancela. Se soltar antes sem escolher um lado, o clique vai para o app normalmente (no momento em que o botão é solto). Fora das janelas da grade o botão funciona normalmente. Usa um gancho de mouse de baixo nível, que só existe enquanto esta opção está ligada."
+  $description: "Press and hold the chosen button over a window of the grid: a ring appears at the cursor. Move the mouse left, right, up or down to pick the neighboring window on that side (its slot is highlighted) and release to swap the two. Keep the cursor still inside the ring until its center fills up and release to take the window out of the grid, or to put a floating window back. Esc cancels. If you release earlier without choosing a side, the click goes to the app as usual (when the button is released). Over floating windows the ring opens too (to put them back), so dragging with that button does not work there either. Everywhere else the button works normally. Uses a low-level mouse hook, which only exists while this option is on."
+  $description:pt-BR: "Pressione e segure o botão escolhido sobre uma janela da grade: um anel aparece no cursor. Mova o mouse para a esquerda, direita, cima ou baixo para escolher a janela vizinha daquele lado (o espaço dela é destacado) e solte para trocar as duas de lugar. Mantenha o cursor parado dentro do anel até o centro encher e solte para tirar a janela da grade, ou para devolver uma janela solta. Esc cancela. Se soltar antes sem escolher um lado, o clique vai para o app normalmente (no momento em que o botão é solto). Sobre janelas soltas o anel também abre (para devolvê-las), então arrastar com esse botão também não funciona nelas. No resto o botão funciona normalmente. Usa um gancho de mouse de baixo nível, que só existe enquanto esta opção está ligada."
   $options:
   - off: Off
   - right: Hold the right button
@@ -1002,7 +1012,7 @@ static DWORD g_threadId = 0;
 static std::atomic<bool> g_stop{false};
 
 static const UINT WM_APP_RELOAD = WM_APP + 1;
-static const int HK_FLOAT = 1, HK_MONOCLE = 2, HK_LEFT = 3, HK_RIGHT = 4, HK_RETILE = 5, HK_LAYOUT = 6, HK_UP = 7, HK_DOWN = 8, HK_ESC = 9;
+static const int HK_FLOAT = 1, HK_MONOCLE = 2, HK_LEFT = 3, HK_RIGHT = 4, HK_RETILE = 5, HK_LAYOUT = 6, HK_UP = 7, HK_DOWN = 8, HK_ESC = 9, HK_ESC_ALT = 10, HK_ESC_WIN = 11;
 
 static int FindItem(HWND h) {
     for (size_t i = 0; i < g_items.size(); i++)
@@ -3457,7 +3467,8 @@ static void OnResizeMouse(bool down) {
 
 struct MouseMove {
     bool active = false;
-    bool dragged = false;   // o cursor já saiu do lugar (senão foi só um Alt + clique)
+    bool dragged = false;   // a janela já está acompanhando o cursor
+    bool moved = false;     // o cursor saiu do lugar (senão foi só um Alt + clique, devolvido ao app)
     bool viaRadial = false; // o clique foi entregue ao menu radial (modo Alt + esquerdo sobre janela da grade)
     bool tear = false;      // janela da grade: ainda presa, será arrancada se o arrasto passar do limite
     bool torn = false;      // foi arrancada da grade neste arrasto (Esc a devolve)
@@ -3512,6 +3523,7 @@ static void MouseMoveTick() {
     const LONG dx = pt.x - M.origin.x, dy = pt.y - M.origin.y;
     if (M.tear) {
         // janela da grade: só é arrancada depois de um arrasto decidido, para não sair por engano
+        if (std::abs(dx) >= 3 || std::abs(dy) >= 3) M.moved = true;
         const double limit = 40.0 * M.scale;
         if ((double)dx * dx + (double)dy * dy < limit * limit) return;
         M.tear = false;
@@ -3525,6 +3537,7 @@ static void MouseMoveTick() {
     if (!M.dragged) {
         if (std::abs(dx) < 3 && std::abs(dy) < 3) return;
         M.dragged = true;
+        M.moved = true;
         g_items[i].anim = false;
         g_dragHwnd = M.h;
     }
@@ -3573,17 +3586,18 @@ static void OnMoveMouse(bool down) {
         return;
     }
     if (MouseFinishPassThrough(0)) return;
-    const bool dragged = M.active && M.dragged;
+    const bool moved = M.active && (M.dragged || M.moved);
     MouseMoveFinish(true);
-    // sem arrasto, foi só um Alt + clique: devolve o clique ao app
-    if (!dragged && !g_mmoveCanceled) ReinjectClick(0);
+    // O cursor não saiu do lugar: foi só um Alt + clique, devolvido ao app. Um arrasto curto sobre uma janela
+    // da grade (menor que o limite de arrancar) não vira clique: ele cairia longe de onde o botão foi pressionado.
+    if (!moved && !g_mmoveCanceled) ReinjectClick(0);
 }
 
 struct HotkeyDef { int id; UINT mods, vk; };
 static std::vector<HotkeyDef> g_keys;
 
 static void OnHotkey(int id) {
-    if (id == HK_ESC) {
+    if (id == HK_ESC || id == HK_ESC_ALT || id == HK_ESC_WIN) {
         // Esc com o menu radial ou o redimensionamento pelo mouse em curso: cancela (a tecla não chega ao app)
         if (g_radial.active) {
             g_mouseCanceled = true;
@@ -3915,21 +3929,19 @@ static void StopHookThread() {
 static const UINT WM_APP_MOUSE = WM_APP + 3;
 // Retângulos das janelas que o mod administra, para o gancho decidir na hora: um clique fora de todos eles
 // passa intocado (sem ser segurado e reenviado). A thread de trabalho atualiza a lista; o gancho só lê.
-struct HookRect { RECT r; bool floating; };
 static std::mutex g_mhRectsLock;
-static std::vector<HookRect> g_mhRects;
+static std::vector<RECT> g_mhRects;
 
-// O ponto está sobre alguma janela administrada? bit 1 = uma janela da grade, bit 2 = uma janela solta.
-static int MousePointOverManaged(POINT pt) {
-    int over = 0;
+// O ponto está sobre alguma janela administrada (da grade ou solta)?
+static bool MousePointOverManaged(POINT pt) {
     std::lock_guard<std::mutex> lock(g_mhRectsLock);
-    for (const HookRect& e : g_mhRects)
-        if (PtInRect(&e.r, pt)) over |= e.floating ? 2 : 1;
-    return over;
+    for (const RECT& r : g_mhRects)
+        if (PtInRect(&r, pt)) return true;
+    return false;
 }
 
-static int g_mhMode = 0;         // cópias de g_mouseMode / g_resizeMouse lidas pela thread do gancho
-static bool g_mhResize = false;  // (escritas com o gancho parado)
+static int g_mhMode = 0;         // cópias de g_mouseMode / g_resizeMouse / g_moveMouse lidas pela thread
+static bool g_mhResize = false;  // do gancho (escritas com o gancho parado)
 static bool g_mhMove = false;
 static WPARAM g_mhUpMsg = 0;     // só a thread do gancho usa: mensagem de "soltar" do botão que ela segurou (0 = nenhum)
 static WPARAM g_mhUpCode = 0;    // o que avisar à thread de trabalho quando esse botão for solto
@@ -3949,7 +3961,8 @@ static void MouseHookDummyKey() {
     SendInput(2, in, sizeof(INPUT));
 }
 
-// Avisos à thread de trabalho (wParam de WM_APP_MOUSE): 1/0 = menu radial pressionado/solto, 3/2 = redimensionar.
+// Avisos à thread de trabalho (wParam de WM_APP_MOUSE): 1/0 = menu radial pressionado/solto, 3/2 = redimensionar,
+// 5/4 = mover.
 static LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wp, LPARAM lp) {
     if (code != HC_ACTION) return CallNextHookEx(nullptr, code, wp, lp);
     const MSLLHOOKSTRUCT* m = (const MSLLHOOKSTRUCT*)lp;
@@ -3965,8 +3978,7 @@ static LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wp, LPARAM lp) {
         return CallNextHookEx(nullptr, code, wp, lp);
     }
     // fora das janelas administradas (área de trabalho, barra de tarefas, outros apps) o clique segue intocado
-    const int over = MousePointOverManaged(m->pt);
-    if (!over) return CallNextHookEx(nullptr, code, wp, lp);
+    if (!MousePointOverManaged(m->pt)) return CallNextHookEx(nullptr, code, wp, lp);
     UINT now = 0;
     if (KeyIsDown(VK_CONTROL)) now |= MOD_CONTROL;
     if (KeyIsDown(VK_MENU)) now |= MOD_ALT;
@@ -4052,7 +4064,7 @@ static void RefreshHookRects(bool force = false) {
     const double now = NowMs();
     if (!force && now - last < 50.0) return;
     last = now;
-    std::vector<HookRect> rects;
+    std::vector<RECT> rects;
     rects.reserve(g_items.size());
     for (const auto& it : g_items) {
         RECT r{};
@@ -4060,7 +4072,7 @@ static void RefreshHookRects(bool force = false) {
         // (que cobriria o monitor inteiro). As soltas entram: todos os gestos agem sobre elas.
         if (IsIconic(it.h) || IsZoomed(it.h) || !GetWindowRect(it.h, &r)) continue;
         if (!it.floating && it.to.right > it.to.left) UnionRect(&r, &r, &it.to);
-        rects.push_back({r, it.floating});
+        rects.push_back(r);
     }
     std::lock_guard<std::mutex> lock(g_mhRectsLock);
     g_mhRects.swap(rects);
@@ -4084,7 +4096,7 @@ static void StartMouseHook() {
         CloseHandle(g_mhThreadH);
         g_mhThreadH = nullptr;
     }
-    if (g_mhThreadH) Wh_Log(L"Gancho de mouse ligado (menu radial: modo %d; redimensionar com Alt + botao direito: %d)", g_mouseMode, (int)g_resizeMouse);
+    if (g_mhThreadH) Wh_Log(L"Gancho de mouse ligado (menu radial: modo %d; redimensionar com Alt + botao direito: %d; mover com Alt + botao esquerdo: %d)", g_mouseMode, (int)g_resizeMouse, (int)g_moveMouse);
 }
 
 static void UnregisterHotkeys() {
@@ -4230,17 +4242,23 @@ static DWORD WINAPI Worker(LPVOID) {
         MouseResizeTick();
         MouseMoveTick();
         {
-            // Enquanto o menu radial ou o redimensionamento pelo mouse está em curso, Esc é registrado como
-            // atalho global: assim ele cancela a ação sem chegar ao app que está sob o cursor.
-            static bool wanted = false, grabbed = false;
+            // Enquanto o menu radial ou um gesto do mouse está em curso, Esc é registrado como atalho global:
+            // assim ele cancela a ação sem chegar ao app que está sob o cursor. Os gestos com Alt (ou Win)
+            // costumam estar com a tecla ainda pressionada, então Alt + Esc e Win + Esc também são registrados;
+            // senão o Alt + Esc do Windows mandaria a janela ativa para trás das outras.
+            static bool wanted = false;
+            static bool grabbed[3] = {};
+            static const struct { int id; UINT mods; } kEsc[3] = {{HK_ESC, 0}, {HK_ESC_ALT, MOD_ALT}, {HK_ESC_WIN, MOD_WIN}};
             const bool need = g_radial.active || g_mres.active || g_mmove.active;
             if (need != wanted) {
                 wanted = need;
-                if (need) {
-                    grabbed = RegisterHotKey(nullptr, HK_ESC, 0, VK_ESCAPE) != 0;
-                } else if (grabbed) {
-                    UnregisterHotKey(nullptr, HK_ESC);
-                    grabbed = false;
+                for (int k = 0; k < 3; k++) {
+                    if (need) {
+                        grabbed[k] = RegisterHotKey(nullptr, kEsc[k].id, kEsc[k].mods, VK_ESCAPE) != 0;
+                    } else if (grabbed[k]) {
+                        UnregisterHotKey(nullptr, kEsc[k].id);
+                        grabbed[k] = false;
+                    }
                 }
             }
         }
