@@ -85,6 +85,12 @@ side has a neighbor, the window goes back to its slot. Esc cancels. AltSnap / Al
 Alt + right button gesture: if you run one of them too, change the gesture there or leave this
 option off, otherwise windows of the grid are resized by this mod and the other windows by them.
 
+Windows can be moved in a similar way: turn on *Move windows with Alt + left button*, hold Alt and
+the left button anywhere over a window, and drag. A floating window just moves. A window of the
+grid is pulled out of the grid after a short drag (about 40 px) and follows the mouse as a floating
+window. If the radial menu is set to Alt + left button, that gesture opens the menu over windows of
+the grid instead.
+
 In the "main left" / "main top" layouts, dragging the divider of the main window changes how much of
 the screen it takes. Each app's minimum size still applies. Your sizes are discarded when a window
 is opened, closed or minimized, when the layout changes and when you re-arrange everything
@@ -137,8 +143,14 @@ slice of the ring lights up and the slot the window will go to is highlighted. R
 to swap the window with the one in that slot. Esc cancels. If there is no window on that side, the
 slice turns gray and nothing happens. It only considers windows on the same monitor.
 
-The ring has two themes: **Classic** (a flat ring) and **Glass** (a glass tube showing the blurred
-screen behind it, with highlights). The selection color paints the chosen slice
+The center of the ring floats and un-floats windows without the keyboard. Keep the button pressed
+with the cursor still: a small circle in the middle fills up in about half a second. Release once
+it is full and the window leaves the grid (the others take its place). Do the same over a floating
+window and it goes back into the grid. Releasing before it is full is an ordinary click.
+
+The ring has three themes: **Liquid glass**, the default (clear glass: the screen shows through
+sharp and bends at the edges of the ring), **Glass** (a frosted glass tube showing the blurred
+screen behind it) and **Classic** (a flat ring). The selection color paints the chosen slice
 and the highlight over the window that will receive the one you are moving. By default the colors
 are the focused window border ones, following its effect (pulse, rainbow, gradient); choose
 *Custom* to set the ring color and the selection color yourself. The ring thickness can be set too.
@@ -275,6 +287,12 @@ cancela. O AltSnap / AltDrag usam o mesmo gesto de Alt + botão direito: se voc�
 troque o gesto lá ou deixe esta opção desligada; senão as janelas da grade são redimensionadas por
 este mod e as demais por eles.
 
+As janelas podem ser movidas de forma parecida: ligue *Mover janelas com Alt + botão esquerdo*,
+segure Alt e o botão esquerdo em qualquer ponto de uma janela e arraste. Uma janela solta apenas se
+move. Uma janela da grade é arrancada da grade depois de um arrasto curto (uns 40 px) e acompanha o
+mouse como janela solta. Se o menu radial estiver em Alt + botão esquerdo, esse gesto abre o menu
+sobre as janelas da grade.
+
 Nos layouts "principal à esquerda" / "principal em cima", arrastar a divisória da janela principal
 muda a parte da tela que ela ocupa. O tamanho mínimo de cada app continua valendo. Os tamanhos
 escolhidos são descartados quando uma janela é aberta, fechada ou minimizada, quando o layout muda
@@ -327,8 +345,14 @@ baixo: aquela fatia do anel acende e o espaço para onde a janela vai é destaca
 para trocar a janela de lugar com a que ocupa aquele espaço. Esc cancela. Se não houver janela
 daquele lado, a fatia fica cinza e nada acontece. Só considera janelas do mesmo monitor.
 
-O anel tem dois temas: **Clássico** (anel liso) e **Vidro** (um tubo de vidro que mostra a tela
-desfocada atrás dele, com brilhos). A cor da seleção pinta a fatia escolhida e o
+O centro do anel solta e prende janelas sem o teclado. Mantenha o botão pressionado com o cursor
+parado: um pequeno círculo no meio se enche em cerca de meio segundo. Solte quando estiver cheio e
+a janela sai da grade (as outras ocupam o lugar dela). Faça o mesmo sobre uma janela solta e ela
+volta para a grade. Soltar antes de encher é um clique comum.
+
+O anel tem três temas: **Vidro líquido**, o padrão (vidro transparente: a tela aparece nítida e
+se curva nas bordas do anel), **Vidro** (um tubo de vidro fosco que mostra a tela desfocada atrás
+dele) e **Clássico** (anel liso). A cor da seleção pinta a fatia escolhida e o
 destaque sobre a janela que vai receber a que você está movendo. Por padrão as cores são as da
 borda da janela em foco, acompanhando o efeito dela (pulsar, arco-íris, degradê); escolha
 *Personalizadas* para definir você mesmo a cor do anel e a cor da seleção. A espessura do anel
@@ -526,8 +550,8 @@ os cantos.
 - radialMouse: off
   $name: Radial menu (move a window with the mouse)
   $name:pt-BR: Menu radial (mover a janela com o mouse)
-  $description: "Press and hold the chosen button over a window of the grid: a ring appears at the cursor. Move the mouse left, right, up or down to pick the neighboring window on that side (its slot is highlighted) and release to swap the two. Esc cancels. If you release without choosing a side, the click goes to the app as usual (when the button is released). Outside the windows of the grid the button works normally. Uses a low-level mouse hook, which only exists while this option is on."
-  $description:pt-BR: "Pressione e segure o botão escolhido sobre uma janela da grade: um anel aparece no cursor. Mova o mouse para a esquerda, direita, cima ou baixo para escolher a janela vizinha daquele lado (o espaço dela é destacado) e solte para trocar as duas de lugar. Esc cancela. Se soltar sem escolher um lado, o clique vai para o app normalmente (no momento em que o botão é solto). Fora das janelas da grade o botão funciona normalmente. Usa um gancho de mouse de baixo nível, que só existe enquanto esta opção está ligada."
+  $description: "Press and hold the chosen button over a window of the grid: a ring appears at the cursor. Move the mouse left, right, up or down to pick the neighboring window on that side (its slot is highlighted) and release to swap the two. Keep the cursor still inside the ring until its center fills up and release to take the window out of the grid, or to put a floating window back. Esc cancels. If you release earlier without choosing a side, the click goes to the app as usual (when the button is released). Outside the windows of the grid the button works normally. Uses a low-level mouse hook, which only exists while this option is on."
+  $description:pt-BR: "Pressione e segure o botão escolhido sobre uma janela da grade: um anel aparece no cursor. Mova o mouse para a esquerda, direita, cima ou baixo para escolher a janela vizinha daquele lado (o espaço dela é destacado) e solte para trocar as duas de lugar. Mantenha o cursor parado dentro do anel até o centro encher e solte para tirar a janela da grade, ou para devolver uma janela solta. Esc cancela. Se soltar antes sem escolher um lado, o clique vai para o app normalmente (no momento em que o botão é solto). Fora das janelas da grade o botão funciona normalmente. Usa um gancho de mouse de baixo nível, que só existe enquanto esta opção está ligada."
   $options:
   - off: Off
   - right: Hold the right button
@@ -540,22 +564,24 @@ os cantos.
   - middle: Segurar o botão do meio
   - altleft: Alt + segurar o botão esquerdo
   - winleft: Win + segurar o botão esquerdo
-- radialTheme: classic
+- radialTheme: liquid
   $name: Radial menu ring theme
   $name:pt-BR: Tema do anel do menu radial
-  $description: "Glass draws the ring as a glass tube that shows the blurred screen behind it, with highlights and a tinted slice for the selection. The background behind the ring is captured once, when the ring opens."
-  $description:pt-BR: "Vidro desenha o anel como um tubo de vidro que mostra a tela desfocada atrás dele, com brilhos e a fatia da seleção tingida. O fundo atrás do anel é capturado uma vez, quando o anel abre."
+  $description: "Glass draws the ring as a frosted glass tube that shows the blurred screen behind it. Liquid glass is clear: the screen behind shows through sharp and bends at the edges of the ring, as through thick curved glass. In both, the background behind the ring is captured once, when the ring opens."
+  $description:pt-BR: "Vidro desenha o anel como um tubo de vidro fosco que mostra a tela desfocada atrás dele. Vidro líquido é transparente: a tela atrás aparece nítida e se curva nas bordas do anel, como através de um vidro grosso e curvo. Nos dois, o fundo atrás do anel é capturado uma vez, quando o anel abre."
   $options:
+  - liquid: Liquid glass (clear, refraction at the edges)
+  - glass: Glass (frosted)
   - classic: Classic (flat ring)
-  - glass: Glass
   $options:pt-BR:
+  - liquid: Vidro líquido (transparente, refração nas bordas)
+  - glass: Vidro (fosco)
   - classic: Clássico (anel liso)
-  - glass: Vidro
 - radialThickness: 0
   $name: Ring thickness (px at 100% scale, 0 = the theme's own)
   $name:pt-BR: Espessura do anel (px a 100% de escala, 0 = a do tema)
-  $description: "0 uses the theme's thickness (10 for classic, 20 for glass). Otherwise from 4 to 48. The ring grows outward; the hole in the middle keeps its size."
-  $description:pt-BR: "0 usa a espessura do tema (10 no clássico, 20 no vidro). Senão, de 4 a 48. O anel cresce para fora; o furo do meio mantém o tamanho."
+  $description: "0 uses the theme's thickness (10 for classic, 20 for the glass themes). Otherwise from 4 to 48. The ring grows outward; the hole in the middle keeps its size."
+  $description:pt-BR: "0 usa a espessura do tema (10 no clássico, 20 nos temas de vidro). Senão, de 4 a 48. O anel cresce para fora; o furo do meio mantém o tamanho."
 - radialColors: border
   $name: Radial menu colors
   $name:pt-BR: Cores do menu radial
@@ -580,6 +606,11 @@ os cantos.
   $name:pt-BR: Redimensionar a janela com Alt + botão direito
   $description: "Hold Alt and the right button anywhere over a window and drag sideways or up/down: the side of the window nearest to the cursor follows the mouse, so dragging outward enlarges the window and dragging inward shrinks it. The other windows make room as you drag. If that side is against the screen edge, the opposite side is used. Esc cancels. An Alt + right click without dragging still reaches the app. Uses the same low-level mouse hook as the radial menu."
   $description:pt-BR: "Segure Alt e o botão direito em qualquer ponto sobre uma janela e arraste para os lados ou para cima/baixo: a lateral da janela mais próxima do cursor acompanha o mouse, então arrastar para fora aumenta a janela e arrastar para dentro diminui. As outras janelas abrem espaço enquanto você arrasta. Se essa lateral estiver junto da borda da tela, vale a lateral oposta. Esc cancela. Um Alt + clique direito sem arrastar continua chegando ao app. Usa o mesmo gancho de mouse de baixo nível do menu radial."
+- moveMouse: false
+  $name: Move windows with Alt + left button (pulls them out of the grid)
+  $name:pt-BR: Mover janelas com Alt + botão esquerdo (arranca da grade)
+  $description: "Hold Alt and the left button anywhere over a window and drag. A floating window just moves. A window of the grid is pulled out of the grid after a short drag and then follows the mouse, while the others take its place. Esc cancels. An Alt + left click without dragging still reaches the app. To put a window back in the grid, use the float hotkey or hold the radial menu button until its center fills. Uses the same low-level mouse hook as the radial menu."
+  $description:pt-BR: "Segure Alt e o botão esquerdo em qualquer ponto de uma janela e arraste. Uma janela solta apenas se move. Uma janela da grade é arrancada da grade depois de um arrasto curto e passa a acompanhar o mouse, enquanto as outras ocupam o lugar dela. Esc cancela. Um Alt + clique esquerdo sem arrastar continua chegando ao app. Para devolver uma janela à grade, use o atalho de soltar ou segure o botão do menu radial até o centro encher. Usa o mesmo gancho de mouse de baixo nível do menu radial."
 - hotkeys: winalt
   $name: Modifiers of the other hotkeys
   $name:pt-BR: Modificadores dos atalhos
@@ -700,7 +731,7 @@ struct Config {
     int borderGlow = 0;
     int borderRadius = 8;
     int borderOffset = 0;
-    int radialTheme = 0;       // anel do menu radial: 0 = clássico, 1 = vidro
+    int radialTheme = 2;       // anel do menu radial: 0 = clássico, 1 = vidro (fosco), 2 = vidro líquido (transparente, refração nas bordas)
     bool radialCustom = false; // false = cores da borda; true = cores próprias do anel e da seleção
     COLORREF radialRing = RGB(0xFF, 0xFF, 0xFF);
     COLORREF radialSel = RGB(0x7B, 0x8C, 0xFF);
@@ -887,7 +918,10 @@ static void LoadSettings() {
         c.borderOffset = std::min(30, std::max(-30, Wh_GetIntSetting(L"borderOffset")));
         ParseHexColor(GetStr(L"borderColor2"), &c.borderColor2);
     }
-    c.radialTheme = GetStr(L"radialTheme") == L"glass" ? 1 : 0;
+    {
+        std::wstring rt = GetStr(L"radialTheme");
+        c.radialTheme = rt == L"glass" ? 1 : rt == L"liquid" ? 2 : 0;
+    }
     c.radialCustom = GetStr(L"radialColors") == L"custom";
     ParseHexColor(GetStr(L"radialRingColor"), &c.radialRing);
     ParseHexColor(GetStr(L"radialSelColor"), &c.radialSel);
@@ -2689,6 +2723,11 @@ struct Radial {
     int size = 0;
     int drawnDir = -2;
     bool drawnOk = false;
+    bool floatTarget = false;  // a janela sob o cursor está solta: o anel só oferece devolvê-la à grade
+    double holdStart = 0;      // desde quando o cursor está parado no centro com o anel visível (0 = não está)
+    double hold = 0;           // 0..1: quanto o centro já encheu
+    bool armed = false;        // o centro encheu: soltar o botão agora solta a janela da grade (ou a devolve)
+    int drawnHold = -1;
     bool shown = false;     // o anel já apareceu (ele espera um instante, para não piscar num clique rápido)
     double beganAt = 0;
     std::vector<uint32_t> back;  // tema vidro: o que estava na tela sob o anel quando ele abriu, já desfocado
@@ -2703,12 +2742,14 @@ static COLORREF RadialRingColor() { return g_cfg.radialCustom ? g_cfg.radialRing
 static bool RadialColorsAnimated() { return !g_cfg.radialCustom && g_cfg.borderStyle != 0; }
 // Medidas do anel. O furo do meio tem tamanho fixo; a espessura (do tema ou a escolhida) cresce para fora.
 static double RadialHalf(double scale) {
-    const int th = g_cfg.radialThickness > 0 ? g_cfg.radialThickness : (g_cfg.radialTheme == 1 ? 20 : 10);
+    const int th = g_cfg.radialThickness > 0 ? g_cfg.radialThickness : (g_cfg.radialTheme >= 1 ? 20 : 10);
     return th * scale / 2.0;
 }
 static double RadialRad(double scale) { return 28.0 * scale + RadialHalf(scale); }  // raio do meio do anel
 static int RadialSize(double scale) {
-    const double margin = (g_cfg.radialTheme == 1 ? 10.0 : 8.0) * scale;  // sombra / disco de fundo em volta
+    // em volta do anel: a sombra / o disco de fundo; no vidro líquido, também a faixa de onde a borda puxa o fundo
+    double margin = (g_cfg.radialTheme >= 1 ? 10.0 : 8.0) * scale;
+    if (g_cfg.radialTheme == 2) margin = std::max(margin, RadialHalf(scale) * 0.85 + 4.0 * scale);
     return std::max(48, (int)std::lround(2.0 * (RadialRad(scale) + RadialHalf(scale) + margin)) + 2);
 }
 
@@ -2718,6 +2759,7 @@ static int RadialSize(double scale) {
 static int g_mouseMode = 0;
 static bool g_mouseCanceled = false;  // o menu foi cancelado com Esc: o clique não é devolvido
 static bool g_resizeMouse = false;    // Alt + botão direito redimensiona a janela (opcional, mesmo gancho)
+static bool g_moveMouse = false;      // Alt + botão esquerdo move uma janela solta, fora da grade (opcional, mesmo gancho)
 // O clique não foi sobre uma janela da grade: a thread de trabalho já devolveu o "pressionar" ao app e pede
 // ao gancho que deixe passar o "soltar" verdadeiro. Assim, fora da grade, clicar e arrastar com o botão
 // continuam funcionando normalmente.
@@ -2806,6 +2848,8 @@ static void RadialCaptureBackdrop() {
     if (mem) DeleteDC(mem);
     ReleaseDC(nullptr, scr);
 
+    // o vidro líquido é transparente: mostra o fundo nítido, só curvado nas bordas (sem desfoque)
+    if (g_cfg.radialTheme == 2) return;
     // desfoque: média móvel na horizontal e na vertical, duas vezes (aproxima um desfoque gaussiano)
     const int rad = std::max(2, (int)std::lround(5 * R.scale));
     std::vector<uint32_t> tmp((size_t)S * S);
@@ -2910,7 +2954,91 @@ static uint32_t RadialPixelGlass(int x, int y, double dx, double dy, double d, b
     return RadialPack(c[0] * k, c[1] * k, c[2] * k, A);
 }
 
+// Pinta uma cor por cima de um pixel já calculado (os dois com a cor multiplicada pela transparência).
+static uint32_t RadialOver(uint32_t dst, COLORREF col, double a) {
+    if (a <= 0) return dst;
+    const double k = 1.0 - a;
+    auto ch = [&](int shift, double c) {
+        const double v = c * a + (double)((dst >> shift) & 0xFF) * k;
+        return (uint32_t)std::lround(std::min(255.0, std::max(0.0, v)));
+    };
+    return (ch(24, 255.0) << 24) | (ch(16, GetRValue(col)) << 16) | (ch(8, GetGValue(col)) << 8) | ch(0, GetBValue(col));
+}
+
+// Tempo, em ms, que o cursor precisa ficar parado no centro do anel para ele encher.
+static const double kRadialHoldMs = 550.0;
+
+// Tema vidro líquido: o mesmo vidro do mod Siri Plus Launchpad, aplicado ao anel. O vidro é transparente e
+// mostra o fundo nítido; perto das duas bordas (a de dentro e a de fora) o fundo é puxado de mais longe, como
+// através de um vidro grosso e curvo: numa faixa junto da borda a imagem vem de até "depth" pixels além dela,
+// mais quanto mais perto da borda. Por cima vão um leve ganho de cor, um brilho suave no alto e um filete de
+// luz nas bordas, claro em cima e embaixo. A fatia escolhida recebe a cor da seleção, sem perder a transparência.
+static uint32_t RadialPixelLiquid(double fx, double fy, double dx, double dy, double d, bool sel, COLORREF ringCol, COLORREF selCol) {
+    const Radial& R = g_radial;
+    const int S = R.size;
+    const double sc = R.scale;
+    const double rad = RadialRad(sc), half = RadialHalf(sc);
+    const double off = std::fabs(d - rad);
+    const double cov = std::min(1.0, std::max(0.0, half - off + 0.5));
+    // sombra suave projetada em volta do vidro
+    const double shMax = 0.16;
+    const double sh = off > half ? shMax * std::pow(std::max(0.0, 1.0 - (off - half) / (9.0 * sc)), 2.0) : shMax;
+    if (cov <= 0) return sh > 0.003 ? RadialPack(0, 0, 0, sh) : 0;
+    const double ux = d > 0.001 ? dx / d : 0.0, uy = d > 0.001 ? dy / d : 0.0;
+    const double side = d >= rad ? 1.0 : -1.0;  // lado da borda mais próxima: +1 = a de fora, -1 = a de dentro
+    // refração: mesma curva do Siri Plus (faixa junto da borda, deslocamento = profundidade * t^2,2, a 60 %)
+    const double band = std::max(1.0, std::min(half * 0.84, 30.0 * sc));
+    const double depth = band * 0.96;
+    const double inside = half - off;  // distância até a borda mais próxima, para dentro do vidro
+    const double t = std::min(1.0, std::max(0.0, 1.0 - inside / band));
+    const double k = depth * std::pow(t, 2.2);
+    // amostra o fundo deslocado, com interpolação entre os 4 pixels vizinhos
+    double c[3] = {128.0, 128.0, 128.0};
+    if (R.backSize == S && !R.back.empty()) {
+        const double sx = std::min((double)S - 1.001, std::max(0.0, fx + ux * side * k - 0.5));
+        const double sy = std::min((double)S - 1.001, std::max(0.0, fy + uy * side * k - 0.5));
+        const int x0 = (int)sx, y0 = (int)sy;
+        const double ax = sx - x0, ay = sy - y0;
+        const uint32_t p00 = R.back[(size_t)y0 * S + x0], p10 = R.back[(size_t)y0 * S + x0 + 1];
+        const uint32_t p01 = R.back[(size_t)(y0 + 1) * S + x0], p11 = R.back[(size_t)(y0 + 1) * S + x0 + 1];
+        for (int q = 0; q < 3; q++) {
+            const int shift = 16 - 8 * q;
+            const double top = ((p00 >> shift) & 0xFF) * (1.0 - ax) + ((p10 >> shift) & 0xFF) * ax;
+            const double bot = ((p01 >> shift) & 0xFF) * (1.0 - ax) + ((p11 >> shift) & 0xFF) * ax;
+            c[q] = top * (1.0 - ay) + bot * ay;
+        }
+    }
+    // um pouco mais saturado e claro, como luz atravessando vidro
+    const double lum = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    const double ring[3] = {(double)GetRValue(ringCol), (double)GetGValue(ringCol), (double)GetBValue(ringCol)};
+    const double tint[3] = {(double)GetRValue(selCol), (double)GetGValue(selCol), (double)GetBValue(selCol)};
+    const bool ringTinted = ringCol != RGB(255, 255, 255);
+    // brilho suave no alto do anel e filete de luz nas bordas (claro em cima e embaixo, discreto dos lados)
+    const double outer = rad + half;
+    const double v = std::min(1.0, std::max(0.0, (fy - (S / 2.0 - outer)) / (2.0 * outer)));  // 0 = topo, 1 = base
+    const double glowH = std::min(0.22, 14.0 * sc / (2.0 * outer));
+    const double glow = v < glowH ? 0.07 * (1.0 - v / glowH) : 0.0;
+    const double rimLine = std::min(1.0, std::max(0.0, 1.0 - inside / (1.3 * sc)));
+    const double rimEnds = std::pow(std::fabs(v - 0.5) * 2.0, 1.6);  // 1 no topo e na base, 0 no meio
+    const double rimLight = rimLine * (0.20 + 0.50 * rimEnds);
+    const double rimDark = rimLine * 0.22 * (1.0 - rimEnds);
+    for (int q = 0; q < 3; q++) {
+        double x = (lum + (c[q] - lum) * 1.12) * 1.03 + 4.0;
+        if (ringTinted) x = x * 0.88 + ring[q] * 0.12;  // cor personalizada do anel: só um leve tom
+        if (sel) x = x * 0.50 + tint[q] * 0.50;         // fatia escolhida: vidro colorido, ainda transparente
+        x += (255.0 - x) * glow;
+        x *= 1.0 - rimDark;
+        x += (255.0 - x) * rimLight;
+        c[q] = x;
+    }
+    const double A = cov + sh * (1.0 - cov);
+    const double w = cov / A;  // o vidro por cima da sombra preta
+    return RadialPack(c[0] * w, c[1] * w, c[2] * w, A);
+}
+
 // Desenha o anel. dir = fatia destacada (-1 = nenhuma); ok = há uma janela vizinha naquela direção.
+// O centro mostra o "segurar para soltar/prender": um círculo guia que se enche enquanto o cursor fica parado
+// nele; cheio (R.armed), o anel inteiro acende.
 static void RadialDrawRing(int dir, bool ok) {
     Radial& R = g_radial;
     const int S = RadialSize(R.scale);
@@ -2935,20 +3063,32 @@ static void RadialDrawRing(int dir, bool ok) {
     // ângulo central de cada direção (atan2 com y para baixo): cima, esquerda, direita, baixo
     static const double kCenter[4] = {-1.5707963, 3.1415927, 0.0, 1.5707963};
     const COLORREF ringCol = RadialRingColor();
-    const COLORREF selCol = ok ? RadialSelColor() : RGB(150, 150, 150);
-    const bool glass = g_cfg.radialTheme == 1;
+    const COLORREF fillCol = RadialSelColor();
+    const COLORREF selCol = (ok || R.armed) ? fillCol : RGB(150, 150, 150);
+    const int theme = g_cfg.radialTheme;
+    const double guideR = 20.0 * R.scale;   // círculo guia do centro (fica dentro da zona onde nada é escolhido)
+    const double fillR = guideR * R.hold;
     for (int y = 0; y < S; y++) {
         for (int x = 0; x < S; x++) {
             const double dx = x + 0.5 - c, dy = y + 0.5 - c;
             const double d = std::sqrt(dx * dx + dy * dy);
-            bool sel = false;
+            bool sel = R.armed;
             if (dir >= 0) {
                 double diff = std::fabs(std::atan2(dy, dx) - kCenter[dir]);
                 if (diff > 3.1415927) diff = 6.2831853 - diff;
                 sel = diff <= 0.7853982;
             }
-            R.bits[(size_t)y * S + x] = glass ? RadialPixelGlass(x, y, dx, dy, d, sel, ringCol, selCol)
-                                              : RadialPixelClassic(d, sel, ringCol, selCol, R.scale);
+            uint32_t px;
+            if (theme == 2) px = RadialPixelLiquid(x + 0.5, y + 0.5, dx, dy, d, sel, ringCol, selCol);
+            else if (theme == 1) px = RadialPixelGlass(x, y, dx, dy, d, sel, ringCol, selCol);
+            else px = RadialPixelClassic(d, sel, ringCol, selCol, R.scale);
+            if (dir < 0 && d < guideR + 2.0 * R.scale) {
+                // contorno fino do círculo guia, e o preenchimento que cresce do meio para fora
+                const double line = std::min(1.0, std::max(0.0, 0.9 * R.scale - std::fabs(d - guideR) + 0.5));
+                px = RadialOver(px, RGB(255, 255, 255), 0.45 * line);
+                px = RadialOver(px, fillCol, 0.92 * std::min(1.0, std::max(0.0, fillR - d + 0.5)));
+            }
+            R.bits[(size_t)y * S + x] = px;
         }
     }
     POINT dst{R.origin.x - S / 2, R.origin.y - S / 2}, src{0, 0};
@@ -2958,6 +3098,14 @@ static void RadialDrawRing(int dir, bool ok) {
     SetWindowPos(R.ring, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
     R.drawnDir = dir;
     R.drawnOk = ok;
+    R.drawnHold = (int)(R.hold * 40.0);
+}
+
+// Solta a janela da grade, ou a devolve se já estava solta (o mesmo que o atalho de soltar/prender).
+static void ToggleFloatItem(int i) {
+    g_items[i].floating = !g_items[i].floating;
+    if (!g_items[i].floating) g_items[i].to = RECT{0, 0, 0, 0};
+    Retile();
 }
 
 // Fecha o menu. Retorna true se a janela foi movida.
@@ -2968,6 +3116,11 @@ static bool RadialEnd(bool apply) {
     if (R.ring) ShowWindow(R.ring, SW_HIDE);
     if (R.prev) ShowWindow(R.prev, SW_HIDE);
     int i = FindItem(R.target);
+    if (apply && i >= 0 && R.dir < 0 && R.armed) {
+        Wh_Log(L"Menu radial: centro cheio, janela %s", g_items[i].floating ? L"devolvida a grade" : L"solta da grade");
+        ToggleFloatItem(i);
+        return true;
+    }
     if (!apply || i < 0 || R.dir < 0) {
         Wh_Log(L"Menu radial: cancelado");
         return false;
@@ -2983,7 +3136,7 @@ static bool RadialEnd(bool apply) {
     return true;
 }
 
-// Abre o menu para a janela da grade que está sob o cursor. Retorna true se abriu.
+// Abre o menu para a janela administrada que está sob o cursor (da grade ou solta). Retorna true se abriu.
 static bool RadialBegin() {
     Radial& R = g_radial;
     if (R.active) return false;
@@ -2992,9 +3145,14 @@ static bool RadialBegin() {
     HWND under = WindowFromPoint(pt);
     if (under) under = GetAncestor(under, GA_ROOT);
     int i = FindItem(under);
-    if (i < 0 || g_items[i].floating || IsZoomed(g_items[i].h)) return false;
+    if (i < 0 || IsZoomed(g_items[i].h)) return false;
     if (!RadialEnsureWindows()) return false;
     R.target = g_items[i].h;
+    R.floatTarget = g_items[i].floating;
+    R.holdStart = 0;
+    R.hold = 0;
+    R.armed = false;
+    R.drawnHold = -1;
     R.origin = pt;
     R.dir = -1;
     R.nb = -1;
@@ -3027,19 +3185,33 @@ static void RadialTick() {
         const double moved = 6.0 * R.scale;
         if (NowMs() - R.beganAt < 180.0 && dx * dx + dy * dy < moved * moved) return;
         R.shown = true;
-        if (g_cfg.radialTheme == 1) RadialCaptureBackdrop();  // antes de o anel aparecer na tela
+        if (g_cfg.radialTheme >= 1) RadialCaptureBackdrop();  // antes de o anel aparecer na tela
         RadialDrawRing(-1, false);
     }
     const double dead = 22.0 * R.scale;  // dentro do centro do anel nada é escolhido
     int dir = -1;
-    if (dx * dx + dy * dy >= dead * dead) {
+    // uma janela solta não tem vizinhas: para ela o anel só oferece o centro (devolver à grade)
+    if (!R.floatTarget && dx * dx + dy * dy >= dead * dead) {
         if (std::fabs(dx) >= std::fabs(dy)) dir = dx < 0 ? 1 : 2;
         else dir = dy < 0 ? 0 : 3;
     }
     int nb = dir >= 0 ? FindNeighbor(i, dir) : -1;
     R.dir = dir;
+    // Segurar parado no centro enche o círculo; cheio, soltar o botão solta a janela da grade (ou a devolve).
+    // Sair do centro zera a contagem. Numa janela solta, afastar-se do anel também zera.
+    const bool inCenter = dir < 0 && dx * dx + dy * dy < dead * dead;
+    if (inCenter) {
+        if (R.holdStart == 0) R.holdStart = NowMs();
+        R.hold = std::min(1.0, (NowMs() - R.holdStart) / kRadialHoldMs);
+    } else {
+        R.holdStart = 0;
+        R.hold = 0;
+    }
+    R.armed = R.hold >= 1.0;
+    const bool holdChanged = (int)(R.hold * 40.0) != R.drawnHold;
     const bool animated = RadialColorsAnimated();  // cores da borda com efeito (pulsar, arco-íris, degradê)
-    if (dir != R.drawnDir || (nb >= 0) != R.drawnOk || (animated && dir >= 0)) RadialDrawRing(dir, nb >= 0);
+    if (dir != R.drawnDir || (nb >= 0) != R.drawnOk || holdChanged || (animated && (dir >= 0 || R.hold > 0)))
+        RadialDrawRing(dir, nb >= 0);
     if (animated && nb >= 0 && nb == R.nb) InvalidateRect(R.prev, nullptr, TRUE);
     if (nb == R.nb) return;
     R.nb = nb;
@@ -3276,6 +3448,137 @@ static void OnResizeMouse(bool down) {
     if (!dragged && !g_mresCanceled) ReinjectClick(2);
 }
 
+// ---------------------------------------------------------------------------
+// Mover uma janela solta com Alt + botão esquerdo
+// ---------------------------------------------------------------------------
+// Segurar Alt + botão esquerdo em qualquer ponto de uma janela e arrastar a leva junto com o cursor. Uma
+// janela solta só se move; uma janela da grade é antes arrancada da grade (depois de um arrasto de uns 40 px)
+// e passa a ser uma janela solta. Para devolvê-la: o atalho de soltar/prender ou o centro do menu radial.
+
+struct MouseMove {
+    bool active = false;
+    bool dragged = false;   // o cursor já saiu do lugar (senão foi só um Alt + clique)
+    bool viaRadial = false; // o clique foi entregue ao menu radial (modo Alt + esquerdo sobre janela da grade)
+    bool tear = false;      // janela da grade: ainda presa, será arrancada se o arrasto passar do limite
+    bool torn = false;      // foi arrancada da grade neste arrasto (Esc a devolve)
+    double scale = 1.0;
+    HWND h = nullptr;
+    POINT origin{};
+    RECT start{};
+    POINT last{};
+};
+static MouseMove g_mmove;
+static bool g_mmoveCanceled = false;
+
+static void MouseMoveFinish(bool keep) {
+    MouseMove& M = g_mmove;
+    if (!M.active) return;
+    M.active = false;
+    if (!M.dragged) return;
+    if (g_dragHwnd == M.h) g_dragHwnd = nullptr;
+    int i = FindItem(M.h);
+    if (i < 0) return;
+    if (!keep) {
+        if (M.torn && g_items[i].floating) {
+            ToggleFloatItem(i);  // cancelado: a janela arrancada volta para a grade
+            return;
+        }
+        SetWindowPos(M.h, nullptr, M.start.left, M.start.top, 0, 0,
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS);
+        return;
+    }
+    // a janela pode ter ido para outro monitor
+    g_items[i].mon = MonitorFromWindow(M.h, MONITOR_DEFAULTTONEAREST);
+    GetWindowRect(M.h, &g_items[i].cur);
+}
+
+// Chamada a cada volta do laço da thread de trabalho enquanto o botão está pressionado.
+static void MouseMoveTick() {
+    MouseMove& M = g_mmove;
+    if (!M.active) return;
+    int i = FindItem(M.h);
+    if (i < 0 || (!g_items[i].floating && !M.tear)) {
+        M.active = false;
+        if (g_dragHwnd == M.h) g_dragHwnd = nullptr;
+        return;
+    }
+    if (KeyIsDown(VK_ESCAPE)) {
+        g_mmoveCanceled = true;
+        MouseMoveFinish(false);
+        return;
+    }
+    POINT pt{};
+    GetCursorPos(&pt);
+    const LONG dx = pt.x - M.origin.x, dy = pt.y - M.origin.y;
+    if (M.tear) {
+        // janela da grade: só é arrancada depois de um arrasto decidido, para não sair por engano
+        const double limit = 40.0 * M.scale;
+        if ((double)dx * dx + (double)dy * dy < limit * limit) return;
+        M.tear = false;
+        M.torn = true;
+        M.dragged = true;
+        Wh_Log(L"Alt + botao esquerdo: janela arrancada da grade");
+        ToggleFloatItem(i);  // as outras ocupam o espaço dela
+        g_items[i].anim = false;
+        g_dragHwnd = M.h;
+    }
+    if (!M.dragged) {
+        if (std::abs(dx) < 3 && std::abs(dy) < 3) return;
+        M.dragged = true;
+        g_items[i].anim = false;
+        g_dragHwnd = M.h;
+    }
+    if (pt.x == M.last.x && pt.y == M.last.y) return;
+    M.last = pt;
+    if (IsHungAppWindow(M.h)) return;
+    SetWindowPos(M.h, nullptr, M.start.left + dx, M.start.top + dy, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS);
+}
+
+// O gancho de mouse avisou que Alt + botão esquerdo foi pressionado (down) ou solto.
+static void OnMoveMouse(bool down) {
+    MouseMove& M = g_mmove;
+    if (down) {
+        g_mmoveCanceled = false;
+        g_mouseDownInjected = false;
+        M = MouseMove{};
+        POINT pt{};
+        GetCursorPos(&pt);
+        HWND under = WindowFromPoint(pt);
+        if (under) under = GetAncestor(under, GA_ROOT);
+        int i = FindItem(under);
+        const bool managed = i >= 0 && !IsZoomed(under);
+        if (g_mouseMode == 2 && managed && !g_items[i].floating) {
+            // janela da grade, e Alt + botão esquerdo é também o botão do menu radial: o clique é dele
+            M.viaRadial = true;
+            OnRadialMouse(true);
+            return;
+        }
+        if (g_moveMouse && managed) {
+            M.active = true;
+            M.tear = !g_items[i].floating;
+            M.h = under;
+            M.origin = pt;
+            M.last = pt;
+            M.scale = MonScale(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST));
+            GetWindowRect(under, &M.start);
+            return;
+        }
+        MousePassThrough(0);
+        return;
+    }
+    if (M.viaRadial) {
+        M.viaRadial = false;
+        OnRadialMouse(false);
+        return;
+    }
+    if (MouseFinishPassThrough(0)) return;
+    const bool dragged = M.active && M.dragged;
+    MouseMoveFinish(true);
+    // sem arrasto, foi só um Alt + clique: devolve o clique ao app
+    if (!dragged && !g_mmoveCanceled) ReinjectClick(0);
+}
+
 struct HotkeyDef { int id; UINT mods, vk; };
 static std::vector<HotkeyDef> g_keys;
 
@@ -3289,6 +3592,10 @@ static void OnHotkey(int id) {
         if (g_mres.active) {
             g_mresCanceled = true;
             MouseResizeFinish(false);
+        }
+        if (g_mmove.active) {
+            g_mmoveCanceled = true;
+            MouseMoveFinish(false);
         }
         return;
     }
@@ -3608,18 +3915,22 @@ static void StopHookThread() {
 static const UINT WM_APP_MOUSE = WM_APP + 3;
 // Retângulos das janelas que o mod administra, para o gancho decidir na hora: um clique fora de todos eles
 // passa intocado (sem ser segurado e reenviado). A thread de trabalho atualiza a lista; o gancho só lê.
+struct HookRect { RECT r; bool floating; };
 static std::mutex g_mhRectsLock;
-static std::vector<RECT> g_mhRects;
+static std::vector<HookRect> g_mhRects;
 
-static bool MousePointOverManaged(POINT pt) {
+// O ponto está sobre alguma janela administrada? bit 1 = uma janela da grade, bit 2 = uma janela solta.
+static int MousePointOverManaged(POINT pt) {
+    int over = 0;
     std::lock_guard<std::mutex> lock(g_mhRectsLock);
-    for (const RECT& r : g_mhRects)
-        if (PtInRect(&r, pt)) return true;
-    return false;
+    for (const HookRect& e : g_mhRects)
+        if (PtInRect(&e.r, pt)) over |= e.floating ? 2 : 1;
+    return over;
 }
 
 static int g_mhMode = 0;         // cópias de g_mouseMode / g_resizeMouse lidas pela thread do gancho
 static bool g_mhResize = false;  // (escritas com o gancho parado)
+static bool g_mhMove = false;
 static WPARAM g_mhUpMsg = 0;     // só a thread do gancho usa: mensagem de "soltar" do botão que ela segurou (0 = nenhum)
 static WPARAM g_mhUpCode = 0;    // o que avisar à thread de trabalho quando esse botão for solto
 static DWORD g_mhTarget = 0;
@@ -3654,7 +3965,8 @@ static LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wp, LPARAM lp) {
         return CallNextHookEx(nullptr, code, wp, lp);
     }
     // fora das janelas administradas (área de trabalho, barra de tarefas, outros apps) o clique segue intocado
-    if (!MousePointOverManaged(m->pt)) return CallNextHookEx(nullptr, code, wp, lp);
+    const int over = MousePointOverManaged(m->pt);
+    if (!over) return CallNextHookEx(nullptr, code, wp, lp);
     UINT now = 0;
     if (KeyIsDown(VK_CONTROL)) now |= MOD_CONTROL;
     if (KeyIsDown(VK_MENU)) now |= MOD_ALT;
@@ -3667,6 +3979,16 @@ static LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wp, LPARAM lp) {
         MouseHookDummyKey();
         return 1;  // segura o clique; ele é devolvido depois se não houver arrasto
     }
+    // Alt + botão esquerdo: mover uma janela solta, ou arrancar da grade uma janela presa (a thread de
+    // trabalho confere a janela exata e, se não for o caso, entrega o clique ao menu radial ou o devolve ao app)
+    if (g_mhMove && wp == WM_LBUTTONDOWN && now == MOD_ALT) {
+        g_mhUpMsg = WM_LBUTTONUP;
+        g_mhUpCode = 4;
+        PostThreadMessageW(g_mhTarget, WM_APP_MOUSE, 5, 0);
+        MouseHookDummyKey();
+        return 1;
+    }
+
     WPARAM wantDown = 0, wantUp = 0;
     UINT wantMods = 0;
     if (g_mhMode == 1) {
@@ -3718,6 +4040,7 @@ static void StopMouseHook() {
     g_mhUpMsg = 0;
     g_mhMode = 0;
     g_mhResize = false;
+    g_mhMove = false;
     g_mhPassUp = false;
 }
 
@@ -3729,16 +4052,15 @@ static void RefreshHookRects(bool force = false) {
     const double now = NowMs();
     if (!force && now - last < 50.0) return;
     last = now;
-    std::vector<RECT> rects;
+    std::vector<HookRect> rects;
     rects.reserve(g_items.size());
     for (const auto& it : g_items) {
         RECT r{};
-        // Só entram as janelas sobre as quais o mod de fato age: nem o menu radial nem o redimensionamento
-        // mexem em janela maximizada (que cobriria o monitor inteiro), e o menu radial ignora as soltas.
+        // Só entram as janelas sobre as quais o mod de fato age: nenhum dos gestos mexe em janela maximizada
+        // (que cobriria o monitor inteiro). As soltas entram: todos os gestos agem sobre elas.
         if (IsIconic(it.h) || IsZoomed(it.h) || !GetWindowRect(it.h, &r)) continue;
-        if (it.floating && !g_resizeMouse) continue;
-        if (it.to.right > it.to.left) UnionRect(&r, &r, &it.to);
-        rects.push_back(r);
+        if (!it.floating && it.to.right > it.to.left) UnionRect(&r, &r, &it.to);
+        rects.push_back({r, it.floating});
     }
     std::lock_guard<std::mutex> lock(g_mhRectsLock);
     g_mhRects.swap(rects);
@@ -3746,10 +4068,11 @@ static void RefreshHookRects(bool force = false) {
 
 // Chamada só pela thread de trabalho, com o gancho parado.
 static void StartMouseHook() {
-    if (g_mouseMode == 0 && !g_resizeMouse) return;
+    if (g_mouseMode == 0 && !g_resizeMouse && !g_moveMouse) return;
     RefreshHookRects(true);
     g_mhMode = g_mouseMode;
     g_mhResize = g_resizeMouse;
+    g_mhMove = g_moveMouse;
     g_mhTarget = GetCurrentThreadId();
     HookStart st{CreateEventW(nullptr, TRUE, FALSE, nullptr), false};
     if (!st.ready) return;
@@ -3811,6 +4134,7 @@ static void RegisterHotkeys() {
         std::wstring rm = GetStr(L"radialMouse");
         g_mouseMode = rm == L"middle" ? 1 : rm == L"altleft" ? 2 : rm == L"winleft" ? 3 : rm == L"right" ? 4 : 0;
         g_resizeMouse = Wh_GetIntSetting(L"resizeMouse") != 0;
+        g_moveMouse = Wh_GetIntSetting(L"moveMouse") != 0;
         StartMouseHook();
     }
 }
@@ -3848,12 +4172,14 @@ static DWORD WINAPI Worker(LPVOID) {
             if (msg.message == WM_HOTKEY || msg.message == WM_APP_LLHK) {
                 OnHotkey((int)msg.wParam);
             } else if (msg.message == WM_APP_MOUSE) {
-                if (msg.wParam >= 2) OnResizeMouse(msg.wParam == 3);
+                if (msg.wParam >= 4) OnMoveMouse(msg.wParam == 5);
+                else if (msg.wParam >= 2) OnResizeMouse(msg.wParam == 3);
                 else OnRadialMouse(msg.wParam == 1);
             } else if (msg.message == WM_APP_RELOAD) {
                 Wh_Log(L"Configuracoes alteradas: recarregando");
                 RadialEnd(false);
                 MouseResizeFinish(false);
+                MouseMoveFinish(true);
                 if (g_live.active) {
                     LiveRestoreBase();
                     LiveEnd();
@@ -3902,11 +4228,12 @@ static DWORD WINAPI Worker(LPVOID) {
         TickBorder();
         RadialTick();
         MouseResizeTick();
+        MouseMoveTick();
         {
             // Enquanto o menu radial ou o redimensionamento pelo mouse está em curso, Esc é registrado como
             // atalho global: assim ele cancela a ação sem chegar ao app que está sob o cursor.
             static bool wanted = false, grabbed = false;
-            const bool need = g_radial.active || g_mres.active;
+            const bool need = g_radial.active || g_mres.active || g_mmove.active;
             if (need != wanted) {
                 wanted = need;
                 if (need) {
@@ -3939,6 +4266,7 @@ static DWORD WINAPI Worker(LPVOID) {
             if (g_retileAt) wait = std::min<DWORD>(wait, 15);
             if (g_displayAt) wait = std::min<DWORD>(wait, 50);
             if (g_radial.active || g_mres.active) wait = std::min<DWORD>(wait, 16);
+            if (g_mmove.active) wait = std::min<DWORD>(wait, 8);
             if (g_live.active) wait = std::min<DWORD>(wait, 8);
             MsgWaitForMultipleObjectsEx(0, nullptr, wait, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         }
