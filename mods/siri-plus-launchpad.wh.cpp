@@ -243,8 +243,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
 - displayMode: siriOriginal
   $name: "① Mode"
   $name:pt-BR: "① Modo"
-  $description: "Tip: the ⋯ button at the end of the bar opens these settings inside the launcher. A value changed there takes priority over the one shown here until you change it here again"
-  $description:pt-BR: "Dica: o botão ⋯ no fim da barra abre estas configurações dentro do menu. Um valor mudado lá vale no lugar do que aparece aqui até você mudá-lo aqui de novo"
+  $description: "Tip: the ⋯ button at the end of the bar opens these settings inside the launcher. A value changed there takes priority over the one shown here until you change it here again. Glass transparency and Background blur are the exception: chosen there, they are kept for that theme until you use its Theme defaults button"
+  $description:pt-BR: "Dica: o botão ⋯ no fim da barra abre estas configurações dentro do menu. Um valor mudado lá vale no lugar do que aparece aqui até você mudá-lo aqui de novo. A Transparência do vidro e o Desfoque do fundo são a exceção: escolhidos lá, ficam guardados para aquele tema até você usar o botão Padrões do tema"
   $options:
   - siriOriginal: Original Siri (macOS 27 style menu, default)
   - siri: Floating (search bar)
@@ -343,8 +343,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - transparency: 80
     $name: Glass transparency (%)
     $name:pt-BR: "Transparência do vidro (%)"
-    $description: Ready-made themes. 100 = completely clear; lower = more solid. Light and OLED start solid (0) while this stays at 80
-    $description:pt-BR: "Temas prontos. 100 = totalmente transparente; menos = mais sólido. Claro e OLED começam sólidos (0) enquanto isto fica em 80"
+    $description: "Ready-made themes. 100 = completely clear; lower = more solid. While this stays at 80, Light and OLED start solid (0) and Custom liquid glass starts clear (100). A value chosen in the launcher's own settings is kept for that theme and used instead of this one"
+    $description:pt-BR: "Temas prontos. 100 = totalmente transparente; menos = mais sólido. Enquanto isto fica em 80, Claro e OLED começam sólidos (0) e Vidro líquido personalizado começa transparente (100). Um valor escolhido nas configurações do próprio menu fica guardado para aquele tema e vale no lugar deste"
   - cornerRadius: 26
     $name: Corner rounding (px)
     $name:pt-BR: "Arredondamento dos cantos (px)"
@@ -353,8 +353,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - blur: 60
     $name: Background blur (0-100, 0 = none)
     $name:pt-BR: "Desfoque do fundo (0–100, 0 = nenhum)"
-    $description: Live blur behind the menus (animated wallpapers and videos keep playing). Needs Windows' transparency effects; without them a blurred still image is used
-    $description:pt-BR: "Desfoque ao vivo atrás dos menus (papéis de parede animados e vídeos continuam rodando). Precisa dos efeitos de transparência do Windows; sem eles, usa uma imagem parada desfocada"
+    $description: "Live blur behind the menus (animated wallpapers and videos keep playing). Needs Windows' transparency effects; without them a blurred still image is used. Custom liquid glass starts with no blur while this stays at 60. A value chosen in the launcher's own settings is kept for that theme and used instead of this one"
+    $description:pt-BR: "Desfoque ao vivo atrás dos menus (papéis de parede animados e vídeos continuam rodando). Precisa dos efeitos de transparência do Windows; sem eles, usa uma imagem parada desfocada. Vidro líquido personalizado começa sem desfoque enquanto isto fica em 60. Um valor escolhido nas configurações do próprio menu fica guardado para aquele tema e vale no lugar deste"
   - menuTextColor: auto
     $name: Text color
     $name:pt-BR: "Cor do texto"
