@@ -2551,6 +2551,9 @@ static void UpdateBorderHooks() {
         EVENT_SYSTEM_MINIMIZEEND,    EVENT_SYSTEM_MOVESIZEEND,
         EVENT_OBJECT_DESTROY,        EVENT_OBJECT_CLOAKED_AOT,
         EVENT_OBJECT_UNCLOAKED_AOT,
+        // Keeps the ring's z-order right as focus moves. The menu hooks may
+        // deliver the same event a second time; both handlers are idempotent.
+        EVENT_SYSTEM_FOREGROUND,
     };
     for (DWORD ev : events) {
         HWINEVENTHOOK hook = SetWinEventHook(ev, ev, nullptr, WinEventProc, 0, 0,
