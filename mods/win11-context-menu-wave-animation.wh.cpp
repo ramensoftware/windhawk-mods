@@ -9,7 +9,7 @@
 // @github          https://github.com/GuiFrr03
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -ldwmapi -lgdi32 -luser32 -O3
+// @compilerOptions -ldwmapi -lgdi32 -luser32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -49,8 +49,8 @@ When opening a right-click context menu, concentric circular ripples radiate fro
 - waveIntensity: 100
   $name: Wave 3D Strength (%)
   $name:pt: Força da onda 3D (%)
-  $description: Intensity of the 3D refraction and text deformation (50 to 150)
-  $description:pt: Intensidade da refração 3D e deformação do texto (50 a 150)
+  $description: Intensity of the 3D refraction and text deformation (25 to 200, 100 recommended)
+  $description:pt: Intensidade da refração 3D e deformação do texto (25 a 200, 100 recomendado)
 - rippleRings: 2
   $name: Concentric ripple rings
   $name:pt: Anéis de ondulação extras
@@ -67,14 +67,10 @@ When opening a right-click context menu, concentric circular ripples radiate fro
 - minPopupHeight: 40
   $name: Minimum height (DIP)
   $name:pt: Altura mínima (DIP)
-- logWindows: false
-  $name: Log popup windows
-  $name:pt: Registrar janelas popup no log
-- debugLogFile: ''
-  $name: Debug log file
-  $name:pt: Arquivo de log de depuração
 */
 // ==/WindhawkModSettings==
+
+#include <windhawk_utils.h>
 
 #include <windows.h>
 #include <dwmapi.h>
@@ -82,11 +78,10 @@ When opening a right-click context menu, concentric circular ripples radiate fro
 #include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <cstdarg>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -111,24 +106,18 @@ static UINT SafeGetDpiForWindow(HWND hwnd) {
 }
 
 struct Settings {
-    int durationMs = 450;
+    int durationMs = 700;
     float intensity = 1.0f;
     int rings = 2;
     std::vector<std::wstring> classes;
     int minWidth = 60;
     int minHeight = 40;
-    bool log = false;
 };
 
 static std::mutex g_settingsMutex;
 static Settings g_settings;
-static std::mutex g_logMutex;
-static std::wstring g_logPath;
-static std::atomic<bool> g_logToWh{false};
-static std::atomic<bool> g_hasLogFile{false};
 
 static LONGLONG g_qpcFreq = 1;
-static LONGLONG g_qpcInit = 0;
 
 static LONGLONG Now() {
     LARGE_INTEGER n;
@@ -140,46 +129,11 @@ static double ElapsedMs(LONGLONG start, LONGLONG end) {
     return (double)(end - start) * 1000.0 / (double)g_qpcFreq;
 }
 
-static void DebugLog(const wchar_t* fmt, ...) {
-    bool logWh = g_logToWh.load(std::memory_order_relaxed);
-    bool hasFile = g_hasLogFile.load(std::memory_order_relaxed);
-    if (!logWh && !hasFile) return;
-
-    wchar_t msg[1024];
-    va_list args;
-    va_start(args, fmt);
-    _vsnwprintf_s(msg, _countof(msg), _TRUNCATE, fmt, args);
-    va_end(args);
-
-    if (logWh) Wh_Log(L"%s", msg);
-    if (!hasFile) return;
-
-    std::lock_guard<std::mutex> lock(g_logMutex);
-    if (g_logPath.empty()) return;
-
-    double ms = ElapsedMs(g_qpcInit, Now());
-    wchar_t line[1200];
-    _snwprintf_s(line, _countof(line), _TRUNCATE, L"%10.1f [%5lu] %s\r\n", ms,
-                 GetCurrentThreadId(), msg);
-
-    char utf8[3600];
-    int n = WideCharToMultiByte(CP_UTF8, 0, line, -1, utf8, sizeof(utf8), nullptr, nullptr);
-    if (n <= 1) return;
-
-    HANDLE f = CreateFileW(g_logPath.c_str(), FILE_APPEND_DATA,
-                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-                           OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return;
-    DWORD written;
-    WriteFile(f, utf8, n - 1, &written, nullptr);
-    CloseHandle(f);
-}
-
 static void LoadSettings() {
     Settings s;
 
     int dur = Wh_GetIntSetting(L"waveDuration");
-    s.durationMs = (dur > 0) ? std::clamp(dur, 150, 2000) : 450;
+    s.durationMs = (dur > 0) ? std::clamp(dur, 150, 2000) : 700;
 
     int inten = Wh_GetIntSetting(L"waveIntensity");
     s.intensity = (inten > 0) ? (std::clamp(inten, 25, 200) / 100.0f) : 1.0f;
@@ -187,9 +141,7 @@ static void LoadSettings() {
     int rings = Wh_GetIntSetting(L"rippleRings");
     s.rings = (rings > 0) ? std::clamp(rings, 1, 4) : 2;
 
-    PCWSTR classes = Wh_GetStringSetting(L"classes");
-    std::wstring all = classes ? classes : L"";
-    if (classes) Wh_FreeStringSetting(classes);
+    std::wstring all = WindhawkUtils::StringSetting::make(L"classes").get();
 
     size_t pos = 0;
     while (pos <= all.size()) {
@@ -216,24 +168,9 @@ static void LoadSettings() {
     int mh = Wh_GetIntSetting(L"minPopupHeight");
     s.minWidth = std::max(50, mw > 0 ? mw : 60);
     s.minHeight = std::max(35, mh > 0 ? mh : 40);
-    s.log = Wh_GetIntSetting(L"logWindows") != 0;
-
-    PCWSTR logFile = Wh_GetStringSetting(L"debugLogFile");
-    {
-        std::lock_guard<std::mutex> lock(g_logMutex);
-        g_logPath = logFile ? logFile : L"";
-        g_hasLogFile.store(!g_logPath.empty(), std::memory_order_relaxed);
-    }
-    if (logFile) Wh_FreeStringSetting(logFile);
-    g_logToWh.store(s.log, std::memory_order_relaxed);
 
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settings = std::move(s);
-}
-
-static Settings GetSettings() {
-    std::lock_guard<std::mutex> lock(g_settingsMutex);
-    return g_settings;
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +180,6 @@ static Settings GetSettings() {
 struct Anim {
     HWND hwnd = nullptr;
     bool armed = false;
-    bool cancel = false;
     bool addedLayered = false;
     bool hasAppRgn = false;
     std::vector<BYTE> appRgnData;
@@ -256,8 +192,6 @@ struct Anim {
 };
 
 struct CapturedCard {
-    HWND hwnd = nullptr;
-    RECT wndRect{};
     RECT cardScreenRect{};
     int width = 0;
     int height = 0;
@@ -282,11 +216,12 @@ struct WaveSession {
 
 static std::mutex g_animMutex;
 static std::unordered_map<HWND, Anim> g_anims;
+static std::atomic<int> g_activeAnimCount{0};
 static std::unordered_map<HWND, ULONGLONG> g_recent;
 static std::atomic<bool> g_resetSession{false};
 static HANDLE g_wakeEvent = nullptr;
 static std::atomic<bool> g_stop{false};
-static std::thread g_animThread;
+[[clang::no_destroy]] static std::optional<std::thread> g_animThread;
 
 static thread_local bool g_ownCall = false;
 
@@ -302,7 +237,7 @@ static int MySetWindowRgn(HWND hwnd, HRGN rgn, BOOL redraw) {
     return r;
 }
 
-static bool IsTargetClass(HWND hwnd, const Settings& s, WCHAR* clsOut, int clsLen) {
+static bool MatchTargetClassAndGetSettings(HWND hwnd, WCHAR* clsOut, int clsLen, Settings& sOut) {
     clsOut[0] = 0;
     if (!GetClassNameW(hwnd, clsOut, clsLen)) return false;
 
@@ -313,8 +248,13 @@ static bool IsTargetClass(HWND hwnd, const Settings& s, WCHAR* clsOut, int clsLe
         return false;
     }
 
-    for (const auto& c : s.classes)
-        if (_wcsicmp(c.c_str(), clsOut) == 0) return true;
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    for (const auto& c : g_settings.classes) {
+        if (_wcsicmp(c.c_str(), clsOut) == 0) {
+            sOut = g_settings;
+            return true;
+        }
+    }
     return false;
 }
 
@@ -332,7 +272,7 @@ static void HideWindowForWave(Anim& a) {
 }
 
 static void RestoreRealWindow(const Anim& a, const wchar_t* why) {
-    DebugLog(L"hwnd=%p restore (%s)", a.hwnd, why);
+    Wh_Log(L"hwnd=%p restore (%s)", a.hwnd, why);
     if (!IsWindow(a.hwnd)) return;
 
     HRGN restore = nullptr;
@@ -356,7 +296,6 @@ static void RestoreRealWindow(const Anim& a, const wchar_t* why) {
 // Capture a single PopupWindowSiteBridge via PrintWindow(PW_RENDERFULLCONTENT) and auto-crop transparent shadow margins
 static CapturedCard CapturePopupCard(HWND hwnd, int minWidthDip, int minHeightDip) {
     CapturedCard out;
-    out.hwnd = hwnd;
     if (!IsWindow(hwnd) || !IsWindowVisible(hwnd)) return out;
 
     RECT rc{};
@@ -367,7 +306,6 @@ static CapturedCard CapturePopupCard(HWND hwnd, int minWidthDip, int minHeightDi
     if (w < MulDiv(minWidthDip, dpi, 96) || h < MulDiv(minHeightDip, dpi, 96) || w > 2400 || h > 2400) {
         return out;
     }
-    out.wndRect = rc;
 
     HDC hdcScreen = GetDC(nullptr);
     if (!hdcScreen) return out;
@@ -522,7 +460,7 @@ static CapturedCard CapturePopupCard(HWND hwnd, int minWidthDip, int minHeightDi
 // 3D Water Drop Ripple Deformation Renderer & Overlay Window
 // ---------------------------------------------------------------------------
 
-static HWND g_hwndOverlay = nullptr;
+static std::atomic<HWND> g_hwndOverlay{nullptr};
 static HDC g_hdcOverlay = nullptr;
 static HBITMAP g_hbmOverlay = nullptr;
 static HGDIOBJ g_oldOverlayBm = nullptr;
@@ -530,25 +468,35 @@ static uint32_t* g_overlayBits = nullptr;
 static int g_overlayAllocW = 0;
 static int g_overlayAllocH = 0;
 
+static HINSTANCE GetModInstance() {
+    HMODULE hm = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&GetModInstance, &hm);
+    return hm;
+}
+
 static void EnsureOverlayWindow() {
-    if (g_hwndOverlay && IsWindow(g_hwndOverlay)) return;
+    HWND cur = g_hwndOverlay.load(std::memory_order_relaxed);
+    if (cur && IsWindow(cur)) return;
 
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = DefWindowProcW;
-    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hInstance = GetModInstance();
     wc.lpszClassName = L"WindhawkFluentWaveOverlay";
     RegisterClassExW(&wc);
 
-    g_hwndOverlay = CreateWindowExW(
+    HWND hwnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         L"WindhawkFluentWaveOverlay", L"", WS_POPUP,
         0, 0, 1, 1, nullptr, nullptr, wc.hInstance, nullptr);
+    g_hwndOverlay.store(hwnd, std::memory_order_relaxed);
 }
 
 static bool EnsureOverlaySurface(int outW, int outH) {
     EnsureOverlayWindow();
-    if (!g_hwndOverlay) return false;
+    if (!g_hwndOverlay.load(std::memory_order_relaxed)) return false;
 
     if (!g_hdcOverlay) {
         HDC hdcScreen = GetDC(nullptr);
@@ -600,9 +548,9 @@ static bool EnsureOverlaySurface(int outW, int outH) {
 }
 
 static void DestroyOverlayResources() {
-    if (g_hwndOverlay) {
-        DestroyWindow(g_hwndOverlay);
-        g_hwndOverlay = nullptr;
+    HWND overlay = g_hwndOverlay.exchange(nullptr, std::memory_order_relaxed);
+    if (overlay) {
+        DestroyWindow(overlay);
     }
     if (g_hdcOverlay && g_oldOverlayBm) {
         SelectObject(g_hdcOverlay, g_oldOverlayBm);
@@ -617,7 +565,7 @@ static void DestroyOverlayResources() {
         DeleteDC(g_hdcOverlay);
         g_hdcOverlay = nullptr;
     }
-    UnregisterClassW(L"WindhawkFluentWaveOverlay", GetModuleHandleW(nullptr));
+    UnregisterClassW(L"WindhawkFluentWaveOverlay", GetModInstance());
     g_overlayAllocW = 0;
     g_overlayAllocH = 0;
 }
@@ -853,16 +801,18 @@ static void RenderWaterDrop3DFrame(const WaveSession& ws, float p) {
     bf.SourceConstantAlpha = 255;
     bf.AlphaFormat = AC_SRC_ALPHA;
 
-    UpdateLayeredWindow(g_hwndOverlay, nullptr, &ptPos, &szWnd, g_hdcOverlay, &ptSrc, 0, &bf, ULW_ALPHA);
-    if (!IsWindowVisible(g_hwndOverlay)) {
-        SetWindowPos(g_hwndOverlay, HWND_TOPMOST, ptPos.x, ptPos.y, szWnd.cx, szWnd.cy,
+    HWND overlay = g_hwndOverlay.load(std::memory_order_relaxed);
+    UpdateLayeredWindow(overlay, nullptr, &ptPos, &szWnd, g_hdcOverlay, &ptSrc, 0, &bf, ULW_ALPHA);
+    if (!IsWindowVisible(overlay)) {
+        SetWindowPos(overlay, HWND_TOPMOST, ptPos.x, ptPos.y, szWnd.cx, szWnd.cy,
                      SWP_NOACTIVATE | SWP_SHOWWINDOW);
     }
 }
 
 static void HideWaveOverlay() {
-    if (g_hwndOverlay && IsWindowVisible(g_hwndOverlay)) {
-        ShowWindow(g_hwndOverlay, SW_HIDE);
+    HWND overlay = g_hwndOverlay.load(std::memory_order_relaxed);
+    if (overlay && IsWindowVisible(overlay)) {
+        ShowWindow(overlay, SW_HIDE);
     }
 }
 
@@ -982,6 +932,7 @@ static void FinishAllActiveAnims(const wchar_t* why) {
             toRestore.push_back(a);
         }
         g_anims.clear();
+        g_activeAnimCount.store(0, std::memory_order_release);
     }
     for (const auto& a : toRestore) {
         RestoreRealWindow(a, why);
@@ -1016,19 +967,19 @@ static void AnimThreadProc() {
                 HideWaveOverlay();
                 session = WaveSession{};
             }
-            WaitForSingleObject(g_wakeEvent, 200);
+            MsgWaitForMultipleObjectsEx(1, &g_wakeEvent, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
             continue;
         }
 
         LONGLONG now = Now();
 
-        // Check if any tracked window was destroyed, hidden, or cancelled
+        // Check if any tracked window was destroyed or hidden
         bool anyCancelledOrHidden = false;
         std::vector<Anim> currentAnims;
         {
             std::lock_guard<std::mutex> lock(g_animMutex);
             for (auto& [h, a] : g_anims) {
-                if (!IsWindow(h) || !IsWindowVisible(h) || a.cancel) {
+                if (!IsWindow(h) || !IsWindowVisible(h)) {
                     anyCancelledOrHidden = true;
                 } else {
                     RECT curRc{};
@@ -1173,7 +1124,8 @@ static void AnimThreadProc() {
             }
 
             // Fuse all valid cards (Command Bar + Main Flyout) into a single unified BGRA buffer
-            const int SHADOW_PAD = 24;
+            UINT sessionDpi = SafeGetDpiForWindow(primaryHwnd);
+            const int shadowPad = MulDiv(24, sessionDpi, 96);
             RECT unionRc = validCards[0].cardScreenRect;
             for (size_t i = 1; i < validCards.size(); i++) {
                 unionRc.left = std::min(unionRc.left, validCards[i].cardScreenRect.left);
@@ -1182,11 +1134,11 @@ static void AnimThreadProc() {
                 unionRc.bottom = std::max(unionRc.bottom, validCards[i].cardScreenRect.bottom);
             }
 
-            // Expand unionRc by SHADOW_PAD so the 3D ripple renders the soft native drop shadow
-            unionRc.left -= SHADOW_PAD;
-            unionRc.top -= SHADOW_PAD;
-            unionRc.right += SHADOW_PAD;
-            unionRc.bottom += SHADOW_PAD;
+            // Expand unionRc by shadowPad so the 3D ripple renders the soft native drop shadow
+            unionRc.left -= shadowPad;
+            unionRc.top -= shadowPad;
+            unionRc.right += shadowPad;
+            unionRc.bottom += shadowPad;
 
             int uw = unionRc.right - unionRc.left;
             int uh = unionRc.bottom - unionRc.top;
@@ -1203,7 +1155,7 @@ static void AnimThreadProc() {
             session.unionScreenRect = unionRc;
             session.width = uw;
             session.height = uh;
-            session.dpi = SafeGetDpiForWindow(primaryHwnd);
+            session.dpi = sessionDpi;
             session.settings = activeSettings;
             session.fusedPixels.assign((size_t)uw * uh, 0);
 
@@ -1211,6 +1163,19 @@ static void AnimThreadProc() {
                 // Real Acrylic blur is now captured in fusedPixels!
                 // During the 3D ripple animation, keep real window at alpha=0 so only the ripple is seen:
                 SetLayeredWindowAttributes(a.hwnd, 0, 0, LWA_ALPHA);
+            }
+
+            // A hook may have cancelled/superseded some of these windows while we were
+            // capturing; its restore ran before the call above, so undo our alpha 0.
+            std::vector<HWND> untracked;
+            {
+                std::lock_guard<std::mutex> lock(g_animMutex);
+                for (const auto& a : currentAnims) {
+                    if (!g_anims.contains(a.hwnd)) untracked.push_back(a.hwnd);
+                }
+            }
+            for (HWND h : untracked) {
+                if (IsWindow(h)) SetLayeredWindowAttributes(h, 0, 255, LWA_ALPHA);
             }
 
             for (const auto& c : validCards) {
@@ -1228,11 +1193,11 @@ static void AnimThreadProc() {
                 }
             }
 
-            // Generate soft native drop shadow in the outer SHADOW_PAD margin
-            GenerateDropShadow(session.fusedPixels, uw, uh, SHADOW_PAD, session.dpi);
+            // Generate soft native drop shadow in the outer shadowPad margin
+            GenerateDropShadow(session.fusedPixels, uw, uh, shadowPad, session.dpi);
 
-            DebugLog(L"3D WaveSession started: cards=%zu union=(%ld,%ld %dx%d) cursor=(%ld,%ld)",
-                     validCards.size(), unionRc.left, unionRc.top, uw, uh, clickPt.x, clickPt.y);
+            Wh_Log(L"3D WaveSession started: cards=%zu union=(%ld,%ld %dx%d) cursor=(%ld,%ld)",
+                   validCards.size(), unionRc.left, unionRc.top, uw, uh, clickPt.x, clickPt.y);
         }
 
         // Phase 2: Render 3D Water Ripple frame
@@ -1276,16 +1241,14 @@ static RECT CurrentRect(HWND hwnd) {
 static bool PrepareAnim(HWND hwnd, const RECT& finalRect, const wchar_t* source) {
     if (!hwnd || GetAncestor(hwnd, GA_PARENT) != GetDesktopWindow()) return false;
 
-    Settings s = GetSettings();
     WCHAR cls[256];
-    if (!IsTargetClass(hwnd, s, cls, ARRAYSIZE(cls))) return false;
+    Settings s;
+    if (!MatchTargetClassAndGetSettings(hwnd, cls, ARRAYSIZE(cls), s)) return false;
 
     int w = finalRect.right - finalRect.left;
     int h = finalRect.bottom - finalRect.top;
-    DebugLog(L"[%s] hwnd=%p class=\"%s\" rect=(%ld,%ld %dx%d)",
-             source, hwnd, cls, finalRect.left, finalRect.top, w, h);
-
-
+    Wh_Log(L"[%s] hwnd=%p class=\"%s\" rect=(%ld,%ld %dx%d)",
+           source, hwnd, cls, finalRect.left, finalRect.top, w, h);
 
     // Check if an existing root menu is currently open and visible on screen.
     // If so, this new window is a SUBMENU (hovered flyout) and should NOT be intercepted
@@ -1305,7 +1268,7 @@ static bool PrepareAnim(HWND hwnd, const RECT& finalRect, const wchar_t* source)
     }
 
     if (isSubmenu) {
-        DebugLog(L"hwnd=%p skipped (detected as submenu of open context menu)", hwnd);
+        Wh_Log(L"hwnd=%p skipped (detected as submenu of open context menu)", hwnd);
         return false;
     }
 
@@ -1323,6 +1286,7 @@ static bool PrepareAnim(HWND hwnd, const RECT& finalRect, const wchar_t* source)
             }
         }
         if (!staleToRestore.empty()) {
+            g_activeAnimCount.store((int)g_anims.size(), std::memory_order_release);
             g_resetSession = true;
         }
     }
@@ -1347,6 +1311,7 @@ static bool PrepareAnim(HWND hwnd, const RECT& finalRect, const wchar_t* source)
     {
         std::lock_guard<std::mutex> lock(g_animMutex);
         g_anims[hwnd] = a;
+        g_activeAnimCount.store((int)g_anims.size(), std::memory_order_release);
     }
     return true;
 }
@@ -1367,6 +1332,8 @@ static void StartAnim(HWND hwnd) {
 }
 
 static void CancelAnim(HWND hwnd, const wchar_t* why) {
+    if (g_activeAnimCount.load(std::memory_order_acquire) == 0) return;
+
     Anim a;
     bool found = false;
     {
@@ -1375,6 +1342,7 @@ static void CancelAnim(HWND hwnd, const wchar_t* why) {
         if (it != g_anims.end()) {
             a = it->second;
             g_anims.erase(it);
+            g_activeAnimCount.store((int)g_anims.size(), std::memory_order_release);
             found = true;
             g_resetSession = true;
         }
@@ -1386,6 +1354,8 @@ static void CancelAnim(HWND hwnd, const wchar_t* why) {
 }
 
 static void OnBeforeResize(HWND hwnd, const RECT& newRect, const wchar_t* source) {
+    if (g_activeAnimCount.load(std::memory_order_acquire) == 0) return;
+
     std::lock_guard<std::mutex> lock(g_animMutex);
     auto it = g_anims.find(hwnd);
     if (it == g_anims.end()) return;
@@ -1407,7 +1377,7 @@ static void OnBeforeResize(HWND hwnd, const RECT& newRect, const wchar_t* source
         }
         it->second.lastResizeQpc = now;
         it->second.lastRect = newRect;
-        DebugLog(L"[%s] hwnd=%p resize (%dx%d -> %dx%d)", source, hwnd, oldW, oldH, newW, newH);
+        Wh_Log(L"[%s] hwnd=%p resize (%dx%d -> %dx%d)", source, hwnd, oldW, oldH, newW, newH);
     }
 }
 
@@ -1415,7 +1385,9 @@ using ShowWindow_t = BOOL(WINAPI*)(HWND, int);
 static ShowWindow_t ShowWindow_Original;
 
 static BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
-    if (hWnd == g_hwndOverlay) return ShowWindow_Original(hWnd, nCmdShow);
+    if (hWnd == g_hwndOverlay.load(std::memory_order_relaxed)) {
+        return ShowWindow_Original(hWnd, nCmdShow);
+    }
     bool prepared = false;
     if (nCmdShow == SW_HIDE) {
         CancelAnim(hWnd, L"ShowWindow(SW_HIDE)");
@@ -1438,20 +1410,29 @@ static SetWindowPos_t SetWindowPos_Original;
 
 static BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y,
                                      int cx, int cy, UINT uFlags) {
-    if (hWnd == g_hwndOverlay) return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
-    RECT nr = CurrentRect(hWnd);
-    if (!(uFlags & SWP_NOMOVE)) OffsetRect(&nr, X - nr.left, Y - nr.top);
-    if (!(uFlags & SWP_NOSIZE)) {
-        nr.right = nr.left + cx;
-        nr.bottom = nr.top + cy;
+    if (hWnd == g_hwndOverlay.load(std::memory_order_relaxed)) {
+        return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
     }
 
     bool prepared = false;
     if (uFlags & SWP_HIDEWINDOW) {
         CancelAnim(hWnd, L"SWP_HIDEWINDOW");
     } else if ((uFlags & SWP_SHOWWINDOW) && !IsWindowVisible(hWnd)) {
+        RECT nr = CurrentRect(hWnd);
+        if (!(uFlags & SWP_NOMOVE)) OffsetRect(&nr, X - nr.left, Y - nr.top);
+        if (!(uFlags & SWP_NOSIZE)) {
+            nr.right = nr.left + cx;
+            nr.bottom = nr.top + cy;
+        }
         prepared = PrepareAnim(hWnd, nr, L"SetWindowPos");
-    } else if ((uFlags & (SWP_NOSIZE | SWP_NOMOVE)) != (SWP_NOSIZE | SWP_NOMOVE)) {
+    } else if ((uFlags & (SWP_NOSIZE | SWP_NOMOVE)) != (SWP_NOSIZE | SWP_NOMOVE) &&
+               g_activeAnimCount.load(std::memory_order_acquire) > 0) {
+        RECT nr = CurrentRect(hWnd);
+        if (!(uFlags & SWP_NOMOVE)) OffsetRect(&nr, X - nr.left, Y - nr.top);
+        if (!(uFlags & SWP_NOSIZE)) {
+            nr.right = nr.left + cx;
+            nr.bottom = nr.top + cy;
+        }
         OnBeforeResize(hWnd, nr, L"SetWindowPos");
     }
 
@@ -1468,7 +1449,7 @@ using DestroyWindow_t = BOOL(WINAPI*)(HWND);
 static DestroyWindow_t DestroyWindow_Original;
 
 static BOOL WINAPI DestroyWindow_Hook(HWND hWnd) {
-    if (hWnd && hWnd != g_hwndOverlay) {
+    if (hWnd && hWnd != g_hwndOverlay.load(std::memory_order_relaxed)) {
         CancelAnim(hWnd, L"DestroyWindow");
     }
     return DestroyWindow_Original(hWnd);
@@ -1478,13 +1459,17 @@ using MoveWindow_t = BOOL(WINAPI*)(HWND, int, int, int, int, BOOL);
 static MoveWindow_t MoveWindow_Original;
 
 static BOOL WINAPI MoveWindow_Hook(HWND hWnd, int X, int Y, int w, int h, BOOL repaint) {
-    RECT nr{X, Y, X + w, Y + h};
-    OnBeforeResize(hWnd, nr, L"MoveWindow");
+    if (g_activeAnimCount.load(std::memory_order_acquire) > 0) {
+        RECT nr{X, Y, X + w, Y + h};
+        OnBeforeResize(hWnd, nr, L"MoveWindow");
+    }
     return MoveWindow_Original(hWnd, X, Y, w, h, repaint);
 }
 
 static int WINAPI SetWindowRgn_Hook(HWND hWnd, HRGN hRgn, BOOL bRedraw) {
-    if (g_ownCall) return SetWindowRgn_Original(hWnd, hRgn, bRedraw);
+    if (g_ownCall || g_activeAnimCount.load(std::memory_order_acquire) == 0) {
+        return SetWindowRgn_Original(hWnd, hRgn, bRedraw);
+    }
 
     {
         std::lock_guard<std::mutex> lock(g_animMutex);
@@ -1559,7 +1544,7 @@ static HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd, DWORD attr, LPCVOID 
 #define EVENT_OBJECT_UNCLOAKED 0x8018
 #endif
 
-static std::thread g_eventThread;
+[[clang::no_destroy]] static std::optional<std::thread> g_eventThread;
 static std::atomic<DWORD> g_eventThreadId{0};
 
 static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
@@ -1600,55 +1585,50 @@ static void EventThreadProc() {
 // Mod Lifecycle
 // ---------------------------------------------------------------------------
 
-template <typename T>
-static void Hook(HMODULE mod, const char* name, void* hook, T* original) {
-    void* p = mod ? (void*)GetProcAddress(mod, name) : nullptr;
-    BOOL ok = p && Wh_SetFunctionHook(p, hook, (void**)original);
-    DebugLog(L"hook %S: %s", name, ok ? L"ok" : L"FAILED");
-}
-
 BOOL Wh_ModInit() {
     LARGE_INTEGER f;
     QueryPerformanceFrequency(&f);
     g_qpcFreq = f.QuadPart ? f.QuadPart : 1;
-    g_qpcInit = Now();
 
     LoadSettings();
-    DebugLog(L"==== Init v1.0.0 (3D Water Ripple), pid=%lu ====", GetCurrentProcessId());
+    Wh_Log(L"==== Init v1.0.0 (3D Water Ripple), pid=%lu ====", GetCurrentProcessId());
 
     g_wakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_wakeEvent) return FALSE;
 
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    Hook(user32, "DestroyWindow", (void*)DestroyWindow_Hook, &DestroyWindow_Original);
-    Hook(user32, "ShowWindow", (void*)ShowWindow_Hook, &ShowWindow_Original);
-    Hook(user32, "SetWindowPos", (void*)SetWindowPos_Hook, &SetWindowPos_Original);
-    Hook(user32, "MoveWindow", (void*)MoveWindow_Hook, &MoveWindow_Original);
-    Hook(user32, "SetWindowRgn", (void*)SetWindowRgn_Hook, &SetWindowRgn_Original);
-    Hook(user32, "CreateWindowExW", (void*)CreateWindowExW_Hook, &CreateWindowExW_Original);
-    HMODULE dwmapi = GetModuleHandleW(L"dwmapi.dll");
-    if (!dwmapi) dwmapi = LoadLibraryW(L"dwmapi.dll");
-    Hook(dwmapi, "DwmSetWindowAttribute",
-         (void*)DwmSetWindowAttribute_Hook, &DwmSetWindowAttribute_Original);
+    WindhawkUtils::SetFunctionHook(DestroyWindow, DestroyWindow_Hook, &DestroyWindow_Original);
+    WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_Hook, &ShowWindow_Original);
+    WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook, &SetWindowPos_Original);
+    WindhawkUtils::SetFunctionHook(MoveWindow, MoveWindow_Hook, &MoveWindow_Original);
+    WindhawkUtils::SetFunctionHook(SetWindowRgn, SetWindowRgn_Hook, &SetWindowRgn_Original);
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
+    WindhawkUtils::SetFunctionHook(DwmSetWindowAttribute, DwmSetWindowAttribute_Hook,
+                                   &DwmSetWindowAttribute_Original);
 
     g_stop = false;
-    g_animThread = std::thread(AnimThreadProc);
-    g_eventThread = std::thread(EventThreadProc);
+    g_eventThreadId = 0;
+    g_animThread.emplace(AnimThreadProc);
+    g_eventThread.emplace(EventThreadProc);
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    DebugLog(L"Uninit");
+    Wh_Log(L"Uninit");
 
-    if (g_eventThread.joinable()) {
+    if (g_eventThread) {
         while (!g_eventThreadId) Sleep(1);
         PostThreadMessageW(g_eventThreadId, WM_QUIT, 0, 0);
-        g_eventThread.join();
+        g_eventThread->join();
+        g_eventThread.reset();
+        g_eventThreadId = 0;
     }
 
     g_stop = true;
     if (g_wakeEvent) SetEvent(g_wakeEvent);
-    if (g_animThread.joinable()) g_animThread.join();
+    if (g_animThread) {
+        g_animThread->join();
+        g_animThread.reset();
+    }
     if (g_wakeEvent) {
         CloseHandle(g_wakeEvent);
         g_wakeEvent = nullptr;
@@ -1657,5 +1637,5 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    DebugLog(L"SettingsChanged");
+    Wh_Log(L"SettingsChanged");
 }
