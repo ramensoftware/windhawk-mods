@@ -10237,6 +10237,7 @@ static void ComputeDockLayout(const MONITORINFO& mi, UINT dpiX, UINT dpiY) {
 
     int prevW = 0;
     int prevH = 0;
+    int boxW = 0;
     int previewSlotH = 0;
 
     if (showPreview) {
@@ -10251,21 +10252,27 @@ static void ComputeDockLayout(const MONITORINFO& mi, UINT dpiX, UINT dpiY) {
         maxH = std::max(maxH, reservedH + minimumPreviewH);
         maxPrevH = std::clamp(maxPrevH, minimumPreviewH, maxH - reservedH);
 
-        prevW = maxPrevH;
-        prevH = maxPrevH;
+        // Fixed preview box: the preview height at the work area's aspect,
+        // within the width limit. The switcher keeps this size while the
+        // selection changes; each preview is fitted and centered inside it.
+        int maxPrevW = std::max(1, maxW - 2 * masterPadX - DpiScale(24, dpiX));
+        boxW = monH > 0 ? (int)lround((double)maxPrevH * monW / monH) : maxPrevH;
+        boxW = std::clamp(boxW, 1, maxPrevW);
+        int boxH = maxPrevH;
+        prevW = std::min(boxW, boxH);
+        prevH = boxH;
         if (g_selectedIndex >= 0 && g_selectedIndex < n) {
             const auto& selWnd = g_windows[g_selectedIndex];
             if (selWnd.effectiveSourceSize.cx > 0 && selWnd.effectiveSourceSize.cy > 0) {
-                int maxPrevW = std::max(1, maxW - 2 * masterPadX - DpiScale(24, dpiX));
                 double aspect = (double)selWnd.effectiveSourceSize.cx / selWnd.effectiveSourceSize.cy;
-                prevW = std::max(1, (int)std::min((double)maxPrevW, maxPrevH * aspect));
-                prevH = std::max(1, (int)std::min((double)maxPrevH, maxPrevW / aspect));
+                prevW = std::max(1, (int)std::min((double)boxW, boxH * aspect));
+                prevH = std::max(1, (int)std::min((double)boxH, boxW / aspect));
             }
         }
-        previewSlotH = prevH + DpiScale(12, dpiY);
+        previewSlotH = boxH + DpiScale(12, dpiY);
     }
 
-    int contentW = std::max(totalStripW, prevW + DpiScale(32, dpiX));
+    int contentW = std::max(totalStripW, boxW + DpiScale(32, dpiX));
     int minW = DpiScale(380, dpiX);
     if (contentW < minW) contentW = minW;
     if (contentW > maxW - 2 * masterPadX) contentW = maxW - 2 * masterPadX;
