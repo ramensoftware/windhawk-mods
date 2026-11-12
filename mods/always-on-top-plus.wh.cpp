@@ -2,10 +2,11 @@
 // @id              always-on-top-plus
 // @name            Always On Top Windows Plus
 // @description     Pin any window above all others with a hotkey, with a highlight border, opacity and sounds
-// @version         2.3.0
+// @version         2.4.0
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
 // @homepage        https://github.com/DavidHiFi/davids-windhawk-mods
+// @license         MIT
 // @donateUrl       https://ko-fi.com/DavidHiFi
 // @include         windhawk.exe
 // @compilerOptions -luser32 -lwinmm -lgdi32 -ldwmapi -lshell32 -lole32
@@ -21,7 +22,7 @@ with the same shortcut. A thin colored border shows which windows are pinned.
 ![Always On Top Windows Plus preview](https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/always-on-top-plus.png)
 
 ## Features
-- **Pin and unpin with a shortcut.** The default is Win+Alt+T, and you can change every part of it.
+- **Pin and unpin with a shortcut.** The default is Win+Ctrl+T, and you can change every part of it.
 - **Highlight border.** A colored ring around each pinned window. It follows the window
   as it moves and resizes, uses your Windows accent color or a custom color, and can round
   its corners to match the window.
@@ -35,20 +36,20 @@ with the same shortcut. A thin colored border shows which windows are pinned.
 
 ## How to use
 1. Click into the window you want to keep on top.
-2. Press the pin shortcut (Win+Alt+T).
+2. Press the pin shortcut (Win+Ctrl+T).
 3. Press it again to release the window.
 
 Shortcut table:
 
 | Shortcut | Action |
 | --- | --- |
-| Win+Alt+T | Pin or unpin the active window |
-| Win+Alt++ | Make the active pinned window more opaque |
-| Win+Alt+- | Make the active pinned window more transparent |
+| Win+Ctrl+T | Pin or unpin the active window |
+| Win+Ctrl++ | Make the active pinned window more opaque |
+| Win+Ctrl+- | Make the active pinned window more transparent |
 
 ## Notes
-- Windows runs this mod in its own small process, so it works with every app.
-- To pin a window that runs as administrator, run the Windhawk app itself as administrator.
+- Windhawk runs this mod in its own small process, so it works with every app.
+- Windows of apps that run as administrator cannot be pinned, unless portable Windhawk runs as administrator.
 - The border cannot be drawn around windows that block it, such as some full-screen games.
 
 ## Credits
@@ -63,10 +64,10 @@ to Windhawk. MIT license.
 - hotkeyWin: true
   $name: Use the Windows key
   $description: Part of the pin shortcut. Pick at least one modifier key.
-- hotkeyCtrl: false
+- hotkeyCtrl: true
   $name: Use the Ctrl key
   $description: Part of the pin shortcut. Pick at least one modifier key.
-- hotkeyAlt: true
+- hotkeyAlt: false
   $name: Use the Alt key
   $description: Part of the pin shortcut. Pick at least one modifier key.
 - hotkeyShift: false
@@ -74,7 +75,7 @@ to Windhawk. MIT license.
   $description: Part of the pin shortcut. Pick at least one modifier key.
 - hotkeyKey: "84"
   $name: Pin shortcut key
-  $description: 'The last key of the pin shortcut, together with the modifier keys above (Suggested: T).'
+  $description: 'The last key of the pin shortcut, together with the modifier keys above. Disabled turns the pin shortcut off (Suggested: T).'
   $options:
   - "0": "Disabled"
   - "65": "A"
@@ -150,7 +151,7 @@ to Windhawk. MIT license.
   - "221": "Right bracket (])"
   - "222": "Quote (')"
   - "19": "Pause"
-  - "42": "Print screen"
+  - "44": "Print screen"
 - hotkeyOpacityUp: "187"
   $name: More opaque shortcut key
   $description: 'Makes the active pinned window less see-through, in steps, using the same modifier keys as the pin shortcut (Suggested: +).'
@@ -286,6 +287,9 @@ to Windhawk. MIT license.
 - frameRoundCorners: true
   $name: Enable rounded corners
   $description: When on, the border rounds its corners to match the pinned window.
+- frameCornerRadius: 0
+  $name: Border corner radius
+  $description: 'Corner radius of the border in pixels. 0 uses the Windows default, 8 for normal windows and 4 for small ones. Set it to match a corner mod (Suggested: 0).'
 - soundEnabled: true
   $name: Play a sound when pinning a window
   $description: Plays the sounds below when you pin or unpin a window, and when you change opacity.
@@ -328,7 +332,7 @@ to Windhawk. MIT license.
 #include <shellapi.h>
 #include <mmsystem.h>
 #include <map>
-#include <set>
+#include <unordered_set>
 #include <string>
 #include <vector>
 
@@ -371,7 +375,7 @@ enum SoundKind {
 };
 
 struct Settings {
-    UINT hotkeyMods = MOD_WIN | MOD_ALT;
+    UINT hotkeyMods = MOD_WIN | MOD_CONTROL;
     UINT hotkeyVk = 'T';
     UINT opacityUpVk = VK_OEM_PLUS;
     UINT opacityDownVk = VK_OEM_MINUS;
@@ -383,6 +387,7 @@ struct Settings {
     int frameOpacity = 100;
     int frameThickness = 4;
     bool frameRoundCorners = true;
+    int frameCornerRadius = 0;
     bool soundEnabled = true;
     std::wstring soundOn = L"C:\\Windows\\Media\\Speech On.wav";
     std::wstring soundOff = L"C:\\Windows\\Media\\Speech Off.wav";
@@ -400,8 +405,10 @@ static Settings g_settings;
 
 static HWND g_hostWnd = nullptr;
 static HANDLE g_mainThread = nullptr;
-static std::vector<HWINEVENTHOOK> g_eventHooks;
-static std::vector<HWINEVENTHOOK> g_menuHooks;
+// Main thread only: the hooks, the pinned-window map and the menu windows.
+static std::vector<HWINEVENTHOOK> g_eventHooks; // only while a window is pinned
+static std::vector<HWINEVENTHOOK> g_menuHooks;  // only while the menu entry is on
+static void UpdateBorderHooks();
 static HWND g_lastSysMenuWnd = nullptr;
 
 // Windows we pinned, with the border state for each.
@@ -421,6 +428,7 @@ struct BorderEntry {
     float lastOpacity = -1.0f;
     int lastThickness = -1;
     float lastRadius = -1.0f;
+    float lastTuck = -1.0f;
     int lastW = 0;
     int lastH = 0;
 };
@@ -445,6 +453,8 @@ struct PendingCheck {
 };
 static std::vector<PendingCheck> g_pendingChecks;
 static bool g_menuEverEnabled = false;
+// Windows whose system menu we added the entry to. Main thread only.
+static std::unordered_set<HWND> g_menuWindows;
 
 // ----- D2D, bound at runtime so the mod links without d2d1 import libs -----
 
@@ -727,62 +737,18 @@ static float ScalingFactor(HWND wnd) {
     return dpi / 96.0f;
 }
 
-static bool ReadEngineDword(const wchar_t* subkey, const wchar_t* name, DWORD* value) {
-    HKEY key = nullptr;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, subkey, 0, KEY_QUERY_VALUE | KEY_WOW64_64KEY, &key) !=
-        ERROR_SUCCESS) {
-        return false;
-    }
-    DWORD type = 0;
-    DWORD size = sizeof(*value);
-    bool ok = RegQueryValueExW(key, name, nullptr, &type, (BYTE*)value, &size) == ERROR_SUCCESS &&
-              type == REG_DWORD;
-    RegCloseKey(key);
-    return ok;
-}
-
-// The Custom Window Corner Radius mod changes the radius DWM rounds windows with:
-// under 6 becomes its small radius, anything else its radius, -1 keeps Windows'.
-// Without that mod (or with it off) Windows' own radius stands.
-static float ReadSystemCornerRadius(float windowsRadius) {
-    const wchar_t kModKey[] = L"SOFTWARE\\Windhawk\\Engine\\Mods\\custom-corner-radius";
-    const wchar_t kSettingsKey[] =
-        L"SOFTWARE\\Windhawk\\Engine\\Mods\\custom-corner-radius\\Settings";
-    DWORD disabled = 0;
-    HKEY key = nullptr;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, kModKey, 0, KEY_QUERY_VALUE | KEY_WOW64_64KEY, &key) !=
-        ERROR_SUCCESS) {
-        return windowsRadius;
-    }
-    RegCloseKey(key);
-    if (ReadEngineDword(kModKey, L"Disabled", &disabled) && disabled) {
-        return windowsRadius;
-    }
-    DWORD radius = 12;     // that mod's own defaults
-    DWORD smallRadius = 6;
-    ReadEngineDword(kSettingsKey, L"radius", &radius);
-    ReadEngineDword(kSettingsKey, L"smallRadius", &smallRadius);
-    int replaced = windowsRadius < 6.0f ? (int)smallRadius : (int)radius;
-    return replaced < 0 ? windowsRadius : (float)replaced;
-}
-
-// The same, read from the registry at most every 2 seconds per thread, since
-// rings ask on every window move.
+// Corner radius in px at 96 dpi: the frameCornerRadius setting when it is set,
+// otherwise the Windows default passed in (8 normal, 4 small).
 static float SystemCornerRadius(float windowsRadius) {
-    thread_local ULONGLONG readAt = 0;
-    thread_local float normal = 8.0f;
-    thread_local float small = 4.0f;
-    ULONGLONG now = GetTickCount64();
-    if (!readAt || now - readAt > 2000) {
-        normal = ReadSystemCornerRadius(8.0f);
-        small = ReadSystemCornerRadius(4.0f);
-        readAt = now;
-    }
-    return windowsRadius < 6.0f ? small : normal;
+    int custom;
+    EnterCriticalSection(&g_cs);
+    custom = g_settings.frameCornerRadius;
+    LeaveCriticalSection(&g_cs);
+    return custom > 0 ? (float)custom : windowsRadius;
 }
 
-// Corner radius in px at 96 dpi: the DWM corner preference, then the radius the
-// corner mod gives it. Maximized windows have square corners.
+// Corner radius of a window in px at 96 dpi: the DWM corner preference, then
+// the radius setting. Maximized windows have square corners.
 static float WindowCornersRadius(HWND wnd) {
     if (IsZoomed(wnd)) {
         return 0.0f;
@@ -893,15 +859,13 @@ static void LoadSettingsLocked() {
         g_settings.hotkeyMods |= MOD_SHIFT;
     }
     if (g_settings.hotkeyMods == 0) {
-        g_settings.hotkeyMods = MOD_WIN | MOD_ALT;
+        g_settings.hotkeyMods = MOD_WIN | MOD_CONTROL;
     }
 
     PCWSTR key = Wh_GetStringSetting(L"hotkeyKey");
+    // 0 is Disabled: no pin shortcut is registered at all.
     g_settings.hotkeyVk = ParseVkString(key, 'T');
     Wh_FreeStringSetting(key);
-    if (g_settings.hotkeyVk == 0) {
-        g_settings.hotkeyVk = 'T';
-    }
 
     PCWSTR up = Wh_GetStringSetting(L"hotkeyOpacityUp");
     g_settings.opacityUpVk = ParseVkString(up, VK_OEM_PLUS);
@@ -945,6 +909,15 @@ static void LoadSettingsLocked() {
     g_settings.frameThickness = thickness;
 
     g_settings.frameRoundCorners = Wh_GetIntSetting(L"frameRoundCorners") != 0;
+
+    int cornerRadius = Wh_GetIntSetting(L"frameCornerRadius");
+    if (cornerRadius < 0) {
+        cornerRadius = 0;
+    }
+    if (cornerRadius > 64) {
+        cornerRadius = 64;
+    }
+    g_settings.frameCornerRadius = cornerRadius;
 
     g_settings.soundEnabled = Wh_GetIntSetting(L"soundEnabled") != 0;
 
@@ -1238,8 +1211,8 @@ static void CardRender() {
     const float s = c.scale;
     const float w = (float)c.w;
     const float h = (float)c.h;
-    // DWM rounds the card's corners with the system radius (the corner mod's,
-    // 16 px here). The ring is everything outside an inner outline concentric
+    // DWM rounds the card's corners with the system radius (the radius setting
+    // when it is set). The ring is everything outside an inner outline concentric
     // with that curve, and DWM's own anti-aliased clip makes its outer edge, so
     // the ring keeps one thickness all the way round.
     const float radius = std::min(SystemCornerRadius(8.0f) * s, h / 2.0f);
@@ -1752,11 +1725,6 @@ static HRESULT factory_create_rect(ID2D1Factory* f, const D2D1_RECT_F& rect,
     return f->CreateRectangleGeometry(rect, out);
 }
 
-static HRESULT factory_create_rounded(ID2D1Factory* f, const D2D1_ROUNDED_RECT& rr,
-                                      ID2D1RoundedRectangleGeometry** out);
-static HRESULT factory_create_rect(ID2D1Factory* f, const D2D1_RECT_F& rect,
-                                   ID2D1RectangleGeometry** out);
-
 static D2D1_COLOR_F BorderColorF(COLORREF color, float opacity) {
     return {GetRValue(color) / 255.f, GetGValue(color) / 255.f, GetBValue(color) / 255.f,
             opacity};
@@ -1944,17 +1912,19 @@ static void UpdateBorder(BorderEntry* entry, HWND target) {
     float opacity = s.frameOpacity / 100.0f;
     int thickness = (int)(s.frameThickness * scale);
     float radius = s.frameRoundCorners ? WindowCornersRadius(target) * scale : 0.0f;
+    // Only when Seamless Borders strips sit over the window: reach one scaled
+    // pixel past the edge line they draw (it overlaps the window by 1 px at
+    // 100%), plus one for its soft edge. Otherwise the ring ends at the edge.
+    float tuck = anchor != target ? std::max(1.0f, roundf(scale)) + 1.0f : 0.0f;
     bool gradient = s.frameGradient;
     COLORREF colorTo = s.frameColorTo;
     if (entry->drawn && entry->lastW == w && entry->lastH == h &&
         entry->lastColor == color && entry->lastColorTo == colorTo &&
         entry->lastGradient == gradient && entry->lastOpacity == opacity &&
-        entry->lastThickness == thickness && entry->lastRadius == radius) {
+        entry->lastThickness == thickness && entry->lastRadius == radius &&
+        entry->lastTuck == tuck) {
         return;
     }
-    // Reach one scaled pixel past the edge line Seamless Borders draws (it
-    // overlaps the window by 1 px at 100%), plus one for its soft edge.
-    float tuck = std::max(1.0f, roundf(scale)) + 1.0f;
     RenderBorder(entry, color, colorTo, gradient, opacity, thickness, radius, tuck);
     entry->drawn = entry->rt != nullptr;
     entry->lastW = w;
@@ -1965,6 +1935,7 @@ static void UpdateBorder(BorderEntry* entry, HWND target) {
     entry->lastOpacity = opacity;
     entry->lastThickness = thickness;
     entry->lastRadius = radius;
+    entry->lastTuck = tuck;
 }
 
 static LRESULT CALLBACK BorderWndProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -2101,7 +2072,9 @@ static void DestroyBorderFor(HWND target) {
 static bool PinWindow(HWND wnd) {
     SetPropW(wnd, kPinProp, (HANDLE)1);
     if (!SetWindowPos(wnd, HWND_TOPMOST, 0, 0, 0, 0, ForeignPosFlags(wnd))) {
+        DWORD err = GetLastError();
         RemovePropW(wnd, kPinProp);
+        SetLastError(err);
         return false;
     }
     return true;
@@ -2244,6 +2217,7 @@ static void UpdateSystemMenuItem(HWND wnd) {
         if (HasOurMenuCommand(menu)) {
             RemoveMenu(menu, kSysMenuCommandId, MF_BYCOMMAND);
         }
+        g_menuWindows.erase(wnd);
         return;
     }
 
@@ -2256,10 +2230,35 @@ static void UpdateSystemMenuItem(HWND wnd) {
     info.dwItemData = kSysMenuOwnerTag;
 
     if (!HasOurMenuCommand(menu)) {
-        InsertMenuItemW(menu, SC_CLOSE, FALSE, &info);
+        if (InsertMenuItemW(menu, SC_CLOSE, FALSE, &info)) {
+            g_menuWindows.insert(wnd);
+        }
     } else {
         info.fMask = MIIM_STATE | MIIM_STRING;
         SetMenuItemInfoW(menu, kSysMenuCommandId, FALSE, &info);
+        g_menuWindows.insert(wnd);
+    }
+}
+
+// Takes our entry out of every system menu we added it to. Used when the
+// setting is turned off and at teardown.
+static void RemoveSystemMenuItems() {
+    for (HWND wnd : g_menuWindows) {
+        if (!IsWindow(wnd)) {
+            continue;
+        }
+        HMENU menu = GetSystemMenu(wnd, FALSE);
+        if (HasOurMenuCommand(menu)) {
+            RemoveMenu(menu, kSysMenuCommandId, MF_BYCOMMAND);
+        }
+    }
+    g_menuWindows.clear();
+}
+
+// Forgets closed windows so the set does not grow.
+static void PruneMenuWindows() {
+    for (auto it = g_menuWindows.begin(); it != g_menuWindows.end();) {
+        it = IsWindow(*it) ? std::next(it) : g_menuWindows.erase(it);
     }
 }
 
@@ -2366,6 +2365,8 @@ static void MaintainPinned() {
             PinWindow(wnd);
         }
     }
+    PruneMenuWindows();
+    UpdateBorderHooks(); // drops the hooks once nothing is pinned
 }
 
 // The window the shortcut acts on: the top-level window of whatever has
@@ -2383,7 +2384,7 @@ static HWND ResolveCommandTarget(HWND wnd) {
     return wnd;
 }
 
-static void ProcessCommand(HWND wnd) {
+static void ProcessCommandImpl(HWND wnd) {
     wnd = ResolveCommandTarget(wnd);
     if (!wnd) {
         Wh_Log(L"[aot-plus] no window to pin");
@@ -2396,7 +2397,7 @@ static void ProcessCommand(HWND wnd) {
     }
     // Windows blocks a normal app from moving an administrator's window.
     if (!IsCurrentProcessElevated() && IsWindowProcessElevated(wnd)) {
-        ShowNotification(L"Run Windhawk as administrator to pin this window");
+        ShowNotification(L"Cannot pin apps running as administrator");
         Wh_Log(L"[aot-plus] %p runs as administrator, skipped", wnd);
         return;
     }
@@ -2406,8 +2407,9 @@ static void ProcessCommand(HWND wnd) {
     if (pinned) {
         ForgetWindow(wnd, false);
         if (!UnpinWindow(wnd)) {
+            DWORD err = GetLastError();
             ShowNotification(L"Could not unpin this window");
-            Wh_Log(L"[aot-plus] failed to unpin %p: %lu", wnd, GetLastError());
+            Wh_Log(L"[aot-plus] failed to unpin %p: %lu", wnd, err);
             return;
         }
         QueueCheck(wnd, false);
@@ -2420,8 +2422,9 @@ static void ProcessCommand(HWND wnd) {
             return;
         }
         if (!PinWindow(wnd)) {
+            DWORD err = GetLastError();
             ShowNotification(L"Could not pin this window");
-            Wh_Log(L"[aot-plus] failed to pin %p: %lu", wnd, GetLastError());
+            Wh_Log(L"[aot-plus] failed to pin %p: %lu", wnd, err);
             return;
         }
         AssignBorder(wnd);
@@ -2431,6 +2434,11 @@ static void ProcessCommand(HWND wnd) {
         Wh_Log(L"[aot-plus] pinned %p", wnd);
     }
     UpdateSystemMenuItem(wnd);
+}
+
+static void ProcessCommand(HWND wnd) {
+    ProcessCommandImpl(wnd);
+    UpdateBorderHooks(); // a window was pinned or unpinned
 }
 
 // ----- Win events -----
@@ -2524,12 +2532,25 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND wnd, LONG idO
     }
 }
 
-static void SubscribeToEvents() {
+// These events fire for every window on the desktop (location changes include
+// every cursor and caret move), so the hooks exist only while at least one
+// window is pinned. Main thread only; never called from inside WinEventProc.
+static void UpdateBorderHooks() {
+    if (g_borders.empty()) {
+        for (HWINEVENTHOOK hook : g_eventHooks) {
+            UnhookWinEvent(hook);
+        }
+        g_eventHooks.clear();
+        return;
+    }
+    if (!g_eventHooks.empty()) {
+        return;
+    }
     const DWORD events[] = {
         EVENT_OBJECT_LOCATIONCHANGE, EVENT_SYSTEM_MINIMIZESTART,
         EVENT_SYSTEM_MINIMIZEEND,    EVENT_SYSTEM_MOVESIZEEND,
-        EVENT_SYSTEM_FOREGROUND,     EVENT_OBJECT_DESTROY,
-        EVENT_OBJECT_CLOAKED_AOT,    EVENT_OBJECT_UNCLOAKED_AOT,
+        EVENT_OBJECT_DESTROY,        EVENT_OBJECT_CLOAKED_AOT,
+        EVENT_OBJECT_UNCLOAKED_AOT,
     };
     for (DWORD ev : events) {
         HWINEVENTHOOK hook = SetWinEventHook(ev, ev, nullptr, WinEventProc, 0, 0,
@@ -2547,8 +2568,9 @@ static void UpdateMenuHooks(bool enable) {
         if (!g_menuHooks.empty()) {
             return;
         }
-        const DWORD events[] = {EVENT_SYSTEM_MENUPOPUPSTART, EVENT_SYSTEM_MENUPOPUPEND,
-                                EVENT_OBJECT_INVOKED};
+        // The foreground event is what puts the entry into each window's menu.
+        const DWORD events[] = {EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MENUPOPUPSTART,
+                                EVENT_SYSTEM_MENUPOPUPEND, EVENT_OBJECT_INVOKED};
         for (DWORD ev : events) {
             HWINEVENTHOOK hook = SetWinEventHook(ev, ev, nullptr, WinEventProc, 0, 0,
                                                  WINEVENT_OUTOFCONTEXT |
@@ -2600,7 +2622,8 @@ static void AdoptPinnedWindows() {
 // ----- Hotkeys -----
 
 // Windows keeps some shortcuts for itself (Win+Alt+T belongs to Game Bar), so
-// RegisterHotKey fails for them. Those fall back to a low-level keyboard hook
+// RegisterHotKey fails for them. The default Win+Ctrl+T is free, so the hook
+// only runs when the user picks a chord Windows holds. Those fall back to a low-level keyboard hook
 // that catches the chord before the shell sees it.
 struct FallbackHotkey {
     UINT id;
@@ -2612,14 +2635,12 @@ struct FallbackHotkey {
 
 // The keyboard hook lives on its own high-priority thread that does nothing
 // else. Windows silently drops a low-level hook whose thread is slow to
-// answer, so the hook never shares a thread with window work, and it is
-// re-armed every 15 seconds in case Windows dropped it anyway.
+// answer, so the hook never shares a thread with window work.
 static HANDLE g_hookThread = nullptr;
 static DWORD g_hookThreadId = 0;
 static HANDLE g_hookReady = nullptr;
 static std::vector<FallbackHotkey> g_fallbackHotkeys; // hook thread only
 static HHOOK g_keyboardHook = nullptr;                // hook thread only
-static const UINT kHookRearmMs = 15000;
 
 static UINT CurrentModifiers() {
     UINT mods = 0;
@@ -2671,7 +2692,8 @@ static LRESULT CALLBACK FallbackKeyboardProc(int code, WPARAM wp, LPARAM lp) {
     return CallNextHookEx(nullptr, code, wp, lp);
 }
 
-// Installs a fresh hook before removing the old one, so no key is missed.
+// Installs a fresh hook before removing the old one, so no key is missed when
+// the key list changes.
 static void ArmHook() {
     HHOOK old = g_keyboardHook;
     g_keyboardHook = nullptr;
@@ -2692,23 +2714,15 @@ static DWORD WINAPI HookThread(LPVOID) {
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE); // makes the queue
     SetEvent(g_hookReady);
-    UINT_PTR rearm = SetTimer(nullptr, 0, kHookRearmMs, nullptr);
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         if (msg.hwnd == nullptr && msg.message == WM_HOOK_SET) {
             auto* list = (std::vector<FallbackHotkey>*)msg.lParam;
             g_fallbackHotkeys = list ? *list : std::vector<FallbackHotkey>();
             delete list;
             ArmHook();
-        } else if (msg.hwnd == nullptr && msg.message == WM_TIMER && msg.wParam == rearm) {
-            if (!g_fallbackHotkeys.empty()) {
-                ArmHook();
-            }
         } else {
             DispatchMessageW(&msg);
         }
-    }
-    if (rearm) {
-        KillTimer(nullptr, rearm);
     }
     if (g_keyboardHook) {
         UnhookWindowsHookEx(g_keyboardHook);
@@ -2847,6 +2861,10 @@ static LRESULT CALLBACK HostWndProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
                     AssignBorder(trackedWnd);
                 }
             }
+            UpdateBorderHooks();
+            if (!s.showInSystemMenu) {
+                RemoveSystemMenuItems();
+            }
             UpdateMenuHooks(s.showInSystemMenu);
             g_lastSysMenuWnd = nullptr;
             UpdateSystemMenuItem(GetForegroundWindow());
@@ -2858,6 +2876,11 @@ static LRESULT CALLBACK HostWndProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
     }
     return DefWindowProcW(wnd, msg, wp, lp);
 }
+
+// MainThread sets this once the host window exists, or on failure, so
+// WhTool_ModInit never returns before g_hostWnd is known.
+static HANDLE g_mainReady = nullptr;
+static bool g_mainStartOk = false; // written before g_mainReady is set
 
 static DWORD WINAPI MainThread(LPVOID) {
     HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -2874,6 +2897,7 @@ static DWORD WINAPI MainThread(LPVOID) {
         if (SUCCEEDED(com)) {
             CoUninitialize();
         }
+        SetEvent(g_mainReady);
         return 0;
     }
 
@@ -2885,20 +2909,24 @@ static DWORD WINAPI MainThread(LPVOID) {
         if (SUCCEEDED(com)) {
             CoUninitialize();
         }
+        SetEvent(g_mainReady);
         return 0;
     }
+
+    g_mainStartOk = true;
+    SetEvent(g_mainReady);
 
     LoadSettings();
     GetD2DFactory(); // created once here, before the card thread shares it
     StartCardThread();
     StartHookThread();
     RegisterOurHotkeys(g_hostWnd);
-    SubscribeToEvents();
     {
         Settings s = GetSettingsCopy();
         UpdateMenuHooks(s.showInSystemMenu);
     }
     AdoptPinnedWindows();
+    UpdateBorderHooks();
     SetTimer(g_hostWnd, kMaintainTimerId, 1000, nullptr);
     if (HWND fg = GetForegroundWindow()) {
         UpdateSystemMenuItem(fg);
@@ -2929,6 +2957,7 @@ static DWORD WINAPI MainThread(LPVOID) {
         UnhookWinEvent(hook);
     }
     g_eventHooks.clear();
+    RemoveSystemMenuItems();
 
     for (auto& [wnd, entry] : g_borders) {
         if (IsWindow(wnd)) {
@@ -2962,9 +2991,27 @@ BOOL WhTool_ModInit() {
     InitializeCriticalSection(&g_cs);
     LoadSettings();
 
-    g_mainThread = CreateThread(nullptr, 0, MainThread, nullptr, 0, nullptr);
+    g_mainReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (g_mainReady) {
+        g_mainThread = CreateThread(nullptr, 0, MainThread, nullptr, 0, nullptr);
+    }
     if (!g_mainThread) {
         Wh_Log(L"[aot-plus] failed to start the main thread");
+        if (g_mainReady) {
+            CloseHandle(g_mainReady);
+            g_mainReady = nullptr;
+        }
+        DeleteCriticalSection(&g_cs);
+        return FALSE;
+    }
+    // MainThread sets the event on every path, so this wait always ends.
+    WaitForSingleObject(g_mainReady, INFINITE);
+    CloseHandle(g_mainReady);
+    g_mainReady = nullptr;
+    if (!g_mainStartOk) {
+        WaitForSingleObject(g_mainThread, INFINITE);
+        CloseHandle(g_mainThread);
+        g_mainThread = nullptr;
         DeleteCriticalSection(&g_cs);
         return FALSE;
     }
@@ -2993,12 +3040,23 @@ void WhTool_ModUninit() {
     Wh_Log(L"[aot-plus] unloaded");
 }
 
-// ============================================================
-// Tool mod launcher (runs the mod in its own windhawk.exe process)
-// ============================================================
+// clang-format off
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
-static bool g_isToolModProcessLauncher;
-static HANDLE g_toolModProcessMutex;
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
     Wh_Log(L">");
@@ -3007,14 +3065,14 @@ void WINAPI EntryPoint_Hook() {
 
 BOOL Wh_ModInit() {
     DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
         return FALSE;
     }
 
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
-
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
@@ -3048,11 +3106,13 @@ BOOL Wh_ModInit() {
     }
 
     if (isCurrentToolModProcess) {
-        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
+
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
             Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
@@ -3062,9 +3122,11 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
@@ -3086,17 +3148,19 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
             return;
     }
 
-    WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") /
-                                      sizeof(WCHAR)) -
-                                 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
@@ -3108,24 +3172,29 @@ void Wh_ModAfterInit() {
     }
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, WINBOOL,
-        DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
-
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION pi{};
-
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine, nullptr,
-                                 nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr,
-                                 &si, &pi, nullptr)) {
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
         Wh_Log(L"CreateProcess failed");
         return;
     }
@@ -3138,6 +3207,7 @@ void Wh_ModSettingsChanged() {
     if (g_isToolModProcessLauncher) {
         return;
     }
+
     WhTool_ModSettingsChanged();
 }
 
@@ -3145,6 +3215,8 @@ void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
         return;
     }
+
     WhTool_ModUninit();
     ExitProcess(0);
 }
+// clang-format on
