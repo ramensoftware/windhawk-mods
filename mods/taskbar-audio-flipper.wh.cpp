@@ -3982,11 +3982,14 @@ struct Settings {
         webcamName = Storage::GetString(L"WebcamName");
         int excludedCount = Storage::GetInt(L"ExcludedCount", -1);
         if (excludedCount < 0) {
-            // Saved before 1.5.0, each list in one value.
+            // Saved before 1.5.0, each list in one value. Once they're saved in the new form, the
+            // old values go; if saving fails, the count goes, so they're read again next time.
             LoadOldLists();
             if (Save()) {
                 Storage::Delete(L"Excluded");
                 Storage::Delete(L"WebcamNicknames");
+            } else {
+                Storage::Delete(L"ExcludedCount");
             }
             return;
         }
@@ -4048,10 +4051,11 @@ private:
         return saved;
     }
 
-    // Before 1.5.0 each list was one value, its entries on separate lines. Portable Windhawk saved
-    // those line breaks as spaces, so a space separates entries too: neither endpoint IDs nor
-    // device instance IDs contain one, and a webcam's ID starts after the last space or line
-    // break before the tab that ends it ("<instance ID><tab><name>" for each webcam).
+    // Before 1.5.0 each list was one value, its entries on separate lines. Portable Windhawk 1.7
+    // saved those line breaks as spaces (1.6 and earlier kept only the first line), so a space
+    // separates entries too: neither endpoint IDs nor device instance IDs contain one, and a
+    // webcam's ID starts after the last space or line break before the tab that ends it
+    // ("<instance ID><tab><name>" for each webcam).
     void LoadOldLists() {
         std::wstring excludedIds = Storage::GetString(L"Excluded");
         std::replace(excludedIds.begin(), excludedIds.end(), L' ', L'\n');
