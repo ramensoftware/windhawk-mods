@@ -19,6 +19,8 @@
 /*
 # Disable Web Search in Start Menu
 
+![Before & After](https://raw.githubusercontent.com/DeepakBalaraman/disable-web-search-in-start-menu/master/assets/before-after.jpg)
+
 The search box in the Start menu, and the search flyout it opens on the
 taskbar, mix results from Bing into local results. Windows can be told to stop
 doing that with policies, but those are read when the search UI starts, so
