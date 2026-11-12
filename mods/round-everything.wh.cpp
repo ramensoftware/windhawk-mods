@@ -10926,14 +10926,17 @@ std::atomic<bool> g_clipGeometryLifetimeTracked{false};  // CResourceProxy's des
 // Whether rectangle geometries are seen destroyed through it: 0 not known
 // yet, 1 confirmed, -1 not seen (no records for this dwm.exe session).
 std::atomic<int> g_geometryDestructionSeen{0};
-struct GeometryProbe {
-    void* geometry;
-    ULONGLONG createdAt;
-};
-std::vector<GeometryProbe> g_geometryProbes;  // under g_contentClipsMutex
-int g_probeHits = 0, g_probeMisses = 0;       // likewise
-int g_probesMade = 0;                         // likewise
-ULONGLONG g_probeStatusLogged = 0;            // likewise
+std::vector<void*> g_geometryProbes;     // under g_contentClipsMutex
+int g_probeHits = 0, g_probeMisses = 0;  // likewise
+int g_probesOther = 0;                   // likewise: destroyed with another vtable
+int g_probesMade = 0;                    // likewise
+ULONGLONG g_probeStatusLogged = 0;       // likewise
+// The vtable pointer a rectangle geometry has as it is made, and the one it
+// has as CResourceProxy's destructor runs for it (each derived class's
+// destructor puts back its own before that): the first watched geometry
+// seen destroyed sets the second, and only destructions that show it count.
+void* g_probeMadeVtable = nullptr;       // likewise, for the log
+void* g_probeDestroyedVtable = nullptr;  // likewise
 std::atomic<unsigned> g_proxyDestructions{0};  // seen by the hook, for the status log
 // Records plus probes: the destructor hook, which runs for every DWM proxy,
 // takes the lock only while there is something to look up.
@@ -10953,43 +10956,56 @@ void EraseContentClipLocked(std::unordered_map<HWND, ContentClip>::iterator it) 
 }
 
 // Decides from the probes so far (under g_contentClipsMutex). A hit is a
-// watched geometry seen destroyed; a miss is a new rectangle geometry made
-// at an address still watched - the one there before was freed unseen.
-// Geometries DWM keeps (a window's content clip) simply stay watched, and
-// the oldest is let go, uncounted, once kMaxProbes are. With the base
-// destructor in their path, hits come one after another and misses don't
-// come at all; a hit only now and then (an address another proxy reused
-// and was destroyed through it) is no proof.
+// watched geometry seen destroyed, with the vtable pointer rectangle
+// geometries have there; a miss is a new rectangle geometry made at an
+// address still watched - the one there before was freed without the hook
+// seeing it. With every rectangle geometry destroyed through the hooked
+// destructor, a miss can't happen (the destructor runs before the memory is
+// freed, and takes the probe off first), so a single miss settles it: no
+// fitting for this dwm.exe session (also if DWM ever initializes a live
+// geometry again - the safe side). The vtable check keeps another proxy
+// type, made at a geometry's freed address and destroyed through the hook,
+// from passing for a hit that hides the miss. Geometries DWM keeps (a
+// window's content clip) simply stay watched, and the oldest is let go,
+// uncounted, once kMaxProbes are.
 constexpr size_t kMaxProbes = 64;
 void JudgeProbesLocked() {
     // Until the verdict, how the probes are doing (at most once a second).
     ULONGLONG now = GetTickCount64();
     if (now - g_probeStatusLogged >= 1000) {
         g_probeStatusLogged = now;
-        Wh_Log(L"[dwm] rectangle geometries watched: %d made, %d seen destroyed, %d not "
-               L"(%u proxy destructions seen in all)",
-               g_probesMade, g_probeHits, g_probeMisses, g_proxyDestructions.load());
+        Wh_Log(L"[dwm] rectangle geometries watched: %d made, %d seen destroyed, %d not, "
+               L"%d with another vtable (%u proxy destructions seen in all)",
+               g_probesMade, g_probeHits, g_probeMisses, g_probesOther,
+               g_proxyDestructions.load());
     }
     int verdict = 0;
-    if (g_probeHits >= 8 && g_probeHits >= 4 * g_probeMisses) {
+    if (g_probeMisses > 0) {
+        verdict = -1;  // a rectangle geometry was freed without the hook seeing it
+    } else if (g_probeHits >= 8) {
         verdict = 1;
-    } else if (g_probeMisses >= 10) {
-        verdict = -1;
     }
     if (!verdict) {
         return;
     }
     g_geometryDestructionSeen = verdict;
     g_geometryProbes.clear();
+    if (verdict < 0) {
+        // No record is used from here on: none is kept, and the hook stops
+        // looking anything up.
+        g_contentClips.clear();
+        g_clipGeometryWindows.clear();
+    }
     UpdateGeometriesWatchedLocked();
     if (verdict > 0) {
         Wh_Log(L"[dwm] rectangle geometries are destroyed through CResourceProxy (%d seen, "
-               L"%d not) - restore corners fitted",
-               g_probeHits, g_probeMisses);
+               L"%d with another vtable; vtable %p as made, %p as destroyed) - restore "
+               L"corners fitted",
+               g_probeHits, g_probesOther, g_probeMadeVtable, g_probeDestroyedVtable);
     } else {
-        Wh_Log(L"[dwm] rectangle geometries not seen destroyed through CResourceProxy (%d "
-               L"seen, %d not) - restores keep Windows' stretched corner",
-               g_probeHits, g_probeMisses);
+        Wh_Log(L"[dwm] a rectangle geometry was freed without CResourceProxy's destructor "
+               L"seen (%d seen before) - restores keep Windows' stretched corner",
+               g_probeHits);
     }
 }
 
@@ -11001,17 +11017,18 @@ void ProbeGeometryDestruction(void* geometry) {
         return;
     }
     std::lock_guard<std::mutex> lock(g_contentClipsMutex);
-    for (auto it = g_geometryProbes.begin(); it != g_geometryProbes.end(); ++it) {
-        if (it->geometry == geometry) {
-            g_probeMisses++;  // made again where one was watched: freed unseen
-            g_geometryProbes.erase(it);
-            break;
-        }
+    auto it = std::find(g_geometryProbes.begin(), g_geometryProbes.end(), geometry);
+    if (it != g_geometryProbes.end()) {
+        g_probeMisses++;  // made again where one was watched: freed unseen
+        g_geometryProbes.erase(it);
     }
     if (g_geometryProbes.size() >= kMaxProbes) {
         g_geometryProbes.erase(g_geometryProbes.begin());  // kept by DWM: let go
     }
-    g_geometryProbes.push_back({geometry, GetTickCount64()});
+    g_geometryProbes.push_back(geometry);
+    if (!g_probeMadeVtable) {
+        g_probeMadeVtable = *static_cast<void**>(geometry);
+    }
     if (g_probesMade++ == 0) {
         Wh_Log(L"[dwm] watching the rectangle geometries DWM makes for their destruction");
     }
@@ -11033,17 +11050,23 @@ void ForgetContentClips(void* border) {
 }
 
 // A proxy being destroyed: a record of it as a content clip goes with it,
-// and a probe of it counts as seen.
+// and a probe of it counts as seen (see JudgeProbesLocked).
 void ForgetClipGeometry(void* geometry) {
     std::lock_guard<std::mutex> lock(g_contentClipsMutex);
-    for (auto it = g_geometryProbes.begin(); it != g_geometryProbes.end(); ++it) {
-        if (it->geometry == geometry) {
-            g_geometryProbes.erase(it);
-            g_probeHits++;
-            UpdateGeometriesWatchedLocked();
-            JudgeProbesLocked();
-            break;
+    auto probe = std::find(g_geometryProbes.begin(), g_geometryProbes.end(), geometry);
+    if (probe != g_geometryProbes.end()) {
+        g_geometryProbes.erase(probe);
+        void* vtable = *static_cast<void**>(geometry);  // still alive: its destructor runs
+        if (!g_probeDestroyedVtable) {
+            g_probeDestroyedVtable = vtable;
         }
+        if (vtable == g_probeDestroyedVtable) {
+            g_probeHits++;
+        } else {
+            g_probesOther++;  // another type made at a freed geometry's address
+        }
+        UpdateGeometriesWatchedLocked();
+        JudgeProbesLocked();
     }
     auto index = g_clipGeometryWindows.find(geometry);
     if (index == g_clipGeometryWindows.end()) {
