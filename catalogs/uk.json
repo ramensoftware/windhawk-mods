@@ -7396,7 +7396,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794373382000,
+        "updated": 1794474119000,
         "users": 61
       },
       "metadata": {
@@ -7412,7 +7412,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "Explorer Translucent Menus",
-        "version": "1.0.2"
+        "version": "1.1.0"
       }
     },
     "explorer-tree-click-expand": {
@@ -12527,6 +12527,33 @@
         "name": "Hide NVIDIA Control Panel Missing Dialog",
         "twitter": "https://x.com/bcrtvkcs",
         "version": "1.1.2"
+      }
+    },
+    "octagonal-windows": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794474113000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794474113000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "JER-10000",
+        "compilerOptions": "-lole32 -lwevtapi -ld2d1 -ld3d11",
+        "description": "Makes Windows 11 window borders octagonal.",
+        "github": "https://github.com/JER-10000",
+        "include": [
+          "dwm.exe"
+        ],
+        "name": "Octagonal Windows",
+        "version": "1.0.1"
       }
     },
     "office-fix-account-disp-name": {
@@ -17975,7 +18002,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791187455000,
+        "updated": 1794474107000,
         "users": 25
       },
       "metadata": {
@@ -17990,7 +18017,7 @@
           "explorer.exe"
         ],
         "name": "Taskbar Margin",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "taskbar-media-widget": {

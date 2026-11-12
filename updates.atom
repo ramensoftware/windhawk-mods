@@ -2,12 +2,101 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-12T08:05:22.000Z</updated>
+    <updated>2026-11-12T09:01:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Translucent Menus 1.1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-translucent-menus#98a3b62f2339b3207bb5de681fab897e9efb8dcc</id>
+        <link href="https://windhawk.net/mods/explorer-translucent-menus"/>
+        <updated>2026-11-12T09:01:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add a recreated fade animation after selecting a menu command to avoid the black background that can appear during the native Windows fade. Options are available to keep the native animation or close the menu immediately.</li>
+<li>Add customizable corner radius and inset for the hover highlight, with DPI scaling.</li>
+</ul>
+]]></content>
+        <author>
+            <name>alkali210</name>
+            <uri>https://github.com/alkali210</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Octagonal Windows 1.0.1]]></title>
+        <id>https://windhawk.net/mods/octagonal-windows#07533b4522ca85de836c1d6173bdb5cd132933a9</id>
+        <link href="https://windhawk.net/mods/octagonal-windows"/>
+        <updated>2026-11-12T09:01:53.000Z</updated>
+        <content type="html"><![CDATA[<h1>Octagonal Windows</h1>
+<p>Makes Windows 11 window borders octagonal. You can change the size of each corner.</p>
+<p>The mod was <a href="https://github.com/ramensoftware/windhawk-mods/pull/3587">originally
+submitted</a> by
+<a href="https://github.com/kanak-buet19">Kanak415</a>. The option for maximized and
+snapped windows is based on a
+<a href="https://github.com/ramensoftware/windhawk-mods/pull/5022">mod</a> by <a href="https://github.com/leshaalexey">Alexey
+Lavrinenko</a>. I modified the mod <a href="https://windhawk.net/mods/custom-corner-radius">Custom Window Corner Radius</a> from <a href="https://github.com/m417z">m417z</a>.</p>
+<p><img src="https://raw.githubusercontent.com/JER-10000/windhawk-mods/main/images/octagonal-windows.png" alt="Octagonal Windows"></p>
+<h2>⚠ Important usage note ⚠</h2>
+<p>This mod needs to hook into <code>dwm.exe</code> to work. Please navigate to Windhawk's
+Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list,
+and make sure that <code>dwm.exe</code> is in the list.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot"></p>
+<h2>Additional notes</h2>
+<ul>
+<li>Some elements, such as context menus, use a smaller radius (4px by default).
+This can be customized separately with the &quot;Small corner size&quot; option.</li>
+<li>Standard tooltips can be customized separately with the &quot;Tooltip corner
+radius&quot; option.</li>
+<li>Each window corner can have its own size with the &quot;Per-corner size&quot;
+option, for example to bevel only the top corners.</li>
+<li>Windows 11 squares off the corners of maximized and snapped windows. The
+&quot;beveled corners for maximized and snapped windows&quot; option enables beveling
+for them.</li>
+<li>Some elements, such as the taskbar, the Start menu, and the notification
+center, are unaffected by this mod. Some of them can be customized using other
+mods, such as Windows 11 Taskbar Styler.</li>
+<li>Disabling the mod instantly restores default behavior - no system files are
+modified.</li>
+</ul>
+<h2>Compatibility</h2>
+<ul>
+<li>When using this mod alongside Translucent Flyouts, set its <code>CornerType</code> option
+to <code>0</code> (&quot;Don't Change&quot;) to prevent conflicts between the two.</li>
+<li>This mod is not compatible with <a href="https://windhawk.net/mods/custom-corner-radius">Custom Window Corner Radius</a>. Don't use together.</li>
+</ul>
+<h2>Recommended companion mods</h2>
+<p>For the best visual experience, consider combining this mod with:</p>
+<ul>
+<li>Window Border Customizer</li>
+<li>Windows 11 Taskbar Styler</li>
+<li>Taskbar Background Helper</li>
+</ul>
+<p>A dark taskbar background combined with the Lucent style from Windows 11 Taskbar Styler pairs especially well with octagonal window borders (as shown in the screenshot above).</p>
+]]></content>
+        <author>
+            <name>JER-10000</name>
+            <uri>https://github.com/JER-10000</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Margin 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-margin#1bd79d42195b1c91f64d749df0d0f12698905957</id>
+        <link href="https://windhawk.net/mods/taskbar-margin"/>
+        <updated>2026-11-12T09:01:47.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a placement option to reserve space on the right side of the taskbar, between the app list and the system tray.</li>
+<li>Added a &quot;Specific display only&quot; scope to the Displays setting.</li>
+<li>The display name of each taskbar is now written to the mod log.</li>
+<li>Added Japanese localization.</li>
+<li>The right-side placement, specific display scope and Japanese localization were contributed by Ren9618.</li>
+</ul>
+]]></content>
+        <author>
+            <name>loliri</name>
+            <uri>https://github.com/loliri</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Task Manager Pause Button 1.0.0]]></title>
         <id>https://windhawk.net/mods/task-manager-pause-button#b8a64f42f5edc941234424f16894123290e733b4</id>
@@ -785,139 +874,6 @@ source. Only one of the two runs at a time: if you switch to the mod, quit WinPa
         <author>
             <name>Luiz Bizzio</name>
             <uri>https://github.com/luizbizzio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8/8.1 Taskbar Recreation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win81-taskbar-recreation#065407515062d95879eb965294ebbba68ea309a8</id>
-        <link href="https://windhawk.net/mods/win81-taskbar-recreation"/>
-        <updated>2026-11-12T04:32:52.000Z</updated>
-        <content type="html"><![CDATA[<h1>Windows 7/8/8.1 Taskbar Recreation</h1>
-<p>This mod recreates taskbars inspired by Windows 7, Windows 8 and Windows 8.1
-on Windows 10 and 11. The taskbar runs in a dedicated Explorer process on a
-best-effort basis. Appearance and behavior can vary with
-the Windows build, DPI, taskbar replacement and other shell mods.</p>
-<h2>Features</h2>
-<ul>
-<li>Four skin presets: Windows 7, Windows 8 Beta 8148, Windows 8.0 and Windows 8.1, plus Custom for individual Start options.</li>
-<li>Task buttons, window previews, Jump Lists, notification icons and toolbars.</li>
-<li>An integrated notification area and taskbar, with a fallback to the native bar if the integrated tray cannot start.</li>
-<li>Horizontal and vertical layouts, Aero Peek and classic flyout options.</li>
-<li>Change notification area icon visibility using the Control Panel page that the mod attempts to restore, including on Windows 11; availability and behavior can vary.</li>
-<li>Static taskbar textures and system colors; the textures do not blur live windows behind the bar. Windows 7 skin adds a cursor-following, icon-colored hover glow for running apps.</li>
-<li>Local taskbar pins and ordering: the mod does not change Windows pins. Drag to an empty task area to pin; hover a running app to activate its window.</li>
-<li>An advanced battery flyout option; compatibility may vary between Windows builds.</li>
-<li>Optional secondary taskbars show pins, windows and the shared private tray. Secondary AppBar registration reserves work area when necessary and allowed by the shell. DPI scaling and flyout positioning are best-effort.</li>
-<li>Experimental shell minimize-rectangle support supplies reconstructed button coordinates to Windows, without changing Windows 7 Window Animations Restorer. Availability depends on Windows shell-hook delivery and ordering.</li>
-<li>Optional icon-only horizontal button width: native default, manual logical width, or read-only following of Taskbar height and icon size for standard registry-based Windhawk installations. This does not change icon size or taskbar height and does not hook or modify the other mod. Unsupported installation layouts use the original width.</li>
-</ul>
-<h2>Themes</h2>
-<h3>Windows 7</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7taskskin.png" alt="Windows 7 taskbar"></p>
-<h3>Windows 8 Beta 8148</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8betatask.png" alt="Windows 8 Beta taskbar"></p>
-<h3>Windows 8.0</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8.0task.png" alt="Windows 8.0 taskbar"></p>
-<h3>Windows 8.1</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81task.png" alt="Windows 8.1 taskbar"></p>
-<h3>Custom</h3>
-<p>Choose individual Start options instead of a preset.</p>
-<h2>Installation</h2>
-<ol>
-<li>Install and enable the mod in Windhawk.</li>
-<li>Choose a skin preset in the mod settings.</li>
-<li>Restart the mod after changing settings that require it.</li>
-</ol>
-<h2>Settings</h2>
-<p>The mod settings control the skin, Start button, taskbar layout, notification
-area, previews, flyouts and other behavior. Individual descriptions in
-Windhawk explain their scope and any restart requirements.</p>
-<h2>Behavior and limitations</h2>
-<ul>
-<li>
-<p>The taskbar runs in a separate <code>explorer.exe</code> process on a best-effort basis.
-Notification-page hooks still run in Explorer, and other Explorer mods can
-load in the separate process. A watchdog attempts to restore the native taskbar
-after an unexpected exit; recovery from a hang or other failure is not guaranteed.</p>
-</li>
-<li>
-<p>Skins are approximations; Windows 7 popup frames use the current system's DWM frame when available.</p>
-</li>
-<li>
-<p>The Windows 8 Start corner is illustrated, not a live Start-screen preview.</p>
-</li>
-<li>
-<p>Vertical layout, Aero Peek and classic flyouts may vary between Windows builds.</p>
-</li>
-<li>
-<p>On first use, the mod downloads <code>pnidui.dll</code>, <code>SndVolSSO.dll</code> and <code>batmeter.dll</code>. The advanced battery flyout also downloads <code>stobject.dll</code> and an English or Italian language-pack CAB. Downloaded files are checked against pinned SHA-256 hashes. The Windows 10 1511 <code>stobject.dll</code> is loaded into the dedicated tool process and stays loaded until that process exits.</p>
-</li>
-<li>
-<p>The integrated tray is enabled by default. It creates a private <code>Shell_TrayWnd</code> host and hides the native taskbar. Applications and mods that find the taskbar by class can encounter the private host; tray and AppBar traffic routed to it is processed or forwarded by the mod's UI thread. The host supplies taskbar geometry and forwards wheel input in supported cases, but it does not contain the native taskbar's <code>ReBarWindow32</code>, <code>MSTaskSwWClass</code>, Start button or XAML content. Mods that depend on those windows or content can fail or conflict. Disable the integrated tray and reload the mod if this compatibility trade-off is unsuitable.</p>
-</li>
-<li>
-<p>The integrated tray keeps “Always show all icons” in memory for the current session. It starts from the Windows preference and does not write that preference to the system registry; it is reset when the mod reloads.</p>
-</li>
-<li>
-<p>The Notification Area Icons page uses a private COM provider. The mod attempts to close its hosting window before unloading the Explorer hooks. Behavior has not been verified on every Windows build; if the window cannot be identified or does not respond, close the page before disabling, updating, or reloading the mod.</p>
-</li>
-<li>
-<p>Keep a way to disable the mod or restart Explorer.</p>
-</li>
-<li>
-<p>Windows 11 Taskbar Styler and its skins are technical references; their authors are not involved in this mod.</p>
-</li>
-</ul>
-<h2>Credits</h2>
-<ul>
-<li>WinBoeing777 - Testing on Windows 10 22H2 and Suggestions</li>
-<li>Cips - Testing on Windows 11 25H2</li>
-<li>Kiyaku - Suggestions and Testing</li>
-</ul>
-<h2>Disclaimer</h2>
-<p>This is an independent, unofficial project. It is not affiliated with, endorsed, sponsored or approved by Microsoft Corporation. Windows is a trademark of Microsoft Corporation, used here only to describe the style and compatibility of this mod.</p>
-<p>The mod is provided &quot;as is&quot;, without warranty of any kind, under the GPL-3.0-or-later license. To the maximum extent permitted by law, the author is not responsible for data loss, system instability, blocked updates, or any other damage or consequence arising from the use or misuse of this mod.</p>
-<p>Use at your own risk. You are responsible for how you use the mod and for complying with the licenses and terms of any software or resources it interacts with, including Microsoft's terms for any resources downloaded on first use. Keep a way to disable the mod or restart Explorer.</p>
-]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Z-Order Override 0.9.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-z-order-override#ecfcd33887f2697dd08fc26f659695a18cc325bd</id>
-        <link href="https://windhawk.net/mods/taskbar-z-order-override"/>
-        <updated>2026-11-12T04:02:17.000Z</updated>
-        <content type="html"><![CDATA[<p>Adds an optional &quot;raise taskbar when switching windows&quot; switch for topmost mode.</p>
-]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mac Island & Dock 3.1.1]]></title>
-        <id>https://windhawk.net/mods/mac-island-dock#6625a8c8aa81f686b06ea934207e5bbd3b140d73</id>
-        <link href="https://windhawk.net/mods/mac-island-dock"/>
-        <updated>2026-11-11T10:03:02.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>Fixes</strong></p>
-<ul>
-<li>The island no longer crashes inside Windows' media controls while media apps or a browser's videos (like YouTube in Chrome) keep changing: a media session that goes away (or stops being the one shown) is kept with its handlers for 10 seconds before the media thread lets it go, since Windows may still be calling it on its own threads (also when the media thread stops, without keeping the island waiting). If the island's process ever crashes (an NTSTATUS exit code), the explorer part starts it again, at most 3 times in 10 minutes, and only when it was Windhawk's own <code>windhawk.exe</code> at Explorer's integrity level (decided at its hello, while it runs), launched with <code>CreateProcessInternalW</code> like the tool mod snippet. On Windhawk 2.0 the island runs in <code>windhawk-mod.exe</code>, which Windhawk starts itself, so the mod doesn't start it again there.</li>
-<li>With the Fixed style's notches minimized, a notification's app icon peeks out only of the notch with the bell, not out of every notch, and no longer for the app you're using (a taskbar badge from the app in front).</li>
-<li>A click on a notification opens its app when the app's own notification handler doesn't answer (its COM activation fails within 5 seconds), instead of doing nothing: the island falls back to the app's window, its tray icon or the app itself.</li>
-<li>An app's own counter on its taskbar button (like WhatsApp's) no longer keeps its icon on the island as a waiting notification while the list is empty (&quot;No notifications&quot;, so no &quot;Clear all&quot; to dismiss it): it counts as seen when the app comes to the front (or is in front when it changes) or its icon on the island is clicked, and shows again when the counter goes away and comes back or its number grows.</li>
-<li>Sleep in the power button's menu no longer hibernates PCs with Modern Standby: with no S1-S3, it turns the screen off like Start &gt; Sleep instead of calling SetSuspendState.</li>
-<li>QQ's and WeChat's message preview shows again when hovering their icon in the taskbar's tray with tray icons on the island: the island answers Shell_NotifyIconGetRect with its own place only while the mouse is on that icon on the island (#7157).</li>
-<li>The settings window takes much less of the processor in its first seconds: the preview's hint, the &quot;+ Line&quot; glow and the other hints that only fade or pulse draw at most 30 times a second instead of at the monitor's rate.</li>
-<li>Dock: games' icons (like Steam's) and other apps without an icon of their own in the Start menu no longer go empty when Windows' icon cache is out of date (an empty picture now counts as none and the next source is tried), nor show a small icon magnified: the last fallback reads the window's program's icon from the file as big as the dock shows it, before the window's own 32 px icon (#7207).</li>
-<li>Right after a Windows update whose <code>taskbar.dll</code> symbols Microsoft hasn't published yet (KB5132061, <code>taskbar.dll</code> 10.0.26100.9974, was 🔴 on the symbol cache's status page), the explorer part no longer stops as a whole. <code>ExplorerModInit</code> returned FALSE when <code>HookTaskbarDllSymbols</code> failed, so the island lost its tray icons too, which need no symbols (subclass and <code>WM_COPYDATA</code>). Now the taskbar stays as Windows draws it (<code>g_taskbarSymbols</code> false: no symbol hook is set, and <code>GetTaskbarXamlRoot</code>/<code>GetSecondaryTaskbarXamlRoot</code> return null instead of calling a symbol pointer), <code>ApplyToTaskbar</code> counts the main taskbar as ready so the late start goes on, and the tray icons and the apps asking for attention keep reaching the island. The explorer part keeps the <code>taskbar.dll</code> version without symbols in the mod's storage (<code>taskbarNoSymbols</code>, cleared once they load), and the main island shows a sticky notice saying why, once per version and only when the chosen taskbar needs them (the dock, the transparent taskbar, only the apps, or the tray hidden). Its &quot;Details&quot; button, or a click on it, opens the island's What's new, where this fix tells why (the whole text may not fit a smaller notice). The dock comes back once the symbols are published and load with Explorer (its next start). Without <code>taskbar.dll</code> at all, it still returns FALSE.</li>
-<li>The islands no longer stall every few seconds on PCs with apps chosen for the visualizer (since 3.1). Each island, every 3 s, read all the default output's audio sessions again once per chosen app, each read making a new <code>IAudioSessionManager2</code>, asking for every session's state and process and opening each program (~12 ms a read), all on the islands' thread: with 8 apps on 3 islands a tick took 30 ms to over a second, found with a per-message timing log and by sampling the thread. Now one list (<code>g_audioSessions</code>) is read at most every 1.5 s for every island and app, the output's session manager is kept (made again for another default output or after a failure), each program's file is looked up once per process, and the list is released with the islands, before <code>CoUninitialize</code>.</li>
-</ul>
-]]></content>
-        <author>
-            <name>caliberda</name>
-            <uri>https://github.com/cesarkali</uri>
         </author>
     </entry>
 </feed>

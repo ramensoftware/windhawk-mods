@@ -2,12 +2,68 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-12T08:05:22.000Z</updated>
+    <updated>2026-11-12T09:01:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Octagonal Windows 1.0.1]]></title>
+        <id>https://windhawk.net/mods/octagonal-windows#07533b4522ca85de836c1d6173bdb5cd132933a9</id>
+        <link href="https://windhawk.net/mods/octagonal-windows"/>
+        <updated>2026-11-12T09:01:53.000Z</updated>
+        <content type="html"><![CDATA[<h1>Octagonal Windows</h1>
+<p>Makes Windows 11 window borders octagonal. You can change the size of each corner.</p>
+<p>The mod was <a href="https://github.com/ramensoftware/windhawk-mods/pull/3587">originally
+submitted</a> by
+<a href="https://github.com/kanak-buet19">Kanak415</a>. The option for maximized and
+snapped windows is based on a
+<a href="https://github.com/ramensoftware/windhawk-mods/pull/5022">mod</a> by <a href="https://github.com/leshaalexey">Alexey
+Lavrinenko</a>. I modified the mod <a href="https://windhawk.net/mods/custom-corner-radius">Custom Window Corner Radius</a> from <a href="https://github.com/m417z">m417z</a>.</p>
+<p><img src="https://raw.githubusercontent.com/JER-10000/windhawk-mods/main/images/octagonal-windows.png" alt="Octagonal Windows"></p>
+<h2>⚠ Important usage note ⚠</h2>
+<p>This mod needs to hook into <code>dwm.exe</code> to work. Please navigate to Windhawk's
+Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list,
+and make sure that <code>dwm.exe</code> is in the list.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot"></p>
+<h2>Additional notes</h2>
+<ul>
+<li>Some elements, such as context menus, use a smaller radius (4px by default).
+This can be customized separately with the &quot;Small corner size&quot; option.</li>
+<li>Standard tooltips can be customized separately with the &quot;Tooltip corner
+radius&quot; option.</li>
+<li>Each window corner can have its own size with the &quot;Per-corner size&quot;
+option, for example to bevel only the top corners.</li>
+<li>Windows 11 squares off the corners of maximized and snapped windows. The
+&quot;beveled corners for maximized and snapped windows&quot; option enables beveling
+for them.</li>
+<li>Some elements, such as the taskbar, the Start menu, and the notification
+center, are unaffected by this mod. Some of them can be customized using other
+mods, such as Windows 11 Taskbar Styler.</li>
+<li>Disabling the mod instantly restores default behavior - no system files are
+modified.</li>
+</ul>
+<h2>Compatibility</h2>
+<ul>
+<li>When using this mod alongside Translucent Flyouts, set its <code>CornerType</code> option
+to <code>0</code> (&quot;Don't Change&quot;) to prevent conflicts between the two.</li>
+<li>This mod is not compatible with <a href="https://windhawk.net/mods/custom-corner-radius">Custom Window Corner Radius</a>. Don't use together.</li>
+</ul>
+<h2>Recommended companion mods</h2>
+<p>For the best visual experience, consider combining this mod with:</p>
+<ul>
+<li>Window Border Customizer</li>
+<li>Windows 11 Taskbar Styler</li>
+<li>Taskbar Background Helper</li>
+</ul>
+<p>A dark taskbar background combined with the Lucent style from Windows 11 Taskbar Styler pairs especially well with octagonal window borders (as shown in the screenshot above).</p>
+]]></content>
+        <author>
+            <name>JER-10000</name>
+            <uri>https://github.com/JER-10000</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Task Manager Pause Button 1.0.0]]></title>
         <id>https://windhawk.net/mods/task-manager-pause-button#b8a64f42f5edc941234424f16894123290e733b4</id>
@@ -1558,48 +1614,6 @@ a description does.</p>
         <author>
             <name>Saber Naeemi</name>
             <uri>https://github.com/sabergraphics</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Unlock "Folder In Use" 1.0.0]]></title>
-        <id>https://windhawk.net/mods/unlock-folder-in-use#df82b32c5f560e924ca1c70e63088a5ae635bee8</id>
-        <link href="https://windhawk.net/mods/unlock-folder-in-use"/>
-        <updated>2026-11-09T19:04:02.000Z</updated>
-        <content type="html"><![CDATA[<h1>Unlock &quot;Folder In Use&quot;</h1>
-<p>When Explorer refuses to delete, move or rename something because it is in use (&quot;Folder In Use&quot; / &quot;File In Use&quot;), this mod finds out which processes are blocking it and lets you decide what to do.</p>
-<p><img src="https://i.imgur.com/goeqtLD.png" alt="Screenshot"></p>
-<p>When the warning appears, a small dialog lists the blocking processes and offers:</p>
-<ul>
-<li><strong>End processes and continue</strong> - terminates the processes and presses <em>Try Again</em> for you, so Explorer completes the original operation.</li>
-<li><strong>Only end processes</strong> - terminates the processes and leaves Explorer's warning open so you can retry yourself.</li>
-<li><strong>Cancel</strong> - does nothing.</li>
-</ul>
-<p>If Explorer windows are open inside the item being processed, they are moved up one level.</p>
-<h2>How it works</h2>
-<ul>
-<li>The mod runs as a tool in its own dedicated process, not inside Explorer, so a problem in it can't affect the taskbar or the desktop.</li>
-<li>The warning is detected through its internal UI Automation identifiers instead of its text, so it works with any display language.</li>
-<li>The blocked item is identified from the name shown in the warning. Only the text elements of the interrupt panel itself are read (starting from the <em>Try Again</em> button), never the rest of the progress window, and names are compared in full. Only the selected items (or entries inside selected folders) whose name matches exactly are scanned.</li>
-<li>The matched paths are listed in the details of the prompt, so you can see what was scanned before ending anything.</li>
-<li>Blockers are found with the Restart Manager, the current directory of each process, and the system handle table. Every Explorer process is excluded.</li>
-<li>Processes are opened while scanning and terminated through those same handles, so a process that exits and whose PID is reused is never terminated by mistake.</li>
-</ul>
-<h2>Notes</h2>
-<ul>
-<li>Ending a process terminates it immediately. Unsaved work in that process is lost.</li>
-<li>Elevated or protected processes can't be ended from this mod.</li>
-<li>If the item named in the warning can't be matched with the selection, the mod says so and does nothing.</li>
-<li>The mod relies on internal details of Explorer's operation dialog, which may change in future Windows versions.</li>
-</ul>
-<h2>Settings</h2>
-<ul>
-<li><strong>Modern dialogs</strong> - use task-dialog style windows instead of classic message boxes.</li>
-<li><strong>Show message when nothing is found</strong> - show a dialog when the blocked item or its blocking process could not be identified (enabled by default).</li>
-</ul>
-]]></content>
-        <author>
-            <name>LyricsPortal</name>
-            <uri>https://github.com/LyricsPortal</uri>
         </author>
     </entry>
 </feed>
