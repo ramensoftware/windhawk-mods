@@ -1,41 +1,41 @@
 // ==WindhawkMod==
 // @id              winklok
 // @name            WinKlok
-// @description     A calmer, smarter clock mod for the Windows 11 taskbar. Packed with essential time utilities and a powerful notes panel that seamlessly supports rich text and LaTeX.
-// @version         1.1.0
+// @description     A multifunctional notification center replacement mod for Windows 11. Bringing your calendar (Local + Google calendar support), tasks, notes (Rich text & LaTeX support), and essential time utilities together in one place.
+// @version         1.2.0
 // @author          Shifting Whistler
 // @github          https://github.com/shifting-whistler
 // @homepage        https://github.com/shifting-whistler
 // @license         GPL-3.0-or-later
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -luser32 -lgdi32 -ld2d1 -ldwrite -ldwmapi -lwinmm -lshell32 -ladvapi32
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -luser32 -lgdi32 -ld2d1 -ldwrite -ldwmapi -lwinmm -lshell32 -ladvapi32 -lwinhttp -lcomdlg32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # WinKlok
 
-**A calmer, smarter clock mod for Windows 11 taskbar.**
+**A multifunctional notification center replacement mod for Windows 11.**
 WinKlok replaces the stock date/time flyout with a fast, native, Fluent-styled panel that
 combines a **Calendar, Stopwatch, Timer, Alarm, Tasks, Notes** and **Settings** in one place, plus its own **notification panel**, and puts
 live stopwatch and timer previews right next to the taskbar clock.
 
 ---
 
-![Desktop](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/desktopv1.1.0.png)
+![Desktop](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/desktopv1.2.0.png)
 
 ---
 
 ## Highlights
 
-| | |
-|---|---|
+| Feature | Description |
+| :--- | :--- |
 | **Native look and feel** | Drawn with Direct2D and DirectWrite in the Windows palette, with real acrylic blur, your accent colour, light and dark themes, and Windows-style slide-up animations. |
 | **Everything in one panel** | Calendar, Stopwatch, Timer, Alarm, Notes and Settings, one click away from the clock. |
 | **Live taskbar previews** | A running stopwatch or timer is shown beside the clock with pause/play and reset buttons. |
 | **Smooth scrolling** | Mouse wheel, precision touchpad (tracked from raw two-finger movement with kinetic momentum), touch and pen share smooth scrolling. |
-| **Private by design** | No network access, no telemetry, no accounts. Everything is stored locally by Windhawk. |
+| **Private by design** | No telemetry and no accounts. Network access happens only when you import an iCalendar link or turn on Google Calendar Sync with your own credentials. Calendar data stays on your PC. |
 
 ---
 
@@ -43,9 +43,9 @@ live stopwatch and timer previews right next to the taskbar clock.
 
 ---
 
-![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowone.png)
+![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowfirst.png)
 ![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowtwo.png)
-![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowthird.png)
+![Panel Tabs](https://raw.githubusercontent.com/shifting-whistler/WinKlok/main/Images/rowthree.png)
 ---
 
 ## Features
@@ -53,7 +53,10 @@ live stopwatch and timer previews right next to the taskbar clock.
 ### Calendar
 * Month, year and decade views, with smooth vertical month scrolling like the Windows calendar.
 * Today and the selected date are marked with your accent colour.
-* Week numbers sit in a narrow column on the left. The first day of the week and the first week of the year follow your Windows regional settings (no hard-coded ISO or Sunday rules).
+* **Events**: a thin ring of coloured segments around every date that has events, a hover card (up to five events, then "+N more"), and a double-click editor with all-day, start/end, title, description, location and colour.
+* **Local mode**: any number of local calendars (with a protected *WinKlok (default)* calendar), import of Google Takeout ZIPs, `.ics` files and iCalendar links (duplicate-safe, edits are kept), and `.ics` export.
+* **Google Calendar Sync mode** (Settings > Calendar settings): two-way sync with your own Google Cloud OAuth Desktop client. Local and Google data are kept completely separate. Calendars you own can be deleted (the primary one can be emptied) from the same page; this needs the full `calendar` scope, see the Help section there.
+* Week numbers sit in a narrow column on the left and can be switched off in Calendar settings. The first day of the week and the first week of the year follow your Windows regional settings (no hard-coded ISO or Sunday rules).
 
 ### Stopwatch
 * Centisecond precision, up to 200 laps (the newest lap is always on top) and a smooth lap list.
@@ -76,7 +79,8 @@ live stopwatch and timer previews right next to the taskbar clock.
 
 ### Notification panel
 * The taskbar bell opens WinKlok's own notification panel instead of the Windows one: notifications grouped by app, relative times, dismiss one, dismiss a whole app, clear all, click to open the app.
-* In Settings choose **Separate panel** (the bell opens it on its own) or **Above WinKlok**: then the clock opens the WinKlok panel with the notifications stacked above it, sliding in from the right like the native flyout. A chevron in the tab bar folds the WinKlok panel into a slim strip so the notifications extend, and back (remembered).
+* The icon can be left or right of the date and time, and can be always on, off, or shown only while there are notifications.
+* In Settings > Notification settings choose **Separate panel** (the bell opens it on its own) or **Above WinKlok**: then the clock opens the WinKlok panel with the notifications stacked above it, sliding in from the right like the native flyout. A chevron in the tab bar folds the WinKlok panel into a slim strip so the notifications extend, and back (remembered).
 * Notifications are read locally from the Windows notification database (read-only copy, nothing leaves your PC). If Windows ever blocks that, the panel says so and offers the native one.
 
 ### Notes
@@ -87,8 +91,9 @@ live stopwatch and timer previews right next to the taskbar clock.
 * One-tap **Copy** button for the whole note body (the title is not included), adjustable text size.
 
 ### Settings
-* Choose which tabs are shown, taskbar previews, preview layout, notification icon and panel style, 12/24-hour time (applied everywhere),
-  panel material (acrylic or simple) and default timer / alarm sounds.
+* Settings is split into **General**, **Notification** and **Calendar** pages.
+* General: taskbar previews, which tabs are shown (drag them to reorder), preview layout, 12/24-hour time (applied everywhere), panel material (acrylic or simple), default timer / alarm sounds and the **panel horizontal position**.
+* The panel opens in the corner next to the clock (below the taskbar when the taskbar is at the top). The position slider moves it along the screen in single-pixel steps, up to the left edge (useful on ultrawide screens); the notification stack then rises from the taskbar instead of sliding in from the edge.
 * **Sync time now** (Windows asks for administrator permission whenever it is needed).
 * A compact **About** card with the version, developer, project links and a bug / feature request button.
 
@@ -96,7 +101,7 @@ live stopwatch and timer previews right next to the taskbar clock.
 ---
 
 ## First-run defaults
-Notification icon on when the Windows bell was showing (off otherwise), taskbar previews on, time format following Windows, acrylic blur, side-by-side layout, the *Windows Alarm*
+Notification icon on (left of the clock) when the Windows bell was showing (off otherwise), taskbar previews on, time format following Windows, acrylic blur, side-by-side layout, the *Windows Alarm*
 tone for both timers and alarms.
 
 ## Getting started
@@ -114,7 +119,7 @@ tone for both timers and alarms.
 * Windows 11 with the XAML taskbar, 64-bit only.
 * Do not combine with other mods that rebuild the taskbar clock area (for example *Taskbar Clock
   Customization*) until you have verified they coexist.
-* The panel always rests above the taskbar, even when it is set to auto-hide (it keeps clear of the area the taskbar occupies when shown).
+* The panel always rests next to the taskbar (above a bottom taskbar, below a top one), even when it is set to auto-hide (it keeps clear of the area the taskbar occupies when shown).
 * WinKlok does not change the taskbar height. Use the *Taskbar height and icon size* mod for that.
 * To turn WinKlok off, disable the mod in Windhawk: the taskbar clock goes back to Windows immediately.
 * If something misbehaves, enable logging for this mod in Windhawk and check the log.
@@ -150,6 +155,8 @@ WinKlok is free and open source software released under the **GNU General Public
 #include <shellapi.h>
 #include <shobjidl.h>
 #include <winsvc.h>
+#include <winhttp.h>
+#include <commdlg.h>
 #include <sddl.h>
 #include <dwmapi.h>
 #include <d2d1.h>
@@ -164,6 +171,7 @@ WinKlok is free and open source software released under the **GNU General Public
 #include <cwchar>
 #include <cwctype>
 #include <cstring>
+#include <climits>
 #include <cmath>
 #include <functional>
 #include <map>
@@ -207,7 +215,7 @@ WinKlok is free and open source software released under the **GNU General Public
 
 // ---- product information ---------------------------------------------------
 #define WK_NAME L"WinKlok"
-#define WK_VERSION L"1.1.0"
+#define WK_VERSION L"1.2.0"
 #define WK_DEVELOPER L"Shifting Whistler"
 #define WK_COPYRIGHT L"\u00A9 2026 Shifting Whistler"
 #define WK_LICENSE L"GPL-3.0-or-later"
@@ -260,8 +268,11 @@ namespace td
     struct Settings
     {
         std::atomic<int> showPreviews{1};
-        std::atomic<int> stacked{0}; // 0 = side by side, 1 = stopwatch above timer
-        std::atomic<int> showBell{0};
+        std::atomic<int> stacked{0};                     // 0 = side by side, 1 = stopwatch above timer
+        std::atomic<int> showBell{0};                    // notification icon: 0 = off, 1 = on, 2 = only while there are notifications
+        std::atomic<int> bellSide{0};                    // 0 = left of the date and time, 1 = right of it
+        std::atomic<int> panelX{0};                      // screen pixels from the right edge (0 = default corner)
+        std::atomic<int> showWeeks{1};                   // calendar week-number column
         std::atomic<bool> bellUnset{false};              // never chosen yet: the first run copies the state of the Windows bell
         std::atomic<int> hour24{-1};                     // -1 = follow Windows (default), 0 = 12 h, 1 = 24 h
         std::atomic<int> acrylic{1};                     // 1 = acrylic blur when Windows transparency is on, 0 = simple transparency
@@ -282,10 +293,13 @@ namespace td
             showPreviews = Wh_GetIntValue(L"showPreviews", 1);
             stacked = Wh_GetIntValue(L"stacked", 0);
             {
-                const int bell = Wh_GetIntValue(L"showBell", -1); // -1: first run
+                const int bell = Wh_GetIntValue(L"showBell", -1);             // -1: first run
                 bellUnset = bell < 0 || Wh_GetIntValue(L"notifMode", -1) < 0; // -1: new install, or an update from v1.0
-                showBell = bell < 0 ? 0 : bell;
+                showBell = bell < 0 ? 0 : std::min(2, bell);
             }
+            bellSide = Wh_GetIntValue(L"bellSide", 0) != 0 ? 1 : 0;
+            panelX = std::min(20000, std::max(0, Wh_GetIntValue(L"panelX", 0)));
+            showWeeks = Wh_GetIntValue(L"showWeeks", 1) != 0 ? 1 : 0;
             hour24 = Wh_GetIntValue(L"hour24", -1);
             acrylic = Wh_GetIntValue(L"acrylic", 1);
             timerSound = std::min(kSoundCount - 1, std::max(0, Wh_GetIntValue(L"timerSound", kTimerSound)));
@@ -301,6 +315,9 @@ namespace td
             Wh_SetIntValue(L"stacked", stacked);
             if (!bellUnset)
                 Wh_SetIntValue(L"showBell", showBell);
+            Wh_SetIntValue(L"bellSide", bellSide);
+            Wh_SetIntValue(L"panelX", panelX);
+            Wh_SetIntValue(L"showWeeks", showWeeks);
             Wh_SetIntValue(L"hour24", hour24);
             Wh_SetIntValue(L"acrylic", acrylic);
             Wh_SetIntValue(L"timerSound", timerSound);
@@ -311,6 +328,8 @@ namespace td
         }
     };
     static Settings g_set;
+    // Notifications held by Windows (not dismissed here): the bell's "only when notified" mode follows this count.
+    static std::atomic<int> g_nfCount{0};
 
     static ULONGLONG MonoMs() { return GetTickCount64(); }
 
@@ -475,7 +494,9 @@ namespace td
             if (c == L'\\' && i + 1 < s.size())
             {
                 wchar_t n = s[++i];
-                o += n == L'p' ? L'|' : n == L's' ? L';' : n == L'n' ? L'\n' : n;
+                o += n == L'p' ? L'|' : n == L's' ? L';'
+                                    : n == L'n'   ? L'\n'
+                                                  : n;
             }
             else
                 o += c;
@@ -519,7 +540,9 @@ namespace td
 
     static const size_t kChunk = 30000; // stay under Windhawk's 32,767-char value limit
     static std::vector<std::wstring> SplitRecords(const std::wstring &s)
-    { return Split(s, s.find(L'\n') != std::wstring::npos ? L'\n' : L';'); } // old data used line breaks
+    {
+        return Split(s, s.find(L'\n') != std::wstring::npos ? L'\n' : L';');
+    } // old data used line breaks
 
     static void PutBig(const wchar_t *key, const std::wstring &v)
     {
@@ -529,11 +552,13 @@ namespace td
         for (size_t s = 0; s < v.size(); ++n)
         {
             size_t e = std::min(v.size(), s + kChunk);
-            while (e < v.size() && e > s + 1 && (iswspace(v[e - 1]) || iswspace(v[e]))) --e; // INI may trim edge spaces
+            while (e < v.size() && e > s + 1 && (iswspace(v[e - 1]) || iswspace(v[e])))
+                --e; // INI may trim edge spaces
             Wh_SetStringValue((k + L"_" + std::to_wstring(n)).c_str(), v.substr(s, e - s).c_str());
             s = e;
         }
-        for (int i = n; i < old; ++i) Wh_DeleteValue((k + L"_" + std::to_wstring(i)).c_str());
+        for (int i = n; i < old; ++i)
+            Wh_DeleteValue((k + L"_" + std::to_wstring(i)).c_str());
         Wh_SetIntValue((k + L"_n").c_str(), n);
         Wh_DeleteValue(key); // the old single-value copy
     }
@@ -546,14 +571,16 @@ namespace td
         for (int i = 0; i < n; ++i)
         {
             const size_t m = Wh_GetStringValue((k + L"_" + std::to_wstring(i)).c_str(), b.data(), b.size());
-            if (m >= b.size()) return L"";
+            if (m >= b.size())
+                return L"";
             v.append(b.data(), m);
         }
         if (n == 0) // data saved by older versions
         {
             b.assign(200000, 0);
             const size_t m = Wh_GetStringValue(key, b.data(), b.size());
-            if (m < b.size()) v.assign(b.data(), m);
+            if (m < b.size())
+                v.assign(b.data(), m);
         }
         return v;
     }
@@ -1318,6 +1345,8 @@ namespace tb
         wuxc::Viewbox scale{nullptr}; // scales the whole preview to the native clock height
         wuxc::Grid swBlock{nullptr}, tmBlock{nullptr}, swCompact{nullptr}, tmCompact{nullptr};
         wuxc::Border bell{nullptr};
+        wux::FrameworkElement bellR{nullptr}; // the bell when it sits right of the date and time (its own element)
+        wuxc::TextBlock bellRGlyph{nullptr};
         wuxc::TextBlock swLabel{nullptr}, swTime{nullptr}, swGlyph{nullptr}, tmLabel{nullptr}, tmTime{nullptr}, tmGlyph{nullptr};
         wuxc::TextBlock swCTime{nullptr}, swCGlyph{nullptr}, tmCTime{nullptr}, tmCGlyph{nullptr};
         std::vector<wuxc::TextBlock> allText;
@@ -1345,6 +1374,8 @@ namespace tb
             swCompact = nullptr;
             tmCompact = nullptr;
             bell = nullptr;
+            bellR = nullptr;
+            bellRGlyph = nullptr;
             swLabel = nullptr;
             swTime = nullptr;
             swGlyph = nullptr;
@@ -1532,11 +1563,11 @@ namespace tb
                 t.Foreground(fg);
     }
 
-    static void ShiftNative(Entry &en, double w)
+    static void ShiftNative(Entry &en, double w, double r = 0)
     {
         if (!en.grid)
             return;
-        if (w <= 0.5)
+        if (w <= 0.5 && r <= 0.5)
         {
             for (auto &p : en.shifted)
             {
@@ -1569,7 +1600,7 @@ namespace tb
                 }
             if (!known)
                 en.shifted.emplace_back(fe, orig);
-            fe.Margin(wux::Thickness{orig.Left + w, orig.Top, orig.Right, orig.Bottom});
+            fe.Margin(wux::Thickness{orig.Left + w, orig.Top, orig.Right + r, orig.Bottom});
         }
         en.shift = w;
     }
@@ -1631,7 +1662,8 @@ namespace tb
             for (int i = 0; i < 16 && cur; ++i)
             {
                 cur = wuxm::VisualTreeHelper::GetParent(cur);
-                if (!cur) break;
+                if (!cur)
+                    break;
                 auto fe = cur.try_as<wux::FrameworkElement>();
                 if (fe && fe.Name() == L"NotificationCenterButton")
                     return FindVisualByClass(fe, kLeaf, 16);
@@ -1641,24 +1673,40 @@ namespace tb
                     if (auto btn = FindVisualByName(xr.Content(), L"NotificationCenterButton", 64))
                         return FindVisualByClass(btn, kLeaf, 64);
         }
-        catch (...) {}
+        catch (...)
+        {
+        }
         return nullptr;
     }
 
     static void ApplyBell(Entry &en)
     {
-        if (!WkActive()) return;
+        if (!WkActive())
+            return;
         const ULONGLONG now = GetTickCount64();
         bool attached = false;
         if (en.bellLeaf)
-            try { attached = (bool)wuxm::VisualTreeHelper::GetParent(en.bellLeaf); } catch (...) {}
+            try
+            {
+                attached = (bool)wuxm::VisualTreeHelper::GetParent(en.bellLeaf);
+            }
+            catch (...)
+            {
+            }
         if (!attached)
         {
-            if (en.bellLeaf) { en.bellLeaf = nullptr; en.bellBackoffMs = 250; en.bellNextSearchMs = 0; } // taskbar rebuilt: look again at once
+            if (en.bellLeaf)
+            {
+                en.bellLeaf = nullptr;
+                en.bellBackoffMs = 250;
+                en.bellNextSearchMs = 0;
+            } // taskbar rebuilt: look again at once
             en.bellHidden = false;
-            if (now < en.bellNextSearchMs) return;
+            if (now < en.bellNextSearchMs)
+                return;
             const bool deep = now >= en.bellDeepMs;
-            if (deep) en.bellDeepMs = now + 30000;
+            if (deep)
+                en.bellDeepMs = now + 30000;
             en.bellLeaf = FindNativeBell(en, deep);
             if (!en.bellLeaf)
             {
@@ -1685,7 +1733,11 @@ namespace tb
                 en.bellLeaf.Visibility(wux::Visibility::Collapsed);
             en.bellHidden = true;
         }
-        catch (...) { en.bellLeaf = nullptr; en.bellHidden = false; }
+        catch (...)
+        {
+            en.bellLeaf = nullptr;
+            en.bellHidden = false;
+        }
     }
 
     // ---- click handling ------------------------------------------------------------------
@@ -1865,6 +1917,19 @@ namespace tb
         Background="Transparent" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
 )XAML";
 
+    // The bell when it is placed right of the date and time: its own element in the clock grid (right aligned).
+    static const wchar_t kBellRXaml[] = LR"XAML(
+<Viewbox xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+         x:Name="WinklokBellRScale" Grid.RowSpan="99" Grid.ColumnSpan="99" Stretch="Uniform" Height="32"
+         HorizontalAlignment="Right" VerticalAlignment="Center" Visibility="Collapsed">
+  <Border x:Name="WinklokBellRBtn" Width="26" Height="36" CornerRadius="5" Background="Transparent">
+    <TextBlock x:Name="WinklokBellRGlyph" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="15"
+               Text="&#xEA8F;" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+  </Border>
+</Viewbox>
+)XAML";
+
     template <class T>
     static T Named(wux::FrameworkElement const &root, const wchar_t *name)
     {
@@ -1946,6 +2011,8 @@ namespace tb
             en.swCompact = Named<wuxc::Grid>(en.host, L"WinklokSwCompactBlock");
             en.tmCompact = Named<wuxc::Grid>(en.host, L"WinklokTmCompactBlock");
             en.bell = Named<wuxc::Border>(en.host, L"WinklokBell");
+            en.bellR = wux::Markup::XamlReader::Load(kBellRXaml).as<wux::FrameworkElement>();
+            en.bellRGlyph = Named<wuxc::TextBlock>(en.bellR, L"WinklokBellRGlyph");
             en.swLabel = tb(L"WinklokSwLabel");
             en.swTime = tb(L"WinklokSwTime");
             en.swGlyph = tb(L"WinklokSwGlyph");
@@ -1964,8 +2031,10 @@ namespace tb
                                      L"WinklokTmCompactGlyph", L"WinklokTmCompactCancelGlyph", L"WinklokBellGlyph"})
                 en.allText.push_back(tb(n));
 
+            en.allText.push_back(en.bellRGlyph);
             en.grid.Children().Append(en.overlay);
             en.grid.Children().Append(en.host);
+            en.grid.Children().Append(en.bellR);
 
             HookRegion(en, en.overlay);
             HookRegion(en, en.host);
@@ -2005,6 +2074,9 @@ namespace tb
                                   : nullptr);
             }
 
+            HookButton(en, Named<wux::UIElement>(en.bellR, L"WinklokBellRBtn"), []()
+                       { ui::RequestToggleNotifications(); }, []()
+                       { ui::NotifyTaskbarClockPress(); });
             en.layoutKey = -1;
             en.lastBrushMs = GetTickCount64();
             ClearClockTooltips(en);
@@ -2072,8 +2144,10 @@ namespace tb
 
             const bool showAny = S.showPreviews.load() && (p.swOn || p.tmOn);
             const bool compact = showAny && p.swOn && p.tmOn && S.stacked.load() != 0; // two one-line rows
-            const bool bell = S.showBell.load() != 0;
-            const int key = (showAny ? 1 : 0) | (p.swOn ? 2 : 0) | (p.tmOn ? 4 : 0) | (compact ? 8 : 0) | (bell ? 16 : 0);
+            const int bellMode = S.showBell.load();
+            const bool bell = bellMode == 1 || (bellMode == 2 && td::g_nfCount.load() > 0);
+            const bool bellRight = S.bellSide.load() != 0;
+            const int key = (showAny ? 1 : 0) | (p.swOn ? 2 : 0) | (p.tmOn ? 4 : 0) | (compact ? 8 : 0) | (bell ? 16 : 0) | (bellRight ? 32 : 0);
 
             if (showAny)
             {
@@ -2097,24 +2171,29 @@ namespace tb
                 en.layoutKey = key;
                 const auto vis = [](bool v)
                 { return v ? wux::Visibility::Visible : wux::Visibility::Collapsed; };
-                en.host.Visibility(vis(showAny || bell));
+                const bool bellL = bell && !bellRight, bellRt = bell && bellRight;
+                en.host.Visibility(vis(showAny || bellL));
                 en.previewStack.Visibility(vis(showAny));
-                en.bell.Visibility(vis(bell));
+                en.bell.Visibility(vis(bellL));
+                en.bellR.Visibility(vis(bellRt));
                 en.swBlock.Visibility(vis(showAny && p.swOn && !compact));
                 en.tmBlock.Visibility(vis(showAny && p.tmOn && !compact));
                 en.swCompact.Visibility(vis(compact));
                 en.tmCompact.Visibility(vis(compact));
                 en.previewStack.Orientation(compact ? wuxc::Orientation::Vertical : wuxc::Orientation::Horizontal);
-                en.previewStack.Margin(wux::Thickness{0, 0, bell ? 6.0 : 0.0, 0});
+                en.previewStack.Margin(wux::Thickness{0, 0, bellL ? 6.0 : 0.0, 0});
                 en.swBlock.Margin(wux::Thickness{0, 0, (p.tmOn && !compact) ? 6.0 : 0.0, 0});
                 en.tmBlock.Margin(wux::Thickness{0, 0, 0, 0});
 
                 en.scale.Height(en.nativeH); // preview + buttons are exactly as tall as the native date/time
-                double dy = en.nativeDy;     // keep the preview centred on the native text
+                en.bellR.as<wuxc::Viewbox>().Height(en.nativeH);
+                double dy = en.nativeDy; // keep the preview centred on the native text
                 en.host.Margin(wux::Thickness{4, dy > 0 ? 2 * dy : 0.0, 2, dy < 0 ? -2 * dy : 0.0});
+                en.bellR.Margin(wux::Thickness{2, dy > 0 ? 2 * dy : 0.0, 4, dy < 0 ? -2 * dy : 0.0}); // mirrors the left bell: 2 next to the clock, 4 outside
                 ApplyBrushes(en);
                 en.host.Measure(wf::Size{1e6f, 1e6f});
-                ShiftNative(en, (showAny || bell) ? en.host.DesiredSize().Width : 0);
+                en.bellR.Measure(wf::Size{1e6f, 1e6f});
+                ShiftNative(en, (showAny || bellL) ? en.host.DesiredSize().Width : 0, bellRt ? en.bellR.DesiredSize().Width : 0);
             }
             else if (showAny && nowMs - en.lastBrushMs >= 5000)
             {
@@ -2352,7 +2431,8 @@ namespace tb
                     continue;
                 if (!en->injected && en->injectFailures < 25)
                     want = std::min(want, 100u); // retry the first injection quickly
-                else if (!en->bellHidden && en->bellBackoffMs <= 1000) want = std::min(want, 250u);
+                else if (!en->bellHidden && en->bellBackoffMs <= 1000)
+                    want = std::min(want, 250u);
             }
         }
         SetTickMs(want);
@@ -2796,7 +2876,8 @@ namespace ui
         WM_UI_HWHEEL = WM_APP + 24,
         WM_UI_SYNCDONE = WM_APP + 25,
         WM_UI_TOGGLE_NOTIF = WM_APP + 26,
-        WM_UI_FRAME = WM_APP + 27 // one compositor frame has passed (posted by the frame clock)
+        WM_UI_FRAME = WM_APP + 27,     // one compositor frame has passed (posted by the frame clock)
+        WM_UI_CALCHANGED = WM_APP + 28 // calendar data changed on another thread: repaint
     };
     enum
     {
@@ -2813,7 +2894,10 @@ namespace ui
         TIMER_ABOUT_ANIM,
         TIMER_NOTIF_REFRESH,
         TIMER_STACK_ANIM,
-        TIMER_TODO_ANIM
+        TIMER_TODO_ANIM,
+        TIMER_CAL_HOVER,
+        TIMER_CAL_REARM,
+        TIMER_SYNC_SPIN
     };
 
     // ---- colors ---------------------------------------------------------------------
@@ -3219,7 +3303,7 @@ namespace ui
             {
                 const DWORD r = g_waitClock(1, &g_stopEvt, 100);
                 if (r == WAIT_OBJECT_0 && WaitForSingleObject(g_stopEvt, 0) == WAIT_OBJECT_0)
-                    return false; // stop requested (checked again, so a compositor tick can never be mistaken for it)
+                    return false;                              // stop requested (checked again, so a compositor tick can never be mistaken for it)
                 paced = r != WAIT_TIMEOUT && r != WAIT_FAILED; // the compositor ticked; on a timeout or failure a frame is still posted
                 return true;
             }
@@ -3461,6 +3545,35 @@ namespace ui
         (void)mon;
         const int top = bandH > 0 ? mi.rcMonitor.bottom - bandH : mi.rcWork.bottom;
         return std::min<int>(top, mi.rcWork.bottom);
+    }
+
+    // True when the taskbar of this monitor is docked at the top; lineBelow is then the screen y flyouts rest below.
+    static bool TaskbarOnTop(const MONITORINFO &mi, int &lineBelow)
+    {
+        const int monW = mi.rcMonitor.right - mi.rcMonitor.left, monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+        bool top = false;
+        auto consider = [&](HWND t)
+        {
+            RECT r{};
+            if (top || !t || !IsWindowVisible(t) || !GetWindowRect(t, &r))
+                return;
+            const int th = r.bottom - r.top;
+            const int overlap = std::min<int>(r.right, mi.rcMonitor.right) - std::max<int>(r.left, mi.rcMonitor.left);
+            if (th < 24 || th > monH / 3 || overlap < monW / 2 || r.top > mi.rcMonitor.top + 2 || r.bottom > mi.rcMonitor.top + monH / 2)
+                return;
+            top = true; // an auto-hidden bar keeps its full height, only a sliver is on screen
+            lineBelow = std::max<int>(mi.rcWork.top, mi.rcMonitor.top + th);
+        };
+        consider(FindWindowW(L"Shell_TrayWnd", nullptr));
+        for (HWND t = nullptr; !top && (t = FindWindowExW(nullptr, t, L"Shell_SecondaryTrayWnd", nullptr));)
+            consider(t);
+        return top;
+    }
+    // Left edge of a flyout. "Panel position" is the distance in screen pixels from the right edge: 0 is the default corner,
+    // the largest value puts the panel against the left edge.
+    static int FlyoutLeft(const MONITORINFO &mi, int w, int margin)
+    {
+        return std::max<int>(mi.rcWork.right - w - margin - td::g_set.panelX.load(), mi.rcWork.left + margin);
     }
 
     // ---- fonts / text -------------------------------------------------------------------------
@@ -8011,6 +8124,4776 @@ namespace ui
 } // namespace ui
 
 // ============================================================================
+//  CALENDAR ENGINE (events, local + Google data, iCalendar, ZIP, JSON)
+//  Pure logic first (no Windows calls: unit-testable), the Windows layer follows below.
+// ============================================================================
+namespace cal
+{
+    static const long long kDayMs = 86400000LL;
+
+    static long long FloorDiv(long long a, long long b)
+    {
+        long long q = a / b;
+        return (a % b != 0 && ((a < 0) != (b < 0))) ? q - 1 : q;
+    }
+
+    // ---- UTF-8 <-> wstring (surrogate aware, independent of sizeof(wchar_t)) -------------------------------------
+    static std::string ToUtf8(const std::wstring &w)
+    {
+        std::string o;
+        o.reserve(w.size() + 8);
+        for (size_t i = 0; i < w.size(); ++i)
+        {
+            unsigned long c = (unsigned long)w[i];
+            if (sizeof(wchar_t) == 2 && c >= 0xD800 && c < 0xDC00 && i + 1 < w.size() && (unsigned long)w[i + 1] >= 0xDC00 && (unsigned long)w[i + 1] < 0xE000)
+            {
+                c = 0x10000 + ((c - 0xD800) << 10) + ((unsigned long)w[++i] - 0xDC00);
+            }
+            if (c < 0x80)
+                o += (char)c;
+            else if (c < 0x800)
+            {
+                o += (char)(0xC0 | (c >> 6));
+                o += (char)(0x80 | (c & 0x3F));
+            }
+            else if (c < 0x10000)
+            {
+                o += (char)(0xE0 | (c >> 12));
+                o += (char)(0x80 | ((c >> 6) & 0x3F));
+                o += (char)(0x80 | (c & 0x3F));
+            }
+            else
+            {
+                o += (char)(0xF0 | (c >> 18));
+                o += (char)(0x80 | ((c >> 12) & 0x3F));
+                o += (char)(0x80 | ((c >> 6) & 0x3F));
+                o += (char)(0x80 | (c & 0x3F));
+            }
+        }
+        return o;
+    }
+    static std::wstring FromUtf8(const std::string &s)
+    {
+        std::wstring o;
+        o.reserve(s.size());
+        for (size_t i = 0; i < s.size();)
+        {
+            unsigned char b = (unsigned char)s[i];
+            unsigned long c;
+            int n;
+            if (b < 0x80)
+            {
+                c = b;
+                n = 1;
+            }
+            else if ((b >> 5) == 6)
+            {
+                c = b & 0x1F;
+                n = 2;
+            }
+            else if ((b >> 4) == 14)
+            {
+                c = b & 0x0F;
+                n = 3;
+            }
+            else if ((b >> 3) == 30)
+            {
+                c = b & 0x07;
+                n = 4;
+            }
+            else
+            {
+                o += (wchar_t)0xFFFD;
+                ++i;
+                continue;
+            }
+            if (i + (size_t)n > s.size())
+            {
+                o += (wchar_t)0xFFFD;
+                break;
+            }
+            bool bad = false;
+            for (int k = 1; k < n; ++k)
+            {
+                unsigned char cc = (unsigned char)s[i + k];
+                if ((cc >> 6) != 2)
+                {
+                    bad = true;
+                    break;
+                }
+                c = (c << 6) | (cc & 0x3F);
+            }
+            if (bad)
+            {
+                o += (wchar_t)0xFFFD;
+                ++i;
+                continue;
+            }
+            i += (size_t)n;
+            if (sizeof(wchar_t) == 2 && c >= 0x10000)
+            {
+                c -= 0x10000;
+                o += (wchar_t)(0xD800 + (c >> 10));
+                o += (wchar_t)(0xDC00 + (c & 0x3FF));
+            }
+            else
+                o += (wchar_t)c;
+        }
+        return o;
+    }
+
+    static std::wstring W(const char *s) { return FromUtf8(s ? std::string(s) : std::string()); }
+    static std::string Up(std::string s)
+    {
+        for (auto &c : s)
+            if (c >= 'a' && c <= 'z')
+                c = (char)(c - 32);
+        return s;
+    }
+    static std::wstring LowerW(std::wstring s)
+    {
+        for (auto &c : s)
+            c = (wchar_t)towlower(c);
+        return s;
+    }
+    static std::string Trim8(const std::string &s)
+    {
+        size_t a = 0, b = s.size();
+        while (a < b && (s[a] == ' ' || s[a] == '\t' || s[a] == '\r' || s[a] == '\n'))
+            ++a;
+        while (b > a && (s[b - 1] == ' ' || s[b - 1] == '\t' || s[b - 1] == '\r' || s[b - 1] == '\n'))
+            --b;
+        return s.substr(a, b - a);
+    }
+    static std::wstring TrimW(const std::wstring &s)
+    {
+        size_t a = 0, b = s.size();
+        while (a < b && iswspace(s[a]))
+            ++a;
+        while (b > a && iswspace(s[b - 1]))
+            --b;
+        return s.substr(a, b - a);
+    }
+    static bool EqNoCaseW(const std::wstring &a, const std::wstring &b) { return LowerW(a) == LowerW(b); }
+
+    static std::string HexOf(const unsigned char *p, size_t n)
+    {
+        static const char *d = "0123456789abcdef";
+        std::string o;
+        o.reserve(n * 2);
+        for (size_t i = 0; i < n; ++i)
+        {
+            o += d[p[i] >> 4];
+            o += d[p[i] & 15];
+        }
+        return o;
+    }
+    static bool UnhexTo(const std::string &h, std::vector<unsigned char> &out)
+    {
+        out.clear();
+        if (h.size() % 2)
+            return false;
+        auto v = [](char c) -> int
+        { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10
+                                              : c >= 'A' && c <= 'F'   ? c - 'A' + 10
+                                                                       : -1; };
+        for (size_t i = 0; i < h.size(); i += 2)
+        {
+            int a = v(h[i]), b = v(h[i + 1]);
+            if (a < 0 || b < 0)
+                return false;
+            out.push_back((unsigned char)(a * 16 + b));
+        }
+        return true;
+    }
+
+    // FNV-1a 64-bit (identity hashes, not security)
+    static unsigned long long Fnv(const std::string &s, unsigned long long h = 1469598103934665603ULL)
+    {
+        for (unsigned char c : s)
+        {
+            h ^= c;
+            h *= 1099511628211ULL;
+        }
+        return h;
+    }
+    static std::wstring Hex64(unsigned long long v)
+    {
+        wchar_t b[20];
+        for (int i = 15; i >= 0; --i)
+        {
+            b[i] = L"0123456789abcdef"[v & 15];
+            v >>= 4;
+        }
+        b[16] = 0;
+        return b;
+    }
+
+    // ---- model -------------------------------------------------------------------------------------------------
+    // Event times: timed events hold UTC milliseconds, all-day events whole days since 1970-01-01 (end exclusive).
+    struct Event
+    {
+        std::wstring id;  // local: "e<n>"; Google: the Google event id
+        std::wstring cal; // owning calendar id
+        std::wstring uid; // iCalendar UID (import identity)
+        std::wstring rid; // original start of a detached override (decimal), empty for ordinary events
+        std::wstring title, desc, loc;
+        std::wstring tz; // zone of the first start: "" = UTC, "*" = the PC's own zone, else an IANA name (drives repeats)
+        bool allDay = false, edited = false, readOnly = false;
+        long long s = 0, e = 0;
+        int color = -1; // -1 = the calendar's colour, else 0xRRGGBB
+        std::wstring rrule;
+        std::vector<long long> ex, rd; // excluded / extra start values (same unit as s)
+        std::wstring etag;
+    };
+    struct Calendar
+    {
+        std::wstring id, name;
+        int color = 0x3B82F6;
+        bool visible = true;
+        bool imported = false;
+        std::wstring srcKind, srcUrl; // "file" | "zip" | "url"
+        long long lastImport = 0;
+        // Google
+        std::wstring acct, gid, role; // account (e-mail), Google calendar id, accessRole
+        bool primary = false;
+        bool ReadOnly() const { return role == L"reader" || role == L"freeBusyReader"; }
+    };
+
+    // ---- time zones ------------------------------------------------------------------------------------------------
+    // Platform hooks (the Windows layer installs them; tests install fakes).
+    static bool (*g_zoneOffset)(const std::wstring &tz, long long utcMs, long long &offMs) = nullptr; // named zones
+    static long long (*g_localOffset)(long long utcMs) = nullptr;                                     // the PC's own zone
+    static int g_unknownTz = 0;                                                                       // counted while importing
+
+    static long long ZoneOff(const std::wstring &tz, long long utcMs)
+    {
+        if (tz.empty() || tz == L"UTC" || tz == L"Z")
+            return 0;
+        if (tz == L"*")
+            return g_localOffset ? g_localOffset(utcMs) : 0;
+        long long o = 0;
+        if (g_zoneOffset && g_zoneOffset(tz, utcMs, o))
+            return o;
+        ++g_unknownTz; // unknown zone: behave like a floating time
+        return g_localOffset ? g_localOffset(utcMs) : 0;
+    }
+    static long long WallToUtc(const std::wstring &tz, long long wallMs)
+    {
+        const long long o1 = ZoneOff(tz, wallMs - ZoneOff(tz, wallMs));
+        return wallMs - o1;
+    }
+    static long long UtcToWall(const std::wstring &tz, long long utcMs) { return utcMs + ZoneOff(tz, utcMs); }
+    static long long LocalDayOf(long long utcMs) { return FloorDiv(utcMs + (g_localOffset ? g_localOffset(utcMs) : 0), kDayMs); }
+
+    // Local days (inclusive) that a stored span touches.
+    static void SpanDays(bool allDay, long long s, long long e, long long &d0, long long &d1)
+    {
+        if (allDay)
+        {
+            d0 = s;
+            d1 = e > s ? e - 1 : s;
+        }
+        else
+        {
+            d0 = LocalDayOf(s);
+            d1 = e > s ? LocalDayOf(e - 1) : d0;
+        }
+    }
+
+    // ---- iCalendar -------------------------------------------------------------------------------------------------
+    struct Prop
+    {
+        std::string name, value;
+        std::vector<std::pair<std::string, std::string>> params;
+        std::string Param(const char *k) const
+        {
+            for (auto &p : params)
+                if (p.first == k)
+                    return p.second;
+            return std::string();
+        }
+    };
+
+    static bool ParseLine(const std::string &l, Prop &p)
+    {
+        p = Prop();
+        size_t i = 0;
+        while (i < l.size() && l[i] != ';' && l[i] != ':')
+            ++i;
+        if (i >= l.size())
+            return false;
+        p.name = Up(Trim8(l.substr(0, i)));
+        if (p.name.empty())
+            return false;
+        while (i < l.size() && l[i] == ';')
+        {
+            size_t k = ++i;
+            while (i < l.size() && l[i] != '=' && l[i] != ';' && l[i] != ':')
+                ++i;
+            std::string key = Up(l.substr(k, i - k)), val;
+            if (i < l.size() && l[i] == '=')
+            {
+                ++i;
+                if (i < l.size() && l[i] == '"')
+                {
+                    size_t q = l.find('"', i + 1);
+                    if (q == std::string::npos)
+                        q = l.size();
+                    val = l.substr(i + 1, q - i - 1);
+                    i = std::min(l.size(), q + 1);
+                }
+                else
+                {
+                    size_t v0 = i;
+                    while (i < l.size() && l[i] != ';' && l[i] != ':')
+                        ++i;
+                    val = l.substr(v0, i - v0);
+                }
+            }
+            p.params.push_back({key, val});
+        }
+        if (i >= l.size() || l[i] != ':')
+            return false;
+        p.value = l.substr(i + 1);
+        return true;
+    }
+
+    static std::string UnescText(const std::string &s)
+    {
+        std::string o;
+        o.reserve(s.size());
+        for (size_t i = 0; i < s.size(); ++i)
+        {
+            if (s[i] == '\\' && i + 1 < s.size())
+            {
+                const char n = s[++i];
+                o += (n == 'n' || n == 'N') ? '\n' : n;
+            }
+            else
+                o += s[i];
+        }
+        return o;
+    }
+    static std::string EscText(const std::string &s)
+    {
+        std::string o;
+        for (char c : s)
+        {
+            if (c == '\\' || c == ';' || c == ',')
+            {
+                o += '\\';
+                o += c;
+            }
+            else if (c == '\n')
+                o += "\\n";
+            else if (c != '\r')
+                o += c;
+        }
+        return o;
+    }
+
+    static bool Digits(const std::string &s, size_t pos, size_t n, int &v)
+    {
+        if (pos + n > s.size())
+            return false;
+        v = 0;
+        for (size_t i = 0; i < n; ++i)
+        {
+            if (s[pos + i] < '0' || s[pos + i] > '9')
+                return false;
+            v = v * 10 + (s[pos + i] - '0');
+        }
+        return true;
+    }
+    // "20260315" or "20260315T093000[Z]". days since 1970 + ms of day.
+    static bool ParseDateTime(const std::string &v0, bool &dateOnly, bool &utc, long long &days, long long &msOfDay)
+    {
+        const std::string v = Trim8(v0);
+        int y, m, d;
+        if (!Digits(v, 0, 4, y) || !Digits(v, 4, 2, m) || !Digits(v, 6, 2, d))
+            return false;
+        if (m < 1 || m > 12 || d < 1 || d > 31 || y < 1601 || y > 9998)
+            return false;
+        days = td::DaysFromCivil(y, m, d);
+        msOfDay = 0;
+        utc = false;
+        dateOnly = v.size() == 8;
+        if (dateOnly)
+            return true;
+        if (v.size() < 15 || v[8] != 'T')
+            return false;
+        int hh, mi, ss;
+        if (!Digits(v, 9, 2, hh) || !Digits(v, 11, 2, mi) || !Digits(v, 13, 2, ss))
+            return false;
+        if (hh > 24 || mi > 59 || ss > 60)
+            return false;
+        msOfDay = ((long long)hh * 3600 + mi * 60 + std::min(ss, 59)) * 1000;
+        utc = v.size() > 15 && (v[15] == 'Z' || v[15] == 'z');
+        return true;
+    }
+    // ISO 8601 duration -> ms (P1W, P1DT2H30M, PT45M). Negative is rejected.
+    static bool ParseDuration(const std::string &v, long long &ms)
+    {
+        size_t i = 0;
+        if (i < v.size() && v[i] == '+')
+            ++i;
+        if (i >= v.size() || v[i] != 'P')
+            return false;
+        ++i;
+        bool timePart = false;
+        long long total = 0;
+        bool any = false;
+        while (i < v.size())
+        {
+            if (v[i] == 'T')
+            {
+                timePart = true;
+                ++i;
+                continue;
+            }
+            long long n = 0;
+            size_t st = i;
+            while (i < v.size() && v[i] >= '0' && v[i] <= '9')
+                n = n * 10 + (v[i++] - '0');
+            if (i == st || i >= v.size())
+                return false;
+            const char u = v[i++];
+            any = true;
+            if (u == 'W')
+                total += n * 7 * kDayMs;
+            else if (u == 'D')
+                total += n * kDayMs;
+            else if (u == 'H' && timePart)
+                total += n * 3600000;
+            else if (u == 'M' && timePart)
+                total += n * 60000;
+            else if (u == 'S' && timePart)
+                total += n * 1000;
+            else
+                return false;
+        }
+        ms = total;
+        return any;
+    }
+
+    // One DATE / DATE-TIME property value -> the stored unit. Floating times are "*" (the PC's zone).
+    struct TimeVal
+    {
+        bool ok = false, allDay = false;
+        long long v = 0;
+        std::wstring tz;
+    };
+    static TimeVal ReadTime(const Prop &p, const std::string &value)
+    {
+        TimeVal t;
+        bool dateOnly, utc;
+        long long days, ms;
+        if (!ParseDateTime(value, dateOnly, utc, days, ms))
+            return t;
+        t.ok = true;
+        if (dateOnly || Up(p.Param("VALUE")) == "DATE")
+        {
+            t.allDay = true;
+            t.v = days;
+            return t;
+        }
+        const long long wall = days * kDayMs + ms;
+        if (utc)
+        {
+            t.v = wall;
+            t.tz.clear();
+        }
+        else
+        {
+            std::wstring tz = FromUtf8(p.Param("TZID"));
+            t.tz = tz.empty() ? L"*" : tz;
+            t.v = WallToUtc(t.tz, wall);
+        }
+        return t;
+    }
+
+    static std::wstring GenUid(const Event &e)
+    {
+        std::string k = ToUtf8(e.title) + "|" + std::to_string(e.s) + "|" + std::to_string(e.e) + "|" + ToUtf8(e.loc) + "|" + (e.allDay ? "d" : "t");
+        return L"wkgen-" + Hex64(Fnv(k));
+    }
+    // Identity of an event inside a source (UID + the original start of a detached override).
+    static std::wstring EventKey(const Event &e) { return e.uid + L"\x1F" + e.rid; }
+
+    static int ParseColor(const std::string &v0)
+    {
+        std::string v = Trim8(v0);
+        if (v.size() == 7 && v[0] == '#')
+        {
+            unsigned x = 0;
+            for (size_t i = 1; i < 7; ++i)
+            {
+                const char c = v[i];
+                int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10
+                                                     : c >= 'A' && c <= 'F'   ? c - 'A' + 10
+                                                                              : -1;
+                if (d < 0)
+                    return -1;
+                x = x * 16 + (unsigned)d;
+            }
+            return (int)x;
+        }
+        if (v.size() == 9 && v[0] == '#') // #RRGGBBAA (Apple)
+            return ParseColor(v.substr(0, 7));
+        static const struct
+        {
+            const char *n;
+            int c;
+        } names[] = {{"red", 0xFF0000}, {"orange", 0xFFA500}, {"yellow", 0xFFD400}, {"green", 0x008000}, {"blue", 0x0000FF}, {"purple", 0x800080}, {"pink", 0xFFC0CB}, {"brown", 0xA52A2A}, {"gray", 0x808080}, {"grey", 0x808080}, {"black", 0x000000}, {"teal", 0x008080}, {"cyan", 0x00FFFF}, {"magenta", 0xFF00FF}, {"navy", 0x000080}};
+        std::string l;
+        for (char c : v)
+            l += (char)((c >= 'A' && c <= 'Z') ? c + 32 : c);
+        for (auto &n : names)
+            if (l == n.n)
+                return n.c;
+        return -1;
+    }
+
+    struct IcsResult
+    {
+        std::wstring calName;
+        int calColor = -1;
+        std::vector<Event> evs;
+        int skipped = 0;   // events that could not be read
+        int cancelled = 0; // cancelled events (dropped)
+        int unknownTz = 0; // events whose time zone was unknown (treated as local time)
+        bool sawCalendar = false;
+        bool complete = false; // END:VCALENDAR was reached: the source was not cut off
+    };
+
+    static std::vector<std::string> Unfold(const std::string &raw)
+    {
+        std::vector<std::string> lines;
+        size_t i = 0;
+        if (raw.size() >= 3 && (unsigned char)raw[0] == 0xEF && (unsigned char)raw[1] == 0xBB && (unsigned char)raw[2] == 0xBF)
+            i = 3;
+        while (i < raw.size())
+        {
+            size_t e = raw.find('\n', i);
+            if (e == std::string::npos)
+                e = raw.size();
+            size_t le = e;
+            if (le > i && raw[le - 1] == '\r')
+                --le;
+            if (le > i && (raw[i] == ' ' || raw[i] == '\t') && !lines.empty())
+                lines.back().append(raw, i + 1, le - i - 1);
+            else if (le > i)
+                lines.emplace_back(raw, i, le - i);
+            i = e + 1;
+        }
+        return lines;
+    }
+
+    static void ParseIcs(const std::string &raw, IcsResult &out)
+    {
+        const std::vector<std::string> lines = Unfold(raw);
+        std::vector<std::string> stack;
+        struct Raw
+        {
+            Event ev;
+            bool hasRid = false, cancelled = false;
+            long long ridV = 0;
+            bool ridAllDay = false;
+            std::wstring ridTz;
+            bool hasEnd = false, hasDur = false;
+            long long durMs = 0;
+            TimeVal endT;
+            bool hasStart = false, tzMiss = false;
+            int tzAtStart = 0;
+            std::vector<std::pair<Prop, std::string>> exd, rdt;
+        };
+        Raw cur;
+        bool inEvent = false;
+        std::vector<Raw> raws;
+        for (const std::string &line : lines)
+        {
+            Prop p;
+            if (!ParseLine(line, p))
+                continue;
+            if (p.name == "BEGIN")
+            {
+                const std::string c = Up(Trim8(p.value));
+                stack.push_back(c);
+                if (c == "VCALENDAR")
+                    out.sawCalendar = true;
+                if (c == "VEVENT" && stack.size() >= 2 && stack[stack.size() - 2] == "VCALENDAR")
+                {
+                    inEvent = true;
+                    cur = Raw();
+                    cur.tzAtStart = g_unknownTz;
+                }
+                continue;
+            }
+            if (p.name == "END")
+            {
+                const std::string c = Up(Trim8(p.value));
+                if (c == "VCALENDAR" && stack.size() == 1)
+                    out.complete = true;
+                if (!stack.empty())
+                    stack.pop_back();
+                if (c == "VEVENT" && inEvent)
+                {
+                    inEvent = false;
+                    cur.tzMiss = g_unknownTz > cur.tzAtStart;
+                    raws.push_back(std::move(cur));
+                    cur = Raw();
+                }
+                continue;
+            }
+            if (stack.empty())
+                continue;
+            if (inEvent && stack.back() == "VEVENT")
+            {
+                Event &e = cur.ev;
+                if (p.name == "UID")
+                    e.uid = FromUtf8(Trim8(p.value));
+                else if (p.name == "SUMMARY")
+                    e.title = FromUtf8(UnescText(p.value));
+                else if (p.name == "DESCRIPTION")
+                    e.desc = FromUtf8(UnescText(p.value));
+                else if (p.name == "LOCATION")
+                    e.loc = FromUtf8(UnescText(p.value));
+                else if (p.name == "STATUS")
+                    cur.cancelled = Up(Trim8(p.value)) == "CANCELLED";
+                else if (p.name == "DTSTART")
+                {
+                    TimeVal t = ReadTime(p, p.value);
+                    if (t.ok)
+                    {
+                        cur.hasStart = true;
+                        e.allDay = t.allDay;
+                        e.s = t.v;
+                        e.tz = t.tz;
+                    }
+                }
+                else if (p.name == "DTEND")
+                {
+                    cur.endT = ReadTime(p, p.value);
+                    cur.hasEnd = cur.endT.ok;
+                }
+                else if (p.name == "DURATION")
+                    cur.hasDur = ParseDuration(Trim8(p.value), cur.durMs);
+                else if (p.name == "RRULE")
+                    e.rrule = FromUtf8(Trim8(p.value));
+                else if (p.name == "EXDATE")
+                    cur.exd.push_back({p, p.value});
+                else if (p.name == "RDATE")
+                    cur.rdt.push_back({p, p.value});
+                else if (p.name == "RECURRENCE-ID")
+                {
+                    TimeVal t = ReadTime(p, p.value);
+                    if (t.ok)
+                    {
+                        cur.hasRid = true;
+                        cur.ridV = t.v;
+                        cur.ridAllDay = t.allDay;
+                    }
+                }
+                else if (p.name == "COLOR" || p.name == "X-WK-COLOR")
+                    e.color = ParseColor(p.value);
+                continue;
+            }
+            if (stack.size() == 1 && stack[0] == "VCALENDAR")
+            {
+                if (p.name == "X-WR-CALNAME" || (p.name == "NAME" && out.calName.empty()))
+                    out.calName = FromUtf8(UnescText(p.value));
+                else if (p.name == "COLOR" || p.name == "X-APPLE-CALENDAR-COLOR" || p.name == "X-WR-CALCOLOR")
+                    out.calColor = ParseColor(p.value);
+            }
+        }
+        // Raw -> Event
+        std::map<std::wstring, size_t> masterIdx; // uid -> index in out.evs of the series / ordinary event
+        std::vector<std::pair<size_t, long long>> pendingEx;
+        std::vector<std::pair<std::wstring, long long>> detached; // (uid, original start) of every detached override
+        for (Raw &r : raws)
+        {
+            Event &e = r.ev;
+            if (!r.hasStart)
+            {
+                ++out.skipped;
+                continue;
+            }
+            // end
+            if (r.hasEnd && r.endT.allDay == e.allDay)
+                e.e = r.endT.v;
+            else if (r.hasEnd) // mixed date / date-time: trust the end instant
+                e.e = r.endT.allDay ? (e.allDay ? r.endT.v : e.s) : r.endT.v;
+            else if (r.hasDur)
+                e.e = e.allDay ? e.s + std::max<long long>(1, r.durMs / kDayMs) : e.s + r.durMs;
+            else
+                e.e = e.allDay ? e.s + 1 : e.s;
+            if (e.allDay && e.e <= e.s)
+                e.e = e.s + 1;
+            if (!e.allDay && e.e < e.s)
+                e.e = e.s;
+            if (e.uid.empty())
+                e.uid = GenUid(e);
+            if (r.tzMiss)
+                ++out.unknownTz;
+            if (r.cancelled)
+            {
+                ++out.cancelled;
+                if (r.hasRid)
+                    detached.push_back({e.uid, r.ridV}); // a cancelled instance of a series: the series skips it
+                continue;
+            }
+            // EXDATE / RDATE
+            auto conv = [&](const Prop &p, const std::string &val, std::vector<long long> &dst)
+            {
+                size_t st = 0;
+                while (st <= val.size())
+                {
+                    size_t c = val.find(',', st);
+                    if (c == std::string::npos)
+                        c = val.size();
+                    const std::string one = val.substr(st, c - st);
+                    st = c + 1;
+                    if (one.empty())
+                        continue;
+                    TimeVal t = ReadTime(p, one);
+                    if (!t.ok)
+                        continue;
+                    if (t.allDay && !e.allDay) // a date for a timed series: that day at the series' time of day
+                    {
+                        const long long wall0 = UtcToWall(e.tz, e.s);
+                        const long long tod = wall0 - FloorDiv(wall0, kDayMs) * kDayMs;
+                        dst.push_back(WallToUtc(e.tz, t.v * kDayMs + tod));
+                    }
+                    else if (!t.allDay && e.allDay)
+                        dst.push_back(FloorDiv(t.v, kDayMs));
+                    else
+                        dst.push_back(t.v);
+                }
+            };
+            for (auto &x : r.exd)
+                conv(x.first, x.second, e.ex);
+            for (auto &x : r.rdt)
+                conv(x.first, x.second, e.rd);
+            if (r.hasRid)
+            {
+                long long rv = r.ridV;
+                if (r.ridAllDay && !e.allDay)
+                    rv = e.s;
+                else if (!r.ridAllDay && e.allDay)
+                    rv = FloorDiv(rv, kDayMs);
+                e.rid = std::to_wstring(rv);
+                e.rrule.clear();
+                detached.push_back({e.uid, rv});
+            }
+            out.evs.push_back(std::move(e));
+            if (!r.hasRid)
+                masterIdx[out.evs.back().uid] = out.evs.size() - 1;
+        }
+        // A detached override replaces one instance of its series: the series must not also produce that instance.
+        for (auto &d : detached)
+        {
+            auto it = masterIdx.find(d.first);
+            if (it != masterIdx.end() && !out.evs[it->second].rrule.empty())
+            {
+                auto &ex = out.evs[it->second].ex;
+                if (std::find(ex.begin(), ex.end(), d.second) == ex.end())
+                    ex.push_back(d.second);
+            }
+        }
+    }
+
+    // ---- iCalendar writer ----------------------------------------------------------------------------------------
+    static void FoldLine(std::string &out, const std::string &line)
+    {
+        size_t i = 0, first = 75;
+        while (i < line.size())
+        {
+            size_t n = std::min(first, line.size() - i);
+            if (i + n < line.size()) // never cut inside a UTF-8 sequence
+                while (n > 1 && ((unsigned char)line[i + n] & 0xC0) == 0x80)
+                    --n;
+            out.append(line, i, n);
+            out += "\r\n";
+            i += n;
+            if (i < line.size())
+                out += ' ';
+            first = 74;
+        }
+        if (line.empty())
+            out += "\r\n";
+    }
+    static std::string IcsDate(long long days)
+    {
+        int y, m, d;
+        td::CivilFromDays(days, y, m, d);
+        char b[16];
+        snprintf(b, sizeof b, "%04d%02d%02d", y, m, d);
+        return b;
+    }
+    static std::string IcsDateTime(long long wallMs, bool z)
+    {
+        const long long days = FloorDiv(wallMs, kDayMs);
+        const long long ms = wallMs - days * kDayMs;
+        int y, m, d;
+        td::CivilFromDays(days, y, m, d);
+        char b[24];
+        snprintf(b, sizeof b, "%04d%02d%02dT%02d%02d%02d%s", y, m, d, (int)(ms / 3600000), (int)(ms / 60000 % 60), (int)(ms / 1000 % 60), z ? "Z" : "");
+        return b;
+    }
+    static bool LooksIana(const std::wstring &tz) { return tz.find(L'/') != std::wstring::npos && tz.find(L' ') == std::wstring::npos; }
+
+    static std::string WriteIcs(const std::wstring &calName, int calColor, const std::vector<const Event *> &evs, long long nowMs)
+    {
+        std::string o;
+        auto L = [&](const std::string &s)
+        { FoldLine(o, s); };
+        L("BEGIN:VCALENDAR");
+        L("VERSION:2.0");
+        L("PRODID:-//Shifting Whistler//WinKlok//EN");
+        L("CALSCALE:GREGORIAN");
+        if (!calName.empty())
+            L("X-WR-CALNAME:" + EscText(ToUtf8(calName)));
+        if (calColor >= 0)
+        {
+            char b[16];
+            snprintf(b, sizeof b, "#%06X", calColor & 0xFFFFFF);
+            L(std::string("X-APPLE-CALENDAR-COLOR:") + b);
+        }
+        for (const Event *pe : evs)
+        {
+            const Event &e = *pe;
+            L("BEGIN:VEVENT");
+            L("UID:" + ToUtf8(e.uid.empty() ? GenUid(e) : e.uid));
+            L("DTSTAMP:" + IcsDateTime(nowMs, true));
+            const bool zoned = !e.allDay && !e.rrule.empty() && LooksIana(e.tz);
+            if (!e.rid.empty())
+            {
+                const long long rv = td::ToLL(e.rid, 0);
+                L(e.allDay ? "RECURRENCE-ID;VALUE=DATE:" + IcsDate(rv) : "RECURRENCE-ID:" + IcsDateTime(rv, true));
+            }
+            if (e.allDay)
+            {
+                L("DTSTART;VALUE=DATE:" + IcsDate(e.s));
+                L("DTEND;VALUE=DATE:" + IcsDate(std::max(e.e, e.s + 1)));
+            }
+            else if (zoned)
+            {
+                L("DTSTART;TZID=" + ToUtf8(e.tz) + ":" + IcsDateTime(UtcToWall(e.tz, e.s), false));
+                L("DTEND;TZID=" + ToUtf8(e.tz) + ":" + IcsDateTime(UtcToWall(e.tz, e.e), false));
+            }
+            else
+            {
+                L("DTSTART:" + IcsDateTime(e.s, true));
+                L("DTEND:" + IcsDateTime(e.e, true));
+            }
+            L("SUMMARY:" + EscText(ToUtf8(e.title)));
+            if (!e.desc.empty())
+                L("DESCRIPTION:" + EscText(ToUtf8(e.desc)));
+            if (!e.loc.empty())
+                L("LOCATION:" + EscText(ToUtf8(e.loc)));
+            if (!e.rrule.empty())
+            {
+                L("RRULE:" + ToUtf8(e.rrule));
+                for (long long x : e.ex)
+                {
+                    if (e.allDay)
+                        L("EXDATE;VALUE=DATE:" + IcsDate(x));
+                    else if (zoned)
+                        L("EXDATE;TZID=" + ToUtf8(e.tz) + ":" + IcsDateTime(UtcToWall(e.tz, x), false));
+                    else
+                        L("EXDATE:" + IcsDateTime(x, true));
+                }
+            }
+            if (e.color >= 0)
+            {
+                char b[16];
+                snprintf(b, sizeof b, "#%06X", e.color & 0xFFFFFF);
+                L(std::string("X-WK-COLOR:") + b);
+            }
+            L("END:VEVENT");
+        }
+        L("END:VCALENDAR");
+        return o;
+    }
+
+    // ---- recurrence (RRULE) --------------------------------------------------------------------------------------
+    struct Rule
+    {
+        int freq = 0; // 1 daily, 2 weekly, 3 monthly, 4 yearly; 0 = not supported (only the first occurrence is shown)
+        int interval = 1, count = 0, wkst = 1;
+        bool untilIsDate = true;
+        long long until = 0; // days when untilIsDate, else UTC ms
+        bool hasUntil = false;
+        std::vector<std::pair<int, int>> byday; // (ordinal, weekday 0 = Sunday)
+        std::vector<int> bymonthday, bymonth, bysetpos;
+    };
+
+    static std::vector<std::string> SplitS(const std::string &s, char c)
+    {
+        std::vector<std::string> r;
+        size_t st = 0;
+        for (;;)
+        {
+            size_t p = s.find(c, st);
+            if (p == std::string::npos)
+            {
+                r.push_back(s.substr(st));
+                break;
+            }
+            r.push_back(s.substr(st, p - st));
+            st = p + 1;
+        }
+        return r;
+    }
+    static int WeekdayCode(const std::string &s)
+    {
+        static const char *n[] = {"SU", "MO", "TU", "WE", "TH", "FR", "SA"};
+        for (int i = 0; i < 7; ++i)
+            if (s == n[i])
+                return i;
+        return -1;
+    }
+
+    static Rule ParseRule(const std::wstring &wr)
+    {
+        Rule r;
+        const std::string s = ToUtf8(wr);
+        for (const std::string &part : SplitS(s, ';'))
+        {
+            const size_t eq = part.find('=');
+            if (eq == std::string::npos)
+                continue;
+            const std::string k = Up(part.substr(0, eq)), v = part.substr(eq + 1);
+            if (k == "FREQ")
+            {
+                const std::string f = Up(v);
+                r.freq = f == "DAILY" ? 1 : f == "WEEKLY" ? 2
+                                        : f == "MONTHLY"  ? 3
+                                        : f == "YEARLY"   ? 4
+                                                          : 0;
+            }
+            else if (k == "INTERVAL")
+                r.interval = std::max(1, std::min(1000, atoi(v.c_str())));
+            else if (k == "COUNT")
+                r.count = std::max(0, std::min(100000, atoi(v.c_str())));
+            else if (k == "UNTIL")
+            {
+                bool dateOnly, utc;
+                long long days, ms;
+                if (ParseDateTime(v, dateOnly, utc, days, ms))
+                {
+                    r.hasUntil = true;
+                    r.untilIsDate = dateOnly;
+                    r.until = dateOnly ? days : days * kDayMs + ms; // a floating UNTIL is read as UTC: close enough
+                }
+            }
+            else if (k == "WKST")
+            {
+                const int w = WeekdayCode(Up(v));
+                if (w >= 0)
+                    r.wkst = w;
+            }
+            else if (k == "BYDAY")
+            {
+                for (const std::string &d : SplitS(v, ','))
+                {
+                    if (d.size() < 2)
+                        continue;
+                    const int wd = WeekdayCode(Up(d.substr(d.size() - 2)));
+                    if (wd < 0)
+                        continue;
+                    const std::string o = d.substr(0, d.size() - 2);
+                    r.byday.push_back({o.empty() ? 0 : atoi(o.c_str()), wd});
+                }
+            }
+            else if (k == "BYMONTHDAY" || k == "BYMONTH" || k == "BYSETPOS")
+            {
+                auto &dst = k == "BYMONTHDAY" ? r.bymonthday : k == "BYMONTH" ? r.bymonth
+                                                                              : r.bysetpos;
+                for (const std::string &d : SplitS(v, ','))
+                    if (!d.empty())
+                        dst.push_back(atoi(d.c_str()));
+            }
+        }
+        return r;
+    }
+
+    static int DaysIn(int y, int m)
+    {
+        static const int d[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+        return m == 2 && ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0) ? 29 : d[m - 1];
+    }
+    static bool InList(const std::vector<int> &l, int v) { return std::find(l.begin(), l.end(), v) != l.end(); }
+
+    // Days of one month that a MONTHLY / YEARLY rule selects (before BYSETPOS).
+    static void MonthDays(const Rule &r, int y, int m, int dtDay, std::vector<long long> &out)
+    {
+        const int dim = DaysIn(y, m);
+        const long long first = td::DaysFromCivil(y, m, 1);
+        std::vector<long long> v;
+        if (!r.bymonthday.empty())
+        {
+            for (int md : r.bymonthday)
+            {
+                const int d = md > 0 ? md : dim + md + 1;
+                if (d < 1 || d > dim)
+                    continue;
+                const long long day = first + d - 1;
+                bool ok = true;
+                if (!r.byday.empty())
+                {
+                    ok = false;
+                    for (auto &b : r.byday)
+                        if (b.second == td::WeekdayFromDays(day))
+                            ok = true;
+                }
+                if (ok)
+                    v.push_back(day);
+            }
+        }
+        else if (!r.byday.empty())
+        {
+            for (auto &b : r.byday)
+            {
+                std::vector<long long> match;
+                for (int d = 1; d <= dim; ++d)
+                    if (td::WeekdayFromDays(first + d - 1) == b.second)
+                        match.push_back(first + d - 1);
+                if (b.first == 0)
+                    v.insert(v.end(), match.begin(), match.end());
+                else if (b.first > 0 && b.first <= (int)match.size())
+                    v.push_back(match[(size_t)b.first - 1]);
+                else if (b.first < 0 && -b.first <= (int)match.size())
+                    v.push_back(match[match.size() - (size_t)(-b.first)]);
+            }
+        }
+        else if (dtDay <= dim)
+            v.push_back(first + dtDay - 1);
+        std::sort(v.begin(), v.end());
+        v.erase(std::unique(v.begin(), v.end()), v.end());
+        out.insert(out.end(), v.begin(), v.end());
+    }
+    static void ApplySetPos(const Rule &r, std::vector<long long> &v)
+    {
+        if (r.bysetpos.empty() || v.empty())
+            return;
+        std::vector<long long> o;
+        for (int p : r.bysetpos)
+        {
+            const int idx = p > 0 ? p - 1 : (int)v.size() + p;
+            if (idx >= 0 && idx < (int)v.size())
+                o.push_back(v[(size_t)idx]);
+        }
+        std::sort(o.begin(), o.end());
+        o.erase(std::unique(o.begin(), o.end()), o.end());
+        v.swap(o);
+    }
+
+    struct Occ
+    {
+        long long s = 0, e = 0;   // stored units
+        long long d0 = 0, d1 = 0; // local days touched (inclusive)
+    };
+
+    static bool Excluded(const Event &ev, long long s)
+    {
+        for (long long x : ev.ex)
+            if (x == s)
+                return true;
+        return false;
+    }
+
+    // All occurrences of an event that touch the local days [lo, hi). Ordinary events yield at most one.
+    static void Occurrences(const Event &ev, long long lo, long long hi, std::vector<Occ> &out, int cap = 4000)
+    {
+        auto push = [&](long long s, long long e)
+        {
+            Occ o;
+            o.s = s;
+            o.e = e;
+            SpanDays(ev.allDay, s, e, o.d0, o.d1);
+            if (o.d1 >= lo && o.d0 < hi)
+                out.push_back(o);
+        };
+        const long long dur = ev.e - ev.s;
+        const Rule r = ev.rrule.empty() ? Rule() : ParseRule(ev.rrule);
+        if (r.freq == 0)
+        {
+            if (!Excluded(ev, ev.s))
+                push(ev.s, ev.e);
+            for (long long x : ev.rd)
+                push(x, x + dur);
+            return;
+        }
+        const bool ad = ev.allDay;
+        const long long wall0 = ad ? ev.s * kDayMs : UtcToWall(ev.tz, ev.s);
+        const long long day0 = FloorDiv(wall0, kDayMs), tod = wall0 - day0 * kDayMs;
+        int y0, m0, d0;
+        td::CivilFromDays(day0, y0, m0, d0);
+        const long long durDays = ad ? dur : dur / kDayMs + 1;
+        const long long wlo = lo - 2 - durDays, whi = hi + 2; // window in the event's own wall days
+        int emitted = 0;
+        long long lastDay = day0 - 1;
+        int guard = 0;
+        bool done = false;
+
+        auto emit = [&](long long day) -> bool { // false = the series is over
+            if (day <= lastDay)
+                return true;
+            lastDay = day;
+            if (r.hasUntil && r.untilIsDate && day > r.until)
+                return false;
+            long long s;
+            if (ad)
+                s = day;
+            else
+                s = WallToUtc(ev.tz, day * kDayMs + tod);
+            if (r.hasUntil && !r.untilIsDate && !ad && s > r.until)
+                return false;
+            if (r.count && emitted >= r.count)
+                return false;
+            ++emitted;
+            if (day >= wlo && day < whi && !Excluded(ev, s) && (int)out.size() < cap)
+                push(s, ad ? s + dur : s + dur);
+            return true;
+        };
+        // The series' own first start always counts as its first instance.
+        if (!emit(day0))
+            done = true;
+
+        const long long wk0 = day0 - ((td::WeekdayFromDays(day0) - r.wkst + 7) % 7);
+        long long n = 0;
+        if (!r.count) // jump close to the window; COUNT needs every period from the start
+        {
+            if (r.freq == 1)
+                n = std::max(0LL, (wlo - day0) / r.interval - 1);
+            else if (r.freq == 2)
+                n = std::max(0LL, (wlo - wk0) / (7LL * r.interval) - 1);
+            else
+            {
+                int yl, ml, dl;
+                td::CivilFromDays(std::max(wlo, day0), yl, ml, dl);
+                if (r.freq == 3)
+                    n = std::max(0LL, (((long long)yl * 12 + ml) - ((long long)y0 * 12 + m0)) / r.interval - 1);
+                else
+                    n = std::max(0LL, (long long)(yl - y0) / r.interval - 1);
+            }
+        }
+        for (; !done && guard < 400000; ++n, ++guard)
+        {
+            std::vector<long long> cand;
+            if (r.freq == 1)
+            {
+                const long long day = day0 + n * r.interval;
+                if (day > whi + 1)
+                    break;
+                bool ok = true;
+                int y, m, d;
+                td::CivilFromDays(day, y, m, d);
+                if (!r.bymonth.empty() && !InList(r.bymonth, m))
+                    ok = false;
+                if (!r.bymonthday.empty())
+                {
+                    bool hit = false;
+                    for (int md : r.bymonthday)
+                        if ((md > 0 ? md : DaysIn(y, m) + md + 1) == d)
+                            hit = true;
+                    ok = ok && hit;
+                }
+                if (!r.byday.empty())
+                {
+                    bool hit = false;
+                    for (auto &b : r.byday)
+                        if (b.second == td::WeekdayFromDays(day))
+                            hit = true;
+                    ok = ok && hit;
+                }
+                if (ok)
+                    cand.push_back(day);
+            }
+            else if (r.freq == 2)
+            {
+                const long long ws = wk0 + 7LL * r.interval * n;
+                if (ws > whi + 1)
+                    break;
+                std::vector<int> wds;
+                if (r.byday.empty())
+                    wds.push_back(td::WeekdayFromDays(day0));
+                else
+                    for (auto &b : r.byday)
+                        wds.push_back(b.second);
+                for (int wd : wds)
+                {
+                    const long long day = ws + ((wd - r.wkst + 7) % 7);
+                    int y, m, d;
+                    td::CivilFromDays(day, y, m, d);
+                    if (!r.bymonth.empty() && !InList(r.bymonth, m))
+                        continue;
+                    cand.push_back(day);
+                }
+                std::sort(cand.begin(), cand.end());
+                cand.erase(std::unique(cand.begin(), cand.end()), cand.end());
+                ApplySetPos(r, cand);
+            }
+            else if (r.freq == 3)
+            {
+                const long long idx = (long long)y0 * 12 + (m0 - 1) + n * r.interval;
+                const int y = (int)(idx / 12), m = (int)(idx % 12) + 1;
+                if (y > 9998 || td::DaysFromCivil(y, m, 1) > whi + 1)
+                    break;
+                if (r.bymonth.empty() || InList(r.bymonth, m))
+                {
+                    MonthDays(r, y, m, d0, cand);
+                    ApplySetPos(r, cand);
+                }
+            }
+            else
+            {
+                const int y = y0 + (int)(n * r.interval);
+                if (y > 9998 || td::DaysFromCivil(y, 1, 1) > whi + 1)
+                    break;
+                if (r.bymonth.empty() && !r.byday.empty() && r.bymonthday.empty())
+                { // weekday positions counted over the whole year
+                    const long long first = td::DaysFromCivil(y, 1, 1), len = td::DaysFromCivil(y + 1, 1, 1) - first;
+                    for (auto &b : r.byday)
+                    {
+                        std::vector<long long> match;
+                        for (long long k = 0; k < len; ++k)
+                            if (td::WeekdayFromDays(first + k) == b.second)
+                                match.push_back(first + k);
+                        if (b.first == 0)
+                            cand.insert(cand.end(), match.begin(), match.end());
+                        else if (b.first > 0 && b.first <= (int)match.size())
+                            cand.push_back(match[(size_t)b.first - 1]);
+                        else if (b.first < 0 && -b.first <= (int)match.size())
+                            cand.push_back(match[match.size() - (size_t)(-b.first)]);
+                    }
+                    std::sort(cand.begin(), cand.end());
+                    cand.erase(std::unique(cand.begin(), cand.end()), cand.end());
+                }
+                else
+                {
+                    std::vector<int> months;
+                    if (!r.bymonth.empty())
+                        months = r.bymonth;
+                    else if (r.bymonthday.empty())
+                        months.push_back(m0);
+                    else
+                        for (int m = 1; m <= 12; ++m)
+                            months.push_back(m);
+                    std::sort(months.begin(), months.end());
+                    for (int m : months)
+                        if (m >= 1 && m <= 12)
+                            MonthDays(r, y, m, d0, cand);
+                }
+                ApplySetPos(r, cand);
+            }
+            for (long long day : cand)
+                if (!emit(day))
+                {
+                    done = true;
+                    break;
+                }
+        }
+        for (long long x : ev.rd)
+            push(x, x + dur);
+    }
+
+    // ---- JSON (small, strict enough for Google's API) -----------------------------------------------------------
+    struct Json
+    {
+        enum T
+        {
+            Null,
+            Bool,
+            Num,
+            Str,
+            Arr,
+            Obj
+        } t = Null;
+        bool b = false;
+        double n = 0;
+        std::string s;
+        std::vector<Json> a;
+        std::vector<std::pair<std::string, Json>> o;
+
+        const Json *Get(const char *k) const
+        {
+            if (t != Obj)
+                return nullptr;
+            for (auto &p : o)
+                if (p.first == k)
+                    return &p.second;
+            return nullptr;
+        }
+        std::string Str_(const char *k, const std::string &def = std::string()) const
+        {
+            const Json *j = Get(k);
+            return j && j->t == Str ? j->s : def;
+        }
+        bool Bool_(const char *k, bool def = false) const
+        {
+            const Json *j = Get(k);
+            return j && j->t == Bool ? j->b : def;
+        }
+        void Set(const char *k, Json v)
+        {
+            t = Obj;
+            for (auto &p : o)
+                if (p.first == k)
+                {
+                    p.second = std::move(v);
+                    return;
+                }
+            o.push_back({k, std::move(v)});
+        }
+        static Json S(const std::string &x)
+        {
+            Json j;
+            j.t = Str;
+            j.s = x;
+            return j;
+        }
+        static Json B(bool x)
+        {
+            Json j;
+            j.t = Bool;
+            j.b = x;
+            return j;
+        }
+        static Json N()
+        {
+            Json j;
+            j.t = Null;
+            return j;
+        }
+        static Json O()
+        {
+            Json j;
+            j.t = Obj;
+            return j;
+        }
+        static Json A()
+        {
+            Json j;
+            j.t = Arr;
+            return j;
+        }
+    };
+
+    struct JsonParser
+    {
+        const std::string &s;
+        size_t i = 0;
+        int depth = 0;
+        explicit JsonParser(const std::string &x) : s(x) {}
+        void Ws()
+        {
+            while (i < s.size() && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r'))
+                ++i;
+        }
+        static void PutCp(std::string &o, unsigned long c)
+        {
+            if (c < 0x80)
+                o += (char)c;
+            else if (c < 0x800)
+            {
+                o += (char)(0xC0 | (c >> 6));
+                o += (char)(0x80 | (c & 0x3F));
+            }
+            else if (c < 0x10000)
+            {
+                o += (char)(0xE0 | (c >> 12));
+                o += (char)(0x80 | ((c >> 6) & 0x3F));
+                o += (char)(0x80 | (c & 0x3F));
+            }
+            else
+            {
+                o += (char)(0xF0 | (c >> 18));
+                o += (char)(0x80 | ((c >> 12) & 0x3F));
+                o += (char)(0x80 | ((c >> 6) & 0x3F));
+                o += (char)(0x80 | (c & 0x3F));
+            }
+        }
+        bool Hex4(unsigned long &v)
+        {
+            if (i + 4 > s.size())
+                return false;
+            v = 0;
+            for (int k = 0; k < 4; ++k)
+            {
+                const char c = s[i + k];
+                int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10
+                                                     : c >= 'A' && c <= 'F'   ? c - 'A' + 10
+                                                                              : -1;
+                if (d < 0)
+                    return false;
+                v = v * 16 + (unsigned long)d;
+            }
+            i += 4;
+            return true;
+        }
+        bool Str_(std::string &o)
+        {
+            if (i >= s.size() || s[i] != '"')
+                return false;
+            ++i;
+            while (i < s.size())
+            {
+                const char c = s[i++];
+                if (c == '"')
+                    return true;
+                if (c != '\\')
+                {
+                    o += c;
+                    continue;
+                }
+                if (i >= s.size())
+                    return false;
+                const char e = s[i++];
+                switch (e)
+                {
+                case 'n':
+                    o += '\n';
+                    break;
+                case 't':
+                    o += '\t';
+                    break;
+                case 'r':
+                    o += '\r';
+                    break;
+                case 'b':
+                    o += '\b';
+                    break;
+                case 'f':
+                    o += '\f';
+                    break;
+                case 'u':
+                {
+                    unsigned long c1;
+                    if (!Hex4(c1))
+                        return false;
+                    if (c1 >= 0xD800 && c1 < 0xDC00 && i + 1 < s.size() && s[i] == '\\' && s[i + 1] == 'u')
+                    {
+                        i += 2;
+                        unsigned long c2;
+                        if (!Hex4(c2))
+                            return false;
+                        c1 = 0x10000 + ((c1 - 0xD800) << 10) + (c2 - 0xDC00);
+                    }
+                    PutCp(o, c1);
+                    break;
+                }
+                default:
+                    o += e;
+                }
+            }
+            return false;
+        }
+        bool Value(Json &j)
+        {
+            if (++depth > 64)
+                return false;
+            struct D
+            {
+                int &d;
+                ~D() { --d; }
+            } guard{depth};
+            Ws();
+            if (i >= s.size())
+                return false;
+            const char c = s[i];
+            if (c == '{')
+            {
+                ++i;
+                j.t = Json::Obj;
+                Ws();
+                if (i < s.size() && s[i] == '}')
+                {
+                    ++i;
+                    return true;
+                }
+                for (;;)
+                {
+                    Ws();
+                    std::string k;
+                    if (!Str_(k))
+                        return false;
+                    Ws();
+                    if (i >= s.size() || s[i++] != ':')
+                        return false;
+                    Json v;
+                    if (!Value(v))
+                        return false;
+                    j.o.push_back({std::move(k), std::move(v)});
+                    Ws();
+                    if (i >= s.size())
+                        return false;
+                    if (s[i] == ',')
+                    {
+                        ++i;
+                        continue;
+                    }
+                    if (s[i] == '}')
+                    {
+                        ++i;
+                        return true;
+                    }
+                    return false;
+                }
+            }
+            if (c == '[')
+            {
+                ++i;
+                j.t = Json::Arr;
+                Ws();
+                if (i < s.size() && s[i] == ']')
+                {
+                    ++i;
+                    return true;
+                }
+                for (;;)
+                {
+                    Json v;
+                    if (!Value(v))
+                        return false;
+                    j.a.push_back(std::move(v));
+                    Ws();
+                    if (i >= s.size())
+                        return false;
+                    if (s[i] == ',')
+                    {
+                        ++i;
+                        continue;
+                    }
+                    if (s[i] == ']')
+                    {
+                        ++i;
+                        return true;
+                    }
+                    return false;
+                }
+            }
+            if (c == '"')
+            {
+                j.t = Json::Str;
+                return Str_(j.s);
+            }
+            if (s.compare(i, 4, "true") == 0)
+            {
+                i += 4;
+                j.t = Json::Bool;
+                j.b = true;
+                return true;
+            }
+            if (s.compare(i, 5, "false") == 0)
+            {
+                i += 5;
+                j.t = Json::Bool;
+                return true;
+            }
+            if (s.compare(i, 4, "null") == 0)
+            {
+                i += 4;
+                j.t = Json::Null;
+                return true;
+            }
+            size_t st = i;
+            while (i < s.size() && (isdigit((unsigned char)s[i]) || s[i] == '-' || s[i] == '+' || s[i] == '.' || s[i] == 'e' || s[i] == 'E'))
+                ++i;
+            if (st == i)
+                return false;
+            j.t = Json::Num;
+            j.n = atof(s.substr(st, i - st).c_str());
+            return true;
+        }
+    };
+    static bool ParseJson(const std::string &s, Json &j)
+    {
+        JsonParser p(s);
+        if (!p.Value(j))
+            return false;
+        p.Ws();
+        return true;
+    }
+    static void JsonOut(const Json &j, std::string &o)
+    {
+        switch (j.t)
+        {
+        case Json::Null:
+            o += "null";
+            break;
+        case Json::Bool:
+            o += j.b ? "true" : "false";
+            break;
+        case Json::Num:
+        {
+            char b[40];
+            snprintf(b, sizeof b, "%.0f", j.n);
+            o += b;
+            break;
+        }
+        case Json::Str:
+        {
+            o += '"';
+            for (unsigned char c : j.s)
+            {
+                if (c == '"')
+                    o += "\\\"";
+                else if (c == '\\')
+                    o += "\\\\";
+                else if (c == '\n')
+                    o += "\\n";
+                else if (c == '\r')
+                    o += "\\r";
+                else if (c == '\t')
+                    o += "\\t";
+                else if (c < 0x20)
+                {
+                    char b[8];
+                    snprintf(b, sizeof b, "\\u%04x", c);
+                    o += b;
+                }
+                else
+                    o += (char)c;
+            }
+            o += '"';
+            break;
+        }
+        case Json::Arr:
+        {
+            o += '[';
+            for (size_t k = 0; k < j.a.size(); ++k)
+            {
+                if (k)
+                    o += ',';
+                JsonOut(j.a[k], o);
+            }
+            o += ']';
+            break;
+        }
+        case Json::Obj:
+        {
+            o += '{';
+            for (size_t k = 0; k < j.o.size(); ++k)
+            {
+                if (k)
+                    o += ',';
+                JsonOut(Json::S(j.o[k].first), o);
+                o += ':';
+                JsonOut(j.o[k].second, o);
+            }
+            o += '}';
+            break;
+        }
+        }
+    }
+    static std::string JsonStr(const Json &j)
+    {
+        std::string o;
+        JsonOut(j, o);
+        return o;
+    }
+
+    // ---- SHA-256, base64url (PKCE) -------------------------------------------------------------------------------
+    static void Sha256(const unsigned char *data, size_t len, unsigned char out[32])
+    {
+        static const unsigned K[64] = {
+            0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+            0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+            0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+            0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
+        unsigned h[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+        std::vector<unsigned char> m(data, data + len);
+        m.push_back(0x80);
+        while (m.size() % 64 != 56)
+            m.push_back(0);
+        const unsigned long long bits = (unsigned long long)len * 8;
+        for (int i = 7; i >= 0; --i)
+            m.push_back((unsigned char)(bits >> (i * 8)));
+        auto rot = [](unsigned x, int n)
+        { return (x >> n) | (x << (32 - n)); };
+        for (size_t off = 0; off < m.size(); off += 64)
+        {
+            unsigned w[64];
+            for (int i = 0; i < 16; ++i)
+                w[i] = ((unsigned)m[off + i * 4] << 24) | ((unsigned)m[off + i * 4 + 1] << 16) | ((unsigned)m[off + i * 4 + 2] << 8) | m[off + i * 4 + 3];
+            for (int i = 16; i < 64; ++i)
+            {
+                const unsigned s0 = rot(w[i - 15], 7) ^ rot(w[i - 15], 18) ^ (w[i - 15] >> 3);
+                const unsigned s1 = rot(w[i - 2], 17) ^ rot(w[i - 2], 19) ^ (w[i - 2] >> 10);
+                w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+            }
+            unsigned a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], hh = h[7];
+            for (int i = 0; i < 64; ++i)
+            {
+                const unsigned S1 = rot(e, 6) ^ rot(e, 11) ^ rot(e, 25), ch = (e & f) ^ (~e & g);
+                const unsigned t1 = hh + S1 + ch + K[i] + w[i];
+                const unsigned S0 = rot(a, 2) ^ rot(a, 13) ^ rot(a, 22), mj = (a & b) ^ (a & c) ^ (b & c);
+                const unsigned t2 = S0 + mj;
+                hh = g;
+                g = f;
+                f = e;
+                e = d + t1;
+                d = c;
+                c = b;
+                b = a;
+                a = t1 + t2;
+            }
+            h[0] += a;
+            h[1] += b;
+            h[2] += c;
+            h[3] += d;
+            h[4] += e;
+            h[5] += f;
+            h[6] += g;
+            h[7] += hh;
+        }
+        for (int i = 0; i < 8; ++i)
+            for (int k = 0; k < 4; ++k)
+                out[i * 4 + k] = (unsigned char)(h[i] >> (24 - k * 8));
+    }
+    static std::string Base64Url(const unsigned char *p, size_t n)
+    {
+        static const char *t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        std::string o;
+        for (size_t i = 0; i < n; i += 3)
+        {
+            unsigned v = (unsigned)p[i] << 16 | (i + 1 < n ? (unsigned)p[i + 1] << 8 : 0) | (i + 2 < n ? p[i + 2] : 0);
+            o += t[(v >> 18) & 63];
+            o += t[(v >> 12) & 63];
+            if (i + 1 < n)
+                o += t[(v >> 6) & 63];
+            if (i + 2 < n)
+                o += t[v & 63];
+        }
+        return o;
+    }
+    static std::string UrlEnc(const std::string &s)
+    {
+        std::string o;
+        for (unsigned char c : s)
+        {
+            if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~')
+                o += (char)c;
+            else
+            {
+                char b[4];
+                snprintf(b, sizeof b, "%%%02X", c);
+                o += b;
+            }
+        }
+        return o;
+    }
+
+    // ---- inflate + ZIP reader (Google Takeout archives) -----------------------------------------------------------
+    struct Inflater
+    {
+        const unsigned char *in;
+        size_t inLen, pos = 0;
+        unsigned bitBuf = 0;
+        int bitCnt = 0;
+        std::string *out;
+        size_t limit;
+        bool err = false;
+        struct Huff
+        {
+            unsigned short count[16], symbol[288];
+        };
+        int Bits(int n)
+        {
+            while (bitCnt < n)
+            {
+                if (pos >= inLen)
+                {
+                    err = true;
+                    return 0;
+                }
+                bitBuf |= (unsigned)in[pos++] << bitCnt;
+                bitCnt += 8;
+            }
+            const int v = (int)(bitBuf & ((1u << n) - 1));
+            bitBuf >>= n;
+            bitCnt -= n;
+            return v;
+        }
+        static void Build(Huff &h, const unsigned char *len, int n)
+        {
+            memset(h.count, 0, sizeof h.count);
+            for (int i = 0; i < n; ++i)
+                h.count[len[i]]++;
+            h.count[0] = 0;
+            unsigned short offs[16];
+            offs[1] = 0;
+            for (int i = 1; i < 15; ++i)
+                offs[i + 1] = (unsigned short)(offs[i] + h.count[i]);
+            for (int i = 0; i < n; ++i)
+                if (len[i])
+                    h.symbol[offs[len[i]]++] = (unsigned short)i;
+        }
+        int Decode(const Huff &h)
+        {
+            int code = 0, first = 0, index = 0;
+            for (int len = 1; len <= 15; ++len)
+            {
+                code |= Bits(1);
+                if (err)
+                    return -1;
+                const int count = h.count[len];
+                if (code - count < first)
+                    return h.symbol[index + (code - first)];
+                index += count;
+                first += count;
+                first <<= 1;
+                code <<= 1;
+            }
+            err = true;
+            return -1;
+        }
+        bool Codes(const Huff &lit, const Huff &dist)
+        {
+            static const unsigned short lbase[] = {3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258};
+            static const unsigned short lext[] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0};
+            static const unsigned short dbase[] = {1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577};
+            static const unsigned short dext[] = {0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
+            for (;;)
+            {
+                int sym = Decode(lit);
+                if (err || sym < 0)
+                    return false;
+                if (sym < 256)
+                    out->push_back((char)sym);
+                else if (sym == 256)
+                    return true;
+                else
+                {
+                    sym -= 257;
+                    if (sym >= 29)
+                        return false;
+                    const int len = lbase[sym] + Bits(lext[sym]);
+                    const int ds = Decode(dist);
+                    if (err || ds < 0 || ds >= 30)
+                        return false;
+                    const size_t d = (size_t)dbase[ds] + (size_t)Bits(dext[ds]);
+                    if (err || d > out->size())
+                        return false;
+                    for (int k = 0; k < len; ++k)
+                        out->push_back((*out)[out->size() - d]);
+                }
+                if (out->size() > limit)
+                    return false;
+            }
+        }
+        bool Run()
+        {
+            for (;;)
+            {
+                const int last = Bits(1), type = Bits(2);
+                if (err)
+                    return false;
+                if (type == 0)
+                {
+                    bitBuf = 0;
+                    bitCnt = 0;
+                    if (pos + 4 > inLen)
+                        return false;
+                    const unsigned len = in[pos] | (in[pos + 1] << 8), nlen = in[pos + 2] | (in[pos + 3] << 8);
+                    pos += 4;
+                    if ((len ^ 0xFFFF) != nlen || pos + len > inLen)
+                        return false;
+                    out->append((const char *)in + pos, len);
+                    pos += len;
+                }
+                else if (type == 1)
+                {
+                    static Huff lit, dist;
+                    static bool init = false;
+                    if (!init)
+                    {
+                        unsigned char l[288];
+                        int i = 0;
+                        for (; i < 144; ++i)
+                            l[i] = 8;
+                        for (; i < 256; ++i)
+                            l[i] = 9;
+                        for (; i < 280; ++i)
+                            l[i] = 7;
+                        for (; i < 288; ++i)
+                            l[i] = 8;
+                        Build(lit, l, 288);
+                        unsigned char d[30];
+                        for (i = 0; i < 30; ++i)
+                            d[i] = 5;
+                        Build(dist, d, 30);
+                        init = true;
+                    }
+                    if (!Codes(lit, dist))
+                        return false;
+                }
+                else if (type == 2)
+                {
+                    const int nlen = Bits(5) + 257, ndist = Bits(5) + 1, ncode = Bits(4) + 4;
+                    if (err || nlen > 286 || ndist > 30)
+                        return false;
+                    static const unsigned char order[19] = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+                    unsigned char lengths[320] = {};
+                    for (int i = 0; i < ncode; ++i)
+                        lengths[order[i]] = (unsigned char)Bits(3);
+                    Huff lencode;
+                    Build(lencode, lengths, 19);
+                    int idx = 0;
+                    unsigned char ll[320] = {};
+                    while (idx < nlen + ndist)
+                    {
+                        int sym = Decode(lencode);
+                        if (err || sym < 0)
+                            return false;
+                        if (sym < 16)
+                            ll[idx++] = (unsigned char)sym;
+                        else
+                        {
+                            int len = 0, rep;
+                            if (sym == 16)
+                            {
+                                if (idx == 0)
+                                    return false;
+                                len = ll[idx - 1];
+                                rep = 3 + Bits(2);
+                            }
+                            else if (sym == 17)
+                                rep = 3 + Bits(3);
+                            else
+                                rep = 11 + Bits(7);
+                            if (idx + rep > nlen + ndist)
+                                return false;
+                            while (rep--)
+                                ll[idx++] = (unsigned char)len;
+                        }
+                    }
+                    Huff lit, dist;
+                    Build(lit, ll, nlen);
+                    Build(dist, ll + nlen, ndist);
+                    if (!Codes(lit, dist))
+                        return false;
+                }
+                else
+                    return false;
+                if (last)
+                    return !err;
+            }
+        }
+    };
+    static bool InflateRaw(const unsigned char *p, size_t n, std::string &out, size_t limit)
+    {
+        Inflater f;
+        f.in = p;
+        f.inLen = n;
+        f.out = &out;
+        f.limit = limit;
+        return f.Run();
+    }
+
+    static unsigned U16(const unsigned char *p) { return p[0] | (p[1] << 8); }
+    static unsigned U32(const unsigned char *p) { return p[0] | (p[1] << 8) | (p[2] << 16) | ((unsigned)p[3] << 24); }
+
+    struct ZipEntry
+    {
+        std::string name;
+        unsigned method = 0;
+        unsigned long long csize = 0, usize = 0, offset = 0;
+    };
+    // Reads the central directory. false = not a (supported) ZIP file.
+    static bool ZipList(const std::string &z, std::vector<ZipEntry> &out)
+    {
+        out.clear();
+        const unsigned char *d = (const unsigned char *)z.data();
+        if (z.size() < 22)
+            return false;
+        long long eocd = -1;
+        for (long long i = (long long)z.size() - 22; i >= 0 && i >= (long long)z.size() - 22 - 65535; --i)
+            if (U32(d + i) == 0x06054b50)
+            {
+                eocd = i;
+                break;
+            }
+        if (eocd < 0)
+            return false;
+        unsigned long long total = U16(d + eocd + 10), cdSize = U32(d + eocd + 12), cdOff = U32(d + eocd + 16);
+        if (total == 0xFFFF || cdOff == 0xFFFFFFFFu || cdSize == 0xFFFFFFFFu) // ZIP64
+        {
+            if (eocd < 20 || U32(d + eocd - 20) != 0x07064b50)
+                return false;
+            unsigned long long z64 = (unsigned long long)U32(d + eocd - 20 + 8) | ((unsigned long long)U32(d + eocd - 20 + 12) << 32);
+            if (z64 + 56 > z.size() || U32(d + z64) != 0x06064b50)
+                return false;
+            total = (unsigned long long)U32(d + z64 + 32) | ((unsigned long long)U32(d + z64 + 36) << 32);
+            cdSize = (unsigned long long)U32(d + z64 + 40) | ((unsigned long long)U32(d + z64 + 44) << 32);
+            cdOff = (unsigned long long)U32(d + z64 + 48) | ((unsigned long long)U32(d + z64 + 52) << 32);
+        }
+        unsigned long long p = cdOff;
+        for (unsigned long long k = 0; k < total; ++k)
+        {
+            if (p + 46 > z.size() || U32(d + p) != 0x02014b50)
+                return false;
+            ZipEntry e;
+            e.method = U16(d + p + 10);
+            e.csize = U32(d + p + 20);
+            e.usize = U32(d + p + 24);
+            const unsigned nl = U16(d + p + 28), xl = U16(d + p + 30), cl = U16(d + p + 32);
+            e.offset = U32(d + p + 42);
+            if (p + 46 + nl + xl + cl > z.size())
+                return false;
+            e.name.assign((const char *)d + p + 46, nl);
+            // ZIP64 extra field
+            const unsigned char *x = d + p + 46 + nl;
+            for (unsigned xo = 0; xo + 4 <= xl;)
+            {
+                const unsigned id = U16(x + xo), sz = U16(x + xo + 2);
+                if (id == 1)
+                {
+                    unsigned o = xo + 4;
+                    auto rd8 = [&](unsigned long long &v)
+                    {
+                        if (o + 8 <= xo + 4 + sz && o + 8 <= xl)
+                        {
+                            v = (unsigned long long)U32(x + o) | ((unsigned long long)U32(x + o + 4) << 32);
+                            o += 8;
+                        }
+                    };
+                    if (e.usize == 0xFFFFFFFFu)
+                        rd8(e.usize);
+                    if (e.csize == 0xFFFFFFFFu)
+                        rd8(e.csize);
+                    if (e.offset == 0xFFFFFFFFu)
+                        rd8(e.offset);
+                }
+                xo += 4 + sz;
+            }
+            out.push_back(std::move(e));
+            p += 46 + nl + xl + cl;
+        }
+        return true;
+    }
+    static bool ZipRead(const std::string &z, const ZipEntry &e, std::string &out, size_t limit)
+    {
+        const unsigned char *d = (const unsigned char *)z.data();
+        out.clear();
+        if (e.offset + 30 > z.size() || U32(d + e.offset) != 0x04034b50)
+            return false;
+        const unsigned long long start = e.offset + 30 + U16(d + e.offset + 26) + U16(d + e.offset + 28);
+        if (start + e.csize > z.size() || e.usize > limit)
+            return false;
+        if (e.method == 0)
+        {
+            out.assign((const char *)d + start, (size_t)e.csize);
+            return true;
+        }
+        if (e.method == 8)
+            return InflateRaw(d + start, (size_t)e.csize, out, limit);
+        return false;
+    }
+
+    // ---- store: calendars + events of one mode, persistence, local rules, import merge -----------------------------
+    static const wchar_t *const kDefaultId = L"default";
+    static const wchar_t *const kDefaultName = L"WinKlok (default)";
+    static const int kPalette[12] = {0xD50000, 0xE67C73, 0xF4511E, 0xF6BF26, 0x33B679, 0x0B8043, 0x039BE5, 0x3F51B5, 0x7986CB, 0x8E24AA, 0x616161, 0x0EA5E9};
+    // Google's eleven event colours (colorId 1..11) in the order of kPalette[0..10] -> colorId
+    static const int kGoogleColorId[11] = {11, 4, 6, 5, 2, 10, 7, 9, 1, 3, 8};
+
+    struct Store
+    {
+        std::vector<Calendar> cals;
+        std::vector<Event> evs;
+        long long nextId = 1;
+        std::wstring lastCal; // last-used regular local calendar
+        Calendar *FindCal(const std::wstring &id)
+        {
+            for (auto &c : cals)
+                if (c.id == id)
+                    return &c;
+            return nullptr;
+        }
+        const Calendar *FindCal(const std::wstring &id) const { return const_cast<Store *>(this)->FindCal(id); }
+        Event *FindEv(const std::wstring &cal, const std::wstring &id)
+        {
+            for (auto &e : evs)
+                if (e.id == id && e.cal == cal)
+                    return &e;
+            return nullptr;
+        }
+        std::wstring NewEventId() { return L"e" + std::to_wstring(nextId++); }
+        std::wstring NewCalId() { return L"c" + std::to_wstring(nextId++); }
+    };
+
+    static void EnsureDefault(Store &st)
+    {
+        Calendar *d = st.FindCal(kDefaultId);
+        if (!d)
+        {
+            Calendar c;
+            c.id = kDefaultId;
+            c.color = 0x3B82F6;
+            st.cals.insert(st.cals.begin(), c);
+            d = &st.cals.front();
+        }
+        d->name = kDefaultName; // can never be renamed
+        d->imported = false;
+        d->srcKind.clear();
+        d->srcUrl.clear();
+        const Calendar *l = st.FindCal(st.lastCal);
+        if (!l || l->imported)
+            st.lastCal = kDefaultId;
+    }
+    // Where a new event goes: the last-used regular calendar, else WinKlok (default). Never an imported one.
+    static std::wstring DefaultDestination(const Store &st)
+    {
+        const Calendar *c = st.FindCal(st.lastCal);
+        return c && !c->imported ? c->id : std::wstring(kDefaultId);
+    }
+
+    static std::wstring CleanName(std::wstring n)
+    {
+        n = TrimW(n);
+        for (auto &c : n)
+            if (c == L'\t' || c == L'\r' || c == L'\n')
+                c = L' ';
+        if (n.size() > 60)
+            n.resize(60);
+        return n;
+    }
+    // Returns an error text, or empty on success.
+    static std::wstring AddLocalCalendar(Store &st, const std::wstring &name0, int color, std::wstring *newId = nullptr)
+    {
+        const std::wstring name = CleanName(name0);
+        if (name.empty())
+            return L"Enter a name for the calendar.";
+        if (EqNoCaseW(name, kDefaultName))
+            return L"That name is reserved for the default calendar.";
+        for (auto &c : st.cals)
+            if (!c.imported && EqNoCaseW(c.name, name))
+                return L"A calendar with that name already exists.";
+        Calendar c;
+        c.id = st.NewCalId();
+        c.name = name;
+        c.color = color;
+        if (newId)
+            *newId = c.id;
+        st.cals.push_back(c);
+        return L"";
+    }
+    static std::wstring RenameLocalCalendar(Store &st, const std::wstring &id, const std::wstring &name0)
+    {
+        Calendar *c = st.FindCal(id);
+        if (!c)
+            return L"Calendar not found.";
+        if (id == kDefaultId)
+            return L"The default calendar cannot be renamed.";
+        const std::wstring name = CleanName(name0);
+        if (name.empty())
+            return L"Enter a name for the calendar.";
+        if (EqNoCaseW(name, kDefaultName))
+            return L"That name is reserved for the default calendar.";
+        for (auto &o : st.cals)
+            if (&o != c && !o.imported && !c->imported && EqNoCaseW(o.name, name))
+                return L"A calendar with that name already exists.";
+        c->name = name;
+        return L"";
+    }
+    static std::wstring DeleteLocalCalendar(Store &st, const std::wstring &id)
+    {
+        if (id == kDefaultId)
+            return L"The default calendar cannot be deleted.";
+        auto it = std::find_if(st.cals.begin(), st.cals.end(), [&](const Calendar &c)
+                               { return c.id == id; });
+        if (it == st.cals.end())
+            return L"Calendar not found.";
+        st.cals.erase(it);
+        st.evs.erase(std::remove_if(st.evs.begin(), st.evs.end(), [&](const Event &e)
+                                    { return e.cal == id; }),
+                     st.evs.end());
+        if (st.lastCal == id)
+            st.lastCal = kDefaultId;
+        return L"";
+    }
+    static int ClearLocalCalendar(Store &st, const std::wstring &id)
+    {
+        const size_t before = st.evs.size();
+        st.evs.erase(std::remove_if(st.evs.begin(), st.evs.end(), [&](const Event &e)
+                                    { return e.cal == id; }),
+                     st.evs.end());
+        return (int)(before - st.evs.size());
+    }
+
+    // ---- import merge --------------------------------------------------------------------------------------------------
+    struct MergeReport
+    {
+        int added = 0, updated = 0, unchanged = 0, keptEdited = 0, removed = 0, skipped = 0;
+        bool createdCalendar = false, removalSkipped = false;
+        std::wstring calName, calId;
+    };
+    static bool SameContent(const Event &a, const Event &b)
+    {
+        return a.title == b.title && a.desc == b.desc && a.loc == b.loc && a.allDay == b.allDay && a.s == b.s && a.e == b.e && a.rrule == b.rrule && a.ex == b.ex && a.rd == b.rd && a.color == b.color && a.tz == b.tz;
+    }
+    // Finds the imported calendar a source belongs to. A URL is its own identity; otherwise the events' UIDs decide
+    // (never the file name or the calendar name, so a renamed file is still recognised and two different calendars
+    // with the same name are not merged).
+    static Calendar *FindImportTarget(Store &st, const IcsResult &r, const std::wstring &srcKind, const std::wstring &url, const std::wstring &fallbackName)
+    {
+        if (!url.empty())
+            for (auto &c : st.cals)
+                if (c.imported && c.srcUrl == url)
+                    return &c;
+        std::map<std::wstring, int> incoming;
+        for (auto &e : r.evs)
+            incoming[EventKey(e)] = 1;
+        Calendar *best = nullptr;
+        double bestRatio = 0;
+        for (auto &c : st.cals)
+        {
+            if (!c.imported)
+                continue;
+            if (!url.empty() && !c.srcUrl.empty() && c.srcUrl != url)
+                continue; // a different subscription address is a different calendar
+            int shared = 0, have = 0;
+            for (auto &e : st.evs)
+                if (e.cal == c.id)
+                {
+                    ++have;
+                    if (incoming.count(EventKey(e)))
+                        ++shared;
+                }
+            if (incoming.empty())
+            {
+                if (have == 0 && c.name == (r.calName.empty() ? fallbackName : r.calName) && c.srcKind == srcKind && !best)
+                    best = &c;
+                continue;
+            }
+            if (shared == 0)
+                continue;
+            const double ratio = (double)shared / (double)incoming.size();
+            const double back = have ? (double)shared / (double)have : 0;
+            // Both sides must overlap: a small calendar that merely shares one invited event with a big one is a different calendar.
+            if (std::min(ratio, back) >= 0.5 && ratio + back > bestRatio)
+            {
+                bestRatio = ratio + back;
+                best = &c;
+            }
+        }
+        return best;
+    }
+
+    static MergeReport MergeImport(Store &st, const IcsResult &r, const std::wstring &srcKind, const std::wstring &url, const std::wstring &fallbackName, long long nowMs)
+    {
+        MergeReport rep;
+        rep.skipped = r.skipped;
+        Calendar *c = FindImportTarget(st, r, srcKind, url, fallbackName);
+        if (!c)
+        {
+            Calendar nc;
+            nc.id = st.NewCalId();
+            nc.name = CleanName(r.calName.empty() ? fallbackName : r.calName);
+            if (nc.name.empty())
+                nc.name = L"Imported calendar";
+            nc.color = r.calColor >= 0 ? r.calColor : kPalette[(st.cals.size() + 6) % 11];
+            nc.imported = true;
+            st.cals.push_back(nc);
+            c = &st.cals.back();
+            rep.createdCalendar = true;
+        }
+        c->srcKind = srcKind;
+        if (!url.empty())
+            c->srcUrl = url;
+        c->lastImport = nowMs;
+        const std::wstring cid = c->id;
+        rep.calId = cid;
+        rep.calName = c->name;
+        std::map<std::wstring, size_t> existing;
+        for (size_t i = 0; i < st.evs.size(); ++i)
+            if (st.evs[i].cal == cid)
+                existing[EventKey(st.evs[i])] = i;
+        std::map<std::wstring, bool> seen;
+        std::vector<Event> add;
+        for (const Event &in : r.evs)
+        {
+            const std::wstring k = EventKey(in);
+            if (seen.count(k))
+                continue; // the same UID twice in one file
+            seen[k] = true;
+            auto it = existing.find(k);
+            if (it == existing.end())
+            {
+                Event e = in;
+                e.cal = cid;
+                e.id = st.NewEventId();
+                e.edited = false;
+                add.push_back(std::move(e));
+                ++rep.added;
+                continue;
+            }
+            Event &ex = st.evs[it->second];
+            if (ex.edited)
+                ++rep.keptEdited;
+            else if (SameContent(ex, in))
+                ++rep.unchanged;
+            else
+            {
+                const std::wstring keepId = ex.id;
+                ex = in;
+                ex.id = keepId;
+                ex.cal = cid;
+                ex.edited = false;
+                ++rep.updated;
+            }
+        }
+        // Events that disappeared at the source are only removed when the source was read completely and is not empty:
+        // a cut-off download, unreadable entries or an empty answer must never wipe what was imported before.
+        rep.removalSkipped = !(r.complete && r.skipped == 0 && !r.evs.empty());
+        if (!rep.removalSkipped)
+        {
+            std::vector<Event> keep;
+            for (auto &e : st.evs)
+            {
+                if (e.cal == cid && !e.edited && !seen.count(EventKey(e)))
+                {
+                    ++rep.removed;
+                    continue;
+                }
+                keep.push_back(std::move(e));
+            }
+            st.evs.swap(keep);
+        }
+        for (auto &e : add)
+            st.evs.push_back(std::move(e));
+        return rep;
+    }
+
+    // ---- serialization (line based, tab separated, escaped) ---------------------------------------------------------------
+    static std::string Esc8(const std::wstring &w)
+    {
+        const std::string s = ToUtf8(w);
+        std::string o;
+        o.reserve(s.size());
+        for (char c : s)
+        {
+            if (c == '\\')
+                o += "\\\\";
+            else if (c == '\t')
+                o += "\\t";
+            else if (c == '\n')
+                o += "\\n";
+            else if (c == '\r')
+                o += "\\r";
+            else
+                o += c;
+        }
+        return o;
+    }
+    static std::wstring Unesc8(const std::string &s)
+    {
+        std::string o;
+        for (size_t i = 0; i < s.size(); ++i)
+        {
+            if (s[i] == '\\' && i + 1 < s.size())
+            {
+                const char n = s[++i];
+                o += n == 't' ? '\t' : n == 'n' ? '\n'
+                                   : n == 'r'   ? '\r'
+                                                : n;
+            }
+            else
+                o += s[i];
+        }
+        return FromUtf8(o);
+    }
+    static std::string JoinLL(const std::vector<long long> &v)
+    {
+        std::string o;
+        for (size_t i = 0; i < v.size(); ++i)
+        {
+            if (i)
+                o += ',';
+            o += std::to_string(v[i]);
+        }
+        return o;
+    }
+    static std::vector<long long> SplitLL(const std::string &s)
+    {
+        std::vector<long long> v;
+        for (auto &p : SplitS(s, ','))
+            if (!p.empty())
+                v.push_back(atoll(p.c_str()));
+        return v;
+    }
+
+    static std::string SerializeStore(const Store &st, const char *magic)
+    {
+        std::string o = std::string(magic) + " 1\n";
+        o += "M\t" + std::to_string(st.nextId) + "\t" + Esc8(st.lastCal) + "\n";
+        for (const Calendar &c : st.cals)
+            o += "C\t" + Esc8(c.id) + "\t" + Esc8(c.name) + "\t" + std::to_string(c.color) + "\t" + (c.visible ? "1" : "0") + "\t" + (c.imported ? "1" : "0") + "\t" + Esc8(c.srcKind) + "\t" + Esc8(c.srcUrl) + "\t" + std::to_string(c.lastImport) + "\t" + Esc8(c.acct) + "\t" + Esc8(c.gid) + "\t" + Esc8(c.role) + "\t" + (c.primary ? "1" : "0") + "\n";
+        for (const Event &e : st.evs)
+            o += "E\t" + Esc8(e.id) + "\t" + Esc8(e.cal) + "\t" + Esc8(e.uid) + "\t" + Esc8(e.rid) + "\t" + Esc8(e.title) + "\t" + Esc8(e.desc) + "\t" + Esc8(e.loc) + "\t" + Esc8(e.tz) + "\t" + (e.allDay ? "1" : "0") + "\t" + std::to_string(e.s) + "\t" + std::to_string(e.e) + "\t" + std::to_string(e.color) + "\t" + (e.edited ? "1" : "0") + "\t" + Esc8(e.rrule) + "\t" + JoinLL(e.ex) + "\t" + JoinLL(e.rd) + "\t" + (e.readOnly ? "1" : "0") + "\t" + Esc8(e.etag) + "\n";
+        return o;
+    }
+    // Bad lines are skipped, never fatal. Returns false only when the header is missing.
+    static bool ParseStore(const std::string &data, Store &st, const char *magic, int *badLines = nullptr)
+    {
+        st = Store();
+        size_t i = 0;
+        bool header = false;
+        int bad = 0;
+        while (i < data.size())
+        {
+            size_t e = data.find('\n', i);
+            if (e == std::string::npos)
+                e = data.size();
+            const std::string line = data.substr(i, e - i);
+            i = e + 1;
+            if (line.empty())
+                continue;
+            if (!header)
+            {
+                if (line.compare(0, strlen(magic), magic) != 0)
+                    return false;
+                header = true;
+                continue;
+            }
+            const std::vector<std::string> f = SplitS(line, '\t');
+            auto F = [&](size_t k) -> std::string
+            { return k < f.size() ? f[k] : std::string(); };
+            if (f[0] == "M" && f.size() >= 2)
+            {
+                st.nextId = std::max(1LL, atoll(F(1).c_str()));
+                st.lastCal = Unesc8(F(2));
+            }
+            else if (f[0] == "C" && f.size() >= 5)
+            {
+                Calendar c;
+                c.id = Unesc8(F(1));
+                c.name = Unesc8(F(2));
+                c.color = atoi(F(3).c_str());
+                c.visible = F(4) != "0";
+                c.imported = F(5) == "1";
+                c.srcKind = Unesc8(F(6));
+                c.srcUrl = Unesc8(F(7));
+                c.lastImport = atoll(F(8).c_str());
+                c.acct = Unesc8(F(9));
+                c.gid = Unesc8(F(10));
+                c.role = Unesc8(F(11));
+                c.primary = F(12) == "1";
+                if (c.id.empty())
+                    ++bad;
+                else
+                    st.cals.push_back(std::move(c));
+            }
+            else if (f[0] == "E" && f.size() >= 13)
+            {
+                Event ev;
+                ev.id = Unesc8(F(1));
+                ev.cal = Unesc8(F(2));
+                ev.uid = Unesc8(F(3));
+                ev.rid = Unesc8(F(4));
+                ev.title = Unesc8(F(5));
+                ev.desc = Unesc8(F(6));
+                ev.loc = Unesc8(F(7));
+                ev.tz = Unesc8(F(8));
+                ev.allDay = F(9) == "1";
+                ev.s = atoll(F(10).c_str());
+                ev.e = atoll(F(11).c_str());
+                ev.color = atoi(F(12).c_str());
+                ev.edited = F(13) == "1";
+                ev.rrule = Unesc8(F(14));
+                ev.ex = SplitLL(F(15));
+                ev.rd = SplitLL(F(16));
+                ev.readOnly = F(17) == "1";
+                ev.etag = Unesc8(F(18));
+                if (ev.id.empty() || ev.cal.empty())
+                    ++bad;
+                else
+                    st.evs.push_back(std::move(ev));
+            }
+            else
+                ++bad;
+        }
+        if (badLines)
+            *badLines = bad;
+        // events whose calendar is gone cannot be shown; they stay out of the store but the file is only rewritten on a real change
+        return header;
+    }
+
+    // ============================ Windows layer ============================
+    // Shared state. g_mu guards every store; heavy work (network, parsing) happens outside it.
+    static std::recursive_mutex g_mu;
+    static Store g_local, g_google;
+    static std::atomic<int> g_mode{0};         // 0 = Local, 1 = Google Calendar Sync
+    static std::atomic<unsigned> g_version{1}; // bumped by every change to what the calendar shows
+    static std::atomic<bool> g_stop{false};    // the mod is unloading: every wait and request must end
+    static std::atomic<int> g_modal{0};        // a file dialog is open: the panel must not hide itself
+    static HANDLE g_wake = nullptr;            // wakes the Google worker
+    static std::wstring g_msg;                 // last import / sync message (shown in Calendar settings)
+    static std::wstring g_busy;                // what a running job is doing ("" = idle)
+    static std::mutex g_msgMu;
+    static bool g_loaded = false;
+
+    static void SetMsg(const std::wstring &m)
+    {
+        std::lock_guard<std::mutex> l(g_msgMu);
+        g_msg = m;
+    }
+    static std::wstring GetMsg()
+    {
+        std::lock_guard<std::mutex> l(g_msgMu);
+        return g_msg;
+    }
+    static void SetBusy(const std::wstring &m)
+    {
+        std::lock_guard<std::mutex> l(g_msgMu);
+        g_busy = m;
+    }
+    static std::wstring GetBusy()
+    {
+        std::lock_guard<std::mutex> l(g_msgMu);
+        return g_busy;
+    }
+    static void Changed() // asks the panel to repaint (safe from any thread)
+    {
+        HWND h = ui::g_panelWnd.load();
+        if (h)
+            PostMessageW(h, ui::WM_UI_CALCHANGED, 0, 0);
+    }
+
+    static Store &Active() { return g_mode.load() == 1 ? g_google : g_local; }
+
+    // ---- files --------------------------------------------------------------------------------------------------------
+    static std::wstring DataDir()
+    {
+        static std::wstring dir;
+        if (!dir.empty())
+            return dir;
+        wchar_t b[MAX_PATH] = {};
+        DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", b, MAX_PATH);
+        std::wstring p = n && n < MAX_PATH ? std::wstring(b, n) : std::wstring();
+        if (p.empty())
+            return dir;
+        CreateDirectoryW((p + L"\\WinKlok").c_str(), nullptr);
+        p += L"\\WinKlok\\calendar";
+        CreateDirectoryW(p.c_str(), nullptr);
+        dir = p;
+        return dir;
+    }
+    static bool ReadFileAll(const std::wstring &path, std::string &out, size_t limit = 96u << 20)
+    {
+        out.clear();
+        HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h == INVALID_HANDLE_VALUE)
+            return false;
+        LARGE_INTEGER sz{};
+        bool ok = GetFileSizeEx(h, &sz) && (unsigned long long)sz.QuadPart <= limit;
+        if (ok)
+        {
+            out.resize((size_t)sz.QuadPart);
+            size_t got = 0;
+            while (got < out.size())
+            {
+                DWORD n = 0;
+                if (!ReadFile(h, &out[got], (DWORD)std::min<size_t>(out.size() - got, 1u << 24), &n, nullptr) || n == 0)
+                    break;
+                got += n;
+            }
+            ok = got == out.size();
+        }
+        CloseHandle(h);
+        if (!ok)
+            out.clear();
+        return ok;
+    }
+    // Crash-safe replace: temp file, flush, keep the previous version as .bak, then swap in.
+    static bool WriteFileAtomic(const std::wstring &path, const std::string &data, bool keepBak = true)
+    {
+        const std::wstring tmp = path + L".tmp";
+        HANDLE h = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h == INVALID_HANDLE_VALUE)
+            return false;
+        bool ok = true;
+        size_t put = 0;
+        while (put < data.size() && ok)
+        {
+            DWORD n = 0;
+            ok = WriteFile(h, data.data() + put, (DWORD)std::min<size_t>(data.size() - put, 1u << 24), &n, nullptr) && n > 0;
+            put += n;
+        }
+        ok = ok && FlushFileBuffers(h);
+        CloseHandle(h);
+        if (!ok)
+        {
+            DeleteFileW(tmp.c_str());
+            return false;
+        }
+        if (keepBak && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES)
+            CopyFileW(path.c_str(), (path + L".bak").c_str(), FALSE);
+        if (!MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+        {
+            DeleteFileW(tmp.c_str());
+            return false;
+        }
+        return true;
+    }
+
+    // ---- time zones: named zones through the ICU that ships with Windows 10/11; the PC's own zone through Win32 ---------
+    static long long LocalOffsetImpl(long long utcMs)
+    {
+        const long long lo = -11644473600000LL + kDayMs * 2, hi = 253370764800000LL; // years 1601 .. 9999
+        const long long u = std::min(hi, std::max(lo, utcMs));
+        const SYSTEMTIME l = td::WallToLocal(u);
+        const long long local = td::DaysFromCivil(l.wYear, l.wMonth, l.wDay) * kDayMs + ((l.wHour * 60LL + l.wMinute) * 60LL + l.wSecond) * 1000LL + l.wMilliseconds;
+        return local - u;
+    }
+    struct Icu
+    {
+        void *(__cdecl *open)(const char16_t *, int, const char *, int, int *) = nullptr;
+        void(__cdecl *setMillis)(void *, double, int *) = nullptr;
+        int(__cdecl *get)(const void *, int, int *) = nullptr;
+        int(__cdecl *tzId)(const void *, char16_t *, int, int *) = nullptr;
+        void(__cdecl *close)(void *) = nullptr;
+        bool ok = false;
+    };
+    static bool ZoneOffsetImpl(const std::wstring &tz, long long utcMs, long long &off)
+    {
+        static std::mutex mu;
+        static Icu icu;
+        static bool tried = false;
+        static std::map<std::wstring, void *> cache;
+        static std::map<std::wstring, bool> bad;
+        std::lock_guard<std::mutex> l(mu);
+        if (!tried)
+        {
+            tried = true;
+            HMODULE m = LoadLibraryW(L"icu.dll");
+            if (m)
+            {
+                icu.open = (decltype(icu.open))GetProcAddress(m, "ucal_open");
+                icu.setMillis = (decltype(icu.setMillis))GetProcAddress(m, "ucal_setMillis");
+                icu.get = (decltype(icu.get))GetProcAddress(m, "ucal_get");
+                icu.tzId = (decltype(icu.tzId))GetProcAddress(m, "ucal_getTimeZoneID");
+                icu.close = (decltype(icu.close))GetProcAddress(m, "ucal_close");
+                icu.ok = icu.open && icu.setMillis && icu.get && icu.tzId;
+            }
+        }
+        if (!icu.ok || bad.count(tz))
+            return false;
+        auto it = cache.find(tz);
+        void *c = it != cache.end() ? it->second : nullptr;
+        if (!c)
+        {
+            std::u16string z(tz.begin(), tz.end());
+            int st = 0;
+            c = icu.open(z.c_str(), (int)z.size(), "en_US", 1 /*UCAL_GREGORIAN*/, &st);
+            if (c && st <= 0)
+            {
+                char16_t id[64] = {};
+                int s2 = 0;
+                icu.tzId(c, id, 63, &s2);
+                if (std::u16string(id) == u"Etc/Unknown" && tz != L"Etc/Unknown")
+                {
+                    if (icu.close)
+                        icu.close(c);
+                    c = nullptr;
+                }
+            }
+            else
+                c = nullptr;
+            if (!c)
+            {
+                bad[tz] = true;
+                return false;
+            }
+            cache[tz] = c;
+        }
+        int st = 0;
+        icu.setMillis(c, (double)utcMs, &st);
+        const int zo = icu.get(c, 15, &st), dst = icu.get(c, 16, &st);
+        if (st > 0)
+            return false;
+        off = (long long)zo + dst;
+        return true;
+    }
+    static void InstallTimeHooks()
+    {
+        g_localOffset = LocalOffsetImpl;
+        g_zoneOffset = ZoneOffsetImpl;
+    }
+
+    // ---- secrets (DPAPI, current user) and randomness -----------------------------------------------------------------
+    struct WkBlob
+    {
+        DWORD cb;
+        BYTE *pb;
+    };
+    static std::string Protect(const std::string &plain, bool protect)
+    {
+        static auto lib = LoadLibraryW(L"crypt32.dll");
+        using F1 = BOOL(WINAPI *)(WkBlob *, LPCWSTR, WkBlob *, PVOID, PVOID, DWORD, WkBlob *);
+        using F2 = BOOL(WINAPI *)(WkBlob *, LPWSTR *, WkBlob *, PVOID, PVOID, DWORD, WkBlob *);
+        if (!lib)
+            return std::string();
+        static unsigned char ent[] = "WinKlok.Google.v1";
+        WkBlob in{(DWORD)plain.size(), (BYTE *)plain.data()}, entropy{(DWORD)(sizeof(ent) - 1), ent}, out{0, nullptr};
+        BOOL ok;
+        if (protect)
+        {
+            auto f = (F1)GetProcAddress(lib, "CryptProtectData");
+            ok = f && f(&in, L"WinKlok", &entropy, nullptr, nullptr, 1 /*UI forbidden*/, &out);
+        }
+        else
+        {
+            auto f = (F2)GetProcAddress(lib, "CryptUnprotectData");
+            ok = f && f(&in, nullptr, &entropy, nullptr, nullptr, 1, &out);
+        }
+        if (!ok || !out.pb)
+            return std::string();
+        std::string r((const char *)out.pb, out.cb);
+        LocalFree(out.pb);
+        return r;
+    }
+    static std::string SealHex(const std::string &s)
+    {
+        const std::string b = Protect(s, true);
+        return HexOf((const unsigned char *)b.data(), b.size());
+    }
+    static std::string UnsealHex(const std::string &hex)
+    {
+        std::vector<unsigned char> b;
+        if (!UnhexTo(hex, b) || b.empty())
+            return std::string();
+        return Protect(std::string((const char *)b.data(), b.size()), false);
+    }
+    static void RandomBytes(unsigned char *p, size_t n)
+    {
+        static auto fn = (BOOLEAN(WINAPI *)(PVOID, ULONG))GetProcAddress(GetModuleHandleW(L"advapi32.dll") ? GetModuleHandleW(L"advapi32.dll") : LoadLibraryW(L"advapi32.dll"), "SystemFunction036");
+        if (fn && fn(p, (ULONG)n))
+            return;
+        unsigned long long x = (unsigned long long)GetTickCount64() ^ (unsigned long long)GetCurrentThreadId() << 32 ^ (unsigned long long)(uintptr_t)p;
+        LARGE_INTEGER q;
+        QueryPerformanceCounter(&q);
+        x ^= (unsigned long long)q.QuadPart;
+        for (size_t i = 0; i < n; ++i)
+        { // last resort only (RtlGenRandom is always present on supported Windows)
+            x = x * 6364136223846793005ULL + 1442695040888963407ULL;
+            p[i] = (unsigned char)(x >> 33);
+        }
+    }
+
+    // ---- HTTP (WinHTTP). Every handle is registered so unloading can abort a request that is still waiting. -----------
+    struct HttpResp
+    {
+        int status = 0; // 0 = no response (offline, DNS, TLS, timeout, cancelled)
+        std::string body, err;
+    };
+    static std::mutex g_hMu;
+    static std::vector<HINTERNET> g_handles;
+    static HINTERNET Reg(HINTERNET h)
+    {
+        if (h)
+        {
+            std::lock_guard<std::mutex> l(g_hMu);
+            g_handles.push_back(h);
+        }
+        return h;
+    }
+    static void Unreg(HINTERNET h)
+    {
+        if (!h)
+            return;
+        bool mine = false;
+        {
+            std::lock_guard<std::mutex> l(g_hMu);
+            auto it = std::find(g_handles.begin(), g_handles.end(), h);
+            if (it != g_handles.end())
+            {
+                g_handles.erase(it);
+                mine = true;
+            }
+        }
+        if (mine)
+            WinHttpCloseHandle(h);
+    }
+    static void AbortAllHttp()
+    {
+        std::vector<HINTERNET> v;
+        {
+            std::lock_guard<std::mutex> l(g_hMu);
+            v.swap(g_handles);
+        }
+        for (HINTERNET h : v)
+            WinHttpCloseHandle(h);
+    }
+
+    static HttpResp Http(const std::wstring &method, const std::wstring &url, const std::string &body = std::string(), const std::wstring &headers = std::wstring(), size_t maxBody = 64u << 20)
+    {
+        HttpResp r;
+        if (g_stop.load())
+        {
+            r.err = "cancelled";
+            return r;
+        }
+        URL_COMPONENTSW uc{};
+        uc.dwStructSize = sizeof(uc);
+        wchar_t host[256] = {}, path[4096] = {};
+        uc.lpszHostName = host;
+        uc.dwHostNameLength = 255;
+        uc.lpszUrlPath = path;
+        uc.dwUrlPathLength = 4095;
+        wchar_t extra[4096] = {};
+        uc.lpszExtraInfo = extra;
+        uc.dwExtraInfoLength = 4095;
+        if (!WinHttpCrackUrl(url.c_str(), 0, 0, &uc) || (uc.nScheme != INTERNET_SCHEME_HTTPS && uc.nScheme != INTERNET_SCHEME_HTTP))
+        {
+            r.err = "bad address";
+            return r;
+        }
+        const std::wstring objName = std::wstring(path, uc.dwUrlPathLength) + std::wstring(extra, uc.dwExtraInfoLength);
+        HINTERNET ses = Reg(WinHttpOpen(L"WinKlok/" WK_VERSION, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
+        if (!ses)
+        {
+            r.err = "network unavailable";
+            return r;
+        }
+        WinHttpSetTimeouts(ses, 10000, 10000, 20000, 40000);
+        DWORD dec = 3; // WINHTTP_DECOMPRESSION_FLAG_ALL
+        WinHttpSetOption(ses, 118 /*WINHTTP_OPTION_DECOMPRESSION*/, &dec, sizeof(dec));
+        HINTERNET con = Reg(WinHttpConnect(ses, std::wstring(host, uc.dwHostNameLength).c_str(), uc.nPort, 0));
+        HINTERNET req = con ? Reg(WinHttpOpenRequest(con, method.c_str(), objName.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, uc.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0)) : nullptr;
+        bool ok = req != nullptr && !g_stop.load(); // unloading: do not start anything new
+        if (ok)
+            ok = WinHttpSendRequest(req, headers.empty() ? WINHTTP_NO_ADDITIONAL_HEADERS : headers.c_str(), headers.empty() ? 0 : (DWORD)-1L, body.empty() ? WINHTTP_NO_REQUEST_DATA : (LPVOID)body.data(), (DWORD)body.size(), (DWORD)body.size(), 0) && WinHttpReceiveResponse(req, nullptr);
+        if (ok)
+        {
+            DWORD code = 0, sz = sizeof(code);
+            if (WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &code, &sz, WINHTTP_NO_HEADER_INDEX))
+                r.status = (int)code;
+            for (;;)
+            {
+                DWORD avail = 0;
+                if (!WinHttpQueryDataAvailable(req, &avail) || avail == 0)
+                    break;
+                const size_t at = r.body.size();
+                if (at + avail > maxBody)
+                {
+                    r.status = 0;
+                    r.err = "response too large";
+                    r.body.clear();
+                    break;
+                }
+                r.body.resize(at + avail);
+                DWORD got = 0;
+                if (!WinHttpReadData(req, &r.body[at], avail, &got))
+                {
+                    r.status = 0;
+                    r.err = "connection lost";
+                    r.body.clear();
+                    break;
+                }
+                r.body.resize(at + got);
+            }
+        }
+        else if (r.err.empty())
+            r.err = g_stop.load() ? "cancelled" : "could not connect";
+        Unreg(req);
+        Unreg(con);
+        Unreg(ses);
+        return r;
+    }
+
+    // ---- file dialogs (UI thread) ---------------------------------------------------------------------------------------
+    struct ModalGuard
+    {
+        ModalGuard() { ++g_modal; }
+        ~ModalGuard() { --g_modal; }
+    };
+    static bool PickOpenFile(HWND owner, std::wstring &path)
+    {
+        ModalGuard g;
+        wchar_t buf[MAX_PATH * 2] = {};
+        OPENFILENAMEW o{};
+        o.lStructSize = sizeof(o);
+        o.hwndOwner = owner;
+        o.lpstrFilter = L"Calendar files (*.zip;*.ics)\0*.zip;*.ics\0All files\0*.*\0";
+        o.lpstrFile = buf;
+        o.nMaxFile = MAX_PATH * 2;
+        o.lpstrTitle = L"Import calendar";
+        o.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_EXPLORER;
+        if (!GetOpenFileNameW(&o))
+            return false;
+        path = buf;
+        return true;
+    }
+    static bool PickSaveFile(HWND owner, const std::wstring &suggested, std::wstring &path)
+    {
+        ModalGuard g;
+        wchar_t buf[MAX_PATH * 2] = {};
+        wcsncpy(buf, suggested.c_str(), MAX_PATH - 1);
+        OPENFILENAMEW o{};
+        o.lStructSize = sizeof(o);
+        o.hwndOwner = owner;
+        o.lpstrFilter = L"iCalendar (*.ics)\0*.ics\0";
+        o.lpstrFile = buf;
+        o.nMaxFile = MAX_PATH * 2;
+        o.lpstrDefExt = L"ics";
+        o.lpstrTitle = L"Export calendar";
+        o.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_EXPLORER;
+        if (!GetSaveFileNameW(&o))
+            return false;
+        path = buf;
+        return true;
+    }
+
+    // ---- persistence of both stores -------------------------------------------------------------------------------------
+    static const char *kLocalMagic = "WKCAL", *kGoogleMagic = "WKGCAL";
+    static std::wstring LocalPath() { return DataDir() + L"\\local.dat"; }
+    static std::wstring GooglePath() { return DataDir() + L"\\google.dat"; }
+
+    static bool LoadStoreFile(const std::wstring &path, const char *magic, Store &st, bool &existed)
+    {
+        existed = GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+        std::string data;
+        if (existed && ReadFileAll(path, data) && ParseStore(data, st, magic))
+            return true;
+        if (ReadFileAll(path + L".bak", data) && ParseStore(data, st, magic))
+            return true; // the previous good copy
+        if (existed)
+        { // unreadable and no backup: keep the file aside instead of overwriting it
+            const std::wstring side = path + L".corrupt-" + std::to_wstring(GetTickCount64());
+            MoveFileExW(path.c_str(), side.c_str(), MOVEFILE_REPLACE_EXISTING);
+        }
+        st = Store();
+        return false;
+    }
+    static bool SaveLocal()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        const std::wstring d = DataDir();
+        if (d.empty())
+            return false;
+        return WriteFileAtomic(LocalPath(), SerializeStore(g_local, kLocalMagic));
+    }
+    static bool SaveGoogle()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        const std::wstring d = DataDir();
+        if (d.empty())
+            return false;
+        return WriteFileAtomic(GooglePath(), SerializeStore(g_google, kGoogleMagic));
+    }
+    static void LoadAll()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        bool existed = false;
+        if (!DataDir().empty())
+        {
+            LoadStoreFile(LocalPath(), kLocalMagic, g_local, existed);
+            LoadStoreFile(GooglePath(), kGoogleMagic, g_google, existed);
+        }
+        EnsureDefault(g_local);
+        for (auto &c : g_google.cals)
+            if (c.visible && c.id.empty())
+                c.visible = false;
+        g_mode = Wh_GetIntValue(L"calMode", 0) == 1 ? 1 : 0;
+        g_loaded = true;
+        ++g_version;
+    }
+    static void SaveActive()
+    {
+        if (g_mode.load() == 1)
+            SaveGoogle();
+        else
+            SaveLocal();
+    }
+
+    // ---- job thread (imports, refresh, OAuth, move): one at a time, always joined on unload ----------------------------
+    static HANDLE g_job = nullptr;
+    static bool JobRunning() { return g_job && WaitForSingleObject(g_job, 0) == WAIT_TIMEOUT; }
+    static DWORD WINAPI JobThunk(LPVOID p)
+    {
+        std::function<void()> *f = (std::function<void()> *)p;
+        (*f)();
+        delete f;
+        return 0;
+    }
+    static bool StartJob(const std::wstring &label, std::function<void()> fn)
+    {
+        if (g_stop.load() || JobRunning())
+            return false;
+        if (g_job)
+        {
+            CloseHandle(g_job);
+            g_job = nullptr;
+        }
+        SetBusy(label);
+        auto *f = new std::function<void()>([fn]()
+                                            {
+            fn();
+            SetBusy(L"");
+            Changed(); });
+        g_job = CreateThread(nullptr, 0, JobThunk, f, 0, nullptr);
+        if (!g_job)
+        {
+            delete f;
+            SetBusy(L"");
+            return false;
+        }
+        return true;
+    }
+    static void JoinJob()
+    {
+        if (g_job)
+        {
+            WaitForSingleObject(g_job, INFINITE);
+            CloseHandle(g_job);
+            g_job = nullptr;
+        }
+    }
+
+    // ---- queries for the calendar page -----------------------------------------------------------------------------------
+    struct OccView
+    {
+        std::wstring title, calId, evId, calName;
+        bool allDay = false, readOnly = false, recurring = false;
+        long long s = 0, e = 0, d0 = 0, d1 = 0;
+        int color = 0x3B82F6;
+    };
+    static void QueryOccurrences(long long lo, long long hi, std::vector<OccView> &out)
+    {
+        out.clear();
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        Store &st = Active();
+        std::map<std::wstring, const Calendar *> cm;
+        for (auto &c : st.cals)
+            if (c.visible)
+                cm[c.id] = &c;
+        std::vector<Occ> tmp;
+        for (const Event &ev : st.evs)
+        {
+            auto it = cm.find(ev.cal);
+            if (it == cm.end())
+                continue;
+            tmp.clear();
+            Occurrences(ev, lo, hi, tmp, 800);
+            for (const Occ &o : tmp)
+            {
+                OccView v;
+                v.title = ev.title;
+                v.calId = ev.cal;
+                v.evId = ev.id;
+                v.calName = it->second->name;
+                v.allDay = ev.allDay;
+                v.readOnly = ev.readOnly || it->second->ReadOnly();
+                v.recurring = !ev.rrule.empty();
+                v.s = o.s;
+                v.e = o.e;
+                v.d0 = o.d0;
+                v.d1 = o.d1;
+                v.color = ev.color >= 0 ? ev.color : it->second->color;
+                out.push_back(std::move(v));
+            }
+        }
+        std::stable_sort(out.begin(), out.end(), [](const OccView &a, const OccView &b)
+                         { return a.d0 != b.d0 ? a.d0 < b.d0 : (a.allDay != b.allDay ? a.allDay : a.s < b.s); });
+    }
+    static bool GetEvent(const std::wstring &calId, const std::wstring &evId, Event &out, Calendar *calOut = nullptr)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        Store &st = Active();
+        Event *e = st.FindEv(calId, evId);
+        if (!e)
+            return false;
+        out = *e;
+        if (calOut)
+            if (const Calendar *c = st.FindCal(calId))
+                *calOut = *c;
+        return true;
+    }
+    static std::vector<Calendar> ListCalendars()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        return Active().cals;
+    }
+    // Calendars a NEW event may go to: regular local calendars (never imported ones), or writable Google calendars.
+    static std::vector<Calendar> WritableCalendars()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        std::vector<Calendar> r;
+        for (auto &c : Active().cals)
+        {
+            if (g_mode.load() == 1 ? (!c.ReadOnly() && !c.gid.empty()) : !c.imported)
+                r.push_back(c);
+        }
+        return r;
+    }
+
+    // Forward declarations of the Google side.
+    static std::wstring GoogleSaveEvent(Event &ev, bool isNew);
+    static std::wstring GoogleDeleteEvent(const std::wstring &calId, const std::wstring &evId);
+    static void GoogleSetCalColor(const std::wstring &calId, int color);
+    static void GoogleWake();
+    static void GoogleRequestRange(long long lo, long long hi);
+    static std::wstring NewGoogleEventId();
+
+    struct EventEdit
+    {
+        std::wstring calId, evId; // evId empty = new event
+        std::wstring title, desc, loc;
+        bool allDay = false;
+        long long s = 0, e = 0; // timed: UTC ms; all-day: first day / last day + 1
+        int color = -1;
+        long long occS = 0; // start of the occurrence that was edited (for repeating events)
+        bool occAllDay = false;
+    };
+
+    static std::wstring SaveEventEdit(const EventEdit &ed)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        Store &st = Active();
+        const bool google = g_mode.load() == 1;
+        Calendar *c = st.FindCal(ed.calId);
+        if (!c)
+            return L"The calendar no longer exists.";
+        if (ed.title.size() > 500 || ed.loc.size() > 500 || ed.desc.size() > 8000)
+            return L"The text is too long.";
+        if (ed.allDay ? ed.e <= ed.s : ed.e < ed.s)
+            return L"The end must not be before the start.";
+        if (ed.evId.empty())
+        {
+            if (google ? (c->ReadOnly() || c->gid.empty()) : c->imported)
+                return google ? L"That calendar is read-only." : L"Events cannot be added to an imported calendar.";
+            Event ev;
+            ev.cal = ed.calId;
+            ev.id = google ? NewGoogleEventId() : st.NewEventId();
+            ev.uid = google ? ev.id + L"@winklok" : ev.id + L"@winklok.local";
+            ev.title = ed.title;
+            ev.desc = ed.desc;
+            ev.loc = ed.loc;
+            ev.allDay = ed.allDay;
+            ev.s = ed.s;
+            ev.e = ed.e;
+            ev.color = ed.color;
+            ev.tz = L"*";
+            if (google)
+            {
+                const std::wstring err = GoogleSaveEvent(ev, true);
+                if (!err.empty())
+                    return err;
+            }
+            else
+            {
+                st.evs.push_back(ev);
+                st.lastCal = c->id; // remembered as the default destination
+                SaveLocal();
+            }
+        }
+        else
+        {
+            Event *ev = st.FindEv(ed.calId, ed.evId);
+            if (!ev)
+                return L"The event no longer exists.";
+            if (ev->readOnly || c->ReadOnly())
+                return L"This event is read-only.";
+            Event n = *ev;
+            n.title = ed.title;
+            n.desc = ed.desc;
+            n.loc = ed.loc;
+            n.color = ed.color;
+            if (!n.rrule.empty() && n.allDay == ed.allDay)
+            { // a series: the edit moves / resizes the whole series by what changed on this occurrence
+                const long long shift = ed.s - ed.occS;
+                n.s += shift;
+                n.e = n.s + (ed.e - ed.s);
+                for (auto &x : n.ex)
+                    x += shift;
+                for (auto &x : n.rd)
+                    x += shift;
+            }
+            else
+            {
+                if (n.allDay != ed.allDay)
+                    n.rrule.clear(), n.ex.clear(), n.rd.clear();
+                n.allDay = ed.allDay;
+                n.s = ed.s;
+                n.e = ed.e;
+                n.tz = L"*";
+            }
+            n.edited = true;
+            if (google)
+            {
+                const std::wstring err = GoogleSaveEvent(n, false);
+                if (!err.empty())
+                    return err;
+            }
+            else
+            {
+                *ev = n;
+                if (!c->imported)
+                    st.lastCal = c->id;
+                SaveLocal();
+            }
+        }
+        ++g_version;
+        return L"";
+    }
+    static std::wstring DeleteEventById(const std::wstring &calId, const std::wstring &evId)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        Store &st = Active();
+        Event *ev = st.FindEv(calId, evId);
+        if (!ev)
+            return L"";
+        const Calendar *c = st.FindCal(calId);
+        if (ev->readOnly || (c && c->ReadOnly()))
+            return L"This event is read-only.";
+        if (g_mode.load() == 1)
+        {
+            const std::wstring err = GoogleDeleteEvent(calId, evId);
+            if (!err.empty())
+                return err;
+        }
+        else
+        {
+            st.evs.erase(std::remove_if(st.evs.begin(), st.evs.end(), [&](const Event &e)
+                                        { return e.cal == calId && e.id == evId; }),
+                         st.evs.end());
+            SaveLocal();
+        }
+        ++g_version;
+        return L"";
+    }
+
+    // ---- calendar management (the visible list of the active mode) ---------------------------------------------------------
+    static std::wstring CalAdd(const std::wstring &name, int color)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        if (g_mode.load() == 1)
+            return L"Switch to Local mode to manage local calendars.";
+        const std::wstring err = AddLocalCalendar(g_local, name, color);
+        if (err.empty())
+        {
+            SaveLocal();
+            ++g_version;
+        }
+        return err;
+    }
+    static std::wstring CalRename(const std::wstring &id, const std::wstring &name)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        if (g_mode.load() == 1)
+            return L"Google calendars are renamed in Google Calendar.";
+        const std::wstring err = RenameLocalCalendar(g_local, id, name);
+        if (err.empty())
+        {
+            SaveLocal();
+            ++g_version;
+        }
+        return err;
+    }
+    static std::wstring GoogleRemoveCalendar(const std::wstring &id, bool del); // (Google section below)
+    static std::wstring CalDelete(const std::wstring &id)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        if (g_mode.load() == 1)
+            return GoogleRemoveCalendar(id, true);
+        const std::wstring err = DeleteLocalCalendar(g_local, id);
+        if (err.empty())
+        {
+            SaveLocal();
+            ++g_version;
+        }
+        return err;
+    }
+    static int CalClear(const std::wstring &id)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        if (g_mode.load() == 1)
+            return 0;
+        const int n = ClearLocalCalendar(g_local, id);
+        SaveLocal();
+        ++g_version;
+        return n;
+    }
+    static void CalSetColor(const std::wstring &id, int color)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        Store &st = Active();
+        Calendar *c = st.FindCal(id);
+        if (!c)
+            return;
+        c->color = color;
+        if (g_mode.load() == 1)
+            GoogleSetCalColor(id, color);
+        SaveActive();
+        ++g_version;
+    }
+    static void CalSetVisible(const std::wstring &id, bool v)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        if (Calendar *c = Active().FindCal(id))
+            c->visible = v;
+        SaveActive();
+        ++g_version;
+        if (g_mode.load() == 1 && v)
+            GoogleWake();
+    }
+    static void CalSetAllVisible(bool v)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        for (auto &c : Active().cals)
+            c.visible = v;
+        SaveActive();
+        ++g_version;
+        if (g_mode.load() == 1 && v)
+            GoogleWake();
+    }
+
+    // ---- import / export ----------------------------------------------------------------------------------------------------
+    static std::wstring BaseNoExt(const std::wstring &path)
+    {
+        size_t s = path.find_last_of(L"\\/");
+        std::wstring n = s == std::wstring::npos ? path : path.substr(s + 1);
+        const size_t d = n.find_last_of(L'.');
+        if (d != std::wstring::npos && d > 0)
+            n.resize(d);
+        return n;
+    }
+    static bool EndsWithNoCase(const std::string &s, const char *suf)
+    {
+        const size_t n = strlen(suf);
+        if (s.size() < n)
+            return false;
+        for (size_t i = 0; i < n; ++i)
+            if (tolower((unsigned char)s[s.size() - n + i]) != suf[i])
+                return false;
+        return true;
+    }
+    static std::wstring Plural(int n, const wchar_t *one, const wchar_t *many) { return std::to_wstring(n) + L" " + (n == 1 ? one : many); }
+
+    // Parses a downloaded / chosen file (ZIP or .ics) and merges it into the local store. Nothing is touched if it cannot be read.
+    static std::wstring ImportBytes(const std::string &bytes, const std::wstring &nameHint, const std::wstring &url)
+    {
+        struct Item
+        {
+            IcsResult r;
+            std::wstring name;
+        };
+        std::vector<Item> items;
+        std::wstring kind = url.empty() ? L"file" : L"url";
+        int badEntries = 0;
+        g_unknownTz = 0;
+        auto parseOne = [&](const std::string &data, const std::wstring &name)
+        {
+            if (data.find("BEGIN:VCALENDAR") == std::string::npos && data.find("begin:vcalendar") == std::string::npos)
+            {
+                ++badEntries;
+                return;
+            }
+            Item it;
+            it.name = name;
+            ParseIcs(data, it.r);
+            if (!it.r.sawCalendar || it.r.evs.size() > 200000)
+            {
+                ++badEntries;
+                return;
+            }
+            items.push_back(std::move(it));
+        };
+        if (bytes.size() >= 4 && bytes[0] == 'P' && bytes[1] == 'K')
+        {
+            std::vector<ZipEntry> es;
+            if (!ZipList(bytes, es))
+                return L"This ZIP file could not be read (it may be damaged).";
+            kind = L"zip";
+            for (const ZipEntry &e : es)
+            {
+                if (g_stop.load())
+                    return L"Import cancelled.";
+                if (!EndsWithNoCase(e.name, ".ics"))
+                    continue;
+                std::string data;
+                if (!ZipRead(bytes, e, data, 96u << 20))
+                {
+                    ++badEntries;
+                    continue;
+                }
+                std::wstring n = FromUtf8(e.name);
+                parseOne(data, BaseNoExt(n));
+            }
+        }
+        else
+            parseOne(bytes, nameHint);
+        if (items.empty())
+            return badEntries ? L"No calendar data was found. The file is not a valid iCalendar (.ics) or Google Takeout file." : L"No .ics calendar was found in this file.";
+        std::wstring out;
+        int totalNew = 0;
+        {
+            std::lock_guard<std::recursive_mutex> l(g_mu);
+            const long long now = td::WallMs();
+            for (Item &it : items)
+            {
+                const MergeReport m = MergeImport(g_local, it.r, kind, url, it.name, now);
+                totalNew += m.added;
+                if (!out.empty())
+                    out += L"\n";
+                out += (m.createdCalendar ? L"New calendar \u201C" : L"Updated \u201C") + m.calName + L"\u201D: " + std::to_wstring(m.added) + L" new";
+                if (m.updated)
+                    out += L", " + std::to_wstring(m.updated) + L" updated";
+                if (m.unchanged)
+                    out += L", " + std::to_wstring(m.unchanged) + L" unchanged";
+                if (m.keptEdited)
+                    out += L", " + std::to_wstring(m.keptEdited) + L" edited here (kept)";
+                if (m.removed)
+                    out += L", " + std::to_wstring(m.removed) + L" removed (deleted at the source)";
+                if (m.skipped)
+                    out += L", " + std::to_wstring(m.skipped) + L" skipped (unreadable)";
+                out += L".";
+                if (m.removalSkipped && !m.createdCalendar)
+                    out += L" Nothing was removed because the source was incomplete or empty.";
+                if (it.r.unknownTz)
+                    out += L" " + Plural(it.r.unknownTz, L"event", L"events") + L" with an unknown time zone use local time.";
+            }
+            EnsureDefault(g_local);
+            if (!SaveLocal())
+                out += L"\nWarning: the changes could not be saved to disk.";
+            ++g_version;
+        }
+        if (badEntries)
+            out += L"\n" + Plural(badEntries, L"file", L"files") + L" in the archive could not be read and " + (badEntries == 1 ? L"was" : L"were") + L" skipped.";
+        (void)totalNew;
+        return out;
+    }
+
+    static void ImportFileAsync(const std::wstring &path)
+    {
+        if (!StartJob(L"Importing\u2026", [path]()
+                      {
+            std::string data;
+            if (!ReadFileAll(path, data))
+                SetMsg(L"The file could not be opened or is too large.");
+            else
+                SetMsg(ImportBytes(data, BaseNoExt(path), L"")); }))
+            SetMsg(L"Another task is still running. Try again in a moment.");
+    }
+    static std::wstring NormalizeUrl(std::wstring u)
+    {
+        u = TrimW(u);
+        if (u.size() > 9 && EqNoCaseW(u.substr(0, 9), L"webcal://"))
+            u = L"https://" + u.substr(9);
+        else if (u.size() > 10 && EqNoCaseW(u.substr(0, 10), L"webcals://"))
+            u = L"https://" + u.substr(10);
+        return u;
+    }
+    static std::wstring FetchAndImport(const std::wstring &url)
+    {
+        const HttpResp r = Http(L"GET", url, std::string(), L"Accept: text/calendar, application/zip, */*\r\n");
+        if (r.status == 0)
+            return L"The address could not be reached (" + FromUtf8(r.err) + L"). Nothing was changed.";
+        if (r.status != 200)
+            return L"The server answered with an error (HTTP " + std::to_wstring(r.status) + L"). Check that the link is correct and public. Nothing was changed.";
+        std::wstring nm = url;
+        const size_t q = nm.find(L'?');
+        if (q != std::wstring::npos)
+            nm.resize(q);
+        return ImportBytes(r.body, BaseNoExt(nm), url);
+    }
+    static void ImportUrlAsync(const std::wstring &url0)
+    {
+        const std::wstring url = NormalizeUrl(url0);
+        if (url.size() < 8 || (EqNoCaseW(url.substr(0, 8), L"https://") == false && EqNoCaseW(url.substr(0, 7), L"http://") == false))
+        {
+            SetMsg(L"Enter a full link that starts with https:// (or webcal://).");
+            return;
+        }
+        if (!StartJob(L"Downloading\u2026", [url]()
+                      { SetMsg(FetchAndImport(url)); }))
+            SetMsg(L"Another task is still running. Try again in a moment.");
+    }
+    static void RefreshUrlAsync(const std::wstring &calId)
+    {
+        std::wstring url;
+        {
+            std::lock_guard<std::recursive_mutex> l(g_mu);
+            if (const Calendar *c = g_local.FindCal(calId))
+                url = c->srcUrl;
+        }
+        if (url.empty())
+        {
+            SetMsg(L"This calendar was not imported from a link.");
+            return;
+        }
+        if (!StartJob(L"Refreshing\u2026", [url]()
+                      { SetMsg(FetchAndImport(url)); }))
+            SetMsg(L"Another task is still running. Try again in a moment.");
+    }
+    static std::wstring SafeFileName(std::wstring n)
+    {
+        for (auto &c : n)
+            if (wcschr(L"\\/:*?\"<>|", c))
+                c = L'_';
+        return n.empty() ? L"calendar" : n;
+    }
+    static std::wstring ExportSuggestedName(const std::wstring &calId)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        const Calendar *c = g_local.FindCal(calId);
+        return SafeFileName(c ? c->name : L"calendar") + L".ics";
+    }
+    static std::wstring ExportCalendar(const std::wstring &calId, const std::wstring &path)
+    {
+        std::string data;
+        int n = 0;
+        {
+            std::lock_guard<std::recursive_mutex> l(g_mu);
+            const Calendar *c = g_local.FindCal(calId);
+            if (!c)
+                return L"Calendar not found.";
+            std::vector<const Event *> v;
+            for (auto &e : g_local.evs)
+                if (e.cal == calId)
+                    v.push_back(&e);
+            n = (int)v.size();
+            data = WriteIcs(c->name, c->color, v, td::WallMs());
+        }
+        if (!WriteFileAtomic(path, data, false))
+            return L"The file could not be written. Choose another location.";
+        return L"Exported " + Plural(n, L"event", L"events") + L".";
+    }
+
+    // ============================ Google Calendar ============================
+    // One scope covers events, the calendar list and removing calendars (calendars.delete / clear need the full scope).
+    static const char *kScopes = "https://www.googleapis.com/auth/calendar";
+    struct Account
+    {
+        std::wstring email;
+        std::string refresh, access;
+        long long accessExp = 0; // wall ms
+        bool needsReauth = false;
+    };
+    struct Op
+    {
+        char type = 'u'; // i insert, u update, d delete, c calendar colour
+        std::wstring calId, evId;
+    };
+    static std::string g_clientId, g_clientSecret;
+    static std::vector<Account> g_accts;
+    static std::vector<Op> g_ops;
+    static long long g_winLo = 0, g_winHi = 0; // synced window (local days)
+    static std::atomic<bool> g_forcePull{false};
+    static std::atomic<bool> g_syncing{false}; // the sync worker is talking to Google right now (drives the spinning sync button)
+    static HANDLE g_syncThread = nullptr;
+    static std::wstring g_gmsg;
+
+    static void SetGMsg(const std::wstring &m)
+    {
+        std::lock_guard<std::mutex> l(g_msgMu);
+        g_gmsg = m;
+    }
+    static std::wstring GetGMsg()
+    {
+        std::lock_guard<std::mutex> l(g_msgMu);
+        return g_gmsg;
+    }
+    static std::wstring CalKey(const std::wstring &acct, const std::wstring &gid) { return acct + L"|" + gid; }
+    static bool SplitKey(const std::wstring &k, std::wstring &acct, std::wstring &gid)
+    {
+        const size_t p = k.find(L'|');
+        if (p == std::wstring::npos)
+            return false;
+        acct = k.substr(0, p);
+        gid = k.substr(p + 1);
+        return true;
+    }
+
+    // ---- persistence of credentials / queue ---------------------------------------------------------------------------------
+    static std::wstring AuthPath() { return DataDir() + L"\\google_auth.dat"; }
+    static std::wstring OpsPath() { return DataDir() + L"\\google_ops.dat"; }
+    static void SaveAuth()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        if (DataDir().empty())
+            return;
+        std::string o = "WKAUTH 1\n";
+        o += "CID\t" + Esc8(FromUtf8(g_clientId)) + "\n";
+        if (!g_clientSecret.empty())
+            o += "SEC\t" + SealHex(g_clientSecret) + "\n";
+        for (auto &a : g_accts)
+            o += "ACC\t" + Esc8(a.email) + "\t" + SealHex(a.refresh) + "\t" + (a.needsReauth ? "1" : "0") + "\n";
+        WriteFileAtomic(AuthPath(), o);
+    }
+    static void LoadAuth()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        std::string d;
+        if (!ReadFileAll(AuthPath(), d) && !ReadFileAll(AuthPath() + L".bak", d))
+            return;
+        for (const std::string &line : SplitS(d, '\n'))
+        {
+            const auto f = SplitS(line, '\t');
+            if (f[0] == "CID" && f.size() >= 2)
+                g_clientId = ToUtf8(Unesc8(f[1]));
+            else if (f[0] == "SEC" && f.size() >= 2)
+                g_clientSecret = UnsealHex(f[1]);
+            else if (f[0] == "ACC" && f.size() >= 3)
+            {
+                Account a;
+                a.email = Unesc8(f[1]);
+                a.refresh = UnsealHex(f[2]);
+                a.needsReauth = f.size() > 3 && f[3] == "1";
+                if (a.refresh.empty())
+                    a.needsReauth = true; // not decryptable here (another Windows user / PC): sign in again
+                if (!a.email.empty())
+                    g_accts.push_back(std::move(a));
+            }
+        }
+    }
+    static void SaveOps()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        if (DataDir().empty())
+            return;
+        std::string o = "WKOPS 1\n";
+        for (auto &p : g_ops)
+            o += std::string("P\t") + p.type + "\t" + Esc8(p.calId) + "\t" + Esc8(p.evId) + "\n";
+        WriteFileAtomic(OpsPath(), o);
+    }
+    static void LoadOps()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        std::string d;
+        if (!ReadFileAll(OpsPath(), d) && !ReadFileAll(OpsPath() + L".bak", d))
+            return;
+        for (const std::string &line : SplitS(d, '\n'))
+        {
+            const auto f = SplitS(line, '\t');
+            if (f[0] == "P" && f.size() >= 4 && !f[1].empty())
+            {
+                Op p;
+                p.type = f[1][0];
+                p.calId = Unesc8(f[2]);
+                p.evId = Unesc8(f[3]);
+                g_ops.push_back(p);
+            }
+        }
+    }
+    static void QueueOp(char type, const std::wstring &calId, const std::wstring &evId)
+    {
+        for (auto &o : g_ops)
+            if (o.type == type && o.calId == calId && o.evId == evId)
+                return;
+        Op p;
+        p.type = type;
+        p.calId = calId;
+        p.evId = evId;
+        g_ops.push_back(p);
+    }
+
+    // ---- conversions -------------------------------------------------------------------------------------------------------------
+    static std::string IsoDate(long long days)
+    {
+        int y, m, d;
+        td::CivilFromDays(days, y, m, d);
+        char b[16];
+        snprintf(b, sizeof b, "%04d-%02d-%02d", y, m, d);
+        return b;
+    }
+    static std::string IsoUtc(long long ms)
+    {
+        const long long days = FloorDiv(ms, kDayMs), r = ms - days * kDayMs;
+        char b[40];
+        snprintf(b, sizeof b, "%sT%02d:%02d:%02dZ", IsoDate(days).c_str(), (int)(r / 3600000), (int)(r / 60000 % 60), (int)(r / 1000 % 60));
+        return b;
+    }
+    static bool ParseRfc3339(const std::string &s, long long &utcMs)
+    {
+        int y, mo, d, h, mi, se;
+        if (s.size() < 19 || !Digits(s, 0, 4, y) || !Digits(s, 5, 2, mo) || !Digits(s, 8, 2, d) || !Digits(s, 11, 2, h) || !Digits(s, 14, 2, mi) || !Digits(s, 17, 2, se))
+            return false;
+        if (mo < 1 || mo > 12 || d < 1 || d > 31)
+            return false;
+        size_t i = 19;
+        if (i < s.size() && s[i] == '.')
+        {
+            ++i;
+            while (i < s.size() && isdigit((unsigned char)s[i]))
+                ++i;
+        }
+        long long off = 0;
+        if (i < s.size() && (s[i] == '+' || s[i] == '-'))
+        {
+            int oh = 0, om = 0;
+            if (!Digits(s, i + 1, 2, oh) || !Digits(s, i + 4, 2, om))
+                return false;
+            off = ((long long)oh * 60 + om) * 60000 * (s[i] == '-' ? -1 : 1);
+        }
+        utcMs = td::DaysFromCivil(y, mo, d) * kDayMs + ((long long)h * 3600 + mi * 60 + se) * 1000 - off;
+        return true;
+    }
+    static std::string HexColor(int c)
+    {
+        char b[16];
+        snprintf(b, sizeof b, "#%06x", c & 0xFFFFFF);
+        return b;
+    }
+    static int EventColorFromId(const std::string &id)
+    {
+        const int n = atoi(id.c_str());
+        for (int i = 0; i < 11; ++i)
+            if (kGoogleColorId[i] == n)
+                return kPalette[i];
+        return -1;
+    }
+    static std::string ColorIdFromColor(int c)
+    {
+        if (c < 0)
+            return std::string();
+        int best = 0;
+        long long bd = LLONG_MAX;
+        for (int i = 0; i < 11; ++i)
+        {
+            const int dr = ((c >> 16) & 255) - ((kPalette[i] >> 16) & 255), dg = ((c >> 8) & 255) - ((kPalette[i] >> 8) & 255), db = (c & 255) - (kPalette[i] & 255);
+            const long long d = (long long)dr * dr + dg * dg + db * db;
+            if (d < bd)
+            {
+                bd = d;
+                best = i;
+            }
+        }
+        return std::to_string(kGoogleColorId[best]);
+    }
+    static std::wstring NewGoogleEventId()
+    {
+        unsigned char b[16];
+        RandomBytes(b, 16);
+        static const char *a = "0123456789abcdefghijklmnopqrstuv";
+        std::string s = "vk";
+        for (int i = 0; i < 16; ++i)
+        {
+            s += a[b[i] & 31];
+            s += a[(b[i] >> 3) & 31];
+        }
+        return FromUtf8(s);
+    }
+
+    static Json EventToJson(const Event &e, bool withId, const std::wstring &zoneForRepeat = std::wstring())
+    {
+        Json j = Json::O();
+        if (withId)
+            j.Set("id", Json::S(ToUtf8(e.id)));
+        j.Set("summary", Json::S(ToUtf8(e.title)));
+        j.Set("description", Json::S(ToUtf8(e.desc)));
+        j.Set("location", Json::S(ToUtf8(e.loc)));
+        Json st = Json::O(), en = Json::O();
+        if (e.allDay)
+        {
+            st.Set("date", Json::S(IsoDate(e.s)));
+            en.Set("date", Json::S(IsoDate(std::max(e.e, e.s + 1))));
+        }
+        else
+        {
+            st.Set("dateTime", Json::S(IsoUtc(e.s)));
+            en.Set("dateTime", Json::S(IsoUtc(std::max(e.e, e.s))));
+            if (!zoneForRepeat.empty())
+            {
+                st.Set("timeZone", Json::S(ToUtf8(zoneForRepeat)));
+                en.Set("timeZone", Json::S(ToUtf8(zoneForRepeat)));
+            }
+        }
+        j.Set("start", st);
+        j.Set("end", en);
+        const std::string cid = ColorIdFromColor(e.color);
+        if (!cid.empty())
+            j.Set("colorId", Json::S(cid));
+        else if (!withId)
+            j.Set("colorId", Json::N()); // an update that goes back to the calendar's colour
+        if (!zoneForRepeat.empty() || (e.allDay && !e.rrule.empty()))
+        {
+            Json rec = Json::A();
+            rec.a.push_back(Json::S("RRULE:" + ToUtf8(e.rrule)));
+            for (long long x : e.ex)
+            {
+                if (e.allDay)
+                    rec.a.push_back(Json::S("EXDATE;VALUE=DATE:" + IcsDate(x)));
+                else
+                    rec.a.push_back(Json::S("EXDATE;TZID=" + ToUtf8(zoneForRepeat) + ":" + IcsDateTime(UtcToWall(zoneForRepeat, x), false)));
+            }
+            j.Set("recurrence", rec);
+        }
+        return j;
+    }
+    static bool EventFromJson(const Json &it, const std::wstring &calId, Event &e)
+    {
+        if (it.Str_("status") == "cancelled")
+            return false;
+        const Json *st = it.Get("start"), *en = it.Get("end");
+        if (!st || !en)
+            return false;
+        e = Event();
+        e.id = FromUtf8(it.Str_("id"));
+        e.cal = calId;
+        e.uid = FromUtf8(it.Str_("iCalUID", it.Str_("id")));
+        e.title = FromUtf8(it.Str_("summary"));
+        e.desc = FromUtf8(it.Str_("description"));
+        e.loc = FromUtf8(it.Str_("location"));
+        e.etag = FromUtf8(it.Str_("etag"));
+        e.tz = L"*";
+        const std::string sd = st->Str_("date"), ed = en->Str_("date");
+        if (!sd.empty())
+        {
+            bool dateOnly, utc;
+            long long d1, ms, d2;
+            if (!ParseDateTime(std::string(sd).erase(4, 1).erase(6, 1), dateOnly, utc, d1, ms))
+                return false;
+            e.allDay = true;
+            e.s = d1;
+            e.e = ParseDateTime(std::string(ed).erase(4, 1).erase(6, 1), dateOnly, utc, d2, ms) ? d2 : d1 + 1;
+            if (e.e <= e.s)
+                e.e = e.s + 1;
+        }
+        else
+        {
+            if (!ParseRfc3339(st->Str_("dateTime"), e.s))
+                return false;
+            if (!ParseRfc3339(en->Str_("dateTime"), e.e))
+                e.e = e.s;
+            if (e.e < e.s)
+                e.e = e.s;
+        }
+        e.color = EventColorFromId(it.Str_("colorId"));
+        bool ro = it.Bool_("locked");
+        const std::string type = it.Str_("eventType", "default");
+        if (type != "default")
+            ro = true; // birthdays, focus time, out of office, working location: edited in Google Calendar
+        if (const Json *org = it.Get("organizer"))
+            if (!org->Bool_("self") && !it.Bool_("guestsCanModify"))
+                ro = true; // an invitation from someone else
+        e.readOnly = ro;
+        return !e.id.empty();
+    }
+
+    // ---- tokens + API --------------------------------------------------------------------------------------------------------------
+    static std::wstring Hdr(const Account &a) { return L"Authorization: Bearer " + FromUtf8(a.access) + L"\r\nContent-Type: application/json; charset=utf-8\r\n"; }
+    static bool RefreshToken(Account &a, std::wstring &err, bool &fatal)
+    {
+        fatal = false;
+        std::string cid, sec, rt;
+        {
+            std::lock_guard<std::recursive_mutex> l(g_mu);
+            cid = g_clientId;
+            sec = g_clientSecret;
+            rt = a.refresh;
+        }
+        if (cid.empty() || sec.empty() || rt.empty())
+        {
+            err = L"Enter your Client ID and Client Secret, then connect again.";
+            fatal = true;
+            return false;
+        }
+        const std::string body = "client_id=" + UrlEnc(cid) + "&client_secret=" + UrlEnc(sec) + "&refresh_token=" + UrlEnc(rt) + "&grant_type=refresh_token";
+        const HttpResp r = Http(L"POST", L"https://oauth2.googleapis.com/token", body, L"Content-Type: application/x-www-form-urlencoded\r\n", 1 << 20);
+        if (r.status == 0)
+        {
+            err = L"Offline: could not reach Google. WinKlok will retry.";
+            return false;
+        }
+        Json j;
+        if (r.status != 200 || !ParseJson(r.body, j) || j.Str_("access_token").empty())
+        {
+            const std::string e = j.t == Json::Obj ? j.Str_("error") : std::string();
+            if (r.status == 400 || r.status == 401)
+            {
+                fatal = true;
+                err = e == "invalid_grant" ? L"Google sign-in expired or was revoked. Connect the account again." : L"Google rejected the credentials (" + FromUtf8(e) + L"). Check the Client ID and Secret.";
+            }
+            else
+                err = L"Google is temporarily unavailable (HTTP " + std::to_wstring(r.status) + L").";
+            return false;
+        }
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        a.access = j.Str_("access_token");
+        const Json *ex = j.Get("expires_in");
+        a.accessExp = td::WallMs() + (long long)(ex ? ex->n : 3600) * 1000;
+        return true;
+    }
+    static bool EnsureToken(Account &a, std::wstring &err, bool &fatal)
+    {
+        fatal = false;
+        if (!a.access.empty() && a.accessExp > td::WallMs() + 60000)
+            return true;
+        return RefreshToken(a, err, fatal);
+    }
+    static HttpResp GApi(Account &a, const std::wstring &method, const std::wstring &url, const std::string &body = std::string())
+    {
+        HttpResp r = Http(method, url, body, Hdr(a), 32u << 20);
+        if (r.status == 401)
+        {
+            std::wstring err;
+            bool fatal;
+            a.access.clear();
+            if (RefreshToken(a, err, fatal))
+                r = Http(method, url, body, Hdr(a), 32u << 20);
+        }
+        return r;
+    }
+    static const std::wstring kApi = L"https://www.googleapis.com/calendar/v3";
+
+    // ---- push the queue -------------------------------------------------------------------------------------------------------------
+    static bool Transient(int status) { return status == 0 || status == 429 || status >= 500; }
+    static void DropOp(const Op &p)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        g_ops.erase(std::remove_if(g_ops.begin(), g_ops.end(), [&](const Op &o)
+                                   { return o.type == p.type && o.calId == p.calId && o.evId == p.evId; }),
+                    g_ops.end());
+        SaveOps();
+    }
+    // false = stop (offline / server trouble): the queue is kept for the next attempt.
+    static bool PushOps(Account &a, std::wstring &err)
+    {
+        std::vector<Op> ops;
+        {
+            std::lock_guard<std::recursive_mutex> l(g_mu);
+            ops = g_ops;
+        }
+        for (const Op &p : ops)
+        {
+            if (g_stop.load())
+                return false;
+            std::wstring acct, gid;
+            if (!SplitKey(p.calId, acct, gid) || acct != a.email)
+                continue;
+            const std::wstring gidEnc = FromUtf8(UrlEnc(ToUtf8(gid)));
+            HttpResp r;
+            if (p.type == 'x')
+                r = GApi(a, L"DELETE", kApi + L"/calendars/" + gidEnc);
+            else if (p.type == 'k')
+                r = GApi(a, L"POST", kApi + L"/calendars/" + gidEnc + L"/clear");
+            else if (p.type == 'c')
+            {
+                int color = 0x3B82F6;
+                {
+                    std::lock_guard<std::recursive_mutex> l(g_mu);
+                    if (const Calendar *c = g_google.FindCal(p.calId))
+                        color = c->color;
+                }
+                const int lum = (((color >> 16) & 255) * 299 + ((color >> 8) & 255) * 587 + (color & 255) * 114) / 1000;
+                Json j = Json::O();
+                j.Set("backgroundColor", Json::S(HexColor(color)));
+                j.Set("foregroundColor", Json::S(lum > 150 ? "#000000" : "#ffffff"));
+                r = GApi(a, L"PATCH", kApi + L"/users/me/calendarList/" + gidEnc + L"?colorRgbFormat=true", JsonStr(j));
+            }
+            else
+            {
+                const std::wstring evEnc = FromUtf8(UrlEnc(ToUtf8(p.evId)));
+                if (p.type == 'd')
+                    r = GApi(a, L"DELETE", kApi + L"/calendars/" + gidEnc + L"/events/" + evEnc);
+                else
+                {
+                    Event ev;
+                    bool have = false;
+                    {
+                        std::lock_guard<std::recursive_mutex> l(g_mu);
+                        if (Event *e = g_google.FindEv(p.calId, p.evId))
+                        {
+                            ev = *e;
+                            have = true;
+                        }
+                    }
+                    if (!have)
+                    {
+                        DropOp(p);
+                        continue;
+                    }
+                    const std::string body = JsonStr(EventToJson(ev, p.type == 'i'));
+                    r = p.type == 'i' ? GApi(a, L"POST", kApi + L"/calendars/" + gidEnc + L"/events", body)
+                                      : GApi(a, L"PATCH", kApi + L"/calendars/" + gidEnc + L"/events/" + evEnc, body);
+                }
+            }
+            if (Transient(r.status))
+            {
+                err = r.status == 0 ? L"Offline: changes are saved here and will sync when Google is reachable." : L"Google is busy (HTTP " + std::to_wstring(r.status) + L"). Will retry.";
+                return false;
+            }
+            const bool ok = r.status == 200 || r.status == 204 || (p.type == 'i' && r.status == 409) || ((p.type == 'd' || p.type == 'x' || p.type == 'k') && (r.status == 404 || r.status == 410));
+            if (!ok)
+            {
+                Json j;
+                ParseJson(r.body, j);
+                std::string msg;
+                if (const Json *e = j.Get("error"))
+                    msg = e->Str_("message");
+                err = L"Google refused a change (HTTP " + std::to_wstring(r.status) + L"): " + FromUtf8(msg);
+                if ((p.type == 'x' || p.type == 'k') && r.status == 403)
+                    err = L"Google refused. Press Connect account again to grant the Calendar permission.";
+                if (p.type == 'i') // a new event Google will never accept: do not keep a ghost
+                {
+                    std::lock_guard<std::recursive_mutex> l(g_mu);
+                    g_google.evs.erase(std::remove_if(g_google.evs.begin(), g_google.evs.end(), [&](const Event &e)
+                                                      { return e.cal == p.calId && e.id == p.evId; }),
+                                       g_google.evs.end());
+                    SaveGoogle();
+                    ++g_version;
+                }
+            }
+            DropOp(p);
+        }
+        return true;
+    }
+
+    // ---- pull ----------------------------------------------------------------------------------------------------------------------
+    static bool PullCalendars(Account &a, std::wstring &err)
+    {
+        std::vector<Json> items;
+        std::string token;
+        for (int page = 0; page < 20; ++page)
+        {
+            std::wstring url = kApi + L"/users/me/calendarList?maxResults=250&showHidden=true&minAccessRole=reader";
+            if (!token.empty())
+                url += L"&pageToken=" + FromUtf8(UrlEnc(token));
+            HttpResp r = GApi(a, L"GET", url);
+            Json j;
+            if (r.status != 200 || !ParseJson(r.body, j))
+            {
+                err = r.status == 0 ? L"Offline: could not reach Google." : L"Could not read the calendar list (HTTP " + std::to_wstring(r.status) + L").";
+                return false;
+            }
+            if (const Json *its = j.Get("items"))
+                for (auto &i : its->a)
+                    items.push_back(i);
+            token = j.Str_("nextPageToken");
+            if (token.empty())
+                break;
+        }
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        std::vector<std::wstring> present;
+        for (const Json &it : items)
+        {
+            if (it.Bool_("deleted"))
+                continue;
+            const std::wstring gid = FromUtf8(it.Str_("id")), key = CalKey(a.email, gid);
+            bool delPending = false; // a delete still waiting in the queue: do not bring the calendar back meanwhile
+            for (auto &o : g_ops)
+                if (o.type == 'x' && o.calId == key)
+                    delPending = true;
+            if (delPending)
+                continue;
+            present.push_back(key);
+            Calendar *c = g_google.FindCal(key);
+            bool created = false;
+            if (!c)
+            {
+                Calendar nc;
+                nc.id = key;
+                nc.acct = a.email;
+                nc.gid = gid;
+                nc.visible = it.Bool_("primary") || it.Bool_("selected");
+                g_google.cals.push_back(nc);
+                c = &g_google.cals.back();
+                created = true;
+            }
+            (void)created;
+            c->name = FromUtf8(it.Str_("summaryOverride", it.Str_("summary", "(untitled)")));
+            c->role = FromUtf8(it.Str_("accessRole"));
+            c->primary = it.Bool_("primary");
+            c->imported = false;
+            bool pendingColor = false;
+            for (auto &o : g_ops)
+                if (o.type == 'c' && o.calId == key)
+                    pendingColor = true;
+            const std::string bg = it.Str_("backgroundColor");
+            if (!pendingColor && !bg.empty())
+            {
+                const int col = ParseColor(bg);
+                if (col >= 0)
+                    c->color = col;
+            }
+        }
+        // calendars this account no longer lists
+        std::vector<std::wstring> gone;
+        for (auto &c : g_google.cals)
+            if (c.acct == a.email && std::find(present.begin(), present.end(), c.id) == present.end())
+                gone.push_back(c.id);
+        for (auto &id : gone)
+        {
+            g_google.cals.erase(std::remove_if(g_google.cals.begin(), g_google.cals.end(), [&](const Calendar &c)
+                                               { return c.id == id; }),
+                                g_google.cals.end());
+            g_google.evs.erase(std::remove_if(g_google.evs.begin(), g_google.evs.end(), [&](const Event &e)
+                                              { return e.cal == id; }),
+                               g_google.evs.end());
+        }
+        SaveGoogle();
+        ++g_version;
+        return true;
+    }
+    static bool PullEvents(Account &a, const Calendar &cal, std::wstring &err)
+    {
+        long long lo, hi;
+        {
+            std::lock_guard<std::recursive_mutex> l(g_mu);
+            lo = g_winLo;
+            hi = g_winHi;
+        }
+        const std::wstring gidEnc = FromUtf8(UrlEnc(ToUtf8(cal.gid)));
+        std::vector<Event> fetched;
+        std::string token;
+        for (int page = 0; page < 200; ++page)
+        {
+            std::wstring url = kApi + L"/calendars/" + gidEnc + L"/events?singleEvents=true&showDeleted=false&maxResults=2500&timeMin=" + FromUtf8(UrlEnc(IsoDate(lo) + "T00:00:00Z")) + L"&timeMax=" + FromUtf8(UrlEnc(IsoDate(hi) + "T00:00:00Z"));
+            if (!token.empty())
+                url += L"&pageToken=" + FromUtf8(UrlEnc(token));
+            HttpResp r = GApi(a, L"GET", url);
+            if (r.status == 403 || r.status == 404)
+                return true; // no access to this calendar's events: leave it as it is
+            Json j;
+            if (r.status != 200 || !ParseJson(r.body, j))
+            {
+                err = r.status == 0 ? L"Offline: could not reach Google." : L"Could not read events of \u201C" + cal.name + L"\u201D (HTTP " + std::to_wstring(r.status) + L").";
+                return false;
+            }
+            if (const Json *its = j.Get("items"))
+                for (auto &i : its->a)
+                {
+                    Event e;
+                    if (EventFromJson(i, cal.id, e))
+                        fetched.push_back(std::move(e));
+                }
+            token = j.Str_("nextPageToken");
+            if (token.empty())
+                break;
+        }
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        std::vector<std::wstring> pending;
+        for (auto &o : g_ops)
+            if (o.calId == cal.id)
+                pending.push_back(o.evId);
+        auto isPending = [&](const std::wstring &id)
+        { return std::find(pending.begin(), pending.end(), id) != pending.end(); };
+        std::vector<Event> keep;
+        for (auto &e : g_google.evs)
+            if (e.cal != cal.id || isPending(e.id))
+                keep.push_back(std::move(e));
+        for (auto &e : fetched)
+            if (!isPending(e.id))
+                keep.push_back(std::move(e));
+        g_google.evs.swap(keep);
+        return true;
+    }
+
+    // One full cycle. Returns false on a transient problem (the caller backs off).
+    static bool SyncOnce(bool pull)
+    {
+        std::vector<std::wstring> emails;
+        {
+            std::lock_guard<std::recursive_mutex> l(g_mu);
+            for (auto &a : g_accts)
+                if (!a.needsReauth)
+                    emails.push_back(a.email);
+        }
+        bool allOk = true;
+        std::wstring lastErr;
+        for (const std::wstring &em : emails)
+        {
+            if (g_stop.load())
+                return true;
+            Account a;
+            {
+                std::lock_guard<std::recursive_mutex> l(g_mu);
+                for (auto &x : g_accts)
+                    if (x.email == em)
+                        a = x;
+            }
+            std::wstring err;
+            bool fatal = false;
+            if (!EnsureToken(a, err, fatal))
+            {
+                lastErr = err;
+                if (fatal)
+                {
+                    std::lock_guard<std::recursive_mutex> l(g_mu);
+                    for (auto &x : g_accts)
+                        if (x.email == em)
+                            x.needsReauth = true;
+                    SaveAuth();
+                }
+                else
+                    allOk = false;
+                continue;
+            }
+            {
+                std::lock_guard<std::recursive_mutex> l(g_mu);
+                for (auto &x : g_accts)
+                    if (x.email == em)
+                    {
+                        x.access = a.access;
+                        x.accessExp = a.accessExp;
+                    }
+            }
+            if (!PushOps(a, err))
+            {
+                lastErr = err;
+                allOk = false;
+                continue;
+            }
+            if (!err.empty())
+                lastErr = err;
+            if (!pull)
+                continue;
+            if (!PullCalendars(a, err))
+            {
+                lastErr = err;
+                allOk = false;
+                continue;
+            }
+            std::vector<Calendar> cals;
+            {
+                std::lock_guard<std::recursive_mutex> l(g_mu);
+                for (auto &c : g_google.cals)
+                    if (c.acct == em && c.visible)
+                        cals.push_back(c);
+            }
+            for (const Calendar &c : cals)
+            {
+                if (g_stop.load())
+                    return true;
+                if (!PullEvents(a, c, err))
+                {
+                    lastErr = err;
+                    allOk = false;
+                    break;
+                }
+            }
+            std::lock_guard<std::recursive_mutex> l(g_mu);
+            SaveGoogle();
+            ++g_version;
+        }
+        if (allOk && lastErr.empty())
+        {
+            SYSTEMTIME t = td::WallToLocal(td::WallMs());
+            wchar_t b[64];
+            _snwprintf(b, 64, L"Last synced at %02d:%02d.", t.wHour, t.wMinute);
+            SetGMsg(emails.empty() ? L"No account connected." : b);
+        }
+        else if (!lastErr.empty())
+            SetGMsg(lastErr);
+        Changed();
+        return allOk;
+    }
+    static DWORD WINAPI SyncThread(LPVOID)
+    {
+        int backoff = 0;
+        while (!g_stop.load())
+        {
+            bool any;
+            {
+                std::lock_guard<std::recursive_mutex> l(g_mu);
+                any = !g_accts.empty();
+            }
+            DWORD wait = INFINITE;
+            if (any)
+            {
+                const bool google = g_mode.load() == 1 || g_forcePull.exchange(false);
+                g_syncing = true;
+                const bool ok = SyncOnce(google);
+                g_syncing = false;
+                Changed();
+                if (ok)
+                {
+                    backoff = 0;
+                    wait = google ? 5 * 60 * 1000 : 15 * 60 * 1000;
+                }
+                else
+                {
+                    wait = (DWORD)std::min(300000, 30000 << std::min(backoff, 4));
+                    ++backoff;
+                }
+            }
+            if (g_stop.load())
+                break;
+            WaitForSingleObject(g_wake, wait);
+        }
+        return 0;
+    }
+    static void GoogleWake()
+    {
+        if (g_wake)
+            SetEvent(g_wake);
+    }
+    static void GoogleRequestRange(long long lo, long long hi)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        if (g_accts.empty() || (lo >= g_winLo && hi <= g_winHi))
+            return;
+        long long nlo = std::min(g_winLo, lo - 60), nhi = std::max(g_winHi, hi + 60);
+        if (nhi - nlo > 3650) // keep the cache bounded: follow the requested range instead of growing without end
+        {
+            nlo = lo - 90;
+            nhi = hi + 90;
+        }
+        g_winLo = nlo;
+        g_winHi = nhi;
+        GoogleWake();
+    }
+
+    // ---- edits made in WinKlok while Google mode is active -----------------------------------------------------------------------
+    static std::wstring GoogleSaveEvent(Event &ev, bool isNew)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        if (isNew)
+            g_google.evs.push_back(ev);
+        else if (Event *e = g_google.FindEv(ev.cal, ev.id))
+            *e = ev;
+        else
+            return L"The event no longer exists.";
+        bool pendingInsert = false;
+        for (auto &o : g_ops)
+            if (o.type == 'i' && o.calId == ev.cal && o.evId == ev.id)
+                pendingInsert = true;
+        if (!pendingInsert)
+            QueueOp(isNew ? 'i' : 'u', ev.cal, ev.id);
+        SaveGoogle();
+        SaveOps();
+        GoogleWake();
+        return L"";
+    }
+    static std::wstring GoogleDeleteEvent(const std::wstring &calId, const std::wstring &evId)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        bool wasPendingInsert = false;
+        for (auto &o : g_ops)
+            if (o.calId == calId && o.evId == evId && o.type == 'i')
+                wasPendingInsert = true;
+        g_ops.erase(std::remove_if(g_ops.begin(), g_ops.end(), [&](const Op &o)
+                                   { return o.calId == calId && o.evId == evId && (o.type == 'i' || o.type == 'u'); }),
+                    g_ops.end());
+        g_google.evs.erase(std::remove_if(g_google.evs.begin(), g_google.evs.end(), [&](const Event &e)
+                                          { return e.cal == calId && e.id == evId; }),
+                           g_google.evs.end());
+        if (!wasPendingInsert)
+            QueueOp('d', calId, evId);
+        SaveGoogle();
+        SaveOps();
+        GoogleWake();
+        return L"";
+    }
+    // Deletes a Google calendar (del) or removes all of its events. Locally at once, at Google through the queue.
+    static std::wstring GoogleRemoveCalendar(const std::wstring &id, bool del)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        const Calendar *c = g_google.FindCal(id);
+        if (!c || c->role != L"owner")
+            return L"Only calendars you own can be changed here.";
+        if (del && c->primary)
+            return L"The primary calendar cannot be deleted.";
+        g_ops.erase(std::remove_if(g_ops.begin(), g_ops.end(), [&](const Op &o)
+                                   { return o.calId == id; }),
+                    g_ops.end());
+        g_google.evs.erase(std::remove_if(g_google.evs.begin(), g_google.evs.end(), [&](const Event &e)
+                                          { return e.cal == id; }),
+                           g_google.evs.end());
+        if (del)
+            g_google.cals.erase(std::remove_if(g_google.cals.begin(), g_google.cals.end(), [&](const Calendar &x)
+                                               { return x.id == id; }),
+                                g_google.cals.end());
+        QueueOp(del ? 'x' : 'k', id, L"");
+        SaveGoogle();
+        SaveOps();
+        ++g_version;
+        GoogleWake();
+        return L"";
+    }
+    static void GoogleSetCalColor(const std::wstring &calId, int)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        QueueOp('c', calId, L"");
+        SaveOps();
+        GoogleWake();
+    }
+
+    // ---- OAuth (installed app flow: system browser + PKCE + loopback listener) ---------------------------------------------------
+    using SOCK = UINT_PTR;
+    struct WkSockAddr
+    {
+        unsigned short family, port;
+        unsigned addr;
+        char zero[8];
+    };
+    struct WkPoll
+    {
+        SOCK fd;
+        short events, revents;
+    };
+    struct Ws
+    {
+        int(WINAPI *startup)(WORD, void *) = nullptr;
+        int(WINAPI *cleanup)() = nullptr;
+        SOCK(WINAPI *socket_)(int, int, int) = nullptr;
+        int(WINAPI *bind_)(SOCK, const void *, int) = nullptr;
+        int(WINAPI *listen_)(SOCK, int) = nullptr;
+        SOCK(WINAPI *accept_)(SOCK, void *, int *) = nullptr;
+        int(WINAPI *recv_)(SOCK, char *, int, int) = nullptr;
+        int(WINAPI *send_)(SOCK, const char *, int, int) = nullptr;
+        int(WINAPI *close_)(SOCK) = nullptr;
+        int(WINAPI *getsockname_)(SOCK, void *, int *) = nullptr;
+        int(WINAPI *poll)(WkPoll *, ULONG, int) = nullptr;
+    };
+    static bool LoadWs(Ws &w)
+    {
+        HMODULE m = LoadLibraryW(L"ws2_32.dll");
+        if (!m)
+            return false;
+#define WKW(f, n) w.f = (decltype(w.f))GetProcAddress(m, n)
+        WKW(startup, "WSAStartup");
+        WKW(cleanup, "WSACleanup");
+        WKW(socket_, "socket");
+        WKW(bind_, "bind");
+        WKW(listen_, "listen");
+        WKW(accept_, "accept");
+        WKW(recv_, "recv");
+        WKW(send_, "send");
+        WKW(close_, "closesocket");
+        WKW(getsockname_, "getsockname");
+        WKW(poll, "WSAPoll");
+#undef WKW
+        return w.startup && w.cleanup && w.socket_ && w.bind_ && w.listen_ && w.accept_ && w.recv_ && w.send_ && w.close_ && w.getsockname_ && w.poll;
+    }
+    static std::string QueryParam(const std::string &q, const char *key)
+    {
+        for (const std::string &p : SplitS(q, '&'))
+        {
+            const size_t eq = p.find('=');
+            if (eq != std::string::npos && p.substr(0, eq) == key)
+            {
+                std::string v, s = p.substr(eq + 1);
+                for (size_t i = 0; i < s.size(); ++i)
+                {
+                    if (s[i] == '%' && i + 2 < s.size())
+                    {
+                        v += (char)strtol(s.substr(i + 1, 2).c_str(), nullptr, 16);
+                        i += 2;
+                    }
+                    else
+                        v += s[i] == '+' ? ' ' : s[i];
+                }
+                return v;
+            }
+        }
+        return std::string();
+    }
+
+    static std::wstring ConnectAccount()
+    {
+        std::string cid, sec;
+        {
+            std::lock_guard<std::recursive_mutex> l(g_mu);
+            cid = g_clientId;
+            sec = g_clientSecret;
+        }
+        if (cid.empty() || sec.empty())
+            return L"Enter and save your Client ID and Client Secret first.";
+        Ws w;
+        if (!LoadWs(w))
+            return L"Network support is not available.";
+        char wsa[512] = {};
+        if (w.startup(0x0202, wsa) != 0)
+            return L"Network support could not be started.";
+        struct Cleanup
+        {
+            Ws &w;
+            ~Cleanup() { w.cleanup(); }
+        } cleanup{w};
+        SOCK ls = w.socket_(2, 1, 6);
+        if (ls == (SOCK)~0)
+            return L"Could not open a local port for the sign-in.";
+        struct Closer
+        {
+            Ws &w;
+            SOCK s;
+            ~Closer()
+            {
+                if (s != (SOCK)~0)
+                    w.close_(s);
+            }
+        } lcl{w, ls};
+        WkSockAddr sa{};
+        sa.family = 2;
+        sa.port = 0;
+        sa.addr = 0x0100007F; // 127.0.0.1, network order on a little-endian CPU
+        if (w.bind_(ls, &sa, sizeof(sa)) != 0 || w.listen_(ls, 4) != 0)
+            return L"Could not listen on a local port for the sign-in.";
+        int sl = sizeof(sa);
+        if (w.getsockname_(ls, &sa, &sl) != 0)
+            return L"Could not read the local port.";
+        const unsigned port = (unsigned)(((sa.port & 0xFF) << 8) | (sa.port >> 8));
+        const std::string redirect = "http://127.0.0.1:" + std::to_string(port);
+
+        unsigned char rnd[48], dig[32];
+        RandomBytes(rnd, 48);
+        const std::string verifier = Base64Url(rnd, 48); // 64 characters
+        Sha256((const unsigned char *)verifier.data(), verifier.size(), dig);
+        const std::string challenge = Base64Url(dig, 32);
+        RandomBytes(rnd, 16);
+        const std::string state = Base64Url(rnd, 16);
+        const std::string url = "https://accounts.google.com/o/oauth2/v2/auth?client_id=" + UrlEnc(cid) + "&redirect_uri=" + UrlEnc(redirect) + "&response_type=code&scope=" + UrlEnc(kScopes) + "&code_challenge=" + challenge + "&code_challenge_method=S256&state=" + state + "&access_type=offline&prompt=consent";
+        SetGMsg(L"Waiting for you to approve access in your browser\u2026");
+        Changed();
+        ShellExecuteW(nullptr, L"open", FromUtf8(url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+
+        std::string code, error;
+        const ULONGLONG deadline = GetTickCount64() + 5 * 60 * 1000;
+        for (int conns = 0; conns < 12 && code.empty() && error.empty();)
+        {
+            if (g_stop.load())
+                return L"Cancelled.";
+            if (GetTickCount64() > deadline)
+                return L"The sign-in timed out. Try connecting again.";
+            WkPoll p{ls, 0x0100 /*POLLRDNORM*/, 0};
+            if (w.poll(&p, 1, 250) <= 0 || !(p.revents & 0x0100))
+                continue;
+            SOCK cs = w.accept_(ls, nullptr, nullptr);
+            if (cs == (SOCK)~0)
+                continue;
+            ++conns;
+            std::string req;
+            char buf[2048];
+            for (int k = 0; k < 20 && req.find("\r\n\r\n") == std::string::npos && req.size() < 8192; ++k)
+            {
+                WkPoll cp{cs, 0x0100, 0};
+                if (w.poll(&cp, 1, 500) <= 0)
+                    break;
+                const int n = w.recv_(cs, buf, sizeof buf, 0);
+                if (n <= 0)
+                    break;
+                req.append(buf, (size_t)n);
+            }
+            std::string html = "<html><body style=\"font-family:Segoe UI,sans-serif;text-align:center;margin-top:15vh\"><h2>WinKlok</h2><p>You can close this tab and return to WinKlok.</p></body></html>";
+            const size_t sp1 = req.find(' '), sp2 = req.find(' ', sp1 + 1);
+            if (req.compare(0, 4, "GET ") == 0 && sp2 != std::string::npos)
+            {
+                const std::string target = req.substr(sp1 + 1, sp2 - sp1 - 1);
+                const size_t qm = target.find('?');
+                if (qm != std::string::npos)
+                {
+                    const std::string q = target.substr(qm + 1);
+                    if (QueryParam(q, "state") == state)
+                    {
+                        code = QueryParam(q, "code");
+                        error = QueryParam(q, "error");
+                    }
+                }
+            }
+            const std::string resp = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\nContent-Length: " + std::to_string(html.size()) + "\r\n\r\n" + html;
+            w.send_(cs, resp.data(), (int)resp.size(), 0);
+            w.close_(cs);
+        }
+        if (!error.empty())
+            return error == "access_denied" ? L"Access was not granted." : L"Google returned an error: " + FromUtf8(error);
+        if (code.empty())
+            return L"No answer was received from the browser.";
+        const std::string body = "code=" + UrlEnc(code) + "&client_id=" + UrlEnc(cid) + "&client_secret=" + UrlEnc(sec) + "&redirect_uri=" + UrlEnc(redirect) + "&grant_type=authorization_code&code_verifier=" + verifier;
+        HttpResp r = Http(L"POST", L"https://oauth2.googleapis.com/token", body, L"Content-Type: application/x-www-form-urlencoded\r\n", 1 << 20);
+        Json j;
+        if (r.status == 0)
+            return L"Could not reach Google to finish the sign-in.";
+        if (r.status != 200 || !ParseJson(r.body, j) || j.Str_("access_token").empty() || j.Str_("refresh_token").empty())
+        {
+            const std::string e = j.t == Json::Obj ? j.Str_("error_description", j.Str_("error")) : std::string();
+            return L"Google did not accept the credentials: " + FromUtf8(e) + L" Check the Client ID, the Client Secret and that the OAuth client type is \u201CDesktop app\u201D.";
+        }
+        Account a;
+        a.refresh = j.Str_("refresh_token");
+        a.access = j.Str_("access_token");
+        const Json *ex = j.Get("expires_in");
+        a.accessExp = td::WallMs() + (long long)(ex ? ex->n : 3600) * 1000;
+        // the primary calendar's id is the account's e-mail address
+        HttpResp cl = GApi(a, L"GET", kApi + L"/users/me/calendarList?maxResults=250&minAccessRole=reader");
+        Json cj;
+        std::wstring email;
+        if (cl.status == 200 && ParseJson(cl.body, cj))
+            if (const Json *its = cj.Get("items"))
+                for (auto &i : its->a)
+                    if (i.Bool_("primary"))
+                        email = FromUtf8(i.Str_("id"));
+        if (email.empty())
+        {
+            if (cl.status == 403)
+                return L"Google Calendar API is not enabled for your Cloud project. Enable it, then connect again (see Help).";
+            return L"Connected, but the account could not be identified (HTTP " + std::to_wstring(cl.status) + L").";
+        }
+        a.email = email;
+        {
+            std::lock_guard<std::recursive_mutex> l(g_mu);
+            bool found = false;
+            for (auto &x : g_accts)
+                if (x.email == email)
+                {
+                    x = a;
+                    found = true;
+                }
+            if (!found)
+                g_accts.push_back(a);
+            SaveAuth();
+        }
+        g_forcePull = true;
+        GoogleWake();
+        return L"Connected " + email + L". Switch to Google Calendar mode to see its events.";
+    }
+    static void ConnectAsync()
+    {
+        if (!StartJob(L"Connecting\u2026", []()
+                      { const std::wstring m = ConnectAccount(); SetGMsg(m); }))
+            SetGMsg(L"Another task is still running. Try again in a moment.");
+    }
+    static void SaveCredentials(const std::wstring &id, const std::wstring &secret)
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        const std::string nid = ToUtf8(TrimW(id));
+        const std::string nsec = ToUtf8(TrimW(secret));
+        if (!nid.empty() && nid != g_clientId)
+        {
+            for (auto &a : g_accts) // tokens belong to the old client: they cannot be refreshed with another one
+                a.needsReauth = true;
+            g_clientId = nid; // an empty box keeps what is saved
+        }
+        if (!nsec.empty())
+            g_clientSecret = nsec;
+        SaveAuth();
+        GoogleWake();
+    }
+    static void Disconnect(const std::wstring &email)
+    {
+        std::string rt;
+        {
+            std::lock_guard<std::recursive_mutex> l(g_mu);
+            for (auto &a : g_accts)
+                if (a.email == email)
+                    rt = a.refresh;
+            g_accts.erase(std::remove_if(g_accts.begin(), g_accts.end(), [&](const Account &a)
+                                         { return a.email == email; }),
+                          g_accts.end());
+            // Google data of that account leaves the cache; pending changes for it are dropped with it
+            g_google.cals.erase(std::remove_if(g_google.cals.begin(), g_google.cals.end(), [&](const Calendar &c)
+                                               { return c.acct == email; }),
+                                g_google.cals.end());
+            g_google.evs.erase(std::remove_if(g_google.evs.begin(), g_google.evs.end(), [&](const Event &e)
+                                              { std::wstring a, g; return SplitKey(e.cal, a, g) && a == email; }),
+                               g_google.evs.end());
+            g_ops.erase(std::remove_if(g_ops.begin(), g_ops.end(), [&](const Op &o)
+                                       { std::wstring a, g; return SplitKey(o.calId, a, g) && a == email; }),
+                        g_ops.end());
+            if (g_accts.empty() && g_mode.load() == 1)
+            {
+                g_mode = 0;
+                Wh_SetIntValue(L"calMode", 0);
+            }
+            SaveAuth();
+            SaveGoogle();
+            SaveOps();
+            ++g_version;
+        }
+        if (!rt.empty()) // revoke the token with Google (best effort, in the background)
+            StartJob(L"Disconnecting\u2026", [rt]()
+                     { Http(L"POST", L"https://oauth2.googleapis.com/revoke", "token=" + UrlEnc(rt), L"Content-Type: application/x-www-form-urlencoded\r\n", 1 << 16); });
+    }
+    static bool HasAccounts()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        return !g_accts.empty();
+    }
+    // Switching modes only changes which data is shown. Neither data set is touched.
+    static std::wstring SetMode(int mode)
+    {
+        if (mode == 1)
+        {
+            std::lock_guard<std::recursive_mutex> l(g_mu);
+            if (g_accts.empty())
+                return L"Connect a Google account first.";
+        }
+        g_mode = mode == 1 ? 1 : 0;
+        Wh_SetIntValue(L"calMode", g_mode.load());
+        ++g_version;
+        if (mode == 1)
+        {
+            g_forcePull = true;
+            GoogleWake();
+        }
+        return L"";
+    }
+
+    static std::wstring ConnectedLabel()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        std::wstring s;
+        for (auto &a : g_accts)
+            s += (s.empty() ? L"" : L", ") + a.email + (a.needsReauth ? L" (sign in again)" : L"");
+        return s;
+    }
+    static std::vector<std::wstring> AccountEmails()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        std::vector<std::wstring> v;
+        for (auto &a : g_accts)
+            v.push_back(a.email);
+        return v;
+    }
+    static std::wstring ClientIdText()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        return FromUtf8(g_clientId);
+    }
+    static bool HasClientId()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        return !g_clientId.empty();
+    }
+    static bool HasSecret()
+    {
+        std::lock_guard<std::recursive_mutex> l(g_mu);
+        return !g_clientSecret.empty();
+    }
+
+    // ---- lifecycle ----------------------------------------------------------------------------------------------------------------
+    static void Init()
+    {
+        InstallTimeHooks();
+        g_stop = false;
+        g_wake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        LoadAll();
+        LoadAuth();
+        LoadOps();
+        const long long today = LocalDayOf(td::WallMs());
+        g_winLo = today - 200;
+        g_winHi = today + 400;
+        if (g_wake)
+            g_syncThread = CreateThread(nullptr, 0, SyncThread, nullptr, 0, nullptr);
+    }
+    static void Shutdown()
+    {
+        g_stop = true;
+        AbortAllHttp();
+        if (g_wake)
+            SetEvent(g_wake);
+        JoinJob();
+        if (g_syncThread)
+        {
+            WaitForSingleObject(g_syncThread, INFINITE);
+            CloseHandle(g_syncThread);
+            g_syncThread = nullptr;
+        }
+        if (g_wake)
+        {
+            CloseHandle(g_wake);
+            g_wake = nullptr;
+        }
+    }
+} // namespace cal
+
+// ============================================================================
 //  PANEL PAGES + ALERT WINDOWS
 //  PanelWindow owns content sizing/scrolling/transitions; engine state is in td::.
 // ============================================================================
@@ -8025,6 +12908,7 @@ namespace ui
         ID_CAL_HDR,
         ID_CAL_CELL,
         ID_CAL_TODAY,
+        ID_CAL_SYNC,
         ID_SW_TOGGLE,
         ID_SW_LAP,
         ID_SW_RESET,
@@ -8089,7 +12973,44 @@ namespace ui
         ID_NF_DISMISS,
         ID_NF_OPEN,
         ID_NF_OPENWIN,
-        ID_STACK_TOGGLE
+        ID_STACK_TOGGLE,
+        ID_EV_BACK,
+        ID_EV_ADD,
+        ID_EV_ROW,
+        ID_EV_SAVE,
+        ID_EV_CANCEL,
+        ID_EV_DELETE,
+        ID_EV_ALLDAY,
+        ID_EV_COLOR,
+        ID_EV_CAL,
+        ID_ST_CALSET,
+        ID_CS_BACK,
+        ID_CS_MODE,
+        ID_CS_ALLON,
+        ID_CS_ALLOFF,
+        ID_CS_VIS,
+        ID_CS_ROW,
+        ID_CS_COLOR,
+        ID_CS_RENAME,
+        ID_CS_DELETE,
+        ID_CS_CLEAR,
+        ID_CS_EXPORT,
+        ID_CS_REFRESH,
+        ID_CS_NEW,
+        ID_CS_NEWADD,
+        ID_CS_IMPORT,
+        ID_CS_URLIMPORT,
+        ID_CS_SAVECRED,
+        ID_CS_CONNECT,
+        ID_CS_DISC,
+        ID_CS_SYNC,
+        ID_CS_HELP,
+        ID_CS_LINK,
+        ID_ST_BELLSIDE,
+        ID_ST_POSX,
+        ID_ST_WEEKS,
+        ID_ST_GENSET,
+        ID_ST_NOTSET
     };
     enum EditSlot
     {
@@ -8103,6 +13024,18 @@ namespace ui
         E_NTITLE,
         E_NBODY,
         E_TODO,
+        E_EV_TITLE,
+        E_EV_SD,
+        E_EV_ST,
+        E_EV_ED,
+        E_EV_ET,
+        E_EV_LOC,
+        E_EV_DESC,
+        E_CS_NAME,
+        E_CS_NEW,
+        E_CS_URL,
+        E_CS_CID,
+        E_CS_SEC,
         E_COUNT
     };
 
@@ -8129,7 +13062,34 @@ namespace ui
     };
     static const int kTabs = td::kTabCount;
     static const wchar_t *const kTabNames[kTabs] = {L"Calendar", L"Stopwatch", L"Timer", L"Alarm", L"Notes", L"Settings", L"Tasks"};
-    static const int kTabOrder[kTabs] = {TAB_CAL, TAB_SW, TAB_TIMER, TAB_ALARM, TAB_TODO, TAB_NOTES, TAB_SETTINGS};
+    static int kTabOrder[kTabs] = {TAB_CAL, TAB_SW, TAB_TIMER, TAB_ALARM, TAB_TODO, TAB_NOTES, TAB_SETTINGS};
+    // The order is kept as one int, 3 bits per position. Settings always stays last.
+    static void LoadTabOrder()
+    {
+        const int v = Wh_GetIntValue(L"tabOrder", -1);
+        if (v < 0)
+            return;
+        int ord[kTabs], seen = 0;
+        for (int n = 0; n < kTabs; ++n)
+        {
+            ord[n] = (v >> (3 * n)) & 7;
+            if (ord[n] >= kTabs || ((seen >> ord[n]) & 1))
+                return;
+            seen |= 1 << ord[n];
+        }
+        if (ord[kTabs - 1] == TAB_SETTINGS)
+            memcpy(kTabOrder, ord, sizeof(ord));
+    }
+    static void SaveTabOrder()
+    {
+        int v = 0;
+        for (int n = 0; n < kTabs; ++n)
+            v |= kTabOrder[n] << (3 * n);
+        Wh_SetIntValue(L"tabOrder", v);
+    }
+    // Without the week column the seven columns widen evenly across the panel (16 px margins) instead of floating in the middle.
+    static float CalGridX() { return td::g_set.showWeeks.load() ? kCalGridX : 18.f; }
+    static float CalCell() { return td::g_set.showWeeks.load() ? kCalCell : 48.f; }
     static bool TabVisible(int id) { return id >= 0 && id < kTabs && ((td::g_set.tabMask.load() >> id) & 1) != 0; }
     static const float kTabAnimMs = 260.f;
     static const float kGlideMs = 80.f; // scroll glide time constant (mouse wheel, touch, keyboard)
@@ -9194,11 +14154,14 @@ namespace ui
         bool slideUnder = false;
         // Stacked mode slides in from the right screen edge instead of up from the taskbar.
         bool slideHorizontal = false;
-        int slideClipX = 0; // physical px: right edge of the monitor, the line a horizontal slide is cut at
+        bool dockTop = false; // taskbar at the top of the screen: flyouts hang below it and slide down from it
+        int slideClipX = 0;   // physical px: right edge of the monitor, the line a horizontal slide is cut at
         int panelAnimationStartX = 0, panelAnimationEndX = 0;
         bool activateAfterOpen = false;
         bool syncFollower = false; // animation is stepped by another flyout's timer (stacked mode)
         bool slideUseClip = true;  // a horizontal slide only needs the region clip when another monitor lies to the right
+        int pendingClip = 0;       // opening inside a batched move: the region is widened right after the batch, never before it
+        bool clipPending = false;
         // Stacked open: the first window stays cloaked (composed by DWM but invisible, shadow included) until the second is
         // ready, and both are revealed in the same instant. Otherwise the first sat at the screen edge, shadow and all,
         // while the other was still being prepared.
@@ -9279,7 +14242,8 @@ namespace ui
                 return;
             const int w = panelAnimationWidth, h = panelAnimationHeight;
             const int clipY = slideHorizontal ? slideClipX : (slideClipY > 0 ? slideClipY : panelWorkBottom);
-            const int vis = clipY - top; // horizontal slide: `top` is the left edge and `vis` the visible width
+            const bool fromTop = dockTop && !slideHorizontal;        // the visible part is below the line
+            const int vis = fromTop ? top + h - clipY : clipY - top; // horizontal slide: `top` is the left edge and `vis` the visible width
             if (clipY <= 0 || vis >= (slideHorizontal ? w : h) || (slideHorizontal && !slideUseClip))
             {
                 if (slideClipped && SetWindowRgn(hwnd, nullptr, TRUE))
@@ -9292,7 +14256,9 @@ namespace ui
                 return;
             // Never an empty region: DWM stops tracking a window with nothing visible, and a system backdrop (acrylic)
             // set up in that state comes back flat. A thin sliver always stays visible instead.
-            HRGN cut = slideHorizontal ? CreateRectRgn(0, 0, std::max(1, vis), h + 1) : CreateRectRgn(0, 0, w + 1, std::max(1, vis));
+            HRGN cut = slideHorizontal ? CreateRectRgn(0, 0, std::max(1, vis), h + 1)
+                       : fromTop       ? CreateRectRgn(0, h + 1 - std::max(1, vis), w + 1, h + 1)
+                                       : CreateRectRgn(0, 0, w + 1, std::max(1, vis));
             if (!cut)
             {
                 DeleteObject(full);
@@ -9320,6 +14286,15 @@ namespace ui
             slideTaskbar = nullptr;
             slideUnder = false;
             slideClipY = 0;
+            if (dockTop)
+            { // top bar: the panel is cut at the line below it (panelWorkBottom) and kept under the bar in z-order
+                for (HWND t = FindWindowW(L"Shell_TrayWnd", nullptr); t && !slideTaskbar; t = FindWindowExW(nullptr, t, L"Shell_SecondaryTrayWnd", nullptr))
+                    if (IsWindowVisible(t) && MonitorFromWindow(t, MONITOR_DEFAULTTONULL) == mon)
+                        slideTaskbar = t;
+                slideUnder = slideTaskbar != nullptr;
+                slideClipY = panelWorkBottom;
+                return slideUnder;
+            }
             const int monW = mi.rcMonitor.right - mi.rcMonitor.left, monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
             auto consider = [&](HWND t)
             {
@@ -9365,10 +14340,11 @@ namespace ui
 
         // A visible-but-nearly-fully-clipped window is the resting line of the slide: a few pixels stay visible so DWM
         // keeps the window (and its acrylic) alive.
-        int SlideHiddenY() const
+        int SlideHiddenY(int h = 0) const
         {
             const int clipY = slideClipY > 0 ? slideClipY : panelWorkBottom;
-            return clipY - std::max(2, (int)std::lround(3.f * Scale()));
+            const int sliver = std::max(2, (int)std::lround(3.f * Scale()));
+            return dockTop ? clipY + sliver - h : clipY - sliver; // top bar: the window's bottom edge just shows below the line
         }
 
         // The same sequence as switching the panel material to Simple and back to Acrylic in Settings, which is the
@@ -9399,7 +14375,7 @@ namespace ui
                 return;
             StopFrames(hwnd, TIMER_PANEL_ANIM);
             const bool wasVisible = IsWindowVisible(hwnd) != FALSE;
-            int startY = SlideHiddenY(), startX = SlideHiddenX();
+            int startY = SlideHiddenY(h), startX = SlideHiddenX();
             if (wasVisible && panelAnimation == PanelAnimationState::Closing)
             { // re-opened while sliding away: continue from where it is
                 RECT cur{};
@@ -9464,6 +14440,14 @@ namespace ui
                 SetForegroundWindow(hwnd);
         }
 
+        void FlushSlideClip()
+        {
+            if (!clipPending)
+                return;
+            clipPending = false;
+            ApplySlideClip(pendingClip);
+        }
+
         void ReleaseCloak()
         {
             if (!cloakHeld || !hwnd)
@@ -9492,7 +14476,7 @@ namespace ui
             panelAnimationWidth = r.right - r.left;
             panelAnimationHeight = r.bottom - r.top;
             panelAnimationStartY = r.top;
-            panelAnimationEndY = std::max(SlideHiddenY(), (int)r.top);
+            panelAnimationEndY = dockTop ? std::min(SlideHiddenY(panelAnimationHeight), (int)r.top) : std::max(SlideHiddenY(), (int)r.top);
             panelAnimationStartX = r.left;
             panelAnimationEndX = std::max(SlideHiddenX(), (int)r.left);
             if (slideHorizontal)
@@ -9544,7 +14528,13 @@ namespace ui
             if (opening)
             { // moving in: widen the visible part after the move, never before it
                 MoveFlyout(z, x, y, panelAnimationWidth, panelAnimationHeight);
-                ApplySlideClip(along);
+                if (g_moveBatch)
+                {
+                    pendingClip = along;
+                    clipPending = true;
+                }
+                else
+                    ApplySlideClip(along);
             }
             else
             { // moving away: shrink the visible part before the move
@@ -9605,6 +14595,7 @@ namespace ui
     static void NotifCloseStacked();                                  // a stacked notification card goes away together with the panel
     static void NotifCloseStandalone();                               // the panel takes over from a standalone notification panel
     static void ToggleNotifications();                                // the taskbar bell
+    static void NotifPoll();                                          // keeps the bell's notification count current while the panels are closed
     static void NotifFollowStack(int panelX, int panelY, int panelW); // the card above follows a resizing panel
     static void StepStackedFlyouts(FlyoutWindow &panel);              // one slide step for the panel and a stacked card together
 
@@ -9717,6 +14708,23 @@ namespace ui
                     style = WS_CHILD | WS_TABSTOP | ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN;
                     limit = 40000;
                 }
+                if (i == E_EV_DESC)
+                {
+                    style = WS_CHILD | WS_TABSTOP | ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN;
+                    limit = 8000;
+                }
+                if (i == E_EV_TITLE || i == E_EV_LOC)
+                    limit = 200;
+                if (i == E_EV_SD || i == E_EV_ED || i == E_EV_ST || i == E_EV_ET)
+                    limit = 24;
+                if (i == E_CS_NAME || i == E_CS_NEW)
+                    limit = 60;
+                if (i == E_CS_URL)
+                    limit = 2000;
+                if (i == E_CS_CID || i == E_CS_SEC)
+                    limit = 300;
+                if (i == E_CS_SEC)
+                    style |= ES_PASSWORD;
                 edits[i] = CreateWindowExW(0, L"EDIT", L"", style, 0, 0, 10, 10, hwnd, (HMENU)(INT_PTR)(100 + i), inst, nullptr);
                 if (!edits[i])
                     return false;
@@ -9731,12 +14739,20 @@ namespace ui
             SendMessageW(edits[E_ALABEL], 0x1501, TRUE, (LPARAM)L"Alarm name (optional)");
             SendMessageW(edits[E_NTITLE], 0x1501, TRUE, (LPARAM)L"Title");
             SendMessageW(edits[E_TODO], 0x1501, TRUE, (LPARAM)L"Add a task");
+            SendMessageW(edits[E_EV_TITLE], 0x1501, TRUE, (LPARAM)L"Add title");
+            SendMessageW(edits[E_EV_LOC], 0x1501, TRUE, (LPARAM)L"Add location");
+            SendMessageW(edits[E_CS_NAME], 0x1501, TRUE, (LPARAM)L"Calendar name");
+            SendMessageW(edits[E_CS_NEW], 0x1501, TRUE, (LPARAM)L"New calendar name");
+            SendMessageW(edits[E_CS_URL], 0x1501, TRUE, (LPARAM)L"iCalendar link (https://\u2026)");
+            SendMessageW(edits[E_CS_CID], 0x1501, TRUE, (LPARAM)L"Client ID");
+            SendMessageW(edits[E_CS_SEC], 0x1501, TRUE, (LPARAM)L"Client Secret (stored encrypted)");
             SetWindowTextW(edits[E_TH], L"00");
             SetWindowTextW(edits[E_TM], L"05");
             SetWindowTextW(edits[E_TS], L"00");
             LoadNotes();
             LoadTodos();
 
+            LoadTabOrder();
             LayoutTabs();
             ApplyComposition();
             InitTabAnim();
@@ -9818,6 +14834,7 @@ namespace ui
                 HFONT f = (i == E_TH || i == E_TM || i == E_TS || i == E_AH || i == E_AM) ? fontBig
                           : i == E_NTITLE                                                 ? fontTitle
                           : i == E_NBODY                                                  ? fontBody
+                          : i == E_EV_TITLE                                               ? fontTitle
                                                                                           : fontNorm;
                 if (edits[i])
                     SendMessageW(edits[i], WM_SETFONT, (WPARAM)f, TRUE);
@@ -9924,7 +14941,8 @@ namespace ui
                         continue;
                     const std::wstring v = td::GetBig(NoteKey(id).c_str());
                     const auto f = td::Split(v, L'|');
-                    if (v.empty() || f.size() < 3) continue;
+                    if (v.empty() || f.size() < 3)
+                        continue;
                     Note note;
                     note.id = id;
                     note.modified = td::ToLL(f[0]);
@@ -10159,10 +15177,22 @@ namespace ui
             indWA.Go(tabW[i] * 0.5f, cw);
             tabScrollA.Go(CenterScroll(i), cs);
             StartTabTimer();
+            if (!changed && i == TAB_SETTINGS && settingsSub)
+            {
+                CloseCalSettings();
+                return;
+            }
+            if (!changed && i == TAB_CAL && evView)
+            {
+                CloseEditor();
+                return;
+            }
             if (!changed)
                 return;
             StopTouchpadFling(); // a previous page's inertia must not scroll the newly selected page
             alarmEditing = false;
+            evView = 0;
+            settingsSub = 0;
             StopPreviewSound();
             FlushNote();
             panelScroll = panelScrollFrom = panelScrollTarget = 0.f;
@@ -10213,6 +15243,10 @@ namespace ui
             switch (tab)
             {
             case 0:
+                if (evView == 1)
+                    return std::max(panelH, 100.f + (float)dayOccs.size() * 58.f + 16.f);
+                if (evView == 2)
+                    return panelH;
                 return 470.f + 16.f + CalendarClockOffset(); // calendar: Today button + secondary-clock rows + bottom padding
             case 2:
             {
@@ -10232,6 +15266,8 @@ namespace ui
             case TAB_TODO:
                 return std::max(panelH, TodoBottom() + 10.f);
             case TAB_SETTINGS:
+                if (settingsSub)
+                    return calSetBottom;
                 return settingsAboutTop + AboutHeight() + 18.f; // settings stack, About card last
             default:
                 return panelH;
@@ -10411,7 +15447,7 @@ namespace ui
             if (panelScrollStarted)
             {
                 const float mx = std::max(0.f, PanelScrollMax());
-                if (!aboutA.Running(kAboutMs))
+                if (!aboutA.Running(kAboutMs) && !helpA.Running(kAboutMs))
                     panelScrollTarget = std::min(panelScrollTarget, mx);
                 Smooth m;
                 m.pos = panelScroll;
@@ -10739,7 +15775,9 @@ namespace ui
                 tickMs = 100;
                 SetTimer(hwnd, TIMER_TICK, 100, nullptr);
             }
-            panelWorkBottom = TaskbarBandTop(mon, mi, Scale()); // never below the area a (possibly auto-hidden) taskbar occupies
+            int topLine = 0;
+            dockTop = TaskbarOnTop(mi, topLine);
+            panelWorkBottom = dockTop ? topLine : TaskbarBandTop(mon, mi, Scale()); // never below the area a (possibly auto-hidden) taskbar occupies
             if (!timerPeriodActive)
             { // finer timer resolution while the panel is open keeps scrolling and sliding even
                 timeBeginPeriod(1);
@@ -10747,13 +15785,13 @@ namespace ui
             }
 
             const float scale = Scale();
-            const float workH = (float)(panelWorkBottom - mi.rcWork.top) / scale;
+            const float workH = (float)(dockTop ? mi.rcWork.bottom - panelWorkBottom : panelWorkBottom - mi.rcWork.top) / scale;
             panelH = std::min(kPanelH + CalendarClockOffset(), std::max(140.f, workH - 24.f));
             const int w = (int)std::lround(kPanelW * scale), h = (int)std::lround((collapsed ? CollapsedH() : panelH) * scale);
             const int margin = (int)std::lround(12.f * scale);
-            const int x = std::max(static_cast<int>(mi.rcWork.left), static_cast<int>(mi.rcWork.right) - w - margin);
-            const int y = std::max(static_cast<int>(mi.rcWork.top), panelWorkBottom - h - margin);
-            slideHorizontal = withNotif;
+            const int x = FlyoutLeft(mi, w, margin);
+            const int y = dockTop ? panelWorkBottom + margin : std::max(static_cast<int>(mi.rcWork.top), panelWorkBottom - h - margin);
+            slideHorizontal = withNotif && td::g_set.panelX.load() == 0; // moved off the corner: the stack rises from the taskbar instead
             slideClipX = mi.rcMonitor.right;
             slideUseClip = !slideHorizontal || MonitorOnRight(mi);
             if (slideHorizontal)
@@ -10839,6 +15877,7 @@ namespace ui
             }
             UpdateTickInterval();
             KeepAlertsPlaced();
+            NotifPoll();
             if (!IsWindowVisible(hwnd))
                 return;
             {
@@ -11012,7 +16051,12 @@ namespace ui
             switch (tab)
             {
             case 0:
-                PaintCalendar();
+                if (evView == 1)
+                    PaintEventDay();
+                else if (evView == 2)
+                    PaintEventForm();
+                else
+                    PaintCalendar();
                 break;
             case 1:
                 PaintStopwatch();
@@ -11030,7 +16074,14 @@ namespace ui
                 PaintTodo();
                 break;
             default:
-                PaintSettings();
+                if (settingsSub == 1)
+                    PaintCalSettings();
+                else if (settingsSub == 2)
+                    PaintNotifSettings();
+                else if (settingsSub == 3)
+                    PaintGeneralSettings();
+                else
+                    PaintSettings();
                 break;
             }
             rt->SetTransform(&originalTransform);
@@ -11087,6 +16138,7 @@ namespace ui
             const int fdow = FirstDayOfWeekSun(), weekRule = FirstWeekRule();
             const long long base = CalBaseDays(calYear, calMonth);
             const int r0 = (int)std::floor(offset / kCalRow) - 1;
+            EnsureOcc(base + 7LL * r0, base + 7LL * (r0 + 10));
             for (int r = r0; r <= r0 + 9; ++r)
             {
                 const float cy = 158.f + layoutOffset + (float)r * kCalRow + 22.f - offset;
@@ -11097,14 +16149,15 @@ namespace ui
                 td::CivilFromDays(rowStart, y0, m0, d0);
                 if (y0 < 1601 || y0 > 9998)
                     continue;
-                Text(std::to_wstring(td::WeekNumberOfRow(rowStart, fdow, weekRule)), RF(kCalWeekX, cy - 18, kCalWeekW, 36), 12.f, 400,
-                     Fade(pal.accent, 0.8f), 1, 1);
+                if (td::g_set.showWeeks.load())
+                    Text(std::to_wstring(td::WeekNumberOfRow(rowStart, fdow, weekRule)), RF(kCalWeekX, cy - 18, kCalWeekW, 36), 12.f, 400,
+                         Fade(pal.accent, 0.8f), 1, 1);
                 for (int c = 0; c < 7; ++c)
                 {
                     int y, m, d;
                     td::CivilFromDays(rowStart + c, y, m, d);
                     const bool inMonth = (y == calYear && m == calMonth);
-                    const float cx = kCalGridX + (float)c * kCalCell + kCalCell / 2;
+                    const float cx = CalGridX() + (float)c * CalCell() + CalCell() / 2;
                     const int code = y * 10000 + m * 100 + d;
                     const bool isToday = (y == now.wYear && m == now.wMonth && d == now.wDay);
                     const bool isSel = (y == calSelY && m == calSelM && d == calSelD);
@@ -11119,9 +16172,16 @@ namespace ui
                         Circle(cx, cy, 18.f, Fade(pal.cardHover, hov));
                     if (isSel && !isToday)
                         CircleStroke(cx, cy, 17.f, pal.accent, 2.f);
-                    Text(std::to_wstring(d), RF(cx - kCalCell / 2, cy - 18, kCalCell, 36), 13.5f, isToday ? 600 : 400, fg, 1, 1);
+                    DayRing(rowStart + c, cx, cy);
+                    if (hoverId == ID_CAL_CELL && hoverParam == code)
+                    {
+                        hoverCx = cx;
+                        hoverCy = cy;
+                        hoverCellSeen = true;
+                    }
+                    Text(std::to_wstring(d), RF(cx - CalCell() / 2, cy - 18, CalCell(), 36), 13.5f, isToday ? 600 : 400, fg, 1, 1);
                     if (cy > clipTop && cy < clipBottom)
-                        AddHit(RF(cx - kCalCell / 2, cy - 22, kCalCell, 44), ID_CAL_CELL, code);
+                        AddHit(RF(cx - CalCell() / 2, cy - 22, CalCell(), 44), ID_CAL_CELL, code);
                 }
             }
         }
@@ -11170,13 +16230,68 @@ namespace ui
             }
         }
 
+        // Sync button: the arrows turn while the worker syncs (or for at least one turn after a press). Whole turns only, eased,
+        // so the icon always comes to rest upright. Returns the angle in degrees.
+        ULONGLONG syncSpinStart = 0, syncSpinMin = 0, syncStopCycle = 0;
+        bool syncSpinning = false;
+        float SyncSpinAngle()
+        {
+            const ULONGLONG now = MonoMs();
+            const bool want = cal::g_syncing.load() || now < syncSpinMin;
+            if (!syncSpinning)
+            {
+                if (!want)
+                    return 0.f;
+                syncSpinning = true;
+                syncSpinStart = now;
+                syncStopCycle = ~0ULL;
+            }
+            const ULONGLONG cyc = (now - syncSpinStart) / 900;
+            if (want)
+                syncStopCycle = ~0ULL;
+            else if (syncStopCycle == ~0ULL)
+                syncStopCycle = cyc + 1; // finish the turn that is under way
+            if (!want && cyc >= syncStopCycle)
+            {
+                syncSpinning = false;
+                return 0.f;
+            }
+            StartFrames(hwnd, TIMER_SYNC_SPIN);
+            return 360.f * EaseInOutCubic((float)((now - syncSpinStart) % 900) / 900.f);
+        }
+
         void PaintCalendar()
         {
             SYSTEMTIME now{}, utc{};
             GetLocalTime(&now);
             GetSystemTime(&utc);
             const float clockOffset = CalendarClockOffset();
-            Text(DateStr(now, L"dddd, MMMM d"), RF(16, 56, 340, 32), 20.f, 600, pal.text, 0, 1);
+            hoverCellSeen = false;
+            const bool gSync = cal::g_mode.load() == 1;
+            if (gSync)
+            { // manual sync, Google mode only: a quiet round button flush with the right margin (same edge as the month arrows)
+                Text(FitText(DateStr(now, L"dddd, MMMM d"), 20.f, 600, 300.f), RF(16, 56, 306, 32), 20.f, 600, pal.text, 0, 1);
+                const float cx = 342.f, cy = 72.f, d = 28.f, hov = HoverAmount(ID_CAL_SYNC);
+                const D2D1_RECT_F sb = RF(cx - d / 2, cy - d / 2, d, d);
+                Circle(cx, cy, d / 2, Mix(pal.card, pal.cardHover, hov));
+                CircleStroke(cx, cy, d / 2 - 0.5f, Mix(pal.border, pal.accent, 0.45f * hov), 1.f);
+                const float ang = SyncSpinAngle() * 3.14159265f / 180.f, cs = std::cos(ang), sn = std::sin(ang);
+                D2D1_MATRIX_3X2_F m0{}, m = {};
+                rt->GetTransform(&m0);
+                const float tx = cx - cx * cs + cy * sn, ty = cy - cx * sn - cy * cs; // rotation about the button centre, then the page transform
+                m._11 = cs * m0._11 + sn * m0._21;
+                m._12 = cs * m0._12 + sn * m0._22;
+                m._21 = -sn * m0._11 + cs * m0._21;
+                m._22 = -sn * m0._12 + cs * m0._22;
+                m._31 = tx * m0._11 + ty * m0._21 + m0._31;
+                m._32 = tx * m0._12 + ty * m0._22 + m0._32;
+                rt->SetTransform(&m);
+                Text(L"\uE895", sb, 13.f, 400, Mix(pal.text, pal.accent, 0.5f * hov), 1, 1, true);
+                rt->SetTransform(&m0);
+                AddHit(sb, ID_CAL_SYNC);
+            }
+            else
+                Text(DateStr(now, L"dddd, MMMM d"), RF(16, 56, 340, 32), 20.f, 600, pal.text, 0, 1);
 
             // Same hierarchy as the Windows 11 flyout: date, additional clocks, then the month calendar.
             for (size_t i = 0; i < additionalClocks.size(); ++i)
@@ -11219,9 +16334,10 @@ namespace ui
                     std::wstring n = WeekdayName((fdow + c) % 7, L"ddd");
                     if (n.size() > 2)
                         n.resize(2);
-                    Text(n, RF(kCalGridX + c * kCalCell, 132.f + clockOffset, kCalCell, 22), 12.f, 400, Fade(pal.accent, 0.8f), 1, 1);
+                    Text(n, RF(CalGridX() + c * CalCell(), 132.f + clockOffset, CalCell(), 22), 12.f, 400, Fade(pal.accent, 0.8f), 1, 1);
                 }
-                Text(L"Wk", RF(kCalWeekX, 132.f + clockOffset, kCalWeekW, 22), 12.f, 400, Fade(pal.accent, 0.8f), 1, 1);
+                if (td::g_set.showWeeks.load())
+                    Text(L"Wk", RF(kCalWeekX, 132.f + clockOffset, kCalWeekW, 22), 12.f, 400, Fade(pal.accent, 0.8f), 1, 1);
             }
 
             // Pages above / below the committed one slide through a clipped window, like the Windows calendar.
@@ -11251,6 +16367,7 @@ namespace ui
             }
             rt->PopAxisAlignedClip();
             Btn(RF(116, 436.f + clockOffset, 140, 34), ID_CAL_TODAY, 0, L"Go to today", 0, 13.f);
+            PaintHoverCard();
         }
 
         void CalClick(int id, int param)
@@ -11289,6 +16406,21 @@ namespace ui
                     calSelD = param % 100;
                     calYear = calSelY;
                     calMonth = calSelM;
+                    // Double-click (same place, within the system double-click time) opens the event editor for the date of the first click.
+                    POINT pt{};
+                    GetCursorPos(&pt);
+                    const ULONGLONG nowTick = MonoMs();
+                    if (lastClkDay && nowTick - lastClkTick <= (ULONGLONG)GetDoubleClickTime() &&
+                        std::abs(pt.x - lastClkPt.x) <= GetSystemMetrics(SM_CXDOUBLECLK) && std::abs(pt.y - lastClkPt.y) <= GetSystemMetrics(SM_CYDOUBLECLK))
+                    {
+                        const long long d = lastClkDay;
+                        lastClkDay = 0;
+                        OpenDayEditor(d);
+                        return;
+                    }
+                    lastClkDay = td::DaysFromCivil(calSelY, calSelM, calSelD);
+                    lastClkTick = nowTick;
+                    lastClkPt = pt;
                 }
                 else if (calView == 1)
                 {
@@ -11301,6 +16433,19 @@ namespace ui
                     calView = 1;
                 }
             }
+            else if (id == ID_CAL_SYNC)
+            {
+                if (!cal::HasAccounts())
+                {
+                    SetStatus(L"Connect a Google account first.");
+                    return;
+                }
+                cal::g_forcePull = true;
+                cal::GoogleWake();
+                syncSpinMin = MonoMs() + 900; // at least one full turn, so a quick sync still gives feedback
+                SyncSpinAngle();
+                return;
+            }
             else if (id == ID_CAL_TODAY)
             {
                 CalResetSlide();
@@ -11312,6 +16457,1359 @@ namespace ui
                 calSelD = now.wDay;
             }
             Invalidate(); // in-place update: no page slide/fade for every date click
+        }
+
+        // ======================= calendar events (rings, hover card, day list, event form) =======================
+        unsigned occVer = 0;
+        long long occLo = 0, occHi = 0;
+        std::vector<cal::OccView> occ;
+        std::map<long long, std::vector<int>> occDay;
+        int evView = 0; // 0 = calendar, 1 = events of a day, 2 = event form
+        long long evDay = 0;
+        std::vector<cal::OccView> dayOccs;
+        std::wstring evCalId, evId, evCalName, evErr;
+        std::vector<cal::Calendar> evChoices;
+        int evChoice = 0, evColor = -1;
+        bool evAllDay = false, evReadOnly = false, evRecurring = false, evFromList = false;
+        long long evOccS = 0, evPrevWall = 0;
+        ULONGLONG evDelArmedUntil = 0, evErrUntil = 0;
+        long long lastClkDay = 0;
+        ULONGLONG lastClkTick = 0;
+        POINT lastClkPt{};
+        int hoverCardCode = 0;
+        ULONGLONG hoverCardSince = 0;
+        float hoverCx = 0.f, hoverCy = 0.f;
+        bool hoverCellSeen = false;
+
+        void RearmRepaint(int ms) { SetTimer(hwnd, TIMER_CAL_REARM, (UINT)ms, nullptr); } // repaint once an armed button has expired
+
+        void EnsureOcc(long long lo, long long hi)
+        {
+            const unsigned v = cal::g_version.load();
+            if (v == occVer && lo >= occLo && hi <= occHi)
+                return;
+            occLo = lo - 40;
+            occHi = hi + 40;
+            occVer = v;
+            cal::QueryOccurrences(occLo, occHi, occ);
+            occDay.clear();
+            for (size_t i = 0; i < occ.size(); ++i)
+                for (long long d = std::max(occ[i].d0, occLo); d <= occ[i].d1 && d < occHi && d < occ[i].d0 + 400; ++d)
+                    occDay[d].push_back((int)i);
+            if (cal::g_mode.load() == 1)
+                cal::GoogleRequestRange(lo, hi);
+        }
+
+        // Thin hollow ring around a date: one coloured segment per event (a single event is a full circle).
+        void EventRing(float cx, float cy, float r, const std::vector<int> &cols, float w)
+        {
+            const int n = (int)cols.size();
+            if (n == 0)
+                return;
+            if (n == 1)
+            {
+                CircleStroke(cx, cy, r, Hex((unsigned)cols[0]), w);
+                return;
+            }
+            const float PI = 3.14159265f, seg = 2.f * PI / (float)n, gap = n <= 8 ? 0.17f : 0.07f;
+            for (int i = 0; i < n; ++i)
+            {
+                const float a0 = -PI / 2.f + (float)i * seg + gap / 2.f, a1 = a0 + seg - gap;
+                ID2D1PathGeometry *g = nullptr;
+                if (!g_d2d || FAILED(g_d2d->CreatePathGeometry(&g)) || !g)
+                    continue;
+                ID2D1GeometrySink *sk = nullptr;
+                if (SUCCEEDED(g->Open(&sk)) && sk)
+                {
+                    sk->BeginFigure(D2D1_POINT_2F{cx + r * std::cos(a0), cy + r * std::sin(a0)}, D2D1_FIGURE_BEGIN_HOLLOW);
+                    D2D1_ARC_SEGMENT arc{D2D1_POINT_2F{cx + r * std::cos(a1), cy + r * std::sin(a1)}, D2D1_SIZE_F{r, r}, 0.f,
+                                         D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL};
+                    sk->AddArc(&arc);
+                    sk->EndFigure(D2D1_FIGURE_END_OPEN);
+                    sk->Close();
+                    sk->Release();
+                    Color(Hex((unsigned)cols[(size_t)i]));
+                    rt->DrawGeometry(g, br, w, nullptr);
+                }
+                g->Release();
+            }
+        }
+        void DayRing(long long day, float cx, float cy)
+        {
+            auto it = occDay.find(day);
+            if (it == occDay.end())
+                return;
+            std::vector<int> cols;
+            for (int idx : it->second)
+            {
+                if (cols.size() >= 16)
+                    break;
+                cols.push_back(occ[(size_t)idx].color);
+            }
+            EventRing(cx, cy, 20.f, cols, 1.6f);
+        }
+
+        static SYSTEMTIME StOfDay(long long day)
+        {
+            int y, m, d;
+            td::CivilFromDays(day, y, m, d);
+            SYSTEMTIME st{};
+            st.wYear = (WORD)y;
+            st.wMonth = (WORD)m;
+            st.wDay = (WORD)d;
+            return st;
+        }
+        static std::wstring TimeLabel(const cal::OccView &o, long long day)
+        {
+            if (o.allDay)
+                return L"All day";
+            const long long ws = cal::UtcToWall(L"*", o.s), we = cal::UtcToWall(L"*", std::max(o.e, o.s));
+            auto hm = [](long long w)
+            {
+                const long long m = (w - cal::FloorDiv(w, cal::kDayMs) * cal::kDayMs) / 60000;
+                return td::FmtTimeOfDay((int)(m / 60), (int)(m % 60));
+            };
+            const long long sd = cal::FloorDiv(ws, cal::kDayMs), ed = cal::FloorDiv(we, cal::kDayMs);
+            if (sd == ed)
+                return hm(ws) + L" \u2013 " + hm(we);
+            if (day == sd)
+                return hm(ws) + L" \u2192";
+            if (day == ed)
+                return L"\u2192 " + hm(we);
+            return L"All day";
+        }
+
+        // The floating card of a date with events: up to five, then "+N more".
+        void PaintHoverCard()
+        {
+            if (calView != 0 || evView != 0 || hoverId != ID_CAL_CELL || hoverParam == 0)
+            {
+                hoverCardCode = 0;
+                return;
+            }
+            if (hoverParam != hoverCardCode)
+            {
+                hoverCardCode = hoverParam;
+                hoverCardSince = MonoMs();
+                SetTimer(hwnd, TIMER_CAL_HOVER, 230, nullptr);
+            }
+            if (MonoMs() - hoverCardSince < 220 || calSm.Active() || !hoverCellSeen)
+                return;
+            const long long day = td::DaysFromCivil(hoverCardCode / 10000, (hoverCardCode / 100) % 100, hoverCardCode % 100);
+            auto it = occDay.find(day);
+            if (it == occDay.end() || it->second.empty())
+                return;
+            const int total = (int)it->second.size(), shown = std::min(5, total);
+            const float w = 246.f, rowH = 24.f, h = 30.f + rowH * (float)shown + (total > shown ? 22.f : 6.f);
+            float x = std::min(kPanelW - w - 8.f, std::max(8.f, hoverCx - w / 2.f));
+            float y = hoverCy + 28.f;
+            if (y + h > panelH - 10.f)
+                y = hoverCy - 28.f - h;
+            const D2D1_RECT_F card = RF(x, y, w, h);
+            const Col solid = Hex(pal.dark ? 0x2C2C2C : 0xFBFBFB);
+            RoundFill(RF(x + 1, y + 2, w, h), 9.f, Fade(Hex(0x000000), 0.18f)); // soft drop shadow
+            RoundFill(card, 8.f, solid);
+            RoundStroke(card, 8.f, pal.border, 1.f);
+            Text(DateStr(StOfDay(day), L"ddd, MMM d"), RF(x + 12, y + 4, w - 24, 24), 12.f, 600, pal.sub, 0, 1);
+            for (int k = 0; k < shown; ++k)
+            {
+                const cal::OccView &o = occ[(size_t)it->second[(size_t)k]];
+                const float ry = y + 30.f + rowH * (float)k;
+                RoundFill(RF(x + 12, ry + 4, 4, rowH - 8), 2.f, Hex((unsigned)o.color));
+                const std::wstring tl = TimeLabel(o, day);
+                const float tw = std::min(96.f, MeasureText(tl, 11.f, 400) + 4.f);
+                Text(FitText(o.title.empty() ? L"(No title)" : o.title, 12.5f, 400, w - 40.f - tw - 8.f), RF(x + 24, ry, w - 40.f - tw, rowH), 12.5f, 400, pal.text, 0, 1);
+                Text(tl, RF(x + w - 12.f - tw, ry, tw, rowH), 11.f, 400, pal.sub, 2, 1);
+            }
+            if (total > shown)
+                Text(L"+" + std::to_wstring(total - shown) + L" more", RF(x + 24, y + 30.f + rowH * (float)shown, w - 36, 20), 11.5f, 600, pal.accent, 0, 1);
+        }
+
+        // ---- date / time text <-> values (the order of day, month and year follows the Windows regional settings)
+        static int DateOrder()
+        {
+            int v = 0;
+            if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_IDATE | LOCALE_RETURN_NUMBER, (LPWSTR)&v, sizeof(v) / sizeof(WCHAR)) == 0)
+                return 0;
+            return v; // 0 = M/D/Y, 1 = D/M/Y, 2 = Y/M/D
+        }
+        static std::wstring FmtDay(long long day)
+        {
+            int y, m, d;
+            td::CivilFromDays(day, y, m, d);
+            const int o = DateOrder();
+            return o == 2 ? td::Fmt(L"%04d/%02d/%02d", y, m, d) : o == 1 ? td::Fmt(L"%02d/%02d/%04d", d, m, y)
+                                                                         : td::Fmt(L"%02d/%02d/%04d", m, d, y);
+        }
+        static bool ParseDay(const std::wstring &s, long long &day)
+        {
+            int g[3] = {}, len[3] = {}, n = 0;
+            for (size_t i = 0; i < s.size() && n < 4;)
+            {
+                if (!iswdigit(s[i]))
+                {
+                    ++i;
+                    continue;
+                }
+                int v = 0, l = 0;
+                while (i < s.size() && iswdigit(s[i]) && l < 6)
+                {
+                    v = v * 10 + (s[i] - L'0');
+                    ++i;
+                    ++l;
+                }
+                if (n < 3)
+                {
+                    g[n] = v;
+                    len[n] = l;
+                }
+                ++n;
+            }
+            if (n != 3)
+                return false;
+            int y, m, d;
+            const int o = len[0] == 4 ? 2 : DateOrder();
+            if (o == 2)
+            {
+                y = g[0];
+                m = g[1];
+                d = g[2];
+            }
+            else if (o == 1)
+            {
+                d = g[0];
+                m = g[1];
+                y = g[2];
+            }
+            else
+            {
+                m = g[0];
+                d = g[1];
+                y = g[2];
+            }
+            if (y < 100)
+                y += 2000;
+            if (y < 1601 || y > 9998 || m < 1 || m > 12 || d < 1 || d > 31)
+                return false;
+            static const int dim[] = {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+            if (d > dim[m - 1])
+                return false;
+            day = td::DaysFromCivil(y, m, d);
+            int y2, m2, d2;
+            td::CivilFromDays(day, y2, m2, d2);
+            return m2 == m && d2 == d; // rejects 29 February of a common year
+        }
+        static std::wstring FmtTod(int minutes) { return td::FmtTimeOfDay(minutes / 60, minutes % 60); }
+        static bool ParseTod(const std::wstring &s, int &minutes)
+        {
+            int g[2] = {-1, -1}, n = 0;
+            bool pm = false, am = false;
+            for (size_t i = 0; i < s.size();)
+            {
+                if (iswdigit(s[i]))
+                {
+                    int v = 0, l = 0;
+                    while (i < s.size() && iswdigit(s[i]) && l < 4)
+                    {
+                        v = v * 10 + (s[i] - L'0');
+                        ++i;
+                        ++l;
+                    }
+                    if (n < 2)
+                        g[n] = v;
+                    if (n == 0 && l >= 3) // "930" / "1430"
+                    {
+                        g[1] = g[0] % 100;
+                        g[0] /= 100;
+                        n = 1;
+                    }
+                    ++n;
+                }
+                else
+                {
+                    const wchar_t c = (wchar_t)towlower(s[i]);
+                    if (c == L'p')
+                        pm = true;
+                    if (c == L'a')
+                        am = true;
+                    ++i;
+                }
+            }
+            if (n < 1 || g[0] < 0)
+                return false;
+            int h = g[0], m = g[1] < 0 ? 0 : g[1];
+            if (pm && h < 12)
+                h += 12;
+            if (am && h == 12)
+                h = 0;
+            if (h > 23 || m > 59)
+                return false;
+            minutes = h * 60 + m;
+            return true;
+        }
+        bool ReadWhen(int dateSlot, int timeSlot, long long &wall, bool allDay)
+        {
+            long long day;
+            if (!ParseDay(EditText(dateSlot), day))
+                return false;
+            int mins = 0;
+            if (!allDay && !ParseTod(EditText(timeSlot), mins))
+                return false;
+            wall = day * cal::kDayMs + (long long)mins * 60000LL;
+            return true;
+        }
+        void WriteWhen(int dateSlot, int timeSlot, long long wall)
+        {
+            const long long day = cal::FloorDiv(wall, cal::kDayMs);
+            SetWindowTextW(edits[dateSlot], FmtDay(day).c_str());
+            SetWindowTextW(edits[timeSlot], FmtTod((int)((wall - day * cal::kDayMs) / 60000)).c_str());
+        }
+        // Up / Down in a date or time box nudges it (a day, or a quarter of an hour).
+        void NudgeWhen(int slot, int dir)
+        {
+            const bool isDate = slot == E_EV_SD || slot == E_EV_ED;
+            const int ds = (slot == E_EV_SD || slot == E_EV_ST) ? E_EV_SD : E_EV_ED, ts = ds == E_EV_SD ? E_EV_ST : E_EV_ET;
+            long long wall;
+            if (!ReadWhen(ds, ts, wall, evAllDay))
+                return;
+            wall += isDate ? (long long)dir * cal::kDayMs : (long long)dir * 15 * 60000LL;
+            if (!evAllDay && !isDate)
+                wall = std::max(wall, cal::FloorDiv(wall, cal::kDayMs) * cal::kDayMs); // stays within the day it was on
+            WriteWhen(ds, ts, wall);
+            if (ds == E_EV_SD)
+                OnStartEdited();
+            Invalidate();
+        }
+        // Changing the start moves the end with it (like Google Calendar), so the length stays the same.
+        void OnStartEdited()
+        {
+            long long ns, ne;
+            if (!ReadWhen(E_EV_SD, E_EV_ST, ns, evAllDay))
+                return;
+            if (evPrevWall && ReadWhen(E_EV_ED, E_EV_ET, ne, evAllDay))
+                WriteWhen(E_EV_ED, E_EV_ET, ne + (ns - evPrevWall));
+            evPrevWall = ns;
+        }
+        void NormalizeWhen(int slot)
+        {
+            const bool isDate = slot == E_EV_SD || slot == E_EV_ED;
+            if (isDate)
+            {
+                long long d;
+                if (ParseDay(EditText(slot), d))
+                    SetWindowTextW(edits[slot], FmtDay(d).c_str());
+            }
+            else
+            {
+                int m;
+                if (ParseTod(EditText(slot), m))
+                    SetWindowTextW(edits[slot], FmtTod(m).c_str());
+            }
+            if (slot == E_EV_SD || slot == E_EV_ST)
+                OnStartEdited();
+        }
+        void EvError(const std::wstring &m)
+        {
+            evErr = m;
+            evErrUntil = MonoMs() + 5000;
+            RearmRepaint(3700);
+            Invalidate();
+        }
+
+        // ---- opening / closing the editor
+        void EvTransition()
+        {
+            panelScroll = panelScrollFrom = panelScrollTarget = 0.f;
+            panelScrollStarted = 0;
+            StopFrames(hwnd, TIMER_SCROLL_ANIM);
+            StartContentTransition();
+            ResizePanelToContent();
+        }
+        void OpenDayEditor(long long day)
+        {
+            tab = TAB_CAL;
+            evDay = day;
+            cal::QueryOccurrences(day, day + 1, dayOccs);
+            evView = 1;
+            evDelArmedUntil = 0;
+            if (dayOccs.empty() && !cal::WritableCalendars().empty())
+            {
+                NewEventForm(day, false);
+                return;
+            }
+            EvTransition();
+        }
+        void CloseEditor()
+        {
+            evView = 0;
+            evDelArmedUntil = 0;
+            for (int s : {E_EV_TITLE, E_EV_SD, E_EV_ST, E_EV_ED, E_EV_ET, E_EV_LOC, E_EV_DESC})
+                if (edits[s] && GetFocus() == edits[s])
+                    SetFocus(hwnd);
+            EvTransition();
+        }
+        void SetEvEditsReadOnly(bool ro)
+        {
+            for (int s : {E_EV_TITLE, E_EV_SD, E_EV_ST, E_EV_ED, E_EV_ET, E_EV_LOC, E_EV_DESC})
+                SendMessageW(edits[s], EM_SETREADONLY, ro ? TRUE : FALSE, 0);
+        }
+        void NewEventForm(long long day, bool fromList)
+        {
+            evChoices = cal::WritableCalendars();
+            if (evChoices.empty())
+            {
+                if (fromList)
+                    EvError(L"No calendar can receive new events.");
+                return;
+            }
+            std::wstring want;
+            {
+                std::lock_guard<std::recursive_mutex> l(cal::g_mu);
+                want = cal::g_mode.load() == 1 ? std::wstring() : cal::DefaultDestination(cal::g_local);
+            }
+            evChoice = 0;
+            for (size_t i = 0; i < evChoices.size(); ++i)
+                if (evChoices[i].id == want || (want.empty() && evChoices[i].primary))
+                    evChoice = (int)i;
+            evId.clear();
+            evCalId = evChoices[(size_t)evChoice].id;
+            evCalName = evChoices[(size_t)evChoice].name;
+            evAllDay = false;
+            evReadOnly = false;
+            evRecurring = false;
+            evColor = -1;
+            evOccS = 0;
+            evFromList = fromList;
+            SetEvEditsReadOnly(false);
+            SetWindowTextW(edits[E_EV_TITLE], L"");
+            SetWindowTextW(edits[E_EV_LOC], L"");
+            SetWindowTextW(edits[E_EV_DESC], L"");
+            SYSTEMTIME now{};
+            GetLocalTime(&now);
+            int startMin = ((int)now.wHour + 1) * 60; // the next full hour
+            long long d = day;
+            if (td::DaysFromCivil(now.wYear, now.wMonth, now.wDay) != day)
+                startMin = 9 * 60;
+            else if (startMin >= 24 * 60)
+            {
+                startMin = 23 * 60;
+            }
+            WriteWhen(E_EV_SD, E_EV_ST, d * cal::kDayMs + (long long)startMin * 60000LL);
+            WriteWhen(E_EV_ED, E_EV_ET, d * cal::kDayMs + (long long)(startMin + 60) * 60000LL);
+            evPrevWall = d * cal::kDayMs + (long long)startMin * 60000LL;
+            evErr.clear();
+            evDelArmedUntil = 0;
+            evView = 2;
+            pendingFocus = E_EV_TITLE;
+            EvTransition();
+        }
+        void OpenEventForm(const cal::OccView &o)
+        {
+            cal::Event ev;
+            cal::Calendar c;
+            if (!cal::GetEvent(o.calId, o.evId, ev, &c))
+            {
+                EvError(L"That event no longer exists.");
+                return;
+            }
+            evId = ev.id;
+            evCalId = ev.cal;
+            evCalName = c.name;
+            evChoices.clear();
+            evAllDay = ev.allDay;
+            evColor = ev.color;
+            evRecurring = !ev.rrule.empty();
+            evReadOnly = ev.readOnly || c.ReadOnly();
+            evOccS = o.s;
+            evFromList = true;
+            SetEvEditsReadOnly(evReadOnly);
+            SetWindowTextW(edits[E_EV_TITLE], ev.title.c_str());
+            SetWindowTextW(edits[E_EV_LOC], ev.loc.c_str());
+            SetWindowTextW(edits[E_EV_DESC], ToCrlf(ev.desc).c_str());
+            if (o.allDay)
+            {
+                WriteWhen(E_EV_SD, E_EV_ST, o.s * cal::kDayMs);
+                WriteWhen(E_EV_ED, E_EV_ET, std::max(o.s, o.e - 1) * cal::kDayMs);
+                evPrevWall = o.s * cal::kDayMs;
+            }
+            else
+            {
+                const long long ws = cal::UtcToWall(L"*", o.s), we = cal::UtcToWall(L"*", std::max(o.e, o.s));
+                WriteWhen(E_EV_SD, E_EV_ST, ws);
+                WriteWhen(E_EV_ED, E_EV_ET, we);
+                evPrevWall = ws;
+            }
+            evErr.clear();
+            evDelArmedUntil = 0;
+            evView = 2;
+            EvTransition();
+        }
+        void SaveEventForm()
+        {
+            if (evReadOnly)
+                return;
+            cal::EventEdit ed;
+            ed.calId = evCalId;
+            ed.evId = evId;
+            ed.title = TrimTitle(EditText(E_EV_TITLE));
+            ed.desc = FromCrlf(EditText(E_EV_DESC));
+            ed.loc = TrimTitle(EditText(E_EV_LOC));
+            ed.allDay = evAllDay;
+            ed.color = evColor;
+            long long ws, we;
+            if (!ReadWhen(E_EV_SD, E_EV_ST, ws, evAllDay))
+            {
+                EvError(L"Check the start date and time.");
+                return;
+            }
+            if (!ReadWhen(E_EV_ED, E_EV_ET, we, evAllDay))
+            {
+                EvError(L"Check the end date and time.");
+                return;
+            }
+            if (evAllDay)
+            {
+                ed.s = cal::FloorDiv(ws, cal::kDayMs);
+                ed.e = cal::FloorDiv(we, cal::kDayMs) + 1;
+            }
+            else
+            {
+                ed.s = cal::WallToUtc(L"*", ws);
+                ed.e = cal::WallToUtc(L"*", we);
+            }
+            if (ed.e < ed.s || (evAllDay && ed.e <= ed.s))
+            {
+                EvError(L"The end must not be before the start.");
+                return;
+            }
+            ed.occS = evOccS;
+            ed.occAllDay = evAllDay;
+            if (!evId.empty())
+            { // the occurrence being edited: for an all-day series its first day
+                cal::Event cur;
+                if (cal::GetEvent(evCalId, evId, cur) && cur.allDay != evAllDay)
+                    ed.occS = ed.s;
+            }
+            const std::wstring err = cal::SaveEventEdit(ed);
+            if (!err.empty())
+            {
+                EvError(err);
+                return;
+            }
+            evDay = evAllDay ? ed.s : cal::LocalDayOf(ed.s);
+            const long long dayShown = evDay;
+            calSelY = calSelM = calSelD = 0;
+            int y, m, d;
+            td::CivilFromDays(dayShown, y, m, d);
+            calSelY = y;
+            calSelM = m;
+            calSelD = d;
+            cal::QueryOccurrences(evDay, evDay + 1, dayOccs);
+            evView = 1;
+            evDelArmedUntil = 0;
+            EvTransition();
+        }
+        void DeleteEventForm()
+        {
+            const ULONGLONG now = MonoMs();
+            if (evId.empty() || evReadOnly)
+                return;
+            if (now < evDelArmedUntil)
+            {
+                const std::wstring err = cal::DeleteEventById(evCalId, evId);
+                if (!err.empty())
+                {
+                    EvError(err);
+                    return;
+                }
+                cal::QueryOccurrences(evDay, evDay + 1, dayOccs);
+                evView = 1;
+                evDelArmedUntil = 0;
+                EvTransition();
+                return;
+            }
+            evDelArmedUntil = now + 3000;
+            RearmRepaint(3700);
+        }
+        static std::wstring TrimTitle(const std::wstring &s)
+        {
+            size_t a = 0, b = s.size();
+            while (a < b && iswspace(s[a]))
+                ++a;
+            while (b > a && iswspace(s[b - 1]))
+                --b;
+            return s.substr(a, b - a);
+        }
+        static std::wstring FromCrlf(const std::wstring &s)
+        {
+            std::wstring r;
+            r.reserve(s.size());
+            for (size_t i = 0; i < s.size(); ++i)
+                if (!(s[i] == L'\r' && i + 1 < s.size() && s[i + 1] == L'\n'))
+                    r += s[i];
+            return TrimTitle(r);
+        }
+
+        // ---- the events of one day (select, add)
+        void PaintEventDay()
+        {
+            FlatIcon(RF(8, 50, 34, 34), ID_EV_BACK, 0, L"\uE72B", 14.f);
+            Text(DateStr(StOfDay(evDay), L"dddd, MMMM d"), RF(46, 50, 270, 34), 17.f, 600, pal.text, 0, 1);
+            const bool canAdd = !cal::WritableCalendars().empty();
+            if (canAdd)
+                FlatIcon(RF(322, 50, 34, 34), ID_EV_ADD, 0, L"\uE710", 14.f);
+            float y = 94.f;
+            if (!evErr.empty() && MonoMs() < evErrUntil)
+                Text(evErr, RF(16, 82, 340, 16), 11.f, 400, pal.danger, 0, 1);
+            if (dayOccs.empty())
+            {
+                Text(canAdd ? L"No events on this day. Press + to add one." : L"No events on this day.", RF(24, 150, kPanelW - 48, 40), 12.5f, 400, pal.sub, 1, 0, false, true);
+                return;
+            }
+            for (size_t i = 0; i < dayOccs.size(); ++i)
+            {
+                const cal::OccView &o = dayOccs[i];
+                const D2D1_RECT_F r = RF(16, y, 340, 52);
+                RoundFill(r, 8.f, Mix(pal.card, pal.cardHover, HoverAmount(ID_EV_ROW, (int)i)));
+                RoundStroke(r, 8.f, pal.border, 1.f);
+                RoundFill(RF(24, y + 9, 4, 34), 2.f, Hex((unsigned)o.color));
+                Text(FitText(o.title.empty() ? L"(No title)" : o.title, 13.5f, 600, 262.f), RF(38, y + 6, 270, 22), 13.5f, 600, pal.text, 0, 1);
+                Text(FitText(TimeLabel(o, evDay) + L"  \u00B7  " + o.calName, 11.5f, 400, 262.f), RF(38, y + 27, 270, 20), 11.5f, 400, pal.sub, 0, 1);
+                Text(o.readOnly ? L"\uE72E" : L"\uE76C", RF(318, y, 30, 52), 11.f, 400, pal.sub, 1, 1, true);
+                AddHit(r, ID_EV_ROW, (int)i);
+                y += 58.f;
+            }
+        }
+
+        // ---- the event form
+        void PaintEventForm()
+        {
+            FlatIcon(RF(8, 50, 34, 34), ID_EV_BACK, 0, L"\uE72B", 14.f);
+            Text(evId.empty() ? L"New event" : evReadOnly ? L"Event"
+                                                          : L"Edit event",
+                 RF(46, 50, 140, 34), 17.f, 600, pal.text, 0, 1);
+            if (!evErr.empty() && MonoMs() < evErrUntil)
+                Text(evErr, RF(150, 50, 206, 34), 11.f, 400, pal.danger, 2, 1, false, true);
+            else if (evReadOnly)
+                Text(L"Read-only", RF(150, 50, 206, 34), 11.5f, 400, pal.sub, 2, 1);
+            else if (evRecurring)
+                Text(L"Repeats \u00B7 edits change the whole series", RF(150, 50, 206, 34), 11.f, 400, pal.sub, 2, 1, false, true);
+            UseEdit(E_EV_TITLE, RF(16, 90, 340, 38), 10, 7);
+            Text(L"All day", RF(18, 134, 200, 26), 13.f, 400, pal.text, 0, 1);
+            if (!evReadOnly)
+                UiWindow::Toggle(316, 137, ID_EV_ALLDAY, evAllDay);
+            else
+                Text(evAllDay ? L"Yes" : L"No", RF(256, 134, 100, 26), 12.5f, 400, pal.sub, 2, 1);
+            Text(L"Start", RF(18, 166, 44, 34), 12.5f, 400, pal.sub, 0, 1);
+            Text(L"End", RF(18, 206, 44, 34), 12.5f, 400, pal.sub, 0, 1);
+            UseEdit(E_EV_SD, RF(64, 166, evAllDay ? 292.f : 168.f, 34), 8, 7);
+            UseEdit(E_EV_ED, RF(64, 206, evAllDay ? 292.f : 168.f, 34), 8, 7);
+            if (!evAllDay)
+            {
+                UseEdit(E_EV_ST, RF(240, 166, 116, 34), 8, 7);
+                UseEdit(E_EV_ET, RF(240, 206, 116, 34), 8, 7);
+            }
+            // calendar
+            Text(L"Calendar", RF(18, 246, 60, 30), 12.5f, 400, pal.sub, 0, 1);
+            const bool pick = evId.empty() && evChoices.size() > 1;
+            Circle(96, 261, 6.f, Hex((unsigned)(evChoice >= 0 && evChoice < (int)evChoices.size() ? evChoices[(size_t)evChoice].color : 0x3B82F6)));
+            if (evId.empty() && evChoice >= 0 && evChoice < (int)evChoices.size())
+                evCalName = evChoices[(size_t)evChoice].name;
+            Text(FitText(evCalName, 13.f, 600, pick ? 170.f : 240.f), RF(108, 246, pick ? 176.f : 246.f, 30), 13.f, 600, pal.text, 0, 1);
+            if (pick)
+            {
+                FlatIcon(RF(290, 246, 32, 30), ID_EV_CAL, 0, L"\uE76B", 12.f);
+                FlatIcon(RF(324, 246, 32, 30), ID_EV_CAL, 1, L"\uE76C", 12.f);
+            }
+            // colour
+            Text(L"Colour", RF(18, 284, 60, 24), 12.5f, 400, pal.sub, 0, 1);
+            for (int i = -1; i < 11; ++i)
+            {
+                const float cx = 84.f + (float)(i + 1) * 23.5f + 8.f, cy = 296.f;
+                const int col = i < 0 ? -1 : cal::kPalette[i];
+                const bool sel = evColor == col;
+                if (i < 0)
+                {
+                    CircleStroke(cx, cy, 7.f, pal.sub, 1.5f); // the calendar's own colour
+                    Line(cx - 4.5f, cy + 4.5f, cx + 4.5f, cy - 4.5f, pal.sub, 1.3f);
+                }
+                else
+                    Circle(cx, cy, 7.5f, Hex((unsigned)col));
+                if (sel)
+                    CircleStroke(cx, cy, 10.f, pal.text, 1.6f);
+                if (!evReadOnly)
+                    AddHit(RF(cx - 11.f, cy - 12.f, 22.f, 24.f), ID_EV_COLOR, i + 1);
+            }
+            UseEdit(E_EV_LOC, RF(16, 316, 340, 34), 10, 7);
+            Text(L"Description", RF(18, 354, 200, 14), 10.5f, 400, pal.sub, 0, 1);
+            UseEdit(E_EV_DESC, RF(16, 370, 340, 56), 10, 6);
+            // buttons
+            if (evReadOnly)
+                Btn(RF(16, 436, 340, 38), ID_EV_CANCEL, 0, L"Close", 0, 13.5f);
+            else if (evId.empty())
+            {
+                Btn(RF(16, 436, 166, 38), ID_EV_SAVE, 0, L"Save", 1, 13.5f);
+                Btn(RF(190, 436, 166, 38), ID_EV_CANCEL, 0, L"Cancel", 0, 13.5f);
+            }
+            else
+            {
+                const bool armed = MonoMs() < evDelArmedUntil;
+                Btn(RF(16, 436, 104, 38), ID_EV_SAVE, 0, L"Save", 1, 13.5f);
+                Btn(RF(128, 436, 104, 38), ID_EV_CANCEL, 0, L"Cancel", 0, 13.5f);
+                Btn(RF(240, 436, 116, 38), ID_EV_DELETE, 0, armed ? L"Confirm?" : L"Delete", armed ? 3 : 0, 13.5f);
+            }
+        }
+
+        void EvClick(int id, int param)
+        {
+            switch (id)
+            {
+            case ID_EV_BACK:
+            case ID_EV_CANCEL:
+                if (evView == 2 && evFromList)
+                {
+                    cal::QueryOccurrences(evDay, evDay + 1, dayOccs);
+                    evView = 1;
+                    evDelArmedUntil = 0;
+                    EvTransition();
+                }
+                else
+                    CloseEditor();
+                return;
+            case ID_EV_ADD:
+                NewEventForm(evDay, true);
+                return;
+            case ID_EV_ROW:
+                if (param >= 0 && param < (int)dayOccs.size())
+                    OpenEventForm(dayOccs[(size_t)param]);
+                return;
+            case ID_EV_SAVE:
+                SaveEventForm();
+                return;
+            case ID_EV_DELETE:
+                DeleteEventForm();
+                break;
+            case ID_EV_ALLDAY:
+            {
+                long long ws, we;
+                const bool okS = ReadWhen(E_EV_SD, E_EV_ST, ws, evAllDay), okE = ReadWhen(E_EV_ED, E_EV_ET, we, evAllDay);
+                evAllDay = !evAllDay;
+                if (okS && okE)
+                { // keep the dates; switching to a timed event gives it a one-hour slot at the start's time
+                    const long long ds = cal::FloorDiv(ws, cal::kDayMs), de = cal::FloorDiv(we, cal::kDayMs);
+                    if (!evAllDay)
+                    {
+                        const long long start = ds * cal::kDayMs + 9 * 3600000LL;
+                        WriteWhen(E_EV_SD, E_EV_ST, start);
+                        WriteWhen(E_EV_ED, E_EV_ET, de == ds ? start + 3600000LL : de * cal::kDayMs + 10 * 3600000LL);
+                        evPrevWall = start;
+                    }
+                    else
+                    {
+                        WriteWhen(E_EV_SD, E_EV_ST, ds * cal::kDayMs);
+                        WriteWhen(E_EV_ED, E_EV_ET, de * cal::kDayMs);
+                        evPrevWall = ds * cal::kDayMs;
+                    }
+                }
+                break;
+            }
+            case ID_EV_COLOR:
+                evColor = param == 0 ? -1 : cal::kPalette[param - 1];
+                break;
+            case ID_EV_CAL:
+                if (!evChoices.empty())
+                {
+                    evChoice = (evChoice + (param ? 1 : -1) + (int)evChoices.size()) % (int)evChoices.size();
+                    evCalId = evChoices[(size_t)evChoice].id;
+                    evCalName = evChoices[(size_t)evChoice].name;
+                }
+                break;
+            }
+            Invalidate();
+        }
+
+        // ======================= Settings > Calendar settings =======================
+        int settingsSub = 0; // 0 = Settings, 1 = Calendar settings
+        std::vector<cal::Calendar> csList;
+        std::vector<std::wstring> csLinks;
+        std::wstring csOpen; // the calendar whose details are expanded
+        bool csNewOpen = false, csHelpOpen = false;
+        Anim helpA;            // Help card expand / collapse (same tween as the About card)
+        float csHelpTop = 0.f; // y of the Help card (kept in step with PaintCalSettings)
+        float calSetBottom = 1200.f;
+        ULONGLONG csArmedUntil = 0;
+        std::wstring csArmedKind, csArmedId, csRowMsg;
+
+        static float WrapH(const std::wstring &s, float size, float width, int weight = 400)
+        {
+            if (s.empty())
+                return 0.f;
+            IDWriteTextFormat *f = GetFormat(size, weight, 0, 0, false, true);
+            IDWriteTextLayout *tl = nullptr;
+            if (!f || FAILED(g_dw->CreateTextLayout(s.c_str(), (UINT32)s.size(), f, width, 2000.f, &tl)) || !tl)
+                return size * 1.4f;
+            DWRITE_TEXT_METRICS m{};
+            tl->GetMetrics(&m);
+            tl->Release();
+            return std::ceil(m.height) + 2.f;
+        }
+        // A paragraph of wrapped text; returns its height.
+        float Para(float y, const std::wstring &s, float size, Col c, float x = 16.f, float w = 340.f)
+        {
+            const float h = WrapH(s, size, w);
+            Text(s, RF(x, y, w, h), size, 400, c, 0, 0, false, true);
+            return h;
+        }
+        float LinkRow(float y, const wchar_t *label, const wchar_t *url, float x = 16.f, float w = 340.f)
+        {
+            const int idx = (int)csLinks.size();
+            csLinks.push_back(url);
+            const D2D1_RECT_F r = RF(x, y, w, 26);
+            const float hov = HoverAmount(ID_CS_LINK, idx);
+            if (hov > 0.001f)
+                RoundFill(r, 6.f, Fade(pal.cardHover, hov));
+            Text(L"\uE71B", RF(x + 6, y, 20, 26), 11.f, 400, pal.accent, 1, 1, true);
+            Text(label, RF(x + 28, y, w - 34, 26), 12.5f, 600, pal.accent, 0, 1);
+            AddHit(r, ID_CS_LINK, idx);
+            return 28.f;
+        }
+        bool Armed(const wchar_t *kind, const std::wstring &id) const { return csArmedKind == kind && csArmedId == id && MonoMs() < csArmedUntil; }
+        void Arm(const wchar_t *kind, const std::wstring &id)
+        {
+            csArmedKind = kind;
+            csArmedId = id;
+            csArmedUntil = MonoMs() + 3500;
+            RearmRepaint(3700);
+        }
+
+        void UpdateCredCues()
+        { // the boxes stay empty once saved: the cue text says that something is stored
+            SendMessageW(edits[E_CS_CID], 0x1501, TRUE, (LPARAM)(cal::HasClientId() ? L"Client ID saved. Type to replace" : L"Client ID"));
+            SendMessageW(edits[E_CS_SEC], 0x1501, TRUE, (LPARAM)(cal::HasSecret() ? L"Secret saved (encrypted). Type to replace" : L"Client Secret (stored encrypted)"));
+        }
+        // sub: 1 = Calendar settings, 2 = Notification settings, 3 = General settings
+        void OpenCalSettings(int sub = 1)
+        {
+            settingsSub = sub;
+            csOpen.clear();
+            csNewOpen = false;
+            csRowMsg.clear();
+            UpdateCredCues();
+            NoteTransition();
+        }
+        // breadcrumb: Settings > <title>
+        void SubHeader(const wchar_t *title)
+        {
+            const float tw = MeasureText(L"Settings", 12.5f, 600);
+            const D2D1_RECT_F r = RF(12, 52, tw + 16, 28);
+            const float hov = HoverAmount(ID_CS_BACK);
+            if (hov > 0.001f)
+                RoundFill(r, 6.f, Fade(pal.cardHover, hov));
+            Text(L"Settings", r, 12.5f, 600, pal.accent, 1, 1);
+            AddHit(r, ID_CS_BACK);
+            Text(L"\uE76C", RF(12 + tw + 14, 52, 18, 28), 9.f, 400, pal.sub, 1, 1, true);
+            Text(title, RF(12 + tw + 34, 52, 240, 28), 14.f, 600, pal.text, 0, 1);
+        }
+        void CloseCalSettings()
+        {
+            settingsSub = 0;
+            NoteTransition();
+        }
+
+        float HelpT() const { return helpA.Value(kAboutMs, false); } // already eased
+        // Help text. Numbered steps (badge + wrapped text), the links under the step they belong to, a divider between
+        // the two guides. draw = false only measures. Returns the height.
+        float HelpBody(float by, bool draw)
+        {
+            const float x0 = 30.f, w0 = 312.f, tx = x0 + 28.f, tw = w0 - 28.f;
+            float yy = by;
+            int n = 0;
+            auto section = [&](const wchar_t *t, bool first)
+            {
+                if (!first)
+                {
+                    if (draw)
+                        Fill(RF(x0, yy + 4.f, w0, 1.f), pal.border);
+                    yy += 18.f;
+                }
+                if (draw)
+                    Text(t, RF(x0, yy, w0, 22), 13.5f, 600, pal.text, 0, 1);
+                yy += 28.f;
+                n = 0;
+            };
+            auto step = [&](const wchar_t *t, bool hasLink)
+            {
+                ++n;
+                const float ph = std::max(18.f, WrapH(t, 12.f, tw));
+                if (draw)
+                {
+                    Circle(x0 + 9.f, yy + 9.f, 9.f, Mix(pal.cardHover, pal.accent, 0.3f));
+                    Text(std::to_wstring(n), RF(x0, yy, 18.f, 18.f), 10.f, 600, pal.text, 1, 1);
+                    Text(t, RF(tx, yy, tw, ph), 12.f, 400, pal.sub, 0, 0, false, true);
+                }
+                yy += ph + (hasLink ? 2.f : 10.f);
+            };
+            auto link = [&](const wchar_t *l, const wchar_t *u)
+            {
+                if (draw)
+                    LinkRow(yy, l, u, tx - 10.f, x0 + w0 - tx + 10.f);
+                yy += 36.f;
+            };
+            section(L"Import and export Google Calendar data", true);
+            step(L"All calendars at once: open Google Takeout, press \u201CDeselect all\u201D, tick Calendar, then Create export. Download the ZIP and choose it under Import file. Every calendar inside is added separately.", true);
+            link(L"Open Google Takeout", L"https://takeout.google.com/");
+            step(L"One calendar as a link: in Google Calendar open Settings, choose the calendar, then Integrate calendar. Copy the \u201CPublic address in iCal format\u201D or the \u201CSecret address in iCal format\u201D and paste it next to Import link. The link is downloaded once; press Refresh on the calendar to update it. Keep secret addresses private.", true);
+            link(L"Open Google Calendar settings", L"https://calendar.google.com/calendar/r/settings");
+            step(L"Re-importing the same file or link never creates duplicates, and events you edited here are kept. To get a file out of WinKlok, open a calendar and press Export .ics.", true);
+            link(L"Google Calendar Help Center", L"https://support.google.com/calendar");
+            section(L"Set up Google Calendar Sync", false);
+            step(L"Create a project in the Google Cloud Console (any name).", true);
+            link(L"Create a Google Cloud project", L"https://console.cloud.google.com/projectcreate");
+            step(L"Turn on the Google Calendar API for that project.", true);
+            link(L"Enable the Google Calendar API", L"https://console.cloud.google.com/apis/library/calendar-json.googleapis.com");
+            step(L"Configure the OAuth consent screen: choose External, enter an app name and your e-mail, and add your own Google account under Test users. While the app stays in Testing, Google asks you to sign in again every 7 days.", true);
+            link(L"Open the OAuth consent screen", L"https://console.cloud.google.com/apis/credentials/consent");
+            step(L"On the consent screen open Data access, choose Add or remove scopes and tick: .../auth/calendar (See, edit, share and permanently delete all calendars). This one scope covers events, the calendar list and deleting calendars.", false);
+            step(L"Open Credentials, choose Create credentials > OAuth client ID, set the application type to Desktop app and create it. Copy the Client ID and the Client secret.", true);
+            link(L"Open Credentials", L"https://console.cloud.google.com/apis/credentials");
+            step(L"Paste both above, press Save credentials, then Connect account and approve access in your browser. Then switch Calendar mode to Google Calendar.", false);
+            if (draw)
+                Fill(RF(x0, yy + 2.f, w0, 1.f), pal.border);
+            yy += 12.f;
+            const wchar_t *note = L"WinKlok contains no credentials of its own. Yours are stored encrypted for your Windows account and are only sent to Google.";
+            const float nh = WrapH(note, 11.f, w0);
+            if (draw)
+                Text(note, RF(x0, yy, w0, nh), 11.f, 400, pal.sub, 0, 0, false, true);
+            yy += nh;
+            return yy - by;
+        }
+        float HelpFullH() { return 66.f + HelpBody(0.f, false) + 14.f; }
+
+        void PaintCalSettings()
+        {
+            csLinks.clear();
+            csList = cal::ListCalendars();
+            const bool google = cal::g_mode.load() == 1;
+            const std::wstring busy = cal::GetBusy();
+            SubHeader(L"Calendar settings");
+            float y = 92.f;
+
+            // ---- mode
+            SettingRow(y, 100, L"Calendar mode", L"Local and Google data stay separate and untouched.");
+            Chip(RF(30, y + 58, 150, 26), ID_CS_MODE, 0, L"Local", !google);
+            Chip(RF(192, y + 58, 150, 26), ID_CS_MODE, 1, L"Google Calendar", google);
+            y += 108.f;
+            SettingRow(y, 56, L"Week numbers", L"Show the week column in the calendar");
+            UiWindow::Toggle(302, y + 18, ID_ST_WEEKS, td::g_set.showWeeks.load() != 0);
+            y += 64.f;
+
+            // ---- calendars
+            Text(google ? L"Google calendars" : L"Local calendars", RF(18, y, 190, 28), 14.f, 600, pal.text, 0, 1);
+            Btn(RF(216, y + 1, 68, 26), ID_CS_ALLON, 0, L"Show all", 2, 11.5f);
+            Btn(RF(288, y + 1, 68, 26), ID_CS_ALLOFF, 0, L"Hide all", 2, 11.5f);
+            y += 34.f;
+            if (csList.empty())
+                y += Para(y, google ? L"No Google calendars yet. They appear after the first sync." : L"No calendars.", 12.f, pal.sub, 20.f, 330.f) + 6.f;
+            for (size_t i = 0; i < csList.size(); ++i)
+            {
+                const cal::Calendar &c = csList[i];
+                const bool open = csOpen == c.id;
+                const D2D1_RECT_F row = RF(16, y, 340, 40);
+                RoundFill(row, 8.f, Mix(pal.card, pal.cardHover, HoverAmount(ID_CS_ROW, (int)i)));
+                RoundStroke(row, 8.f, pal.border, 1.f);
+                AddHit(row, ID_CS_ROW, (int)i);
+                // visibility box
+                const D2D1_RECT_F box = RF(26, y + 11, 18, 18);
+                if (c.visible)
+                {
+                    RoundFill(box, 4.f, pal.accent);
+                    Text(L"\uE73E", box, 11.f, 400, pal.onAccent, 1, 1, true);
+                }
+                else
+                    RoundStroke(box, 4.f, pal.sub, 1.4f);
+                AddHit(RF(18, y, 36, 40), ID_CS_VIS, (int)i);
+                Circle(66, y + 20, 6.5f, Hex((unsigned)c.color));
+                std::wstring tag = c.imported ? L"Imported" : (c.ReadOnly() ? L"Read-only" : L"");
+                const float tagW = tag.empty() ? 0.f : MeasureText(tag, 10.5f, 400) + 8.f;
+                Text(FitText(c.name, 13.f, 600, 224.f - tagW), RF(82, y, 230.f - tagW, 40), 13.f, 600, pal.text, 0, 1);
+                if (!tag.empty())
+                    Text(tag, RF(318.f - tagW - 4.f, y, tagW, 40), 10.5f, 400, pal.sub, 2, 1);
+                Text(open ? L"\uE70E" : L"\uE70D", RF(322, y, 28, 40), 10.f, 400, pal.sub, 1, 1, true);
+                y += 44.f;
+                if (!open)
+                    continue;
+                // ---- details of the opened calendar
+                float h = 44.f + 34.f; // swatches + first button row
+                const bool def = c.id == cal::kDefaultId, regular = !google && !def;
+                const bool gOwner = google && c.role == L"owner"; // Google calendars you own can be deleted (the primary one cleared)
+                if (!google)
+                    h += 34.f + (regular || c.imported ? 40.f : 0.f);
+                else if (gOwner)
+                    h += 36.f;
+                const D2D1_RECT_F det = RF(16, y, 340, h);
+                RoundFill(det, 8.f, Fade(pal.card, 0.7f));
+                RoundStroke(det, 8.f, pal.border, 1.f);
+                for (int s = 0; s < 11; ++s)
+                {
+                    const float cx = 36.f + (float)s * 30.f, cy = y + 22.f;
+                    Circle(cx, cy, 9.f, Hex((unsigned)cal::kPalette[s]));
+                    if (c.color == cal::kPalette[s])
+                        CircleStroke(cx, cy, 12.f, pal.text, 1.6f);
+                    AddHit(RF(cx - 13, cy - 14, 26, 28), ID_CS_COLOR, (int)i * 16 + s);
+                }
+                float by = y + 44.f;
+                if (!google)
+                {
+                    if (regular || c.imported)
+                    {
+                        UseEdit(E_CS_NAME, RF(26, by, 230, 32), 8, 6);
+                        Btn(RF(264, by, 82, 32), ID_CS_RENAME, (int)i, L"Rename", 0, 12.f);
+                        by += 40.f;
+                    }
+                    // the buttons share the full 320 px width equally
+                    const int nb = 2 + (c.srcUrl.empty() ? 0 : 1);
+                    const float bwid = (320.f - 8.f * (float)(nb - 1)) / (float)nb;
+                    float bx = 26.f;
+                    Btn(RF(bx, by, bwid, 30), ID_CS_EXPORT, (int)i, L"Export .ics", 0, 12.f);
+                    bx += bwid + 8.f;
+                    if (!c.srcUrl.empty())
+                    {
+                        Btn(RF(bx, by, bwid, 30), ID_CS_REFRESH, (int)i, busy.empty() ? L"Refresh" : L"\u2026", 0, 12.f);
+                        bx += bwid + 8.f;
+                    }
+                    if (def)
+                        Btn(RF(bx, by, bwid, 30), ID_CS_CLEAR, (int)i, Armed(L"clear", c.id) ? L"Confirm clear" : L"Clear events", Armed(L"clear", c.id) ? 3 : 0, 12.f);
+                    else
+                        Btn(RF(bx, by, bwid, 30), ID_CS_DELETE, (int)i, Armed(L"del", c.id) ? L"Confirm" : L"Delete", Armed(L"del", c.id) ? 3 : 0, 12.f);
+                }
+                else
+                {
+                    Text(c.ReadOnly() ? L"Read-only calendar. Colour changes are sent to Google Calendar." : L"Colour changes are sent to Google Calendar.", RF(26, by - 2, 320, 30), 11.f, 400, pal.sub, 0, 1);
+                    if (gOwner)
+                    {
+                        const bool clear = c.primary; // the primary calendar cannot be deleted, only emptied
+                        const int bid = clear ? ID_CS_CLEAR : ID_CS_DELETE;
+                        const bool armed = Armed(clear ? L"clear" : L"del", c.id);
+                        Btn(RF(26, by + 32.f, 320, 30), bid, (int)i, armed ? L"Confirm" : (clear ? L"Clear events" : L"Delete calendar"), armed ? 3 : 0, 12.f);
+                    }
+                }
+                y += h + 8.f;
+            }
+            if (!csRowMsg.empty())
+                y += Para(y, csRowMsg, 11.5f, pal.sub, 20.f, 330.f) + 4.f;
+
+            // ---- new calendar (local)
+            if (!google)
+            {
+                if (!csNewOpen)
+                    Btn(RF(16, y, 340, 34), ID_CS_NEW, 0, L"+  New calendar", 0, 13.f);
+                else
+                {
+                    UseEdit(E_CS_NEW, RF(16, y, 250, 34), 10, 7);
+                    Btn(RF(274, y, 82, 34), ID_CS_NEWADD, 0, L"Add", 1, 13.f);
+                }
+                y += 46.f;
+            }
+            else
+                y += 6.f;
+
+            // ---- import / export
+            if (!google)
+            {
+                SettingRow(y, 196, L"Import and export", L"Google Takeout ZIP, .ics files or an iCalendar link.");
+                Btn(RF(30, y + 56, 312, 32), ID_CS_IMPORT, 0, L"Import file (.zip or .ics)\u2026", 0, 12.5f);
+                UseEdit(E_CS_URL, RF(30, y + 98, 222, 32), 8, 6);
+                Btn(RF(260, y + 98, 82, 32), ID_CS_URLIMPORT, 0, L"Import link", 0, 11.5f);
+                Text(L"A link is downloaded once. Use Refresh on that calendar to fetch it again. Export is on each calendar.", RF(30, y + 136, 312, 52), 11.f, 400, pal.sub, 0, 0, false, true);
+                y += 204.f;
+            }
+            else
+            {
+                SettingRow(y, 70, L"Import and export", L"Switch to Local mode to import or export calendars.");
+                y += 78.f;
+            }
+            {
+                std::wstring m = cal::GetMsg();
+                if (!busy.empty())
+                    m = busy;
+                if (!m.empty() && !google)
+                    y += Para(y, m, 11.5f, pal.text, 20.f, 330.f) + 10.f;
+            }
+
+            // ---- Google Calendar Sync (Advanced)
+            {
+                const auto emails = cal::AccountEmails();
+                const float h = 212.f + (float)emails.size() * 34.f;
+                SettingRow(y, h, L"Google Calendar Sync (Advanced)", L"Use your own Google Cloud OAuth client (Desktop app).");
+                float gy = y + 52.f;
+                UseEdit(E_CS_CID, RF(30, gy, 312, 32), 8, 6);
+                gy += 38.f;
+                UseEdit(E_CS_SEC, RF(30, gy, 312, 32), 8, 6);
+                gy += 38.f;
+                Btn(RF(30, gy, 150, 32), ID_CS_SAVECRED, 0, L"Save credentials", 0, 12.f);
+                Btn(RF(192, gy, 150, 32), ID_CS_CONNECT, 0, emails.empty() ? L"Connect account" : L"Add account", 1, 12.f);
+                gy += 40.f;
+                for (size_t i = 0; i < emails.size(); ++i)
+                {
+                    Text(FitText(emails[i], 12.5f, 400, 220.f), RF(30, gy, 226, 30), 12.5f, 400, pal.text, 0, 1);
+                    Btn(RF(262, gy, 80, 28), ID_CS_DISC, (int)i, L"Disconnect", 0, 11.f);
+                    gy += 34.f;
+                }
+                Btn(RF(30, gy, 312, 32), ID_CS_SYNC, 0, L"Sync now", 0, 12.5f);
+                gy += 40.f;
+                y += h + 8.f;
+                std::wstring g = cal::GetGMsg();
+                if (!busy.empty() && google)
+                    g = busy;
+                if (!g.empty())
+                    y += Para(y, g, 11.5f, pal.text, 20.f, 330.f) + 10.f;
+            }
+
+            // ---- Help (expandable card: same look and motion as the About card in Settings)
+            {
+                const float t = HelpT();
+                csHelpTop = y;
+                const float full = (csHelpOpen || t > 0.f) ? HelpFullH() : 62.f;
+                const float cardH = 62.f + (full - 62.f) * t;
+                const D2D1_RECT_F card = RF(16, y, 340, cardH), head = RF(16, y, 340, 62);
+                const float hov = HoverAmount(ID_CS_HELP);
+                RoundFill(card, 8.f, Mix(pal.card, pal.cardHover, hov * (1.f - t)));
+                RoundStroke(card, 8.f, pal.border, 1.f);
+                AddHit(head, ID_CS_HELP);
+                rt->PushAxisAlignedClip(Inset(card, 1, 1), D2D1_ANTIALIAS_MODE_ALIASED);
+                Text(L"Help", RF(30, y + 10, 200, 22), 14.5f, 600, pal.text, 0, 1);
+                Text(L"Importing calendars and Google sync setup", RF(30, y + 32, 280, 20), 11.f, 400, pal.sub, 0, 1);
+                const float a1 = Clamp01((t - 0.35f) / 0.65f);
+                if (a1 > 0.01f)
+                {
+                    const float savedOpacity = drawOpacity;
+                    const size_t h0 = hits.size();
+                    drawOpacity = savedOpacity * a1; // text, badges and links fade in together
+                    HelpBody(y + 66.f, true);
+                    drawOpacity = savedOpacity;
+                    if (t <= 0.6f) // links only become clickable once the card is mostly open
+                        hits.erase(hits.begin() + (std::ptrdiff_t)h0, hits.end());
+                }
+                rt->PopAxisAlignedClip();
+                Text(t < 0.5f ? L"\uE70D" : L"\uE70E", RF(316, y, 28, 62), 11.f, 400, pal.sub, 1, 1, true);
+                y += cardH + 8.f;
+            }
+            calSetBottom = y + 12.f;
+        }
+
+        void CsClick(int id, int param)
+        {
+            auto calAt = [&](int i) -> const cal::Calendar *
+            { return i >= 0 && i < (int)csList.size() ? &csList[(size_t)i] : nullptr; };
+            switch (id)
+            {
+            case ID_CS_BACK:
+                CloseCalSettings();
+                return;
+            case ID_CS_MODE:
+            {
+                const std::wstring err = cal::SetMode(param);
+                if (!err.empty())
+                    SetStatus(err); // shown at the bottom, where the user is looking
+                csOpen.clear();
+                csNewOpen = false;
+                evView = 0;
+                break;
+            }
+            case ID_CS_ALLON:
+            case ID_CS_ALLOFF:
+                cal::CalSetAllVisible(id == ID_CS_ALLON);
+                break;
+            case ID_CS_VIS:
+                if (auto *c = calAt(param))
+                    cal::CalSetVisible(c->id, !c->visible);
+                break;
+            case ID_CS_ROW:
+                if (auto *c = calAt(param))
+                {
+                    csOpen = csOpen == c->id ? std::wstring() : c->id;
+                    csRowMsg.clear();
+                    if (!csOpen.empty())
+                        SetWindowTextW(edits[E_CS_NAME], c->name.c_str());
+                }
+                break;
+            case ID_CS_COLOR:
+                if (auto *c = calAt(param / 16))
+                    if (param % 16 < 11)
+                        cal::CalSetColor(c->id, cal::kPalette[param % 16]);
+                break;
+            case ID_CS_RENAME:
+                if (auto *c = calAt(param))
+                {
+                    const std::wstring err = cal::CalRename(c->id, EditText(E_CS_NAME));
+                    if (!err.empty())
+                        SetStatus(err);
+                }
+                break;
+            case ID_CS_DELETE:
+                if (auto *c = calAt(param))
+                {
+                    if (!Armed(L"del", c->id))
+                    {
+                        Arm(L"del", c->id);
+                        SetStatus(L"Click Confirm to delete this calendar and its events");
+                    }
+                    else
+                    {
+                        const std::wstring err = cal::CalDelete(c->id);
+                        if (!err.empty())
+                            SetStatus(err);
+                        else if (cal::g_mode.load() == 1)
+                            SetStatus(L"Calendar deleted. Updating Google\u2026");
+                        csOpen.clear();
+                        csArmedUntil = 0;
+                    }
+                }
+                break;
+            case ID_CS_CLEAR:
+                if (auto *c = calAt(param))
+                {
+                    if (!Armed(L"clear", c->id))
+                    {
+                        Arm(L"clear", c->id);
+                        SetStatus(L"Click Confirm to remove every event");
+                    }
+                    else
+                    {
+                        if (cal::g_mode.load() == 1)
+                        {
+                            const std::wstring err = cal::GoogleRemoveCalendar(c->id, false);
+                            SetStatus(err.empty() ? L"Events removed. Updating Google\u2026" : err);
+                        }
+                        else
+                        {
+                            const int n = cal::CalClear(c->id);
+                            SetStatus(L"Removed " + std::to_wstring(n) + (n == 1 ? L" event" : L" events"));
+                        }
+                        csArmedUntil = 0;
+                    }
+                }
+                break;
+            case ID_CS_EXPORT:
+                if (auto *c = calAt(param))
+                {
+                    std::wstring path;
+                    if (cal::PickSaveFile(hwnd, cal::ExportSuggestedName(c->id), path))
+                        csRowMsg = cal::ExportCalendar(c->id, path);
+                }
+                break;
+            case ID_CS_REFRESH:
+                if (auto *c = calAt(param))
+                    cal::RefreshUrlAsync(c->id);
+                break;
+            case ID_CS_NEW:
+                csNewOpen = true;
+                SetWindowTextW(edits[E_CS_NEW], L"");
+                pendingFocus = E_CS_NEW;
+                break;
+            case ID_CS_NEWADD:
+            {
+                const std::wstring err = cal::CalAdd(EditText(E_CS_NEW), cal::kPalette[(csList.size() + 4) % 11]);
+                if (!err.empty())
+                    SetStatus(err);
+                if (err.empty())
+                    csNewOpen = false;
+                break;
+            }
+            case ID_CS_IMPORT:
+            {
+                std::wstring path;
+                if (cal::PickOpenFile(hwnd, path))
+                    cal::ImportFileAsync(path);
+                break;
+            }
+            case ID_CS_URLIMPORT:
+                cal::ImportUrlAsync(EditText(E_CS_URL));
+                break;
+            case ID_CS_SAVECRED:
+            case ID_CS_CONNECT:
+            {
+                const bool entered = !EditText(E_CS_CID).empty() || !EditText(E_CS_SEC).empty();
+                cal::SaveCredentials(EditText(E_CS_CID), EditText(E_CS_SEC));
+                SetWindowTextW(edits[E_CS_CID], L""); // saved: the boxes empty and their cue text says so
+                SetWindowTextW(edits[E_CS_SEC], L"");
+                UpdateCredCues();
+                if (id == ID_CS_CONNECT)
+                    cal::ConnectAsync();
+                else
+                    SetStatus(entered ? L"Credentials saved" : L"Enter a Client ID and Secret first");
+                break;
+            }
+            case ID_CS_DISC:
+            {
+                const auto em = cal::AccountEmails();
+                if (param >= 0 && param < (int)em.size())
+                {
+                    cal::Disconnect(em[(size_t)param]);
+                    cal::SetGMsg(L"Disconnected " + em[(size_t)param] + L".");
+                }
+                break;
+            }
+            case ID_CS_SYNC:
+                if (!cal::HasAccounts())
+                    cal::SetGMsg(L"Connect a Google account first.");
+                else
+                {
+                    cal::g_forcePull = true;
+                    cal::GoogleWake();
+                    cal::SetGMsg(L"Syncing\u2026");
+                }
+                break;
+            case ID_CS_HELP:
+                csHelpOpen = !csHelpOpen;
+                helpA.Go(csHelpOpen ? 1.f : 0.f, HelpT());
+                StartFrames(hwnd, TIMER_ABOUT_ANIM);
+                if (csHelpOpen)
+                { // glide down so the whole expanded card is visible (as the About card does)
+                    panelScrollTarget = std::max(0.f, csHelpTop + HelpFullH() + 12.f - ContentViewportBottom());
+                    panelScrollStarted = MonoMs();
+                    KickScroll();
+                }
+                return;
+            case ID_CS_LINK:
+                if (param >= 0 && param < (int)csLinks.size())
+                    ShellExecuteW(nullptr, L"open", csLinks[(size_t)param].c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                return;
+            }
+            ResizePanelToContent();
+            Invalidate();
+        }
+        // Enter inside one of the calendar-settings text boxes.
+        bool CalSettingsEnter()
+        {
+            if (tab != TAB_SETTINGS || settingsSub != 1)
+                return false;
+            const HWND f = GetFocus();
+            if (f == edits[E_CS_URL])
+                CsClick(ID_CS_URLIMPORT, 0);
+            else if (f == edits[E_CS_CID] || f == edits[E_CS_SEC])
+                CsClick(ID_CS_SAVECRED, 0);
+            else if (f == edits[E_CS_NEW])
+                CsClick(ID_CS_NEWADD, 0);
+            else if (f == edits[E_CS_NAME])
+            {
+                for (size_t i = 0; i < csList.size(); ++i)
+                    if (csList[i].id == csOpen)
+                        CsClick(ID_CS_RENAME, (int)i);
+            }
+            else
+                return false;
+            return true;
+        }
+        bool IsWhenSlot(HWND h, int &slot) const
+        {
+            for (int s : {E_EV_SD, E_EV_ST, E_EV_ED, E_EV_ET})
+                if (edits[s] == h)
+                {
+                    slot = s;
+                    return true;
+                }
+            return false;
         }
 
         // ---- stopwatch ---------------------------------------------------------------------------------
@@ -11789,7 +18287,7 @@ namespace ui
         float CurPanelH() const { return panelH + (CollapsedH() - panelH) * stackK; }
         void ApplyStackGeometry()
         {
-            const int hpx = (int)std::lround(CurPanelH() * Scale()), ypx = stackBottomPx - hpx;
+            const int hpx = (int)std::lround(CurPanelH() * Scale()), ypx = dockTop ? stackBottomPx : stackBottomPx - hpx; // (top bar: the anchor is the top edge)
             SetWindowPos(hwnd, nullptr, stackXPx, ypx, stackWPx, hpx, SWP_NOZORDER | SWP_NOACTIVATE);
             NotifFollowStack(stackXPx, ypx, stackWPx);
             Invalidate();
@@ -11805,7 +18303,7 @@ namespace ui
             GetWindowRect(hwnd, &r);
             stackXPx = r.left;
             stackWPx = r.right - r.left;
-            stackBottomPx = r.bottom; // the panel stays anchored above the taskbar; its top edge moves
+            stackBottomPx = dockTop ? r.top : r.bottom; // the panel stays anchored next to the taskbar; its far edge moves
             stackAnimFrom = stackK;
             stackAnimTo = collapsed ? 1.f : 0.f;
             stackAnimStart = MonoMs();
@@ -12235,34 +18733,114 @@ namespace ui
 
         void PaintSettings()
         {
-            auto &S = td::g_set;
             float y = 58;
-            auto toggleRow = [&](const wchar_t *t, const wchar_t *d, int id, bool on)
+            auto nav = [&](const wchar_t *t, const wchar_t *d, int id)
             {
+                const D2D1_RECT_F cr = RF(16, y, 340, 56);
                 SettingRow(y, 56, t, d);
-                UiWindow::Toggle(302, y + 18, id, on);
+                const float ch = HoverAmount(id);
+                if (ch > 0.001f)
+                    RoundFill(cr, 8.f, Fade(pal.cardHover, ch * 0.6f));
+                Text(L"\uE76C", RF(316, y, 28, 56), 11.f, 400, pal.sub, 1, 1, true);
+                AddHit(cr, id);
                 y += 64;
             };
-            toggleRow(L"Notification icon", L"Show the bell next to the clock", ID_ST_BELL, S.showBell.load() != 0);
-            toggleRow(L"Taskbar previews", L"Stopwatch / timer next to the clock", ID_ST_PREVIEW, S.showPreviews.load() != 0);
+            nav(L"General settings", L"Tabs, time format, horizontal position and look", ID_ST_GENSET);
+            nav(L"Notification settings", L"Notification icon and panel", ID_ST_NOTSET);
+            nav(L"Calendar settings", L"Events, calendars, import and Google sync", ID_ST_CALSET);
+            Btn(RF(16, y, 340, 38), ID_ST_SYNC, 0, syncBusy ? L"Syncing time\u2026" : L"Sync time now", 0, 13.5f);
+            y += 38 + 30; // a little air between the function and the About card
+            settingsAboutTop = y;
+            PaintAbout(y);
+        }
 
+        void PaintNotifSettings()
+        {
+            auto &S = td::g_set;
+            SubHeader(L"Notification settings");
+            float y = 92.f;
             SettingRow(y, 70, L"Notification panel", L"");
             Chip(RF(30, y + 36, 150, 26), ID_ST_NOTIFMODE, 0, L"Separate panel", S.notifMode.load() == 0);
             Chip(RF(192, y + 36, 150, 26), ID_ST_NOTIFMODE, 1, L"Above WinKlok", S.notifMode.load() == 1);
             y += 78;
-            SettingRow(y, 108, L"Visible tabs", L"");
+            SettingRow(y, 88, L"Notification icon", L"Off, always shown, or only with notifications");
+            Chip(RF(30, y + 52, 98, 26), ID_ST_BELL, 0, L"Off", S.showBell.load() == 0);
+            Chip(RF(137, y + 52, 98, 26), ID_ST_BELL, 1, L"On", S.showBell.load() == 1);
+            Chip(RF(244, y + 52, 98, 26), ID_ST_BELL, 2, L"When notified", S.showBell.load() == 2);
+            y += 96;
+            SettingRow(y, 70, L"Icon position", L"");
+            Chip(RF(30, y + 36, 150, 26), ID_ST_BELLSIDE, 0, L"Left of the clock", S.bellSide.load() == 0);
+            Chip(RF(192, y + 36, 150, 26), ID_ST_BELLSIDE, 1, L"Right of the clock", S.bellSide.load() == 1);
+            y += 78;
+            calSetBottom = y + 12.f;
+        }
+
+        // ---- General settings: tabs can be dragged into a new order, the panel position is a slider ----
+        int tabDragId = -1, tabDragSlot = 0;
+        bool tabDragging = false, posDrag = false;
+        float tabDragDownX = 0.f, tabDragDownY = 0.f, tabDragX = 0.f, tabDragY = 0.f, tabChipsTop = 0.f;
+        int PosMax() const
+        { // screen pixels between the right and the left position of the panel on this monitor
+            MONITORINFO mi{};
+            mi.cbSize = sizeof(mi);
+            if (!GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY), &mi))
+                return 400;
+            const float s = Scale();
+            return std::max(0, (int)(mi.rcWork.right - mi.rcWork.left) - (int)std::lround(kPanelW * s) - 2 * (int)std::lround(12.f * s));
+        }
+        void SetPosFromX(float x)
+        { // the thumb on the right = the panel on the right
+            td::g_set.panelX = (int)std::lround((1.f - std::min(1.f, std::max(0.f, (x - 68.f) / 236.f))) * (float)PosMax());
+            Invalidate();
+        }
+        int TabSlotAt(float x, float y) const
+        {
+            const int col = std::max(0, std::min(2, (int)((x - 30.f) / 106.f))), row = std::max(0, std::min(1, (int)((y - tabChipsTop) / 32.f)));
+            return std::min(row * 3 + col, kTabs - 2);
+        }
+        void CommitTabDrag()
+        {
+            std::vector<int> ord;
+            for (int k = 0; k < kTabs; ++k)
+                if (kTabOrder[k] != TAB_SETTINGS && kTabOrder[k] != tabDragId)
+                    ord.push_back(kTabOrder[k]);
+            ord.insert(ord.begin() + std::min<size_t>((size_t)tabDragSlot, ord.size()), tabDragId);
+            for (size_t k = 0; k < ord.size(); ++k)
+                kTabOrder[k] = ord[k];
+            kTabOrder[kTabs - 1] = TAB_SETTINGS;
+            SaveTabOrder();
+            LayoutTabs();
+            InitTabAnim();
+        }
+
+        void PaintGeneralSettings()
+        {
+            auto &S = td::g_set;
+            SubHeader(L"General settings");
+            float y = 92.f;
+            SettingRow(y, 56, L"Taskbar previews", L"Stopwatch / timer next to the clock");
+            UiWindow::Toggle(302, y + 18, ID_ST_PREVIEW, S.showPreviews.load() != 0);
+            y += 64;
+
+            SettingRow(y, 122, L"Visible tabs", L"Click to show or hide, drag to reorder");
             {
-                int n = 0;
+                std::vector<int> ord;
                 for (int k = 0; k < kTabs; ++k)
-                {
-                    const int id = kTabOrder[k];
-                    if (id == TAB_SETTINGS)
-                        continue; // Settings always stays, so it can always be turned back on
-                    Chip(RF(30.f + (float)(n % 3) * 106.f, y + 38.f + (float)(n / 3) * 32.f, 100, 26), ID_ST_TAB, id, kTabNames[id], TabVisible(id));
-                    ++n;
+                    if (kTabOrder[k] != TAB_SETTINGS) // Settings always stays, so it can always be turned back on
+                        ord.push_back(kTabOrder[k]);
+                if (tabDragging)
+                { // live preview: the dragged tab already sits in its new slot
+                    ord.erase(std::find(ord.begin(), ord.end(), tabDragId));
+                    ord.insert(ord.begin() + std::min<size_t>((size_t)tabDragSlot, ord.size()), tabDragId);
                 }
+                tabChipsTop = y + 52.f;
+                for (size_t n = 0; n < ord.size(); ++n)
+                    if (!(tabDragging && ord[n] == tabDragId))
+                        Chip(RF(30.f + (float)(n % 3) * 106.f, tabChipsTop + (float)(n / 3) * 32.f, 100, 26), ID_ST_TAB, ord[n], kTabNames[ord[n]], TabVisible(ord[n]));
+                if (tabDragging)
+                    Chip(RF(tabDragX - 50.f, tabDragY - 13.f, 100, 26), ID_ST_TAB, tabDragId, kTabNames[tabDragId], TabVisible(tabDragId));
             }
-            y += 116;
+            y += 130;
 
             SettingRow(y, 70, L"Time format", L"");
             Chip(RF(30, y + 36, 150, 26), ID_ST_FORMAT, 0, L"12-hour", !S.Use24());
@@ -12272,6 +18850,21 @@ namespace ui
             Chip(RF(30, y + 36, 150, 26), ID_ST_ACRYLIC, 1, L"Acrylic blur", S.acrylic.load() != 0);
             Chip(RF(192, y + 36, 150, 26), ID_ST_ACRYLIC, 0, L"Simple", S.acrylic.load() == 0);
             y += 78;
+            {
+                const int mx = PosMax(), cur = std::min(S.panelX.load(), mx);
+                SettingRow(y, 92, L"Panel horizontal position", L"Slide along the screen. Right is the default.");
+                Text(cur == 0 ? L"Right edge" : cur >= mx ? L"Left edge"
+                                                          : std::to_wstring(cur) + L" px from right",
+                     RF(190, y + 9, 150, 20), 12.f, 600, pal.sub, 2, 1);
+                FlatIcon(RF(30, y + 52, 30, 30), ID_ST_POSX, 0, L"\uE738", 12.f);
+                FlatIcon(RF(312, y + 52, 30, 30), ID_ST_POSX, 1, L"\uE710", 12.f);
+                const float f = mx > 0 ? 1.f - (float)cur / (float)mx : 1.f;
+                RoundFill(RF(68, y + 65, 236, 4), 2.f, pal.track);
+                RoundFill(RF(68, y + 65, 236.f * f, 4), 2.f, pal.accent);
+                Circle(68.f + 236.f * f, y + 67, 8.f, pal.accent);
+                AddHit(RF(60, y + 52, 252, 30), ID_ST_POSX, 2);
+                y += 100;
+            }
             SettingRow(y, 70, L"Preview layout", L"");
             Chip(RF(30, y + 36, 150, 26), ID_ST_LAYOUT, 0, L"Side by side", S.stacked.load() == 0);
             Chip(RF(192, y + 36, 150, 26), ID_ST_LAYOUT, 1, L"Stacked (compact)", S.stacked.load() == 1);
@@ -12280,10 +18873,7 @@ namespace ui
             y += 86;
             SoundRow(y, L"Default alarm sound", S.alarmSound.load(), ID_ST_ASOUND, ID_ST_ASOUND_PLAY);
             y += 86;
-            Btn(RF(16, y, 340, 38), ID_ST_SYNC, 0, syncBusy ? L"Syncing time\u2026" : L"Sync time now", 0, 13.5f);
-            y += 38 + 30; // a little air between the function and the About card
-            settingsAboutTop = y;
-            PaintAbout(y);
+            calSetBottom = y + 12.f;
         }
 
         // ---------------------------------------------------------------- input
@@ -12339,7 +18929,7 @@ namespace ui
                 ScrollTo(panelScrollTarget - delta * (kWheelPx / (float)WHEEL_DELTA));
                 return;
             }
-            if (tab == 0)
+            if (tab == 0 && evView == 0)
                 CalWheel(delta, discrete); // calendar: weeks (month view) or pages slide smoothly
         }
 
@@ -12359,11 +18949,56 @@ namespace ui
             case ID_TAB:
                 SelectTab(param);
                 return;
+            case ID_EV_BACK:
+            case ID_EV_ADD:
+            case ID_EV_ROW:
+            case ID_EV_SAVE:
+            case ID_EV_CANCEL:
+            case ID_EV_DELETE:
+            case ID_EV_ALLDAY:
+            case ID_EV_COLOR:
+            case ID_EV_CAL:
+                EvClick(id, param);
+                return;
+            case ID_ST_CALSET:
+                OpenCalSettings();
+                return;
+            case ID_ST_NOTSET:
+                OpenCalSettings(2);
+                return;
+            case ID_ST_GENSET:
+                OpenCalSettings(3);
+                return;
+            case ID_CS_BACK:
+            case ID_CS_MODE:
+            case ID_CS_ALLON:
+            case ID_CS_ALLOFF:
+            case ID_CS_VIS:
+            case ID_CS_ROW:
+            case ID_CS_COLOR:
+            case ID_CS_RENAME:
+            case ID_CS_DELETE:
+            case ID_CS_CLEAR:
+            case ID_CS_EXPORT:
+            case ID_CS_REFRESH:
+            case ID_CS_NEW:
+            case ID_CS_NEWADD:
+            case ID_CS_IMPORT:
+            case ID_CS_URLIMPORT:
+            case ID_CS_SAVECRED:
+            case ID_CS_CONNECT:
+            case ID_CS_DISC:
+            case ID_CS_SYNC:
+            case ID_CS_HELP:
+            case ID_CS_LINK:
+                CsClick(id, param);
+                return;
             case ID_CAL_PREV:
             case ID_CAL_NEXT:
             case ID_CAL_HDR:
             case ID_CAL_CELL:
             case ID_CAL_TODAY:
+            case ID_CAL_SYNC:
                 CalClick(id, param);
                 return;
             case ID_SW_TOGGLE:
@@ -12650,9 +19285,25 @@ namespace ui
                 break;
             case ID_ST_BELL:
                 td::g_set.bellUnset = false; // an explicit choice: the first-run copy of the Windows bell must not overwrite it
-                td::g_set.showBell = !td::g_set.showBell.load();
+                td::g_set.showBell = param;
                 td::g_set.Save();
                 tb::PostRefreshAll();
+                break;
+            case ID_ST_BELLSIDE:
+                td::g_set.bellSide = param;
+                td::g_set.Save();
+                tb::PostRefreshAll();
+                break;
+            case ID_ST_WEEKS:
+                td::g_set.showWeeks = !td::g_set.showWeeks.load();
+                td::g_set.Save();
+                break;
+            case ID_ST_POSX:
+                if (param < 2)
+                {
+                    td::g_set.panelX = std::max(0, std::min(PosMax(), td::g_set.panelX.load() + (param ? -1 : 1))); // + moves the panel right
+                    td::g_set.Save();
+                }
                 break;
             case ID_ST_PREVIEW:
                 td::g_set.showPreviews = !td::g_set.showPreviews.load();
@@ -12687,7 +19338,12 @@ namespace ui
 
         void PrimaryAction()
         {
-            if (tab == 2)
+            if (CalSettingsEnter())
+            {
+            }
+            else if (tab == 0 && evView == 2)
+                SaveEventForm();
+            else if (tab == 2)
             {
                 StartTimerFromEdits();
                 tb::PostRefreshAll();
@@ -12728,10 +19384,18 @@ namespace ui
                 case TIMER_NOTE_SAVE:
                     FlushNote();
                     return 0;
+                case TIMER_SYNC_SPIN:
+                    SyncSpinAngle();
+                    if (!syncSpinning)
+                        StopFrames(hwnd, TIMER_SYNC_SPIN);
+                    else if (tab == 0 && evView == 0)
+                        Invalidate();
+                    return 0;
                 case TIMER_ABOUT_ANIM:
-                    if (!aboutA.Running(kAboutMs))
+                    if (!aboutA.Running(kAboutMs) && !helpA.Running(kAboutMs))
                     {
                         aboutA.Set(aboutA.to);
+                        helpA.Set(helpA.to);
                         StopFrames(hwnd, TIMER_ABOUT_ANIM);
                         ResizePanelToContent();
                     }
@@ -12777,6 +19441,14 @@ namespace ui
                     }
                     Invalidate();
                     return 0;
+                case TIMER_CAL_HOVER:
+                    KillTimer(hwnd, TIMER_CAL_HOVER);
+                    Invalidate();
+                    return 0;
+                case TIMER_CAL_REARM:
+                    KillTimer(hwnd, TIMER_CAL_REARM);
+                    Invalidate();
+                    return 0;
                 case TIMER_TICK:
                     OnTick();
                     return 0;
@@ -12784,7 +19456,7 @@ namespace ui
                     KillTimer(hwnd, TIMER_DEACTIVATE_CHECK);
                     // Focus-loss dismissal is deferred briefly so a clock click can deliver its
                     // pointer event and its explicit toggle message first.
-                    if (IsWindowVisible(hwnd) && !noActMode)
+                    if (IsWindowVisible(hwnd) && !noActMode && cal::g_modal.load() == 0) // a file dialog is not a reason to close
                     {
                         if (g_clockTogglePendingUntil.load() > MonoMs())
                         {
@@ -12801,12 +19473,81 @@ namespace ui
                     return 0;
                 }
                 break;
+            case WM_LBUTTONDOWN:
+                if (tab == TAB_SETTINGS && settingsSub == 3)
+                {
+                    const float x = GET_X_LPARAM(lp) * 96.f / dpi, y = GET_Y_LPARAM(lp) * 96.f / dpi;
+                    int id = 0, p = 0;
+                    HitAt(x, y, id, p);
+                    if (id == ID_ST_TAB && p != TAB_SETTINGS)
+                    {
+                        tabDragId = p;
+                        tabDragDownX = x;
+                        tabDragDownY = HitTestY(y);
+                    }
+                    else if (id == ID_ST_POSX && p == 2)
+                    {
+                        posDrag = true;
+                        SetPosFromX(x);
+                    }
+                }
+                break;
+            case WM_MOUSEMOVE:
+                if ((wp & MK_LBUTTON) && tab == TAB_SETTINGS && settingsSub == 3)
+                {
+                    const float x = GET_X_LPARAM(lp) * 96.f / dpi, y = HitTestY(GET_Y_LPARAM(lp) * 96.f / dpi);
+                    if (posDrag)
+                        SetPosFromX(x);
+                    else if (tabDragId >= 0)
+                    {
+                        if (!tabDragging && (std::fabs(x - tabDragDownX) > 6.f || std::fabs(y - tabDragDownY) > 6.f))
+                            tabDragging = true;
+                        if (tabDragging)
+                        {
+                            tabDragX = x;
+                            tabDragY = y;
+                            tabDragSlot = TabSlotAt(x, y);
+                            Invalidate();
+                        }
+                    }
+                }
+                break;
+            case WM_LBUTTONUP:
+                if (posDrag)
+                {
+                    posDrag = false;
+                    td::g_set.Save();
+                }
+                if (tabDragId >= 0)
+                {
+                    const bool dragged = tabDragging;
+                    if (dragged)
+                        CommitTabDrag();
+                    tabDragId = -1;
+                    tabDragging = false;
+                    if (dragged)
+                    {
+                        if (GetCapture() == hwnd)
+                            ReleaseCapture();
+                        downId = 0; // a drop is not a click: the tab keeps its visibility
+                        Invalidate();
+                        return 0;
+                    }
+                }
+                break;
             case WM_UI_TOGGLE:
                 g_clockTogglePendingUntil = 0;
                 Toggle(wp != 0);
                 return 0;
             case WM_UI_FRAME:
                 fclk::Tick();
+                return 0;
+            case WM_UI_CALCHANGED:
+                occVer = 0; // data changed elsewhere: rebuild the ring cache on the next paint
+                if (evView == 1)
+                    cal::QueryOccurrences(evDay, evDay + 1, dayOccs);
+                if (IsWindowVisible(hwnd))
+                    Invalidate();
                 return 0;
             case MM_WOM_DONE: // a one-shot sound (a preview) has finished playing: release the audio device
                 snd::OnWaveDone((HWAVEOUT)wp);
@@ -12849,13 +19590,25 @@ namespace ui
                 }
                 if (LOWORD(wp) == IDCANCEL)
                 {
-                    HidePanel();
+                    if (tab == 0 && evView)
+                    {
+                        if (evView == 2 && evFromList)
+                            EvClick(ID_EV_CANCEL, 0);
+                        else
+                            CloseEditor();
+                    }
+                    else if (tab == TAB_SETTINGS && settingsSub)
+                        CloseCalSettings();
+                    else
+                        HidePanel();
                     return 0;
                 }
                 if (HIWORD(wp) == EN_CHANGE && (LOWORD(wp) == 100 + E_NTITLE || LOWORD(wp) == 100 + E_NBODY))
                     OnNoteTextChanged();
                 if (HIWORD(wp) == EN_VSCROLL)
                     Invalidate(); // keeps the editor's thin scroll indicator in sync
+                if (HIWORD(wp) == EN_KILLFOCUS && LOWORD(wp) >= 100 + E_EV_SD && LOWORD(wp) <= 100 + E_EV_ET && evView == 2)
+                    NormalizeWhen((int)LOWORD(wp) - 100);
                 if (HIWORD(wp) == EN_SETFOCUS || HIWORD(wp) == EN_KILLFOCUS)
                     Invalidate();
                 return 0;
@@ -12890,6 +19643,12 @@ namespace ui
         {
             if (m == WM_POINTERDOWN || m == WM_POINTERUPDATE || m == WM_POINTERUP)
                 p->HandleTouchpadPointer(m, w); // touchpad contacts over a text field still scroll the panel
+            int whenSlot = 0;
+            if (m == WM_KEYDOWN && (w == VK_UP || w == VK_DOWN) && p->IsWhenSlot(h, whenSlot))
+            {
+                p->NudgeWhen(whenSlot, w == VK_UP ? 1 : -1); // date: a day, time: a quarter of an hour
+                return 0;
+            }
             const bool isBody = h == p->edits[E_NBODY];
             if (m == WM_MOUSEMOVE || m == WM_SETCURSOR || m == WM_NCHITTEST)
                 RouteTouchpadTo(isBody ? h : p->hwnd); // touchpad pointers go to the body editor only while it is under the cursor
@@ -13165,7 +19924,11 @@ namespace ui
                     sa.lpSecurityDescriptor = sd;
                 }
             }
-            ~OwnerOnly() { if (sd) LocalFree(sd); }
+            ~OwnerOnly()
+            {
+                if (sd)
+                    LocalFree(sd);
+            }
             SECURITY_ATTRIBUTES *Get() { return sd ? &sa : nullptr; }
         };
 
@@ -13173,7 +19936,8 @@ namespace ui
         static bool CopyShared(const std::wstring &src, const std::wstring &dst)
         {
             OwnerOnly acl;
-            if (!acl.Get()) return false;
+            if (!acl.Get())
+                return false;
             HANDLE in = CreateFileW(src.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
                                     FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
             if (in == INVALID_HANDLE_VALUE)
@@ -13724,6 +20488,20 @@ namespace ui
             if (!wpn::StartRead(hwnd, s) && wpn::Busy())
                 rereadPending = true; // looked at again as soon as the running read is done
         }
+        // Count of notifications still listed: drives the taskbar bell's "only when notified" mode.
+        void UpdateBadge()
+        {
+            const long long now = td::WallMs();
+            int n = 0;
+            for (const wpn::Item &it : items)
+                if (available && !wpn::IsHidden(it) && !(it.expiry > 0 && it.expiry < now))
+                    ++n;
+            if (n != td::g_nfCount.load())
+            {
+                td::g_nfCount = n;
+                tb::PostRefreshAll();
+            }
+        }
         void OnReadDone()
         {
             wpn::ReadResult r;
@@ -13748,9 +20526,12 @@ namespace ui
                         items.clear();
                 }
             }
-            BuildRows();
             if (hwnd && IsWindowVisible(hwnd))
+            { // (a hidden panel only needs the count; the rows are built when it opens)
+                BuildRows();
                 Invalidate();
+            }
+            UpdateBadge();
             if (rereadPending)
             {
                 rereadPending = false;
@@ -13858,6 +20639,7 @@ namespace ui
                 ReleaseTarget();
             }
             currentFade = 1.f;
+            UpdateBadge();
             ApplyComposition();
             Reload(false); // only reads again when the database changed since the list was built
             sm.Jump(0.f);
@@ -13880,13 +20662,15 @@ namespace ui
             slideHorizontal = false; // on its own it rises from the taskbar like the WinKlok panel
             slideUseClip = true;
             Prepare(mi);
-            panelWorkBottom = TaskbarBandTop(mon, mi, Scale());
+            int topLine = 0;
+            dockTop = TaskbarOnTop(mi, topLine);
+            panelWorkBottom = dockTop ? topLine : TaskbarBandTop(mon, mi, Scale());
             const float scale = Scale();
-            panelH = std::min(kMaxH, std::max(kMinH, (float)(panelWorkBottom - mi.rcWork.top) / scale - 24.f));
+            panelH = std::min(kMaxH, std::max(kMinH, (float)(dockTop ? mi.rcWork.bottom - panelWorkBottom : panelWorkBottom - mi.rcWork.top) / scale - 24.f));
             BuildRows();
             const int w = (int)std::lround(kPanelW * scale), h = (int)std::lround(panelH * scale), margin = (int)std::lround(12.f * scale);
-            const int x = std::max(static_cast<int>(mi.rcWork.left), static_cast<int>(mi.rcWork.right) - w - margin);
-            const int y = std::max(static_cast<int>(mi.rcWork.top), panelWorkBottom - h - margin);
+            const int x = FlyoutLeft(mi, w, margin);
+            const int y = dockTop ? panelWorkBottom + margin : std::max(static_cast<int>(mi.rcWork.top), panelWorkBottom - h - margin);
             if (!(IsWindowVisible(hwnd) && panelAnimation == PanelAnimationState::Closing))
                 FindSlideTaskbar(mon, mi);
             BeginOpenAnimation(x, y, w, h, false);
@@ -13901,14 +20685,16 @@ namespace ui
             panelWorkBottom = bandTop;
             const float scale = Scale();
             const int gap = (int)std::lround(8.f * scale), margin = (int)std::lround(12.f * scale);
-            const float availDip = (float)(panelY - gap - mi.rcWork.top - margin) / scale;
+            dockTop = g_panel && g_panel->dockTop; // top bar: the card hangs below the panel instead of above it
+            const int below = panelY + (g_panel ? g_panel->panelAnimationHeight : 0) + gap;
+            const float availDip = dockTop ? (float)(mi.rcWork.bottom - below - margin) / scale : (float)(panelY - gap - mi.rcWork.top - margin) / scale;
             panelH = std::min(StackMaxH(), std::max(120.f, availDip));
             BuildRows();
             const int h = (int)std::lround(panelH * scale);
-            const int y = std::max(static_cast<int>(mi.rcWork.top), panelY - gap - h);
-            slideHorizontal = true; // the stack slides in from the right screen edge together with the panel
+            const int y = dockTop ? below : std::max(static_cast<int>(mi.rcWork.top), panelY - gap - h);
+            slideHorizontal = td::g_set.panelX.load() == 0; // in the corner the stack slides in from the right with the panel, else it rises from the taskbar
             slideClipX = mi.rcMonitor.right;
-            slideUseClip = MonitorOnRight(mi);
+            slideUseClip = !slideHorizontal || MonitorOnRight(mi);
             slideTaskbar = nullptr;
             slideUnder = false;
             slideClipY = bandTop;
@@ -13947,9 +20733,12 @@ namespace ui
             const float scale = Scale();
             const int gap = (int)std::lround(8.f * scale), margin = (int)std::lround(12.f * scale);
             const float k = g_panel ? g_panel->stackK : 0.f; // grow smoothly with the panel's animation
-            panelH = std::min(460.f + (kMaxH - 460.f) * k, std::max(120.f, (float)(panelY - gap - mi.rcWork.top - margin) / scale));
+            RECT pr{};
+            const bool top = g_panel && g_panel->dockTop && GetWindowRect(g_panel->hwnd, &pr); // top bar: below the panel
+            const float avail = top ? (float)(mi.rcWork.bottom - (pr.bottom + gap) - margin) / scale : (float)(panelY - gap - mi.rcWork.top - margin) / scale;
+            panelH = std::min(460.f + (kMaxH - 460.f) * k, std::max(120.f, avail));
             const int h = (int)std::lround(panelH * scale);
-            const int y = std::max(static_cast<int>(mi.rcWork.top), panelY - gap - h);
+            const int y = top ? pr.bottom + gap : std::max(static_cast<int>(mi.rcWork.top), panelY - gap - h);
             SetWindowPos(hwnd, nullptr, panelX, y, panelW, h, SWP_NOZORDER | SWP_NOACTIVATE);
             BuildRows();
             Invalidate();
@@ -14186,6 +20975,7 @@ namespace ui
                     {
                         wpn::Hide(items[param]); // like Windows: opening a notification takes it off the list
                         BuildRows();
+                        UpdateBadge();
                         Dismiss();
                         return;
                     }
@@ -14204,6 +20994,7 @@ namespace ui
                 return;
             }
             BuildRows();
+            UpdateBadge();
             Invalidate();
         }
 
@@ -14284,6 +21075,18 @@ namespace ui
 
     static NotifWindow *g_notif = nullptr;
 
+    // Every few seconds, only while the bell is on: compares the database's file signature (cheap) and reads again on a change.
+    static void NotifPoll()
+    {
+        static ULONGLONG last = 0;
+        const ULONGLONG now = MonoMs();
+        if (!g_notif || !g_notif->hwnd || td::g_set.showBell.load() == 0 || now - last < 3000)
+            return;
+        last = now;
+        if (!g_notif->IsOpen())
+            g_notif->Reload(false);
+    }
+
     // Both windows get one common start time and one timer, so they slide in and out as a single unit.
     static void NotifSyncWithPanel()
     {
@@ -14301,7 +21104,7 @@ namespace ui
     static void StepStackedFlyouts(FlyoutWindow &panel)
     {
         const bool follower = g_notif && g_notif->syncFollower && g_notif->panelAnimation != FlyoutWindow::PanelAnimationState::Idle;
-        if (follower && !panel.slideUseClip)
+        if (follower)
             g_moveBatch = BeginDeferWindowPos(2); // NULL on failure: plain moves
         panel.AdvancePanelAnimation(false, follower);
         if (follower)
@@ -14311,6 +21114,9 @@ namespace ui
             EndDeferWindowPos(g_moveBatch);
             g_moveBatch = nullptr;
         }
+        panel.FlushSlideClip(); // widen the visible part only after both windows have moved
+        if (follower)
+            g_notif->FlushSlideClip();
         if (panel.finishPending)
             panel.FinishAnimation();
         if (follower && g_notif->finishPending)
@@ -15015,8 +21821,9 @@ static DWORD WINAPI InitThreadProc(LPVOID)
     DWORD pid = 0;
     GetWindowThreadProcessId(shell, &pid);
     if (pid != GetCurrentProcessId() || g_shuttingDown.load())
-        return 0; // another explorer.exe (folder windows, "Show in folder"): stay idle
+        return 0;     // another explorer.exe (folder windows, "Show in folder"): stay idle
     td::g_eng.Load(); // before the UI starts: Load may queue the missed-alarm popup
+    cal::Init();      // calendar data and the Google sync worker
     if (!ui::Start())
         Wh_Log(L"could not start the UI thread");
     return 0;
@@ -15062,12 +21869,11 @@ void Wh_ModUninit()
         CloseHandle(g_initThread);
         g_initThread = nullptr;
     }
-    ui::Stop(); // returns at once when the UI never started
+    ui::Stop();      // returns at once when the UI never started
+    cal::Shutdown(); // aborts and joins every calendar thread (idempotent)
     if (g_initStop)
     {
         CloseHandle(g_initStop);
         g_initStop = nullptr;
     }
 }
-
-
