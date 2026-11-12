@@ -35,7 +35,7 @@ live stopwatch and timer previews right next to the taskbar clock.
 | **Everything in one panel** | Calendar, Stopwatch, Timer, Alarm, Notes and Settings, one click away from the clock. |
 | **Live taskbar previews** | A running stopwatch or timer is shown beside the clock with pause/play and reset buttons. |
 | **Smooth scrolling** | Mouse wheel, precision touchpad (tracked from raw two-finger movement with kinetic momentum), touch and pen share smooth scrolling. |
-| **Private by design** | No telemetry and no accounts. Network access happens only when you import an iCalendar link or turn on Google Calendar Sync with your own credentials. Calendar data stays on your PC. |
+| **Private by design** | No telemetry and no accounts. In Local mode WinKlok makes no background network requests. Network access happens only when you import an iCalendar (https) link, or connect a Google account and use Google Calendar Sync with your own credentials. Calendar data stays on your PC, in the mod's own storage folder (removed together with the mod; export to .ics to keep a copy). |
 
 ---
 
@@ -8124,6 +8124,60 @@ namespace ui
 } // namespace ui
 
 // ============================================================================
+//  PER-USER ACCESS HELPERS (shared by the calendar files and the notification copy)
+// ============================================================================
+namespace usr
+{
+    static const std::wstring &UserSid()
+    {
+        static const std::wstring sid = []
+        {
+            std::wstring s;
+            HANDLE t = nullptr;
+            if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &t))
+            {
+                DWORD n = 0;
+                GetTokenInformation(t, TokenUser, nullptr, 0, &n);
+                std::vector<BYTE> b(n ? n : 1);
+                LPWSTR str = nullptr;
+                if (n && GetTokenInformation(t, TokenUser, b.data(), n, &n) &&
+                    ConvertSidToStringSidW(((TOKEN_USER *)b.data())->User.Sid, &str))
+                {
+                    s = str;
+                    LocalFree(str);
+                }
+                CloseHandle(t);
+            }
+            return s;
+        }();
+        return sid;
+    }
+    struct OwnerOnly // security attributes: full access for this user only
+    {
+        SECURITY_ATTRIBUTES sa{};
+        PSECURITY_DESCRIPTOR sd = nullptr;
+        // inherit: files and folders created inside the folder get the same owner-only access
+        explicit OwnerOnly(bool inherit = false)
+        {
+            const std::wstring d = std::wstring(L"D:P(A;") + (inherit ? L"OICI" : L"") + L";FA;;;" + UserSid() + L")";
+            if (!UserSid().empty() && ConvertStringSecurityDescriptorToSecurityDescriptorW(d.c_str(), SDDL_REVISION_1, &sd, nullptr))
+            {
+                sa.nLength = sizeof(sa);
+                sa.lpSecurityDescriptor = sd;
+            }
+        }
+        ~OwnerOnly()
+        {
+            if (sd)
+                LocalFree(sd);
+        }
+        OwnerOnly(const OwnerOnly &) = delete;
+        OwnerOnly &operator=(const OwnerOnly &) = delete;
+        SECURITY_ATTRIBUTES *Get() { return sd ? &sa : nullptr; }
+    };
+} // namespace usr
+
+// ============================================================================
 //  CALENDAR ENGINE (events, local + Google data, iCalendar, ZIP, JSON)
 //  Pure logic first (no Windows calls: unit-testable), the Windows layer follows below.
 // ============================================================================
@@ -8364,7 +8418,7 @@ namespace cal
     // Platform hooks (the Windows layer installs them; tests install fakes).
     static bool (*g_zoneOffset)(const std::wstring &tz, long long utcMs, long long &offMs) = nullptr; // named zones
     static long long (*g_localOffset)(long long utcMs) = nullptr;                                     // the PC's own zone
-    static int g_unknownTz = 0;                                                                       // counted while importing
+    static std::atomic<int> g_unknownTz{0};                                                           // counted while importing
 
     static long long ZoneOff(const std::wstring &tz, long long utcMs)
     {
@@ -10103,6 +10157,11 @@ namespace cal
         unsigned method = 0;
         unsigned long long csize = 0, usize = 0, offset = 0;
     };
+    // off + len can wrap around for 64-bit values read from the file, so the range is checked without adding.
+    static bool InRange(unsigned long long off, unsigned long long len, size_t size)
+    {
+        return off <= size && len <= size - off;
+    }
     // Reads the central directory. false = not a (supported) ZIP file.
     static bool ZipList(const std::string &z, std::vector<ZipEntry> &out)
     {
@@ -10125,7 +10184,7 @@ namespace cal
             if (eocd < 20 || U32(d + eocd - 20) != 0x07064b50)
                 return false;
             unsigned long long z64 = (unsigned long long)U32(d + eocd - 20 + 8) | ((unsigned long long)U32(d + eocd - 20 + 12) << 32);
-            if (z64 + 56 > z.size() || U32(d + z64) != 0x06064b50)
+            if (!InRange(z64, 56, z.size()) || U32(d + z64) != 0x06064b50)
                 return false;
             total = (unsigned long long)U32(d + z64 + 32) | ((unsigned long long)U32(d + z64 + 36) << 32);
             cdSize = (unsigned long long)U32(d + z64 + 40) | ((unsigned long long)U32(d + z64 + 44) << 32);
@@ -10134,7 +10193,7 @@ namespace cal
         unsigned long long p = cdOff;
         for (unsigned long long k = 0; k < total; ++k)
         {
-            if (p + 46 > z.size() || U32(d + p) != 0x02014b50)
+            if (!InRange(p, 46, z.size()) || U32(d + p) != 0x02014b50)
                 return false;
             ZipEntry e;
             e.method = U16(d + p + 10);
@@ -10142,7 +10201,7 @@ namespace cal
             e.usize = U32(d + p + 24);
             const unsigned nl = U16(d + p + 28), xl = U16(d + p + 30), cl = U16(d + p + 32);
             e.offset = U32(d + p + 42);
-            if (p + 46 + nl + xl + cl > z.size())
+            if (!InRange(p, 46ull + nl + xl + cl, z.size()))
                 return false;
             e.name.assign((const char *)d + p + 46, nl);
             // ZIP64 extra field
@@ -10179,10 +10238,10 @@ namespace cal
     {
         const unsigned char *d = (const unsigned char *)z.data();
         out.clear();
-        if (e.offset + 30 > z.size() || U32(d + e.offset) != 0x04034b50)
+        if (!InRange(e.offset, 30, z.size()) || U32(d + e.offset) != 0x04034b50)
             return false;
         const unsigned long long start = e.offset + 30 + U16(d + e.offset + 26) + U16(d + e.offset + 28);
-        if (start + e.csize > z.size() || e.usize > limit)
+        if (!InRange(start, e.csize, z.size()) || e.usize > limit || (e.method == 0 && e.csize > limit))
             return false;
         if (e.method == 0)
         {
@@ -10635,7 +10694,6 @@ namespace cal
     static std::wstring g_msg;                 // last import / sync message (shown in Calendar settings)
     static std::wstring g_busy;                // what a running job is doing ("" = idle)
     static std::mutex g_msgMu;
-    static bool g_loaded = false;
 
     static void SetMsg(const std::wstring &m)
     {
@@ -10667,19 +10725,33 @@ namespace cal
     static Store &Active() { return g_mode.load() == 1 ? g_google : g_local; }
 
     // ---- files --------------------------------------------------------------------------------------------------------
+    // System DLLs are loaded from System32 only (no search through the application directory or PATH).
+    static HMODULE LoadSys32(const wchar_t *name)
+    {
+        return LoadLibraryExW(name, nullptr, 0x00000800 /*LOAD_LIBRARY_SEARCH_SYSTEM32*/);
+    }
+    // The calendar files live in the mod's own storage folder (Windhawk removes it with the mod), in a subfolder named by
+    // the user's SID with owner-only access: that storage folder is shared by every Windows user of the PC.
     static std::wstring DataDir()
     {
         static std::wstring dir;
         if (!dir.empty())
             return dir;
         wchar_t b[MAX_PATH] = {};
-        DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", b, MAX_PATH);
-        std::wstring p = n && n < MAX_PATH ? std::wstring(b, n) : std::wstring();
-        if (p.empty())
+        if (!Wh_GetModStoragePath(b, ARRAYSIZE(b)) || !b[0] || usr::UserSid().empty())
             return dir;
-        CreateDirectoryW((p + L"\\WinKlok").c_str(), nullptr);
-        p += L"\\WinKlok\\calendar";
-        CreateDirectoryW(p.c_str(), nullptr);
+        CreateDirectoryW(b, nullptr); // (already there in most cases)
+        const std::wstring p = std::wstring(b) + L"\\" + usr::UserSid();
+        usr::OwnerOnly acl(true);
+        if (!acl.Get())
+            return dir; // without the owner-only access nothing is stored
+        CreateDirectoryW(p.c_str(), acl.Get());
+        const DWORD at = GetFileAttributesW(p.c_str());
+        if (at == INVALID_FILE_ATTRIBUTES || !(at & FILE_ATTRIBUTE_DIRECTORY))
+            return dir;
+        // Also secure an already-existing SID directory; if its DACL cannot be restricted, fail closed.
+        if (!SetFileSecurityW(p.c_str(), DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION, acl.sd))
+            return dir;
         dir = p;
         return dir;
     }
@@ -10759,18 +10831,34 @@ namespace cal
         void(__cdecl *close)(void *) = nullptr;
         bool ok = false;
     };
+    struct ZoneIcu // ICU of Windows 10/11, loaded on first use and given back in ZoneShutdown
+    {
+        std::mutex mu;
+        Icu icu;
+        HMODULE mod = nullptr;
+        bool tried = false, closed = false;
+        std::map<std::wstring, void *> cache;
+        std::map<std::wstring, bool> bad;
+    };
+    static ZoneIcu &ZI()
+    {
+        static ZoneIcu z;
+        return z;
+    }
     static bool ZoneOffsetImpl(const std::wstring &tz, long long utcMs, long long &off)
     {
-        static std::mutex mu;
-        static Icu icu;
-        static bool tried = false;
-        static std::map<std::wstring, void *> cache;
-        static std::map<std::wstring, bool> bad;
-        std::lock_guard<std::mutex> l(mu);
-        if (!tried)
+        ZoneIcu &z = ZI();
+        std::lock_guard<std::mutex> l(z.mu);
+        if (z.closed)
+            return false;
+        Icu &icu = z.icu;
+        auto &cache = z.cache;
+        auto &bad = z.bad;
+        if (!z.tried)
         {
-            tried = true;
-            HMODULE m = LoadLibraryW(L"icu.dll");
+            z.tried = true;
+            HMODULE m = LoadSys32(L"icu.dll");
+            z.mod = m;
             if (m)
             {
                 icu.open = (decltype(icu.open))GetProcAddress(m, "ucal_open");
@@ -10819,6 +10907,25 @@ namespace cal
         off = (long long)zo + dst;
         return true;
     }
+    // Closes the cached ICU calendars and gives icu.dll back. Later lookups simply fail (floating time).
+    static void ZoneShutdown()
+    {
+        ZoneIcu &z = ZI();
+        std::lock_guard<std::mutex> l(z.mu);
+        z.closed = true;
+        if (z.icu.close)
+            for (auto &kv : z.cache)
+                if (kv.second)
+                    z.icu.close(kv.second);
+        z.cache.clear();
+        z.bad.clear();
+        z.icu = Icu();
+        if (z.mod)
+        {
+            FreeLibrary(z.mod);
+            z.mod = nullptr;
+        }
+    }
     static void InstallTimeHooks()
     {
         g_localOffset = LocalOffsetImpl;
@@ -10826,6 +10933,24 @@ namespace cal
     }
 
     // ---- secrets (DPAPI, current user) and randomness -----------------------------------------------------------------
+    static HMODULE g_crypt32 = nullptr;
+    static std::mutex g_cryptMu;
+    static HMODULE Crypt32()
+    {
+        std::lock_guard<std::mutex> l(g_cryptMu);
+        if (!g_crypt32)
+            g_crypt32 = LoadSys32(L"crypt32.dll");
+        return g_crypt32;
+    }
+    static void FreeCrypt32()
+    {
+        std::lock_guard<std::mutex> l(g_cryptMu);
+        if (g_crypt32)
+        {
+            FreeLibrary(g_crypt32);
+            g_crypt32 = nullptr;
+        }
+    }
     struct WkBlob
     {
         DWORD cb;
@@ -10833,7 +10958,7 @@ namespace cal
     };
     static std::string Protect(const std::string &plain, bool protect)
     {
-        static auto lib = LoadLibraryW(L"crypt32.dll");
+        HMODULE lib = Crypt32();
         using F1 = BOOL(WINAPI *)(WkBlob *, LPCWSTR, WkBlob *, PVOID, PVOID, DWORD, WkBlob *);
         using F2 = BOOL(WINAPI *)(WkBlob *, LPWSTR *, WkBlob *, PVOID, PVOID, DWORD, WkBlob *);
         if (!lib)
@@ -10948,13 +11073,16 @@ namespace cal
         wchar_t extra[4096] = {};
         uc.lpszExtraInfo = extra;
         uc.dwExtraInfoLength = 4095;
-        if (!WinHttpCrackUrl(url.c_str(), 0, 0, &uc) || (uc.nScheme != INTERNET_SCHEME_HTTPS && uc.nScheme != INTERNET_SCHEME_HTTP))
+        if (!WinHttpCrackUrl(url.c_str(), 0, 0, &uc) || uc.nScheme != INTERNET_SCHEME_HTTPS) // https only
         {
             r.err = "bad address";
             return r;
         }
         const std::wstring objName = std::wstring(path, uc.dwUrlPathLength) + std::wstring(extra, uc.dwExtraInfoLength);
-        HINTERNET ses = Reg(WinHttpOpen(L"WinKlok/" WK_VERSION, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
+        // 4 = WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY: follows the system's automatic proxy settings (WPAD / PAC script)
+        HINTERNET ses = Reg(WinHttpOpen(L"WinKlok/" WK_VERSION, 4, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
+        if (!ses) // an older system: the proxy configured for WinHTTP
+            ses = Reg(WinHttpOpen(L"WinKlok/" WK_VERSION, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
         if (!ses)
         {
             r.err = "network unavailable";
@@ -11012,9 +11140,31 @@ namespace cal
         ModalGuard() { ++g_modal; }
         ~ModalGuard() { --g_modal; }
     };
+    // GetOpenFileName / GetSaveFileName change the current directory of explorer.exe to the folder that was picked, which
+    // keeps a USB drive "in use". OFN_NOCHANGEDIR has no effect on GetOpenFileName, so the directory is put back here.
+    struct KeepCwd
+    {
+        std::wstring dir;
+        KeepCwd()
+        {
+            DWORD n = GetCurrentDirectoryW(0, nullptr);
+            if (n)
+            {
+                dir.resize(n);
+                n = GetCurrentDirectoryW(n, &dir[0]);
+                dir.resize(n);
+            }
+        }
+        ~KeepCwd()
+        {
+            if (!dir.empty())
+                SetCurrentDirectoryW(dir.c_str());
+        }
+    };
     static bool PickOpenFile(HWND owner, std::wstring &path)
     {
         ModalGuard g;
+        KeepCwd cwd;
         wchar_t buf[MAX_PATH * 2] = {};
         OPENFILENAMEW o{};
         o.lStructSize = sizeof(o);
@@ -11032,6 +11182,7 @@ namespace cal
     static bool PickSaveFile(HWND owner, const std::wstring &suggested, std::wstring &path)
     {
         ModalGuard g;
+        KeepCwd cwd;
         wchar_t buf[MAX_PATH * 2] = {};
         wcsncpy(buf, suggested.c_str(), MAX_PATH - 1);
         OPENFILENAMEW o{};
@@ -11100,7 +11251,6 @@ namespace cal
             if (c.visible && c.id.empty())
                 c.visible = false;
         g_mode = Wh_GetIntValue(L"calMode", 0) == 1 ? 1 : 0;
-        g_loaded = true;
         ++g_version;
     }
     static void SaveActive()
@@ -11116,9 +11266,18 @@ namespace cal
     static bool JobRunning() { return g_job && WaitForSingleObject(g_job, 0) == WAIT_TIMEOUT; }
     static DWORD WINAPI JobThunk(LPVOID p)
     {
-        std::function<void()> *f = (std::function<void()> *)p;
-        (*f)();
-        delete f;
+        std::unique_ptr<std::function<void()>> f((std::function<void()> *)p);
+        try
+        {
+            (*f)();
+        }
+        catch (...)
+        { // an exception that leaves a thread would end explorer.exe
+            Wh_Log(L"calendar job failed");
+            SetMsg(L"The task failed.");
+            SetBusy(L"");
+            Changed();
+        }
         return 0;
     }
     static bool StartJob(const std::wstring &label, std::function<void()> fn)
@@ -11531,14 +11690,12 @@ namespace cal
         if (items.empty())
             return badEntries ? L"No calendar data was found. The file is not a valid iCalendar (.ics) or Google Takeout file." : L"No .ics calendar was found in this file.";
         std::wstring out;
-        int totalNew = 0;
         {
             std::lock_guard<std::recursive_mutex> l(g_mu);
             const long long now = td::WallMs();
             for (Item &it : items)
             {
                 const MergeReport m = MergeImport(g_local, it.r, kind, url, it.name, now);
-                totalNew += m.added;
                 if (!out.empty())
                     out += L"\n";
                 out += (m.createdCalendar ? L"New calendar \u201C" : L"Updated \u201C") + m.calName + L"\u201D: " + std::to_wstring(m.added) + L" new";
@@ -11565,7 +11722,6 @@ namespace cal
         }
         if (badEntries)
             out += L"\n" + Plural(badEntries, L"file", L"files") + L" in the archive could not be read and " + (badEntries == 1 ? L"was" : L"were") + L" skipped.";
-        (void)totalNew;
         return out;
     }
 
@@ -11591,6 +11747,8 @@ namespace cal
     }
     static std::wstring FetchAndImport(const std::wstring &url)
     {
+        if (url.size() < 9 || !EqNoCaseW(url.substr(0, 8), L"https://"))
+            return L"Only https:// links are supported. Nothing was changed.";
         const HttpResp r = Http(L"GET", url, std::string(), L"Accept: text/calendar, application/zip, */*\r\n");
         if (r.status == 0)
             return L"The address could not be reached (" + FromUtf8(r.err) + L"). Nothing was changed.";
@@ -11605,7 +11763,7 @@ namespace cal
     static void ImportUrlAsync(const std::wstring &url0)
     {
         const std::wstring url = NormalizeUrl(url0);
-        if (url.size() < 8 || (EqNoCaseW(url.substr(0, 8), L"https://") == false && EqNoCaseW(url.substr(0, 7), L"http://") == false))
+        if (url.size() < 9 || !EqNoCaseW(url.substr(0, 8), L"https://"))
         {
             SetMsg(L"Enter a full link that starts with https:// (or webcal://).");
             return;
@@ -11729,6 +11887,8 @@ namespace cal
     static void LoadAuth()
     {
         std::lock_guard<std::recursive_mutex> l(g_mu);
+        if (DataDir().empty())
+            return;
         std::string d;
         if (!ReadFileAll(AuthPath(), d) && !ReadFileAll(AuthPath() + L".bak", d))
             return;
@@ -11765,6 +11925,8 @@ namespace cal
     static void LoadOps()
     {
         std::lock_guard<std::recursive_mutex> l(g_mu);
+        if (DataDir().empty())
+            return;
         std::string d;
         if (!ReadFileAll(OpsPath(), d) && !ReadFileAll(OpsPath() + L".bak", d))
             return;
@@ -11926,6 +12088,14 @@ namespace cal
         }
         return j;
     }
+    // "YYYY-MM-DD" -> "YYYYMMDD"; false for anything shorter or differently shaped (never throws)
+    static bool CompactDate(const std::string &s, std::string &o)
+    {
+        if (s.size() != 10 || s[4] != '-' || s[7] != '-')
+            return false;
+        o = s.substr(0, 4) + s.substr(5, 2) + s.substr(8, 2);
+        return true;
+    }
     static bool EventFromJson(const Json &it, const std::wstring &calId, Event &e)
     {
         if (it.Str_("status") == "cancelled")
@@ -11947,11 +12117,12 @@ namespace cal
         {
             bool dateOnly, utc;
             long long d1, ms, d2;
-            if (!ParseDateTime(std::string(sd).erase(4, 1).erase(6, 1), dateOnly, utc, d1, ms))
+            std::string c1, c2;
+            if (!CompactDate(sd, c1) || !ParseDateTime(c1, dateOnly, utc, d1, ms))
                 return false;
             e.allDay = true;
             e.s = d1;
-            e.e = ParseDateTime(std::string(ed).erase(4, 1).erase(6, 1), dateOnly, utc, d2, ms) ? d2 : d1 + 1;
+            e.e = CompactDate(ed, c2) && ParseDateTime(c2, dateOnly, utc, d2, ms) ? d2 : d1 + 1;
             if (e.e <= e.s)
                 e.e = e.s + 1;
         }
@@ -12395,19 +12566,30 @@ namespace cal
                 any = !g_accts.empty();
             }
             DWORD wait = INFINITE;
-            if (any)
+            // Local mode makes no background network requests: the worker syncs only in Google mode, or once when something asked
+            // for it (connect, Refresh, switching to Google mode). Changes queued meanwhile are sent by the next sync.
+            const bool google = g_mode.load() == 1;
+            const bool asked = g_forcePull.exchange(false);
+            if (any && (google || asked))
             {
-                const bool google = g_mode.load() == 1 || g_forcePull.exchange(false);
                 g_syncing = true;
-                const bool ok = SyncOnce(google);
+                bool ok = false;
+                try
+                {
+                    ok = SyncOnce(true);
+                }
+                catch (...)
+                { // an exception that leaves a thread would end explorer.exe
+                    Wh_Log(L"sync failed");
+                }
                 g_syncing = false;
                 Changed();
                 if (ok)
                 {
                     backoff = 0;
-                    wait = google ? 5 * 60 * 1000 : 15 * 60 * 1000;
+                    wait = google ? 5 * 60 * 1000 : INFINITE;
                 }
-                else
+                else if (google)
                 {
                     wait = (DWORD)std::min(300000, 30000 << std::min(backoff, 4));
                     ++backoff;
@@ -12530,6 +12712,7 @@ namespace cal
     };
     struct Ws
     {
+        HMODULE mod = nullptr; // the ws2_32 reference taken by LoadWs
         int(WINAPI *startup)(WORD, void *) = nullptr;
         int(WINAPI *cleanup)() = nullptr;
         SOCK(WINAPI *socket_)(int, int, int) = nullptr;
@@ -12544,9 +12727,10 @@ namespace cal
     };
     static bool LoadWs(Ws &w)
     {
-        HMODULE m = LoadLibraryW(L"ws2_32.dll");
+        HMODULE m = LoadSys32(L"ws2_32.dll");
         if (!m)
             return false;
+        w.mod = m;
 #define WKW(f, n) w.f = (decltype(w.f))GetProcAddress(m, n)
         WKW(startup, "WSAStartup");
         WKW(cleanup, "WSACleanup");
@@ -12597,6 +12781,15 @@ namespace cal
         if (cid.empty() || sec.empty())
             return L"Enter and save your Client ID and Client Secret first.";
         Ws w;
+        struct ModFree // gives ws2_32 back on every way out (declared first: it runs after WSACleanup)
+        {
+            Ws &w;
+            ~ModFree()
+            {
+                if (w.mod)
+                    FreeLibrary(w.mod);
+            }
+        } modFree{w};
         if (!LoadWs(w))
             return L"Network support is not available.";
         char wsa[512] = {};
@@ -12765,11 +12958,17 @@ namespace cal
         SaveAuth();
         GoogleWake();
     }
-    static void Disconnect(const std::wstring &email)
+    // False (nothing done) while an import or another job runs: the token is revoked by a job of its own.
+    static bool Disconnect(const std::wstring &email)
     {
+        if (JobRunning())
+            return false;
         std::string rt;
         {
             std::lock_guard<std::recursive_mutex> l(g_mu);
+            // The sync thread may be outside the UI job slot. Do not race its account snapshot or file writes.
+            if (g_syncing.load())
+                return false;
             for (auto &a : g_accts)
                 if (a.email == email)
                     rt = a.refresh;
@@ -12794,11 +12993,19 @@ namespace cal
             SaveAuth();
             SaveGoogle();
             SaveOps();
+            // the previous copies still hold the removed account's token, calendars and events
+            if (!DataDir().empty())
+            {
+                DeleteFileW((AuthPath() + L".bak").c_str());
+                DeleteFileW((GooglePath() + L".bak").c_str());
+                DeleteFileW((OpsPath() + L".bak").c_str());
+            }
             ++g_version;
         }
         if (!rt.empty()) // revoke the token with Google (best effort, in the background)
             StartJob(L"Disconnecting\u2026", [rt]()
                      { Http(L"POST", L"https://oauth2.googleapis.com/revoke", "token=" + UrlEnc(rt), L"Content-Type: application/x-www-form-urlencoded\r\n", 1 << 16); });
+        return true;
     }
     static bool HasAccounts()
     {
@@ -12825,14 +13032,6 @@ namespace cal
         return L"";
     }
 
-    static std::wstring ConnectedLabel()
-    {
-        std::lock_guard<std::recursive_mutex> l(g_mu);
-        std::wstring s;
-        for (auto &a : g_accts)
-            s += (s.empty() ? L"" : L", ") + a.email + (a.needsReauth ? L" (sign in again)" : L"");
-        return s;
-    }
     static std::vector<std::wstring> AccountEmails()
     {
         std::lock_guard<std::recursive_mutex> l(g_mu);
@@ -12840,11 +13039,6 @@ namespace cal
         for (auto &a : g_accts)
             v.push_back(a.email);
         return v;
-    }
-    static std::wstring ClientIdText()
-    {
-        std::lock_guard<std::recursive_mutex> l(g_mu);
-        return FromUtf8(g_clientId);
     }
     static bool HasClientId()
     {
@@ -12890,6 +13084,8 @@ namespace cal
             CloseHandle(g_wake);
             g_wake = nullptr;
         }
+        ZoneShutdown(); // every calendar thread is gone: give back icu.dll and crypt32.dll
+        FreeCrypt32();
     }
 } // namespace cal
 
@@ -14056,6 +14252,7 @@ namespace ui
         sei.lpFile = file.c_str();
         sei.lpParameters = args.c_str();
         sei.nShow = SW_HIDE;
+        sei.hwnd = g_panelWnd.load(); // owner of the UAC prompt, so that it opens in front instead of behind other windows
         cancelled = false;
         if (!ShellExecuteExW(&sei))
         {
@@ -14288,9 +14485,14 @@ namespace ui
             slideClipY = 0;
             if (dockTop)
             { // top bar: the panel is cut at the line below it (panelWorkBottom) and kept under the bar in z-order
-                for (HWND t = FindWindowW(L"Shell_TrayWnd", nullptr); t && !slideTaskbar; t = FindWindowExW(nullptr, t, L"Shell_SecondaryTrayWnd", nullptr))
-                    if (IsWindowVisible(t) && MonitorFromWindow(t, MONITOR_DEFAULTTONULL) == mon)
+                auto onMon = [&](HWND t)
+                {
+                    if (t && !slideTaskbar && IsWindowVisible(t) && MonitorFromWindow(t, MONITOR_DEFAULTTONULL) == mon)
                         slideTaskbar = t;
+                };
+                onMon(FindWindowW(L"Shell_TrayWnd", nullptr));
+                for (HWND t = nullptr; !slideTaskbar && (t = FindWindowExW(nullptr, t, L"Shell_SecondaryTrayWnd", nullptr));) // from the top of the z-order
+                    onMon(t);
                 slideUnder = slideTaskbar != nullptr;
                 slideClipY = panelWorkBottom;
                 return slideUnder;
@@ -16772,9 +16974,10 @@ namespace ui
             long long wall;
             if (!ReadWhen(ds, ts, wall, evAllDay))
                 return;
+            const long long day0 = cal::FloorDiv(wall, cal::kDayMs); // the day the box was on
             wall += isDate ? (long long)dir * cal::kDayMs : (long long)dir * 15 * 60000LL;
-            if (!evAllDay && !isDate)
-                wall = std::max(wall, cal::FloorDiv(wall, cal::kDayMs) * cal::kDayMs); // stays within the day it was on
+            if (!evAllDay && !isDate) // a time nudge stays within that day (00:00 .. 23:59)
+                wall = std::min(std::max(wall, day0 * cal::kDayMs), day0 * cal::kDayMs + cal::kDayMs - 60000LL);
             WriteWhen(ds, ts, wall);
             if (ds == E_EV_SD)
                 OnStartEdited();
@@ -17745,8 +17948,10 @@ namespace ui
                 const auto em = cal::AccountEmails();
                 if (param >= 0 && param < (int)em.size())
                 {
-                    cal::Disconnect(em[(size_t)param]);
-                    cal::SetGMsg(L"Disconnected " + em[(size_t)param] + L".");
+                    if (cal::Disconnect(em[(size_t)param]))
+                        cal::SetGMsg(L"Disconnected " + em[(size_t)param] + L".");
+                    else
+                        cal::SetGMsg(L"Another task is still running. Try again in a moment.");
                 }
                 break;
             }
@@ -19612,6 +19817,7 @@ namespace ui
                 if (HIWORD(wp) == EN_SETFOCUS || HIWORD(wp) == EN_KILLFOCUS)
                     Invalidate();
                 return 0;
+            case WM_CTLCOLORSTATIC: // read-only edit boxes ask here instead of WM_CTLCOLOREDIT
             case WM_CTLCOLOREDIT:
             {
                 HDC hdc = (HDC)wp;
@@ -19887,50 +20093,8 @@ namespace ui
         // Background read state (see "background reading" below). g_cancel is checked inside the long loops.
         static std::atomic<bool> g_cancel{false}, g_busy{false};
 
-        static const std::wstring &UserSid()
-        {
-            static const std::wstring sid = []
-            {
-                std::wstring s;
-                HANDLE t = nullptr;
-                if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &t))
-                {
-                    DWORD n = 0;
-                    GetTokenInformation(t, TokenUser, nullptr, 0, &n);
-                    std::vector<BYTE> b(n ? n : 1);
-                    LPWSTR str = nullptr;
-                    if (n && GetTokenInformation(t, TokenUser, b.data(), n, &n) &&
-                        ConvertSidToStringSidW(((TOKEN_USER *)b.data())->User.Sid, &str))
-                    {
-                        s = str;
-                        LocalFree(str);
-                    }
-                    CloseHandle(t);
-                }
-                return s;
-            }();
-            return sid;
-        }
-        struct OwnerOnly // security attributes: full access for this user only
-        {
-            SECURITY_ATTRIBUTES sa{};
-            PSECURITY_DESCRIPTOR sd = nullptr;
-            OwnerOnly()
-            {
-                const std::wstring d = L"D:P(A;;FA;;;" + UserSid() + L")";
-                if (!UserSid().empty() && ConvertStringSecurityDescriptorToSecurityDescriptorW(d.c_str(), SDDL_REVISION_1, &sd, nullptr))
-                {
-                    sa.nLength = sizeof(sa);
-                    sa.lpSecurityDescriptor = sd;
-                }
-            }
-            ~OwnerOnly()
-            {
-                if (sd)
-                    LocalFree(sd);
-            }
-            SECURITY_ATTRIBUTES *Get() { return sd ? &sa : nullptr; }
-        };
+        using usr::UserSid; // shared with the calendar files (defined before namespace cal)
+        using usr::OwnerOnly;
 
         // The database is in use by Windows, so it is read with every sharing mode allowed.
         static bool CopyShared(const std::wstring &src, const std::wstring &dst)
@@ -21075,12 +21239,12 @@ namespace ui
 
     static NotifWindow *g_notif = nullptr;
 
-    // Every few seconds, only while the bell is on: compares the database's file signature (cheap) and reads again on a change.
+    // Every few seconds, only in the bell's "When notified" mode (the one that needs the count): compares the database's file signature (cheap) and reads again on a change.
     static void NotifPoll()
     {
         static ULONGLONG last = 0;
         const ULONGLONG now = MonoMs();
-        if (!g_notif || !g_notif->hwnd || td::g_set.showBell.load() == 0 || now - last < 3000)
+        if (!g_notif || !g_notif->hwnd || td::g_set.showBell.load() != 2 || now - last < 3000)
             return;
         last = now;
         if (!g_notif->IsOpen())
@@ -21823,7 +21987,14 @@ static DWORD WINAPI InitThreadProc(LPVOID)
     if (pid != GetCurrentProcessId() || g_shuttingDown.load())
         return 0;     // another explorer.exe (folder windows, "Show in folder"): stay idle
     td::g_eng.Load(); // before the UI starts: Load may queue the missed-alarm popup
-    cal::Init();      // calendar data and the Google sync worker
+    try
+    {
+        cal::Init(); // calendar data and the Google sync worker
+    }
+    catch (...)
+    { // for example out of memory while reading a very large calendar file: the rest of the mod still starts
+        Wh_Log(L"calendar start-up failed");
+    }
     if (!ui::Start())
         Wh_Log(L"could not start the UI thread");
     return 0;
