@@ -51,6 +51,10 @@ Press the **Windows key** (or click **Start**) and type, or pick what you want t
 |---|---|---|
 | ![Original Siri, Clear glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-glass.png) | ![Original Siri, Dark theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-dark.png) | ![Original Siri, OLED theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-oled.png) |
 
+| Custom liquid glass |
+|---|
+| ![Original Siri, Custom liquid glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-custom-liquid.png) |
+
 ### Floating
 | Clear glass | Light | Siri gradient |
 |---|---|---|
@@ -421,7 +425,7 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     $name:pt-BR: "Temas Claro, Escuro e OLED: efeito vidro"
     $description: "Light on the top, the thickness of the glass at the edges and a beveled rim"
     $description:pt-BR: "Brilho no topo, a espessura do vidro nas bordas e uma borda chanfrada"
-  - liveGlass: true
+  - liveGlass: false
     $name: "Liquid glass: follow the background live"
     $name:pt-BR: "Vidro líquido: acompanhar o fundo ao vivo"
     $description: "Videos and animated wallpapers move inside the glass, but the launcher no longer shows in screenshots and screen recordings"
@@ -1543,7 +1547,7 @@ struct Settings {
     bool liveBackground = true;   // no snapshot: animated wallpapers and videos keep playing behind
     bool glassLiquid = true;       // glass themes: refraction (liquid glass) instead of the live blur
     int refraction = 70;          // liquid glass: how far the edges bend the background (%)
-    bool liveGlass = true;        // liquid glass: picture retaken while open (hides the launcher from captures)
+    bool liveGlass = false;       // liquid glass: picture retaken while open (hides the launcher from captures)
     int tintLevel = 100;         // Custom liquid glass theme: how solid the color is at the top (%)
     int tintReach = 29;          // Custom liquid glass theme: how far down the color goes before the clear glass (%)
     D2D1_COLOR_F tintColor = D2D1::ColorF(0x050505);   // Custom liquid glass theme: the color of the glass
@@ -3810,7 +3814,7 @@ const CfgDefault kCfgDefaults[] = {
     {L"appearance.glassStyle", L"liquid"},
     {L"appearance.refraction", L"70"},
     {L"appearance.glassEffect", L"1"},
-    {L"appearance.liveGlass", L"1"},
+    {L"appearance.liveGlass", L"0"},
     {L"appearance.tintLevel", L"100"},
     {L"appearance.tintReach", L"29"},
     {L"appearance.tintColor", L"#050505"},
