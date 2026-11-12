@@ -2,7 +2,7 @@
 // @id              shell-font-changer-plus
 // @name            Shell Font Changer Plus
 // @description     Any installed font in Explorer, Start, Search and Settings, with icons and emoji left intact
-// @version         1.3.3
+// @version         1.3.4
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
 // @homepage        https://github.com/DavidHiFi/davids-windhawk-mods
@@ -45,7 +45,8 @@ turn into empty boxes.
 ## How to use
 
 Type an installed font family name in the settings, such as `FiraCode Nerd Font`
-or `Inter`. Leave the field empty, or type `None`, to turn the mod off.
+or `Inter`. The field starts empty, so nothing changes until you pick a font.
+Leave it empty, or type `None`, to turn the mod off.
 
 If the font is not installed, or its name is 32 characters or longer, the mod
 does not start. The Windhawk log says why.
@@ -65,7 +66,7 @@ by Gabriela Cristei. MIT.
 // ==WindhawkModSettings==
 /*
 - font:
-  - name: FiraCode Nerd Font
+  - name: ""
     $name: Font family
     $description: An installed font family, such as Inter. Leave empty or type None to keep the original font.
   $name: Text font
@@ -79,7 +80,6 @@ by Gabriela Cristei. MIT.
 #include <cwctype>
 #include <algorithm>
 #include <vector>
-#include <map>
 #include <cmath>
 
 namespace policy {
@@ -396,7 +396,10 @@ HRESULT WINAPI themeHook(HTHEME theme, HDC dc, int part, int state, LPCWSTR text
 decltype(&DrawThemeTextEx) themeExOriginal;
 HRESULT WINAPI themeExHook(HTHEME theme, HDC dc, int part, int state, LPCWSTR text, int length, DWORD flags, LPRECT rect, const DTTOPTS* opts) {
     FontScope font(dc, text, policy::textLength(text, length));
-    fitBox(font, dc, text, policy::textLength(text, length), rect, flags, nullptr, true);
+    // A measuring call has no final box yet, so it is not fitted.
+    if (!(opts && (opts->dwFlags & DTT_CALCRECT))) {
+        fitBox(font, dc, text, policy::textLength(text, length), rect, flags, nullptr, true);
+    }
     return themeExOriginal(theme, dc, part, state, text, length, flags, rect, opts);
 }
 
@@ -456,8 +459,12 @@ bool loadSettings() {
     Wh_FreeStringSetting(name);
     policy::enabled = !policy::target.empty() && _wcsicmp(policy::target.c_str(), L"None") != 0;
     if (!policy::enabled) return true;
-    if (policy::target.size() >= LF_FACESIZE || policy::protectedFace(policy::target.c_str())) {
+    if (policy::target.size() >= LF_FACESIZE) {
         Wh_Log(L"Choose a text font family shorter than 32 characters.");
+        return false;
+    }
+    if (policy::protectedFace(policy::target.c_str())) {
+        Wh_Log(L"Icon and emoji fonts cannot be used as the text font.");
         return false;
     }
     IDWriteFactory* factory = nullptr;
