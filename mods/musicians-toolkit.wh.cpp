@@ -2,7 +2,7 @@
 // @id              musicians-toolkit
 // @name            Musician's Toolkit
 // @description     An all-in-one toolkit flyout for musicians: a chord library, a metronome, a tuner, a tap tempo calculator, a strumming pattern builder, the circle of fifths and a timed note trainer for guitar, ukulele and piano.
-// @version         1.2.0
+// @version         1.1.0
 // @author          DpakB
 // @homepage        https://dpakb.com
 // @github          https://github.com/DeepakBalaraman
