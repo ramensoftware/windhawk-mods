@@ -19,7 +19,7 @@ The Windows 11 taskbar right-click menu only offers "Taskbar settings" and
 "Task Manager". This mod lets you add your own items to that menu. Each item
 has a label, an optional icon, and a command that runs when you click it.
 
-![The taskbar menu with three custom items](https://raw.githubusercontent.com/jcyrio/windhawk-taskbar-context-menu-custom-items/main/screenshot.png)
+![The taskbar menu with custom items](https://raw.githubusercontent.com/jcyrio/windhawk-taskbar-context-menu-custom-items/main/screenshot.png)
 
 The items are added to the native menu itself, so they look and behave like
 the built-in ones.
@@ -30,13 +30,14 @@ Add as many items as you like in the mod settings. Each item has:
 
 * **Label**: the text shown in the menu. A label that is a single dash (`-`)
   adds a separator line instead of an item.
-* **Command**: what to open. Anything that works in the Run dialog (Win+R)
-  works here: a program (`notepad.exe`), a full path to a file or script, a
-  folder, a URL (`https://example.com`), a settings page
+* **Command**: what to open: a program (`notepad.exe`), a full path to a file
+  or script, a folder, a URL (`https://example.com`), a settings page
   (`ms-settings:display`) or a shell location (`shell:Downloads`). Environment
   variables such as `%USERPROFILE%` are expanded. Quotes around a path with
   spaces are not needed.
-* **Arguments**: optional command-line arguments for the command.
+* **Arguments**: optional command-line arguments for the command. They go
+  here and not in the Command field, so a command line such as
+  `notepad.exe C:\notes.txt` is split over the two fields.
 * **Icon**: optional. The hex code of a glyph in the Segoe Fluent Icons font,
   for example `E756` for a command prompt. The full list is in Microsoft's
   [Segoe Fluent Icons reference](https://learn.microsoft.com/en-us/windows/apps/design/style/segoe-fluent-icons-font).
@@ -59,6 +60,9 @@ a heading.
 | Network connections | `ncpa.cpl` | |
 | My script | `powershell.exe` | `-NoProfile -File "C:\Scripts\my script.ps1"` |
 | Restart Explorer | `cmd.exe` | `/c taskkill /f /im explorer.exe & start explorer.exe` |
+
+The Restart Explorer example closes all File Explorer windows and stops file
+copies that are in progress. Turn on "Hide window" for it.
 
 ## Other settings
 
@@ -101,10 +105,10 @@ by oyrslyng.
       $description: Text shown in the menu. Use a single dash (-) to add a separator line.
     - command: wt.exe
       $name: Command
-      $description: Program, file, folder, URL, ms-settings page or shell location to open. Environment variables such as %USERPROFILE% are expanded.
+      $description: Program, file, folder, URL, ms-settings page or shell location to open, without arguments. Environment variables such as %USERPROFILE% are expanded.
     - arguments: ""
       $name: Arguments
-      $description: Optional command-line arguments
+      $description: Optional command-line arguments for the command
     - icon: E756
       $name: Icon
       $description: Optional hex code of a Segoe Fluent Icons glyph, for example E756, or a single character such as an emoji
@@ -119,12 +123,6 @@ by oyrslyng.
     - icon: E770
     - runAsAdmin: false
     - hideWindow: false
-  - - name: Restart Explorer
-    - command: cmd.exe
-    - arguments: /c taskkill /f /im explorer.exe & start explorer.exe
-    - icon: E72C
-    - runAsAdmin: false
-    - hideWindow: true
   $name: Menu items
 - placement: bottom
   $name: Placement
@@ -146,7 +144,6 @@ by oyrslyng.
 #include <windows.h>
 
 #include <shellapi.h>
-#include <shlobj.h>
 
 #undef GetCurrentTime
 
@@ -227,7 +224,7 @@ std::wstring Trim(std::wstring_view value) {
 template <typename... Args>
 std::wstring GetStringSetting(PCWSTR valueName, Args... args) {
     auto value = WindhawkUtils::StringSetting::make(valueName, args...);
-    return value.get() ? Trim(value.get()) : std::wstring();
+    return Trim(value.get());
 }
 
 void LoadSettings() {
@@ -267,12 +264,16 @@ void LoadSettings() {
 ////////////////////////////////////////////////////////////////////////////////
 // Running commands
 
-// Set when the mod is being unloaded. A launch thread can outlive the mod's
-// registration with Windhawk, and must not log after that point.
+// Set when the mod is being unloaded. From that point on no menu is extended
+// and no command is started.
 std::atomic<bool> g_unloading;
 
+// The threads that start commands. Wh_ModUninit waits for them, so that none
+// is still running code of the mod when Windhawk unloads it.
+std::mutex g_launchThreadsMutex;
+std::vector<HANDLE> g_launchThreads;
+
 struct LaunchRequest {
-    HMODULE module = nullptr;
     std::wstring name;
     std::wstring command;
     std::wstring arguments;
@@ -315,58 +316,47 @@ std::wstring StripSurroundingQuotes(const std::wstring& value) {
 
 DWORD WINAPI LaunchThread(LPVOID param) {
     std::unique_ptr<LaunchRequest> request(static_cast<LaunchRequest*>(param));
-    HMODULE module = request->module;
 
-    {
-        HRESULT hrCoInit = CoInitializeEx(
-            nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    HRESULT hrCoInit = CoInitializeEx(
+        nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
-        std::wstring command =
-            StripSurroundingQuotes(ExpandEnvironment(request->command));
-        std::wstring arguments = ExpandEnvironment(request->arguments);
+    std::wstring command =
+        StripSurroundingQuotes(ExpandEnvironment(request->command));
+    std::wstring arguments = ExpandEnvironment(request->arguments);
 
-        // Explorer's own working directory is System32. Start commands in the
-        // user's profile folder instead, like a terminal would.
-        std::wstring directory = ExpandEnvironment(L"%USERPROFILE%");
+    // Explorer's own working directory is System32. Start commands in the
+    // user's profile folder instead, like a terminal would.
+    std::wstring directory = ExpandEnvironment(L"%USERPROFILE%");
 
-        SHELLEXECUTEINFOW sei = {};
-        sei.cbSize = sizeof(sei);
-        // The thread exits right after the call, so the launch has to complete
-        // before ShellExecuteEx returns. Error UI is left enabled so that a
-        // mistyped command is reported to the user.
-        sei.fMask = SEE_MASK_NOASYNC;
-        sei.lpVerb = request->runAsAdmin ? L"runas" : nullptr;
-        sei.lpFile = command.c_str();
-        sei.lpParameters = arguments.empty() ? nullptr : arguments.c_str();
-        sei.lpDirectory = directory.empty() ? nullptr : directory.c_str();
-        sei.nShow = request->hideWindow ? SW_HIDE : SW_SHOWNORMAL;
+    SHELLEXECUTEINFOW sei = {};
+    sei.cbSize = sizeof(sei);
+    // The thread exits right after the call, so the launch has to complete
+    // before ShellExecuteEx returns. Error UI is left enabled so that a
+    // mistyped command is reported to the user.
+    sei.fMask = SEE_MASK_NOASYNC;
+    sei.lpVerb = request->runAsAdmin ? L"runas" : nullptr;
+    sei.lpFile = command.c_str();
+    sei.lpParameters = arguments.empty() ? nullptr : arguments.c_str();
+    sei.lpDirectory = directory.empty() ? nullptr : directory.c_str();
+    sei.nShow = request->hideWindow ? SW_HIDE : SW_SHOWNORMAL;
 
-        BOOL started = ShellExecuteExW(&sei);
-        DWORD error = started ? ERROR_SUCCESS : GetLastError();
-
-        if (g_unloading) {
-            // No logging, see above.
-        } else if (started) {
-            Wh_Log(L"Started \"%s\"", request->name.c_str());
+    if (ShellExecuteExW(&sei)) {
+        Wh_Log(L"Started \"%s\"", request->name.c_str());
+    } else {
+        DWORD error = GetLastError();
+        if (error == ERROR_CANCELLED) {
+            Wh_Log(L"Starting \"%s\" was cancelled by the user",
+                   request->name.c_str());
         } else {
-            if (error == ERROR_CANCELLED) {
-                Wh_Log(L"Starting \"%s\" was cancelled by the user",
-                       request->name.c_str());
-            } else {
-                Wh_Log(L"Failed to start \"%s\" (%s), error %lu",
-                       request->name.c_str(), command.c_str(), error);
-            }
-        }
-
-        if (SUCCEEDED(hrCoInit)) {
-            CoUninitialize();
+            Wh_Log(L"Failed to start \"%s\" (%s), error %lu",
+                   request->name.c_str(), command.c_str(), error);
         }
     }
 
-    request.reset();
+    if (SUCCEEDED(hrCoInit)) {
+        CoUninitialize();
+    }
 
-    // Release the reference that kept the mod loaded while the thread ran.
-    FreeLibraryAndExitThread(module, 0);
     return 0;
 }
 
@@ -380,27 +370,47 @@ void Launch(const MenuItemSettings& item) {
     request->runAsAdmin = item.runAsAdmin;
     request->hideWindow = item.hideWindow;
 
-    // Keep the mod loaded until the thread exits, even if the mod is disabled
-    // in the meantime.
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                            reinterpret_cast<LPCWSTR>(&LaunchThread),
-                            &request->module)) {
-        Wh_Log(L"GetModuleHandleExW failed, error %lu", GetLastError());
+    std::lock_guard<std::mutex> lock(g_launchThreadsMutex);
+    if (g_unloading) {
         return;
     }
 
-    HMODULE module = request->module;
+    // Close the handles of the threads that have already finished.
+    std::erase_if(g_launchThreads, [](HANDLE thread) {
+        if (WaitForSingleObject(thread, 0) != WAIT_OBJECT_0) {
+            return false;
+        }
+
+        CloseHandle(thread);
+        return true;
+    });
+
     HANDLE thread =
         CreateThread(nullptr, 0, LaunchThread, request.get(), 0, nullptr);
     if (!thread) {
         Wh_Log(L"CreateThread failed, error %lu", GetLastError());
-        FreeLibrary(module);
         return;
     }
 
     // The thread owns the request now.
     request.release();
-    CloseHandle(thread);
+    g_launchThreads.push_back(thread);
+}
+
+// Called while the mod is unloaded, after the click handlers are removed, so
+// no new thread can be started. A thread that shows a UAC prompt or an error
+// message keeps running until the user closes it.
+void WaitForLaunchThreads() {
+    std::vector<HANDLE> threads;
+    {
+        std::lock_guard<std::mutex> lock(g_launchThreadsMutex);
+        threads.swap(g_launchThreads);
+    }
+
+    for (HANDLE thread : threads) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -707,6 +717,13 @@ void __cdecl MenuFlyoutItemBaseVector_Append_Hook(
         void* identity = GetIdentity(items);
 
         if (!state->itemsIdentity) {
+            // The hooked function may be shared with collections of other
+            // types, so make sure that this one holds menu items.
+            if (!items.try_as<MenuItemsVector>()) {
+                state->modifying = false;
+                return;
+            }
+
             // The first item appended while the taskbar menu is being built
             // identifies the item collection of the menu.
             state->itemsIdentity = identity;
@@ -979,7 +996,8 @@ void Wh_ModBeforeUninit() {
     g_unloading = true;
 }
 
-// Called after the hooks are removed.
+// Called after the hooks are removed. The mod is unloaded once it returns, so
+// nothing may refer to its code after that.
 void Wh_ModUninit() {
     Wh_Log(L">");
 
@@ -1000,4 +1018,6 @@ void Wh_ModUninit() {
             Wh_Log(L"Failed to release the menu elements");
         }
     }
+
+    WaitForLaunchThreads();
 }
