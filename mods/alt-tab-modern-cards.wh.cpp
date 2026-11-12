@@ -2,8 +2,10 @@
 // @id              alt-tab-modern-cards
 // @name            Alt+Tab Modern Cards
 // @name:pt-BR      Alt+Tab Cartões Modernos
+// @name:ar         Alt+Tab بطاقات عصرية
 // @description     Replaces Alt+Tab with modern, neon-lit, spring-animated card layouts of live windows
 // @description:pt-BR Substitui o Alt+Tab por layouts modernos de cartões com brilho neon, animações em mola e janelas ao vivo
+// @description:ar  يستبدل Alt+Tab بتخطيطات بطاقات عصرية بتوهج نيون وحركات نابضة للنوافذ الحية
 // @version         2.0.0
 // @author          LG TME
 // @github          https://github.com/LGTme69
@@ -18,7 +20,7 @@
 /*
 # Alt+Tab Modern Cards
 
-**English** 
+**English** | [Português](#português) | [العربية](#العربية)
 
 Replaces Alt+Tab with modern card layouts of your **live windows**, moved
 by smooth spring animations.
@@ -87,9 +89,8 @@ Win+Tab can open the switcher too, instead of Alt+Tab or together with it
 use a style of its own (*Win+Tab animation style*).
 
 More shortcuts can be added in *Extra shortcuts*, each with a style of its
-own: **Win+Ctrl+Tab**, which keeps the switcher open like Ctrl+Alt+Tab (the
-original Flip 3D shortcut; off by default, so Windows keeps it until you add
-it), and **Ctrl+Alt+Tab**, to give it a style of its own.
+own: **Win+Ctrl+Tab**, which keeps the switcher open like Ctrl+Alt+Tab (off by
+default, so Windows keeps it until you add it), and **Ctrl+Alt+Tab**, to give it a style of its own.
 
 A quick Alt+Tab tap (shorter than the *show delay*) switches instantly to the
 previous window without showing the stack, just like the native switcher.
@@ -98,18 +99,13 @@ without waiting for the delay.
 
 ## How it compares with similar mods
 
-* **[Aero Flip 3D Recreation](https://windhawk.net/mods/aero-flip3d-recreation)**
-  brings Flip 3D back on **Win+Tab**. This mod replaces **Alt+Tab** instead,
-  draws the windows with real perspective from their live content, with
-  modern card layouts of its own. Both can be installed together, since they use
-  different shortcuts, unless the *Shortcut* setting here includes Win+Tab.
 * **[Simple Window Switcher](https://windhawk.net/mods/simple-window-switcher)**
   and **[Legacy Alt+Tab dialog](https://windhawk.net/mods/legacy-alt-tab)**
   also replace Alt+Tab. This mod brings its own card layouts, keys and
   settings instead.
 
-**Don't combine this mod with another Alt+Tab replacement**, such as the two
-above. Only one of them can take over Alt+Tab.
+**Don't combine this mod with another Alt+Tab replacement**, such as Simple
+Window Switcher or Legacy Alt+Tab dialog. Only one of them can take over Alt+Tab.
 
 ## Notes
 
@@ -143,7 +139,7 @@ above. Only one of them can take over Alt+Tab.
   keep their full brightness in the switcher, like in the native Alt+Tab
   (*HDR* setting).
 * With the *Dim only* background, the real windows stay visible behind the
-  stack. The wallpaper backgrounds hide them, like the original Flip 3D.
+  stack. The wallpaper backgrounds hide them.
 * If the switcher can't start (e.g. no GPU device), the native Alt+Tab keeps
   working. If the graphics driver is updated or reset, the switcher starts
   over by itself.
@@ -159,12 +155,8 @@ I'm **LG TME**. To talk to me and follow my projects, find me on Instagram:
 
 ## Credits
 
-* Inspired by **Windows Flip 3D** from Windows Vista and Windows 7 (Microsoft).
-* Based on the open-source mod **Alt+Tab Flip 3D (Vista Style)** by
-  **caliberda**, used under the MIT license. The modern card styles and
-  this page are by **LG TME**.
-* The neon look (glow outline, grid, staggered entrance) is adapted from
-  the *Neon Exposé Alt+Tab* variant of that mod.
+* Built on the open-source Alt+Tab switcher engine by **caliberda** (MIT
+  license). The card styles, the neon look and this page are by **LG TME**.
 
 ---
 
@@ -239,8 +231,8 @@ Win+Tab pode ter um estilo próprio (*Estilo da animação no Win+Tab*).
 
 Dá para adicionar mais atalhos em *Atalhos extras*, cada um com seu próprio
 estilo: **Win+Ctrl+Tab**, que mantém o alternador aberto como o Ctrl+Alt+Tab
-(o atalho original do Flip 3D; vem desligado, então o Windows continua com
-ele até você adicioná-lo), e o **Ctrl+Alt+Tab**, para ter um estilo próprio.
+(vem desligado, então o Windows continua com ele até você adicioná-lo), e o
+**Ctrl+Alt+Tab**, para ter um estilo próprio.
 
 Um toque rápido no Alt+Tab (menor que o *atraso para exibir*) troca na hora
 para a janela anterior sem mostrar a pilha, igual ao alternador nativo.
@@ -249,19 +241,14 @@ sem esperar o atraso.
 
 ### Comparação com mods parecidos
 
-* O **[Aero Flip 3D Recreation](https://windhawk.net/mods/aero-flip3d-recreation)**
-  traz o Flip 3D de volta no **Win+Tab**. Este mod substitui o **Alt+Tab**,
-  desenha as janelas com perspectiva real a partir do conteúdo ao vivo, com
-  layouts modernos de cartões próprios. Os dois podem ficar instalados juntos, porque usam
-  atalhos diferentes, a menos que a configuração *Atalho* daqui inclua o
-  Win+Tab.
 * O **[Simple Window Switcher](https://windhawk.net/mods/simple-window-switcher)**
   e o **[Legacy Alt+Tab dialog](https://windhawk.net/mods/legacy-alt-tab)**
   também substituem o Alt+Tab. Este mod traz seus próprios layouts de cartões,
   teclas e configurações.
 
-**Não use este mod junto com outro substituto do Alt+Tab**, como os dois
-acima. Só um deles consegue assumir o Alt+Tab.
+**Não use este mod junto com outro substituto do Alt+Tab**, como o Simple
+Window Switcher ou o Legacy Alt+Tab dialog. Só um deles consegue assumir o
+Alt+Tab.
 
 ### Observações
 
@@ -299,7 +286,7 @@ acima. Só um deles consegue assumir o Alt+Tab.
   mantêm o brilho todo no alternador, como no Alt+Tab nativo (configuração
   *HDR*).
 * Com o fundo *Apenas escurecer*, as janelas reais continuam visíveis atrás da
-  pilha. Os fundos com papel de parede as escondem, como no Flip 3D original.
+  pilha. Os fundos com papel de parede as escondem.
 * Se o alternador não conseguir iniciar (ex.: sem dispositivo de GPU), o Alt+Tab
   nativo continua funcionando. Se o driver de vídeo for atualizado ou
   reiniciado, o alternador recomeça sozinho.
@@ -316,12 +303,90 @@ encontre no Instagram:
 
 ### Créditos
 
-* Inspirado no **Windows Flip 3D** do Windows Vista e Windows 7 (Microsoft).
-* Baseado no mod de código aberto **Alt+Tab Flip 3D (Vista Style)** de
-  **caliberda**, usado sob a licença MIT. Os estilos modernos de cartões e
-  esta página são do **LG TME**.
-* O visual neon (contorno brilhante, grade, entrada escalonada) é adaptado da
-  variante *Neon Exposé Alt+Tab* desse mod.
+* Feito sobre o motor de código aberto do alternador de Alt+Tab de
+  **caliberda** (licença MIT). Os estilos de cartões, o visual neon e esta
+  página são do **LG TME**.
+
+---
+
+## العربية
+
+يستبدل Alt+Tab بتخطيطات بطاقات عصرية لـ**نوافذك الحية**، تحرّكها حركات نابضة سلسة.
+
+اضغط **Alt+Tab** فتطير نوافذك من أماكنها الحقيقية إلى التخطيط المختار. أبقِ Alt مضغوطًا وقلّب بينها؛ وعند رفع Alt تعود النافذة المختارة طائرة إلى مكانها.
+
+من صنع **LG TME** · إنستغرام [@a._.s._.azzam](https://www.instagram.com/a._.s._.azzam/?hl=eg)
+
+### أنماط الحركة
+
+* **Wave (موجة)**: صف بأسلوب الشريط. تُكبَّر النافذة المختارة وتُرفع، وتصغر النوافذ المجاورة وتنزل وتميل بعيدًا في موجة سلسة تنساب معك أثناء التقليب.
+* **Glide (انزلاق)**: صف بطاقات مسطّح، مثل عرض التطبيقات الأخيرة في الهاتف. البطاقة المختارة في المنتصف بحجمها الكامل، والأخرى خلفها أصغر وأغمق.
+* **Stage (مسرح)**: النافذة المختارة كبيرة على اليمين، والأخرى في صف عمودي من بطاقات صغيرة مائلة قليلًا على اليسار، مثل Stage Manager.
+* **Swipe (سحب)**: حزمة بطاقات. تنحرف البطاقة الأمامية إلى الجانب ثم تنزلق إلى مؤخرة الحزمة.
+* **Float (طفو)**: طبقات من الزجاج، كل طبقة خلف الأخرى وأعلى وأخفت قليلًا. الأمامية تطفو إلى أعلى وتبتعد.
+* **Orbit (مدار)**: حلقة جيروسكوب تُرى من أعلى قليلًا. النافذة المختارة تواجهك، والأخرى تدور خلفها أصغر وأخفت.
+* **Warp (قفزة)**: صف في الفضاء الفائق. تنساب النوافذ نحو البعيد، وتمرّ الأمامية بجوارك مندفعة ومستطيلة أثناء التقليب.
+* **Dial (قرص)**: نوافذ تركب قرصًا دوّارًا كبيرًا، مثل عجلة واجهة HUD. تجلس المختارة في مقدمة القرص وتنحني الأخرى بعيدًا.
+* **Alt+Tab الأصلي في Windows**: تترك الإضافة Alt+Tab وشأنه.
+
+### مظهر السايبربانك النيون
+
+مفعّل افتراضيًا (إعداد *مظهر السايبربانك النيون*)، ويعمل مع كل الأنماط: توهج نيون حول النافذة المحددة (ضباب بنفسجي، ووهج سماوي، ونواة زرقاء جليدية)، وشبكة منظور نيون خافتة خلف النوافذ، ودخول متتابع تستقر فيه كل بطاقة بحركة نابضة خفيفة. أوقفه للحصول على الإطار الأبيض البسيط ودخول بسيط.
+
+يُفتح المبدّل على الشاشة التي فيها مؤشر الماوس (أو، اختياريًا، التي فيها النافذة النشطة). ويمكنه عرض نوافذ تلك الشاشة فقط (*نوافذ شاشة المبدّل فقط*)؛ وعندها يُظهر مفتاح نوافذ كل الشاشات أثناء فتحه، والضغط عليه مرة أخرى يعيدك. وهو افتراضيًا المفتاح الذي على يسار 1، ويمكن تغييره (*مفتاح إظهار كل الشاشات*).
+
+### عناصر التحكم
+
+| المفتاح / الإجراء | ما يفعله |
+|---|---|
+| Alt+Tab | يفتح الصف / النافذة التالية |
+| Alt+Shift+Tab | النافذة السابقة |
+| Ctrl+Alt+Tab | يفتح الصف ويُبقيه مفتوحًا (اختياري) |
+| مفاتيح الأسهم، عجلة الماوس | تقليب للأمام / للخلف |
+| رفع Alt، Enter، Space | التبديل إلى النافذة الأمامية |
+| النقر على نافذة | التبديل إلى تلك النافذة |
+| النقر بالزر الأوسط على نافذة | إغلاق تلك النافذة (اختياري) |
+| النقر على X في نافذة | إغلاق تلك النافذة (اختياري) |
+| المفتاح الذي على يسار 1 (أو المختار) | نوافذ كل الشاشات (اختياري) |
+| Esc | إلغاء والعودة إلى حيث كنت |
+
+يمكن لـ Win+Tab أيضًا فتح المبدّل، بدلًا من Alt+Tab أو معه (انظر إعداد *الاختصار*). ارفع Win للتبديل. ومع الاثنين معًا، يمكن لـ Win+Tab استخدام نمط خاص به (*نمط حركة Win+Tab*).
+
+ويمكن إضافة اختصارات أخرى في *اختصارات إضافية*، لكل منها نمط خاص به: **Win+Ctrl+Tab**، الذي يُبقي المبدّل مفتوحًا مثل Ctrl+Alt+Tab (متوقف افتراضيًا، فيبقى مع Windows حتى تضيفه)، و**Ctrl+Alt+Tab**، لمنحه نمطًا خاصًا به.
+
+نقرة Alt+Tab سريعة (أقصر من *تأخير الإظهار*) تبدّل فورًا إلى النافذة السابقة دون إظهار الصف، تمامًا مثل المبدّل الأصلي. ومع *الإظهار فورًا عند الضغط الثاني على Tab*، يُظهر الضغط على Tab مرة أخرى الصف دون انتظار التأخير.
+
+### مقارنة بإضافات مشابهة
+
+* **[Simple Window Switcher](https://windhawk.net/mods/simple-window-switcher)** و**[Legacy Alt+Tab dialog](https://windhawk.net/mods/legacy-alt-tab)** يستبدلان Alt+Tab أيضًا. أما هذه الإضافة فتأتي بتخطيطات البطاقات والمفاتيح والإعدادات الخاصة بها.
+
+**لا تجمع هذه الإضافة مع بديل آخر لـ Alt+Tab**، مثل Simple Window Switcher أو Legacy Alt+Tab dialog. فواحد منها فقط يستطيع الاستحواذ على Alt+Tab.
+
+### ملاحظات
+
+* Windows 11 فقط (تستخدم Windows Graphics Capture دون الإطار الأصفر).
+* الأشرطة وأشرطة الإرساء التي تبقى في مقدمة الشاشة، مثل YASB وWindowSill، تُستبعد من المبدّل. ويمكن استبعاد تطبيقات أخرى بإعداد *التطبيقات المستثناة*.
+* إذا تعذّرت قراءة ورق الجدار (مثل صيغة يعرضها Windows ولا يستطيع فك ترميزها، أو Windows Spotlight)، تُستخدم النسخة التي يحتفظ بها Windows من ورق الجدار الحالي. وإن لم توجد، يظهر سطح المكتب من خلفها معتّمًا.
+* مع ورق جدار متحرك (Wallpaper Engine وLively Wallpaper وما شابههما)، تعرض خلفية *سطح المكتب الحي* سطح المكتب الحقيقي خلف الصف وهو يعمل. وإذا توقف تطبيق ورق الجدار مؤقتًا عندما يكون تطبيق آخر مكبّرًا أو في المقدمة، فسيبقى متوقفًا هنا أيضًا. راجع إعدادات ذلك التطبيق.
+* نوافذ أسطح المكتب الافتراضية الأخرى تتبع إعداد Windows لـ Alt+Tab، أو إعداد *أسطح المكتب الافتراضية*. واختيار إحداها ينقلك إلى سطح مكتبها.
+* مديرات النوافذ المتجاورة مثل komorebi تخفي نوافذ مساحات العمل الأخرى لديها. ولإظهارها أيضًا، مثل Alt+Tab الأصلي، فعّل *إظهار النوافذ التي تخفيها مديرات النوافذ*.
+* يعمل المبدّل في عملية خلفية خاصة به، فلا تؤثر مشكلة فيه على شريط المهام أو سطح المكتب. والجزء الصغير الذي يعالج الحالة التالية هو وحده الذي يعمل داخل explorer.
+* يعمل أيضًا عندما يكون برنامج يعمل بصلاحيات المسؤول في المقدمة: تلتقط الإضافة اختصار Alt+Tab داخل explorer قبل أن يُفتح المبدّل الأصلي، وتسلّمه إلى المبدّل. ويُسجَّل Win+Ctrl+Tab كاختصار للسبب نفسه.
+* تعرض النوافذ المصغّرة آخر محتوى لها، مثل معاينات شريط المهام (ويمكن إيقاف ذلك). والنوافذ التي ترفض الالتقاط تظهر كبطاقة بأيقونة التطبيق.
+* على شاشة مفعّل عليها HDR، تحتفظ النوافذ ذات محتوى HDR (الفيديو والألعاب والصور) بسطوعها الكامل في المبدّل، مثل Alt+Tab الأصلي (إعداد *HDR*).
+* مع خلفية *تعتيم فقط*، تبقى النوافذ الحقيقية مرئية خلف الصف. أما خلفيات ورق الجدار فتخفيها.
+* إذا تعذّر تشغيل المبدّل (مثلًا لا يوجد جهاز GPU)، يستمر Alt+Tab الأصلي في العمل. وإذا حُدّث تعريف الرسوميات أو أُعيد ضبطه، يبدأ المبدّل من جديد تلقائيًا.
+* على الحواسيب المحمولة ذات وحدتي GPU، يرسم المبدّل على الوحدة المتصلة بالشاشة. وعلى الحواسيب الأبطأ، تجعله إعدادات *حد معدل الإطارات* و*محتوى النوافذ الحي* أخف.
+
+### التواصل
+
+أنا **LG TME**. للحديث معي ومتابعة مشاريعي، تجدني على إنستغرام:
+
+* **إنستغرام [@a._.s._.azzam](https://www.instagram.com/a._.s._.azzam/?hl=eg)**
+
+### الاعتمادات
+
+* مبنيّ على محرك مبدّل Alt+Tab مفتوح المصدر من **caliberda** (رخصة MIT). أنماط البطاقات ومظهر النيون وهذه الصفحة من **LG TME**.
 */
 // ==/WindhawkModReadme==
 
@@ -330,8 +395,10 @@ encontre no Instagram:
 - style: glide
   $name: Animation style
   $name:pt-BR: Estilo da animação
+  $name:ar: نمط الحركة
   $description: How the windows are presented
   $description:pt-BR: Como as janelas são apresentadas
+  $description:ar: طريقة عرض النوافذ
   $options:
   - wave: Wave (dock magnify)
   - glide: Glide (flat card row)
@@ -352,27 +419,46 @@ encontre no Instagram:
   - warp: Dobra (hiperespaço)
   - dial: Disco (HUD rotativo)
   - native: Alt+Tab nativo do Windows
+  $options:ar:
+  - wave: موجة (تكبير الشريط)
+  - glide: انزلاق (صف بطاقات مسطّح)
+  - stage: مسرح (نافذة كبيرة + صف جانبي)
+  - swipe: سحب (حزمة بطاقات)
+  - float: طفو (طبقات زجاجية)
+  - orbit: مدار (حلقة جيروسكوب)
+  - warp: قفزة (فضاء فائق)
+  - dial: قرص (واجهة HUD دوّارة)
+  - native: Alt+Tab الأصلي في Windows
 - monitor: cursor
   $name: Monitor
   $name:pt-BR: Monitor
+  $name:ar: الشاشة
   $description: Which monitor the switcher opens on
   $description:pt-BR: Em qual monitor o alternador abre
+  $description:ar: الشاشة التي يُفتح عليها المبدّل
   $options:
   - cursor: Where the mouse cursor is
   - activeWindow: Where the active window is
   $options:pt-BR:
   - cursor: Onde está o cursor do mouse
   - activeWindow: Onde está a janela ativa
+  $options:ar:
+  - cursor: حيث مؤشر الماوس
+  - activeWindow: حيث النافذة النشطة
 - currentMonitorOnly: false
   $name: Only the windows on the switcher's monitor
   $name:pt-BR: Só as janelas do monitor do alternador
+  $name:ar: نوافذ شاشة المبدّل فقط
   $description: Shows only the windows on the monitor the switcher opens on (see Monitor). While it's open, a key (the one left of 1 by default, see below) shows the windows of every monitor, and pressing it again goes back. If that monitor has no windows, all of them are shown
   $description:pt-BR: Mostra só as janelas do monitor onde o alternador abre (veja Monitor). Com ele aberto, uma tecla (a da esquerda do 1, por padrão, veja abaixo) mostra as janelas de todos os monitores, e apertar de novo volta. Se esse monitor não tiver janelas, todas aparecem
+  $description:ar: يعرض فقط النوافذ الموجودة على الشاشة التي يُفتح عليها المبدّل (انظر «الشاشة»). أثناء فتحه، يُظهر مفتاح (الذي على يسار 1 افتراضيًا، انظر أدناه) نوافذ كل الشاشات، والضغط عليه مرة أخرى يعيدك. إذا لم تكن على تلك الشاشة نوافذ، تُعرض كلها
 - allMonitorsKey: leftOf1
   $name: Key that shows every monitor
   $name:pt-BR: Tecla que mostra todos os monitores
+  $name:ar: مفتاح إظهار كل الشاشات
   $description: With "Only the windows on the switcher's monitor", pressing this key while the switcher is open shows the windows of every monitor, and pressing it again goes back. Type in the list to find a key. Tab, the arrows, Enter, Space, Esc and the modifier keys already belong to the switcher
   $description:pt-BR: Com "Só as janelas do monitor do alternador", apertar esta tecla com o alternador aberto mostra as janelas de todos os monitores, e apertar de novo volta. Digite na lista para achar uma tecla. Tab, setas, Enter, Espaço, Esc e as teclas modificadoras já são do alternador
+  $description:ar: مع «نوافذ شاشة المبدّل فقط»، الضغط على هذا المفتاح أثناء فتح المبدّل يُظهر نوافذ كل الشاشات، والضغط عليه مجددًا يعيدك. اكتب في القائمة للعثور على مفتاح. المفاتيح Tab والأسهم وEnter وSpace وEsc ومفاتيح التعديل محجوزة للمبدّل
   $options:
   - leftOf1: Key left of 1 (under Esc)
   - keyA: A
@@ -489,11 +575,71 @@ encontre no Instagram:
   - pageUp: Page Up
   - pageDown: Page Down
   - none: Nenhuma (sem tecla)
+  $options:ar:
+  - leftOf1: المفتاح على يسار 1 (تحت Esc)
+  - keyA: A
+  - keyB: B
+  - keyC: C
+  - keyD: D
+  - keyE: E
+  - keyF: F
+  - keyG: G
+  - keyH: H
+  - keyI: I
+  - keyJ: J
+  - keyK: K
+  - keyL: L
+  - keyM: M
+  - keyN: N
+  - keyO: O
+  - keyP: P
+  - keyQ: Q
+  - keyR: R
+  - keyS: S
+  - keyT: T
+  - keyU: U
+  - keyV: V
+  - keyW: W
+  - keyX: X
+  - keyY: Y
+  - keyZ: Z
+  - digit0: "0"
+  - digit1: "1"
+  - digit2: "2"
+  - digit3: "3"
+  - digit4: "4"
+  - digit5: "5"
+  - digit6: "6"
+  - digit7: "7"
+  - digit8: "8"
+  - digit9: "9"
+  - f1: F1
+  - f2: F2
+  - f3: F3
+  - f4: F4
+  - f5: F5
+  - f6: F6
+  - f7: F7
+  - f8: F8
+  - f9: F9
+  - f10: F10
+  - f11: F11
+  - f12: F12
+  - backspace: Backspace
+  - insert: Insert
+  - delete: Delete
+  - home: Home
+  - end: End
+  - pageUp: Page Up
+  - pageDown: Page Down
+  - none: بلا (بدون مفتاح)
 - shortcut: altTab
   $name: Shortcut
   $name:pt-BR: Atalho
+  $name:ar: الاختصار
   $description: Which shortcut opens the switcher
   $description:pt-BR: Qual atalho abre o alternador
+  $description:ar: الاختصار الذي يفتح المبدّل
   $options:
   - altTab: Alt+Tab
   - winTab: Win+Tab (Alt+Tab stays native)
@@ -502,11 +648,17 @@ encontre no Instagram:
   - altTab: Alt+Tab
   - winTab: Win+Tab (o Alt+Tab fica nativo)
   - both: Alt+Tab e Win+Tab
+  $options:ar:
+  - altTab: Alt+Tab
+  - winTab: Win+Tab (يبقى Alt+Tab أصليًا)
+  - both: Alt+Tab وWin+Tab
 - winTabStyle: same
   $name: Win+Tab animation style
   $name:pt-BR: Estilo da animação no Win+Tab
+  $name:ar: نمط حركة Win+Tab
   $description: Lets Win+Tab use a different style from Alt+Tab. Only when the shortcut includes Win+Tab. The "Native Windows Alt+Tab" style turns the whole mod off, Win+Tab too; to keep Alt+Tab native and use the mod on Win+Tab only, choose the "Win+Tab" shortcut instead
   $description:pt-BR: Deixa o Win+Tab usar um estilo diferente do Alt+Tab. Só quando o atalho inclui o Win+Tab. O estilo "Alt+Tab nativo do Windows" desliga o mod inteiro, o Win+Tab também; para deixar o Alt+Tab nativo e usar o mod só no Win+Tab, escolha o atalho "Win+Tab"
+  $description:ar: يتيح لـ Win+Tab استخدام نمط مختلف عن Alt+Tab. يعمل فقط عندما يتضمن الاختصار Win+Tab. نمط «Alt+Tab الأصلي في Windows» يوقف الإضافة كلها، بما فيها Win+Tab؛ لإبقاء Alt+Tab الأصلي واستخدام الإضافة مع Win+Tab فقط، اختر الاختصار «Win+Tab» بدلًا من ذلك
   $options:
   - same: Same as Alt+Tab
   - wave: Wave (dock magnify)
@@ -527,15 +679,28 @@ encontre no Instagram:
   - orbit: Órbita (anel giroscópio)
   - warp: Dobra (hiperespaço)
   - dial: Disco (HUD rotativo)
+  $options:ar:
+  - same: مثل Alt+Tab
+  - wave: موجة (تكبير الشريط)
+  - glide: انزلاق (صف بطاقات مسطّح)
+  - stage: مسرح (نافذة كبيرة + صف جانبي)
+  - swipe: سحب (حزمة بطاقات)
+  - float: طفو (طبقات زجاجية)
+  - orbit: مدار (حلقة جيروسكوب)
+  - warp: قفزة (فضاء فائق)
+  - dial: قرص (واجهة HUD دوّارة)
 - stickyShortcut: true
   $name: Ctrl+Alt+Tab keeps the switcher open
   $name:pt-BR: Ctrl+Alt+Tab mantém o alternador aberto
+  $name:ar: Ctrl+Alt+Tab يُبقي المبدّل مفتوحًا
   $description: Opens the switcher and keeps it open after the keys are released. Pick a window with the arrows, Tab or the mouse wheel, then press Enter or click it. Esc or a click outside the windows closes it. Only when the shortcut includes Alt+Tab. Adding Ctrl+Alt+Tab to Extra shortcuts turns it on too, with a style of its own
   $description:pt-BR: Abre o alternador e o mantém aberto depois de soltar as teclas. Escolha a janela com as setas, o Tab ou a roda do mouse e aperte Enter ou clique nela. Esc ou um clique fora das janelas fecha. Só quando o atalho inclui o Alt+Tab. Adicionar o Ctrl+Alt+Tab nos Atalhos extras também o liga, com um estilo próprio
+  $description:ar: يفتح المبدّل ويُبقيه مفتوحًا بعد رفع المفاتيح. اختر نافذة بالأسهم أو Tab أو عجلة الماوس، ثم اضغط Enter أو انقر عليها. يغلقه Esc أو النقر خارج النوافذ. يعمل فقط عندما يتضمن الاختصار Alt+Tab. إضافة Ctrl+Alt+Tab إلى «اختصارات إضافية» تفعّله أيضًا، بنمط خاص به
 - extraShortcuts:
   - - shortcut: none
       $name: Shortcut
       $name:pt-BR: Atalho
+      $name:ar: الاختصار
       $options:
       - none: None
       - winCtrlTab: Win+Ctrl+Tab (stays open)
@@ -544,9 +709,14 @@ encontre no Instagram:
       - none: Nenhum
       - winCtrlTab: Win+Ctrl+Tab (fica aberto)
       - ctrlAltTab: Ctrl+Alt+Tab (fica aberto)
+      $options:ar:
+      - none: بلا
+      - winCtrlTab: Win+Ctrl+Tab (يبقى مفتوحًا)
+      - ctrlAltTab: Ctrl+Alt+Tab (يبقى مفتوحًا)
     - style: same
       $name: Animation style
       $name:pt-BR: Estilo da animação
+      $name:ar: نمط الحركة
       $options:
       - same: Same as Alt+Tab or Win+Tab (the key held with it)
       - wave: Wave (dock magnify)
@@ -567,60 +737,85 @@ encontre no Instagram:
       - orbit: Órbita (anel giroscópio)
       - warp: Dobra (hiperespaço)
       - dial: Disco (HUD rotativo)
+      $options:ar:
+      - same: مثل Alt+Tab أو Win+Tab (المفتاح المضغوط معه)
+      - wave: موجة (تكبير الشريط)
+      - glide: انزلاق (صف بطاقات مسطّح)
+      - stage: مسرح (نافذة كبيرة + صف جانبي)
+      - swipe: سحب (حزمة بطاقات)
+      - float: طفو (طبقات زجاجية)
+      - orbit: مدار (حلقة جيروسكوب)
+      - warp: قفزة (فضاء فائق)
+      - dial: قرص (واجهة HUD دوّارة)
   $name: Extra shortcuts
   $name:pt-BR: Atalhos extras
+  $name:ar: اختصارات إضافية
   $description: Shortcuts with an animation style of their own, one per item. Win+Ctrl+Tab stays with Windows until it's added here; adding Ctrl+Alt+Tab also turns it on. Both keep the switcher open after the keys are released
   $description:pt-BR: Atalhos com um estilo de animação próprio, um por item. O Win+Ctrl+Tab continua com o Windows até ser adicionado aqui; adicionar o Ctrl+Alt+Tab também o liga. Os dois mantêm o alternador aberto depois de soltar as teclas
+  $description:ar: اختصارات لكل منها نمط حركة خاص به، واحد لكل عنصر. يبقى Win+Ctrl+Tab مع Windows حتى تضيفه هنا؛ وإضافة Ctrl+Alt+Tab تفعّله أيضًا. كلاهما يُبقي المبدّل مفتوحًا بعد رفع المفاتيح
 - animationDuration: 420
   $name: Open/close animation duration (ms)
   $name:pt-BR: Duração da animação de abrir/fechar (ms)
+  $name:ar: مدة حركة الفتح والإغلاق (بالمللي ثانية)
   $description: How long the windows take to fly into the stack and back (50-3000, default 420)
   $description:pt-BR: Quanto tempo as janelas levam para voar até a pilha e voltar (50-3000, padrão 420)
+  $description:ar: المدة التي تستغرقها النوافذ لتطير إلى الصف ثم تعود (50-3000، الافتراضي 420)
 - flipSpeed: 100
   $name: Flip speed (%)
   $name:pt-BR: Velocidade da troca (%)
+  $name:ar: سرعة التقليب (%)
   $description: Speed of the spring animation when flipping between windows (25-400, default 100)
   $description:pt-BR: Velocidade da animação de mola ao passar entre as janelas (25-400, padrão 100)
+  $description:ar: سرعة حركة النابض عند التقليب بين النوافذ (25-400، الافتراضي 100)
 - showDelay: 90
   $name: Show delay (ms)
   $name:pt-BR: Atraso para exibir (ms)
+  $name:ar: تأخير الإظهار (بالمللي ثانية)
   $description: A quick Alt+Tab shorter than this switches instantly without showing the stack (0-1000, default 90)
   $description:pt-BR: Um Alt+Tab mais rápido que isso troca na hora, sem mostrar a pilha (0-1000, padrão 90)
+  $description:ar: أي Alt+Tab أسرع من هذه المدة يبدّل فورًا دون إظهار الصف (0-1000، الافتراضي 90)
 - showOnSecondTab: false
   $name: Show at once on the second Tab
   $name:pt-BR: Mostrar na hora no segundo Tab
+  $name:ar: الإظهار فورًا عند الضغط الثاني على Tab
   $description: With a show delay, pressing Tab again (or an arrow key, or turning the mouse wheel) before it passes shows the stack right away. A quick Alt+Tab still switches without showing it
   $description:pt-BR: Com um atraso para exibir, apertar o Tab de novo (ou uma seta, ou girar a roda do mouse) antes dele passar mostra a pilha na hora. Um Alt+Tab rápido continua trocando sem mostrar
-- tiltAngle: 30
-  $name: Tilt angle (degrees)
-  $name:pt-BR: Ângulo de inclinação (graus)
-  $description: How much the windows are turned (0-70, default 30). Not used by the current card styles
-  $description:pt-BR: Quanto as janelas ficam viradas (0-70, padrão 30). Não usado pelos estilos de cartões atuais
+  $description:ar: مع وجود تأخير للإظهار، الضغط على Tab مرة أخرى (أو سهم، أو تدوير عجلة الماوس) قبل انتهائه يُظهر الصف فورًا. يبقى Alt+Tab السريع يبدّل دون إظهاره
 - stackSpacing: 100
   $name: Stack spacing (%)
   $name:pt-BR: Espaçamento da pilha (%)
+  $name:ar: المسافة بين النوافذ (%)
   $description: Distance between the windows in the stack (40-250, default 100)
   $description:pt-BR: Distância entre as janelas na pilha (40-250, padrão 100)
+  $description:ar: المسافة بين النوافذ في الصف (40-250، الافتراضي 100)
 - windowSize: 100
   $name: Window size (%)
   $name:pt-BR: Tamanho das janelas (%)
-  $description: Makes the windows in the switcher bigger, as if closer, or smaller, as if farther away (50-200, default 100). In the grid, windows only grow up to the size of their cell. Not used by the 2D styles
-  $description:pt-BR: Deixa as janelas do alternador maiores, como se estivessem mais perto, ou menores, como se estivessem mais longe (50-200, padrão 100). Na grade, as janelas só crescem até o tamanho da célula. Não vale para os estilos 2D
+  $name:ar: حجم النافذة (%)
+  $description: Makes the windows in the switcher bigger, as if closer, or smaller, as if farther away (50-200, default 100)
+  $description:pt-BR: Deixa as janelas do alternador maiores, como se estivessem mais perto, ou menores, como se estivessem mais longe (50-200, padrão 100)
+  $description:ar: يجعل النوافذ في المبدّل أكبر كأنها أقرب، أو أصغر كأنها أبعد (50-200، الافتراضي 100)
 - depth: 100
   $name: Depth (%)
   $name:pt-BR: Profundidade (%)
-  $description: How far back the windows behind the front one go (0-300, default 100). Lower values bring them closer. Not used by the 2D styles
-  $description:pt-BR: O quanto as janelas de trás vão para o fundo (0-300, padrão 100). Valores menores as trazem para mais perto. Não vale para os estilos 2D
+  $name:ar: العمق (%)
+  $description: How far back the windows behind the front one go (0-300, default 100). Lower values bring them closer
+  $description:pt-BR: O quanto as janelas de trás vão para o fundo (0-300, padrão 100). Valores menores as trazem para mais perto
+  $description:ar: إلى أي مدى تتراجع النوافذ التي خلف النافذة الأمامية (0-300، الافتراضي 100). القيم الأقل تقرّبها
 - maxWindows: 20
   $name: Maximum number of windows
   $name:pt-BR: Número máximo de janelas
+  $name:ar: الحد الأقصى لعدد النوافذ
   $description: Windows beyond this number (by recent use) are not shown (2-40, default 20)
   $description:pt-BR: Janelas além desse número (por uso recente) não são mostradas (2-40, padrão 20)
+  $description:ar: النوافذ التي تتجاوز هذا العدد (حسب آخر استخدام) لا تُعرض (2-40، الافتراضي 20)
 - background: blur
   $name: Background
   $name:pt-BR: Fundo
-  $description: What is shown behind the stack. "Live desktop" shows the real desktop, icons included, with animated wallpapers (Wallpaper Engine, Lively Wallpaper and similar) still playing. It can't be blurred. The iTab styles with a glossy black floor have a background of their own
-  $description:pt-BR: O que aparece atrás da pilha. "Área de trabalho ao vivo" mostra a área de trabalho de verdade, com os ícones, e os papéis de parede animados (Wallpaper Engine, Lively Wallpaper e parecidos) continuam tocando. Ela não pode ser desfocada. Os estilos iTab com chão preto brilhante têm um fundo próprio
+  $name:ar: الخلفية
+  $description: What is shown behind the stack. "Live desktop" shows the real desktop, icons included, with animated wallpapers (Wallpaper Engine, Lively Wallpaper and similar) still playing. It can't be blurred
+  $description:pt-BR: O que aparece atrás da pilha. "Área de trabalho ao vivo" mostra a área de trabalho de verdade, com os ícones, e os papéis de parede animados (Wallpaper Engine, Lively Wallpaper e parecidos) continuam tocando. Ela não pode ser desfocada
+  $description:ar: ما يُعرض خلف الصف. «سطح المكتب الحي» يُظهر سطح المكتب الحقيقي بما فيه الأيقونات، مع استمرار تشغيل الخلفيات المتحركة (Wallpaper Engine وLively Wallpaper وما شابههما). لا يمكن تمويهه
   $options:
   - blur: Blurred wallpaper
   - wallpaper: Wallpaper
@@ -631,55 +826,80 @@ encontre no Instagram:
   - wallpaper: Papel de parede
   - desktop: Área de trabalho ao vivo (papéis de parede animados)
   - dim: Apenas escurecer
+  $options:ar:
+  - blur: ورق جدار مموّه
+  - wallpaper: ورق الجدار
+  - desktop: سطح المكتب الحي (خلفيات متحركة)
+  - dim: تعتيم فقط
 - blurAmount: 20
   $name: Background blur strength
   $name:pt-BR: Intensidade do desfoque do fundo
+  $name:ar: قوة تمويه الخلفية
   $description: Used by the blurred wallpaper background (1-100, default 20)
   $description:pt-BR: Usado pelo fundo com papel de parede desfocado (1-100, padrão 20)
+  $description:ar: تستخدمها خلفية ورق الجدار المموّه (1-100، الافتراضي 20)
 - dimOpacity: 25
   $name: Background dimming (%)
   $name:pt-BR: Escurecimento do fundo (%)
+  $name:ar: تعتيم الخلفية (%)
   $description: How dark the background gets (0-90, default 25). For "Dim only", around 60 looks best
   $description:pt-BR: Quanto o fundo escurece (0-90, padrão 25). Para "Apenas escurecer", algo perto de 60 fica melhor
+  $description:ar: مدى إظلام الخلفية (0-90، الافتراضي 25). مع «تعتيم فقط»، تبدو القيمة 60 تقريبًا الأفضل
 - neon: true
   $name: Cyberpunk neon look
   $name:pt-BR: Visual neon cyberpunk
+  $name:ar: مظهر السايبربانك النيون
   $description: A neon glow around the selected window, a faint neon grid behind the windows, and a springy staggered entrance
   $description:pt-BR: Um brilho neon na janela selecionada, uma grade neon discreta atrás das janelas e uma entrada escalonada com mola
+  $description:ar: توهج نيون حول النافذة المحددة، وشبكة نيون خافتة خلف النوافذ، ودخول متتابع بحركة نابضة
 - showTitle: true
   $name: Show window title
   $name:pt-BR: Mostrar título da janela
+  $name:ar: إظهار عنوان النافذة
   $description: Shows the icon and title of the window in front
   $description:pt-BR: Mostra o ícone e o título da janela da frente
+  $description:ar: يعرض أيقونة وعنوان النافذة الأمامية
 - titlePosition: bottom
   $name: Title position
   $name:pt-BR: Posição do título
-  $description: Where the title of the window in front is shown. Not used by the 2D styles, nor by the iTab styles, whose title is always centered under the windows
-  $description:pt-BR: Onde o título da janela da frente aparece. Não vale para os estilos 2D, nem para os estilos iTab, que sempre mostram o título centralizado embaixo das janelas
+  $name:ar: موضع العنوان
+  $description: Where the title of the window in front is shown
+  $description:pt-BR: Onde o título da janela da frente aparece
+  $description:ar: مكان عرض عنوان النافذة الأمامية
   $options:
   - bottom: Bottom of the screen
   - belowWindow: Right below the selected window
   $options:pt-BR:
   - bottom: Parte de baixo da tela
   - belowWindow: Logo abaixo da janela escolhida
+  $options:ar:
+  - bottom: أسفل الشاشة
+  - belowWindow: أسفل النافذة المحددة مباشرة
 - shadows: true
   $name: Window shadows
   $name:pt-BR: Sombras das janelas
-  $description: Soft shadows under the windows in the stack. The iTab styles show reflections instead
-  $description:pt-BR: Sombras suaves sob as janelas da pilha. Os estilos iTab mostram reflexos no lugar
+  $name:ar: ظلال النوافذ
+  $description: Soft shadows under the windows in the stack
+  $description:pt-BR: Sombras suaves sob as janelas da pilha
+  $description:ar: ظلال ناعمة تحت النوافذ في الصف
 - includeMinimized: true
   $name: Include minimized windows
   $name:pt-BR: Incluir janelas minimizadas
+  $name:ar: تضمين النوافذ المصغّرة
 - minimizedContent: true
   $name: Show the content of minimized windows
   $name:pt-BR: Mostrar o conteúdo das janelas minimizadas
+  $name:ar: إظهار محتوى النوافذ المصغّرة
   $description: Shows the last content of minimized windows, like the taskbar previews. When off, they're shown as a card with the app icon
   $description:pt-BR: Mostra o último conteúdo das janelas minimizadas, como as miniaturas da barra de tarefas. Desligado, elas aparecem como um cartão com o ícone do app
+  $description:ar: يعرض آخر محتوى للنوافذ المصغّرة، مثل معاينات شريط المهام. عند إيقافه، تظهر كبطاقة بأيقونة التطبيق
 - virtualDesktops: windows
   $name: Virtual desktops
   $name:pt-BR: Áreas de trabalho virtuais
+  $name:ar: أسطح المكتب الافتراضية
   $description: Which desktops' windows are shown. "Same as Windows" follows Settings > System > Multitasking > Desktops (Show all open windows when I press Alt+Tab). Picking a window on another desktop switches to that desktop
   $description:pt-BR: De quais áreas de trabalho as janelas aparecem. "Igual ao Windows" segue Configurações > Sistema > Multitarefa > Áreas de trabalho (Mostrar todas as janelas abertas ao pressionar Alt+Tab). Escolher uma janela de outra área troca para essa área
+  $description:ar: نوافذ أي أسطح مكتب تُعرض. «مثل Windows» يتبع الإعدادات > النظام > تعدد المهام > أسطح المكتب (إظهار كل النوافذ المفتوحة عند الضغط على Alt+Tab). اختيار نافذة على سطح مكتب آخر ينقلك إلى ذلك السطح
   $options:
   - windows: Same as Windows
   - current: Only the current desktop
@@ -688,16 +908,24 @@ encontre no Instagram:
   - windows: Igual ao Windows
   - current: Só a área atual
   - all: Todas as áreas
+  $options:ar:
+  - windows: مثل Windows
+  - current: سطح المكتب الحالي فقط
+  - all: كل أسطح المكتب
 - managerHiddenWindows: false
   $name: Show windows hidden by window managers
   $name:pt-BR: Mostrar janelas escondidas por gerenciadores de janelas
+  $name:ar: إظهار النوافذ التي تخفيها مديرات النوافذ
   $description: Tiling window managers such as komorebi hide the windows of their other workspaces. When on, those windows are shown too, like in the native Alt+Tab, and picking one lets the window manager bring its workspace back
   $description:pt-BR: Gerenciadores de janelas lado a lado, como o komorebi, escondem as janelas dos outros espaços de trabalho deles. Ligado, essas janelas aparecem também, como no Alt+Tab nativo, e escolher uma deixa o gerenciador voltar para o espaço dela
+  $description:ar: مديرات النوافذ المتجاورة مثل komorebi تخفي نوافذ مساحات العمل الأخرى لديها. عند التشغيل، تُعرض تلك النوافذ أيضًا كما في Alt+Tab الأصلي، واختيار إحداها يجعل مدير النوافذ يعيد مساحة عملها
 - liveContent: all
   $name: Live window content
   $name:pt-BR: Conteúdo ao vivo das janelas
+  $name:ar: محتوى النوافذ الحي
   $description: Which windows keep updating while the switcher is open. The others show a picture taken when it opened, which is lighter on slower PCs
   $description:pt-BR: Quais janelas continuam se atualizando com o alternador aberto. As outras mostram uma imagem tirada ao abrir, o que pesa menos em PCs mais fracos
+  $description:ar: أي النوافذ تستمر في التحديث أثناء فتح المبدّل. الباقي يعرض صورة التُقطت عند فتحه، وهذا أخف على الحواسيب الأبطأ
   $options:
   - all: All windows
   - selected: Only the selected window
@@ -706,11 +934,17 @@ encontre no Instagram:
   - all: Todas as janelas
   - selected: Só a janela escolhida
   - none: Nenhuma (mais leve)
+  $options:ar:
+  - all: كل النوافذ
+  - selected: النافذة المحددة فقط
+  - none: بلا (الأخف)
 - frameRate: screen
   $name: Frame rate limit
   $name:pt-BR: Limite de quadros por segundo
+  $name:ar: حد معدل الإطارات
   $description: Caps the animation's frame rate, which lightens the load on slower PCs and laptops. Each screen uses its own refresh rate. "+ 20 FPS" draws a few frames more than the screen shows, which costs more; it only goes above the refresh rate where the graphics driver doesn't hold frames back to it (for example with vertical sync turned off)
   $description:pt-BR: Limita os quadros por segundo da animação, o que alivia PCs mais fracos e notebooks. Cada tela usa a própria taxa de atualização. O "+ 20 FPS" desenha alguns quadros a mais do que a tela mostra, o que pesa mais; ele só passa da taxa da tela onde o driver de vídeo não segura os quadros nela (por exemplo, com a sincronização vertical desligada)
+  $description:ar: يحدّ من معدل إطارات الحركة، مما يخفف الحمل على الحواسيب الأبطأ والحواسيب المحمولة. تستخدم كل شاشة معدل التحديث الخاص بها. «+ 20 FPS» يرسم بضعة إطارات أكثر مما تعرضه الشاشة، وهذا يكلّف أكثر؛ ولا يتجاوز معدل التحديث إلا حيث لا يحجب تعريف الرسوميات الإطارات عنه (مثلًا عند إيقاف المزامنة العمودية)
   $options:
   - screen: Screen refresh rate
   - screenPlus20: Screen refresh rate + 20 FPS
@@ -723,32 +957,48 @@ encontre no Instagram:
   - "90": Cerca de 90 FPS
   - "60": Cerca de 60 FPS
   - "30": Cerca de 30 FPS
+  $options:ar:
+  - screen: معدل تحديث الشاشة
+  - screenPlus20: معدل تحديث الشاشة + 20 إطارًا/ث
+  - "90": حوالي 90 إطارًا/ث
+  - "60": حوالي 60 إطارًا/ث
+  - "30": حوالي 30 إطارًا/ث
 - hdr: true
   $name: HDR
   $name:pt-BR: HDR
+  $name:ar: HDR
   $description: On a monitor with HDR on (Settings > System > Display > Use HDR), windows with HDR content (videos, games, photos) keep their full brightness in the switcher, like in the native Alt+Tab. It takes more graphics memory; when off, they're shown at SDR brightness. Monitors without HDR aren't affected
   $description:pt-BR: Num monitor com HDR ligado (Configurações > Sistema > Tela > Usar HDR), janelas com conteúdo HDR (vídeos, jogos, fotos) mantêm o brilho todo no alternador, como no Alt+Tab nativo. Usa mais memória de vídeo; desligado, elas aparecem com o brilho de SDR. Monitores sem HDR não mudam
+  $description:ar: على شاشة مفعّل عليها HDR (الإعدادات > النظام > العرض > استخدام HDR)، تحتفظ النوافذ ذات محتوى HDR (الفيديو والألعاب والصور) بسطوعها الكامل في المبدّل، كما في Alt+Tab الأصلي. يستهلك ذاكرة رسوميات أكبر؛ وعند الإيقاف تُعرض بسطوع SDR. الشاشات بلا HDR لا تتأثر
 - middleClickClose: true
   $name: Middle-click closes a window
   $name:pt-BR: Clique do meio fecha a janela
+  $name:ar: النقر بالزر الأوسط يغلق النافذة
   $description: Clicking a window in the switcher with the middle mouse button (pressing the scroll wheel) closes it
   $description:pt-BR: Clicar numa janela do alternador com o botão do meio do mouse (apertando a rodinha) fecha essa janela
+  $description:ar: النقر على نافذة في المبدّل بزر الماوس الأوسط (الضغط على عجلة التمرير) يغلقها
 - closeButton: true
   $name: Close button
   $name:pt-BR: Botão de fechar
+  $name:ar: زر الإغلاق
   $description: Shows an X on the window under the mouse. Clicking it closes that window
   $description:pt-BR: Mostra um X na janela embaixo do mouse. Clicar nele fecha essa janela
+  $description:ar: يعرض علامة X على النافذة التي تحت الماوس. النقر عليها يغلق تلك النافذة
 - hideBars: true
   $name: Leave out bars and docks
   $name:pt-BR: Deixar de fora barras e docks
+  $name:ar: استبعاد الأشرطة وأشرطة الإرساء
   $description: Skips long, thin windows that stay on top or sit outside the work area, like status bars and docks (YASB, WindowSill and similar)
   $description:pt-BR: Ignora janelas compridas e finas que ficam sempre por cima ou fora da área de trabalho, como barras de status e docks (YASB, WindowSill e parecidos)
+  $description:ar: يتجاهل النوافذ الطويلة الرفيعة التي تبقى في المقدمة أو تقع خارج منطقة العمل، مثل أشرطة الحالة وأشرطة الإرساء (YASB وWindowSill وما شابههما)
 - excludedApps:
   - ""
   $name: Excluded apps
   $name:pt-BR: Apps excluídos
+  $name:ar: التطبيقات المستثناة
   $description: Windows of these apps never appear in the switcher. Process names, like yasb.exe, or window class names
   $description:pt-BR: Janelas desses apps nunca aparecem no alternador. Nomes de processo, como yasb.exe, ou nomes de classe da janela
+  $description:ar: نوافذ هذه التطبيقات لا تظهر أبدًا في المبدّل. أسماء العمليات مثل yasb.exe، أو أسماء فئات النوافذ
 */
 // ==/WindhawkModSettings==
 
@@ -919,18 +1169,18 @@ constexpr int kMaxRestoreTries = 3;
 constexpr UINT_PTR kDeviceRetryTimerId = 2;
 constexpr UINT kDeviceRetryMs = 2000;
 
-constexpr WCHAR kOverlayClassName[] = L"WindhawkFlip3DSwitcherOverlay";
-constexpr WCHAR kProxyClassName[] = L"WindhawkFlip3DSwitcherProxy";
+constexpr WCHAR kOverlayClassName[] = L"WindhawkModernCardsOverlay";
+constexpr WCHAR kProxyClassName[] = L"WindhawkModernCardsProxy";
 // The overlay's title tells explorer whether the switcher can take over
 // Alt+Tab right now. FindWindow compares titles without sending messages.
-constexpr WCHAR kOverlayTitleIdle[] = L"Flip 3D";
-constexpr WCHAR kOverlayTitleReady[] = L"Flip 3D (ready)";
+constexpr WCHAR kOverlayTitleIdle[] = L"Modern Cards";
+constexpr WCHAR kOverlayTitleReady[] = L"Modern Cards (ready)";
 // Posted by explorer to the overlay when it receives the Alt+Tab hotkey.
 // wParam: kStartBackwards, and the shortcut shifted by kStartShortcutShift.
-constexpr WCHAR kHotkeyMessageName[] = L"WindhawkFlip3DSwitcher_Hotkey";
+constexpr WCHAR kHotkeyMessageName[] = L"WindhawkModernCards_Hotkey";
 
 enum class AnimationStyle {
-    Flip3D,
+    Unused,
     Cascade,
     CoverFlow,
     // Cover Flow on a glossy floor, with reflections and a caption (see
@@ -5302,199 +5552,6 @@ void Switcher::ComputeLayout() {
             // Never laid out: nothing is shown with this style.
             break;
 
-        case AnimationStyle::Flip3D:
-            // Like Flip 3D, the stack recedes up and to the left.
-            m_boxWidth = m_width * 0.48f;
-            m_boxHeight = m_height * 0.50f;
-            m_frontX = m_width * 0.12f;
-            m_frontY = m_height * 0.05f;
-            m_stepX = -m_width * 0.065f * density;
-            m_stepY = -m_height * 0.04f * density;
-            m_stepZ = m_width * 0.07f * density;
-            break;
-
-        case AnimationStyle::Cascade:
-            // A deck tilted backwards, receding upwards.
-            m_boxWidth = m_width * 0.52f;
-            m_boxHeight = m_height * 0.50f;
-            m_frontX = 0;
-            m_frontY = m_height * 0.10f;
-            m_stepX = 0;
-            m_stepY = -m_height * 0.075f * density;
-            m_stepZ = m_width * 0.09f * density;
-            break;
-
-        case AnimationStyle::CoverFlow:
-            m_boxWidth = m_width * 0.42f;
-            m_boxHeight = m_height * 0.55f;
-            m_frontX = m_width * 0.27f;  // Distance of the first side window.
-            m_frontY = -m_height * 0.02f;
-            m_stepX = m_width * 0.075f * spacing;
-            m_stepY = 0;
-            m_stepZ = m_width * 0.22f;  // How far back the sides are.
-            break;
-
-        case AnimationStyle::ITab:
-        case AnimationStyle::ITabTitle:
-        case AnimationStyle::ITabBackground:
-        case AnimationStyle::ITabBackgroundTitle:
-            // Proportions of the selected window's width W: the first side
-            // window is 0.8 W from the middle, each next one 0.19 W further,
-            // all 0.4 W back, standing on the floor. Close enough that their
-            // content stays readable. W leaves room for about five windows on
-            // each side.
-            m_boxWidth = m_width * 0.30f;
-            m_boxHeight = m_height * 0.42f;
-            m_floorY = m_height * 0.14f;
-            m_frontX = m_boxWidth * 0.80f;  // Distance of the first side window.
-            m_frontY = 0;
-            m_stepX = m_boxWidth * 0.19f * spacing;
-            m_stepY = 0;
-            m_stepZ = m_boxWidth * 0.40f;  // How far back the sides are.
-            break;
-
-        case AnimationStyle::Carousel:
-            m_boxWidth = m_width * 0.38f;
-            m_boxHeight = m_height * 0.45f;
-            m_frontX = 0;
-            m_frontY = m_height * 0.08f;
-            m_stepX = m_width * 0.30f * spacing;  // Ring radius.
-            m_stepY = 0;
-            m_stepZ = 2 * 3.14159265f / std::max(count, 5);  // Angle per window.
-            break;
-
-        case AnimationStyle::Grid: {
-            // As many columns as make the cells closest to a 16:10 window.
-            const float areaWidth = m_width * 0.92f;
-            const float areaHeight = m_height * 0.78f;
-            m_gridColumns = std::clamp(
-                (int)std::ceil(std::sqrt(count * areaWidth / areaHeight / 1.6f)),
-                1, count);
-            m_gridRows = (count + m_gridColumns - 1) / m_gridColumns;
-            m_boxWidth = areaWidth / m_gridColumns;
-            m_boxHeight = areaHeight / m_gridRows;
-            m_frontX = 0;
-            m_frontY = m_height * 0.05f - m_height / 2;  // Top of the grid.
-            m_stepX = m_stepY = m_stepZ = 0;
-            break;
-        }
-
-        case AnimationStyle::Helix:
-            m_boxWidth = m_width * 0.36f;
-            m_boxHeight = m_height * 0.40f;
-            m_frontX = 0;
-            m_frontY = m_height * 0.02f;
-            m_stepX = m_width * 0.28f * spacing;   // Radius.
-            m_stepY = m_height * 0.09f * spacing;  // Rise per window.
-            m_stepZ = 0.75f;                       // Angle per window.
-            break;
-
-        case AnimationStyle::Fan:
-            m_boxWidth = m_width * 0.34f;
-            m_boxHeight = m_height * 0.42f;
-            m_frontX = 0;
-            m_frontY = m_height * 0.95f;           // Pivot, below the screen.
-            m_stepX = m_height * 0.95f;            // Distance to the pivot.
-            m_stepY = 0;
-            m_stepZ = 0.16f * spacing;             // Angle per window.
-            break;
-
-        case AnimationStyle::Panorama:
-            m_boxWidth = m_width * 0.26f;
-            m_boxHeight = m_height * 0.36f;
-            m_frontX = 0;
-            m_frontY = -m_height * 0.02f;
-            m_stepX = m_width * 1.4f;              // Wall radius.
-            m_stepY = 0;
-            m_stepZ = m_width * 0.29f * spacing / m_stepX;  // Angle per window.
-            break;
-
-        case AnimationStyle::Tunnel:
-            m_boxWidth = m_width * 0.42f;
-            m_boxHeight = m_height * 0.44f;
-            m_frontX = 0;
-            m_frontY = m_height * 0.08f;
-            m_stepX = 0;
-            m_stepY = -m_height * 0.06f * density;  // Deeper ones peek above.
-            m_stepZ = m_width * 0.12f * density;
-            break;
-
-        case AnimationStyle::Windows11:
-        case AnimationStyle::Thumbnails:
-        case AnimationStyle::IconRow:
-        case AnimationStyle::List:
-        case AnimationStyle::Classic:
-            ComputePanelLayout();
-            break;
-
-        case AnimationStyle::Rolodex:
-            m_boxWidth = m_width * 0.36f;
-            m_boxHeight = m_height * 0.30f;
-            m_frontX = 0;
-            m_frontY = -m_height * 0.04f;
-            m_stepX = m_height * 0.42f * spacing;  // Wheel radius.
-            m_stepY = 0;
-            m_stepZ = 0.75f;                       // Angle per window.
-            break;
-
-        case AnimationStyle::Cube:
-            // Each window is a face of a cube turning around its vertical
-            // axis. All faces are as wide as the cube, so the edges meet.
-            m_boxWidth = m_width * 0.40f;
-            m_boxHeight = m_height * 0.46f;
-            m_frontX = 0;
-            m_frontY = -m_height * 0.02f;
-            m_stepX = m_boxWidth / 2;  // Half the cube's side.
-            m_stepY = 0;
-            m_stepZ = 3.14159265f / 2;  // Angle per window.
-            break;
-
-        case AnimationStyle::Sphere: {
-            // Windows on a spiral around a ball, from the selected one in
-            // the middle of its face. Each window is a step further around
-            // and a little lower; one turn later, the windows are a step
-            // lower, in the next band. Steps get smaller with more windows,
-            // so all of them fit on the ball once, from top to bottom.
-            m_boxWidth = m_width * 0.25f;
-            m_boxHeight = m_height * 0.30f;
-            m_frontX = 0;
-            m_frontY = -m_height * 0.01f;
-            m_stepX = m_height * 0.40f * spacing;  // Radius.
-            // Longitude per window, at most about a window's width. Over
-            // count windows, the bands then reach count * step^2 / (4 pi)
-            // up and down, which stays within kMaxLatitude.
-            constexpr float kMaxLatitude = 1.15f;
-            m_stepZ = std::min(
-                std::clamp(m_boxWidth * 0.95f / m_stepX, 0.3f, 1.0f),
-                2 * std::sqrt(3.14159265f * kMaxLatitude / count));
-            // Latitude per window: one step per turn.
-            m_stepY = m_stepZ * m_stepZ / (2 * 3.14159265f);
-            break;
-        }
-
-        case AnimationStyle::Shuffle:
-            // A deck of cards: the front one is lifted over the deck and
-            // slid in at the back.
-            m_boxWidth = m_width * 0.46f;
-            m_boxHeight = m_height * 0.48f;
-            m_frontX = 0;
-            m_frontY = m_height * 0.12f;
-            m_stepX = 0;
-            m_stepY = -m_height * 0.02f * density;
-            m_stepZ = m_width * 0.035f * density;
-            break;
-
-        case AnimationStyle::Domino:
-            // Windows standing in a row: the front one falls over.
-            m_boxWidth = m_width * 0.30f;
-            m_boxHeight = m_height * 0.42f;
-            m_frontX = -m_width * 0.16f;
-            m_frontY = m_height * 0.06f;
-            m_stepX = m_width * 0.10f * density;
-            m_stepY = 0;
-            m_stepZ = m_width * 0.15f * density;
-            break;
-
         case AnimationStyle::Wave:
             // A dock-style row. The selected window is magnified and
             // raised; the others shrink, drop and turn away with distance.
@@ -5585,6 +5642,9 @@ void Switcher::ComputeLayout() {
             m_stepY = 0;
             m_stepZ = 0.62f;                       // Angle per window.
             break;
+
+        default:
+            break;
     }
 }
 
@@ -5616,303 +5676,6 @@ Pose Switcher::LayoutPose(const Item& item, int index, float rel) const {
     switch (m_settings.style) {
         case AnimationStyle::Native:
             break;
-
-        case AnimationStyle::Flip3D:
-        case AnimationStyle::Cascade: {
-            const bool flip = m_settings.style != AnimationStyle::Cascade;
-            if (flip) {
-                pose.angleY = tilt;
-            } else {
-                pose.angleX = tilt;
-            }
-            if (rel >= 0) {
-                pose.x = m_frontX + rel * m_stepX;
-                pose.y = m_frontY + rel * m_stepY;
-                pose.z = rel * m_stepZ;
-                pose.brightness = 1 - std::min(rel * 0.07f, 0.55f);
-            } else if (flip) {
-                // Leaving the front: fly towards the viewer and fade out.
-                pose.x = m_frontX - rel * m_width * 0.22f;
-                pose.y = m_frontY - rel * m_height * 0.10f;
-                pose.z = rel * m_focal * 0.45f;
-                pose.opacity = (1 + rel) * (1 + rel);
-            } else {
-                // Leaving the front: drop down and fade out.
-                pose.x = m_frontX;
-                pose.y = m_frontY - rel * m_height * 0.45f;
-                pose.z = rel * m_focal * 0.25f;
-                pose.opacity = (1 + rel) * (1 + rel);
-            }
-            break;
-        }
-
-        case AnimationStyle::CoverFlow: {
-            // The selected window faces the viewer; the others are turned
-            // towards it on both sides.
-            const float inner = std::min(distance, 1.0f);
-            const float outer = std::max(distance - 1, 0.0f);
-            pose.x = side * (inner * m_frontX + outer * m_stepX);
-            pose.y = m_frontY;
-            pose.z = inner * m_stepZ + outer * m_width * 0.01f;
-            pose.angleY =
-                std::clamp(rel, -1.0f, 1.0f) * std::min(tilt * 2.2f, 1.3f);
-            pose.brightness = 1 - inner * 0.2f - std::min(outer * 0.04f, 0.3f);
-            pose.opacity = std::clamp(8 - distance, 0.0f, 1.0f);
-            break;
-        }
-
-        case AnimationStyle::ITab:
-        case AnimationStyle::ITabTitle:
-        case AnimationStyle::ITabBackground:
-        case AnimationStyle::ITabBackgroundTitle: {
-            // The selected window faces the viewer. The others are turned
-            // 60 degrees to face the middle (their edge nearer the middle
-            // farther away), side by side, each a little further back so the
-            // ones nearer the middle cover them. Their bottom edges rest on
-            // the floor.
-            const float inner = std::min(distance, 1.0f);
-            const float outer = std::max(distance - 1, 0.0f);
-            pose.x = side * (inner * m_frontX + outer * m_stepX);
-            pose.y = m_floorY - item.Height() * fit / 2;
-            pose.z = inner * m_stepZ + outer * m_width * 0.012f;
-            pose.angleY = -std::clamp(rel, -1.0f, 1.0f) * 1.05f;
-            pose.brightness = 1 - inner * 0.1f - std::min(outer * 0.03f, 0.3f);
-            pose.opacity = std::clamp(10 - distance, 0.0f, 1.0f);
-            break;
-        }
-
-        case AnimationStyle::Carousel: {
-            // A ring seen slightly from above, rotating around its center.
-            const float angle = rel * m_stepZ;
-            pose.x = m_stepX * std::sin(angle);
-            pose.z = m_stepX * (1 - std::cos(angle));
-            pose.y = m_frontY - pose.z * 0.18f;
-            pose.angleY = angle * 0.55f;
-            pose.brightness = 1 - (1 - std::cos(angle)) * 0.22f;
-            pose.opacity = std::clamp(3.5f - std::fabs(angle), 0.0f, 1.0f);
-            break;
-        }
-
-        case AnimationStyle::Grid: {
-            const int row = index / m_gridColumns;
-            const int column = index % m_gridColumns;
-            const int inRow = std::min(
-                m_gridColumns, (int)m_items.size() - row * m_gridColumns);
-            const float selected = std::max(0.0f, 1 - distance);
-            // The window size setting only resizes the window inside its
-            // cell, so the grid always fits on the screen.
-            const float cellFit = std::min(m_boxWidth * 0.88f / item.Width(),
-                                           m_boxHeight * 0.84f / item.Height());
-            pose.scale = std::min(std::min(cellFit, 1.0f) *
-                                      m_settings.windowSize,
-                                  cellFit) *
-                         (1 + selected * 0.05f);
-            pose.x = (column - (inRow - 1) / 2.0f) * m_boxWidth;
-            pose.y = m_frontY + (row + 0.5f) * m_boxHeight;
-            pose.z = -selected * m_width * 0.02f;
-            pose.brightness = 0.72f + selected * 0.28f;
-            pose.highlight = selected;
-            break;
-        }
-
-        case AnimationStyle::Helix: {
-            // A spiral around a vertical axis: earlier windows go up and
-            // around, later ones down and around.
-            const float angle = rel * m_stepZ;
-            pose.x = m_stepX * std::sin(angle);
-            pose.z = m_stepX * (1 - std::cos(angle));
-            pose.y = m_frontY + rel * m_stepY;
-            pose.angleY = angle * 0.6f;
-            pose.brightness = 1 - (1 - std::cos(angle)) * 0.22f;
-            pose.opacity = std::clamp(3.6f - std::fabs(angle), 0.0f, 1.0f);
-            break;
-        }
-
-        case AnimationStyle::Fan: {
-            // Like playing cards held in a hand, around a pivot below.
-            const float angle = rel * m_stepZ;
-            const float selected = std::max(0.0f, 1 - distance);
-            pose.x = m_stepX * std::sin(angle);
-            pose.y = m_frontY - m_stepX * std::cos(angle) -
-                     selected * m_height * 0.05f;
-            pose.z = distance * m_width * 0.004f - selected * m_width * 0.02f;
-            pose.angleZ = angle;
-            pose.brightness = 0.8f + selected * 0.2f;
-            pose.opacity = std::clamp((1.45f - std::fabs(angle)) * 3, 0.0f, 1.0f);
-            break;
-        }
-
-        case AnimationStyle::Panorama: {
-            // A row of windows on a wall curving around the viewer.
-            const float angle = rel * m_stepZ;
-            const float selected = std::max(0.0f, 1 - distance);
-            pose.x = m_stepX * std::sin(angle);
-            pose.y = m_frontY;
-            pose.z = -m_stepX * (1 - std::cos(angle)) * 0.25f -
-                     selected * m_width * 0.02f;
-            pose.angleY = -angle * 0.8f;
-            pose.scale = fit * (1 + selected * 0.08f);
-            pose.brightness = 0.7f + selected * 0.3f;
-            pose.highlight = selected;
-            pose.opacity = std::clamp(4.5f - distance, 0.0f, 1.0f);
-            break;
-        }
-
-        case AnimationStyle::Tunnel:
-            // Windows sink into a twisting tunnel.
-            pose.x = m_frontX;
-            pose.y = m_frontY;
-            if (rel >= 0) {
-                pose.y += rel * m_stepY;
-                pose.z = rel * m_stepZ;
-                pose.angleZ = rel * 0.3f;
-                pose.brightness = 1 - std::min(rel * 0.09f, 0.6f);
-            } else {
-                // Leaving the front: spin towards the viewer and fade out.
-                pose.z = rel * m_focal * 0.4f;
-                pose.angleZ = rel * 0.6f;
-                pose.opacity = (1 + rel) * (1 + rel);
-            }
-            break;
-
-        case AnimationStyle::Windows11:
-        case AnimationStyle::Thumbnails: {
-            // The window shrinks into its thumbnail.
-            const D2D1_RECT_F& thumbnail = m_thumbnails[index];
-            const float selected = std::max(0.0f, 1 - distance);
-            pose.x = (thumbnail.left + thumbnail.right) / 2 - m_width / 2;
-            pose.y = (thumbnail.top + thumbnail.bottom) / 2 - m_height / 2;
-            pose.z = -selected * m_width * 0.002f;
-            pose.scale =
-                std::min((thumbnail.right - thumbnail.left) / item.Width(),
-                         (thumbnail.bottom - thumbnail.top) / item.Height()) *
-                (1 + selected * 0.03f);
-            break;
-        }
-
-        case AnimationStyle::IconRow:
-        case AnimationStyle::List:
-        case AnimationStyle::Classic:
-            // No thumbnails: the windows fade out where they are.
-            pose = FlatPose(item);
-            pose.opacity = 0;
-            break;
-
-        case AnimationStyle::Rolodex: {
-            // A wheel around a horizontal axis: earlier windows roll over the
-            // top, later ones under the bottom.
-            const float angle = rel * m_stepZ;
-            pose.x = m_frontX;
-            pose.y = m_frontY + m_stepX * std::sin(angle);
-            pose.z = m_stepX * (1 - std::cos(angle));
-            pose.angleX = -angle;
-            pose.brightness = 1 - (1 - std::cos(angle)) * 0.45f;
-            // Fade out before the back side of the wheel comes around.
-            pose.opacity = std::clamp((1.9f - std::fabs(angle)) * 2, 0.0f, 1.0f);
-            break;
-        }
-
-        case AnimationStyle::Cube: {
-            // Faces turn around the cube's center; only the front one and,
-            // while turning, the one coming in are seen.
-            const float angle = rel * m_stepZ;
-            const float half = m_stepX;
-            // Whatever the window's shape: as wide as the cube, and windows
-            // taller than the cube are squeezed to its height.
-            pose.scale = 2 * half / item.Width();
-            pose.squeeze =
-                std::min(1.0f, m_boxHeight / (item.Height() * pose.scale));
-            pose.x = half * std::sin(angle);
-            pose.y = m_frontY;
-            pose.z = half * (1 - std::cos(angle)) + half * 0.35f;
-            pose.angleY = angle;
-            pose.brightness = 0.45f + 0.55f * std::max(std::cos(angle), 0.0f);
-            pose.opacity = std::clamp((1 - distance) * 30, 0.0f, 1.0f);
-            break;
-        }
-
-        case AnimationStyle::Sphere: {
-            // See ComputeLayout. Earlier windows go left and up, later ones
-            // right and down. Only the front of the ball is shown.
-            const float selected = std::max(0.0f, 1 - distance);
-            const float latitude = -rel * m_stepY;
-            const float longitude = rel * m_stepZ;
-            const float facing = std::cos(longitude) * std::cos(latitude);
-            pose.x = m_stepX * std::sin(longitude) * std::cos(latitude);
-            pose.y = m_frontY - m_stepX * std::sin(latitude);
-            pose.z = m_stepX * (1 - facing) - selected * m_stepX * 0.2f;
-            pose.angleY = longitude;
-            pose.angleX = latitude;
-            // Small enough for a step between neighbours, both along a band
-            // and between bands, and smaller towards the top and bottom,
-            // where the bands are shorter.
-            const float cell = m_stepX * m_stepZ;
-            pose.scale = std::min({fit, cell * 0.92f / item.Width(),
-                                   cell * 0.85f / item.Height()}) *
-                         std::max(std::cos(latitude), 0.5f) *
-                         (1 + selected * 0.25f);
-            pose.brightness = 0.45f + 0.55f * std::max(facing, 0.0f);
-            pose.highlight = selected;
-            pose.opacity = std::clamp((facing - 0.3f) * 4, 0.0f, 1.0f);
-            // Also faded out at both ends of the spiral, where a window
-            // jumps from one end to the other. Not with a few windows: the
-            // ends are then next to the selected one.
-            if (m_items.size() > 4) {
-                const float ends = m_items.size() / 2.0f - distance;
-                pose.opacity *= std::clamp(ends * 1.5f, 0.0f, 1.0f);
-            }
-            break;
-        }
-
-        case AnimationStyle::Shuffle: {
-            const int count = (int)m_items.size();
-            if (rel >= 0) {
-                // A slightly untidy deck.
-                pose.x = m_frontX;
-                pose.y = m_frontY + rel * m_stepY;
-                pose.z = rel * m_stepZ;
-                pose.angleZ = ((index % 3) - 1) * 0.035f * std::min(rel, 1.0f);
-                pose.brightness = 1 - std::min(rel * 0.06f, 0.5f);
-            } else {
-                // Leaving the front: lifted over the deck in an arc, then
-                // slid in at the back.
-                const float progress = -rel;
-                const float arc = std::sin(progress * 3.14159265f);
-                const float back = (float)std::max(count - 1, 1);
-                pose.x = m_frontX + arc * m_width * 0.16f;
-                pose.y = m_frontY + progress * back * m_stepY -
-                         arc * m_height * 0.62f;
-                pose.z = progress * back * m_stepZ;
-                pose.angleX = arc * 0.8f;
-                pose.angleZ = -arc * 0.35f;
-                pose.brightness = 1 - std::min(progress * back * 0.06f, 0.5f);
-            }
-            break;
-        }
-
-        case AnimationStyle::Domino: {
-            const float halfHeight = item.Height() * fit / 2;
-            if (rel >= 0) {
-                pose.x = m_frontX + rel * m_stepX;
-                pose.y = m_frontY;
-                pose.z = rel * m_stepZ;
-                pose.angleY = -0.35f;
-                pose.brightness = 1 - std::min(rel * 0.08f, 0.55f);
-            } else {
-                // Leaving the front: falls towards the viewer, around its
-                // bottom edge, and fades out.
-                const float progress = -rel;
-                const float fall = progress * 1.45f;
-                pose.x = m_frontX;
-                pose.y = m_frontY + halfHeight - halfHeight * std::cos(fall);
-                // Unlike x and y, z isn't scaled by the window size later.
-                pose.z = -halfHeight * m_settings.windowSize * std::sin(fall);
-                pose.angleX = -fall;
-                pose.angleY = -0.35f * (1 - progress);
-                pose.opacity = 1 - progress * progress;
-            }
-            break;
-        }
 
         case AnimationStyle::Wave: {
             // `rel` is continuous while flipping, so every term below is a
@@ -6068,6 +5831,9 @@ Pose Switcher::LayoutPose(const Item& item, int index, float rel) const {
             pose.opacity = std::clamp(3.0f - distance, 0.0f, 1.0f);
             break;
         }
+
+        default:
+            break;
     }
     return pose;
 }
@@ -6166,12 +5932,7 @@ void Switcher::BuildDrawList(float t) {
         }
     };
 
-    const bool stacked = m_settings.style == AnimationStyle::Flip3D ||
-                         m_settings.style == AnimationStyle::Cascade ||
-                         m_settings.style == AnimationStyle::Tunnel ||
-                         m_settings.style == AnimationStyle::Shuffle ||
-                         m_settings.style == AnimationStyle::Domino ||
-                         m_settings.style == AnimationStyle::Swipe ||
+    const bool stacked = m_settings.style == AnimationStyle::Swipe ||
                          m_settings.style == AnimationStyle::Float ||
                          m_settings.style == AnimationStyle::Warp;
     for (int i = 0; i < count; i++) {
@@ -6185,8 +5946,7 @@ void Switcher::BuildDrawList(float t) {
             add(i, 0, slot >= count / 2.0f ? slot - count : slot, 1);
         } else if (slot <= count - 1) {
             add(i, 0, slot, 1);
-        } else if (m_settings.style == AnimationStyle::Shuffle ||
-                   m_settings.style == AnimationStyle::Swipe) {
+        } else if (m_settings.style == AnimationStyle::Swipe) {
             // The card itself travels to the back of the deck.
             add(i, 0, slot - count, 1);
         } else {
