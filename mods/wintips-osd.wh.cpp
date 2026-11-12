@@ -4,13 +4,13 @@
 // @name:zh-CN      WinTips 键盘状态提示
 // @description     Shows a Win11-style floating OSD for Caps/Num/Scroll Lock, Insert and copy/paste/cut
 // @description:zh-CN 按下大写/数字/滚动锁定、Insert 或复制/粘贴/剪切时弹出 Win11 质感的浮窗提示
-// @version         1.5.2
+// @version         1.6.0
 // @author          DoYouNatureQ
 // @github          https://github.com/DoYouNatureQ
 // @homepage        https://github.com/DoYouNatureQ/WinTips
 // @license         GPL-3.0-or-later
 // @include         windhawk.exe
-// @compilerOptions -lgdiplus -lgdi32 -ladvapi32 -lshell32 -lshcore -ldwmapi -limm32
+// @compilerOptions -lgdiplus -lgdi32 -ladvapi32 -lshell32 -lshcore -ldwmapi -limm32 -ldwrite
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -41,7 +41,10 @@ Chinese/English mode.
   frame. *Card material → Solid* for an opaque card.
 - **Windows 11 look, Windows 10 included.** The mod paints the card itself, so
   it needs neither system acrylic nor system rounded corners. Per-monitor DPI,
-  light/dark theme and the system accent color are followed.
+  light/dark theme and the system accent color are followed. The labels are
+  drawn by DirectWrite — the same engine the native OSD uses — so they stay
+  smooth at every DPI scale, with a GDI+ fallback where dwrite.dll is not
+  available.
 - **Stays in front.** A fullscreen game, recorder or launcher overlay that covers
   the card is noticed within 100 ms and the card is re-raised; when nothing
   covers it, no other window is touched.
@@ -65,7 +68,8 @@ Chinese/English mode.
 
 - **Tips** — Caps Lock, Num Lock, Scroll Lock, Insert, Copy, Paste and Cut, each
   on or off. *Also notify non-keyboard copies* adds context-menu and in-app
-  copies.
+  copies; *Show the ×N count badge* hides the badge on the copy/paste/cut cards
+  when turned off.
 - **Input language & Chinese/English tip** — off by default; shows the globe card
   after a language switch. Set it back to off if it fires more often than it
   helps.
@@ -208,6 +212,14 @@ complete corresponding source under the GPL.
     右键菜单、应用内“复制”按钮等非键盘复制（剪贴板更新即提示）也会弹出提示。
 
     需要同时开启上面的“复制”选项。
+- countBadge: true
+  $name: Show the ×N count badge
+  $name:zh-CN: 显示 ×N 次数徽章
+  $description: >-
+    Copy, paste and cut cards show a small ×N badge counting consecutive
+    actions. Turn this off to keep just the icon and the label.
+  $description:zh-CN: >-
+    复制、粘贴、剪切卡片右上角的 ×N 次数徽章记录连续操作次数。不需要时可关闭，卡片只保留图标和文字。
 - notifyLanguage: false
   $name: Input language & Chinese/English tip
   $name:zh-CN: 输入法语言与中英文提示
@@ -323,14 +335,14 @@ complete corresponding source under the GPL.
     where text stays readable over a light wallpaper.
   $description:zh-CN: >-
     仅亚克力材质有效：模糊背景之上那层底色盖住多少。数值越低越透、背景越清晰，越高越接近实心。20 至 90，55 是"看得见背后"与"文字不失读"的平衡点。
-- blurRadius: 12
+- blurRadius: 16
   $name: Blur radius (pixels)
   $name:zh-CN: 模糊半径（像素）
   $description: >-
     Only used by the Acrylic material. Higher values look softer; 0 keeps the
-    background sharp behind the tint.
+    background sharp behind the tint. 16 matches the WinTips app's default.
   $description:zh-CN: >-
-    仅亚克力材质有效。数值越大越模糊，0 表示背景不模糊、只叠一层色调。
+    仅亚克力材质有效。数值越大越模糊，0 表示背景不模糊、只叠一层色调。16 与 WinTips 应用默认值一致。
 - accentColor: ""
   $name: Accent color
   $name:zh-CN: 强调色
@@ -354,6 +366,7 @@ complete corresponding source under the GPL.
 #include <shellscalingapi.h>
 #include <dwmapi.h>
 #include <imm.h>
+#include <dwrite.h>
 
 #include <algorithm>
 #include <cmath>
@@ -422,10 +435,19 @@ constexpr int kFollowMs = 140;        // shorter than the entrance, so it keeps 
 // and the blur is re-aligned to wherever the card is now. A grab costs about
 // 7 ms of a core (it waits for the compositor), so this is not a frame rate to
 // chase - the smoothness comes from the blend below rather than from more
-// frames. The WinTips app refreshes every 22 ms; the mod is a guest in
-// windhawk.exe, where other mods' hooks run on the same CPU, so it settles for
-// 30 Hz and lets the blend do the rest.
-constexpr int kLiveRefreshMs = 33;
+// frames. 22 ms matches the WinTips app; the blend is what hides the beat.
+constexpr int kLiveRefreshMs = 22;
+
+// Box-blur passes. The one-shot snapshot runs three and approaches a Gaussian;
+// the live path runs two and widens the radius instead (see kLiveRadiusScale) -
+// same softness per frame for a third less convolution. Same split the
+// WinTips app makes.
+constexpr int kStaticBlurPasses = 3;
+constexpr int kLiveBlurPasses = 2;
+
+// The live path blurs with two passes, whose sigma is only radius * 0.82; the
+// radius grows by a quarter (16 -> 20) to match the three-pass snapshot.
+constexpr float kLiveRadiusScale = 1.25f;
 
 // How far the card may wander inside one grab, in DIPs. The snapshot is taken
 // around the card instead of exactly behind it, and the drawing code samples
@@ -436,7 +458,8 @@ constexpr int kStaticPaddingDip = 72; // one grab per tip: cover the whole slide
 
 // New frame's weight in the blend (256 = new frame only). Around 150 the image
 // catches up in about three frames - fast enough to read as "live", slow enough
-// that a 30 Hz capture of a busy desktop doesn't flicker.
+// that a ~45 Hz capture of a busy desktop doesn't flicker. Same value the
+// WinTips app uses.
 constexpr int kLiveBlendWeight = 150;
 
 // The topmost guard: check this often whether something else landed on top of
@@ -518,6 +541,7 @@ struct Settings {
     bool notify[kKindCount] = {true, true, true, true,
                                true, true, true, false}; // language tip off
     bool notifyAnyCopy = true;
+    bool countBadge = true; // ×N badge on copy/paste/cut cards (issue #7304)
     int displayMs = 2000;
     int animationPercent = 100;
     int tipScalePercent = 100;
@@ -532,7 +556,9 @@ struct Settings {
     // 55 is the same balance point the WinTips app settled on: below ~40 the
     // text starts fighting a busy wallpaper, above ~75 the blur is invisible.
     int tintOpacity = 55;
-    int blurRadius = 12;
+    // Same default the WinTips app uses: soft enough to read as frosted glass,
+    // sharp enough that the desktop behind stays recognizable.
+    int blurRadius = 16;
     std::wstring accentColor;
     bool suppressFullscreen = false;
 
@@ -625,6 +651,7 @@ void LoadSettings() {
     s.notify[kPaste] = Wh_GetIntSetting(L"notifyPaste") != 0;
     s.notify[kCut] = Wh_GetIntSetting(L"notifyCut") != 0;
     s.notifyAnyCopy = Wh_GetIntSetting(L"notifyAnyCopy") != 0;
+    s.countBadge = Wh_GetIntSetting(L"countBadge") != 0;
     s.notify[kLanguage] = Wh_GetIntSetting(L"notifyLanguage") != 0;
 
     s.displayMs = Clamp(Wh_GetIntSetting(L"displayMs"), 500, 10000);
@@ -1694,6 +1721,17 @@ float MeasureTextWidth(HDC dc, const LOGFONTW& logFont, const std::wstring& text
     return (float)size.cx;
 }
 
+// DirectWrite text, defined with the surface code below: it rasterises the
+// glyphs and blends them straight into the card's DIB, which is only known
+// there - the same forward-declaration split PaintCardBackground uses above.
+// DWrite is what the native Windows 11 OSD draws its labels with; GDI+'s
+// grid-fit aliasing is what issue #6977 reported as pixelated text.
+bool DWriteAvailable();
+float MeasureTextWidthDWrite(const std::wstring& text, float size, int weight);
+float DrawTextDWrite(const std::wstring& text, float size, int weight,
+                     const Color& color, float alphaScale, float x,
+                     float centerY, bool centerAlign);
+
 // =============================================================================
 // Frame rendering
 // =============================================================================
@@ -1756,26 +1794,51 @@ void RenderCard(Graphics& g, float scale, float width, float height,
     FormatTip(f.kind, f.on, label);
 
     // --- fonts -------------------------------------------------------------
+    // DirectWrite draws the label when it can be reached; the GDI+ path below
+    // is the fallback, and it keeps the font objects only then.
+    bool useDWrite = DWriteAvailable();
     HDC screenDc = GetDC(nullptr);
     LOGFONTW textLogFont = MakeUiLogFont(14.0f * scale, 500);
     LOGFONTW badgeLogFont = MakeUiLogFont(12.5f * scale, 600);
 
+    // `clip` marks the card family (icon, vertical rhythm); `badge` only says
+    // whether the ×N pill is drawn and reserves width (issue #7304).
     bool clip = IsClipKind(f.kind);
+    bool badge = clip && g_settings.countBadge;
     bool lang = IsLanguageKind(f.kind);
     float textWidth = MeasureTextWidth(screenDc, textLogFont, label);
-    float badgeWidth = clip ? MeasureTextWidth(screenDc, badgeLogFont,
-                                               CountText(f.count)) +
-                                  14.0f * scale
-                            : 0.0f;
+    if (useDWrite) {
+        float width = MeasureTextWidthDWrite(label, 14.0f * scale, 500);
+        if (width > 0.0f) {
+            textWidth = width;
+        }
+    }
+    float badgeWidth = 0.0f;
+    if (badge) {
+        badgeWidth =
+            MeasureTextWidth(screenDc, badgeLogFont, CountText(f.count)) +
+            14.0f * scale;
+        if (useDWrite) {
+            float width = MeasureTextWidthDWrite(CountText(f.count),
+                                                 12.5f * scale, 600);
+            if (width > 0.0f) {
+                badgeWidth = width + 14.0f * scale;
+            }
+        }
+    }
 
-    Font textFont(screenDc, &textLogFont);
-    Font badgeFont(screenDc, &badgeLogFont);
+    Font* textFont = nullptr;
+    Font* badgeFont = nullptr;
+    if (!useDWrite) {
+        textFont = new Font(screenDc, &textLogFont);
+        badgeFont = new Font(screenDc, &badgeLogFont);
+    }
     ReleaseDC(nullptr, screenDc);
 
     // --- card --------------------------------------------------------------
     g.SetSmoothingMode(SmoothingModeAntiAlias);
     g.SetPixelOffsetMode(PixelOffsetModeHalf);
-    g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+    g.SetTextRenderingHint(TextRenderingHintAntiAlias);
 
     GraphicsPath card;
     AddRoundRect(card, RectF(0.0f, 0.0f, width, height), 8.0f * scale);
@@ -1813,7 +1876,9 @@ void RenderCard(Graphics& g, float scale, float width, float height,
     }
 
     // --- text --------------------------------------------------------------
-    g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+    // The hint matters only for the GDI+ fallback now, and AntiAlias (without
+    // the grid fit) is the best it can do - see the DirectWrite section below.
+    g.SetTextRenderingHint(TextRenderingHintAntiAlias);
     SolidBrush textBrush(theme.text);
     StringFormat textFormat;
     textFormat.SetFormatFlags(StringFormatFlagsNoWrap | StringFormatFlagsNoClip);
@@ -1821,13 +1886,19 @@ void RenderCard(Graphics& g, float scale, float width, float height,
     textFormat.SetLineAlignment(StringAlignmentCenter);
 
     float textX;
-    if (clip) {
+    if (badge) {
         const float gridLeft = 16.0f * scale;
         const float iconEnd = 22.0f * scale;
         float badgeStart = width - gridLeft - 8.0f * scale - badgeWidth;
         float mid = (iconEnd + badgeStart) / 2.0f;
         textX = std::max(iconEnd + 8.0f * scale, mid - textWidth / 2.0f);
         textX += gridLeft;
+    } else if (clip) {
+        // Badge hidden (issue #7304): center the label on the card itself, the
+        // way the badge-on layout lands, instead of the icon-gutter offset the
+        // lock cards use. The max keeps a gap when a label runs long.
+        textX = std::max((16.0f + 22.0f + 8.0f) * scale,
+                         width / 2.0f - textWidth / 2.0f);
     } else {
         // Centered in the content grid, offset by the icon gutter.
         float contentLeft = 16.0f * scale;
@@ -1836,20 +1907,36 @@ void RenderCard(Graphics& g, float scale, float width, float height,
                 18.0f * scale / 2.0f;
     }
 
+    // Vertical: the exe's XAML maths puts the label centre at ~22, but that
+    // reads as high on the rendered card (ink sits 3 px above centre), so the
+    // mod keeps the visually centred positions users are used to.
     float textY = (clip ? height / 2.0f - 1.0f * scale
                         : height / 2.0f - 2.0f * scale + gridShift);
     // NoWrap keeps a slightly narrower GDI+ measure from breaking the label
     // into two lines, so the rect only needs to be tall enough for one line.
     RectF textRect(textX, textY - 14.0f * scale, width - textX + 8.0f * scale,
                    28.0f * scale);
-    g.DrawString(label.c_str(), (INT)label.size(), &textFont, textRect,
-                 &textFormat, &textBrush);
+    if (useDWrite) {
+        // DirectWrite writes straight into the surface pixels, so everything
+        // GDI+ has queued must land in the DIB first.
+        g.Flush();
+        DrawTextDWrite(label, 14.0f * scale, 500, theme.text, 1.0f,
+                       textX + textWidth / 2.0f, textY, true);
+    } else {
+        g.DrawString(label.c_str(), (INT)label.size(), textFont, textRect,
+                     &textFormat, &textBrush);
+    }
 
     // --- clipboard badge ---------------------------------------------------
-    if (clip) {
-        float badgeHeight = 18.0f * scale;
-        float badgeX = width - 16.0f * scale - 8.0f * scale - badgeWidth;
-        float badgeY = (height - badgeHeight) / 2.0f;
+    if (badge) {
+        // Geometry copied from the exe's OsdWindow.xaml: the pill is right
+        // aligned inside the content grid (right inset 12, no extra margin),
+        // vertically centred in the grid band [6, 40] -> centre 23 DIP, and
+        // sized like the Border there: 12.5 px text line + 2 px padding on
+        // each side (~20.5 DIP tall, corner radius 9).
+        float badgeHeight = 20.5f * scale;
+        float badgeX = width - 12.0f * scale - badgeWidth;
+        float badgeY = (23.0f - badgeHeight / 2.0f) * scale;
 
         GraphicsState badgeState = g.Save();
         g.TranslateTransform(badgeX + badgeWidth / 2.0f, badgeY + badgeHeight / 2.0f);
@@ -1875,9 +1962,20 @@ void RenderCard(Graphics& g, float scale, float width, float height,
         badgeFormat.SetAlignment(StringAlignmentCenter);
         badgeFormat.SetLineAlignment(StringAlignmentCenter);
         std::wstring countText = CountText(f.count);
-        g.DrawString(countText.c_str(), (INT)countText.size(), &badgeFont,
-                     RectF(badgeX, badgeY, badgeWidth, badgeHeight),
-                     &badgeFormat, &badgeText);
+        if (useDWrite) {
+            g.Flush();
+            // The scale transform around the badge centre is reproduced by
+            // growing the font itself: scaling about the badge's centre keeps
+            // the midpoint, and the alpha follows the same animation value.
+            DrawTextDWrite(countText, 12.5f * scale * Clamp01(f.badgeScale),
+                           600, theme.onAccent, Clamp01(f.badgeAlpha),
+                           badgeX + badgeWidth / 2.0f,
+                           badgeY + badgeHeight / 2.0f, true);
+        } else {
+            g.DrawString(countText.c_str(), (INT)countText.size(), badgeFont,
+                         RectF(badgeX, badgeY, badgeWidth, badgeHeight),
+                         &badgeFormat, &badgeText);
+        }
 
         g.Restore(badgeState);
     }
@@ -1904,6 +2002,9 @@ void RenderCard(Graphics& g, float scale, float width, float height,
                      indicatorHeight / 2.0f);
         g.FillPath(&indicator, &bar);
     }
+
+    delete textFont;
+    delete badgeFont;
 }
 
 // Measures the card size for the current tip, in physical pixels.
@@ -1916,16 +2017,36 @@ void MeasureCard(float scale, const FrameState& f, int& outWidth,
     LOGFONTW textLogFont = MakeUiLogFont(14.0f * scale, 500);
     LOGFONTW badgeLogFont = MakeUiLogFont(12.5f * scale, 600);
 
+    // Width reserves room for the pill only when the badge setting shows it.
     bool clip = IsClipKind(f.kind);
+    bool badge = clip && g_settings.countBadge;
     float textWidth = MeasureTextWidth(screenDc, textLogFont, label);
-    float badgeWidth = clip ? MeasureTextWidth(screenDc, badgeLogFont,
-                                               CountText(f.count)) +
-                                  14.0f * scale
-                            : 0.0f;
+    if (DWriteAvailable()) {
+        float width = MeasureTextWidthDWrite(label, 14.0f * scale, 500);
+        if (width > 0.0f) {
+            textWidth = width;
+        }
+    }
+    float badgeWidth = 0.0f;
+    if (badge) {
+        badgeWidth =
+            MeasureTextWidth(screenDc, badgeLogFont, CountText(f.count)) +
+            14.0f * scale;
+        if (DWriteAvailable()) {
+            float width =
+                MeasureTextWidthDWrite(CountText(f.count), 12.5f * scale, 600);
+            if (width > 0.0f) {
+                badgeWidth = width + 14.0f * scale;
+            }
+        }
+    }
 
     float widthDip =
         16.0f + 22.0f + 18.0f + textWidth / scale + 12.0f +
-        (clip ? badgeWidth / scale + 22.0f : 0.0f);
+        // The exe reserves MeasureText(count) + 22 for the pill zone; the
+        // mod's badgeWidth already includes the pill's 14 px padding, so the
+        // equivalent here is badgeWidth + 8.
+        (badge ? badgeWidth / scale + 8.0f : 0.0f);
     outWidth = (int)std::lround(std::max(kBaseWidth * scale,
                                          std::ceil(widthDip) * scale));
     outHeight = (int)std::lround(kBaseHeight * scale);
@@ -2064,8 +2185,10 @@ struct Backdrop {
 
 Backdrop g_backdrop;
 
-// Separable box blur. Running it twice per axis is close enough to a Gaussian
-// at this size and stays well under a millisecond for a card-sized region.
+// Separable box blur, `passes` rounds of horizontal + vertical. Three passes
+// approach a Gaussian closely enough for the one-shot snapshot; the live path
+// runs two and widens the radius to pay for it - see kLiveRadiusScale. Stays
+// well under a millisecond for a card-sized region either way.
 void BlurAxis(BYTE* bits, int width, int height, int radius, bool horizontal) {
     if (!bits || radius <= 0) {
         return;
@@ -2117,11 +2240,11 @@ void BlurAxis(BYTE* bits, int width, int height, int radius, bool horizontal) {
     }
 }
 
-void BlurBackdrop(Surface& image, int radius) {
+void BlurBackdrop(Surface& image, int radius, int passes) {
     if (!image.bits || radius <= 0) {
         return;
     }
-    for (int pass = 0; pass < 2; pass++) {
+    for (int pass = 0; pass < passes; pass++) {
         BlurAxis((BYTE*)image.bits, image.width, image.height, radius, true);
         BlurAxis((BYTE*)image.bits, image.width, image.height, radius, false);
     }
@@ -2173,7 +2296,7 @@ bool CaptureBackdrop(HDC source, int x, int y, int w, int h, int radius,
         return false;
     }
 
-    BlurBackdrop(g_backdrop.image, radius);
+    BlurBackdrop(g_backdrop.image, radius, kStaticBlurPasses);
     g_backdrop.x = grabX;
     g_backdrop.y = grabY;
     g_backdrop.valid = true;
@@ -2450,6 +2573,13 @@ ULONGLONG g_lastFired[kPollKeyCount];
 bool g_rawDown[kPollKeyCount];
 ULONGLONG g_rawDownAt[kPollKeyCount];
 
+// Whether the Raw Input registration succeeded. The polling fallback has no way
+// to tell numpad 0 from Insert - GetAsyncKeyState only knows virtual keys, and
+// with Num Lock off numpad 0 reports VK_INSERT - so while this is true the poll
+// leaves Insert to Raw Input entirely. Raw Input is not blocked by UIPI, so it
+// covers exactly the elevated-foreground cases the poll exists for.
+bool g_rawInputOk;
+
 // The language watch. A language or IME-mode change has no notification of its
 // own: it is a property of the thread that owns the input, and the only reliable
 // trigger is "a key that switches it was just pressed". So a switch key starts a
@@ -2469,6 +2599,356 @@ InputState g_inputLast;
 
 void StartInputWatch();
 void InputTick();
+
+// =============================================================================
+// DirectWrite text
+//
+// GDI+'s AntiAliasGridFit snaps every glyph to the pixel grid, which is what
+// makes the label look pixelated at 100% scaling - windhawk-mods issue #6977.
+// The native Windows 11 OSD draws its labels with DirectWrite, and so does the
+// card now: each glyph run is rasterised into a grayscale coverage texture and
+// blended over the card's premultiplied pixels by hand. Doing the blend
+// directly is what keeps the per-pixel alpha the layered window needs - a
+// Direct2D render target bound to the DC would flatten it.
+//
+// NATURAL_SYMMETRIC is the WPF-style symmetric grayscale smoothing, which is
+// what the standalone WinTips app (WPF) shows as well, so both editions draw
+// the label the same way. Subpixel positioning stays on (pixel snapping off),
+// which is what keeps the glyphs smooth while the card slides in. If dwrite.dll
+// cannot be reached the GDI+ path remains, now without the grid fit.
+// =============================================================================
+
+IDWriteFactory* g_dwriteFactory = nullptr;
+bool g_dwriteTried = false;
+
+bool DWriteAvailable() {
+    if (!g_dwriteTried) {
+        g_dwriteTried = true;
+        HRESULT hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
+                                         __uuidof(IDWriteFactory),
+                                         (IUnknown**)&g_dwriteFactory);
+        if (FAILED(hr)) {
+            g_dwriteFactory = nullptr;
+            Wh_Log(L"DWriteCreateFactory failed: 0x%08lX", hr);
+        }
+    }
+    return g_dwriteFactory != nullptr;
+}
+
+// Text formats are cached: the size only changes when the card moves to a
+// display with another DPI scale or the card size setting changes, and a font
+// match on every frame would spend exactly the milliseconds the animation
+// needs. Four slots hold the two sizes of the card plus a little churn.
+struct CachedTextFormat {
+    float size;
+    int weight;
+    IDWriteTextFormat* format;
+};
+
+CachedTextFormat g_textFormatCache[4] = {};
+
+void DWriteShutdown() {
+    for (CachedTextFormat& entry : g_textFormatCache) {
+        if (entry.format) {
+            entry.format->Release();
+        }
+        entry.size = 0.0f;
+        entry.weight = 0;
+        entry.format = nullptr;
+    }
+    if (g_dwriteFactory) {
+        g_dwriteFactory->Release();
+        g_dwriteFactory = nullptr;
+    }
+    g_dwriteTried = false;
+}
+
+IDWriteTextFormat* GetTextFormat(float size, int weight) {
+    if (!DWriteAvailable()) {
+        return nullptr;
+    }
+    for (CachedTextFormat& entry : g_textFormatCache) {
+        if (entry.format && entry.size == size && entry.weight == weight) {
+            return entry.format;
+        }
+    }
+
+    IDWriteTextFormat* format = nullptr;
+    HRESULT hr = g_dwriteFactory->CreateTextFormat(
+        UiFaceName(), nullptr, (DWRITE_FONT_WEIGHT)weight,
+        DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size, L"",
+        &format);
+    if (FAILED(hr)) {
+        Wh_Log(L"CreateTextFormat(%s, %g) failed: 0x%08lX", UiFaceName(), size,
+               hr);
+        return nullptr;
+    }
+    format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+
+    CachedTextFormat* slot = nullptr;
+    for (CachedTextFormat& entry : g_textFormatCache) {
+        if (!entry.format) {
+            slot = &entry;
+            break;
+        }
+    }
+    if (!slot) {
+        slot = &g_textFormatCache[0]; // rare overflow: evict the oldest
+        if (slot->format) {
+            slot->format->Release();
+        }
+    }
+    slot->size = size;
+    slot->weight = weight;
+    slot->format = format;
+    return format;
+}
+
+float MeasureTextWidthDWrite(const std::wstring& text, float size,
+                             int weight) {
+    if (text.empty()) {
+        return 0.0f;
+    }
+    IDWriteTextFormat* format = GetTextFormat(size, weight);
+    if (!format) {
+        return 0.0f;
+    }
+    IDWriteTextLayout* layout = nullptr;
+    if (FAILED(g_dwriteFactory->CreateTextLayout(text.c_str(),
+                                                 (UINT32)text.size(), format,
+                                                 10000.0f, 1000.0f, &layout))) {
+        return 0.0f;
+    }
+    DWRITE_TEXT_METRICS metrics{};
+    layout->GetMetrics(&metrics);
+    layout->Release();
+    return metrics.widthIncludingTrailingWhitespace;
+}
+
+// Blends DirectWrite's coverage texture straight into the card's premultiplied
+// pixels. A process-lifetime object: the refcount is pinned at one and the
+// draw parameters travel through the members rather than the client context.
+class CardTextRenderer : public IDWriteTextRenderer {
+public:
+    BYTE* bits = nullptr;
+    int width = 0;
+    int height = 0;
+    int stride = 0;
+    int coverageScale = 256; // extra multiplier on the coverage (badge fade)
+    BYTE premul[256][3];     // premultiplied text color per coverage level
+
+    void Begin(BYTE* surfaceBits, int surfaceWidth, int surfaceHeight,
+               int surfaceStride, const Color& color, float alphaScale) {
+        bits = surfaceBits;
+        width = surfaceWidth;
+        height = surfaceHeight;
+        stride = surfaceStride;
+        coverageScale =
+            (int)std::lround(Clamp01(alphaScale) * 256.0f);
+        for (int i = 0; i < 256; i++) {
+            premul[i][0] = (BYTE)((color.GetB() * i + 127) / 255);
+            premul[i][1] = (BYTE)((color.GetG() * i + 127) / 255);
+            premul[i][2] = (BYTE)((color.GetR() * i + 127) / 255);
+        }
+    }
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** object) {
+        if (!object) {
+            return E_POINTER;
+        }
+        *object = nullptr;
+        if (riid == __uuidof(IUnknown) ||
+            riid == __uuidof(IDWritePixelSnapping) ||
+            riid == __uuidof(IDWriteTextRenderer)) {
+            *object = (IDWriteTextRenderer*)this;
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() {
+        return 1;
+    }
+
+    ULONG STDMETHODCALLTYPE Release() {
+        return 1;
+    }
+
+    // Subpixel positioning on: positions are not rounded to the pixel grid,
+    // which is what keeps the text smooth while the card slides.
+    HRESULT STDMETHODCALLTYPE IsPixelSnappingDisabled(void*, BOOL* isDisabled) {
+        if (isDisabled) {
+            *isDisabled = TRUE;
+        }
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetCurrentTransform(void*, DWRITE_MATRIX* matrix) {
+        if (matrix) {
+            *matrix = DWRITE_MATRIX{1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
+        }
+        return S_OK;
+    }
+
+    // The em sizes handed to CreateTextFormat are pixels already, so one DIP
+    // is one pixel here.
+    HRESULT STDMETHODCALLTYPE GetPixelsPerDip(void*, FLOAT* pixelsPerDip) {
+        if (pixelsPerDip) {
+            *pixelsPerDip = 1.0f;
+        }
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE
+    DrawGlyphRun(void*, FLOAT originX, FLOAT originY,
+                 DWRITE_MEASURING_MODE measuringMode,
+                 const DWRITE_GLYPH_RUN* glyphRun,
+                 const DWRITE_GLYPH_RUN_DESCRIPTION*, IUnknown*) {
+        return BlendGlyphRun(originX, originY, measuringMode, glyphRun);
+    }
+
+    HRESULT STDMETHODCALLTYPE DrawUnderline(void*, FLOAT, FLOAT,
+                                            const DWRITE_UNDERLINE*, IUnknown*) {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE DrawStrikethrough(void*, FLOAT, FLOAT,
+                                                const DWRITE_STRIKETHROUGH*,
+                                                IUnknown*) {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE DrawInlineObject(void*, FLOAT, FLOAT,
+                                               IDWriteInlineObject*, BOOL, BOOL,
+                                               IUnknown*) {
+        return S_OK;
+    }
+
+private:
+    HRESULT BlendGlyphRun(FLOAT originX, FLOAT originY,
+                          DWRITE_MEASURING_MODE measuringMode,
+                          const DWRITE_GLYPH_RUN* glyphRun) {
+        if (!bits || !g_dwriteFactory || !glyphRun ||
+            glyphRun->glyphCount == 0) {
+            return S_OK;
+        }
+
+        IDWriteGlyphRunAnalysis* analysis = nullptr;
+        if (FAILED(g_dwriteFactory->CreateGlyphRunAnalysis(
+                glyphRun, 1.0f, nullptr, DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC,
+                measuringMode, originX, originY, &analysis))) {
+            // A missing label for one frame beats a failed card for the tip.
+            return S_OK;
+        }
+
+        RECT bounds{};
+        if (SUCCEEDED(analysis->GetAlphaTextureBounds(
+                DWRITE_TEXTURE_CLEARTYPE_3x1, &bounds)) &&
+            bounds.right > bounds.left && bounds.bottom > bounds.top) {
+            const int left = std::max((int)bounds.left, 0);
+            const int top = std::max((int)bounds.top, 0);
+            const int right = std::min((int)bounds.right, width);
+            const int bottom = std::min((int)bounds.bottom, height);
+            if (right > left && bottom > top) {
+                // The CLEARTYPE_3x1 texture is three bytes per pixel - one
+                // coverage value per subpixel column - whatever the rendering
+                // mode. Averaging the three columns turns it into the
+                // grayscale coverage the card's surface needs.
+                const int textureWidth = bounds.right - bounds.left;
+                const int textureHeight = bounds.bottom - bounds.top;
+                std::vector<BYTE> texture((size_t)textureWidth * 3 *
+                                          textureHeight);
+                HRESULT texHr = analysis->CreateAlphaTexture(
+                        DWRITE_TEXTURE_CLEARTYPE_3x1, &bounds, texture.data(),
+                        (UINT32)texture.size());
+                if (SUCCEEDED(texHr)) {
+                    for (int y = top; y < bottom; y++) {
+                        const BYTE* source =
+                            texture.data() +
+                            (size_t)(y - bounds.top) * textureWidth * 3;
+                        BYTE* row = bits + (size_t)y * stride;
+                        for (int x = left; x < right; x++) {
+                            const BYTE* tex =
+                                source + (size_t)(x - bounds.left) * 3;
+                            const unsigned gray =
+                                ((unsigned)tex[0] + tex[1] + tex[2] + 1) / 3;
+                            const unsigned coverage =
+                                (gray * coverageScale + 128) >> 8;
+                            if (!coverage) {
+                                continue;
+                            }
+                            const unsigned inverse = 255 - coverage;
+                            BYTE* pixel = row + (size_t)x * 4;
+                            // Premultiplied "over": out = src + dst*(1-srcA).
+                            pixel[0] = (BYTE)(premul[coverage][0] +
+                                              (pixel[0] * inverse + 127) / 255);
+                            pixel[1] = (BYTE)(premul[coverage][1] +
+                                              (pixel[1] * inverse + 127) / 255);
+                            pixel[2] = (BYTE)(premul[coverage][2] +
+                                              (pixel[2] * inverse + 127) / 255);
+                            pixel[3] = (BYTE)(coverage +
+                                              (pixel[3] * inverse + 127) / 255);
+                        }
+                    }
+                }
+            }
+        }
+
+        analysis->Release();
+        return S_OK;
+    }
+};
+
+CardTextRenderer g_textRenderer;
+
+// Draws one line of text into the card surface. `x`/`centerY` name the point
+// the line is centred on - the same point the GDI+ path centred its rect
+// around - unless `centerAlign` is false, when `x` is the left edge instead.
+// Returns the measured line width, or 0 when DirectWrite is unavailable and
+// the caller must draw with GDI+.
+float DrawTextDWrite(const std::wstring& text, float size, int weight,
+                     const Color& color, float alphaScale, float x,
+                     float centerY, bool centerAlign) {
+    if (text.empty() || !DWriteAvailable() || !g_surface.bits) {
+        return 0.0f;
+    }
+    IDWriteTextFormat* format = GetTextFormat(size, weight);
+    if (!format) {
+        return 0.0f;
+    }
+    IDWriteTextLayout* layout = nullptr;
+    if (FAILED(g_dwriteFactory->CreateTextLayout(text.c_str(),
+                                                 (UINT32)text.size(), format,
+                                                 10000.0f, 1000.0f, &layout))) {
+        return 0.0f;
+    }
+
+    // One line, always: the labels are single strings and wrapping is off.
+    DWRITE_TEXT_METRICS metrics{};
+    layout->GetMetrics(&metrics);
+    UINT32 lineCount = 0;
+    layout->GetLineMetrics(nullptr, 0, &lineCount);
+    float lineHeight = size * 1.3f;
+    if (lineCount > 0) {
+        DWRITE_LINE_METRICS line{};
+        UINT32 fetched = 1;
+        if (SUCCEEDED(layout->GetLineMetrics(&line, 1, &fetched))) {
+            lineHeight = (float)line.height;
+        }
+    }
+
+    const float lineWidth = metrics.widthIncludingTrailingWhitespace;
+    const float originX = centerAlign ? x - lineWidth / 2.0f : x;
+    const float originY = centerY - lineHeight / 2.0f;
+
+    g_textRenderer.Begin((BYTE*)g_surface.bits, g_surface.width,
+                         g_surface.height, g_surface.stride, color, alphaScale);
+    layout->Draw(nullptr, &g_textRenderer, originX, originY);
+    layout->Release();
+    return lineWidth;
+}
+
 
 // =============================================================================
 // Live backdrop
@@ -2687,7 +3167,7 @@ DWORD WINAPI LiveCaptureThread(LPVOID param) {
                 }
             } else {
                 misses = 0;
-                BlurBackdrop(work, radius);
+                BlurBackdrop(work, radius, kLiveBlurPasses);
 
                 const int bytes = grabW * grabH * 4;
                 const int movedX = grabX - previousX;
@@ -2752,8 +3232,10 @@ void StartLiveCapture() {
 
     g_livePad = (int)std::lround((float)kLivePaddingDip *
                                  std::max(1.0f, g_scale));
+    // Two blur passes need a wider radius to match the three-pass snapshot;
+    // 16 * 1.25 = 20, the same split the WinTips app makes.
     g_liveRadius = (int)std::lround((float)g_settings.blurRadius *
-                                    std::max(1.0f, g_scale));
+                                    kLiveRadiusScale * std::max(1.0f, g_scale));
 
     g_liveWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_liveWake) {
@@ -2774,8 +3256,8 @@ void StartLiveCapture() {
     }
     SetThreadPriority(g_liveThread, THREAD_PRIORITY_BELOW_NORMAL);
 
-    // The loop waits 33 ms at a time, and the default 15.6 ms timer granularity
-    // would round that up to 47 ms - the capture rate would drop to about 20 Hz
+    // The loop waits 22 ms at a time, and the default 15.6 ms timer granularity
+    // would round that up to 38 ms - the capture rate would drop to about 26 Hz
     // and the blur would visibly beat against the animation. Raised only while
     // the card is up; a tray app must not hold the system out of idle.
     TimePeriod_t beginPeriod = TimePeriodFn("timeBeginPeriod");
@@ -3002,7 +3484,14 @@ bool SwitchCandidate(DWORD vk) {
 }
 
 // A key press resolved to the tip it should raise, or -1 for "not ours".
-int TipKindForVk(DWORD vk, bool ctrl, bool shift) {
+// `extended` is the hook's LLKHF_EXTENDED bit. With Num Lock off, numpad 0
+// reports VK_INSERT too, and the E0 prefix is the only thing marking the real
+// Insert key: without this check, every 0 on the numpad would raise an Insert
+// card - or a copied/pasted one under Ctrl/Shift.
+int TipKindForVk(DWORD vk, bool extended, bool ctrl, bool shift) {
+    if (vk == VK_INSERT && !extended) {
+        return -1;
+    }
     int kind = LegacyClipKindFromVk(vk, ctrl, shift);
     if (kind >= 0) {
         return kind;
@@ -3894,8 +4383,17 @@ bool RegisterRawInputKeys(HWND hwnd, bool enable) {
 }
 
 int RawKeyIndex(const RAWKEYBOARD& key) {
+    // Real Insert and numpad 0 share the scan code 0x52; only the E0 prefix
+    // tells them apart. With Num Lock off, numpad 0 reports VK_INSERT as its
+    // virtual key, so even the VKey match below must check that flag - a
+    // numpad 0 press must never come back as kInsert.
+    const bool e0 = (key.Flags & RI_KEY_E0) != 0;
+
     for (int i = 0; i < kPollKeyCount; i++) {
         if (KindToVk((TipKind)i) == key.VKey) {
+            if ((TipKind)i == kInsert && !e0) {
+                return -1;  // numpad 0 with Num Lock off
+            }
             return i;
         }
     }
@@ -3909,7 +4407,6 @@ int RawKeyIndex(const RAWKEYBOARD& key) {
     if (key.VKey != 0xFF) {
         return -1;
     }
-    const bool e0 = (key.Flags & RI_KEY_E0) != 0;
     switch (key.MakeCode) {
         case 0x3A:
             return kCapsLock;
@@ -4174,7 +4671,8 @@ DWORD WINAPI UiThreadProc(LPVOID) {
     // to be undone on the way out as well: Windhawk unloads a mod inside the
     // live process, so a leftover registration would keep posting WM_INPUT to a
     // window that no longer exists.
-    if (!RegisterRawInputKeys(g_hwnd, true)) {
+    g_rawInputOk = RegisterRawInputKeys(g_hwnd, true);
+    if (!g_rawInputOk) {
         Wh_Log(L"RegisterRawInputDevices failed: %lu", GetLastError());
     } else {
         Wh_Log(L"raw input keyboard sink registered");
@@ -4200,6 +4698,7 @@ DWORD WINAPI UiThreadProc(LPVOID) {
     g_backdrop.image.Release();
     DestroyWindow(g_hwnd);
     g_hwnd = nullptr;
+    DWriteShutdown();
     GdiplusShutdown(g_gdiplusToken);
     return 0;
 }
@@ -4585,7 +5084,13 @@ void PollTick() {
         g_pollDown[i] = down;
 
         if (i == kInsert) {
-            if (pressed && !insertModified && g_hwnd &&
+            // GetAsyncKeyState sees only the virtual key: with Num Lock off,
+            // numpad 0 presses read as VK_INSERT here, and there is no scan
+            // code to disprove it. Raw Input, which can see the E0 prefix,
+            // reports Insert on its own when registered - so the poll stays
+            // out of its way and only covers the registration-failed case,
+            // where the rare numpad-0 misreport beats losing Insert entirely.
+            if (pressed && !insertModified && !g_rawInputOk && g_hwnd &&
                 AllowTip((TipKind)kInsert, GetTickCount64(), kSourcePoll)) {
                 // Same path as a hooked Insert: notify switch, fullscreen
                 // check and the tip itself all live in HandleTip.
@@ -4635,7 +5140,11 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
                 // ClipCtrlDown, not CtrlDown: with Right Alt held this is AltGr
                 // and the letter is a character, not a clipboard shortcut.
-                int kind = TipKindForVk(vk, ClipCtrlDown(), ShiftDown());
+                // The extended flag is what marks the real Insert key: with
+                // Num Lock off, numpad 0 also arrives as VK_INSERT, and only
+                // the E0-prefixed (extended) copy is Insert.
+                const bool extended = (info->flags & LLKHF_EXTENDED) != 0;
+                int kind = TipKindForVk(vk, extended, ClipCtrlDown(), ShiftDown());
 
                 if (kind >= 0 &&
                     AllowTip((TipKind)kind, GetTickCount64(), kSourceHook)) {
