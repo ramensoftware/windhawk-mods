@@ -752,15 +752,22 @@ class ModMetadataValidator:
         if not prop:
             return
 
+        # WIL headers require -fms-extensions.
+        includes_wil = re.search(
+            r'^\s*#\s*include\s*[<"]wil/',
+            blank_comments(self.mod_source),
+            re.MULTILINE,
+        )
+
         def is_allowed_option(option: str) -> bool:
             return bool(
                 option.startswith('-l')
                 or option
                 in [
                     '-DWIN32_LEAN_AND_MEAN',
-                    '-fms-extensions',
                     '-ffp-exception-behavior=maytrap',
                 ]
+                or (option == '-fms-extensions' and includes_wil)
             )
 
         options = prop.value.split()
@@ -843,14 +850,17 @@ class ModMetadataValidator:
     def validate_tool_mod(self):
         """Validate the metadata of a tool mod: one that targets windhawk.exe
         with a WhTool_ModInit entry point or a -tool-mod launcher, or any
-        windhawk-*.exe process."""
+        windhawk-*.exe process other than windhawk-ui.exe and windhawk-cli.exe."""
         prop = self.property('include')
         if not prop:
             return
 
         includes = {x.lower() for x in prop.value.split('\n') if x != ''}
         windhawk_includes = {
-            x for x in includes if re.fullmatch(r'windhawk(-[\w-]+)?\.exe', x)
+            x
+            for x in includes
+            if re.fullmatch(r'windhawk(-[\w-]+)?\.exe', x)
+            and x not in ('windhawk-ui.exe', 'windhawk-cli.exe')
         }
         defines_tool_mod_init = (
             re.search(r'\bWhTool_ModInit\s*\([^)]*\)\s*\{', self.mod_source)
@@ -1744,6 +1754,7 @@ def validate_specific_keywords(path: Path, mod_source: str):
         (r'\bnoUndecoratedSymbols\b', 'noUndecoratedSymbols', 'Decorated symbols don\'t support online caching, undecorated symbols are usually preferred'),
         (r'\bWh_SetFunctionHookT\b', 'Wh_SetFunctionHookT', 'Deprecated, use `WindhawkUtils::SetFunctionHook` instead'),
         (r'\b__ptr64\b', '__ptr64', 'Windhawk doesn\'t use symbols with __ptr64 markers (UNDNAME_NO_PTR64)'),
+        (r'\b__try\b', '__try', 'Using SEH is usually discouraged'),
         (r'^\s*#\s*define\s+(?!WH_WINRT_WINUI2\b)W[Hh]_', 'Windhawk symbol redefinition', 'Avoid redefining Windhawk symbols'),
     ]
     # fmt: on
@@ -1860,6 +1871,81 @@ def validate_line_lengths(path: Path, mod_source: str) -> int:
     return warnings
 
 
+# Assignment, comparison and logical operators. Operators which are also used
+# in other syntax, such as `<`, `*` and `&`, are left out.
+SPACED_OPERATOR_RE = re.compile(
+    r'(?<![<>=!+\-*/%&|^])(?:==|!=|<=|>=|&&|\|\||[+\-*/%&|^]?=)(?!=)'
+)
+
+# Formatted code has almost no operators without spaces around them and few
+# lines with several statements. Compacted code has them throughout the file.
+# Operators without spaces alone are a coding style, which is readable as long
+# as statements are on separate lines.
+COMPACT_CODE_MIN_LINES = 200
+COMPACT_CODE_MAX_UNSPACED_OPERATORS = 0.4
+COMPACT_CODE_MIN_UNSPACED_PACKED_LINES = 50
+COMPACT_CODE_MAX_PACKED_LINES = 0.1
+
+
+def validate_code_compactness(path: Path, mod_source: str) -> int:
+    """Validate that the code isn't compacted, with operators and statements
+    run together throughout the file."""
+    lines = 0
+    operators = 0
+    unspaced_operators = 0
+    packed_lines = 0
+    densest_line_num = 1
+    densest_line_score = 0
+
+    for line_num, line in enumerate(get_code_lines(mod_source), start=1):
+        line = line.strip()
+        if line == '' or line.startswith('#'):
+            continue
+
+        lines += 1
+
+        line_unspaced_operators = 0
+        padded = f' {line} '
+        for match in SPACED_OPERATOR_RE.finditer(padded):
+            operators += 1
+            if padded[match.start() - 1] != ' ' and padded[match.end()] != ' ':
+                line_unspaced_operators += 1
+        unspaced_operators += line_unspaced_operators
+
+        # `case X: f(); break;` is a common idiom, not a packed line.
+        statements = count_statements(line)
+        if statements >= 2 and not re.match(r'(case\b|default\s*:)', line):
+            packed_lines += 1
+
+        if line_unspaced_operators + statements > densest_line_score:
+            densest_line_num = line_num
+            densest_line_score = line_unspaced_operators + statements
+
+    if lines < COMPACT_CODE_MIN_LINES:
+        return 0
+
+    unspaced_ratio = unspaced_operators / operators if operators else 0
+    packed_ratio = packed_lines / lines
+    if not (
+        (
+            unspaced_ratio > COMPACT_CODE_MAX_UNSPACED_OPERATORS
+            and packed_lines >= COMPACT_CODE_MIN_UNSPACED_PACKED_LINES
+        )
+        or packed_ratio > COMPACT_CODE_MAX_PACKED_LINES
+    ):
+        return 0
+
+    return add_warning(
+        path,
+        densest_line_num,
+        'The code is compacted throughout the file, which makes it difficult to'
+        f' review: {unspaced_ratio:.0%} of the operators have no spaces around'
+        f' them and {packed_ratio:.0%} of the lines have several statements,'
+        ' this line is one example. Please format the code, for example with'
+        ' clang-format and the .clang-format file of the repository.',
+    )
+
+
 def normalize_callback_param_types(params: str) -> str:
     """Strip parameter names and normalize whitespace/pointer style in a C parameter list."""
     p = re.sub(r'\s+', ' ', params.strip())
@@ -1953,6 +2039,7 @@ def validate_mod_file(path: Path, pr_author: str, pr_author_id: Optional[int]) -
     warnings += validate_symbol_hooks(path, mod_source)
     warnings += validate_specific_keywords(path, mod_source)
     warnings += validate_line_lengths(path, mod_source)
+    warnings += validate_code_compactness(path, mod_source)
     warnings += validate_callback_signatures(path, mod_source)
 
     return warnings
@@ -1977,10 +2064,8 @@ def test_run():
 
 def validate_pr_changelog(pr_body: str) -> int:
     """Mod updates must describe the changes in the PR description."""
-    markers_re = re.compile(
-        r'<!--\s*changelog:start\s*-->(.*?)<!--\s*changelog:end\s*-->',
-        re.DOTALL | re.IGNORECASE,
-    )
+    start_marker_re = re.compile(r'<!--\s*changelog:start\s*-->', re.IGNORECASE)
+    end_marker_re = re.compile(r'<!--\s*changelog:end\s*-->', re.IGNORECASE)
 
     # The sample items of the pull request template, which are to be replaced
     # with the actual changes.
@@ -1993,17 +2078,20 @@ def validate_pr_changelog(pr_body: str) -> int:
         ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1).'
     )
 
-    matches = markers_re.findall(pr_body)
-    if len(matches) != 1:
+    starts = list(start_marker_re.finditer(pr_body))
+    ends = list(end_marker_re.finditer(pr_body))
+    if len(starts) != 1 or len(ends) != 1 or starts[0].end() > ends[0].start():
         return add_warning(
             Path('.github/pull_request_template.md'),
             1,
             'Mod updates must have a changelog in the PR description, between a single'
-            ' pair of the "<!-- changelog:start -->" and "<!-- changelog:end -->"'
-            f' markers, found {len(matches)} such pairs.' + template_hint,
+            ' "<!-- changelog:start -->" marker and a single "<!-- changelog:end -->"'
+            f' marker after it, found {len(starts)} start and {len(ends)} end markers.'
+            + template_hint,
         )
 
-    changelog = placeholder_item_re.sub('', matches[0]).strip()
+    changelog = pr_body[starts[0].end() : ends[0].start()]
+    changelog = placeholder_item_re.sub('', changelog).strip()
     if changelog == '':
         return add_warning(
             Path('.github/pull_request_template.md'),

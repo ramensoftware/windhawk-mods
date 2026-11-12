@@ -4,7 +4,7 @@
 // @name:uk-UA      Системний монітор панелі завдань
 // @description     CPU, GPU, RAM and VRAM on the Windows 11 taskbar, with temperatures, history graphs, adaptive layouts and live dragging.
 // @description:uk-UA CPU, GPU, RAM і VRAM на панелі завдань Windows 11: температури, графіки історії, адаптивні макети та перетягування живого віджета.
-// @version         1.8.1
+// @version         1.9.0
 // @author          Yevhenii Starychenko
 // @github          https://github.com/starychenko
 // @homepage        https://github.com/starychenko/windhawk-taskbar-system-info
@@ -69,9 +69,9 @@ each. RAM and VRAM show the percentage, used/total capacity and a thin usage bar
 Values stay in fixed columns as the readings change. CPU/GPU fields are compact,
 with six logical pixels of padding on each side of the widget.
 
-When space is limited, the widget can hide graphs or memory details, or use one
-row on a low taskbar. It restores the full view when space returns. No manual
-mode switch is needed. See [Adaptive layouts](#adaptive-layouts) for examples.
+Choose **Preferred layout** for a full view, no graphs, or compact readings in
+one or two rows. When space is limited, the widget fits a more compact layout
+and restores your choice when space returns. See [Adaptive layouts](#adaptive-layouts).
 
 Normal readings use the taskbar text color. Temperature and memory alerts add
 color when a threshold is reached. Light, dark and Windows high-contrast themes
@@ -136,7 +136,23 @@ the same sample on dark and light taskbars; network rates are illustrative.
 
 ## Adaptive layouts
 
-Adaptation is automatic on the selected taskbar. The mod measures the free gaps
+**Preferred layout** sets the starting view for the main widget and every copy.
+The default is **Full, two rows**, preserving the existing automatic behavior.
+**Without graphs, two rows** retains memory capacities and bars. Both compact
+choices retain percentages and enabled temperatures, without memory details.
+A compact one-row preference can fall back to two rows when width is limited;
+a two-row preference can use one row when the taskbar is too low.
+
+**Show CPU graph** and **Show GPU graph** independently control history in the
+Full layout. Percentages remain visible. CPU and GPU share a column in two-row
+layouts, so hiding only one graph may not reduce the outer width. Hiding both
+removes the graph area and its gap. Setting **Temperature source** to **Disabled**
+removes both temperature fields and releases their width, including reserved
+space before Start. A temporarily missing enabled sensor still shows `--°C`.
+
+Automatic fitting never restores details that your settings hide. Each taskbar
+adapts independently, and dragging uses these same preferences at the destination.
+The mod measures the free gaps
 between visible controls, the taskbar height and text in the configured font.
 Opening more apps, changing Search or Widgets, changing the font, or moving to a
 taskbar with different dimensions can change the result. Screen resolution alone
@@ -167,25 +183,44 @@ more horizontal space than the compact two-row layout. A narrow gap on a normal
 height taskbar can therefore use two rows, while a low panel with a wider gap
 can use one.
 
-The normal full layout is tried first. It can shrink to 85% of its size while
+With the default preference, the normal full layout is tried first. It can
+shrink to 85% of its size while
 keeping the main font at least 9 logical pixels. If it cannot fit or its cells
 are too small for the configured font, the mod tries a measured full layout,
 then no graphs, compact two rows and compact one row at the configured font size.
-Two-row layouts reduce vertical gaps before reducing row height. If needed,
+Other preferences start at their selected layout and only try layouts with
+the same or fewer details. Two-row layouts reduce vertical gaps before reducing
+row height. If needed,
 compact layouts can also shrink, keeping the main font at least 9 logical pixels.
 If no readable layout fits, the normal widget hides. In move mode, the frame
 turns red and the position cannot be saved.
 
 Hidden details still update. Graphs keep collecting history while hidden and
 return with its actual age. When room becomes available again, the mod restores
-the full view and preferred position. Adaptation does not overwrite **Widget
+the selected view and preferred position. Adaptation does not overwrite **Widget
 width**, **Left offset** or positions saved by dragging. **Widget width** is a
-preference for the full view; it does not cap the measured width of an adaptive
-layout that fits at the configured font size.
+preference for the full view with all fields enabled. Disabled temperature
+fields reduce that width; graph-free and compact layouts use their measured
+content width, which can be below 330 logical pixels. This setting does not cap
+the measured width of a layout that fits at the configured font size.
 
 While dragging between taskbars, the preview uses the destination's free space,
 height and DPI. It can change layout during the drag while keeping the grabbed
 point under the cursor. **Enter** checks the current layout again before saving.
+
+With the default font and the sample readings above, the isolated widget
+measures 410 logical pixels in Full view, 370 with temperatures disabled,
+219 without graphs, and 188 without either. Compact two-row readings without
+temperatures measure 142. Actual widths depend on the font, capacities, network
+column and available space; these are examples, not fixed thresholds.
+
+| Temperatures disabled, graphs enabled | Temperatures and both graphs disabled |
+| --- | --- |
+| ![Full widget without temperature fields](https://raw.githubusercontent.com/starychenko/windhawk-taskbar-system-info/main/assets/widget-no-temperatures.png) | ![Numeric readings and memory capacities without temperatures or graphs](https://raw.githubusercontent.com/starychenko/windhawk-taskbar-system-info/main/assets/widget-numbers-only.png) |
+
+Compact two-row readings with temperatures disabled:
+
+![Compact CPU, GPU, RAM and VRAM percentages](https://raw.githubusercontent.com/starychenko/windhawk-taskbar-system-info/main/assets/widget-compact-numbers.png)
 
 ## Moving and saved positions
 
@@ -326,7 +361,7 @@ that is still missing.
 | **HWiNFO Shared Memory** | `Global\HWiNFO_SENS_SM2` only. The shared-memory interface targets HWiNFO 7.0 or newer. |
 | **HWiNFO Gadget Registry** | `HKCU\Software\HWiNFO64\VSB` only. HWiNFO and Explorer must use the same Windows user. |
 | **Windows native** | GPU temperature from the selected display driver through D3DKMT; CPU fallback from Windows ACPI thermal zones through PDH. |
-| **Disabled** | Skips temperature collection. Usage, memory and graphs keep working. |
+| **Disabled** | Skips temperature collection and removes both temperature fields and their width. Usage, memory and enabled graphs keep working. |
 
 Windows thermal zones can describe a motherboard, chassis, skin or
 processor-related sensor. They are not always the CPU package temperature.
@@ -392,7 +427,10 @@ distinctive part of its HWiNFO name. Otherwise, leave the filters empty.
 
 | Setting | What to change |
 | --- | --- |
-| **Widget width** | Preferred full-layout width, including side padding. Range: 330-800 logical pixels; default: 410. Adaptive layouts use their measured size within the available space. |
+| **Widget width** | Preferred full-layout width with all fields enabled, including side padding. Range: 330-800 logical pixels; default: 410. Hidden temperatures reduce it; graph-free and compact layouts use measured content width. |
+| **Preferred layout** | Full (default), Without graphs, Compact two rows, or Compact one row. Automatically fits a more compact view when needed and restores your choice when space returns. |
+| **Show CPU graph** | On by default. Controls CPU history in Full layout; CPU percentage remains visible. |
+| **Show GPU graph** | On by default. Controls GPU history in Full layout; GPU percentage remains visible. Disabling both graphs releases their shared column space. |
 | **Left offset** | Preferred horizontal position before dragging. Nonnegative logical pixels; default: 10. |
 | **Taskbar monitor** | Initial display, range 1-32. Monitor 1 is primary; the rest follow their position in the virtual desktop and may differ from Windows numbering. |
 | **Show on all monitors** | Off by default. Adds a read-only copy of the widget to every other monitor's taskbar. Each copy uses its own taskbar theme and responds to layout changes independently of metric sampling, including on other UI threads. Copies use that monitor's saved position or Left offset and never reserve space before Start. |
@@ -448,8 +486,8 @@ threshold is kept above its warning threshold. Alerts only change the display.
 | GPU or VRAM stays at `--` after a driver update | Allow up to one minute for adapter refresh or a fresh-counter probe, plus a few samples to establish a baseline. Check the Windhawk log; reload the mod if Windows still supplies no valid readings. |
 | Integrated-GPU memory looks too large | Automatic shows the Windows shared-memory limit. Select Dedicated VRAM only if you want the reserved carve-out. |
 | An old 512 MB discrete card is shown as shared | Set GPU memory type to Dedicated VRAM. Automatic detection can mistake an old low-memory card for an integrated GPU. |
-| Graphs or memory capacities disappeared | The widget selected an adaptive layout. These details return automatically when the free gap or taskbar height allows it. See Adaptive layouts. |
-| The widget changed to one row | The selected taskbar is too low for a readable two-row view. One row keeps essential readings when enough width is available. |
+| Graphs or memory capacities disappeared | Check Preferred layout and the graph switches. Otherwise the widget selected an adaptive layout; enabled details return when space allows. See Adaptive layouts. |
+| The widget changed row count | Preferred layout sets the starting shape. A low taskbar can require one row; limited width can require two. Your preferred shape returns when it fits. |
 | The widget is hidden | The available gap must fit the readability limits and side clearance. Check width, font and the Windhawk log. Try another position or Reserve space. |
 | The widget is on the wrong display | Check Taskbar monitor or drag it to the required taskbar. Home, then Enter, clears positions saved by dragging. |
 | The hotkey does nothing | Check Move widget hotkey and the log. Choose another combination if it is invalid or already registered. |
@@ -461,9 +499,13 @@ placement errors and sensor mismatches. It does not print every sample.
 
 ## Compatibility
 
-The current source is **1.8.1**, built with Windhawk **1.7.3** for Windows 11.
+The current source is **1.9.0**, built with Windhawk **1.7.3** for Windows 11.
 The widget targets horizontal primary and secondary taskbars. x64 and ARM64
 builds pass; ARM64 hardware has not been checked.
+
+The 1.9.0 layout preferences pass isolated XAML and native preview tests.
+Live Explorer dragging, physical secondary displays and mixed-DPI transfers
+have not been verified for this release.
 
 The normal widget uses native taskbar XAML. Move mode uses a temporary Win32
 window. It does not use XAML Diagnostics. Display changes recheck the target even
@@ -492,8 +534,36 @@ Released under [GPL-3.0](https://github.com/starychenko/windhawk-taskbar-system-
 - width: 410
   $name: Widget width
   $name:uk-UA: Ширина блока
-  $description: "Preferred full-layout width: 330-800 logical pixels. Adaptive layouts use their measured size in the available space."
-  $description:uk-UA: "Бажана ширина повного макету: 330-800 логічних пікселів. Адаптивні макети займають місце за виміряними розмірами."
+  $description: "Full-layout width with all fields enabled: 330-800 logical pixels. Hidden temperatures reduce it; graph-free and compact layouts use measured content width."
+  $description:uk-UA: "Ширина повного вигляду з усіма полями: 330-800 логічних пікселів. Приховані температури зменшують її; варіанти без графіків і компактні займають ширину видимого вмісту."
+
+- preferredLayout: full
+  $name: Preferred layout
+  $name:uk-UA: Бажаний вигляд
+  $description: "Starts with this layout and fits a more compact one if needed. Restores your choice when space returns. Compact layouts keep percentages but hide memory capacities and bars. One row can switch to two rows when horizontal space is limited."
+  $description:uk-UA: "Використовує обраний вигляд, а за браку місця переходить до компактнішого. Повертає ваш вибір, коли місце з'являється. Компактні варіанти залишають відсотки без обсягу та смуг пам'яті. Один рядок може перейти у два за браку ширини."
+  $options:
+  - full: Full, two rows
+  - noGraphs: Without graphs, two rows
+  - compactTwoRows: Compact, two rows
+  - compactOneRow: Compact, one row
+  $options:uk-UA:
+  - full: Повний, два рядки
+  - noGraphs: Без графіків, два рядки
+  - compactTwoRows: Компактний, два рядки
+  - compactOneRow: Компактний, один рядок
+
+- showCpuGraph: true
+  $name: Show CPU graph
+  $name:uk-UA: Показувати графік CPU
+  $description: "Show CPU history in the Full layout when it fits. CPU usage stays visible. Disabling both graphs reduces the shared CPU/GPU column width."
+  $description:uk-UA: "Показувати історію CPU у повному вигляді, якщо вона вміщається. Навантаження CPU залишається. Вимкнення обох графіків зменшує ширину спільної колонки CPU/GPU."
+
+- showGpuGraph: true
+  $name: Show GPU graph
+  $name:uk-UA: Показувати графік GPU
+  $description: "Show GPU history in the Full layout when it fits. GPU usage stays visible. Disabling both graphs reduces the shared CPU/GPU column width."
+  $description:uk-UA: "Показувати історію GPU у повному вигляді, якщо вона вміщається. Навантаження GPU залишається. Вимкнення обох графіків зменшує ширину спільної колонки CPU/GPU."
 
 - leftOffset: 10
   $name: Left offset
@@ -668,8 +738,8 @@ Released under [GPL-3.0](https://github.com/starychenko/windhawk-taskbar-system-
 - temperatureSource: auto
   $name: Temperature source
   $name:uk-UA: Джерело температури
-  $description: "Automatic is recommended: it tries both HWiNFO interfaces, then Windows D3DKMT for a missing GPU reading and Windows thermal zones for a missing CPU reading. HWiNFO is optional but must be running and configured as explained on the Details page."
-  $description:uk-UA: "Рекомендовано Автоматично: режим перевіряє обидва інтерфейси HWiNFO, потім Windows D3DKMT для відсутньої температури GPU та термозони Windows для CPU. HWiNFO необовязковий, але має працювати й бути налаштований за інструкцією на сторінці Деталі."
+  $description: "Automatic is recommended: it tries both HWiNFO interfaces, then Windows D3DKMT for a missing GPU reading and Windows thermal zones for a missing CPU reading. Disabled hides both temperature fields and frees their space. HWiNFO is optional but must be running and configured as explained on the Details page."
+  $description:uk-UA: "Рекомендовано Автоматично: режим перевіряє обидва інтерфейси HWiNFO, потім Windows D3DKMT для відсутньої температури GPU та термозони Windows для CPU. Вимкнено приховує обидва поля температури та звільняє їхнє місце. HWiNFO необовязковий, але має працювати й бути налаштований за інструкцією на сторінці Деталі."
   $options:
   - auto: Automatic
   - hwinfoAuto: HWiNFO automatic
@@ -835,6 +905,8 @@ enum class TemperatureProvider {
     WindowsThermalZones,
 };
 
+enum class WidgetLayoutMode { Full, NoGraphs, CompactTwoRows, CompactOneRow };
+
 struct ModSettings {
     std::wstring moveHotkey;
     std::wstring fontFamily;
@@ -858,6 +930,8 @@ struct ModSettings {
     bool showNetwork = false;
     bool allMonitors = false;
     bool networkBits = false;
+    WidgetLayoutMode preferredLayout = WidgetLayoutMode::Full;
+    bool showCpuGraph = true, showGpuGraph = true;
     int reserveGap = 8;
     int updateInterval = 1;
     int historySeconds = 60;
@@ -918,7 +992,6 @@ double PreferredTaskbarLeft(HWND window, double width, const ModSettings& settin
 std::optional<double> SavedTaskbarFraction(HWND window);
 double g_reservedMargin = 0.0;
 std::optional<double> g_lastAppliedRepeaterMarginLeft;
-double g_graphWidth = 96.0;
 double g_memoryBarWidth = 120.0;
 [[clang::no_destroy]] DispatcherTimer g_timer{nullptr};
 event_token g_timerToken{};
@@ -959,7 +1032,6 @@ std::optional<std::list<FrameworkElement::Loaded_revoker>> g_loadedRevokers{
 [[clang::no_destroy]] std::array<Grid, 4> g_metricRows{nullptr, nullptr, nullptr, nullptr};
 [[clang::no_destroy]] std::array<Grid, 2> g_netRows{nullptr,
                                                     nullptr};  // Down, up.
-bool g_layoutGraphsVisible = true;
 [[clang::no_destroy]] SolidColorBrush g_textBrush{nullptr};
 [[clang::no_destroy]] SolidColorBrush g_graphBrush{nullptr};
 [[clang::no_destroy]] SolidColorBrush g_warningBrush{nullptr};
@@ -1073,6 +1145,13 @@ std::wstring GetStringSetting(PCWSTR name) {
 
 std::optional<Color> ParseColor(const std::wstring& value);
 
+WidgetLayoutMode ParsePreferredLayout(const std::wstring& value) {
+    if (value == L"noGraphs") return WidgetLayoutMode::NoGraphs;
+    if (value == L"compactTwoRows") return WidgetLayoutMode::CompactTwoRows;
+    if (value == L"compactOneRow") return WidgetLayoutMode::CompactOneRow;
+    return WidgetLayoutMode::Full;
+}
+
 TemperatureSource ParseTemperatureSource(const std::wstring& value) {
     if (value == L"hwinfoAuto") {
         return TemperatureSource::HwInfoAuto;
@@ -1128,6 +1207,10 @@ void LoadSettings() {
     settings.windowsThermalZoneAggregation = ParseThermalZoneAggregation(
         GetStringSetting(L"windowsThermalZoneAggregation"));
     settings.width = std::clamp(Wh_GetIntSetting(L"width"), 330, 800);
+    settings.preferredLayout =
+        ParsePreferredLayout(GetStringSetting(L"preferredLayout"));
+    settings.showCpuGraph = Wh_GetIntSetting(L"showCpuGraph") != 0;
+    settings.showGpuGraph = Wh_GetIntSetting(L"showGpuGraph") != 0;
     settings.leftOffset = std::max(Wh_GetIntSetting(L"leftOffset"), 0);
     settings.monitor = std::clamp(Wh_GetIntSetting(L"monitor"), 1, 32);
     settings.adaptiveColors = Wh_GetIntSetting(L"adaptiveColors") != 0;
@@ -4222,8 +4305,8 @@ void UpdateSparkline(XamlPath graph,
                      const std::deque<HistorySample>& history,
                      const ModSettings& settings,
                      SampleTime end,
-                     double width = g_graphWidth,
-                     bool visible = g_layoutGraphsVisible) {
+                     double width,
+                     bool visible) {
     if (!graph) {
         return;
     }
@@ -4360,7 +4443,6 @@ std::unique_ptr<Gdiplus::Font> CreateWidgetPreviewFont(std::wstring name,
     }
     return font;
 }
-enum class WidgetLayoutMode { Full, NoGraphs, CompactTwoRows, CompactOneRow };
 struct WidgetFontMetrics {
     std::array<double, 12> widths{28, 34, 40, 43, 38, 48,
                                   28, 34, 40, 43, 38, 48};
@@ -4377,6 +4459,8 @@ struct WidgetLayout {
     double net = 0;                  // Network group width; 0 when hidden.
     std::array<Rect, 4> netCells{};  // Down label/value, up label/value.
     bool legacy = true, showGraphs = true, showMemoryDetails = true;
+    bool showTemperatures = true;
+    std::array<bool, 2> graphVisible{true, true};
 };
 std::optional<WidgetLayout> g_widgetLayout;
 std::wstring g_measuredFontFamily;
@@ -4531,7 +4615,10 @@ WidgetLayout BuildWidgetLayout(const ModSettings& settings,
     WidgetLayout layout;
     layout.mode = mode;
     layout.legacy = legacy;
-    layout.showGraphs = mode == WidgetLayoutMode::Full;
+    layout.graphVisible = {mode == WidgetLayoutMode::Full && settings.showCpuGraph,
+                           mode == WidgetLayoutMode::Full && settings.showGpuGraph};
+    layout.showGraphs = layout.graphVisible[0] || layout.graphVisible[1];
+    layout.showTemperatures = settings.temperatureSource != TemperatureSource::Disabled;
     layout.showMemoryDetails =
         mode == WidgetLayoutMode::Full || mode == WidgetLayoutMode::NoGraphs;
     bool single = mode == WidgetLayoutMode::CompactOneRow;
@@ -4544,6 +4631,10 @@ WidgetLayout BuildWidgetLayout(const ModSettings& settings,
     if (legacy) {
         widths = {28, 34, 40, 43, 38, 0, 28, 34, 40, 43, 38, 0};
     }
+    double temperatureWidth = widths[2];
+    if (!layout.showTemperatures) {
+        widths[2] = widths[8] = 0;
+    }
     if (!layout.showMemoryDetails) {
         widths[5] = widths[11] = 0;
     }
@@ -4555,16 +4646,22 @@ WidgetLayout BuildWidgetLayout(const ModSettings& settings,
     layout.net = net;
     if (legacy) {
         auto columns = ResolveWidgetColumns(settings.width);
-        layout.width = settings.width + (net > 0 ? net + kColumnGap : 0);
         compute = columns.left;
         memory = columns.right;
+        if (!layout.showTemperatures) compute -= temperatureWidth;
+        if (!layout.showGraphs) compute -= columns.graph + kGraphLeftGap;
+        layout.width = 2 * kWidgetSidePadding + kColumnGap + compute + memory +
+                       (net > 0 ? net + kColumnGap : 0);
         widths[5] = widths[11] = memory - widths[3] - widths[4];
     } else {
         if (layout.showGraphs) {
             compute += kGraphLeftGap + 24;
             double minimum =
                 2 * kWidgetSidePadding + kColumnGap + compute + memory;
-            compute += std::max(0.0, settings.width - minimum);
+            // Hidden temperature cells must release space, not lengthen graphs.
+            double preferredWidth = settings.width -
+                (layout.showTemperatures ? 0 : temperatureWidth);
+            compute += std::max(0.0, preferredWidth - minimum);
         }
         layout.width = 2 * kWidgetSidePadding +
                        (single ? 2 * compute + 2 * memory + 3 * kColumnGap
@@ -4616,7 +4713,7 @@ WidgetLayout BuildWidgetLayout(const ModSettings& settings,
                 static_cast<float>(textHeight)};
             cellX += widths[first + field];
         }
-        if (group < 2 && layout.showGraphs) {
+        if (group < 2 && layout.graphVisible[group]) {
             layout.graphs[group] = {
                 static_cast<float>(cellX + kGraphLeftGap),
                 static_cast<float>(y + (layout.rowHeight - kGraphHeight) / 2),
@@ -4651,7 +4748,9 @@ WidgetLayout BuildWidgetLayout(const ModSettings& settings,
 bool SameWidgetLayout(const WidgetLayout& a, const WidgetLayout& b) {
     if (a.mode != b.mode || a.legacy != b.legacy || a.width != b.width ||
         a.height != b.height || a.rowHeight != b.rowHeight ||
-        a.rowGap != b.rowGap) {
+        a.rowGap != b.rowGap || a.graphVisible != b.graphVisible ||
+        a.showTemperatures != b.showTemperatures ||
+        a.showMemoryDetails != b.showMemoryDetails) {
         return false;
     }
     for (size_t i = 0; i < a.cells.size(); ++i) {
@@ -4782,7 +4881,7 @@ void ApplyElementGeometry(const WidgetElements& view,
         }
         if (group < 2) {
             fields.GetAt(3).Width(GridLength{
-                layout.showGraphs ? layout.graphs[group].Width + kGraphLeftGap
+                layout.graphVisible[group] ? layout.graphs[group].Width + kGraphLeftGap
                                   : 0,
                 GridUnitType::Pixel});
         }
@@ -4809,6 +4908,12 @@ void ApplyElementGeometry(const WidgetElements& view,
                                                      : Visibility::Collapsed);
         }
     }
+    for (TextBlock text : {view.texts[2], view.texts[8]}) {
+        if (text) {
+            text.Visibility(layout.showTemperatures ? Visibility::Visible
+                                                    : Visibility::Collapsed);
+        }
+    }
     for (TextBlock text : {view.texts[3], view.texts[4], view.texts[5],
                            view.texts[9], view.texts[10], view.texts[11]}) {
         if (text) {
@@ -4817,12 +4922,14 @@ void ApplyElementGeometry(const WidgetElements& view,
                 !layout.legacy && layout.showMemoryDetails ? 2.25 : 0});
         }
     }
-    for (XamlPath graph : {view.graphs[0], view.graphs[1]}) {
+    for (size_t i = 0; i < view.graphs.size(); ++i) {
+        auto graph = view.graphs[i];
         if (!graph) {
             continue;
         }
-        graph.Width((layout.showGraphs ? layout.graphs[0].Width : 0));
+        graph.Width(layout.graphs[i].Width);
         graph.Height(kGraphHeight);
+        if (!layout.graphVisible[i]) graph.Visibility(Visibility::Collapsed);
     }
     for (XamlRectangle bar :
          {view.bars[0], view.bars[2], view.bars[1], view.bars[3]}) {
@@ -4838,6 +4945,16 @@ void ApplyElementGeometry(const WidgetElements& view,
     view.bars[3].Width(layout.groups[2] * vramRatio);
 }
 
+void UpdatePrimarySparklines(const ModSettings& settings, SampleTime now) {
+    const auto* layout = g_widgetLayout ? &*g_widgetLayout : nullptr;
+    UpdateSparkline(g_cpuGraph, g_cpuHistory, settings, now,
+                    layout ? layout->graphs[0].Width : 0,
+                    layout && layout->graphVisible[0]);
+    UpdateSparkline(g_gpuGraph, g_gpuHistory, settings, now,
+                    layout ? layout->graphs[1].Width : 0,
+                    layout && layout->graphVisible[1]);
+}
+
 void ApplyWidgetGeometry(const ModSettings& settings,
                          const WidgetLayout& layout) {
     if (!g_widget) {
@@ -4849,13 +4966,10 @@ void ApplyWidgetGeometry(const ModSettings& settings,
     }
     ++g_widgetVisualRevision;
     g_widgetLayout = layout;
-    g_layoutGraphsVisible = layout.showGraphs;
-    g_graphWidth = layout.showGraphs ? layout.graphs[0].Width : 0;
     g_memoryBarWidth = layout.groups[2];
     ApplyElementGeometry(PrimaryElements(), layout);
     auto now = SampleTime::clock::now();
-    UpdateSparkline(g_cpuGraph, g_cpuHistory, settings, now);
-    UpdateSparkline(g_gpuGraph, g_gpuHistory, settings, now);
+    UpdatePrimarySparklines(settings, now);
 }
 
 // Geometry is a value snapshot: no XAML references cross a taskbar thread.
@@ -5285,25 +5399,32 @@ WidgetPlacement ResolveWidgetPlacement(const ModSettings& settings,
     for (int index = 0; index < 12; ++index) {
         // Existing fixed cells need the measured glyph width; the extra two
         // DIP are an overhang allowance used when allocating adaptive cells.
+        if ((index == 2 || index == 8) && !legacy.showTemperatures) continue;
         readableCells = readableCells &&
                         font.widths[index] - 2 <= legacy.cells[index].Width;
     }
-    if (result.placement.width > 0 && readableCells) {
+    if (settings.preferredLayout == WidgetLayoutMode::Full && legacy.showGraphs &&
+        result.placement.width > 0 && readableCells) {
         return result;
     }
-    for (auto mode :
-         {WidgetLayoutMode::Full, WidgetLayoutMode::NoGraphs,
-          WidgetLayoutMode::CompactTwoRows, WidgetLayoutMode::CompactOneRow}) {
+    std::array modes{WidgetLayoutMode::Full, WidgetLayoutMode::NoGraphs,
+                     WidgetLayoutMode::CompactTwoRows, WidgetLayoutMode::CompactOneRow};
+    size_t first = static_cast<size_t>(settings.preferredLayout);
+    if (settings.preferredLayout == WidgetLayoutMode::CompactOneRow) {
+        // Same information, alternate shape: two rows need less horizontal room.
+        std::swap(modes[2], modes[3]);
+        first = 2;
+    }
+    for (size_t i = first; i < modes.size(); ++i) {
         result = evaluate(
-            BuildWidgetLayout(settings, font, mode, geometry.height), 1);
+            BuildWidgetLayout(settings, font, modes[i], geometry.height), 1);
         if (result.placement.width > 0) {
             return result;
         }
     }
     WidgetPlacement best{{}, legacy};
     best.layout.scale = 0;
-    for (auto mode :
-         {WidgetLayoutMode::CompactTwoRows, WidgetLayoutMode::CompactOneRow}) {
+    for (auto mode : {modes[2], modes[3]}) {
         result =
             evaluate(BuildWidgetLayout(settings, font, mode, geometry.height),
                      9.0 / settings.fontSize);
@@ -5496,6 +5617,8 @@ struct PlacementInputs {
     int width, leftOffset, fontSize, reserveGap;
     bool reserveSpace, reservationRejected, dockReservationActive;
     bool showNetwork, networkBits;
+    WidgetLayoutMode preferredLayout;
+    bool showTemperatures, showCpuGraph, showGpuGraph;
     std::wstring fontFamily;
     std::optional<double> savedFraction;
     double baselineMargin;
@@ -5508,6 +5631,8 @@ struct ReservationInputs {
     int width, leftOffset, fontSize, reserveGap;
     bool reserveSpace;
     bool showNetwork, networkBits;
+    WidgetLayoutMode preferredLayout;
+    bool showTemperatures, showCpuGraph, showGpuGraph;
     std::wstring fontFamily;
     std::optional<double> savedFraction;
     uint64_t capacityRevision;
@@ -5870,7 +5995,10 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
     ReservationInputs reservationInputs{
         settings.width,          settings.leftOffset,   settings.fontSize,
         settings.reserveGap,     settings.reserveSpace, settings.showNetwork,
-        settings.networkBits,    settings.fontFamily,   savedFraction,
+        settings.networkBits,    settings.preferredLayout,
+        settings.temperatureSource != TemperatureSource::Disabled,
+        settings.showCpuGraph, settings.showGpuGraph,
+        settings.fontFamily,   savedFraction,
         g_capacityBudgetRevision};
     bool reservationInputsChanged = !g_lastReservationInputs ||
                                     *g_lastReservationInputs != reservationInputs;
@@ -5963,6 +6091,10 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
                            g_dockReservationActive,
                            settings.showNetwork,
                            settings.networkBits,
+                           settings.preferredLayout,
+                           settings.temperatureSource != TemperatureSource::Disabled,
+                           settings.showCpuGraph,
+                           settings.showGpuGraph,
                            settings.fontFamily,
                            savedFraction,
                            margin.Left,
@@ -6087,8 +6219,7 @@ void ApplyWidgetSettings() {
     ++g_widgetVisualRevision;
     ApplyTaskbarPlacement(settings);
     auto now = SampleTime::clock::now();
-    UpdateSparkline(g_cpuGraph, g_cpuHistory, settings, now);
-    UpdateSparkline(g_gpuGraph, g_gpuHistory, settings, now);
+    UpdatePrimarySparklines(settings, now);
 
     UpdateTimerInterval();
 }
@@ -6250,8 +6381,7 @@ void UpdateWidgetText(bool force = false) {
         PruneHistory(g_gpuHistory, now, settings.historySeconds);
     }
     if (hasNewSample || !fresh) {
-        UpdateSparkline(g_cpuGraph, g_cpuHistory, settings, now);
-        UpdateSparkline(g_gpuGraph, g_gpuHistory, settings, now);
+        UpdatePrimarySparklines(settings, now);
     }
     if (capacityChanged)
         ApplyTaskbarPlacement(settings);
@@ -6695,7 +6825,6 @@ bool RemoveWidget() {
     for (auto& row : g_metricRows) row = nullptr;
     for (auto& row : g_netRows)
         row = nullptr;
-    g_layoutGraphsVisible = true;
     // Font bounds and capacity budgets are plain values. Retain them across
     // taskbar transfers; a changed font or total invalidates the cache normally.
     g_widgetHost = nullptr;
@@ -7613,7 +7742,7 @@ void UpdateSecondaryWidget(SecondaryWidget& copy, bool refreshValues) {
             UpdateSparkline(
                 copy.view.graphs[i],
                 fresh ? copy.model->histories[i] : std::deque<HistorySample>{},
-                settings, now, layout.graphs[i].Width, layout.showGraphs);
+                settings, now, layout.graphs[i].Width, layout.graphVisible[i]);
         }
     }
 }
@@ -9028,7 +9157,7 @@ void ArrangeWidgetPreview(WidgetPreviewFrame& frame,
     for (size_t i = 0; i < frame.graphs.size(); ++i) {
         auto& graph = frame.graphs[i];
         graph.bounds = layout.graphs[i];
-        graph.runs = layout.showGraphs
+        graph.runs = layout.graphVisible[i]
                          ? BuildSparklineRuns(
                                frame.histories[i], settings.historySeconds,
                                settings.updateInterval, graph.bounds.Width,
@@ -9209,7 +9338,7 @@ MovePreviewLayout ResolveMovePreviewLayout(const MoveEditorState& editor,
         resolved.placement.width > 0
             ? resolved.layout
             : BuildWidgetLayout(*settings, editor.visual.fontMetrics,
-                                WidgetLayoutMode::Full, kWidgetHeight, true);
+                                settings->preferredLayout, kWidgetHeight);
     double sourceWidth = shape.width;
     double downScale =
         std::min({1.0, width / sourceWidth, heightLimit / shape.height});
@@ -9494,8 +9623,7 @@ void VerifyMovedWidget(void* value) {
     if (fits) {
         auto settings = CurrentSettings();
         auto now = SampleTime::clock::now();
-        UpdateSparkline(g_cpuGraph, g_cpuHistory, *settings, now);
-        UpdateSparkline(g_gpuGraph, g_gpuHistory, *settings, now);
+        UpdatePrimarySparklines(*settings, now);
     }
 }
 struct PreviewPlacementVerification {

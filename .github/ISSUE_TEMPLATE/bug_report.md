@@ -11,7 +11,5 @@ assignees: ''
 ⚠️ Before reporting a bug, please go over the troubleshooting page:
 https://github.com/ramensoftware/windhawk/wiki/Troubleshooting
 
-Include the mod name in the title, and tag the mod's author using their GitHub handle. Attach debug logs to the report.
+Include the mod name in the title. Attach debug logs to the report.
 -->
-
-Mod author: @username (GitHub profile handle)

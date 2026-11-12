@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnail-stats
 // @name            Taskbar Thumbnail Stats
 // @description     Shows RAM, CPU and version of the program on the Windows 11 taskbar thumbnails
-// @version         1.4
+// @version         1.7
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @license         GPL-3.0
@@ -28,11 +28,12 @@ Adds a line with live process information to the Windows 11 taskbar
 thumbnails (the previews shown when hovering an open app), inside the
 thumbnail, over the bottom of the preview image or below it:
 
-- **RAM** in use (private working set, like Task Manager)
 - **CPU** usage in percent, updated every second
+- **RAM** in use: private working set, like Task Manager, or private bytes,
+  like System Informer
 - **version** of the executable
 
-Example: `RAM 412 MB · CPU 3.4% · v131.0.2`
+Example: `CPU: 3.4% · RAM: 412 MB · v131.0.2`
 
 ![Screenshot](https://i.imgur.com/qxWa9bC.png)
 
@@ -42,13 +43,20 @@ include the child processes too, to get closer to what Task Manager shows.
 The line can use the Windows accent color, a custom color or no background
 at all, and the font size and text color can be customized.
 
+Optional layout tweaks: the window name and the close button can be moved to
+the bottom of the thumbnail, closer to the mouse pointer (with an optional
+separator line), the close button can be always shown, and thumbnails of
+small windows can be widened to fit the whole line.
+
+![Layout options](https://i.imgur.com/s1RDMVX.png)
+
 Works with the new XAML thumbnails of Windows 11 (tested on 25H2). It does
 not work with taskbar replacements such as StartAllBack or ExplorerPatcher.
 
 If enabled in the settings, clicking the line opens a process manager on the
 program: Process Explorer (Sysinternals) with the process already selected, if
-it's installed, or Task Manager otherwise. Task Manager has no way to be opened on a specific
-process, so there you have to find it yourself.
+it's installed, or Task Manager otherwise. Task Manager has no way to be
+opened on a specific process, so there you have to find it yourself.
 
 The statistics are collected on a background thread, so the taskbar is never
 slowed down, and only while a thumbnail is actually visible.
@@ -57,10 +65,20 @@ slowed down, and only while a thumbnail is actually visible.
 
 // ==WindhawkModSettings==
 /*
-- showRam: true
-  $name: Show RAM
 - showCpu: true
   $name: Show CPU
+- showRam: true
+  $name: Show RAM
+- memoryType: privateWorkingSet
+  $name: RAM measurement
+  $options:
+  - privateWorkingSet: Private working set (like Task Manager)
+  - privateBytes: Private bytes (like System Informer)
+- order: cpuFirst
+  $name: Order
+  $options:
+  - cpuFirst: "CPU, then RAM (like Task Manager → Performance)"
+  - ramFirst: RAM, then CPU
 - showVersion: true
   $name: Show version
 - includeChildren: true
@@ -77,6 +95,39 @@ slowed down, and only while a thumbnail is actually visible.
   $options:
   - overlay: Over the preview image, at its bottom
   - below: Below the preview image
+- closeButton: hover
+  $name: Close button
+  $options:
+  - hover: Shown when the mouse is over the thumbnail (Windows default)
+  - always: Always shown
+- widenToFit: false
+  $name: Widen small thumbnails to fit the line
+  $description: >-
+    Thumbnails of small windows are narrow, so the line gets shortened with
+    "…". With this option the thumbnail is made wide enough to show the whole
+    line
+- titleAtBottom: false
+  $name: Title at the bottom
+  $description: >-
+    Move the window name and the close button to a row at the bottom of the
+    thumbnail, below the statistics, so they're closer to the mouse pointer
+- titleSeparator: false
+  $name: Separator above the title
+  $description: >-
+    With the title at the bottom, draw a thin line between the statistics and
+    the title row, in the color of the line background (or of the text, when
+    the line has no background)
+- topSpacing: 8
+  $name: Top spacing with the title at the bottom
+  $description: >-
+    Space in pixels above the preview image when the title is at the bottom,
+    so the image doesn't touch the top edge of the thumbnail (0 to disable)
+- singleLine: true
+  $name: Single line
+  $description: >-
+    Keep the line on one row, shortening it with "…" if it doesn't fit. When
+    disabled, a long line wraps to a second row, which can make the line
+    change height as the values change
 - fontSize: 10
   $name: Font size
   $description: In pixels (the thumbnail title is about 12)
@@ -125,6 +176,7 @@ slowed down, and only while a thumbnail is actually visible.
 #include <windhawk_utils.h>
 
 #include <psapi.h>
+#include <shellapi.h>
 #include <shlwapi.h>
 #include <tlhelp32.h>
 #include <winver.h>
@@ -134,6 +186,7 @@ slowed down, and only while a thumbnail is actually visible.
 #include <chrono>
 #include <condition_variable>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -151,6 +204,7 @@ slowed down, and only while a thumbnail is actually visible.
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Media.Animation.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.h>
@@ -170,11 +224,19 @@ enum class TextColorMode { automatic, white, black, custom };
 
 struct Settings {
     bool showRam = true;
+    bool privateBytes = false;  // Else private working set.
+    bool ramFirst = false;
     bool showCpu = true;
     bool showVersion = true;
     bool showProcessCount = true;
     bool includeChildren = true;
     Position position = Position::overlay;
+    bool titleAtBottom = false;
+    int topSpacing = 8;
+    bool titleSeparator = false;
+    bool widenToFit = false;
+    bool closeButtonAlways = false;
+    bool singleLine = true;
     double fontSize = 10;
     BackgroundMode background = BackgroundMode::accent;
     Color backgroundColor{255, 58, 110, 165};
@@ -224,10 +286,8 @@ struct ThumbnailMapping {
 };
 
 std::mutex g_mappingMutex;
-// Holds WinRT weak references: not destroyed at process exit (see
-// https://github.com/ramensoftware/windhawk/wiki/Global-objects-and-process-shutdown),
-// cleared in Wh_ModUninit instead.
-[[clang::no_destroy]] std::vector<ThumbnailMapping> g_thumbnailMapping;
+// Only weak references and raw pointers: safe to destroy at process exit.
+std::vector<ThumbnailMapping> g_thumbnailMapping;
 
 void* GetIdentity(IUnknown* object) {
     if (!object) {
@@ -439,11 +499,7 @@ struct CpuSample {
 // the last measurement instead of measuring over a near-zero interval.
 constexpr ULONGLONG kMinCpuIntervalWallTime = 200ULL * 10000ULL;  // 200 ms
 
-// Returns the CPU usage of the process in percent, if known yet.
-std::optional<double> SampleCpuUsage(DWORD pid,
-                                     ULONGLONG creationTime,
-                                     ULONGLONG cpuTime,
-                                     ULONGLONG now);
+
 
 // Only accessed by the worker thread.
 std::unordered_map<DWORD, CpuSample> g_cpuSamples;
@@ -669,6 +725,7 @@ std::wstring FormatPercent(double value) {
     return result + L"%";
 }
 
+// Returns the CPU usage of the process in percent, if known yet.
 std::optional<double> SampleCpuUsage(DWORD pid,
                                      ULONGLONG creationTime,
                                      ULONGLONG cpuTime,
@@ -736,10 +793,20 @@ std::wstring BuildStatsText(HWND hWnd, const Settings& settings) {
         if (settings.showRam) {
             ProcessMemoryCountersEx2 counters{};
             counters.cb = sizeof(counters);
-            if (GetProcessMemoryInfo(process,
-                                     (PROCESS_MEMORY_COUNTERS*)&counters,
-                                     sizeof(counters)) &&
-                counters.PrivateWorkingSetSize) {
+            PROCESS_MEMORY_COUNTERS_EX countersEx{};
+            countersEx.cb = sizeof(countersEx);
+            if (settings.privateBytes) {
+                // Private bytes (commit charge), like System Informer.
+                if (GetProcessMemoryInfo(process,
+                                         (PROCESS_MEMORY_COUNTERS*)&countersEx,
+                                         sizeof(countersEx))) {
+                    memory += countersEx.PrivateUsage;
+                }
+            } else if (GetProcessMemoryInfo(
+                           process, (PROCESS_MEMORY_COUNTERS*)&counters,
+                           sizeof(counters)) &&
+                       counters.PrivateWorkingSetSize) {
+                // Private working set, like Task Manager.
                 memory += counters.PrivateWorkingSetSize;
             } else {
                 PROCESS_MEMORY_COUNTERS basic{};
@@ -787,17 +854,29 @@ std::wstring BuildStatsText(HWND hWnd, const Settings& settings) {
     // Processes that can't be opened (e.g. protected ones): show nothing
     // rather than misleading values.
     if (openedCount > 0) {
+        std::wstring ramPart;
         if (settings.showRam && memory) {
             WCHAR sizeText[64];
             if (StrFormatByteSizeW((LONGLONG)memory, sizeText,
                                    ARRAYSIZE(sizeText))) {
-                append(std::wstring(L"RAM ") + sizeText);
+                ramPart = std::wstring(L"RAM: ") + sizeText;
             }
         }
 
+        std::wstring cpuPart;
         if (settings.showCpu) {
-            append(L"CPU " + (cpuReady ? FormatPercent(cpuPercent)
-                                       : std::wstring(L"…")));
+            // "N/A" until two samples are available: wider than an ellipsis,
+            // so the line moves less when the value appears.
+            cpuPart = L"CPU: " + (cpuReady ? FormatPercent(cpuPercent)
+                                           : std::wstring(L"N/A"));
+        }
+
+        if (settings.ramFirst) {
+            append(ramPart);
+            append(cpuPart);
+        } else {
+            append(cpuPart);
+            append(ramPart);
         }
     }
 
@@ -921,8 +1000,20 @@ bool LaunchProgram(const std::wstring& file, const std::wstring& parameters) {
     info.lpFile = file.c_str();
     info.lpParameters = parameters.empty() ? nullptr : parameters.c_str();
     info.nShow = SW_SHOWNORMAL;
-    if (!ShellExecuteExW(&info)) {
-        Wh_Log(L"Couldn't start %s: %u", file.c_str(), GetLastError());
+
+    // ShellExecuteEx needs COM, only initialized around the call.
+    HRESULT hrCoInit = CoInitializeEx(
+        nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
+    bool succeeded = ShellExecuteExW(&info);
+    DWORD error = succeeded ? 0 : GetLastError();
+
+    if (SUCCEEDED(hrCoInit)) {
+        CoUninitialize();
+    }
+
+    if (!succeeded) {
+        Wh_Log(L"Couldn't start %s: %u", file.c_str(), error);
         return false;
     }
     return true;
@@ -951,9 +1042,6 @@ void OpenProcessManager(HWND hWnd, const Settings& settings) {
 }
 
 void StatsThreadProc() {
-    // ShellExecuteEx (click on the line) needs COM.
-    HRESULT hrCoInit = CoInitializeEx(
-        nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
     ULONGLONG lastDiagnosticsTick = 0;
 
@@ -1024,11 +1112,6 @@ void StatsThreadProc() {
                                   [] { return g_statsStop || g_statsNewRequest; });
     }
 
-    lock.unlock();
-
-    if (SUCCEEDED(hrCoInit)) {
-        CoUninitialize();
-    }
 }
 
 // Called from the UI thread.
@@ -1117,11 +1200,36 @@ struct ViewState {
     std::vector<Controls::RowDefinition> addedRows;
     Position injectedPosition = Position::overlay;
 
+    // Title moved to the bottom: what's needed to restore the original layout.
+    bool titleMoved = false;
+    bool injectedTitleAtBottom = false;
+
+    // Close button always visible: the visual state setters/animations that
+    // hide it, removed from their collections (restored on cleanup).
+    bool injectedCloseButtonAlways = false;
+    Controls::Button closeButton{nullptr};
+    std::vector<std::pair<SetterBaseCollection, SetterBase>> removedSetters;
+    std::vector<std::pair<Media::Animation::TimelineCollection,
+                          Media::Animation::Timeline>>
+        removedTimelines;
+    std::vector<Controls::RowDefinition> originalRowOrder;
+    struct MovedChild {
+        FrameworkElement element{nullptr};
+        int32_t row;
+        int32_t rowSpan;
+    };
+    std::vector<MovedChild> movedChildren;
+    int injectedTopSpacing = 0;
+    bool injectedTitleSeparator = false;
+    Controls::Border separator{nullptr};
+    std::vector<std::pair<FrameworkElement, Thickness>> adjustedMargins;
+
     DispatcherTimer timer{nullptr};
     bool timerRunning = false;
     int timerInterval = 0;
     int styleGeneration = 0;
     bool fastPolling = false;  // Waiting for the first result.
+    double widenedMinWidth = 0;  // MinWidth set on the thumbnail, if any.
 
     winrt::event_token loadedToken{};
     winrt::event_token unloadedToken{};
@@ -1198,6 +1306,16 @@ void ApplyStyle(ViewState& state, const Settings& settings) {
 
     textBlock.FontSize(settings.fontSize);
 
+    // A line that barely fits would otherwise wrap and unwrap as the values
+    // change, making the line jump between one and two rows.
+    if (settings.singleLine) {
+        textBlock.TextWrapping(TextWrapping::NoWrap);
+        textBlock.TextTrimming(TextTrimming::CharacterEllipsis);
+    } else {
+        textBlock.TextWrapping(TextWrapping::Wrap);
+        textBlock.TextTrimming(TextTrimming::None);
+    }
+
     // Reset what a previous style may have set.
     border.ClearValue(Controls::Border::BackgroundProperty());
     textBlock.ClearValue(Controls::TextBlock::ForegroundProperty());
@@ -1251,6 +1369,357 @@ void ApplyStyle(ViewState& state, const Settings& settings) {
             }
             break;
     }
+
+    // Separator above the title: the color of the line background, or of the
+    // text when the line has no background.
+    if (state.separator) {
+        std::optional<Color> separatorColor = background;
+        if (!separatorColor || separatorColor->A == 0) {
+            switch (settings.textColor) {
+                case TextColorMode::white:
+                    separatorColor = ColorHelper::FromArgb(255, 255, 255, 255);
+                    break;
+                case TextColorMode::black:
+                    separatorColor = ColorHelper::FromArgb(255, 0, 0, 0);
+                    break;
+                case TextColorMode::custom:
+                    separatorColor = settings.textCustomColor;
+                    break;
+                case TextColorMode::automatic:
+                    // Neutral gray, visible on light and dark themes.
+                    separatorColor = ColorHelper::FromArgb(255, 128, 128, 128);
+                    break;
+            }
+            separatorColor->A = 0x99;
+        }
+        state.separator.Background(Media::SolidColorBrush(*separatorColor));
+    }
+}
+
+// Logs the structure of the thumbnail grid once (diagnostics for the
+// "title at the bottom" option).
+void LogGridStructure(Controls::Grid const& grid) {
+    static std::atomic<bool> logged;
+    if (logged.exchange(true)) {
+        return;
+    }
+
+    auto rows = grid.RowDefinitions();
+    std::wstring text = L"Thumbnail grid rows:";
+    for (uint32_t i = 0; i < rows.Size(); i++) {
+        auto height = rows.GetAt(i).Height();
+        WCHAR buf[64];
+        swprintf_s(buf, L" [%u: %s %.0f]", i,
+                   height.GridUnitType == GridUnitType::Auto   ? L"auto"
+                   : height.GridUnitType == GridUnitType::Star ? L"star"
+                                                               : L"px",
+                   height.Value);
+        text += buf;
+    }
+    Wh_Log(L"%s", text.c_str());
+
+    for (const auto& child : grid.Children()) {
+        auto fe = child.try_as<FrameworkElement>();
+        if (!fe) {
+            continue;
+        }
+        Wh_Log(L"  child %s #%s row=%d span=%d",
+               winrt::get_class_name(fe).c_str(), fe.Name().c_str(),
+               Controls::Grid::GetRow(fe), Controls::Grid::GetRowSpan(fe));
+    }
+}
+
+// Moves the row with the window name and the close button to the bottom of
+// the grid, after the image (and after the statistics row, if any).
+bool MoveTitleToBottom(ViewState& state, Controls::Grid const& grid) {
+    auto rows = grid.RowDefinitions();
+    int32_t rowCount = (int32_t)rows.Size();
+    if (rowCount < 2) {
+        Wh_Log(L"Title at the bottom: the grid has %d rows, not supported",
+               rowCount);
+        return false;
+    }
+
+    // The direct child of the grid that contains the window name.
+    auto title = FindDescendant(grid, 4, [](DependencyObject const& o) {
+        auto tb = o.try_as<Controls::TextBlock>();
+        return tb && tb.Name() == L"DisplayNameTextBlock";
+    });
+    DependencyObject titleChild = title;
+    while (titleChild) {
+        auto parent = Media::VisualTreeHelper::GetParent(titleChild);
+        if (!parent || parent == grid) {
+            break;
+        }
+        titleChild = parent;
+    }
+    auto titleElement =
+        titleChild ? titleChild.try_as<FrameworkElement>() : nullptr;
+    if (!titleElement ||
+        Media::VisualTreeHelper::GetParent(titleElement) != grid) {
+        Wh_Log(L"Title at the bottom: window name not found");
+        return false;
+    }
+
+    int32_t titleRow = Controls::Grid::GetRow(titleElement);
+    if (titleRow < 0 || titleRow >= rowCount) {
+        return false;
+    }
+
+    // New order: the other rows (image, statistics) keep their order, the
+    // title row goes last.
+    std::vector<Controls::RowDefinition> originalOrder;
+    std::vector<int32_t> newIndexOf(rowCount);
+    int32_t next = 0;
+    for (int32_t i = 0; i < rowCount; i++) {
+        originalOrder.push_back(rows.GetAt(i));
+        if (i != titleRow) {
+            newIndexOf[i] = next++;
+        }
+    }
+    newIndexOf[titleRow] = rowCount - 1;
+
+    // Move the children first (their rows refer to the original order).
+    std::vector<ViewState::MovedChild> movedChildren;
+    for (const auto& child : grid.Children()) {
+        auto fe = child.try_as<FrameworkElement>();
+        if (!fe) {
+            continue;
+        }
+
+        int32_t row = std::clamp(Controls::Grid::GetRow(fe), 0, rowCount - 1);
+        int32_t span = std::max(Controls::Grid::GetRowSpan(fe), 1);
+        int32_t last = std::min(row + span, rowCount) - 1;
+
+        int32_t newRow;
+        int32_t newSpan;
+        if (fe == state.border && state.injectedPosition == Position::overlay) {
+            // Over the image: all the rows except the title.
+            newRow = 0;
+            newSpan = std::max(rowCount - 1, 1);
+        } else if (row == 0 && last == rowCount - 1) {
+            // Spans everything (e.g. a background): unchanged.
+            continue;
+        } else {
+            int32_t first = rowCount;
+            int32_t end = -1;
+            for (int32_t i = row; i <= last; i++) {
+                first = std::min(first, newIndexOf[i]);
+                end = std::max(end, newIndexOf[i]);
+            }
+            newRow = first;
+            newSpan = end - first + 1;
+        }
+
+        if (newRow == row && newSpan == Controls::Grid::GetRowSpan(fe)) {
+            continue;
+        }
+
+        movedChildren.push_back(
+            {fe, Controls::Grid::GetRow(fe), Controls::Grid::GetRowSpan(fe)});
+        Controls::Grid::SetRow(fe, newRow);
+        Controls::Grid::SetRowSpan(fe, newSpan);
+    }
+
+    // Then reorder the row definitions.
+    rows.Clear();
+    for (int32_t i = 0; i < rowCount; i++) {
+        if (i != titleRow) {
+            rows.Append(originalOrder[i]);
+        }
+    }
+    rows.Append(originalOrder[titleRow]);
+
+    // The title row used to give some room at the top: without it the image
+    // would touch the top edge of the thumbnail.
+    int topSpacing = GetSettings()->topSpacing;
+    std::vector<std::pair<FrameworkElement, Thickness>> adjustedMargins;
+    if (topSpacing > 0) {
+        for (const auto& child : grid.Children()) {
+            auto fe = child.try_as<FrameworkElement>();
+            if (!fe || fe == state.border ||
+                Controls::Grid::GetRow(fe) != 0 ||
+                Controls::Grid::GetRowSpan(fe) >= rowCount) {
+                continue;  // Not in the first row, or a full-size background.
+            }
+            Thickness margin = fe.Margin();
+            adjustedMargins.push_back({fe, margin});
+            margin.Top += topSpacing;
+            fe.Margin(margin);
+        }
+    }
+
+    state.titleMoved = true;
+    state.adjustedMargins = std::move(adjustedMargins);
+
+    // Optional thin line at the top of the title row. Its color is set by
+    // ApplyStyle.
+    if (GetSettings()->titleSeparator) {
+        Controls::Border separator;
+        separator.Height(1);
+        separator.VerticalAlignment(VerticalAlignment::Top);
+        separator.HorizontalAlignment(HorizontalAlignment::Stretch);
+        separator.Margin(ThicknessHelper::FromLengths(8, 0, 8, 0));
+        separator.IsHitTestVisible(false);
+        Controls::Grid::SetRow(separator, rowCount - 1);
+        Controls::Grid::SetColumnSpan(separator, 100);
+        grid.Children().Append(separator);
+        state.separator = separator;
+    }
+    state.originalRowOrder = std::move(originalOrder);
+    state.movedChildren = std::move(movedChildren);
+    return true;
+}
+
+void RestoreTitle(ViewState& state, Controls::Grid const& grid) {
+    if (!state.titleMoved) {
+        return;
+    }
+
+    for (const auto& [fe, margin] : state.adjustedMargins) {
+        fe.Margin(margin);
+    }
+    state.adjustedMargins.clear();
+
+    if (state.separator) {
+        uint32_t index;
+        if (grid.Children().IndexOf(state.separator, index)) {
+            grid.Children().RemoveAt(index);
+        }
+        state.separator = nullptr;
+    }
+
+    for (const auto& moved : state.movedChildren) {
+        Controls::Grid::SetRow(moved.element, moved.row);
+        Controls::Grid::SetRowSpan(moved.element, moved.rowSpan);
+    }
+
+    // Only if the rows are still the ones we reordered.
+    auto rows = grid.RowDefinitions();
+    if (grid && rows.Size() == state.originalRowOrder.size()) {
+        rows.Clear();
+        for (const auto& row : state.originalRowOrder) {
+            rows.Append(row);
+        }
+    }
+
+    state.titleMoved = false;
+    state.originalRowOrder.clear();
+    state.movedChildren.clear();
+}
+
+bool IsCloseButtonTarget(DependencyObject const& closeButton,
+                         winrt::Windows::Foundation::IInspectable const& target) {
+    if (!target) {
+        return false;
+    }
+    if (auto obj = target.try_as<DependencyObject>()) {
+        return obj == closeButton;
+    }
+    return winrt::unbox_value_or<winrt::hstring>(target, L"") ==
+           L"CloseButton";
+}
+
+// Keeps the close button always visible, by removing from the visual states
+// of the thumbnail what hides it (they are per-thumbnail instances).
+void ForceCloseButtonVisible(ViewState& state, Controls::Grid const& grid) {
+    auto found = FindDescendant(grid, 3, [](DependencyObject const& o) {
+        auto button = o.try_as<Controls::Button>();
+        return button && button.Name() == L"CloseButton";
+    });
+    auto closeButton = found ? found.try_as<Controls::Button>() : nullptr;
+    if (!closeButton) {
+        Wh_Log(L"Close button not found");
+        return;
+    }
+
+    int removedSetters = 0, removedTimelines = 0, failed = 0;
+    for (FrameworkElement owner : {grid.as<FrameworkElement>(),
+                                   state.element.get()}) {
+        if (!owner) {
+            continue;
+        }
+        for (const auto& group : VisualStateManager::GetVisualStateGroups(owner)) {
+            for (const auto& visualState : group.States()) {
+                auto setters = visualState.Setters();
+                for (int32_t i = (int32_t)setters.Size() - 1; i >= 0; i--) {
+                    auto setter = setters.GetAt(i).try_as<Setter>();
+                    if (!setter || !setter.Target() ||
+                        !IsCloseButtonTarget(closeButton,
+                                             setter.Target().Target())) {
+                        continue;
+                    }
+                    try {
+                        state.removedSetters.push_back({setters, setter});
+                        setters.RemoveAt(i);
+                        removedSetters++;
+                    } catch (...) {
+                        state.removedSetters.pop_back();
+                        failed++;
+                    }
+                }
+
+                auto storyboard = visualState.Storyboard();
+                if (!storyboard) {
+                    continue;
+                }
+                auto timelines = storyboard.Children();
+                for (int32_t i = (int32_t)timelines.Size() - 1; i >= 0; i--) {
+                    auto timeline = timelines.GetAt(i);
+                    if (Media::Animation::Storyboard::GetTargetName(timeline) !=
+                        L"CloseButton") {
+                        continue;
+                    }
+                    try {
+                        state.removedTimelines.push_back({timelines, timeline});
+                        timelines.RemoveAt(i);
+                        removedTimelines++;
+                    } catch (...) {
+                        state.removedTimelines.pop_back();
+                        failed++;
+                    }
+                }
+            }
+        }
+    }
+
+    closeButton.Visibility(Visibility::Visible);
+    closeButton.Opacity(1.0);
+    state.closeButton = closeButton;
+
+    static std::atomic<bool> logged;
+    if (!logged.exchange(true)) {
+        Wh_Log(L"Close button always visible: removed %d setters, %d "
+               L"animations, %d failed",
+               removedSetters, removedTimelines, failed);
+    }
+}
+
+void RestoreCloseButton(ViewState& state) {
+    for (auto it = state.removedSetters.rbegin();
+         it != state.removedSetters.rend(); ++it) {
+        try {
+            it->first.Append(it->second);
+        } catch (...) {
+        }
+    }
+    for (auto it = state.removedTimelines.rbegin();
+         it != state.removedTimelines.rend(); ++it) {
+        try {
+            it->first.Append(it->second);
+        } catch (...) {
+        }
+    }
+    if (state.closeButton) {
+        try {
+            state.closeButton.ClearValue(UIElement::VisibilityProperty());
+            state.closeButton.ClearValue(UIElement::OpacityProperty());
+        } catch (...) {
+        }
+    }
+    state.removedSetters.clear();
+    state.removedTimelines.clear();
+    state.closeButton = nullptr;
 }
 
 // Removes exactly what was injected (the line and our own row definitions).
@@ -1275,6 +1744,9 @@ void RemoveInjected(ViewState& state) {
 
     if (auto grid = state.grid.get()) {
         try {
+            RestoreTitle(state, grid);
+            RestoreCloseButton(state);
+
             if (state.border) {
                 uint32_t index;
                 if (grid.Children().IndexOf(state.border, index)) {
@@ -1300,6 +1772,14 @@ void RemoveInjected(ViewState& state) {
     state.border = nullptr;
     state.textBlock = nullptr;
     state.addedRows.clear();
+    state.titleMoved = false;
+    state.originalRowOrder.clear();
+    state.movedChildren.clear();
+    state.removedSetters.clear();
+    state.removedTimelines.clear();
+    state.closeButton = nullptr;
+    state.adjustedMargins.clear();
+    state.separator = nullptr;
 }
 
 bool InjectStats(ViewState& state) {
@@ -1314,12 +1794,20 @@ bool InjectStats(ViewState& state) {
     }
 
     Position position = GetSettings()->position;
+    bool titleAtBottom = GetSettings()->titleAtBottom;
+    int topSpacing = GetSettings()->topSpacing;
+    bool titleSeparator = GetSettings()->titleSeparator;
+    bool closeButtonAlways = GetSettings()->closeButtonAlways;
 
     if (state.border) {
         // Still in place? The template may have been applied again, with a
         // new grid, or the position setting may have changed.
         uint32_t index;
         if (state.grid.get() == grid && state.injectedPosition == position &&
+            state.injectedTitleAtBottom == titleAtBottom &&
+            state.injectedTopSpacing == topSpacing &&
+            state.injectedTitleSeparator == titleSeparator &&
+            state.injectedCloseButtonAlways == closeButtonAlways &&
             grid.Children().IndexOf(state.border, index)) {
             return true;
         }
@@ -1337,7 +1825,6 @@ bool InjectStats(ViewState& state) {
     }
 
     Controls::TextBlock textBlock;
-    textBlock.TextWrapping(TextWrapping::Wrap);
     textBlock.TextAlignment(TextAlignment::Center);
 
     Controls::Border border;
@@ -1388,6 +1875,19 @@ bool InjectStats(ViewState& state) {
     state.textBlock = textBlock;
     state.addedRows = std::move(addedRows);
     state.injectedPosition = position;
+    state.injectedTitleAtBottom = titleAtBottom;
+    state.injectedTopSpacing = topSpacing;
+    state.injectedTitleSeparator = titleSeparator;
+
+    if (titleAtBottom) {
+        LogGridStructure(grid);
+        MoveTitleToBottom(state, grid);
+    }
+
+    state.injectedCloseButtonAlways = closeButtonAlways;
+    if (closeButtonAlways) {
+        ForceCloseButtonVisible(state, grid);
+    }
 
     // Clicks on the line open a process manager instead of switching to the
     // window: the pointer events are marked as handled so that the thumbnail
@@ -1441,6 +1941,47 @@ void ReleaseTimer(ViewState& state) {
     }
 }
 
+// Makes the thumbnail wide enough for the whole line ("Widen small
+// thumbnails to fit the line"), or restores its original width.
+void UpdateThumbnailWidth(ViewState& state,
+                          FrameworkElement const& element,
+                          const Settings& settings) {
+    if (!settings.widenToFit || !state.textBlock) {
+        if (state.widenedMinWidth > 0) {
+            element.ClearValue(FrameworkElement::MinWidthProperty());
+            state.widenedMinWidth = 0;
+        }
+        return;
+    }
+
+    auto text = state.textBlock.Text();
+    if (text.empty()) {
+        return;
+    }
+
+    // Measure the full line with a detached copy of the text block, so the
+    // layout of the thumbnail isn't disturbed.
+    Controls::TextBlock measure;
+    measure.FontSize(state.textBlock.FontSize());
+    measure.FontFamily(state.textBlock.FontFamily());
+    measure.TextWrapping(TextWrapping::NoWrap);
+    measure.Text(text);
+    measure.Measure(winrt::Windows::Foundation::Size{
+        std::numeric_limits<float>::infinity(),
+        std::numeric_limits<float>::infinity()});
+
+    // Text + padding of the line + its margins + some room for the
+    // thumbnail's own padding.
+    double required = measure.DesiredSize().Width + 12 + 12 + 16;
+
+    // Only grow while the thumbnail is shown: shrinking at every value change
+    // would make it jump.
+    if (required > state.widenedMinWidth + 0.5) {
+        element.MinWidth(required);
+        state.widenedMinWidth = required;
+    }
+}
+
 void UpdateView(const std::shared_ptr<ViewState>& state) {
     if (g_unloading) {
         return;
@@ -1461,6 +2002,12 @@ void UpdateView(const std::shared_ptr<ViewState>& state) {
     if (state->styleGeneration != g_styleGeneration) {
         state->styleGeneration = g_styleGeneration;
         ApplyStyle(*state, *settings);
+        // New font size or option turned off: measure again from scratch.
+        if (state->widenedMinWidth > 0) {
+            element.ClearValue(FrameworkElement::MinWidthProperty());
+            state->widenedMinWidth = 0;
+        }
+        UpdateThumbnailWidth(*state, element, *settings);
     }
 
     // Until the first result arrives, poll quickly so that the line shows up
@@ -1503,6 +2050,8 @@ void UpdateView(const std::shared_ptr<ViewState>& state) {
     state->textBlock.Text(*text);
     state->border.Visibility(text->empty() ? Visibility::Collapsed
                                            : Visibility::Visible);
+
+    UpdateThumbnailWidth(*state, element, *settings);
 }
 
 void StartTimer(const std::shared_ptr<ViewState>& state) {
@@ -1727,6 +2276,10 @@ void CleanupViewState(const std::shared_ptr<ViewState>& state) {
     ReleaseTimer(*state);
 
     if (auto element = state->element.get()) {
+        if (state->widenedMinWidth > 0) {
+            element.ClearValue(FrameworkElement::MinWidthProperty());
+            state->widenedMinWidth = 0;
+        }
         if (state->loadedToken) {
             element.Loaded(state->loadedToken);
         }
@@ -1928,70 +2481,80 @@ void LoadSettings() {
     auto settings = std::make_shared<Settings>();
 
     settings->showRam = Wh_GetIntSetting(L"showRam");
+
+    auto memoryType = WindhawkUtils::StringSetting::make(L"memoryType");
+    settings->privateBytes = wcscmp(memoryType.get(), L"privateBytes") == 0;
+
+    auto order = WindhawkUtils::StringSetting::make(L"order");
+    settings->ramFirst = wcscmp(order.get(), L"ramFirst") == 0;
     settings->showCpu = Wh_GetIntSetting(L"showCpu");
     settings->showVersion = Wh_GetIntSetting(L"showVersion");
     settings->showProcessCount = Wh_GetIntSetting(L"showProcessCount");
     settings->includeChildren = Wh_GetIntSetting(L"includeChildren");
 
-    PCWSTR position = Wh_GetStringSetting(L"position");
-    settings->position = wcscmp(position, L"below") == 0 ? Position::below
+    auto position = WindhawkUtils::StringSetting::make(L"position");
+    settings->titleAtBottom = Wh_GetIntSetting(L"titleAtBottom");
+    int topSpacing = Wh_GetIntSetting(L"topSpacing");
+    settings->topSpacing = (topSpacing >= 0 && topSpacing <= 40) ? topSpacing : 8;
+    settings->titleSeparator = Wh_GetIntSetting(L"titleSeparator");
+    settings->widenToFit = Wh_GetIntSetting(L"widenToFit");
+    settings->closeButtonAlways =
+        wcscmp(WindhawkUtils::StringSetting::make(L"closeButton").get(),
+               L"always") == 0;
+
+    settings->position = wcscmp(position.get(), L"below") == 0 ? Position::below
                                                          : Position::overlay;
-    Wh_FreeStringSetting(position);
+
+    settings->singleLine = Wh_GetIntSetting(L"singleLine");
 
     int fontSize = Wh_GetIntSetting(L"fontSize");
     settings->fontSize = (fontSize >= 6 && fontSize <= 40) ? fontSize : 10;
 
-    PCWSTR background = Wh_GetStringSetting(L"background");
-    settings->background = wcscmp(background, L"none") == 0
+    auto background = WindhawkUtils::StringSetting::make(L"background");
+    settings->background = wcscmp(background.get(), L"none") == 0
                                ? BackgroundMode::none
-                           : wcscmp(background, L"custom") == 0
+                           : wcscmp(background.get(), L"custom") == 0
                                ? BackgroundMode::custom
                                : BackgroundMode::accent;
-    Wh_FreeStringSetting(background);
 
-    PCWSTR backgroundColor = Wh_GetStringSetting(L"backgroundColor");
-    if (auto color = ParseColor(backgroundColor)) {
+    auto backgroundColor = WindhawkUtils::StringSetting::make(L"backgroundColor");
+    if (auto color = ParseColor(backgroundColor.get())) {
         settings->backgroundColor = *color;
     } else if (settings->background == BackgroundMode::custom) {
         Wh_Log(L"Invalid background color \"%s\", using the default",
-               backgroundColor);
+               backgroundColor.get());
     }
-    Wh_FreeStringSetting(backgroundColor);
 
     int opacity = Wh_GetIntSetting(L"backgroundOpacity");
     settings->backgroundOpacity = (opacity >= 0 && opacity <= 100) ? opacity
                                                                   : 100;
 
-    PCWSTR textColor = Wh_GetStringSetting(L"textColor");
-    settings->textColor = wcscmp(textColor, L"white") == 0
+    auto textColor = WindhawkUtils::StringSetting::make(L"textColor");
+    settings->textColor = wcscmp(textColor.get(), L"white") == 0
                               ? TextColorMode::white
-                          : wcscmp(textColor, L"black") == 0
+                          : wcscmp(textColor.get(), L"black") == 0
                               ? TextColorMode::black
-                          : wcscmp(textColor, L"custom") == 0
+                          : wcscmp(textColor.get(), L"custom") == 0
                               ? TextColorMode::custom
                               : TextColorMode::automatic;
-    Wh_FreeStringSetting(textColor);
 
-    PCWSTR textCustomColor = Wh_GetStringSetting(L"textCustomColor");
-    if (auto color = ParseColor(textCustomColor)) {
+    auto textCustomColor = WindhawkUtils::StringSetting::make(L"textCustomColor");
+    if (auto color = ParseColor(textCustomColor.get())) {
         settings->textCustomColor = *color;
     } else if (settings->textColor == TextColorMode::custom) {
         Wh_Log(L"Invalid text color \"%s\", using the default",
-               textCustomColor);
+               textCustomColor.get());
     }
-    Wh_FreeStringSetting(textCustomColor);
 
-    PCWSTR clickAction = Wh_GetStringSetting(L"clickAction");
+    auto clickAction = WindhawkUtils::StringSetting::make(L"clickAction");
     settings->clickAction =
-        wcscmp(clickAction, L"auto") == 0              ? ClickAction::automatic
-        : wcscmp(clickAction, L"processExplorer") == 0 ? ClickAction::processExplorer
-        : wcscmp(clickAction, L"taskManager") == 0     ? ClickAction::taskManager
+        wcscmp(clickAction.get(), L"auto") == 0              ? ClickAction::automatic
+        : wcscmp(clickAction.get(), L"processExplorer") == 0 ? ClickAction::processExplorer
+        : wcscmp(clickAction.get(), L"taskManager") == 0     ? ClickAction::taskManager
                                                        : ClickAction::none;
-    Wh_FreeStringSetting(clickAction);
 
-    PCWSTR processExplorerPath = Wh_GetStringSetting(L"processExplorerPath");
-    settings->processExplorerPath = processExplorerPath;
-    Wh_FreeStringSetting(processExplorerPath);
+    auto processExplorerPath = WindhawkUtils::StringSetting::make(L"processExplorerPath");
+    settings->processExplorerPath = processExplorerPath.get();
 
     int interval = Wh_GetIntSetting(L"updateInterval");
     settings->updateInterval = std::max(interval > 0 ? interval : 1000, 250);
@@ -2122,13 +2685,10 @@ void Wh_ModUninit() {
     Wh_Log(L"Cleaned up the views of %d UI threads", cleaned);
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
     // Apply the new settings in place, without unloading the mod: the views
     // pick up the new style and interval on their next update.
     LoadSettings();
-    *bReload = FALSE;
-
-    return TRUE;
 }
