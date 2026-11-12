@@ -15307,10 +15307,43 @@ static int EffectiveShowDelay(bool sticky, bool touchpadInvocation) {
     return std::max(std::max(0, g_settings.showDelay), automaticGrace);
 }
 
+// Cross-row navigation keeps a goal position, like a text editor's goal
+// column: consecutive Up/Down moves aim at the same spot, so rows with
+// different counts or widths do not make the selection drift. The goal stays
+// only while the selection is the entry the last cross-row move picked; any
+// other selection change starts a new one.
+static struct {
+    bool valid = false;
+    HWND hwnd = nullptr;
+    int index = -1;
+    int offset = 0;     // Center relative to the switcher's center (rows/columns).
+    double slot = 0.0;  // Visual column slot (Dock grid).
+} s_crossLineGoal;
+
+static bool CrossLineGoalCurrent() {
+    return s_crossLineGoal.valid && g_selectedIndex >= 0 &&
+           g_selectedIndex < (int)g_windows.size() &&
+           s_crossLineGoal.index == g_selectedIndex &&
+           s_crossLineGoal.hwnd == g_windows[g_selectedIndex].hWnd;
+}
+
+static void RememberCrossLineGoal(int offset, double slot) {
+    if (g_selectedIndex < 0 || g_selectedIndex >= (int)g_windows.size()) {
+        s_crossLineGoal.valid = false;
+        return;
+    }
+    s_crossLineGoal.valid = true;
+    s_crossLineGoal.hwnd = g_windows[g_selectedIndex].hWnd;
+    s_crossLineGoal.index = g_selectedIndex;
+    s_crossLineGoal.offset = offset;
+    s_crossLineGoal.slot = slot;
+}
+
 static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
                          ULONGLONG invocationStartTick = 0) {
     const ULONGLONG invocationTick = invocationStartTick ? invocationStartTick :
                                      GetTickCount64();
+    s_crossLineGoal.valid = false;
     const bool touchpadInvocation = g_isTouchpadGestureActive;
     const ULONGLONG rawState = g_touchpadRawThreeFingerState.load(std::memory_order_acquire);
     InvalidateSwsFocusRecoverySession();
@@ -17060,14 +17093,26 @@ static void CycleDirectional(int vertDelta, bool wrap = true) {
             // Rows are counted over all pages, so moving past a page's last
             // row continues on the next page in the same column.
             int n = (int)g_windows.size();
-            int rowCount = (n - 1) / g_dockGridColumns + 1;
-            int row = g_selectedIndex / g_dockGridColumns;
+            const int cols = g_dockGridColumns;
+            int rowCount = (n - 1) / cols + 1;
+            int row = g_selectedIndex / cols;
             int targetRow = row + vertDelta;
             if (wrap) targetRow = (targetRow % rowCount + rowCount) % rowCount;
             if (targetRow < 0 || targetRow >= rowCount || targetRow == row) return;
-            int target = std::min(n - 1, targetRow * g_dockGridColumns +
-                                         g_selectedIndex % g_dockGridColumns);
+            // Columns are visual slots: a centered partial row is shifted by
+            // half a slot per missing icon (as in ComputeDockLayout).
+            auto rowIcons = [&](int r) { return std::min(cols, n - r * cols); };
+            auto rowShift = [&](int r) {
+                return g_settings.dockGridCenterRows ? (cols - rowIcons(r)) / 2.0 : 0.0;
+            };
+            double goal = CrossLineGoalCurrent()
+                ? s_crossLineGoal.slot
+                : (g_selectedIndex % cols) + rowShift(row);
+            int col = (int)floor(goal - rowShift(targetRow) + 0.5);
+            col = std::clamp(col, 0, rowIcons(targetRow) - 1);
+            int target = targetRow * cols + col;
             CycleLinear(target - g_selectedIndex);
+            if (g_selectedIndex == target) RememberCrossLineGoal(0, goal);
             return;
         }
         if (wrap) {
@@ -17085,9 +17130,19 @@ static void CycleDirectional(int vertDelta, bool wrap = true) {
     bool verticalLayout = LayoutIsVertical();
     HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
 
-    // Save current selection's perpendicular center for nearest-column matching
-    RECT rcPrev = g_windows[g_selectedIndex].rcCell;
-    int prevPerpCenter = verticalLayout ? (rcPrev.top + rcPrev.bottom) / 2 : (rcPrev.left + rcPrev.right) / 2;
+    // Goal for nearest-column matching, measured from the switcher's center:
+    // lines are centered in the switcher, whose size changes when the view
+    // scrolls, so absolute positions are not comparable across layouts.
+    auto lineOffset = [&](const RECT& rc) {
+        return verticalLayout ? (rc.top + rc.bottom) / 2 - g_winH / 2
+                              : (rc.left + rc.right) / 2 - g_winW / 2;
+    };
+    bool goalKnown = CrossLineGoalCurrent();
+    int goalOffset = goalKnown ? s_crossLineGoal.offset : 0;
+    if (!goalKnown && !IsRectEmpty(&g_windows[g_selectedIndex].rcCell)) {
+        goalOffset = lineOffset(g_windows[g_selectedIndex].rcCell);
+        goalKnown = true;
+    }
 
     int oldStart = g_layoutStartIndex;
     int savedWinW = g_winW;
@@ -17104,6 +17159,13 @@ static void CycleDirectional(int vertDelta, bool wrap = true) {
         g_layoutStartIndex = curStart;
         g_isPaginatedView = false;
         ComputeLayout(hMon);
+        // The selection had no laid-out cell: take it from the pass that
+        // places its row.
+        if (!goalKnown && g_selectedIndex >= curStart &&
+            !IsRectEmpty(&g_windows[g_selectedIndex].rcCell)) {
+            goalOffset = lineOffset(g_windows[g_selectedIndex].rcCell);
+            goalKnown = true;
+        }
 
         int firstIdx = curStart % n;
         int curLine = verticalLayout ? g_windows[firstIdx].rcCell.left : g_windows[firstIdx].rcCell.top;
@@ -17263,10 +17325,7 @@ static void CycleDirectional(int vertDelta, bool wrap = true) {
         int lineCoord = verticalLayout ? g_windows[wi].rcCell.left : g_windows[wi].rcCell.top;
         if (lineCoord != targetLineCoord) continue;
 
-        int perpCenter = verticalLayout ?
-            (g_windows[wi].rcCell.top + g_windows[wi].rcCell.bottom) / 2 :
-            (g_windows[wi].rcCell.left + g_windows[wi].rcCell.right) / 2;
-        int dist = abs(prevPerpCenter - perpCenter);
+        int dist = abs(goalOffset - lineOffset(g_windows[wi].rcCell));
         if (dist < bestDist) {
             bestDist = dist;
             bestIndex = wi;
@@ -17274,6 +17333,7 @@ static void CycleDirectional(int vertDelta, bool wrap = true) {
     }
 
     g_selectedIndex = bestIndex;
+    RememberCrossLineGoal(goalOffset, 0.0);
     RetargetSelectionFromPresented(selectionFrom);
     PaintSwitcher();
 }
