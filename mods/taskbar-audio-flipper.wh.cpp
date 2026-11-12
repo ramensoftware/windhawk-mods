@@ -222,17 +222,6 @@ std::vector<std::wstring> Split(const std::wstring& text, wchar_t separator) {
     }
 }
 
-std::wstring Join(const std::vector<std::wstring>& parts, const std::wstring& separator) {
-    std::wstring joined;
-    for (size_t i = 0; i < parts.size(); i++) {
-        if (i > 0) {
-            joined += separator;
-        }
-        joined += parts[i];
-    }
-    return joined;
-}
-
 std::wstring Utf8ToWide(const std::string& text) {
     if (text.empty()) {
         return {};
@@ -3953,7 +3942,7 @@ struct Settings {
 
     // Names a webcam; an empty name goes back to the device's own name.
     void SetWebcamNickname(const std::wstring& instanceId, std::wstring nickname) {
-        // Settings are stored one per line, so keep names to a single line.
+        // Each name is a stored value of its own, so keep it to a single line.
         for (wchar_t& c : nickname) {
             if (c == L'\r' || c == L'\n' || c == L'\t') {
                 c = L' ';
@@ -3991,19 +3980,32 @@ struct Settings {
         showWebcam = Storage::GetInt(L"ShowWebcam", showWebcam) != 0;
         webcamId = Storage::GetString(L"WebcamId");
         webcamName = Storage::GetString(L"WebcamName");
-        for (const std::wstring& id : Split(Storage::GetString(L"Excluded"), L'\n')) {
-            SetExcluded(id, true);
+        int excludedCount = Storage::GetInt(L"ExcludedCount", -1);
+        if (excludedCount < 0) {
+            // Saved before 1.5.0, each list in one value.
+            LoadOldLists();
+            if (Save()) {
+                Storage::Delete(L"Excluded");
+                Storage::Delete(L"WebcamNicknames");
+            }
+            return;
         }
-        for (const std::wstring& line : Split(Storage::GetString(L"WebcamNicknames"), L'\n')) {
-            AddNicknameLine(line);
+        for (int i = 0; i < excludedCount; i++) {
+            std::wstring id = Storage::GetString(EntryName(L"Excluded", i).c_str());
+            if (!id.empty()) {
+                SetExcluded(id, true);
+            }
+        }
+        int nicknameCount = Storage::GetInt(L"WebcamNicknameCount", 0);
+        for (int i = 0; i < nicknameCount; i++) {
+            std::wstring id = Storage::GetString(EntryName(L"WebcamNickname", i, L"Id").c_str());
+            if (!id.empty()) {
+                SetWebcamNickname(id, Storage::GetString(EntryName(L"WebcamNickname", i, L"Name").c_str()));
+            }
         }
     }
 
     bool Save() const {
-        std::vector<std::wstring> nicknameLines;
-        for (const auto& [id, nickname] : webcamNicknames) {
-            nicknameLines.push_back(id + L"\t" + nickname);
-        }
         bool saved = Storage::SetInt(L"SwitchCommunications", switchCommunications);
         saved = Storage::SetInt(L"SwitchInputCommunications", switchInputCommunications) && saved;
         saved = Storage::SetInt(L"ShowPopup", showPopup) && saved;
@@ -4015,11 +4017,69 @@ struct Settings {
         saved = Storage::SetInt(L"ShowWebcam", showWebcam) && saved;
         saved = Storage::SetString(L"WebcamId", webcamId) && saved;
         saved = Storage::SetString(L"WebcamName", webcamName) && saved;
-        saved = Storage::SetString(L"Excluded", Join(excluded, L"\n")) && saved;
-        return Storage::SetString(L"WebcamNicknames", Join(nicknameLines, L"\n")) && saved;
+        for (int i = 0; i < (int)excluded.size(); i++) {
+            saved = Storage::SetString(EntryName(L"Excluded", i).c_str(), excluded[i]) && saved;
+        }
+        saved = SaveCount(L"Excluded", (int)excluded.size(), {L""}) && saved;
+        for (int i = 0; i < (int)webcamNicknames.size(); i++) {
+            saved = Storage::SetString(EntryName(L"WebcamNickname", i, L"Id").c_str(), webcamNicknames[i].first) && saved;
+            saved = Storage::SetString(EntryName(L"WebcamNickname", i, L"Name").c_str(), webcamNicknames[i].second) && saved;
+        }
+        return SaveCount(L"WebcamNickname", (int)webcamNicknames.size(), {L"Id", L"Name"}) && saved;
     }
 
 private:
+    // The lists are kept one value per entry, numbered from 0, with a count: a stored value can't
+    // hold line breaks in portable Windhawk, which keeps the mod's storage in an INI file.
+    static std::wstring EntryName(const wchar_t* list, int index, const wchar_t* field = L"") {
+        return list + std::to_wstring(index) + field;
+    }
+
+    // Saves a list's count, then deletes the entries a longer list left past it.
+    static bool SaveCount(const wchar_t* list, int count, std::initializer_list<const wchar_t*> fields) {
+        std::wstring countName = std::wstring(list) + L"Count";
+        int previous = Storage::GetInt(countName.c_str(), 0);
+        bool saved = Storage::SetInt(countName.c_str(), count);
+        for (int i = count; i < previous; i++) {
+            for (const wchar_t* field : fields) {
+                Storage::Delete(EntryName(list, i, field).c_str());
+            }
+        }
+        return saved;
+    }
+
+    // Before 1.5.0 each list was one value, its entries on separate lines. Portable Windhawk saved
+    // those line breaks as spaces, so a space separates entries too: neither endpoint IDs nor
+    // device instance IDs contain one, and a webcam's ID starts after the last space or line
+    // break before the tab that ends it ("<instance ID><tab><name>" for each webcam).
+    void LoadOldLists() {
+        std::wstring excludedIds = Storage::GetString(L"Excluded");
+        std::replace(excludedIds.begin(), excludedIds.end(), L' ', L'\n');
+        for (const std::wstring& id : Split(excludedIds, L'\n')) {
+            SetExcluded(id, true);
+        }
+        std::wstring nicknames = Storage::GetString(L"WebcamNicknames");
+        std::wstring id;
+        size_t start = 0;
+        while (true) {
+            size_t tab = nicknames.find(L'\t', start);
+            std::wstring part = nicknames.substr(start, tab == std::wstring::npos ? std::wstring::npos : tab - start);
+            if (tab == std::wstring::npos) {
+                if (!id.empty()) {
+                    SetWebcamNickname(id, part);
+                }
+                return;
+            }
+            // The part before a tab is the previous webcam's name (if any) and this webcam's ID.
+            size_t cut = part.find_last_of(L" \n");
+            if (!id.empty() && cut != std::wstring::npos) {
+                SetWebcamNickname(id, part.substr(0, cut));
+            }
+            id = cut == std::wstring::npos ? part : part.substr(cut + 1);
+            start = tab + 1;
+        }
+    }
+
     // AudioFlipper.exe's settings.txt has "key=value" lines.
     void Import() {
         std::wstring path = KnownFolder(FOLDERID_RoamingAppData) + L"\\AudioFlipper\\settings.txt";
