@@ -10928,13 +10928,13 @@ std::atomic<bool> g_clipGeometryLifetimeTracked{false};  // CResourceProxy's des
 std::atomic<int> g_geometryDestructionSeen{0};
 std::vector<void*> g_geometryProbes;     // under g_contentClipsMutex
 int g_probeHits = 0, g_probeMisses = 0;  // likewise
-int g_probesOther = 0;                   // likewise: destroyed with another vtable
+int g_probesOther = 0;                   // likewise: misses that were another vtable
 int g_probesMade = 0;                    // likewise
 ULONGLONG g_probeStatusLogged = 0;       // likewise
 // The vtable pointer a rectangle geometry has as it is made, and the one it
 // has as CResourceProxy's destructor runs for it (each derived class's
 // destructor puts back its own before that): the first watched geometry
-// seen destroyed sets the second, and only destructions that show it count.
+// seen destroyed sets the second; a later one with another pointer is a miss.
 void* g_probeMadeVtable = nullptr;       // likewise, for the log
 void* g_probeDestroyedVtable = nullptr;  // likewise
 std::atomic<unsigned> g_proxyDestructions{0};  // seen by the hook, for the status log
@@ -10963,9 +10963,10 @@ void EraseContentClipLocked(std::unordered_map<HWND, ContentClip>::iterator it) 
 // destructor, a miss can't happen (the destructor runs before the memory is
 // freed, and takes the probe off first), so a single miss settles it: no
 // fitting for this dwm.exe session (also if DWM ever initializes a live
-// geometry again - the safe side). The vtable check keeps another proxy
-// type, made at a geometry's freed address and destroyed through the hook,
-// from passing for a hit that hides the miss. Geometries DWM keeps (a
+// geometry again - the safe side). A destruction at a watched address with
+// another vtable pointer is a miss too: a probe is watched until a
+// destruction at its address is seen, so another object there means the
+// geometry was freed unseen. Geometries DWM keeps (a
 // window's content clip) simply stay watched, and the oldest is let go,
 // uncounted, once kMaxProbes are.
 constexpr size_t kMaxProbes = 64;
@@ -10974,8 +10975,8 @@ void JudgeProbesLocked() {
     ULONGLONG now = GetTickCount64();
     if (now - g_probeStatusLogged >= 1000) {
         g_probeStatusLogged = now;
-        Wh_Log(L"[dwm] rectangle geometries watched: %d made, %d seen destroyed, %d not, "
-               L"%d with another vtable (%u proxy destructions seen in all)",
+        Wh_Log(L"[dwm] rectangle geometries watched: %d made, %d seen destroyed, %d not "
+               L"(%d of them another vtable; %u proxy destructions seen in all)",
                g_probesMade, g_probeHits, g_probeMisses, g_probesOther,
                g_proxyDestructions.load());
     }
@@ -10999,13 +11000,14 @@ void JudgeProbesLocked() {
     UpdateGeometriesWatchedLocked();
     if (verdict > 0) {
         Wh_Log(L"[dwm] rectangle geometries are destroyed through CResourceProxy (%d seen, "
-               L"%d with another vtable; vtable %p as made, %p as destroyed) - restore "
-               L"corners fitted",
-               g_probeHits, g_probesOther, g_probeMadeVtable, g_probeDestroyedVtable);
+               L"0 missed; vtable %p as made, %p as destroyed) - restore corners fitted",
+               g_probeHits, g_probeMadeVtable, g_probeDestroyedVtable);
     } else {
         Wh_Log(L"[dwm] a rectangle geometry was freed without CResourceProxy's destructor "
-               L"seen (%d seen before) - restores keep Windows' stretched corner",
-               g_probeHits);
+               L"seen (%d seen before; %s) - restores keep Windows' stretched corner",
+               g_probeHits,
+               g_probesOther ? L"another object destroyed at its address"
+                             : L"another geometry made at its address");
     }
 }
 
@@ -11063,7 +11065,11 @@ void ForgetClipGeometry(void* geometry) {
         if (vtable == g_probeDestroyedVtable) {
             g_probeHits++;
         } else {
-            g_probesOther++;  // another type made at a freed geometry's address
+            // Another object at a watched address: the geometry was freed
+            // unseen (or rectangle geometries don't share one pointer here,
+            // and the hook is better not relied on either way).
+            g_probesOther++;  // kept for the log
+            g_probeMisses++;
         }
         UpdateGeometriesWatchedLocked();
         JudgeProbesLocked();
