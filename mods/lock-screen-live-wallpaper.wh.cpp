@@ -10,8 +10,7 @@
 // @license           GPL-3.0
 // @include           LogonUI.exe
 // @include           LockApp.exe
-// @include           explorer.exe
-// @architecture      x86-64
+// @include           windhawk.exe
 // @compilerOptions   -lole32 -loleaut32 -lruntimeobject -lmfplat -lmfreadwrite -lmfuuid -lwinmm -luuid -ld3d11 -lgdi32 -luser32 -lshell32 -luxtheme
 // ==/WindhawkMod==
 
@@ -72,7 +71,7 @@
 | Power saving | Still-frame mode, pause when idle, optional pause on the password screen, and a low battery saver (light, balanced, maximum) |
 | Boot behavior | Optionally show the last frame for a chosen time right after boot instead of decoding |
 | Shutdown screen | Optionally show the video on the "Shutting down" / "Restarting" screen (off by default, so Windows' own black screen is shown) |
-| Preview window | Optional window that plays your video with the current fit, color and speed settings, opened from the settings, a hotkey or a tray icon. It can draw a copy of the real clock, date and status icons over the video. It runs inside `explorer.exe`, so the mod is also loaded there. It is an approximation of the wallpaper layer, not the Windows lock screen UI itself |
+| Preview window | Optional window that plays your video with the current fit, color and speed settings, opened from the settings, a hotkey or a tray icon. It can draw a copy of the real clock, date and status icons over the video. It runs in its own helper process (`windhawk.exe`) that exists only while the preview, tray icon or hotkey is on. It is an approximation of the wallpaper layer, not the Windows lock screen UI itself |
 | Fail-safe | Restores the original wallpaper if the lock screen UI changes or the mod misbehaves |
 | Debug log | Optional CPU and decode statistics and a UI tree dump |
 
@@ -94,7 +93,7 @@
 | **Play video on the password screen** | On (default) keeps the video playing while you type your password. Off freezes it on the password screen, which can help if playback stutters there, and it plays again on the lock screen. |
 | **Behavior right after boot** and **Still frame duration after boot** | With **Show last frame**, the first minutes after boot show the last saved frame without decoding. How long is set by **Still frame duration after boot** (10 to 1800 seconds, 180 by default). Needs at least one earlier session where the video was playing. |
 | **Show preview window** | Opens the preview window and keeps it open. Saving the settings refreshes it without closing it, unless a preview option itself changed. You can resize the window (the aspect ratio stays) and it remembers its size and position. `Esc` or the close button hides it, and a hidden or minimized preview does not decode anything. |
-| **Preview hotkey** | A global shortcut that shows or hides the preview window. It is a text field that is empty by default (hotkey off): type a combination to turn it on, for example `Ctrl+Alt+P`, `Ctrl+Alt+Shift+P` or `Ctrl+Shift+F12`. Write the modifiers (`Ctrl`, `Alt`, `Shift`, `Win`) and one key joined with `+`; at least one modifier is required. The key can be a letter, a digit, `F1` to `F24`, `Space`, `Tab`, `Enter`, `Esc`, `Insert`, `Delete`, `Home`, `End`, `PgUp`, `PgDn` or an arrow key (`Up`, `Down`, `Left`, `Right`). Many combinations with `Win` are already used by Windows itself. Text that cannot be read is ignored and the log shows `is not valid`. If another program already uses the combination, Windows refuses it and the log shows `RegisterHotKey failed`. While the hotkey is on, the mod keeps a small hidden window inside `explorer.exe` to listen for it. |
+| **Preview hotkey** | A global shortcut that shows or hides the preview window. It is a text field that is empty by default (hotkey off): type a combination to turn it on, for example `Ctrl+Alt+P`, `Ctrl+Alt+Shift+P` or `Ctrl+Shift+F12`. Write the modifiers (`Ctrl`, `Alt`, `Shift`, `Win`) and one key joined with `+`; at least one modifier is required. The key can be a letter, a digit, `F1` to `F24`, `Space`, `Tab`, `Enter`, `Esc`, `Insert`, `Delete`, `Home`, `End`, `PgUp`, `PgDn` or an arrow key (`Up`, `Down`, `Left`, `Right`). Many combinations with `Win` are already used by Windows itself. Text that cannot be read is ignored and the log shows `is not valid`. If another program already uses the combination, Windows refuses it and the log shows `RegisterHotKey failed`. While the hotkey is on, the mod keeps a small hidden window in that helper process to listen for it. |
 | **Tray icon** | Left click shows or hides the preview window, right click opens a small menu. |
 | **Preview stays on top** | Keeps the preview window above other windows. When it is off, other windows can cover the preview. |
 | **Clock, date and status icons in the preview** | The clock, date and status icons are drawn by `LockApp.exe`, not by `LogonUI.exe`. The mod captures them from the real lock screen every time you lock the PC (wait about 6 seconds without touching anything), and the preview uses the newest copy, so the clock in the preview shows the time of the last lock. While it renders them, the real clock and date move down for a split second; turn this option off if that bothers you, and the mod stops capturing. Until a copy exists, the preview says so at the bottom. |
@@ -140,7 +139,7 @@ The logs contain the video path, so remove anything personal first if you prefer
 2. A decoder thread reads the video as RGB32 through Media Foundation (or the GIF through WIC), scales each frame according to the fit mode, applies the color settings, and publishes it to a shared buffer.
 3. On the UI thread, the newest frame is copied into a `WriteableBitmap`, which is set as the source of the `LockLogonImage` and `SwapLockLogonImage` elements.
 4. When the mod is unloaded, the original image sources are restored.
-5. The preview window lives in `explorer.exe` and runs its own decoder with the same settings.
+5. The preview window lives in its own helper process (`windhawk.exe`) and runs its own decoder with the same settings.
 6. In `LockApp.exe` the mod reads the lock screen UI. A few seconds after the lock screen appears, it renders the clock, date and status icons to transparent bitmaps at the scale XAML uses (adding temporary padding around the clock and date so large glyphs are not clipped, which makes them move for a split second), places them on a transparent canvas the size of the screen, and saves it as `overlay.bgra` for the preview to draw over the video.
 
 ## 🛡️ Fail-safe
@@ -239,7 +238,7 @@ Only tested on Windows 11 23H2 and 25H2. This mod runs inside a system UI proces
 | Hemat daya | Mode gambar diam, jeda saat idle, opsi jeda di layar password, dan penghemat baterai rendah (ringan, seimbang, maksimum) |
 | Perilaku saat boot | Opsional menampilkan frame terakhir selama waktu yang dipilih tepat setelah boot tanpa decoding |
 | Layar shutdown | Opsional menampilkan video di layar "Shutting down" / "Restarting" (mati secara default, sehingga layar hitam bawaan Windows yang tampil) |
-| Jendela preview | Jendela opsional yang memutar videomu dengan pengaturan fit, warna, dan kecepatan saat ini, dibuka lewat pengaturan, hotkey, atau tray icon. Bisa menggambar salinan jam, tanggal, dan ikon status asli di atas videonya. Jalan di dalam `explorer.exe`, jadi mod ini juga dimuat di sana. Tampilannya perkiraan dari lapisan wallpaper, bukan UI lock screen Windows itu sendiri |
+| Jendela preview | Jendela opsional yang memutar videomu dengan pengaturan fit, warna, dan kecepatan saat ini, dibuka lewat pengaturan, hotkey, atau tray icon. Bisa menggambar salinan jam, tanggal, dan ikon status asli di atas videonya. Jalan di proses bantu sendiri (`windhawk.exe`) yang hanya ada selama preview, tray icon, atau hotkey aktif. Tampilannya perkiraan dari lapisan wallpaper, bukan UI lock screen Windows itu sendiri |
 | Fail-safe | Mengembalikan wallpaper asli jika UI lock screen berubah atau mod bermasalah |
 | Debug log | Opsional: statistik CPU dan decode serta dump UI tree |
 
@@ -261,7 +260,7 @@ Only tested on Windows 11 23H2 and 25H2. This mod runs inside a system UI proces
 | **Play video on the password screen** | Aktif (default) berarti video tetap diputar saat kamu mengetik password. Jika dimatikan, video dibekukan di layar password (berguna jika video patah-patah di sana), dan diputar lagi di lock screen. |
 | **Behavior right after boot** dan **Still frame duration after boot** | Dengan **Show last frame**, beberapa menit pertama setelah boot menampilkan frame terakhir yang tersimpan tanpa decoding. Lamanya diatur oleh **Still frame duration after boot** (10 sampai 1800 detik, default 180). Butuh minimal satu sesi sebelumnya di mana video sempat diputar. |
 | **Show preview window** | Membuka jendela preview dan membiarkannya tetap terbuka. Menyimpan pengaturan me-refresh jendelanya tanpa menutupnya, kecuali opsi preview itu sendiri yang berubah. Ukuran jendela bisa diubah (rasio aspek tetap), dan ukuran serta posisinya diingat. `Esc` atau tombol tutup menyembunyikannya, dan preview yang tersembunyi atau di-minimize tidak men-decode apa pun. |
-| **Preview hotkey** | Pintasan global untuk menampilkan atau menyembunyikan jendela preview. Berupa kolom teks yang kosong secara default (hotkey mati): ketik kombinasi untuk menyalakannya, misalnya `Ctrl+Alt+P`, `Ctrl+Alt+Shift+P` atau `Ctrl+Shift+F12`. Tulis modifier (`Ctrl`, `Alt`, `Shift`, `Win`) dan satu tombol yang digabung dengan `+`; minimal satu modifier wajib ada. Tombolnya bisa huruf, angka, `F1` sampai `F24`, `Space`, `Tab`, `Enter`, `Esc`, `Insert`, `Delete`, `Home`, `End`, `PgUp`, `PgDn`, atau tombol panah (`Up`, `Down`, `Left`, `Right`). Banyak kombinasi dengan `Win` sudah dipakai Windows sendiri. Teks yang tidak terbaca diabaikan dan log menampilkan `is not valid`. Kalau kombinasinya sudah dipakai program lain, Windows menolaknya dan log menampilkan `RegisterHotKey failed`. Selama hotkey aktif, mod menjaga satu jendela tersembunyi kecil di dalam `explorer.exe` untuk mendengarkannya. |
+| **Preview hotkey** | Pintasan global untuk menampilkan atau menyembunyikan jendela preview. Berupa kolom teks yang kosong secara default (hotkey mati): ketik kombinasi untuk menyalakannya, misalnya `Ctrl+Alt+P`, `Ctrl+Alt+Shift+P` atau `Ctrl+Shift+F12`. Tulis modifier (`Ctrl`, `Alt`, `Shift`, `Win`) dan satu tombol yang digabung dengan `+`; minimal satu modifier wajib ada. Tombolnya bisa huruf, angka, `F1` sampai `F24`, `Space`, `Tab`, `Enter`, `Esc`, `Insert`, `Delete`, `Home`, `End`, `PgUp`, `PgDn`, atau tombol panah (`Up`, `Down`, `Left`, `Right`). Banyak kombinasi dengan `Win` sudah dipakai Windows sendiri. Teks yang tidak terbaca diabaikan dan log menampilkan `is not valid`. Kalau kombinasinya sudah dipakai program lain, Windows menolaknya dan log menampilkan `RegisterHotKey failed`. 5. Jendela preview berada di proses bantu sendiri (`windhawk.exe`) dan menjalankan decoder sendiri dengan pengaturan yang sama. |
 | **Tray icon** | Klik kiri menampilkan atau menyembunyikan jendela preview, klik kanan membuka menu kecil. |
 | **Preview stays on top** | Menjaga jendela preview tetap di atas jendela lain. Kalau dimatikan, jendela lain bisa menutupinya. |
 | **Clock, date and status icons in the preview** | Jam, tanggal, dan ikon status digambar oleh `LockApp.exe`, bukan oleh `LogonUI.exe`. Mod menangkapnya dari lock screen asli setiap kali kamu mengunci PC (tunggu sekitar 6 detik tanpa menyentuh apa pun), dan preview memakai salinan terbaru, jadi jam di preview menunjukkan waktu lock terakhir. Saat merendernya, jam dan tanggal asli bergeser turun sepersekian detik; matikan opsi ini kalau mengganggu, dan mod berhenti menangkap. Sebelum salinannya ada, preview menuliskannya di bagian bawah. |
@@ -447,7 +446,7 @@ Hanya diuji di Windows 11 23H2 dan 25H2. Mod ini berjalan di dalam proses UI sis
 - preview:
   - enabled: false
     $name: Show preview window
-    $description: Opens a window that plays your video with the current fit, color and speed settings, so you can check them without locking the PC. It runs inside explorer.exe and refreshes every time you save the settings. It shows the wallpaper only, not the Windows lock screen UI.
+    $description: Opens a window that plays your video with the current fit, color and speed settings, so you can check them without locking the PC. It runs in its own helper process and refreshes every time you save the settings. It shows the wallpaper only, not the Windows lock screen UI.
   - hotkey: ""
     $name: Preview hotkey
     $description: Global shortcut that shows or hides the preview window. Empty (default) = off. To turn it on, write the modifiers (Ctrl, Alt, Shift, Win) and one key joined with +, for example Ctrl+Alt+P or Ctrl+Shift+F12. At least one modifier is needed.
@@ -505,7 +504,9 @@ static const GUID IID_IBufferByteAccess_ =
       { 0x8c, 0x49, 0x00, 0x1e, 0x4f, 0xc6, 0x86, 0xda } };
 static const GUID kGuidNull = { 0, 0, 0, { 0, 0, 0, 0, 0, 0, 0, 0 } };
 static bool g_debug = false;
-static bool g_previewRole = false;   // true inside explorer.exe: hosts the preview window, never touches the lock screen
+static bool g_previewRole = false;   // true inside the preview tool process: hosts the preview window, never touches the lock screen
+static bool g_toolProcess = false;   // true inside the dedicated tool-mod process (set by WhTool_ModInit)
+static bool g_isLockProcess = false; // true inside LogonUI.exe / LockApp.exe
 static SRWLOCK g_logLock = SRWLOCK_INIT;
 static wchar_t kCacheDir[MAX_PATH] = L"";  // mod storage folder, set in Wh_ModInit
 static wchar_t g_logPath[MAX_PATH] = L"";
@@ -2257,8 +2258,8 @@ DWORD WINAPI Worker(LPVOID) {
     return 0;
 }
 
-// ---------- Preview window (runs inside explorer.exe) ----------
-// The same mod file also loads into explorer.exe. There it does not touch the lock
+// ---------- Preview window (runs in the dedicated tool process) ----------
+// The same mod file also runs in a dedicated tool process (windhawk.exe). There it does not touch the lock
 // screen: it plays the video with the same fit / color / speed settings in a normal window.
 static HANDLE g_prevThread = nullptr;
 static DWORD g_prevTid = 0;
@@ -2456,6 +2457,7 @@ static void PreviewCreateWindow() {
 }
 
 static void PreviewShow() {
+    FileLog(L"Preview: show requested");    
     if (!g_prevWnd) PreviewCreateWindow();
     if (!g_prevWnd) return;
     g_idlePaused = false;
@@ -2465,6 +2467,7 @@ static void PreviewShow() {
     SetTimer(g_prevWnd, 1, 33, nullptr);
     ShowWindow(g_prevWnd, IsIconic(g_prevWnd) ? SW_RESTORE : SW_SHOW);
     SetForegroundWindow(g_prevWnd);
+    FileLog(L"Preview: window shown");    
 }
 
 static void PreviewHide() {
@@ -2501,7 +2504,7 @@ static void PreviewTrayRemove() {
 }
 
 static const UINT kReloadMsg = WM_APP + 2;
-static BOOL (*g_modInitFn)() = nullptr;   // set at the top of Wh_ModInit so the preview can re-run it
+static BOOL (*g_modInitFn)() = nullptr;   // set at the top of ModInitImpl so the preview can re-run it
 
 // Applies changed settings without closing the preview window.
 // Runs on the preview thread (called from PreviewProc), so it cannot race with the paint timer.
@@ -2692,7 +2695,9 @@ static DWORD WINAPI PreviewThread(LPVOID) {
         }
         if (g_prevTray) PreviewTrayAdd();
     }
-    if (g_prevAutoOpen) PreviewShow();
+    if (g_prevAutoOpen) {
+        PreviewShow();
+    }
     MSG m;
     while (GetMessageW(&m, nullptr, 0, 0) > 0) {
         TranslateMessage(&m);
@@ -3022,8 +3027,8 @@ static BOOL LockAppInit() {
     return TRUE;
 }
 
-BOOL Wh_ModInit() {
-    g_modInitFn = &Wh_ModInit;    
+BOOL ModInitImpl() {
+    g_modInitFn = &ModInitImpl;
     {
         wchar_t exe0[MAX_PATH] = L"";
         GetModuleFileNameW(nullptr, exe0, MAX_PATH);
@@ -3063,10 +3068,7 @@ BOOL Wh_ModInit() {
     g_debug = Wh_GetIntSetting(L"debugLog") != 0;
     FileLog(L"Storage: %s", kCacheDir);
     {
-        wchar_t exe[MAX_PATH] = L"";
-        GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        const wchar_t* base = wcsrchr(exe, L'\\');
-        g_previewRole = _wcsicmp(base ? base + 1 : exe, L"explorer.exe") == 0;
+        g_previewRole = g_toolProcess;
     }
     if (g_previewRole) {
         g_prevAutoOpen = Wh_GetIntSetting(L"preview.enabled") != 0;
@@ -3080,7 +3082,7 @@ BOOL Wh_ModInit() {
             else if (hk[0]) FileLog(L"Preview: hotkey \"%s\" is not valid (use for example Ctrl+Alt+P), hotkey disabled", hk);
             Wh_FreeStringSetting(hk);
         }
-        // Nothing requested: stay completely idle inside explorer.exe.
+        // Nothing requested: stay idle (WhTool_ModInit then exits the tool process).
         if (!g_prevAutoOpen && !g_prevTray && g_prevHotkey == 0) return TRUE;
         FileLog(L"Preview: role active (open=%d tray=%d hotkey=%d)", g_prevAutoOpen ? 1 : 0,
                g_prevTray ? 1 : 0, g_prevHotkey);
@@ -3093,7 +3095,7 @@ BOOL Wh_ModInit() {
                       (((ULONGLONG)cr.dwHighDateTime << 32) | cr.dwLowDateTime);
         DWORD sid = 0;
         ProcessIdToSessionId(GetCurrentProcessId(), &sid);
-        FileLog(L"=== MOD INIT === LogonUI age=%llu ms, session=%lu", a / 10000, sid);
+        FileLog(L"=== MOD INIT === process age=%llu ms, session=%lu", a / 10000, sid);
     }
     PCWSTR p = Wh_GetStringSetting(L"general.videoPath");
     std::wstring path = Clean(p ? p : L"");
@@ -3248,7 +3250,7 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void ModUninitImpl() {
     FileLog(L"=== MOD UNINIT ===");
     if (g_lockAppRole) {
         g_stop = true;
@@ -3313,7 +3315,7 @@ void Wh_ModUninit() {
     if (w && IsWindow(w)) SendMessageW(w, WM_NULL, 0, 0);  // when this returns, no hook call is still running
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+BOOL SettingsChangedImpl(BOOL* bReload) {
     *bReload = TRUE;
     if (g_previewRole && g_prevThread && g_prevCtl) {
         // If the preview options themselves did not change, apply the rest in place and keep the window.
@@ -3335,4 +3337,272 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
         }
     }    
     return TRUE;
+}
+
+// ---------- Tool-mod glue: the preview runs in a dedicated process ----------
+static BOOL WhTool_ModInit() {
+    g_toolProcess = true;
+    // windhawk.exe may be DPI-unaware; this fails harmlessly if the process is already aware.
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    BOOL ok = ModInitImpl();
+    if (!g_prevThread) {
+        // nothing requested (no preview, tray icon or hotkey): don't keep a process alive
+        ExitProcess(0);
+    }
+    return ok;
+}
+
+static void WhTool_ModSettingsChanged() {
+    BOOL reload = TRUE;
+    SettingsChangedImpl(&reload);
+    if (!reload) return;   // applied in place, the preview window stays open
+    // The preview options changed: restart the preview inside this process.
+    ModUninitImpl();
+    g_stop = false;
+    g_teardown = false;
+    g_decoderDone = false;
+    g_decodeDead = false;
+    g_decPublished = false;
+    g_frameDone = false;
+    g_gpuActive = false;
+    g_lowBat = false;
+    g_idlePaused = false;
+    g_seq = 0;
+    ModInitImpl();
+    if (!g_prevThread) ExitProcess(0);   // everything was turned off
+}
+
+static const wchar_t kToolMutexName[] = L"windhawk-tool-mod_" WH_MOD_ID;
+
+// Like the snippet's CreateMutex, but waits while another process still owns the mutex
+// (for example the previous version of the tool process, still shutting down after a recompile).
+static HANDLE CreateToolMutexWithRetry() {
+    for (int i = 0; i < 20; i++) {
+        SetLastError(0);
+        HANDLE m = CreateMutex(nullptr, TRUE, kToolMutexName);
+        if (!m || GetLastError() != ERROR_ALREADY_EXISTS) return m;
+        CloseHandle(m);   // still taken: try again shortly
+        Sleep(250);
+    }
+    SetLastError(0);
+    return CreateMutex(nullptr, TRUE, kToolMutexName);   // still taken after ~5 s: the snippet's own check then exits
+}
+
+static void WhTool_ModUninit() {
+    ModUninitImpl();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL WhSnippet_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateToolMutexWithRetry();
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    Wh_Log(L"Launcher: tool process spawned (pid %lu)", pi.dwProcessId);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void WhSnippet_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void WhSnippet_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
+
+// ---------- Entry points: LogonUI / LockApp keep the old code, everything else is the tool mod ----------
+BOOL Wh_ModInit() {
+    wchar_t exePath[MAX_PATH] = L"";
+    GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+    const wchar_t* base = wcsrchr(exePath, L'\\');
+    base = base ? base + 1 : exePath;
+    if (_wcsicmp(base, L"LogonUI.exe") == 0 || _wcsicmp(base, L"LockApp.exe") == 0) {
+        g_isLockProcess = true;
+        return ModInitImpl();
+    }
+    return WhSnippet_ModInit();
+}
+
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    if (g_isLockProcess) return SettingsChangedImpl(bReload);   // reload as before
+    *bReload = FALSE;
+    if (g_isToolModProcessLauncher) {
+        // Start the tool process if it is not running (it exits by itself when nothing is requested).
+        HANDLE m = OpenMutexW(SYNCHRONIZE, FALSE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (m) CloseHandle(m);
+        else Wh_ModAfterInit();
+    } else {
+        WhTool_ModSettingsChanged();
+    }
+    return TRUE;
+}
+
+void Wh_ModUninit() {
+    if (g_isLockProcess) {
+        ModUninitImpl();
+        return;
+    }
+    WhSnippet_ModUninit();
 }
