@@ -10,16 +10,16 @@
 // @name:ru         Открытие скрытых значков панели задач и трея при наведении
 // @name:zh-CN      悬停打开任务栏和系统托盘溢出菜单
 // @name:ja         ホバーでタスクバーとシステムトレイのオーバーフローを表示
-// @description     Opens the Windows 11 taskbar app overflow and system tray hidden icons menu on hover, auto-closing on exit or click.
-// @description:fr  Ouvre automatiquement le menu de débordement des applications et les icônes cachées de la barre d'état de Windows 11 au survol de la souris, et les ferme automatiquement.
-// @description:ar  يفتح قائمة التطبيقات الإضافية والأيقونات المخفية في شريط مهام ويندوز 11 تلقائياً عند تمرير مؤشر الفأرة، ويغلقها عند الابتعاد أو النقر.
-// @description:es  Abre automáticamente el menú de aplicaciones desbordadas y los iconos ocultos de la bandeja del sistema en Windows 11 al pasar el cursor, cerrándose al salir o hacer clic.
-// @description:de  Öffnet das Überlaufmenü der Taskleiste und die ausgeblendeten Symbole im System-Tray von Windows 11 beim Darüberfahren mit der Maus und schließt sie automatisch.
-// @description:it  Apre automaticamente il menu di overflow delle app e le icone nascoste della barra di sistema di Windows 11 al passaggio del mouse, chiudendoli quando ti allontani o fai clic.
-// @description:pt  Abre automaticamente o menu de aplicativos excedentes da barra de tarefas e os ícones ocultos da bandeja do sistema no Windows 11 ao passar o mouse.
-// @description:ru  Автоматически открывает меню переполнения панели задач и скрытые значки системного трея Windows 11 при наведении курсора и закрывает их при уводе мыши или клике.
-// @description:zh-CN 鼠标悬停时自动打开 Windows 11 任务栏应用溢出菜单和系统托盘隐藏图标菜单，移开或点击时自动关闭。
-// @description:ja  マウスホバーで Windows 11 のタスクバーアプリアイコンのオーバーフローとシステムトレイの隠れているインジケーターを自動的に開き、離れるかクリックすると閉じます。
+// @description     Opens the Windows 11 taskbar app overflow and (optionally) system tray hidden icons menu on hover, auto-closing on exit or click.
+// @description:fr  Ouvre automatiquement le menu de débordement des applications (et en option les icônes cachées de la barre d'état) de Windows 11 au survol de la souris.
+// @description:ar  يفتح قائمة التطبيقات الإضافية (واختيارياً الأيقونات المخفية في منطقة الإشعارات) في شريط مهام ويندوز 11 تلقائياً عند تمرير مؤشر الفأرة.
+// @description:es  Abre automáticamente el menú de aplicaciones desbordadas (y opcionalmente los iconos ocultos de la bandeja) en Windows 11 al pasar el cursor.
+// @description:de  Öffnet das Überlaufmenü der Taskleiste (und optional die ausgeblendeten Symbole im System-Tray) von Windows 11 beim Darüberfahren mit der Maus.
+// @description:it  Apre automaticamente il menu di overflow delle app (e opzionalmente le icone nascoste della barra di sistema) di Windows 11 al passaggio del mouse.
+// @description:pt  Abre automaticamente o menu de aplicativos excedentes da barra de tarefas (e opcionalmente os ícones ocultos da bandeja) no Windows 11 ao passar o mouse.
+// @description:ru  Автоматически открывает меню переполнения панели задач (и опционально скрытые значки системного трея) Windows 11 при наведении курсора.
+// @description:zh-CN 鼠标悬停时自动打开 Windows 11 任务栏应用溢出菜单（以及可选的系统托盘隐藏图标菜单），移开或点击时自动关闭。
+// @description:ja  マウスホバーで Windows 11 のタスクバーアプリアイコンのオーバーフロー（およびオプションでシステムトレイの隠れているインジケーター）を自動的に開きます。
 // @version         1.2.0
 // @author          Cougar16
 // @github          https://github.com/Cougar16
@@ -32,16 +32,26 @@
 # Taskbar & System Tray Overflow on Hover 🚀
 
 A zero-click QoL upgrade for Windows 11. Hover over the taskbar app overflow button
-or the system tray chevron to instantly expand hidden items without clicking.
+(and optionally the system tray chevron) to instantly expand hidden items without clicking.
 
 ![Hover overflow menu](https://raw.githubusercontent.com/Cougar16/win11-taskbar-overflow-hover/main/Assets/Hover-Overflow-Menu.png)
 
 ✨ Features:
-- Dual-Zone Zero-Click Open: Auto-expands both the running app overflow menu ("...") and the system tray hidden icons flyout (the "^" chevron) simply by hovering.
+- Zero-Click App Overflow Open: Auto-expands the running app overflow menu ("...") simply by hovering.
+- Optional System Tray Chevron Support: Can also auto-expand the system tray hidden icons flyout (the "^" chevron) in a single unified process (disabled by default in Settings to avoid conflicts with existing tray mods).
 - Configurable Toggles: Individually enable or disable hover activation for either menu in the mod settings.
 - Auto-Dismiss: Smoothly closes the active menu the moment your cursor leaves the button and flyout hit area, complete with debounced overshoot protection so quick mouse sweeps won't cause flickering.
 - Instant Item Launch: Automatically dismisses the flyout the millisecond you launch an app or click an item inside it, bypassing native Windows UI delay while keeping context menus intact.
 - Multi-DPI & Multi-Language Support: Per-Monitor V2 DPI awareness guarantees pixel-accurate coordinate mapping on high-scale displays, with native localization across Windows editions.
+
+## Compatibility & Comparison with `tray-hover-expand`
+For the system tray hidden icons chevron (`^`), the Windhawk catalog also offers **[Tray hover expand](https://windhawk.net/mods/tray-hover-expand)** (`tray-hover-expand`), which provides additional tray-specific options such as fullscreen suppression, tooltip hiding, and custom keyword lists.
+
+**How this mod's optional tray handler differs:**
+- **Unified Single-Process Polling:** Handles both the taskbar app overflow (`...`) and the system tray chevron (`^`) in a single UIA monitor thread, cleanly coordinating transitions when moving directly between the two buttons.
+- **Strict Chevron Disambiguation (Build 26220+ Safe):** On newer Windows 11 builds, all tray action buttons (Touch Keyboard, Emoji/IME, and Language Switcher) share `AutomationId="SystemTrayIcon"` and `ClassName="SystemTray.NormalButton"`. Rather than matching on class and ID alone, this mod inspects the button's cached accessible name and raw XAML subtree for Segoe Fluent chevron glyphs (`\uE70D`, `\uE70E`, etc.) so neighboring tray buttons are never accidentally triggered.
+
+> ⚠️ **Important:** Do **not** enable **"Enable System Tray Chevron on Hover"** in this mod while `tray-hover-expand` is also enabled. Because the Windows 11 system tray chevron uses `IUIAutomationInvokePattern` (which acts as a toggle), running two tray hover mods simultaneously will cause them to fight and re-open the flyout when trying to close it. For this reason, the system tray chevron option is **disabled by default**.
 
 Developed by Cougar16 for the Windows customization community.
 */
@@ -70,7 +80,7 @@ Developed by Cougar16 for the Windows customization community.
   $description:ru: Автоматически открывать меню дополнительных запущенных приложений («...») при наведении курсора.
   $description:zh-CN: 鼠标悬停在任务栏“...”按钮上时自动展开隐藏的运行中应用。
   $description:ja: タスクバーの「...」ボタンにカーソルを合わせたときに実行中のアプリ一覧を自動的に開きます。
-- enableTrayChevron: true
+- enableTrayChevron: false
   $name: Enable System Tray Chevron on Hover
   $name:fr: Activer le chevron des icônes cachées au survol
   $name:ar: تفعيل سهم الأيقونات المخفية في منطقة الإشعارات عند التمرير
@@ -81,16 +91,16 @@ Developed by Cougar16 for the Windows customization community.
   $name:ru: Открывать скрытые значки системного трея при наведении
   $name:zh-CN: 悬停时打开系统托盘隐藏图标菜单
   $name:ja: ホバーでシステムトレイの隠れているアイコンを開く
-  $description: Auto-open the system tray hidden icons flyout ("^") when hovering.
-  $description:fr: Ouvre automatiquement le menu des icônes cachées (« ^ ») de la barre d'état système au survol.
-  $description:ar: فتح نافذة الأيقونات المخفية ("^") في منطقة الإشعارات تلقائياً عند تمرير الفأرة فوقها.
-  $description:es: Abre automáticamente el menú desplegable de iconos ocultos ("^") de la bandeja del sistema al pasar el cursor.
-  $description:de: Öffnet das Flyout für ausgeblendete Symbole ("^") im System-Tray automatisch beim Darüberfahren.
-  $description:it: Apre automaticamente il riquadro delle icone nascoste ("^") nella barra di sistema al passaggio del mouse.
-  $description:pt: Abre automaticamente o menu de ícones ocultos ("^") na bandeja do sistema ao passar o cursor.
-  $description:ru: Автоматически открывать всплывающее окно скрытых значков трея («^») при наведении курсора.
-  $description:zh-CN: 鼠标悬停在系统托盘“^”按钮上时自动展开隐藏图标菜单。
-  $description:ja: システムトレイの「^」ボタンにカーソルを合わせたときに隠れているインジケーターを自動的に開きます。
+  $description: Auto-open the system tray hidden icons flyout ("^") when hovering. Do not enable if you already use the "Tray hover expand" mod.
+  $description:fr: Ouvre automatiquement le menu des icônes cachées (« ^ ») au survol. Ne pas activer si vous utilisez déjà le mod « Tray hover expand ».
+  $description:ar: فتح نافذة الأيقونات المخفية ("^") في منطقة الإشعارات تلقائياً عند التمرير. لا تقم بتفعيله إذا كنت تستخدم إضافة "Tray hover expand".
+  $description:es: Abre automáticamente el menú de iconos ocultos ("^") al pasar el cursor. No activar si ya usas el mod "Tray hover expand".
+  $description:de: Öffnet das Flyout für ausgeblendete Symbole ("^") beim Darüberfahren. Nicht aktivieren, wenn bereits "Tray hover expand" genutzt wird.
+  $description:it: Apre automaticamente il riquadro delle icone nascoste ("^") al passaggio del mouse. Non attivare se usi già la mod "Tray hover expand".
+  $description:pt: Abre automaticamente o menu de ícones ocultos ("^") ao passar o cursor. Não ative se você já usa o mod "Tray hover expand".
+  $description:ru: Автоматически открывать всплывающее окно скрытых значков трея («^») при наведении. Не включайте, если уже используете мод «Tray hover expand».
+  $description:zh-CN: 鼠标悬停在系统托盘“^”按钮上时自动展开隐藏图标菜单。如果已启用“Tray hover expand”模组，请勿同时开启。
+  $description:ja: システムトレイの「^」ボタンにカーソルを合わせたときに隠れているインジケーターを自動的に開きます。「Tray hover expand」を使用中の場合は無効にしてください。
 */
 // ==/WindhawkModSettings==
 
@@ -116,7 +126,7 @@ HANDLE g_hThread = nullptr;
 // Mod settings state
 struct ModSettings {
     bool enableAppOverflow = true;
-    bool enableTrayChevron = true;
+    bool enableTrayChevron = false;
 } g_settings;
 
 void LoadSettings() {
@@ -138,27 +148,6 @@ constexpr ULONGLONG kClickSettleMs = 100;
 constexpr wchar_t kXamlHostClass[] = L"XamlExplorerHostIslandWindow";
 constexpr wchar_t kTrayOverflowHostClass[] = L"TopLevelWindowForOverflowXamlIsland";
 constexpr wchar_t kLegacyTrayOverflowHostClass[] = L"NotifyIconOverflowWindow";
-
-// Prevents Windows 11 from placing the dedicated tool process or monitor thread
-// into Efficiency Mode (EcoQoS) / timer coalescing sleep after idle periods.
-void DisablePowerThrottling() {
-    PROCESS_POWER_THROTTLING_STATE procThrottle = {};
-    procThrottle.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
-    procThrottle.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED |
-                               PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION;
-    procThrottle.StateMask = 0; // 0 = disable throttling
-    SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling,
-                          &procThrottle, sizeof(procThrottle));
-
-    THREAD_POWER_THROTTLING_STATE threadThrottle = {};
-    threadThrottle.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
-    threadThrottle.ControlMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED;
-    threadThrottle.StateMask = 0; // 0 = disable throttling
-    SetThreadInformation(GetCurrentThread(), ThreadPowerThrottling,
-                         &threadThrottle, sizeof(threadThrottle));
-
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
-}
 
 // Return true only when the point belongs to a taskbar top-level window
 // owned by the same process as the primary taskbar.
@@ -714,16 +703,12 @@ bool IsOverflowOpen(IUIAutomationTogglePattern* toggle,
 }
 
 DWORD WINAPI HoverMonitorThread(LPVOID) {
-    // 1. Prevent Windows 11 EcoQoS / background power throttling from putting
-    // this monitor thread to sleep after idle periods.
-    DisablePowerThrottling();
-
-    // 2. Ensure physical screen coordinates from GetCursorPos match UIA ElementFromPoint
+    // 1. Ensure physical screen coordinates from GetCursorPos match UIA ElementFromPoint
     // on DPI-scaled displays (125%, 150%, etc.).
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-    // 3. Use COINIT_MULTITHREADED (MTA) so COM never creates a hidden STA window
-    // whose unpumped message queue would stall cross-process UIA calls after a few minutes!
+    // 2. Use COINIT_MULTITHREADED (MTA) so COM never creates a hidden STA window
+    // whose unpumped message queue would stall cross-process UIA calls after a few minutes.
     HRESULT coHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(coHr)) {
         coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -818,9 +803,13 @@ DWORD WINAPI HoverMonitorThread(LPVOID) {
     };
 
     auto closeFlyout = [&]() {
-        HRESULT closeHr = triggerAction(chevron, chevronInvoke, chevronExpand, false);
-        if (FAILED(closeHr)) {
-            Wh_Log(L"Failed to close the overflow flyout: 0x%08X", closeHr);
+        // Guard against the Invoke-toggle hazard: only fire the close action if
+        // the flyout is still actually open right now.
+        if (IsOverflowOpen(chevron, activeIsTrayChevron, activeTaskbarPid)) {
+            HRESULT closeHr = triggerAction(chevron, chevronInvoke, chevronExpand, false);
+            if (FAILED(closeHr)) {
+                Wh_Log(L"Failed to close the overflow flyout: 0x%08X", closeHr);
+            }
         }
         resetOwnership();
     };
@@ -828,13 +817,6 @@ DWORD WINAPI HoverMonitorThread(LPVOID) {
     // The 50 ms wait doubles as the poll interval and is interrupted by the
     // stop event, so unloading never has to wait for a sleep to finish.
     while (WaitForSingleObject(g_stopEvent, 50) == WAIT_TIMEOUT) {
-        // Drain any thread messages if an STA fallback or Win32 hook posted to us.
-        MSG msg;
-        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-
         const ULONGLONG now = GetTickCount64();
 
         // The flyout was closed some other way (Win key, Alt+Tab, Escape typed
@@ -1041,7 +1023,7 @@ DWORD WINAPI HoverMonitorThread(LPVOID) {
 }
 
 BOOL WhTool_ModInit() {
-    Wh_Log(L"Initializing Taskbar Overflow on Hover v1.2");
+    Wh_Log(L"Initializing Taskbar & System Tray Overflow on Hover v1.1.0");
 
     LoadSettings();
 
@@ -1061,7 +1043,7 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModUninit() {
-    Wh_Log(L"Unloading Taskbar Overflow on Hover");
+    Wh_Log(L"Unloading Taskbar & System Tray Overflow on Hover");
 
     if (g_stopEvent) {
         SetEvent(g_stopEvent);
