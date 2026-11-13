@@ -2,17 +2,18 @@
 // @id              file-operation-styler
 // @name            File Operation Styler
 // @description     Portable custom presentation for native Explorer file operations with a skin-safe unified presentation.
-// @version         1.1.0
+// @version         1.4.0
 // @author          digART
 // @github          https://github.com/digart11
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lgdi32 -lgdiplus -lshlwapi -ladvapi32
+// @compilerOptions -lcomctl32 -lgdi32 -lgdiplus -lshlwapi -ladvapi32 -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
+
 # File Operation Styler
 
 A modern replacement for the standard Windows 11 file operation window.
@@ -21,6 +22,11 @@ File Operation Styler gives copy, move, delete, and recycle operations a cleaner
 
 ![File Operation Styler](https://raw.githubusercontent.com/digart11/File-Operation-Styler/master/images/file-operation-styler.png)
 
+### Interactive Controls
+
+![File Operation Styler interactive controls](https://raw.githubusercontent.com/digart11/File-Operation-Styler/master/images/file-operation-styler-controls.png)
+
+The large progress circle can pause and resume operations, while optional settings can hide the smaller controls and title-bar percentage for a cleaner layout.
 
 ### Default vs File Operation Styler
 
@@ -28,29 +34,62 @@ File Operation Styler gives copy, move, delete, and recycle operations a cleaner
 
 ### Themes
 
-![File Operation Styler Themes](https://raw.githubusercontent.com/digart11/File-Operation-Styler/master/images/file-operation-styler-themes.png)
+![File Operation Styler Themes](https://raw.githubusercontent.com/digart11/File-Operation-Styler/master/images/file-operation-styler-themes-1.2.png)
+
+## What's new in 1.4.0
+
+- Added experimental support for third-party file managers that use compatible native Windows copy dialogs.
+- Improved Common Controls compatibility so the mod can also work in other application processes.
+- Third-party file managers can be enabled manually through Windhawk's custom process inclusion list.
+- Preserved the existing Windows Explorer functionality and appearance.
+
+See the [complete changelog](https://github.com/digart11/File-Operation-Styler/blob/master/CHANGELOG.md) for the full release history.
+
 ## Features
 
-- Modern copy and move progress window
-- Circular percentage indicator
+- Modern copy, move, delete, and recycle operation window
+- Circular overall progress indicator
+- Current-file progress bar
 - Transferred size, remaining items, speed, and estimated time
 - Progress graph in More Details view
-- Multiple file operations in the same window
+- Multiple file operations in one window, with automatic vertical scrolling when needed
 - Pause, resume, and cancel controls
+- Interactive Pause / Resume control in the large progress circle
+- Option to hide the small Pause / Resume and Cancel buttons
+- Option to hide the percentage from the window title
 - Works with normal Windows conflict and error dialogs
-- Several built-in themes
+- Several built-in themes, including Frosted Glass
+- Windows Acrylic and Custom Blur glass styles
 - Custom colors, fonts, text sizes, and progress thickness
+
+## Using another file manager?
+
+File Operation Styler works automatically with Windows Explorer, but it can also work with some other file managers.
+
+To try it:
+
+1. Open **File Operation Styler > Advanced** in Windhawk.
+2. Find **Custom process inclusion list**.
+3. Add your file manager's actual EXE filename, one per line.
+4. Save and completely restart the file manager.
+
+For example, we tested **OneCommander** with `OneCommander.exe` and **File Pilot 0.8.5** with `FPilot.exe`.
+
+These are examples, not universal executable names. Compatibility depends on the file manager and its version.
 
 ## Customization
 
-Choose one of the included themes or adjust a few basic options to create your own look.
+Choose one of the included themes or adjust the available colors, typography, progress styling, and other presentation options to create your own look.
+
+The Frosted Glass theme supports both Windows Acrylic and Custom Blur, including adjustable tint and opacity.
 
 ## Notes
 
-File Operation Styler changes the appearance of the normal file operation window only.
-Windows continues to handle the actual copy, move, delete, conflicts, and errors.
+File Operation Styler changes the appearance of the normal Windows file operation window only. Windows continues to handle the actual copy, move, delete, conflicts, errors, pause, resume, and cancel operations.
 
 Settings changes apply to new file-operation windows; operations already in progress may use the native Windows presentation until they complete.
+
+File Operation Styler has been tested on Windows 11 25H2 and 26H2 x64, including build 26300.9818. It relies on private Explorer and Shell presentation interfaces, so compatibility may vary between Windows builds. Unsupported presentations fall back to the native Windows UI.
 
 */
 // ==/WindhawkModReadme==
@@ -60,6 +99,15 @@ Settings changes apply to new file-operation windows; operations already in prog
 - showCurrentFileProgressBar: true
   $name: Show current-file progress bar
   $description: Show progress for the file currently being copied or moved.
+
+- hideSmallControlButtons: false
+  $name: Hide small control buttons
+  $description: Hide the small Pause / Resume and Cancel controls in the upper-right corner. The progress circle and bottom Cancel button remain available.
+
+- hideTitleBarPercentage: false
+  $name: Hide title-bar percentage
+  $description: Hide the normal progress percentage from the visible window title bar.
+
 
 - customization:
   - enabled: false
@@ -76,6 +124,25 @@ Settings changes apply to new file-operation windows; operations already in prog
     - light: Light
     - system: Windows / System
     - glass: Frosted Glass
+
+  - glassEffect: acrylic
+    $name: Frosted Glass style
+    $description: Choose the glass effect used by the Frosted Glass theme.
+    $options:
+    - acrylic: Windows Acrylic
+    - blur: Custom Blur
+    #! $showIf: {preset: glass}
+
+  - glassTint: "#000000"
+    $name: Blur tint
+    $description: Tint color used by Custom Blur.
+    #! $format: colorRgb
+    #! $showIf: {preset: glass, glassEffect: blur}
+
+  - glassTintStrength: 0
+    $name: Glass opacity
+    $description: Higher values make Custom Blur less transparent while preserving the selected tint color.
+    #! $showIf: {preset: glass, glassEffect: blur}
 
   - footerStyle: glass
     $name: Footer
@@ -98,29 +165,29 @@ Settings changes apply to new file-operation windows; operations already in prog
     - custom: Custom
     #! $showIf: {preset: glass, footerStyle: solid}
   - footerColor: ""
+    #! $format: colorRgb
     $name: Solid footer custom color
     $description: Used only when Solid footer color preset is Custom. Enter a hex color such as #1C3346.
-    #! $format: colorRgb
-    #! $showIf: {preset: glass, footerStyle: solid}
+    #! $showIf: {preset: glass, footerStyle: solid, footerColorPreset: custom}
   - colors:
     - backgroundOverride: ""
+      #! $format: colorRgb
       $name: Background
-      #! $format: colorRgb
     - accentOverride: ""
-      $name: Accent
       #! $format: colorRgb
+      $name: Accent
       $description: Circle, progress bar, graph, and links.
     - primaryTextOverride: ""
-      $name: Main text
       #! $format: colorRgb
+      $name: Main text
       $description: Large numbers and values.
     - secondaryTextOverride: ""
-      $name: Secondary text
       #! $format: colorRgb
+      $name: Secondary text
       $description: Labels and smaller text.
     - inactiveOverride: ""
-      $name: Track / inactive
       #! $format: colorRgb
+      $name: Track / inactive
       $description: Circle track and progress track.
     $name: Colors
     $description: "Leave blank to use the theme color. Enter a hex color such as #2D8BE0."
@@ -170,6 +237,7 @@ Settings changes apply to new file-operation windows; operations already in prog
 #include <windhawk_utils.h>
 
 #include <commctrl.h>
+#include <dwmapi.h>
 #include <gdiplus.h>
 #include <shlwapi.h>
 #include <windows.h>
@@ -203,6 +271,121 @@ namespace DirectUI
 
 namespace
 {
+    // Keep the existing call sites, but bind all four helpers to the SAME v6
+    // module. decltype is unevaluated and adds no COMCTL32 import references.
+    decltype(&::SetWindowSubclass) SetWindowSubclass = nullptr;
+    decltype(&::GetWindowSubclass) GetWindowSubclass = nullptr;
+    decltype(&::RemoveWindowSubclass) RemoveWindowSubclass = nullptr;
+    decltype(&::DefSubclassProc) DefSubclassProc = nullptr;
+    HMODULE g_commonControlsV6Module = nullptr;
+
+    // Called only before hooks/UI initialization, or after all subclasses and
+    // callbacks have been drained by the existing owning-thread teardown.
+    void ShutdownCommonControlsSubclassApi()
+    {
+        SetWindowSubclass = nullptr;
+        GetWindowSubclass = nullptr;
+        RemoveWindowSubclass = nullptr;
+        DefSubclassProc = nullptr;
+        if (g_commonControlsV6Module)
+        {
+            FreeLibrary(g_commonControlsV6Module);
+            g_commonControlsV6Module = nullptr;
+        }
+    }
+
+    bool InitializeCommonControlsSubclassApi()
+    {
+        if (g_commonControlsV6Module)
+            return true;
+
+        wchar_t shellPath[MAX_PATH]{};
+        UINT length = GetSystemDirectoryW(shellPath, ARRAYSIZE(shellPath));
+        constexpr wchar_t shellName[] = L"\\shell32.dll";
+        if (!length || length + ARRAYSIZE(shellName) > ARRAYSIZE(shellPath))
+        {
+            Wh_Log(L"Subclass setup failed: system-directory path unavailable");
+            return false;
+        }
+        lstrcatW(shellPath, shellName);
+
+        // Windows Shell's isolation manifest declares Common Controls v6.
+        // Resource 124 is a Windows implementation detail: if it disappears
+        // or stops selecting v6, fail closed rather than falling back to v5.
+        // No host manifest, process default, or window-creation context changes.
+        ACTCTXW contextInfo{};
+        contextInfo.cbSize = sizeof(contextInfo);
+        contextInfo.dwFlags = ACTCTX_FLAG_RESOURCE_NAME_VALID;
+        contextInfo.lpSource = shellPath;
+        contextInfo.lpResourceName = MAKEINTRESOURCEW(124);
+        HANDLE context = CreateActCtxW(&contextInfo);
+        if (context == INVALID_HANDLE_VALUE)
+        {
+            Wh_Log(L"Subclass setup failed: CreateActCtxW error=%lu", GetLastError());
+            return false;
+        }
+
+        ULONG_PTR cookie = 0;
+        if (!ActivateActCtx(context, &cookie))
+        {
+            Wh_Log(L"Subclass setup failed: ActivateActCtx error=%lu", GetLastError());
+            ReleaseActCtx(context);
+            return false;
+        }
+
+        // SxS redirection under this context selects v6 even in a v5-only
+        // host. The search flag prevents a working-directory DLL fallback.
+        HMODULE module = LoadLibraryExW(
+            L"comctl32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        DWORD loadError = module ? ERROR_SUCCESS : GetLastError();
+        BOOL deactivated = DeactivateActCtx(0, cookie);
+        DWORD deactivateError = deactivated ? ERROR_SUCCESS : GetLastError();
+        ReleaseActCtx(context);
+        if (!module || !deactivated)
+        {
+            Wh_Log(L"Subclass setup failed: load error=%lu deactivate error=%lu",
+                   loadError, deactivateError);
+            if (module)
+                FreeLibrary(module);
+            return false;
+        }
+
+        auto versionFn = reinterpret_cast<HRESULT(CALLBACK *)(DLLVERSIONINFO *)>(
+            GetProcAddress(module, "DllGetVersion"));
+        DLLVERSIONINFO version{};
+        version.cbSize = sizeof(version);
+        auto set = reinterpret_cast<decltype(SetWindowSubclass)>(
+            GetProcAddress(module, "SetWindowSubclass"));
+        auto get = reinterpret_cast<decltype(GetWindowSubclass)>(
+            GetProcAddress(module, "GetWindowSubclass"));
+        auto remove = reinterpret_cast<decltype(RemoveWindowSubclass)>(
+            GetProcAddress(module, "RemoveWindowSubclass"));
+        auto def = reinterpret_cast<decltype(DefSubclassProc)>(
+            GetProcAddress(module, "DefSubclassProc"));
+        if (!versionFn || FAILED(versionFn(&version)) ||
+            version.dwMajorVersion != 6 || !set || !get || !remove || !def)
+        {
+            Wh_Log(L"Subclass setup failed: required v6 exports unavailable "
+                   L"version=%lu.%lu", version.dwMajorVersion, version.dwMinorVersion);
+            FreeLibrary(module);
+            return false;
+        }
+
+        // Publish only the complete API. The explicit LoadLibrary reference
+        // outlives the temporary context and every installed subclass, through
+        // Wh_ModBeforeUninit and ShutdownProgressCircleUi in Wh_ModUninit.
+        SetWindowSubclass = set;
+        GetWindowSubclass = get;
+        RemoveWindowSubclass = remove;
+        DefSubclassProc = def;
+        g_commonControlsV6Module = module;
+        Wh_Log(L"Subclass API initialized: Common Controls %lu.%lu build=%lu",
+               version.dwMajorVersion, version.dwMinorVersion, version.dwBuildNumber);
+        return true;
+    }
+
+    HMODULE g_ownedOle32Module = nullptr;
+
     void FreeShellMemory(void *memory)
     {
         if (!memory)
@@ -214,7 +397,17 @@ namespace
         {
             HMODULE ole32 = GetModuleHandleW(L"ole32.dll");
             if (!ole32)
-                ole32 = LoadLibraryW(L"ole32.dll");
+            {
+                ole32 = LoadLibraryExW(
+                    L"ole32.dll",
+                    nullptr,
+                    LOAD_LIBRARY_SEARCH_SYSTEM32);
+
+                if (ole32)
+                {
+                    g_ownedOle32Module = ole32;
+                }
+            }
 
             return ole32
                        ? reinterpret_cast<CoTaskMemFree_t>(
@@ -224,6 +417,15 @@ namespace
 
         if (freeFn)
             freeFn(memory);
+    }
+
+    void ShutdownShellMemoryApi()
+    {
+        if (g_ownedOle32Module)
+        {
+            FreeLibrary(g_ownedOle32Module);
+            g_ownedOle32Module = nullptr;
+        }
     }
 
     static_assert(sizeof(void *) == 8);
@@ -555,6 +757,7 @@ namespace
         bool measuredSampleInitialized = false;
         bool resumedFromSpecialState = false;
         std::vector<double> nativeRateHistory;
+        std::vector<DirectUI::Element *> nativeElementsHiddenByMod;
     };
 
     std::mutex g_transferSummaryMutex;
@@ -919,6 +1122,8 @@ namespace
     struct ModSettings
     {
         bool customizationEnabled = false;
+        bool hideSmallControlButtons = false;
+        bool hideTitleBarPercentage = false;
         std::wstring preset = L"blueDark";
         ThemePalette theme{};
         bool applyNativeColors = false;
@@ -926,6 +1131,7 @@ namespace
         TypographyConfig typography{};
         ElementConfig elements{};
 
+        std::wstring glassEffect = L"acrylic";
         COLORREF glassTint = RGB(0, 0, 0);
         int glassStrength = 0;
         std::wstring footerStyle = L"glass";
@@ -1267,6 +1473,12 @@ namespace
         g_showCurrentFileProgressBar =
             Wh_GetIntSetting(L"showCurrentFileProgressBar") != 0;
 
+        g_settings.hideSmallControlButtons =
+            Wh_GetIntSetting(L"hideSmallControlButtons") != 0;
+
+        g_settings.hideTitleBarPercentage =
+            Wh_GetIntSetting(L"hideTitleBarPercentage") != 0;
+
         g_settings.customizationEnabled =
             Wh_GetIntSetting(L"customization.enabled") != 0;
 
@@ -1279,11 +1491,28 @@ namespace
 
         g_settings.theme = MakePresetTheme(g_settings.preset);
 
-        // Glass tint support is intentionally retained internally but is not
-        // currently exposed. Keep the public Glass preset neutral so the native
-        // title area and custom client area remain visually consistent.
+        g_settings.glassEffect =
+            GetStringSettingValue(
+                L"customization.glassEffect");
+
+        if (g_settings.glassEffect != L"blur" &&
+            g_settings.glassEffect != L"acrylic")
+        {
+            g_settings.glassEffect = L"acrylic";
+        }
+
         g_settings.glassTint = RGB(0, 0, 0);
-        g_settings.glassStrength = 0;
+
+        ParseColorValue(
+            GetStringSettingValue(
+                L"customization.glassTint"),
+            &g_settings.glassTint);
+
+        g_settings.glassStrength =
+            GetClampedIntSetting(
+                L"customization.glassTintStrength",
+                0,
+                100);
 
         g_settings.footerStyle =
             GetStringSettingValue(
@@ -1515,6 +1744,40 @@ namespace
     constexpr int kDwmsbtAuto = 0;
     constexpr int kDwmsbtTransientWindow = 3;
 
+    constexpr int kWcaAccentPolicy = 19;
+    constexpr int kAccentStateDisabled = 0;
+
+    constexpr wchar_t kGlassEffectAppliedProperty[] =
+        L"Windhawk.FileOperationStyler.GlassEffectApplied";
+
+    constexpr wchar_t kGlassAccentBlurAppliedProperty[] =
+        L"Windhawk.FileOperationStyler.GlassAccentBlurApplied";
+
+    struct GlassAccentPolicy
+    {
+        int accentState;
+        int accentFlags;
+        int gradientColor;
+        int animationId;
+    };
+
+    struct GlassWindowCompositionAttributeData
+    {
+        int attribute;
+        PVOID data;
+        SIZE_T size;
+    };
+
+    using SetWindowCompositionAttribute_t =
+        BOOL(WINAPI *)(
+            HWND,
+            GlassWindowCompositionAttributeData *);
+
+    using DwmEnableBlurBehindWindow_t =
+        HRESULT(WINAPI *)(
+            HWND,
+            DWM_BLURBEHIND const *);
+
     static thread_local bool g_glassTransparentInfoPanelPaint = false;
 
     using DwmSetWindowAttribute_t = HRESULT(WINAPI *)(
@@ -1522,6 +1785,7 @@ namespace
 
     HMODULE g_ownedDwmApiModule;
     DwmSetWindowAttribute_t g_dwmSetWindowAttribute;
+    DwmEnableBlurBehindWindow_t g_dwmEnableBlurBehindWindow;
 
     DwmSetWindowAttribute_t GetDwmSetWindowAttribute()
     {
@@ -1544,6 +1808,12 @@ namespace
             g_dwmSetWindowAttribute =
                 reinterpret_cast<DwmSetWindowAttribute_t>(
                 GetProcAddress(module, "DwmSetWindowAttribute"));
+
+            g_dwmEnableBlurBehindWindow =
+                reinterpret_cast<DwmEnableBlurBehindWindow_t>(
+                    GetProcAddress(
+                        module,
+                        "DwmEnableBlurBehindWindow"));
             if (owned)
             {
                 g_ownedDwmApiModule = module;
@@ -1554,6 +1824,7 @@ namespace
     void ShutdownDwmApi()
     {
         g_dwmSetWindowAttribute = nullptr;
+        g_dwmEnableBlurBehindWindow = nullptr;
         if (g_ownedDwmApiModule)
         {
             FreeLibrary(g_ownedDwmApiModule);
@@ -1561,6 +1832,123 @@ namespace
         }
     }
 
+    DwmEnableBlurBehindWindow_t GetDwmEnableBlurBehindWindow()
+    {
+        GetDwmSetWindowAttribute();
+        return g_dwmEnableBlurBehindWindow;
+    }
+
+    SetWindowCompositionAttribute_t GetSetWindowCompositionAttribute()
+    {
+        static SetWindowCompositionAttribute_t function =
+            reinterpret_cast<SetWindowCompositionAttribute_t>(
+                GetProcAddress(
+                    GetModuleHandleW(L"user32.dll"),
+                    "SetWindowCompositionAttribute"));
+
+        return function;
+    }
+
+    DWORD MakeGlassAccentGradientColor()
+    {
+        // ACCENT_POLICY uses AABBGGRR. COLORREF already stores BBGGRR.
+        // Keep a small tint contribution at every opacity level so choosing
+        // opacity 0 never removes the selected Custom Blur color.
+        constexpr DWORD kCustomBlurBaseTintAlpha = 32;
+
+        return (kCustomBlurBaseTintAlpha << 24) |
+               (static_cast<DWORD>(g_settings.glassTint) & 0x00FFFFFF);
+    }
+
+    void SetGlassAccentBlurBehind(
+        HWND hostWindow,
+        bool enabled)
+    {
+        if (!hostWindow || !IsWindow(hostWindow))
+        {
+            return;
+        }
+
+        if (!enabled)
+        {
+            // Never send ACCENT_STATE_DISABLED to a window that never had
+            // our Blur recipe. Doing so can disturb the native Acrylic
+            // SystemBackdrop path even though Acrylic itself is correct.
+            if (!GetPropW(
+                    hostWindow,
+                    kGlassAccentBlurAppliedProperty))
+            {
+                return;
+            }
+        }
+
+        SetWindowCompositionAttribute_t setCompositionAttribute =
+            GetSetWindowCompositionAttribute();
+
+        if (!setCompositionAttribute)
+        {
+            Wh_Log(
+                L"Glass: SetWindowCompositionAttribute unavailable hwnd=%p",
+                reinterpret_cast<void *>(hostWindow));
+            return;
+        }
+
+        // ACCENT_ENABLE_BLURBEHIND = 3.
+        // Custom Blur uses the classic blur material; Windows Acrylic
+        // remains on the separate SystemBackdrop path above.
+        constexpr int kCustomAccentEnableBlurBehind = 3;
+
+        GlassAccentPolicy accentPolicy{};
+        accentPolicy.accentState =
+            enabled
+                ? kCustomAccentEnableBlurBehind
+                : kAccentStateDisabled;
+
+        if (enabled)
+        {
+            accentPolicy.gradientColor =
+                static_cast<int>(
+                    MakeGlassAccentGradientColor());
+        }
+
+        GlassWindowCompositionAttributeData data{};
+        data.attribute = kWcaAccentPolicy;
+        data.data = &accentPolicy;
+        data.size = sizeof(accentPolicy);
+
+        if (!setCompositionAttribute(hostWindow, &data))
+        {
+            Wh_Log(
+                L"Glass: SetWindowCompositionAttribute failed "
+                L"hwnd=%p error=%lu",
+                reinterpret_cast<void *>(hostWindow),
+                GetLastError());
+            return;
+        }
+
+        if (enabled)
+        {
+            SetPropW(
+                hostWindow,
+                kGlassAccentBlurAppliedProperty,
+                reinterpret_cast<HANDLE>(1));
+        }
+        else
+        {
+            RemovePropW(
+                hostWindow,
+                kGlassAccentBlurAppliedProperty);
+        }
+
+        Wh_Log(
+            L"Glass: AccentBlurBehind %s tint=#%02X%02X%02X strength=%d hwnd=%p",
+            enabled ? L"enabled" : L"disabled",
+            GetRValue(g_settings.glassTint),
+            GetGValue(g_settings.glassTint),
+            GetBValue(g_settings.glassTint),
+            g_settings.glassStrength,
+            reinterpret_cast<void *>(hostWindow));
+    }
     struct GlassFrameMargins
     {
         int left;
@@ -1574,6 +1962,54 @@ namespace
             HWND hwnd,
             GlassFrameMargins const *margins);
 
+    void SetGlassDwmBlurRegion(
+        HWND hostWindow,
+        bool enabled)
+    {
+        if (!hostWindow || !IsWindow(hostWindow))
+        {
+            return;
+        }
+
+        auto enableBlurBehind =
+            GetDwmEnableBlurBehindWindow();
+
+        if (!enableBlurBehind)
+        {
+            return;
+        }
+
+        HRGN blurRegion =
+            enabled
+                ? CreateRectRgn(0, 0, -1, -1)
+                : nullptr;
+
+        DWM_BLURBEHIND blurBehind{};
+        blurBehind.dwFlags =
+            DWM_BB_ENABLE |
+            (enabled ? DWM_BB_BLURREGION : 0);
+        blurBehind.fEnable = enabled ? TRUE : FALSE;
+        blurBehind.hRgnBlur = blurRegion;
+
+        HRESULT result =
+            enableBlurBehind(
+                hostWindow,
+                &blurBehind);
+
+        if (blurRegion)
+        {
+            DeleteObject(blurRegion);
+        }
+
+        if (FAILED(result))
+        {
+            Wh_Log(
+                L"Glass: DwmEnableBlurBehindWindow failed "
+                L"result=0x%08X hwnd=%p",
+                static_cast<unsigned int>(result),
+                reinterpret_cast<void *>(hostWindow));
+        }
+    }
     void SetGlassClientFrameExtension(
         HWND hostWindow,
         bool enabled)
@@ -1634,7 +2070,56 @@ namespace
             return;
         }
 
-        int backdropType = kDwmsbtTransientWindow;
+        // Acrylic is the compatibility path. Keep this sequence equivalent
+        // to the proven 1.1 implementation and do not touch ACCENT_POLICY.
+        if (g_settings.glassEffect == L"acrylic")
+        {
+            int backdropType = kDwmsbtTransientWindow;
+
+            HRESULT backdropResult =
+                setAttribute(
+                    hostWindow,
+                    kDwmwaSystemBackdropType,
+                    &backdropType,
+                    sizeof(backdropType));
+
+            if (FAILED(backdropResult))
+            {
+                Wh_Log(
+                    L"Glass: Acrylic SYSTEMBACKDROP_TYPE failed "
+                    L"result=0x%08X hwnd=%p",
+                    static_cast<unsigned int>(backdropResult),
+                    reinterpret_cast<void *>(hostWindow));
+            }
+
+            SetGlassClientFrameExtension(hostWindow, true);
+
+            SetPropW(
+                hostWindow,
+                kGlassEffectAppliedProperty,
+                reinterpret_cast<HANDLE>(1));
+
+            if (!IsIconic(hostWindow))
+            {
+                DefWindowProcW(hostWindow, WM_NCACTIVATE, TRUE, -1);
+            }
+
+            Wh_Log(
+                L"Glass: applied effect=acrylic tint=#%02X%02X%02X "
+                L"strength=%d hwnd=%p",
+                GetRValue(g_settings.glassTint),
+                GetGValue(g_settings.glassTint),
+                GetBValue(g_settings.glassTint),
+                g_settings.glassStrength,
+                reinterpret_cast<void *>(hostWindow));
+
+            return;
+        }
+
+        // Custom Blur uses AccentBlurBehind instead of the Windows
+        // Acrylic SystemBackdrop recipe.
+        int backdropType = kDwmsbtAuto;
+
         HRESULT backdropResult =
             setAttribute(
                 hostWindow,
@@ -1650,17 +2135,30 @@ namespace
                 reinterpret_cast<void *>(hostWindow));
         }
 
+        SetGlassDwmBlurRegion(hostWindow, true);
+        SetGlassAccentBlurBehind(hostWindow, true);
+
         SetGlassClientFrameExtension(hostWindow, true);
 
-        // Desktop Acrylic otherwise uses its solid inactive fallback. Keep
-        // DWM's nonclient appearance active without activating the HWND.
-        // Also covers applying/resuming Glass on an already inactive host.
+        SetPropW(
+            hostWindow,
+            kGlassEffectAppliedProperty,
+            reinterpret_cast<HANDLE>(1));
+
+        Wh_Log(
+            L"Glass: applied effect=%s tint=#%02X%02X%02X strength=%d hwnd=%p",
+            g_settings.glassEffect.c_str(),
+            GetRValue(g_settings.glassTint),
+            GetGValue(g_settings.glassTint),
+            GetBValue(g_settings.glassTint),
+            g_settings.glassStrength,
+            reinterpret_cast<void *>(hostWindow));
+
         if (!IsIconic(hostWindow))
         {
             DefWindowProcW(hostWindow, WM_NCACTIVATE, TRUE, -1);
         }
     }
-
     void ApplyHostThemeColors(HWND hostWindow)
     {
         if (!ShouldApplyNativeColorOverrides())
@@ -1719,8 +2217,15 @@ namespace
             return;
         }
 
-        if (IsGlassTheme())
+        bool hadGlassEffect =
+            RemovePropW(
+                hostWindow,
+                kGlassEffectAppliedProperty) != nullptr;
+
+        if (hadGlassEffect || IsGlassTheme())
         {
+            SetGlassAccentBlurBehind(hostWindow, false);
+            SetGlassDwmBlurRegion(hostWindow, false);
             SetGlassClientFrameExtension(hostWindow, false);
         }
 
@@ -1799,6 +2304,9 @@ namespace
 
     constexpr UINT kCurrentFileAnimationMessage = WM_APP + 0x51;
     constexpr UINT_PTR kCurrentFileAnimationTimer = 0xF0510020;
+    constexpr UINT_PTR kCircleHoverAnimationTimer = 0xF0510021;
+    constexpr UINT kCircleHoverAnimationIntervalMs = 16;
+    constexpr UINT kPausedBreathingIntervalMs = 66;
 
     struct CurrentFileAnimation
     {
@@ -1835,6 +2343,9 @@ namespace
         int positionHeight;
         bool positionValid;
         CurrentFileAnimation currentFileAnimation{};
+        bool circleHovered = false;
+        RECT infoClip{};
+        bool infoClipValid = false;
     };
 
     struct HostPositionRequest
@@ -1857,6 +2368,65 @@ namespace
     std::mutex g_circleMutex;
     std::vector<CircleState> g_circles;
     std::vector<HWND> g_subclassedHosts;
+
+    // Snapshots are copied under this lock. HWND work is done only on the
+    // owning UI thread, without holding a registry lock across window calls.
+    struct HostGeometryTarget
+    {
+        int windowWidth = 0;
+        int windowHeight = 0;
+        int clientWidth = 0;
+        int clientHeight = 0;
+        int top = 0;
+        unsigned long long transitionId = 0;
+        unsigned long long verificationId = 0;
+        UINT dpi = 0;
+        size_t tileCount = 0;
+        bool expanded = false;
+    };
+
+    struct HostScrollState
+    {
+        HWND hostWindow = nullptr;
+        HWND scrollBar = nullptr;
+        int offset = 0;
+        int wheelRemainder = 0;
+        UINT dpi = USER_DEFAULT_SCREEN_DPI;
+        bool updating = false;
+        bool failed = false;
+        bool geometryPending = false;
+        HostGeometryTarget geometryTarget{};
+    };
+
+    struct TransferViewport
+    {
+        std::vector<OperationTileElement *> tiles;
+        RECT bounds{};
+        int rowHeight = 0;
+        int contentHeight = 0;
+        int offset = 0;
+        int scrollBarWidth = 0;
+        UINT dpi = USER_DEFAULT_SCREEN_DPI;
+    };
+
+    std::mutex g_hostScrollMutex;
+    std::vector<HostScrollState> g_hostScrollStates;
+    std::atomic<unsigned long long> g_geometryVerificationSequence{};
+    constexpr wchar_t kTransferScrollBarOwnerProperty[] =
+        L"Windhawk.FileOperationStyler.TransferScrollBarOwner";
+
+    HostScrollState ReadHostScrollState(HWND hostWindow)
+    {
+        std::lock_guard<std::mutex> lock(g_hostScrollMutex);
+        for (auto const &state : g_hostScrollStates)
+        {
+            if (state.hostWindow == hostWindow)
+                return state;
+        }
+        HostScrollState state{};
+        state.hostWindow = hostWindow;
+        return state;
+    }
 
     struct HostPresentationState
     {
@@ -1882,6 +2452,7 @@ namespace
     std::vector<HostNativeGeometry> g_hostNativeGeometries;
     thread_local HWND g_suppressNativeGeometryCaptureHost;
     thread_local HWND g_restoringNativeGeometryHost;
+    thread_local WINDOWPOS const *g_requestedHostGeometry;
     std::vector<HostPositionRequest> g_hostPositionRequests;
     std::mutex g_displayDiagnosticMutex;
     std::vector<DeferredDisplaySnapshot> g_deferredDisplaySnapshots;
@@ -1898,12 +2469,15 @@ namespace
     {
     public:
         ScopedHostGeometryChange(HWND hostWindow,
-                                 bool restoringNativeGeometry)
+                                 bool restoringNativeGeometry,
+                                 WINDOWPOS const *request = nullptr)
             : m_previousCaptureSuppression(
                   g_suppressNativeGeometryCaptureHost),
-              m_previousRestoration(g_restoringNativeGeometryHost)
+              m_previousRestoration(g_restoringNativeGeometryHost),
+              m_previousRequest(g_requestedHostGeometry)
         {
             g_suppressNativeGeometryCaptureHost = hostWindow;
+            g_requestedHostGeometry = request;
             if (restoringNativeGeometry)
             {
                 g_restoringNativeGeometryHost = hostWindow;
@@ -1915,6 +2489,7 @@ namespace
             g_suppressNativeGeometryCaptureHost =
                 m_previousCaptureSuppression;
             g_restoringNativeGeometryHost = m_previousRestoration;
+            g_requestedHostGeometry = m_previousRequest;
         }
 
         ScopedHostGeometryChange(ScopedHostGeometryChange const &) = delete;
@@ -1924,6 +2499,7 @@ namespace
     private:
         HWND m_previousCaptureSuppression;
         HWND m_previousRestoration;
+        WINDOWPOS const *m_previousRequest;
     };
 
     void CaptureHostNativeGeometry(HWND hostWindow, WINDOWPOS const &position)
@@ -2147,13 +2723,42 @@ namespace
         bool expanded,
         unsigned long long transitionId);
 
+    struct NativeProgressSnapshot
+    {
+        int position;
+        int rangeLow;
+        int rangeHigh;
+        int percent;
+        bool rangeValid;
+    };
+
+    NativeProgressSnapshot ReadNativeProgress(
+        HWND progressWindow,
+        int fallbackPercent);
+    bool EnsureProgressCircle(
+        OperationTileElement *tile,
+        unsigned long long eventId,
+        NativeProgressSnapshot const &progress);
+
     bool ApplyDisplayMode(COperationStatusTile *owner,
                           bool applyFinalHostGeometry,
                           unsigned long long transitionId = 0);
     void InitializeRegisteredDisplayMode(COperationStatusTile *owner);
     bool GetVerifiedCustomHostWindowHeight(HWND hostWindow,
                                            int nativeWindowHeight,
-                                           int *targetWindowHeight);
+                                           int *targetWindowHeight,
+                                           RECT const *placement = nullptr,
+                                           int *targetTop = nullptr);
+    bool GetTransferViewport(HWND hostWindow, TransferViewport *viewport);
+    bool UpdateHostTransferViewport(HWND hostWindow);
+    void ClearPendingHostGeometry(HWND hostWindow);
+    bool VerifyPendingHostGeometry(HWND hostWindow, bool finalCheck);
+    void SuspendHostTransferViewport(HWND hostWindow);
+    bool DestroyHostTransferViewport(HWND hostWindow);
+    void ForgetHostTransferViewport(HWND hostWindow);
+    void FailHostTransferViewport(HWND hostWindow, PCWSTR reason);
+    bool RouteTransferScrollMessage(HWND hostWindow, UINT message,
+                                    WPARAM wParam, LPARAM lParam);
     bool IsHostInSpecialOperationState(HWND hostWindow);
     bool IsNormalPresentationHierarchyValidForHost(HWND hostWindow,
                                                    bool *stateAvailable);
@@ -2505,6 +3110,7 @@ namespace
         bool displayModeKnown = false;
         bool deleteLike = false;
         bool paused = false;
+        bool circleHovered = false;
         std::wstring description;
         std::wstring descriptionStart;
         std::wstring firstLocation;
@@ -2538,6 +3144,7 @@ namespace
             snapshot->percent = std::clamp(it->progressPercent, 0, 100);
             storedPaused = it->paused;
             storedPausedKnown = it->pausedStateKnown;
+            snapshot->circleHovered = it->circleHovered;
             animation = it->currentFileAnimation;
 
             snapshot->displayedOverallPercent =
@@ -2808,11 +3415,109 @@ namespace
     void GetInfoPanelPauseRect(HWND infoWindow, RECT *pauseRect);
     void GetInfoPanelCancelRect(HWND infoWindow, RECT *cancelRect);
 
+    void SetCircleHoverState(HWND infoWindow, bool hovered)
+    {
+        if (!infoWindow || !IsWindow(infoWindow))
+        {
+            return;
+        }
+
+        OperationTileElement *tile = nullptr;
+        bool changed = false;
+        bool paused = false;
+
+        {
+            std::lock_guard<std::mutex> lock(g_circleMutex);
+
+            auto it = std::find_if(
+                g_circles.begin(),
+                g_circles.end(),
+                [infoWindow](CircleState const &state)
+                {
+                    return state.infoWindow == infoWindow;
+                });
+
+            if (it == g_circles.end())
+            {
+                return;
+            }
+
+            tile = it->tile;
+            paused =
+                it->pausedStateKnown &&
+                it->paused;
+
+            if (it->circleHovered != hovered)
+            {
+                it->circleHovered = hovered;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            if (hovered)
+            {
+                SetTimer(
+                    infoWindow,
+                    kCircleHoverAnimationTimer,
+                    kCircleHoverAnimationIntervalMs,
+                    nullptr);
+            }
+            else if (paused)
+            {
+                SetTimer(
+                    infoWindow,
+                    kCircleHoverAnimationTimer,
+                    kPausedBreathingIntervalMs,
+                    nullptr);
+            }
+            else
+            {
+                KillTimer(
+                    infoWindow,
+                    kCircleHoverAnimationTimer);
+            }
+
+            if (tile)
+            {
+                InvalidateInfoPanelForTile(tile, false);
+            }
+        }
+    }
+    void ClearCircleHoverStatesForHost(HWND hostWindow)
+    {
+        if (!hostWindow)
+        {
+            return;
+        }
+
+        std::vector<HWND> infoWindows;
+        {
+            std::lock_guard<std::mutex> lock(g_circleMutex);
+            for (CircleState const &state : g_circles)
+            {
+                if (state.hostWindow == hostWindow &&
+                    state.infoWindow)
+                {
+                    infoWindows.push_back(state.infoWindow);
+                }
+            }
+        }
+
+        for (HWND infoWindow : infoWindows)
+        {
+            SetCircleHoverState(infoWindow, false);
+        }
+    }
+
     void DrawEmbeddedProgressCircle(Gdiplus::Graphics &graphics,
                                     UINT dpi,
                                     double displayProgress,
                                     ThemePalette const &theme,
-                                    TypographyConfig const &type)
+                                    TypographyConfig const &type,
+                                    bool paused = false,
+                                    bool hovered = false)
     {
         if (!ActiveElements().showCircle)
         {
@@ -2876,12 +3581,12 @@ namespace
             type.circleFont.c_str(),
             static_cast<Gdiplus::REAL>(
                 ScaleForDpi(type.circlePercentSize, dpi)),
-            Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+            Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
         Gdiplus::Font percentageFallback(
             L"Segoe UI",
             static_cast<Gdiplus::REAL>(
                 ScaleForDpi(type.circlePercentSize, dpi)),
-            Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+            Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
         Gdiplus::Font labelFont(
             type.circleLabelFont.c_str(),
             static_cast<Gdiplus::REAL>(
@@ -2917,19 +3622,447 @@ namespace
         Gdiplus::RectF labelBounds(
             ringLeft, ringTop + diameter * 0.59f, diameter,
             static_cast<Gdiplus::REAL>(ScaleForDpi(24, dpi)));
-        graphics.DrawString(percentageText, -1, selectedPercentageFont,
-                            percentageBounds, &centeredText, &primaryBrush);
-        if (ActiveElements().showCompleteLabel)
+        // ------------------------------------------------------------
+        // INTERACTIVE CIRCLE CENTER
+        // ------------------------------------------------------------
+
+        constexpr double kInteractionPi =
+            3.14159265358979323846;
+
+        double interactionPhase =
+            static_cast<double>(
+                GetTickCount64() % 800) /
+            800.0;
+
+        double interactionWave =
+            0.5 -
+            0.5 * std::cos(
+                      interactionPhase *
+                      2.0 *
+                      kInteractionPi);
+
+        Gdiplus::REAL centerX =
+            ringLeft + diameter / 2.0f;
+
+        Gdiplus::REAL centerY =
+            ringTop + diameter / 2.0f;
+
+        if (!paused && !hovered)
         {
-            graphics.DrawString(L"Complete", -1, selectedLabelFont,
-                                labelBounds, &centeredText,
-                                &secondaryBrush);
+            // Normal running state: use the original clean presentation.
+            graphics.DrawString(
+                percentageText,
+                -1,
+                selectedPercentageFont,
+                percentageBounds,
+                &centeredText,
+                &primaryBrush);
+
+            if (ActiveElements().showCompleteLabel)
+            {
+                graphics.DrawString(
+                    L"Complete",
+                    -1,
+                    selectedLabelFont,
+                    labelBounds,
+                    &centeredText,
+                    &secondaryBrush);
+            }
+        }
+        else if (!paused && hovered)
+        {
+            // Hover state: show only the Pause affordance.
+            Gdiplus::REAL iconScale =
+                static_cast<Gdiplus::REAL>(
+                    1.0 +
+                    interactionWave * 0.08);
+
+            Gdiplus::REAL halfHeight =
+                static_cast<Gdiplus::REAL>(
+                    ScaleForDpi(20, dpi)) *
+                iconScale;
+
+            Gdiplus::REAL separation =
+                static_cast<Gdiplus::REAL>(
+                    ScaleForDpi(9, dpi)) *
+                iconScale;
+
+            BYTE outerGlowAlpha =
+                static_cast<BYTE>(
+                    22 +
+                    interactionWave * 14);
+
+            BYTE innerGlowAlpha =
+                static_cast<BYTE>(
+                    44 +
+                    interactionWave * 22);
+
+            BYTE foregroundAlpha =
+                static_cast<BYTE>(
+                    165 +
+                    interactionWave * 18);
+
+            Gdiplus::Pen pauseOuterGlow(
+                Gdiplus::Color(
+                    outerGlowAlpha,
+                    GetRValue(theme.accent),
+                    GetGValue(theme.accent),
+                    GetBValue(theme.accent)),
+                static_cast<Gdiplus::REAL>(
+                    ScaleForDpi(15, dpi)));
+
+            pauseOuterGlow.SetStartCap(
+                Gdiplus::LineCapRound);
+            pauseOuterGlow.SetEndCap(
+                Gdiplus::LineCapRound);
+
+            Gdiplus::Pen pauseInnerGlow(
+                Gdiplus::Color(
+                    innerGlowAlpha,
+                    GetRValue(theme.primaryText),
+                    GetGValue(theme.primaryText),
+                    GetBValue(theme.primaryText)),
+                static_cast<Gdiplus::REAL>(
+                    ScaleForDpi(12, dpi)));
+
+            pauseInnerGlow.SetStartCap(
+                Gdiplus::LineCapRound);
+            pauseInnerGlow.SetEndCap(
+                Gdiplus::LineCapRound);
+
+            Gdiplus::Pen pausePen(
+                Gdiplus::Color(
+                    foregroundAlpha,
+                    GetRValue(theme.primaryText),
+                    GetGValue(theme.primaryText),
+                    GetBValue(theme.primaryText)),
+                static_cast<Gdiplus::REAL>(
+                    ScaleForDpi(10, dpi)));
+
+            pausePen.SetStartCap(
+                Gdiplus::LineCapRound);
+            pausePen.SetEndCap(
+                Gdiplus::LineCapRound);
+
+            auto drawPauseBars =
+                [&](Gdiplus::Pen *pen)
+            {
+                graphics.DrawLine(
+                    pen,
+                    centerX - separation,
+                    centerY - halfHeight,
+                    centerX - separation,
+                    centerY + halfHeight);
+
+                graphics.DrawLine(
+                    pen,
+                    centerX + separation,
+                    centerY - halfHeight,
+                    centerX + separation,
+                    centerY + halfHeight);
+            };
+
+            drawPauseBars(&pauseOuterGlow);
+            drawPauseBars(&pauseInnerGlow);
+            drawPauseBars(&pausePen);
+        }
+        else
+        {
+            // Paused operation.
+            // Away from the mouse this is a STATE indicator:
+            // Pause icon + "Paused". Hover changes the whole center
+            // immediately into the available ACTION: Play + "Resume".
+            if (!hovered)
+            {
+                Gdiplus::REAL iconScale =
+                    static_cast<Gdiplus::REAL>(
+                        0.88 + interactionWave * 0.16);
+
+                Gdiplus::REAL pauseCenterY =
+                    centerY -
+                    static_cast<Gdiplus::REAL>(
+                        ScaleForDpi(5, dpi));
+
+                Gdiplus::REAL halfHeight =
+                    static_cast<Gdiplus::REAL>(
+                        ScaleForDpi(18, dpi)) *
+                    iconScale;
+
+                Gdiplus::REAL barOffset =
+                    static_cast<Gdiplus::REAL>(
+                        ScaleForDpi(7, dpi)) *
+                    iconScale;
+
+                BYTE outerGlowAlpha =
+                    static_cast<BYTE>(
+                        22 + interactionWave * 30);
+
+                Gdiplus::Pen pauseOuterGlow(
+                    Gdiplus::Color(
+                        outerGlowAlpha,
+                        GetRValue(theme.accent),
+                        GetGValue(theme.accent),
+                        GetBValue(theme.accent)),
+                    static_cast<Gdiplus::REAL>(
+                        ScaleForDpi(10, dpi)));
+
+                pauseOuterGlow.SetStartCap(
+                    Gdiplus::LineCapRound);
+                pauseOuterGlow.SetEndCap(
+                    Gdiplus::LineCapRound);
+
+                Gdiplus::Pen pausePen(
+                    Gdiplus::Color(
+                        225,
+                        GetRValue(theme.primaryText),
+                        GetGValue(theme.primaryText),
+                        GetBValue(theme.primaryText)),
+                    static_cast<Gdiplus::REAL>(
+                        ScaleForDpi(7, dpi)));
+
+                pausePen.SetStartCap(
+                    Gdiplus::LineCapRound);
+                pausePen.SetEndCap(
+                    Gdiplus::LineCapRound);
+
+                auto drawPausedBars =
+                    [&](Gdiplus::Pen *pen)
+                {
+                    graphics.DrawLine(
+                        pen,
+                        centerX - barOffset,
+                        pauseCenterY - halfHeight,
+                        centerX - barOffset,
+                        pauseCenterY + halfHeight);
+
+                    graphics.DrawLine(
+                        pen,
+                        centerX + barOffset,
+                        pauseCenterY - halfHeight,
+                        centerX + barOffset,
+                        pauseCenterY + halfHeight);
+                };
+
+                drawPausedBars(&pauseOuterGlow);
+                drawPausedBars(&pausePen);
+
+                if (ActiveElements().showCompleteLabel)
+                {
+                    Gdiplus::Font pausedFont(
+                        type.circleLabelFont.c_str(),
+                        static_cast<Gdiplus::REAL>(
+                            ScaleForDpi(
+                                type.circleLabelSize + 1,
+                                dpi)),
+                        Gdiplus::FontStyleBold,
+                        Gdiplus::UnitPixel);
+
+                    Gdiplus::Font pausedFallback(
+                        L"Segoe UI",
+                        static_cast<Gdiplus::REAL>(
+                            ScaleForDpi(
+                                type.circleLabelSize + 1,
+                                dpi)),
+                        Gdiplus::FontStyleBold,
+                        Gdiplus::UnitPixel);
+
+                    Gdiplus::Font *selectedPausedFont =
+                        pausedFont.GetLastStatus() == Gdiplus::Ok
+                            ? &pausedFont
+                            : &pausedFallback;
+
+                    Gdiplus::RectF pausedBounds(
+                        ringLeft,
+                        ringTop + diameter * 0.70f,
+                        diameter,
+                        static_cast<Gdiplus::REAL>(
+                            ScaleForDpi(21, dpi)));
+
+                    Gdiplus::SolidBrush pausedBrush(
+                        Gdiplus::Color(
+                            210,
+                            GetRValue(theme.primaryText),
+                            GetGValue(theme.primaryText),
+                            GetBValue(theme.primaryText)));
+
+                    graphics.DrawString(
+                        L"Paused",
+                        -1,
+                        selectedPausedFont,
+                        pausedBounds,
+                        &centeredText,
+                        &pausedBrush);
+                }
+            }
+            else
+            {
+                // Hover is an immediate action preview.
+                // No interpolation: icon and text change together.
+                Gdiplus::REAL playScale =
+                    static_cast<Gdiplus::REAL>(
+                        0.94 + interactionWave * 0.12);
+
+                Gdiplus::REAL playCenterY =
+                    centerY -
+                    static_cast<Gdiplus::REAL>(
+                        ScaleForDpi(5, dpi));
+
+                Gdiplus::REAL halfHeight =
+                    static_cast<Gdiplus::REAL>(
+                        ScaleForDpi(23, dpi)) *
+                    playScale;
+
+                Gdiplus::REAL halfWidth =
+                    static_cast<Gdiplus::REAL>(
+                        ScaleForDpi(19, dpi)) *
+                    playScale;
+
+                Gdiplus::PointF playPoints[3] =
+                    {
+                        {centerX - halfWidth * 0.58f,
+                         playCenterY - halfHeight},
+                        {centerX - halfWidth * 0.58f,
+                         playCenterY + halfHeight},
+                        {centerX + halfWidth,
+                         playCenterY}};
+
+                Gdiplus::Pen playOuterGlow(
+                    Gdiplus::Color(
+                        static_cast<BYTE>(
+                            32 + interactionWave * 28),
+                        GetRValue(theme.accent),
+                        GetGValue(theme.accent),
+                        GetBValue(theme.accent)),
+                    static_cast<Gdiplus::REAL>(
+                        ScaleForDpi(10, dpi)));
+
+                playOuterGlow.SetLineJoin(
+                    Gdiplus::LineJoinRound);
+
+                graphics.DrawPolygon(
+                    &playOuterGlow,
+                    playPoints,
+                    ARRAYSIZE(playPoints));
+
+                Gdiplus::Pen playInnerGlow(
+                    Gdiplus::Color(
+                        static_cast<BYTE>(
+                            60 + interactionWave * 28),
+                        GetRValue(theme.primaryText),
+                        GetGValue(theme.primaryText),
+                        GetBValue(theme.primaryText)),
+                    static_cast<Gdiplus::REAL>(
+                        ScaleForDpi(5, dpi)));
+
+                playInnerGlow.SetLineJoin(
+                    Gdiplus::LineJoinRound);
+
+                graphics.DrawPolygon(
+                    &playInnerGlow,
+                    playPoints,
+                    ARRAYSIZE(playPoints));
+
+                Gdiplus::SolidBrush playBrush(
+                    Gdiplus::Color(
+                        230,
+                        GetRValue(theme.primaryText),
+                        GetGValue(theme.primaryText),
+                        GetBValue(theme.primaryText)));
+
+                graphics.FillPolygon(
+                    &playBrush,
+                    playPoints,
+                    ARRAYSIZE(playPoints));
+
+                Gdiplus::Pen playRoundedEdge(
+                    Gdiplus::Color(
+                        230,
+                        GetRValue(theme.primaryText),
+                        GetGValue(theme.primaryText),
+                        GetBValue(theme.primaryText)),
+                    static_cast<Gdiplus::REAL>(
+                        ScaleForDpi(4, dpi)));
+
+                playRoundedEdge.SetLineJoin(
+                    Gdiplus::LineJoinRound);
+
+                graphics.DrawPolygon(
+                    &playRoundedEdge,
+                    playPoints,
+                    ARRAYSIZE(playPoints));
+
+                Gdiplus::Pen playHighlight(
+                    Gdiplus::Color(
+                        110,
+                        255,
+                        255,
+                        255),
+                    static_cast<Gdiplus::REAL>(
+                        ScaleForDpi(1, dpi)));
+
+                playHighlight.SetLineJoin(
+                    Gdiplus::LineJoinRound);
+
+                graphics.DrawPolygon(
+                    &playHighlight,
+                    playPoints,
+                    ARRAYSIZE(playPoints));
+
+                if (ActiveElements().showCompleteLabel)
+                {
+                    Gdiplus::Font resumeFont(
+                        type.circleLabelFont.c_str(),
+                        static_cast<Gdiplus::REAL>(
+                            ScaleForDpi(
+                                type.circleLabelSize + 1,
+                                dpi)),
+                        Gdiplus::FontStyleBold,
+                        Gdiplus::UnitPixel);
+
+                    Gdiplus::Font resumeFallback(
+                        L"Segoe UI",
+                        static_cast<Gdiplus::REAL>(
+                            ScaleForDpi(
+                                type.circleLabelSize + 1,
+                                dpi)),
+                        Gdiplus::FontStyleBold,
+                        Gdiplus::UnitPixel);
+
+                    Gdiplus::Font *selectedResumeFont =
+                        resumeFont.GetLastStatus() == Gdiplus::Ok
+                            ? &resumeFont
+                            : &resumeFallback;
+
+                    Gdiplus::RectF resumeBounds(
+                        ringLeft,
+                        ringTop + diameter * 0.70f,
+                        diameter,
+                        static_cast<Gdiplus::REAL>(
+                            ScaleForDpi(21, dpi)));
+
+                    Gdiplus::SolidBrush resumeBrush(
+                        Gdiplus::Color(
+                            210,
+                            GetRValue(theme.primaryText),
+                            GetGValue(theme.primaryText),
+                            GetBValue(theme.primaryText)));
+
+                    graphics.DrawString(
+                        L"Resume",
+                        -1,
+                        selectedResumeFont,
+                        resumeBounds,
+                        &centeredText,
+                        &resumeBrush);
+                }
+            }
         }
     }
 
     void DrawInfoPanelFrame(HWND infoWindow,
                             HDC deviceContext,
-                            RECT const &clientRect)
+                            RECT const &clientRect,
+                            RECT const *hostClip = nullptr)
     {
         int width = clientRect.right - clientRect.left;
         int height = clientRect.bottom - clientRect.top;
@@ -2966,11 +4099,22 @@ namespace
                 static_cast<Gdiplus::REAL>(width),
                 static_cast<Gdiplus::REAL>(height)),
             Gdiplus::CombineModeReplace);
+        if (hostClip)
+        {
+            graphics.SetClip(Gdiplus::Rect(
+                                 hostClip->left - clientRect.left,
+                                 hostClip->top - clientRect.top,
+                                 hostClip->right - hostClip->left,
+                                 hostClip->bottom - hostClip->top),
+                             Gdiplus::CombineModeIntersect);
+        }
 
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
         graphics.SetTextRenderingHint(
-            Gdiplus::TextRenderingHintClearTypeGridFit);
+            g_glassTransparentInfoPanelPaint
+                ? Gdiplus::TextRenderingHintAntiAliasGridFit
+                : Gdiplus::TextRenderingHintClearTypeGridFit);
 
         Gdiplus::SolidBrush backgroundBrush(Gdiplus::Color(
             255, GetRValue(theme.background), GetGValue(theme.background),
@@ -2986,7 +4130,13 @@ namespace
         }
 
         DrawEmbeddedProgressCircle(
-            graphics, dpi, snapshot.displayedOverallPercent, theme, type);
+            graphics,
+            dpi,
+            snapshot.displayedOverallPercent,
+            theme,
+            type,
+            snapshot.paused,
+            snapshot.circleHovered);
 
         int effectiveBodySize =
             type.bodySize +
@@ -3436,48 +4586,52 @@ namespace
                                    255, GetRValue(theme.actionText), GetGValue(theme.actionText),
                                    GetBValue(theme.actionText)),
                                static_cast<Gdiplus::REAL>(ScaleForDpi(2, dpi)));
-        Gdiplus::REAL actionCenterX =
-            static_cast<Gdiplus::REAL>(pauseRect.left + pauseRect.right) /
-            2.0f;
-        Gdiplus::REAL actionCenterY =
-            static_cast<Gdiplus::REAL>(pauseRect.top + pauseRect.bottom) /
-            2.0f;
-        Gdiplus::REAL actionHalfHeight =
-            static_cast<Gdiplus::REAL>(ScaleForDpi(7, dpi));
-        if (snapshot.paused)
+        if (!g_settings.hideSmallControlButtons)
         {
-            Gdiplus::GraphicsPath playPath;
-            playPath.AddLine(actionCenterX - ScaleForDpi(4, dpi),
-                             actionCenterY - actionHalfHeight,
-                             actionCenterX + ScaleForDpi(6, dpi),
-                             actionCenterY);
-            playPath.AddLine(actionCenterX + ScaleForDpi(6, dpi),
-                             actionCenterY,
-                             actionCenterX - ScaleForDpi(4, dpi),
-                             actionCenterY + actionHalfHeight);
-            playPath.CloseFigure();
-            Gdiplus::SolidBrush playBrush(Gdiplus::Color(
-                255, GetRValue(theme.actionText),
-                GetGValue(theme.actionText), GetBValue(theme.actionText)));
-            graphics.FillPath(&playBrush, &playPath);
-        }
-        else
-        {
-            Gdiplus::REAL barOffset =
-                static_cast<Gdiplus::REAL>(ScaleForDpi(3, dpi));
-            graphics.DrawLine(&actionPen,
-                              actionCenterX - barOffset,
-                              actionCenterY - actionHalfHeight,
-                              actionCenterX - barOffset,
-                              actionCenterY + actionHalfHeight);
-            graphics.DrawLine(&actionPen,
-                              actionCenterX + barOffset,
-                              actionCenterY - actionHalfHeight,
-                              actionCenterX + barOffset,
-                              actionCenterY + actionHalfHeight);
+            Gdiplus::REAL actionCenterX =
+                static_cast<Gdiplus::REAL>(pauseRect.left + pauseRect.right) /
+                2.0f;
+            Gdiplus::REAL actionCenterY =
+                static_cast<Gdiplus::REAL>(pauseRect.top + pauseRect.bottom) /
+                2.0f;
+            Gdiplus::REAL actionHalfHeight =
+                static_cast<Gdiplus::REAL>(ScaleForDpi(7, dpi));
+            if (snapshot.paused)
+            {
+                Gdiplus::GraphicsPath playPath;
+                playPath.AddLine(actionCenterX - ScaleForDpi(4, dpi),
+                                 actionCenterY - actionHalfHeight,
+                                 actionCenterX + ScaleForDpi(6, dpi),
+                                 actionCenterY);
+                playPath.AddLine(actionCenterX + ScaleForDpi(6, dpi),
+                                 actionCenterY,
+                                 actionCenterX - ScaleForDpi(4, dpi),
+                                 actionCenterY + actionHalfHeight);
+                playPath.CloseFigure();
+                Gdiplus::SolidBrush playBrush(Gdiplus::Color(
+                    255, GetRValue(theme.actionText),
+                    GetGValue(theme.actionText), GetBValue(theme.actionText)));
+                graphics.FillPath(&playBrush, &playPath);
+            }
+            else
+            {
+                Gdiplus::REAL barOffset =
+                    static_cast<Gdiplus::REAL>(ScaleForDpi(3, dpi));
+                graphics.DrawLine(&actionPen,
+                                  actionCenterX - barOffset,
+                                  actionCenterY - actionHalfHeight,
+                                  actionCenterX - barOffset,
+                                  actionCenterY + actionHalfHeight);
+                graphics.DrawLine(&actionPen,
+                                  actionCenterX + barOffset,
+                                  actionCenterY - actionHalfHeight,
+                                  actionCenterX + barOffset,
+                                  actionCenterY + actionHalfHeight);
+            }
         }
 
-        if (elements.showCancel)
+        if (!g_settings.hideSmallControlButtons &&
+            elements.showCancel)
         {
             RECT cancelRect{};
             GetInfoPanelCancelRect(infoWindow, &cancelRect);
@@ -3538,15 +4692,19 @@ namespace
             1.0f);
         for (int row = 1; row < 4; ++row)
         {
-            Gdiplus::REAL y = static_cast<Gdiplus::REAL>(
-                chartTop + (chartHeight * row) / 4);
+            int yPixels =
+                chartTop + (chartHeight * row) / 4;
+            Gdiplus::REAL y =
+                static_cast<Gdiplus::REAL>(yPixels);
             graphics.DrawLine(&gridPen, 0.0f, y,
                               static_cast<Gdiplus::REAL>(chartWidth), y);
         }
         for (int column = 1; column < 6; ++column)
         {
-            Gdiplus::REAL x = static_cast<Gdiplus::REAL>(
-                (chartWidth * column) / 6);
+            int xPixels =
+                (chartWidth * column) / 6;
+            Gdiplus::REAL x =
+                static_cast<Gdiplus::REAL>(xPixels);
             graphics.DrawLine(&gridPen, x,
                               static_cast<Gdiplus::REAL>(chartTop), x,
                               static_cast<Gdiplus::REAL>(
@@ -3780,6 +4938,11 @@ namespace
         }
         SetRectEmpty(cancelRect);
 
+        if (g_settings.hideSmallControlButtons)
+        {
+            return;
+        }
+
         RECT clientRect{};
         HWND geometryWindow = infoWindow;
         if (g_glassTransparentInfoPanelPaint)
@@ -3795,6 +4958,14 @@ namespace
             !ActiveElements().showCancel)
         {
             return;
+        }
+        if (g_glassTransparentInfoPanelPaint)
+        {
+            TransferViewport viewport{};
+            if (!GetTransferViewport(geometryWindow, &viewport))
+                return;
+            clientRect.right = viewport.bounds.right;
+            clientRect.bottom = viewport.rowHeight;
         }
 
         LONG rightPadding = ScaleForDpi(kContentRightPadding, dpi);
@@ -3816,6 +4987,11 @@ namespace
         }
         SetRectEmpty(pauseRect);
 
+        if (g_settings.hideSmallControlButtons)
+        {
+            return;
+        }
+
         RECT clientRect{};
         HWND geometryWindow = infoWindow;
         if (g_glassTransparentInfoPanelPaint)
@@ -3830,6 +5006,14 @@ namespace
         if (!dpi || !GetClientRect(geometryWindow, &clientRect))
         {
             return;
+        }
+        if (g_glassTransparentInfoPanelPaint)
+        {
+            TransferViewport viewport{};
+            if (!GetTransferViewport(geometryWindow, &viewport))
+                return;
+            clientRect.right = viewport.bounds.right;
+            clientRect.bottom = viewport.rowHeight;
         }
 
         LONG rightPadding = ScaleForDpi(kContentRightPadding, dpi);
@@ -3850,6 +5034,58 @@ namespace
         pauseRect->top = ScaleForDpi(4, dpi);
         pauseRect->bottom = std::min<LONG>(
             pauseRect->top + controlSize, clientRect.bottom);
+    }
+
+    void GetInfoPanelCircleActionRect(
+        HWND infoWindow,
+        RECT *circleRect)
+    {
+        if (!circleRect)
+        {
+            return;
+        }
+
+        SetRectEmpty(circleRect);
+
+        if (!ActiveElements().showCircle ||
+            !infoWindow ||
+            !IsWindow(infoWindow))
+        {
+            return;
+        }
+
+        HWND geometryWindow = infoWindow;
+        if (g_glassTransparentInfoPanelPaint)
+        {
+            HWND hostWindow = GetAncestor(infoWindow, GA_ROOT);
+            if (hostWindow && IsWindow(hostWindow))
+            {
+                geometryWindow = hostWindow;
+            }
+        }
+
+        UINT dpi = GetDpiForWindow(geometryWindow);
+        if (!dpi)
+        {
+            dpi = USER_DEFAULT_SCREEN_DPI;
+        }
+
+        int diameter = ScaleForDpi(kCircleDiameter, dpi);
+        int columnWidth = ScaleForDpi(kCircleColumnWidth, dpi);
+        int ringLeft =
+            (columnWidth - diameter) / 2 +
+            ScaleForDpi(ActiveLayout().circleXOffset, dpi);
+        int ringTop =
+            ScaleForDpi(kCircleHostY + kCircleTop, dpi);
+
+        // Slightly enlarge the hit target beyond the visible ring so the
+        // circle feels easy to click without changing its appearance.
+        int hitPadding = ScaleForDpi(6, dpi);
+
+        circleRect->left = ringLeft - hitPadding;
+        circleRect->top = ringTop - hitPadding;
+        circleRect->right = ringLeft + diameter + hitPadding;
+        circleRect->bottom = ringTop + diameter + hitPadding;
     }
 
     struct ChildWindowClassLookup
@@ -3963,7 +5199,9 @@ namespace
 
         // Preserve Explorer's semantic action mechanism after fail-closed
         // runtime class validation. Never synthesize mouse input here.
-        return buttonDefaultAction(element) >= 0;
+        long result = buttonDefaultAction(element);
+
+        return result >= 0;
     }
 
     bool InvokeNativeActionForTile(OperationTileElement *tile,
@@ -4003,6 +5241,8 @@ namespace
         bool paused)
     {
         HWND infoWindow = nullptr;
+        bool hovered = false;
+
         {
             std::lock_guard<std::mutex> lock(g_circleMutex);
             auto it = std::find_if(
@@ -4017,6 +5257,7 @@ namespace
             it->paused = paused;
             it->pausedStateKnown = true;
             infoWindow = it->infoWindow;
+            hovered = it->circleHovered;
         }
 
         if (infoWindow && IsWindow(infoWindow))
@@ -4024,17 +5265,46 @@ namespace
             if (paused)
             {
                 StopCurrentFileAnimation(infoWindow);
+
+                // Paused is an intentionally animated state. Keep the
+                // breathing effect active until the operation resumes.
+                SetTimer(
+                    infoWindow,
+                    kCircleHoverAnimationTimer,
+                    hovered
+                        ? kCircleHoverAnimationIntervalMs
+                        : kPausedBreathingIntervalMs,
+                    nullptr);
             }
             else
             {
-                PostMessageW(infoWindow, kCurrentFileAnimationMessage, 0, 0);
+                // Hover still owns the animation timer while the pointer
+                // remains over the interactive circle.
+                if (hovered)
+                {
+                    SetTimer(
+                        infoWindow,
+                        kCircleHoverAnimationTimer,
+                        kCircleHoverAnimationIntervalMs,
+                        nullptr);
+                }
+                else
+                {
+                    KillTimer(
+                        infoWindow,
+                        kCircleHoverAnimationTimer);
+                }
+
+                PostMessageW(
+                    infoWindow,
+                    kCurrentFileAnimationMessage,
+                    0,
+                    0);
             }
-            RedrawWindow(
-                infoWindow, nullptr, nullptr,
-                RDW_INVALIDATE | RDW_UPDATENOW);
+
+            InvalidateInfoPanelForTile(tile, false);
         }
     }
-
     bool InvokeNativeActionFromInfoPanel(HWND infoWindow,
                                          PCWSTR elementName,
                                          PCWSTR actionName)
@@ -4071,13 +5341,10 @@ namespace
 
         bool invoked =
             InvokeNativeActionForTile(tile, elementName, actionName);
-
         if (invoked && isPauseResume && pauseStateResolved)
         {
-            // Explorer's top-level caption is aggregate in multi-op mode, so
-            // it cannot tell us which tile changed. We already invoked the
-            // correct tile's native button; mirror that successful toggle in
-            // the presentation state immediately.
+            // The native DirectUI action has been accepted by Explorer.
+            // Mirror the resulting Pause / Resume state in our presentation.
             SetTilePausedPresentationState(tile, !wasPaused);
         }
 
@@ -4422,6 +5689,7 @@ namespace
              message == g_removeHostSubclassMessage))
         {
             StopCurrentFileAnimation(window);
+            KillTimer(window, kCircleHoverAnimationTimer);
         }
         if (g_removeHostSubclassMessage &&
             message == g_removeHostSubclassMessage)
@@ -4443,6 +5711,49 @@ namespace
             if (wParam == kCurrentFileAnimationTimer)
             {
                 UpdateCurrentFileAnimation(window, true);
+                return 0;
+            }
+
+            if (wParam == kCircleHoverAnimationTimer)
+            {
+                OperationTileElement *tile = nullptr;
+                bool hovered = false;
+                bool paused = false;
+
+                {
+                    std::lock_guard<std::mutex> lock(g_circleMutex);
+
+                    auto it = std::find_if(
+                        g_circles.begin(),
+                        g_circles.end(),
+                        [window](CircleState const &state)
+                        {
+                            return state.infoWindow == window;
+                        });
+
+                    if (it != g_circles.end())
+                    {
+                        tile = it->tile;
+                        hovered = it->circleHovered;
+                        paused =
+                            it->pausedStateKnown &&
+                            it->paused;
+                    }
+                }
+
+                if (!hovered && !paused)
+                {
+                    KillTimer(
+                        window,
+                        kCircleHoverAnimationTimer);
+                    return 0;
+                }
+
+                if (tile)
+                {
+                    InvalidateInfoPanelForTile(tile, false);
+                }
+
                 return 0;
             }
             break;
@@ -4484,8 +5795,42 @@ namespace
                     window, L"eltPauseButton", L"pause-resume");
                 return 0;
             }
+
+            RECT circleRect{};
+            GetInfoPanelCircleActionRect(window, &circleRect);
+            if (PtInRect(&circleRect, point))
+            {
+                InvokeNativeActionFromInfoPanel(
+                    window,
+                    L"eltPauseButton",
+                    L"circle-pause-resume");
+                return 0;
+            }
+
             return 0;
         }
+        case WM_MOUSEMOVE:
+        {
+            TRACKMOUSEEVENT tracking{};
+            tracking.cbSize = sizeof(tracking);
+            tracking.dwFlags = TME_LEAVE;
+            tracking.hwndTrack = window;
+            TrackMouseEvent(&tracking);
+
+            POINT point{
+                static_cast<short>(LOWORD(lParam)),
+                static_cast<short>(HIWORD(lParam))};
+            RECT circleRect{};
+            GetInfoPanelCircleActionRect(window, &circleRect);
+
+            SetCircleHoverState(
+                window,
+                PtInRect(&circleRect, point) != FALSE);
+            break;
+        }
+        case WM_MOUSELEAVE:
+            SetCircleHoverState(window, false);
+            return 0;
         case WM_SETCURSOR:
         {
             POINT point{};
@@ -4496,8 +5841,17 @@ namespace
                 GetInfoPanelCancelRect(window, &cancelRect);
                 RECT pauseRect{};
                 GetInfoPanelPauseRect(window, &pauseRect);
+                RECT circleRect{};
+                GetInfoPanelCircleActionRect(window, &circleRect);
+
+                bool overCircle =
+                    PtInRect(&circleRect, point) != FALSE;
+
+                SetCircleHoverState(window, overCircle);
+
                 if (PtInRect(&cancelRect, point) ||
-                    PtInRect(&pauseRect, point))
+                    PtInRect(&pauseRect, point) ||
+                    overCircle)
                 {
                     SetCursor(LoadCursorW(nullptr, IDC_HAND));
                     return TRUE;
@@ -4631,7 +5985,9 @@ namespace
         Gdiplus::Graphics graphics(deviceContext);
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         graphics.SetTextRenderingHint(
-            Gdiplus::TextRenderingHintClearTypeGridFit);
+            glassHostPaint
+                ? Gdiplus::TextRenderingHintAntiAliasGridFit
+                : Gdiplus::TextRenderingHintClearTypeGridFit);
 
         COLORREF footerBackground = theme.background;
         if (!glassHostPaint &&
@@ -5031,7 +6387,8 @@ namespace
         }
 
         HWND hostWindow = GetRegisteredCircleHost(tile);
-        if (!hostWindow || !IsWindow(hostWindow))
+        if (!hostWindow || !IsWindow(hostWindow) ||
+            IsHostInSpecialOperationState(hostWindow))
         {
             return;
         }
@@ -5068,6 +6425,7 @@ namespace
         }
         if (!footerWindow)
         {
+            FailHostTransferViewport(hostWindow, L"footer-creation");
             return;
         }
 
@@ -5118,6 +6476,7 @@ namespace
                               0, overlayTop, overlayWidth, overlayHeight,
                               flags))
             {
+                FailHostTransferViewport(hostWindow, L"footer-position");
                 return;
             }
         }
@@ -5202,6 +6561,7 @@ namespace
             }
         }
         ForgetHostNativeGeometry(hostWindow);
+        ForgetHostTransferViewport(hostWindow);
     }
 
     bool RemoveDestroyedHostRecords(HWND hostWindow)
@@ -5236,6 +6596,7 @@ namespace
                 { return request.hostWindow == hostWindow; }),
             g_hostPositionRequests.end());
         ForgetHostNativeGeometry(hostWindow);
+        ForgetHostTransferViewport(hostWindow);
         return true;
     }
 
@@ -5490,6 +6851,8 @@ namespace
 
     bool DestroyProgressCirclesForHost(HWND hostWindow)
     {
+        if (!DestroyHostTransferViewport(hostWindow))
+            return false;
         std::vector<CircleState> states;
         {
             std::lock_guard<std::mutex> lock(g_circleMutex);
@@ -5612,6 +6975,11 @@ namespace
             return false;
         }
 
+        if (ReadHostScrollState(hostWindow).failed)
+        {
+            return true;
+        }
+
         std::lock_guard<std::mutex> lock(g_hostPresentationMutex);
         auto it = std::find_if(
             g_hostPresentationStates.begin(),
@@ -5620,6 +6988,35 @@ namespace
             { return state.hostWindow == hostWindow; });
         return it != g_hostPresentationStates.end() &&
                it->specialOperationState;
+    }
+
+    void SetHostCaptionDrawingSuppressed(
+        HWND hostWindow,
+        bool suppressed)
+    {
+        if (!hostWindow || !IsWindow(hostWindow))
+        {
+            return;
+        }
+
+        WTA_OPTIONS options{};
+        options.dwFlags =
+            suppressed ? WTNCA_NODRAWCAPTION : 0;
+        options.dwMask = WTNCA_NODRAWCAPTION;
+
+        HRESULT result = SetWindowThemeAttribute(
+            hostWindow,
+            WTA_NONCLIENT,
+            &options,
+            sizeof(options));
+
+        if (FAILED(result))
+        {
+            Wh_Log(
+                L"Caption drawing update failed result=0x%08X hwnd=%p",
+                static_cast<unsigned int>(result),
+                reinterpret_cast<void *>(hostWindow));
+        }
     }
 
     void ForgetHostPresentationState(HWND hostWindow)
@@ -5638,18 +7035,14 @@ namespace
         TransferSummaryState const &state,
         bool customNormalMode)
     {
-        if (!Element_SetVisible_Original || !state.operationTileRoot)
+        if (!Element_GetVisible_Original ||
+            !Element_SetVisible_Original ||
+            !state.tile ||
+            !state.operationTileRoot)
         {
             return;
         }
 
-        auto setVisible = [](DirectUI::Element *element, bool visible)
-        {
-            if (element)
-            {
-                Element_SetVisible_Original(element, visible);
-            }
-        };
         auto find = [&state](PCWSTR name, bool headerFallback = false)
         {
             return FindSkinElement(
@@ -5657,30 +7050,218 @@ namespace
                 name, headerFallback);
         };
 
+        std::vector<DirectUI::Element *> elements{
+            state.tileHeaderRoot,
+            find(L"eltSummary"),
+            find(L"eltDetails"),
+            find(L"eltChartArea"),
+            find(L"eltRateChart_New"),
+            find(L"eltProgressBarContainer"),
+            find(L"eltProgressBar")};
+
         if (customNormalMode)
         {
-            setVisible(state.tileHeaderRoot, false);
-            setVisible(find(L"eltSummary"), false);
-            setVisible(find(L"eltDetails"), false);
-            setVisible(find(L"eltChartArea"), false);
-            setVisible(find(L"eltRateChart_New"), false);
-            setVisible(find(L"eltProgressBarContainer"), false);
-            setVisible(find(L"eltProgressBar"), false);
+            std::vector<DirectUI::Element *> alreadyOwned;
+            {
+                std::lock_guard<std::mutex> lock(
+                    g_transferSummaryMutex);
+
+                auto it = std::find_if(
+                    g_transferSummaries.begin(),
+                    g_transferSummaries.end(),
+                    [&state](TransferSummaryState const &candidate)
+                    {
+                        return candidate.tile == state.tile &&
+                               candidate.operationTileRoot ==
+                                   state.operationTileRoot;
+                    });
+
+                if (it == g_transferSummaries.end())
+                {
+                    return;
+                }
+
+                alreadyOwned = it->nativeElementsHiddenByMod;
+            }
+
+            std::vector<DirectUI::Element *> newlyHidden;
+
+            for (DirectUI::Element *element : elements)
+            {
+                if (!element)
+                {
+                    continue;
+                }
+
+                bool owned =
+                    std::find(
+                        alreadyOwned.begin(),
+                        alreadyOwned.end(),
+                        element) != alreadyOwned.end();
+
+                if (owned)
+                {
+                    // Explorer may have made an element visible again
+                    // during an unrelated native refresh. We still own
+                    // its original visible state, so suppress it again
+                    // without changing the saved restoration record.
+                    if (Element_GetVisible_Original(element))
+                    {
+                        Element_SetVisible_Original(element, false);
+                    }
+                    continue;
+                }
+
+                if (!Element_GetVisible_Original(element))
+                {
+                    // It was already hidden by Explorer. Do not claim
+                    // ownership and never force it visible later.
+                    continue;
+                }
+
+                HRESULT result =
+                    Element_SetVisible_Original(element, false);
+
+                if (SUCCEEDED(result))
+                {
+                    newlyHidden.push_back(element);
+                }
+            }
+
+            if (newlyHidden.empty())
+            {
+                return;
+            }
+
+            bool stateStillLive = false;
+            {
+                std::lock_guard<std::mutex> lock(
+                    g_transferSummaryMutex);
+
+                auto it = std::find_if(
+                    g_transferSummaries.begin(),
+                    g_transferSummaries.end(),
+                    [&state](TransferSummaryState const &candidate)
+                    {
+                        return candidate.tile == state.tile &&
+                               candidate.operationTileRoot ==
+                                   state.operationTileRoot;
+                    });
+
+                if (it != g_transferSummaries.end())
+                {
+                    stateStillLive = true;
+
+                    for (DirectUI::Element *element : newlyHidden)
+                    {
+                        if (std::find(
+                                it->nativeElementsHiddenByMod.begin(),
+                                it->nativeElementsHiddenByMod.end(),
+                                element) ==
+                            it->nativeElementsHiddenByMod.end())
+                        {
+                            it->nativeElementsHiddenByMod.push_back(
+                                element);
+                        }
+                    }
+                }
+            }
+
+            if (!stateStillLive)
+            {
+                // Registration disappeared while applying suppression.
+                // Undo only the changes made by this invocation.
+                for (DirectUI::Element *element : newlyHidden)
+                {
+                    Element_SetVisible_Original(element, true);
+                }
+            }
+
             return;
         }
 
-        // Restore Explorer's own normal-mode visibility model before revealing
-        // it for a special state or removing the mod.
-        bool expanded = state.displayModeKnown && state.expanded;
-        setVisible(state.tileHeaderRoot, true);
-        setVisible(find(L"eltSummary"), true);
-        setVisible(find(L"eltDetails"), expanded);
-        setVisible(find(L"eltChartArea"), expanded);
-        setVisible(find(L"eltRateChart_New"), expanded);
-        setVisible(find(L"eltProgressBarContainer"), !expanded);
-        setVisible(find(L"eltProgressBar"), !expanded);
-    }
+        std::vector<DirectUI::Element *> ownedElements;
+        {
+            std::lock_guard<std::mutex> lock(
+                g_transferSummaryMutex);
 
+            auto it = std::find_if(
+                g_transferSummaries.begin(),
+                g_transferSummaries.end(),
+                [&state](TransferSummaryState const &candidate)
+                {
+                    return candidate.tile == state.tile &&
+                           candidate.operationTileRoot ==
+                               state.operationTileRoot;
+                });
+
+            if (it == g_transferSummaries.end())
+            {
+                return;
+            }
+
+            ownedElements.swap(it->nativeElementsHiddenByMod);
+        }
+
+        std::vector<DirectUI::Element *> failedRestores;
+
+        for (DirectUI::Element *element : ownedElements)
+        {
+            if (!element ||
+                std::find(elements.begin(), elements.end(), element) ==
+                    elements.end())
+            {
+                // The old descendant is no longer part of this live
+                // tile. Do not dereference or alter a replacement.
+                continue;
+            }
+
+            if (Element_GetVisible_Original(element))
+            {
+                continue;
+            }
+
+            HRESULT result =
+                Element_SetVisible_Original(element, true);
+
+            if (FAILED(result))
+            {
+                failedRestores.push_back(element);
+            }
+        }
+
+        if (!failedRestores.empty())
+        {
+            std::lock_guard<std::mutex> lock(
+                g_transferSummaryMutex);
+
+            auto it = std::find_if(
+                g_transferSummaries.begin(),
+                g_transferSummaries.end(),
+                [&state](TransferSummaryState const &candidate)
+                {
+                    return candidate.tile == state.tile &&
+                           candidate.operationTileRoot ==
+                               state.operationTileRoot;
+                });
+
+            if (it != g_transferSummaries.end())
+            {
+                for (DirectUI::Element *element : failedRestores)
+                {
+                    if (std::find(
+                            it->nativeElementsHiddenByMod.begin(),
+                            it->nativeElementsHiddenByMod.end(),
+                            element) ==
+                        it->nativeElementsHiddenByMod.end())
+                    {
+                        it->nativeElementsHiddenByMod.push_back(
+                            element);
+                    }
+                }
+            }
+        }
+    }
     void RestoreNativePresentationForHost(HWND hostWindow)
     {
         std::vector<TransferSummaryState> states;
@@ -5701,6 +7282,9 @@ namespace
 
     void HideCustomPresentationForHost(HWND hostWindow)
     {
+        SuspendHostTransferViewport(hostWindow);
+        SetHostCaptionDrawingSuppressed(hostWindow, false);
+
         // Special Explorer states must temporarily leave the
         // full-client Acrylic presentation before native DirectUI
         // becomes visible again.
@@ -5738,6 +7322,7 @@ namespace
                 }
 
                 state.positionValid = false;
+                state.circleHovered = false;
                 if (state.circleWindow)
                 {
                     windows.push_back(state.circleWindow);
@@ -5754,6 +7339,9 @@ namespace
             if (child && IsWindow(child))
             {
                 StopCurrentFileAnimation(child);
+                KillTimer(
+                    child,
+                    kCircleHoverAnimationTimer);
             }
             if (child && IsWindow(child) && IsWindowVisible(child))
             {
@@ -5771,6 +7359,15 @@ namespace
     void ScheduleCustomReapplyForHost(HWND hostWindow,
                                       bool resumeTransferState)
     {
+        // A failed custom viewport stays native for this HWND's lifetime.
+        if (ReadHostScrollState(hostWindow).failed)
+        {
+            return;
+        }
+        SetHostCaptionDrawingSuppressed(
+            hostWindow,
+            g_settings.hideTitleBarPercentage);
+
         if (IsGlassTheme())
         {
             ApplyUnifiedHostChrome(hostWindow);
@@ -5970,13 +7567,10 @@ namespace
         }
     }
 
-    void RefreshHostPresentationState(HWND hostWindow)
+    void RefreshHostPresentationStateFromCaption(
+        HWND hostWindow,
+        PCWSTR captionHint)
     {
-        wchar_t caption[256]{};
-        PCWSTR captionHint =
-            GetWindowTextW(hostWindow, caption, ARRAYSIZE(caption))
-                ? caption
-                : nullptr;
         bool enteredSpecial = false;
         bool leftSpecial = false;
         bool leftNativeSpecial = false;
@@ -5986,12 +7580,26 @@ namespace
 
         if (enteredSpecial)
         {
+
             HideCustomPresentationForHost(hostWindow);
         }
         else if (leftSpecial)
         {
+
             ScheduleCustomReapplyForHost(hostWindow, leftNativeSpecial);
         }
+    }
+
+    void RefreshHostPresentationState(HWND hostWindow)
+    {
+        wchar_t caption[256]{};
+        PCWSTR captionHint =
+            GetWindowTextW(hostWindow, caption, ARRAYSIZE(caption))
+                ? caption
+                : nullptr;
+
+        RefreshHostPresentationStateFromCaption(
+            hostWindow, captionHint);
     }
 
     struct GlassBufferedPaintApi
@@ -6015,18 +7623,11 @@ namespace
                 HPAINTBUFFER,
                 BOOL);
 
-        using SetAlpha_t =
-            HRESULT(WINAPI *)(
-                HPAINTBUFFER,
-                RECT const *,
-                BYTE);
-
         HMODULE module = nullptr;
         Init_t init = nullptr;
         UnInit_t uninit = nullptr;
         Begin_t begin = nullptr;
         End_t end = nullptr;
-        SetAlpha_t setAlpha = nullptr;
     };
 
     GlassBufferedPaintApi g_glassBufferedPaintApi{};
@@ -6051,7 +7652,10 @@ namespace
             if (!api.module)
             {
                 api.module =
-                    LoadLibraryW(L"uxtheme.dll");
+                    LoadLibraryExW(
+                        L"uxtheme.dll",
+                        nullptr,
+                        LOAD_LIBRARY_SEARCH_SYSTEM32);
 
                 if (api.module)
                 {
@@ -6084,20 +7688,13 @@ namespace
                         GetProcAddress(
                             api.module,
                             "EndBufferedPaint"));
-
-                api.setAlpha =
-                    reinterpret_cast<GlassBufferedPaintApi::SetAlpha_t>(
-                        GetProcAddress(
-                            api.module,
-                            "BufferedPaintSetAlpha"));
             }
         }
 
         if (!api.init ||
             !api.uninit ||
             !api.begin ||
-            !api.end ||
-            !api.setAlpha)
+            !api.end)
         {
             return nullptr;
         }
@@ -6119,27 +7716,45 @@ namespace
         }
     }
 
+    constexpr wchar_t kGlassDirectUiHiddenByModProperty[] =
+        L"Windhawk.FileOperationStyler.GlassDirectUiHidden";
+
     void RestoreGlassDirectUiForHost(HWND hostWindow)
     {
-        if (!IsGlassTheme() || !hostWindow || !IsWindow(hostWindow))
+        if (!hostWindow || !IsWindow(hostWindow))
         {
             return;
         }
 
         HWND directUi = nullptr;
-
         while ((directUi = FindWindowExW(
                     hostWindow,
                     directUi,
                     L"DirectUIHWND",
                     nullptr)) != nullptr)
         {
+            if (!GetPropW(
+                    directUi,
+                    kGlassDirectUiHiddenByModProperty))
+            {
+                continue;
+            }
+
             if (!IsWindowVisible(directUi))
             {
+                ShowWindow(directUi, SW_SHOWNA);
+            }
 
-                ShowWindow(
+            if (IsWindowVisible(directUi))
+            {
+                RemovePropW(
                     directUi,
-                    SW_SHOWNA);
+                    kGlassDirectUiHiddenByModProperty);
+
+                InvalidateRect(
+                    directUi,
+                    nullptr,
+                    TRUE);
             }
         }
     }
@@ -6271,6 +7886,9 @@ namespace
         if (g_removeHostSubclassMessage &&
             message == g_removeHostSubclassMessage)
         {
+            // Restore Explorer's normal non-client caption drawing.
+            SetHostCaptionDrawingSuppressed(window, false);
+
             // Restore anything hidden by the custom Glass presentation.
             RestoreGlassDirectUiForHost(window);
 
@@ -6322,8 +7940,24 @@ namespace
             PCWSTR reason =
                 TakeProgressCirclePositionReason(window);
 
+            auto geometryState = ReadHostScrollState(window);
+            bool verifyingGeometry = geometryState.geometryPending;
+            if (verifyingGeometry)
+            {
+                // Older layout/verification messages may already be queued.
+                // Only this request's own posted callback can fail it finally.
+                if (wParam != geometryState.geometryTarget.verificationId)
+                    return 0;
+                if (!VerifyPendingHostGeometry(window, true))
+                    return 0;
+                reason = L"geometry-verified";
+            }
+
             if (reason)
             {
+                if (!verifyingGeometry && !IsHostInSpecialOperationState(window) && !IsIconic(window) &&
+                    GetRegisteredTileCountForHost(window) > 0)
+                    ResizeOperationStatusWindowForMode(window, false, 0);
                 PositionProgressCirclesForHost(
                     window,
                     reason);
@@ -6384,13 +8018,31 @@ namespace
             return 1;
         }
 
+        if (IsGlassTheme() && message == WM_MOUSELEAVE)
+        {
+            ClearCircleHoverStatesForHost(window);
+        }
+
+        if (RouteTransferScrollMessage(window, message, wParam, lParam))
+            return 0;
+
         // In Glass mode the info panels are painted into the shared host
         // instead of shown as interactive child windows. Route Pause/Cancel
         // to the operation tile whose visual slot contains the mouse.
         if (IsGlassTheme() &&
             !IsHostInSpecialOperationState(window) &&
-            (message == WM_LBUTTONUP || message == WM_SETCURSOR))
+            (message == WM_LBUTTONUP ||
+             message == WM_SETCURSOR ||
+             message == WM_MOUSEMOVE))
         {
+            if (message == WM_MOUSEMOVE)
+            {
+                TRACKMOUSEEVENT tracking{};
+                tracking.cbSize = sizeof(tracking);
+                tracking.dwFlags = TME_LEAVE;
+                tracking.hwndTrack = window;
+                TrackMouseEvent(&tracking);
+            }
             struct GlassActionEntry
             {
                 OperationTileElement *tile = nullptr;
@@ -6418,7 +8070,8 @@ namespace
             POINT point{};
             bool havePoint = false;
 
-            if (message == WM_LBUTTONUP)
+            if (message == WM_LBUTTONUP ||
+                message == WM_MOUSEMOVE)
             {
                 point = {
                     static_cast<short>(LOWORD(lParam)),
@@ -6436,13 +8089,9 @@ namespace
             {
                 HWND glassInfoActionWindow = nullptr;
                 POINT panelPoint = point;
-
-                if (actionEntries.size() == 1)
-                {
-                    glassInfoActionWindow =
-                        actionEntries.front().infoWindow;
-                }
-                else
+                TransferViewport viewport{};
+                if (GetTransferViewport(window, &viewport) &&
+                    PtInRect(&viewport.bounds, point))
                 {
                     for (GlassActionEntry const &entry : actionEntries)
                     {
@@ -6476,6 +8125,7 @@ namespace
                 {
                     RECT cancelRect{};
                     RECT pauseRect{};
+                    RECT circleRect{};
 
                     bool previousTransparentPaint =
                         g_glassTransparentInfoPanelPaint;
@@ -6485,6 +8135,8 @@ namespace
                         glassInfoActionWindow, &cancelRect);
                     GetInfoPanelPauseRect(
                         glassInfoActionWindow, &pauseRect);
+                    GetInfoPanelCircleActionRect(
+                        glassInfoActionWindow, &circleRect);
 
                     g_glassTransparentInfoPanelPaint =
                         previousTransparentPaint;
@@ -6493,8 +8145,22 @@ namespace
                         PtInRect(&cancelRect, panelPoint) != FALSE;
                     bool overPause =
                         PtInRect(&pauseRect, panelPoint) != FALSE;
+                    bool overCircle =
+                        PtInRect(&circleRect, panelPoint) != FALSE;
 
-                    if (overCancel || overPause)
+                    if (message == WM_SETCURSOR ||
+                        message == WM_MOUSEMOVE)
+                    {
+                        for (GlassActionEntry const &entry : actionEntries)
+                        {
+                            SetCircleHoverState(
+                                entry.infoWindow,
+                                entry.infoWindow == glassInfoActionWindow &&
+                                    overCircle);
+                        }
+                    }
+
+                    if (overCancel || overPause || overCircle)
                     {
                         if (message == WM_SETCURSOR)
                         {
@@ -6503,12 +8169,25 @@ namespace
                             return TRUE;
                         }
 
+                        if (message == WM_MOUSEMOVE)
+                        {
+                            return DefSubclassProc(
+                                window, message, wParam, lParam);
+                        }
+
                         if (overCancel)
                         {
                             InvokeNativeActionFromInfoPanel(
                                 glassInfoActionWindow,
                                 L"eltCancelButton",
                                 L"cancel-top-x");
+                        }
+                        else if (overCircle)
+                        {
+                            InvokeNativeActionFromInfoPanel(
+                                glassInfoActionWindow,
+                                L"eltPauseButton",
+                                L"circle-pause-resume");
                         }
                         else
                         {
@@ -6522,6 +8201,16 @@ namespace
                     }
                 }
             }
+        }
+
+        // If Glass routing reached this point, the pointer did not
+        // remain over an actionable circle. Clear any tile that was
+        // left hovered by a previous routed mouse message.
+        if (IsGlassTheme() &&
+            (message == WM_SETCURSOR ||
+             message == WM_MOUSEMOVE))
+        {
+            ClearCircleHoverStatesForHost(window);
         }
 
         LRESULT footerResult = 0;
@@ -6543,6 +8232,14 @@ namespace
                     window, message, wParam, lParam);
             }
 
+            if (!UpdateHostTransferViewport(window))
+                return DefSubclassProc(window, message, wParam, lParam);
+            TransferViewport viewport{};
+            if (!GetTransferViewport(window, &viewport))
+            {
+                FailHostTransferViewport(window, L"glass-mapping");
+                return DefSubclassProc(window, message, wParam, lParam);
+            }
 
             PAINTSTRUCT paint{};
             HDC paintDc = BeginPaint(window, &paint);
@@ -6558,6 +8255,13 @@ namespace
                 EndPaint(window, &paint);
                 return 0;
             }
+            if (viewport.scrollBarWidth)
+            {
+                // EndBufferedPaint must not copy host pixels over the native
+                // scrollbar child, including while its thumb is being dragged.
+                ExcludeClipRect(paintDc, viewport.bounds.right, 0,
+                                client.right, viewport.bounds.bottom);
+            }
 
             GlassBufferedPaintApi *bp =
                 GetGlassBufferedPaintApi();
@@ -6568,7 +8272,7 @@ namespace
                     L"Glass: buffered-paint API unavailable");
 
                 EndPaint(window, &paint);
-                RestoreGlassDirectUiForHost(window);
+                FailHostTransferViewport(window, L"glass-buffer-api");
                 return 0;
             }
 
@@ -6582,12 +8286,14 @@ namespace
                     static_cast<unsigned int>(initResult));
 
                 EndPaint(window, &paint);
-                RestoreGlassDirectUiForHost(window);
+                FailHostTransferViewport(window, L"glass-buffer-init");
                 return 0;
             }
 
             BP_PAINTPARAMS params{};
             params.cbSize = sizeof(params);
+            // Custom Blur depends on a transparent host surface. This clears
+            // the top-down DIB to ARGB {0, 0, 0, 0} before any drawing.
             params.dwFlags = BPPF_ERASE;
 
             HDC bufferDc = nullptr;
@@ -6611,7 +8317,7 @@ namespace
 
                 bp->uninit();
                 EndPaint(window, &paint);
-                RestoreGlassDirectUiForHost(window);
+                FailHostTransferViewport(window, L"glass-buffer-begin");
                 return 0;
             }
 
@@ -6625,19 +8331,50 @@ namespace
                         L"DirectUIHWND",
                         nullptr)) != nullptr)
             {
+                if (!IsWindowVisible(directUi))
+                {
+                    continue;
+                }
+
+                if (!SetPropW(
+                        directUi,
+                        kGlassDirectUiHiddenByModProperty,
+                        reinterpret_cast<HANDLE>(1)))
+                {
+                    // Fail closed: without an ownership marker we
+                    // cannot safely restore this HWND later.
+                    continue;
+                }
+
+                ShowWindow(directUi, SW_HIDE);
+
                 if (IsWindowVisible(directUi))
                 {
-                    ShowWindow(directUi, SW_HIDE);
+                    // Hiding failed, so this HWND never became ours.
+                    RemovePropW(
+                        directUi,
+                        kGlassDirectUiHiddenByModProperty);
                 }
             }
 
             {
-                if (g_settings.glassStrength > 0)
+                if (g_settings.glassEffect == L"blur" &&
+                    g_settings.glassStrength > 0)
                 {
-                    int tintAlpha = std::clamp(
-                        g_settings.glassStrength * 255 / 100,
+                    // AccentBlurBehind already supplies the base tint.
+                    // This overlay controls only additional opacity.
+                    // Use a quadratic curve so low values stay subtle
+                    // instead of quickly turning into a solid color fill.
+                    constexpr int kCustomBlurMaximumOverlayAlpha = 90;
+
+                    int strength = std::clamp(
+                        g_settings.glassStrength,
                         0,
-                        255);
+                        100);
+
+                    int tintAlpha =
+                        strength * strength *
+                        kCustomBlurMaximumOverlayAlpha / 10000;
 
                     Gdiplus::Graphics glassGraphics(bufferDc);
                     Gdiplus::SolidBrush tintBrush(
@@ -6680,6 +8417,7 @@ namespace
                 }
 
                 bool drewInfoPanel = false;
+                bool frameReady = glassInfoPanels.size() == viewport.tiles.size();
 
                 if (!glassInfoPanels.empty())
                 {
@@ -6689,55 +8427,64 @@ namespace
                     {
                         g_glassTransparentInfoPanelPaint = true;
 
-                        bool multiTile =
-                            glassInfoPanels.size() > 1;
-
                         for (GlassInfoPanelPaintEntry const &entry :
                              glassInfoPanels)
                         {
-                            RECT panelRect = hostClient;
-
-                            if (multiTile)
+                            RECT panelRect{0, 0, viewport.bounds.right, 0};
+                            int slotTop = 0;
+                            int slotBottom = 0;
+                            if (!GetMultiTileSlotBounds(
+                                    entry.tile, window, &slotTop, &slotBottom))
                             {
-                                int slotTop = 0;
-                                int slotBottom = 0;
-
-                                if (!GetMultiTileSlotBounds(
-                                        entry.tile,
-                                        window,
-                                        &slotTop,
-                                        &slotBottom))
-                                {
-                                    continue;
-                                }
-
-                                panelRect.top = slotTop;
-                                panelRect.bottom = slotBottom;
+                                frameReady = false;
+                                break;
                             }
+                            panelRect.top = slotTop;
+                            panelRect.bottom = slotBottom;
+                            RECT visible{};
+                            if (!IntersectRect(&visible, &panelRect, &viewport.bounds))
+                                continue;
 
                             int savedDc = SaveDC(bufferDc);
 
                             if (savedDc != 0)
                             {
-                                IntersectClipRect(
-                                    bufferDc,
-                                    panelRect.left,
-                                    panelRect.top,
-                                    panelRect.right,
-                                    panelRect.bottom);
+                                if (IntersectClipRect(
+                                        bufferDc,
+                                        visible.left, visible.top,
+                                        visible.right, visible.bottom) == ERROR)
+                                {
+                                    RestoreDC(bufferDc, savedDc);
+                                    frameReady = false;
+                                    break;
+                                }
 
                                 DrawInfoPanelFrame(
                                     entry.infoWindow,
                                     bufferDc,
-                                    panelRect);
+                                    panelRect, &viewport.bounds);
 
                                 RestoreDC(bufferDc, savedDc);
                                 drewInfoPanel = true;
+                            }
+                            else
+                            {
+                                frameReady = false;
+                                break;
                             }
                         }
 
                         g_glassTransparentInfoPanelPaint = false;
                     }
+                }
+
+                if (!frameReady)
+                {
+                    bp->end(buffer, FALSE);
+                    bp->uninit();
+                    EndPaint(window, &paint);
+                    FailHostTransferViewport(window, L"glass-row-clipping");
+                    return 0;
                 }
 
                 if (!drewInfoPanel)
@@ -6749,9 +8496,23 @@ namespace
 
                 DrawGlassHostFooter(window, bufferDc);
 
-                bp->end(
-                    buffer,
-                    TRUE);
+                HRESULT commitResult =
+                    bp->end(buffer, TRUE);
+
+                if (FAILED(commitResult))
+                {
+                    Wh_Log(
+                        L"Glass: EndBufferedPaint commit failed "
+                        L"result=0x%08X hwnd=%p",
+                        static_cast<unsigned int>(commitResult),
+                        reinterpret_cast<void *>(window));
+
+                    // Return the complete host to its native presentation.
+                    bp->uninit();
+                    EndPaint(window, &paint);
+                    FailHostTransferViewport(window, L"glass-buffer-commit");
+                    return 0;
+                }
             }
 
             bp->uninit();
@@ -6787,18 +8548,59 @@ namespace
             auto *windowPosition = reinterpret_cast<WINDOWPOS *>(lParam);
             int nativeCy = windowPosition->cy;
             int customCy = 0;
+            int customTop = 0;
             static thread_local bool applyingHeightOverride;
-            if (!(windowPosition->flags & SWP_NOSIZE) &&
-                !applyingHeightOverride &&
-                g_restoringNativeGeometryHost != window)
+            if (g_requestedHostGeometry && g_requestedHostGeometry->hwnd == window &&
+                g_restoringNativeGeometryHost != window &&
+                !IsIconic(window) &&
+                !IsHostInSpecialOperationState(window))
             {
+                // Explorer can rewrite our WINDOWPOS in DefSubclassProc.
+                // This passive correction must run even while recursive
+                // sizing and native-geometry capture are suppressed.
+                auto const &request = *g_requestedHostGeometry;
+                if (windowPosition->cx != request.cx || windowPosition->cy != request.cy ||
+                    (windowPosition->flags & SWP_NOSIZE))
+                {
+                    Wh_Log(L"CUSTOM_LAYOUT native geometry rewrite host=%p "
+                           L"requestedWindow=%dx%d nativeWindow=%dx%d",
+                           reinterpret_cast<void *>(window), request.cx, request.cy,
+                           windowPosition->cx, windowPosition->cy);
+                }
+                windowPosition->x = request.x;
+                windowPosition->y = request.y;
+                windowPosition->cx = request.cx;
+                windowPosition->cy = request.cy;
+                windowPosition->flags &= ~(SWP_NOSIZE | SWP_NOMOVE);
+            }
+            else if (!applyingHeightOverride && !IsIconic(window) &&
+                     g_suppressNativeGeometryCaptureHost != window &&
+                     g_restoringNativeGeometryHost != window &&
+                     (!(windowPosition->flags & SWP_NOSIZE) ||
+                      !(windowPosition->flags & SWP_NOMOVE)))
+            {
+                RECT placement{};
+                if (!GetWindowRect(window, &placement))
+                    return result;
+                if (!(windowPosition->flags & SWP_NOMOVE))
+                {
+                    OffsetRect(&placement, windowPosition->x - placement.left,
+                               windowPosition->y - placement.top);
+                }
                 applyingHeightOverride = true;
                 bool verified = GetVerifiedCustomHostWindowHeight(
-                    window, nativeCy, &customCy);
+                    window, nativeCy, &customCy, &placement, &customTop);
                 applyingHeightOverride = false;
                 if (verified)
                 {
                     windowPosition->cy = customCy;
+                    windowPosition->flags &= ~SWP_NOSIZE;
+                    if (placement.top != customTop)
+                    {
+                        windowPosition->x = placement.left;
+                        windowPosition->y = customTop;
+                        windowPosition->flags &= ~SWP_NOMOVE;
+                    }
 
                     RECT currentWindow{};
                     RECT currentClient{};
@@ -6819,10 +8621,10 @@ namespace
         if (message == WM_SIZE)
         {
             // Explorer can restore its cached/native width after a
-            // minimize/restore cycle. Reapply the verified custom
-            // Glass geometry once the host is restored.
+            // minimize/restore cycle. Reapply the verified custom geometry
+            // once the host is restored, excluding our own synchronous resize.
             if (wParam == SIZE_RESTORED &&
-                IsGlassTheme() &&
+                g_suppressNativeGeometryCaptureHost != window &&
                 !IsHostInSpecialOperationState(window))
             {
                 static thread_local bool repairingRestoreGeometry;
@@ -6889,15 +8691,21 @@ namespace
         }
         else if (message == WM_WINDOWPOSCHANGED)
         {
+            if (g_suppressNativeGeometryCaptureHost != window &&
+                ReadHostScrollState(window).geometryPending)
+                VerifyPendingHostGeometry(window, false);
             // Explorer can restack OperationTileHost while the top-level
             // window moves. Repair our single opaque presentation surface in
             // the same message instead of one posted message later.
             PositionProgressCirclesForHost(window, L"host-position-sync");
             ApplyNativeDisplayRatesForHost(window);
         }
-        else if (message == WM_DPICHANGED)
+        else if (message == WM_DPICHANGED || message == WM_DISPLAYCHANGE ||
+                 (message == WM_SETTINGCHANGE && wParam == SPI_SETWORKAREA))
         {
-            ScheduleProgressCirclePosition(window, L"dpi-change");
+            // The old verification target no longer describes this monitor.
+            ClearPendingHostGeometry(window);
+            ScheduleProgressCirclePosition(window, L"work-area-or-dpi-change");
         }
         return result;
     }
@@ -6997,7 +8805,7 @@ namespace
         // deliberately not a fallback: an unsupported host fails closed.
         *x = ScaleForDpi(ActiveLayout().circleXOffset, dpi);
         *y = ScaleForDpi(kCircleHostY, dpi);
-        if (GetRegisteredTileCountForHost(state.hostWindow) > 1)
+        if (GetRegisteredTileCountForHost(state.hostWindow) > 0)
         {
             int slotTop = 0;
             int slotBottom = 0;
@@ -7056,6 +8864,11 @@ namespace
             }
         }
 
+        bool hostIconic =
+            hostWindow &&
+            IsWindow(hostWindow) &&
+            IsIconic(hostWindow);
+
         if (infoWindow && IsWindow(infoWindow))
         {
             // Progress may arrive outside this HWND's thread. Marshal all
@@ -7065,12 +8878,16 @@ namespace
             {
                 PostMessageW(infoWindow, kCurrentFileAnimationMessage, 0, 0);
             }
-            InvalidateRect(infoWindow, nullptr, FALSE);
+            if (!hostIconic)
+            {
+                InvalidateRect(infoWindow, nullptr, FALSE);
+            }
         }
 
         if (IsGlassTheme() &&
             hostWindow &&
-            IsWindow(hostWindow))
+            IsWindow(hostWindow) &&
+            !hostIconic)
         {
             InvalidateRect(
                 hostWindow,
@@ -7083,6 +8900,8 @@ namespace
     {
         HWND infoWindow = nullptr;
         HWND hostWindow = nullptr;
+        RECT oldClip{};
+        bool clipValid = false;
         {
             std::lock_guard<std::mutex> lock(g_circleMutex);
             auto it = std::find_if(
@@ -7095,6 +8914,8 @@ namespace
             }
             infoWindow = it->infoWindow;
             hostWindow = it->hostWindow;
+            oldClip = it->infoClip;
+            clipValid = it->infoClipValid;
         }
 
         if (!infoWindow || !IsWindow(infoWindow) ||
@@ -7124,59 +8945,27 @@ namespace
             return;
         }
 
-        bool expanded = false;
-        bool modeKnown = false;
+        TransferViewport viewport{};
+        int slotTop = 0;
+        int slotBottom = 0;
+        if (!GetTransferViewport(hostWindow, &viewport) ||
+            !GetMultiTileSlotBounds(tile, hostWindow, &slotTop, &slotBottom))
         {
-            std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
-            auto it = std::find_if(
-                g_transferSummaries.begin(), g_transferSummaries.end(),
-                [tile](TransferSummaryState const &state)
-                { return state.tile == tile; });
-            if (it != g_transferSummaries.end())
-            {
-                expanded = it->expanded;
-                modeKnown = it->displayModeKnown;
-            }
-        }
-
-        UINT dpi = GetDpiForWindow(hostWindow);
-        RECT clientRect{};
-        if (!dpi || !GetClientRect(hostWindow, &clientRect))
-        {
+            FailHostTransferViewport(hostWindow, L"panel-mapping");
             return;
         }
-
+        // Only mod-owned child panels move. Native DirectUI and progress
+        // HWND geometry is untouched; a region clips partially visible rows.
         int x = 0;
-        int y = 0;
-        int width = std::max(static_cast<int>(clientRect.right), 1);
-
-        bool multiTileHost =
-            GetRegisteredTileCountForHost(hostWindow) > 1;
-        int height = 0;
-        if (multiTileHost)
+        int y = slotTop;
+        int width = viewport.bounds.right;
+        int height = viewport.rowHeight;
+        RECT clip{0, std::max(-y, 0), width,
+                  std::min(height, static_cast<int>(viewport.bounds.bottom) - y)};
+        if (clip.bottom <= clip.top)
         {
-            int slotTop = 0;
-            int slotBottom = 0;
-            if (!GetMultiTileSlotBounds(
-                    tile, hostWindow, &slotTop, &slotBottom))
-            {
-                return;
-            }
-
-            y = slotTop;
-            height = std::max(slotBottom - slotTop, 1);
-        }
-        else
-        {
-            int logicalHeight =
-                modeKnown && expanded ? kExpandedRegularTileHeight
-                                      : kCompactRegularTileHeight;
-            height = ScaleForDpi(logicalHeight, dpi);
-            int footerTop = std::max(
-                static_cast<int>(clientRect.bottom) -
-                    ScaleForDpi(kFooterOverlayHeight, dpi),
-                1);
-            height = std::max(std::min(height, footerTop), 1);
+            ShowWindow(infoWindow, SW_HIDE);
+            return;
         }
 
         // Avoid forcing the child through SetWindowPos/InvalidateRect on
@@ -7213,19 +9002,42 @@ namespace
             positionFlags |= SWP_NOMOVE | SWP_NOSIZE;
         }
 
-        if (SetWindowPos(infoWindow, HWND_TOP, x, y, width, height,
-                         positionFlags))
+        bool clipChanged = !clipValid || !EqualRect(&clip, &oldClip);
+        // Apply the region before showing/moving the panel so even an
+        // intermediate child paint cannot cover the fixed footer.
+        if (clipChanged)
         {
-            // The footer divider is intentionally hidden in this layout.
-            // Keep the custom panel as one continuous surface.
-            SetWindowRgn(infoWindow, nullptr, TRUE);
-
-            // Geometry/mode/show changes need one repaint. A pure Z-order
-            // repair keeps the existing buffer and avoids drag-time flashing.
-            if (geometryChanged || needsShow)
+            HRGN region = CreateRectRgn(clip.left, clip.top, clip.right, clip.bottom);
+            if (!region || !SetWindowRgn(infoWindow, region, FALSE))
             {
-                InvalidateRect(infoWindow, nullptr, FALSE);
+                if (region)
+                    DeleteObject(region);
+                FailHostTransferViewport(hostWindow, L"panel-clipping");
+                return;
             }
+            // Successful SetWindowRgn transfers ownership to USER32.
+            std::lock_guard<std::mutex> lock(g_circleMutex);
+            for (auto &state : g_circles)
+            {
+                if (state.infoWindow == infoWindow)
+                {
+                    state.infoClip = clip;
+                    state.infoClipValid = true;
+                    break;
+                }
+            }
+        }
+        if (!SetWindowPos(infoWindow, HWND_TOP, x, y, width, height, positionFlags))
+        {
+            FailHostTransferViewport(hostWindow, L"panel-position");
+            return;
+        }
+
+        // Geometry/mode/show changes need one repaint. A pure Z-order repair
+        // keeps the existing pixels and avoids drag-time flashing.
+        if (geometryChanged || needsShow || clipChanged)
+        {
+            InvalidateRect(infoWindow, nullptr, FALSE);
         }
     }
 
@@ -7423,6 +9235,12 @@ namespace
 
     void PositionProgressCirclesForHost(HWND hostWindow, PCWSTR reason)
     {
+        // SetWindowPos synchronously delivers size/position notifications.
+        // Its caller lays out the rows after the outer host resize completes.
+        if (g_suppressNativeGeometryCaptureHost == hostWindow)
+            return;
+        if (!UpdateHostTransferViewport(hostWindow))
+            return;
         std::vector<OperationTileElement *> tiles;
         {
             std::lock_guard<std::mutex> lock(g_circleMutex);
@@ -7507,6 +9325,41 @@ namespace
                 ResetUnifiedHostChrome(hostWindow);
             }
             return false;
+        }
+
+        SetHostCaptionDrawingSuppressed(
+            hostWindow,
+            g_settings.hideTitleBarPercentage);
+
+        // Capture Explorer's current native size before any mod-owned
+        // resize can occur. Later genuine native size changes may
+        // update this snapshot through WM_WINDOWPOSCHANGING.
+        RECT initialNativeWindowRect{};
+        if (GetWindowRect(hostWindow, &initialNativeWindowRect))
+        {
+            WINDOWPOS initialNativePosition{};
+            initialNativePosition.cx =
+                initialNativeWindowRect.right -
+                initialNativeWindowRect.left;
+            initialNativePosition.cy =
+                initialNativeWindowRect.bottom -
+                initialNativeWindowRect.top;
+
+            if (initialNativePosition.cx > 0 &&
+                initialNativePosition.cy > 0)
+            {
+                CaptureHostNativeGeometry(
+                    hostWindow, initialNativePosition);
+            }
+        }
+        else
+        {
+            Wh_Log(
+                L"eventId=%llu initial native geometry capture failed "
+                L"host=%p error=%lu",
+                eventId,
+                reinterpret_cast<void *>(hostWindow),
+                GetLastError());
         }
 
         bool shuttingDown = false;
@@ -7634,81 +9487,426 @@ namespace
         return count;
     }
 
-    bool GetMultiTileSlotBounds(
-        OperationTileElement *tile,
-        HWND hostWindow,
-        int *slotTop,
-        int *slotBottom)
+    bool GetHostTransferRows(HWND hostWindow,
+                             std::vector<OperationTileElement *> *tiles,
+                             bool *expanded)
     {
-        if (!tile || !hostWindow || !IsWindow(hostWindow) ||
-            !slotTop || !slotBottom)
-        {
-            return false;
-        }
-
-        std::vector<OperationTileElement *> hostTiles;
+        tiles->clear();
         {
             std::lock_guard<std::mutex> lock(g_circleMutex);
             for (CircleState const &state : g_circles)
             {
                 if (state.hostWindow == hostWindow && state.tile)
                 {
-                    hostTiles.push_back(state.tile);
+                    tiles->push_back(state.tile);
                 }
             }
         }
+        *expanded = false;
+        std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
+        for (auto *tile : *tiles)
+        {
+            auto it = std::find_if(
+                g_transferSummaries.begin(), g_transferSummaries.end(),
+                [tile](TransferSummaryState const &state)
+                { return state.tile == tile; });
+            if (it == g_transferSummaries.end() || !it->displayModeKnown)
+                return false;
+            *expanded = *expanded || it->expanded;
+        }
+        return !tiles->empty();
+    }
 
-        if (hostTiles.size() < 2)
+    // Pure geometry: fixed-height rows share a single scroll coordinate space.
+    bool CalculateTransferViewport(size_t count, int rowHeight,
+                                   int clientWidth, int clientHeight,
+                                   int footerHeight, int scrollBarWidth,
+                                   int requestedOffset,
+                                   TransferViewport *viewport)
+    {
+        if (!count || rowHeight <= 0 || footerHeight <= 0 ||
+            clientHeight <= footerHeight + 1 || clientWidth <= 0 ||
+            count > static_cast<size_t>(INT_MAX / rowHeight))
         {
             return false;
         }
+        viewport->rowHeight = rowHeight;
+        // The existing footer begins one pixel above its reserved area.
+        // Exclude that seam from both the viewport and the last row's extent:
+        // fitting hosts retain their exact height and never gain a scrollbar.
+        viewport->bounds = {0, 0, clientWidth,
+                            clientHeight - footerHeight - 1};
+        viewport->contentHeight = static_cast<int>(count) * rowHeight - 1;
+        int maximumOffset = std::max<int>(
+            viewport->contentHeight - viewport->bounds.bottom, 0);
+        viewport->offset = std::clamp(requestedOffset, 0, maximumOffset);
+        viewport->scrollBarWidth = maximumOffset > 0 ? scrollBarWidth : 0;
+        viewport->bounds.right -= viewport->scrollBarWidth;
+        return viewport->bounds.right > 0 &&
+               (maximumOffset == 0 || scrollBarWidth > 0);
+    }
 
-        auto tileIt = std::find(hostTiles.begin(), hostTiles.end(), tile);
-        if (tileIt == hostTiles.end())
-        {
-            return false;
-        }
-
+    bool GetTransferViewport(HWND hostWindow, TransferViewport *viewport)
+    {
+        bool expanded = false;
         RECT clientRect{};
         UINT dpi = GetDpiForWindow(hostWindow);
-        if (!dpi || !GetClientRect(hostWindow, &clientRect))
+        if (!dpi || !GetClientRect(hostWindow, &clientRect) ||
+            !GetHostTransferRows(hostWindow, &viewport->tiles, &expanded))
         {
             return false;
         }
+        auto state = ReadHostScrollState(hostWindow);
+        viewport->dpi = dpi;
+        return CalculateTransferViewport(
+            viewport->tiles.size(),
+            ScaleForDpi(expanded ? kExpandedRegularTileHeight
+                                 : kCompactRegularTileHeight,
+                        dpi),
+            clientRect.right, clientRect.bottom,
+            ScaleForDpi(kDisplayModeFooterReserveHeight, dpi),
+            GetSystemMetricsForDpi(SM_CXVSCROLL, dpi),
+            MulDiv(state.offset, dpi, state.dpi), viewport);
+    }
 
-        int clientHeight =
-            std::max(static_cast<int>(clientRect.bottom - clientRect.top), 0);
-        int footerReserve =
-            ScaleForDpi(kDisplayModeFooterReserveHeight, dpi);
-        int contentHeight = std::max(clientHeight - footerReserve, 0);
-
-        // Explorer owns the multi-operation host height and lays its operation
-        // rows into equal vertical slots above one shared footer. Do not use
-        // the per-tile native progress HWND as a vertical datum: on this shell
-        // build those HWNDs can move only a few dozen pixels apart even while
-        // the DirectUI operation rows themselves are ~200px apart.
-        int minimumSlotHeight = ScaleForDpi(120, dpi);
-        if (contentHeight <
-            minimumSlotHeight * static_cast<int>(hostTiles.size()))
+    bool GetMultiTileSlotBounds(OperationTileElement *tile, HWND hostWindow,
+                                int *slotTop, int *slotBottom)
+    {
+        TransferViewport viewport{};
+        if (!tile || !slotTop || !slotBottom ||
+            !GetTransferViewport(hostWindow, &viewport))
         {
             return false;
         }
+        auto it = std::find(viewport.tiles.begin(), viewport.tiles.end(), tile);
+        if (it == viewport.tiles.end())
+            return false;
+        *slotTop = static_cast<int>(it - viewport.tiles.begin()) *
+                       viewport.rowHeight -
+                   viewport.offset;
+        *slotBottom = *slotTop + viewport.rowHeight;
+        return true;
+    }
 
-        size_t index =
-            static_cast<size_t>(tileIt - hostTiles.begin());
-        long long count =
-            static_cast<long long>(hostTiles.size());
+    void SuspendHostTransferViewport(HWND hostWindow)
+    {
+        HWND scrollBar = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_hostScrollMutex);
+            for (auto &state : g_hostScrollStates)
+            {
+                if (state.hostWindow != hostWindow)
+                    continue;
+                scrollBar = state.scrollBar;
+                state.offset = 0;
+                state.wheelRemainder = 0;
+                state.geometryPending = false;
+                break;
+            }
+        }
+        if (scrollBar && GetParent(scrollBar) == hostWindow &&
+            GetPropW(scrollBar, kTransferScrollBarOwnerProperty) == g_circleClassInstance)
+            ShowWindow(scrollBar, SW_HIDE);
+    }
 
-        *slotTop = static_cast<int>(
-            (static_cast<long long>(contentHeight) *
-             static_cast<long long>(index)) /
-            count);
-        *slotBottom = static_cast<int>(
-            (static_cast<long long>(contentHeight) *
-             static_cast<long long>(index + 1)) /
-            count);
+    bool DestroyHostTransferViewport(HWND hostWindow)
+    {
+        HWND scrollBar = ReadHostScrollState(hostWindow).scrollBar;
+        bool owned = scrollBar && GetParent(scrollBar) == hostWindow &&
+                     GetPropW(scrollBar, kTransferScrollBarOwnerProperty) == g_circleClassInstance;
+        if (owned && !DestroyWindowOnOwningThread(scrollBar, L"transfer-scrollbar"))
+            return false;
+        std::lock_guard<std::mutex> lock(g_hostScrollMutex);
+        for (auto &state : g_hostScrollStates)
+        {
+            if (state.hostWindow == hostWindow)
+            {
+                state.scrollBar = nullptr;
+                state.offset = 0;
+                state.wheelRemainder = 0;
+                state.geometryPending = false;
+            }
+        }
+        return true;
+    }
 
-        return *slotBottom > *slotTop;
+    void ForgetHostTransferViewport(HWND hostWindow)
+    {
+        std::lock_guard<std::mutex> lock(g_hostScrollMutex);
+        g_hostScrollStates.erase(std::remove_if(
+                                     g_hostScrollStates.begin(), g_hostScrollStates.end(),
+                                     [hostWindow](HostScrollState const &state)
+                                     { return state.hostWindow == hostWindow; }),
+                                 g_hostScrollStates.end());
+    }
+
+    void FailHostTransferViewport(HWND hostWindow, PCWSTR reason)
+    {
+        bool changed = false;
+        {
+            std::lock_guard<std::mutex> lock(g_hostScrollMutex);
+            auto it = std::find_if(
+                g_hostScrollStates.begin(), g_hostScrollStates.end(),
+                [hostWindow](HostScrollState const &state)
+                { return state.hostWindow == hostWindow; });
+            if (it == g_hostScrollStates.end())
+            {
+                HostScrollState state{};
+                state.hostWindow = hostWindow;
+                g_hostScrollStates.push_back(state);
+                it = g_hostScrollStates.end() - 1;
+            }
+            changed = !it->failed;
+            it->failed = true;
+            it->geometryPending = false;
+        }
+        if (!changed)
+            return;
+        Wh_Log(L"Transfer viewport: native fallback host=%p reason=%s",
+               reinterpret_cast<void *>(hostWindow), reason);
+        HideCustomPresentationForHost(hostWindow);
+        RestoreHostNativeGeometry(hostWindow);
+        RedrawWindow(hostWindow, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+    }
+
+    bool UpdateHostTransferViewport(HWND hostWindow)
+    {
+        if (g_unloading.load(std::memory_order_acquire) ||
+            !hostWindow || !IsWindow(hostWindow) || IsIconic(hostWindow) ||
+            GetWindowThreadProcessId(hostWindow, nullptr) != GetCurrentThreadId())
+            return false;
+        if (IsHostInSpecialOperationState(hostWindow) ||
+            GetRegisteredTileCountForHost(hostWindow) == 0)
+        {
+            SuspendHostTransferViewport(hostWindow);
+            return false;
+        }
+        auto state = ReadHostScrollState(hostWindow);
+        if (state.geometryPending)
+            return false;
+        if (state.updating)
+            return true;
+        TransferViewport viewport{};
+        bool ready = GetTransferViewport(hostWindow, &viewport);
+        if (ready && !viewport.scrollBarWidth && !state.scrollBar)
+        {
+            // Fitting layouts (especially the normal single-transfer case)
+            // need no scroll state allocation or scrollbar initialization.
+            std::lock_guard<std::mutex> lock(g_hostScrollMutex);
+            for (auto &entry : g_hostScrollStates)
+            {
+                if (entry.hostWindow == hostWindow)
+                {
+                    entry.offset = 0;
+                    entry.wheelRemainder = 0;
+                    entry.dpi = viewport.dpi;
+                    break;
+                }
+            }
+            return true;
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_hostScrollMutex);
+            auto it = std::find_if(
+                g_hostScrollStates.begin(), g_hostScrollStates.end(),
+                [hostWindow](HostScrollState const &entry)
+                { return entry.hostWindow == hostWindow; });
+            if (it == g_hostScrollStates.end())
+            {
+                g_hostScrollStates.push_back(state);
+                it = g_hostScrollStates.end() - 1;
+            }
+            it->updating = true;
+        }
+        HWND scrollBar = state.scrollBar;
+        if (ready && viewport.scrollBarWidth)
+        {
+            if (!scrollBar)
+            {
+                scrollBar = CreateWindowExW(
+                    WS_EX_NOPARENTNOTIFY, L"SCROLLBAR", nullptr,
+                    WS_CHILD | WS_TABSTOP | SBS_VERT,
+                    0, 0, 0, 0, hostWindow, nullptr,
+                    g_circleClassInstance, nullptr);
+                if (scrollBar && !SetPropW(scrollBar, kTransferScrollBarOwnerProperty,
+                                           g_circleClassInstance))
+                {
+                    DestroyWindow(scrollBar);
+                    scrollBar = nullptr;
+                }
+            }
+            ready = scrollBar && GetParent(scrollBar) == hostWindow &&
+                    GetPropW(scrollBar, kTransferScrollBarOwnerProperty) == g_circleClassInstance &&
+                    SetWindowPos(scrollBar, HWND_TOP, viewport.bounds.right, 0,
+                                 viewport.scrollBarWidth, viewport.bounds.bottom,
+                                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            if (ready)
+            {
+                SetWindowTextW(scrollBar, L"Transfers");
+                SCROLLINFO info{sizeof(info), SIF_RANGE | SIF_PAGE | SIF_POS};
+                info.nMax = viewport.contentHeight - 1;
+                info.nPage = viewport.bounds.bottom;
+                info.nPos = viewport.offset;
+                SetScrollInfo(scrollBar, SB_CTL, &info, TRUE);
+                SCROLLINFO actual{sizeof(actual), SIF_RANGE | SIF_PAGE | SIF_POS};
+                ready = GetScrollInfo(scrollBar, SB_CTL, &actual) &&
+                        actual.nMax == info.nMax && actual.nPage == info.nPage &&
+                        actual.nPos == info.nPos &&
+                        (GetWindowLongPtrW(scrollBar, GWL_STYLE) & WS_VISIBLE);
+            }
+        }
+        else if (scrollBar && GetParent(scrollBar) == hostWindow &&
+                 GetPropW(scrollBar, kTransferScrollBarOwnerProperty) == g_circleClassInstance)
+        {
+            ShowWindow(scrollBar, SW_HIDE);
+        }
+        // Window calls above can synchronously enter native fallback or
+        // teardown. Never publish their pre-callback snapshot as ready after
+        // the host has relinquished its custom presentation.
+        bool suspended = g_unloading.load(std::memory_order_acquire) ||
+                         !IsWindow(hostWindow) || IsHostInSpecialOperationState(hostWindow) ||
+                         GetRegisteredTileCountForHost(hostWindow) == 0;
+        ready = ready && !suspended;
+        bool statePresent = false;
+        {
+            std::lock_guard<std::mutex> lock(g_hostScrollMutex);
+            for (auto &entry : g_hostScrollStates)
+            {
+                if (entry.hostWindow != hostWindow)
+                    continue;
+                statePresent = true;
+                entry.scrollBar = scrollBar;
+                entry.offset = ready ? viewport.offset : 0;
+                entry.dpi = viewport.dpi;
+                if (!viewport.scrollBarWidth)
+                    entry.wheelRemainder = 0;
+                entry.updating = false;
+                break;
+            }
+        }
+        if (!statePresent)
+        {
+            // Teardown can retire the registry while a newly created control
+            // is still local to this invocation.
+            if (scrollBar && GetParent(scrollBar) == hostWindow &&
+                GetPropW(scrollBar, kTransferScrollBarOwnerProperty) == g_circleClassInstance)
+                DestroyWindowOnOwningThread(scrollBar, L"retired-transfer-scrollbar");
+            return false;
+        }
+        if (suspended)
+        {
+            SuspendHostTransferViewport(hostWindow);
+            if (GetRegisteredTileCountForHost(hostWindow) == 0)
+                DestroyHostTransferViewport(hostWindow);
+            return false;
+        }
+        if (!ready)
+            FailHostTransferViewport(hostWindow, L"scrollbar-or-geometry");
+        else if (viewport.offset != state.offset || viewport.dpi != state.dpi)
+            ClearCircleHoverStatesForHost(hostWindow);
+        return ready;
+    }
+
+    bool RouteTransferScrollMessage(HWND hostWindow, UINT message,
+                                    WPARAM wParam, LPARAM lParam)
+    {
+        if ((message != WM_VSCROLL && message != WM_MOUSEWHEEL) ||
+            IsHostInSpecialOperationState(hostWindow))
+            return false;
+        auto state = ReadHostScrollState(hostWindow);
+        TransferViewport viewport{};
+        if (!state.scrollBar || GetParent(state.scrollBar) != hostWindow ||
+            GetPropW(state.scrollBar, kTransferScrollBarOwnerProperty) != g_circleClassInstance ||
+            !IsWindowVisible(state.scrollBar) ||
+            !GetTransferViewport(hostWindow, &viewport) || !viewport.scrollBarWidth)
+            return false;
+
+        long long requested = viewport.offset;
+        int line = ScaleForDpi(24, viewport.dpi);
+        int page = std::max<int>(viewport.bounds.bottom - line, line);
+        if (message == WM_VSCROLL)
+        {
+            // Ignore Explorer's native scrollbar messages completely.
+            if (reinterpret_cast<HWND>(lParam) != state.scrollBar)
+                return false;
+            switch (LOWORD(wParam))
+            {
+            case SB_LINEUP:
+                requested -= line;
+                break;
+            case SB_LINEDOWN:
+                requested += line;
+                break;
+            case SB_PAGEUP:
+                requested -= page;
+                break;
+            case SB_PAGEDOWN:
+                requested += page;
+                break;
+            case SB_TOP:
+                requested = 0;
+                break;
+            case SB_BOTTOM:
+                requested = viewport.contentHeight;
+                break;
+            case SB_THUMBTRACK:
+            case SB_THUMBPOSITION:
+            {
+                SCROLLINFO info{sizeof(info), SIF_TRACKPOS};
+                if (!GetScrollInfo(state.scrollBar, SB_CTL, &info))
+                {
+                    FailHostTransferViewport(hostWindow, L"scrollbar-track");
+                    return true;
+                }
+                requested = info.nTrackPos;
+                break;
+            }
+            default:
+                return true;
+            }
+        }
+        else
+        {
+            if (LOWORD(wParam) & (MK_CONTROL | MK_SHIFT))
+                return false;
+            POINT point{static_cast<short>(LOWORD(lParam)),
+                        static_cast<short>(HIWORD(lParam))};
+            RECT client{};
+            if (!ScreenToClient(hostWindow, &point) ||
+                !GetClientRect(hostWindow, &client) || !PtInRect(&client, point))
+                return false;
+            UINT lines = 3;
+            SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0);
+            int delta = state.wheelRemainder + static_cast<short>(HIWORD(wParam));
+            int steps = delta / WHEEL_DELTA;
+            state.wheelRemainder = delta % WHEEL_DELTA;
+            requested -= static_cast<long long>(steps) *
+                         (lines == WHEEL_PAGESCROLL ? page : static_cast<long long>(line) * lines);
+        }
+        int offset = static_cast<int>(std::clamp<long long>(
+            requested, 0, std::max<int>(viewport.contentHeight - viewport.bounds.bottom, 0)));
+        {
+            std::lock_guard<std::mutex> lock(g_hostScrollMutex);
+            for (auto &entry : g_hostScrollStates)
+            {
+                if (entry.hostWindow != hostWindow)
+                    continue;
+                entry.offset = offset;
+                // The input snapshot may already use the new monitor's DPI
+                // before its posted layout refresh has run.
+                entry.dpi = viewport.dpi;
+                entry.wheelRemainder = state.wheelRemainder;
+                break;
+            }
+        }
+        if (offset != viewport.offset)
+        {
+            ClearCircleHoverStatesForHost(hostWindow);
+            PositionProgressCirclesForHost(hostWindow, L"transfer-scroll");
+            InvalidateRect(hostWindow, &viewport.bounds, FALSE);
+        }
+        return true;
     }
 
     bool TryGetDeleteLikeOperationKind(
@@ -8549,7 +10747,9 @@ namespace
     bool CalculateCustomHostWindowHeight(HWND hostWindow,
                                          bool expanded,
                                          int *targetWindowHeight,
-                                         int *targetClientHeight = nullptr)
+                                         int *targetClientHeight = nullptr,
+                                         RECT const *placement = nullptr,
+                                         int *targetTop = nullptr)
     {
         RECT windowRect{};
         RECT clientRect{};
@@ -8560,28 +10760,50 @@ namespace
             return false;
         }
 
-        size_t tileCount = std::max<size_t>(
-            GetRegisteredTileCountForHost(hostWindow), 1);
-        int logicalTileHeight = expanded ? kExpandedRegularTileHeight
-                                         : kCompactRegularTileHeight;
-        int logicalClientHeight =
-            logicalTileHeight * static_cast<int>(tileCount) +
-            kDisplayModeFooterReserveHeight;
-        int scaledClientHeight = ScaleForDpi(logicalClientHeight, dpi);
+        std::vector<OperationTileElement *> tiles;
+        if (!GetHostTransferRows(hostWindow, &tiles, &expanded))
+            return false;
+        int rowHeight = ScaleForDpi(
+            expanded ? kExpandedRegularTileHeight : kCompactRegularTileHeight, dpi);
+        if (rowHeight <= 0 || tiles.size() > static_cast<size_t>(INT_MAX / rowHeight))
+            return false;
+        int footerHeight = ScaleForDpi(kDisplayModeFooterReserveHeight, dpi);
         int windowHeight = windowRect.bottom - windowRect.top;
         int clientHeight = clientRect.bottom - clientRect.top;
-        *targetWindowHeight =
-            scaledClientHeight + (windowHeight - clientHeight);
+        int nonClientHeight = windowHeight - clientHeight;
+        RECT proposed = placement ? *placement : windowRect;
+        MONITORINFO monitor{sizeof(monitor)};
+        if (!GetMonitorInfoW(MonitorFromRect(&proposed, MONITOR_DEFAULTTONEAREST),
+                             &monitor) ||
+            nonClientHeight < 0)
+            return false;
+        // Keep the existing top edge while there is room for a useful viewport.
+        // Recover an off-screen/near-bottom caption by moving it only as far
+        // as necessary to leave the footer and a small scrollable body usable.
+        int minimumHeight = footerHeight + ScaleForDpi(80, dpi) + nonClientHeight;
+        if (monitor.rcWork.bottom - monitor.rcWork.top < minimumHeight)
+            return false;
+        int top = std::clamp<int>(proposed.top, monitor.rcWork.top,
+                                  monitor.rcWork.bottom - minimumHeight);
+        long long desiredHeight = static_cast<long long>(tiles.size()) *
+                                      rowHeight +
+                                  footerHeight + nonClientHeight;
+        *targetWindowHeight = static_cast<int>(std::min<long long>(
+            desiredHeight, monitor.rcWork.bottom - top));
         if (targetClientHeight)
         {
-            *targetClientHeight = scaledClientHeight;
+            *targetClientHeight = *targetWindowHeight - nonClientHeight;
         }
+        if (targetTop)
+            *targetTop = top;
         return true;
     }
 
     bool GetVerifiedCustomHostWindowHeight(HWND hostWindow,
                                            int nativeWindowHeight,
-                                           int *targetWindowHeight)
+                                           int *targetWindowHeight,
+                                           RECT const *placement,
+                                           int *targetTop)
     {
         (void)nativeWindowHeight;
 
@@ -8620,7 +10842,70 @@ namespace
         }
 
         return CalculateCustomHostWindowHeight(
-            hostWindow, expanded, targetWindowHeight);
+            hostWindow, expanded, targetWindowHeight, nullptr,
+            placement, targetTop);
+    }
+
+    bool HostGeometryMatches(HWND hostWindow, HostGeometryTarget const &target)
+    {
+        RECT window{}, client{};
+        return GetWindowRect(hostWindow, &window) && GetClientRect(hostWindow, &client) &&
+               window.right - window.left == target.windowWidth &&
+               window.bottom - window.top == target.windowHeight &&
+               client.right - client.left == target.clientWidth &&
+               client.bottom - client.top == target.clientHeight && window.top == target.top;
+    }
+
+    void ClearPendingHostGeometry(HWND hostWindow)
+    {
+        std::lock_guard<std::mutex> lock(g_hostScrollMutex);
+        for (auto &state : g_hostScrollStates)
+            if (state.hostWindow == hostWindow)
+                state.geometryPending = false;
+    }
+
+    bool VerifyPendingHostGeometry(HWND hostWindow, bool finalCheck)
+    {
+        auto state = ReadHostScrollState(hostWindow);
+        if (!state.geometryPending)
+            return true;
+        if (!IsWindow(hostWindow) || IsIconic(hostWindow) ||
+            g_unloading.load(std::memory_order_acquire) ||
+            IsHostInSpecialOperationState(hostWindow) ||
+            GetRegisteredTileCountForHost(hostWindow) == 0)
+        {
+            ClearPendingHostGeometry(hostWindow);
+            return false;
+        }
+        std::vector<OperationTileElement *> tiles;
+        bool expanded = false;
+        if (!GetHostTransferRows(hostWindow, &tiles, &expanded))
+        {
+            ClearPendingHostGeometry(hostWindow);
+            FailHostTransferViewport(hostWindow, L"deferred-geometry-state");
+            return false;
+        }
+        if (GetDpiForWindow(hostWindow) != state.geometryTarget.dpi ||
+            tiles.size() != state.geometryTarget.tileCount ||
+            expanded != state.geometryTarget.expanded)
+        {
+            // This is a new layout request, not a retry of the failed target.
+            ClearPendingHostGeometry(hostWindow);
+            ScheduleProgressCirclePosition(hostWindow, L"geometry-target-changed");
+            return false;
+        }
+        if (HostGeometryMatches(hostWindow, state.geometryTarget))
+        {
+            ClearPendingHostGeometry(hostWindow);
+            return true;
+        }
+        if (!finalCheck)
+            return false;
+        ClearPendingHostGeometry(hostWindow);
+        Wh_Log(L"MODE[%llu] CUSTOM_LAYOUT deferred resize-verification-failed host=%p",
+               state.geometryTarget.transitionId, reinterpret_cast<void *>(hostWindow));
+        FailHostTransferViewport(hostWindow, L"host-size-verification");
+        return false;
     }
 
     bool ResizeOperationStatusWindowForMode(
@@ -8628,20 +10913,32 @@ namespace
         bool expanded,
         unsigned long long transitionId)
     {
+        if (g_suppressNativeGeometryCaptureHost == hostWindow)
+            return false;
+        if (IsHostInSpecialOperationState(hostWindow) || IsIconic(hostWindow))
+            return false;
+        if (GetRegisteredTileCountForHost(hostWindow) == 0)
+            return false;
+        if (GetWindowThreadProcessId(hostWindow, nullptr) != GetCurrentThreadId())
+            return false;
+        if (ReadHostScrollState(hostWindow).geometryPending)
+            return false;
         RECT windowRect{};
         RECT clientRect{};
         int targetWindowHeight = 0;
         int targetClientHeight = 0;
+        int targetTop = 0;
         if (!GetWindowRect(hostWindow, &windowRect) ||
             !GetClientRect(hostWindow, &clientRect) ||
             !CalculateCustomHostWindowHeight(
                 hostWindow, expanded, &targetWindowHeight,
-                &targetClientHeight))
+                &targetClientHeight, nullptr, &targetTop))
         {
             Wh_Log(L"MODE[%llu] CUSTOM_LAYOUT resize-failed host=%p "
                    L"reason=window-rect error=%lu",
                    transitionId, reinterpret_cast<void *>(hostWindow),
                    GetLastError());
+            FailHostTransferViewport(hostWindow, L"host-size-calculation");
             return false;
         }
 
@@ -8656,14 +10953,29 @@ namespace
         int targetClientWidth = ScaleForDpi(kRequestedTileWidth, dpi);
         int nonClientWidth = windowWidth - clientWidth;
         int targetWindowWidth = targetClientWidth + nonClientWidth;
+        HostGeometryTarget target{};
+        target.windowWidth = targetWindowWidth;
+        target.windowHeight = targetWindowHeight;
+        target.clientWidth = targetClientWidth;
+        target.clientHeight = targetClientHeight;
+        target.top = targetTop;
+        target.transitionId = transitionId;
+        target.dpi = dpi;
+        std::vector<OperationTileElement *> targetTiles;
+        if (!GetHostTransferRows(hostWindow, &targetTiles, &target.expanded))
+            return false;
+        target.tileCount = targetTiles.size();
 
         if (windowHeight != targetWindowHeight ||
-            windowWidth != targetWindowWidth)
+            windowWidth != targetWindowWidth || windowRect.top != targetTop)
         {
-            ScopedHostGeometryChange geometryChange(hostWindow, false);
-            if (!SetWindowPos(hostWindow, nullptr, 0, 0,
+            WINDOWPOS request{hostWindow, nullptr, windowRect.left, targetTop,
                               targetWindowWidth, targetWindowHeight,
-                              SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE))
+                              SWP_NOZORDER | SWP_NOACTIVATE};
+            ScopedHostGeometryChange geometryChange(hostWindow, false, &request);
+            if (!SetWindowPos(hostWindow, nullptr, windowRect.left, targetTop,
+                              targetWindowWidth, targetWindowHeight,
+                              SWP_NOZORDER | SWP_NOACTIVATE))
             {
                 Wh_Log(L"MODE[%llu] CUSTOM_LAYOUT resize-failed host=%p "
                        L"targetClientWidth=%d targetClientHeight=%d "
@@ -8672,10 +10984,13 @@ namespace
                        transitionId, reinterpret_cast<void *>(hostWindow),
                        targetClientWidth, targetClientHeight,
                        targetWindowWidth, targetWindowHeight, GetLastError());
+                FailHostTransferViewport(hostWindow, L"host-resize");
                 return false;
             }
         }
 
+        if (IsHostInSpecialOperationState(hostWindow) || IsIconic(hostWindow))
+            return false;
         RECT windowAfter{};
         RECT clientAfter{};
         if (!GetWindowRect(hostWindow, &windowAfter) ||
@@ -8690,11 +11005,13 @@ namespace
         bool sizeVerified = actualWindowWidth == targetWindowWidth &&
                             actualWindowHeight == targetWindowHeight &&
                             actualClientWidth == targetClientWidth &&
-                            actualClientHeight == targetClientHeight;
+                            actualClientHeight == targetClientHeight &&
+                            windowAfter.top == targetTop;
 
         if (!sizeVerified)
         {
-            Wh_Log(L"MODE[%llu] CUSTOM_LAYOUT resize-verification-failed "
+            target.verificationId = ++g_geometryVerificationSequence;
+            Wh_Log(L"MODE[%llu] CUSTOM_LAYOUT resize-verification-pending "
                    L"host=%p targetClient=%dx%d actualClient=%dx%d "
                    L"targetWindow=%dx%d actualWindow=%dx%d",
                    transitionId, reinterpret_cast<void *>(hostWindow),
@@ -8702,8 +11019,30 @@ namespace
                    actualClientWidth, actualClientHeight,
                    targetWindowWidth, targetWindowHeight,
                    actualWindowWidth, actualWindowHeight);
+            {
+                std::lock_guard<std::mutex> lock(g_hostScrollMutex);
+                auto it = std::find_if(g_hostScrollStates.begin(), g_hostScrollStates.end(),
+                                       [hostWindow](HostScrollState const &state)
+                                       { return state.hostWindow == hostWindow; });
+                if (it == g_hostScrollStates.end())
+                {
+                    HostScrollState state{};
+                    state.hostWindow = hostWindow;
+                    g_hostScrollStates.push_back(state);
+                    it = g_hostScrollStates.end() - 1;
+                }
+                it->geometryTarget = target;
+                it->geometryPending = true;
+            }
+            // Native messages queued by SetWindowPos run first. The existing
+            // host layout message then verifies once, without another resize.
+            if (!g_positionCirclesMessage ||
+                !PostMessageW(hostWindow, g_positionCirclesMessage,
+                              static_cast<WPARAM>(target.verificationId), 0))
+                FailHostTransferViewport(hostWindow, L"host-size-verification-post");
+            return false;
         }
-        return sizeVerified;
+        return UpdateHostTransferViewport(hostWindow);
     }
 
     bool ApplyDisplayMode(COperationStatusTile *owner,
@@ -8743,18 +11082,25 @@ namespace
             return false;
         }
 
-        // Single-operation normal mode owns all visible body content. Hide
-        // only duplicate native visuals; their live elements and actions stay
-        // intact and are restored for Explorer's fallback presentations.
-        if (IsSingleNormalProgressTileForHost(state.tile, hostWindow))
+        if (!applyFinalHostGeometry)
         {
-            SetNativeDuplicatePresentation(state, true);
+            // Native mode changes are not yet settled. In particular, do not
+            // initialize a scrollbar from the single tile's old native size.
+            ScheduleProgressCirclePosition(hostWindow, L"display-mode");
+            return false;
         }
 
         bool geometryApplied =
-            !applyFinalHostGeometry ||
             ResizeOperationStatusWindowForMode(
                 hostWindow, state.expanded, transitionId);
+
+        if (!geometryApplied || !UpdateHostTransferViewport(hostWindow))
+            return false;
+
+        // Suppress duplicate native visuals only after geometry is verified.
+        // Their live elements/actions remain intact for native fallback.
+        if (IsSingleNormalProgressTileForHost(state.tile, hostWindow))
+            SetNativeDuplicatePresentation(state, true);
 
         PositionInfoPanel(state.tile);
         PositionFooterOverlay(state.tile);
@@ -8814,10 +11160,6 @@ namespace
                    ValidateNormalProgressHierarchy(elements, 0, false));
         if (!hierarchyValid)
         {
-            Wh_Log(L"INITIAL_MODE owner=%p result=skipped "
-                   L"reason=unsupported-layout deleteLike=%s",
-                   reinterpret_cast<void *>(owner),
-                   deleteLike ? L"yes" : L"no");
             return;
         }
 
@@ -8852,11 +11194,6 @@ namespace
 
         if (!nativeCompact && !nativeExpanded)
         {
-            Wh_Log(
-                L"INITIAL_MODE owner=%p result=skipped "
-                L"reason=unrecognized-native-visibility deleteLike=%s",
-                reinterpret_cast<void *>(owner),
-                deleteLike ? L"yes" : L"no");
             return;
         }
 
@@ -8876,6 +11213,38 @@ namespace
             it->expanded = expanded;
         }
 
+        HWND nativeProgressWindow =
+            OperationTileElement_GetProgressHWND_Original(state.tile);
+        NativeProgressSnapshot initialProgress =
+            ReadNativeProgress(nativeProgressWindow, 0);
+
+        if (!EnsureProgressCircle(state.tile, 0, initialProgress))
+        {
+            // Keep the native presentation authoritative and allow a
+            // later native update to retry activation.
+            std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
+            auto it = std::find_if(
+                g_transferSummaries.begin(), g_transferSummaries.end(),
+                [owner](TransferSummaryState const &candidate)
+                { return candidate.owner == owner; });
+            if (it != g_transferSummaries.end() &&
+                it->tile == state.tile)
+            {
+                it->displayModeKnown = false;
+            }
+            return;
+        }
+
+        HWND hostWindow = GetRegisteredCircleHost(state.tile);
+        if (hostWindow && GetRegisteredTileCountForHost(hostWindow) > 1)
+        {
+            MarkHostForMeasuredMultiRate(hostWindow);
+        }
+        if (hostWindow)
+        {
+            RefreshHostPresentationState(hostWindow);
+        }
+
         unsigned long long transitionId = ++g_displayTransitionSequence;
         ApplyDisplayMode(owner, false, transitionId);
         ScheduleDeferredDisplaySnapshot(owner, transitionId, expanded);
@@ -8885,27 +11254,92 @@ namespace
                            bool expanded,
                            unsigned long long transitionId)
     {
-        bool recorded = false;
+        OperationTileElement *sourceTile = nullptr;
+
         {
             std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
             auto it = std::find_if(
-                g_transferSummaries.begin(), g_transferSummaries.end(),
+                g_transferSummaries.begin(),
+                g_transferSummaries.end(),
                 [owner](TransferSummaryState const &state)
                 { return state.owner == owner; });
-            if (it != g_transferSummaries.end() && it->tile &&
-                it->operationTileRoot)
+
+            if (it == g_transferSummaries.end() ||
+                !it->tile ||
+                !it->operationTileRoot)
             {
-                it->displayModeKnown = true;
-                it->expanded = expanded;
-                recorded = true;
+                return;
+            }
+
+            sourceTile = it->tile;
+        }
+
+        HWND hostWindow =
+            GetRegisteredCircleHost(sourceTile);
+
+        std::vector<OperationTileElement *> hostTiles;
+
+        if (hostWindow)
+        {
+            std::lock_guard<std::mutex> lock(g_circleMutex);
+
+            for (CircleState const &circle : g_circles)
+            {
+                if (circle.hostWindow == hostWindow &&
+                    circle.tile)
+                {
+                    hostTiles.push_back(circle.tile);
+                }
             }
         }
-        if (recorded)
+
+        std::vector<COperationStatusTile *> ownersToApply;
+
         {
-            ApplyDisplayMode(owner, false, transitionId);
+            std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
+
+            for (TransferSummaryState &state :
+                 g_transferSummaries)
+            {
+                bool sameHost =
+                    !hostTiles.empty() &&
+                    std::find(
+                        hostTiles.begin(),
+                        hostTiles.end(),
+                        state.tile) != hostTiles.end();
+
+                // If host lookup unexpectedly failed, preserve the
+                // previous single-owner behavior instead of changing
+                // unrelated transfer state.
+                bool sourceOwnerFallback =
+                    hostTiles.empty() &&
+                    state.owner == owner;
+
+                if ((!sameHost && !sourceOwnerFallback) ||
+                    !state.owner ||
+                    !state.tile ||
+                    !state.operationTileRoot)
+                {
+                    continue;
+                }
+
+                state.displayModeKnown = true;
+                state.expanded = expanded;
+                ownersToApply.push_back(state.owner);
+            }
+        }
+
+        // Re-layout every custom tile in this host. Do this outside
+        // the state locks because ApplyDisplayMode performs window
+        // and DirectUI work.
+        for (COperationStatusTile *affectedOwner : ownersToApply)
+        {
+            ApplyDisplayMode(
+                affectedOwner,
+                false,
+                transitionId);
         }
     }
-
     void RecordTransferBytes(COperationStatusTile *owner,
                              unsigned long long completedItems,
                              unsigned long long totalItems,
@@ -9182,7 +11616,6 @@ namespace
             it->totalBytes = totalBytes;
             it->bytesValid = true;
 
-
             tile = it->tile;
         }
 
@@ -9243,15 +11676,6 @@ namespace
             InitializeRegisteredDisplayMode(owner);
         }
     }
-
-    struct NativeProgressSnapshot
-    {
-        int position;
-        int rangeLow;
-        int rangeHigh;
-        int percent;
-        bool rangeValid;
-    };
 
     NativeProgressSnapshot ReadNativeProgress(HWND progressWindow,
                                               int fallbackPercent)
@@ -9362,6 +11786,26 @@ namespace
                 InvalidateInfoPanelForTile(tile);
             }
             return true;
+        }
+
+        // A custom presentation must never be activated until Explorer's
+        // native compact/expanded state has been positively identified.
+        // Existing circles may still be refreshed after activation.
+        bool displayModeKnown = false;
+        {
+            std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
+            auto transferIt = std::find_if(
+                g_transferSummaries.begin(), g_transferSummaries.end(),
+                [tile](TransferSummaryState const &state)
+                { return state.tile == tile; });
+            displayModeKnown =
+                transferIt != g_transferSummaries.end() &&
+                transferIt->displayModeKnown;
+        }
+
+        if (!displayModeKnown)
+        {
+            return false;
         }
 
         HWND circleWindow = CreateWindowExW(
@@ -9539,6 +11983,7 @@ namespace
         {
             if (GetRegisteredTileCountForHost(state.hostWindow) == 0)
             {
+                DestroyHostTransferViewport(state.hostWindow);
                 HWND footerWindow =
                     GetFooterOverlayWindow(state.hostWindow);
                 if (footerWindow && IsWindow(footerWindow))
@@ -10024,7 +12469,9 @@ namespace
         COperationDataProvider *thisPtr,
         IShellItem *currentItem)
     {
-        if (currentItem)
+        bool trackCurrentFile = g_showCurrentFileProgressBar;
+
+        if (trackCurrentFile && currentItem)
         {
             currentItem->AddRef();
         }
@@ -10033,8 +12480,8 @@ namespace
             COperationDataProvider_WriteCurrentItem_Original(
                 thisPtr, currentItem);
 
-        if (!g_unloading.load(std::memory_order_acquire) &&
-            g_showCurrentFileProgressBar)
+        if (trackCurrentFile &&
+            !g_unloading.load(std::memory_order_acquire))
         {
             PWSTR filePath = nullptr;
 
@@ -10063,7 +12510,6 @@ namespace
                             data.nFileSizeLow);
                 }
             }
-
 
             {
                 std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
@@ -10103,20 +12549,15 @@ namespace
                 binding->currentFileSize = fileSize;
                 binding->currentFileValid = fileSize > 0;
                 PublishSharedProgress(*binding);
-
-
             }
-
 
             if (filePath)
             {
                 FreeShellMemory(filePath);
             }
-
-
         }
 
-        if (currentItem)
+        if (trackCurrentFile && currentItem)
         {
             currentItem->Release();
         }
@@ -10133,8 +12574,7 @@ namespace
         unsigned long long value4,
         unsigned long long value5)
     {
-
-
+        if (g_showCurrentFileProgressBar)
         {
             std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
 
@@ -10158,9 +12598,7 @@ namespace
             binding->latestTotalBytes = value5;
             binding->latestProgressValid = true;
             PublishSharedProgress(*binding);
-
         }
-
 
         return COperationDataProvider_WriteProgressValues_Original(
             thisPtr,
@@ -10240,6 +12678,21 @@ namespace
         bool ownerResolved = ResolveDisplayModeOwner(
             thisPtr, transitionId, &canonicalOwner, false);
 
+        TransferSummaryState preNativeState{};
+        bool releasedNativeVisibilityForModeChange =
+            ownerResolved && canonicalOwner &&
+            CopyRegisteredTransferState(
+                canonicalOwner, &preNativeState);
+
+        if (releasedNativeVisibilityForModeChange)
+        {
+            // Give Explorer back exactly the elements we suppressed
+            // before asking it to establish the new compact/expanded
+            // visibility state.
+            SetNativeDuplicatePresentation(
+                preNativeState, false);
+        }
+
         HRESULT result = COperationStatusTile_SetTileDisplayMode_Original(
             thisPtr, expanded);
 
@@ -10255,6 +12708,27 @@ namespace
             RecordDisplayMode(canonicalOwner, expanded, transitionId);
             ScheduleDeferredDisplaySnapshot(canonicalOwner, transitionId,
                                             expanded);
+        }
+        else if (ownerStillResolved &&
+                 releasedNativeVisibilityForModeChange)
+        {
+            TransferSummaryState currentState{};
+            if (CopyRegisteredTransferState(
+                    canonicalOwner, &currentState) &&
+                currentState.tile)
+            {
+                HWND hostWindow = nullptr;
+                if (GetUniqueRegisteredCircleHost(
+                        currentState.tile, &hostWindow) &&
+                    hostWindow &&
+                    !IsHostInSpecialOperationState(hostWindow) &&
+                    IsSingleNormalProgressTileForHost(
+                        currentState.tile, hostWindow))
+                {
+                    SetNativeDuplicatePresentation(
+                        currentState, true);
+                }
+            }
         }
         else if (!ownerStillResolved)
         {
@@ -10272,123 +12746,6 @@ namespace
         RemoveTransferSummary(thisPtr);
         DestroyProgressCircle(thisPtr);
         OperationTileElement_Destructor_Original(thisPtr);
-    }
-
-    struct WindowResizeResult
-    {
-        int beforeWidth;
-        int beforeHeight;
-        int afterWidth;
-        int afterHeight;
-        bool hostResized;
-        bool success;
-    };
-
-    WindowResizeResult EnsureOperationStatusWindowWidth(
-        unsigned long long eventId)
-    {
-        WindowResizeResult resizeResult{};
-        WindowLookupContext context{eventId, nullptr};
-        SetLastError(ERROR_SUCCESS);
-        BOOL enumResult = EnumThreadWindows(
-            GetCurrentThreadId(), FindOperationStatusWindow,
-            reinterpret_cast<LPARAM>(&context));
-        if (!context.operationStatusWindow)
-        {
-            DWORD error = enumResult ? ERROR_NOT_FOUND : GetLastError();
-            if (error == ERROR_SUCCESS)
-            {
-                error = ERROR_NOT_FOUND;
-            }
-            Wh_Log(L"eventId=%llu base-layout OperationStatusWindow lookup "
-                   L"failed error=%lu",
-                   eventId, error);
-            return resizeResult;
-        }
-
-        RECT windowRect;
-        if (!GetWindowRect(context.operationStatusWindow, &windowRect))
-        {
-            Wh_Log(L"eventId=%llu base-layout GetWindowRect before failed "
-                   L"error=%lu",
-                   eventId, GetLastError());
-            return resizeResult;
-        }
-
-        resizeResult.beforeWidth = windowRect.right - windowRect.left;
-        resizeResult.beforeHeight = windowRect.bottom - windowRect.top;
-        resizeResult.afterWidth = resizeResult.beforeWidth;
-        resizeResult.afterHeight = resizeResult.beforeHeight;
-
-        RECT clientRect;
-        if (!GetClientRect(context.operationStatusWindow, &clientRect))
-        {
-            Wh_Log(L"eventId=%llu base-layout GetClientRect before failed "
-                   L"error=%lu",
-                   eventId, GetLastError());
-            return resizeResult;
-        }
-
-        UINT dpi = GetDpiForWindow(context.operationStatusWindow);
-        if (!dpi)
-        {
-            Wh_Log(L"eventId=%llu base-layout GetDpiForWindow failed dpi=0",
-                   eventId);
-            return resizeResult;
-        }
-
-        int targetClientWidth =
-            MulDiv(kRequestedTileWidth, static_cast<int>(dpi),
-                   USER_DEFAULT_SCREEN_DPI);
-        int currentClientWidth = clientRect.right - clientRect.left;
-        if (currentClientWidth >= targetClientWidth)
-        {
-            resizeResult.success = true;
-            return resizeResult;
-        }
-
-        int nonClientWidth = resizeResult.beforeWidth - currentClientWidth;
-        int targetWindowWidth = targetClientWidth + nonClientWidth;
-        BOOL resized = FALSE;
-        {
-            ScopedHostGeometryChange geometryChange(
-                context.operationStatusWindow, false);
-            resized = SetWindowPos(
-                context.operationStatusWindow, nullptr, 0, 0,
-                targetWindowWidth, resizeResult.beforeHeight,
-                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-        }
-        if (!resized)
-        {
-            Wh_Log(L"eventId=%llu base-layout SetWindowPos failed "
-                   L"requestedWidth=%d error=%lu",
-                   eventId, targetWindowWidth, GetLastError());
-            return resizeResult;
-        }
-
-        resizeResult.hostResized = true;
-        if (!GetWindowRect(context.operationStatusWindow, &windowRect))
-        {
-            Wh_Log(L"eventId=%llu base-layout GetWindowRect after failed "
-                   L"error=%lu",
-                   eventId, GetLastError());
-            return resizeResult;
-        }
-
-        resizeResult.afterWidth = windowRect.right - windowRect.left;
-        resizeResult.afterHeight = windowRect.bottom - windowRect.top;
-        if (!GetClientRect(context.operationStatusWindow, &clientRect))
-        {
-            Wh_Log(L"eventId=%llu base-layout GetClientRect after failed "
-                   L"error=%lu",
-                   eventId, GetLastError());
-            return resizeResult;
-        }
-
-        resizeResult.success =
-            clientRect.right - clientRect.left >= targetClientWidth &&
-            resizeResult.afterHeight == resizeResult.beforeHeight;
-        return resizeResult;
     }
 
     // Exact verified x64 ABI encoded by the Microsoft public symbol:
@@ -10482,30 +12839,15 @@ namespace
             return result;
         }
 
-        HWND nativeProgressWindow =
-            OperationTileElement_GetProgressHWND_Original(operationTile);
-        NativeProgressSnapshot initialProgress =
-            ReadNativeProgress(nativeProgressWindow, 0);
-
-        // Only the top-level HWND is sized. Native DirectUI geometry, fonts,
-        // colors, and parentage are never modified; duplicate normal-mode
-        // visuals are hidden later and restored for native fallback.
+        // Register native state first. Custom HWNDs, Glass, positioning,
+        // and host geometry are activated only after the native display
+        // mode has been positively identified.
         ScopedPresentationActivation activationGuard;
         if (g_unloading.load(std::memory_order_acquire))
         {
             return result;
         }
-        if (!EnsureProgressCircle(operationTile, eventId, initialProgress))
-        {
-            if (!g_unloading.load(std::memory_order_acquire))
-            {
-                Wh_Log(L"eventId=%llu presentation activation failed; "
-                       L"native Explorer presentation retained",
-                       eventId);
-            }
-            return result;
-        }
-        EnsureOperationStatusWindowWidth(eventId);
+
         RegisterTransferSummary(thisPtr, operationTile, operationTileRoot,
                                 state.tileHeaderRoot);
         return result;
@@ -10724,7 +13066,7 @@ namespace
                 {LR"(private: double __cdecl COperationStatusTileRateCalculator::_CalculateRate(unsigned __int64,unsigned __int64,unsigned __int64,unsigned __int64,unsigned __int64,unsigned __int64,unsigned __int64,double *))"},
                 &targets->calculateRate,
                 nullptr,
-                false,
+                true,
             },
         };
 
@@ -10737,7 +13079,7 @@ namespace
             !targets->writeProgressValues ||
             !targets->refreshDisplayProgress ||
             !targets->updateRemainingItemsAndSize || !targets->updateSummary ||
-            !targets->setTileDisplayMode || !targets->calculateRate)
+            !targets->setTileDisplayMode)
         {
             Wh_Log(L"Skin setup failed: unable to resolve exact "
                    L"file-operation symbols CreateTile=%p ProgressProp=%p "
@@ -10862,13 +13204,20 @@ namespace
             return false;
         }
 
-        if (!WindhawkUtils::SetFunctionHook(
-                targets.calculateRate,
-                COperationStatusTileRateCalculator_CalculateRate_Hook,
-                &COperationStatusTileRateCalculator_CalculateRate_Original))
+        if (targets.calculateRate)
         {
-            Wh_Log(L"Skin setup failed: unable to hook native rate update");
-            return false;
+            if (!WindhawkUtils::SetFunctionHook(
+                    targets.calculateRate,
+                    COperationStatusTileRateCalculator_CalculateRate_Hook,
+                    &COperationStatusTileRateCalculator_CalculateRate_Original))
+            {
+                Wh_Log(L"Skin setup failed: unable to hook native rate update");
+                return false;
+            }
+        }
+        else
+        {
+            Wh_Log(L"Native rate symbol unavailable; using measured fallback");
         }
 
         return true;
@@ -10879,12 +13228,18 @@ namespace
 BOOL Wh_ModInit()
 {
     g_unloading.store(false, std::memory_order_release);
-    Wh_Log(L"File Operation Styler 1.1.0 initialization started");
+    Wh_Log(L"File Operation Styler " WH_MOD_VERSION L" initialization started");
+
+    if (!InitializeCommonControlsSubclassApi())
+    {
+        return FALSE;
+    }
 
     LoadSettings();
 
     if (!InitializeProgressCircleUi())
     {
+        ShutdownCommonControlsSubclassApi();
         return FALSE;
     }
 
@@ -10893,10 +13248,11 @@ BOOL Wh_ModInit()
     {
         ShutdownProgressCircleUi();
         ReleaseOwnedSkinTargetModules();
+        ShutdownCommonControlsSubclassApi();
         return FALSE;
     }
 
-    Wh_Log(L"File Operation Styler 1.1.0 initialization complete");
+    Wh_Log(L"File Operation Styler " WH_MOD_VERSION L" initialization complete");
     return TRUE;
 }
 
@@ -10907,7 +13263,7 @@ void Wh_ModBeforeUninit()
         return;
     }
 
-    Wh_Log(L"File Operation Styler 1.1.0 presentation teardown started");
+    Wh_Log(L"File Operation Styler " WH_MOD_VERSION L" presentation teardown started");
     {
         std::unique_lock<std::mutex> lock(g_presentationActivationMutex);
         g_presentationActivationCondition.wait(
@@ -10915,7 +13271,7 @@ void Wh_ModBeforeUninit()
             { return g_presentationActivations == 0; });
     }
     DestroyAllProgressCircles();
-    Wh_Log(L"File Operation Styler 1.1.0 presentation teardown complete");
+    Wh_Log(L"File Operation Styler " WH_MOD_VERSION L" presentation teardown complete");
 }
 
 void Wh_ModUninit()
@@ -10931,7 +13287,9 @@ void Wh_ModUninit()
     ShutdownSharedProgressBridge();
     ShutdownGlassBufferedPaintApi();
     ShutdownDwmApi();
-    Wh_Log(L"File Operation Styler 1.1.0 uninitialization complete");
+    ShutdownShellMemoryApi();
+    ShutdownCommonControlsSubclassApi();
+    Wh_Log(L"File Operation Styler " WH_MOD_VERSION L" uninitialization complete");
 }
 
 BOOL Wh_ModSettingsChanged(BOOL *bReload)
