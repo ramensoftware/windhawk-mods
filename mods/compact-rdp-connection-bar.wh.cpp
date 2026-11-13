@@ -2,7 +2,7 @@
 // @id              compact-rdp-connection-bar
 // @name            Compact RDP connection bar
 // @description     Shrinks the top connection bar, optionally hides pin/quality buttons, keeps drag working
-// @version         2.9.2
+// @version         2.9.3.2
 // @author          hsb5
 // @github          https://github.com/hsb5
 // @include         mstsc.exe
@@ -29,9 +29,9 @@ hostname alone.
 
 ## Screenshots
 
-| Before | After |
-|--------|-------|
-| ![Original wide connection bar](https://raw.githubusercontent.com/hsb5/screenshots/main/Before.png) | ![Compact connection bar with centered hostname](https://raw.githubusercontent.com/hsb5/screenshots/main/After.png) |
+| Before | After | After2 | After3 | After4 |
+|--------|-------|--------|-------|-------|
+| ![Original wide connection bar](https://raw.githubusercontent.com/hsb5/screenshots/main/Before.png) | ![Compact connection bar with centered hostname](https://raw.githubusercontent.com/hsb5/screenshots/main/After.png) | ![Compact connection bar 2 with centered hostname](https://raw.githubusercontent.com/hsb5/screenshots/main/After2.png) | ![Compact connection bar 3 with centered hostname](https://raw.githubusercontent.com/hsb5/screenshots/main/After3.png) | ![Compact connection bar 4 with centered hostname](https://raw.githubusercontent.com/hsb5/screenshots/main/After4.png) |
 
 ## Settings
 
@@ -141,6 +141,45 @@ static CreateWindowExW_t CreateWindowExW_Original;
 
 static LRESULT CALLBACK BarProc(HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
 static LRESULT CALLBACK TbProc(HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
+
+// ---------------------------------------------------------------- bar enumeration
+
+// The bar can be either a top-level window or a child of the full-screen
+// session window depending on the mstsc mode. EnumWindows finds it either way.
+using BarFn = void (*)(HWND);
+
+static BOOL CALLBACK VisitIfBar(HWND hwnd, LPARAM lParam) {
+    WCHAR cls[32];
+    if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) &&
+        lstrcmpW(cls, L"BBarWindowClass") == 0) {
+        ((BarFn)lParam)(hwnd);
+    }
+    return TRUE;
+}
+
+static BOOL CALLBACK VisitTopLevel(HWND hwnd, LPARAM lParam) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid == GetCurrentProcessId()) {
+        VisitIfBar(hwnd, lParam);                    // a top-level bar
+        EnumChildWindows(hwnd, VisitIfBar, lParam);  // a bar at any depth below it
+    }
+    return TRUE;
+}
+
+static void ForEachBar(BarFn fn) {
+    EnumWindows(VisitTopLevel, (LPARAM)fn);
+}
+
+// Window rect in the coordinates SetWindowPos expects: the parent's client
+// area for a child window, the screen for a top-level one. Mapping changes
+// nothing for top-level windows.
+static RECT GetRectInParent(HWND hwnd) {
+    RECT rc;
+    GetWindowRect(hwnd, &rc);
+    MapWindowPoints(HWND_DESKTOP, GetAncestor(hwnd, GA_PARENT), (POINT*)&rc, 2);
+    return rc;
+}
 
 // ---------------------------------------------------------------- helpers
 
@@ -508,8 +547,7 @@ static bool ComputeTargets(HWND hwnd) {
         int width = pad + leftW + gap + rightW + pad;
         if (width <= 0) break;
 
-        RECT bar;
-        GetWindowRect(hwnd, &bar);
+        RECT bar = GetRectInParent(hwnd);   // SetWindowPos coordinate space
         if (!g_haveOrigBar) {
             g_origBar = bar;
             g_haveOrigBar = true;
@@ -540,6 +578,8 @@ static bool ComputeTargets(HWND hwnd) {
         g_tb[lastIdx].w = rightW;
 
         g_targetW = width;
+        // Anchor to the original left edge, not the current one: a recompute
+        // after Commit would otherwise drift by half the shrink each time.
         g_targetX = (int)g_origBar.left + (origW > 0 ? (origW - width) / 2 : 0);
 
         if (g_debug)
@@ -554,8 +594,7 @@ static bool ComputeTargets(HWND hwnd) {
 }
 
 static void Commit(HWND hwnd) {
-    RECT bar;
-    GetWindowRect(hwnd, &bar);
+    RECT bar = GetRectInParent(hwnd);   // parent/client space for SetWindowPos
     RECT client;
     GetClientRect(hwnd, &client);
     int height = client.bottom > 0 ? (int)client.bottom : (int)(bar.bottom - bar.top);
@@ -714,10 +753,15 @@ static int WINAPI DrawTextExW_Hook(HDC hdc, LPWSTR text, int cch, LPRECT lprc,
 // ---------------------------------------------------------------- hooks
 
 static void AttachBar(HWND hwnd) {
+    // Avoid double-attaching when CreateWindowExW hook and EnumWindows both see it
+    if (hwnd == g_bbar) return;
+
     if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, BarProc, 0)) {
         g_bbar = hwnd;
         g_dumped = false;
-        Wh_Log(L"attached to BBar %p", hwnd);
+        DWORD style = (DWORD)GetWindowLongW(hwnd, GWL_STYLE);
+        Wh_Log(L"attached to BBar %p style=0x%08X %s", hwnd, style,
+               (style & WS_CHILD) ? L"(child)" : L"(top-level)");
     } else {
         Wh_Log(L"SetWindowSubclass failed for %p", hwnd);
     }
@@ -739,14 +783,15 @@ static HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR cls, LPCWSTR name
 }
 
 static void FindExisting() {
-    HWND desktop = GetDesktopWindow();
-    HWND hwnd = NULL;
-    DWORD myPid = GetCurrentProcessId();
-    while ((hwnd = FindWindowExW(desktop, hwnd, L"BBarWindowClass", NULL)) != NULL) {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(hwnd, &pid);
-        if (pid == myPid) AttachBar(hwnd);
-    }
+    ForEachBar(AttachBar);
+}
+
+static void DetachBar(HWND hwnd) {
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, BarProc);
+
+    HWND tb = NULL;
+    while ((tb = FindWindowExW(hwnd, tb, L"ToolbarWindow32", NULL)) != NULL)
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(tb, TbProc);
 }
 
 // ---------------------------------------------------------------- settings
@@ -773,7 +818,7 @@ BOOL Wh_ModInit() {
     WindhawkUtils::SetFunctionHook(DrawTextExW, DrawTextExW_Hook, &DrawTextExW_Original);
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
 
-    Wh_Log(L"init 2.9.2: gap=%d pin=%d quality=%d min=%d restore=%d close=%d debug=%d",
+    Wh_Log(L"init 2.9.3.2: gap=%d pin=%d quality=%d min=%d restore=%d close=%d debug=%d",
            g_gapWidth, (int)g_hidePin, (int)g_hideQuality,
            (int)g_hideMin, (int)g_hideRestore, (int)g_hideClose,
            (int)g_debug);
@@ -801,25 +846,13 @@ void Wh_ModUninit() {
     // bar or toolbar that keeps one crashes mstsc on its next message once the
     // mod is unloaded. Doing this before RestoreButtons also stops a WM_PAINT
     // from landing in the gap and recomputing the layout we are undoing.
-    HWND desktop = GetDesktopWindow();
-    HWND hwnd = NULL;
-    DWORD myPid = GetCurrentProcessId();
-    while ((hwnd = FindWindowExW(desktop, hwnd, L"BBarWindowClass", NULL)) != NULL) {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(hwnd, &pid);
-        if (pid != myPid) continue;
-
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, BarProc);
-
-        HWND tb = NULL;
-        while ((tb = FindWindowExW(hwnd, tb, L"ToolbarWindow32", NULL)) != NULL)
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(tb, TbProc);
-    }
+    ForEachBar(DetachBar);
 
     RestoreButtons();
     g_active = false;
 
     if (g_bbar && IsWindow(g_bbar) && g_haveOrigBar) {
+        // Restore in the same coordinate space we captured
         SetWindowPos(g_bbar, NULL, (int)g_origBar.left, (int)g_origBar.top,
                      (int)(g_origBar.right - g_origBar.left),
                      (int)(g_origBar.bottom - g_origBar.top),
