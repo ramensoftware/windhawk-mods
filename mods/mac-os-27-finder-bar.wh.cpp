@@ -18243,6 +18243,36 @@ static void IslandPush(const IslandNote& n, bool force) {
         NtfRefresh();  // painel de notificações aberto: entra na hora
     }
     if (g_isl.hwnd) {
+        // Aviso de estado (Caps Lock, Foco, saída de áudio...): o mesmo tipo de aviso
+        // que já está na pílula troca o texto na hora, e os repetidos na fila somem.
+        // Assim a pílula mostra sempre o estado mais recente, em vez de contar cada toque.
+        auto sameKind = [&](const IslandNote& o) { return !o.isNotif && o.open.empty() && o.glyph == n.glyph; };
+        if (sameKind(n)) {
+            g_isl.queue.erase(std::remove_if(g_isl.queue.begin(), g_isl.queue.end(), sameKind), g_isl.queue.end());
+            double t = (double)(GetTickCount64() - g_isl.tick);
+            if (!g_isl.reply && sameKind(g_isl.note) && t < kIslGrow + kIslHold + kIslShrink) {
+                float s = g_isl.s, tw = 0;
+                if (IDWriteTextFormat* fT = MakeFormat(g_settings.fontFamily.c_str(), DWRITE_FONT_WEIGHT_SEMI_BOLD, 13 * s)) {
+                    tw = GmMeasure(fT, n.title);
+                    fT->Release();
+                }
+                if (IDWriteTextFormat* fS = MakeFormat(g_settings.fontFamily.c_str(), DWRITE_FONT_WEIGHT_NORMAL, 12 * s)) {
+                    tw = std::max(tw, GmMeasure(fS, n.sub));
+                    fS->Release();
+                }
+                if (tw + 70 * s <= g_isl.fullW + 0.5f) {
+                    // Cabe na pílula aberta: troca o texto e segura de novo, sem reabrir.
+                    g_isl.note.title = n.title;
+                    g_isl.note.sub = n.sub;
+                    g_isl.note.color = n.color;
+                    if (t > kIslGrow) g_isl.tick = GetTickCount64() - (ULONGLONG)kIslGrow;
+                    IslandRender();
+                } else {
+                    IslandStart(n);  // texto maior: reabre já com o novo
+                }
+                return;
+            }
+        }
         if (g_isl.queue.size() < 4) g_isl.queue.push_back(n);
         return;
     }
