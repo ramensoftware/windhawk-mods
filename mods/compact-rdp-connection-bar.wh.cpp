@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              compact-rdp-connection-bar
 // @name            Compact RDP connection bar
-// @description     Shrinks the top connection bar, optionally hides pin/quality buttons, keeps drag working
-// @version         2.9.3.2
+// @description     Shrinks the top connection bar, optionally hides pin/quality/lock buttons, keeps drag working
+// @version         3.0.0
 // @author          hsb5
 // @github          https://github.com/hsb5
 // @include         mstsc.exe
@@ -25,24 +25,32 @@ quality buttons are hidden.
 
 The right toolbar carries the window buttons - minimize, restore and close.
 Each can be hidden separately; hide all three and the bar shrinks to the
-hostname alone.
+hostname alone. A single remaining toolbar keeps the side it originally sat on,
+so hiding the window buttons does not move the pin group to the right.
+
+The quality indicator is a lock icon that mstsc only shows in some sessions.
+Ticking the setting when it is absent changes nothing, and the bar is laid out
+exactly as it would be without the setting.
 
 ## Screenshots
 
 | Before | After | After2 | After3 | After4 |
 |--------|-------|--------|-------|-------|
-| ![Original wide connection bar](https://raw.githubusercontent.com/hsb5/screenshots/main/Before.png) | ![Compact connection bar with centered hostname](https://raw.githubusercontent.com/hsb5/screenshots/main/After.png) | ![Compact connection bar 2 with centered hostname](https://raw.githubusercontent.com/hsb5/screenshots/main/After2.png) | ![Compact connection bar 3 with centered hostname](https://raw.githubusercontent.com/hsb5/screenshots/main/After3.png) | ![Compact connection bar 4 with centered hostname](https://raw.githubusercontent.com/hsb5/screenshots/main/After4.png) |
+| ![Original wide connection bar](https://raw.githubusercontent.com/hsb5/screenshots/main/Before.png) | ![Compact bar, pin hidden](https://raw.githubusercontent.com/hsb5/screenshots/main/After.png) | ![Compact bar, pin and quality hidden](https://raw.githubusercontent.com/hsb5/screenshots/main/After2.png) | ![Compact bar, pin, minimize and restore hidden](https://raw.githubusercontent.com/hsb5/screenshots/main/After3.png) | ![Compact bar, all buttons hidden, hostname only](https://raw.githubusercontent.com/hsb5/screenshots/main/After4.png) |
 
 ## Settings
 
 - **Text area width** - target width of the hostname zone, scaled for DPI.
-  Automatically raised to fit the hostname, so it is never clipped.
-- **Hide pin / quality button** - hides the pin and quality indicator
-  buttons from the left toolbar.
+  Raised automatically when the hostname needs more room.
+- **Hide pin button** - hides the pin (keep on top) button.
+- **Hide quality button** - hides the connection quality indicator.
+- **Hide lock button** - hides the lock icon mstsc shows next to the quality
+  indicator. The button is only present in some sessions; when it is absent,
+  nothing changes.
 - **Hide minimize / restore / close** - hide the window buttons on the
   right. Hiding the close button removes the only visible way to disconnect;
-  the session can still be closed from the taskbar icon.
-- **Debug layout** - dump the bar, its children and every toolbar button once.
+  the session can still be closed from the taskbar icon, or Ctrl+Alt+Break
+  leaves full screen so the bar and the window controls come back.
 */
 // ==/WindhawkModReadme==
 
@@ -57,18 +65,18 @@ hostname alone.
 - hideQualityButton: false
   $name: Hide quality button
   $description: Hides the connection quality indicator
+- hideLockButton: false
+  $name: Hide lock button
+  $description: Hides the lock icon next to the quality indicator, when mstsc shows it
 - hideMinimizeButton: false
   $name: Hide minimize button
-  $description: Hides the minimize button on the right (bmp 0)
+  $description: Hides the minimize button on the right
 - hideRestoreButton: false
   $name: Hide restore button
-  $description: Hides the restore-to-window button (bmp 1)
+  $description: Hides the restore-to-window button
 - hideCloseButton: false
   $name: Hide close button
-  $description: Hides the close button (bmp 2), the only visible way to disconnect
-- debugLayout: false
-  $name: Debug layout
-  $description: Write the bar/toolbar/button structure to the Windhawk log
+  $description: Hides the close button, the only visible way to disconnect
 */
 // ==/WindhawkModSettings==
 
@@ -80,6 +88,7 @@ hostname alone.
 #define MAX_HIDDEN 16
 #define EDGE_PAD    8   // margin mstsc leaves at both ends of the bar, in 96-DPI px
 #define PIN_ID      4   // command id of the pin button in mstsc
+#define LOCK_ID     5   // command id of the lock icon, when the session has one
 #define QUALITY_ID  6   // command id of the quality indicator in mstsc
 
 // ---------------------------------------------------------------- state
@@ -88,7 +97,9 @@ struct TbInfo {
     HWND hwnd;
     bool haveOrig;
     int  ox;     // original x, bar client coords
+    int  oy;     // original y, bar client coords
     int  ow;     // original width
+    int  oh;     // original height
     int  x;      // target x
     int  w;      // target width
 };
@@ -100,10 +111,10 @@ static int    g_tbCount = 0;
 static int  g_gapWidth    = 100;
 static bool g_hidePin     = false;
 static bool g_hideQuality = false;
+static bool g_hideLock    = false;
 static bool g_hideMin     = false;
 static bool g_hideRestore = false;
 static bool g_hideClose   = false;
-static bool g_debug       = false;
 
 static RECT g_origBar;
 static bool g_haveOrigBar = false;
@@ -111,6 +122,7 @@ static bool g_haveOrigBar = false;
 static int  g_targetW = 0;
 static int  g_targetX = 0;
 static bool g_active  = false;
+static bool g_restoreWanted = false;
 
 static RECT g_textRect;          // hostname zone, bar client coords
 static int  g_textLimitX = 0;    // text may never go past this x (right group)
@@ -124,16 +136,18 @@ static bool g_stale      = false;
 static thread_local bool t_painting = false;
 static bool g_computing = false;  // re-entrancy guard
 static bool g_dumped    = false;  // one-shot structure dump
+static UINT g_applyMsg  = 0;      // posted to the bar to apply new settings
 
-// Buttons we hid, remembered by command id so they can be restored.
+// Buttons this mod hid, remembered by command id so they can be restored.
+// Buttons that were already hidden when we looked are deliberately not
+// recorded: unhiding them on unload would show something mstsc hid itself.
 struct HiddenButton { HWND tb; int id; };
 static HiddenButton g_hidden[MAX_HIDDEN];
 static int g_hiddenCount = 0;
 
-typedef int  (WINAPI* DrawTextW_t)(HDC, LPCWSTR, int, LPRECT, UINT);
-typedef int  (WINAPI* DrawTextExW_t)(HDC, LPWSTR, int, LPRECT, UINT, LPDRAWTEXTPARAMS);
-typedef HWND (WINAPI* CreateWindowExW_t)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int,
-                                         HWND, HMENU, HINSTANCE, LPVOID);
+using DrawTextW_t       = decltype(&DrawTextW);
+using DrawTextExW_t     = decltype(&DrawTextExW);
+using CreateWindowExW_t = decltype(&CreateWindowExW);
 
 static DrawTextW_t       DrawTextW_Original;
 static DrawTextExW_t     DrawTextExW_Original;
@@ -247,8 +261,12 @@ static int HostTextWidth(HWND hwnd) {
     return w;
 }
 
+// The lock icon is only present in some sessions, so a setting for it must be
+// a no-op when mstsc does not create the button at all.
 static bool ShouldHideId(int id) {
-    return (g_hidePin && id == PIN_ID) || (g_hideQuality && id == QUALITY_ID);
+    return (g_hidePin && id == PIN_ID) ||
+           (g_hideLock && id == LOCK_ID) ||
+           (g_hideQuality && id == QUALITY_ID);
 }
 
 // Window buttons on the right toolbar are matched by bitmap index (0 minimize,
@@ -292,9 +310,17 @@ static void DumpTb(HWND tb) {
         ZeroMemory(&ir, sizeof(ir));
         SendMessageW(tb, TB_GETITEMRECT, i, (LPARAM)&ir);
 
-        wchar_t txt[128];
+        // TB_GETBUTTONTEXTW takes no buffer size. Asking with a NULL buffer
+        // returns the length, so a long text cannot overflow the buffer here.
+        wchar_t txt[256];
         txt[0] = L'\0';
-        SendMessageW(tb, TB_GETBUTTONTEXTW, b.idCommand, (LPARAM)txt);
+        int txtCap = (int)ARRAYSIZE(txt);
+        int len = (int)SendMessageW(tb, TB_GETBUTTONTEXTW, b.idCommand, 0);
+        if (len > 0 && len < txtCap) {
+            SendMessageW(tb, TB_GETBUTTONTEXTW, b.idCommand, (LPARAM)txt);
+        } else if (len >= txtCap) {
+            lstrcpynW(txt, L"<too long>", txtCap);
+        }
 
         Wh_Log(L"    btn[%d] id=%d bmp=%d state=0x%02X style=0x%02X rect=%d..%d w=%d hidden=%d txt='%s'",
                i, b.idCommand, b.iBitmap, b.fsState, b.fsStyle,
@@ -331,7 +357,8 @@ static void DumpAll(HWND bbar) {
 
 // ---------------------------------------------------------------- toolbars
 
-// Collects ToolbarWindow32 children, sorted by original left edge.
+// Collects ToolbarWindow32 children, sorted by original left edge. Target
+// geometry is left alone here: it is only written once a layout succeeds.
 static int CollectToolbars(HWND bbar) {
     HWND found[MAX_TB];
     int n = 0;
@@ -368,13 +395,13 @@ static int CollectToolbars(HWND bbar) {
     for (int i = 0; i < n; i++) {
         TbInfo* t = &g_tb[g_tbCount++];
         t->hwnd = found[i];
-        t->x = 0;
-        t->w = 0;
         if (!t->haveOrig) {
             RECT r;
             GetWindowRect(found[i], &r);
             t->ox = (int)r.left - origin.x;
+            t->oy = (int)r.top - origin.y;
             t->ow = (int)(r.right - r.left);
+            t->oh = (int)(r.bottom - r.top);
             t->haveOrig = true;
         }
     }
@@ -425,14 +452,12 @@ static void HideMatching(HWND tb) {
         if (!ShouldHideId(b.idCommand) &&
             !ShouldHideWindowButton(b.idCommand, b.iBitmap)) continue;
 
-        if (!IsButtonHidden(tb, b.idCommand)) {
-            SendMessageW(tb, TB_HIDEBUTTON, (WPARAM)b.idCommand, MAKELPARAM(TRUE, 0));
-            changed = true;
-            if (g_debug)
-                Wh_Log(L"hide btn[%d] id=%d bmp=%d on %p -> now hidden=%d",
-                       i, b.idCommand, b.iBitmap, tb,
-                       (int)IsButtonHidden(tb, b.idCommand));
-        }
+        // Only buttons this mod actually hid are recorded for restore.
+        if (IsButtonHidden(tb, b.idCommand)) continue;
+
+        SendMessageW(tb, TB_HIDEBUTTON, (WPARAM)b.idCommand, MAKELPARAM(TRUE, 0));
+        changed = true;
+        Wh_Log(L"hide btn[%d] id=%d bmp=%d on %p", i, b.idCommand, b.iBitmap, tb);
 
         bool known = false;
         for (int k = 0; k < g_hiddenCount; k++)
@@ -479,22 +504,24 @@ static bool LayoutStale(HWND hwnd) {
     return false;
 }
 
-// Returns false when the structure is unusable; nothing is changed then.
+// Returns false when the structure is unusable. Nothing is written to the
+// shared layout state in that case, so a failed pass cannot leave zero-width
+// targets behind for TbProc to enforce.
 static bool ComputeTargets(HWND hwnd) {
     if (g_computing) return false;
     g_computing = true;
+    g_restoreWanted = false;
 
     bool ok = false;
     do {
         int n = CollectToolbars(hwnd);
-        if (g_debug) Wh_Log(L"ComputeTargets: %d toolbar(s)", n);
         if (n <= 0) break;
 
         for (int i = 0; i < n; i++) SubclassToolbar(g_tb[i].hwnd);
         for (int i = 0; i < n; i++) HideMatching(g_tb[i].hwnd);
 
         // Dump once, once the toolbars really exist and hiding has been tried.
-        if (g_debug && !g_dumped) {
+        if (!g_dumped) {
             g_dumped = true;
             DumpAll(hwnd);
         }
@@ -508,6 +535,10 @@ static bool ComputeTargets(HWND hwnd) {
             height = (int)(r.bottom - r.top);
         }
 
+        RECT bar = GetRectInParent(hwnd);   // SetWindowPos coordinate space
+        RECT origBar = g_haveOrigBar ? g_origBar : bar;
+        int origW = (int)(origBar.right - origBar.left);
+
         // First non-empty toolbar anchors left, last one anchors right.
         // Everything in between is not laid out; it has nothing to show.
         int needed[MAX_TB];
@@ -515,77 +546,108 @@ static bool ComputeTargets(HWND hwnd) {
         int lastIdx  = -1;
         for (int i = 0; i < n; i++) {
             needed[i] = NeededWidth(g_tb[i].hwnd);
-            g_tb[i].w = 0;
-            g_tb[i].x = 0;
             if (needed[i] <= 0) continue;
             if (firstIdx < 0) firstIdx = i;
             lastIdx = i;
         }
 
+        int leftIdx = -1, rightIdx = -1;
+        int leftW = 0, rightW = 0;
+
         if (lastIdx < 0) {
-            Wh_Log(L"ComputeTargets: every toolbar is empty, abort");
-            break;
+            // Every button hidden: the bar shrinks to the hostname zone. The
+            // README promises this, so it must not bail out here.
+            Wh_Log(L"ComputeTargets: every toolbar is empty, hostname only");
+        } else if (firstIdx != lastIdx) {
+            leftIdx  = firstIdx;
+            rightIdx = lastIdx;
+            leftW    = needed[leftIdx];
+            rightW   = needed[rightIdx];
+        } else {
+            // A single non-empty toolbar keeps the side it originally sat on,
+            // so hiding the window buttons does not move the pin group right.
+            int refW = origW > 0 ? origW : (int)client.right;
+            int center = g_tb[firstIdx].ox + g_tb[firstIdx].ow / 2;
+            if (refW > 0 && center < refW / 2) {
+                leftIdx = firstIdx;
+                leftW   = needed[firstIdx];
+            } else {
+                rightIdx = firstIdx;
+                rightW   = needed[firstIdx];
+            }
         }
 
-        int leftIdx = (firstIdx != lastIdx) ? firstIdx : -1;
-        int leftW   = (leftIdx >= 0) ? needed[leftIdx] : 0;
-        int rightW  = needed[lastIdx];
-
         int dpi = DpiOf(hwnd);
-        g_dpi = dpi;
         int pad = MulDiv(EDGE_PAD, dpi, 96);
         int gap = MulDiv(g_gapWidth, dpi, 96);
 
         int minText = HostTextWidth(hwnd) + MulDiv(20, dpi, 96);
         if (g_textNeed > minText) minText = g_textNeed;
         if (gap < minText) {
-            if (g_debug)
-                Wh_Log(L"ComputeTargets: gap %d raised to %d for the hostname", gap, minText);
+            Wh_Log(L"ComputeTargets: gap %d raised to %d for the hostname", gap, minText);
             gap = minText;
         }
 
         int width = pad + leftW + gap + rightW + pad;
         if (width <= 0) break;
 
-        RECT bar = GetRectInParent(hwnd);   // SetWindowPos coordinate space
-        if (!g_haveOrigBar) {
-            g_origBar = bar;
-            g_haveOrigBar = true;
-        }
-        int origW = (int)(g_origBar.right - g_origBar.left);
-
         // Only ever shrink.
         if (origW > 0 && width >= origW) {
-            if (g_debug)
-                Wh_Log(L"ComputeTargets: target %d >= original %d, nothing to do", width, origW);
+            Wh_Log(L"ComputeTargets: target %d >= original %d, nothing to do",
+                   width, origW);
+            // The bar is compacted right now but no longer needs to be, for
+            // example because every hide setting was turned off again.
+            g_restoreWanted = g_active;
             break;
+        }
+
+        int tbx[MAX_TB];
+        int tbw[MAX_TB];
+        for (int i = 0; i < n; i++) {
+            tbx[i] = 0;
+            tbw[i] = 0;
         }
 
         int cursor = pad;
         if (leftIdx >= 0) {
-            g_tb[leftIdx].x = cursor;
-            g_tb[leftIdx].w = leftW;
+            tbx[leftIdx] = cursor;
+            tbw[leftIdx] = leftW;
             cursor += leftW;
         }
 
-        g_textRect.left   = cursor;
-        g_textRect.right  = cursor + gap;
-        g_textRect.top    = 0;
-        g_textRect.bottom = height;
-        g_textLimitX      = cursor + gap;
+        RECT textRect;
+        textRect.left   = cursor;
+        textRect.right  = cursor + gap;
+        textRect.top    = 0;
+        textRect.bottom = height;
+        int textLimit   = cursor + gap;
 
-        g_tb[lastIdx].x = cursor + gap;
-        g_tb[lastIdx].w = rightW;
+        if (rightIdx >= 0) {
+            tbx[rightIdx] = cursor + gap;
+            tbw[rightIdx] = rightW;
+        }
 
-        g_targetW = width;
+        int targetW = width;
         // Anchor to the original left edge, not the current one: a recompute
         // after Commit would otherwise drift by half the shrink each time.
-        g_targetX = (int)g_origBar.left + (origW > 0 ? (origW - width) / 2 : 0);
+        int targetX = (int)origBar.left + (origW > 0 ? (origW - width) / 2 : 0);
 
-        if (g_debug)
-            Wh_Log(L"ComputeTargets: leftW=%d gap=%d rightW=%d pad=%d -> width=%d (orig %d) text=%d..%d",
-                   leftW, gap, rightW, pad, width, origW,
-                   (int)g_textRect.left, (int)g_textRect.right);
+        // Everything checked out, publish the layout.
+        for (int i = 0; i < n; i++) {
+            g_tb[i].x = tbx[i];
+            g_tb[i].w = tbw[i];
+        }
+        g_textRect   = textRect;
+        g_textLimitX = textLimit;
+        g_targetW    = targetW;
+        g_targetX    = targetX;
+        g_origBar    = origBar;
+        g_haveOrigBar = true;
+        g_dpi        = dpi;
+
+        Wh_Log(L"ComputeTargets: leftW=%d gap=%d rightW=%d pad=%d -> width=%d (orig %d) text=%d..%d",
+               leftW, gap, rightW, pad, width, origW, (int)textRect.left,
+               (int)textRect.right);
         ok = true;
     } while (0);
 
@@ -616,9 +678,53 @@ static void Commit(HWND hwnd) {
            g_targetX, g_targetW, (int)g_textRect.left, (int)g_textRect.right);
 }
 
+// Undoes the layout: the original width and height, the original toolbar
+// rects, and the bar back where it started unless the user dragged it.
+static void RestoreGeometry(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd) || !g_haveOrigBar) return;
+
+    RECT cur = GetRectInParent(hwnd);
+    // If the bar still sits where the layout put it, put it back where it was.
+    // Otherwise the user moved it and their position wins.
+    int x = (cur.left == g_targetX) ? (int)g_origBar.left : (int)cur.left;
+
+    g_active = false;
+    SetWindowPos(hwnd, NULL, x, (int)g_origBar.top,
+                 (int)(g_origBar.right - g_origBar.left),
+                 (int)(g_origBar.bottom - g_origBar.top),
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+
+    for (int i = 0; i < g_tbCount; i++) {
+        if (!IsWindow(g_tb[i].hwnd) || !g_tb[i].haveOrig) continue;
+        SendMessageW(g_tb[i].hwnd, TB_AUTOSIZE, 0, 0);
+        SetWindowPos(g_tb[i].hwnd, NULL, g_tb[i].ox, g_tb[i].oy,
+                     g_tb[i].ow, g_tb[i].oh,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    InvalidateRect(hwnd, NULL, FALSE);
+}
+
 // ---------------------------------------------------------------- subclass procs
 
 static LRESULT CALLBACK BarProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR) {
+    // Settings live on the Windhawk engine thread; the layout state does not.
+    // Applying them here keeps every write to g_tb/g_hidden on this thread.
+    if (g_applyMsg && msg == g_applyMsg) {
+        RestoreButtons();
+        g_active = false;
+        g_dumped = false;
+        g_textNeed = 0;
+        g_stale = false;
+        if (ComputeTargets(hwnd)) {
+            Commit(hwnd);
+        } else {
+            if (g_restoreWanted) RestoreGeometry(hwnd);
+            else InvalidateRect(hwnd, NULL, FALSE);
+        }
+        return 0;
+    }
+
     switch (msg) {
     case WM_PAINT: {
         if (!g_computing) {
@@ -663,8 +769,15 @@ static LRESULT CALLBACK BarProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD
         break;
 
     case WM_DESTROY:
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, BarProc);
         if (hwnd == g_bbar) {
+            // haveOrig must not survive into the next bar, or a recreated bar
+            // would be restored to the previous bar's toolbar positions.
+            for (int i = 0; i < MAX_TB; i++) {
+                g_tb[i].hwnd = NULL;
+                g_tb[i].haveOrig = false;
+                g_tb[i].x = 0;
+                g_tb[i].w = 0;
+            }
             g_bbar = NULL;
             g_tbCount = 0;
             g_haveOrigBar = false;
@@ -672,6 +785,7 @@ static LRESULT CALLBACK BarProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD
             g_hiddenCount = 0;
             g_textNeed = 0;
             g_stale = false;
+            g_dpi = 96;
             t_painting = false;
             g_dumped = false;
         }
@@ -694,10 +808,6 @@ static LRESULT CALLBACK TbProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_
         }
         break;
     }
-
-    case WM_DESTROY:
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TbProc);
-        break;
     }
     return DefSubclassProc(hwnd, msg, wp, lp);
 }
@@ -710,7 +820,7 @@ static UINT CenterFormat(UINT format) {
 
 // Centers the hostname inside its zone. A hostname wider than the zone gets
 // the room it needs, up to the right button group, and the next layout pass
-// widens the zone so it never stays clipped.
+// widens the zone so the text stays readable.
 static LPRECT RedirectRect(HDC hdc, LPCWSTR text, int cch, LPRECT out) {
     *out = g_textRect;
     int tw = MeasureText(hdc, text, cch);
@@ -803,10 +913,10 @@ static void LoadSettings() {
 
     g_hidePin     = Wh_GetIntSetting(L"hidePinButton") != 0;
     g_hideQuality = Wh_GetIntSetting(L"hideQualityButton") != 0;
+    g_hideLock    = Wh_GetIntSetting(L"hideLockButton") != 0;
     g_hideMin     = Wh_GetIntSetting(L"hideMinimizeButton") != 0;
     g_hideRestore = Wh_GetIntSetting(L"hideRestoreButton") != 0;
     g_hideClose   = Wh_GetIntSetting(L"hideCloseButton") != 0;
-    g_debug       = Wh_GetIntSetting(L"debugLayout") != 0;
 }
 
 // ---------------------------------------------------------------- entry points
@@ -814,14 +924,15 @@ static void LoadSettings() {
 BOOL Wh_ModInit() {
     LoadSettings();
 
+    g_applyMsg = RegisterWindowMessageW(L"CompactRdpBar.ApplySettings");
+
     WindhawkUtils::SetFunctionHook(DrawTextW, DrawTextW_Hook, &DrawTextW_Original);
     WindhawkUtils::SetFunctionHook(DrawTextExW, DrawTextExW_Hook, &DrawTextExW_Original);
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
 
-    Wh_Log(L"init 2.9.3.2: gap=%d pin=%d quality=%d min=%d restore=%d close=%d debug=%d",
-           g_gapWidth, (int)g_hidePin, (int)g_hideQuality,
-           (int)g_hideMin, (int)g_hideRestore, (int)g_hideClose,
-           (int)g_debug);
+    Wh_Log(L"init " WH_MOD_VERSION L": gap=%d pin=%d quality=%d lock=%d min=%d restore=%d close=%d",
+           g_gapWidth, (int)g_hidePin, (int)g_hideQuality, (int)g_hideLock,
+           (int)g_hideMin, (int)g_hideRestore, (int)g_hideClose);
     return TRUE;
 }
 
@@ -831,42 +942,24 @@ void Wh_ModAfterInit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    if (g_bbar && IsWindow(g_bbar)) {
-        RestoreButtons();
-        g_active = false;
-        g_dumped = false;
-        g_textNeed = 0;
-        g_stale = false;
-        if (!ComputeTargets(g_bbar)) InvalidateRect(g_bbar, NULL, FALSE);
-    }
+    // SendMessage to the bar's window makes this run on the bar's own thread,
+    // so the settings are applied to the same state BarProc is using.
+    if (g_bbar && IsWindow(g_bbar) && g_applyMsg)
+        SendMessageW(g_bbar, g_applyMsg, 0, 0);
 }
 
 void Wh_ModUninit() {
-    // Remove every subclass first. Both procs live in this mod's image, so a
+    // Stop forcing geometry first: TbProc clamps toolbars back to their slot on
+    // every WM_WINDOWPOSCHANGING, and the restore below would be undone.
+    g_active = false;
+
+    // Then remove every subclass. Both procs live in this mod's image, so a
     // bar or toolbar that keeps one crashes mstsc on its next message once the
-    // mod is unloaded. Doing this before RestoreButtons also stops a WM_PAINT
-    // from landing in the gap and recomputing the layout we are undoing.
+    // mod is unloaded.
     ForEachBar(DetachBar);
 
     RestoreButtons();
-    g_active = false;
-
-    if (g_bbar && IsWindow(g_bbar) && g_haveOrigBar) {
-        // Restore in the same coordinate space we captured
-        SetWindowPos(g_bbar, NULL, (int)g_origBar.left, (int)g_origBar.top,
-                     (int)(g_origBar.right - g_origBar.left),
-                     (int)(g_origBar.bottom - g_origBar.top),
-                     SWP_NOZORDER | SWP_NOACTIVATE);
-
-        for (int i = 0; i < g_tbCount; i++) {
-            if (!IsWindow(g_tb[i].hwnd) || !g_tb[i].haveOrig) continue;
-            SendMessageW(g_tb[i].hwnd, TB_AUTOSIZE, 0, 0);
-            SetWindowPos(g_tb[i].hwnd, NULL, g_tb[i].ox, 0, g_tb[i].ow,
-                         (int)(g_origBar.bottom - g_origBar.top),
-                         SWP_NOZORDER | SWP_NOACTIVATE);
-        }
-        InvalidateRect(g_bbar, NULL, FALSE);
-    }
+    RestoreGeometry(g_bbar);
 
     g_bbar = NULL;
     g_tbCount = 0;
