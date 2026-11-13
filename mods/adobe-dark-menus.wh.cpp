@@ -2,7 +2,7 @@
 // @id            adobe-dark-menus
 // @name          Adobe Dark Menus
 // @description   Enables dark mode and custom colors for the menus, dropdown lists and title bars in Adobe apps.
-// @version       1.0.0
+// @version       1.1.0
 // @author        Saber Naeemi
 // @github        https://github.com/sabergraphics
 // @twitter       https://x.com/SaberNaeemi
@@ -10,14 +10,20 @@
 // @include       Photoshop.exe
 // @include       Illustrator.exe
 // @include       InDesign.exe
+// @include       InDesign (Beta).exe
+// @include       InCopy.exe
+// @include       InCopy (Beta).exe
 // @include       Dreamweaver.exe
 // @include       AfterFX.exe
 // @include       AfterFX (Beta).exe
 // @include       Adobe Premiere Pro.exe
+// @include       Adobe Premiere Pro (Beta).exe
 // @include       Adobe Audition.exe
+// @include       Adobe Audition (Beta).exe
 // @include       Adobe Media Encoder.exe
 // @include       Adobe Media Encoder (Beta).exe
 // @include       Adobe Bridge.exe
+// @include       Lightroom.exe
 // @include       Acrobat.exe
 // @compilerOptions -lgdi32 -lcomctl32 -ldwmapi
 // ==/WindhawkMod==
@@ -35,8 +41,11 @@ and no other application is affected.
 
 ## Supported apps
 
-Photoshop, Illustrator, InDesign, Dreamweaver, After Effects, Premiere Pro,
-Audition, Media Encoder, Bridge and Acrobat.
+Photoshop, Illustrator, InDesign, InCopy, Dreamweaver, After Effects, Premiere
+Pro, Audition, Media Encoder, Bridge, Lightroom, Lightroom Classic and Acrobat.
+
+The Beta versions of Photoshop, Illustrator, InDesign, InCopy, After Effects,
+Premiere Pro, Audition and Media Encoder are covered as well.
 
 ## Screenshots
 
@@ -101,6 +110,7 @@ tested, so use one or the other for the apps above.
 - **Border Color**: Color of the frame around menus an app draws itself and around dropdown lists. Leave empty to keep the system frame on those menus and to use the background color on lists (Default: `#2D2D2D`).
 - **Theme Dropdown Lists**: Darken the dropdown lists an app draws itself, using the colors above (Default: on).
 - **Darken Menus Windows Draws**: Use Windows' dark menu theme, and paint real menu bars dark (Default: on).
+- **Scroll Long Menus Instead of Columns**: Open a menu that an app splits into columns as one dark column that scrolls, since Windows cannot darken a menu with columns. After Effects splits its Effect menu this way once it holds more than the screen fits. Turn it off to keep the columns, which stay light (Default: on).
 - **Dark Title Bars**: Color standard title bars to match the menus (Default: on).
 - **Title Bar Color**: Leave empty to match Menu Background Color (Default: empty).
 - **Title Bar Text Color**: Leave empty to let Windows choose, which dims the text on a window that is not active (Default: empty).
@@ -195,6 +205,19 @@ rather than drawing a new one. On a menu an app draws itself, Windows draws a ba
 triangle instead of the square, and the mod recolors it to Menu Text Color or
 Disabled Text Color.
 
+### Menus split into columns
+
+An app can split a long menu into columns. After Effects does it to a menu taller
+than the screen, which is what its Effect menu becomes with enough plugins
+installed. Windows turns its theme off for any menu that has a column break and
+draws it the old way, in light colors. So while such a menu is open, the mod takes
+its column breaks off, and Windows lays it out as one dark column that scrolls. The
+breaks go back on when the menu closes, so the app finds its menu as it left it.
+
+If the app writes a break back while the menu is open, the mod holds that write
+until the menu closes. Windows would otherwise lay the open menu out in columns
+again, light and scrolled back to the top.
+
 ### Title bars
 
 Windows 11 lets a process color a standard title bar through
@@ -217,8 +240,9 @@ intercepting a system one, in windows where a light fill can be the content.
 
 A dropdown list Windows draws itself keeps its normal colors, as described above.
 
-Long menus scroll rather than splitting into columns, because Windows turns its
-theme off for any menu that has columns, which leaves them light.
+With **Scroll Long Menus Instead of Columns** turned off, a menu that an app
+splits into columns stays light, because Windows turns its theme off for any menu
+that has columns.
 
 ## Source and bug reports
 
@@ -265,6 +289,13 @@ a description does.
   $description: >-
     Use Windows' dark menu theme for the menus Windows draws itself, which is
     most menus in most Adobe apps, and paint real menu bars dark.
+- ScrollColumnMenus: true
+  $name: "Scroll Long Menus Instead of Columns"
+  $description: >-
+    Windows cannot darken a menu that an app splits into columns, as After
+    Effects does with its Effect menu once it holds more than the screen fits.
+    With this on, such a menu opens as one dark column that scrolls. Turn it off
+    to keep the columns, which stay light.
 - ThemeTitleBars: true
   $name: "Dark Title Bars"
   $description: >-
@@ -286,10 +317,13 @@ a description does.
 #include <dwmapi.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
+#include <stddef.h>
+#include <string.h>
 #include <wchar.h>
 #include <wctype.h>
 #include <atomic>
 #include <mutex>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -315,6 +349,7 @@ std::atomic<COLORREF> g_colTitleBarText{kDwmColorDefault};
 
 std::atomic<bool> g_themeDropdowns{true};
 std::atomic<bool> g_themeWindowsMenus{true};
+std::atomic<bool> g_scrollColumnMenus{true};
 std::atomic<bool> g_themeTitleBars{true};
 
 // Whether the process is actually in dark menu mode. Stays false with the setting
@@ -356,18 +391,33 @@ private:
     int* pDepth;
 };
 
-// The engine does not remove SetWindowsHookEx hooks, and their procedures live in
-// the mod image, so each one has to be released at uninit. Wh_ModUninit runs on
-// another thread, hence the global set: UnhookWindowsHookEx works from any thread.
-std::unordered_set<HHOOK> g_winHooks;
-std::mutex g_winHooksMutex;
+// What the opening hook did for each WM_DRAWITEM now on this thread's stack, innermost
+// last, so the closing hook undoes exactly that. Working it out again from the message
+// goes wrong for a list destroyed mid-draw: it no longer looks like a list by then, and
+// nothing else would lower its counter. Windows calls the two hooks in strict pairs, also
+// for a window destroyed while it handles the message.
+enum class DrawKind : unsigned char { Other, Menu, List };
+constexpr int kMaxNestedDraws = 16;
+thread_local DrawKind tl_drawKinds[kMaxNestedDraws];
+thread_local int tl_drawNesting = 0;
 
-void TrackWinHook(HHOOK hHook) {
-    if (!hHook) return;
+// Windhawk does not call Wh_ModUninit when the app exits, so the thread hooks and the
+// subclasses are still up while the loader destroys this module's globals, and the app's
+// own DLLs are torn down after that. A window one of them destroys then comes back through
+// the return hook into a container that no longer exists. So once the process is exiting,
+// nothing here touches the containers.
+using RtlDllShutdownInProgress_t = BOOLEAN(NTAPI*)();
+RtlDllShutdownInProgress_t g_pRtlDllShutdownInProgress = nullptr;
 
-    std::lock_guard<std::mutex> lock(g_winHooksMutex);
-    g_winHooks.insert(hHook);
+inline bool ProcessIsExiting() {
+    return g_pRtlDllShutdownInProgress && g_pRtlDllShutdownInProgress();
 }
+
+// Set at the start of Wh_ModUninit. A thread that is inside the mod at that moment can be
+// about to put up a hook or a subclass, and once uninit has emptied its lists nothing
+// would take that one down again. So whoever registers one checks this first, and once
+// more under the lock of the list it is about to add to.
+std::atomic<bool> g_unloading{false};
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -425,6 +475,7 @@ void PublishColor(std::atomic<COLORREF>* pColor, std::atomic<HBRUSH>* pSlot, COL
 void LoadSettings() {
     g_themeDropdowns.store(Wh_GetIntSetting(L"ThemeDropdowns") != 0, std::memory_order_relaxed);
     g_themeWindowsMenus.store(Wh_GetIntSetting(L"ThemeWindowsMenus") != 0, std::memory_order_relaxed);
+    g_scrollColumnMenus.store(Wh_GetIntSetting(L"ScrollColumnMenus") != 0, std::memory_order_relaxed);
     g_themeTitleBars.store(Wh_GetIntSetting(L"ThemeTitleBars") != 0, std::memory_order_relaxed);
 
     PublishColor(&g_colMenu, &g_hMenuBrush,
@@ -485,12 +536,16 @@ bool HasSystemTitleBar(HWND hWnd) {
     LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
     if ((style & WS_CAPTION) != WS_CAPTION || (style & WS_CHILD)) return false;
 
-    RECT window;
-    POINT origin = { 0, 0 };
-    if (!GetWindowRect(hWnd, &window) || !ClientToScreen(hWnd, &origin)) return false;
+    // Both rectangles come back in screen coordinates. ClientToScreen would not do: on a
+    // mirrored window client x runs right to left, so its origin is the right edge.
+    WINDOWINFO info = {};
+    info.cbSize = sizeof(info);
+    if (!GetWindowInfo(hWnd, &info)) return false;
 
     constexpr int kMinCaptionHeight = 10;
-    return (origin.y - window.top) - (origin.x - window.left) >= kMinCaptionHeight;
+    int top = info.rcClient.top - info.rcWindow.top;
+    int side = info.rcClient.left - info.rcWindow.left;
+    return top - side >= kMinCaptionHeight;
 }
 
 void SetTitleBarColors(HWND hWnd, COLORREF caption, COLORREF text) {
@@ -501,7 +556,10 @@ void SetTitleBarColors(HWND hWnd, COLORREF caption, COLORREF text) {
 // On Windows 10 the two color calls fail harmlessly, and the dark flag alone still
 // gives a dark title bar.
 void ApplyTitleBar(HWND hWnd) {
-    if (!g_themeTitleBars.load(std::memory_order_relaxed) || !HasSystemTitleBar(hWnd)) return;
+    if (!g_themeTitleBars.load(std::memory_order_relaxed) || ProcessIsExiting() ||
+        !HasSystemTitleBar(hWnd)) {
+        return;
+    }
 
     // Recorded before the calls below, since a frame paint can come back through here.
     {
@@ -523,6 +581,8 @@ void ApplyTitleBar(HWND hWnd) {
 }
 
 void ForgetTitleBar(HWND hWnd) {
+    if (ProcessIsExiting()) return;
+
     std::lock_guard<std::mutex> lock(g_titledWindowsMutex);
     g_titledWindows.erase(hWnd);
 }
@@ -691,13 +751,9 @@ bool MenuHasOwnerDrawnItems(HMENU hMenu) {
     return false;
 }
 
-void ApplyMenuBackground(HMENU hMenu) {
-    HBRUSH hBrush = g_hMenuBrush.load(std::memory_order_acquire);
-    if (!hMenu || !hBrush) return;
-
-    // On a menu Windows draws, the brush would replace only the background, while the
-    // gutter, separators and text still come from the theme.
-    if (!MenuHasOwnerDrawnItems(hMenu)) return;
+// Stamps one menu and records it.
+void StampMenu(HMENU hMenu, HBRUSH hBrush) {
+    if (ProcessIsExiting()) return;
 
     // Checked before stamping, since a stamped menu that is not recorded stays dark
     // after uninit.
@@ -713,7 +769,7 @@ void ApplyMenuBackground(HMENU hMenu) {
 
     MENUINFO mi = {};
     mi.cbSize = sizeof(mi);
-    mi.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS;
+    mi.fMask = MIM_BACKGROUND;
     mi.hbrBack = hBrush;
     if (!SetMenuInfo(hMenu, &mi)) return;
 
@@ -723,7 +779,35 @@ void ApplyMenuBackground(HMENU hMenu) {
     g_stampedMenus.insert(hMenu);
 }
 
-// MIM_APPLYTOSUBMENUS also covers submenus that were stamped but never opened.
+// Far deeper than any real menu nests. It only stops a walk that would never end.
+constexpr int kMaxMenuDepth = 25;
+
+// Each menu of the tree is judged on its own. MIM_APPLYTOSUBMENUS would cover the tree in
+// one call, but it also stamps a submenu Windows draws below a menu the app draws. On a
+// menu Windows draws, the brush replaces only the background, while the gutter, separators
+// and text still come from the theme.
+void StampMenuTree(HMENU hMenu, HBRUSH hBrush, int depth) {
+    bool ownerDrawn = false;
+    int count = GetMenuItemCount(hMenu);
+    for (int i = 0; i < count; i++) {
+        MENUITEMINFOW mii = {};
+        mii.cbSize = sizeof(mii);
+        mii.fMask = MIIM_FTYPE | MIIM_SUBMENU;
+        if (!GetMenuItemInfoW(hMenu, (UINT)i, TRUE, &mii)) continue;
+
+        if (mii.fType & MFT_OWNERDRAW) ownerDrawn = true;
+        if (mii.hSubMenu && depth < kMaxMenuDepth) StampMenuTree(mii.hSubMenu, hBrush, depth + 1);
+    }
+
+    if (ownerDrawn) StampMenu(hMenu, hBrush);
+}
+
+void ApplyMenuBackground(HMENU hMenu) {
+    HBRUSH hBrush = g_hMenuBrush.load(std::memory_order_acquire);
+    if (hMenu && hBrush) StampMenuTree(hMenu, hBrush, 0);
+}
+
+// Every stamped menu is in the set by itself, so each is cleared by itself too.
 void RestoreStampedMenus() {
     std::vector<HMENU> menus;
     {
@@ -732,11 +816,11 @@ void RestoreStampedMenus() {
         g_stampedMenus.clear();
     }
 
-    // Outside the lock, as in ApplyMenuBackground.
+    // Outside the lock, as in StampMenu.
     for (HMENU hMenu : menus) {
         MENUINFO mi = {};
         mi.cbSize = sizeof(mi);
-        mi.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS;
+        mi.fMask = MIM_BACKGROUND;
         mi.hbrBack = nullptr;
         SetMenuInfo(hMenu, &mi);
     }
@@ -807,9 +891,19 @@ void PaintPopupBorder(HWND hWnd, HDC hdcTarget) {
 //   enabled and embossed COLOR_BTNSHADOW and COLOR_BTNHIGHLIGHT when disabled. Black is
 //   close to invisible on a dark menu, so both are recolored.
 //
-// Neither may undo itself, because a repaint can arrive with no new arrow behind it.
-// Only the square has a long light run near the top of the band, and the recoloring
-// matches exact system colors that are gone once it has run.
+// Neither may undo itself, because a repaint can arrive with no new arrow behind it. An
+// inverted square has lost the long light run near the top of the band that marks a fresh
+// one, and the recoloring matches exact system colors that are gone once it has run.
+//
+// The shape is taken from the menu rather than read off the pixels: on a light brush the
+// whole band is one light run, which would pass for a square from edge to edge.
+bool MenuHasBackgroundBrush(HMENU hMenu) {
+    MENUINFO mi = {};
+    mi.cbSize = sizeof(mi);
+    mi.fMask = MIM_BACKGROUND;
+    return hMenu && GetMenuInfo(hMenu, &mi) && mi.hbrBack;
+}
+
 inline DWORD ToDibColor(COLORREF color) {
     return ((DWORD)GetRValue(color) << 16) | ((DWORD)GetGValue(color) << 8) | GetBValue(color);
 }
@@ -841,16 +935,23 @@ void RecolorBareArrow(HDC hdc, HDC hdcBand, DWORD* pixels, int left, int top, in
     DWORD shadow = ToDibColor(GetSysColor(COLOR_BTNSHADOW));
     DWORD highlight = ToDibColor(GetSysColor(COLOR_BTNHIGHLIGHT));
 
-    bool hasEnabled = false, hasShadow = false;
+    bool hasEnabled = false, hasShadow = false, hasHighlight = false;
     for (int i = 0; i < width * height; i++) {
         DWORD value = pixels[i] & 0xFFFFFF;
         if (value == enabled && value != back) hasEnabled = true;
         if (value == shadow && value != back) hasShadow = true;
+        if (value == highlight && value != back) hasHighlight = true;
     }
-    if (!hasEnabled && !hasShadow) return;
 
     DWORD text = ToDibColor(g_colText.load(std::memory_order_relaxed));
     DWORD gray = ToDibColor(g_colGray.load(std::memory_order_relaxed));
+
+    // With a text color that happens to equal COLOR_BTNSHADOW, an enabled arrow that has
+    // already been recolored looks like a disabled one. Only a disabled arrow the kernel
+    // has just drawn still has its highlight emboss.
+    if (text == shadow && !hasHighlight) hasShadow = false;
+
+    if (!hasEnabled && !hasShadow) return;
 
     int minX = width, minY = height, maxX = -1, maxY = -1;
     for (int y = 0; y < height; y++) {
@@ -885,7 +986,7 @@ void RecolorBareArrow(HDC hdc, HDC hdcBand, DWORD* pixels, int left, int top, in
 // The non-client area is at most this tall beyond the frame when it holds no arrow.
 constexpr int kMaxBandWithoutArrow = 6;
 
-void PaintOverArrow(HDC hdc, int left, int top, int width, int height) {
+void PaintOverArrow(HDC hdc, int left, int top, int width, int height, bool bareTriangle) {
     if (width <= 0 || height <= kMaxBandWithoutArrow) return;
 
     BITMAPINFO bi = {};
@@ -916,7 +1017,7 @@ void PaintOverArrow(HDC hdc, int left, int top, int width, int height) {
     };
 
     int x0 = -1, x1 = -1, y0 = -1, y1 = -1;
-    for (int y = 0; y <= height / 4 && y0 < 0; y++) {
+    for (int y = 0; !bareTriangle && y <= height / 4 && y0 < 0; y++) {
         int run = 0, longest = 0, longestEnd = 0;
         for (int x = 0; x < width; x++) {
             run = isLight(pixels[y * width + x]) ? run + 1 : 0;
@@ -974,11 +1075,15 @@ void PaintOverScrollArrows(HWND hWnd, HDC hdcTarget) {
     int clientTop = origin.y - window.top;
     if (clientTop <= frame + kMaxBandWithoutArrow) return;
 
+    HMENU hMenu = (HMENU)SendMessageW(hWnd, MN_GETHMENU, 0, 0);
+
     // On a menu that has been left light, a light arrow is the right one.
-    if (!g_darkMenusActive.load(std::memory_order_relaxed)) {
-        HMENU hMenu = (HMENU)SendMessageW(hWnd, MN_GETHMENU, 0, 0);
-        if (!hMenu || !MenuHasOwnerDrawnItems(hMenu)) return;
+    if (!g_darkMenusActive.load(std::memory_order_relaxed) &&
+        (!hMenu || !MenuHasOwnerDrawnItems(hMenu))) {
+        return;
     }
+
+    bool bareTriangle = MenuHasBackgroundBrush(hMenu);
 
     HDC hdc = hdcTarget ? hdcTarget : GetWindowDC(hWnd);
     if (!hdc) return;
@@ -988,8 +1093,8 @@ void PaintOverScrollArrows(HWND hWnd, HDC hdcTarget) {
         int width = window.right - window.left - frame * 2;
         int windowHeight = window.bottom - window.top;
         int clientBottom = clientTop + client.bottom;
-        PaintOverArrow(hdc, frame, frame, width, clientTop - frame);
-        PaintOverArrow(hdc, frame, clientBottom, width, windowHeight - frame - clientBottom);
+        PaintOverArrow(hdc, frame, frame, width, clientTop - frame, bareTriangle);
+        PaintOverArrow(hdc, frame, clientBottom, width, windowHeight - frame - clientBottom, bareTriangle);
     }
 
     if (!hdcTarget) ReleaseDC(hWnd, hdc);
@@ -1013,8 +1118,15 @@ WindowKind ClassifyWindow(HWND hWnd) {
 std::unordered_set<HWND> g_subclassedPopups;
 std::mutex g_subclassedPopupsMutex;
 
-// MN_SELECTITEM, undocumented: moves the selection in a menu popup.
+// MN_SELECTITEM, undocumented: moves the selection in a menu popup. Its wParam is an item
+// position, or one of these two while the pointer is over a scroll arrow.
 constexpr UINT kMenuSelectItem = 0x01E5;
+constexpr UINT kMenuUpArrow = 0xFFFFFFFD;
+constexpr UINT kMenuDownArrow = 0xFFFFFFFC;
+
+// The popup whose scroll arrow the pointer is on, if any. The kernel redraws an arrow when
+// the pointer moves onto it and again when it moves off, with no paint message either time.
+thread_local HWND tl_arrowPopup = nullptr;
 
 // A subclass rather than a message hook, because WM_PAINT is posted and a
 // WH_CALLWNDPROCRET hook never sees it.
@@ -1024,9 +1136,18 @@ LRESULT CALLBACK MenuPopupSubclassProc(HWND hWnd,
                                        LPARAM lParam,
                                        [[maybe_unused]] DWORD_PTR dwRefData) {
     if (uMsg == WM_NCDESTROY) {
-        std::lock_guard<std::mutex> lock(g_subclassedPopupsMutex);
-        g_subclassedPopups.erase(hWnd);
+        if (tl_arrowPopup == hWnd) tl_arrowPopup = nullptr;
+
+        if (!ProcessIsExiting()) {
+            std::lock_guard<std::mutex> lock(g_subclassedPopupsMutex);
+            g_subclassedPopups.erase(hWnd);
+        }
     }
+
+    // A scroll redraws the arrows and then repaints the rows, and it is the rows that take
+    // the time. Painted over only afterward, the arrows would stay as the kernel drew them
+    // for the whole repaint, which is long enough to be seen.
+    if (uMsg == WM_PAINT) PaintOverScrollArrows(hWnd, nullptr);
 
     LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
@@ -1063,17 +1184,47 @@ LRESULT CALLBACK MenuPopupSubclassProc(HWND hWnd,
         case WM_KEYDOWN:
         case WM_MOUSEWHEEL:
         case WM_MOUSEMOVE:
-        case kMenuSelectItem:
             PaintOverScrollArrows(hWnd, nullptr);
             break;
+
+        // Sent on every mouse move, and it only leaves an arrow redrawn when the pointer
+        // has moved onto one or off one. The rest are let through: reading the arrows
+        // back for every move kept a long menu busy for as long as the mouse was moving.
+        case kMenuSelectItem: {
+            bool onArrow = (UINT)wParam == kMenuUpArrow || (UINT)wParam == kMenuDownArrow;
+            HWND hLeft = tl_arrowPopup;
+            tl_arrowPopup = onArrow ? hWnd : nullptr;
+
+            if (onArrow) PaintOverScrollArrows(hWnd, nullptr);
+
+            // The pointer may have left for another popup, and a remembered handle is only
+            // as good as the day it was stored.
+            if (hLeft && (hLeft != hWnd || !onArrow) && ClassifyWindow(hLeft) == WindowKind::MenuPopup) {
+                PaintOverScrollArrows(hLeft, nullptr);
+            }
+            break;
+        }
     }
 
     return result;
 }
 
+// Records a window that has just been subclassed. Returns false once Wh_ModUninit has
+// begun: it may already have emptied the set and would never come back for this window, so
+// the caller takes the subclass off again.
+bool RecordSubclassed(std::unordered_set<HWND>& windows, std::mutex& mutex, HWND hWnd) {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (g_unloading.load(std::memory_order_relaxed)) return false;
+
+    windows.insert(hWnd);
+    return true;
+}
+
 // Subclassed even when Border Color is empty: the system reuses popups, so one skipped
 // here would ignore a border color set later.
 void SubclassPopup(HWND hWnd) {
+    if (ProcessIsExiting() || g_unloading.load(std::memory_order_relaxed)) return;
+
     {
         std::lock_guard<std::mutex> lock(g_subclassedPopupsMutex);
         if (g_subclassedPopups.contains(hWnd)) return;
@@ -1081,11 +1232,13 @@ void SubclassPopup(HWND hWnd) {
 
     // Not under the lock: from another thread the helper uses SendMessage, and the
     // subclass procedure takes the same lock on WM_NCDESTROY.
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, MenuPopupSubclassProc, 0)) {
-        std::lock_guard<std::mutex> lock(g_subclassedPopupsMutex);
-        g_subclassedPopups.insert(hWnd);
-    } else {
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, MenuPopupSubclassProc, 0)) {
         Wh_Log(L"Failed to subclass menu popup %p; it keeps the system frame.", hWnd);
+        return;
+    }
+
+    if (!RecordSubclassed(g_subclassedPopups, g_subclassedPopupsMutex, hWnd)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, MenuPopupSubclassProc);
     }
 }
 
@@ -1135,7 +1288,7 @@ LRESULT CALLBACK ComboListSubclassProc(HWND hWnd,
                                        WPARAM wParam,
                                        LPARAM lParam,
                                        [[maybe_unused]] DWORD_PTR dwRefData) {
-    if (uMsg == WM_NCDESTROY) {
+    if (uMsg == WM_NCDESTROY && !ProcessIsExiting()) {
         std::lock_guard<std::mutex> lock(g_subclassedListsMutex);
         g_subclassedLists.erase(hWnd);
     }
@@ -1154,25 +1307,29 @@ LRESULT CALLBACK ComboListSubclassProc(HWND hWnd,
 // Dropdown or not is checked at paint time, because a list has not been moved to the
 // desktop yet when the CBT hook sees it.
 void SubclassComboList(HWND hWnd) {
-    if (!IsOwnerDrawnList(hWnd)) return;
+    if (ProcessIsExiting() || g_unloading.load(std::memory_order_relaxed) || !IsOwnerDrawnList(hWnd)) {
+        return;
+    }
 
     {
         std::lock_guard<std::mutex> lock(g_subclassedListsMutex);
         if (g_subclassedLists.contains(hWnd)) return;
     }
 
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ComboListSubclassProc, 0)) {
-        {
-            std::lock_guard<std::mutex> lock(g_subclassedListsMutex);
-            g_subclassedLists.insert(hWnd);
-        }
-        Wh_Log(L"Subclassed dropdown list %p.", hWnd);
-
-        // A list found mid-paint has already had its background filled.
-        InvalidateRect(hWnd, nullptr, TRUE);
-    } else {
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ComboListSubclassProc, 0)) {
         Wh_Log(L"Failed to subclass dropdown list %p; it keeps the system colors.", hWnd);
+        return;
     }
+
+    if (!RecordSubclassed(g_subclassedLists, g_subclassedListsMutex, hWnd)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ComboListSubclassProc);
+        return;
+    }
+
+    Wh_Log(L"Subclassed dropdown list %p.", hWnd);
+
+    // A list found mid-paint has already had its background filled.
+    InvalidateRect(hWnd, nullptr, TRUE);
 }
 
 void SubclassIfKnown(HWND hWnd) {
@@ -1191,13 +1348,382 @@ LRESULT CALLBACK CbtProcHook(int code, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
-// Threads whose hooks are up, global so that Wh_ModAfterInit can install them from
-// outside a thread. Each entry holds the thread open, because Windows does not reuse a
-// thread's id while a handle to it is open. A new thread landing on a dead one's id
-// would otherwise count as hooked and never be themed. Bounded by the number of UI
-// threads.
-std::unordered_map<DWORD, HANDLE> g_hookedThreads;
+// ---------------------------------------------------------------------------
+// Menus an app splits into columns
+// ---------------------------------------------------------------------------
+
+// An app can break a long menu into columns. After Effects does it to a menu taller than
+// the screen, which is what its Effect menu becomes with enough plugins installed: its
+// menu update puts MFT_MENUBARBREAK on every item whose position is a multiple of the
+// rows that fit. Windows draws a menu that has a break the old way, without the theme,
+// so the dark theme never reaches it. Without the breaks the same menu is one themed
+// column that scrolls.
+//
+// So the breaks come off while such a menu is open and go back on when it closes, which
+// leaves the menu as the app built it whenever it is not on screen.
+constexpr UINT kColumnBreaks = MFT_MENUBREAK | MFT_MENUBARBREAK;
+
+// How many such menus can be open at once, submenus included, and how many columns one
+// can have. Past either, a menu is left as the app made it.
+constexpr int kMaxHeldMenus = 8;
+constexpr int kMaxHeldBreaks = 32;
+
+// A menu whose breaks the mod is holding, and where they go back.
+struct HeldMenu {
+    HMENU hMenu;
+    DWORD threadId;
+    int itemCount;
+    int breakCount;
+    UINT positions[kMaxHeldBreaks];
+    UINT breaks[kMaxHeldBreaks];
+};
+
+// A plain array rather than a container, so there is nothing here for the loader to
+// destroy at process exit. See ProcessIsExiting.
+HeldMenu g_heldMenus[kMaxHeldMenus];
+std::mutex g_heldMenusMutex;
+
+// Read on every SetMenuItemInfo call in the process, so that the hook costs one load
+// while no such menu is open.
+std::atomic<int> g_heldMenuCount{0};
+
+decltype(&SetMenuItemInfoW) SetMenuItemInfoW_Original;
+decltype(&SetMenuItemInfoA) SetMenuItemInfoA_Original;
+
+// Called with g_heldMenusMutex held. A null handle finds a free entry.
+HeldMenu* FindHeldMenu(HMENU hMenu) {
+    for (HeldMenu& held : g_heldMenus) {
+        if (held.hMenu == hMenu) return &held;
+    }
+    return nullptr;
+}
+
+// Called with g_heldMenusMutex held. Returns false when the menu has more columns than
+// an entry can record.
+bool AddHeldBreak(HeldMenu* held, UINT pos, UINT breaks) {
+    for (int i = 0; i < held->breakCount; i++) {
+        if (held->positions[i] == pos) {
+            held->breaks[i] = breaks;
+            return true;
+        }
+    }
+    if (held->breakCount == kMaxHeldBreaks) return false;
+
+    held->positions[held->breakCount] = pos;
+    held->breaks[held->breakCount] = breaks;
+    held->breakCount++;
+    return true;
+}
+
+bool GetItemType(HMENU hMenu, UINT pos, UINT* pType) {
+    MENUITEMINFOW mii = {};
+    mii.cbSize = sizeof(mii);
+    mii.fMask = MIIM_FTYPE;
+    if (!GetMenuItemInfoW(hMenu, pos, TRUE, &mii)) return false;
+
+    *pType = mii.fType;
+    return true;
+}
+
+// Past the hook, which would hold back the mod's own writes as well.
+bool SetItemType(HMENU hMenu, UINT pos, UINT type) {
+    MENUITEMINFOW mii = {};
+    mii.cbSize = sizeof(mii);
+    mii.fMask = MIIM_FTYPE;
+    mii.fType = type;
+
+    auto setItemInfo = SetMenuItemInfoW_Original ? SetMenuItemInfoW_Original : SetMenuItemInfoW;
+    return setItemInfo(hMenu, pos, TRUE, &mii) != FALSE;
+}
+
+// Takes the breaks off a menu that is about to be shown. Called again for a menu that is
+// already held, it picks up the breaks that have appeared since.
+void HoldColumnMenu(HMENU hMenu) {
+    if (!hMenu || !g_scrollColumnMenus.load(std::memory_order_relaxed) ||
+        !g_darkMenusActive.load(std::memory_order_relaxed) || ProcessIsExiting() ||
+        g_unloading.load(std::memory_order_relaxed)) {
+        return;
+    }
+
+    int itemCount = GetMenuItemCount(hMenu);
+    int found = 0;
+    UINT positions[kMaxHeldBreaks], types[kMaxHeldBreaks];
+    for (int i = 0; i < itemCount; i++) {
+        UINT type;
+        if (!GetItemType(hMenu, (UINT)i, &type)) continue;
+
+        // A menu the app paints is dark through the app's own drawing, columns and all.
+        if (type & MFT_OWNERDRAW) return;
+
+        if (type & kColumnBreaks) {
+            // Windows reports the type of an old-style bitmap item with MFT_BITMAP in it
+            // and then refuses that type when it is written back. Taking some of a
+            // menu's breaks off and not others would only move its columns.
+            if ((type & MFT_BITMAP) || found == kMaxHeldBreaks) return;
+            positions[found] = (UINT)i;
+            types[found] = type;
+            found++;
+        }
+    }
+    if (found == 0) return;
+
+    bool recorded[kMaxHeldBreaks] = {};
+    {
+        std::lock_guard<std::mutex> lock(g_heldMenusMutex);
+
+        // Wh_ModUninit may already have been through the table.
+        if (g_unloading.load(std::memory_order_relaxed)) return;
+
+        HeldMenu* held = FindHeldMenu(hMenu);
+        if (!held) {
+            held = FindHeldMenu(nullptr);
+            if (!held) {
+                // Nothing reports a menu the app destroyed while it was held.
+                for (HeldMenu& old : g_heldMenus) {
+                    if (old.hMenu && !IsMenu(old.hMenu)) {
+                        old = {};
+                        g_heldMenuCount.fetch_sub(1, std::memory_order_relaxed);
+                    }
+                }
+                held = FindHeldMenu(nullptr);
+            }
+            if (!held) return;
+
+            *held = {};
+            held->hMenu = hMenu;
+            g_heldMenuCount.fetch_add(1, std::memory_order_relaxed);
+        } else if (held->itemCount != itemCount) {
+            // The app has rebuilt the menu since, so the positions on record are no use.
+            held->breakCount = 0;
+        }
+
+        held->threadId = GetCurrentThreadId();
+        held->itemCount = itemCount;
+        for (int i = 0; i < found; i++) {
+            recorded[i] = AddHeldBreak(held, positions[i], types[i] & kColumnBreaks);
+        }
+    }
+
+    // A break that could not be recorded stays on, since nothing would put it back.
+    for (int i = 0; i < found; i++) {
+        if (recorded[i]) SetItemType(hMenu, positions[i], types[i] & ~kColumnBreaks);
+    }
+}
+
+// Positions say nothing once the app has added or removed items. Its own next update
+// decides where the breaks go then.
+void RestoreColumnBreaks(const HeldMenu& held) {
+    if (!IsMenu(held.hMenu) || GetMenuItemCount(held.hMenu) != held.itemCount) return;
+
+    for (int i = 0; i < held.breakCount; i++) {
+        UINT type;
+        if (GetItemType(held.hMenu, held.positions[i], &type)) {
+            SetItemType(held.hMenu, held.positions[i], type | held.breaks[i]);
+        }
+    }
+}
+
+// Whether a popup of this thread is showing the menu.
+bool MenuIsOnScreen(HMENU hMenu) {
+    struct Search {
+        HMENU hMenu;
+        bool found;
+    } search = { hMenu, false };
+
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL {
+        auto* pSearch = (Search*)lParam;
+        if (IsWindowVisible(hWnd) && ClassifyWindow(hWnd) == WindowKind::MenuPopup &&
+            (HMENU)SendMessageW(hWnd, MN_GETHMENU, 0, 0) == pSearch->hMenu) {
+            pSearch->found = true;
+            return FALSE;
+        }
+        return TRUE;
+    }, (LPARAM)&search);
+
+    return search.found;
+}
+
+// Puts the breaks back on every menu this thread no longer shows. It asks what is on
+// screen rather than trusting the message that reports one menu closed, which also covers
+// a popup that closes without that message. A menu that is still open is left held:
+// changing an item's type on an open menu leaves Windows hit-testing a layout it has not
+// made yet, and the pointer stops finding the items.
+void ReleaseClosedColumnMenus() {
+    if (g_heldMenuCount.load(std::memory_order_relaxed) == 0 || ProcessIsExiting()) return;
+
+    DWORD tid = GetCurrentThreadId();
+    HMENU mine[kMaxHeldMenus];
+    int count = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_heldMenusMutex);
+        for (const HeldMenu& held : g_heldMenus) {
+            if (held.hMenu && held.threadId == tid) mine[count++] = held.hMenu;
+        }
+    }
+
+    // Asked outside the lock: MN_GETHMENU is a message to the popup.
+    for (int i = 0; i < count; i++) {
+        if (MenuIsOnScreen(mine[i])) continue;
+
+        HeldMenu released;
+        {
+            std::lock_guard<std::mutex> lock(g_heldMenusMutex);
+            HeldMenu* held = FindHeldMenu(mine[i]);
+            if (!held) continue;
+
+            released = *held;
+            *held = {};
+            g_heldMenuCount.fetch_sub(1, std::memory_order_relaxed);
+        }
+        RestoreColumnBreaks(released);
+    }
+}
+
+// For Wh_ModUninit and for the setting going off, which run on another thread and cannot
+// ask what is on screen. No menu is normally open then, since the app is not in front
+// while its mod is switched off or its settings are changed.
+void ReleaseAllColumnMenus() {
+    HeldMenu released[kMaxHeldMenus];
+    {
+        std::lock_guard<std::mutex> lock(g_heldMenusMutex);
+        for (int i = 0; i < kMaxHeldMenus; i++) {
+            released[i] = g_heldMenus[i];
+            g_heldMenus[i] = {};
+        }
+        g_heldMenuCount.store(0, std::memory_order_relaxed);
+    }
+
+    for (const HeldMenu& held : released) {
+        if (held.hMenu) RestoreColumnBreaks(held);
+    }
+}
+
+// The longest item text a write is compared against. A longer one is passed on unread.
+constexpr int kMaxComparedText = 512;
+
+// Whether writing these fields would leave the item exactly as it is.
+template <typename Info, typename GetInfo>
+bool ItemAlreadyMatches(HMENU hMenu, UINT pos, const Info& wanted, GetInfo getInfo) {
+    constexpr UINT kCompared = MIIM_STATE | MIIM_ID | MIIM_SUBMENU | MIIM_CHECKMARKS | MIIM_TYPE |
+                               MIIM_DATA | MIIM_STRING | MIIM_BITMAP | MIIM_FTYPE;
+    UINT mask = wanted.fMask;
+    if (mask & ~kCompared) return false;
+
+    // With MIIM_TYPE, dwTypeData is a bitmap or a value of the app's on these.
+    if ((mask & MIIM_TYPE) && (wanted.fType & (MFT_BITMAP | MFT_OWNERDRAW))) return false;
+
+    using Char = std::remove_pointer_t<decltype(wanted.dwTypeData)>;
+    Char text[kMaxComparedText];
+    text[0] = 0;
+
+    Info current = {};
+    current.cbSize = sizeof(current);
+    current.fMask = mask;
+    current.dwTypeData = text;
+    current.cch = kMaxComparedText;
+    if (!getInfo(hMenu, pos, TRUE, &current)) return false;
+
+    if ((mask & (MIIM_FTYPE | MIIM_TYPE)) && current.fType != wanted.fType) return false;
+    if ((mask & MIIM_STATE) && current.fState != wanted.fState) return false;
+    if ((mask & MIIM_ID) && current.wID != wanted.wID) return false;
+    if ((mask & MIIM_SUBMENU) && current.hSubMenu != wanted.hSubMenu) return false;
+    if ((mask & MIIM_CHECKMARKS) && (current.hbmpChecked != wanted.hbmpChecked ||
+                                     current.hbmpUnchecked != wanted.hbmpUnchecked)) {
+        return false;
+    }
+    if ((mask & MIIM_DATA) && current.dwItemData != wanted.dwItemData) return false;
+    if ((mask & MIIM_BITMAP) && current.hbmpItem != wanted.hbmpItem) return false;
+
+    bool hasText = (mask & MIIM_STRING) || ((mask & MIIM_TYPE) && !(wanted.fType & MFT_SEPARATOR));
+    if (hasText) {
+        // A text the buffer cut short cannot be compared.
+        if (!wanted.dwTypeData || current.cch >= (UINT)kMaxComparedText - 1) return false;
+
+        for (int i = 0;; i++) {
+            if (text[i] != wanted.dwTypeData[i]) return false;
+            if (!text[i]) break;
+        }
+    }
+    return true;
+}
+
+// A break written to a menu that is open without its breaks would undo that on the spot:
+// Windows lays the open popup out again in columns, light, and scrolled back to the top.
+// After Effects' menu update writes one wherever it finds a break missing, so it would do
+// this if it ran while the menu is open. So on a held menu the break is noted, to go on
+// when the menu closes, and the rest of the write is passed on without it.
+//
+// Usually there is no rest: the app is writing back what it read, plus the break. Windows
+// would still repaint the whole popup for that, so a write that changes nothing is dropped.
+//
+// Returns false for a menu that is not held, which the caller passes on as it came. Only
+// a write by position is looked at. A break belongs to a position, and a command id can
+// just as well name an item inside a submenu.
+template <typename Info, typename SetInfo, typename GetInfo>
+bool SetHeldItemInfo(HMENU hMenu, UINT pos, BOOL byPosition, const Info* pInfo, SetInfo setInfo,
+                     GetInfo getInfo, BOOL* pResult) {
+    // Windows accepts the structure with or without its last member.
+    if (!byPosition || !hMenu || ProcessIsExiting() || pInfo->cbSize > sizeof(Info) ||
+        pInfo->cbSize < offsetof(Info, hbmpItem)) {
+        return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_heldMenusMutex);
+        HeldMenu* held = FindHeldMenu(hMenu);
+        if (!held) return false;
+
+        AddHeldBreak(held, pos, pInfo->fType & kColumnBreaks);
+    }
+
+    Info stripped = {};
+    memcpy(&stripped, pInfo, pInfo->cbSize);
+    stripped.fType &= ~kColumnBreaks;
+
+    *pResult = ItemAlreadyMatches(hMenu, pos, stripped, getInfo) ? TRUE
+                                                                 : setInfo(hMenu, pos, TRUE, &stripped);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Thread hooks
+// ---------------------------------------------------------------------------
+
+// A thread whose hooks are up. The engine does not remove SetWindowsHookEx hooks, and
+// their procedures live in the mod image, so each one is kept to be released at uninit.
+// The handle holds the thread open, because Windows does not reuse a thread's id while a
+// handle to it is open. A new thread landing on a dead one's id would otherwise count as
+// hooked and never be themed.
+struct HookedThread {
+    HANDLE hThread = nullptr;
+    HHOOK hCwpRet = nullptr;
+    HHOOK hCwp = nullptr;
+    HHOOK hCbt = nullptr;
+};
+
+// Global so that Wh_ModAfterInit can hook a thread from outside it, and so that
+// Wh_ModUninit, which runs on another thread, can take the hooks down again:
+// UnhookWindowsHookEx works from any thread. Bounded by the number of UI threads alive.
+std::unordered_map<DWORD, HookedThread> g_hookedThreads;
 std::mutex g_hookedThreadsMutex;
+
+void RemoveThreadHooks(const HookedThread& thread) {
+    if (thread.hCwpRet) UnhookWindowsHookEx(thread.hCwpRet);
+    if (thread.hCwp) UnhookWindowsHookEx(thread.hCwp);
+    if (thread.hCbt) UnhookWindowsHookEx(thread.hCbt);
+}
+
+// Windows frees a thread's hooks when the thread exits, so only its handle is left to
+// release. Called with g_hookedThreadsMutex held.
+void ForgetExitedThreads() {
+    std::erase_if(g_hookedThreads, [](const auto& entry) {
+        HANDLE hThread = entry.second.hThread;
+        if (!hThread || WaitForSingleObject(hThread, 0) != WAIT_OBJECT_0) return false;
+
+        CloseHandle(hThread);
+        return true;
+    });
+}
 
 LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK CallWndRetProcHook(int code, WPARAM wParam, LPARAM lParam);
@@ -1206,9 +1732,11 @@ LRESULT CALLBACK CallWndRetProcHook(int code, WPARAM wParam, LPARAM lParam);
 // Returns whether the thread is recorded as hooked, which is false only when every hook
 // failed and a later paint should retry.
 bool InstallThreadHook(DWORD tid) {
+    if (ProcessIsExiting()) return true;
+
     {
         std::lock_guard<std::mutex> lock(g_hookedThreadsMutex);
-        if (g_hookedThreads.contains(tid)) return true;
+        if (g_unloading.load(std::memory_order_relaxed) || g_hookedThreads.contains(tid)) return true;
     }
 
     // A thread whose handle cannot be opened is still recorded, since reinstalling on
@@ -1217,10 +1745,12 @@ bool InstallThreadHook(DWORD tid) {
 
     {
         std::lock_guard<std::mutex> lock(g_hookedThreadsMutex);
+        ForgetExitedThreads();
 
         // Two callers can reach this point for one thread: the thread itself
         // from a color hook, and the engine's thread from Wh_ModAfterInit.
-        if (!g_hookedThreads.try_emplace(tid, hThread).second) {
+        if (g_unloading.load(std::memory_order_relaxed) ||
+            !g_hookedThreads.try_emplace(tid, HookedThread{ hThread }).second) {
             if (hThread) CloseHandle(hThread);
             return true;
         }
@@ -1229,7 +1759,7 @@ bool InstallThreadHook(DWORD tid) {
     // The closing hook goes up first, and the opening one never goes up alone. With only
     // the opening hook installed, a WM_DRAWITEM would raise tl_comboListDepth with nothing
     // to lower it, and the whole thread would paint in the mod's colors. In this order the
-    // odd message closes a bracket that was never opened, which the > 0 guards absorb.
+    // odd message closes a draw that was never recorded, which the closing hook ignores.
     HHOOK hCwpRet = SetWindowsHookExW(WH_CALLWNDPROCRET, CallWndRetProcHook, nullptr, tid);
     DWORD errCwpRet = hCwpRet ? 0 : GetLastError();
     HHOOK hCwp = hCwpRet ? SetWindowsHookExW(WH_CALLWNDPROC, CallWndProcHook, nullptr, tid)
@@ -1238,9 +1768,32 @@ bool InstallThreadHook(DWORD tid) {
     HHOOK hCbt = SetWindowsHookExW(WH_CBT, CbtProcHook, nullptr, tid);
     DWORD errCbt = hCbt ? 0 : GetLastError();
 
-    TrackWinHook(hCwpRet);
-    TrackWinHook(hCwp);
-    TrackWinHook(hCbt);
+    // Nothing went up, so let a later paint retry. A partial failure keeps what it got,
+    // since retrying would add a second copy of the hooks that did install.
+    bool retry = !hCwpRet && !hCwp && !hCbt;
+
+    // The entry is gone if the thread has exited, or if Wh_ModUninit emptied the map in
+    // the meantime. Either way nothing would take these hooks down later.
+    bool recorded = false;
+    {
+        std::lock_guard<std::mutex> lock(g_hookedThreadsMutex);
+        auto it = g_hookedThreads.find(tid);
+        if (it != g_hookedThreads.end()) {
+            recorded = true;
+            if (retry) {
+                if (it->second.hThread) CloseHandle(it->second.hThread);
+                g_hookedThreads.erase(it);
+            } else {
+                it->second.hCwpRet = hCwpRet;
+                it->second.hCwp = hCwp;
+                it->second.hCbt = hCbt;
+            }
+        }
+    }
+    if (!recorded) {
+        RemoveThreadHooks(HookedThread{ nullptr, hCwpRet, hCwp, hCbt });
+        return true;
+    }
 
     if (hCwpRet && hCwp && hCbt) {
         Wh_Log(L"Hooked thread %u.", tid);
@@ -1251,19 +1804,7 @@ bool InstallThreadHook(DWORD tid) {
            L"and dropdowns fall back to the system colors.",
            tid, errCwpRet, errCwp, errCbt);
 
-    // Nothing went up, so let a later paint retry. A partial failure keeps what it got,
-    // since retrying would add a second copy of the hooks that did install.
-    if (!hCwpRet && !hCwp && !hCbt) {
-        std::lock_guard<std::mutex> lock(g_hookedThreadsMutex);
-        auto it = g_hookedThreads.find(tid);
-        if (it != g_hookedThreads.end()) {
-            if (it->second) CloseHandle(it->second);
-            g_hookedThreads.erase(it);
-        }
-        return false;
-    }
-
-    return true;
+    return !retry;
 }
 
 // Called from the color hooks, which any thread that paints reaches early. A thread with
@@ -1311,8 +1852,8 @@ bool IsMenuItemDraw(const DRAWITEMSTRUCT* di) {
 // one, so the class is checked rather than the type alone. The closed combo field also
 // arrives as a list draw, marked ODS_COMBOBOXEDIT, and is left to the app.
 //
-// The opening and closing hooks both go through here and have to agree, since nothing
-// resets tl_comboListDepth the way LeaveMenu resets the menu counter.
+// Only the opening hook asks this. The closing hook goes by what was recorded then, since
+// the answer can change while the row is drawn. See tl_drawKinds.
 bool IsListItemDraw(const DRAWITEMSTRUCT* di) {
     if (di->itemState & ODS_COMBOBOXEDIT) return false;
     if (di->CtlType == ODT_COMBOBOX) {
@@ -1346,10 +1887,23 @@ LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) {
     if (cwp->message == WM_DRAWITEM && cwp->lParam) {
         auto* di = (const DRAWITEMSTRUCT*)cwp->lParam;
 
-        // Only a menu the mod is tracking, so one it leaves alone is not half-themed.
-        if (IsMenuItemDraw(di) && MenuIsOpen()) {
+        // Past the end of the record, a draw is left alone rather than counted with
+        // nothing to say how to uncount it.
+        DrawKind kind = DrawKind::Other;
+        if (tl_drawNesting < kMaxNestedDraws) {
+            // Only a menu the mod is tracking, so one it leaves alone is not half-themed.
+            if (IsMenuItemDraw(di) && MenuIsOpen()) {
+                kind = DrawKind::Menu;
+            } else if (IsListItemDraw(di) && g_themeDropdowns.load(std::memory_order_relaxed)) {
+                kind = DrawKind::List;
+            }
+            tl_drawKinds[tl_drawNesting] = kind;
+        }
+        tl_drawNesting++;
+
+        if (kind == DrawKind::Menu) {
             tl_menuDrawDepth++;
-        } else if (IsListItemDraw(di) && g_themeDropdowns.load(std::memory_order_relaxed)) {
+        } else if (kind == DrawKind::List) {
             tl_comboListDepth++;
             // On the inner draw hwndItem is the list, which catches one the CBT hook
             // never saw. On the outer draw it is the combo, hence the class check.
@@ -1360,12 +1914,15 @@ LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) {
                g_themeDropdowns.load(std::memory_order_relaxed)) {
         // Also names the list, earlier in the paint than the first row.
         if (IsComboListWindow((HWND)cwp->lParam)) SubclassComboList((HWND)cwp->lParam);
+    } else if (cwp->message == WM_UNINITMENUPOPUP || cwp->message == WM_EXITMENULOOP) {
+        // Ahead of the app's own handler, which then finds its menu as it left it.
+        ReleaseClosedColumnMenus();
     }
 
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
-// Closes the counters, and stamps a popup that has just been initialized.
+// Closes the counters, and sees to a popup that has just been initialized.
 LRESULT CALLBACK CallWndRetProcHook(int code, WPARAM wParam, LPARAM lParam) {
     if (code != HC_ACTION || !lParam) {
         return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -1385,14 +1942,21 @@ LRESULT CALLBACK CallWndRetProcHook(int code, WPARAM wParam, LPARAM lParam) {
     }
 
     if (ret->message == WM_INITMENUPOPUP) {
-        // In the return hook, so that items the app adds in its own handler are seen.
+        // In the return hook, so that what the app does to the menu in its own handler is
+        // seen: the items it adds, and the column breaks it sets.
+        HoldColumnMenu((HMENU)ret->wParam);
         if (MenuIsOpen()) ApplyMenuBackground((HMENU)ret->wParam);
     } else if (ret->message == WM_DRAWITEM && ret->lParam) {
-        auto* di = (const DRAWITEMSTRUCT*)ret->lParam;
-        if (IsMenuItemDraw(di)) {
-            if (tl_menuDrawDepth > 0) tl_menuDrawDepth--;
-        } else if (IsListItemDraw(di)) {
-            if (tl_comboListDepth > 0) tl_comboListDepth--;
+        // Nothing is recorded for a draw that began before the opening hook was up.
+        if (tl_drawNesting > 0) {
+            tl_drawNesting--;
+            DrawKind kind = tl_drawNesting < kMaxNestedDraws ? tl_drawKinds[tl_drawNesting]
+                                                             : DrawKind::Other;
+            if (kind == DrawKind::Menu) {
+                if (tl_menuDrawDepth > 0) tl_menuDrawDepth--;
+            } else if (kind == DrawKind::List) {
+                if (tl_comboListDepth > 0) tl_comboListDepth--;
+            }
         }
     } else if (ret->message == WM_CTLCOLORLISTBOX &&
                g_themeDropdowns.load(std::memory_order_relaxed) &&
@@ -1410,10 +1974,17 @@ LRESULT CALLBACK CallWndRetProcHook(int code, WPARAM wParam, LPARAM lParam) {
 void EnterMenu(HMENU hMenu) {
     tl_menuDepth++;
     EnsureThreadHooks();
+
+    // From here as well, for a popup tracked with TPM_NONOTIFY, whose owner is sent no
+    // WM_INITMENUPOPUP.
+    HoldColumnMenu(hMenu);
     ApplyMenuBackground(hMenu);
 }
 
 void LeaveMenu() {
+    // And no WM_UNINITMENUPOPUP either.
+    ReleaseClosedColumnMenus();
+
     if (--tl_menuDepth > 0) return;
 
     // A menu dismissed mid-draw would otherwise leave the overrides stuck on.
@@ -1792,6 +2363,31 @@ BOOL WINAPI SetMenuInfo_Hook(HMENU hMenu, LPCMENUINFO pInfo) {
     return SetMenuInfo_Original(hMenu, pInfo);
 }
 
+// Every SetMenuItemInfo call in the process comes through these two. One that carries no
+// column break, or that comes while no menu is held, goes straight on.
+template <typename Info>
+inline bool CarriesColumnBreak(const Info* pInfo) {
+    return pInfo && (pInfo->fMask & (MIIM_FTYPE | MIIM_TYPE)) && (pInfo->fType & kColumnBreaks);
+}
+
+BOOL WINAPI SetMenuItemInfoW_Hook(HMENU hMenu, UINT item, BOOL byPosition, LPCMENUITEMINFOW pInfo) {
+    BOOL result;
+    if (g_heldMenuCount.load(std::memory_order_relaxed) > 0 && CarriesColumnBreak(pInfo) &&
+        SetHeldItemInfo(hMenu, item, byPosition, pInfo, SetMenuItemInfoW_Original, GetMenuItemInfoW, &result)) {
+        return result;
+    }
+    return SetMenuItemInfoW_Original(hMenu, item, byPosition, pInfo);
+}
+
+BOOL WINAPI SetMenuItemInfoA_Hook(HMENU hMenu, UINT item, BOOL byPosition, LPCMENUITEMINFOA pInfo) {
+    BOOL result;
+    if (g_heldMenuCount.load(std::memory_order_relaxed) > 0 && CarriesColumnBreak(pInfo) &&
+        SetHeldItemInfo(hMenu, item, byPosition, pInfo, SetMenuItemInfoA_Original, GetMenuItemInfoA, &result)) {
+        return result;
+    }
+    return SetMenuItemInfoA_Original(hMenu, item, byPosition, pInfo);
+}
+
 // ---------------------------------------------------------------------------
 // Windhawk events
 // ---------------------------------------------------------------------------
@@ -1799,11 +2395,23 @@ BOOL WINAPI SetMenuInfo_Hook(HMENU hMenu, LPCMENUINFO pInfo) {
 void Wh_ModSettingsChanged() {
     LoadSettings();
     ApplyDarkMenus();
+
+    // A menu still held would otherwise stay one column until it next closes, so the
+    // switch would take a second open to show.
+    if (!g_scrollColumnMenus.load(std::memory_order_relaxed) ||
+        !g_darkMenusActive.load(std::memory_order_relaxed)) {
+        ReleaseAllColumnMenus();
+    }
+
     RedrawMenuBars();
     SyncTitleBars();
 }
 
 BOOL Wh_ModInit() {
+    // No header or import library has it, so it is looked up. See ProcessIsExiting.
+    g_pRtlDllShutdownInProgress = (RtlDllShutdownInProgress_t)(void*)GetProcAddress(
+        GetModuleHandleW(L"ntdll.dll"), "RtlDllShutdownInProgress");
+
     LoadSettings();
 
     // A failure here only costs part of the result, since the dark theme below needs no
@@ -1820,6 +2428,8 @@ BOOL Wh_ModInit() {
     if (!WindhawkUtils::SetFunctionHook(DefFrameProcW, DefFrameProcW_Hook, &DefFrameProcW_Original)) Wh_Log(L"Failed to hook DefFrameProcW");
     if (!WindhawkUtils::SetFunctionHook(DefFrameProcA, DefFrameProcA_Hook, &DefFrameProcA_Original)) Wh_Log(L"Failed to hook DefFrameProcA");
     if (!WindhawkUtils::SetFunctionHook(SetMenuInfo, SetMenuInfo_Hook, &SetMenuInfo_Original)) Wh_Log(L"Failed to hook SetMenuInfo");
+    if (!WindhawkUtils::SetFunctionHook(SetMenuItemInfoW, SetMenuItemInfoW_Hook, &SetMenuItemInfoW_Original)) Wh_Log(L"Failed to hook SetMenuItemInfoW");
+    if (!WindhawkUtils::SetFunctionHook(SetMenuItemInfoA, SetMenuItemInfoA_Hook, &SetMenuItemInfoA_Original)) Wh_Log(L"Failed to hook SetMenuItemInfoA");
 
     ResolveDarkMenuApis();
     ApplyDarkMenus();
@@ -1844,6 +2454,9 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModUninit() {
+    // Before anything is taken down, so that nothing new goes up behind it.
+    g_unloading.store(true, std::memory_order_relaxed);
+
     // Back to whatever mode the process was in, with no restart needed.
     g_themeWindowsMenus.store(false, std::memory_order_relaxed);
     ApplyDarkMenus();
@@ -1855,25 +2468,18 @@ void Wh_ModUninit() {
     g_themeTitleBars.store(false, std::memory_order_relaxed);
     RestoreTitleBars();
 
-    // See g_winHooks.
+    // See HookedThread.
     {
-        std::vector<HHOOK> hooks;
+        std::vector<HookedThread> threads;
         {
-            std::lock_guard<std::mutex> lock(g_winHooksMutex);
-            hooks.assign(g_winHooks.begin(), g_winHooks.end());
-            g_winHooks.clear();
+            std::lock_guard<std::mutex> lock(g_hookedThreadsMutex);
+            for (const auto& entry : g_hookedThreads) threads.push_back(entry.second);
+            g_hookedThreads.clear();
         }
-        for (HHOOK hHook : hooks) {
-            UnhookWindowsHookEx(hHook);
+        for (const HookedThread& thread : threads) {
+            RemoveThreadHooks(thread);
+            if (thread.hThread) CloseHandle(thread.hThread);
         }
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(g_hookedThreadsMutex);
-        for (const auto& entry : g_hookedThreads) {
-            if (entry.second) CloseHandle(entry.second);
-        }
-        g_hookedThreads.clear();
     }
 
     // Not WindhawkUtils::RemoveAllWindowSubclasses(), which needs Windhawk 1.8.
@@ -1901,8 +2507,10 @@ void Wh_ModUninit() {
         }
     }
 
-    // Undo the background brush stamped on the app's menus.
+    // Undo the background brush stamped on the app's menus, and hand back any column
+    // breaks still held.
     RestoreStampedMenus();
+    ReleaseAllColumnMenus();
 
     // The brushes are deliberately not deleted. Two paths hand them to the app and neither
     // can be reclaimed: MENUINFO::hbrBack on menus that outlive the mod, and GetSysColorBrush
