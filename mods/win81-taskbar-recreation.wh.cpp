@@ -29752,11 +29752,11 @@ static void T81InstallShellStartHook() {
     if (!pid || pid != GetCurrentProcessId()) return;
     HMODULE module = LoadLibraryExW(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) { Wh_Log(L"[T81-NATIVE-WIN] module unavailable error=%lu", GetLastError()); return; }
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
         {{LR"(public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum IMMERSIVELAUNCHERSHOWFLAGS))"},
          &t81OriginalShowStartView, T81ShowStartViewHook},
     };
-    bool ok = WindhawkUtils::HookSymbols(module, hooks, std::size(hooks));
+    bool ok = WindhawkUtils::HookSymbols(module, twinuiPcshellDllHooks, std::size(twinuiPcshellDllHooks));
     Wh_Log(L"[T81-NATIVE-WIN] native Explorer symbol hook installed=%d", ok ? 1 : 0);
     // Retain the module for the lifetime of the installed hook.
 }
