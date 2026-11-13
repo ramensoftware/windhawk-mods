@@ -2,7 +2,7 @@
 // @id              window-centralizer
 // @name            Window Centralizer
 // @description     Predictably centers new windows and dialogs to their parent, the screen or the mouse cursor, with configurable threshold and live exclusion list.
-// @version         1.1.0
+// @version         1.2.0
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
 // @include         *
@@ -18,11 +18,11 @@ New dialogs and small windows open centered to where they came from, the mouse c
 
 The window is placed **before** it appears, so there is no jump and no flicker. Elevated programs are covered as well.
 
-With **Show windows already drawn** on, a centered window is also kept invisible for a moment while it draws its contents, so classic dialogs don't flash blank while loading. Its opening animation, from Windows or from an animation mod, may then be skipped; turn the option off to keep animations playing at the final position.
+With **Show windows after complete UI load** on, a centered window is also kept invisible for a moment while it draws its contents, so classic dialogs don't flash blank while loading. Its opening animation, from Windows or from an animation mod, may then be skipped; turn the option off to keep animations playing at the final position.
 
 ## Modes
 
-- **Parent window / monitor**: centered on the window it came from, otherwise the active or topmost window of the same program. Orphan windows, such as the Run dialog or a program just launched, open centered on the monitor where the mouse cursor is.
+- **Parent window / monitor**: centered on the window it came from, otherwise the active or topmost window of the same program. Orphan windows, such as the Run dialog or a program just launched, open centered on the monitor where the mouse cursor is. With **Center on the unrelated launcher window** on, a program started from another one opens centered on the window it was started from.
 - **Parent monitor only**: centered on the monitor of the window it came from, or on the monitor with the mouse cursor when orphan. With the window size limit to target at 100%, every window opens at the center of the screen.
 - **Mouse cursor**: centered on the mouse cursor.
 
@@ -61,6 +61,10 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
     - parent: Parent window / monitor
     - monitor: Parent monitor only
     - mouse: Mouse cursor
+- centerOnLauncher: false
+  $name: Center on the unrelated launcher window
+  $description: A program started from another one (context menu, file opened from a folder, etc.) is centered on the window it was started from, instead of the monitor.
+  $showIf: {mode: parent}
 - maxAreaPercent: 10
   $name: Window size limit to target — % of the monitor area
   $description: Windows larger than this keep their assigned position. Standard dialogs are centered regardless, but can be set to be ignored.
@@ -78,6 +82,7 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
 
 #include <windows.h>
 #include <dwmapi.h>
+#include <tlhelp32.h>
 #include <windhawk_utils.h>
 #include <atomic>
 #include <stdio.h>
@@ -99,6 +104,7 @@ enum Mode { MODE_PARENT, MODE_MONITOR, MODE_MOUSE };
 std::atomic<int> g_mode{MODE_PARENT};
 std::atomic<int> g_maxAreaPercent{10};
 std::atomic<bool> g_revealWhenDrawn{true};
+std::atomic<bool> g_centerOnLauncher{false};
 
 // Tool process only, read and written on the host thread.
 wchar_t g_ignoreHotkey[64];
@@ -119,6 +125,7 @@ void LoadCenteringSettings() {
     int pct = Wh_GetIntSetting(L"maxAreaPercent");
     g_maxAreaPercent = pct < 1 ? 1 : (pct > 100 ? 100 : pct);
     g_revealWhenDrawn = Wh_GetIntSetting(L"revealWhenDrawn") != 0;
+    g_centerOnLauncher = Wh_GetIntSetting(L"centerOnLauncher") != 0;
 }
 
 void LoadHotkeySettings() {
@@ -450,26 +457,71 @@ BOOL CALLBACK FindTopOwnWindow(HWND hwnd, LPARAM param) {
     return FALSE;
 }
 
+/// File name of a process's executable, empty if it can't be read.
+void ExeNameOfPid(DWORD pid, wchar_t* name, DWORD chars) {
+    name[0] = L'\0';
+    HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!proc)
+        return;
+    wchar_t path[MAX_PATH];
+    DWORD size = MAX_PATH;
+    if (QueryFullProcessImageNameW(proc, 0, path, &size)) {
+        const wchar_t* slash = wcsrchr(path, L'\\');
+        wcsncpy_s(name, chars, slash ? slash + 1 : path, _TRUNCATE);
+    }
+    CloseHandle(proc);
+}
+
 bool SameExecutable(HWND hwnd) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
-    HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!proc)
-        return false;
-    wchar_t path[MAX_PATH];
-    DWORD size = MAX_PATH;
-    bool same = false;
-    if (QueryFullProcessImageNameW(proc, 0, path, &size)) {
-        const wchar_t* slash = wcsrchr(path, L'\\');
-        same = _wcsicmp(slash ? slash + 1 : path, g_processName) == 0;
+    wchar_t name[MAX_PATH];
+    ExeNameOfPid(pid, name, MAX_PATH);
+    return *name && _wcsicmp(name, g_processName) == 0;
+}
+
+wchar_t g_launcherName[MAX_PATH];  // executable of LauncherPid(), set with it
+HWND g_launchForeground;           // foreground window when this process started, set in Wh_ModInit
+
+/// The process that started this one, or 0 if unknown or no longer running. Looked up on first use.
+DWORD LauncherPid() {
+    static std::atomic<DWORD> cached{0xFFFFFFFF};  // never a real PID: those are multiples of 4
+    DWORD pid = cached;
+    if (pid != 0xFFFFFFFF)
+        return pid;
+    DWORD self = GetCurrentProcessId(), parent = 0;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe = {};
+        pe.dwSize = sizeof(pe);
+        for (BOOL ok = Process32FirstW(snap, &pe); ok; ok = Process32NextW(snap, &pe)) {
+            if (pe.th32ProcessID == self) {
+                parent = pe.th32ParentProcessID;
+                break;
+            }
+        }
+        CloseHandle(snap);
     }
-    CloseHandle(proc);
-    return same;
+    // A PID is reused once its process exits; a process started after this one isn't its launcher.
+    pid = 0;
+    if (HANDLE proc = parent ? OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, parent) : nullptr) {
+        FILETIME parentStart, selfStart, unused1, unused2, unused3;
+        if (GetProcessTimes(proc, &parentStart, &unused1, &unused2, &unused3) &&
+            GetProcessTimes(GetCurrentProcess(), &selfStart, &unused1, &unused2, &unused3) &&
+            CompareFileTime(&parentStart, &selfStart) < 0)
+            pid = parent;
+        CloseHandle(proc);
+    }
+    if (pid)
+        ExeNameOfPid(pid, g_launcherName, MAX_PATH);
+    cached = pid;
+    return pid;
 }
 
 /// The window to center on: the owner, else the program's active or topmost window, else the
 /// foreground window of another instance of the same program (Explorer runs folder windows in
-/// several processes). Null if none qualifies.
+/// several processes), else, if enabled, the foreground window of the program that started this one.
+/// Null if none qualifies.
 HWND FindParent(HWND hwnd) {
     HWND owner = GetWindow(hwnd, GW_OWNER);
     if (IsValidParent(owner, hwnd))
@@ -501,6 +553,22 @@ HWND FindParent(HWND hwnd) {
 
     if (fg && fgPid != GetCurrentProcessId() && IsValidParent(fg, hwnd) && SameExecutable(fg))
         return fg;
+
+    // A launched program takes the foreground before its first window is shown, so the window the user
+    // acted on is the one in the foreground when this process started. Explorer can run folder windows in
+    // a different process from the one that launched the program, so any window of the launcher's executable counts.
+    if (g_centerOnLauncher && g_mode == MODE_PARENT && IsValidParent(g_launchForeground, hwnd)) {
+        DWORD launcher = LauncherPid();
+        DWORD startFgPid = 0;
+        GetWindowThreadProcessId(g_launchForeground, &startFgPid);
+        wchar_t startFgCls[256] = L"", startFgName[MAX_PATH];
+        bool startFgIsShell =
+            GetClassNameW(g_launchForeground, startFgCls, ARRAYSIZE(startFgCls)) && IsIgnoredClass(startFgCls);
+        ExeNameOfPid(startFgPid, startFgName, MAX_PATH);
+        if (launcher && startFgPid != GetCurrentProcessId() && !startFgIsShell &&
+            (startFgPid == launcher || (*startFgName && _wcsicmp(startFgName, g_launcherName) == 0)))
+            return g_launchForeground;
+    }
     return nullptr;
 }
 
@@ -792,6 +860,40 @@ BOOL WINAPI NtUserSetWindowPos_Hook(HWND hwnd, HWND after, int x, int y, int cx,
         }
     }
     return NtUserSetWindowPos_Original(hwnd, after, x, y, cx, cy, flags);
+}
+
+// rcNormalPosition is in workspace coordinates: relative to the work area of the window's monitor,
+// which differs from the screen when the taskbar is on the left or top.
+POINT WorkspaceOffset(const RECT& rc) {
+    MONITORINFO mi = {};
+    mi.cbSize = sizeof(mi);
+    GetMonitorInfoW(MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST), &mi);
+    return {mi.rcWork.left - mi.rcMonitor.left, mi.rcWork.top - mi.rcMonitor.top};
+}
+
+// Programs that restore a saved position (7-Zip's file manager) show their window with
+// SetWindowPlacement, which shows it inside the kernel without a show call to hook.
+using SetWindowPlacement_t = decltype(&SetWindowPlacement);
+SetWindowPlacement_t SetWindowPlacement_Original;
+BOOL WINAPI SetWindowPlacement_Hook(HWND hwnd, const WINDOWPLACEMENT* wp) {
+    if (hwnd && wp && IsShowCommand(wp->showCmd) && !IsWindowVisible(hwnd) && IsCandidate(hwnd)) {
+        WINDOWPLACEMENT centered = *wp;
+        RECT& rc = centered.rcNormalPosition;
+        int w = rc.right - rc.left, h = rc.bottom - rc.top;
+        POINT off = WorkspaceOffset(rc);
+        RECT proposed = {rc.left + off.x, rc.top + off.y, rc.left + off.x + w, rc.top + off.y + h};
+        int x, y;
+        POINT c;
+        if (ComputeTarget(hwnd, proposed, &x, &y, &c)) {
+            RECT target = {x, y, x + w, y + h};
+            POINT back = WorkspaceOffset(target);
+            rc = {x - back.x, y - back.y, x - back.x + w, y - back.y + h};
+            RememberCenter(hwnd, c);
+            HideUntilDrawn(hwnd);
+            return SetWindowPlacement_Original(hwnd, &centered);
+        }
+    }
+    return SetWindowPlacement_Original(hwnd, wp);
 }
 
 // Windows created with WS_VISIBLE are shown inside the kernel, without any show call to hook;
@@ -1811,6 +1913,7 @@ BOOL Wh_ModInit() {
         return ToolMod_Init();
     }
 
+    g_launchForeground = GetForegroundWindow();
     LoadCenteringSettings();
     StartRevealing();
     if (HMODULE win32u = GetModuleHandleW(L"win32u.dll")) {
@@ -1821,6 +1924,7 @@ BOOL Wh_ModInit() {
     }
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
     WindhawkUtils::SetFunctionHook(CreateWindowExA, CreateWindowExA_Hook, &CreateWindowExA_Original);
+    WindhawkUtils::SetFunctionHook(SetWindowPlacement, SetWindowPlacement_Hook, &SetWindowPlacement_Original);
     return TRUE;
 }
 
