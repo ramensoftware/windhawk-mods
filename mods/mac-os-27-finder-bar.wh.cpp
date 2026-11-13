@@ -81,7 +81,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 - Bar text and icons in white, black or automatic (following the Windows theme), for all displays or each display on its own
 - Clicking the album cover (Control Center or Now Playing) brings the playing app's window to the front
 - Optional: hide the bar while a window is maximized on its display (the window gets the whole height) and bring it back when none is
-- Hide the bar: never, when the pointer touches the top (never over a window's caption buttons), or with the handle: the bar stays hidden and comes back only with a click on a thin pill at the top center, and windows move down while it's shown. A bar hidden by a maximized window also comes back with the handle
+- Hide the bar: never, when the pointer touches the top (never over a window's caption buttons), or with the handle: a click on a thin pill at the top center shows the bar, windows move down and the bar takes the color of the active window's title bar; another click hides it. A bar hidden by a maximized window also comes back with the handle
 - Choose where the bar shows: all displays, the main one, or a specific display (listed by name); if that display is disconnected, the bar moves to the main one
 - **Disks** (optional): its menu lists every local and removable disk with a usage bar and opens it in Explorer
 - Bar icons share one size: each icon is measured and scaled to the same height, and they all grow together with the icon size setting
@@ -869,6 +869,7 @@ static void LoadSettings() {
 #define TIMER_REBUILD   3
 #define TIMER_MAXCHECK  86  // "Ocultar com janela maximizada": confere 4 vezes por segundo
 #define TIMER_MAXNOW    87  // ...e logo depois de uma janela maximizar ou restaurar
+#define TIMER_PEEKCOLOR 88  // a cor da janela ativa, depois que as janelas descem para a barra
 
 static const wchar_t kBarClass[] = L"WhFinderTopBar";
 static const wchar_t kOwnerClass[] = L"WhFinderTopBarOwner";
@@ -931,6 +932,8 @@ struct Bar {
     bool handleHot = false;
     bool maxHidden = false;       // escondida por janela maximizada
     bool peekReserved = false;    // mostrada pela alça: o espaço do topo reservado só enquanto ela fica
+    bool peekColorOn = false;     // mostrada pela alça: a barra na cor da barra de título da janela ativa
+    DWORD peekColor = 0;          // essa cor (0xRRGGBB)
     ID2D1HwndRenderTarget* rt = nullptr;
     ID2D1SolidColorBrush* brush = nullptr;
     IDWriteTextFormat* fmtBold = nullptr;
@@ -1401,6 +1404,12 @@ static void TextColorSet(const std::wstring& device, int v) {
 }
 // Claro ou escuro na barra deste monitor (o texto escuro vai num fundo claro).
 static bool BarLight(const Bar* b) {
+    if (b->peekColorOn) {
+        // Na cor da janela ativa: texto escuro numa cor clara, branco numa escura.
+        DWORD c = b->peekColor;
+        float lum = (0.2126f * ((c >> 16) & 255) + 0.7152f * ((c >> 8) & 255) + 0.0722f * (c & 255)) / 255.0f;
+        return lum > 0.58f;
+    }
     if (g_settings.barStyle == 3) return g_light;  // segue a cor do vidro
     int t = TextColorFor(b->device);
     if (t < 0) return g_light;
@@ -12381,7 +12390,7 @@ static const BsRowDef kBsRows[] = {
     {BR_SLIDER, BV_ICONS, L"Tamanho dos ícones", 0, 0},
     {BR_GROUP, BV_NONE, L"Comportamento", 0, 0},
     {BR_SWITCH, BV_BATTPCT, L"Mostrar a porcentagem da bateria", 0, 0},
-    {BR_CHOICE, BV_HIDEMODE, L"Ocultar a barra", 0, 0, L"Com a alça, a barra fica escondida e volta com um clique na pílula fina no topo; as janelas descem para ela caber"},
+    {BR_CHOICE, BV_HIDEMODE, L"Ocultar a barra", 0, 0, L"Com a alça, um clique na pílula fina no topo mostra a barra (as janelas descem e ela fica na cor da janela ativa) e outro clique a esconde"},
     {BR_SWITCH, BV_HIDEFS, L"Ocultar em tela cheia", 0, 0, L"Jogos, vídeos e apps em tela cheia ficam sem a barra"},
     {BR_SWITCH, BV_HIDEMAX, L"Ocultar com janela maximizada", 0, 0, L"A barra some quando uma janela é maximizada e volta quando não há nenhuma (na área de trabalho)"},
     {BR_SWITCH, BV_SOLIDMAX, L"Fundo sólido com janela maximizada", 0, 0},
@@ -22202,7 +22211,13 @@ static void Render(Bar* b) {
     bool marquee = false;
     b->rt->BeginDraw();
     b->rt->Clear(D2D1::ColorF(0, 0, 0, 0));
-    bool see = g_settings.barStyle != 0 && !b->solid;  // fundo transparente ou líquido
+    bool see = g_settings.barStyle != 0 && !b->solid && !b->peekColorOn;  // fundo transparente ou líquido
+    if (b->peekColorOn) {
+        // Mostrada pela alça: a barra continua a barra de título da janela ativa.
+        DWORD c = b->peekColor;
+        b->brush->SetColor(D2D1::ColorF(((c >> 16) & 255) / 255.0f, ((c >> 8) & 255) / 255.0f, (c & 255) / 255.0f, 1.0f));
+        b->rt->FillRectangle(D2D1::RectF(0, 0, w, h), b->brush);
+    }
     if (see && g_settings.barStyle >= 2 && b->lq) DrawBarLiquid(b, w, h, s);
     if (see && g_settings.barStyle == 3) DrawBarTint(b, w, h, s, b->lq != nullptr);
 
@@ -22596,7 +22611,13 @@ static void UpdateFullscreen() {
             }
         }
         b->maxHidden = hide && forMax;
-        if (!b->maxHidden && !g_settings.autoHide) b->autoShown = false;
+        if (!b->maxHidden && !g_settings.autoHide && b->autoShown) {
+            b->autoShown = false;
+            if (b->peekColorOn) {
+                b->peekColorOn = false;
+                InvalidateRect(b->hwnd, nullptr, FALSE);
+            }
+        }
         if (b->maxHidden && b->autoShown && b->hiddenForFullscreen) {
             // Mostrada pela alça (a janela maximizada desceu para ela caber): o tique
             // rápido a esconde quando o mouse sai.
@@ -22750,7 +22771,9 @@ static void HandleRender(Bar* b) {
     }
     SafeRelease(br);
     SafeRelease(rt);
-    POINT dst = {(b->monRect.left + b->monRect.right - W) / 2, b->monRect.top};
+    // Escondida: no alto da tela; com a barra à vista, na borda de baixo dela.
+    LONG hy = b->autoShown ? b->monRect.top + b->heightPx - H + (LONG)std::round(2 * s) : b->monRect.top;
+    POINT dst = {(b->monRect.left + b->monRect.right - W) / 2, hy};
     POINT src = {0, 0};
     SIZE sz = {W, H};
     BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
@@ -22761,9 +22784,9 @@ static void HandleRender(Bar* b) {
 }
 // A alça aparece só quando a barra está escondida por um desses dois modos.
 static void HandleSync(Bar* b) {
-    // Modo "com a alça", ou escondida por janela maximizada (aí a alça é o jeito de trazê-la).
-    bool want = !b->autoShown &&
-                ((g_settings.autoHide && g_settings.revealHandle && !b->hiddenForFullscreen) || b->maxHidden);
+    // Modo "com a alça", ou escondida por janela maximizada (aí a alça é o jeito de
+    // trazê-la). A alça fica sempre: ela mostra e esconde a barra.
+    bool want = (g_settings.autoHide && g_settings.revealHandle && !b->hiddenForFullscreen) || b->maxHidden;
     if (want && !b->handle) {
         b->handle = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOACTIVATE, kHandleClass, L"",
                                     WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, g_hInst, nullptr);
@@ -22774,7 +22797,6 @@ static void HandleSync(Bar* b) {
     if (!b->handle) return;
     if (want != (IsWindowVisible(b->handle) != FALSE)) {
         if (want) {
-            b->handleHot = false;
             HandleRender(b);
             SetWindowPos(b->handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
         } else {
@@ -22785,8 +22807,52 @@ static void HandleSync(Bar* b) {
         SetWindowPos(b->handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 }
+// A cor da barra de título da janela ativa: a mediana de alguns pontos logo abaixo
+// do topo dela (a tela de verdade, então vale para qualquer app e tema).
+static void BarSamplePeekColor(Bar* b) {
+    HWND fg = GetForegroundWindow();
+    RECT vr{};
+    DWORD pid = 0;
+    if (fg) GetWindowThreadProcessId(fg, &pid);
+    if (!fg || IsShellOrSelf(pid) || IsIconic(fg) || MonitorFromWindow(fg, MONITOR_DEFAULTTONULL) != b->monitor ||
+        FAILED(DwmGetWindowAttribute(fg, 9 /*DWMWA_EXTENDED_FRAME_BOUNDS*/, &vr, sizeof(vr))) || vr.right - vr.left < 60) {
+        if (b->peekColorOn) {
+            b->peekColorOn = false;
+            InvalidateRect(b->hwnd, nullptr, FALSE);
+        }
+        return;
+    }
+    float s = b->dpi / 96.0f;
+    int y = std::max<LONG>(vr.top, b->monRect.top + b->heightPx) + (int)std::round(5 * s);
+    HDC dc = GetDC(nullptr);
+    if (!dc) return;
+    std::vector<int> rs, gs, bs;
+    for (int i = 0; i < 9; i++) {
+        int x = vr.left + (int)((vr.right - vr.left) * (0.18f + 0.64f * i / 8.0f));
+        COLORREF c = GetPixel(dc, x, y);
+        if (c == CLR_INVALID) continue;
+        rs.push_back(GetRValue(c));
+        gs.push_back(GetGValue(c));
+        bs.push_back(GetBValue(c));
+    }
+    ReleaseDC(nullptr, dc);
+    if (rs.empty()) return;
+    auto med = [](std::vector<int>& v) {
+        std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
+        return v[v.size() / 2];
+    };
+    DWORD col = ((DWORD)med(rs) << 16) | ((DWORD)med(gs) << 8) | (DWORD)med(bs);
+    if (!b->peekColorOn || col != b->peekColor) {
+        b->peekColor = col;
+        b->peekColorOn = true;
+        InvalidateRect(b->hwnd, nullptr, FALSE);
+    }
+}
+static bool BarPeekMode(const Bar* b) { return (g_settings.autoHide && g_settings.revealHandle) || b->maxHidden; }
+
 // Clique na alça: a barra aparece e reserva o espaço do topo enquanto estiver à
 // vista, então as janelas (a maximizada também) descem e nada fica por baixo dela.
+// Ela fica até a alça ser clicada de novo, na cor da barra de título da janela ativa.
 static void BarRevealTemp(Bar* b) {
     b->autoShown = true;
     b->hideCountdown = 10;
@@ -22803,9 +22869,16 @@ static void BarRevealTemp(Bar* b) {
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
     BarSyncShadow(b);
     HandleSync(b);
+    HandleRender(b);  // a alça vai para a borda de baixo da barra
+    if (b->handle) SetWindowPos(b->handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    if (g_owner) SetTimer(g_owner, TIMER_PEEKCOLOR, 180, nullptr);  // depois que as janelas descem
 }
 // A barra mostrada pela alça se escondeu: devolve o espaço (as janelas sobem de novo).
 static void BarPeekEnd(Bar* b) {
+    if (b->peekColorOn) {
+        b->peekColorOn = false;
+        InvalidateRect(b->hwnd, nullptr, FALSE);
+    }
     if (!b->peekReserved) return;
     b->peekReserved = false;
     if (b->appbar) {
@@ -22838,7 +22911,18 @@ static LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             return 0;
         case WM_LBUTTONUP:
-            if (b) BarRevealTemp(b);
+            if (!b) return 0;
+            if (b->autoShown) {
+                // Segundo clique: a barra some, as janelas sobem e a alça volta ao alto.
+                b->autoShown = false;
+                b->hover = -1;
+                ShowWindow(b->hwnd, SW_HIDE);
+                if (b->shadow) ShowWindow(b->shadow, SW_HIDE);
+                BarPeekEnd(b);
+                HandleRender(b);
+            } else {
+                BarRevealTemp(b);
+            }
             return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
@@ -22893,6 +22977,10 @@ static void AutoHideTick() {
                              b->monRect.right - b->monRect.left, b->heightPx,
                              SWP_NOACTIVATE | SWP_SHOWWINDOW);
             }
+        } else if (BarPeekMode(b)) {
+            // Com a alça, a barra só some pelo clique nela; enquanto isso, segue a
+            // cor da janela ativa (confere 2 vezes por segundo).
+            if (++b->hideCountdown % 5 == 0) BarSamplePeekColor(b);
         } else {
             bool inside = inX && pt.y >= b->monRect.top - 2 &&
                           pt.y < b->monRect.top + b->heightPx + (int)(6 * s);
@@ -22947,6 +23035,7 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
                                   DWORD, DWORD) {
     if (idObject != OBJID_WINDOW) return;
     if (event == EVENT_SYSTEM_MINIMIZESTART || event == EVENT_SYSTEM_MINIMIZEEND) MaxCheckSoon();
+    if (event == EVENT_SYSTEM_FOREGROUND && g_owner) SetTimer(g_owner, TIMER_PEEKCOLOR, 120, nullptr);  // outra janela ativa: outra cor
     if (event == EVENT_SYSTEM_FOREGROUND) UpdateActiveApp(hwnd);
     else if (hwnd == g_active.hwnd) UpdateSolid();  // minimizar/restaurar
 }
@@ -23320,6 +23409,12 @@ static LRESULT CALLBACK OwnerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
             }
             if (wp == TIMER_CAPS) {
                 CapsPoll();
+                return 0;
+            }
+            if (wp == TIMER_PEEKCOLOR) {
+                KillTimer(hwnd, TIMER_PEEKCOLOR);
+                for (Bar* b : g_bars)
+                    if (b->autoShown && BarPeekMode(b)) BarSamplePeekColor(b);
                 return 0;
             }
             if (wp == TIMER_MAXCHECK || wp == TIMER_MAXNOW) {
@@ -24280,7 +24375,7 @@ const UiTr kUiTr[] = {
     {L"A barra some quando uma janela é maximizada e volta quando não há nenhuma (na área de trabalho)", L"The bar hides when a window is maximized and comes back when none is (on the desktop)", L"La barra se oculta al maximizar una ventana y vuelve cuando no hay ninguna (en el escritorio)", L"La barre se masque quand une fenêtre est agrandie et revient quand il n'y en a plus (sur le bureau)", L"Die Leiste verschwindet bei einem maximierten Fenster und kommt zurück, wenn keines mehr da ist (auf dem Desktop)", L"La barra si nasconde quando una finestra è ingrandita e torna quando non ce ne sono (sul desktop)", L"窗口最大化时菜单栏隐藏，没有最大化窗口时（桌面上）重新出现"},
     {L"Não", L"No", L"No", L"Non", L"Nein", L"No", L"否"},
     {L"Ocultar a barra", L"Hide the bar", L"Ocultar la barra", L"Masquer la barre", L"Leiste ausblenden", L"Nascondi la barra", L"隐藏菜单栏"},
-    {L"Com a alça, a barra fica escondida e volta com um clique na pílula fina no topo; as janelas descem para ela caber", L"With the handle, the bar stays hidden and comes back with a click on the thin pill at the top; windows move down to make room", L"Con la asa, la barra queda oculta y vuelve con un clic en la píldora fina de arriba; las ventanas bajan para dejarle espacio", L"Avec la poignée, la barre reste masquée et revient d'un clic sur la fine pilule en haut ; les fenêtres descendent pour lui laisser la place", L"Mit dem Griff bleibt die Leiste ausgeblendet und kommt per Klick auf die schmale Pille oben zurück; Fenster rücken nach unten", L"Con la maniglia, la barra resta nascosta e torna con un clic sulla pillola sottile in alto; le finestre scendono per farle spazio", L"使用拉手时，菜单栏保持隐藏，点击顶部的细长胶囊即可显示；窗口会下移让出空间"},
+    {L"Com a alça, um clique na pílula fina no topo mostra a barra (as janelas descem e ela fica na cor da janela ativa) e outro clique a esconde", L"With the handle, a click on the thin pill at the top shows the bar (windows move down and it takes the active window's color) and another click hides it", L"Con la asa, un clic en la píldora fina de arriba muestra la barra (las ventanas bajan y toma el color de la ventana activa) y otro clic la oculta", L"Avec la poignée, un clic sur la fine pilule en haut affiche la barre (les fenêtres descendent et elle prend la couleur de la fenêtre active) et un autre clic la masque", L"Mit dem Griff zeigt ein Klick auf die schmale Pille oben die Leiste (Fenster rücken nach unten, sie nimmt die Farbe des aktiven Fensters an), ein weiterer Klick blendet sie aus", L"Con la maniglia, un clic sulla pillola sottile in alto mostra la barra (le finestre scendono e prende il colore della finestra attiva) e un altro clic la nasconde", L"使用拉手时，点击顶部的细长胶囊显示菜单栏（窗口下移，菜单栏采用活动窗口的颜色），再次点击隐藏"},
     {L"Ao encostar o mouse no topo", L"When the pointer touches the top", L"Al tocar la parte superior con el puntero", L"Quand le pointeur touche le haut", L"Wenn der Mauszeiger oben anstößt", L"Quando il puntatore tocca il bordo superiore", L"鼠标碰到顶部时"},
     {L"Com a alça (clique)", L"With the handle (click)", L"Con la asa (clic)", L"Avec la poignée (clic)", L"Mit dem Griff (Klick)", L"Con la maniglia (clic)", L"使用拉手（点击）"},
     {L"Discos", L"Disks", L"Discos", L"Disques", L"Laufwerke", L"Dischi", L"磁盘"},
