@@ -19721,7 +19721,14 @@ static void NtfLayout() {
     }
     if (g_ntf.groups.empty()) {
         // Sem notificações: uma pílula pequena no centro, como "Editar controles".
-        float pw = std::min(x1 - x0, GmMeasure(g_ntf.fBody, T(L"Nenhuma notificação")) + 34 * s), mid = (x0 + x1) / 2;
+        // A fonte do painel ainda não existe na primeira montagem: mede com uma igual.
+        float tw = 0;
+        if (IDWriteTextFormat* f = MakeFormat(g_settings.fontFamily.c_str(), DWRITE_FONT_WEIGHT_NORMAL, 13 * s)) {
+            tw = GmMeasure(f, T(L"Nenhuma notificação"));
+            f->Release();
+        }
+        if (tw <= 0) tw = 150 * s;
+        float pw = std::min(x1 - x0, tw + 34 * s), mid = (x0 + x1) / 2;
         g_ntf.blocks.push_back({5, D2D1::RectF(mid - pw / 2, y, mid + pw / 2, y + 32 * s), -1, {}});
         y += 38 * s;
     }
