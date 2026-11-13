@@ -1425,15 +1425,15 @@ bool GetItemType(HMENU hMenu, UINT pos, UINT* pType) {
     return true;
 }
 
-// Past the hook, which would hold back the mod's own writes as well.
+// Through the hook, which only holds back a break written to a menu still on record. The
+// mod's own writes either carry no break or come after the menu has left the table.
 bool SetItemType(HMENU hMenu, UINT pos, UINT type) {
     MENUITEMINFOW mii = {};
     mii.cbSize = sizeof(mii);
     mii.fMask = MIIM_FTYPE;
     mii.fType = type;
 
-    auto setItemInfo = SetMenuItemInfoW_Original ? SetMenuItemInfoW_Original : SetMenuItemInfoW;
-    return setItemInfo(hMenu, pos, TRUE, &mii) != FALSE;
+    return SetMenuItemInfoW(hMenu, pos, TRUE, &mii) != FALSE;
 }
 
 // Takes the breaks off a menu that is about to be shown. Called again for a menu that is
