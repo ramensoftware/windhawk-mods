@@ -842,23 +842,19 @@ constexpr SettingField kSettingFields[]{
         .Mirrors(L"liquid.edgeHighlight")
         .Help(L"Edge glow on the floating panels and glass controls. 0% disables it."),
     SettingField{L"ui.glassModel", L"Refraction model", SettingKind::Choice, 3, 0, 0, 0, kRefractionChoices}
-        .Mirrors(L"liquid.model").Opens(L"Glass shape")
-        .Help(L"Biconvex curves the glass. Snell traces light through the surface. Dome magnifies. Layered adds a curled rim; Bevel concentrates distortion at the edge."),
+        .Mirrors(L"liquid.model").Opens(L"Glass shape"),
     SettingField{L"ui.glassSurface", L"Surface profile", SettingKind::Choice, 3, 0, 0, 0, kSurfaceChoices}
-        .Mirrors(L"liquid.surface")
-        .Help(L"Circle and squircle are convex; concave bends outward; raised lip blends convex and concave curves."),
+        .Mirrors(L"liquid.surface"),
     SettingField{L"ui.panelRefraction", L"Glass refraction (%)", SettingKind::Number, 3, 100, 0, 200}
         .Mirrors(L"liquid.refraction").Help(kUiGlassHelp),
     SettingField{L"ui.panelDepth", L"Glass depth (DIP)", SettingKind::Number, 3, 40, 1, 100}.Mirrors(L"liquid.zRadius")
         .Help(kUiGlassHelp),
     SettingField{L"ui.glassBezelWidth", L"Bezel width (DIP)", SettingKind::Number, 3, 12, 1, 100}
-        .Mirrors(L"liquid.bezelWidth")
-        .Help(L"Width of the curved edge, independent of the glass base thickness."),
+        .Mirrors(L"liquid.bezelWidth"),
     SettingField{L"ui.glassThickness", L"Glass thickness (DIP)", SettingKind::Number, 3, 20, 1, 200}
         .Mirrors(L"liquid.thickness").Help(kUiGlassHelp),
     SettingField{L"ui.glassRefractiveIndex", L"Refractive index", SettingKind::Number, 3, 150, 100, 250, {}, 100}
-        .Mirrors(L"liquid.refractiveIndex")
-        .Help(L"1.00 does not bend light; ordinary glass is approximately 1.50."),
+        .Mirrors(L"liquid.refractiveIndex"),
     SettingField{L"ui.glassMagnification", L"Magnification (%)", SettingKind::Number, 3, 0, 0, 200}
         .Mirrors(L"liquid.magnification").Help(kUiGlassHelp),
     SettingField{L"ui.glassDistortion", L"Micro-distortion (%)", SettingKind::Number, 3, 0, 0, 100}
@@ -866,8 +862,7 @@ constexpr SettingField kSettingFields[]{
     SettingField{L"ui.glassChromaticAberration", L"Color fringing (%)", SettingKind::Number, 3, 0, 0, 30}
         .Mirrors(L"liquid.chromaticAberration").Help(kUiGlassHelp),
     SettingField{L"ui.glassLighting", L"Lighting", SettingKind::Choice, 3, 1, 0, 0, kLightingChoices}
-        .Mirrors(L"liquid.lighting").Opens(L"Lighting")
-        .Help(L"Original and Rich specular use the highlight intensity. At 0%, specular highlights are disabled; refraction and Fresnel remain independent."),
+        .Mirrors(L"liquid.lighting").Opens(L"Lighting"),
     SettingField{L"ui.panelHighlights", L"Glass highlights (%)", SettingKind::Number, 3, 5, 0, 100}
         .Mirrors(L"liquid.specular").Help(kUiGlassHelp),
     SettingField{L"ui.glassFresnel", L"Fresnel reflection (%)", SettingKind::Number, 3, 100, 0, 200}
@@ -897,30 +892,25 @@ constexpr SettingField kSettingFields[]{
     SettingField{L"ui.glassRippleWavelength", L"Ripple spacing (DIP)", SettingKind::Number, 3, 12, 2, 100}
         .Mirrors(L"liquid.rippleWavelength").Help(kUiGlassHelp),
     SettingField{L"ui.glassEdgeWidth", L"Highlight width (DIP; 0 = auto)", SettingKind::Number, 3, 0, 0, 100}
-        .Mirrors(L"liquid.edgeWidth")
-        .Help(L"Width of the highlight, independent of refraction. 0 keeps automatic sizing."),
+        .Mirrors(L"liquid.edgeWidth"),
     SettingField{L"ui.glassEdgeSoftness", L"Highlight softness (%)", SettingKind::Number, 3, 100, 10, 400}
         .Mirrors(L"liquid.edgeSoftness").Help(kUiGlassHelp),
     SettingField{L"ui.glassFrostEdge", L"Polished edge (%)", SettingKind::Number, 3, 15, 0, 100}.Mirrors(L"liquid.frostEdge")
-        .Opens(L"Frost & color")
-        .Help(L"Sharp detail retained at the edge of frosted glass. 0 frosts the entire surface."),
+        .Opens(L"Frost & color"),
     SettingField{L"ui.glassDispersion", L"Color dispersion", SettingKind::Choice, 3, 0, 0, 0, kDispersionChoices}
-        .Mirrors(L"liquid.dispersion")
-        .Help(L"With refraction links color fringing to the actual displacement of light."),
+        .Mirrors(L"liquid.dispersion"),
     SettingField{L"ui.glassDye", L"Tint color (#RRGGBB)", SettingKind::Color, 3, 0, 0, 0}.Mirrors(L"liquid.dye")
         .Help(kUiGlassHelp),
     SettingField{L"ui.glassDyeStrength", L"Tint strength (%)", SettingKind::Number, 3, 0, 0, 100}
         .Mirrors(L"liquid.dyeStrength").Help(kUiGlassHelp),
     SettingField{L"ui.glassFluidStrength", L"Fluid response (%)", SettingKind::Number, 3, 0, 0, 100}
-        .Mirrors(L"liquid.fluidStrength").Opens(L"Interaction & glints")
-        .Help(L"Glass follows pointer motion and settles after it stops. Controls stay in place. Windows animation settings apply."),
+        .Mirrors(L"liquid.fluidStrength").Opens(L"Interaction & glints"),
     SettingField{L"ui.glassFluidRadius", L"Fluid reach (%)", SettingKind::Number, 3, 35, 5, 100}
         .Mirrors(L"liquid.fluidRadius").Help(kUiGlassHelp),
     SettingField{L"ui.glassFluidViscosity", L"Fluid viscosity (%)", SettingKind::Number, 3, 65, 0, 100}
         .Mirrors(L"liquid.fluidViscosity").Help(kUiGlassHelp),
     SettingField{L"ui.glassGlintMode", L"Moving glints", SettingKind::Choice, 3, 0, 0, 0, kGlintChoices}
-        .Mirrors(L"liquid.glintMode")
-        .Help(L"Optional glints along the glass edge. Windows animation settings apply."),
+        .Mirrors(L"liquid.glintMode"),
     SettingField{L"ui.glassGlintStrength", L"Glint strength (%)", SettingKind::Number, 3, 15, 0, 100}
         .Mirrors(L"liquid.glintStrength").Help(kUiGlassHelp),
     SettingField{L"ui.glassGlintSpeed", L"Glint speed (%)", SettingKind::Number, 3, 50, 1, 100}.Mirrors(L"liquid.glintSpeed")
@@ -3695,7 +3685,8 @@ void CreateEditorContent(SettingsEditor& editor) {
         control.input.VerticalAlignment(VerticalAlignment::Center);
         Automation::AutomationProperties::SetName(control.input, field.label);
         Automation::AutomationProperties::SetAutomationId(control.input, field.key);
-        PCWSTR help = field.help;
+        // A UI row without help of its own explains the glass option as its Liquid row does.
+        PCWSTR help = field.help ? field.help : field.mirrorOf ? SettingDefinition(field.mirrorOf).help : nullptr;
         if (help) {
             Controls::ToolTipService::SetToolTip(control.row, winrt::box_value(help));
             Automation::AutomationProperties::SetHelpText(control.input, help);
@@ -4555,7 +4546,7 @@ using DockPolygon = std::vector<DockCorner>; // Closed, clockwise for a bottom t
 struct DockOutline {
     std::vector<DockPolygon> polygons{}; // One per bar; empty for the hull itself.
     float radius{};
-    bool atTop{}; // The screen edge is the hull's top: the polygons' depths then run down from its bottom.
+    bool atTop{}; // The screen edge is the hull's top: the polygons' depths then run up from its bottom.
     // From the last button's edge to the tray content's: Plan puts the tray this far after the buttons. Separate's grows
     // with whatever its facing ends reach toward each other.
     double gap{kGap};
@@ -5034,8 +5025,8 @@ DrawnOutline::Kind OutlineKind(DockOutline const& outline) {
     using Kind = DrawnOutline::Kind;
     return NeedsPath(outline) ? Kind::Path : HullOnly(outline) ? Kind::Hull : Kind::Bleed;
 }
-// The live dock's outline on its hull. Island's is the hull. Edge's is the hull's rest rect until BindBleed binds it,
-// and a path is empty until FollowOutline keys its morph off the hull, both in the same pass.
+// The live dock's outline on its hull: the hull geometry itself, a bleed box at the hull's rest rect until BindBleed
+// binds it, or a path that is empty until FollowOutline keys its morph off the hull, both in the same pass.
 DrawnOutline HullOutline(CompositionRoundedRectangleGeometry const& hull, DockOutline const& outline) {
     auto kind = OutlineKind(outline);
     if (kind == DrawnOutline::Kind::Hull) return {kind, hull};
@@ -6428,7 +6419,8 @@ float dockOutlineDistance(float2 pixel, bool optical) {
     uint first = 0;
     for (uint polygon = 0; polygon < uint(dockShape.y); ++polygon) {
         uint end = first + uint(dockPolygons[polygon]);
-        // A box softens by a quarter of its height, at most half its corner radius, as a button's opticalDistanceFor does.
+        // A box softens by an eighth of its height, at most half its corner radius and at least 2 pixels, as a
+        // button's opticalDistanceFor does.
         float shallow = 1e10, deep = -1e10;
         for (uint k = first; k < end; ++k) { shallow = min(shallow, dockCorners[k].y); deep = max(deep, dockCorners[k].y); }
         float softness = max(2, min(radius * 0.5, (deep - shallow) * 0.125));
@@ -8841,7 +8833,7 @@ void ApplyBorder(LiquidRenderer::LensConstants& lens, DockBorder border, float s
     lens.borderWidth[0] = border.width * scale;
 }
 
-// Packs the outline's polygons in pixels. The hull itself packs nothing, which keeps today's shader path.
+// Packs the outline's polygons in pixels. The hull itself packs nothing, so the shader keeps the hull's own distance.
 void ApplyDockShape(LiquidRenderer::LensConstants& lens, DockOutline const& outline, float scale) {
     if (HullOnly(outline)) return;
     lens.dockShape[0] = 1;
