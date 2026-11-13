@@ -443,9 +443,7 @@ constexpr unsigned kRefreshRetryLimit = 10;
 #define UW_STRINGIZE_IMPL(value) #value
 #define UW_STRINGIZE(value) UW_STRINGIZE_IMPL(value)
 constexpr size_t kMaxButtonLenses = UW_BUTTON_LENS_CAP;
-#define UW_DOCK_PIECE_CAP 4
-constexpr size_t kMaxDockPieces = UW_DOCK_PIECE_CAP;
-// A slanted outline's corners over all its polygons: Separate Edge arc with inner arcs needs eight per bar.
+// An outline's corners over all its polygons: Separate Edge arc with inner arcs needs eight per bar.
 #define UW_DOCK_CORNER_CAP 16
 constexpr size_t kMaxDockCorners = UW_DOCK_CORNER_CAP;
 constexpr wchar_t kWindowClass[] = L"Windhawk.BetterUltrawideTaskbar.2";
@@ -4536,27 +4534,17 @@ double DockBleed(DockShape shape, double radius) {
 }
 
 // ---- Dock outline ----------------------------------------------------------
-// The hull is the visible band's bounding box, animated off Start. The outline is rounded boxes
-// whose x edges are fixed offsets from the hull's left or right edge and whose y edges are the
-// hull's band, so every point of the silhouette is affine in the hull's left edge: the compositor
-// morphs it with that one value and the shader rebuilds it from the sampled hull.
+// The hull is the visible band's bounding box, animated off Start. The outline is rounded polygons whose corners
+// hang off the hull's left or right edge at fixed offsets and sit at fixed depths from its far side, so every point
+// of the silhouette is affine in the hull's left edge: the compositor morphs it with that one value and the shader
+// rebuilds it from the sampled hull.
 enum class HullEdge { Left, Right };
 struct Anchor {
     HullEdge edge{};
     float offset{};
     bool operator==(Anchor const&) const = default;
 };
-// One rounded box. top and bottom carry the band past the screen edge by the bleed for Edge.
-// Each wall's corners and flare use min(radius, (band - its drop) / 2).
-struct DockPiece {
-    Anchor left{HullEdge::Left, 0}, right{HullEdge::Right, 0};
-    float top{}, bottom{};
-    float flareLeft{}, flareRight{}; // Concave arc radius at the wall's screen-edge foot; 0 = none.
-    float dropLeft{}, dropRight{}; // How far inside the hull's far side the piece's far side sits at each wall.
-    Anchor step{}; // With dropRight > dropLeft: the centre of the S between the two heights.
-    bool operator==(DockPiece const&) const = default;
-};
-// A slanted outline's corner: x hangs off a hull edge, depth is DIP in from the hull's far side (the band height
+// An outline's corner: x hangs off a hull edge, depth is DIP in from the hull's far side (the band height
 // is the screen edge, deeper is past it), and radius is its fillet's, 0 for a sharp corner.
 struct DockCorner {
     Anchor x;
@@ -4565,10 +4553,9 @@ struct DockCorner {
 };
 using DockPolygon = std::vector<DockCorner>; // Closed, clockwise for a bottom taskbar.
 struct DockOutline {
-    std::vector<DockPiece> pieces{DockPiece{}}; // The hull itself by default.
-    std::vector<DockPolygon> polygons{}; // Slanted ends: one per bar, with no pieces.
+    std::vector<DockPolygon> polygons{}; // One per bar; empty for the hull itself.
     float radius{};
-    bool atTop{}; // The screen edge is the hull's top; flares, drops, the step and slanted polygons read it.
+    bool atTop{}; // The screen edge is the hull's top: the polygons' depths then run down from its bottom.
     // From the last button's edge to the tray content's: Plan puts the tray this far after the buttons. Separate's grows
     // with whatever its facing ends reach toward each other.
     double gap{kGap};
@@ -4576,27 +4563,29 @@ struct DockOutline {
     double reach{};
     bool operator==(DockOutline const&) const = default;
 };
-// Today's dock: the clip keeps the hull geometry and the shader its own distance.
-bool HullOnly(DockOutline const& outline) {
-    return outline.pieces.size() == 1 && outline.pieces[0] == DockPiece{};
+// The hull itself: the clip keeps the hull geometry and the shader its own distance.
+bool HullOnly(DockOutline const& outline) { return outline.polygons.empty(); }
+// One upright box of the dock radius from the hull's far side to one depth: Edge's hull carried past the screen edge
+// by the bleed, which a rounded rect of the hull's width draws.
+bool BleedBox(DockOutline const& outline) {
+    if (outline.polygons.size() != 1 || outline.polygons[0].size() != 4) return false;
+    auto const& box = outline.polygons[0];
+    return box[0].x == box[3].x && box[1].x == box[2].x && box[0].depth == 0 && box[1].depth == 0 &&
+           box[2].depth == box[3].depth &&
+           std::ranges::all_of(box, [&](DockCorner const& corner) { return corner.radius == outline.radius; });
 }
-bool Flared(DockOutline const& outline) {
-    return std::ranges::any_of(outline.pieces, [](DockPiece const& piece) {
-        return piece.flareLeft > 0 || piece.flareRight > 0;
-    });
-}
-bool Dropped(DockOutline const& outline) {
-    return std::ranges::any_of(outline.pieces, [](DockPiece const& piece) {
-        return piece.dropLeft > 0 || piece.dropRight > 0;
-    });
-}
-// A rounded rect can't draw two bars, a flare or a drop, so those outlines are a traced path.
-bool NeedsPath(DockOutline const& outline) {
-    return !outline.polygons.empty() || outline.pieces.size() > 1 || Flared(outline) || Dropped(outline);
+// A rounded rect can't draw two bars, a flare, a drop or a slant, so those outlines are a traced path.
+bool NeedsPath(DockOutline const& outline) { return !HullOnly(outline) && !BleedBox(outline); }
+// How deep the outline runs in from the hull's far side: the band, or further by the bleed where its deepest corner
+// is carried past the screen edge.
+float OutlineDepth(DockOutline const& outline, float band) {
+    float depth = band;
+    for (auto const& polygon : outline.polygons)
+        for (auto const& corner : polygon) depth = std::max(depth, corner.depth);
+    return depth;
 }
 // How far the outline reaches past the hull's sides on the band: an outer flare, or a slanted wall's lean.
 double OutlineReach(DockOutline const& outline, double band) {
-    if (outline.polygons.empty()) return outline.pieces.front().flareLeft;
     double reach = 0;
     auto outward = [](DockCorner const& corner, double x) { return corner.x.edge == HullEdge::Left ? -x : x; };
     for (auto const& polygon : outline.polygons)
@@ -4675,7 +4664,7 @@ DockOutline SlantedOutline(DockStyle const& style, double trayWidth, double radi
     double k = std::tan(style.slant * 3.14159265358979323846 / 180), h = std::sqrt(1 + k * k), tau = h - k;
     double bleed = DockBleed(style.shape, radius), drop = TrayDrop(style, band);
     bool arc = style.shape == DockShape::EdgeArc;
-    DockOutline outline{.pieces = {}, .radius = static_cast<float>(radius), .atTop = atTop};
+    DockOutline outline{.radius = static_cast<float>(radius), .atTop = atTop};
     // A leaning wall of `run` is run * h long. Its far corner takes radius * tau of it, an Island's toe radius / tau
     // more and Edge arc's flare its radius * tau, and a dropped wall's far corner rounds at most at half its band. The
     // convex radius is the corner radius as far as each end allows it alone, and the concave one Concave radius up to
@@ -4889,156 +4878,105 @@ DockOutline SlantedOutline(DockStyle const& style, double trayWidth, double radi
 DockOutline MakeOutline(DockStyle const& style, double trayWidth, double radius, double band, bool atTop,
                         DockContent const& content, double square = NAN) {
     if (style.slant > 0) return SlantedOutline(style, trayWidth, radius, band, atTop, content, square);
-    auto bleed = static_cast<float>(DockBleed(style.shape, radius));
     auto r = static_cast<float>(radius);
     auto drop = static_cast<float>(TrayDrop(style, band));
+    // Corners at `edge` sit on the screen edge, at `past` beyond it by Edge's bleed.
+    auto edge = static_cast<float>(band), past = static_cast<float>(band + DockBleed(style.shape, radius));
     bool arc = style.shape == DockShape::EdgeArc;
     // A facing flare is the outer flares' arc.
     float outer = arc ? r : 0, facing = arc && style.innerArcs ? r : 0;
     // A dropped wall rounds at the shorter band's radius, so its flare may not exceed that either.
     auto trayFlare = [&](float flare) { return drop > 0 ? std::min(flare, static_cast<float>(band - drop) / 2) : flare; };
-    DockPiece piece{.top = atTop ? -bleed : 0, .bottom = atTop ? 0 : bleed, .flareLeft = outer, .flareRight = outer};
-    DockOutline outline{.pieces = {piece}, .radius = r, .atTop = atTop};
+    // One rounded box from `left` to `right`, its far side each drop in from the hull's at that wall. Clockwise for a
+    // bottom taskbar: the far-left corner, between a shallower left and a deeper right the S, the far-right corner,
+    // then each wall's foot: a concave flare of that radius turning onto the screen edge with its tip past it, or the
+    // wall's corner past the edge.
+    struct Box { Anchor left{HullEdge::Left, 0}, right{HullEdge::Right, 0}; float dropLeft{}, dropRight{}, flareLeft{}, flareRight{}; };
+    auto corners = [&](Box const& box) {
+        auto at = [](Anchor anchor, float dx) { return Anchor{anchor.edge, anchor.offset + dx}; };
+        auto wallRadius = [&](float wallDrop) { return wallDrop > 0 ? std::min(r, (edge - wallDrop) / 2) : r; };
+        float rl = wallRadius(box.dropLeft), rr = wallRadius(box.dropRight);
+        DockPolygon polygon{{box.left, box.dropLeft, rl}};
+        if (box.dropRight > box.dropLeft) {
+            // The S is centred in the gap between the last button and the tray content: a convex arc of rho turns off
+            // the shallow far side and a concave one of the same radius lands flat d deeper, the two sharing a tangent
+            // at the centre. Its corners are where that tangent meets each height, each filleted at rho.
+            Anchor step{HullEdge::Right, -static_cast<float>(kDockPadding + trayWidth + kGap / 2)};
+            float d = box.dropRight - box.dropLeft, rho = std::max(rl, d / 2);
+            float run = std::sqrt(4 * rho * d - d * d) / 2, half = d / (2 * run) * (rho - d / 2);
+            polygon.push_back({at(step, -half), box.dropLeft, rho});
+            polygon.push_back({at(step, half), box.dropRight, rho});
+        }
+        polygon.push_back({box.right, box.dropRight, rr});
+        if (box.flareRight > 0)
+            polygon.insert(polygon.end(), {{box.right, edge, box.flareRight}, {at(box.right, box.flareRight), edge, 0},
+                                           {at(box.right, box.flareRight), past, 0}});
+        else polygon.push_back({box.right, past, rr});
+        if (box.flareLeft > 0)
+            polygon.insert(polygon.end(), {{at(box.left, -box.flareLeft), past, 0}, {at(box.left, -box.flareLeft), edge, 0},
+                                           {box.left, edge, box.flareLeft}});
+        else polygon.push_back({box.left, past, rl});
+        return polygon;
+    };
+    DockOutline outline{.radius = r, .atTop = atTop};
+    // The tray's outer end reaches its flare past the hull's right edge, or runs square past the screen's side, its
+    // rounded corners off screen.
+    Box dock{.flareLeft = outer, .flareRight = trayFlare(outer)};
+    outline.reach = dock.flareRight;
+    if (std::isfinite(square)) {
+        dock.right = {HullEdge::Right, static_cast<float>(square)};
+        dock.flareRight = 0;
+        outline.reach = square;
+    }
     if (style.layout == DockLayout::Separate) {
         // The tray bar wraps the tray content in the dock padding. The button bar ends where its facing flare's tip,
         // the bars' nearest point, comes barGap short of the tray bar's.
         auto trayBar = static_cast<float>(trayWidth + 2 * kDockPadding);
         outline.gap = style.barGap + 2 * kDockPadding + facing + trayFlare(facing);
-        outline.pieces[0].right = {HullEdge::Right, -static_cast<float>(trayWidth + outline.gap)};
-        outline.pieces[0].flareRight = facing;
-        outline.pieces.push_back(piece);
-        auto& tray = outline.pieces[1];
-        tray.left = {HullEdge::Right, -trayBar};
-        tray.flareLeft = trayFlare(facing);
-        tray.flareRight = trayFlare(outer);
-        tray.dropLeft = tray.dropRight = drop;
+        Box buttons{.right = {HullEdge::Right, -static_cast<float>(trayWidth + outline.gap)}, .flareLeft = outer, .flareRight = facing};
+        dock.left = {HullEdge::Right, -trayBar};
+        dock.flareLeft = trayFlare(facing);
+        dock.dropLeft = dock.dropRight = drop;
+        outline.polygons = {corners(buttons), corners(dock)};
     } else if (drop > 0) {
-        // The S is centred in the gap between the last button and the tray content.
-        auto& dock = outline.pieces[0];
-        dock.flareRight = trayFlare(outer);
         dock.dropRight = drop;
-        dock.step = {HullEdge::Right, -static_cast<float>(kDockPadding + trayWidth + kGap / 2)};
-    }
-    // The tray's outer end reaches its flare past the hull's right edge, or runs square past the screen's side, its
-    // rounded corners off screen.
-    auto& last = outline.pieces.back();
-    outline.reach = last.flareRight;
-    if (std::isfinite(square)) {
-        last.right = {HullEdge::Right, static_cast<float>(square)};
-        last.flareRight = 0;
-        outline.reach = square;
+        outline.polygons = {corners(dock)};
+    } else if (style.shape != DockShape::Island || std::isfinite(square)) {
+        // Unified Island's box is the hull itself: nothing to draw or pack beyond it.
+        outline.polygons = {corners(dock)};
     }
     return outline;
 }
 
 struct DockHull { float left{}, top{}, right{}, bottom{}; };
 
-// Appends the outline's pieces at a hull as one closed figure each, a quarter-circle cubic per
-// corner. A flared wall instead stops f short of the screen edge, turns out along it in a concave
-// quarter arc of radius f and runs square past it to the piece's edge-side y. A drop moves a wall's
-// far side in; between a shallower left and a deeper right one the far side runs an S. The segment
-// structure depends on the outline alone, never on the hull, so a linear morph between two traces is
-// exact for every hull left edge between them.
+// Appends the outline's polygons at a hull as one closed figure each: per corner a line to its fillet's start, then
+// the fillet in cubics of at most a quarter turn each. Every point is a fixed offset from its corner, so the segment
+// structure depends on the outline alone, never on the hull, and a linear morph between two traces is exact for every
+// hull left edge between them.
 void TraceOutline(ID2D1GeometrySink* sink, DockOutline const& outline, DockHull const& hull) {
-    // A slanted outline's polygons: per corner a line to its fillet's start, then the fillet in cubics of at most a
-    // quarter turn each. Every point is a fixed offset from its corner, so the structure is the polygon's alone.
-    if (!outline.polygons.empty()) {
-        double farSide = outline.atTop ? hull.bottom : hull.top, inward = outline.atTop ? -1 : 1;
-        for (auto const& polygon : outline.polygons) {
-            auto fillets = Fillets(polygon);
-            for (size_t i = 0; i < polygon.size(); ++i) {
-                auto const& corner = polygon[i];
-                auto const& fillet = fillets[i];
-                double x = (corner.x.edge == HullEdge::Left ? hull.left : hull.right) + corner.x.offset;
-                auto at = [&](double dx, double depth) {
-                    return D2D1_POINT_2F{float(x + dx), float(farSide + inward * (corner.depth + depth))};
-                };
-                if (i) sink->AddLine(at(fillet.inX, fillet.inDepth));
-                else sink->BeginFigure(at(fillet.inX, fillet.inDepth), D2D1_FIGURE_BEGIN_FILLED);
-                // A quarter turn is one cubic: the guard keeps rounding from splitting it.
-                int arcs = static_cast<int>(std::ceil(std::abs(fillet.sweep) / (3.14159265358979323846 / 2) - 1e-9));
-                double rho = corner.radius, step = arcs ? fillet.sweep / arcs : 0, k = 4.0 / 3 * std::tan(step / 4) * rho;
-                double a = std::atan2(fillet.inDepth - fillet.centreDepth, fillet.inX - fillet.centreX);
-                auto on = [&](double angle, double along) {
-                    return at(fillet.centreX + rho * std::cos(angle) - along * std::sin(angle),
-                              fillet.centreDepth + rho * std::sin(angle) + along * std::cos(angle));
-                };
-                for (int j = 0; j < arcs; ++j, a += step) sink->AddBezier({on(a, k), on(a + step, -k), on(a + step, 0)});
-            }
-            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-        }
-        return;
-    }
-    constexpr float kappa = 0.5522847f, pi = 3.14159265f;
-    float edge = outline.atTop ? hull.top : hull.bottom, inward = outline.atTop ? 1.f : -1.f;
-    for (auto const& piece : outline.pieces) {
-        auto x = [&](Anchor anchor) {
-            return (anchor.edge == HullEdge::Left ? hull.left : hull.right) + anchor.offset;
-        };
-        bool atTop = outline.atTop;
-        float left = x(piece.left), right = x(piece.right);
-        float top = hull.top + piece.top, bottom = hull.bottom + piece.bottom;
-        auto wallRadius = [&](float drop) {
-            return drop > 0 ? std::min(outline.radius, (hull.bottom - hull.top - drop) / 2) : outline.radius;
-        };
-        float rl = wallRadius(piece.dropLeft), kl = rl * (1 - kappa), rr = wallRadius(piece.dropRight), kr = rr * (1 - kappa);
-        float topL = top + (atTop ? 0 : piece.dropLeft), topR = top + (atTop ? 0 : piece.dropRight);
-        float bottomL = bottom - (atTop ? piece.dropLeft : 0), bottomR = bottom - (atTop ? piece.dropRight : 0);
-        bool begun = false;
-        auto to = [&](D2D1_POINT_2F point) {
-            if (begun) sink->AddLine(point);
-            else sink->BeginFigure(point, D2D1_FIGURE_BEGIN_FILLED);
-            begun = true;
-        };
-        // Clockwise, the figure reaches a top-left or bottom-right flare from its wall and the others along the bleed line.
-        auto flare = [&](float wall, float outward, float f, float close, bool fromWall) {
-            float g = f * (1 - kappa);
-            D2D1_POINT_2F foot{wall, edge + inward * f}, tip{wall + outward * f, edge}, square{wall + outward * f, close};
-            D2D1_POINT_2F footControl{wall, edge + inward * g}, tipControl{wall + outward * g, edge};
-            if (fromWall) {
-                to(foot);
-                sink->AddBezier({footControl, tipControl, tip});
-                sink->AddLine(square);
-            } else {
-                to(square);
-                sink->AddLine(tip);
-                sink->AddBezier({tipControl, footControl, foot});
-            }
-        };
-        // The S, construction (a): a convex arc of radius rho turns off the shallow far side to the step's centre,
-        // where a concave one of the same radius takes over and lands flat d deeper. Each turns under a quarter,
-        // so each is one cubic. A top taskbar's far side is the bottom, traced right to left: the S mirrored.
-        bool stepped = piece.dropRight > piece.dropLeft;
-        auto step = [&] {
-            float d = piece.dropRight - piece.dropLeft, rho = std::max(rl, d / 2);
-            float run = std::sqrt(4 * rho * d - d * d) / 2, c1 = x(piece.step) - run, c2 = x(piece.step) + run;
-            float tangent = std::atan2(d / 2 - rho, run);
-            auto arc = [&](float cx, float cy, float a0, float a1) {
-                float k = 4.f / 3.f * std::tan(std::abs(a1 - a0) / 4) * rho, turn = a1 > a0 ? 1.f : -1.f;
-                D2D1_POINT_2F s{cx + rho * std::cos(a0), cy + rho * std::sin(a0)}, e{cx + rho * std::cos(a1), cy + rho * std::sin(a1)};
-                sink->AddBezier({{s.x - turn * k * std::sin(a0), s.y + turn * k * std::cos(a0)},
-                                 {e.x + turn * k * std::sin(a1), e.y - turn * k * std::cos(a1)}, e});
+    double farSide = outline.atTop ? hull.bottom : hull.top, inward = outline.atTop ? -1 : 1;
+    for (auto const& polygon : outline.polygons) {
+        auto fillets = Fillets(polygon);
+        for (size_t i = 0; i < polygon.size(); ++i) {
+            auto const& corner = polygon[i];
+            auto const& fillet = fillets[i];
+            double x = (corner.x.edge == HullEdge::Left ? hull.left : hull.right) + corner.x.offset;
+            auto at = [&](double dx, double depth) {
+                return D2D1_POINT_2F{float(x + dx), float(farSide + inward * (corner.depth + depth))};
             };
-            if (atTop) {
-                to({c2, bottomR});
-                arc(c2, bottomL - d + rho, -pi / 2, -tangent - pi);
-                arc(c1, bottomL - rho, -tangent, pi / 2);
-            } else {
-                to({c1, topL});
-                arc(c1, topL + rho, -pi / 2, tangent);
-                arc(c2, topL + d - rho, tangent + pi, pi / 2);
-            }
-        };
-        if (atTop && piece.flareLeft > 0) flare(left, -1, piece.flareLeft, top, true);
-        else { to({left, topL + rl}); sink->AddBezier({{left, topL + kl}, {left + kl, topL}, {left + rl, topL}}); }
-        if (stepped && !atTop) step();
-        if (atTop && piece.flareRight > 0) flare(right, 1, piece.flareRight, top, false);
-        else { to({right - rr, topR}); sink->AddBezier({{right - kr, topR}, {right, topR + kr}, {right, topR + rr}}); }
-        if (!atTop && piece.flareRight > 0) flare(right, 1, piece.flareRight, bottom, true);
-        else { to({right, bottomR - rr}); sink->AddBezier({{right, bottomR - kr}, {right - kr, bottomR}, {right - rr, bottomR}}); }
-        if (stepped && atTop) step();
-        if (!atTop && piece.flareLeft > 0) flare(left, -1, piece.flareLeft, bottom, false);
-        else { to({left + rl, bottomL}); sink->AddBezier({{left + kl, bottomL}, {left, bottomL - kl}, {left, bottomL - rl}}); }
+            if (i) sink->AddLine(at(fillet.inX, fillet.inDepth));
+            else sink->BeginFigure(at(fillet.inX, fillet.inDepth), D2D1_FIGURE_BEGIN_FILLED);
+            // A quarter turn is one cubic: the guard keeps rounding from splitting it.
+            int arcs = static_cast<int>(std::ceil(std::abs(fillet.sweep) / (3.14159265358979323846 / 2) - 1e-9));
+            double rho = corner.radius, step = arcs ? fillet.sweep / arcs : 0, k = 4.0 / 3 * std::tan(step / 4) * rho;
+            double a = std::atan2(fillet.inDepth - fillet.centreDepth, fillet.inX - fillet.centreX);
+            auto on = [&](double angle, double along) {
+                return at(fillet.centreX + rho * std::cos(angle) - along * std::sin(angle),
+                          fillet.centreDepth + rho * std::sin(angle) + along * std::cos(angle));
+            };
+            for (int j = 0; j < arcs; ++j, a += step) sink->AddBezier({on(a, k), on(a + step, -k), on(a + step, 0)});
+        }
         sink->EndFigure(D2D1_FIGURE_END_CLOSED);
     }
 }
@@ -5138,7 +5076,7 @@ void StopOutline(DrawnOutline const& outline) {
         outline.geometry.StopAnimation(L"Size");
     }
 }
-// The preview's outline at a hull that stands still: the trace there, or the one piece's box, which is the hull
+// The preview's outline at a hull that stands still: the trace there, or the bleed box's rounded rect, the hull
 // carried past the screen edge by Edge's bleed. Returns whether it made a new geometry, which whatever held the old
 // one has to take up.
 bool SetOutline(DrawnOutline& drawn, Compositor const& compositor, DockOutline const& outline, DockHull const& hull) {
@@ -5152,10 +5090,10 @@ bool SetOutline(DrawnOutline& drawn, Compositor const& compositor, DockOutline c
     if (path) {
         drawn.geometry.as<CompositionPathGeometry>().Path(OutlinePath(outline, hull));
     } else {
-        auto const& piece = outline.pieces.front();
+        float depth = OutlineDepth(outline, hull.bottom - hull.top);
         auto rect = drawn.geometry.as<CompositionRoundedRectangleGeometry>();
-        rect.Offset({hull.left, hull.top + piece.top});
-        rect.Size({hull.right - hull.left, hull.bottom - hull.top + piece.bottom - piece.top});
+        rect.Offset({hull.left, outline.atTop ? hull.bottom - depth : hull.top});
+        rect.Size({hull.right - hull.left, depth});
         rect.CornerRadius({outline.radius, outline.radius});
     }
     return created;
@@ -6272,21 +6210,12 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
         float border[4]{}; // r, g, b, a in 0..1.
         float borderWidth[4]{}; // x: width in pixels, 0 = none; the rest keeps cbuffer alignment.
         float outputOffset[4]{}; // x, y: output pixel to backdrop pixel; z: 1 draws the lenses alone, clear elsewhere.
-        // The taskbar dock's outline. x: 0 is the hull itself, 1 the union of the pieces, 2 the union of the
-        // polygons; y: the piece or polygon count; z, with flares, drops or polygons: +1 when the screen edge is
-        // the hull's bottom, -1 at its top.
+        // The taskbar dock's outline. x: 0 is the hull itself, 1 the union of the polygons; y: the polygon count;
+        // z: +1 when the screen edge is the hull's bottom, -1 at its top.
         float dockShape[4]{};
-        // Each piece is a box of the dock radius; its left, top, right and bottom sit these pixels from the hull's.
-        float dockPieceRect[kMaxDockPieces][4]{};
-        // Which hull edge a piece's left (x) and right (y) edge hangs off: 0 the hull's left, 1 its right;
-        // z and w: its left and right wall's flare radius in pixels, 0 for none.
-        float dockPieceSide[kMaxDockPieces][4]{};
-        // x and y: how far inside the hull's far side the piece's far side sits at its left and right wall, in
-        // pixels; z: the step's centre in pixels from the hull edge w names, 0 its left and 1 its right.
-        float dockPieceFar[kMaxDockPieces][4]{};
-        // With dockShape.x 2, a slanted outline: each polygon's corner count, then their corners in order. A corner
-        // is x: its offset in pixels from the hull edge z names (0 its left, 1 its right), y: its depth in pixels in
-        // from the hull's far side, w: its fillet's radius; its fillet's start (xy) and end (zw) are offsets from it.
+        // Each polygon's corner count, then their corners in order. A corner is x: its offset in pixels from the hull
+        // edge z names (0 its left, 1 its right), y: its depth in pixels in from the hull's far side, w: its fillet's
+        // radius; its fillet's start (xy) and end (zw) are offsets from it.
         float dockPolygons[4]{};
         float dockCorners[kMaxDockCorners][4]{};
         float dockFillets[kMaxDockCorners][4]{};
@@ -6296,7 +6225,7 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
     // six float4 arrays, eight trailing 16-byte registers, then the dock outline.
     // Adding a member without accounting for it here would silently shift every lens the shader reads.
     static_assert(sizeof(LensConstants) ==
-                   224 + 6 * 16 * kMaxButtonLenses + 128 + 16 + 3 * 16 * kMaxDockPieces + 16 + 2 * 16 * kMaxDockCorners);
+                   224 + 6 * 16 * kMaxButtonLenses + 128 + 16 + 16 + 2 * 16 * kMaxDockCorners);
 
     struct CopyConstants {
         float offset[2]{};
@@ -6396,9 +6325,6 @@ cbuffer Lens : register(b0) {
     float4 borderWidth;
     float4 outputOffset;
     float4 dockShape;
-    float4 dockPieceRect[)" UW_STRINGIZE(UW_DOCK_PIECE_CAP) R"(];
-    float4 dockPieceSide[)" UW_STRINGIZE(UW_DOCK_PIECE_CAP) R"(];
-    float4 dockPieceFar[)" UW_STRINGIZE(UW_DOCK_PIECE_CAP) R"(];
     float4 dockPolygons;
     float4 dockCorners[)" UW_STRINGIZE(UW_DOCK_CORNER_CAP) R"(];
     float4 dockFillets[)" UW_STRINGIZE(UW_DOCK_CORNER_CAP) R"(];
@@ -6479,114 +6405,74 @@ float roundedDistance(float2 p) {
     if (bodyMode != 0) return continuousDistanceFor(p, halfSize, radius);
     return roundedDistanceFor(p, halfSize, radius);
 }
-// A wall's flare of radius f: a square box over [wall - f, wall + f] from f inside the screen edge
-// to the piece's edge-side y, less the disc of radius f centred f out from the wall and f inside
-// the edge. The box overlaps the bar by f, so the union with it has no interior zero.
-float flareDistance(float2 pixel, float wall, float outward, float f, float sideY) {
-    float foot = center.y + dockShape.z * (halfSize.y - f);
-    float2 size = float2(f, abs(sideY - foot) / 2);
-    float box = roundedDistanceFor(pixel - float2(wall, (sideY + foot) / 2), size, 0);
-    return max(box, f - length(pixel - float2(wall + outward * f, foot)));
-}
 // q's distance to the arc of radius r about the origin between the unit directions a and b, under a half turn apart.
 float arcDistance(float2 q, float r, float2 a, float2 b) {
     float turn = a.x * b.y - a.y * b.x;
     bool within = (a.x * q.y - a.y * q.x) * turn >= 0 && (q.x * b.y - q.y * b.x) * turn >= 0;
     return within ? abs(length(q) - r) : min(length(q - a * r), length(q - b * r));
 }
-// A far side that drops d at the S about s: flat, a convex arc of radius rho down to the S's centre, a concave one
-// landing flat at depth d, then the right wall's far corner of radius rb. q runs along the hull and inward from the
-// shallow far side. This is the exact signed distance to the region inward of that profile and left of the wall, so
-// the border band, the rim and the bezel read offsets parallel to the S: a union of boxes would put internal walls
-// within their depth.
-float stepDistance(float2 q, float s, float d, float rho, float right, float rb) {
-    float run = sqrt(4 * rho * d - d * d) / 2, c1 = s - run, c2 = s + run, corner = right - rb;
-    float2 tangent = float2(run, d / 2 - rho) / rho;
-    float distance = min(length(float2(max(q.x - c1, 0), q.y)), length(float2(q.x - clamp(q.x, c2, corner), q.y - d)));
-    distance = min(distance, length(float2(q.x - right, min(q.y - d - rb, 0))));
-    distance = min(distance, arcDistance(q - float2(c1, rho), rho, float2(0, -1), tangent));
-    distance = min(distance, arcDistance(q - float2(c2, d - rho), rho, -tangent, float2(0, 1)));
-    distance = min(distance, arcDistance(q - float2(corner, d + rb), rb, float2(0, -1), float2(1, 0)));
-    float u = q.x - (q.x <= s ? c1 : q.x <= c2 ? c2 : corner);
-    float profile = q.x <= c1 ? 0 : q.x <= s ? rho - sqrt(max(rho * rho - u * u, 0)) :
-                    q.x <= c2 ? d - rho + sqrt(max(rho * rho - u * u, 0)) :
-                    q.x <= corner ? d : d + rb - sqrt(max(rb * rb - u * u, 0));
-    return q.x <= right && q.y >= profile ? -distance : distance;
+float softMin(float a, float b, float softness) { return -softMax(-a, -b, softness); }
+// Whether the ray from q along +x crosses the edge e0-e1: the even-odd test, which puts a point on an edge inside when
+// the region lies to its right. The polygon and each fillet's triangle use it, so a point on a shared edge is in both
+// or in neither.
+bool crossesRight(float2 e0, float2 e1, float2 q) {
+    return (e0.y > q.y) != (e1.y > q.y) && q.x < e0.x + (q.y - e0.y) * (e1.x - e0.x) / (e1.y - e0.y);
 }
-// The union of the dock's pieces in output pixels. Each x edge holds a fixed offset from the hull
-// edge it hangs off, so the pieces follow the sampled hull between layout passes. A piece whose
-// right wall drops deeper than its left is its box intersected with the S's region, which keeps the
-// field exact inside: an intersection's depth is the smaller of two exact depths.
-float dockPiecesDistance(float2 pixel, bool optical) {
-    float distance = 1e10;
-    float2 hullX = float2(center.x - halfSize.x, center.x + halfSize.x);
-    for (uint i = 0; i < uint(dockShape.y); ++i) {
-        float4 edges = float4(lerp(hullX.x, hullX.y, dockPieceSide[i].x), center.y - halfSize.y,
-                              lerp(hullX.x, hullX.y, dockPieceSide[i].y), center.y + halfSize.y) + dockPieceRect[i];
-        float4 drops = dockPieceFar[i];
-        if (dockShape.z > 0) edges.y += drops.x; else edges.w -= drops.x;
-        float2 size = (edges.zw - edges.xy) / 2;
-        float2 p = pixel - (edges.xy + size);
-        float2 wallRadius = float2(drops.x > 0 ? min(radius, halfSize.y - drops.x / 2) : radius,
-                                   drops.y > 0 ? min(radius, halfSize.y - drops.y / 2) : radius);
-        float cornerRadius = min(p.x < 0 ? wallRadius.x : wallRadius.y, min(size.x, size.y));
-        float piece = optical ? opticalDistanceFor(p, size, cornerRadius) : roundedDistanceFor(p, size, cornerRadius);
-        if (drops.y > drops.x) {
-            float2 q = float2(pixel.x, dockShape.z * (pixel.y - (dockShape.z > 0 ? edges.y : edges.w)));
-            float d = drops.y - drops.x;
-            piece = max(piece, stepDistance(q, lerp(hullX.x, hullX.y, drops.w) + drops.z, d, max(wallRadius.x, d / 2),
-                                            edges.z, wallRadius.y));
-        }
-        distance = min(distance, piece);
-        float sideY = dockShape.z > 0 ? edges.w : edges.y;
-        if (dockPieceSide[i].z > 0) distance = min(distance, flareDistance(pixel, edges.x, -1, dockPieceSide[i].z, sideY));
-        if (dockPieceSide[i].w > 0) distance = min(distance, flareDistance(pixel, edges.z, 1, dockPieceSide[i].w, sideY));
-    }
-    return distance;
-}
-float cross2(float2 a, float2 b) { return a.x * b.y - a.y * b.x; }
-// The slanted outline's rounded polygons in output pixels, along the hull and in depth from its far side. The
+// The outline's rounded polygons in output pixels, along the hull and in depth from its far side. The
 // exact signed distance: the nearest straight run or fillet arc, inside by the sharp polygon's crossing number,
 // which is wrong only between a fillet and its corner: inside the triangle of its ends and corner, off its disc.
-float dockPolygonsDistance(float2 pixel) {
+float dockOutlineDistance(float2 pixel, bool optical) {
     float2 hullX = float2(center.x - halfSize.x, center.x + halfSize.x);
     float2 q = float2(pixel.x, dockShape.z * (pixel.y - center.y) + halfSize.y);
     float distance = 1e10;
     uint first = 0;
     for (uint polygon = 0; polygon < uint(dockShape.y); ++polygon) {
         uint end = first + uint(dockPolygons[polygon]);
+        // A box softens by a quarter of its height, at most half its corner radius, as a button's opticalDistanceFor does.
+        float shallow = 1e10, deep = -1e10;
+        for (uint k = first; k < end; ++k) { shallow = min(shallow, dockCorners[k].y); deep = max(deep, dockCorners[k].y); }
+        float softness = max(2, min(radius * 0.5, (deep - shallow) * 0.125));
         float4 last = dockCorners[end - 1];
         float2 previous = float2(lerp(hullX.x, hullX.y, last.z) + last.x, last.y), runStart = previous + dockFillets[end - 1].zw;
-        float nearest = 1e10;
+        float nearest = 1e10, across = 1e10, along = 1e10, exact = 1e10;
         bool inside = false;
         for (uint i = first; i < end; ++i) {
             float4 corner = dockCorners[i], fillet = dockFillets[i];
             float2 v = float2(lerp(hullX.x, hullX.y, corner.z) + corner.x, corner.y), a = v + fillet.xy, b = v + fillet.zw;
             float2 run = a - runStart, w = q - runStart;
-            nearest = min(nearest, length(w - run * saturate(dot(w, run) / max(dot(run, run), 1e-12))));
-            if ((previous.y > q.y) != (v.y > q.y) &&
-                q.x < previous.x + (q.y - previous.y) * (v.x - previous.x) / (v.y - previous.y)) inside = !inside;
+            float wall = length(w - run * saturate(dot(w, run) / max(dot(run, run), 1e-12)));
+            nearest = min(nearest, wall);
+            // The box's own walls soften: the runs along its shallow and deep sides and the ones across it. A step's
+            // or a flare's run and every fillet stay exact.
+            bool side = abs(a.y - shallow) < 0.01 || abs(a.y - deep) < 0.01;
+            if (abs(run.x) < abs(run.y)) across = softMin(across, wall, 2 * softness);
+            else if (side && abs(run.y) < 0.01) along = softMin(along, wall, 2 * softness);
+            else exact = min(exact, wall);
+            if (crossesRight(previous, v, q)) inside = !inside;
             float r = corner.w;
             if (r > 0) {
                 // The centre is on the corner's bisector, through the midpoint of the fillet's ends.
                 float2 c = v + (fillet.xy + fillet.zw) / 2 * (1 + r * r / dot(fillet.xy, fillet.xy));
-                nearest = min(nearest, arcDistance(q - c, r, (a - c) / r, (b - c) / r));
-                float s1 = cross2(v - a, q - a), s2 = cross2(b - v, q - v), s3 = cross2(a - b, q - b);
-                if (((s1 >= 0 && s2 >= 0 && s3 >= 0) || (s1 <= 0 && s2 <= 0 && s3 <= 0)) && length(q - c) > r)
-                    inside = !inside;
+                float arc = arcDistance(q - c, r, (a - c) / r, (b - c) / r);
+                nearest = min(nearest, arc);
+                exact = min(exact, arc);
+                // The rounded shape is the sharp one with each fillet's triangle swapped outside its disc.
+                bool inTriangle = crossesRight(v, a, q) != crossesRight(a, b, q);
+                if (crossesRight(b, v, q)) inTriangle = !inTriangle;
+                if (inTriangle && length(q - c) > r) inside = !inside;
             }
             previous = v;
             runStart = b;
         }
-        distance = min(distance, inside ? -nearest : nearest);
+        // Within the corner radius of the boundary the optics read the exact distance; deeper, the softened one,
+        // never shallower than that radius, as opticalDistanceFor does.
+        float depth = optical && nearest > radius ? max(min(softMin(along, across, softness), exact), radius) : nearest;
+        distance = min(distance, inside ? -depth : nearest);
         first = end;
     }
     return distance;
 }
-float dockOutlineDistance(float2 pixel, bool optical) {
-    return dockShape.x == 2 ? dockPolygonsDistance(pixel) : dockPiecesDistance(pixel, optical);
-}
-// Only the taskbar dock and its preview have pieces; the editor window keeps its own outline.
+// Only the taskbar dock and its preview have an outline; the editor window keeps its own.
 float dockDistance(float2 pixel) {
     if (bodyMode != 0 || dockShape.x == 0) return roundedDistance(pixel - center);
     return dockOutlineDistance(pixel, false);
@@ -6712,7 +6598,7 @@ void glassRefraction(inout Glass g, float2 gradient, float height, float bevel,
     }
     g.shift += -p * (1 - 1 / (1 + magnification)) * g.depth;
 }
-// The dock surface's field. With pieces, only the field changes: depth, radial terms and the
+// The dock surface's field. With an outline, only the field changes: depth, radial terms and the
 // lighting's top bias keep the hull's visible band.
 float glassField(float2 p, float2 halfExtent, float4 radii, bool optical) {
     if (bodyMode == 0 && dockShape.x != 0) return dockOutlineDistance(p + center, optical);
@@ -8955,46 +8841,27 @@ void ApplyBorder(LiquidRenderer::LensConstants& lens, DockBorder border, float s
     lens.borderWidth[0] = border.width * scale;
 }
 
-// Packs the outline's pieces, or a slanted outline's polygons, in pixels. The hull itself packs nothing, which keeps
-// today's shader path.
+// Packs the outline's polygons in pixels. The hull itself packs nothing, which keeps today's shader path.
 void ApplyDockShape(LiquidRenderer::LensConstants& lens, DockOutline const& outline, float scale) {
     if (HullOnly(outline)) return;
-    if (!outline.polygons.empty()) {
-        lens.dockShape[0] = 2;
-        lens.dockShape[1] = static_cast<float>(outline.polygons.size());
-        lens.dockShape[2] = outline.atTop ? -1 : 1;
-        size_t first = 0;
-        for (size_t p = 0; p < outline.polygons.size() && p < std::size(lens.dockPolygons); ++p) {
-            auto const& polygon = outline.polygons[p];
-            auto fillets = Fillets(polygon);
-            lens.dockPolygons[p] = static_cast<float>(polygon.size());
-            for (size_t i = 0; i < polygon.size() && first < kMaxDockCorners; ++i, ++first) {
-                auto const& corner = polygon[i];
-                auto const& fillet = fillets[i];
-                float packed[]{corner.x.offset * scale, corner.depth * scale, float(corner.x.edge == HullEdge::Right),
-                               corner.radius * scale};
-                float ends[]{float(fillet.inX * scale), float(fillet.inDepth * scale), float(fillet.outX * scale),
-                             float(fillet.outDepth * scale)};
-                std::copy_n(packed, 4, lens.dockCorners[first]);
-                std::copy_n(ends, 4, lens.dockFillets[first]);
-            }
-        }
-        return;
-    }
     lens.dockShape[0] = 1;
-    lens.dockShape[1] = static_cast<float>(outline.pieces.size());
-    if (Flared(outline) || Dropped(outline)) lens.dockShape[2] = outline.atTop ? -1 : 1;
-    for (size_t i = 0; i < outline.pieces.size() && i < kMaxDockPieces; ++i) {
-        auto const& piece = outline.pieces[i];
-        float rect[]{piece.left.offset * scale, piece.top * scale, piece.right.offset * scale, piece.bottom * scale};
-        std::copy_n(rect, 4, lens.dockPieceRect[i]);
-        lens.dockPieceSide[i][0] = piece.left.edge == HullEdge::Right;
-        lens.dockPieceSide[i][1] = piece.right.edge == HullEdge::Right;
-        lens.dockPieceSide[i][2] = piece.flareLeft * scale;
-        lens.dockPieceSide[i][3] = piece.flareRight * scale;
-        float drops[]{piece.dropLeft * scale, piece.dropRight * scale, piece.step.offset * scale,
-                      float(piece.step.edge == HullEdge::Right)};
-        std::copy_n(drops, 4, lens.dockPieceFar[i]);
+    lens.dockShape[1] = static_cast<float>(outline.polygons.size());
+    lens.dockShape[2] = outline.atTop ? -1 : 1;
+    size_t first = 0;
+    for (size_t p = 0; p < outline.polygons.size() && p < std::size(lens.dockPolygons); ++p) {
+        auto const& polygon = outline.polygons[p];
+        auto fillets = Fillets(polygon);
+        lens.dockPolygons[p] = static_cast<float>(polygon.size());
+        for (size_t i = 0; i < polygon.size() && first < kMaxDockCorners; ++i, ++first) {
+            auto const& corner = polygon[i];
+            auto const& fillet = fillets[i];
+            float packed[]{corner.x.offset * scale, corner.depth * scale, float(corner.x.edge == HullEdge::Right),
+                           corner.radius * scale};
+            float ends[]{float(fillet.inX * scale), float(fillet.inDepth * scale), float(fillet.outX * scale),
+                         float(fillet.outDepth * scale)};
+            std::copy_n(packed, 4, lens.dockCorners[first]);
+            std::copy_n(ends, 4, lens.dockFillets[first]);
+        }
     }
 }
 
@@ -10398,7 +10265,6 @@ void EndLiquidMotionBatch(CompositionScopedBatch const& batch) noexcept {
 #undef UW_STRINGIZE
 #undef UW_STRINGIZE_IMPL
 #undef UW_BUTTON_LENS_CAP
-#undef UW_DOCK_PIECE_CAP
 #undef UW_DOCK_CORNER_CAP
 
 winrt::weak_ref<FrameworkElement> MotionEvent(
@@ -13367,7 +13233,8 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
                               static_cast<float>((m.trayInsets.top - m.trayInsets.bottom) / 2));
     float radius = static_cast<float>(
         EffectiveDockRadius(m.host, m.visibleDockHeight()));
-    float bleed = static_cast<float>(DockBleed(g_dockStyle.shape, radius));
+    auto band = static_cast<float>(m.visibleDockHeight());
+    float bleed = OutlineDepth(m.outline, band) - band;
     root.metrics.InsertScalar(L"bleed", bleed);
     root.metrics.InsertScalar(L"bleedTop", m.atTop ? bleed : 0);
     root.dock.geometry.CornerRadius({radius, radius});
