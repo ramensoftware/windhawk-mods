@@ -2,12 +2,217 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-12T09:01:53.000Z</updated>
+    <updated>2026-11-13T06:03:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Win11 Context Menu Wave Animation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win11-context-menu-wave-animation#5629b60cfd6a63be322173a289975cc6908f7abb</id>
+        <link href="https://windhawk.net/mods/win11-context-menu-wave-animation"/>
+        <updated>2026-11-13T06:03:27.000Z</updated>
+        <content type="html"><![CDATA[<h1>Win11 Context Menu Wave Animation (3D Water Drop Ripple)</h1>
+<p>Applies a <strong>3D liquid wave (water drop ripple) deformation</strong> to modern Windows 11 right-click context menus.</p>
+<p><img src="https://raw.githubusercontent.com/GuiFrr03/windhawk-assets/main/demo-normal.gif" alt="Demo"></p>
+<h3>Slow Motion</h3>
+<p><img src="https://raw.githubusercontent.com/GuiFrr03/windhawk-assets/main/demo-slow.gif" alt="Slow Motion Demo"></p>
+<p>When opening a right-click context menu, concentric circular ripples radiate from the cursor click position, deforming the menu's text, icons, and Acrylic background in 3D with liquid refraction, specular wave crests, and smooth dissipation.</p>
+<h2>Features</h2>
+<ul>
+<li><strong>3D Mesh Refraction:</strong> Distorts text, icons, and the Acrylic background using a radial heightfield ripple simulation.</li>
+<li><strong>Specular Water Lighting:</strong> Wave crests catch directional highlights and subtle 3D shading.</li>
+<li><strong>Natural Ripple Deceleration:</strong> Smooth outward wavefront expansion that settles cleanly back into the native menu.</li>
+<li><strong>Command Bar + Menu Fusion:</strong> When the top command bar (Cut/Copy/Rename) is present, both surfaces ripple together as a single continuous liquid sheet.</li>
+<li><strong>Native Blur Preservation:</strong> Hands control seamlessly back to hardware-accelerated WinUI 3 / DWM rendering once the ripple completes.</li>
+<li><strong>System Popup Protection:</strong> Ignores <code>Win+V</code>, emoji panel, taskbar overflow, and hovered submenus.</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>Targets <code>explorer.exe</code> (Desktop and File Explorer modern context menus on Windows 11).</li>
+</ul>
+]]></content>
+        <author>
+            <name>Gui03</name>
+            <uri>https://github.com/GuiFrr03</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Archive Preview 1.0.0]]></title>
+        <id>https://windhawk.net/mods/archive-preview#9a7af07ba878775030838c526bba40862a9bd9a4</id>
+        <link href="https://windhawk.net/mods/archive-preview"/>
+        <updated>2026-11-13T06:03:21.000Z</updated>
+        <content type="html"><![CDATA[<h1>Archive Preview</h1>
+<p><img src="https://raw.githubusercontent.com/luizbizzio/archive-preview/main/assets/archive-preview-cover.png" alt="Archive Preview"></p>
+<p><strong>Browse, open, copy, and extract archives directly in Windows File Explorer.</strong></p>
+<p>Archive Preview is a <a href="https://windhawk.net/">Windhawk</a> mod that adds archive browsing to File Explorer's built-in <strong>Preview Pane (Alt + P)</strong>. View files and folders inside an archive and work with them without opening a separate archive manager.</p>
+<h2>Features</h2>
+<ul>
+<li><strong>Browse archives:</strong> Open folders and view their contents in the Preview Pane.</li>
+<li><strong>Open files:</strong> Double-click supported files to open them with their default Windows app.</li>
+<li><strong>Copy and paste:</strong> Select items, press <strong>Ctrl + C</strong>, and paste them into a folder with <strong>Ctrl + V</strong>.</li>
+<li><strong>Drag and drop:</strong> Drag files or folders from the preview into File Explorer or a compatible app.</li>
+<li><strong>Extract files:</strong> Use <strong>Extract here</strong>, <strong>Extract to</strong>, or <strong>Extract selected</strong>. You can also extract selected items from the right-click menu.</li>
+<li><strong>Fits Windows:</strong> Light and dark themes, familiar file icons, and optional columns for Date modified, Type, and Size.</li>
+</ul>
+<h2>Getting started</h2>
+<ol>
+<li>Install and enable Archive Preview in <strong>Windhawk</strong>.</li>
+<li>Open <strong>File Explorer</strong> and press <strong>Alt + P</strong> to show the Preview Pane.</li>
+<li>Select a supported archive, such as a <code>.zip</code> or <code>.rar</code> file.</li>
+<li>Browse its folders, select items, and choose an action.</li>
+</ol>
+<p><strong>Useful controls</strong></p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>How to use it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Open a folder or file</td>
+<td>Double-click it</td>
+</tr>
+<tr>
+<td>Go back</td>
+<td>Click <strong>Back</strong></td>
+</tr>
+<tr>
+<td>Select multiple items</td>
+<td>Use <strong>Ctrl</strong> or <strong>Shift</strong> while selecting</td>
+</tr>
+<tr>
+<td>Copy selected items</td>
+<td><strong>Ctrl + C</strong>, then <strong>Ctrl + V</strong> in the destination</td>
+</tr>
+<tr>
+<td>Extract selected items</td>
+<td>Click <strong>Extract selected</strong> or press <strong>Ctrl + Shift + E</strong></td>
+</tr>
+<tr>
+<td>Extract to a folder</td>
+<td>Click <strong>Extract to</strong></td>
+</tr>
+<tr>
+<td>Extract beside the archive</td>
+<td>Click <strong>Extract here</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The <strong>Ctrl + Shift + E</strong> shortcut works only when the archive list has focus. You can change or disable it in Windhawk settings.</p>
+<h2>Supported formats</h2>
+<p>Archive Preview enables four formats by default:</p>
+<table>
+<thead>
+<tr>
+<th>Default formats</th>
+<th>Extension</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ZIP</td>
+<td><code>.zip</code></td>
+</tr>
+<tr>
+<td>RAR</td>
+<td><code>.rar</code></td>
+</tr>
+<tr>
+<td>7z</td>
+<td><code>.7z</code></td>
+</tr>
+<tr>
+<td>TAR</td>
+<td><code>.tar</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Optional experimental formats:</strong> <code>.tar.gz</code>, <code>.tgz</code>, <code>.tbz</code>, and <code>.tzst</code>.</p>
+<p>To try an experimental format, add its extension under <strong>Windhawk Settings &gt; Files / Archive extensions</strong>. These formats are not enabled by default and may not work on every Windows build. Some compound extensions need an available Windows preview association. Adding an extension does not add a missing archive provider.</p>
+<p>Archive Preview uses the archive support provided by <strong>Windows Shell</strong>. Built-in File Explorer support for RAR, 7z, and TAR was introduced with Windows 11 23H2. For reliable native archive handling, use Windows 11 23H2 or newer; individual providers and compression methods can still vary.</p>
+<h2>Native Windows integration</h2>
+<p>Archive Preview uses Windows Shell for file access, copy, drag and drop, and extraction. It does <strong>not</strong> run its own archive extractor or create a managed disk cache for transferred or extracted files.</p>
+<p>The mod uses runtime hooks in File Explorer to redirect supported archive previews. It reuses the built-in Windows text Preview Handler to load its archive interface inside <code>prevhost.exe</code>, without creating or changing COM preview registrations in the Windows Registry. Other file types continue to use their normal preview handlers.</p>
+<p>The mod keeps a small amount of navigation data in memory to help when switching folders. Windows or the destination app may still create temporary files during an operation.</p>
+<h2>Settings</h2>
+<p>You can change these options in Windhawk:</p>
+<ul>
+<li><strong>Archive extensions:</strong> Choose the file types to preview.</li>
+<li><strong>Theme:</strong> Follow the system theme or select light or dark mode.</li>
+<li><strong>Columns:</strong> Show or hide Date modified, Type, and Size.</li>
+<li><strong>Extract selected shortcut:</strong> Change the keyboard shortcut.</li>
+<li><strong>Allow preview for downloaded archives:</strong> Off by default. This can relax a Windows preview check for some local archives. It does not remove Mark of the Web.</li>
+<li><strong>Diagnostics:</strong> Use Windhawk's built-in logging when troubleshooting. Logs may include file names and paths.</li>
+</ul>
+<h2>Important limitations</h2>
+<ul>
+<li><strong>Windows preview compatibility:</strong> The runtime bridge requires the built-in Windows text Preview Handler and compatible File Explorer association behavior. It may not work on every Windows version or with every custom file association. It does not add a missing Windows archive provider.</li>
+<li><strong>Preview Host and unload:</strong> Disabling the mod waits for active workers and COM preview objects to finish before the DLL can unload. If <code>prevhost.exe</code> still holds a preview object or class factory (including for normal <code>.txt</code> previews), Windhawk may remain blocked until the hosting Explorer window is closed, a different file is selected, or <code>prevhost.exe</code> exits. A stalled Shell provider can prevent shutdown indefinitely. The mod never forces a process restart.</li>
+<li><strong>Broker security:</strong> Requests are restricted to the current user's Preview Host session, validated local archive paths and live Preview windows, but other code executing inside the same Preview Host remains in the same trust boundary. This architecture is not equivalent to fully isolating every preview provider.</li>
+<li><strong>Archive locations:</strong> Broker operations require files on a local drive reported as fixed by Windows, without junctions, symbolic links or other reparse points in the path. Network shares and drives reported as removable (including many USB drives) are rejected. The read-only recovery list may still display their contents when Windows supports the format, but broker-based open, copy, drag and extraction are unavailable there.</li>
+<li><strong>Cross-process controls:</strong> The interactive native list is owned by Explorer and parented into <code>prevhost.exe</code>. Windows can connect their input queues, so a stalled Shell drag or other synchronous provider operation may temporarily delay input in Explorer.</li>
+<li><strong>Trusted archives only for extraction:</strong> The native Shell backend does not enforce its own limit on the amount of data after decompression. A small archive can contain a very large amount of data. Avoid extracting files from unknown sources.</li>
+<li><strong>Windows provider support:</strong> Some archives, compression methods, or password-protected files may not work. Archive Preview does not provide a password entry window.</li>
+<li><strong>Transfers:</strong> Copy, paste, drag and drop, and opening files depend on what the Windows archive provider and destination app support. Some apps need physical files and may not accept virtual files.</li>
+<li><strong>Opening active content:</strong> Direct opening of executable files, scripts, and other risky file types is blocked. Extracting them is a separate action and should only be done with trusted files.</li>
+<li><strong>Large archives:</strong> Loading a large archive may take time. A Windows Shell provider can block inside a system call, so progress and cancellation may not respond immediately.</li>
+<li><strong>Unavailable formats:</strong> If the native browser fails for the selected archive, it stops retrying and keeps the recovery list when available. If recovery also fails, the error stays visible until a different selection or a new preview session. Temporary broker startup errors are retried for a bounded period.</li>
+<li><strong>Dates in ZIP folders:</strong> When a folder has no stored date, Archive Preview may show a date derived from items inside it. This is not always the folder's original date.</li>
+<li><strong>Selection limit:</strong> Native transfer requests support up to <strong>4,096 selected items</strong> at a time.</li>
+</ul>
+<h2>Troubleshooting</h2>
+<p><strong>The preview is not showing</strong></p>
+<p>If Windows cannot read an archive, Archive Preview displays the error and stops retrying that selection. Select another file and then select the archive again to retry.</p>
+<p>Make sure the Preview Pane is enabled with <strong>Alt + P</strong> and that the archive extension is listed in Windhawk settings. The runtime bridge also needs the built-in Windows text Preview Handler to be available. If you have just updated the mod, close and reopen the File Explorer window. Archive Preview does not restart Explorer automatically.</p>
+<p><strong>A file will not copy, open, or extract</strong></p>
+<p>Try the same archive in File Explorer itself. If Windows cannot use the archive provider for that file, Archive Preview may not be able to use it either. For experimental extensions, support is not guaranteed.</p>
+<p><strong>Something is not working correctly</strong></p>
+<p><a href="https://github.com/luizbizzio/archive-preview/issues">Open a GitHub issue</a> and include your Windows version, archive format, what you tried, and what happened. Screenshots and logs can help. Remove private file names or paths before sharing logs.</p>
+<h2>Project</h2>
+<ul>
+<li><strong>Source code:</strong> <a href="https://github.com/luizbizzio/archive-preview">GitHub repository</a></li>
+<li><strong>Author:</strong> <a href="https://github.com/luizbizzio">Luiz Bizzio</a></li>
+<li><strong>Version:</strong> 1.0.0</li>
+<li><strong>License:</strong> <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache-2.0</a></li>
+</ul>
+]]></content>
+        <author>
+            <name>Luiz Bizzio</name>
+            <uri>https://github.com/luizbizzio</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Classic (Win32) taskbar for Win11 24H2+ (all in one) 1.0]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-24h2-26100#f8f739a32af87e3a1b60c2ece9d8ca554e2a812c</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-24h2-26100"/>
+        <updated>2026-11-13T06:03:16.000Z</updated>
+        <content type="html"><![CDATA[<h1>Classic (Win32) Taskbar for Win11 24H2+ (All-in-One)</h1>
+<p>This mod downloads the Windows 10-style taskbar from Microsoft's symbol server and installs it directly into the mod's storage space. <strong>No system files are modified.</strong></p>
+<p>The version of Explorer used here is sourced from Windows 11 24H2 RTM (build 26100.1). Because Microsoft removed the system tray from this version, this mod completely reimplements it from scratch. To simplify installation, this is an &quot;all-in-one&quot; package that already incorporates the functionality of other mods required to make the Win10-style taskbar work correctly.</p>
+<p>While similar to <a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Win10 taskbar on Win11 24H2 or later</a>, this mod features the following differences:</p>
+<ul>
+<li>It uses the actual Windows 11 24H2 RTM (Germanium) <code>explorer.exe</code>.</li>
+<li>It is an all-in-one solution (all necessary supporting mods are built-in).</li>
+<li>UWP apps display normally on the taskbar alongside Win32 applications.</li>
+<li>The system tray is completely custom-built, meaning other mods targeting the notification area <strong>will not work</strong>.</li>
+<li>The language indicator is currently unavailable, but will be added in a future update.</li>
+</ul>
+<p>To restore the network icon, you can install the <a href="https://windhawk.net/mods/restore-legacy-network-tray">Restore legacy network tray</a> mod, or use any other network indicator of your choice.</p>
+<p><strong>Important Notes:</strong></p>
+<ul>
+<li><strong>Internet access is required</strong> during the mod's initial launch.</li>
+<li>To restart Explorer, you must run <code>userinit.exe</code> instead of <code>explorer.exe</code>.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Octagonal Windows 1.0.1]]></title>
         <id>https://windhawk.net/mods/octagonal-windows#07533b4522ca85de836c1d6173bdb5cd132933a9</id>
@@ -1175,445 +1380,6 @@ the provider. A mute you set yourself in the Volume Mixer is left alone.</p>
         <author>
             <name>Omar</name>
             <uri>https://github.com/uomr</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Translucent Menus 1.0.2]]></title>
-        <id>https://windhawk.net/mods/explorer-translucent-menus#835b475ed345822f8b1527367ac17306e4b85c8e</id>
-        <link href="https://windhawk.net/mods/explorer-translucent-menus"/>
-        <updated>2026-11-11T05:03:02.000Z</updated>
-        <content type="html"><![CDATA[<h1>Explorer Translucent Menus</h1>
-<p>Apply translucent materials to classic Win32 popup menus in File Explorer.
-Windows continues to provide menu items, layout, commands, keyboard navigation,
-and shell extensions. Windows 11's modern context menu is left unchanged.</p>
-<p>This is an Explorer-only, menu-focused alternative to the archived
-<a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a> project.
-It covers classic popup menus hosted by <code>explorer.exe</code>, including desktop and
-File Explorer context menus. It leaves the main Explorer window background,
-ordinary controls, and other processes unchanged.</p>
-<h2>Screenshots</h2>
-<p>Materials in light and dark themes</p>
-<p><img src="https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/01-materials-light-dark.png" alt="materials"></p>
-<p>Tint and transparency adjustments</p>
-<p><img src="https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/02-tint-transparency.png" alt="tint"></p>
-<p>Borders and submenus</p>
-<p><img src="https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/03-border-submenus.png" alt="borders"></p>
-<h2>Requirements</h2>
-<ul>
-<li>Windows 11 22H2 or later (build 22621+), 64-bit.</li>
-<li>Desktop composition and Windows transparency effects enabled.</li>
-<li>No other renderer modifying the same Explorer menus.</li>
-</ul>
-<p>To open a classic context menu on Windows 11, select <strong>Show more options</strong> or
-use <strong>Shift+F10</strong>. Select <strong>Native</strong> to disable all hooks. For a temporary bypass,
-enable <strong>Hold Ctrl to bypass</strong> in the settings, then hold <strong>Ctrl</strong> before opening
-a menu.</p>
-<h2>Materials</h2>
-<table>
-<thead>
-<tr>
-<th>Material</th>
-<th>Tint opacity</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Native</td>
-<td>No modifications</td>
-</tr>
-<tr>
-<td>Solid</td>
-<td>Always opaque</td>
-</tr>
-<tr>
-<td>Transparent</td>
-<td>Adjustable, no blur</td>
-</tr>
-<tr>
-<td>Acrylic</td>
-<td>Adjustable tint over blur</td>
-</tr>
-<tr>
-<td>Modern Acrylic</td>
-<td>Adjustable tint color, fixed opacity</td>
-</tr>
-<tr>
-<td>System Acrylic</td>
-<td>Fixed Windows recipe</td>
-</tr>
-<tr>
-<td>Mica / Mica Alt</td>
-<td>Fixed Windows recipes</td>
-</tr>
-</tbody>
-</table>
-<p>Tint opacity changes the material, not text or icons. Theme selection controls
-the light or dark palette. Hover highlight opacity can be adjusted separately.
-Unrecognized saved material values use Acrylic.</p>
-<h2>Appearance</h2>
-<p>Enable <strong>Hide menu border</strong> to suppress the outline on modified menus. This
-preserves menu dimensions and works with rounded or square corners. Native
-mode and Ctrl bypass retain the complete Windows appearance.
-The option also protects the outline setting from later Shell/UxTheme updates
-while the modified menu is being tracked.</p>
-<p>Legacy icon repair converts copied RGB bitmaps to premultiplied alpha. Optional
-background removal clears only matching corner-connected white, black, or
-magenta regions. Disable background removal for icons with intentional borders.
-Transfers that declare per-pixel alpha, and bitmaps with ambiguous partial
-alpha, retain the original GDI behavior. The mod does not guess whether an
-existing alpha bitmap is straight or premultiplied.</p>
-<h2>Scope and rendering approach</h2>
-<p>This mod keeps the Shell's immersive owner-draw enabled and preserves native
-menu layout, commands, and shell extensions. Effects are scoped to supported
-classic popups while a menu is tracked. Preparation validates resources before
-applying effects and exposes the popup to drawing hooks only after commit.
-Only successful state changes are recorded for cleanup. Unassociated memory
-DCs are left to Windows; owner-draw memory DCs require an exact synchronous
-WM_DRAWITEM match.
-GDI and UxTheme hooks are installed in Explorer, but forward to Windows outside
-a tracked menu. The scope is the popup effect, rather than a replacement for
-Explorer's overall interface rendering.</p>
-<p><a href="https://windhawk.net/mods/translucent-windows">Translucent Windows</a> and
-<a href="https://windhawk.net/mods/win32-ui-modernizer">Win32 UI Modernizer</a> already
-offer translucent classic menus. Translucent Windows shares background-effect
-configuration between windows and flyouts, with menu drawing integrated into
-its broader theme-rendering path. Win32 UI Modernizer lets users disable its
-Explorer section and other general features, but its modern menu modes disable
-immersive owner-draw and also modernize ComboBox dropdowns.</p>
-<p>The purpose of this separate implementation is to provide a dedicated popup
-renderer that retains the Shell's owner-draw path and can accompany a separate
-Explorer background renderer. Restricting process targets or adding material
-presets alone does not provide that rendering behavior. An equivalent mode in
-a broader UI mod would need to isolate menu rendering and preserve immersive
-owner-draw as well.</p>
-<h2>Compatibility</h2>
-<p>Menu effects from these mods conflict when enabled on the same Explorer popups:</p>
-<ul>
-<li><a href="https://windhawk.net/mods/translucent-windows">Translucent Windows</a>:
-<strong>Flyout effects</strong> also renders classic menus, dropdowns, and tooltips.
-Disable that option to remove its flyout effects.</li>
-<li><a href="https://windhawk.net/mods/win32-ui-modernizer">Win32 UI Modernizer</a>: set
-<strong>Menus and dropdowns</strong> to <strong>Native (no modernization)</strong>. Both modern modes
-apply their own acrylic rendering and disable immersive owner-draw.</li>
-</ul>
-<p>These settings turn off their direct menu features. Their remaining Explorer
-effects and shared drawing hooks depend on other settings, so compatibility
-must be evaluated with the configuration in use. To avoid their remaining hooks
-in Explorer while continuing to use them in other applications, exclude
-<code>explorer.exe</code> from their targets in Windhawk's Advanced tab.</p>
-<p>This mod is also compatible with
-<a href="https://github.com/Maplespe/ExplorerBlurMica">ExplorerBlurMica</a>, which supplies
-the main Explorer window backdrop. This mod keeps its effects confined to classic
-popup menus and leaves the main window backdrop to ExplorerBlurMica.</p>
-<p>Unknown owner-drawn menus, custom background brushes, high contrast, remote
-sessions, disabled transparency, and recognized conflicting renderers are
-left unchanged. Settings changes reload the mod. Menu opening animations follow
-the Windows settings and the caller's flags, including when effects are active.</p>
-<p>Menus whose previous system-backdrop value cannot be read stay native. Unreadable
-optional dark-mode and corner preferences are left unchanged. Recorded values
-are restored on live-window cleanup; failed restores remain pending for retry.
-There are no public getters for prior blur regions or extended-frame margins,
-and the Accent getter is unavailable on some builds. Cleanup of those states is
-best-effort, not a lossless restoration guarantee for an unknown renderer. A
-missing border-color snapshot likewise uses the Windows default on cleanup.
-Destroyed popup HWNDs release their window-owned effects without extra resets.</p>
-<p>The implementation uses version-dependent Windows interfaces: the composition
-attribute exports, UxTheme ordinal 74, the DarkMode::Menu theme, menu layout
-message 0x1e2, and Shell window properties. It does not read private Shell item
-structures, patch instructions, download symbols, or replace the menu loop.</p>
-<h2>Troubleshooting</h2>
-<p>Enable log output in Windhawk's Advanced tab to record menu preparation,
-material and border application results, native fallback reasons, and cleanup.
-There is no separate logging setting in this mod. Native mode registers no
-menu hooks, so it reports initialization rather than individual menu openings.</p>
-<h2>Credits and license</h2>
-<p>Informed by <a href="https://github.com/ALTaleX531/TranslucentFlyouts">TranslucentFlyouts</a>,
-<a href="https://windhawk.net/mods/translucent-windows">Translucent Windows</a>, and
-<a href="https://github.com/Bolt-Scripts/custom-cached-context-menu">Custom Cached Context Menu</a>.
-This implementation is distributed under GPL-3.0-or-later.</p>
-]]></content>
-        <author>
-            <name>alkali210</name>
-            <uri>https://github.com/alkali210</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mac OS 27 Finder Bar 1.0.0]]></title>
-        <id>https://windhawk.net/mods/mac-os-27-finder-bar#490977e5b6cf20cdba95d86f1203e8f8be44e012</id>
-        <link href="https://windhawk.net/mods/mac-os-27-finder-bar"/>
-        <updated>2026-11-10T00:01:58.000Z</updated>
-        <content type="html"><![CDATA[<h1>Mac OS 27 Finder Bar</h1>
-<p>A <a href="https://windhawk.net">Windhawk</a> mod that adds a macOS 27-style menu bar to the top of the screen in Windows 11: the menus of the app in front on the left, and system status, Control Center, notifications and the clock on the right, all in live glass.</p>
-<p>Available in English, Português, Español, Français, Deutsch, Italiano and 中文（简体）. The language follows Windows automatically, or can be picked in the settings.</p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/bar.png" alt="The bar"></p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/control-center.png" alt="Control Center"></p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/notifications.png" alt="Notifications"></p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/logo-menu.png" alt="Logo menu"></p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/settings.png" alt="Settings window"></p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/control-center.gif" alt="Control Center in action"></p>
-<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/weather.gif" alt="Animated weather widget"></p>
-<hr>
-<h2>Left side</h2>
-<ul>
-<li><strong>Logo menu</strong>: About This PC, System Settings, Microsoft Store (both with pending update counts), Force Quit, Show Desktop, Sleep, Hibernate, Restart, Shut Down, Lock Screen, Sign Out and <strong>Menu Bar Settings…</strong></li>
-<li><strong>Active app name</strong> (shown as <em>Finder</em> for the desktop and File Explorer, a name you can change): hide the app, hide others, open file location, close window, quit, force quit</li>
-<li><strong>Global menu</strong>:
-<ul>
-<li>apps with a classic menu bar (Win32): the app's real menus</li>
-<li>modern apps: the app's menu bar read through UI Automation when it exists</li>
-<li>browsers, File Explorer, Office, VS Code and other apps: ready-made menus that send the app's own keyboard shortcuts</li>
-<li>a <strong>Window</strong> menu with the app's open windows</li>
-</ul>
-</li>
-<li><strong>Help</strong> menu with a search across all the app's menus; ← → move between menus (optional Ctrl+F2 opens the bar from the keyboard)</li>
-</ul>
-<h2>Right side</h2>
-<ul>
-<li><strong>Display</strong>: dark mode, night light, projection modes</li>
-<li>Keyboard layout (when there is more than one), emoji, on-screen keyboard</li>
-<li><strong>Battery</strong> (percentage, charging, time remaining), <strong>Wi-Fi</strong> (current network, available and known networks), <strong>Bluetooth</strong> and <strong>Sound</strong> (scroll on the icon to change the volume, right-click to mute, switch output and input)</li>
-<li><strong>Now Playing</strong>: the song name scrolls across the bar when it doesn't fit; the panel has a large-cover or compact layout and a progress bar drawn as a line, a colored line or a wave</li>
-<li><strong>Focus</strong> (when Do Not Disturb is on), <strong>Search</strong> (Windows Search or Siri Plus Launchpad), <strong>microphone and camera</strong> (the icons turn orange and green while an app uses them, as on the Mac; click to see which apps use them and mute the microphone), <strong>Weather</strong> (Open-Meteo, MET Norway or wttr.in, no account needed) and the <strong>Notifications</strong> button</li>
-<li><strong>Clock</strong>: the calendar and your agenda from your own .ics files, imported right from the settings window. Date and time formats are configurable</li>
-<li>An arrow collapses the icons that don't fit; each icon can be turned on or off in the settings</li>
-</ul>
-<h2>Control Center</h2>
-<p>Wi-Fi, Bluetooth, media playing, dark mode, Do Not Disturb, brightness, sound and audio output, plus tiles you can add: night light, airplane mode, screenshot, <strong>screen recording</strong>, <strong>power mode</strong>, <strong>energy saver</strong> (one click turns it on and off), <strong>magnifier</strong>, lock screen, calculator, Task Manager, emoji and show desktop.</p>
-<ul>
-<li><strong>Edit Controls</strong> lets you add, remove, move and resize tiles</li>
-<li>Clicking <strong>power mode</strong> opens a box under Edit Controls, as wide as the panel, with the Windows 11 power modes and power plans (repeated plans are hidden)</li>
-<li>Tile names that don't fit scroll when the mouse is over the tile</li>
-<li>Tiles can be pills or rounded squares; a tile that is on shows a colored circle or turns into a whole white pill</li>
-<li>Optional: blur and dim the screen while the Control Center is open; cascade or fade animation when it opens</li>
-</ul>
-<h2>Notice pills</h2>
-<p>Small glass pills drop from the bar for headphones, audio output, low battery, charger, Focus, Caps Lock, USB devices and drives, finished downloads, copy and cut, screenshots and screen recordings. Pills you can act on (open and edit a screenshot or recording, open a download, reply to a message) stay 2.5 times longer and are kept in the bell panel; the rest only show in the pill. Volume, brightness and Bluetooth changes can show as floating pills too. The pill's style (glass, liquid glass or dark), size, position, duration and opening and closing animations are all configurable.</p>
-<h2>Notifications</h2>
-<p>Turn on <strong>Windows notifications</strong> in logo → <strong>Menu Bar Settings…</strong> → <strong>Notice pills</strong> (off by default) and the bar shows your apps' notifications:</p>
-<ul>
-<li>in the pill and in the bell panel, grouped by app</li>
-<li><strong>reply</strong> to messages (like WhatsApp) right from the pill, when the app supports replies</li>
-<li><strong>drag</strong> a notification aside in the panel to clear it</li>
-<li><strong>Only the bar shows notifications</strong>: optional; Windows' own banners move off the screen while the bar shows them, and come back when the option or the mod is turned off</li>
-</ul>
-<h2>Bar and glass</h2>
-<ul>
-<li>Bar background: fully transparent (default), Windows blur glass, or liquid glass (experimental); opaque when the active app is maximized (optional)</li>
-<li><strong>Live glass</strong>: panels blur what's behind them in real time, with an experimental liquid glass with edge refraction (on by default)</li>
-<li>Menus use their own frosted glass (with a transparency slider) or <strong>the same glass as the Control Center</strong></li>
-<li>Light, dark or automatic theme, nine selection colors for the bar and menus, font, font size, icon size and bar height</li>
-<li>Hides with full-screen apps, can hide automatically until the mouse touches the top, and shows on every monitor (each optional)</li>
-</ul>
-<h2>Settings</h2>
-<p>Logo → <strong>Menu Bar Settings…</strong> opens a window in the same style as Siri Plus Launchpad: sections on the left with search, every setting applied live without restarting the bar. It's the only place for those settings. Windhawk's settings page has the few the window doesn't: font, glass tints, theme, the name shown for the desktop, ready-made menus, Control Center tile look, opening animation, tray click, the app update count and .ics file paths, plus <strong>Reset the bar's settings</strong>, which puts the window's options back to their defaults if the bar ever doesn't show up.</p>
-<h2>What changes Windows settings</h2>
-<p>Some Control Center tiles and menu items change real Windows settings, the same ones Windows' own quick settings change. They stay changed after the mod is turned off, as they would if you used Windows' quick settings:</p>
-<ul>
-<li><strong>Dark mode</strong>: the app and system light/dark theme (sets both to the same value)</li>
-<li><strong>Night light</strong>: on or off</li>
-<li><strong>Power mode and power plan</strong>: picking a power mode also switches the plan to Balanced, as Windows requires</li>
-<li><strong>Energy saver</strong> and <strong>Do Not Disturb</strong></li>
-<li><strong>Brightness</strong>, <strong>default audio device</strong>, <strong>volume and mute</strong>, <strong>microphone mute</strong>, <strong>Wi-Fi and Bluetooth radios</strong>, <strong>Wi-Fi network</strong> and <strong>display mode</strong> (projection)</li>
-</ul>
-<p>Nothing is changed unless you click the matching tile or item.</p>
-<h2>Network use</h2>
-<p>The mod only goes online for features you set up yourself (the calendar reads local .ics files only, never the network):</p>
-<ul>
-<li><strong>Weather</strong>, once you pick a place: the place search uses OpenStreetMap Nominatim or Open-Meteo, and the forecast comes from the service you choose (Open-Meteo, MET Norway or wttr.in) with the place's coordinates rounded to about 1 km. Turning the weather icon off stops all requests.</li>
-<li><strong>App update count</strong> (off by default, in Windhawk's settings): runs <code>winget upgrade</code>, which checks winget's sources online. The mod doesn't accept winget's source agreements for you. The Windows Update count is offline.</li>
-</ul>
-<h2>Privacy</h2>
-<p>The copy pill only says &quot;Copied&quot; or &quot;Cut&quot;: it never shows what was copied, and it skips anything an app marks as private (password managers do), the same way Windows' clipboard history does.</p>
-<h2>How it runs</h2>
-<p>The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so if it ever fails, the taskbar and desktop keep working. Explorer keeps only a small hook that copies the tray icons' registrations to the bar. If that process is ended by hand, turn the mod off and on again in Windhawk to bring the bar back.</p>
-<h2>Known limitations</h2>
-<ul>
-<li>Apps without a classic menu bar use ready-made menus based on keyboard shortcuts.</li>
-<li>Bluetooth lists classic (non-BLE) devices and opens Settings to connect and disconnect.</li>
-<li>Power mode and energy saver use undocumented Windows functions; if Windows refuses, the tile opens the matching Settings page.</li>
-<li>Screen recording uses Win+Shift+R and needs an up-to-date Snipping Tool.</li>
-<li>Replying from the pill works with apps that register a notification activator with Windows; otherwise the pill opens the app and copies your text.</li>
-<li>With live glass (and the bar's liquid background), the bar and panels don't show up in screenshots.</li>
-<li>If Windhawk itself runs as administrator (portable mode started elevated), the bar doesn't show the tray icons: letting the shell's tray data reach an elevated bar would also let any app send it fake icons.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Thiago Silva</name>
-            <uri>https://github.com/brideinflame-rgb</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Adobe Dark Menus 1.0.0]]></title>
-        <id>https://windhawk.net/mods/adobe-dark-menus#b60d87126147f197eca7d8d69e73cec6cc7e5d5c</id>
-        <link href="https://windhawk.net/mods/adobe-dark-menus"/>
-        <updated>2026-11-09T23:05:07.000Z</updated>
-        <content type="html"><![CDATA[<h1>Adobe Dark Menus</h1>
-<p>This Windhawk mod gives Adobe apps on Windows dark menus: real menu bars, top-bar
-dropdowns, context menus and dropdown lists. It also colors their standard title
-bars to match.</p>
-<p>Everything happens inside each app's own process. No system colors are changed
-and no other application is affected.</p>
-<h2>Supported apps</h2>
-<p>Photoshop, Illustrator, InDesign, Dreamweaver, After Effects, Premiere Pro,
-Audition, Media Encoder, Bridge and Acrobat.</p>
-<h2>Screenshots</h2>
-<p><strong>Photoshop:</strong> a dropdown list in the options bar</p>
-<p><img src="https://raw.githubusercontent.com/sabergraphics/adobe-dark-menus/main/images/photoshop-dropdown-list.png" alt="Photoshop dropdown list"></p>
-<p><strong>Illustrator:</strong> a context menu</p>
-<p><img src="https://raw.githubusercontent.com/sabergraphics/adobe-dark-menus/main/images/illustrator-context-menu.png" alt="Illustrator context menu"></p>
-<p><strong>InDesign:</strong> the Type menu</p>
-<p><img src="https://raw.githubusercontent.com/sabergraphics/adobe-dark-menus/main/images/indesign-type-menu.png" alt="InDesign Type menu"></p>
-<p><strong>After Effects:</strong> the Window menu, with the menu bar and title bar</p>
-<p><img src="https://raw.githubusercontent.com/sabergraphics/adobe-dark-menus/main/images/after-effects-window-menu.png" alt="After Effects Window menu"></p>
-<p><strong>After Effects:</strong> the blend modes on a timeline layer</p>
-<p><img src="https://raw.githubusercontent.com/sabergraphics/adobe-dark-menus/main/images/after-effects-blend-modes.png" alt="After Effects blend modes"></p>
-<p><strong>Premiere Pro:</strong> a context menu on a timeline clip</p>
-<p><img src="https://raw.githubusercontent.com/sabergraphics/adobe-dark-menus/main/images/premiere-context-menu.png" alt="Premiere Pro context menu"></p>
-<p><strong>Premiere Pro:</strong> the Sequence menu, with the menu bar and title bar</p>
-<p><img src="https://raw.githubusercontent.com/sabergraphics/adobe-dark-menus/main/images/premiere-sequence-menu.png" alt="Premiere Pro Sequence menu"></p>
-<h2>Related mods</h2>
-<p>These overlap with this mod. Running them together in the same app has not been
-tested, so use one or the other for the apps above.</p>
-<ul>
-<li><strong><a href="https://windhawk.net/mods/photoshop-dark-menus">Photoshop Dark Menus</a></strong> covers
-Photoshop only. This mod does everything it did and reaches the other Adobe apps,
-so disable it if you use this one.</li>
-<li><strong><a href="https://windhawk.net/mods/dark-menus">Dark mode context menus</a></strong> darkens the
-menus Windows draws, in every app and in fixed colors. It does not reach menus an
-app draws itself, which is why Photoshop stays light with it, or dropdown lists.
-This mod uses the same technique for the menus Windows draws, so exclude the Adobe
-apps from it in its Advanced tab.</li>
-<li><strong><a href="https://windhawk.net/mods/after-effects-theme">After Effects Theme</a></strong> and
-<strong><a href="https://windhawk.net/mods/premiere-pro-theme">Premiere Pro Theme</a></strong> recolor the
-whole interface of those two apps in palettes of their own, title bar, menu bar
-and menus included. They answer the same menu bar messages as this mod, so if you
-use one of them, exclude that app from this mod in its Advanced tab.</li>
-<li><strong><a href="https://windhawk.net/mods/win11-custom-title-bar-colours">Windows 11 Custom Title Bar Colours</a></strong>
-and <strong><a href="https://windhawk.net/mods/auto-custom-titlebar-colors">Auto Custom Titlebar Colors</a></strong>
-color title bars in every app. If you prefer one of them, turn off <strong>Dark Title Bars</strong> here.</li>
-</ul>
-<h2>Options</h2>
-<ul>
-<li><strong>Menu Background Color</strong>: Background color (Default: <code>#2D2D2D</code>).</li>
-<li><strong>Menu Text Color</strong>: Text color for active items (Default: <code>#DCDCDC</code>).</li>
-<li><strong>Highlight Background Color</strong>: Color when hovering over an item (Default: <code>#505050</code>).</li>
-<li><strong>Highlight Text Color</strong>: Text color when hovering over an item (Default: <code>#FFFFFF</code>).</li>
-<li><strong>Separator Line Color</strong>: Color for separator lines. Set to match the background color to hide them completely (Default: <code>#383838</code>).</li>
-<li><strong>Disabled Text Color</strong>: Text color for disabled menu items (Default: <code>#808080</code>).</li>
-<li><strong>Border Color</strong>: Color of the frame around menus an app draws itself and around dropdown lists. Leave empty to keep the system frame on those menus and to use the background color on lists (Default: <code>#2D2D2D</code>).</li>
-<li><strong>Theme Dropdown Lists</strong>: Darken the dropdown lists an app draws itself, using the colors above (Default: on).</li>
-<li><strong>Darken Menus Windows Draws</strong>: Use Windows' dark menu theme, and paint real menu bars dark (Default: on).</li>
-<li><strong>Dark Title Bars</strong>: Color standard title bars to match the menus (Default: on).</li>
-<li><strong>Title Bar Color</strong>: Leave empty to match Menu Background Color (Default: empty).</li>
-<li><strong>Title Bar Text Color</strong>: Leave empty to let Windows choose, which dims the text on a window that is not active (Default: empty).</li>
-</ul>
-<p>Colors can be given as <code>#RRGGBB</code> or the short <code>#RGB</code> form.</p>
-<p>The colors apply to real menu bars, to menus an app draws itself (Photoshop's) and
-to dropdown lists. Menus Windows draws itself keep Windows' own dark colors.</p>
-<h2>How it works</h2>
-<p>Adobe's apps do not all draw their menus the same way, and sharing a library does
-not settle it: Illustrator and InDesign ship the same <code>AdobeOwl.dll</code> as Photoshop,
-yet Windows draws their menus and Photoshop draws its own. So the mod decides
-menu by menu, by whether the items are owner-drawn (<code>MFT_OWNERDRAW</code>).</p>
-<h3>Menus Windows draws</h3>
-<p>This is most menus in most Adobe apps. Windows paints them through its theme
-engine, and uxtheme has a dark variant of that drawing which is off unless a
-process asks for it. The mod asks for it with <code>SetPreferredAppMode(ForceDark)</code>
-and <code>FlushMenuThemes</code>, and puts the process back when it is disabled. This
-technique comes from
-<a href="https://windhawk.net/mods/dark-menus">Dark mode context menus</a> by MGGSK, and
-needs Windows 10 1903 or later.</p>
-<h3>Real menu bars</h3>
-<p>Some apps, After Effects for one, have a real Win32 menu bar. The dark theme does
-not reach it, but Windows offers it to the window first through the undocumented
-<code>WM_UAHDRAWMENU</code> and <code>WM_UAHDRAWMENUITEM</code> messages, so the mod paints it from a
-<code>DefWindowProc</code> hook, in the colors above. Those messages were worked out in
-<a href="https://github.com/adzm/win32-custom-menubar-aero-theme">win32-custom-menubar-aero-theme</a>.</p>
-<h3>Menus an app draws itself</h3>
-<p>Photoshop owner-draws its menu items with plain GDI, so the theme has nothing to
-attach to. Measured in Photoshop, the popups go up via <code>TrackPopupMenuEx</code> and each
-item is painted with:</p>
-<ul>
-<li><code>FillRect(hdc, &amp;rc, (HBRUSH)(COLOR_MENU + 1))</code> for the item background, and
-<code>(HBRUSH)(COLOR_HIGHLIGHT + 1)</code> for the hovered item. These <strong>system color
-pseudo-handles</strong> are resolved inside <code>user32</code> from shared memory, so they
-bypass <code>GetSysColor</code> and <code>GetSysColorBrush</code> hooks entirely.</li>
-<li><code>GetSysColor(COLOR_MENUTEXT / COLOR_GRAYTEXT / COLOR_HIGHLIGHTTEXT)</code> for text.</li>
-<li>Its own 1px <code>FillRect</code> for separator lines.</li>
-</ul>
-<p>So every pixel of a menu item is reachable from inside the process:</p>
-<ul>
-<li><code>FillRect</code> / <code>PatBlt</code> are hooked and, while a menu item is being painted,
-sys-color pseudo-handles are re-resolved through this mod's own color table,
-and 1px fills inside a menu DC are recolored to the separator color.</li>
-<li><code>GetSysColor</code> / <code>GetSysColorBrush</code> are hooked for the menu color indices, but
-<strong>only while a menu item is actually being painted</strong>, that is, inside a
-<code>WM_DRAWITEM</code> of type <code>ODT_MENU</code>, so the app's dialogs and panels keep the
-system colors. &quot;While a menu is open&quot; would be far too broad: a menu runs a
-modal message loop that keeps dispatching to every other window on the thread,
-and an unrelated repaint would pick the menu colors up.</li>
-<li><code>MENUINFO::hbrBack</code> is stamped on each owner-drawn popup at <code>WM_INITMENUPOPUP</code>,
-covering the popup background that the system paints around the items. It is
-never stamped on a menu Windows draws, where it would put a custom background
-behind a theme's gutter, separators and text.</li>
-<li>The popup's non-client frame is drawn kernel-side, where no user-mode hook can
-reach it. So the popup is subclassed at creation and the frame is repainted
-with the border color after it.</li>
-</ul>
-<h3>Dropdown lists</h3>
-<p>The dropdown lists are stock Win32 combo boxes whose list is the system's own
-<code>ComboLBox</code> window. Photoshop owner-draws the rows but takes their colors from the
-system, and not consistently: one list reads <code>COLOR_WINDOWTEXT</code> for its row text
-where another reads <code>COLOR_MENUTEXT</code>, and one fills its rows from a color it asks
-for where another fills them with a <code>(HBRUSH)(COLOR_X + 1)</code> pseudo-handle. Both
-routes are therefore covered, over a table that maps every background index to
-the background color and every text index to the text color. The list window is
-subclassed so that all of it applies only while that list or one of its rows is
-painting, which leaves every other control reading those same colors alone,
-including anything the app repaints in response to a selection.</p>
-<p>A list whose rows Windows draws is left alone, the same rule as for menus. Windows
-fills it from a brush no hook can reach, so recoloring the text alone would leave
-light text on white. So is a list that stays open inside a dialog, such as the ones
-in the font picker, since it is part of the dialog rather than a dropdown.</p>
-<h3>Scroll arrows</h3>
-<p>A menu too tall for the screen gets scroll arrows, which the Windows kernel draws
-directly in light colors, below anything the dark theme or a hook can reach. So the
-mod paints over them straight afterward, turning the light square dark and the dark
-triangle light. A disabled arrow stays dimmer, since this inverts what is there
-rather than drawing a new one. On a menu an app draws itself, Windows draws a bare
-triangle instead of the square, and the mod recolors it to Menu Text Color or
-Disabled Text Color.</p>
-<h3>Title bars</h3>
-<p>Windows 11 lets a process color a standard title bar through
-<code>DwmSetWindowAttribute</code>, so nothing is drawn here: the mod sets
-<code>DWMWA_USE_IMMERSIVE_DARK_MODE</code> and <code>DWMWA_CAPTION_COLOR</code> on each top-level window
-with a caption, and puts them back when it is disabled. On Windows 10 2004 or later
-the dark flag still gives a dark title bar, without the custom color.</p>
-<p>A window that draws its own title bar, such as the main window of Photoshop,
-Illustrator or InDesign, is left alone. This is checked per window, so the dialogs
-in those apps are still colored. The dialog's contents stay whatever color the app
-or Windows paints them.</p>
-<h2>Scope</h2>
-<p>Anything an app paints from its own palette rather than from a system color or
-the theme is out of reach, such as Photoshop's font browser and the Glyphs panel's
-character cells. Recoloring those would mean matching color values rather than
-intercepting a system one, in windows where a light fill can be the content.</p>
-<p>A dropdown list Windows draws itself keeps its normal colors, as described above.</p>
-<p>Long menus scroll rather than splitting into columns, because Windows turns its
-theme off for any menu that has columns, which leaves them light.</p>
-<h2>Source and bug reports</h2>
-<p>The mod is developed at
-<a href="https://github.com/sabergraphics/adobe-dark-menus">github.com/sabergraphics/adobe-dark-menus</a>.</p>
-<p>Report a problem in
-<a href="https://github.com/sabergraphics/adobe-dark-menus/issues">Issues</a>. Menu drawing
-depends on the environment more than most things do, so please say which Adobe
-app and version and which Windows version you are on, what your display scaling
-is, and which menu or dropdown list is wrong. A screenshot usually says more than
-a description does.</p>
-]]></content>
-        <author>
-            <name>Saber Naeemi</name>
-            <uri>https://github.com/sabergraphics</uri>
         </author>
     </entry>
 </feed>

@@ -828,6 +828,37 @@
         "version": "1.3.0"
       }
     },
+    "archive-preview": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794549801000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794549801000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Luiz Bizzio",
+        "compilerOptions": "-lole32 -loleaut32 -luuid -luser32 -lgdi32 -ladvapi32 -lshell32 -lshlwapi -lcomctl32 -luxtheme -lpropsys -ldwmapi -lwindowscodecs -lmsimg32 -lpsapi -lurlmon",
+        "description": "Browse, open, copy and extract ZIP, RAR, 7z and TAR archives in File Explorer's Preview Pane (Alt+P); additional formats are optional.",
+        "donateUrl": "https://github.com/sponsors/luizbizzio",
+        "github": "https://github.com/luizbizzio",
+        "homepage": "https://github.com/luizbizzio/archive-preview",
+        "include": [
+          "explorer.exe",
+          "prevhost.exe"
+        ],
+        "license": "Apache-2.0",
+        "name": "Archive Preview",
+        "version": "1.0.0"
+      }
+    },
     "audio-hardware-volume-preset": {
       "details": {
         "defaultSorting": 480,
@@ -21247,6 +21278,35 @@
         "version": "1.1.0"
       }
     },
+    "win10-taskbar-24h2-26100": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794549796000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794549796000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "amd64"
+        ],
+        "author": "Anixx",
+        "compilerOptions": "-lcomctl32 -lgdi32 -luser32 -lshell32 -lole32 -luxtheme -lurlmon -lbcrypt -ladvapi32",
+        "description": "Installs Win10-style taskbar version 26100.1 (Win 11 24H2 RTM) and fixes its functionality",
+        "github": "https://github.com/Anixx",
+        "include": [
+          "explorer.exe",
+          "sndvol.exe",
+          "userinit.exe"
+        ],
+        "name": "Classic (Win32) taskbar for Win11 24H2+ (all in one)",
+        "version": "1.0"
+      }
+    },
     "win10-taskbar-context-menu-fix-24h2": {
       "details": {
         "defaultSorting": 2586,
@@ -21426,6 +21486,34 @@
         ],
         "name": "Windows 11 Accent Window Border",
         "version": "1.0.5"
+      }
+    },
+    "win11-context-menu-wave-animation": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794549807000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794549807000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Gui03",
+        "compilerOptions": "-ldwmapi -lgdi32 -luser32",
+        "description": "True 3D Liquid Wave & Water Drop Ripple deformation for modern Windows 11 context menus",
+        "github": "https://github.com/GuiFrr03",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Win11 Context Menu Wave Animation",
+        "version": "1.0.0"
       }
     },
     "win11-custom-title-bar-colours": {

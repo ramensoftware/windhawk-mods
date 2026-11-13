@@ -967,6 +967,12 @@
     "githubId": 9023392,
     "homepages": []
   },
+  "https://github.com/guifrr03": {
+    "author": "Gui03",
+    "github": "https://github.com/GuiFrr03",
+    "githubId": 350805912,
+    "homepages": []
+  },
   "https://github.com/hahawth": {
     "author": "Creeam",
     "github": "https://github.com/HaHaWTH",
@@ -1409,6 +1415,7 @@
     "github": "https://github.com/luizbizzio",
     "githubId": 73234672,
     "homepages": [
+      "https://github.com/luizbizzio/archive-preview",
       "https://github.com/luizbizzio/recycle-bin-file-preview",
       "https://github.com/luizbizzio/task-manager-pause-button",
       "https://github.com/luizbizzio/taskbar-zones"
