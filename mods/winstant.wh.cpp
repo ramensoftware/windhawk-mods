@@ -3278,7 +3278,9 @@ std::vector<SavedLayout> LoadSavedLayouts() {
     std::vector<SavedLayout> layouts;
     int count =
         Clamp(Wh_GetIntValue(UserValueName(L"layoutCount").c_str(), 0), 0, kMaxSavedLayouts);
-    std::vector<wchar_t> buf(32768);  // a value never exceeds kMaxLayoutValueChars
+    // 128K chars: also fits layouts saved by 1.5, before values were capped at
+    // kMaxLayoutValueChars.
+    std::vector<wchar_t> buf(1 << 17);
     for (int i = 0; i < count; i++) {
         if (!Wh_GetStringValue(LayoutValueName(i).c_str(), buf.data(), buf.size())) continue;
         std::vector<std::wstring> parts = Split(buf.data(), L';');
