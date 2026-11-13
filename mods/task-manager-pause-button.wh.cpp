@@ -34,10 +34,13 @@ Real time update speed setting.
 
 ## Compatibility and limitations
 
-- Experimental XAML Diagnostics discovery for the Windows 11 Task Manager.
-  It avoids private Task Manager PDB symbols and hardcoded function offsets,
-  but Windows updates can still change the UI tree or refresh behavior.
-  XAML Diagnostics can conflict with other consumers in the same process.
+- Uses Task Manager's own page-navigation hooks and public XAML APIs. For the
+  Taskmgr.exe 26100.9974 binary matching its PE timestamp, image size, and
+  RSDS PDB identifier, the mod has a small built-in offset table to avoid
+  requiring an unavailable PDB. All other builds use Windhawk's symbol lookup.
+  If neither method has verified addresses, the mod doesn't install the button.
+  Windows updates may change private functions or controls. No XAML Diagnostics
+  service is used.
 - Uses Task Manager's Ctrl-key refresh hold through `GetKeyState` calls made
   directly by `Taskmgr.exe`. While paused, some Task Manager keyboard actions
   may behave as if Ctrl is held, including Run new task (Ctrl+click can open
@@ -47,19 +50,15 @@ Real time update speed setting.
   task in the first position. Falls back to English/Portuguese labels or
   recognizable control identifiers on other layouts. Other Windows versions
   can have different layouts, so all languages/builds are not guaranteed.
-- Pause/Resume labels are in English regardless of the Task Manager language.
-- Keeps Pause active when moving between Processes and Details. Subscribes to
-  the public XAML Frame.Navigated event where available to resume on other
-  pages; also recognizes visible non-supported Task Manager pages as fallback.
-  Unrecognized custom navigation layouts may still require manual Resume.
-- Uses the Windows.UI.Xaml Diagnostics connection to discover native controls.
-  Only one diagnostics consumer can own the XAML connection in a process.
-  If another tool owns it, this experimental build may not insert a button.
-  No hardcoded function offsets are used.
+- The native button inherits Task Manager's XAML theme, including its own
+  Light/Dark appearance; no fixed foreground/background colors are applied.
+  Pause/Resume labels are in English regardless of the Task Manager language.
+- Keeps Pause active when switching between Processes and Details. Uses the
+  public Frame.Navigated event (when the navigation Frame can be reached) to
+  resume on other pages, even without OnNavigatedFrom symbols. Existing
+  navigation-exit hooks also provide a fallback where available.
 - If the button is missing, close and reopen Task Manager with the mod enabled.
-- A short-lived diagnostic worker is started inside Task Manager. XAML
-  subscriptions and worker threads are cleaned up on disable. No external
-  application or registry changes are needed.
+- No settings or background applications are needed.
 
 ## Source and feedback
 
@@ -73,8 +72,6 @@ Author: Luiz Bizzio. License: Apache-2.0.
 // Copyright 2026 Luiz Bizzio
 
 #include <windows.h>
-#include <xamlom.h>
-#include <ocidl.h>
 #include <inspectable.h>
 #include <windhawk_utils.h>
 #ifdef GetCurrentTime
@@ -98,7 +95,7 @@ Author: Luiz Bizzio. License: Apache-2.0.
 #include <string>
 #include <string_view>
 #include <cwctype>
-#include <utility>
+#include <cstring>
 
 namespace mux = winrt::Windows::UI::Xaml;
 namespace muxc = winrt::Windows::UI::Xaml::Controls;
@@ -118,17 +115,6 @@ uintptr_t g_taskEnd{};
 
 using GetKeyState_t = decltype(&GetKeyState);
 GetKeyState_t g_getKeyOriginal{};
-// XAML Diagnostics is used instead of Window::Current(), which is often
-// unavailable on XAML Islands. No Taskmgr.exe private symbol is required.
-std::atomic<bool> g_diagnosticsStop{false};
-std::atomic<unsigned> g_diagnosticCandidates{0};
-std::atomic<unsigned> g_diagnosticErrors{0};
-std::atomic<unsigned> g_diagnosticPages{0};
-std::atomic<unsigned> g_diagnosticWatchers{0};
-// XAML elements can disappear before the diagnostics callback looks them up.
-std::atomic<unsigned> g_diagnosticExpiredHandles{0};
-HANDLE g_diagnosticsWorker{};
-HANDLE g_diagnosticsStopEvent{};
 
 bool IsCtrl(int vk) noexcept {
     return vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL;
@@ -158,9 +144,7 @@ struct BarEntry {
 };
 
 std::mutex g_barsMutex;
-// Prevent COM weak references from being destroyed by static shutdown after
-// the Windhawk DLL and the XAML runtime have started tearing down.
-[[clang::no_destroy]] std::vector<BarEntry> g_bars;
+std::vector<BarEntry> g_bars;
 std::atomic<uint64_t> g_nextEntryId{1};
 thread_local bool g_addingButton = false;
 
@@ -199,6 +183,7 @@ void SyncButtons();
 std::vector<DWORD> NavigationThreads();
 bool RemoveThreadNavigationHooks(DWORD threadId);
 void ForgetNavigationThread(DWORD threadId);
+void TryAttachFrameNavigation(mux::DependencyObject object);
 
 void UpdateButton(muxc::AppBarButton const& button) {
     const bool paused = g_paused.load(std::memory_order_relaxed);
@@ -394,6 +379,10 @@ void TryInsertButton(muxc::CommandBar const& bar, uint32_t place) {
 
         button = muxc::AppBarButton();
         button.Name(kButtonName);
+        // Keep the default native AppBarButton style. In particular, do not
+        // set RequestedTheme, Foreground, Background, or a fixed Style: the
+        // XAML tree inherits Task Manager's own Light/Dark/contrast resources.
+        // The SymbolIcon inherits its brush from this native button as well.
         UpdateButton(button);
         commands.InsertAt(place, button);
         inserted = true;
@@ -428,7 +417,12 @@ void TryInsertButton(muxc::CommandBar const& bar, uint32_t place) {
         }
 
         const auto count = g_insertions.fetch_add(1) + 1;
-        if (count <= 8) Wh_Log(L"Native Pause button inserted (%u)", count);
+        if (count <= 8) {
+            const auto theme = button.ActualTheme();
+            Wh_Log(L"Native Pause button inserted (%u, theme=%s)", count,
+                   theme == mux::ElementTheme::Light ? L"light" :
+                   theme == mux::ElementTheme::Dark ? L"dark" : L"default");
+        }
     } catch (...) {
         HRESULT error = winrt::to_hresult();
         bool safeToForget = !clickAttached;
@@ -668,14 +662,14 @@ std::vector<DWORD> KnownThreads() {
     std::vector<DWORD> result;
     {
         std::lock_guard<std::mutex> lock(g_barsMutex);
-        for (auto const& entry : g_bars) {
+        for (const auto& entry : g_bars) {
             if (std::find(result.begin(), result.end(), entry.ownerThread) == result.end())
                 result.push_back(entry.ownerThread);
         }
     }
-    for (DWORD threadId : NavigationThreads()) {
-        if (std::find(result.begin(), result.end(), threadId) == result.end())
-            result.push_back(threadId);
+    for (DWORD id : NavigationThreads()) {
+        if (std::find(result.begin(), result.end(), id) == result.end())
+            result.push_back(id);
     }
     return result;
 }
@@ -765,8 +759,8 @@ bool RemoveThreadButtonsAndEvents(DWORD threadId) {
             [&entry](BarEntry const& value) { return value.entryId == entry.entryId; });
         if (it != g_bars.end()) g_bars.erase(it);
     }
-    // Navigation event callbacks also point into this mod, and must be
-    // detached on the owning XAML thread before unloading the DLL.
+    // The navigation listener is also a callback into this mod. Detach it
+    // on its owning XAML thread before the DLL is unloaded.
     return RemoveThreadNavigationHooks(threadId) && allDetached;
 }
 
@@ -793,14 +787,13 @@ bool FindTaskManagerRange() {
 }
 
 
-// Called on an owning XAML thread after a Diagnostics notification.
-void TryAttachFrameNavigation(mux::DependencyObject object);
-
-// Called only on the owning XAML thread, from diagnostics notifications.
-void FindCommandBars(mux::FrameworkElement const& page, bool supportedPage) {
+// Called on the XAML thread during Processes/Details page navigation.
+void FindCommandBars(mux::FrameworkElement const& page) {
     if (g_stopping.load(std::memory_order_acquire)) return;
     try {
-        if (supportedPage) TryAttachFrameNavigation(page);
+        // Public XAML event, subscribed only on a page/navigation frame
+        // obtained through the normal Task Manager symbol hook.
+        TryAttachFrameNavigation(page);
         mux::DependencyObject root = page;
         for (unsigned i = 0; i < 48; ++i) {
             auto parent = muxm::VisualTreeHelper::GetParent(root);
@@ -817,9 +810,6 @@ void FindCommandBars(mux::FrameworkElement const& page, bool supportedPage) {
             auto element = stack.back();
             stack.pop_back();
             ++scanned;
-            if (auto fe = element.try_as<mux::FrameworkElement>()) {
-                if (fe.Visibility() != mux::Visibility::Visible) continue;
-            }
             if (auto bar = element.try_as<muxc::CommandBar>()) {
                 ++barsFound;
                 pageBars.push_back(bar);
@@ -831,11 +821,11 @@ void FindCommandBars(mux::FrameworkElement const& page, bool supportedPage) {
 
         // A complete scan is essential for the structural fallback. If the
         // traversal was cut short, only the semantic matcher may be trusted.
-        const bool uniquePageBar =
-            supportedPage && stack.empty() && pageBars.size() == 1;
+        const bool uniquePageBar = stack.empty() && pageBars.size() == 1;
         for (auto const& bar : pageBars) {
             if (g_stopping.load(std::memory_order_acquire)) break;
             try {
+                TryAttachFrameNavigation(bar);
                 BarCandidate candidate;
                 if (InspectProductionBar(bar, uniquePageBar, candidate)) {
                     ++matchingBars;
@@ -858,8 +848,9 @@ void FindCommandBars(mux::FrameworkElement const& page, bool supportedPage) {
     }
 }
 
-// Identify navigation destinations from public XAML type names rather than
-// TaskManagerApp private symbols. Unknown page names don't reset Pause.
+// Frame.Navigated is a public XAML event. We acquire the Frame through the
+// existing Task Manager navigation hook, not through XAML Diagnostics.
+// Unknown page types do not cause an automatic Resume.
 enum class ActivePage { Unknown, Supported, Other };
 
 bool EndsWith(std::wstring_view value, std::wstring_view suffix) {
@@ -867,23 +858,19 @@ bool EndsWith(std::wstring_view value, std::wstring_view suffix) {
            value.substr(value.size() - suffix.size()) == suffix;
 }
 
-ActivePage ClassifyPageType(winrt::hstring const& typeName) {
-    std::wstring_view name{typeName.c_str(), typeName.size()};
+ActivePage ClassifyPageType(winrt::hstring const& fullName) {
+    const std::wstring_view name{fullName.c_str(), fullName.size()};
     if (EndsWith(name, L"ProcessesPage") || EndsWith(name, L"DetailsPage"))
         return ActivePage::Supported;
-    // Only treat positively identified Task Manager pages as evidence that
-    // Pause should reset. Generic shell/container frames aren't evidence.
-    constexpr std::wstring_view otherPages[] = {
-        L"PerformancePage", L"AppHistoryPage", L"StartupAppsPage",
-        L"StartupPage", L"UsersPage", L"ServicesPage", L"SettingsPage"
-    };
-    for (auto suffix : otherPages)
-        if (EndsWith(name, suffix)) return ActivePage::Other;
+
+    // Limit automatic Resume to positively identified Task Manager pages.
+    // Avoid treating arbitrary XAML container navigation as leaving Task Manager.
+    if (name.find(L"TaskManagerApp.") != std::wstring_view::npos &&
+        EndsWith(name, L"Page"))
+        return ActivePage::Other;
     return ActivePage::Unknown;
 }
 
-// A public Frame.Navigated event is more reliable for leaving Processes or
-// Details than simply observing page Add events. No private Taskmgr symbols.
 struct NavigationEntry {
     winrt::weak_ref<muxc::Frame> frame;
     DWORD ownerThread{};
@@ -891,34 +878,35 @@ struct NavigationEntry {
     uint64_t id{};
     bool attached{};
 };
+
 std::mutex g_navigationMutex;
-[[clang::no_destroy]] std::vector<NavigationEntry> g_navigationEntries;
+std::vector<NavigationEntry> g_navigationEntries; // Weak references only.
 std::atomic<uint64_t> g_nextNavigationId{1};
 std::atomic<unsigned> g_navigationEvents{0};
 
 void ResumeOnUnsupportedPage() {
     if (g_stopping.load(std::memory_order_acquire)) return;
     if (g_paused.exchange(false, std::memory_order_acq_rel)) {
-        Wh_Log(L"Pause cleared after navigating away from Processes/Details");
+        Wh_Log(L"Pause cleared after navigating to another Task Manager page");
         SyncButtons();
     }
 }
 
 std::vector<DWORD> NavigationThreads() {
-    std::vector<DWORD> threads;
+    std::vector<DWORD> result;
     std::lock_guard<std::mutex> lock(g_navigationMutex);
-    for (const auto& entry : g_navigationEntries) {
-        if (std::find(threads.begin(), threads.end(), entry.ownerThread) == threads.end())
-            threads.push_back(entry.ownerThread);
-    }
-    return threads;
+    for (const auto& entry : g_navigationEntries)
+        if (std::find(result.begin(), result.end(), entry.ownerThread) == result.end())
+            result.push_back(entry.ownerThread);
+    return result;
 }
 
 void ForgetNavigationThread(DWORD threadId) {
     std::lock_guard<std::mutex> lock(g_navigationMutex);
-    std::erase_if(g_navigationEntries, [threadId](const NavigationEntry& e) {
-        return e.ownerThread == threadId;
-    });
+    g_navigationEntries.erase(std::remove_if(g_navigationEntries.begin(),
+        g_navigationEntries.end(), [threadId](const NavigationEntry& entry) {
+            return entry.ownerThread == threadId;
+        }), g_navigationEntries.end());
 }
 
 bool RemoveThreadNavigationHooks(DWORD threadId) {
@@ -944,567 +932,316 @@ bool RemoveThreadNavigationHooks(DWORD threadId) {
             Wh_Log(L"Frame.Navigated detach failed: 0x%08X", winrt::to_hresult());
         }
         if (!detached) {
-            allDetached = false; // Live callback: retry, don't unload the DLL.
-            continue;
+            allDetached = false;
+            continue; // Never unload with a live callback still attached.
         }
         std::lock_guard<std::mutex> lock(g_navigationMutex);
-        std::erase_if(g_navigationEntries, [&entry](const NavigationEntry& e) {
-            return e.id == entry.id;
-        });
+        g_navigationEntries.erase(std::remove_if(g_navigationEntries.begin(),
+            g_navigationEntries.end(), [&entry](const NavigationEntry& value) {
+                return value.id == entry.id;
+            }), g_navigationEntries.end());
     }
     return allDetached;
 }
 
 void TryAttachFrameNavigation(mux::DependencyObject object) {
     if (!object || g_stopping.load(std::memory_order_acquire)) return;
-    InsertionGuard guard; // Keep unload from racing with event subscription.
+    InsertionGuard guard; // Wait for event subscriptions during unload.
     if (!guard.active) return;
     try {
-    for (unsigned depth = 0; object && depth < 64; ++depth) {
-        if (auto frame = object.try_as<muxc::Frame>()) {
-            const DWORD owner = GetCurrentThreadId();
-            {
-                std::lock_guard<std::mutex> lock(g_navigationMutex);
-                for (const auto& entry : g_navigationEntries) {
-                    if (entry.ownerThread == owner && entry.frame.get() == frame)
-                        return;
-                }
-            }
-            NavigationEntry entry;
-            entry.frame = winrt::make_weak(frame);
-            entry.ownerThread = owner;
-            entry.id = g_nextNavigationId.fetch_add(1);
-            const auto id = entry.id;
-            winrt::event_token token{};
-            bool attached = false;
-            bool tracked = false;
-            try {
+        for (unsigned depth = 0; object && depth < 64; ++depth) {
+            if (auto frame = object.try_as<muxc::Frame>()) {
+                const DWORD owner = GetCurrentThreadId();
                 {
                     std::lock_guard<std::mutex> lock(g_navigationMutex);
-                    g_navigationEntries.push_back(entry);
+                    for (const auto& entry : g_navigationEntries)
+                        if (entry.ownerThread == owner && entry.frame.get() == frame)
+                            return;
                 }
-                tracked = true;
-                token = frame.Navigated([](auto const&,
-                    mux::Navigation::NavigationEventArgs const& args) {
-                    if (g_stopping.load(std::memory_order_acquire)) return;
-                    try {
-                        const ActivePage page = ClassifyPageType(args.SourcePageType().Name);
-                        if (g_navigationEvents.fetch_add(1) < 16)
-                            Wh_Log(L"Frame.Navigated: page=%d", static_cast<int>(page));
-                        if (page == ActivePage::Other) ResumeOnUnsupportedPage();
-                    } catch (...) {
-                        Wh_Log(L"Frame navigation identification failed: 0x%08X",
-                               winrt::to_hresult());
+
+                NavigationEntry entry;
+                entry.frame = winrt::make_weak(frame);
+                entry.ownerThread = owner;
+                entry.id = g_nextNavigationId.fetch_add(1);
+                const uint64_t id = entry.id;
+                winrt::event_token token{};
+                bool attached = false;
+                bool tracked = false;
+                try {
+                    {
+                        std::lock_guard<std::mutex> lock(g_navigationMutex);
+                        g_navigationEntries.push_back(entry);
                     }
-                });
-                attached = true;
-                {
-                    std::lock_guard<std::mutex> lock(g_navigationMutex);
-                    for (auto& saved : g_navigationEntries) {
-                        if (saved.id == id) {
-                            saved.token = token;
-                            saved.attached = true;
-                            break;
+                    tracked = true;
+                    token = frame.Navigated([](auto const&,
+                        mux::Navigation::NavigationEventArgs const& args) {
+                        if (g_stopping.load(std::memory_order_acquire)) return;
+                        try {
+                            const ActivePage active =
+                                ClassifyPageType(args.SourcePageType().Name);
+                            if (g_navigationEvents.fetch_add(1) < 12)
+                                Wh_Log(L"Frame.Navigated: page=%d",
+                                       static_cast<int>(active));
+                            if (active == ActivePage::Other) {
+                                ResumeOnUnsupportedPage();
+                            } else if (active == ActivePage::Supported) {
+                                // Also discover Details if its private hook is
+                                // unavailable but Processes gave us the Frame.
+                                auto page = args.Content().try_as<mux::FrameworkElement>();
+                                if (page) {
+                                    PruneExpiredEntriesOnCurrentThread();
+                                    FindCommandBars(page);
+                                }
+                            }
+                        } catch (...) {
+                            Wh_Log(L"Frame navigation callback failed: 0x%08X",
+                                   winrt::to_hresult());
                         }
-                    }
-                }
-                Wh_Log(L"Frame.Navigated listener attached on thread %lu", owner);
-            } catch (...) {
-                const HRESULT hr = winrt::to_hresult();
-                bool safe = !attached;
-                if (attached) {
-                    try { frame.Navigated(token); safe = true; } catch (...) {}
-                }
-                if (tracked && safe) {
-                    std::lock_guard<std::mutex> lock(g_navigationMutex);
-                    std::erase_if(g_navigationEntries, [id](const NavigationEntry& e) {
-                        return e.id == id;
                     });
+                    attached = true;
+                    {
+                        std::lock_guard<std::mutex> lock(g_navigationMutex);
+                        for (auto& saved : g_navigationEntries)
+                            if (saved.id == id) {
+                                saved.token = token;
+                                saved.attached = true;
+                                break;
+                            }
+                    }
+                    Wh_Log(L"Frame.Navigated attached on thread %lu", owner);
+                } catch (...) {
+                    const HRESULT error = winrt::to_hresult();
+                    bool safe = !attached;
+                    if (attached) {
+                        try { frame.Navigated(token); safe = true; } catch (...) {}
+                    }
+                    if (tracked && safe) {
+                        std::lock_guard<std::mutex> lock(g_navigationMutex);
+                        g_navigationEntries.erase(std::remove_if(
+                            g_navigationEntries.begin(), g_navigationEntries.end(),
+                            [id](const NavigationEntry& e) { return e.id == id; }),
+                            g_navigationEntries.end());
+                    }
+                    Wh_Log(L"Frame.Navigated attachment failed: 0x%08X", error);
                 }
-                Wh_Log(L"Frame.Navigated attachment failed: 0x%08X", hr);
+                return;
             }
-            return;
+            object = muxm::VisualTreeHelper::GetParent(object);
         }
-        object = muxm::VisualTreeHelper::GetParent(object);
-    }
     } catch (...) {
-        // Navigation detection is optional: never prevent Pause insertion if
-        // an ancestor cannot be inspected on this Windows build.
-        static std::atomic<unsigned> errorsLogged{0};
-        if (errorsLogged.fetch_add(1) < 4)
+        static std::atomic<unsigned> logged{0};
+        if (logged.fetch_add(1) < 4)
             Wh_Log(L"Frame navigation discovery unavailable: 0x%08X",
                    winrt::to_hresult());
     }
 }
 
-// Fallback for XAML layouts without Frame.Navigated: use a visible, attached
-// page only. If a Frame exists, also verify that the page is its live Content;
-// a preloaded page is not evidence of navigation.
-void HandleOtherPageAddition(mux::DependencyObject const& object) {
-    if (!g_paused.load(std::memory_order_acquire) || !object) return;
+// IPageOverrides::OnNavigatedTo belongs to a C++/WinRT produce interface.
+// The supplied self pointer is an inspectable ABI interface pointer.
+using PageNavigation_t = HRESULT(__cdecl*)(void*, void*);
+PageNavigation_t g_processesToOriginal{};
+PageNavigation_t g_detailsToOriginal{};
+PageNavigation_t g_processesFromOriginal{};
+PageNavigation_t g_detailsFromOriginal{};
+
+void CapturePageFromInterface(void* self) {
+    if (!self || g_stopping.load(std::memory_order_acquire)) return;
     try {
-        auto page = object.try_as<mux::FrameworkElement>();
-        if (!page || page.Visibility() != mux::Visibility::Visible) return;
-        mux::DependencyObject current = page;
-        bool attached = false;
-        for (unsigned depth = 0; current && depth < 64; ++depth) {
-            auto parent = muxm::VisualTreeHelper::GetParent(current);
-            if (!parent) break;
-            attached = true;
-            if (auto frame = parent.try_as<muxc::Frame>()) {
-                // Ignore a page that was created but isn't the active frame content.
-                if (frame.Content().try_as<mux::FrameworkElement>() != page)
-                    return;
-                break;
-            }
-            current = parent;
+        winrt::com_ptr<::IInspectable> object;
+        HRESULT hr = reinterpret_cast<::IUnknown*>(self)->QueryInterface(
+            __uuidof(::IInspectable), object.put_void());
+        if (FAILED(hr) || !object) {
+            Wh_Log(L"Page capture: IInspectable unavailable, hr=0x%08X", hr);
+            return;
         }
-        if (attached) ResumeOnUnsupportedPage();
+        wf::IInspectable inspectable{nullptr};
+        winrt::copy_from_abi(inspectable, object.get());
+        auto page = inspectable.try_as<mux::FrameworkElement>();
+        if (!page) {
+            Wh_Log(L"Page capture: FrameworkElement unavailable");
+            return;
+        }
+        PruneExpiredEntriesOnCurrentThread();
+        FindCommandBars(page);
     } catch (...) {
-        // A detached or temporarily unavailable page isn't navigation proof.
+        Wh_Log(L"Page capture failed: 0x%08X", winrt::to_hresult());
     }
 }
 
-// The diagnostics callback receives UI objects in the target XAML visual
-// tree. Unlike Window::Current, it can work with XAML Islands. It is also
-// scoped to Taskmgr.exe, so it never scans other processes.
-using InitializeXamlDiagnosticsEx_t = decltype(&InitializeXamlDiagnosticsEx);
+HRESULT __cdecl ProcessesNavigatedTo_Hook(void* self, void* args) {
+    HRESULT result = g_processesToOriginal(self, args);
+    if (SUCCEEDED(result) && !g_stopping.load(std::memory_order_acquire))
+        CapturePageFromInterface(self);
+    return result;
+}
 
-class PauseVisualTreeWatcher;
-std::mutex g_diagnosticWatchersMutex;
-// Explicitly clear COM references while XAML is still alive. Do not let
-// global destructors run at DLL/process teardown.
-[[clang::no_destroy]] std::vector<winrt::com_ptr<PauseVisualTreeWatcher>> g_diagnosticWatchersList;
-std::mutex g_diagnosticThreadsMutex;
-std::vector<HANDLE> g_diagnosticAdviseThreads;
+HRESULT __cdecl DetailsNavigatedTo_Hook(void* self, void* args) {
+    HRESULT result = g_detailsToOriginal(self, args);
+    if (SUCCEEDED(result) && !g_stopping.load(std::memory_order_acquire))
+        CapturePageFromInterface(self);
+    return result;
+}
 
-bool IsSupportedPageAncestor(mux::DependencyObject start) {
-    for (unsigned depth = 0; start && depth < 64; ++depth) {
-        try {
-            if (auto fe = start.try_as<mux::FrameworkElement>()) {
-                if (fe.Visibility() != mux::Visibility::Visible) return false;
-                if (ClassifyPageType(winrt::get_class_name(fe)) ==
-                    ActivePage::Supported) return true;
-            }
-            start = muxm::VisualTreeHelper::GetParent(start);
-        } catch (...) {
-            return false;
+// SourcePageType identifies the navigation destination. Preserve Pause when
+// switching Processes <-> Details. An unknown event/argument is not evidence
+// of a real departure (OnNavigatedFrom can also run for GetNavigationState).
+bool IsSupportedDestination(void* args, bool& known) {
+    known = false;
+    if (!args) return false;
+    try {
+        mux::Navigation::NavigationEventArgs navigation{nullptr};
+        winrt::copy_from_abi(navigation, args);
+        const auto name = navigation.SourcePageType().Name;
+        if (name.empty()) return false;
+        known = true;
+        const std::wstring_view value{name.c_str(), name.size()};
+        const auto endsWith = [value](std::wstring_view suffix) {
+            return value.size() >= suffix.size() &&
+                value.substr(value.size() - suffix.size()) == suffix;
+        };
+        return value == L"ProcessesPage" || value == L"DetailsPage" ||
+               endsWith(L".ProcessesPage") || endsWith(L".DetailsPage");
+    } catch (...) {
+        Wh_Log(L"Could not inspect navigation destination; preserving pause state");
+        return false;
+    }
+}
+
+void OnLeavingSupportedPage(void* args) {
+    if (g_stopping.load(std::memory_order_acquire)) return;
+    bool known = false;
+    const bool supported = IsSupportedDestination(args, known);
+    if (!known || supported) return;
+    if (g_paused.exchange(false, std::memory_order_acq_rel))
+        SyncButtons();
+}
+
+HRESULT __cdecl ProcessesNavigatedFrom_Hook(void* self, void* args) {
+    HRESULT result = g_processesFromOriginal(self, args);
+    if (SUCCEEDED(result)) OnLeavingSupportedPage(args);
+    return result;
+}
+
+HRESULT __cdecl DetailsNavigatedFrom_Hook(void* self, void* args) {
+    HRESULT result = g_detailsFromOriginal(self, args);
+    if (SUCCEEDED(result)) OnLeavingSupportedPage(args);
+    return result;
+}
+
+
+// Known offsets are part of the compatibility data, not a replacement for
+// Windhawk's normal symbol resolution. These two RVAs came from the Windhawk
+// online symbol cache for Taskmgr.exe 26100.9974 (PDB GUID + age below).
+//
+// Never select by Windows build number alone. Match the loaded executable's
+// PE timestamp, SizeOfImage, and full RSDS GUID/age first, then verify the
+// target RVAs lie within executable sections. No memory scanning, registry
+// modifications, or XAML Diagnostics connection is involved.
+struct KnownTaskmgrNavigation {
+    DWORD peTimestamp;
+    DWORD imageSize;
+    GUID pdbGuid;
+    DWORD pdbAge;
+    DWORD processesToRva;
+    DWORD processesFromRva;
+};
+
+constexpr KnownTaskmgrNavigation kKnownTaskmgr26100_9974 = {
+    0xAF07E6AD,     // 2936530605 in Windhawk's PE cache key.
+    0x00595000,     // 5853184 bytes (SizeOfImage).
+    {0x5BD2613C, 0x6031, 0xD3C5,
+     {0x40, 0x9E, 0x12, 0x6E, 0x6A, 0x21, 0x21, 0x27}},
+    1,
+    0x0026CE10,     // ProcessesPage::OnNavigatedTo
+    0x0011D880,     // ProcessesPage::OnNavigatedFrom
+};
+
+constexpr DWORD kRsdsMagic = 0x53445352; // ASCII "RSDS", little-endian.
+
+struct RsdsIdentity {
+    DWORD signature;
+    GUID guid;
+    DWORD age;
+};
+
+// All offsets are relative to the loaded module; ASLR doesn't affect them.
+// Parse only bounded ranges within the loaded PE image.
+bool MatchesKnownTaskmgr(HMODULE module, const KnownTaskmgrNavigation& known) {
+    auto* base = reinterpret_cast<const BYTE*>(module);
+    if (!base) return false;
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0 ||
+        dos->e_lfanew > 4096) return false;
+
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE ||
+        nt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64 ||
+        nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
+        nt->FileHeader.TimeDateStamp != known.peTimestamp ||
+        nt->OptionalHeader.SizeOfImage != known.imageSize ||
+        nt->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_DEBUG) {
+        return false;
+    }
+
+    const auto& debug = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
+    if (!debug.VirtualAddress ||
+        debug.Size < sizeof(IMAGE_DEBUG_DIRECTORY) ||
+        debug.VirtualAddress >= known.imageSize ||
+        debug.Size > known.imageSize - debug.VirtualAddress) return false;
+
+    const auto count = debug.Size / sizeof(IMAGE_DEBUG_DIRECTORY);
+    for (DWORD i = 0; i < count; ++i) {
+        IMAGE_DEBUG_DIRECTORY entry{};
+        std::memcpy(&entry,
+                    base + debug.VirtualAddress + i * sizeof(entry),
+                    sizeof(entry));
+        if (entry.Type != IMAGE_DEBUG_TYPE_CODEVIEW ||
+            entry.SizeOfData < sizeof(RsdsIdentity) ||
+            !entry.AddressOfRawData ||
+            entry.AddressOfRawData >= known.imageSize ||
+            entry.SizeOfData > known.imageSize - entry.AddressOfRawData) {
+            continue;
+        }
+
+        RsdsIdentity identity{};
+        std::memcpy(&identity, base + entry.AddressOfRawData,
+                    sizeof(identity));
+        if (identity.signature == kRsdsMagic &&
+            identity.age == known.pdbAge &&
+            std::memcmp(&identity.guid, &known.pdbGuid, sizeof(GUID)) == 0) {
+            return true;
         }
     }
     return false;
 }
 
-// This path avoids a whole-tree search on every incoming UI element.
-// A CommandBar is inspected only when XAML Diagnostics reports a relevant
-// native control addition; re-entrant additions of our own button are ignored.
-void TryProcessDiagnosticElement(mux::DependencyObject element) {
-    if (!element || g_stopping.load(std::memory_order_acquire)) return;
-    try {
-        muxc::CommandBar bar{nullptr};
-        auto current = element;
-        for (unsigned depth = 0; current && depth < 48; ++depth) {
-            if (auto candidate = current.try_as<muxc::CommandBar>()) {
-                bar = candidate;
-                break;
-            }
-            current = muxm::VisualTreeHelper::GetParent(current);
-        }
-        if (!bar) return;
-        TryAttachFrameNavigation(bar);
-
-        // Explicit role matching is safe on unknown pages. A four-button
-        // structural fallback is used only after verifying the page type.
-        BarCandidate candidate;
-        const bool supportedPage = IsSupportedPageAncestor(bar);
-        if (!InspectProductionBar(bar, supportedPage, candidate)) return;
-        if (g_diagnosticPages.fetch_add(1, std::memory_order_relaxed) < 8)
-            Wh_Log(L"XAML Diagnostics: matching Task Manager command bar, thread=%lu supported=%d",
-                   GetCurrentThreadId(), supportedPage);
-        PruneExpiredEntriesOnCurrentThread();
-        TryInsertButton(candidate.bar, candidate.place);
-    } catch (...) {
-        if (g_diagnosticErrors.fetch_add(1, std::memory_order_relaxed) < 12)
-            Wh_Log(L"XAML Diagnostics: command bar inspection failed: 0x%08X",
-                   winrt::to_hresult());
+bool ExecutableRva(HMODULE module, DWORD rva) {
+    const auto* base = reinterpret_cast<const BYTE*>(module);
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
+    if (rva >= nt->OptionalHeader.SizeOfImage ||
+        nt->FileHeader.NumberOfSections == 0 ||
+        nt->FileHeader.NumberOfSections > 96) return false;
+    const auto* sections = IMAGE_FIRST_SECTION(nt);
+    for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
+        const auto& section = sections[i];
+        const DWORD length = (std::max)(section.Misc.VirtualSize,
+                                        section.SizeOfRawData);
+        if ((section.Characteristics & IMAGE_SCN_MEM_EXECUTE) &&
+            rva >= section.VirtualAddress &&
+            rva - section.VirtualAddress < length) return true;
     }
+    return false;
 }
 
-// Wait for every in-flight Diagnostics callback before DLL unload. The stop
-// flag prevents new callbacks from entering this mod's XAML work.
-std::mutex g_diagnosticCallbackMutex;
-std::condition_variable g_diagnosticCallbackDone;
-unsigned g_activeDiagnosticCallbacks = 0;
-struct DiagnosticCallbackGuard {
-    bool active = false;
-    DiagnosticCallbackGuard() {
-        std::lock_guard<std::mutex> lock(g_diagnosticCallbackMutex);
-        if (!g_diagnosticsStop.load(std::memory_order_acquire) &&
-            !g_stopping.load(std::memory_order_acquire)) {
-            ++g_activeDiagnosticCallbacks;
-            active = true;
-        }
-    }
-    ~DiagnosticCallbackGuard() {
-        if (!active) return;
-        std::lock_guard<std::mutex> lock(g_diagnosticCallbackMutex);
-        if (--g_activeDiagnosticCallbacks == 0) g_diagnosticCallbackDone.notify_all();
-    }
-};
-
-class PauseVisualTreeWatcher
-    : public winrt::implements<PauseVisualTreeWatcher,
-                               IVisualTreeServiceCallback2,
-                               winrt::non_agile> {
-public:
-    explicit PauseVisualTreeWatcher(winrt::com_ptr<IUnknown> site)
-        : m_diagnostics(site.as<IXamlDiagnostics>()) {
-        // AdviseVisualTreeChange may synchronously call this object. Never
-        // invoke it inside SetSite: perform subscription on a separate thread.
-        // Start and register the thread under the SAME lock used by Stop.
-        // Reserve a registry slot first: allocation failure cannot leave an
-        // untracked thread executing mod code after unload.
-        std::lock_guard<std::mutex> lock(g_diagnosticThreadsMutex);
-        if (g_diagnosticsStop.load(std::memory_order_acquire))
-            winrt::throw_hresult(HRESULT_FROM_WIN32(ERROR_CANCELLED));
-        g_diagnosticAdviseThreads.push_back(nullptr);
-        AddRef();
-        HANDLE thread = CreateThread(nullptr, 0, [](LPVOID raw) -> DWORD {
-            auto* self = static_cast<PauseVisualTreeWatcher*>(raw);
-            HRESULT hr = E_FAIL;
-            try {
-                hr = self->m_diagnostics.as<IVisualTreeService3>()
-                         ->AdviseVisualTreeChange(self);
-            } catch (...) {
-                hr = winrt::to_hresult();
-            }
-            if (SUCCEEDED(hr)) {
-                self->m_advised.store(true, std::memory_order_release);
-                Wh_Log(L"XAML Diagnostics: visual-tree watcher subscribed");
-                if (self->m_unadviseRequested.load(std::memory_order_acquire))
-                    self->Unadvise();
-            } else if (!g_diagnosticsStop.load(std::memory_order_acquire)) {
-                Wh_Log(L"XAML Diagnostics: AdviseVisualTreeChange failed: 0x%08X", hr);
-            }
-            self->Release();
-            return 0;
-        }, this, 0, nullptr);
-        if (!thread) {
-            const DWORD error = GetLastError();
-            g_diagnosticAdviseThreads.pop_back();
-            Release();
-            winrt::throw_hresult(HRESULT_FROM_WIN32(error));
-        }
-        g_diagnosticAdviseThreads.back() = thread;
-    }
-
-    void Unadvise() noexcept {
-        m_unadviseRequested.store(true, std::memory_order_release);
-        if (!m_advised.exchange(false, std::memory_order_acq_rel)) return;
-        try {
-            HRESULT hr = m_diagnostics.as<IVisualTreeService3>()
-                             ->UnadviseVisualTreeChange(this);
-            if (FAILED(hr))
-                Wh_Log(L"XAML Diagnostics: UnadviseVisualTreeChange failed: 0x%08X", hr);
-        } catch (...) {
-            Wh_Log(L"XAML Diagnostics: exception during unadvise");
-        }
-    }
-
-    HRESULT STDMETHODCALLTYPE OnVisualTreeChange(
-        ParentChildRelation, VisualElement element,
-        VisualMutationType mutationType) override try {
-        if (mutationType != Add) return S_OK;
-        DiagnosticCallbackGuard callback;
-        if (!callback.active) return S_OK;
-        const std::wstring_view type{element.Type ? element.Type : L""};
-        const bool isButton = type.find(L"AppBarButton") != std::wstring_view::npos;
-        const bool isBar = type.find(L"CommandBar") != std::wstring_view::npos;
-        const ActivePage pageKind = ClassifyPageType(
-            winrt::hstring{element.Type ? element.Type : L""});
-        const bool isPage = pageKind != ActivePage::Unknown;
-        if (!isButton && !isBar && !isPage) return S_OK;
-        if (g_diagnosticCandidates.fetch_add(1, std::memory_order_relaxed) < 14)
-            Wh_Log(L"XAML Diagnostics: candidate type=%s thread=%lu",
-                   element.Type ? element.Type : L"", GetCurrentThreadId());
-        wf::IInspectable inspectable{nullptr};
-        const HRESULT hr = m_diagnostics->GetIInspectableFromHandle(
-            element.Handle,
-            reinterpret_cast<::IInspectable**>(winrt::put_abi(inspectable)));
-        if (hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
-            // XAML element additions and removals can race with diagnostics
-            // handle lookup. A removed element isn't an initialization error.
-            g_diagnosticExpiredHandles.fetch_add(1, std::memory_order_relaxed);
-            return S_OK;
-        }
-        if (FAILED(hr)) {
-            if (g_diagnosticErrors.fetch_add(1, std::memory_order_relaxed) < 12)
-                Wh_Log(L"XAML Diagnostics: GetIInspectableFromHandle failed 0x%08X", hr);
-            return S_OK;
-        }
-        if (auto object = inspectable.try_as<mux::DependencyObject>()) {
-            if (isPage) {
-                if (auto page = object.try_as<mux::FrameworkElement>()) {
-                    TryAttachFrameNavigation(page);
-                    if (pageKind == ActivePage::Supported) {
-                        // A page notification may arrive after the bar exists.
-                        FindCommandBars(page, true);
-                    } else {
-                        HandleOtherPageAddition(page);
-                    }
-                }
-            } else {
-                TryProcessDiagnosticElement(object);
-            }
-        }
-        return S_OK;
-    } catch (...) {
-        if (g_diagnosticErrors.fetch_add(1, std::memory_order_relaxed) < 12)
-            Wh_Log(L"XAML Diagnostics: visual-tree callback error 0x%08X",
-                   winrt::to_hresult());
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE OnElementStateChanged(
-        InstanceHandle, VisualElementState, LPCWSTR) noexcept override {
-        return S_OK;
-    }
-
-private:
-    winrt::com_ptr<IXamlDiagnostics> m_diagnostics;
-    std::atomic<bool> m_advised{false};
-    std::atomic<bool> m_unadviseRequested{false};
-};
-
-void RemoveDiagnosticWatcher(PauseVisualTreeWatcher* watcher) {
-    std::lock_guard<std::mutex> lock(g_diagnosticWatchersMutex);
-    auto& active = g_diagnosticWatchersList;
-    active.erase(std::remove_if(active.begin(), active.end(),
-        [watcher](auto const& candidate) { return candidate.get() == watcher; }),
-        active.end());
+bool InstallKnownNavigation(HMODULE module, DWORD rva,
+                            PageNavigation_t hook,
+                            PageNavigation_t* original) {
+    if (!ExecutableRva(module, rva)) return false;
+    auto* target = reinterpret_cast<BYTE*>(module) + rva;
+    return WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<PageNavigation_t>(target), hook, original);
 }
-
-HMODULE CurrentModModule() {
-    HMODULE module{};
-    if (!GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            reinterpret_cast<LPCWSTR>(&CurrentModModule), &module)) {
-        return nullptr;
-    }
-    return module;
-}
-
-class PauseXamlTap
-    : public winrt::implements<PauseXamlTap, IObjectWithSite, winrt::non_agile> {
-public:
-    HRESULT STDMETHODCALLTYPE SetSite(IUnknown* site) override try {
-        if (m_watcher) {
-            m_watcher->Unadvise();
-            RemoveDiagnosticWatcher(m_watcher.get());
-            m_watcher = nullptr;
-        }
-        m_site.copy_from(site);
-        if (!site) return S_OK;
-
-        // The XAML framework holds a separate LoadLibrary reference when it
-        // loads this class. Balance that reference as in other Windhawk mods.
-        if (HMODULE module = CurrentModModule()) FreeLibrary(module);
-        if (g_diagnosticsStop.load(std::memory_order_acquire)) return S_OK;
-
-        auto watcher = winrt::make_self<PauseVisualTreeWatcher>(m_site);
-        {
-            std::lock_guard<std::mutex> lock(g_diagnosticWatchersMutex);
-            if (g_diagnosticsStop.load(std::memory_order_relaxed)) {
-                watcher->Unadvise();
-                return S_OK;
-            }
-            g_diagnosticWatchersList.push_back(watcher);
-        }
-        m_watcher = std::move(watcher);
-        g_diagnosticWatchers.fetch_add(1, std::memory_order_release);
-        Wh_Log(L"XAML Diagnostics: site received; watcher created");
-        return S_OK;
-    } catch (...) {
-        Wh_Log(L"XAML Diagnostics: SetSite failed: 0x%08X", winrt::to_hresult());
-        return winrt::to_hresult();
-    }
-
-    HRESULT STDMETHODCALLTYPE GetSite(REFIID iid, void** object) noexcept override {
-        return m_site.as(iid, object);
-    }
-private:
-    winrt::com_ptr<IUnknown> m_site;
-    winrt::com_ptr<PauseVisualTreeWatcher> m_watcher;
-};
-
-template <typename T>
-struct PauseClassFactory
-    : winrt::implements<PauseClassFactory<T>, IClassFactory, winrt::non_agile> {
-    HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown* outer, REFIID iid,
-                                             void** object) override try {
-        if (outer) return CLASS_E_NOAGGREGATION;
-        *object = nullptr;
-        return winrt::make<T>().as(iid, object);
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override { return S_OK; }
-};
-
-// {B061FA10-A60B-46C9-9382-99C2AEAA5A01}
-constexpr CLSID CLSID_PauseXamlTap = {
-    0xb061fa10, 0xa60b, 0x46c9,
-    {0x93, 0x82, 0x99, 0xc2, 0xae, 0xaa, 0x5a, 0x01}};
-
-} // namespace
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
-__declspec(dllexport) _Use_decl_annotations_
-STDAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void** object) try {
-    if (clsid != CLSID_PauseXamlTap) return CLASS_E_CLASSNOTAVAILABLE;
-    *object = nullptr;
-    return winrt::make<PauseClassFactory<PauseXamlTap>>().as(iid, object);
-} catch (...) {
-    return winrt::to_hresult();
-}
-
-__declspec(dllexport) _Use_decl_annotations_
-STDAPI DllCanUnloadNow() {
-    return winrt::get_module_lock() ? S_FALSE : S_OK;
-}
-#pragma clang diagnostic pop
-
-namespace {
-
-HRESULT AttachToXamlDiagnostics(HMODULE xamlModule) {
-    const auto initialize = reinterpret_cast<InitializeXamlDiagnosticsEx_t>(
-        GetProcAddress(xamlModule, "InitializeXamlDiagnosticsEx"));
-    if (!initialize) return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
-    const HMODULE module = CurrentModModule();
-    if (!module) return HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
-    wchar_t modulePath[MAX_PATH]{};
-    const DWORD len = GetModuleFileNameW(module, modulePath, ARRAYSIZE(modulePath));
-    if (!len || len >= ARRAYSIZE(modulePath)) return E_FAIL;
-
-    // Windows.UI.Xaml uses the VisualDiagConnectionN endpoints. The framework
-    // ordinal is process-lifetime based, so don't assume endpoint number 1.
-    for (int index = 1; index <= 10000; ++index) {
-        if (g_diagnosticsStop.load(std::memory_order_acquire))
-            return HRESULT_FROM_WIN32(ERROR_CANCELLED);
-        wchar_t connectionName[80]{};
-        _snwprintf_s(connectionName, _TRUNCATE,
-                     L"VisualDiagConnection%d", index);
-        const HRESULT hr = initialize(connectionName, GetCurrentProcessId(),
-                                      L"", modulePath, CLSID_PauseXamlTap, nullptr);
-        if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) return hr;
-    }
-    return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
-}
-
-DWORD WINAPI XamlDiagnosticsWorker(LPVOID) {
-    const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    unsigned failures = 0;
-    unsigned emptyWalks = 0;
-    bool moduleSeen = false;
-    for (unsigned attempt = 0; attempt < 30; ++attempt) {
-        if (g_diagnosticsStop.load(std::memory_order_acquire)) break;
-        HMODULE xamlModule = GetModuleHandleW(L"Windows.UI.Xaml.dll");
-        if (xamlModule) {
-            moduleSeen = true;
-            const unsigned previousWatchers =
-                g_diagnosticWatchers.load(std::memory_order_acquire);
-            const HRESULT hr = AttachToXamlDiagnostics(xamlModule);
-            if (SUCCEEDED(hr)) {
-                // SetSite may complete asynchronously after initialization
-                // returns. Observe the actual watcher rather than reporting
-                // a spurious competing-consumer warning immediately.
-                // Poll briefly on the background worker, never on the UI
-                // thread. The existing stop event interrupts the wait safely.
-                for (unsigned i = 0; i < 30 &&
-                     g_diagnosticWatchers.load(std::memory_order_acquire) ==
-                         previousWatchers &&
-                     !g_diagnosticsStop.load(std::memory_order_acquire); ++i) {
-                    if (WaitForSingleObject(g_diagnosticsStopEvent, 25) !=
-                        WAIT_TIMEOUT) break;
-                }
-                if (g_diagnosticsStop.load(std::memory_order_acquire))
-                    break;
-                if (g_diagnosticWatchers.load(std::memory_order_acquire) >
-                    previousWatchers) {
-                    Wh_Log(L"XAML Diagnostics: connected to Windows.UI.Xaml");
-                } else {
-                    Wh_Log(L"XAML Diagnostics: no watcher observed within 750 ms (handoff delayed or another consumer)");
-                }
-                break;
-            }
-            if (hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
-                if (++emptyWalks >= 3) {
-                    Wh_Log(L"XAML Diagnostics: no VisualDiagConnection endpoint after 3 attempts");
-                    break;
-                }
-            } else if (hr != HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
-                Wh_Log(L"XAML Diagnostics: initialization failed: 0x%08X", hr);
-                if (++failures >= 3) break;
-            }
-        }
-        if (g_diagnosticsStopEvent &&
-            WaitForSingleObject(g_diagnosticsStopEvent, 1000) == WAIT_OBJECT_0)
-            break;
-    }
-    if (!moduleSeen && !g_diagnosticsStop.load(std::memory_order_acquire))
-        Wh_Log(L"XAML Diagnostics: Windows.UI.Xaml.dll not found; no compatible XAML source");
-    if (SUCCEEDED(com)) CoUninitialize();
-    return 0;
-}
-
-void StopDiagnosticsWorkers() {
-    // The same lock is held while a watcher thread is created and registered.
-    // After closing admission, a snapshot cannot miss a newly started thread.
-    {
-        std::lock_guard<std::mutex> lock(g_diagnosticThreadsMutex);
-        g_diagnosticsStop.store(true, std::memory_order_release);
-    }
-    if (g_diagnosticsStopEvent) SetEvent(g_diagnosticsStopEvent);
-    if (g_diagnosticsWorker) {
-        WaitForSingleObject(g_diagnosticsWorker, INFINITE);
-        CloseHandle(g_diagnosticsWorker);
-        g_diagnosticsWorker = nullptr;
-    }
-    std::vector<HANDLE> threads;
-    {
-        std::lock_guard<std::mutex> lock(g_diagnosticThreadsMutex);
-        threads.swap(g_diagnosticAdviseThreads);
-    }
-    for (HANDLE thread : threads) {
-        if (!thread) continue;
-        WaitForSingleObject(thread, INFINITE);
-        CloseHandle(thread);
-    }
-}
-
-void UnadviseDiagnostics() {
-    std::vector<winrt::com_ptr<PauseVisualTreeWatcher>> watchers;
-    {
-        std::lock_guard<std::mutex> lock(g_diagnosticWatchersMutex);
-        watchers.swap(g_diagnosticWatchersList);
-    }
-    for (auto const& watcher : watchers) watcher->Unadvise();
-    // Unadvising prevents future callbacks. Wait for any already inside
-    // OnVisualTreeChange before releasing watchers or UI event handlers.
-    {
-        std::unique_lock<std::mutex> lock(g_diagnosticCallbackMutex);
-        g_diagnosticCallbackDone.wait(lock, [] {
-            return g_activeDiagnosticCallbacks == 0;
-        });
-    }
-    watchers.clear();
-    if (g_diagnosticsStopEvent) {
-        CloseHandle(g_diagnosticsStopEvent);
-        g_diagnosticsStopEvent = nullptr;
-    }
-}
-
 
 } // namespace
 
@@ -1515,49 +1252,103 @@ BOOL Wh_ModInit() {
         g_insertionCount = 0;
     }
     g_stopping = false;
-    g_diagnosticsStop = false;
-    g_diagnosticCandidates = 0;
-    g_diagnosticErrors = 0;
-    g_diagnosticPages = 0;
-    g_diagnosticWatchers = 0;
-    g_diagnosticExpiredHandles = 0;
-    g_navigationEvents = 0;
     g_paused = false;
     g_insertions = 0;
     g_cleanupFailures = 0;
+    g_navigationEvents = 0;
     g_dispatchMsg = RegisterWindowMessageW(
         L"Windhawk.TaskManagerPauseButton.SynchronousUI");
     if (!g_dispatchMsg || !FindTaskManagerRange()) return FALSE;
-    if (!WindhawkUtils::SetFunctionHook(
-            GetKeyState, GetKeyState_Hook, &g_getKeyOriginal)) {
-        Wh_Log(L"Required GetKeyState hook failed; no UI was changed");
-        return FALSE;
+
+    HMODULE host = GetModuleHandleW(nullptr);
+    if (!host) return FALSE;
+
+    bool embeddedOffsets = false;
+    bool processesFromInstalled = false;
+
+    // The exact PE/PDB key makes this path independent of Microsoft's PDB
+    // service on the one Task Manager build that produced HTTP 404. All other
+    // binaries use one normal Windhawk symbol lookup with optional entries.
+    if (MatchesKnownTaskmgr(host, kKnownTaskmgr26100_9974)) {
+        Wh_Log(L"Known Taskmgr PE/PDB matched: using embedded navigation RVAs");
+        if (!InstallKnownNavigation(host,
+                                    kKnownTaskmgr26100_9974.processesToRva,
+                                    ProcessesNavigatedTo_Hook,
+                                    &g_processesToOriginal)) {
+            Wh_Log(L"Embedded ProcessesPage hook could not be installed");
+            return FALSE;
+        }
+        embeddedOffsets = true;
+        processesFromInstalled = InstallKnownNavigation(
+            host, kKnownTaskmgr26100_9974.processesFromRva,
+            ProcessesNavigatedFrom_Hook, &g_processesFromOriginal);
+        Wh_Log(L"Embedded Processes hooks: to=ok from=%s",
+               processesFromInstalled ? L"ok" : L"unavailable");
+        if (!processesFromInstalled) g_processesFromOriginal = nullptr;
+    } else {
+        WindhawkUtils::SYMBOL_HOOK taskmgrExeHooks[] = {
+            {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)"},
+             &g_processesToOriginal, ProcessesNavigatedTo_Hook},
+            {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::DetailsPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)"},
+             &g_detailsToOriginal, nullptr, true},
+            {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedFrom(void *)"},
+             &g_processesFromOriginal, nullptr, true},
+            {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::DetailsPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedFrom(void *)"},
+             &g_detailsFromOriginal, nullptr, true},
+        };
+        if (!WindhawkUtils::HookSymbols(host, taskmgrExeHooks,
+                                        ARRAYSIZE(taskmgrExeHooks))) {
+            Wh_Log(L"Taskmgr navigation symbols unavailable; PE/PDB didn't match an embedded entry");
+            return FALSE;
+        }
+        Wh_Log(L"Taskmgr navigation hooks installed using Windhawk symbols");
     }
-    g_diagnosticsStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_diagnosticsStopEvent) return FALSE;
 
-    Wh_Log(L"Ready: XAML Diagnostics discovery (experimental; no private Taskmgr symbols)");
+    // Install optional hooks only if they were resolved from PDB symbols.
+    // A known-offset entry already installed its Processes exit hook above.
+    const bool detailsFound = g_detailsToOriginal != nullptr;
+    const bool detailsHooked = detailsFound && WindhawkUtils::SetFunctionHook(
+        g_detailsToOriginal, DetailsNavigatedTo_Hook, &g_detailsToOriginal);
+    if (!detailsHooked) g_detailsToOriginal = nullptr;
+    Wh_Log(L"Optional DetailsPage::OnNavigatedTo: symbol=%s hook=%s",
+           detailsFound ? L"found" : L"missing",
+           detailsHooked ? L"ok" : L"unavailable");
+
+    const bool processesExitFound = g_processesFromOriginal != nullptr;
+    const bool processesExitHooked = embeddedOffsets ? processesFromInstalled :
+        (processesExitFound && WindhawkUtils::SetFunctionHook(
+            g_processesFromOriginal, ProcessesNavigatedFrom_Hook,
+            &g_processesFromOriginal));
+    if (!processesExitHooked) g_processesFromOriginal = nullptr;
+    Wh_Log(L"Optional ProcessesPage::OnNavigatedFrom: symbol=%s hook=%s",
+           processesExitFound ? L"found" : L"missing",
+           processesExitHooked ? L"ok" : L"unavailable");
+
+    const bool detailsExitFound = g_detailsFromOriginal != nullptr;
+    const bool detailsExitHooked = detailsExitFound && WindhawkUtils::SetFunctionHook(
+        g_detailsFromOriginal, DetailsNavigatedFrom_Hook, &g_detailsFromOriginal);
+    if (!detailsExitHooked) g_detailsFromOriginal = nullptr;
+    Wh_Log(L"Optional DetailsPage::OnNavigatedFrom: symbol=%s hook=%s",
+           detailsExitFound ? L"found" : L"missing",
+           detailsExitHooked ? L"ok" : L"unavailable");
+
+    // Intentionally unchanged: preserve the tested GetKeyState-based refresh
+    // hold, including its Taskmgr.exe return-address restriction.
+    if (!WindhawkUtils::SetFunctionHook(
+            GetKeyState, GetKeyState_Hook, &g_getKeyOriginal)) return FALSE;
+
+    Wh_Log(L"Ready: navigation hooks, Frame.Navigated (embedded=%d)",
+           embeddedOffsets);
     return TRUE;
-}
-
-void Wh_ModAfterInit() {
-    std::lock_guard<std::mutex> lock(g_diagnosticThreadsMutex);
-    if (g_diagnosticsStop.load(std::memory_order_acquire)) return;
-    g_diagnosticsWorker = CreateThread(nullptr, 0, XamlDiagnosticsWorker,
-                                      nullptr, 0, nullptr);
-    if (!g_diagnosticsWorker)
-        Wh_Log(L"XAML Diagnostics: couldn't start worker: %lu", GetLastError());
 }
 
 void Wh_ModBeforeUninit() {
     StopNewInsertions();
-    StopDiagnosticsWorkers();
 }
+
 
 void Wh_ModUninit() {
     StopNewInsertions();
-    StopDiagnosticsWorkers();
-    UnadviseDiagnostics();
     {
         std::unique_lock<std::mutex> lock(g_insertionMutex);
         g_insertionDone.wait(lock, [] { return g_insertionCount == 0; });
@@ -1589,8 +1380,6 @@ void Wh_ModUninit() {
         // require the user to close Task Manager; no finite wait is safe.
         Sleep(250);
     }
-    Wh_Log(L"XAML Diagnostics summary: expiredHandlesIgnored=%u diagnosticErrors=%u",
-           g_diagnosticExpiredHandles.load(), g_diagnosticErrors.load());
     Wh_Log(L"Uninit finished: inserted=%u terminatedThreads=%u cleanupErrors=%u",
            g_insertions.load(), terminatedThreads, g_cleanupFailures.load());
 }
