@@ -2,7 +2,7 @@
 // @id              mmc-dark-mode
 // @name            MMC Dark Mode
 // @description     Dark theme for the console snap-ins: Device Manager, Event Viewer, Services, Task Scheduler and Disk Management.
-// @version         1.0
+// @version         1.1
 // @author          metanoid18
 // @github          https://github.com/Metanoid18
 // @license         MIT
@@ -63,6 +63,43 @@ painting. The system-wide colour table is not changed.
 * The maximized child window's menu-row buttons use scoped custom drawing.
   Other layouts may keep the native appearance. Restored child-window captions
   and their buttons can remain light.
+
+## Changelog
+
+### 1.1
+
+* Edit fields in property sheets use classic painting: no light themed frame,
+  no light fill for read-only fields. Editable fields get a slightly raised fill.
+* Hosted WinForms separator lines (thin sunken labels) are drawn as a single
+  line in the border colour instead of the system's white 3D edge.
+* Task Scheduler: the General tab (the first page, which WinForms builds before
+  the view is attached) is now themed like the other tabs. Hosted WinForms
+  windows are recognised by class name instead of by their parent chain.
+* Task Scheduler: combo boxes on the Conditions and Settings tabs (including the
+  editable ones such as the idle time) are dark. They are no longer limited to
+  the exact nesting depth of the summary pane.
+* Task Scheduler: the details pane of a selected task (General, Triggers,
+  Actions, Conditions, Settings tabs) was drawn on a light page, which made the
+  light labels invisible. The page body and group-box frames are now drawn in
+  the dark palette, group-box captions are light, and the tab strip of these
+  hosted WinForms tab controls uses the same dark tab painter as property
+  sheets.
+* Tab strips refresh immediately when a tab is selected, added or renamed from
+  code (not only after a mouse click or key press).
+* Palette: all colours are now named constants. Hover and pressed states are
+  neutral greys, the border and caption colours are set explicitly, list rows
+  have separate hot, selected and inactive-selection fills, and an accent blue
+  marks the selected tab, the focused edit field and the default push button.
+* Status bar: text now uses the control's own font (it used the raster system
+  font before), and panes are separated by thin dividers.
+* Toolbar buttons show a pressed state.
+* Fixed the first property-sheet tab strip paint falling back to the light
+  native drawing.
+* Fixed `Dark title bar` and `Rounded window corners` not reverting when
+  switched off while the mod is running.
+* Group box captions with `&` mnemonics are measured correctly, disabled
+  captions are dimmed, and offsets follow the window DPI.
+* Removed frame styles are tracked in a map instead of a fixed 64-slot table.
 */
 // ==/WindhawkModReadme==
 
@@ -91,6 +128,7 @@ painting. The system-wide colour table is not changed.
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <cwchar>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
@@ -118,14 +156,43 @@ constexpr WORD kOrdinalIsDarkModeAllowedForWindow = 137;
 // Try the supported immersive dark title-bar attributes in order.
 constexpr DWORD kDwmwaUseImmersiveDarkMode = 20;
 constexpr DWORD kDwmwaUseImmersiveDarkModeLegacy = 19;
+// Windows 11 (build 22000+); older builds reject them harmlessly.
+constexpr DWORD kDwmwaCaptionColor = 35;
+constexpr DWORD kDwmwaTextColor = 36;
 
-constexpr COLORREF kColorBackground = RGB(32, 32, 32);
+// Palette: neutral greys in the Windows 11 dark layering, with blue reserved for
+// selection and the accent. Text contrast against the background is 4.8:1 or
+// better for every text colour.
+constexpr COLORREF kColorBackground = RGB(32, 32, 32);    // windows, dialogs, lists
+constexpr COLORREF kColorSurface = RGB(43, 43, 43);       // raised: buttons, selected tab
+constexpr COLORREF kColorHover = RGB(56, 56, 56);
+constexpr COLORREF kColorPressed = RGB(66, 66, 66);
+constexpr COLORREF kColorLine = RGB(72, 72, 72);          // borders and dividers
+constexpr COLORREF kColorAccent = RGB(60, 140, 230);      // focus and "current" markers
 constexpr COLORREF kColorText = RGB(240, 240, 240);
-constexpr COLORREF kColorLine = RGB(70, 70, 70);
-constexpr COLORREF kColorHover = RGB(58, 60, 66);
-constexpr COLORREF kColorTabText = RGB(178, 178, 178);
-constexpr COLORREF kColorTabSelected = RGB(45, 45, 45);
+constexpr COLORREF kColorTextMuted = RGB(178, 178, 178);  // inactive tabs
+constexpr COLORREF kColorTextDisabled = RGB(140, 140, 140);
 constexpr COLORREF kColorSelection = RGB(38, 79, 120);
+constexpr COLORREF kColorSelectionHot = RGB(46, 58, 76);
+constexpr COLORREF kColorSelectionInactive = RGB(56, 62, 72);
+constexpr COLORREF kColorTabText = kColorTextMuted;
+constexpr COLORREF kColorTabSelected = kColorSurface;
+
+// Window-control glyph buttons (the standard Windows 11 close-button reds).
+constexpr COLORREF kColorCloseHot = RGB(196, 43, 28);
+constexpr COLORREF kColorCloseDown = RGB(145, 32, 23);
+
+// Actions pane header gradient, as grey levels (top, middle, bottom).
+constexpr int kActionsShadeTop = 46;
+constexpr int kActionsShadeMiddle = 42;
+constexpr int kActionsShadeBottom = 38;
+
+// Disk Management: the stock navy hatch is recoloured to the accent, and the
+// selected partition frame uses a lighter steel blue.
+constexpr COLORREF kColorDiskStockNavy = RGB(0, 0, 128);
+constexpr COLORREF kColorDiskSelected = RGB(80, 120, 160);
+
+constexpr COLORREF kNotMapped = 0xffffffff;
 
 using ShouldAppsUseDarkMode_t = BOOL(WINAPI*)();
 using AllowDarkModeForWindow_t = BOOL(WINAPI*)(HWND, BOOL);
@@ -157,12 +224,38 @@ GetThemeColor_t pGetThemeColorHook = nullptr;
 // The active flag is read on GUI threads and cleared during unload.
 std::atomic<bool> g_active{false};
 
+// Non-zero while a hosted WinForms window is handling a paint or erase message
+// on this thread. It scopes the theme hooks that recolour WinForms pages.
+thread_local int g_formsPaintDepth = 0;
+
+// Native tab control, or the WinForms wrapper class around it.
+bool IsTabControlClass(PCWSTR className) {
+    static const WCHAR kFormsTabPrefix[] = L"WindowsForms10.SysTabControl32.";
+    return wcscmp(className, L"SysTabControl32") == 0 ||
+           wcsncmp(className, kFormsTabPrefix, ARRAYSIZE(kFormsTabPrefix) - 1) == 0;
+}
+
 HRESULT WINAPI GetThemeColor_Hook(HTHEME theme, int part, int state, int prop,
                                   COLORREF* colour) {
-    if (colour && g_active && prop == TMT_FILLCOLOR && part == LBCP_ITEM &&
-        state >= LBPSI_HOT && state <= LBPSI_SELECTEDNOTFOCUS) {
-        *colour = kColorSelection;
+    // WinForms group boxes take their caption colour from the light theme.
+    if (colour && g_active && g_formsPaintDepth > 0 && prop == TMT_TEXTCOLOR &&
+        part == BP_GROUPBOX) {
+        *colour = state == GBS_DISABLED ? kColorTextDisabled : kColorText;
         return S_OK;
+    }
+    if (colour && g_active && prop == TMT_FILLCOLOR && part == LBCP_ITEM) {
+        switch (state) {
+        case LBPSI_HOT:
+            *colour = kColorSelectionHot;
+            return S_OK;
+        case LBPSI_HOTSELECTED:
+        case LBPSI_SELECTED:
+            *colour = kColorSelection;
+            return S_OK;
+        case LBPSI_SELECTEDNOTFOCUS:
+            *colour = kColorSelectionInactive;
+            return S_OK;
+        }
     }
     if (!pGetThemeColorHook) {
         return E_FAIL;
@@ -180,26 +273,23 @@ void SetWindowThemeQuiet(HWND hWnd, PCWSTR subApp, PCWSTR subId) {
 
 // Prevent late theme changes from reintroducing unsuitable control styles.
 HRESULT WINAPI SetWindowTheme_Hook(HWND hWnd, LPCWSTR subApp, LPCWSTR subId) {
-    if (pSetWindowThemeHook && hWnd) {
-        WCHAR className[64] = {};
-        if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
-            return pSetWindowThemeHook(hWnd, subApp, subId);
-        }
-
-        if (!g_active) {
-            return pSetWindowThemeHook(hWnd, subApp, subId);
-        }
-
-        // Keep toolbars, labels, links and tab strips on their classic drawing paths.
-        if (wcscmp(className, L"ToolbarWindow32") == 0 ||
-            wcscmp(className, L"Static") == 0 ||
-            wcscmp(className, L"SysLink") == 0 ||
-            wcscmp(className, L"SysTabControl32") == 0) {
-            return pSetWindowThemeHook(hWnd, L"", L"");
-        }
+    if (!pSetWindowThemeHook) {
+        return E_FAIL;
+    }
+    if (!hWnd || !g_active) {
         return pSetWindowThemeHook(hWnd, subApp, subId);
     }
-    return S_OK;
+
+    // Keep toolbars, labels, links and tab strips on their classic drawing paths.
+    WCHAR className[64] = {};
+    if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+        (wcscmp(className, L"ToolbarWindow32") == 0 ||
+         wcscmp(className, L"Static") == 0 ||
+         wcscmp(className, L"SysLink") == 0 ||
+         IsTabControlClass(className))) {
+        return pSetWindowThemeHook(hWnd, L"", L"");
+    }
+    return pSetWindowThemeHook(hWnd, subApp, subId);
 }
 DWORD g_darkTitleBarAttribute = 0;
 
@@ -212,6 +302,12 @@ struct Settings {
 Settings g_settings;
 
 LRESULT SendToControl(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+
+// Scale a 96-DPI pixel value for the window's DPI.
+int ScaleForWindow(HWND hWnd, int pixels) {
+    const UINT dpi = hWnd ? GetDpiForWindow(hWnd) : 0;
+    return dpi ? MulDiv(pixels, static_cast<int>(dpi), 96) : pixels;
+}
 
 // Use the comctl32 subclass chain; track windows for safe unload.
 enum class WindowKind : DWORD_PTR {
@@ -234,6 +330,8 @@ enum class WindowKind : DWORD_PTR {
     WinFormsCombo,
     WinFormsComboParent,
     WinFormsRefresh,
+    WinFormsSurface,
+    PushButton,
 };
 
 bool SubclassWith(HWND hWnd, WindowKind kind);
@@ -251,6 +349,8 @@ HBRUSH g_backgroundBrush = nullptr;
 HBRUSH g_hoverBrush = nullptr;
 HBRUSH g_lineBrush = nullptr;
 HBRUSH g_tabSelectedBrush = nullptr;
+HBRUSH g_pressedBrush = nullptr;
+HBRUSH g_accentBrush = nullptr;
 
 // Caches are thread-local and populated on each window's owning thread.
 
@@ -276,6 +376,7 @@ struct StatusCache {
     int parts;
     RECT rects[16];
     WCHAR text[16][256];
+    HFONT font;
     bool valid;
 };
 thread_local StatusCache g_statusCache[2];
@@ -367,6 +468,8 @@ LRESULT HandleTab(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 bool RefreshTabEntry(HWND hWnd);
 HBRUSH LineBrush();
 HBRUSH TabSelectedBrush();
+HBRUSH PressedBrush();
+HBRUSH AccentBrush();
 void DrawTextOn(HDC dc, PCWSTR text, RECT* rect, UINT flags, COLORREF colour,
                 COLORREF behind);
 LRESULT HandleGroupBox(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -400,21 +503,44 @@ LRESULT HandleStatusBar(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
             GetClientRect(hWnd, &client);
             FillRect(dc, &client, g_backgroundBrush);
 
+            HBRUSH line = LineBrush();
+            if (line) {
+                RECT top = {client.left, client.top, client.right, client.top + 1};
+                FillRect(dc, &top, line);
+            }
+
+            const int padding = ScaleForWindow(hWnd, 6);
+            const int dividerInset = ScaleForWindow(hWnd, 4);
             for (int i = 0; i < 2; i++) {
                 StatusCache& cache = g_statusCache[i];
                 if (cache.hWnd != hWnd || !cache.valid) {
                     continue;
                 }
+                // Without this the DC keeps the raster system font.
+                HGDIOBJ oldFont = SelectObject(
+                    dc, cache.font ? static_cast<HGDIOBJ>(cache.font)
+                              : GetStockObject(DEFAULT_GUI_FONT));
                 for (int part = 0; part < cache.parts && part < 16; part++) {
+                    RECT partRect = cache.rects[part];
+                    if (line && part + 1 < cache.parts) {
+                        RECT divider = {partRect.right, partRect.top + dividerInset,
+                                        partRect.right + 1,
+                                        partRect.bottom - dividerInset};
+                        if (divider.bottom > divider.top) {
+                            FillRect(dc, &divider, line);
+                        }
+                    }
                     if (!cache.text[part][0]) {
                         continue;
                     }
-                    RECT partRect = cache.rects[part];
-                    partRect.left += 4;
+                    partRect.left += padding;
                     DrawTextOn(dc, cache.text[part], &partRect,
                                DT_LEFT | DT_VCENTER | DT_SINGLELINE |
-                                   DT_END_ELLIPSIS,
+                                   DT_END_ELLIPSIS | DT_NOPREFIX,
                                kColorText, kColorBackground);
+                }
+                if (oldFont) {
+                    SelectObject(dc, oldFont);
                 }
             }
         }
@@ -425,7 +551,8 @@ LRESULT HandleStatusBar(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     LRESULT result =
         DefSubclassProc(hWnd, message, wParam, lParam);
 
-    if (message == SB_SETTEXTW || message == SB_SETPARTS || message == WM_SIZE) {
+    if (message == SB_SETTEXTW || message == SB_SETPARTS || message == WM_SIZE ||
+        message == WM_SETFONT) {
         RefreshStatusCache(hWnd);
     }
 
@@ -506,18 +633,27 @@ void SetDarkTitleBar(HWND hWnd, bool dark) {
     }
 }
 
+// Caption colours make the title bar blend with the client area; the default
+// value hands control back to the system.
+void SetCaptionColours(HWND hWnd, bool dark) {
+    COLORREF caption = dark ? kColorBackground : DWMWA_COLOR_DEFAULT;
+    COLORREF text = dark ? kColorText : DWMWA_COLOR_DEFAULT;
+    DwmSetWindowAttribute(hWnd, kDwmwaCaptionColor, &caption, sizeof(caption));
+    DwmSetWindowAttribute(hWnd, kDwmwaTextColor, &text, sizeof(text));
+}
+
 void ApplyToTopLevel(HWND hWnd) {
-    if (g_settings.darkTitleBar) {
-        SetDarkTitleBar(hWnd, true);
-    }
+    // Both settings are applied in both directions: they can be switched off
+    // while the mod is loaded, and the window must follow.
+    SetDarkTitleBar(hWnd, g_settings.darkTitleBar);
+    SetCaptionColours(hWnd, g_settings.darkTitleBar);
 
-    if (g_settings.roundCorners) {
-        int preference = DWMWCP_ROUND;
-        DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &preference,
-                              sizeof(preference));
-    }
+    int preference = g_settings.roundCorners ? DWMWCP_ROUND : DWMWCP_DEFAULT;
+    DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &preference,
+                          sizeof(preference));
 
-    COLORREF border = kColorBackground;
+    // A visible border keeps the window separated from other dark windows.
+    COLORREF border = kColorLine;
     DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &border, sizeof(border));
 
     if (!g_backgroundBrush) {
@@ -568,6 +704,7 @@ void RefreshStatusCache(HWND hWnd) {
 
     cache->hWnd = hWnd;
     cache->valid = false;
+    cache->font = reinterpret_cast<HFONT>(SendToControl(hWnd, WM_GETFONT, 0, 0));
 
     int parts = static_cast<int>(SendToControl(hWnd, SB_GETPARTS, 0, 0));
     if (parts <= 0) {
@@ -720,7 +857,7 @@ void ColourClassicControl(HWND hWnd, bool dark) {
             pSetWindowTheme(hWnd, nullptr, nullptr);
             pAllowDarkModeForWindow(hWnd, FALSE);
         }
-    } else if (wcscmp(className, L"SysTabControl32") == 0) {
+    } else if (IsTabControlClass(className)) {
         if (dark) {
             pSetWindowTheme(hWnd, L"", L"");
             SubclassWith(hWnd, WindowKind::Tab);
@@ -735,32 +872,18 @@ void ColourClassicControl(HWND hWnd, bool dark) {
     }
 }
 
-// Record removed frame-style bits for restoration.
+// Record removed frame-style bits for restoration (guarded by g_stateLock).
 struct StyleFix {
-    HWND hWnd;
     LONG_PTR styleBits;
     LONG_PTR exStyleBits;
 };
-constexpr int kMaxStyleFixes = 64;
-StyleFix g_styleFixes[kMaxStyleFixes] = {};
+std::unordered_map<HWND, StyleFix> g_styleFixes;
 
 void NoteRemovedStyles(HWND hWnd, LONG_PTR styleBits, LONG_PTR exStyleBits) {
     std::lock_guard<std::mutex> lock(g_stateLock);
-    for (int i = 0; i < kMaxStyleFixes; i++) {
-        if (g_styleFixes[i].hWnd == hWnd) {
-            g_styleFixes[i].styleBits |= styleBits;
-            g_styleFixes[i].exStyleBits |= exStyleBits;
-            return;
-        }
-    }
-    for (int i = 0; i < kMaxStyleFixes; i++) {
-        if (!g_styleFixes[i].hWnd) {
-            g_styleFixes[i].hWnd = hWnd;
-            g_styleFixes[i].styleBits = styleBits;
-            g_styleFixes[i].exStyleBits = exStyleBits;
-            return;
-        }
-    }
+    StyleFix& fix = g_styleFixes[hWnd];
+    fix.styleBits |= styleBits;
+    fix.exStyleBits |= exStyleBits;
 }
 
 void RestoreRemovedStyles(HWND hWnd) {
@@ -768,18 +891,13 @@ void RestoreRemovedStyles(HWND hWnd) {
     LONG_PTR exStyleBits = 0;
     {
         std::lock_guard<std::mutex> lock(g_stateLock);
-        for (int i = 0; i < kMaxStyleFixes; i++) {
-            if (g_styleFixes[i].hWnd != hWnd) {
-                continue;
-            }
-            styleBits = g_styleFixes[i].styleBits;
-            exStyleBits = g_styleFixes[i].exStyleBits;
-            g_styleFixes[i] = {};
-            break;
+        const auto it = g_styleFixes.find(hWnd);
+        if (it == g_styleFixes.end()) {
+            return;
         }
-    }
-    if (!styleBits && !exStyleBits) {
-        return;
+        styleBits = it->second.styleBits;
+        exStyleBits = it->second.exStyleBits;
+        g_styleFixes.erase(it);
     }
     if (styleBits) {
         SetWindowLongPtrW(hWnd, GWL_STYLE,
@@ -789,7 +907,9 @@ void RestoreRemovedStyles(HWND hWnd) {
         SetWindowLongPtrW(hWnd, GWL_EXSTYLE,
                           GetWindowLongPtrW(hWnd, GWL_EXSTYLE) | exStyleBits);
     }
-    RefreshFrame(hWnd);
+    if (styleBits || exStyleBits) {
+        RefreshFrame(hWnd);
+    }
 }
 
 LRESULT CALLBACK ModSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
@@ -798,11 +918,7 @@ LRESULT CALLBACK ModSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
 void ForgetSubclass(HWND hWnd) {
     std::lock_guard<std::mutex> lock(g_stateLock);
     g_subclassed.erase(hWnd);
-    for (int i = 0; i < kMaxStyleFixes; i++) {
-        if (g_styleFixes[i].hWnd == hWnd) {
-            g_styleFixes[i] = {};
-        }
-    }
+    g_styleFixes.erase(hWnd);
 }
 
 bool IsSubclassed(HWND hWnd) {
@@ -944,12 +1060,15 @@ LRESULT HandleStrip(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
                     (entry && entry->valid &&
                      entry->rect.left == custom->rc.left &&
                      entry->rect.top == custom->rc.top);
-                if (isHot && custom->hdc) {
+                const bool isDown =
+                    (custom->uItemState & (CDIS_SELECTED | CDIS_CHECKED)) != 0;
+                if ((isHot || isDown) && custom->hdc) {
                     if (!g_hoverBrush) {
                         g_hoverBrush = CreateSolidBrush(kColorHover);
                     }
-                    if (g_hoverBrush) {
-                        FillRect(custom->hdc, &custom->rc, g_hoverBrush);
+                    HBRUSH fill = isDown ? PressedBrush() : g_hoverBrush;
+                    if (fill) {
+                        FillRect(custom->hdc, &custom->rc, fill);
                     }
                 }
                 // The native handler must see this before the toolbar draws.
@@ -1164,6 +1283,11 @@ void PaintTabStrip(HWND hWnd) {
                 if (brush) {
                     FillRect(dc, &tab, brush);
                 }
+                if (HBRUSH accent = AccentBrush()) {
+                    RECT bar = {tab.left, tab.top, tab.right,
+                                tab.top + ScaleForWindow(hWnd, 2)};
+                    FillRect(dc, &bar, accent);
+                }
                 selectedLeft = tab.left;
                 selectedRight = tab.right;
             }
@@ -1222,7 +1346,8 @@ LRESULT HandleTab(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     if (message == WM_PAINT) {
         TabEntry* entry = TabEntryFor(hWnd, false);
         if (!entry || !entry->usable) {
-            if (!RefreshTabEntry(hWnd) || !entry) {
+            // `entry` may have been null before the refresh; PaintTabStrip looks it up again.
+            if (!RefreshTabEntry(hWnd)) {
                 return DefSubclassProc(hWnd, message, wParam, lParam);
             }
         }
@@ -1230,8 +1355,12 @@ LRESULT HandleTab(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         return 0;
     }
 
+    // Mouse and keyboard input, plus selection and item changes made from code.
     if (message == WM_LBUTTONDOWN || message == WM_LBUTTONUP ||
-        message == WM_KEYUP) {
+        message == WM_KEYUP || message == TCM_SETCURSEL ||
+        message == TCM_INSERTITEMW || message == TCM_INSERTITEMA ||
+        message == TCM_DELETEITEM || message == TCM_DELETEALLITEMS ||
+        message == TCM_SETITEMW || message == TCM_SETITEMA) {
         LRESULT result =
             DefSubclassProc(hWnd, message, wParam, lParam);
         RefreshTabEntry(hWnd);
@@ -1295,6 +1424,7 @@ thread_local bool g_drawingMmcDescription = false;
 thread_local bool g_drawingActionsContent = false;
 thread_local bool g_drawingSummaryTitle = false;
 thread_local HWND g_drawingSummaryButton = nullptr;
+thread_local HWND g_drawingPushButton = nullptr;
 
 BOOL WINAPI DrawEdge_Hook(HDC dc, LPRECT rect, UINT edge, UINT flags) {
     if (!pDrawEdge) {
@@ -1410,29 +1540,17 @@ bool IsDiskManagementHeader(HWND hWnd) {
 
 bool IsMmcMdiButtonStrip(HWND hWnd);
 
-// Scope the non-owner-drawn Scheduler combo to its observed host hierarchy.
+// WinForms combo boxes (Task Scheduler pages) that use the native drawing:
+// drop-down lists and editable drop-downs, but not owner-drawn ones. The nesting
+// depth differs from page to page and is not checked.
 bool IsMmcSummaryCombo(HWND hWnd) {
-    if (!WindowClassStarts(hWnd, L"WindowsForms10.COMBOBOX.") ||
-        (GetWindowLongPtrW(hWnd, GWL_STYLE) & 3) != CBS_DROPDOWNLIST ||
-        (GetWindowLongPtrW(hWnd, GWL_STYLE) &
-            (CBS_OWNERDRAWFIXED | CBS_OWNERDRAWVARIABLE))) {
+    if (!WindowClassStarts(hWnd, L"WindowsForms10.COMBOBOX.")) {
         return false;
     }
-    HWND parent = hWnd;
-    for (int i = 0; i < 7; ++i) {
-        parent = GetParent(parent);
-        if (!WindowClassStarts(parent, L"WindowsForms10.Window.")) {
-            return false;
-        }
-    }
-    HWND atl = GetParent(parent);
-    HWND ax = atl ? GetParent(atl) : nullptr;
-    HWND ocx = ax ? GetParent(ax) : nullptr;
-    HWND mmcView = ocx ? GetParent(ocx) : nullptr;
-    return WindowClassStarts(atl, L"ATL:") &&
-           WindowClassStarts(ax, L"AtlAxWinEx") &&
-           WindowClassStarts(ocx, L"MMCOCXViewWindow") &&
-           WindowClassStarts(mmcView, L"MMCViewWindow");
+    const LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+    const LONG_PTR type = style & 3;
+    return (type == CBS_DROPDOWNLIST || type == CBS_DROPDOWN) &&
+           !(style & (CBS_OWNERDRAWFIXED | CBS_OWNERDRAWVARIABLE));
 }
 
 bool IsMmcSummaryComboPart(HWND combo, HWND part) {
@@ -1512,6 +1630,37 @@ bool IsMmcSummaryTitle(HWND hWnd) {
     }
     return IsWindowVisible(hWnd) && p.top == f.top && p.left == f.left &&
            p.right == f.right && p.bottom > p.top && f.bottom > p.bottom;
+}
+
+// Any WinForms window in this process. The parent chain cannot be used: the
+// page that is selected first is built under a parking window and only moved
+// into the snap-in view afterwards.
+bool IsHostedWinFormsWindow(HWND hWnd) {
+    return WindowClassStarts(hWnd, L"WindowsForms10.");
+}
+
+// Plain text push buttons: native, or the WinForms wrapper. Owner-drawn buttons
+// and the other button types keep their own drawing.
+bool IsTextPushButton(HWND hWnd) {
+    WCHAR cls[32] = {};
+    if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) {
+        return false;
+    }
+    if (wcscmp(cls, L"Button") != 0 &&
+        !WindowClassStarts(hWnd, L"WindowsForms10.BUTTON.")) {
+        return false;
+    }
+    const LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+    const LONG_PTR type = style & BS_TYPEMASK;
+    return (type == BS_PUSHBUTTON || type == BS_DEFPUSHBUTTON) &&
+           !(style & (BS_ICON | BS_BITMAP));
+}
+
+// An icon or bitmap can be assigned after creation; its glyph is drawn dark and
+// would vanish on the dark face, so such buttons are left alone.
+bool ButtonHasImage(HWND hWnd) {
+    return SendToControl(hWnd, BM_GETIMAGE, IMAGE_ICON, 0) != 0 ||
+           SendToControl(hWnd, BM_GETIMAGE, IMAGE_BITMAP, 0) != 0;
 }
 
 #if defined(_WIN64)
@@ -1651,6 +1800,17 @@ void ApplyToWindow(HWND hWnd) {
         InvalidateRect(hWnd, nullptr, TRUE);
     }
 
+    if (IsTextPushButton(hWnd) && SubclassWith(hWnd, WindowKind::PushButton)) {
+        InvalidateRect(hWnd, nullptr, TRUE);
+    }
+
+    // Last on purpose: a window takes only one subclass, so the specific
+    // handlers above (tab strip, summary label, combo, button) win.
+    if (IsHostedWinFormsWindow(hWnd) &&
+        SubclassWith(hWnd, WindowKind::WinFormsSurface)) {
+        InvalidateRect(hWnd, nullptr, TRUE);
+    }
+
     // Keep existing subclasses when handling the native owner-drawn description.
     WCHAR descriptionHostClass[64] = {};
     if (GetClassNameW(hWnd, descriptionHostClass, ARRAYSIZE(descriptionHostClass)) &&
@@ -1687,6 +1847,20 @@ HBRUSH TabSelectedBrush() {
         g_tabSelectedBrush = CreateSolidBrush(kColorTabSelected);
     }
     return g_tabSelectedBrush;
+}
+
+HBRUSH PressedBrush() {
+    if (!g_pressedBrush) {
+        g_pressedBrush = CreateSolidBrush(kColorPressed);
+    }
+    return g_pressedBrush;
+}
+
+HBRUSH AccentBrush() {
+    if (!g_accentBrush) {
+        g_accentBrush = CreateSolidBrush(kColorAccent);
+    }
+    return g_accentBrush;
 }
 
 // Repaint only the tree border; retain native geometry and input.
@@ -1750,8 +1924,15 @@ LRESULT HandleDiskHeader(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     return result;
 }
 
-// Add a subtle edge after the field's native paint.
+// Add a subtle edge after the field's native paint; the focused field also
+// gets an accent underline.
 LRESULT HandleField(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+
+    if (message == WM_SETFOCUS || message == WM_KILLFOCUS) {
+        LRESULT result = DefSubclassProc(hWnd, message, wParam, lParam);
+        RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_FRAME);
+        return result;
+    }
 
     if (message == WM_PAINT) {
         LRESULT result =
@@ -1762,11 +1943,57 @@ LRESULT HandleField(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
             RECT client = {};
             GetClientRect(hWnd, &client);
             FrameRect(dc, &client, brush);
+            HBRUSH accent = AccentBrush();
+            if (accent && GetFocus() == hWnd) {
+                RECT underline = {client.left, client.bottom - 2, client.right,
+                                  client.bottom};
+                FillRect(dc, &underline, accent);
+            }
+        }
+        if (dc) {
             ReleaseDC(hWnd, dc);
         }
         return result;
     }
 
+    return DefSubclassProc(hWnd, message, wParam, lParam);
+}
+
+// A thin sunken WinForms label is used as a section separator. The system draws
+// its 3D edge in white and grey; draw one line in the border colour instead.
+bool IsFormsSeparator(HWND hWnd) {
+    if (!WindowClassStarts(hWnd, L"WindowsForms10.STATIC.") ||
+        !(GetWindowLongPtrW(hWnd, GWL_EXSTYLE) &
+          (WS_EX_CLIENTEDGE | WS_EX_STATICEDGE))) {
+        return false;
+    }
+    RECT window = {};
+    if (!GetWindowRect(hWnd, &window)) {
+        return false;
+    }
+    const int width = window.right - window.left;
+    const int height = window.bottom - window.top;
+    return width > 0 && height > 0 && (height <= 6 || width <= 6);
+}
+
+LRESULT HandleFormsSurface(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_NCPAINT && g_backgroundBrush && IsFormsSeparator(hWnd)) {
+        RECT window = {};
+        HBRUSH line = LineBrush();
+        HDC dc = line && GetWindowRect(hWnd, &window) ? GetWindowDC(hWnd) : nullptr;
+        if (dc) {
+            const int width = window.right - window.left;
+            const int height = window.bottom - window.top;
+            RECT all = {0, 0, width, height};
+            FillRect(dc, &all, g_backgroundBrush);
+            RECT stroke = height <= width
+                              ? RECT{0, height / 2, width, height / 2 + 1}
+                              : RECT{width / 2, 0, width / 2 + 1, height};
+            FillRect(dc, &stroke, line);
+            ReleaseDC(hWnd, dc);
+            return 0;
+        }
+    }
     return DefSubclassProc(hWnd, message, wParam, lParam);
 }
 
@@ -1843,27 +2070,41 @@ void PaintGroupBox(HWND hWnd) {
     WCHAR caption[128] = {};
     GetWindowTextW(hWnd, caption, ARRAYSIZE(caption) - 1);
 
+    // DrawText measures '&' mnemonics correctly; GetTextExtentPoint32W does not.
     SIZE textSize = {};
     if (caption[0]) {
-        GetTextExtentPoint32W(dc, caption, lstrlenW(caption), &textSize);
+        RECT measure = {};
+        DrawTextW(dc, caption, -1, &measure, DT_CALCRECT | DT_SINGLELINE | DT_LEFT);
+        textSize.cx = measure.right - measure.left;
+        textSize.cy = measure.bottom - measure.top;
     }
 
     const int lineY = client.top + textSize.cy / 2;
 
     HGDIOBJ pen = CreatePen(PS_SOLID, 1, kColorLine);
+    if (!pen) {
+        if (oldFont) {
+            SelectObject(dc, oldFont);
+        }
+        EndPaint(hWnd, &ps);
+        return;
+    }
     HGDIOBJ oldPen = SelectObject(dc, pen);
     HGDIOBJ oldBrush = SelectObject(dc, GetStockObject(NULL_BRUSH));
 
     Rectangle(dc, client.left, lineY, client.right, client.bottom);
 
     if (caption[0] && g_backgroundBrush) {
-        RECT captionRect = {client.left + 6, client.top, 0,
+        const int inset = ScaleForWindow(hWnd, 6);
+        const int gap = ScaleForWindow(hWnd, 4);
+        RECT captionRect = {client.left + inset, client.top, 0,
                             client.top + textSize.cy + 2};
-        captionRect.right = captionRect.left + textSize.cx + 8;
+        captionRect.right = captionRect.left + textSize.cx + 2 * gap;
         FillRect(dc, &captionRect, g_backgroundBrush);
-        captionRect.left += 4;
+        captionRect.left += gap;
         DrawTextOn(dc, caption, &captionRect, DT_LEFT | DT_SINGLELINE | DT_VCENTER,
-                   kColorText, kColorBackground);
+                   IsWindowEnabled(hWnd) ? kColorText : kColorTextDisabled,
+                   kColorBackground);
     }
 
     SelectObject(dc, oldBrush);
@@ -2044,14 +2285,19 @@ LRESULT HandleDialog(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         message == WM_CTLCOLORBTN || message == WM_CTLCOLOREDIT ||
         message == WM_CTLCOLORLISTBOX || message == WM_CTLCOLORSCROLLBAR ||
         message == WM_CTLCOLORMSGBOX) {
+        // Editable fields that sit directly on the dialog get a raised fill so
+        // they stand out from the page; everything else keeps the page colour.
+        const bool field = message == WM_CTLCOLOREDIT && lParam &&
+                           GetParent(reinterpret_cast<HWND>(lParam)) == hWnd;
+        HBRUSH brush = field ? TabSelectedBrush() : g_backgroundBrush;
         if (wParam) {
             HDC dc = reinterpret_cast<HDC>(wParam);
             // Opaque text backgrounds provide a known colour for ClearType blending.
             SetBkMode(dc, OPAQUE);
             SetTextColor(dc, kColorText);
-            SetBkColor(dc, kColorBackground);
+            SetBkColor(dc, field ? kColorSurface : kColorBackground);
         }
-        return reinterpret_cast<LRESULT>(g_backgroundBrush);
+        return reinterpret_cast<LRESULT>(brush);
     }
 
     return DefSubclassProc(hWnd, message, wParam, lParam);
@@ -2092,8 +2338,22 @@ BOOL CALLBACK ReapplyChild(HWND hWnd, LPARAM) {
     }
 
     if (wcscmp(className, L"Edit") == 0) {
-        if (RemoveClientEdge(hWnd)) {
-            SubclassWith(hWnd, WindowKind::Field);
+        // The edit inside a combo box keeps the combo's own drawing.
+        WCHAR parentClass[32] = {};
+        HWND editParent = GetParent(hWnd);
+        const bool inCombo =
+            editParent &&
+            GetClassNameW(editParent, parentClass, ARRAYSIZE(parentClass)) &&
+            (wcscmp(parentClass, L"ComboBox") == 0 ||
+             wcsncmp(parentClass, L"ComboBoxEx", 10) == 0);
+        if (!inCombo) {
+            // The themed edit draws a light frame and a light read-only fill;
+            // classic painting follows the mod's colour messages instead.
+            SetWindowThemeQuiet(hWnd, L"", L"");
+            if (RemoveClientEdge(hWnd)) {
+                SubclassWith(hWnd, WindowKind::Field);
+            }
+            InvalidateRect(hWnd, nullptr, TRUE);
         }
     }
 
@@ -2170,6 +2430,7 @@ void ResetWindow(HWND hWnd) {
         // Restore the default DWM border colour during unload.
         DWORD border = DWMWA_COLOR_DEFAULT;
         DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &border, sizeof(border));
+        SetCaptionColours(hWnd, false);
         InvalidateRect(hWnd, nullptr, TRUE);
     }
 }
@@ -2434,9 +2695,9 @@ COLORREF MapSystemColour(int index) {
     case kColHighlightText:
         return kColorText;
     case kColGrayText:
-        return RGB(140, 140, 140);
+        return kColorTextDisabled;
     default:
-        return 0xffffffff;  // not remapped
+        return kNotMapped;
     }
 }
 
@@ -2495,12 +2756,12 @@ CreateHatchBrush_t pCreateHatchBrush = nullptr;
 HBRUSH WINAPI CreateHatchBrush_Hook(int hatch, COLORREF color) {
     if (!pCreateHatchBrush) return nullptr;
     HMODULE caller = nullptr;
-    if (g_active && color == RGB(0, 0, 128) &&
+    if (g_active && color == kColorDiskStockNavy &&
         GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                            reinterpret_cast<LPCWSTR>(__builtin_return_address(0)),
                            &caller) && caller && caller == GetModuleHandleW(L"dmview.ocx")) {
-        HBRUSH result = pCreateHatchBrush(hatch, RGB(55, 125, 230));
+        HBRUSH result = pCreateHatchBrush(hatch, kColorAccent);
         if (result) return result;
     }
     return pCreateHatchBrush(hatch, color);
@@ -2565,12 +2826,12 @@ bool DrawMmcMdiButton(HDC dc, int part, int state, LPCRECT bounds, LPCRECT clip)
         RestoreDC(dc, saved);
         return false;
     }
-    COLORREF face = RGB(45, 45, 45);
-    if (state == 2) face = part == WP_MDICLOSEBUTTON ? RGB(196, 43, 28) : kColorHover;
-    if (state == 3) face = part == WP_MDICLOSEBUTTON ? RGB(145, 32, 23) : RGB(76, 78, 84);
+    COLORREF face = kColorSurface;
+    if (state == 2) face = part == WP_MDICLOSEBUTTON ? kColorCloseHot : kColorHover;
+    if (state == 3) face = part == WP_MDICLOSEBUTTON ? kColorCloseDown : kColorPressed;
     COLORREF edge = part == WP_MDICLOSEBUTTON && (state == 2 || state == 3)
-                        ? face : RGB(75, 75, 75);
-    COLORREF ink = state == 4 ? RGB(130, 130, 130) : kColorText;
+                        ? face : kColorLine;
+    COLORREF ink = state == 4 ? kColorTextDisabled : kColorText;
     HBRUSH brush = reinterpret_cast<HBRUSH>(GetStockObject(DC_BRUSH));
     HPEN pen = CreatePen(PS_SOLID, height >= 32 ? 2 : 1, ink);
     if (!brush || !pen || SetDCBrushColor(dc, face) == CLR_INVALID) {
@@ -2631,16 +2892,48 @@ HRESULT WINAPI DrawThemeBackground_Hook(HTHEME theme, HDC dc, int part, int stat
         DrawMmcMdiButton(dc, part, state, bounds, clip)) {
         return S_OK;
     }
-    if (g_active && g_drawingSummaryButton && dc && bounds &&
-        part == BP_PUSHBUTTON && state >= PBS_NORMAL && state <= PBS_DEFAULTED &&
-        GetClientRect(g_drawingSummaryButton, &client) &&
+    // Hosted WinForms pages take their body and group-box frame from the light
+    // theme; draw them in the mod palette while one is painting.
+    if (g_active && g_formsPaintDepth > 0 && dc && bounds) {
+        constexpr int kTabPane = 9, kTabBody = 10, kTabAeroWizardBody = 11;
+        const bool pageBody = part == kTabPane || part == kTabBody ||
+                              part == kTabAeroWizardBody;
+        const bool groupFrame =
+            part == BP_GROUPBOX && (state == GBS_NORMAL || state == GBS_DISABLED);
+        HBRUSH brush = pageBody ? g_backgroundBrush : groupFrame ? g_lineBrush : nullptr;
+        const int saved = brush ? SaveDC(dc) : 0;
+        if (saved) {
+            if (clip) {
+                IntersectClipRect(dc, clip->left, clip->top, clip->right, clip->bottom);
+            }
+            const BOOL drawn = pageBody ? FillRect(dc, bounds, brush)
+                                        : FrameRect(dc, bounds, brush);
+            RestoreDC(dc, saved);
+            if (drawn) {
+                return S_OK;
+            }
+        }
+    }
+    // PBS_DEFAULTED_ANIMATING (6) is the pulsing frame of the default button.
+    constexpr int kPushDefaultedAnimating = 6;
+    HWND button = g_drawingPushButton ? g_drawingPushButton : g_drawingSummaryButton;
+    if (g_active && button && dc && bounds &&
+        part == BP_PUSHBUTTON && state >= PBS_NORMAL &&
+        state <= kPushDefaultedAnimating &&
+        GetClientRect(button, &client) &&
         bounds->right - bounds->left == client.right - client.left &&
         bounds->bottom - bounds->top == client.bottom - client.top) {
-        HBRUSH fill = state == PBS_DISABLED ? g_backgroundBrush : g_tabSelectedBrush;
-        if (state == PBS_HOT || state == PBS_PRESSED) {
+        HBRUSH fill = g_tabSelectedBrush;
+        if (state == PBS_DISABLED) {
+            fill = g_backgroundBrush;
+        } else if (state == PBS_PRESSED) {
+            fill = g_pressedBrush;
+        } else if (state == PBS_HOT) {
             fill = g_hoverBrush;
         }
-        HBRUSH edge = g_lineBrush;
+        // The default button keeps an accent frame.
+        HBRUSH edge = (state == PBS_DEFAULTED || state == kPushDefaultedAnimating)
+                          ? g_accentBrush : g_lineBrush;
         int saved = SaveDC(dc);
         if (saved && fill && edge) {
             if (clip) {
@@ -2658,6 +2951,62 @@ HRESULT WINAPI DrawThemeBackground_Hook(HTHEME theme, HDC dc, int part, int stat
     }
     return pDrawThemeBackground ? pDrawThemeBackground(theme, dc, part, state, bounds, clip)
                                 : E_FAIL;
+}
+
+// Push button caption: the theme text colour is black, so while a scoped button
+// paints, its caption is drawn in the mod palette.
+using DrawThemeTextEx_t = decltype(&DrawThemeTextEx);
+using DrawThemeText_t = decltype(&DrawThemeText);
+DrawThemeTextEx_t pDrawThemeTextEx = nullptr;
+DrawThemeText_t pDrawThemeText = nullptr;
+
+bool PushButtonTextColour(HDC dc, int part, int state, COLORREF* colour) {
+    if (!g_active || !g_drawingPushButton || !dc || part != BP_PUSHBUTTON) {
+        return false;
+    }
+    *colour = state == PBS_DISABLED ? kColorTextDisabled : kColorText;
+    return true;
+}
+
+HRESULT WINAPI DrawThemeTextEx_Hook(HTHEME theme, HDC dc, int part, int state,
+                                    LPCWSTR text, int length, DWORD flags,
+                                    LPRECT rect, const DTTOPTS* options) {
+    if (!pDrawThemeTextEx) {
+        return E_FAIL;
+    }
+    COLORREF colour = 0;
+    if (PushButtonTextColour(dc, part, state, &colour)) {
+        DTTOPTS merged = {};
+        if (options) {
+            memcpy(&merged, options,
+                   options->dwSize < sizeof(merged) ? options->dwSize : sizeof(merged));
+        }
+        merged.dwSize = sizeof(merged);
+        merged.dwFlags |= DTT_TEXTCOLOR;
+        merged.crText = colour;
+        return pDrawThemeTextEx(theme, dc, part, state, text, length, flags, rect,
+                                &merged);
+    }
+    return pDrawThemeTextEx(theme, dc, part, state, text, length, flags, rect, options);
+}
+
+HRESULT WINAPI DrawThemeText_Hook(HTHEME theme, HDC dc, int part, int state,
+                                  LPCWSTR text, int length, DWORD flags,
+                                  DWORD flags2, LPCRECT rect) {
+    if (!pDrawThemeText) {
+        return E_FAIL;
+    }
+    COLORREF colour = 0;
+    if (pDrawThemeTextEx && rect && PushButtonTextColour(dc, part, state, &colour)) {
+        DTTOPTS options = {};
+        options.dwSize = sizeof(options);
+        options.dwFlags = DTT_TEXTCOLOR;
+        options.crText = colour;
+        RECT copy = *rect;
+        return pDrawThemeTextEx(theme, dc, part, state, text, length, flags, &copy,
+                                &options);
+    }
+    return pDrawThemeText(theme, dc, part, state, text, length, flags, flags2, rect);
 }
 
 // Adjust only the scoped Scheduler summary title foreground.
@@ -2699,8 +3048,8 @@ DWORD WINAPI GetSysColor_Hook(int nIndex) {
         IsExtendedViewColourCaller(__builtin_return_address(0))) {
         return nIndex == kColCaptionText ? kColorText : kColorBackground;
     }
-    COLORREF mapped = g_active ? MapSystemColour(nIndex) : 0xffffffff;
-    if (mapped != 0xffffffff) {
+    COLORREF mapped = g_active ? MapSystemColour(nIndex) : kNotMapped;
+    if (mapped != kNotMapped) {
         return mapped;
     }
     return pGetSysColor(nIndex);
@@ -2909,8 +3258,8 @@ void QueueMmcViewRepaint() {
 }
 
 // Subclass reference data identifies the handler; WM_NCDESTROY removes bookkeeping.
-LRESULT CALLBACK ModSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
-                                 LPARAM lParam, DWORD_PTR refData) {
+LRESULT ModSubclassInner(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam,
+                         DWORD_PTR refData) {
     const WindowKind kind = static_cast<WindowKind>(refData);
 
     if (message == WM_NCDESTROY) {
@@ -2954,20 +3303,20 @@ LRESULT CALLBACK ModSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
 
     // Let the native combo handler run before adjusting the scoped colour response.
     if ((kind == WindowKind::WinFormsCombo ||
-         kind == WindowKind::WinFormsComboParent) &&
+         kind == WindowKind::WinFormsComboParent ||
+         kind == WindowKind::WinFormsSurface) &&
         (message == WM_CTLCOLORSTATIC || message == WM_CTLCOLOREDIT ||
          message == WM_CTLCOLORLISTBOX) && wParam && lParam &&
         g_backgroundBrush) {
         HWND part = reinterpret_cast<HWND>(lParam);
         HWND combo = kind == WindowKind::WinFormsCombo ? hWnd : part;
-        if (kind == WindowKind::WinFormsComboParent &&
-            !IsMmcSummaryCombo(combo)) {
+        if (kind != WindowKind::WinFormsCombo && !IsMmcSummaryCombo(combo)) {
             combo = GetParent(part);
         }
         if (IsMmcSummaryComboPart(combo, part)) {
             DefSubclassProc(hWnd, message, wParam, lParam);
             HDC dc = reinterpret_cast<HDC>(wParam);
-            SetTextColor(dc, IsWindowEnabled(combo) ? kColorText : RGB(140, 140, 140));
+            SetTextColor(dc, IsWindowEnabled(combo) ? kColorText : kColorTextDisabled);
             SetBkColor(dc, kColorBackground);
             return reinterpret_cast<LRESULT>(g_backgroundBrush);
         }
@@ -2998,6 +3347,16 @@ LRESULT CALLBACK ModSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
         g_actionsEraseDc = reinterpret_cast<HDC>(wParam);
         LRESULT result = DefSubclassProc(hWnd, message, wParam, lParam);
         g_actionsEraseDc = previous;
+        return result;
+    }
+
+    if (kind == WindowKind::PushButton &&
+        (message == WM_PAINT || message == WM_PRINTCLIENT) &&
+        !ButtonHasImage(hWnd)) {
+        HWND previous = g_drawingPushButton;
+        g_drawingPushButton = hWnd;
+        LRESULT result = DefSubclassProc(hWnd, message, wParam, lParam);
+        g_drawingPushButton = previous;
         return result;
     }
 
@@ -3065,11 +3424,39 @@ LRESULT CALLBACK ModSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
     case WindowKind::WinFormsCombo:
     case WindowKind::WinFormsComboParent:
     case WindowKind::WinFormsRefresh:
+    case WindowKind::PushButton:
         return DefSubclassProc(hWnd, message, wParam, lParam);
+    case WindowKind::WinFormsSurface:
+        return HandleFormsSurface(hWnd, message, wParam, lParam);
     case WindowKind::DiskHeader:
         return HandleDiskHeader(hWnd, message, wParam, lParam);
     }
     return DefSubclassProc(hWnd, message, wParam, lParam);
+}
+
+bool IsHostedWinFormsKind(WindowKind kind) {
+    return kind == WindowKind::WinFormsSurface || kind == WindowKind::WinFormsLabel ||
+           kind == WindowKind::WinFormsCombo ||
+           kind == WindowKind::WinFormsComboParent ||
+           kind == WindowKind::WinFormsRefresh;
+}
+
+// Marks the paint and erase messages of hosted WinForms windows so the theme
+// hooks can tell a Task Scheduler page from every other themed drawing.
+LRESULT CALLBACK ModSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
+                                 LPARAM lParam, DWORD_PTR refData) {
+    const bool scoped =
+        g_active && IsHostedWinFormsKind(static_cast<WindowKind>(refData)) &&
+        (message == WM_PAINT || message == WM_ERASEBKGND ||
+         message == WM_PRINTCLIENT || message == WM_PRINT);
+    if (scoped) {
+        ++g_formsPaintDepth;
+    }
+    const LRESULT result = ModSubclassInner(hWnd, message, wParam, lParam, refData);
+    if (scoped) {
+        --g_formsPaintDepth;
+    }
+    return result;
 }
 
 void LoadSettings() {
@@ -3215,7 +3602,9 @@ BOOL WINAPI ActionsGradient_Hook(HDC dc, PTRIVERTEX vertices, ULONG count,
             const bool isMid = MatchesActionsVertex(vertices[i], middle);
             sawFirst |= isFirst; sawLast |= isLast;
             match &= isFirst || isLast || isMid;
-            const COLOR16 shade = static_cast<COLOR16>((isFirst ? 46 : isLast ? 38 : 42) << 8);
+            const COLOR16 shade = static_cast<COLOR16>(
+                (isFirst ? kActionsShadeTop : isLast ? kActionsShadeBottom
+                                                      : kActionsShadeMiddle) << 8);
             copy[i].Red = copy[i].Green = copy[i].Blue = shade;
         }
         if (match && sawFirst && sawLast &&
@@ -3290,7 +3679,7 @@ BOOL WINAPI ActionsExtText_Hook(HDC dc, int x, int y, UINT options, const RECT* 
     if (g_active && dc && rect && !text && count == 0 &&
         options == ETO_OPAQUE && GetBkColor(dc) == RGB(0, 0, 0) &&
         IsDiskSelectedFillOnStack()) {
-        COLORREF old = SetBkColor(dc, RGB(80, 120, 160));
+        COLORREF old = SetBkColor(dc, kColorDiskSelected);
         if (old != CLR_INVALID) {
             BOOL result = pActionsExtText(dc, x, y, options, rect, text, count, dx);
             SetBkColor(dc, old);
@@ -3373,7 +3762,18 @@ void InstallHooks() {
         GetProcAddress(uxtheme, "DrawThemeBackground")) : nullptr;
     if (!drawThemeBackground || !WindhawkUtils::SetFunctionHook(
             drawThemeBackground, DrawThemeBackground_Hook, &pDrawThemeBackground)) {
-        Wh_Log(L"could not hook DrawThemeBackground; Task Scheduler button keeps its original face");
+        Wh_Log(L"could not hook DrawThemeBackground; push buttons keep their original face");
+    }
+    auto drawThemeTextEx = uxtheme ? reinterpret_cast<DrawThemeTextEx_t>(
+        GetProcAddress(uxtheme, "DrawThemeTextEx")) : nullptr;
+    auto drawThemeText = uxtheme ? reinterpret_cast<DrawThemeText_t>(
+        GetProcAddress(uxtheme, "DrawThemeText")) : nullptr;
+    if (!drawThemeTextEx || !WindhawkUtils::SetFunctionHook(
+            drawThemeTextEx, DrawThemeTextEx_Hook, &pDrawThemeTextEx)) {
+        Wh_Log(L"could not hook DrawThemeTextEx; push button captions may stay dark");
+    } else if (!drawThemeText || !WindhawkUtils::SetFunctionHook(
+                   drawThemeText, DrawThemeText_Hook, &pDrawThemeText)) {
+        Wh_Log(L"could not hook DrawThemeText; push button captions may stay dark");
     }
     if (!WindhawkUtils::SetFunctionHook(DrawTextExW, DrawTextExW_Hook,
                                         &pDrawTextExW)) {
@@ -3437,7 +3837,7 @@ void Activate() {
     }
     for (int i = 0; i < kSysColourCount; i++) {
         COLORREF mapped = MapSystemColour(i);
-        if (mapped != 0xffffffff && !g_sysBrushes[i]) {
+        if (mapped != kNotMapped && !g_sysBrushes[i]) {
             g_sysBrushes[i] = CreateSolidBrush(mapped);
         }
     }
@@ -3448,6 +3848,8 @@ void Activate() {
     }
     LineBrush();
     TabSelectedBrush();
+    PressedBrush();
+    AccentBrush();
 
     Wh_Log(L"init: brushes ready");
     pSetPreferredAppMode(PreferredAppModeForceDark);
@@ -3463,7 +3865,7 @@ void Activate() {
 }  // namespace
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"MMC Dark Mode 1.0");
+    Wh_Log(L"MMC Dark Mode 1.4");
 
     LoadSettings();
     Wh_Log(L"init: settings read");
