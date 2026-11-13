@@ -6167,6 +6167,8 @@ DWORD CompositorProcessId() {
 
 // ---- Liquid glass: windowed capture and GPU refraction ------------------
 struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
+    // LensConstants::bodyMode. The shader compares the same numbers.
+    enum class BodyMode { Taskbar = 0, Composed = 3, Native = 4, Acrylic = 6 };
     struct LensConstants {
         float imageSize[2]{};
         float center[2]{};
@@ -6188,7 +6190,7 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
         float alertTintOpacity{};
         float lensBlend{};
         uint32_t compositorClip{};
-        float bodyMode{}; // 0: taskbar; 3: composed; 4: Native; 6: Acrylic.
+        float bodyMode{}; // A BodyMode.
         float clipPadding[2]{};
         float bodyMaterialTint[4]{};
         float fluidPointer[4]{}; // Position and settled displacement, output pixels.
@@ -8101,7 +8103,7 @@ float4 ps(VertexOutput input) : SV_Target {
     void UpdateSources() {
         if (bodyVisual) { SetBodyVisual(bodyVisual); return; }
         bool editorBody{};
-        { std::lock_guard lock(mutex); editorBody = lens.bodyMode != 0; }
+        { std::lock_guard lock(mutex); editorBody = lens.bodyMode != float(BodyMode::Taskbar); }
         if (editorBody) { UpdateSources({}); return; }
         UpdateSources(CandidateWindows());
     }
@@ -8366,7 +8368,7 @@ float4 ps(VertexOutput input) : SV_Target {
     }
 
     bool StripSourceLocked(Source const& source) const {
-        return lens.bodyMode == 0 && source.window && source.window == GetShellWindow();
+        return lens.bodyMode == float(BodyMode::Taskbar) && source.window && source.window == GetShellWindow();
     }
 
     RECT NeededTexelsLocked(Source const& source) const {
@@ -8548,7 +8550,7 @@ float4 ps(VertexOutput input) : SV_Target {
         CommitMotionObservationLocked(std::chrono::steady_clock::now());
         float clear[]{0, 0, 0, 0};
         float native[]{lens.bodyMaterialTint[0],lens.bodyMaterialTint[1],lens.bodyMaterialTint[2],1};
-        context->ClearRenderTargetView(compositeTarget.get(), lens.bodyMode != 0 ? native : clear);
+        context->ClearRenderTargetView(compositeTarget.get(), lens.bodyMode != float(BodyMode::Taskbar) ? native : clear);
         int taskbarWidth = taskbarRect.right - taskbarRect.left;
         int taskbarHeight = taskbarRect.bottom - taskbarRect.top;
         if (taskbarWidth <= 0 || taskbarHeight <= 0) return;
@@ -8666,7 +8668,7 @@ float4 ps(VertexOutput input) : SV_Target {
         ID3D11ShaderResourceView* panelInput=compositeView.get();
         auto effectsLens = lens;
         UpdateEffectsLocked(effectsLens);
-        if (lens.bodyMode != 0) {
+        if (lens.bodyMode != float(BodyMode::Taskbar)) {
             auto bodyLens=effectsLens;
             bodyLens.lensCount=0; // Body first; no panels can feed back into it.
             context->ClearRenderTargetView(renderedBodyTarget.get(),clear);
@@ -8696,8 +8698,8 @@ float4 ps(VertexOutput input) : SV_Target {
             std::chrono::steady_clock::now());
         std::copy_n(effectsLens.fluidPointer, 4, presentLens.fluidPointer);
         std::copy_n(effectsLens.glintClock, 4, presentLens.glintClock);
-        if (presentLens.bodyMode != 0)
-            presentLens.bodyMode=3; // Compose panels over the completed body, without shading it twice.
+        if (presentLens.bodyMode != float(BodyMode::Taskbar))
+            presentLens.bodyMode=float(BodyMode::Composed); // Compose panels over the completed body, without shading it twice.
         if (haveCompositorBounds) {
             for (int axis=0; axis<2; ++axis) {
                 presentLens.halfSize[axis] = compositorBounds[axis+2] * geometryScale / 2;
@@ -9457,7 +9459,7 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
             editor.desktopRenderer=std::move(renderer);
         }
         LiquidRenderer::LensConstants desktop{};
-        desktop.bodyMode=4; // Unshaded, opaque input to the native material.
+        desktop.bodyMode=float(LiquidRenderer::BodyMode::Native); // Unshaded, opaque input to the native material.
         desktop.center[0]=desktop.halfSize[0]=width/2.0f;
         desktop.center[1]=desktop.halfSize[1]=height/2.0f;
         if (!editor.desktopRenderer->UpdateGeometry(rect,width,height,desktop))
@@ -9487,7 +9489,7 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
         lens.center[1] = lens.halfSize[1] = height / 2.0f;
         lens.radius = windowRadius * scale;
         auto const& ui = editor.savedValues;
-        lens.bodyMode = 6; // Acrylic.
+        lens.bodyMode = float(LiquidRenderer::BodyMode::Acrylic);
         lens.optics = ReadUiLiquidSettings(ui, scale);
         ApplyBorder(lens, ReadBorder(ui, L"ui.bodyBorder"), scale);
         std::fill_n(lens.bodyMaterialTint, 3, dark ? 32.0f / 255 : 243.0f / 255);
