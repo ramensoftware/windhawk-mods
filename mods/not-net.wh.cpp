@@ -580,6 +580,7 @@ struct CycleConfig {
     CycleRunMode runMode = CycleRunMode::UntilStopped;
     uint64_t runValue = 0; // cycle count for ForCycles, or total ms for ForDuration
     bool focusedOnly = true;
+    bool allowWhenUnfocused = true;
     uint64_t targetEndUtcMs = 0; // >0 when synced with Windows clock
     Direction direction = Direction::FullyOffline;
 };
@@ -598,6 +599,7 @@ struct CycleStatusSnapshot {
     CycleRunMode runMode = CycleRunMode::UntilStopped;
     uint64_t totalRemainingMs = 0;
     bool focusedOnly = true;
+    bool allowWhenUnfocused = true;
     uint64_t blockMs = 10000;
     uint64_t allowMs = 5000;
 };
@@ -1584,6 +1586,7 @@ static CycleStatusSnapshot BuildSnapshotLocked(const CycleRuntime& rt, double no
     snap.targetCycles = (rt.cfg.runMode == CycleRunMode::ForCycles) ? rt.cfg.runValue : 0;
     snap.runMode = rt.cfg.runMode;
     snap.focusedOnly = rt.cfg.focusedOnly;
+    snap.allowWhenUnfocused = rt.cfg.allowWhenUnfocused;
     snap.blockMs = rt.cfg.blockMs;
     snap.allowMs = rt.cfg.allowMs;
 
@@ -1648,10 +1651,18 @@ static bool StartCycleForApp(const std::wstring& exePath, const CycleConfig& cfg
         incChildren = g_settings.includeChildProcesses;
     }
 
-    // Always starts with Blocked
-    if (!ApplyBlock(exePath, cfg.direction, incChildren, true)) {
-        outErr = g_statusBanner.empty() ? L"Failed to apply initial block." : g_statusBanner;
-        return false;
+    bool startUnfocusedAllowed = false;
+    {
+        std::lock_guard<std::mutex> lk(g_cycleMtx);
+        startUnfocusedAllowed = (cfg.focusedOnly && cfg.allowWhenUnfocused && g_cycleFgExe != low);
+    }
+
+    // Always starts with Blocked unless focusedOnly + allowWhenUnfocused and app is currently unfocused
+    if (!startUnfocusedAllowed) {
+        if (!ApplyBlock(exePath, cfg.direction, incChildren, true)) {
+            outErr = g_statusBanner.empty() ? L"Failed to apply initial block." : g_statusBanner;
+            return false;
+        }
     }
 
     double nowMs = QpcNowMs();
@@ -1794,6 +1805,7 @@ static bool GetWidgetCycleTarget(CycleStatusSnapshot& outSnap) {
 static void NotifyCycleFocusChanged(const std::wstring& fgExeLower) {
     double nowMs = QpcNowMs();
     bool changed = false;
+    std::vector<CyclePendingAction> focusActions;
     {
         std::lock_guard<std::mutex> lk(g_cycleMtx);
         if (g_cycleFgExe == fgExeLower) return;
@@ -1810,6 +1822,9 @@ static void NotifyCycleFocusChanged(const std::wstring& fgExeLower) {
             if (!shouldBeFocused && !rt.pausedByFocus) {
                 if (!rt.pausedByUser) rt.pauseStartMs = nowMs;
                 rt.pausedByFocus = true;
+                if (rt.cfg.allowWhenUnfocused && rt.phase == CyclePhase::Blocked) {
+                    focusActions.push_back({CyclePendingAction::SwitchAllow, rt.displayPath, rt.cfg.direction, rt.includeChildren});
+                }
                 changed = true;
             } else if (shouldBeFocused && rt.pausedByFocus) {
                 rt.pausedByFocus = false;
@@ -1821,8 +1836,18 @@ static void NotifyCycleFocusChanged(const std::wstring& fgExeLower) {
                         rt.totalEndMs += pausedDelta;
                     }
                 }
+                if (rt.cfg.allowWhenUnfocused && rt.phase == CyclePhase::Blocked) {
+                    focusActions.push_back({CyclePendingAction::SwitchBlock, rt.displayPath, rt.cfg.direction, rt.includeChildren});
+                }
                 changed = true;
             }
+        }
+    }
+    for (const auto& act : focusActions) {
+        if (act.kind == CyclePendingAction::SwitchAllow) {
+            ApplyAllow(act.displayPath);
+        } else if (act.kind == CyclePendingAction::SwitchBlock) {
+            ApplyBlock(act.displayPath, act.dir, act.includeChildren, false);
         }
     }
     if (changed) {
@@ -3393,7 +3418,7 @@ struct CycleHitRect {
     RECT rc{};
     int id = 0;
     enum Kind {
-                None = 0, InputBox, RunDropdown, SyncClockToggle, ClockFormat12h, FocusToggle, CancelBtn, PrimaryBtn
+                None = 0, InputBox, RunDropdown, SyncClockToggle, ClockFormat12h, FocusToggle, AllowUnfocusedToggle, CancelBtn, PrimaryBtn
     } kind = None;
     int fieldId = CF_NONE;
 };
@@ -3434,6 +3459,7 @@ struct CyclePopupState {
 
     int runModeIdx = 0; // 0=Until stopped, 1=For N cycles, 2=For a set time
     bool focusedOnly = true;
+    bool allowWhenUnfocused = true;
 
     int focusedField = CF_BLK_S;
     bool replaceOnType = false;
@@ -3837,6 +3863,9 @@ static void LayoutCyclePopup(CyclePopupState* st, UINT dpi, bool animateResize) 
     y += DpiScale(16, dpi);
     int chkH = DpiScale(22, dpi);
     y += chkH + DpiScale(8, dpi);
+    if (st->focusedOnly) {
+        y += chkH + DpiScale(8, dpi);
+    }
 
     int sumH = DpiScale(16, dpi);
     st->rcSummary = {pad, y, winW - pad, y + sumH};
@@ -3984,13 +4013,17 @@ static void PaintCyclePopup(HWND hwnd, CyclePopupState* st) {
 
             Gdiplus::RectF tRf((Gdiplus::REAL)r.left, (Gdiplus::REAL)r.top,
                                (Gdiplus::REAL)(r.right - r.left), (Gdiplus::REAL)(r.bottom - r.top));
-            const std::wstring& disp = txt.empty() ? L"0" : txt;
-            g.DrawString(disp.c_str(), -1, &numFont, tRf, &sfCenter, &whiteBr);
+            bool isEmpty = txt.empty();
+            const std::wstring& disp = isEmpty ? L"0" : txt;
+            g.DrawString(disp.c_str(), -1, &numFont, tRf, &sfCenter, isEmpty ? &mutedBr : &whiteBr);
 
             if (st->focusedField == fieldId && st->caretVisible && GetFocus() == hwnd) {
-                Gdiplus::RectF measured{};
-                g.MeasureString(disp.c_str(), -1, &numFont, Gdiplus::PointF(0, 0), &measured);
-                Gdiplus::REAL cx = (Gdiplus::REAL)r.left + ((Gdiplus::REAL)(r.right - r.left) + measured.Width) * 0.5f + 1.0f;
+                Gdiplus::REAL cx = (Gdiplus::REAL)r.left + (Gdiplus::REAL)(r.right - r.left) * 0.5f;
+                if (!isEmpty) {
+                    Gdiplus::RectF measured{};
+                    g.MeasureString(disp.c_str(), -1, &numFont, Gdiplus::PointF(0, 0), &measured);
+                    cx = (Gdiplus::REAL)r.left + ((Gdiplus::REAL)(r.right - r.left) + measured.Width) * 0.5f + 1.0f;
+                }
                 cx = std::min<Gdiplus::REAL>(cx, (Gdiplus::REAL)(r.right - DpiScale(6, dpi)));
                 Gdiplus::Pen caretPen(Gdiplus::Color(235, 248, 248, 250), 1.5f);
                 g.DrawLine(&caretPen, cx, (Gdiplus::REAL)(r.top + DpiScale(8, dpi)), cx, (Gdiplus::REAL)(r.bottom - DpiScale(8, dpi)));
@@ -4157,6 +4190,26 @@ static void PaintCyclePopup(HWND hwnd, CyclePopupState* st) {
         st->hits.push_back({chkHit, 2, CycleHitRect::FocusToggle, CF_NONE});
         y += chkH + DpiScale(8, dpi);
 
+        if (st->focusedOnly) {
+            int subPad = pad;
+            int subBoxY = y + (chkH - boxSz) / 2;
+            RECT subHit{subPad, y, w - pad, y + chkH};
+            if (st->allowWhenUnfocused) {
+                FillRoundedRect(g, terraBr, (Gdiplus::REAL)subPad, (Gdiplus::REAL)subBoxY, (Gdiplus::REAL)boxSz, (Gdiplus::REAL)boxSz, chkRad);
+                Gdiplus::RectF subCkRf((Gdiplus::REAL)subPad, (Gdiplus::REAL)subBoxY, (Gdiplus::REAL)boxSz, (Gdiplus::REAL)boxSz);
+                g.DrawString(L"\xE73E", -1, &glyphFont, subCkRf, &sfCenter, &whiteBr);
+            } else {
+                FillRoundedRect(g, (st->hoverId == 7) ? surfHoverBr : surfRestBr,
+                                (Gdiplus::REAL)subPad, (Gdiplus::REAL)subBoxY, (Gdiplus::REAL)boxSz, (Gdiplus::REAL)boxSz, chkRad);
+                DrawRoundedRect(g, borderRestPen, (Gdiplus::REAL)subPad, (Gdiplus::REAL)subBoxY, (Gdiplus::REAL)boxSz, (Gdiplus::REAL)boxSz, chkRad);
+            }
+            Gdiplus::RectF subTxt((Gdiplus::REAL)(subPad + boxSz + DpiScale(10, dpi)), (Gdiplus::REAL)y,
+                                  (Gdiplus::REAL)(w - pad - (subPad + boxSz + DpiScale(10, dpi))), (Gdiplus::REAL)chkH);
+            g.DrawString(L"Allow internet when out of focus", -1, &uiFont, subTxt, &sfLeft, &labelBr);
+            st->hits.push_back({subHit, 7, CycleHitRect::AllowUnfocusedToggle, CF_NONE});
+            y += chkH + DpiScale(8, dpi);
+        }
+
         // Live summary
         Gdiplus::RectF sumRf((Gdiplus::REAL)st->rcSummary.left, (Gdiplus::REAL)st->rcSummary.top,
                              (Gdiplus::REAL)(st->rcSummary.right - st->rcSummary.left),
@@ -4231,6 +4284,7 @@ static void ExecuteCyclePrimaryAction(CyclePopupState* st) {
         }
     }
     cfg.focusedOnly = st->focusedOnly;
+    cfg.allowWhenUnfocused = st->focusedOnly && st->allowWhenUnfocused;
     cfg.direction = st->direction;
 
     std::wstring err;
@@ -4698,6 +4752,10 @@ static LRESULT CALLBACK CyclePopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
                     UpdateCyclePopupSummary(st);
                 } else if (h.kind == CycleHitRect::FocusToggle) {
                     st->focusedOnly = !st->focusedOnly;
+                    LayoutCyclePopup(st, GetDpiForWindow(hwnd), true);
+                    UpdateCyclePopupSummary(st);
+                } else if (h.kind == CycleHitRect::AllowUnfocusedToggle) {
+                    st->allowWhenUnfocused = !st->allowWhenUnfocused;
                     InvalidateRect(hwnd, &h.rc, FALSE);
                     UpdateCyclePopupSummary(st);
                 } else if (h.kind == CycleHitRect::CancelBtn) {
@@ -4719,6 +4777,8 @@ static LRESULT CALLBACK CyclePopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
                     if (st->replaceOnType) {
                         pTxt->clear();
                         st->replaceOnType = false;
+                    } else if (st->focusedField != CF_CLK_H && st->focusedField != CF_CLK_M && *pTxt == L"0") {
+                        pTxt->clear();
                     }
                     size_t maxLen = (st->focusedField == CF_CLK_H || st->focusedField == CF_CLK_M) ? 2 : 6;
                     if (st->focusedField == CF_CLK_H || st->focusedField == CF_CLK_M) {
@@ -4764,12 +4824,10 @@ static LRESULT CALLBACK CyclePopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
                 RECT fRc{};
                 if (std::wstring* pTxt = GetFieldTextPtr(st, st->focusedField, &fRc)) {
                     pTxt->clear();
+                    st->replaceOnType = false;
                     if (st->focusedField == CF_CLK_H || st->focusedField == CF_CLK_M) {
                         st->clockEditing = true;
                         SetTimer(hwnd, TIMER_CYCLE_CLOCK_COMMIT, 1500, nullptr);
-                    } else {
-                        *pTxt = L"0";
-                        st->replaceOnType = true;
                     }
                     st->caretVisible = true;
                     InvalidateRect(hwnd, &fRc, FALSE);
@@ -4786,7 +4844,6 @@ static LRESULT CALLBACK CyclePopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
                         SetTimer(hwnd, TIMER_CYCLE_CLOCK_COMMIT, 1500, nullptr);
                     }
                     if (!pTxt->empty()) pTxt->pop_back();
-                    if (pTxt->empty() && st->focusedField != CF_CLK_H && st->focusedField != CF_CLK_M) *pTxt = L"0";
                     st->caretVisible = true;
                     InvalidateRect(hwnd, &fRc, FALSE);
                     UpdateCyclePopupSummary(st);
@@ -4895,6 +4952,7 @@ static void OpenCyclePopupForApp(const AppEntry& app) {
         defCfg.runMode = activeSnap.runMode;
         defCfg.runValue = (activeSnap.runMode == CycleRunMode::ForCycles) ? activeSnap.targetCycles : activeSnap.totalRemainingMs;
         defCfg.focusedOnly = activeSnap.focusedOnly;
+        defCfg.allowWhenUnfocused = activeSnap.allowWhenUnfocused;
     } else if (g_hasLastCycleConfig) {
         defCfg = g_lastCycleConfig;
     }
@@ -4908,6 +4966,7 @@ static void OpenCyclePopupForApp(const AppEntry& app) {
                          false);
     PopulateClockFromWindows(st);
     st->focusedOnly = defCfg.focusedOnly;
+    st->allowWhenUnfocused = defCfg.allowWhenUnfocused;
     st->focusedField = CF_BLK_S;
     st->replaceOnType = true;
 
