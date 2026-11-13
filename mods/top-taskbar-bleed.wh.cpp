@@ -2985,11 +2985,12 @@ void Wh_ModUninit() {
         // No taskbar window (Explorer is going away): there is no tree to clean
         // and no taskbar thread to release XAML objects on. g_islands is
         // no_destroy, so leaving it alone leaks the few refs instead of
-        // releasing them from this thread. The message hook is the one thing
-        // that must not outlive the module.
+        // releasing them from this thread.
         Wh_Log(L"no taskbar window, skipping UI teardown");
-        RemoveSettingChangeHook();
     }
+    // The message hook is the one thing that must not outlive the module,
+    // whichever way the teardown went (a no-op if the cleanup removed it).
+    RemoveSettingChangeHook();
 }
 
 void Wh_ModSettingsChanged() {
