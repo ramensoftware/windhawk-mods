@@ -41,7 +41,7 @@ the Windows build, DPI, taskbar replacement and other shell mods.
 - An advanced battery flyout option; compatibility may vary between Windows builds.
 - Optional secondary taskbars show pins, windows and the shared private tray. Secondary AppBar registration reserves work area when necessary and allowed by the shell. DPI scaling and flyout positioning are best-effort.
 - Experimental shell minimize-rectangle support supplies reconstructed button coordinates to Windows, without changing Windows 7 Window Animations Restorer. Availability depends on Windows shell-hook delivery and ordering.
-- Optional icon-only horizontal button width: native default, manual logical width, or read-only following of Taskbar height and icon size for standard registry-based Windhawk installations. This does not change icon size or taskbar height and does not hook or modify the other mod. Unsupported installation layouts use the original width.
+- Optional icon-only horizontal button width: choose the native default or a custom logical width. This does not change icon size or taskbar height.
 
 ## Themes
 
@@ -80,7 +80,10 @@ Windhawk explain their scope and any restart requirements.
 ## Windows symbols and downloads
 
 Windhawk may resolve Windows symbols for taskbarcpl.dll and rpcrt4.dll for the
-Notification Area Icons page safety checks. It can download matching symbols if
+Notification Area Icons page safety checks. The optional Explorer Start hook also
+uses symbols for twinui.pcshell.dll. For keyboard Start requests when the foreground
+application is elevated or cannot be identified, it attempts to open Open-Shell
+instead of Windows Start when Open-Shell is detected; availability varies. It can download matching symbols if
 not cached. Some specifically verified builds use a fixed, checked fallback
 instead. Symbol verification for taskbarcpl is prepared in the background;
 if verification is unavailable, safety checks can prevent the private page
@@ -91,6 +94,7 @@ confirms resolution, not whether a fresh download occurred.
 
 ## Behavior and limitations
 
+- The advanced forced Windows-key recovery option is disabled by default. When enabled, it uses a single global keyboard hook and a delayed recovery request. It may still bypass deliberate Win-key blocking by hooks later in the chain or interfere with shortcuts, and may not work with elevated applications. It does not sample all key states or reorder hooks. A successful request does not guarantee the menu changed.
 - The taskbar runs in a separate `explorer.exe` process on a best-effort basis.
   Notification-page hooks still run in Explorer, and other Explorer mods can
   load in the separate process. A watchdog attempts to restore the native taskbar
@@ -223,28 +227,50 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $description:es: "Esta configuración controla si la acción Mostrar ventana aparece en las Jump Lists."
   $description:fr: "Ce paramètre contrôle l’affichage de l’action Afficher la fenêtre dans les Jump Lists."
   $description:pt: "Esta configuração controla se a ação Mostrar janela aparece nas Jump Lists."
+- forceWinKeyRecovery: false
+  $name: "Advanced: force Windows key recovery for Open-Shell"
+  $name:it: "Avanzata: forza il recupero del tasto Windows per Open-Shell"
+  $name:es: "Avanzado: forzar la recuperación de la tecla Windows para Open-Shell"
+  $name:fr: "Avancé : forcer la récupération de la touche Windows pour Open-Shell"
+  $name:pt: "Avançado: forçar a recuperação da tecla Windows para o Open-Shell"
+  $description: "This setting enables an experimental, optional Windows-key recovery for Open-Shell and is disabled by default. Use it only if the key does not open or close the menu. A global keyboard hook observes key events and waits briefly before attempting recovery; it is installed once and does not consume input. Software that blocks the Windows key before this hook prevents recovery, but blocking by a later hook may still be bypassed. Shortcuts or games may be affected. The recovery may not work with elevated applications. Restart the mod after changing this setting."
+  $description:it: "Questa impostazione attiva il recupero sperimentale e facoltativo del tasto Windows per Open-Shell ed è disattivata per impostazione predefinita. Usala solo se il tasto non apre o non chiude il menu. Un hook globale osserva gli eventi della tastiera e attende brevemente prima di tentare il recupero; viene installato una sola volta e non intercetta i tasti. Se un programma blocca il tasto prima di questo hook, il recupero non interviene; un blocco successivo potrebbe invece essere aggirato. Scorciatoie e giochi potrebbero risentirne. Il recupero potrebbe non funzionare con applicazioni eseguite come amministratore. Riavvia la mod dopo la modifica."
+  $description:es: "Esta configuración activa la recuperación experimental y opcional de la tecla Windows para Open-Shell y está desactivada de forma predeterminada. Úsala solo si la tecla no abre o cierra el menú. Un hook global observa los eventos del teclado y espera brevemente antes de intentar la recuperación; se instala una sola vez y no consume las teclas. Si otro programa bloquea la tecla antes de este hook, la recuperación no actúa; un bloqueo posterior podría eludirse. Los atajos y los juegos podrían verse afectados. La recuperación puede no funcionar con aplicaciones ejecutadas como administrador. Reinicia el mod después de cambiarla."
+  $description:fr: "Ce paramètre active la récupération expérimentale et facultative de la touche Windows pour Open-Shell et est désactivé par défaut. Utilisez-le uniquement si la touche n’ouvre ou ne ferme pas le menu. Un hook clavier global observe les événements et attend brièvement avant de tenter une récupération ; il n’est installé qu’une fois et ne consomme pas les touches. Si un programme bloque la touche avant ce hook, la récupération n’intervient pas ; un blocage ultérieur pourrait toutefois être contourné. Les raccourcis et les jeux peuvent être affectés. La récupération peut ne pas fonctionner avec les applications exécutées en tant qu’administrateur. Redémarrez le mod après modification."
+  $description:pt: "Esta configuração ativa a recuperação experimental e opcional da tecla Windows para o Open-Shell e está desativada por padrão. Use-a somente se a tecla não abrir ou fechar o menu. Um hook global observa os eventos do teclado e aguarda brevemente antes de tentar a recuperação; ele é instalado uma única vez e não consome as teclas. Se outro programa bloquear a tecla antes desse hook, a recuperação não atuará; um bloqueio posterior ainda poderá ser contornado. Atalhos e jogos podem ser afetados. A recuperação pode não funcionar com aplicativos executados como administrador. Reinicie o mod após alterar a configuração."
+- enablePrivateTray: true
+  $name: "Use the integrated taskbar and hide the original taskbar"
+  $name:it: "Usa la barra integrata e nascondi la barra originale"
+  $name:es: "Usar la barra de tareas integrada y ocultar la original"
+  $name:fr: "Utiliser la barre des tâches intégrée et masquer la barre d’origine"
+  $name:pt: "Usar a barra de tarefas integrada e ocultar a original"
+  $description: "This setting uses the mod’s own notification area and hides the original taskbar. Keeps the original bar if the integrated tray cannot start. A private Shell_TrayWnd host may be found by other apps or taskbar mods instead of the native window. Restart the mod after changing this option."
+  $description:it: "Questa impostazione usa l’area di notifica della mod e nasconde la barra originale. Mantiene la barra originale se l’area integrata non si avvia. Altre app o mod possono trovare una finestra Shell_TrayWnd privata invece di quella nativa. Riavvia la mod dopo aver modificato questa opzione."
+  $description:es: "Esta configuración usa el área de notificación del mod y oculta la barra original. Mantiene la barra original si el área integrada no puede iniciarse. Otras aplicaciones o mods pueden encontrar una ventana Shell_TrayWnd privada en lugar de la nativa. Reinicia el mod después de cambiar esta opción."
+  $description:fr: "Ce paramètre utilise la zone de notification du mod et masque la barre d’origine. Conserve la barre d’origine si la zone intégrée ne peut pas démarrer. D’autres applications ou mods peuvent trouver une fenêtre Shell_TrayWnd privée au lieu de la fenêtre native. Redémarrez le mod après modification."
+  $description:pt: "Esta configuração usa a área de notificação do mod e oculta a barra original. Mantém a barra original se a área integrada não puder iniciar. Outros aplicativos ou mods podem encontrar uma janela Shell_TrayWnd privada em vez da janela nativa. Reinicie o mod depois de alterar esta opção."
 - reserveWorkArea: true
   $name: "Reserve desktop space for a moved taskbar"
   $name:it: "Riserva spazio sul desktop per la barra spostata"
   $name:es: "Reservar espacio del escritorio para la barra desplazada"
   $name:fr: "Réserver de l’espace sur le bureau pour la barre déplacée"
   $name:pt: "Reservar espaço na área de trabalho para a barra movida"
-  $description: "This setting: Enabled by default. Requests a Windows AppBar when the integrated taskbar is on a different edge from the native taskbar. Windows or other mods may prevent reservation or retain space at the native edge; windows can then overlap the bar. The reservation is removed on normal unload; restarting the shell may be necessary after an unexpected interruption."
-  $description:it: "Questa impostazione: Attiva per impostazione predefinita. Richiede una AppBar di Windows quando la barra integrata si trova su un bordo diverso da quella nativa. Windows o altre mod possono impedire la riserva o mantenere spazio sul bordo nativo; le finestre possono quindi sovrapporsi alla barra. La riserva viene rimossa alla chiusura normale; dopo un’interruzione imprevista può essere necessario riavviare la shell."
-  $description:es: "Esta configuración: Activada de forma predeterminada. Solicita una AppBar de Windows cuando la barra integrada está en un borde distinto de la barra nativa. Windows u otros mods pueden impedir la reserva o conservar espacio en el borde nativo; las ventanas pueden superponerse a la barra. La reserva se elimina al descargarse normalmente; después de una interrupción inesperada puede ser necesario reiniciar el shell."
-  $description:fr: "Ce paramètre : Activé par défaut. Demande une AppBar Windows lorsque la barre intégrée se trouve sur un bord différent de la barre native. Windows ou d’autres mods peuvent empêcher la réservation ou conserver de l’espace au bord natif ; les fenêtres peuvent alors recouvrir la barre. La réservation est supprimée lors d’un déchargement normal ; après une interruption inattendue, un redémarrage du shell peut être nécessaire."
-  $description:pt: "Esta configuração: Ativada por padrão. Solicita uma AppBar do Windows quando a barra integrada está em uma borda diferente da barra nativa. O Windows ou outros mods podem impedir a reserva ou manter espaço na borda nativa; as janelas podem então sobrepor a barra. A reserva é removida no descarregamento normal; após uma interrupção inesperada, pode ser necessário reiniciar o shell."
+  $description: "This setting is enabled by default. Requests a Windows AppBar when the integrated taskbar is on a different edge from the native taskbar. Windows or other mods may prevent reservation or retain space at the native edge; windows can then overlap the bar. The reservation is removed on normal unload; restarting the shell may be necessary after an unexpected interruption."
+  $description:it: "Questa impostazione è attiva per impostazione predefinita. Richiede una AppBar di Windows quando la barra integrata si trova su un bordo diverso da quella nativa. Windows o altre mod possono impedire la riserva o mantenere spazio sul bordo nativo; le finestre possono quindi sovrapporsi alla barra. La riserva viene rimossa alla chiusura normale; dopo un’interruzione imprevista può essere necessario riavviare la shell."
+  $description:es: "Esta configuración está activada de forma predeterminada. Solicita una AppBar de Windows cuando la barra integrada está en un borde distinto de la barra nativa. Windows u otros mods pueden impedir la reserva o conservar espacio en el borde nativo; las ventanas pueden superponerse a la barra. La reserva se elimina al descargarse normalmente; después de una interrupción inesperada puede ser necesario reiniciar el shell."
+  $description:fr: "Ce paramètre est activé par défaut. Demande une AppBar Windows lorsque la barre intégrée se trouve sur un bord différent de la barre native. Windows ou d’autres mods peuvent empêcher la réservation ou conserver de l’espace au bord natif ; les fenêtres peuvent alors recouvrir la barre. La réservation est supprimée lors d’un déchargement normal ; après une interruption inattendue, un redémarrage du shell peut être nécessaire."
+  $description:pt: "Esta configuração está ativada por padrão. Solicita uma AppBar do Windows quando a barra integrada está em uma borda diferente da barra nativa. O Windows ou outros mods podem impedir a reserva ou manter espaço na borda nativa; as janelas podem então sobrepor a barra. A reserva é removida no descarregamento normal; após uma interrupção inesperada, pode ser necessário reiniciar o shell."
 - taskbarPlacement: "allEdges"
   $name: "Taskbar position"
   $name:it: "Posizione della barra delle applicazioni"
   $name:es: "Posición de la barra de tareas"
   $name:fr: "Position de la barre des tâches"
   $name:pt: "Posição da barra de tarefas"
-  $description: "This setting: Applies to the integrated taskbar. All edges starts at the native horizontal position and allows dragging the unlocked bar by an empty area to any edge. Left and Right select a vertical edge directly. Work-area reservation is controlled separately; Windows and other taskbar mods can affect placement."
-  $description:it: "Questa impostazione: Si applica alla barra integrata. Tutti i bordi segue inizialmente la posizione orizzontale di Windows e consente di trascinare la barra sbloccata da uno spazio vuoto verso qualsiasi bordo. Sinistra e Destra scelgono direttamente un bordo verticale. La riserva dell’area di lavoro si gestisce separatamente; Windows e altre mod possono influire sul posizionamento."
-  $description:es: "Esta configuración: Se aplica a la barra integrada. Todos los bordes sigue inicialmente la posición horizontal de Windows y permite arrastrar la barra desbloquejada desde un área vacía a cualquier borde. Izquierda y Derecha seleccionan directamente un borde vertical. La reserva del área de trabajo se controla por separado; Windows y otros mods pueden afectar a la posición."
-  $description:fr: "Ce paramètre : S’applique à la barre intégrée. Tous les bords suit d’abord la position horizontale de Windows et permet de faire glisser la barre déverrouillée depuis un espace vide vers n’importe quel bord. Gauche et Droite choisissent directement un bord vertical. La réservation de la zone de travail se règle séparément ; Windows et d’autres mods peuvent affecter le positionnement."
-  $description:pt: "Esta configuração: Aplica-se à barra integrada. Todas as bordas segue inicialmente a posição horizontal do Windows e permite arrastar a barra desbloqueada por uma área vazia para qualquer borda. Esquerda e Direita selecionam diretamente uma borda vertical. A reserva da área de trabalho é controlada separadamente; o Windows e outros mods podem afetar o posicionamento."
+  $description: "This setting applies to the integrated taskbar. All edges starts at the native horizontal position and allows dragging the unlocked bar by an empty area to any edge. Left and Right select a vertical edge directly. Work-area reservation is controlled separately; Windows and other taskbar mods can affect placement."
+  $description:it: "Questa impostazione si applica alla barra integrata. Tutti i bordi segue inizialmente la posizione orizzontale di Windows e consente di trascinare la barra sbloccata da uno spazio vuoto verso qualsiasi bordo. Sinistra e Destra scelgono direttamente un bordo verticale. La riserva dell’area di lavoro si gestisce separatamente; Windows e altre mod possono influire sul posizionamento."
+  $description:es: "Esta configuración se aplica a la barra integrada. Todos los bordes sigue inicialmente la posición horizontal de Windows y permite arrastrar la barra desbloquejada desde un área vacía a cualquier borde. Izquierda y Derecha seleccionan directamente un borde vertical. La reserva del área de trabajo se controla por separado; Windows y otros mods pueden afectar a la posición."
+  $description:fr: "Ce paramètre s’applique à la barre intégrée. Tous les bords suit d’abord la position horizontale de Windows et permet de faire glisser la barre déverrouillée depuis un espace vide vers n’importe quel bord. Gauche et Droite choisissent directement un bord vertical. La réservation de la zone de travail se règle séparément ; Windows et d’autres mods peuvent affecter le positionnement."
+  $description:pt: "Esta configuração aplica-se à barra integrada. Todas as bordas segue inicialmente a posição horizontal do Windows e permite arrastar a barra desbloqueada por uma área vazia para qualquer borda. Esquerda e Direita selecionam diretamente uma borda vertical. A reserva da área de trabalho é controlada separadamente; o Windows e outros mods podem afetar o posicionamento."
   $options:
     - native: "Follow Windows (horizontal)"
     - left: "Left"
@@ -276,27 +302,33 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Reservar espacio del escritorio junto a la barra vertical"
   $name:fr: "Réserver de l’espace sur le bureau à côté de la barre verticale"
   $name:pt: "Reservar espaço na área de trabalho ao lado da barra vertical"
-  $description: "This setting: Enabled by default. Requests a Windows AppBar for a vertical taskbar and removes it if the work area cannot be observed. If the request fails, maximized windows may extend beneath the bar and native top or bottom space may remain. The mod does not force the work area through build-specific Explorer hooks."
-  $description:it: "Questa impostazione: Attiva per impostazione predefinita. Richiede una AppBar di Windows per la barra verticale e la rimuove se non è possibile rilevare l’area di lavoro. Se la richiesta non riesce, le finestre ingrandite possono estendersi sotto la barra e può restare spazio nativo in alto o in basso. La mod non forza l’area di lavoro tramite hook interni di Explorer dipendenti dalla build."
-  $description:es: "Esta configuración: Activada de forma predeterminada. Solicita una AppBar de Windows para la barra vertical y la elimina si no puede observar el área de trabajo. Si la solicitud falla, las ventanas maximizadas pueden extenderse debajo de la barra y puede quedar espacio nativo arriba o abajo. El mod no fuerza el área de trabajo mediante hooks internos de Explorer dependientes de la compilación."
-  $description:fr: "Ce paramètre : Activé par défaut. Demande une AppBar Windows pour la barre verticale et la supprime si la zone de travail ne peut pas être observée. Si la demande échoue, les fenêtres agrandies peuvent s’étendre sous la barre et un espace natif peut subsister en haut ou en bas. Le mod ne force pas la zone de travail via des hooks internes d’Explorer propres à la build."
-  $description:pt: "Esta configuração: Ativada por padrão. Solicita uma AppBar do Windows para a barra vertical e a remove se a área de trabalho não puder ser observada. Se a solicitação falhar, as janelas maximizadas podem se estender sob a barra e o espaço nativo superior ou inferior pode permanecer. O mod não força a área de trabalho por meio de hooks internos do Explorer dependentes da build."
+  $description: "This setting is enabled by default. Requests a Windows AppBar for a vertical taskbar and removes it if the work area cannot be observed. If the request fails, maximized windows may extend beneath the bar and native top or bottom space may remain. The mod does not force the work area through build-specific Explorer hooks."
+  $description:it: "Questa impostazione è attiva per impostazione predefinita. Richiede una AppBar di Windows per la barra verticale e la rimuove se non è possibile rilevare l’area di lavoro. Se la richiesta non riesce, le finestre ingrandite possono estendersi sotto la barra e può restare spazio nativo in alto o in basso. La mod non forza l’area di lavoro tramite hook interni di Explorer dipendenti dalla build."
+  $description:es: "Esta configuración está activada de forma predeterminada. Solicita una AppBar de Windows para la barra vertical y la elimina si no puede observar el área de trabajo. Si la solicitud falla, las ventanas maximizadas pueden extenderse debajo de la barra y puede quedar espacio nativo arriba o abajo. El mod no fuerza el área de trabajo mediante hooks internos de Explorer dependientes de la compilación."
+  $description:fr: "Ce paramètre est activé par défaut. Demande une AppBar Windows pour la barre verticale et la supprime si la zone de travail ne peut pas être observée. Si la demande échoue, les fenêtres agrandies peuvent s’étendre sous la barre et un espace natif peut subsister en haut ou en bas. Le mod ne force pas la zone de travail via des hooks internes d’Explorer propres à la build."
+  $description:pt: "Esta configuração está ativada por padrão. Solicita uma AppBar do Windows para a barra vertical e a remove se a área de trabalho não puder ser observada. Se a solicitação falhar, as janelas maximizadas podem se estender sob a barra e o espaço nativo superior ou inferior pode permanecer. O mod não força a área de trabalho por meio de hooks internos do Explorer dependentes da build."
 - experimentalLiveBlur: true
   $name: "Experimental live blur (unsupported Windows API)"
   $name:it: "Blur dinamico sperimentale (API Windows non documentata)"
   $name:es: "Desenfoque dinámico experimental (API de Windows no documentada)"
   $name:fr: "Flou dynamique expérimental (API Windows non documentée)"
   $name:pt: "Desfoque dinâmico experimental (API Windows não documentada)"
-  $description: "On by default for Windows 7 and Windows 8 Beta only. If unavailable or the request fails, the original background remains. Requests DWM blur only for the recreated taskbar windows. Compatibility with layered rendering, Windows builds and other mods is not guaranteed. Disable if the bar is missing or glitches. This is not the original Windows 7 glass renderer."
-  $description:it: "Attivato per impostazione predefinita solo per le skin Windows 7 e Windows 8 Beta. Se non disponibile o se la richiesta fallisce, rimane lo sfondo originale. Richiede il blur DWM solo per le finestre della barra ricreata. La compatibilità con trasparenza per pixel, versioni di Windows e altre mod non è garantita. Disattiva se la barra scompare o presenta difetti. Non è il renderer originale di Windows 7."
-  $description:es: "Activado de forma predeterminada. Si no está disponible o falla la solicitud, se conserva el fondo original. Solicita desenfoque DWM solo para las ventanas de la barra recreada. La compatibilidad no está garantizada. Desactívalo si la barra desaparece o presenta defectos."
-  $description:fr: "Activé par défaut. Si indisponible ou en cas d’échec, le fond d’origine est conservé. Demande le flou DWM uniquement pour les fenêtres de la barre recréée. La compatibilité n’est pas garantie. Désactivez-le si la barre disparaît ou présente des défauts."
-  $description:pt: "Ativado por padrão. Se indisponível ou se a solicitação falhar, o fundo original é mantido. Solicita desfoque DWM somente para as janelas da barra recriada. A compatibilidade não é garantida. Desative se a barra desaparecer ou apresentar falhas."
+  $description: "This setting enables experimental live blur, on by default only for the Windows 7 and Windows 8 Beta skins. If unavailable or the request fails, the original background remains. It requests DWM blur only for recreated taskbar windows. Compatibility with layered rendering, Windows builds and other mods is not guaranteed. Disable it if the bar disappears or glitches. This is not the original Windows 7 glass renderer."
+  $description:it: "Questa impostazione attiva la sfocatura dinamica sperimentale, attiva per impostazione predefinita solo per le skin Windows 7 e Windows 8 Beta. Se non è disponibile o la richiesta fallisce, rimane lo sfondo originale. Richiede il blur DWM solo per le finestre della barra ricreata. La compatibilità con la trasparenza per pixel, le versioni di Windows e le altre mod non è garantita. Disattivala se la barra scompare o presenta difetti. Non è il renderer originale del vetro di Windows 7."
+  $description:es: "Esta configuración activa el desenfoque dinámico experimental, activado de forma predeterminada solo para los estilos Windows 7 y Windows 8 Beta. Si no está disponible o falla la solicitud, se conserva el fondo original. Solicita desenfoque DWM solo para las ventanas de la barra recreada. La compatibilidad con la transparencia por píxel, las versiones de Windows y otros mods no está garantizada. Desactívala si la barra desaparece o presenta fallos. No es el renderizador de cristal original de Windows 7."
+  $description:fr: "Ce paramètre active le flou dynamique expérimental, activé par défaut uniquement pour les thèmes Windows 7 et Windows 8 Beta. Si le flou est indisponible ou si la demande échoue, le fond d’origine est conservé. Il demande le flou DWM uniquement pour les fenêtres de la barre recréée. La compatibilité avec la transparence par pixel, les versions de Windows et les autres mods n’est pas garantie. Désactivez-le si la barre disparaît ou présente des défauts. Ce n’est pas le moteur de rendu du verre original de Windows 7."
+  $description:pt: "Esta configuração ativa o desfoque dinâmico experimental, ativado por padrão apenas para os temas Windows 7 e Windows 8 Beta. Se não estiver disponível ou se a solicitação falhar, o fundo original será mantido. Ela solicita o desfoque DWM apenas para as janelas da barra recriada. A compatibilidade com transparência por pixel, versões do Windows e outros mods não é garantida. Desative-a se a barra desaparecer ou apresentar falhas. Este não é o renderizador de vidro original do Windows 7."
 - taskbarRows: 0
   $name: "Taskbar rows (0 = follow native height, 1-4 = custom)"
   $name:it: "Righe della barra (0 = altezza nativa, 1-4 = personalizzate)"
-  $description: "Horizontal integrated taskbar only. Automatic derives rows from the native height. Custom rows change visual height; the native shell can still reserve its original work area. Multi-row drag reorder is disabled. Unlock and drag the horizontal bar's outer edge to resize during this session."
-  $description:it: "Solo barra orizzontale integrata. Automatico ricava le righe dall’altezza nativa. Le righe personalizzate cambiano l’altezza visiva; la shell può ancora riservare lo spazio originale. Il riordino tramite trascinamento è disattivato con più righe. Sblocca la barra e trascina il bordo esterno per ridimensionare durante la sessione."
+  $name:es: "Filas de la barra de tareas (0 = altura original, 1-4 = personalizadas)"
+  $name:fr: "Rangées de la barre des tâches (0 = hauteur native, 1-4 = personnalisées)"
+  $name:pt: "Linhas da barra de tarefas (0 = altura original, 1-4 = personalizadas)"
+  $description: "This setting controls rows on the horizontal integrated taskbar. Automatic derives rows from the native height. Custom rows change visual height; the native shell can still reserve its original work area. Multi-row drag reorder is disabled. Unlock and drag the horizontal bar’s outer edge to resize during this session."
+  $description:it: "Questa impostazione controlla le righe della barra integrata orizzontale. La modalità automatica ricava le righe dall’altezza nativa. Le righe personalizzate cambiano l’altezza visiva; la shell può ancora riservare lo spazio originale. Il riordino tramite trascinamento è disattivato con più righe. Sblocca la barra e trascina il bordo esterno per ridimensionarla durante questa sessione."
+  $description:es: "Esta configuración controla las filas de la barra integrada horizontal. El modo automático calcula las filas a partir de la altura original. Las filas personalizadas cambian la altura visual; la shell puede seguir reservando el área de trabajo original. La reordenación mediante arrastre se desactiva con varias filas. Desbloquea la barra y arrastra el borde exterior para cambiar su tamaño durante esta sesión."
+  $description:fr: "Ce paramètre contrôle les rangées de la barre intégrée horizontale. Le mode automatique détermine le nombre de rangées à partir de la hauteur native. Les rangées personnalisées modifient la hauteur visuelle ; le shell peut toujours réserver sa zone de travail d’origine. Le réordonnancement par glisser-déposer est désactivé avec plusieurs rangées. Déverrouillez la barre et faites glisser son bord extérieur pour la redimensionner pendant cette session."
+  $description:pt: "Esta configuração controla as linhas da barra integrada horizontal. O modo automático calcula as linhas a partir da altura original. Linhas personalizadas alteram a altura visual; o shell ainda pode reservar a área de trabalho original. A reordenação por arrastar fica desativada com várias linhas. Desbloqueie a barra e arraste a borda externa para redimensioná-la durante esta sessão."
 - taskbarOpacity: 220
   $name: "Global opacity in classic mode (140-255)"
   $name:it: "Opacità globale in modalità classica (140-255)"
@@ -325,22 +357,22 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Transparencia por píxel de la barra de tareas"
   $name:fr: "Transparence pixel par pixel de la barre des tâches"
   $name:pt: "Transparência por pixel da barra de tarefas"
-  $description: "This setting: Enabled by default. Separates background and content using UpdateLayeredWindow, rather than the original Windows 8.1 compositor. Compatibility can vary with the Windows build and other mods. Disable this option if the bar is invisible."
-  $description:it: "Questa impostazione: Attiva per impostazione predefinita. Separa sfondo e contenuto usando UpdateLayeredWindow, anziché il compositor originale di Windows 8.1. La compatibilità può variare con la build di Windows e le altre mod. Disattiva questa opzione se la barra è invisibile."
-  $description:es: "Esta configuración: Activada de forma predeterminada. Separa el fondo y el contenido mediante UpdateLayeredWindow, en lugar del compositor original de Windows 8.1. La compatibilidad puede variar con la compilación de Windows y otros mods. Desactiva esta opción si la barra es invisible."
-  $description:fr: "Ce paramètre : Activé par défaut. Sépare l’arrière-plan et le contenu avec UpdateLayeredWindow, plutôt qu’avec le compositeur d’origine de Windows 8.1. La compatibilité peut varier selon la version de Windows et les autres mods. Désactivez cette option si la barre est invisible."
-  $description:pt: "Esta configuração: Ativada por padrão. Separa o fundo e o conteúdo usando UpdateLayeredWindow, em vez do compositor original do Windows 8.1. A compatibilidade pode variar com a build do Windows e outros mods. Desative esta opção se a barra estiver invisível."
+  $description: "This setting is enabled by default. Separates background and content using UpdateLayeredWindow, rather than the original Windows 8.1 compositor. Compatibility can vary with the Windows build and other mods. Disable this option if the bar is invisible."
+  $description:it: "Questa impostazione è attiva per impostazione predefinita. Separa sfondo e contenuto usando UpdateLayeredWindow, anziché il compositor originale di Windows 8.1. La compatibilità può variare con la build di Windows e le altre mod. Disattiva questa opzione se la barra è invisibile."
+  $description:es: "Esta configuración está activada de forma predeterminada. Separa el fondo y el contenido mediante UpdateLayeredWindow, en lugar del compositor original de Windows 8.1. La compatibilidad puede variar con la compilación de Windows y otros mods. Desactiva esta opción si la barra es invisible."
+  $description:fr: "Ce paramètre est activé par défaut. Sépare l’arrière-plan et le contenu avec UpdateLayeredWindow, plutôt qu’avec le compositeur d’origine de Windows 8.1. La compatibilité peut varier selon la version de Windows et les autres mods. Désactivez cette option si la barre est invisible."
+  $description:pt: "Esta configuração está ativada por padrão. Separa o fundo e o conteúdo usando UpdateLayeredWindow, em vez do compositor original do Windows 8.1. A compatibilidade pode variar com a build do Windows e outros mods. Desative esta opção se a barra estiver invisível."
 - perPixelPreview: true
   $name: "Per-pixel preview transparency"
   $name:it: "Trasparenza per pixel delle anteprime"
   $name:es: "Transparencia por píxel de las vistas previas"
   $name:fr: "Transparence pixel par pixel des aperçus"
   $name:pt: "Transparência por pixel das visualizações"
-  $description: "This setting: Enabled by default. Requires DWM; live thumbnails may fail on some Windows builds or with other mods. Disable this option if previews are invisible."
-  $description:it: "Questa impostazione: Attiva per impostazione predefinita. Richiede DWM; le miniature live possono non funzionare su alcune build di Windows o con altre mod. Disattiva questa opzione se le anteprime sono invisibili."
-  $description:es: "Esta configuración: Activada de forma predeterminada. Requiere DWM; las miniaturas en directo pueden fallar en algunas compilaciones de Windows o con otros mods. Desactiva esta opción si las vistas previas son invisibles."
-  $description:fr: "Ce paramètre : Activé par défaut. Nécessite DWM ; les miniatures dynamiques peuvent échouer sur certaines versions de Windows ou avec d’autres mods. Désactivez cette option si les aperçus sont invisibles."
-  $description:pt: "Esta configuração: Ativada por padrão. Requer DWM; as miniaturas ao vivo podem falhar em algumas builds do Windows ou com outros mods. Desative esta opção se as visualizações estiverem invisíveis."
+  $description: "This setting is enabled by default. Requires DWM; live thumbnails may fail on some Windows builds or with other mods. Disable this option if previews are invisible."
+  $description:it: "Questa impostazione è attiva per impostazione predefinita. Richiede DWM; le miniature live possono non funzionare su alcune build di Windows o con altre mod. Disattiva questa opzione se le anteprime sono invisibili."
+  $description:es: "Esta configuración está activada de forma predeterminada. Requiere DWM; las miniaturas en directo pueden fallar en algunas compilaciones de Windows o con otros mods. Desactiva esta opción si las vistas previas son invisibles."
+  $description:fr: "Ce paramètre est activé par défaut. Nécessite DWM ; les miniatures dynamiques peuvent échouer sur certaines versions de Windows ou avec d’autres mods. Désactivez cette option si les aperçus sont invisibles."
+  $description:pt: "Esta configuração está ativada por padrão. Requer DWM; as miniaturas ao vivo podem falhar em algumas builds do Windows ou com outros mods. Desative esta opção se as visualizações estiverem invisíveis."
 - previewOpacity: 200
   $name: "Preview background opacity (140-255)"
   $name:it: "Opacità dello sfondo delle anteprime (140-255)"
@@ -358,11 +390,11 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Esquina Inicio al estilo Windows 8"
   $name:fr: "Coin Démarrer de style Windows 8"
   $name:pt: "Canto Iniciar no estilo Windows 8"
-  $description: "This setting: Hides the Start button and shows an illustrated, clickable Start preview on hover at the start of the reconstructed bar. It is not a live screenshot or a system-wide hot corner."
-  $description:it: "Questa impostazione: Nasconde il pulsante Start e mostra al passaggio del mouse un'anteprima illustrata e cliccabile all'inizio della barra ricreata. Non è una cattura live né un angolo attivo in tutto il sistema."
-  $description:es: "Esta configuración: Oculta el botón Inicio y muestra una vista ilustrada y pulsable al pasar el ratón al inicio de la barra recreada. No es una captura en vivo ni una esquina activa en todo el sistema."
-  $description:fr: "Ce paramètre : Masque le bouton Démarrer et affiche un aperçu illustré cliquable au survol du début de la barre recréée. Ce n'est ni une capture en direct ni un coin actif dans tout le système."
-  $description:pt: "Esta configuração: Oculta o botão Iniciar e mostra uma prévia ilustrada clicável ao passar o mouse no início da barra recriada. Não é uma captura ao vivo nem um canto ativo em todo o sistema."
+  $description: "This setting hides the Start button and shows an illustrated, clickable Start preview on hover at the start of the reconstructed bar. It is not a live screenshot or a system-wide hot corner."
+  $description:it: "Questa impostazione nasconde il pulsante Start e mostra al passaggio del mouse un'anteprima illustrata e cliccabile all'inizio della barra ricreata. Non è una cattura live né un angolo attivo in tutto il sistema."
+  $description:es: "Esta configuración oculta el botón Inicio y muestra una vista ilustrada y pulsable al pasar el ratón al inicio de la barra recreada. No es una captura en vivo ni una esquina activa en todo el sistema."
+  $description:fr: "Ce paramètre masque le bouton Démarrer et affiche un aperçu illustré cliquable au survol du début de la barre recréée. Ce n'est ni une capture en direct ni un coin actif dans tout le système."
+  $description:pt: "Esta configuração oculta o botão Iniciar e mostra uma prévia ilustrada clicável ao passar o mouse no início da barra recriada. Não é uma captura ao vivo nem um canto ativo em todo o sistema."
 - customStartColor: false
   $name: "Custom Windows 8.1 Start hover color"
   $name:it: "Colore personalizzato Start Windows 8.1 al passaggio del mouse"
@@ -452,30 +484,38 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $description:fr: "Ce paramètre définit la composante bleue de la couleur personnalisée de la barre de 0 à 255. Elle s’applique lorsque la couleur personnalisée de la barre est activée."
   $description:pt: "Esta configuração seleciona o componente azul da cor personalizada da barra de 0 a 255. Ela se aplica quando a cor personalizada da barra está ativada."
 - debugExceptionLog: false
-  $name: Exception diagnostics
-  $description: Log distinct exception sites to help diagnose a problem. This is process-wide, diagnostic only, and does not prevent crashes.
+  $name: "Exception diagnostics"
+  $name:it: "Diagnostica delle eccezioni"
+  $name:es: "Diagnóstico de excepciones"
+  $name:fr: "Diagnostic des exceptions"
+  $name:pt: "Diagnóstico de exceções"
+  $description: "This setting logs distinct exception locations to help diagnose problems. It applies to the whole process, is for diagnostics only and does not prevent crashes."
+  $description:it: "Questa impostazione registra i punti in cui si verificano eccezioni diverse per aiutare a diagnosticare i problemi. Si applica all’intero processo, serve solo alla diagnostica e non impedisce gli arresti anomali."
+  $description:es: "Esta configuración registra las ubicaciones de las distintas excepciones para ayudar a diagnosticar problemas. Se aplica a todo el proceso, sirve solo para diagnóstico y no evita cierres inesperados."
+  $description:fr: "Ce paramètre journalise les emplacements des différentes exceptions afin de faciliter le diagnostic. Il s’applique à l’ensemble du processus, sert uniquement au diagnostic et n’empêche pas les plantages."
+  $description:pt: "Esta configuração registra os locais das diferentes exceções para ajudar a diagnosticar problemas. Ela se aplica a todo o processo, serve apenas para diagnóstico e não impede falhas."
 - showRecoverableErrors: true
   $name: "Notify recoverable UI errors"
   $name:it: "Notifica errori recuperabili dell'interfaccia"
   $name:es: "Notificar errores recuperables de la interfaz"
   $name:fr: "Signaler les erreurs récupérables de l'interface"
   $name:pt: "Notificar erros recuperáveis da interface"
-  $description: "This setting: Shows a tooltip for caught C++ errors in the preview and language flyout. Does not intercept fatal faults or guarantee Explorer will not restart."
-  $description:it: "Questa impostazione: Mostra un tooltip per errori C++ intercettati nell'anteprima e nel flyout lingua. Non intercetta errori fatali e non garantisce che Explorer non si riavvii."
-  $description:es: "Esta configuración: Muestra un aviso para errores C++ capturados en las vistas previas y el panel de idiomas. No intercepta fallos fatales ni garantiza que Explorer no se reinicie."
-  $description:fr: "Ce paramètre : Affiche une infobulle pour les erreurs C++ capturées dans les aperçus et le volet de langue. N'intercepte pas les erreurs fatales et ne garantit pas qu'Explorer ne redémarre pas."
-  $description:pt: "Esta configuração: Mostra uma dica para erros C++ capturados nas prévias e no painel de idioma. Não intercepta falhas fatais nem garante que o Explorer não reinicie."
+  $description: "This setting shows a tooltip for caught C++ errors in the preview and language flyout. Does not intercept fatal faults or guarantee Explorer will not restart."
+  $description:it: "Questa impostazione mostra un tooltip per errori C++ intercettati nell'anteprima e nel flyout lingua. Non intercetta errori fatali e non garantisce che Explorer non si riavvii."
+  $description:es: "Esta configuración muestra un aviso para errores C++ capturados en las vistas previas y el panel de idiomas. No intercepta fallos fatales ni garantiza que Explorer no se reinicie."
+  $description:fr: "Ce paramètre affiche une infobulle pour les erreurs C++ capturées dans les aperçus et le volet de langue. N'intercepte pas les erreurs fatales et ne garantit pas qu'Explorer ne redémarre pas."
+  $description:pt: "Esta configuração mostra uma dica para erros C++ capturados nas prévias e no painel de idioma. Não intercepta falhas fatais nem garante que o Explorer não reinicie."
 - useBetaStartLogo: false
   $name: "Windows 8 Beta 8148 skin"
   $name:it: "Skin Windows 8 Beta 8148"
   $name:es: "Estilo Windows 8 Beta 8148"
   $name:fr: "Thème Windows 8 Beta 8148"
   $name:pt: "Tema Windows 8 Beta 8148"
-  $description: "This setting: Applies a best-effort skin inspired by Windows 8 Beta 8148, including Start, taskbar textures, task buttons, Show desktop and the Jump List close icon. Turn off to restore the standard Windows 8.1 appearance."
-  $description:it: "Questa impostazione: Applica una skin best effort ispirata a Windows 8 Beta 8148, con Start, texture della barra, pulsanti delle app, Mostra desktop e icona di chiusura della Jump List. Disattivala per ripristinare l'aspetto standard di Windows 8.1."
-  $description:es: "Esta configuración: Aplica un estilo aproximado inspirado en Windows 8 Beta 8148, con Inicio, texturas de la barra, botones de aplicaciones, Mostrar escritorio y el icono de cierre de la lista de accesos directos. Desactívalo para recuperar el aspecto estándar de Windows 8.1."
-  $description:fr: "Ce paramètre : Applique un thème approximatif inspiré de Windows 8 Beta 8148, avec Démarrer, les textures de la barre, les boutons d'applications, Afficher le bureau et l'icône de fermeture des listes de raccourcis. Désactivez-le pour retrouver l'apparence standard de Windows 8.1."
-  $description:pt: "Esta configuração: Aplica um tema aproximado inspirado no Windows 8 Beta 8148, com Iniciar, texturas da barra, botões de aplicativos, Mostrar área de trabalho e ícone de fechar da lista de atalhos. Desative para restaurar a aparência padrão do Windows 8.1."
+  $description: "This setting applies a best-effort skin inspired by Windows 8 Beta 8148, including Start, taskbar textures, task buttons, Show desktop and the Jump List close icon. Turn off to restore the standard Windows 8.1 appearance."
+  $description:it: "Questa impostazione applica una skin best effort ispirata a Windows 8 Beta 8148, con Start, texture della barra, pulsanti delle app, Mostra desktop e icona di chiusura della Jump List. Disattivala per ripristinare l'aspetto standard di Windows 8.1."
+  $description:es: "Esta configuración aplica un estilo aproximado inspirado en Windows 8 Beta 8148, con Inicio, texturas de la barra, botones de aplicaciones, Mostrar escritorio y el icono de cierre de la lista de accesos directos. Desactívalo para recuperar el aspecto estándar de Windows 8.1."
+  $description:fr: "Ce paramètre applique un thème approximatif inspiré de Windows 8 Beta 8148, avec Démarrer, les textures de la barre, les boutons d'applications, Afficher le bureau et l'icône de fermeture des listes de raccourcis. Désactivez-le pour retrouver l'apparence standard de Windows 8.1."
+  $description:pt: "Esta configuração aplica um tema aproximado inspirado no Windows 8 Beta 8148, com Iniciar, texturas da barra, botões de aplicativos, Mostrar área de trabalho e ícone de fechar da lista de atalhos. Desative para restaurar a aparência padrão do Windows 8.1."
 - enableAeroPeek: true
   $name: "Aero Peek on previews"
   $name:it: "Aero Peek sulle anteprime"
@@ -537,11 +577,11 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Usar el panel de batería Win32 original (reiniciar el mod)"
   $name:fr: "Utiliser le panneau de batterie Win32 d’origine (redémarrer le mod)"
   $name:pt: "Usar o painel de bateria Win32 original (reiniciar o mod)"
-  $description: "This setting: Advanced feature. Executes the verified Windows 10 1511 stobject DLL inside Explorer; compatibility may vary between Windows builds. The DLL stays loaded until Explorer restarts. When off or unavailable, battery opens Windows Settings."
-  $description:it: "Questa impostazione: Funzionalità avanzata. Esegue la DLL stobject verificata di Windows 10 1511 dentro Explorer; la compatibilità può variare tra le versioni di Windows. La DLL resta caricata fino al riavvio di Explorer. Se disattivata o non disponibile, la batteria apre Impostazioni di Windows."
-  $description:es: "Esta configuración: Función avanzada. Ejecuta la DLL stobject verificada de Windows 10 1511 dentro de Explorer; la compatibilidad puede variar entre versiones de Windows. La DLL permanece cargada hasta que Explorer se reinicie. Si está desactivada o no está disponible, la batería abre la Configuración de Windows."
-  $description:fr: "Ce paramètre : Fonctionnalité avancée. Exécute la DLL stobject vérifiée de Windows 10 1511 dans Explorer ; la compatibilité peut varier selon la version de Windows. La DLL reste chargée jusqu’au redémarrage d’Explorer. Si cette option est désactivée ou indisponible, la batterie ouvre les Paramètres Windows."
-  $description:pt: "Esta configuração: Recurso avançado. Executa a DLL stobject verificada do Windows 10 1511 dentro do Explorer; a compatibilidade pode variar entre versões do Windows. A DLL permanece carregada até o Explorer reiniciar. Se estiver desativada ou indisponível, a bateria abre as Configurações do Windows."
+  $description: "This setting is an advanced feature. Executes the verified Windows 10 1511 stobject DLL inside Explorer; compatibility may vary between Windows builds. The DLL stays loaded until Explorer restarts. When off or unavailable, battery opens Windows Settings."
+  $description:it: "Questa impostazione è una funzionalità avanzata. Esegue la DLL stobject verificata di Windows 10 1511 dentro Explorer; la compatibilità può variare tra le versioni di Windows. La DLL resta caricata fino al riavvio di Explorer. Se disattivata o non disponibile, la batteria apre Impostazioni di Windows."
+  $description:es: "Esta configuración es una función avanzada. Ejecuta la DLL stobject verificada de Windows 10 1511 dentro de Explorer; la compatibilidad puede variar entre versiones de Windows. La DLL permanece cargada hasta que Explorer se reinicie. Si está desactivada o no está disponible, la batería abre la Configuración de Windows."
+  $description:fr: "Ce paramètre est une fonctionnalité avancée. Exécute la DLL stobject vérifiée de Windows 10 1511 dans Explorer ; la compatibilité peut varier selon la version de Windows. La DLL reste chargée jusqu’au redémarrage d’Explorer. Si cette option est désactivée ou indisponible, la batterie ouvre les Paramètres Windows."
+  $description:pt: "Esta configuração é um recurso avançado. Executa a DLL stobject verificada do Windows 10 1511 dentro do Explorer; a compatibilidade pode variar entre versões do Windows. A DLL permanece carregada até o Explorer reiniciar. Se estiver desativada ou indisponível, a bateria abre as Configurações do Windows."
 - networkUse100PercentArtwork: false
   $name: "Use 100% DPI artwork for network, volume and battery"
   $name:it: "Usa le risorse grafiche al 100% DPI per rete, volume e batteria"
@@ -603,11 +643,11 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Usar el color de Windows en otros elementos de la interfaz"
   $name:fr: "Utiliser la couleur de Windows dans les autres éléments de l'interface"
   $name:pt: "Usar a cor do Windows em outros elementos da interface"
-  $description: "This setting: Controls the accent in related UI elements. Both recreated taskbar skins follow the Windows colorization color independently of this setting."
-  $description:it: "Questa impostazione: Controlla il colore principale negli elementi dell'interfaccia collegati. Entrambe le skin della barra ricreata seguono il colore di Windows indipendentemente da questa impostazione."
-  $description:es: "Esta configuración: Controla el color de énfasis en otros elementos de la interfaz. Ambos estilos de la barra recreada siguen el color de Windows independientemente de esta opción."
-  $description:fr: "Ce paramètre : Contrôle la couleur d'accentuation dans les autres éléments de l'interface. Les deux thèmes de la barre recréée suivent la couleur de Windows indépendamment de ce paramètre."
-  $description:pt: "Esta configuração: Controla a cor de destaque nos outros elementos da interface. Ambos os temas da barra recriada seguem a cor do Windows independentemente desta opção."
+  $description: "This setting controls the accent in related UI elements. Both recreated taskbar skins follow the Windows colorization color independently of this setting."
+  $description:it: "Questa impostazione controlla il colore principale negli elementi dell'interfaccia collegati. Entrambe le skin della barra ricreata seguono il colore di Windows indipendentemente da questa impostazione."
+  $description:es: "Esta configuración controla el color de énfasis en otros elementos de la interfaz. Ambos estilos de la barra recreada siguen el color de Windows independientemente de esta opción."
+  $description:fr: "Ce paramètre contrôle la couleur d'accentuation dans les autres éléments de l'interface. Les deux thèmes de la barre recréée suivent la couleur de Windows indépendamment de ce paramètre."
+  $description:pt: "Esta configuração controla a cor de destaque nos outros elementos da interface. Ambos os temas da barra recriada seguem a cor do Windows independentemente desta opção."
 - showLanguageIndicator: true
   $name: "Show the input language and its flyout"
   $name:it: "Mostra la lingua di input e il relativo flyout"
@@ -2412,6 +2452,7 @@ struct State {
     int openShellRetries = 0;
     bool privateActive = false, nativeWasVisible = false, nativeHiddenByUs = false;
     bool nativeRecoveryPending = false;
+    int nativeRecoveryAttempts = 0;
     ULONGLONG nativeRecoveryRetryAt = 0;
     bool privateGeometryApplied = false;
     bool verticalActive = false;
@@ -2453,6 +2494,11 @@ struct State {
     bool startPressed = false;
     unsigned long t81WinFallbackSequence = 0;
     bool t81WinBeganVisible = false;
+    HWND t81WinMenuAtDown = nullptr;
+    DWORD t81WinMenuPid = 0, t81WinMenuTid = 0;
+    unsigned long t81WinMenuGeneration = 0;
+    bool nativeLauncherVisible = false, alternateLauncherVisible = false;
+    HMONITOR nativeLauncherMonitor = nullptr, alternateLauncherMonitor = nullptr;
     bool startMenuVisible = false;
     HMONITOR startMenuMonitor = nullptr;
     bool dragCandidate = false;
@@ -2617,216 +2663,249 @@ struct State {
 };
 // State is owned and freed by the UI thread; no destructible globals.
 State* s = nullptr;
-// RetroBar tracks actual launcher visibility rather than just mouse capture.
-// Poll on a separate COM thread so a slow shell query cannot block painting.
+// Launcher state is event-driven independently of the optional keyboard fallback.
 static constexpr UINT WM_T81_START_STATE = WM_APP + 354;
+static HANDLE t81StartObserverThread = nullptr, t81StartObserverStop = nullptr;
+static bool T81StartMenuOn(HWND bar) {
+    if (!s || !bar)
+        return false;
+    return s->startMenuVisible &&
+           (!s->startMenuMonitor ||
+            MonitorFromWindow(bar, MONITOR_DEFAULTTONEAREST) ==
+                s->startMenuMonitor);
+}
+class T81LauncherVisibilitySink final : public IAppVisibilityEvents {
+   public:
+    explicit T81LauncherVisibilitySink(HWND target) : target_(target) {}
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
+        if (!out)
+            return E_POINTER;
+        *out = nullptr;
+        const GUID eventsId = {
+            0x6584ce6b,
+            0x7d82,
+            0x49c2,
+            {0x89, 0xc9, 0xc6, 0xbc, 0x02, 0xba, 0x8c, 0x38}};
+        if (IsEqualIID(iid, IID_IUnknown) || IsEqualIID(iid, eventsId)) {
+            *out = static_cast<IAppVisibilityEvents*>(this);
+            AddRef();
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return InterlockedIncrement(&refs_);
+    }
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG refs = InterlockedDecrement(&refs_);
+        if (!refs)
+            delete this;
+        return refs;
+    }
+    HRESULT STDMETHODCALLTYPE
+    AppVisibilityOnMonitorChanged(HMONITOR,
+                                  MONITOR_APP_VISIBILITY,
+                                  MONITOR_APP_VISIBILITY) override {
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE LauncherVisibilityChange(BOOL visible) override {
+        HWND fg = visible ? GetForegroundWindow() : nullptr;
+        HMONITOR monitor =
+            fg ? MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST) : nullptr;
+        PostMessageW(target_, WM_T81_START_STATE, visible ? 1 : 0,
+                     (LPARAM)monitor);
+        return S_OK;
+    }
+
+   private:
+    volatile LONG refs_ = 1;
+    HWND target_;
+};
+static DWORD WINAPI T81ObserveStart(void* arg) {
+    HWND target = static_cast<HWND>(arg);
+    HRESULT initialized = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(initialized))
+        return 0;
+    const GUID cls = {0x7e5fe3d9,
+                      0x985f,
+                      0x4908,
+                      {0x91, 0xf9, 0xee, 0x19, 0xf9, 0xfd, 0x15, 0x14}};
+    const GUID iid = {0x2246ea2d,
+                      0xcaea,
+                      0x4444,
+                      {0xa3, 0xc4, 0x6d, 0xe8, 0x27, 0xe4, 0x43, 0x13}};
+    IAppVisibility* app = nullptr;
+    T81LauncherVisibilitySink* sink = nullptr;
+    DWORD cookie = 0;
+    HRESULT hr = CoCreateInstance(cls, nullptr,
+                                  CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER,
+                                  iid, reinterpret_cast<void**>(&app));
+    if (SUCCEEDED(hr)) {
+        sink = new (std::nothrow) T81LauncherVisibilitySink(target);
+        if (sink) {
+            hr = app->Advise(sink, &cookie);
+            if (SUCCEEDED(hr)) {
+                BOOL visible = FALSE;
+                if (SUCCEEDED(app->IsLauncherVisible(&visible)))
+                    sink->LauncherVisibilityChange(visible);
+            }
+        }
+    }
+    Wh_Log(L"[T81-START-STATE] visibility subscription hr=0x%08lx",
+           (unsigned long)hr);
+    WaitForSingleObject(t81StartObserverStop, INFINITE);
+    if (app && cookie)
+        app->Unadvise(cookie);
+    if (sink)
+        sink->Release();
+    if (app)
+        app->Release();
+    CoUninitialize();
+    return 0;
+}
+static void T81StartObserver(HWND bar) {
+    if (t81StartObserverThread || !bar)
+        return;
+    t81StartObserverStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!t81StartObserverStop)
+        return;
+    t81StartObserverThread =
+        CreateThread(nullptr, 0, T81ObserveStart, bar, 0, nullptr);
+    if (!t81StartObserverThread) {
+        CloseHandle(t81StartObserverStop);
+        t81StartObserverStop = nullptr;
+    }
+}
+static void T81StopObserver() {
+    if (t81StartObserverStop)
+        SetEvent(t81StartObserverStop);
+    if (t81StartObserverThread) {
+        WaitForSingleObject(t81StartObserverThread, INFINITE);
+        CloseHandle(t81StartObserverThread);
+        t81StartObserverThread = nullptr;
+    }
+    if (t81StartObserverStop) {
+        CloseHandle(t81StartObserverStop);
+        t81StartObserverStop = nullptr;
+    }
+}
+
+// Advanced, opt-in compatibility fallback. It may conflict with software that
+// blocks Win if that software's hook runs later. No polling or hook reordering.
 static constexpr UINT WM_T81_WIN_TAP = WM_APP + 355;
 static constexpr UINT_PTR TIMER_T81_WIN_FALLBACK = 56;
+static std::atomic<bool> t81ForceWinRecovery{false};
 static std::atomic<HWND> t81WinHookTarget{nullptr};
 static std::atomic<unsigned long> t81WinInputGeneration{0};
-// Hook state belongs only to the observer thread. Pass every event down the
-// chain: this is recovery, not a system-wide Win-key replacement.
-static unsigned t81WinHeld = 0;
-static bool t81WinChord = false;
+static std::atomic<unsigned> t81WinHeld{0};
+static bool t81WinChord = false;  // Only accessed on the hook thread.
+static HANDLE t81WinHookThread = nullptr, t81WinHookReady = nullptr;
+static std::atomic<unsigned long> t81MenuGeneration{0};
+static DWORD t81WinHookTid = 0;
+
 static LRESULT CALLBACK T81WinObserverHook(int code, WPARAM msg, LPARAM data) {
-    if (code != HC_ACTION || !data) return CallNextHookEx(nullptr, code, msg, data);
+    if (code != HC_ACTION || !data)
+        return CallNextHookEx(nullptr, code, msg, data);
     const auto* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(data);
-    if (key->flags & LLKHF_INJECTED) return CallNextHookEx(nullptr, code, msg, data);
+    if (key->flags & LLKHF_INJECTED)
+        return CallNextHookEx(nullptr, code, msg, data);
     bool down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
     bool up = msg == WM_KEYUP || msg == WM_SYSKEYUP;
-    if (!down && !up) return CallNextHookEx(nullptr, code, msg, data);
-    unsigned bit = key->vkCode == VK_LWIN ? 1u : key->vkCode == VK_RWIN ? 2u : 0u;
+    if (!down && !up)
+        return CallNextHookEx(nullptr, code, msg, data);
+    unsigned bit = key->vkCode == VK_LWIN   ? 1u
+                   : key->vkCode == VK_RWIN ? 2u
+                                            : 0u;
+    unsigned held = t81WinHeld.load(std::memory_order_relaxed);
     HWND target = t81WinHookTarget.load(std::memory_order_relaxed);
-    if (bit && down && !(t81WinHeld & bit)) {
+    if (bit && down && !(held & bit)) {
         unsigned long seq = ++t81WinInputGeneration;
-        if (!t81WinHeld) {
+        if (!held) {
             t81WinChord = (GetAsyncKeyState(VK_CONTROL) & 0x8000) ||
                           (GetAsyncKeyState(VK_MENU) & 0x8000) ||
                           (GetAsyncKeyState(VK_SHIFT) & 0x8000);
-            if (target) PostMessageW(target, WM_T81_WIN_TAP, 1, (LPARAM)seq);
-        } else t81WinChord = true;
-        t81WinHeld |= bit;
-    } else if (bit && up && (t81WinHeld & bit)) {
-        t81WinHeld &= ~bit;
-        unsigned long seq = t81WinInputGeneration.load(std::memory_order_relaxed);
-        if (!t81WinHeld && target)
-            PostMessageW(target, WM_T81_WIN_TAP, t81WinChord ? 3 : 2, (LPARAM)seq);
+            if (target)
+                PostMessageW(target, WM_T81_WIN_TAP, 1, (LPARAM)seq);
+        } else {
+            t81WinChord = true;
+        }
+        t81WinHeld.store(held | bit, std::memory_order_relaxed);
+    } else if (bit && up && (held & bit)) {
+        held &= ~bit;
+        t81WinHeld.store(held, std::memory_order_relaxed);
+        unsigned long seq =
+            t81WinInputGeneration.load(std::memory_order_relaxed);
+        if (!held && target)
+            PostMessageW(target, WM_T81_WIN_TAP, t81WinChord ? 3 : 2,
+                         (LPARAM)seq);
     } else if (!bit && down) {
         ++t81WinInputGeneration;
-        if (t81WinHeld && !t81WinChord) {
+        if (held && !t81WinChord) {
             t81WinChord = true;
-            if (target) PostMessageW(target, WM_T81_WIN_TAP, 3, 0);
+            if (target)
+                PostMessageW(target, WM_T81_WIN_TAP, 3, 0);
         }
     }
     return CallNextHookEx(nullptr, code, msg, data);
 }
 
-static HANDLE t81StartObserverThread = nullptr, t81StartObserverStop = nullptr;
-static bool T81StartMenuOn(HWND bar) {
-    if (!s || !bar) return false;
-    return s->startMenuVisible &&
-           (!s->startMenuMonitor || MonitorFromWindow(bar, MONITOR_DEFAULTTONEAREST) == s->startMenuMonitor);
-}
-static DWORD WINAPI T81ObserveStart(void* arg) {
-    HWND target = static_cast<HWND>(arg);
-    MSG message{};
-    PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
-    t81WinHeld = 0; t81WinChord = false;
-    t81WinHookTarget.store(target, std::memory_order_release);
-    HMODULE hookModule = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       reinterpret_cast<LPCWSTR>(&T81WinObserverHook), &hookModule);
-    HHOOK keyHook = hookModule ? SetWindowsHookExW(WH_KEYBOARD_LL, T81WinObserverHook, hookModule, 0) : nullptr;
-    Wh_Log(L"[T81-WIN-RECOVERY] passive keyboard observer installed=%d error=%lu", keyHook ? 1 : 0, keyHook ? 0 : GetLastError());
-    // Do not activate the native launcher visibility service while Open-Shell
-    // owns the shell: its window classes already provide visibility. This is
-    // a cautious compatibility change, not proof of the reported cause.
-    HRESULT initialized = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    IAppVisibility* app = nullptr;
-    ULONGLONG nextAppAttempt = 0;
-    bool lastOpenShell = false, loggedBackend = false;
-    const GUID cls = {0x7e5fe3d9,0x985f,0x4908,{0x91,0xf9,0xee,0x19,0xf9,0xfd,0x15,0x14}};
-    const GUID iid = {0x2246ea2d,0xcaea,0x4444,{0xa3,0xc4,0x6d,0xe8,0x27,0xe4,0x43,0x13}};
-    bool oldVisible = false, sent = false;
-    HMONITOR oldMonitor = nullptr;
-    DWORD hookForegroundPid = 0;
-    ULONGLONG hookRetryAt = 0;
-    // Supplemental sampling is used only when the normal LL hook did not
-    // observe this Win press. It never consumes or injects keyboard input.
-    bool sampleHeld = false, sampleChord = false, samplePending = false;
-    unsigned long sampleGeneration = 0;
-    ULONGLONG sampleDue = 0;
-    while (WaitForSingleObject(t81StartObserverStop, 0) == WAIT_TIMEOUT) {
-        // Reinsert the passive hook when the foreground process changes. Hooks
-        // are called newest first; another hook can otherwise swallow Win before
-        // our observer sees it. Never reinsert while a Win key is down.
-        HWND fgForHook = GetForegroundWindow();
-        DWORD fgForHookPid = 0;
-        if (fgForHook) GetWindowThreadProcessId(fgForHook, &fgForHookPid);
-        bool winPhysicallyDown = ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) != 0;
-        if (hookModule && fgForHookPid && fgForHookPid != hookForegroundPid &&
-            !winPhysicallyDown && GetTickCount64() >= hookRetryAt) {
-            HHOOK replacement = SetWindowsHookExW(WH_KEYBOARD_LL, T81WinObserverHook, hookModule, 0);
-            DWORD hookError = replacement ? 0 : GetLastError();
-            if (replacement) {
-                if (keyHook) UnhookWindowsHookEx(keyHook);
-                keyHook = replacement;
-                hookForegroundPid = fgForHookPid;
-                // A key-up could have been swallowed by another hook.
-                // Cancel a stale tap rather than generating an extra toggle.
-                if (t81WinHeld) {
-                    t81WinHeld = 0; t81WinChord = false;
-                    ++t81WinInputGeneration;
-                    PostMessageW(target, WM_T81_WIN_TAP, 3, 0);
-                }
-            } else {
-                hookRetryAt = GetTickCount64() + 1000;
-            }
-            Wh_Log(L"[T81-WIN-FORCE] foreground=%p pid=%lu hook-reinserted=%d error=%lu", fgForHook, fgForHookPid, replacement ? 1 : 0, hookError);
-        }
-        bool visible = false;
-        HMONITOR monitor = nullptr;
-        DWORD shellPid = 0;
-        HWND shell = GetShellWindow();
-        if (shell) GetWindowThreadProcessId(shell, &shellPid);
-        HWND helper = FindWindowW(L"OpenShellMenu.CStartHookWindow", nullptr);
-        HWND owner = FindWindowW(L"OpenShell.COwnerWindow", nullptr);
-        DWORD helperPid = 0, ownerPid = 0;
-        if (helper) GetWindowThreadProcessId(helper, &helperPid);
-        if (owner) GetWindowThreadProcessId(owner, &ownerPid);
-        bool openShell = shellPid && (helperPid == shellPid || ownerPid == shellPid);
-        if (openShell && app) { app->Release(); app = nullptr; }
-        if (!loggedBackend || lastOpenShell != openShell) {
-            Wh_Log(L"[T81-START-STATE] backend=%ls", openShell ? L"OpenShell-window" : L"native-visibility");
-            loggedBackend = true; lastOpenShell = openShell;
-        }
-        if (!openShell && !app && SUCCEEDED(initialized) && GetTickCount64() >= nextAppAttempt) {
-            HRESULT hr = CoCreateInstance(cls, nullptr, CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER, iid, (void**)&app);
-            if (FAILED(hr)) nextAppAttempt = GetTickCount64() + 10000;
-        }
-        const wchar_t* classes[] = {L"OpenShell.CMenuContainer", L"DV2ControlHost", L"Win8StartScreenMod8045"};
-        for (const auto* clsName : classes) {
-            HWND h = nullptr;
-            for (int i = 0; i < 32 && (h = FindWindowExW(nullptr, h, clsName, nullptr)); ++i) {
-                DWORD pid = 0;
-                GetWindowThreadProcessId(h, &pid);
-                if (!IsWindowVisible(h) || !pid ||
-                    (wcscmp(clsName, L"Win8StartScreenMod8045") && pid != shellPid && pid != GetCurrentProcessId()))
-                    continue;
-                visible = true;
-                monitor = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
-                break;
-            }
-            if (visible) break;
-        }
-        if (!visible && !openShell && app) {
-            BOOL launcher = FALSE;
-            if (SUCCEEDED(app->IsLauncherVisible(&launcher)) && launcher) {
-                visible = true;
-                HWND fg = GetForegroundWindow();
-                if (fg) monitor = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
-            }
-        }
-        if (!sent || visible != oldVisible || monitor != oldMonitor) {
-            if (PostMessageW(target, WM_T81_START_STATE, visible ? 1 : 0, (LPARAM)monitor)) {
-                sent = true; oldVisible = visible; oldMonitor = monitor;
-            }
-        }
-        // Sample only key states, never record key values. Sampling cannot
-        // guarantee detection of very short chords; cancel on any other key.
-        bool sampleWin = ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) != 0;
-        if (sampleWin && !sampleHeld) {
-            sampleHeld = true; sampleChord = t81WinHeld != 0; samplePending = false;
-            sampleGeneration = t81WinInputGeneration.load(std::memory_order_relaxed);
-        }
-        if (sampleHeld) {
-            if (t81WinHeld) sampleChord = true;
-            for (int vk = 8; vk < 256; ++vk) {
-                if (vk == VK_LWIN || vk == VK_RWIN) continue;
-                if (GetAsyncKeyState(vk) & 0x8000) { sampleChord = true; break; }
-            }
-            if (!sampleWin) {
-                sampleHeld = false;
-                if (!sampleChord) { samplePending = true; sampleDue = GetTickCount64() + 40; }
-            }
-        }
-        if (samplePending && GetTickCount64() >= sampleDue) {
-            samplePending = false;
-            if (sampleGeneration == t81WinInputGeneration.load(std::memory_order_relaxed)) {
-                unsigned long seq = ++t81WinInputGeneration;
-                PostMessageW(target, WM_T81_WIN_TAP, 1, (LPARAM)seq);
-                PostMessageW(target, WM_T81_WIN_TAP, 2, (LPARAM)seq);
-                Wh_Log(L"[T81-WIN-SAMPLE] Win observed via key state; hook did not report it");
-            }
-        }
-        // LL hooks are delivered to the installing thread's message queue.
-        DWORD wait = MsgWaitForMultipleObjects(1, &t81StartObserverStop, FALSE, 10, QS_ALLINPUT);
-        if (wait == WAIT_OBJECT_0 || wait == WAIT_FAILED) break;
-        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&message);
-            DispatchMessageW(&message);
-        }
+static DWORD WINAPI T81WinHookProc(void*) {
+    MSG msg{};
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    SetEvent(t81WinHookReady);
+    HMODULE module = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&T81WinObserverHook), &module);
+    HHOOK hook = module ? SetWindowsHookExW(WH_KEYBOARD_LL, T81WinObserverHook,
+                                            module, 0)
+                        : nullptr;
+    Wh_Log(L"[T81-WIN-FORCE] optional keyboard hook installed=%d",
+           hook ? 1 : 0);
+    // Keep the hook on a message-pump-only thread. Never move it ahead of
+    // other hooks; keys consumed earlier in the chain are not recovered.
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
     }
-    t81WinHookTarget.store(nullptr, std::memory_order_release);
-    if (keyHook) UnhookWindowsHookEx(keyHook);
-    if (app) app->Release();
-    if (SUCCEEDED(initialized)) CoUninitialize();
+    if (hook)
+        UnhookWindowsHookEx(hook);
     return 0;
 }
-static void T81StartObserver(HWND bar) {
-    if (t81StartObserverThread || !bar) return;
-    t81StartObserverStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!t81StartObserverStop) return;
-    t81StartObserverThread = CreateThread(nullptr, 0, T81ObserveStart, bar, 0, nullptr);
-    if (!t81StartObserverThread) { CloseHandle(t81StartObserverStop); t81StartObserverStop = nullptr; }
-}
-static void T81StopObserver() {
-    if (t81StartObserverStop) SetEvent(t81StartObserverStop);
-    if (t81StartObserverThread) {
-        WaitForSingleObject(t81StartObserverThread, INFINITE);
-        CloseHandle(t81StartObserverThread); t81StartObserverThread = nullptr;
+
+static void T81StopForcedWinRecovery() {
+    t81WinHookTarget.store(nullptr);
+    if (t81WinHookThread) {
+        WaitForSingleObject(t81WinHookReady, INFINITE);
+        PostThreadMessageW(t81WinHookTid, WM_QUIT, 0, 0);
+        WaitForSingleObject(t81WinHookThread, INFINITE);
+        CloseHandle(t81WinHookThread);
+        t81WinHookThread = nullptr;
     }
-    if (t81StartObserverStop) { CloseHandle(t81StartObserverStop); t81StartObserverStop = nullptr; }
+    if (t81WinHookReady) {
+        CloseHandle(t81WinHookReady);
+        t81WinHookReady = nullptr;
+    }
+    t81WinHookTid = 0;
+    t81WinHeld.store(0);
+}
+static void T81StartForcedWinRecovery(HWND target) {
+    if (!target || t81WinHookThread)
+        return;
+    t81WinHookReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!t81WinHookReady) {
+        T81StopForcedWinRecovery();
+        return;
+    }
+    t81WinHeld.store(0);
+    t81WinChord = false;
+    t81WinHookTarget.store(target);
+    t81WinHookThread =
+        CreateThread(nullptr, 0, T81WinHookProc, nullptr, 0, &t81WinHookTid);
+    if (!t81WinHookThread) {
+        T81StopForcedWinRecovery();
+        return;
+    }
 }
 
 std::atomic<HWND> barWindow{nullptr};
@@ -2912,11 +2991,8 @@ static void MigrateTaskbarSettings() {
 void LoadSettings() {
     MigrateTaskbarSettings();
     debugExceptionLog.store(Wh_GetIntSetting(L"debugExceptionLog") != 0);
-    // Full recreation is always requested, regardless of an old saved
-    // enablePrivateTray=0 value. Native shell remains a recovery path if
-    // takeover is not actually possible.
-    enablePrivateTray.store(true);
-    Wh_Log(L"[T81-TRAY] integrated tray required; legacy disable setting ignored");
+    enablePrivateTray.store(Wh_GetIntSetting(L"enablePrivateTray") != 0);
+    t81ForceWinRecovery.store(Wh_GetIntSetting(L"forceWinKeyRecovery") != 0);
     secondaryVisualMirror.store(Wh_GetIntSetting(L"secondaryVisualMirror") != 0);
     {
         PCWSTR value = Wh_GetStringSetting(L"buttonWidthMode");
@@ -7271,7 +7347,7 @@ static HWND StartDesktopWindow() {
         GetWindowThreadProcessId(shell, &shellPid);
     return shellPid && pid == shellPid ? desktop : nullptr;
 }
-static bool OpenShellMenuVisible() {
+static HWND T81FindVisibleOpenShellMenu() {
     HWND h = nullptr;
     while ((h = FindWindowExW(nullptr, h, L"OpenShell.CMenuContainer", nullptr)) != nullptr) {
         DWORD pid = 0;
@@ -7281,9 +7357,12 @@ static bool OpenShellMenuVisible() {
         if (shell)
             GetWindowThreadProcessId(shell, &shellPid);
         if (shellPid && pid == shellPid && IsWindowVisible(h))
-            return true;
+            return h;
     }
-    return false;
+    return nullptr;
+}
+static bool OpenShellMenuVisible() {
+    return T81FindVisibleOpenShellMenu() != nullptr;
 }
 static bool PostOpenShellRequest(WPARAM operation) {
     HWND helper = FindWindowW(L"OpenShellMenu.CStartHookWindow", L"StartHookWindow");
@@ -9562,11 +9641,12 @@ static DWORD WINAPI T81RecoveryWatchdog(void*) {
         if (!shell || !GetWindowThreadProcessId(shell, &shellPid) ||
             shellPid != GetCurrentProcessId())
             continue;
-        HANDLE mapping = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, kT81RecoveryName);
+        HANDLE mapping =
+            OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, kT81RecoveryName);
         if (!mapping)
             continue;
-        auto* r = (T81RecoveryState*)MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0,
-                                                   sizeof(T81RecoveryState));
+        auto* r = (T81RecoveryState*)MapViewOfFile(
+            mapping, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(T81RecoveryState));
         if (!r) {
             CloseHandle(mapping);
             continue;
@@ -9586,14 +9666,40 @@ static DWORD WINAPI T81RecoveryWatchdog(void*) {
         HANDLE handles[] = {g_t81WatchStop, process};
         DWORD result = WAIT_TIMEOUT;
         ULONGLONG lastGuardLog = 0;
-        while ((result = WaitForMultipleObjects(2, handles, FALSE, 40)) == WAIT_TIMEOUT &&
+        bool restoredForUnresponsiveBar = false;
+        while ((result = WaitForMultipleObjects(2, handles, FALSE, 250)) ==
+                   WAIT_TIMEOUT &&
                InterlockedCompareExchange(&r->ready, 0, 0) == 1) {
-            if (InterlockedCompareExchange(&r->guardEnabled, 0, 0) != 1) continue;
+            if (InterlockedCompareExchange(&r->guardEnabled, 0, 0) != 1)
+                continue;
             InterlockedExchange(&r->guardInFlight, 1);
-            if (InterlockedCompareExchange(&r->guardEnabled, 0, 0) == 1 &&
+            bool guardActive =
+                InterlockedCompareExchange(&r->guardEnabled, 0, 0) == 1 &&
+                InterlockedCompareExchange(&r->ready, 0, 0) == 1;
+            bool barHealthy =
+                T81SameRecoveryWindow(r->guardBar) && r->guardBar.pid == pid &&
+                IsWindowVisible((HWND)r->guardBar.hwnd) &&
+                !IsHungAppWindow((HWND)r->guardBar.hwnd) &&
+                T81SameRecoveryWindow(r->guardHost) && r->guardHost.pid == pid;
+            if (guardActive && !barHealthy && !restoredForUnresponsiveBar &&
+                InterlockedCompareExchange(&r->nativeHidden, 0, 0) &&
+                T81SameRecoveryWindow(r->native) && r->native.pid == shellPid) {
+                // Restore the native bar, separately hidden Start windows, and
+                // the work area using the same validated crash-recovery path.
+                T81RestoreRecovery(r);
+                restoredForUnresponsiveBar = true;
+                Wh_Log(
+                    L"[T81-RECOVERY] recreated taskbar unavailable or hung; "
+                    L"native restore requested");
+            }
+            if (barHealthy)
+                restoredForUnresponsiveBar = false;
+            if (guardActive && barHealthy &&
+                InterlockedCompareExchange(&r->guardEnabled, 0, 0) == 1 &&
                 InterlockedCompareExchange(&r->ready, 0, 0) == 1 &&
                 T81SameRecoveryWindow(r->guardBar) && r->guardBar.pid == pid &&
-                T81SameRecoveryWindow(r->guardHost) && r->guardHost.pid == pid &&
+                T81SameRecoveryWindow(r->guardHost) &&
+                r->guardHost.pid == pid &&
                 IsWindowVisible((HWND)r->guardBar.hwnd) &&
                 T81SameRecoveryWindow(r->native) && r->native.pid == shellPid &&
                 IsWindowVisible((HWND)r->native.hwnd)) {
@@ -9601,16 +9707,21 @@ static DWORD WINAPI T81RecoveryWatchdog(void*) {
                 BOOL queued = ShowWindowAsync((HWND)r->native.hwnd, SW_HIDE);
                 ULONGLONG now = GetTickCount64();
                 if (!lastGuardLog || now - lastGuardLog >= 10000) {
-                    Wh_Log(L"[T81-NATIVE-GUARD] watchdog rehide hwnd=%p queued=%d", (HWND)r->native.hwnd, queued ? 1 : 0);
+                    Wh_Log(
+                        L"[T81-NATIVE-GUARD] watchdog rehide hwnd=%p queued=%d",
+                        (HWND)r->native.hwnd, queued ? 1 : 0);
                     lastGuardLog = now;
                 }
             }
             InterlockedExchange(&r->guardInFlight, 0);
         }
-        if (result == WAIT_OBJECT_0 + 1 && InterlockedCompareExchange(&r->ready, 0, 0) == 1) {
+        if (result == WAIT_OBJECT_0 + 1 &&
+            InterlockedCompareExchange(&r->ready, 0, 0) == 1) {
             T81RestoreRecovery(r);
             InterlockedExchange(&r->ready, 0);
-            Wh_Log(L"[T81-RECOVERY] tool exited unexpectedly; native taskbar restore requested");
+            Wh_Log(
+                L"[T81-RECOVERY] tool exited unexpectedly; native taskbar "
+                L"restore requested");
         }
         InterlockedExchange(&r->watching, 0);
         CloseHandle(process);
@@ -9626,7 +9737,8 @@ static void StartT81RecoveryWatchdog() {
         return;
     g_t81WatchStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (g_t81WatchStop)
-        g_t81WatchThread = CreateThread(nullptr, 0, T81RecoveryWatchdog, nullptr, 0, nullptr);
+        g_t81WatchThread =
+            CreateThread(nullptr, 0, T81RecoveryWatchdog, nullptr, 0, nullptr);
     if (!g_t81WatchThread) {
         if (g_t81WatchStop)
             CloseHandle(g_t81WatchStop);
@@ -9989,13 +10101,15 @@ static bool IsExpectedNativeTray(HWND h) {
            !wcscmp(cls, L"Shell_TrayWnd");
 }
 static void HideNativeTrayIfVisible() {
-    if (!s || !s->privateActive || !s->bar || !IsWindow(s->bar) || !IsWindowVisible(s->bar) || !s->privateHost ||
+    if (!s || !s->privateActive || !s->bar || !IsWindow(s->bar) ||
+        !IsWindowVisible(s->bar) || !s->privateHost ||
         !IsWindow(s->privateHost))
         return;
-    if (T81RecoveryReady() && s->nativeWasVisible && IsExpectedNativeTray(s->native) &&
-        IsWindowVisible(s->native)) {
+    if (T81RecoveryReady() && !IsHungAppWindow(s->bar) && s->nativeWasVisible &&
+        IsExpectedNativeTray(s->native) && IsWindowVisible(s->native)) {
         ULONGLONG now = GetTickCount64();
-        if (!s->nativeHideLastLogged || now - s->nativeHideLastLogged >= 10000) {
+        if (!s->nativeHideLastLogged ||
+            now - s->nativeHideLastLogged >= 10000) {
             Wh_Log(L"[T81-DIAG] hiding-native hwnd=%p", s->native);
             s->nativeHideLastLogged = now;
         }
@@ -10003,14 +10117,15 @@ static void HideNativeTrayIfVisible() {
         InterlockedExchange(&g_t81Recovery->nativeHidden, 1);
         ShowWindowAsync(s->native, SW_HIDE);
         SetWindowPos(s->native, HWND_BOTTOM, 0, 0, 0, 0,
-                     SWP_HIDEWINDOW | SWP_ASYNCWINDOWPOS | SWP_NOMOVE | SWP_NOSIZE |
-                         SWP_NOACTIVATE);
+                     SWP_HIDEWINDOW | SWP_ASYNCWINDOWPOS | SWP_NOMOVE |
+                         SWP_NOSIZE | SWP_NOACTIVATE);
     }
 }
 static void GuardPrivateTray() {
     if (!s || !s->privateActive)
         return;
-    if (!s->privateHost || !IsWindow(s->privateHost) || !s->bar || !IsWindow(s->bar)) {
+    if (!s->privateHost || !IsWindow(s->privateHost) || !s->bar ||
+        !IsWindow(s->bar)) {
         StopPrivateTray();
         return;
     }
@@ -10020,7 +10135,8 @@ static void GuardPrivateTray() {
     SetWindowPos(s->privateHost, HWND_TOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     SyncPrivateHostGeometry();
-    if (T81RecoveryReady())
+    if (T81RecoveryReady() && IsWindowVisible(s->bar) &&
+        !IsHungAppWindow(s->bar))
         EnumWindows(HideOwnedStart, 0);
 }
 // Event-based repair reduces the interval in which Explorer's own bar can
@@ -10028,14 +10144,61 @@ static void GuardPrivateTray() {
 static bool AttachClassicClockFrame();
 static void T81PlaceSecondaryOpenShell(HWND observed = nullptr) noexcept;
 static void T81StopOpenShellPositionForPopup(HWND popup) noexcept;
-static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG object,
-                                          LONG child, DWORD, DWORD) {
+// Re-scan only on launcher show/hide and at startup, not on a timer.
+static void T81RefreshAlternateLauncher(HWND exclude = nullptr) {
+    if (!s || !s->bar || taskbarSkin.load() != 1)
+        return;
+    DWORD shellPid = DesktopShellPid();
+    const wchar_t* classes[] = {L"OpenShell.CMenuContainer", L"DV2ControlHost",
+                                L"Win8StartScreenMod8045"};
+    for (const wchar_t* className : classes) {
+        HWND window = nullptr;
+        while ((window = FindWindowExW(nullptr, window, className, nullptr)) !=
+               nullptr) {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(window, &pid);
+            if (window == exclude || !pid || !IsWindowVisible(window))
+                continue;
+            if (wcscmp(className, L"Win8StartScreenMod8045") &&
+                pid != shellPid && pid != GetCurrentProcessId())
+                continue;
+            HMONITOR monitor =
+                MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+            PostMessageW(s->bar, WM_T81_START_STATE, 3, (LPARAM)monitor);
+            return;
+        }
+    }
+    PostMessageW(s->bar, WM_T81_START_STATE, 2, 0);
+}
+static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK,
+                                          DWORD event,
+                                          HWND hwnd,
+                                          LONG object,
+                                          LONG child,
+                                          DWORD,
+                                          DWORD) {
     try {
         if (!s || !hwnd || object != OBJID_WINDOW || child != CHILDID_SELF)
             return;
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
         DWORD shellPid = DesktopShellPid();
+        wchar_t launcherClass[64]{};
+        if ((event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_HIDE) &&
+            GetClassNameW(hwnd, launcherClass, (int)std::size(launcherClass)) &&
+            !wcscmp(launcherClass, L"OpenShell.CMenuContainer") && shellPid &&
+            pid == shellPid)
+            ++t81MenuGeneration;
+        if ((event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_HIDE) &&
+            GetClassNameW(hwnd, launcherClass, (int)std::size(launcherClass)) &&
+            (!wcscmp(launcherClass, L"OpenShell.CMenuContainer") ||
+             !wcscmp(launcherClass, L"DV2ControlHost") ||
+             !wcscmp(launcherClass, L"Win8StartScreenMod8045")) &&
+            (pid == GetCurrentProcessId() || (shellPid && pid == shellPid) ||
+             !wcscmp(launcherClass, L"Win8StartScreenMod8045"))) {
+            T81RefreshAlternateLauncher(event == EVENT_OBJECT_HIDE ? hwnd
+                                                                   : nullptr);
+        }
         if (pid != GetCurrentProcessId() && (!shellPid || pid != shellPid))
             return;
         if (event == EVENT_OBJECT_SHOW) {
@@ -10049,10 +10212,12 @@ static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK, DWORD event, HWND hwnd,
         if (event == EVENT_OBJECT_SHOW && s->peekOn) {
             wchar_t startClass[64]{};
             if (GetClassNameW(hwnd, startClass, (int)std::size(startClass)) &&
-                !wcscmp(startClass, L"Win8StartScreenMod8045") && IsWindowVisible(hwnd))
+                !wcscmp(startClass, L"Win8StartScreenMod8045") &&
+                IsWindowVisible(hwnd))
                 PeekOff(false);
         }
-        if (event == EVENT_OBJECT_SHOW && s->privateActive && hwnd == s->native) {
+        if (event == EVENT_OBJECT_SHOW && s->privateActive &&
+            hwnd == s->native) {
             Wh_Log(L"[T81-DIAG] native bar shown: event-driven rehide");
             HideNativeTrayIfVisible();
             return;
@@ -10060,32 +10225,39 @@ static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK, DWORD event, HWND hwnd,
         // ExplorerPatcher and similar taskbars may expose a separate top-level
         // Start button. Apply the same ownership, class and geometry checks as
         // the periodic scan as soon as that window appears.
-        if (event == EVENT_OBJECT_SHOW && s->privateActive && s->bar && IsWindowVisible(s->bar) &&
-            s->privateHost && IsWindow(s->privateHost) && hwnd != s->native &&
+        if (event == EVENT_OBJECT_SHOW && s->privateActive && s->bar &&
+            IsWindowVisible(s->bar) && s->privateHost &&
+            IsWindow(s->privateHost) && hwnd != s->native &&
             hwnd != s->privateHost)
             HideOwnedStart(hwnd, 0);
         if (event == EVENT_OBJECT_CREATE || event == EVENT_OBJECT_SHOW) {
             wchar_t cls[64]{};
-            if (GetClassNameW(hwnd, cls, 64) && !wcscmp(cls, L"ClockFlyoutWindow")) {
+            if (GetClassNameW(hwnd, cls, 64) &&
+                !wcscmp(cls, L"ClockFlyoutWindow")) {
                 BOOL disabled = TRUE;
-                HRESULT hr = DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, &disabled,
-                                                   sizeof(disabled));
-                Wh_Log(L"[T81-DIAG] clock transition disable event=%lu hr=0x%08lx", event,
-                       (unsigned long)hr);
+                HRESULT hr =
+                    DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED,
+                                          &disabled, sizeof(disabled));
+                Wh_Log(
+                    L"[T81-DIAG] clock transition disable event=%lu hr=0x%08lx",
+                    event, (unsigned long)hr);
                 if (event == EVENT_OBJECT_SHOW && s->clockFixAttempts > 0 &&
                     AttachClassicClockFrame()) {
                     if (s->bar)
                         KillTimer(s->bar, TIMER_CLOCK_FIX);
                     s->clockFixAttempts = 0;
                 }
-            } else if (GetClassNameW(hwnd, cls, 64) && !wcscmp(cls, L"BatMeterFlyout")) {
+            } else if (GetClassNameW(hwnd, cls, 64) &&
+                       !wcscmp(cls, L"BatMeterFlyout")) {
                 BOOL disabled = TRUE;
-                DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, &disabled,
-                                      sizeof(disabled));
+                DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED,
+                                      &disabled, sizeof(disabled));
             }
         }
     } catch (...) {
-        Wh_Log(L"[T81-DIAG] shell visibility event C++ exception; periodic guard remains active");
+        Wh_Log(
+            L"[T81-DIAG] shell visibility event C++ exception; periodic guard "
+            L"remains active");
     }
 }
 // Compatibility with the explicitly named companion classes. Action Center
@@ -21290,6 +21462,7 @@ void UpdatePlacement() {
         s->rectValid = false;
         nativeWindow.store(nullptr);
         s->nativeRecoveryPending = true;
+        s->nativeRecoveryAttempts = 0;
         s->nativeRecoveryRetryAt = GetTickCount64() + 2000;
         Wh_Log(L"[T81-DIAG] native taskbar lost; waiting before recovery");
         return;
@@ -26641,51 +26814,84 @@ static bool T81ResizeMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     // The primary vertical bar uses its work-area-facing edge. Never apply
     // this to horizontal secondary mirrors when the primary is vertical.
     if (s->verticalActive) {
-        if (hwnd != s->bar) return false;
-        RECT r{}; GetClientRect(hwnd, &r);
+        if (hwnd != s->bar)
+            return false;
+        RECT r{};
+        GetClientRect(hwnd, &r);
         int edge = std::max(2, MulDiv(4, (int)T81SecondaryDpi(hwnd), 96));
-        auto onEdge = [&](int x) { return s->verticalSide == 1
-            ? x >= r.right - edge && x < r.right : x >= 0 && x < edge; };
+        auto onEdge = [&](int x) {
+            return s->verticalSide == 1 ? x >= r.right - edge && x < r.right
+                                        : x >= 0 && x < edge;
+        };
         if (msg == WM_SETCURSOR && !s->bandsLocked && LOWORD(lp) == HTCLIENT) {
-            POINT p{}; if (GetCursorPos(&p) && ScreenToClient(hwnd, &p) && onEdge(p.x)) {
-                SetCursor(LoadCursorW(nullptr, IDC_SIZEWE)); return true;
+            POINT p{};
+            if (GetCursorPos(&p) && ScreenToClient(hwnd, &p) && onEdge(p.x)) {
+                SetCursor(LoadCursorW(nullptr, IDC_SIZEWE));
+                return true;
             }
         }
-        if (msg == WM_LBUTTONDOWN && !s->bandsLocked && !t81ResizeWindow && onEdge(GET_X_LPARAM(lp))) {
+        if (msg == WM_LBUTTONDOWN && !s->bandsLocked && !t81ResizeWindow &&
+            onEdge(GET_X_LPARAM(lp))) {
             t81VerticalResizeBefore = s->verticalWidthLogical;
             SetCapture(hwnd);
-            if (GetCapture() == hwnd) { t81ResizeWindow = hwnd; t81ResizeVertical = true; HidePreview(); return true; }
+            if (GetCapture() == hwnd) {
+                t81ResizeWindow = hwnd;
+                t81ResizeVertical = true;
+                HidePreview();
+                return true;
+            }
         }
-        if (t81ResizeWindow != hwnd || !t81ResizeVertical) return false;
+        if (t81ResizeWindow != hwnd || !t81ResizeVertical)
+            return false;
         if (msg == WM_MOUSEMOVE && GetCapture() == hwnd && (wp & MK_LBUTTON)) {
-            POINT p{}; MONITORINFO mi{}; mi.cbSize = sizeof(mi);
-            if (GetCursorPos(&p) && GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi)) {
-                int physical = s->verticalSide == 1 ? p.x - mi.rcMonitor.left : mi.rcMonitor.right - p.x;
+            POINT p{};
+            MONITORINFO mi{};
+            mi.cbSize = sizeof(mi);
+            if (GetCursorPos(&p) &&
+                GetMonitorInfoW(
+                    MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi)) {
+                int physical = s->verticalSide == 1 ? p.x - mi.rcMonitor.left
+                                                    : mi.rcMonitor.right - p.x;
                 int dpi = (int)T81SecondaryDpi(hwnd);
-                int maximum = std::max(56, MulDiv((mi.rcMonitor.right - mi.rcMonitor.left) / 2, 96, dpi));
-                int logical = std::clamp(MulDiv(physical, 96, dpi), 56, std::min(320, maximum));
+                int maximum = std::max(
+                    56, MulDiv((mi.rcMonitor.right - mi.rcMonitor.left) / 2, 96,
+                               dpi));
+                int logical = std::clamp(MulDiv(physical, 96, dpi), 56,
+                                         std::min(320, maximum));
                 if (logical != s->verticalWidthLogical) {
-                    s->verticalWidthLogical = logical; UpdatePlacement();
-                    Wh_Log(L"[T81-ROWS] vertical resize width=%d logical px (runtime only)", logical);
+                    s->verticalWidthLogical = logical;
+                    UpdatePlacement();
+                    Wh_Log(
+                        L"[T81-ROWS] vertical resize width=%d logical px "
+                        L"(runtime only)",
+                        logical);
                 }
             }
             return true;
         }
         if (msg == WM_LBUTTONUP) {
-            t81ResizeWindow = nullptr; t81ResizeVertical = false;
-            if (GetCapture() == hwnd) ReleaseCapture(); return true;
+            t81ResizeWindow = nullptr;
+            t81ResizeVertical = false;
+            if (GetCapture() == hwnd)
+                ReleaseCapture();
+            return true;
         }
         if (msg == WM_CANCELMODE || msg == WM_CAPTURECHANGED) {
-            t81ResizeWindow = nullptr; t81ResizeVertical = false;
+            t81ResizeWindow = nullptr;
+            t81ResizeVertical = false;
             s->verticalWidthLogical = t81VerticalResizeBefore;
-            if (msg == WM_CANCELMODE && GetCapture() == hwnd) ReleaseCapture();
-            UpdatePlacement(); return true;
+            if (msg == WM_CANCELMODE && GetCapture() == hwnd)
+                ReleaseCapture();
+            UpdatePlacement();
+            return true;
         }
         return false;
     }
     if (msg == WM_SETCURSOR && !s->bandsLocked && LOWORD(lp) == HTCLIENT) {
-        POINT p{}; RECT r{};
-        if (GetCursorPos(&p) && ScreenToClient(hwnd, &p) && GetClientRect(hwnd, &r)) {
+        POINT p{};
+        RECT r{};
+        if (GetCursorPos(&p) && ScreenToClient(hwnd, &p) &&
+            GetClientRect(hwnd, &r)) {
             int edge = std::max(2, MulDiv(4, (int)T81SecondaryDpi(hwnd), 96));
             if ((s->nativeEdge == ABE_TOP && p.y >= r.bottom - edge) ||
                 (s->nativeEdge != ABE_TOP && p.y < edge)) {
@@ -26697,7 +26903,8 @@ static bool T81ResizeMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == WM_LBUTTONDOWN && !s->bandsLocked && !t81ResizeWindow) {
         RECT r{};
         GetClientRect(hwnd, &r);
-        int y = GET_Y_LPARAM(lp), edge = std::max(2, MulDiv(4, (int)T81SecondaryDpi(hwnd), 96));
+        int y = GET_Y_LPARAM(lp),
+            edge = std::max(2, MulDiv(4, (int)T81SecondaryDpi(hwnd), 96));
         if ((s->nativeEdge == ABE_TOP && y >= r.bottom - edge) ||
             (s->nativeEdge != ABE_TOP && y >= 0 && y < edge)) {
             t81ResizeBefore = taskbarRows.load();
@@ -26712,10 +26919,17 @@ static bool T81ResizeMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (t81ResizeWindow != hwnd)
         return false;
     if (msg == WM_MOUSEMOVE && GetCapture() == hwnd && (wp & MK_LBUTTON)) {
-        POINT cursor{}; MONITORINFO mi{}; mi.cbSize = sizeof(mi);
-        if (GetCursorPos(&cursor) && GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi)) {
-            int unit = std::max(1, MulDiv(s->nativeSmallIcons ? 30 : 40, (int)T81SecondaryDpi(hwnd), 96));
-            int thickness = s->nativeEdge == ABE_TOP ? cursor.y - mi.rcMonitor.top : mi.rcMonitor.bottom - cursor.y;
+        POINT cursor{};
+        MONITORINFO mi{};
+        mi.cbSize = sizeof(mi);
+        if (GetCursorPos(&cursor) &&
+            GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+                            &mi)) {
+            int unit = std::max(1, MulDiv(s->nativeSmallIcons ? 30 : 40,
+                                          (int)T81SecondaryDpi(hwnd), 96));
+            int thickness = s->nativeEdge == ABE_TOP
+                                ? cursor.y - mi.rcMonitor.top
+                                : mi.rcMonitor.bottom - cursor.y;
             int rows = std::clamp((thickness + unit / 2) / unit, 1, 4);
             if (rows != taskbarRows.load()) {
                 taskbarRows.store(rows);
@@ -26728,20 +26942,25 @@ static bool T81ResizeMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     }
     if (msg == WM_LBUTTONUP) {
         t81ResizeWindow = nullptr;
-        if (GetCapture() == hwnd) ReleaseCapture();
+        if (GetCapture() == hwnd)
+            ReleaseCapture();
         return true;
     }
     if (msg == WM_CANCELMODE || msg == WM_CAPTURECHANGED) {
         t81ResizeWindow = nullptr;
         taskbarRows.store(t81ResizeBefore);
-        if (msg == WM_CANCELMODE && GetCapture() == hwnd) ReleaseCapture();
+        if (msg == WM_CANCELMODE && GetCapture() == hwnd)
+            ReleaseCapture();
         UpdatePlacement();
         T81SyncMirrors();
         return true;
     }
     return false;
 }
-static LRESULT CALLBACK T81MirrorProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+static LRESULT CALLBACK T81MirrorProc(HWND hwnd,
+                                      UINT msg,
+                                      WPARAM wp,
+                                      LPARAM lp) {
     try {
         T81Mirror* bar = T81FindSecondary(hwnd);
         if (bar && T81ResizeMessage(hwnd, msg, wp, lp))
@@ -27279,10 +27498,13 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         }
         delete request;
         if (FAILED(hr))
-            Wh_Log(L"[T81-CNI] UI request failed hr=0x%08lx", (unsigned long)hr);
+            Wh_Log(L"[T81-CNI] UI request failed hr=0x%08lx",
+                   (unsigned long)hr);
         return 0;
     }
     case WM_T81_WIN_TAP: {
+        if (!t81ForceWinRecovery.load())
+            return 0;
         // Compare the actual menu state before the physical key release with
         // the state at the verification deadline; never replay the Win key.
         static bool beganVisible = false;
@@ -27290,30 +27512,54 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         if (wp == 1) {
             KillTimer(h, TIMER_T81_WIN_FALLBACK);
             downSequence = (unsigned long)lp;
-            beganVisible = OpenShellMenuVisible();
-            HWND fg = GetForegroundWindow(); DWORD fgPid = 0;
-            if (fg) GetWindowThreadProcessId(fg, &fgPid);
-            Wh_Log(L"[T81-WIN-RECOVERY] physical down foreground=%p pid=%lu", fg, fgPid);
+            s->t81WinMenuAtDown = T81FindVisibleOpenShellMenu();
+            beganVisible = s->t81WinMenuAtDown != nullptr;
+            s->t81WinMenuTid = s->t81WinMenuAtDown
+                                   ? GetWindowThreadProcessId(
+                                         s->t81WinMenuAtDown, &s->t81WinMenuPid)
+                                   : 0;
+            s->t81WinMenuGeneration =
+                t81MenuGeneration.load(std::memory_order_relaxed);
+            HWND fg = GetForegroundWindow();
+            DWORD fgPid = 0;
+            if (fg)
+                GetWindowThreadProcessId(fg, &fgPid);
+            Wh_Log(L"[T81-WIN-RECOVERY] physical down foreground=%p pid=%lu",
+                   fg, fgPid);
         } else if (wp == 3) {
         } else if (wp == 2 && downSequence == (unsigned long)lp) {
             s->t81WinFallbackSequence = downSequence;
             s->t81WinBeganVisible = beganVisible;
-            if (SetTimer(h, TIMER_T81_WIN_FALLBACK, 100, nullptr))
-                Wh_Log(L"[T81-WIN-RECOVERY] physical Win tap began-visible=%d check-ms=100", beganVisible ? 1 : 0);
+            if (SetTimer(h, TIMER_T81_WIN_FALLBACK, 350, nullptr))
+                Wh_Log(
+                    L"[T81-WIN-RECOVERY] physical Win tap began-visible=%d "
+                    L"check-ms=350",
+                    beganVisible ? 1 : 0);
         }
         return 0;
     }
     case WM_T81_START_STATE: {
-        bool visible = wp != 0;
-        HMONITOR monitor = (HMONITOR)lp;
+        if (wp <= 1) {
+            s->nativeLauncherVisible = wp == 1;
+            s->nativeLauncherMonitor = (HMONITOR)lp;
+        } else {
+            s->alternateLauncherVisible = wp == 3;
+            s->alternateLauncherMonitor = (HMONITOR)lp;
+        }
+        bool visible = s->nativeLauncherVisible || s->alternateLauncherVisible;
+        HMONITOR monitor = s->alternateLauncherVisible
+                               ? s->alternateLauncherMonitor
+                               : s->nativeLauncherMonitor;
         if (s->startMenuVisible != visible || s->startMenuMonitor != monitor) {
             s->startMenuVisible = visible;
             s->startMenuMonitor = monitor;
-            Wh_Log(L"[T81-START-STATE] visible=%d monitor=%p", visible ? 1 : 0, monitor);
+            Wh_Log(L"[T81-START-STATE] visible=%d monitor=%p", visible ? 1 : 0,
+                   monitor);
             if (taskbarSkin.load() == 1) {
                 InvalidateRect(h, nullptr, FALSE);
                 for (const auto& mirror : t81Mirrors)
-                    if (mirror.window && IsWindow(mirror.window)) InvalidateRect(mirror.window, nullptr, FALSE);
+                    if (mirror.window && IsWindow(mirror.window))
+                        InvalidateRect(mirror.window, nullptr, FALSE);
             }
         }
         return 0;
@@ -27333,32 +27579,65 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     case WM_TIMER:
         if (wp == TIMER_T81_WIN_FALLBACK) {
             KillTimer(h, TIMER_T81_WIN_FALLBACK);
-            if (s->t81WinFallbackSequence != t81WinInputGeneration.load(std::memory_order_relaxed)) {
-                Wh_Log(L"[T81-WIN-RECOVERY] cancelled: subsequent keyboard input");
+            if (!t81ForceWinRecovery.load())
+                return 0;
+            if (s->t81WinFallbackSequence !=
+                t81WinInputGeneration.load(std::memory_order_relaxed)) {
+                Wh_Log(
+                    L"[T81-WIN-RECOVERY] cancelled: subsequent keyboard input");
                 return 0;
             }
-            HWND helper = FindWindowW(L"OpenShellMenu.CStartHookWindow", nullptr);
+            HWND helper =
+                FindWindowW(L"OpenShellMenu.CStartHookWindow", nullptr);
             HWND owner = FindWindowW(L"OpenShell.COwnerWindow", nullptr);
             DWORD shellPid = 0, helperPid = 0, ownerPid = 0;
             HWND shell = GetShellWindow();
-            if (shell) GetWindowThreadProcessId(shell, &shellPid);
-            if (helper) GetWindowThreadProcessId(helper, &helperPid);
-            if (owner) GetWindowThreadProcessId(owner, &ownerPid);
+            if (shell)
+                GetWindowThreadProcessId(shell, &shellPid);
+            if (helper)
+                GetWindowThreadProcessId(helper, &helperPid);
+            if (owner)
+                GetWindowThreadProcessId(owner, &ownerPid);
             if (!shellPid || (helperPid != shellPid && ownerPid != shellPid)) {
-                Wh_Log(L"[T81-WIN-RECOVERY] Open-Shell not positively identified; no fallback");
+                Wh_Log(
+                    L"[T81-WIN-RECOVERY] Open-Shell not positively identified; "
+                    L"no fallback");
                 return 0;
             }
-            bool visibleNow = OpenShellMenuVisible();
-            if (visibleNow != s->t81WinBeganVisible) {
-                Wh_Log(L"[T81-WIN-RECOVERY] menu state already changed; no fallback");
+            if (s->t81WinMenuGeneration !=
+                t81MenuGeneration.load(std::memory_order_relaxed)) {
+                Wh_Log(
+                    L"[T81-WIN-RECOVERY] launcher changed during verification; "
+                    L"cancelled");
                 return 0;
             }
-            // Reuse the real taskbar click route, including its positioning
-            // and guarded foreground recovery. A queued request is not a
-            // confirmation that the menu became visible.
-            bool posted = ToggleOpenShellStart();
-            Wh_Log(L"[T81-WIN-RECOVERY] click-route request=%ls posted=%d (state unconfirmed)",
-                   visibleNow ? L"close" : L"open", posted ? 1 : 0);
+            HWND visibleMenu = T81FindVisibleOpenShellMenu();
+            bool posted = false;
+            if (!s->t81WinBeganVisible && !visibleMenu) {
+                // MSG_OPEN is idempotent: a late native opening cannot turn it
+                // into a request to close the menu.
+                T81ArmOpenShellPosition(s->bar, true);
+                posted = PostOpenShellRequest(2);
+            } else if (s->t81WinBeganVisible && visibleMenu) {
+                DWORD pid = 0;
+                DWORD tid = GetWindowThreadProcessId(s->t81WinMenuAtDown, &pid);
+                wchar_t cls[64]{};
+                if (pid == shellPid && pid == s->t81WinMenuPid &&
+                    tid == s->t81WinMenuTid &&
+                    IsWindowVisible(s->t81WinMenuAtDown) &&
+                    GetClassNameW(s->t81WinMenuAtDown, cls,
+                                  (int)std::size(cls)) &&
+                    !wcscmp(cls, L"OpenShell.CMenuContainer")) {
+                    // Open-Shell itself posts WM_CLOSE to menu containers.
+                    // Unlike toggle, a late close cannot reopen the menu.
+                    posted = PostMessageW(s->t81WinMenuAtDown, WM_CLOSE, 0,
+                                          0) != FALSE;
+                }
+            }
+            Wh_Log(
+                L"[T81-WIN-RECOVERY] conservative request=%ls posted=%d "
+                L"unconfirmed",
+                s->t81WinBeganVisible ? L"close" : L"open", posted ? 1 : 0);
             return 0;
         }
         if (wp == TIMER_T81_SECONDARY_START) {
@@ -27626,7 +27905,9 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                 IsWindowVisible(s->bar) &&
                 (s->perPixelBar ? s->perPixelFrame : s->legacyAlphaReady)) {
                 s->nativeRecoveryRetryAt = GetTickCount64() + 3000;
-                Wh_Log(L"[T81-TRAY] retrying integrated takeover");
+                if (++s->nativeRecoveryAttempts >= 5)
+                    s->nativeRecoveryPending = false;
+                Wh_Log(L"[T81-TRAY] retrying integrated takeover attempt=%d/5", s->nativeRecoveryAttempts);
                 try {
                     if (StartPrivateTray()) {
                         s->nativeRecoveryPending = false;
@@ -28633,8 +28914,8 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_DESTROY:
+        T81StopForcedWinRecovery();
         T81StopObserver();
-        KillTimer(h, TIMER_T81_WIN_FALLBACK);
         s->buttonTransitions.clear();
         T81CancelOpenShellPosition();
         KillTimer(h, TIMER_BUTTON_TRANSITION);
@@ -28828,7 +29109,10 @@ DWORD WINAPI UIThread(LPVOID) {
             barWindow.store(local.bar);
             if (local.bar) {
                 ConfigureBarAlpha(local.bar, perPixelTaskbar.load());
-                T81StartObserver(local.bar);
+                if (taskbarSkin.load() == 1)
+                    T81StartObserver(local.bar);
+                if (t81ForceWinRecovery.load())
+                    T81StartForcedWinRecovery(local.bar);
                 StartAttentionHook(local.bar);
             }
             if (local.bar && !quitting.load()) {
@@ -28837,11 +29121,12 @@ DWORD WINAPI UIThread(LPVOID) {
                     RegisterTaskDropTarget(local.bar);
                 local.native = ownedTray;
                 local.visibilityHook =
-                    SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW, nullptr,
+                    SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE, nullptr,
                                     ShellVisibilityEvent, 0, 0, WINEVENT_OUTOFCONTEXT);
                 if (!local.visibilityHook)
                     Wh_Log(L"[T81-DIAG] visibility event hook unavailable error=%lu",
                            GetLastError());
+                T81RefreshAlternateLauncher();
                 UpdatePlacement();
                 Refresh();
                 T81SyncMirrors();
@@ -28873,6 +29158,7 @@ DWORD WINAPI UIThread(LPVOID) {
                     // not cover or hide the native tray until takeover succeeds.
                     if (enablePrivateTray.load()) {
                         local.nativeRecoveryPending = true;
+                        local.nativeRecoveryAttempts = 0;
                         local.nativeRecoveryRetryAt = GetTickCount64() + 1000;
                         Wh_Log(L"[T81-RECOVERY] takeover deferred; retry armed in 1 second");
                     }
@@ -28892,6 +29178,7 @@ DWORD WINAPI UIThread(LPVOID) {
             UnhookWinEvent(local.visibilityHook);
             local.visibilityHook = nullptr;
         }
+        T81StopForcedWinRecovery();
         T81StopObserver();
         StopVolumePositionWatch();
         CancelBatterySlide();
@@ -28949,6 +29236,7 @@ DWORD WINAPI UIThread(LPVOID) {
             }
         };
         if (s) {
+            cleanup([&] { T81StopForcedWinRecovery(); });
             cleanup([&] { T81StopObserver(); });
             cleanup([&] { StopVolumePositionWatch(); });
             cleanup([&] { StopAttentionHook(local.bar); });
@@ -29186,6 +29474,8 @@ void WhTool_ModSettingsChanged() {
     if (toolShutdown.load(std::memory_order_acquire))
         return;
     bool oldTray = enablePrivateTray.load();
+    bool oldForceWinRecovery = t81ForceWinRecovery.load();
+    int oldSkin = taskbarSkin.load();
     LoadSettings();
     if (debugExceptionLog.load())
         InstallExceptionLogger();
@@ -29193,7 +29483,9 @@ void WhTool_ModSettingsChanged() {
         RemoveExceptionLogger();
     if (!toolRuntimeStarted.load(std::memory_order_acquire))
         return;
-    if (oldTray != enablePrivateTray.load()) {
+    if (oldTray != enablePrivateTray.load() ||
+        oldForceWinRecovery != t81ForceWinRecovery.load() ||
+        (oldSkin == 1) != (taskbarSkin.load() == 1)) {
         StopTaskbarWorker();
         if (!StartTaskbarWorker()) {
             Wh_Log(L"[T81-START] worker restart failed; stopping tool process");
@@ -29698,72 +29990,101 @@ void WINAPI EntryPoint_Hook() {
 }
 
 // Keyboard Start route observed in taskbar-auto-hide-keyboard-only (GPL-3.0).
-// This runs only in the real shell Explorer, not the dedicated taskbar process.
+// Registered in non-tool Explorer processes, including during shell startup;
+// the callback checks the real shell PID before redirecting a request.
 // It is an optional private symbol, and Windows builds can route Win elsewhere.
 using T81ShowStartViewFn = HRESULT (WINAPI*)(void*, int, int);
 static T81ShowStartViewFn t81OriginalShowStartView = nullptr;
 // Unknown is not treated as proof of elevation; it selects the compatibility
 // path only when Open-Shell is positively identified.
 static int T81ForegroundElevationState() {
-    HWND fg = GetForegroundWindow(); DWORD pid = 0;
-    if (!fg || !GetWindowThreadProcessId(fg, &pid) || !pid) return -1;
+    HWND fg = GetForegroundWindow();
+    DWORD pid = 0;
+    if (!fg || !GetWindowThreadProcessId(fg, &pid) || !pid)
+        return -1;
     HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!process) return -1;
-    HANDLE token = nullptr; TOKEN_ELEVATION elevation{}; DWORD bytes = 0;
+    if (!process)
+        return -1;
+    HANDLE token = nullptr;
+    TOKEN_ELEVATION elevation{};
+    DWORD bytes = 0;
     bool ok = OpenProcessToken(process, TOKEN_QUERY, &token) &&
-              GetTokenInformation(token, TokenElevation, &elevation, sizeof(elevation), &bytes);
-    if (token) CloseHandle(token);
+              GetTokenInformation(token, TokenElevation, &elevation,
+                                  sizeof(elevation), &bytes);
+    if (token)
+        CloseHandle(token);
     CloseHandle(process);
     return ok ? (elevation.TokenIsElevated ? 1 : 0) : -1;
 }
 static HRESULT WINAPI T81ShowStartViewHook(void* self, int method, int flags) {
     int elevation = method == 1 ? T81ForegroundElevationState() : 0;
-    if (method == 1) Wh_Log(L"[T81-NATIVE-WIN] keyboard route foreground-elevation=%d", elevation);
+    if (method == 1)
+        Wh_Log(L"[T81-NATIVE-WIN] keyboard route foreground-elevation=%d",
+               elevation);
     if (method == 1 && elevation != 0) {
         DWORD shellPid = 0;
         HWND shell = GetShellWindow();
-        if (shell) GetWindowThreadProcessId(shell, &shellPid);
+        if (shell)
+            GetWindowThreadProcessId(shell, &shellPid);
         HWND helper = FindWindowW(L"OpenShellMenu.CStartHookWindow", nullptr);
         HWND owner = FindWindowW(L"OpenShell.COwnerWindow", nullptr);
         DWORD helperPid = 0, ownerPid = 0;
-        if (helper) GetWindowThreadProcessId(helper, &helperPid);
-        if (owner) GetWindowThreadProcessId(owner, &ownerPid);
+        if (helper)
+            GetWindowThreadProcessId(helper, &helperPid);
+        if (owner)
+            GetWindowThreadProcessId(owner, &ownerPid);
         HWND tray = nullptr;
-        for (int i = 0; i < 32 && (tray = FindWindowExW(nullptr, tray, L"Shell_TrayWnd", nullptr)); ++i) {
-            DWORD p = 0; GetWindowThreadProcessId(tray, &p);
-            if (p == shellPid) break;
+        for (int i = 0;
+             i < 32 &&
+             (tray = FindWindowExW(nullptr, tray, L"Shell_TrayWnd", nullptr));
+             ++i) {
+            DWORD p = 0;
+            GetWindowThreadProcessId(tray, &p);
+            if (p == shellPid)
+                break;
         }
         DWORD trayPid = 0;
-        if (tray) GetWindowThreadProcessId(tray, &trayPid);
+        if (tray)
+            GetWindowThreadProcessId(tray, &trayPid);
         if (shellPid == GetCurrentProcessId() && tray && trayPid == shellPid &&
             (helperPid == shellPid || ownerPid == shellPid)) {
             UINT msg = RegisterWindowMessageW(L"OpenShellMenu.StartMenuMsg");
             bool shown = OpenShellMenuVisible();
             BOOL posted = msg && PostMessageW(tray, msg, shown ? 0 : 2, 0);
-            Wh_Log(L"[T81-NATIVE-WIN] keyboard method=1 compatibility request=%ls posted=%d unconfirmed", shown ? L"close" : L"open", posted ? 1 : 0);
-            if (posted) return S_OK;
+            Wh_Log(
+                L"[T81-NATIVE-WIN] keyboard method=1 compatibility request=%ls "
+                L"posted=%d unconfirmed",
+                shown ? L"close" : L"open", posted ? 1 : 0);
+            if (posted)
+                return S_OK;
         }
     }
     return t81OriginalShowStartView(self, method, flags);
 }
 static void T81InstallShellStartHook() {
-    DWORD pid = 0; HWND shell = GetShellWindow();
-    if (shell) GetWindowThreadProcessId(shell, &pid);
-    if (!pid || pid != GetCurrentProcessId()) return;
-    HMODULE module = LoadLibraryExW(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!module) { Wh_Log(L"[T81-NATIVE-WIN] module unavailable error=%lu", GetLastError()); return; }
-    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
+    HMODULE module = LoadLibraryExW(L"twinui.pcshell.dll", nullptr,
+                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"[T81-NATIVE-WIN] module unavailable error=%lu",
+               GetLastError());
+        return;
+    }
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{LR"(public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum IMMERSIVELAUNCHERSHOWFLAGS))"},
-         &t81OriginalShowStartView, T81ShowStartViewHook},
+         &t81OriginalShowStartView,
+         T81ShowStartViewHook},
     };
-    bool ok = WindhawkUtils::HookSymbols(module, twinuiPcshellDllHooks, std::size(twinuiPcshellDllHooks));
-    Wh_Log(L"[T81-NATIVE-WIN] native Explorer symbol hook installed=%d", ok ? 1 : 0);
+    bool ok = WindhawkUtils::HookSymbols(module, hooks, std::size(hooks));
+    Wh_Log(L"[T81-NATIVE-WIN] native Explorer symbol hook installed=%d",
+           ok ? 1 : 0);
     // Retain the module for the lifetime of the installed hook.
 }
 
 BOOL Wh_ModInit() {
     DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
         return FALSE;
     }
 
