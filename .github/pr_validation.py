@@ -1625,6 +1625,37 @@ def is_existing_windows_file_name(name: str):
     return name.lower() in get_existing_windows_file_names()
 
 
+# Non-Windows modules accepted as symbol hook targets in any mod.
+NON_WINDOWS_TARGET_MODULES = {'chrome.dll'}
+
+# Non-Windows modules accepted as symbol hook targets in specific mods.
+MOD_NON_WINDOWS_TARGET_MODULES = {
+    'win7-alttab-loader': {'alttab.dll'},
+    'word-image-resize-anti-flip': {'oart.dll'},
+    'word-mathtype-dark-fix': {'wwlib.dll'},
+    'word-omath-shade-fix': {'wwlib.dll'},
+}
+
+# Mods accepted with noUndecoratedSymbols, with their symbol hook targets.
+# Hooking any other target brings back the manual inspection.
+MOD_NO_UNDECORATED_SYMBOLS_TARGETS = {
+    'chrome-context-menu-items': {'chrome.dll'},
+    'chrome-native-ui-tweaks': {'chrome.dll'},
+    'word-image-resize-anti-flip': {'oart.dll'},
+    'word-mathtype-dark-fix': {'wwlib.dll'},
+    'word-omath-shade-fix': {'wwlib.dll'},
+}
+
+
+def is_known_module(mod_id: str, name: str):
+    name = name.lower()
+    return (
+        name in NON_WINDOWS_TARGET_MODULES
+        or name in MOD_NON_WINDOWS_TARGET_MODULES.get(mod_id, set())
+        or is_existing_windows_file_name(name)
+    )
+
+
 def get_target_module_from_symbol_block_name(symbol_block_name: str):
     p = r'(.*?)_?(exe|dll|cpl)_?hooks?'
     match = re.fullmatch(p, symbol_block_name, flags=re.IGNORECASE)
@@ -1652,9 +1683,9 @@ def get_target_modules_from_previous_line(previous_line: str):
     return names
 
 
-def validate_symbol_hooks(path: Path, mod_source: str):
-    warnings = 0
-
+def get_symbol_hook_blocks(mod_source: str):
+    """Yield (line_num, target_from_name, targets_from_comment) for each symbol
+    hooks variable."""
     mod_source_lines = mod_source.splitlines()
 
     p = r'^[ \t]*(?:(?:static|const)[ \t]+)*(?:WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)'
@@ -1668,6 +1699,36 @@ def validate_symbol_hooks(path: Path, mod_source: str):
         previous_line = mod_source_lines[line_num - 2]
         targets_from_comment = get_target_modules_from_previous_line(previous_line)
 
+        yield line_num, target_from_name, targets_from_comment
+
+
+def is_no_undecorated_symbols_accepted(mod_id: str, mod_source: str):
+    """Whether the mod is accepted with noUndecoratedSymbols and all of its symbol
+    hook targets are known and among the accepted ones."""
+    accepted_targets = MOD_NO_UNDECORATED_SYMBOLS_TARGETS.get(mod_id)
+    if not accepted_targets:
+        return False
+
+    blocks = list(get_symbol_hook_blocks(mod_source))
+    if not blocks:
+        return False
+
+    for _, target_from_name, targets_from_comment in blocks:
+        targets = [x for x in [target_from_name, *targets_from_comment] if x]
+        if not targets or any(x.lower() not in accepted_targets for x in targets):
+            return False
+
+    return True
+
+
+def validate_symbol_hooks(path: Path, mod_source: str):
+    warnings = 0
+
+    mod_id = path.name.removesuffix('.wh.cpp')
+    mod_source_lines = mod_source.splitlines()
+
+    blocks = get_symbol_hook_blocks(mod_source)
+    for line_num, target_from_name, targets_from_comment in blocks:
         if targets_from_comment and line_num > 2:
             line_before_comment = mod_source_lines[line_num - 3].strip()
             if line_before_comment.startswith('//') and line_before_comment.endswith(','):
@@ -1681,7 +1742,7 @@ def validate_symbol_hooks(path: Path, mod_source: str):
             )
             warnings += add_warning(path, line_num, warning_msg)
         elif target_from_name or targets_from_comment:
-            if target_from_name and not is_existing_windows_file_name(target_from_name):
+            if target_from_name and not is_known_module(mod_id, target_from_name):
                 warning_msg = (
                     f'"{target_from_name}" is not recognized as a Windows file name.'
                     ' If the target module name can\'t be represented by a variable'
@@ -1693,7 +1754,7 @@ def validate_symbol_hooks(path: Path, mod_source: str):
                 warnings += add_warning(path, line_num, warning_msg)
 
             for target in targets_from_comment:
-                if not is_existing_windows_file_name(target):
+                if not is_known_module(mod_id, target):
                     warning_msg = f'"{target}" is not recognized as a Windows file name'
                     warnings += add_warning(path, line_num - 1, warning_msg)
             continue
@@ -1759,6 +1820,11 @@ def validate_specific_keywords(path: Path, mod_source: str):
     ]
     # fmt: on
 
+    mod_id = path.name.removesuffix('.wh.cpp')
+    no_undecorated_symbols_accepted = is_no_undecorated_symbols_accepted(
+        mod_id, mod_source
+    )
+
     for line_num, line in enumerate(mod_source_lines, start=1):
         for pattern, word, description in keyword_patterns:
             if re.search(pattern, line):
@@ -1766,6 +1832,9 @@ def validate_specific_keywords(path: Path, mod_source: str):
                 if word in ('GWL_WNDPROC', 'GWLP_WNDPROC') and re.search(
                     r'GetWindowLong(Ptr)?[AW]?\s*\([^,]+,\s*GWLP?_WNDPROC\s*\)', line
                 ):
+                    continue
+
+                if word == 'noUndecoratedSymbols' and no_undecorated_symbols_accepted:
                     continue
 
                 warnings += add_warning(
