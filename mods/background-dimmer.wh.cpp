@@ -2,13 +2,13 @@
 // @id              background-dimmer
 // @name            Background Dimmer
 // @description     Dims unfocused windows with a solid tint, pattern or image, tuned live in a secondary configuration window
-// @version         1.0.0
+// @version         1.1.0
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
 // @include         windhawk-mod-uiaccess.exe
 // @include         windhawk-mod.exe
 // @include         windhawk.exe
-// @compilerOptions -lcomctl32 -lcomdlg32 -lgdi32 -lgdiplus -lshell32
+// @compilerOptions -lcomctl32 -lcomdlg32 -ldwmapi -lgdi32 -lgdiplus -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -19,7 +19,7 @@
 
 Dims inactive windows so the active one stands out, while the background stays readable. Especially useful when working with windows side by side.
 
-The dimming layer can be a solid tint, checkerboard, horizontal, vertical or diagonal stripes, or a tiled image of your choice. Opacity, brightness, contrast, pattern size and base color are all adjustable.
+The dimming layer can be a solid tint, a checkerboard or stripes at any angle, or a tiled image of your choice. Opacity, brightness, contrast, pattern size, rotation and base color are all adjustable.
 
 Windows that run as administrator need Windhawk 2 (currently in alpha). On Windhawk 1.x the layer can't move behind them, so when one of them gets focus, the previously active window stays undimmed.
 
@@ -27,27 +27,31 @@ Windows that run as administrator need Windhawk 2 (currently in alpha). On Windh
 
 The look is tuned in the mod's own **configuration window**, where every change shows up immediately on screen. Open it with the **configuration hotkey** (**Win+Ctrl+Alt+D** by default, changeable in the mod settings).
 
-The window also opens by itself the first time the mod runs. If the configuration hotkey is empty or already taken by another program, it opens whenever the mod settings are saved. When it opens this way, without a keypress, Windows may keep it behind other windows: look for its flashing taskbar button.
+With the **tray icon** option in the mod settings, an icon in the notification area also opens it with a click, and a right-click toggles the dimming on and off.
+
+The window also opens by itself the first time the mod runs. If the configuration hotkey is empty or already taken by another program and the tray icon is off, it opens whenever the mod settings are saved. When it opens this way, without a keypress, Windows may keep it behind other windows: look for its flashing taskbar button.
 
 Changes made in the configuration window are saved automatically. Dimming can be turned off with the **Active** checkbox in the window, or with an optional on/off hotkey.
 
 ## How the controls work
 
 - **Opacity**: how strongly the layer covers the background.
-- **Brightness**: the overall lightness of the layer.
-- **Contrast**: the difference between the light and dark parts of a pattern. At 0 the pattern disappears into a flat tint.
-- **Size**: the size of the checkerboard squares or the width of the stripes, in pixels.
+- **Brightness**: overall lightness of the layer.
+- **Contrast**: difference between light and dark parts of a pattern. At 0 the pattern disappears into a flat tint.
+- **Size**: size of the checkerboard squares or the width of the stripes, in pixels.
+- **Rotation**: angle of the stripes or the checkerboard, in degrees.
 - **Base color**: tints the layer. White gives neutral gray tones.
 
 Brightness and contrast set the two pattern tones as *brightness ± contrast / 2*, so one controls how dark the layer is and the other how visible the pattern is. Near the ends of the range a tone is clipped to black or white, which keeps the pattern visible over a black base, as in the default look.
 
 ## Behavior
 
-- Dialogs stay lit together with the window that owns them.
-- The taskbar, Start, Alt+Tab and menus never move the layer.
+- By default, a dialog also dims the window that owns it. An option in the configuration window keeps them lit together instead.
+- While the taskbar, Start or Alt+Tab has focus, every window is dimmed.
+- A menu keeps the window that opened it lit, unless the option to dim behind menus is turned on in the configuration window. That option works with standard Windows menus; apps that draw their own menus, such as Office and web-based apps, aren't detected.
 - When the desktop has focus, the layer can either hide or cover everything (option in the configuration window).
 - The mod runs in its own Windhawk process and does not inject into Explorer or any other program.
-- Optionally, the layer can be left out of screenshots, recordings and screen sharing while it stays visible on your screen (Windows 10 version 2004 or later).
+- By default, the layer is left out of screenshots, recordings and screen sharing while it stays visible on your screen (Windows 10 version 2004 or later). This can be turned off in the configuration window.
 - The appearance is stored per computer, so all Windows users of the same PC share it.
 */
 // ==/WindhawkModReadme==
@@ -56,21 +60,23 @@ Brightness and contrast set the two pattern tones as *brightness ± contrast / 2
 /*
 - configHotkey: Win+Ctrl+Alt+D
   $name: Configuration window hotkey
-  $description: >-
-    Opens the live configuration window. Modifiers (Ctrl, Alt, Shift, Win)
-    and one key, joined with +, for example Win+Ctrl+Alt+D or Ctrl+Shift+F9. If
-    empty, the configuration window opens whenever these settings are saved.
+  $description: Opens the live configuration window. Modifiers (Ctrl, Alt, Shift, Win) and one key, joined with + (Win+Ctrl+Alt+D). If empty and the tray icon is off, the configuration window opens whenever these settings are saved.
 - toggleHotkey: ""
   $name: On/off hotkey
-  $description: >-
-    Turns the dimming on and off, same format as above. Leave empty for no
-    hotkey.
+  $description: Turns the dimming on and off, same format as above.
+- trayIcon: false
+  $name: Tray icon
+  $description: Shows an icon in the notification area. Click it to open the configuration window, right-click it to toggle dimming on and off.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <commctrl.h>
 #include <commdlg.h>
+#include <dwmapi.h>
+#include <math.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <stdio.h>
@@ -95,31 +101,32 @@ int WINAPI GdipDisposeImage(void* image);
 
 // ───────────── State ─────────────
 
-enum Pattern { PAT_SOLID, PAT_CHECKER, PAT_HSTRIPES, PAT_VSTRIPES, PAT_DIAGONAL, PAT_IMAGE, PAT_COUNT };
-const wchar_t* const kPatternNames[PAT_COUNT] = {
-    L"Solid", L"Checkerboard", L"Horizontal stripes", L"Vertical stripes", L"Diagonal stripes", L"Image",
-};
+enum Pattern { PAT_SOLID, PAT_CHECKER, PAT_STRIPES, PAT_IMAGE, PAT_COUNT };
+const wchar_t* const kPatternNames[PAT_COUNT] = {L"Solid", L"Checkerboard", L"Stripes", L"Image"};
 
-constexpr int SL_OPACITY = 0, SL_BRIGHTNESS = 1, SL_CONTRAST = 2, SL_SIZE = 3, SL_COUNT = 4;
+constexpr int SL_OPACITY = 0, SL_BRIGHTNESS = 1, SL_CONTRAST = 2, SL_SIZE = 3, SL_ANGLE = 4, SL_COUNT = 5;
 
 struct Appearance {
     int pattern;
-    int slider[SL_COUNT];   // opacity/brightness/contrast in %, size in px
+    int slider[SL_COUNT];   // opacity/brightness/contrast in %, size in px, angle in degrees
     int colorRgb;           // 0xRRGGBB
     bool hideOnDesktop;
     bool hideFromCapture;
+    bool dimOwners;
+    bool dimMenus;
     bool active;
     wchar_t image[MAX_PATH];
 };
 
-const Appearance kDefaults = {PAT_DIAGONAL, {20, 0, 60, 16}, 0xFFFFFF, true, false, true, L""};
-const wchar_t* const kSliderKeys[SL_COUNT] = {L"opacity", L"brightness", L"contrast", L"size"};
-const int kSliderMin[SL_COUNT] = {0, 0, 0, 1};
-const int kSliderMax[SL_COUNT] = {100, 100, 100, 200};
+const Appearance kDefaults = {PAT_STRIPES, {20, 0, 60, 20, 45}, 0xFFFFFF, true, true, true, false, true, L""};
+const wchar_t* const kSliderKeys[SL_COUNT] = {L"opacity", L"brightness", L"contrast", L"size", L"angle"};
+const int kSliderMin[SL_COUNT] = {0, 0, 0, 1, 0};
+const int kSliderMax[SL_COUNT] = {100, 100, 100, 200, 180};
 
 struct ModSettings {
     wchar_t toggleHotkey[64];
     wchar_t configHotkey[64];
+    bool trayIcon;
 };
 
 Appearance g_ap;
@@ -132,18 +139,24 @@ HWND g_hwndConfig;
 HWINEVENTHOOK g_hook;
 HBRUSH g_brush;
 HBITMAP g_brushBitmap;
+HBITMAP g_texture;
 bool g_overlayVisible;
 bool g_configHotkeyActive;
 bool g_savePending;
+HWND g_menus[8];  // open popup menus, oldest first: the first is the menu, the rest its submenus
+int g_menuCount;
 ULONG_PTR g_gdiplusToken;
 HICON g_icon;
-bool g_iconExtracted;  // false when g_icon is the shared IDI_APPLICATION icon, which must not be destroyed
+HICON g_trayIcon;
+bool g_iconOwned, g_trayIconOwned;  // false for the shared IDI_APPLICATION icon, which must not be destroyed
+bool g_trayAdded;
+UINT g_wmTaskbarCreated;
 
 constexpr wchar_t kMainClass[] = L"BackgroundDimmer_Main";
 constexpr wchar_t kOverlayClass[] = L"BackgroundDimmer_Overlay";
 constexpr wchar_t kConfigClass[] = L"BackgroundDimmer_Config";
 
-enum { WM_APP_RELOAD = WM_APP + 1, WM_APP_EXIT };
+enum { WM_APP_RELOAD = WM_APP + 1, WM_APP_EXIT, WM_APP_TRAY };
 enum { HK_TOGGLE = 1, HK_CONFIG = 2 };
 enum { TIMER_REPOSITION = 1, TIMER_SAVE = 2, TIMER_FIT = 3 };
 
@@ -152,12 +165,29 @@ enum { TIMER_REPOSITION = 1, TIMER_SAVE = 2, TIMER_FIT = 3 };
 int Clamp(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
 void LoadAppearance() {
-    g_ap.pattern = Clamp(Wh_GetIntValue(L"pattern", kDefaults.pattern), 0, PAT_COUNT - 1);
     for (int i = 0; i < SL_COUNT; i++)
         g_ap.slider[i] = Clamp(Wh_GetIntValue(kSliderKeys[i], kDefaults.slider[i]), kSliderMin[i], kSliderMax[i]);
+    int pattern = Wh_GetIntValue(L"texture", -1);
+    if (pattern < 0) {
+        // Until 1.0 the "pattern" key held: solid, checkerboard, horizontal, vertical, diagonal stripes, image.
+        static const int kOldPattern[] = {PAT_SOLID, PAT_CHECKER, PAT_STRIPES, PAT_STRIPES, PAT_STRIPES, PAT_IMAGE};
+        static const int kOldAngle[] = {45, 0, 0, 90, 45, 45};
+        int old = Wh_GetIntValue(L"pattern", -1);
+        pattern = kDefaults.pattern;
+        if (old >= 0 && old < (int)ARRAYSIZE(kOldPattern)) {
+            pattern = kOldPattern[old];
+            g_ap.slider[SL_ANGLE] = kOldAngle[old];
+            // The old diagonal stripes measured their width along the x axis, not across the stripe.
+            if (old == 4)
+                g_ap.slider[SL_SIZE] = Clamp((int)(g_ap.slider[SL_SIZE] * 0.7071f + 0.5f), 1, 200);
+        }
+    }
+    g_ap.pattern = Clamp(pattern, 0, PAT_COUNT - 1);
     g_ap.colorRgb = Wh_GetIntValue(L"color", kDefaults.colorRgb) & 0xFFFFFF;
     g_ap.hideOnDesktop = Wh_GetIntValue(L"hideOnDesktop", kDefaults.hideOnDesktop) != 0;
     g_ap.hideFromCapture = Wh_GetIntValue(L"hideFromCapture", kDefaults.hideFromCapture) != 0;
+    g_ap.dimOwners = Wh_GetIntValue(L"dimOwners", kDefaults.dimOwners) != 0;
+    g_ap.dimMenus = Wh_GetIntValue(L"dimMenus", kDefaults.dimMenus) != 0;
     g_ap.active = Wh_GetIntValue(L"active", kDefaults.active) != 0;
     g_ap.image[0] = L'\0';
     Wh_GetStringValue(L"image", g_ap.image, ARRAYSIZE(g_ap.image));
@@ -165,12 +195,14 @@ void LoadAppearance() {
 
 void SaveAppearance() {
     g_savePending = false;
-    Wh_SetIntValue(L"pattern", g_ap.pattern);
+    Wh_SetIntValue(L"texture", g_ap.pattern);
     for (int i = 0; i < SL_COUNT; i++)
         Wh_SetIntValue(kSliderKeys[i], g_ap.slider[i]);
     Wh_SetIntValue(L"color", g_ap.colorRgb);
     Wh_SetIntValue(L"hideOnDesktop", g_ap.hideOnDesktop);
     Wh_SetIntValue(L"hideFromCapture", g_ap.hideFromCapture);
+    Wh_SetIntValue(L"dimOwners", g_ap.dimOwners);
+    Wh_SetIntValue(L"dimMenus", g_ap.dimMenus);
     Wh_SetIntValue(L"active", g_ap.active);
     Wh_SetStringValue(L"image", g_ap.image);
 }
@@ -189,6 +221,7 @@ void CopySetting(const wchar_t* name, wchar_t* dst, size_t dstChars) {
 void LoadModSettings() {
     CopySetting(L"toggleHotkey", g_settings.toggleHotkey, ARRAYSIZE(g_settings.toggleHotkey));
     CopySetting(L"configHotkey", g_settings.configHotkey, ARRAYSIZE(g_settings.configHotkey));
+    g_settings.trayIcon = Wh_GetIntSetting(L"trayIcon") != 0;
 }
 
 // ───────────── Hotkeys ─────────────
@@ -279,30 +312,6 @@ COLORREF Shade(int rgb, int level) {
     return RGB(r, g, b);
 }
 
-void FillBox(HDC dc, int l, int t, int r, int b, COLORREF color) {
-    RECT rc = {l, t, r, b};
-    HBRUSH br = CreateSolidBrush(color);
-    FillRect(dc, &rc, br);
-    DeleteObject(br);
-}
-
-// Light band where (x+y) mod 2s < s. The polygons overshoot the tile by 1 px so no seam shows between tiles.
-void DiagonalBands(HDC dc, int s, COLORREF color) {
-    HBRUSH br = CreateSolidBrush(color);
-    HGDIOBJ oldBrush = SelectObject(dc, br);
-    HGDIOBJ oldPen = SelectObject(dc, GetStockObject(NULL_PEN));
-    int e = 2 * s + 1;
-    const int starts[2] = {0, 2 * s};
-    for (int c0 : starts) {
-        int c1 = c0 + s;
-        POINT pts[4] = {{-1, c0 + 1}, {e, c0 - e}, {e, c1 - e}, {-1, c1 + 1}};
-        Polygon(dc, pts, 4);
-    }
-    SelectObject(dc, oldPen);
-    SelectObject(dc, oldBrush);
-    DeleteObject(br);
-}
-
 // Copied into a compatible bitmap: GDI+ returns a DIB section, which CreatePatternBrush does not accept on every Windows version.
 HBITMAP LoadTile(const wchar_t* path) {
     if (!path[0] || GetFileAttributesW(path) == INVALID_FILE_ATTRIBUTES)
@@ -335,69 +344,164 @@ HBITMAP LoadTile(const wchar_t* path) {
     return dst;
 }
 
-void BuildBrush() {
-    HBITMAP bmp = g_ap.pattern == PAT_IMAGE ? LoadTile(g_ap.image) : nullptr;
-    if (!bmp) {
-        int sz = g_ap.slider[SL_SIZE];
-        int k = Pct255(g_ap.slider[SL_CONTRAST]);
-        int lvl = Pct255(g_ap.slider[SL_BRIGHTNESS]);
-        COLORREF dark = Shade(g_ap.colorRgb, lvl - k / 2);
-        COLORREF light = Shade(g_ap.colorRgb, lvl + k - k / 2);
-        int w = 2 * sz, h = 2 * sz;
-        switch (g_ap.pattern) {
-            case PAT_SOLID:
-            case PAT_IMAGE: w = h = 8; break;
-            case PAT_HSTRIPES: w = 8; break;
-            case PAT_VSTRIPES: h = 8; break;
-        }
-        HDC screen = GetDC(nullptr);
-        HDC mdc = CreateCompatibleDC(screen);
-        bmp = CreateCompatibleBitmap(screen, w, h);
-        ReleaseDC(nullptr, screen);
-        HGDIOBJ old = SelectObject(mdc, bmp);
-        switch (g_ap.pattern) {
-            case PAT_SOLID:
-            case PAT_IMAGE:
-                FillBox(mdc, 0, 0, w, h, Shade(g_ap.colorRgb, lvl));
-                break;
-            case PAT_CHECKER:
-                FillBox(mdc, 0, 0, w, h, dark);
-                FillBox(mdc, 0, 0, sz, sz, light);
-                FillBox(mdc, sz, sz, w, h, light);
-                break;
-            case PAT_HSTRIPES:
-                FillBox(mdc, 0, 0, w, h, dark);
-                FillBox(mdc, 0, 0, w, sz, light);
-                break;
-            case PAT_VSTRIPES:
-                FillBox(mdc, 0, 0, w, h, dark);
-                FillBox(mdc, 0, 0, sz, h, light);
-                break;
-            case PAT_DIAGONAL:
-                FillBox(mdc, 0, 0, w, h, dark);
-                DiagonalBands(mdc, sz, light);
-                break;
-        }
-        SelectObject(mdc, old);
-        DeleteDC(mdc);
+// Soft square wave: +1 on even bands and -1 on odd ones, with t in band widths of s px. Edges blend over
+// about 1 px, so stripes at any angle stay smooth.
+float Wave(float t, float s) {
+    float ph = t - 2 * floorf(t * 0.5f);
+    float sign = ph < 1 ? 1.f : -1.f;
+    if (ph >= 1)
+        ph -= 1;
+    return sign * fminf(1.f, 2 * fminf(ph, 1 - ph) * s);
+}
+
+/// 8-bit DIB the size of the virtual screen with the stripes or checkerboard as palette indexes (1 = dark,
+/// 255 = light). Colors live only in the palette, so brightness, contrast and color changes don't re-render it.
+/// Renders into `reuse` when it already has the virtual screen's size, and returns it; otherwise creates a new DIB.
+HBITMAP BuildTexture(HBITMAP reuse) {
+    int w = GetSystemMetrics(SM_CXVIRTUALSCREEN), h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    void* bits = nullptr;
+    HBITMAP bmp = nullptr;
+    DIBSECTION ds;
+    if (reuse && GetObject(reuse, sizeof(ds), &ds) == sizeof(ds) && ds.dsBm.bmWidth == w &&
+        abs(ds.dsBm.bmHeight) == h) {
+        GdiFlush();
+        bmp = reuse;
+        bits = ds.dsBm.bmBits;
+    } else {
+        struct {
+            BITMAPINFOHEADER header;
+            RGBQUAD palette[256];
+        } bi = {};
+        bi.header.biSize = sizeof(bi.header);
+        bi.header.biWidth = w;
+        bi.header.biHeight = -h;
+        bi.header.biPlanes = 1;
+        bi.header.biBitCount = 8;
+        bi.header.biCompression = BI_RGB;
+        bi.header.biClrUsed = 256;
+        bmp = CreateDIBSection(nullptr, (BITMAPINFO*)&bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+        if (!bmp)
+            return nullptr;
     }
-    HBRUSH brush = CreatePatternBrush(bmp);
+    int stride = (w + 3) & ~3;
+    int s = g_ap.slider[SL_SIZE];
+    double angle = g_ap.slider[SL_ANGLE] * 3.14159265358979 / 180;
+    double c = cos(angle), sn = sin(angle);
+    bool checker = g_ap.pattern == PAT_CHECKER;
+
+    // Positions across the bands are fixed point, 1/65536 px, wrapped to one period (2s px). One period of the
+    // wave is tabulated at 1/64 px (index = phase >> 10), so each pixel costs an add, a compare and a lookup.
+    const uint32_t period = (uint32_t)(2 * s) << 16;
+    int count = 2 * s * 64;
+    signed char* wave = (signed char*)malloc(count);
+    if (!wave) {
+        if (bmp != reuse)
+            DeleteObject(bmp);
+        return nullptr;
+    }
+    for (int i = 0; i < count; i++)
+        wave[i] = (signed char)lroundf(Wave((i + 0.5f) / 64 / s, (float)s) * 127);
+    auto wrap = [period](double px) {
+        double v = fmod(px * 65536, (double)period);
+        return (uint32_t)(v < 0 ? v + period : v) % period;
+    };
+    uint32_t stepV = wrap(sn), stepU = wrap(c);
+
+    for (int y = 0; y < h; y++) {
+        BYTE* row = (BYTE*)bits + (size_t)y * stride;
+        uint32_t v = wrap(y * c);
+        if (!checker) {
+            for (int x = 0; x < w; x++) {
+                row[x] = (BYTE)(128 + wave[v >> 10]);
+                if ((v += stepV) >= period)
+                    v -= period;
+            }
+            continue;
+        }
+        uint32_t u = wrap(-y * sn);
+        for (int x = 0; x < w; x++) {
+            row[x] = (BYTE)(128 + wave[v >> 10] * wave[u >> 10] / 127);
+            if ((v += stepV) >= period)
+                v -= period;
+            if ((u += stepU) >= period)
+                u -= period;
+        }
+    }
+    free(wave);
+    return bmp;
+}
+
+void ApplyTexturePalette() {
+    int k = Pct255(g_ap.slider[SL_CONTRAST]);
+    int lvl = Pct255(g_ap.slider[SL_BRIGHTNESS]);
+    COLORREF dark = Shade(g_ap.colorRgb, lvl - k / 2);
+    COLORREF light = Shade(g_ap.colorRgb, lvl + k - k / 2);
+    RGBQUAD palette[256];
+    for (int i = 0; i < 256; i++) {
+        int t = i ? i - 1 : 0;
+        palette[i].rgbRed = (BYTE)(GetRValue(dark) + (GetRValue(light) - GetRValue(dark)) * t / 254);
+        palette[i].rgbGreen = (BYTE)(GetGValue(dark) + (GetGValue(light) - GetGValue(dark)) * t / 254);
+        palette[i].rgbBlue = (BYTE)(GetBValue(dark) + (GetBValue(light) - GetBValue(dark)) * t / 254);
+        palette[i].rgbReserved = 0;
+    }
+    HDC dc = CreateCompatibleDC(nullptr);
+    HGDIOBJ old = SelectObject(dc, g_texture);
+    SetDIBColorTable(dc, 0, 256, palette);
+    SelectObject(dc, old);
+    DeleteDC(dc);
+}
+
+void BuildBrush() {
+    HBITMAP tile = g_ap.pattern == PAT_IMAGE ? LoadTile(g_ap.image) : nullptr;
+    HBRUSH brush = tile ? CreatePatternBrush(tile) : nullptr;
+    HBITMAP texture = g_ap.pattern == PAT_CHECKER || g_ap.pattern == PAT_STRIPES ? BuildTexture(g_texture) : nullptr;
+    if (!brush && !texture)
+        brush = CreateSolidBrush(Shade(g_ap.colorRgb, Pct255(g_ap.slider[SL_BRIGHTNESS])));
     if (g_brush)
         DeleteObject(g_brush);
     if (g_brushBitmap)
         DeleteObject(g_brushBitmap);
+    if (g_texture && g_texture != texture)
+        DeleteObject(g_texture);
     g_brush = brush;
-    g_brushBitmap = bmp;
+    g_brushBitmap = tile;
+    g_texture = texture;
+    if (g_texture)
+        ApplyTexturePalette();
     if (g_hwndOverlay)
         InvalidateRect(g_hwndOverlay, nullptr, TRUE);
+}
+
+/// Brightness, contrast or color changed: only the palette is rebuilt when a texture is in use.
+void UpdateColors() {
+    if (!g_texture) {
+        BuildBrush();
+        return;
+    }
+    ApplyTexturePalette();
+    InvalidateRect(g_hwndOverlay, nullptr, TRUE);
 }
 
 #ifndef WDA_EXCLUDEFROMCAPTURE
 #define WDA_EXCLUDEFROMCAPTURE 0x00000011
 #endif
 
-// The layer stays on screen but is left out of screenshots, recordings and screen sharing (Windows 10 2004+).
+// WDA_EXCLUDEFROMCAPTURE needs Windows 10 2004 (build 19041); older builds treat it as WDA_MONITOR, which
+// blacks out the whole layer in screenshots and screen sharing.
+bool CaptureExclusionSupported() {
+    static int supported = -1;
+    if (supported < 0) {
+        using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW*);
+        auto rtlGetVersion = (RtlGetVersion_t)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion");
+        OSVERSIONINFOW vi = {sizeof(vi)};
+        supported = rtlGetVersion && rtlGetVersion(&vi) == 0 && vi.dwBuildNumber >= 19041;
+    }
+    return supported != 0;
+}
+
 void ApplyCaptureExclusion() {
+    if (!CaptureExclusionSupported())
+        return;
     if (!SetWindowDisplayAffinity(g_hwndOverlay, g_ap.hideFromCapture ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE))
         Wh_Log(L"SetWindowDisplayAffinity failed: %u", GetLastError());
 }
@@ -421,17 +525,51 @@ void ShowOverlay(bool show) {
     ShowWindow(g_hwndOverlay, show ? SW_SHOWNOACTIVATE : SW_HIDE);
 }
 
-// Windows that never move the layer when they get focus (taskbar, Alt+Tab, Start, menus).
-bool IsIgnoredClass(const wchar_t* cls) {
-    static const wchar_t* const kIgnored[] = {
-        L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd", L"XamlExplorerHostIslandWindow", L"MultitaskingViewFrame",
-        L"ForegroundStaging", L"TaskListThumbnailWnd", L"NotifyIconOverflowWindow",
-        L"TopLevelWindowForOverflowXamlIsland", L"Windows.UI.Core.CoreWindow", L"#32768", kMainClass,
-    };
-    for (const wchar_t* c : kIgnored)
-        if (wcscmp(cls, c) == 0)
+bool ClassIn(const wchar_t* cls, const wchar_t* const* list, size_t count) {
+    for (size_t i = 0; i < count; i++)
+        if (wcscmp(cls, list[i]) == 0)
             return true;
     return false;
+}
+
+// Transient windows that never move the layer: menus, taskbar thumbnails, the stand-in shown while switching.
+bool IsIgnoredClass(const wchar_t* cls) {
+    static const wchar_t* const kIgnored[] = {
+        L"ForegroundStaging", L"TaskListThumbnailWnd", L"#32768", kMainClass,
+    };
+    return ClassIn(cls, kIgnored, ARRAYSIZE(kIgnored));
+}
+
+// Shell surfaces (taskbar, Start, Alt+Tab, notifications). They are topmost, so with the layer at the top of the
+// normal band every regular window is dimmed while one of them has focus.
+bool IsShellClass(const wchar_t* cls) {
+    static const wchar_t* const kShell[] = {
+        L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd", L"XamlExplorerHostIslandWindow", L"MultitaskingViewFrame",
+        L"NotifyIconOverflowWindow", L"TopLevelWindowForOverflowXamlIsland", L"Windows.UI.Core.CoreWindow",
+    };
+    return ClassIn(cls, kShell, ARRAYSIZE(kShell));
+}
+
+/// Highest visible, non-minimized, non-cloaked window of the process in the normal (non-topmost) band, or nullptr.
+/// Windows owned by a visible window are skipped, so their owner is returned instead (owned windows sit above it).
+HWND TopWindowOfProcess(DWORD pid) {
+    for (HWND w = GetTopWindow(nullptr); w; w = GetWindow(w, GW_HWNDNEXT)) {
+        if (w == g_hwndOverlay || !IsWindowVisible(w) || IsIconic(w) ||
+            (GetWindowLongPtrW(w, GWL_EXSTYLE) & WS_EX_TOPMOST))
+            continue;
+        HWND owner = GetWindow(w, GW_OWNER);
+        if (owner && IsWindowVisible(owner))
+            continue;
+        DWORD wPid = 0;
+        GetWindowThreadProcessId(w, &wPid);
+        if (wPid != pid)
+            continue;
+        DWORD cloaked = 0;
+        DwmGetWindowAttribute(w, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+        if (!cloaked)
+            return w;
+    }
+    return nullptr;
 }
 
 // Moves the layer to the top of the non-topmost band, unless it is already there.
@@ -442,11 +580,52 @@ void RaiseOverlayToTop() {
     SetWindowPos(g_hwndOverlay, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 }
 
+// Puts the layer right below the window, or at the top of the normal band when the window is topmost:
+// inserting the layer behind a topmost window would make it topmost too.
+void PlaceBelow(HWND hwnd) {
+    if (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) {
+        RaiseOverlayToTop();
+        return;
+    }
+    if (GetWindow(hwnd, GW_HWNDNEXT) == g_hwndOverlay)
+        return;
+    SetWindowPos(g_hwndOverlay, hwnd, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+}
+
+void ForgetMenu(HWND hwnd) {
+    int n = 0;
+    for (int i = 0; i < g_menuCount; i++)
+        if (g_menus[i] != hwnd)
+            g_menus[n++] = g_menus[i];
+    g_menuCount = n;
+}
+
+void TrackMenu(HWND hwnd, bool open) {
+    ForgetMenu(hwnd);
+    if (open && hwnd && g_menuCount < (int)ARRAYSIZE(g_menus))
+        g_menus[g_menuCount++] = hwnd;
+}
+
+// Drops menus that closed without a MENUPOPUPEND. Only from the timer: right after MENUPOPUPSTART the menu
+// may not be visible yet.
+void PruneMenus() {
+    int n = 0;
+    for (int i = 0; i < g_menuCount; i++)
+        if (IsWindow(g_menus[i]) && IsWindowVisible(g_menus[i]))
+            g_menus[n++] = g_menus[i];
+    g_menuCount = n;
+}
+
 void Reposition() {
     if (!g_hwndOverlay)
         return;
     if (!g_ap.active) {
         ShowOverlay(false);
+        return;
+    }
+    if (g_ap.dimMenus && g_menuCount) {
+        ShowOverlay(true);
+        PlaceBelow(g_menus[0]);
         return;
     }
     HWND fg = GetForegroundWindow();
@@ -455,6 +634,11 @@ void Reposition() {
     wchar_t cls[256];
     if (!GetClassNameW(fg, cls, ARRAYSIZE(cls)) || IsIgnoredClass(cls))
         return;
+    if (IsShellClass(cls)) {
+        ShowOverlay(true);
+        RaiseOverlayToTop();
+        return;
+    }
     if (wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0) {
         if (g_ap.hideOnDesktop) {
             ShowOverlay(false);
@@ -465,35 +649,80 @@ void Reposition() {
         return;
     }
     ShowOverlay(true);
-    // Below the root owner, so a dialog and the window that owns it stay lit together.
-    // Stops at the last visible owner: hidden owners (WinForms ShowInTaskbar=false, Java dialogs) aren't raised
-    // with the window they own, so placing the layer below one would leave everything in between undimmed.
+    // With dimOwners off, below the root owner, so a dialog and the window that owns it stay lit together.
+    // Stops at the last visible owner: hidden owners (WinForms ShowInTaskbar=false, Java dialogs, Excel's Find
+    // dialog) aren't raised with the window they own, so the app's highest visible window stands in for them.
     HWND root = fg;
-    for (HWND owner; (owner = GetWindow(root, GW_OWNER)) && IsWindowVisible(owner);)
-        root = owner;
-    if (GetWindowLongPtrW(root, GWL_EXSTYLE) & WS_EX_TOPMOST) {
-        // Inserting the layer behind a topmost window would make it topmost too; go to the top of the normal band instead.
-        RaiseOverlayToTop();
-        return;
+    if (!g_ap.dimOwners) {
+        HWND owner;
+        while ((owner = GetWindow(root, GW_OWNER)) && IsWindowVisible(owner))
+            root = owner;
+        if (owner) {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(fg, &pid);
+            if (HWND top = TopWindowOfProcess(pid))
+                root = top;
+        }
     }
-    if (GetWindow(root, GW_HWNDNEXT) == g_hwndOverlay)
-        return;
-    SetWindowPos(g_hwndOverlay, root, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+    PlaceBelow(root);
 }
 
-void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
+void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG, LONG, DWORD, DWORD) {
+    if (event == EVENT_SYSTEM_MENUPOPUPSTART) {
+        wchar_t cls[16];
+        if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) || wcscmp(cls, L"#32768") != 0)
+            return;
+        TrackMenu(hwnd, true);
+    } else if (event == EVENT_SYSTEM_MENUPOPUPEND) {
+        TrackMenu(hwnd, false);
+    } else if (event != EVENT_SYSTEM_FOREGROUND) {
+        return;
+    }
     Reposition();
 }
 
 // ───────────── Icon ─────────────
 
-HICON LoadSystemIcon(int index, int size) {
+HICON LoadSystemIcon(int index, int size, bool* owned) {
     wchar_t path[MAX_PATH];
     GetSystemDirectoryW(path, MAX_PATH);
     wcscat_s(path, L"\\imageres.dll");
     HICON icon = nullptr;
-    g_iconExtracted = SUCCEEDED(SHDefExtractIconW(path, index, 0, &icon, nullptr, size)) && icon;
-    return g_iconExtracted ? icon : LoadIconW(nullptr, IDI_APPLICATION);
+    *owned = SUCCEEDED(SHDefExtractIconW(path, index, 0, &icon, nullptr, size)) && icon;
+    return *owned ? icon : LoadIconW(nullptr, IDI_APPLICATION);
+}
+
+// ───────────── Tray icon ─────────────
+
+void RemoveTrayIcon() {
+    if (!g_trayAdded)
+        return;
+    NOTIFYICONDATAW nid = {};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = g_hwndMain;
+    nid.uID = 1;
+    Shell_NotifyIconW(NIM_DELETE, &nid);
+    g_trayAdded = false;
+}
+
+/// Adds, updates or removes the tray icon to match the setting; the tooltip shows whether dimming is on.
+void UpdateTrayIcon() {
+    if (!g_settings.trayIcon) {
+        RemoveTrayIcon();
+        return;
+    }
+    NOTIFYICONDATAW nid = {};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = g_hwndMain;
+    nid.uID = 1;
+    nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    nid.uCallbackMessage = WM_APP_TRAY;
+    nid.hIcon = g_trayIcon;
+    swprintf_s(nid.szTip, L"Background Dimmer: %s\nRight-click to turn %s", g_ap.active ? L"on" : L"off",
+               g_ap.active ? L"off" : L"on");
+    if (g_trayAdded && Shell_NotifyIconW(NIM_MODIFY, &nid))
+        return;
+    g_trayAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
 }
 
 // ───────────── Configuration window ─────────────
@@ -502,7 +731,7 @@ enum {
     ID_PATTERN = 100,
     ID_SLIDER = 110,      // + SL_* index
     ID_VALUE = 120,       // + SL_* index
-    ID_LABEL = 140,       // + row
+    ID_LABEL = 160,       // + row
     ID_SWATCH = 130,
     ID_COLOR,
     ID_IMAGE,
@@ -511,6 +740,8 @@ enum {
     ID_HIDE_CAPTURE,
     ID_ACTIVE,
     ID_RESET,
+    ID_DIM_OWNERS,
+    ID_DIM_MENUS,
 };
 
 struct ConfigUi {
@@ -527,6 +758,8 @@ void UpdateValueLabels() {
         wchar_t text[16];
         if (i == SL_SIZE)
             swprintf_s(text, L"%d px", g_ap.slider[i]);
+        else if (i == SL_ANGLE)
+            swprintf_s(text, L"%d\u00B0", g_ap.slider[i]);
         else
             swprintf_s(text, L"%d%%", g_ap.slider[i]);
         SetWindowTextW(Ctl(ID_VALUE + i), text);
@@ -541,6 +774,8 @@ void UpdateEnabled() {
     EnableWindow(Ctl(ID_COLOR), !image);
     EnableWindow(Ctl(ID_SLIDER + SL_CONTRAST), !flat);
     EnableWindow(Ctl(ID_SLIDER + SL_SIZE), !flat);
+    EnableWindow(Ctl(ID_SLIDER + SL_ANGLE), !flat);
+    EnableWindow(Ctl(ID_HIDE_CAPTURE), CaptureExclusionSupported());
 }
 
 void UpdateSwatch() {
@@ -568,6 +803,8 @@ void SyncControls() {
     SetWindowTextW(Ctl(ID_IMAGE), g_ap.image);
     CheckDlgButton(g_hwndConfig, ID_HIDE_DESKTOP, g_ap.hideOnDesktop ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(g_hwndConfig, ID_HIDE_CAPTURE, g_ap.hideFromCapture ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(g_hwndConfig, ID_DIM_OWNERS, g_ap.dimOwners ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(g_hwndConfig, ID_DIM_MENUS, g_ap.dimMenus ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(g_hwndConfig, ID_ACTIVE, g_ap.active ? BST_CHECKED : BST_UNCHECKED);
     UpdateValueLabels();
     UpdateEnabled();
@@ -580,6 +817,7 @@ void SetActive(bool active) {
     if (g_hwndConfig)
         CheckDlgButton(g_hwndConfig, ID_ACTIVE, active ? BST_CHECKED : BST_UNCHECKED);
     Reposition();
+    UpdateTrayIcon();
     ScheduleSave();
 }
 
@@ -626,7 +864,7 @@ void PickColor() {
         return;
     g_ap.colorRgb = RgbToRef(cc.rgbResult);
     UpdateSwatch();
-    BuildBrush();
+    UpdateColors();
     ScheduleSave();
 }
 
@@ -640,6 +878,7 @@ void ResetDefaults() {
     ApplyCaptureExclusion();
     BuildBrush();
     Reposition();
+    UpdateTrayIcon();
     ScheduleSave();
 }
 
@@ -655,7 +894,7 @@ BOOL CALLBACK SetFontProc(HWND child, LPARAM font) {
 }
 
 // Layout in 96-dpi pixels, scaled to the DPI of the current monitor.
-const int kClientW = 440, kClientH = 370;
+const int kClientW = 440, kClientH = 454;
 
 void LayoutConfig(UINT dpi) {
     g_ui.dpi = dpi;
@@ -678,17 +917,21 @@ void LayoutConfig(UINT dpi) {
         MoveCtl(ID_SLIDER + i, cx - 4, y, 210, 28);
         MoveCtl(ID_VALUE + i, cx + 208, y + 4, 50, 20);
     }
-    MoveCtl(ID_LABEL + 5, lx, y + 4, 104, 20);
+    MoveCtl(ID_LABEL + 1 + SL_COUNT, lx, y + 4, 104, 20);
     MoveCtl(ID_SWATCH, cx, y + 2, 44, 22);
     MoveCtl(ID_COLOR, cx + 52, y, 96, 26);
     y += row + 2;
-    MoveCtl(ID_LABEL + 6, lx, y + 4, 104, 20);
+    MoveCtl(ID_LABEL + 2 + SL_COUNT, lx, y + 4, 104, 20);
     MoveCtl(ID_IMAGE, cx, y + 1, 220, 24);
     MoveCtl(ID_BROWSE, cx + 226, y, 32, 26);
     y += row + 8;
     MoveCtl(ID_HIDE_DESKTOP, lx, y, kClientW - 2 * lx, 22);
     y += 26;
     MoveCtl(ID_HIDE_CAPTURE, lx, y, kClientW - 2 * lx, 22);
+    y += 26;
+    MoveCtl(ID_DIM_OWNERS, lx, y, kClientW - 2 * lx, 22);
+    y += 26;
+    MoveCtl(ID_DIM_MENUS, lx, y, kClientW - 2 * lx, 22);
     y += 26;
     MoveCtl(ID_ACTIVE, lx, y, kClientW - 2 * lx, 22);
     y += 38;
@@ -726,8 +969,9 @@ HWND AddCtl(const wchar_t* cls, const wchar_t* text, DWORD style, int id, DWORD 
 }
 
 void CreateConfigControls() {
-    const wchar_t* labels[] = {L"Pattern", L"Opacity", L"Brightness", L"Contrast", L"Size", L"Base color", L"Image"};
-    for (int i = 0; i < 7; i++)
+    const wchar_t* labels[] = {L"Pattern", L"Opacity", L"Brightness", L"Contrast", L"Size", L"Rotation",
+                               L"Base color", L"Image"};
+    for (int i = 0; i < (int)ARRAYSIZE(labels); i++)
         AddCtl(L"STATIC", labels[i], SS_LEFT, ID_LABEL + i);
 
     HWND combo = AddCtl(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_TABSTOP | WS_VSCROLL, ID_PATTERN);
@@ -749,6 +993,8 @@ void CreateConfigControls() {
     AddCtl(L"BUTTON", L"Don't dim while the desktop has focus", BS_AUTOCHECKBOX | WS_TABSTOP, ID_HIDE_DESKTOP);
     AddCtl(L"BUTTON", L"Hide the layer from screenshots and screen sharing", BS_AUTOCHECKBOX | WS_TABSTOP,
            ID_HIDE_CAPTURE);
+    AddCtl(L"BUTTON", L"Dim a window while one of its dialogs has focus", BS_AUTOCHECKBOX | WS_TABSTOP, ID_DIM_OWNERS);
+    AddCtl(L"BUTTON", L"Dim everything behind an open menu", BS_AUTOCHECKBOX | WS_TABSTOP, ID_DIM_MENUS);
     AddCtl(L"BUTTON", L"Active", BS_AUTOCHECKBOX | WS_TABSTOP, ID_ACTIVE);
     AddCtl(L"BUTTON", L"Reset to defaults", BS_PUSHBUTTON | WS_TABSTOP, ID_RESET);
     AddCtl(L"BUTTON", L"Close", BS_DEFPUSHBUTTON | WS_TABSTOP, IDCANCEL);
@@ -768,6 +1014,8 @@ LRESULT CALLBACK ConfigProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 UpdateValueLabels();
                 if (i == SL_OPACITY)
                     ApplyOpacity();
+                else if (i == SL_BRIGHTNESS || i == SL_CONTRAST)
+                    UpdateColors();
                 else
                     BuildBrush();
                 ScheduleSave();
@@ -799,6 +1047,16 @@ LRESULT CALLBACK ConfigProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 case ID_HIDE_CAPTURE:
                     g_ap.hideFromCapture = IsDlgButtonChecked(hwnd, ID_HIDE_CAPTURE) == BST_CHECKED;
                     ApplyCaptureExclusion();
+                    ScheduleSave();
+                    return 0;
+                case ID_DIM_OWNERS:
+                    g_ap.dimOwners = IsDlgButtonChecked(hwnd, ID_DIM_OWNERS) == BST_CHECKED;
+                    Reposition();
+                    ScheduleSave();
+                    return 0;
+                case ID_DIM_MENUS:
+                    g_ap.dimMenus = IsDlgButtonChecked(hwnd, ID_DIM_MENUS) == BST_CHECKED;
+                    Reposition();
                     ScheduleSave();
                     return 0;
                 case ID_ACTIVE:
@@ -866,7 +1124,8 @@ void ApplyModSettings(bool fromSettingsChange) {
     g_configHotkeyActive = RegisterHotkeyText(HK_CONFIG, g_settings.configHotkey);
     if (g_hwndConfig)
         UpdateActiveLabel();
-    if (fromSettingsChange && !g_configHotkeyActive)
+    UpdateTrayIcon();
+    if (fromSettingsChange && !g_configHotkeyActive && !g_trayAdded)
         OpenConfig();
 }
 
@@ -880,6 +1139,7 @@ void Shutdown() {
     g_hook = nullptr;
     UnregisterHotKey(g_hwndMain, HK_TOGGLE);
     UnregisterHotKey(g_hwndMain, HK_CONFIG);
+    RemoveTrayIcon();
     if (g_hwndOverlay)
         DestroyWindow(g_hwndOverlay);
     g_hwndOverlay = nullptr;
@@ -887,9 +1147,16 @@ void Shutdown() {
 }
 
 LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == g_wmTaskbarCreated && msg) {
+        // Explorer restarted and the notification area is empty again.
+        g_trayAdded = false;
+        UpdateTrayIcon();
+        return 0;
+    }
     switch (msg) {
         case WM_TIMER:
             if (wParam == TIMER_REPOSITION) {
+                PruneMenus();
                 Reposition();
             } else if (wParam == TIMER_SAVE) {
                 KillTimer(hwnd, TIMER_SAVE);
@@ -897,6 +1164,8 @@ LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             } else if (wParam == TIMER_FIT) {
                 KillTimer(hwnd, TIMER_FIT);
                 FitOverlay();
+                if (g_texture)
+                    BuildBrush();
             }
             return 0;
         case WM_HOTKEY:
@@ -907,6 +1176,12 @@ LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         case WM_DISPLAYCHANGE:
             SetTimer(hwnd, TIMER_FIT, 500, nullptr);
+            return 0;
+        case WM_APP_TRAY:
+            if (lParam == WM_LBUTTONUP)
+                OpenConfig();
+            else if (lParam == WM_RBUTTONUP)
+                SetActive(!g_ap.active);
             return 0;
         case WM_APP_RELOAD:
             LoadModSettings();
@@ -925,13 +1200,21 @@ LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
 LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
-        case WM_ERASEBKGND:
-            if (g_brush) {
-                RECT rc;
-                GetClientRect(hwnd, &rc);
-                FillRect((HDC)wParam, &rc, g_brush);
+        case WM_ERASEBKGND: {
+            HDC dc = (HDC)wParam;
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            if (g_texture) {
+                HDC mem = CreateCompatibleDC(dc);
+                HGDIOBJ old = SelectObject(mem, g_texture);
+                BitBlt(dc, 0, 0, rc.right, rc.bottom, mem, 0, 0, SRCCOPY);
+                SelectObject(mem, old);
+                DeleteDC(mem);
+            } else if (g_brush) {
+                FillRect(dc, &rc, g_brush);
             }
             return 1;
+        }
         case WM_PAINT: {
             PAINTSTRUCT ps;
             BeginPaint(hwnd, &ps);
@@ -976,7 +1259,10 @@ DWORD WINAPI ThreadProc(void*) {
     if (GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr) != 0)
         Wh_Log(L"GdiplusStartup failed: the Image pattern falls back to a solid tint");
 
-    g_icon = LoadSystemIcon(201, GetSystemMetricsForDpi(SM_CXICON, GetDpiForSystem()));
+    UINT systemDpi = GetDpiForSystem();
+    g_icon = LoadSystemIcon(201, GetSystemMetricsForDpi(SM_CXICON, systemDpi), &g_iconOwned);
+    g_trayIcon = LoadSystemIcon(201, GetSystemMetricsForDpi(SM_CXSMICON, systemDpi), &g_trayIconOwned);
+    g_wmTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
     LoadAppearance();
 
@@ -988,6 +1274,9 @@ DWORD WINAPI ThreadProc(void*) {
                                  nullptr, inst, nullptr);
     g_hwndOverlay = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
                                     kOverlayClass, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, inst, nullptr);
+    // Lets Explorer's TaskbarCreated broadcast through UIPI when the host runs with UIAccess.
+    if (g_hwndMain)
+        ChangeWindowMessageFilterEx(g_hwndMain, g_wmTaskbarCreated, MSGFLT_ALLOW, nullptr);
     // Read after g_hwndMain exists, so a settings change saved meanwhile is queued as WM_APP_RELOAD, not lost.
     LoadModSettings();
     if (g_hwndMain && g_hwndOverlay) {
@@ -995,7 +1284,7 @@ DWORD WINAPI ThreadProc(void*) {
         ApplyOpacity();
         ApplyCaptureExclusion();
         FitOverlay();
-        g_hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, WinEventProc, 0, 0,
+        g_hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MENUPOPUPEND, nullptr, WinEventProc, 0, 0,
                                  WINEVENT_OUTOFCONTEXT);
         // Safety net for z-order changes no WinEvent reports, such as the active window being lowered or made
         // topmost without the foreground window changing.
@@ -1022,10 +1311,15 @@ DWORD WINAPI ThreadProc(void*) {
         DeleteObject(g_brush);
     if (g_brushBitmap)
         DeleteObject(g_brushBitmap);
+    if (g_texture)
+        DeleteObject(g_texture);
     g_brush = nullptr;
     g_brushBitmap = nullptr;
-    if (g_icon && g_iconExtracted)
+    g_texture = nullptr;
+    if (g_icon && g_iconOwned)
         DestroyIcon(g_icon);
+    if (g_trayIcon && g_trayIconOwned)
+        DestroyIcon(g_trayIcon);
     UnregisterClassW(kConfigClass, inst);
     UnregisterClassW(kOverlayClass, inst);
     UnregisterClassW(kMainClass, inst);

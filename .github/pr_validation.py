@@ -1871,6 +1871,81 @@ def validate_line_lengths(path: Path, mod_source: str) -> int:
     return warnings
 
 
+# Assignment, comparison and logical operators. Operators which are also used
+# in other syntax, such as `<`, `*` and `&`, are left out.
+SPACED_OPERATOR_RE = re.compile(
+    r'(?<![<>=!+\-*/%&|^])(?:==|!=|<=|>=|&&|\|\||[+\-*/%&|^]?=)(?!=)'
+)
+
+# Formatted code has almost no operators without spaces around them and few
+# lines with several statements. Compacted code has them throughout the file.
+# Operators without spaces alone are a coding style, which is readable as long
+# as statements are on separate lines.
+COMPACT_CODE_MIN_LINES = 200
+COMPACT_CODE_MAX_UNSPACED_OPERATORS = 0.4
+COMPACT_CODE_MIN_UNSPACED_PACKED_LINES = 50
+COMPACT_CODE_MAX_PACKED_LINES = 0.1
+
+
+def validate_code_compactness(path: Path, mod_source: str) -> int:
+    """Validate that the code isn't compacted, with operators and statements
+    run together throughout the file."""
+    lines = 0
+    operators = 0
+    unspaced_operators = 0
+    packed_lines = 0
+    densest_line_num = 1
+    densest_line_score = 0
+
+    for line_num, line in enumerate(get_code_lines(mod_source), start=1):
+        line = line.strip()
+        if line == '' or line.startswith('#'):
+            continue
+
+        lines += 1
+
+        line_unspaced_operators = 0
+        padded = f' {line} '
+        for match in SPACED_OPERATOR_RE.finditer(padded):
+            operators += 1
+            if padded[match.start() - 1] != ' ' and padded[match.end()] != ' ':
+                line_unspaced_operators += 1
+        unspaced_operators += line_unspaced_operators
+
+        # `case X: f(); break;` is a common idiom, not a packed line.
+        statements = count_statements(line)
+        if statements >= 2 and not re.match(r'(case\b|default\s*:)', line):
+            packed_lines += 1
+
+        if line_unspaced_operators + statements > densest_line_score:
+            densest_line_num = line_num
+            densest_line_score = line_unspaced_operators + statements
+
+    if lines < COMPACT_CODE_MIN_LINES:
+        return 0
+
+    unspaced_ratio = unspaced_operators / operators if operators else 0
+    packed_ratio = packed_lines / lines
+    if not (
+        (
+            unspaced_ratio > COMPACT_CODE_MAX_UNSPACED_OPERATORS
+            and packed_lines >= COMPACT_CODE_MIN_UNSPACED_PACKED_LINES
+        )
+        or packed_ratio > COMPACT_CODE_MAX_PACKED_LINES
+    ):
+        return 0
+
+    return add_warning(
+        path,
+        densest_line_num,
+        'The code is compacted throughout the file, which makes it difficult to'
+        f' review: {unspaced_ratio:.0%} of the operators have no spaces around'
+        f' them and {packed_ratio:.0%} of the lines have several statements,'
+        ' this line is one example. Please format the code, for example with'
+        ' clang-format and the .clang-format file of the repository.',
+    )
+
+
 def normalize_callback_param_types(params: str) -> str:
     """Strip parameter names and normalize whitespace/pointer style in a C parameter list."""
     p = re.sub(r'\s+', ' ', params.strip())
@@ -1964,6 +2039,7 @@ def validate_mod_file(path: Path, pr_author: str, pr_author_id: Optional[int]) -
     warnings += validate_symbol_hooks(path, mod_source)
     warnings += validate_specific_keywords(path, mod_source)
     warnings += validate_line_lengths(path, mod_source)
+    warnings += validate_code_compactness(path, mod_source)
     warnings += validate_callback_signatures(path, mod_source)
 
     return warnings

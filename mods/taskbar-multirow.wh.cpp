@@ -2,7 +2,7 @@
 // @id              taskbar-multirow
 // @name            Multirow taskbar for Windows 11
 // @description     Span taskbar items across multiple rows, just like it was possible before Windows 11
-// @version         1.1.4
+// @version         1.2
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -25,13 +25,18 @@
 # Multirow taskbar for Windows 11
 
 Span taskbar items across multiple rows, just like it was possible before
-Windows 11.
+Windows 11. On a vertical taskbar, items span across multiple columns instead.
 
 ## Notes
 
 * The mod doesn't change the taskbar height, it only makes the task list span
   across multiple rows. To change the taskbar height, use the [Taskbar height
   and icon size](https://windhawk.net/mods/taskbar-icon-size) mod.
+* Similarly, the mod doesn't change the width of a vertical taskbar. To make
+  room for multiple columns, change the taskbar width with the [Vertical Taskbar
+  for Windows 11](https://windhawk.net/mods/taskbar-vertical) mod.
+* Multiple columns require the native vertical taskbar, which is available in
+  newer Windows 11 builds.
 * To have multiple rows of tray icons, use the [Taskbar tray icon spacing and
   grid](https://windhawk.net/mods/taskbar-notification-icon-spacing) mod.
 
@@ -43,8 +48,10 @@ Windows 11.
 /*
 - rows: 2
   $name: Rows
+  $description: On a vertical taskbar, this is the number of columns.
 - fullHeightStartButton: true
   $name: Full-height start button
+  $description: On a vertical taskbar, the start button spans the full width.
 */
 // ==/WindhawkModSettings==
 
@@ -60,15 +67,22 @@ Windows 11.
 
 #undef GetCurrentTime
 
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.Numerics.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/base.h>
 
 using namespace winrt::Windows::UI::Xaml;
+
+// A vertical taskbar lays items out in a single column instead of a single row.
+// It's handled the same way with the axes swapped, so its columns are called
+// rows here. The length of an element is its size along a row, and its
+// thickness is its size across rows.
 
 struct {
     int rows;
@@ -93,26 +107,38 @@ class ScopedFlag {
 };
 
 thread_local bool g_inTaskbarCollapsibleLayoutXamlTraits_ArrangeOverride;
-thread_local float g_taskbarCollapsibleLayoutHeight;
+thread_local winrt::Windows::Foundation::Size g_taskbarCollapsibleLayoutSize;
 
 // The rect each item was last moved to, so that an item re-arranged in its
 // slot, e.g. by another mod, isn't moved again. A slot from another layout
-// height doesn't count, as the layout's rect for the new height can match it.
+// thickness doesn't count, as the layout's rect for the new thickness can match
+// it.
 struct ArrangedItem {
     winrt::weak_ref<FrameworkElement> element;
     winrt::Windows::Foundation::Rect rect;
-    float layoutHeight;
+    float layoutThickness;
 };
 std::unordered_map<void*, ArrangedItem> g_arrangedItems;
 
+// XAML stores a slot with layout rounding, which can move each value by up to
+// half a physical pixel.
+bool IsSameSlot(winrt::Windows::Foundation::Rect a,
+                winrt::Windows::Foundation::Rect b) {
+    return std::abs(a.X - b.X) < 1 && std::abs(a.Y - b.Y) < 1 &&
+           std::abs(a.Width - b.Width) < 1 && std::abs(a.Height - b.Height) < 1;
+}
+
 // Set while the taskbar calculates the drop position of a dragged item, holding
-// the horizontal distance between the row the item is dragged over and the
+// the distance along the row between the row the item is dragged over and the
 // single row the taskbar lays items out in.
 bool g_hasDropPlaceholderOffset;
 float g_dropPlaceholderOffset;
 
 struct TaskbarState {
     winrt::weak_ref<XamlRoot> xamlRoot;
+    // Kept up to date by GetTaskbarState, as the taskbar can change its
+    // orientation at runtime.
+    bool vertical;
     // Sized by GetTaskbarState from the row count setting, which can change on
     // another thread in the meantime. Index it within its own size.
     std::vector<float> rowOffsetAdjustment;
@@ -123,9 +149,10 @@ std::unordered_map<void*, TaskbarState> g_taskbarState;
 // Only one taskbar item can be dragged at a time.
 struct {
     bool active;
+    bool vertical;
     int startRow;
-    bool hasLastDropX;
-    float lastDropX;
+    bool hasLastDropPosition;
+    float lastDropPosition;
 } g_dragState;
 
 HWND FindCurrentProcessTaskbarWnd() {
@@ -183,16 +210,64 @@ FrameworkElement FindChildByClassName(FrameworkElement element,
     });
 }
 
-// The taskbar frame doesn't always have an explicit width, in which case
-// Width() is NaN and the laid out width has to be used.
-double GetTaskbarFrameWidth(FrameworkElement taskbarFrameElement) {
-    double width = taskbarFrameElement.Width();
-    return std::isnan(width) ? taskbarFrameElement.ActualWidth() : width;
+// The root grid of the taskbar frame has a visual state for the side the
+// taskbar is docked to. Builds without the vertical taskbar may not set a
+// current state.
+bool IsVerticalTaskbarFrame(FrameworkElement taskbarFrameElement) {
+    auto rootGrid = FindChildByName(taskbarFrameElement, L"RootGrid");
+    if (!rootGrid) {
+        return false;
+    }
+
+    for (const auto& group :
+         VisualStateManager::GetVisualStateGroups(rootGrid)) {
+        if (group.Name() == L"DockingStates") {
+            auto currentState = group.CurrentState();
+            if (!currentState) {
+                return false;
+            }
+
+            auto name = currentState.Name();
+            return name == L"DockedLeft" || name == L"DockedRight";
+        }
+    }
+
+    return false;
 }
 
-// The width a single row of items can span, i.e. the taskbar frame width
+double GetElementLength(FrameworkElement element, bool vertical) {
+    return vertical ? element.ActualHeight() : element.ActualWidth();
+}
+
+double GetElementThickness(FrameworkElement element, bool vertical) {
+    return vertical ? element.ActualWidth() : element.ActualHeight();
+}
+
+// Lets a rect of a vertical taskbar be handled like a rect of a horizontal one,
+// and the other way around.
+winrt::Windows::Foundation::Rect SwapAxesIfVertical(
+    winrt::Windows::Foundation::Rect rect,
+    bool vertical) {
+    return vertical ? winrt::Windows::Foundation::Rect{rect.Y, rect.X,
+                                                       rect.Height, rect.Width}
+                    : rect;
+}
+
+// The taskbar frame doesn't always have an explicit length, in which case the
+// property is NaN and the laid out length has to be used.
+double GetTaskbarFrameLength(FrameworkElement taskbarFrameElement,
+                             bool vertical) {
+    double length =
+        vertical ? taskbarFrameElement.Height() : taskbarFrameElement.Width();
+    return std::isnan(length) ? GetElementLength(taskbarFrameElement, vertical)
+                              : length;
+}
+
+// The length a single row of items can span, i.e. the taskbar frame length
 // without the part which is occupied by the system tray.
-bool GetWidthWithoutExtent(FrameworkElement xamlRootContent, double* result) {
+bool GetLengthWithoutExtent(FrameworkElement xamlRootContent,
+                            bool vertical,
+                            double* result) {
     auto taskbarFrameElement =
         FindChildByName(xamlRootContent, L"TaskbarFrame");
     if (!taskbarFrameElement) {
@@ -205,9 +280,83 @@ bool GetWidthWithoutExtent(FrameworkElement xamlRootContent, double* result) {
         return false;
     }
 
-    *result = GetTaskbarFrameWidth(taskbarFrameElement) -
-              systemTrayFrame.ActualWidth();
+    *result = GetTaskbarFrameLength(taskbarFrameElement, vertical) -
+              GetElementLength(systemTrayFrame, vertical);
     return true;
+}
+
+FrameworkElement FindTaskbarFrameRepeater(FrameworkElement xamlRootContent) {
+    FrameworkElement child = xamlRootContent;
+    if (child &&
+        (child = FindChildByClassName(child, L"Taskbar.TaskbarFrame")) &&
+        (child = FindChildByName(child, L"RootGrid")) &&
+        (child = FindChildByName(child, L"TaskbarFrameRepeater"))) {
+        return child;
+    }
+
+    return nullptr;
+}
+
+// The root element of a taskbar item, e.g. the icon panel of a taskbar button.
+FrameworkElement GetItemContent(FrameworkElement item) {
+    if (Media::VisualTreeHelper::GetChildrenCount(item) == 0) {
+        return nullptr;
+    }
+
+    return Media::VisualTreeHelper::GetChild(item, 0)
+        .try_as<FrameworkElement>();
+}
+
+// The column that holds the icon, if the content of an item is the icon panel
+// of a taskbar button.
+Controls::ColumnDefinition GetItemContentIconColumn(FrameworkElement content) {
+    auto iconPanel = content.try_as<Controls::Grid>();
+    if (!iconPanel || iconPanel.Name() != L"IconPanel") {
+        return nullptr;
+    }
+
+    auto columns = iconPanel.ColumnDefinitions();
+    return columns.Size() > 0 ? columns.GetAt(0) : nullptr;
+}
+
+// Being arranged in a column doesn't make the content of an item narrower: a
+// button without a label has an icon panel and an icon column as wide as the
+// taskbar, and a label only gets trimmed to the available width. The maximum
+// widths apply to all of these, and take precedence over the widths that the
+// taskbar sets.
+void LimitItemContentWidth(FrameworkElement item, double maxWidth) {
+    auto content = GetItemContent(item);
+    if (!content) {
+        return;
+    }
+
+    if (content.MaxWidth() != maxWidth) {
+        content.MaxWidth(maxWidth);
+    }
+
+    if (auto iconColumn = GetItemContentIconColumn(content)) {
+        auto padding = content.as<Controls::Grid>().Padding();
+        double iconColumnMaxWidth =
+            std::max(maxWidth - padding.Left - padding.Right, 0.0);
+        if (iconColumn.MaxWidth() != iconColumnMaxWidth) {
+            iconColumn.MaxWidth(iconColumnMaxWidth);
+        }
+    }
+}
+
+void ClearItemContentWidthLimits(FrameworkElement taskbarFrameRepeater) {
+    EnumChildElements(taskbarFrameRepeater, [](FrameworkElement item) {
+        if (auto content = GetItemContent(item)) {
+            content.ClearValue(FrameworkElement::MaxWidthProperty());
+
+            if (auto iconColumn = GetItemContentIconColumn(content)) {
+                iconColumn.ClearValue(
+                    Controls::ColumnDefinition::MaxWidthProperty());
+            }
+        }
+
+        return false;
+    });
 }
 
 TaskbarState* GetTaskbarState(XamlRoot xamlRoot) {
@@ -224,6 +373,29 @@ TaskbarState* GetTaskbarState(XamlRoot xamlRoot) {
         };
     }
 
+    auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
+    auto taskbarFrameElement =
+        xamlRootContent ? FindChildByName(xamlRootContent, L"TaskbarFrame")
+                        : nullptr;
+    if (taskbarFrameElement &&
+        it->second.vertical != IsVerticalTaskbarFrame(taskbarFrameElement)) {
+        it->second.vertical = !it->second.vertical;
+        Wh_Log(L"Taskbar orientation changed, vertical=%d",
+               it->second.vertical);
+
+        // Nothing that was applied for the other orientation carries over.
+        it->second.rowOffsetAdjustment.clear();
+
+        if (auto repeater = FindTaskbarFrameRepeater(xamlRootContent)) {
+            auto margin = repeater.Margin();
+            margin.Right = 0;
+            margin.Bottom = 0;
+            repeater.Margin(margin);
+
+            ClearItemContentWidthLimits(repeater);
+        }
+    }
+
     // Update size in case it was just created as an empty vector or in case the
     // settings changed.
     it->second.rowOffsetAdjustment.resize(g_settings.rows);
@@ -231,7 +403,7 @@ TaskbarState* GetTaskbarState(XamlRoot xamlRoot) {
     return &it->second;
 }
 
-// The horizontal offset which items get on their way from the single row the
+// The offset along the row which items get on their way from the single row the
 // taskbar lays out to the given row.
 float RowOffsetSum(TaskbarState* taskbarState, int row) {
     float sum = 0;
@@ -258,19 +430,23 @@ int ClampRow(int row) {
 }
 
 // Expands the bounds of a task list item to span all rows, given the distance
-// of the item from the top of the task list.
+// of the item from the start of the first row.
 void ExpandBoundsToAllRows(winrt::Windows::Foundation::Rect* bounds,
                            double offset,
-                           double taskListHeight) {
+                           double taskListThickness,
+                           bool vertical) {
     // Also catches NaN.
-    if (g_settings.rows < 2 || !(taskListHeight > 0)) {
+    if (g_settings.rows < 2 || !(taskListThickness > 0)) {
         return;
     }
 
-    double rowHeight = taskListHeight / g_settings.rows;
-    int row = ClampRow((int)std::lround(offset / rowHeight));
-    bounds->Y -= row * rowHeight;
-    bounds->Height = taskListHeight;
+    double rowThickness = taskListThickness / g_settings.rows;
+    int row = ClampRow((int)std::lround(offset / rowThickness));
+
+    auto rect = SwapAxesIfVertical(*bounds, vertical);
+    rect.Y -= row * rowThickness;
+    rect.Height = taskListThickness;
+    *bounds = SwapAxesIfVertical(rect, vertical);
 }
 
 FrameworkElement FindFullHeightStartButton(
@@ -291,28 +467,29 @@ FrameworkElement FindFullHeightStartButton(
     });
 }
 
-// Moves the rect of a task list item from the single row that the taskbar lays
-// items out in to the row that the item is displayed in. An item that moves to
-// the beginning of a row sets the horizontal offset of the row's other items,
-// unless updateRowOffsets is false.
+// Moves the rect of a task list item, with the axes of a horizontal taskbar,
+// from the single row that the taskbar lays items out in to the row that the
+// item is displayed in. An item that moves to the beginning of a row sets the
+// offset along the row of the row's other items, unless updateRowOffsets is
+// false.
 winrt::Windows::Foundation::Rect MoveToDisplayedRow(
     winrt::Windows::Foundation::Rect rect,
     TaskbarState* taskbarState,
-    double widthWithoutExtent,
-    double startButtonWidth,
+    double lengthWithoutExtent,
+    double startButtonLength,
     bool updateRowOffsets) {
     int rows = static_cast<int>(taskbarState->rowOffsetAdjustment.size());
     rect.Height /= rows;
-    for (int i = 0; i < rows - 1 && rect.X + rect.Width > widthWithoutExtent;
+    for (int i = 0; i < rows - 1 && rect.X + rect.Width > lengthWithoutExtent;
          i++) {
-        rect.X -= widthWithoutExtent;
+        rect.X -= lengthWithoutExtent;
         if (rect.X <= 0) {
             if (updateRowOffsets) {
                 taskbarState->rowOffsetAdjustment[i] =
-                    -rect.X + startButtonWidth;
+                    -rect.X + startButtonLength;
             }
 
-            rect.X = startButtonWidth;
+            rect.X = startButtonLength;
         } else {
             rect.X += taskbarState->rowOffsetAdjustment[i];
         }
@@ -325,18 +502,18 @@ winrt::Windows::Foundation::Rect MoveToDisplayedRow(
 
 void UpdateTaskbarFrameRepeaterMargin(FrameworkElement taskbarFrameRepeater,
                                       TaskbarState* taskbarState,
-                                      double widthWithoutExtent,
+                                      double lengthWithoutExtent,
                                       bool forceUpdate = false) {
     double desiredMargin = 0;
 
     if (!g_unloading) {
         // Also catches NaN.
-        if (!(widthWithoutExtent > 0)) {
-            Wh_Log(L"Skipping, widthWithoutExtent=%f", widthWithoutExtent);
+        if (!(lengthWithoutExtent > 0)) {
+            Wh_Log(L"Skipping, lengthWithoutExtent=%f", lengthWithoutExtent);
             return;
         }
 
-        desiredMargin = -widthWithoutExtent * (g_settings.rows - 1);
+        desiredMargin = -lengthWithoutExtent * (g_settings.rows - 1);
 
         for (const auto f : taskbarState->rowOffsetAdjustment) {
             desiredMargin += f;
@@ -348,31 +525,20 @@ void UpdateTaskbarFrameRepeaterMargin(FrameworkElement taskbarFrameRepeater,
     }
 
     auto margin = taskbarFrameRepeater.Margin();
+    double& marginEnd = taskbarState->vertical ? margin.Bottom : margin.Right;
     if (forceUpdate) {
-        Wh_Log(L"Re-setting margin.Right=%f (widthWithoutExtent=%f)",
-               desiredMargin, widthWithoutExtent);
-        margin.Right = desiredMargin + 1;
+        Wh_Log(L"Re-setting margin end=%f (lengthWithoutExtent=%f)",
+               desiredMargin, lengthWithoutExtent);
+        marginEnd = desiredMargin + 1;
         taskbarFrameRepeater.Margin(margin);
-        margin.Right = desiredMargin;
+        marginEnd = desiredMargin;
         taskbarFrameRepeater.Margin(margin);
-    } else if (margin.Right != desiredMargin) {
-        Wh_Log(L"Setting margin.Right=%f (widthWithoutExtent=%f)",
-               desiredMargin, widthWithoutExtent);
-        margin.Right = desiredMargin;
+    } else if (marginEnd != desiredMargin) {
+        Wh_Log(L"Setting margin end=%f (lengthWithoutExtent=%f)", desiredMargin,
+               lengthWithoutExtent);
+        marginEnd = desiredMargin;
         taskbarFrameRepeater.Margin(margin);
     }
-}
-
-FrameworkElement FindTaskbarFrameRepeater(FrameworkElement xamlRootContent) {
-    FrameworkElement child = xamlRootContent;
-    if (child &&
-        (child = FindChildByClassName(child, L"Taskbar.TaskbarFrame")) &&
-        (child = FindChildByName(child, L"RootGrid")) &&
-        (child = FindChildByName(child, L"TaskbarFrameRepeater"))) {
-        return child;
-    }
-
-    return nullptr;
 }
 
 bool ApplyStyle(XamlRoot xamlRoot) {
@@ -385,13 +551,20 @@ bool ApplyStyle(XamlRoot xamlRoot) {
         return false;
     }
 
-    double widthWithoutExtent;
-    if (!GetWidthWithoutExtent(xamlRootContent, &widthWithoutExtent)) {
+    // Arranging the items applies the limits again, unless they no longer apply
+    // with the new settings or the mod is unloading.
+    if (taskbarState->vertical) {
+        ClearItemContentWidthLimits(taskbarFrameRepeater);
+    }
+
+    double lengthWithoutExtent;
+    if (!GetLengthWithoutExtent(xamlRootContent, taskbarState->vertical,
+                                &lengthWithoutExtent)) {
         return false;
     }
 
     UpdateTaskbarFrameRepeaterMargin(taskbarFrameRepeater, taskbarState,
-                                     widthWithoutExtent, /*forceUpdate=*/true);
+                                     lengthWithoutExtent, /*forceUpdate=*/true);
 
     return true;
 }
@@ -778,9 +951,16 @@ XamlRoot GetTaskbarXamlRootOfWindow(HWND hWnd) {
     return nullptr;
 }
 
+bool IsTaskbarOfWindowVertical(HWND hWnd) {
+    auto xamlRoot = GetTaskbarXamlRootOfWindow(hWnd);
+    return xamlRoot && GetTaskbarState(xamlRoot)->vertical;
+}
+
 // The bounds of the task list of the taskbar that the window belongs to,
 // relative to the XAML root content.
-bool GetTaskListBounds(HWND hWnd, winrt::Windows::Foundation::Rect* bounds) {
+bool GetTaskListBounds(HWND hWnd,
+                       winrt::Windows::Foundation::Rect* bounds,
+                       bool* vertical) {
     auto xamlRoot = GetTaskbarXamlRootOfWindow(hWnd);
     if (!xamlRoot) {
         return false;
@@ -788,15 +968,21 @@ bool GetTaskListBounds(HWND hWnd, winrt::Windows::Foundation::Rect* bounds) {
 
     auto taskbarFrameRepeater =
         FindTaskbarFrameRepeater(xamlRoot.Content().try_as<FrameworkElement>());
-    return taskbarFrameRepeater &&
-           GetBoundsInXamlRoot(taskbarFrameRepeater, bounds);
+    if (!taskbarFrameRepeater ||
+        !GetBoundsInXamlRoot(taskbarFrameRepeater, bounds)) {
+        return false;
+    }
+
+    *vertical = GetTaskbarState(xamlRoot)->vertical;
+    return true;
 }
 
 // Moves the bounds that the taskbar reports for a button group, relative to the
 // XAML root content, to the row that the group is displayed in. The taskbar
 // converts the bounds from the layout, which places the buttons in a single
 // row, as if they were relative to the taskbar frame. Bounds that are already
-// within a row aren't moved.
+// within a row aren't moved. Only their position along the row changes, since
+// they already span all rows.
 void MoveGroupBoundsToDisplayedRow(HWND hWnd,
                                    winrt::Windows::Foundation::Rect* bounds) {
     if (g_settings.rows < 2) {
@@ -810,35 +996,43 @@ void MoveGroupBoundsToDisplayedRow(HWND hWnd,
         return;
     }
 
+    TaskbarState* taskbarState = GetTaskbarState(xamlRoot);
+    bool vertical = taskbarState->vertical;
+
     auto taskbarFrame =
         FindChildByClassName(xamlRootContent, L"Taskbar.TaskbarFrame");
     auto taskbarFrameRepeater = FindTaskbarFrameRepeater(xamlRootContent);
     winrt::Windows::Foundation::Rect taskbarFrameBounds;
-    double widthWithoutExtent;
+    double lengthWithoutExtent;
     if (!taskbarFrame || !taskbarFrameRepeater ||
         !GetBoundsInXamlRoot(taskbarFrame, &taskbarFrameBounds) ||
-        !GetWidthWithoutExtent(xamlRootContent, &widthWithoutExtent) ||
-        !(widthWithoutExtent > 0)) {
+        !GetLengthWithoutExtent(xamlRootContent, vertical,
+                                &lengthWithoutExtent) ||
+        !(lengthWithoutExtent > 0)) {
         return;
     }
 
     auto startButton = FindFullHeightStartButton(taskbarFrameRepeater);
-    double startButtonWidth = startButton ? startButton.ActualWidth() : 0;
+    double startButtonLength =
+        startButton ? GetElementLength(startButton, vertical) : 0;
 
-    winrt::Windows::Foundation::Rect layoutRect = *bounds;
-    layoutRect.X -= taskbarFrameBounds.X;
+    auto layoutRect = SwapAxesIfVertical(*bounds, vertical);
+    float frameStart = vertical ? taskbarFrameBounds.Y : taskbarFrameBounds.X;
+    layoutRect.X -= frameStart;
 
-    auto displayedRect = MoveToDisplayedRow(
-        layoutRect, GetTaskbarState(xamlRoot), widthWithoutExtent,
-        startButtonWidth, /*updateRowOffsets=*/false);
-    bounds->X = displayedRect.X + taskbarFrameBounds.X;
+    auto displayedRect =
+        MoveToDisplayedRow(layoutRect, taskbarState, lengthWithoutExtent,
+                           startButtonLength, /*updateRowOffsets=*/false);
+
+    layoutRect.X = displayedRect.X + frameStart;
+    *bounds = SwapAxesIfVertical(layoutRect, vertical);
 }
 
-// The jump list is centered horizontally on the reported bounds of the button
-// group, which don't match the displayed buttons: some builds report them as
-// if the buttons were laid out in a single row, and a group's buttons can span
-// multiple rows. It's centered on the button it's opened for if the jump list
-// is opened from the button's context menu request. Otherwise, e.g. for
+// The jump list is placed along the taskbar by the reported bounds of the
+// button group, which don't match the displayed buttons: some builds report
+// them as if the buttons were laid out in a single row, and a group's buttons
+// can span multiple rows. It's placed by the button it's opened for if the jump
+// list is opened from the button's context menu request. Otherwise, e.g. for
 // Win+Alt+number, the reported bounds are moved to the displayed row.
 using ToRawPixelsInDesktopCoordinates_t = RECT(
     WINAPI*)(const winrt::Windows::Foundation::Rect& rect, UINT dpi, HWND hWnd);
@@ -855,17 +1049,27 @@ RECT WINAPI ToRawPixelsInDesktopCoordinates_Hook(
 
     if (g_inCTaskListWnd_ComputeJumpViewPosition) {
         if (g_hasJumpListButtonBounds) {
-            newRect.X = g_jumpListButtonBounds.X;
-            newRect.Width = g_jumpListButtonBounds.Width;
+            if (IsTaskbarOfWindowVertical(hWnd)) {
+                newRect.Y = g_jumpListButtonBounds.Y;
+                newRect.Height = g_jumpListButtonBounds.Height;
+            } else {
+                newRect.X = g_jumpListButtonBounds.X;
+                newRect.Width = g_jumpListButtonBounds.Width;
+            }
         } else {
             MoveGroupBoundsToDisplayedRow(hWnd, &newRect);
         }
     } else if (g_inCTaskListThumbnailWnd_DisplayUI ||
                g_inCTaskListThumbnailWnd_LayoutThumbnails) {
         winrt::Windows::Foundation::Rect taskListBounds;
-        if (GetTaskListBounds(hWnd, &taskListBounds)) {
-            ExpandBoundsToAllRows(&newRect, newRect.Y - taskListBounds.Y,
-                                  taskListBounds.Height);
+        bool vertical;
+        if (GetTaskListBounds(hWnd, &taskListBounds, &vertical)) {
+            ExpandBoundsToAllRows(
+                &newRect,
+                vertical ? newRect.X - taskListBounds.X
+                         : newRect.Y - taskListBounds.Y,
+                vertical ? taskListBounds.Width : taskListBounds.Height,
+                vertical);
         }
     }
 
@@ -881,7 +1085,8 @@ thread_local bool g_inFlyoutFrame_UpdateFlyoutPosition;
 // The position in the task list of the target whose bounds are calculated.
 struct TaskListItemPosition {
     double offset;
-    double taskListHeight;
+    double taskListThickness;
+    bool vertical;
 };
 thread_local std::optional<TaskListItemPosition> g_flyoutTargetPosition;
 
@@ -923,9 +1128,19 @@ HRESULT WINAPI IUIElement_TransformToVisual_Hook(void* pThis,
         return original();
     }
 
+    auto xamlRoot = taskbarFrameRepeater.XamlRoot();
+    if (!xamlRoot) {
+        return original();
+    }
+
+    bool vertical = GetTaskbarState(xamlRoot)->vertical;
+    auto offset = element.ActualOffset();
+
     g_flyoutTargetPosition = TaskListItemPosition{
-        .offset = element.ActualOffset().y,
-        .taskListHeight = taskbarFrameRepeater.ActualHeight(),
+        .offset = vertical ? offset.x : offset.y,
+        .taskListThickness =
+            GetElementThickness(taskbarFrameRepeater, vertical),
+        .vertical = vertical,
     };
 
     return original();
@@ -945,7 +1160,8 @@ UnionRect_Hook(const winrt::Windows::Foundation::Rect& rect1,
 
     winrt::Windows::Foundation::Rect newRect2 = rect2;
     ExpandBoundsToAllRows(&newRect2, g_flyoutTargetPosition->offset,
-                          g_flyoutTargetPosition->taskListHeight);
+                          g_flyoutTargetPosition->taskListThickness,
+                          g_flyoutTargetPosition->vertical);
     g_flyoutTargetPosition.reset();
 
     return UnionRect_Original(rect1, newRect2);
@@ -995,20 +1211,6 @@ HRESULT WINAPI IUIElement_Arrange_Hook(void* pThis,
         return original();
     }
 
-    void* elementAbi = winrt::get_abi(element);
-    if (auto it = g_arrangedItems.find(elementAbi);
-        it != g_arrangedItems.end() && it->second.rect == rect &&
-        it->second.layoutHeight == g_taskbarCollapsibleLayoutHeight) {
-        return original();
-    }
-
-    auto startButton = FindFullHeightStartButton(taskbarFrameRepeater);
-    if (element == startButton) {
-        return original();
-    }
-
-    double startButtonWidth = startButton ? startButton.ActualWidth() : 0;
-
     auto xamlRoot = taskbarFrameRepeater.XamlRoot();
     if (!xamlRoot) {
         return original();
@@ -1020,31 +1222,59 @@ HRESULT WINAPI IUIElement_Arrange_Hook(void* pThis,
     }
 
     TaskbarState* taskbarState = GetTaskbarState(xamlRoot);
+    bool vertical = taskbarState->vertical;
 
-    double widthWithoutExtent;
-    if (!GetWidthWithoutExtent(xamlRootContent, &widthWithoutExtent)) {
+    float layoutThickness = vertical ? g_taskbarCollapsibleLayoutSize.Width
+                                     : g_taskbarCollapsibleLayoutSize.Height;
+
+    void* elementAbi = winrt::get_abi(element);
+    if (auto it = g_arrangedItems.find(elementAbi);
+        it != g_arrangedItems.end() && IsSameSlot(it->second.rect, rect) &&
+        it->second.layoutThickness == layoutThickness) {
         return original();
     }
 
-    if (!(widthWithoutExtent > 0)) {
-        Wh_Log(L"Skipping, widthWithoutExtent=%f", widthWithoutExtent);
+    auto startButton = FindFullHeightStartButton(taskbarFrameRepeater);
+    if (element == startButton) {
         return original();
+    }
+
+    double startButtonLength =
+        startButton ? GetElementLength(startButton, vertical) : 0;
+
+    double lengthWithoutExtent;
+    if (!GetLengthWithoutExtent(xamlRootContent, vertical,
+                                &lengthWithoutExtent)) {
+        return original();
+    }
+
+    if (!(lengthWithoutExtent > 0)) {
+        Wh_Log(L"Skipping, lengthWithoutExtent=%f", lengthWithoutExtent);
+        return original();
+    }
+
+    int rows = static_cast<int>(taskbarState->rowOffsetAdjustment.size());
+    if (vertical && rows > 1 && layoutThickness > 0) {
+        LimitItemContentWidth(element, layoutThickness / rows);
+    }
+
+    winrt::Windows::Foundation::Rect displayedRect = MoveToDisplayedRow(
+        SwapAxesIfVertical(rect, vertical), taskbarState, lengthWithoutExtent,
+        startButtonLength, /*updateRowOffsets=*/true);
+
+    if (displayedRect.X + displayedRect.Width > lengthWithoutExtent) {
+        UpdateTaskbarFrameRepeaterMargin(taskbarFrameRepeater, taskbarState,
+                                         lengthWithoutExtent);
     }
 
     winrt::Windows::Foundation::Rect newRect =
-        MoveToDisplayedRow(rect, taskbarState, widthWithoutExtent,
-                           startButtonWidth, /*updateRowOffsets=*/true);
-
-    if (newRect.X + newRect.Width > widthWithoutExtent) {
-        UpdateTaskbarFrameRepeaterMargin(taskbarFrameRepeater, taskbarState,
-                                         widthWithoutExtent);
-    }
+        SwapAxesIfVertical(displayedRect, vertical);
 
     // A rect left as is, e.g. with a single row, can be the layout's rect again
     // after a settings change.
     if (newRect != rect) {
         g_arrangedItems[elementAbi] = {winrt::make_weak(element), newRect,
-                                       g_taskbarCollapsibleLayoutHeight};
+                                       layoutThickness};
     } else {
         g_arrangedItems.erase(elementAbi);
     }
@@ -1086,7 +1316,7 @@ HRESULT WINAPI TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook(
     ScopedFlag scopedFlag(
         &g_inTaskbarCollapsibleLayoutXamlTraits_ArrangeOverride);
 
-    g_taskbarCollapsibleLayoutHeight = size.Height;
+    g_taskbarCollapsibleLayoutSize = size;
 
     std::erase_if(g_arrangedItems,
                   [](const auto& item) { return !item.second.element.get(); });
@@ -1102,8 +1332,8 @@ HRESULT WINAPI TaskbarCollapsibleLayoutXamlTraits_ArrangeOverride_Hook(
 // between the row the pointer is over and the row the drag started in.
 struct MultirowMetrics {
     TaskbarState* taskbarState;
-    double widthWithoutExtent;
-    double rowHeight;
+    double lengthWithoutExtent;
+    double rowThickness;
 };
 
 bool GetMultirowMetrics(FrameworkElement taskListButtonElement,
@@ -1123,12 +1353,6 @@ bool GetMultirowMetrics(FrameworkElement taskListButtonElement,
         return false;
     }
 
-    double rowHeight = taskbarFrameRepeater.ActualHeight() / g_settings.rows;
-    // Also catches NaN.
-    if (!(rowHeight > 0)) {
-        return false;
-    }
-
     auto xamlRoot = taskbarFrameRepeater.XamlRoot();
     if (!xamlRoot) {
         return false;
@@ -1139,15 +1363,26 @@ bool GetMultirowMetrics(FrameworkElement taskListButtonElement,
         return false;
     }
 
-    double widthWithoutExtent;
-    if (!GetWidthWithoutExtent(xamlRootContent, &widthWithoutExtent) ||
-        !(widthWithoutExtent > 0)) {
+    TaskbarState* taskbarState = GetTaskbarState(xamlRoot);
+
+    double rowThickness =
+        GetElementThickness(taskbarFrameRepeater, taskbarState->vertical) /
+        g_settings.rows;
+    // Also catches NaN.
+    if (!(rowThickness > 0)) {
         return false;
     }
 
-    metrics->taskbarState = GetTaskbarState(xamlRoot);
-    metrics->widthWithoutExtent = widthWithoutExtent;
-    metrics->rowHeight = rowHeight;
+    double lengthWithoutExtent;
+    if (!GetLengthWithoutExtent(xamlRootContent, taskbarState->vertical,
+                                &lengthWithoutExtent) ||
+        !(lengthWithoutExtent > 0)) {
+        return false;
+    }
+
+    metrics->taskbarState = taskbarState;
+    metrics->lengthWithoutExtent = lengthWithoutExtent;
+    metrics->rowThickness = rowThickness;
     return true;
 }
 
@@ -1173,12 +1408,16 @@ void WINAPI TaskListButton_OnDragStartedGesture_Hook(
     auto element = g_unloading ? nullptr : TaskListButtonElement(pThis);
     MultirowMetrics metrics;
     if (element && GetMultirowMetrics(element, &metrics)) {
-        g_dragState.active = true;
-        g_dragState.startRow = ClampRow(
-            (int)std::lround(element.ActualOffset().y / metrics.rowHeight));
+        bool vertical = metrics.taskbarState->vertical;
+        auto offset = element.ActualOffset();
 
-        Wh_Log(L"Drag started in row %d (point.Y=%f, rowHeight=%f)",
-               g_dragState.startRow, point.Y, metrics.rowHeight);
+        g_dragState.active = true;
+        g_dragState.vertical = vertical;
+        g_dragState.startRow = ClampRow((int)std::lround(
+            (vertical ? offset.x : offset.y) / metrics.rowThickness));
+
+        Wh_Log(L"Drag started in row %d (point=%f,%f, rowThickness=%f)",
+               g_dragState.startRow, point.X, point.Y, metrics.rowThickness);
     }
 
     TaskListButton_OnDragStartedGesture_Original(pThis, point);
@@ -1216,11 +1455,12 @@ TaskListButton_UpdateDrag_Hook(void* pThis,
     }
 
     // Gesture points are relative to the repeater, which spans all rows.
-    int row = ClampRow((int)std::floor(point.Y / metrics.rowHeight));
+    float rowPosition = metrics.taskbarState->vertical ? point.X : point.Y;
+    int row = ClampRow((int)std::floor(rowPosition / metrics.rowThickness));
     // Clamped again in case the number of rows changed mid-drag.
     int startRow = ClampRow(g_dragState.startRow);
 
-    g_dropPlaceholderOffset = (row - startRow) * metrics.widthWithoutExtent -
+    g_dropPlaceholderOffset = (row - startRow) * metrics.lengthWithoutExtent -
                               (RowOffsetSum(metrics.taskbarState, row) -
                                RowOffsetSum(metrics.taskbarState, startRow));
     ScopedFlag scopedFlag(&g_hasDropPlaceholderOffset);
@@ -1251,17 +1491,21 @@ void* WINAPI TaskListDragOperation_GetDropPlaceholder_Hook(
     Wh_Log(L">");
 
     if (g_hasDropPlaceholderOffset) {
-        dragBounds.X += g_dropPlaceholderOffset;
+        float& dropPosition =
+            g_dragState.vertical ? dragBounds.Y : dragBounds.X;
+        dropPosition += g_dropPlaceholderOffset;
 
         // The caller derives the direction from the pointer position, which
         // moves backwards whenever the drop position moves forward into the
         // next row. 1 means forward, 0 means backwards.
-        if (g_dragState.hasLastDropX && dragBounds.X != g_dragState.lastDropX) {
-            rearrangeDirection = dragBounds.X > g_dragState.lastDropX ? 1 : 0;
+        if (g_dragState.hasLastDropPosition &&
+            dropPosition != g_dragState.lastDropPosition) {
+            rearrangeDirection =
+                dropPosition > g_dragState.lastDropPosition ? 1 : 0;
         }
 
-        g_dragState.hasLastDropX = true;
-        g_dragState.lastDropX = dragBounds.X;
+        g_dragState.hasLastDropPosition = true;
+        g_dragState.lastDropPosition = dropPosition;
     }
 
     return TaskListDragOperation_GetDropPlaceholder_Original(
@@ -1296,15 +1540,20 @@ void WINAPI TaskbarFrame_SystemTrayExtent_Hook(void* pThis, double value) {
         return;
     }
 
+    bool vertical = IsVerticalTaskbarFrame(taskbarFrameElement);
+
+    // A frame without a XAML root has no state yet, and no row offsets to
+    // apply.
+    TaskbarState detachedState{.vertical = vertical};
     auto xamlRoot = taskbarFrameRepeater.XamlRoot();
+    TaskbarState* taskbarState =
+        xamlRoot ? GetTaskbarState(xamlRoot) : &detachedState;
 
-    TaskbarState* taskbarState = GetTaskbarState(xamlRoot);
-
-    double widthWithoutExtent =
-        GetTaskbarFrameWidth(taskbarFrameElement) - value;
+    double lengthWithoutExtent =
+        GetTaskbarFrameLength(taskbarFrameElement, vertical) - value;
 
     UpdateTaskbarFrameRepeaterMargin(taskbarFrameRepeater, taskbarState,
-                                     widthWithoutExtent);
+                                     lengthWithoutExtent);
 }
 
 using RegGetValueW_t = decltype(&RegGetValueW);
