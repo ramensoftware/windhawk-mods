@@ -34,13 +34,14 @@ Real time update speed setting.
 
 ## Compatibility and limitations
 
-- Uses Task Manager's own page-navigation hooks and public XAML APIs. For the
-  Taskmgr.exe 26100.9974 binary matching its PE timestamp, image size, and
-  RSDS PDB identifier, the mod has a small built-in offset table to avoid
-  requiring an unavailable PDB. All other builds use Windhawk's symbol lookup.
-  If neither method has verified addresses, the mod doesn't install the button.
-  Windows updates may change private functions or controls. No XAML Diagnostics
-  service is used.
+- Uses Task Manager's navigation hooks and public XAML APIs. Processes symbols
+  use the mod's official Windhawk online/local cache, including when testing
+  as a local Windhawk mod. The optional Details entry hook uses a local PDB if
+  available. An advanced setting allows a separate optional Microsoft PDB
+  download for Details, without making the Processes hook depend on it.
+  This request may delay startup if Microsoft's PDB is missing, so the setting
+  is disabled by default. No hardcoded Task Manager offsets or XAML Diagnostics
+  service are used. Windows updates may change private functions.
 - Uses Task Manager's Ctrl-key refresh hold through `GetKeyState` calls made
   directly by `Taskmgr.exe`. While paused, some Task Manager keyboard actions
   may behave as if Ctrl is held, including Run new task (Ctrl+click can open
@@ -48,17 +49,24 @@ Real time update speed setting.
 - Recognizes the tested Task Manager command-bar layout independently of
   display language: one command bar with four native buttons, with Run new
   task in the first position. Falls back to English/Portuguese labels or
-  recognizable control identifiers on other layouts. Other Windows versions
-  can have different layouts, so all languages/builds are not guaranteed.
+  recognizable control identifiers on other layouts. Visual-tree traversal
+  skips unrelated Page subtrees; shared shell command bars remain eligible.
+  Other Windows versions can have different layouts, so all languages/builds
+  are not guaranteed.
 - The native button inherits Task Manager's XAML theme, including its own
   Light/Dark appearance; no fixed foreground/background colors are applied.
   Pause/Resume labels are in English regardless of the Task Manager language.
 - Keeps Pause active when switching between Processes and Details. Uses the
-  public Frame.Navigated event (when the navigation Frame can be reached) to
-  resume on other pages, even without OnNavigatedFrom symbols. Existing
-  navigation-exit hooks also provide a fallback where available.
+  public Frame.Navigated event to discover Details and resume on other pages.
+  It retries the command-bar search if the initial navigation hook ran before
+  the toolbar was ready or failed to insert a usable button, without repeating
+  successful scans. If the Details symbol is resolved, Details can be the
+  initial page. Otherwise, visit Processes first so the mod can attach to the
+  navigation Frame. If you need direct Details startup, you can enable the
+  optional symbol-download setting, but it won't help if Microsoft has not
+  published the matching PDB.
 - If the button is missing, close and reopen Task Manager with the mod enabled.
-- No settings or background applications are needed.
+- No background applications are needed.
 
 ## Source and feedback
 
@@ -67,6 +75,14 @@ Real time update speed setting.
 Author: Luiz Bizzio. License: Apache-2.0.
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- tryOnlineDetailsPdb: false
+  $name: Try downloading the Details symbol file
+  $description: If the Details symbol file is not available locally, try downloading it from Microsoft's symbol server. This may delay Task Manager startup if the file is missing. Keep this disabled unless you need the Pause button when Task Manager starts directly on Details.
+*/
+// ==/WindhawkModSettings==
 
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Luiz Bizzio
@@ -95,7 +111,6 @@ Author: Luiz Bizzio. License: Apache-2.0.
 #include <string>
 #include <string_view>
 #include <cwctype>
-#include <cstring>
 
 namespace mux = winrt::Windows::UI::Xaml;
 namespace muxc = winrt::Windows::UI::Xaml::Controls;
@@ -141,6 +156,9 @@ struct BarEntry {
     winrt::event_token clickToken{};
     uint64_t entryId{};
     bool clickAttached{};
+    // Only true after the complete insertion sequence succeeds. A callback
+    // retained after a failed rollback is tracked but is not a usable button.
+    bool usable{};
 };
 
 std::mutex g_barsMutex;
@@ -184,6 +202,9 @@ std::vector<DWORD> NavigationThreads();
 bool RemoveThreadNavigationHooks(DWORD threadId);
 void ForgetNavigationThread(DWORD threadId);
 void TryAttachFrameNavigation(mux::DependencyObject object);
+bool NeedsFrameNavigationScan(winrt::hstring const& pageType,
+                              mux::FrameworkElement const& page);
+void ForgetHookScanThread(DWORD threadId);
 
 void UpdateButton(muxc::AppBarButton const& button) {
     const bool paused = g_paused.load(std::memory_order_relaxed);
@@ -331,10 +352,15 @@ bool InspectProductionBar(muxc::CommandBar const& bar,
     return false;
 }
 
-void TryInsertButton(muxc::CommandBar const& bar, uint32_t place) {
-    if (!bar || g_addingButton) return;
+// Distinguish a usable button from an incomplete insertion whose Click
+// callback could not be revoked. The latter must remain tracked for safe
+// unloading, but must NOT count as successful insertion.
+enum class InsertStatus { Failed, Ready, RetainedCallback };
+
+InsertStatus TryInsertButton(muxc::CommandBar const& bar, uint32_t place) {
+    if (!bar || g_addingButton) return InsertStatus::Failed;
     InsertionGuard insertion;
-    if (!insertion.active) return;
+    if (!insertion.active) return InsertStatus::Failed;
     struct Guard {
         Guard() { g_addingButton = true; }
         ~Guard() { g_addingButton = false; }
@@ -348,7 +374,26 @@ void TryInsertButton(muxc::CommandBar const& bar, uint32_t place) {
     uint64_t entryId{};
     try {
         auto commands = bar.PrimaryCommands();
-        if (!commands || place > commands.Size()) return;
+        if (!commands || place > commands.Size()) return InsertStatus::Failed;
+
+        // Before examining visible commands, avoid inserting another button
+        // if a previous rollback left a live Click callback on this bar.
+        // Such an entry must be released by the unload path, not overwritten.
+        std::vector<BarEntry> trackedEntries;
+        {
+            std::lock_guard<std::mutex> lock(g_barsMutex);
+            for (const auto& entry : g_bars) {
+                if (entry.ownerThread == GetCurrentThreadId() &&
+                    entry.clickAttached)
+                    trackedEntries.push_back(entry);
+            }
+        }
+        for (const auto& entry : trackedEntries) {
+            if (!entry.usable && entry.bar.get() == bar && entry.button.get()) {
+                Wh_Log(L"Previous insertion has a retained Click callback; waiting for safe cleanup");
+                return InsertStatus::RetainedCallback;
+            }
+        }
 
         // On a previous unload a button can remain visible after its Click
         // handler was successfully detached but XAML RemoveAt failed.
@@ -356,22 +401,11 @@ void TryInsertButton(muxc::CommandBar const& bar, uint32_t place) {
         for (uint32_t i = commands.Size(); i > 0; --i) {
             auto item = commands.GetAt(i - 1).try_as<muxc::AppBarButton>();
             if (!item || item.Name() != kButtonName) continue;
-            std::vector<winrt::weak_ref<muxc::AppBarButton>> trackedButtons;
-            {
-                std::lock_guard<std::mutex> lock(g_barsMutex);
-                for (const auto& entry : g_bars) {
-                    if (entry.ownerThread == GetCurrentThreadId())
-                        trackedButtons.push_back(entry.button);
-                }
+            for (const auto& entry : trackedEntries) {
+                if (entry.button.get() == item)
+                    return entry.usable ? InsertStatus::Ready :
+                                          InsertStatus::RetainedCallback;
             }
-            bool activeButton = false;
-            for (const auto& weakButton : trackedButtons) {
-                if (weakButton.get() == item) {
-                    activeButton = true;
-                    break;
-                }
-            }
-            if (activeButton) return;
             commands.RemoveAt(i - 1);
             if (i - 1 < place) --place;
             Wh_Log(L"Removed detached button left by an earlier unload");
@@ -411,18 +445,26 @@ void TryInsertButton(muxc::CommandBar const& bar, uint32_t place) {
                 if (saved.entryId == entryId) {
                     saved.clickToken = clickToken;
                     saved.clickAttached = true;
+                    saved.usable = true;
                     break;
                 }
             }
         }
 
         const auto count = g_insertions.fetch_add(1) + 1;
+        // Diagnostics must not turn a completed Click subscription into a
+        // failed insertion. ActualTheme is optional and may throw.
         if (count <= 8) {
-            const auto theme = button.ActualTheme();
-            Wh_Log(L"Native Pause button inserted (%u, theme=%s)", count,
-                   theme == mux::ElementTheme::Light ? L"light" :
-                   theme == mux::ElementTheme::Dark ? L"dark" : L"default");
+            try {
+                const auto theme = button.ActualTheme();
+                Wh_Log(L"Native Pause button inserted (%u, theme=%s)", count,
+                       theme == mux::ElementTheme::Light ? L"light" :
+                       theme == mux::ElementTheme::Dark ? L"dark" : L"default");
+            } catch (...) {
+                Wh_Log(L"Native Pause button inserted (%u, theme unavailable)", count);
+            }
         }
+        return InsertStatus::Ready;
     } catch (...) {
         HRESULT error = winrt::to_hresult();
         bool safeToForget = !clickAttached;
@@ -459,7 +501,29 @@ void TryInsertButton(muxc::CommandBar const& bar, uint32_t place) {
                 }
             }
         }
+        // If Click revocation failed, its callback may remain live. Keep a
+        // non-usable entry with its revocation token for safe unload. Never
+        // present this exceptional state as a successful button insertion.
+        if (!safeToForget && clickAttached && inserted && tracked) {
+            try {
+                std::lock_guard<std::mutex> lock(g_barsMutex);
+                for (auto& entry : g_bars) {
+                    if (entry.entryId == entryId) {
+                        entry.clickToken = clickToken;
+                        entry.clickAttached = true;
+                        entry.usable = false;
+                        break;
+                    }
+                }
+            } catch (...) {
+                Wh_Log(L"WARNING: could not refresh retained callback state");
+            }
+            Wh_Log(L"Button insertion incomplete: 0x%08X; Click callback retained",
+                   error);
+            return InsertStatus::RetainedCallback;
+        }
         Wh_Log(L"Button insertion failed: 0x%08X", error);
+        return InsertStatus::Failed;
     }
 }
 
@@ -620,7 +684,10 @@ bool RunOnUiThread(DWORD threadId, bool (*callback)(DWORD)) {
         g_activeRequests = &request;
     }
     // SendMessageW waits for the target UI callback and the hook chain.
-    // Other dispatches can proceed while we are blocked here.
+    // Do not substitute a naive SendMessageTimeoutW here: the stack-backed
+    // UiRequest and module callback could remain in flight after timeout,
+    // allowing use-after-free or unload-while-running. Safe cancellation needs
+    // a separate lifetime protocol. Other dispatches can proceed meanwhile.
     SendMessageW(hwnd, g_dispatchMsg, 0, reinterpret_cast<LPARAM>(&request));
     {
         std::lock_guard<std::mutex> lock(g_dispatchMutex);
@@ -761,7 +828,9 @@ bool RemoveThreadButtonsAndEvents(DWORD threadId) {
     }
     // The navigation listener is also a callback into this mod. Detach it
     // on its owning XAML thread before the DLL is unloaded.
-    return RemoveThreadNavigationHooks(threadId) && allDetached;
+    const bool navigationDetached = RemoveThreadNavigationHooks(threadId);
+    if (navigationDetached && allDetached) ForgetHookScanThread(threadId);
+    return navigationDetached && allDetached;
 }
 
 void ForgetTerminatedThread(DWORD threadId) {
@@ -772,6 +841,7 @@ void ForgetTerminatedThread(DWORD threadId) {
             g_bars.end());
     }
     ForgetNavigationThread(threadId);
+    ForgetHookScanThread(threadId);
 }
 
 bool FindTaskManagerRange() {
@@ -788,28 +858,45 @@ bool FindTaskManagerRange() {
 
 
 // Called on the XAML thread during Processes/Details page navigation.
-void FindCommandBars(mux::FrameworkElement const& page) {
-    if (g_stopping.load(std::memory_order_acquire)) return;
+// Returns true only after all matched bars have usable Pause buttons.
+// Frame.Navigated may retry when the entry hook ran before the toolbar was
+// created, or when the first insertion attempt failed.
+bool FindCommandBars(mux::FrameworkElement const& page) {
+    if (g_stopping.load(std::memory_order_acquire) || !page) return false;
     try {
         // Public XAML event, subscribed only on a page/navigation frame
         // obtained through the normal Task Manager symbol hook.
         TryAttachFrameNavigation(page);
         mux::DependencyObject root = page;
+        std::vector<mux::DependencyObject> pagePath{root};
         for (unsigned i = 0; i < 48; ++i) {
             auto parent = muxm::VisualTreeHelper::GetParent(root);
             if (!parent) break;
             root = parent;
+            pagePath.push_back(root);
         }
         std::vector<mux::DependencyObject> stack{root};
         unsigned scanned = 0;
         unsigned barsFound = 0;
         unsigned matchingBars = 0;
+        unsigned buttonsReady = 0;
+        unsigned retainedCallbacks = 0;
+        unsigned skippedOtherPages = 0;
         std::vector<muxc::CommandBar> pageBars;
         while (!stack.empty() && scanned < 5000 &&
                !g_stopping.load(std::memory_order_acquire)) {
             auto element = stack.back();
             stack.pop_back();
             ++scanned;
+            // A shell-level command bar can be a sibling of the active page,
+            // so we must search the common root. Exclude *other* Page subtrees
+            // (including cached/navigated-away pages) to avoid matching their
+            // command bars. Preserve all ancestors of the active page.
+            if (element.try_as<muxc::Page>() &&
+                std::find(pagePath.begin(), pagePath.end(), element) == pagePath.end()) {
+                ++skippedOtherPages;
+                continue;
+            }
             if (auto bar = element.try_as<muxc::CommandBar>()) {
                 ++barsFound;
                 pageBars.push_back(bar);
@@ -829,7 +916,12 @@ void FindCommandBars(mux::FrameworkElement const& page) {
                 BarCandidate candidate;
                 if (InspectProductionBar(bar, uniquePageBar, candidate)) {
                     ++matchingBars;
-                    TryInsertButton(candidate.bar, candidate.place);
+                    const auto result = TryInsertButton(candidate.bar,
+                                                        candidate.place);
+                    if (result == InsertStatus::Ready)
+                        ++buttonsReady;
+                    else if (result == InsertStatus::RetainedCallback)
+                        ++retainedCallbacks;
                 }
             } catch (...) {
                 Wh_Log(L"Could not inspect command bar: 0x%08X",
@@ -840,11 +932,14 @@ void FindCommandBars(mux::FrameworkElement const& page) {
         // toolbar anchors, and insertion errors without spamming the log.
         static std::atomic<unsigned> searchesLogged{0};
         if (searchesLogged.fetch_add(1, std::memory_order_relaxed) < 6) {
-            Wh_Log(L"Command bar scan: elements=%u bars=%u matches=%u",
-                   scanned, barsFound, matchingBars);
+            Wh_Log(L"Command bar scan: elements=%u bars=%u matches=%u ready=%u retained=%u otherPages=%u",
+                   scanned, barsFound, matchingBars, buttonsReady,
+                   retainedCallbacks, skippedOtherPages);
         }
+        return matchingBars != 0 && buttonsReady == matchingBars;
     } catch (...) {
         Wh_Log(L"Visual tree search failed: 0x%08X", winrt::to_hresult());
+        return false;
     }
 }
 
@@ -977,18 +1072,19 @@ void TryAttachFrameNavigation(mux::DependencyObject object) {
                         mux::Navigation::NavigationEventArgs const& args) {
                         if (g_stopping.load(std::memory_order_acquire)) return;
                         try {
-                            const ActivePage active =
-                                ClassifyPageType(args.SourcePageType().Name);
+                            const auto pageType = args.SourcePageType().Name;
+                            const ActivePage active = ClassifyPageType(pageType);
                             if (g_navigationEvents.fetch_add(1) < 12)
                                 Wh_Log(L"Frame.Navigated: page=%d",
                                        static_cast<int>(active));
                             if (active == ActivePage::Other) {
                                 ResumeOnUnsupportedPage();
                             } else if (active == ActivePage::Supported) {
-                                // Also discover Details if its private hook is
-                                // unavailable but Processes gave us the Frame.
                                 auto page = args.Content().try_as<mux::FrameworkElement>();
-                                if (page) {
+                                if (page && NeedsFrameNavigationScan(pageType, page)) {
+                                    // If there is no entry hook, the toolbar
+                                    // was not ready, or insertion failed,
+                                    // retry after navigation completes.
                                     PruneExpiredEntriesOnCurrentThread();
                                     FindCommandBars(page);
                                 }
@@ -1040,9 +1136,57 @@ void TryAttachFrameNavigation(mux::DependencyObject object) {
 // The supplied self pointer is an inspectable ABI interface pointer.
 using PageNavigation_t = HRESULT(__cdecl*)(void*, void*);
 PageNavigation_t g_processesToOriginal{};
-PageNavigation_t g_detailsToOriginal{};
 PageNavigation_t g_processesFromOriginal{};
-PageNavigation_t g_detailsFromOriginal{};
+PageNavigation_t g_detailsToOriginal{};
+
+// Track whether the entry hook inserted or found a usable button on the
+// specific page instance. The frame event retries failed/missing insertions,
+// but avoids a duplicate scan if the button is already usable.
+struct HookScanRecord {
+    winrt::weak_ref<mux::FrameworkElement> page;
+    DWORD ownerThread{};
+    bool buttonReady{};
+};
+std::mutex g_hookScansMutex;
+std::vector<HookScanRecord> g_hookScans;
+
+void RememberHookScan(mux::FrameworkElement const& page, bool buttonReady) {
+    const DWORD owner = GetCurrentThreadId();
+    std::lock_guard<std::mutex> lock(g_hookScansMutex);
+    auto it = std::find_if(g_hookScans.begin(), g_hookScans.end(),
+        [owner](HookScanRecord const& item) { return item.ownerThread == owner; });
+    HookScanRecord record{winrt::make_weak(page), owner, buttonReady};
+    if (it != g_hookScans.end()) *it = std::move(record);
+    else g_hookScans.push_back(std::move(record));
+}
+
+void ForgetHookScanThread(DWORD threadId) {
+    std::lock_guard<std::mutex> lock(g_hookScansMutex);
+    g_hookScans.erase(std::remove_if(g_hookScans.begin(), g_hookScans.end(),
+        [threadId](HookScanRecord const& record) {
+            return record.ownerThread == threadId;
+        }), g_hookScans.end());
+}
+
+bool NeedsFrameNavigationScan(winrt::hstring const& pageType,
+                              mux::FrameworkElement const& page) {
+    const std::wstring_view name{pageType.c_str(), pageType.size()};
+    bool hasEntryHook = false;
+    if (EndsWith(name, L"ProcessesPage"))
+        hasEntryHook = g_processesToOriginal != nullptr;
+    else if (EndsWith(name, L"DetailsPage"))
+        hasEntryHook = g_detailsToOriginal != nullptr;
+    else
+        return false;
+    if (!hasEntryHook) return true;
+    const DWORD owner = GetCurrentThreadId();
+    std::lock_guard<std::mutex> lock(g_hookScansMutex);
+    for (const auto& record : g_hookScans) {
+        if (record.ownerThread == owner && record.page.get() == page)
+            return !record.buttonReady;
+    }
+    return true; // A hook exists, but has not yet captured this page instance.
+}
 
 void CapturePageFromInterface(void* self) {
     if (!self || g_stopping.load(std::memory_order_acquire)) return;
@@ -1062,7 +1206,8 @@ void CapturePageFromInterface(void* self) {
             return;
         }
         PruneExpiredEntriesOnCurrentThread();
-        FindCommandBars(page);
+        const bool buttonReady = FindCommandBars(page);
+        RememberHookScan(page, buttonReady);
     } catch (...) {
         Wh_Log(L"Page capture failed: 0x%08X", winrt::to_hresult());
     }
@@ -1080,6 +1225,66 @@ HRESULT __cdecl DetailsNavigatedTo_Hook(void* self, void* args) {
     if (SUCCEEDED(result) && !g_stopping.load(std::memory_order_acquire))
         CapturePageFromInterface(self);
     return result;
+}
+
+// Resolve Details separately so its PDB cannot make the required Processes
+// HookSymbols call fail or poison that cache. By default, only a local PDB is
+// used. An explicit setting allows the Microsoft symbol server to be tried
+// on builds whose Details PDB has not already been downloaded.
+bool TryHookDetailsFromPdb(HMODULE host, bool allowDownload) {
+    constexpr std::wstring_view kDetailsToSymbol =
+        L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::DetailsPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)";
+
+    WH_FIND_SYMBOL_OPTIONS options{};
+    options.optionsSize = sizeof(options);
+    options.symbolServer = allowDownload ? nullptr : L"";
+    WH_FIND_SYMBOL symbol{};
+    HANDLE search = Wh_FindFirstSymbol(host, &options, &symbol);
+    if (!search) {
+        Wh_Log(L"Details OnNavigatedTo: PDB unavailable (online=%d); Frame fallback remains active",
+               allowDownload);
+        return false;
+    }
+
+    void* target = nullptr;
+    do {
+        if (symbol.symbol && std::wstring_view{symbol.symbol} == kDetailsToSymbol) {
+            target = symbol.address;
+            break;
+        }
+    } while (Wh_FindNextSymbol(search, &symbol));
+
+    bool installed = false;
+    if (target) {
+        const uintptr_t address = reinterpret_cast<uintptr_t>(target);
+        MEMORY_BASIC_INFORMATION region{};
+        const bool inImage = address >= g_taskBegin && address < g_taskEnd;
+        if (inImage && VirtualQuery(target, &region, sizeof(region)) == sizeof(region) &&
+            region.State == MEM_COMMIT && !(region.Protect & PAGE_GUARD)) {
+            const DWORD protection = region.Protect & 0xff;
+            const bool executable = protection == PAGE_EXECUTE ||
+                protection == PAGE_EXECUTE_READ ||
+                protection == PAGE_EXECUTE_READWRITE ||
+                protection == PAGE_EXECUTE_WRITECOPY;
+            if (executable) {
+                installed = WindhawkUtils::SetFunctionHook(
+                    reinterpret_cast<PageNavigation_t>(target),
+                    DetailsNavigatedTo_Hook, &g_detailsToOriginal);
+            } else {
+                Wh_Log(L"Details OnNavigatedTo: resolved address is not executable");
+            }
+        } else {
+            Wh_Log(L"Details OnNavigatedTo: resolved address is outside a valid executable region");
+        }
+    }
+
+    // Close after installing the hook: unloading the DIA library during
+    // initialization is known to cause hangs with Application Verifier.
+    Wh_FindCloseSymbol(search);
+    if (!installed) g_detailsToOriginal = nullptr;
+    Wh_Log(L"Details OnNavigatedTo from PDB: %s (online=%d)",
+           installed ? L"installed" : L"unavailable", allowDownload);
+    return installed;
 }
 
 // SourcePageType identifies the navigation destination. Preserve Pause when
@@ -1122,126 +1327,6 @@ HRESULT __cdecl ProcessesNavigatedFrom_Hook(void* self, void* args) {
     return result;
 }
 
-HRESULT __cdecl DetailsNavigatedFrom_Hook(void* self, void* args) {
-    HRESULT result = g_detailsFromOriginal(self, args);
-    if (SUCCEEDED(result)) OnLeavingSupportedPage(args);
-    return result;
-}
-
-
-// Known offsets are part of the compatibility data, not a replacement for
-// Windhawk's normal symbol resolution. These two RVAs came from the Windhawk
-// online symbol cache for Taskmgr.exe 26100.9974 (PDB GUID + age below).
-//
-// Never select by Windows build number alone. Match the loaded executable's
-// PE timestamp, SizeOfImage, and full RSDS GUID/age first, then verify the
-// target RVAs lie within executable sections. No memory scanning, registry
-// modifications, or XAML Diagnostics connection is involved.
-struct KnownTaskmgrNavigation {
-    DWORD peTimestamp;
-    DWORD imageSize;
-    GUID pdbGuid;
-    DWORD pdbAge;
-    DWORD processesToRva;
-    DWORD processesFromRva;
-};
-
-constexpr KnownTaskmgrNavigation kKnownTaskmgr26100_9974 = {
-    0xAF07E6AD,     // 2936530605 in Windhawk's PE cache key.
-    0x00595000,     // 5853184 bytes (SizeOfImage).
-    {0x5BD2613C, 0x6031, 0xD3C5,
-     {0x40, 0x9E, 0x12, 0x6E, 0x6A, 0x21, 0x21, 0x27}},
-    1,
-    0x0026CE10,     // ProcessesPage::OnNavigatedTo
-    0x0011D880,     // ProcessesPage::OnNavigatedFrom
-};
-
-constexpr DWORD kRsdsMagic = 0x53445352; // ASCII "RSDS", little-endian.
-
-struct RsdsIdentity {
-    DWORD signature;
-    GUID guid;
-    DWORD age;
-};
-
-// All offsets are relative to the loaded module; ASLR doesn't affect them.
-// Parse only bounded ranges within the loaded PE image.
-bool MatchesKnownTaskmgr(HMODULE module, const KnownTaskmgrNavigation& known) {
-    auto* base = reinterpret_cast<const BYTE*>(module);
-    if (!base) return false;
-    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0 ||
-        dos->e_lfanew > 4096) return false;
-
-    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE ||
-        nt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64 ||
-        nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
-        nt->FileHeader.TimeDateStamp != known.peTimestamp ||
-        nt->OptionalHeader.SizeOfImage != known.imageSize ||
-        nt->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_DEBUG) {
-        return false;
-    }
-
-    const auto& debug = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
-    if (!debug.VirtualAddress ||
-        debug.Size < sizeof(IMAGE_DEBUG_DIRECTORY) ||
-        debug.VirtualAddress >= known.imageSize ||
-        debug.Size > known.imageSize - debug.VirtualAddress) return false;
-
-    const auto count = debug.Size / sizeof(IMAGE_DEBUG_DIRECTORY);
-    for (DWORD i = 0; i < count; ++i) {
-        IMAGE_DEBUG_DIRECTORY entry{};
-        std::memcpy(&entry,
-                    base + debug.VirtualAddress + i * sizeof(entry),
-                    sizeof(entry));
-        if (entry.Type != IMAGE_DEBUG_TYPE_CODEVIEW ||
-            entry.SizeOfData < sizeof(RsdsIdentity) ||
-            !entry.AddressOfRawData ||
-            entry.AddressOfRawData >= known.imageSize ||
-            entry.SizeOfData > known.imageSize - entry.AddressOfRawData) {
-            continue;
-        }
-
-        RsdsIdentity identity{};
-        std::memcpy(&identity, base + entry.AddressOfRawData,
-                    sizeof(identity));
-        if (identity.signature == kRsdsMagic &&
-            identity.age == known.pdbAge &&
-            std::memcmp(&identity.guid, &known.pdbGuid, sizeof(GUID)) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool ExecutableRva(HMODULE module, DWORD rva) {
-    const auto* base = reinterpret_cast<const BYTE*>(module);
-    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
-    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
-    if (rva >= nt->OptionalHeader.SizeOfImage ||
-        nt->FileHeader.NumberOfSections == 0 ||
-        nt->FileHeader.NumberOfSections > 96) return false;
-    const auto* sections = IMAGE_FIRST_SECTION(nt);
-    for (WORD i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
-        const auto& section = sections[i];
-        const DWORD length = (std::max)(section.Misc.VirtualSize,
-                                        section.SizeOfRawData);
-        if ((section.Characteristics & IMAGE_SCN_MEM_EXECUTE) &&
-            rva >= section.VirtualAddress &&
-            rva - section.VirtualAddress < length) return true;
-    }
-    return false;
-}
-
-bool InstallKnownNavigation(HMODULE module, DWORD rva,
-                            PageNavigation_t hook,
-                            PageNavigation_t* original) {
-    if (!ExecutableRva(module, rva)) return false;
-    auto* target = reinterpret_cast<BYTE*>(module) + rva;
-    return WindhawkUtils::SetFunctionHook(
-        reinterpret_cast<PageNavigation_t>(target), hook, original);
-}
 
 } // namespace
 
@@ -1263,82 +1348,68 @@ BOOL Wh_ModInit() {
     HMODULE host = GetModuleHandleW(nullptr);
     if (!host) return FALSE;
 
-    bool embeddedOffsets = false;
-    bool processesFromInstalled = false;
+    // Ask for the two Processes symbols already present in the Windhawk
+    // ported cache for Taskmgr.exe 26100.9974. Do not ask for Details here:
+    // its missing cache entries would force a PDB request that can return 404.
+    // Other Task Manager versions use the usual Windhawk symbol resolution.
+    WindhawkUtils::SYMBOL_HOOK taskmgrExeHooks[] = {
+        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)"},
+         &g_processesToOriginal, ProcessesNavigatedTo_Hook},
+        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedFrom(void *)"},
+         &g_processesFromOriginal, nullptr, true},
+    };
+    // Windhawk does not use the default online symbol cache for local@ mods.
+    // Explicitly use this published mod's official cache so that local tests
+    // can resolve the same symbol entries as the catalog version. The Windhawk
+    // engine still validates the entry against the loaded Taskmgr.exe PDB key.
+    WH_HOOK_SYMBOLS_OPTIONS hookOptions{};
+    hookOptions.optionsSize = sizeof(hookOptions);
+    hookOptions.onlineCacheUrl =
+        L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/"
+        L"task-manager-pause-button/";
 
-    // The exact PE/PDB key makes this path independent of Microsoft's PDB
-    // service on the one Task Manager build that produced HTTP 404. All other
-    // binaries use one normal Windhawk symbol lookup with optional entries.
-    if (MatchesKnownTaskmgr(host, kKnownTaskmgr26100_9974)) {
-        Wh_Log(L"Known Taskmgr PE/PDB matched: using embedded navigation RVAs");
-        if (!InstallKnownNavigation(host,
-                                    kKnownTaskmgr26100_9974.processesToRva,
-                                    ProcessesNavigatedTo_Hook,
-                                    &g_processesToOriginal)) {
-            Wh_Log(L"Embedded ProcessesPage hook could not be installed");
-            return FALSE;
-        }
-        embeddedOffsets = true;
-        processesFromInstalled = InstallKnownNavigation(
-            host, kKnownTaskmgr26100_9974.processesFromRva,
-            ProcessesNavigatedFrom_Hook, &g_processesFromOriginal);
-        Wh_Log(L"Embedded Processes hooks: to=ok from=%s",
-               processesFromInstalled ? L"ok" : L"unavailable");
-        if (!processesFromInstalled) g_processesFromOriginal = nullptr;
-    } else {
-        WindhawkUtils::SYMBOL_HOOK taskmgrExeHooks[] = {
-            {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)"},
-             &g_processesToOriginal, ProcessesNavigatedTo_Hook},
-            {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::DetailsPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)"},
-             &g_detailsToOriginal, nullptr, true},
-            {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedFrom(void *)"},
-             &g_processesFromOriginal, nullptr, true},
-            {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::DetailsPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedFrom(void *)"},
-             &g_detailsFromOriginal, nullptr, true},
-        };
-        if (!WindhawkUtils::HookSymbols(host, taskmgrExeHooks,
-                                        ARRAYSIZE(taskmgrExeHooks))) {
-            Wh_Log(L"Taskmgr navigation symbols unavailable; PE/PDB didn't match an embedded entry");
-            return FALSE;
-        }
-        Wh_Log(L"Taskmgr navigation hooks installed using Windhawk symbols");
+    if (!WindhawkUtils::HookSymbols(host, taskmgrExeHooks,
+                                    ARRAYSIZE(taskmgrExeHooks),
+                                    &hookOptions)) {
+        Wh_Log(L"Processes navigation symbol resolution failed "
+               L"(official cache or PDB unavailable)");
+        return FALSE;
     }
+    Wh_Log(L"Required ProcessesPage::OnNavigatedTo hook installed via Windhawk symbols");
 
-    // Install optional hooks only if they were resolved from PDB symbols.
-    // A known-offset entry already installed its Processes exit hook above.
-    const bool detailsFound = g_detailsToOriginal != nullptr;
-    const bool detailsHooked = detailsFound && WindhawkUtils::SetFunctionHook(
-        g_detailsToOriginal, DetailsNavigatedTo_Hook, &g_detailsToOriginal);
-    if (!detailsHooked) g_detailsToOriginal = nullptr;
-    Wh_Log(L"Optional DetailsPage::OnNavigatedTo: symbol=%s hook=%s",
-           detailsFound ? L"found" : L"missing",
-           detailsHooked ? L"ok" : L"unavailable");
-
+    // The exit hook is optional: Frame.Navigated also handles leaving the
+    // supported pages when the navigation Frame has been discovered.
     const bool processesExitFound = g_processesFromOriginal != nullptr;
-    const bool processesExitHooked = embeddedOffsets ? processesFromInstalled :
-        (processesExitFound && WindhawkUtils::SetFunctionHook(
-            g_processesFromOriginal, ProcessesNavigatedFrom_Hook,
-            &g_processesFromOriginal));
+    const bool processesExitHooked = processesExitFound &&
+        WindhawkUtils::SetFunctionHook(g_processesFromOriginal,
+                                      ProcessesNavigatedFrom_Hook,
+                                      &g_processesFromOriginal);
     if (!processesExitHooked) g_processesFromOriginal = nullptr;
     Wh_Log(L"Optional ProcessesPage::OnNavigatedFrom: symbol=%s hook=%s",
            processesExitFound ? L"found" : L"missing",
            processesExitHooked ? L"ok" : L"unavailable");
 
-    const bool detailsExitFound = g_detailsFromOriginal != nullptr;
-    const bool detailsExitHooked = detailsExitFound && WindhawkUtils::SetFunctionHook(
-        g_detailsFromOriginal, DetailsNavigatedFrom_Hook, &g_detailsFromOriginal);
-    if (!detailsExitHooked) g_detailsFromOriginal = nullptr;
-    Wh_Log(L"Optional DetailsPage::OnNavigatedFrom: symbol=%s hook=%s",
-           detailsExitFound ? L"found" : L"missing",
-           detailsExitHooked ? L"ok" : L"unavailable");
+    // If requested by the user, also try the Microsoft symbol server for
+    // Details. This may delay startup for a missing PDB, hence opt-in.
+    // The required Processes hook above remains independent either way.
+    const bool tryOnlineDetailsPdb = Wh_GetIntSetting(L"tryOnlineDetailsPdb") != 0;
+    const bool detailsHooked = TryHookDetailsFromPdb(host, tryOnlineDetailsPdb);
 
     // Intentionally unchanged: preserve the tested GetKeyState-based refresh
     // hold, including its Taskmgr.exe return-address restriction.
     if (!WindhawkUtils::SetFunctionHook(
             GetKeyState, GetKeyState_Hook, &g_getKeyOriginal)) return FALSE;
 
-    Wh_Log(L"Ready: navigation hooks, Frame.Navigated (embedded=%d)",
-           embeddedOffsets);
+    Wh_Log(L"Ready: Processes cache, Details PDB hook=%d online=%d, Frame.Navigated (no embedded offsets)",
+           detailsHooked, tryOnlineDetailsPdb);
+    return TRUE;
+}
+
+// Hook availability depends on tryOnlineDetailsPdb, which is read during
+// Wh_ModInit. Reload the mod when settings change so the new value takes
+// effect instead of leaving the existing hooks unchanged.
+BOOL Wh_ModSettingsChanged(BOOL* reload) {
+    *reload = TRUE;
     return TRUE;
 }
 
@@ -1377,7 +1448,8 @@ void Wh_ModUninit() {
         if (KnownThreads().empty()) break;
         // Never unload a module while a live XAML button still has a Click
         // handler pointing into it. A dead or inaccessible UI thread may
-        // require the user to close Task Manager; no finite wait is safe.
+        // require the user to close Task Manager; a simple timeout would be
+        // unsafe without first revoking all callbacks.
         Sleep(250);
     }
     Wh_Log(L"Uninit finished: inserted=%u terminatedThreads=%u cleanupErrors=%u",
