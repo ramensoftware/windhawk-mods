@@ -51,8 +51,8 @@ improvements by [Asteski](https://github.com/Asteski) and
 - Multi-monitor display and filtering, DPI-aware sizing, and current/all virtual
   desktop filtering. All virtual desktops are included by default.
 - Window exclusions by title or executable name, custom application names and
-  light/dark icons by executable name and/or window title, and an option to use
-  the native switcher in Xbox Mode.
+  light/dark icons by executable name, full path or file description and/or
+  window title, and an option to use the native switcher in Xbox Mode.
 - Keyboard, mouse, scroll-wheel, and supported precision-touchpad controls.
 
 ## Layouts
@@ -977,6 +977,9 @@ nothing failed.
 #include <map>
 #include <string>
 #include <algorithm>
+#include <cmath>
+#include <climits>
+#include <type_traits>
 #include <gdiplus.h>
 #include <windhawk_utils.h>
 #include <winrt/Windows.Foundation.h>
