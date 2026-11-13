@@ -52,12 +52,20 @@ switching and a toast.
 ## Notes and limitations
 - Replacement is clipboard-based (copy/paste simulation), so behavior can vary
   in apps with custom clipboard/shortcut handling.
-- In console windows the copy uses Ctrl+Insert instead of Ctrl+C, because
-  Ctrl+C without a selection discards the typed line and interrupts a running
-  command. The previous-word fallback is skipped there, so select the text
-  instead. Editors such as VS Code or Visual Studio copy the current line when
-  nothing is selected, so pressing the shortcut without a selection can paste
-  an extra line there; the selection-only scope doesn't avoid this.
+- In console windows (conhost, Windows Terminal, ConEmu/Cmder, mintty, WezTerm
+  and Alacritty) the copy uses Ctrl+Insert instead of Ctrl+C, because Ctrl+C
+  without a selection discards the typed line and interrupts a running command.
+  The previous-word fallback is skipped there, and the converted text is left
+  on the clipboard instead of being pasted: a terminal selection covers the
+  screen buffer rather than the input line, so pasting would add a duplicate.
+  Delete the original and paste manually; the previous clipboard content isn't
+  restored in that case. Other terminals can still receive Ctrl+C, which may
+  interrupt the running program.
+- If the clipboard holds content that can't be preserved (for example a single
+  format above 128 MB), the mod beeps and does not convert, so nothing is lost.
+- Editors such as VS Code or Visual Studio copy the current line when nothing
+  is selected, so pressing the shortcut without a selection can paste an extra
+  line there; the selection-only scope doesn't avoid this.
 - The shortcut is swallowed globally, which shadows apps that use it themselves
   (for example Microsoft Word binds Alt+X); change the shortcut if needed.
 - The mod may not be able to interact with elevated (UIPI) windows, secure
@@ -622,7 +630,13 @@ bool SaveClipboard(ClipboardSnapshot& snapshot) {
             continue;
         }
         SIZE_T size = GlobalSize(h);
-        if (size == 0 || size > kClipboardFormatLimit ||
+        if (size == 0) {
+            // An empty block has nothing to restore, and failing the whole
+            // snapshot over it would block every conversion while it's there.
+            Wh_Log(L"Clipboard format %u is empty", format);
+            continue;
+        }
+        if (size > kClipboardFormatLimit ||
             total + size > kClipboardTotalLimit) {
             Wh_Log(L"Clipboard format %u is too large (%zu bytes, %zu total)",
                    format, size, total);
@@ -665,7 +679,9 @@ bool SaveClipboard(ClipboardSnapshot& snapshot) {
 }
 
 // Restores a snapshot, unless the clipboard was replaced in the meantime.
-void RestoreClipboard(const ClipboardSnapshot& snapshot) {
+// Takes ownership of the saved blocks: SetClipboardData frees them, so handing
+// them over avoids a second copy of every format (and of its peak memory).
+void RestoreClipboard(ClipboardSnapshot& snapshot) {
     if (!snapshot.captured) return;
     // Nothing restorable: leave whatever is on the clipboard instead of
     // emptying it, so no data is lost.
@@ -674,23 +690,15 @@ void RestoreClipboard(const ClipboardSnapshot& snapshot) {
     if (!OpenClipboardWithRetry()) return;
 
     EmptyClipboard();
-    for (const ClipboardItem& item : snapshot.items) {
-        SIZE_T size = GlobalSize(item.handle);
-        if (size == 0) continue;
-        const void* src = GlobalLock(item.handle);
-        if (!src) continue;
-        HGLOBAL copy = GlobalAlloc(GMEM_MOVEABLE, size);
-        void* dst = copy ? GlobalLock(copy) : nullptr;
-        if (!dst) {
-            GlobalUnlock(item.handle);
-            if (copy) GlobalFree(copy);
-            Wh_Log(L"Out of memory restoring clipboard format %u", item.format);
-            continue;
+    for (ClipboardItem& item : snapshot.items) {
+        if (!item.handle) continue;
+        if (SetClipboardData(item.format, item.handle)) {
+            item.handle = nullptr;  // now owned by the clipboard
+        } else {
+            Wh_Log(L"Failed to restore clipboard format %u", item.format);
+            GlobalFree(item.handle);
+            item.handle = nullptr;
         }
-        memcpy(dst, src, size);
-        GlobalUnlock(copy);
-        GlobalUnlock(item.handle);
-        if (!SetClipboardData(item.format, copy)) GlobalFree(copy);
     }
     AddClipboardExclusionMarker();
     CloseClipboard();
@@ -1463,8 +1471,22 @@ bool IsConsoleWindow(HWND hwnd) {
     if (!hwnd) return false;
     WCHAR className[64] = {};
     if (!GetClassNameW(hwnd, className, ARRAYSIZE(className))) return false;
-    return _wcsicmp(className, L"ConsoleWindowClass") == 0 ||
-           _wcsicmp(className, L"CASCADIA_HOSTING_WINDOW_CLASS") == 0;
+    // Terminals where a selection lives on the screen buffer rather than in the
+    // input line, and where Ctrl+C can reach the running program. Copying uses
+    // Ctrl+Insert there; terminals without a Ctrl+Insert binding simply leave
+    // nothing on the clipboard instead of sending ^C.
+    static const wchar_t* const kConsoleClasses[] = {
+        L"ConsoleWindowClass",             // conhost
+        L"CASCADIA_HOSTING_WINDOW_CLASS",  // Windows Terminal
+        L"VirtualConsoleClass",            // ConEmu / Cmder
+        L"mintty",                         // Git Bash / Cygwin
+        L"org.wezfurlong.wezterm",         // WezTerm
+        L"Alacritty",                      // Alacritty
+    };
+    for (const wchar_t* name : kConsoleClasses) {
+        if (_wcsicmp(className, name) == 0) return true;
+    }
+    return false;
 }
 
 void PerformConversion() {
@@ -1483,12 +1505,14 @@ void PerformConversion() {
     // Pick up layouts added/removed at runtime; cheap when unchanged.
     RefreshLayoutsIfNeeded();
 
-    // Snapshot before the synthetic Ctrl+C replaces the clipboard. If anything
+    // Snapshot before the synthetic copy replaces the clipboard. If anything
     // can't be saved, skip the conversion rather than destroy it.
     ClipboardSnapshot snapshot;
     if (s.restoreClipboard && !SaveClipboard(snapshot)) {
         Wh_Log(L"Clipboard could not be saved completely; skipping conversion "
                L"to avoid losing its content");
+        // The shortcut would otherwise look like it did nothing.
+        MessageBeep(MB_ICONWARNING);
         return;
     }
 
@@ -1552,6 +1576,16 @@ void PerformConversion() {
     if (!SetClipboardUnicodeText(converted)) {
         Wh_Log(L"Failed to set converted clipboard text");
         if (s.restoreClipboard) RestoreClipboard(snapshot);
+        return;
+    }
+
+    if (console) {
+        // A terminal selection covers the screen buffer, not the editable input
+        // line, so a paste would insert a duplicate instead of replacing the
+        // original. Leave the converted text on the clipboard for a manual
+        // paste, and skip the restore so it isn't immediately overwritten.
+        Wh_Log(L"Console window: converted text left on the clipboard");
+        if (s.showNotification) ShowToast();
         return;
     }
 
