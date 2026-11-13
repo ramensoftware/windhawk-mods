@@ -2,7 +2,7 @@
 // @id              win-x-hotcorners
 // @name            Win-X Hot Corners
 // @description     macOS-style hot corners & edges for Windows with full multi-monitor support — trigger actions instantly when your cursor hits any screen corner or edge
-// @version         1.3.0
+// @version         1.4.0
 // @author          lost_husky
 // @github          https://github.com/DhakadG
 // @donateUrl       https://ko-fi.com/losthusky_
@@ -50,7 +50,9 @@ action for whether this feels good or infuriating.
 
 - **16 zones per display** — four corners, and four edges split into three
   segments each.
-- **38 actions**, plus any key combination and any command you can name.
+- **39 actions**, plus any key combination and any command you can name.
+- **Virtual modifier keys** — a zone can hold Ctrl, Alt, Shift or Win down for
+  as long as the pointer rests in it, for mouse-only control.
 - **Five trigger styles** that combine: arrival, dwell, knock, held modifier,
   press-and-hold.
 - **Per-monitor everything** — zones bind to a display's name, not its position,
@@ -215,16 +217,19 @@ the window and the next one puts it back.
 | Send key press | Send any key combination, or several in sequence |
 | Alternate key press | Two combinations, fired alternately (`Alt+S | Alt+H`) |
 | Alternate command | Two commands, fired alternately |
+| Hold modifier key | Hold Ctrl, Alt, Shift or Win down while the pointer is in the zone |
 | Custom command | Launch any executable, path, or URL |
 | Nothing | Disabled (default) |
 
 ### Arguments
 
-Four actions take an argument. The rest ignore the field.
+Five actions take an argument. The rest ignore the field.
 
 **Send key press** — one combination is `Modifier+Key`. Separate several with
 semicolons and they are sent **one after another**, not merged into a single
-chord: `Ctrl+C;Alt+Tab` sends Ctrl+C, then Alt+Tab.
+chord: `Ctrl+C;Alt+Tab` sends Ctrl+C, then Alt+Tab. A combination with a key
+name this mod does not know is skipped whole, and the log says which, rather
+than sending what is left of it.
 
 > Modifiers are Ctrl, Alt, Shift and Win. Keys are A-Z, 0-9, F1-F24, Enter,
 > Space, Tab, Escape, Home, End, Delete, the arrows, and so on.
@@ -245,6 +250,52 @@ by `|`. The zone fires the left one, then the right one, then the left again.
 Each side accepts everything the single version does, so `Ctrl+C;Ctrl+V |
 Alt+Tab` is valid. Every zone alternates independently, and the position resets
 whenever settings or the display layout change.
+
+**Hold modifier key** — the modifiers to hold, joined with `+`: `Win`, `Ctrl`,
+`Ctrl+Shift`. `LWin`, `RCtrl` and the other left/right names work too. Nothing
+but modifiers is accepted.
+
+## Virtual modifier keys
+
+**Hold modifier key** turns a zone into a modifier key the pointer holds down.
+The key goes down when the zone fires and comes back up when the pointer
+leaves.
+
+It is built for mouse-only control. Say two trackball buttons are mapped to
+`Ctrl+Left` and `Ctrl+Right`. Set the top-left corner to Hold modifier key with
+`Win`, park the pointer there, and the same two buttons send `Win+Ctrl+Left`
+and `Win+Ctrl+Right` — previous and next virtual desktop — with no hand on the
+keyboard. It also
+takes one key off an awkward keyboard shortcut: let the corner hold Shift and
+your hand only has to find the rest.
+
+| Setting | Value |
+| --- | --- |
+| Zone | `Top-left corner` |
+| Action | `Hold modifier key while the pointer is here` |
+| Arguments | `Win` |
+| Pass-through guard override | `0`, if you want the key down the moment you arrive |
+| Cooldown override | `0`, if you dip in and out quickly |
+
+Things worth knowing:
+
+- Every trigger style still applies to the key going *down* — the pass-through
+  guard, a dwell, a knock, the cooldown, the fullscreen and excluded-app
+  checks. Leaving always lets go. With the default 300 ms cooldown, coming
+  straight back into the zone waits out the rest of it before the key goes
+  down again, which is what the cooldown override above is for.
+- The log and the dashboard name the keys, as in `Hold Win`, so two such zones
+  are easy to tell apart.
+- The key is let go on every way out, not only on leaving: turning the hot
+  corners off, suspending them, a settings change, a display change and
+  unloading the mod all release it first.
+- A Win or Alt that is let go with nothing pressed in between would open Start
+  or a menu bar, so the release is masked the same way *Send key press* masks
+  a held Win.
+- If the Windhawk process itself is killed while a key is held, nothing is left
+  to let go of it. Press and release that key on the keyboard to clear it.
+- Leaving the zone lets go of the key even if you are also holding it on the
+  keyboard. Press it again to carry on.
 
 ## Shaping the zones
 
@@ -523,6 +574,7 @@ like buying me a coffee:
           - ACTION_KEEP_AWAKE_OFF: Keep awake off
           - ACTION_SEND_KEYPRESS: Send key press
           - ACTION_ALTERNATE_KEYPRESS: Alternate key press
+          - ACTION_HOLD_MODIFIER: Hold modifier key while the pointer is here
           - ACTION_START_PROCESS: Custom command
           - ACTION_ALTERNATE_COMMAND: Alternate command
         - args: ""
@@ -531,7 +583,8 @@ like buying me a coffee:
             Only used by some actions. Send key press takes a combination such
             as  Ctrl+Shift+Esc . Custom command takes an executable, path or
             URL. The two Alternate actions take both halves separated by a
-            vertical bar, for example  Alt+S | Alt+H .
+            vertical bar, for example  Alt+S | Alt+H . Hold modifier key takes
+            the modifiers to hold, for example  Win  or  Ctrl+Shift .
         - releaseAction: ACTION_NOTHING
           $name: Hold - action when the pointer leaves
           $description: >-
@@ -544,7 +597,8 @@ like buying me a coffee:
 
             "The same action again" is what you want for a toggle such as Show
             Desktop, Mute or Keep Awake, and it stays in step if you change the
-            action above later.
+            action above later. Ignored by Hold modifier key, which always
+            lets its keys go when the pointer leaves.
           $options:
           - ACTION_NOTHING: "Nothing (fire once on arrival)"
           - ACTION_SAME: The same action again
@@ -746,6 +800,9 @@ enum class CornerAction
     AlternateCommand,
     SendKeypress,
     StartProcess,
+    // Presses modifiers on entry and releases them on leaving, so the zone
+    // behaves as a key held down for as long as the pointer rests in it.
+    HoldModifier,
 };
 
 // Zone IDs: 0-3 corners, then each edge as three independently configurable
@@ -1014,6 +1071,13 @@ static std::deque<HitZone> g_queue;
 // pile of stale shell commands seconds after the user made the gesture.
 static constexpr size_t kMaxQueue = 2;
 
+// Hold modifier key releases queued but not yet sent. Until they are, the
+// modifier this mod pressed is still down, and GetAsyncKeyState cannot tell it
+// from one the user is holding - so a modifier-gated zone entered straight
+// from a hold zone would fire on the mod's own key. The gate waits on this.
+// Incremented by the detection thread, decremented by the worker.
+static std::atomic<int> g_pendingModifierReleases{0};
+
 // Detection state (detection thread only)
 static int g_activeZone = -1;
 static ULONGLONG g_enterTick = 0;
@@ -1263,7 +1327,10 @@ static std::vector<std::vector<WORD>> ParseKeyCombo(const std::wstring &input)
             continue;
 
         std::vector<WORD> modifiers;
-        WORD mainKey = 0;
+        // Every key, in order. Keeping only the last one silently turned
+        // "Ctrl+A+B" into Ctrl+B.
+        std::vector<WORD> mainKeys;
+        bool bad = false;
 
         // Split on '+'
         size_t start = 0;
@@ -1303,19 +1370,24 @@ static std::vector<std::vector<WORD>> ParseKeyCombo(const std::wstring &input)
 
             // Check VK map
             auto vkIt = g_vkMap.find(upper);
-            if (vkIt != g_vkMap.end())
+            if (vkIt == g_vkMap.end())
             {
-                mainKey = vkIt->second;
+                // The whole combination goes, not just the token. Sending what
+                // is left of it is a different shortcut: a typo in "Win+PgUp"
+                // used to send a bare Win and open Start.
+                Wh_Log(L"Unknown key '%s' in '%s' - that combination is "
+                       L"ignored",
+                       token.c_str(), combo.c_str());
+                bad = true;
+                break;
             }
-            else
-            {
-                Wh_Log(L"Unknown key token: '%s'", token.c_str());
-            }
+            mainKeys.push_back(vkIt->second);
         }
+        if (bad)
+            continue;
 
         std::vector<WORD> keys = modifiers;
-        if (mainKey)
-            keys.push_back(mainKey);
+        keys.insert(keys.end(), mainKeys.begin(), mainKeys.end());
         if (!keys.empty())
             allCombos.push_back(std::move(keys));
     }
@@ -2000,12 +2072,20 @@ static void ActionStartProcess(const std::wstring &command)
     std::wstring cmd = command;
     std::wstring verb = L"open";
 
-    // Expand environment variables (%AppData%, %USERPROFILE%, etc.)
-    WCHAR expandedBuf[4096];
-    DWORD expandedLen = ExpandEnvironmentStringsW(cmd.c_str(), expandedBuf,
-                                                  ARRAYSIZE(expandedBuf));
-    if (expandedLen > 0 && expandedLen <= ARRAYSIZE(expandedBuf))
-        cmd = expandedBuf;
+    // Expand environment variables (%AppData%, %USERPROFILE%, etc.). Sized by
+    // asking first: a fixed buffer silently ran the command unexpanded once
+    // the result outgrew it.
+    DWORD need = ExpandEnvironmentStringsW(cmd.c_str(), nullptr, 0);
+    if (need > 0)
+    {
+        std::wstring expanded(need, L'\0');
+        DWORD got = ExpandEnvironmentStringsW(cmd.c_str(), expanded.data(), need);
+        if (got > 0 && got <= need)
+        {
+            expanded.resize(got - 1);   // got counts the terminator
+            cmd = expanded;
+        }
+    }
 
     if (cmd.length() > 4 && _wcsnicmp(cmd.c_str(), L"uac;", 4) == 0)
     {
@@ -2069,12 +2149,14 @@ static void ActionStartProcess(const std::wstring &command)
                 params += argv[i];
             }
         }
-        LocalFree(argv);
     }
     else
     {
         exe = cmd;
     }
+    // Outside the branch: a non-null argv with argc == 0 still has to go.
+    if (argv)
+        LocalFree(argv);
 
     SHELLEXECUTEINFO sei = {sizeof(sei)};
     // NOASYNC because the worker thread has no message loop: without it the
@@ -2091,6 +2173,108 @@ static void ActionStartProcess(const std::wstring &command)
         if (err != ERROR_CANCELLED)
             Wh_Log(L"ShellExecuteEx failed: %lu", err);
     }
+}
+
+// Hold modifier key: the keys go down when the zone fires and come back up
+// when the pointer leaves, so a zone acts as a modifier held by the pointer.
+// The case it exists for is a mouse or trackball whose buttons are mapped to
+// shortcuts - park in a corner and the same buttons send the Win (or Ctrl, or
+// Alt) variant of those shortcuts, with no hand on the keyboard.
+//
+// Modifiers only. An injected ordinary key does not auto-repeat, so holding
+// one does nothing useful, and a letter left down is far more disruptive than
+// a modifier if anything ever goes wrong.
+static bool IsModifierVk(WORD vk)
+{
+    switch (vk)
+    {
+    case VK_LCONTROL:
+    case VK_RCONTROL:
+    case VK_LMENU:
+    case VK_RMENU:
+    case VK_LSHIFT:
+    case VK_RSHIFT:
+    case VK_LWIN:
+    case VK_RWIN:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// One combination of modifiers, or empty if the argument is anything else.
+static std::vector<WORD> ParseHeldModifiers(const std::wstring &args)
+{
+    auto combos = ParseKeyCombo(args);
+    if (combos.size() != 1)
+        return {};
+    for (WORD vk : combos[0])
+    {
+        if (!IsModifierVk(vk))
+            return {};
+    }
+    return combos[0];
+}
+
+// The two halves of a hold, as separate batches. Unlike SendKeys this never
+// releases what the user is physically holding first: a press only adds keys,
+// and the release sends a key-up for every key the press sent. A key-up for a
+// key that is already up does nothing, so the pair can never leave one down -
+// which is the property that makes holding a key from a background process
+// acceptable at all.
+static void SendModifierState(const std::vector<WORD> &vks, bool down)
+{
+    std::vector<INPUT> in;
+    auto push = [&in](WORD vk, DWORD flags)
+    {
+        INPUT i = {};
+        i.type = INPUT_KEYBOARD;
+        i.ki.wVk = vk;
+        i.ki.dwFlags = flags | (IsExtendedKey(vk) ? KEYEVENTF_EXTENDEDKEY : 0);
+        in.push_back(i);
+    };
+
+    if (down)
+    {
+        for (WORD vk : vks)
+            push(vk, 0);
+    }
+    else
+    {
+        // A Win or Alt key-up with nothing pressed since its key-down opens
+        // Start or activates the menu bar - and "entered the zone, left again
+        // without clicking anything" produces exactly that. A Ctrl tap in
+        // between masks it; Ctrl alone does nothing. Same trick as SendKeys.
+        bool mask = std::any_of(vks.begin(), vks.end(),
+                                [](WORD vk)
+                                {
+                                    return vk == VK_LWIN || vk == VK_RWIN ||
+                                           vk == VK_LMENU || vk == VK_RMENU;
+                                });
+        if (mask)
+        {
+            push(VK_CONTROL, 0);
+            push(VK_CONTROL, KEYEVENTF_KEYUP);
+        }
+        for (auto it = vks.rbegin(); it != vks.rend(); ++it)
+            push(*it, KEYEVENTF_KEYUP);
+    }
+
+    SetLastError(0);
+    UINT sent = SendInput((UINT)in.size(), in.data(), sizeof(INPUT));
+    if (sent == in.size())
+    {
+        Wh_Log(L"Modifier %s: %u events", down ? L"down" : L"up", sent);
+        return;
+    }
+    Wh_Log(L"SendInput FAILED (modifier %s): sent %u/%u, err=%lu",
+           down ? L"down" : L"up", sent, (UINT)in.size(), GetLastError());
+
+    // A press that stopped partway is not a hold anybody can rely on, so let
+    // go of it now rather than wait for a release that assumes it worked. The
+    // release still runs later; a second key-up is harmless.
+    if (down && sent > 0)
+        SendModifierState(vks, false);
 }
 
 // =====================================================================
@@ -2139,6 +2323,7 @@ static CornerAction ParseActionType(const std::wstring &raw)
         {L"ACTION_ALTERNATE_COMMAND", CornerAction::AlternateCommand},
         {L"ACTION_SEND_KEYPRESS", CornerAction::SendKeypress},
         {L"ACTION_START_PROCESS", CornerAction::StartProcess},
+        {L"ACTION_HOLD_MODIFIER", CornerAction::HoldModifier},
     };
 
     auto it = map.find(ToUpperStr(TrimStr(raw)));
@@ -2188,6 +2373,7 @@ static const wchar_t *ActionToString(CornerAction a)
     case CornerAction::AlternateCommand: return L"Alternate command";
     case CornerAction::SendKeypress: return L"Send key press";
     case CornerAction::StartProcess: return L"Custom command";
+    case CornerAction::HoldModifier: return L"Hold modifier key";
     }
     return L"Unknown";
 }
@@ -2348,6 +2534,20 @@ static std::function<void()> MakeExecutor(CornerAction action,
             return nullptr;
         }
         return [cmd]() { ActionStartProcess(cmd); };
+    }
+    // The press only. Its release is built next to it in ReadSettingsZones,
+    // from the same argument, so the two can never disagree about the keys.
+    case CornerAction::HoldModifier:
+    {
+        auto vks = ParseHeldModifiers(args);
+        if (vks.empty())
+        {
+            Wh_Log(L"Hold modifier key: expected modifiers only, such as  Win "
+                   L" or  Ctrl+Shift , got '%s'",
+                   args.c_str());
+            return nullptr;
+        }
+        return [vks]() { SendModifierState(vks, true); };
     }
     }
     return nullptr;
@@ -2650,6 +2850,10 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
                                                 : L"";
             hz.label = mon.id + L" " + ZoneToString(z) + span + L" -> " +
                        ActionToString(zc->action);
+            // Which keys matters more than the action's name here: the log
+            // line is how you tell a corner holding Win from one holding Ctrl.
+            if (zc->action == CornerAction::HoldModifier)
+                hz.label += L" (" + TrimStr(zc->args) + L")";
             set->zones.push_back(std::move(hz));
         };
 
@@ -2915,6 +3119,10 @@ static void EnqueueRelease(const HitZone &hz)
     rel.label = hz.label + L"  (released)";
     rel.engagesHold = false;
     rel.isRelease = true;
+    // Counted before it is queued, so the worker can never decrement first.
+    // A release is never dropped, so every increment is matched.
+    if (rel.action == CornerAction::HoldModifier)
+        g_pendingModifierReleases++;
     EnqueueAction(rel);
 }
 
@@ -2989,6 +3197,8 @@ static DWORD WINAPI ActionWorkerThread(LPVOID)
                     // so there is nothing to undo. Releasing anyway is how a
                     // hold zone ends up *hiding* your windows on the way out.
                     Wh_Log(L"SKIP (nothing engaged): %s", job.label.c_str());
+                    if (job.action == CornerAction::HoldModifier)
+                        g_pendingModifierReleases--;
                     continue;
                 }
             }
@@ -3048,7 +3258,12 @@ static DWORD WINAPI ActionWorkerThread(LPVOID)
             // Recorded only now, past the gates and the execution, so a hold is
             // owed a release exactly when its entry half really happened.
             if (job.isRelease)
+            {
                 holdActive = false;
+                // Only now: the key-up has actually been sent.
+                if (job.action == CornerAction::HoldModifier)
+                    g_pendingModifierReleases--;
+            }
             else if (job.engagesHold)
                 holdActive = true;
         }
@@ -3211,6 +3426,16 @@ static DWORD DetectTick()
     if (!g_knockSatisfied)
     {
         gate(L"knock window - leave and re-enter to arm it");
+        return next;
+    }
+
+    // A modifier this mod pressed may still be down, waiting on the worker to
+    // let go of it; it would pass the check below as if the user held it.
+    // Checked every tick, so this only ever delays the zone by that long.
+    if (zones->zones[idx].modifier != kModifierNone &&
+        g_pendingModifierReleases.load() > 0)
+    {
+        gate(L"waiting for a held modifier key to be let go");
         return next;
     }
 
@@ -3799,15 +4024,43 @@ static std::vector<MonitorZoneConfig> ReadSettingsZones()
                 GetSettingStr(L"displays[%d].zones[%d].releaseAction", i, z));
             std::wstring relArgs =
                 GetSettingStr(L"displays[%d].zones[%d].releaseArgs", i, z);
+
+            // Hold modifier's release is not a choice: whatever went down on
+            // arrival comes back up on leaving, whatever the release field
+            // says. The reverse matters as much - HoldModifier as a *release*
+            // of some other action would be a press with nothing to undo it,
+            // so a hand-edited value like that is dropped.
+            if (act == CornerAction::HoldModifier)
+            {
+                rel = CornerAction::HoldModifier;
+                relArgs = args;
+            }
+            else if (rel == CornerAction::HoldModifier)
+            {
+                rel = CornerAction::Nothing;
+            }
+
             cfg.zones[zi].releaseAction = rel;
             cfg.zones[zi].releaseArgs = relArgs;
             // Nothing is built for SameAsEntry on purpose: BuildZoneSet
             // substitutes the entry executor for that case, so a second one
             // would never be read - and for an Alternate entry it would carry
             // its own flip flag, which is the drift that substitution fixed.
-            if (rel != CornerAction::Nothing &&
-                rel != CornerAction::SameAsEntry)
+            if (rel == CornerAction::HoldModifier)
+            {
+                // Parsed from the same argument as the press, so both are
+                // built or neither is; ResolveZone never sees one without the
+                // other.
+                auto vks = ParseHeldModifiers(args);
+                if (!vks.empty())
+                    cfg.zones[zi].releaseExecutor = [vks]()
+                    { SendModifierState(vks, false); };
+            }
+            else if (rel != CornerAction::Nothing &&
+                     rel != CornerAction::SameAsEntry)
+            {
                 cfg.zones[zi].releaseExecutor = MakeExecutor(rel, relArgs);
+            }
             cfg.zones[zi].tuning.size =
                 Wh_GetIntSetting(L"displays[%d].zones[%d].size", i, z);
             cfg.zones[zi].tuning.delay =
@@ -5007,7 +5260,13 @@ static void DashPaintDiagram(DashState *s, HDC hdc)
                                                : RGB(0, 0, 0))
                                : g_pal.accentText);
 
-        const wchar_t *name = ActionToString(zv.action);
+        // "Hold Win" says what the zone does; "Hold modifier key" does not,
+        // and every such zone would otherwise look the same in the picture.
+        std::wstring nameBuf = zv.action == CornerAction::HoldModifier &&
+                                       !zv.invalid
+                                   ? L"Hold " + TrimStr(zv.args)
+                                   : ActionToString(zv.action);
+        const wchar_t *name = nameBuf.c_str();
 
         if (ZoneIsVertical((Zone)z))
         {
@@ -5175,7 +5434,11 @@ static void DashPaintDetail(DashState *s, HDC hdc, const RECT &client)
         // "again" is only true when the release repeats the entry. With a
         // different release action it read as though that action was the
         // entry - "runs Mute again" on a zone that opens Quick Settings.
-        if (zv.releaseAction == CornerAction::SameAsEntry)
+        if (zv.action == CornerAction::HoldModifier)
+            wcscpy_s(hold, _countof(hold),
+                     L"Held: the keys go down on arrival and come back up "
+                     L"when the pointer leaves");
+        else if (zv.releaseAction == CornerAction::SameAsEntry)
             _snwprintf_s(hold, _countof(hold), _TRUNCATE,
                          L"Held: runs %s again when the pointer leaves",
                          ActionToString(zv.action));
