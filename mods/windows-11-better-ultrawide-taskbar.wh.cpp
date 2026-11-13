@@ -11498,31 +11498,31 @@ void RestorePlateFill(Root::StatePlate& state) {
     state.fillHidden=false;
 }
 
-void ApplyPlateFill(Root::StatePlate& state, float factor) {
+void ApplyPlateFill(Root::StatePlate& state, float factor, bool borders) {
     if (!state.fill) {
         EnsurePlateTemplate(state);
         state.fill=std::make_shared<NativePlateFill>();
         state.fill->templateValues=state.templateValues;
         state.fill->factor=factor;
-        state.fill->borders=g_keepButtonRim;
+        state.fill->borders=borders;
         state.fill->Attach(state.element);
     } else if (!state.fill->refreshSucceeded || state.fill->factor!=factor ||
-               state.fill->borders!=g_keepButtonRim) {
+               state.fill->borders!=borders) {
         // Native changes are already observed by the brush/VSM callbacks.
         // Reapply only a changed policy or a previously failed brush update.
         state.fill->factor=factor;
-        state.fill->borders=g_keepButtonRim;
+        state.fill->borders=borders;
         state.fill->Refresh();
     }
     state.fillHidden = factor == 0;
 }
 
-void ApplyPlateAppearance(Root::StatePlate& state, bool glass, bool highContrast) {
+void ApplyPlateAppearance(Root::StatePlate& state, bool glass, bool highContrast, bool rim) {
     if(state.trayHighlight) return; // Native tray brushes/animations are the highlight, not app chrome.
     // Like tray highlights, ordinary app fills keep their native color/opacity.
     // Only an explicit border switch or accepted liquid lens needs brush overrides.
-    if(highContrast || (!glass && g_keepButtonRim)) RestorePlateFill(state);
-    else ApplyPlateFill(state,ButtonFillOpacity(glass));
+    if(highContrast || (!glass && rim)) RestorePlateFill(state);
+    else ApplyPlateFill(state,ButtonFillOpacity(glass),rim);
 }
 
 constexpr PlateProperty kPlateLayoutSlots[]{PlateProperty::Margin,PlateProperty::Height,PlateProperty::VerticalAlignment};
@@ -11657,8 +11657,25 @@ ShapeVisual ButtonRim(CompositionRoundedRectangleGeometry const& outline,
     return visual;
 }
 
-void PrepareStatePlate(Root& root, Root::StatePlate& state,
-                       DockInsets insets, bool glassLayer) {
+// How a state plate is to look. Its adapter decides this from the measured pass and the configuration;
+// PrepareStatePlate applies it. Whether the plate is a tray highlight stays on the plate, which it never changes for.
+struct PlateLook {
+    DockInsets band{};  // Within the dock's background.
+    double corner{};
+    bool glass{};  // Under an accepted liquid lens: clipped to the band, and rimmed where `rim` says so.
+    bool rim{};
+    bool highContrast{};
+};
+
+PlateLook ButtonPlateLook(DockInsets band, bool glassLayer) {
+    bool highContrast=HighContrastActive();
+    return {band,g_buttonCornerRadius,glassLayer && !highContrast,g_keepButtonRim,highContrast};
+}
+
+// Native tray brushes and animations are the highlight: no lens, no rim, no fill of ours.
+PlateLook TrayPlateLook(DockInsets band) { return {band,g_trayHighlightRadius}; }
+
+void PrepareStatePlate(Root& root, Root::StatePlate& state, PlateLook const& look) {
     if (state.blocked || !state.element) return;
     auto plate = state.element;
     try {
@@ -11686,8 +11703,7 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
             Wh_Log(L"[UWITEM] external state plate geometry retained");
             return;
         }
-        bool highContrast = HighContrastActive();
-        if ((!glassLayer || highContrast) && (state.clip || state.fillHidden)) {
+        if (!look.glass && (state.clip || state.fillHidden)) {
             auto owner=state.buttonOwner;
             RestoreStatePlate(state);
             state.element=plate;
@@ -11701,21 +11717,20 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
                 plate,Controls::Border::CornerRadiusProperty(),state.originalCornerBinding);
             state.cornersOwned = true;
         }
-        double corner=state.trayHighlight?g_trayHighlightRadius:g_buttonCornerRadius;
-        state.appliedCorners = {corner,corner,corner,corner};
+        state.appliedCorners = {look.corner,look.corner,look.corner,look.corner};
         ApplyPlateProperty(state,PlateProperty::CornerRadius,winrt::box_value(state.appliedCorners),
                            plate.CornerRadius()!=state.appliedCorners);
         // Keep native fills intact unless an accepted liquid lens replaces them.
         // Border visibility follows its separate explicit control.
-        ApplyPlateAppearance(state,state.fillHidden,highContrast);
+        ApplyPlateAppearance(state,state.fillHidden,look.highContrast,look.rim);
         // Size the background in its native layout slot. Its owner, icons,
         // horizontal margins and native transforms are untouched.
         auto transform=root.dock.background.TransformToVisual(parent);
         auto slot=Controls::Primitives::LayoutInformation::GetLayoutSlot(plate);
         if(slot.Height<=0) return;
-        double top=transform.TransformPoint({0,float(insets.top)}).Y-slot.Y;
+        double top=transform.TransformPoint({0,float(look.band.top)}).Y-slot.Y;
         double bottom=transform.TransformPoint(
-            {0,float(root.dock.background.ActualHeight()-insets.bottom)}).Y-slot.Y;
+            {0,float(root.dock.background.ActualHeight()-look.band.bottom)}).Y-slot.Y;
         if(state.trayHighlight) {
             ApplyPlateProperty(state,PlateProperty::MaxHeight,winrt::box_value(double(INFINITY)),plate.MaxHeight()!=INFINITY);
             ApplyPlateProperty(state,PlateProperty::MinHeight,winrt::box_value(0.0),plate.MinHeight()!=0);
@@ -11743,12 +11758,12 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
         ApplyPlateProperty(state,PlateProperty::Height,winrt::box_value(state.appliedHeight),plate.Height()!=state.appliedHeight);
         ApplyPlateProperty(state,PlateProperty::VerticalAlignment,winrt::box_value(VerticalAlignment::Top),
                            plate.VerticalAlignment()!=VerticalAlignment::Top);
-        if(state.rim && !g_keepButtonRim) {
+        if(state.rim && !look.rim) {
             if(Hosting::ElementCompositionPreview::GetElementChildVisual(plate)==state.rim)
                 Hosting::ElementCompositionPreview::SetElementChildVisual(plate,nullptr);
             state.rim=nullptr; state.rimThemeReady=false;
         }
-        if (!glassLayer || highContrast) return;
+        if (!look.glass) return;
         if (!state.clip && plate.Clip()) return;
         if (state.clip) {
             auto currentClip =
@@ -11802,7 +11817,7 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
                 return;
             }
         }
-        if (g_keepButtonRim && !state.blocked && !state.rim &&
+        if (look.rim && !state.blocked && !state.rim &&
             plate.Name() == L"BackgroundElement" &&
             !Hosting::ElementCompositionPreview::GetElementChildVisual(plate)) {
             state.rim = ButtonRim(state.clipGeometry,
@@ -11812,7 +11827,7 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
             Hosting::ElementCompositionPreview::SetElementChildVisual(
                 plate, state.rim);
         }
-        float radius = static_cast<float>(ButtonClipRadius(rect.Width,rect.Height,g_buttonCornerRadius));
+        float radius = static_cast<float>(ButtonClipRadius(rect.Width,rect.Height,look.corner));
         state.clipGeometry.Offset({rect.X, rect.Y});
         if (state.clipBounds) state.clipBounds.InsertScalar(L"height",rect.Height);
         state.clipGeometry.Size({rect.Width, rect.Height});
@@ -11857,7 +11872,7 @@ void PrepareStatePlates(Root& root, FrameworkElement const& buttons,
                 state->trayStates=std::make_shared<ButtonStateObserver>();
                 state->trayStates->Attach(state->templateValues->control,state->buttonOwner);
             }
-            PrepareStatePlate(root,*state,trayInsets,false);
+            PrepareStatePlate(root,*state,TrayPlateLook(trayInsets));
             continue;
         }
         FrameworkElement owner{nullptr};
@@ -11874,7 +11889,7 @@ void PrepareStatePlates(Root& root, FrameworkElement const& buttons,
             source->plate=plate;
         bool glassLayer=source!=root.sources.end() &&
             ButtonGlassEnabled(g_theme,g_buttonLiquidLayer);
-        PrepareStatePlate(root, *state, buttonInsets, glassLayer);
+        PrepareStatePlate(root, *state, ButtonPlateLook(buttonInsets, glassLayer));
     }
 }
 
@@ -11901,9 +11916,9 @@ bool CommitButtonGlass(Root& root, ButtonGlassSources const& accepted={}) {
             if(!glass && (state.clip || state.fillHidden)) {
                 // Release glass-only clip/rim/fill while retaining configured
                 // native rounding/padding. Other plates still restore if one fails.
-                PrepareStatePlate(root,state,root.measurements.plateInsets(),false);
+                PrepareStatePlate(root,state,ButtonPlateLook(root.measurements.plateInsets(),false));
             }
-            if(state.element && !state.blocked) ApplyPlateAppearance(state,glass,highContrast);
+            if(state.element && !state.blocked) ApplyPlateAppearance(state,glass,highContrast,g_keepButtonRim);
         } catch (...) {
             complete=false;
             Wh_Log(L"[UWITEM] button appearance commit failed hr=%08X",winrt::to_hresult().value);
@@ -13913,12 +13928,12 @@ void RefreshItemStates() {
                 bool glass=ButtonGlassEnabled(g_theme,g_buttonLiquidLayer);
                 for (auto& plate : root.statePlates)
                     if (plate.buttonOwner==source.identity)
-                        PrepareStatePlate(root,plate,insets,glass);
+                        PrepareStatePlate(root,plate,ButtonPlateLook(insets,glass));
             }
             auto trayInsets=root.measurements.trayPlateInsets();
             for(auto& plate:root.statePlates)
                 if(plate.trayHighlight && std::exchange(plate.stateRefreshPending,false))
-                    PrepareStatePlate(root,plate,trayInsets,false);
+                    PrepareStatePlate(root,plate,TrayPlateLook(trayInsets));
             // Repack once for the affected root. No discovery, tray movement,
             // foreground setup or native appearance work on unrelated buttons.
             if (changed && g_theme==DockTheme::Liquid)
