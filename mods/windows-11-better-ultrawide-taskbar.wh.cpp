@@ -1745,7 +1745,7 @@ TaskbarPreviewMetrics g_previewMetrics;
 struct EditorPreview {
     int width = 640, height = 420;
     double margin = 48; // The canvas past each side of the dock band: wider when a slanted outline leans further.
-    double widen = 0; // How much wider the dock band is than with the 28-DIP gap: Separate's facing ends part the bars.
+    double widen = 0; // How much wider the dock band is than with kPreviewGap: Separate's facing ends part the bars.
     TaskbarPreviewMetrics metrics;
     Controls::Canvas canvas{nullptr};
     Controls::Image backdrop{nullptr};
@@ -9792,13 +9792,20 @@ void CreateEditorPreview(SettingsEditor& editor) {
     preview.canvas.Children().Append(preview.clock);
 }
 
+// The preview's dock. Its buttons sit kPreviewSpacing apart, the first as far past the dock padding. Its tray content,
+// from the first icon past the clock, is kPreviewTray wide and sits kPreviewGap after the last button in Unified, which
+// is Separate's gap at its default Bar distance between square facing ends, so changing the layout leaves the tray in
+// place.
+constexpr double kPreviewSpacing = 8, kPreviewTray = 240, kPreviewGap = kBarGap + 2 * kDockPadding;
+
 // Sizes the canvas to the dock band and a margin of 48 DIP, or the outline's reach past the band, on each side.
 void FitPreviewCanvas(SettingsEditor& editor, double reach, double widen) {
     auto& preview = editor.preview;
     preview.margin = std::max(48.0, std::ceil(reach));
     preview.widen = widen;
-    double step = std::max(44.0, preview.metrics.iconWidth + 16) + 8;
-    int width = static_cast<int>(std::ceil(5 * step + 380 + widen + 2 * (preview.margin - 48)));
+    double step = std::max(44.0, preview.metrics.iconWidth + 16) + kPreviewSpacing;
+    int width = static_cast<int>(std::ceil(5 * step + (2 * kDockPadding + kPreviewGap + kPreviewTray + 2 * 48) + widen +
+                                           2 * (preview.margin - 48)));
     int height = static_cast<int>(std::ceil(std::max(editor.compactLayout?140.0:420.0, preview.metrics.dockHeight + 48)));
     if (preview.width != width || preview.height != height) {
         CloseEditorPreview(editor);
@@ -9937,8 +9944,8 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         if (!liquid || preview.unavailable) CloseEditorPreview(editor);
         double dockHeight = preview.metrics.dockHeight;
         double buttonWidth = std::max(44.0, preview.metrics.iconWidth + 16);
-        double step = buttonWidth + 8;
-        double trayWidth = 240; // The preview's tray content, from its first icon past the clock.
+        double step = buttonWidth + kPreviewSpacing, firstButton = kDockPadding + kPreviewSpacing;
+        double trayWidth = kPreviewTray;
         auto pageValues = EditorPageValues(editor, 0);
         // Alignment places the dock on the host, so only the layout and shape show here. Edge and Edge arc
         // sit on the canvas bottom as a bottom taskbar sits on its screen edge.
@@ -9956,23 +9963,27 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         // first tray glyph, 16 DIP tall at the tray content's edge, as placed below.
         IconBox buttonIcon{0, (dockHeight - preview.metrics.iconHeight) / 2, (dockHeight + preview.metrics.iconHeight) / 2};
         double iconInset = (buttonWidth - preview.metrics.iconWidth) / 2;
-        auto outline = MakeOutline(style, trayWidth, radius, dockHeight, false,
-                                   {buttonPadding, std::min(buttonCorner, buttonWidth / 2), highlightPadding, highlightRadius,
-                                    IconBox{16 + iconInset, buttonIcon.top, buttonIcon.bottom},
-                                    IconBox{kDockPadding + trayWidth - (102 + preview.clock.Width()),
-                                            (dockHeight + drop - 34) / 2, (dockHeight + drop + 34) / 2},
-                                    IconBox{kDockPadding + iconInset, buttonIcon.top, buttonIcon.bottom},
-                                    IconBox{kDockPadding, (dockHeight + drop - 16) / 2, (dockHeight + drop + 16) / 2}});
-        // The buttons start 16 DIP into the dock, and the tray content sits Separate's gap after the last one, 28 DIP
-        // in Unified.
-        double trayGap = style.layout == DockLayout::Separate ? outline.gap : 28;
-        double dockWidth = 16 + 5 * step - 8 + trayGap + trayWidth + kDockPadding;
+        DockContent content{buttonPadding, std::min(buttonCorner, buttonWidth / 2), highlightPadding, highlightRadius,
+                            IconBox{firstButton + iconInset, buttonIcon.top, buttonIcon.bottom},
+                            IconBox{kDockPadding + trayWidth - (102 + preview.clock.Width()),
+                                    (dockHeight + drop - 34) / 2, (dockHeight + drop + 34) / 2},
+                            IconBox{kDockPadding + iconInset, buttonIcon.top, buttonIcon.bottom},
+                            IconBox{kDockPadding, (dockHeight + drop - 16) / 2, (dockHeight + drop + 16) / 2}};
+        // The preview has no host and grows its canvas to the dock, so FitDock gets a host with room for any dock and
+        // hands back the gap, Bar distance and curved tray end the settings ask for. The button area starts at the dock
+        // padding and ends with Separate's last button; Unified's runs on past it, which leaves the tray kPreviewGap
+        // after that button.
+        double trail = style.layout == DockLayout::Separate ? 0 : kPreviewGap - kGap;
+        double buttons = 5 * step + trail;
+        auto fit = FitDock(INFINITY, buttons, trayWidth, style, radius, dockHeight, content);
+        auto outline = PlacedOutline(fit, style, trayWidth, radius, dockHeight, false, content);
+        double dockWidth = kDockPadding + buttons + fit.gap + trayWidth + kDockPadding;
         // A traced outline clips the material, which the outer flares or the slanted walls widen past the dock band on
         // both sides.
         bool traced = NeedsPath(outline);
         float flare = static_cast<float>(OutlineReach(outline, dockHeight));
-        FitPreviewCanvas(editor, flare, trayGap - 28);
-        double left = preview.margin, trayLeft = left + 16 + 5 * step - 8 + trayGap;
+        FitPreviewCanvas(editor, flare, trail + fit.gap - kPreviewGap);
+        double left = preview.margin, trayLeft = left + kDockPadding + buttons + fit.gap;
         double y = edge ? preview.height - dockHeight : (preview.height - dockHeight) / 2;
         auto buttonInsets=GetButtonInsets({0,0},dockHeight,buttonPadding);
         double padding=buttonInsets.top;
@@ -9986,7 +9997,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         for (size_t i = 0; i < preview.buttons.size(); ++i) {
             auto button = preview.buttons[i];
             button.Width(buttonWidth);
-            Controls::Canvas::SetLeft(button, left + 16 + i * step);
+            Controls::Canvas::SetLeft(button, left + firstButton + i * step);
             button.Height(buttonHeight);
             button.CornerRadius({buttonCorner,buttonCorner,buttonCorner,buttonCorner});
             Controls::Canvas::SetTop(button, y + padding);
@@ -9995,7 +10006,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
             auto image = preview.appIcons[i];
             image.Width(preview.metrics.iconWidth);
             image.Height(preview.metrics.iconHeight);
-            Controls::Canvas::SetLeft(image, left + 16 + (i + 1) * step + (buttonWidth - preview.metrics.iconWidth) / 2);
+            Controls::Canvas::SetLeft(image, left + firstButton + (i + 1) * step + (buttonWidth - preview.metrics.iconWidth) / 2);
             Controls::Canvas::SetTop(image, y + (dockHeight - preview.metrics.iconHeight) / 2);
         }
         constexpr double trayOffsets[]{0, 38, 66};
@@ -10014,7 +10025,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         }
         preview.startIcon.Width(preview.metrics.iconWidth);
         preview.startIcon.Height(preview.metrics.iconHeight);
-        Controls::Canvas::SetLeft(preview.startIcon, left + 16 + (buttonWidth - preview.metrics.iconWidth) / 2);
+        Controls::Canvas::SetLeft(preview.startIcon, left + firstButton + (buttonWidth - preview.metrics.iconWidth) / 2);
         Controls::Canvas::SetTop(preview.startIcon, y + (dockHeight - preview.metrics.iconHeight) / 2);
         Controls::Canvas::SetLeft(preview.clock, trayLeft + 102);
         Controls::Canvas::SetTop(preview.clock, y + (dockHeight + drop - 34) / 2);
@@ -10068,7 +10079,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
                 for(size_t i=1;i<preview.buttons.size();++i) {
                     bool attention=i==3;
                     if(!ButtonGlassEnabled(theme,toggle(FieldIndex(L"button.liquidLayer")))) continue;
-                    float x = static_cast<float>(left + 16 + i * step + buttonWidth / 2);
+                    float x = static_cast<float>(left + firstButton + i * step + buttonWidth / 2);
                     float centerY = static_cast<float>(y + dockHeight / 2);
                     float4 rect{x,centerY,float(buttonWidth/2),float(buttonHeight/2)};
                     float nativeRadius=float(buttonCorner),clipRadius=float(buttonRadius);
