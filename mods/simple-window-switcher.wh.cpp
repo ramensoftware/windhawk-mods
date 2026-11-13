@@ -3259,6 +3259,9 @@ static HRESULT RegisterSwitcherThumbnail(HWND destination, HWND source, HTHUMBNA
             entry.visual = static_cast<IUnknown*>(visual);
             if (SUCCEEDED(hr) && handle && entry.visual) {
                 hr = g_sharedThumbnailDevice->CreateVisual(&entry.container);
+                // Soft borders anti-alias the rounded clip; the default hard
+                // mode leaves stair-stepped corners.
+                if (SUCCEEDED(hr)) hr = entry.container->SetBorderMode(DCOMPOSITION_BORDER_MODE_SOFT);
                 if (SUCCEEDED(hr)) hr = g_sharedThumbnailDevice->CreateRectangleClip(&entry.clip);
                 if (SUCCEEDED(hr)) hr = entry.container->SetClip(entry.clip);
                 if (SUCCEEDED(hr)) {
