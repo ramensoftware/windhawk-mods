@@ -6985,6 +6985,13 @@ static void GetSwitcherPosition(const RECT& workArea, int* outX, int* outY,
     } else { // center
         *outX = workArea.left + (w - width) / 2; *outY = workArea.top + (h - height) / 2;
     }
+    // A large margin must not push a switcher that fits off the screen.
+    if (width <= w) {
+        *outX = std::clamp(*outX, (int)workArea.left, (int)workArea.right - width);
+    }
+    if (height <= h) {
+        *outY = std::clamp(*outY, (int)workArea.top, (int)workArea.bottom - height);
+    }
 }
 
 static int GetCloseButtonCornerRadiusPx() {
@@ -21474,9 +21481,12 @@ static void LoadSettings() {
     g_settings.autoFitTasks = Wh_GetIntSetting(L"Dimensions.autoFitTasks");
     g_settings.defaultSwitcherPadding = LoadIntSetting(L"Dimensions.switcherPadding", 20);
     if (g_settings.defaultSwitcherPadding < 0) g_settings.defaultSwitcherPadding = 20;
+    // Paddings and offsets beyond a few hundred DIP grow the switcher past the screen.
+    if (g_settings.defaultSwitcherPadding > 300) g_settings.defaultSwitcherPadding = 300;
     g_settings.switcherPadding = g_settings.defaultSwitcherPadding;
     g_settings.entryPadding = LoadIntSetting(L"Dimensions.entryPadding", 16);
     if (g_settings.entryPadding < 0) g_settings.entryPadding = 16;
+    if (g_settings.entryPadding > 300) g_settings.entryPadding = 300;
     g_settings.showThumbnails = Wh_GetIntSetting(L"Appearance.Thumbnails.showThumbnails");
     g_settings.showCloseButton = Wh_GetIntSetting(L"Appearance.Thumbnails.showCloseButton");
     g_settings.showCloseButtonBackground = LoadAutoBoolSetting(L"Appearance.Thumbnails.showCloseButtonBackground", IsWin11OrGreater());
@@ -21585,9 +21595,11 @@ static void LoadSettings() {
     g_settings.showBadgeIconBackgroundShadow = LoadAutoBoolSetting(L"Appearance.BadgeLayout.showBadgeIconBackgroundShadow", IsWin11OrGreater());
     g_settings.badgeIconPadding = Wh_GetIntSetting(L"Appearance.BadgeLayout.badgeIconPadding");
     g_settings.badgeIconOffsetX = Wh_GetIntSetting(L"Appearance.BadgeLayout.badgeIconOffsetX");
-    g_settings.badgeIconOffsetY = Wh_GetIntSetting(L"Appearance.BadgeLayout.badgeIconOffsetY");
+    g_settings.badgeIconOffsetY = std::clamp(
+        Wh_GetIntSetting(L"Appearance.BadgeLayout.badgeIconOffsetY"), -300, 300);
     g_settings.badgeSwitcherPadding = LoadIntSetting(L"Appearance.BadgeLayout.badgeSwitcherPadding", LoadIntSetting(L"Dimensions.switcherPadding", 20));
     if (g_settings.badgeSwitcherPadding < 0) g_settings.badgeSwitcherPadding = 20;
+    if (g_settings.badgeSwitcherPadding > 300) g_settings.badgeSwitcherPadding = 300;
 
     // Dock layout settings
     LoadStringSetting(L"Appearance.DockLayout.dockIconPosition", g_settings.dockIconPosition, L"top");
@@ -21628,6 +21640,7 @@ static void LoadSettings() {
     g_settings.dockGridCenterRows = Wh_GetIntSetting(L"Appearance.DockLayout.dockGridCenterRows") != 0;
     g_settings.dockSwitcherPadding = LoadIntSetting(L"Appearance.DockLayout.dockSwitcherPadding", 11);
     if (g_settings.dockSwitcherPadding < 0) g_settings.dockSwitcherPadding = 11;
+    if (g_settings.dockSwitcherPadding > 300) g_settings.dockSwitcherPadding = 300;
 
     LoadStringSetting(L"Appearance.DockLayout.dockCloseButtonPosition", g_settings.dockCloseButtonPosition, L"topRight");
     if (wcscmp(g_settings.dockCloseButtonPosition, L"previewTopRight") == 0 ||
