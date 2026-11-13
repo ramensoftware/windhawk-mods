@@ -2,7 +2,7 @@
 // @id              top-taskbar-bleed
 // @name            Top Taskbar Bleed
 // @description     Bleeds the color of a maximized window's title bar into a top-docked taskbar behind the task buttons
-// @version         1.2.0
+// @version         1.2.1
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
@@ -130,7 +130,10 @@ drives those (the background is a gradient brush).
   taskbar's own theme when the panel hides - the one matching the current
   Windows mode, also when the mode was switched while the panel was showing.
   This is done per taskbar through XAML's `RequestedTheme`, so only the
-  affected monitor changes and the system theme itself is untouched.
+  affected monitor changes and the system theme itself is untouched. While
+  the taskbar handles a mode or accent change of its own, the mod steps
+  aside so the taskbar computes its background for the real theme, and
+  re-applies the panel's theme once it is done.
 
 ## Credits
 
@@ -2109,12 +2112,16 @@ wux::ElementTheme RestoreThemeValue(Island& isl) {
     return isl.originalTheme;
 }
 
-wux::ElementTheme ForcedThemeValue(Island& isl) {
-    return isl.forcedTheme == ThemeLight ? wux::ElementTheme::Light
-           : isl.forcedTheme == ThemeDark ? wux::ElementTheme::Dark
-                                          : RestoreThemeValue(isl);
-}
-
+// The taskbar's background doesn't follow RequestedTheme: its theme-change
+// handling computes it once, from the theme in effect while the handling
+// runs. When the Windows mode changes while a theme is forced, that can be the
+// forced theme (a light title bar, forced Light, the mode switched to dark:
+// the background is computed light, the panel covers it, and it is still
+// light when the panel hides and the restored Dark puts white text on it).
+// So once the theme is restored after such a change, the taskbar is asked to
+// run that handling again, now under its own theme, with the same
+// notification Windows sends for a mode change. The island's window only:
+// nothing else in the process is told.
 // The taskbar sets RequestedTheme on its root itself and rewrites it when the
 // system theme changes. A value saved once would go stale: forced Dark under a
 // dark system theme, then Windows switched to light and the panel hidden, would
@@ -2129,7 +2136,10 @@ wux::ElementTheme ForcedThemeValue(Island& isl) {
 // the panel hid and the theme was restored. The handling is let to finish
 // under the real theme (the panel covers the background meanwhile), and the
 // tracker re-asserts the forced theme kThemeReassertMs after the last write.
+bool g_releasingForTaskbar = false;  // a root write of our own from ReleaseForcedThemes: the callback stays quiet
+
 void OnRootThemeChanged(HWND hwnd, wux::FrameworkElement const& root) try {
+    if (g_releasingForTaskbar) return;  // our own release write (see ReleaseForcedThemes)
     auto isl = FindIslandByHwnd(hwnd);
     if (!isl || isl->forcedTheme == ThemeNone) return;
     wux::ElementTheme now = root.RequestedTheme();
@@ -2141,6 +2151,88 @@ void OnRootThemeChanged(HWND hwnd, wux::FrameworkElement const& root) try {
     Wh_Log(L"taskbar %p: root theme changed underneath to %d, re-asserting in %llu ms", hwnd, (int)now,
            kThemeReassertMs);
 } catch (...) {
+}
+
+// ---- Releasing the forced theme for the taskbar's own color handling -------
+// The taskbar recomputes its background colors when Windows tells it the
+// colors changed (WM_SETTINGCHANGE "ImmersiveColorSet", WM_THEMECHANGED, the
+// accent color), from the theme in effect while it does so - and it does so
+// more than once per switch (a mode switcher writes the apps and the system
+// mode separately, each with its own broadcast, a second apart). Re-asserting
+// the forced theme between two of those runs makes the later run compute the
+// background for the wrong theme, and that result stays until the next
+// switch: it was the light bar with white text the reporter saw. So the
+// forced theme is released *before* each such message is handled: a
+// WH_CALLWNDPROC hook on the taskbar thread sees every sent message before
+// its window procedure does (a message-id compare per sent message, nothing
+// more), writes the Windows mode's theme to every island root still forced,
+// and lets the tracker re-assert kThemeReassertMs after the last one, as it
+// already does for the taskbar's own root writes. A switch is a handful of
+// these messages over a few seconds, so the forced theme may be released and
+// re-asserted a few times; each time the bar's text follows for half a
+// second, which is what a theme switch looks like anyway.
+HHOOK g_settingChangeHook = nullptr;  // taskbar thread only
+
+bool IsColorChangeMessage(const CWPSTRUCT& cwp) {
+    switch (cwp.message) {
+        case WM_SETTINGCHANGE:
+        case WM_THEMECHANGED:
+        case WM_SYSCOLORCHANGE:
+        case WM_DWMCOLORIZATIONCOLORCHANGED:
+            return true;
+        default:
+            return false;
+    }
+}
+
+void ReleaseForcedThemes(const WCHAR* why) {
+    std::vector<std::shared_ptr<Island>> islands;
+    {
+        std::lock_guard lock(g_islandsMutex);
+        if (g_islands) islands.assign(g_islands->begin(), g_islands->end());
+    }
+    for (auto& isl : islands) {
+        if (isl->forcedTheme == ThemeNone) continue;
+        auto root = isl->themeRoot.get();
+        if (!root) continue;
+        try {
+            wux::ElementTheme mode = RestoreThemeValue(*isl);  // the registry already holds the new mode
+            g_releasingForTaskbar = true;
+            root.RequestedTheme(mode);
+            g_releasingForTaskbar = false;
+            g_themeReassertAt = (ULONGLONG)NowMs() + kThemeReassertMs;
+            RequestTick();
+            Wh_Log(L"taskbar %p: forced theme released to %d for the taskbar's color handling (%s)", isl->hwnd,
+                   (int)mode, why);
+        } catch (...) {
+            g_releasingForTaskbar = false;
+        }
+    }
+}
+
+LRESULT CALLBACK SettingChangeHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION && lParam && !g_unloading) {
+        const CWPSTRUCT& cwp = *reinterpret_cast<const CWPSTRUCT*>(lParam);
+        if (IsColorChangeMessage(cwp) && IsTaskbarWindowClass(cwp.hwnd)) {
+            WCHAR why[64];
+            swprintf_s(why, L"message %04X", cwp.message);
+            ReleaseForcedThemes(why);
+        }
+    }
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+void InstallSettingChangeHook() {
+    if (g_settingChangeHook) return;
+    g_settingChangeHook = SetWindowsHookExW(WH_CALLWNDPROC, SettingChangeHookProc, nullptr, GetCurrentThreadId());
+    if (!g_settingChangeHook) Wh_Log(L"SetWindowsHookEx(WH_CALLWNDPROC) for color changes failed");
+}
+
+void RemoveSettingChangeHook() {
+    if (g_settingChangeHook) {
+        UnhookWindowsHookEx(g_settingChangeHook);
+        g_settingChangeHook = nullptr;
+    }
 }
 
 wux::FrameworkElement ThemeRootOf(Island& isl) {
@@ -2500,6 +2592,7 @@ bool IsTaskbarWindowClass(HWND hWnd) {
 // still has no island.
 void WINAPI AttachAllTaskbars(void*) try {
     if (g_unloading) return;
+    InstallSettingChangeHook();
     PruneDeadIslands();
     bool missing = false;
     EnumThreadWindows(
@@ -2684,6 +2777,7 @@ void WINAPI CleanupIslandsOnTaskbarThread(void*) {
     for (auto& isl : all) TeardownIsland(*isl);
     all.clear();  // XAML objects released here, on their thread
     g_failedFrames.clear();
+    RemoveSettingChangeHook();
 }
 
 // ============================================================================
