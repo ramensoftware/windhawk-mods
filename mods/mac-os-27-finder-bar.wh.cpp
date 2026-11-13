@@ -96,7 +96,7 @@ Some Control Center tiles and menu items change real Windows settings, the same 
 
 Nothing is changed unless you click the matching tile or item.
 
-While the bar's volume and brightness indicator is on, Windows' own volume pill is kept minimized so only one shows. Turning the indicator or the mod off brings it back.
+While the bar's volume and brightness indicator is on, Windows' own volume pill is kept minimized so only one shows. Turning the indicator or the mod off brings it back; if the bar's process ever crashes, it comes back when Explorer restarts.
 
 ## Network use
 
@@ -524,6 +524,7 @@ static const UiDefault kUiDefaults[] = {
     {L"ccDimScreen", L"0"},
     {L"ccCloseAnim", L"cascade"},
     {L"ntfIconShape", L"round"},
+    {L"glassBeforeTint", L""},
     {L"showOsd", L"1"},
     {L"flyouts", L"1"},
     {L"showControlCenter", L"1"},
@@ -5523,20 +5524,32 @@ static bool CcEnsureResources() {
     return true;
 }
 
-static ID2D1Bitmap* DecodeImage(ID2D1RenderTarget* rt, const std::vector<BYTE>& bytes) {
+// maxSide > 0: reduz a imagem (se for maior) para no máximo esse lado, antes de virar bitmap.
+static ID2D1Bitmap* DecodeImage(ID2D1RenderTarget* rt, const std::vector<BYTE>& bytes, UINT maxSide = 0) {
     if (!g_wic || bytes.empty()) return nullptr;
     IWICStream* stream = nullptr;
     IWICBitmapDecoder* dec = nullptr;
     IWICBitmapFrameDecode* frame = nullptr;
     IWICFormatConverter* conv = nullptr;
+    IWICBitmapScaler* scaler = nullptr;
     ID2D1Bitmap* bmp = nullptr;
     if (SUCCEEDED(g_wic->CreateStream(&stream)) &&
         SUCCEEDED(stream->InitializeFromMemory(const_cast<BYTE*>(bytes.data()), (DWORD)bytes.size())) &&
         SUCCEEDED(g_wic->CreateDecoderFromStream(stream, nullptr, WICDecodeMetadataCacheOnLoad, &dec)) &&
         SUCCEEDED(dec->GetFrame(0, &frame)) && SUCCEEDED(g_wic->CreateFormatConverter(&conv)) &&
         SUCCEEDED(conv->Initialize(frame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr,
-                                   0.0, WICBitmapPaletteTypeMedianCut)))
-        rt->CreateBitmapFromWicBitmap(conv, nullptr, &bmp);
+                                   0.0, WICBitmapPaletteTypeMedianCut))) {
+        IWICBitmapSource* src = conv;
+        UINT w = 0, h = 0;
+        if (maxSide && SUCCEEDED(conv->GetSize(&w, &h)) && std::max(w, h) > maxSide &&
+            SUCCEEDED(g_wic->CreateBitmapScaler(&scaler))) {
+            double k = (double)maxSide / std::max(w, h);
+            UINT sw = std::max(1u, (UINT)std::lround(w * k)), sh = std::max(1u, (UINT)std::lround(h * k));
+            if (SUCCEEDED(scaler->Initialize(conv, sw, sh, WICBitmapInterpolationModeFant))) src = scaler;
+        }
+        rt->CreateBitmapFromWicBitmap(src, nullptr, &bmp);
+    }
+    SafeRelease(scaler);
     SafeRelease(conv);
     SafeRelease(frame);
     SafeRelease(dec);
@@ -7313,7 +7326,7 @@ static void CcRefreshLocal() {
 // cima à direita e some), em vez de sumir de uma vez.
 static void CloseControlCenter(bool refocus) {
     if (!g_cc.hwnd) return;
-    if (g_settings.openAnim == 0 || g_settings.ccCloseAnim == 4) {
+    if (g_settings.ccCloseAnim == 4) {  // "Nenhuma": fecha na hora (vale mesmo sem animação ao abrir)
         g_captureNeedsFlush = true;
         DestroyWindow(g_cc.hwnd);  // WM_DESTROY limpa o resto
         if (refocus) FocusActive();
@@ -9925,12 +9938,20 @@ static LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
-// A pílula de volume e brilho do próprio Windows (a janela NativeHWNDHost com
-// um DirectUIHWND, do Explorer). Com o indicador da barra ligado, ela fica
-// minimizada, e por isso não aparece mais; volta ao normal ao desligar o
-// indicador ou o mod. O Windows só cria essa janela na primeira vez que o
-// volume muda, então ela pode aparecer uma vez antes de ser escondida.
+// A pílula de volume e brilho do próprio Windows. Com o indicador da barra
+// ligado, ela não aparece mais; volta ao normal ao desligar o indicador ou o mod.
+// Há dois tipos, conforme a versão do Windows:
+//  - a antiga: a janela NativeHWNDHost com um DirectUIHWND, do Explorer. Ela fica
+//    minimizada;
+//  - a nova (24H2 em diante, em XAML): uma XamlExplorerHostIslandWindow do Explorer,
+//    sem título, com a ponte de conteúdo do XAML e o InputSite dentro. Ela fica
+//    transparente para o mouse, fora da tela e minimizada (é o que fazem o
+//    HideVolumeOSD e o FluentFlyout); minimizada só, o Windows a mostra de novo.
+// O Windows só cria a janela na primeira vez que o volume muda, então ela pode
+// aparecer uma vez antes de ser escondida.
 static HWND g_winOsdHidden = nullptr;
+static HWND g_winOsdIsland = nullptr;  // a nova, escondida
+static LONG_PTR g_winOsdIslandEx = 0;  // o estilo dela antes de esconder
 static HWND FindWinOsd() {
     HWND h = nullptr;
     while ((h = FindWindowExW(nullptr, h, L"NativeHWNDHost", L"")) != nullptr) {
@@ -9940,19 +9961,65 @@ static HWND FindWinOsd() {
     }
     return nullptr;
 }
+// A nova. O título vazio deixa de fora o Alt+Tab e a Visão de Tarefas, que usam a
+// mesma classe com título.
+static HWND FindWinOsdIsland() {
+    HWND h = nullptr;
+    while ((h = FindWindowExW(nullptr, h, L"XamlExplorerHostIslandWindow", nullptr)) != nullptr) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(h, &pid);
+        if (pid != ShellPid() || GetWindowTextLengthW(h) > 0) continue;
+        HWND bridge = FindWindowExW(h, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", L"DesktopWindowXamlSource");
+        if (bridge && FindWindowExW(bridge, nullptr, L"Windows.UI.Input.InputSite.WindowClass", nullptr)) return h;
+    }
+    return nullptr;
+}
+// O Explorer responde em até 300 ms? Travado, a barra desiste e nunca fica presa nele.
+static bool ShellAnswers(HWND h) {
+    DWORD_PTR r = 0;
+    return SendMessageTimeoutW(h, WM_NULL, 0, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 300, &r) != 0;
+}
+static void WinOsdIslandRestore() {
+    if (g_winOsdIsland && IsWindow(g_winOsdIsland) && ShellAnswers(g_winOsdIsland)) {
+        SetWindowLongPtrW(g_winOsdIsland, GWL_EXSTYLE, g_winOsdIslandEx);
+        SetWindowPos(g_winOsdIsland, nullptr, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+        ShowWindowAsync(g_winOsdIsland, SW_SHOWNOACTIVATE);
+    }
+    g_winOsdIsland = nullptr;
+}
 static void WinOsdApply() {
     if (g_settings.showOsd) {
         HWND h = FindWinOsd();
-        if (h && !IsIconic(h)) ShowWindow(h, SW_MINIMIZE);
+        // ShowWindowAsync e WM_SYSCOMMAND não bastam para a antiga: com as teclas de
+        // volume o Explorer mostra a pílula de novo; só o ShowWindow direto a mantém minimizada.
+        if (h && !IsIconic(h) && ShellAnswers(h)) ShowWindow(h, SW_MINIMIZE);
         if (h) g_winOsdHidden = h;
-    } else if (g_winOsdHidden) {
-        if (IsWindow(g_winOsdHidden) && IsIconic(g_winOsdHidden)) ShowWindow(g_winOsdHidden, SW_RESTORE);
-        g_winOsdHidden = nullptr;
+        HWND x = FindWinOsdIsland();
+        if (x && x != g_winOsdIsland) {
+            if (g_winOsdIsland) WinOsdIslandRestore();
+            if (ShellAnswers(x)) {
+                g_winOsdIsland = x;
+                g_winOsdIslandEx = GetWindowLongPtrW(x, GWL_EXSTYLE);
+            }
+        }
+        if (x && x == g_winOsdIsland && ShellAnswers(x)) {
+            SetWindowLongPtrW(x, GWL_EXSTYLE, g_winOsdIslandEx | WS_EX_LAYERED | WS_EX_TRANSPARENT);
+            SetWindowPos(x, nullptr, -99999, -99999, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+            ShowWindowAsync(x, SW_SHOWMINNOACTIVE);
+        }
+    } else {
+        if (g_winOsdHidden) {
+            if (IsWindow(g_winOsdHidden) && IsIconic(g_winOsdHidden)) ShowWindowAsync(g_winOsdHidden, SW_SHOWNOACTIVATE);
+            g_winOsdHidden = nullptr;
+        }
+        WinOsdIslandRestore();
     }
 }
 static void WinOsdRestore() {
-    if (g_winOsdHidden && IsWindow(g_winOsdHidden) && IsIconic(g_winOsdHidden)) ShowWindow(g_winOsdHidden, SW_RESTORE);
+    if (g_winOsdHidden && IsWindow(g_winOsdHidden) && IsIconic(g_winOsdHidden))
+        ShowWindowAsync(g_winOsdHidden, SW_SHOWNOACTIVATE);
     g_winOsdHidden = nullptr;
+    WinOsdIslandRestore();
 }
 
 static void OsdShow(int kind, int value, bool mute) {
@@ -11692,6 +11759,7 @@ static void BsSaveLook() {
 
 static void BarsApplyLive(bool geometry);
 static void BarsRestyle();
+static HWND BsWindow();
 static void BsSet(int val, int v) {
     if (const BsBoolKey* k = BsKeyFor(val)) {
         bool on = v != 0;
@@ -11844,12 +11912,26 @@ static void BsSet(int val, int v) {
         if (g_glass.tinted == want) return;
         g_glass.tinted = want;
         if (want) {
+            // Guarda o vidro de antes, para voltar a ele ao sair do tema.
+            wchar_t prev[64];
+            swprintf(prev, ARRAYSIZE(prev), L"%d;%d;%d;%d;%d", g_glass.liquid ? 1 : 0, g_glass.clear ? 1 : 0,
+                     g_glass.transparency, g_glass.blur, g_glass.refraction);
+            OvrSetStr(L"glassBeforeTint", prev);
             // Os padrões do tema no Siri Plus: limpo abaixo da cor, sem desfoque, refração 70 %.
             g_glass.liquid = true;
             g_glass.clear = true;
             g_glass.transparency = 100;
             g_glass.blur = 0;
             g_glass.refraction = 70;
+        } else {
+            int l, c, t, b, r;
+            if (swscanf(OvrStr(L"glassBeforeTint").c_str(), L"%d;%d;%d;%d;%d", &l, &c, &t, &b, &r) == 5) {
+                g_glass.liquid = l != 0;
+                g_glass.clear = c != 0;
+                g_glass.transparency = std::clamp(t, 0, 100);
+                g_glass.blur = std::clamp(b, 0, 100);
+                g_glass.refraction = std::clamp(r, 0, 100);
+            }
         }
         SaveGlassPrefs();
         TintApply();
@@ -11860,7 +11942,7 @@ static void BsSet(int val, int v) {
             static COLORREF custom[16] = {};
             DWORD c = g_settings.tintColor;
             CHOOSECOLORW cc{sizeof(cc)};
-            cc.hwndOwner = FindWindowW(kBsClass, nullptr);  // a janela de ajustes
+            cc.hwndOwner = BsWindow();  // a janela de ajustes
             cc.rgbResult = RGB((c >> 16) & 255, (c >> 8) & 255, c & 255);
             cc.lpCustColors = custom;
             cc.Flags = CC_FULLOPEN | CC_RGBINIT;
@@ -11977,6 +12059,7 @@ struct BarSettingsWnd {
 // encerramento do processo.
 [[clang::no_destroy]] static std::optional<BarSettingsWnd> g_bsStore{std::in_place};
 static BarSettingsWnd& g_bs = *g_bsStore;
+static HWND BsWindow() { return g_bs.hwnd; }
 
 static const float kBsOpenMs = 700.0f, kBsCloseMs = 420.0f;
 
@@ -16791,9 +16874,15 @@ static double IslOut() { return g_settings.islOut == 3 ? 520 : g_settings.islOut
 #define kIslShrink IslOut()
 
 // Histórico (sino na barra).
+// Uma fala da conversa: o que chegou ou o que você respondeu.
+struct IslandLine {
+    std::wstring text;
+    bool mine;
+};
 struct IslandHist {
-    IslandNote note;
+    IslandNote note;  // a mais nova da conversa (é ela que se abre e se responde)
     SYSTEMTIME at;
+    std::vector<IslandLine> thread;  // a conversa em ordem, ficando no painel até limpar
 };
 static std::vector<IslandHist> g_islHist;  // o mais novo no fim
 static int g_islUnread = 0;
@@ -17120,10 +17209,31 @@ static void IslandPush(const IslandNote& n, bool force) {
     // com algo a fazer (abrir a captura, a gravação, o download...). "Copiado",
     // Caps Lock e afins só aparecem na pílula.
     if (!force && (isNotif || !n.open.empty())) {
-        IslandHist h{n, {}};
-        GetLocalTime(&h.at);
-        g_islHist.push_back(h);
-        if (g_islHist.size() > 38) g_islHist.erase(g_islHist.begin());
+        std::wstring text = n.body.empty() ? n.sub : n.body;
+        // Mensagem nova da mesma conversa (mesmo app e mesmo remetente ou grupo):
+        // entra no cartão que já está no painel, em vez de abrir outro.
+        int same = -1;
+        if (isNotif && !n.title.empty())
+            for (int i = (int)g_islHist.size() - 1; i >= 0; i--)
+                if (g_islHist[i].note.isNotif && g_islHist[i].note.aumid == n.aumid && g_islHist[i].note.title == n.title) {
+                    same = i;
+                    break;
+                }
+        if (same >= 0) {
+            IslandHist h = std::move(g_islHist[same]);
+            g_islHist.erase(g_islHist.begin() + same);
+            h.note = n;
+            GetLocalTime(&h.at);
+            if (h.thread.empty() || h.thread.back().mine || h.thread.back().text != text) h.thread.push_back({text, false});
+            if (h.thread.size() > 30) h.thread.erase(h.thread.begin());
+            g_islHist.push_back(std::move(h));
+        } else {
+            IslandHist h{n, {}, {}};
+            GetLocalTime(&h.at);
+            if (isNotif) h.thread.push_back({text, false});
+            g_islHist.push_back(std::move(h));
+            if (g_islHist.size() > 38) g_islHist.erase(g_islHist.begin());
+        }
         if (isNotif || g_settings.islHistNotices) g_islUnread++;
         if (g_settings.islHistory) RedrawAll();
         NtfRefresh();  // painel de notificações aberto: entra na hora
@@ -17203,6 +17313,17 @@ static void IslandLeaveReply() {
 static void IslandReplyDone(bool ok, const IslandNote& n, const std::wstring& text) {
     IslandLeaveReply();
     if (ok) {
+        // A conversa continua no painel, com a resposta embaixo: dá para
+        // responder de novo ou limpar quando quiser.
+        for (int i = (int)g_islHist.size() - 1; i >= 0; i--) {
+            IslandHist& h = g_islHist[i];
+            if (h.note.isNotif && h.note.aumid == n.aumid && h.note.title == n.title) {
+                h.thread.push_back({text, true});
+                if (h.thread.size() > 30) h.thread.erase(h.thread.begin());
+                break;
+            }
+        }
+        NtfRefresh();
         IslandShow(0xE725, 0x30D158, L"Resposta enviada", n.app, L"", false, true);
         return;
     }
@@ -18180,21 +18301,36 @@ static bool FindActivator(const std::wstring& aumid, CLSID* out) {
 // Caminho no disco de uma imagem do toast: file:///, um caminho comum ou
 // ms-appdata:/// (as pastas do pacote do app). Endereços da internet não.
 static std::wstring ToastImagePath(const std::wstring& aumid, std::wstring src) {
+    // %XX são bytes em UTF-8 (ex.: Jo%C3%A3o): junta os bytes e converte de uma vez.
     auto unescape = [](const std::wstring& u) {
-        std::wstring o;
+        std::string bytes;
         for (size_t i = 0; i < u.size(); i++) {
             if (u[i] == L'%' && i + 2 < u.size() && iswxdigit(u[i + 1]) && iswxdigit(u[i + 2])) {
-                o += (wchar_t)wcstoul(u.substr(i + 1, 2).c_str(), nullptr, 16);
+                bytes += (char)wcstoul(u.substr(i + 1, 2).c_str(), nullptr, 16);
                 i += 2;
             } else {
-                o += u[i] == L'/' ? L'\\' : u[i];
+                wchar_t c = u[i] == L'/' ? L'\\' : u[i];
+                char buf[8];
+                int n = WideCharToMultiByte(CP_UTF8, 0, &c, 1, buf, sizeof(buf), nullptr, nullptr);
+                bytes.append(buf, n > 0 ? n : 0);
             }
         }
+        int n = MultiByteToWideChar(CP_UTF8, 0, bytes.data(), (int)bytes.size(), nullptr, 0);
+        std::wstring o(n > 0 ? n : 0, L'\0');
+        if (n > 0) MultiByteToWideChar(CP_UTF8, 0, bytes.data(), (int)bytes.size(), &o[0], n);
         return o;
     };
+    // Só arquivos num disco local (C:\\...): nada de rede (\\\\servidor) nem de caminhos de dispositivo.
+    auto localOnly = [](const std::wstring& p) {
+        bool drive = p.size() > 2 && iswalpha(p[0]) && p[1] == L':' && p[2] == L'\\';
+        if (!drive || p.find(L"\\\\") != std::wstring::npos) return std::wstring();
+        wchar_t root[4] = {p[0], L':', L'\\', 0};
+        UINT type = GetDriveTypeW(root);
+        return type == DRIVE_FIXED || type == DRIVE_REMOVABLE ? p : std::wstring();
+    };
     auto starts = [&](PCWSTR p) { return _wcsnicmp(src.c_str(), p, wcslen(p)) == 0; };
-    if (starts(L"file:///")) return unescape(src.substr(8));
-    if (src.size() > 2 && src[1] == L':' && (src[2] == L'\\' || src[2] == L'/')) return unescape(src);
+    if (starts(L"file:///")) return localOnly(unescape(src.substr(8)));
+    if (src.size() > 2 && src[1] == L':' && (src[2] == L'\\' || src[2] == L'/')) return localOnly(unescape(src));
     static const struct { PCWSTR prefix, folder; } kAppData[] = {
         {L"ms-appdata:///local/", L"LocalState"}, {L"ms-appdata:///temp/", L"TempState"},
         {L"ms-appdata:///roaming/", L"RoamingState"}};
@@ -18240,7 +18376,7 @@ static std::wstring ToastImagePath(const std::wstring& aumid, std::wstring src) 
                                               nullptr, OPEN_EXISTING, 0, nullptr);
         if (f != INVALID_HANDLE_VALUE) {
             LARGE_INTEGER size{};
-            if (GetFileSizeEx(f, &size) && size.QuadPart > 0 && size.QuadPart <= 4 * 1024 * 1024) {
+            if (GetFileSizeEx(f, &size) && size.QuadPart > 0 && size.QuadPart <= 1024 * 1024) {
                 auto data = std::make_shared<std::string>((size_t)size.QuadPart, '\0');
                 DWORD got = 0;
                 if (ReadFile(f, &(*data)[0], (DWORD)data->size(), &got, nullptr) && got == data->size()) m->avatar = data;
@@ -18299,7 +18435,7 @@ static DWORD WINAPI ReplyThreadProc(LPVOID p) {
                                    (void**)&cb)) &&
         cb) {
         if (job->open) {
-            AllowSetForegroundWindow(ASFW_ANY);  // o app pode vir para a frente
+            CoAllowSetForegroundWindow(cb, nullptr);  // só o app (o servidor COM dele) pode vir para a frente
             ok = SUCCEEDED(cb->Activate(job->note.aumid.c_str(), job->note.reply.launch.c_str(), nullptr, 0));
         } else {
             NotifInputData d{job->note.reply.inputId.c_str(), job->text.c_str()};
@@ -18902,7 +19038,7 @@ static ID2D1Bitmap* NtfAvatar(const IslandNote& n) {
     auto it = g_ntf.avatars.find(n.avatarId);
     if (it != g_ntf.avatars.end()) return it->second;
     std::vector<BYTE> bytes(n.avatar->begin(), n.avatar->end());
-    ID2D1Bitmap* bmp = DecodeImage(g_ntf.rt, bytes);
+    ID2D1Bitmap* bmp = DecodeImage(g_ntf.rt, bytes, (UINT)std::lround(96 * g_ntf.s));  // o dobro do círculo de 48 px
     if (!bmp) Wh_Log(L"Notification image: couldn't decode %zu bytes", bytes.size());
     if (g_ntf.avatars.size() > 60) {
         for (auto& kv : g_ntf.avatars) SafeRelease(kv.second);
@@ -19012,6 +19148,17 @@ static void NtfBuildGroups() {
 }
 
 static float NtfCardH(float s) { return 112 * s; }  // hora + foto/título/mensagem
+// A conversa no cartão: a mensagem de cima e, embaixo, as últimas falas
+// (até 4, uma linha cada), as suas com "Você:".
+static int NtfReplyLines(int histIdx) {
+    if (histIdx < 0 || histIdx >= (int)g_islHist.size()) return 0;
+    size_t n = g_islHist[histIdx].thread.size();
+    return n > 1 ? (int)std::min<size_t>(4, n - 1) : 0;
+}
+static float NtfRepliesH(int histIdx, float s) {
+    int n = NtfReplyLines(histIdx);
+    return n ? n * 20 * s + 6 * s : 0;
+}
 static float NtfRowH(float s) { return 64 * s; }    // item extra num grupo aberto
 
 static void NtfLayout() {
@@ -19026,7 +19173,8 @@ static void NtfLayout() {
         bool open = g_ntf.expanded.count(g.app) > 0;
         int extra = (int)g.items.size() - 1;
         bool canReply = !g.items.empty() && NtfCanReply(g_islHist[g.items[0]].note);
-        float h = NtfCardH(s) + (open ? extra * NtfRowH(s) : 0) + (extra > 0 || canReply ? 34 * s : 0);
+        float h = NtfCardH(s) + NtfRepliesH(g.items.empty() ? -1 : g.items[0], s) + (open ? extra * NtfRowH(s) : 0) +
+                  (extra > 0 || canReply ? 34 * s : 0);
         NtfBlock card{1, D2D1::RectF(x0, y, x1, y + h), (int)gi, g.items};
         if (canReply) card.reply = D2D1::RectF(x1 - 12 * s - 104 * s, y + h - 32 * s, x1 - 12 * s, y + h - 8 * s);
         g_ntf.blocks.push_back(card);
@@ -19365,8 +19513,43 @@ static void NtfRender() {
                 float tx = ax + av + 12 * s, tr = r.right - 14 * s;
                 NtfDrawText(rt, br, h.note.title, g_ntf.fTitle, D2D1::RectF(tx, ay, tr, ay + 22 * s), fg, 1);
                 std::wstring body = h.note.body.empty() ? h.note.sub : h.note.body;
+                int lines = k == 0 ? NtfReplyLines(b.items[0]) : 0;
+                if (lines) {
+                    // A fala logo antes das linhas de baixo fica no lugar da mensagem.
+                    const IslandLine& head = h.thread[h.thread.size() - 1 - lines];
+                    body = head.mine ? TF(L"Você: %s", {head.text}) : head.text;
+                }
                 NtfDrawText(rt, br, body, g_ntf.fBody, D2D1::RectF(tx, ay + 22 * s, tr, ay + (k == 0 ? 58 : 44) * s), dim, 2);
                 y += k == 0 ? 66 * s : NtfRowH(s);
+                if (lines) {
+                    // O resto da conversa: o que chegou, e "↩ Você: ..." no que você respondeu.
+                    size_t from = h.thread.size() - (size_t)lines;
+                    float ry = y;
+                    for (size_t q = from; q < h.thread.size(); q++) {
+                        const IslandLine& ln = h.thread[q];
+                        if (!ln.mine) {
+                            NtfDrawText(rt, br, ln.text, g_ntf.fSmall, D2D1::RectF(tx, ry, tr, ry + 20 * s), fg, 1);
+                            ry += 20 * s;
+                            continue;
+                        }
+                        {
+                            wchar_t gl = 0xE97A;  // seta de resposta
+                            IDWriteTextLayout* l = nullptr;
+                            if (SUCCEEDED(g_dwrite->CreateTextLayout(&gl, 1, g_ntf.fIcon, 16 * s, 20 * s, &l))) {
+                                DWRITE_TEXT_RANGE all = {0, 1};
+                                l->SetFontSize(11 * s, all);
+                                l->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                                br->SetColor(dim);
+                                rt->DrawTextLayout(D2D1::Point2F(tx, ry), l, br);
+                                l->Release();
+                            }
+                        }
+                        NtfDrawText(rt, br, TF(L"Você: %s", {ln.text}), g_ntf.fSmall,
+                                    D2D1::RectF(tx + 20 * s, ry, tr, ry + 20 * s), dim, 1);
+                        ry += 20 * s;
+                    }
+                    y += NtfRepliesH(b.items[0], s);
+                }
             }
             if (b.reply.right > b.reply.left) {
                 // Responder: abre o campo na pílula, que envia pelo app.
@@ -19544,7 +19727,8 @@ static int NtfItemAt(const NtfBlock& b, float y) {
     int item = b.items.empty() ? -1 : b.items[0];
     if (b.kind == 1 && b.group >= 0 && g_ntf.expanded.count(g_ntf.groups[b.group].app)) {
         float ly = y - g_ntf.view.top + g_ntf.scroll - b.r.top - 34 * g_ntf.s;
-        int k = ly < 66 * g_ntf.s ? 0 : 1 + (int)((ly - 66 * g_ntf.s) / NtfRowH(g_ntf.s));
+        float first = 66 * g_ntf.s + NtfRepliesH(b.items.empty() ? -1 : b.items[0], g_ntf.s);
+        int k = ly < first ? 0 : 1 + (int)((ly - first) / NtfRowH(g_ntf.s));
         if (k >= 0 && k < (int)b.items.size()) item = b.items[k];
     }
     return item;
@@ -19670,7 +19854,10 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 SendKeys(M_WIN, 'N');
             } else if (NtfOnReply(h, x, y)) {
                 NtfBlock b = g_ntf.blocks[h];
-                if (!b.items.empty() && b.items[0] < (int)g_islHist.size()) NtfReplyTo(g_islHist[b.items[0]].note);
+                if (!b.items.empty() && b.items[0] < (int)g_islHist.size()) {
+                    IslandNote n = g_islHist[b.items[0]].note;  // cópia: o histórico pode mudar no caminho
+                    NtfReplyTo(n);
+                }
             } else if (h >= 0 && h < (int)g_ntf.blocks.size()) {
                 NtfBlock b = g_ntf.blocks[h];
                 if (b.kind == 2 || (b.kind == 1 && b.items.size() > 1 && y - g_ntf.view.top + g_ntf.scroll < b.r.top + 32 * g_ntf.s)) {
@@ -22710,6 +22897,7 @@ const UiTr kUiTr[] = {
     {L"Cascata", L"Cascade", L"Cascada", L"Cascade", L"Kaskade", L"Cascata", L"层叠"},
     {L"Deslizar para cima", L"Slide up", L"Deslizar hacia arriba", L"Glisser vers le haut", L"Nach oben gleiten", L"Scorri verso l’alto", L"向上滑动"},
     {L"Nenhuma", L"None", L"Ninguna", L"Aucune", L"Keine", L"Nessuna", L"无"},
+    {L"Você: %s", L"You: %s", L"Tú: %s", L"Vous : %s", L"Du: %s", L"Tu: %s", L"你：%s"},
     {L"Formato dos ícones", L"Icon shape", L"Forma de los iconos", L"Forme des icônes", L"Symbolform", L"Forma delle icone", L"图标形状"},
     {L"Nas notificações: círculo ou o formato dos ícones do macOS", L"In notifications: a circle or the macOS icon shape", L"En las notificaciones: círculo o la forma de los iconos de macOS", L"Dans les notifications : un cercle ou la forme des icônes de macOS", L"In Mitteilungen: Kreis oder die Form der macOS-Symbole", L"Nelle notifiche: cerchio o la forma delle icone di macOS", L"通知中：圆形或 macOS 图标形状"},
     {L"Círculo", L"Circle", L"Círculo", L"Cercle", L"Kreis", L"Cerchio", L"圆形"},
