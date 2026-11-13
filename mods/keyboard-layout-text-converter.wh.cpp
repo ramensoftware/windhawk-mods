@@ -7,9 +7,8 @@
 // @github          https://github.com/omar-devloop
 // @homepage        https://github.com/omar-devloop/keyboard-layout-text-converter
 // @license         MIT
-// @include         explorer.exe
-// @compilerOptions -luser32 -lkernel32 -lshell32 -lgdi32 -lgdiplus
-// @architecture    x86-64
+// @include         windhawk.exe
+// @compilerOptions -luser32 -lkernel32 -lshell32 -lgdi32 -lgdiplus -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -21,15 +20,16 @@ Windows applications.
 
 ## How it works
 - Press the configured shortcut while text is selected (recommended), or use the
-  last-word fallback mode. The default shortcut is left Ctrl + left Shift.
-  A modifier-only shortcut only converts when the keys are pressed and released
-  on their own; pressing another key (e.g. Ctrl+Shift+T) cancels it.
-- The shortcut keypress is swallowed (for regular combos) and the conversion
-  starts as soon as the keys are released.
+  last-word fallback mode. The default shortcut is Alt+X.
+- A regular key combination is swallowed, and the conversion starts as soon as
+  the keys are released. Modifier-only shortcuts such as Ctrl+Shift are also
+  supported, but they can collide with other Windows actions (for example
+  switching the keyboard layout), so a regular combination is recommended.
 - The mod copies the target text, detects the likely source/target keyboard
   layout among the keyboard layouts installed on your device, converts the text
   by key positions between layouts, then pastes the converted text back.
-- By default the original clipboard text content is restored after replacement.
+- By default the previous clipboard content is restored after replacement, in
+  all of its formats (text, images, files and so on).
 - An optional small success toast can be enabled in the settings; it appears in
   the bottom-right screen corner after each conversion.
 
@@ -38,22 +38,33 @@ Windows applications.
   depending on the active/installed layouts and text.
 - Works best when at least two keyboard layouts/languages are installed.
 
+## Similar mods
+- Arabic Keyboard Layout Fixer converts between a fixed Arabic/English pair.
+  This mod builds the mapping from every installed layout, and adds a
+  previous-word fallback, cycle mode, optional layout switching and a toast.
+
 ## Notes and limitations
 - Replacement is clipboard-based (copy/paste simulation), so behavior can vary
   in apps with custom clipboard/shortcut handling.
+- In console windows, Ctrl+C without a selection interrupts the running
+  command, so the previous-word fallback is skipped there; select the text
+  instead. Editors such as VS Code or Visual Studio copy the current line when
+  nothing is selected, so the fallback can paste an extra line there.
+- The shortcut is swallowed globally, which shadows apps that use it themselves
+  (for example Microsoft Word binds Alt+X); change the shortcut if needed.
 - The mod may not be able to interact with elevated (UIPI) windows, secure
   fields, or some terminals/remote apps.
 - Very short or ambiguous text can be hard to auto-detect; use a longer
   selection or adjust settings if needed.
-- Runs inside `explorer.exe`.
+- Runs as a Windhawk tool mod in a dedicated `windhawk.exe` process.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- hotkey: "LCtrl+LShift"
+- hotkey: "Alt+X"
   $name: "Conversion shortcut"
-  $description: "Global shortcut to convert text. The conversion starts when the shortcut keys are released. Supports modifier-only combinations (e.g. LCtrl+LShift) and regular combos (e.g. Ctrl+Alt+Space, Win+Shift+F12). Use L/R prefixes to pick a side."
+  $description: "Global shortcut to convert text. A regular combination such as Alt+X is recommended; modifier-only combinations (e.g. LCtrl+LShift) are supported too, but they can collide with Windows actions such as switching the keyboard layout. Use L/R prefixes to pick a side."
 - mode: auto
   $name: "Conversion mode"
   $options:
@@ -69,16 +80,16 @@ Windows applications.
   $description: "What text to convert when the shortcut is pressed."
 - restoreClipboard: true
   $name: "Restore clipboard"
-  $description: "Restore previous clipboard Unicode text after conversion."
+  $description: "Restore the previous clipboard content, in all of its formats, after conversion."
 - showNotification: false
   $name: "Show notification"
   $description: "Show a small success toast in the screen corner after a successful conversion."
 - switchLayout: false
   $name: "Switch keyboard layout after convert"
   $description: "Try to switch the active keyboard layout to the detected target layout."
-- actionDelayMs: 40
-  $name: "Clipboard timeout (ms)"
-  $description: "Base timeout in milliseconds for clipboard copy/paste handshakes. Increase it if conversions fail in slow applications."
+- actionDelayMs: 150
+  $name: "Clipboard wait (ms)"
+  $description: "Minimum time in milliseconds to wait for the clipboard after copy and paste. Increase it if conversions fail in slow applications."
 */
 // ==/WindhawkModSettings==
 
@@ -88,7 +99,10 @@ Windows applications.
 
 #include <windows.h>
 #include <shellapi.h>
+#include <shellscalingapi.h>
 #include <gdiplus.h>
+
+#include <windhawk_utils.h>
 
 #include <algorithm>
 #include <cctype>
@@ -104,17 +118,17 @@ Windows applications.
 
 namespace {
 
-template <typename... Args>
-void Logf(const wchar_t* fmt, Args... args) {
-    wchar_t buf[512];
-    _snwprintf_s(buf, _countof(buf), _TRUNCATE, fmt, args...);
-    Wh_Log(L"%s", buf);
-    OutputDebugStringW(L"[KLTC] ");
-    OutputDebugStringW(buf);
-    OutputDebugStringW(L"\n");
-}
-
 constexpr UINT WM_APP_CONVERT = WM_APP + 0x51;
+
+// A modifier-only shortcut held longer than this is treated as regular
+// modifier usage rather than a shortcut, which keeps Ctrl+Shift+drag and
+// similar accidental triggers from converting text.
+constexpr ULONGLONG kHotkeyMaxHoldMs = 1500;
+
+// Clipboard snapshot limits. Larger formats are skipped instead of blocking
+// the conversion.
+constexpr SIZE_T kClipboardFormatLimit = 8 * 1024 * 1024;
+constexpr SIZE_T kClipboardTotalLimit = 16 * 1024 * 1024;
 
 struct Hotkey {
     UINT modifiers = 0;  // MOD_* | MOD_NOREPEAT (we ignore norepeat in parsing)
@@ -127,35 +141,41 @@ struct Hotkey {
 };
 
 struct Settings {
-    std::wstring hotkeyStr = L"LCtrl+LShift";
+    std::wstring hotkeyStr = L"Alt+X";
     Hotkey hotkey;
     std::wstring mode = L"auto";
     std::wstring scope = L"selection-first";
     bool restoreClipboard = true;
     bool switchLayout = false;
     bool showNotification = false;
-    int actionDelayMs = 40;
+    int actionDelayMs = 150;
 };
 
 struct KeyStroke {
     UINT vk = 0;
-    UINT scan = 0;
     bool shift = false;
 };
 
 struct LayoutMap {
-    HKL hkl = nullptr;
     std::wstring charsForKey[256][2];  // [vk][shift] -> produced char(s)
     std::unordered_map<wchar_t, KeyStroke> keyForChar;
     std::unordered_map<wchar_t, KeyStroke> keyForCharShift;
 };
 
+struct ClipboardSnapshot {
+    bool valid = false;
+    DWORD seq = 0;
+    std::vector<std::pair<UINT, std::vector<BYTE>>> items;
+};
+
 Settings g_settings;
+Hotkey g_hotkeyForHook;
 std::mutex g_settingsMutex;
 std::mutex g_convertMutex;
 std::mutex g_layoutMutex;
 
 HHOOK g_keyboardHook = nullptr;
+HHOOK g_mouseHook = nullptr;
 HANDLE g_workerThread = nullptr;    // hook + message pump thread
 DWORD g_workerThreadId = 0;
 HANDLE g_convertThread = nullptr;   // conversion thread, kept separate so the
@@ -167,6 +187,7 @@ UINT g_suppressedHotkeyVk = 0;
 // Combo-release tracking. Only touched on the hook thread.
 bool g_keyDown[256] = {};
 bool g_hotkeyPending = false;
+ULONGLONG g_hotkeyArmTick = 0;
 
 std::vector<HKL> g_layouts;
 std::unordered_map<UINT_PTR, LayoutMap> g_layoutMaps;
@@ -211,12 +232,24 @@ UINT ParseVkToken(const std::wstring& tokenRaw) {
         wchar_t c = token[0];
         if (c >= L'a' && c <= L'z') return (UINT)(L'A' + (c - L'a'));
         if (c >= L'0' && c <= L'9') return (UINT)c;
-    }
-    if (token.rfind(L"0x", 0) == 0 || token.rfind(L"vk_", 0) == 0) {
-        // try parse hex/decimal after prefix best-effort
+        switch (c) {
+            case L';': case L':': return VK_OEM_1;
+            case L'=': case L'+': return VK_OEM_PLUS;
+            case L',': case L'<': return VK_OEM_COMMA;
+            case L'-': case L'_': return VK_OEM_MINUS;
+            case L'.': case L'>': return VK_OEM_PERIOD;
+            case L'/': case L'?': return VK_OEM_2;
+            case L'`': case L'~': return VK_OEM_3;
+            case L'[': case L'{': return VK_OEM_4;
+            case L'\\': case L'|': return VK_OEM_5;
+            case L']': case L'}': return VK_OEM_6;
+            case L'\'': case L'"': return VK_OEM_7;
+            default: return 0;
+        }
     }
     if (token[0] >= L'0' && token[0] <= L'9') {
-        return (UINT)wcstoul(token.c_str(), nullptr, 0);
+        DWORD value = wcstoul(token.c_str(), nullptr, 0);
+        return (value >= 1 && value <= 0xFF) ? (UINT)value : 0;
     }
     if (token == L"space") return VK_SPACE;
     if (token == L"tab") return VK_TAB;
@@ -233,6 +266,25 @@ UINT ParseVkToken(const std::wstring& tokenRaw) {
     if (token == L"right") return VK_RIGHT;
     if (token == L"up") return VK_UP;
     if (token == L"down") return VK_DOWN;
+    if (token == L"pause" || token == L"break") return VK_PAUSE;
+    if (token == L"capslock" || token == L"caps") return VK_CAPITAL;
+    if (token == L"scrolllock") return VK_SCROLL;
+    if (token == L"numlock") return VK_NUMLOCK;
+    if (token == L"printscreen" || token == L"prtsc" || token == L"snapshot") {
+        return VK_SNAPSHOT;
+    }
+    if (token == L"apps" || token == L"contextmenu") return VK_APPS;
+    if (token == L"semicolon") return VK_OEM_1;
+    if (token == L"equals" || token == L"equal") return VK_OEM_PLUS;
+    if (token == L"comma") return VK_OEM_COMMA;
+    if (token == L"minus" || token == L"dash") return VK_OEM_MINUS;
+    if (token == L"period" || token == L"dot") return VK_OEM_PERIOD;
+    if (token == L"slash") return VK_OEM_2;
+    if (token == L"backtick" || token == L"grave") return VK_OEM_3;
+    if (token == L"lbracket" || token == L"bracketleft") return VK_OEM_4;
+    if (token == L"backslash") return VK_OEM_5;
+    if (token == L"rbracket" || token == L"bracketright") return VK_OEM_6;
+    if (token == L"quote" || token == L"apostrophe") return VK_OEM_7;
     if (token.rfind(L"f", 0) == 0 && token.size() <= 3) {
         int n = _wtoi(token.c_str() + 1);
         if (n >= 1 && n <= 24) return VK_F1 + (n - 1);
@@ -244,6 +296,7 @@ Hotkey ParseHotkey(const std::wstring& text) {
     Hotkey hk;
     UINT mods = 0;
     UINT vk = 0;
+    bool badToken = false;
     auto addMod = [&](UINT mod, int idx, UINT sideVk) {
         mods |= mod;
         if (sideVk) hk.modVk[idx] = sideVk;
@@ -279,7 +332,13 @@ Hotkey ParseHotkey(const std::wstring& text) {
             } else if (low == L"rwin" || low == L"rightwin") {
                 addMod(MOD_WIN, 3, VK_RWIN);
             } else {
-                vk = ParseVkToken(part);
+                UINT parsed = ParseVkToken(part);
+                if (parsed && !vk) {
+                    vk = parsed;
+                } else {
+                    // Unknown key name or more than one non-modifier key.
+                    badToken = true;
+                }
             }
         }
         if (plus == std::wstring::npos) break;
@@ -287,8 +346,10 @@ Hotkey ParseHotkey(const std::wstring& text) {
     }
     hk.modifiers = mods;
     hk.vk = vk;
-    hk.modifierOnly = (vk == 0 && mods != 0);
-    hk.valid = (vk != 0) || hk.modifierOnly;
+    // An unknown or duplicate key name invalidates the whole shortcut; it must
+    // not silently degrade to a modifier-only one.
+    hk.modifierOnly = !badToken && vk == 0 && mods != 0;
+    hk.valid = !badToken && ((vk != 0) || hk.modifierOnly);
     if (vk != 0) {
         // Side-specific info is only meaningful for modifier-only shortcuts.
         for (auto& m : hk.modVk) m = 0;
@@ -298,40 +359,47 @@ Hotkey ParseHotkey(const std::wstring& text) {
 
 void LoadSettings() {
     Settings s;
-    PCWSTR hotkeyStr = Wh_GetStringSetting(L"hotkey");
-    if (hotkeyStr && *hotkeyStr) s.hotkeyStr = hotkeyStr;
-    if (hotkeyStr) Wh_FreeStringSetting(hotkeyStr);
+    WindhawkUtils::StringSetting hotkeySetting =
+        WindhawkUtils::StringSetting::make(L"hotkey");
+    if (*hotkeySetting.get()) s.hotkeyStr = hotkeySetting.get();
 
-    PCWSTR mode = Wh_GetStringSetting(L"mode");
-    if (mode && *mode) s.mode = mode;
-    if (mode) Wh_FreeStringSetting(mode);
+    WindhawkUtils::StringSetting modeSetting =
+        WindhawkUtils::StringSetting::make(L"mode");
+    if (*modeSetting.get()) s.mode = modeSetting.get();
 
-    PCWSTR scope = Wh_GetStringSetting(L"scope");
-    if (scope && *scope) s.scope = scope;
-    if (scope) Wh_FreeStringSetting(scope);
+    WindhawkUtils::StringSetting scopeSetting =
+        WindhawkUtils::StringSetting::make(L"scope");
+    if (*scopeSetting.get()) s.scope = scopeSetting.get();
 
     s.restoreClipboard = Wh_GetIntSetting(L"restoreClipboard") != 0;
     s.switchLayout = Wh_GetIntSetting(L"switchLayout") != 0;
     s.showNotification = Wh_GetIntSetting(L"showNotification") != 0;
     s.actionDelayMs = Wh_GetIntSetting(L"actionDelayMs");
-    if (s.actionDelayMs <= 0) s.actionDelayMs = 40;
-    if (s.actionDelayMs < 10) s.actionDelayMs = 10;
-    if (s.actionDelayMs > 500) s.actionDelayMs = 500;
+    if (s.actionDelayMs < 30) s.actionDelayMs = 150;
+    if (s.actionDelayMs > 2000) s.actionDelayMs = 2000;
 
     s.hotkey = ParseHotkey(s.hotkeyStr);
 
-    Logf(L"Settings: hotkey=%s valid=%d mode=%s scope=%s restoreClipboard=%d switchLayout=%d showNotification=%d delay=%d",
-         s.hotkeyStr.c_str(), s.hotkey.valid ? 1 : 0, s.mode.c_str(), s.scope.c_str(),
-         s.restoreClipboard ? 1 : 0, s.switchLayout ? 1 : 0, s.showNotification ? 1 : 0,
-         s.actionDelayMs);
+    Wh_Log(L"Settings: hotkey=%s valid=%d mode=%s scope=%s "
+           L"restoreClipboard=%d switchLayout=%d showNotification=%d delay=%d",
+           s.hotkeyStr.c_str(), s.hotkey.valid ? 1 : 0, s.mode.c_str(),
+           s.scope.c_str(), s.restoreClipboard ? 1 : 0,
+           s.switchLayout ? 1 : 0, s.showNotification ? 1 : 0,
+           s.actionDelayMs);
 
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settings = s;
+    g_hotkeyForHook = s.hotkey;
 }
 
 Settings GetSettingsCopy() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     return g_settings;
+}
+
+Hotkey GetHotkeyForHook() {
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    return g_hotkeyForHook;
 }
 
 bool IsExtendedVk(UINT vk) {
@@ -449,6 +517,40 @@ bool OpenClipboardWithRetry(HWND owner = nullptr) {
     }
 }
 
+UINT GetExcludeClipboardFormat() {
+    static UINT format =
+        RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
+    return format;
+}
+
+// Keeps our own clipboard writes out of the Win+V history and Cloud Clipboard.
+void AddClipboardExclusionMarker() {
+    UINT format = GetExcludeClipboardFormat();
+    if (!format) return;
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD));
+    if (!h) return;
+    DWORD* p = (DWORD*)GlobalLock(h);
+    if (p) {
+        *p = 1;
+        GlobalUnlock(h);
+    }
+    if (!SetClipboardData(format, h)) GlobalFree(h);
+}
+
+// Formats which hold a GDI handle or private data must not be copied as a
+// plain memory block.
+bool IsSnapshotSkippedFormat(UINT format) {
+    if (format == CF_BITMAP || format == CF_ENHMETAFILE ||
+        format == CF_METAFILEPICT || format == CF_PALETTE ||
+        format == CF_OWNERDISPLAY) {
+        return true;
+    }
+    if (format >= CF_DSPTEXT && format <= CF_DSPENHMETAFILE) return true;
+    if (format >= CF_PRIVATEFIRST && format <= CF_PRIVATELAST) return true;
+    if (format >= CF_GDIOBJFIRST && format <= CF_GDIOBJLAST) return true;
+    return false;
+}
+
 std::wstring GetClipboardUnicodeText() {
     std::wstring text;
     if (!OpenClipboardWithRetry()) return text;
@@ -464,7 +566,67 @@ std::wstring GetClipboardUnicodeText() {
     return text;
 }
 
+ClipboardSnapshot SaveClipboard() {
+    ClipboardSnapshot snapshot;
+    if (!OpenClipboardWithRetry()) return snapshot;
+
+    snapshot.valid = true;
+    snapshot.seq = GetClipboardSequenceNumber();
+
+    SIZE_T total = 0;
+    for (UINT format = 0; (format = EnumClipboardFormats(format)) != 0;) {
+        if (IsSnapshotSkippedFormat(format)) continue;
+
+        HANDLE h = GetClipboardData(format);
+        if (!h) continue;
+        SIZE_T size = GlobalSize(h);
+        if (size == 0 || size > kClipboardFormatLimit ||
+            total + size > kClipboardTotalLimit) {
+            continue;
+        }
+        const void* p = GlobalLock(h);
+        if (!p) continue;
+        std::vector<BYTE> data(size);
+        memcpy(data.data(), p, size);
+        GlobalUnlock(h);
+        snapshot.items.emplace_back(format, std::move(data));
+        total += size;
+    }
+
+    CloseClipboard();
+    return snapshot;
+}
+
+// Restores a snapshot, unless the clipboard was replaced in the meantime.
+void RestoreClipboard(const ClipboardSnapshot& snapshot) {
+    if (!snapshot.valid) return;
+    // Nothing restorable: leave whatever is on the clipboard instead of
+    // emptying it, so no data is lost.
+    if (snapshot.items.empty()) return;
+    if (GetClipboardSequenceNumber() == snapshot.seq) return;
+    if (!OpenClipboardWithRetry()) return;
+
+    EmptyClipboard();
+    for (const auto& item : snapshot.items) {
+        HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, item.second.size());
+        if (!h) continue;
+        void* dst = GlobalLock(h);
+        if (!dst) {
+            GlobalFree(h);
+            continue;
+        }
+        memcpy(dst, item.second.data(), item.second.size());
+        GlobalUnlock(h);
+        if (!SetClipboardData(item.first, h)) GlobalFree(h);
+    }
+    AddClipboardExclusionMarker();
+    CloseClipboard();
+}
+
 bool SetClipboardUnicodeText(const std::wstring& text) {
+    // Never write an empty clipboard: "restoring" no text would wipe the
+    // formats that aren't plain text.
+    if (text.empty()) return false;
     if (!OpenClipboardWithRetry()) return false;
     EmptyClipboard();
     SIZE_T bytes = (text.size() + 1) * sizeof(wchar_t);
@@ -479,14 +641,17 @@ bool SetClipboardUnicodeText(const std::wstring& text) {
         GlobalUnlock(h);
     }
     bool ok = SetClipboardData(CF_UNICODETEXT, h) != nullptr;
+    if (ok) {
+        AddClipboardExclusionMarker();
+    } else {
+        GlobalFree(h);
+    }
     CloseClipboard();
-    if (!ok) GlobalFree(h);
     return ok;
 }
 
 void BuildLayoutMap(HKL hkl, LayoutMap& map) {
     map = {};
-    map.hkl = hkl;
     for (int shift = 0; shift <= 1; shift++) {
         BYTE state[256] = {};
         if (shift) state[VK_SHIFT] = 0x80;
@@ -518,16 +683,33 @@ void BuildLayoutMap(HKL hkl, LayoutMap& map) {
                 continue;
             }
             if (rc > 0) {
-                wchar_t ch = buf[0];
-                map.charsForKey[vk][shift] = std::wstring(1, ch);
-                auto& rev = shift ? map.keyForCharShift : map.keyForChar;
-                if (rev.find(ch) == rev.end()) rev[ch] = KeyStroke{vk, scan, shift != 0};
-                if (iswalpha(ch)) {
-                    wchar_t lo = (wchar_t)towlower(ch);
-                    wchar_t up = (wchar_t)towupper(ch);
-                    if (rev.find(lo) == rev.end()) rev[lo] = KeyStroke{vk, scan, shift != 0};
-                    if (rev.find(up) == rev.end()) rev[up] = KeyStroke{vk, scan, shift != 0};
-                }
+                map.charsForKey[vk][shift] = std::wstring(1, buf[0]);
+            }
+        }
+    }
+
+    // The reverse maps are built after both tables are filled, so that
+    // uppercase aliases pick the keystroke that actually produces them. For
+    // example, an uppercase letter whose shifted output is punctuation must
+    // keep Shift, otherwise the punctuation converts to the unshifted symbol.
+    for (int shift = 0; shift <= 1; shift++) {
+        const int otherShift = shift ? 0 : 1;
+        for (UINT vk = 0x20; vk < 256; vk++) {
+            const std::wstring& produced = map.charsForKey[vk][shift];
+            if (produced.size() != 1) continue;
+            wchar_t ch = produced[0];
+            auto add = [&](wchar_t c, bool needsShift) {
+                auto& rev = needsShift ? map.keyForCharShift : map.keyForChar;
+                if (rev.find(c) == rev.end()) rev[c] = KeyStroke{vk, needsShift};
+            };
+            add(ch, shift != 0);
+            if (iswalpha(ch)) {
+                wchar_t other = shift ? (wchar_t)towlower(ch)
+                                      : (wchar_t)towupper(ch);
+                const std::wstring& otherProduced =
+                    map.charsForKey[vk][otherShift];
+                add(other,
+                    otherProduced.size() == 1 && otherProduced[0] == other);
             }
         }
     }
@@ -664,10 +846,8 @@ std::wstring ConvertUsingPair(const std::wstring& text, HKL source, HKL target, 
 bool ActivateTargetKeyboardLayout(HKL hkl) {
     if (!hkl) return false;
     HWND fg = GetForegroundWindow();
-    if (fg) {
-        PostMessage(fg, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)hkl);
-    }
-    return ::ActivateKeyboardLayout(hkl, KLF_SETFORPROCESS) != nullptr;
+    if (!fg) return false;
+    return PostMessage(fg, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)hkl) != FALSE;
 }
 
 bool ConvertTextAutoOrCycle(const std::wstring& input, const Settings& s, std::wstring& output, HKL& chosenTarget) {
@@ -1015,7 +1195,7 @@ LRESULT CALLBACK ToastWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 // Fixed corner success toast, independent of the active window.
 void ShowToast() {
     if (!g_gdiplusReady) {
-        Logf(L"Toast skipped: GDI+ is not initialized");
+        Wh_Log(L"Toast skipped: GDI+ is not initialized");
         return;
     }
 
@@ -1045,15 +1225,25 @@ void ShowToast() {
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         wc.lpszClassName = g_toastClass;
         if (!RegisterClassExW(&wc)) {
-            Logf(L"RegisterClassEx(toast) failed: %u", GetLastError());
+            Wh_Log(L"RegisterClassEx(toast) failed: %u", GetLastError());
             return;
         }
         g_toastClassRegistered = true;
-        Logf(L"Toast class registered: %s", g_toastClass);
+        Wh_Log(L"Toast class registered: %s", g_toastClass);
     }
 
+    // The toast follows the monitor under the cursor, so use that monitor's DPI.
+    POINT cursor = {};
+    GetCursorPos(&cursor);
+    HMONITOR mon = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+
     float scale = 1.0f;
-    {
+    UINT dpiX = 96;
+    UINT dpiY = 96;
+    if (mon && SUCCEEDED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) &&
+        dpiX >= 48) {
+        scale = (float)dpiX / 96.0f;
+    } else {
         UINT dpi = GetDpiForSystem();
         if (dpi >= 48) {
             scale = (float)dpi / 96.0f;
@@ -1106,11 +1296,8 @@ void ShowToast() {
     layout.closeHalf = closeSize / 2;
 
     // Bottom-right corner of the monitor under the cursor.
-    POINT cursor = {};
-    GetCursorPos(&cursor);
     MONITORINFO mi = {};
     mi.cbSize = sizeof(mi);
-    HMONITOR mon = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
     GetMonitorInfoW(mon, &mi);
 
     const int margin = ToastPx(12, scale);
@@ -1122,7 +1309,7 @@ void ShowToast() {
     // Offscreen 32bpp surface for per-pixel alpha (UpdateLayeredWindow).
     HDC screenDC = GetDC(nullptr);
     if (!screenDC) {
-        Logf(L"Toast: GetDC failed");
+        Wh_Log(L"Toast: GetDC failed");
         return;
     }
     g_toastMemDC = CreateCompatibleDC(screenDC);
@@ -1136,13 +1323,13 @@ void ShowToast() {
     g_toastDib = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &g_toastBits, nullptr, 0);
     ReleaseDC(nullptr, screenDC);
     if (!g_toastMemDC || !g_toastDib || !g_toastBits) {
-        Logf(L"Toast DIB creation failed: %u", GetLastError());
+        Wh_Log(L"Toast DIB creation failed: %u", GetLastError());
         DestroyToastResources();
         return;
     }
     g_toastOldDib = SelectObject(g_toastMemDC, g_toastDib);
     if (!g_toastOldDib) {
-        Logf(L"Toast SelectObject failed: %u", GetLastError());
+        Wh_Log(L"Toast SelectObject failed: %u", GetLastError());
         DestroyToastResources();
         return;
     }
@@ -1151,7 +1338,7 @@ void ShowToast() {
         Gdiplus::Bitmap bitmap(layout.width, layout.height, layout.width * 4,
                                PixelFormat32bppPARGB, (BYTE*)g_toastBits);
         if (bitmap.GetLastStatus() != Gdiplus::Ok) {
-            Logf(L"Toast bitmap creation failed");
+            Wh_Log(L"Toast bitmap creation failed");
             DestroyToastResources();
             return;
         }
@@ -1163,7 +1350,7 @@ void ShowToast() {
         WS_POPUP, x, y, layout.width, layout.height, nullptr, nullptr, g_toastInstance,
         nullptr);
     if (!hwnd) {
-        Logf(L"CreateWindowEx(toast) failed: %u", GetLastError());
+        Wh_Log(L"CreateWindowEx(toast) failed: %u", GetLastError());
         DestroyToastResources();
         return;
     }
@@ -1174,7 +1361,7 @@ void ShowToast() {
     BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
     if (!UpdateLayeredWindow(hwnd, nullptr, &dst, &size, g_toastMemDC, &src, 0, &blend,
                              ULW_ALPHA)) {
-        Logf(L"UpdateLayeredWindow failed: %u", GetLastError());
+        Wh_Log(L"UpdateLayeredWindow failed: %u", GetLastError());
     }
 
     g_toastHwnd = hwnd;
@@ -1192,25 +1379,24 @@ void ShowToast() {
     UpdateWindow(hwnd);
     g_toastStartTick = GetTickCount64();
     SetTimer(hwnd, TOAST_TIMER_ID, TOAST_TIMER_MS, nullptr);
-    Logf(L"Toast shown at %d,%d (%dx%d)", x, y, layout.width, layout.height);
+    Wh_Log(L"Toast shown at %d,%d (%dx%d)", x, y, layout.width, layout.height);
 }
 
-// Backstop so the toast can never get stuck if timer messages are missed.
-void ExpireToastIfNeeded() {
-    if (g_toastHwnd &&
-        GetTickCount64() - g_toastStartTick >= TOAST_HOLD_MS + TOAST_FADE_OUT_MS) {
-        DestroyWindow(g_toastHwnd);
-        g_toastHwnd = nullptr;
-    }
+bool IsConsoleWindow(HWND hwnd) {
+    if (!hwnd) return false;
+    WCHAR className[64] = {};
+    if (!GetClassNameW(hwnd, className, ARRAYSIZE(className))) return false;
+    return _wcsicmp(className, L"ConsoleWindowClass") == 0 ||
+           _wcsicmp(className, L"CASCADIA_HOSTING_WINDOW_CLASS") == 0;
 }
 
 void PerformConversion() {
     std::lock_guard<std::mutex> opLock(g_convertMutex);
     ULONGLONG tStart = GetTickCount64();
-    Logf(L"PerformConversion start");
+    Wh_Log(L"PerformConversion start");
     Settings s = GetSettingsCopy();
     if (!s.hotkey.valid) {
-        Logf(L"Hotkey is not valid: %s", s.hotkeyStr.c_str());
+        Wh_Log(L"Hotkey is not valid: %s", s.hotkeyStr.c_str());
         return;
     }
 
@@ -1221,28 +1407,31 @@ void PerformConversion() {
     // Pick up layouts added/removed at runtime; cheap when unchanged.
     RefreshLayoutsIfNeeded();
 
-    std::wstring originalClipboard;
-    if (s.restoreClipboard) originalClipboard = GetClipboardUnicodeText();
+    ClipboardSnapshot snapshot;
+    if (s.restoreClipboard) snapshot = SaveClipboard();
 
     std::wstring selected;
     bool captured = false;
     bool usedFallbackWord = false;
-    const DWORD copyTimeoutMs = (std::max)(150u, (unsigned)s.actionDelayMs * 3u);
+    const DWORD clipboardDelayMs = (DWORD)std::max(150, s.actionDelayMs);
 
     if (s.scope == L"selection-first" || s.scope == L"selection-only") {
         DWORD seq = GetClipboardSequenceNumber();
-        SendKeyCombo('C', true, false, false, false); // Ctrl+C
-        if (WaitForClipboardChange(seq, copyTimeoutMs)) {
+        SendKeyCombo('C', true, false, false, false);  // Ctrl+C
+        if (WaitForClipboardChange(seq, clipboardDelayMs)) {
             selected = GetClipboardUnicodeText();
             captured = !selected.empty();
         }
     }
 
-    if (!captured && s.scope != L"selection-only") {
+    // In console windows Ctrl+C without a selection interrupts the running
+    // command, so the previous-word fallback is skipped there.
+    if (!captured && s.scope != L"selection-only" &&
+        !IsConsoleWindow(GetForegroundWindow())) {
         DWORD seq = GetClipboardSequenceNumber();
-        SendKeyCombo(VK_LEFT, true, true, false, false); // Ctrl+Shift+Left
-        SendKeyCombo('C', true, false, false, false);    // Ctrl+C
-        if (WaitForClipboardChange(seq, copyTimeoutMs)) {
+        SendKeyCombo(VK_LEFT, true, true, false, false);  // Ctrl+Shift+Left
+        SendKeyCombo('C', true, false, false, false);     // Ctrl+C
+        if (WaitForClipboardChange(seq, clipboardDelayMs)) {
             selected = GetClipboardUnicodeText();
             usedFallbackWord = !selected.empty();
         }
@@ -1251,9 +1440,9 @@ void PerformConversion() {
     ULONGLONG tCopyDone = GetTickCount64();
 
     if (selected.empty()) {
-        Logf(L"No text captured for conversion (wait=%llums copy=%llums)",
-             tWaitDone - tStart, tCopyDone - tWaitDone);
-        if (s.restoreClipboard) SetClipboardUnicodeText(originalClipboard);
+        Wh_Log(L"No text captured for conversion (wait=%llums copy=%llums)",
+               tWaitDone - tStart, tCopyDone - tWaitDone);
+        if (s.restoreClipboard) RestoreClipboard(snapshot);
         return;
     }
 
@@ -1262,41 +1451,68 @@ void PerformConversion() {
     bool convertedOk = ConvertTextAutoOrCycle(selected, s, converted, targetLayout);
     ULONGLONG tConvertDone = GetTickCount64();
     if (!convertedOk || converted.empty() || converted == selected) {
-        Logf(L"Conversion produced no change (len=%zu)", selected.size());
+        Wh_Log(L"Conversion produced no change (len=%zu)", selected.size());
         if (usedFallbackWord) {
             SendKeyCombo(VK_RIGHT, false, false, false, false);
         }
-        if (s.restoreClipboard) SetClipboardUnicodeText(originalClipboard);
+        if (s.restoreClipboard) RestoreClipboard(snapshot);
         return;
     }
 
     if (!SetClipboardUnicodeText(converted)) {
-        Logf(L"Failed to set converted clipboard text");
-        if (s.restoreClipboard) SetClipboardUnicodeText(originalClipboard);
+        Wh_Log(L"Failed to set converted clipboard text");
+        if (s.restoreClipboard) RestoreClipboard(snapshot);
         return;
     }
 
-    SendKeyCombo('V', true, false, false, false); // Ctrl+V
+    SendKeyCombo('V', true, false, false, false);  // Ctrl+V
     ULONGLONG tPasteDone = GetTickCount64();
 
     if (s.showNotification) {
         ShowToast();
     }
 
-    Sleep(s.restoreClipboard ? 150 : 40);
+    Sleep(s.restoreClipboard ? clipboardDelayMs : 40);
 
     if (s.switchLayout && targetLayout) {
         ActivateTargetKeyboardLayout(targetLayout);
     }
 
     if (s.restoreClipboard) {
-        SetClipboardUnicodeText(originalClipboard);
+        RestoreClipboard(snapshot);
     }
     ULONGLONG tEnd = GetTickCount64();
-    Logf(L"Conversion applied (len %zu -> %zu) wait=%llums copy=%llums convert=%llums paste=%llums total=%llums",
-         selected.size(), converted.size(),
-         tWaitDone - tStart, tCopyDone - tWaitDone, tConvertDone - tCopyDone,
-         tPasteDone - tConvertDone, tEnd - tStart);
+    Wh_Log(L"Conversion applied (len %zu -> %zu) wait=%llums copy=%llums "
+           L"convert=%llums paste=%llums total=%llums",
+           selected.size(), converted.size(), tWaitDone - tStart,
+           tCopyDone - tWaitDone, tConvertDone - tCopyDone,
+           tPasteDone - tConvertDone, tEnd - tStart);
+}
+
+// AutoHotkey-style "menu mask": a dummy keypress so that a swallowed Win or
+// Alt combo doesn't look like a lone modifier tap to Windows (Start menu or
+// menu bar activation).
+void SendMenuMaskKey() {
+    INPUT inputs[2] = {};
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = 0xE8;
+    inputs[1].type = INPUT_KEYBOARD;
+    inputs[1].ki.wVk = 0xE8;
+    inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(2, inputs, sizeof(INPUT));
+}
+
+// A modifier key-up can be lost when it happens on the secure desktop (Win+L,
+// UAC, Ctrl+Alt+Del), where the hook isn't called. GetAsyncKeyState reports the
+// state before the current event, so the current key is skipped.
+void ResyncModifierState(UINT currentVk) {
+    const UINT modifiers[] = {VK_LCONTROL, VK_RCONTROL, VK_LMENU, VK_RMENU,
+                              VK_LSHIFT, VK_RSHIFT, VK_LWIN, VK_RWIN};
+    for (UINT vk : modifiers) {
+        if (vk != currentVk) {
+            g_keyDown[vk] = (GetAsyncKeyState(vk) & 0x8000) != 0;
+        }
+    }
 }
 
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
@@ -1304,30 +1520,36 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         const KBDLLHOOKSTRUCT* kb = (const KBDLLHOOKSTRUCT*)lParam;
         if (kb && kb->vkCode < 256 && !(kb->flags & LLKHF_INJECTED)) {
             const UINT vk = kb->vkCode;
-            Settings s = GetSettingsCopy();
+            const Hotkey hk = GetHotkeyForHook();
+            ResyncModifierState(vk);
             if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
                 const bool wasDown = g_keyDown[vk];
                 g_keyDown[vk] = true;
-                if (s.hotkey.valid) {
-                    if (s.hotkey.modifierOnly) {
+                if (hk.valid) {
+                    if (hk.modifierOnly) {
                         if (!g_hotkeyPending) {
-                            if (ModifierOnlyHotkeyMatch(s.hotkey)) {
+                            if (ModifierOnlyHotkeyMatch(hk)) {
                                 g_hotkeyPending = true;
+                                g_hotkeyArmTick = GetTickCount64();
                             }
-                        } else if (!IsModifierVk(vk) || !ModifierOnlyHotkeyMatch(s.hotkey)) {
+                        } else if (!IsModifierVk(vk) || !ModifierOnlyHotkeyMatch(hk)) {
                             // Another key or an extra modifier went down: this is a
                             // regular shortcut such as Ctrl+Shift+T, not a bare combo.
                             g_hotkeyPending = false;
                         }
-                    } else if (vk == s.hotkey.vk) {
-                        if (!wasDown && !g_hotkeyPending && HotkeyModifiersMatch(s.hotkey)) {
-                            Logf(L"Hotkey matched, waiting for release before conversion");
+                    } else if (vk == hk.vk) {
+                        if (!wasDown && !g_hotkeyPending && HotkeyModifiersMatch(hk)) {
+                            Wh_Log(L"Hotkey matched, waiting for release");
                             g_suppressedHotkeyVk = vk;
                             g_hotkeyPending = true;
-                            return 1; // suppress hotkey keydown
+                            g_hotkeyArmTick = GetTickCount64();
+                            if (hk.modifiers & (MOD_ALT | MOD_WIN)) {
+                                SendMenuMaskKey();
+                            }
+                            return 1;  // suppress hotkey keydown
                         }
                         if (g_hotkeyPending || g_suppressedHotkeyVk == vk) {
-                            return 1; // swallow auto-repeat while the combo is held
+                            return 1;  // swallow auto-repeat while the combo is held
                         }
                     } else if (g_hotkeyPending && !IsModifierVk(vk)) {
                         g_hotkeyPending = false;
@@ -1339,13 +1561,18 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 if (suppress) {
                     g_suppressedHotkeyVk = 0;
                 }
-                if (g_hotkeyPending && s.hotkey.valid && HotkeyComboReleased(s.hotkey)) {
+                if (g_hotkeyPending && hk.valid && HotkeyComboReleased(hk)) {
+                    const bool heldTooLong =
+                        hk.modifierOnly &&
+                        GetTickCount64() - g_hotkeyArmTick > kHotkeyMaxHoldMs;
                     g_hotkeyPending = false;
-                    Logf(L"Hotkey released, requesting conversion");
-                    RequestConversion();
+                    if (!heldTooLong) {
+                        Wh_Log(L"Hotkey released, requesting conversion");
+                        RequestConversion();
+                    }
                 }
                 if (suppress) {
-                    return 1; // suppress matching keyup to avoid stray character/input
+                    return 1;  // suppress the matching keyup to avoid stray input
                 }
             }
         }
@@ -1353,29 +1580,49 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
 }
 
+// A mouse button or wheel between a modifier-only hotkey press and release
+// means the user is doing something else (Ctrl+Shift+click, Ctrl+Shift+wheel,
+// ...). Regular combos are unaffected, since they suppress their key.
+LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION && wParam != WM_MOUSEMOVE) {
+        if (g_suppressedHotkeyVk == 0) {
+            g_hotkeyPending = false;
+        }
+    }
+    return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+}
+
 DWORD WINAPI WorkerThreadProc(LPVOID) {
-    g_workerThreadId = GetCurrentThreadId();
     MSG msg;
     PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
-    g_keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandle(nullptr), 0);
-    if (!g_keyboardHook) {
-        Logf(L"SetWindowsHookEx(WH_KEYBOARD_LL) failed: %u", GetLastError());
+    // Build the layout maps before installing the hook, so the first shortcut
+    // doesn't have to wait for them.
+    if (!RefreshLayoutsIfNeeded(true)) {
+        Wh_Log(L"No keyboard layouts found or failed to enumerate layouts");
     } else {
-        Logf(L"Keyboard hook installed (thread=%lu)", GetCurrentThreadId());
+        Wh_Log(L"Keyboard layouts enumerated and maps built");
     }
 
-    // Pending hotkey state is cleared by key release or by any other key press;
-    // no timer is needed (and a timeout must not fire with modifiers still held).
-
-    if (!RefreshLayoutsIfNeeded(true)) {
-        Logf(L"No keyboard layouts found or failed to enumerate layouts");
+    g_keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc,
+                                      GetModuleHandle(nullptr), 0);
+    if (!g_keyboardHook) {
+        Wh_Log(L"SetWindowsHookEx(WH_KEYBOARD_LL) failed: %u", GetLastError());
     } else {
-        Logf(L"Keyboard layouts enumerated and maps built");
+        Wh_Log(L"Keyboard hook installed (thread=%lu)", GetCurrentThreadId());
+    }
+
+    // The mouse hook cancels a pending modifier-only shortcut when the user
+    // clicks or scrolls while the combo is held.
+    g_mouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc,
+                                   GetModuleHandle(nullptr), 0);
+    if (!g_mouseHook) {
+        Wh_Log(L"SetWindowsHookEx(WH_MOUSE_LL) failed: %u", GetLastError());
     }
 
     for (;;) {
-        DWORD wait = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE, QS_ALLINPUT);
+        DWORD wait = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE,
+                                               QS_ALLINPUT);
         if (wait == WAIT_OBJECT_0) {
             break;
         }
@@ -1389,29 +1636,27 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     }
 
 done:
+    if (g_mouseHook) {
+        UnhookWindowsHookEx(g_mouseHook);
+        g_mouseHook = nullptr;
+    }
     if (g_keyboardHook) {
         UnhookWindowsHookEx(g_keyboardHook);
         g_keyboardHook = nullptr;
     }
-    g_workerThreadId = 0;
     return 0;
 }
 
 DWORD WINAPI ConversionThreadProc(LPVOID) {
     MSG msg;
     PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
-    g_convertThreadId = GetCurrentThreadId();
-    Logf(L"Conversion thread started (thread=%lu)", GetCurrentThreadId());
+    Wh_Log(L"Conversion thread started (thread=%lu)", GetCurrentThreadId());
 
     for (;;) {
-        DWORD wait = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE,
-                                               g_toastHwnd ? 100 : INFINITE, QS_ALLINPUT);
+        DWORD wait = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE,
+                                               QS_ALLINPUT);
         if (wait == WAIT_OBJECT_0) {
             break;
-        }
-        if (wait == WAIT_TIMEOUT) {
-            ExpireToastIfNeeded();
-            continue;
         }
         while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) {
@@ -1431,47 +1676,50 @@ done:
         DestroyWindow(g_toastHwnd);
         g_toastHwnd = nullptr;
     }
-    g_convertThreadId = 0;
     return 0;
 }
 
 }  // namespace
 
-BOOL ModInit() {
-    Logf(L"Mod init (pid=%lu)", GetCurrentProcessId());
+BOOL WhTool_ModInit() {
+    Wh_Log(L"Mod init (pid=%lu)", GetCurrentProcessId());
     LoadSettings();
 
     Gdiplus::GdiplusStartupInput gdiplusInput;
-    if (Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr) == Gdiplus::Ok) {
+    if (Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr) ==
+        Gdiplus::Ok) {
         g_gdiplusReady = true;
     } else {
         g_gdiplusToken = 0;
-        Logf(L"GdiplusStartup failed; notifications are disabled");
+        Wh_Log(L"GdiplusStartup failed; notifications are disabled");
     }
 
     g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) {
-        Logf(L"CreateEvent failed: %u", GetLastError());
+        Wh_Log(L"CreateEvent failed: %u", GetLastError());
         StopGdiplus();
         return FALSE;
     }
 
-    g_convertThread = CreateThread(nullptr, 0, ConversionThreadProc, nullptr, 0, nullptr);
+    g_convertThread = CreateThread(nullptr, 0, ConversionThreadProc, nullptr, 0,
+                                   &g_convertThreadId);
     if (!g_convertThread) {
-        Logf(L"CreateThread (conversion) failed: %u", GetLastError());
+        Wh_Log(L"CreateThread (conversion) failed: %u", GetLastError());
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
         StopGdiplus();
         return FALSE;
     }
 
-    g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr);
+    g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0,
+                                  &g_workerThreadId);
     if (!g_workerThread) {
-        Logf(L"CreateThread (hook) failed: %u", GetLastError());
+        Wh_Log(L"CreateThread (hook) failed: %u", GetLastError());
         SetEvent(g_stopEvent);
-        WaitForSingleObject(g_convertThread, 5000);
+        WaitForSingleObject(g_convertThread, INFINITE);
         CloseHandle(g_convertThread);
         g_convertThread = nullptr;
+        g_convertThreadId = 0;
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
         StopGdiplus();
@@ -1481,29 +1729,29 @@ BOOL ModInit() {
     return TRUE;
 }
 
-void ModSettingsChanged() {
-    Logf(L"Settings changed");
+void WhTool_ModSettingsChanged() {
+    Wh_Log(L"Settings changed");
     LoadSettings();
-    RefreshLayoutsIfNeeded(true);
 }
 
-void ModUninit() {
-    Logf(L"Uninit");
+void WhTool_ModUninit() {
+    Wh_Log(L"Uninit");
     if (g_stopEvent) {
         SetEvent(g_stopEvent);
     }
+    // Wait for both threads before tearing anything down: Windhawk unmaps the
+    // mod right after this returns.
     if (g_workerThread) {
-        // Nudge message loop
-        if (g_workerThreadId) PostThreadMessage(g_workerThreadId, WM_NULL, 0, 0);
-        WaitForSingleObject(g_workerThread, 5000);
+        WaitForSingleObject(g_workerThread, INFINITE);
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
+        g_workerThreadId = 0;
     }
     if (g_convertThread) {
-        if (g_convertThreadId) PostThreadMessage(g_convertThreadId, WM_NULL, 0, 0);
-        WaitForSingleObject(g_convertThread, 5000);
+        WaitForSingleObject(g_convertThread, INFINITE);
         CloseHandle(g_convertThread);
         g_convertThread = nullptr;
+        g_convertThreadId = 0;
     }
     if (g_toastClassRegistered && g_toastClass[0]) {
         UnregisterClassW(g_toastClass, g_toastInstance);
@@ -1511,12 +1759,9 @@ void ModUninit() {
         g_toastClass[0] = L'\0';
         g_toastInstance = nullptr;
     }
-    if (g_gdiplusReady) {
-        Gdiplus::GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusToken = 0;
-        g_gdiplusReady = false;
-    }
-    if (g_stopEvent) {        CloseHandle(g_stopEvent);
+    StopGdiplus();
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
     }
     memset(g_keyDown, 0, sizeof(g_keyDown));
@@ -1526,23 +1771,181 @@ void ModUninit() {
     g_layouts.clear();
 }
 
-BOOL Wh_ModInit() {
-    DWORD sessionId = 0;
-    ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
-    Logf(L"Wh_ModInit pid=%lu session=%lu cmd=\"%s\"",
-         GetCurrentProcessId(), sessionId, GetCommandLineW() ? GetCommandLineW() : L"");
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
-    // Run in explorer.exe as a simple in-process tool.
-    return ModInit() ? TRUE : FALSE;
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
 }
 
-void Wh_ModAfterInit() {}
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si = {};
+    si.cb = sizeof(STARTUPINFO);
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
 
 void Wh_ModSettingsChanged() {
-    ModSettingsChanged();
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    ModUninit();
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
 
