@@ -579,6 +579,7 @@ struct Island {
     winrt::weak_ref<wux::FrameworkElement> stroke;  // Rectangle#BackgroundStroke: the 1px border line
     winrt::weak_ref<wux::FrameworkElement> fill;    // Rectangle#BackgroundFill: the taskbar's own background
     winrt::weak_ref<wux::FrameworkElement> background;  // Taskbar.TaskbarBackground: pinned to the Windows mode while forced
+    bool backgroundPinned = false;  // the pin is the mod's own local RequestedTheme on it
     winrt::weak_ref<wux::FrameworkElement> themeRoot;  // island root content; RequestedTheme is set here
     wuxc::Border panel{nullptr};
     wuxm::LinearGradientBrush brush{nullptr};
@@ -2130,15 +2131,29 @@ wux::ElementTheme ForcedThemeValue(Island& isl) {
 // RequestedTheme wins over the inherited one - and whatever the taskbar
 // computes for it is computed for the real mode. Released with the forced
 // theme. Re-pinned on every mode change, since the mode is what it pins to.
+// An element that already has a RequestedTheme of its own (a Styler style,
+// say) is left alone: it isn't inheriting the forced theme in the first
+// place, and the mod only ever undoes its own changes. Releasing clears the
+// pin rather than writing Default, so nothing of lower precedence is shadowed.
 void PinBackgroundTheme(Island& isl, bool pin) try {
     auto background = isl.background.get();
     if (!background) return;
-    wux::ElementTheme want = pin ? (SystemLightTheme() ? wux::ElementTheme::Light : wux::ElementTheme::Dark)
-                                 : wux::ElementTheme::Default;
-    if (background.RequestedTheme() != want) {
-        background.RequestedTheme(want);
-        Wh_Log(L"taskbar %p: taskbar background theme %s", isl.hwnd,
-               pin ? (want == wux::ElementTheme::Light ? L"pinned to light" : L"pinned to dark") : L"released");
+    auto property = wux::FrameworkElement::RequestedThemeProperty();
+    if (pin) {
+        if (!isl.backgroundPinned && background.ReadLocalValue(property) != wux::DependencyProperty::UnsetValue()) {
+            return;  // has a theme of its own
+        }
+        wux::ElementTheme want = SystemLightTheme() ? wux::ElementTheme::Light : wux::ElementTheme::Dark;
+        if (!isl.backgroundPinned || background.RequestedTheme() != want) {
+            background.RequestedTheme(want);
+            Wh_Log(L"taskbar %p: taskbar background theme pinned to %s", isl.hwnd,
+                   want == wux::ElementTheme::Light ? L"light" : L"dark");
+        }
+        isl.backgroundPinned = true;
+    } else if (isl.backgroundPinned) {
+        background.ClearValue(property);
+        isl.backgroundPinned = false;
+        Wh_Log(L"taskbar %p: taskbar background theme released", isl.hwnd);
     }
 } catch (...) {
 }
@@ -2181,7 +2196,7 @@ void OnRootThemeChanged(HWND hwnd, wux::FrameworkElement const& root) try {
 // thread sees every sent message before its window procedure does (a
 // message-id compare per sent message, nothing more) and re-pins every forced
 // island's background to the mode the registry holds by then.
-HHOOK g_settingChangeHook = nullptr;  // taskbar thread only
+std::atomic<HHOOK> g_settingChangeHook{nullptr};  // installed on the taskbar thread; removed on any unload path
 
 bool IsColorChangeMessage(const CWPSTRUCT& cwp) {
     switch (cwp.message) {
@@ -2215,16 +2230,16 @@ LRESULT CALLBACK SettingChangeHookProc(int nCode, WPARAM wParam, LPARAM lParam) 
 }
 
 void InstallSettingChangeHook() {
-    if (g_settingChangeHook) return;
-    g_settingChangeHook = SetWindowsHookExW(WH_CALLWNDPROC, SettingChangeHookProc, nullptr, GetCurrentThreadId());
-    if (!g_settingChangeHook) Wh_Log(L"SetWindowsHookEx(WH_CALLWNDPROC) for color changes failed");
+    if (g_settingChangeHook.load()) return;
+    HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, SettingChangeHookProc, nullptr, GetCurrentThreadId());
+    if (!hook) Wh_Log(L"SetWindowsHookEx(WH_CALLWNDPROC) for color changes failed");
+    g_settingChangeHook = hook;
 }
 
+// Callable from any thread: the hook procedure lives in this module, so it
+// must be gone before the module is, whichever way the mod unloads.
 void RemoveSettingChangeHook() {
-    if (g_settingChangeHook) {
-        UnhookWindowsHookEx(g_settingChangeHook);
-        g_settingChangeHook = nullptr;
-    }
+    if (HHOOK hook = g_settingChangeHook.exchange(nullptr)) UnhookWindowsHookEx(hook);
 }
 
 wux::FrameworkElement ThemeRootOf(Island& isl) {
@@ -2273,10 +2288,13 @@ void ApplyTheme(Island& isl, bool active, Rgb color) {
     // when it happens to match); the root's own value again when the panel
     // hides. forcedTheme is set before the property so the change callback
     // recognizes the write as ours.
+    // Pinned before the root is forced and released after it is restored, so
+    // the background never inherits the forced theme, not even in between.
     isl.forcedTheme = want;
-    PinBackgroundTheme(isl, want != ThemeNone);
+    if (want != ThemeNone) PinBackgroundTheme(isl, true);
     root.RequestedTheme(ForcedThemeValue(isl));
     if (want == ThemeNone) {
+        PinBackgroundTheme(isl, false);
         Wh_Log(L"taskbar %p: theme restored to %d (Windows mode %s)", isl.hwnd, (int)isl.originalTheme,
                isl.originalSystemLight ? L"light" : L"dark");
     } else {
@@ -2957,8 +2975,10 @@ void Wh_ModUninit() {
         // No taskbar window (Explorer is going away): there is no tree to clean
         // and no taskbar thread to release XAML objects on. g_islands is
         // no_destroy, so leaving it alone leaks the few refs instead of
-        // releasing them from this thread.
+        // releasing them from this thread. The message hook is the one thing
+        // that must not outlive the module.
         Wh_Log(L"no taskbar window, skipping UI teardown");
+        RemoveSettingChangeHook();
     }
 }
 
