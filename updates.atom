@@ -2,12 +2,93 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-13T19:04:44.000Z</updated>
+    <updated>2026-11-13T20:01:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chrome clear on exit with keep sites 0.4.1]]></title>
+        <id>https://windhawk.net/mods/chrome-clear-on-exit-keep-sites#f796a98b5959eb394186ba836682b193010f44f9</id>
+        <link href="https://windhawk.net/mods/chrome-clear-on-exit-keep-sites"/>
+        <updated>2026-11-13T20:01:37.000Z</updated>
+        <content type="html"><![CDATA[<h1>Chrome clear on exit with keep sites</h1>
+<p>Clear Chrome's browsing data when its last window closes normally, while keeping
+login cookies and ordinary site storage for domains you choose. Chrome performs
+the deletion. The mod supplies its settings through Chrome's native policy reader.</p>
+<p><strong>Cleanup is off by default.</strong> Review the keep list, then turn on <strong>Enable automatic
+cleanup</strong> in the mod's Settings tab. The list starts empty: enabling cleanup with
+no exceptions signs you out of most websites. Deleted data cannot be recovered.
+Enter domains such as <code>example.com</code>; subdomains are included. Full HTTP/HTTPS URLs
+are accepted, with their paths and ports ignored. Use ASCII/punycode domain names.</p>
+<h2>Check your configuration</h2>
+<p>Restart Chrome after installing the mod. At <code>chrome://policy</code>, select <strong>Reload
+policies</strong> and check these three entries:</p>
+<ul>
+<li><code>ClearBrowsingDataOnExitList</code>: browsing history, download history, cached images
+and files, autofill, site settings, and hosted-app data, for all time.</li>
+<li><code>DefaultCookiesSetting</code>: <code>4</code>, making ordinary site storage session-only.</li>
+<li><code>CookiesAllowedForUrls</code>: your keep list, preserving cookies and ordinary storage.</li>
+</ul>
+<p>The keep list does not preserve history, cache, permissions, or legacy hosted-app
+storage. Downloaded files, bookmarks, and saved passwords are not selected for
+deletion. Websites can still expire their own sessions or require a new login.</p>
+<p>Chrome already exposes the cookie/storage controls at
+<code>chrome://settings/content/siteData</code>. This mod sets those controls and their
+<strong>Allowed to save data on your device</strong> exceptions from one Windhawk keep list,
+and adds the broader exit cleanup policy which has no equivalent Chrome setting.
+Another clearing extension or an existing Chrome cleanup rule can still remove
+the data you intended to keep.</p>
+<h2>Changes and removal</h2>
+<p>After changing settings, use <strong>Reload policies</strong> to verify the result. The mod
+also requests a refresh when it has observed Chrome registering its policy events.
+Chrome processes these requests asynchronously; the mod cannot acknowledge when
+Chrome has finished applying them.</p>
+<p>To stop cleanup, turn the setting off or disable the mod, then <strong>Reload policies
+before closing Chrome</strong> and confirm that the supplied entries have disappeared.
+Chrome can otherwise retain its cached policies for the remainder of that session.
+The next Chrome start with the mod disabled receives no policies from this mod.
+No administrator prompt, PowerShell helper, or policy-removal permission is needed.</p>
+<p>The mod runs only in Chrome's browser process and does not change its real policy
+registry keys or profile files. It uses private temporary storage within
+Windhawk's mod storage while cleanup is enabled. Inactive files can remain after
+Chrome exits; a later enabled start attempts to remove verified leftovers when
+they are no longer in use. These files are never reused as configuration or
+needed for backup.</p>
+<h2>Scope and limitations</h2>
+<ul>
+<li>Applies to all profiles in each Chrome browser process that loads the mod.
+Chrome must be allowed to load Windhawk mods.</li>
+<li>Intended for personal installations. Conflicting existing local Chrome policies
+prevent injection; they are never replaced. Chrome's normal cloud-policy
+precedence still applies. Check Windhawk's mod log if the entries do not appear.</li>
+<li>If a policy view cannot be prepared, Chrome uses its genuine policies for that
+load. The mod logs the reason; check the policy page to confirm cleanup is active.
+If private storage could not be initialized, save the mod's settings again to
+retry. Once storage is ready, reloading Chrome policies retries a failed read.</li>
+<li>Chrome can show <strong>Managed by your organization</strong> while these policies are active.
+Chrome also disables synchronization of affected data categories.</li>
+<li>Normal last-window close is the supported cleanup path. Crashes, forced
+termination, Windows shutdown, and some restart/quit paths can
+prevent completion or defer selective site-data deletion until the next start.</li>
+<li>Disabling the mod cannot restore browsing data Chrome has already deleted.</li>
+</ul>
+<p>Back up the source and your Windhawk settings to reproduce the configuration on a
+fresh Windows installation. The source's defaults do not contain your saved list.</p>
+<h2>References</h2>
+<ul>
+<li><a href="https://chromeenterprise.google/policies/clear-browsing-data-on-exit-list/">Chrome exit cleanup policy</a></li>
+<li><a href="https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/policy/core/common/policy_loader_win.cc">Chromium Windows policy loader</a></li>
+<li><a href="https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/policy/core/common/registry_dict.cc">Chromium registry policy conversion</a></li>
+<li><a href="https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regloadappkeyw">Windows application hives</a></li>
+</ul>
+]]></content>
+        <author>
+            <name>haniobaid</name>
+            <uri>https://github.com/haniobaid</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Siri Plus Launchpad 1.2.0]]></title>
         <id>https://windhawk.net/mods/siri-plus-launchpad#a93589dee0307dd5b6f697293cf296e6b55bdb30</id>
@@ -964,36 +1045,6 @@ administrador) passam a flutuar depois de algumas tentativas; Win + Alt + Home t
         <author>
             <name>Thiago Silva</name>
             <uri>https://github.com/brideinflame-rgb</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win11 Context Menu Wave Animation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win11-context-menu-wave-animation#5629b60cfd6a63be322173a289975cc6908f7abb</id>
-        <link href="https://windhawk.net/mods/win11-context-menu-wave-animation"/>
-        <updated>2026-11-13T06:03:27.000Z</updated>
-        <content type="html"><![CDATA[<h1>Win11 Context Menu Wave Animation (3D Water Drop Ripple)</h1>
-<p>Applies a <strong>3D liquid wave (water drop ripple) deformation</strong> to modern Windows 11 right-click context menus.</p>
-<p><img src="https://raw.githubusercontent.com/GuiFrr03/windhawk-assets/main/demo-normal.gif" alt="Demo"></p>
-<h3>Slow Motion</h3>
-<p><img src="https://raw.githubusercontent.com/GuiFrr03/windhawk-assets/main/demo-slow.gif" alt="Slow Motion Demo"></p>
-<p>When opening a right-click context menu, concentric circular ripples radiate from the cursor click position, deforming the menu's text, icons, and Acrylic background in 3D with liquid refraction, specular wave crests, and smooth dissipation.</p>
-<h2>Features</h2>
-<ul>
-<li><strong>3D Mesh Refraction:</strong> Distorts text, icons, and the Acrylic background using a radial heightfield ripple simulation.</li>
-<li><strong>Specular Water Lighting:</strong> Wave crests catch directional highlights and subtle 3D shading.</li>
-<li><strong>Natural Ripple Deceleration:</strong> Smooth outward wavefront expansion that settles cleanly back into the native menu.</li>
-<li><strong>Command Bar + Menu Fusion:</strong> When the top command bar (Cut/Copy/Rename) is present, both surfaces ripple together as a single continuous liquid sheet.</li>
-<li><strong>Native Blur Preservation:</strong> Hands control seamlessly back to hardware-accelerated WinUI 3 / DWM rendering once the ripple completes.</li>
-<li><strong>System Popup Protection:</strong> Ignores <code>Win+V</code>, emoji panel, taskbar overflow, and hovered submenus.</li>
-</ul>
-<h2>Notes</h2>
-<ul>
-<li>Targets <code>explorer.exe</code> (Desktop and File Explorer modern context menus on Windows 11).</li>
-</ul>
-]]></content>
-        <author>
-            <name>Gui03</name>
-            <uri>https://github.com/GuiFrr03</uri>
         </author>
     </entry>
 </feed>

@@ -2,12 +2,93 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-13T19:04:39.000Z</updated>
+    <updated>2026-11-13T20:01:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chrome clear on exit with keep sites 0.4.1]]></title>
+        <id>https://windhawk.net/mods/chrome-clear-on-exit-keep-sites#f796a98b5959eb394186ba836682b193010f44f9</id>
+        <link href="https://windhawk.net/mods/chrome-clear-on-exit-keep-sites"/>
+        <updated>2026-11-13T20:01:37.000Z</updated>
+        <content type="html"><![CDATA[<h1>Chrome clear on exit with keep sites</h1>
+<p>Clear Chrome's browsing data when its last window closes normally, while keeping
+login cookies and ordinary site storage for domains you choose. Chrome performs
+the deletion. The mod supplies its settings through Chrome's native policy reader.</p>
+<p><strong>Cleanup is off by default.</strong> Review the keep list, then turn on <strong>Enable automatic
+cleanup</strong> in the mod's Settings tab. The list starts empty: enabling cleanup with
+no exceptions signs you out of most websites. Deleted data cannot be recovered.
+Enter domains such as <code>example.com</code>; subdomains are included. Full HTTP/HTTPS URLs
+are accepted, with their paths and ports ignored. Use ASCII/punycode domain names.</p>
+<h2>Check your configuration</h2>
+<p>Restart Chrome after installing the mod. At <code>chrome://policy</code>, select <strong>Reload
+policies</strong> and check these three entries:</p>
+<ul>
+<li><code>ClearBrowsingDataOnExitList</code>: browsing history, download history, cached images
+and files, autofill, site settings, and hosted-app data, for all time.</li>
+<li><code>DefaultCookiesSetting</code>: <code>4</code>, making ordinary site storage session-only.</li>
+<li><code>CookiesAllowedForUrls</code>: your keep list, preserving cookies and ordinary storage.</li>
+</ul>
+<p>The keep list does not preserve history, cache, permissions, or legacy hosted-app
+storage. Downloaded files, bookmarks, and saved passwords are not selected for
+deletion. Websites can still expire their own sessions or require a new login.</p>
+<p>Chrome already exposes the cookie/storage controls at
+<code>chrome://settings/content/siteData</code>. This mod sets those controls and their
+<strong>Allowed to save data on your device</strong> exceptions from one Windhawk keep list,
+and adds the broader exit cleanup policy which has no equivalent Chrome setting.
+Another clearing extension or an existing Chrome cleanup rule can still remove
+the data you intended to keep.</p>
+<h2>Changes and removal</h2>
+<p>After changing settings, use <strong>Reload policies</strong> to verify the result. The mod
+also requests a refresh when it has observed Chrome registering its policy events.
+Chrome processes these requests asynchronously; the mod cannot acknowledge when
+Chrome has finished applying them.</p>
+<p>To stop cleanup, turn the setting off or disable the mod, then <strong>Reload policies
+before closing Chrome</strong> and confirm that the supplied entries have disappeared.
+Chrome can otherwise retain its cached policies for the remainder of that session.
+The next Chrome start with the mod disabled receives no policies from this mod.
+No administrator prompt, PowerShell helper, or policy-removal permission is needed.</p>
+<p>The mod runs only in Chrome's browser process and does not change its real policy
+registry keys or profile files. It uses private temporary storage within
+Windhawk's mod storage while cleanup is enabled. Inactive files can remain after
+Chrome exits; a later enabled start attempts to remove verified leftovers when
+they are no longer in use. These files are never reused as configuration or
+needed for backup.</p>
+<h2>Scope and limitations</h2>
+<ul>
+<li>Applies to all profiles in each Chrome browser process that loads the mod.
+Chrome must be allowed to load Windhawk mods.</li>
+<li>Intended for personal installations. Conflicting existing local Chrome policies
+prevent injection; they are never replaced. Chrome's normal cloud-policy
+precedence still applies. Check Windhawk's mod log if the entries do not appear.</li>
+<li>If a policy view cannot be prepared, Chrome uses its genuine policies for that
+load. The mod logs the reason; check the policy page to confirm cleanup is active.
+If private storage could not be initialized, save the mod's settings again to
+retry. Once storage is ready, reloading Chrome policies retries a failed read.</li>
+<li>Chrome can show <strong>Managed by your organization</strong> while these policies are active.
+Chrome also disables synchronization of affected data categories.</li>
+<li>Normal last-window close is the supported cleanup path. Crashes, forced
+termination, Windows shutdown, and some restart/quit paths can
+prevent completion or defer selective site-data deletion until the next start.</li>
+<li>Disabling the mod cannot restore browsing data Chrome has already deleted.</li>
+</ul>
+<p>Back up the source and your Windhawk settings to reproduce the configuration on a
+fresh Windows installation. The source's defaults do not contain your saved list.</p>
+<h2>References</h2>
+<ul>
+<li><a href="https://chromeenterprise.google/policies/clear-browsing-data-on-exit-list/">Chrome exit cleanup policy</a></li>
+<li><a href="https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/policy/core/common/policy_loader_win.cc">Chromium Windows policy loader</a></li>
+<li><a href="https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/policy/core/common/registry_dict.cc">Chromium registry policy conversion</a></li>
+<li><a href="https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regloadappkeyw">Windows application hives</a></li>
+</ul>
+]]></content>
+        <author>
+            <name>haniobaid</name>
+            <uri>https://github.com/haniobaid</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Web Search in Start Menu 1.0.0]]></title>
         <id>https://windhawk.net/mods/disable-web-search-in-start-menu#15a0fabc158cd3b05e041f13f1e21aed77db4712</id>
@@ -1696,61 +1777,6 @@ after an unexpected exit; recovery from a hang or other failure is not guarantee
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Auto-Pause on Disconnect 1.0.0]]></title>
-        <id>https://windhawk.net/mods/auto-pause-on-disconnect#e9a03e6c7c6b4128f898d5f8e204198ed180d85c</id>
-        <link href="https://windhawk.net/mods/auto-pause-on-disconnect"/>
-        <updated>2026-11-11T08:00:33.000Z</updated>
-        <content type="html"><![CDATA[<h1>Auto-Pause on Disconnect</h1>
-<p>Pauses what you were listening to when the headphones go away: the 3.5 mm cable
-pulled out, a Bluetooth headset dropped, a USB DAC unplugged. The action lands
-after Windows has moved the sound back to the built-in speakers, so there is no
-one-second blast through them.</p>
-<p><img src="https://raw.githubusercontent.com/DeepakBalaraman/auto-pause-on-disconnect/master/assets/auto-pause-sample.gif" alt="Auto-Pause in action"></p>
-<p>It does not have to be a pause. The action is a setting, and so is whether it
-runs on a disconnect, on a connect, or both.</p>
-<h2>Features</h2>
-<ul>
-<li>Watches the default output device, so wired, Bluetooth and USB removals are
-caught the same way.</li>
-<li>Toggle play/pause, mute the output, or unmute it.</li>
-<li>Waits 300 ms by default before acting, which is enough for Windows to finish
-moving the stream. Adjustable.</li>
-<li>Repeats inside one second are folded into a single action. One unplug raises
-several notifications, and play/pause is a toggle.</li>
-<li>Only acts while an app is actually playing by default, so it never starts
-playback on its own.</li>
-<li>Switching the output by hand is left alone; the old device has to be gone for
-the action to run.</li>
-</ul>
-<h2>Settings</h2>
-<ul>
-<li><strong>When a device disconnects</strong> and <strong>When a device connects</strong> pick the
-direction. Connects are off by default, because plugging headphones in moves
-the default output too.</li>
-<li><strong>Audio role to watch</strong> is Multimedia by default, or Console, or Both.</li>
-<li><strong>Action</strong> is Toggle play/pause, Mute the default output, or Unmute it.</li>
-<li><strong>Delay before acting (ms)</strong> is how long Windows gets before the action runs,
-0 to 3000.</li>
-<li><strong>Ignore repeats within (ms)</strong> is the window used to fold the burst, 0 to 5000.</li>
-<li><strong>Act only while audio is playing</strong> keeps the toggle from starting playback.</li>
-</ul>
-<h2>Good to know</h2>
-<p>Play/pause is a toggle, not a pause: if playback was already stopped, it starts
-again. Leaving <em>Act only while audio is playing</em> on keeps it honest, and the
-Windows disconnect sound is not counted as playback.</p>
-<p>The mute action applies to whichever device is the default after the switch,
-which is normally the internal speakers. Pair <em>When a device connects</em> with
-unmute if the headset should bring the sound back when it returns.</p>
-<p>The mod runs in a small process of its own rather than inside Explorer, and uses
-the Windows Core Audio API. The notification callback only wakes a worker thread;
-the delay, the playback check and the media key all happen there.</p>
-]]></content>
-        <author>
-            <name>DpakB</name>
-            <uri>https://github.com/DeepakBalaraman</uri>
         </author>
     </entry>
 </feed>

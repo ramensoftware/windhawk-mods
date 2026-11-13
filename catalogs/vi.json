@@ -1958,6 +1958,31 @@
         "version": "1.0.4"
       }
     },
+    "chrome-clear-on-exit-keep-sites": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794600097000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794600097000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "haniobaid",
+        "compilerOptions": "-ladvapi32 -lshell32 -lole32 -luserenv",
+        "description": "Clears Chrome browsing data on exit while keeping selected website logins.",
+        "github": "https://github.com/haniobaid",
+        "include": [
+          "chrome.exe"
+        ],
+        "license": "MIT",
+        "name": "Chrome clear on exit with keep sites",
+        "version": "0.4.1"
+      }
+    },
     "chrome-context-menu-items": {
       "details": {
         "defaultSorting": 711,
