@@ -2,12 +2,489 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-13T06:03:27.000Z</updated>
+    <updated>2026-11-13T07:04:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Custom CMD "ver" Command Text 1.0]]></title>
+        <id>https://windhawk.net/mods/custom-cmd-ver-command-text#628c65c9d8dd96d295699b97753b18feac5e0608</id>
+        <link href="https://windhawk.net/mods/custom-cmd-ver-command-text"/>
+        <updated>2026-11-13T07:04:53.000Z</updated>
+        <content type="html"><![CDATA[<h1>Custom CMD &quot;ver&quot; Command Text</h1>
+<p>A simple mod that lets you customize the command prompt &quot;ver&quot; command text.</p>
+<p>You can customize it in the settings tab. This mod specifically targets the <code>ver</code> command typed directly at the active prompt, leaving scripts and internal operations unaffected.</p>
+<p>Preview:</p>
+<p><img src="https://raw.githubusercontent.com/RandomGuy5747/windhawk-preview/refs/heads/main/preview.png" alt="preview1"></p>
+]]></content>
+        <author>
+            <name>RandomGuy5747</name>
+            <uri>https://github.com/RandomGuy5747</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Zen Duplicate Titlebar Fix (Win10) 1.0.0]]></title>
+        <id>https://windhawk.net/mods/zen-duplicate-titlebar-fix-win-10#fa72b34e6ff8225f45a1d2afd01370541e035428</id>
+        <link href="https://windhawk.net/mods/zen-duplicate-titlebar-fix-win-10"/>
+        <updated>2026-11-13T07:04:48.000Z</updated>
+        <content type="html"><![CDATA[<p>Duplicate titlebar buttons can occur on Zen when using transparent browser mods with DWMBlurGlass or OpenGlass, on Windows 10.<br>
+This mod hides the extra Windows-native titlebar buttons and lets Zen's remain.</p>
+<h3>Before</h3>
+<p><img src="https://raw.githubusercontent.com/landnthrnnn/DUMP/refs/heads/main/GitHub/repos/zen-duplicate-titlebar-fix/before.png" alt="Before fix"></p>
+<h3>After</h3>
+<p><img src="https://raw.githubusercontent.com/landnthrnnn/DUMP/refs/heads/main/GitHub/repos/zen-duplicate-titlebar-fix/after.png" alt="After fix"></p>
+<h2>How It Works</h2>
+<ul>
+<li>Removes the <code>WS_SYSMENU</code> window style from Zen's main browser windows, preventing Windows from drawing its native titlebar buttons over Zen's.</li>
+<li>Prevents Zen from restoring that style while the mod is active.</li>
+<li>Involves removing the native Windows system menu from being used on Zen, normally accessible with <code>alt + space</code>.</li>
+<li>Only targets <code>zen.exe</code> for it's main window(s), external windows from Zen such as Library or Browser Console are not targetted.</li>
+</ul>
+]]></content>
+        <author>
+            <name>landnthrn</name>
+            <uri>https://github.com/landnthrn</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Adaptive Windows 1.0.0]]></title>
+        <id>https://windhawk.net/mods/adaptive-windows#06c04b4e8ff5afca4391707ceded7fe95f98d1d0</id>
+        <link href="https://windhawk.net/mods/adaptive-windows"/>
+        <updated>2026-11-13T07:04:43.000Z</updated>
+        <content type="html"><![CDATA[<h1>Adaptive Windows</h1>
+<p><em>(Português do Brasil logo abaixo / Brazilian Portuguese below)</em></p>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/overview.gif" alt="Adaptive Windows demo"></p>
+<h2>English</h2>
+<p>An automatic tiling window manager for Windows 11, inspired by the <strong>Nava OS</strong> concept videos
+and by four tools: <strong>tacky-borders</strong> (focus border), <strong>komorebi</strong> (tiling), <strong>AltSnap</strong> (moving
+and resizing windows with Alt + mouse) and <strong>Loop</strong> (radial menu). Here you get all of it in one
+place. It arranges the windows of each monitor in a grid, animates every change with fluid transitions,
+and works together with minimize / restore / open animation mods: a window is animated
+<strong>straight to the new place assigned by the grid</strong>, not to where it used to be.</p>
+<p>The mod runs in its own <code>windhawk.exe</code> process (a Windhawk &quot;tool mod&quot;), not inside Explorer, so a
+problem in it cannot take down the taskbar or File Explorer.</p>
+<h3>Features</h3>
+<ul>
+<li><strong>Automatic grid.</strong> A new window takes a slot and the others make room for it; when a window
+closes or is minimized, the rest take over the free space.</li>
+<li><strong>Respects each app's minimum size.</strong> The grid reshapes itself so no window ends up smaller than
+its app allows or overlaps another one (for example Outlook and Spotify together on a short
+screen). If a chosen layout does not fit, the automatic layout is used.</li>
+<li><strong>Free resizing.</strong> Drag a window edge and the grid adapts to the width or height you chose: the
+other windows give way while you drag.
+Dragging a window by its title and dropping it over another one swaps the two; dropping it
+anywhere else sends it back to its slot.</li>
+<li><strong>Move windows with the keyboard.</strong> Win + Alt + arrows swap the focused window with its neighbor
+on that side.</li>
+<li><strong>Move windows with the mouse (radial menu, optional).</strong> Hold the right button (or another one
+you choose) over a window and a ring appears at the cursor. Move the mouse towards a side: the
+slot of the neighbor on that side is highlighted. Release and the two windows swap places.</li>
+<li><strong>Maximized windows</strong> that return to or enter the grid go back to normal mode and take their slot.
+Turn on <em>Keep maximized windows maximized</em> to leave them alone instead: they stay maximized,
+outside the grid, and take their slot again when they stop being maximized. A maximized window
+never gets the drawn border, and the drawn border and its glow are clipped to the window's
+monitor, so they do not spill onto the monitor next to it.</li>
+<li><strong>Animated border on the focused window</strong>: color, effect (solid, pulse, rainbow, gradient), line
+width, glow, corner radius and offset, so it can match your rounded corners mod.</li>
+<li><strong>Multiple monitors.</strong> Each monitor has its own grid, and windows can be dragged between them,
+including monitors with different display scales. It works within the limits each window or app
+imposes: the minimum size is decided by the app (and grows with the monitor's scale), so an app
+whose minimum is wider than the monitor will overflow its right / bottom edge.</li>
+<li><strong>Display scale aware.</strong> The gap, the screen-edge margin and the border sizes (width, glow, offset,
+corner radius) are set in pixels at 100% scale and scaled for each monitor, so they look the same
+on a 100% and on a 200% monitor.</li>
+<li><strong>Virtual desktops.</strong> When you switch desktops, the windows of the desktop you come back to return
+to the same slots and order, without replaying the entrance animation.</li>
+</ul>
+<h3>Free resizing: when it works</h3>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/mouse-resize.gif" alt="Resizing with Alt + right button"></p>
+<p>Dragging a window border adapts the grid only when all of these are true:</p>
+<ul>
+<li>The window is in the grid: not taken out with the float hotkey, not maximized and not minimized.</li>
+<li>There are at least two windows in the grid on the same monitor.</li>
+<li>You drag an edge that faces another window. An edge against the screen border has no neighbor to
+take space from, so dragging it does nothing and the window goes back to its slot.</li>
+<li>You hold the window by its border (within about 12 px of the left, right or bottom edge, or the
+top 5 px) and change its size by more than 6 px. Holding it by the middle or the title bar moves
+the window instead (drop it over another window to swap, anywhere else to send it back).</li>
+</ul>
+<p>You do not have to aim at the border: with <em>Resize a window with Alt + right button</em> on, hold Alt
+and the right button anywhere over the window and drag sideways or up/down. The side nearest to the
+cursor follows the mouse (the right side if you hold the right half of the window, and so on):
+drag outward to enlarge the window, inward to shrink it. The other windows move out of the way
+while you drag, so nothing overlaps.
+A side against the screen border has no neighbor, so the opposite side is used instead; if neither
+side has a neighbor, the window goes back to its slot. Esc cancels.</p>
+<p>Windows can be moved in a similar way: turn on <em>Move windows with Alt + left button</em>, hold Alt and
+the left button anywhere over a window, and drag. A floating window just moves. A window of the
+grid is pulled out of the grid after a short drag (about 40 px) and follows the mouse as a floating
+window. If the radial menu is set to Alt + left button, that gesture opens the menu over windows of
+the grid instead.</p>
+<p><strong>If you also use AltDrag or AltSnap.</strong> They use the same two gestures (Alt + left button to move,
+Alt + right button to resize) on every window. With both running, a drag over a window this mod
+manages goes to this mod, and a drag anywhere else goes to them. To avoid two tools answering the
+same gesture, leave these two options off here (they are off by default) or change the gesture
+there.</p>
+<p>In the &quot;main left&quot; / &quot;main top&quot; layouts, dragging the divider of the main window changes how much of
+the screen it takes. Each app's minimum size still applies. Your sizes are discarded when a window
+is opened, closed or minimized, when the layout changes and when you re-arrange everything
+(Win + Alt + Home).</p>
+<h3>Hotkeys</h3>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/keyboard-move.gif" alt="Moving windows with the keyboard"></p>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/layouts.gif" alt="Layouts"></p>
+<table>
+<thead>
+<tr>
+<th>Hotkey</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Win + Ctrl + G</td>
+<td>Cycle the layout: auto, columns, rows, grid, main left, main top</td>
+</tr>
+<tr>
+<td>Win + Ctrl + T</td>
+<td>Take the focused window out of the grid (it stays where it is and the others use the space); press again to put it back</td>
+</tr>
+<tr>
+<td>Win + Alt + F</td>
+<td>Focus mode: every window on the monitor fills the screen; press again to leave</td>
+</tr>
+<tr>
+<td>Win + Alt + ← / →</td>
+<td>Move the focused window left / right: swaps it with the window next to it on that side, whatever the layout (does nothing if there is none)</td>
+</tr>
+<tr>
+<td>Win + Alt + ↑ / ↓</td>
+<td>Move the focused window up / down: swaps it with the window directly above / below it (does nothing if there is none)</td>
+</tr>
+<tr>
+<td>Win + Alt + Home</td>
+<td>Re-arrange everything and put all windows back in the grid</td>
+</tr>
+</tbody>
+</table>
+<p>Every hotkey can be changed in the settings, and the change applies as soon as you save them:</p>
+<ul>
+<li><strong>Layout, float and re-arrange</strong> have their own text fields (for example <code>Ctrl+Alt+G</code>, <code>Win+T</code> or
+<code>Alt+Home</code>). Write modifiers (Ctrl, Alt, Shift, Win) and one key: a letter, a digit, or Up, Down,
+Left, Right, Home or End. Leave a field empty to turn that hotkey off.</li>
+<li><strong>Focus mode and the four arrows</strong> share one modifier choice: Win+Alt (default), Ctrl+Alt,
+Ctrl+Alt+Shift or Alt+Shift.</li>
+<li>Avoid combinations without Win or Ctrl: they take the key away from every other app.</li>
+</ul>
+<p>Hotkeys that cannot be registered are reported in the Windhawk log (error 1409 = already in use).
+Win + Alt + ↑ is one of them unless you turn on <em>Take over hotkeys</em> (see below).
+Win + Ctrl + T is also the default Always On Top shortcut of PowerToys: if you use both, change one
+of them.</p>
+<h4>Taking over shortcuts that are already in use</h4>
+<p>Windows itself uses some of these combinations: Win + Alt + ↑ snaps the window to the top half of the
+screen, so with the default settings it is unavailable to the mod (the log reports error 1409) and
+Windows keeps handling it. The mod never overrides another program's shortcut unless you ask it to.
+To use Win + Alt + ↑, turn on the <em>Take over hotkeys</em> option (off by default) or pick another set
+of modifiers for the arrows. With the option on, whenever a hotkey is already taken the mod
+catches that combination with a low-level keyboard hook, so the other program or Windows no longer
+receives it. The hook runs in a thread of its own, exists only while the mod runs, and only for the
+combinations that were already taken.</p>
+<h3>Radial menu: moving a window with the mouse</h3>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/radial-menu-glass.gif" alt="Radial menu"></p>
+<p>Off by default. In the settings, choose which button opens it: the right button, the middle button,
+or Alt / Win + the left button. Then press and hold that button over a window of the grid. A ring
+appears where the cursor is (after a brief hold, so a quick click does not flash it). Move the mouse out of the ring to the left, right, up or down: that
+slice of the ring lights up and the slot the window will go to is highlighted. Release the button
+to swap the window with the one in that slot. Esc cancels. If there is no window on that side, the
+slice turns gray and nothing happens. It only considers windows on the same monitor.</p>
+<p>The center of the ring floats and un-floats windows without the keyboard. Keep the button pressed
+with the cursor still: a small circle in the middle fills up in about half a second. Release once
+it is full and the window leaves the grid (the others take its place). Do the same over a floating
+window and it goes back into the grid. Releasing before it is full is an ordinary click.</p>
+<p>The ring has three themes: <strong>Liquid glass</strong>, the default (clear glass: the screen shows through
+sharp and bends at the edges of the ring), <strong>Glass</strong> (a frosted glass tube showing the blurred
+screen behind it) and <strong>Classic</strong> (a flat ring). The selection color paints the chosen slice
+and the highlight over the window that will receive the one you are moving. By default the colors
+are the focused window border ones, following its effect (pulse, rainbow, gradient); choose
+<em>Custom</em> to set the ring color and the selection color yourself. The ring thickness can be set too.</p>
+<p>If you release without leaving the ring, the click is passed on to the app when the button is
+released, so a plain right click still opens the context menu. Over a window the mod manages
+(in the grid or floating), dragging with that button no longer works while the option is on;
+anywhere else (the desktop, the taskbar, maximized windows, ignored apps) the click is not touched
+at all. It needs a low-level mouse hook, which only exists while this option
+(or one of the two Alt gestures, resize or move) is on.</p>
+<h3>Works with other animation mods</h3>
+<p>Adaptive Windows works together with these two mods:</p>
+<ul>
+<li><strong>MacOS Minimize Animation</strong> (genie effect for minimize, restore and open).</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/macos-minimize-animation.gif" alt="Adaptive Windows with MacOS Minimize Animation"></p>
+<ul>
+<li><strong>Windows Animations</strong>.</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/windows-animations.gif" alt="Adaptive Windows with Windows Animations"></p>
+<p>Those mods hide the window and play their own animation. With the <em>sync with open/close
+animations</em> option on, Adaptive Windows notices this, puts the window in its final slot while it
+is hidden, and only animates the other windows making room, at the same time. Each window has a
+single animation, so nothing fights.</p>
+<p>For the genie to land in the right place, while a window is minimized the mod writes into Windows
+the slot it will occupy when it comes back, and keeps that value up to date as the grid changes.
+This way the restore animation ends where the window will really be.</p>
+<p>Programs you exclude in the other mod (for example Word in the genie mod) are not animated by it;
+in that case Adaptive Windows uses its own entrance animation.</p>
+<h3>Animations</h3>
+<p>The <strong>Nava OS</strong> style is the base (strong ease-out curve, new windows slide in from the right).
+There are also Smooth (slides in from the top), Snappy (no entrance effect) and Playful (enters from the
+bottom with a slight overshoot). While moving, a window keeps a fixed size (like when dragging):
+shrinking windows shrink at the start and growing ones only grow at the end, so nothing overlaps.
+The frame rate can follow the DWM (recommended), follow the highest refresh rate among your
+monitors, or be fixed (30 to 240 Hz).</p>
+<h3>Taskbar and dock</h3>
+<p>The usable area is the Windows work area. The screen-edge margin applies to all four sides. If the
+taskbar is hidden, windows only respect the screen edge. The bottom spacing setting (0 = automatic)
+is meant for docks drawn by another mod: enter the distance from the screen edge to the top of
+the dock. The taskbar can be on any edge of any monitor: the grid follows the Windows work
+area, and is re-computed when a monitor is connected or removed, the resolution changes, or the
+taskbar is moved or toggles auto-hide.</p>
+<h3>Corners</h3>
+<p>Uses the Windows 11 corner preference (default, rounded, small, square). Windows does not allow an
+arbitrary radius this way. If you already use a corner mod (for example &quot;Custom Window Corner
+Radius&quot;), leave this option on &quot;do not touch&quot; so the two do not fight over the corners.</p>
+<h3>Ignored windows and limits</h3>
+<ul>
+<li>Settings apply as soon as you save them; there is no need to restart the mod. Changing the
+<strong>apps that always stay out of the grid</strong> list also takes windows out of the grid (or brings them in)
+right away.</li>
+<li>To take one window out of the grid for now, use the float hotkey (Win + Ctrl + T). To keep an
+app out of the grid always, write its name in that list (for example <code>spotify;chrome</code>). A name
+works if it is the program's name or if it appears in the window title. The list is empty by
+default.</li>
+<li>Tool windows, always-on-top, non-focusable and non-resizable windows (panels, widgets) always
+stay out of the grid. The Windhawk log says why each window was ignored.</li>
+<li>Windows that refuse to be positioned (a likely case is programs running as administrator) float
+after a few attempts; Win + Alt + Home tries again.</li>
+<li>Moving windows with the keyboard only considers windows on the same monitor.</li>
+</ul>
+<hr>
+<h2>Português (Brasil)</h2>
+<p>Gerenciador de janelas em grade automática para o Windows 11, inspirado nos vídeos de conceito
+do <strong>Nava OS</strong> e em quatro ferramentas: <strong>tacky-borders</strong> (borda na janela em foco), <strong>komorebi</strong>
+(grade de janelas), <strong>AltSnap</strong> (mover e redimensionar janelas com Alt + mouse) e <strong>Loop</strong> (menu
+radial). Aqui você tem tudo isso em um único lugar. Ele organiza as janelas de cada monitor, anima as mudanças com transições fluidas
+e funciona junto com os mods de animação de minimizar, restaurar e abrir janelas: a janela
+é animada <strong>já para o novo lugar definido pela grade</strong>, e não para onde ela estava antes.</p>
+<p>O mod roda em um processo <code>windhawk.exe</code> próprio (um &quot;tool mod&quot; do Windhawk), e não dentro do
+Explorer, então um problema nele não derruba a barra de tarefas nem o Explorador de Arquivos.</p>
+<h3>O que ele faz</h3>
+<ul>
+<li><strong>Grade automática.</strong> Cada janela nova ocupa um espaço da grade e as outras abrem espaço para
+ela; ao fechar ou minimizar uma janela, as demais ocupam o espaço livre.</li>
+<li><strong>Respeita o tamanho mínimo de cada app.</strong> O formato da grade se ajusta sozinho para que nenhuma
+janela fique menor do que o app aceita nem sobreponha outra (por exemplo, Outlook e Spotify
+juntos numa tela de pouca altura). Se um layout escolhido não couber, ele usa o automático.</li>
+<li><strong>Redimensionamento livre.</strong> Arraste a borda de uma janela e a grade se adapta à largura ou à
+altura que você escolheu: as outras janelas abrem espaço enquanto você arrasta. Arrastar uma janela pelo meio e soltá-la sobre outra troca as duas
+de lugar; soltá-la em qualquer outro ponto a devolve ao seu espaço.</li>
+<li><strong>Mover janelas pelo teclado.</strong> Win + Alt + setas trocam a janela em foco com a vizinha daquele
+lado.</li>
+<li><strong>Mover janelas com o mouse (menu radial, opcional).</strong> Segure o botão direito (ou outro que você
+escolher) sobre uma janela e um anel aparece no cursor. Mova o mouse para um lado: o espaço da
+vizinha daquele lado é destacado. Solte e as duas janelas trocam de lugar.</li>
+<li><strong>Janelas maximizadas</strong> que voltam ou entram na grade passam ao modo normal e assumem o espaço.
+Ligue <em>Manter janelas maximizadas</em> para deixá-las em paz: elas continuam maximizadas, fora da
+grade, e assumem o espaço de novo quando deixam de estar maximizadas. Uma janela maximizada
+nunca recebe a borda desenhada, e a borda desenhada e o brilho são recortados no monitor da
+janela, para não passarem para o monitor ao lado.</li>
+<li><strong>Borda animada na janela em foco</strong>: cor, efeito (fixa, pulsar, arco-íris, degradê), largura da
+linha, brilho, raio dos cantos e deslocamento, para alinhar com o seu mod de cantos arredondados.</li>
+<li><strong>Vários monitores.</strong> Cada monitor tem a sua própria grade, e as janelas podem ser arrastadas
+entre eles, inclusive entre monitores de escalas diferentes. Funciona dentro dos limites
+impostos por cada janela ou app: o tamanho mínimo é decidido pelo app (e cresce com a escala do
+monitor), então um app cujo mínimo é maior que a largura do monitor vai passar da borda direita
+/ de baixo.</li>
+<li><strong>Respeita a escala de cada monitor.</strong> O espaço entre janelas, a margem da borda da tela e as
+medidas da borda (largura, brilho, deslocamento, raio dos cantos) são configurados em pixels a
+100% de escala e ajustados a cada monitor, então ficam iguais num monitor de 100% e num de 200%.</li>
+<li><strong>Áreas de trabalho virtuais.</strong> Ao trocar de área, as janelas da área para a qual você volta
+retomam os mesmos espaços e a mesma ordem, sem repetir a animação de entrada.</li>
+</ul>
+<h3>Redimensionamento livre: quando funciona</h3>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/mouse-resize.gif" alt="Redimensionar com Alt + botão direito"></p>
+<p>Arrastar a borda de uma janela adapta a grade apenas quando todas estas condições são verdadeiras:</p>
+<ul>
+<li>A janela está na grade: não foi tirada com o atalho de soltar, nem está maximizada ou minimizada.</li>
+<li>Há pelo menos duas janelas na grade no mesmo monitor.</li>
+<li>Você arrasta uma borda que encosta em outra janela. Uma borda junto da borda da tela não tem
+vizinha para ceder espaço, então arrastá-la não faz nada e a janela volta ao seu espaço.</li>
+<li>Você segura a janela pela borda (a cerca de 12 px da lateral esquerda, direita ou de baixo, ou
+nos 5 px de cima) e muda o tamanho em mais de 6 px. Segurar pelo meio ou pela barra de título
+move a janela (solte sobre outra para trocar, ou em qualquer outro ponto para devolvê-la).</li>
+</ul>
+<p>Não é preciso mirar na borda: com <em>Redimensionar a janela com Alt + botão direito</em> ligado, segure
+Alt e o botão direito em qualquer ponto da janela e arraste para os lados ou para cima/baixo. A
+lateral mais próxima do cursor acompanha o mouse (a direita, se você segurar a metade direita da
+janela, e assim por diante): arraste para fora para aumentar a janela, para dentro para diminuir.
+As outras janelas abrem espaço enquanto você arrasta, sem sobreposição. Uma lateral junto da borda da tela não tem vizinha,
+então vale a lateral oposta; se nenhuma das duas tiver vizinha, a janela volta ao seu espaço. Esc
+cancela.</p>
+<p>As janelas podem ser movidas de forma parecida: ligue <em>Mover janelas com Alt + botão esquerdo</em>,
+segure Alt e o botão esquerdo em qualquer ponto de uma janela e arraste. Uma janela solta apenas se
+move. Uma janela da grade é arrancada da grade depois de um arrasto curto (uns 40 px) e acompanha o
+mouse como janela solta. Se o menu radial estiver em Alt + botão esquerdo, esse gesto abre o menu
+sobre as janelas da grade.</p>
+<p><strong>Se você também usa o AltDrag ou o AltSnap.</strong> Eles usam os mesmos dois gestos (Alt + botão esquerdo
+para mover, Alt + botão direito para redimensionar) em qualquer janela. Com os dois ligados, um
+arrasto sobre uma janela que este mod administra fica com este mod, e em qualquer outro lugar fica
+com eles. Para não ter duas ferramentas respondendo ao mesmo gesto, deixe estas duas opções
+desligadas aqui (é o padrão) ou troque o gesto lá.</p>
+<p>Nos layouts &quot;principal à esquerda&quot; / &quot;principal em cima&quot;, arrastar a divisória da janela principal
+muda a parte da tela que ela ocupa. O tamanho mínimo de cada app continua valendo. Os tamanhos
+escolhidos são descartados quando uma janela é aberta, fechada ou minimizada, quando o layout muda
+e quando você reorganiza tudo (Win + Alt + Home).</p>
+<h3>Atalhos</h3>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/keyboard-move.gif" alt="Mover janelas pelo teclado"></p>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/layouts.gif" alt="Layouts"></p>
+<table>
+<thead>
+<tr>
+<th>Atalho</th>
+<th>Ação</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Win + Ctrl + G</td>
+<td>Troca o layout: automático, colunas, linhas, grade, principal à esquerda, principal em cima</td>
+</tr>
+<tr>
+<td>Win + Ctrl + T</td>
+<td>Tira a janela em foco da grade (ela fica onde está e as outras ocupam o espaço); apertar de novo devolve à grade</td>
+</tr>
+<tr>
+<td>Win + Alt + F</td>
+<td>Modo foco: todas as janelas do monitor ocupam a tela toda; apertar de novo sai do modo</td>
+</tr>
+<tr>
+<td>Win + Alt + ← / →</td>
+<td>Move a janela em foco para a esquerda / direita: troca de lugar com a janela vizinha daquele lado, qualquer que seja o layout (não faz nada se não houver)</td>
+</tr>
+<tr>
+<td>Win + Alt + ↑ / ↓</td>
+<td>Sobe / desce a janela em foco: troca de lugar com a janela logo acima / abaixo dela (não faz nada se não houver)</td>
+</tr>
+<tr>
+<td>Win + Alt + Home</td>
+<td>Reorganiza tudo e devolve todas as janelas à grade</td>
+</tr>
+</tbody>
+</table>
+<p>Todos os atalhos podem ser trocados nas configurações, e a mudança vale assim que você salva:</p>
+<ul>
+<li><strong>Layout, soltar/prender e reorganizar</strong> têm campos de texto próprios (por exemplo <code>Ctrl+Alt+G</code>,
+<code>Win+T</code> ou <code>Alt+Home</code>). Escreva os modificadores (Ctrl, Alt, Shift, Win) e uma tecla: uma letra,
+um dígito, ou Up, Down, Left, Right, Home ou End. Deixe o campo vazio para desligar o atalho.</li>
+<li><strong>Modo foco e as quatro setas</strong> compartilham uma única escolha de modificadores: Win+Alt
+(padrão), Ctrl+Alt, Ctrl+Alt+Shift ou Alt+Shift.</li>
+<li>Evite combinações sem Win ou Ctrl: elas tiram a tecla de todos os outros apps.</li>
+</ul>
+<p>Atalhos que não puderem ser registrados aparecem no log do Windhawk (erro 1409 = já em uso).
+Win + Alt + ↑ é um deles, a menos que você ligue <em>Assumir atalhos</em> (veja abaixo).
+Win + Ctrl + T também é o atalho padrão do Always On Top do PowerToys: se você usa os dois, troque
+um deles.</p>
+<h4>Assumir atalhos que já estão em uso</h4>
+<p>O próprio Windows usa algumas dessas combinações: Win + Alt + ↑ encaixa a janela na metade de cima
+da tela, então com as configurações padrão ela fica indisponível para o mod (o log mostra o erro
+1409) e o Windows continua tratando-a. O mod nunca sobrescreve o atalho de outro programa se você
+não pedir. Para usar Win + Alt + ↑, ligue a opção <em>Assumir atalhos</em> (desligada por padrão) ou escolha
+outros modificadores para as setas. Com a opção ligada, sempre que um atalho já estiver ocupado o
+mod captura essa combinação com um gancho de teclado de baixo nível, e o outro programa ou o
+Windows deixa de recebê-la. O gancho roda numa thread própria, só existe enquanto o mod está ligado,
+e só para as combinações que já estavam ocupadas.</p>
+<h3>Menu radial: mover a janela com o mouse</h3>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/radial-menu-glass.gif" alt="Menu radial"></p>
+<p>Desligado por padrão. Nas configurações, escolha o botão que o abre: o botão direito, o do meio, ou
+Alt / Win + botão esquerdo. Depois pressione e segure esse botão sobre uma janela da grade. Um anel
+aparece onde o cursor está (depois de um instante, para não piscar num clique rápido). Mova o mouse para fora do anel, para a esquerda, direita, cima ou
+baixo: aquela fatia do anel acende e o espaço para onde a janela vai é destacado. Solte o botão
+para trocar a janela de lugar com a que ocupa aquele espaço. Esc cancela. Se não houver janela
+daquele lado, a fatia fica cinza e nada acontece. Só considera janelas do mesmo monitor.</p>
+<p>O centro do anel solta e prende janelas sem o teclado. Mantenha o botão pressionado com o cursor
+parado: um pequeno círculo no meio se enche em cerca de meio segundo. Solte quando estiver cheio e
+a janela sai da grade (as outras ocupam o lugar dela). Faça o mesmo sobre uma janela solta e ela
+volta para a grade. Soltar antes de encher é um clique comum.</p>
+<p>O anel tem três temas: <strong>Vidro líquido</strong>, o padrão (vidro transparente: a tela aparece nítida e
+se curva nas bordas do anel), <strong>Vidro</strong> (um tubo de vidro fosco que mostra a tela desfocada atrás
+dele) e <strong>Clássico</strong> (anel liso). A cor da seleção pinta a fatia escolhida e o
+destaque sobre a janela que vai receber a que você está movendo. Por padrão as cores são as da
+borda da janela em foco, acompanhando o efeito dela (pulsar, arco-íris, degradê); escolha
+<em>Personalizadas</em> para definir você mesmo a cor do anel e a cor da seleção. A espessura do anel
+também pode ser escolhida.</p>
+<p>Se você soltar sem sair do anel, o clique é repassado ao app no momento em que o botão é solto,
+então um clique direito comum continua abrindo o menu de contexto. Sobre uma janela que o mod
+administra (na grade ou solta), arrastar com esse botão deixa de funcionar enquanto a opção está
+ligada; em qualquer outro lugar (a área de trabalho, a barra de tarefas, janelas maximizadas, apps
+ignorados) o clique nem é tocado. Ela precisa de um gancho de mouse de baixo nível, que só
+existe enquanto esta opção (ou um dos dois gestos com Alt, redimensionar ou mover) está ligada.</p>
+<h3>Funciona junto com outros mods de animação</h3>
+<p>O Adaptive Windows funciona junto com estes dois mods:</p>
+<ul>
+<li><strong>MacOS Minimize Animation</strong> (efeito genie ao minimizar, restaurar e abrir).</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/macos-minimize-animation.gif" alt="Adaptive Windows com o MacOS Minimize Animation"></p>
+<ul>
+<li><strong>Windows Animations</strong>.</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/brideinflame-rgb/Adaptive-Windows/main/screenshot/windows-animations.gif" alt="Adaptive Windows com o Windows Animations"></p>
+<p>Esses mods escondem a janela e tocam a animação sozinhos. Com <em>Sincronizar com animações de
+abrir/fechar</em> ligado, o Adaptive Windows percebe isso, posiciona a janela no espaço final enquanto
+ela está escondida e anima só as outras janelas abrindo espaço, ao mesmo tempo. Cada janela tem
+uma única animação, sem briga.</p>
+<p>Para o genie voltar ao lugar certo, enquanto uma janela está minimizada o mod grava no Windows o
+espaço que ela vai ocupar quando voltar e mantém esse valor atualizado conforme a grade muda.
+Assim a animação de restaurar termina onde a janela de fato vai ficar.</p>
+<p>Programas que você excluir do outro mod (por exemplo, o Word no genie) não são animados por ele;
+nesse caso o Adaptive Windows usa a própria animação de entrada.</p>
+<h3>Animações</h3>
+<p>O estilo <strong>Nava OS</strong> é a base (curva de saída forte, janela nova entra deslizando da direita).
+Há também os estilos Suave (entra deslizando de cima), Rápido (sem efeito de entrada) e Elástico
+(entra de baixo com leve ressalto). Durante o movimento a janela mantém o tamanho (como ao
+arrastar): as que diminuem encolhem no início e as que crescem só crescem no final, sem
+sobreposição. A taxa de quadros pode seguir o DWM (recomendado), seguir a maior taxa de
+atualização entre os monitores, ou ser fixa (de 30 a 240 Hz).</p>
+<h3>Barra de tarefas e dock</h3>
+<p>A área útil é a área de trabalho do Windows. A <strong>Margem da borda da tela</strong> vale para os quatro
+lados. Se a barra de tarefas estiver escondida, as janelas respeitam apenas a borda da tela.
+<strong>Espaço embaixo</strong> (0 = automático) serve para docks desenhados por outro mod: informe a distância
+da borda da tela até o topo do dock. A barra de tarefas pode ficar em qualquer lado de qualquer
+monitor: a grade segue a área de trabalho do Windows e é refeita quando um monitor é conectado ou
+removido, a resolução muda, ou a barra é movida ou muda a opção de ocultar automaticamente.</p>
+<h3>Cantos</h3>
+<p>Usa a preferência de cantos do próprio Windows 11 (padrão, arredondado, pequeno, quadrado).
+O Windows não permite raio arbitrário por esta via. Se você já usa um mod de cantos (por exemplo,
+&quot;Custom Window Corner Radius&quot;), deixe esta opção em &quot;Não mexer&quot; para os dois não disputarem
+os cantos.</p>
+<h3>Janelas ignoradas e limites</h3>
+<ul>
+<li>As configurações valem assim que você as salva, sem reiniciar o mod. Mudar a lista de
+<strong>Aplicativos que ficam sempre fora da grade</strong> também tira janelas da grade (ou as traz) na hora.</li>
+<li>Para tirar uma janela da grade por enquanto, use o atalho de soltar (Win + Ctrl + T). Para um
+aplicativo ficar sempre fora da grade, escreva o nome dele nessa lista (por exemplo
+<code>spotify;chrome</code>). Um nome vale se for o nome do programa ou se aparecer no título da janela. A
+lista vem vazia por padrão.</li>
+<li>Janelas de ferramenta, sempre no topo, sem foco ou sem moldura redimensionável (por exemplo,
+painéis e widgets) ficam sempre fora da grade. O log do Windhawk diz por que cada janela foi
+ignorada.</li>
+<li>Janelas que não aceitam ser posicionadas (um caso provável são programas executados como
+administrador) passam a flutuar depois de algumas tentativas; Win + Alt + Home tenta de novo.</li>
+<li>Mover janelas pelo teclado só considera janelas do mesmo monitor.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Thiago Silva</name>
+            <uri>https://github.com/brideinflame-rgb</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win11 Context Menu Wave Animation 1.0.0]]></title>
         <id>https://windhawk.net/mods/win11-context-menu-wave-animation#5629b60cfd6a63be322173a289975cc6908f7abb</id>
@@ -805,208 +1282,6 @@ zlib license notice in the source.</p>
         <author>
             <name>DoYouNatureQ</name>
             <uri>https://github.com/DoYouNatureQ</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Icons Proximity Reveal 1.0.3]]></title>
-        <id>https://windhawk.net/mods/desktop-icons-proximity#b8e1961b145ff09548ed49cb1b1500a788d3887d</id>
-        <link href="https://windhawk.net/mods/desktop-icons-proximity"/>
-        <updated>2026-11-12T07:02:56.000Z</updated>
-        <content type="html"><![CDATA[<h1>Desktop Icons Proximity Reveal</h1>
-<p><img src="https://raw.githubusercontent.com/CTabdul15/windhawk-mods/assets/desktop-icons-proximity-preview.gif" alt="Desktop Icons Proximity Reveal demo"></p>
-<p>Hide desktop icons when you are not using them. Hover near an icon or over a
-custom area to fade them back in.</p>
-<p>Features:</p>
-<ul>
-<li>Draw up to 32 reveal areas around your icons.</li>
-<li>Reveal each group separately, or show all icons together.</li>
-<li>Adjust fade speed, hide delay, and hover padding.</li>
-<li>Preview your areas and save them between sessions.</li>
-<li>Keep new folders and shortcuts visible while naming them, then hide them after
-an outside click or a configurable timeout (15 seconds by default).</li>
-<li>Selected icons stay visible until deselected; press <strong>Ctrl+A</strong> to reveal all.
-Disable <strong>Keep selected icons visible</strong> to turn this off.</li>
-<li>Keep icons permanently visible using <strong>Always-visible icons (whitelist)</strong>.
-Enter desktop names separated by semicolons, such as <code>Recycle Bin; Steam; Discord</code>.
-Names ignore case; <code>*</code> and <code>?</code> wildcards are supported.</li>
-</ul>
-<h2>Setup</h2>
-<ol>
-<li>Enable <strong>Show box editor panel</strong> in Settings and apply.</li>
-<li>Click <strong>Edit boxes</strong>. All icons appear, including those outside saved areas.
-Drag around your icons to add areas.</li>
-<li>Click <strong>Save &amp; apply</strong> or <strong>Cancel</strong> to restore normal hiding.
-Switch the panel setting off to close it.</li>
-</ol>
-<p>The panel stays closed at startup. If its setting is already on, switch it off
-and on again to reopen it.</p>
-<p>Separate groups are enabled by default. Without active areas, hovering near any icon
-shows all icons. Recycle Bin and folders work too.</p>
-<h2>How this differs from other mods</h2>
-<p><a href="https://windhawk.net/mods/desktop-icon-section-autohide">Desktop Icon Section Auto-Hide</a>
-uses a single section or box. This mod adds up to 32 separately animated areas,
-a drag-to-draw editor, and temporary visibility for newly created items.
-<a href="https://windhawk.net/mods/flashlight-desktop-icons">Flashlight Desktop Icons</a> and
-<a href="https://windhawk.net/mods/transparent-desktop-icons-spotlight">Spotlight</a> reveal
-icons near the cursor rather than inside saved groups.
-<a href="https://windhawk.net/mods/smooth-desktop-icons-auto-hide">Smooth Desktop Icons Auto-Hide</a>
-and <a href="https://windhawk.net/mods/zen-desktop-toggle-icons">ZenDesktop</a> focus on hiding
-and restoring the desktop as a whole.</p>
-<p><strong>Note:</strong> Requires Windows 10/11 x64. Keep Windows' <strong>Show desktop icons</strong> enabled.
-Hidden icons retain their Windows click targets; icons outside all boxes stay
-hidden unless selected, whitelisted, temporarily revealed, or accessed by keyboard.
-Redraw areas after changing monitors; avoid running other icon hiding mods.</p>
-<p>Rendering hooks adapted from <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-icons-transparency.wh.cpp">Desktop Icons Transparency by zed712969-crypto</a>.</p>
-]]></content>
-        <author>
-            <name>CTabdul15</name>
-            <uri>https://github.com/CTabdul15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Gradual Night Light 0.4.2]]></title>
-        <id>https://windhawk.net/mods/gradual-night-light#46cd778f855d3036a63dfca46ec94348d2ba0cc1</id>
-        <link href="https://windhawk.net/mods/gradual-night-light"/>
-        <updated>2026-11-12T07:02:50.000Z</updated>
-        <content type="html"><![CDATA[<h1>Gradual Night Light</h1>
-<p>Automatically adjust Windows' native Night light throughout the evening, with
-an editable daily schedule and optional gradual transitions.</p>
-<h2>Default schedule</h2>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Time</th>
-<th>Strength</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Stage 1</td>
-<td>19:00</td>
-<td>50</td>
-</tr>
-<tr>
-<td>Stage 2</td>
-<td>20:00</td>
-<td>60</td>
-</tr>
-<tr>
-<td>Stage 3</td>
-<td>21:00</td>
-<td>70</td>
-</tr>
-<tr>
-<td>Off time</td>
-<td>07:00</td>
-<td>Off</td>
-</tr>
-</tbody>
-</table>
-<h2>Settings</h2>
-<ul>
-<li><strong>Off time</strong>: the local time when Night light turns off each day.</li>
-<li><strong>Stages</strong>: add or remove stages with Windhawk's list controls. Each stage has
-a time and a strength from 1 (weakest) to 100 (warmest). Three stages are
-provided by default; between 1 and 96 stages are supported.</li>
-<li><strong>Gradual transitions</strong>: interpolate strength between stages. For example,
-the default schedule produces strength 55 at 19:30. Disable this option to
-change strength only at each stage's start time.</li>
-</ul>
-<p>Times use the local 24-hour <code>HH:MM</code> format. Stages are sorted automatically and
-the schedule repeats daily, including across midnight. All stage times must be
-unique and different from Off time. Invalid settings are reported in the mod
-log; an invalid edit keeps the last valid configuration. If saved settings are
-invalid at startup, the tool stays running without applying a schedule until
-valid settings are saved.</p>
-<p>Night light switches off at Off time and stays off until the next stage. The
-last stage holds its strength until Off time. To fade in from almost no warmth,
-add a stage such as 18:30 with strength 1 before 19:00 with strength 50. Add
-further stages to create a five-stage schedule or a gradual morning fade.</p>
-<h2>Behavior and restoration</h2>
-<p>The scheduler runs in a dedicated Windhawk tool process. Every ten seconds it
-applies the scheduled temperature directly through Windows' display pipeline.
-It also checks after display changes, resume, and session unlock.</p>
-<p>Settings and Quick Settings show Windows' own Night light configuration.
-Windows continues running its own schedule in the background. Its transitions
-can briefly take precedence until the next mod check. The mod pauses while
-Windows previews its strength slider. Disabling the mod reapplies the
-temperature requested by Windows' current settings.</p>
-<p>The mod reads the current user's Night light settings and state from CloudStore.
-It applies all scheduled changes at runtime without writing either record. If
-Windhawk is terminated during a stage, the runtime tint may last until Windows
-next applies Night light or the user signs out.</p>
-<p>If you tested an earlier prerelease, disable it before upgrading so that version
-can restore the settings it saved.</p>
-<h2>Requirements and limitations</h2>
-<p>The mod uses internal Windows Night light display interfaces and the modern
-CloudStore <code>Current</code> layout. The display driver must support Night light.
-The tool launcher supports Windhawk 1.7.3 and newer. The runtime interfaces
-were tested on Windows 11 build 26100, x64, with two displays. HDR and ARM64
-have not been verified. If records are missing, open
-<strong>Settings &gt; System &gt; Display &gt; Night light</strong> once.</p>
-<h2>Technical references</h2>
-<p>The parser and scheduler are independently implemented using the documented
-research below. No external helper, script, or runtime download is required.</p>
-<ul>
-<li><a href="https://github.com/kvnxiao/win-nightlight-cli/blob/main/docs/nightlight-registry-format.md">Night light registry format research</a></li>
-<li><a href="https://github.com/microsoft/bond/blob/master/cpp/inc/bond/protocol/compact_binary.h">Microsoft Bond CompactBinary protocol</a></li>
-<li><a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">Official Windhawk tool mod launcher</a></li>
-</ul>
-]]></content>
-        <author>
-            <name>Fenryr</name>
-            <uri>https://github.com/soldier93HUN</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Floating Taskbar 2.1.13]]></title>
-        <id>https://windhawk.net/mods/floating-taskbar#3631c69d3cd1f3e77c840781f48155f42210fd12</id>
-        <link href="https://windhawk.net/mods/floating-taskbar"/>
-        <updated>2026-11-12T07:02:45.000Z</updated>
-        <content type="html"><![CDATA[<h1>Floating Taskbar</h1>
-<p><img src="https://raw.githubusercontent.com/chaochenzhudian/windhawk-mods/assets/floating-taskbar/assets/floating-taskbar-left.png" alt="Floating Taskbar with left-aligned taskbar icons"></p>
-<p>Left-aligned taskbar layout with the default gradient background.</p>
-<h2>Features</h2>
-<ul>
-<li>Configure the floating bar width, taskbar area height, bottom gap, and
-corner radii.</li>
-<li>Configure the corner radius of taskbar hover highlights.</li>
-<li>Use the system background, a transparent background, translucent color, a
-solid color, a linear gradient, or a custom XAML brush.</li>
-<li>Click through blank areas inside the floating taskbar.</li>
-<li>Keep tray menus and Quick Settings aligned with the right edge of the bar.</li>
-</ul>
-<h2>Settings</h2>
-<p>Widths, area height, spacing, and radii are physical pixels. A taskbar area
-height of 0 follows the system. A custom XAML background that is left empty
-also follows the system background.</p>
-<p>The same physical-pixel values appear differently at different display scales.
-Set the values separately if precise consistency across mixed-DPI monitors is
-required.</p>
-<p>Multi-window taskbar highlights are currently detected from the Chinese and
-English taskbar accessible names. On other Windows display languages, those
-highlights may not be hidden.</p>
-<h2>Differences from other mods</h2>
-<p>Windows 11 Taskbar Styler, Taskbar height and icon size, and MacOS Style Dock
-can also create a floating or unusually sized taskbar. Floating Taskbar also
-adds click-through blank space, tray and Quick Settings alignment, automatic
-tray layout reassertion, and multi-window highlight cleanup. It writes
-properties on the taskbar's <code>RootGrid</code> and <code>BackgroundFill</code>, so combining it
-with a Taskbar Styler theme that styles the same properties is not supported.</p>
-<p>Use Windhawk's normal mod toggle to disable the mod; there is no separate
-enable setting.</p>
-<h2>中文说明</h2>
-<p>将 Windows 11 任务栏变为独立的悬浮圆角条，可调整长度、区域高度、悬浮间距、
-任务栏与待选框圆角，以及背景颜色或渐变。悬浮条内部空白区域可以点击穿透，
-托盘菜单与快速设置面板会对齐悬浮条右端。</p>
-<p>长度、区域高度、间距和圆角使用物理像素。多窗口任务栏高亮目前依靠中文或英文
-辅助功能名称识别，其他显示语言可能不隐藏该高亮。若同时使用 Taskbar Styler
-并修改相同的 <code>RootGrid</code> 或 <code>BackgroundFill</code> 属性，两个 Mod 可能冲突。</p>
-]]></content>
-        <author>
-            <name>chaochenzhudian</name>
-            <uri>https://github.com/chaochenzhudian</uri>
         </author>
     </entry>
 </feed>
