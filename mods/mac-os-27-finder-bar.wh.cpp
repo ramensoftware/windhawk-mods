@@ -9957,9 +9957,9 @@ static LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 //    minimizada. O Windows só cria essa janela na primeira vez que o volume muda,
 //    então ela pode aparecer uma vez antes de ser escondida;
 //  - a nova (24H2 em diante, em XAML, a das teclas de volume): uma
-//    XamlExplorerHostIslandWindow do Explorer. Ela fica transparente para o mouse,
-//    fora da tela e minimizada (é o que fazem o HideVolumeOSD e o FluentFlyout);
-//    minimizada só, o Windows a mostra de novo.
+//    XamlExplorerHostIslandWindow do Explorer. Ela fica em camadas e sem conteúdo
+//    (invisível), transparente para o mouse e fora da tela. Não é minimizada: o
+//    Windows a restaura com a animação de janela, que se vê saindo do canto.
 // A visualização das miniaturas da barra de tarefas, o Snap Assist, o Alt+Tab e a
 // Visão de Tarefas usam a mesma classe. Por isso a nova só é escolhida quando
 // aparece logo depois de uma mudança de volume, sem título e pequena (bem menor
@@ -10038,8 +10038,10 @@ static void WinOsdIslandHide(HWND x) {
         Wh_Log(L"Hiding Windows' XAML volume pill %p (%dx%d)", x, (int)(r.right - r.left), (int)(r.bottom - r.top));
     }
     SetWindowLongPtrW(x, GWL_EXSTYLE, g_winOsdIslandEx | WS_EX_LAYERED | WS_EX_TRANSPARENT);
+    // Sem minimizar: minimizada, o Windows a restaura com a animação de janela
+    // (ela "sai voando" do canto). Em camadas e sem conteúdo ela já não aparece;
+    // fora da tela, também não pega clique.
     SetWindowPos(x, nullptr, -99999, -99999, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
-    ShowWindowAsync(x, SW_SHOWMINNOACTIVE);
 }
 // Depois de uma mudança de volume, procura a nova por até 700 ms (ela aparece
 // quase junto com a mudança).
@@ -22151,6 +22153,8 @@ static void LqLiveTick() {
     if (g_wxw.hwnd && LqLiveRefresh(g_wxw.glass.lq)) { any = true; WxRender(); }
     if (g_calw.hwnd && LqLiveRefresh(g_calw.glass.lq)) { any = true; CalRender(); }
     if (g_isl.hwnd && LqLiveRefresh(g_isl.glass.lq)) { any = true; IslandRender(); }
+    if (g_np.hwnd && LqLiveRefresh(g_np.glass.lq)) { any = true; NpRender(); }
+    if (g_ntf.hwnd && LqLiveRefresh(g_ntf.glass.lq)) { any = true; NtfRender(); }
     if (!any) KillTimer(g_owner, TIMER_LIQUID);
 }
 
