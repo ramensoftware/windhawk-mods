@@ -1969,6 +1969,17 @@ struct AdaptiveTone {
         return average = total / (now - start);
     }
 };
+// The Composition geometry that draws a dock outline: what the clip, the border line, the highlights and the shadow
+// mask share. The live dock binds it to its hull, which the compositor animates; the preview sets it at a hull that
+// stands still. Its functions follow OutlinePath.
+struct DrawnOutline {
+    // Hull: the hull's own rounded rect. Bleed: a second rounded rect, the hull carried past the screen edge. Path: a
+    // trace of what a rounded rect can't draw.
+    enum class Kind { Hull, Bleed, Path };
+    Kind kind{};
+    CompositionGeometry geometry{nullptr};
+};
+
 struct EditorPreview {
     int width = 640, height = 420;
     double margin = 48; // The canvas past each side of the dock band: wider when a slanted outline leans further.
@@ -1991,8 +2002,8 @@ struct EditorPreview {
     std::shared_ptr<LiquidRenderer> renderer;
     std::unique_ptr<GlassPointerBinding> glassPointer;
     std::shared_ptr<GlassShadow> shadow;
-    CompositionGeometry shadowGeometry{nullptr}; // A rounded rect, or Separate's static trace.
-    CompositionPathGeometry outline{nullptr};    // Separate: clips the material and carries its border line.
+    DrawnOutline shadowOutline; // The shadow's mask, in the canvas' DIP.
+    DrawnOutline outline;       // A trace in the material's DIP: clips it and carries its border line.
     bool unavailable{};
     std::array<AdaptiveTone,3> foregroundTones;
     std::future<std::array<double,3>> foregroundSample;
@@ -5080,6 +5091,76 @@ CompositionPath OutlinePath(DockOutline const& outline, DockHull const& hull) {
     return CompositionPath(source.as<winrt::Windows::Graphics::IGeometrySource2D>());
 }
 
+// ---- Drawn outline ---------------------------------------------------------
+DrawnOutline::Kind OutlineKind(DockOutline const& outline) {
+    using Kind = DrawnOutline::Kind;
+    return NeedsPath(outline) ? Kind::Path : HullOnly(outline) ? Kind::Hull : Kind::Bleed;
+}
+// The live dock's outline on its hull. Island's is the hull. Edge's is the hull's rest rect until BindBleed binds it,
+// and a path is empty until FollowOutline keys its morph off the hull, both in the same pass.
+DrawnOutline HullOutline(CompositionRoundedRectangleGeometry const& hull, DockOutline const& outline) {
+    auto kind = OutlineKind(outline);
+    if (kind == DrawnOutline::Kind::Hull) return {kind, hull};
+    auto compositor = hull.Compositor();
+    if (kind == DrawnOutline::Kind::Path) return {kind, compositor.CreatePathGeometry()};
+    auto extended = compositor.CreateRoundedRectangleGeometry();
+    extended.CornerRadius(hull.CornerRadius());
+    extended.Offset(hull.Offset());
+    extended.Size(hull.Size());
+    return {kind, extended};
+}
+void RoundBleed(DrawnOutline const& outline, float radius) {
+    if (outline.kind == DrawnOutline::Kind::Bleed)
+        outline.geometry.as<CompositionRoundedRectangleGeometry>().CornerRadius({radius, radius});
+}
+// Edge's outline is bound to the hull, like the tray, so it moves in the hull's compositor frame.
+void BindBleed(DrawnOutline const& outline, CompositionRoundedRectangleGeometry const& hull,
+               CompositionPropertySet const& metrics) {
+    if (outline.kind != DrawnOutline::Kind::Bleed) return;
+    auto outlineOffset = metrics.Compositor().CreateExpressionAnimation(
+        L"Vector2(dock.Offset.X, dock.Offset.Y - geometry.bleedTop)");
+    auto outlineSize = metrics.Compositor().CreateExpressionAnimation(
+        L"Vector2(dock.Size.X, dock.Size.Y + geometry.bleed)");
+    for (auto const& expression : {outlineOffset, outlineSize}) {
+        expression.SetReferenceParameter(L"dock", hull);
+        expression.SetReferenceParameter(L"geometry", metrics);
+    }
+    outline.geometry.StartAnimation(L"Offset", outlineOffset);
+    outline.geometry.StartAnimation(L"Size", outlineSize);
+}
+void StopOutline(DrawnOutline const& outline) {
+    if (outline.kind == DrawnOutline::Kind::Path) {
+        auto path = outline.geometry.as<CompositionPathGeometry>();
+        if (auto controller = path.TryGetAnimationController(L"Path")) controller.StopAnimation(L"Progress");
+        path.StopAnimation(L"Path");
+    } else {
+        outline.geometry.StopAnimation(L"Offset");
+        outline.geometry.StopAnimation(L"Size");
+    }
+}
+// The preview's outline at a hull that stands still: the trace there, or the one piece's box, which is the hull
+// carried past the screen edge by Edge's bleed. Returns whether it made a new geometry, which whatever held the old
+// one has to take up.
+bool SetOutline(DrawnOutline& drawn, Compositor const& compositor, DockOutline const& outline, DockHull const& hull) {
+    auto kind = OutlineKind(outline);
+    bool path = kind == DrawnOutline::Kind::Path;
+    bool created = !drawn.geometry || path != (drawn.kind == DrawnOutline::Kind::Path);
+    if (created)
+        drawn.geometry = path ? CompositionGeometry(compositor.CreatePathGeometry())
+                              : compositor.CreateRoundedRectangleGeometry();
+    drawn.kind = kind;
+    if (path) {
+        drawn.geometry.as<CompositionPathGeometry>().Path(OutlinePath(outline, hull));
+    } else {
+        auto const& piece = outline.pieces.front();
+        auto rect = drawn.geometry.as<CompositionRoundedRectangleGeometry>();
+        rect.Offset({hull.left, hull.top + piece.top});
+        rect.Size({hull.right - hull.left, hull.bottom - hull.top + piece.bottom - piece.top});
+        rect.CornerRadius({outline.radius, outline.radius});
+    }
+    return created;
+}
+
 struct LiquidSettings {
     float zRadius{40};
     float refraction{0.69f};
@@ -5856,7 +5937,7 @@ struct OwnedDock {
     CompositionRoundedRectangleGeometry geometry{nullptr};
     // The silhouette the clip, highlights, border line and shadow draw: the hull itself for
     // Island, the hull carried past the screen edge for Edge, a path morphed off the hull for Separate.
-    CompositionGeometry outline{nullptr};
+    DrawnOutline outline;
     // What Separate's morph keyframes encode, so an unchanged Refresh leaves the running morph alone.
     struct MorphKey {
         DockOutline outline;
@@ -9955,7 +10036,6 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         double buttonCorner = number(FieldIndex(L"buttonCornerRadius"));
         double highlightPadding = number(FieldIndex(L"tray.highlightPadding"));
         double highlightRadius = number(FieldIndex(L"tray.highlightRadius"));
-        double bleed = DockBleed(style.shape, radius);
         double drop = TrayDrop(style, dockHeight);
         // The tray bar wraps the tray content in the dock padding, like the live tray. The ends keep their gap beside the
         // Start icon and the clock, the last tray item, and Separate's facing ends beside the last button's icon and the
@@ -9979,7 +10059,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         double dockWidth = kDockPadding + buttons + fit.gap + trayWidth + kDockPadding;
         // A traced outline clips the material, which the outer flares or the slanted walls widen past the dock band on
         // both sides.
-        bool traced = NeedsPath(outline);
+        bool traced = OutlineKind(outline) == DrawnOutline::Kind::Path;
         float flare = static_cast<float>(OutlineReach(outline, dockHeight));
         FitPreviewCanvas(editor, flare, trail + fit.gap - kPreviewGap);
         double left = preview.margin, trayLeft = left + kDockPadding + buttons + fit.gap;
@@ -10046,31 +10126,19 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
             auto lens = DockLens(left, y, dockWidth, dockHeight, radius, outline, border,
                                  ReadLiquidSettings(EditorPageValues(editor, 1)), 1);
             if (lens.optics.shadowOpacity > 0) {
-                // The mask shape is fixed at construction, so a change of geometry kind rebuilds the shadow.
-                if (preview.shadow && bool(preview.shadowGeometry.try_as<CompositionPathGeometry>()) != traced) {
+                auto compositor = Hosting::ElementCompositionPreview::GetElementVisual(
+                    preview.liquidHost).Compositor();
+                // The mask shape is fixed at construction, so a new geometry rebuilds the shadow.
+                if (SetOutline(preview.shadowOutline, compositor, outline,
+                               {float(left), float(y), float(left + dockWidth), float(y + dockHeight)}))
                     preview.shadow.reset();
-                    preview.shadowGeometry = nullptr;
-                }
-                if (!preview.shadow) {
-                    auto compositor = Hosting::ElementCompositionPreview::GetElementVisual(
-                        preview.liquidHost).Compositor();
-                    preview.shadowGeometry = traced ? CompositionGeometry(compositor.CreatePathGeometry())
-                                                    : compositor.CreateRoundedRectangleGeometry();
+                if (!preview.shadow)
                     preview.shadow = std::make_shared<GlassShadow>(
-                        preview.canvas, preview.material, preview.shadowGeometry);
-                }
-                if (auto path = preview.shadowGeometry.try_as<CompositionPathGeometry>()) {
-                    path.Path(OutlinePath(outline, {float(left), float(y), float(left + dockWidth), float(y + dockHeight)}));
-                } else {
-                    auto rect = preview.shadowGeometry.as<CompositionRoundedRectangleGeometry>();
-                    rect.Offset({lens.center[0] - lens.halfSize[0], lens.center[1] - lens.halfSize[1]});
-                    rect.Size({lens.halfSize[0] * 2, lens.halfSize[1] * 2 + float(bleed)});
-                    rect.CornerRadius({lens.radius, lens.radius});
-                }
+                        preview.canvas, preview.material, preview.shadowOutline.geometry);
                 preview.shadow->Update({float(preview.width), float(preview.height)}, {}, lens.optics);
             } else {
                 preview.shadow.reset();
-                preview.shadowGeometry = nullptr;
+                preview.shadowOutline = {};
             }
             if(ButtonLensFits(buttonWidth,buttonHeight)) {
                 // Start is not a TaskListButton. Only the four app samples
@@ -10108,11 +10176,10 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         ShapeVisual materialLine{nullptr};
         if (traced) {
             auto compositor = materialVisual.Compositor();
-            if (!preview.outline) preview.outline = compositor.CreatePathGeometry();
-            preview.outline.Path(OutlinePath(outline, {flare, 0, flare + float(dockWidth), float(dockHeight)}));
-            if (!materialVisual.Clip()) materialVisual.Clip(compositor.CreateGeometricClip(preview.outline));
+            SetOutline(preview.outline, compositor, outline, {flare, 0, flare + float(dockWidth), float(dockHeight)});
+            if (!materialVisual.Clip()) materialVisual.Clip(compositor.CreateGeometricClip(preview.outline.geometry));
             if (borderWidth == 0 && !liquid && border.width > 0)
-                materialLine = GlassHighlights(preview.outline, DockTheme::Native, dark, border);
+                materialLine = GlassHighlights(preview.outline.geometry, DockTheme::Native, dark, border);
         } else {
             materialVisual.Clip(nullptr);
         }
@@ -10163,7 +10230,7 @@ void CloseEditorPreview(SettingsEditor& editor) {
     }
     preview.glassPointer.reset();
     preview.shadow.reset();
-    preview.shadowGeometry=nullptr;
+    preview.shadowOutline={};
     if (preview.renderer) {
         try {
             if (preview.liquidHost &&
@@ -12018,7 +12085,7 @@ void PrepareGlass(Root& root) {
         if (g_theme == DockTheme::Glass || frosted) {
             material = GlassMaterial(frosted, dark);
         }
-        auto highlights = GlassHighlights(dock.outline, g_theme, dark, g_dockBorder);
+        auto highlights = GlassHighlights(dock.outline.geometry, g_theme, dark, g_dockBorder);
         if (!native) {
             dock.fill = fill;
             dock.stroke = stroke;
@@ -12943,7 +13010,7 @@ void PrepareLiquid(Root& root, Measurements const& m) {
             if (!dock.shadow) {
                 auto parent = Media::VisualTreeHelper::GetParent(dock.background).try_as<Controls::Panel>();
                 if (!parent) throw winrt::hresult_error(E_NOTIMPL, L"Shadow parent unavailable");
-                dock.shadow = std::make_shared<GlassShadow>(parent, dock.background, dock.outline);
+                dock.shadow = std::make_shared<GlassShadow>(parent, dock.background, dock.outline.geometry);
             }
             auto offset = dock.background.ActualOffset();
             dock.shadow->Update({float(dock.background.ActualWidth()), float(dock.background.ActualHeight())},
@@ -13007,17 +13074,6 @@ void PrepareLiquid(Root& root, Measurements const& m) {
     }
 }
 
-void StopOutline(OwnedDock& dock) {
-    if (auto path = dock.outline.try_as<CompositionPathGeometry>()) {
-        if (auto controller = path.TryGetAnimationController(L"Path")) controller.StopAnimation(L"Progress");
-        path.StopAnimation(L"Path");
-    } else {
-        dock.outline.StopAnimation(L"Offset");
-        dock.outline.StopAnimation(L"Size");
-    }
-    dock.morph = {};
-}
-
 void RestoreDock(Root& root) {
     auto& dock=root.dock;
     dock.liquidRetryAt = 0;
@@ -13034,9 +13090,10 @@ void RestoreDock(Root& root) {
     else Wh_Log(L"[UWDOCK] clip ownership lost; external clip retained");
     dock.geometry.StopAnimation(L"Offset");
     dock.geometry.StopAnimation(L"Size");
-    StopOutline(dock);
+    StopOutline(dock.outline);
+    dock.morph = {};
     dock.geometry = nullptr;
-    dock.outline = nullptr;
+    dock.outline = {};
     dock.clip = nullptr;
     dock.visual = nullptr;
     dock.originalClip = nullptr;
@@ -13046,7 +13103,7 @@ bool PrepareDock(OwnedDock& dock, FrameworkElement background,
                  DockInsets insets, DockOutline const& silhouette) {
     if (dock.clip) {
         return dock.background == background && dock.visual.Clip() == dock.clip &&
-               dock.clip.Geometry() == dock.outline;
+               dock.clip.Geometry() == dock.outline.geometry;
     }
     auto visual = Hosting::ElementCompositionPreview::GetElementVisual(background);
     auto compositor = visual.Compositor();
@@ -13058,19 +13115,8 @@ bool PrepareDock(OwnedDock& dock, FrameworkElement background,
     geometry.Offset({0, static_cast<float>(insets.top)});
     geometry.Size({static_cast<float>(background.ActualWidth()),
                    static_cast<float>(height)});
-    CompositionGeometry outline = geometry;
-    if (NeedsPath(silhouette)) {
-        // FollowOutline keys the path's morph off the hull in this same pass.
-        outline = compositor.CreatePathGeometry();
-    } else if (!HullOnly(silhouette)) {
-        // UpdateFollower binds it to the hull; until then it is the hull's rest rect.
-        auto extended = compositor.CreateRoundedRectangleGeometry();
-        extended.CornerRadius({radius, radius});
-        extended.Offset(geometry.Offset());
-        extended.Size(geometry.Size());
-        outline = extended;
-    }
-    auto clip = compositor.CreateGeometricClip(outline);
+    auto outline = HullOutline(geometry, silhouette);
+    auto clip = compositor.CreateGeometricClip(outline.geometry);
     dock.background = background;
     dock.visual = visual;
     dock.originalClip = visual.Clip();
@@ -13088,8 +13134,8 @@ bool PrepareDock(OwnedDock& dock, FrameworkElement background,
 // grid, so a wall is off by up to span * 1 ms / Duration: 15 DIP at 1 s on a 5120 DIP host, under
 // 0.01 DIP at an hour. Returns whether it re-keyed: only when what the traces encode changed.
 bool FollowOutline(OwnedDock& dock, CompositionPropertySet const& metrics, Measurements const& m) {
-    auto path = dock.outline.try_as<CompositionPathGeometry>();
-    if (!path) return false;
+    if (dock.outline.kind != DrawnOutline::Kind::Path) return false;
+    auto path = dock.outline.geometry.as<CompositionPathGeometry>();
     OwnedDock::MorphKey key{m.outline, static_cast<float>(m.insets.top),
                             static_cast<float>(m.insets.top + m.visibleDockHeight()),
                             static_cast<float>(m.center), static_cast<float>(m.host)};
@@ -13313,8 +13359,7 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
     root.metrics.InsertScalar(L"bleed", bleed);
     root.metrics.InsertScalar(L"bleedTop", m.atTop ? bleed : 0);
     root.dock.geometry.CornerRadius({radius, radius});
-    if (auto extended = root.dock.outline.try_as<CompositionRoundedRectangleGeometry>(); extended && extended != root.dock.geometry)
-        extended.CornerRadius({radius, radius});
+    RoundBleed(root.dock.outline, radius);
     // Start's arranged x is what anchor.Offset.X reads once Windows' slide lands, so at rest Min() is the identity.
     double startRest = start.ActualOffset().x;
     LeadHull(root, m.dockOrigin() + m.shift + std::max(0.0, (threshold - startRest) / 2) + startRest - kDockPadding);
@@ -13341,19 +13386,7 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
     root.buttonsTranslation.element.StartAnimation(buttonsAnimation);
     root.trayTranslation.element.StartAnimation(animation);
     BindHull(root.dock.geometry, root.metrics, anchorVisual);
-    if (root.dock.outline.try_as<CompositionRoundedRectangleGeometry>() && root.dock.outline != root.dock.geometry) {
-        // Bound to the hull, like the tray, so it moves in the hull's compositor frame.
-        auto outlineOffset = root.metrics.Compositor().CreateExpressionAnimation(
-            L"Vector2(dock.Offset.X, dock.Offset.Y - geometry.bleedTop)");
-        auto outlineSize = root.metrics.Compositor().CreateExpressionAnimation(
-            L"Vector2(dock.Size.X, dock.Size.Y + geometry.bleed)");
-        for (auto const& expression : {outlineOffset, outlineSize}) {
-            expression.SetReferenceParameter(L"dock", root.dock.geometry);
-            expression.SetReferenceParameter(L"geometry", root.metrics);
-        }
-        root.dock.outline.StartAnimation(L"Offset", outlineOffset);
-        root.dock.outline.StartAnimation(L"Size", outlineSize);
-    }
+    BindBleed(root.dock.outline, root.dock.geometry, root.metrics);
 }
 
 void RestoreRoot(Root& root) {
@@ -13638,7 +13671,7 @@ bool RootLayoutUnchanged(Root& root) {
     for (auto const* owned : {&root.buttonsTranslation,&root.trayTranslation})
         if (owned->installed && !root.follower && !StillOwned(*owned)) return false;
     auto& dock=root.dock;
-    if (dock.clip && (dock.visual.Clip()!=dock.clip || dock.clip.Geometry()!=dock.outline)) return false;
+    if (dock.clip && (dock.visual.Clip()!=dock.clip || dock.clip.Geometry()!=dock.outline.geometry)) return false;
     if ((dock.material && (dock.fill.Fill()!=dock.material || dock.stroke.Fill()!=dock.transparentStroke)) ||
         (dock.attachedVisual && Hosting::ElementCompositionPreview::GetElementChildVisual(dock.background)!=dock.attachedVisual))
         return false;
