@@ -8325,7 +8325,15 @@ static bool IsEligibleWindow(HWND hWnd, WindowEntry* outEntry = nullptr) {
         // In Gaming Full Screen Experience (Xbox Mode) or Tablet Mode, the Windows
         // Shell cloaks background desktop windows on the current desktop.
         // These are valid open applications and must be shown in Alt+Tab.
+        // Windows that no virtual desktop owns (prelaunched background apps such
+        // as Settings) are hidden, matching the native switcher.
         if (g_pVirtualDesktopManager) {
+            GUID desktopId = {};
+            static const GUID kNoDesktop = {};
+            if (FAILED(g_pVirtualDesktopManager->GetWindowDesktopId(hWnd, &desktopId)) ||
+                IsEqualGUID(desktopId, kNoDesktop)) {
+                return false;
+            }
             BOOL onCurrent = FALSE;
             if (SUCCEEDED(g_pVirtualDesktopManager->IsWindowOnCurrentVirtualDesktop(hWnd, &onCurrent))) {
                 if (onCurrent) {
