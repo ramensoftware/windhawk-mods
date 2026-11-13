@@ -29,7 +29,10 @@ Windows applications.
   layout among the keyboard layouts installed on your device, converts the text
   by key positions between layouts, then pastes the converted text back.
 - By default the previous clipboard content is restored after replacement, in
-  all of its formats (text, images, files and so on).
+  all of its formats (text, images, files and so on). Formats are kept up to
+  128 MB each (256 MB in total); if the clipboard holds something larger, or
+  only formats that can't be copied, the conversion is skipped instead of
+  losing it.
 - An optional small success toast can be enabled in the settings; it appears in
   the bottom-right screen corner after each conversion.
 
@@ -40,16 +43,21 @@ Windows applications.
 
 ## Similar mods
 - Arabic Keyboard Layout Fixer converts between a fixed Arabic/English pair.
-  This mod builds the mapping from every installed layout, and adds a
-  previous-word fallback, cycle mode, optional layout switching and a toast.
+- Quick translator & Layout-switcher converts between a fixed English/Russian
+  pair, with optional online translation.
+Both use a fixed layout pair. This mod builds the mapping from every installed
+layout, and adds a previous-word fallback, cycle mode, optional layout
+switching and a toast.
 
 ## Notes and limitations
 - Replacement is clipboard-based (copy/paste simulation), so behavior can vary
   in apps with custom clipboard/shortcut handling.
-- In console windows, Ctrl+C without a selection interrupts the running
-  command, so the previous-word fallback is skipped there; select the text
+- In console windows the copy uses Ctrl+Insert instead of Ctrl+C, because
+  Ctrl+C without a selection discards the typed line and interrupts a running
+  command. The previous-word fallback is skipped there, so select the text
   instead. Editors such as VS Code or Visual Studio copy the current line when
-  nothing is selected, so the fallback can paste an extra line there.
+  nothing is selected, so pressing the shortcut without a selection can paste
+  an extra line there; the selection-only scope doesn't avoid this.
 - The shortcut is swallowed globally, which shadows apps that use it themselves
   (for example Microsoft Word binds Alt+X); change the shortcut if needed.
 - The mod may not be able to interact with elevated (UIPI) windows, secure
@@ -80,7 +88,7 @@ Windows applications.
   $description: "What text to convert when the shortcut is pressed."
 - restoreClipboard: true
   $name: "Restore clipboard"
-  $description: "Restore the previous clipboard content, in all of its formats, after conversion."
+  $description: "Restore the previous clipboard content, in all of its formats, after conversion. Formats above 128 MB (or 256 MB in total) can't be preserved, and the conversion is skipped in that case."
 - showNotification: false
   $name: "Show notification"
   $description: "Show a small success toast in the screen corner after a successful conversion."
@@ -89,7 +97,7 @@ Windows applications.
   $description: "Try to switch the active keyboard layout to the detected target layout."
 - actionDelayMs: 150
   $name: "Clipboard wait (ms)"
-  $description: "Minimum time in milliseconds to wait for the clipboard after copy and paste. Increase it if conversions fail in slow applications."
+  $description: "Time in milliseconds to wait for the clipboard after copy, and to wait after pasting before the clipboard is restored. Values below 150 are raised to 150. Increase it if conversions fail in slow applications."
 */
 // ==/WindhawkModSettings==
 
@@ -119,16 +127,18 @@ Windows applications.
 namespace {
 
 constexpr UINT WM_APP_CONVERT = WM_APP + 0x51;
+constexpr UINT WM_APP_UPDATE_MOUSE_HOOK = WM_APP + 0x52;
 
 // A modifier-only shortcut held longer than this is treated as regular
 // modifier usage rather than a shortcut, which keeps Ctrl+Shift+drag and
 // similar accidental triggers from converting text.
 constexpr ULONGLONG kHotkeyMaxHoldMs = 1500;
 
-// Clipboard snapshot limits. Larger formats are skipped instead of blocking
-// the conversion.
-constexpr SIZE_T kClipboardFormatLimit = 8 * 1024 * 1024;
-constexpr SIZE_T kClipboardTotalLimit = 16 * 1024 * 1024;
+// Clipboard snapshot limits. A 4K/5K screenshot is 30-50 MB, so the per-format
+// limit leaves plenty of headroom. If a restorable format still can't be saved,
+// the conversion is skipped instead of destroying it.
+constexpr SIZE_T kClipboardFormatLimit = 128 * 1024 * 1024;
+constexpr SIZE_T kClipboardTotalLimit = 256 * 1024 * 1024;
 
 struct Hotkey {
     UINT modifiers = 0;  // MOD_* | MOD_NOREPEAT (we ignore norepeat in parsing)
@@ -162,16 +172,32 @@ struct LayoutMap {
     std::unordered_map<wchar_t, KeyStroke> keyForCharShift;
 };
 
+struct ClipboardItem {
+    UINT format = 0;
+    HGLOBAL handle = nullptr;
+};
+
+// Clipboard data is kept in GlobalAlloc blocks rather than in std::vector, so
+// that in the 32-bit tool process a failed allocation of a large format (e.g. a
+// 4K screenshot) returns NULL instead of throwing.
 struct ClipboardSnapshot {
-    bool valid = false;
     DWORD seq = 0;
-    std::vector<std::pair<UINT, std::vector<BYTE>>> items;
+    bool captured = false;
+    std::vector<ClipboardItem> items;
+
+    ClipboardSnapshot() = default;
+    ClipboardSnapshot(const ClipboardSnapshot&) = delete;
+    ClipboardSnapshot& operator=(const ClipboardSnapshot&) = delete;
+    ~ClipboardSnapshot() {
+        for (ClipboardItem& item : items) {
+            if (item.handle) GlobalFree(item.handle);
+        }
+    }
 };
 
 Settings g_settings;
 Hotkey g_hotkeyForHook;
 std::mutex g_settingsMutex;
-std::mutex g_convertMutex;
 std::mutex g_layoutMutex;
 
 HHOOK g_keyboardHook = nullptr;
@@ -275,7 +301,9 @@ UINT ParseVkToken(const std::wstring& tokenRaw) {
     }
     if (token == L"apps" || token == L"contextmenu") return VK_APPS;
     if (token == L"semicolon") return VK_OEM_1;
-    if (token == L"equals" || token == L"equal") return VK_OEM_PLUS;
+    if (token == L"equals" || token == L"equal" || token == L"plus") {
+        return VK_OEM_PLUS;
+    }
     if (token == L"comma") return VK_OEM_COMMA;
     if (token == L"minus" || token == L"dash") return VK_OEM_MINUS;
     if (token == L"period" || token == L"dot") return VK_OEM_PERIOD;
@@ -306,39 +334,40 @@ Hotkey ParseHotkey(const std::wstring& text) {
         size_t plus = text.find(L'+', start);
         std::wstring part = Trim(text.substr(start, plus == std::wstring::npos ? std::wstring::npos : plus - start));
         std::wstring low = ToLower(part);
-        if (!low.empty()) {
-            if (low == L"ctrl" || low == L"control") {
-                addMod(MOD_CONTROL, 0, 0);
-            } else if (low == L"lctrl" || low == L"leftctrl" || low == L"leftcontrol") {
-                addMod(MOD_CONTROL, 0, VK_LCONTROL);
-            } else if (low == L"rctrl" || low == L"rightctrl" || low == L"rightcontrol") {
-                addMod(MOD_CONTROL, 0, VK_RCONTROL);
-            } else if (low == L"alt" || low == L"menu") {
-                addMod(MOD_ALT, 1, 0);
-            } else if (low == L"lalt" || low == L"leftalt") {
-                addMod(MOD_ALT, 1, VK_LMENU);
-            } else if (low == L"ralt" || low == L"rightalt") {
-                addMod(MOD_ALT, 1, VK_RMENU);
-            } else if (low == L"shift") {
-                addMod(MOD_SHIFT, 2, 0);
-            } else if (low == L"lshift" || low == L"leftshift") {
-                addMod(MOD_SHIFT, 2, VK_LSHIFT);
-            } else if (low == L"rshift" || low == L"rightshift") {
-                addMod(MOD_SHIFT, 2, VK_RSHIFT);
-            } else if (low == L"win" || low == L"windows" || low == L"meta") {
-                addMod(MOD_WIN, 3, 0);
-            } else if (low == L"lwin" || low == L"leftwin") {
-                addMod(MOD_WIN, 3, VK_LWIN);
-            } else if (low == L"rwin" || low == L"rightwin") {
-                addMod(MOD_WIN, 3, VK_RWIN);
+        if (low.empty()) {
+            // "Ctrl++" or a trailing "+" is a typo, not a modifier-only combo.
+            badToken = true;
+        } else if (low == L"ctrl" || low == L"control") {
+            addMod(MOD_CONTROL, 0, 0);
+        } else if (low == L"lctrl" || low == L"leftctrl" || low == L"leftcontrol") {
+            addMod(MOD_CONTROL, 0, VK_LCONTROL);
+        } else if (low == L"rctrl" || low == L"rightctrl" || low == L"rightcontrol") {
+            addMod(MOD_CONTROL, 0, VK_RCONTROL);
+        } else if (low == L"alt" || low == L"menu") {
+            addMod(MOD_ALT, 1, 0);
+        } else if (low == L"lalt" || low == L"leftalt") {
+            addMod(MOD_ALT, 1, VK_LMENU);
+        } else if (low == L"ralt" || low == L"rightalt") {
+            addMod(MOD_ALT, 1, VK_RMENU);
+        } else if (low == L"shift") {
+            addMod(MOD_SHIFT, 2, 0);
+        } else if (low == L"lshift" || low == L"leftshift") {
+            addMod(MOD_SHIFT, 2, VK_LSHIFT);
+        } else if (low == L"rshift" || low == L"rightshift") {
+            addMod(MOD_SHIFT, 2, VK_RSHIFT);
+        } else if (low == L"win" || low == L"windows" || low == L"meta") {
+            addMod(MOD_WIN, 3, 0);
+        } else if (low == L"lwin" || low == L"leftwin") {
+            addMod(MOD_WIN, 3, VK_LWIN);
+        } else if (low == L"rwin" || low == L"rightwin") {
+            addMod(MOD_WIN, 3, VK_RWIN);
+        } else {
+            UINT parsed = ParseVkToken(part);
+            if (parsed && !vk) {
+                vk = parsed;
             } else {
-                UINT parsed = ParseVkToken(part);
-                if (parsed && !vk) {
-                    vk = parsed;
-                } else {
-                    // Unknown key name or more than one non-modifier key.
-                    badToken = true;
-                }
+                // Unknown key name or more than one non-modifier key.
+                badToken = true;
             }
         }
         if (plus == std::wstring::npos) break;
@@ -375,7 +404,7 @@ void LoadSettings() {
     s.switchLayout = Wh_GetIntSetting(L"switchLayout") != 0;
     s.showNotification = Wh_GetIntSetting(L"showNotification") != 0;
     s.actionDelayMs = Wh_GetIntSetting(L"actionDelayMs");
-    if (s.actionDelayMs < 30) s.actionDelayMs = 150;
+    if (s.actionDelayMs < 150) s.actionDelayMs = 150;
     if (s.actionDelayMs > 2000) s.actionDelayMs = 2000;
 
     s.hotkey = ParseHotkey(s.hotkeyStr);
@@ -566,40 +595,78 @@ std::wstring GetClipboardUnicodeText() {
     return text;
 }
 
-ClipboardSnapshot SaveClipboard() {
-    ClipboardSnapshot snapshot;
-    if (!OpenClipboardWithRetry()) return snapshot;
+// Copies the whole clipboard into the snapshot. Returns false if a restorable
+// format couldn't be captured; the caller must then leave the clipboard alone,
+// because the synthetic Ctrl+C would destroy content that can't be put back.
+bool SaveClipboard(ClipboardSnapshot& snapshot) {
+    if (!OpenClipboardWithRetry()) return false;
 
-    snapshot.valid = true;
     snapshot.seq = GetClipboardSequenceNumber();
 
     SIZE_T total = 0;
+    bool ok = true;
+    bool skippedAny = false;
     for (UINT format = 0; (format = EnumClipboardFormats(format)) != 0;) {
-        if (IsSnapshotSkippedFormat(format)) continue;
+        if (IsSnapshotSkippedFormat(format)) {
+            // GDI handles and private formats can't be copied into a block.
+            skippedAny = true;
+            continue;
+        }
 
         HANDLE h = GetClipboardData(format);
-        if (!h) continue;
+        if (!h) {
+            // The owner has no data for this format. Synthesized aliases such
+            // as CF_DIBV5 can report NULL, and there is nothing to lose by not
+            // restoring a format that reports no data.
+            Wh_Log(L"Clipboard format %u has no data", format);
+            continue;
+        }
         SIZE_T size = GlobalSize(h);
         if (size == 0 || size > kClipboardFormatLimit ||
             total + size > kClipboardTotalLimit) {
-            continue;
+            Wh_Log(L"Clipboard format %u is too large (%zu bytes, %zu total)",
+                   format, size, total);
+            ok = false;
+            break;
         }
-        const void* p = GlobalLock(h);
-        if (!p) continue;
-        std::vector<BYTE> data(size);
-        memcpy(data.data(), p, size);
+        const void* src = GlobalLock(h);
+        if (!src) {
+            Wh_Log(L"Clipboard format %u could not be locked", format);
+            ok = false;
+            break;
+        }
+        HGLOBAL copy = GlobalAlloc(GMEM_MOVEABLE, size);
+        void* dst = copy ? GlobalLock(copy) : nullptr;
+        if (!dst) {
+            GlobalUnlock(h);
+            if (copy) GlobalFree(copy);
+            Wh_Log(L"Out of memory saving clipboard format %u (%zu bytes)",
+                   format, size);
+            ok = false;
+            break;
+        }
+        memcpy(dst, src, size);
+        GlobalUnlock(copy);
         GlobalUnlock(h);
-        snapshot.items.emplace_back(format, std::move(data));
+        snapshot.items.push_back(ClipboardItem{format, copy});
         total += size;
     }
 
+    // Nothing restorable was found (e.g. a lone CF_BITMAP): restoring would
+    // empty the clipboard, so treat it as a failure as well.
+    if (ok && snapshot.items.empty() && skippedAny) {
+        Wh_Log(L"Clipboard has no format that can be saved and restored");
+        ok = false;
+    }
+
     CloseClipboard();
-    return snapshot;
+    snapshot.captured = ok;
+    return ok;
 }
 
 // Restores a snapshot, unless the clipboard was replaced in the meantime.
 void RestoreClipboard(const ClipboardSnapshot& snapshot) {
-    if (!snapshot.valid) return;
+    if (!snapshot.captured) return;
     // Nothing restorable: leave whatever is on the clipboard instead of
     // emptying it, so no data is lost.
     if (snapshot.items.empty()) return;
@@ -607,17 +674,23 @@ void RestoreClipboard(const ClipboardSnapshot& snapshot) {
     if (!OpenClipboardWithRetry()) return;
 
     EmptyClipboard();
-    for (const auto& item : snapshot.items) {
-        HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, item.second.size());
-        if (!h) continue;
-        void* dst = GlobalLock(h);
+    for (const ClipboardItem& item : snapshot.items) {
+        SIZE_T size = GlobalSize(item.handle);
+        if (size == 0) continue;
+        const void* src = GlobalLock(item.handle);
+        if (!src) continue;
+        HGLOBAL copy = GlobalAlloc(GMEM_MOVEABLE, size);
+        void* dst = copy ? GlobalLock(copy) : nullptr;
         if (!dst) {
-            GlobalFree(h);
+            GlobalUnlock(item.handle);
+            if (copy) GlobalFree(copy);
+            Wh_Log(L"Out of memory restoring clipboard format %u", item.format);
             continue;
         }
-        memcpy(dst, item.second.data(), item.second.size());
-        GlobalUnlock(h);
-        if (!SetClipboardData(item.first, h)) GlobalFree(h);
+        memcpy(dst, src, size);
+        GlobalUnlock(copy);
+        GlobalUnlock(item.handle);
+        if (!SetClipboardData(item.format, copy)) GlobalFree(copy);
     }
     AddClipboardExclusionMarker();
     CloseClipboard();
@@ -708,8 +781,12 @@ void BuildLayoutMap(HKL hkl, LayoutMap& map) {
                                       : (wchar_t)towupper(ch);
                 const std::wstring& otherProduced =
                     map.charsForKey[vk][otherShift];
-                add(other,
-                    otherProduced.size() == 1 && otherProduced[0] == other);
+                // Keep Shift when this key actually produces the alias only
+                // with the other Shift state. For the unshifted pass the other
+                // state is shifted; for the shifted pass it is unshifted.
+                bool otherMatches =
+                    otherProduced.size() == 1 && otherProduced[0] == other;
+                add(other, otherMatches ? (otherShift != 0) : (shift != 0));
             }
         }
     }
@@ -1391,7 +1468,6 @@ bool IsConsoleWindow(HWND hwnd) {
 }
 
 void PerformConversion() {
-    std::lock_guard<std::mutex> opLock(g_convertMutex);
     ULONGLONG tStart = GetTickCount64();
     Wh_Log(L"PerformConversion start");
     Settings s = GetSettingsCopy();
@@ -1407,27 +1483,41 @@ void PerformConversion() {
     // Pick up layouts added/removed at runtime; cheap when unchanged.
     RefreshLayoutsIfNeeded();
 
+    // Snapshot before the synthetic Ctrl+C replaces the clipboard. If anything
+    // can't be saved, skip the conversion rather than destroy it.
     ClipboardSnapshot snapshot;
-    if (s.restoreClipboard) snapshot = SaveClipboard();
+    if (s.restoreClipboard && !SaveClipboard(snapshot)) {
+        Wh_Log(L"Clipboard could not be saved completely; skipping conversion "
+               L"to avoid losing its content");
+        return;
+    }
+
+    HWND foreground = GetForegroundWindow();
+    const bool console = IsConsoleWindow(foreground);
 
     std::wstring selected;
     bool captured = false;
     bool usedFallbackWord = false;
-    const DWORD clipboardDelayMs = (DWORD)std::max(150, s.actionDelayMs);
+    const DWORD clipboardDelayMs = (DWORD)s.actionDelayMs;
 
     if (s.scope == L"selection-first" || s.scope == L"selection-only") {
         DWORD seq = GetClipboardSequenceNumber();
-        SendKeyCombo('C', true, false, false, false);  // Ctrl+C
+        if (console) {
+            // Ctrl+C without a selection discards the typed line and interrupts
+            // a running command in conhost and Windows Terminal, which both
+            // bind Ctrl+Insert to copy instead.
+            SendKeyCombo(VK_INSERT, true, false, false, false);
+        } else {
+            SendKeyCombo('C', true, false, false, false);
+        }
         if (WaitForClipboardChange(seq, clipboardDelayMs)) {
             selected = GetClipboardUnicodeText();
             captured = !selected.empty();
         }
     }
 
-    // In console windows Ctrl+C without a selection interrupts the running
-    // command, so the previous-word fallback is skipped there.
-    if (!captured && s.scope != L"selection-only" &&
-        !IsConsoleWindow(GetForegroundWindow())) {
+    // The previous-word fallback sends Ctrl+C, which is unsafe in consoles.
+    if (!captured && s.scope != L"selection-only" && !console) {
         DWORD seq = GetClipboardSequenceNumber();
         SendKeyCombo(VK_LEFT, true, true, false, false);  // Ctrl+Shift+Left
         SendKeyCombo('C', true, false, false, false);     // Ctrl+C
@@ -1468,10 +1558,6 @@ void PerformConversion() {
     SendKeyCombo('V', true, false, false, false);  // Ctrl+V
     ULONGLONG tPasteDone = GetTickCount64();
 
-    if (s.showNotification) {
-        ShowToast();
-    }
-
     Sleep(s.restoreClipboard ? clipboardDelayMs : 40);
 
     if (s.switchLayout && targetLayout) {
@@ -1480,6 +1566,12 @@ void PerformConversion() {
 
     if (s.restoreClipboard) {
         RestoreClipboard(snapshot);
+    }
+
+    // After the post-paste wait, so the toast never blocks its own timer and
+    // click handling while the conversion thread sleeps.
+    if (s.showNotification) {
+        ShowToast();
     }
     ULONGLONG tEnd = GetTickCount64();
     Wh_Log(L"Conversion applied (len %zu -> %zu) wait=%llums copy=%llums "
@@ -1592,6 +1684,23 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
 
+// Hook thread only. The mouse hook exists to cancel armed modifier-only
+// shortcuts, so it isn't installed for regular combos such as the default
+// Alt+X, where the combo key is swallowed instead.
+void UpdateMouseHook() {
+    bool needed = GetHotkeyForHook().modifierOnly;
+    if (needed && !g_mouseHook) {
+        g_mouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc,
+                                       GetModuleHandle(nullptr), 0);
+        if (!g_mouseHook) {
+            Wh_Log(L"SetWindowsHookEx(WH_MOUSE_LL) failed: %u", GetLastError());
+        }
+    } else if (!needed && g_mouseHook) {
+        UnhookWindowsHookEx(g_mouseHook);
+        g_mouseHook = nullptr;
+    }
+}
+
 DWORD WINAPI WorkerThreadProc(LPVOID) {
     MSG msg;
     PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
@@ -1612,13 +1721,8 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
         Wh_Log(L"Keyboard hook installed (thread=%lu)", GetCurrentThreadId());
     }
 
-    // The mouse hook cancels a pending modifier-only shortcut when the user
-    // clicks or scrolls while the combo is held.
-    g_mouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc,
-                                   GetModuleHandle(nullptr), 0);
-    if (!g_mouseHook) {
-        Wh_Log(L"SetWindowsHookEx(WH_MOUSE_LL) failed: %u", GetLastError());
-    }
+    // Only needed for modifier-only shortcuts; see UpdateMouseHook.
+    UpdateMouseHook();
 
     for (;;) {
         DWORD wait = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE,
@@ -1629,6 +1733,10 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
         while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) {
                 goto done;
+            }
+            if (msg.message == WM_APP_UPDATE_MOUSE_HOOK) {
+                UpdateMouseHook();
+                continue;
             }
             TranslateMessage(&msg);
             DispatchMessage(&msg);
@@ -1732,6 +1840,10 @@ BOOL WhTool_ModInit() {
 void WhTool_ModSettingsChanged() {
     Wh_Log(L"Settings changed");
     LoadSettings();
+    // The mouse hook is only needed for modifier-only shortcuts.
+    if (g_workerThreadId) {
+        PostThreadMessage(g_workerThreadId, WM_APP_UPDATE_MOUSE_HOOK, 0, 0);
+    }
 }
 
 void WhTool_ModUninit() {
