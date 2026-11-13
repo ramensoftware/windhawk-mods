@@ -9,6 +9,15 @@
       "parentId": null,
       "timestamp": 1791206598,
       "votes": 1
+    },
+    {
+      "authorName": "mahdi.v0",
+      "content": "It's a great extension but it's a bit slow. It takes much longer to open a folder than usual. Please check if you can optimize the code more.",
+      "id": 120,
+      "modVersion": "0.8",
+      "parentId": null,
+      "timestamp": 1794551271,
+      "votes": 0
     }
   ]
 }

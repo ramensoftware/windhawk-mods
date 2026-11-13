@@ -836,7 +836,7 @@
         "ratingUsers": 0,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794376875000,
+        "updated": 1794556888000,
         "users": 8
       },
       "metadata": {
@@ -849,7 +849,7 @@
           "windhawk.exe"
         ],
         "name": "Arabic Keyboard Layout Fixer",
-        "version": "1.3.0"
+        "version": "1.3.1"
       }
     },
     "archive-preview": {
@@ -5524,19 +5524,19 @@
         "ratingUsers": 36,
         "reviews": 1,
         "trendingSorting": 14.335221471264354,
-        "updated": 1791748912000,
+        "updated": 1794556893000,
         "users": 1993
       },
       "metadata": {
         "author": "iMAboud",
-        "compilerOptions": "-lole32 -lgdi32 -lshell32 -lgdiplus",
+        "compilerOptions": "-lole32 -lgdi32 -lshell32 -lgdiplus -luuid",
         "description": "Drag files onto a floating target to move them to the Recycle Bin.",
         "github": "https://github.com/iMAboud",
         "include": [
           "explorer.exe"
         ],
         "name": "Drag to Delete",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "drag-to-scroll": {
@@ -7102,7 +7102,7 @@
         "rating": 9,
         "ratingBreakdown": [2, 4, 2, 5, 48],
         "ratingUsers": 61,
-        "reviews": 1,
+        "reviews": 2,
         "trendingSorting": 0.3769236935311216,
         "updated": 1779318510000,
         "users": 705
@@ -8578,7 +8578,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794466965000,
+        "updated": 1794556899000,
         "users": 13
       },
       "metadata": {
@@ -8595,7 +8595,7 @@
           "ShellExperienceHost.exe"
         ],
         "name": "Floating Taskbar",
-        "version": "2.1.13"
+        "version": "2.1.14"
       }
     },
     "fluid-wallpaper": {
@@ -15125,6 +15125,33 @@
         "license": "MIT",
         "name": "Search on Active Display",
         "version": "1.1.0"
+      }
+    },
+    "search-menu-extensions": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794556882000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794556882000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "TurtlesMaster1",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshlwapi -lshell32 -luuid -ladvapi32",
+        "description": "For the NEW Windows 11 Insider search box (composer search, build 26320+), not classic search. Adds a calculator, unit converter, \"kill <process>\" and custom keyword commands. Other mods and scripts can add results too",
+        "github": "https://github.com/TurtlesMaster1",
+        "include": [
+          "shellhost.exe"
+        ],
+        "name": "New Windows Search Extensions",
+        "version": "0.1.0"
       }
     },
     "search-menu-inspect-helper": {

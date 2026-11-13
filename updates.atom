@@ -2,12 +2,233 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-13T07:04:53.000Z</updated>
+    <updated>2026-11-13T08:01:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Floating Taskbar 2.1.14]]></title>
+        <id>https://windhawk.net/mods/floating-taskbar#68650cb524e6e9976dcf9e2cf602fff41c13ec40</id>
+        <link href="https://windhawk.net/mods/floating-taskbar"/>
+        <updated>2026-11-13T08:01:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add hover-radius support for taskbar and tray controls that expose <code>CornerRadius</code> directly.</li>
+<li>Cover SystemTray icon, notification icon, quick-settings, and tray-frame hover hosts.</li>
+<li>Lower the default hover corner radius from 20 to 10 pixels.</li>
+</ul>
+]]></content>
+        <author>
+            <name>chaochenzhudian</name>
+            <uri>https://github.com/chaochenzhudian</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Drag to Delete 1.1.0]]></title>
+        <id>https://windhawk.net/mods/drag-to-delete#65feabc14ab993c83f5a27bc88216e9d0b948bc6</id>
+        <link href="https://windhawk.net/mods/drag-to-delete"/>
+        <updated>2026-11-13T08:01:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Placement modes: Added Follow cursor, Nearby, and Top.</li>
+<li>Ctrl+Z undo: Added native Shell undo via IFileOperation.</li>
+<li>System icon option: Added sharp native Windows Recycle Bin icon.</li>
+<li>Optional shadow: Added toggleable ShowShadow setting.</li>
+<li>Distance auto-hide: Target fades out when dragging far away.</li>
+<li>Fullscreen Z-order fix: Stays visible over fullscreen background windows.</li>
+<li>Search drag support: Recycles Everything &amp; Power Tools search items.</li>
+<li>Desktop Shell items: Added support for CFSTR_SHELLIDLIST desktop selections.</li>
+<li>Virtual item filtering: Safely ignores non-filesystem virtual items.</li>
+<li>Dynamic monitor DPI: Automatically updates scaling across different monitors.</li>
+</ul>
+]]></content>
+        <author>
+            <name>iMAboud</name>
+            <uri>https://github.com/iMAboud</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Arabic Keyboard Layout Fixer 1.3.1]]></title>
+        <id>https://windhawk.net/mods/arabic-keyboard-layout-fixer#262de066b0cb265da1ce7fb5eb666fa09bddfa58</id>
+        <link href="https://windhawk.net/mods/arabic-keyboard-layout-fixer"/>
+        <updated>2026-11-13T08:01:28.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add animated demo GIF to mod details and README</li>
+</ul>
+]]></content>
+        <author>
+            <name>Omar</name>
+            <uri>https://github.com/uomr</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[New Windows Search Extensions 0.1.0]]></title>
+        <id>https://windhawk.net/mods/search-menu-extensions#37956ed345a36863ccd46033d42f032825d01185</id>
+        <link href="https://windhawk.net/mods/search-menu-extensions"/>
+        <updated>2026-11-13T08:01:22.000Z</updated>
+        <content type="html"><![CDATA[<blockquote>
+<p><strong>Updated for Build 26320.9876 (Windows 11 Insider Beta).</strong> Insider builds
+change quickly, so newer builds may break or move this.</p>
+</blockquote>
+<h1>New Windows Search Extensions</h1>
+<p><strong>This is only for the NEW Windows search</strong>: the compact &quot;composer&quot; search box
+on recent Windows 11 Insider builds (hosted by
+<code>shellhost.exe loadComponent SystemComposerControl</code>, the one with inline
+actions like &quot;Turn on dark mode&quot; and the volume slider). It does <strong>nothing</strong> for
+the classic Start menu search, the old taskbar search flyout (<code>SearchHost.exe</code>)
+or Windows 10.</p>
+<p>Adds new kinds of results to the new search box, mixed in with the native ones:</p>
+<ul>
+<li><strong>Calculator</strong>: type <code>12*7.5</code>, <code>(3+4)^2</code>, <code>sqrt(2)</code>, <code>200 * 15%</code>, <code>50 + 10%</code> and press
+Enter to copy the result. Supports <code>+ - * / ^ %</code>, brackets, <code>pi</code>, <code>e</code> and
+<code>sqrt cbrt abs sin cos tan asin acos atan ln log log2 exp round floor ceil</code>.</li>
+<li><strong>Unit converter</strong>: <code>5 km in mi</code>, <code>72 f to c</code>, <code>1.5 gb in mb</code>, <code>3 cups to ml</code>.
+Length, weight, volume, time, speed, data size and temperature.</li>
+<li><strong>Kill process</strong>: <code>kill note</code> lists the running processes whose name contains
+&quot;note&quot;, with their memory use; Enter ends the selected one. It's ended at
+once, like &quot;End task&quot; in Task Manager, so unsaved work in it is lost. Only
+processes you're allowed to end are listed.</li>
+<li><strong>Custom commands</strong>: your own keywords, set in the mod settings. A keyword can
+open a program, file, folder or URL. Put <code>{query}</code> in the command to pass on
+what you type after the keyword: with the default <code>g</code> command, <code>g windhawk</code>
+searches Google for &quot;windhawk&quot;. Such a command shows up once you've typed
+something after the keyword.</li>
+</ul>
+<p>Each one can be turned off in the settings.</p>
+<h2>For developers: add your own results</h2>
+<p>Other mods, and any program or script, can put items into the new search box
+through this mod. Providers see every query and decide for themselves when to
+answer, so no prefix is needed. The <strong>Demo provider</strong> setting adds sample items
+(type <code>wh hello</code>: an echo/copy item, a toggle, a &quot;run&quot; item and a card).</p>
+<p><img src="https://raw.githubusercontent.com/TurtlesMaster1/windhawk-search-menu-extensions/main/images/demo.png" alt="Demo provider items mixed into the new Windows search"></p>
+<p><img src="https://raw.githubusercontent.com/TurtlesMaster1/windhawk-search-menu-extensions/main/images/weather.png" alt="A pipe client showing live weather with an Adaptive Card"></p>
+<p><em>Above: <code>examples/weather_client.py</code>, an out-of-process provider talking over
+the named pipe.</em></p>
+<p>Items are injected as genuine native search providers. Windows' own search is
+built from <em>Palette extensions</em> (<code>Windows.UI.Palettes</code>): Apps, Files, Settings,
+Windows Actions, Command Line and so on are each one extension. This mod adds
+one more extension per provider (the built-in ones included), so the items are
+real <code>PaletteItem</code>s. They mix into the native list with native ranking, keyboard
+navigation, icons, toggles and Adaptive Card content.</p>
+<h2>Two ways to provide items</h2>
+<h3>1. From another Windhawk mod (in-process)</h3>
+<p>Your mod must also <code>@include shellhost.exe</code>. Find this mod's DLL and call its
+exported C API (Windhawk exports every symbol of a mod DLL):</p>
+<pre><code class="language-cpp">typedef struct WSE_ProviderCallbacks {
+    UINT32 cbSize;
+    void* ctx;
+    // Called for every query (text may be empty = zero state). Answer with
+    // WSE_SubmitResults(queryHandle, itemsJson, done) from any thread, now or later.
+    void (WINAPI* onQuery)(void* ctx, UINT64 queryHandle, PCWSTR text, PCWSTR queryJson);
+    // An item was invoked: actionId is &quot;invoke&quot;, &quot;toggle&quot; or a card action id.
+    void (WINAPI* onInvoke)(void* ctx, PCWSTR itemId, PCWSTR actionId, PCWSTR dataJson, PCWSTR inputsJson);
+    // Optional. Query abandoned (user typed more / closed search).
+    void (WINAPI* onCancel)(void* ctx, UINT64 queryHandle);
+    // Optional. The library is unloading: drop the provider handle, don't call the API again.
+    void (WINAPI* onDetach)(void* ctx);
+} WSE_ProviderCallbacks;
+
+int    WINAPI WSE_GetApiVersion(void);                                   // 1
+UINT64 WINAPI WSE_RegisterProvider(PCWSTR providerJson, const WSE_ProviderCallbacks* cb);
+BOOL   WINAPI WSE_SubmitResults(UINT64 queryHandle, PCWSTR itemsJson, BOOL done);
+BOOL   WINAPI WSE_SetStaticItems(UINT64 provider, PCWSTR itemsJson);     // items always offered (GetItems)
+BOOL   WINAPI WSE_UpdateCard(UINT64 provider, PCWSTR itemId, PCWSTR dataJson); // live-update a card's data
+BOOL   WINAPI WSE_NotifyChanged(UINT64 provider);                        // ask search to re-query
+BOOL   WINAPI WSE_UnregisterProvider(UINT64 provider);                   // waits for running callbacks
+</code></pre>
+<p>Finding the library: enumerate the modules of the process and use the first one
+that exports <code>WSE_GetApiVersion</code>. Mods load in any order, so retry for a few
+seconds if it isn't there yet (and again later: the library can be disabled,
+updated or re-enabled while your mod is running; <code>onDetach</code> tells you it's going).</p>
+<p>Callbacks run on the library's worker threads, never on Windows' own threads.
+Call <code>WSE_UnregisterProvider</code> in your <code>Wh_ModUninit</code>: it returns once none of
+your callbacks is running any more, so your DLL can unload safely. (Calling it
+from inside one of your own callbacks is fine too; it then waits for the others.)</p>
+<h3>2. From any process (named pipe)</h3>
+<p>Connect to <code>\\.\pipe\WindhawkSearchExtensions-&lt;session id&gt;</code> (the Windows
+session id of your process, e.g. <code>ProcessIdToSessionId</code>) and exchange
+<strong>newline-delimited UTF-8 JSON</strong> messages. Each connection can register any
+number of providers. They're removed automatically when the connection closes.</p>
+<p>Only processes running as the same user can open the pipe. Any of them can
+register a provider, and a provider sees the text typed into search. That's
+why the <strong>Named pipe API</strong> setting is off by default: turn it on to use the pipe.</p>
+<p>Client to library:</p>
+<pre><code class="language-json">{&quot;op&quot;:&quot;register&quot;,&quot;provider&quot;:{&quot;id&quot;:&quot;weather&quot;,&quot;name&quot;:&quot;Weather&quot;,&quot;glyph&quot;:&quot;\uE706&quot;}}
+{&quot;op&quot;:&quot;results&quot;,&quot;queryId&quot;:&quot;17&quot;,&quot;items&quot;:[ ... ],&quot;done&quot;:true}
+{&quot;op&quot;:&quot;setItems&quot;,&quot;provider&quot;:&quot;weather&quot;,&quot;items&quot;:[ ... ]}
+{&quot;op&quot;:&quot;updateCard&quot;,&quot;provider&quot;:&quot;weather&quot;,&quot;itemId&quot;:&quot;now&quot;,&quot;data&quot;:{ ... }}
+{&quot;op&quot;:&quot;refresh&quot;,&quot;provider&quot;:&quot;weather&quot;}
+{&quot;op&quot;:&quot;unregister&quot;,&quot;provider&quot;:&quot;weather&quot;}
+</code></pre>
+<p>Library to client:</p>
+<pre><code class="language-json">{&quot;op&quot;:&quot;registered&quot;,&quot;provider&quot;:&quot;weather&quot;,&quot;extensionId&quot;:&quot;Windhawk.weather&quot;}
+{&quot;op&quot;:&quot;query&quot;,&quot;provider&quot;:&quot;weather&quot;,&quot;queryId&quot;:&quot;17&quot;,&quot;text&quot;:&quot;weather lond&quot;,&quot;query&quot;:{...}}
+{&quot;op&quot;:&quot;cancel&quot;,&quot;provider&quot;:&quot;weather&quot;,&quot;queryId&quot;:&quot;17&quot;}
+{&quot;op&quot;:&quot;invoke&quot;,&quot;provider&quot;:&quot;weather&quot;,&quot;itemId&quot;:&quot;now&quot;,&quot;actionId&quot;:&quot;invoke&quot;,&quot;data&quot;:&quot;&quot;,&quot;inputs&quot;:&quot;&quot;}
+{&quot;op&quot;:&quot;error&quot;,&quot;message&quot;:&quot;...&quot;}
+</code></pre>
+<h2>Provider JSON</h2>
+<pre><code class="language-json">{
+  &quot;id&quot;: &quot;weather&quot;,                       // unique, [A-Za-z0-9._-]
+  &quot;name&quot;: &quot;Weather&quot;,                     // shown in search settings/diagnostics
+  &quot;description&quot;: &quot;Current conditions&quot;,
+  &quot;glyph&quot;: &quot;\uE706&quot;, &quot;font&quot;: &quot;Segoe Fluent Icons&quot;,  // or &quot;icon&quot;: &quot;C:\\path\\icon.png&quot;
+  &quot;zeroState&quot;: false,                    // also asked when the box is empty
+  &quot;kinds&quot;: [&quot;QueryResult.SystemComposer&quot;],          // advanced: palette kinds this source serves
+  &quot;itemKinds&quot;: [&quot;Command&quot;]               // default kinds for items
+}
+</code></pre>
+<h2>Item JSON</h2>
+<pre><code class="language-json">{
+  &quot;id&quot;: &quot;now&quot;,                           // stable id within the provider
+  &quot;title&quot;: &quot;London: 14°C, light rain&quot;,
+  &quot;subtitle&quot;: &quot;Feels like 12°C&quot;,         // string or array of strings
+  &quot;icon&quot;: {&quot;glyph&quot;: &quot;\uE9E2&quot;, &quot;font&quot;: &quot;Segoe Fluent Icons&quot;},  // or {&quot;uri&quot;: &quot;https://...&quot;} / {&quot;path&quot;: &quot;C:\\x.png&quot;} / &quot;C:\\x.png&quot;
+  &quot;tags&quot;: [{&quot;text&quot;: &quot;Live&quot;, &quot;tooltip&quot;: &quot;Updated just now&quot;}],
+  &quot;kinds&quot;: [&quot;Command&quot;],
+  &quot;score&quot;: 0.9,                          // goes to the native ranking (KnownPaletteProperties.Score)
+  &quot;properties&quot;: {&quot;Path&quot;: &quot;C:\\Users&quot;},   // any extra KnownPaletteProperties
+  &quot;action&quot;: {&quot;type&quot;: &quot;callback&quot;},        // default: onInvoke(id, &quot;invoke&quot;)
+  //  {&quot;type&quot;:&quot;uri&quot;,&quot;uri&quot;:&quot;https://bbc.co.uk/weather&quot;}
+  //  {&quot;type&quot;:&quot;run&quot;,&quot;command&quot;:&quot;notepad.exe&quot;,&quot;args&quot;:&quot;x.txt&quot;}
+  //  {&quot;type&quot;:&quot;copy&quot;,&quot;text&quot;:&quot;14°C&quot;}
+  //  {&quot;type&quot;:&quot;toggle&quot;,&quot;isToggled&quot;:true}   -&gt; onInvoke(id, &quot;toggle&quot;, &quot;true&quot;|&quot;false&quot;)
+  &quot;card&quot;: {                              // optional Adaptive Card content (template + data)
+    &quot;template&quot;: { &quot;type&quot;: &quot;AdaptiveCard&quot;, &quot;version&quot;: &quot;1.5&quot;, &quot;body&quot;: [ ... ], &quot;actions&quot;: [ ... ] },
+    &quot;data&quot;: { ... }                      // Action.Submit/Execute -&gt; onInvoke(id, actionId, data, inputs)
+  }
+}
+</code></pre>
+<h2>Notes</h2>
+<ul>
+<li>This mod only works on builds that have the new composer search
+(<code>Windows.UI.Palettes</code>). Elsewhere it does nothing.</li>
+<li>Windows reads its provider list once, when the composer starts. If the mod
+is enabled while the composer is already running, it restarts the composer
+(setting <strong>Restart search when enabled late</strong>). The composer comes back the
+next time you open search. Providers registered later (other mods, pipe
+clients) are picked up live.</li>
+<li>When the mod is disabled or updated, Windows may still hold some of its
+objects (items it's showing, finished queries). The mod then restarts the
+composer instead of unloading under them; search reopens normally next time.</li>
+<li><strong>Card buttons:</strong> cards render under the selected row and you can update them
+live (<code>WSE_UpdateCard</code> / <code>updateCard</code>). But Windows ignores Action.Submit
+buttons in that inline preview (&quot;slot previews do not support card actions&quot;).
+Put the action on the item itself.</li>
+<li><strong>Pipe clients:</strong> if you open the pipe as an ordinary synchronous handle
+(Python <code>open()</code>, .NET <code>FileStream</code> without async), don't write from one
+thread while another is blocked reading. Windows serializes I/O on
+synchronous handles and the write waits forever. Either answer from the
+reading thread or open the pipe overlapped.</li>
+<li>Enable logging for the mod in Windhawk to see the queries and what Windows
+asks of the providers.</li>
+</ul>
+]]></content>
+        <author>
+            <name>TurtlesMaster1</name>
+            <uri>https://github.com/TurtlesMaster1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom CMD "ver" Command Text 1.0]]></title>
         <id>https://windhawk.net/mods/custom-cmd-ver-command-text#628c65c9d8dd96d295699b97753b18feac5e0608</id>
@@ -954,334 +1175,6 @@ available on your Windows build.</li>
         <author>
             <name>Luiz Bizzio</name>
             <uri>https://github.com/luizbizzio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Quick Look 1.0.0]]></title>
-        <id>https://windhawk.net/mods/quick-look#a2c3b3bf6c8b6e52f87efbd3e6b977fcb23c3b25</id>
-        <link href="https://windhawk.net/mods/quick-look"/>
-        <updated>2026-11-12T08:05:16.000Z</updated>
-        <content type="html"><![CDATA[<h1>Quick Look</h1>
-<p>A native Quick Look preview for Windows File Explorer, packed as a <a href="https://windhawk.net">Windhawk</a> mod.</p>
-<p>Select a file or a folder and press <strong>Space</strong>. That is the whole idea.</p>
-<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/preview.png" alt="Quick Look panel docked in File Explorer"></p>
-<p>Quick Look docks a real panel <strong>inside the File Explorer window</strong>, next to the file list, and previews
-whatever is selected. It is not a floating window: it is a child of the Explorer tab, so it moves with
-it, is clipped to it and, if you want, shrinks the Details columns to reserve its own space, the way
-File Pilot's inspector does.</p>
-<p>Folders open with <strong>Explorer's own file list</strong>, not a copy: the same icons, columns, sorting, view modes
-and scrollbars. Text, images, video, audio, PDF, Word, Excel, PowerPoint, archives and everything else
-have their own preview or a proper fallback. Nothing runs on a timer in the background, and nothing that
-touches the disk ever blocks Explorer.</p>
-<h2>Highlights</h2>
-<ul>
-<li><strong>A panel, not a window.</strong> Space opens it, Space or Esc closes it, the header has a close button for the
-mouse. It docks on the right, or at the bottom when the window is too narrow; drag its edge to change
-its width and the width is remembered.</li>
-<li><strong>Folders, with Explorer's own list.</strong> The preview hosts a real Explorer browser, so icons, columns,
-sorting, grouping and the Details / List / Icons view modes are Explorer's. A view dropdown in the
-header switches between Details, List, Small, Medium, Large and Extra Large icons.</li>
-<li><strong>A real filter, at the same level.</strong> Typing in the filter box shows only the matching direct children
-of the previewed folder, with their original columns, and clearing it brings the folder back. No
-subfolder is ever searched.</li>
-<li><strong>Text and code, detected by content.</strong> No extension list: a file is text when its bytes say so, so
-<code>.ahk</code>, <code>.psd1</code>, <code>.config</code>, extensionless files and anything else just work. UTF-8, UTF-16 LE/BE and the
-ANSI code page are decoded, and the footer reports which one was used, the size and the line count.</li>
-<li><strong>An editor-style toolbar.</strong> Word wrap, line numbers (a wrapped continuation keeps its number once), a
-whitespace inspector that draws spaces as dim dots, and alternating row colors. The four toggles are
-remembered if you want them remembered, and the defaults are settings.</li>
-<li><strong>Search inside the file.</strong> The same filter box keeps only the matching lines, each with its original
-line number, and highlights every match with your Windows accent color.</li>
-<li><strong>Documents without Office.</strong> Word, Excel, PowerPoint, RTF and OpenDocument files are opened as a zip
-of XML parts and reduced to their text, so they preview instantly even when Office is not installed.
-Old binary <code>.doc</code>, <code>.xls</code> and <code>.ppt</code> files use the Windows preview handler when one is registered.</li>
-<li><strong>Images, video and audio.</strong> Images are decoded at full resolution, videos show a frame and audio shows
-its album art, both through the same still-image providers Windows uses.</li>
-<li><strong>PDF.</strong> Rendered by the Windows PDF preview handler, the same component Explorer's preview pane uses,
-hosted inside the panel. Zoom and scroll belong to the handler.</li>
-<li><strong>Archives.</strong> A <code>.zip</code> (and any format the shell exposes as a folder) lists its contents in the native
-list. Formats with no shell namespace fall back to the properties view.</li>
-<li><strong>A fallback that still helps.</strong> Anything else shows the real file icon plus its type, size, modified
-date and full path.</li>
-<li><strong>Colors that follow Windows.</strong> The panel samples Explorer's actual pixels for the background and the
-text, and takes the accent from Windows itself, so light, dark and custom accents look native.</li>
-<li><strong>Explorer never freezes.</strong> Listing a folder, reading a file, decoding an image, building a thumbnail or
-checking a cloud placeholder all run on worker threads. The panel opens at once with a loading state,
-a new selection cancels the previous load, and a file that is only a cloud placeholder is never
-downloaded just to be previewed.</li>
-</ul>
-<p>A few of the things it previews:</p>
-<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/archive.png" alt="Quick Look archive preview"></p>
-<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/text.png" alt="Quick Look text preview"></p>
-<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/images.png" alt="Quick Look image preview"></p>
-<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/pdf.png" alt="Quick Look PDF preview"></p>
-<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Quick-Look-Windhawk/main/assets/office.png" alt="Quick Look document preview"></p>
-<h2>Install</h2>
-<ol>
-<li>Install <a href="https://windhawk.net">Windhawk</a> (Windows 10 or 11).</li>
-<li>Open <a href="https://windhawk.net/mods/quick-look">Quick Look on windhawk.net</a> and press <strong>Install</strong>.</li>
-<li>Select a file or folder in File Explorer and press <strong>Space</strong>.</li>
-</ol>
-<p>Quick Look is an <strong>injected</strong> mod: it runs inside <code>explorer.exe</code>, which is what lets the panel be a real
-child of the window instead of a window that follows it.</p>
-<h2>Keys</h2>
-<table>
-<thead>
-<tr>
-<th>Key</th>
-<th>Action</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Space</strong></td>
-<td>Open or close the preview</td>
-</tr>
-<tr>
-<td><strong>Esc</strong></td>
-<td>Close the preview</td>
-</tr>
-<tr>
-<td><strong>Click the close button</strong></td>
-<td>Close the preview with the mouse</td>
-</tr>
-<tr>
-<td><strong>Shift + wheel</strong></td>
-<td>Scroll a text preview sideways when word wrap is off</td>
-</tr>
-<tr>
-<td><strong>Mouse wheel / drag the bars</strong></td>
-<td>Scroll the preview</td>
-</tr>
-</tbody>
-</table>
-<h2>Settings</h2>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Default</th>
-<th>What it does</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Shrink columns to fit the panel</td>
-<td>On</td>
-<td>Shrinks the file view and scales the Details columns to the space left by the panel. Turn it off to overlay the panel instead.</td>
-</tr>
-<tr>
-<td>Remember the text preview options</td>
-<td>On</td>
-<td>Keeps wrap, line numbers, whitespace dots and alternating rows as you left them for the next window or session.</td>
-</tr>
-<tr>
-<td>Line numbers by default</td>
-<td>Off</td>
-<td>The gutter used when the options are not remembered.</td>
-</tr>
-<tr>
-<td>Alternating rows by default</td>
-<td>Off</td>
-<td>The alternating row color used when the options are not remembered.</td>
-</tr>
-</tbody>
-</table>
-<h2>What each file shows</h2>
-<table>
-<thead>
-<tr>
-<th>Selection</th>
-<th>Preview</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Folder</td>
-<td>Explorer's native list, with a view dropdown, a name filter and file/folder counts</td>
-</tr>
-<tr>
-<td>Text, code, config, logs</td>
-<td>Text with wrap, line numbers, whitespace dots, alternating rows and in-file search</td>
-</tr>
-<tr>
-<td>Word, Excel, PowerPoint, RTF, OpenDocument</td>
-<td>The document text, read directly without Office</td>
-</tr>
-<tr>
-<td>Old <code>.doc</code>, <code>.xls</code>, <code>.ppt</code></td>
-<td>The Windows preview handler when one is installed, otherwise the properties view</td>
-</tr>
-<tr>
-<td>Images (<code>png</code>, <code>jpg</code>, <code>gif</code>, <code>bmp</code>, <code>tif</code>, <code>ico</code>, <code>webp</code>…)</td>
-<td>The decoded image, fitted to the panel</td>
-</tr>
-<tr>
-<td>Video and audio</td>
-<td>A frame or the album art, as Windows produces it</td>
-</tr>
-<tr>
-<td>PDF</td>
-<td>The Windows PDF preview handler, hosted in the panel</td>
-</tr>
-<tr>
-<td>Archives (<code>.zip</code>, and formats with a shell namespace)</td>
-<td>The archive contents in the native list</td>
-</tr>
-<tr>
-<td>Anything else</td>
-<td>The real file icon with type, size, modified date and path</td>
-</tr>
-</tbody>
-</table>
-<h2>How it behaves</h2>
-<ul>
-<li><strong>The panel never navigates.</strong> Double-clicking a folder inside the preview opens its <strong>Properties</strong>;
-it does not enter it. Quick Look is a preview, not a file manager.</li>
-<li><strong>Single click selects.</strong> A double click on empty space does nothing.</li>
-<li><strong>Cloud files are left alone.</strong> A file that is only a placeholder is not downloaded to be previewed.</li>
-<li><strong>Text is capped.</strong> A text preview reads the first 200 KB and says so in the footer.</li>
-</ul>
-<h2>Troubleshooting</h2>
-<ul>
-<li><strong>Space does nothing.</strong> The panel only opens when the file list itself has the focus, so a pending
-rename, an address bar edit or the search box is never hijacked. Click the file list and try again.</li>
-<li><strong>Something looks wrong.</strong> Turn on the Windhawk log for this mod (Advanced tab), reproduce it and
-attach the log to the issue. It is off by default because it adds a line for every step.</li>
-<li><strong>A document shows only text.</strong> That is by design: modern Office and OpenDocument files are read as
-text, so layout, images and colors are not part of the preview.</li>
-</ul>
-<h2>Contributing</h2>
-<p>Bug reports, fixes and new features are welcome. Open an
-<a href="https://github.com/DavidRaveloU/Quick-Look-Windhawk/issues">issue</a> with your Windows build, the mod
-version, the steps to reproduce it and, when it is visual, a screenshot or a short clip.</p>
-<p>For a pull request: fork the
-<a href="https://github.com/DavidRaveloU/Quick-Look-Windhawk">repository</a>, branch from <code>main</code>, change
-<code>quick-look.wh.cpp</code>, confirm it compiles and open the PR describing <strong>what</strong> changed and <strong>why</strong>. One bug
-or feature per PR is much easier to review.</p>
-<h2>License</h2>
-<p>Released under the <strong>MIT License</strong>. See the
-<a href="https://github.com/DavidRaveloU/Quick-Look-Windhawk/blob/main/LICENSE">license file</a>.
-The inflate code that reads Word and OpenDocument files is derived from zlib's <code>puff.c</code> and keeps its
-zlib license notice in the source.</p>
-<p>Copyright (c) 2026-present David Ravelo.</p>
-]]></content>
-        <author>
-            <name>David Ravelo</name>
-            <uri>https://github.com/DavidRaveloU</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[PWA Tray Center 0.5.610]]></title>
-        <id>https://windhawk.net/mods/pwa-tray-center#c6355a5b7a53551df8d85e7992e94a722fd00b58</id>
-        <link href="https://windhawk.net/mods/pwa-tray-center"/>
-        <updated>2026-11-12T08:05:10.000Z</updated>
-        <content type="html"><![CDATA[<h2>PWA Tray Center</h2>
-<p>Adds a <strong>&quot;Hide to PWA Tray Center&quot;</strong> item to the window menu of installed Chrome PWA windows (right-click title bar).</p>
-<p><img src="https://raw.githubusercontent.com/JJProponent/Image-s-/main/RMB%20Place.jpg" alt="Hide to PWA Tray Center in the window menu"></p>
-<ul>
-<li>Hidden windows keep running (music plays, etc.)</li>
-<li>One tray icon for all PWAs. By default it stays in the tray. With <em>Always show tray icon</em> turned off (Settings → Advanced), it appears only while PWAs are hidden and disappears when the last one is restored</li>
-</ul>
-<p><img src="https://raw.githubusercontent.com/JJProponent/Image-s-/main/Main%20app.jpg" alt="PWA Tray Center flyout"></p>
-<h3>Tray Icon</h3>
-<p><img src="https://raw.githubusercontent.com/JJProponent/Image-s-/main/Tray%20place.jpg" alt="PWA Tray Center tray icon"></p>
-<ul>
-<li><strong>Left click</strong> → opens PWA Tray Center (Fluent flyout, rounded corners, Mica or solid backdrop, chosen in Settings)</li>
-<li><strong>Right click</strong> → menu: <em>Show all</em> / <em>Quit all</em></li>
-<li><strong>Center mode</strong> (Settings → Panel): <em>Hermes (Quick)</em> closes on a click outside, <em>Titan (Pinned)</em> stays open</li>
-</ul>
-<h3>Tabs</h3>
-<table>
-<thead>
-<tr>
-<th>Tab</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Media</strong></td>
-<td>Cards for each Chrome media session: cover, title, artist, PWA source, prev/play-pause/next, draggable progress bar. Right-click for controls. Cover style (small, full or none) and compact view (3 covers per row) are set in Settings.</td>
-</tr>
-<tr>
-<td><strong>Apps</strong></td>
-<td>Hidden PWAs. Left-click to show, right-click for Show/Quit. Badge shows unread counter.</td>
-</tr>
-<tr>
-<td><strong>Notifications</strong></td>
-<td>Toast notifications from Windows notification center. Falls back to unread counter from window title (e.g. <code>(3) Inbox</code>).</td>
-</tr>
-<tr>
-<td><strong>Library</strong></td>
-<td>All installed Chrome PWAs. Left-click to launch/show. Drag to reorder. Right-click for Open/Quit/categories. Search field + category chips for filtering.</td>
-</tr>
-<tr>
-<td><strong>Settings</strong></td>
-<td>All mod options (Panel, Media, PWAs, Notifications, Advanced). No Windhawk settings needed.</td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<p>Tabs, cards, and tiles are <strong>drag-to-reorder</strong>; order is remembered.</p>
-</blockquote>
-<blockquote>
-<p><strong>Notifications are not verified yet and may not work.</strong></p>
-</blockquote>
-<h3>Technical Notes</h3>
-<ul>
-<li>Only affects PWA windows (identified by <code>AppUserModelID</code> with <code>_crx_&lt;app id&gt;</code>)</li>
-<li>Regular browser windows and other programs are untouched</li>
-<li>Library reads from Chrome's Web Applications folders (default or <code>--user-data-dir</code>)</li>
-</ul>
-<h3>Chrome Volume</h3>
-<p>Volume bar in Media tab controls Chrome's system-wide volume (same as Windows volume mixer). Dims when no audio session; changes apply when Chrome starts playing. It can be turned on or off in Settings. The level stays as set after the mod is disabled.</p>
-<h3>Limitations</h3>
-<ul>
-<li>Does not keep PWA alive after browser process exits</li>
-<li>Audio may stop if browser freezes or discards background pages (Memory Saver / Efficiency mode)</li>
-</ul>
-]]></content>
-        <author>
-            <name>Proponent</name>
-            <uri>https://github.com/JJProponent</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Middle Click Minimize 1.1.3]]></title>
-        <id>https://windhawk.net/mods/middle-click-minimize#e2e99f8ff147a915abf7e8d2c72cdbb43bfacb4e</id>
-        <link href="https://windhawk.net/mods/middle-click-minimize"/>
-        <updated>2026-11-12T08:05:05.000Z</updated>
-        <content type="html"><![CDATA[<h1>Middle Click Minimize</h1>
-<p>This mod allows you to minimize windows by middle-clicking (using the scroll wheel) directly on the title bar.</p>
-<h2>Exclusions and Conflicts</h2>
-<ul>
-<li><strong>How to exclude programs:</strong> To disable the mod for a specific program (e.g., <code>steam.exe</code> or <code>vivaldi.exe</code>), add it to the custom process exclusion list in the mod's <strong>Advanced</strong> tab in Windhawk.</li>
-<li><strong>Known conflicts:</strong> If you use the &quot;Middle-Click New Tab Chrome/Edge/Brave&quot; mod, middle-clicking the empty tab-strip might minimize the browser instead of opening a new tab. You can add your browser to the exclusion list in the Advanced tab to prevent this.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Ar4ujo_009</name>
-            <uri>https://github.com/Ar4ujo009</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinTips OSD 1.5.2]]></title>
-        <id>https://windhawk.net/mods/wintips-osd#3a33b42eeb7bf2faacab922f5e9aeeef8a13bb28</id>
-        <link href="https://windhawk.net/mods/wintips-osd"/>
-        <updated>2026-11-12T07:03:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an input language tip: Win+Space, Ctrl+Shift, Alt+Shift and Shift inside an IME now show the input language, or the Chinese/English mode inside a Chinese IME. Off by default.</li>
-<li>The backdrop now keeps refreshing while the card is up (Windows 10 2004 and later), so a video or a scrolling page moves through the blur instead of freezing on the frame it had when the tip appeared. The card excludes itself from its own screen grabs, so it is not picked up by screenshots and recordings while it is visible.</li>
-<li>Keys pressed while an administrator window has focus now come from Raw Input, which covers Insert and copy/paste/cut there too, not just the lock keys. The key-state poll stays behind it for remote sessions and virtual keyboards. The &quot;Detect toggles under elevated apps&quot; setting is gone: the integrity level of the foreground process is read instead, and the fallback only runs when it is actually needed.</li>
-<li>Added a topmost guard: a fullscreen game, a recorder or a launcher overlay covering the card is noticed within 100 ms and the card is raised again. When nothing covers it, no other window is touched.</li>
-<li>The settings page no longer has &quot;Detect toggles under elevated apps&quot;; nothing else was renamed, so existing settings carry over.</li>
-<li>Rewrote the mod description.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DoYouNatureQ</name>
-            <uri>https://github.com/DoYouNatureQ</uri>
         </author>
     </entry>
 </feed>
