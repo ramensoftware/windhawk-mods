@@ -22981,8 +22981,15 @@ BOOL Wh_ModInit() {
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            ExitProcess(1);
+            // Finder Bar change: when the mod is updated or recompiled, the new
+            // process can start while the old one is still closing its bar.
+            // Wait for it (the mutex is released when it exits) instead of
+            // quitting, so the bar comes back without toggling the mod.
+            DWORD wait = WaitForSingleObject(g_toolModProcessMutex, 15000);
+            if (wait != WAIT_OBJECT_0 && wait != WAIT_ABANDONED) {
+                Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+                ExitProcess(1);
+            }
         }
 
         if (!WhTool_ModInit()) {
