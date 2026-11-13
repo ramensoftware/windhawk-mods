@@ -80,6 +80,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 - **One glass for everything**: the Control Center, menus, panels and pills share the same glass settings (style, tint, liquid glass, refraction, blur, live)
 - Bar text and icons in white, black or automatic (following the Windows theme)
 - Clicking the album cover (Control Center or Now Playing) brings the playing app's window to the front
+- Choose where the bar shows: all displays, the main one, or a specific display (listed by name); if that display is disconnected, the bar moves to the main one
 - **Disks** (optional): its menu lists every local and removable disk with a usage bar and opens it in Explorer
 - Bar icons share one size: each icon is measured and scaled to the same height, and they all grow together with the icon size setting
 - Light, dark or automatic theme, nine selection colors for the bar and menus, font, font size, icon size and bar height
@@ -324,6 +325,7 @@ struct Settings {
     DWORD tintDark, tintLight;
     bool solidWhenMaximized;
     bool allMonitors;
+    std::wstring barMonitor;  // "all", "primary" ou o nome do monitor (\\.\DISPLAY2)
     bool autoHide;
     bool hideOnFullscreen;
     std::wstring desktopName;
@@ -734,6 +736,8 @@ static void LoadSettings() {
     s.tintLight = ParseArgb(ReadStr(L"tintLight"), 0x50F2F2F2);
     s.solidWhenMaximized = OvrInt(L"solidWhenMaximized") != 0;
     s.allMonitors = OvrInt(L"allMonitors") != 0;
+    // Onde a barra aparece; sem escolha guardada, segue o antigo "todos os monitores".
+    if (!UiStored(L"barMonitor", s.barMonitor) || s.barMonitor.empty()) s.barMonitor = s.allMonitors ? L"all" : L"primary";
     s.autoHide = OvrInt(L"autoHide") != 0;
     s.hideOnFullscreen = OvrInt(L"hideOnFullscreen") != 0;
     s.desktopName = ReadStr(L"desktopName");
@@ -12133,7 +12137,7 @@ enum BsVal {
     BV_BATTPCT, BV_AUTOHIDE, BV_HIDEFS, BV_SOLIDMAX, BV_ALLMON, BV_FLYOUTS, BV_OSD, BV_DIM,
     BV_G_TRANSP, BV_G_CLEAR, BV_G_LIQUID, BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_ICONS, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_SELMENU, BV_UPDATES,
     BV_G_TINT, BV_SEARCHTGT, BV_LANG, BV_NPBAR, BV_ICSADD, BV_ICSCLEAR,
-    BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK,
+    BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON,
 };
 struct BsRowDef {
     int kind;
@@ -12178,7 +12182,7 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_AUTOHIDE, L"Ocultar e mostrar a barra automaticamente", 0, 0, L"Aparece ao encostar o mouse no topo da tela"},
     {BR_SWITCH, BV_HIDEFS, L"Ocultar em tela cheia", 0, 0, L"Jogos, vídeos e apps em tela cheia ficam sem a barra"},
     {BR_SWITCH, BV_SOLIDMAX, L"Fundo sólido com janela maximizada", 0, 0},
-    {BR_SWITCH, BV_ALLMON, L"Mostrar em todos os monitores", 0, 0},
+    {BR_CHOICE, BV_BARMON, L"Mostrar a barra em", 0, 0, L"Todos os monitores, o principal ou um deles; se o escolhido for desconectado, a barra vai para o principal"},
     {BR_SWITCH, BV_MORE, L"Recolher numa seta os ícones que não cabem", 0, 0, L"Como as setas ao lado do notch no macOS 27"},
     {BR_HEADER, BV_NONE, L"Menus e painéis", 0xE7C4, 0x5E5CE6, L"Tocando agora, pílulas de volume e brilho"},
     {BR_SWITCH, BV_UPDATES, L"Atualizações pendentes no menu do logo", 0, 0},
@@ -12333,6 +12337,80 @@ static int TintPaletteIndex() {
         if (kTintPalette[i] == g_settings.tintColor) return i;
     return -1;  // uma cor da paleta do Windows
 }
+// ---- Em qual monitor a barra aparece ----
+// "all" (todos), "primary" (o principal) ou o nome de um monitor (\\.\DISPLAY2).
+// O escolhido desconectado: a barra vai para o principal.
+struct MonChoice {
+    std::wstring device, label;
+};
+// O nome do monitor (ex.: "LG ULTRAWIDE"), como nas Configurações de tela.
+static std::wstring MonitorFriendly(const wchar_t* gdiName) {
+    UINT32 np = 0, nm = 0;
+    if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &np, &nm) != ERROR_SUCCESS) return L"";
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths(np);
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes(nm);
+    if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &np, paths.data(), &nm, modes.data(), nullptr) != ERROR_SUCCESS)
+        return L"";
+    for (UINT32 i = 0; i < np; i++) {
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME src{};
+        src.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+        src.header.size = sizeof(src);
+        src.header.adapterId = paths[i].sourceInfo.adapterId;
+        src.header.id = paths[i].sourceInfo.id;
+        if (DisplayConfigGetDeviceInfo(&src.header) != ERROR_SUCCESS || _wcsicmp(src.viewGdiDeviceName, gdiName) != 0) continue;
+        DISPLAYCONFIG_TARGET_DEVICE_NAME tgt{};
+        tgt.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+        tgt.header.size = sizeof(tgt);
+        tgt.header.adapterId = paths[i].targetInfo.adapterId;
+        tgt.header.id = paths[i].targetInfo.id;
+        if (DisplayConfigGetDeviceInfo(&tgt.header) == ERROR_SUCCESS && tgt.monitorFriendlyDeviceName[0])
+            return tgt.monitorFriendlyDeviceName;
+    }
+    return L"";
+}
+static BOOL CALLBACK MonListProc(HMONITOR mon, HDC, LPRECT, LPARAM lp) {
+    auto* v = reinterpret_cast<std::vector<std::pair<MONITORINFOEXW, bool>>*>(lp);
+    MONITORINFOEXW mi{};
+    mi.cbSize = sizeof(mi);
+    if (GetMonitorInfoW(mon, &mi)) v->push_back({mi, (mi.dwFlags & MONITORINFOF_PRIMARY) != 0});
+    return TRUE;
+}
+// Os monitores ligados agora: o principal primeiro, depois da esquerda para a direita.
+static std::vector<MonChoice> MonitorChoices() {
+    std::vector<std::pair<MONITORINFOEXW, bool>> v;
+    EnumDisplayMonitors(nullptr, nullptr, MonListProc, (LPARAM)&v);
+    std::stable_sort(v.begin(), v.end(), [](const auto& a, const auto& b) {
+        if (a.second != b.second) return a.second;
+        return a.first.rcMonitor.left < b.first.rcMonitor.left;
+    });
+    std::vector<MonChoice> out;
+    for (size_t i = 0; i < v.size(); i++) {
+        const MONITORINFOEXW& mi = v[i].first;
+        std::wstring name = MonitorFriendly(mi.szDevice);
+        if (name.size() > 28) name = name.substr(0, 27) + L"…";
+        wchar_t buf[160];
+        swprintf(buf, 160, L"%s %d%s%s (%d×%d)", T(L"Monitor"), (int)i + 1, name.empty() ? L"" : L": ", name.c_str(),
+                 (int)(mi.rcMonitor.right - mi.rcMonitor.left), (int)(mi.rcMonitor.bottom - mi.rcMonitor.top));
+        out.push_back({mi.szDevice, buf});
+    }
+    return out;
+}
+// A barra vai para este monitor?
+static bool BarOnMonitor(const MONITORINFOEXW& mi, bool chosenPresent) {
+    const std::wstring& w = g_settings.barMonitor;
+    bool primary = (mi.dwFlags & MONITORINFOF_PRIMARY) != 0;
+    if (w == L"all") return true;
+    if (w == L"primary" || !chosenPresent) return primary;
+    return _wcsicmp(mi.szDevice, w.c_str()) == 0;
+}
+static bool BarChosenMonitorPresent() {
+    const std::wstring& w = g_settings.barMonitor;
+    if (w == L"all" || w == L"primary") return true;
+    for (const MonChoice& c : MonitorChoices())
+        if (_wcsicmp(c.device.c_str(), w.c_str()) == 0) return true;
+    return false;
+}
+
 static void TintApply();
 
 static int BsGet(int val) {
@@ -12352,6 +12430,14 @@ static int BsGet(int val) {
         case BV_CCCLOSE: return g_settings.ccCloseAnim;
         case BV_NTFSHAPE: return g_settings.ntfIconShape;
         case BV_TEXTCOLOR: return g_settings.theme;
+        case BV_BARMON: {
+            if (g_settings.barMonitor == L"all") return 0;
+            if (g_settings.barMonitor == L"primary") return 1;
+            std::vector<MonChoice> list = MonitorChoices();
+            for (size_t i = 0; i < list.size(); i++)
+                if (_wcsicmp(list[i].device.c_str(), g_settings.barMonitor.c_str()) == 0) return 2 + (int)i;
+            return 1;
+        }
         case BV_TCOLOR: return TintPaletteIndex();
         case BV_TLEVEL: return g_settings.tintLevel;
         case BV_TREACH: return g_settings.tintReach;
@@ -12526,6 +12612,18 @@ static void BsSet(int val, int v) {
         OvrSetStr(L"barStyle", kNames[v]);
         BarsRestyle();  // troca o fundo na barra que já existe
         TintApply();    // a cor do texto da barra segue a cor do vidro
+        return;
+    }
+    if (val == BV_BARMON) {
+        std::wstring want = v <= 0 ? L"all" : v == 1 ? L"primary" : L"";
+        if (v >= 2) {
+            std::vector<MonChoice> list = MonitorChoices();
+            if (v - 2 < (int)list.size()) want = list[v - 2].device;
+        }
+        if (want.empty() || want == g_settings.barMonitor) return;
+        g_settings.barMonitor = want;
+        OvrSetStr(L"barMonitor", want);
+        RequestReload(1);  // refaz as barras nos monitores escolhidos
         return;
     }
     if (val == BV_TEXTCOLOR) {
@@ -12873,8 +12971,25 @@ static const PCWSTR kBsSearchTgt[] = {L"Pesquisa do Windows", L"Siri Plus"};
 static const PCWSTR kBsNpBar[] = {L"Linha", L"Linha colorida", L"Onda"};
 static const PCWSTR kBsLang[] = {L"Automático (Windows)", L"Português", L"English", L"Español",
                                  L"Français", L"Deutsch", L"Italiano", L"中文（简体）"};
+// As opções de "Mostrar a barra em": todos, o principal e cada monitor ligado.
+static const PCWSTR* BsMonitorLabels(int* count) {
+    static std::vector<std::wstring> names;
+    static std::vector<PCWSTR> ptrs;
+    static ULONGLONG tick = 0;
+    ULONGLONG now = GetTickCount64();
+    if (ptrs.empty() || now - tick > 1500) {
+        tick = now;
+        names = {L"Todos os monitores", L"Monitor principal"};
+        for (const MonChoice& c : MonitorChoices()) names.push_back(c.label);
+        ptrs.clear();
+        for (const std::wstring& n : names) ptrs.push_back(n.c_str());
+    }
+    if (count) *count = (int)ptrs.size();
+    return ptrs.data();
+}
 static const PCWSTR* BsChoiceLabels(int val) {
     switch (val) {
+        case BV_BARMON: return BsMonitorLabels(nullptr);
         case BV_BSSTYLE: return kBsLookChoices;
         case BV_ISLSTYLE: return kBsIslStyle;
         case BV_ISLIN: return kBsIslIn;
@@ -12903,6 +13018,11 @@ static int BsChoiceCount(int val) {
         case BV_LANG: return (int)ARRAYSIZE(kBsLang);
         case BV_ISLIN: return 4;
         case BV_ISLOUT: case BV_CCCLOSE: return 5;
+        case BV_BARMON: {
+            int n = 0;
+            BsMonitorLabels(&n);
+            return n;
+        }
     }
     return 3;
 }
@@ -22712,11 +22832,15 @@ static LRESULT CALLBACK OwnerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
 // Criação / destruição
 // ===========================================================================
 
-static BOOL CALLBACK MonitorEnumProc(HMONITOR mon, HDC, LPRECT, LPARAM) {
+
+static BOOL CALLBACK MonitorEnumProc(HMONITOR mon, HDC, LPRECT, LPARAM chosenPresent) {
+    MONITORINFOEXW mix{};
+    mix.cbSize = sizeof(mix);
+    if (!GetMonitorInfoW(mon, &mix)) return TRUE;
+    if (!BarOnMonitor(mix, chosenPresent != 0)) return TRUE;
     MONITORINFO mi{};
     mi.cbSize = sizeof(mi);
     if (!GetMonitorInfoW(mon, &mi)) return TRUE;
-    if (!g_settings.allMonitors && !(mi.dwFlags & MONITORINFOF_PRIMARY)) return TRUE;
 
     UINT dx = 96, dy = 96;
     GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dx, &dy);
@@ -22759,7 +22883,7 @@ static BOOL CALLBACK MonitorEnumProc(HMONITOR mon, HDC, LPRECT, LPARAM) {
 
 static void CreateBars() {
     ResolveTheme();
-    EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, 0);
+    EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, BarChosenMonitorPresent() ? 1 : 0);
     if (g_settings.autoHide) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
     else KillTimer(g_owner, TIMER_FAST);
     UpdateSolid();
@@ -23085,6 +23209,7 @@ static DWORD WINAPI BarThread(LPVOID) {
                 // Aparência, ícones, fonte, idioma...: valem na barra que já existe,
                 // sem ela sumir e voltar.
                 if (msg.wParam == 0 && !g_bars.empty() && before.allMonitors == g_settings.allMonitors &&
+                    before.barMonitor == g_settings.barMonitor &&
                     before.autoHide == g_settings.autoHide) {
                     ApplySettingsLive(before);
                     continue;
@@ -23548,6 +23673,11 @@ const UiTr kUiTr[] = {
     {L"Branco", L"White", L"Blanco", L"Blanc", L"Weiß", L"Bianco", L"白色"},
     {L"Preto", L"Black", L"Negro", L"Noir", L"Schwarz", L"Nero", L"黑色"},
     {L"Abrir %s", L"Open %s", L"Abrir %s", L"Ouvrir %s", L"%s öffnen", L"Apri %s", L"打开 %s"},
+    {L"Mostrar a barra em", L"Show the bar on", L"Mostrar la barra en", L"Afficher la barre sur", L"Leiste anzeigen auf", L"Mostra la barra su", L"菜单栏显示在"},
+    {L"Todos os monitores, o principal ou um deles; se o escolhido for desconectado, a barra vai para o principal", L"All displays, the main one or one of them; if the chosen one is disconnected, the bar moves to the main display", L"Todos los monitores, el principal o uno de ellos; si el elegido se desconecta, la barra pasa al principal", L"Tous les écrans, le principal ou l'un d'eux ; si celui choisi est déconnecté, la barre passe sur le principal", L"Alle Bildschirme, der Hauptbildschirm oder einer davon; wird der gewählte getrennt, wechselt die Leiste zum Hauptbildschirm", L"Tutti i monitor, il principale o uno di essi; se quello scelto viene scollegato, la barra passa al principale", L"所有显示器、主显示器或其中一个；所选显示器断开时，菜单栏移到主显示器"},
+    {L"Todos os monitores", L"All displays", L"Todos los monitores", L"Tous les écrans", L"Alle Bildschirme", L"Tutti i monitor", L"所有显示器"},
+    {L"Monitor principal", L"Main display", L"Monitor principal", L"Écran principal", L"Hauptbildschirm", L"Monitor principale", L"主显示器"},
+    {L"Monitor", L"Display", L"Monitor", L"Écran", L"Bildschirm", L"Monitor", L"显示器"},
     {L"Discos", L"Disks", L"Discos", L"Disques", L"Laufwerke", L"Dischi", L"磁盘"},
     {L"Clique para ver os discos e quanto cada um está cheio", L"Click to see the disks and how full each one is", L"Haz clic para ver los discos y cuánto está lleno cada uno", L"Cliquez pour voir les disques et leur remplissage", L"Klicken, um die Laufwerke und ihre Belegung zu sehen", L"Fai clic per vedere i dischi e quanto è pieno ciascuno", L"点击查看磁盘及其使用量"},
     {L"Discos: o do sistema está %s% cheio", L"Disks: the system disk is %s% full", L"Discos: el del sistema está al %s%", L"Disques : le disque système est plein à %s %", L"Laufwerke: Systemlaufwerk zu %s% voll", L"Dischi: quello di sistema è pieno al %s%", L"磁盘：系统磁盘已用 %s%"},
