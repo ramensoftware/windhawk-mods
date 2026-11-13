@@ -129,8 +129,9 @@ A focused, customizable Dynamic Island overlay for Windows that becomes an inter
 - Animations:
   - TargetFPS: auto
     $name: Refresh rate / FPS
+    $description: Auto caps continuous animation at 60 FPS. Select an explicit rate for higher-refresh displays.
     $options:
-      - auto: Auto
+      - auto: Auto (up to 60 FPS)
       - '60': 60 FPS
       - '120': 120 FPS
       - '144': 144 FPS
@@ -500,6 +501,9 @@ std::atomic<bool> g_settingsMenuOpen{false};
 std::atomic<HWND> g_foregroundBeforeSettingsMenu{nullptr};
 
 std::atomic<bool> g_layoutDirty{true};
+// Redrawing content does not necessarily require moving/resizing the overlay.
+// Keep window placement updates separate to avoid SetWindowPos on color/hover animations.
+std::atomic<bool> g_windowPositionDirty{true};
 std::atomic<bool> g_clickExpanded{false};
 std::atomic<int> g_pressedMediaButton{-1};
 std::atomic<int> g_hoveredMediaButton{-1};
@@ -1371,6 +1375,7 @@ void LoadSettings() {
         g_settings = std::move(next);
     }
     g_layoutDirty = true;
+    g_windowPositionDirty = true;
     HWND hSelf = g_hwnd.load();
     if (hSelf) {
         PostMessageW(hSelf, WM_APP_APPLY_HOTKEY, 0, 0);
@@ -2088,7 +2093,11 @@ DWORD WINAPI MediaThreadProc(void*) {
                                 // Providers often return the same stale thumbnail for
                                 // several polls. Hash the bytes first and avoid repeating
                                 // the more expensive WIC decode until the payload changes.
-                                if (!s_hasLastArtBytesHash || bytesHash != s_lastArtBytesHash) {
+                                // A matching hash only makes decoding redundant when a
+                                // decoded cover is already attached to this snapshot.
+                                // After a media session is recreated, next.art can be empty
+                                // even though the provider returns the same thumbnail bytes.
+                                if (!next.art || !s_hasLastArtBytesHash || bytesHash != s_lastArtBytesHash) {
                                     s_lastArtBytesHash = bytesHash;
                                     s_hasLastArtBytesHash = true;
                                     BitmapPixels decodedArt;
@@ -2533,9 +2542,18 @@ class Renderer {
         if (pw != bitmapWidth_ || ph != bitmapHeight_) {
             if (!CreateBackingBitmap(pw, ph)) return false;
             g_layoutDirty = false;
+            // Consume before positioning so a concurrent placement request is not lost.
+            g_windowPositionDirty.exchange(false);
             PositionOverlayWindow(hwnd_, pw, ph, settings);
-        } else if (g_layoutDirty.exchange(false)) {
-            PositionOverlayWindow(hwnd_, pw, ph, settings);
+        } else {
+            // Consume the redraw request before doing window work, so a concurrent
+            // update raised during positioning remains pending for the next frame.
+            g_layoutDirty.exchange(false);
+            // Content animations (accent morphing, hover and button feedback) only
+            // need a redraw. Reposition the HWND only for actual placement changes.
+            if (g_windowPositionDirty.exchange(false)) {
+                PositionOverlayWindow(hwnd_, pw, ph, settings);
+            }
         }
 
         RECT rc = {0, 0, bitmapWidth_, bitmapHeight_};
@@ -4420,6 +4438,7 @@ DWORD WINAPI SettingsMenuThreadProc(void* param) {
     }
     g_settingsMenuOpen = false;
     g_layoutDirty = true;
+    g_windowPositionDirty = true;
     return 0;
 }
 
@@ -4432,6 +4451,7 @@ void StartSettingsMenu(HWND hwnd, POINT screenPoint) {
         g_foregroundBeforeSettingsMenu = nullptr;
     }
     g_layoutDirty = true;
+    g_windowPositionDirty = true;
 
     auto args = std::make_unique<SettingsMenuThreadArgs>();
     args->hwnd = hwnd;
@@ -4441,6 +4461,7 @@ void StartSettingsMenu(HWND hwnd, POINT screenPoint) {
     if (!thread) {
         g_settingsMenuOpen = false;
         g_foregroundBeforeSettingsMenu = nullptr;
+        g_windowPositionDirty = true;
         return;
     }
     args.release();
@@ -4492,6 +4513,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                          prcNewWindow->bottom - prcNewWindow->top,
                          SWP_NOZORDER | SWP_NOACTIVATE);
             g_layoutDirty = true;
+            g_windowPositionDirty = true;
             return 0;
         }
         
@@ -4499,6 +4521,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             const Settings cfg = GetSettingsCopy();
             g_targetMonitor.store(ResolveTargetMonitor(cfg.targetMonitor));
             g_layoutDirty = true;
+            g_windowPositionDirty = true;
             return 0;
         }
         
@@ -4867,6 +4890,7 @@ DWORD WINAPI RenderThreadProc(void*) {
             if (detectedFgApp != lastFgApp) {
                 lastFgApp = std::move(detectedFgApp);
                 g_layoutDirty = true;
+                g_windowPositionDirty = true;
             }
         }
         const std::wstring& currentFgApp = lastFgApp;
@@ -4958,6 +4982,7 @@ DWORD WINAPI RenderThreadProc(void*) {
             parked = false;
             ShowWindow(hwnd, SW_SHOWNOACTIVATE);
             g_layoutDirty = true;
+            g_windowPositionDirty = true;
             previousFrame = std::chrono::steady_clock::now();
             nextFrameTarget = previousFrame;
         }
@@ -4991,6 +5016,7 @@ DWORD WINAPI RenderThreadProc(void*) {
                                      !moveMode && !g_settingsMenuOpen.load();
         if (g_forceForeground.exchange(forceForeground) != forceForeground) {
             g_layoutDirty = true;
+            g_windowPositionDirty = true;
         }
 
         const bool isInteracting = (g_clickThrough.load() && ctrlHeld && hover) ||
@@ -5134,8 +5160,7 @@ DWORD WINAPI RenderThreadProc(void*) {
                     cachedRefreshRate = GetMonitorRefreshRate(hwnd);
                     lastRefreshCheck = now;
                 }
-                // Keep Auto mode lightweight like the known-good 1.3.5
-                // renderer: continuous animation is capped at 60 FPS.
+                // Auto mode caps continuous animation at 60 FPS.
                 // Higher refresh rates remain available as explicit settings.
                 targetFps = std::min(cachedRefreshRate, 60);
             }
@@ -5426,3 +5451,4 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+
