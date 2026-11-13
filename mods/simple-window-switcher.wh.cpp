@@ -18898,8 +18898,10 @@ static bool QueueCloseWindow(HWND hw) {
 
     if (iconic) {
         request.state = CloseRequestState::RestorePending;
+        // Restore without activation: an activated window takes the foreground
+        // from the switcher, which then hides before the close is verified.
         SetLastError(ERROR_SUCCESS);
-        BOOL restored = ShowWindowAsync(hw, SW_RESTORE);
+        BOOL restored = ShowWindowAsync(hw, SW_SHOWNOACTIVATE);
         DWORD error = restored ? ERROR_SUCCESS : GetLastError();
         if (!restored) {
             Wh_Log(L"SWS: close restore queued hwnd=%p requested=0 error=%u",
