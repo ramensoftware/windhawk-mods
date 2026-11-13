@@ -580,6 +580,7 @@ struct Island {
     winrt::weak_ref<wux::FrameworkElement> fill;    // Rectangle#BackgroundFill: the taskbar's own background
     winrt::weak_ref<wux::FrameworkElement> background;  // Taskbar.TaskbarBackground: pinned to the Windows mode while forced
     bool backgroundPinned = false;  // the pin is the mod's own local RequestedTheme on it
+    bool backgroundHadLocalDefault = false;  // the element carried a local Default before the pin (put back on release)
     winrt::weak_ref<wux::FrameworkElement> themeRoot;  // island root content; RequestedTheme is set here
     wuxc::Border panel{nullptr};
     wuxm::LinearGradientBrush brush{nullptr};
@@ -2133,15 +2134,23 @@ wux::ElementTheme ForcedThemeValue(Island& isl) {
 // theme. Re-pinned on every mode change, since the mode is what it pins to.
 // An element that already has a RequestedTheme of its own (a Styler style,
 // say) is left alone: it isn't inheriting the forced theme in the first
-// place, and the mod only ever undoes its own changes. Releasing clears the
-// pin rather than writing Default, so nothing of lower precedence is shadowed.
+// place, and the mod only ever undoes its own changes. A local Default is
+// not a theme of its own - it inherits like an unset value does (the taskbar
+// leaves one there) - so it is pinned over and put back on release; an unset
+// value is cleared back to unset.
 void PinBackgroundTheme(Island& isl, bool pin) try {
     auto background = isl.background.get();
     if (!background) return;
     auto property = wux::FrameworkElement::RequestedThemeProperty();
     if (pin) {
-        if (!isl.backgroundPinned && background.ReadLocalValue(property) != wux::DependencyProperty::UnsetValue()) {
-            return;  // has a theme of its own
+        if (!isl.backgroundPinned) {
+            auto local = background.ReadLocalValue(property);
+            bool hasLocal = local != wux::DependencyProperty::UnsetValue();
+            if (hasLocal && winrt::unbox_value_or<wux::ElementTheme>(local, wux::ElementTheme::Default) !=
+                                wux::ElementTheme::Default) {
+                return;  // has a theme of its own
+            }
+            isl.backgroundHadLocalDefault = hasLocal;
         }
         wux::ElementTheme want = SystemLightTheme() ? wux::ElementTheme::Light : wux::ElementTheme::Dark;
         if (!isl.backgroundPinned || background.RequestedTheme() != want) {
@@ -2151,7 +2160,8 @@ void PinBackgroundTheme(Island& isl, bool pin) try {
         }
         isl.backgroundPinned = true;
     } else if (isl.backgroundPinned) {
-        background.ClearValue(property);
+        if (isl.backgroundHadLocalDefault) background.RequestedTheme(wux::ElementTheme::Default);
+        else background.ClearValue(property);
         isl.backgroundPinned = false;
         Wh_Log(L"taskbar %p: taskbar background theme released", isl.hwnd);
     }
