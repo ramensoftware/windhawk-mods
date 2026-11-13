@@ -326,7 +326,6 @@ struct Settings {
     int theme;  // 0 auto, 1 dark, 2 light
     int panelTheme;  // 0 auto, 1 dark, 2 light
     DWORD tintDark, tintLight;
-    bool solidWhenMaximized;
     bool allMonitors;
     std::wstring textColorMon;  // cor do texto por monitor: "\\.\DISPLAY2=1|..." (0 auto, 1 branco, 2 preto)
     std::wstring barMonitor;  // "all", "primary" ou o nome do monitor (\\.\DISPLAY2)
@@ -494,7 +493,6 @@ static const UiDefault kUiDefaults[] = {
     {L"tintReach", L"29"},
     {L"selectionBar", L"blue"},
     {L"selectionMenu", L"blue"},
-    {L"solidWhenMaximized", L"1"},
     {L"allMonitors", L"1"},
     {L"autoHide", L"0"},
     {L"hideOnFullscreen", L"1"},
@@ -742,7 +740,6 @@ static void LoadSettings() {
     }
     s.tintDark = ParseArgb(ReadStr(L"tintDark"), 0x401A1A1A);
     s.tintLight = ParseArgb(ReadStr(L"tintLight"), 0x50F2F2F2);
-    s.solidWhenMaximized = OvrInt(L"solidWhenMaximized") != 0;
     s.allMonitors = OvrInt(L"allMonitors") != 0;
     // Onde a barra aparece; sem escolha guardada, segue o antigo "todos os monitores".
     if (!UiStored(L"textColorMon", s.textColorMon)) s.textColorMon.clear();
@@ -899,7 +896,6 @@ struct Bar {
     bool appbarReleased = false;      // escondida por janela maximizada: o espaço do topo foi devolvido
     bool autoShown = false;
     int hideCountdown = 0;
-    bool solid = false;
     int hover = -1;
     int open = -1;
     int flash = -1;  // item destacado pelo indicador de volume/brilho
@@ -1450,7 +1446,6 @@ static void ApplyGlass(Bar* b) {
         return;
     }
     DWORD argb = g_light ? g_settings.tintLight : g_settings.tintDark;
-    if (b->solid) argb = (argb & 0x00FFFFFF) | 0xE6000000;
     DWORD abgr = (argb & 0xFF000000) | ((argb & 0x000000FF) << 16) | (argb & 0x0000FF00) |
                  ((argb & 0x00FF0000) >> 16);
     ACCENT_POLICY accent = {4 /*ACRYLICBLURBEHIND*/, 0, abgr, 0};
@@ -12348,7 +12343,7 @@ enum BsVal {
     BV_ISLFOCUS, BV_ISLCAPS, BV_ISLBATT, BV_ISLBT, BV_ISLAUDIO, BV_ISLHIST, BV_ISLSTYLE, BV_ISLSIZE, BV_ISLDUR, BV_ISLIN, BV_ISLOUT,
     BV_ISLPOS, BV_ISLTEST, BV_ISLCLEAR, BV_NPLAYOUT, BV_NPSIZE, BV_WINNOTIF, BV_WINONLY, BV_ISLHISTNOT,
     BV_WXPROV, BV_WXUNIT, BV_WXLOOK, BV_WXGLASS, BV_WXINT, BV_WXTEMP, BV_WXPLACE, BV_WXNOW, BV_WXRESULT,
-    BV_BATTPCT, BV_AUTOHIDE, BV_HIDEFS, BV_SOLIDMAX, BV_ALLMON, BV_FLYOUTS, BV_OSD, BV_DIM,
+    BV_BATTPCT, BV_AUTOHIDE, BV_HIDEFS, BV_ALLMON, BV_FLYOUTS, BV_OSD, BV_DIM,
     BV_G_TRANSP, BV_G_CLEAR, BV_G_LIQUID, BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_ICONS, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_SELMENU, BV_UPDATES,
     BV_G_TINT, BV_SEARCHTGT, BV_LANG, BV_NPBAR, BV_ICSADD, BV_ICSCLEAR,
     BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_TEXTMON, BV_HIDEMAX, BV_REVEAL, BV_HIDEMODE,
@@ -12397,7 +12392,6 @@ static const BsRowDef kBsRows[] = {
     {BR_CHOICE, BV_HIDEMODE, L"Ocultar a barra", 0, 0, L"Com a alça, um clique na pílula fina no topo mostra a barra (as janelas descem e ela fica na cor da janela ativa) e outro clique a esconde"},
     {BR_SWITCH, BV_HIDEFS, L"Ocultar em tela cheia", 0, 0, L"Jogos, vídeos e apps em tela cheia ficam sem a barra"},
     {BR_SWITCH, BV_HIDEMAX, L"Ocultar com janela maximizada", 0, 0, L"A barra some quando uma janela é maximizada e volta quando não há nenhuma (na área de trabalho)"},
-    {BR_SWITCH, BV_SOLIDMAX, L"Fundo sólido com janela maximizada", 0, 0},
     {BR_CHOICE, BV_BARMON, L"Mostrar a barra em", 0, 0, L"Todos os monitores, o principal ou um deles; se o escolhido for desconectado, a barra vai para o principal"},
     {BR_SWITCH, BV_MORE, L"Recolher numa seta os ícones que não cabem", 0, 0, L"Como as setas ao lado do notch no macOS 27"},
     {BR_HEADER, BV_NONE, L"Menus e painéis", 0xE7C4, 0x5E5CE6, L"Tocando agora, pílulas de volume e brilho"},
@@ -12520,7 +12514,6 @@ static const BsBoolKey kBsKeys[] = {
     {BV_AUTOHIDE, L"autoHide", &Settings::autoHide},
     {BV_HIDEFS, L"hideOnFullscreen", &Settings::hideOnFullscreen},
     {BV_HIDEMAX, L"hideWhenMaximized", &Settings::hideWhenMaximized},
-    {BV_SOLIDMAX, L"solidWhenMaximized", &Settings::solidWhenMaximized},
     {BV_ALLMON, L"allMonitors", &Settings::allMonitors},
     {BV_FLYOUTS, L"flyouts", &Settings::flyouts},
     {BV_OSD, L"showOsd", &Settings::showOsd},
@@ -21683,7 +21676,7 @@ static void BarShadowPaint(Bar* b) {
 // A sombra acompanha a barra (posição e visibilidade).
 static void BarSyncShadow(Bar* b) {
     if (!b->shadow) return;
-    if (!IsWindowVisible(b->hwnd) || b->solid) {
+    if (!IsWindowVisible(b->hwnd)) {
         ShowWindow(b->shadow, SW_HIDE);
         return;
     }
@@ -21695,7 +21688,7 @@ static void BarLiquidTick() {
     bool any = false;
     for (Bar* b : g_bars) {
         if (b->lq) any = true;
-        if (!b->lq || b->solid || !IsWindowVisible(b->hwnd)) continue;
+        if (!b->lq || !IsWindowVisible(b->hwnd)) continue;
         RECT wr;
         if (!GetWindowRect(b->hwnd, &wr)) continue;
         InflateRect(&wr, kLiquidMargin, kLiquidMargin);
@@ -22215,7 +22208,7 @@ static void Render(Bar* b) {
     bool marquee = false;
     b->rt->BeginDraw();
     b->rt->Clear(D2D1::ColorF(0, 0, 0, 0));
-    bool see = g_settings.barStyle != 0 && !b->solid && !b->peekColorOn;  // fundo transparente ou líquido
+    bool see = g_settings.barStyle != 0 && !b->peekColorOn;  // fundo transparente ou líquido
     if (b->peekColorOn) {
         // Mostrada pela alça: a barra continua a barra de título da janela ativa.
         DWORD c = b->peekColor;
@@ -22715,16 +22708,6 @@ static void ApplySettingsLive(const Settings& before) {
 static void BarSamplePeekColor(Bar* b);  // a cor da barra de título da janela ativa (mais abaixo)
 static void UpdateSolid() {
     for (Bar* b : g_bars) {
-        // Transparente e líquido ficam sempre assim (escolha explícita do usuário).
-        bool solid = g_settings.barStyle == 0 && g_settings.solidWhenMaximized && g_active.hwnd && IsWindow(g_active.hwnd) &&
-                     IsZoomed(g_active.hwnd) && !IsIconic(g_active.hwnd) &&
-                     MonitorFromWindow(g_active.hwnd, MONITOR_DEFAULTTONULL) == b->monitor;
-        if (solid != b->solid) {
-            b->solid = solid;
-            ApplyGlass(b);
-            BarSyncShadow(b);
-            InvalidateRect(b->hwnd, nullptr, FALSE);
-        }
         // "Cor da janela": transparente na área de trabalho; com a janela ativa
         // maximizada neste monitor, a barra pega a cor da barra de título dela.
         if (g_settings.barStyle == 4 && !b->autoShown) {
@@ -24482,7 +24465,6 @@ const UiTr kUiTr[] = {
     {L"Aparece ao encostar o mouse no topo da tela", L"Appears when the mouse touches the top of the screen", L"Aparece al llevar el ratón a la parte superior de la pantalla", L"Apparaît quand la souris touche le haut de l’écran", L"Erscheint, wenn die Maus den oberen Bildschirmrand berührt", L"Compare quando il mouse tocca il bordo superiore dello schermo", L"鼠标移到屏幕顶部时显示"},
     {L"Ocultar em tela cheia", L"Hide in full screen", L"Ocultar en pantalla completa", L"Masquer en plein écran", L"Im Vollbild ausblenden", L"Nascondi a schermo intero", L"全屏时隐藏"},
     {L"Jogos, vídeos e apps em tela cheia ficam sem a barra", L"Full-screen games, videos and apps don’t show the bar", L"Los juegos, vídeos y apps en pantalla completa no muestran la barra", L"Les jeux, vidéos et apps en plein écran n’affichent pas la barre", L"Spiele, Videos und Apps im Vollbild zeigen die Leiste nicht", L"Giochi, video e app a schermo intero non mostrano la barra", L"全屏游戏、视频和应用中不显示菜单栏"},
-    {L"Fundo sólido com janela maximizada", L"Solid background with a maximized window", L"Fondo sólido con ventana maximizada", L"Arrière-plan opaque avec une fenêtre agrandie", L"Deckender Hintergrund bei maximiertem Fenster", L"Sfondo pieno con finestra ingrandita", L"窗口最大化时使用纯色背景"},
     {L"Mostrar em todos os monitores", L"Show on all monitors", L"Mostrar en todos los monitores", L"Afficher sur tous les écrans", L"Auf allen Monitoren anzeigen", L"Mostra su tutti i monitor", L"在所有显示器上显示"},
     {L"Recolher numa seta os ícones que não cabem", L"Collapse icons that don’t fit into an arrow", L"Agrupar en una flecha los iconos que no caben", L"Regrouper dans une flèche les icônes qui ne tiennent pas", L"Nicht passende Symbole hinter einem Pfeil zusammenfassen", L"Raccogli in una freccia le icone che non entrano", L"将放不下的图标收进箭头"},
     {L"Como as setas ao lado do notch no macOS 27", L"Like the arrows next to the notch in macOS 27", L"Como las flechas junto al notch en macOS 27", L"Comme les flèches à côté de l’encoche dans macOS 27", L"Wie die Pfeile neben der Notch in macOS 27", L"Come le frecce accanto al notch in macOS 27", L"就像 macOS 27 中刘海旁的箭头"},
