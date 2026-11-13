@@ -6,7 +6,7 @@
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @include         explorer.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @license         GPL-2.0-or-later
 // @compilerOptions -luser32 -lshell32 -lole32 -luuid -lbcrypt -lcabinet -lcrypt32
 // ==/WindhawkMod==
@@ -22,6 +22,7 @@ Press **Ctrl+Alt+Shift+D** to launch Doom fullscreen. Press it again to return t
 The mod includes **Crispy Doom 7.2** and the complete **Freedoom Phase 1 and Phase 2** campaigns.
 Choose the campaign in Settings. The first launch unpacks the engine and selected campaign
 into your Windows user profile. The game starts fullscreen every time.
+The bundled x64 engine runs on x64 Windows and uses x64 emulation on Windows 11 on Arm.
 
 Set **Game WAD** to your own DOOM.WAD or DOOM2.WAD to play the original game with the bundled engine.
 **Doom executable** is optional and lets you choose another source port that accepts -fullscreen.
