@@ -6,7 +6,7 @@
 // @description:de-DE Jedes Fenster, sofort – genau dort, wo du es brauchst. Wechseln, anordnen und starten über die Minimieren-Schaltfläche oder ein Tastenkürzel
 // @description:fr-FR N'importe quelle fenêtre, instantanément, là où vous en avez besoin. Changez, organisez et lancez depuis le bouton Réduire ou un raccourci
 // @description:es-ES Cualquier ventana, al instante, justo donde la necesitas. Cambia, organiza y abre desde el botón Minimizar o un atajo
-// @version         1.5
+// @version         1.6
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         windhawk.exe
@@ -51,6 +51,9 @@ and restore whole desktop arrangements.
    press its number.
 
 Move the mouse away and the panel closes by itself.
+
+Prefer the keyboard only? Turn off **Open the panel by hovering the
+minimize button** in the settings and use the hotkey below.
 
 Or press **Ctrl+Alt+Space** anywhere (optionally also a quick double tap of
 Ctrl, Shift or Alt, see the settings) to open the panel in the middle of the
@@ -228,6 +231,17 @@ into these languages.
 // ==WindhawkModSettings==
 /*
 - panel:
+  - hoverOpen: true
+    $name: Open the panel by hovering the minimize button
+    $name:it-IT: Apri il pannello sostando sul pulsante Riduci a icona
+    $name:de-DE: Panel durch Verweilen auf der Minimieren-Schaltfläche öffnen
+    $name:fr-FR: Ouvrir le panneau en survolant le bouton Réduire
+    $name:es-ES: Abrir el panel al pasar sobre el botón Minimizar
+    $description: Turn off to open the panel only with the hotkey or key taps (the mouse wheel on the minimize button has its own option)
+    $description:it-IT: Disattiva per aprire il pannello solo con la scorciatoia o i tocchi del tasto (la rotella sul pulsante Riduci a icona ha un'opzione a parte)
+    $description:de-DE: Deaktivieren, um das Panel nur per Tastenkürzel oder Antippen zu öffnen (das Mausrad auf der Minimieren-Schaltfläche hat eine eigene Option)
+    $description:fr-FR: Désactivez pour n'ouvrir le panneau qu'avec le raccourci ou les tapotements (la molette sur le bouton Réduire a sa propre option)
+    $description:es-ES: Desactívalo para abrir el panel solo con el atajo o las pulsaciones de tecla (la rueda sobre el botón Minimizar tiene su propia opción)
   - hoverDelay: 500
     $name: Hover delay (ms)
     $name:it-IT: Ritardo (ms)
@@ -945,6 +959,7 @@ using std::min;
 enum class OriginalAction { None, Minimize, Swap };
 
 // Panel
+std::atomic<bool> g_hoverOpen{true};
 std::atomic<int> g_hoverDelay{500};
 std::atomic<bool> g_showAll{false};
 std::atomic<bool> g_shiftInverts{true};
@@ -1070,6 +1085,7 @@ void LoadAppearanceSettings();
 
 void LoadSettings() {
     // Panel
+    g_hoverOpen = GetBoolSetting(L"panel.hoverOpen");
     g_hoverDelay = Clamp(Wh_GetIntSetting(L"panel.hoverDelay"), 100, 5000);
     g_showAll = GetStringSetting(L"panel.showWindows") == L"all";
     g_shiftInverts = GetBoolSetting(L"panel.shiftInverts");
@@ -6808,6 +6824,19 @@ void ResetHover() {
     g_hoverStart = 0;
 }
 
+// The 50 ms hover tick is only needed for opening on hover and for the
+// wheel on the minimize button; with both off, nothing is polled.
+void UpdateHoverTimer(HWND hwnd) {
+    bool stopping = WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0;
+    if (!stopping && (g_hoverOpen || g_wheelSwitch)) {
+        SetTimer(hwnd, kTimerId, kTickMs, nullptr);
+    } else {
+        KillTimer(hwnd, kTimerId);
+        ResetHover();
+        g_onMinWnd = nullptr;
+    }
+}
+
 void OnTick(HWND hwndOwner) {
     if (GetAsyncKeyState(VK_LBUTTON) & 0x8000 || GetAsyncKeyState(VK_RBUTTON) & 0x8000) {
         ResetHover();
@@ -6866,6 +6895,9 @@ void OnTick(HWND hwndOwner) {
     g_onMinY = pt.y;
     g_onMinWnd = root;
 
+    // Hover opening turned off: the detection above still serves the wheel.
+    if (!g_hoverOpen) return;
+
     if (root == g_suppressWnd) return;
 
     ULONGLONG now = GetTickCount64();
@@ -6880,9 +6912,7 @@ void OnTick(HWND hwndOwner) {
         ResetHover();
         KillTimer(hwndOwner, kTimerId);
         ShowSwitcher(root, pt, false);
-        if (WaitForSingleObject(g_stopEvent, 0) != WAIT_OBJECT_0) {
-            SetTimer(hwndOwner, kTimerId, kTickMs, nullptr);
-        }
+        UpdateHoverTimer(hwndOwner);
     }
 }
 
@@ -6928,9 +6958,7 @@ void ShowSwitcherFromHotkey(HWND hwndOwner) {
     KillTimer(hwndOwner, kTimerId);
     g_onMinWnd = nullptr;
     ShowSwitcher(source, pt, true);
-    if (WaitForSingleObject(g_stopEvent, 0) != WAIT_OBJECT_0) {
-        SetTimer(hwndOwner, kTimerId, kTickMs, nullptr);
-    }
+    UpdateHoverTimer(hwndOwner);
 }
 
 void ApplyRuntimeSettings(HWND hwnd) {
@@ -6953,6 +6981,7 @@ void ApplyRuntimeSettings(HWND hwnd) {
     StopWheelHook();
     if (g_wheelSwitch) StartWheelHook();
     UpdateRawInput(hwnd);
+    UpdateHoverTimer(hwnd);
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -7059,8 +7088,7 @@ DWORD WINAPI ThreadProc(LPVOID) {
     if (hwnd) {
         g_hwnd = hwnd;
         StartMruTracking();
-        SetTimer(hwnd, kTimerId, kTickMs, nullptr);
-        ApplyRuntimeSettings(hwnd);
+        ApplyRuntimeSettings(hwnd);  // also starts the hover tick if needed
 
         bool quit = false;
         while (!quit) {
