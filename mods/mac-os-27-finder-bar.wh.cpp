@@ -67,7 +67,8 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 
 - in the pill and in the bell panel, grouped by app; with liquid glass on, each notification is its own glass card in the Control Center's style
 - a round picture on each notification: the sender's photo when the app saves it on the PC with the notification (with the app's icon in the corner), otherwise the app's icon. Photos sent as web links (WhatsApp does this) aren't downloaded
-- **reply** to messages (like WhatsApp) right from the pill or from the Reply button in the panel, when the app supports replies
+- **reply** to messages (like WhatsApp) right from the pill or from the Reply button in the panel, when the app supports replies. Your replies stay in the card until you clear it
+- new messages from the same conversation (same app and sender or group) go into the card that's already there, in order, instead of a new one
 - **drag** a notification aside in the panel to clear it
 - **Only the bar shows notifications**: optional; Windows' own banners move off the screen while the bar shows them, and come back when the option or the mod is turned off
 
@@ -96,7 +97,7 @@ Some Control Center tiles and menu items change real Windows settings, the same 
 
 Nothing is changed unless you click the matching tile or item.
 
-While the bar's volume and brightness indicator is on, Windows' own volume pill is kept minimized so only one shows. Turning the indicator or the mod off brings it back; if the bar's process ever crashes, it comes back when Explorer restarts.
+While the bar's volume and brightness indicator is on, Windows' own volume pill is kept hidden so only one shows (the older pill is minimized; the newer one, which the keyboard volume keys show on recent Windows 11 versions, is also moved off the screen). Turning the indicator or the mod off brings it back; if the bar's process ever crashes, it comes back when Explorer restarts.
 
 ## Network use
 
