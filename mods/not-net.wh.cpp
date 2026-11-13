@@ -7,8 +7,10 @@
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
 // @donateUrl       https://ko-fi.com/kashix
+// @include         windhawk-mod-elevated.exe
+// @include         windhawk-mod.exe
 // @include         windhawk.exe
-// @compilerOptions -lfwpuclnt -lrpcrt4 -lole32 -loleaut32 -luuid -lshell32 -lgdi32 -lgdiplus -ldwmapi -luxtheme -lshlwapi -luser32 -lcomctl32 -liphlpapi -lws2_32 -lpsapi -ladvapi32
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lfwpuclnt -lrpcrt4 -lole32 -loleaut32 -luuid -lshell32 -lgdi32 -lgdiplus -ldwmapi -luser32 -lcomctl32 -liphlpapi -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -16,7 +18,7 @@
 
 ## Two Modes
 - **Session-Only (Floating Pill / Panel, default):** Uses Windows Filtering Platform (WFP) dynamic sessions (`FWPM_SESSION_DYNAMIC`). Blocks vanish automatically on Windows restart, shutdown, or when `!Net` exits or crashes.
-- **Persistent Rules (`ExclaimNet_*`):** Saved in Mod Settings and synced to Windows Defender Firewall (`INetFwPolicy2`) with a lock in the panel. Never touches or modifies firewall rules it did not create.
+- **Auto-Blocked Rules:** Saved in Mod Settings (`persistentRules`) and applied automatically via WFP dynamic sessions (`FWPM_SESSION_DYNAMIC`) whenever `!Net` starts, vanishing cleanly on exit.
 
 ## Direction Modes
 - **Offline (Fully offline):** Blocks incoming + outgoing traffic (default).
@@ -41,12 +43,11 @@
 - **System / Excluded:** View Windows system processes or restore excluded apps.
 
 ## Permissions & Safety
-- **Administrator Rights:** Modifying WFP session filters requires elevation — if `!Net` is not elevated, the panel prompts **Run as Admin**.
+- **Administrator Rights:** Modifying WFP session filters requires elevation (via Windhawk's elevated tool host).
 - Critical Windows processes (`svchost.exe`, `lsass.exe`, `services.exe`, `csrss.exe`, `winlogon.exe`, `dwm.exe`, `windhawk.exe`, DNS/Firewall services) are locked by default.
 - Warns before blocking remote desktop or VPN clients when an active remote session or VPN process is detected.
 */
 // ==/WindhawkModReadme==
-// CYCLE_MODE_README_PATCH_19
 
 // ==WindhawkModSettings==
 /*
@@ -59,11 +60,9 @@
     - cant_be_reached: Can't be reached (Incoming only)
   - includeChildProcesses: true
     $name: Include child / helper processes by default
-    $description: Also blocks descendant helper processes (Electron, browsers, launchers).
-  - autoRestoreOnExit: true
-    $name: Auto-restore session blocks on exit
+    $description: Also blocks descendant executables inside the app's install folder.
 - Pill:
-  - dockEdge: top
+  - dockEdge: right
     $name: Dock edge / corner
     $options:
     - right: Right
@@ -73,7 +72,7 @@
     - top_left: Top-Left Corner (L-shape)
     - bottom_left: Bottom-Left Corner (L-shape)
     - bottom_right: Bottom-Right Corner (L-shape)
-  - followCursorMonitor: false
+  - followCursorMonitor: true
     $name: Follow cursor monitor
     $description: Automatically move the collapsed pill and panel to whichever monitor the mouse cursor is currently on (off by default).
   - rememberWindowPosition: true
@@ -99,8 +98,6 @@
     $description: Expand the panel when hovering slightly near the collapsed edge pill.
   - hoverHitMarginPx: 12
     $name: Pill hover hit margin (px)
-  - collapseDelayMs: 1000
-    $name: Collapse delay (ms)
   - defaultFilter: user
     $name: Default app filter
     $options:
@@ -116,7 +113,7 @@
     $name: Show hover tooltips (accessibility)
     $description: Enable descriptive tooltips when hovering over buttons, toggles, and the clock widget.
 - Behavior:
-  - enableCycleScheduler: false
+  - enableCycleScheduler: true
     $name: Turn on Cycle Mode scheduler
     $description: Allow per-app Cycle Mode scheduling (double-click or right-click an app row).
   - showCycleWidget: true
@@ -135,7 +132,6 @@
     $name: Fullscreen behavior
     $options:
     - hide: Hide
-    - pause: Pause animations
     - allow: Allow
   - hideDuringCapture: true
     $name: Hide during capture
@@ -163,33 +159,20 @@
       - cant_be_reached: Can't be reached
     - includeChildProcesses: true
       $name: Include child processes
-  $name: Persistent Firewall Rules (ExclaimNet_*)
+  $name: Auto-Blocked Apps (WFP Session)
 */
 // ==/WindhawkModSettings==
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0A00
-#endif
-
-#undef _WINSOCKAPI_
+#include <windhawk_utils.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
 #include <dwmapi.h>
-#include <uxtheme.h>
 #include <shellapi.h>
 #include <shlobj.h>
-#include <shlwapi.h>
 #include <tlhelp32.h>
-#include <psapi.h>
 #include <iphlpapi.h>
 #include <rpc.h>
 #include <fwpmu.h>
@@ -225,10 +208,8 @@ static const GUID kWfpLayerAleAuthRecvAcceptV6 = {
 #endif
 
 #include <algorithm>
-// CYCLE_MODE_SCHEDULER_PATCH_01
 #include <atomic>
 #include <cmath>
-// CYCLE_MODE_FIX_PATCH_03
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
@@ -266,7 +247,6 @@ static const GUID kWfpLayerAleAuthRecvAcceptV6 = {
 constexpr wchar_t kWndClass[]       = L"ExclaimNet_FloatingWnd_v6";
 constexpr wchar_t kCtrlWndClass[]   = L"ExclaimNet_ControlWnd_v6";
 constexpr wchar_t kCyclePopupClass[] = L"ExclaimNet_CyclePopup_v1";
-constexpr wchar_t kCyclePipeName[]   = L"\\\\.\\pipe\\ExclaimNetCycle";
 constexpr wchar_t kRulePrefix[]     = L"ExclaimNet_";
 constexpr wchar_t kTrayTip[]        = L"!Net — Per-App Internet Control";
 
@@ -275,12 +255,14 @@ constexpr UINT WM_APP_TRAY_CALLBACK   = WM_APP + 102;
 constexpr UINT WM_APP_REFRESH_APPS    = WM_APP + 103;
 constexpr UINT WM_APP_FOREGROUND_CHG  = WM_APP + 104;
 constexpr UINT WM_APP_CYCLE_STATE     = WM_APP + 105;
+constexpr UINT WM_APP_CYCLE_APPLY     = WM_APP + 106;
 
 constexpr UINT_PTR TIMER_COLLAPSE     = 1;
 constexpr UINT_PTR TIMER_ANIM_VSYNC   = 2;
 constexpr UINT_PTR TIMER_FULLSCREEN   = 3;
 constexpr UINT_PTR TIMER_HOVER_SENSOR    = 4;
 constexpr UINT_PTR TIMER_CYCLE_UI        = 5;
+constexpr UINT_PTR TIMER_DEBOUNCE_REFRESH = 6;
 constexpr UINT_PTR TIMER_WIDGET_PROXIMITY = 86;
 constexpr UINT_PTR TIMER_OUTSIDE_CLICK    = 87;
 
@@ -300,9 +282,7 @@ static bool IsCornerDock(DockEdge e) {
 }
 enum class PillIndicatorMode { Always = 0, Pulse = 1 };
 enum class AppFilter { Allowed = 0, Blocked, UserApps, SystemApps, Excluded };
-enum class FullscreenBehavior { Hide = 0, Pause, Allow };
-// CYCLE_MODE_FIX_PATCH_04
-enum class CaptureBehavior { Hide = 0 };
+enum class FullscreenBehavior { Hide = 0, Allow = 1 };
 enum class SizePreset { Default = 0, Large, ExtraLarge };
 enum class UiState { Line = 0, Panel };
 enum class PulseKind { None = 0, AllowedGreen, BlockedRed };
@@ -327,7 +307,6 @@ struct HotkeyBinding {
 struct ModSettings {
     Direction defaultDirection = Direction::FullyOffline;
     bool includeChildProcesses = true;
-    bool autoRestoreOnExit = true;
 
     DockEdge dockEdge = DockEdge::Right;
     PillIndicatorMode pillIndicatorMode = PillIndicatorMode::Always;
@@ -335,19 +314,16 @@ struct ModSettings {
     bool expandHoverHitArea = false;
     int hoverHitMarginPx = 12;
     int panelEdgeOffsetPx = 4;
-    int collapseDelayMs = 1000;
     AppFilter defaultFilter = AppFilter::UserApps;
-    // CYCLE_MODE_FIX_PATCH_18
-    bool showNonActionableInRunning = false;
+        bool showNonActionableInRunning = false;
     bool showTooltips = false;
-    bool followCursorMonitor = false;
+    bool followCursorMonitor = true;
     bool rememberWindowPosition = true;
     SizePreset windowSizePreset = SizePreset::Default;
 
     FullscreenBehavior fullscreenBehavior = FullscreenBehavior::Hide;
-    // CYCLE_MODE_FIX_PATCH_10
-    bool hideDuringCapture = true;
-    bool enableCycleScheduler = false;
+        bool hideDuringCapture = true;
+    bool enableCycleScheduler = true;
     bool showCycleMs = false;
     bool showCycleWidget = true;
     CycleWidgetAction cycleWidgetAction = CycleWidgetAction::SchedulerOnly;
@@ -373,6 +349,8 @@ struct BlockState {
     bool includeChildProcesses = true;
     Direction direction = Direction::FullyOffline;
     std::vector<WfpFilterEntry> sessionFilters;
+    std::vector<std::wstring> blockedChildren;
+    std::unordered_set<std::wstring> blockedChildPaths;
 };
 
 struct AppEntry {
@@ -487,6 +465,19 @@ struct DragController {
 static std::mutex g_settingsMtx;
 static ModSettings g_settings;
 static int g_lastSettingDockEdge = -1;
+static int g_posX = 0;
+static int g_posY = 0;
+static bool g_posLoaded = false;
+static bool g_isLightTheme = false;
+
+static void RefreshLightThemeCache() {
+    DWORD val = 0;
+    DWORD sz = sizeof(val);
+    g_isLightTheme = (RegGetValueW(HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &val, &sz) == ERROR_SUCCESS)
+        && (val != 0);
+}
 
 static std::mutex g_engineMtx;
 static HANDLE g_wfpEngine = nullptr;
@@ -496,7 +487,6 @@ static std::unordered_map<std::wstring, BlockState> g_blocks;
 static std::unordered_map<std::wstring, Direction> g_pendingDirs; // remembers direction choice before blocking
 static std::unordered_set<std::wstring> g_excludedExes;
 
-static std::atomic<bool> g_running{false};
 static HANDLE g_uiThread = nullptr;
 static DWORD g_uiThreadId = 0;
 static HANDLE g_uiReadyEvent = nullptr;
@@ -506,6 +496,7 @@ static HWND g_hCtrlWnd = nullptr;
 static HWND g_hTooltip = nullptr;
 static NOTIFYICONDATAW g_nid{};
 static bool g_trayAdded = false;
+static UINT g_wmTaskbarCreated = 0;
 
 static HWINEVENTHOOK g_hookFg = nullptr;
 static HWINEVENTHOOK g_hookCreate = nullptr;
@@ -546,8 +537,7 @@ struct HitRect {
     std::wstring tooltip;
     enum Kind {
         None = 0, PinBtn, RestoreAllBtn, SettingsBtn, ElevateBtn,
-        // CYCLE_MODE_UI_PATCH_02
-        FilterChip, RowToggle, RowDirection, RowExclude, RowExternalLocked, RowBody, HeaderDrag
+                FilterChip, RowToggle, RowDirection, RowExclude, RowExternalLocked, RowBody, HeaderDrag
     } kind = None;
 };
 static std::vector<HitRect> g_hitRects;
@@ -568,7 +558,7 @@ static Direction ParseDirection(PCWSTR s);
 static const wchar_t* DirectionLabel(Direction d);
 static const wchar_t* DirectionShortLabel(Direction d);
 static void RefreshAppList();
-static bool ApplyBlock(const std::wstring& exePath, Direction dir, bool includeChildren, bool persistent);
+static bool ApplyBlock(const std::wstring& exePath, Direction dir, bool includeChildren, bool askUser = true);
 static bool ApplyAllow(const std::wstring& exePath, bool removePersistent);
 static void RestoreAllSessionBlocks();
 static void SyncPersistentRules();
@@ -581,7 +571,6 @@ static void TriggerForegroundPulse(const std::wstring& fgExe);
 // Cycle Mode Data Models & Forward Declarations
 // ============================================================================
 
-// CYCLE_MODE_FIX_PATCH_12
 enum class CycleRunMode { UntilStopped = 0, ForCycles, ForDuration };
 enum class CyclePhase { Blocked = 0, Allowed };
 
@@ -617,7 +606,6 @@ static bool StartCycleForApp(const std::wstring& exePath, const CycleConfig& cfg
 static bool StopCycleForApp(const std::wstring& exePath, bool setAllowed);
 static void StopAllCycles(bool setAllowed);
 static bool GetCycleSnapshot(const std::wstring& exePath, CycleStatusSnapshot& outSnap);
-static std::vector<CycleStatusSnapshot> GetAllCycleSnapshots();
 static bool HasAnyActiveCycle();
 static bool ToggleCyclePauseForApp(const std::wstring& exePath, bool& outNowPaused);
 static bool GetWidgetCycleTarget(CycleStatusSnapshot& outSnap);
@@ -660,6 +648,8 @@ static bool FileExistsW(const std::wstring& path) {
     return (attr != INVALID_FILE_ATTRIBUTES) && !(attr & FILE_ATTRIBUTE_DIRECTORY);
 }
 
+extern HANDLE g_toolModProcessMutex;
+static void RelaunchElevated();
 static bool IsProcessElevated() {
     HANDLE hToken = nullptr;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) return false;
@@ -670,37 +660,22 @@ static bool IsProcessElevated() {
     return isElev;
 }
 
-static void RelaunchElevated() {
-    WCHAR exePath[MAX_PATH]{};
-    GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
-    WCHAR params[128]{};
-    swprintf_s(params, L"-tool-mod \"%s\"", WH_MOD_ID);
-
-    if (g_toolModProcessMutex) {
-        ReleaseMutex(g_toolModProcessMutex);
-        CloseHandle(g_toolModProcessMutex);
-        g_toolModProcessMutex = nullptr;
-    }
-
-    SHELLEXECUTEINFOW sei{sizeof(sei)};
-    sei.lpVerb = L"runas";
-    sei.lpFile = exePath;
-    sei.lpParameters = params;
-    sei.nShow = SW_SHOWNORMAL;
-    if (ShellExecuteExW(&sei)) {
-        if (g_hWnd) PostMessageW(g_hWnd, WM_CLOSE, 0, 0);
-    } else {
-        g_toolModProcessMutex = CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        g_statusBanner = L"Admin permission cancelled — needed to block apps.";
-        RequestRepaint();
-    }
-}
-
 static void LoadExcludedApps() {
     g_excludedExes.clear();
+    int count = Wh_GetIntValue(L"excludedCount", -1);
+    if (count >= 0) {
+        for (int i = 0; i < count; ++i) {
+            std::wstring key = L"excluded_" + std::to_wstring(i);
+            wchar_t buf[1024]{};
+            if (Wh_GetStringValue(key.c_str(), buf, ARRAYSIZE(buf)) > 0) {
+                std::wstring item = ToLower(Trim(buf));
+                if (!item.empty()) g_excludedExes.insert(item);
+            }
+        }
+        return;
+    }
     wchar_t buf[4096]{};
-    size_t n = Wh_GetStringValue(L"excludedApps", buf, ARRAYSIZE(buf));
-    if (n > 0) {
+    if (Wh_GetStringValue(L"excludedApps", buf, ARRAYSIZE(buf)) > 0) {
         std::wstringstream ss(buf);
         std::wstring item;
         while (std::getline(ss, item, L'|')) {
@@ -711,12 +686,12 @@ static void LoadExcludedApps() {
 }
 
 static void SaveExcludedApps() {
-    std::wstring joined;
+    Wh_SetIntValue(L"excludedCount", (int)g_excludedExes.size());
+    int idx = 0;
     for (const auto& ex : g_excludedExes) {
-        if (!joined.empty()) joined += L"|";
-        joined += ex;
+        std::wstring key = L"excluded_" + std::to_wstring(idx++);
+        Wh_SetStringValue(key.c_str(), ex.c_str());
     }
-    Wh_SetStringValue(L"excludedApps", joined.c_str());
 }
 
 static Direction ParseDirection(PCWSTR s) {
@@ -748,32 +723,7 @@ static int DpiScale(int px, UINT dpi) {
 }
 
 static void LogAudit(const std::wstring& msg) {
-    Wh_Log(L"[!Net] %s", msg.c_str());
-    wchar_t appData[MAX_PATH]{};
-    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appData))) {
-        std::wstring dir = std::wstring(appData) + L"\\ExclaimNet";
-        CreateDirectoryW(dir.c_str(), nullptr);
-        std::wstring logPath = dir + L"\\exclaimnet.log";
-        HANDLE hFile = CreateFileW(logPath.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                   nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (hFile != INVALID_HANDLE_VALUE) {
-            SYSTEMTIME st{};
-            GetLocalTime(&st);
-            wchar_t line[1024]{};
-            int n = swprintf_s(line, L"%04d-%02d-%02d %02d:%02d:%02d | %s\r\n",
-                               st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, msg.c_str());
-            if (n > 0) {
-                int utf8Len = WideCharToMultiByte(CP_UTF8, 0, line, n, nullptr, 0, nullptr, nullptr);
-                if (utf8Len > 0) {
-                    std::string utf8(utf8Len, '\0');
-                    WideCharToMultiByte(CP_UTF8, 0, line, n, &utf8[0], utf8Len, nullptr, nullptr);
-                    DWORD written = 0;
-                    WriteFile(hFile, utf8.data(), (DWORD)utf8.size(), &written, nullptr);
-                }
-            }
-            CloseHandle(hFile);
-        }
-    }
+    Wh_Log(L"%s", msg.c_str());
 }
 
 // ============================================================================
@@ -892,13 +842,38 @@ static std::vector<std::wstring> CollectChildExePaths(const std::wstring& parent
     std::unordered_set<std::wstring> uniqueExes;
     uniqueExes.insert(parentLowerPath);
 
+    size_t slashPos = parentLowerPath.find_last_of(L"\\/");
+    std::wstring rootDir = (slashPos != std::wstring::npos) ? parentLowerPath.substr(0, slashPos + 1) : L"";
+    wchar_t winDirBuf[MAX_PATH]{};
+    std::wstring winDir;
+    if (GetWindowsDirectoryW(winDirBuf, ARRAYSIZE(winDirBuf)) > 0) {
+        winDir = ToLower(winDirBuf);
+        if (!winDir.empty() && winDir.back() != L'\\') winDir.push_back(L'\\');
+    }
+    auto isSharedRuntime = [](const std::wstring& p) -> bool {
+        std::wstring fn = GetFileNameOnly(p);
+        static const wchar_t* kShared[] = {
+            L"msedgewebview2.exe", L"powershell.exe", L"pwsh.exe", L"cmd.exe",
+            L"conhost.exe", L"git.exe", L"node.exe", L"python.exe", L"pythonw.exe"
+        };
+        for (auto* s : kShared) if (fn == s) return true;
+        return false;
+    };
+
     while (!stack.empty()) {
         DWORD cur = stack.back();
         stack.pop_back();
         if (!visited.insert(cur).second) continue;
         auto itPath = pidToPath.find(cur);
         if (itPath != pidToPath.end() && !IsCriticalSystemExe(itPath->second)) {
-            uniqueExes.insert(itPath->second);
+            const std::wstring& cp = itPath->second;
+            bool inRoot = !rootDir.empty() && cp.size() >= rootDir.size() &&
+                          cp.compare(0, rootDir.size(), rootDir) == 0;
+            bool inWinDir = !winDir.empty() && cp.size() >= winDir.size() &&
+                            cp.compare(0, winDir.size(), winDir) == 0;
+            if (cp == parentLowerPath || (inRoot && !inWinDir && !isSharedRuntime(cp))) {
+                uniqueExes.insert(cp);
+            }
         }
         auto itCh = childrenMap.find(cur);
         if (itCh != childrenMap.end()) {
@@ -924,10 +899,30 @@ static std::unordered_set<DWORD> GetPidsWithLiveNetwork() {
         }
     }
     size = 0;
+    if (GetExtendedTcpTable(nullptr, &size, FALSE, AF_INET6, TCP_TABLE_OWNER_PID_ALL, 0) == ERROR_INSUFFICIENT_BUFFER && size > 0) {
+        std::vector<BYTE> buf(size);
+        if (GetExtendedTcpTable(buf.data(), &size, FALSE, AF_INET6, TCP_TABLE_OWNER_PID_ALL, 0) == NO_ERROR) {
+            auto* tbl = reinterpret_cast<PMIB_TCP6TABLE_OWNER_PID>(buf.data());
+            for (DWORD i = 0; i < tbl->dwNumEntries; ++i) {
+                pids.insert(tbl->table[i].dwOwningPid);
+            }
+        }
+    }
+    size = 0;
     if (GetExtendedUdpTable(nullptr, &size, FALSE, AF_INET, UDP_TABLE_OWNER_PID, 0) == ERROR_INSUFFICIENT_BUFFER && size > 0) {
         std::vector<BYTE> buf(size);
         if (GetExtendedUdpTable(buf.data(), &size, FALSE, AF_INET, UDP_TABLE_OWNER_PID, 0) == NO_ERROR) {
             auto* tbl = reinterpret_cast<PMIB_UDPTABLE_OWNER_PID>(buf.data());
+            for (DWORD i = 0; i < tbl->dwNumEntries; ++i) {
+                pids.insert(tbl->table[i].dwOwningPid);
+            }
+        }
+    }
+    size = 0;
+    if (GetExtendedUdpTable(nullptr, &size, FALSE, AF_INET6, UDP_TABLE_OWNER_PID, 0) == ERROR_INSUFFICIENT_BUFFER && size > 0) {
+        std::vector<BYTE> buf(size);
+        if (GetExtendedUdpTable(buf.data(), &size, FALSE, AF_INET6, UDP_TABLE_OWNER_PID, 0) == NO_ERROR) {
+            auto* tbl = reinterpret_cast<PMIB_UDP6TABLE_OWNER_PID>(buf.data());
             for (DWORD i = 0; i < tbl->dwNumEntries; ++i) {
                 pids.insert(tbl->table[i].dwOwningPid);
             }
@@ -967,7 +962,7 @@ static bool EnsureWfpEngineLocked() {
     session.displayData.name = sName;
     DWORD err = FwpmEngineOpen0(nullptr, RPC_C_AUTHN_WINNT, nullptr, &session, &g_wfpEngine);
     if (err != ERROR_SUCCESS) {
-        Wh_Log(L"[!Net] FwpmEngineOpen0 failed: 0x%08X", err);
+        Wh_Log(L"FwpmEngineOpen0 failed: 0x%08X", err);
         g_wfpEngine = nullptr;
         return false;
     }
@@ -1015,7 +1010,7 @@ static bool AddWfpBlockForExeLocked(const std::wstring& exePath, Direction dir, 
     if (redirDisabled) Wow64RevertWow64FsRedirection(oldRedir);
 
     if (err != ERROR_SUCCESS || !appBlob) {
-        Wh_Log(L"[!Net] FwpmGetAppIdFromFileName0 failed for %s: 0x%08X", exePath.c_str(), err);
+        Wh_Log(L"FwpmGetAppIdFromFileName0 failed for %s: 0x%08X", exePath.c_str(), err);
         return false;
     }
 
@@ -1045,7 +1040,7 @@ static bool AddWfpBlockForExeLocked(const std::wstring& exePath, Direction dir, 
             return true;
         }
         if (addErr == ERROR_ACCESS_DENIED) outAccessDenied = true;
-        Wh_Log(L"[!Net] FwpmFilterAdd0 failed: 0x%08X", addErr);
+        Wh_Log(L"FwpmFilterAdd0 failed: 0x%08X", addErr);
         return false;
     };
 
@@ -1072,144 +1067,6 @@ static void RemoveWfpFiltersLocked(std::vector<WfpFilterEntry>& filters) {
         FwpmFilterDeleteById0(g_wfpEngine, f.filterId);
     }
     filters.clear();
-}
-
-// ============================================================================
-// Persistent Windows Firewall COM Engine (ExclaimNet_* Only)
-// ============================================================================
-
-static std::wstring MakePersistentRuleName(const std::wstring& exePath, const wchar_t* dirSuffix) {
-    std::wstring base = GetFileNameOnly(exePath);
-    uint32_t h = 2166136261u;
-    for (wchar_t c : ToLower(exePath)) {
-        h ^= (uint32_t)c;
-        h *= 16777619u;
-    }
-    wchar_t buf[256]{};
-    swprintf_s(buf, L"%s%s_%08X_%s", kRulePrefix, base.c_str(), h, dirSuffix);
-    return buf;
-}
-
-static void RemovePersistentRulesForExe(const std::wstring& exePath) {
-    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    INetFwPolicy2* pPolicy = nullptr;
-    if (SUCCEEDED(CoCreateInstance(__uuidof(NetFwPolicy2), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pPolicy))) && pPolicy) {
-        INetFwRules* pRules = nullptr;
-        if (SUCCEEDED(pPolicy->get_Rules(&pRules)) && pRules) {
-            std::wstring nOut = MakePersistentRuleName(exePath, L"OUT");
-            std::wstring nIn  = MakePersistentRuleName(exePath, L"IN");
-            BSTR bOut = SysAllocString(nOut.c_str());
-            BSTR bIn  = SysAllocString(nIn.c_str());
-            pRules->Remove(bOut);
-            pRules->Remove(bIn);
-            SysFreeString(bOut);
-            SysFreeString(bIn);
-            pRules->Release();
-        }
-        pPolicy->Release();
-    }
-    if (SUCCEEDED(hrCo)) CoUninitialize();
-}
-
-static void ClearAllExclaimNetPersistentRules() {
-    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    INetFwPolicy2* pPolicy = nullptr;
-    if (SUCCEEDED(CoCreateInstance(__uuidof(NetFwPolicy2), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pPolicy))) && pPolicy) {
-        INetFwRules* pRules = nullptr;
-        if (SUCCEEDED(pPolicy->get_Rules(&pRules)) && pRules) {
-            IUnknown* pUnk = nullptr;
-            if (SUCCEEDED(pRules->get__NewEnum(&pUnk)) && pUnk) {
-                IEnumVARIANT* pEnum = nullptr;
-                if (SUCCEEDED(pUnk->QueryInterface(IID_PPV_ARGS(&pEnum))) && pEnum) {
-                    std::vector<std::wstring> toDelete;
-                    VARIANT var{};
-                    ULONG fetched = 0;
-                    while (pEnum->Next(1, &var, &fetched) == S_OK && fetched == 1) {
-                        if (var.vt == VT_DISPATCH && var.pdispVal) {
-                            INetFwRule* pRule = nullptr;
-                            if (SUCCEEDED(var.pdispVal->QueryInterface(IID_PPV_ARGS(&pRule))) && pRule) {
-                                BSTR bName = nullptr;
-                                if (SUCCEEDED(pRule->get_Name(&bName)) && bName) {
-                                    if (wcsncmp(bName, kRulePrefix, wcslen(kRulePrefix)) == 0) {
-                                        toDelete.emplace_back(bName);
-                                    }
-                                    SysFreeString(bName);
-                                }
-                                pRule->Release();
-                            }
-                        }
-                        VariantClear(&var);
-                    }
-                    for (const auto& name : toDelete) {
-                        BSTR b = SysAllocString(name.c_str());
-                        pRules->Remove(b);
-                        SysFreeString(b);
-                    }
-                    pEnum->Release();
-                }
-                pUnk->Release();
-            }
-            pRules->Release();
-        }
-        pPolicy->Release();
-    }
-    if (SUCCEEDED(hrCo)) CoUninitialize();
-}
-
-static bool AddPersistentFirewallRule(const std::wstring& exePath, Direction dir) {
-    RemovePersistentRulesForExe(exePath);
-    if (!FileExistsW(exePath)) return false;
-
-    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    bool ok = true;
-    INetFwPolicy2* pPolicy = nullptr;
-    if (SUCCEEDED(CoCreateInstance(__uuidof(NetFwPolicy2), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pPolicy))) && pPolicy) {
-        INetFwRules* pRules = nullptr;
-        if (SUCCEEDED(pPolicy->get_Rules(&pRules)) && pRules) {
-            auto addDir = [&](NET_FW_RULE_DIRECTION fwDir, const wchar_t* suffix) {
-                INetFwRule* pRule = nullptr;
-                if (SUCCEEDED(CoCreateInstance(__uuidof(NetFwRule), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pRule))) && pRule) {
-                    std::wstring rName = MakePersistentRuleName(exePath, suffix);
-                    BSTR bName = SysAllocString(rName.c_str());
-                    BSTR bApp  = SysAllocString(exePath.c_str());
-                    BSTR bDesc = SysAllocString(L"Managed by !Net (ExclaimNet) persistent rule");
-
-                    pRule->put_Name(bName);
-                    pRule->put_Description(bDesc);
-                    pRule->put_ApplicationName(bApp);
-                    pRule->put_Action(NET_FW_ACTION_BLOCK);
-                    pRule->put_Direction(fwDir);
-                    pRule->put_Profiles(NET_FW_PROFILE2_ALL);
-                    pRule->put_Enabled(VARIANT_TRUE);
-
-                    HRESULT hrAdd = pRules->Add(pRule);
-                    if (FAILED(hrAdd)) ok = false;
-
-                    SysFreeString(bName);
-                    SysFreeString(bApp);
-                    SysFreeString(bDesc);
-                    pRule->Release();
-                } else {
-                    ok = false;
-                }
-            };
-
-            if (dir == Direction::FullyOffline || dir == Direction::CantReachInternet) {
-                addDir(NET_FW_RULE_DIR_OUT, L"OUT");
-            }
-            if (dir == Direction::FullyOffline || dir == Direction::CantBeReached) {
-                addDir(NET_FW_RULE_DIR_IN, L"IN");
-            }
-            pRules->Release();
-        } else {
-            ok = false;
-        }
-        pPolicy->Release();
-    } else {
-        ok = false;
-    }
-    if (SUCCEEDED(hrCo)) CoUninitialize();
-    return ok;
 }
 
 struct ExtFwInfo {
@@ -1295,9 +1152,18 @@ static std::unordered_map<std::wstring, ExtFwInfo> ScanExternalFirewallBlocks(bo
                                             BSTR bApp = nullptr;
                                             if (SUCCEEDED(pRule->get_ApplicationName(&bApp)) && bApp) {
                                                 if (*bApp) {
+                                                    std::wstring rawApp(bApp);
+                                                    static BOOL s_isWow64 = []() {
+                                                        BOOL w = FALSE;
+                                                        IsWow64Process(GetCurrentProcess(), &w);
+                                                        return w;
+                                                    }();
+                                                    if (s_isWow64 && _wcsnicmp(rawApp.c_str(), L"%ProgramFiles%", 14) == 0) {
+                                                        rawApp = L"%ProgramW6432%" + rawApp.substr(14);
+                                                    }
                                                     wchar_t expanded[MAX_PATH * 2]{};
-                                                    DWORD expLen = ExpandEnvironmentStringsW(bApp, expanded, ARRAYSIZE(expanded));
-                                                    std::wstring appLow = ToLower((expLen > 0 && expLen < ARRAYSIZE(expanded)) ? expanded : bApp);
+                                                    DWORD expLen = ExpandEnvironmentStringsW(rawApp.c_str(), expanded, ARRAYSIZE(expanded));
+                                                    std::wstring appLow = ToLower((expLen > 0 && expLen < ARRAYSIZE(expanded)) ? expanded : rawApp);
                                                     NET_FW_RULE_DIRECTION fwDir = NET_FW_RULE_DIR_OUT;
                                                     pRule->get_Direction(&fwDir);
                                                     int bit = (fwDir == NET_FW_RULE_DIR_IN) ? 2 : 1;
@@ -1373,7 +1239,7 @@ static void SyncForegroundStateAndFilter(bool allowFilterJump) {
     if (!fg || IsDesktopOrShellWindow(fg)) {
         g_lastFgExe.clear();
         NotifyCycleFocusChanged(L"");
-        if (!g_needsElevation && g_statusBanner.find(L"Windows Defender Firewall") != std::wstring::npos) {
+        if (g_statusBanner.find(L"Windows Defender Firewall") != std::wstring::npos) {
             g_statusBanner.clear();
         }
         return;
@@ -1410,7 +1276,7 @@ static void SyncForegroundStateAndFilter(bool allowFilterJump) {
 
     auto extFw = (g_extFwScanTick == 0) ? ScanExternalFirewallBlocks(false) : GetCachedExternalFirewallBlocks();
     auto itExt = extFw.find(low);
-    bool isExtBlk = (itExt != extFw.end() && (itExt->second.dirMask & 1) != 0);
+    bool isExtBlk = (itExt != extFw.end() && itExt->second.dirMask != 0);
 
     bool isNetBlk = false;
     {
@@ -1423,7 +1289,7 @@ static void SyncForegroundStateAndFilter(bool allowFilterJump) {
         if (isExtBlk) {
             g_activeFilter = AppFilter::Blocked;
             g_blockedFirewallOnly = true;
-            if (!g_needsElevation) {
+            if (true) {
                 g_statusBanner = L"Blocked by Windows Firewall — edit rules in Windows Defender Firewall.";
             }
         } else {
@@ -1435,7 +1301,7 @@ static void SyncForegroundStateAndFilter(bool allowFilterJump) {
             } else if (isNetBlk && g_activeFilter == AppFilter::Blocked) {
                 g_blockedFirewallOnly = false;
             }
-            if (!g_needsElevation && g_statusBanner.find(L"Windows Defender Firewall") != std::wstring::npos) {
+            if (g_statusBanner.find(L"Windows Defender Firewall") != std::wstring::npos) {
                 g_statusBanner.clear();
             }
         }
@@ -1460,29 +1326,33 @@ static void TriggerForegroundPulse(const std::wstring& fgExe) {
     if (!isBlocked) {
         auto extFw = (g_extFwScanTick == 0) ? ScanExternalFirewallBlocks(false) : GetCachedExternalFirewallBlocks();
         auto itExt = extFw.find(low);
-        isBlocked = (itExt != extFw.end() && (itExt->second.dirMask & 1) != 0);
+        isBlocked = (itExt != extFw.end() && itExt->second.dirMask != 0);
     }
     TriggerPulse(isBlocked ? PulseKind::BlockedRed : PulseKind::AllowedGreen);
 }
 
-static bool ApplyBlock(const std::wstring& exePath, Direction dir, bool includeChildren, bool persistent) {
+static bool ApplyBlock(const std::wstring& exePath, Direction dir, bool includeChildren, bool askUser) {
     std::wstring low = ToLower(exePath);
     if (g_excludedExes.count(low)) {
         g_statusBanner = L"App is excluded from !Net.";
         return false;
     }
+    bool lockCrit = true;
+    bool warnVpn = true;
     {
         std::lock_guard<std::mutex> lk(g_settingsMtx);
-        if (g_settings.lockSystemProcesses && IsCriticalSystemExe(low)) {
-            g_statusBanner = L"System-critical process is locked.";
-            return false;
-        }
-        if (g_settings.warnOnVpnOrRemote && IsVpnOrRemoteExe(low)) {
-            int res = MessageBoxW(g_hWnd,
-                                  L"Blocking this app may disconnect your active VPN or Remote Desktop session.\n\nContinue?",
-                                  L"!Net Safety Warning", MB_YESNO | MB_ICONWARNING | MB_TOPMOST);
-            if (res != IDYES) return false;
-        }
+        lockCrit = g_settings.lockSystemProcesses;
+        warnVpn = g_settings.warnOnVpnOrRemote;
+    }
+    if (lockCrit && IsCriticalSystemExe(low)) {
+        g_statusBanner = L"System-critical process is locked.";
+        return false;
+    }
+    if (warnVpn && askUser && IsVpnOrRemoteExe(low)) {
+        int res = MessageBoxW(g_hWnd,
+                              L"Blocking this app may disconnect your active VPN or Remote Desktop session.\n\nContinue?",
+                              L"!Net Safety Warning", MB_YESNO | MB_ICONWARNING | MB_TOPMOST);
+        if (res != IDYES) return false;
     }
 
     std::vector<std::wstring> targets;
@@ -1490,12 +1360,9 @@ static bool ApplyBlock(const std::wstring& exePath, Direction dir, bool includeC
         targets = CollectChildExePaths(low);
     }
     if (targets.empty()) targets.push_back(low);
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMtx);
-        if (g_settings.lockSystemProcesses) {
-            targets.erase(std::remove_if(targets.begin(), targets.end(),
-                [](const std::wstring& t) { return IsCriticalSystemExe(t); }), targets.end());
-        }
+    if (lockCrit) {
+        targets.erase(std::remove_if(targets.begin(), targets.end(),
+            [](const std::wstring& t) { return IsCriticalSystemExe(t); }), targets.end());
     }
     if (targets.empty()) return false;
 
@@ -1505,13 +1372,9 @@ static bool ApplyBlock(const std::wstring& exePath, Direction dir, bool includeC
     bool accessDenied = false;
 
     for (const auto& t : targets) {
-        if (persistent) {
-            anyOk |= AddPersistentFirewallRule(t, dir);
-        } else {
-            bool denied = false;
-            anyOk |= AddWfpBlockForExeLocked(t, dir, newFilters, denied);
-            accessDenied |= denied;
-        }
+        bool denied = false;
+        anyOk |= AddWfpBlockForExeLocked(t, dir, newFilters, denied);
+        accessDenied |= denied;
     }
 
     if (!anyOk) {
@@ -1530,30 +1393,59 @@ static bool ApplyBlock(const std::wstring& exePath, Direction dir, bool includeC
     auto& state = g_blocks[low];
     RemoveWfpFiltersLocked(state.sessionFilters);
     state.blocked = true;
-    state.persistent = persistent;
+    state.persistent = false;
     state.includeChildProcesses = includeChildren;
     state.direction = dir;
     state.sessionFilters = std::move(newFilters);
+    state.blockedChildren.clear();
+    state.blockedChildPaths.clear();
+    for (const auto& t : targets) {
+        if (t != low) {
+            state.blockedChildPaths.insert(t);
+            state.blockedChildren.push_back(GetFileNameOnly(t));
+        }
+    }
 
-    LogAudit((persistent ? L"BLOCK [PERSISTENT] " : L"BLOCK [SESSION] ") + exePath + L" (" + DirectionShortLabel(dir) + L")");
+    LogAudit(L"BLOCK [SESSION] " + exePath + L" (" + DirectionShortLabel(dir) + L")");
     g_statusBanner.clear();
     TriggerPulse(PulseKind::BlockedRed);
     return true;
 }
 
-static bool ApplyAllow(const std::wstring& exePath, bool removePersistent) {
+static void SyncLateChildBlocks() {
+    std::vector<std::pair<std::wstring, Direction>> toCheck;
+    {
+        std::lock_guard<std::mutex> lk(g_engineMtx);
+        for (const auto& kv : g_blocks) {
+            if (kv.second.blocked && kv.second.includeChildProcesses) {
+                toCheck.push_back({kv.first, kv.second.direction});
+            }
+        }
+    }
+    if (toCheck.empty()) return;
+    for (const auto& item : toCheck) {
+        auto children = CollectChildExePaths(item.first);
+        std::lock_guard<std::mutex> lk(g_engineMtx);
+        auto it = g_blocks.find(item.first);
+        if (it == g_blocks.end() || !it->second.blocked) continue;
+        for (const auto& ch : children) {
+            if (ch == item.first) continue;
+            if (it->second.blockedChildPaths.count(ch)) continue;
+            bool denied = false;
+            if (AddWfpBlockForExeLocked(ch, item.second, it->second.sessionFilters, denied)) {
+                it->second.blockedChildPaths.insert(ch);
+                it->second.blockedChildren.push_back(GetFileNameOnly(ch));
+            }
+        }
+    }
+}
+
+static bool ApplyAllow(const std::wstring& exePath, bool) {
     std::wstring low = ToLower(exePath);
     std::lock_guard<std::mutex> lk(g_engineMtx);
     auto it = g_blocks.find(low);
     if (it != g_blocks.end()) {
-        if (it->second.persistent && !removePersistent) {
-            g_statusBanner = L"Persistent rule locked — edit in Windhawk Settings.";
-            return false;
-        }
         RemoveWfpFiltersLocked(it->second.sessionFilters);
-        if (it->second.persistent) {
-            RemovePersistentRulesForExe(low);
-        }
         g_blocks.erase(it);
     }
     LogAudit(L"ALLOW " + exePath);
@@ -1590,8 +1482,14 @@ static std::wstring g_cycleFgExe;
 static std::wstring g_lastWidgetCycleExe;
 static CycleConfig g_lastCycleConfig; // session-only memory, never saved to YAML
 static bool g_hasLastCycleConfig = false;
+struct CyclePendingAction {
+    enum Kind { SwitchBlock, SwitchAllow, EndAllow, WipeExited } kind;
+    std::wstring displayPath;
+    Direction dir = Direction::FullyOffline;
+    bool includeChildren = true;
+};
+static std::vector<CyclePendingAction> g_pendingCycleActions;
 static HANDLE g_cycleThread = nullptr;
-static HANDLE g_pipeThread = nullptr;
 static std::atomic<bool> g_cycleStopping{false};
 
 static uint64_t UtcNowMs() {
@@ -1726,7 +1624,7 @@ static bool StartCycleForApp(const std::wstring& exePath, const CycleConfig& cfg
     }
     auto extFw = GetCachedExternalFirewallBlocks();
     auto itExt = extFw.find(low);
-    if (itExt != extFw.end() && (itExt->second.dirMask & 1) != 0) {
+    if (itExt != extFw.end() && itExt->second.dirMask != 0) {
         outErr = L"Blocked by Windows Firewall — cannot cycle.";
         return false;
     }
@@ -1738,7 +1636,7 @@ static bool StartCycleForApp(const std::wstring& exePath, const CycleConfig& cfg
     }
 
     // Always starts with Blocked
-    if (!ApplyBlock(exePath, cfg.direction, incChildren, false)) {
+    if (!ApplyBlock(exePath, cfg.direction, incChildren, true)) {
         outErr = g_statusBanner.empty() ? L"Failed to apply initial block." : g_statusBanner;
         return false;
     }
@@ -1820,17 +1718,6 @@ static bool GetCycleSnapshot(const std::wstring& exePath, CycleStatusSnapshot& o
     if (it == g_cycles.end()) return false;
     outSnap = BuildSnapshotLocked(it->second, nowMs);
     return true;
-}
-
-static std::vector<CycleStatusSnapshot> GetAllCycleSnapshots() {
-    double nowMs = QpcNowMs();
-    std::lock_guard<std::mutex> lk(g_cycleMtx);
-    std::vector<CycleStatusSnapshot> out;
-    out.reserve(g_cycles.size());
-    for (const auto& kv : g_cycles) {
-        out.push_back(BuildSnapshotLocked(kv.second, nowMs));
-    }
-    return out;
 }
 
 static bool HasAnyActiveCycle() {
@@ -1957,15 +1844,8 @@ static void NotifyCycleSystemResume() {
 }
 
 static DWORD WINAPI CycleSchedulerThreadProc(LPVOID) {
-    struct PendingAction {
-        enum Kind { SwitchBlock, SwitchAllow, EndAllow, WipeExited } kind;
-        std::wstring displayPath;
-        Direction dir = Direction::FullyOffline;
-        bool includeChildren = true;
-    };
-
     while (!g_cycleStopping.load()) {
-        std::vector<PendingAction> actions;
+        std::vector<CyclePendingAction> actions;
         double nextWakeMs = 250.0;
 
         {
@@ -1985,7 +1865,7 @@ static DWORD WINAPI CycleSchedulerThreadProc(LPVOID) {
                 if (nowMs - rt.lastProcCheckMs >= 500.0) {
                     rt.lastProcCheckMs = nowMs;
                     if (!IsAnyProcessAliveForExe(rt.exePath)) {
-                        actions.push_back({PendingAction::WipeExited, rt.displayPath, rt.cfg.direction, rt.includeChildren});
+                        actions.push_back({CyclePendingAction::WipeExited, rt.displayPath, rt.cfg.direction, rt.includeChildren});
                         toErase.push_back(kv.first);
                         continue;
                     }
@@ -1999,7 +1879,7 @@ static DWORD WINAPI CycleSchedulerThreadProc(LPVOID) {
                 // Check total duration limit (monotonic OR Windows wall-clock target)
                 if (rt.cfg.runMode == CycleRunMode::ForDuration &&
                     (nowMs >= rt.totalEndMs || (rt.cfg.targetEndUtcMs > 0 && UtcNowMs() >= rt.cfg.targetEndUtcMs))) {
-                    actions.push_back({PendingAction::EndAllow, rt.displayPath, rt.cfg.direction, rt.includeChildren});
+                    actions.push_back({CyclePendingAction::EndAllow, rt.displayPath, rt.cfg.direction, rt.includeChildren});
                     toErase.push_back(kv.first);
                     continue;
                 }
@@ -2011,11 +1891,11 @@ static DWORD WINAPI CycleSchedulerThreadProc(LPVOID) {
                         double allowDur = (double)rt.cfg.allowMs;
                         rt.phaseStartMs = (nowMs - rt.phaseTargetMs < allowDur) ? rt.phaseTargetMs : nowMs;
                         rt.phaseTargetMs = rt.phaseStartMs + allowDur;
-                        actions.push_back({PendingAction::SwitchAllow, rt.displayPath, rt.cfg.direction, rt.includeChildren});
+                        actions.push_back({CyclePendingAction::SwitchAllow, rt.displayPath, rt.cfg.direction, rt.includeChildren});
                     } else {
                         rt.completedCycles++;
                         if (rt.cfg.runMode == CycleRunMode::ForCycles && rt.completedCycles >= rt.cfg.runValue) {
-                            actions.push_back({PendingAction::EndAllow, rt.displayPath, rt.cfg.direction, rt.includeChildren});
+                            actions.push_back({CyclePendingAction::EndAllow, rt.displayPath, rt.cfg.direction, rt.includeChildren});
                             toErase.push_back(kv.first);
                             continue;
                         }
@@ -2023,7 +1903,7 @@ static DWORD WINAPI CycleSchedulerThreadProc(LPVOID) {
                         double blockDur = (double)rt.cfg.blockMs;
                         rt.phaseStartMs = (nowMs - rt.phaseTargetMs < blockDur) ? rt.phaseTargetMs : nowMs;
                         rt.phaseTargetMs = rt.phaseStartMs + blockDur;
-                        actions.push_back({PendingAction::SwitchBlock, rt.displayPath, rt.cfg.direction, rt.includeChildren});
+                        actions.push_back({CyclePendingAction::SwitchBlock, rt.displayPath, rt.cfg.direction, rt.includeChildren});
                     }
                 }
 
@@ -2039,23 +1919,15 @@ static DWORD WINAPI CycleSchedulerThreadProc(LPVOID) {
             }
         }
 
-        // Execute WFP filter transitions outside g_cycleMtx
-        bool uiDirty = false;
-        for (const auto& act : actions) {
-            uiDirty = true;
-            if (act.kind == PendingAction::SwitchBlock) {
-                ApplyBlock(act.displayPath, act.dir, act.includeChildren, false);
-            } else if (act.kind == PendingAction::SwitchAllow) {
-                ApplyAllow(act.displayPath, false);
-            } else if (act.kind == PendingAction::EndAllow) {
-                ApplyAllow(act.displayPath, false);
-                LogAudit(L"CYCLE COMPLETED " + act.displayPath);
-            } else if (act.kind == PendingAction::WipeExited) {
-                ApplyAllow(act.displayPath, false);
-                LogAudit(L"CYCLE WIPED (process exited) " + act.displayPath);
+        if (!actions.empty()) {
+            {
+                std::lock_guard<std::mutex> lk(g_cycleMtx);
+                g_pendingCycleActions.insert(g_pendingCycleActions.end(),
+                                             std::make_move_iterator(actions.begin()),
+                                             std::make_move_iterator(actions.end()));
             }
+            if (g_hWnd) PostMessageW(g_hWnd, WM_APP_CYCLE_APPLY, 0, 0);
         }
-        if (uiDirty) PostCycleUiSync();
 
         {
             std::unique_lock<std::mutex> lk(g_cycleMtx);
@@ -2068,139 +1940,10 @@ static DWORD WINAPI CycleSchedulerThreadProc(LPVOID) {
     return 0;
 }
 
-static std::wstring Utf8ToWide(const std::string& s) {
-    if (s.empty()) return L"";
-    int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), nullptr, 0);
-    if (n <= 0) return L"";
-    std::wstring out(n, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), &out[0], n);
-    return out;
-}
-
-static std::string WideToUtf8(const std::wstring& s) {
-    if (s.empty()) return "";
-    int n = WideCharToMultiByte(CP_UTF8, 0, s.data(), (int)s.size(), nullptr, 0, nullptr, nullptr);
-    if (n <= 0) return "";
-    std::string out(n, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, s.data(), (int)s.size(), &out[0], n, nullptr, nullptr);
-    return out;
-}
-
-static std::wstring HandleCyclePipeCommand(const std::wstring& reqRaw) {
-    std::wstring req = Trim(reqRaw);
-    std::vector<std::wstring> parts;
-    std::wstringstream ss(req);
-    std::wstring tok;
-    while (std::getline(ss, tok, L'|')) {
-        parts.push_back(Trim(tok));
-    }
-    if (parts.empty()) return L"ERR|empty_command\n";
-
-    std::wstring cmd = ToLower(parts[0]);
-    if (cmd == L"startcycle") {
-        // startCycle|<exePath>|<blockMs>|<allowMs>|<runMode>|<runValue>|<focusedOnly>[|<direction>]
-        if (parts.size() < 7) return L"ERR|usage: startCycle|exePath|blockMs|allowMs|runMode|runValue|focusedOnly[|direction]\n";
-        CycleConfig cfg;
-        cfg.blockMs = (uint64_t)_wcstoui64(parts[2].c_str(), nullptr, 10);
-        cfg.allowMs = (uint64_t)_wcstoui64(parts[3].c_str(), nullptr, 10);
-        std::wstring rm = ToLower(parts[4]);
-        if (rm == L"cycles" || rm == L"for_cycles" || rm == L"1") cfg.runMode = CycleRunMode::ForCycles;
-        else if (rm == L"duration" || rm == L"for_time" || rm == L"2") cfg.runMode = CycleRunMode::ForDuration;
-        else cfg.runMode = CycleRunMode::UntilStopped;
-        cfg.runValue = (uint64_t)_wcstoui64(parts[5].c_str(), nullptr, 10);
-        cfg.focusedOnly = (parts[6] == L"1" || ToLower(parts[6]) == L"true");
-        if (parts.size() >= 8) {
-            cfg.direction = (Direction)std::clamp(_wtoi(parts[7].c_str()), 0, 2);
-        } else {
-            std::lock_guard<std::mutex> lk(g_settingsMtx);
-            cfg.direction = g_settings.defaultDirection;
-        }
-        std::wstring err;
-        if (!StartCycleForApp(parts[1], cfg, err)) return L"ERR|" + err + L"\n";
-        return L"OK|started|" + ToLower(parts[1]) + L"\n";
-    }
-    if (cmd == L"stopcycle") {
-        if (parts.size() < 2) return L"ERR|usage: stopCycle|exePath\n";
-        if (parts[1] == L"*") {
-            StopAllCycles(true);
-            return L"OK|stopped_all\n";
-        }
-        if (!StopCycleForApp(parts[1], true)) return L"ERR|not_found\n";
-        return L"OK|stopped|" + ToLower(parts[1]) + L"\n";
-    }
-    if (cmd == L"cyclestatus") {
-        if (parts.size() >= 2 && !parts[1].empty()) {
-            CycleStatusSnapshot s;
-            if (!GetCycleSnapshot(parts[1], s)) return L"OK|0\n";
-            wchar_t line[512]{};
-            swprintf_s(line, L"OK|1\n%s|%s|%llu|%d|%llu|%llu|%llu|%d\n",
-                       s.exePath.c_str(),
-                       (s.phase == CyclePhase::Blocked ? L"Blocked" : L"Allowed"),
-                       (unsigned long long)s.phaseRemainingMs,
-                       s.pausedByFocus ? 1 : 0,
-                       (unsigned long long)s.completedCycles,
-                       (unsigned long long)s.targetCycles,
-                       (unsigned long long)s.totalRemainingMs,
-                       s.focusedOnly ? 1 : 0);
-            return line;
-        }
-        auto all = GetAllCycleSnapshots();
-        std::wstring out = L"OK|" + std::to_wstring(all.size()) + L"\n";
-        for (const auto& s : all) {
-            wchar_t line[512]{};
-            swprintf_s(line, L"%s|%s|%llu|%d|%llu|%llu|%llu|%d\n",
-                       s.exePath.c_str(),
-                       (s.phase == CyclePhase::Blocked ? L"Blocked" : L"Allowed"),
-                       (unsigned long long)s.phaseRemainingMs,
-                       s.pausedByFocus ? 1 : 0,
-                       (unsigned long long)s.completedCycles,
-                       (unsigned long long)s.targetCycles,
-                       (unsigned long long)s.totalRemainingMs,
-                       s.focusedOnly ? 1 : 0);
-            out += line;
-        }
-        return out;
-    }
-    return L"ERR|unknown_command\n";
-}
-
-static DWORD WINAPI CyclePipeThreadProc(LPVOID) {
-    while (!g_cycleStopping.load()) {
-        HANDLE hPipe = CreateNamedPipeW(
-            kCyclePipeName,
-            PIPE_ACCESS_DUPLEX,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
-            1, 4096, 4096, 0, nullptr);
-        if (hPipe == INVALID_HANDLE_VALUE) {
-            Sleep(200);
-            continue;
-        }
-        BOOL connected = ConnectNamedPipe(hPipe, nullptr) ? TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
-        if (connected && !g_cycleStopping.load()) {
-            char buf[4096]{};
-            DWORD readBytes = 0;
-            if (ReadFile(hPipe, buf, sizeof(buf) - 1, &readBytes, nullptr) && readBytes > 0) {
-                std::wstring req = Utf8ToWide(std::string(buf, readBytes));
-                std::wstring resp = HandleCyclePipeCommand(req);
-                std::string respUtf8 = WideToUtf8(resp);
-                DWORD written = 0;
-                WriteFile(hPipe, respUtf8.data(), (DWORD)respUtf8.size(), &written, nullptr);
-                FlushFileBuffers(hPipe);
-            }
-        }
-        DisconnectNamedPipe(hPipe);
-        CloseHandle(hPipe);
-    }
-    return 0;
-}
-
 static void StartCycleEngine() {
     g_cycleStopping = false;
     if (!g_cycleThread) {
         g_cycleThread = CreateThread(nullptr, 0, CycleSchedulerThreadProc, nullptr, 0, nullptr);
-    }
-    if (!g_pipeThread) {
-        g_pipeThread = CreateThread(nullptr, 0, CyclePipeThreadProc, nullptr, 0, nullptr);
     }
 }
 
@@ -2208,18 +1951,10 @@ static void ShutdownCycleEngine() {
     StopAllCycles(true);
     g_cycleStopping = true;
     g_cycleCv.notify_all();
-    // Unblock ConnectNamedPipe if waiting
-    HANDLE hWake = CreateFileW(kCyclePipeName, GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
-    if (hWake != INVALID_HANDLE_VALUE) CloseHandle(hWake);
     if (g_cycleThread) {
         WaitForSingleObject(g_cycleThread, 3000);
         CloseHandle(g_cycleThread);
         g_cycleThread = nullptr;
-    }
-    if (g_pipeThread) {
-        WaitForSingleObject(g_pipeThread, 3000);
-        CloseHandle(g_pipeThread);
-        g_pipeThread = nullptr;
     }
 }
 
@@ -2240,30 +1975,17 @@ static void RestoreAllSessionBlocks() {
 }
 
 static void SyncPersistentRules() {
-    ClearAllExclaimNetPersistentRules();
     std::vector<PersistentRuleCfg> rules;
     {
         std::lock_guard<std::mutex> lk(g_settingsMtx);
         rules = g_settings.persistentRules;
     }
-
-    std::lock_guard<std::mutex> lk(g_engineMtx);
-    for (auto it = g_blocks.begin(); it != g_blocks.end();) {
-        if (it->second.persistent) it = g_blocks.erase(it);
-        else ++it;
-    }
-
     for (const auto& r : rules) {
         if (r.appPath.empty()) continue;
         std::wstring low = ToLower(r.appPath);
         if (g_excludedExes.count(low)) continue;
-        if (FileExistsW(r.appPath) && AddPersistentFirewallRule(r.appPath, r.direction)) {
-            BlockState bs;
-            bs.blocked = true;
-            bs.persistent = true;
-            bs.includeChildProcesses = r.includeChildProcesses;
-            bs.direction = r.direction;
-            g_blocks[low] = bs;
+        if (FileExistsW(r.appPath)) {
+            ApplyBlock(r.appPath, r.direction, r.includeChildProcesses, false);
         }
     }
 }
@@ -2328,7 +2050,7 @@ static void RefreshAppList() {
             e.isExcluded = g_excludedExes.count(low) > 0;
             e.exeExists = FileExistsW(p.exePath);
             auto itExt = extFw.find(low);
-            if (itExt != extFw.end() && (itExt->second.dirMask & 1) != 0) {
+            if (itExt != extFw.end() && itExt->second.dirMask != 0) {
                 e.isExternalBlocked = true;
                 e.externalBlockMask = itExt->second.dirMask;
                 e.externalRuleName = itExt->second.ruleName;
@@ -2453,9 +2175,8 @@ static void RefreshAppList() {
 // ============================================================================
 
 static HICON GetAppIconCached(const std::wstring& exePath, UINT dpi) {
-    wchar_t keyBuf[512]{};
-    swprintf_s(keyBuf, L"%s@%u", exePath.c_str(), dpi);
-    auto it = g_iconCache.find(keyBuf);
+    std::wstring key = exePath + L"@" + std::to_wstring(dpi);
+    auto it = g_iconCache.find(key);
     if (it != g_iconCache.end()) return it->second;
 
     int sz = DpiScale(20, dpi);
@@ -2473,7 +2194,7 @@ static HICON GetAppIconCached(const std::wstring& exePath, UINT dpi) {
             hIcon = sii.hIcon;
         }
     }
-    g_iconCache[keyBuf] = hIcon;
+    g_iconCache[key] = hIcon;
     return hIcon;
 }
 
@@ -2488,14 +2209,17 @@ static void ClearIconCache() {
 // Capture Guard & Fullscreen Gate
 // ============================================================================
 
-static void ApplyCaptureAffinity() {
-    if (!g_hWnd) return;
-    SetWindowDisplayAffinity(g_hWnd, WDA_NONE);
+static void ApplyCaptureExclusionToWindow(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+    bool hideCap = true;
+    { std::lock_guard<std::mutex> lk(g_settingsMtx); hideCap = g_settings.hideDuringCapture; }
+    SetWindowDisplayAffinity(hwnd, hideCap ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
 }
 
-static bool IsCaptureAppActive() {
-    return FindWindowW(L"ScreenClippingHost", nullptr) != nullptr ||
-           FindWindowW(L"Microsoft.SnippingTool", nullptr) != nullptr;
+static void ApplyCaptureExclusionAll() {
+    ApplyCaptureExclusionToWindow(g_hWnd);
+    ApplyCaptureExclusionToWindow(g_hCycleWidget);
+    ApplyCaptureExclusionToWindow(g_hCyclePopup);
 }
 
 static bool IsFullscreenActive() {
@@ -2561,7 +2285,7 @@ static void RegisterAllHotkeys(HWND hwnd) {
     auto reg = [&](int id, const HotkeyBinding& hb, const wchar_t* label) {
         if (hb.vk == 0) return;
         if (!RegisterHotKey(hwnd, id, hb.modifiers, hb.vk)) {
-            Wh_Log(L"[!Net] Hotkey conflict: %s (%s) already in use.", label, hb.raw.c_str());
+            Wh_Log(L"Hotkey conflict: %s (%s) already in use.", label, hb.raw.c_str());
         }
     };
     reg(HK_TOGGLE_FG, s.hkToggleFg, L"toggleForegroundApp");
@@ -2570,13 +2294,24 @@ static void RegisterAllHotkeys(HWND hwnd) {
 }
 
 static void OpenWindhawkSettingsUI() {
-    WCHAR exePath[MAX_PATH]{};
-    GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
-    ShellExecuteW(nullptr, L"open", exePath, nullptr, nullptr, SW_SHOWNORMAL);
     HWND whWnd = FindWindowW(nullptr, L"Windhawk");
     if (whWnd) {
         ShowWindow(whWnd, SW_RESTORE);
         SetForegroundWindow(whWnd);
+    } else {
+        WCHAR exePath[MAX_PATH]{};
+        GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
+        std::wstring p(exePath);
+        size_t sl = p.find_last_of(L"\\/");
+        std::wstring dir = (sl != std::wstring::npos) ? p.substr(0, sl) : L"";
+        std::wstring uiExe = dir + L"\\windhawk.exe";
+        if (!FileExistsW(uiExe)) {
+            size_t sl2 = dir.find_last_of(L"\\/");
+            if (sl2 != std::wstring::npos) uiExe = dir.substr(0, sl2) + L"\\windhawk.exe";
+        }
+        if (FileExistsW(uiExe)) {
+            ShellExecuteW(nullptr, L"open", uiExe.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        }
     }
     g_statusBanner = L"Opened Windhawk — select !Net -> Settings.";
     RequestRepaint();
@@ -2585,16 +2320,14 @@ static void OpenWindhawkSettingsUI() {
 static void LoadSettings() {
     ModSettings next;
 
-    PCWSTR sDir = Wh_GetStringSetting(L"general.defaultDirection");
-    next.defaultDirection = ParseDirection(sDir);
-    Wh_FreeStringSetting(sDir);
+    auto sDir = WindhawkUtils::StringSetting::make(L"General.defaultDirection");
+    next.defaultDirection = ParseDirection(sDir.get());
 
-    next.includeChildProcesses = Wh_GetIntSetting(L"general.includeChildProcesses") != 0;
-    next.autoRestoreOnExit = Wh_GetIntSetting(L"general.autoRestoreOnExit") != 0;
+    next.includeChildProcesses = Wh_GetIntSetting(L"General.includeChildProcesses") != 0;
 
-    PCWSTR sEdge = Wh_GetStringSetting(L"pill.dockEdge");
-    if (sEdge) {
-        std::wstring e = ToLower(sEdge);
+    auto sEdge = WindhawkUtils::StringSetting::make(L"Pill.dockEdge");
+    {
+        std::wstring e = ToLower(sEdge.get());
         if (e == L"left") next.dockEdge = DockEdge::Left;
         else if (e == L"top") next.dockEdge = DockEdge::Top;
         else if (e == L"bottom") next.dockEdge = DockEdge::Bottom;
@@ -2602,97 +2335,74 @@ static void LoadSettings() {
         else if (e == L"bottom_left") next.dockEdge = DockEdge::BottomLeft;
         else if (e == L"bottom_right") next.dockEdge = DockEdge::BottomRight;
         else next.dockEdge = DockEdge::Right;
-        Wh_FreeStringSetting(sEdge);
     }
 
-    PCWSTR sInd = Wh_GetStringSetting(L"pill.pillIndicatorMode");
-    if (sInd) {
-        std::wstring m = ToLower(sInd);
-        next.pillIndicatorMode = (m == L"pulse") ? PillIndicatorMode::Pulse : PillIndicatorMode::Always;
-        Wh_FreeStringSetting(sInd);
-    }
+    auto sInd = WindhawkUtils::StringSetting::make(L"Pill.pillIndicatorMode");
+    next.pillIndicatorMode = (ToLower(sInd.get()) == L"pulse") ? PillIndicatorMode::Pulse : PillIndicatorMode::Always;
 
-    next.hoverExpand = Wh_GetIntSetting(L"pill.hoverExpand") != 0;
-    next.expandHoverHitArea = Wh_GetIntSetting(L"pill.expandHoverHitArea") != 0;
-    int rawMargin = Wh_GetIntSetting(L"pill.hoverHitMarginPx");
+    next.hoverExpand = Wh_GetIntSetting(L"Pill.hoverExpand") != 0;
+    next.expandHoverHitArea = Wh_GetIntSetting(L"Pill.expandHoverHitArea") != 0;
+    int rawMargin = Wh_GetIntSetting(L"Pill.hoverHitMarginPx");
     next.hoverHitMarginPx = (rawMargin > 0) ? std::clamp(rawMargin, 4, 40) : 12;
-    int rawOffset = Wh_GetIntSetting(L"pill.panelEdgeOffsetPx");
-    next.panelEdgeOffsetPx = (rawOffset >= 0) ? std::clamp(rawOffset, 0, 16) : 4;
-    next.collapseDelayMs = std::clamp(Wh_GetIntSetting(L"pill.collapseDelayMs"), 200, 10000);
+    int rawOffset = Wh_GetIntSetting(L"Pill.panelEdgeOffsetPx");
+    next.panelEdgeOffsetPx = (rawOffset >= 0) ? std::clamp(rawOffset, 0, 12) : 8;
 
-    PCWSTR sFilter = Wh_GetStringSetting(L"pill.defaultFilter");
-    if (sFilter) {
-        std::wstring f = ToLower(sFilter);
+    auto sFilter = WindhawkUtils::StringSetting::make(L"Pill.defaultFilter");
+    {
+        std::wstring f = ToLower(sFilter.get());
         if (f == L"blocked") next.defaultFilter = AppFilter::Blocked;
         else if (f == L"allowed") next.defaultFilter = AppFilter::Allowed;
         else if (f == L"system") next.defaultFilter = AppFilter::SystemApps;
         else if (f == L"excluded") next.defaultFilter = AppFilter::Excluded;
         else next.defaultFilter = AppFilter::UserApps;
-        Wh_FreeStringSetting(sFilter);
     }
 
-    next.showNonActionableInRunning = Wh_GetIntSetting(L"pill.showNonActionableInRunning") != 0;
-    next.showTooltips = Wh_GetIntSetting(L"pill.showTooltips") != 0;
-    next.followCursorMonitor = Wh_GetIntSetting(L"pill.followCursorMonitor") != 0;
-    next.rememberWindowPosition = Wh_GetIntSetting(L"pill.rememberWindowPosition") != 0;
+    next.showNonActionableInRunning = Wh_GetIntSetting(L"Pill.showNonActionableInRunning") != 0;
+    next.showTooltips = Wh_GetIntSetting(L"Pill.showTooltips") != 0;
+    next.followCursorMonitor = Wh_GetIntSetting(L"Pill.followCursorMonitor") != 0;
+    next.rememberWindowPosition = Wh_GetIntSetting(L"Pill.rememberWindowPosition") != 0;
 
-    PCWSTR sPreset = Wh_GetStringSetting(L"pill.windowSizePreset");
-    if (sPreset) {
-        std::wstring p = ToLower(sPreset);
+    auto sPreset = WindhawkUtils::StringSetting::make(L"Pill.windowSizePreset");
+    {
+        std::wstring p = ToLower(sPreset.get());
         if (p == L"large") next.windowSizePreset = SizePreset::Large;
         else if (p == L"extralarge") next.windowSizePreset = SizePreset::ExtraLarge;
         else next.windowSizePreset = SizePreset::Default;
-        Wh_FreeStringSetting(sPreset);
     }
 
-    PCWSTR sFs = Wh_GetStringSetting(L"behavior.fullscreenBehavior");
-    if (sFs) {
-        std::wstring v = ToLower(sFs);
-        if (v == L"pause") next.fullscreenBehavior = FullscreenBehavior::Pause;
-        else if (v == L"allow") next.fullscreenBehavior = FullscreenBehavior::Allow;
-        else next.fullscreenBehavior = FullscreenBehavior::Hide;
-        Wh_FreeStringSetting(sFs);
+    auto sFs = WindhawkUtils::StringSetting::make(L"Behavior.fullscreenBehavior");
+    {
+        std::wstring v = ToLower(sFs.get());
+        next.fullscreenBehavior = (v == L"allow") ? FullscreenBehavior::Allow : FullscreenBehavior::Hide;
     }
 
-    next.hideDuringCapture = Wh_GetIntSetting(L"behavior.hideDuringCapture") != 0;
-    next.enableCycleScheduler = Wh_GetIntSetting(L"behavior.enableCycleScheduler") != 0;
-    next.showCycleMs = Wh_GetIntSetting(L"behavior.showCycleMs") != 0;
-    next.showCycleWidget = Wh_GetIntSetting(L"behavior.showCycleWidget") != 0;
-    PCWSTR sCycAct = Wh_GetStringSetting(L"behavior.cycleWidgetAction");
-    if (sCycAct) {
-        next.cycleWidgetAction = (_wcsicmp(sCycAct, L"navigate_pill") == 0)
-            ? CycleWidgetAction::NavigatePill
-            : CycleWidgetAction::SchedulerOnly;
-        Wh_FreeStringSetting(sCycAct);
-    }
+    next.hideDuringCapture = Wh_GetIntSetting(L"Behavior.hideDuringCapture") != 0;
+    next.enableCycleScheduler = Wh_GetIntSetting(L"Behavior.enableCycleScheduler") != 0;
+    next.showCycleMs = Wh_GetIntSetting(L"Behavior.showCycleMs") != 0;
+    next.showCycleWidget = Wh_GetIntSetting(L"Behavior.showCycleWidget") != 0;
+    auto sCycAct = WindhawkUtils::StringSetting::make(L"Behavior.cycleWidgetAction");
+    next.cycleWidgetAction = (_wcsicmp(sCycAct.get(), L"navigate_pill") == 0)
+        ? CycleWidgetAction::NavigatePill
+        : CycleWidgetAction::SchedulerOnly;
 
-    next.lockSystemProcesses = Wh_GetIntSetting(L"safety.lockSystemProcesses") != 0;
-    next.warnOnVpnOrRemote = Wh_GetIntSetting(L"safety.warnOnVpnOrRemote") != 0;
+    next.lockSystemProcesses = Wh_GetIntSetting(L"Safety.lockSystemProcesses") != 0;
+    next.warnOnVpnOrRemote = Wh_GetIntSetting(L"Safety.warnOnVpnOrRemote") != 0;
 
     auto readHk = [&](PCWSTR key, PCWSTR defVal) {
-        PCWSTR raw = Wh_GetStringSetting(key);
-        HotkeyBinding hb = ParseHotkeyString((raw && *raw) ? raw : defVal);
-        Wh_FreeStringSetting(raw);
-        return hb;
+        auto raw = WindhawkUtils::StringSetting::make(key);
+        return ParseHotkeyString(*raw.get() ? raw.get() : defVal);
     };
-    next.hkToggleFg   = readHk(L"hotkeys.toggleForegroundApp", L"Ctrl+Shift+1");
-    next.hkExpandPill = readHk(L"hotkeys.expandCollapsePill",  L"Ctrl+Alt+Shift+M");
-    next.hkRestoreAll = readHk(L"hotkeys.restoreAll",          L"Ctrl+Alt+Shift+R");
+    next.hkToggleFg   = readHk(L"Hotkeys.toggleForegroundApp", L"Ctrl+Shift+1");
+    next.hkExpandPill = readHk(L"Hotkeys.expandCollapsePill",  L"Ctrl+Alt+Shift+M");
+    next.hkRestoreAll = readHk(L"Hotkeys.restoreAll",          L"Ctrl+Alt+Shift+R");
 
     for (int i = 0; i < 64; ++i) {
-        PCWSTR app = Wh_GetStringSetting(L"persistentRules[%d].appPath", i);
-        if (!app || !*app) {
-            if (app) Wh_FreeStringSetting(app);
-            break;
-        }
+        auto app = WindhawkUtils::StringSetting::make(L"persistentRules[%d].appPath", i);
+        if (!*app.get()) break;
         PersistentRuleCfg r;
-        r.appPath = app;
-        Wh_FreeStringSetting(app);
-
-        PCWSTR dir = Wh_GetStringSetting(L"persistentRules[%d].direction", i);
-        r.direction = ParseDirection(dir);
-        if (dir) Wh_FreeStringSetting(dir);
-
+        r.appPath = app.get();
+        auto dir = WindhawkUtils::StringSetting::make(L"persistentRules[%d].direction", i);
+        r.direction = ParseDirection(dir.get());
         r.includeChildProcesses = Wh_GetIntSetting(L"persistentRules[%d].includeChildProcesses", i) != 0;
         next.persistentRules.push_back(std::move(r));
     }
@@ -2712,7 +2422,7 @@ static void LoadSettings() {
         std::lock_guard<std::mutex> lk(g_settingsMtx);
         g_settings = std::move(next);
         g_activeFilter = g_settings.defaultFilter;
-        if (g_activeFilter == AppFilter::SystemApps && !g_needsElevation) {
+        if (g_activeFilter == AppFilter::SystemApps) {
             g_statusBanner = L"Experts only — if you don't know what you're doing, skip System.";
         }
     }
@@ -2836,10 +2546,13 @@ static void ComputeTargetRect(double progress, RECT& outRc) {
     int panelOffsetPx = DpiScale(s.panelEdgeOffsetPx, dpi);
     int edgeInset = (int)std::round((double)panelOffsetPx * progress);
 
-    int savedY = s.rememberWindowPosition ? Wh_GetIntValue(L"posY", wa.top + DpiScale(240, dpi))
-                                          : (wa.top + DpiScale(240, dpi));
-    int savedX = s.rememberWindowPosition ? Wh_GetIntValue(L"posX", wa.left + (wa.right - wa.left - expW) / 2)
-                                          : (wa.left + (wa.right - wa.left - expW) / 2);
+    if (s.rememberWindowPosition && !g_posLoaded) {
+        g_posX = Wh_GetIntValue(L"posX", wa.left + (wa.right - wa.left - expW) / 2);
+        g_posY = Wh_GetIntValue(L"posY", wa.top + DpiScale(240, dpi));
+        g_posLoaded = true;
+    }
+    int savedY = s.rememberWindowPosition ? g_posY : (wa.top + DpiScale(240, dpi));
+    int savedX = s.rememberWindowPosition ? g_posX : (wa.left + (wa.right - wa.left - expW) / 2);
 
     switch (s.dockEdge) {
         case DockEdge::Left:
@@ -2978,7 +2691,7 @@ static void PaintFloatingWindow(HWND hwnd) {
                     if (!fgBlocked) {
                         std::lock_guard<std::mutex> lk(g_extFwMtx);
                         auto itExt = g_extFwBlocks.find(fgLow);
-                        fgBlocked = (itExt != g_extFwBlocks.end() && (itExt->second.dirMask & 1) != 0);
+                        fgBlocked = (itExt != g_extFwBlocks.end() && itExt->second.dirMask != 0);
                     }
                     if (fgBlocked) { tr = 225; tg = 58; tb = 58; k = 1.0; }
                     else           { tr = 34;  tg = 175; tb = 85; k = 1.0; }
@@ -3309,9 +3022,17 @@ static void PaintFloatingWindow(HWND hwnd) {
                     Gdiplus::RectF togRf((Gdiplus::REAL)togRc.left, (Gdiplus::REAL)togRc.top, (Gdiplus::REAL)togW, (Gdiplus::REAL)ctlH);
                     g.DrawString(allowed ? L"Allowed" : L"Blocked", -1, &smallFont, togRf, &sfCenter, &whiteBr);
                     if (togRc.top >= listTop && togRc.bottom <= listBottom) {
-                        const wchar_t* togTip = allowed
+                        std::wstring togTip = allowed
                             ? L"Internet allowed — click to Block this app"
                             : L"Internet blocked — click to Allow this app";
+                        if (!allowed && !app.block.blockedChildren.empty()) {
+                            togTip += L" (also blocks: ";
+                            for (size_t ci = 0; ci < app.block.blockedChildren.size(); ++ci) {
+                                if (ci > 0) togTip += L", ";
+                                togTip += app.block.blockedChildren[ci];
+                            }
+                            togTip += L")";
+                        }
                         g_hitRects.push_back({togRc, 1000 + idx * 4, idx, togTip, HitRect::RowToggle});
                     }
                 }
@@ -3471,10 +3192,10 @@ static void HandleClickAction(const HitRect& hr) {
         RestoreAllSessionBlocks();
         RefreshAppList();
         RequestRepaint();
-    } else if (hr.kind == HitRect::SettingsBtn) {
-        OpenWindhawkSettingsUI();
     } else if (hr.kind == HitRect::ElevateBtn) {
         RelaunchElevated();
+    } else if (hr.kind == HitRect::SettingsBtn) {
+        OpenWindhawkSettingsUI();
     } else if (hr.kind == HitRect::FilterChip) {
         g_userPinnedFilter = true;
         AppFilter nextF = (AppFilter)hr.rowIndex;
@@ -3485,7 +3206,7 @@ static void HandleClickAction(const HitRect& hr) {
         } else if (nextF == AppFilter::Blocked) {
             g_blockedFirewallOnly = false;
         }
-        if (!g_needsElevation) {
+        if (true) {
             if (nextF == AppFilter::Blocked && g_blockedFirewallOnly) {
                 g_statusBanner = L"Blocked by Windows Firewall — edit rules in Windows Defender Firewall.";
             } else if (nextF == AppFilter::SystemApps) {
@@ -3546,7 +3267,7 @@ static void HandleClickAction(const HitRect& hr) {
             std::wstring low = ToLower(app.displayPath);
             auto itDir = g_pendingDirs.find(low);
             Direction dir = (itDir != g_pendingDirs.end()) ? itDir->second : s.defaultDirection;
-            ApplyBlock(app.displayPath, dir, s.includeChildProcesses, false);
+            ApplyBlock(app.displayPath, dir, s.includeChildProcesses, true);
         }
         RefreshAppList();
         RequestRepaint();
@@ -3561,7 +3282,7 @@ static void HandleClickAction(const HitRect& hr) {
         Direction nextDir = (Direction)(((int)app.block.direction + 1) % 3);
         g_pendingDirs[low] = nextDir;
         if (app.block.blocked && !app.block.persistent) {
-            ApplyBlock(app.displayPath, nextDir, app.block.includeChildProcesses, false);
+            ApplyBlock(app.displayPath, nextDir, app.block.includeChildProcesses, true);
         }
         RefreshAppList();
         RequestRepaint();
@@ -3585,11 +3306,8 @@ static void HandleClickAction(const HitRect& hr) {
 
 constexpr wchar_t kCycleRunDropClass[] = L"ExclaimNet_CycleRunDrop_v1";
 constexpr UINT_PTR TIMER_CYCLE_POPUP_ANIM  = 77;
-// CYCLE_MODE_FIX_PATCH_11
 constexpr UINT_PTR TIMER_CYCLE_POPUP_CARET = 78;
-// CYCLE_MODE_FIX_PATCH_13
 constexpr UINT_PTR TIMER_CYCLE_POPUP_OPEN   = 79;
-// CYCLE_MODE_FIX_PATCH_14
 constexpr UINT_PTR TIMER_CYCLE_POPUP_RESIZE = 80;
 constexpr UINT_PTR TIMER_CYCLE_CLOCK_COMMIT = 81;
 constexpr uint64_t kCycleMaxMs = 99ULL * 3600000ULL;
@@ -3627,8 +3345,7 @@ struct CycleHitRect {
     RECT rc{};
     int id = 0;
     enum Kind {
-        // CYCLE_MODE_FIX_PATCH_15
-        None = 0, InputBox, RunDropdown, SyncClockToggle, ClockFormat12h, FocusToggle, CancelBtn, PrimaryBtn
+                None = 0, InputBox, RunDropdown, SyncClockToggle, ClockFormat12h, FocusToggle, CancelBtn, PrimaryBtn
     } kind = None;
     int fieldId = CF_NONE;
 };
@@ -3836,7 +3553,6 @@ static const wchar_t* RunModeDisplayLabel(int idx) {
 
 
 
-// CYCLE_MODE_FIX_PATCH_16
 static uint64_t ComputeNext12hDiffSeconds(uint64_t hh, uint64_t mm, int nowSec, bool& outIsPm) {
     int hAm = (hh == 12) ? 0 : (int)hh;
     int hPm = (hh == 12) ? 12 : (int)(hh + 12);
@@ -3863,7 +3579,6 @@ static void AutoCalculateAmPm(CyclePopupState* st) {
     ComputeNext12hDiffSeconds(hh, mm, nowSec, st->clockIsPm);
 }
 
-// CYCLE_MODE_FIX_PATCH_17
 static void CommitClockFields(CyclePopupState* st) {
     if (!st) return;
     st->clockEditing = false;
@@ -4283,7 +3998,6 @@ static void PaintCyclePopup(HWND hwnd, CyclePopupState* st) {
                         (Gdiplus::REAL)st->rcRunDrop.left, (Gdiplus::REAL)st->rcRunDrop.top,
                         (Gdiplus::REAL)(st->rcRunDrop.right - st->rcRunDrop.left),
                         (Gdiplus::REAL)(st->rcRunDrop.bottom - st->rcRunDrop.top), rad);
-        (void)borderAccentPen;
         DrawRoundedRect(g, borderRestPen,
                         (Gdiplus::REAL)st->rcRunDrop.left, (Gdiplus::REAL)st->rcRunDrop.top,
                         (Gdiplus::REAL)(st->rcRunDrop.right - st->rcRunDrop.left),
@@ -4540,6 +4254,7 @@ static LRESULT CALLBACK CycleRunDropWndProc(HWND hwnd, UINT msg, WPARAM wParam, 
             DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
             MARGINS m{-1, -1, -1, -1};
             DwmExtendFrameIntoClientArea(hwnd, &m);
+            ApplyCaptureExclusionToWindow(hwnd);
             return 0;
         }
         case WM_ACTIVATE: {
@@ -4752,7 +4467,6 @@ static LRESULT CALLBACK CyclePopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             int backdrop = DWMSBT_TRANSIENTWINDOW;
             HRESULT hrBd = DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
             if (st) st->hasBackdropBlur = SUCCEEDED(hrBd);
-            SetWindowDisplayAffinity(hwnd, WDA_NONE);
             SetTimer(hwnd, TIMER_CYCLE_POPUP_CARET, 520, nullptr);
             return 0;
         }
@@ -5210,9 +4924,10 @@ static bool IsExeEligibleForCycle(const std::wstring& exeLower) {
         lockCrit = g_settings.lockSystemProcesses;
     }
     if (lockCrit && IsCriticalSystemExe(exeLower)) return false;
-    auto extFw = (g_extFwScanTick == 0) ? ScanExternalFirewallBlocks(false) : GetCachedExternalFirewallBlocks();
-    auto itExt = extFw.find(exeLower);
-    if (itExt != extFw.end() && (itExt->second.dirMask & 1) != 0) return false;
+    if (g_extFwScanTick == 0) ScanExternalFirewallBlocks(false);
+    std::lock_guard<std::mutex> lk(g_extFwMtx);
+    auto itExt = g_extFwBlocks.find(exeLower);
+    if (itExt != g_extFwBlocks.end() && itExt->second.dirMask != 0) return false;
     return true;
 }
 
@@ -5276,7 +4991,7 @@ static void NavigatePillAndOpenCycle(const std::wstring& targetExeLower) {
     if (foundIdx < 0 && !targetExeLower.empty()) {
         g_activeFilter = IsSystemPath(targetExeLower) ? AppFilter::SystemApps : AppFilter::UserApps;
         g_userRunningOnly = false;
-        if (!g_needsElevation) g_statusBanner.clear();
+        g_statusBanner.clear();
         RefreshAppList();
         foundIdx = findIdx();
     }
@@ -5324,7 +5039,7 @@ static void OpenCycleTargetFromWidget(const CycleStatusSnapshot* activeSnap) {
         targetApp.isCriticalLocked = IsCriticalSystemExe(g_lastFgExe);
         auto extFw = GetCachedExternalFirewallBlocks();
         auto itExt = extFw.find(g_lastFgExe);
-        if (itExt != extFw.end() && (itExt->second.dirMask & 1) != 0) targetApp.isExternalBlocked = true;
+        if (itExt != extFw.end() && itExt->second.dirMask != 0) targetApp.isExternalBlocked = true;
         auto itDir = g_pendingDirs.find(g_lastFgExe);
         targetApp.block.direction = (itDir != g_pendingDirs.end()) ? itDir->second : defDir;
     } else {
@@ -5458,12 +5173,7 @@ static void RenderCycleWidgetLayered(HWND hwnd) {
         bool hasSnap = GetWidgetCycleTarget(snap);
         bool isPaused = hasSnap && (snap.pausedByFocus || snap.pausedByUser);
 
-        DWORD lightThemeVal = 0;
-        DWORD lightThemeSz = sizeof(lightThemeVal);
-        bool isLightMode = (RegGetValueW(HKEY_CURRENT_USER,
-            L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-            L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &lightThemeVal, &lightThemeSz) == ERROR_SUCCESS)
-            && (lightThemeVal != 0);
+        bool isLightMode = g_isLightTheme;
         BYTE r = isLightMode ? 0 : 255;
         BYTE gr = isLightMode ? 0 : 255;
         BYTE b = isLightMode ? 0 : 255;
@@ -5518,7 +5228,7 @@ static void RenderCycleWidgetLayered(HWND hwnd) {
 static LRESULT CALLBACK CycleWidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_CREATE: {
-            SetWindowDisplayAffinity(hwnd, WDA_NONE);
+            ApplyCaptureExclusionToWindow(hwnd);
             g_hWidgetTooltip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
                                                WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
                                                CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
@@ -5725,10 +5435,19 @@ static void SyncCycleWidgetWindow(bool reposition) {
 }
 
 static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (g_wmTaskbarCreated && msg == g_wmTaskbarCreated) {
+        g_trayAdded = false;
+        AddTrayIcon(hwnd);
+        return 0;
+    }
     switch (msg) {
         case WM_CREATE: {
+            g_wmTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+            if (g_wmTaskbarCreated) ChangeWindowMessageFilterEx(hwnd, g_wmTaskbarCreated, MSGFLT_ALLOW, nullptr);
+            ChangeWindowMessageFilterEx(hwnd, WM_APP_TRAY_CALLBACK, MSGFLT_ALLOW, nullptr);
+            RefreshLightThemeCache();
             SetWindowFrameMode(hwnd, false);
-            ApplyCaptureAffinity();
+            ApplyCaptureExclusionToWindow(hwnd);
             RegisterAllHotkeys(hwnd);
             AddTrayIcon(hwnd);
             InitTooltip(hwnd);
@@ -5911,6 +5630,9 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
                     g_settings.dockEdge = snapped;
                 }
                 Wh_SetIntValue(L"dockEdgeOverride", (int)snapped);
+                g_posX = rc.left;
+                g_posY = rc.top;
+                g_posLoaded = true;
                 Wh_SetIntValue(L"posX", rc.left);
                 Wh_SetIntValue(L"posY", rc.top);
                 UpdateWindowGeometry(false);
@@ -6021,6 +5743,13 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
                     bool inZone = g_cycleWidgetHover || PtInRect(&zone, cur);
                     SetCycleWidgetRevealed(inZone);
                 }
+            } else if (wParam == TIMER_DEBOUNCE_REFRESH) {
+                KillTimer(hwnd, TIMER_DEBOUNCE_REFRESH);
+                SyncLateChildBlocks();
+                if (g_uiState != UiState::Line) {
+                    RefreshAppList();
+                    RequestRepaint();
+                }
             } else if (wParam == TIMER_OUTSIDE_CLICK) {
                 if (g_uiState != UiState::Panel || g_pinned) {
                     KillTimer(hwnd, TIMER_OUTSIDE_CLICK);
@@ -6064,16 +5793,12 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
                     KillTimer(hwnd, TIMER_CYCLE_UI);
                 }
             } else if (wParam == TIMER_FULLSCREEN) {
-                FullscreenBehavior fb;
-                bool hideCap = true;
+                FullscreenBehavior fb = FullscreenBehavior::Hide;
                 {
                     std::lock_guard<std::mutex> lk(g_settingsMtx);
                     fb = g_settings.fullscreenBehavior;
-                    hideCap = g_settings.hideDuringCapture;
                 }
-                bool cap = hideCap && IsCaptureAppActive();
-                bool fs  = (fb == FullscreenBehavior::Hide) && IsFullscreenActive();
-                bool shouldHide = cap || fs;
+                bool shouldHide = (fb == FullscreenBehavior::Hide) && IsFullscreenActive();
                 if (shouldHide && g_hCyclePopup && IsWindow(g_hCyclePopup)) {
                     DestroyWindow(g_hCyclePopup);
                 }
@@ -6146,7 +5871,7 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
                     std::wstring low = ToLower(exe);
                     auto extFw = ScanExternalFirewallBlocks();
                     auto itExt = extFw.find(low);
-                    if (itExt != extFw.end() && (itExt->second.dirMask & 1) != 0) {
+                    if (itExt != extFw.end() && itExt->second.dirMask != 0) {
                         g_activeFilter = AppFilter::Blocked;
                         g_blockedFirewallOnly = true;
                         g_statusBanner = L"Blocked by Windows Firewall — edit rules in Windows Defender Firewall.";
@@ -6176,7 +5901,7 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
                         }
                         auto itDir = g_pendingDirs.find(low);
                         Direction dir = (itDir != g_pendingDirs.end()) ? itDir->second : s.defaultDirection;
-                        ApplyBlock(exe, dir, s.includeChildProcesses, false);
+                        ApplyBlock(exe, dir, s.includeChildProcesses, true);
                     }
                     RefreshAppList();
                     RequestRepaint();
@@ -6232,7 +5957,39 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
         }
         case WM_APP_REFRESH_APPS: {
             if (g_uiState != UiState::Line) {
-                RefreshAppList();
+                SetTimer(hwnd, TIMER_DEBOUNCE_REFRESH, 300, nullptr);
+            }
+            return 0;
+        }
+        case WM_SETTINGCHANGE: {
+            RefreshLightThemeCache();
+            if (g_hCycleWidget && IsWindow(g_hCycleWidget) && IsWindowVisible(g_hCycleWidget)) {
+                RenderCycleWidgetLayered(g_hCycleWidget);
+            }
+            return 0;
+        }
+        case WM_APP_CYCLE_APPLY: {
+            std::vector<CyclePendingAction> actions;
+            {
+                std::lock_guard<std::mutex> lk(g_cycleMtx);
+                actions.swap(g_pendingCycleActions);
+            }
+            for (const auto& act : actions) {
+                if (act.kind == CyclePendingAction::SwitchBlock) {
+                    ApplyBlock(act.displayPath, act.dir, act.includeChildren, false);
+                } else if (act.kind == CyclePendingAction::SwitchAllow) {
+                    ApplyAllow(act.displayPath, false);
+                } else if (act.kind == CyclePendingAction::EndAllow) {
+                    ApplyAllow(act.displayPath, false);
+                    LogAudit(L"CYCLE COMPLETED " + act.displayPath);
+                } else if (act.kind == CyclePendingAction::WipeExited) {
+                    ApplyAllow(act.displayPath, false);
+                    LogAudit(L"CYCLE WIPED (process exited) " + act.displayPath);
+                }
+            }
+            if (!actions.empty()) {
+                if (g_uiState != UiState::Line) RefreshAppList();
+                SyncCycleWidgetWindow(true);
                 RequestRepaint();
             }
             return 0;
@@ -6261,6 +6018,7 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
             KillTimer(hwnd, TIMER_HOVER_SENSOR);
             KillTimer(hwnd, TIMER_CYCLE_UI);
             KillTimer(hwnd, TIMER_NAVIGATE_OPEN_CYCLE);
+            KillTimer(hwnd, TIMER_DEBOUNCE_REFRESH);
             KillTimer(hwnd, TIMER_WIDGET_PROXIMITY);
             KillTimer(hwnd, TIMER_OUTSIDE_CLICK);
             if (g_hCyclePopup && IsWindow(g_hCyclePopup)) DestroyWindow(g_hCyclePopup);
@@ -6281,7 +6039,7 @@ static LRESULT CALLBACK ControlWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         if (!g_settings.enableCycleScheduler) StopAllCycles(true);
         SyncPersistentRules();
         if (g_hWnd) {
-            ApplyCaptureAffinity();
+            ApplyCaptureExclusionAll();
             RegisterAllHotkeys(g_hWnd);
             UpdateWindowGeometry(true);
         }
@@ -6306,17 +6064,7 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
 // UI Thread & Windhawk Tool Mod Lifecycle
 // ============================================================================
 
-static void EnablePerMonitorDpiAwareness() {
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    if (hUser32) {
-        typedef BOOL(WINAPI* SetDpiCtx_t)(DPI_AWARENESS_CONTEXT);
-        auto pSet = (SetDpiCtx_t)GetProcAddress(hUser32, "SetProcessDpiAwarenessContext");
-        if (pSet) pSet(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    }
-}
-
 static DWORD WINAPI UiThreadProc(LPVOID) {
-    EnablePerMonitorDpiAwareness();
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     Gdiplus::GdiplusStartupInput gpsi;
     Gdiplus::GdiplusStartup(&g_gdiplusToken, &gpsi, nullptr);
@@ -6349,6 +6097,8 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
 
     if (g_hWnd) {
         ShowWindow(g_hWnd, SW_SHOWNOACTIVATE);
+        UpdateWindowGeometry(true);
+        UpdateWindow(g_hWnd);
     }
 
     g_hookFg = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND, nullptr,
@@ -6382,7 +6132,6 @@ BOOL WhTool_ModInit() {
     LoadExcludedApps();
     SyncPersistentRules();
 
-    g_running = true;
     g_uiReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, &g_uiThreadId);
     if (!g_uiThread) {
@@ -6406,7 +6155,6 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-    g_running = false;
     ShutdownCycleEngine();
     if (g_hWnd) {
         PostMessageW(g_hWnd, WM_CLOSE, 0, 0);
@@ -6419,14 +6167,7 @@ void WhTool_ModUninit() {
         g_uiThread = nullptr;
     }
 
-    bool autoRestore = true;
-    {
-        std::lock_guard<std::mutex> lk(g_settingsMtx);
-        autoRestore = g_settings.autoRestoreOnExit;
-    }
-    if (autoRestore) {
-        RestoreAllSessionBlocks();
-    }
+    RestoreAllSessionBlocks();
     {
         std::lock_guard<std::mutex> lk(g_engineMtx);
         CloseWfpEngineLocked();
@@ -6438,6 +6179,30 @@ void WhTool_ModUninit() {
 // Windhawk Tool Mod Launcher Boilerplate (Windhawk 1.7.x / 2.0 compatible)
 // ============================================================================
 
+static void RelaunchElevated() {
+    WCHAR exePath[MAX_PATH]{};
+    GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
+    std::wstring params = std::wstring(L"-tool-mod \"") + WH_MOD_ID + L"\"";
+
+    if (g_toolModProcessMutex) {
+        CloseHandle(g_toolModProcessMutex);
+        g_toolModProcessMutex = nullptr;
+    }
+
+    SHELLEXECUTEINFOW sei{sizeof(sei)};
+    sei.lpVerb = L"runas";
+    sei.lpFile = exePath;
+    sei.lpParameters = params.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    if (ShellExecuteExW(&sei)) {
+        ExitProcess(0);
+    } else {
+        g_toolModProcessMutex = CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        g_statusBanner = L"Admin permission cancelled — needed to block apps.";
+        RequestRepaint();
+    }
+}
+
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
@@ -6447,11 +6212,16 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+        return FALSE;
+    }
+
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
@@ -6483,21 +6253,30 @@ BOOL Wh_ModInit() {
     }
 
     if (isCurrentToolModProcess) {
-        g_toolModProcessMutex = CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
+
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running");
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
+
         if (!WhTool_ModInit()) {
             ExitProcess(1);
         }
-        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
-        IMAGE_NT_HEADERS* ntHeader = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
-        void* entryPoint = (BYTE*)dosHeader + ntHeader->OptionalHeader.AddressOfEntryPoint;
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
@@ -6516,21 +6295,53 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileNameW(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
             return;
     }
 
-    WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) -
+                      1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
 
-    STARTUPINFO si{sizeof(si)};
-    PROCESS_INFORMATION pi{};
-    if (!CreateProcessW(currentProcessPath, commandLine, nullptr, nullptr, FALSE,
-                        NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi)) {
-        Wh_Log(L"CreateProcess failed: %u", GetLastError());
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
@@ -6542,6 +6353,7 @@ void Wh_ModSettingsChanged() {
     if (g_isToolModProcessLauncher) {
         return;
     }
+
     WhTool_ModSettingsChanged();
 }
 
@@ -6549,6 +6361,7 @@ void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
         return;
     }
+
     WhTool_ModUninit();
     ExitProcess(0);
 }
