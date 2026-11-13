@@ -11720,6 +11720,7 @@ static void NpRender() {
     if (anim) PushAnim(rt, layer, pv, pivot);
     DrawLiquidGlass(rt, br, P, 22 * s, s, false, false, g_np.glass.ok, true);
 
+    D2D1_RECT_F coverDst = P;  // onde a capa foi desenhada (as lentes dos botões usam)
     if (g_np.full) {
         // A capa no painel todo (cantos do painel) e um escurecido de baixo para
         // cima, para o texto e os botões aparecerem sobre qualquer capa.
@@ -11737,6 +11738,7 @@ static void NpRender() {
                 D2D1_RECT_F dst = D2D1::RectF(P.left + (pw - dw) / 2, P.top + (ph - dh) / 2, P.left + (pw + dw) / 2,
                                               P.top + (ph + dh) / 2);
                 rt->DrawBitmap(g_np.artBmp, dst, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+                coverDst = dst;
             } else {
                 D2D1_GRADIENT_STOP gs[] = {{0.0f, Argb(g_settings.ccAccent | 0xFF000000)},
                                            {0.6f, D2D1::ColorF(0.957f, 0.447f, 0.714f, 1)},
@@ -11917,30 +11919,48 @@ static void NpRender() {
     for (const Btn& bt : btns) {
         D2D1_RECT_F r = *bt.r;
         if (g_np.full) {
-            // Capa inteira: botões bem visíveis. Tocar/pausar num círculo branco com o
-            // ícone escuro; anterior e próxima em círculos escuros com o ícone branco.
+            // Capa inteira: botões redondos de vidro como os da Central de Controle, sobre
+            // a capa. Por baixo de cada um, a própria capa ampliada (como uma lente) faz o
+            // papel do fundo refratado; por cima, o mesmo vidro da Central (sombra,
+            // corpo translúcido, brilho e borda de luz).
             if (g_np.pressBtn == bt.id && GetTickCount64() - g_np.pressTick < 160) {
                 float kk = 3 * s;
                 r = D2D1::RectF(r.left + kk, r.top + kk, r.right - kk, r.bottom - kk);
             }
-            float rr = (r.right - r.left) / 2;
+            float rr = (r.right - r.left) / 2, mx = (r.left + r.right) / 2, my = (r.top + r.bottom) / 2;
             bool hot = g_np.hover == bt.id;
-            if (bt.id == 2) {
-                br->SetColor(D2D1::ColorF(1, 1, 1, sh.mediaHas ? (hot ? 1.0f : 0.92f) : 0.5f));
-                rt->FillRoundedRectangle(D2D1::RoundedRect(r, rr, rr), br);
-                br->SetColor(D2D1::ColorF(0.06f, 0.06f, 0.07f, 1));
-            } else {
-                br->SetColor(D2D1::ColorF(0, 0, 0, hot ? 0.58f : 0.40f));
-                rt->FillRoundedRectangle(D2D1::RoundedRect(r, rr, rr), br);
-                br->SetColor(D2D1::ColorF(1, 1, 1, 0.55f));
-                rt->DrawRoundedRectangle(D2D1::RoundedRect(r, rr, rr), br, 1.0f * s);
-                br->SetColor(D2D1::ColorF(1, 1, 1, sh.mediaHas ? 1.0f : 0.5f));
+            D2D1_ROUNDED_RECT disc = D2D1::RoundedRect(r, rr, rr);
+            ID2D1RoundedRectangleGeometry* lens = nullptr;
+            ID2D1Layer* ll = nullptr;
+            if (g_np.artBmp && sh.mediaHas && SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(disc, &lens)) &&
+                SUCCEEDED(rt->CreateLayer(&ll))) {
+                rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), lens), ll);
+                D2D1::Matrix3x2F was;
+                rt->GetTransform(&was);
+                rt->SetTransform(D2D1::Matrix3x2F::Scale(1.22f, 1.22f, D2D1::Point2F(mx, my)) * was);
+                rt->DrawBitmap(g_np.artBmp, coverDst, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+                rt->SetTransform(was);
+                br->SetColor(D2D1::ColorF(0, 0, 0, 0.18f));  // um véu, para o ícone branco ler bem
+                rt->FillRectangle(r, br);
+                rt->PopLayer();
+            }
+            SafeRelease(ll);
+            SafeRelease(lens);
+            {
+                // O vidro da Central, sem a foto da tela por trás (a "foto" aqui é a capa).
+                LiquidSurface* keep = g_lqCur;
+                g_lqCur = nullptr;
+                DrawLiquidGlass(rt, br, r, rr, s, false, hot, true, true);
+                g_lqCur = keep;
             }
             IDWriteTextLayout* gl = nullptr;
             if (SUCCEEDED(g_dwrite->CreateTextLayout(&bt.g, 1, g_np.fIcon, r.right - r.left, r.bottom - r.top, &gl))) {
                 DWRITE_TEXT_RANGE all = {0, 1};
                 gl->SetFontSize((bt.id == 2 ? 26 : 19) * s * g_np.k, all);
                 gl->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                br->SetColor(D2D1::ColorF(0, 0, 0, 0.35f));  // sombrinha do ícone
+                rt->DrawTextLayout(D2D1::Point2F(r.left, r.top + 1.2f * s), gl, br);
+                br->SetColor(D2D1::ColorF(1, 1, 1, sh.mediaHas ? 1.0f : 0.5f));
                 rt->DrawTextLayout(D2D1::Point2F(r.left, r.top), gl, br);
                 gl->Release();
             }
