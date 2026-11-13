@@ -18,7 +18,7 @@
 
 ## Two Modes
 - **Session-Only (Floating Pill / Panel, default):** Uses Windows Filtering Platform (WFP) dynamic sessions (`FWPM_SESSION_DYNAMIC`). Blocks vanish automatically on Windows restart, shutdown, or when `!Net` exits or crashes.
-- **Auto-Blocked Rules:** Saved in Mod Settings (`persistentRules`) and applied automatically via WFP dynamic sessions (`FWPM_SESSION_DYNAMIC`) whenever `!Net` starts, vanishing cleanly on exit.
+- **Auto-Blocked Rules:** Saved in Mod Settings (`autoBlockedApps`) and applied automatically via WFP dynamic sessions (`FWPM_SESSION_DYNAMIC`) whenever `!Net` starts, vanishing cleanly on exit.
 
 ## Direction Modes
 - **Offline (Fully offline):** Blocks incoming + outgoing traffic (default).
@@ -28,12 +28,12 @@
 ## Shortcuts
 | Icon | Shortcut / Trigger | Action |
 |---|---|---|
-| ⚡ | `Ctrl+Shift+1` | Toggle block/allow for foreground app (`!` key) |
+| ⚡ | `Ctrl+Alt+Shift+1` | Toggle block/allow for foreground app (`!` key) |
 | ◧ | `Ctrl+Alt+Shift+M` | Expand / collapse floating pill |
 | ↺ | `Ctrl+Alt+Shift+R` | Restore all (clear session blocks) |
 
-## Cycle Mode *(enable in Settings)*
-- **Trigger:** Double-click an app row (or right-click → **Cycle...**) after enabling **Turn on Cycle Mode scheduler**.
+## Cycle Mode
+- **Trigger:** Double-click an app row (or right-click → **Cycle...**) — enabled by default in Settings.
 - **Schedule:** Alternates **Blocked → Allowed** (`min | sec`, optional `ms` in Settings) using the row's direction. Run **Until stopped**, **For N cycles**, or **For a set time** (supports **Sync with Windows clock** in `12h`/`24h`).
 - **Focus & Session:** **Only while app is focused** freezes the timer on focus loss. Cycles are session-only and wipe automatically on app exit/crash, `!Net` exit, or Windows restart.
 
@@ -74,7 +74,7 @@
     - bottom_right: Bottom-Right Corner (L-shape)
   - followCursorMonitor: true
     $name: Follow cursor monitor
-    $description: Automatically move the collapsed pill and panel to whichever monitor the mouse cursor is currently on (off by default).
+    $description: Automatically move the collapsed pill and panel to whichever monitor the mouse cursor is currently on.
   - rememberWindowPosition: true
     $name: Remember pill position
   - windowSizePreset: default
@@ -141,14 +141,14 @@
   - warnOnVpnOrRemote: true
     $name: Warn on VPN or Remote Desktop block
 - Hotkeys:
-  - toggleForegroundApp: "Ctrl+Shift+1"
+  - toggleForegroundApp: "Ctrl+Alt+Shift+1"
     $name: Toggle foreground app (! key)
     $description: Blocks the active foreground app if allowed, or unblocks it if already blocked.
   - expandCollapsePill: "Ctrl+Alt+Shift+M"
     $name: Expand / collapse pill
   - restoreAll: "Ctrl+Alt+Shift+R"
     $name: Restore all session blocks
-- persistentRules:
+- autoBlockedApps:
   - - appPath: ""
       $name: Executable full path
     - direction: fully_offline
@@ -335,7 +335,7 @@ struct ModSettings {
     HotkeyBinding hkExpandPill;
     HotkeyBinding hkRestoreAll;
 
-    std::vector<PersistentRuleCfg> persistentRules;
+    std::vector<PersistentRuleCfg> autoBlockedApps;
 };
 
 struct WfpFilterEntry {
@@ -345,7 +345,6 @@ struct WfpFilterEntry {
 
 struct BlockState {
     bool blocked = false;
-    bool persistent = false;
     bool includeChildProcesses = true;
     Direction direction = Direction::FullyOffline;
     std::vector<WfpFilterEntry> sessionFilters;
@@ -558,10 +557,9 @@ static Direction ParseDirection(PCWSTR s);
 static const wchar_t* DirectionLabel(Direction d);
 static const wchar_t* DirectionShortLabel(Direction d);
 static void RefreshAppList();
-static bool ApplyBlock(const std::wstring& exePath, Direction dir, bool includeChildren, bool askUser = true);
-static bool ApplyAllow(const std::wstring& exePath, bool removePersistent);
+static bool ApplyBlock(std::wstring exePath, Direction dir, bool includeChildren, bool askUser = true);
+static bool ApplyAllow(std::wstring exePath);
 static void RestoreAllSessionBlocks();
-static void SyncPersistentRules();
 static void UpdateWindowGeometry(bool immediate);
 static void RequestRepaint(const RECT* dirty = nullptr);
 static void OpenWindhawkSettingsUI();
@@ -662,24 +660,12 @@ static bool IsProcessElevated() {
 
 static void LoadExcludedApps() {
     g_excludedExes.clear();
-    int count = Wh_GetIntValue(L"excludedCount", -1);
-    if (count >= 0) {
-        for (int i = 0; i < count; ++i) {
-            std::wstring key = L"excluded_" + std::to_wstring(i);
-            wchar_t buf[1024]{};
-            if (Wh_GetStringValue(key.c_str(), buf, ARRAYSIZE(buf)) > 0) {
-                std::wstring item = ToLower(Trim(buf));
-                if (!item.empty()) g_excludedExes.insert(item);
-            }
-        }
-        return;
-    }
-    wchar_t buf[4096]{};
-    if (Wh_GetStringValue(L"excludedApps", buf, ARRAYSIZE(buf)) > 0) {
-        std::wstringstream ss(buf);
-        std::wstring item;
-        while (std::getline(ss, item, L'|')) {
-            item = ToLower(Trim(item));
+    int count = Wh_GetIntValue(L"excludedCount", 0);
+    for (int i = 0; i < count; ++i) {
+        std::wstring key = L"excluded_" + std::to_wstring(i);
+        wchar_t buf[1024]{};
+        if (Wh_GetStringValue(key.c_str(), buf, ARRAYSIZE(buf)) > 0) {
+            std::wstring item = ToLower(Trim(buf));
             if (!item.empty()) g_excludedExes.insert(item);
         }
     }
@@ -1289,7 +1275,7 @@ static void SyncForegroundStateAndFilter(bool allowFilterJump) {
         if (isExtBlk) {
             g_activeFilter = AppFilter::Blocked;
             g_blockedFirewallOnly = true;
-            if (true) {
+            {
                 g_statusBanner = L"Blocked by Windows Firewall — edit rules in Windows Defender Firewall.";
             }
         } else {
@@ -1331,7 +1317,7 @@ static void TriggerForegroundPulse(const std::wstring& fgExe) {
     TriggerPulse(isBlocked ? PulseKind::BlockedRed : PulseKind::AllowedGreen);
 }
 
-static bool ApplyBlock(const std::wstring& exePath, Direction dir, bool includeChildren, bool askUser) {
+static bool ApplyBlock(std::wstring exePath, Direction dir, bool includeChildren, bool askUser) {
     std::wstring low = ToLower(exePath);
     if (g_excludedExes.count(low)) {
         g_statusBanner = L"App is excluded from !Net.";
@@ -1393,7 +1379,6 @@ static bool ApplyBlock(const std::wstring& exePath, Direction dir, bool includeC
     auto& state = g_blocks[low];
     RemoveWfpFiltersLocked(state.sessionFilters);
     state.blocked = true;
-    state.persistent = false;
     state.includeChildProcesses = includeChildren;
     state.direction = dir;
     state.sessionFilters = std::move(newFilters);
@@ -1440,13 +1425,33 @@ static void SyncLateChildBlocks() {
     }
 }
 
-static bool ApplyAllow(const std::wstring& exePath, bool) {
+static bool ApplyAllow(std::wstring exePath) {
     std::wstring low = ToLower(exePath);
-    std::lock_guard<std::mutex> lk(g_engineMtx);
-    auto it = g_blocks.find(low);
-    if (it != g_blocks.end()) {
-        RemoveWfpFiltersLocked(it->second.sessionFilters);
-        g_blocks.erase(it);
+    {
+        std::lock_guard<std::mutex> lk(g_engineMtx);
+        auto it = g_blocks.find(low);
+        if (it != g_blocks.end()) {
+            RemoveWfpFiltersLocked(it->second.sessionFilters);
+            g_blocks.erase(it);
+        } else {
+            for (auto& kv : g_blocks) {
+                if (!kv.second.blockedChildPaths.count(low)) continue;
+                std::wstring childFn = GetFileNameOnly(low);
+                kv.second.blockedChildPaths.erase(low);
+                kv.second.blockedChildren.erase(
+                    std::remove(kv.second.blockedChildren.begin(), kv.second.blockedChildren.end(), childFn),
+                    kv.second.blockedChildren.end());
+                std::vector<WfpFilterEntry> kept;
+                for (const auto& f : kv.second.sessionFilters) {
+                    if (ToLower(f.exePath) == low) {
+                        if (g_wfpEngine) FwpmFilterDeleteById0(g_wfpEngine, f.filterId);
+                    } else {
+                        kept.push_back(f);
+                    }
+                }
+                kv.second.sessionFilters = std::move(kept);
+            }
+        }
     }
     LogAudit(L"ALLOW " + exePath);
     g_statusBanner.clear();
@@ -1456,7 +1461,7 @@ static bool ApplyAllow(const std::wstring& exePath, bool) {
 
 
 // ============================================================================
-// Cycle Mode Scheduler & Pipe IPC
+// Cycle Mode Scheduler
 // ============================================================================
 
 struct CycleRuntime {
@@ -1684,7 +1689,7 @@ static bool StopCycleForApp(const std::wstring& exePath, bool setAllowed) {
     }
     g_cycleCv.notify_all();
     if (setAllowed) {
-        ApplyAllow(disp, false);
+        ApplyAllow(disp);
     }
     LogAudit(L"CYCLE STOP " + disp);
     PostCycleUiSync();
@@ -1704,7 +1709,7 @@ static void StopAllCycles(bool setAllowed) {
     }
     g_cycleCv.notify_all();
     if (setAllowed) {
-        for (const auto& p : toAllow) ApplyAllow(p, false);
+        for (const auto& p : toAllow) ApplyAllow(p);
     }
     LogAudit(L"CYCLE STOP ALL");
     PostCycleUiSync();
@@ -1948,7 +1953,7 @@ static void StartCycleEngine() {
 }
 
 static void ShutdownCycleEngine() {
-    StopAllCycles(true);
+    StopAllCycles(false);
     g_cycleStopping = true;
     g_cycleCv.notify_all();
     if (g_cycleThread) {
@@ -1962,32 +1967,43 @@ static void RestoreAllSessionBlocks() {
     StopAllCycles(false);
     std::lock_guard<std::mutex> lk(g_engineMtx);
     for (auto it = g_blocks.begin(); it != g_blocks.end();) {
-        if (!it->second.persistent) {
-            RemoveWfpFiltersLocked(it->second.sessionFilters);
-            it = g_blocks.erase(it);
-        } else {
-            ++it;
-        }
+        RemoveWfpFiltersLocked(it->second.sessionFilters);
+        it = g_blocks.erase(it);
     }
     LogAudit(L"RESTORE ALL session blocks");
     g_statusBanner = L"All session blocks cleared.";
     TriggerPulse(PulseKind::AllowedGreen);
 }
 
-static void SyncPersistentRules() {
+static std::unordered_map<std::wstring, std::pair<Direction, bool>> g_lastAutoBlocked;
+
+static void SyncAutoBlockedApps() {
     std::vector<PersistentRuleCfg> rules;
     {
         std::lock_guard<std::mutex> lk(g_settingsMtx);
-        rules = g_settings.persistentRules;
+        rules = g_settings.autoBlockedApps;
     }
+    std::unordered_map<std::wstring, std::pair<Direction, bool>> nextMap;
     for (const auto& r : rules) {
         if (r.appPath.empty()) continue;
         std::wstring low = ToLower(r.appPath);
         if (g_excludedExes.count(low)) continue;
         if (FileExistsW(r.appPath)) {
-            ApplyBlock(r.appPath, r.direction, r.includeChildProcesses, false);
+            nextMap[low] = {r.direction, r.includeChildProcesses};
         }
     }
+    for (const auto& prev : g_lastAutoBlocked) {
+        if (!nextMap.count(prev.first)) {
+            ApplyAllow(prev.first);
+        }
+    }
+    for (const auto& cur : nextMap) {
+        auto itPrev = g_lastAutoBlocked.find(cur.first);
+        if (itPrev == g_lastAutoBlocked.end() || itPrev->second != cur.second) {
+            ApplyBlock(cur.first, cur.second.first, cur.second.second, false);
+        }
+    }
+    g_lastAutoBlocked = std::move(nextMap);
 }
 
 static int CountBlockedApps() {
@@ -2079,6 +2095,13 @@ static void RefreshAppList() {
                 e.exeExists = FileExistsW(kv.first);
             }
             e.block = kv.second;
+            for (const auto& chLow : kv.second.blockedChildPaths) {
+                auto itCh = mapEntries.find(chLow);
+                if (itCh != mapEntries.end() && !itCh->second.block.blocked) {
+                    itCh->second.block.blocked = true;
+                    itCh->second.block.direction = kv.second.direction;
+                }
+            }
         }
     }
 
@@ -2392,19 +2415,19 @@ static void LoadSettings() {
         auto raw = WindhawkUtils::StringSetting::make(key);
         return ParseHotkeyString(*raw.get() ? raw.get() : defVal);
     };
-    next.hkToggleFg   = readHk(L"Hotkeys.toggleForegroundApp", L"Ctrl+Shift+1");
+    next.hkToggleFg   = readHk(L"Hotkeys.toggleForegroundApp", L"Ctrl+Alt+Shift+1");
     next.hkExpandPill = readHk(L"Hotkeys.expandCollapsePill",  L"Ctrl+Alt+Shift+M");
     next.hkRestoreAll = readHk(L"Hotkeys.restoreAll",          L"Ctrl+Alt+Shift+R");
 
     for (int i = 0; i < 64; ++i) {
-        auto app = WindhawkUtils::StringSetting::make(L"persistentRules[%d].appPath", i);
+        auto app = WindhawkUtils::StringSetting::make(L"autoBlockedApps[%d].appPath", i);
         if (!*app.get()) break;
         PersistentRuleCfg r;
         r.appPath = app.get();
-        auto dir = WindhawkUtils::StringSetting::make(L"persistentRules[%d].direction", i);
+        auto dir = WindhawkUtils::StringSetting::make(L"autoBlockedApps[%d].direction", i);
         r.direction = ParseDirection(dir.get());
-        r.includeChildProcesses = Wh_GetIntSetting(L"persistentRules[%d].includeChildProcesses", i) != 0;
-        next.persistentRules.push_back(std::move(r));
+        r.includeChildProcesses = Wh_GetIntSetting(L"autoBlockedApps[%d].includeChildProcesses", i) != 0;
+        next.autoBlockedApps.push_back(std::move(r));
     }
 
     int settingEdgeInt = (int)next.dockEdge;
@@ -2937,8 +2960,7 @@ static void PaintFloatingWindow(HWND hwnd) {
                         sub = !app.externalRuleName.empty()
                             ? (std::wstring(L"Rule: ") + app.externalRuleName + L" (" + dirTxt + L")")
                             : (std::wstring(L"Blocked by Windows Firewall (") + dirTxt + L")");
-                    } else if (app.block.persistent) sub += L" · Locked";
-                    else if (critProtected) sub += L" · Protected";
+                    } else if (critProtected) sub += L" · Protected";
                     else if (app.isVpnOrRemote) sub += L" · VPN / Remote";
                 }
                 Gdiplus::RectF subRf((Gdiplus::REAL)textX, (Gdiplus::REAL)(rowRc.top + DpiScale(24, dpi)),
@@ -3206,7 +3228,7 @@ static void HandleClickAction(const HitRect& hr) {
         } else if (nextF == AppFilter::Blocked) {
             g_blockedFirewallOnly = false;
         }
-        if (true) {
+        {
             if (nextF == AppFilter::Blocked && g_blockedFirewallOnly) {
                 g_statusBanner = L"Blocked by Windows Firewall — edit rules in Windows Defender Firewall.";
             } else if (nextF == AppFilter::SystemApps) {
@@ -3223,7 +3245,7 @@ static void HandleClickAction(const HitRect& hr) {
         g_statusBanner = L"!Net can't manage this app — edit its rule in Windows Defender Firewall.";
         RequestRepaint();
     } else if (hr.kind == HitRect::RowExclude && hr.rowIndex >= 0 && hr.rowIndex < (int)g_appList.size()) {
-        const AppEntry& app = g_appList[hr.rowIndex];
+        AppEntry app = g_appList[hr.rowIndex];
         if (app.isExternalBlocked) {
             g_statusBanner = L"!Net can't manage this app — edit its rule in Windows Defender Firewall.";
             RequestRepaint();
@@ -3234,7 +3256,7 @@ static void HandleClickAction(const HitRect& hr) {
             g_excludedExes.erase(low);
             LogAudit(L"UNEXCLUDE " + app.displayPath);
         } else {
-            ApplyAllow(app.displayPath, false);
+            ApplyAllow(app.displayPath);
             g_excludedExes.insert(low);
             LogAudit(L"EXCLUDE " + app.displayPath);
         }
@@ -3242,7 +3264,7 @@ static void HandleClickAction(const HitRect& hr) {
         RefreshAppList();
         RequestRepaint();
     } else if (hr.kind == HitRect::RowToggle && hr.rowIndex >= 0 && hr.rowIndex < (int)g_appList.size()) {
-        const AppEntry& app = g_appList[hr.rowIndex];
+        AppEntry app = g_appList[hr.rowIndex];
         if (app.isExternalBlocked) {
             g_statusBanner = L"!Net can't manage this app — edit its rule in Windows Defender Firewall.";
             RequestRepaint();
@@ -3256,8 +3278,22 @@ static void HandleClickAction(const HitRect& hr) {
             if (res != IDYES) return;
             StopCycleForApp(app.displayPath, false);
         }
-        if (app.block.blocked) {
-            ApplyAllow(app.displayPath, false);
+        bool blockedNow = false;
+        {
+            std::lock_guard<std::mutex> lk(g_engineMtx);
+            auto it = g_blocks.find(app.exePath);
+            if (it != g_blocks.end() && it->second.blocked) blockedNow = true;
+            else {
+                for (const auto& bkv : g_blocks) {
+                    if (bkv.second.blocked && bkv.second.blockedChildPaths.count(app.exePath)) {
+                        blockedNow = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (blockedNow) {
+            ApplyAllow(app.displayPath);
         } else {
             ModSettings s;
             {
@@ -3272,7 +3308,7 @@ static void HandleClickAction(const HitRect& hr) {
         RefreshAppList();
         RequestRepaint();
     } else if (hr.kind == HitRect::RowDirection && hr.rowIndex >= 0 && hr.rowIndex < (int)g_appList.size()) {
-        AppEntry& app = g_appList[hr.rowIndex];
+        AppEntry app = g_appList[hr.rowIndex];
         if (app.isExternalBlocked) {
             g_statusBanner = L"!Net can't manage this app — edit its rule in Windows Defender Firewall.";
             RequestRepaint();
@@ -3281,7 +3317,7 @@ static void HandleClickAction(const HitRect& hr) {
         std::wstring low = ToLower(app.displayPath);
         Direction nextDir = (Direction)(((int)app.block.direction + 1) % 3);
         g_pendingDirs[low] = nextDir;
-        if (app.block.blocked && !app.block.persistent) {
+        if (app.block.blocked) {
             ApplyBlock(app.displayPath, nextDir, app.block.includeChildProcesses, true);
         }
         RefreshAppList();
@@ -5892,7 +5928,7 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
                         auto it = g_blocks.find(low);
                         isBlocked = (it != g_blocks.end() && it->second.blocked);
                     }
-                    if (isBlocked) ApplyAllow(exe, false);
+                    if (isBlocked) ApplyAllow(exe);
                     else {
                         ModSettings s;
                         {
@@ -5956,7 +5992,14 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
             return 0;
         }
         case WM_APP_REFRESH_APPS: {
-            if (g_uiState != UiState::Line) {
+            bool hasChildBlocks = false;
+            if (g_uiState == UiState::Line) {
+                std::lock_guard<std::mutex> lk(g_engineMtx);
+                for (const auto& kv : g_blocks) {
+                    if (kv.second.blocked && kv.second.includeChildProcesses) { hasChildBlocks = true; break; }
+                }
+            }
+            if (g_uiState != UiState::Line || hasChildBlocks) {
                 SetTimer(hwnd, TIMER_DEBOUNCE_REFRESH, 300, nullptr);
             }
             return 0;
@@ -5975,15 +6018,20 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
                 actions.swap(g_pendingCycleActions);
             }
             for (const auto& act : actions) {
+                if (act.kind == CyclePendingAction::SwitchBlock || act.kind == CyclePendingAction::SwitchAllow) {
+                    std::wstring low = ToLower(act.displayPath);
+                    std::lock_guard<std::mutex> lk(g_cycleMtx);
+                    if (!g_cycles.count(low)) continue;
+                }
                 if (act.kind == CyclePendingAction::SwitchBlock) {
                     ApplyBlock(act.displayPath, act.dir, act.includeChildren, false);
                 } else if (act.kind == CyclePendingAction::SwitchAllow) {
-                    ApplyAllow(act.displayPath, false);
+                    ApplyAllow(act.displayPath);
                 } else if (act.kind == CyclePendingAction::EndAllow) {
-                    ApplyAllow(act.displayPath, false);
+                    ApplyAllow(act.displayPath);
                     LogAudit(L"CYCLE COMPLETED " + act.displayPath);
                 } else if (act.kind == CyclePendingAction::WipeExited) {
-                    ApplyAllow(act.displayPath, false);
+                    ApplyAllow(act.displayPath);
                     LogAudit(L"CYCLE WIPED (process exited) " + act.displayPath);
                 }
             }
@@ -6037,7 +6085,7 @@ static LRESULT CALLBACK ControlWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
     if (msg == WM_APP_RELOAD_SETTINGS) {
         LoadSettings();
         if (!g_settings.enableCycleScheduler) StopAllCycles(true);
-        SyncPersistentRules();
+        SyncAutoBlockedApps();
         if (g_hWnd) {
             ApplyCaptureExclusionAll();
             RegisterAllHotkeys(g_hWnd);
@@ -6130,7 +6178,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
 BOOL WhTool_ModInit() {
     LoadSettings();
     LoadExcludedApps();
-    SyncPersistentRules();
+    SyncAutoBlockedApps();
 
     g_uiReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, &g_uiThreadId);
@@ -6195,6 +6243,7 @@ static void RelaunchElevated() {
     sei.lpParameters = params.c_str();
     sei.nShow = SW_SHOWNORMAL;
     if (ShellExecuteExW(&sei)) {
+        RemoveTrayIcon();
         ExitProcess(0);
     } else {
         g_toolModProcessMutex = CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
