@@ -355,7 +355,7 @@
         the site name or within the path, https:// and www. are optional, and a
         pattern without a path, such as github.com, https://github.com or
         localhost:3000, matches the whole site. Example: github.com
-        *.wikipedia.org/wiki/* youtube.com/watch* . Leave empty to show the
+        *.wikipedia.org/wiki* youtube.com/watch* . Leave empty to show the
         entry on every page.
     - workingDirectory: ""
       $name: Working directory
