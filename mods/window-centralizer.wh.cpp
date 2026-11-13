@@ -64,7 +64,6 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
 - centerOnLauncher: false
   $name: Center on the unrelated launcher window
   $description: A program started from another one (context menu, file opened from a folder, etc.) is centered on the window it was started from, instead of the monitor. Only in the "Parent window / monitor" mode.
-  $showIf: {mode: parent}
 - maxAreaPercent: 10
   $name: Window size limit to target — % of the monitor area
   $description: Windows larger than this keep their assigned position. Standard dialogs are centered regardless, but can be set to be ignored.
