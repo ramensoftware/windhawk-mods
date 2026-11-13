@@ -82,7 +82,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 - Bar text and icons in white, black or automatic (following the Windows theme), for all displays or each display on its own
 - Clicking the album cover (Control Center or Now Playing) brings the playing app's window to the front
 - Optional: hide the bar while a window is maximized on its display (the window gets the whole height) and bring it back when none is
-- Hide the bar: never, when the pointer touches the top (never over a window's caption buttons), or with the handle: a click on a thin pill at the top center shows the bar, windows move down and the bar takes the color of the active window's title bar; another click hides it. A bar hidden by a maximized window also comes back with the handle
+- Hide the bar: never, when the pointer touches the top (never over a window's caption buttons), or with the handle: a click on a thin pill at the top center shows the bar, windows move down and the bar takes the color of the active window's title bar; another click hides it. "Hide when a window is maximized" is separate: the bar comes back on its own when the window is minimized or you go to the desktop, and while it's on, "Hide the bar" is off
 - Choose where the bar shows: all displays, the main one, or a specific display (listed by name); if that display is disconnected, the bar moves to the main one
 - **Disks** (optional): its menu lists every local and removable disk with a usage bar and opens it in Explorer
 - Bar icons share one size: each icon is measured and scaled to the same height, and they all grow together with the icon size setting
@@ -747,6 +747,9 @@ static void LoadSettings() {
     s.autoHide = OvrInt(L"autoHide") != 0;
     s.hideOnFullscreen = OvrInt(L"hideOnFullscreen") != 0;
     s.hideWhenMaximized = OvrInt(L"hideWhenMaximized") != 0;
+    // "Ocultar com janela maximizada" ligada desliga "Ocultar a barra" (alça ou mouse):
+    // a barra volta sozinha na área de trabalho, então as duas não convivem.
+    if (s.hideWhenMaximized) s.autoHide = false;
     s.revealHandle = OvrInt(L"revealHandle") != 0;
     s.desktopName = ReadStr(L"desktopName");
     if (s.desktopName.empty()) s.desktopName = L"Finder";
@@ -12391,7 +12394,7 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_BATTPCT, L"Mostrar a porcentagem da bateria", 0, 0},
     {BR_CHOICE, BV_HIDEMODE, L"Ocultar a barra", 0, 0, L"Com a alça, um clique na pílula fina no topo mostra a barra (as janelas descem e ela fica na cor da janela ativa) e outro clique a esconde"},
     {BR_SWITCH, BV_HIDEFS, L"Ocultar em tela cheia", 0, 0, L"Jogos, vídeos e apps em tela cheia ficam sem a barra"},
-    {BR_SWITCH, BV_HIDEMAX, L"Ocultar com janela maximizada", 0, 0, L"A barra some quando uma janela é maximizada e volta quando não há nenhuma (na área de trabalho)"},
+    {BR_SWITCH, BV_HIDEMAX, L"Ocultar com janela maximizada", 0, 0, L"A barra some quando uma janela é maximizada e volta sozinha ao minimizar ou ir para a área de trabalho; ligada, desativa \"Ocultar a barra\""},
     {BR_CHOICE, BV_BARMON, L"Mostrar a barra em", 0, 0, L"Todos os monitores, o principal ou um deles; se o escolhido for desconectado, a barra vai para o principal"},
     {BR_SWITCH, BV_MORE, L"Recolher numa seta os ícones que não cabem", 0, 0, L"Como as setas ao lado do notch no macOS 27"},
     {BR_HEADER, BV_NONE, L"Menus e painéis", 0xE7C4, 0x5E5CE6, L"Tocando agora, pílulas de volume e brilho"},
@@ -12667,7 +12670,7 @@ static int BsGet(int val) {
             return dev.empty() ? g_settings.theme : TextColorFor(dev) + 1;
         }
         case BV_TEXTMON: return g_textMonEdit;
-        case BV_HIDEMODE: return !g_settings.autoHide ? 0 : g_settings.revealHandle ? 2 : 1;
+        case BV_HIDEMODE: return !g_settings.autoHide || g_settings.hideWhenMaximized ? 0 : g_settings.revealHandle ? 2 : 1;
         case BV_BARMON: {
             if (g_settings.barMonitor == L"all") return 0;
             if (g_settings.barMonitor == L"primary") return 1;
@@ -12740,13 +12743,16 @@ static void BsSet(int val, int v) {
         if (val == BV_ALLMON || val == BV_AUTOHIDE) {
             RequestReload(1);
         } else {
+            if (val == BV_HIDEMAX && on && g_settings.autoHide) {
+                // Ocultar com janela maximizada desliga "Ocultar a barra" (alça ou mouse).
+                g_settings.autoHide = false;
+                OvrSetInt(L"autoHide", 0);
+                RequestReload(1);
+                return;
+            }
             if (val == BV_HIDEMAX && g_owner) {
                 if (on) SetTimer(g_owner, TIMER_MAXCHECK, 250, nullptr);
                 else KillTimer(g_owner, TIMER_MAXCHECK);
-            }
-            if (val == BV_HIDEMAX && g_owner) {
-                if (g_settings.autoHide || g_settings.hideWhenMaximized) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
-                else KillTimer(g_owner, TIMER_FAST);
             }
             BarsApplyLive(false);
         }
@@ -14100,6 +14106,7 @@ static bool BsRowDisabled(int rowIdx) {
         return !g_glass.tinted && g_settings.barStyle != 3;
     // Com a barra no Vidro líquido personalizado, o texto segue a cor do vidro.
     if (d.val == BV_TEXTCOLOR) return g_settings.barStyle == 3;
+    if (d.val == BV_HIDEMODE) return g_settings.hideWhenMaximized;  // bloqueada por "Ocultar com janela maximizada"
     if (d.val == BV_TEXTMON) {
         int n = 0;
         BsTextMonLabels(&n);
@@ -22615,11 +22622,6 @@ static void UpdateFullscreen() {
                 InvalidateRect(b->hwnd, nullptr, FALSE);
             }
         }
-        if (b->maxHidden && b->autoShown && b->hiddenForFullscreen) {
-            // Mostrada pela alça (a janela maximizada desceu para ela caber): o tique
-            // rápido a esconde quando o mouse sai.
-            continue;
-        }
         if (hide != b->hiddenForFullscreen) {
             b->hiddenForFullscreen = hide;
             ShowWindow(b->hwnd, hide ? SW_HIDE : SW_SHOWNOACTIVATE);
@@ -22828,9 +22830,8 @@ static void HandleRender(Bar* b) {
 }
 // A alça aparece só quando a barra está escondida por um desses dois modos.
 static void HandleSync(Bar* b) {
-    // Modo "com a alça", ou escondida por janela maximizada (aí a alça é o jeito de
-    // trazê-la). A alça fica sempre: ela mostra e esconde a barra.
-    bool want = (g_settings.autoHide && g_settings.revealHandle && !b->hiddenForFullscreen) || b->maxHidden;
+    // Modo "com a alça": a alça fica sempre, ela mostra e esconde a barra.
+    bool want = g_settings.autoHide && g_settings.revealHandle && !b->hiddenForFullscreen;
     if (want && !b->handle) {
         b->handle = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOACTIVATE, kHandleClass, L"",
                                     WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, g_hInst, nullptr);
@@ -22895,7 +22896,7 @@ static void BarSamplePeekColor(Bar* b) {
         InvalidateRect(b->hwnd, nullptr, FALSE);
     }
 }
-static bool BarPeekMode(const Bar* b) { return (g_settings.autoHide && g_settings.revealHandle) || b->maxHidden; }
+static bool BarPeekMode(const Bar*) { return g_settings.autoHide && g_settings.revealHandle; }
 
 // Clique na alça: a barra aparece e reserva o espaço do topo enquanto estiver à
 // vista, então as janelas (a maximizada também) descem e nada fica por baixo dela.
@@ -22988,7 +22989,7 @@ static void AutoHideTick() {
         bool inX = pt.x >= b->monRect.left && pt.x < b->monRect.right;
         float s = b->dpi / 96.0f;
         // Só o modo automático e a barra escondida por janela maximizada usam isto.
-        if (!g_settings.autoHide && !b->maxHidden) {
+        if (!g_settings.autoHide) {
             b->autoShown = false;
             HandleSync(b);
             continue;
@@ -23615,7 +23616,7 @@ static void CreateBars() {
     ResolveTheme();
     EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, BarChosenMonitorPresent() ? 1 : 0);
     // O tique rápido: o modo automático e a barra mostrada pela alça.
-    if (g_settings.autoHide || g_settings.hideWhenMaximized) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
+    if (g_settings.autoHide) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
     else KillTimer(g_owner, TIMER_FAST);
     if (g_settings.hideWhenMaximized) SetTimer(g_owner, TIMER_MAXCHECK, 250, nullptr);
     else KillTimer(g_owner, TIMER_MAXCHECK);
@@ -24428,7 +24429,7 @@ const UiTr kUiTr[] = {
     {L"Escolha um monitor para dar a ele uma cor própria", L"Pick a display to give it its own color", L"Elige un monitor para darle su propio color", L"Choisissez un écran pour lui donner sa propre couleur", L"Wähle einen Bildschirm für eine eigene Farbe", L"Scegli un monitor per dargli un colore proprio", L"选择一台显示器，为它单独设置颜色"},
     {L"Como nos outros", L"Same as the others", L"Como en los demás", L"Comme les autres", L"Wie die anderen", L"Come gli altri", L"与其他相同"},
     {L"Ocultar com janela maximizada", L"Hide when a window is maximized", L"Ocultar con una ventana maximizada", L"Masquer quand une fenêtre est agrandie", L"Bei maximiertem Fenster ausblenden", L"Nascondi con una finestra ingrandita", L"窗口最大化时隐藏"},
-    {L"A barra some quando uma janela é maximizada e volta quando não há nenhuma (na área de trabalho)", L"The bar hides when a window is maximized and comes back when none is (on the desktop)", L"La barra se oculta al maximizar una ventana y vuelve cuando no hay ninguna (en el escritorio)", L"La barre se masque quand une fenêtre est agrandie et revient quand il n'y en a plus (sur le bureau)", L"Die Leiste verschwindet bei einem maximierten Fenster und kommt zurück, wenn keines mehr da ist (auf dem Desktop)", L"La barra si nasconde quando una finestra è ingrandita e torna quando non ce ne sono (sul desktop)", L"窗口最大化时菜单栏隐藏，没有最大化窗口时（桌面上）重新出现"},
+    {L"A barra some quando uma janela é maximizada e volta sozinha ao minimizar ou ir para a área de trabalho; ligada, desativa \"Ocultar a barra\"", L"The bar hides when a window is maximized and comes back on its own when you minimize it or go to the desktop; when on, it turns off \"Hide the bar\"", L"La barra se oculta al maximizar una ventana y vuelve sola al minimizarla o ir al escritorio; activada, desactiva \"Ocultar la barra\"", L"La barre se masque quand une fenêtre est agrandie et revient seule quand vous la réduisez ou allez sur le bureau ; activée, elle désactive \"Masquer la barre\"", L"Die Leiste verschwindet bei einem maximierten Fenster und kommt von selbst zurück, wenn du es minimierst oder zum Desktop gehst; eingeschaltet deaktiviert sie \"Leiste ausblenden\"", L"La barra si nasconde quando una finestra è ingrandita e torna da sola quando la riduci o vai sul desktop; attiva, disattiva \"Nascondi la barra\"", L"窗口最大化时菜单栏隐藏，最小化窗口或回到桌面时自动重新出现；开启后会关闭“隐藏菜单栏”"},
     {L"Não", L"No", L"No", L"Non", L"Nein", L"No", L"否"},
     {L"Ocultar a barra", L"Hide the bar", L"Ocultar la barra", L"Masquer la barre", L"Leiste ausblenden", L"Nascondi la barra", L"隐藏菜单栏"},
     {L"Com a alça, um clique na pílula fina no topo mostra a barra (as janelas descem e ela fica na cor da janela ativa) e outro clique a esconde", L"With the handle, a click on the thin pill at the top shows the bar (windows move down and it takes the active window's color) and another click hides it", L"Con la asa, un clic en la píldora fina de arriba muestra la barra (las ventanas bajan y toma el color de la ventana activa) y otro clic la oculta", L"Avec la poignée, un clic sur la fine pilule en haut affiche la barre (les fenêtres descendent et elle prend la couleur de la fenêtre active) et un autre clic la masque", L"Mit dem Griff zeigt ein Klick auf die schmale Pille oben die Leiste (Fenster rücken nach unten, sie nimmt die Farbe des aktiven Fensters an), ein weiterer Klick blendet sie aus", L"Con la maniglia, un clic sulla pillola sottile in alto mostra la barra (le finestre scendono e prende il colore della finestra attiva) e un altro clic la nasconde", L"使用拉手时，点击顶部的细长胶囊显示菜单栏（窗口下移，菜单栏采用活动窗口的颜色），再次点击隐藏"},
