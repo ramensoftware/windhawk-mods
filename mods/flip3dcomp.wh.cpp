@@ -5,10 +5,10 @@
 // @version         2.0
 // @author          Tails (milestprower92)
 // @github          https://github.com/milestprower92
-// @include         sihost.exe
+// @include         windhawk.exe
 // @include         explorer.exe
 // @include         rundll32.exe
-// @compilerOptions -lcomdlg32 -lwindowscodecs -lole32 -loleaut32 -loleacc -luuid -ladvapi32 -ldxgi -ld3d11 -ldcomp -ldwmapi -lgdi32 -luser32
+// @compilerOptions -lcomdlg32 -lwindowscodecs -lole32 -loleaut32 -loleacc -luuid -ladvapi32 -ldxgi -ld3d11 -ldcomp -ldwmapi -lgdi32 -luser32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -19,25 +19,21 @@ Original version by: [ALTaleX531](https://github.com/ALTaleX531)
 
 A 1:1 replica of the Flip3D Window switcher introduced on Windows Vista, for newer versions of Windows, ported from my fork [Flip3DComp](https://github.com/milestprower92/Flip3DComp)
 
-
 ## Demo
 
 ![Demo](https://raw.githubusercontent.com/milestprower92/Flip3DComp/refs/heads/main/media/Flip3DComp_demo.gif)
 
-Eligible windows are shown as DWM shared thumbnails on a DirectComposition 3D carousel. No D3D11 scene pass, no Windows.Graphics.Capture.
-
+Live window previews follow the original Flip3D carousel layout and timing.
 
 ## Requirements
 
-- Windows 10 version 1703 and higher
-- Windhawk Versions 1.7 and higher
-
+- Windows 10 versions 1703 and higher
+- Windhawk 1.7.3 or higher
 
 ## ⚠️ Notes
 
-- The Task View override currently only supports 11, for 10, it will partially work if you use [Explorer7](https://github.com/world-windows-federation/explorer7), full support for it will be added on a future update 
-- Restart Windows Explorer from Task Manager after enabling or disabling the mod to apply or restore the native Win+Tab registration. The mod no longer prompts for a restart or terminates Explorer.
-
+- The optional Task View override currently uses the Windows 11 Task View activation path on AMD64. It is unavailable on x86, ARM64 & Windows 10.
+- **Do not enable more than one Win+Tab replacement. Disable Any mods that override Win+Tab, or leave Win+Tab disabled in Alt+Tab Flip 3D, while using Flip3DComp.**
 
 ## Controls
 
@@ -49,7 +45,6 @@ Eligible windows are shown as DWM shared thumbnails on a DirectComposition 3D ca
 - `Esc`: exit
 - `F5`: replay the enter animation
 
-
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -59,7 +54,7 @@ Eligible windows are shown as DWM shared thumbnails on a DirectComposition 3D ca
   $description: Use eased animations on flip3d.
 - TaskViewOverride: false
   $name: Replace Task View (BETA)
-  $description: Redirect Task View so it opens Flip3D instead
+  $description: Redirect Task View to Flip3D. AMD64 & Windows 11 only.
 */
 // ==/WindhawkModSettings==
 
@@ -85,6 +80,8 @@ Eligible windows are shown as DWM shared thumbnails on a DirectComposition 3D ca
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 #include <windows.h>
+#include <shellapi.h>
+#include <tlhelp32.h>
 #include <dwmapi.h>
 #include <dcomp.h>
 #include <wrl/client.h>
@@ -1010,7 +1007,6 @@ public:
     const wchar_t* InitErrorMessage() const { return m_initError.c_str(); }
     int  Run();
     void Shutdown();
-    size_t CountSwitchableWindows() { return EnumerateWindows().size(); }
 
 private:
     // Window procedure forwarding
@@ -1578,38 +1574,13 @@ static void LoadAnimationSettings()
 namespace
 {
     std::atomic<HWND> g_hostWindow{ nullptr };
+    HANDLE g_hostStopEvent = nullptr;
 
     // Only the host thread accesses pending animation restoration.
     const UINT_PTR kRestoreTransitionsTimerId = 0x7F36;
     std::vector<HWND> g_transitionWindows;
     ULONGLONG g_restoreTransitionsAt = 0;
 
-    bool g_minAnimateSuppressed = false;
-    int  g_minAnimateOriginal = 0;
-
-    void SuppressMinimizeAnimation()
-    {
-        ANIMATIONINFO info = { sizeof(info) };
-        if (g_minAnimateSuppressed
-            || !SystemParametersInfoW(SPI_GETANIMATION, sizeof(info), &info, 0))
-            return;
-        g_minAnimateOriginal = info.iMinAnimate;
-        if (!g_minAnimateOriginal)
-            return;
-        info.iMinAnimate = 0;
-        if (SystemParametersInfoW(SPI_SETANIMATION, sizeof(info), &info, 0))
-            g_minAnimateSuppressed = true;
-    }
-
-    void RestoreMinimizeAnimation()
-    {
-        if (!g_minAnimateSuppressed)
-            return;
-        g_minAnimateSuppressed = false;
-        ANIMATIONINFO info = { sizeof(info) };
-        info.iMinAnimate = g_minAnimateOriginal;
-        SystemParametersInfoW(SPI_SETANIMATION, sizeof(info), &info, 0);
-    }
 
     void SetWindowTransitionsDisabled(HWND hwnd, bool disabled) {
         if (!hwnd || !IsWindow(hwnd))
@@ -1628,7 +1599,6 @@ namespace
             g_restoreTransitionsAt = 0;
         }
 
-        RestoreMinimizeAnimation();
         for (HWND hwnd : g_transitionWindows)
             SetWindowTransitionsDisabled(hwnd, false);
         g_transitionWindows.clear();
@@ -3499,7 +3469,6 @@ void Flip3DCompApp::Update(float dtSeconds)
                 m_pendingActivateHwnd = nullptr;
                 if (target == GetShellWindow())
                 {
-                    SuppressMinimizeAnimation();
                     SetCardTransitionsDisabled(true);
                     bool needShellMinimizeAll = false;
                     for (const CardModel& card : m_cards)
@@ -6250,10 +6219,9 @@ bool Flip3DCompApp::CreateAppWindow()
         kAppWindowClassName,
         nullptr,
     };
-    if (RegisterClassExW(&wc))
-        m_windowClassRegistered = true;
-    else if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+    if (!RegisterClassExW(&wc))
         return false;
+    m_windowClassRegistered = true;
 
     const int x = GetSystemMetrics(SM_XVIRTUALSCREEN);
     const int y = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -6348,8 +6316,6 @@ bool Flip3DCompApp::Initialize(HINSTANCE hInstance, bool openingTabHeld)
         return false;
     }
 
-    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-
     if (!LoadThumbApi())
         return false;
 
@@ -6434,6 +6400,9 @@ int Flip3DCompApp::Run()
 
     while (msg.message != WM_QUIT)
     {
+        if (g_hostStopEvent
+            && WaitForSingleObject(g_hostStopEvent, 0) == WAIT_OBJECT_0)
+            break;
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))
         {
             if (msg.message == WM_QUIT)
@@ -6456,7 +6425,9 @@ int Flip3DCompApp::Run()
         }
         else
         {
-            WaitMessage();
+            MsgWaitForMultipleObjects(g_hostStopEvent ? 1 : 0,
+                g_hostStopEvent ? &g_hostStopEvent : nullptr,
+                FALSE, INFINITE, QS_ALLINPUT);
             m_prevFrame = std::chrono::steady_clock::now();
         }
     }
@@ -6615,998 +6586,1024 @@ LRESULT Flip3DCompApp::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
 }
 
 
-namespace
+const wchar_t kHostClassName[] = L"Flip3DCompWindhawkHost";
+const wchar_t kHostWindowName[] = L"Flip3DCompWindhawkHostWindow";
+const UINT kHostKeyMessage = WM_APP + 0x71;
+const UINT kHostCommitMessage = WM_APP + 0x72;
+const UINT_PTR kHotkeyPollTimerId = 0x7F33;
+const int kHotkeyIdCtrlWinTab = 0x7F32;
+const ULONG_PTR kReplayedWindowsKeyTag = 0x3344434F;
+
+HMODULE g_modModule = nullptr;
+UINT g_activationMessage = 0;
+HANDLE g_hostThread = nullptr;
+HANDLE g_hostReadyEvent = nullptr;
+bool g_hostInitializationSucceeded = false;
+HANDLE g_keyboardThread = nullptr;
+HANDLE g_keyboardReadyEvent = nullptr;
+HANDLE g_keyboardStopEvent = nullptr;
+bool g_keyboardInitializationSucceeded = false;
+HHOOK g_keyboardHook = nullptr;
+std::atomic_bool g_switcherEngaged{ false };
+std::atomic_bool g_TaskViewOverride{ false };
+
+// The render thread owns the app and commit policy. The input thread only posts
+// messages and reads the published engaged flag.
+std::unique_ptr<Flip3DCompApp> g_app;
+bool g_commitOnWindowsKeyRelease = false;
+
+// The hook records Win-key state even when it suppresses delivery to Windows.
+// The UI release timer must include that state rather than just GetAsyncKeyState.
+std::atomic<unsigned> g_windowsKeyMask{ 0 };
+
+// Only the keyboard thread accesses the remaining key bookkeeping.
+unsigned g_deferredWindowsKeyMask = 0;
+unsigned g_forwardedWindowsKeyMask = 0;
+unsigned g_suppressWindowsKeyMask = 0;
+unsigned g_controlKeyMask = 0;
+bool g_tabDown = false;
+bool g_suppressTabUntilUp = false;
+bool g_navigationDown[256] = {};
+
+bool SendWindowsKeyEvent(unsigned bit, bool down)
 {
-    constexpr wchar_t kHostClassName[] = L"Flip3DCompWindhawkHost";
-    constexpr wchar_t kHostWindowName[] = L"Flip3DCompWindhawkHostWindow";
-    constexpr UINT kHostTabMessage = WM_APP + 0x71;
-    constexpr UINT kHostCommitMessage = WM_APP + 0x72;
-    constexpr UINT kHostShutdownMessage = WM_APP + 0x73;
-    constexpr wchar_t kKeyboardHookMutexName[] =
-        L"Local\\Flip3DComp.KeyboardHookOwner";
+    INPUT input = {};
+    input.type = INPUT_KEYBOARD;
+    input.ki.wVk = bit == 1u ? VK_LWIN : VK_RWIN;
+    input.ki.dwExtraInfo = kReplayedWindowsKeyTag;
+    input.ki.dwFlags = KEYEVENTF_EXTENDEDKEY | (down ? 0 : KEYEVENTF_KEYUP);
+    return SendInput(1, &input, sizeof(input)) == 1;
+}
 
-    using RegisterHotKey_t = BOOL(WINAPI*)(HWND, int, UINT, UINT);
-    RegisterHotKey_t g_originalRegisterHotKey = nullptr;
-
-    UINT g_activationMessage = 0;
-    HHOOK g_keyboardHook = nullptr;
-    HANDLE g_hostThread = nullptr;
-    HANDLE g_hostReadyEvent = nullptr;
-    DWORD g_hostThreadId = 0;
-    bool g_hostInitializationSucceeded = false;
-    std::unique_ptr<Flip3DCompApp> g_app;
-    unsigned g_windowsKeyMask = 0;
-    unsigned g_deferredWindowsKeyMask = 0;
-    unsigned g_forwardedWindowsKeyMask = 0;
-    unsigned g_suppressWindowsKeyMask = 0;
-    constexpr ULONG_PTR kReplayedWindowsKeyTag = 0x464C49503344434FULL;
-    unsigned g_controlKeyMask = 0;
-    bool g_tabDown = false;
-    bool g_suppressTabUntilUp = false;
-    bool g_switcherPending = false;
-    bool g_commitOnWindowsKeyRelease = false;
-    bool g_shutdownRequested = false;
-
-    bool SendWindowsKeyEvent(unsigned bit, bool down)
+void SendWindowsKeyTap(unsigned bit)
+{
+    INPUT inputs[2] = {};
+    for (INPUT& input : inputs)
     {
-        INPUT input = {};
         input.type = INPUT_KEYBOARD;
         input.ki.wVk = bit == 1u ? VK_LWIN : VK_RWIN;
         input.ki.dwExtraInfo = kReplayedWindowsKeyTag;
-        input.ki.dwFlags = KEYEVENTF_EXTENDEDKEY
-            | (down ? 0 : KEYEVENTF_KEYUP);
-
-        if (SendInput(1, &input, sizeof(input)) != 1)
-        {
-            Wh_Log(L"Failed to replay Windows-key %s event for bit 0x%x",
-                down ? L"down" : L"up", bit);
-            return false;
-        }
-        return true;
+        input.ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
     }
+    inputs[1].ki.dwFlags |= KEYEVENTF_KEYUP;
+    if (SendInput(2, inputs, sizeof(INPUT)) == 1)
+        SendWindowsKeyEvent(bit, false);
+}
 
-    bool SendWindowsKeyTap(unsigned bit)
+void ForwardDeferredWindowsKeys()
+{
+    for (unsigned bit : { 1u, 2u })
     {
-        INPUT inputs[2] = {};
-        for (INPUT& input : inputs)
+        if ((g_deferredWindowsKeyMask & bit) && SendWindowsKeyEvent(bit, true))
         {
-            input.type = INPUT_KEYBOARD;
-            input.ki.wVk = bit == 1u ? VK_LWIN : VK_RWIN;
-            input.ki.dwExtraInfo = kReplayedWindowsKeyTag;
-            input.ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
-        }
-        inputs[1].ki.dwFlags |= KEYEVENTF_KEYUP;
-
-        const UINT inserted = SendInput(2, inputs, sizeof(INPUT));
-        if (inserted == 2)
-            return true;
-
-        Wh_Log(L"Failed to replay Windows-key tap for bit 0x%x; inserted=%u",
-            bit, inserted);
-        if (inserted == 1)
-            SendWindowsKeyEvent(bit, false);
-        return false;
-    }
-
-    BOOL WINAPI RegisterHotKeyHook(HWND hwnd, int id, UINT modifiers, UINT vk)
-    {
-        if ((modifiers & MOD_WIN) && vk == VK_TAB)
-        {
-            Wh_Log(L"Blocked native Win+Tab hotkey registration");
-            return TRUE;
-        }
-
-        return g_originalRegisterHotKey(hwnd, id, modifiers, vk);
-    }
-
-    void ForwardDeferredWindowsKeys()
-    {
-        for (unsigned bit : { 1u, 2u })
-        {
-            if ((g_deferredWindowsKeyMask & bit)
-                && SendWindowsKeyEvent(bit, true))
-            {
-                g_deferredWindowsKeyMask &= ~bit;
-                g_forwardedWindowsKeyMask |= bit;
-            }
+            g_deferredWindowsKeyMask &= ~bit;
+            g_forwardedWindowsKeyMask |= bit;
         }
     }
+}
 
-    constexpr int kHotkeyIdWinTab = 0x7F31;
-    constexpr int kHotkeyIdCtrlWinTab = 0x7F32;
-    constexpr UINT_PTR kHotkeyPollTimerId = 0x7F33;
-    constexpr UINT_PTR kHotkeyRetryTimerId = 0x7F34;
-    constexpr UINT_PTR kHideTaskViewTimerId = 0x7F35;
-    constexpr UINT kHostHideTaskViewMessage = WM_APP + 0x75;
-    int g_hideTaskViewTicks = 0;
-    bool g_nativeTaskViewHooked = false;
-    std::atomic_bool g_TaskViewOverride{ false };
+void RecordForegroundWindow(HWND hwnd)
+{
+    if (!hwnd || !IsWindow(hwnd))
+        return;
+    hwnd = GetAncestor(hwnd, GA_ROOT);
+    if (!hwnd || hwnd == GetShellWindow() || hwnd == GetDesktopWindow())
+        return;
+    WCHAR cls[64] = {};
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+    if (wcscmp(cls, L"WindhawkFlip3DCompWindow") == 0
+        || wcscmp(cls, L"Shell_TrayWnd") == 0
+        || wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0
+        || wcscmp(cls, L"WorkerW") == 0
+        || wcscmp(cls, L"Progman") == 0)
+        return;
+    auto it = std::find(g_mruWindows.begin(), g_mruWindows.end(), hwnd);
+    if (it != g_mruWindows.end())
+        g_mruWindows.erase(it);
+    g_mruWindows.insert(g_mruWindows.begin(), hwnd);
+    if (g_mruWindows.size() > 256)
+        g_mruWindows.resize(256);
+}
 
-    void LoadTaskViewSettings()
+void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD, HWND hwnd,
+    LONG, LONG, DWORD, DWORD)
+{
+    RecordForegroundWindow(hwnd);
+}
+
+bool IsWindowsKeyPhysicallyDown()
+{
+    return (GetAsyncKeyState(VK_LWIN) & 0x8000)
+        || (GetAsyncKeyState(VK_RWIN) & 0x8000);
+}
+
+void LaunchSwitcher(bool sticky, bool openingTabHeld)
+{
+    if (WaitForSingleObject(g_hostStopEvent, 0) == WAIT_OBJECT_0)
+        return;
+    if (g_app)
     {
-        g_TaskViewOverride = Wh_GetIntSetting(L"TaskViewOverride") != 0;
-    }
-    HWINEVENTHOOK g_showEventHook = nullptr;
-
-    void RecordForegroundWindow(HWND hwnd)
-    {
-        if (!hwnd || !IsWindow(hwnd))
-            return;
-        hwnd = GetAncestor(hwnd, GA_ROOT);
-        if (!hwnd || hwnd == GetShellWindow() || hwnd == GetDesktopWindow())
-            return;
-        WCHAR cls[64] = {};
-        GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-        if (wcscmp(cls, L"WindhawkFlip3DCompWindow") == 0
-            || wcscmp(cls, L"Shell_TrayWnd") == 0
-            || wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0
-            || wcscmp(cls, L"WorkerW") == 0
-            || wcscmp(cls, L"Progman") == 0)
-            return;
-        auto it = std::find(g_mruWindows.begin(), g_mruWindows.end(), hwnd);
-        if (it != g_mruWindows.end())
-            g_mruWindows.erase(it);
-        g_mruWindows.insert(g_mruWindows.begin(), hwnd);
-        if (g_mruWindows.size() > 256)
-            g_mruWindows.resize(256);
-    }
-
-    void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD, HWND hwnd,
-        LONG, LONG, DWORD, DWORD)
-    {
-        RecordForegroundWindow(hwnd);
-    }
-
-    bool IsNativeTaskViewWindow(HWND hwnd)
-    {
-        WCHAR cls[64] = {};
-        if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls))
-            || wcscmp(cls, L"XamlExplorerHostIslandWindow") != 0)
-            return false;
-
-        // Task View is identified by its stored window caption, not by calling
-        // another UI thread's WM_GETTEXT handler.
-        WCHAR title[64] = {};
-        return InternalGetWindowText(hwnd, title, ARRAYSIZE(title)) > 0
-            && _wcsicmp(title, L"Task View") == 0;
+        if (sticky)
+            g_commitOnWindowsKeyRelease = false;
+        if (openingTabHeld)
+            PostMessageW(g_app->WindowHandle(), WM_KEYDOWN, VK_TAB, 0);
+        return;
     }
 
-    void CALLBACK TaskViewShowEventProc(HWINEVENTHOOK, DWORD, HWND hwnd,
-        LONG idObject, LONG, DWORD, DWORD)
+    g_switcherEngaged = true;
+    g_commitOnWindowsKeyRelease = !sticky;
+    auto app = std::make_unique<Flip3DCompApp>();
+    // Enumeration, D3D, DWM and WIC work must stay off the keyboard thread.
+    if (!app->Initialize(g_modModule, openingTabHeld))
     {
-        if (!g_nativeTaskViewHooked || !g_TaskViewOverride
-            || idObject != OBJID_WINDOW || !hwnd)
-            return;
-        if (IsNativeTaskViewWindow(hwnd))
-        {
-            ShowWindowAsync(hwnd, SW_HIDE);
-            Wh_Log(L"Requested native Task View hide on show event");
-        }
-    }
-
-    BOOL CALLBACK CloseTaskViewEnumProc(HWND hwnd, LPARAM)
-    {
-        if (IsNativeTaskViewWindow(hwnd))
-        {
-            PostMessageW(hwnd, WM_CLOSE, 0, 0);
-            Wh_Log(L"Native Task View window closed");
-        }
-        return TRUE;
-    }
-
-    void CloseNativeTaskView()
-    {
-        if (!g_nativeTaskViewHooked || !g_TaskViewOverride)
-            return;
-        if (g_hostWindow)
-            KillTimer(g_hostWindow, kHideTaskViewTimerId);
-        EnumWindows(CloseTaskViewEnumProc, 0);
-    }
-
-    BOOL CALLBACK HideTaskViewEnumProc(HWND hwnd, LPARAM)
-    {
-        if (!IsWindowVisible(hwnd))
-            return TRUE;
-        if (IsNativeTaskViewWindow(hwnd))
-        {
-            ShowWindowAsync(hwnd, SW_HIDE);
-            Wh_Log(L"Requested native Task View hide");
-        }
-        return TRUE;
-    }
-    bool g_hotkeyWinTab = false;
-    bool g_hotkeyCtrlWinTab = false;
-    bool g_hotkeysRegistered = false;
-
-    void RegisterSwitcherHotkeys(HWND hwnd)
-    {
-        auto registerFn = g_originalRegisterHotKey
-            ? g_originalRegisterHotKey : RegisterHotKey;
-        if (!g_hotkeyWinTab)
-            g_hotkeyWinTab = registerFn(hwnd, kHotkeyIdWinTab,
-                MOD_WIN | MOD_NOREPEAT, VK_TAB) != FALSE;
-        if (!g_hotkeyCtrlWinTab)
-            g_hotkeyCtrlWinTab = registerFn(hwnd, kHotkeyIdCtrlWinTab,
-                MOD_WIN | MOD_CONTROL | MOD_NOREPEAT, VK_TAB) != FALSE;
-        const bool all = g_hotkeyWinTab && g_hotkeyCtrlWinTab;
-        if (all != g_hotkeysRegistered)
-            Wh_Log(L"Switcher hotkeys: Win+Tab=%d Ctrl+Win+Tab=%d",
-                g_hotkeyWinTab, g_hotkeyCtrlWinTab);
-        g_hotkeysRegistered = all;
-        if (all)
-            KillTimer(hwnd, kHotkeyRetryTimerId);
-        else
-            SetTimer(hwnd, kHotkeyRetryTimerId, 1000, nullptr);
-    }
-
-    void UnregisterSwitcherHotkeys(HWND hwnd)
-    {
-        KillTimer(hwnd, kHotkeyRetryTimerId);
-        if (g_hotkeyWinTab)
-            UnregisterHotKey(hwnd, kHotkeyIdWinTab);
-        if (g_hotkeyCtrlWinTab)
-            UnregisterHotKey(hwnd, kHotkeyIdCtrlWinTab);
-        g_hotkeyWinTab = g_hotkeyCtrlWinTab = g_hotkeysRegistered = false;
-    }
-
-    bool IsWindowsKeyPhysicallyDown()
-    {
-        return (GetAsyncKeyState(VK_LWIN) & 0x8000)
-            || (GetAsyncKeyState(VK_RWIN) & 0x8000);
-    }
-
-    void SignalHostReady()
-    {
-        if (g_hostReadyEvent)
-            SetEvent(g_hostReadyEvent);
-    }
-
-    void LaunchSwitcher(bool sticky, bool openingTabHeld)
-    {
-        if (g_app || g_shutdownRequested)
-        {
-            if (g_app && sticky)
-                g_commitOnWindowsKeyRelease = false;
-            return;
-        }
-
-        auto app = std::make_unique<Flip3DCompApp>();
-        if (!app->Initialize(GetModuleHandleW(nullptr), openingTabHeld))
-        {
-            Wh_Log(L"Flip3DComp initialization failed: %s", app->InitErrorMessage());
-            app->Shutdown();
-            g_switcherPending = false;
-            return;
-        }
-
-        g_commitOnWindowsKeyRelease = !sticky;
-        g_app = std::move(app);
-        Wh_Log(L"Flip3DComp initialized; showing switcher window");
-        ShowWindow(g_app->WindowHandle(), SW_SHOW);
-        SetWindowPos(g_app->WindowHandle(), HWND_TOPMOST, 0, 0, 0, 0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-        if (!SetForegroundWindow(g_app->WindowHandle()))
-            Wh_Log(L"SetForegroundWindow failed for switcher window: %lu",
-                GetLastError());
-        UpdateWindow(g_app->WindowHandle());
-        Wh_Log(L"Switcher window shown; entering message/render loop");
-
-        g_app->Run();
-        Wh_Log(L"Switcher message/render loop exited; Windows-key mask=0x%x, async LWIN=%d RWIN=%d",
-            g_windowsKeyMask,
-            (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0,
-            (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0);
-        g_app->Shutdown();
-        g_app.reset();
-        g_switcherPending = false;
+        Wh_Log(L"Flip3DComp initialization failed: %s", app->InitErrorMessage());
+        app->Shutdown();
         g_commitOnWindowsKeyRelease = false;
-        CloseNativeTaskView();
-
-        if (g_shutdownRequested)
-            PostQuitMessage(0);
+        g_switcherEngaged = false;
+        return;
     }
 
-    LRESULT CALLBACK HostWindowProc(HWND hwnd, UINT message, WPARAM wParam,
-        LPARAM lParam)
+    g_app = std::move(app);
+    ShowWindow(g_app->WindowHandle(), SW_SHOW);
+    SetWindowPos(g_app->WindowHandle(), HWND_TOPMOST, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    if (!SetForegroundWindow(g_app->WindowHandle()))
+        Wh_Log(L"Switcher could not take foreground focus; navigation remains on the keyboard hook");
+    UpdateWindow(g_app->WindowHandle());
+    if (!sticky && !SetTimer(g_hostWindow, kHotkeyPollTimerId, 30, nullptr))
     {
-        if (message == g_activationMessage)
-        {
-            g_switcherPending = false;
-            LaunchSwitcher(wParam != 0, lParam != 0);
-            return 0;
-        }
-
-        switch (message)
-        {
-        case WM_HOTKEY:
-            if (wParam == kHotkeyIdWinTab || wParam == kHotkeyIdCtrlWinTab)
-            {
-                Wh_Log(L"Win+Tab received via RegisterHotKey id=0x%x",
-                    (unsigned)wParam);
-                if (g_app)
-                {
-                    PostMessageW(g_app->WindowHandle(), WM_KEYDOWN, VK_TAB, 0);
-                    return 0;
-                }
-                if (g_switcherPending)
-                    return 0;
-                const bool ctrl = wParam == kHotkeyIdCtrlWinTab;
-                g_switcherPending = true;
-                g_commitOnWindowsKeyRelease = !ctrl;
-                if (!PostMessageW(hwnd, g_activationMessage, ctrl, TRUE))
-                {
-                    g_switcherPending = false;
-                    g_commitOnWindowsKeyRelease = false;
-                    return 0;
-                }
-                if (!ctrl)
-                    SetTimer(hwnd, kHotkeyPollTimerId, 30, nullptr);
-            }
-            return 0;
-
-        case kHostHideTaskViewMessage:
-            g_hideTaskViewTicks = 20;
-            SetTimer(hwnd, kHideTaskViewTimerId, 15, nullptr);
-            return 0;
-
-        case WM_TIMER:
-            if (wParam == kRestoreTransitionsTimerId)
-            {
-                // KillTimer does not remove an already queued WM_TIMER.
-                if (g_restoreTransitionsAt
-                    && GetTickCount64() >= g_restoreTransitionsAt)
-                    RestorePendingTransitions();
-                return 0;
-            }
-            if (wParam == kHideTaskViewTimerId)
-            {
-                EnumWindows(HideTaskViewEnumProc, 0);
-                if (--g_hideTaskViewTicks <= 0)
-                    KillTimer(hwnd, kHideTaskViewTimerId);
-                return 0;
-            }
-            if (wParam == kHotkeyRetryTimerId)
-            {
-                if (g_keyboardHook)
-                    RegisterSwitcherHotkeys(hwnd);
-                return 0;
-            }
-            if (wParam == kHotkeyPollTimerId)
-            {
-                if (IsWindowsKeyPhysicallyDown() || g_windowsKeyMask)
-                    return 0;
-                if (g_app && IsWindow(g_app->WindowHandle()))
-                {
-                    KillTimer(hwnd, kHotkeyPollTimerId);
-                    if (g_commitOnWindowsKeyRelease)
-                    {
-                        g_commitOnWindowsKeyRelease = false;
-                        PostMessageW(g_app->WindowHandle(), WM_KEYDOWN,
-                            VK_RETURN, 0);
-                    }
-                }
-                else if (!g_switcherPending)
-                {
-                    KillTimer(hwnd, kHotkeyPollTimerId);
-                }
-                return 0;
-            }
-            break;
-
-        case kHostTabMessage:
-            if (g_app && IsWindow(g_app->WindowHandle()))
-            {
-                PostMessageW(g_app->WindowHandle(),
-                    wParam ? WM_KEYDOWN : WM_KEYUP, VK_TAB,
-                    lParam ? (1LL << 30) : 0);
-            }
-            return 0;
-
-        case kHostCommitMessage:
-            if (g_app && IsWindow(g_app->WindowHandle()))
-                PostMessageW(g_app->WindowHandle(), WM_KEYDOWN, VK_RETURN, 0);
-            return 0;
-
-        case kHostShutdownMessage:
-            g_shutdownRequested = true;
-            if (g_app && IsWindow(g_app->WindowHandle()))
-                PostMessageW(g_app->WindowHandle(), WM_CLOSE, 0, 0);
-            else
-                PostQuitMessage(0);
-            return 0;
-
-        case WM_DESTROY:
-            RestorePendingTransitions();
-            KillTimer(hwnd, kHotkeyPollTimerId);
-            UnregisterSwitcherHotkeys(hwnd);
-            if (g_keyboardHook)
-            {
-                UnhookWindowsHookEx(g_keyboardHook);
-                g_keyboardHook = nullptr;
-            }
-            PostQuitMessage(0);
-            return 0;
-        }
-
-        return DefWindowProcW(hwnd, message, wParam, lParam);
+        Wh_Log(L"Failed to start the Windows-key release timer: %lu", GetLastError());
+        g_app->Shutdown();
     }
-
-    bool g_tabPassthrough = false;
-
-    bool CanOpenSwitcher()
+    else
     {
-        BOOL compositionEnabled = FALSE;
-        if (FAILED(DwmIsCompositionEnabled(&compositionEnabled))
-            || !compositionEnabled)
-            return false;
-
-        Flip3DCompApp probe;
-        return probe.CountSwitchableWindows() > 1;
+        g_app->Run();
+        g_app->Shutdown();
     }
+    KillTimer(g_hostWindow, kHotkeyPollTimerId);
+    g_app.reset();
+    g_commitOnWindowsKeyRelease = false;
+    g_switcherEngaged = false;
+}
 
-    void SendPlainTab(bool down)
+LRESULT CALLBACK HostWindowProc(HWND hwnd, UINT message, WPARAM wParam,
+    LPARAM lParam)
+{
+    if (message == g_activationMessage)
     {
-        INPUT input = {};
-        input.type = INPUT_KEYBOARD;
-        input.ki.wVk = VK_TAB;
-        input.ki.wScan = static_cast<WORD>(MapVirtualKeyW(VK_TAB, MAPVK_VK_TO_VSC));
-        input.ki.dwFlags = down ? 0 : KEYEVENTF_KEYUP;
-        input.ki.dwExtraInfo = kReplayedWindowsKeyTag;
-        SendInput(1, &input, sizeof(input));
-    }
-
-    LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM message, LPARAM data)
-    {
-        if (code != HC_ACTION)
-            return CallNextHookEx(g_keyboardHook, code, message, data);
-
-        const auto* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(data);
-        if ((key->flags & LLKHF_INJECTED)
-            && key->dwExtraInfo == kReplayedWindowsKeyTag)
-        {
-            return CallNextHookEx(g_keyboardHook, code, message, data);
-        }
-
-        const bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
-        const bool up = message == WM_KEYUP || message == WM_SYSKEYUP;
-        if (!down && !up)
-            return CallNextHookEx(g_keyboardHook, code, message, data);
-
-        const bool windowsKey = key->vkCode == VK_LWIN || key->vkCode == VK_RWIN;
-        if (!windowsKey && key->vkCode != VK_TAB && g_deferredWindowsKeyMask)
-        {
-            if (g_app || g_switcherPending)
-            {
-                g_suppressWindowsKeyMask |= g_deferredWindowsKeyMask;
-                g_deferredWindowsKeyMask = 0;
-            }
-            else
-            {
-                ForwardDeferredWindowsKeys();
-            }
-        }
-
-        switch (key->vkCode)
-        {
-        case VK_LWIN:
-        case VK_RWIN:
-        {
-            const unsigned bit = key->vkCode == VK_LWIN ? 1u : 2u;
-            if (down)
-            {
-                if (g_windowsKeyMask & bit)
-                    return 1;
-
-                g_windowsKeyMask |= bit;
-                if (g_app || g_switcherPending)
-                    g_suppressWindowsKeyMask |= bit;
-                else
-                    g_deferredWindowsKeyMask |= bit;
-                Wh_Log(L"Windows-key down deferred/suppressed vk=0x%02x mask=0x%x",
-                    key->vkCode, g_windowsKeyMask);
-                return 1;
-            }
-
-            g_windowsKeyMask &= ~bit;
-            if (g_windowsKeyMask == 0 && g_commitOnWindowsKeyRelease && g_hostWindow)
-            {
-                if (g_app && IsWindow(g_app->WindowHandle()))
-                    PostMessageW(g_app->WindowHandle(), WM_KEYDOWN,
-                        VK_RETURN, 0);
-                else
-                    PostMessageW(g_hostWindow, kHostCommitMessage, 0, 0);
-            }
-
-            if (g_suppressWindowsKeyMask & bit)
-            {
-                g_suppressWindowsKeyMask &= ~bit;
-                g_deferredWindowsKeyMask &= ~bit;
-                g_forwardedWindowsKeyMask &= ~bit;
-                Wh_Log(L"Windows-key up suppressed vk=0x%02x mask=0x%x",
-                    key->vkCode, g_windowsKeyMask);
-                return 1;
-            }
-
-            if (g_deferredWindowsKeyMask & bit)
-            {
-                g_deferredWindowsKeyMask &= ~bit;
-                if (!(g_app || g_switcherPending)
-                    && !SendWindowsKeyTap(bit))
-                    Wh_Log(L"Standalone Windows-key tap could not be replayed");
-                Wh_Log(L"Windows-key tap handled vk=0x%02x mask=0x%x",
-                    key->vkCode, g_windowsKeyMask);
-                return 1;
-            }
-
-            if (g_forwardedWindowsKeyMask & bit)
-                g_forwardedWindowsKeyMask &= ~bit;
-            else
-            {
-                Wh_Log(L"Unmatched Windows-key up passed through vk=0x%02x",
-                    key->vkCode);
-                break;
-            }
-
-            Wh_Log(L"Windows-key %s vk=0x%02x flags=0x%x mask=0x%x",
-                down ? L"down" : L"up", key->vkCode, key->flags,
-                g_windowsKeyMask);
-            break;
-        }
-
-        case VK_LCONTROL:
-        case VK_RCONTROL:
-            if (down)
-                g_controlKeyMask |= key->vkCode == VK_LCONTROL ? 1u : 2u;
-            else
-                g_controlKeyMask &= ~(key->vkCode == VK_LCONTROL ? 1u : 2u);
-            break;
-
-        case VK_LEFT:
-        case VK_RIGHT:
-        case VK_UP:
-        case VK_DOWN:
-        case VK_HOME:
-        case VK_END:
-        case VK_ESCAPE:
-        case VK_RETURN:
-        {
-            if (!g_app || !IsWindow(g_app->WindowHandle()))
-                break;
-            static bool s_navDown[256] = {};
-            const UINT vk = key->vkCode;
-            const bool repeated = down && s_navDown[vk];
-            s_navDown[vk] = down;
-            PostMessageW(g_app->WindowHandle(), down ? WM_KEYDOWN : WM_KEYUP,
-                vk, repeated ? (1LL << 30) : 0);
-            return 1;
-        }
-
-        case VK_TAB:
-            if (down && (g_windowsKeyMask != 0
-                || (GetAsyncKeyState(VK_LWIN) & 0x8000)
-                || (GetAsyncKeyState(VK_RWIN) & 0x8000)))
-            {
-                g_suppressWindowsKeyMask |= g_deferredWindowsKeyMask;
-                g_deferredWindowsKeyMask = 0;
-                if (!g_app && !g_switcherPending && !CanOpenSwitcher())
-                {
-                    Wh_Log(L"Win+Tab ignored: not enough windows or composition off; sending Tab");
-                    g_tabPassthrough = true;
-                    g_tabDown = true;
-                    g_suppressTabUntilUp = true;
-                    SendPlainTab(true);
-                    return 1;
-                }
-                if (!g_app && !g_switcherPending)
-                {
-                    const bool controlKeyDown = g_controlKeyMask != 0
-                        || (GetAsyncKeyState(VK_LCONTROL) & 0x8000)
-                        || (GetAsyncKeyState(VK_RCONTROL) & 0x8000);
-                    if (g_hostWindow && IsWindow(g_hostWindow)
-                        && g_activationMessage)
-                    {
-                        g_switcherPending = true;
-                        g_commitOnWindowsKeyRelease = !controlKeyDown;
-                        if (!PostMessageW(g_hostWindow, g_activationMessage,
-                            controlKeyDown, TRUE))
-                        {
-                            g_switcherPending = false;
-                            g_commitOnWindowsKeyRelease = false;
-                            Wh_Log(L"Failed to queue Win+Tab activation: %lu",
-                                GetLastError());
-                        }
-                        else
-                        {
-                            Wh_Log(L"Win+Tab detected; switcher activation queued");
-                        }
-                    }
-                    else
-                    {
-                        Wh_Log(L"Win+Tab detected without an active host window");
-                    }
-                }
-
-                const bool repeated = g_tabDown;
-                g_tabDown = true;
-                kHookTabHeld.store(true, std::memory_order_relaxed);
-                g_suppressTabUntilUp = true;
-                Wh_Log(L"Win+Tab original key event swallowed");
-                if (g_app && g_hostWindow)
-                    PostMessageW(g_app->WindowHandle(), WM_KEYDOWN, VK_TAB,
-                        repeated ? (1LL << 30) : 0);
-                return 1;
-            }
-
-            if (up && g_suppressTabUntilUp)
-            {
-                g_tabDown = false;
-                kHookTabHeld.store(false, std::memory_order_relaxed);
-                g_suppressTabUntilUp = false;
-                if (g_tabPassthrough)
-                {
-                    g_tabPassthrough = false;
-                    SendPlainTab(false);
-                    return 1;
-                }
-                if (g_hostWindow)
-                {
-                    if (g_app && IsWindow(g_app->WindowHandle()))
-                        PostMessageW(g_app->WindowHandle(), WM_KEYUP, VK_TAB, 0);
-                    else
-                        PostMessageW(g_hostWindow, kHostTabMessage, FALSE, FALSE);
-                }
-                return 1;
-            }
-            break;
-        }
-
-        return CallNextHookEx(g_keyboardHook, code, message, data);
-    }
-
-    DWORD WINAPI HostThreadProc(void*)
-    {
-        g_hostThreadId = GetCurrentThreadId();
-        MSG msg = {};
-        PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
-
-
-        WNDCLASSEXW wc = {};
-        wc.cbSize = sizeof(wc);
-        wc.lpfnWndProc = HostWindowProc;
-        wc.hInstance = GetModuleHandleW(nullptr);
-        wc.lpszClassName = kHostClassName;
-        if (!RegisterClassExW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
-        {
-            SignalHostReady();
-            return 1;
-        }
-
-        g_hostWindow = CreateWindowExW(
-            WS_EX_TOOLWINDOW, kHostClassName, kHostWindowName, WS_POPUP,
-            -32000, -32000, 1, 1, nullptr, nullptr, wc.hInstance, nullptr);
-        if (!g_hostWindow)
-        {
-            UnregisterClassW(kHostClassName, wc.hInstance);
-            SignalHostReady();
-            return 1;
-        }
-
-        g_showEventHook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW,
-            nullptr, TaskViewShowEventProc, GetCurrentProcessId(), 0,
-            WINEVENT_OUTOFCONTEXT);
-
-        RecordForegroundWindow(GetForegroundWindow());
-        g_mruHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND,
-            EVENT_SYSTEM_FOREGROUND, nullptr, ForegroundEventProc, 0, 0,
-            WINEVENT_OUTOFCONTEXT);
-
-        HANDLE hookMutex = CreateMutexW(nullptr, FALSE,
-            kKeyboardHookMutexName);
-        if (!hookMutex)
-        {
-            Wh_Log(L"Failed to create keyboard hook owner mutex: %lu",
-                GetLastError());
-            DestroyWindow(g_hostWindow);
-            g_hostWindow = nullptr;
-            UnregisterClassW(kHostClassName, wc.hInstance);
-            SignalHostReady();
-            return 1;
-        }
-
-        bool ownsHookMutex = false;
-        bool readySignaled = false;
-        bool quit = false;
-        while (!quit)
-        {
-            const DWORD waitResult = ownsHookMutex
-                ? MsgWaitForMultipleObjects(0, nullptr, FALSE, INFINITE,
-                    QS_ALLINPUT)
-                : MsgWaitForMultipleObjects(1, &hookMutex, FALSE, 100,
-                    QS_ALLINPUT);
-
-            if (!ownsHookMutex)
-            {
-                if (waitResult == WAIT_OBJECT_0
-                    || waitResult == WAIT_ABANDONED_0)
-                {
-                    ownsHookMutex = true;
-                    HMODULE hookModule = nullptr;
-                    if (GetModuleHandleExW(
-                        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
-                        | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                        reinterpret_cast<LPCWSTR>(&LowLevelKeyboardProc),
-                        &hookModule))
-                    {
-                        g_keyboardHook = SetWindowsHookExW(
-                            WH_KEYBOARD_LL, LowLevelKeyboardProc,
-                            hookModule, 0);
-                    }
-
-                    if (!g_keyboardHook)
-                    {
-                        Wh_Log(L"Failed to install the Flip3D keyboard hook: %lu",
-                            GetLastError());
-                        ReleaseMutex(hookMutex);
-                        ownsHookMutex = false;
-                        if (!readySignaled)
-                        {
-                            g_hostInitializationSucceeded = false;
-                            SignalHostReady();
-                            break;
-                        }
-                        MsgWaitForMultipleObjects(0, nullptr, FALSE, 1000,
-                            QS_ALLINPUT);
-                    }
-                    else
-                    {
-                        Wh_Log(L"Flip3DComp keyboard hook installed in process %lu",
-                            GetCurrentProcessId());
-                        RegisterSwitcherHotkeys(g_hostWindow);
-                        g_hostInitializationSucceeded = true;
-                        if (!readySignaled)
-                        {
-                            SignalHostReady();
-                            readySignaled = true;
-                        }
-                    }
-                }
-                else if (waitResult == WAIT_TIMEOUT)
-                {
-                    if (!readySignaled)
-                    {
-                        g_hostInitializationSucceeded = true;
-                        SignalHostReady();
-                        readySignaled = true;
-                    }
-                }
-                else if (waitResult != WAIT_OBJECT_0 + 1)
-                {
-                    Wh_Log(L"Waiting for keyboard hook ownership failed: %lu",
-                        GetLastError());
-                    break;
-                }
-            }
-
-            if (waitResult == WAIT_OBJECT_0 + (ownsHookMutex ? 0 : 1))
-            {
-                while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))
-                {
-                    if (msg.message == WM_QUIT)
-                    {
-                        quit = true;
-                        break;
-                    }
-                    TranslateMessage(&msg);
-                    DispatchMessageW(&msg);
-                }
-            }
-        }
-
-        if (g_keyboardHook)
-        {
-            UnhookWindowsHookEx(g_keyboardHook);
-            g_keyboardHook = nullptr;
-        }
-        if (g_showEventHook)
-        {
-            UnhookWinEvent(g_showEventHook);
-            g_showEventHook = nullptr;
-        }
-        if (g_mruHook)
-        {
-            UnhookWinEvent(g_mruHook);
-            g_mruHook = nullptr;
-        }
-
-        if (g_app)
-        {
-            g_app->Shutdown();
-            g_app.reset();
-        }
-        if (g_hostWindow)
-        {
-            DestroyWindow(g_hostWindow);
-            g_hostWindow = nullptr;
-        }
-        UnregisterClassW(kHostClassName, wc.hInstance);
-        if (ownsHookMutex)
-            ReleaseMutex(hookMutex);
-        CloseHandle(hookMutex);
+        LaunchSwitcher(wParam != 0, lParam != 0);
         return 0;
     }
+    switch (message)
+    {
+    case WM_TIMER:
+        if (wParam == kRestoreTransitionsTimerId)
+        {
+            if (g_restoreTransitionsAt && GetTickCount64() >= g_restoreTransitionsAt)
+                RestorePendingTransitions();
+        }
+        else if (wParam == kHotkeyPollTimerId
+            && !g_windowsKeyMask.load() && !IsWindowsKeyPhysicallyDown())
+        {
+            if (g_app && g_commitOnWindowsKeyRelease)
+            {
+                g_commitOnWindowsKeyRelease = false;
+                PostMessageW(g_app->WindowHandle(), WM_KEYDOWN, VK_RETURN, 0);
+            }
+            KillTimer(hwnd, kHotkeyPollTimerId);
+        }
+        return 0;
+
+    case kHostKeyMessage:
+        if (g_app)
+            PostMessageW(g_app->WindowHandle(),
+                (static_cast<ULONG_PTR>(lParam) & 0x80000000u) ? WM_KEYUP : WM_KEYDOWN,
+                wParam, lParam);
+        return 0;
+
+    case kHostCommitMessage:
+        if (g_app && g_commitOnWindowsKeyRelease)
+        {
+            g_commitOnWindowsKeyRelease = false;
+            PostMessageW(g_app->WindowHandle(), WM_KEYDOWN, VK_RETURN, 0);
+        }
+        return 0;
+
+    case WM_DESTROY:
+        RestorePendingTransitions();
+        KillTimer(hwnd, kHotkeyPollTimerId);
+        return 0;
+    }
+    return DefWindowProcW(hwnd, message, wParam, lParam);
 }
 
-namespace
+bool QueueKeyboardActivation(bool sticky)
 {
-    using TaskViewFrameSetActive_t = LONG(__cdecl*)(void*);
-    TaskViewFrameSetActive_t g_originalTaskViewSetActive = nullptr;
+    if (g_switcherEngaged.exchange(true))
+        return true;
+    if (PostMessageW(g_hostWindow, g_activationMessage, sticky, TRUE))
+        return true;
+    g_switcherEngaged = false;
+    return false;
+}
 
-    LONG __cdecl TaskViewFrameSetActiveHook(void* thisPtr)
+LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM message, LPARAM data)
+{
+    if (code != HC_ACTION)
+        return CallNextHookEx(nullptr, code, message, data);
+    const auto* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(data);
+    if ((key->flags & LLKHF_INJECTED) && key->dwExtraInfo == kReplayedWindowsKeyTag)
+        return CallNextHookEx(nullptr, code, message, data);
+    const bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
+    const bool up = message == WM_KEYUP || message == WM_SYSKEYUP;
+    if (!down && !up)
+        return CallNextHookEx(nullptr, code, message, data);
+
+    const bool engaged = g_switcherEngaged.load();
+    const bool windowsKey = key->vkCode == VK_LWIN || key->vkCode == VK_RWIN;
+    if (!windowsKey && key->vkCode != VK_TAB && g_deferredWindowsKeyMask)
     {
-        const HWND host = g_hostWindow.load();
-        if (g_TaskViewOverride && host && g_activationMessage)
+        if (engaged)
         {
-            PostMessageW(host, kHostHideTaskViewMessage, 0, 0);
-            if (!PostMessageW(host, g_activationMessage, TRUE, FALSE))
-                Wh_Log(L"Failed to queue Task View activation: %lu", GetLastError());
+            g_suppressWindowsKeyMask |= g_deferredWindowsKeyMask;
+            g_deferredWindowsKeyMask = 0;
         }
-        return g_originalTaskViewSetActive(thisPtr);
-    }
-
-    using DwmOrdinal105_t = HRESULT(WINAPI*)();
-    DwmOrdinal105_t g_originalDwmOrdinal105 = nullptr;
-
-    HRESULT WINAPI DwmOrdinal105Hook()
-    {
-        HWND host = g_hostWindow.load();
-        if (!host || !IsWindow(host))
-            host = FindWindowW(kHostClassName, nullptr);
-        if (!host || !g_activationMessage)
-            return g_originalDwmOrdinal105();
-
-        if (!PostMessageW(host, g_activationMessage, TRUE, FALSE))
-            return g_originalDwmOrdinal105();
-        return S_OK;
-    }
-
-    void HookDwmOrdinal105()
-    {
-        HMODULE dwmapi = LoadLibraryExW(L"dwmapi.dll", nullptr,
-            LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (!dwmapi)
-            return;
-        void* target = reinterpret_cast<void*>(
-            GetProcAddress(dwmapi, MAKEINTRESOURCEA(105)));
-        if (!target)
-        {
-            Wh_Log(L"DwmApi #105 not found");
-            return;
-        }
-        Wh_SetFunctionHook(target,
-            reinterpret_cast<void*>(DwmOrdinal105Hook),
-            reinterpret_cast<void**>(&g_originalDwmOrdinal105));
-    }
-
-    void HookNativeTaskView()
-    {
-        WCHAR exePath[MAX_PATH] = {};
-        GetModuleFileNameW(nullptr, exePath, MAX_PATH);
-        const WCHAR* name = wcsrchr(exePath, L'\\');
-        name = name ? name + 1 : exePath;
-        if (_wcsicmp(name, L"explorer.exe") != 0)
-            return;
-
-        HMODULE module = LoadLibraryExW(L"twinui.pcshell.dll", nullptr,
-            LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (!module)
-        {
-            Wh_Log(L"twinui.pcshell.dll unavailable: %lu", GetLastError());
-            return;
-        }
-
-        WindhawkUtils::SYMBOL_HOOK hooks[] = {
-            {
-                {
-                    L"public: virtual long __cdecl TaskViewFrame::SetActive(void)",
-                    L"?SetActive@TaskViewFrame@@UEAAJXZ",
-                },
-                reinterpret_cast<void**>(&g_originalTaskViewSetActive),
-                reinterpret_cast<void*>(TaskViewFrameSetActiveHook),
-                true,
-            },
-        };
-        if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks)))
-            Wh_Log(L"Native Task View hook not available on this build");
         else
         {
-            g_nativeTaskViewHooked = true;
-            Wh_Log(L"Native Task View hook installed");
+            ForwardDeferredWindowsKeys();
         }
     }
+
+    switch (key->vkCode)
+    {
+    case VK_LWIN:
+    case VK_RWIN:
+    {
+        const unsigned bit = key->vkCode == VK_LWIN ? 1u : 2u;
+        if (down)
+        {
+            if (g_windowsKeyMask & bit)
+                return 1;
+            g_windowsKeyMask |= bit;
+            if (engaged)
+                g_suppressWindowsKeyMask |= bit;
+            else
+                g_deferredWindowsKeyMask |= bit;
+            return 1;
+        }
+        g_windowsKeyMask &= ~bit;
+        if (!g_windowsKeyMask && engaged)
+            PostMessageW(g_hostWindow, kHostCommitMessage, 0, 0);
+        if (g_suppressWindowsKeyMask & bit)
+        {
+            g_suppressWindowsKeyMask &= ~bit;
+            g_deferredWindowsKeyMask &= ~bit;
+            if (g_forwardedWindowsKeyMask & bit)
+            {
+                g_forwardedWindowsKeyMask &= ~bit;
+                break;
+            }
+            return 1;
+        }
+        if (g_deferredWindowsKeyMask & bit)
+        {
+            g_deferredWindowsKeyMask &= ~bit;
+            if (!engaged)
+                SendWindowsKeyTap(bit);
+            return 1;
+        }
+        g_forwardedWindowsKeyMask &= ~bit;
+        break;
+    }
+    case VK_LCONTROL:
+    case VK_RCONTROL:
+        if (down)
+            g_controlKeyMask |= key->vkCode == VK_LCONTROL ? 1u : 2u;
+        else
+            g_controlKeyMask &= ~(key->vkCode == VK_LCONTROL ? 1u : 2u);
+        break;
+
+    case VK_LEFT:
+    case VK_RIGHT:
+    case VK_UP:
+    case VK_DOWN:
+    case VK_HOME:
+    case VK_END:
+    case VK_ESCAPE:
+    case VK_RETURN:
+    case VK_F5:
+    {
+        const UINT vk = key->vkCode;
+        const bool wasDown = g_navigationDown[vk];
+        g_navigationDown[vk] = down && engaged;
+        if (!engaged && !wasDown)
+            break;
+        const LPARAM flags = (wasDown ? 0x40000000u : 0u)
+            | (up ? 0x80000000u : 0u);
+        PostMessageW(g_hostWindow, kHostKeyMessage, vk, flags);
+        return 1;
+    }
+    case VK_TAB:
+        if (down && (engaged || g_windowsKeyMask || IsWindowsKeyPhysicallyDown()))
+        {
+            const bool sticky = g_controlKeyMask
+                || (GetAsyncKeyState(VK_CONTROL) & 0x8000);
+            if (!engaged && !QueueKeyboardActivation(sticky))
+            {
+                ForwardDeferredWindowsKeys();
+                break;
+            }
+            g_suppressWindowsKeyMask |= g_deferredWindowsKeyMask;
+            g_deferredWindowsKeyMask = 0;
+            const bool repeated = g_tabDown;
+            g_tabDown = true;
+            g_suppressTabUntilUp = true;
+            kHookTabHeld = true;
+            if (engaged)
+                PostMessageW(g_hostWindow, kHostKeyMessage, VK_TAB,
+                    repeated ? 0x40000000u : 0u);
+            return 1;
+        }
+        if (up && g_suppressTabUntilUp)
+        {
+            g_tabDown = false;
+            g_suppressTabUntilUp = false;
+            kHookTabHeld = false;
+            PostMessageW(g_hostWindow, kHostKeyMessage, VK_TAB, 0xC0000000u);
+            return 1;
+        }
+        break;
+    }
+    return CallNextHookEx(nullptr, code, message, data);
 }
 
-BOOL Wh_ModInit()
+DWORD WINAPI KeyboardThreadProc(void*)
 {
-    if (g_hostThread)
-        return TRUE;
+    MSG msg = {};
+    PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
+    g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL,
+        LowLevelKeyboardProc, g_modModule, 0);
+    g_keyboardInitializationSucceeded = g_keyboardHook != nullptr;
+    if (!g_keyboardHook)
+        Wh_Log(L"Failed to install the keyboard hook: %lu", GetLastError());
+    // Win+Tab remains registered by Explorer. This additional chord has no
+    // registration on shells which only reserve Win+Tab.
+    const bool stickyHotkey = g_keyboardHook && RegisterHotKey(nullptr,
+        kHotkeyIdCtrlWinTab, MOD_WIN | MOD_CONTROL | MOD_NOREPEAT, VK_TAB);
+    SetEvent(g_keyboardReadyEvent);
+    if (!g_keyboardHook)
+        return 1;
 
-    g_activationMessage = RegisterWindowMessageW(L"Flip3DComp.Windhawk.Activate");
-    if (!g_activationMessage)
+    while (MsgWaitForMultipleObjects(1, &g_keyboardStopEvent, FALSE,
+        INFINITE, QS_ALLINPUT) == WAIT_OBJECT_0 + 1)
     {
-        Wh_Log(L"Failed to register the switcher activation message: %lu", GetLastError());
-        return FALSE;
-    }
-
-    {
-        WCHAR exe[MAX_PATH] = {};
-        GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        const WCHAR* base = wcsrchr(exe, L'\\');
-        base = base ? base + 1 : exe;
-        if (_wcsicmp(base, L"rundll32.exe") == 0)
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))
         {
-            HookDwmOrdinal105();
-            return TRUE;
+            if (msg.message == WM_HOTKEY && msg.wParam == kHotkeyIdCtrlWinTab)
+                QueueKeyboardActivation(true);
+            else
+            {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
         }
     }
-
-    LoadTaskViewSettings();
-    HookNativeTaskView();
-    HookDwmOrdinal105();
-
-    Wh_SetFunctionHook(reinterpret_cast<void*>(RegisterHotKey),
-        reinterpret_cast<void*>(RegisterHotKeyHook),
-        reinterpret_cast<void**>(&g_originalRegisterHotKey));
-
-    LoadAnimationSettings();
-    g_hostReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_hostReadyEvent)
-        return FALSE;
-
-    g_hostThread = CreateThread(nullptr, 0, HostThreadProc, nullptr, 0, &g_hostThreadId);
-    if (!g_hostThread)
+    if (stickyHotkey)
+        UnregisterHotKey(nullptr, kHotkeyIdCtrlWinTab);
+    UnhookWindowsHookEx(g_keyboardHook);
+    g_keyboardHook = nullptr;
+    // Do not leave a deferred physical Windows key without its down event
+    // when the hook stops before the user releases the key.
+    for (unsigned bit : { 1u, 2u })
     {
-        CloseHandle(g_hostReadyEvent);
-        g_hostReadyEvent = nullptr;
-        return FALSE;
+        if ((g_deferredWindowsKeyMask | g_suppressWindowsKeyMask) & bit)
+            SendWindowsKeyEvent(bit, true);
     }
+    g_windowsKeyMask = g_deferredWindowsKeyMask = 0;
+    g_forwardedWindowsKeyMask = g_suppressWindowsKeyMask = 0;
+    g_controlKeyMask = 0;
+    g_tabDown = g_suppressTabUntilUp = false;
+    std::fill(std::begin(g_navigationDown), std::end(g_navigationDown), false);
+    kHookTabHeld = false;
+    return 0;
+}
 
-    WaitForSingleObject(g_hostReadyEvent, INFINITE);
-    CloseHandle(g_hostReadyEvent);
-    g_hostReadyEvent = nullptr;
+DWORD WINAPI HostThreadProc(void*)
+{
+    if (!SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
+    {
+        Wh_Log(L"Failed to set switcher thread DPI awareness: %lu", GetLastError());
+        SetEvent(g_hostReadyEvent);
+        return 1;
+    }
+    WNDCLASSEXW wc = {};
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = HostWindowProc;
+    wc.hInstance = g_modModule;
+    wc.lpszClassName = kHostClassName;
+    if (!RegisterClassExW(&wc))
+    {
+        Wh_Log(L"Failed to register the host window class: %lu", GetLastError());
+        SetEvent(g_hostReadyEvent);
+        return 1;
+    }
+    HWND host = CreateWindowExW(WS_EX_TOOLWINDOW, kHostClassName,
+        kHostWindowName, WS_POPUP, -32000, -32000, 1, 1,
+        nullptr, nullptr, g_modModule, nullptr);
+    if (!host)
+    {
+        Wh_Log(L"Failed to create the switcher host window: %lu", GetLastError());
+        UnregisterClassW(kHostClassName, g_modModule);
+        SetEvent(g_hostReadyEvent);
+        return 1;
+    }
+    g_hostWindow = host;
+    RecordForegroundWindow(GetForegroundWindow());
+    g_mruHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND,
+        EVENT_SYSTEM_FOREGROUND, nullptr, ForegroundEventProc, 0, 0,
+        WINEVENT_OUTOFCONTEXT);
+    g_hostInitializationSucceeded = g_mruHook != nullptr;
+    if (!g_mruHook)
+        Wh_Log(L"Failed to track foreground windows: %lu", GetLastError());
+    SetEvent(g_hostReadyEvent);
+    MSG msg = {};
+    while (g_hostInitializationSucceeded
+        && MsgWaitForMultipleObjects(1, &g_hostStopEvent, FALSE,
+            INFINITE, QS_ALLINPUT) == WAIT_OBJECT_0 + 1)
+    {
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))
+        {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+    if (g_mruHook)
+    {
+        UnhookWinEvent(g_mruHook);
+        g_mruHook = nullptr;
+    }
+    g_hostWindow = nullptr;
+    DestroyWindow(host);
+    UnregisterClassW(kHostClassName, g_modModule);
+    g_mruWindows.clear();
+    return 0;
+}
 
-    if (!g_hostWindow || !g_hostInitializationSucceeded)
+bool ForwardSwitcherActivation(bool sticky, bool openingTabHeld)
+{
+    HWND host = FindWindowW(kHostClassName, kHostWindowName);
+    if (!host || !g_activationMessage)
+        return false;
+    DWORD processId = 0;
+    GetWindowThreadProcessId(host, &processId);
+    if (!processId || !AllowSetForegroundWindow(processId))
+        return false;
+    return PostMessageW(host, g_activationMessage, sticky, openingTabHeld) != FALSE;
+}
+
+enum ALL_UP_VIEW_FLAGS : int;
+using CAllUpViewService__ToggleAllUpView_t =
+    LONG(__thiscall*)(void*, HMONITOR, ALL_UP_VIEW_FLAGS);
+CAllUpViewService__ToggleAllUpView_t CAllUpViewService__ToggleAllUpView_orig = nullptr;
+
+LONG __thiscall CAllUpViewService__ToggleAllUpView_hook(
+    void* pThis, HMONITOR monitor, ALL_UP_VIEW_FLAGS flags)
+{
+    // twinui.pcshell AMD64 22621.317 RVA 0x493D0 and 26100.863 RVA 0x461AD0:
+    // this service queues the task which creates/shows Task View. SetActive
+    // only focuses an already shown frame.
+    // Redirect before the native task is queued, not after its windows exist.
+    if (g_TaskViewOverride && ForwardSwitcherActivation(true, false))
+        return S_OK;
+    return CAllUpViewService__ToggleAllUpView_orig(pThis, monitor, flags);
+}
+
+using DwmOrdinal105_t = HRESULT(WINAPI*)();
+DwmOrdinal105_t g_originalDwmOrdinal105 = nullptr;
+
+HRESULT WINAPI DwmOrdinal105Hook()
+{
+    if (ForwardSwitcherActivation(true, false))
+        return S_OK;
+    return g_originalDwmOrdinal105();
+}
+
+bool HookDwmOrdinal105()
+{
+    HMODULE dwmapi = LoadLibraryExW(L"dwmapi.dll", nullptr,
+        LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!dwmapi)
+    {
+        Wh_Log(L"Failed to load dwmapi.dll: %lu", GetLastError());
+        return false;
+    }
+    void* target = reinterpret_cast<void*>(
+        GetProcAddress(dwmapi, MAKEINTRESOURCEA(105)));
+    if (!target || !Wh_SetFunctionHook(target,
+        reinterpret_cast<void*>(DwmOrdinal105Hook),
+        reinterpret_cast<void**>(&g_originalDwmOrdinal105)))
+    {
+        Wh_Log(L"Failed to hook dwmapi ordinal 105");
+        return false;
+    }
+    return true;
+}
+
+void LoadTaskViewSettings()
+{
+    g_TaskViewOverride = Wh_GetIntSetting(L"TaskViewOverride") != 0;
+}
+
+bool HookNativeTaskView()
+{
+#if defined(_M_X64) || defined(__x86_64__)
+    HMODULE module = LoadLibraryExW(L"twinui.pcshell.dll", nullptr,
+        LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (module)
+    {
+        const WindhawkUtils::SYMBOL_HOOK hooks[] = {
+            {
+                {
+                    L"public: virtual long __cdecl CAllUpViewService::ToggleAllUpView(struct HMONITOR__ *,enum ALL_UP_VIEW_FLAGS)"
+                },
+                &CAllUpViewService__ToggleAllUpView_orig,
+                CAllUpViewService__ToggleAllUpView_hook,
+                true
+            }
+        };
+        if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks)))
+            return false;
+    }
+#endif
+    if (g_TaskViewOverride && !CAllUpViewService__ToggleAllUpView_orig)
+    {
+        Wh_Log(L"Task View override is unavailable in this twinui.pcshell.dll");
+        return false;
+    }
+    return true;
+}
+
+void WhTool_ModUninit()
+{
+    if (g_keyboardStopEvent)
+        SetEvent(g_keyboardStopEvent);
+    if (g_keyboardThread)
+    {
+        WaitForSingleObject(g_keyboardThread, INFINITE);
+        CloseHandle(g_keyboardThread);
+        g_keyboardThread = nullptr;
+    }
+    if (g_hostStopEvent)
+        SetEvent(g_hostStopEvent);
+    if (g_hostThread)
     {
         WaitForSingleObject(g_hostThread, INFINITE);
         CloseHandle(g_hostThread);
         g_hostThread = nullptr;
+    }
+    for (HANDLE* event : { &g_hostReadyEvent, &g_hostStopEvent,
+        &g_keyboardReadyEvent, &g_keyboardStopEvent })
+    {
+        if (*event)
+            CloseHandle(*event);
+        *event = nullptr;
+    }
+    g_switcherEngaged = false;
+}
+
+BOOL WhTool_ModInit()
+{
+    LoadAnimationSettings();
+    g_hostInitializationSucceeded = false;
+    g_keyboardInitializationSucceeded = false;
+    g_hostStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_hostReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_keyboardStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_keyboardReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hostStopEvent || !g_hostReadyEvent
+        || !g_keyboardStopEvent || !g_keyboardReadyEvent)
+    {
+        Wh_Log(L"Failed to create switcher thread events: %lu", GetLastError());
+        WhTool_ModUninit();
         return FALSE;
     }
-
+    g_hostThread = CreateThread(nullptr, 0, HostThreadProc, nullptr, 0, nullptr);
+    if (!g_hostThread)
+    {
+        Wh_Log(L"Failed to create the render thread: %lu", GetLastError());
+        WhTool_ModUninit();
+        return FALSE;
+    }
+    WaitForSingleObject(g_hostReadyEvent, INFINITE);
+    if (!g_hostInitializationSucceeded)
+    {
+        WhTool_ModUninit();
+        return FALSE;
+    }
+    g_keyboardThread = CreateThread(nullptr, 0, KeyboardThreadProc, nullptr, 0, nullptr);
+    if (!g_keyboardThread)
+    {
+        Wh_Log(L"Failed to create the keyboard thread: %lu", GetLastError());
+        WhTool_ModUninit();
+        return FALSE;
+    }
+    WaitForSingleObject(g_keyboardReadyEvent, INFINITE);
+    if (!g_keyboardInitializationSucceeded)
+    {
+        WhTool_ModUninit();
+        return FALSE;
+    }
     return TRUE;
 }
 
-void Wh_ModUninit()
-{
-    const HWND host = g_hostWindow.load();
-    if (host)
-        PostMessageW(host, kHostShutdownMessage, 0, 0);
-    else if (g_hostThreadId)
-        PostThreadMessageW(g_hostThreadId, WM_QUIT, 0, 0);
-
-    if (g_hostThread)
-    {
-        WaitForSingleObject(g_hostThread, INFINITE);
-        CloseHandle(g_hostThread);
-        g_hostThread = nullptr;
-    }
-
-    g_hostThreadId = 0;
-    Wh_Log(L"Uninit");
-}
-
-void Wh_ModSettingsChanged()
+void WhTool_ModSettingsChanged()
 {
     LoadAnimationSettings();
-    LoadTaskViewSettings();
-    Wh_Log(L"SettingsChanged");
+}
+
+// Only this bridge runs inside Explorer. Native hotkey registrations are left
+// intact; an unavailable tool leaves WM_HOTKEY untouched.
+HHOOK g_messageHook = nullptr;
+HANDLE g_messageHookThread = nullptr;
+HANDLE g_explorerStopEvent = nullptr;
+HANDLE g_explorerThread = nullptr;
+std::atomic<unsigned> g_messageHookCalls{ 0 };
+
+LRESULT CALLBACK ExplorerGetMessageProc(int code, WPARAM wParam, LPARAM lParam)
+{
+    g_messageHookCalls.fetch_add(1);
+    if (code == HC_ACTION && wParam == PM_REMOVE)
+    {
+        MSG* msg = reinterpret_cast<MSG*>(lParam);
+        if (msg->message == WM_HOTKEY && HIWORD(msg->lParam) == VK_TAB)
+        {
+            const UINT modifiers = LOWORD(msg->lParam);
+            if ((modifiers & MOD_WIN)
+                && !(modifiers & ~(MOD_WIN | MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT))
+                && ForwardSwitcherActivation((modifiers & MOD_CONTROL) != 0, true))
+                msg->message = WM_NULL;
+        }
+    }
+    const LRESULT result = CallNextHookEx(nullptr, code, wParam, lParam);
+    g_messageHookCalls.fetch_sub(1);
+    return result;
+}
+
+bool HookExplorerHotkeyThread()
+{
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snapshot == INVALID_HANDLE_VALUE)
+        return false;
+    THREADENTRY32 entry = { sizeof(entry) };
+    for (BOOL more = Thread32First(snapshot, &entry); more;
+        more = Thread32Next(snapshot, &entry))
+    {
+        if (entry.th32OwnerProcessID != GetCurrentProcessId())
+            continue;
+        HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
+            FALSE, entry.th32ThreadID);
+        if (!thread)
+            continue;
+        PWSTR name = nullptr;
+        const bool matches = SUCCEEDED(GetThreadDescription(thread, &name))
+            && name && wcscmp(name, L"Immersive Shell") == 0;
+        LocalFree(name);
+        if (matches)
+        {
+            g_messageHook = SetWindowsHookExW(WH_GETMESSAGE,
+                ExplorerGetMessageProc, nullptr, entry.th32ThreadID);
+            if (g_messageHook)
+            {
+                g_messageHookThread = thread;
+                break;
+            }
+        }
+        CloseHandle(thread);
+    }
+    CloseHandle(snapshot);
+    return g_messageHook != nullptr;
+}
+
+void UnhookExplorerHotkeyThread()
+{
+    if (g_messageHook)
+    {
+        UnhookWindowsHookEx(g_messageHook);
+        g_messageHook = nullptr;
+    }
+    // UnhookWindowsHookEx does not wait for a callback already in progress.
+    while (g_messageHookCalls.load())
+        Sleep(1);
+    if (g_messageHookThread)
+    {
+        CloseHandle(g_messageHookThread);
+        g_messageHookThread = nullptr;
+    }
+}
+
+DWORD WINAPI ExplorerThreadProc(void*)
+{
+    while (WaitForSingleObject(g_explorerStopEvent, 0) == WAIT_TIMEOUT)
+    {
+        HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+        if (taskbar)
+        {
+            DWORD processId = 0;
+            GetWindowThreadProcessId(taskbar, &processId);
+            if (processId != GetCurrentProcessId())
+                return 0;
+            break;
+        }
+        if (WaitForSingleObject(g_explorerStopEvent, 1000) != WAIT_TIMEOUT)
+            return 0;
+    }
+
+    bool loggedMissing = false;
+    for (;;)
+    {
+        if (!g_messageHook && !HookExplorerHotkeyThread() && !loggedMissing)
+        {
+            Wh_Log(L"Waiting for Explorer's Immersive Shell hotkey thread");
+            loggedMissing = true;
+        }
+        const HANDLE events[] = { g_explorerStopEvent, g_messageHookThread };
+        DWORD result = WaitForMultipleObjects(g_messageHook ? 2 : 1, events,
+            FALSE, g_messageHook ? INFINITE : 5000);
+        if (result == WAIT_OBJECT_0 + 1)
+        {
+            UnhookExplorerHotkeyThread();
+            loggedMissing = false;
+        }
+        else if (result != WAIT_TIMEOUT)
+            break;
+    }
+    UnhookExplorerHotkeyThread();
+    return 0;
+}
+
+void StopExplorerPart()
+{
+    if (g_explorerStopEvent)
+        SetEvent(g_explorerStopEvent);
+    if (g_explorerThread)
+    {
+        WaitForSingleObject(g_explorerThread, INFINITE);
+        CloseHandle(g_explorerThread);
+        g_explorerThread = nullptr;
+    }
+    if (g_explorerStopEvent)
+    {
+        CloseHandle(g_explorerStopEvent);
+        g_explorerStopEvent = nullptr;
+    }
+}
+
+BOOL StartExplorerPart()
+{
+    g_explorerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_explorerStopEvent)
+        return FALSE;
+    g_explorerThread = CreateThread(nullptr, 0, ExplorerThreadProc, nullptr, 0, nullptr);
+    if (!g_explorerThread)
+    {
+        StopExplorerPart();
+        return FALSE;
+    }
+    return TRUE;
+}
+
+bool g_isExplorer = false;
+bool g_isRundll32 = false;
+
+bool InitializeModuleGlobals()
+{
+    g_activationMessage = RegisterWindowMessageW(L"Flip3DComp.Windhawk.Activate");
+    return g_activationMessage && GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(&InitializeModuleGlobals), &g_modModule);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    if (!InitializeModuleGlobals()) {
+        Wh_Log(L"Failed to initialize module identity or activation message");
+        return FALSE;
+    }
+    WCHAR exe[MAX_PATH] = {};
+    if (!GetModuleFileNameW(nullptr, exe, ARRAYSIZE(exe))) {
+        return FALSE;
+    }
+    const WCHAR* name = wcsrchr(exe, L'\\');
+    name = name ? name + 1 : exe;
+    if (_wcsicmp(name, L"explorer.exe") == 0) {
+        g_isExplorer = true;
+        LoadTaskViewSettings();
+        if (!HookNativeTaskView() || !HookDwmOrdinal105()) {
+            return FALSE;
+        }
+        return StartExplorerPart();
+    }
+    if (_wcsicmp(name, L"rundll32.exe") == 0) {
+        g_isRundll32 = true;
+        int argc = 0;
+        LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+        bool shortcut = false;
+        if (argv && argc > 1) {
+            const WCHAR* entry = wcsrchr(argv[1], L'\\');
+            entry = entry ? entry + 1 : argv[1];
+            shortcut = _wcsicmp(entry, L"dwmapi.dll,#105") == 0;
+        }
+        LocalFree(argv);
+        return shortcut && HookDwmOrdinal105();
+    }
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (g_isExplorer || g_isRundll32) {
+        return;
+    }
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isExplorer || g_isRundll32) {
+        LoadTaskViewSettings();
+        if (g_isExplorer && g_TaskViewOverride
+            && !CAllUpViewService__ToggleAllUpView_orig) {
+            Wh_Log(L"Task View override is unavailable; leave this option disabled");
+        }
+        return;
+    }
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isExplorer || g_isRundll32) {
+        StopExplorerPart();
+        return;
+    }
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
