@@ -2,7 +2,7 @@
 // @id              tray-hover-expand
 // @name            Tray hover expand
 // @description     Open the hidden tray icons flyout on hover instead of clicking the chevron; optionally collapse it when the cursor leaves
-// @version         1.7.1
+// @version         1.7.2
 // @author          wygodad
 // @github          https://github.com/wygodad
 // @include         windhawk.exe
@@ -34,14 +34,28 @@ mod in a dedicated process and does not inject into the shell.
 ## How the chevron is detected
 Only tray elements are ever considered, so no taskbar application button can be
 selected. Among those, detection goes:
-1. By class name, which is language-independent: the chevron is the only tray
-   element whose class name is `SystemTray.NormalButton` while its AutomationId
-   is `SystemTrayIcon`. Notification icons share the class but use a different
+1. By class name, which is language-independent: the chevron's class name is
+   `SystemTray.NormalButton` and its AutomationId is `SystemTrayIcon`. Other
+   system buttons, such as the emoji panel, the touch keyboard and the input
+   indicator, can have the same pair when they are shown. So the pair is only
+   accepted when exactly one tray element has it and its name agrees with the
+   chevron's tooltip (step 2) or a keyword (step 3), or, when the mod could
+   not read or recognise that tooltip text, on its own. A single match with any
+   other name is one of those buttons while the chevron itself is not shown,
+   for example when no icon is hidden. Otherwise the mod moves on to the next
+   step. Notification icons share the class but use a different
    AutomationId, and the clock, volume, network, battery and "show desktop"
    buttons share the AutomationId but use other classes.
-2. By name, in case a future Windows build renames those classes. The keyword
-   list covers the most common display languages and can be extended.
-3. Otherwise nothing happens. The mod does not guess, because invoking an
+2. By its tooltip text, whenever the pair above does not single out the
+   chevron. The mod reads that text from Windows itself, in your display
+   language, and uses it only when it contains one of the built-in keywords,
+   so it is certain to be the chevron's tooltip. This keeps working even when
+   the keyword list saved in your settings is outdated.
+3. By the keyword list, in case Windows stores that text differently on your
+   build. The list covers the most common display languages and can be
+   extended: if the chevron is not found, add part of its tooltip in your
+   language.
+4. Otherwise nothing happens. The mod does not guess, because invoking an
    unidentified tray button would open whatever it happens to be.
 
 ## Notes
@@ -90,14 +104,29 @@ Działa jako „tool mod" w osobnym procesie i nie wstrzykuje się do powłoki.
 ### Jak wykrywana jest strzałka
 Brane pod uwagę są wyłącznie elementy zasobnika, więc żaden przycisk aplikacji
 z paska zadań nie może zostać wybrany. Wśród nich wykrywanie przebiega tak:
-1. Po nazwie klasy, niezależnie od języka: strzałka jest jedynym elementem
-   zasobnika o klasie `SystemTray.NormalButton` i jednocześnie AutomationId
-   `SystemTrayIcon`. Ikony powiadomień mają tę samą klasę, ale inne
+1. Po nazwie klasy, niezależnie od języka: strzałka ma klasę
+   `SystemTray.NormalButton` i AutomationId `SystemTrayIcon`. Inne przyciski
+   systemowe, takie jak panel emoji, klawiatura dotykowa i wskaźnik
+   wprowadzania, mogą mieć tę samą parę, gdy są widoczne. Dlatego para jest
+   przyjmowana tylko wtedy, gdy ma ją dokładnie jeden element zasobnika, a jego
+   nazwa zgadza się z tekstem podpowiedzi strzałki (krok 2) albo ze słowem
+   kluczowym (krok 3), a gdy mod nie zdołał odczytać ani rozpoznać tego tekstu,
+   także bez tego sprawdzenia. Pojedyncze dopasowanie o innej nazwie to jeden z tych
+   przycisków w chwili, gdy samej strzałki nie ma, na przykład gdy żadna ikona
+   nie jest ukryta. W przeciwnym razie mod przechodzi do następnego kroku.
+   Ikony powiadomień mają tę samą klasę, ale inne
    AutomationId, a zegar, głośność, sieć, bateria i „pokaż pulpit" mają to samo
    AutomationId, ale inne klasy.
-2. Po nazwie, na wypadek gdyby przyszła kompilacja Windows zmieniła te klasy.
-   Lista słów kluczowych obejmuje najpopularniejsze języki i można ją rozszerzyć.
-3. W przeciwnym razie nic się nie dzieje. Mod nie zgaduje, bo uruchomienie
+2. Po tekście jej podpowiedzi, zawsze gdy powyższa para nie wskazuje
+   jednoznacznie strzałki. Mod odczytuje ten tekst z samego Windows, w Twoim
+   języku interfejsu, i używa go tylko wtedy, gdy zawiera któreś z wbudowanych
+   słów kluczowych, więc na pewno jest to podpowiedź strzałki. Działa to także
+   wtedy, gdy lista słów zapisana w Twoich ustawieniach jest nieaktualna.
+3. Po liście słów kluczowych, na wypadek gdyby Twoja kompilacja Windows
+   przechowywała ten tekst inaczej. Lista obejmuje najpopularniejsze języki i
+   można ją rozszerzyć: jeśli strzałka nie zostanie znaleziona, dopisz fragment
+   jej podpowiedzi w swoim języku.
+4. W przeciwnym razie nic się nie dzieje. Mod nie zgaduje, bo uruchomienie
    nierozpoznanego przycisku zasobnika otworzyłoby cokolwiek, czym on jest.
 
 ### Uwagi
@@ -154,21 +183,21 @@ z paska zadań nie może zostać wybrany. Wśród nich wykrywanie przebiega tak:
   $name:pl-PL: Margines obszaru najechania (piksele)
   $description: Enlarges the hover area around the chevron button.
   $description:pl-PL: Powiększa obszar najechania wokół przycisku strzałki.
-- keywords: ["hidden icons", "ukryte ikony", "verborgen pictogrammen", "ausgeblendete symbole", "icônes masquées", "iconos ocultos", "icone nascoste", "ícones ocultos", "skryté ikony", "rejtett ikonok", "pictograme ascunse", "dolda ikoner", "skjulte ikoner", "piilotetut kuvakkeet", "gizli simgeleri", "скрытые значки", "приховані піктограми", "κρυφών εικονιδίων", "隐藏的图标", "隱藏的圖示", "隠れている", "숨겨진 아이콘"]
+- keywords: ["hidden icons", "ukryte ikony", "verborgen pictogrammen", "ausgeblendete symbole", "icônes cachées", "iconos ocultos", "icone nascoste", "ícones ocultos", "skryté ikony", "rejtett ikonok", "pictograme ascunse", "dolda ikoner", "skjulte ikoner", "piilotetut kuvakkeet", "gizli simgeleri", "скрытые значки", "приховані піктограми", "κρυφών εικονιδίων", "隐藏的图标", "隱藏的圖示", "隠れている", "숨겨진 아이콘"]
   $name: Chevron name keywords
   $name:pl-PL: Słowa kluczowe nazwy strzałki
-  $description: Only used when the chevron cannot be identified by its class name. Case-insensitive substrings, matched against tray buttons only. The most common Windows display languages are covered by default.
-  $description:pl-PL: Używane tylko wtedy, gdy strzałki nie da się rozpoznać po nazwie klasy. Fragmenty nazwy (wielkość liter bez znaczenia), porównywane wyłącznie z przyciskami zasobnika. Domyślnie pokryte są najpopularniejsze języki interfejsu Windows.
+  $description: Only used when the chevron can be identified neither by its class name nor by the tooltip text the mod reads from Windows. Case-insensitive substrings, matched against tray buttons only. The most common Windows display languages are covered by default.
+  $description:pl-PL: Używane tylko wtedy, gdy strzałki nie da się rozpoznać ani po nazwie klasy, ani po tekście podpowiedzi, który mod odczytuje z Windows. Fragmenty nazwy (wielkość liter bez znaczenia), porównywane wyłącznie z przyciskami zasobnika. Domyślnie pokryte są najpopularniejsze języki interfejsu Windows.
 - chevronClass: SystemTray.NormalButton
   $name: Chevron class name
   $name:pl-PL: Nazwa klasy strzałki
-  $description: Primary, language-independent identification. The chevron is the only tray element that has this class name together with the AutomationId below. Change it if a future Windows build renames it.
-  $description:pl-PL: Podstawowe rozpoznawanie, niezależne od języka. Strzałka jest jedynym elementem zasobnika, który ma tę nazwę klasy razem z poniższym AutomationId. Zmień ją, jeśli przyszła kompilacja Windows zmieni nazwę.
+  $description: Primary, language-independent identification, used when exactly one tray element has this class name together with the AutomationId below and its name agrees with the chevron's (or on its own when the mod could not read or recognise the chevron's tooltip text from Windows). Other system buttons, such as the emoji panel, the touch keyboard or the input indicator, can share that pair, and the chevron is then recognised by its name instead. Change it if a future Windows build renames it.
+  $description:pl-PL: Podstawowe rozpoznawanie, niezależne od języka, używane wtedy, gdy tę nazwę klasy razem z poniższym AutomationId ma dokładnie jeden element zasobnika, a jego nazwa zgadza się z nazwą strzałki (albo bez tego sprawdzenia, gdy mod nie zdołał odczytać ani rozpoznać tekstu podpowiedzi strzałki z Windows). Inne przyciski systemowe, takie jak panel emoji, klawiatura dotykowa czy wskaźnik wprowadzania, mogą mieć tę samą parę i wtedy strzałka jest rozpoznawana po nazwie. Zmień ją, jeśli przyszła kompilacja Windows zmieni nazwę.
 - positionalFallback: false
   $name: Guess the chevron by position as a last resort
   $name:pl-PL: W ostateczności zgaduj strzałkę po pozycji
-  $description: When the chevron matches neither the class name nor any keyword, assume it is the leftmost tray button. This is a guess and can select a different button, such as Quick Settings, so it is off by default and the mod simply does nothing instead.
-  $description:pl-PL: Gdy strzałka nie pasuje ani do nazwy klasy, ani do żadnego słowa kluczowego, uznaje za nią pierwszy od lewej przycisk zasobnika. To zgadywanie i może trafić w inny przycisk, na przykład Szybkie ustawienia, dlatego domyślnie jest wyłączone, a mod po prostu nic nie robi.
+  $description: When the chevron matches neither the class name, nor the tooltip text the mod reads from Windows, nor any keyword, assume it is the leftmost tray button. This is a guess and can select a different button, such as Quick Settings, so it is off by default and the mod simply does nothing instead.
+  $description:pl-PL: Gdy strzałka nie pasuje ani do nazwy klasy, ani do tekstu podpowiedzi odczytanego z Windows, ani do żadnego słowa kluczowego, uznaje za nią pierwszy od lewej przycisk zasobnika. To zgadywanie i może trafić w inny przycisk, na przykład Szybkie ustawienia, dlatego domyślnie jest wyłączone, a mod po prostu nic nie robi.
 - suppressInFullscreen: true
   $name: Do not activate over fullscreen apps
   $name:pl-PL: Nie aktywuj na aplikacjach pełnoekranowych
@@ -218,29 +247,31 @@ struct Settings {
     std::wstring tooltipClass = L"Xaml_WindowedPopupClass";
     std::wstring trayIconAutomationId = L"SystemTrayIcon";
     std::wstring chevronClass = L"SystemTray.NormalButton";
-    // Fragments of the chevron's name ("Show hidden icons") across the most
-    // common Windows display languages. Each entry is a distinctive part of the
-    // name rather than the whole string, so wording differences between builds
-    // still match.
+    // Fragments of the chevron's name ("Show hidden icons") as Windows spells
+    // it in the most common display languages. Each entry is a distinctive
+    // part of the name rather than the whole string, so wording differences
+    // between builds still match. Entries marked "unverified" have not been
+    // confirmed against a Windows build in that language; they are kept
+    // because a wrong fragment simply never matches.
     std::vector<std::wstring> keywords = {
         L"hidden icons",            // English
         L"ukryte ikony",            // Polish
         L"verborgen pictogrammen",  // Dutch
         L"ausgeblendete symbole",   // German
-        L"icônes masquées",         // French
+        L"icônes cachées",          // French
         L"iconos ocultos",          // Spanish
         L"icone nascoste",          // Italian
-        L"ícones ocultos",          // Portuguese
-        L"skryté ikony",            // Czech, Slovak
-        L"rejtett ikonok",          // Hungarian
-        L"pictograme ascunse",      // Romanian
-        L"dolda ikoner",            // Swedish
-        L"skjulte ikoner",          // Danish, Norwegian
-        L"piilotetut kuvakkeet",    // Finnish
-        L"gizli simgeleri",         // Turkish
+        L"ícones ocultos",          // Portuguese (Brazil)
+        L"skryté ikony",            // Czech, Slovak (unverified)
+        L"rejtett ikonok",          // Hungarian (unverified)
+        L"pictograme ascunse",      // Romanian (unverified)
+        L"dolda ikoner",            // Swedish (unverified)
+        L"skjulte ikoner",          // Danish, Norwegian (unverified)
+        L"piilotetut kuvakkeet",    // Finnish (unverified)
+        L"gizli simgeleri",         // Turkish (unverified)
         L"скрытые значки",          // Russian
-        L"приховані піктограми",    // Ukrainian
-        L"κρυφών εικονιδίων",       // Greek
+        L"приховані піктограми",    // Ukrainian (unverified)
+        L"κρυφών εικονιδίων",       // Greek (unverified)
         L"隐藏的图标",                // Chinese (Simplified)
         L"隱藏的圖示",                // Chinese (Traditional)
         L"隠れている",                // Japanese
@@ -275,6 +306,61 @@ static std::atomic<bool> g_running{false};
 static HANDLE g_thread = nullptr;
 static HANDLE g_stopEvent = nullptr;
 
+// The chevron's tooltip as this Windows installation spells it, read once from
+// the shell's own string table in the user's display language. Written before
+// the worker thread starts and only read afterwards.
+static std::wstring g_systemChevronName;
+
+// Taskbar.dll holds the tray strings of the Windows 11 taskbar, and string 543
+// is the chevron's "Show hidden icons" tooltip. Loading the module as a
+// resource file makes Windows pick the translation for the current display
+// language. The id is not a public contract and can move in another build, so
+// the text is only used once IsKnownChevronName recognises it, it is only
+// ever compared with a button's whole name, preferably among the buttons that
+// carry the chevron's class name and AutomationId (see FindOverflowButton),
+// and a match is accepted only when exactly one button has it.
+static const UINT TASKBAR_CHEVRON_STRING_ID = 543;
+
+static std::wstring LoadChevronStringFrom(const std::wstring& path) {
+    HMODULE mod = LoadLibraryExW(path.c_str(), nullptr,
+                                 LOAD_LIBRARY_AS_DATAFILE |
+                                 LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+    if (!mod) return {};
+    WCHAR buf[256];
+    int n = LoadStringW(mod, TASKBAR_CHEVRON_STRING_ID, buf, ARRAYSIZE(buf));
+    FreeLibrary(mod);
+    return n > 0 ? std::wstring(buf, n) : std::wstring();
+}
+
+static std::wstring LoadSystemChevronName() {
+    std::wstring result;
+
+    // Windhawk 1.7.3 runs tool mods inside the 32-bit windhawk.exe. Under
+    // WOW64 a System32 path is redirected to SysWOW64, which has no
+    // Taskbar.dll at all, so read the native copy that Explorer loads through
+    // Sysnative. Sysnative only exists while that redirection is active, so if
+    // it fails, fall back to System32, which then reaches the native copy.
+    BOOL wow64 = FALSE;
+    if (IsWow64Process(GetCurrentProcess(), &wow64) && wow64) {
+        WCHAR win[MAX_PATH];
+        UINT len = GetSystemWindowsDirectoryW(win, ARRAYSIZE(win));
+        if (len > 0 && len < ARRAYSIZE(win)) {
+            result = LoadChevronStringFrom(std::wstring(win, len) +
+                                           L"\\Sysnative\\Taskbar.dll");
+        }
+    }
+
+    if (result.empty()) {
+        WCHAR dir[MAX_PATH];
+        UINT len = GetSystemDirectoryW(dir, ARRAYSIZE(dir));
+        if (len > 0 && len < ARRAYSIZE(dir)) {
+            result = LoadChevronStringFrom(std::wstring(dir, len) +
+                                           L"\\Taskbar.dll");
+        }
+    }
+    return result;
+}
+
 static Settings GetSettingsSnapshot() {
     AcquireSRWLockShared(&g_settingsLock);
     Settings s = g_settings;
@@ -297,6 +383,21 @@ static bool NameMatches(const std::wstring& name, const Settings& s) {
     std::wstring low = ToLower(name);
     for (const auto& k : s.keywordsLower) {
         if (!k.empty() && low.find(k) != std::wstring::npos) return true;
+    }
+    return false;
+}
+
+// The Taskbar.dll string id is not a public contract and has only been checked
+// on some Windows builds, so the text read there is trusted only when it is
+// recognisably the chevron's tooltip, i.e. when it contains one of the
+// built-in keywords. The built-in list is used rather than the user's, which
+// may be an outdated copy saved by an earlier version of the mod.
+static bool IsKnownChevronName(const std::wstring& text) {
+    std::wstring low = ToLower(text);
+    for (const auto& k : Settings{}.keywords) {
+        if (!k.empty() && low.find(ToLower(k)) != std::wstring::npos) {
+            return true;
+        }
     }
     return false;
 }
@@ -385,14 +486,22 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
     // positional fallback can ever select an application button (whose name is
     // the window title and can contain anything).
     //
-    // Three-step detection, most reliable first:
-    //  1) class name + AutomationId, which is language-independent: the chevron
-    //     is the only tray element that is a `chevronClass` button carrying
-    //     `trayIconAutomationId`. Notification icons share the class but use a
-    //     different AutomationId, and the clock, volume, network, battery and
-    //     "show desktop" buttons share the AutomationId but use other classes.
-    //  2) match by name, for builds where those class names change.
-    //  3) nothing: when the chevron cannot be identified, no element is
+    // Detection, most reliable first:
+    //  1) class name + AutomationId, which is language-independent, accepted
+    //     only when exactly one tray element is a `chevronClass` button
+    //     carrying `trayIconAutomationId` and its name agrees with the
+    //     chevron's. The emoji panel, the touch keyboard and the input
+    //     indicator carry the same pair when they are shown, so this step often
+    //     finds several, or a single one of them while the chevron itself is
+    //     not shown. Notification icons share the class but
+    //     use a different AutomationId, and the clock, volume, network, battery
+    //     and "show desktop" buttons share the AutomationId but use other
+    //     classes.
+    //  2) the chevron's tooltip text, read from Windows in the current display
+    //     language and used only once a built-in keyword recognises it,
+    //     whenever step 1 does not single out the chevron.
+    //  3) the keyword list, when that text is unavailable or not recognised.
+    //  4) nothing: when the chevron cannot be identified, no element is
     //     returned. Invoking an unidentified tray button would open whatever it
     //     happens to be, which is how the chevron was mistaken for Quick
     //     Settings in the field, so guessing is opt-in only.
@@ -467,26 +576,70 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
     // 1) Language-independent identification, accepted only when it is
     // unambiguous. If a future build gives several tray elements this same
     // signature, picking one of them arbitrarily would be a guess.
+    auto hasChevronPair = [&](const Candidate& c) {
+        return c.className == s.chevronClass &&
+               (c.automationId == s.trayIconAutomationId ||
+                c.automationId == CHEVRON_AUTOMATION_ID_ALT);
+    };
+
     int classMatches = 0, firstClassMatch = -1;
     for (size_t i = 0; i < cands.size(); i++) {
-        if (cands[i].className == s.chevronClass &&
-            (cands[i].automationId == s.trayIconAutomationId ||
-             cands[i].automationId == CHEVRON_AUTOMATION_ID_ALT)) {
+        if (hasChevronPair(cands[i])) {
             classMatches++;
             if (firstClassMatch < 0) firstClassMatch = (int)i;
         }
     }
     if (classMatches == 1) {
-        chosen = firstClassMatch;
+        // The emoji panel, the touch keyboard and the input indicator carry the
+        // same pair, so a single match is one of them whenever the chevron is
+        // not shown (no hidden icons, or right after sign-in). Accepting it
+        // would also keep that button cached after the chevron appears. When
+        // the chevron's tooltip text from Windows was read and recognised,
+        // require the name to agree; without it, keep accepting the pair on
+        // its own, as before that text was used.
+        const Candidate& c = cands[firstClassMatch];
+        if (g_systemChevronName.empty() || c.name == g_systemChevronName ||
+            NameMatches(c.name, s)) {
+            chosen = firstClassMatch;
+        }
     } else if (classMatches > 1 && logWeakMatch) {
         *logWeakMatch = true;
         Wh_Log(L"%d tray elements share the chevron signature, falling back to name",
                classMatches);
     }
 
-    // 2) Name match, for builds where the class names change.
+    // 2) The chevron's tooltip as Windows itself spells it in the current
+    //    display language, compared with whole names. When any tray element
+    //    carries the class pair, only those are compared, which rules out the
+    //    clock, volume, network, battery, notification and "show desktop"
+    //    buttons in case the string id ever points at one of their names.
+    //    Accepted only when exactly one element has it.
+    if (chosen < 0 && !g_systemChevronName.empty()) {
+        int nameMatches = 0, firstNameMatch = -1;
+        for (size_t i = 0; i < cands.size(); i++) {
+            if (classMatches > 0 && !hasChevronPair(cands[i])) continue;
+            if (cands[i].name == g_systemChevronName) {
+                nameMatches++;
+                if (firstNameMatch < 0) firstNameMatch = (int)i;
+            }
+        }
+        if (nameMatches == 1) {
+            chosen = firstNameMatch;
+            if (logWeakMatch) {
+                *logWeakMatch = true;
+                Wh_Log(L"Chevron matched by the tooltip text from Windows: %s",
+                       cands[chosen].name.c_str());
+            }
+        }
+    }
+
+    // 3) Keyword match, for when the tooltip text from Windows is unavailable
+    //    or not recognised. Like step 2, it only considers the elements that
+    //    carry the class pair when any do, so a keyword cannot hit a
+    //    notification icon, whose name is an arbitrary application tooltip.
     if (chosen < 0) {
         for (size_t i = 0; i < cands.size(); i++) {
+            if (classMatches > 0 && !hasChevronPair(cands[i])) continue;
             if (NameMatches(cands[i].name, s)) {
                 chosen = (int)i;
                 if (logWeakMatch) {
@@ -498,7 +651,7 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
         }
     }
 
-    // 3) Optional positional guess, off by default.
+    // 4) Optional positional guess, off by default.
     if (chosen < 0 && s.positionalFallback) {
         for (size_t i = 0; i < cands.size(); i++) {
             // Same admission test as isTrayElement, so a build exposing the
@@ -1085,6 +1238,20 @@ static void LoadSettings() {
 
 BOOL WhTool_ModInit() {
     LoadSettings();
+
+    std::wstring systemName = LoadSystemChevronName();
+    if (systemName.empty()) {
+        Wh_Log(L"Chevron tooltip not found in Taskbar.dll, using the keyword list");
+    } else if (!IsKnownChevronName(systemName)) {
+        // Possibly a different string on this build, or a display language
+        // the built-in list does not cover; detection then works as it did
+        // before the tooltip text was used.
+        Wh_Log(L"Text from Taskbar.dll not recognised as the chevron's tooltip, "
+               L"ignoring it: %s", systemName.c_str());
+    } else {
+        g_systemChevronName = systemName;
+        Wh_Log(L"Chevron tooltip from Windows: %s", systemName.c_str());
+    }
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) {
