@@ -81,7 +81,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 - Bar text and icons in white, black or automatic (following the Windows theme), for all displays or each display on its own
 - Clicking the album cover (Control Center or Now Playing) brings the playing app's window to the front
 - Optional: hide the bar while a window is maximized on its display (the window gets the whole height) and bring it back when none is
-- Optional handle: a thin pill at the top center brings a hidden bar back with a click (auto-hide or maximized window); with auto-hide, touching the top edge still works, and the bar never appears over a window's caption buttons
+- Optional handle: a thin pill at the top center brings a hidden bar back with a click (auto-hide or maximized window), and windows move down while it's shown so nothing sits under it; without the handle, auto-hide shows the bar by touching the top edge, never over a window's caption buttons
 - Choose where the bar shows: all displays, the main one, or a specific display (listed by name); if that display is disconnected, the bar moves to the main one
 - **Disks** (optional): its menu lists every local and removable disk with a usage bar and opens it in Explorer
 - Bar icons share one size: each icon is measured and scaled to the same height, and they all grow together with the icon size setting
@@ -930,6 +930,7 @@ struct Bar {
     HWND handle = nullptr;        // a alça no topo (barra escondida)
     bool handleHot = false;
     bool maxHidden = false;       // escondida por janela maximizada
+    bool peekReserved = false;    // mostrada pela alça: o espaço do topo reservado só enquanto ela fica
     ID2D1HwndRenderTarget* rt = nullptr;
     ID2D1SolidColorBrush* brush = nullptr;
     IDWriteTextFormat* fmtBold = nullptr;
@@ -12383,7 +12384,7 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_AUTOHIDE, L"Ocultar e mostrar a barra automaticamente", 0, 0, L"Aparece ao encostar o mouse no topo da tela"},
     {BR_SWITCH, BV_HIDEFS, L"Ocultar em tela cheia", 0, 0, L"Jogos, vídeos e apps em tela cheia ficam sem a barra"},
     {BR_SWITCH, BV_HIDEMAX, L"Ocultar com janela maximizada", 0, 0, L"A barra some quando uma janela é maximizada e volta quando não há nenhuma (na área de trabalho)"},
-    {BR_SWITCH, BV_REVEAL, L"Alça para trazer a barra", 0, 0, L"Barra escondida (automática ou por janela maximizada): uma pílula fina no centro do topo também traz a barra com um clique"},
+    {BR_SWITCH, BV_REVEAL, L"Alça para trazer a barra", 0, 0, L"Barra escondida (automática ou por janela maximizada): um clique na pílula fina no centro do topo traz a barra e as janelas descem para ela caber; no modo automático, ela substitui encostar o mouse no topo"},
     {BR_SWITCH, BV_SOLIDMAX, L"Fundo sólido com janela maximizada", 0, 0},
     {BR_CHOICE, BV_BARMON, L"Mostrar a barra em", 0, 0, L"Todos os monitores, o principal ou um deles; se o escolhido for desconectado, a barra vai para o principal"},
     {BR_SWITCH, BV_MORE, L"Recolher numa seta os ícones que não cabem", 0, 0, L"Como as setas ao lado do notch no macOS 27"},
@@ -22537,6 +22538,10 @@ static void BarReleaseSpace(Bar* b, bool release) {
         SHAppBarMessage(ABM_REMOVE, &abd);
         b->appbar = false;
         b->appbarReleased = true;
+    } else if (!release && b->appbarReleased && b->appbar) {
+        // Já reservado (mostrada pela alça): só deixa de ser temporário.
+        b->appbarReleased = false;
+        b->peekReserved = false;
     } else if (!release && b->appbarReleased) {
         APPBARDATA abd{};
         abd.cbSize = sizeof(abd);
@@ -22578,8 +22583,8 @@ static void UpdateFullscreen() {
         b->maxHidden = hide && forMax;
         if (!b->maxHidden && !g_settings.autoHide) b->autoShown = false;
         if (b->maxHidden && b->autoShown && b->hiddenForFullscreen) {
-            // Mostrada pela alça por cima da janela maximizada: o tique rápido a esconde.
-            BarReleaseSpace(b, true);
+            // Mostrada pela alça (a janela maximizada desceu para ela caber): o tique
+            // rápido a esconde quando o mouse sai.
             continue;
         }
         if (hide != b->hiddenForFullscreen) {
@@ -22764,13 +22769,36 @@ static void HandleSync(Bar* b) {
         SetWindowPos(b->handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 }
+// Clique na alça: a barra aparece e reserva o espaço do topo enquanto estiver à
+// vista, então as janelas (a maximizada também) descem e nada fica por baixo dela.
 static void BarRevealTemp(Bar* b) {
     b->autoShown = true;
     b->hideCountdown = 10;
+    if (!b->appbar) {
+        APPBARDATA abd{};
+        abd.cbSize = sizeof(abd);
+        abd.hWnd = b->hwnd;
+        abd.uCallbackMessage = WM_APP_APPBAR;
+        b->appbar = SHAppBarMessage(ABM_NEW, &abd) != FALSE;
+        b->peekReserved = b->appbar;
+        if (b->appbar) SetAppBarPos(b, false);
+    }
     SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top, b->monRect.right - b->monRect.left, b->heightPx,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
     BarSyncShadow(b);
     HandleSync(b);
+}
+// A barra mostrada pela alça se escondeu: devolve o espaço (as janelas sobem de novo).
+static void BarPeekEnd(Bar* b) {
+    if (!b->peekReserved) return;
+    b->peekReserved = false;
+    if (b->appbar) {
+        APPBARDATA abd{};
+        abd.cbSize = sizeof(abd);
+        abd.hWnd = b->hwnd;
+        SHAppBarMessage(ABM_REMOVE, &abd);
+        b->appbar = false;
+    }
 }
 static LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     Bar* b = reinterpret_cast<Bar*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
@@ -22814,9 +22842,9 @@ static void AutoHideTick() {
         }
         HandleSync(b);
         if (!b->autoShown) {
-            // Encostando o mouse no topo: só no modo automático (a alça, se ligada,
-            // é um jeito a mais; escondida por janela maximizada, só pela alça).
-            if (!g_settings.autoHide) continue;
+            // Com a alça ligada, a barra volta só pelo clique nela (encostar o mouse
+            // no topo fica para quando a alça está desligada, no modo automático).
+            if (!g_settings.autoHide || g_settings.revealHandle) continue;
             bool atEdge = inX && pt.y <= b->monRect.top + 1 && pt.y >= b->monRect.top - 2;
             if (!atEdge) {
                 b->edgeSince = 0;
@@ -22859,6 +22887,7 @@ static void AutoHideTick() {
                 b->hover = -1;
                 ShowWindow(b->hwnd, SW_HIDE);
                 if (b->shadow) ShowWindow(b->shadow, SW_HIDE);
+                BarPeekEnd(b);
                 HandleSync(b);
             }
         }
@@ -24234,7 +24263,7 @@ const UiTr kUiTr[] = {
     {L"Ocultar com janela maximizada", L"Hide when a window is maximized", L"Ocultar con una ventana maximizada", L"Masquer quand une fenêtre est agrandie", L"Bei maximiertem Fenster ausblenden", L"Nascondi con una finestra ingrandita", L"窗口最大化时隐藏"},
     {L"A barra some quando uma janela é maximizada e volta quando não há nenhuma (na área de trabalho)", L"The bar hides when a window is maximized and comes back when none is (on the desktop)", L"La barra se oculta al maximizar una ventana y vuelve cuando no hay ninguna (en el escritorio)", L"La barre se masque quand une fenêtre est agrandie et revient quand il n'y en a plus (sur le bureau)", L"Die Leiste verschwindet bei einem maximierten Fenster und kommt zurück, wenn keines mehr da ist (auf dem Desktop)", L"La barra si nasconde quando una finestra è ingrandita e torna quando non ce ne sono (sul desktop)", L"窗口最大化时菜单栏隐藏，没有最大化窗口时（桌面上）重新出现"},
     {L"Alça para trazer a barra", L"Handle to bring the bar back", L"Asa para traer la barra", L"Poignée pour rappeler la barre", L"Griff zum Zurückholen der Leiste", L"Maniglia per richiamare la barra", L"用拉手显示菜单栏"},
-    {L"Barra escondida (automática ou por janela maximizada): uma pílula fina no centro do topo também traz a barra com um clique", L"Hidden bar (auto-hide or maximized window): a thin pill at the top center also brings it back with a click", L"Barra oculta (automática o por ventana maximizada): una píldora fina arriba en el centro también la trae con un clic", L"Barre masquée (automatique ou par fenêtre agrandie) : une fine pilule en haut au centre la rappelle aussi d'un clic", L"Ausgeblendete Leiste (automatisch oder bei maximiertem Fenster): eine schmale Pille oben in der Mitte holt sie auch per Klick zurück", L"Barra nascosta (automatica o per finestra ingrandita): una pillola sottile in alto al centro la richiama anche con un clic", L"隐藏菜单栏时（自动或因窗口最大化）：也可点击顶部中央的细长胶囊来显示"},
+    {L"Barra escondida (automática ou por janela maximizada): um clique na pílula fina no centro do topo traz a barra e as janelas descem para ela caber; no modo automático, ela substitui encostar o mouse no topo", L"Hidden bar (auto-hide or maximized window): a click on the thin pill at the top center brings it back and windows move down to make room; in auto-hide, it replaces touching the top edge", L"Barra oculta (automática o por ventana maximizada): un clic en la píldora fina arriba en el centro la trae y las ventanas bajan para dejarle espacio; en el modo automático, reemplaza tocar el borde superior", L"Barre masquée (automatique ou par fenêtre agrandie) : un clic sur la fine pilule en haut au centre la rappelle et les fenêtres descendent pour lui laisser la place ; en mode automatique, cela remplace le bord supérieur", L"Ausgeblendete Leiste (automatisch oder bei maximiertem Fenster): ein Klick auf die schmale Pille oben in der Mitte holt sie zurück, und Fenster rücken nach unten; im Automatikmodus ersetzt das den oberen Rand", L"Barra nascosta (automatica o per finestra ingrandita): un clic sulla pillola sottile in alto al centro la richiama e le finestre scendono per farle spazio; in modalità automatica sostituisce il bordo superiore", L"隐藏菜单栏时（自动或因窗口最大化）：点击顶部中央的细长胶囊即可显示，窗口会下移让出空间；自动模式下，它取代鼠标碰到顶部"},
     {L"Discos", L"Disks", L"Discos", L"Disques", L"Laufwerke", L"Dischi", L"磁盘"},
     {L"Clique para ver os discos e quanto cada um está cheio", L"Click to see the disks and how full each one is", L"Haz clic para ver los discos y cuánto está lleno cada uno", L"Cliquez pour voir les disques et leur remplissage", L"Klicken, um die Laufwerke und ihre Belegung zu sehen", L"Fai clic per vedere i dischi e quanto è pieno ciascuno", L"点击查看磁盘及其使用量"},
     {L"Discos: o do sistema está %s% cheio", L"Disks: the system disk is %s% full", L"Discos: el del sistema está al %s%", L"Disques : le disque système est plein à %s %", L"Laufwerke: Systemlaufwerk zu %s% voll", L"Dischi: quello di sistema è pieno al %s%", L"磁盘：系统磁盘已用 %s%"},
