@@ -100,7 +100,7 @@ Some Control Center tiles and menu items change real Windows settings, the same 
 
 Nothing is changed unless you click the matching tile or item.
 
-While the bar's volume and brightness indicator is on, Windows' own volume pill is kept hidden so only one shows (the older pill is minimized; the newer one, which the keyboard volume keys show on recent Windows 11 versions, is also moved off the screen). Turning the indicator or the mod off brings it back; if the bar's process ever crashes, it comes back when Explorer restarts.
+While the bar's volume and brightness indicator is on, Windows' own volume pill is kept hidden so only one shows (the older pill is minimized; the newer one, which the keyboard volume keys show on recent Windows 11 versions, is cloaked by the mod's part inside Explorer, or moved off the screen if that fails). It may still show once, the first time the volume changes after Explorer starts. Turning the indicator or the mod off brings it back; if the bar's process ever crashes, it comes back when Explorer restarts.
 
 ## Network use
 
