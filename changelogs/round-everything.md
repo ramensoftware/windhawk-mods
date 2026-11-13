@@ -1,3 +1,7 @@
+## 2.0.1 ([Nov 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e886acc3788a96739956aa821580c9fec9c339c3/mods/round-everything.wh.cpp))
+
+* Fix: on Windows builds whose symbols aren't public yet (26300.9974), windows weren't rounded and maximized ones got no border or shadow - one optional symbol the online cache doesn't list failed the whole udwm.dll lookup; the restore animation's clip is now tracked through symbols it does list
+
 ## 2.0.0 ([Nov 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e6711b07ff48b99f05d93434a45074cdd135dc9d/mods/round-everything.wh.cpp))
 
 * Renamed to Round Everything Interface (the id stays round-everything; installed copies keep running)

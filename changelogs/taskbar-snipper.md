@@ -1,3 +1,8 @@
+## 1.4.0 ([Nov 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/66b700c6645c8bcbc1b793d74a78d5d206ce2782/mods/taskbar-snipper.wh.cpp))
+
+* **Position** in the right-click menu moves the buttons, like the **Position** setting; whichever you changed last is used.
+* At the left end of the taskbar, the buttons go right of the Widgets button instead of over it.
+
 ## 1.3.0 ([Nov 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/38463a071b68590c96a5416dcb0ce84eb0ef3e2e/mods/taskbar-snipper.wh.cpp))
 
 * The buttons' right-click menu has **Screenshot button** and **Record button**, to show or hide each one (one of them stays), and **Swap the buttons**, to put the record button first.

@@ -1,3 +1,11 @@
+## 1.5.0 ([Nov 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b84c547aa1792f8da203658b97e95ce84c60c987/mods/taskbar-audio-flipper.wh.cpp))
+
+* **Icons only** in the right-click menu shows just the icons, without the device names, volume levels and bars. Switching the output or input then shows its name in a popup for a moment.
+* **Show volume flyout on hover** in the menu turns the volume flyout off.
+* **Position** in the menu moves the widget, like the **Position** setting; whichever you changed last is used.
+* At the left end of the taskbar, the widget goes right of the Widgets button instead of over it.
+* The devices taken out of the rotation and the webcam names are now kept in portable Windhawk too.
+
 ## 1.4.0 ([Nov 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/44ac102d6a6a5925e36c52f488b4e5173920f41a/mods/taskbar-audio-flipper.wh.cpp))
 
 * **Change icons…** in the right-click menu gives the widget's icons other glyphs from the Windows icon font: each kind of device (speakers, headphones, headset, display, microphone), muted output and input, and the webcam. Choose an icon, then a glyph, or type its code; **Default** puts its own back.

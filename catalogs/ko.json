@@ -14905,7 +14905,7 @@
         "ratingUsers": 13,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794463225000,
+        "updated": 1794589221000,
         "users": 76
       },
       "metadata": {
@@ -14922,7 +14922,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Round Everything Interface",
-        "version": "2.0.0"
+        "version": "2.0.1"
       }
     },
     "rounded-selection-rectangle": {
@@ -16662,7 +16662,7 @@
         "ratingUsers": 8,
         "reviews": 0,
         "trendingSorting": 0.8571756370859874,
-        "updated": 1793660572000,
+        "updated": 1794589205000,
         "users": 121
       },
       "metadata": {
@@ -16678,7 +16678,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar Audio Flipper",
-        "version": "1.4.0"
+        "version": "1.5.0"
       }
     },
     "taskbar-auto-hide-custom-activation-area": {
@@ -18520,7 +18520,7 @@
         "ratingUsers": 3,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793660578000,
+        "updated": 1794589211000,
         "users": 25
       },
       "metadata": {
@@ -18536,7 +18536,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar RDP Launcher",
-        "version": "1.4.0"
+        "version": "1.5.0"
       }
     },
     "taskbar-recent-focus-highlight": {
@@ -18765,7 +18765,7 @@
         "ratingUsers": 15,
         "reviews": 0,
         "trendingSorting": 0.6711538052554489,
-        "updated": 1793660566000,
+        "updated": 1794589216000,
         "users": 137
       },
       "metadata": {
@@ -18781,7 +18781,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar Snipper",
-        "version": "1.3.0"
+        "version": "1.4.0"
       }
     },
     "taskbar-spatial-order": {

@@ -2,12 +2,75 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-13T08:01:39.000Z</updated>
+    <updated>2026-11-13T17:00:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Round Everything Interface 2.0.1]]></title>
+        <id>https://windhawk.net/mods/round-everything#e886acc3788a96739956aa821580c9fec9c339c3</id>
+        <link href="https://windhawk.net/mods/round-everything"/>
+        <updated>2026-11-13T17:00:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix: on Windows builds whose symbols aren't public yet (26300.9974), windows weren't rounded and maximized ones got no border or shadow - one optional symbol the online cache doesn't list failed the whole udwm.dll lookup; the restore animation's clip is now tracked through symbols it does list</li>
+</ul>
+]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Snipper 1.4.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-snipper#66b700c6645c8bcbc1b793d74a78d5d206ce2782</id>
+        <link href="https://windhawk.net/mods/taskbar-snipper"/>
+        <updated>2026-11-13T17:00:16.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Position</strong> in the right-click menu moves the buttons, like the <strong>Position</strong> setting; whichever you changed last is used.</li>
+<li>At the left end of the taskbar, the buttons go right of the Widgets button instead of over it.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar RDP Launcher 1.5.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-rdp-launcher#65ff3f1ef0c3fccd7987974b45a4fe4fba802057</id>
+        <link href="https://windhawk.net/mods/taskbar-rdp-launcher"/>
+        <updated>2026-11-13T17:00:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Position</strong> in the right-click menu moves the widget, like the <strong>Position</strong> setting; whichever you changed last is used.</li>
+<li>At the left end of the taskbar, the widget goes right of the Widgets button instead of over it.</li>
+<li>The computers, display buttons and display IDs are now kept in portable Windhawk too.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Audio Flipper 1.5.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-audio-flipper#b84c547aa1792f8da203658b97e95ce84c60c987</id>
+        <link href="https://windhawk.net/mods/taskbar-audio-flipper"/>
+        <updated>2026-11-13T17:00:05.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Icons only</strong> in the right-click menu shows just the icons, without the device names, volume levels and bars. Switching the output or input then shows its name in a popup for a moment.</li>
+<li><strong>Show volume flyout on hover</strong> in the menu turns the volume flyout off.</li>
+<li><strong>Position</strong> in the menu moves the widget, like the <strong>Position</strong> setting; whichever you changed last is used.</li>
+<li>At the left end of the taskbar, the widget goes right of the Widgets button instead of over it.</li>
+<li>The devices taken out of the rotation and the webcam names are now kept in portable Windhawk too.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Floating Taskbar 2.1.14]]></title>
         <id>https://windhawk.net/mods/floating-taskbar#68650cb524e6e9976dcf9e2cf602fff41c13ec40</id>
@@ -1039,142 +1102,6 @@ administrador) passam a flutuar depois de algumas tentativas; Win + Alt + Home t
         <author>
             <name>Lone</name>
             <uri>https://github.com/Louis047</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Translucent Menus 1.1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-translucent-menus#98a3b62f2339b3207bb5de681fab897e9efb8dcc</id>
-        <link href="https://windhawk.net/mods/explorer-translucent-menus"/>
-        <updated>2026-11-12T09:01:59.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add a recreated fade animation after selecting a menu command to avoid the black background that can appear during the native Windows fade. Options are available to keep the native animation or close the menu immediately.</li>
-<li>Add customizable corner radius and inset for the hover highlight, with DPI scaling.</li>
-</ul>
-]]></content>
-        <author>
-            <name>alkali210</name>
-            <uri>https://github.com/alkali210</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Octagonal Windows 1.0.1]]></title>
-        <id>https://windhawk.net/mods/octagonal-windows#07533b4522ca85de836c1d6173bdb5cd132933a9</id>
-        <link href="https://windhawk.net/mods/octagonal-windows"/>
-        <updated>2026-11-12T09:01:53.000Z</updated>
-        <content type="html"><![CDATA[<h1>Octagonal Windows</h1>
-<p>Makes Windows 11 window borders octagonal. You can change the size of each corner.</p>
-<p>The mod was <a href="https://github.com/ramensoftware/windhawk-mods/pull/3587">originally
-submitted</a> by
-<a href="https://github.com/kanak-buet19">Kanak415</a>. The option for maximized and
-snapped windows is based on a
-<a href="https://github.com/ramensoftware/windhawk-mods/pull/5022">mod</a> by <a href="https://github.com/leshaalexey">Alexey
-Lavrinenko</a>. I modified the mod <a href="https://windhawk.net/mods/custom-corner-radius">Custom Window Corner Radius</a> from <a href="https://github.com/m417z">m417z</a>.</p>
-<p><img src="https://raw.githubusercontent.com/JER-10000/windhawk-mods/main/images/octagonal-windows.png" alt="Octagonal Windows"></p>
-<h2>⚠ Important usage note ⚠</h2>
-<p>This mod needs to hook into <code>dwm.exe</code> to work. Please navigate to Windhawk's
-Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list,
-and make sure that <code>dwm.exe</code> is in the list.</p>
-<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Advanced settings screenshot"></p>
-<h2>Additional notes</h2>
-<ul>
-<li>Some elements, such as context menus, use a smaller radius (4px by default).
-This can be customized separately with the &quot;Small corner size&quot; option.</li>
-<li>Standard tooltips can be customized separately with the &quot;Tooltip corner
-radius&quot; option.</li>
-<li>Each window corner can have its own size with the &quot;Per-corner size&quot;
-option, for example to bevel only the top corners.</li>
-<li>Windows 11 squares off the corners of maximized and snapped windows. The
-&quot;beveled corners for maximized and snapped windows&quot; option enables beveling
-for them.</li>
-<li>Some elements, such as the taskbar, the Start menu, and the notification
-center, are unaffected by this mod. Some of them can be customized using other
-mods, such as Windows 11 Taskbar Styler.</li>
-<li>Disabling the mod instantly restores default behavior - no system files are
-modified.</li>
-</ul>
-<h2>Compatibility</h2>
-<ul>
-<li>When using this mod alongside Translucent Flyouts, set its <code>CornerType</code> option
-to <code>0</code> (&quot;Don't Change&quot;) to prevent conflicts between the two.</li>
-<li>This mod is not compatible with <a href="https://windhawk.net/mods/custom-corner-radius">Custom Window Corner Radius</a>. Don't use together.</li>
-</ul>
-<h2>Recommended companion mods</h2>
-<p>For the best visual experience, consider combining this mod with:</p>
-<ul>
-<li>Window Border Customizer</li>
-<li>Windows 11 Taskbar Styler</li>
-<li>Taskbar Background Helper</li>
-</ul>
-<p>A dark taskbar background combined with the Lucent style from Windows 11 Taskbar Styler pairs especially well with octagonal window borders (as shown in the screenshot above).</p>
-]]></content>
-        <author>
-            <name>JER-10000</name>
-            <uri>https://github.com/JER-10000</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Margin 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-margin#1bd79d42195b1c91f64d749df0d0f12698905957</id>
-        <link href="https://windhawk.net/mods/taskbar-margin"/>
-        <updated>2026-11-12T09:01:47.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a placement option to reserve space on the right side of the taskbar, between the app list and the system tray.</li>
-<li>Added a &quot;Specific display only&quot; scope to the Displays setting.</li>
-<li>The display name of each taskbar is now written to the mod log.</li>
-<li>Added Japanese localization.</li>
-<li>The right-side placement, specific display scope and Japanese localization were contributed by Ren9618.</li>
-</ul>
-]]></content>
-        <author>
-            <name>loliri</name>
-            <uri>https://github.com/loliri</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Task Manager Pause Button 1.0.0]]></title>
-        <id>https://windhawk.net/mods/task-manager-pause-button#b8a64f42f5edc941234424f16894123290e733b4</id>
-        <link href="https://windhawk.net/mods/task-manager-pause-button"/>
-        <updated>2026-11-12T08:05:22.000Z</updated>
-        <content type="html"><![CDATA[<h1>Task Manager Pause Button</h1>
-<p>Add a native <strong>Pause / Resume</strong> button next to <strong>Run new task</strong> in the
-Windows 11 Task Manager on the Processes and Details pages.</p>
-<p><img src="https://raw.githubusercontent.com/luizbizzio/task-manager-pause-button/main/assets/task-manager-pause-button-cover.png" alt="Task Manager Pause Button"></p>
-<h2>How to use</h2>
-<ol>
-<li>Open Task Manager and select <strong>Processes</strong> or <strong>Details</strong>.</li>
-<li>Click <strong>Pause</strong> to stop the list from updating.</li>
-<li>Click <strong>Resume</strong> to start updating again.</li>
-</ol>
-<p>The button controls Task Manager's refresh hold on Processes and Details.
-The mod does not suspend apps, stop Windows processes, or change the
-Real time update speed setting.</p>
-<h2>Compatibility and limitations</h2>
-<ul>
-<li>Works with the Windows 11 Task Manager XAML interface. Windows updates may
-change private Task Manager functions or controls.</li>
-<li>Uses Task Manager's Ctrl-key refresh hold through <code>GetKeyState</code> calls made
-directly by <code>Taskmgr.exe</code>. While paused, some Task Manager keyboard actions
-may behave as if Ctrl is held, including Run new task (Ctrl+click can open
-Command Prompt instead of the normal dialog). This does not affect other apps.</li>
-<li>Recognizes the tested Task Manager command-bar layout independently of
-display language: one command bar with four native buttons, with Run new
-task in the first position. Falls back to English/Portuguese labels or
-recognizable control identifiers on other layouts. Other Windows versions
-can have different layouts, so all languages/builds are not guaranteed.</li>
-<li>Pause/Resume labels are in English regardless of the Task Manager language.</li>
-<li>Keeps Pause active when moving between Processes and Details. Automatically
-resumes when navigating to another page if the navigation-exit symbol is
-available on your Windows build.</li>
-<li>If the button is missing, close and reopen Task Manager with the mod enabled.</li>
-<li>No settings or background applications are needed.</li>
-</ul>
-<h2>Source and feedback</h2>
-<p><a href="https://github.com/luizbizzio/task-manager-pause-button">GitHub</a></p>
-<p>Author: Luiz Bizzio. License: Apache-2.0.</p>
-]]></content>
-        <author>
-            <name>Luiz Bizzio</name>
-            <uri>https://github.com/luizbizzio</uri>
         </author>
     </entry>
 </feed>

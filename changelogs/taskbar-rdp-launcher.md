@@ -1,3 +1,9 @@
+## 1.5.0 ([Nov 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/65ff3f1ef0c3fccd7987974b45a4fe4fba802057/mods/taskbar-rdp-launcher.wh.cpp))
+
+* **Position** in the right-click menu moves the widget, like the **Position** setting; whichever you changed last is used.
+* At the left end of the taskbar, the widget goes right of the Widgets button instead of over it.
+* The computers, display buttons and display IDs are now kept in portable Windhawk too.
+
 ## 1.4.0 ([Nov 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e195076df9a08f7c7c54fb458767393ec676fdba/mods/taskbar-rdp-launcher.wh.cpp))
 
 * **Change icons…** in the right-click menu gives the widget's icons other glyphs from the Windows icon font: the computer and the display buttons. Choose an icon, then a glyph, or type its code; **Default** puts its own back.
