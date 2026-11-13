@@ -2,7 +2,7 @@
 // @id              taskmgr-network-bytes
 // @name            Task Manager Network Speed in Bytes
 // @description     Show network throughput in Task Manager as KB/s, MB/s, GB/s (bytes) instead of Kbps, Mbps, Gbps (bits)
-// @version         1.1
+// @version         1.3
 // @author          Nehoray-Bitan
 // @github          https://github.com/Nehoray-Bitan
 // @include         taskmgr.exe
@@ -36,9 +36,13 @@ rates use).
 
 ## Notes
 
-- The mod needs the debug symbols of `taskmgr.exe`. Windhawk downloads them
+- The mod prefers the debug symbols of `taskmgr.exe`. Windhawk downloads them
   (about 20 MB) the first time Task Manager starts after the mod is installed —
-  wait for the "Loading symbols" popup to reach 100%.
+  wait for the "Loading symbols" popup to reach 100%. If a Windows update ships
+  a Task Manager build whose symbols aren't on Microsoft's symbol server yet,
+  the mod falls back to matching the current build's code by byte patterns.
+  The patterns are tied to the executable's function table, so moving code
+  around or changing a few bytes in a function doesn't break the mod.
 - Restart Task Manager after enabling or disabling the mod. Graph scale labels
   are cached until the graph rescales.
 - The graph keeps Task Manager's original scale steps, which are round numbers
@@ -95,6 +99,43 @@ constexpr double kNetworkColumnMinMbps = static_cast<double>(0.1f);
 
 // Fixed output size used by the link speed overload of GetBestFitUnit.
 constexpr size_t kLinkSpeedBufferChars = 0x80;
+
+// Byte patterns for the hook targets, used when Microsoft's symbol server
+// doesn't have a PDB for the installed Task Manager build yet. '??' marks
+// bytes that legitimately differ between builds: relocated addresses, stack
+// frame sizes, and local variable offsets. FindPattern matches these against
+// the executable's function table and accepts a few changed bytes, so an
+// update that moves code around or tweaks a prologue keeps working.
+constexpr PCSTR kPatternGetBestFitUnit =
+    "48 8B C4 48 89 58 08 55 56 57 41 56 41 57 48 81 EC ?? ?? ?? ?? "
+    "0F 29 70 C8 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? "
+    "48 8B BC 24 ?? ?? ?? ?? 4C 8B F2";
+constexpr PCSTR kPatternGetBestFitUnitPair =
+    "48 8B C4 48 89 58 08 55 56 57 41 54 41 55 41 56 41 57 48 8D A8 ?? "
+    "?? ?? ?? 48 81 EC ?? ?? ?? ?? 0F 29 70 B8 0F 29 78 A8 44 0F 29 40 "
+    "98 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 45 60";
+constexpr PCSTR kPatternGetBestFitUnitLinkSpeed =
+    "48 89 5C 24 08 48 89 6C 24 18 56 57 41 56 48 81 EC ?? ?? ?? ?? "
+    "48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 48 8B 9C "
+    "24 ?? ?? ?? ?? 4C 8D 1D ?? ?? ?? ?? 33 ED 4C 8B F2 48 89 6C 24 "
+    "30 44 8B CD";
+constexpr PCSTR kPatternTmPrintOrFormatBuffer =
+    "40 53 55 56 57 41 54 41 55 41 56 41 57 48 81 EC ?? ?? ?? ?? 48 8B "
+    "05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 41 69 D9 6D 4E C6 "
+    "41 4C 8B FA 41 69 C1 CD 0D 01 00 4D 8B E0 41 B8 01 00 00 00";
+constexpr PCSTR kPatternGetColumnText =
+    "48 8B C4 48 89 58 08 48 89 68 10 48 89 70 18 57 41 56 41 57 48 83 "
+    "EC ?? 41 0F B6 18 49 8B F9 48 83 22 00 49 8B E8 0F 29 70 D8 48 8B "
+    "F2 4C 8B F1 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 44 8D 53 F9 41 83 "
+    "FA 04 76 6B 83 FB 0E 74 66";
+constexpr PCSTR kPatternWdcStringMapLoadStringW =
+    "48 8B C4 48 89 58 10 48 89 68 18 48 89 70 20 48 89 48 08 57 41 54 "
+    "41 55 41 56 41 57 48 83 EC ?? 69 F2 6D 4E C6 41 4C 8D 25 ?? ?? ?? "
+    "?? 69 C2 CD 0D 01 00 4D 8B F8 44 8B F2 41 B8 01 00 00 00";
+constexpr PCSTR kPatternWdcLoadString =
+    "48 89 5C 24 08 57 48 83 EC ?? 49 81 F8 FF FF FF 7F 77 ?? 49 63 C0 "
+    "49 3B C0 0F 87 ?? ?? ?? ?? 45 8B C8 4C 8B C2 8B D1 48 8B 0D ?? ?? "
+    "?? ?? 48 FF 15 ?? ?? ?? ?? 0F 1F 44 00 00 85 C0 7E 4B";
 
 struct ATM_INSTANT_VALUE_SCALE {
     double threshold;
@@ -709,6 +750,275 @@ HRESULT WINAPI WdcLoadString_Hook(DWORD id,
     return WdcLoadString_Original(id, buffer, bufferChars);
 }
 
+struct PatternByte {
+    BYTE value;
+    bool exact;
+};
+
+struct Pattern {
+    PatternByte bytes[128];
+    size_t count;
+    size_t exactCount;
+};
+
+int HexDigit(char c) {
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'A' && c <= 'F') {
+        return c - 'A' + 10;
+    }
+    if (c >= 'a' && c <= 'f') {
+        return c - 'a' + 10;
+    }
+    return -1;
+}
+
+// Parses a space-separated byte pattern. '??' matches any byte.
+bool ParsePattern(PCSTR text, Pattern* pattern) {
+    pattern->count = 0;
+    pattern->exactCount = 0;
+    for (PCSTR p = text; *p;) {
+        if (*p == ' ' || *p == '\t') {
+            p++;
+            continue;
+        }
+        if (pattern->count == ARRAYSIZE(pattern->bytes)) {
+            return false;
+        }
+        if (p[0] == '?' && p[1] == '?') {
+            pattern->bytes[pattern->count++] = {0, false};
+            p += 2;
+            continue;
+        }
+        int high = HexDigit(p[0]);
+        int low = HexDigit(p[1]);
+        if (high < 0 || low < 0) {
+            return false;
+        }
+        pattern->bytes[pattern->count++] = {
+            static_cast<BYTE>((high << 4) | low), true};
+        pattern->exactCount++;
+        p += 2;
+    }
+    return pattern->count != 0;
+}
+
+// How many bytes of a pattern may differ. A Windows update that moves code,
+// changes a stack frame size or reorders a couple of instructions stays within
+// this. A function that was rewritten doesn't.
+size_t MaxPatternMismatches(const Pattern& pattern) {
+    size_t mismatches = pattern.exactCount / 10 + 1;
+    if (mismatches < 3) {
+        mismatches = 3;
+    } else if (mismatches > 8) {
+        mismatches = 8;
+    }
+    return mismatches;
+}
+
+size_t CountPatternMismatches(const BYTE* address,
+                              const Pattern& pattern,
+                              size_t limit) {
+    size_t mismatches = 0;
+    for (size_t i = 0; i < pattern.count; i++) {
+        if (pattern.bytes[i].exact && address[i] != pattern.bytes[i].value) {
+            if (++mismatches > limit) {
+                break;
+            }
+        }
+    }
+    return mismatches;
+}
+
+const IMAGE_SECTION_HEADER* FindTextSection(const IMAGE_NT_HEADERS* nt) {
+    const IMAGE_SECTION_HEADER* section = IMAGE_FIRST_SECTION(nt);
+    for (WORD i = 0; i < nt->FileHeader.NumberOfSections; i++, section++) {
+        if (memcmp(section->Name, ".text", 5) == 0) {
+            return section;
+        }
+    }
+    return nullptr;
+}
+
+bool GetTextRange(HMODULE module,
+                  const IMAGE_NT_HEADERS* nt,
+                  const BYTE** start,
+                  const BYTE** end) {
+    const IMAGE_SECTION_HEADER* section = FindTextSection(nt);
+    if (!section) {
+        return false;
+    }
+    size_t imageSize = nt->OptionalHeader.SizeOfImage;
+    size_t sectionSize = section->Misc.VirtualSize
+                             ? section->Misc.VirtualSize
+                             : section->SizeOfRawData;
+    if (section->VirtualAddress > imageSize ||
+        sectionSize > imageSize - section->VirtualAddress) {
+        return false;
+    }
+    *start = reinterpret_cast<const BYTE*>(module) + section->VirtualAddress;
+    *end = *start + sectionSize;
+    return true;
+}
+
+// A RUNTIME_FUNCTION entry from the exception directory (.pdata).
+struct PdataEntry {
+    DWORD beginAddress;
+    DWORD endAddress;
+    DWORD unwindInfo;
+};
+static_assert(sizeof(PdataEntry) == 0xC);
+
+// Matches `pattern` at the start of a function from the exception directory
+// (.pdata). Windows updates move functions around, which this ignores, and a
+// few changed prologue bytes are tolerated. The match must be the unique best
+// one, so a pattern that fits several functions is refused.
+const BYTE* FindPatternInFunctions(HMODULE module,
+                                   const IMAGE_NT_HEADERS* nt,
+                                   const Pattern& pattern,
+                                   size_t* mismatches) {
+    const BYTE* textStart;
+    const BYTE* textEnd;
+    if (!GetTextRange(module, nt, &textStart, &textEnd)) {
+        return nullptr;
+    }
+
+    const IMAGE_DATA_DIRECTORY& directory =
+        nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION];
+    size_t imageSize = nt->OptionalHeader.SizeOfImage;
+    if (directory.VirtualAddress == 0 ||
+        directory.Size < sizeof(PdataEntry) ||
+        directory.Size % sizeof(PdataEntry) != 0 ||
+        directory.VirtualAddress > imageSize ||
+        directory.Size > imageSize - directory.VirtualAddress) {
+        return nullptr;
+    }
+
+    const BYTE* base = reinterpret_cast<const BYTE*>(module);
+    const auto* functions = reinterpret_cast<const PdataEntry*>(
+        base + directory.VirtualAddress);
+    size_t functionCount = directory.Size / sizeof(PdataEntry);
+    size_t maxMismatches = MaxPatternMismatches(pattern);
+
+    const BYTE* best = nullptr;
+    size_t bestMismatches = maxMismatches + 1;
+    size_t bestCount = 0;
+
+    for (size_t i = 0; i < functionCount; i++) {
+        const BYTE* start = base + functions[i].beginAddress;
+        if (start < textStart || start + pattern.count > textEnd) {
+            continue;
+        }
+
+        size_t score =
+            CountPatternMismatches(start, pattern, maxMismatches);
+        if (score > maxMismatches) {
+            continue;
+        }
+        if (score < bestMismatches) {
+            bestMismatches = score;
+            best = start;
+            bestCount = 1;
+        } else if (score == bestMismatches && start != best) {
+            bestCount++;
+        }
+    }
+
+    if (bestCount != 1) {
+        if (bestCount > 1) {
+            Wh_Log(L"Byte pattern matches %u functions equally well",
+                   static_cast<unsigned>(bestCount));
+        }
+        return nullptr;
+    }
+    *mismatches = bestMismatches;
+    return best;
+}
+
+// Exact fallback: a single match anywhere in .text. This covers functions that
+// aren't listed in .pdata, and keeps the old behavior as a last resort.
+const BYTE* FindPatternInText(HMODULE module,
+                              const IMAGE_NT_HEADERS* nt,
+                              const Pattern& pattern) {
+    const BYTE* start;
+    const BYTE* end;
+    if (!GetTextRange(module, nt, &start, &end)) {
+        return nullptr;
+    }
+
+    const BYTE* match = nullptr;
+    for (const BYTE* p = start; p + pattern.count <= end; p++) {
+        bool found = true;
+        for (size_t i = 0; i < pattern.count; i++) {
+            if (pattern.bytes[i].exact &&
+                p[i] != pattern.bytes[i].value) {
+                found = false;
+                break;
+            }
+        }
+        if (found) {
+            if (match) {
+                return nullptr;
+            }
+            match = p;
+        }
+    }
+    return match;
+}
+
+// Finds `pattern` through the function table first and by exact search in
+// .text second. `mismatches` receives the number of bytes that differed.
+const BYTE* FindPattern(HMODULE module,
+                        PCSTR patternText,
+                        size_t* mismatches) {
+    *mismatches = 0;
+
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(module);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
+        return nullptr;
+    }
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(
+        reinterpret_cast<const BYTE*>(module) + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) {
+        return nullptr;
+    }
+
+    Pattern pattern;
+    if (!ParsePattern(patternText, &pattern)) {
+        return nullptr;
+    }
+
+    if (const BYTE* match =
+            FindPatternInFunctions(module, nt, pattern, mismatches)) {
+        return match;
+    }
+    return FindPatternInText(module, nt, pattern);
+}
+
+// Hooks `pattern` if it can be found unambiguously. Used only for functions
+// that HookSymbols couldn't resolve.
+bool HookByPattern(PCSTR pattern,
+                   void* hookFunction,
+                   void** originalFunction,
+                   PCWSTR name) {
+    size_t mismatches = 0;
+    const BYTE* target =
+        FindPattern(GetModuleHandleW(nullptr), pattern, &mismatches);
+    if (!target) {
+        Wh_Log(L"%s: byte pattern not found or ambiguous", name);
+        return false;
+    }
+    if (!Wh_SetFunctionHook(const_cast<BYTE*>(target), hookFunction,
+                            originalFunction)) {
+        Wh_Log(L"%s: Wh_SetFunctionHook failed", name);
+        return false;
+    }
+    Wh_Log(L"%s: hooked at %p (byte pattern, %u changed byte%s)", name, target,
+           static_cast<unsigned>(mismatches), mismatches == 1 ? L"" : L"s");
+    return true;
+}
+
 void LoadSettings() {
     auto unitNames = WindhawkUtils::StringSetting::make(L"unitNames");
     g_englishUnits = wcscmp(unitNames, L"localized") != 0;
@@ -768,8 +1078,55 @@ BOOL Wh_ModInit() {
 
     if (!WindhawkUtils::HookSymbols(GetModuleHandleW(nullptr), taskmgrExeHooks,
                                     ARRAYSIZE(taskmgrExeHooks))) {
-        Wh_Log(L"Failed to look up Task Manager symbols");
-        return FALSE;
+        Wh_Log(L"Task Manager symbols are unavailable; trying byte patterns");
+    }
+
+    // Microsoft's symbol server can lag behind a Windows update. The patterns
+    // are only used for functions the symbol lookup didn't resolve, so normal
+    // symbol-based hooking stays in charge whenever a PDB is available.
+    if (!GetBestFitUnit_Original) {
+        HookByPattern(kPatternGetBestFitUnit,
+                      reinterpret_cast<void*>(GetBestFitUnit_Hook),
+                      reinterpret_cast<void**>(&GetBestFitUnit_Original),
+                      L"GetBestFitUnit (Send/Receive)");
+    }
+    if (!GetBestFitUnitPair_Original) {
+        HookByPattern(kPatternGetBestFitUnitPair,
+                      reinterpret_cast<void*>(GetBestFitUnitPair_Hook),
+                      reinterpret_cast<void**>(&GetBestFitUnitPair_Original),
+                      L"GetBestFitUnit (sidebar)");
+    }
+    if (!GetBestFitUnitLinkSpeed_Original) {
+        HookByPattern(kPatternGetBestFitUnitLinkSpeed,
+                      reinterpret_cast<void*>(GetBestFitUnitLinkSpeed_Hook),
+                      reinterpret_cast<void**>(
+                          &GetBestFitUnitLinkSpeed_Original),
+                      L"GetBestFitUnit (link speed)");
+    }
+    if (!TmPrintOrFormatBuffer_Original) {
+        HookByPattern(kPatternTmPrintOrFormatBuffer,
+                      reinterpret_cast<void*>(TmPrintOrFormatBuffer_Hook),
+                      reinterpret_cast<void**>(&TmPrintOrFormatBuffer_Original),
+                      L"TmPrintOrFormatBuffer");
+    }
+    if (!GetColumnText_Original) {
+        HookByPattern(kPatternGetColumnText,
+                      reinterpret_cast<void*>(GetColumnText_Hook),
+                      reinterpret_cast<void**>(&GetColumnText_Original),
+                      L"WdcApplicationsMonitor::GetColumnText");
+    }
+    if (!WdcStringMap_LoadStringW_Original) {
+        HookByPattern(kPatternWdcStringMapLoadStringW,
+                      reinterpret_cast<void*>(WdcStringMap_LoadStringW_Hook),
+                      reinterpret_cast<void**>(
+                          &WdcStringMap_LoadStringW_Original),
+                      L"WdcStringMap::LoadStringW");
+    }
+    if (!WdcLoadString_Original) {
+        HookByPattern(kPatternWdcLoadString,
+                      reinterpret_cast<void*>(WdcLoadString_Hook),
+                      reinterpret_cast<void**>(&WdcLoadString_Original),
+                      L"WdcLoadString");
     }
 
     struct {
