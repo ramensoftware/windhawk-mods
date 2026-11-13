@@ -16862,6 +16862,10 @@ static void UpdateDockSelectionWithDynamicResize() {
 
 // Linear navigation: Tab, Shift+Tab, Left, Right, Hotkeys, Scroll
 static void CycleLinear(int delta) {
+    // A linear move starts a new cross-row goal, even when it returns to the
+    // entry the last cross-row move picked. The Dock grid's cross-row path sets
+    // its goal again after calling this.
+    s_crossLineGoal.valid = false;
     if (g_windows.empty()) return;
     RectF selectionFrom = SelectionRectWithViewport();
     g_isPaginatedView = false;
