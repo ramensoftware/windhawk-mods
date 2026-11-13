@@ -242,16 +242,6 @@ Disabling or uninstalling the mod restores the original UI in the running Chrome
 */
 // ==/WindhawkModReadme==
 
-// ==WindhawkModChangelog==
-/*
-## 1.1
-- Restore tab close-button hiding and favicon/title spacing on Chrome 157 by detecting and validating both known tab layout constant mappings.
-- Add an independent font size setting for the Find in page (Ctrl+F) text field, with live updates and restoration of Chrome defaults.
-
-## 1.0
-- Initial release.
-*/
-// ==/WindhawkModChangelog==
 // clang-format on
 
 #include <windows.h>
@@ -382,7 +372,19 @@ using TextfieldCtorFn = void (*)(void*);
 using TextfieldSetFontListFn = void (*)(void*, const FontListOpaque*);
 
 using FindBarViewCtorFn = void (*)(void*, void*);
-using FindBarViewDtorFn = void (*)(void*);
+using FindBarViewDeletingDtorFn = void* (*)(void*, unsigned int);
+// FindBarHost repositions and resizes the standalone find bar widget.
+using FindBarHostMoveWindowIfNecessaryFn = void (*)(void*);
+// gfx::Rect is four 32-bit coordinates in Chrome's Windows build.
+struct GfxRectEmpty {
+  int x;
+  int y;
+  int width;
+  int height;
+};
+static_assert(sizeof(GfxRectEmpty) == 16);
+using FindBarHostMoveWindowIfNecessaryWithRectFn =
+    void (*)(void*, const GfxRectEmpty*);
 
 using TabTitleCtorFn = void (*)(void*);
 using TabTitleDtorFn = void (*)(void*);
@@ -394,6 +396,7 @@ using TabCloseButtonDtorFn = void (*)(void*);
 using ViewSetVisibleFn = void (*)(void*, bool);
 
 using ViewInvalidateLayoutFn = void (*)(void*, bool);
+using ViewSchedulePaintFn = void (*)(void*);
 
 using ViewPreferredSizeChangedFn = void (*)(void*);
 
@@ -467,7 +470,10 @@ static OmniboxViewViewsDtorFn g_OmniboxViewViewsDtorOriginal;
 static TextfieldCtorFn g_TextfieldCtorOriginal;
 static TextfieldSetFontListFn g_TextfieldSetFontListOriginal;
 static FindBarViewCtorFn g_FindBarViewCtorOriginal;
-static FindBarViewDtorFn g_FindBarViewDtorOriginal;
+static FindBarViewDeletingDtorFn g_FindBarViewDeletingDtorOriginal;
+static FindBarHostMoveWindowIfNecessaryFn g_FindBarHostMoveWindowIfNecessary;
+static FindBarHostMoveWindowIfNecessaryWithRectFn
+    g_FindBarHostMoveWindowIfNecessaryWithRect;
 
 static TabTitleCtorFn g_TabTitleCtorOriginal;
 static TabTitleDtorFn g_TabTitleDtorOriginal;
@@ -476,6 +482,7 @@ static TabCloseButtonDtorFn g_TabCloseButtonDtorOriginal;
 
 static ViewSetVisibleFn g_ViewSetVisibleOriginal;
 static ViewInvalidateLayoutFn g_ViewInvalidateLayout;
+static ViewSchedulePaintFn g_ViewSchedulePaint;
 static ViewPreferredSizeChangedFn g_ViewPreferredSizeChanged;
 static GetLayoutConstantFn g_GetLayoutConstantOriginal;
 
@@ -607,6 +614,7 @@ static std::unordered_map<void*, OmniboxInfo> g_omniboxes;
 struct FindBarInfo {
   DWORD threadId;
   void* textfield;
+  void* host;
   std::unique_ptr<OpaqueObjectStorage> originalFontStorage;
 };
 
@@ -1046,6 +1054,24 @@ static void OmniboxViewViewsDtorHook(void* self) {
 // Find in page (Ctrl+F)
 // -----------------------------------------------------------------------------
 
+// PreferredSizeChanged() updates the View hierarchy, but FindBarHost owns a
+// separate Widget whose bounds are only updated by its positioning routine.
+// On a live size change, ask Chrome to recalculate both the view and the host
+// window. The routine itself skips inactive find sessions.
+static bool RefreshFindBarBounds(void* host) {
+  if (!host) return false;
+  if (g_FindBarHostMoveWindowIfNecessary) {
+    g_FindBarHostMoveWindowIfNecessary(host);
+    return true;
+  }
+  if (g_FindBarHostMoveWindowIfNecessaryWithRect) {
+    const GfxRectEmpty emptyRect{};
+    g_FindBarHostMoveWindowIfNecessaryWithRect(host, &emptyRect);
+    return true;
+  }
+  return false;
+}
+
 static bool ApplyFindBarFont(void* textfield, const FontListOpaque* originalFont) {
   if (!textfield || !originalFont || !g_TextfieldSetFontListOriginal) return false;
 
@@ -1053,6 +1079,9 @@ static bool ApplyFindBarFont(void* textfield, const FontListOpaque* originalFont
   if (targetSize < 0 || !g_FontListGetFontSize ||
       targetSize == g_FontListGetFontSize(originalFont)) {
     g_TextfieldSetFontListOriginal(textfield, originalFont);
+    // Textfield::SetFontList recalculates preferred size but doesn't repaint.
+    // Live setting changes need an explicit paint request for visible text.
+    if (g_ViewSchedulePaint) g_ViewSchedulePaint(textfield);
     return true;
   }
 
@@ -1061,6 +1090,7 @@ static bool ApplyFindBarFont(void* textfield, const FontListOpaque* originalFont
   if (!derivedFontStorage) return false;
 
   g_TextfieldSetFontListOriginal(textfield, GetOwnedFontList(derivedFontStorage));
+  if (g_ViewSchedulePaint) g_ViewSchedulePaint(textfield);
   DestroyOwnedFontListStorage(std::move(derivedFontStorage), L"Find in page");
   return true;
 }
@@ -1092,19 +1122,19 @@ static void FindBarViewCtorHook(void* self, void* host) {
   }
 
   const FontListOpaque* originalFont = GetOwnedFontList(originalFontStorage);
-  Wh_Log(L"Find in page: captured Textfield=%p, original size=%d, requested=%d",
-         textfield, g_FontListGetFontSize(originalFont),
-         g_findBarFontSize.load(std::memory_order_relaxed));
   if (!ApplyFindBarFont(textfield, originalFont)) {
     Wh_Log(L"Find in page: failed to apply font size");
   }
 
   std::lock_guard<std::mutex> lock(g_findBarsMutex);
   g_findBars.insert_or_assign(
-      self, FindBarInfo{GetCurrentThreadId(), textfield, std::move(originalFontStorage)});
+      self, FindBarInfo{GetCurrentThreadId(), textfield, host,
+                        std::move(originalFontStorage)});
 }
 
-static void FindBarViewDtorHook(void* self) {
+// Hook the virtual deleting destructor: optimized Chrome builds may inline
+// ~FindBarView() into this entry instead of calling the standalone destructor.
+static void* FindBarViewDeletingDtorHook(void* self, unsigned int flags) {
   std::unique_ptr<OpaqueObjectStorage> originalFontStorage;
   {
     std::lock_guard<std::mutex> lock(g_findBarsMutex);
@@ -1117,7 +1147,7 @@ static void FindBarViewDtorHook(void* self) {
 
   DestroyOwnedFontListStorage(std::move(originalFontStorage),
                               L"Find in page original FontList");
-  g_FindBarViewDtorOriginal(self);
+  return g_FindBarViewDeletingDtorOriginal(self, flags);
 }
 
 // -----------------------------------------------------------------------------
@@ -1906,24 +1936,33 @@ static void WINAPI ApplyFindBarFontOnCurrentThread(void* parameter) {
   if (!teardown && !g_findBarFontHooksReady.load(std::memory_order_relaxed)) return;
 
   if (!teardown) {
-    std::vector<std::pair<void*, const FontListOpaque*>> fields;
+    struct LiveEntry {
+      void* textfield;
+      void* host;
+      const FontListOpaque* originalFont;
+    };
+    std::vector<LiveEntry> fields;
     {
       std::lock_guard<std::mutex> lock(g_findBarsMutex);
       for (const auto& [findBar, info] : g_findBars) {
         if (info.threadId == threadId) {
-          fields.push_back({info.textfield, GetOwnedFontList(info.originalFontStorage)});
+          fields.push_back({info.textfield, info.host,
+                            GetOwnedFontList(info.originalFontStorage)});
         }
       }
     }
 
-    for (const auto& [textfield, originalFont] : fields) {
-      ApplyFindBarFont(textfield, originalFont);
+    for (const auto& entry : fields) {
+      if (ApplyFindBarFont(entry.textfield, entry.originalFont)) {
+        RefreshFindBarBounds(entry.host);
+      }
     }
     return;
   }
 
   struct TeardownEntry {
     void* textfield;
+    void* host;
     std::unique_ptr<OpaqueObjectStorage> originalFontStorage;
   };
   std::vector<TeardownEntry> fields;
@@ -1931,7 +1970,8 @@ static void WINAPI ApplyFindBarFontOnCurrentThread(void* parameter) {
     std::lock_guard<std::mutex> lock(g_findBarsMutex);
     for (auto it = g_findBars.begin(); it != g_findBars.end();) {
       if (it->second.threadId == threadId) {
-        fields.push_back({it->second.textfield, std::move(it->second.originalFontStorage)});
+        fields.push_back({it->second.textfield, it->second.host,
+                          std::move(it->second.originalFontStorage)});
         it = g_findBars.erase(it);
       } else {
         ++it;
@@ -1943,6 +1983,8 @@ static void WINAPI ApplyFindBarFontOnCurrentThread(void* parameter) {
     const FontListOpaque* originalFont = GetOwnedFontList(entry.originalFontStorage);
     if (originalFont && g_TextfieldSetFontListOriginal) {
       g_TextfieldSetFontListOriginal(entry.textfield, originalFont);
+      if (g_ViewSchedulePaint) g_ViewSchedulePaint(entry.textfield);
+      RefreshFindBarBounds(entry.host);
     }
     DestroyOwnedFontListStorage(std::move(entry.originalFontStorage),
                                 L"Find in page original FontList");
@@ -2496,14 +2538,26 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
 
       // Find in page uses the same Textfield functions, but initializes the
       // field's medium-weight font in FindBarView's constructor.
-      {{LR"(??0FindBarView@@QEAA@PEAVFindBarHost@@@Z)", L"FindBarView::FindBarView"},
+      {{LR"(??0FindBarView@@QEAA@PEAVFindBarHost@@@Z)"},
        &g_FindBarViewCtorOriginal,
        FindBarViewCtorHook,
        true},
 
-      {{LR"(??1FindBarView@@UEAA@XZ)", L"FindBarView::~FindBarView"},
-       &g_FindBarViewDtorOriginal,
-       FindBarViewDtorHook,
+      {{LR"(??_GFindBarView@@UEAAPEAXI@Z)"},
+       &g_FindBarViewDeletingDtorOriginal,
+       FindBarViewDeletingDtorHook,
+       true},
+
+      // Prefer the public virtual resize routine, which is emitted for the
+      // vtable; the private helper may be inlined in optimized builds.
+      {{LR"(?MoveWindowIfNecessary@FindBarHost@@UEAAXXZ)"},
+       &g_FindBarHostMoveWindowIfNecessary,
+       nullptr,
+       true},
+
+      {{LR"(?MoveWindowIfNecessaryWithRect@FindBarHost@@AEAAXAEBVRect@gfx@@@Z)"},
+       &g_FindBarHostMoveWindowIfNecessaryWithRect,
+       nullptr,
        true},
 
       {{LR"(?GetFontSize@FontList@gfx@@QEBAHXZ)"},
@@ -2547,6 +2601,14 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
 
       {{L"views::View::InvalidateLayout", LR"(?InvalidateLayout@View@views@@QEAAX_N@Z)"},
        &g_ViewInvalidateLayout,
+       nullptr,
+       true},
+
+      // Textfield::SetFontList() does not request a repaint itself.
+      // This is optional: on builds without the symbol, existing font sizing
+      // still works, but visible Find in page fields may wait for repaint.
+      {{LR"(?SchedulePaint@View@views@@QEAAXXZ)"},
+       &g_ViewSchedulePaint,
        nullptr,
        true},
 
@@ -2623,7 +2685,7 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
       g_FontListGetFontSize && g_FontListDeriveWithSizeDelta && g_FontListDtor;
 
   bool findBarFontReady =
-      g_FindBarViewCtorOriginal && g_FindBarViewDtorOriginal &&
+      g_FindBarViewCtorOriginal && g_FindBarViewDeletingDtorOriginal &&
       g_TextfieldSetFontListOriginal && g_FontListCopyCtor &&
       g_FontListGetFontSize && g_FontListDeriveWithSizeDelta && g_FontListDtor;
 
@@ -2702,10 +2764,10 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
       g_FontListDeriveWithSizeDelta ? L"ready" : L"MISSING",
       g_FontListDtor ? L"ready" : L"MISSING");
 
-  Wh_Log(L"Find in page font tweak: %ls (ctor=%ls dtor=%ls setFont=%ls)",
+  Wh_Log(L"Find in page font tweak: %ls (ctor=%ls deletingDtor=%ls setFont=%ls)",
          findBarFontReady ? L"ready" : L"unavailable",
          g_FindBarViewCtorOriginal ? L"ready" : L"MISSING",
-         g_FindBarViewDtorOriginal ? L"ready" : L"MISSING",
+         g_FindBarViewDeletingDtorOriginal ? L"ready" : L"MISSING",
          g_TextfieldSetFontListOriginal ? L"ready" : L"MISSING");
 
   Wh_Log(L"Tab title tweak: %ls", tabFontReady ? L"ready" : L"unavailable");
