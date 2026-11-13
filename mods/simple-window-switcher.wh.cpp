@@ -11244,6 +11244,23 @@ static COLORREF GetBgColor() {
                         SWS_BG_LIGHT);
 }
 
+// The selection fill is the highlight color drawn translucently over the
+// background.
+static BYTE GetSelectionFillAlpha() {
+    return g_isDarkMode ? 28 : 18;
+}
+
+// Opaque color the selection fill produces over the solid background, so
+// thumbnail corner cutouts inside the selected item match it.
+static COLORREF GetSelectionFillOnBgColor() {
+    COLORREF bg = GetBgColor();
+    COLORREF fill = GetHighlightFillColor();
+    int a = GetSelectionFillAlpha();
+    auto mix = [a](int under, int over) { return (under * (255 - a) + over * a + 127) / 255; };
+    return RGB(mix(GetRValue(bg), GetRValue(fill)), mix(GetGValue(bg), GetGValue(fill)),
+               mix(GetBValue(bg), GetBValue(fill)));
+}
+
 static COLORREF GetIconBackgroundColor() {
     if (g_isDarkMode) {
         return ResolveColor(g_settings.iconBgColorModeDark,
@@ -11627,7 +11644,7 @@ static void DrawSelectionFillF(HDC hdc, const RectF& rc) {
         Gdiplus::Graphics graphics(hdc);
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-        BYTE fillAlpha = g_isDarkMode ? 28 : 18;
+        BYTE fillAlpha = GetSelectionFillAlpha();
         BYTE strokeAlpha = g_isDarkMode ? 20 : 15;
         Gdiplus::SolidBrush brush(Gdiplus::Color(fillAlpha, r, g, b));
 
@@ -11661,7 +11678,7 @@ static void DrawSelectionFillF(HDC hdc, const RectF& rc) {
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeNone);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeNone);
-    BYTE fillAlpha = g_isDarkMode ? 28 : 18;
+    BYTE fillAlpha = GetSelectionFillAlpha();
     BYTE strokeAlpha = g_isDarkMode ? 20 : 15;
     Gdiplus::SolidBrush brush(Gdiplus::Color(fillAlpha, r, g, b));
     graphics.FillRectangle(&brush, snapLeft, snapTop, snapW, snapH);
@@ -13042,7 +13059,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
         if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
             COLORREF maskColor = GetBgColor();
             if (i == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
-                maskColor = GetHighlightFillColor();
+                maskColor = GetSelectionFillOnBgColor();
             }
             MaskRectCorners(hdc, rcThumbActual, cornerRadius, true, maskColor);
         }
@@ -13368,7 +13385,7 @@ static void DrawSwitcherOverlayStaticContent(HDC hdc, HWND hWnd) {
         if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
             COLORREF maskColor = GetBgColor();
             if (i == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
-                maskColor = GetHighlightFillColor();
+                maskColor = GetSelectionFillOnBgColor();
             }
             MaskRectCorners(hdc, rcThumbActual, cornerRadius, true, maskColor);
         }
@@ -13531,7 +13548,7 @@ static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
             if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
                 COLORREF maskColor = GetBgColor();
                 if (g_hoverThumbIndex == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
-                    maskColor = GetHighlightFillColor();
+                    maskColor = GetSelectionFillOnBgColor();
                 }
                 MaskRectCorners(hdc, rcThumbActual, cornerRadius, true, maskColor);
             }
