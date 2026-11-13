@@ -153,12 +153,19 @@
       Negative positions count from the bottom: -1 is last, -2 is second-last,
       and so on. 0 appends before negative positions are placed. Hidden entries
       and separators do not count. Used when extension grouping is enabled.
-  - ctrlAltShowsOriginalMenu: false
-    $name: Hold Ctrl+Alt to show Chrome's original page menu
+  - holdKeysShowOriginalMenu: true
+    $name: Hold a shortcut to show Chrome's original page menu
     $description: >-
-      When Ctrl+Alt is held as the page context menu opens, the menu appears as
-      Chrome built it: no hidden entries, custom commands, or Custom and
-      Extensions groups. Appearance settings still apply.
+      When the shortcut below is held as the page context menu opens, the menu
+      appears exactly as Chrome built it: no hidden entries, custom commands,
+      Custom and Extensions groups, or appearance changes.
+  - originalMenuShortcut: Ctrl+Shift
+    $name: Original page menu shortcut
+    $description: >-
+      Keys joined with +, for example Ctrl+Shift, Ctrl+Alt, or Shift+Alt+O.
+      Use any of Ctrl, Shift, Alt, and Win, plus at most one letter, digit, or
+      F1-F24 key. Case and spaces are ignored. An invalid value uses
+      Ctrl+Shift. Used when the toggle above is on.
   $name: Settings
 - themes:
   - customItemBackgroundColor: false
@@ -475,9 +482,10 @@ Designed for 64-bit Chrome on Windows.
   image) is hidden.
 - **Per-site commands** - show a custom command only on matching pages, for
   example `github.com` or `youtube.com/watch*`.
-- **Chrome's original menu on demand** - optionally hold **Ctrl+Alt** while
-  opening the page menu to see it without the mod's hidden entries, custom
-  commands and groups (off by default).
+- **Chrome's original menu on demand** - optionally hold **Ctrl+Shift** (or a
+  shortcut of your choice) while opening the page menu to see it without the
+  mod's hidden entries, custom commands, groups and appearance changes (on by
+  default).
 - **Custom items group** - optionally put your custom commands into one submenu
   with a label of your choice.
 - **Extensions submenu** - move all extension commands into a single
@@ -922,6 +930,8 @@ enum MenuScope : int {
   kMenuScopeApp,
   kMenuScopeTab,
   kMenuScopeBookmark,
+  // A page menu opened with the original-menu shortcut held. Never styled.
+  kMenuScopeOriginalPage,
   kMenuScopeCount,
 };
 
@@ -1014,6 +1024,10 @@ static CanvasTranslateFn g_CanvasTranslate;
 static thread_local const void* g_menuItemPaintColorProvider = nullptr;
 static thread_local bool g_normalizeMenuBackgroundAlpha = false;
 static thread_local uint32_t g_menuItemPaintColor = 0;
+// Inside NativeTheme::PaintMenuItemBackground: the fill color GetColor just
+// returned (0 once used), so its rounded fill can be drawn anti-aliased.
+static thread_local bool g_paintingMenuItemBackground = false;
+static thread_local uint32_t g_menuItemPaintedColor = 0;
 static FontListCopyCtorFn g_FontListCopyCtor;
 
 static FontListGetFontSizeFn g_FontListGetFontSize;
@@ -1227,14 +1241,98 @@ struct CustomMenuItem {
   const void* nativeLabel = nullptr;
 };
 
-// "Hold Ctrl+Alt to show Chrome's original page menu". g_pageMenuBypass is
+// "Hold a shortcut to show Chrome's original page menu". g_pageMenuBypass is
 // decided when a page menu is constructed and holds until the next one; Chrome
 // shows one page context menu at a time.
-static std::atomic_bool g_ctrlAltShowsOriginalMenu = false;
+enum : uint32_t {
+  kShortcutCtrl = 1u << 0,
+  kShortcutShift = 1u << 1,
+  kShortcutAlt = 1u << 2,
+  kShortcutWin = 1u << 3,
+};
+
+// Low byte: optional non-modifier virtual key (0 = none). Bits 8+: modifiers.
+static constexpr uint32_t PackShortcut(uint32_t modifiers, uint32_t vk) {
+  return (modifiers << 8) | (vk & 0xFF);
+}
+
+static constexpr uint32_t kDefaultOriginalMenuShortcut =
+    PackShortcut(kShortcutCtrl | kShortcutShift, 0);
+
+static std::atomic_bool g_holdKeysShowOriginalMenu = true;
+static std::atomic<uint32_t> g_originalMenuShortcut = kDefaultOriginalMenuShortcut;
 static std::atomic_bool g_pageMenuBypass = false;
+
+// Parses "Ctrl+Shift", "shift + alt + o", "Ctrl+F2". Returns 0 when invalid.
+static uint32_t ParseShortcut(PCWSTR text) {
+  uint32_t modifiers = 0;
+  uint32_t vk = 0;
+  std::wstring token;
+  auto takeToken = [&]() -> bool {
+    if (token.empty()) return false;
+    uint32_t modifier = 0;
+    if (token == L"CTRL" || token == L"CONTROL") modifier = kShortcutCtrl;
+    else if (token == L"SHIFT") modifier = kShortcutShift;
+    else if (token == L"ALT") modifier = kShortcutAlt;
+    else if (token == L"WIN" || token == L"WINDOWS") modifier = kShortcutWin;
+    if (modifier) {
+      if (modifiers & modifier) return false;
+      modifiers |= modifier;
+    } else {
+      uint32_t key = 0;
+      if (token.size() == 1 && ((token[0] >= L'A' && token[0] <= L'Z') ||
+                                (token[0] >= L'0' && token[0] <= L'9'))) {
+        key = token[0];
+      } else if (token.size() >= 2 && token.size() <= 3 && token[0] == L'F') {
+        int number = 0;
+        for (size_t i = 1; i < token.size(); ++i) {
+          if (token[i] < L'0' || token[i] > L'9') return false;
+          number = number * 10 + (token[i] - L'0');
+        }
+        if (token[1] == L'0' || number < 1 || number > 24) return false;
+        key = VK_F1 + number - 1;
+      }
+      if (!key || vk) return false;
+      vk = key;
+    }
+    token.clear();
+    return true;
+  };
+  for (PCWSTR p = text ? text : L""; ; ++p) {
+    if (*p == L'+' || *p == L'\0') {
+      // Empty tokens ("", "Ctrl+", "Ctrl++Shift") and unknown keys are invalid.
+      if (!takeToken()) return 0;
+      if (*p == L'\0') break;
+    } else if (!iswspace(*p)) {
+      token.push_back(static_cast<wchar_t>(towupper(*p)));
+    }
+  }
+  if (!modifiers && !vk) return 0;
+  return PackShortcut(modifiers, vk);
+}
+
+static bool KeyDown(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
+
+static bool OriginalMenuShortcutHeld() {
+  const uint32_t shortcut = g_originalMenuShortcut.load(std::memory_order_relaxed);
+  const uint32_t modifiers = shortcut >> 8;
+  const int vk = static_cast<int>(shortcut & 0xFF);
+  // Modifiers must match exactly so Ctrl+Shift does not fire on Ctrl+Shift+Alt.
+  if (KeyDown(VK_CONTROL) != ((modifiers & kShortcutCtrl) != 0)) return false;
+  if (KeyDown(VK_SHIFT) != ((modifiers & kShortcutShift) != 0)) return false;
+  if (KeyDown(VK_MENU) != ((modifiers & kShortcutAlt) != 0)) return false;
+  if ((KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) != ((modifiers & kShortcutWin) != 0)) {
+    return false;
+  }
+  return !vk || KeyDown(vk);
+}
 
 static bool PageMenuBypassed() {
   return g_pageMenuBypass.load(std::memory_order_relaxed);
+}
+
+static int PageMenuScope() {
+  return PageMenuBypassed() ? kMenuScopeOriginalPage : kMenuScopePage;
 }
 
 static std::mutex g_customItemsMutex;
@@ -2301,7 +2399,16 @@ static void LoadCustomMenuItems() {
 static void LoadSettings() {
   g_groupExtensions.store(Wh_GetIntSetting(L"menus.groupExtensions") != 0);
   g_extensionsGroupOrder.store(Wh_GetIntSetting(L"menus.extensionsGroupOrder"));
-  g_ctrlAltShowsOriginalMenu.store(Wh_GetIntSetting(L"menus.ctrlAltShowsOriginalMenu") != 0);
+  g_holdKeysShowOriginalMenu.store(Wh_GetIntSetting(L"menus.holdKeysShowOriginalMenu") != 0);
+  {
+    auto value = WindhawkUtils::StringSetting::make(L"menus.originalMenuShortcut");
+    uint32_t shortcut = ParseShortcut(value.get());
+    if (!shortcut) {
+      Wh_Log(L"Invalid original menu shortcut '%s'; using Ctrl+Shift", value.get());
+      shortcut = kDefaultOriginalMenuShortcut;
+    }
+    g_originalMenuShortcut.store(shortcut, std::memory_order_relaxed);
+  }
   const struct {
     MenuScope scope;
     PCWSTR setting;
@@ -2527,7 +2634,7 @@ static void MenuControllerRunHook(void* self, void* parent, void* button,
 
 static void ToolkitDelegateRunMenuAtHook(void* self, void* widget,
                                          const void* point, int sourceType) {
-  SetPendingMenuScope(kMenuScopePage);
+  SetPendingMenuScope(PageMenuScope());
   g_ToolkitDelegateRunMenuAtOriginal(self, widget, point, sourceType);
 }
 
@@ -2750,9 +2857,8 @@ static bool ExtensionGroupingReady() {
 static void* PageContextMenuCtorHook(void* self, void* frame, const void* params,
                                      bool paste, bool pasteMatchStyle) {
   // Decide before the original runs: it builds the extension submenus.
-  g_pageMenuBypass.store(g_ctrlAltShowsOriginalMenu.load(std::memory_order_relaxed) &&
-                             (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
-                             (GetAsyncKeyState(VK_MENU) & 0x8000),
+  g_pageMenuBypass.store(g_holdKeysShowOriginalMenu.load(std::memory_order_relaxed) &&
+                             OriginalMenuShortcutHeld(),
                          std::memory_order_relaxed);
   {
     PageMenuContext context = ReadPageMenuContext(frame, params);
@@ -2976,6 +3082,7 @@ static void* AddMenuItemFromModelAtHook(void* model, size_t modelIndex,
 
 static bool ShouldHideMainPageMenuIcon(void* item) {
   if (!g_hideMainPageMenuIcons.load(std::memory_order_relaxed)) return false;
+  if (PageMenuBypassed()) return false;
   if (g_buildingMainPageMenuItem) return true;
   if (!g_pageMenuTrackedCount.load(std::memory_order_relaxed)) return false;
   std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
@@ -3107,7 +3214,7 @@ static void GroupCustomMenuItems(void* rootModel, std::vector<CustomMenuItem>& i
 
 // The complete model can be edited before Chrome turns it into menu views.
 static void ToolkitDelegateInitHook(void* self, void* menuModel) {
-  SetPendingMenuScope(kMenuScopePage);
+  SetPendingMenuScope(PageMenuScope());
   if (menuModel && PageLabelFilteringReady()) {
     std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
     g_pageLabelModels.insert(menuModel);
@@ -3221,9 +3328,13 @@ static uint32_t ColorProviderGetColorHook(const void* self, int colorId) {
     // NativeTheme::PaintMenuItemBackground makes one GetColor call. Consume
     // the override so later incidental queries cannot inherit this color.
     g_menuItemPaintColor = 0;
+    g_menuItemPaintedColor = color;
     return color;
   }
   const uint32_t color = g_ColorProviderGetColorOriginal(self, colorId);
+  if (g_paintingMenuItemBackground && self == g_menuItemPaintColorProvider) {
+    g_menuItemPaintedColor = color;
+  }
   // The outer layer supplies the requested alpha exactly once. Preserve fully
   // transparent colors (no fill), but remove existing translucency from the
   // native background's colors so it cannot multiply the selected opacity.
@@ -3251,15 +3362,102 @@ static void PaintMenuItemBackgroundHook(
   if (radius >= 0 && expectedLayout) adjusted.params.cornerRadius = radius;
   const auto previousProvider = g_menuItemPaintColorProvider;
   const uint32_t previousColor = g_menuItemPaintColor;
+  const bool previousPainting = g_paintingMenuItemBackground;
+  const uint32_t previousPaintedColor = g_menuItemPaintedColor;
   g_menuItemPaintColorProvider = colorProvider;
   g_menuItemPaintColor = g_ColorProviderGetColorOriginal
       ? g_menuItemBackgroundColor.load(std::memory_order_relaxed) : 0;
+  g_paintingMenuItemBackground = true;
+  g_menuItemPaintedColor = 0;
   // This canvas is cc::PaintCanvas, not gfx::Canvas. Keep Chrome's original
   // painting path and override only its scoped background-color lookup.
   g_PaintMenuItemBackgroundOriginal(self, canvas, colorProvider, state, rect,
                                     expectedLayout ? &adjusted.params : params);
+  g_menuItemPaintedColor = previousPaintedColor;
+  g_paintingMenuItemBackground = previousPainting;
   g_menuItemPaintColor = previousColor;
   g_menuItemPaintColorProvider = previousProvider;
+}
+
+// cc/paint/paint_flags.h: CorePaintFlags starts with SkColor4f color_, float
+// width_, float miter_limit_, then a uint32_t bitfield whose lowest bit is
+// anti_alias_. NativeTheme::PaintMenuItemBackground draws its rounded fill
+// with default flags, so the corners come out jagged. Turn on anti-aliasing
+// for that one draw, but only when the flags hold exactly the color GetColor
+// just returned plus default width, miter limit, and style bits; otherwise
+// the layout is not the expected one and the draw is left alone.
+static constexpr size_t kPaintFlagsBitfieldOffset = 24;
+
+static bool IsExpectedMenuItemPaintFlags(const void* flags) {
+  const uint32_t color = g_menuItemPaintedColor;
+  if (!flags || !color) return false;
+  float values[6];
+  memcpy(values, flags, sizeof(values));
+  const float expected[4] = {((color >> 16) & 0xFF) / 255.0f,
+                             ((color >> 8) & 0xFF) / 255.0f,
+                             (color & 0xFF) / 255.0f,
+                             ((color >> 24) & 0xFF) / 255.0f};
+  for (int i = 0; i < 4; ++i) {
+    const float difference = values[i] - expected[i];
+    if (difference > 0.002f || difference < -0.002f) return false;
+  }
+  if (values[4] != 0.0f || values[5] != 4.0f) return false;
+  uint32_t bits;
+  memcpy(&bits, static_cast<const unsigned char*>(flags) + kPaintFlagsBitfieldOffset,
+         sizeof(bits));
+  // anti_alias, dither, cap, join, and style are all zero by default.
+  return (bits & 0xFF) == 0;
+}
+
+// Runs |draw| with anti-aliasing temporarily enabled on Chrome's local flags.
+template <typename Draw>
+static void DrawMenuItemBackgroundAntiAliased(const void* flags, Draw draw) {
+  if (!g_paintingMenuItemBackground || !IsExpectedMenuItemPaintFlags(flags)) {
+    draw();
+    return;
+  }
+  // One draw per paint call: later draws keep Chrome's flags untouched.
+  g_menuItemPaintedColor = 0;
+  auto* bits = reinterpret_cast<uint32_t*>(
+      const_cast<unsigned char*>(static_cast<const unsigned char*>(flags)) +
+      kPaintFlagsBitfieldOffset);
+  const uint32_t original = *bits;
+  *bits = original | 1u;
+  draw();
+  *bits = original;
+}
+
+using PaintCanvasDrawRoundRectFn = void (*)(void*, const void*, float, float, const void*);
+using PaintCanvasDrawRRectFn = void (*)(void*, const void*, const void*);
+static PaintCanvasDrawRoundRectFn g_RecordCanvasDrawRoundRectOriginal;
+static PaintCanvasDrawRoundRectFn g_SkiaCanvasDrawRoundRectOriginal;
+static PaintCanvasDrawRRectFn g_RecordCanvasDrawRRectOriginal;
+static PaintCanvasDrawRRectFn g_SkiaCanvasDrawRRectOriginal;
+
+static void RecordCanvasDrawRoundRectHook(void* self, const void* rect, float rx,
+                                          float ry, const void* flags) {
+  DrawMenuItemBackgroundAntiAliased(flags, [&] {
+    g_RecordCanvasDrawRoundRectOriginal(self, rect, rx, ry, flags);
+  });
+}
+
+static void SkiaCanvasDrawRoundRectHook(void* self, const void* rect, float rx,
+                                        float ry, const void* flags) {
+  DrawMenuItemBackgroundAntiAliased(flags, [&] {
+    g_SkiaCanvasDrawRoundRectOriginal(self, rect, rx, ry, flags);
+  });
+}
+
+static void RecordCanvasDrawRRectHook(void* self, const void* rrect, const void* flags) {
+  DrawMenuItemBackgroundAntiAliased(flags, [&] {
+    g_RecordCanvasDrawRRectOriginal(self, rrect, flags);
+  });
+}
+
+static void SkiaCanvasDrawRRectHook(void* self, const void* rrect, const void* flags) {
+  DrawMenuItemBackgroundAntiAliased(flags, [&] {
+    g_SkiaCanvasDrawRRectOriginal(self, rrect, flags);
+  });
 }
 
 static bool MenuGroupBorderReady() {
@@ -4257,6 +4455,21 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
        &g_ColorProviderGetColorOriginal,
        ColorProviderGetColorHook,
        true},
+
+      // Anti-aliased rounded menu item backgrounds; see
+      // DrawMenuItemBackgroundAntiAliased. Menus normally paint through a
+      // recording canvas; the Skia canvas covers direct raster paints.
+      {{LR"(?drawRoundRect@RecordPaintCanvas@cc@@UEAAXAEBUSkRect@@MMAEBVPaintFlags@2@@Z)"},
+       &g_RecordCanvasDrawRoundRectOriginal, RecordCanvasDrawRoundRectHook, true},
+
+      {{LR"(?drawRoundRect@SkiaPaintCanvas@cc@@UEAAXAEBUSkRect@@MMAEBVPaintFlags@2@@Z)"},
+       &g_SkiaCanvasDrawRoundRectOriginal, SkiaCanvasDrawRoundRectHook, true},
+
+      {{LR"(?drawRRect@RecordPaintCanvas@cc@@UEAAXAEBVSkRRect@@AEBVPaintFlags@2@@Z)"},
+       &g_RecordCanvasDrawRRectOriginal, RecordCanvasDrawRRectHook, true},
+
+      {{LR"(?drawRRect@SkiaPaintCanvas@cc@@UEAAXAEBVSkRRect@@AEBVPaintFlags@2@@Z)"},
+       &g_SkiaCanvasDrawRRectOriginal, SkiaCanvasDrawRRectHook, true},
 
       // Public virtual in Chrome 153, protected in earlier builds.
       {{LR"(?OnPaintBackground@MenuScrollViewContainer@views@@UEAAXPEAVCanvas@gfx@@@Z)",
