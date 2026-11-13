@@ -2,7 +2,7 @@
 // @id              taskbar-rdp-launcher
 // @name            Taskbar RDP Launcher
 // @description     A taskbar widget that starts Remote Desktop full screen on the number of displays you pick
-// @version         1.4.0
+// @version         1.5.0
 // @author          Lucidic15
 // @github          https://github.com/Lucidic15
 // @include         explorer.exe
@@ -31,10 +31,10 @@ number.
   over it) to go to the next of your computers.
 - **Right-click** for the menu: add computers (by name, from a saved .rdp file, or from Remote
   Desktop Connection's recent list), rename or remove them, and open their Remote Desktop settings.
-- **Position** in the mod's settings puts the widget left of the notification area, of the Wi-Fi,
-  volume and battery icons, or of the clock, where the taskbar makes room for it. It can also go
-  at the left end of the taskbar, over it: that's free when the taskbar's icons are centered and
-  the Widgets button is off.
+- **Position**, in the menu or the mod's settings (whichever you changed last), puts the widget
+  left of the notification area, of the Wi-Fi, volume and battery icons, or of the clock, where the
+  taskbar makes room for it. It can also go at the left end of the taskbar, over it, right of the
+  Widgets button: that's free when the taskbar's icons are centered.
 - **Change icons…**, at the end of the menu, picks other glyphs from the Windows icon font for the
   computer and the display buttons, and for the icons of Taskbar Snipper and Taskbar Audio Flipper
   when they're running.
@@ -95,7 +95,7 @@ doesn't change). Use the app or the mod, not both: each shows its own widget.
 /*
 - position: tray
   $name: Position
-  $description: Where on the taskbar the widget goes. At the left end, it's over the taskbar, which is free when its icons are centered and the Widgets button is off. The Taskbar Snipper and Taskbar Audio Flipper widgets in the same position sit beside it.
+  $description: Where on the taskbar the widget goes. At the left end, it's over the taskbar, right of the Widgets button, which is free when the taskbar's icons are centered. The widget's right-click menu can change this too; whichever you changed last is used. The Taskbar Snipper and Taskbar Audio Flipper widgets in the same position sit beside it.
   $options:
   - tray: Left of the notification area
   - systemIcons: Left of the Wi-Fi, volume and battery icons
@@ -445,7 +445,7 @@ bool SetInt(const wchar_t* name, int value) {
 }
 
 std::wstring GetString(const wchar_t* name) {
-    std::vector<WCHAR> buffer(64 * 1024);  // The computers and display buttons take a few KB.
+    std::vector<WCHAR> buffer(64 * 1024);  // A list kept in one value before 1.5.0 takes a few KB.
     size_t length = Wh_GetStringValue(ValueName(name).c_str(), buffer.data(), buffer.size());
     return std::wstring(buffer.data(), std::min(length, buffer.size()));
 }
@@ -456,6 +456,80 @@ bool SetString(const wchar_t* name, const std::wstring& value) {
 
 void Delete(const wchar_t* name) {
     Wh_DeleteValue(ValueName(name).c_str());
+}
+
+// Lists of lines are kept one value per line, numbered from 0, with their count ("<list>Count"): a
+// stored value can't hold line breaks in portable Windhawk, which keeps the storage in an INI file.
+std::wstring LineName(const wchar_t* list, int index) {
+    return list + std::to_wstring(index);
+}
+
+std::wstring CountName(const wchar_t* list) {
+    return std::wstring(list) + L"Count";
+}
+
+// Saves the lines that changed, then deletes those a longer list left past them. (Portable Windhawk
+// rewrites its INI file for every value written, so the lines that are the same aren't written.)
+bool SetLines(const wchar_t* list, const std::vector<std::wstring>& lines) {
+    bool saved = true;
+    for (int i = 0; i < (int)lines.size(); i++) {
+        std::wstring name = LineName(list, i);
+        if (GetString(name.c_str()) != lines[i]) {
+            saved = SetString(name.c_str(), lines[i]) && saved;
+        }
+    }
+    int previous = GetInt(CountName(list).c_str(), -1);
+    if (previous != (int)lines.size()) {
+        saved = SetInt(CountName(list).c_str(), (int)lines.size()) && saved;
+    }
+    for (int i = (int)lines.size(); i < previous; i++) {
+        Delete(LineName(list, i).c_str());
+    }
+    return saved;
+}
+
+void DeleteLines(const wchar_t* list) {
+    int count = GetInt(CountName(list).c_str(), 0);
+    for (int i = 0; i < count; i++) {
+        Delete(LineName(list, i).c_str());
+    }
+    Delete(CountName(list).c_str());
+    Delete(list);  // As kept before 1.5.0.
+}
+
+// Before 1.5.0 a list was one value, its lines separated by line breaks. Portable Windhawk 1.7 saved
+// those as spaces (1.6 and earlier kept only the first line), so a value without any goes to
+// splitOld. The first time a list with lines is read, it's saved in the new form and the old value
+// is deleted; if saving fails, the count is dropped so that happens again next time.
+std::vector<std::wstring> GetLines(const wchar_t* list, std::vector<std::wstring> (*splitOld)(const std::wstring&)) {
+    int count = GetInt(CountName(list).c_str(), -1);
+    if (count < 0) {
+        std::wstring value = GetString(list);
+        std::vector<std::wstring> lines = value.find(L'\n') != std::wstring::npos ? Split(value, L'\n') : splitOld(value);
+        if (!lines.empty()) {
+            if (SetLines(list, lines)) {
+                Delete(list);
+            } else {
+                Delete(CountName(list).c_str());
+            }
+        }
+        return lines;
+    }
+    std::vector<std::wstring> lines;
+    for (int i = 0; i < count; i++) {
+        std::wstring line = GetString(LineName(list, i).c_str());
+        if (!line.empty()) {
+            lines.push_back(line);
+        }
+    }
+    return lines;
+}
+
+// An old value without line breaks, for lines that never have a space: a space separates them.
+std::vector<std::wstring> SplitOldSpacelessLines(const std::wstring& value) {
+    std::wstring lines = value;
+    std::replace(lines.begin(), lines.end(), L' ', L'\n');
+    return Split(lines, L'\n');
 }
 
 // The user's folder in the mod's storage, for files.
@@ -1660,15 +1734,47 @@ enum class Slot {
     Tray,         // Left of the notification area.
     SystemIcons,  // Left of the Wi-Fi, volume and battery icons.
     Clock,        // Left of the clock.
-    Left,         // The left end of the taskbar, over it (free when its icons are centered and the Widgets button is off).
+    Left,         // The left end of the taskbar, over it, right of the Widgets button (free when its icons are centered).
 };
 
+// The slots, as the Position setting and the widget's menu name them.
+struct SlotChoice {
+    Slot slot;
+    const wchar_t* setting;
+    const wchar_t* label;
+};
+
+constexpr SlotChoice kSlotChoices[] = {
+    {Slot::Tray, L"tray", L"Left of the notification area"},
+    {Slot::SystemIcons, L"systemIcons", L"Left of the Wi-Fi, volume and battery icons"},
+    {Slot::Clock, L"clock", L"Left of the clock"},
+    {Slot::Left, L"left", L"At the left end of the taskbar"},
+};
+
+// The slot chosen from the widget's menu, until the Position setting is changed; then the setting's.
 Slot ReadSlot() {
-    auto value = WindhawkUtils::StringSetting::make(L"position");
-    return wcscmp(value, L"systemIcons") == 0 ? Slot::SystemIcons
-           : wcscmp(value, L"clock") == 0     ? Slot::Clock
-           : wcscmp(value, L"left") == 0      ? Slot::Left
-                                              : Slot::Tray;
+    std::wstring setting = WindhawkUtils::StringSetting::make(L"position").get();
+    int chosen = Storage::GetInt(L"Position", -1);
+    if (chosen >= 0 && chosen <= (int)Slot::Left && Storage::GetString(L"PositionSetting") == setting) {
+        return (Slot)chosen;
+    }
+    if (chosen != -1) {
+        // The setting was changed after the slot was chosen: the setting wins.
+        Storage::Delete(L"Position");
+        Storage::Delete(L"PositionSetting");
+    }
+    for (const SlotChoice& choice : kSlotChoices) {
+        if (setting == choice.setting) {
+            return choice.slot;
+        }
+    }
+    return Slot::Tray;
+}
+
+// Keeps the slot chosen from the widget's menu, with the setting it was chosen over.
+void ChooseSlot(Slot slot) {
+    Storage::SetInt(L"Position", (int)slot);
+    Storage::SetString(L"PositionSetting", WindhawkUtils::StringSetting::make(L"position").get());
 }
 
 std::wstring PanelName(Slot slot) {
@@ -1949,6 +2055,7 @@ public:
         StopRetrying();
         ForgetMenu(false);
         ForgetIconPicker(false);
+        StopFollowingWidgetsButton();
         g_menuTarget = nullptr;
         element_ = nullptr;
         if (view_) {
@@ -1957,6 +2064,16 @@ public:
     }
 
     wux::FrameworkElement Element() const { return element_; }
+
+    Slot CurrentSlot() const { return slot_; }
+
+    // Moves the widget to another slot, chosen from its menu, to stay there.
+    void MoveTo(Slot slot) {
+        if (slot != slot_ && taskbar_) {
+            ChooseSlot(slot);
+            Attach(taskbar_, slot, view_);
+        }
+    }
 
     // Whether there's another widget on the left (direction -1) or right (1) in the slot.
     bool CanMove(int direction) {
@@ -1987,12 +2104,20 @@ public:
 
 private:
     void TakeOut() {
+        StopFollowingWidgetsButton();
         try {
             if (element_) {
                 if (auto panel = wuxm::VisualTreeHelper::GetParent(element_).try_as<wuxc::StackPanel>()) {
                     uint32_t index = 0;
                     if (panel.Children().IndexOf(element_, index)) {
                         panel.Children().RemoveAt(index);
+                    }
+                    if (slot_ == Slot::Left && panel.Children().Size() > 0) {
+                        // Back to the left end for the widgets left in it; those that follow the
+                        // Widgets button place it past the button again.
+                        wux::Thickness margin = panel.Margin();
+                        margin.Left = 0;
+                        panel.Margin(margin);
                     }
                     RemovePanelIfEmpty(panel);
                 }
@@ -2028,6 +2153,9 @@ private:
                 }
             }
             panel.Children().InsertAt(index, element_);
+            if (slot_ == Slot::Left) {
+                FollowWidgetsButton();
+            }
             g_bridge->SetDispatcher(element_.Dispatcher(), taskbar_);
             PostToApp(kAttachedMessage, 0, 0);
         } catch (...) {
@@ -2071,10 +2199,78 @@ private:
         }
     }
 
+    // At the left end, the slot's panel goes right of the Widgets button (the weather), which is
+    // there while the taskbar's icons are centered and Widgets is on. It's placed again after each
+    // layout of the taskbar, as the button comes and goes, and its width changes with the weather.
+    // The other widgets in the panel place it too, at the same place.
+    void FollowWidgetsButton() {
+        layoutRevoker_ = element_.LayoutUpdated(winrt::auto_revoke, [this](auto const&, auto const&) { PlacePastWidgetsButton(); });
+        PlacePastWidgetsButton();
+    }
+
+    void StopFollowingWidgetsButton() {
+        layoutRevoker_.revoke();
+        widgetsButton_ = nullptr;
+    }
+
+    void PlacePastWidgetsButton() {
+        try {
+            auto panel = element_ ? wuxm::VisualTreeHelper::GetParent(element_).try_as<wuxc::StackPanel>() : nullptr;
+            auto grid = panel ? wuxm::VisualTreeHelper::GetParent(panel).try_as<wuxc::Grid>() : nullptr;
+            if (!grid) {
+                return;
+            }
+            double left = widgetsButton_ ? WidgetsButtonEnd(widgetsButton_, grid) : 0;
+            if (left <= 0) {
+                widgetsButton_ = FindWidgetsButton(grid, grid, 3);
+                left = widgetsButton_ ? WidgetsButtonEnd(widgetsButton_, grid) : 0;
+            }
+            wux::Thickness margin = panel.Margin();
+            if (std::abs(margin.Left - left) >= 0.5) {
+                margin.Left = left;
+                panel.Margin(margin);
+            }
+        } catch (...) {
+        }
+    }
+
+    // Where the Widgets button ends in the grid, when it's shown at the left end; otherwise 0. With the
+    // taskbar's icons on the left, it's elsewhere, and one the taskbar has put aside is far off to
+    // the left.
+    static double WidgetsButtonEnd(wux::FrameworkElement const& button, wuxc::Grid const& grid) {
+        try {
+            if (button.Visibility() != wux::Visibility::Visible || button.ActualWidth() <= 0) {
+                return 0;
+            }
+            double start = button.TransformToVisual(grid).TransformPoint(winrt::Windows::Foundation::Point{0, 0}).X;
+            return start >= 0 && start < grid.ActualWidth() / 2 ? start + button.ActualWidth() : 0;
+        } catch (...) {
+            return 0;  // Out of the taskbar's layout.
+        }
+    }
+
+    // The Widgets button shown at the left end, among the elements of its name.
+    static wux::FrameworkElement FindWidgetsButton(wux::DependencyObject const& parent, wuxc::Grid const& grid, int depth) {
+        int count = depth > 0 ? wuxm::VisualTreeHelper::GetChildrenCount(parent) : 0;
+        for (int i = 0; i < count; i++) {
+            auto child = wuxm::VisualTreeHelper::GetChild(parent, i);
+            if (auto element = child.try_as<wux::FrameworkElement>();
+                element && element.Name() == L"AugmentedEntryPointButton" && WidgetsButtonEnd(element, grid) > 0) {
+                return element;
+            }
+            if (auto found = FindWidgetsButton(child, grid, depth - 1)) {
+                return found;
+            }
+        }
+        return nullptr;
+    }
+
     HWND taskbar_ = nullptr;
     Slot slot_ = Slot::Tray;
     View* view_ = nullptr;
     wux::FrameworkElement element_{nullptr};
+    wux::FrameworkElement::LayoutUpdated_revoker layoutRevoker_;
+    wux::FrameworkElement widgetsButton_{nullptr};  // The Widgets button, once found, at the left end.
     UINT_PTR retryTimer_ = 0;
     static inline WidgetHost* retrying_ = nullptr;
     int attempts_ = 0;
@@ -2372,14 +2568,16 @@ void AddMenuEntries(winrt::Windows::Foundation::Collections::IVector<wuxc::MenuF
     }
 }
 
-// Commands of the widget's own: moving it among the others in its slot, and the widgets' icons.
+// Commands of the widget's own: moving it among the others in its slot, the widgets' icons, and
+// putting it in another slot (down from kFirstSlotCommand, one for each of kSlotChoices).
 constexpr int kMoveLeftCommand = -1;
 constexpr int kMoveRightCommand = -2;
 constexpr int kChangeIconsCommand = -3;
+constexpr int kFirstSlotCommand = -10;
 
-// Opens the menu where the widget was last right-clicked, with Move left and Move right when other
-// widgets share its slot, and Change icons…. The chosen item goes to the app once the menu has
-// closed, so what it does (a screenshot, say) doesn't have the menu in it.
+// Opens the menu where the widget was last right-clicked, with Position, Move left and Move right
+// when other widgets share its slot, and Change icons…. The chosen item goes to the app once the
+// menu has closed, so what it does (a screenshot, say) doesn't have the menu in it.
 void ShowMenu(const std::vector<MenuEntry>& entries) {
     auto target = g_menuTarget && g_menuTarget.XamlRoot() ? g_menuTarget : g_host->Element();
     if (!target || !target.XamlRoot()) {
@@ -2390,6 +2588,23 @@ void ShowMenu(const std::vector<MenuEntry>& entries) {
     wuxc::MenuFlyout menu;
     AddMenuEntries(menu.Items(), entries, chosen);
     menu.Items().Append(wuxc::MenuFlyoutSeparator());
+    wuxc::MenuFlyoutSubItem position;
+    position.Text(L"Position");
+    for (size_t i = 0; i < std::size(kSlotChoices); i++) {
+        wuxc::MenuFlyoutItem item{nullptr};
+        if (kSlotChoices[i].slot == g_host->CurrentSlot()) {
+            wuxc::ToggleMenuFlyoutItem toggle;
+            toggle.IsChecked(true);
+            item = toggle;
+        } else {
+            item = wuxc::MenuFlyoutItem();
+        }
+        item.Text(kSlotChoices[i].label);
+        int command = kFirstSlotCommand - (int)i;
+        g_menuClicks->push_back(item.Click(winrt::auto_revoke, [chosen, command](auto const&, auto const&) { *chosen = command; }));
+        position.Items().Append(item);
+    }
+    menu.Items().Append(position);
     if (g_host->CanMove(-1) || g_host->CanMove(1)) {
         for (int command : {kMoveLeftCommand, kMoveRightCommand}) {
             wuxc::MenuFlyoutItem item;
@@ -2411,7 +2626,9 @@ void ShowMenu(const std::vector<MenuEntry>& entries) {
             g_host->Move(*chosen == kMoveLeftCommand ? -1 : 1);
         } else if (*chosen == kChangeIconsCommand) {
             PostToApp(kChangeIconsMessage, 0, 0);
-        } else if (*chosen) {
+        } else if (*chosen <= kFirstSlotCommand && kFirstSlotCommand - *chosen < (int)std::size(kSlotChoices)) {
+            g_host->MoveTo(kSlotChoices[kFirstSlotCommand - *chosen].slot);
+        } else if (*chosen > 0) {
             PostToApp(kMenuCommandMessage, *chosen, 0);
         }
     });
@@ -3660,14 +3877,15 @@ struct Settings {
             Storage::SetInt(L"Imported", 1);
             return;
         }
-        for (const std::wstring& line : Split(Storage::GetString(L"Connections"), L'\n')) {
+        for (const std::wstring& line : Storage::GetLines(L"Connections", SplitOldConnections)) {
             AddConnectionLine(line);
         }
         currentConnectionKey = Storage::GetString(L"CurrentConnection");
-        for (const std::wstring& line : Split(Storage::GetString(L"DisplayButtons"), L'\n')) {
+        // Display keys ("1920x1080@0,0") have no spaces.
+        for (const std::wstring& line : Storage::GetLines(L"DisplayButtons", Storage::SplitOldSpacelessLines)) {
             AddDisplayButtonLine(line);
         }
-        for (const std::wstring& line : Split(Storage::GetString(L"DisplayIds"), L'\n')) {
+        for (const std::wstring& line : Storage::GetLines(L"DisplayIds", Storage::SplitOldSpacelessLines)) {
             AddDisplayIdsLine(line);
         }
     }
@@ -3691,10 +3909,10 @@ struct Settings {
             }
             idLines.push_back(outputs + L"|" + Join(pairs, L";"));
         }
-        bool saved = Storage::SetString(L"Connections", Join(connectionLines, L"\n"));
+        bool saved = Storage::SetLines(L"Connections", connectionLines);
         saved = Storage::SetString(L"CurrentConnection", currentConnectionKey) && saved;
-        saved = Storage::SetString(L"DisplayButtons", Join(buttonLines, L"\n")) && saved;
-        return Storage::SetString(L"DisplayIds", Join(idLines, L"\n")) && saved;
+        saved = Storage::SetLines(L"DisplayButtons", buttonLines) && saved;
+        return Storage::SetLines(L"DisplayIds", idLines) && saved;
     }
 
     Connection* FindConnection(const std::wstring& key) {
@@ -3747,6 +3965,23 @@ private:
         if (!connections.empty()) {
             Wh_Log(L"Imported %d computers from %s", (int)connections.size(), path.c_str());
         }
+    }
+
+    // Connection lines from before 1.5.0, in a value without line breaks. Each line starts with
+    // "host:" or "file:" and the computer name or file path right after it, so a space, then one of
+    // those, then something other than a space starts a line. (Only a name given with Rename
+    // could also have that.)
+    static std::vector<std::wstring> SplitOldConnections(const std::wstring& value) {
+        std::wstring lines = value;
+        for (const std::wstring start : {L" host:", L" file:"}) {
+            for (size_t at = lines.find(start); at != std::wstring::npos; at = lines.find(start, at + 1)) {
+                size_t next = at + start.size();
+                if (next < lines.size() && !iswspace(lines[next])) {
+                    lines[at] = L'\n';
+                }
+            }
+        }
+        return Split(lines, L'\n');
     }
 
     // <connection key>|<name it was given>, or just the key.
@@ -3871,7 +4106,7 @@ struct DefaultRdpChange {
     // Stored as lines: "existed" or "created", then "<name>\t<line before>\t<value given>…" for each
     // setting, where each line or value is "=" and its text, or "-" for none.
     static std::optional<DefaultRdpChange> Load() {
-        std::vector<std::wstring> lines = Split(Storage::GetString(L"DefaultRdpChange"), L'\n');
+        std::vector<std::wstring> lines = Storage::GetLines(L"DefaultRdpChange", SplitOld);
         if (lines.empty()) {
             return std::nullopt;
         }
@@ -3900,12 +4135,26 @@ struct DefaultRdpChange {
             }
             lines.push_back(line);
         }
-        return Storage::SetString(L"DefaultRdpChange", Join(lines, L"\n"));
+        return Storage::SetLines(L"DefaultRdpChange", lines);
     }
 
-    static void Forget() { Storage::Delete(L"DefaultRdpChange"); }
+    static void Forget() { Storage::DeleteLines(L"DefaultRdpChange"); }
 
 private:
+    // The lines from before 1.5.0, in a value without line breaks. The settings' names have spaces,
+    // but they're the full-screen settings' names, so a line starts at the space before one of
+    // those names and its tab.
+    static std::vector<std::wstring> SplitOld(const std::wstring& value) {
+        std::wstring lines = value;
+        for (const RdpSetting& setting : FullScreenSettings(nullptr)) {
+            std::wstring start = L" " + setting.name + L"\t";
+            for (size_t at = lines.find(start); at != std::wstring::npos; at = lines.find(start, at + 1)) {
+                lines[at] = L'\n';
+            }
+        }
+        return Split(lines, L'\n');
+    }
+
     static std::wstring Encode(const std::optional<std::wstring>& text) { return text ? L"=" + *text : L"-"; }
 
     static std::optional<std::wstring> Decode(const std::wstring& field) {
@@ -3973,7 +4222,8 @@ ULONGLONG ProcessStartTime(HANDLE process) {
 
 std::vector<SessionMark> LoadSessionMarks() {
     std::vector<SessionMark> marks;
-    for (const std::wstring& line : Split(Storage::GetString(L"DefaultRdpSessions"), L'\n')) {
+    // "<process ID>\t<start time>" lines.
+    for (const std::wstring& line : Storage::GetLines(L"DefaultRdpSessions", Storage::SplitOldSpacelessLines)) {
         std::vector<std::wstring> fields = Split(line, L'\t');
         if (fields.size() == 2) {
             marks.push_back({(DWORD)wcstoul(fields[0].c_str(), nullptr, 10), wcstoull(fields[1].c_str(), nullptr, 10)});
@@ -3984,14 +4234,14 @@ std::vector<SessionMark> LoadSessionMarks() {
 
 void SaveSessionMarks(const std::vector<SessionMark>& marks) {
     if (marks.empty()) {
-        Storage::Delete(L"DefaultRdpSessions");
+        Storage::DeleteLines(L"DefaultRdpSessions");
         return;
     }
     std::vector<std::wstring> lines;
     for (const SessionMark& mark : marks) {
         lines.push_back(std::to_wstring(mark.processId) + L"\t" + std::to_wstring(mark.started));
     }
-    Storage::SetString(L"DefaultRdpSessions", Join(lines, L"\n"));
+    Storage::SetLines(L"DefaultRdpSessions", lines);
 }
 
 // The session's process, if it's still running (the same process: ID and start time), or null.
