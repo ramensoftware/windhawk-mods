@@ -23987,6 +23987,16 @@ void WhTool_ModSettingsChanged() {
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
+// Set by the running tool host when it starts unloading. A new host waits for
+// the previous one only during such a handover (recompile or update); a copy
+// started while the host keeps running (Windhawk does this on every settings
+// change) exits at once.
+HANDLE g_toolModExitingEvent;
+#define SWS_TOOL_EXITING_EVENT_NAME L"windhawk-tool-mod-exiting_" WH_MOD_ID
+
+static void SignalToolHostExiting() {
+    if (g_toolModExitingEvent) SetEvent(g_toolModExitingEvent);
+}
 
 void WINAPI EntryPoint_Hook() {
     Wh_Log(L">");
@@ -24150,10 +24160,18 @@ BOOL Wh_ModInit() {
             // previous host is still shutting down. The named mutex exists until
             // that host's handle closes on exit, so retry for a few seconds
             // instead of leaving no host at all. Mutex ownership cannot be used
-            // here: it ends with the thread that created it.
+            // here: it ends with the thread that created it. Wait only while the
+            // host reports that it is exiting (briefly allow for that report to
+            // arrive). A host without the event predates it, so wait for it.
+            HANDLE exitingEvent =
+                OpenEventW(SYNCHRONIZE, FALSE, SWS_TOOL_EXITING_EVENT_NAME);
             ULONGLONG waitStart = GetTickCount64();
             bool previousExited = false;
             while (GetTickCount64() - waitStart < 5000) {
+                if (exitingEvent && GetTickCount64() - waitStart >= 500 &&
+                    WaitForSingleObject(exitingEvent, 0) != WAIT_OBJECT_0) {
+                    break;
+                }
                 CloseHandle(g_toolModProcessMutex);
                 Sleep(50);
                 g_toolModProcessMutex =
@@ -24167,12 +24185,20 @@ BOOL Wh_ModInit() {
                     break;
                 }
             }
+            if (exitingEvent) CloseHandle(exitingEvent);
             if (!previousExited) {
                 Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
                 ExitProcess(1);
             }
             Wh_Log(L"Previous tool mod host exited after %llu ms",
                    GetTickCount64() - waitStart);
+        }
+
+        g_toolModExitingEvent =
+            CreateEventW(nullptr, TRUE, FALSE, SWS_TOOL_EXITING_EVENT_NAME);
+        if (g_toolModExitingEvent && GetLastError() == ERROR_ALREADY_EXISTS) {
+            // A late duplicate may still hold the previous host's event.
+            ResetEvent(g_toolModExitingEvent);
         }
 
         if (!WhTool_ModInit()) {
@@ -24277,6 +24303,7 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModBeforeUninit() {
+    SignalToolHostExiting();
     if (g_isExplorer) {
         s_nativeSwipeShutdownRequested.store(true);
         s_nativeSwipeHooksAvailable.store(false);
@@ -24300,6 +24327,7 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
+    SignalToolHostExiting();
     if (g_isExplorer) {
         HWND promptWnd = g_restartExplorerPromptWindow;
         if (promptWnd) PostMessage(promptWnd, WM_CLOSE, 0, 0);
