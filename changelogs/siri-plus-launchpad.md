@@ -1,3 +1,22 @@
+## 1.2.0 ([Nov 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a93589dee0307dd5b6f697293cf296e6b55bdb30/mods/siri-plus-launchpad.wh.cpp))
+
+New
+
+* Custom liquid glass theme: your color (black to start with) solid at the top, thinning out smoothly into clear glass, with a fine line of light along the bottom edge. Its own settings: color strength at the top, how far down the color goes, the glass color, and the selection color in menus.
+* The app list follows installs and removals by itself (installers and Microsoft Store apps), without turning the mod off and on.
+* Keeps working right after a Windows update: when the symbols for twinui.pcshell.dll aren't available yet, the launcher still opens with the Windows key and the Start button in a temporary way, and goes back to the normal hook the next time the mod loads with the symbols available.
+
+Changed
+
+* Stronger refraction: above 60 % the liquid glass edge gets wider and deeper. The default is now 70 %.
+* Glass themes start with the Liquid glass style.
+* The background blur chosen in the settings panel is now kept for each theme, like the glass transparency.
+* The selection color in menus also works in the Custom liquid glass theme.
+
+Fixed
+
+* A newly installed app only showed up after the mod was turned off and on.
+
 ## 1.1.0 ([Nov 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/180c307cae12a0c45412f9394ff035f6a67a7ab9/mods/siri-plus-launchpad.wh.cpp))
 
 New

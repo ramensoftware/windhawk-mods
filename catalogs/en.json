@@ -5320,6 +5320,37 @@
         "version": "1.0.0"
       }
     },
+    "disable-web-search-in-start-menu": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794596679000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794596679000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "DpakB",
+        "description": "Keeps the Start menu and taskbar search local by hiding web results and web suggestions",
+        "donateUrl": "https://buymeacoffee.com/dpakb",
+        "github": "https://github.com/DeepakBalaraman",
+        "homepage": "https://dpakb.com",
+        "include": [
+          "SearchHost.exe",
+          "SearchApp.exe"
+        ],
+        "license": "MIT",
+        "name": "Disable Web Search in Start Menu",
+        "twitter": "https://twitter.com/dpakb_",
+        "version": "1.0.0"
+      }
+    },
     "disable-windows-shortcuts": {
       "details": {
         "defaultSorting": 1944,
@@ -5775,6 +5806,32 @@
         "license": "MIT",
         "name": "Dynamic Island for Windows",
         "version": "1.4.0"
+      }
+    },
+    "dynamic-island-media-player": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794596667000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794596667000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "BOG090909",
+        "compilerOptions": "-lole32 -loleaut32 -ld2d1 -ldwrite -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lwinmm -lcomdlg32 -lcomctl32 -ldwmapi -lshcore",
+        "description": "A dedicated, standalone Dynamic Island media player for Windows. Forked and optimized from 'Dynamic Island for Windows' by devcode90. Features per-app positioning, custom color morphing, multilingual UI, and optimized rendering.",
+        "github": "https://github.com/BOG090909",
+        "homepage": "https://github.com/BOG090909/dynamic-island-media-player",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Dynamic Island Media Player",
+        "version": "1.6.0"
       }
     },
     "dynamic-taskbar-transparency": {
@@ -14777,7 +14834,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": -0.21023848191587508,
-        "updated": 1794272652000,
+        "updated": 1794596672000,
         "users": 472
       },
       "metadata": {
@@ -14786,13 +14843,13 @@
         ],
         "author": "Anixx",
         "compilerOptions": "-lcomctl32 -lgdi32 -luxtheme",
-        "description": "Fixes explorer problems: menu bar, listview redraw, classic background color, Control Panel header/sidebar color for dark themes",
+        "description": "Fixes explorer problems: menu bar, listview redraw, classic background color, classic search box colors, Control Panel header/sidebar color for dark themes",
         "github": "https://github.com/Anixx",
         "include": [
           "explorer.exe"
         ],
         "name": "ExplorerFrame and menubar fixes fork",
-        "version": "4.1"
+        "version": "4.2"
       }
     },
     "restore-legacy-network-tray": {
@@ -15489,7 +15546,7 @@
         "ratingUsers": 62,
         "reviews": 0,
         "trendingSorting": 21.98944830075924,
-        "updated": 1794175277000,
+        "updated": 1794596684000,
         "users": 1045
       },
       "metadata": {
@@ -15497,7 +15554,7 @@
           "x86-64"
         ],
         "author": "Thiago Silva",
-        "compilerOptions": "-lcomdlg32 -lgdi32 -lshell32 -lshcore -ld2d1 -ldwrite -lole32 -luuid -lwindowscodecs -lshlwapi -ldwmapi",
+        "compilerOptions": "-lcomdlg32 -lgdi32 -lshell32 -lshcore -ld2d1 -ldwrite -lole32 -luuid -lwindowscodecs -lshlwapi -ldwmapi -loleaut32",
         "description": "Replaces the Start menu with a macOS 27 Siri-style launcher: search bar with categories, app tabs, files, clipboard, actions and live glass",
         "github": "https://github.com/brideinflame-rgb",
         "homepage": "https://github.com/brideinflame-rgb/Siri-Plus-Launchpad",
@@ -15506,7 +15563,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Siri Plus Launchpad",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "sleep-countdown-reset": {

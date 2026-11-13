@@ -1,3 +1,7 @@
+## 4.2 ([Nov 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/455e436eb27730e3f143f4747c739a0ce5562938/mods/restore-folder-menubar-25h2.wh.cpp))
+
+* Merge with `Classic Theme Explorer Search Fix` by aubymori for compatibility with Explorerframe.dll spoofing
+
 ## 4.1 ([Nov 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7047a595d7d4de175f55b420edfb05d9f832d278/mods/restore-folder-menubar-25h2.wh.cpp))
 
 * Add a link to [Classic Explorerframe for 24H2 and later](https://windhawk.net/mods/classic-explorerframe) mod

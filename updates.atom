@@ -2,12 +2,141 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-13T18:02:23.000Z</updated>
+    <updated>2026-11-13T19:04:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Siri Plus Launchpad 1.2.0]]></title>
+        <id>https://windhawk.net/mods/siri-plus-launchpad#a93589dee0307dd5b6f697293cf296e6b55bdb30</id>
+        <link href="https://windhawk.net/mods/siri-plus-launchpad"/>
+        <updated>2026-11-13T19:04:44.000Z</updated>
+        <content type="html"><![CDATA[<p>New</p>
+<ul>
+<li>Custom liquid glass theme: your color (black to start with) solid at the top, thinning out smoothly into clear glass, with a fine line of light along the bottom edge. Its own settings: color strength at the top, how far down the color goes, the glass color, and the selection color in menus.</li>
+<li>The app list follows installs and removals by itself (installers and Microsoft Store apps), without turning the mod off and on.</li>
+<li>Keeps working right after a Windows update: when the symbols for twinui.pcshell.dll aren't available yet, the launcher still opens with the Windows key and the Start button in a temporary way, and goes back to the normal hook the next time the mod loads with the symbols available.</li>
+</ul>
+<p>Changed</p>
+<ul>
+<li>Stronger refraction: above 60 % the liquid glass edge gets wider and deeper. The default is now 70 %.</li>
+<li>Glass themes start with the Liquid glass style.</li>
+<li>The background blur chosen in the settings panel is now kept for each theme, like the glass transparency.</li>
+<li>The selection color in menus also works in the Custom liquid glass theme.</li>
+</ul>
+<p>Fixed</p>
+<ul>
+<li>A newly installed app only showed up after the mod was turned off and on.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Thiago Silva</name>
+            <uri>https://github.com/brideinflame-rgb</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Disable Web Search in Start Menu 1.0.0]]></title>
+        <id>https://windhawk.net/mods/disable-web-search-in-start-menu#15a0fabc158cd3b05e041f13f1e21aed77db4712</id>
+        <link href="https://windhawk.net/mods/disable-web-search-in-start-menu"/>
+        <updated>2026-11-13T19:04:39.000Z</updated>
+        <content type="html"><![CDATA[<h1>Disable Web Search in Start Menu</h1>
+<p><img src="https://raw.githubusercontent.com/DeepakBalaraman/disable-web-search-in-start-menu/master/assets/before-after.jpg" alt="Before &amp; After"></p>
+<p>The search UI that the Start menu and the taskbar open mixes results from Bing
+into local results. Windows can be told to stop doing that with settings and
+policies, but they are read when the search UI starts, so changing them means
+signing out, and the registry entries stay behind afterwards.</p>
+<p>This mod does the same thing without touching the registry. It sits in the
+search UI process and answers the setting reads as if web search had been
+turned off. Turning the mod off gives the old behavior back the next time the
+search UI starts.</p>
+<p>On both Windows 10 and Windows 11, typing in the Start menu hands the query to
+this search UI, so the Start menu search is covered as well.</p>
+<h2>Settings</h2>
+<ul>
+<li><strong>Also hide cloud content results</strong> reports the two &quot;Cloud content search&quot;
+switches from Settings as off. The Windows 11 search UI asks for them before
+it puts web results in the list, so turning this setting off can bring web
+results back, and leaving it on also removes OneDrive, Outlook and SharePoint
+results from search.</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>Nothing is written to the registry and no files are touched. The values the
+mod reports are the ones Windows itself uses:
+<ul>
+<li><code>DisableSearchBoxSuggestions</code>, <code>ConnectedSearchUseWeb</code> and
+<code>DisableWebSearch</code>, the web search policies</li>
+<li><code>BingSearchEnabled</code>, the older web results switch</li>
+<li><code>IsMSACloudSearchEnabled</code>, <code>IsAADCloudSearchEnabled</code> and
+<code>AllowCloudSearch</code>, the cloud content switches, only with the setting above
+If you set any of these yourself, the mod simply agrees.</li>
+</ul>
+</li>
+<li>The search UI is a packaged app and reaches the registry through the API sets,
+which end up in <code>kernelbase.dll</code>. Desktop callers import <code>advapi32.dll</code>, whose
+exports are separate entry points rather than forwarders on current builds.
+Both are hooked, so neither path is missed.</li>
+<li>Web results are decided while the search UI sets up, so after enabling the mod
+or changing a setting, end <code>SearchHost.exe</code> in Task Manager. Windows starts it
+again on the next search, and the new settings are read then.</li>
+<li>If web results survive, turn on the mod's log and open the search UI once. The
+log lists every read the mod answered, which shows whether the process asks
+for these values at all.</li>
+</ul>
+]]></content>
+        <author>
+            <name>DpakB</name>
+            <uri>https://github.com/DeepakBalaraman</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[ExplorerFrame and menubar fixes fork 4.2]]></title>
+        <id>https://windhawk.net/mods/restore-folder-menubar-25h2#455e436eb27730e3f143f4747c739a0ce5562938</id>
+        <link href="https://windhawk.net/mods/restore-folder-menubar-25h2"/>
+        <updated>2026-11-13T19:04:32.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Merge with <code>Classic Theme Explorer Search Fix</code> by aubymori for compatibility with Explorerframe.dll spoofing</li>
+</ul>
+]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Dynamic Island Media Player 1.6.0]]></title>
+        <id>https://windhawk.net/mods/dynamic-island-media-player#1ae41698ee287ad9e577aa72fc23dc295d21d8b5</id>
+        <link href="https://windhawk.net/mods/dynamic-island-media-player"/>
+        <updated>2026-11-13T19:04:27.000Z</updated>
+        <content type="html"><![CDATA[<h1>Dynamic Island Media Player for Windows</h1>
+<p><img src="https://raw.githubusercontent.com/BOG090909/dynamic-island-media-player/main/assets/preview.png" alt="Dynamic Island Preview"></p>
+<p>A focused, customizable Dynamic Island overlay for Windows that becomes an interactive media player when music or video is playing. Based on the original <strong><a href="https://github.com/devcode90/Dynamic-Island-for-Windows">Dynamic Island for Windows</a></strong>, this standalone mod removes unrelated dashboard modules and concentrates on media playback.</p>
+<h2>Key Features</h2>
+<ul>
+<li><strong>Media integration:</strong> Track title, artist, album, source-app badge, album artwork, playback state, and progress information through Windows System Media Transport Controls. Artwork is refreshed when metadata settles, stale provider thumbnails are rechecked briefly, and large covers are downscaled to reduce memory use.</li>
+<li><strong>Playback controls:</strong> Play/pause, previous/next track, and progress scrubbing.</li>
+<li><strong>Track transitions:</strong> Choose between crossfade (Fade) and horizontal slide animations. Track transitions work independently from the option that disables the island's hover and movement animations.</li>
+<li><strong>Interactive island:</strong> Expand on hover, click-through mode with Ctrl-to-interact, and configurable show/hide, next, previous, and play/pause hotkeys.</li>
+<li><strong>Window behavior:</strong> Always-on-top, above-games behavior, taskbar layering, fullscreen handling, and per-application saved positions.</li>
+<li><strong>Context menu:</strong> Right-click configuration with color and opacity dialogs, playback-related options, and persistent menu overrides.</li>
+<li><strong>Color customization:</strong> Theme presets, background/text colors, automatic/system/custom accent colors, and a user-managed color-morphing palette with speed controls.</li>
+<li><strong>Appearance:</strong> Multiple island shapes, adjustable size and text scale, custom font, button styles, shadow toggle, and monitor selection.</li>
+<li><strong>Localization:</strong> Ukrainian, Russian, and English interface languages.</li>
+<li><strong>Media source filtering:</strong> Optionally restrict the player to the currently selected media source.</li>
+</ul>
+<h2>Credits</h2>
+<ul>
+<li><strong>Himanshu (devcode90):</strong> Original Dynamic Island for Windows framework, rendering foundation, and core interface design.</li>
+<li><strong>BOG090909:</strong> Standalone media-player adaptation, per-app positioning, customization features, localization, playback integration, and performance improvements.</li>
+</ul>
+]]></content>
+        <author>
+            <name>BOG090909</name>
+            <uri>https://github.com/BOG090909</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Everything & Power Tools in the Start Menu 2.2.1]]></title>
         <id>https://windhawk.net/mods/start-everything#e89ea96891fa6369bb76755d830f106d338a613c</id>
@@ -865,214 +994,6 @@ administrador) passam a flutuar depois de algumas tentativas; Win + Alt + Home t
         <author>
             <name>Gui03</name>
             <uri>https://github.com/GuiFrr03</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Archive Preview 1.0.0]]></title>
-        <id>https://windhawk.net/mods/archive-preview#9a7af07ba878775030838c526bba40862a9bd9a4</id>
-        <link href="https://windhawk.net/mods/archive-preview"/>
-        <updated>2026-11-13T06:03:21.000Z</updated>
-        <content type="html"><![CDATA[<h1>Archive Preview</h1>
-<p><img src="https://raw.githubusercontent.com/luizbizzio/archive-preview/main/assets/archive-preview-cover.png" alt="Archive Preview"></p>
-<p><strong>Browse, open, copy, and extract archives directly in Windows File Explorer.</strong></p>
-<p>Archive Preview is a <a href="https://windhawk.net/">Windhawk</a> mod that adds archive browsing to File Explorer's built-in <strong>Preview Pane (Alt + P)</strong>. View files and folders inside an archive and work with them without opening a separate archive manager.</p>
-<h2>Features</h2>
-<ul>
-<li><strong>Browse archives:</strong> Open folders and view their contents in the Preview Pane.</li>
-<li><strong>Open files:</strong> Double-click supported files to open them with their default Windows app.</li>
-<li><strong>Copy and paste:</strong> Select items, press <strong>Ctrl + C</strong>, and paste them into a folder with <strong>Ctrl + V</strong>.</li>
-<li><strong>Drag and drop:</strong> Drag files or folders from the preview into File Explorer or a compatible app.</li>
-<li><strong>Extract files:</strong> Use <strong>Extract here</strong>, <strong>Extract to</strong>, or <strong>Extract selected</strong>. You can also extract selected items from the right-click menu.</li>
-<li><strong>Fits Windows:</strong> Light and dark themes, familiar file icons, and optional columns for Date modified, Type, and Size.</li>
-</ul>
-<h2>Getting started</h2>
-<ol>
-<li>Install and enable Archive Preview in <strong>Windhawk</strong>.</li>
-<li>Open <strong>File Explorer</strong> and press <strong>Alt + P</strong> to show the Preview Pane.</li>
-<li>Select a supported archive, such as a <code>.zip</code> or <code>.rar</code> file.</li>
-<li>Browse its folders, select items, and choose an action.</li>
-</ol>
-<p><strong>Useful controls</strong></p>
-<table>
-<thead>
-<tr>
-<th>Action</th>
-<th>How to use it</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Open a folder or file</td>
-<td>Double-click it</td>
-</tr>
-<tr>
-<td>Go back</td>
-<td>Click <strong>Back</strong></td>
-</tr>
-<tr>
-<td>Select multiple items</td>
-<td>Use <strong>Ctrl</strong> or <strong>Shift</strong> while selecting</td>
-</tr>
-<tr>
-<td>Copy selected items</td>
-<td><strong>Ctrl + C</strong>, then <strong>Ctrl + V</strong> in the destination</td>
-</tr>
-<tr>
-<td>Extract selected items</td>
-<td>Click <strong>Extract selected</strong> or press <strong>Ctrl + Shift + E</strong></td>
-</tr>
-<tr>
-<td>Extract to a folder</td>
-<td>Click <strong>Extract to</strong></td>
-</tr>
-<tr>
-<td>Extract beside the archive</td>
-<td>Click <strong>Extract here</strong></td>
-</tr>
-</tbody>
-</table>
-<p>The <strong>Ctrl + Shift + E</strong> shortcut works only when the archive list has focus. You can change or disable it in Windhawk settings.</p>
-<h2>Supported formats</h2>
-<p>Archive Preview enables four formats by default:</p>
-<table>
-<thead>
-<tr>
-<th>Default formats</th>
-<th>Extension</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>ZIP</td>
-<td><code>.zip</code></td>
-</tr>
-<tr>
-<td>RAR</td>
-<td><code>.rar</code></td>
-</tr>
-<tr>
-<td>7z</td>
-<td><code>.7z</code></td>
-</tr>
-<tr>
-<td>TAR</td>
-<td><code>.tar</code></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Optional experimental formats:</strong> <code>.tar.gz</code>, <code>.tgz</code>, <code>.tbz</code>, and <code>.tzst</code>.</p>
-<p>To try an experimental format, add its extension under <strong>Windhawk Settings &gt; Files / Archive extensions</strong>. These formats are not enabled by default and may not work on every Windows build. Some compound extensions need an available Windows preview association. Adding an extension does not add a missing archive provider.</p>
-<p>Archive Preview uses the archive support provided by <strong>Windows Shell</strong>. Built-in File Explorer support for RAR, 7z, and TAR was introduced with Windows 11 23H2. For reliable native archive handling, use Windows 11 23H2 or newer; individual providers and compression methods can still vary.</p>
-<h2>Native Windows integration</h2>
-<p>Archive Preview uses Windows Shell for file access, copy, drag and drop, and extraction. It does <strong>not</strong> run its own archive extractor or create a managed disk cache for transferred or extracted files.</p>
-<p>The mod uses runtime hooks in File Explorer to redirect supported archive previews. It reuses the built-in Windows text Preview Handler to load its archive interface inside <code>prevhost.exe</code>, without creating or changing COM preview registrations in the Windows Registry. Other file types continue to use their normal preview handlers.</p>
-<p>The mod keeps a small amount of navigation data in memory to help when switching folders. Windows or the destination app may still create temporary files during an operation.</p>
-<h2>Settings</h2>
-<p>You can change these options in Windhawk:</p>
-<ul>
-<li><strong>Archive extensions:</strong> Choose the file types to preview.</li>
-<li><strong>Theme:</strong> Follow the system theme or select light or dark mode.</li>
-<li><strong>Columns:</strong> Show or hide Date modified, Type, and Size.</li>
-<li><strong>Extract selected shortcut:</strong> Change the keyboard shortcut.</li>
-<li><strong>Allow preview for downloaded archives:</strong> Off by default. This can relax a Windows preview check for some local archives. It does not remove Mark of the Web.</li>
-<li><strong>Diagnostics:</strong> Use Windhawk's built-in logging when troubleshooting. Logs may include file names and paths.</li>
-</ul>
-<h2>Important limitations</h2>
-<ul>
-<li><strong>Windows preview compatibility:</strong> The runtime bridge requires the built-in Windows text Preview Handler and compatible File Explorer association behavior. It may not work on every Windows version or with every custom file association. It does not add a missing Windows archive provider.</li>
-<li><strong>Preview Host and unload:</strong> Disabling the mod waits for active workers and COM preview objects to finish before the DLL can unload. If <code>prevhost.exe</code> still holds a preview object or class factory (including for normal <code>.txt</code> previews), Windhawk may remain blocked until the hosting Explorer window is closed, a different file is selected, or <code>prevhost.exe</code> exits. A stalled Shell provider can prevent shutdown indefinitely. The mod never forces a process restart.</li>
-<li><strong>Broker security:</strong> Requests are restricted to the current user's Preview Host session, validated local archive paths and live Preview windows, but other code executing inside the same Preview Host remains in the same trust boundary. This architecture is not equivalent to fully isolating every preview provider.</li>
-<li><strong>Archive locations:</strong> Broker operations require files on a local drive reported as fixed by Windows, without junctions, symbolic links or other reparse points in the path. Network shares and drives reported as removable (including many USB drives) are rejected. The read-only recovery list may still display their contents when Windows supports the format, but broker-based open, copy, drag and extraction are unavailable there.</li>
-<li><strong>Cross-process controls:</strong> The interactive native list is owned by Explorer and parented into <code>prevhost.exe</code>. Windows can connect their input queues, so a stalled Shell drag or other synchronous provider operation may temporarily delay input in Explorer.</li>
-<li><strong>Trusted archives only for extraction:</strong> The native Shell backend does not enforce its own limit on the amount of data after decompression. A small archive can contain a very large amount of data. Avoid extracting files from unknown sources.</li>
-<li><strong>Windows provider support:</strong> Some archives, compression methods, or password-protected files may not work. Archive Preview does not provide a password entry window.</li>
-<li><strong>Transfers:</strong> Copy, paste, drag and drop, and opening files depend on what the Windows archive provider and destination app support. Some apps need physical files and may not accept virtual files.</li>
-<li><strong>Opening active content:</strong> Direct opening of executable files, scripts, and other risky file types is blocked. Extracting them is a separate action and should only be done with trusted files.</li>
-<li><strong>Large archives:</strong> Loading a large archive may take time. A Windows Shell provider can block inside a system call, so progress and cancellation may not respond immediately.</li>
-<li><strong>Unavailable formats:</strong> If the native browser fails for the selected archive, it stops retrying and keeps the recovery list when available. If recovery also fails, the error stays visible until a different selection or a new preview session. Temporary broker startup errors are retried for a bounded period.</li>
-<li><strong>Dates in ZIP folders:</strong> When a folder has no stored date, Archive Preview may show a date derived from items inside it. This is not always the folder's original date.</li>
-<li><strong>Selection limit:</strong> Native transfer requests support up to <strong>4,096 selected items</strong> at a time.</li>
-</ul>
-<h2>Troubleshooting</h2>
-<p><strong>The preview is not showing</strong></p>
-<p>If Windows cannot read an archive, Archive Preview displays the error and stops retrying that selection. Select another file and then select the archive again to retry.</p>
-<p>Make sure the Preview Pane is enabled with <strong>Alt + P</strong> and that the archive extension is listed in Windhawk settings. The runtime bridge also needs the built-in Windows text Preview Handler to be available. If you have just updated the mod, close and reopen the File Explorer window. Archive Preview does not restart Explorer automatically.</p>
-<p><strong>A file will not copy, open, or extract</strong></p>
-<p>Try the same archive in File Explorer itself. If Windows cannot use the archive provider for that file, Archive Preview may not be able to use it either. For experimental extensions, support is not guaranteed.</p>
-<p><strong>Something is not working correctly</strong></p>
-<p><a href="https://github.com/luizbizzio/archive-preview/issues">Open a GitHub issue</a> and include your Windows version, archive format, what you tried, and what happened. Screenshots and logs can help. Remove private file names or paths before sharing logs.</p>
-<h2>Project</h2>
-<ul>
-<li><strong>Source code:</strong> <a href="https://github.com/luizbizzio/archive-preview">GitHub repository</a></li>
-<li><strong>Author:</strong> <a href="https://github.com/luizbizzio">Luiz Bizzio</a></li>
-<li><strong>Version:</strong> 1.0.0</li>
-<li><strong>License:</strong> <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache-2.0</a></li>
-</ul>
-]]></content>
-        <author>
-            <name>Luiz Bizzio</name>
-            <uri>https://github.com/luizbizzio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic (Win32) taskbar for Win11 24H2+ (all in one) 1.0]]></title>
-        <id>https://windhawk.net/mods/win10-taskbar-24h2-26100#f8f739a32af87e3a1b60c2ece9d8ca554e2a812c</id>
-        <link href="https://windhawk.net/mods/win10-taskbar-24h2-26100"/>
-        <updated>2026-11-13T06:03:16.000Z</updated>
-        <content type="html"><![CDATA[<h1>Classic (Win32) Taskbar for Win11 24H2+ (All-in-One)</h1>
-<p>This mod downloads the Windows 10-style taskbar from Microsoft's symbol server and installs it directly into the mod's storage space. <strong>No system files are modified.</strong></p>
-<p>The version of Explorer used here is sourced from Windows 11 24H2 RTM (build 26100.1). Because Microsoft removed the system tray from this version, this mod completely reimplements it from scratch. To simplify installation, this is an &quot;all-in-one&quot; package that already incorporates the functionality of other mods required to make the Win10-style taskbar work correctly.</p>
-<p>While similar to <a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Win10 taskbar on Win11 24H2 or later</a>, this mod features the following differences:</p>
-<ul>
-<li>It uses the actual Windows 11 24H2 RTM (Germanium) <code>explorer.exe</code>.</li>
-<li>It is an all-in-one solution (all necessary supporting mods are built-in).</li>
-<li>UWP apps display normally on the taskbar alongside Win32 applications.</li>
-<li>The system tray is completely custom-built, meaning other mods targeting the notification area <strong>will not work</strong>.</li>
-<li>The language indicator is currently unavailable, but will be added in a future update.</li>
-</ul>
-<p>To restore the network icon, you can install the <a href="https://windhawk.net/mods/restore-legacy-network-tray">Restore legacy network tray</a> mod, or use any other network indicator of your choice.</p>
-<p><strong>Important Notes:</strong></p>
-<ul>
-<li><strong>Internet access is required</strong> during the mod's initial launch.</li>
-<li>To restart Explorer, you must run <code>userinit.exe</code> instead of <code>explorer.exe</code>.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 Taskbar Context Menu Fix for Win11 24H2+ 1.4]]></title>
-        <id>https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2#ccdaeb7521f9379b199727dd47acdbc35ce4e38c</id>
-        <link href="https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2"/>
-        <updated>2026-11-13T05:01:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixing the taskmgr item (again)</li>
-</ul>
-]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Outlook Refined 0.6.5]]></title>
-        <id>https://windhawk.net/mods/outlook-refined#63b4770b5de06f02844e2d0e9cb283d281dd8819</id>
-        <link href="https://windhawk.net/mods/outlook-refined"/>
-        <updated>2026-11-13T05:01:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>A changed setting now reaches open Outlook windows the next time you switch to them, with no restart.</li>
-<li>With &quot;Calendar, times on event tiles&quot; on, a meeting that is about to start keeps its title on its tile. Outlook adds a row holding only the Join button before the title, and that row was taken for the title, so the tile showed only &quot;Join&quot;.</li>
-<li>Stop the calendar's month and year label clipping when the navigation pane is narrowed. The button carries a 20px left indent on top of its own padding, which at a 180px pane leaves it 91px while the longest labels need 104px, so the text was cut off mid-word under the header's hidden overflow. Dropping the indent gives the button 111px and the label fits at every pane width the mod allows.</li>
-<li>Double-clicking an event in a merged tile opens it, and the merged tile shows how long each event runs.</li>
-<li>Right-click and double-click on a row of a merged tile act the way they do on an Outlook event tile.</li>
-<li>The readme says where to turn on the agenda, the month grid and the Other inbox card.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Analytic Endeavors</name>
-            <uri>https://github.com/ae-reid-havens</uri>
         </author>
     </entry>
 </feed>
