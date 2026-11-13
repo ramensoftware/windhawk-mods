@@ -35,11 +35,9 @@ Real time update speed setting.
 ## Compatibility and limitations
 
 - Uses Task Manager's Processes navigation hooks and public XAML APIs.
-  Processes symbols use the official Windhawk symbol cache, including when
-  testing as a local mod. Details is discovered through Frame.Navigated after
-  visiting Processes. No hardcoded Task Manager offsets, extra PDB probing, or
-  XAML Diagnostics service are used. Windows updates may change private
-  functions.
+  Windhawk resolves the Processes symbols using its normal symbol cache.
+  Details is discovered through `Frame.Navigated` after visiting Processes.
+  Windows updates may change private functions.
 - Uses Task Manager's Ctrl-key refresh hold through `GetKeyState` calls made
   directly by `Taskmgr.exe`. While paused, some Task Manager keyboard actions
   may behave as if Ctrl is held, including Run new task (Ctrl+click can open
@@ -1278,19 +1276,10 @@ BOOL Wh_ModInit() {
         {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedFrom(void *)"},
          &g_processesFromOriginal, nullptr, true},
     };
-    // Windhawk does not use the default online symbol cache for local@ mods.
-    // Explicitly use this published mod's official cache so that local tests
-    // can resolve the same symbol entries as the catalog version. The Windhawk
-    // engine still validates the entry against the loaded Taskmgr.exe PDB key.
-    WH_HOOK_SYMBOLS_OPTIONS hookOptions{};
-    hookOptions.optionsSize = sizeof(hookOptions);
-    hookOptions.onlineCacheUrl =
-        L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/"
-        L"task-manager-pause-button/";
-
+    // Catalog mods use Windhawk's default online symbol cache. Local test
+    // copies must configure their cache URL separately, not in this release.
     if (!WindhawkUtils::HookSymbols(host, taskmgrExeHooks,
-                                    ARRAYSIZE(taskmgrExeHooks),
-                                    &hookOptions)) {
+                                    ARRAYSIZE(taskmgrExeHooks))) {
         Wh_Log(L"Processes navigation symbol resolution failed "
                L"(official cache or PDB unavailable)");
         return FALSE;
