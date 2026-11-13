@@ -1026,6 +1026,8 @@ namespace SwsSelectionProtocol {
 #define SWS_HOTKEY_WINALTTAB        6
 #define SWS_HOTKEY_WINALTSHIFTTAB   7
 #define SWS_HOTKEY_ALTBACKTICK_UK   8
+#define SWS_HOTKEY_ALTESC           9
+#define SWS_HOTKEY_ALTSHIFTESC      10
 #define SWS_HOTKEY_RETRY_TIMER_ID   100
 #define SWS_HOTKEY_RETRY_INTERVAL   2000
 #define SWS_BG_DARK          RGB(32, 32, 32)
@@ -3144,6 +3146,7 @@ static inline HRESULT SafeDwmUnregisterThumbnail(HTHUMBNAIL h) {
 static void LoadSettings();
 static void SWS_RegisterHotkeys();
 static void SWS_UnregisterHotkeys();
+static void SWS_SetSessionEscHotkeys(bool enable);
 static void ApplySwitcherRegion();
 static void ApplyThemeToWindow(HWND hWnd);
 static void ApplyPresentationWindowRegion(HWND hWnd);
@@ -15424,6 +15427,7 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     g_layoutStartIndex = 0; // Always start from the first window on initial show
     g_drilledIn = false;
     g_consumeEscUp = false;
+    SWS_SetSessionEscHotkeys(true);
     g_drillInAfterReveal = false;
     g_selectedIndex = 0;
     // Sticky sessions and touchpad invocations (which step from entry 0 on their
@@ -15472,6 +15476,7 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
         s_combinedRawSeen = false;
         s_combinedRawLiftHandled = false;
         s_commitStarted = false;
+        SWS_SetSessionEscHotkeys(false);
         PublishNativeSwipePolicy();
         ApplyHiddenObjectEventHook();
         return;
@@ -15759,6 +15764,7 @@ static void HideSwitcher() {
     RefreshTouchpadGestureKinds();
     g_drilledIn = false;
     g_consumeEscUp = false;
+    SWS_SetSessionEscHotkeys(false);
     g_drillInAfterReveal = false;
     g_isPaginatedView = false;
     g_isTouchpadGestureActive = false;
@@ -20406,6 +20412,29 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     }
     if (uMsg == WM_HOTKEY) {
         g_ctrlTapPending = false;
+        if (wParam == SWS_HOTKEY_ALTESC || wParam == SWS_HOTKEY_ALTSHIFTESC) {
+            // Same as Esc in the switcher, also while another window still
+            // holds the foreground (show delay).
+            if (g_isPendingShow) {
+                StartExitAnimation(false);
+            } else if (g_isVisible) {
+                if (g_drilledIn) { ExitAppGroup(); g_consumeEscUp = true; }
+                else {
+                    // The hotkey takes Esc from the system, so nothing moves the
+                    // foreground off the closing switcher anymore. Hand it back
+                    // to the window the session started from.
+                    HWND hSource = s_switchAnimationSource;
+                    StartExitAnimation(false);
+                    if (hSource && IsWindow(hSource) && IsWindowVisible(hSource) &&
+                        !IsIconic(hSource) && IsSwitcherWindow(GetForegroundWindow())) {
+                        SetForegroundWindow(hSource);
+                    }
+                }
+            } else {
+                SWS_SetSessionEscHotkeys(false);
+            }
+            return 0;
+        }
         if (g_settings.excludeXboxMode && IsXboxModeOrForeground()) {
             SWS_UnregisterHotkeys();
             INPUT inputs[2] = {};
@@ -21239,6 +21268,28 @@ static void SWS_RegisterHotkeys() {
         // Keep successful registrations. An optional shortcut conflict must not
         // disable ordinary Alt+Tab; retries touch only missing registrations.
         SetTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID, SWS_HOTKEY_RETRY_INTERVAL, NULL);
+    }
+}
+// Windows handles Alt+Esc (send the active window to the back) before the key
+// reaches the switcher when another window holds the foreground, as in the
+// show-delay phase. These hotkeys exist only while a session is open, so
+// Alt+Esc keeps its Windows meaning the rest of the time.
+static bool g_sessionEscHotkeys = false;
+static void SWS_SetSessionEscHotkeys(bool enable) {
+    if (!g_hSwitcher || enable == g_sessionEscHotkeys) return;
+    g_sessionEscHotkeys = enable;
+    if (!enable) {
+        UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTESC);
+        UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTESC);
+        return;
+    }
+    bool alt = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTESC,
+                              MOD_ALT | MOD_NOREPEAT, VK_ESCAPE) != FALSE;
+    bool altShift = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTESC,
+                                   MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, VK_ESCAPE) != FALSE;
+    if (!alt || !altShift) {
+        Wh_Log(L"SWS: Alt+Esc session hotkey unavailable alt=%d altShift=%d error=%u",
+               alt, altShift, GetLastError());
     }
 }
 static void SWS_UnregisterHotkeys() {
@@ -22925,6 +22976,7 @@ thread_exit:
         hAnimTimer = NULL;
     }
     SWS_UnregisterHotkeys();
+    SWS_SetSessionEscHotkeys(false);
     g_touchpadGesturesEnabled.store(false);
     PublishNativeSwipePolicy();
     if (g_isVisible || g_isPendingShow) HideSwitcher();
