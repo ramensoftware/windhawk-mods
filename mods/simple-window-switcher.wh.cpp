@@ -169,9 +169,9 @@ navigation can change the selection while the UI remains hidden.
   [Custom Window Corner Radius](https://windhawk.net/mods/custom-corner-radius)
   mod on regular and portable Windhawk installs. Squared, Rounded, Rounded small,
   and Custom take precedence over it for the switcher and all of its elements.
-- On Windows 11, live thumbnails are rounded on every material. Thumbnail
-  Corners can also use its own Custom radius, for example when the Windows
-  corner radius is 0.
+- On Windows 11, live thumbnails are rounded on every material. Each element's
+  corner setting can also use its own Custom radius, for example when the
+  Windows corner radius is 0.
 - On Windows 11, Mica and Acrylic keep their material at every corner radius.
   Radii that Windows does not draw itself use a material drawn by the switcher,
   which has no Windows drop shadow.
@@ -444,10 +444,14 @@ nothing failed.
           $description: Corner radius in pixels (0-32), used when Corner Preference is Custom.
         - taskRoundedCorners: "true"
           $name: Task Border and Close Button Corners
-          $description: Corners of the selected task border and the close button. Follow Corner Preference uses the switcher's radius, so a Squared switcher gives square corners here too.
+          $description: Corners of the selected task border and the close button. Follow Corner Preference uses the switcher's radius, so a Squared switcher gives square corners here too. Custom uses Task Border and Close Button Corner Radius instead.
           $options:
           - true: Follow Corner Preference
           - false: Squared
+          - custom: Custom
+        - taskCornerRadius: 8
+          $name: Task Border and Close Button Corner Radius (px)
+          $description: Corner radius in pixels (0-32), used when Task Border and Close Button Corners is Custom.
         - roundThumbnailCorners: "true"
           $name: Thumbnail Corners
           $description: Corners of the live window thumbnails, their shadow and hover outline. Follow Corner Preference uses the switcher's radius, so a Squared switcher gives square corners here too. Custom uses Thumbnail Corner Radius instead, for example when the Windows corner radius is 0.
@@ -460,16 +464,24 @@ nothing failed.
           $description: Thumbnail corner radius in pixels (0-32), used when Thumbnail Corners is Custom.
         - roundGroupIndicator: "true"
           $name: Group Indicator Corners
-          $description: Corners of the group indicator. Follow Corner Preference uses the switcher's radius, limited to half the indicator's height.
+          $description: Corners of the group indicator. Follow Corner Preference uses the switcher's radius and Custom uses Group Indicator Corner Radius, both limited to half the indicator's height.
           $options:
           - true: Follow Corner Preference
           - false: Squared
+          - custom: Custom
+        - groupIndicatorCornerRadius: 8
+          $name: Group Indicator Corner Radius (px)
+          $description: Corner radius in pixels (0-32), used when Group Indicator Corners is Custom.
         - roundBadgeIconBackground: "true"
           $name: Badge Icon Background Corners
-          $description: Corners of the badge icon background (Badge layout). Follow Corner Preference uses the switcher's radius, limited to half the background's size.
+          $description: Corners of the badge icon background (Badge layout). Follow Corner Preference uses the switcher's radius and Custom uses Badge Icon Background Corner Radius, both limited to half the background's size.
           $options:
           - true: Follow Corner Preference
           - false: Squared
+          - custom: Custom
+        - badgeIconBackgroundCornerRadius: 8
+          $name: Badge Icon Background Corner Radius (px)
+          $description: Corner radius in pixels (0-32), used when Badge Icon Background Corners is Custom.
       $name: Corners
     - Thumbnails:
         - thumbnailPosition: bottom
@@ -1405,11 +1417,17 @@ struct Settings {
     int entryPadding;
     bool perMonitorWindows;
     bool taskRoundedCorners;
+    bool customTaskCorners;
+    int taskCornerRadius;
     bool roundThumbnailCorners;
     bool customThumbnailCorners;
     int thumbnailCornerRadius;
     bool roundGroupIndicator;
+    bool customGroupIndicatorCorners;
+    int groupIndicatorCornerRadius;
     bool roundBadgeIconBackground;
+    bool customBadgeIconBackgroundCorners;
+    int badgeIconBackgroundCornerRadius;
     bool reverseScrollDirection;
     bool centerTaskContent;
     bool showApplications;
@@ -7124,37 +7142,41 @@ static bool UseTaskRoundedCorners() {
     return g_settings.taskRoundedCorners;
 }
 
-static int GetTaskUiCornerRadiusPx() {
-    if (!UseTaskRoundedCorners()) {
+// Each element's corner setting follows the switcher's own radius from Corner
+// Preference, keeps the element square, or uses the element's custom radius.
+static int ResolveElementCornerRadiusPx(bool round, bool custom, int customRadiusDip) {
+    if (!round) {
         return 0;
+    }
+    if (custom) {
+        return MulDiv(customRadiusDip, g_dpiX, 96);
     }
     return GetWindowCornerRadiusPx();
 }
 
-// Each element's corner setting either follows the switcher's own radius from
-// Corner Preference or keeps the element square.
+static int GetTaskUiCornerRadiusPx() {
+    return ResolveElementCornerRadiusPx(UseTaskRoundedCorners(), g_settings.customTaskCorners,
+                                        g_settings.taskCornerRadius);
+}
+
 static int GetThumbnailCornerRadiusPx() {
-    if (!g_settings.roundThumbnailCorners) {
-        return 0;
-    }
-    if (g_settings.customThumbnailCorners) {
-        return MulDiv(g_settings.thumbnailCornerRadius, g_dpiX, 96);
-    }
-    return GetWindowCornerRadiusPx();
+    return ResolveElementCornerRadiusPx(g_settings.roundThumbnailCorners,
+                                        g_settings.customThumbnailCorners,
+                                        g_settings.thumbnailCornerRadius);
 }
 
 static int GetGroupIndicatorCornerRadiusPx(int maxRadius) {
-    if (!g_settings.roundGroupIndicator) {
-        return 0;
-    }
-    return std::min(GetWindowCornerRadiusPx(), maxRadius);
+    return std::min(ResolveElementCornerRadiusPx(g_settings.roundGroupIndicator,
+                                                 g_settings.customGroupIndicatorCorners,
+                                                 g_settings.groupIndicatorCornerRadius),
+                    maxRadius);
 }
 
 static int GetBadgeIconBackgroundCornerRadiusPx(int maxRadius) {
-    if (!g_settings.roundBadgeIconBackground) {
-        return 0;
-    }
-    return std::min(GetWindowCornerRadiusPx(), maxRadius);
+    return std::min(ResolveElementCornerRadiusPx(g_settings.roundBadgeIconBackground,
+                                                 g_settings.customBadgeIconBackgroundCorners,
+                                                 g_settings.badgeIconBackgroundCornerRadius),
+                    maxRadius);
 }
 
 static void GetSwitcherPosition(const RECT& workArea, int* outX, int* outY,
@@ -21659,6 +21681,17 @@ static bool LoadAutoBoolSetting(LPCWSTR settingName, bool autoVal) {
     return result;
 }
 
+// Corner settings: "true" follows Corner Preference, "false" is square and
+// "custom" uses the element's own radius setting (0-32 px).
+static void LoadCornerSetting(LPCWSTR modeName, LPCWSTR radiusName, bool* round,
+                              bool* custom, int* radiusDip) {
+    PCWSTR mode = Wh_GetStringSetting(modeName);
+    *custom = mode && _wcsicmp(mode, L"custom") == 0;
+    if (mode) Wh_FreeStringSetting(mode);
+    *round = *custom || LoadAutoBoolSetting(modeName, true);
+    *radiusDip = std::clamp(Wh_GetIntSetting(radiusName), 0, 32);
+}
+
 static int LoadIntSetting(LPCWSTR settingName, int defaultVal) {
     PCWSTR s = Wh_GetStringSetting(settingName);
     if (!s || !*s) {
@@ -21698,19 +21731,23 @@ static void LoadSettings() {
     if (g_settings.customCornerRadius > 32) g_settings.customCornerRadius = 32;
     // Element corners follow the switcher's own radius (true) or stay square
     // (false). An empty or earlier "auto" value follows, the default.
-    g_settings.taskRoundedCorners = LoadAutoBoolSetting(L"Appearance.Corners.taskRoundedCorners", true);
-    {
-        PCWSTR thumbnailCorners = Wh_GetStringSetting(L"Appearance.Corners.roundThumbnailCorners");
-        g_settings.customThumbnailCorners =
-            thumbnailCorners && _wcsicmp(thumbnailCorners, L"custom") == 0;
-        if (thumbnailCorners) Wh_FreeStringSetting(thumbnailCorners);
-    }
-    g_settings.roundThumbnailCorners = g_settings.customThumbnailCorners ||
-        LoadAutoBoolSetting(L"Appearance.Corners.roundThumbnailCorners", true);
-    g_settings.thumbnailCornerRadius =
-        std::clamp(Wh_GetIntSetting(L"Appearance.Corners.thumbnailCornerRadius"), 0, 32);
-    g_settings.roundGroupIndicator = LoadAutoBoolSetting(L"Appearance.Corners.roundGroupIndicator", true);
-    g_settings.roundBadgeIconBackground = LoadAutoBoolSetting(L"Appearance.Corners.roundBadgeIconBackground", true);
+    LoadCornerSetting(L"Appearance.Corners.taskRoundedCorners",
+                      L"Appearance.Corners.taskCornerRadius",
+                      &g_settings.taskRoundedCorners, &g_settings.customTaskCorners,
+                      &g_settings.taskCornerRadius);
+    LoadCornerSetting(L"Appearance.Corners.roundThumbnailCorners",
+                      L"Appearance.Corners.thumbnailCornerRadius",
+                      &g_settings.roundThumbnailCorners, &g_settings.customThumbnailCorners,
+                      &g_settings.thumbnailCornerRadius);
+    LoadCornerSetting(L"Appearance.Corners.roundGroupIndicator",
+                      L"Appearance.Corners.groupIndicatorCornerRadius",
+                      &g_settings.roundGroupIndicator, &g_settings.customGroupIndicatorCorners,
+                      &g_settings.groupIndicatorCornerRadius);
+    LoadCornerSetting(L"Appearance.Corners.roundBadgeIconBackground",
+                      L"Appearance.Corners.badgeIconBackgroundCornerRadius",
+                      &g_settings.roundBadgeIconBackground,
+                      &g_settings.customBadgeIconBackgroundCorners,
+                      &g_settings.badgeIconBackgroundCornerRadius);
     LoadStringSetting(L"Accessibility.scrollWheelBehavior", g_settings.scrollWheelBehavior, L"never");
     LoadStringSetting(L"Accessibility.scrollWheelAction", g_settings.scrollWheelAction, L"selection");
     LoadStringSetting(L"Accessibility.scrollSecondaryAction", g_settings.scrollSecondaryAction, L"page");
