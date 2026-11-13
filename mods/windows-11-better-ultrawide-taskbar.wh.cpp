@@ -674,6 +674,8 @@ constexpr SettingChoice kLightingChoices[]{
 constexpr SettingChoice kShapeChoices[]{{L"island", L"Island"}, {L"edge", L"Edge"}, {L"edgeArc", L"Edge arc"}};
 constexpr SettingChoice kAlignmentChoices[]{{L"group", L"Whole group"}, {L"buttons", L"Button area"}};
 constexpr SettingChoice kLayoutChoices[]{{L"unified", L"Unified"}, {L"separate", L"Separate"}};
+// A row is enabled while another row is at one of these choice values or, with no value, switched on or above 0.
+struct SettingNeed { PCWSTR key = nullptr; PCWSTR values[3]{}; };
 struct SettingField {
     PCWSTR key;
     PCWSTR label;
@@ -684,128 +686,260 @@ struct SettingField {
     int maximum = 0;
     std::span<const SettingChoice> choices{};
     double displayDivisor = 1;
+    PCWSTR section = nullptr; // The title of the editor section this row opens.
+    PCWSTR help = nullptr;
+    PCWSTR mirrorOf = nullptr; // The Liquid row whose glass option this UI row sets for the panels and controls.
+    SettingNeed needs[2]{}; // Both must hold. A row that mirrors a Liquid row takes that row's needs, over the UI rows.
+    constexpr SettingField Needs(PCWSTR key, PCWSTR a = nullptr, PCWSTR b = nullptr, PCWSTR c = nullptr) const {
+        if (needs[1].key) throw std::logic_error("A row holds two needs");
+        auto row = *this;
+        row.needs[needs[0].key ? 1 : 0] = {key, {a, b, c}};
+        return row;
+    }
+    constexpr SettingField Mirrors(PCWSTR key) const { auto row = *this; row.mirrorOf = key; return row; }
+    constexpr SettingField Opens(PCWSTR title) const { auto row = *this; row.section = title; return row; }
+    constexpr SettingField Help(PCWSTR text) const { auto row = *this; row.help = text; return row; }
 };
+constexpr PCWSTR kUiGlassHelp = L"Applies to the floating panels and the glass controls.";
+// The editor shows each page's rows in this order.
 constexpr SettingField kSettingFields[]{
-    {L"theme", L"Dock theme", SettingKind::Choice, 0, 0, 0, 0, kThemeChoices},
+    SettingField{L"theme", L"Dock theme", SettingKind::Choice, 0, 0, 0, 0, kThemeChoices}.Opens(L"Style & color"),
     {L"fontColor", L"Text color", SettingKind::Choice, 0, 0, 0, 0, kFontChoices},
-    {L"tray.grayscale", L"Use grayscale", SettingKind::Toggle, 2},
-    {L"cornerRadius", L"Dock corner radius (DIP)", SettingKind::Number, 0, 12, 0, 100},
-    {L"buttonCornerRadius", L"Button corner radius (DIP)", SettingKind::Number, 0, 12, 0, 100},
-    {L"buttonVerticalPadding", L"Button vertical padding (DIP)", SettingKind::Number, 0, 4, 0, 100},
-    {L"edgeDistance", L"Distance from screen edge (DIP)", SettingKind::Number, 0, 4, 0, 100},
-    {L"button.border", L"Show button borders", SettingKind::Toggle, 0, 1},
-    {L"button.liquidLayer", L"Give each button its own liquid layer", SettingKind::Toggle, 0},
-    {L"liquid.preset", L"Preset", SettingKind::Choice, 1, 0, 0, 0, kPresetChoices},
-    {L"liquid.zRadius", L"Depth (DIP)", SettingKind::Number, 1, 40, 1, 100},
-    {L"liquid.refraction", L"Refraction (%)", SettingKind::Number, 1, 69, 0, 200},
+    SettingField{L"adaptive.windowSeconds", L"Adaptive averaging (seconds)", SettingKind::Number, 0, 200, 0, 1000, {}, 100}
+        .Needs(L"fontColor", L"adaptive")
+        .Help(L"Average background brightness over this many seconds. Longer windows reduce color changes on animated wallpapers. 0 reacts to each sample."),
+    {L"dockBorder", L"Dock border line", SettingKind::Toggle, 0, 0},
+    SettingField{L"dockBorderColor", L"Border color", SettingKind::Choice, 0, 1, 0, 0, kBorderColorChoices}
+        .Needs(L"dockBorder"),
+    SettingField{L"dockBorderCustomColor", L"Custom border color (#RRGGBB)", SettingKind::Color, 0, 0, 0, 0}
+        .Needs(L"dockBorder").Needs(L"dockBorderColor", L"custom"),
+    SettingField{L"dockBorderWidth", L"Border thickness (DIP)", SettingKind::Number, 0, 2, 1, 20, {}, 2}.Needs(L"dockBorder"),
+    SettingField{L"dockBorderOpacity", L"Border opacity (%)", SettingKind::Number, 0, 100, 0, 100}.Needs(L"dockBorder"),
+    SettingField{L"layout", L"Layout", SettingKind::Segmented, 0, 0, 0, 0, kLayoutChoices}.Opens(L"Dock layout")
+        .Help(L"Unified is one dock around the buttons and the tray. Separate splits it into a button bar and a tray bar, Bar distance apart."),
+    SettingField{L"barDistance", L"Bar distance (DIP)", SettingKind::Number, 0, static_cast<int>(kBarGap), 0, 100}
+        .Needs(L"layout", L"separate")
+        .Help(L"How far apart Separate's two bars are where they come nearest. Arcs and slanted ends on their facing sides move the bars apart, so the curves never touch. On a monitor too narrow for the dock, the bars close in, down to the curves touching, before the buttons move left."),
+    SettingField{L"shape", L"Shape", SettingKind::Segmented, 0, 0, 0, 0, kShapeChoices}
+        .Help(L"Island floats off the screen edge with every corner rounded. Edge sits on the screen edge, square where it meets it. Edge arc also curves out along the screen edge at each side, like a tab."),
+    SettingField{L"alignment", L"Alignment", SettingKind::Segmented, 0, 0, 0, 0, kAlignmentChoices}
+        .Help(L"Whole group centers the buttons and the tray together. Button area centers Start through the last app; the tray follows on the right."),
+    SettingField{L"innerArcs", L"Arc the inner edges", SettingKind::Toggle, 0, 0}.Needs(L"layout", L"separate")
+        .Needs(L"shape", L"edgeArc")
+        .Help(L"With Separate and Edge arc, the facing sides of the two bars also curve out along the screen edge, with the same arc as the outer sides."),
+    SettingField{L"slantedEnds", L"Slanted ends", SettingKind::Toggle, 0, 0}
+        .Help(L"Curves the dock's ends out toward the screen edge, the facing ends of Separate's two bars too. Every convex curve rounds at the dock's corner radius as far as each curve allows, and every concave one at Concave radius up to the room the convex curves leave. The curves keep clear of the buttons and the tray; every end sits 24 DIP from its nearest icon. With Smaller tray, the step to the tray becomes an S of the same kind, at least 24 DIP from the last button's icon. Where the dock is too wide for its monitor, the tray's end meets the screen's side square."),
+    SettingField{L"slantAngle", L"Curve angle (°)", SettingKind::Number, 0, 70, 30, 85}.Needs(L"slantedEnds")
+        .Help(L"How steep the middle of the curve is, from the screen edge: higher is steeper and narrower."),
+    SettingField{L"concaveRadius", L"Concave radius (DIP)", SettingKind::Number, 0, static_cast<int>(kConcaveRadius), 0, 100}
+        .Needs(L"slantedEnds")
+        .Help(L"The radius of the slanted ends' concave curves: where Edge arc's ends flare onto the screen edge and where Smaller tray's step lands. The dock corner radius sets the convex ones. Where an end is too short for both, the concave curves take the room the convex ones leave; Smaller tray's step rounds its concave curve as far as the rest of the step allows, so a short step changes no other curve."),
+    SettingField{L"smallerTray", L"Smaller tray", SettingKind::Toggle, 0, 0}
+        .Help(L"Lowers the tray's side of the dock on the side away from the screen edge. Unified joins the two heights with an S curve before the tray; Separate shortens the tray bar."),
+    SettingField{L"trayReduction", L"Tray height reduction (DIP)", SettingKind::Number, 0, 8, 1, 100}.Needs(L"smallerTray")
+        .Help(L"How much lower the tray side is. The limit is the dock's height less 24 DIP, so the tray band keeps at least 24 DIP."),
+    SettingField{L"cornerRadius", L"Dock corner radius (DIP)", SettingKind::Number, 0, 12, 0, 100}.Opens(L"Geometry")
+        .Help(L"Rounded corners are limited to half the visible shape's width or height."),
+    SettingField{L"buttonCornerRadius", L"Button corner radius (DIP)", SettingKind::Number, 0, 12, 0, 100}
+        .Help(L"Rounded corners are limited to half the visible shape's width or height."),
+    SettingField{L"buttonVerticalPadding", L"Button vertical padding (DIP)", SettingKind::Number, 0, 4, 0, 100}
+        .Help(L"Space above and below each button background. Icons and click targets keep their native size."),
+    SettingField{L"edgeDistance", L"Distance from screen edge (DIP)", SettingKind::Number, 0, 4, 0, 100}
+        .Needs(L"shape", L"island"),  // Edge and Edge arc sit on the screen edge.
+    SettingField{L"button.border", L"Show button borders", SettingKind::Toggle, 0, 1}.Opens(L"Buttons"),
+    SettingField{L"button.liquidLayer", L"Give each button its own liquid layer", SettingKind::Toggle, 0}
+        .Needs(L"theme", L"liquid"),
+    SettingField{L"tray.highlightPadding", L"Highlight vertical padding (DIP)", SettingKind::Number, 2, 8, 0, 100}
+        .Opens(L"Tray highlights"),
+    {L"tray.highlightRadius", L"Highlight corner radius (DIP)", SettingKind::Number, 2, 12, 0, 100},
+    {L"tray.enabled", L"Enable custom tray icons", SettingKind::Toggle, 2, 1},
+    SettingField{L"tray.grayscale", L"Use grayscale", SettingKind::Toggle, 2}.Needs(L"tray.enabled"),
+    SettingField{L"liquid.preset", L"Preset", SettingKind::Choice, 1, 0, 0, 0, kPresetChoices}.Opens(L"Material"),
+    SettingField{L"liquid.model", L"Refraction model", SettingKind::Choice, 1, 0, 0, 0, kRefractionChoices}
+        .Help(L"Biconvex curves the glass. Snell traces light through the surface. Dome magnifies. Layered adds a curled rim; Bevel concentrates distortion at the edge."),
+    SettingField{L"liquid.surface", L"Surface profile", SettingKind::Choice, 1, 0, 0, 0, kSurfaceChoices}.Opens(L"Surface")
+        .Help(L"Circle and squircle are convex; concave bends outward; raised lip blends convex and concave curves."),
+    SettingField{L"liquid.zRadius", L"Depth (DIP)", SettingKind::Number, 1, 40, 1, 100}
+        .Needs(L"liquid.model", L"biconvex", L"dome"),
+    SettingField{L"liquid.bezelWidth", L"Bezel width (DIP)", SettingKind::Number, 1, 12, 1, 100}
+        .Help(L"Width of the curved edge, independent of the glass base thickness."),
+    SettingField{L"liquid.thickness", L"Glass thickness (DIP)", SettingKind::Number, 1, 20, 1, 200}
+        .Needs(L"liquid.model", L"snell"),
+    SettingField{L"liquid.refractiveIndex", L"Refractive index", SettingKind::Number, 1, 150, 100, 250, {}, 100}
+        .Needs(L"liquid.model", L"snell")
+        .Help(L"1.00 does not bend light; ordinary glass is approximately 1.50."),
+    SettingField{L"liquid.refraction", L"Refraction (%)", SettingKind::Number, 1, 69, 0, 200}.Opens(L"Refraction"),
+    {L"liquid.magnification", L"Additional magnification (%)", SettingKind::Number, 1, 0, 0, 200},
     {L"liquid.chromaticAberration", L"Chromatic aberration (%)", SettingKind::Number, 1, 5, 0, 30},
+    {L"liquid.distortion", L"Micro-distortion (%)", SettingKind::Number, 1, 0, 0, 100},
+    SettingField{L"liquid.lighting", L"Lighting", SettingKind::Choice, 1, 0, 0, 0, kLightingChoices}.Opens(L"Lighting")
+        .Help(L"Original and Rich specular use the highlight intensity. At 0%, specular highlights are disabled; refraction and Fresnel remain independent."),
+    SettingField{L"liquid.specular", L"Specular highlight (%)", SettingKind::Number, 1, 0, 0, 100}
+        .Needs(L"liquid.lighting", L"original", L"rich"),
     {L"liquid.edgeHighlight", L"Edge highlight (%)", SettingKind::Number, 1, 5, 0, 100},
-    {L"liquid.specular", L"Specular highlight (%)", SettingKind::Number, 1, 0, 0, 100},
     {L"liquid.fresnel", L"Fresnel reflection (%)", SettingKind::Number, 1, 100, 0, 200},
-    {L"liquid.opacity", L"Opacity (%)", SettingKind::Number, 1, 100, 0, 100},
+    SettingField{L"liquid.lightAngle", L"Rim light angle (degrees)", SettingKind::Number, 1, -60, -180, 180}
+        .Needs(L"liquid.lighting", L"rim"),
+    SettingField{L"liquid.rimOpacity", L"Rim light opacity (%)", SettingKind::Number, 1, 40, 0, 100}
+        .Needs(L"liquid.lighting", L"rim"),
+    SettingField{L"liquid.rimSaturation", L"Rim color saturation (%)", SettingKind::Number, 1, 400, 0, 1000}
+        .Needs(L"liquid.lighting", L"rim"),
+    SettingField{L"liquid.opacity", L"Opacity (%)", SettingKind::Number, 1, 100, 0, 100}.Opens(L"Finish"),
     {L"liquid.brightness", L"Brightness (%)", SettingKind::Number, 1, 0, -50, 50},
     {L"liquid.blur", L"Blur (%)", SettingKind::Number, 1, 0, 0, 100},
-    {L"tray.enabled", L"Enable custom tray icons", SettingKind::Toggle, 2, 1},
-    {L"liquid.model", L"Refraction model", SettingKind::Choice, 1, 0, 0, 0, kRefractionChoices},
-    {L"liquid.surface", L"Surface profile", SettingKind::Choice, 1, 0, 0, 0, kSurfaceChoices},
-    {L"liquid.bezelWidth", L"Bezel width (DIP)", SettingKind::Number, 1, 12, 1, 100},
-    {L"liquid.thickness", L"Glass thickness (DIP)", SettingKind::Number, 1, 20, 1, 200},
-    {L"liquid.refractiveIndex", L"Refractive index", SettingKind::Number, 1, 150, 100, 250, {}, 100},
-    {L"liquid.magnification", L"Additional magnification (%)", SettingKind::Number, 1, 0, 0, 200},
-    {L"liquid.distortion", L"Micro-distortion (%)", SettingKind::Number, 1, 0, 0, 100},
     {L"liquid.saturation", L"Saturation (%)", SettingKind::Number, 1, 0, -100, 100},
     {L"liquid.tint", L"Cool glass tint (%)", SettingKind::Number, 1, 0, 0, 100},
-    {L"liquid.lighting", L"Lighting", SettingKind::Choice, 1, 0, 0, 0, kLightingChoices},
-    {L"liquid.lightAngle", L"Rim light angle (degrees)", SettingKind::Number, 1, -60, -180, 180},
-    {L"liquid.rimOpacity", L"Rim light opacity (%)", SettingKind::Number, 1, 40, 0, 100},
-    {L"liquid.rimSaturation", L"Rim color saturation (%)", SettingKind::Number, 1, 400, 0, 1000},
-    {L"liquid.shadowOpacity", L"Shadow opacity (%)", SettingKind::Number, 1, 0, 0, 100},
-    {L"liquid.shadowBlur", L"Shadow softness (DIP)", SettingKind::Number, 1, 12, 0, 72},
-    {L"liquid.shadowOffset", L"Shadow vertical offset (DIP)", SettingKind::Number, 1, 4, -40, 40},
-    {L"adaptive.windowSeconds", L"Adaptive averaging (seconds)", SettingKind::Number, 0, 200, 0, 1000, {}, 100},
-    {L"ui.panelBlur", L"Panel blur (%)", SettingKind::Number, 3, 25, 0, 100},
-    {L"ui.panelRefraction", L"Glass refraction (%)", SettingKind::Number, 3, 100, 0, 200},
-    {L"ui.panelDepth", L"Glass depth (DIP)", SettingKind::Number, 3, 40, 1, 100},
-    {L"ui.panelHighlights", L"Glass highlights (%)", SettingKind::Number, 3, 5, 0, 100},
-    {L"ui.glassModel", L"Refraction model", SettingKind::Choice, 3, 0, 0, 0, kRefractionChoices},
-    {L"ui.glassSurface", L"Surface profile", SettingKind::Choice, 3, 0, 0, 0, kSurfaceChoices},
-    {L"ui.glassBezelWidth", L"Bezel width (DIP)", SettingKind::Number, 3, 12, 1, 100},
-    {L"ui.glassThickness", L"Glass thickness (DIP)", SettingKind::Number, 3, 20, 1, 200},
-    {L"ui.glassRefractiveIndex", L"Refractive index", SettingKind::Number, 3, 150, 100, 250, {}, 100},
-    {L"ui.glassMagnification", L"Magnification (%)", SettingKind::Number, 3, 0, 0, 200},
-    {L"ui.glassDistortion", L"Micro-distortion (%)", SettingKind::Number, 3, 0, 0, 100},
-    {L"ui.glassChromaticAberration", L"Color fringing (%)", SettingKind::Number, 3, 0, 0, 30},
-    {L"ui.glassBrightness", L"Brightness (%)", SettingKind::Number, 3, 0, -50, 50},
-    {L"ui.glassSaturation", L"Saturation (%)", SettingKind::Number, 3, 0, -100, 100},
-    {L"ui.glassFresnel", L"Fresnel reflection (%)", SettingKind::Number, 3, 100, 0, 200},
-    {L"ui.glassLighting", L"Lighting", SettingKind::Choice, 3, 1, 0, 0, kLightingChoices},
-    {L"ui.glassLightAngle", L"Light angle (degrees)", SettingKind::Number, 3, -60, -180, 180},
-    {L"ui.glassRimOpacity", L"Rim light strength (%)", SettingKind::Number, 3, 40, 0, 100},
-    {L"ui.glassRimSaturation", L"Rim color saturation (%)", SettingKind::Number, 3, 400, 0, 1000},
-    {L"ui.panelOpacity", L"Panel opacity (%)", SettingKind::Number, 3, 100, 0, 100},
-    {L"ui.glassEdgeHighlight", L"Edge highlight (%)", SettingKind::Number, 3, 0, 0, 100},
-    {L"liquid.rimRefraction", L"Rim refraction (%)", SettingKind::Number, 1, 50, 0, 200},
-    {L"liquid.rimWidth", L"Rim width (DIP)", SettingKind::Number, 1, 3, 1, 60},
-    {L"liquid.bevelSharpness", L"Bevel sharpness", SettingKind::Number, 1, 10, 2, 32},
+    SettingField{L"liquid.shadowOpacity", L"Shadow opacity (%)", SettingKind::Number, 1, 0, 0, 100}.Opens(L"Shadow")
+        .Help(L"Shadows follow the dock and are limited to the taskbar's window area."),
+    SettingField{L"liquid.shadowBlur", L"Shadow softness (DIP)", SettingKind::Number, 1, 12, 0, 72}
+        .Needs(L"liquid.shadowOpacity"),
+    SettingField{L"liquid.shadowOffset", L"Shadow vertical offset (DIP)", SettingKind::Number, 1, 4, -40, 40}
+        .Needs(L"liquid.shadowOpacity"),
+    SettingField{L"liquid.rimRefraction", L"Rim refraction (%)", SettingKind::Number, 1, 50, 0, 200}.Opens(L"Edge shaping")
+        .Needs(L"liquid.model", L"layered", L"bevel"),
+    SettingField{L"liquid.rimWidth", L"Rim width (DIP)", SettingKind::Number, 1, 3, 1, 60}.Needs(L"liquid.model", L"layered"),
+    SettingField{L"liquid.bevelSharpness", L"Bevel sharpness", SettingKind::Number, 1, 10, 2, 32}
+        .Needs(L"liquid.model", L"bevel"),
     {L"liquid.cornerBoost", L"Corner boost (%)", SettingKind::Number, 1, 0, 0, 100},
     {L"liquid.rippleStrength", L"Edge ripple (%)", SettingKind::Number, 1, 0, 0, 100},
-    {L"liquid.rippleWavelength", L"Ripple spacing (DIP)", SettingKind::Number, 1, 12, 2, 100},
-    {L"liquid.edgeWidth", L"Highlight width (DIP; 0 = auto)", SettingKind::Number, 1, 0, 0, 100},
+    SettingField{L"liquid.rippleWavelength", L"Ripple spacing (DIP)", SettingKind::Number, 1, 12, 2, 100}
+        .Needs(L"liquid.rippleStrength"),
+    SettingField{L"liquid.edgeWidth", L"Highlight width (DIP; 0 = auto)", SettingKind::Number, 1, 0, 0, 100}
+        .Help(L"Width of the highlight, independent of refraction. 0 keeps automatic sizing."),
     {L"liquid.edgeSoftness", L"Highlight softness (%)", SettingKind::Number, 1, 100, 10, 400},
-    {L"liquid.frostEdge", L"Polished edge (%)", SettingKind::Number, 1, 15, 0, 100},
-    {L"liquid.dispersion", L"Color dispersion", SettingKind::Choice, 1, 0, 0, 0, kDispersionChoices},
-    {L"liquid.dye", L"Tint color (#RRGGBB)", SettingKind::Color, 1, 0, 0, 0},
+    SettingField{L"liquid.frostEdge", L"Polished edge (%)", SettingKind::Number, 1, 15, 0, 100}.Opens(L"Frost & color")
+        .Needs(L"liquid.blur")
+        .Help(L"Sharp detail retained at the edge of frosted glass. 0 frosts the entire surface."),
+    SettingField{L"liquid.dispersion", L"Color dispersion", SettingKind::Choice, 1, 0, 0, 0, kDispersionChoices}
+        .Help(L"With refraction links color fringing to the actual displacement of light."),
+    SettingField{L"liquid.dye", L"Tint color (#RRGGBB)", SettingKind::Color, 1, 0, 0, 0}.Needs(L"liquid.dyeStrength"),
     {L"liquid.dyeStrength", L"Tint strength (%)", SettingKind::Number, 1, 0, 0, 100},
-    {L"liquid.fluidStrength", L"Fluid response (%)", SettingKind::Number, 1, 0, 0, 100},
-    {L"liquid.fluidRadius", L"Fluid reach (%)", SettingKind::Number, 1, 35, 5, 100},
-    {L"liquid.fluidViscosity", L"Fluid viscosity (%)", SettingKind::Number, 1, 65, 0, 100},
-    {L"liquid.glintMode", L"Moving glints", SettingKind::Choice, 1, 0, 0, 0, kGlintChoices},
-    {L"liquid.glintStrength", L"Glint strength (%)", SettingKind::Number, 1, 15, 0, 100},
-    {L"liquid.glintSpeed", L"Glint speed (%)", SettingKind::Number, 1, 50, 1, 100},
-    {L"liquid.glintSize", L"Glint size (%)", SettingKind::Number, 1, 35, 5, 100},
+    SettingField{L"liquid.fluidStrength", L"Fluid response (%)", SettingKind::Number, 1, 0, 0, 100}
+        .Opens(L"Interaction & glints")
+        .Help(L"Glass follows pointer motion and settles after it stops. Controls stay in place. Windows animation settings apply."),
+    SettingField{L"liquid.fluidRadius", L"Fluid reach (%)", SettingKind::Number, 1, 35, 5, 100}
+        .Needs(L"liquid.fluidStrength"),
+    SettingField{L"liquid.fluidViscosity", L"Fluid viscosity (%)", SettingKind::Number, 1, 65, 0, 100}
+        .Needs(L"liquid.fluidStrength"),
+    SettingField{L"liquid.glintMode", L"Moving glints", SettingKind::Choice, 1, 0, 0, 0, kGlintChoices}
+        .Help(L"Optional glints along the glass edge. Windows animation settings apply."),
+    SettingField{L"liquid.glintStrength", L"Glint strength (%)", SettingKind::Number, 1, 15, 0, 100}
+        .Needs(L"liquid.glintMode", L"animated", L"pointer"),
+    SettingField{L"liquid.glintSpeed", L"Glint speed (%)", SettingKind::Number, 1, 50, 1, 100}
+        .Needs(L"liquid.glintMode", L"animated"),
+    SettingField{L"liquid.glintSize", L"Glint size (%)", SettingKind::Number, 1, 35, 5, 100}
+        .Needs(L"liquid.glintMode", L"animated", L"pointer"),
     {L"liquid.boundaryFade", L"Capture edge softness (DIP)", SettingKind::Number, 1, 2, 0, 20},
-    {L"ui.glassRimRefraction", L"Rim refraction (%)", SettingKind::Number, 3, 50, 0, 200},
-    {L"ui.glassRimWidth", L"Rim width (DIP)", SettingKind::Number, 3, 3, 1, 60},
-    {L"ui.glassBevelSharpness", L"Bevel sharpness", SettingKind::Number, 3, 10, 2, 32},
-    {L"ui.glassCornerBoost", L"Corner boost (%)", SettingKind::Number, 3, 0, 0, 100},
-    {L"ui.glassRippleStrength", L"Edge ripple (%)", SettingKind::Number, 3, 0, 0, 100},
-    {L"ui.glassRippleWavelength", L"Ripple spacing (DIP)", SettingKind::Number, 3, 12, 2, 100},
-    {L"ui.glassEdgeWidth", L"Highlight width (DIP; 0 = auto)", SettingKind::Number, 3, 0, 0, 100},
-    {L"ui.glassEdgeSoftness", L"Highlight softness (%)", SettingKind::Number, 3, 100, 10, 400},
-    {L"ui.glassFrostEdge", L"Polished edge (%)", SettingKind::Number, 3, 15, 0, 100},
-    {L"ui.glassDispersion", L"Color dispersion", SettingKind::Choice, 3, 0, 0, 0, kDispersionChoices},
-    {L"ui.glassDye", L"Tint color (#RRGGBB)", SettingKind::Color, 3, 0, 0, 0},
-    {L"ui.glassDyeStrength", L"Tint strength (%)", SettingKind::Number, 3, 0, 0, 100},
-    {L"ui.glassFluidStrength", L"Fluid response (%)", SettingKind::Number, 3, 0, 0, 100},
-    {L"ui.glassFluidRadius", L"Fluid reach (%)", SettingKind::Number, 3, 35, 5, 100},
-    {L"ui.glassFluidViscosity", L"Fluid viscosity (%)", SettingKind::Number, 3, 65, 0, 100},
-    {L"ui.glassGlintMode", L"Moving glints", SettingKind::Choice, 3, 0, 0, 0, kGlintChoices},
-    {L"ui.glassGlintStrength", L"Glint strength (%)", SettingKind::Number, 3, 15, 0, 100},
-    {L"ui.glassGlintSpeed", L"Glint speed (%)", SettingKind::Number, 3, 50, 1, 100},
-    {L"ui.glassGlintSize", L"Glint size (%)", SettingKind::Number, 3, 35, 5, 100},
-    {L"ui.glassBoundaryFade", L"Capture edge softness (DIP)", SettingKind::Number, 3, 2, 0, 20},
-    {L"tray.highlightPadding", L"Highlight vertical padding (DIP)", SettingKind::Number, 2, 8, 0, 100},
-    {L"tray.highlightRadius", L"Highlight corner radius (DIP)", SettingKind::Number, 2, 12, 0, 100},
-    {L"dockBorder", L"Dock border line", SettingKind::Toggle, 0, 0},
-    {L"dockBorderColor", L"Border color", SettingKind::Choice, 0, 1, 0, 0, kBorderColorChoices},
-    {L"dockBorderCustomColor", L"Custom border color (#RRGGBB)", SettingKind::Color, 0, 0, 0, 0},
-    {L"dockBorderWidth", L"Border thickness (DIP)", SettingKind::Number, 0, 2, 1, 20, {}, 2},
-    {L"dockBorderOpacity", L"Border opacity (%)", SettingKind::Number, 0, 100, 0, 100},
-    {L"ui.bodyBorder", L"Body border line", SettingKind::Toggle, 3, 1},
-    {L"ui.bodyBorderColor", L"Border color", SettingKind::Choice, 3, 1, 0, 0, kBorderColorChoices},
-    {L"ui.bodyBorderCustomColor", L"Custom border color (#RRGGBB)", SettingKind::Color, 3, 0, 0, 0},
-    {L"ui.bodyBorderWidth", L"Border thickness (DIP)", SettingKind::Number, 3, 2, 1, 20, {}, 2},
-    {L"ui.bodyBorderOpacity", L"Border opacity (%)", SettingKind::Number, 3, 100, 0, 100},
-    {L"shape", L"Shape", SettingKind::Segmented, 0, 0, 0, 0, kShapeChoices},
-    {L"alignment", L"Alignment", SettingKind::Segmented, 0, 0, 0, 0, kAlignmentChoices},
-    {L"layout", L"Layout", SettingKind::Segmented, 0, 0, 0, 0, kLayoutChoices},
-    {L"innerArcs", L"Arc the inner edges", SettingKind::Toggle, 0, 0},
-    {L"smallerTray", L"Smaller tray", SettingKind::Toggle, 0, 0},
-    {L"trayReduction", L"Tray height reduction (DIP)", SettingKind::Number, 0, 8, 1, 100},
-    {L"slantedEnds", L"Slanted ends", SettingKind::Toggle, 0, 0},
-    {L"slantAngle", L"Curve angle (°)", SettingKind::Number, 0, 70, 30, 85},
-    {L"barDistance", L"Bar distance (DIP)", SettingKind::Number, 0, static_cast<int>(kBarGap), 0, 100},
-    {L"concaveRadius", L"Concave radius (DIP)", SettingKind::Number, 0, static_cast<int>(kConcaveRadius), 0, 100},
+    SettingField{L"ui.bodyBorder", L"Body border line", SettingKind::Toggle, 3, 1}.Opens(L"Window appearance"),
+    SettingField{L"ui.bodyBorderColor", L"Border color", SettingKind::Choice, 3, 1, 0, 0, kBorderColorChoices}
+        .Needs(L"ui.bodyBorder"),
+    SettingField{L"ui.bodyBorderCustomColor", L"Custom border color (#RRGGBB)", SettingKind::Color, 3, 0, 0, 0}
+        .Needs(L"ui.bodyBorder").Needs(L"ui.bodyBorderColor", L"custom"),
+    SettingField{L"ui.bodyBorderWidth", L"Border thickness (DIP)", SettingKind::Number, 3, 2, 1, 20, {}, 2}
+        .Needs(L"ui.bodyBorder"),
+    SettingField{L"ui.bodyBorderOpacity", L"Border opacity (%)", SettingKind::Number, 3, 100, 0, 100}.Needs(L"ui.bodyBorder"),
+    SettingField{L"ui.panelOpacity", L"Panel opacity (%)", SettingKind::Number, 3, 100, 0, 100}
+        .Help(L"Transparency of the floating panels. The main body remains opaque."),
+    SettingField{L"ui.glassEdgeHighlight", L"Edge highlight (%)", SettingKind::Number, 3, 0, 0, 100}
+        .Mirrors(L"liquid.edgeHighlight")
+        .Help(L"Edge glow on the floating panels and glass controls. 0% disables it."),
+    SettingField{L"ui.glassModel", L"Refraction model", SettingKind::Choice, 3, 0, 0, 0, kRefractionChoices}
+        .Mirrors(L"liquid.model").Opens(L"Glass shape")
+        .Help(L"Biconvex curves the glass. Snell traces light through the surface. Dome magnifies. Layered adds a curled rim; Bevel concentrates distortion at the edge."),
+    SettingField{L"ui.glassSurface", L"Surface profile", SettingKind::Choice, 3, 0, 0, 0, kSurfaceChoices}
+        .Mirrors(L"liquid.surface")
+        .Help(L"Circle and squircle are convex; concave bends outward; raised lip blends convex and concave curves."),
+    SettingField{L"ui.panelRefraction", L"Glass refraction (%)", SettingKind::Number, 3, 100, 0, 200}
+        .Mirrors(L"liquid.refraction").Help(kUiGlassHelp),
+    SettingField{L"ui.panelDepth", L"Glass depth (DIP)", SettingKind::Number, 3, 40, 1, 100}.Mirrors(L"liquid.zRadius")
+        .Help(kUiGlassHelp),
+    SettingField{L"ui.glassBezelWidth", L"Bezel width (DIP)", SettingKind::Number, 3, 12, 1, 100}
+        .Mirrors(L"liquid.bezelWidth")
+        .Help(L"Width of the curved edge, independent of the glass base thickness."),
+    SettingField{L"ui.glassThickness", L"Glass thickness (DIP)", SettingKind::Number, 3, 20, 1, 200}
+        .Mirrors(L"liquid.thickness").Help(kUiGlassHelp),
+    SettingField{L"ui.glassRefractiveIndex", L"Refractive index", SettingKind::Number, 3, 150, 100, 250, {}, 100}
+        .Mirrors(L"liquid.refractiveIndex")
+        .Help(L"1.00 does not bend light; ordinary glass is approximately 1.50."),
+    SettingField{L"ui.glassMagnification", L"Magnification (%)", SettingKind::Number, 3, 0, 0, 200}
+        .Mirrors(L"liquid.magnification").Help(kUiGlassHelp),
+    SettingField{L"ui.glassDistortion", L"Micro-distortion (%)", SettingKind::Number, 3, 0, 0, 100}
+        .Mirrors(L"liquid.distortion").Help(kUiGlassHelp),
+    SettingField{L"ui.glassChromaticAberration", L"Color fringing (%)", SettingKind::Number, 3, 0, 0, 30}
+        .Mirrors(L"liquid.chromaticAberration").Help(kUiGlassHelp),
+    SettingField{L"ui.glassLighting", L"Lighting", SettingKind::Choice, 3, 1, 0, 0, kLightingChoices}
+        .Mirrors(L"liquid.lighting").Opens(L"Lighting")
+        .Help(L"Original and Rich specular use the highlight intensity. At 0%, specular highlights are disabled; refraction and Fresnel remain independent."),
+    SettingField{L"ui.panelHighlights", L"Glass highlights (%)", SettingKind::Number, 3, 5, 0, 100}
+        .Mirrors(L"liquid.specular").Help(kUiGlassHelp),
+    SettingField{L"ui.glassFresnel", L"Fresnel reflection (%)", SettingKind::Number, 3, 100, 0, 200}
+        .Mirrors(L"liquid.fresnel").Help(kUiGlassHelp),
+    SettingField{L"ui.glassLightAngle", L"Light angle (degrees)", SettingKind::Number, 3, -60, -180, 180}
+        .Mirrors(L"liquid.lightAngle").Help(kUiGlassHelp),
+    SettingField{L"ui.glassRimOpacity", L"Rim light strength (%)", SettingKind::Number, 3, 40, 0, 100}
+        .Mirrors(L"liquid.rimOpacity").Help(kUiGlassHelp),
+    SettingField{L"ui.glassRimSaturation", L"Rim color saturation (%)", SettingKind::Number, 3, 400, 0, 1000}
+        .Mirrors(L"liquid.rimSaturation").Help(kUiGlassHelp),
+    SettingField{L"ui.panelBlur", L"Panel blur (%)", SettingKind::Number, 3, 25, 0, 100}.Mirrors(L"liquid.blur")
+        .Opens(L"Finish"),
+    SettingField{L"ui.glassBrightness", L"Brightness (%)", SettingKind::Number, 3, 0, -50, 50}.Mirrors(L"liquid.brightness")
+        .Help(kUiGlassHelp),
+    SettingField{L"ui.glassSaturation", L"Saturation (%)", SettingKind::Number, 3, 0, -100, 100}
+        .Mirrors(L"liquid.saturation").Help(kUiGlassHelp),
+    SettingField{L"ui.glassRimRefraction", L"Rim refraction (%)", SettingKind::Number, 3, 50, 0, 200}
+        .Mirrors(L"liquid.rimRefraction").Opens(L"Edge shaping").Help(kUiGlassHelp),
+    SettingField{L"ui.glassRimWidth", L"Rim width (DIP)", SettingKind::Number, 3, 3, 1, 60}.Mirrors(L"liquid.rimWidth")
+        .Help(kUiGlassHelp),
+    SettingField{L"ui.glassBevelSharpness", L"Bevel sharpness", SettingKind::Number, 3, 10, 2, 32}
+        .Mirrors(L"liquid.bevelSharpness").Help(kUiGlassHelp),
+    SettingField{L"ui.glassCornerBoost", L"Corner boost (%)", SettingKind::Number, 3, 0, 0, 100}
+        .Mirrors(L"liquid.cornerBoost").Help(kUiGlassHelp),
+    SettingField{L"ui.glassRippleStrength", L"Edge ripple (%)", SettingKind::Number, 3, 0, 0, 100}
+        .Mirrors(L"liquid.rippleStrength").Help(kUiGlassHelp),
+    SettingField{L"ui.glassRippleWavelength", L"Ripple spacing (DIP)", SettingKind::Number, 3, 12, 2, 100}
+        .Mirrors(L"liquid.rippleWavelength").Help(kUiGlassHelp),
+    SettingField{L"ui.glassEdgeWidth", L"Highlight width (DIP; 0 = auto)", SettingKind::Number, 3, 0, 0, 100}
+        .Mirrors(L"liquid.edgeWidth")
+        .Help(L"Width of the highlight, independent of refraction. 0 keeps automatic sizing."),
+    SettingField{L"ui.glassEdgeSoftness", L"Highlight softness (%)", SettingKind::Number, 3, 100, 10, 400}
+        .Mirrors(L"liquid.edgeSoftness").Help(kUiGlassHelp),
+    SettingField{L"ui.glassFrostEdge", L"Polished edge (%)", SettingKind::Number, 3, 15, 0, 100}.Mirrors(L"liquid.frostEdge")
+        .Opens(L"Frost & color")
+        .Help(L"Sharp detail retained at the edge of frosted glass. 0 frosts the entire surface."),
+    SettingField{L"ui.glassDispersion", L"Color dispersion", SettingKind::Choice, 3, 0, 0, 0, kDispersionChoices}
+        .Mirrors(L"liquid.dispersion")
+        .Help(L"With refraction links color fringing to the actual displacement of light."),
+    SettingField{L"ui.glassDye", L"Tint color (#RRGGBB)", SettingKind::Color, 3, 0, 0, 0}.Mirrors(L"liquid.dye")
+        .Help(kUiGlassHelp),
+    SettingField{L"ui.glassDyeStrength", L"Tint strength (%)", SettingKind::Number, 3, 0, 0, 100}
+        .Mirrors(L"liquid.dyeStrength").Help(kUiGlassHelp),
+    SettingField{L"ui.glassFluidStrength", L"Fluid response (%)", SettingKind::Number, 3, 0, 0, 100}
+        .Mirrors(L"liquid.fluidStrength").Opens(L"Interaction & glints")
+        .Help(L"Glass follows pointer motion and settles after it stops. Controls stay in place. Windows animation settings apply."),
+    SettingField{L"ui.glassFluidRadius", L"Fluid reach (%)", SettingKind::Number, 3, 35, 5, 100}
+        .Mirrors(L"liquid.fluidRadius").Help(kUiGlassHelp),
+    SettingField{L"ui.glassFluidViscosity", L"Fluid viscosity (%)", SettingKind::Number, 3, 65, 0, 100}
+        .Mirrors(L"liquid.fluidViscosity").Help(kUiGlassHelp),
+    SettingField{L"ui.glassGlintMode", L"Moving glints", SettingKind::Choice, 3, 0, 0, 0, kGlintChoices}
+        .Mirrors(L"liquid.glintMode")
+        .Help(L"Optional glints along the glass edge. Windows animation settings apply."),
+    SettingField{L"ui.glassGlintStrength", L"Glint strength (%)", SettingKind::Number, 3, 15, 0, 100}
+        .Mirrors(L"liquid.glintStrength").Help(kUiGlassHelp),
+    SettingField{L"ui.glassGlintSpeed", L"Glint speed (%)", SettingKind::Number, 3, 50, 1, 100}.Mirrors(L"liquid.glintSpeed")
+        .Help(kUiGlassHelp),
+    SettingField{L"ui.glassGlintSize", L"Glint size (%)", SettingKind::Number, 3, 35, 5, 100}.Mirrors(L"liquid.glintSize")
+        .Help(kUiGlassHelp),
+    SettingField{L"ui.glassBoundaryFade", L"Capture edge softness (DIP)", SettingKind::Number, 3, 2, 0, 20}
+        .Mirrors(L"liquid.boundaryFade").Help(kUiGlassHelp),
+};
+// The rules a row's own needs cannot state.
+// Every Liquid row needs the Liquid theme and, the preset aside, the Custom preset.
+constexpr SettingNeed kLiquidPageNeeds[]{{L"theme", {L"liquid"}}, {L"liquid.preset", {L"custom"}}};
+// A row enabled by any one of several needs, on top of its own.
+struct SettingAnyNeed { PCWSTR key; SettingNeed any[3]; };
+constexpr SettingAnyNeed kAnyNeeds[]{
+    {L"liquid.bezelWidth",
+     {{L"liquid.model", {L"snell", L"layered", L"bevel"}}, {L"liquid.cornerBoost"}, {L"liquid.rippleStrength"}}},
 };
 SettingField const& SettingDefinition(PCWSTR key) {
     for (auto const& field : kSettingFields)
@@ -818,16 +952,70 @@ consteval size_t FieldIndex(std::wstring_view key) {
         if (key == kSettingFields[i].key) return i;
     throw std::logic_error("Unknown setting");
 }
-// The editor's rows in the order shown, every row once: a repeat, a missing row or an unknown key fails the build.
-consteval std::array<size_t, std::size(kSettingFields)> DisplayOrder(std::wstring_view const (&keys)[std::size(kSettingFields)]) {
-    std::array<size_t, std::size(kSettingFields)> rows{};
-    bool shown[std::size(kSettingFields)]{};
-    for (size_t i = 0; i < rows.size(); ++i) {
-        rows[i] = FieldIndex(keys[i]);
-        if (std::exchange(shown[rows[i]], true)) throw std::logic_error("Row shown twice");
+// The UI row that mirrors each Liquid row, std::size(kSettingFields) where none does. ReadUiLiquidSettings hands a UI
+// row's value to the Liquid decoder under the mirrored key, so the two rows must hold the same kind of value.
+consteval std::array<size_t, std::size(kSettingFields)> UiMirrors() {
+    std::array<size_t, std::size(kSettingFields)> mirrors{};
+    mirrors.fill(mirrors.size());
+    for (size_t i = 0; i < mirrors.size(); ++i) {
+        auto const& field = kSettingFields[i];
+        if (!field.mirrorOf) continue;
+        size_t mirrored = FieldIndex(field.mirrorOf);
+        auto const& liquid = kSettingFields[mirrored];
+        if (mirrors[mirrored] != mirrors.size() || liquid.mirrorOf || liquid.kind != field.kind ||
+            liquid.displayDivisor != field.displayDivisor || liquid.choices.data() != field.choices.data())
+            throw std::logic_error("Bad mirror");
+        mirrors[mirrored] = i;
     }
-    return rows;
+    return mirrors;
 }
+constexpr auto kUiMirror = UiMirrors();
+// A row's rule with every key resolved to its row and every value to the states that meet it, a bit each: a choice's
+// index, a toggle's 0 or 1, a slider at 0 or above it. A need with no states is unused.
+struct RowNeed { size_t row = 0; unsigned states = 0; };
+struct RowRule { RowNeed all[4]; RowNeed any[3]; };
+consteval RowNeed ResolveNeed(SettingNeed const& need, bool ui) {
+    size_t row = FieldIndex(need.key);
+    if (ui && (row = kUiMirror[row]) == std::size(kSettingFields)) throw std::logic_error("Need has no UI mirror");
+    auto const& field = kSettingFields[row];
+    bool choice = field.kind == SettingKind::Choice || field.kind == SettingKind::Segmented;
+    // Above 0 is the slider's every state but one only when it starts at 0.
+    if (choice ? !need.values[0] : need.values[0] || field.kind == SettingKind::Color ||
+            (field.kind == SettingKind::Number && field.minimum != 0))
+        throw std::logic_error("Need does not fit its row's kind");
+    unsigned states = choice ? 0 : 2;
+    for (PCWSTR value : need.values) {
+        if (!value) continue;
+        size_t index = 0;
+        while (index < field.choices.size() && std::wstring_view(field.choices[index].value) != value) ++index;
+        if (index == field.choices.size()) throw std::logic_error("Unknown choice");
+        states |= 1u << index;
+    }
+    return {row, states};
+}
+consteval std::array<RowRule, std::size(kSettingFields)> RowRules() {
+    std::array<RowRule, std::size(kSettingFields)> rules{};
+    for (size_t i = 0; i < rules.size(); ++i) {
+        auto const& field = kSettingFields[i];
+        bool ui = field.mirrorOf != nullptr;
+        if (ui && field.needs[0].key) throw std::logic_error("A mirror takes its Liquid row's needs");
+        auto const& source = ui ? kSettingFields[FieldIndex(field.mirrorOf)] : field;
+        size_t count = 0;
+        auto add = [&](SettingNeed const& need, bool mirrored) {
+            if (!need.key) return;
+            auto resolved = ResolveNeed(need, mirrored);
+            if (resolved.row != i) rules[i].all[count++] = resolved; // The preset cannot need itself.
+        };
+        if (field.page == 1)
+            for (auto const& need : kLiquidPageNeeds) add(need, false);
+        for (auto const& need : source.needs) add(need, ui);
+        for (auto const& compound : kAnyNeeds)
+            if (std::wstring_view(compound.key) == source.key)
+                for (size_t n = 0; n < std::size(compound.any); ++n) rules[i].any[n] = ResolveNeed(compound.any[n], ui);
+    }
+    return rules;
+}
+constexpr auto kRowRules = RowRules();
 
 int LocalInt(settingsjson::JsonObject const& settings, PCWSTR key) {
     if (settings) {
@@ -2046,104 +2234,28 @@ void UpdateEditorSection(EditorSection& section,bool available=true) {
         section.header.Content(winrt::box_value(label));
 }
 
-// liquid.X and ui.glassX are the same glass extras in the same order, so UpdateEditorEnabled applies one rule set to both
-// blocks at the UI block's offset.
-constexpr size_t kLiquidExtras = FieldIndex(L"liquid.rimRefraction"), kUiExtras = FieldIndex(L"ui.glassRimRefraction"),
-    kGlassExtras = FieldIndex(L"liquid.boundaryFade") + 1 - kLiquidExtras;
-consteval bool ParallelGlassExtras() {
-    if (FieldIndex(L"ui.glassBoundaryFade") + 1 - kUiExtras != kGlassExtras) return false;
-    for (size_t option = 0; option < kGlassExtras; ++option) {
-        std::wstring_view liquid = kSettingFields[kLiquidExtras + option].key, ui = kSettingFields[kUiExtras + option].key;
-        if (!liquid.starts_with(L"liquid.") || !ui.starts_with(L"ui.glass")) return false;
-        liquid.remove_prefix(7);
-        ui.remove_prefix(8);
-        if (liquid.empty() || liquid.size() != ui.size() || liquid[0] - L'a' + L'A' != ui[0] || liquid.substr(1) != ui.substr(1))
-            return false;
-    }
-    return true;
-}
-static_assert(ParallelGlassExtras());
-
 void UpdateEditorEnabled(SettingsEditor& editor) {
     bool liquid = editor.controls[FieldIndex(L"theme")].input.as<Controls::ComboBox>().SelectedIndex() == int(DockTheme::Liquid);
     bool custom = editor.controls[FieldIndex(L"liquid.preset")].input.as<Controls::ComboBox>().SelectedIndex() == 0;
-    int model = editor.controls[FieldIndex(L"liquid.model")].input.as<Controls::ComboBox>().SelectedIndex();
-    bool snell = model == 1;
-    bool rim = editor.controls[FieldIndex(L"liquid.lighting")].input.as<Controls::ComboBox>().SelectedIndex() == 2;
-    int uiModel = editor.controls[FieldIndex(L"ui.glassModel")].input.as<Controls::ComboBox>().SelectedIndex();
-    bool uiSnell = uiModel == 1;
-    bool uiRim = editor.controls[FieldIndex(L"ui.glassLighting")].input.as<Controls::ComboBox>().SelectedIndex() == 2;
-    int shape = editor.controls[FieldIndex(L"shape")].input.as<Controls::Primitives::Selector>().SelectedIndex();
-    bool separate = editor.controls[FieldIndex(L"layout")].input.as<Controls::Primitives::Selector>().SelectedIndex() ==
-        int(DockLayout::Separate);
-    // A border's color, custom color, thickness and opacity follow its toggle; the custom color also needs Custom chosen.
-    struct Border { size_t toggle, color, customColor, width, opacity; };
-    constexpr Border borders[]{
-        {FieldIndex(L"dockBorder"), FieldIndex(L"dockBorderColor"), FieldIndex(L"dockBorderCustomColor"),
-         FieldIndex(L"dockBorderWidth"), FieldIndex(L"dockBorderOpacity")},
-        {FieldIndex(L"ui.bodyBorder"), FieldIndex(L"ui.bodyBorderColor"), FieldIndex(L"ui.bodyBorderCustomColor"),
-         FieldIndex(L"ui.bodyBorderWidth"), FieldIndex(L"ui.bodyBorderOpacity")}};
+    // Each control's state as a bit: a choice's index, a toggle's 0 or 1, a slider at 0 or above it.
+    std::array<unsigned, std::size(kSettingFields)> states{};
+    for (size_t i = 0; i < states.size(); ++i) {
+        auto const& control = editor.controls[i];
+        auto kind = kSettingFields[i].kind;
+        int state = kind == SettingKind::Toggle ? control.input.as<Controls::ToggleSwitch>().IsOn() :
+            kind == SettingKind::Number ? control.slider.Value() > 0 :
+            kind == SettingKind::Color ? 0 : control.input.as<Controls::Primitives::Selector>().SelectedIndex();
+        if (state >= 0) states[i] = 1u << state;
+    }
     for (size_t i = 0; i < editor.controls.size(); ++i) {
-        bool enabled = true;
-        if (i == FieldIndex(L"edgeDistance")) enabled &= shape == int(DockShape::Island); // Edge and Edge arc sit on the screen edge.
-        if (i == FieldIndex(L"innerArcs")) enabled &= separate && shape == int(DockShape::EdgeArc); // Only Separate Edge arc has facing flares.
-        if (i == FieldIndex(L"barDistance")) enabled &= separate;
-        if (i == FieldIndex(L"trayReduction")) enabled &= editor.controls[FieldIndex(L"smallerTray")].input.as<Controls::ToggleSwitch>().IsOn();
-        if (i == FieldIndex(L"slantAngle") || i == FieldIndex(L"concaveRadius"))
-            enabled &= editor.controls[FieldIndex(L"slantedEnds")].input.as<Controls::ToggleSwitch>().IsOn();
-        if (i == FieldIndex(L"button.liquidLayer") || i == FieldIndex(L"liquid.preset")) enabled &= liquid;
-        if (kSettingFields[i].page == 1 && i != FieldIndex(L"liquid.preset")) enabled &= liquid && custom;
-        if (i == FieldIndex(L"tray.grayscale")) enabled &= editor.trayEnabled.IsOn();
-        if (i == FieldIndex(L"liquid.zRadius")) enabled &= !snell && model < 3;
-        if (i == FieldIndex(L"liquid.bezelWidth")) enabled &= snell || model >= 3 ||
-            editor.controls[FieldIndex(L"liquid.cornerBoost")].slider.Value()>0 ||
-            editor.controls[FieldIndex(L"liquid.rippleStrength")].slider.Value()>0;
-        if (i == FieldIndex(L"liquid.thickness") || i == FieldIndex(L"liquid.refractiveIndex")) enabled &= snell;
-        if (i == FieldIndex(L"liquid.specular")) enabled &= !rim;
-        if (i == FieldIndex(L"liquid.lightAngle") || i == FieldIndex(L"liquid.rimOpacity") || i == FieldIndex(L"liquid.rimSaturation"))
-            enabled &= rim;
-        if (i == FieldIndex(L"liquid.shadowBlur") || i == FieldIndex(L"liquid.shadowOffset"))
-            enabled &= editor.controls[FieldIndex(L"liquid.shadowOpacity")].slider.Value() > 0;
-        if (i == FieldIndex(L"adaptive.windowSeconds"))
-            enabled &= editor.controls[FieldIndex(L"fontColor")].input.as<Controls::ComboBox>().SelectedIndex() ==
-                int(FontColorMode::Adaptive);
-        for (auto const& border : borders)
-            if (i == border.color || i == border.customColor || i == border.width || i == border.opacity) {
-                enabled &= editor.controls[border.toggle].input.as<Controls::ToggleSwitch>().IsOn();
-                if (i == border.customColor)
-                    enabled &= editor.controls[border.color].input.as<Controls::ComboBox>().SelectedIndex() == 3;
-            }
-        if (i == FieldIndex(L"ui.panelDepth")) enabled &= !uiSnell && uiModel < 3;
-        if (i == FieldIndex(L"ui.glassBezelWidth")) enabled &= uiSnell || uiModel >= 3 ||
-            editor.controls[FieldIndex(L"ui.glassCornerBoost")].slider.Value()>0 ||
-            editor.controls[FieldIndex(L"ui.glassRippleStrength")].slider.Value()>0;
-        if (i == FieldIndex(L"ui.glassThickness") || i == FieldIndex(L"ui.glassRefractiveIndex")) enabled &= uiSnell;
-        if (i == FieldIndex(L"ui.panelHighlights")) enabled &= !uiRim;
-        if (i == FieldIndex(L"ui.glassLightAngle") || i == FieldIndex(L"ui.glassRimOpacity") || i == FieldIndex(L"ui.glassRimSaturation"))
-            enabled &= uiRim;
-        bool uiExtra = i >= kUiExtras && i < kUiExtras + kGlassExtras;
-        if (uiExtra || (i >= kLiquidExtras && i < kLiquidExtras + kGlassExtras)) {
-            // Each rule names its liquid row; the UI block's is the same extra at the block's offset.
-            auto row = [uiExtra](size_t liquidRow) { return uiExtra ? liquidRow - kLiquidExtras + kUiExtras : liquidRow; };
-            int selectedModel = uiExtra ? uiModel : model;
-            int glints = editor.controls[row(FieldIndex(L"liquid.glintMode"))].input.as<Controls::ComboBox>().SelectedIndex();
-            if (i == row(FieldIndex(L"liquid.rimRefraction"))) enabled &= selectedModel >= 3;
-            if (i == row(FieldIndex(L"liquid.rimWidth"))) enabled &= selectedModel == 3;
-            if (i == row(FieldIndex(L"liquid.bevelSharpness"))) enabled &= selectedModel == 4;
-            if (i == row(FieldIndex(L"liquid.rippleWavelength")))
-                enabled &= editor.controls[row(FieldIndex(L"liquid.rippleStrength"))].slider.Value() > 0;
-            if (i == row(FieldIndex(L"liquid.frostEdge")))
-                enabled &= editor.controls[uiExtra ? FieldIndex(L"ui.panelBlur") : FieldIndex(L"liquid.blur")].slider.Value()>0;
-            if (i == row(FieldIndex(L"liquid.dye"))) enabled &= editor.controls[row(FieldIndex(L"liquid.dyeStrength"))].slider.Value() > 0;
-            if (i == row(FieldIndex(L"liquid.fluidRadius")) || i == row(FieldIndex(L"liquid.fluidViscosity")))
-                enabled &= editor.controls[row(FieldIndex(L"liquid.fluidStrength"))].slider.Value() > 0;
-            if (i == row(FieldIndex(L"liquid.glintStrength")) || i == row(FieldIndex(L"liquid.glintSize"))) enabled &= glints > 0;
-            if (i == row(FieldIndex(L"liquid.glintSpeed"))) enabled &= glints == 1;
-        }
-        bool expert = (kSettingFields[i].page==1 && i!=FieldIndex(L"liquid.preset")) ||
-            (kSettingFields[i].page==3 && i!=FieldIndex(L"ui.panelOpacity") && i!=FieldIndex(L"ui.glassEdgeHighlight"));
-        editor.controls[i].card.Visibility((i==FieldIndex(L"liquid.preset") ? liquid : !expert || enabled)
-            ?Visibility::Visible:Visibility::Collapsed);
+        auto const& rule = kRowRules[i];
+        bool enabled = true, any = !rule.any[0].states;
+        for (auto const& need : rule.all) enabled &= !need.states || (states[need.row] & need.states) != 0;
+        for (auto const& need : rule.any) any |= (states[need.row] & need.states) != 0;
+        enabled &= any;
+        // A Liquid or UI row that does not apply leaves its page; elsewhere it stays, dimmed.
+        bool collapses = kSettingFields[i].page == 1 || kSettingFields[i].page == 3;
+        editor.controls[i].card.Visibility(!collapses || enabled ? Visibility::Visible : Visibility::Collapsed);
         editor.controls[i].input.IsEnabled(editor.valid && enabled);
         if (editor.controls[i].slider) editor.controls[i].slider.IsEnabled(editor.valid && enabled);
         editor.controls[i].row.Opacity(editor.valid && enabled ? 1 : 0.5);
@@ -3410,60 +3522,18 @@ void CreateEditorContent(SettingsEditor& editor) {
     editor.trayList = find(L"TrayList").as<Controls::StackPanel>();
     editor.trayStatus = find(L"TrayStatus").as<Controls::TextBlock>();
     editor.syncing = true;
-    constexpr auto displayOrder = DisplayOrder({
-        L"theme", L"fontColor", L"adaptive.windowSeconds", L"dockBorder", L"dockBorderColor",
-        L"dockBorderCustomColor", L"dockBorderWidth", L"dockBorderOpacity", L"layout", L"barDistance", L"shape",
-        L"alignment", L"innerArcs", L"slantedEnds", L"slantAngle", L"concaveRadius", L"smallerTray",
-        L"trayReduction", L"cornerRadius", L"buttonCornerRadius", L"buttonVerticalPadding", L"edgeDistance",
-        L"button.border", L"button.liquidLayer", L"tray.highlightPadding", L"tray.highlightRadius", L"tray.enabled",
-        L"tray.grayscale",
-        L"liquid.preset", L"liquid.model", L"liquid.surface", L"liquid.zRadius", L"liquid.bezelWidth",
-        L"liquid.thickness", L"liquid.refractiveIndex", L"liquid.refraction", L"liquid.magnification",
-        L"liquid.chromaticAberration", L"liquid.distortion",
-        L"liquid.lighting", L"liquid.specular", L"liquid.edgeHighlight", L"liquid.fresnel", L"liquid.lightAngle",
-        L"liquid.rimOpacity", L"liquid.rimSaturation", L"liquid.opacity", L"liquid.brightness", L"liquid.blur",
-        L"liquid.saturation", L"liquid.tint", L"liquid.shadowOpacity", L"liquid.shadowBlur", L"liquid.shadowOffset",
-        L"liquid.rimRefraction", L"liquid.rimWidth", L"liquid.bevelSharpness", L"liquid.cornerBoost",
-        L"liquid.rippleStrength", L"liquid.rippleWavelength", L"liquid.edgeWidth", L"liquid.edgeSoftness",
-        L"liquid.frostEdge", L"liquid.dispersion", L"liquid.dye", L"liquid.dyeStrength", L"liquid.fluidStrength",
-        L"liquid.fluidRadius", L"liquid.fluidViscosity", L"liquid.glintMode", L"liquid.glintStrength",
-        L"liquid.glintSpeed", L"liquid.glintSize", L"liquid.boundaryFade",
-        L"ui.bodyBorder", L"ui.bodyBorderColor", L"ui.bodyBorderCustomColor", L"ui.bodyBorderWidth",
-        L"ui.bodyBorderOpacity", L"ui.panelOpacity", L"ui.glassEdgeHighlight",
-        L"ui.glassModel", L"ui.glassSurface", L"ui.panelRefraction", L"ui.panelDepth", L"ui.glassBezelWidth",
-        L"ui.glassThickness", L"ui.glassRefractiveIndex", L"ui.glassMagnification", L"ui.glassDistortion",
-        L"ui.glassChromaticAberration",
-        L"ui.glassLighting", L"ui.panelHighlights", L"ui.glassFresnel", L"ui.glassLightAngle", L"ui.glassRimOpacity",
-        L"ui.glassRimSaturation",
-        L"ui.panelBlur", L"ui.glassBrightness", L"ui.glassSaturation",
-        L"ui.glassRimRefraction", L"ui.glassRimWidth", L"ui.glassBevelSharpness", L"ui.glassCornerBoost",
-        L"ui.glassRippleStrength", L"ui.glassRippleWavelength", L"ui.glassEdgeWidth", L"ui.glassEdgeSoftness",
-        L"ui.glassFrostEdge", L"ui.glassDispersion", L"ui.glassDye", L"ui.glassDyeStrength",
-        L"ui.glassFluidStrength", L"ui.glassFluidRadius", L"ui.glassFluidViscosity", L"ui.glassGlintMode",
-        L"ui.glassGlintStrength", L"ui.glassGlintSpeed", L"ui.glassGlintSize", L"ui.glassBoundaryFade"});
     std::array<Controls::StackPanel,4> containers{appearance,liquid,tray,ui};
     auto targets=containers;
     std::array<Controls::Primitives::ToggleButton,4> disclosures{nullptr,nullptr,nullptr,nullptr};
-    for (size_t i : displayOrder) {
+    for (size_t i = 0; i < std::size(kSettingFields); ++i) {
         auto const& field = kSettingFields[i];
         auto& control = editor.controls[i];
         auto fields = targets[field.page];
-        PCWSTR section = i == FieldIndex(L"tray.highlightPadding") ? L"Tray highlights" :
-            i == FieldIndex(L"theme") ? L"Style & color" : i == FieldIndex(L"layout") ? L"Dock layout" :
-            i == FieldIndex(L"cornerRadius") ? L"Geometry" :
-            i == FieldIndex(L"button.border") ? L"Buttons" : i == FieldIndex(L"liquid.preset") ? L"Material" :
-            i == FieldIndex(L"liquid.surface") ? L"Surface" :
-            i == FieldIndex(L"liquid.refraction") ? L"Refraction" : i == FieldIndex(L"liquid.lighting") ? L"Lighting" :
-            i == FieldIndex(L"liquid.opacity") ? L"Finish" : i == FieldIndex(L"liquid.shadowOpacity") ? L"Shadow" :
-            i == FieldIndex(L"ui.bodyBorder") ? L"Window appearance" : i == FieldIndex(L"ui.glassModel") ? L"Glass shape" :
-            i == FieldIndex(L"ui.glassLighting") ? L"Lighting" : i == FieldIndex(L"ui.panelBlur") ? L"Finish" :
-            i == FieldIndex(L"liquid.rimRefraction") || i == FieldIndex(L"ui.glassRimRefraction") ? L"Edge shaping" :
-            i == FieldIndex(L"liquid.frostEdge") || i == FieldIndex(L"ui.glassFrostEdge") ? L"Frost & color" :
-            i == FieldIndex(L"liquid.fluidStrength") || i == FieldIndex(L"ui.glassFluidStrength") ? L"Interaction & glints" : nullptr;
+        PCWSTR section = field.section;
         if (section) {
             fields=containers[field.page];
             disclosures[field.page]=nullptr;
-            if((field.page==1 && i!=9) || (field.page==3 && i!=105)) {
+            if((field.page==1 && i!=FieldIndex(L"liquid.preset")) || (field.page==3 && i!=FieldIndex(L"ui.bodyBorder"))) {
                 EditorSection group;
                 group.page=field.page;group.title=section;
                 group.header=Controls::Primitives::ToggleButton();
@@ -3623,33 +3693,7 @@ void CreateEditorContent(SettingsEditor& editor) {
         control.input.VerticalAlignment(VerticalAlignment::Center);
         Automation::AutomationProperties::SetName(control.input, field.label);
         Automation::AutomationProperties::SetAutomationId(control.input, field.key);
-        PCWSTR help = i == FieldIndex(L"cornerRadius") || i == FieldIndex(L"buttonCornerRadius") ? L"Rounded corners are limited to half the visible shape's width or height." :
-            i == FieldIndex(L"buttonVerticalPadding") ? L"Space above and below each button background. Icons and click targets keep their native size." :
-            i == FieldIndex(L"shape") ? L"Island floats off the screen edge with every corner rounded. Edge sits on the screen edge, square where it meets it. Edge arc also curves out along the screen edge at each side, like a tab." :
-            i == FieldIndex(L"innerArcs") ? L"With Separate and Edge arc, the facing sides of the two bars also curve out along the screen edge, with the same arc as the outer sides." :
-            i == FieldIndex(L"barDistance") ? L"How far apart Separate's two bars are where they come nearest. Arcs and slanted ends on their facing sides move the bars apart, so the curves never touch. On a monitor too narrow for the dock, the bars close in, down to the curves touching, before the buttons move left." :
-            i == FieldIndex(L"smallerTray") ? L"Lowers the tray's side of the dock on the side away from the screen edge. Unified joins the two heights with an S curve before the tray; Separate shortens the tray bar." :
-            i == FieldIndex(L"trayReduction") ? L"How much lower the tray side is. The limit is the dock's height less 24 DIP, so the tray band keeps at least 24 DIP." :
-            i == FieldIndex(L"slantedEnds") ? L"Curves the dock's ends out toward the screen edge, the facing ends of Separate's two bars too. Every convex curve rounds at the dock's corner radius as far as each curve allows, and every concave one at Concave radius up to the room the convex curves leave. The curves keep clear of the buttons and the tray; every end sits 24 DIP from its nearest icon. With Smaller tray, the step to the tray becomes an S of the same kind, at least 24 DIP from the last button's icon. Where the dock is too wide for its monitor, the tray's end meets the screen's side square." :
-            i == FieldIndex(L"slantAngle") ? L"How steep the middle of the curve is, from the screen edge: higher is steeper and narrower." :
-            i == FieldIndex(L"concaveRadius") ? L"The radius of the slanted ends' concave curves: where Edge arc's ends flare onto the screen edge and where Smaller tray's step lands. The dock corner radius sets the convex ones. Where an end is too short for both, the concave curves take the room the convex ones leave; Smaller tray's step rounds its concave curve as far as the rest of the step allows, so a short step changes no other curve." :
-            i == FieldIndex(L"alignment") ? L"Whole group centers the buttons and the tray together. Button area centers Start through the last app; the tray follows on the right." :
-            i == FieldIndex(L"layout") ? L"Unified is one dock around the buttons and the tray. Separate splits it into a button bar and a tray bar, Bar distance apart." :
-            i == FieldIndex(L"liquid.model") || i == FieldIndex(L"ui.glassModel") ? L"Biconvex curves the glass. Snell traces light through the surface. Dome magnifies. Layered adds a curled rim; Bevel concentrates distortion at the edge." :
-            i == FieldIndex(L"liquid.surface") || i == FieldIndex(L"ui.glassSurface") ? L"Circle and squircle are convex; concave bends outward; raised lip blends convex and concave curves." :
-            i == FieldIndex(L"liquid.bezelWidth") || i == FieldIndex(L"ui.glassBezelWidth") ? L"Width of the curved edge, independent of the glass base thickness." :
-            i == FieldIndex(L"liquid.refractiveIndex") || i == FieldIndex(L"ui.glassRefractiveIndex") ? L"1.00 does not bend light; ordinary glass is approximately 1.50." :
-            i == FieldIndex(L"liquid.lighting") || i == FieldIndex(L"ui.glassLighting") ? L"Original and Rich specular use the highlight intensity. At 0%, specular highlights are disabled; refraction and Fresnel remain independent." :
-            i == FieldIndex(L"ui.panelOpacity") ? L"Transparency of the floating panels. The main body remains opaque." :
-            i == FieldIndex(L"ui.glassEdgeHighlight") ? L"Edge glow on the floating panels and glass controls. 0% disables it." :
-            i == FieldIndex(L"liquid.edgeWidth") || i == FieldIndex(L"ui.glassEdgeWidth") ? L"Width of the highlight, independent of refraction. 0 keeps automatic sizing." :
-            i == FieldIndex(L"liquid.frostEdge") || i == FieldIndex(L"ui.glassFrostEdge") ? L"Sharp detail retained at the edge of frosted glass. 0 frosts the entire surface." :
-            i == FieldIndex(L"liquid.dispersion") || i == FieldIndex(L"ui.glassDispersion") ? L"With refraction links color fringing to the actual displacement of light." :
-            i == FieldIndex(L"liquid.fluidStrength") || i == FieldIndex(L"ui.glassFluidStrength") ? L"Glass follows pointer motion and settles after it stops. Controls stay in place. Windows animation settings apply." :
-            i == FieldIndex(L"liquid.glintMode") || i == FieldIndex(L"ui.glassGlintMode") ? L"Optional glints along the glass edge. Windows animation settings apply." :
-            field.page == 3 && i != FieldIndex(L"ui.panelBlur") && !std::wstring_view(field.key).starts_with(L"ui.bodyBorder") ? L"Applies to the floating panels and the glass controls." :
-            i == FieldIndex(L"liquid.shadowOpacity") ? L"Shadows follow the dock and are limited to the taskbar's window area." :
-            i == FieldIndex(L"adaptive.windowSeconds") ? L"Average background brightness over this many seconds. Longer windows reduce color changes on animated wallpapers. 0 reacts to each sample." : nullptr;
+        PCWSTR help = field.help;
         if (help) {
             Controls::ToolTipService::SetToolTip(control.row, winrt::box_value(help));
             Automation::AutomationProperties::SetHelpText(control.input, help);
@@ -5159,54 +5203,12 @@ DockBorder ReadBorder(settingsjson::JsonObject const& settings, PCWSTR prefix) {
 
 LiquidSettings ReadUiLiquidSettings(settingsjson::JsonObject const& ui, float scale) {
     // Reuse the optical decoder with only UI values, never taskbar settings.
-    constexpr std::pair<PCWSTR, PCWSTR> bindings[]{
-        {L"ui.panelDepth", L"liquid.zRadius"},
-        {L"ui.panelRefraction", L"liquid.refraction"},
-        {L"ui.panelBlur", L"liquid.blur"},
-        {L"ui.panelHighlights", L"liquid.specular"},
-        {L"ui.glassEdgeHighlight", L"liquid.edgeHighlight"},
-        {L"ui.glassModel", L"liquid.model"},
-        {L"ui.glassSurface", L"liquid.surface"},
-        {L"ui.glassBezelWidth", L"liquid.bezelWidth"},
-        {L"ui.glassThickness", L"liquid.thickness"},
-        {L"ui.glassRefractiveIndex", L"liquid.refractiveIndex"},
-        {L"ui.glassMagnification", L"liquid.magnification"},
-        {L"ui.glassDistortion", L"liquid.distortion"},
-        {L"ui.glassChromaticAberration", L"liquid.chromaticAberration"},
-        {L"ui.glassBrightness", L"liquid.brightness"},
-        {L"ui.glassSaturation", L"liquid.saturation"},
-        {L"ui.glassFresnel", L"liquid.fresnel"},
-        {L"ui.glassLighting", L"liquid.lighting"},
-        {L"ui.glassLightAngle", L"liquid.lightAngle"},
-        {L"ui.glassRimOpacity", L"liquid.rimOpacity"},
-        {L"ui.glassRimSaturation", L"liquid.rimSaturation"},
-        {L"ui.glassRimRefraction", L"liquid.rimRefraction"},
-        {L"ui.glassRimWidth", L"liquid.rimWidth"},
-        {L"ui.glassBevelSharpness", L"liquid.bevelSharpness"},
-        {L"ui.glassCornerBoost", L"liquid.cornerBoost"},
-        {L"ui.glassRippleStrength", L"liquid.rippleStrength"},
-        {L"ui.glassRippleWavelength", L"liquid.rippleWavelength"},
-        {L"ui.glassEdgeWidth", L"liquid.edgeWidth"},
-        {L"ui.glassEdgeSoftness", L"liquid.edgeSoftness"},
-        {L"ui.glassFrostEdge", L"liquid.frostEdge"},
-        {L"ui.glassDispersion", L"liquid.dispersion"},
-        {L"ui.glassDye", L"liquid.dye"},
-        {L"ui.glassDyeStrength", L"liquid.dyeStrength"},
-        {L"ui.glassFluidStrength", L"liquid.fluidStrength"},
-        {L"ui.glassFluidRadius", L"liquid.fluidRadius"},
-        {L"ui.glassFluidViscosity", L"liquid.fluidViscosity"},
-        {L"ui.glassGlintMode", L"liquid.glintMode"},
-        {L"ui.glassGlintStrength", L"liquid.glintStrength"},
-        {L"ui.glassGlintSpeed", L"liquid.glintSpeed"},
-        {L"ui.glassGlintSize", L"liquid.glintSize"},
-        {L"ui.glassBoundaryFade", L"liquid.boundaryFade"},
-    };
     settingsjson::JsonObject optics;
-    for (auto [uiKey, opticalKey] : bindings) {
-        auto const& field = SettingDefinition(uiKey);
-        optics.Insert(opticalKey, field.kind == SettingKind::Choice || field.kind == SettingKind::Color ?
-            settingsjson::JsonValue::CreateStringValue(LocalString(ui, uiKey)) :
-            settingsjson::JsonValue::CreateNumberValue(LocalInt(ui, uiKey) / field.displayDivisor));
+    for (auto const& field : kSettingFields) {
+        if (!field.mirrorOf) continue;
+        optics.Insert(field.mirrorOf, field.kind == SettingKind::Choice || field.kind == SettingKind::Color ?
+            settingsjson::JsonValue::CreateStringValue(LocalString(ui, field.key)) :
+            settingsjson::JsonValue::CreateNumberValue(LocalInt(ui, field.key) / field.displayDivisor));
     }
     auto result = ReadLiquidSettings(optics);
     ScaleLiquidSettings(result, scale);
