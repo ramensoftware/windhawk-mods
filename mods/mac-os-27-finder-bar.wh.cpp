@@ -79,6 +79,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 - **Custom liquid glass** (the theme from Siri Plus Launchpad): your color at the top, fading to clear glass at the bottom, with a fine line of light along the bottom edge. For the panels and pills, the bar's background or both; color, strength and how far down the color goes are set in Menu Bar Settings
 - **One glass for everything**: the Control Center, menus, panels and pills share the same glass settings (style, tint, liquid glass, refraction, blur, live)
 - Bar text and icons in white, black or automatic (following the Windows theme)
+- Clicking the album cover (Control Center or Now Playing) brings the playing app's window to the front
 - **Disks** (optional): its menu lists every local and removable disk with a usage bar and opens it in Explorer
 - Bar icons share one size: each icon is measured and scaled to the same height, and they all grow together with the icon size setting
 - Light, dark or automatic theme, nine selection colors for the bar and menus, font, font size, icon size and bar height
@@ -273,6 +274,8 @@ The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so
 #include <dbt.h>
 #include <cfgmgr32.h>
 #include <shlobj.h>
+#include <propsys.h>
+#include <tlhelp32.h>
 
 // C++/WinRT (vem com o compilador do Windhawk): vidro por bloco, rádios, mídia
 // e leitura das notificações do Windows.
@@ -2470,6 +2473,7 @@ enum {
     ID_SW_GLASSCLEAR = 1970, ID_SW_LIQUID, ID_SW_LIVE, ID_BAR_SETTINGS = 1975,
     ID_PRIV_MICMUTE = 1950, ID_PRIV_INFO,
     ID_NOW_PREV = 1101 + 40, ID_NOW_PLAY, ID_NOW_NEXT, ID_FOCUS_OFF, ID_FOCUS_SETTINGS, ID_PRIV_SETTINGS,
+    ID_NOW_OPEN = 1147,
     ID_HIST_CLEAR = 1150, ID_HIST_BASE = 1151, ID_HIST_WINCENTER = 1190,
     ID_DISK_BASE = 1800, ID_DISK_EXPLORER = 1830, ID_DISK_SETTINGS,
 };
@@ -7471,6 +7475,7 @@ static void CcRefreshLocal() {
 
 // Fechar: a central volta para o ícone de onde veio (encolhe para o canto de
 // cima à direita e some), em vez de sumir de uma vez.
+static void OpenMediaApp();  // o app que está tocando (Tocando agora)
 static void CloseControlCenter(bool refocus) {
     if (!g_cc.hwnd) return;
     if (g_settings.ccCloseAnim == 4) {  // "Nenhuma": fecha na hora (vale mesmo sem animação ao abrir)
@@ -7979,6 +7984,15 @@ static LRESULT CALLBACK CcWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 return 0;
             }
             if (hit >= 0 && hit == pressed && hit != CC_MEDIA) CcActivate(hit);
+            if (hit == CC_MEDIA && pressed == CC_MEDIA) {
+                // Clique na capa do álbum: abre o app que está tocando.
+                float s = g_cc.s, x = (float)LP_X(lp), y = (float)LP_Y(lp);
+                const D2D1_RECT_F& r = g_cc.rc[CC_MEDIA];
+                if (x >= r.left + 14 * s && x < r.left + 58 * s && y >= r.top + 13 * s && y < r.top + 57 * s) {
+                    CloseControlCenter(false);
+                    OpenMediaApp();
+                }
+            }
             return 0;
         }
         case WM_MOUSEWHEEL: {
@@ -11238,6 +11252,93 @@ struct NowPlayingWnd {
 [[clang::no_destroy]] static std::optional<NowPlayingWnd> g_npStore{std::in_place};
 static NowPlayingWnd& g_np = *g_npStore;
 
+// ---- O app que está tocando ----
+// Clique na capa do álbum (na Central ou no Tocando agora): traz a janela do app
+// para a frente. O id da sessão de mídia é o AppUserModelID do app (apps da Store,
+// PWAs) ou o nome do programa (Spotify.exe, Chrome...).
+static std::wstring WindowAumid(HWND h) {
+    std::wstring out;
+    IPropertyStore* ps = nullptr;
+    if (SUCCEEDED(SHGetPropertyStoreForWindow(h, IID_PPV_ARGS(&ps))) && ps) {
+        // PKEY_AppUserModel_ID
+        static const PROPERTYKEY kAumid = {{0x9F4C2855, 0x9F79, 0x4B39, {0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3}}, 5};
+        PROPVARIANT v;
+        PropVariantInit(&v);
+        if (SUCCEEDED(ps->GetValue(kAumid, &v)) && v.vt == VT_LPWSTR && v.pwszVal) out = v.pwszVal;
+        PropVariantClear(&v);
+        ps->Release();
+    }
+    return out;
+}
+static std::wstring ExeOfPid(DWORD pid) {
+    std::wstring out;
+    if (HANDLE p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid)) {
+        wchar_t buf[MAX_PATH];
+        DWORD n = MAX_PATH;
+        if (QueryFullProcessImageNameW(p, 0, buf, &n)) out.assign(buf, n);
+        CloseHandle(p);
+    }
+    return out;
+}
+static const wchar_t* BaseName(const std::wstring& path) {
+    size_t sl = path.find_last_of(L"\\/");
+    return path.c_str() + (sl == std::wstring::npos ? 0 : sl + 1);
+}
+struct MediaWinFind {
+    std::wstring id, exe;  // o id da sessão; e, se for um programa, o nome do .exe
+    HWND found;
+};
+static BOOL CALLBACK MediaWinProc(HWND h, LPARAM lp) {
+    auto* f = reinterpret_cast<MediaWinFind*>(lp);
+    if (!IsAppWindow(h)) return TRUE;
+    std::wstring a = WindowAumid(h);
+    if (!a.empty() && _wcsicmp(a.c_str(), f->id.c_str()) == 0) {
+        f->found = h;
+        return FALSE;
+    }
+    if (!f->exe.empty()) {
+        std::wstring path = ExeOfPid(RealPidOf(h));
+        if (!path.empty() && _wcsicmp(BaseName(path), f->exe.c_str()) == 0) {
+            f->found = h;
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+static void OpenMediaApp() {
+    std::wstring id;
+    AcquireSRWLockShared(&g_ccLock);
+    id = g_ccShared.app;
+    ReleaseSRWLockShared(&g_ccLock);
+    if (id.empty()) return;
+    bool packaged = id.find(L'!') != std::wstring::npos;
+    MediaWinFind f{id, L"", nullptr};
+    if (!packaged) {
+        f.exe = BaseName(id);
+        if (f.exe.find(L'.') == std::wstring::npos) f.exe += L".exe";  // "Chrome" → chrome.exe
+    }
+    EnumWindows(MediaWinProc, (LPARAM)&f);
+    if (f.found) {
+        if (IsIconic(f.found)) ShowWindow(f.found, SW_RESTORE);
+        ForceForeground(f.found);
+        return;
+    }
+    // Sem janela aberta (minimizado na bandeja, por exemplo): abre o app, que mostra
+    // a janela que já existe.
+    if (packaged) {
+        OpenUri(L"explorer.exe", (L"shell:AppsFolder\\" + id).c_str());
+        return;
+    }
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return;
+    PROCESSENTRY32W pe{sizeof(pe)};
+    std::wstring path;
+    for (BOOL ok = Process32FirstW(snap, &pe); ok && path.empty(); ok = Process32NextW(snap, &pe))
+        if (_wcsicmp(pe.szExeFile, f.exe.c_str()) == 0) path = ExeOfPid(pe.th32ProcessID);
+    CloseHandle(snap);
+    if (!path.empty()) ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
 static std::wstring NpAppName(std::wstring id) {
     size_t bang = id.find(L'!');
     if (bang != std::wstring::npos) id.resize(bang);
@@ -11762,6 +11863,7 @@ static int NpHit(float x, float y) {
     if (in(g_np.next)) return 3;
     if (in(g_np.out)) return 4;
     if (g_np.hasTimeline && in(g_np.track, 9 * g_np.s)) return 5;
+    if (in(g_np.art)) return 6;  // a capa: abre o app
     return 0;
 }
 
@@ -11904,6 +12006,10 @@ static LRESULT CALLBACK NpWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 CcQueue(JOB_MEDIA_TOGGLE);
             } else if (h == 4) {
                 NpOutputMenu();
+                return 0;
+            } else if (h == 6) {
+                NpClose();
+                OpenMediaApp();
                 return 0;
             }
             NpRender();
@@ -17031,6 +17137,14 @@ static HMENU BuildNowMenu() {
     AddItem(m, ID_NOW_PLAY, std::wstring(1, (wchar_t)(g_ext.playing ? 0xE769 : 0xE768)) +
                                 (g_ext.playing ? L" Pausar" : L" Reproduzir"));
     AddItem(m, ID_NOW_NEXT, std::wstring(1, (wchar_t)0xE893) + L" Próxima");
+    std::wstring app;
+    AcquireSRWLockShared(&g_ccLock);
+    app = NpAppName(g_ccShared.app);
+    ReleaseSRWLockShared(&g_ccLock);
+    if (!app.empty()) {
+        AddSep(m);
+        AddItem(m, ID_NOW_OPEN, TF(L"Abrir %s", {app}));
+    }
     return m;
 }
 
@@ -20827,6 +20941,7 @@ static void OpenItemMenu(Bar* b, int idx) {
         case ID_NOW_PREV: CcQueue(JOB_MEDIA_PREV); FocusActive(); return;
         case ID_NOW_PLAY: CcQueue(JOB_MEDIA_TOGGLE); FocusActive(); return;
         case ID_NOW_NEXT: CcQueue(JOB_MEDIA_NEXT); FocusActive(); return;
+        case ID_NOW_OPEN: OpenMediaApp(); return;
         case ID_FOCUS_OFF:
             DndWrite(false);
             g_ext.dnd = 0;
@@ -23432,6 +23547,7 @@ const UiTr kUiTr[] = {
     {L"Automático segue o tema do Windows", L"Automatic follows the Windows theme", L"Automático sigue el tema de Windows", L"Automatique suit le thème de Windows", L"Automatisch folgt dem Windows-Design", L"Automatico segue il tema di Windows", L"自动跟随 Windows 主题"},
     {L"Branco", L"White", L"Blanco", L"Blanc", L"Weiß", L"Bianco", L"白色"},
     {L"Preto", L"Black", L"Negro", L"Noir", L"Schwarz", L"Nero", L"黑色"},
+    {L"Abrir %s", L"Open %s", L"Abrir %s", L"Ouvrir %s", L"%s öffnen", L"Apri %s", L"打开 %s"},
     {L"Discos", L"Disks", L"Discos", L"Disques", L"Laufwerke", L"Dischi", L"磁盘"},
     {L"Clique para ver os discos e quanto cada um está cheio", L"Click to see the disks and how full each one is", L"Haz clic para ver los discos y cuánto está lleno cada uno", L"Cliquez pour voir les disques et leur remplissage", L"Klicken, um die Laufwerke und ihre Belegung zu sehen", L"Fai clic per vedere i dischi e quanto è pieno ciascuno", L"点击查看磁盘及其使用量"},
     {L"Discos: o do sistema está %s% cheio", L"Disks: the system disk is %s% full", L"Discos: el del sistema está al %s%", L"Disques : le disque système est plein à %s %", L"Laufwerke: Systemlaufwerk zu %s% voll", L"Dischi: quello di sistema è pieno al %s%", L"磁盘：系统磁盘已用 %s%"},
