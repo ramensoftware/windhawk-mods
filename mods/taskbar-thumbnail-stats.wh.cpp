@@ -2,13 +2,13 @@
 // @id              taskbar-thumbnail-stats
 // @name            Taskbar Thumbnail Stats
 // @description     Shows RAM, CPU and version of the program on the Windows 11 taskbar thumbnails
-// @version         1.7
+// @version         1.8
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -lshlwapi -lshell32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -lshlwapi -lshell32 -lpdh
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -30,7 +30,8 @@ thumbnail, over the bottom of the preview image or below it:
 
 - **CPU** usage in percent, updated every second
 - **RAM** in use: private working set, like Task Manager, or private bytes,
-  like System Informer
+  like System Informer; as a size, a percentage of the total RAM, or both
+- **GPU** usage in percent (optional), computed like Task Manager
 - **version** of the executable
 
 Example: `CPU: 3.4% · RAM: 412 MB · v131.0.2`
@@ -69,6 +70,17 @@ slowed down, and only while a thumbnail is actually visible.
   $name: Show CPU
 - showRam: true
   $name: Show RAM
+- ramFormat: size
+  $name: RAM format
+  $options:
+  - size: "Size, e.g. 412 MB"
+  - percent: "Percentage of the total RAM, e.g. 3%"
+  - both: "Both, e.g. 412 MB (3%)"
+- showGpu: false
+  $name: Show GPU
+  $description: >-
+    GPU usage in percent, computed like Task Manager (the busiest GPU engine
+    of the program)
 - memoryType: privateWorkingSet
   $name: RAM measurement
   $options:
@@ -175,6 +187,8 @@ slowed down, and only while a thumbnail is actually visible.
 
 #include <windhawk_utils.h>
 
+#include <pdh.h>
+#include <pdhmsg.h>
 #include <psapi.h>
 #include <shellapi.h>
 #include <shlwapi.h>
@@ -225,6 +239,8 @@ enum class TextColorMode { automatic, white, black, custom };
 struct Settings {
     bool showRam = true;
     bool privateBytes = false;  // Else private working set.
+    int ramFormat = 0;          // 0 size, 1 percent, 2 both.
+    bool showGpu = false;
     bool ramFirst = false;
     bool showCpu = true;
     bool showVersion = true;
@@ -757,6 +773,129 @@ std::optional<double> SampleCpuUsage(DWORD pid,
     return sample.lastPercent;
 }
 
+// ===========================================================================
+// GPU usage (worker thread only), from the "GPU Engine" performance counters,
+// the same data Task Manager uses.
+// ===========================================================================
+
+struct GpuSampler {
+    PDH_HQUERY query = nullptr;
+    PDH_HCOUNTER counter = nullptr;
+    bool failed = false;
+    int collectCount = 0;
+    // Utilization per process and per GPU engine, from the last collection.
+    std::unordered_map<DWORD, std::unordered_map<std::wstring, double>> usage;
+};
+
+GpuSampler g_gpu;
+
+void CloseGpuSampler() {
+    if (g_gpu.query) {
+        PdhCloseQuery(g_gpu.query);
+    }
+    g_gpu.query = nullptr;
+    g_gpu.counter = nullptr;
+    g_gpu.collectCount = 0;
+    g_gpu.usage.clear();
+}
+
+void SampleGpu() {
+    if (g_gpu.failed) {
+        return;
+    }
+
+    if (!g_gpu.query) {
+        if (PdhOpenQueryW(nullptr, 0, &g_gpu.query) != ERROR_SUCCESS) {
+            g_gpu.query = nullptr;
+            g_gpu.failed = true;
+            Wh_Log(L"GPU: PdhOpenQuery failed");
+            return;
+        }
+        // English counter name: works on every system language.
+        if (PdhAddEnglishCounterW(g_gpu.query,
+                                  L"\\GPU Engine(*)\\Utilization Percentage",
+                                  0, &g_gpu.counter) != ERROR_SUCCESS) {
+            Wh_Log(L"GPU: counters not available");
+            CloseGpuSampler();
+            g_gpu.failed = true;
+            return;
+        }
+    }
+
+    if (PdhCollectQueryData(g_gpu.query) != ERROR_SUCCESS) {
+        return;
+    }
+    g_gpu.collectCount++;
+    g_gpu.usage.clear();
+
+    // A rate counter needs two collections.
+    if (g_gpu.collectCount < 2) {
+        return;
+    }
+
+    DWORD bufferSize = 0;
+    DWORD itemCount = 0;
+    PDH_STATUS status = PdhGetFormattedCounterArrayW(
+        g_gpu.counter, PDH_FMT_DOUBLE, &bufferSize, &itemCount, nullptr);
+    if (status != (PDH_STATUS)PDH_MORE_DATA || !bufferSize) {
+        return;
+    }
+
+    std::vector<BYTE> buffer(bufferSize);
+    auto* items = (PDH_FMT_COUNTERVALUE_ITEM_W*)buffer.data();
+    if (PdhGetFormattedCounterArrayW(g_gpu.counter, PDH_FMT_DOUBLE,
+                                     &bufferSize, &itemCount,
+                                     items) != ERROR_SUCCESS) {
+        return;
+    }
+
+    for (DWORD i = 0; i < itemCount; i++) {
+        const auto& item = items[i];
+        if (item.FmtValue.CStatus != PDH_CSTATUS_VALID_DATA &&
+            item.FmtValue.CStatus != PDH_CSTATUS_NEW_DATA) {
+            continue;
+        }
+
+        // e.g. "pid_1234_luid_0x00000000_0x0000D1A5_phys_0_eng_0_engtype_3D"
+        PCWSTR name = item.szName;
+        if (!name || wcsncmp(name, L"pid_", 4) != 0) {
+            continue;
+        }
+        DWORD pid = wcstoul(name + 4, nullptr, 10);
+        PCWSTR engine = wcsstr(name, L"_luid_");
+        if (!pid || !engine) {
+            continue;
+        }
+
+        g_gpu.usage[pid][engine] += item.FmtValue.doubleValue;
+    }
+}
+
+// GPU usage of a group of processes like Task Manager: the busiest engine.
+// Empty while not measured yet.
+std::optional<double> GetGpuUsage(const std::vector<DWORD>& pids) {
+    if (g_gpu.failed || g_gpu.collectCount < 2) {
+        return std::nullopt;
+    }
+
+    std::unordered_map<std::wstring, double> perEngine;
+    for (DWORD pid : pids) {
+        auto it = g_gpu.usage.find(pid);
+        if (it == g_gpu.usage.end()) {
+            continue;
+        }
+        for (const auto& [engine, value] : it->second) {
+            perEngine[engine] += value;
+        }
+    }
+
+    double result = 0;
+    for (const auto& [engine, value] : perEngine) {
+        result = std::max(result, value);
+    }
+    return std::min(result, 100.0);
+}
+
 std::wstring BuildStatsText(HWND hWnd, const Settings& settings) {
     if (!hWnd || !IsWindow(hWnd)) {
         return {};
@@ -856,11 +995,39 @@ std::wstring BuildStatsText(HWND hWnd, const Settings& settings) {
     if (openedCount > 0) {
         std::wstring ramPart;
         if (settings.showRam && memory) {
+            std::wstring sizePart;
             WCHAR sizeText[64];
             if (StrFormatByteSizeW((LONGLONG)memory, sizeText,
                                    ARRAYSIZE(sizeText))) {
-                ramPart = std::wstring(L"RAM: ") + sizeText;
+                sizePart = sizeText;
             }
+
+            // Share of the RAM installed in the system.
+            std::wstring percentPart;
+            MEMORYSTATUSEX memoryStatus{sizeof(memoryStatus)};
+            if (settings.ramFormat != 0 && GlobalMemoryStatusEx(&memoryStatus) &&
+                memoryStatus.ullTotalPhys) {
+                percentPart = FormatPercent((double)memory * 100.0 /
+                                            (double)memoryStatus.ullTotalPhys);
+            }
+
+            std::wstring value;
+            if (settings.ramFormat == 1 && !percentPart.empty()) {
+                value = percentPart;
+            } else if (settings.ramFormat == 2 && !percentPart.empty()) {
+                value = sizePart + L" (" + percentPart + L")";
+            } else {
+                value = sizePart;
+            }
+            if (!value.empty()) {
+                ramPart = L"RAM: " + value;
+            }
+        }
+
+        std::wstring gpuPart;
+        if (settings.showGpu) {
+            auto gpu = GetGpuUsage(pids);
+            gpuPart = L"GPU: " + (gpu ? FormatPercent(*gpu) : std::wstring(L"N/A"));
         }
 
         std::wstring cpuPart;
@@ -878,6 +1045,7 @@ std::wstring BuildStatsText(HWND hWnd, const Settings& settings) {
             append(cpuPart);
             append(ramPart);
         }
+        append(gpuPart);
     }
 
     if (settings.showVersion && !rootPath.empty()) {
@@ -888,7 +1056,7 @@ std::wstring BuildStatsText(HWND hWnd, const Settings& settings) {
     }
 
     if (settings.showProcessCount && openedCount > 1 &&
-        (settings.showRam || settings.showCpu)) {
+        (settings.showRam || settings.showCpu || settings.showGpu)) {
         append(std::to_wstring(openedCount) + L" processes");
     }
 
@@ -1076,6 +1244,13 @@ void StatsThreadProc() {
             }
         }
 
+        // GPU usage: collected once per pass, shared by all the windows.
+        if (settings->showGpu && !windows.empty()) {
+            SampleGpu();
+        } else if (!settings->showGpu && g_gpu.query) {
+            CloseGpuSampler();
+        }
+
         std::vector<std::pair<HWND, std::wstring>> results;
         for (HWND hWnd : windows) {
             try {
@@ -1112,6 +1287,8 @@ void StatsThreadProc() {
                                   [] { return g_statsStop || g_statsNewRequest; });
     }
 
+    lock.unlock();
+    CloseGpuSampler();
 }
 
 // Called from the UI thread.
@@ -2484,6 +2661,12 @@ void LoadSettings() {
 
     auto memoryType = WindhawkUtils::StringSetting::make(L"memoryType");
     settings->privateBytes = wcscmp(memoryType.get(), L"privateBytes") == 0;
+
+    auto ramFormat = WindhawkUtils::StringSetting::make(L"ramFormat");
+    settings->ramFormat = wcscmp(ramFormat.get(), L"percent") == 0 ? 1
+                          : wcscmp(ramFormat.get(), L"both") == 0  ? 2
+                                                                    : 0;
+    settings->showGpu = Wh_GetIntSetting(L"showGpu");
 
     auto order = WindhawkUtils::StringSetting::make(L"order");
     settings->ramFirst = wcscmp(order.get(), L"ramFirst") == 0;
