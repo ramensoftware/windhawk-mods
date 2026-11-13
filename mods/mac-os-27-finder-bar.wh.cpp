@@ -22756,6 +22756,12 @@ static void HandleRender(Bar* b) {
         SUCCEEDED(rt->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &br))) {
         rt->BeginDraw();
         rt->Clear(D2D1::ColorF(0, 0, 0, 0));
+        // Com a barra à vista, a alça fica invisível na borda dela e só aparece com
+        // o mouse em cima (na hora de esconder a barra). O fundo quase transparente
+        // mantém a área clicável (pixel com alfa 0 não recebe o mouse).
+        br->SetColor(D2D1::ColorF(0, 0, 0, 0.012f));
+        rt->FillRectangle(D2D1::RectF(0, 0, (float)W, (float)H), br);
+        if (!b->autoShown || b->handleHot) {
         // Clara com contorno escuro: aparece sobre qualquer fundo. Com o mouse, cresce.
         float pw = (b->handleHot ? 64 : 52) * s, ph = (b->handleHot ? 6 : 5) * s;
         D2D1_RECT_F r = D2D1::RectF((W - pw) / 2, 4 * s, (W + pw) / 2, 4 * s + ph);
@@ -22767,6 +22773,7 @@ static void HandleRender(Bar* b) {
         rt->FillRoundedRectangle(rr, br);
         br->SetColor(D2D1::ColorF(0, 0, 0, 0.35f));
         rt->DrawRoundedRectangle(rr, br, std::max(1.0f, 0.8f * s));
+        }
         rt->EndDraw();
     }
     SafeRelease(br);
