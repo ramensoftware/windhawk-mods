@@ -789,7 +789,10 @@ static void LoadSettings() {
         s.islOut = v == L"suck" ? 1 : v == L"rise" ? 2 : v == L"circle" ? 3 : v == L"fade" ? 4 : 0;
         s.islPos = OvrStr(L"islPos") == L"right" ? 1 : 0;
     }
-    s.npLayout = OvrStr(L"npLayout") == L"compact" ? 1 : 0;
+    {
+        std::wstring l = OvrStr(L"npLayout");
+        s.npLayout = l == L"compact" ? 1 : l == L"full" ? 2 : 0;
+    }
     {
         std::wstring nb = OvrStr(L"npBar");
         s.npBar = nb == L"colored" ? 1 : nb == L"wave" ? 2 : 0;
@@ -11281,6 +11284,7 @@ struct NowPlayingWnd {
     D2D1_RECT_F panel{}, art{}, track{}, prev{}, play{}, next{}, out{};
     D2D1_RECT_F appR{}, titleR{}, artistR{};
     bool hasTimeline = false, big = true;
+    bool full = false;  // "Capa inteira": a capa ocupa o painel todo, o resto por cima
     float k = 1;  // escala do texto (capa grande: cresce com a largura)
     D2D1_COLOR_F tint = D2D1::ColorF(0.9f, 0.25f, 0.2f, 1);  // cor da capa (barra de progresso)
     ID2D1DCRenderTarget* rt = nullptr;
@@ -11427,7 +11431,35 @@ static std::wstring NpTime(double sec) {
 
 static void NpLayout() {
     float s = g_np.s, M = g_np.M;
-    g_np.big = g_settings.npLayout == 0;
+    g_np.full = g_settings.npLayout == 2;
+    g_np.big = g_settings.npLayout != 1;  // a capa inteira usa as letras grandes
+    if (g_np.full) {
+        // Capa inteira: a capa é o painel; embaixo, sobre um escurecido, o texto, a
+        // barra de progresso e os controles grandes; a saída de áudio no canto de cima.
+        float pw = g_settings.npSize * s, k = g_np.k = pw / (300 * s);
+        float ph = std::round(pw * 1.3f), pad = 18 * s * k;
+        g_np.panel = D2D1::RectF(M, M, M + pw, M + ph);
+        g_np.art = g_np.panel;
+        g_np.out = D2D1::RectF(M + pw - pad - 32 * s * k, M + pad, M + pw - pad, M + pad + 32 * s * k);
+        float cy = M + ph - pad - 32 * s * k, cx = M + pw / 2, r = 32 * s * k, r2 = 24 * s * k, gap = 82 * s * k;
+        g_np.play = D2D1::RectF(cx - r, cy - r, cx + r, cy + r);
+        g_np.prev = D2D1::RectF(cx - gap - r2, cy - r2, cx - gap + r2, cy + r2);
+        g_np.next = D2D1::RectF(cx + gap - r2, cy - r2, cx + gap + r2, cy + r2);
+        float y = cy - r - 12 * s * k;
+        if (g_np.hasTimeline) {
+            y -= 30 * s * k;  // os tempos ficam embaixo da barra
+            g_np.track = D2D1::RectF(M + pad, y - 2 * s, M + pw - pad, y + 2 * s);
+            y -= 16 * s * k;
+        } else {
+            g_np.track = D2D1::RectF(0, 0, 0, 0);
+        }
+        g_np.artistR = D2D1::RectF(M + pad, y - 22 * s * k, M + pw - pad, y);
+        y -= 22 * s * k;
+        g_np.titleR = D2D1::RectF(M + pad, y - 28 * s * k, M + pw - pad, y);
+        y -= 28 * s * k;
+        g_np.appR = D2D1::RectF(M + pad, y - 18 * s * k, M + pw - pad, y);
+        return;
+    }
     if (g_np.big) {
         // Capa grande em cima, texto embaixo e controles grandes (como no Mac).
         float pw = g_settings.npSize * s, pad = 16 * s * std::max(0.85f, pw / (300 * s));
@@ -11639,9 +11671,10 @@ static void NpRender() {
         GlassLayerShapes(g_np.glass, {{g_np.panel, 22 * s}});
     }
 
+    if (g_np.full) g_light = false;  // capa inteira: texto branco sobre a capa escurecida
     D2D1_COLOR_F fg = g_light ? D2D1::ColorF(0.07f, 0.07f, 0.08f, 1) : D2D1::ColorF(1, 1, 1, 0.97f);
     D2D1_COLOR_F dim = fg;
-    dim.a = 0.6f;
+    dim.a = g_np.full ? 0.78f : 0.6f;
     D2D1_COLOR_F faint = fg;
     faint.a = 0.42f;
     const D2D1_RECT_F& P = g_np.panel;
@@ -11687,10 +11720,55 @@ static void NpRender() {
     if (anim) PushAnim(rt, layer, pv, pivot);
     DrawLiquidGlass(rt, br, P, 22 * s, s, false, false, g_np.glass.ok, true);
 
+    if (g_np.full) {
+        // A capa no painel todo (cantos do painel) e um escurecido de baixo para
+        // cima, para o texto e os botões aparecerem sobre qualquer capa.
+        D2D1_ROUNDED_RECT pr = D2D1::RoundedRect(P, 22 * s, 22 * s);
+        ID2D1RoundedRectangleGeometry* clip = nullptr;
+        ID2D1Layer* cl = nullptr;
+        if (SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(pr, &clip)) && SUCCEEDED(rt->CreateLayer(&cl))) {
+            rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip), cl);
+            if (g_np.artBmp && sh.mediaHas) {
+                // Preenche sem deformar: a capa é cortada nas laterais.
+                D2D1_SIZE_F bs = g_np.artBmp->GetSize();
+                float pw = P.right - P.left, ph = P.bottom - P.top;
+                float sc = std::max(pw / std::max(1.0f, bs.width), ph / std::max(1.0f, bs.height));
+                float dw = bs.width * sc, dh = bs.height * sc;
+                D2D1_RECT_F dst = D2D1::RectF(P.left + (pw - dw) / 2, P.top + (ph - dh) / 2, P.left + (pw + dw) / 2,
+                                              P.top + (ph + dh) / 2);
+                rt->DrawBitmap(g_np.artBmp, dst, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+            } else {
+                D2D1_GRADIENT_STOP gs[] = {{0.0f, Argb(g_settings.ccAccent | 0xFF000000)},
+                                           {0.6f, D2D1::ColorF(0.957f, 0.447f, 0.714f, 1)},
+                                           {1.0f, D2D1::ColorF(0.984f, 0.749f, 0.141f, 1)}};
+                if (ID2D1LinearGradientBrush* g = MakeGradient(rt, D2D1::Point2F(P.left, P.top), D2D1::Point2F(P.right, P.bottom), gs, 3)) {
+                    rt->FillRectangle(P, g);
+                    g->Release();
+                }
+            }
+            float top = g_np.appR.top - 40 * s * g_np.k;
+            D2D1_GRADIENT_STOP sc[] = {{0.0f, D2D1::ColorF(0, 0, 0, 0)}, {0.35f, D2D1::ColorF(0, 0, 0, 0.45f)},
+                                       {1.0f, D2D1::ColorF(0, 0, 0, 0.82f)}};
+            if (ID2D1LinearGradientBrush* g = MakeGradient(rt, D2D1::Point2F(0, top), D2D1::Point2F(0, P.bottom), sc, 3)) {
+                rt->FillRectangle(D2D1::RectF(P.left, top, P.right, P.bottom), g);
+                g->Release();
+            }
+            D2D1_GRADIENT_STOP tc[] = {{0.0f, D2D1::ColorF(0, 0, 0, 0.35f)}, {1.0f, D2D1::ColorF(0, 0, 0, 0)}};
+            if (ID2D1LinearGradientBrush* g = MakeGradient(rt, D2D1::Point2F(0, P.top), D2D1::Point2F(0, g_np.out.bottom + 24 * s), tc, 2)) {
+                rt->FillRectangle(D2D1::RectF(P.left, P.top, P.right, g_np.out.bottom + 24 * s), g);
+                g->Release();
+            }
+            rt->PopLayer();
+        }
+        SafeRelease(cl);
+        SafeRelease(clip);
+    }
     // Capa (ou um quadrado com a nota musical).
     float artRad = (g_np.big ? 14 : 12) * s * g_np.k;
     D2D1_ROUNDED_RECT artR = D2D1::RoundedRect(g_np.art, artRad, artRad);
-    if (g_np.big) {
+    if (g_np.full) {
+        // (a capa já foi desenhada no painel todo)
+    } else if (g_np.big) {
         // Sombra suave embaixo da capa.
         for (int i = 3; i >= 1; i--) {
             float o = i * 3 * s;
@@ -11701,7 +11779,8 @@ static void NpRender() {
                                      br);
         }
     }
-    if (g_np.artBmp && sh.mediaHas) {
+    if (g_np.full) {
+    } else if (g_np.artBmp && sh.mediaHas) {
         ID2D1RoundedRectangleGeometry* clip = nullptr;
         ID2D1Layer* cl = nullptr;
         if (SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(artR, &clip)) && SUCCEEDED(rt->CreateLayer(&cl))) {
@@ -11742,10 +11821,15 @@ static void NpRender() {
     {
         const D2D1_RECT_F& o = g_np.out;
         float rr = (o.right - o.left) / 2;
-        GlassCard(rt, br, D2D1::RoundedRect(o, rr, rr),
-                  g_np.hover == 4 ? (g_light ? D2D1::ColorF(0, 0, 0, 0.14f) : D2D1::ColorF(1, 1, 1, 0.24f))
-                                  : (g_light ? D2D1::ColorF(0, 0, 0, 0.07f) : D2D1::ColorF(1, 1, 1, 0.12f)),
-                  s);
+        if (g_np.full) {
+            br->SetColor(D2D1::ColorF(0, 0, 0, g_np.hover == 4 ? 0.55f : 0.38f));
+            rt->FillRoundedRectangle(D2D1::RoundedRect(o, rr, rr), br);
+        } else {
+            GlassCard(rt, br, D2D1::RoundedRect(o, rr, rr),
+                      g_np.hover == 4 ? (g_light ? D2D1::ColorF(0, 0, 0, 0.14f) : D2D1::ColorF(1, 1, 1, 0.24f))
+                                      : (g_light ? D2D1::ColorF(0, 0, 0, 0.07f) : D2D1::ColorF(1, 1, 1, 0.12f)),
+                      s);
+        }
         br->SetColor(fg);
         IDWriteTextLayout* l = nullptr;
         wchar_t g = 0xE7F5;
@@ -11832,6 +11916,36 @@ static void NpRender() {
                   {&g_np.next, (wchar_t)0xE893, 3, 15}};
     for (const Btn& bt : btns) {
         D2D1_RECT_F r = *bt.r;
+        if (g_np.full) {
+            // Capa inteira: botões bem visíveis. Tocar/pausar num círculo branco com o
+            // ícone escuro; anterior e próxima em círculos escuros com o ícone branco.
+            if (g_np.pressBtn == bt.id && GetTickCount64() - g_np.pressTick < 160) {
+                float kk = 3 * s;
+                r = D2D1::RectF(r.left + kk, r.top + kk, r.right - kk, r.bottom - kk);
+            }
+            float rr = (r.right - r.left) / 2;
+            bool hot = g_np.hover == bt.id;
+            if (bt.id == 2) {
+                br->SetColor(D2D1::ColorF(1, 1, 1, sh.mediaHas ? (hot ? 1.0f : 0.92f) : 0.5f));
+                rt->FillRoundedRectangle(D2D1::RoundedRect(r, rr, rr), br);
+                br->SetColor(D2D1::ColorF(0.06f, 0.06f, 0.07f, 1));
+            } else {
+                br->SetColor(D2D1::ColorF(0, 0, 0, hot ? 0.58f : 0.40f));
+                rt->FillRoundedRectangle(D2D1::RoundedRect(r, rr, rr), br);
+                br->SetColor(D2D1::ColorF(1, 1, 1, 0.55f));
+                rt->DrawRoundedRectangle(D2D1::RoundedRect(r, rr, rr), br, 1.0f * s);
+                br->SetColor(D2D1::ColorF(1, 1, 1, sh.mediaHas ? 1.0f : 0.5f));
+            }
+            IDWriteTextLayout* gl = nullptr;
+            if (SUCCEEDED(g_dwrite->CreateTextLayout(&bt.g, 1, g_np.fIcon, r.right - r.left, r.bottom - r.top, &gl))) {
+                DWRITE_TEXT_RANGE all = {0, 1};
+                gl->SetFontSize((bt.id == 2 ? 26 : 19) * s * g_np.k, all);
+                gl->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                rt->DrawTextLayout(D2D1::Point2F(r.left, r.top), gl, br);
+                gl->Release();
+            }
+            continue;
+        }
         if (g_np.big) {
             // Capa grande: controles cheios, sem círculo (o círculo só aparece no hover).
             if (g_np.pressBtn == bt.id && GetTickCount64() - g_np.pressTick < 160) {
@@ -12615,10 +12729,12 @@ static void BsSet(int val, int v) {
             OvrSetStr(L"npBar", k[g_settings.npBar]);
             return;
         }
-        case BV_NPLAYOUT:
-            g_settings.npLayout = v == 1 ? 1 : 0;
-            OvrSetStr(L"npLayout", g_settings.npLayout ? L"compact" : L"big");
+        case BV_NPLAYOUT: {
+            static const PCWSTR kNames[] = {L"big", L"compact", L"full"};
+            g_settings.npLayout = std::clamp(v, 0, 2);
+            OvrSetStr(L"npLayout", kNames[g_settings.npLayout]);
             return;
+        }
         case BV_NPSIZE:
             g_settings.npSize = 240 + (int)std::lround(std::clamp(v, 0, 100) * 200 / 100.0);
             OvrSetInt(L"npSize", g_settings.npSize);
@@ -13053,7 +13169,7 @@ static const PCWSTR kBsIslStyle[] = {L"Vidro", L"Escuro"};
 static const PCWSTR kBsIslIn[] = {L"Expandir", L"Círculo", L"Descer", L"Esmaecer"};
 static const PCWSTR kBsIslOut[] = {L"Encolher", L"Sugar", L"Subir", L"Círculo", L"Esmaecer"};
 static const PCWSTR kBsIslPos[] = {L"Centro", L"Direita"};
-static const PCWSTR kBsNpLayout[] = {L"Capa grande", L"Compacto"};
+static const PCWSTR kBsNpLayout[] = {L"Capa grande", L"Compacto", L"Capa inteira"};
 static const PCWSTR kBsWxProv[] = {L"Open-Meteo", L"MET Norway", L"wttr.in"};
 static const PCWSTR kBsWxUnit[] = {L"°C", L"°F"};
 static const PCWSTR kBsWxInt[] = {L"10 min", L"20 min", L"1 hora"};
@@ -13105,7 +13221,7 @@ static const PCWSTR* BsChoiceLabels(int val) {
 }
 static int BsChoiceCount(int val) {
     switch (val) {
-        case BV_ISLPOS: case BV_ISLSTYLE: case BV_WXUNIT: case BV_WXLOOK: case BV_NPLAYOUT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: return 2;
+        case BV_ISLPOS: case BV_ISLSTYLE: case BV_WXUNIT: case BV_WXLOOK: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: return 2;
         case BV_BARSTYLE: return 4;
         case BV_LANG: return (int)ARRAYSIZE(kBsLang);
         case BV_ISLIN: return 4;
@@ -23926,6 +24042,7 @@ const UiTr kUiTr[] = {
     {L"Subir", L"Rise", L"Subir", L"Monter", L"Aufsteigen", L"Sali", L"上升"},
     {L"Centro", L"Center", L"Centro", L"Centre", L"Mitte", L"Centro", L"居中"},
     {L"Direita", L"Right", L"Derecha", L"Droite", L"Rechts", L"Destra", L"右侧"},
+    {L"Capa inteira", L"Full cover", L"Portada completa", L"Pochette entière", L"Ganzes Cover", L"Copertina intera", L"全封面"},
     {L"Capa grande", L"Large cover", L"Portada grande", L"Grande pochette", L"Großes Cover", L"Copertina grande", L"大封面"},
     {L"Compacto", L"Compact", L"Compacto", L"Compact", L"Kompakt", L"Compatto", L"紧凑"},
     {L"1 hora", L"1 hour", L"1 hora", L"1 heure", L"1 Stunde", L"1 ora", L"1 小时"},
