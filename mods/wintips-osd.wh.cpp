@@ -4,140 +4,129 @@
 // @name:zh-CN      WinTips 键盘状态提示
 // @description     Shows a Win11-style floating OSD for Caps/Num/Scroll Lock, Insert and copy/paste/cut
 // @description:zh-CN 按下大写/数字/滚动锁定、Insert 或复制/粘贴/剪切时弹出 Win11 质感的浮窗提示
-// @version         1.4.1
+// @version         1.5.2
 // @author          DoYouNatureQ
 // @github          https://github.com/DoYouNatureQ
 // @homepage        https://github.com/DoYouNatureQ/WinTips
-// @license         MIT
+// @license         GPL-3.0-or-later
 // @include         windhawk.exe
-// @compilerOptions -lgdiplus -lgdi32 -ladvapi32 -lshell32 -lshcore -ldwmapi
+// @compilerOptions -lgdiplus -lgdi32 -ladvapi32 -lshell32 -lshcore -ldwmapi -limm32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # WinTips OSD
 
-A Windows 11 style floating overlay for the lock keys, Insert and clipboard
-actions. Nothing is injected into other programs and no system functions are
-hooked: it runs as a Windhawk tool mod in its own process.
+A Windows 11 style floating card for the lock keys, Insert and clipboard actions.
+It runs as a Windhawk tool mod in its own process: nothing is injected into other
+programs and no system functions are hooked.
 
 ![Caps Lock tip sliding in over the desktop](https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-demo-dark-en.gif)
 
-Toggle **Caps Lock**, **Num Lock**, **Scroll Lock** or press **Insert** and a small
-card slides in from the screen edge it sits closest to: a padlock icon that
-rotates and bounces, the state in words, and an accent bar along the bottom.
-**Ctrl+C / Ctrl+V / Ctrl+X** show a check mark or scissors with a `×N` badge that
-counts consecutive actions.
+**Caps Lock**, **Num Lock**, **Scroll Lock** and **Insert** pop a small card out
+of the nearest screen edge — a padlock that rotates and bounces, the state in
+words, an accent bar. **Ctrl+C / V / X**, plus the classic **Ctrl+Insert**,
+**Shift+Insert** and **Shift+Delete**, show a check mark or scissors with a `×N`
+badge counting consecutive actions. **Win+Space**, **Ctrl+Shift**, **Alt+Shift**
+and **Shift** inside an IME show a globe with the input language or the
+Chinese/English mode.
 
 ![Light theme, frosted card over a wallpaper](https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-acrylic-light-en.png)
 
 ## Features
 
-- **Real blurred backdrop.** The card blurs whatever is behind it, the way the
-  Windows 11 OSD does, while keeping a per-pixel-alpha window so the whole card
-  can still fade and slide. Switch *Card material* to Solid for an opaque card.
-- **Slides in from the nearest edge.** A card within 15% of the left or right
-  edge comes in horizontally (this wins over top/bottom), otherwise vertically
-  from whichever half of the screen it sits in.
-- **Follows the taskbar out of the way.** The card is anchored to the taskbar's
-  live edge instead of the work area: with auto-hide on it lifts as the bar
-  slides in and settles back to the screen edge as the bar retreats, so a
-  taskbar that pops up mid-tip never covers it.
-- **Clipboard aware.** Copy tips only appear after the clipboard actually
-  changes, so `Ctrl+C` used to interrupt a console app doesn't pop a false
-  "Copied". Non-keyboard copies (context menu, in-app buttons) can be reported
-  too.
-- **Elevated apps.** A 250 ms poll catches lock-key toggles made while an
-  administrator window has focus, which a low-level keyboard hook can't see.
-- **Follows Windows.** Per-monitor DPI, light/dark theme and the system accent
-  color.
-- **Speaks your Windows language.** The card is English unless Windows is set
-  to a Chinese variant, in which case it shows simplified Chinese. The
-  *Language* setting overrides the detection either way.
-- **Follows the focused display.** The card lands on the display with the
-  window you are working in, positioned with that display's own DPI, work area
-  and taskbar state, so a mixed-DPI setup still lines up. *Show on* can follow
-  the mouse pointer or pin the card to the primary display instead.
-- **Adjustable size.** *Card size* scales the whole card — text, icon, accent
-  bar and the `×N` badge — from 60 to 200 percent of the Windows 11 size, while
-  the margin to the screen edge stays put.
-- **Doesn't get in the way.** Click-through, no focus stealing, not in the
-  taskbar or Alt+Tab, fades out on its own.
-- **Light on resources.** Nothing runs while the card is hidden except the
-  optional 250 ms elevated-app poll: idling costs no measurable CPU. A card
-  frame takes about 0.5 ms at 100% (0.9 ms at 200%) and the backdrop is captured
-  once per tip, roughly 7 ms.
+- **Blurred backdrop, live.** The card blurs what is behind it, the way the
+  Windows 11 OSD does, and keeps it refreshing (Windows 10 2004 and later) so
+  video and scrolling pages move through as a soft wash instead of a frozen
+  frame. *Card material → Solid* for an opaque card.
+- **Windows 11 look, Windows 10 included.** The mod paints the card itself, so
+  it needs neither system acrylic nor system rounded corners. Per-monitor DPI,
+  light/dark theme and the system accent color are followed.
+- **Stays in front.** A fullscreen game, recorder or launcher overlay that covers
+  the card is noticed within 100 ms and the card is re-raised; when nothing
+  covers it, no other window is touched.
+- **Hugs the taskbar.** Anchored to the taskbar's live edge, so an auto-hiding
+  bar never covers the card, and the card slides in from the nearest edge.
+- **Clipboard aware.** Copy and cut tips wait for the clipboard to actually
+  change, so a `Ctrl+C` that interrupts a console app and a permanent
+  `Shift+Delete` stay quiet. Context-menu copies can be reported too.
+- **Works under elevated windows.** Windows stops calling the keyboard hook while
+  an administrator window has focus; the lock keys and Insert then come from Raw
+  Input, which is delivered per device and ignores both focus and integrity
+  level. A key-state poll stays behind it for anything Raw Input cannot see, such
+  as a remote or a virtual keyboard. See below for what does not work there.
+- **Light on resources.** Nothing runs while the card is hidden. A frame takes
+  about 0.5 ms at 100% size; the live backdrop and the topmost guard only tick
+  while a card is up.
 
 ![Paste tip with an ×3 badge](https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-paste-en.png)
 
 ## Settings
 
-- **Language** — language of the text on the card. Follow Windows (the
-  default) shows simplified Chinese on a Chinese Windows and English
-  everywhere else; English and Chinese pin it either way.
-- **Caps Lock / Num Lock / Scroll Lock / Insert / Copy / Paste / Cut** — turn
-  each tip on or off.
-- **Also notify non-keyboard copies** — context menu copies, in-app "Copy"
-  buttons and any other clipboard change that wasn't made with `Ctrl+C`.
-- **Display duration** — how long the card stays, 500 to 10000 ms.
-- **Animation speed** — 100 is normal (300 ms), 50 is twice as fast, 0 disables
-  the animation.
-- **Card size** — 60 to 200 percent; text, icon, accent bar and badge scale
-  together. 100 is the Windows 11 size. The gap to the screen edge does not
-  scale, so a bigger card still sits where a small one did.
-- **Vertical / horizontal position** — above the taskbar (tracked live, so a bar
-  that auto-hides never covers the card) or below the top edge; left, center or
-  right.
-- **Show on** — the display with the active window (the default), the display
-  that holds the mouse cursor, or always the primary display.
-- **Horizontal / vertical offset** — pixel-level fine tuning.
-- **Theme** — follow Windows, dark or light.
-- **Card material** — acrylic (blurred backdrop) or solid.
-- **Blur radius** — 0 to 40 pixels, acrylic material only.
-- **Accent color** — `#RRGGBB` for the status bar and the `×N` badge; leave
-  empty to follow the system accent color.
-- **Detect toggles under elevated apps** — the 250 ms poll described above
-  (lock keys only).
-- **Skip while a fullscreen app is in front** — games, fullscreen video and
-  presentation mode.
+- **Tips** — Caps Lock, Num Lock, Scroll Lock, Insert, Copy, Paste and Cut, each
+  on or off. *Also notify non-keyboard copies* adds context-menu and in-app
+  copies.
+- **Input language & Chinese/English tip** — off by default; shows the globe card
+  after a language switch. Set it back to off if it fires more often than it
+  helps.
+- **Behaviour** — *Display duration* 500–10000 ms; *Animation speed* 100 is
+  normal (300 ms), 0 disables it; *Skip while a fullscreen app is in front*.
+- **Placement** — *Vertical* above the taskbar or below the top edge,
+  *Horizontal* left, center or right, *Show on* the active window's display
+  (default), the mouse's display or the primary one, plus pixel offsets. The
+  taskbar edge is tracked live.
+- **Look** — *Theme* follow Windows, dark or light; *Card material* acrylic or
+  solid; *Tint opacity* 20–90% (55% by default, acrylic only); *Blur radius*
+  0–40 px; *Accent color* `#RRGGBB`, empty for the system accent; *Card size*
+  60–200%, gap to the screen edge unchanged.
+- **Language** — language of the text on the card: Follow Windows (eight UI
+  languages built in, English for anything else) or pin one.
 
 ## Things to know
 
-- Runs as a **tool mod**: it keeps working when Explorer restarts, and it never
-  loads into other processes.
-- The standalone **WinTips.exe** does the same job. If it is already running,
-  this mod stays quiet automatically, so both can be installed — but disable one
-  of the two startup entries.
-- Insert is event-based: Windows doesn't keep a global Insert state.
-- The acrylic backdrop is a screen copy taken the moment the card appears. Behind
-  an elevated window that copy can come back black, and the card falls back to
-  solid for that tip instead of showing a black box.
-- Placement is preset based; fine positioning uses the offset settings.
+- Runs as a **tool mod**: it keeps working when Explorer restarts and never loads
+  into other processes. The standalone **WinTips.exe** does the same job and the
+  mod stays quiet while it runs, so both can be installed — but keep only one of
+  the two startup entries.
+- Insert is event-based: Windows keeps no global Insert state, and only a bare
+  Insert counts (with Ctrl or Shift held it is a copy or a paste).
+- An **exclusive-fullscreen** game covers the card, since that mode owns the
+  display pipeline. Borderless and windowed games are fine.
+- Behind an **elevated window** the backdrop grab comes back black, so that tip
+  falls back to a solid card. The language is still reported there, the IME mode
+  is not. Copy, paste and cut are not either: they need the key the hook is
+  denied, and Raw Input only answers for the lock keys and Insert.
+- The language card needs a keystroke to hang on: switching with the mouse from
+  the language bar or an IME status window shows nothing.
+- The card is **left out of screen capture** while the live backdrop runs
+  (`WDA_EXCLUDEFROMCAPTURE`): screenshots, recordings, streams and screen sharing
+  don't show it. That is what keeps the live blur from feeding on itself. Pick
+  *Card material → Solid* if you want the card in a recording — it uses the
+  one-shot backdrop, which needs no exclusion.
+- Without the live-refresh capability the backdrop is a snapshot taken when the
+  card appeared; sliding in and following the taskbar still work, because the
+  grab includes a margin around the card.
 
 ## Compared to Lock Keys Notifier
 
 [Lock Keys Notifier](https://windhawk.net/mods/lock-keys-notifier) reports the
-same lock keys, so the overlap is worth spelling out. The two aim at different
-things:
-
-- **Look.** This mod reproduces the Windows 11 OSD: the card blurs the desktop
-  behind it, slides in from the nearest edge and animates a padlock. Lock Keys
-  Notifier draws a configurable toast on a solid background.
-- **Scope.** Clipboard tips have no equivalent there.
-- **Configuration.** The look starts at the Windows 11 defaults and stays close
-  to them: the card can be scaled, and the theme and material switched, but there
-  are no layouts or fonts to design. Lock Keys Notifier is built around being
-  configurable — layouts, fonts, shadows, sounds, per-key accents — so it isn't
-  trying to match the native OSD.
-
-If you want lock keys only, and want to tune every pixel of the card,
-Lock Keys Notifier is the better fit. If you want the native Windows 11 look, or
-clipboard tips, this mod is.
+same lock keys but aims elsewhere: it draws a configurable toast on a solid
+background, while this mod reproduces the native Windows 11 OSD and adds
+clipboard tips. Want to tune every pixel of the card — layouts, fonts, shadows,
+sounds? Lock Keys Notifier fits better. Want the native look or clipboard tips?
+This one.
 
 ## Links
 
 - Standalone version, source and issue tracker:
   [WinTips](https://github.com/DoYouNatureQ/WinTips)
+
+## License
+
+GPL-3.0-or-later, as the standalone WinTips app. The look and motion take
+reference from the LockWindow design in FluentFlyout (also GPL-3.0); the code
+here is an independent implementation, and redistributed versions must ship the
+complete corresponding source under the GPL.
 */
 // ==/WindhawkModReadme==
 
@@ -147,19 +136,31 @@ clipboard tips, this mod is.
   $name: Language
   $name:zh-CN: 语言
   $description: >-
-    Language of the text on the card. Follow Windows is the default: a
-    Chinese Windows shows simplified Chinese, any other language shows English.
-    English and Chinese pin the card to that language.
+    Language of the text on the card. Follow Windows reads the Windows display
+    language and picks one of the eight built-in UI languages; anything else
+    reads English. Any other value pins the card to that language.
   $description:zh-CN: >-
-    浮窗上文字使用的语言。默认跟随系统：中文系统显示简体中文，其他语言显示英文。也可以固定为英文或简体中文。
+    浮窗上文字使用的语言。默认跟随系统：按 Windows 显示语言自动匹配内置的八种之一，其他语言显示英文。也可以固定为某一种。
   $options:
   - auto: Follow Windows
-  - en: English
   - zh: 简体中文
+  - zh-Hant: 繁體中文
+  - en: English
+  - de: Deutsch
+  - ja: 日本語
+  - ru: Русский
+  - es: Español
+  - pt: Português
   $options:zh-CN:
   - auto: 跟随系统
-  - en: English
   - zh: 简体中文
+  - zh-Hant: 繁體中文
+  - en: English
+  - de: Deutsch
+  - ja: 日本語
+  - ru: Русский
+  - es: Español
+  - pt: Português
 - notifyCapsLock: true
   $name: Caps Lock
   $name:zh-CN: 大写锁定
@@ -183,18 +184,18 @@ clipboard tips, this mod is.
 - notifyCopy: true
   $name: Copy
   $name:zh-CN: 复制
-  $description: Show a tip when copying (Ctrl+C)
-  $description:zh-CN: 复制（Ctrl+C）时弹出提示
+  $description: Show a tip when copying (Ctrl+C or Ctrl+Insert)
+  $description:zh-CN: 复制（Ctrl+C 或 Ctrl+Insert）时弹出提示
 - notifyPaste: true
   $name: Paste
   $name:zh-CN: 粘贴
-  $description: Show a tip when pasting (Ctrl+V)
-  $description:zh-CN: 粘贴（Ctrl+V）时弹出提示
+  $description: Show a tip when pasting (Ctrl+V or Shift+Insert)
+  $description:zh-CN: 粘贴（Ctrl+V 或 Shift+Insert）时弹出提示
 - notifyCut: true
   $name: Cut
   $name:zh-CN: 剪切
-  $description: Show a tip when cutting (Ctrl+X)
-  $description:zh-CN: 剪切（Ctrl+X）时弹出提示
+  $description: Show a tip when cutting (Ctrl+X or Shift+Delete)
+  $description:zh-CN: 剪切（Ctrl+X 或 Shift+Delete）时弹出提示
 - notifyAnyCopy: true
   $name: Also notify non-keyboard copies
   $name:zh-CN: 任意方式复制都提示
@@ -207,6 +208,15 @@ clipboard tips, this mod is.
     右键菜单、应用内“复制”按钮等非键盘复制（剪贴板更新即提示）也会弹出提示。
 
     需要同时开启上面的“复制”选项。
+- notifyLanguage: false
+  $name: Input language & Chinese/English tip
+  $name:zh-CN: 输入法语言与中英文提示
+  $description: >-
+    Shows the input language after Win+Space, Ctrl+Shift or Alt+Shift, and the
+    Chinese/English mode after Shift inside an IME. Off by default: unless you
+    switch often and on purpose, it shows up more often than it helps.
+  $description:zh-CN: >-
+    Win+Space、Ctrl+Shift、Alt+Shift 换输入语言，或输入法内按 Shift 切中英文时，浮窗显示当前状态。默认关闭：除非确实经常刻意切换，否则它出现得比帮到你的次数多。
 - displayMs: 2000
   $name: Display duration (milliseconds)
   $name:zh-CN: 显示时长（毫秒）
@@ -292,17 +302,27 @@ clipboard tips, this mod is.
   $name: Card material
   $name:zh-CN: 卡片材质
   $description: >-
-    Acrylic blurs whatever is behind the card, like the real Win11 OSD. The
-    area behind the card is captured and blurred every time a tip appears.
-    Solid paints an opaque card instead.
+    Acrylic blurs whatever is behind the card, like the real Win11 OSD, and
+    keeps the blur in step with the desktop while the card is up. Solid paints
+    an opaque card instead.
   $description:zh-CN: >-
-    亚克力会实时模糊卡片背后的画面，观感最接近原生 Win11 提示。每次弹出时截取并模糊一次卡片所在区域。纯色则绘制不透明卡片。
+    亚克力会模糊卡片背后的画面，并在卡片显示期间持续刷新，观感最接近原生 Win11 提示。纯色则绘制不透明卡片。
   $options:
   - acrylic: Acrylic (blurred background)
   - solid: Solid color
   $options:zh-CN:
   - acrylic: 亚克力（模糊背景）
   - solid: 纯色
+- tintOpacity: 55
+  $name: Tint opacity (percent)
+  $name:zh-CN: 底色不透明度（百分比）
+  $description: >-
+    Only used by the Acrylic material: how much of the card is the tint
+    painted over the blurred backdrop. Lower shows more of the blurred
+    background, higher looks more solid. 20 to 90, 55 is the balance point
+    where text stays readable over a light wallpaper.
+  $description:zh-CN: >-
+    仅亚克力材质有效：模糊背景之上那层底色盖住多少。数值越低越透、背景越清晰，越高越接近实心。20 至 90，55 是"看得见背后"与"文字不失读"的平衡点。
 - blurRadius: 12
   $name: Blur radius (pixels)
   $name:zh-CN: 模糊半径（像素）
@@ -319,14 +339,6 @@ clipboard tips, this mod is.
     to follow the Windows accent color.
   $description:zh-CN: >-
     状态条与 ×N 徽章的十六进制颜色，例如 #0067C0。留空则跟随系统强调色。
-- pollElevated: true
-  $name: Detect toggles under elevated apps
-  $name:zh-CN: 提权窗口下也检测
-  $description: >-
-    The keyboard hook can't see input sent to administrator windows. Polling
-    the lock-key state every 250 ms fills that gap (Caps/Num/Scroll only).
-  $description:zh-CN: >-
-    低级键盘钩子收不到发往管理员窗口的按键，因此每 250 毫秒轮询一次锁定状态兜底（仅大写/数字/滚动）。
 - suppressFullscreen: false
   $name: Skip while a fullscreen app is in front
   $name:zh-CN: 全屏应用前台时不提示
@@ -341,6 +353,7 @@ clipboard tips, this mod is.
 #include <shellapi.h>
 #include <shellscalingapi.h>
 #include <dwmapi.h>
+#include <imm.h>
 
 #include <algorithm>
 #include <cmath>
@@ -380,10 +393,58 @@ constexpr float kZoneRatio = 0.15f;   // edge zone that picks the slide directio
 constexpr int kBaseAnimationMs = 300;
 constexpr int kClipIntentMs = 800;    // wait this long for the clipboard to change
 constexpr int kClipMergeMs = 250;     // coalesce clipboard manager write-backs
-constexpr int kPollQuietMs = 1200;    // let a hook-reported toggle settle first
-constexpr int kPollMs = 250;          // elevated-window fallback
+constexpr int kPollMs = 50;           // elevated-window fallback
+
+// How often the fallback question - "has the foreground gone above us?" - is
+// asked when the window event says nothing. Slower than the event, its only job
+// is to notice sooner or later, and while nothing is elevated it costs a cached
+// comparison. It runs unconditionally: the event comes from SetWinEventHook,
+// which Windows is just as entitled to filter as the keyboard hook, so losing
+// it is precisely the case where the fallback matters.
+constexpr int kPollProbeMs = 500;
+
+// One press can be reported by every capture path at once (hook, Raw Input,
+// poll). Only the first report may show a card: a second card for the same
+// physical press would show the opposite of the real lock. Measured between the
+// presses themselves, not between the moments each path noticed them.
+constexpr int kSameKindWindowMs = 200;
+
+// Raw Input repeats a key-down every few dozen ms while it is held; every
+// repeat refreshes the stamp, so this only expires when nothing at all arrived
+// for this long - the matching key-up was lost (device unplugged, a secure
+// desktop that swallowed it). Treating the next press as new is then the
+// recovery, and a desktop switch re-seeds the state on top of it.
+constexpr int kRawRepeatGuardMs = 1500;
 constexpr int kFollowIntervalMs = 60; // the taskbar slide takes ~200 ms
 constexpr int kFollowMs = 140;        // shorter than the entrance, so it keeps up
+
+// The live backdrop: the desktop behind the card is grabbed again this often
+// and the blur is re-aligned to wherever the card is now. A grab costs about
+// 7 ms of a core (it waits for the compositor), so this is not a frame rate to
+// chase - the smoothness comes from the blend below rather than from more
+// frames. The WinTips app refreshes every 22 ms; the mod is a guest in
+// windhawk.exe, where other mods' hooks run on the same CPU, so it settles for
+// 30 Hz and lets the blend do the rest.
+constexpr int kLiveRefreshMs = 33;
+
+// How far the card may wander inside one grab, in DIPs. The snapshot is taken
+// around the card instead of exactly behind it, and the drawing code samples
+// the part that is behind the card right now: sliding in and following the
+// taskbar are covered without a new grab.
+constexpr int kLivePaddingDip = 40;
+constexpr int kStaticPaddingDip = 72; // one grab per tip: cover the whole slide
+
+// New frame's weight in the blend (256 = new frame only). Around 150 the image
+// catches up in about three frames - fast enough to read as "live", slow enough
+// that a 30 Hz capture of a busy desktop doesn't flicker.
+constexpr int kLiveBlendWeight = 150;
+
+// The topmost guard: check this often whether something else landed on top of
+// the card, and speed up when another app keeps raising itself over it.
+constexpr int kTopmostGuardMs = 100;
+constexpr int kTopmostFastMs = 30;
+constexpr int kTopmostRaisesBeforeFast = 3;
+constexpr int kTopmostMaxWalk = 64; // Z-order walk limit, not a card limit
 
 enum TipKind {
     kCapsLock = 0,
@@ -393,16 +454,36 @@ enum TipKind {
     kCopy,
     kPaste,
     kCut,
+    kLanguage, // input language / IME mode, the only kind with no on/off state
     kKindCount,
 };
+
+// The keys the fallback polls: the three lock keys and Insert, which are the
+// first four kinds in a row.
+constexpr int kPollKeyCount = kInsert + 1;
 
 constexpr UINT WM_APP_TIP = WM_APP + 1;
 constexpr UINT WM_APP_QUIT = WM_APP + 2;
 
+// Posted by the hook when a key that may switch the input language went down,
+// so the sampling it starts reads another process's IME window without holding
+// up the hook. Window message, handled on the UI thread.
+constexpr UINT WM_APP_LANGUAGE_WATCH = WM_APP + 7;
+
 constexpr UINT_PTR kTimerAnim = 1;
 constexpr UINT_PTR kTimerHold = 2;
 constexpr UINT_PTR kTimerFollow = 3;
-constexpr UINT_PTR kTimerPoll = 4;
+constexpr UINT_PTR kTimerLiveBackdrop = 6;
+constexpr UINT_PTR kTimerTopmost = 7;
+constexpr UINT_PTR kTimerInput = 8;  // the language watch, on the UI thread
+
+// Thread timers on the hook thread (window timers would need the card window).
+constexpr UINT_PTR kThreadTimerPoll = 1;
+constexpr UINT_PTR kThreadTimerProbe = 2;
+
+// The language watch: poll this often for this long after a switch key.
+constexpr int kInputPollMs = 50;
+constexpr int kInputWindowMs = 2000;
 
 // =============================================================================
 // Settings
@@ -420,14 +501,22 @@ enum MonitorMode {
 };
 
 enum LanguageMode {
-    kLangAuto = 0,    // follow the Windows display language
-    kLangEnglish = 1, // always English
-    kLangChinese = 2, // always Chinese
+    kLangAuto = 0, // follow the Windows display language
+    kLangZhHans = 1,
+    kLangZhHant = 2,
+    kLangEnglish = 3,
+    kLangGerman = 4,
+    kLangJapanese = 5,
+    kLangRussian = 6,
+    kLangSpanish = 7,
+    kLangPortuguese = 8,
+    kLangCount = 9,
 };
 
 struct Settings {
     int language = kLangAuto;
-    bool notify[kKindCount] = {true, true, true, true, true, true, true};
+    bool notify[kKindCount] = {true, true, true, true,
+                               true, true, true, false}; // language tip off
     bool notifyAnyCopy = true;
     int displayMs = 2000;
     int animationPercent = 100;
@@ -439,9 +528,12 @@ struct Settings {
     int monitor = kMonitorFocus;
     int theme = 0;      // 0 = system, 1 = dark, 2 = light
     int material = kMaterialAcrylic;
+    // How much of the card the tint covers on the acrylic path, in percent.
+    // 55 is the same balance point the WinTips app settled on: below ~40 the
+    // text starts fighting a busy wallpaper, above ~75 the blur is invisible.
+    int tintOpacity = 55;
     int blurRadius = 12;
     std::wstring accentColor;
-    bool pollElevated = true;
     bool suppressFullscreen = false;
 
     int AnimationMs() const {
@@ -474,19 +566,55 @@ int Clamp(int v, int lo, int hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+// Setting value -> Language. Accepts the codes the WinTips app writes
+// (zh / zh-Hant / en / de / ja / ru / es / pt) plus the usual Windows-style
+// aliases, so a hand-edited registry value still lands somewhere sensible.
+// Anything else - including an empty value - means Follow Windows.
+int ParseLanguageCode(const wchar_t* code) {
+    if (!code || !code[0]) {
+        return kLangAuto;
+    }
+    std::wstring v(code);
+    if (EqualsNoCase(v, L"zh") || EqualsNoCase(v, L"zh-CN") ||
+        EqualsNoCase(v, L"zh-Hans") || EqualsNoCase(v, L"chs")) {
+        return kLangZhHans;
+    }
+    if (EqualsNoCase(v, L"zh-Hant") || EqualsNoCase(v, L"zh-TW") ||
+        EqualsNoCase(v, L"zh-HK") || EqualsNoCase(v, L"zh-MO") ||
+        EqualsNoCase(v, L"cht")) {
+        return kLangZhHant;
+    }
+    if (EqualsNoCase(v, L"en") || EqualsNoCase(v, L"en-US") ||
+        EqualsNoCase(v, L"en-GB")) {
+        return kLangEnglish;
+    }
+    if (EqualsNoCase(v, L"de") || EqualsNoCase(v, L"de-DE")) {
+        return kLangGerman;
+    }
+    if (EqualsNoCase(v, L"ja") || EqualsNoCase(v, L"jp") ||
+        EqualsNoCase(v, L"ja-JP")) {
+        return kLangJapanese;
+    }
+    if (EqualsNoCase(v, L"ru") || EqualsNoCase(v, L"ru-RU")) {
+        return kLangRussian;
+    }
+    if (EqualsNoCase(v, L"es") || EqualsNoCase(v, L"es-ES")) {
+        return kLangSpanish;
+    }
+    if (EqualsNoCase(v, L"pt") || EqualsNoCase(v, L"pt-BR") ||
+        EqualsNoCase(v, L"pt-PT")) {
+        return kLangPortuguese;
+    }
+    return kLangAuto;
+}
+
 void LoadSettings() {
     Settings s;
 
     // Follow Windows is the default, and what an empty or unknown value falls
-    // back to: a Chinese Windows reads Chinese, everything else reads English.
+    // back to: the card then reads whatever the Windows display language is.
     const wchar_t* str = Wh_GetStringSetting(L"language");
-    if (str && EqualsNoCase(str, L"en")) {
-        s.language = kLangEnglish;
-    } else if (str && EqualsNoCase(str, L"zh")) {
-        s.language = kLangChinese;
-    } else {
-        s.language = kLangAuto;
-    }
+    s.language = ParseLanguageCode(str);
     Wh_FreeStringSetting(str);
 
     s.notify[kCapsLock] = Wh_GetIntSetting(L"notifyCapsLock") != 0;
@@ -497,13 +625,13 @@ void LoadSettings() {
     s.notify[kPaste] = Wh_GetIntSetting(L"notifyPaste") != 0;
     s.notify[kCut] = Wh_GetIntSetting(L"notifyCut") != 0;
     s.notifyAnyCopy = Wh_GetIntSetting(L"notifyAnyCopy") != 0;
+    s.notify[kLanguage] = Wh_GetIntSetting(L"notifyLanguage") != 0;
 
     s.displayMs = Clamp(Wh_GetIntSetting(L"displayMs"), 500, 10000);
     s.animationPercent = Clamp(Wh_GetIntSetting(L"animationPercent"), 0, 300);
     s.tipScalePercent = Clamp(Wh_GetIntSetting(L"tipScale"), 60, 200);
     s.offsetX = Clamp(Wh_GetIntSetting(L"offsetX"), -4000, 4000);
     s.offsetY = Clamp(Wh_GetIntSetting(L"offsetY"), -4000, 4000);
-    s.pollElevated = Wh_GetIntSetting(L"pollElevated") != 0;
     s.suppressFullscreen = Wh_GetIntSetting(L"suppressFullscreen") != 0;
 
     str = Wh_GetStringSetting(L"vertical");
@@ -549,6 +677,8 @@ void LoadSettings() {
                                                       : kMaterialAcrylic;
     Wh_FreeStringSetting(str);
 
+    s.tintOpacity = Clamp(Wh_GetIntSetting(L"tintOpacity"), 20, 90);
+
     int blur = Wh_GetIntSetting(L"blurRadius");
     s.blurRadius = Clamp(blur, 0, 40);
 
@@ -559,51 +689,137 @@ void LoadSettings() {
 // Localization
 // =============================================================================
 
-// English until DetectLanguage() runs: a card drawn before the settings are
-// loaded should read as English rather than silently falling back to Chinese.
-bool g_chinese = false;
+// The card is only ever drawn after DetectLanguage() has run; English is the
+// fallback so a missing call shows up as English instead of pinning every user
+// to one language.
+LanguageMode g_lang = kLangEnglish;
+
+// One row per language: the eight tip labels, then the two lock states, the
+// Insert event and the two IME modes. A table rather than a switch keeps a
+// missing translation a compile-time error (the initializer needs kKindCount
+// labels) instead of a blank label at runtime.
+struct LanguageStrings {
+    const wchar_t* key[kKindCount];
+    const wchar_t* on;
+    const wchar_t* off;
+    const wchar_t* insertPressed;
+    const wchar_t* imeChinese;
+    const wchar_t* imeEnglish;
+};
+
+const LanguageStrings kLanguageStrings[kLangCount] = {
+    // Follow Windows: never used as-is, kept so the table indices line up with
+    // the LanguageMode enum. English is what resolving "auto" falls back to.
+    {{L"Caps Lock", L"Num Lock", L"Scroll Lock", L"Insert", L"Copied",
+      L"Pasted", L"Cut", L"Input language"},
+     L"On", L"Off", L"Insert pressed", L"Chinese input", L"English input"},
+    // Simplified Chinese
+    {{L"大写锁定", L"数字锁定", L"滚动锁定", L"Insert", L"已复制", L"已粘贴",
+      L"已剪切", L"输入法语言"},
+     L"开启", L"关闭", L"Insert 键已按下", L"中文输入", L"英文输入"},
+    // Traditional Chinese
+    {{L"大寫鎖定", L"數字鎖定", L"捲動鎖定", L"Insert", L"已複製", L"已貼上",
+      L"已剪下", L"輸入法語言"},
+     L"開啟", L"關閉", L"Insert 鍵已按下", L"中文輸入", L"英文輸入"},
+    // English
+    {{L"Caps Lock", L"Num Lock", L"Scroll Lock", L"Insert", L"Copied",
+      L"Pasted", L"Cut", L"Input language"},
+     L"On", L"Off", L"Insert pressed", L"Chinese input", L"English input"},
+    // German
+    {{L"Feststelltaste", L"Num-Taste", L"Rollen", L"Einfg", L"Kopiert",
+      L"Eingefügt", L"Ausgeschnitten", L"Eingabesprache"},
+     L"An", L"Aus", L"Einfg gedrückt", L"Chinesische Eingabe",
+     L"Englische Eingabe"},
+    // Japanese
+    {{L"Caps Lock", L"Num Lock", L"Scroll Lock", L"Insert", L"コピーしました",
+      L"貼り付けました", L"切り取りました", L"入力言語"},
+     L"オン", L"オフ", L"Insert キーを押しました", L"中国語入力", L"英語入力"},
+    // Russian
+    {{L"Caps Lock", L"Num Lock", L"Scroll Lock", L"Insert", L"Скопировано",
+      L"Вставлено", L"Вырезано", L"Язык ввода"},
+     L"Вкл", L"Выкл", L"Insert нажата", L"Ввод по-китайски",
+     L"Ввод по-английски"},
+    // Spanish
+    {{L"Bloq Mayús", L"Bloq Num", L"Bloq Despl", L"Insert", L"Copiado",
+      L"Pegado", L"Cortado", L"Idioma de entrada"},
+     L"Activado", L"Desactivado", L"Insert pulsado", L"Entrada en chino",
+     L"Entrada en inglés"},
+    // Portuguese
+    {{L"Caps Lock", L"Num Lock", L"Scroll Lock", L"Insert", L"Copiado",
+      L"Colado", L"Recortado", L"Idioma de entrada"},
+     L"Ativado", L"Desativado", L"Insert pressionado", L"Entrada em chinês",
+     L"Entrada em inglês"},
+};
+
+// The language actually drawn: the setting when it names one, otherwise the
+// Windows display language.
+LanguageMode ResolveLanguage() {
+    if (g_settings.language > kLangAuto && g_settings.language < kLangCount) {
+        return (LanguageMode)g_settings.language;
+    }
+    LANGID lang = GetUserDefaultUILanguage();
+    if (!lang) {
+        return kLangEnglish;
+    }
+    switch (PRIMARYLANGID(lang)) {
+        case LANG_CHINESE: {
+            // Traditional scripts are Taiwan, Hong Kong and Macao; the
+            // mainland and Singapore builds are simplified.
+            WORD sub = SUBLANGID(lang);
+            return (sub == SUBLANG_CHINESE_TRADITIONAL ||
+                    sub == SUBLANG_CHINESE_HONGKONG ||
+                    sub == SUBLANG_CHINESE_MACAU)
+                       ? kLangZhHant
+                       : kLangZhHans;
+        }
+        case LANG_GERMAN:
+            return kLangGerman;
+        case LANG_JAPANESE:
+            return kLangJapanese;
+        case LANG_RUSSIAN:
+            return kLangRussian;
+        case LANG_SPANISH:
+            return kLangSpanish;
+        case LANG_PORTUGUESE:
+            return kLangPortuguese;
+        default:
+            return kLangEnglish;
+    }
+}
 
 void DetectLanguage() {
-    switch (g_settings.language) {
-        case kLangChinese:
-            g_chinese = true;
-            return;
-        case kLangEnglish:
-            g_chinese = false;
-            return;
-        default:
-            break;
-    }
-    // Follow Windows. Every Chinese variant (zh-CN, zh-TW, zh-HK, zh-SG) maps
-    // to simplified Chinese; every other language - and a system that reports
-    // no language at all - reads as English.
-    LANGID lang = GetUserDefaultUILanguage();
-    g_chinese = lang != 0 && PRIMARYLANGID(lang) == LANG_CHINESE;
+    g_lang = ResolveLanguage();
+}
+
+const LanguageStrings& Strings() {
+    return kLanguageStrings[g_lang];
 }
 
 const wchar_t* KeyName(TipKind kind) {
-    static const wchar_t* zh[] = {L"大写锁定", L"数字锁定", L"滚动锁定",
-                                  L"Insert",   L"已复制",   L"已粘贴",
-                                  L"已剪切"};
-    static const wchar_t* en[] = {L"Caps Lock", L"Num Lock",  L"Scroll Lock",
-                                  L"Insert",    L"Copied",    L"Pasted",
-                                  L"Cut"};
-    return g_chinese ? zh[kind] : en[kind];
+    return Strings().key[kind];
 }
+
+// The language card carries no fixed label: the text is whatever the switch
+// resolved to, either an input language name or an IME mode. Written when the
+// tip is raised and read while it is drawn, both on the UI thread.
+std::wstring g_languageText;
 
 void FormatTip(TipKind kind, bool on, std::wstring& out) {
     switch (kind) {
         case kCapsLock:
         case kNumLock:
         case kScrollLock:
-            if (g_chinese) {
-                out = std::wstring(KeyName(kind)) + (on ? L" 开启" : L" 关闭");
-            } else {
-                out = std::wstring(KeyName(kind)) + (on ? L" On" : L" Off");
-            }
+            // "{label} {state}" holds in every language the card ships with.
+            out = KeyName(kind);
+            out += L' ';
+            out += on ? Strings().on : Strings().off;
             break;
         case kInsert:
-            out = g_chinese ? L"已按下 Insert" : L"Insert pressed";
+            out = Strings().insertPressed;
+            break;
+        case kLanguage:
+            // Fall back to a plain label so the card is never blank.
+            out = g_languageText.empty() ? KeyName(kLanguage) : g_languageText;
             break;
         default:
             out = KeyName(kind);
@@ -714,11 +930,15 @@ Theme CurrentTheme() {
     const BYTE alpha = 238;
     t.surface = t.dark ? Color(alpha, 0x2B, 0x2B, 0x2B)
                        : Color(alpha, 0xFB, 0xFB, 0xFB);
-    // Acrylic is a tint over the blurred backdrop. The opacity is deliberately
-    // near the Windows 11 material (about 84%), which keeps the card tone close
-    // to the original app's DWM acrylic while the blur still shows through.
-    t.tint = t.dark ? Color(214, 0x1F, 0x1F, 0x1F)
-                    : Color(214, 0xF2, 0xF2, 0xF2);
+    // Acrylic is a tint over the blurred backdrop. The alpha comes from the
+    // tint opacity setting (20-90%, default 55), which is the same knob the
+    // WinTips app exposes: low values keep the wallpaper visible through the
+    // blur, high ones drift back towards the solid card.
+    const BYTE tintAlpha =
+        (BYTE)std::lround((float)Clamp(g_settings.tintOpacity, 20, 90) * 255.0f /
+                          100.0f);
+    t.tint = t.dark ? Color(tintAlpha, 0x20, 0x20, 0x20)
+                    : Color(tintAlpha, 0xF3, 0xF3, 0xF3);
     t.text = t.dark ? Color(255, 0xFF, 0xFF, 0xFF) : Color(255, 0x19, 0x19, 0x19);
     t.accent = ParseHexColor(g_settings.accentColor, t.accent) ? t.accent
                                                                : SystemAccent();
@@ -770,27 +990,18 @@ float Lerp(float a, float b, float t) {
 // =============================================================================
 
 using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
-using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, MONITOR_DPI_TYPE, UINT*, UINT*);
 
 float ScaleForMonitor(HMONITOR monitor) {
     if (!monitor) {
         return 1.0f;
     }
-    // Resolved once: a tip re-reads the DPI of the display it is about to land
-    // on, and LoadLibrary/GetProcAddress on every tip is pure overhead when the
-    // module never goes away in practice.
-    static GetDpiForMonitor_t getDpi = [] {
-        HMODULE shcore = LoadLibraryW(L"shcore.dll");
-        return shcore ? (GetDpiForMonitor_t)GetProcAddress(shcore,
-                                                           "GetDpiForMonitor")
-                      : nullptr;
-    }();
-    if (getDpi) {
-        UINT dpiX = 0, dpiY = 0;
-        if (SUCCEEDED(getDpi(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) &&
-            dpiX > 0) {
-            return (float)dpiX / 96.0f;
-        }
+    // shcore is in the import table (-lshcore), so this is an ordinary call:
+    // a tip re-reads the DPI of the display it is about to land on, and that
+    // should not go through a proc address on every frame.
+    UINT dpiX = 0, dpiY = 0;
+    if (SUCCEEDED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) &&
+        dpiX > 0) {
+        return (float)dpiX / 96.0f;
     }
     HDC dc = GetDC(nullptr);
     int dpi = dc ? GetDeviceCaps(dc, LOGPIXELSX) : 96;
@@ -1305,6 +1516,27 @@ void DrawLock(Graphics& g, RectF box, const Theme& theme, float angle,
     g.Restore(state);
 }
 
+// Globe drawn as strokes: an outline, a vertical ellipse for the meridians and
+// a horizon. Ported from "M3,11 A8,8 … M11,3 A4.5,8 … M3,11 H19" at 1.5.
+void DrawGlobe(Graphics& g, RectF box, const Theme& theme) {
+    float s = box.Width / 24.0f;
+    GraphicsState state = g.Save();
+    g.TranslateTransform(box.X, box.Y);
+    g.ScaleTransform(s, s);
+
+    Pen pen(theme.text, 1.5f);
+    pen.SetStartCap(LineCapRound);
+    pen.SetEndCap(LineCapRound);
+    pen.SetLineJoin(LineJoinRound);
+
+    // Circle r=8 at (11,11); meridian ellipse rx=4.5, ry=8; horizon y=11.
+    g.DrawEllipse(&pen, RectF(3.0f, 3.0f, 16.0f, 16.0f));
+    g.DrawEllipse(&pen, RectF(6.5f, 3.0f, 9.0f, 16.0f));
+    g.DrawLine(&pen, PointF(3.0f, 11.0f), PointF(19.0f, 11.0f));
+
+    g.Restore(state);
+}
+
 // Check mark drawn on progressively: `progress` 0 draws nothing, 1 draws the
 // whole stroke. Ported from the "M5,12.5 L10,17.5 L19,7" polyline.
 void DrawCheck(Graphics& g, RectF box, const Theme& theme, float progress) {
@@ -1381,8 +1613,56 @@ void DrawScissors(Graphics& g, RectF box, const Theme& theme, float alpha) {
     g.Restore(state);
 }
 
+// HarmonyOS Sans is the preferred UI face (matches the WinTips app), but GDI has
+// no graceful fallback of its own: an unknown lfFaceName silently lands on
+// whatever the mapper picks (usually Arial), which looks nothing like the WPF
+// original. So each candidate is probed once and Segoe UI is the last resort.
+//
+// SC comes first on purpose. The Windows builds of plain "HarmonyOS Sans" carry
+// Latin glyphs only, so Chinese there falls through to GDI font linking and the
+// two scripts end up on different files with mismatched metrics. "HarmonyOS Sans
+// SC" holds Latin and CJK in one face, which is what the WPF side uses too.
+// EnumFontFamiliesExW wants a FONTENUMPROCW, and that is __stdcall on the 32-bit
+// build. A capture-less lambda is __cdecl, and clang refuses the conversion
+// outright - MSVC lets it slide, which is why the standalone harness built fine
+// while CI failed on [compile:x86]. A real CALLBACK function is the portable way.
+int CALLBACK FontProbeProc(const LOGFONTW*, const TEXTMETRICW*, DWORD,
+                           LPARAM param) {
+    *reinterpret_cast<bool*>(param) = true;
+    return 0;  // one hit is enough
+}
+
+const wchar_t* UiFaceName() {
+    static const wchar_t* face = []() -> const wchar_t* {
+        HDC dc = GetDC(nullptr);
+        if (!dc) {
+            return L"Segoe UI";
+        }
+        auto installed = [dc](const wchar_t* name) {
+            bool found = false;
+            LOGFONTW probe{};
+            probe.lfCharSet = DEFAULT_CHARSET;
+            wcscpy_s(probe.lfFaceName, LF_FACESIZE, name);
+            EnumFontFamiliesExW(dc, &probe, FontProbeProc,
+                                reinterpret_cast<LPARAM>(&found), 0);
+            return found;
+        };
+        const wchar_t* result = L"Segoe UI";
+        if (installed(L"HarmonyOS Sans SC")) {
+            result = L"HarmonyOS Sans SC";
+        } else if (installed(L"HarmonyOS Sans")) {
+            result = L"HarmonyOS Sans";  // Latin-only build: CJK falls back
+        }
+        ReleaseDC(nullptr, dc);
+        return result;
+    }();
+    return face;
+}
+
 // Segoe UI Variable is a variable font, which GDI+ can't select a weight for;
 // a LOGFONT with lfWeight gives an exact 500/600 weight on Segoe UI instead.
+// HarmonyOS Sans ships as discrete faces (Thin/Light/Regular/Medium/Bold/Black),
+// so lfWeight 500/600 maps onto Medium/Bold the same way.
 // The same LOGFONT feeds both the HFONT used for measuring and the GDI+ Font
 // used for drawing, so the two never disagree about metrics.
 LOGFONTW MakeUiLogFont(float pixelSize, int weight) {
@@ -1391,7 +1671,7 @@ LOGFONTW MakeUiLogFont(float pixelSize, int weight) {
     lf.lfWeight = weight;
     lf.lfQuality = ANTIALIASED_QUALITY;
     lf.lfCharSet = DEFAULT_CHARSET;
-    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    wcscpy_s(lf.lfFaceName, LF_FACESIZE, UiFaceName());
     return lf;
 }
 
@@ -1449,6 +1729,12 @@ bool IsClipKind(TipKind kind) {
     return kind == kCopy || kind == kPaste || kind == kCut;
 }
 
+// The language card is the one kind with neither a lock pose nor a count: a
+// globe, one line of text, no accent bar.
+bool IsLanguageKind(TipKind kind) {
+    return kind == kLanguage;
+}
+
 std::wstring CountText(int count) {
     wchar_t buf[16];
     swprintf(buf, 16, L"\u00D7%d", count);
@@ -1475,6 +1761,7 @@ void RenderCard(Graphics& g, float scale, float width, float height,
     LOGFONTW badgeLogFont = MakeUiLogFont(12.5f * scale, 600);
 
     bool clip = IsClipKind(f.kind);
+    bool lang = IsLanguageKind(f.kind);
     float textWidth = MeasureTextWidth(screenDc, textLogFont, label);
     float badgeWidth = clip ? MeasureTextWidth(screenDc, badgeLogFont,
                                                CountText(f.count)) +
@@ -1499,7 +1786,7 @@ void RenderCard(Graphics& g, float scale, float width, float height,
     // below, because the accent bar owns the bottom 10 DIP. Mirroring the bar
     // swaps that to 10/6, which drops the region's centre 4 DIP — the icon and
     // label follow it. Clipboard cards have no bar and stay symmetric.
-    float gridShift = (!clip && barOnTop) ? 4.0f * scale : 0.0f;
+    float gridShift = (!clip && !lang && barOnTop) ? 4.0f * scale : 0.0f;
 
     float iconSize = 22.0f * scale;
     RectF iconBox(16.0f * scale,
@@ -1508,7 +1795,10 @@ void RenderCard(Graphics& g, float scale, float width, float height,
 
     float poseT = EaseOutQuad(f.statusT);
     float pose = Lerp(f.prevOn ? 1.0f : 0.0f, f.on ? 1.0f : 0.0f, poseT);
-    if (clip) {
+    if (lang) {
+        // No pose to animate: the card only says which input is active now.
+        DrawGlobe(g, iconBox, theme);
+    } else if (clip) {
         if (f.kind == kCut) {
             DrawScissors(g, iconBox, theme, EaseOutQuad(f.clipT));
         } else {
@@ -1593,7 +1883,8 @@ void RenderCard(Graphics& g, float scale, float width, float height,
     }
 
     // --- accent bar ---------------------------------------------------------
-    if (!clip) {
+    // No bar on the language card: it has no two states for the bar to show.
+    if (!clip && !lang) {
         float indicatorHeight = 3.0f * scale;
         float indicatorWidth = Lerp(36.0f, 60.0f, pose) * scale;
         // Default pose: 7 DIP above the bottom edge. Mirrored: the same 7 DIP
@@ -1719,34 +2010,15 @@ struct Surface {
         return true;
     }
 
+    // GDI+ hands back a DIB it has written to as premultiplied BGRA already: a
+    // 32-bit DIB opened through an HDC is treated as PARGB, so every blend it
+    // performs is composited against the (zeroed) destination and stored
+    // pre-multiplied. UpdateLayeredWindow wants exactly that, so no extra pass
+    // is needed - running one multiplies by alpha a second time and turns every
+    // antialiased edge pixel into a dark fringe.
     void Clear() {
         if (bits) {
             memset(bits, 0, (size_t)stride * height);
-        }
-    }
-
-    // UpdateLayeredWindow expects premultiplied alpha.
-    void Premultiply() {
-        if (!bits) {
-            return;
-        }
-        auto* base = (BYTE*)bits;
-        for (int y = 0; y < height; y++) {
-            BYTE* row = base + (size_t)y * stride;
-            for (int x = 0; x < width; x++) {
-                BYTE* px = row + x * 4;
-                BYTE a = px[3];
-                if (a == 255) {
-                    continue;
-                }
-                if (a == 0) {
-                    px[0] = px[1] = px[2] = 0;
-                    continue;
-                }
-                px[0] = (BYTE)(px[0] * a / 255);
-                px[1] = (BYTE)(px[1] * a / 255);
-                px[2] = (BYTE)(px[2] * a / 255);
-            }
         }
     }
 };
@@ -1756,12 +2028,25 @@ struct Surface {
 //
 // A DWM acrylic backdrop needs a non-layered window, and a non-layered window
 // can neither fade nor blend per pixel. Instead the area behind the card is
-// copied once per tip and blurred - the result is composited into the same
-// ARGB surface, so the card keeps real blur *and* full animation.
+// copied and blurred, and the result is composited into the same ARGB surface,
+// so the card keeps real blur *and* full animation.
+//
+// The copy is taken with a margin around the card, and the drawing code picks
+// the part that is behind the card at that moment: the card can slide in and
+// follow an auto-hiding taskbar without a new grab. Where Windows allows it
+// (10 2004 and later, DWM composing, no remote session) the window is excluded
+// from screen capture and the grab repeats while the card is up, so the blur
+// moves with the desktop instead of being a frozen photograph.
 // =============================================================================
 
+// Where the card is being drawn this frame, in screen pixels. The backdrop is
+// sampled at this offset, so it has to be known before the drawing code, which
+// sits above the rest of the runtime state.
+int g_presentX;
+int g_presentY;
+
 struct Backdrop {
-    Surface image;
+    Surface image; // the captured area, screen (x,y) to (x+w, y+h)
     int x = 0;
     int y = 0;
     bool valid = false;
@@ -1770,9 +2055,10 @@ struct Backdrop {
         valid = false;
     }
 
-    bool Matches(int newX, int newY, int w, int h) const {
-        return valid && x == newX && y == newY && image.width == w &&
-               image.height == h;
+    // True while a card of this size at this place is still inside the grab.
+    bool Covers(int px, int py, int w, int h) const {
+        return valid && w > 0 && h > 0 && px >= x && py >= y &&
+               px + w <= x + image.width && py + h <= y + image.height;
     }
 };
 
@@ -1790,6 +2076,7 @@ void BlurAxis(BYTE* bits, int width, int height, int radius, bool horizontal) {
     const int lineStride = horizontal ? width * 4 : 4;
     const int elemStride = horizontal ? 4 : width * 4;
     const int window = radius * 2 + 1;
+    const double invWindow = 1.0 / (double)window;
     if (lineLength <= 1 || lineCount <= 0) {
         return;
     }
@@ -1812,9 +2099,12 @@ void BlurAxis(BYTE* bits, int width, int height, int radius, bool horizontal) {
 
         for (int i = 0; i < lineLength; i++) {
             BYTE* dst = base + (size_t)i * elemStride;
-            dst[0] = (BYTE)(sum[0] / window);
-            dst[1] = (BYTE)(sum[1] / window);
-            dst[2] = (BYTE)(sum[2] / window);
+            // Rounded rather than truncated: a box blur averaging a flat wall
+            // loses half a level per pass to truncation, and two passes of that
+            // show up as a banded, slightly dirty wash.
+            dst[0] = (BYTE)(sum[0] * invWindow + 0.5);
+            dst[1] = (BYTE)(sum[1] * invWindow + 0.5);
+            dst[2] = (BYTE)(sum[2] * invWindow + 0.5);
 
             int add = Clamp(i + radius + 1, 0, lineLength - 1);
             int sub = Clamp(i - radius, 0, lineLength - 1);
@@ -1856,15 +2146,26 @@ bool SurfaceIsBlank(const Surface& image) {
     return true;
 }
 
-bool CaptureBackdrop(HDC source, int x, int y, int w, int h, int radius) {
+// One grab: the card's rectangle grown by `pad` on every side, blurred in
+// place. The margin is what lets the card move without a new grab - the
+// drawing code samples the part of it that is behind the card at the time.
+bool CaptureBackdrop(HDC source, int x, int y, int w, int h, int radius,
+                     int pad) {
     g_backdrop.Invalidate();
     if (!source || w <= 0 || h <= 0) {
         return false;
     }
-    if (!g_backdrop.image.Ensure(w, h)) {
+    if (pad < 0) {
+        pad = 0;
+    }
+    const int grabW = w + pad * 2;
+    const int grabH = h + pad * 2;
+    const int grabX = x - pad;
+    const int grabY = y - pad;
+    if (!g_backdrop.image.Ensure(grabW, grabH)) {
         return false;
     }
-    if (!BitBlt(g_backdrop.image.dc, 0, 0, w, h, source, x, y,
+    if (!BitBlt(g_backdrop.image.dc, 0, 0, grabW, grabH, source, grabX, grabY,
                 SRCCOPY | CAPTUREBLT)) {
         return false;
     }
@@ -1873,23 +2174,57 @@ bool CaptureBackdrop(HDC source, int x, int y, int w, int h, int radius) {
     }
 
     BlurBackdrop(g_backdrop.image, radius);
-    g_backdrop.x = x;
-    g_backdrop.y = y;
+    g_backdrop.x = grabX;
+    g_backdrop.y = grabY;
     g_backdrop.valid = true;
     return true;
 }
 
+// target = target * weight + previous * (256 - weight), per pixel, BGR only.
+//
+// A grab waits for a composed frame, so the live path tops out well below the
+// refresh rate; against a video or a scrolling page every frame is a visible
+// jump. Blending towards the previous frame turns that into a smooth ramp,
+// which is also what frosted glass is supposed to look like: whatever moves
+// behind it comes through as a soft wash.
+void BlendPixels(const BYTE* previous, BYTE* target, int bytes, int weight) {
+    if (!previous || !target || weight >= 256) {
+        return;
+    }
+    if (weight < 0) {
+        weight = 0;
+    }
+    const int back = 256 - weight;
+    for (int i = 0; i + 3 < bytes; i += 4) {
+        target[i] = (BYTE)((target[i] * weight + previous[i] * back) >> 8);
+        target[i + 1] =
+            (BYTE)((target[i + 1] * weight + previous[i + 1] * back) >> 8);
+        target[i + 2] =
+            (BYTE)((target[i + 2] * weight + previous[i + 2] * back) >> 8);
+    }
+}
+
 void PaintCardBackground(Graphics& g, const GraphicsPath& card, float width,
                          float height, const Theme& theme) {
-    bool acrylic = g_settings.material != kMaterialSolid && g_backdrop.valid;
+    const Surface& image = g_backdrop.image;
+    const int cardW = (int)std::lround(width);
+    const int cardH = (int)std::lround(height);
+    bool acrylic = g_settings.material != kMaterialSolid && g_backdrop.valid &&
+                   image.bits && cardW > 0 && cardH > 0 &&
+                   cardW <= image.width && cardH <= image.height;
     if (acrylic) {
-        const Surface& image = g_backdrop.image;
         Bitmap bitmap(image.width, image.height, image.stride,
                       PixelFormat32bppRGB, (BYTE*)image.bits);
+        // The card is somewhere inside the grab; clamp so a card that has slid
+        // past the margin shows the nearest edge rather than an empty block.
+        const int offsetX = Clamp(g_presentX - g_backdrop.x, 0,
+                                  image.width - cardW);
+        const int offsetY = Clamp(g_presentY - g_backdrop.y, 0,
+                                  image.height - cardH);
         GraphicsState state = g.Save();
         g.SetClip(&card);
-        g.DrawImage(&bitmap, RectF(0.0f, 0.0f, width, height), 0.0f, 0.0f,
-                    (REAL)image.width, (REAL)image.height, UnitPixel);
+        g.DrawImage(&bitmap, RectF(0.0f, 0.0f, width, height), (REAL)offsetX,
+                    (REAL)offsetY, (REAL)cardW, (REAL)cardH, UnitPixel);
         g.Restore(state);
 
         SolidBrush tint(theme.tint);
@@ -1899,8 +2234,118 @@ void PaintCardBackground(Graphics& g, const GraphicsPath& card, float width,
         g.FillPath(&surface, &card);
     }
 
-    Pen border(theme.border, 1.0f);
-    g.DrawPath(&border, &card);
+    // The glass edge is lit from above and fades out towards the bottom: the
+    // eye decides "this is a pane of glass" mostly from the boundary, and a
+    // border at one flat alpha reads like a sticker instead. Solid keeps the
+    // original flat border - there is no glass to catch the light.
+    if (acrylic && !theme.highContrast) {
+        LinearGradientBrush lit(
+            PointF(0.0f, 0.0f), PointF(0.0f, height),
+            theme.dark ? Color(0x3D, 0xFF, 0xFF, 0xFF)
+                       : Color(0x4A, 0xFF, 0xFF, 0xFF),
+            theme.dark ? Color(0x0F, 0xFF, 0xFF, 0xFF)
+                       : Color(0x14, 0x00, 0x00, 0x00));
+        Pen border(&lit, 1.0f);
+        g.DrawPath(&border, &card);
+    } else {
+        Pen border(theme.border, 1.0f);
+        g.DrawPath(&border, &card);
+    }
+}
+
+// =============================================================================
+// Input state
+// =============================================================================
+
+// What tells the language card whether anything changed. Language and IME mode
+// belong to the *thread* that owns the input, not to the top-level window, and
+// the thread that owns it isn't always the one behind GetForegroundWindow: a
+// fullscreen game hands input to a child window, a UWP game to a CoreWindow in
+// its host process, and a launcher overlay (Steam, Discord, a recorder) may sit
+// in front of both. Reading the language off the top-level window then returns
+// the same value forever and the card never appears. GetGUIThreadInfo answers
+// for the foreground thread, which is the one that matters.
+struct InputState {
+    DWORD threadId = 0;
+    DWORD processId = 0;
+    HKL hkl = nullptr;
+    HWND imeWnd = nullptr;
+    int conversionMode = -1; // -1 = no IME window, or it refused to answer
+
+    bool Usable() const {
+        return hkl != nullptr;
+    }
+    bool HasIme() const {
+        return imeWnd != nullptr && conversionMode >= 0;
+    }
+    bool IsNative() const {
+        return (conversionMode & IME_CMODE_NATIVE) != 0;
+    }
+};
+
+HWND FocusWindow() {
+    GUITHREADINFO info{};
+    info.cbSize = sizeof(info);
+    // idThread 0 means "the foreground thread".
+    if (GetGUIThreadInfo(0, &info)) {
+        if (info.hwndFocus) {
+            return info.hwndFocus;
+        }
+        if (info.hwndActive) {
+            return info.hwndActive;
+        }
+    }
+    return GetForegroundWindow();
+}
+
+// WM_IME_CONTROL's "get conversion mode" sub-command: IMEs all implement it,
+// but the SDK headers only ship the neighbouring values, so spell it out.
+constexpr WPARAM kImeGetConversionMode = 0x0001;
+
+// Synchronous message with a short timeout: the target thread can be busy
+// loading a level, and a language tip is never worth stalling the hook for.
+int ReadConversionMode(HWND imeWnd) {
+    DWORD_PTR result = 0;
+    if (!SendMessageTimeoutW(imeWnd, WM_IME_CONTROL, kImeGetConversionMode, 0,
+                             SMTO_ABORTIFHUNG, 40, &result)) {
+        return -1;
+    }
+    return (int)result;
+}
+
+// The IME mode labels ("Chinese input" / "English input") are Chinese-only, and
+// every GUI thread has a default IME window whatever its layout, so a Japanese
+// or Korean IME's mode toggle would be described with the wrong words. Ask for
+// the mode only where the label makes sense.
+bool ChineseLayout(HKL hkl) {
+    return PRIMARYLANGID(LOWORD((ULONG_PTR)hkl)) == LANG_CHINESE;
+}
+
+InputState CurrentInputState() {
+    InputState state;
+    HWND hwnd = FocusWindow();
+    if (!hwnd) {
+        return state;
+    }
+    DWORD pid = 0;
+    DWORD tid = GetWindowThreadProcessId(hwnd, &pid);
+    if (!tid) {
+        return state;
+    }
+    HKL hkl = GetKeyboardLayout(tid);
+    if (!hkl) {
+        return state;
+    }
+    state.threadId = tid;
+    state.processId = pid;
+    state.hkl = hkl;
+    if (ChineseLayout(hkl)) {
+        state.imeWnd = ImmGetDefaultIMEWnd(hwnd);
+        if (state.imeWnd) {
+            state.conversionMode = ReadConversionMode(state.imeWnd);
+        }
+    }
+    return state;
 }
 
 // =============================================================================
@@ -1948,13 +2393,470 @@ TipKind g_currentKind = kCapsLock;
 ULONGLONG g_lastShowTick;
 bool g_clipIntentActive;
 TipKind g_clipIntentKind = kCopy;
-volatile LONG g_pollEnabled = 1;
 
-// Hook thread only.
+// Hook thread only, and only as an auto-repeat filter: a key-down for a key
+// that is already in here is the keyboard repeating, not a new press. It is
+// deliberately not used to answer "is Ctrl down" - a key-up the hook never sees
+// (the secure desktop, an elevated window) would stay in here forever.
 bool g_vkDown[256];
+
+// The lock state itself, and the one place it is allowed to change.
+//
+// It is not read from the system at press time. GetKeyState answers out of the
+// calling thread's own copy of the key state: it starts as the live state when
+// the thread is created and only moves forward as that thread processes
+// keyboard input. The hook thread never processes any, so its copy is frozen at
+// load time and four taps in a row would read back the same value.
+// GetAsyncKeyState only says "held down", which is not a lock state either. So
+// the state is one flip per captured press, which makes "every press changes
+// it" true by construction, and ResyncKeyState() re-seeds it from the live state
+// on a desktop switch - the one thing that can swallow presses.
+//
+// Both the hook thread and the UI thread (Raw Input) write this, so mutation is
+// serialised by AllowTip: it settles, per key, which one capture path owns a
+// given press before the read-modify-write below happens.
 bool g_toggleState[3];
-ULONGLONG g_hookToggleTick[3]; // last press reported by the hook, per lock key
-int g_pollMismatch[3];         // consecutive disagreeing polls, per lock key
+
+// The elevated-window fallback, also hook thread only. A low-level keyboard
+// hook isn't called for input the process isn't allowed to see, so a window
+// running at a higher integrity level makes the mod go blind. Reading the key
+// state instead ignores focus and integrity level alike, at the price of a
+// timer - which is why it only runs while such a window is in front.
+HWINEVENTHOOK g_foregroundHook;
+HWINEVENTHOOK g_desktopHook;
+DWORD g_selfRid;                   // own integrity level, read once at startup
+bool g_pollRunning;
+bool g_pollDown[kPollKeyCount];    // per key: held down at the last poll
+// Mirrors g_pollRunning for the UI thread, which decides there whether a Raw
+// Input key is worth reporting at all. See HandleRawInput.
+volatile LONG g_hookBlind;
+HWND g_levelHwnd;                  // window the verdict below was measured on
+bool g_levelRaised;
+bool g_levelKnown;
+// The short-lived thread that re-reads the lock state after a desktop switch.
+// Kept so a second switch during its 150 ms sleep doesn't start another one, and
+// so the teardown can wait for its last write. Hook thread only.
+HANDLE g_resyncThread;
+
+// When each key last produced a tip, shared by every capture path so a press is
+// reported once. The press time sits in the upper 62 bits and the path that
+// claimed it in the low two, so one atomic word carries both and a 32-bit
+// process can neither tear the pair nor read one without the other. See
+// AllowTip.
+ULONGLONG g_lastFired[kPollKeyCount];
+
+// Raw Input key state, UI thread only. Key-down is what counts; the flags exist
+// to drop auto-repeat and to expire a press whose release was never delivered.
+bool g_rawDown[kPollKeyCount];
+ULONGLONG g_rawDownAt[kPollKeyCount];
+
+// The language watch. A language or IME-mode change has no notification of its
+// own: it is a property of the thread that owns the input, and the only reliable
+// trigger is "a key that switches it was just pressed". So a switch key starts a
+// short watch that compares the input state of the focused thread a few times a
+// second until it settles or times out.
+//
+// It lives on the UI thread. Finding the state means asking the foreground
+// app's IME window a question, and that answer can take tens of milliseconds to
+// arrive - which the hook thread must never wait for, because every keystroke in
+// the session waits behind it. The hook only posts a message; the sampling runs
+// on the thread that draws the card, where a slow answer costs a frame.
+volatile LONG g_languageEnabled;  // mirrors the setting, read by the hook
+bool g_inputWatching;             // UI thread only, here and below
+int g_inputTicks;
+bool g_inputHasLast;
+InputState g_inputLast;
+
+void StartInputWatch();
+void InputTick();
+
+// =============================================================================
+// Live backdrop
+//
+// The snapshot above is taken once and then only re-aligned, so it stays a
+// photograph of the moment the card appeared. Grabbing again while the card is
+// up needs one thing from the system: a way to keep the card out of its own
+// copy. SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) does exactly that, but
+// only Windows 10 2004 and later honour it, and it leans on DWM composition -
+// no composition, or a remote desktop session, and the exclusion can't be
+// trusted. When it is available a worker thread grabs, blurs and blends the
+// desktop behind the card a few dozen times a second; when it isn't, the
+// one-shot path stays as it was.
+// =============================================================================
+
+constexpr DWORD kWdaNone = 0x00000000;
+constexpr DWORD kWdaExcludeFromCapture = 0x00000011;
+
+// Resolved at runtime rather than linked: the mod is built for Windows 10 as a
+// whole, and neither the header declaration nor the import library is
+// guaranteed to be there in every toolchain.
+typedef BOOL(WINAPI* SetWindowDisplayAffinity_t)(HWND, DWORD);
+typedef UINT(WINAPI* TimePeriod_t)(UINT);
+
+SetWindowDisplayAffinity_t DisplayAffinityFn() {
+    static SetWindowDisplayAffinity_t fn = [] {
+        HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        return user32 ? (SetWindowDisplayAffinity_t)GetProcAddress(
+                            user32, "SetWindowDisplayAffinity")
+                      : (SetWindowDisplayAffinity_t) nullptr;
+    }();
+    return fn;
+}
+
+TimePeriod_t TimePeriodFn(const char* name) {
+    static HMODULE winmm;
+    static bool tried;
+    if (!tried) {
+        tried = true;
+        // SYSTEM32 only: winmm.dll is not a KnownDLL, so a bare name would let
+        // the default search order pick up a copy from next to windhawk.exe.
+        winmm = LoadLibraryExW(L"winmm.dll", nullptr,
+                               LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    return winmm ? (TimePeriod_t)GetProcAddress(winmm, name) : nullptr;
+}
+
+// RtlGetVersion answers honestly where GetVersionEx lies to a process without a
+// compatibility manifest, which is exactly the situation a mod runs in.
+struct OsVersionInfo {
+    ULONG size;
+    ULONG major;
+    ULONG minor;
+    ULONG build;
+    ULONG platform;
+    WCHAR csd[128];
+};
+
+DWORD WindowsBuild() {
+    static DWORD build = 0;
+    if (!build) {
+        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        if (ntdll) {
+            auto rtlGetVersion =
+                (LONG(WINAPI*)(OsVersionInfo*))GetProcAddress(ntdll,
+                                                              "RtlGetVersion");
+            if (rtlGetVersion) {
+                OsVersionInfo info{};
+                info.size = sizeof(info);
+                if (rtlGetVersion(&info) == 0) {
+                    build = info.build;
+                }
+            }
+        }
+        if (!build) {
+            build = 1;
+        }
+    }
+    return build;
+}
+
+bool LiveBackdropSupported() {
+    static int cached = -1;
+    if (cached < 0) {
+        BOOL composing = FALSE;
+        bool ok = WindowsBuild() >= 19041 && DisplayAffinityFn() != nullptr &&
+                  GetSystemMetrics(SM_REMOTESESSION) == 0 &&
+                  SUCCEEDED(DwmIsCompositionEnabled(&composing)) && composing;
+        if (!ok) {
+            Wh_Log(L"live backdrop unavailable (build %lu)", WindowsBuild());
+        }
+        cached = ok ? 1 : 0;
+    }
+    return cached == 1;
+}
+
+bool g_liveRunning;      // UI thread only: the worker below is up
+bool g_livePreciseTimer; // timeBeginPeriod(1) is held by us
+HANDLE g_liveThread;
+HANDLE g_liveWake;
+volatile LONG g_liveGeneration; // bumped to tell the worker to stop
+int g_livePad;
+int g_liveRadius;
+
+// The hand-off, one frame at a time. The worker owns the pixels it captures;
+// the UI thread takes a copy under the lock and draws from its own surface, so
+// neither side ever reads a buffer the other is writing.
+CRITICAL_SECTION g_liveLock;
+bool g_liveLockReady;
+volatile LONG g_livePending; // 1 = a frame is waiting for the UI thread
+std::vector<BYTE> g_liveFrame;
+int g_liveFrameX;
+int g_liveFrameY;
+int g_liveFrameW;
+int g_liveFrameH;
+
+void StepAnimation(); // defined below, with the rest of the animation code
+
+// Worker side: hand the frame over if the UI thread has taken the last one.
+// Queueing instead would only ever deliver an older picture, and a burst of
+// stale frames looks worse than a dropped one.
+void PublishLiveFrame(const Surface& image, int x, int y) {
+    if (!image.bits || image.width <= 0 || image.height <= 0) {
+        return;
+    }
+    EnterCriticalSection(&g_liveLock);
+    if (InterlockedCompareExchange(&g_livePending, 1, 0) == 0) {
+        const size_t bytes = (size_t)image.width * image.height * 4;
+        if (g_liveFrame.size() < bytes) {
+            g_liveFrame.resize(bytes);
+        }
+        memcpy(g_liveFrame.data(), image.bits, bytes);
+        g_liveFrameX = x;
+        g_liveFrameY = y;
+        g_liveFrameW = image.width;
+        g_liveFrameH = image.height;
+    }
+    LeaveCriticalSection(&g_liveLock);
+}
+
+// UI side: move the waiting frame into the backdrop. Returns false when there
+// is nothing new, so a tick with no frame costs an atomic exchange and nothing
+// else.
+bool TakeLiveFrame() {
+    if (!g_liveLockReady) {
+        return false;
+    }
+    bool taken = false;
+    EnterCriticalSection(&g_liveLock);
+    if (InterlockedExchange(&g_livePending, 0) == 1) {
+        const size_t bytes = (size_t)g_liveFrameW * g_liveFrameH * 4;
+        if (g_liveFrameW > 0 && g_liveFrameH > 0 &&
+            g_liveFrame.size() >= bytes &&
+            g_backdrop.image.Ensure(g_liveFrameW, g_liveFrameH)) {
+            memcpy(g_backdrop.image.bits, g_liveFrame.data(), bytes);
+            g_backdrop.x = g_liveFrameX;
+            g_backdrop.y = g_liveFrameY;
+            g_backdrop.valid = true;
+            taken = true;
+        }
+    }
+    LeaveCriticalSection(&g_liveLock);
+    return taken;
+}
+
+DWORD WINAPI LiveCaptureThread(LPVOID param) {
+    const LONG generation = (LONG)(LONG_PTR)param;
+    const int pad = g_livePad;
+    const int radius = g_liveRadius;
+
+    Surface work;
+    std::vector<BYTE> previous; // the frame last handed over, for the blend
+    int previousX = 0;
+    int previousY = 0;
+    int previousW = 0;
+    int previousH = 0;
+    bool hasPrevious = false;
+    int misses = 0;
+    ULONGLONG next = GetTickCount64();
+
+    while (generation == g_liveGeneration) {
+        HWND hwnd = g_hwnd;
+        RECT box{};
+        int cardW = 0;
+        int cardH = 0;
+        if (hwnd && GetWindowRect(hwnd, &box)) {
+            cardW = box.right - box.left;
+            cardH = box.bottom - box.top;
+        }
+
+        if (cardW <= 0 || cardH <= 0) {
+            if (++misses >= 10) {
+                break;
+            }
+        } else {
+            const int grabW = cardW + pad * 2;
+            const int grabH = cardH + pad * 2;
+            const int grabX = box.left - pad;
+            const int grabY = box.top - pad;
+
+            bool grabbed = false;
+            if (work.Ensure(grabW, grabH)) {
+                HDC screen = GetDC(nullptr);
+                if (screen) {
+                    grabbed = BitBlt(work.dc, 0, 0, grabW, grabH, screen, grabX,
+                                     grabY, SRCCOPY | CAPTUREBLT) != FALSE;
+                    ReleaseDC(nullptr, screen);
+                }
+            }
+            // A black copy means an elevated window is in front, or the desktop
+            // is in the middle of a switch. Keep what the card already shows
+            // instead of painting a black rectangle into it.
+            if (!grabbed || SurfaceIsBlank(work)) {
+                if (++misses >= 10) {
+                    break;
+                }
+            } else {
+                misses = 0;
+                BlurBackdrop(work, radius);
+
+                const int bytes = grabW * grabH * 4;
+                const int movedX = grabX - previousX;
+                const int movedY = grabY - previousY;
+                const bool moved = movedX > 2 || movedX < -2 || movedY > 2 ||
+                                   movedY < -2;
+                // While the card itself is moving the background is a pan, and
+                // blending two positions smears the edges into a ghost. Only
+                // blend once the card has settled where it belongs.
+                if (hasPrevious && previousW == grabW && previousH == grabH &&
+                    !moved && previous.size() >= (size_t)bytes) {
+                    BlendPixels(previous.data(), (BYTE*)work.bits, bytes,
+                                kLiveBlendWeight);
+                }
+
+                PublishLiveFrame(work, grabX, grabY);
+
+                previous.resize((size_t)bytes);
+                memcpy(previous.data(), work.bits, (size_t)bytes);
+                previousX = grabX;
+                previousY = grabY;
+                previousW = grabW;
+                previousH = grabH;
+                hasPrevious = true;
+            }
+        }
+
+        // Pace off the previous beat rather than "now plus the interval": a
+        // single slow frame then doesn't push everything else back.
+        next += kLiveRefreshMs;
+        ULONGLONG now = GetTickCount64();
+        if (now <= next) {
+            WaitForSingleObject(g_liveWake, (DWORD)(next - now));
+        } else {
+            next = now;
+        }
+    }
+    return 0;
+}
+
+void StopLiveCapture();
+
+void StartLiveCapture() {
+    if (g_liveRunning || !g_hwnd) {
+        return;
+    }
+    if (g_settings.material == kMaterialSolid ||
+        !LiveBackdropSupported()) {
+        return;
+    }
+    SetWindowDisplayAffinity_t setAffinity = DisplayAffinityFn();
+    if (!setAffinity ||
+        !setAffinity(g_hwnd, kWdaExcludeFromCapture)) {
+        return;
+    }
+
+    if (!g_liveLockReady) {
+        InitializeCriticalSection(&g_liveLock);
+        g_liveLockReady = true;
+    }
+    InterlockedExchange(&g_livePending, 0);
+
+    g_livePad = (int)std::lround((float)kLivePaddingDip *
+                                 std::max(1.0f, g_scale));
+    g_liveRadius = (int)std::lround((float)g_settings.blurRadius *
+                                    std::max(1.0f, g_scale));
+
+    g_liveWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_liveWake) {
+        setAffinity(g_hwnd, kWdaNone);
+        return;
+    }
+
+    g_liveRunning = true;
+    const LONG generation = InterlockedIncrement(&g_liveGeneration);
+    g_liveThread = CreateThread(nullptr, 0, LiveCaptureThread,
+                                (LPVOID)(LONG_PTR)generation, 0, nullptr);
+    if (!g_liveThread) {
+        g_liveRunning = false;
+        CloseHandle(g_liveWake);
+        g_liveWake = nullptr;
+        setAffinity(g_hwnd, kWdaNone);
+        return;
+    }
+    SetThreadPriority(g_liveThread, THREAD_PRIORITY_BELOW_NORMAL);
+
+    // The loop waits 33 ms at a time, and the default 15.6 ms timer granularity
+    // would round that up to 47 ms - the capture rate would drop to about 20 Hz
+    // and the blur would visibly beat against the animation. Raised only while
+    // the card is up; a tray app must not hold the system out of idle.
+    TimePeriod_t beginPeriod = TimePeriodFn("timeBeginPeriod");
+    if (beginPeriod && beginPeriod(1) == 0) {
+        g_livePreciseTimer = true;
+    }
+
+    SetTimer(g_hwnd, kTimerLiveBackdrop, kLiveRefreshMs, nullptr);
+}
+
+void StopLiveCapture() {
+    if (!g_liveRunning) {
+        return;
+    }
+    g_liveRunning = false;
+    InterlockedIncrement(&g_liveGeneration);
+
+    if (g_liveWake) {
+        SetEvent(g_liveWake);
+    }
+    if (g_liveThread) {
+        // Unbounded: the worker only ever waits on its own event or on a grab,
+        // never on this thread, so it always gets back here to notice the
+        // generation bump. A timeout that just closes the handle would leave a
+        // second worker running beside the next one.
+        WaitForSingleObject(g_liveThread, INFINITE);
+        CloseHandle(g_liveThread);
+        g_liveThread = nullptr;
+    }
+    if (g_liveWake) {
+        CloseHandle(g_liveWake);
+        g_liveWake = nullptr;
+    }
+
+    if (g_livePreciseTimer) {
+        g_livePreciseTimer = false;
+        TimePeriod_t endPeriod = TimePeriodFn("timeEndPeriod");
+        if (endPeriod) {
+            endPeriod(1);
+        }
+    }
+
+    if (g_hwnd) {
+        KillTimer(g_hwnd, kTimerLiveBackdrop);
+        SetWindowDisplayAffinity_t setAffinity = DisplayAffinityFn();
+        if (setAffinity) {
+            setAffinity(g_hwnd, kWdaNone);
+        }
+    }
+
+    EnterCriticalSection(&g_liveLock);
+    InterlockedExchange(&g_livePending, 0);
+    LeaveCriticalSection(&g_liveLock);
+}
+
+// New frame on screen: re-align the backdrop to where the card is now and
+// repaint. Reusing the animation step keeps the fade and the slide consistent
+// instead of presenting the card at full opacity behind its own animation.
+void OnLiveBackdropTick() {
+    if (g_phase == kPhaseHidden) {
+        StopLiveCapture();
+        return;
+    }
+    if (g_settings.material == kMaterialSolid) {
+        StopLiveCapture();
+        g_backdrop.Invalidate();
+        return;
+    }
+    // The worker gives up after ten grabs in a row that produced nothing (the
+    // desktop is locked, the display is mid-switch). Tear the timer down with
+    // it instead of ticking over a thread that will never deliver again: the
+    // card keeps the last frame, and the next tip starts a fresh worker.
+    if (g_liveThread && WaitForSingleObject(g_liveThread, 0) == WAIT_OBJECT_0) {
+        StopLiveCapture();
+        return;
+    }
+    if (!TakeLiveFrame()) {
+        return;
+    }
+    StepAnimation();
+}
 
 // =============================================================================
 // Keyboard helpers
@@ -2005,6 +2907,179 @@ int ClipKindFromVk(DWORD vk) {
         default:
             return -1;
     }
+}
+
+// Windows has always shipped a second set of clipboard shortcuts: Ctrl+Insert
+// copies, Shift+Insert pastes and Shift+Delete cuts. Terminal windows lean on
+// them, and two of the three land on keys this mod reports by itself, so the
+// modifiers are what tells a plain Insert apart from a copy or a paste.
+int LegacyClipKindFromVk(DWORD vk, bool ctrl, bool shift) {
+    switch (vk) {
+        case VK_INSERT:
+            if (ctrl) {
+                return kCopy;
+            }
+            return shift ? kPaste : -1;
+        case VK_DELETE:
+            // Ctrl+Shift+Delete is "clear browsing data" in browsers and "delete
+            // line" in editors, never a cut.
+            return shift && !ctrl ? kCut : -1;
+        default:
+            return -1;
+    }
+}
+
+// Modifier state comes from GetAsyncKeyState, not from the hook's own table.
+// The table only learns about a key-up the hook is called for, and the hook is
+// not called for anything that happens while the secure desktop is up: after
+// Ctrl+Alt+Del, Win+L or a UAC prompt, Ctrl and Win would stay "held" until they
+// were pressed and released again in an ordinary window - which turns every
+// later V into a paste. GetAsyncKeyState has already accounted for every event
+// that came before the one being handled, and reads "up" once the key was
+// released on another desktop, so it answers this question and the table can't.
+//
+// Left and right are asked separately: the generic codes are resolved by the
+// keyboard layout, the specific ones are not.
+bool KeyDownNow(int vk) {
+    return (GetAsyncKeyState(vk) & 0x8000) != 0;
+}
+
+bool CtrlDown() {
+    return KeyDownNow(VK_LCONTROL) || KeyDownNow(VK_RCONTROL);
+}
+
+// Ctrl as a *clipboard* modifier, which is a narrower question than CtrlDown().
+//
+// AltGr arrives as Left Ctrl + Right Alt, so CtrlDown() is true for as long as
+// AltGr is held. On Czech, Slovak, Hungarian, Polish and Croatian layouts
+// AltGr+V types "@": claiming a paste on every e-mail address typed is worse
+// than missing a deliberate Ctrl+RightAlt+V, and AltGr+C / AltGr+X would arm
+// the copy and cut intents the same way.
+//
+// Asked of Right Alt specifically, not of "some Alt is down": Ctrl+LeftAlt+C is
+// not AltGr on any layout, and ignoring it would lose a real copy.
+bool ClipCtrlDown() {
+    return CtrlDown() && !KeyDownNow(VK_RMENU);
+}
+
+bool ShiftDown() {
+    return KeyDownNow(VK_LSHIFT) || KeyDownNow(VK_RSHIFT);
+}
+
+bool AltDown() {
+    return KeyDownNow(VK_LMENU) || KeyDownNow(VK_RMENU);
+}
+
+bool WinDown() {
+    return KeyDownNow(VK_LWIN) || KeyDownNow(VK_RWIN);
+}
+
+// Keys that may have just changed the input language or the IME mode: their own
+// modifiers (Shift alone toggles Chinese/English inside an IME, Win+Space walks
+// the language list, Ctrl/Alt+Shift is the older shortcut for it) and Space.
+// Modifiers count on their own because they are pressed before the letter they
+// modify, which is exactly when the watch has to be running.
+bool SwitchCandidate(DWORD vk) {
+    if (vk == VK_SPACE) {
+        return CtrlDown() || AltDown() || WinDown();
+    }
+    switch (vk) {
+        case VK_SHIFT:
+        case VK_LSHIFT:
+        case VK_RSHIFT:
+        case VK_CONTROL:
+        case VK_LCONTROL:
+        case VK_RCONTROL:
+        case VK_MENU:
+        case VK_LMENU:
+        case VK_RMENU:
+        case VK_LWIN:
+        case VK_RWIN:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// A key press resolved to the tip it should raise, or -1 for "not ours".
+int TipKindForVk(DWORD vk, bool ctrl, bool shift) {
+    int kind = LegacyClipKindFromVk(vk, ctrl, shift);
+    if (kind >= 0) {
+        return kind;
+    }
+    kind = KindFromVk(vk);
+    if (kind >= 0) {
+        return kind;
+    }
+    return ctrl ? ClipKindFromVk(vk) : -1;
+}
+
+// Which capture path is reporting. Two paths can see the same press; one path
+// seeing two presses in a row is a different thing and must not be dropped.
+enum TipSource {
+    kSourceHook = 0,
+    kSourcePoll = 1,
+    kSourceRaw = 2,
+};
+
+// Claims a press for the calling capture path. False means some other path has
+// already reported this very press, in which case the caller must neither flip
+// the tracked state nor raise a card.
+//
+// `at` is when the key went down, not when this path got round to it. Raw Input
+// is handled on the UI thread, which can be busy capturing a backdrop for a
+// whole frame: its report then arrives well after the hook's, and comparing
+// processing times would make one keystroke look like two. Comparing press
+// times is what makes them the same press.
+//
+// `source` is what the time window alone cannot tell apart: the same press seen
+// by a second path (drop it - flipping twice would leave every later card
+// showing the opposite of the key) and a second, genuine press from the path
+// that already reported one (keep it - the system toggled twice, and dropping it
+// would leave the state one toggle behind for the rest of the session). Nobody
+// holds a lock key down expecting a card every 200 ms; two real taps that fast
+// are rare but not impossible, and getting them wrong is permanent.
+bool AllowTip(TipKind kind, ULONGLONG at, int source) {
+    if ((unsigned)kind >= (unsigned)kPollKeyCount) {
+        return true;  // nothing shared to protect: copy/paste/cut/language
+    }
+
+    const ULONGLONG stamp = (at << 2) | (ULONGLONG)source;
+    for (;;) {
+        // Time and path in one word, read in one go: this process is 32-bit, so
+        // a plain 64-bit read could tear and report a wild press time.
+        const ULONGLONG current = (ULONGLONG)InterlockedCompareExchange64(
+            (volatile LONG64*)&g_lastFired[kind], 0, 0);
+        // Signed, and both sides of zero: the two paths measure the same press a
+        // few ms apart, and either one can be the earlier of the two.
+        const LONGLONG delta = (LONGLONG)(at - (current >> 2));
+        if (delta > -(LONGLONG)kSameKindWindowMs &&
+            delta < (LONGLONG)kSameKindWindowMs) {
+            return (int)(current & 3) == source;
+        }
+        // The exchange decides the race: exactly one caller sees the stamp it
+        // read and goes on; anyone else re-reads the winner's and backs off.
+        if (InterlockedCompareExchange64((volatile LONG64*)&g_lastFired[kind],
+                                         (LONGLONG)stamp,
+                                         (LONGLONG)current) ==
+            (LONGLONG)current) {
+            return true;
+        }
+    }
+}
+
+// When the message being handled was posted, in the 64-bit tick domain.
+// GetMessageTime is the same millisecond counter as GetTickCount, only 32 bits
+// wide; putting it back together with the current tick recovers the elapsed
+// time even across the 49-day wrap.
+ULONGLONG MessagePostTime() {
+    DWORD posted = (DWORD)GetMessageTime();
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG at = (now & ~0xFFFFFFFFull) | posted;
+    if (at > now) {
+        at -= 0x100000000ull;  // posted just before the counter wrapped
+    }
+    return at;
 }
 
 // =============================================================================
@@ -2097,6 +3172,46 @@ void UpdateGeometry() {
     g_surface.Ensure(g_cardWidth, g_cardHeight);
 }
 
+// The card has to land on a display. Its place is derived from the foreground
+// window, that window's monitor, the work area, the taskbar's live edge and the
+// DPI - any of which can come back nonsensical during a fullscreen switch, with
+// the taskbar covered, or across a monitor hot-plug. A card that lands nowhere
+// is indistinguishable from "no tip at all", which is the hardest failure to
+// diagnose, so the resting position is checked once per show and pulled back to
+// the centre of the work area if it failed. Once, not followed: this must not
+// turn into a source of jitter.
+void EnsureOnScreen() {
+    if (g_cardWidth <= 0 || g_cardHeight <= 0) {
+        return;
+    }
+
+    POINT centre{g_posX + g_cardWidth / 2, g_posY + g_cardHeight / 2};
+    if (MonitorFromPoint(centre, MONITOR_DEFAULTTONULL)) {
+        return;
+    }
+
+    // The target itself may be the monitor that went away; the primary one is
+    // then the only safe place left.
+    MonitorTarget target = g_monitor;
+    if (!target.valid) {
+        LoadMonitor(PrimaryMonitor(), target);
+    }
+    if (!target.valid) {
+        return;
+    }
+
+    int usableW = (int)std::max<LONG>(1, target.work.right - target.work.left);
+    int usableH = (int)std::max<LONG>(1, target.work.bottom - target.work.top);
+    g_posX = target.work.left + (usableW - g_cardWidth) / 2;
+    g_posY = target.work.top + (usableH - g_cardHeight) / 2;
+    // The slide and the follow loop ease from the placement, so a jump has to
+    // move it too or the next frame would drag the card straight back out.
+    g_placement.x = g_posX;
+    g_placement.y = g_posY;
+
+    Wh_Log(L"card landed off-screen, recentred to %d,%d", g_posX, g_posY);
+}
+
 // Grabs the pixels behind the card and blurs them. The window has to be hidden
 // while doing it, otherwise the copy would contain the previous card.
 void RefreshBackdrop() {
@@ -2104,18 +3219,34 @@ void RefreshBackdrop() {
         g_backdrop.Invalidate();
         return;
     }
-    if (g_backdrop.Matches(g_posX, g_posY, g_cardWidth, g_cardHeight)) {
+    // Still inside the margin of the last grab: the drawing code re-samples it
+    // at the card's current place, so there is nothing to do.
+    if (g_backdrop.Covers(g_posX, g_posY, g_cardWidth, g_cardHeight)) {
+        return;
+    }
+    // The live path re-aligns on its own within one refresh interval, and the
+    // hide/capture/show dance below would flicker a card that is already up.
+    if (g_liveRunning) {
         return;
     }
 
     bool wasVisible = IsWindowVisible(g_hwnd) != FALSE;
     if (wasVisible) {
         ShowWindow(g_hwnd, SW_HIDE);
+        // Hiding only affects the frame the compositor builds next, while the
+        // copy below reads the frame it has already built. Without a wait the
+        // previous card gets baked into its own snapshot, and that card-sized
+        // flat rectangle is exactly what the new card then draws on. One
+        // composed frame is enough; a failed flush (composition off) just
+        // means there was nothing to wait for.
+        DwmFlush();
     }
 
     int radius = (int)std::lround((float)g_settings.blurRadius * g_scale);
+    int pad = (int)std::lround((float)kStaticPaddingDip * std::max(1.0f, g_scale));
     HDC screen = GetDC(nullptr);
-    CaptureBackdrop(screen, g_posX, g_posY, g_cardWidth, g_cardHeight, radius);
+    CaptureBackdrop(screen, g_posX, g_posY, g_cardWidth, g_cardHeight, radius,
+                    pad);
     ReleaseDC(nullptr, screen);
 
     if (wasVisible) {
@@ -2128,6 +3259,12 @@ void Present(float dx, float dy, BYTE alpha) {
         return;
     }
 
+    // Where the card lands this frame: the backdrop is sampled at this offset,
+    // so a card sliding in still shows the desktop it is sliding over rather
+    // than dragging its snapshot along with it.
+    g_presentX = g_posX + (int)std::lround(dx);
+    g_presentY = g_posY + (int)std::lround(dy);
+
     g_surface.Clear();
     {
         Graphics g(g_surface.dc);
@@ -2136,7 +3273,6 @@ void Present(float dx, float dy, BYTE alpha) {
                    CardHangsTop(g_monitor, g_posX, g_posY, (float)g_cardWidth,
                                 (float)g_cardHeight));
     }
-    g_surface.Premultiply();
 
     HDC screen = GetDC(nullptr);
     POINT src{0, 0};
@@ -2154,10 +3290,15 @@ void Present(float dx, float dy, BYTE alpha) {
 }
 
 void HideNow() {
+    // Both of these watch the card rather than paint it, so they go first: the
+    // capture worker must be joined before the window goes away, and the guard
+    // has nothing left to defend once the card is hidden.
+    StopLiveCapture();
     if (g_hwnd) {
         ShowWindow(g_hwnd, SW_HIDE);
         KillTimer(g_hwnd, kTimerAnim);
         KillTimer(g_hwnd, kTimerFollow);
+        KillTimer(g_hwnd, kTimerTopmost);
     }
     g_phase = kPhaseHidden;
     g_following = false;
@@ -2262,6 +3403,141 @@ void StepAnimation() {
     }
 }
 
+// =============================================================================
+// Topmost guard
+//
+// WS_EX_TOPMOST says "I am in the topmost band", not "I am at the front of it":
+// inside the band the order is whatever the last SetWindowPos did. A fullscreen
+// game, a recorder or a launcher overlay raises itself when it takes focus, and
+// some games do it on every frame - the card then ends up behind the game a
+// couple of hundred milliseconds after it appears, which reads as "the tip is
+// still covered" or even as "there was no tip at all".
+//
+// So: only act when actually covered. Every tick, walk the Z-order upwards and
+// look for a visible window of another process sitting over the card's centre.
+// If there is one, raise once - after that the card is in front again and the
+// next tick usually has nothing to do. No tug of war with other topmost apps,
+// and no flicker from re-raising on a fixed schedule.
+// =============================================================================
+
+int g_topmostRaises;
+bool g_topmostUnfixable;  // this show has raised and stayed covered anyway
+
+void RaiseTopmost() {
+    if (!g_hwnd) {
+        return;
+    }
+    SetWindowPos(g_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+}
+
+// DWM-cloaked windows keep WS_VISIBLE while showing nothing: a closed shell
+// flyout stays in the Z-order, and so does a UWP app that was suspended. Those
+// aren't on screen, so they can't be covering the card either.
+bool WindowCloaked(HWND hwnd) {
+    DWORD cloaked = 0;
+    return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked,
+                                           sizeof(cloaked))) &&
+           cloaked != 0;
+}
+
+// The window covering the card's centre, or null when nothing is. Only the
+// centre point counts: the taskbar, a toast or a tooltip clipping a corner is
+// supposed to sit next to the card, while a fullscreen game or a maximised
+// window always covers the middle.
+HWND FindCoveringWindow(HWND self) {
+    RECT box{};
+    if (!GetWindowRect(self, &box)) {
+        return nullptr;
+    }
+    DWORD selfPid = 0;
+    if (!GetWindowThreadProcessId(self, &selfPid)) {
+        return nullptr;
+    }
+    const int centreX = box.left + (box.right - box.left) / 2;
+    const int centreY = box.top + (box.bottom - box.top) / 2;
+
+    HWND walk = GetWindow(self, GW_HWNDPREV);
+    for (int i = 0; i < kTopmostMaxWalk && walk; i++) {
+        DWORD pid = 0;
+        RECT other{};
+        if (IsWindowVisible(walk) && !IsIconic(walk) &&
+            GetWindowThreadProcessId(walk, &pid) && pid && pid != selfPid &&
+            GetWindowRect(walk, &other) && centreX >= other.left &&
+            centreX < other.right && centreY >= other.top &&
+            centreY < other.bottom && !WindowCloaked(walk)) {
+            return walk;
+        }
+        walk = GetWindow(walk, GW_HWNDPREV);
+    }
+    return nullptr;
+}
+
+void StopTopmostGuard() {
+    if (g_hwnd) {
+        KillTimer(g_hwnd, kTimerTopmost);
+    }
+}
+
+void StartTopmostGuard() {
+    if (!g_hwnd) {
+        return;
+    }
+    g_topmostRaises = 0;
+    g_topmostUnfixable = false;
+    RaiseTopmost();
+    SetTimer(g_hwnd, kTimerTopmost, kTopmostGuardMs, nullptr);
+}
+
+void OnTopmostTick() {
+    if (!g_hwnd) {
+        return;
+    }
+    if (g_phase == kPhaseHidden) {
+        StopTopmostGuard();
+        return;
+    }
+    // The card fades out before it hides; nothing to fight for then.
+    if (g_phase == kPhaseOut || !IsWindowVisible(g_hwnd)) {
+        return;
+    }
+    // A window in a Z-order band no SetWindowPos can beat (a UWP overlay, an
+    // exclusive-fullscreen game) stays in front no matter how often the card is
+    // raised. Once that is known, stop: the raise is a wasted call and the 30 ms
+    // timer behind it would only burn cycles for the rest of the tip.
+    if (g_topmostUnfixable) {
+        StopTopmostGuard();
+        return;
+    }
+    if (!FindCoveringWindow(g_hwnd)) {
+        return;
+    }
+
+    RaiseTopmost();
+    g_topmostRaises++;
+
+    // Look again straight away. Still covered means the raise did not take -
+    // exclusive fullscreen, or the system simply refused - which is a different
+    // fault from "had to raise once", and the only way to tell them apart
+    // afterwards. Once per show: a game that re-raises every frame would
+    // otherwise fill the log with it.
+    if (!g_topmostUnfixable && FindCoveringWindow(g_hwnd)) {
+        g_topmostUnfixable = true;
+        Wh_Log(L"card still covered after raise #%d", g_topmostRaises);
+        // Nothing more can be done for this tip, and the timer would otherwise
+        // keep firing - at 30 ms once the raise count passed the fast limit -
+        // for as long as the card stays up.
+        StopTopmostGuard();
+        return;
+    }
+
+    // Something is raising itself over the card over and over. Speed up rather
+    // than settle into a "visible for 100 ms, covered for 100 ms" flicker.
+    if (g_topmostRaises > kTopmostRaisesBeforeFast) {
+        SetTimer(g_hwnd, kTimerTopmost, kTopmostFastMs, nullptr);
+    }
+}
+
 // Keeps the card off a taskbar that slides in and out. Same shape as the
 // standalone build's FollowTaskbar: re-read the band every 60 ms (a few
 // microseconds - FindWindow plus GetWindowRect, deliberately no ABM query) and
@@ -2319,8 +3595,7 @@ void FollowTaskbar() {
     }
     // The taskbar raised itself when it slid out; put the card back on top of
     // it, otherwise a partial overlap still hides the lower half.
-    SetWindowPos(g_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+    RaiseTopmost();
     if (g_following) {
         SetTimer(g_hwnd, kTimerAnim, 16, nullptr);
     }
@@ -2389,6 +3664,7 @@ void ShowTip(TipKind kind, bool on) {
 
     g_theme = CurrentTheme();
     UpdateGeometry();
+    EnsureOnScreen();
     RefreshBackdrop();
 
     int animMs = g_settings.AnimationMs();
@@ -2414,15 +3690,18 @@ void ShowTip(TipKind kind, bool on) {
 
     if (g_hwnd) {
         // Another topmost window (the taskbar itself, most likely) may have
-        // been raised above the card since the last tip.
-        SetWindowPos(g_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                         SWP_NOOWNERZORDER);
+        // been raised above the card since the last tip - and it may keep doing
+        // it while this tip is up, which is what the guard below watches for.
+        StartTopmostGuard();
         SetTimer(g_hwnd, kTimerAnim, 16, nullptr);
         KillTimer(g_hwnd, kTimerHold);
         SetTimer(g_hwnd, kTimerHold,
                  (UINT)Clamp(g_settings.displayMs, 500, 10000), nullptr);
     }
+
+    // The one-shot snapshot above was taken while the window was still hidden;
+    // from here on the live path keeps it current, where Windows allows it.
+    StartLiveCapture();
 
     StartFollow();
     StepAnimation();
@@ -2434,6 +3713,8 @@ void BeginHide() {
     }
     // Stop chasing the taskbar: the exit slide owns the position from here.
     StopFollow();
+    // The card is on its way out; it has nothing left to defend.
+    StopTopmostGuard();
     if (g_hwnd) {
         KillTimer(g_hwnd, kTimerHold);
     }
@@ -2494,6 +3775,51 @@ void HandleTip(TipKind kind, bool predictedOn) {
     }
 }
 
+// Display name of an input language, for the card: the localized name of its
+// locale, the native name if that is missing, and the raw handle as a last
+// resort so the card can never come up blank.
+std::wstring LanguageDisplayName(HKL hkl) {
+    wchar_t locale[LOCALE_NAME_MAX_LENGTH] = {};
+    LANGID langId = (LANGID)((ULONG_PTR)hkl & 0xFFFF);
+    if (LCIDToLocaleName(langId, locale, LOCALE_NAME_MAX_LENGTH, 0) > 1) {
+        for (DWORD kind : {LOCALE_SLOCALIZEDDISPLAYNAME,
+                           LOCALE_SNATIVEDISPLAYNAME}) {
+            wchar_t name[128] = {};
+            if (GetLocaleInfoEx(locale, kind, name, 128) > 1) {
+                return name;
+            }
+        }
+    }
+    wchar_t fallback[16];
+    swprintf(fallback, 16, L"0x%08X", (unsigned)(ULONG_PTR)hkl);
+    return fallback;
+}
+
+// A language or IME-mode change reported by the hook thread.
+void HandleLanguageTip(int mode, HKL hkl) {
+    if (!g_settings.notify[kLanguage]) {
+        return;
+    }
+    if (ShouldSkip(true)) {
+        return;
+    }
+    switch (mode) {
+        case 1:
+            g_languageText = Strings().imeChinese;
+            break;
+        case 2:
+            g_languageText = Strings().imeEnglish;
+            break;
+        default:
+            g_languageText = LanguageDisplayName(hkl);
+            break;
+    }
+    if (g_languageText.empty()) {
+        return;
+    }
+    ShowTip(kLanguage, true);
+}
+
 // A toggle seen only by the polling fallback (elevated window in front).
 void HandlePoll(TipKind kind, bool state) {
     if (g_phase != kPhaseHidden && kind == g_currentKind &&
@@ -2536,15 +3862,166 @@ void HandleClipboardUpdate() {
     ShowTip(kCopy, false);
 }
 
+// =============================================================================
+// Raw Input
+//
+// The third way in, and the only one that both survives an elevated window and
+// never samples: the hook is cut by UIPI, and polling can miss a quick tap that
+// starts and ends between two 50 ms reads. Raw Input comes off the device stack
+// straight to a window that asked for it with RIDEV_INPUTSINK, so neither focus
+// nor integrity level matters. It is what makes the fallback below an actual
+// fallback rather than the only line of defence.
+//
+// The card window itself is the sink: 1x1, hidden most of the time, and
+// INPUTSINK does not care about either. Keys therefore arrive on the UI thread
+// and go straight to HandleTip - no cross-thread post, no extra window.
+//
+// It is listened to only while the keyboard hook is blind (an elevated window in
+// front). Raw Input reports the physical key even when a low-level-hook remapper
+// - PowerToys Keyboard Manager, AutoHotkey - swallows it, so a Caps Lock remapped
+// to Esc or Ctrl would raise a Caps Lock card on every press and flip the tracked
+// state for a toggle the system never made. Where the hook does see the press,
+// the hook is the better witness and Raw Input has nothing to add.
+// =============================================================================
+
+bool RegisterRawInputKeys(HWND hwnd, bool enable) {
+    RAWINPUTDEVICE device{};
+    device.usUsagePage = 0x01;  // HID_USAGE_PAGE_GENERIC
+    device.usUsage = 0x06;      // HID_USAGE_GENERIC_KEYBOARD
+    device.dwFlags = enable ? RIDEV_INPUTSINK : RIDEV_REMOVE;
+    device.hwndTarget = enable ? hwnd : nullptr;
+    return RegisterRawInputDevices(&device, 1, sizeof(device)) != FALSE;
+}
+
+int RawKeyIndex(const RAWKEYBOARD& key) {
+    for (int i = 0; i < kPollKeyCount; i++) {
+        if (KindToVk((TipKind)i) == key.VKey) {
+            return i;
+        }
+    }
+    // Nothing matched, so the virtual key either names some other key or is
+    // missing altogether - 0xFF, which happens for a few keys that only ever
+    // arrive by scan code. Only that second case may fall through to the scan
+    // code, because a scan code alone does not identify a key: numpad 0 with
+    // Num Lock on is 0x52 like Insert, and Ctrl+Break is 0x46 like Scroll Lock.
+    // The E0 prefix is what separates each pair, and the numpad copies are the
+    // ones without it.
+    if (key.VKey != 0xFF) {
+        return -1;
+    }
+    const bool e0 = (key.Flags & RI_KEY_E0) != 0;
+    switch (key.MakeCode) {
+        case 0x3A:
+            return kCapsLock;
+        case 0x45:
+            return kNumLock;
+        case 0x46:
+            return e0 ? -1 : kScrollLock;
+        case 0x52:
+            return e0 ? kInsert : -1;
+        default:
+            return -1;
+    }
+}
+
+void HandleRawKey(const RAWKEYBOARD& key, ULONGLONG at) {
+    int index = RawKeyIndex(key);
+    if (index < 0) {
+        return;
+    }
+
+    if (key.Flags & RI_KEY_BREAK) {
+        g_rawDown[index] = false;
+        return;
+    }
+
+    ULONGLONG now = GetTickCount64();
+    if (g_rawDown[index]) {
+        if (now - g_rawDownAt[index] < (ULONGLONG)kRawRepeatGuardMs) {
+            // Auto-repeat of a key that is still held. Refresh the stamp: a
+            // hold longer than the guard must not turn into a new press every
+            // guard period, which would flip the tracked state over and over.
+            g_rawDownAt[index] = now;
+            return;
+        }
+        // Nothing arrived for this key in a long time, so the key-up was lost;
+        // this is a new press after all.
+    }
+    g_rawDown[index] = true;
+    g_rawDownAt[index] = now;
+
+    TipKind kind = (TipKind)index;
+
+    if (kind == kInsert) {
+        // Ctrl+Insert is a copy and Shift+Insert a paste, exactly as in the
+        // hook path, so a modified Insert is not a bare press.
+        if (CtrlDown() || ShiftDown()) {
+            return;
+        }
+        if (!AllowTip(kind, at, kSourceRaw)) {
+            return;
+        }
+        HandleTip(kind, false);
+        return;
+    }
+
+    if (!IsToggleKind(kind)) {
+        return;
+    }
+    if (!AllowTip(kind, at, kSourceRaw)) {
+        return;  // another path claimed this press and already flipped
+    }
+    bool state = !g_toggleState[index];
+    g_toggleState[index] = state;
+    HandleTip(kind, state);
+}
+
+void HandleRawInput(LPARAM lParam) {
+    // Nothing to add while the hook is working - and a press it would report
+    // here but the hook never saw is a press the hook (or a remapper ahead of
+    // it) ate, not a lock toggle. See the note above.
+    if (InterlockedCompareExchange(&g_hookBlind, 0, 0) == 0) {
+        return;
+    }
+
+    const UINT header = sizeof(RAWINPUTHEADER);
+
+    UINT size = 0;
+    if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, nullptr, &size, header) !=
+            0 ||
+        size == 0 || size > sizeof(RAWINPUT)) {
+        return;
+    }
+
+    RAWINPUT raw{};
+    UINT read = size;
+    if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, &raw, &read, header) ==
+        (UINT)-1) {
+        return;
+    }
+    if (raw.header.dwType != RIM_TYPEKEYBOARD) {
+        return;
+    }
+    HandleRawKey(raw.data.keyboard, MessagePostTime());
+}
+
 void ApplySettings() {
     LoadSettings();
     DetectLanguage();
-    InterlockedExchange(&g_pollEnabled, g_settings.pollElevated ? 1 : 0);
+    InterlockedExchange(&g_languageEnabled,
+                        g_settings.notify[kLanguage] ? 1 : 0);
     g_theme = CurrentTheme();
     g_backdrop.Invalidate();
     if (g_phase != kPhaseHidden) {
         UpdateGeometry();
         RefreshBackdrop();
+        // Switching to Solid must stop the live path, and switching back has to
+        // bring it up again - the card is on screen, so nobody else will.
+        if (g_settings.material == kMaterialSolid) {
+            StopLiveCapture();
+        } else {
+            StartLiveCapture();
+        }
         StartFollow(); // the new settings may not want a follow loop at all
         StepAnimation();
     }
@@ -2561,6 +4038,15 @@ void OnTimer(UINT_PTR id) {
         case kTimerFollow:
             FollowTaskbar();
             break;
+        case kTimerLiveBackdrop:
+            OnLiveBackdropTick();
+            break;
+        case kTimerTopmost:
+            OnTopmostTick();
+            break;
+        case kTimerInput:
+            InputTick();
+            break;
         case kTimerClip:
             if (g_hwnd) {
                 KillTimer(g_hwnd, kTimerClip);
@@ -2576,7 +4062,12 @@ void OnDisplayChanged() {
     InvalidateTaskbarCache(); // monitors, DPI and taskbar placement may all differ
     g_theme = CurrentTheme();
     if (g_phase != kPhaseHidden) {
+        // The margin and the blur radius are scaled per display, so the capture
+        // worker has to be restarted on the new one rather than carried over.
+        StopLiveCapture();
         UpdateGeometry();
+        RefreshBackdrop();
+        StartLiveCapture();
         StartFollow(); // auto-hide may have been switched on or off
         StepAnimation();
     } else if (ResolveTargetMonitor()) {
@@ -2591,6 +4082,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         case WM_APP_POLL:
             HandlePoll((TipKind)wParam, lParam != 0);
+            return 0;
+        case WM_APP_LANGUAGE_WATCH:
+            StartInputWatch();
             return 0;
         case WM_APP_SETTINGS:
             ApplySettings();
@@ -2609,6 +4103,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_SETTINGCHANGE:
             OnDisplayChanged();
             return 0;
+        case WM_INPUT:
+            HandleRawInput(lParam);
+            break;  // fall through to DefWindowProc, which releases the buffer
         case WM_NCHITTEST:
             return HTTRANSPARENT;
         case WM_DESTROY:
@@ -2628,7 +4125,10 @@ constexpr wchar_t kWindowClass[] = L"WindhawkWinTipsOsd";
 
 DWORD WINAPI UiThreadProc(LPVOID) {
     // Only this thread gets per-monitor DPI awareness; the host process
-    // (windhawk.exe) must keep whatever mode it already has.
+    // (windhawk.exe) must keep whatever mode it already has. In Windhawk this
+    // is a no-op - windhawk.exe declares PerMonitorV2 in its manifest - but the
+    // standalone harness that includes this file has no manifest, so the call
+    // is what makes the overlay render at the right size there.
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (user32) {
         auto setContext = (SetThreadDpiAwarenessContext_t)GetProcAddress(
@@ -2670,6 +4170,16 @@ DWORD WINAPI UiThreadProc(LPVOID) {
 
     AddClipboardFormatListener(g_hwnd);
 
+    // Session-wide keyboard capture that does not go through the hook. It has
+    // to be undone on the way out as well: Windhawk unloads a mod inside the
+    // live process, so a leftover registration would keep posting WM_INPUT to a
+    // window that no longer exists.
+    if (!RegisterRawInputKeys(g_hwnd, true)) {
+        Wh_Log(L"RegisterRawInputDevices failed: %lu", GetLastError());
+    } else {
+        Wh_Log(L"raw input keyboard sink registered");
+    }
+
     if (g_readyEvent) {
         SetEvent(g_readyEvent);
     }
@@ -2680,42 +4190,422 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         DispatchMessageW(&msg);
     }
 
+    RegisterRawInputKeys(nullptr, false);
     RemoveClipboardFormatListener(g_hwnd);
+    // Join the capture worker before the window it captures around disappears;
+    // it also drops the timer resolution and the capture exclusion on the way
+    // out, which matters when the mod is unloaded rather than just idling.
+    StopLiveCapture();
     g_surface.Release();
+    g_backdrop.image.Release();
     DestroyWindow(g_hwnd);
     g_hwnd = nullptr;
     GdiplusShutdown(g_gdiplusToken);
     return 0;
 }
 
-void PollTick() {
-    if (InterlockedCompareExchange(&g_pollEnabled, 1, 1) == 0) {
+// =============================================================================
+// Elevated-window fallback
+// =============================================================================
+
+// Reading the foreground process' integrity level tells us whether the hook is
+// being bypassed: Windows stops calling low-level keyboard hooks for input sent
+// to a window of a higher integrity level, so an administrator window silently
+// swallows every key. There is no way around UIPI from the hook side, but
+// GetAsyncKeyState/GetKeyState report the session-wide state regardless - they
+// are the fallback, and this check decides when to switch to them.
+
+constexpr DWORD kRidMedium = 0x2000; // asInvoker under UAC, when the read fails
+
+DWORD IntegrityRid(HANDLE process) {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(process, TOKEN_QUERY, &token)) {
+        return 0;
+    }
+    DWORD rid = 0;
+    DWORD size = 0;
+    GetTokenInformation(token, TokenIntegrityLevel, nullptr, 0, &size);
+    if (size > 0) {
+        auto* label =
+            (TOKEN_MANDATORY_LABEL*)HeapAlloc(GetProcessHeap(), 0, size);
+        if (label) {
+            if (GetTokenInformation(token, TokenIntegrityLevel, label, size,
+                                    &size)) {
+                SID* sid = (SID*)label->Label.Sid;
+                BYTE* count = sid ? GetSidSubAuthorityCount(sid) : nullptr;
+                if (count && *count > 0) {
+                    // The level is the last sub-authority: S-1-16-<RID>.
+                    DWORD* sub = GetSidSubAuthority(sid, (DWORD)(*count - 1));
+                    if (sub) {
+                        rid = *sub;
+                    }
+                }
+            }
+            HeapFree(GetProcessHeap(), 0, label);
+        }
+    }
+    CloseHandle(token);
+    return rid;
+}
+
+// True while the input desktop is the one this process runs on. A locked
+// workstation or a UAC prompt puts the secure desktop in front: it delivers no
+// window events to us, the keyboard hook isn't called for it, and
+// GetAsyncKeyState can't see its keys either. Nothing can be observed there, so
+// nothing needs watching - and the poll would otherwise tick for hours behind a
+// lock screen.
+bool InputDesktopIsUser() {
+    HDESK desktop = OpenInputDesktop(0, FALSE, DESKTOP_READOBJECTS);
+    if (!desktop) {
+        return false;
+    }
+    // The interactive desktop is named "Default" in every language; Winlogon's
+    // secure desktop is "Winlogon", UAC's is "Secure Desktop".
+    wchar_t name[64] = {};
+    DWORD needed = 0;
+    bool user = false;
+    if (GetUserObjectInformationW(desktop, UOI_NAME, name,
+                                  sizeof(name) - sizeof(wchar_t), &needed)) {
+        user = _wcsicmp(name, L"Default") == 0;
+    }
+    CloseDesktop(desktop);
+    return user;
+}
+
+// True when the foreground window outranks this process. The verdict is cached
+// by window handle: the foreground doesn't change between two polls, so this
+// opens one process token per window rather than one per tick.
+//
+// A window whose process can't be opened at all (a protected one) counts as
+// higher: polling a little too much costs nothing, missing it costs the tip.
+bool ForegroundOutranksSelf() {
+    if (!InputDesktopIsUser()) {
+        return false;
+    }
+    HWND foreground = GetForegroundWindow();
+    if (!foreground) {
+        // No foreground window does not mean the hook is working. Fullscreen
+        // transitions, a display-mode rebuild and the moment the secure desktop
+        // goes away all return null for a while, and the window in front is
+        // usually still the elevated one. Treating that as "hook fine" silences
+        // every tip for the whole stretch; one extra poll costs a handful of
+        // GetAsyncKeyState calls, so assume the fallback is needed.
+        return true;
+    }
+    if (g_levelKnown && foreground == g_levelHwnd) {
+        return g_levelRaised;
+    }
+
+    DWORD pid = 0;
+    bool raised = false;
+    if (GetWindowThreadProcessId(foreground, &pid) && pid) {
+        HANDLE process =
+            OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (process) {
+            DWORD rid = IntegrityRid(process);
+            CloseHandle(process);
+            raised = rid == 0 || rid > g_selfRid;
+        } else {
+            raised = true;
+        }
+    }
+
+    g_levelHwnd = foreground;
+    g_levelRaised = raised;
+    g_levelKnown = true;
+    return raised;
+}
+
+void StartFallbackPoll() {
+    if (g_pollRunning) {
         return;
     }
-    ULONGLONG now = GetTickCount64();
+    // The user may be holding a key as the elevated window takes over: take the
+    // current state as the baseline so it isn't reported as a fresh press.
+    for (int i = 0; i < kPollKeyCount; i++) {
+        g_pollDown[i] = (GetAsyncKeyState(KindToVk((TipKind)i)) & 0x8000) != 0;
+    }
+    g_pollRunning = true;
+    InterlockedExchange(&g_hookBlind, 1);
+    SetTimer(nullptr, kThreadTimerPoll, kPollMs, nullptr);
+    Wh_Log(L"fallback poll started");
+}
+
+void StopFallbackPoll() {
+    if (!g_pollRunning) {
+        return;
+    }
+    g_pollRunning = false;
+    InterlockedExchange(&g_hookBlind, 0);
+    KillTimer(nullptr, kThreadTimerPoll);
+    ZeroMemory(g_pollDown, sizeof(g_pollDown));
+    Wh_Log(L"fallback poll stopped");
+}
+
+void RefreshFallbackPoll() {
+    if (ForegroundOutranksSelf()) {
+        StartFallbackPoll();
+    } else {
+        StopFallbackPoll();
+    }
+}
+
+void CALLBACK ForegroundChangedProc(HWINEVENTHOOK, DWORD event, HWND, LONG, LONG,
+                                    DWORD, DWORD) {
+    if (event != EVENT_SYSTEM_FOREGROUND) {
+        return;
+    }
+    RefreshFallbackPoll();
+}
+
+// Reads the real lock state and adopts it.
+//
+// On a thread of its own, and that is the point: GetKeyState answers out of the
+// calling thread's own copy of the key state, which starts as the live state
+// when the thread is created and only moves forward as that thread processes
+// keyboard input. A thread that has not processed any yet therefore reports the
+// live state - the same reason the startup seed can trust its read, and exactly
+// what the hook thread, whose copy froze at load time, cannot offer.
+//
+// It reads and nothing else: g_vkDown and g_pollDown belong to the hook thread,
+// which resets them itself before starting this thread.
+DWORD WINAPI ResyncKeyStateThread(LPVOID) {
+    // The event arrives as the switch happens; give the desktop a moment to
+    // finish coming back, then make sure it really is ours.
+    Sleep(150);
+    if (!InputDesktopIsUser()) {
+        return 0;
+    }
+
     for (int kind = 0; kind <= kScrollLock; kind++) {
-        // A toggle the hook just reported is already on its way to the screen.
-        // Reading the state inside that window races the system and would make
-        // the card flip back and forth, so corrections wait it out.
-        if (now - g_hookToggleTick[kind] < kPollQuietMs) {
-            g_pollMismatch[kind] = 0;
+        g_toggleState[kind] = (GetKeyState(KindToVk((TipKind)kind)) & 1) != 0;
+    }
+    Wh_Log(L"key state resynced: caps %d num %d scroll %d",
+           (int)g_toggleState[kCapsLock], (int)g_toggleState[kNumLock],
+           (int)g_toggleState[kScrollLock]);
+    return 0;
+}
+
+void ResyncKeyState() {
+    // A resync already sleeping is as good as a new one: it reads the state
+    // after the switch either way.
+    if (g_resyncThread) {
+        if (WaitForSingleObject(g_resyncThread, 0) == WAIT_TIMEOUT) {
+            return;
+        }
+        CloseHandle(g_resyncThread);
+        g_resyncThread = nullptr;
+    }
+    g_resyncThread =
+        CreateThread(nullptr, 0, ResyncKeyStateThread, nullptr, 0, nullptr);
+}
+
+void StopResync() {
+    if (!g_resyncThread) {
+        return;
+    }
+    WaitForSingleObject(g_resyncThread, 1000);
+    CloseHandle(g_resyncThread);
+    g_resyncThread = nullptr;
+}
+
+// The input desktop changed: to the lock screen, to a UAC prompt, or back.
+//
+// This is the one place the tracked state is corrected against the system.
+// Presses made on the secure desktop (typing a password is the classic moment to
+// notice Caps Lock is on) go past the hook, past Raw Input and past the poll,
+// which would leave every later card inverted until the mod restarted.
+void CALLBACK DesktopChangedProc(HWINEVENTHOOK, DWORD event, HWND, LONG, LONG,
+                                 DWORD, DWORD) {
+    if (event != EVENT_SYSTEM_DESKTOPSWITCH) {
+        return;
+    }
+    if (InputDesktopIsUser()) {
+        // Anything held when the desktop went away was released somewhere
+        // nothing could see it, so the press state from before the switch is
+        // wrong. Cleared here rather than in the resync thread: this is the
+        // thread that owns both tables.
+        ZeroMemory(g_vkDown, sizeof(g_vkDown));
+        for (int i = 0; i < kPollKeyCount; i++) {
+            g_pollDown[i] =
+                (GetAsyncKeyState(KindToVk((TipKind)i)) & 0x8000) != 0;
+        }
+        ResyncKeyState();
+        RefreshFallbackPoll();
+        return;
+    }
+    // Gone to the secure desktop: nothing to observe, nothing to poll.
+    StopFallbackPoll();
+}
+
+// =============================================================================
+// Language watch
+// =============================================================================
+
+// Windows has no notification for "the input language changed": it is a
+// per-thread property that simply becomes something else, and the earliest and
+// only dependable hint is the key press that asked for the change. So a switch
+// key starts a short watch that samples the focused thread's state until it
+// differs from what was there before the press, or until the window closes.
+
+// Everything below runs on the UI thread: the hook posts WM_APP_LANGUAGE_WATCH
+// and returns, so the questions asked here - which are cross-process and can
+// each take tens of milliseconds - never sit in the way of the keyboard.
+//
+// Starting a few milliseconds later is harmless: the baseline only has to be
+// older than the switch, and no switch happens on the key-down that starts the
+// watch. Shift alone toggles the IME mode on its release, Ctrl+Shift and
+// Alt+Shift on the release of the combination, and Win+Space goes through the
+// shell - in every case a later event, tens of milliseconds later.
+
+void StopInputWatch() {
+    if (!g_inputWatching) {
+        return;
+    }
+    g_inputWatching = false;
+    if (g_hwnd) {
+        KillTimer(g_hwnd, kTimerInput);
+    }
+    g_inputHasLast = false;
+}
+
+void StartInputWatch() {
+    if (!g_hwnd) {
+        return;
+    }
+    // A watch that is already running holds a baseline from before the first
+    // key of the combination, which is a better baseline than one taken now:
+    // Win+Space switches on the Space press, and this runs a message later, so
+    // a busy UI thread (a backdrop grab, a frame) could read the *new* layout
+    // and then wait for a change that already happened. Keep what we have.
+    if (!g_inputWatching || !g_inputHasLast) {
+        InputState baseline = CurrentInputState();
+        if (baseline.Usable()) {
+            g_inputLast = baseline;
+            g_inputHasLast = true;
+        } else {
+            // Unreadable in the middle of a switch (fullscreen transition,
+            // desktop recomposition): a baseline from some other app would
+            // report the wrong language, so drop it and take the first good
+            // sample instead.
+            g_inputHasLast = false;
+        }
+    }
+    g_inputTicks = 0;
+    // SetTimer on an id that already runs restarts it, which is what a second
+    // switch key during a watch should do.
+    g_inputWatching = true;
+    SetTimer(g_hwnd, kTimerInput, kInputPollMs, nullptr);
+}
+
+void InputTick() {
+    if (++g_inputTicks * kInputPollMs > kInputWindowMs) {
+        StopInputWatch();
+        return;
+    }
+
+    InputState now = CurrentInputState();
+    // Skip this sample rather than stop watching: a fullscreen switch or a
+    // resolution change leaves the foreground empty for a moment, and quitting
+    // here would miss the change that follows it.
+    if (!now.Usable()) {
+        return;
+    }
+    if (!g_inputHasLast) {
+        g_inputLast = now;
+        g_inputHasLast = true;
+        return;
+    }
+
+    if (now.threadId != g_inputLast.threadId) {
+        // Same app, new thread: a game rebuilding its window after a fullscreen
+        // switch, or an IME window created on demand. The language really did
+        // change, so report it. A different app (Alt+Tab) only refreshes the
+        // baseline - otherwise every window switch would raise a card.
+        bool sameApp = now.processId == g_inputLast.processId;
+        bool hklChanged = now.hkl != g_inputLast.hkl;
+        g_inputLast = now;
+        if (sameApp && hklChanged) {
+            HandleLanguageTip(0, now.hkl);
+            StopInputWatch();
+        }
+        return;
+    }
+
+    if (now.hkl != g_inputLast.hkl) {
+        g_inputLast = now;
+        HandleLanguageTip(0, now.hkl);
+        StopInputWatch();
+        return;
+    }
+
+    if (now.HasIme() && g_inputLast.HasIme()) {
+        if (now.IsNative() == g_inputLast.IsNative()) {
+            g_inputLast = now;
+            return;
+        }
+        bool native = now.IsNative();
+        g_inputLast = now;
+        HandleLanguageTip(native ? 1 : 2, nullptr);
+        StopInputWatch();
+        return;
+    }
+
+    if (g_inputLast.HasIme()) {
+        // The baseline had an IME mode and this sample has none: the target
+        // thread was probably busy and the 40 ms message timed out. Keep the
+        // baseline - overwriting it with "no IME" would silence Shift for good.
+        return;
+    }
+
+    g_inputLast = now;
+}
+
+void PollTick() {
+    // The foreground event can be missed; re-checking here also ends the poll
+    // the moment an ordinary window comes back to the front.
+    if (!ForegroundOutranksSelf()) {
+        StopFallbackPoll();
+        return;
+    }
+
+    // Ctrl+Insert is a copy and Shift+Insert a paste, exactly as in the hook
+    // path, so a modified Insert must not be reported as a bare press.
+    const bool insertModified = CtrlDown() || ShiftDown();
+
+    // Nothing below corrects the tracked state against GetKeyState: that read is
+    // this thread's message-queue mirror, and the hook thread never receives
+    // keyboard messages, so the mirror freezes at load time and a "correction"
+    // would rewrite a correct state into a stale one. ResyncKeyState() is where
+    // the real state is read, on a thread whose mirror is still fresh.
+    for (int i = 0; i < kPollKeyCount; i++) {
+        int vk = KindToVk((TipKind)i);
+        bool down = (GetAsyncKeyState(vk) & 0x8000) != 0;
+        bool pressed = down && !g_pollDown[i];
+        g_pollDown[i] = down;
+
+        if (i == kInsert) {
+            if (pressed && !insertModified && g_hwnd &&
+                AllowTip((TipKind)kInsert, GetTickCount64(), kSourcePoll)) {
+                // Same path as a hooked Insert: notify switch, fullscreen
+                // check and the tip itself all live in HandleTip.
+                PostMessageW(g_hwnd, WM_APP_TIP, (WPARAM)kInsert, 0);
+            }
             continue;
         }
-        bool actual =
-            (GetKeyState(KindToVk((TipKind)kind)) & 1) != 0;
-        if (actual == g_toggleState[kind]) {
-            g_pollMismatch[kind] = 0;
-            continue;
-        }
-        // A single odd sample is usually the thread's cached key state lagging
-        // behind; only act once two polls in a row agree.
-        if (++g_pollMismatch[kind] < 2) {
-            continue;
-        }
-        g_pollMismatch[kind] = 0;
-        g_toggleState[kind] = actual;
-        if (g_hwnd) {
-            PostMessageW(g_hwnd, WM_APP_POLL, (WPARAM)kind, actual ? 1 : 0);
+
+        if (pressed) {
+            // A lock key toggles exactly once per press, so flipping the state
+            // we track is exact - and unlike reading it here, it can't catch the
+            // old value before the system has applied the toggle.
+            if (!AllowTip((TipKind)i, GetTickCount64(), kSourcePoll)) {
+                continue;  // the hook or Raw Input already reported this press
+            }
+            bool state = !g_toggleState[i];
+            g_toggleState[i] = state;
+            if (g_hwnd) {
+                PostMessageW(g_hwnd, WM_APP_POLL, (WPARAM)i, state ? 1 : 0);
+            }
         }
     }
 }
@@ -2732,15 +4622,23 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             if (!g_vkDown[vk]) {
                 g_vkDown[vk] = true;
 
-                int kind = KindFromVk(vk);
-                if (kind < 0 &&
-                    (g_vkDown[VK_LCONTROL] || g_vkDown[VK_RCONTROL] ||
-                     g_vkDown[VK_CONTROL] ||
-                     (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0)) {
-                    kind = ClipKindFromVk(vk);
+                // Start the language watch before anything else: a switch key
+                // is the only hint that the language may be about to change.
+                // Posted rather than called: finding the input state means
+                // asking the foreground app's IME window a question and waiting
+                // for the answer, and every keystroke in the session waits for
+                // this hook to return. The UI thread asks instead.
+                if (InterlockedCompareExchange(&g_languageEnabled, 1, 1) != 0 &&
+                    SwitchCandidate(vk) && g_hwnd) {
+                    PostMessageW(g_hwnd, WM_APP_LANGUAGE_WATCH, 0, 0);
                 }
 
-                if (kind >= 0) {
+                // ClipCtrlDown, not CtrlDown: with Right Alt held this is AltGr
+                // and the letter is a character, not a clipboard shortcut.
+                int kind = TipKindForVk(vk, ClipCtrlDown(), ShiftDown());
+
+                if (kind >= 0 &&
+                    AllowTip((TipKind)kind, GetTickCount64(), kSourceHook)) {
                     bool predicted = false;
                     if (IsToggleKind((TipKind)kind)) {
                         // Flip our own copy of the state instead of reading the
@@ -2750,7 +4648,6 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                         // and would make the card flip back a moment later.
                         predicted = !g_toggleState[kind];
                         g_toggleState[kind] = predicted;
-                        g_hookToggleTick[kind] = GetTickCount64();
                     }
                     if (g_hwnd) {
                         PostMessageW(g_hwnd, WM_APP_TIP, (WPARAM)kind,
@@ -2760,13 +4657,6 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             }
         } else if (up) {
             g_vkDown[vk] = false;
-
-            int kind = KindFromVk(vk);
-            if (kind >= 0 && IsToggleKind((TipKind)kind)) {
-                // The polling fallback must not fight the press we just
-                // reported; give the system a moment to settle first.
-                g_hookToggleTick[kind] = GetTickCount64();
-            }
         }
     }
 
@@ -2776,8 +4666,17 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 DWORD WINAPI HookThreadProc(LPVOID) {
     g_hookThreadId = GetCurrentThreadId();
 
+    // The fallback compares the foreground window against our own integrity
+    // level, and that cannot change for a running process: read it once here.
+    g_selfRid = IntegrityRid(GetCurrentProcess());
+    if (g_selfRid == 0) {
+        g_selfRid = kRidMedium;
+    }
+
     // Seed the known state so the polling fallback doesn't report a bogus tip
-    // for keys that are already on when the mod loads.
+    // for keys that are already on when the mod loads. Read on this thread
+    // before it pumps a message, which is the one moment its key-state mirror is
+    // the live state rather than a snapshot of it.
     for (int kind = 0; kind <= kScrollLock; kind++) {
         g_toggleState[kind] = (GetKeyState(KindToVk((TipKind)kind)) & 1) != 0;
     }
@@ -2792,19 +4691,66 @@ DWORD WINAPI HookThreadProc(LPVOID) {
         Wh_Log(L"SetWindowsHookExW failed: %lu", GetLastError());
     }
 
-    // Thread timer drives the elevated-window fallback; the low-level hook only
-    // runs while this thread pumps messages.
-    SetTimer(nullptr, 0, kPollMs, nullptr);
+    // Out-of-context window events are queued to the thread that installed the
+    // hook, which is this one: it starts and stops the fallback as the front
+    // window changes, cheaper and quicker than probing for it.
+    g_foregroundHook = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
+        ForegroundChangedProc, 0, 0,
+        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    if (!g_foregroundHook) {
+        Wh_Log(L"SetWinEventHook failed: %lu", GetLastError());
+    }
 
+    // The same for the input desktop, which is where presses the mod can't see
+    // happen: the lock screen and UAC prompts. Coming back from one of those is
+    // the moment to re-read the real lock state, and going to one is the moment
+    // to stop polling.
+    g_desktopHook = SetWinEventHook(
+        EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_DESKTOPSWITCH, nullptr,
+        DesktopChangedProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!g_desktopHook) {
+        Wh_Log(L"SetWinEventHook(desktop) failed: %lu", GetLastError());
+    }
+
+    // The probe runs either way. Without the window event it is the only way to
+    // notice an elevated window at all; with it, it is the insurance against
+    // the event being filtered - which is the same UIPI rule that swallows the
+    // hook, so the two failures go together. Its verdict is cached by window
+    // handle, so while nothing is elevated it costs one comparison.
+    SetTimer(nullptr, kThreadTimerProbe, kPollProbeMs, nullptr);
+
+    RefreshFallbackPoll();
+
+    // The low-level hook and the window events only arrive while this thread
+    // pumps messages.
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         if (msg.hwnd == nullptr && msg.message == WM_TIMER) {
-            PollTick();
+            if (msg.wParam == kThreadTimerPoll) {
+                PollTick();
+            } else if (msg.wParam == kThreadTimerProbe) {
+                RefreshFallbackPoll();
+            }
             continue;
         }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+
+    if (g_foregroundHook) {
+        UnhookWinEvent(g_foregroundHook);
+        g_foregroundHook = nullptr;
+    }
+    if (g_desktopHook) {
+        UnhookWinEvent(g_desktopHook);
+        g_desktopHook = nullptr;
+    }
+    KillTimer(nullptr, kThreadTimerProbe);
+    StopFallbackPoll();
+    // The resync thread writes the state this thread reads; it must be gone
+    // before the thread that owns it is.
+    StopResync();
 
     if (g_hook) {
         UnhookWindowsHookEx(g_hook);
@@ -2823,7 +4769,8 @@ BOOL WhTool_ModInit() {
     // Settings first: DetectLanguage() reads the language setting.
     LoadSettings();
     DetectLanguage();
-    InterlockedExchange(&g_pollEnabled, g_settings.pollElevated ? 1 : 0);
+    InterlockedExchange(&g_languageEnabled,
+                        g_settings.notify[kLanguage] ? 1 : 0);
 
     g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, nullptr);

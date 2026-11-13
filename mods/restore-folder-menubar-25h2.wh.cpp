@@ -2,7 +2,7 @@
 // @id              restore-folder-menubar-25h2
 // @name            ExplorerFrame and menubar fixes fork
 // @description     Fixes explorer problems: menu bar, listview redraw, classic background color, Control Panel header/sidebar color for dark themes
-// @version         4.0
+// @version         4.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -31,22 +31,13 @@ Black artifacts briefly visible in new file explorer windows under Classic theme
 **Changes from the original**
 
 * This mod restores the menubar in recent builds of 24H2 and in 25H2 with which the original mod was not compatible.
-**!Important!** On newer releases of Windows 11 24H2 and later, you may need to use the [ViVeTool](https://github.com/thebookisclosed/ViVe/releases) utility
-with the following command so to enable the menu:
-
-    `vivetool /disable /id:55063786`
-
-    Alternatively, you can use the [ViVeToolGUI](https://apps.microsoft.com/detail/9P1BW5WB82MH) from
-    Windows Store.
-
-    On even newer builds, replacing the file Explorerframe.dll with an older one may be required.
+**!Important!** On newer releases of Windows 11 24H2 and later, you may need to install the legacy Explorerframe.dll
+using this mod: [Classic Explorerframe for 24H2 and later](https://windhawk.net/mods/classic-explorerframe).
 
 * This mod fixes the compatibility with the mod ```Fluid Window Engine Pro```, in cases where the previous mod would
 whiten out the window content on restore after the minimized state if the option `Classic CabinetWClass background color` was enabled.
 
-* The fix for the folders' background in Classic theme is applied authomatically when Classic theme is detected.
-
-* This mod supports dynamic loading of masked explorerframe.dll for its spoofing.
+* The fix for the folders' background in Classic theme is applied automatically when Classic theme is detected.
 
 **Control Panel Color Fix**
 
@@ -71,6 +62,7 @@ Can be disabled in the mod settings.
 #include <Windows.h>
 #include <winternl.h>
 #include <tlhelp32.h>
+#include <psapi.h>
 #include <strsafe.h>
 #include <commctrl.h>
 #include <uxtheme.h>
@@ -124,60 +116,42 @@ bool IsExplorerFrameBaseNameW(LPCWSTR path)
             lstrcmpiW(base, L"explorerframe") == 0);
 }
 
-// Lock-free tail check on UNICODE_STRING (may be non-null-terminated).
-// Used as cheap pre-filter inside LdrLoadDll hook to avoid waking
-// the worker for unrelated DLLs.
+// Cheap tail check on UNICODE_STRING (may be non-null-terminated).
+// Used as a pre-filter inside the LdrLoadDll hook to avoid waking
+// the worker for unrelated DLLs. The hook calls GetModuleFileNameW
+// right after this check anyway, so API calls are fine here.
 bool IsExplorerFrameUnicodeName(PUNICODE_STRING s)
 {
-    if (!s || !s->Buffer || s->Length < 13 * (USHORT)sizeof(WCHAR))
+    if (!s || !s->Buffer)
         return false;
 
-    USHORT cch = (USHORT)(s->Length / sizeof(WCHAR));
-    int lastSlash = -1;
-    for (int i = 0; i < cch; i++)
+    int cch = (int)(s->Length / sizeof(WCHAR));
+
+    // Find the start of the file name (after the last path separator).
+    int start = 0;
+    for (int i = cch - 1; i >= 0; --i)
     {
         WCHAR c = s->Buffer[i];
         if (c == L'\\' || c == L'/')
-            lastSlash = i;
-        if (c == L'\0')
         {
-            cch = (USHORT)i;
+            start = i + 1;
             break;
         }
     }
 
-    int start = lastSlash + 1;
-    int len = (int)cch - start;
-    if (len != 13 && len != 17)
-        return false;
-
+    int len = cch - start;
     LPCWSTR tail = s->Buffer + start;
-    if (len == 13)
+
+    if (len == 17) // "explorerframe.dll"
     {
-        static const WCHAR k[] = L"explorerframe";
-        for (int i = 0; i < 13; i++)
-        {
-            WCHAR a = tail[i];
-            if (a >= L'A' && a <= L'Z')
-                a += 32;
-            if (a != k[i])
-                return false;
-        }
-        return true;
+        return CompareStringOrdinal(tail, len, L"explorerframe.dll", -1, TRUE) == CSTR_EQUAL;
     }
-    else
+    if (len == 13) // "explorerframe"
     {
-        static const WCHAR k[] = L"explorerframe.dll";
-        for (int i = 0; i < 17; i++)
-        {
-            WCHAR a = tail[i];
-            if (a >= L'A' && a <= L'Z')
-                a += 32;
-            if (a != k[i])
-                return false;
-        }
-        return true;
+        return CompareStringOrdinal(tail, len, L"explorerframe", -1, TRUE) == CSTR_EQUAL;
     }
+
+    return false;
 }
 
 bool NtPathToDosPath(LPCWSTR ntPath, LPWSTR dosPath, DWORD dosLen)
@@ -207,27 +181,12 @@ bool NtPathToDosPath(LPCWSTR ntPath, LPWSTR dosPath, DWORD dosLen)
 }
 
 // Real path via mapped file, bypasses LDR FullDllName spoofing.
-// Uses K32GetMappedFileNameW from kernel32, so no -lpsapi needed
-// (psapi.dll just forwards to kernel32 anyway).
+// K32GetMappedFileNameW is declared in <psapi.h> but exported by
+// kernel32, so it links without -lpsapi.
 bool GetRealModulePath(HMODULE hMod, WCHAR* dosPath, DWORD dosLen)
 {
-    using K32GetMappedFileNameW_t = DWORD (WINAPI *)(HANDLE, LPVOID, LPWSTR, DWORD);
-
-    static K32GetMappedFileNameW_t pK32 = nullptr;
-    static bool tried = false;
-    if (!tried)
-    {
-        tried = true;
-        HMODULE hK32 = GetModuleHandleW(L"kernel32.dll");
-        if (hK32)
-            pK32 = (K32GetMappedFileNameW_t)GetProcAddress(hK32, "K32GetMappedFileNameW");
-    }
-
-    if (!pK32)
-        return false;
-
     WCHAR ntPath[1024];
-    if (!pK32(GetCurrentProcess(), hMod, ntPath, ARRAYSIZE(ntPath)))
+    if (!K32GetMappedFileNameW(GetCurrentProcess(), hMod, ntPath, ARRAYSIZE(ntPath)))
         return false;
 
     return NtPathToDosPath(ntPath, dosPath, dosLen);
@@ -709,7 +668,7 @@ LONG WINAPI LdrLoadDll_Hook(PWSTR SearchPath, PULONG DllCharacteristics, PUNICOD
     {
         if (g_hookEvent && !g_stopWorker.load())
         {
-            // Cheap pre-filter on the request name, no API calls.
+            // Cheap pre-filter on the request name.
             if (IsExplorerFrameUnicodeName(DllName))
             {
                 // Confirm against the loaded module. Redirector keeps
@@ -1001,9 +960,6 @@ BOOL Wh_ModInit()
     if (pCW)
         Wh_SetFunctionHook(pCW, (void*)CreateWindowExW_Hook, (void**)&pOriginalCreateWindowExW);
 
-    // One-time sweep for pre-existing windows, new ones via CreateWindow hook.
-    SubclassExistingWindows();
-
     g_hookEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
     if (!g_hookEvent)
     {
@@ -1027,6 +983,14 @@ BOOL Wh_ModInit()
     g_initDone.store(true);
 
     return TRUE;
+}
+
+void Wh_ModAfterInit()
+{
+    // Runs after hooks are applied, so windows created between
+    // Wh_ModInit sweep point and hook activation are not missed.
+    // New windows are covered by CreateWindowExW hook.
+    SubclassExistingWindows();
 }
 
 void Wh_ModBeforeUninit()
