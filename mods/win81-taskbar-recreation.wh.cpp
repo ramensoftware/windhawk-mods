@@ -10,7 +10,7 @@
 // @description:es  Este mod recrea barras de tareas inspiradas en Windows 7/8/8.1 en Windows 10 y Windows 11
 // @description:fr  Ce mod recrée des barres des tâches inspirées de Windows 7/8/8.1 sur Windows 10 et Windows 11
 // @description:pt  Este mod recria barras de tarefas inspiradas no Windows 7/8/8.1 no Windows 10 e no Windows 11
-// @version         1.0.0
+// @version         1.1.0
 // @license         GPL-3.0-or-later
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
@@ -35,7 +35,8 @@ the Windows build, DPI, taskbar replacement and other shell mods.
 - An integrated notification area and taskbar, with a fallback to the native bar if the integrated tray cannot start.
 - Horizontal and vertical layouts, Aero Peek and classic flyout options.
 - Change notification area icon visibility using the Control Panel page that the mod attempts to restore, including on Windows 11; availability and behavior can vary.
-- Static taskbar textures and system colors; the textures do not blur live windows behind the bar. Windows 7 skin adds a cursor-following, icon-colored hover glow for running apps.
+- Static taskbar textures and system colors. Optional experimental live blur uses the unsupported per-window accent policy approach from Taskbar Background Helper (m417z, GPL-3.0); enabled by default and not guaranteed to work with layered windows. Windows 7 skin adds a cursor-following, icon-colored hover glow for running apps.
+- In the Windows 7 skin, Start uses the pressed image while a recognized Start menu is visible, even when the pointer hovers over it. Visibility tracking is best-effort and updates asynchronously; recognition and monitor placement may vary with Start replacements.
 - Local taskbar pins and ordering: the mod does not change Windows pins. Drag to an empty task area to pin; hover a running app to activate its window.
 - An advanced battery flyout option; compatibility may vary between Windows builds.
 - Optional secondary taskbars show pins, windows and the shared private tray. Secondary AppBar registration reserves work area when necessary and allowed by the shell. DPI scaling and flyout positioning are best-effort.
@@ -76,6 +77,18 @@ The mod settings control the skin, Start button, taskbar layout, notification
 area, previews, flyouts and other behavior. Individual descriptions in
 Windhawk explain their scope and any restart requirements.
 
+## Windows symbols and downloads
+
+Windhawk may resolve Windows symbols for taskbarcpl.dll and rpcrt4.dll for the
+Notification Area Icons page safety checks. It can download matching symbols if
+not cached. Some specifically verified builds use a fixed, checked fallback
+instead. Symbol verification for taskbarcpl is prepared in the background;
+if verification is unavailable, safety checks can prevent the private page
+from operating. Symbols help locate functions across builds but do not promise
+compatibility with changes in their behavior. An initial download needs network
+access, can take time, and uses disk cache. Seeing "using symbols" in the log
+confirms resolution, not whether a fresh download occurred.
+
 ## Behavior and limitations
 
 - The taskbar runs in a separate `explorer.exe` process on a best-effort basis.
@@ -86,7 +99,7 @@ Windhawk explain their scope and any restart requirements.
 - Skins are approximations; Windows 7 popup frames use the current system's DWM frame when available.
 - The Windows 8 Start corner is illustrated, not a live Start-screen preview.
 - Vertical layout, Aero Peek and classic flyouts may vary between Windows builds.
-- On first use, the mod downloads `pnidui.dll`, `SndVolSSO.dll` and `batmeter.dll`. The advanced battery flyout also downloads `stobject.dll` and an English or Italian language-pack CAB. Downloaded files are checked against pinned SHA-256 hashes. The Windows 10 1511 `stobject.dll` is loaded into the dedicated tool process and stays loaded until that process exits.
+- On first use, the mod downloads `pnidui.dll`, `SndVolSSO.dll` and `batmeter.dll`. The advanced battery flyout also downloads `stobject.dll` and a Windows 10 1511 x64 language-pack CAB selected from the Windows UI language (Italian, English, Spanish, French, Portuguese Portugal or Portuguese Brazil; other languages use English). Spanish uses es-ES and French uses fr-FR; regional variants are not all available. The CAB is temporary and is deleted after successful extraction of the verified battery MUI. Windows resource fallback may still affect some strings. Downloaded files are checked against pinned SHA-256 hashes. The Windows 10 1511 `stobject.dll` is loaded into the dedicated tool process and stays loaded until that process exits.
 - The integrated tray is enabled by default. It creates a private `Shell_TrayWnd` host and hides the native taskbar. Applications and mods that find the taskbar by class can encounter the private host; tray and AppBar traffic routed to it is processed or forwarded by the mod's UI thread. The host supplies taskbar geometry and forwards wheel input in supported cases, but it does not contain the native taskbar's `ReBarWindow32`, `MSTaskSwWClass`, Start button or XAML content. Mods that depend on those windows or content can fail or conflict. Disable the integrated tray and reload the mod if this compatibility trade-off is unsuitable.
 - The integrated tray keeps “Always show all icons” in memory for the current session. It starts from the Windows preference and does not write that preference to the system registry; it is reset when the mod reloads.
 - The Notification Area Icons page uses a private COM provider. The mod attempts to close its hosting window before unloading the Explorer hooks. Behavior has not been verified on every Windows build; if the window cannot be identified or does not respond, close the page before disabling, updating, or reloading the mod.
@@ -210,17 +223,6 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $description:es: "Esta configuración controla si la acción Mostrar ventana aparece en las Jump Lists."
   $description:fr: "Ce paramètre contrôle l’affichage de l’action Afficher la fenêtre dans les Jump Lists."
   $description:pt: "Esta configuração controla se a ação Mostrar janela aparece nas Jump Lists."
-- enablePrivateTray: true
-  $name: "Use the integrated taskbar and hide the original taskbar"
-  $name:it: "Usa la barra integrata e nascondi la barra originale"
-  $name:es: "Usar la barra de tareas integrada y ocultar la original"
-  $name:fr: "Utiliser la barre des tâches intégrée et masquer la barre d’origine"
-  $name:pt: "Usar a barra de tarefas integrada e ocultar a original"
-  $description: "This setting: Uses the mod’s own notification area and hides the original taskbar. Keeps the original bar if the integrated tray cannot start. A private Shell_TrayWnd host may be found by other apps or taskbar mods instead of the native window. Restart the mod after changing this option."
-  $description:it: "Questa impostazione: Usa l’area di notifica della mod e nasconde la barra originale. Mantiene la barra originale se l’area integrata non si avvia. Altre app o mod possono trovare una finestra Shell_TrayWnd privata invece di quella nativa. Riavvia la mod dopo aver modificato questa opzione."
-  $description:es: "Esta configuración: Usa el área de notificación del mod y oculta la barra original. Mantiene la barra original si el área integrada no puede iniciarse. Otras aplicaciones o mods pueden encontrar una ventana Shell_TrayWnd privada en lugar de la nativa. Reinicia el mod después de cambiar esta opción."
-  $description:fr: "Ce paramètre : Utilise la zone de notification du mod et masque la barre d’origine. Conserve la barre d’origine si la zone intégrée ne peut pas démarrer. D’autres applications ou mods peuvent trouver une fenêtre Shell_TrayWnd privée au lieu de la fenêtre native. Redémarrez le mod après modification."
-  $description:pt: "Esta configuração: Usa a área de notificação do mod e oculta a barra original. Mantém a barra original se a área integrada não puder iniciar. Outros aplicativos ou mods podem encontrar uma janela Shell_TrayWnd privada em vez da janela nativa. Reinicie o mod depois de alterar esta opção."
 - reserveWorkArea: true
   $name: "Reserve desktop space for a moved taskbar"
   $name:it: "Riserva spazio sul desktop per la barra spostata"
@@ -279,6 +281,22 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $description:es: "Esta configuración: Activada de forma predeterminada. Solicita una AppBar de Windows para la barra vertical y la elimina si no puede observar el área de trabajo. Si la solicitud falla, las ventanas maximizadas pueden extenderse debajo de la barra y puede quedar espacio nativo arriba o abajo. El mod no fuerza el área de trabajo mediante hooks internos de Explorer dependientes de la compilación."
   $description:fr: "Ce paramètre : Activé par défaut. Demande une AppBar Windows pour la barre verticale et la supprime si la zone de travail ne peut pas être observée. Si la demande échoue, les fenêtres agrandies peuvent s’étendre sous la barre et un espace natif peut subsister en haut ou en bas. Le mod ne force pas la zone de travail via des hooks internes d’Explorer propres à la build."
   $description:pt: "Esta configuração: Ativada por padrão. Solicita uma AppBar do Windows para a barra vertical e a remove se a área de trabalho não puder ser observada. Se a solicitação falhar, as janelas maximizadas podem se estender sob a barra e o espaço nativo superior ou inferior pode permanecer. O mod não força a área de trabalho por meio de hooks internos do Explorer dependentes da build."
+- experimentalLiveBlur: true
+  $name: "Experimental live blur (unsupported Windows API)"
+  $name:it: "Blur dinamico sperimentale (API Windows non documentata)"
+  $name:es: "Desenfoque dinámico experimental (API de Windows no documentada)"
+  $name:fr: "Flou dynamique expérimental (API Windows non documentée)"
+  $name:pt: "Desfoque dinâmico experimental (API Windows não documentada)"
+  $description: "On by default for Windows 7 and Windows 8 Beta only. If unavailable or the request fails, the original background remains. Requests DWM blur only for the recreated taskbar windows. Compatibility with layered rendering, Windows builds and other mods is not guaranteed. Disable if the bar is missing or glitches. This is not the original Windows 7 glass renderer."
+  $description:it: "Attivato per impostazione predefinita solo per le skin Windows 7 e Windows 8 Beta. Se non disponibile o se la richiesta fallisce, rimane lo sfondo originale. Richiede il blur DWM solo per le finestre della barra ricreata. La compatibilità con trasparenza per pixel, versioni di Windows e altre mod non è garantita. Disattiva se la barra scompare o presenta difetti. Non è il renderer originale di Windows 7."
+  $description:es: "Activado de forma predeterminada. Si no está disponible o falla la solicitud, se conserva el fondo original. Solicita desenfoque DWM solo para las ventanas de la barra recreada. La compatibilidad no está garantizada. Desactívalo si la barra desaparece o presenta defectos."
+  $description:fr: "Activé par défaut. Si indisponible ou en cas d’échec, le fond d’origine est conservé. Demande le flou DWM uniquement pour les fenêtres de la barre recréée. La compatibilité n’est pas garantie. Désactivez-le si la barre disparaît ou présente des défauts."
+  $description:pt: "Ativado por padrão. Se indisponível ou se a solicitação falhar, o fundo original é mantido. Solicita desfoque DWM somente para as janelas da barra recriada. A compatibilidade não é garantida. Desative se a barra desaparecer ou apresentar falhas."
+- taskbarRows: 0
+  $name: "Taskbar rows (0 = follow native height, 1-4 = custom)"
+  $name:it: "Righe della barra (0 = altezza nativa, 1-4 = personalizzate)"
+  $description: "Horizontal integrated taskbar only. Automatic derives rows from the native height. Custom rows change visual height; the native shell can still reserve its original work area. Multi-row drag reorder is disabled. Unlock and drag the horizontal bar's outer edge to resize during this session."
+  $description:it: "Solo barra orizzontale integrata. Automatico ricava le righe dall’altezza nativa. Le righe personalizzate cambiano l’altezza visiva; la shell può ancora riservare lo spazio originale. Il riordino tramite trascinamento è disattivato con più righe. Sblocca la barra e trascina il bordo esterno per ridimensionare durante la sessione."
 - taskbarOpacity: 220
   $name: "Global opacity in classic mode (140-255)"
   $name:it: "Opacità globale in modalità classica (140-255)"
@@ -628,6 +646,8 @@ Use at your own risk. You are responsible for how you use the mod and for comply
 #include <psapi.h>
 #include <tlhelp32.h>
 #include <gdiplus.h>
+#include <d2d1.h>
+#include <dwrite.h>
 #include <atomic>
 #include <vector>
 #include <string>
@@ -2170,6 +2190,8 @@ const UINT_PTR TIMER_ATTENTION = 27, TIMER_BUTTON_TRANSITION = 28, TIMER_LANGUAG
                TIMER_WIN7_PREVIEW_CLOSE = 30;
 const UINT_PTR TIMER_OPENSHELL_VERIFY = 31, TIMER_T81_SECONDARY_START = 32;
 const UINT WM_T81_APPBAR = WM_APP + 452;
+const UINT WM_T81_OPEN_CUSTOMIZE = WM_APP + 455;
+const UINT WM_T81_PINS_READY = WM_APP + 456;
 const UINT WM_T81_FULLSCREEN_EVENT = WM_APP + 1004;
 const wchar_t kNativeControlOverlayClass[] = L"WH_Taskbar81NativeControlOverlay";
 const wchar_t kPreviewClass[] = L"WH_Taskbar81SuperbarPreview";
@@ -2360,6 +2382,11 @@ struct TrayDragState {
     std::wstring dropAnchor;
 };
 struct State {
+    HMODULE clockD2D = nullptr, clockDWrite = nullptr;
+    ID2D1Factory* clockFactory = nullptr;
+    IDWriteFactory* clockWriteFactory = nullptr;
+    IDWriteTextFormat* clockTextFormat = nullptr;
+    int clockFormatDpi = 0;
     HWND bar = nullptr;
     HWND batteryFrameWindow = nullptr;
     LONG_PTR batteryFrameOriginalStyle = 0, batteryFrameOriginalExStyle = 0;
@@ -2377,7 +2404,7 @@ struct State {
     ATOM overflowClass = 0;
     RECT overflowAnchor{};
     int overflowScroll = 0, overflowHot = -1, overflowMouseMask = 0;
-    bool overflowFooterHot = false;
+    bool overflowFooterHot = false, overflowFooterPressed = false;
     std::wstring overflowTooltipText;
     Gdiplus::Image* overflowHoverImage = nullptr;
     IStream* overflowHoverStream = nullptr;
@@ -2389,6 +2416,7 @@ struct State {
     bool privateGeometryApplied = false;
     bool verticalActive = false;
     int verticalSide = 0, verticalOffset = 0, verticalPressed = HIT_NONE;
+    int verticalWidthLogical = 0; // session-only manual width; 0 follows row thickness
     std::vector<PrivateIcon> trayIcons;
     // CNI-only registrations: owned HICON copies remain alive across callbacks,
     // but these entries never join trayIcons and therefore never duplicate the
@@ -2413,6 +2441,7 @@ struct State {
     int volumeWheelRemainder = 0;
     float volume = 0;
     bool muted = false, hasBattery = false, charging = false, batteryCharging = false;
+    bool batterySaver = false;
     int batteryPct = -1, netKind = 0;
     bool peekOn = false, peekDesktop = false, desktopPeekEnabled = true;
     HWND peekTarget = nullptr, peekCandidate = nullptr;
@@ -2422,6 +2451,10 @@ struct State {
     bool rectValid = false;
     bool tracking = false;
     bool startPressed = false;
+    unsigned long t81WinFallbackSequence = 0;
+    bool t81WinBeganVisible = false;
+    bool startMenuVisible = false;
+    HMONITOR startMenuMonitor = nullptr;
     bool dragCandidate = false;
     bool dragActive = false;
     POINT dragStart{};
@@ -2475,6 +2508,10 @@ struct State {
     IStream* win7StartStream = nullptr;
     Gdiplus::Image* betaStartImage = nullptr;
     IStream* betaStartStream = nullptr;
+    Gdiplus::Image* peekStylerImages[3]{};
+    IStream* peekStylerStreams[3]{};
+    Gdiplus::Image* taskStateSprite = nullptr;
+    IStream* taskStateStream = nullptr;
     Gdiplus::Image* betaTexture[33]{};
     IStream* betaTextureStream[33]{};
     bool betaDesktopPressed = false;
@@ -2496,10 +2533,10 @@ struct State {
     // 0 follows native, 1 top, 2 bottom; 3/4 left/right only when All edges placement mode is selected.
     int barEdgeOverride = 0, barDragInitial = 0, barDragPending = 0;
     bool barDragCandidate = false, barDragMoved = false;
+    bool barDragBlurSuspended = false; // only while our own bar is being moved
     POINT barDragStart{};
     RECT barDragMonitor{};
-    HHOOK barDragHook = nullptr;
-    bool barHookEndQueued = false, barMoveQueued = false;
+    // Low-level mouse hook lives on its own responsive message thread.
     // Last known external system locations; -1 means unavailable/unknown.
     bool edgeSourcesInitialized = false;
     int sourceNativeEdge = -1, sourceModernEdge = -1, sourceClassicEdge = -1;
@@ -2525,8 +2562,15 @@ struct State {
     W8AeroClock* aeroClock = nullptr;
     int clockFixAttempts = 0;
     bool toolbarTimedOut = false;
-    DWORD lastSndvolTick = 0, volumeLaunchPid = 0;
+    DWORD lastSndvolTick = 0, volumeLaunchPid = 0, lastSndvolPid = 0;
+    bool volumeDismissPending = false;
+    int volumeLastWidth = 0, volumeLastHeight = 0;
+    POINT volumeCachedTarget{};
+    RECT volumeCachedBar{}, volumeCachedWork{};
+    bool volumeCachedTargetValid = false;
     int networkPositionAttempts = 0, volumePositionAttempts = 0, actionPositionAttempts = 0;
+    DWORD actionInputTick = 0;
+    bool actionRaised = false;
     HWINEVENTHOOK volumeShowHook = nullptr;
     RECT networkAnchor{}, volumeAnchor{}, actionAnchor{};
     DWORD favoritesVersion = 0;
@@ -2573,6 +2617,218 @@ struct State {
 };
 // State is owned and freed by the UI thread; no destructible globals.
 State* s = nullptr;
+// RetroBar tracks actual launcher visibility rather than just mouse capture.
+// Poll on a separate COM thread so a slow shell query cannot block painting.
+static constexpr UINT WM_T81_START_STATE = WM_APP + 354;
+static constexpr UINT WM_T81_WIN_TAP = WM_APP + 355;
+static constexpr UINT_PTR TIMER_T81_WIN_FALLBACK = 56;
+static std::atomic<HWND> t81WinHookTarget{nullptr};
+static std::atomic<unsigned long> t81WinInputGeneration{0};
+// Hook state belongs only to the observer thread. Pass every event down the
+// chain: this is recovery, not a system-wide Win-key replacement.
+static unsigned t81WinHeld = 0;
+static bool t81WinChord = false;
+static LRESULT CALLBACK T81WinObserverHook(int code, WPARAM msg, LPARAM data) {
+    if (code != HC_ACTION || !data) return CallNextHookEx(nullptr, code, msg, data);
+    const auto* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(data);
+    if (key->flags & LLKHF_INJECTED) return CallNextHookEx(nullptr, code, msg, data);
+    bool down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
+    bool up = msg == WM_KEYUP || msg == WM_SYSKEYUP;
+    if (!down && !up) return CallNextHookEx(nullptr, code, msg, data);
+    unsigned bit = key->vkCode == VK_LWIN ? 1u : key->vkCode == VK_RWIN ? 2u : 0u;
+    HWND target = t81WinHookTarget.load(std::memory_order_relaxed);
+    if (bit && down && !(t81WinHeld & bit)) {
+        unsigned long seq = ++t81WinInputGeneration;
+        if (!t81WinHeld) {
+            t81WinChord = (GetAsyncKeyState(VK_CONTROL) & 0x8000) ||
+                          (GetAsyncKeyState(VK_MENU) & 0x8000) ||
+                          (GetAsyncKeyState(VK_SHIFT) & 0x8000);
+            if (target) PostMessageW(target, WM_T81_WIN_TAP, 1, (LPARAM)seq);
+        } else t81WinChord = true;
+        t81WinHeld |= bit;
+    } else if (bit && up && (t81WinHeld & bit)) {
+        t81WinHeld &= ~bit;
+        unsigned long seq = t81WinInputGeneration.load(std::memory_order_relaxed);
+        if (!t81WinHeld && target)
+            PostMessageW(target, WM_T81_WIN_TAP, t81WinChord ? 3 : 2, (LPARAM)seq);
+    } else if (!bit && down) {
+        ++t81WinInputGeneration;
+        if (t81WinHeld && !t81WinChord) {
+            t81WinChord = true;
+            if (target) PostMessageW(target, WM_T81_WIN_TAP, 3, 0);
+        }
+    }
+    return CallNextHookEx(nullptr, code, msg, data);
+}
+
+static HANDLE t81StartObserverThread = nullptr, t81StartObserverStop = nullptr;
+static bool T81StartMenuOn(HWND bar) {
+    if (!s || !bar) return false;
+    return s->startMenuVisible &&
+           (!s->startMenuMonitor || MonitorFromWindow(bar, MONITOR_DEFAULTTONEAREST) == s->startMenuMonitor);
+}
+static DWORD WINAPI T81ObserveStart(void* arg) {
+    HWND target = static_cast<HWND>(arg);
+    MSG message{};
+    PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    t81WinHeld = 0; t81WinChord = false;
+    t81WinHookTarget.store(target, std::memory_order_release);
+    HMODULE hookModule = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&T81WinObserverHook), &hookModule);
+    HHOOK keyHook = hookModule ? SetWindowsHookExW(WH_KEYBOARD_LL, T81WinObserverHook, hookModule, 0) : nullptr;
+    Wh_Log(L"[T81-WIN-RECOVERY] passive keyboard observer installed=%d error=%lu", keyHook ? 1 : 0, keyHook ? 0 : GetLastError());
+    // Do not activate the native launcher visibility service while Open-Shell
+    // owns the shell: its window classes already provide visibility. This is
+    // a cautious compatibility change, not proof of the reported cause.
+    HRESULT initialized = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    IAppVisibility* app = nullptr;
+    ULONGLONG nextAppAttempt = 0;
+    bool lastOpenShell = false, loggedBackend = false;
+    const GUID cls = {0x7e5fe3d9,0x985f,0x4908,{0x91,0xf9,0xee,0x19,0xf9,0xfd,0x15,0x14}};
+    const GUID iid = {0x2246ea2d,0xcaea,0x4444,{0xa3,0xc4,0x6d,0xe8,0x27,0xe4,0x43,0x13}};
+    bool oldVisible = false, sent = false;
+    HMONITOR oldMonitor = nullptr;
+    DWORD hookForegroundPid = 0;
+    ULONGLONG hookRetryAt = 0;
+    // Supplemental sampling is used only when the normal LL hook did not
+    // observe this Win press. It never consumes or injects keyboard input.
+    bool sampleHeld = false, sampleChord = false, samplePending = false;
+    unsigned long sampleGeneration = 0;
+    ULONGLONG sampleDue = 0;
+    while (WaitForSingleObject(t81StartObserverStop, 0) == WAIT_TIMEOUT) {
+        // Reinsert the passive hook when the foreground process changes. Hooks
+        // are called newest first; another hook can otherwise swallow Win before
+        // our observer sees it. Never reinsert while a Win key is down.
+        HWND fgForHook = GetForegroundWindow();
+        DWORD fgForHookPid = 0;
+        if (fgForHook) GetWindowThreadProcessId(fgForHook, &fgForHookPid);
+        bool winPhysicallyDown = ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) != 0;
+        if (hookModule && fgForHookPid && fgForHookPid != hookForegroundPid &&
+            !winPhysicallyDown && GetTickCount64() >= hookRetryAt) {
+            HHOOK replacement = SetWindowsHookExW(WH_KEYBOARD_LL, T81WinObserverHook, hookModule, 0);
+            DWORD hookError = replacement ? 0 : GetLastError();
+            if (replacement) {
+                if (keyHook) UnhookWindowsHookEx(keyHook);
+                keyHook = replacement;
+                hookForegroundPid = fgForHookPid;
+                // A key-up could have been swallowed by another hook.
+                // Cancel a stale tap rather than generating an extra toggle.
+                if (t81WinHeld) {
+                    t81WinHeld = 0; t81WinChord = false;
+                    ++t81WinInputGeneration;
+                    PostMessageW(target, WM_T81_WIN_TAP, 3, 0);
+                }
+            } else {
+                hookRetryAt = GetTickCount64() + 1000;
+            }
+            Wh_Log(L"[T81-WIN-FORCE] foreground=%p pid=%lu hook-reinserted=%d error=%lu", fgForHook, fgForHookPid, replacement ? 1 : 0, hookError);
+        }
+        bool visible = false;
+        HMONITOR monitor = nullptr;
+        DWORD shellPid = 0;
+        HWND shell = GetShellWindow();
+        if (shell) GetWindowThreadProcessId(shell, &shellPid);
+        HWND helper = FindWindowW(L"OpenShellMenu.CStartHookWindow", nullptr);
+        HWND owner = FindWindowW(L"OpenShell.COwnerWindow", nullptr);
+        DWORD helperPid = 0, ownerPid = 0;
+        if (helper) GetWindowThreadProcessId(helper, &helperPid);
+        if (owner) GetWindowThreadProcessId(owner, &ownerPid);
+        bool openShell = shellPid && (helperPid == shellPid || ownerPid == shellPid);
+        if (openShell && app) { app->Release(); app = nullptr; }
+        if (!loggedBackend || lastOpenShell != openShell) {
+            Wh_Log(L"[T81-START-STATE] backend=%ls", openShell ? L"OpenShell-window" : L"native-visibility");
+            loggedBackend = true; lastOpenShell = openShell;
+        }
+        if (!openShell && !app && SUCCEEDED(initialized) && GetTickCount64() >= nextAppAttempt) {
+            HRESULT hr = CoCreateInstance(cls, nullptr, CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER, iid, (void**)&app);
+            if (FAILED(hr)) nextAppAttempt = GetTickCount64() + 10000;
+        }
+        const wchar_t* classes[] = {L"OpenShell.CMenuContainer", L"DV2ControlHost", L"Win8StartScreenMod8045"};
+        for (const auto* clsName : classes) {
+            HWND h = nullptr;
+            for (int i = 0; i < 32 && (h = FindWindowExW(nullptr, h, clsName, nullptr)); ++i) {
+                DWORD pid = 0;
+                GetWindowThreadProcessId(h, &pid);
+                if (!IsWindowVisible(h) || !pid ||
+                    (wcscmp(clsName, L"Win8StartScreenMod8045") && pid != shellPid && pid != GetCurrentProcessId()))
+                    continue;
+                visible = true;
+                monitor = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+                break;
+            }
+            if (visible) break;
+        }
+        if (!visible && !openShell && app) {
+            BOOL launcher = FALSE;
+            if (SUCCEEDED(app->IsLauncherVisible(&launcher)) && launcher) {
+                visible = true;
+                HWND fg = GetForegroundWindow();
+                if (fg) monitor = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+            }
+        }
+        if (!sent || visible != oldVisible || monitor != oldMonitor) {
+            if (PostMessageW(target, WM_T81_START_STATE, visible ? 1 : 0, (LPARAM)monitor)) {
+                sent = true; oldVisible = visible; oldMonitor = monitor;
+            }
+        }
+        // Sample only key states, never record key values. Sampling cannot
+        // guarantee detection of very short chords; cancel on any other key.
+        bool sampleWin = ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) != 0;
+        if (sampleWin && !sampleHeld) {
+            sampleHeld = true; sampleChord = t81WinHeld != 0; samplePending = false;
+            sampleGeneration = t81WinInputGeneration.load(std::memory_order_relaxed);
+        }
+        if (sampleHeld) {
+            if (t81WinHeld) sampleChord = true;
+            for (int vk = 8; vk < 256; ++vk) {
+                if (vk == VK_LWIN || vk == VK_RWIN) continue;
+                if (GetAsyncKeyState(vk) & 0x8000) { sampleChord = true; break; }
+            }
+            if (!sampleWin) {
+                sampleHeld = false;
+                if (!sampleChord) { samplePending = true; sampleDue = GetTickCount64() + 40; }
+            }
+        }
+        if (samplePending && GetTickCount64() >= sampleDue) {
+            samplePending = false;
+            if (sampleGeneration == t81WinInputGeneration.load(std::memory_order_relaxed)) {
+                unsigned long seq = ++t81WinInputGeneration;
+                PostMessageW(target, WM_T81_WIN_TAP, 1, (LPARAM)seq);
+                PostMessageW(target, WM_T81_WIN_TAP, 2, (LPARAM)seq);
+                Wh_Log(L"[T81-WIN-SAMPLE] Win observed via key state; hook did not report it");
+            }
+        }
+        // LL hooks are delivered to the installing thread's message queue.
+        DWORD wait = MsgWaitForMultipleObjects(1, &t81StartObserverStop, FALSE, 10, QS_ALLINPUT);
+        if (wait == WAIT_OBJECT_0 || wait == WAIT_FAILED) break;
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    }
+    t81WinHookTarget.store(nullptr, std::memory_order_release);
+    if (keyHook) UnhookWindowsHookEx(keyHook);
+    if (app) app->Release();
+    if (SUCCEEDED(initialized)) CoUninitialize();
+    return 0;
+}
+static void T81StartObserver(HWND bar) {
+    if (t81StartObserverThread || !bar) return;
+    t81StartObserverStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!t81StartObserverStop) return;
+    t81StartObserverThread = CreateThread(nullptr, 0, T81ObserveStart, bar, 0, nullptr);
+    if (!t81StartObserverThread) { CloseHandle(t81StartObserverStop); t81StartObserverStop = nullptr; }
+}
+static void T81StopObserver() {
+    if (t81StartObserverStop) SetEvent(t81StartObserverStop);
+    if (t81StartObserverThread) {
+        WaitForSingleObject(t81StartObserverThread, INFINITE);
+        CloseHandle(t81StartObserverThread); t81StartObserverThread = nullptr;
+    }
+    if (t81StartObserverStop) { CloseHandle(t81StartObserverStop); t81StartObserverStop = nullptr; }
+}
+
 std::atomic<HWND> barWindow{nullptr};
 std::atomic<HWND> nativeWindow{nullptr};
 std::atomic<bool> quitting{false};
@@ -2594,6 +2850,8 @@ std::atomic<int> startLogoRgb{0x0078D7};
 std::atomic<bool> customTaskbarColor{false};
 std::atomic<int> taskbarColorRgb{0x0078D7};
 std::atomic<bool> matchNativeTray{true};
+std::atomic<bool> experimentalLiveBlur{true};
+std::atomic<int> taskbarRows{0};
 std::atomic<bool> allowDragReorder{true};
 std::atomic<bool> keepOverlayAbove{true};
 std::atomic<bool> animateReorder{true};
@@ -2654,7 +2912,11 @@ static void MigrateTaskbarSettings() {
 void LoadSettings() {
     MigrateTaskbarSettings();
     debugExceptionLog.store(Wh_GetIntSetting(L"debugExceptionLog") != 0);
-    enablePrivateTray.store(Wh_GetIntSetting(L"enablePrivateTray") != 0);
+    // Full recreation is always requested, regardless of an old saved
+    // enablePrivateTray=0 value. Native shell remains a recovery path if
+    // takeover is not actually possible.
+    enablePrivateTray.store(true);
+    Wh_Log(L"[T81-TRAY] integrated tray required; legacy disable setting ignored");
     secondaryVisualMirror.store(Wh_GetIntSetting(L"secondaryVisualMirror") != 0);
     {
         PCWSTR value = Wh_GetStringSetting(L"buttonWidthMode");
@@ -2664,6 +2926,8 @@ void LoadSettings() {
         int width = Wh_GetIntSetting(L"customTaskButtonWidth");
         customTaskButtonWidth.store(width >= 24 && width <= 200 ? width : 72);
     }
+    experimentalLiveBlur.store(Wh_GetIntSetting(L"experimentalLiveBlur") != 0);
+    taskbarRows.store(std::clamp(Wh_GetIntSetting(L"taskbarRows"), 0, 4));
     reserveWorkArea.store(Wh_GetIntSetting(L"reserveWorkArea") != 0);
     {
         PCWSTR value = Wh_GetStringSetting(L"taskbarPlacement");
@@ -2817,17 +3081,51 @@ static const LegacyFile kBatteryMuiIt = {
 static const LegacyFile kBatteryMuiEn = {
     L"stobject.dll.mui", L"", "a7efe4ef8abb1fe557ac22bb4733772882da440bbb5b6894d0c99463012c3196",
     7680};
-static bool IsBatteryCab(const LegacyFile& s) {
-    return &s == &kBatteryCabIt || &s == &kBatteryCabEn;
+static const LegacyFile kBatteryCabEs = {L"battery-lang-es.cab",
+    L"/c/msdownload/update/software/updt/2015/11/lp_47afd6de9c3f3f5e56eb65a4232ebb76b9d77c60.cab",
+    "5a1b1b1576cd13b817fb620d6a73c52a31b5bc82c091c0c03ac8a0873c2523c8", 38754309};
+static const LegacyFile kBatteryMuiEs = {L"stobject.dll.mui", L"",
+    "70a58e42fdd042cc23ea2c625a53526a0fa1445c36b88f4289ab2c56d80e9908", 8704};
+static const LegacyFile kBatteryCabFr = {L"battery-lang-fr.cab",
+    L"/d/msdownload/update/software/updt/2015/11/lp_261edf9ccbe6e3a1a52e9488862f6a1e55c5d671.cab",
+    "20b2d2435593cc7381c7db83a8f66139d1b0e080a52970f332cff9fde2db27ae", 39292443};
+static const LegacyFile kBatteryMuiFr = {L"stobject.dll.mui", L"",
+    "e455aba01883a498e0b8d137f4e4b867cf7d113646814f9c68bc21b6cc3ef48d", 9216};
+static const LegacyFile kBatteryCabPt = {L"battery-lang-pt.cab",
+    L"/c/msdownload/update/software/updt/2015/11/lp_e8a5eb2c660a6f98176b084165a156d4d425b40b.cab",
+    "272f17f2441d9da3033f99d211d408eec2ebb31301e09ed6b304e97d11d410d4", 38697487};
+static const LegacyFile kBatteryMuiPt = {L"stobject.dll.mui", L"",
+    "6694bf9971d5018660b7cf261020b74517b94ea8cc97b2359f464301775d0e8f", 9216};
+static const LegacyFile kBatteryCabBr = {L"battery-lang-br.cab",
+    L"/c/msdownload/update/software/updt/2015/11/lp_80ef02766fddeb5767b4a5345af8101bb9af1f3b.cab",
+    "40d31a3f28bffe7b326e8f2fd5cb14280dfecb3fc789e1e08c02247c81f84c68", 38982911};
+static const LegacyFile kBatteryMuiBr = {L"stobject.dll.mui", L"",
+    "fde46c0944b0f31cfa747d9f3fd1d6b302eccb81d50d155fffb0f467b5efff40", 8704};
+// The language selection follows the Windows UI language, not keyboard layout.
+struct BatteryLanguage { const LegacyFile* cab; const LegacyFile* mui; const wchar_t* locale; const wchar_t* entry; };
+static const BatteryLanguage& SelectedBatteryLanguage() {
+    static const BatteryLanguage it{&kBatteryCabIt, &kBatteryMuiIt, L"it-IT", L"amd64_microsoft-windows-stobject.resources_31bf3856ad364e35_10.0.10586.0_it-it_ae7cfb07bf1cbc6f\\stobject.dll.mui"};
+    static const BatteryLanguage en{&kBatteryCabEn, &kBatteryMuiEn, L"en-US", L"amd64_microsoft-windows-stobject.resources_31bf3856ad364e35_10.0.10586.0_en-us_21d231ddf4f1ceea\\stobject.dll.mui"};
+    static const BatteryLanguage es{&kBatteryCabEs, &kBatteryMuiEs, L"es-ES", L"amd64_microsoft-windows-stobject.resources_31bf3856ad364e35_10.0.10586.0_es-es_219d8ec1f518c08f\\stobject.dll.mui"};
+    static const BatteryLanguage fr{&kBatteryCabFr, &kBatteryMuiFr, L"fr-FR", L"amd64_microsoft-windows-stobject.resources_31bf3856ad364e35_10.0.10586.0_fr-fr_c45504c0e7ead6f1\\stobject.dll.mui"};
+    static const BatteryLanguage pt{&kBatteryCabPt, &kBatteryMuiPt, L"pt-PT", L"amd64_microsoft-windows-stobject.resources_31bf3856ad364e35_10.0.10586.0_pt-pt_245037ce61153c65\\stobject.dll.mui"};
+    static const BatteryLanguage br{&kBatteryCabBr, &kBatteryMuiBr, L"pt-BR", L"amd64_microsoft-windows-stobject.resources_31bf3856ad364e35_10.0.10586.0_pt-br_236e686261a5cc89\\stobject.dll.mui"};
+    switch (CurrentUiLanguage()) {
+    case UiLanguage::Italian: return it;
+    case UiLanguage::Spanish: return es;
+    case UiLanguage::French: return fr;
+    case UiLanguage::Portuguese: return SUBLANGID(GetUserDefaultUILanguage()) == SUBLANG_PORTUGUESE_BRAZILIAN ? br : pt;
+    default: return en;
+    }
 }
-static const LegacyFile& SelectedBatteryMui() {
-    return ItalianUI() ? kBatteryMuiIt : kBatteryMuiEn;
+static bool IsBatteryCab(const LegacyFile& spec) {
+    return &spec == &kBatteryCabIt || &spec == &kBatteryCabEn || &spec == &kBatteryCabEs ||
+           &spec == &kBatteryCabFr || &spec == &kBatteryCabPt || &spec == &kBatteryCabBr;
 }
-static std::wstring BatteryModuleDirectory(const std::wstring& dir) {
-    return dir + L"\\battery1511";
-}
+static const LegacyFile& SelectedBatteryMui() { return *SelectedBatteryLanguage().mui; }
+static std::wstring BatteryModuleDirectory(const std::wstring& dir) { return dir + L"\\battery1511"; }
 static std::wstring BatteryMuiDirectory(const std::wstring& dir) {
-    return BatteryModuleDirectory(dir) + (ItalianUI() ? L"\\it-IT" : L"\\en-US");
+    return BatteryModuleDirectory(dir) + L"\\" + SelectedBatteryLanguage().locale;
 }
 struct HttpHandle {
     HINTERNET h = nullptr;
@@ -3110,8 +3408,8 @@ static UINT CALLBACK BatteryCabCallback(PVOID context, UINT notification, UINT_P
     return NO_ERROR;
 }
 static bool PrepareBatteryMui(const std::wstring& dir, HANDLE stop) {
-    const bool it = ItalianUI();
-    const LegacyFile& cab = it ? kBatteryCabIt : kBatteryCabEn;
+    const auto& language = SelectedBatteryLanguage();
+    const LegacyFile& cab = *language.cab;
     const LegacyFile& mui = SelectedBatteryMui();
     std::wstring muiDir = BatteryMuiDirectory(dir);
     std::wstring moduleDir = BatteryModuleDirectory(dir);
@@ -3137,10 +3435,7 @@ static bool PrepareBatteryMui(const std::wstring& dir, HANDLE stop) {
         if (reserve.h == INVALID_HANDLE_VALUE)
             return false;
     }
-    MuiCabContext c{
-        it ? L"amd64_microsoft-windows-stobject.resources_31bf3856ad364e35_10.0.10586.0_it-it_ae7cfb07bf1cbc6f\\stobject.dll.mui"
-           : L"amd64_microsoft-windows-stobject.resources_31bf3856ad364e35_10.0.10586.0_en-us_21d231ddf4f1ceea\\stobject.dll.mui",
-        temp, mui.size, stop};
+    MuiCabContext c{language.entry, temp, mui.size, stop};
     bool extracted =
         SetupIterateCabinetW(cabPath.c_str(), 0, BatteryCabCallback, &c) != FALSE && c.selected;
     bool committed = false;
@@ -3169,7 +3464,7 @@ static bool PrepareBatteryMui(const std::wstring& dir, HANDLE stop) {
     if (committed)
         DeleteFileW(cabPath.c_str());
     Wh_Log(L"[T81-DIAG] battery 1511 MUI language=%ls extracted=%d verified=%d",
-           it ? L"it-IT" : L"en-US", extracted ? 1 : 0, committed ? 1 : 0);
+           language.locale, extracted ? 1 : 0, committed ? 1 : 0);
     return committed;
 }
 static std::atomic<int> wifiQuality{-1};
@@ -4580,7 +4875,59 @@ static const char* const
                 "1QXPW/Sprwfsthb3/FcnhJOwvHhBlpdh5vSadDoPS55vSbrYk+RKsRsZZ0s5ZO8BMVO7+XjrzRUMiTLa2O1z3fFIr62cPhN59qu739cJdpvvbt0TJxFOnmDx"
                 "1AUBmJlZE5agQ1/y8/fLIufv1ksPC7wKVap3nqvXlbSSO+9GDaXXVtbP7O5APXt7IfMNjH77B6V7IfdkLp5almVO7a3ZnxZO/z0y1s/cVfoemD0l/7+E134t"
                 "SQBRRfQERk9gVO+565s8383Lnesb8If/P8w36gI/ExtkAAAAAElFTkSuQmCC"};
+// Only the user-provided seventh frame, cropped losslessly (60 x 40 RGBA).
+// Windows7 theme for Windows 11 Taskbar Styler, author Sand216.
+// Exact transparent PNG files: desktopNormal, desktopPointerOver, desktopPressed.
+// https://github.com/ramensoftware/windows-11-taskbar-styling-guide/tree/main/Themes/Windows7/ThemeResources
+// Reference theme uses a 15 x 39 DIP rectangle with Stretch=Fill; 100% scaling
+// was its design target. All three sources are 17 x 40 RGBA PNGs.
+static const char* const kWin7StylerDesktopPng[3] = {
+    // desktopNormal.png
+    "iVBORw0KGgoAAAANSUhEUgAAABEAAAAoCAYAAAAYGBGfAAAACXBIWXMAAA7EAAAOxAGVKw4bAAACl0lEQVRIiaWWS27cMAyGf3nUGcfOC3OEAj"
+    "1FltkUSA/Tq/UiWWSTTYqsEi89nqdEUWQXY3mcyQSJXQKCZEP8/JOiCBsAv7A305uP16dG1u5ZWwDm/v7+N06bqqqKiKRZRCIzq4jEGGO8vb39"
+    "YwFkxhh9fHz8y8waY5TjwczvZmaWm5ubHwCsBTABgO12S2lT3/kIoOkdM4v3PgCYdJDNZuPTZlXtNoYQtLcWEZEQQnp+A5GkpD9ijNpz6AM0hC"
+    "C73Y46SIwxrtdrl+Qmx7Q5hCAxRiWiFJqGEMR7/xayWq0ofbn/tTQ3TUNVVfm6rnm5XLJzTu7u7r4niGVmXq/XdOxMRPLy8rJ7enrabTabeHz+"
+    "bTjGApgwc1gul9R3bpomPDw8rJ1z8kENoQ3HWAA2hEAtRIlIXl9f3fPzs/vIuackJEhGRNw0TQghaFVVvqoq+gzQ1lYAAAtgQkS0WCxotVrFrw"
+    "LeKfHe02KxCHVdMwD9KsQ5xwC+pXB8XddMRB8m8ZQREaO9O8Y5R0T07gg/M+99BKC2lUUYEEayGKN0kO12OwrS+qgFoN57D2BQPgAgy7JOibbn"
+    "PViJMUYBiAWgzrlRkMlkgqQEREQYEc5sNkOnZLfbDSqyZNPpNEtKhJl5jJKiKExSgrbQBivJ8/ygpD2qwUrOzs4MALYA9D8gByXW2giAh0LKsu"
+    "xyInmeM4AwFHJ+fo4OUpZlHANplezL/uLiQgB8uaP1IAogWgByfX2tY5S04ewTO5/PRykpigJIZT+fzzEGUpZl1wri5eUlMCKcPM/fKRkMKYqi"
+    "62xydXVlxkCm02nXqEdD8jzvIDqbzSbOuZ/Y//BkxpgsrXH4UzQnOF1iJc/zGQ6tQLG/R6H33Dc9mqf/AF79uYOrICknAAAAAElFTkSuQmCC",
+    // desktopPointerOver.png
+    "iVBORw0KGgoAAAANSUhEUgAAABEAAAAoCAYAAAAYGBGfAAAACXBIWXMAAA7EAAAOxAGVKw4bAAABuElEQVRIiaWWW3LcIBBFTyPsz6wiVd5IPr"
+    "OUbC+ryTKcjDQPuPlQI/fIGsvCt4oCMfThdgtUY8BPZlno1+OtlnzN3wxYrfUX25L3NbQSxyml39mJAv6sF5tZlbTMrZ+BFyBnYHDItILEgOLP"
+    "Wq25AEOEnMKP4r31rXaOkDaxF7TeZIqQ68rJuxqEsR45uQHTB0FF0sV3vvr6CnxvkOzE0ypInt5oZv8klY0jMAHWnLRdCiB3cTazV0l15m1qAp"
+    "6ikzHkOgLjB8ER8twO22Rmo6dz9uc9AJIm4FtLZ/J2A86fcNB0BrQ4ceqFt/vyWQgLxCfqAQDMr1uZ+Vqf3MVRLenA2+U7JDMrETL6xCH5AVTm"
+    "/jNwVPUO8uBY76kAtUGOvtqopSbXTkj6shMzS81JBW5mdriwkhYnmNlNBy5M0ADMpI5gfPMBKHl2JdFRE2k+Iq0mXRDmC1xbOvtfoG09RUjaWb"
+    "wpM8t4YcVc5cPympTmJO+sf6TFSe11QiismAvUo+WwFfrTGaKTXkhqTqqZ9abDAvFX1Q1p35MB+OF9MrMkaeD+n+LWqVaD1JRSuz93P4bxOjD2"
+    "z/8Br0M9PG3YkpwAAAAASUVORK5CYII=",
+    // desktopPressed.png
+    "iVBORw0KGgoAAAANSUhEUgAAABEAAAAoCAYAAAAYGBGfAAAACXBIWXMAAA7EAAAOxAGVKw4bAAABc0lEQVRIibWWQU7EMAxFn9OIPeIOnIYdl2"
+    "LJSVmxQWliFo2LaTtpkwFL1rRT++n7xzOqAC8sIe5ze32UodZ8RkBKKe+0Qw+yABpCeIuO+HGjeJcioqqqwBMQIzDVh/OFJgX8dQYmg+AhjaYt"
+    "/BekAOmsaZuqmm5CTtIbPXtIbkCsKdembCcDPBokNiAFmEUkqWphHwkQU2KFHpCBrzr7Qf96GGJK5mqSnzXd6jxSEjZK5ppXIlFVTECqSkoHgF"
+    "qrq5JKzR0Ag2CQxM/G9kQ2JeIgvbGOQ4Uc7cFlJQbpHYXao5GfvRhRUlZIY62vKCmRZa1HTsYgqyd5ECKrkjsgABpYzBnxA5ZFLTaO/cn0hlA9"
+    "McAIJAA5DDZ7yJ8oKWasnBT/K2SiHrHeqSSbJyIi3Z6oquCWLZzUt5QUG2c6KW5BNLD8bkaViFdyzziLJyIyOg4rRFVHlYD7j51U9Zn92+HRG+"
+    "UOIsCr3fgH7n67P9vvH74BYNcVN07HMuwAAAAASUVORK5CYII=",
+};
+static const char kTaskStateSprite[] =
+    "iVBORw0KGgoAAAANSUhEUgAAADwAAAAoCAYAAACiu5n/AAACH0lEQVR4nOWaQZLUMAxFn+T0kipqVsMV2HESikPMKTgD95k7cAFWs+UEMNUdW2Jh"
+    "J21TMz1Akeku9V8lTqKS8r9syYkAn7giTEB6eLj78nePOWBejw0ouJtDadfArHg9dtxzuwZQfLXipY5bwdy9mjUoGcfr851Zw3yxjy/2noAkQFBU"
+    "EKCe8v7D188TwG6X0vdv9z9eDvLskH998Ob2doLKMGCIH/6PSxeLSlgLODOdUEgINIEeGTY7nzOvABURGCSdz+nPK2CQtMeXdMOaw1Lm83qyOWrK"
+    "rgwvA1Eh6n0OO3oRy+yG+H2WJvqchQJ9wLEVzVKk1bDXujgwJI05fBml8pYYJO1XkMODpMPTi9BLutgVxNxJ2kvx+JJOwMJwdvDgFA+FR46/Do/t"
+    "oRnk4O1SLaVrwLYvHr726APmEF/StO63LUslfOEhoscc9n32brs4JtoUVRmeDebgAVufw/sSP4cHhrOtSR0Wwyw9m8evpfvCo1xBe1iGddgJ/uEB"
+    "cr8BMB8HwsL69vDgPkeXdB8wRXDbndOd7TH3/fBBCc+wdwzbjJsHZ9iGHQ8h2wb7eX/0g4KuW4kn73nBnpocrz5lr5f042M5vHn7jmzmvnxXM19/"
+    "HCknmuWECpJABbQu7wkQ1dagJECR1ByaBGUniMAk4CpMgCgyTYJUb3VqP6SQICVB0xq0pCQs8amiSj3X56KF/c88L+/s4/PvLR5+AVPK3XcCs0iX"
+    "AAAAAElFTkSuQmCC";
 static void DestroyStartImage(State& state) {
+    for (int i = 0; i < 3; ++i) {
+        delete state.peekStylerImages[i]; state.peekStylerImages[i] = nullptr;
+        if (state.peekStylerStreams[i]) state.peekStylerStreams[i]->Release();
+        state.peekStylerStreams[i] = nullptr;
+    }
+    delete state.taskStateSprite;
+    state.taskStateSprite = nullptr;
+    if (state.taskStateStream)
+        state.taskStateStream->Release();
+    state.taskStateStream = nullptr;
     delete state.win7StartImage;
     state.win7StartImage = nullptr;
     if (state.win7StartStream)
@@ -4690,6 +5037,57 @@ static void DrawBetaTexture(Graphics& g, int index, const RECT& rect) {
                      (int)(rect.bottom - rect.top)),
                 0, 0, (int)image->GetWidth(), (int)image->GetHeight(), UnitPixel);
 }
+// Smooth, neutral alpha relief inspired by the supplied Windows 7 reference.
+// This is a reconstruction, not a recovered Windows theme resource. It blends
+// over the current bar and is drawn in device pixels to keep edges crisp.
+static void DrawWin7PeekRelief(Graphics& g, const RECT& r, bool hot, bool pressed, int dpi) {
+    int w = r.right-r.left, h = r.bottom-r.top;
+    if (w < 3 || h < 4) return;
+    auto saved = g.Save();
+    g.SetSmoothingMode(SmoothingModeNone);
+    int px = std::max(1, MulDiv(1, dpi, 96));
+    // Thin edge, no hard double stripe: the Win7 reference has a single
+    // light seam with a fading glass reflection, not an opaque white bar.
+    SolidBrush tint(Color(15, 0, 0, 0));
+    g.FillRectangle(&tint, (int)r.left, (int)r.top, w, h);
+    RectF full((REAL)r.left, (REAL)r.top, (REAL)w, (REAL)h);
+    RectF top((REAL)r.left, (REAL)r.top, (REAL)w, (REAL)std::max(2,h*2/5));
+    LinearGradientBrush shine(top, Color(68,255,255,255), Color(0,255,255,255), LinearGradientModeVertical);
+    g.FillRectangle(&shine, top);
+    // Draw the light seam only once. The gradient is subtle at the bottom.
+    LinearGradientBrush seam(full, Color(112,255,255,255), Color(35,255,255,255), LinearGradientModeVertical);
+    g.FillRectangle(&seam, (int)r.left, (int)r.top, px, h);
+    LinearGradientBrush farEdge(full, Color(80,255,255,255), Color(40,255,255,255), LinearGradientModeVertical);
+    g.FillRectangle(&farEdge, (int)r.right-px, (int)r.top, px, h);
+    SolidBrush topLine(Color(55,255,255,255));
+    g.FillRectangle(&topLine, (int)r.left+px, (int)r.top, std::max(0,w-2*px), px);
+    if (hot) {
+        SolidBrush hover(Color(pressed ? 42 : 25,255,255,255));
+        g.FillRectangle(&hover, (int)r.left+px, (int)r.top+px, std::max(0,w-2*px), std::max(0,h-2*px));
+    }
+    g.Restore(saved);
+}
+// Actual Windows7 Taskbar Styler PNG states; use alpha over the active bar.
+// Missing/corrupt resources retain the neutral procedural fallback.
+static void DrawWin7StylerPeek(Graphics& g, const RECT& r, bool hot, bool pressed, int dpi) {
+    if (IsRectEmpty(&r)) return;
+    int index = hot ? (pressed ? 2 : 1) : 0;
+    Image* image = s ? s->peekStylerImages[index] : nullptr;
+    if (!image || image->GetLastStatus() != Ok) {
+        DrawWin7PeekRelief(g, r, hot, pressed, dpi);
+        return;
+    }
+    auto state = g.Save();
+    g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+    ImageAttributes attributes;
+    attributes.SetWrapMode(WrapModeTileFlipXY);
+    Status result = g.DrawImage(image, Rect((int)r.left, (int)r.top,
+                                  (int)(r.right-r.left), (int)(r.bottom-r.top)),
+                                0, 0, (int)image->GetWidth(), (int)image->GetHeight(),
+                                UnitPixel, &attributes);
+    g.Restore(state);
+    if (result != Ok) DrawWin7PeekRelief(g, r, hot, pressed, dpi);
+}
 // Recolor chromatic pixels of the beta art while preserving its neutral tile.
 // Cache the bitmap per source and RGB value.
 static Image* CustomBetaStart(Image* src, int slot) {
@@ -4736,7 +5134,8 @@ static Color StartCustomColor() {
     int v = startLogoRgb.load();
     return Color(255, (v >> 16) & 255, (v >> 8) & 255, v & 255);
 }
-static void DrawWin7Start(Graphics& g, int w, int h, int frame, int spriteSize = 0) {
+static void DrawWin7Start(Graphics& g, int w, int h, int frame, int spriteSize = 0,
+                          float hoverFade = -1.f) {
     if (!s || (!s->win7StartImage && !s->betaTexture[30]) || w <= 0 || h <= 0)
         return;
     // Use the standard size unless the caller supplies an alternate size.
@@ -4774,7 +5173,8 @@ static void DrawWin7Start(Graphics& g, int w, int h, int frame, int spriteSize =
         drawFrame(2, 1.f);
     else {
         drawFrame(0, 1.f);
-        drawFrame(1, std::max(0.f, std::min(1.f, s->startFade)));
+        float fade = hoverFade < 0.f ? s->startFade : hoverFade;
+        drawFrame(1, std::max(0.f, std::min(1.f, fade)));
     }
     g.Restore(save);
 }
@@ -4934,8 +5334,28 @@ bool IsTaskWindow(HWND hwnd) {
     // They are shell surfaces rather than application taskbar buttons.
     if (!wcscmp(className, L"Shell_CharmWindow"))
         return false;
+    // ManagedShell honours the Shell's task-list deletion marker.
+    if (GetPropW(hwnd, L"ITaskList_Deleted"))
+        return false;
     if (!HasTaskbarExtendedStyle(hwnd))
         return false;
+    // Exclude only a recognisable Medal overlay, not the recorder's normal UI.
+    // Transparent DWM thumbnails alone are not evidence of a disposable task.
+    wchar_t caption[128]{};
+    GetWindowTextW(hwnd, caption, (int)std::size(caption));
+    if (!_wcsicmp(className, L"MedalOverlayClass") ||
+        !_wcsicmp(caption, L"Medal Overlay")) {
+        DWORD ownerPid = 0;
+        GetWindowThreadProcessId(hwnd, &ownerPid);
+        std::wstring executable = ProcessImage(ownerPid);
+        size_t separator = executable.find_last_of(L"\\/");
+        const wchar_t* name = executable.c_str() + (separator == std::wstring::npos ? 0 : separator + 1);
+        if (!_wcsicmp(name, L"Medal.exe") || !_wcsicmp(name, L"MedalOverlay.exe") ||
+            !_wcsicmp(name, L"MedalEncoder.exe")) {
+            Wh_Log(L"[T81-OVERLAY] excluded Medal overlay hwnd=%p pid=%lu class=%ls", hwnd, ownerPid, className);
+            return false;
+        }
+    }
     if (IsCloakedTaskWindow(hwnd))
         return false;
     // ManagedShell ApplicationWindow.IsImmersiveShellWindow (Apache-2.0):
@@ -5543,7 +5963,7 @@ static bool SetModPinHidden(const std::wstring& key, bool hidden) {
         return false;
     return Wh_SetStringValue(L"Taskbar81.HiddenPins", encoded.c_str()) != FALSE;
 }
-void RefreshPins() {
+static void BuildPinsSnapshot(std::vector<Pin>& next) {
     std::vector<w7t::PinnedApp> discovered = w7t::LoadPinnedApps();
     std::vector<BYTE> favoritesBytes;
     if (ReadTaskbandFavorites(favoritesBytes)) {
@@ -5551,7 +5971,6 @@ void RefreshPins() {
             Wh_Log(L"Unrecognized Taskband Favorites data; using folder enumeration order");
     }
     const auto hidden = ReadHiddenModPins();
-    std::vector<Pin> next;
     for (const auto& item : discovered) {
         if (next.size() >= MAX_TASKS)
             break;
@@ -5599,8 +6018,72 @@ void RefreshPins() {
             pin.icon = fi.hIcon;
         next.push_back(std::move(pin));
     }
-    FreePins();
-    s->pins.swap(next);
+}
+
+// A single owned worker builds icons and shortcut metadata outside the UI
+// thread. The UI retains its current pins until the complete result arrives.
+void BuildGroups();
+struct T81PinWork {
+    HWND target = nullptr;
+    std::vector<Pin> pins;
+    bool success = false;
+    ~T81PinWork() { for (auto& pin : pins) if (pin.icon) DestroyIcon(pin.icon); }
+};
+static HANDLE t81PinWorker = nullptr;
+static T81PinWork* t81PinWork = nullptr;
+static bool t81PinAgain = false;
+static DWORD WINAPI T81PinWorkerProc(void* arg) {
+    T81PinWork* work = static_cast<T81PinWork*>(arg);
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (SUCCEEDED(hr)) {
+        try { BuildPinsSnapshot(work->pins); work->success = true; }
+        catch (...) { Wh_Log(L"[T81-PIN-ASYNC] build failed; previous pins retained"); }
+        CoUninitialize();
+    } else {
+        Wh_Log(L"[T81-PIN-ASYNC] COM init failed hr=0x%08lx", (unsigned long)hr);
+    }
+    PostMessageW(work->target, WM_T81_PINS_READY, 0, 0);
+    return 0;
+}
+static void RefreshPins() {
+    if (!s || !s->bar) return;
+    if (t81PinWorker) { t81PinAgain = true; return; }
+    auto work = std::make_unique<T81PinWork>();
+    work->target = s->bar;
+    HANDLE thread = CreateThread(nullptr, 0, T81PinWorkerProc, work.get(), 0, nullptr);
+    if (!thread) {
+        Wh_Log(L"[T81-PIN-ASYNC] worker unavailable error=%lu; pins retained", GetLastError());
+        return;
+    }
+    t81PinWork = work.release();
+    t81PinWorker = thread;
+}
+static void StopPinWorker() {
+    if (t81PinWorker) {
+        WaitForSingleObject(t81PinWorker, INFINITE);
+        CloseHandle(t81PinWorker);
+        t81PinWorker = nullptr;
+    }
+    delete t81PinWork;
+    t81PinWork = nullptr;
+    t81PinAgain = false;
+}
+static void FinishPinWorker() {
+    if (!t81PinWorker || !t81PinWork || !s) return;
+    WaitForSingleObject(t81PinWorker, INFINITE);
+    CloseHandle(t81PinWorker);
+    t81PinWorker = nullptr;
+    if (t81PinWork->success) {
+        FreePins();
+        s->pins.swap(t81PinWork->pins);
+        BuildGroups();
+        InvalidateRect(s->bar, nullptr, FALSE);
+    }
+    delete t81PinWork;
+    t81PinWork = nullptr;
+    bool again = t81PinAgain;
+    t81PinAgain = false;
+    if (again) RefreshPins();
 }
 
 // Mod-local order override. The binary taskbar order is used until the user
@@ -6025,8 +6508,13 @@ void ExcludeFromPeek(HWND h) {
     if (!h)
         return;
     BOOL exclude = TRUE;
-    DwmSetWindowAttribute(h, (DWMWINDOWATTRIBUTE)12 /* DWMWA_EXCLUDED_FROM_PEEK */, &exclude,
-                          sizeof(exclude));
+    HRESULT hr = DwmSetWindowAttribute(h, (DWMWINDOWATTRIBUTE)12 /* DWMWA_EXCLUDED_FROM_PEEK */,
+                                       &exclude, sizeof(exclude));
+    static HRESULT lastFailure = S_OK;
+    if (FAILED(hr) && hr != lastFailure) {
+        lastFailure = hr;
+        Wh_Log(L"[T81-PEEK] DwmSetWindowAttribute failed hwnd=%p hr=0x%08lX", h, (unsigned long)hr);
+    }
 }
 void PeekOff(bool onlyDesktop) {
     if (!s || !s->peekOn)
@@ -6180,6 +6668,8 @@ struct RefreshContext {
     std::vector<Task>* tasks;
     bool refreshIcons;
     bool failed = false;
+    ULONGLONG titleMs = 0, identityMs = 0, iconMs = 0;
+    unsigned titleCount = 0, identityCount = 0, iconCount = 0;
 };
 struct TaskSnapshot {
     Task task{};
@@ -6277,27 +6767,46 @@ static std::wstring WindhawkIconSource(HWND hwnd, const std::wstring& image) {
     }
     return {};
 }
-static bool BuildTaskSnapshot(HWND hwnd, const RefreshContext& context, TaskSnapshot& snapshot) {
+static bool BuildTaskSnapshot(HWND hwnd, RefreshContext& context, TaskSnapshot& snapshot) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
     const Task* stored = FindStoredTask(hwnd, pid);
-    std::wstring title;
-    if (!GetTitle(hwnd, title)) {
-        if (!stored)
+    // Spread blocking title queries over two refreshes; first discovery stays immediate.
+    // Keep the old title until the next query succeeds.
+    const size_t titleSlot = ((uintptr_t)hwnd >> 2);
+    std::wstring title = stored ? stored->title : std::wstring{};
+    if (!stored || ((s->ticks + titleSlot) % 2 == 0)) {
+        const ULONGLONG titleStart = GetTickCount64();
+        std::wstring updatedTitle;
+        bool titleOk = GetTitle(hwnd, updatedTitle);
+        context.titleMs += GetTickCount64() - titleStart;
+        ++context.titleCount;
+        if (titleOk)
+            title = std::move(updatedTitle);
+        else if (!stored)
             return false;
-        title = stored->title;
     }
     if (title.empty())
         return false;
 
+    // Stagger expensive icon and shell identity work across refresh ticks.
+    // New windows are still discovered and initialized immediately. Use a
+    // stable per-HWND slot so no one tick refreshes every existing icon.
+    const size_t slot = ((uintptr_t)hwnd >> 2);
+    const bool updateIcon = !stored || (s->ticks % 5 == slot % 5);
+    const bool updateIdentity = !stored || (s->ticks % 30 == slot % 30);
     std::wstring relaunchPath = stored ? stored->relaunchPath : std::wstring{};
     std::wstring identity;
-    if (stored && !context.refreshIcons)
+    if (stored && !updateIdentity)
         identity = stored->key;
-    else
+    else {
+        const ULONGLONG started = GetTickCount64();
         identity = WindowIdentity(hwnd, &relaunchPath);
+        context.identityMs += GetTickCount64() - started;
+        ++context.identityCount;
+    }
 
-    if (!stored || (context.refreshIcons && s->ticks % 30 == 0)) {
+    if (updateIdentity) {
         wchar_t className[80]{};
         GetClassNameW(hwnd, className, (int)std::size(className));
         if (!_wcsicmp(className, L"ApplicationFrameWindow"))
@@ -6312,7 +6821,8 @@ static bool BuildTaskSnapshot(HWND hwnd, const RefreshContext& context, TaskSnap
     HICON icon = stored ? stored->icon : nullptr;
     bool ownsIcon = stored ? stored->ownsIcon : false;
     bool windhawkIcon = stored ? stored->windhawkIcon : false;
-    if (!stored || context.refreshIcons) {
+    if (updateIcon) {
+        const ULONGLONG iconStart = GetTickCount64();
         const bool packaged =
             identity.rfind(L"app:", 0) == 0 && w7t::IsPackagedAumid(identity.substr(4));
         HICON candidate = nullptr;
@@ -6357,6 +6867,8 @@ static bool BuildTaskSnapshot(HWND hwnd, const RefreshContext& context, TaskSnap
             icon = LoadIconW(nullptr, MAKEINTRESOURCEW(32512));
             ownsIcon = false;
         }
+        context.iconMs += GetTickCount64() - iconStart;
+        ++context.iconCount;
     }
     const ULONGLONG sequence = stored ? stored->seq : ++s->nextTaskSequence;
     snapshot.task = Task{hwnd,
@@ -6401,8 +6913,16 @@ static PendingButtonChanges PrepareButtonChanges(const std::vector<Task>& next);
 static void CommitButtonChanges(PendingButtonChanges&& pending, const std::vector<Task>& previous);
 void Refresh() {
     std::vector<Task> tasks;
+    // Reuse the previous count as a capacity hint; all tasks are still enumerated.
+    tasks.reserve(s->tasks.size());
     RefreshContext ctx{&tasks, (++s->ticks % 5) == 0};
+    ULONGLONG enumerationStart = GetTickCount64();
     EnumWindows(EnumTask, reinterpret_cast<LPARAM>(&ctx));
+    ULONGLONG enumerationMs = GetTickCount64() - enumerationStart;
+    if (enumerationMs >= 80)
+        Wh_Log(L"[T81-PERF-DETAIL] enum=%llu titles=%llu/%u identity=%llu/%u icons=%llu/%u ms/count",
+               enumerationMs, ctx.titleMs, ctx.titleCount, ctx.identityMs, ctx.identityCount,
+               ctx.iconMs, ctx.iconCount);
     if (ctx.failed) {
         for (const Task& candidate : tasks)
             if (candidate.ownsIcon && candidate.icon) {
@@ -6818,6 +7338,10 @@ static bool PostOpenShellRequest(WPARAM operation) {
 }
 static void T81ArmOpenShellPosition(HWND bar, bool preservePending) noexcept;
 static void T81CancelOpenShellPosition() noexcept;
+static bool ForegroundProcessElevated();
+static HWND t81OpenShellFocusSource = nullptr;
+static DWORD t81OpenShellFocusInput = 0;
+static ULONGLONG t81OpenShellFocusDeadline = 0;
 static bool ToggleOpenShellStart() {
     if (!s || !s->bar)
         return false;
@@ -6827,24 +7351,50 @@ static bool ToggleOpenShellStart() {
         return false;
     KillTimer(s->bar, TIMER_OPENSHELL_VERIFY);
     s->openShellRetries = 0;
+    t81OpenShellFocusSource = nullptr;
     PeekOff(false);
-    if (OpenShellMenuVisible()) {
+    const bool visible = OpenShellMenuVisible();
+    if (visible)
         T81CancelOpenShellPosition();
-        if (!PostOpenShellRequest(0))
-            Wh_Log(L"[T81-DIAG] Open-Shell close request failed");
-        return true;
-    }
-    // Secondary clicks arm their monitor first; do not overwrite that target.
-    T81ArmOpenShellPosition(s->bar, true);
-    if (PostOpenShellRequest(2)) { // MSG_OPEN: only opens if currently closed
-        s->openShellRetries = 3;
-        if (!SetTimer(s->bar, TIMER_OPENSHELL_VERIFY, 700, nullptr)) {
-            s->openShellRetries = 0;
-            Wh_Log(L"[T81-DIAG] Open-Shell verification timer unavailable");
+    else
+        T81ArmOpenShellPosition(s->bar, true);
+    HWND foreground = GetForegroundWindow();
+    DWORD pid = 0;
+    if (foreground)
+        GetWindowThreadProcessId(foreground, &pid);
+    const Task* task = pid ? FindStoredTask(foreground, pid) : nullptr;
+    const bool identifiedWindhawk = task && task->windhawkIcon;
+    const bool elevated = ForegroundProcessElevated();
+    {
+        // Use Open-Shell's own request for all foreground apps, not only
+        // Windhawk or elevated apps: on Windows 10 19044 the synthetic Win
+        // sequence was accepted while Chrome was foreground but no menu opened.
+        // The physical Win key is unaffected; this path is for our Start click.
+        // Delegate foreground permission while the real mouse click is fresh.
+        // Do not change the foreground to an unrelated application.
+        HWND shell = GetShellWindow();
+        DWORD shellPid = 0;
+        if (shell)
+            GetWindowThreadProcessId(shell, &shellPid);
+        BOOL allowed = shellPid ? AllowSetForegroundWindow(shellPid) : FALSE;
+        LASTINPUTINFO input{sizeof(input), 0};
+        if (!visible && foreground && GetLastInputInfo(&input)) {
+            t81OpenShellFocusSource = foreground;
+            t81OpenShellFocusInput = input.dwTime;
+            t81OpenShellFocusDeadline = GetTickCount64() + 1500;
         }
-        return true;
+        bool posted = PostOpenShellRequest(visible ? 0 : 2);
+        if (!posted)
+            t81OpenShellFocusSource = nullptr;
+        Wh_Log(L"[T81-START] direct click foreground=%p pid=%lu windhawk=%d elevated=%d allow=%d posted=%d",
+               foreground, pid, identifiedWindhawk ? 1 : 0, elevated ? 1 : 0,
+               allowed ? 1 : 0, posted ? 1 : 0);
+        if (posted)
+            return true;
+        Wh_Log(L"[T81-START] direct request unavailable; trying Win input fallback");
     }
-    // ManagedShell ShellHelper.ShellKeyCombo (Apache-2.0), as used by RetroBar.
+    // ManagedShell ShellHelper.ShowStartMenu, used by RetroBar (Apache-2.0).
+    // https://github.com/cairoshell/ManagedShell/blob/855222035e927910ca53fd3215caef056337a048/src/ManagedShell.Common/Helpers/ShellHelper.cs
     INPUT keys[4]{};
     for (int i = 0; i < 4; ++i) {
         keys[i].type = INPUT_KEYBOARD;
@@ -6854,26 +7404,12 @@ static bool ToggleOpenShellStart() {
             keys[i].ki.dwFlags = KEYEVENTF_KEYUP;
     }
     UINT sent = SendInput(4, keys, sizeof(INPUT));
-    Wh_Log(L"[T81-DIAG] Open-Shell Win fallback sent=%u/4 (menu not confirmed)", sent);
+    Wh_Log(L"[T81-START] click Win sent=%u/4 foreground=%p (menu not confirmed)", sent, foreground);
+    if (sent > 0 && sent < 3)
+        SendInput(1, &keys[2], sizeof(INPUT));
     return true;
 }
-static void VerifyOpenShellRequest() {
-    if (!s || !s->bar)
-        return;
-    if (OpenShellMenuVisible()) {
-        KillTimer(s->bar, TIMER_OPENSHELL_VERIFY);
-        s->openShellRetries = 0;
-        Wh_Log(L"[T81-DIAG] Open-Shell menu visible");
-        return;
-    }
-    if (s->openShellRetries <= 0 || !PostOpenShellRequest(2)) {
-        KillTimer(s->bar, TIMER_OPENSHELL_VERIFY);
-        s->openShellRetries = 0;
-        Wh_Log(L"[T81-DIAG] Open-Shell menu not confirmed; no native toggle sent");
-        return;
-    }
-    --s->openShellRetries;
-}
+
 static bool ForegroundProcessElevated() {
     HWND foreground = GetForegroundWindow();
     DWORD pid = 0;
@@ -7106,14 +7642,64 @@ static ClockTextRows GetClockTextRows(RECT clock, int height, int dpi) {
     rows.showDate = true;
     return rows;
 }
-// Render clock text in a grayscale transparent surface at 2x resolution and
-// downsample into the existing GDI+ composition. ClearType subpixel color
-// cannot be reconstructed correctly on transparent layered windows.
+// Use the same 9-point GDI font and pixel-grid metrics as clock measurement.
+// Unlike the former 2x GDI+ supersampling/downsample, GDI hints the glyphs
+// directly at the output DPI, giving the small clock a crisper classic look.
+// Grayscale AA is intentional: ClearType's RGB fringes cannot be reconstructed
+// correctly in the black/white per-pixel layered-window composition.
 struct ClockPaintLine {
     RECT rect;
     const wchar_t* text;
 };
-static bool DrawClockTextHighQuality(HDC dc, int dpi, const std::vector<ClockPaintLine>& lines) {
+// UI-thread-only device-independent Direct2D/DirectWrite cache. The render
+// target and brush remain per-DC resources and are still recreated safely.
+static HRESULT T81ClockResources(int dpi, ID2D1Factory** factory, IDWriteFactory** write,
+                                 IDWriteTextFormat** format) {
+    if (!s || !factory || !write || !format) return E_INVALIDARG;
+    if (!s->clockD2D) s->clockD2D = LoadLibraryW(L"d2d1.dll");
+    if (!s->clockDWrite) s->clockDWrite = LoadLibraryW(L"dwrite.dll");
+    using D2DCreate = HRESULT (WINAPI*)(D2D1_FACTORY_TYPE, REFIID, const D2D1_FACTORY_OPTIONS*, void**);
+    using DWCreate = HRESULT (WINAPI*)(DWRITE_FACTORY_TYPE, REFIID, IUnknown**);
+    auto createD2D = s->clockD2D ? reinterpret_cast<D2DCreate>(GetProcAddress(s->clockD2D, "D2D1CreateFactory")) : nullptr;
+    auto createDW = s->clockDWrite ? reinterpret_cast<DWCreate>(GetProcAddress(s->clockDWrite, "DWriteCreateFactory")) : nullptr;
+    if (!createD2D || !createDW) return E_NOINTERFACE;
+    HRESULT hr = S_OK;
+    if (!s->clockFactory)
+        hr = createD2D(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory), nullptr,
+                       reinterpret_cast<void**>(&s->clockFactory));
+    if (SUCCEEDED(hr) && !s->clockWriteFactory)
+        hr = createDW(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+                      reinterpret_cast<IUnknown**>(&s->clockWriteFactory));
+    if (SUCCEEDED(hr) && s->clockTextFormat && s->clockFormatDpi != dpi) {
+        s->clockTextFormat->Release(); s->clockTextFormat = nullptr;
+    }
+    if (SUCCEEDED(hr) && !s->clockTextFormat) {
+        IDWriteTextFormat* temp = nullptr;
+        hr = s->clockWriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
+              DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, (FLOAT)(9.0 * dpi / 72.0), L"", &temp);
+        if (SUCCEEDED(hr)) hr = temp->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        if (SUCCEEDED(hr)) hr = temp->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        if (SUCCEEDED(hr)) hr = temp->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+        if (SUCCEEDED(hr)) { s->clockTextFormat = temp; s->clockFormatDpi = dpi; }
+        else if (temp) temp->Release();
+    }
+    if (FAILED(hr)) return hr;
+    *factory = s->clockFactory; (*factory)->AddRef();
+    *write = s->clockWriteFactory; (*write)->AddRef();
+    *format = s->clockTextFormat; (*format)->AddRef();
+    return S_OK;
+}
+static void T81FreeClockResources(State& state) {
+    if (state.clockTextFormat) { state.clockTextFormat->Release(); state.clockTextFormat = nullptr; }
+    if (state.clockWriteFactory) { state.clockWriteFactory->Release(); state.clockWriteFactory = nullptr; }
+    if (state.clockFactory) { state.clockFactory->Release(); state.clockFactory = nullptr; }
+    state.clockFormatDpi = 0;
+}
+// Direct2D/DirectWrite grayscale rendering on the existing GDI surface.
+// https://learn.microsoft.com/en-us/windows/win32/direct2d/direct2d-and-directwrite
+// Both black/white reconstruction passes see the same grayscale text; do not
+// use subpixel ClearType on a transparent layered surface.
+static bool DrawClockDirectWrite(HDC dc, int dpi, const std::vector<ClockPaintLine>& lines) {
     if (!dc || dpi <= 0 || lines.empty())
         return false;
     RECT bounds = lines.front().rect;
@@ -7123,49 +7709,221 @@ static bool DrawClockTextHighQuality(HDC dc, int dpi, const std::vector<ClockPai
         bounds.right = std::max(bounds.right, line.rect.right);
         bounds.bottom = std::max(bounds.bottom, line.rect.bottom);
     }
-    int width = bounds.right - bounds.left, height = bounds.bottom - bounds.top;
-    if (width <= 0 || height <= 0 || width > 2048 || height > 2048 ||
-        (size_t)width * height > 1024 * 1024)
+    if (bounds.right <= bounds.left || bounds.bottom <= bounds.top ||
+        bounds.right - bounds.left > 2048 || bounds.bottom - bounds.top > 2048)
         return false;
-    constexpr int factor = 2;
-    Bitmap surface(width * factor, height * factor, PixelFormat32bppPARGB);
-    if (surface.GetLastStatus() != Ok)
-        return false;
-    {
-        Graphics textGraphics(&surface);
-        if (textGraphics.GetLastStatus() != Ok || textGraphics.Clear(Color(0, 0, 0, 0)) != Ok)
-            return false;
-        textGraphics.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
-        FontFamily family(L"Segoe UI");
-        Gdiplus::Font font(&family, (REAL)(9.0 * dpi * factor / 72.0), FontStyleRegular, UnitPixel);
-        if (family.GetLastStatus() != Ok || font.GetLastStatus() != Ok)
-            return false;
-        StringFormat format;
-        format.SetAlignment(StringAlignmentCenter);
-        format.SetLineAlignment(StringAlignmentCenter);
-        format.SetFormatFlags(StringFormatFlagsNoWrap);
-        format.SetTrimming(StringTrimmingEllipsisCharacter);
-        SolidBrush white(Color(255, 255, 255, 255));
+    ID2D1Factory* factory = nullptr;
+    IDWriteFactory* write = nullptr;
+    ID2D1DCRenderTarget* target = nullptr;
+    IDWriteTextFormat* format = nullptr;
+    ID2D1SolidColorBrush* brush = nullptr;
+    HRESULT hr = T81ClockResources(dpi, &factory, &write, &format);
+    D2D1_RENDER_TARGET_PROPERTIES props{};
+    props.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
+    props.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    props.pixelFormat.alphaMode = D2D1_ALPHA_MODE_IGNORE;
+    props.dpiX = 96.0f;
+    props.dpiY = 96.0f;
+    if (SUCCEEDED(hr))
+        hr = factory->CreateDCRenderTarget(&props, &target);
+    if (SUCCEEDED(hr)) {
+        GdiFlush(); // finish preceding GDI drawing before Direct2D binds the DC
+        hr = target->BindDC(dc, &bounds);
+    }
+    D2D1_COLOR_F white{1.f, 1.f, 1.f, 1.f};
+    if (SUCCEEDED(hr)) hr = target->CreateSolidColorBrush(white, &brush);
+    if (SUCCEEDED(hr)) {
+        target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+        target->BeginDraw();
         for (const auto& line : lines) {
             if (!line.text || !line.text[0] || line.rect.right <= line.rect.left ||
                 line.rect.bottom <= line.rect.top)
                 continue;
-            RectF rect((REAL)((line.rect.left - bounds.left) * factor),
-                       (REAL)((line.rect.top - bounds.top) * factor),
-                       (REAL)((line.rect.right - line.rect.left) * factor),
-                       (REAL)((line.rect.bottom - line.rect.top) * factor));
-            if (textGraphics.DrawString(line.text, -1, &font, rect, &format, &white) != Ok)
-                return false;
+            D2D1_RECT_F rect{(FLOAT)(line.rect.left - bounds.left), (FLOAT)(line.rect.top - bounds.top),
+                             (FLOAT)(line.rect.right - bounds.left), (FLOAT)(line.rect.bottom - bounds.top)};
+            target->DrawText(line.text, (UINT32)wcslen(line.text), format, rect, brush,
+                             D2D1_DRAW_TEXT_OPTIONS_CLIP, DWRITE_MEASURING_MODE_NATURAL);
         }
-        textGraphics.Flush(FlushIntentionSync);
+        hr = target->EndDraw();
     }
-    Graphics target(dc);
-    if (target.GetLastStatus() != Ok)
+    if (brush) brush->Release();
+    if (format) format->Release();
+    if (target) target->Release();
+    if (write) write->Release();
+    if (factory) factory->Release();
+    return SUCCEEDED(hr);
+}
+// WPF RetroBar uses a 12-DIP Segoe UI TextBlock and Display formatting at
+// normal scale; this approximates that with DirectWrite GDI-compatible metrics
+// and grayscale coverage on an isolated DC, not a WPF implementation.
+static bool DrawWin7ClockDirectWriteMask(HDC dc, int dpi, const std::vector<ClockPaintLine>& lines) {
+    if (!dc || dpi <= 0 || lines.empty())
         return false;
-    target.SetInterpolationMode(InterpolationModeHighQualityBicubic);
-    target.SetPixelOffsetMode(PixelOffsetModeHighQuality);
-    return target.DrawImage(&surface, Rect(bounds.left, bounds.top, width, height), 0, 0,
-                            width * factor, height * factor, UnitPixel) == Ok;
+    RECT bounds = lines.front().rect;
+    for (const auto& line : lines) {
+        bounds.left = std::min(bounds.left, line.rect.left);
+        bounds.top = std::min(bounds.top, line.rect.top);
+        bounds.right = std::max(bounds.right, line.rect.right);
+        bounds.bottom = std::max(bounds.bottom, line.rect.bottom);
+    }
+    if (bounds.right <= bounds.left || bounds.bottom <= bounds.top ||
+        bounds.right - bounds.left > 2048 || bounds.bottom - bounds.top > 2048)
+        return false;
+    // Isolate Direct2D from the taskbar DC. Some DC targets clear/corrupt the
+    // destination despite reporting S_OK; the isolated black mask also lets
+    // us detect an unsupported renderer and fall back safely.
+    int w = bounds.right-bounds.left, h = bounds.bottom-bounds.top;
+    struct MaskCache { int dpi = 0, w = 0, h = 0; std::vector<RECT> rects; std::vector<std::wstring> text; std::vector<BYTE> pixels; };
+    static thread_local MaskCache cache;
+    bool same = cache.dpi == dpi && cache.w == w && cache.h == h &&
+                cache.rects.size() == lines.size() && cache.text.size() == lines.size() &&
+                cache.pixels.size() == (size_t)w*h*4;
+    for (size_t i = 0; same && i < lines.size(); ++i)
+        same = EqualRect(&cache.rects[i], &lines[i].rect) &&
+               cache.text[i] == (lines[i].text ? lines[i].text : L"");
+    if (same) {
+        Bitmap image(w, h, w*4, PixelFormat32bppPARGB, cache.pixels.data());
+        if (image.GetLastStatus() == Ok) {
+            Graphics canvas(dc);
+            canvas.SetCompositingMode(CompositingModeSourceOver);
+            bool ok = canvas.DrawImage(&image, Rect((int)bounds.left, (int)bounds.top, w, h),
+                                       0, 0, w, h, UnitPixel) == Ok;
+            canvas.Flush(FlushIntentionSync);
+            if (ok) return true;
+        }
+    }
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = w; bi.bmiHeader.biHeight = -h;
+    bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    HDC mask = CreateCompatibleDC(dc);
+    BYTE* pixels = nullptr;
+    HBITMAP dib = mask ? CreateDIBSection(dc, &bi, DIB_RGB_COLORS, (void**)&pixels, nullptr, 0) : nullptr;
+    HGDIOBJ previous = dib ? SelectObject(mask, dib) : nullptr;
+    if (!mask || !dib || !pixels || !previous || previous == HGDI_ERROR) {
+        if (dib) DeleteObject(dib); if (mask) DeleteDC(mask); return false;
+    }
+    PatBlt(mask, 0, 0, w, h, BLACKNESS);
+    auto cleanup = [&] { SelectObject(mask, previous); DeleteObject(dib); DeleteDC(mask); };
+    ID2D1Factory* factory = nullptr;
+    IDWriteFactory* write = nullptr;
+    ID2D1DCRenderTarget* target = nullptr;
+    IDWriteTextFormat* format = nullptr;
+    ID2D1SolidColorBrush* brush = nullptr;
+    HRESULT hr = T81ClockResources(dpi, &factory, &write, &format);
+    D2D1_RENDER_TARGET_PROPERTIES props{};
+    props.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
+    props.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    props.pixelFormat.alphaMode = D2D1_ALPHA_MODE_IGNORE;
+    props.dpiX = 96.0f;
+    props.dpiY = 96.0f;
+    if (SUCCEEDED(hr))
+        hr = factory->CreateDCRenderTarget(&props, &target);
+    if (SUCCEEDED(hr)) {
+        GdiFlush(); // finish preceding GDI drawing before Direct2D binds the DC
+        RECT local{0, 0, w, h};
+        hr = target->BindDC(mask, &local);
+    }
+    D2D1_COLOR_F white{1.f, 1.f, 1.f, 1.f};
+    if (SUCCEEDED(hr)) hr = target->CreateSolidColorBrush(white, &brush);
+    if (SUCCEEDED(hr)) {
+        target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+        target->BeginDraw();
+        const D2D1_COLOR_F clear{0.f, 0.f, 0.f, 1.f};
+        target->Clear(&clear);
+        for (const auto& line : lines) {
+            if (!line.text || !line.text[0] || line.rect.right <= line.rect.left ||
+                line.rect.bottom <= line.rect.top)
+                continue;
+            D2D1_RECT_F rect{(FLOAT)(line.rect.left - bounds.left), (FLOAT)(line.rect.top - bounds.top),
+                             (FLOAT)(line.rect.right - bounds.left), (FLOAT)(line.rect.bottom - bounds.top)};
+            target->DrawText(line.text, (UINT32)wcslen(line.text), format, rect, brush,
+                             D2D1_DRAW_TEXT_OPTIONS_CLIP, DWRITE_MEASURING_MODE_GDI_CLASSIC);
+        }
+        hr = target->EndDraw();
+    }
+    if (brush) brush->Release();
+    if (format) format->Release();
+    if (target) target->Release();
+    if (write) write->Release();
+    if (factory) factory->Release();
+    GdiFlush();
+    size_t visible = 0;
+    if (SUCCEEDED(hr)) {
+        for (size_t i=0; i<(size_t)w*h; ++i) {
+            BYTE* px = pixels + i*4;
+            BYTE coverage = px[1]; // grayscale green channel; premultiplied white
+            visible += coverage != 0;
+            px[0]=coverage; px[1]=coverage; px[2]=coverage; px[3]=coverage;
+        }
+    }
+    bool ok = false;
+    if (SUCCEEDED(hr) && visible) {
+        Bitmap image(w, h, w*4, PixelFormat32bppPARGB, pixels);
+        if (image.GetLastStatus() == Ok) {
+            Graphics canvas(dc);
+            canvas.SetCompositingMode(CompositingModeSourceOver);
+            ok = canvas.DrawImage(&image, Rect((int)bounds.left, (int)bounds.top, w, h),
+                                  0, 0, w, h, UnitPixel) == Ok;
+            canvas.Flush(FlushIntentionSync);
+        }
+    }
+    if (ok) {
+        try {
+            MaskCache next; next.dpi = dpi; next.w = w; next.h = h;
+            for (const auto& line : lines) {
+                next.rects.push_back(line.rect);
+                next.text.emplace_back(line.text ? line.text : L"");
+            }
+            next.pixels.assign(pixels, pixels + (size_t)w*h*4);
+            cache = std::move(next);
+        } catch (...) { /* Drawing succeeded; a cache miss is harmless. */ }
+    }
+    static bool logged = false;
+    if (!logged) {
+        Wh_Log(L"[T81-CLOCK] isolated DWrite grayscale mask=%d ink=%Id hr=0x%08lx; GDI fallback if unavailable", ok ? 1 : 0, visible, (unsigned long)hr);
+        logged = true;
+    }
+    cleanup();
+    return ok;
+}
+static bool DrawClockTextHighQuality(HDC dc, int dpi, const std::vector<ClockPaintLine>& lines) {
+    if (taskbarSkin.load() == 1) {
+        if (DrawWin7ClockDirectWriteMask(dc, dpi, lines)) return true;
+    } else if (DrawClockDirectWrite(dc, dpi, lines))
+        return true;
+    if (!dc || dpi <= 0 || lines.empty())
+        return false;
+    HFONT font = CreateTaskbarFont(dpi, true);
+    if (!font)
+        return false;
+    int saved = SaveDC(dc);
+    if (!saved) {
+        DeleteObject(font);
+        return false;
+    }
+    HGDIOBJ old = SelectObject(dc, font);
+    if (!old || old == HGDI_ERROR) {
+        RestoreDC(dc, saved);
+        DeleteObject(font);
+        return false;
+    }
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, RGB(255, 255, 255));
+    bool ok = true;
+    for (const auto& line : lines) {
+        if (!line.text || !line.text[0] || line.rect.right <= line.rect.left ||
+            line.rect.bottom <= line.rect.top)
+            continue;
+        RECT rect = line.rect;
+        if (!DrawTextW(dc, line.text, -1, &rect,
+                       DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS))
+            ok = false;
+    }
+    RestoreDC(dc, saved);
+    DeleteObject(font);
+    return ok;
 }
 static int MeasureClockWidth(HDC dc, int dpi, const wchar_t* time, const wchar_t* date,
                              bool perPixel) {
@@ -7348,7 +8106,9 @@ static void ApplyBatteryStatus(const SYSTEM_POWER_STATUS& p) {
         return;
     bool oldPresent = s->hasBattery;
     int oldPct = s->batteryPct;
-    bool oldCharge = s->charging, oldCharging = s->batteryCharging;
+    bool oldCharge = s->charging, oldCharging = s->batteryCharging, oldSaver = s->batterySaver;
+    // SYSTEM_POWER_STATUS::SystemStatusFlag is defined on Windows 10+.
+    s->batterySaver = p.SystemStatusFlag == 1;
     if (p.BatteryFlag != 255 && (p.BatteryFlag & 128)) {
         s->hasBattery = false;
         s->batteryPct = -1;
@@ -7361,7 +8121,7 @@ static void ApplyBatteryStatus(const SYSTEM_POWER_STATUS& p) {
         s->batteryCharging = p.BatteryFlag != 255 && (p.BatteryFlag & 8) != 0;
     }
     bool changed = oldPresent != s->hasBattery || oldPct != s->batteryPct ||
-                   oldCharge != s->charging || oldCharging != s->batteryCharging;
+                   oldCharge != s->charging || oldCharging != s->batteryCharging || oldSaver != s->batterySaver;
     if (!changed)
         return;
     if (s->bar)
@@ -7526,6 +8286,7 @@ static const wchar_t* EdgeName(BarEdge edge) {
 struct Layout {
     RECT start, clock, language, desktop, overflow, tray, desktopBand, linksBand, addressBand;
     int first, width, count;
+    int rows = 1, columns = 1, rowHeight = 0;
     bool labels = false;
 };
 static void RefreshNativeLabelPreference() {
@@ -7871,11 +8632,16 @@ Layout GetLayout(int w, int h) {
     int bandRight = L.first + avail;
     L.labels = s->labelMode;
     L.width = std::max(1, Px(L.labels ? 150 : T81ButtonLogicalWidth()));
-    int capacity = avail / L.width;
+    int rowUnit = std::max(1, Px(s->nativeSmallIcons ? 30 : 40));
+    L.rows = s->privateActive ? std::clamp((h + rowUnit / 2) / rowUnit, 1, 4) : 1;
+    L.rowHeight = std::max(1, h / L.rows);
+    L.columns = std::max(1, avail / L.width);
+    int capacity = (avail / L.width) * L.rows;
     if ((int)s->groups.size() > capacity && avail >= Px(34)) {
         int overflowW = Px(34);
         L.overflow = {bandRight - overflowW, 0, bandRight, h};
-        capacity = std::max(0, (avail - overflowW) / L.width);
+        L.columns = std::max(1, (avail - overflowW) / L.width);
+        capacity = ((avail - overflowW) / L.width) * L.rows;
     }
     L.count = std::min((int)s->groups.size(), capacity);
     return L;
@@ -7933,8 +8699,18 @@ void DrawBatteryGlyph(Graphics& g, float cx, float cy, float u, int pct, bool ch
                       bool dark = false) {
     if (pct >= 0 && pct <= 100) {
         int frame = charging ? 33 + (pct * 9 + 50) / 100 : (pct * 8 + 50) / 100;
-        if (DrawLegacyBattery(g, frame, cx, cy, u))
+        if (DrawLegacyBattery(g, frame, cx, cy, u)) {
+            if (s && s->batterySaver) {
+                // The 8.1 strip has no verified Windows 10 saver frame. Add a
+                // small distinct leaf as fallback, without substituting an
+                // unverified strip frame or changing the charge indication.
+                SolidBrush bg(dark ? Color(255, 255, 255, 255) : Color(255, 20, 55, 72));
+                SolidBrush leaf(dark ? Color(255, 30, 92, 57) : Color(255, 238, 255, 238));
+                g.FillEllipse(&bg, cx + 2.f*u, cy + 0.2f*u, 6.7f*u, 6.7f*u);
+                g.FillEllipse(&leaf, cx + 3.f*u, cy + 1.3f*u, 4.6f*u, 3.0f*u);
+            }
             return;
+        }
     }
     Color ink = dark ? Color(255, 30, 68, 104) : Color(255, 245, 253, 255);
     SolidBrush white(ink);
@@ -7946,6 +8722,10 @@ void DrawBatteryGlyph(Graphics& g, float cx, float cy, float u, int pct, bool ch
     const float fill = std::max(0.0f, std::min(1.0f, pct / 100.0f)) * (bw - 3 * u);
     SolidBrush level(pct <= 15 && !charging ? Color(255, 226, 70, 60) : ink);
     g.FillRectangle(&level, x + 1.5f * u, y + 1.5f * u, fill, bh - 3 * u);
+    if (s && s->batterySaver) {
+        SolidBrush leaf(ink);
+        g.FillEllipse(&leaf, cx + 3.f*u, cy + 1.3f*u, 4.6f*u, 3.f*u);
+    }
     if (charging) {
         // Keep the charge indicator outside the fill, so the level remains
         // visible even while the machine is charging.
@@ -8719,6 +9499,8 @@ struct T81RecoveryState {
     DWORD size, version, toolPid, toolTid;
     volatile LONG ready, watching, nativeHidden, startCount, workActive;
     T81RecoveryWindow native;
+    T81RecoveryWindow guardBar, guardHost;
+    volatile LONG guardEnabled, guardInFlight;
     T81RecoveryWindow starts[32];
     RECT workMonitor, workBefore, workApplied;
 };
@@ -8803,8 +9585,27 @@ static DWORD WINAPI T81RecoveryWatchdog(void*) {
         InterlockedExchange(&r->watching, 1);
         HANDLE handles[] = {g_t81WatchStop, process};
         DWORD result = WAIT_TIMEOUT;
-        while ((result = WaitForMultipleObjects(2, handles, FALSE, 100)) == WAIT_TIMEOUT &&
+        ULONGLONG lastGuardLog = 0;
+        while ((result = WaitForMultipleObjects(2, handles, FALSE, 40)) == WAIT_TIMEOUT &&
                InterlockedCompareExchange(&r->ready, 0, 0) == 1) {
+            if (InterlockedCompareExchange(&r->guardEnabled, 0, 0) != 1) continue;
+            InterlockedExchange(&r->guardInFlight, 1);
+            if (InterlockedCompareExchange(&r->guardEnabled, 0, 0) == 1 &&
+                InterlockedCompareExchange(&r->ready, 0, 0) == 1 &&
+                T81SameRecoveryWindow(r->guardBar) && r->guardBar.pid == pid &&
+                T81SameRecoveryWindow(r->guardHost) && r->guardHost.pid == pid &&
+                IsWindowVisible((HWND)r->guardBar.hwnd) &&
+                T81SameRecoveryWindow(r->native) && r->native.pid == shellPid &&
+                IsWindowVisible((HWND)r->native.hwnd)) {
+                InterlockedExchange(&r->nativeHidden, 1);
+                BOOL queued = ShowWindowAsync((HWND)r->native.hwnd, SW_HIDE);
+                ULONGLONG now = GetTickCount64();
+                if (!lastGuardLog || now - lastGuardLog >= 10000) {
+                    Wh_Log(L"[T81-NATIVE-GUARD] watchdog rehide hwnd=%p queued=%d", (HWND)r->native.hwnd, queued ? 1 : 0);
+                    lastGuardLog = now;
+                }
+            }
+            InterlockedExchange(&r->guardInFlight, 0);
         }
         if (result == WAIT_OBJECT_0 + 1 && InterlockedCompareExchange(&r->ready, 0, 0) == 1) {
             T81RestoreRecovery(r);
@@ -8915,6 +9716,10 @@ static bool StartT81RecoveryBridge(HWND native) {
     g_t81Recovery->toolPid = GetCurrentProcessId();
     g_t81Recovery->toolTid = GetCurrentThreadId();
     g_t81Recovery->native = T81RecoveryIdentity(native);
+    g_t81Recovery->guardBar = T81RecoveryIdentity(s->bar);
+    g_t81Recovery->guardHost = T81RecoveryIdentity(s->privateHost);
+    // Never hide a taskbar which was already hidden before takeover.
+    InterlockedExchange(&g_t81Recovery->guardEnabled, s->nativeWasVisible ? 1 : 0);
     InterlockedExchange(&g_t81Recovery->ready, 1);
     return true;
 }
@@ -8934,13 +9739,17 @@ static bool T81RecoveryReady() {
 }
 static void StopPrivateTray();
 static bool StartPrivateTray() {
-    if (!s || !s->bar || !s->native || !IsWindow(s->native))
+    if (!s || !s->bar || !s->native || !IsWindow(s->native)) {
+        Wh_Log(L"[T81-TRAY] takeover failed: missing bar or validated native HWND");
         return false;
+    }
     HMODULE module = nullptr;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                 GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                            (LPCWSTR)(ULONG_PTR)&PrivateTrayProc, &module))
+                            (LPCWSTR)(ULONG_PTR)&PrivateTrayProc, &module)) {
+        Wh_Log(L"[T81-TRAY] takeover failed: module error=%lu", GetLastError());
         return false;
+    }
     s->trayModule = module;
     WNDCLASSW wc{};
     wc.lpfnWndProc = PrivateTrayProc;
@@ -8956,6 +9765,7 @@ static bool StartPrivateTray() {
                         L"", WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, 0, 0, 1, 1, nullptr,
                         nullptr, module, nullptr);
     if (!s->privateHost) {
+        Wh_Log(L"[T81-TRAY] takeover failed: host creation error=%lu", GetLastError());
         UnregisterClassW((LPCWSTR)(ULONG_PTR)(WORD)(s->trayAtom), module);
         s->trayAtom = 0;
         return false;
@@ -8970,6 +9780,7 @@ static bool StartPrivateTray() {
                                            WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, 0, 0, 1, 1,
                                            s->privateHost, nullptr, module, nullptr);
     if (!s->privateNotify) {
+        Wh_Log(L"[T81-TRAY] takeover failed: notification host error=%lu", GetLastError());
         DestroyWindow(s->privateHost);
         s->privateHost = nullptr;
         if (s->notifyAtom)
@@ -9110,6 +9921,14 @@ static DWORD DesktopShellPid();
 static void StopPrivateTray() {
     if (!s)
         return;
+    // Stop the independent guard before queuing any restoration requests.
+    if (g_t81Recovery) {
+        InterlockedExchange(&g_t81Recovery->guardEnabled, 0);
+        for (int i = 0; i < 100 && InterlockedCompareExchange(&g_t81Recovery->guardInFlight, 0, 0); ++i)
+            Sleep(1);
+        if (InterlockedCompareExchange(&g_t81Recovery->nativeHidden, 0, 0))
+            s->nativeHiddenByUs = true;
+    }
     DestroyLanguageFlyout();
     // Revoke on the UI thread before icons are destroyed/OleUninitialize.
     StopTrayNotifyServer();
@@ -9170,7 +9989,7 @@ static bool IsExpectedNativeTray(HWND h) {
            !wcscmp(cls, L"Shell_TrayWnd");
 }
 static void HideNativeTrayIfVisible() {
-    if (!s || !s->privateActive || !s->bar || !IsWindow(s->bar) || !s->privateHost ||
+    if (!s || !s->privateActive || !s->bar || !IsWindow(s->bar) || !IsWindowVisible(s->bar) || !s->privateHost ||
         !IsWindow(s->privateHost))
         return;
     if (T81RecoveryReady() && s->nativeWasVisible && IsExpectedNativeTray(s->native) &&
@@ -9195,10 +10014,12 @@ static void GuardPrivateTray() {
         StopPrivateTray();
         return;
     }
+    // Hide first; geometry and z-order housekeeping can otherwise delay the
+    // asynchronous hide when Explorer briefly shows its own taskbar.
+    HideNativeTrayIfVisible();
     SetWindowPos(s->privateHost, HWND_TOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     SyncPrivateHostGeometry();
-    HideNativeTrayIfVisible();
     if (T81RecoveryReady())
         EnumWindows(HideOwnedStart, 0);
 }
@@ -9206,6 +10027,7 @@ static void GuardPrivateTray() {
 // reappear after a balloon/notification. A periodic guard remains as backup.
 static bool AttachClassicClockFrame();
 static void T81PlaceSecondaryOpenShell(HWND observed = nullptr) noexcept;
+static void T81StopOpenShellPositionForPopup(HWND popup) noexcept;
 static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG object,
                                           LONG child, DWORD, DWORD) {
     try {
@@ -9221,6 +10043,8 @@ static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK, DWORD event, HWND hwnd,
             if (GetClassNameW(hwnd, cls, (int)std::size(cls)) &&
                 !wcscmp(cls, L"OpenShell.CMenuContainer"))
                 T81PlaceSecondaryOpenShell(hwnd);
+            else if (!wcscmp(cls, L"#32768"))
+                T81StopOpenShellPositionForPopup(hwnd);
         }
         if (event == EVENT_OBJECT_SHOW && s->peekOn) {
             wchar_t startClass[64]{};
@@ -9230,7 +10054,7 @@ static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK, DWORD event, HWND hwnd,
         }
         if (event == EVENT_OBJECT_SHOW && s->privateActive && hwnd == s->native) {
             Wh_Log(L"[T81-DIAG] native bar shown: event-driven rehide");
-            GuardPrivateTray();
+            HideNativeTrayIfVisible();
             return;
         }
         // ExplorerPatcher and similar taskbars may expose a separate top-level
@@ -9264,6 +10088,46 @@ static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK, DWORD event, HWND hwnd,
         Wh_Log(L"[T81-DIAG] shell visibility event C++ exception; periodic guard remains active");
     }
 }
+// Compatibility with the explicitly named companion classes. Action Center
+// may live in the desktop Explorer, not this dedicated taskbar process. Bind
+// it to the validated owner of its registered tray icon, never an arbitrary PID.
+static bool T81IsActionTrayOwner(HWND owner, DWORD expectedPid) {
+    if (!owner || !IsWindow(owner) || !expectedPid) return false;
+    DWORD pid = 0; GetWindowThreadProcessId(owner, &pid);
+    wchar_t cls[80]{};
+    if (pid != expectedPid || !GetClassNameW(owner, cls, 80) ||
+        wcscmp(cls, L"Win7ActionCenterTrayMsgClass")) return false;
+    std::wstring image = ProcessImage(pid);
+    return !image.empty() && !_wcsicmp(PathFindFileNameW(image.c_str()), L"explorer.exe");
+}
+static bool T81ActionOwnerPid(DWORD pid) {
+    if (!s || !pid) return false;
+    for (const auto& icon : s->trayIcons)
+        if (icon.ownerPid == pid && icon.callback >= WM_USER &&
+            T81IsActionTrayOwner(icon.owner, pid)) return true;
+    return false;
+}
+static void T81DismissOwnCompanionFlyout(const wchar_t* cls) {
+    bool network = !wcscmp(cls, L"Win7NetworkFlyoutSafe");
+    bool action = !wcscmp(cls, L"Win7ActionCenterFlyoutClass");
+    if (!network && !action) return;
+    HWND window = nullptr;
+    while ((window = FindWindowExW(nullptr, window, cls, nullptr))) {
+        DWORD pid = 0; GetWindowThreadProcessId(window, &pid);
+        if (!IsWindowVisible(window) ||
+            !(network ? pid == GetCurrentProcessId() : T81ActionOwnerPid(pid))) continue;
+        // The inspected companions implement WM_CLOSE as hide. Wait a bounded
+        // time so opening the next flyout cannot race a queued close on another
+        // UI thread. A timeout/failure is logged; never broadcast the message.
+        DWORD_PTR result = 0;
+        LRESULT sent = SendMessageTimeoutW(window, WM_CLOSE, 0, 0,
+                            SMTO_ABORTIFHUNG | SMTO_BLOCK, 40, &result);
+        Wh_Log(L"[T81-FLYOUT] dismiss class=%ls pid=%lu sent=%d visible=%d err=%lu",
+               cls, pid, sent ? 1 : 0, IsWindowVisible(window) ? 1 : 0,
+               sent ? 0 : GetLastError());
+    }
+}
+static void T81DismissClockAndVolume(int exceptHit = 0);
 static void QueueActionFlyoutPosition(int index, POINT screen);
 static void SendPrivateIconEvent(int index, UINT message, POINT screen) {
     if (index < 0 || (size_t)index >= s->trayIcons.size())
@@ -9274,8 +10138,14 @@ static void SendPrivateIconEvent(int index, UINT message, POINT screen) {
     if (!icon.owner || !IsWindow(icon.owner) || !pid || pid != icon.ownerPid ||
         icon.callback < WM_USER)
         return;
-    if (message == WM_LBUTTONUP)
+    if (message == WM_LBUTTONUP) {
+        if (T81IsActionTrayOwner(icon.owner, pid)) {
+            Wh_Log(L"[T81-FLYOUT] action click owner-pid=%lu; dismissing network first", pid);
+            T81DismissOwnCompanionFlyout(L"Win7NetworkFlyoutSafe");
+            T81DismissClockAndVolume();
+        }
         QueueActionFlyoutPosition(index, screen);
+    }
     WPARAM w = icon.version > 3 ? MAKELONG((WORD)screen.x, (WORD)screen.y) : icon.id;
     LPARAM l = message | ((icon.version > 3 ? icon.id : 0) << 16);
     PostMessageW(icon.owner, icon.callback, w, l);
@@ -9746,6 +10616,8 @@ void ComputeOverflowNear(const RECT& btn, int w, int h, int& x, int& y) {
         y = btn.top - h - gapY;
     }
 
+    // One logical pixel lower; clamp afterwards on the current monitor.
+    y += std::max(1, Px(1));
     if (x < wa.left + 2)
         x = wa.left + 2;
     if (y < wa.top + 2)
@@ -9773,6 +10645,14 @@ static std::wstring NetworkStatusText(bool known, NLM_CONNECTIVITY state) {
     return Tr(L"Nessun accesso a Internet", L"No Internet access");
 }
 static std::wstring NetworkTooltipText() {
+    // The NLM COM query can block the UI. Reuse only a successful, very recent
+    // result, so repeated tray publication does not repeat the same query.
+    // A thread-local cache avoids sharing mutable data between UI threads.
+    static thread_local std::wstring cached;
+    static thread_local ULONGLONG cachedAt = 0;
+    ULONGLONG now = GetTickCount64();
+    if (cachedAt && now - cachedAt < 2000 && !cached.empty())
+        return cached;
     Wh_Log(L"[T81-DIAG] network tooltip query begin");
     INetworkListManager* manager = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_NetworkListManager, nullptr, CLSCTX_ALL,
@@ -9817,6 +10697,10 @@ static std::wstring NetworkTooltipText() {
         text += NetworkStatusText(false, NLM_CONNECTIVITY_DISCONNECTED);
     } else if (text.empty())
         text = Tr(L"Non connesso", L"Not connected");
+    if (SUCCEEDED(hr) && en && SUCCEEDED(nextStatus)) {
+        cached = text;
+        cachedAt = GetTickCount64();
+    }
     return text;
 }
 static std::wstring TrayEntryKey(int entry) {
@@ -10369,6 +11253,13 @@ static LRESULT CALLBACK PrivateOverflowProc(HWND h, UINT msg, WPARAM wp, LPARAM 
         case WM_LBUTTONDOWN: {
             POINT p{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
             int index = OverflowHit(p);
+            RECT footer = OverflowFooter();
+            if (PtInRect(&footer, p)) {
+                s->overflowFooterPressed = true;
+                SetCapture(h);
+                if (GetCapture() != h) s->overflowFooterPressed = false;
+                return 0;
+            }
             if (index != -1) {
                 BeginTrayDrag(h, index, true, p);
                 return 0;
@@ -10377,6 +11268,7 @@ static LRESULT CALLBACK PrivateOverflowProc(HWND h, UINT msg, WPARAM wp, LPARAM 
         }
         case WM_CAPTURECHANGED:
         case WM_CANCELMODE:
+            s->overflowFooterPressed = false;
             if (s->trayDrag.capture == h) {
                 Wh_Log(L"[T81-DIAG] tray-drag cancelled popup message=0x%04X active=%d", msg,
                        s->trayDrag.active ? 1 : 0);
@@ -10394,12 +11286,21 @@ static LRESULT CALLBACK PrivateOverflowProc(HWND h, UINT msg, WPARAM wp, LPARAM 
                 return 0;
             }
             RECT footer = OverflowFooter();
-            if (msg == WM_LBUTTONUP && PtInRect(&footer, p)) {
+            bool pressedFooter = s->overflowFooterPressed;
+            s->overflowFooterPressed = false;
+            if (pressedFooter && GetCapture() == h) ReleaseCapture();
+            if (msg == WM_LBUTTONUP && pressedFooter && PtInRect(&footer, p)) {
+                // Defer launch until capture release and popup dismissal have
+                // completed. Preserve the Shift shortcut and the actual click.
+                bool privateMenu = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                HWND owner = s->bar;
                 HidePrivateOverflow();
-                if (GetKeyState(VK_SHIFT) & 0x8000)
-                    ShowTrayCustomize(s->bar);
-                else
-                    OpenNotificationIconsPage(s->bar);
+                if (!PostMessageW(owner, WM_T81_OPEN_CUSTOMIZE, privateMenu ? 1 : 0, 0)) {
+                    Wh_Log(L"[T81-CUSTOMIZE] deferred launch failed error=%lu; direct fallback", GetLastError());
+                    if (privateMenu) ShowTrayCustomize(owner);
+                    else OpenNotificationIconsPage(owner);
+                } else
+                    Wh_Log(L"[T81-CUSTOMIZE] click accepted; launch queued private=%d", privateMenu ? 1 : 0);
                 return 0;
             }
             if (msg == WM_LBUTTONUP)
@@ -10475,6 +11376,9 @@ static void ShowPrivateOverflow(const RECT* suppliedAnchor = nullptr) {
         HidePrivateOverflow();
         return;
     }
+    T81DismissOwnCompanionFlyout(L"Win7ActionCenterFlyoutClass");
+    T81DismissOwnCompanionFlyout(L"Win7NetworkFlyoutSafe");
+    T81DismissClockAndVolume();
     if (!s->overflowPanel) {
         HINSTANCE instance = GetModuleHandleW(nullptr);
         WNDCLASSW wc{};
@@ -12185,6 +13089,20 @@ static void InstallCniNdrSafety(bool applyNow) {
 #endif
 }
 static DWORD WINAPI CniSafetyWorker(void*) {
+    // Preload the system CPL on this worker, so its verified call sites are
+    // ready before the first settings-page activation. Keep our reference
+    // until shutdown; never load a DLL from the current directory.
+    wchar_t dir[MAX_PATH]{};
+    HMODULE preloadedCpl = nullptr;
+    UINT n = GetSystemDirectoryW(dir, (UINT)std::size(dir));
+    if (n && n < std::size(dir)) {
+        std::wstring path = std::wstring(dir) + L"\\taskbarcpl.dll";
+        preloadedCpl = LoadLibraryW(path.c_str());
+        if (preloadedCpl) {
+            bool ready = CniVerifyTaskbarCpl(true);
+            Wh_Log(L"[T81-CNI] preload verification ready=%d", ready ? 1 : 0);
+        }
+    }
     HMODULE rpc = GetModuleHandleW(L"rpcrt4.dll");
     if (!CniModuleMatches(rpc, kCniRpcTimestamp, kCniRpcImageSize))
         InstallCniNdrSafety(true);
@@ -12207,6 +13125,8 @@ static DWORD WINAPI CniSafetyWorker(void*) {
     HMODULE pending = g_cniPendingCpl.exchange(nullptr, std::memory_order_acq_rel);
     if (pending)
         FreeLibrary(pending);
+    if (preloadedCpl)
+        FreeLibrary(preloadedCpl);
     return 0;
 }
 static void StartCniSafetyWorker() {
@@ -12713,16 +13633,17 @@ static void EndTrayDrag(HWND capture, POINT client) {
             ReorderTrayBarKey(key, anchor, after);
     } else if (clickSame) {
         if (system) {
-            // Carry the actual button-up screen point while overflow is visible.
+            // Launch while the overflow anchor is still discoverable, then
+            // dismiss it; tray drag/drop still keeps the panel open.
             LaunchSystemTrayHit(system, &p);
+            HidePrivateOverflow();
         } else {
             SendPrivateIconEvent(index, WM_LBUTTONDOWN, p);
             SendPrivateIconEvent(index, WM_LBUTTONUP, p);
             if (s->trayIcons[index].version >= 3)
                 SendPrivateIconEvent(index, NIN_SELECT, p);
+            HidePrivateOverflow();
         }
-        // Keep the overflow and its anchor visible while a flyout opens.
-        // Outside-click dismissal, explicit toggle and drag behavior are unchanged.
     }
 }
 static void DestroyPrivateOverflow() {
@@ -13692,8 +14613,10 @@ static POINT BatteryFlyoutPosition(const RECT& anchor, const RECT& work, int wid
 }
 // Uses the visual bar rather than the hidden native taskbar. Positioning is
 // best effort; never subclass or change another process's window procedure.
-static bool VisualFlyoutTarget(HWND flyout, const RECT& anchor, POINT* target) {
-    if (!s || !target || !s->bar || !IsWindow(flyout) || !IsWindowVisible(flyout))
+static bool VisualFlyoutTarget(HWND flyout, const RECT& anchor, POINT* target,
+                               bool allowHidden = false) {
+    if (!s || !target || !s->bar || !IsWindow(flyout) ||
+        (!allowHidden && !IsWindowVisible(flyout)))
         return false;
     RECT bar{}, current{};
     if (!GetWindowRect(s->bar, &bar) || !GetWindowRect(flyout, &current))
@@ -13733,9 +14656,9 @@ static bool FlyoutAtVisualTarget(HWND flyout, const RECT& anchor) {
     return VisualFlyoutTarget(flyout, anchor, &target) && GetWindowRect(flyout, &actual) &&
            std::abs(actual.left - target.x) <= 2 && std::abs(actual.top - target.y) <= 2;
 }
-static bool PlaceFlyoutAtVisualBar(HWND flyout, const RECT& anchor) {
+static bool PlaceFlyoutAtVisualBar(HWND flyout, const RECT& anchor, bool allowHidden = false) {
     POINT pos{};
-    if (!VisualFlyoutTarget(flyout, anchor, &pos))
+    if (!VisualFlyoutTarget(flyout, anchor, &pos, allowHidden))
         return false;
     UINT flags = SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE;
     DWORD tid = GetWindowThreadProcessId(flyout, nullptr);
@@ -13756,20 +14679,18 @@ static HWND FindOwnActionFlyout() {
     while ((h = FindWindowExW(nullptr, h, L"Win7ActionCenterFlyoutClass", nullptr))) {
         DWORD pid = 0;
         GetWindowThreadProcessId(h, &pid);
-        if (pid == GetCurrentProcessId() && IsWindowVisible(h))
+        if (T81ActionOwnerPid(pid) && IsWindowVisible(h))
             return h;
     }
     return nullptr;
 }
 static void QueueActionFlyoutPosition(int index, POINT screen) {
-    if (!s || !s->verticalActive || !s->bar || index < 0 || (size_t)index >= s->trayIcons.size())
+    if (!s || !s->bar || index < 0 || (size_t)index >= s->trayIcons.size())
         return;
     const auto& icon = s->trayIcons[index];
-    wchar_t cls[80]{};
     DWORD pid = 0;
     GetWindowThreadProcessId(icon.owner, &pid);
-    if (pid != GetCurrentProcessId() || !GetClassNameW(icon.owner, cls, 80) ||
-        wcscmp(cls, L"Win7ActionCenterTrayMsgClass"))
+    if (!T81IsActionTrayOwner(icon.owner, pid))
         return;
     KillTimer(s->bar, TIMER_ACTION_POSITION);
     s->actionPositionAttempts = 0;
@@ -13784,8 +14705,11 @@ static void QueueActionFlyoutPosition(int index, POINT screen) {
     if (IsRectEmpty(&r) || !PtInRect(&r, screen))
         r = RECT{screen.x, screen.y, screen.x + 1, screen.y + 1};
     s->actionAnchor = r;
-    s->actionPositionAttempts = 20;
-    SetTimer(s->bar, TIMER_ACTION_POSITION, 100, nullptr);
+    LASTINPUTINFO input{sizeof(input)};
+    s->actionInputTick = GetLastInputInfo(&input) ? input.dwTime : 0;
+    s->actionRaised = false;
+    s->actionPositionAttempts = 50;
+    SetTimer(s->bar, TIMER_ACTION_POSITION, 20, nullptr);
     Wh_Log(L"[T81-DIAG] action center companion click recognized; checking flyout placement");
 }
 // Secondary click context for mod-owned flyouts. Timeout also bounds async
@@ -14322,7 +15246,7 @@ static bool PrepareBatteryInstance(std::wstring& dllPath, std::wstring& muiPath)
     const auto& inst = s->batteryInstanceDir;
     if (!BatteryPlainDirectory(inst) || s->batteryInstanceLock == INVALID_HANDLE_VALUE)
         return false;
-    std::wstring muiDir = inst + (ItalianUI() ? L"\\it-IT" : L"\\en-US");
+    std::wstring muiDir = inst + L"\\" + SelectedBatteryLanguage().locale;
     if (!CreateDirectoryW(muiDir.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
         return false;
     if (!BatteryPlainDirectory(muiDir))
@@ -14404,7 +15328,7 @@ static void CleanOldBatteryInstances() {
         } else if (GetLastError() != ERROR_INVALID_PARAMETER)
             continue; // inaccessible is not proof of exit
         DeleteBatteryKnownFile(dir + L"\\stobject.dll");
-        for (const wchar_t* language : {L"it-IT", L"en-US"}) {
+        for (const wchar_t* language : {L"it-IT", L"en-US", L"es-ES", L"fr-FR", L"pt-PT", L"pt-BR"}) {
             std::wstring child = dir + L"\\" + language;
             if (!BatteryPlainDirectory(child))
                 continue;
@@ -14447,6 +15371,31 @@ static void ClearBatteryInitialChildFocus(HWND flyout) {
 static bool TryOriginalBatteryFlyout1511() {
     if (!s || !useOriginalBatteryFlyout.load() || s->resourceDir.empty())
         return false;
+    // ShowBatteryUI is a private initializer, not a documented toggle. Reusing
+    // it against an existing window can append another DirectUI tree. Keep a
+    // validated same-thread HWND and toggle visibility without reinitializing.
+    static HWND existingBattery = nullptr;
+    if (existingBattery && IsWindow(existingBattery)) {
+        wchar_t cls[64]{};
+        DWORD pid = 0;
+        DWORD tid = GetWindowThreadProcessId(existingBattery, &pid);
+        if (pid == GetCurrentProcessId() && tid == GetCurrentThreadId() &&
+            GetClassNameW(existingBattery, cls, 64) && !wcscmp(cls, L"BatMeterFlyout")) {
+            if (IsWindowVisible(existingBattery)) {
+                ShowWindow(existingBattery, SW_HIDE);
+                Wh_Log(L"[T81-BAT-REUSE] toggle hidden hwnd=%p", existingBattery);
+            } else {
+                PositionOriginalBatteryFlyout(existingBattery);
+                ShowWindow(existingBattery, SW_SHOW);
+                SetForegroundWindow(existingBattery);
+                ClearBatteryInitialChildFocus(existingBattery);
+                Wh_Log(L"[T81-BAT-REUSE] existing flyout shown without reinitialization hwnd=%p visible=%d",
+                       existingBattery, IsWindowVisible(existingBattery) ? 1 : 0);
+            }
+            return true;
+        }
+    }
+    existingBattery = nullptr;
     if (!Battery1511ArchitectureSupported() || !Battery1511PowerAvailable()) {
         Wh_Log(
             L"[T81-DIAG] original battery flyout skipped: architecture or power status unavailable");
@@ -14566,6 +15515,8 @@ static bool TryOriginalBatteryFlyout1511() {
     Wh_Log(L"[T81-DIAG] battery 1511 ShowBatteryUI hr=0x%08lx own-visible=%d hwnd=%p",
            (unsigned long)hr, visible ? 1 : 0, flyout);
     if (visible) {
+        existingBattery = flyout;
+        Wh_Log(L"[T81-BAT-REUSE] tracking initialized hwnd=%p", existingBattery);
         BOOL disabled = TRUE;
         DwmSetWindowAttribute(flyout, DWMWA_TRANSITIONS_FORCEDISABLED, &disabled, sizeof(disabled));
         StyleOriginalBatteryFlyout(flyout);
@@ -14668,6 +15619,37 @@ static bool RequestNativeWin8NetworkFlyout() {
 // hook before requesting the flyout, so its DWM attribute is set on creation
 // or before WM_SHOWWINDOW returns. Never change Windows-wide animation settings.
 static HHOOK t81NetworkShowHook = nullptr;
+// Immutable snapshot copied under an SRW lock: the companion runs on a
+// different thread, so never read the taskbar State from its hook.
+struct T81NetworkPlacementSnapshot {
+    RECT anchor{}, bar{}, work{};
+    int gap = 8, side = 0;
+    bool vertical = false, top = false, valid = false;
+};
+static SRWLOCK t81NetworkPlacementLock = SRWLOCK_INIT;
+static T81NetworkPlacementSnapshot t81NetworkPlacement{};
+static void T81NetworkPlaceBeforeShow(HWND window) {
+    T81NetworkPlacementSnapshot v;
+    AcquireSRWLockShared(&t81NetworkPlacementLock);
+    v = t81NetworkPlacement;
+    ReleaseSRWLockShared(&t81NetworkPlacementLock);
+    RECT r{};
+    if (!v.valid || !GetWindowRect(window, &r)) return;
+    int w = r.right - r.left, h = r.bottom - r.top;
+    if (w <= 0 || h <= 0 || w > v.work.right-v.work.left || h > v.work.bottom-v.work.top) return;
+    POINT p = BatteryFlyoutPosition(v.anchor, v.work, w, h, v.top, v.gap);
+    if (v.vertical) {
+        p.x = v.side == 1 ? v.bar.right + v.gap : v.bar.left - w - v.gap;
+        p.y = (v.anchor.top + v.anchor.bottom - h) / 2;
+        p.x = std::max((int)v.work.left, std::min((int)p.x, (int)v.work.right-w));
+        p.y = std::max((int)v.work.top, std::min((int)p.y, (int)v.work.bottom-h));
+    }
+    if (r.left != p.x || r.top != p.y) {
+        BOOL ok = SetWindowPos(window, nullptr, p.x, p.y, 0, 0,
+                               SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        Wh_Log(L"[T81-NET-PRESHOW] hwnd=%p x=%ld y=%ld accepted=%d", window, p.x, p.y, ok);
+    }
+}
 static LRESULT CALLBACK T81NetworkShowHookProc(int code, WPARAM wp, LPARAM lp) {
     if (code >= 0 && lp) {
         const auto* m = reinterpret_cast<const CWPRETSTRUCT*>(lp);
@@ -14680,6 +15662,10 @@ static LRESULT CALLBACK T81NetworkShowHookProc(int code, WPARAM wp, LPARAM lp) {
                 BOOL disabled = TRUE;
                 DwmSetWindowAttribute(m->hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, &disabled,
                                       sizeof(disabled));
+                // WM_SHOWWINDOW is delivered before showing. This hook runs
+                // on the flyout owner thread, after its own pre-show placement.
+                if (m->message == WM_SHOWWINDOW && m->wParam)
+                    T81NetworkPlaceBeforeShow(m->hwnd);
             }
         }
     }
@@ -14701,6 +15687,8 @@ static void T81PrepareNetworkShow(DWORD tid) {
             BOOL disabled = TRUE;
             HRESULT hr = DwmSetWindowAttribute(flyout, DWMWA_TRANSITIONS_FORCEDISABLED, &disabled,
                                                sizeof(disabled));
+            if (!IsWindowVisible(flyout) && s && !IsRectEmpty(&s->networkAnchor))
+                PlaceFlyoutAtVisualBar(flyout, s->networkAnchor);
             Wh_Log(L"[T81-NET] existing flyout DWM transition disable hr=0x%08lx",
                    (unsigned long)hr);
         }
@@ -14722,6 +15710,27 @@ static bool RequestWin7NetworkFlyout() {
         if (pid != GetCurrentProcessId() || !tid)
             continue;
         RECT anchor = PrivateSystemAnchor(HIT_NETWORK);
+        s->networkAnchor = anchor; // available before the show request
+        T81NetworkPlacementSnapshot placement{};
+        placement.anchor = anchor;
+        MONITORINFO mi{}; mi.cbSize = sizeof(mi);
+        if (!IsRectEmpty(&anchor) && s->bar && GetWindowRect(s->bar, &placement.bar) &&
+            GetMonitorInfoW(MonitorFromRect(&anchor, MONITOR_DEFAULTTONEAREST), &mi)) {
+            placement.work = mi.rcWork;
+            placement.vertical = s->verticalActive;
+            placement.side = s->verticalSide;
+            placement.top = s->nativeEdge == ABE_TOP;
+            placement.gap = Px(8);
+            RECT panel{};
+            POINT center{(anchor.left + anchor.right)/2, (anchor.top + anchor.bottom)/2};
+            if (placement.vertical && s->overflowPanel && IsWindowVisible(s->overflowPanel) &&
+                GetWindowRect(s->overflowPanel, &panel) && PtInRect(&panel, center))
+                placement.bar = panel;
+            placement.valid = true;
+        }
+        AcquireSRWLockExclusive(&t81NetworkPlacementLock);
+        t81NetworkPlacement = placement;
+        ReleaseSRWLockExclusive(&t81NetworkPlacementLock);
         T81PrepareNetworkShow(tid);
         if (!PostThreadMessageW(tid, WM_USER + 111, 0, 0)) {
             T81StopNetworkShowHook();
@@ -14773,6 +15782,89 @@ static BOOL CALLBACK FindVolumePopupProc(HWND h, LPARAM l) {
     c->found = h;
     return FALSE;
 }
+static void T81DismissClockAndVolume(int exceptHit) {
+    if (!s) return;
+    // The verified battery flyout is created on this taskbar UI thread.
+    // Hide only this thread's exact BatMeterFlyout, never another process's
+    // window. Keep the private DLL's reusable window alive.
+    if (exceptHit != HIT_BATTERY) {
+        HWND battery = nullptr;
+        EnumThreadWindows(GetCurrentThreadId(), FindOwnBatteryFlyout, (LPARAM)&battery);
+        if (battery && IsWindowVisible(battery)) {
+            ShowWindow(battery, SW_HIDE);
+            Wh_Log(L"[T81-FLYOUT] battery dismiss hwnd=%p visible=%d", battery,
+                   IsWindowVisible(battery) ? 1 : 0);
+        }
+    }
+    HWND clock = nullptr;
+    while ((clock = FindWindowExW(nullptr, clock, L"ClockFlyoutWindow", nullptr))) {
+        DWORD pid = 0; GetWindowThreadProcessId(clock, &pid);
+        if (exceptHit != HIT_CLOCK && pid == GetCurrentProcessId() && IsWindowVisible(clock)) PostMessageW(clock, WM_CLOSE, 0, 0);
+    }
+    // A newly launched volume window may not exist yet. Keep its short-lived
+    // watcher armed so a late SHOW can be closed when another flyout won.
+    if (exceptHit != HIT_VOLUME && s->volumeLaunchPid)
+        s->volumeDismissPending = true;
+    if (exceptHit != HIT_VOLUME && s->lastSndvolPid) {
+        std::wstring image = ProcessImage(s->lastSndvolPid);
+        if (!image.empty() && !_wcsicmp(PathFindFileNameW(image.c_str()), L"SndVol.exe")) {
+            FindVolumePopupContext ctx{s->lastSndvolPid, nullptr};
+            EnumWindows(FindVolumePopupProc, (LPARAM)&ctx);
+            if (ctx.found) PostMessageW(ctx.found, WM_CLOSE, 0, 0);
+        }
+    }
+}
+// Cache target geometry before launching SndVol. Its -f coordinate is an
+// undocumented anchor, not a documented window-top-left parameter; do not
+// substitute the cached target into the command line.
+static void T81PrepareVolumeTargetCache(const RECT& anchor) {
+    s->volumeCachedTargetValid = false;
+    int w = s->volumeLastWidth, h = s->volumeLastHeight;
+    RECT bar{};
+    if (w <= 0 || h <= 0 || IsRectEmpty(&anchor) || !GetWindowRect(s->bar, &bar)) return;
+    MONITORINFO mi{}; mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfoW(MonitorFromRect(&anchor, MONITOR_DEFAULTTONEAREST), &mi) ||
+        w > mi.rcMonitor.right - mi.rcMonitor.left || h > mi.rcMonitor.bottom - mi.rcMonitor.top)
+        return;
+    POINT pos = BatteryFlyoutPosition(anchor, mi.rcWork, w, h, s->nativeEdge == ABE_TOP, Px(8));
+    if (s->verticalActive) {
+        RECT panel{};
+        POINT center{(anchor.left + anchor.right) / 2, (anchor.top + anchor.bottom) / 2};
+        bool fromOverflow = s->overflowPanel && IsWindowVisible(s->overflowPanel) &&
+                            GetWindowRect(s->overflowPanel, &panel) && PtInRect(&panel, center);
+        RECT edge = fromOverflow ? panel : bar;
+        pos.x = s->verticalSide == 1 ? edge.right + Px(8) : edge.left - w - Px(8);
+        pos.y = (anchor.top + anchor.bottom - h) / 2;
+        pos.x = std::max((int)mi.rcWork.left, std::min((int)pos.x, (int)mi.rcWork.right-w));
+        pos.y = std::max((int)mi.rcWork.top, std::min((int)pos.y, (int)mi.rcWork.bottom-h));
+    }
+    s->volumeCachedTarget = pos;
+    s->volumeCachedBar = bar;
+    s->volumeCachedWork = mi.rcWork;
+    s->volumeCachedTargetValid = true;
+    Wh_Log(L"[T81-VOLUME-CACHE] prepared x=%ld y=%ld size=%dx%d", pos.x, pos.y, w, h);
+}
+static bool T81PlaceVolumeUsingCache(HWND window) {
+    RECT r{};
+    if (!GetWindowRect(window, &r)) return false;
+    int w = r.right-r.left, h = r.bottom-r.top;
+    RECT bar{};
+    MONITORINFO mi{}; mi.cbSize = sizeof(mi);
+    bool valid = s->volumeCachedTargetValid && w == s->volumeLastWidth && h == s->volumeLastHeight &&
+                 GetWindowRect(s->bar, &bar) && EqualRect(&bar, &s->volumeCachedBar) &&
+                 GetMonitorInfoW(MonitorFromRect(&s->volumeAnchor, MONITOR_DEFAULTTONEAREST), &mi) &&
+                 EqualRect(&mi.rcWork, &s->volumeCachedWork);
+    s->volumeLastWidth = w; s->volumeLastHeight = h;
+    if (!valid) {
+        s->volumeCachedTargetValid = false;
+        return PlaceFlyoutAtVisualBar(window, s->volumeAnchor);
+    }
+    POINT pos = s->volumeCachedTarget;
+    BOOL ok = SetWindowPos(window, nullptr, pos.x, pos.y, 0, 0,
+                           SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+    Wh_Log(L"[T81-VOLUME-CACHE] applied x=%ld y=%ld accepted=%d", pos.x, pos.y, ok);
+    return ok != FALSE;
+}
 // Observe only the newly launched SndVol process. This out-of-context event
 // is delivered on the registering UI thread after the show, not before paint.
 static void CALLBACK VolumeShowEvent(HWINEVENTHOOK hook, DWORD event, HWND hwnd, LONG object,
@@ -14785,12 +15877,17 @@ static void CALLBACK VolumeShowEvent(HWINEVENTHOOK hook, DWORD event, HWND hwnd,
         FindVolumePopupContext c{s->volumeLaunchPid, nullptr};
         FindVolumePopupProc(hwnd, (LPARAM)&c);
         if (c.found) {
+            if (s->volumeDismissPending) {
+                BOOL posted = PostMessageW(c.found, WM_CLOSE, 0, 0);
+                Wh_Log(L"[T81-FLYOUT] late volume dismiss hwnd=%p posted=%d", c.found, posted);
+                return;
+            }
             BOOL disabled = TRUE;
             HRESULT hr = DwmSetWindowAttribute(c.found, DWMWA_TRANSITIONS_FORCEDISABLED, &disabled,
                                                sizeof(disabled));
             Wh_Log(L"[T81-DIAG] volume popup show event; transition disable hr=0x%08lx",
                    (unsigned long)hr);
-            PlaceFlyoutAtVisualBar(c.found, s->volumeAnchor);
+            T81PlaceVolumeUsingCache(c.found);
         }
     } catch (...) {
         Wh_Log(L"[T81-DIAG] volume show event C++ exception; timer remains active");
@@ -14807,6 +15904,7 @@ static void StopVolumePositionWatch() {
     }
     s->volumePositionAttempts = 0;
     s->volumeLaunchPid = 0;
+    s->volumeDismissPending = false;
 }
 // Based on the launch technique in "Legacy (Win32) sound volume flyout"
 // 2.0.0 by Anixx: SndVol -f, packed screen point, CreateProcessW and
@@ -14835,6 +15933,7 @@ static bool ChooseVolumeAnchor(const RECT& r, const POINT* click, POINT* result)
 static bool LaunchSndvolAt(POINT pt, const wchar_t* source, const RECT* iconAnchor = nullptr) {
     if (!s)
         return false;
+    s->volumeDismissPending = false;
     DWORD tick = GetTickCount();
     if (s->lastSndvolTick && tick - s->lastSndvolTick < 400) {
         Wh_Log(L"[T81-DIAG] volume launch suppressed duplicate");
@@ -14853,6 +15952,10 @@ static bool LaunchSndvolAt(POINT pt, const wchar_t* source, const RECT* iconAnch
     }
     std::wstring exe = std::wstring(dir) + L"\\SndVol.exe";
     std::wstring command = L"\"" + exe + L"\" -f " + std::to_wstring((unsigned long)packed);
+    // Geometry is prepared before process creation; first launch uses fallback.
+    s->volumeAnchor = iconAnchor && !IsRectEmpty(iconAnchor)
+                          ? *iconAnchor : RECT{pt.x, pt.y, pt.x + 1, pt.y + 1};
+    T81PrepareVolumeTargetCache(s->volumeAnchor);
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
     startup.dwFlags = STARTF_FORCEOFFFEEDBACK;
@@ -14871,8 +15974,7 @@ static bool LaunchSndvolAt(POINT pt, const wchar_t* source, const RECT* iconAnch
     StopVolumePositionWatch();
     s->lastSndvolTick = tick;
     s->volumeLaunchPid = pi.dwProcessId;
-    s->volumeAnchor =
-        iconAnchor && !IsRectEmpty(iconAnchor) ? *iconAnchor : RECT{pt.x, pt.y, pt.x + 1, pt.y + 1};
+    s->lastSndvolPid = pi.dwProcessId;
     s->volumePositionAttempts = 120;
     if (pi.dwProcessId) {
         s->volumeShowHook =
@@ -15834,9 +16936,23 @@ static void LaunchSystemTrayHit(int hit, const POINT* click) {
         return;
     }
     if (hit == HIT_LANGUAGE) {
+        HidePrivateOverflow();
         ShowLanguageIndicatorMenu();
         return;
     }
+    // A click inside overflow keeps its anchor until EndTrayDrag dispatches.
+    // Otherwise close the panel before opening a system flyout.
+    RECT overflow{};
+    bool fromPanel = click && s->overflowPanel && IsWindowVisible(s->overflowPanel) &&
+                     GetWindowRect(s->overflowPanel, &overflow) && PtInRect(&overflow, *click);
+    if (!fromPanel)
+        HidePrivateOverflow();
+    if (hit == HIT_CLOCK || hit == HIT_NETWORK || hit == HIT_VOLUME || hit == HIT_BATTERY) {
+        T81DismissOwnCompanionFlyout(L"Win7ActionCenterFlyoutClass");
+        T81DismissClockAndVolume(hit);
+    }
+    if (hit != HIT_NETWORK)
+        T81DismissOwnCompanionFlyout(L"Win7NetworkFlyoutSafe");
     if (hit == HIT_CLOCK) {
         if (!preferClassicClock.load() || !OpenClassicClock())
             ShellExecuteW(s->bar, L"open", L"ms-settings:dateandtime", nullptr, nullptr,
@@ -15916,8 +17032,13 @@ int Hit(int x, int y) {
         return HIT_CLOCK;
     if (s->privateActive && PtInRect(&L.tray, p))
         return HitPrivateArea(p, L);
-    if (x >= L.first && x < L.first + L.count * L.width && y >= 0 && y < r.bottom)
-        return (x - L.first) / L.width;
+    if (x >= L.first && y >= 0 && y < r.bottom) {
+        int col = (x - L.first) / L.width;
+        int row = std::min(L.rows - 1, y / L.rowHeight);
+        int index = row * L.columns + col;
+        if (col < L.columns && index < L.count && x < L.first + L.columns * L.width)
+            return index;
+    }
     return HIT_NONE;
 }
 Color Mix(Color a, Color b, int pct) {
@@ -15941,6 +17062,11 @@ static std::vector<int> AnimatedGroupPositions(const Layout& layout) {
     if (!s)
         return positions;
     positions.reserve(layout.count);
+    if (layout.rows > 1) {
+        for (int i = 0; i < layout.count; ++i)
+            positions.push_back(layout.first + (i % layout.columns) * layout.width);
+        return positions;
+    }
     ULONGLONG now = GetTickCount64();
     ULONGLONG elapsed = s->animationTick && now >= s->animationTick ? now - s->animationTick : 16;
     s->animationTick = now;
@@ -16248,7 +17374,7 @@ static bool UpdateWin7OrbSurface(HWND bar, int cellWidth, int barHeight) {
             PatBlt(black.dc, 0, 0, side, side, BLACKNESS);
             PatBlt(white.dc, 0, 0, side, side, WHITENESS);
             int frame =
-                (s->startPressed && s->hot == HIT_START) ? 2 : (s->hot == HIT_START ? 1 : 0);
+                ((s->startPressed && s->hot == HIT_START) || T81StartMenuOn(bar)) ? 2 : (s->hot == HIT_START ? 1 : 0);
             {
                 Graphics g(black.dc);
                 DrawWin7Start(g, side, side, frame, side);
@@ -16284,6 +17410,75 @@ static void DestroyWin7OrbSurface() {
     gWin7OrbWindow = nullptr;
     UnregisterClassW(kWin7OrbClass, GetModuleHandleW(nullptr));
 }
+// Experimental per-window blur, adapted from m417z's Taskbar Background
+// Helper (GPL-3.0), https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-background-helper.wh.cpp
+// SetWindowCompositionAttribute/WCA_ACCENT_POLICY is undocumented: no DWM
+// process is hooked and no other window is modified. On by default. A
+// successful call does not guarantee visible blur, especially for layered HWNDs.
+struct T81AccentPolicy {
+    int state;
+    UINT flags;
+    COLORREF gradient;
+    LONG animation;
+};
+struct T81CompositionAttributeData {
+    int attribute;
+    void* data;
+    UINT size;
+};
+static void T81SetExperimentalBlur(HWND h) {
+    if (!h || !IsWindow(h))
+        return;
+    static const wchar_t property[] = L"WH_Taskbar81_OwnBlurEnabled";
+    // Only Aero-era skins: never change the native flat 8/8.1 or custom skin.
+    int skin = taskbarSkin.load();
+    bool enable = experimentalLiveBlur.load() && (skin == 1 || skin == 2) &&
+                  !(s && h == s->bar && s->barDragBlurSuspended);
+    if (!enable && !GetPropW(h, property))
+        return;
+    using Fn = BOOL(WINAPI*)(HWND, const T81CompositionAttributeData*);
+    static Fn set = reinterpret_cast<Fn>(GetProcAddress(GetModuleHandleW(L"user32.dll"),
+                                                         "SetWindowCompositionAttribute"));
+    if (!set) {
+        static bool logged = false;
+        if (enable && !logged) {
+            logged = true;
+            Wh_Log(L"[T81-BLUR] composition attribute unavailable; using original background");
+        }
+        return;
+    }
+    // Open-Shell's glass menu uses state 3 and flags 0x13 with an ABGR
+    // tint (MenuContainer.cpp, MIT, Open-Shell contributors):
+    // https://github.com/Open-Shell/Open-Shell-Menu/blob/729c3686d093da88ac70095aff18d09f4f1352cf/Src/StartMenu/StartMenuDLL/MenuContainer.cpp
+    // 33 percent is a starting point, not a guarantee of Win7's renderer.
+    DWORD argb = 0;
+    BOOL opaque = FALSE;
+    if (FAILED(DwmGetColorizationColor(&argb, &opaque)))
+        argb = 0x00505050;
+    if (customTaskbarColor.load())
+        argb = (DWORD)taskbarColorRgb.load();
+    DWORD r = (argb >> 16) & 255, g = (argb >> 8) & 255, b = argb & 255;
+    COLORREF tint = (COLORREF)(r | (g << 8) | (b << 16) | (84u << 24));
+    T81AccentPolicy policy{enable ? 3 : 0, enable ? 0x13u : 0u, enable ? tint : 0u, 0};
+    T81CompositionAttributeData data{19, &policy, sizeof(policy)};
+    if (set(h, &data)) {
+        if (enable)
+            SetPropW(h, property, reinterpret_cast<HANDLE>(1));
+        else
+            RemovePropW(h, property);
+    } else {
+        DWORD error = GetLastError();
+        // If a prior request had succeeded, best-effort reset only our own
+        // accent on failure. The GDI background is always drawn regardless.
+        if (enable && GetPropW(h, property)) {
+            T81AccentPolicy reset{0, 0, 0, 0};
+            T81CompositionAttributeData resetData{19, &reset, sizeof(reset)};
+            if (set(h, &resetData))
+                RemovePropW(h, property);
+        }
+        Wh_Log(L"[T81-BLUR] request failed hwnd=%p error=%lu; original background retained", h, error);
+    }
+}
 static void ConfigureBarAlpha(HWND h, bool perPixel) {
     if (!s || !h)
         return;
@@ -16302,12 +17497,61 @@ static void ConfigureBarAlpha(HWND h, bool perPixel) {
         if (!s->legacyAlphaReady)
             Wh_Log(L"[T81-DIAG] could not apply legacy bar alpha error=%lu", GetLastError());
     }
+    T81SetExperimentalBlur(h);
+}
+// Use only the seventh frame for a flashing notification. All other states
+// fall through to the original renderer; missing art uses the original cue.
+static bool DrawUserTaskTexture(Graphics& g, const RECT& cell, bool attention, bool vertical) {
+    if (!attention || !s || !s->taskStateSprite ||
+        (taskbarSkin.load() != 3 && taskbarSkin.load() != 4))
+        return false;
+    auto save = g.Save();
+    if (vertical) {
+        // Rotate only the background, not the app icon or text.
+        g.TranslateTransform((REAL)cell.right, (REAL)cell.top);
+        g.RotateTransform(90.f);
+    }
+    int left = vertical ? 0 : (int)cell.left;
+    int top = vertical ? 0 : (int)cell.top;
+    int width = vertical ? (int)(cell.bottom - cell.top) : (int)(cell.right - cell.left);
+    int height = vertical ? (int)(cell.right - cell.left) : (int)(cell.bottom - cell.top);
+    if (width < 4 || height < 4) { g.Restore(save); return false; }
+    int dx = std::min(std::max(1, Px(2)), width / 2);
+    int dy = std::min(std::max(1, Px(2)), height / 2);
+    int sx[4] = {0, 2, 58, 60}, sy[4] = {0, 2, 38, 40};
+    int x[4] = {left, left + dx, left + width - dx, left + width};
+    int y[4] = {top, top + dy, top + height - dy, top + height};
+    g.SetInterpolationMode(InterpolationModeNearestNeighbor);
+    g.SetPixelOffsetMode(PixelOffsetModeHalf);
+    bool success = true;
+    for (int row = 0; row < 3; ++row)
+        for (int col = 0; col < 3; ++col) {
+            int dw = x[col + 1] - x[col], dh = y[row + 1] - y[row];
+            if (dw && dh && g.DrawImage(s->taskStateSprite, Rect(x[col], y[row], dw, dh),
+                     sx[col], sy[row], sx[col + 1] - sx[col],
+                     sy[row + 1] - sy[row], UnitPixel) != Ok)
+                success = false;
+        }
+    g.Restore(save);
+    return success;
 }
 static void DrawActiveReferenceTile(Graphics& g, int x, int width, int height, float fade) {
     int edge = std::max(1, Px(1));
     int tileWidth = std::max(1, width - edge);
     if (tileWidth <= 4 * edge || height <= 4 * edge)
         return;
+    // Windows 8/8.1: active and inactive task buttons use the same
+    // one-pixel frame geometry; only the brightness/fill distinguishes them.
+    if (taskbarSkin.load() == 3 || taskbarSkin.load() == 4) {
+        int extra = (int)std::lround(12 * std::max(0.f, std::min(1.f, fade)));
+        LinearGradientBrush fill(Point(x, 0), Point(x, height),
+                                 Color(std::min(255, 70 + extra), 255, 255, 255),
+                                 Color(std::min(255, 100 + extra), 255, 255, 255));
+        g.FillRectangle(&fill, x, 0, tileWidth, height);
+        Pen border(Color(230, 255, 255, 255), 1);
+        g.DrawRectangle(&border, x, 0, std::max(1, tileWidth - 1), std::max(1, height - 1));
+        return;
+    }
     // Separate gradient and borders, rather than a single faint stroke.
     int extra = (int)std::lround(12 * std::max(0.f, std::min(1.f, fade)));
     LinearGradientBrush fill(Point(x, 0), Point(x, height),
@@ -16556,6 +17800,18 @@ static void DrawBetaHotTrack(Graphics& g, const RECT& cell, int index, float fad
         return;
     DrawIconHotGlow(g, cell, index, fade, p);
 }
+static void DrawFlatPinnedHover(Graphics& g, const RECT& cell, float fade, UINT dpi = 0) {
+    fade = std::max(0.f, std::min(1.f, fade));
+    int edge = std::max(1, dpi ? MulDiv(1, (int)dpi, 96) : Px(1));
+    int width = std::max(1, (int)(cell.right-cell.left) - edge);
+    int height = (int)(cell.bottom-cell.top);
+    if (height <= 0) return;
+    SolidBrush fill(Color((int)std::lround(77 * fade), 255, 255, 255));
+    g.FillRectangle(&fill, cell.left, cell.top, width, height);
+    Pen border(Color((int)std::lround(125 * fade), 255, 255, 255), 1);
+    g.DrawRectangle(&border, (int)cell.left, (int)cell.top,
+                    std::max(1, width-1), std::max(1, height-1));
+}
 static int TaskTileLayers(size_t windows) {
     return (int)std::min<size_t>(windows, 3);
 }
@@ -16715,7 +17971,8 @@ static void DrawBarForeground(HDC mem, const Layout& L, int w, int h, const std:
     {
         Graphics g(mem);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
-        const bool startDown = s->startPressed && s->hot == HIT_START;
+        const bool startDown = (s->startPressed && s->hot == HIT_START) ||
+                               (taskbarSkin.load() == 1 && T81StartMenuOn(s->bar));
         if (!startHotCorner.load()) {
             if (taskbarSkin.load() == 1 && (s->win7StartImage || s->betaTexture[30])) {
                 if (!gWin7OrbReady)
@@ -16760,6 +18017,10 @@ static void DrawBarForeground(HDC mem, const Layout& L, int w, int h, const std:
             }
         for (int i : drawOrder) {
             int x = xs[i];
+            int rowTop = (i / L.columns) * L.rowHeight;
+            int rowHeight = i / L.columns == L.rows - 1 ? h - rowTop : L.rowHeight;
+            auto rowTransform = g.Save();
+            g.TranslateTransform(0, (REAL)rowTop);
             bool active = false;
             for (size_t idx : s->groups[i].tasks)
                 if (s->tasks[idx].hwnd == fg) {
@@ -16768,7 +18029,7 @@ static void DrawBarForeground(HDC mem, const Layout& L, int w, int h, const std:
                 }
             const bool running = !s->groups[i].tasks.empty();
             const float fade = GroupHoverFade(i);
-            RECT cell{x, 0, x + L.width, h};
+            RECT cell{x, 0, x + L.width, rowHeight};
             const auto* transition = LiveButtonTransition(s->groups[i].key);
             auto savedClip = g.Save();
             if (transition && transition->reveal) {
@@ -16786,7 +18047,7 @@ static void DrawBarForeground(HDC mem, const Layout& L, int w, int h, const std:
             bool attention = GroupNeedsAttention((size_t)i);
             if (running && layers > 1 && BetaTextureAvailable(2)) {
                 auto rear = g.Save();
-                g.SetClip(Rect(front.right, 0, cell.right - front.right, h), CombineModeIntersect);
+                g.SetClip(Rect(front.right, 0, cell.right - front.right, rowHeight), CombineModeIntersect);
                 for (int level = layers - 1; level >= 1; --level) {
                     RECT slab{cell.left + level * step, cell.top, front.right + level * step,
                               cell.bottom};
@@ -16795,22 +18056,29 @@ static void DrawBarForeground(HDC mem, const Layout& L, int w, int h, const std:
                 }
                 g.Restore(rear);
             }
-            bool betaTask = DrawBetaTaskState(g, front, running, active, s->hot == i, pressed,
-                                              attention, false, layers > 1);
+            bool betaTask = DrawUserTaskTexture(g, cell, attention, false);
+            if (!betaTask)
+                betaTask = DrawBetaTaskState(g, front, running, active, s->hot == i, pressed,
+                                             attention, false, layers > 1);
             if (betaTask) {
                 // The texture renderer already painted this state.
             } else if (running) {
-                DrawTaskTileStack(g, x, L.width, h, TaskTileLayers(s->groups[i].tasks.size()),
+                DrawTaskTileStack(g, x, L.width, rowHeight, TaskTileLayers(s->groups[i].tasks.size()),
                                   active, fade);
             } else if (fade > 0.001f) {
-                RECT tile{x, 0, x + L.width, h};
-                DrawTrayHoverTile(g, tile, true, fade);
+                RECT tile{x, 0, x + L.width, rowHeight};
+                if (taskbarSkin.load() == 3 || taskbarSkin.load() == 4)
+                    DrawFlatPinnedHover(g, tile, fade);
+                else
+                    DrawTrayHoverTile(g, tile, true, fade);
             }
             if (running && s->hot == i) {
                 if (taskbarSkin.load() == 1) {
                     POINT cursor{};
-                    if (GetCursorPos(&cursor) && ScreenToClient(s->bar, &cursor))
+                    if (GetCursorPos(&cursor) && ScreenToClient(s->bar, &cursor)) {
+                        cursor.y -= rowTop;
                         DrawIconHotGlow(g, cell, i, fade, cursor);
+                    }
                 } else if (betaTask)
                     DrawBetaHotTrack(g, cell, i, fade);
             }
@@ -16819,8 +18087,9 @@ static void DrawBarForeground(HDC mem, const Layout& L, int w, int h, const std:
             if (!betaTask && GroupNeedsAttention((size_t)i)) {
                 SolidBrush attention(Color(125, 255, 140, 20));
                 g.FillRectangle(&attention, x + Px(2), Px(2), std::max(1, L.width - Px(4)),
-                                std::max(1, h - Px(4)));
+                                std::max(1, rowHeight - Px(4)));
             }
+            g.Restore(rowTransform);
         }
         g.ResetClip();
         if (s->dragActive && s->dragInsertion >= 0) {
@@ -16828,7 +18097,9 @@ static void DrawBarForeground(HDC mem, const Layout& L, int w, int h, const std:
             SolidBrush caret(Color(220, 255, 255, 255));
             g.FillRectangle(&caret, marker - 1, Px(4), std::max(1, Px(2)), std::max(1, h - Px(8)));
         }
-        if (BetaTextureAvailable(0) && !IsRectEmpty(&L.desktop)) {
+        if (taskbarSkin.load() == 1 && !IsRectEmpty(&L.desktop)) {
+            DrawWin7StylerPeek(g, L.desktop, s->hot == HIT_DESKTOP, s->betaDesktopPressed, Dpi());
+        } else if (BetaTextureAvailable(0) && !IsRectEmpty(&L.desktop)) {
             DrawBetaTexture(g, 0, L.desktop);
             if (s->hot == HIT_DESKTOP) {
                 SolidBrush overlay(Color(s->betaDesktopPressed ? 42 : 26, 255, 255, 255));
@@ -16860,7 +18131,7 @@ static void DrawBarForeground(HDC mem, const Layout& L, int w, int h, const std:
             DrawArrowHover(g, BandArrowRect(L.linksBand));
     }
     // GDI is used only for native HICONs and system-font text on the GDI+ surface.
-    int icon = std::max(1, std::min(Px(s->nativeSmallIcons ? 16 : 32), h - Px(6)));
+    int icon = std::max(1, std::min(Px(s->nativeSmallIcons ? 16 : 32), L.rowHeight - Px(6)));
     ScopedSavedDC savedDc(mem);
     IntersectClipRect(mem, L.first, 0, L.tray.left, h);
     for (const auto& t : s->buttonTransitions)
@@ -16874,14 +18145,16 @@ static void DrawBarForeground(HDC mem, const Layout& L, int w, int h, const std:
         }
     for (int i : drawOrder) {
         int x = xs[i], ix = L.labels ? x + Px(10) : x + (L.width - icon) / 2;
+        int rowTop = (i / L.columns) * L.rowHeight;
+        int rowHeight = i / L.columns == L.rows - 1 ? h - rowTop : L.rowHeight;
         ScopedSavedDC clip(mem);
         const auto* t = LiveButtonTransition(s->groups[i].key);
         if (t && t->reveal) {
             RECT c =
-                ButtonRevealRect(RECT{x, 0, x + L.width, h}, ButtonTransitionFraction(*t), false);
+                ButtonRevealRect(RECT{x, rowTop, x + L.width, rowTop + rowHeight}, ButtonTransitionFraction(*t), false);
             IntersectClipRect(mem, c.left, c.top, c.right, c.bottom);
         }
-        DrawIconEx(mem, ix, (h - icon) / 2, GroupIcon(i), icon, icon, 0, nullptr, DI_NORMAL);
+        DrawIconEx(mem, ix, rowTop + (rowHeight - icon) / 2, GroupIcon(i), icon, icon, 0, nullptr, DI_NORMAL);
     }
     HFONT font = CreateTaskbarFont(Dpi(), s->perPixelBar);
     std::unique_ptr<std::remove_pointer<HFONT>::type, DeleteFontHandle> fontGuard(font);
@@ -16902,11 +18175,13 @@ static void DrawBarForeground(HDC mem, const Layout& L, int w, int h, const std:
     if (L.labels)
         for (int i : drawOrder) {
             int x = xs[i];
-            RECT t{x + Px(10) + icon + Px(6), 1, x + L.width - Px(4), h - 1};
+            int rowTop = (i / L.columns) * L.rowHeight;
+            int rowHeight = i / L.columns == L.rows - 1 ? h - rowTop : L.rowHeight;
+            RECT t{x + Px(10) + icon + Px(6), rowTop + 1, x + L.width - Px(4), rowTop + rowHeight - 1};
             ScopedSavedDC clip(mem);
             const auto* transition = LiveButtonTransition(s->groups[i].key);
             if (transition && transition->reveal) {
-                RECT c = ButtonRevealRect(RECT{x, 0, x + L.width, h},
+                RECT c = ButtonRevealRect(RECT{x, rowTop, x + L.width, rowTop + rowHeight},
                                           ButtonTransitionFraction(*transition), false);
                 IntersectClipRect(mem, c.left, c.top, c.right, c.bottom);
             }
@@ -17000,7 +18275,29 @@ static void DrawBarForeground(HDC mem, const Layout& L, int w, int h, const std:
         PaintPrivateArea(trayGraphics, mem, L, h);
     }
 }
+// Aggregate actual hover paint costs, not task enumeration/startup timings.
+struct T81HoverPaintMeasure {
+    ULONGLONG start = GetTickCount64();
+    bool hover;
+    const wchar_t* orientation;
+    T81HoverPaintMeasure(bool active, const wchar_t* label) : hover(active), orientation(label) {}
+    ~T81HoverPaintMeasure() {
+        if (!hover) return;
+        struct Stats { ULONGLONG since = 0, total = 0, peak = 0; unsigned count = 0; };
+        static thread_local Stats stats;
+        ULONGLONG now = GetTickCount64(), elapsed = now - start;
+        if (!stats.count) stats.since = start;
+        ++stats.count; stats.total += elapsed; stats.peak = std::max(stats.peak, elapsed);
+        if (now - stats.since >= 2000) {
+            Wh_Log(L"[T81-HOVER-PAINT] orientation=%s frames=%u avg=%llu max=%llu ms perPixel=%d",
+                   orientation, stats.count, stats.total / stats.count, stats.peak,
+                   s && s->perPixelBar ? 1 : 0);
+            stats = Stats{};
+        }
+    }
+};
 void Paint(HWND hwnd) {
+    T81HoverPaintMeasure hoverMeasure(s && s->hot >= 0, L"horizontal");
     s->buttonPaintTick = GetTickCount64();
     ScopedPaintDC paint(hwnd);
     HDC dc = paint.dc;
@@ -17048,6 +18345,7 @@ void Paint(HWND hwnd) {
             {
                 Graphics g(bg.dc);
                 PaintTaskbarBackground(g, w, h);
+
             }
             PatBlt(black.dc, 0, 0, w, h, BLACKNESS);
             PatBlt(white.dc, 0, 0, w, h, WHITENESS);
@@ -17089,6 +18387,7 @@ void Paint(HWND hwnd) {
             {
                 Graphics g(mem.get());
                 PaintTaskbarBackground(g, w, h);
+
             }
             DrawBarForeground(mem.get(), L, w, h, xs, drawOrder, foreground, time, date);
             BitBlt(dc, 0, 0, w, h, mem.get(), 0, 0, SRCCOPY);
@@ -17363,8 +18662,14 @@ static void DrawPreviewForeground(HDC mem, RECT r) {
                 if ((taskbarSkin.load() == 1 || taskbarSkin.load() == 2) &&
                     BetaTextureAvailable(8)) {
                     RECT button = PreviewCloseButtonRect(item);
-                    Rect dst(button.left, button.top, button.right - button.left,
-                             button.bottom - button.top);
+                    // Only the Windows 8 beta thumbnail close artwork is 1.3%
+                    // smaller, centered. Keep the existing enlarged hit target.
+                    const float scale = taskbarSkin.load() == 2 ? 0.987f : 1.f;
+                    const float bw = (float)(button.right - button.left);
+                    const float bh = (float)(button.bottom - button.top);
+                    RectF dst((REAL)button.left + bw * (1.f-scale) / 2.f,
+                              (REAL)button.top + bh * (1.f-scale) / 2.f,
+                              bw * scale, bh * scale);
                     // Scale the same artwork used by the Jump List with GDI+.
                     auto savedClose = g.Save();
                     g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
@@ -17373,11 +18678,11 @@ static void DrawPreviewForeground(HDC mem, RECT r) {
                     Image* normal = s->betaTexture[8];
                     Image* pressed = BetaTextureAvailable(10) ? s->betaTexture[10] : normal;
                     if (down)
-                        g.DrawImage(pressed, dst, 0, 0, (int)pressed->GetWidth(),
-                                    (int)pressed->GetHeight(), UnitPixel);
+                        g.DrawImage(pressed, dst, 0.f, 0.f, (REAL)pressed->GetWidth(),
+                                    (REAL)pressed->GetHeight(), UnitPixel);
                     else {
-                        g.DrawImage(normal, dst, 0, 0, (int)normal->GetWidth(),
-                                    (int)normal->GetHeight(), UnitPixel);
+                        g.DrawImage(normal, dst, 0.f, 0.f, (REAL)normal->GetWidth(),
+                                    (REAL)normal->GetHeight(), UnitPixel);
                         if (BetaTextureAvailable(9) && s->win7PreviewCloseFade > 0.f) {
                             float a = std::max(0.f, std::min(1.f, s->win7PreviewCloseFade));
                             // A small RGB lift makes hover slightly lighter; alpha
@@ -17391,8 +18696,8 @@ static void DrawPreviewForeground(HDC mem, RECT r) {
                             attr.SetColorMatrix(&cm);
                             attr.SetWrapMode(WrapModeTileFlipXY);
                             Image* over = s->betaTexture[9];
-                            g.DrawImage(over, dst, 0, 0, (int)over->GetWidth(),
-                                        (int)over->GetHeight(), UnitPixel, &attr);
+                            g.DrawImage(over, dst, 0.f, 0.f, (REAL)over->GetWidth(),
+                                        (REAL)over->GetHeight(), UnitPixel, &attr);
                         }
                     }
                     g.Restore(savedClose);
@@ -17466,11 +18771,23 @@ static void DrawPreviewForeground(HDC mem, RECT r) {
             RECT x = PreviewCloseButtonRect(item);
             DrawPreviewCloseCross(mem, x, RGB(255, 255, 255));
         }
-        if (!item.thumbnail && item.icon) {
-            int sz = Px(32);
-            DrawIconEx(mem, (item.cell.left + item.cell.right - sz) / 2,
-                       (item.cell.top + item.cell.bottom - sz) / 2, item.icon, sz, sz, 0, nullptr,
-                       DI_NORMAL);
+        if (!item.thumbnail) {
+            // Keep each failed source individually identifiable and clickable
+            // when other windows in the group still have live thumbnails.
+            RECT tip{item.cell.left + Px(9), item.cell.top + Px(34),
+                     item.cell.right - Px(9), item.cell.bottom - Px(9)};
+            int tipHeight = std::min(Px(44), (int)(tip.bottom - tip.top));
+            int mid = (tip.top + tip.bottom) / 2;
+            tip.top = mid - tipHeight / 2;
+            tip.bottom = tip.top + tipHeight;
+            FillRect(mem, &tip, GetSysColorBrush(COLOR_INFOBK));
+            FrameRect(mem, &tip, GetSysColorBrush(COLOR_INFOTEXT));
+            RECT label = tip;
+            InflateRect(&label, -Px(5), -Px(3));
+            COLORREF previous = SetTextColor(mem, GetSysColor(COLOR_INFOTEXT));
+            DrawTextW(mem, item.title.c_str(), -1, &label,
+                      DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+            SetTextColor(mem, previous);
         }
     }
     if (oldFont)
@@ -17489,6 +18806,7 @@ static void ConfigurePreviewAlpha(HWND h, bool perPixel) {
     SetWindowLongPtrW(h, GWL_EXSTYLE, style);
     s->perPixelPreview = perPixel;
     s->previewPixelFrame = false;
+    // Deliberately do not apply taskbar blur to thumbnail preview hosts.
 }
 static void PaintPreview(HWND h) {
     PAINTSTRUCT ps{};
@@ -18126,7 +19444,7 @@ static void ShowPinTooltip(int group) {
     GetClientRect(s->bar, &client);
     Layout layout = GetLayout(client.right, client.bottom);
     ShowInfoTooltip(GroupTitle((size_t)group),
-                    bar.left + layout.first + group * layout.width + layout.width / 2);
+                    bar.left + layout.first + (group % layout.columns) * layout.width + layout.width / 2);
 }
 static void ShowSystemTooltip(int hit) {
     if (!s || !s->bar)
@@ -18253,8 +19571,10 @@ void ShowPreviewPage(int group, int offset) {
                                      kPreviewClass, L"Taskbar preview", WS_POPUP, 0, 0, 10, 10,
                                      nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
     }
-    if (!s->preview)
+    if (!s->preview) {
+        ShowPinTooltip(group);
         return;
+    }
     ConfigurePreviewAlpha(s->preview, perPixelPreview.load());
     ExcludeFromPeek(s->preview);
     Group g = s->groups[group];
@@ -18286,7 +19606,7 @@ void ShowPreviewPage(int group, int offset) {
     int cellW = std::max(1, std::min(Px(taskbarSkin.load() == 1 ? 182 : 188),
                                      (available - gap - columns * gap) / columns));
     int width = gap + columns * (cellW + gap), height = gap + rows * (cellH + gap);
-    int center = barRect.left + layout.first + group * layout.width + layout.width / 2;
+    int center = barRect.left + layout.first + (group % layout.columns) * layout.width + layout.width / 2;
     int x =
         std::max((int)mi.rcWork.left, std::min(center - width / 2, (int)mi.rcWork.right - width));
     int y = s->nativeEdge == ABE_TOP ? barRect.bottom + Px(2) : barRect.top - height - Px(2);
@@ -18318,74 +19638,107 @@ void ShowPreviewPage(int group, int offset) {
         item.hwnd = task.hwnd;
         GetWindowThreadProcessId(task.hwnd, &item.processId);
         item.icon = task.icon ? CopyIcon(task.icon) : nullptr;
-        item.title = task.title;
+        item.title = task.title.empty() ? GroupTitle((size_t)group) : task.title;
         item.cell = {gap + col * (cellW + gap), gap + row * (cellH + gap),
                      gap + col * (cellW + gap) + cellW, gap + row * (cellH + gap) + cellH};
         item.thumbnail = nullptr;
-        if (IsWindow(task.hwnd) &&
-            SUCCEEDED(DwmRegisterThumbnail(s->preview, task.hwnd, &item.thumbnail)) &&
-            item.thumbnail) {
+        BOOL composition = TRUE;
+        HRESULT compositionResult = DwmIsCompositionEnabled(&composition);
+        HRESULT registration = E_FAIL;
+        if (IsWindow(task.hwnd) && (FAILED(compositionResult) || composition))
+            registration = DwmRegisterThumbnail(s->preview, task.hwnd, &item.thumbnail);
+        if (FAILED(registration)) {
+            item.thumbnail = nullptr;
+            Wh_Log(L"[T81-PREVIEW] thumbnail registration unavailable hwnd=%p hr=0x%08lX composition=%d",
+                   task.hwnd, (unsigned long)registration, composition ? 1 : 0);
+        }
+        if (SUCCEEDED(registration) && item.thumbnail) {
             SIZE src{};
-            RECT sourceCrop{}, windowRect{}, frameRect{};
-            bool crop = false;
-            const bool win7 = taskbarSkin.load() == 1;
-            RECT dst{item.cell.left + Px(win7 ? 7 : 5), item.cell.top + Px(win7 ? 33 : 24),
-                     item.cell.right - Px(win7 ? 7 : 5), item.cell.bottom - Px(win7 ? 7 : 5)};
-            if (SUCCEEDED(DwmQueryThumbnailSourceSize(item.thumbnail, &src)) && src.cx > 0 &&
-                src.cy > 0) {
-                if (GetWindowRect(task.hwnd, &windowRect) &&
-                    SUCCEEDED(DwmGetWindowAttribute(task.hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
-                                                    &frameRect, sizeof(frameRect))))
-                    crop = ThumbnailVisibleSource(src, windowRect, frameRect, Px(24), &sourceCrop);
-                int sw = crop ? sourceCrop.right - sourceCrop.left : src.cx;
-                int sh = crop ? sourceCrop.bottom - sourceCrop.top : src.cy;
-                int maxW = dst.right - dst.left, maxH = dst.bottom - dst.top;
-                int tw = maxW, th = MulDiv(sh, tw, sw);
-                if (th > maxH) {
-                    th = maxH;
-                    tw = MulDiv(sw, th, sh);
-                }
-                dst.left += (maxW - tw) / 2;
-                dst.top += (maxH - th) / 2;
-                dst.right = dst.left + tw;
-                dst.bottom = dst.top + th;
-            }
-            DWM_THUMBNAIL_PROPERTIES prop{};
-            prop.dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_VISIBLE | DWM_TNP_OPACITY;
-            if (crop) {
-                prop.dwFlags |= DWM_TNP_RECTSOURCE;
-                prop.rcSource = sourceCrop;
-            }
-            prop.rcDestination = dst;
-            prop.fVisible = TRUE;
-            prop.opacity = 255;
-            HRESULT update = DwmUpdateThumbnailProperties(item.thumbnail, &prop);
-            if (FAILED(update) && crop) {
-                // A source rectangle can be rejected on some builds; retry
-                // the complete thumbnail before dropping the live preview.
-                prop.dwFlags &= ~DWM_TNP_RECTSOURCE;
-                RECT full{item.cell.left + Px(win7 ? 7 : 5), item.cell.top + Px(win7 ? 33 : 24),
-                          item.cell.right - Px(win7 ? 7 : 5), item.cell.bottom - Px(win7 ? 7 : 5)};
-                int maxW = full.right - full.left, maxH = full.bottom - full.top;
-                int tw = maxW, th = MulDiv(src.cy, tw, src.cx);
-                if (th > maxH) {
-                    th = maxH;
-                    tw = MulDiv(src.cx, th, src.cy);
-                }
-                full.left += (maxW - tw) / 2;
-                full.top += (maxH - th) / 2;
-                full.right = full.left + tw;
-                full.bottom = full.top + th;
-                prop.rcDestination = full;
-                update = DwmUpdateThumbnailProperties(item.thumbnail, &prop);
-            }
-            if (FAILED(update)) {
+            HRESULT sizeResult = DwmQueryThumbnailSourceSize(item.thumbnail, &src);
+            if (FAILED(sizeResult) || src.cx <= 0 || src.cy <= 0) {
+                Wh_Log(L"[T81-PREVIEW] thumbnail source unavailable hwnd=%p hr=0x%08lX size=%ldx%ld",
+                       task.hwnd, (unsigned long)sizeResult, src.cx, src.cy);
                 DwmUnregisterThumbnail(item.thumbnail);
                 item.thumbnail = nullptr;
-            } else if (win7)
-                item.win7ThumbnailRect = prop.rcDestination;
+            } else {
+                RECT sourceCrop{}, windowRect{}, frameRect{};
+                bool crop = false;
+                const bool win7 = taskbarSkin.load() == 1;
+                RECT dst{item.cell.left + Px(win7 ? 7 : 5), item.cell.top + Px(win7 ? 33 : 24),
+                         item.cell.right - Px(win7 ? 7 : 5), item.cell.bottom - Px(win7 ? 7 : 5)};
+                {
+                    if (GetWindowRect(task.hwnd, &windowRect) &&
+                        SUCCEEDED(DwmGetWindowAttribute(task.hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                                        &frameRect, sizeof(frameRect))))
+                        crop = ThumbnailVisibleSource(src, windowRect, frameRect, Px(24), &sourceCrop);
+                    int sw = crop ? sourceCrop.right - sourceCrop.left : src.cx;
+                    int sh = crop ? sourceCrop.bottom - sourceCrop.top : src.cy;
+                    int maxW = dst.right - dst.left, maxH = dst.bottom - dst.top;
+                    int tw = maxW, th = MulDiv(sh, tw, sw);
+                    if (th > maxH) {
+                        th = maxH;
+                        tw = MulDiv(sw, th, sh);
+                    }
+                    dst.left += (maxW - tw) / 2;
+                    dst.top += (maxH - th) / 2;
+                    dst.right = dst.left + tw;
+                    dst.bottom = dst.top + th;
+                }
+                DWM_THUMBNAIL_PROPERTIES prop{};
+                prop.dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_VISIBLE | DWM_TNP_OPACITY;
+                if (crop) {
+                    prop.dwFlags |= DWM_TNP_RECTSOURCE;
+                    prop.rcSource = sourceCrop;
+                }
+                prop.rcDestination = dst;
+                prop.fVisible = TRUE;
+                prop.opacity = 255;
+                HRESULT update = DwmUpdateThumbnailProperties(item.thumbnail, &prop);
+                if (FAILED(update) && crop) {
+                    // A source rectangle can be rejected on some builds; retry
+                    // the complete thumbnail before dropping the live preview.
+                    prop.dwFlags &= ~DWM_TNP_RECTSOURCE;
+                    RECT full{item.cell.left + Px(win7 ? 7 : 5), item.cell.top + Px(win7 ? 33 : 24),
+                              item.cell.right - Px(win7 ? 7 : 5), item.cell.bottom - Px(win7 ? 7 : 5)};
+                    int maxW = full.right - full.left, maxH = full.bottom - full.top;
+                    int tw = maxW, th = MulDiv(src.cy, tw, src.cx);
+                    if (th > maxH) {
+                        th = maxH;
+                        tw = MulDiv(src.cx, th, src.cy);
+                    }
+                    full.left += (maxW - tw) / 2;
+                    full.top += (maxH - th) / 2;
+                    full.right = full.left + tw;
+                    full.bottom = full.top + th;
+                    prop.rcDestination = full;
+                    update = DwmUpdateThumbnailProperties(item.thumbnail, &prop);
+                }
+                if (FAILED(update)) {
+                    Wh_Log(L"[T81-PREVIEW] thumbnail update failed hwnd=%p hr=0x%08lX",
+                           task.hwnd, (unsigned long)update);
+                    DwmUnregisterThumbnail(item.thumbnail);
+                    item.thumbnail = nullptr;
+                } else if (win7)
+                    item.win7ThumbnailRect = prop.rcDestination;
+            }
         }
+        if (!item.thumbnail)
+            Wh_Log(L"[T81-PREVIEW] title fallback hwnd=%p", task.hwnd);
         s->previews.push_back(std::move(item));
+    }
+    // For one failed source use the existing native, non-activating tooltip.
+    // For multiple windows retain the interactive popup and a title box for
+    // each failed item so selecting/closing a specific window still works.
+    if (total == 1 && s->previews.size() == 1 && !s->previews[0].thumbnail) {
+        std::wstring title = s->previews[0].title;
+        HidePreview();
+        RECT client{};
+        GetClientRect(s->bar, &client);
+        Layout current = GetLayout(client.right, client.bottom);
+        RECT bar{};
+        GetWindowRect(s->bar, &bar);
+        ShowInfoTooltip(title, bar.left + current.first + (group % current.columns) * current.width + current.width / 2);
+        return;
     }
     if (total > capacity)
         Wh_Log(L"[T81-DIAG] preview pages offset=%d visible=%d total=%d; mouse wheel changes page",
@@ -19164,7 +20517,7 @@ static HWND FindOwnedNativeTaskbar() {
     return candidate.best;
 }
 static void CloseJumpPopup(bool animate);
-static void CancelBarEdgeDrag(bool revert);
+static void CancelBarEdgeDrag(bool revert, bool deferBlurRestore = false);
 // Undocumented external values are read-only signals, never written by this
 // mod. Geometry remains the authoritative signal when it really changes.
 static int ReadModernTaskbarEdge() {
@@ -20051,7 +21404,13 @@ void UpdatePlacement() {
             }
         }
     }
-    if (s->nativeSmallIcons && s->privateActive) {
+    if (s->privateActive && taskbarRows.load() > 0) {
+        int unit = std::max(1, Px(s->nativeSmallIcons ? 30 : 40));
+        int height = std::min(unit * taskbarRows.load(), (int)(mi.rcMonitor.bottom - mi.rcMonitor.top) / 2);
+        if (s->nativeEdge == ABE_TOP) full.bottom = full.top + height;
+        else full.top = full.bottom - height;
+    }
+    if (s->nativeSmallIcons && s->privateActive && taskbarRows.load() == 0) {
         // Compact our own bar only; never resize Explorer's native HWND.
         int compact = std::min((int)(full.bottom - full.top), std::max(1, Px(30)));
         if (s->nativeEdge == ABE_TOP)
@@ -20068,8 +21427,11 @@ void UpdatePlacement() {
         s->privateActive && requested && mi.rcMonitor.bottom - mi.rcMonitor.top >= Px(320);
     if (vertical) {
         // Convert the logical vertical bar width to physical pixels.
-        int width = std::max(
-            1, Px(useBetaStartLogo.load() && s->betaStartImage ? 61 : kVerticalWidthLogical));
+        int baseWidth = useBetaStartLogo.load() && s->betaStartImage ? 61 : kVerticalWidthLogical;
+        int logicalWidth = s->verticalWidthLogical > 0 ? s->verticalWidthLogical
+            : std::max(baseWidth, taskbarRows.load() * (s->nativeSmallIcons ? 30 : 40));
+        int width = std::min(std::max(1, Px(logicalWidth)),
+                             std::max(1, (int)(mi.rcMonitor.right - mi.rcMonitor.left) / 2));
         full = mi.rcMonitor;
         if (requested == 1)
             full.right = full.left + width;
@@ -20093,6 +21455,7 @@ void UpdatePlacement() {
     s->verticalSide = vertical ? requested : 0;
     if (groupingEdgeChanged)
         BuildGroups();
+    ULONGLONG t81ReserveStart = GetTickCount64();
     if (s->privateActive && vertical)
         ReserveVerticalAppbar(full, mi, requested);
     else if (s->privateActive)
@@ -20106,7 +21469,12 @@ void UpdatePlacement() {
         overlay.right = NativeTrayLeft(native, full);
     RECT tray = full;
     tray.left = overlay.right;
+    ULONGLONG t81FullscreenStart = GetTickCount64();
     bool fullScreen = ShouldHideForFullScreen();
+    ULONGLONG t81FullscreenEnd = GetTickCount64();
+    if (t81FullscreenEnd - t81ReserveStart >= 80)
+        Wh_Log(L"[T81-PERF-PLACEMENT] appbar=%llu fullscreen=%llu ms",
+               t81FullscreenStart-t81ReserveStart, t81FullscreenEnd-t81FullscreenStart);
     // The capture overlay is allowed to stay above us; we only suppress an
     // erroneous fullscreen hide, not raise the bar over the capture UI.
     if (fullScreen || s->appbarArranging) {
@@ -22093,8 +23461,10 @@ static bool ShowJumpList(size_t index, POINT, const RECT* secondaryButton = null
     } else {
         if ((int)index >= l.count)
             return false;
-        button = RECT{bar.left + l.first + (int)index * l.width, bar.top,
-                      bar.left + l.first + ((int)index + 1) * l.width, bar.bottom};
+        int x = l.first + ((int)index % l.columns) * l.width;
+        int y = ((int)index / l.columns) * l.rowHeight;
+        button = RECT{bar.left + x, bar.top + y, bar.left + x + l.width,
+                      bar.top + std::min((int)client.bottom, y + l.rowHeight)};
     }
     MONITORINFO mi{};
     mi.cbSize = sizeof(mi);
@@ -22942,23 +24312,66 @@ static void RegisterTaskDropTarget(HWND h) {
 // RetroBar also uses a low-level mouse hook while unlocked. Install it only
 // during a drag: capture alone cannot track a non-foreground taskbar reliably.
 static constexpr UINT WM_BAR_DRAG_POINT = WM_APP + 450, WM_BAR_DRAG_END = WM_APP + 451;
+// Keep the hook thread independent of slow GDI/DWM/layout work on the UI thread.
+static std::atomic<HWND> gBarHookTarget{nullptr};
+static std::atomic<bool> gBarMoveQueued{false}, gBarEndQueued{false}, gBarHookInstalled{false};
+static HANDLE gBarHookThread = nullptr, gBarHookReady = nullptr;
+static DWORD gBarHookTid = 0;
 static LRESULT CALLBACK BarDragHookProc(int code, WPARAM msg, LPARAM data) {
-    if (code >= 0 && s && s->barDragCandidate && data && !s->barHookEndQueued) {
-        auto* event = reinterpret_cast<MSLLHOOKSTRUCT*>(data);
-        if (msg == WM_MOUSEMOVE && !s->barMoveQueued) {
-            if (PostMessageW(s->bar, WM_BAR_DRAG_POINT, (WPARAM)(INT_PTR)event->pt.x,
-                             (LPARAM)event->pt.y))
-                s->barMoveQueued = true;
-        } else if (msg == WM_LBUTTONUP) {
-            if (PostMessageW(s->bar, WM_BAR_DRAG_END, (WPARAM)(INT_PTR)event->pt.x,
-                             (LPARAM)event->pt.y)) {
-                s->barHookEndQueued = true; // Forward the release to the rest of the hook chain.
-            }
+    HWND target = gBarHookTarget.load();
+    if (code >= 0 && target && data && !gBarEndQueued.load()) {
+        const auto* event = reinterpret_cast<const MSLLHOOKSTRUCT*>(data);
+        if (msg == WM_MOUSEMOVE && !gBarMoveQueued.exchange(true)) {
+            if (!PostMessageW(target, WM_BAR_DRAG_POINT, (WPARAM)(INT_PTR)event->pt.x, (LPARAM)event->pt.y))
+                gBarMoveQueued.store(false);
+        } else if (msg == WM_LBUTTONUP && !gBarEndQueued.exchange(true)) {
+            if (!PostMessageW(target, WM_BAR_DRAG_END, (WPARAM)(INT_PTR)event->pt.x, (LPARAM)event->pt.y))
+                gBarEndQueued.store(false);
         }
     }
     return CallNextHookEx(nullptr, code, msg, data);
 }
-static void CancelBarEdgeDrag(bool revert) {
+static DWORD WINAPI BarHookThreadProc(void*) {
+    MSG msg{}; PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE); // create thread queue
+    HMODULE module = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)BarDragHookProc, &module);
+    HHOOK hook = module ? SetWindowsHookExW(WH_MOUSE_LL, BarDragHookProc, module, 0) : nullptr;
+    gBarHookInstalled.store(hook != nullptr);
+    SetEvent(gBarHookReady);
+    if (hook) {
+        while (GetMessageW(&msg, nullptr, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
+        UnhookWindowsHookEx(hook);
+    }
+    gBarHookInstalled.store(false);
+    return 0;
+}
+static bool StartBarDragHook(HWND target) {
+    if (gBarHookThread) return false;
+    gBarMoveQueued.store(false); gBarEndQueued.store(false); gBarHookTarget.store(target);
+    gBarHookReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!gBarHookReady) { gBarHookTarget.store(nullptr); return false; }
+    gBarHookThread = CreateThread(nullptr, 0, BarHookThreadProc, nullptr, 0, &gBarHookTid);
+    if (!gBarHookThread) { CloseHandle(gBarHookReady); gBarHookReady=nullptr; gBarHookTarget.store(nullptr); return false; }
+    // No heavyweight UI work is performed by the hook thread before readiness.
+    WaitForSingleObject(gBarHookReady, INFINITE);
+    CloseHandle(gBarHookReady); gBarHookReady = nullptr;
+    if (!gBarHookInstalled.load()) {
+        WaitForSingleObject(gBarHookThread, INFINITE); CloseHandle(gBarHookThread);
+        gBarHookThread=nullptr; gBarHookTid=0; gBarHookTarget.store(nullptr); return false;
+    }
+    return true;
+}
+static void StopBarDragHook() {
+    gBarHookTarget.store(nullptr);
+    if (gBarHookThread) {
+        PostThreadMessageW(gBarHookTid, WM_QUIT, 0, 0);
+        WaitForSingleObject(gBarHookThread, INFINITE);
+        CloseHandle(gBarHookThread); gBarHookThread=nullptr; gBarHookTid=0;
+    }
+    gBarMoveQueued.store(false); gBarEndQueued.store(false);
+}
+static void CancelBarEdgeDrag(bool revert, bool deferBlurRestore) {
     if (!s)
         return;
     bool active = s->barDragCandidate, changed = s->barDragMoved;
@@ -22966,12 +24379,7 @@ static void CancelBarEdgeDrag(bool revert) {
     s->barDragCandidate = false;
     s->barDragMoved = false;
     s->barDragPending = 0;
-    s->barHookEndQueued = false;
-    s->barMoveQueued = false;
-    HHOOK hook = s->barDragHook;
-    s->barDragHook = nullptr;
-    if (hook)
-        UnhookWindowsHookEx(hook);
+    StopBarDragHook();
     if (active && changed) {
         // A deliberate drop or revert retries immediately and bypasses cached
         // geometry so the final edge always receives QUERYPOS -> SETPOS.
@@ -22983,12 +24391,19 @@ static void CancelBarEdgeDrag(bool revert) {
         UpdatePlacement();
         InvalidateRect(s->bar, nullptr, FALSE);
     }
+    if (s->barDragBlurSuspended && !deferBlurRestore) {
+        s->barDragBlurSuspended = false;
+        if (!quitting.load() && s->bar && IsWindow(s->bar)) {
+            T81SetExperimentalBlur(s->bar); // respects the current setting and skin
+            Wh_Log(L"[T81-BLUR] drag ended or cancelled; requested normal blur policy");
+        }
+    }
 }
 // RetroBar's screen-wide diagonal-quadrant classification is used during
 // motion and on release. The current cursor is sampled for queued move
 // messages to avoid applying stale pointer coordinates after a busy UI thread.
 // The actual hook-provided button-up point is authoritative at commit.
-static void UpdateBarEdgeDrag(HWND h, POINT point) {
+static void UpdateBarEdgeDrag(HWND h, POINT point, bool finalPoint = false) {
     if (!s || !s->barDragCandidate || !PtInRect(&s->barDragMonitor, point))
         return;
     int dx = std::abs(point.x - s->barDragStart.x), dy = std::abs(point.y - s->barDragStart.y);
@@ -22999,6 +24414,18 @@ static void UpdateBarEdgeDrag(HWND h, POINT point) {
     BarEdge edge = RetroBarDragCoordsToScreenEdge(point.x, point.y, s->barDragMonitor);
     if (!HorizontalEdge(edge) && taskbarPlacementMode.load() != 3)
         return;
+    // Prevent rapid flips around diagonal quadrant boundaries. The actual
+    // release remains authoritative, without hysteresis.
+    if (!finalPoint && s->barDragMoved && s->barEdgeOverride >= 1 && s->barEdgeOverride <= 4) {
+        double x = (double)(point.x - s->barDragMonitor.left) /
+                   std::max(1L, s->barDragMonitor.right - s->barDragMonitor.left);
+        double y = (double)(point.y - s->barDragMonitor.top) /
+                   std::max(1L, s->barDragMonitor.bottom - s->barDragMonitor.top);
+        double dist[] = {0., y, 1. - y, x, 1. - x};
+        int proposed = edge == BarEdge::Top ? 1 : edge == BarEdge::Bottom ? 2 : edge == BarEdge::Left ? 3 : 4;
+        if (proposed != s->barEdgeOverride && dist[proposed] + 0.04 >= dist[s->barEdgeOverride])
+            return;
+    }
     int choice = edge == BarEdge::Top      ? 1
                  : edge == BarEdge::Bottom ? 2
                  : edge == BarEdge::Left   ? 3
@@ -23007,6 +24434,12 @@ static void UpdateBarEdgeDrag(HWND h, POINT point) {
     if (s->barEdgeOverride == choice)
         return;
     int previous = s->barEdgeOverride;
+    if (!s->barDragBlurSuspended && experimentalLiveBlur.load() &&
+        (taskbarSkin.load() == 1 || taskbarSkin.load() == 2)) {
+        s->barDragBlurSuspended = true;
+        T81SetExperimentalBlur(h);
+        Wh_Log(L"[T81-BLUR] requested temporary suspension during bar drag");
+    }
     // Release the old reservation before moving the visual window away from
     // the approved AppBar rectangle. Drop or revert registers it again.
     RemoveWorkAreaAppBar();
@@ -23141,13 +24574,14 @@ static RECT ButtonGroupRect(size_t i) {
     Layout l = GetLayout(r.right, r.bottom);
     if (i >= (size_t)l.count)
         return RECT{};
-    int x = l.first + (int)i * l.width;
+    int x = l.first + ((int)i % l.columns) * l.width;
     for (const auto& p : s->visualPositions)
-        if (p.key == s->groups[i].key) {
+        if (l.rows == 1 && p.key == s->groups[i].key) {
             x = (int)std::lround(p.x);
             break;
         }
-    return RECT{x, 0, x + l.width, r.bottom};
+    int top = ((int)i / l.columns) * l.rowHeight;
+    return RECT{x, top, x + l.width, ((int)i / l.columns == l.rows - 1) ? r.bottom : top + l.rowHeight};
 }
 static PendingButtonChanges PrepareButtonChanges(const std::vector<Task>& next) {
     PendingButtonChanges p;
@@ -23155,6 +24589,10 @@ static PendingButtonChanges PrepareButtonChanges(const std::vector<Task>& next) 
     if (!s || !s->bar || s->ticks <= 1 || s->barDragCandidate || s->dragActive ||
         !ButtonAnimationsEnabled())
         return p;
+    RECT multiRowClient{};
+    if (GetClientRect(s->bar, &multiRowClient) &&
+        !s->verticalActive && GetLayout(multiRowClient.right, multiRowClient.bottom).rows > 1)
+        return p; // old ghost renderer is single-row only
     p.enabled = true;
     for (const auto& g : s->groups)
         p.previousKeys.push_back(g.key);
@@ -23369,7 +24807,10 @@ static void DrawVerticalTaskTile(Graphics& g, const RECT& r, int layers, bool ac
         DrawTaskTileStack(g, 0, r.bottom - r.top, r.right - r.left, layers, active, fade);
     else if (fade > 0) {
         RECT rotated{0, 0, r.bottom - r.top, r.right - r.left};
-        DrawTrayHoverTile(g, rotated, true, fade);
+        if (taskbarSkin.load() == 3 || taskbarSkin.load() == 4)
+            DrawFlatPinnedHover(g, rotated, fade);
+        else
+            DrawTrayHoverTile(g, rotated, true, fade);
     }
     g.Restore(saved);
 }
@@ -23386,7 +24827,8 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
             auto startState = g.Save();
             g.SetClip(Rect(0, 0, w, (int)v.start.bottom));
             g.TranslateTransform((w - sw) / 2.0f, ((int)v.start.bottom - sh) / 2.0f);
-            bool down = s->verticalPressed == HIT_START && s->hot == HIT_START;
+            bool down = (s->verticalPressed == HIT_START && s->hot == HIT_START) ||
+                        (taskbarSkin.load() == 1 && T81StartMenuOn(s->bar));
             if (taskbarSkin.load() == 1 && (s->win7StartImage || s->betaTexture[30])) {
                 g.Restore(startState);
                 DrawWin7Start(g, w, (int)v.start.bottom, down ? 2 : (s->hot == HIT_START ? 1 : 0));
@@ -23463,8 +24905,8 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
                 g.SetClip(Rect(clip.left, clip.top, clip.right - clip.left, clip.bottom - clip.top),
                           CombineModeIntersect);
             }
-            bool betaTask = false;
-            if (BetaTextureAvailable(2)) {
+            bool betaTask = DrawUserTaskTexture(g, tile, GroupNeedsAttention((size_t)i), true);
+            if (!betaTask && BetaTextureAvailable(2)) {
                 RECT bounds = BetaVerticalTaskBounds(tile);
                 betaTask = DrawBetaVerticalTaskState(
                     g, bounds, TaskTileLayers(s->groups[i].tasks.size()), active, s->hot == i,
@@ -23525,7 +24967,14 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
             DrawTrayArrowHover(g, r);
             g.Restore(saved);
         }
-        if (BetaTextureAvailable(0) && !IsRectEmpty(&v.desktop)) {
+        if (taskbarSkin.load() == 1 && !IsRectEmpty(&v.desktop)) {
+            auto ds = g.Save();
+            BeginVerticalTile(g, v.desktop);
+            RECT rotated{0, 0, v.desktop.bottom-v.desktop.top, v.desktop.right-v.desktop.left};
+            DrawWin7StylerPeek(g, rotated, s->hot == HIT_DESKTOP,
+                                s->verticalPressed == HIT_DESKTOP, Dpi());
+            g.Restore(ds);
+        } else if (BetaTextureAvailable(0) && !IsRectEmpty(&v.desktop)) {
             auto ds = g.Save();
             BeginVerticalTile(g, v.desktop);
             RECT rotated{0, 0, v.desktop.bottom - v.desktop.top, v.desktop.right - v.desktop.left};
@@ -23616,6 +25065,7 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
         // The upright bar is narrow: show the seconds only while they fit, and
         // fall back to the classic short time instead of an ellipsis.
         FormatBarClockTime(time, std::size(time), false);
+        firstTime = time;
         GetTextExtentPoint32W(dc, time, (int)wcslen(time), &timeSize);
     }
     if (timeSize.cx > v.clock.right - v.clock.left - Px(4)) {
@@ -23635,6 +25085,13 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
     std::vector<std::wstring> clockLines{firstTime};
     if (!timeMarker.empty())
         clockLines.push_back(timeMarker);
+    // On a widened upright taskbar, use the additional width to show the
+    // localized weekday, like the expanded Windows taskbar when space permits.
+    if (v.clock.right - v.clock.left >= Px(100)) {
+        wchar_t weekday[64]{};
+        if (GetDateFormatW(LOCALE_USER_DEFAULT, 0, nullptr, L"dddd", weekday, 64))
+            clockLines.push_back(weekday);
+    }
     clockLines.push_back(firstDate);
     if (!year.empty())
         clockLines.push_back(year);
@@ -23734,6 +25191,7 @@ static void PaintVerticalBackground(Graphics& g, int w, int h) {
     g.FillRectangle(&lineDark, dark, 0, 1, h);
 }
 static void PaintVertical(HWND h) {
+    T81HoverPaintMeasure hoverMeasure(s && s->hot >= 0, L"vertical");
     s->buttonPaintTick = GetTickCount64();
     ScopedPaintDC paint(h);
     HDC dc = paint.dc;
@@ -23752,6 +25210,7 @@ static void PaintVertical(HWND h) {
             {
                 Graphics g(bg.dc);
                 PaintVerticalBackground(g, w, ht);
+
             }
             PatBlt(black.dc, 0, 0, w, ht, BLACKNESS);
             PatBlt(white.dc, 0, 0, w, ht, WHITENESS);
@@ -23785,6 +25244,7 @@ static void PaintVertical(HWND h) {
             {
                 Graphics g(mem.get());
                 PaintVerticalBackground(g, w, ht);
+
             }
             DrawVerticalForeground(mem.get(), w, ht);
             BitBlt(dc, 0, 0, w, ht, mem.get(), 0, 0, SRCCOPY);
@@ -23873,15 +25333,11 @@ static bool VerticalInput(HWND h, UINT m, WPARAM wp, LPARAM lp, LRESULT& result)
                 s->barDragMoved = false;
                 s->barDragStart = point;
                 s->barDragMonitor = mi.rcMonitor;
-                HMODULE module = nullptr;
-                if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                       (LPCWSTR)BarDragHookProc, &module)) {
+                {
                     s->barDragCandidate = true;
-                    s->barHookEndQueued = false;
+                    gBarEndQueued = false;
                     s->barDragPending = 0;
-                    s->barDragHook = SetWindowsHookExW(WH_MOUSE_LL, BarDragHookProc, module, 0);
-                    if (!s->barDragHook) {
+                    if (!StartBarDragHook(h)) {
                         Wh_Log(L"[T81-DIAG] vertical bar drag hook failed error=%lu",
                                GetLastError());
                         CancelBarEdgeDrag(false);
@@ -24192,6 +25648,15 @@ struct T81Mirror {
     BYTE legacyOpacity = 255;
     RECT desired{}, approved{};
     ULONGLONG retryAfter = 0;
+    // Hover animation belongs to this monitor, never to the primary bar.
+    float startFade = 0.f;
+    bool startHot = false;
+    ULONGLONG startFadeTick = 0;
+    // Local input state: keys survive task list refreshes, indices do not.
+    bool taskPress = false, taskDragging = false;
+    POINT taskPressPoint{};
+    std::wstring taskKey;
+    int taskInsertion = -1;
 };
 struct T81TaskMonitor {
     HWND window = nullptr;
@@ -24203,6 +25668,7 @@ static std::vector<T81TaskMonitor> t81TaskMonitors;
 static constexpr wchar_t kT81MirrorClass[] = L"WH_Taskbar81Secondary";
 static bool t81MirrorClassRegistered = false;
 static const UINT WM_T81_SECONDARY_APPBAR = WM_APP + 985;
+static const UINT_PTR TIMER_T81_SECONDARY_START_FADE = 33;
 static UINT T81SecondaryDpi(HWND hwnd) {
     using GetDpiFn = UINT(WINAPI*)(HWND);
     static auto get = (GetDpiFn)GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow");
@@ -24410,6 +25876,11 @@ static std::vector<T81SecondaryButton> T81SecondaryButtons(HWND window, HMONITOR
     int logical = vertical ? (s->nativeSmallIcons ? 32 : (beta ? 50 : kVerticalTaskLogical))
                            : T81ButtonLogicalWidth();
     int step = std::max(1, MulDiv(logical, (int)dpi, 96));
+    int rowUnit = std::max(1, MulDiv(s->nativeSmallIcons ? 30 : 40, (int)dpi, 96));
+    int rows = vertical ? 1 : std::clamp((cross + rowUnit / 2) / rowUnit, 1, 4);
+    int columns = std::max(0, (available - first) / step);
+    if (!vertical && !columns)
+        return result;
     for (size_t index = 0; index < s->groups.size(); ++index) {
         const Group& group = s->groups[index];
         T81SecondaryButton button{};
@@ -24425,10 +25896,15 @@ static std::vector<T81SecondaryButton> T81SecondaryButtons(HWND window, HMONITOR
             }
         if (button.windows.empty() && (group.pin < 0 || (size_t)group.pin >= s->pins.size()))
             continue;
-        int pos = first + (int)result.size() * step;
-        if (pos + step > available)
+        int slot = (int)result.size();
+        int pos = first + (vertical ? slot : slot % columns) * step;
+        if (vertical && pos + step > available)
             break;
-        button.rect = vertical ? RECT{0, pos, cross, pos + step} : RECT{pos, 0, pos + step, cross};
+        if (!vertical && slot >= columns * rows)
+            break;
+        int top = vertical ? 0 : (slot / columns) * cross / rows;
+        int bottom = vertical ? 0 : ((slot / columns) + 1) * cross / rows;
+        button.rect = vertical ? RECT{0, pos, cross, pos + step} : RECT{pos, top, pos + step, bottom};
         result.push_back(std::move(button));
     }
     return result;
@@ -24443,7 +25919,6 @@ static T81Mirror* T81FindSecondary(HWND window) {
 static void T81DrawSecondaryForeground(HDC dc, HWND window, HMONITOR monitor, int w, int h,
                                        const std::vector<T81SecondaryButton>& buttons) {
     const bool vertical = s->verticalActive;
-    int cross = vertical ? w : h;
     UINT dpi = T81SecondaryDpi(window);
     POINT cursor{};
     bool over = false;
@@ -24456,18 +25931,51 @@ static void T81DrawSecondaryForeground(HDC dc, HWND window, HMONITOR monitor, in
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         RECT start = T81SecondaryStartRect(window);
         bool startHot = over && PtInRect(&start, cursor);
-        int startFrame = startHot ? ((GetKeyState(VK_LBUTTON) & 0x8000) ? 2 : 1) : 0;
+        bool startDown = (startHot && (GetKeyState(VK_LBUTTON) & 0x8000)) ||
+                         (taskbarSkin.load() == 1 && T81StartMenuOn(window));
+        int startFrame = startDown ? 2 : (startHot ? 1 : 0);
+        const T81Mirror* mirror = T81FindSecondary(window);
+        float fade = mirror ? std::max(0.f, std::min(1.f, mirror->startFade)) : 0.f;
         if (!startHotCorner.load()) {
             int sw = start.right, sh = start.bottom;
             if (taskbarSkin.load() == 1 && (s->win7StartImage || s->betaTexture[30]))
-                DrawWin7Start(g, sw, sh, startFrame, MulDiv(54, (int)dpi, 96));
+                DrawWin7Start(g, sw, sh, startFrame, MulDiv(54, (int)dpi, 96), fade);
             else if (useBetaStartLogo.load() && s->betaStartImage) {
                 if (vertical)
                     DrawBetaStartImageVertical(g, sw, sh, startFrame);
                 else
                     DrawBetaStartImage(g, sw, sh, startFrame);
-            } else
-                DrawStartImage(g, sw, sh, 0, 1.f, nullptr);
+            } else {
+                // Match the primary's upright vertical logo and tint/tile layers.
+                auto state = g.Save();
+                g.SetClip(Rect(0, 0, sw, sh), CombineModeIntersect);
+                int logoW = sw, logoH = sh;
+                if (vertical) {
+                    logoW = std::min(sw, std::max(1, MulDiv(kVerticalStartLogical, (int)dpi, 96)));
+                    logoH = std::min(sh, sw);
+                    g.TranslateTransform((sw - logoW) / 2.f, (sh - logoH) / 2.f);
+                }
+                DrawStartImage(g, logoW, logoH, 0, 1.f, nullptr);
+                float amount = startDown ? 1.f : fade;
+                if (amount > 0.f) {
+                    if (vertical) {
+                        auto fill = g.Save();
+                        g.ResetTransform();
+                        SolidBrush tile(Color((BYTE)std::lround(255 * amount), 17, 17, 17));
+                        g.FillRectangle(&tile, 0, 0, sw, sh);
+                        g.Restore(fill);
+                    }
+                    Color tint = (taskbarSkin.load() == 4 && customStartColor.load())
+                                     ? StartCustomColor() : StartHoverColor();
+                    DrawStartImage(g, logoW, logoH, 0, amount, &tint);
+                    DrawStartImage(g, logoW, logoH, startDown ? 2 : 1, amount);
+                }
+                if (startDown) {
+                    SolidBrush pressed(Color(50, 0, 0, 0));
+                    g.FillRectangle(&pressed, 0, 0, logoW, logoH);
+                }
+                g.Restore(state);
+            }
         }
         for (const auto& button : buttons) {
             if (button.group >= s->groups.size())
@@ -24479,15 +25987,15 @@ static void T81DrawSecondaryForeground(HDC dc, HWND window, HMONITOR monitor, in
             bool pressed = hot && (GetKeyState(VK_LBUTTON) & 0x8000);
             bool attention = running && GroupNeedsAttention(button.group);
             int layers = TaskTileLayers(button.windows.size());
-            bool painted = false;
-            if (vertical) {
+            bool painted = DrawUserTaskTexture(g, button.rect, attention, vertical);
+            if (vertical && !painted) {
                 if (BetaTextureAvailable(2))
                     painted =
                         DrawBetaVerticalTaskState(g, BetaVerticalTaskBounds(button.rect), layers,
                                                   active, hot, pressed, attention, hot ? 1.f : 0.f);
                 if (!painted)
                     DrawVerticalTaskTile(g, button.rect, layers, active, hot ? 1.f : 0.f);
-            } else {
+            } else if (!vertical && !painted) {
                 int step = std::max(1, MulDiv(3, (int)dpi, 96));
                 RECT front = button.rect;
                 if (running && layers > 1)
@@ -24507,11 +26015,19 @@ static void T81DrawSecondaryForeground(HDC dc, HWND window, HMONITOR monitor, in
                 }
                 painted = DrawBetaTaskState(g, front, running, active, hot, pressed, attention,
                                             false, layers > 1);
-                if (!painted && running)
-                    DrawTaskTileStack(g, button.rect.left, button.rect.right - button.rect.left, h,
-                                      layers, active, hot ? 1.f : 0.f);
-                else if (!painted && hot)
-                    DrawTrayHoverTile(g, button.rect, true, 1.f);
+                if (!painted && running) {
+                    auto row = g.Save();
+                    g.TranslateTransform(0, (REAL)button.rect.top);
+                    DrawTaskTileStack(g, button.rect.left, button.rect.right - button.rect.left,
+                                      button.rect.bottom - button.rect.top, layers, active, hot ? 1.f : 0.f);
+                    g.Restore(row);
+                }
+                else if (!painted && hot) {
+                    if (taskbarSkin.load() == 3 || taskbarSkin.load() == 4)
+                        DrawFlatPinnedHover(g, button.rect, 1.f, dpi);
+                    else
+                        DrawTrayHoverTile(g, button.rect, true, 1.f);
+                }
             }
             if (running && hot) {
                 if (taskbarSkin.load() == 1)
@@ -24525,6 +26041,23 @@ static void T81DrawSecondaryForeground(HDC dc, HWND window, HMONITOR monitor, in
                                 std::max(1, (int)(button.rect.right - button.rect.left - 4)),
                                 std::max(1, (int)(button.rect.bottom - button.rect.top - 4)));
             }
+        }
+        // Draw a thin insertion marker on the originating secondary bar.
+        if (mirror && mirror->taskDragging && mirror->taskInsertion >= 0) {
+            int edge = vertical ? h : w;
+            for (const auto& button : buttons) {
+                if ((int)button.group >= mirror->taskInsertion) {
+                    edge = vertical ? button.rect.top : button.rect.left;
+                    break;
+                }
+                edge = vertical ? button.rect.bottom : button.rect.right;
+            }
+            int line = std::max(1, MulDiv(2, (int)dpi, 96));
+            SolidBrush marker(Color(220, 255, 255, 255));
+            if (vertical)
+                g.FillRectangle(&marker, 2, edge - line / 2, std::max(1, w - 4), line);
+            else
+                g.FillRectangle(&marker, edge - line / 2, 2, line, std::max(1, h - 4));
         }
     }
     for (const auto& button : buttons) {
@@ -24651,6 +26184,7 @@ static void T81ConfigureSecondaryAlpha(T81Mirror& bar, bool pixel) {
     bar.legacyOpacity = opacity;
     if (!pixel && !SetLayeredWindowAttributes(bar.window, 0, opacity, LWA_ALPHA))
         Wh_Log(L"[T81-MULTI] secondary alpha failed error=%lu", GetLastError());
+    T81SetExperimentalBlur(bar.window);
 }
 static void T81PaintSecondary(HWND window, HMONITOR monitor) {
     ScopedPaintDC paint(window);
@@ -24679,6 +26213,7 @@ static void T81PaintSecondary(HWND window, HMONITOR monitor) {
                     PaintVerticalBackground(g, w, h);
                 else
                     PaintTaskbarBackground(g, w, h);
+
             }
             PatBlt(black.dc, 0, 0, w, h, BLACKNESS);
             PatBlt(white.dc, 0, 0, w, h, WHITENESS);
@@ -24718,6 +26253,7 @@ static void T81PaintSecondary(HWND window, HMONITOR monitor) {
                 PaintVerticalBackground(g, w, h);
             else
                 PaintTaskbarBackground(g, w, h);
+
         }
         T81DrawSecondaryForeground(buffer.get(), window, monitor, w, h, buttons);
         BitBlt(screen, 0, 0, w, h, buffer.get(), 0, 0, SRCCOPY);
@@ -24819,6 +26355,15 @@ static void T81CancelOpenShellPosition() noexcept {
     t81StartMenu = nullptr;
     t81StartDeadline = 0;
 }
+// A standard context popup must keep the position Open-Shell chose. Stop
+// repeated root adjustments when a popup appears on the same GUI thread.
+static void T81StopOpenShellPositionForPopup(HWND popup) noexcept {
+    if (!t81StartMenu || !popup)
+        return;
+    DWORD menuThread = GetWindowThreadProcessId(t81StartMenu, nullptr);
+    if (menuThread && menuThread == GetWindowThreadProcessId(popup, nullptr))
+        T81CancelOpenShellPosition();
+}
 static void T81ArmOpenShellPosition(HWND bar, bool preservePending) noexcept {
     if (!s || !s->bar || !bar || !IsWindow(bar))
         return;
@@ -24844,17 +26389,46 @@ static bool T81IsOpenShellMenu(HWND menu) noexcept {
            GetClassNameW(menu, cls, (int)std::size(cls)) &&
            !wcscmp(cls, L"OpenShell.CMenuContainer");
 }
+// Open-Shell creates cascading CMenuContainer windows with GetParent() as
+// their owner. For an unowned root that also makes its submenus unowned, so
+// GW_OWNER alone cannot distinguish them. Never treat a newly shown container
+// as a root while another visible container already exists.
+static bool T81HasOtherOpenShellContainer(HWND except) noexcept {
+    HWND candidate = nullptr;
+    while ((candidate = FindWindowExW(nullptr, candidate, L"OpenShell.CMenuContainer", nullptr))) {
+        if (candidate != except && T81IsOpenShellMenu(candidate))
+            return true;
+    }
+    return false;
+}
+static bool T81IsUnambiguousOpenShellRoot(HWND menu) noexcept {
+    return T81IsOpenShellMenu(menu) && !GetWindow(menu, GW_OWNER) &&
+           !T81HasOtherOpenShellContainer(menu);
+}
+static void T81TryOpenShellFocus(HWND menu) noexcept {
+    if (!t81OpenShellFocusSource || !T81IsUnambiguousOpenShellRoot(menu))
+        return;
+    HWND source = t81OpenShellFocusSource;
+    t81OpenShellFocusSource = nullptr; // one attempt only
+    HWND current = GetForegroundWindow();
+    if (GetTickCount64() > t81OpenShellFocusDeadline || !SameInput(t81OpenShellFocusInput) ||
+        (current != source && current != menu && (!s || current != s->native))) {
+        Wh_Log(L"[T81-START] menu focus skipped source=%p current=%p", source, current);
+        return;
+    }
+    BOOL activated = current == menu || SetForegroundWindow(menu);
+    Wh_Log(L"[T81-START] menu focus request source=%p menu=%p accepted=%d current=%p",
+           source, menu, activated ? 1 : 0, GetForegroundWindow());
+}
 static void T81PlaceSecondaryOpenShell(HWND observed) noexcept {
     if (!s || !s->bar)
         return;
     ULONGLONG now = GetTickCount64();
     if (t81StartTargetBar && (!IsWindow(t81StartTargetBar) || now > t81StartDeadline))
         T81CancelOpenShellPosition();
-    // A physical Win key lets Open-Shell open its own menu without calling
-    // our Start-button route. Observe its unowned root menu rather than
-    // installing a keyboard hook or moving its owned submenus.
-    if (!t81StartTargetBar && observed && T81IsOpenShellMenu(observed) &&
-        !GetWindow(observed, GW_OWNER)) {
+    // A physical Win key can open Open-Shell without our Start-button route.
+    // A submenu can also be unowned: only act when the root is unambiguous.
+    if (!t81StartTargetBar && observed && T81IsUnambiguousOpenShellRoot(observed)) {
         HMONITOR menuMonitor = MonitorFromWindow(observed, MONITOR_DEFAULTTONULL);
         HWND target = nullptr;
         if (menuMonitor && MonitorFromWindow(s->bar, MONITOR_DEFAULTTONULL) == menuMonitor &&
@@ -24881,20 +26455,26 @@ static void T81PlaceSecondaryOpenShell(HWND observed) noexcept {
         return;
     }
     HWND menu = t81StartMenu;
-    if (!menu && T81IsOpenShellMenu(observed))
+    if (!menu && observed && T81IsUnambiguousOpenShellRoot(observed))
         menu = observed;
-    if (!menu) {
+    if (!menu && !observed) {
         HWND candidate = nullptr;
-        while (
-            (candidate = FindWindowExW(nullptr, candidate, L"OpenShell.CMenuContainer", nullptr))) {
-            if (T81IsOpenShellMenu(candidate)) {
+        while ((candidate = FindWindowExW(nullptr, candidate, L"OpenShell.CMenuContainer", nullptr))) {
+            if (T81IsUnambiguousOpenShellRoot(candidate)) {
                 menu = candidate;
                 break;
             }
         }
     }
+    // Once a submenu is visible, stop adjusting the root too. Moving it while
+    // Open-Shell is tracking a popup can invalidate the popup's anchor.
+    if (menu && t81StartMenu && T81HasOtherOpenShellContainer(menu)) {
+        T81CancelOpenShellPosition();
+        return;
+    }
     if (!menu)
         return;
+    T81TryOpenShellFocus(menu);
     RECT bar{}, r{};
     MONITORINFO mi{};
     mi.cbSize = sizeof(mi);
@@ -24950,6 +26530,10 @@ static void T81SecondaryClick(HWND window, HMONITOR monitor, POINT point) {
                     MapWindowPoints(window, nullptr, (POINT*)&anchor, 2);
                     T81SetSecondaryFlyoutAnchor(hit, anchor);
                     if (hit == HIT_VOLUME) {
+                        HidePrivateOverflow();
+                        T81DismissOwnCompanionFlyout(L"Win7ActionCenterFlyoutClass");
+                        T81DismissOwnCompanionFlyout(L"Win7NetworkFlyoutSafe");
+                        T81DismissClockAndVolume(HIT_VOLUME);
                         POINT screen{};
                         GetCursorPos(&screen);
                         if (!LaunchSndvolAt(screen, L"secondary", &anchor))
@@ -24959,8 +26543,10 @@ static void T81SecondaryClick(HWND window, HMONITOR monitor, POINT point) {
                         if (hit == HIT_NETWORK && s->networkPositionAttempts > 0)
                             s->networkAnchor = anchor;
                     }
-                } else
+                } else {
+                    HidePrivateOverflow();
                     HandlePrivateIconEvent(HIT_TRAY_ICON_BASE - item.entry, WM_LBUTTONUP);
+                }
                 return;
             }
     }
@@ -25015,9 +26601,151 @@ static void T81SecondaryClick(HWND window, HMONITOR monitor, POINT point) {
         return;
     }
 }
+// Compute insertion in the shared global order from the buttons actually
+// visible on this monitor; hidden groups remain in their existing order.
+static int T81SecondaryInsertion(const std::vector<T81SecondaryButton>& buttons, POINT p,
+                                 bool vertical) {
+    if (buttons.empty())
+        return -1;
+    int axis = vertical ? p.y : p.x;
+    for (const auto& button : buttons) {
+        int middle = vertical ? (button.rect.top + button.rect.bottom) / 2
+                              : (button.rect.left + button.rect.right) / 2;
+        if (axis < middle)
+            return (int)button.group;
+    }
+    return (int)buttons.back().group + 1;
+}
+// Animate each secondary independently; the timer is owned by its HWND.
+static void T81SecondaryStartHot(T81Mirror& bar, bool hot) {
+    if (bar.startHot == hot)
+        return;
+    bar.startHot = hot;
+    bar.startFadeTick = GetTickCount64();
+    if (!SetTimer(bar.window, TIMER_T81_SECONDARY_START_FADE, 16, nullptr)) {
+        bar.startFade = hot ? 1.f : 0.f;
+        InvalidateRect(bar.window, nullptr, FALSE);
+    }
+}
+static void T81SyncMirrors();
+// Mouse resize on the screen-facing edge, only while the bar is unlocked.
+// A capture belongs to the initiating HWND; no global hooks or native taskbar
+// mutations. Runtime rows apply to all horizontal reconstructed bars.
+static HWND t81ResizeWindow = nullptr;
+static int t81ResizeBefore = 0;
+static int t81VerticalResizeBefore = 0;
+static bool t81ResizeVertical = false;
+static bool T81ResizeMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (!s || !s->privateActive)
+        return false;
+    // The primary vertical bar uses its work-area-facing edge. Never apply
+    // this to horizontal secondary mirrors when the primary is vertical.
+    if (s->verticalActive) {
+        if (hwnd != s->bar) return false;
+        RECT r{}; GetClientRect(hwnd, &r);
+        int edge = std::max(2, MulDiv(4, (int)T81SecondaryDpi(hwnd), 96));
+        auto onEdge = [&](int x) { return s->verticalSide == 1
+            ? x >= r.right - edge && x < r.right : x >= 0 && x < edge; };
+        if (msg == WM_SETCURSOR && !s->bandsLocked && LOWORD(lp) == HTCLIENT) {
+            POINT p{}; if (GetCursorPos(&p) && ScreenToClient(hwnd, &p) && onEdge(p.x)) {
+                SetCursor(LoadCursorW(nullptr, IDC_SIZEWE)); return true;
+            }
+        }
+        if (msg == WM_LBUTTONDOWN && !s->bandsLocked && !t81ResizeWindow && onEdge(GET_X_LPARAM(lp))) {
+            t81VerticalResizeBefore = s->verticalWidthLogical;
+            SetCapture(hwnd);
+            if (GetCapture() == hwnd) { t81ResizeWindow = hwnd; t81ResizeVertical = true; HidePreview(); return true; }
+        }
+        if (t81ResizeWindow != hwnd || !t81ResizeVertical) return false;
+        if (msg == WM_MOUSEMOVE && GetCapture() == hwnd && (wp & MK_LBUTTON)) {
+            POINT p{}; MONITORINFO mi{}; mi.cbSize = sizeof(mi);
+            if (GetCursorPos(&p) && GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi)) {
+                int physical = s->verticalSide == 1 ? p.x - mi.rcMonitor.left : mi.rcMonitor.right - p.x;
+                int dpi = (int)T81SecondaryDpi(hwnd);
+                int maximum = std::max(56, MulDiv((mi.rcMonitor.right - mi.rcMonitor.left) / 2, 96, dpi));
+                int logical = std::clamp(MulDiv(physical, 96, dpi), 56, std::min(320, maximum));
+                if (logical != s->verticalWidthLogical) {
+                    s->verticalWidthLogical = logical; UpdatePlacement();
+                    Wh_Log(L"[T81-ROWS] vertical resize width=%d logical px (runtime only)", logical);
+                }
+            }
+            return true;
+        }
+        if (msg == WM_LBUTTONUP) {
+            t81ResizeWindow = nullptr; t81ResizeVertical = false;
+            if (GetCapture() == hwnd) ReleaseCapture(); return true;
+        }
+        if (msg == WM_CANCELMODE || msg == WM_CAPTURECHANGED) {
+            t81ResizeWindow = nullptr; t81ResizeVertical = false;
+            s->verticalWidthLogical = t81VerticalResizeBefore;
+            if (msg == WM_CANCELMODE && GetCapture() == hwnd) ReleaseCapture();
+            UpdatePlacement(); return true;
+        }
+        return false;
+    }
+    if (msg == WM_SETCURSOR && !s->bandsLocked && LOWORD(lp) == HTCLIENT) {
+        POINT p{}; RECT r{};
+        if (GetCursorPos(&p) && ScreenToClient(hwnd, &p) && GetClientRect(hwnd, &r)) {
+            int edge = std::max(2, MulDiv(4, (int)T81SecondaryDpi(hwnd), 96));
+            if ((s->nativeEdge == ABE_TOP && p.y >= r.bottom - edge) ||
+                (s->nativeEdge != ABE_TOP && p.y < edge)) {
+                SetCursor(LoadCursorW(nullptr, IDC_SIZENS));
+                return true;
+            }
+        }
+    }
+    if (msg == WM_LBUTTONDOWN && !s->bandsLocked && !t81ResizeWindow) {
+        RECT r{};
+        GetClientRect(hwnd, &r);
+        int y = GET_Y_LPARAM(lp), edge = std::max(2, MulDiv(4, (int)T81SecondaryDpi(hwnd), 96));
+        if ((s->nativeEdge == ABE_TOP && y >= r.bottom - edge) ||
+            (s->nativeEdge != ABE_TOP && y >= 0 && y < edge)) {
+            t81ResizeBefore = taskbarRows.load();
+            SetCapture(hwnd);
+            if (GetCapture() == hwnd) {
+                t81ResizeWindow = hwnd;
+                HidePreview();
+                return true;
+            }
+        }
+    }
+    if (t81ResizeWindow != hwnd)
+        return false;
+    if (msg == WM_MOUSEMOVE && GetCapture() == hwnd && (wp & MK_LBUTTON)) {
+        POINT cursor{}; MONITORINFO mi{}; mi.cbSize = sizeof(mi);
+        if (GetCursorPos(&cursor) && GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi)) {
+            int unit = std::max(1, MulDiv(s->nativeSmallIcons ? 30 : 40, (int)T81SecondaryDpi(hwnd), 96));
+            int thickness = s->nativeEdge == ABE_TOP ? cursor.y - mi.rcMonitor.top : mi.rcMonitor.bottom - cursor.y;
+            int rows = std::clamp((thickness + unit / 2) / unit, 1, 4);
+            if (rows != taskbarRows.load()) {
+                taskbarRows.store(rows);
+                UpdatePlacement();
+                T81SyncMirrors();
+                Wh_Log(L"[T81-ROWS] mouse resize rows=%d (runtime only)", rows);
+            }
+        }
+        return true;
+    }
+    if (msg == WM_LBUTTONUP) {
+        t81ResizeWindow = nullptr;
+        if (GetCapture() == hwnd) ReleaseCapture();
+        return true;
+    }
+    if (msg == WM_CANCELMODE || msg == WM_CAPTURECHANGED) {
+        t81ResizeWindow = nullptr;
+        taskbarRows.store(t81ResizeBefore);
+        if (msg == WM_CANCELMODE && GetCapture() == hwnd) ReleaseCapture();
+        UpdatePlacement();
+        T81SyncMirrors();
+        return true;
+    }
+    return false;
+}
 static LRESULT CALLBACK T81MirrorProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     try {
         T81Mirror* bar = T81FindSecondary(hwnd);
+        if (bar && T81ResizeMessage(hwnd, msg, wp, lp))
+            return msg == WM_SETCURSOR ? TRUE : 0;
         if (msg == WM_MOUSEACTIVATE)
             return MA_NOACTIVATE;
         if (msg == WM_T81_SECONDARY_APPBAR && bar) {
@@ -25033,16 +26761,85 @@ static LRESULT CALLBACK T81MirrorProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (msg == WM_ERASEBKGND)
             return 1;
         if (msg == WM_MOUSEMOVE && bar && s) {
+            if (bar->taskPress && GetCapture() == hwnd && (wp & MK_LBUTTON)) {
+                POINT point{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+                int dx = std::abs((int)(point.x - bar->taskPressPoint.x));
+                int dy = std::abs((int)(point.y - bar->taskPressPoint.y));
+                RECT resizeClient{};
+                GetClientRect(hwnd, &resizeClient);
+                int rowUnit = std::max(1, MulDiv(s->nativeSmallIcons ? 30 : 40, (int)T81SecondaryDpi(hwnd), 96));
+                bool multi = !s->verticalActive && resizeClient.bottom > rowUnit + rowUnit / 2;
+                if (allowDragReorder.load() && !multi &&
+                    (dx >= GetSystemMetrics(SM_CXDRAG) || dy >= GetSystemMetrics(SM_CYDRAG)))
+                    bar->taskDragging = true;
+                if (bar->taskDragging) {
+                    RECT client{};
+                    GetClientRect(hwnd, &client);
+                    bar->taskInsertion = PtInRect(&client, point)
+                        ? T81SecondaryInsertion(T81SecondaryButtons(hwnd, bar->monitor), point,
+                                                s->verticalActive) : -1;
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                    return 0;
+                }
+            }
             TRACKMOUSEEVENT tracking{sizeof(tracking), TME_LEAVE, hwnd, 0};
             TrackMouseEvent(&tracking);
+            POINT point{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+            RECT start = T81SecondaryStartRect(hwnd);
+            T81SecondaryStartHot(*bar, !startHotCorner.load() && PtInRect(&start, point));
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         }
         if (msg == WM_MOUSELEAVE && bar && s) {
+            T81SecondaryStartHot(*bar, false);
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         }
-        if (bar && s && (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP))
+        if (msg == WM_TIMER && wp == TIMER_T81_SECONDARY_START_FADE && bar && s) {
+            ULONGLONG now = GetTickCount64();
+            float elapsed = (float)std::min<ULONGLONG>(80, now - bar->startFadeTick);
+            bar->startFadeTick = now;
+            float duration = taskbarSkin.load() == 1 ? (bar->startHot ? 180.f : 350.f) : 140.f;
+            if (bar->startHot)
+                bar->startFade = std::min(1.f, bar->startFade + elapsed / duration);
+            else
+                bar->startFade = std::max(0.f, bar->startFade - elapsed / duration);
+            if ((bar->startHot && bar->startFade >= 1.f) ||
+                (!bar->startHot && bar->startFade <= 0.f))
+                KillTimer(hwnd, TIMER_T81_SECONDARY_START_FADE);
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+        }
+        if (bar && s && msg == WM_LBUTTONDOWN) {
+            CancelActivationRetry();
+            POINT point{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+            for (const auto& button : T81SecondaryButtons(hwnd, bar->monitor)) {
+                if (PtInRect(&button.rect, point) && button.group < s->groups.size()) {
+                    bar->taskPress = true;
+                    bar->taskDragging = false;
+                    bar->taskPressPoint = point;
+                    bar->taskKey = s->groups[button.group].key;
+                    bar->taskInsertion = -1;
+                    SetCapture(hwnd);
+                    if (GetCapture() != hwnd) {
+                        bar->taskPress = false;
+                        bar->taskKey.clear();
+                    }
+                    break;
+                }
+            }
+            InvalidateRect(hwnd, nullptr, FALSE);
+        }
+        if (bar && s && (msg == WM_CANCELMODE || msg == WM_CAPTURECHANGED)) {
+            bar->taskPress = false;
+            bar->taskDragging = false;
+            bar->taskKey.clear();
+            bar->taskInsertion = -1;
+            if (msg == WM_CANCELMODE && GetCapture() == hwnd)
+                ReleaseCapture();
+            InvalidateRect(hwnd, nullptr, FALSE);
+        }
+        if (bar && s && msg == WM_LBUTTONUP)
             InvalidateRect(hwnd, nullptr, FALSE);
         if (msg == WM_PAINT && bar && s) {
             T81PaintSecondary(hwnd, bar->monitor);
@@ -25067,6 +26864,45 @@ static LRESULT CALLBACK T81MirrorProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         if (msg == WM_LBUTTONUP && bar && s) {
             POINT point{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+            if (bar->taskPress) {
+                bool moved = bar->taskDragging;
+                std::wstring key = bar->taskKey;
+                // Refresh can change the visible list during a drag; derive
+                // the drop from the current snapshot, not a stale index.
+                RECT client{};
+                GetClientRect(hwnd, &client);
+                int insertion = moved && allowDragReorder.load() && PtInRect(&client, point)
+                    ? T81SecondaryInsertion(T81SecondaryButtons(hwnd, bar->monitor), point,
+                                            s->verticalActive) : -1;
+                bar->taskPress = false;
+                bar->taskDragging = false;
+                bar->taskKey.clear();
+                bar->taskInsertion = -1;
+                if (GetCapture() == hwnd)
+                    ReleaseCapture();
+                if (moved) {
+                    if (insertion >= 0) {
+                        MoveGroupToInsertion(key, insertion);
+                        BuildGroups();
+                        if (s->bar)
+                            InvalidateRect(s->bar, nullptr, FALSE);
+                        for (const auto& mirror : t81Mirrors)
+                            if (mirror.window)
+                                InvalidateRect(mirror.window, nullptr, FALSE);
+                    }
+                    return 0;
+                }
+                // Do not activate a different task if the list changed during press.
+                bool same = false;
+                for (const auto& button : T81SecondaryButtons(hwnd, bar->monitor))
+                    if (PtInRect(&button.rect, point) && button.group < s->groups.size() &&
+                        s->groups[button.group].key == key) {
+                        same = true;
+                        break;
+                    }
+                if (!same)
+                    return 0;
+            }
             T81SecondaryClick(hwnd, bar->monitor, point);
             return 0;
         }
@@ -25235,6 +27071,7 @@ static void T81SyncMirrors() {
                 Wh_Log(L"[T81-MULTI] window creation failed: %lu", GetLastError());
                 continue;
             }
+            ExcludeFromPeek(window);
             t81Mirrors.push_back({monitor, window});
             it = std::prev(t81Mirrors.end());
             Wh_Log(L"[T81-MULTI] secondary taskbar created monitor=%p", monitor);
@@ -25367,7 +27204,21 @@ static bool T81HandleShellMinRect(LPARAM lp) noexcept {
 }
 
 LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    if (m == WM_T81_PINS_READY && s && h == s->bar) {
+        FinishPinWorker();
+        return 0;
+    }
+    if (m == WM_T81_OPEN_CUSTOMIZE && s && h == s->bar) {
+        if (wp) ShowTrayCustomize(h);
+        else OpenNotificationIconsPage(h);
+        return 0;
+    }
+    if (T81ResizeMessage(h, m, wp, lp))
+        return m == WM_SETCURSOR ? TRUE : 0;
     if (s && m == WM_LBUTTONDOWN) {
+        // New direct input supersedes any pending activation from an older
+        // task click. Do not activate another application on empty-bar clicks.
+        CancelActivationRetry();
         s->suppressTrayRelease = false;
         t81SecondaryFlyoutUntil = 0;
     }
@@ -25431,6 +27282,42 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             Wh_Log(L"[T81-CNI] UI request failed hr=0x%08lx", (unsigned long)hr);
         return 0;
     }
+    case WM_T81_WIN_TAP: {
+        // Compare the actual menu state before the physical key release with
+        // the state at the verification deadline; never replay the Win key.
+        static bool beganVisible = false;
+        static unsigned long downSequence = 0;
+        if (wp == 1) {
+            KillTimer(h, TIMER_T81_WIN_FALLBACK);
+            downSequence = (unsigned long)lp;
+            beganVisible = OpenShellMenuVisible();
+            HWND fg = GetForegroundWindow(); DWORD fgPid = 0;
+            if (fg) GetWindowThreadProcessId(fg, &fgPid);
+            Wh_Log(L"[T81-WIN-RECOVERY] physical down foreground=%p pid=%lu", fg, fgPid);
+        } else if (wp == 3) {
+        } else if (wp == 2 && downSequence == (unsigned long)lp) {
+            s->t81WinFallbackSequence = downSequence;
+            s->t81WinBeganVisible = beganVisible;
+            if (SetTimer(h, TIMER_T81_WIN_FALLBACK, 100, nullptr))
+                Wh_Log(L"[T81-WIN-RECOVERY] physical Win tap began-visible=%d check-ms=100", beganVisible ? 1 : 0);
+        }
+        return 0;
+    }
+    case WM_T81_START_STATE: {
+        bool visible = wp != 0;
+        HMONITOR monitor = (HMONITOR)lp;
+        if (s->startMenuVisible != visible || s->startMenuMonitor != monitor) {
+            s->startMenuVisible = visible;
+            s->startMenuMonitor = monitor;
+            Wh_Log(L"[T81-START-STATE] visible=%d monitor=%p", visible ? 1 : 0, monitor);
+            if (taskbarSkin.load() == 1) {
+                InvalidateRect(h, nullptr, FALSE);
+                for (const auto& mirror : t81Mirrors)
+                    if (mirror.window && IsWindow(mirror.window)) InvalidateRect(mirror.window, nullptr, FALSE);
+            }
+        }
+        return 0;
+    }
     case WM_T81_APPBAR:
         if (s->appbarRegistered && wp == ABN_POSCHANGED) {
             s->appbarDirty = true;
@@ -25444,6 +27331,36 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         }
         return 0;
     case WM_TIMER:
+        if (wp == TIMER_T81_WIN_FALLBACK) {
+            KillTimer(h, TIMER_T81_WIN_FALLBACK);
+            if (s->t81WinFallbackSequence != t81WinInputGeneration.load(std::memory_order_relaxed)) {
+                Wh_Log(L"[T81-WIN-RECOVERY] cancelled: subsequent keyboard input");
+                return 0;
+            }
+            HWND helper = FindWindowW(L"OpenShellMenu.CStartHookWindow", nullptr);
+            HWND owner = FindWindowW(L"OpenShell.COwnerWindow", nullptr);
+            DWORD shellPid = 0, helperPid = 0, ownerPid = 0;
+            HWND shell = GetShellWindow();
+            if (shell) GetWindowThreadProcessId(shell, &shellPid);
+            if (helper) GetWindowThreadProcessId(helper, &helperPid);
+            if (owner) GetWindowThreadProcessId(owner, &ownerPid);
+            if (!shellPid || (helperPid != shellPid && ownerPid != shellPid)) {
+                Wh_Log(L"[T81-WIN-RECOVERY] Open-Shell not positively identified; no fallback");
+                return 0;
+            }
+            bool visibleNow = OpenShellMenuVisible();
+            if (visibleNow != s->t81WinBeganVisible) {
+                Wh_Log(L"[T81-WIN-RECOVERY] menu state already changed; no fallback");
+                return 0;
+            }
+            // Reuse the real taskbar click route, including its positioning
+            // and guarded foreground recovery. A queued request is not a
+            // confirmation that the menu became visible.
+            bool posted = ToggleOpenShellStart();
+            Wh_Log(L"[T81-WIN-RECOVERY] click-route request=%ls posted=%d (state unconfirmed)",
+                   visibleNow ? L"close" : L"open", posted ? 1 : 0);
+            return 0;
+        }
         if (wp == TIMER_T81_SECONDARY_START) {
             T81PlaceSecondaryOpenShell();
             return 0;
@@ -25481,7 +27398,19 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             FindVolumePopupContext c{s->volumeLaunchPid, nullptr};
             if (c.pid)
                 EnumWindows(FindVolumePopupProc, (LPARAM)&c);
-            if (c.found && FlyoutAtVisualTarget(c.found, s->volumeAnchor)) {
+            if (c.found && s->volumeDismissPending) {
+                BOOL posted = PostMessageW(c.found, WM_CLOSE, 0, 0);
+                Wh_Log(L"[T81-FLYOUT] pending volume dismiss hwnd=%p posted=%d", c.found, posted);
+                if (posted)
+                    StopVolumePositionWatch();
+                else if (--s->volumePositionAttempts <= 0)
+                    StopVolumePositionWatch();
+            } else if (c.found && FlyoutAtVisualTarget(c.found, s->volumeAnchor)) {
+                RECT observed{};
+                if (GetWindowRect(c.found, &observed)) {
+                    s->volumeLastWidth = observed.right - observed.left;
+                    s->volumeLastHeight = observed.bottom - observed.top;
+                }
                 StopVolumePositionWatch();
                 Wh_Log(L"[T81-DIAG] volume popup target rectangle observed");
             } else {
@@ -25489,7 +27418,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                     BOOL disabled = TRUE;
                     DwmSetWindowAttribute(c.found, DWMWA_TRANSITIONS_FORCEDISABLED, &disabled,
                                           sizeof(disabled));
-                    PlaceFlyoutAtVisualBar(c.found, s->volumeAnchor);
+                    T81PlaceVolumeUsingCache(c.found);
                 }
                 if (--s->volumePositionAttempts <= 0) {
                     StopVolumePositionWatch();
@@ -25499,15 +27428,33 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             return 0;
         }
         if (wp == TIMER_ACTION_POSITION) {
-            HWND f = FindOwnActionFlyout();
-            if (f && s->verticalActive && FlyoutAtVisualTarget(f, s->actionAnchor)) {
+            LASTINPUTINFO input{sizeof(input)};
+            if (s->actionInputTick && GetLastInputInfo(&input) &&
+                input.dwTime != s->actionInputTick) {
                 KillTimer(h, TIMER_ACTION_POSITION);
                 s->actionPositionAttempts = 0;
-                Wh_Log(L"[T81-DIAG] action center companion target rectangle observed");
-            } else if (--s->actionPositionAttempts <= 0 || !s->verticalActive) {
+                Wh_Log(L"[T81-ACTION-Z] cancelled: newer user input");
+                return 0;
+            }
+            HWND f = FindOwnActionFlyout();
+            if (f && !s->actionRaised) {
+                // One Z-order adjustment for the validated companion, after an
+                // explicit click. No foreground stealing and no persistent
+                // always-on-top promotion: keep its existing topmost band.
+                BOOL ok = SetWindowPos(f, HWND_TOP, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER |
+                    SWP_ASYNCWINDOWPOS);
+                s->actionRaised = true;
+                Wh_Log(L"[T81-ACTION-Z] raise requested hwnd=%p ok=%d topmost=%d", f,
+                    ok ? 1 : 0, (GetWindowLongPtrW(f, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0);
+            }
+            if (f && (!s->verticalActive || FlyoutAtVisualTarget(f, s->actionAnchor))) {
                 KillTimer(h, TIMER_ACTION_POSITION);
-                Wh_Log(L"[T81-DIAG] action center companion position not confirmed");
-            } else if (f)
+                s->actionPositionAttempts = 0;
+            } else if (--s->actionPositionAttempts <= 0) {
+                KillTimer(h, TIMER_ACTION_POSITION);
+                Wh_Log(L"[T81-ACTION-Z] flyout/position not observed");
+            } else if (f && s->verticalActive)
                 PlaceFlyoutAtVisualBar(f, s->actionAnchor);
             return 0;
         }
@@ -25551,10 +27498,6 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             }
             return 0;
         }
-        if (wp == TIMER_OPENSHELL_VERIFY) {
-            VerifyOpenShellRequest();
-            return 0;
-        }
         if (wp == TIMER_RESOURCE_RELOAD) {
             KillTimer(h, TIMER_RESOURCE_RELOAD);
             LoadLegacyImages();
@@ -25585,7 +27528,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             }
             if (s->barDragCandidate &&
                 (!s->privateActive || s->bandsLocked ||
-                 (!s->barHookEndQueued && !(GetAsyncKeyState(VK_LBUTTON) & 0x8000))))
+                 (!gBarEndQueued && !(GetAsyncKeyState(VK_LBUTTON) & 0x8000))))
                 CancelBarEdgeDrag(true);
             // Keep responsive input checks at 100 ms; run the heavier tray
             // guard once per second, with event-driven rehide still active.
@@ -25610,6 +27553,19 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                     }
                 }
             }
+            // Another shell component can recreate DWM state. Reapply the
+            // documented exclusion, without unhiding the bar in fullscreen.
+            static ULONGLONG lastPeekProtection = 0;
+            ULONGLONG peekNow = GetTickCount64();
+            if (peekNow - lastPeekProtection >= 3000) {
+                lastPeekProtection = peekNow;
+                ExcludeFromPeek(h);
+                if (gWin7OrbWindow && IsWindow(gWin7OrbWindow))
+                    ExcludeFromPeek(gWin7OrbWindow);
+                for (const auto& mirror : t81Mirrors)
+                    if (mirror.window && IsWindow(mirror.window))
+                        ExcludeFromPeek(mirror.window);
+            }
             GuardOverlayZOrder();
             TickTrayDrag();
             DismissOverflowOnOutsideClick();
@@ -25621,6 +27577,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         if (wp == TIMER_ANIMATION || wp == TIMER_FADE)
             InvalidateRect(h, nullptr, FALSE);
         if (wp == TIMER_REFRESH) {
+            ULONGLONG t81RefreshStart = GetTickCount64();
             // Covers Start opened externally, including in another Explorer process.
             if (s->peekOn && CompanionStartScreenVisible())
                 PeekOff(false);
@@ -25651,15 +27608,25 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             }
             if (s->peekOn && !s->peekDesktop && (!s->peekTarget || !IsWindow(s->peekTarget)))
                 PeekOff(false);
+            ULONGLONG t81BeforePlacement = GetTickCount64();
             UpdatePlacement();
+            ULONGLONG t81BeforeTasks = GetTickCount64();
             Refresh();
+            ULONGLONG t81BeforeMirrors = GetTickCount64();
             T81SyncMirrors();
+            ULONGLONG t81AfterMirrors = GetTickCount64();
+            if (t81AfterMirrors - t81RefreshStart >= 80)
+                Wh_Log(L"[T81-PERF] refresh total=%llu pre=%llu placement=%llu tasks=%llu mirrors=%llu ms",
+                       t81AfterMirrors-t81RefreshStart, t81BeforePlacement-t81RefreshStart,
+                       t81BeforeTasks-t81BeforePlacement, t81BeforeMirrors-t81BeforeTasks,
+                       t81AfterMirrors-t81BeforeMirrors);
             if (s->nativeRecoveryPending && !s->privateActive && enablePrivateTray.load() &&
                 !quitting.load() && GetTickCount64() >= s->nativeRecoveryRetryAt &&
                 IsExpectedNativeTray(s->native) && IsWindowVisible(s->native) &&
                 IsWindowVisible(s->bar) &&
                 (s->perPixelBar ? s->perPixelFrame : s->legacyAlphaReady)) {
-                s->nativeRecoveryRetryAt = GetTickCount64() + 5000;
+                s->nativeRecoveryRetryAt = GetTickCount64() + 3000;
+                Wh_Log(L"[T81-TRAY] retrying integrated takeover");
                 try {
                     if (StartPrivateTray()) {
                         s->nativeRecoveryPending = false;
@@ -25674,7 +27641,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                         GuardPrivateTray();
                         InvalidateRect(s->bar, nullptr, FALSE);
                         Wh_Log(
-                            L"[T81-DIAG] private tray recovered after native taskbar replacement");
+                            L"[T81-TRAY] integrated takeover succeeded after retry");
                     } else
                         Wh_Log(
                             L"[T81-DIAG] private tray recovery deferred; native taskbar retained");
@@ -25813,13 +27780,32 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         if (!aeroPeek.load())
             PeekOff(false);
         ConfigureBarAlpha(h, perPixelTaskbar.load());
+        for (const auto& mirror : t81Mirrors)
+            if (mirror.window && IsWindow(mirror.window)) {
+                T81SetExperimentalBlur(mirror.window);
+                InvalidateRect(mirror.window, nullptr, FALSE);
+            }
         UpdatePlacement();
         InvalidateRect(h, nullptr, FALSE);
         return 0;
     case WM_DWMCOMPOSITIONCHANGED:
+        T81SetExperimentalBlur(h);
+        for (const auto& mirror : t81Mirrors)
+            if (mirror.window && IsWindow(mirror.window))
+                T81SetExperimentalBlur(mirror.window);
+        ExcludeFromPeek(h);
+        if (gWin7OrbWindow && IsWindow(gWin7OrbWindow))
+            ExcludeFromPeek(gWin7OrbWindow);
+        for (const auto& mirror : t81Mirrors)
+            if (mirror.window && IsWindow(mirror.window))
+                ExcludeFromPeek(mirror.window);
         InvalidateRect(h, nullptr, FALSE);
         return 0;
     case WM_DWMCOLORIZATIONCOLORCHANGED:
+        T81SetExperimentalBlur(h);
+        for (const auto& mirror : t81Mirrors)
+            if (mirror.window && IsWindow(mirror.window))
+                T81SetExperimentalBlur(mirror.window);
         if (s->jumpPopup)
             InvalidateRect(s->jumpPopup, nullptr, FALSE);
         if (s->overflowPanel)
@@ -25903,7 +27889,10 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             // Small vertical movements remain candidates for the upward pull.
             if (!s->dragActive && gesture.away > 0 && gesture.away > std::abs(gesture.along))
                 return 0;
-            if (allowDragReorder.load() && !s->dragActive &&
+            RECT rowClient{};
+            GetClientRect(h, &rowClient);
+            bool multiRow = GetLayout(rowClient.right, rowClient.bottom).rows > 1;
+            if (allowDragReorder.load() && !multiRow && !s->dragActive &&
                 (std::abs(dx) >= GetSystemMetrics(SM_CXDRAG) / 2 ||
                  std::abs(dy) >= GetSystemMetrics(SM_CYDRAG) / 2)) {
                 s->dragActive = true;
@@ -26041,15 +28030,11 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                 s->barDragMoved = false;
                 s->barDragStart = screen;
                 s->barDragMonitor = mi.rcMonitor;
-                HMODULE module = nullptr;
-                if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                       (LPCWSTR)BarDragHookProc, &module)) {
+                {
                     s->barDragCandidate = true;
-                    s->barHookEndQueued = false;
+                    gBarEndQueued = false;
                     s->barDragPending = 0;
-                    s->barDragHook = SetWindowsHookExW(WH_MOUSE_LL, BarDragHookProc, module, 0);
-                    if (!s->barDragHook) {
+                    if (!StartBarDragHook(h)) {
                         Wh_Log(L"[T81-DIAG] bar drag hook failed error=%lu", GetLastError());
                         CancelBarEdgeDrag(false);
                     } else
@@ -26089,7 +28074,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         }
         if (hit == HIT_TRAY_MORE && taskbarSkin.load() == 1)
             InvalidateRect(h, nullptr, FALSE);
-        if (hit == HIT_DESKTOP && BetaTextureAvailable(0)) {
+        if (hit == HIT_DESKTOP && (taskbarSkin.load() == 1 || BetaTextureAvailable(0))) {
             s->betaDesktopPressed = true;
             SetCapture(h);
             InvalidateRect(h, nullptr, FALSE);
@@ -26168,8 +28153,8 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         }
         return 0;
     case WM_BAR_DRAG_POINT:
-        s->barMoveQueued = false;
-        if (s->barDragCandidate && !s->barHookEndQueued) {
+        gBarMoveQueued = false;
+        if (s->barDragCandidate && !gBarEndQueued) {
             POINT current{};
             if (GetCursorPos(&current))
                 UpdateBarEdgeDrag(h, current);
@@ -26180,7 +28165,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     case WM_BAR_DRAG_END:
         if (s->barDragCandidate) {
             POINT released{(LONG)(INT_PTR)wp, (LONG)lp};
-            UpdateBarEdgeDrag(h, released);
+            UpdateBarEdgeDrag(h, released, true);
             if (!s->barDragCandidate)
                 return 0; // a genuine native move cancelled the gesture
             int pending = s->barDragPending;
@@ -26188,8 +28173,15 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             bool moved = s->barDragMoved, inside = PtInRect(&monitor, released) != FALSE;
             if (moved)
                 SaveBarEdgePreference();
-            CancelBarEdgeDrag(false);
+            CancelBarEdgeDrag(false, true);
             UpdatePlacement();
+            if (s->barDragBlurSuspended) {
+                s->barDragBlurSuspended = false;
+                if (!quitting.load() && IsWindow(h)) {
+                    T81SetExperimentalBlur(h);
+                    Wh_Log(L"[T81-BLUR] drop complete; requested normal blur policy");
+                }
+            }
             Wh_Log(
                 L"[T81-DIAG] drag release x=%ld y=%ld monitor=%ld,%ld,%ld,%ld inside=%d choice=%d changed=%d",
                 released.x, released.y, monitor.left, monitor.top, monitor.right, monitor.bottom,
@@ -26641,6 +28633,8 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_DESTROY:
+        T81StopObserver();
+        KillTimer(h, TIMER_T81_WIN_FALLBACK);
         s->buttonTransitions.clear();
         T81CancelOpenShellPosition();
         KillTimer(h, TIMER_BUTTON_TRANSITION);
@@ -26761,6 +28755,34 @@ DWORD WINAPI UIThread(LPVOID) {
         if (!LoadWin7StartImage(local))
             Wh_Log(L"[T81-DIAG] Windows 7 Start sprite unavailable; using existing Start");
         LoadBetaTextures(local);
+        for (int i = 0; i < 3; ++i) {
+            const auto bytes = DecodeBase64(kWin7StylerDesktopPng[i]);
+            if (bytes.empty()) continue;
+            local.peekStylerStreams[i] = SHCreateMemStream(bytes.data(), (UINT)bytes.size());
+            if (local.peekStylerStreams[i])
+                local.peekStylerImages[i] = Image::FromStream(local.peekStylerStreams[i], FALSE);
+            if (local.peekStylerImages[i] && local.peekStylerImages[i]->GetLastStatus() != Ok) {
+                delete local.peekStylerImages[i]; local.peekStylerImages[i] = nullptr;
+            }
+        }
+        Wh_Log(L"[T81-PEEK] styler images normal=%d hover=%d pressed=%d",
+               local.peekStylerImages[0] != nullptr, local.peekStylerImages[1] != nullptr,
+               local.peekStylerImages[2] != nullptr);
+        const auto taskStateBytes = DecodeBase64(kTaskStateSprite);
+        if (!taskStateBytes.empty()) {
+            local.taskStateStream = SHCreateMemStream(taskStateBytes.data(), (UINT)taskStateBytes.size());
+            if (local.taskStateStream)
+                local.taskStateSprite = Image::FromStream(local.taskStateStream, FALSE);
+            if (!local.taskStateSprite || local.taskStateSprite->GetLastStatus() != Ok ||
+                local.taskStateSprite->GetWidth() != 60 || local.taskStateSprite->GetHeight() != 40) {
+                delete local.taskStateSprite;
+                local.taskStateSprite = nullptr;
+                if (local.taskStateStream)
+                    local.taskStateStream->Release();
+                local.taskStateStream = nullptr;
+                Wh_Log(L"[T81-TASKART] sprite unavailable; using drawn task frames");
+            }
+        }
 
         LoadOrderOverride();
         LoadBands();
@@ -26806,6 +28828,7 @@ DWORD WINAPI UIThread(LPVOID) {
             barWindow.store(local.bar);
             if (local.bar) {
                 ConfigureBarAlpha(local.bar, perPixelTaskbar.load());
+                T81StartObserver(local.bar);
                 StartAttentionHook(local.bar);
             }
             if (local.bar && !quitting.load()) {
@@ -26826,9 +28849,13 @@ DWORD WINAPI UIThread(LPVOID) {
                     InvalidateRect(local.bar, nullptr, FALSE);
                     UpdateWindow(local.bar);
                 }
-                if (enablePrivateTray.load() && IsWindowVisible(local.bar) &&
-                    (local.perPixelBar ? local.perPixelFrame : local.legacyAlphaReady) &&
-                    StartPrivateTray()) {
+                bool readyForTray = IsWindowVisible(local.bar) &&
+                    (local.perPixelBar ? local.perPixelFrame : local.legacyAlphaReady);
+                Wh_Log(L"[T81-TRAY] startup gates integrated=%d bar-visible=%d per-pixel=%d frame=%d legacy=%d ready=%d",
+                    enablePrivateTray.load() ? 1 : 0, IsWindowVisible(local.bar) ? 1 : 0,
+                    local.perPixelBar ? 1 : 0, local.perPixelFrame ? 1 : 0,
+                    local.legacyAlphaReady ? 1 : 0, readyForTray ? 1 : 0);
+                if (enablePrivateTray.load() && readyForTray && StartPrivateTray()) {
                     StartResourceWorker();
                     RefreshVolume();
                     PublishCniSystemIcon(HIT_VOLUME);
@@ -26840,12 +28867,14 @@ DWORD WINAPI UIThread(LPVOID) {
                     GuardPrivateTray();
                     InvalidateRect(local.bar, nullptr, FALSE);
                 } else {
-                    // If fullscreen prevented the bar's first visible frame, retry
-                    // the original private-tray initialization after it reappears.
-                    if (enablePrivateTray.load() && !IsWindowVisible(local.bar) &&
-                        ShouldHideForFullScreen()) {
+                    // Startup can fail transiently (not only during fullscreen),
+                    // including class/host creation races following a restart.
+                    // Retry the same validated takeover path with backoff. Do
+                    // not cover or hide the native tray until takeover succeeds.
+                    if (enablePrivateTray.load()) {
                         local.nativeRecoveryPending = true;
-                        local.nativeRecoveryRetryAt = 0;
+                        local.nativeRecoveryRetryAt = GetTickCount64() + 1000;
+                        Wh_Log(L"[T81-RECOVERY] takeover deferred; retry armed in 1 second");
                     }
                     Wh_Log(
                         L"[T81-DIAG] private tray unavailable or disabled; native taskbar remains available");
@@ -26863,10 +28892,12 @@ DWORD WINAPI UIThread(LPVOID) {
             UnhookWinEvent(local.visibilityHook);
             local.visibilityHook = nullptr;
         }
+        T81StopObserver();
         StopVolumePositionWatch();
         CancelBatterySlide();
         CleanupBatteryFrame();
         StopResourceWorker();
+        StopPinWorker();
         DestroyDesktopPopup();
         DestroyAddressBand();
         CloseJumpPopup();
@@ -26902,6 +28933,9 @@ DWORD WINAPI UIThread(LPVOID) {
         if (registered)
             UnregisterClassW(kClass, wc.hInstance);
         DestroyStartImage(local);
+        T81FreeClockResources(local);
+        if (local.clockDWrite) { FreeLibrary(local.clockDWrite); local.clockDWrite = nullptr; }
+        if (local.clockD2D) { FreeLibrary(local.clockD2D); local.clockD2D = nullptr; }
         ClearLegacyImages();
         s = nullptr;
     } catch (...) {
@@ -26915,6 +28949,7 @@ DWORD WINAPI UIThread(LPVOID) {
             }
         };
         if (s) {
+            cleanup([&] { T81StopObserver(); });
             cleanup([&] { StopVolumePositionWatch(); });
             cleanup([&] { StopAttentionHook(local.bar); });
             cleanup([&] {
@@ -26928,6 +28963,7 @@ DWORD WINAPI UIThread(LPVOID) {
                 CleanupBatteryFrame();
             });
             cleanup([&] { StopResourceWorker(); });
+            cleanup([&] { StopPinWorker(); });
             cleanup([&] { StopPrivateTray(); });
             cleanup([&] { DestroyDesktopPopup(); });
             cleanup([&] { DestroyAddressBand(); });
@@ -26975,6 +29011,9 @@ DWORD WINAPI UIThread(LPVOID) {
         if (registered)
             UnregisterClassW(kClass, GetModuleHandleW(nullptr));
         cleanup([&] { DestroyStartImage(local); });
+        cleanup([&] { T81FreeClockResources(local); });
+        cleanup([&] { if (local.clockDWrite) { FreeLibrary(local.clockDWrite); local.clockDWrite = nullptr; } });
+        cleanup([&] { if (local.clockD2D) { FreeLibrary(local.clockD2D); local.clockD2D = nullptr; } });
         cleanup([&] { ClearLegacyImages(); });
         s = nullptr;
         Wh_Log(
@@ -27658,6 +29697,70 @@ void WINAPI EntryPoint_Hook() {
     ExitThread(0);
 }
 
+// Keyboard Start route observed in taskbar-auto-hide-keyboard-only (GPL-3.0).
+// This runs only in the real shell Explorer, not the dedicated taskbar process.
+// It is an optional private symbol, and Windows builds can route Win elsewhere.
+using T81ShowStartViewFn = HRESULT (WINAPI*)(void*, int, int);
+static T81ShowStartViewFn t81OriginalShowStartView = nullptr;
+// Unknown is not treated as proof of elevation; it selects the compatibility
+// path only when Open-Shell is positively identified.
+static int T81ForegroundElevationState() {
+    HWND fg = GetForegroundWindow(); DWORD pid = 0;
+    if (!fg || !GetWindowThreadProcessId(fg, &pid) || !pid) return -1;
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) return -1;
+    HANDLE token = nullptr; TOKEN_ELEVATION elevation{}; DWORD bytes = 0;
+    bool ok = OpenProcessToken(process, TOKEN_QUERY, &token) &&
+              GetTokenInformation(token, TokenElevation, &elevation, sizeof(elevation), &bytes);
+    if (token) CloseHandle(token);
+    CloseHandle(process);
+    return ok ? (elevation.TokenIsElevated ? 1 : 0) : -1;
+}
+static HRESULT WINAPI T81ShowStartViewHook(void* self, int method, int flags) {
+    int elevation = method == 1 ? T81ForegroundElevationState() : 0;
+    if (method == 1) Wh_Log(L"[T81-NATIVE-WIN] keyboard route foreground-elevation=%d", elevation);
+    if (method == 1 && elevation != 0) {
+        DWORD shellPid = 0;
+        HWND shell = GetShellWindow();
+        if (shell) GetWindowThreadProcessId(shell, &shellPid);
+        HWND helper = FindWindowW(L"OpenShellMenu.CStartHookWindow", nullptr);
+        HWND owner = FindWindowW(L"OpenShell.COwnerWindow", nullptr);
+        DWORD helperPid = 0, ownerPid = 0;
+        if (helper) GetWindowThreadProcessId(helper, &helperPid);
+        if (owner) GetWindowThreadProcessId(owner, &ownerPid);
+        HWND tray = nullptr;
+        for (int i = 0; i < 32 && (tray = FindWindowExW(nullptr, tray, L"Shell_TrayWnd", nullptr)); ++i) {
+            DWORD p = 0; GetWindowThreadProcessId(tray, &p);
+            if (p == shellPid) break;
+        }
+        DWORD trayPid = 0;
+        if (tray) GetWindowThreadProcessId(tray, &trayPid);
+        if (shellPid == GetCurrentProcessId() && tray && trayPid == shellPid &&
+            (helperPid == shellPid || ownerPid == shellPid)) {
+            UINT msg = RegisterWindowMessageW(L"OpenShellMenu.StartMenuMsg");
+            bool shown = OpenShellMenuVisible();
+            BOOL posted = msg && PostMessageW(tray, msg, shown ? 0 : 2, 0);
+            Wh_Log(L"[T81-NATIVE-WIN] keyboard method=1 compatibility request=%ls posted=%d unconfirmed", shown ? L"close" : L"open", posted ? 1 : 0);
+            if (posted) return S_OK;
+        }
+    }
+    return t81OriginalShowStartView(self, method, flags);
+}
+static void T81InstallShellStartHook() {
+    DWORD pid = 0; HWND shell = GetShellWindow();
+    if (shell) GetWindowThreadProcessId(shell, &pid);
+    if (!pid || pid != GetCurrentProcessId()) return;
+    HMODULE module = LoadLibraryExW(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) { Wh_Log(L"[T81-NATIVE-WIN] module unavailable error=%lu", GetLastError()); return; }
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {{LR"(public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum IMMERSIVELAUNCHERSHOWFLAGS))"},
+         &t81OriginalShowStartView, T81ShowStartViewHook},
+    };
+    bool ok = WindhawkUtils::HookSymbols(module, hooks, std::size(hooks));
+    Wh_Log(L"[T81-NATIVE-WIN] native Explorer symbol hook installed=%d", ok ? 1 : 0);
+    // Retain the module for the lifetime of the installed hook.
+}
+
 BOOL Wh_ModInit() {
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
@@ -27732,6 +29835,7 @@ BOOL Wh_ModInit() {
     }
 
     g_isToolModProcessLauncher = true;
+    T81InstallShellStartHook();
     // Limited CPL redirects run in Explorer. Taskbar state and server remain
     // in the dedicated process; this bridge is not crash-isolated from Explorer.
     if (CniModuleMatches(GetModuleHandleW(L"rpcrt4.dll"), kCniRpcTimestamp, kCniRpcImageSize))
