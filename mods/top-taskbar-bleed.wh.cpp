@@ -2112,16 +2112,12 @@ wux::ElementTheme RestoreThemeValue(Island& isl) {
     return isl.originalTheme;
 }
 
-// The taskbar's background doesn't follow RequestedTheme: its theme-change
-// handling computes it once, from the theme in effect while the handling
-// runs. When the Windows mode changes while a theme is forced, that can be the
-// forced theme (a light title bar, forced Light, the mode switched to dark:
-// the background is computed light, the panel covers it, and it is still
-// light when the panel hides and the restored Dark puts white text on it).
-// So once the theme is restored after such a change, the taskbar is asked to
-// run that handling again, now under its own theme, with the same
-// notification Windows sends for a mode change. The island's window only:
-// nothing else in the process is told.
+wux::ElementTheme ForcedThemeValue(Island& isl) {
+    return isl.forcedTheme == ThemeLight ? wux::ElementTheme::Light
+           : isl.forcedTheme == ThemeDark ? wux::ElementTheme::Dark
+                                          : RestoreThemeValue(isl);
+}
+
 // The taskbar sets RequestedTheme on its root itself and rewrites it when the
 // system theme changes. A value saved once would go stale: forced Dark under a
 // dark system theme, then Windows switched to light and the panel hidden, would
