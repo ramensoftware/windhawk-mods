@@ -78,6 +78,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 - **Live glass**: panels blur what's behind them in real time, with an experimental liquid glass with edge refraction (on by default)
 - **Custom liquid glass** (the theme from Siri Plus Launchpad): your color at the top, fading to clear glass at the bottom, with a fine line of light along the bottom edge. For the panels and pills, the bar's background or both; color, strength and how far down the color goes are set in Menu Bar Settings
 - **One glass for everything**: the Control Center, menus, panels and pills share the same glass settings (style, tint, liquid glass, refraction, blur, live)
+- "Window color" bar background: transparent over the desktop, and the color of the active window's title bar when that window is maximized
 - Bar text and icons in white, black or automatic (following the Windows theme), for all displays or each display on its own
 - Clicking the album cover (Control Center or Now Playing) brings the playing app's window to the front
 - Optional: hide the bar while a window is maximized on its display (the window gets the whole height) and bring it back when none is
@@ -349,7 +350,7 @@ struct Settings {
     int islStyle, islSize, islDur, islIn, islOut, islPos;  // pílulas de aviso
     int npLayout, npSize;  // painel Tocando agora
     int npBar;             // barra de progresso: 0 linha, 1 colorida, 2 onda
-    int barStyle;  // 0 vidro, 1 transparente, 2 vidro líquido, 3 vidro líquido personalizado
+    int barStyle;  // 0 vidro, 1 transparente, 2 vidro líquido, 3 vidro líquido personalizado, 4 cor da janela
     DWORD tintColor;          // Vidro líquido personalizado: a cor (0xRRGGBB)
     int tintLevel, tintReach;  // força da cor no topo e até onde ela desce (%)
     int selBar, selMenu;  // cor da seleção: índice em kSelPalette, -1 = fosca
@@ -813,7 +814,7 @@ static void LoadSettings() {
     if (s.islDur < 15 || s.islDur > 80) s.islDur = 26;
     {
         std::wstring bs = OvrStr(L"barStyle");
-        s.barStyle = bs == L"transparent" ? 1 : bs == L"liquid" ? 2 : bs == L"tinted" ? 3 : 0;
+        s.barStyle = bs == L"transparent" ? 1 : bs == L"liquid" ? 2 : bs == L"tinted" ? 3 : bs == L"window" ? 4 : 0;
         std::wstring tc = OvrStr(L"tintColor");
         s.tintColor = 0x050505;
         if (tc.size() == 7 && tc[0] == L'#') {
@@ -12720,7 +12721,7 @@ static void BsLoadLook() {
         g_bsStyle = st;
         g_bsTransp = std::clamp(tr, 0, 100);
     } else {
-        g_bsStyle = (g_glass.liquid || g_settings.barStyle >= 2) ? 1 : 0;
+        g_bsStyle = (g_glass.liquid || g_settings.barStyle == 2 || g_settings.barStyle == 3) ? 1 : 0;
         g_bsTransp = g_glass.transparency;
     }
 }
@@ -12860,8 +12861,8 @@ static void BsSet(int val, int v) {
         return;
     }
     if (val == BV_BARSTYLE) {
-        static const PCWSTR kNames[] = {L"glass", L"transparent", L"liquid", L"tinted"};
-        v = std::clamp(v, 0, 3);
+        static const PCWSTR kNames[] = {L"glass", L"transparent", L"liquid", L"tinted", L"window"};
+        v = std::clamp(v, 0, 4);
         if (g_settings.barStyle == v) return;
         g_settings.barStyle = v;
         OvrSetStr(L"barStyle", kNames[v]);
@@ -13232,7 +13233,7 @@ static void BsReleaseFormats() {
 
 // Opções das escolhas (abrem num menu, como no Siri Plus Launchpad).
 static const PCWSTR kBsChoices[] = {L"Vidro", L"Transparente", L"Líquido"};
-static const PCWSTR kBsBarChoices[] = {L"Vidro", L"Transparente", L"Líquido", L"Vidro líquido personalizado"};
+static const PCWSTR kBsBarChoices[] = {L"Vidro", L"Transparente", L"Líquido", L"Vidro líquido personalizado", L"Cor da janela"};
 static const PCWSTR kBsGlassStyle[] = {L"Transparente", L"Vidro líquido personalizado"};
 static const PCWSTR kBsNtfShape[] = {L"Círculo", L"Formato macOS"};
 static const PCWSTR kBsTextColor[] = {L"Automático", L"Branco", L"Preto"};
@@ -13298,7 +13299,7 @@ static const PCWSTR* BsChoiceLabels(int val) {
 static int BsChoiceCount(int val) {
     switch (val) {
         case BV_ISLPOS: case BV_ISLSTYLE: case BV_WXUNIT: case BV_WXLOOK: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: return 2;
-        case BV_BARSTYLE: return 4;
+        case BV_BARSTYLE: return 5;
         case BV_LANG: return (int)ARRAYSIZE(kBsLang);
         case BV_ISLIN: return 4;
         case BV_ISLOUT: case BV_CCCLOSE: return 5;
@@ -21706,7 +21707,7 @@ static void BarLiquidTick() {
 
 // Prepara a barra para o estilo escolhido (chamado ao criar).
 static void BarSetupStyle(Bar* b) {
-    if (g_settings.barStyle >= 2) {
+    if (g_settings.barStyle == 2 || g_settings.barStyle == 3) {
         b->lq = new LiquidSurface();
         b->lq->live = true;
         b->lq->wnd = b->hwnd;
@@ -22221,7 +22222,7 @@ static void Render(Bar* b) {
         b->brush->SetColor(D2D1::ColorF(((c >> 16) & 255) / 255.0f, ((c >> 8) & 255) / 255.0f, (c & 255) / 255.0f, 1.0f));
         b->rt->FillRectangle(D2D1::RectF(0, 0, w, h), b->brush);
     }
-    if (see && g_settings.barStyle >= 2 && b->lq) DrawBarLiquid(b, w, h, s);
+    if (see && (g_settings.barStyle == 2 || g_settings.barStyle == 3) && b->lq) DrawBarLiquid(b, w, h, s);
     if (see && g_settings.barStyle == 3) DrawBarTint(b, w, h, s, b->lq != nullptr);
 
     // Destaque em pílula, centralizado na altura da barra; fosco ou azul.
@@ -22711,6 +22712,7 @@ static void ApplySettingsLive(const Settings& before) {
     BarsApplyLive(true);
 }
 
+static void BarSamplePeekColor(Bar* b);  // a cor da barra de título da janela ativa (mais abaixo)
 static void UpdateSolid() {
     for (Bar* b : g_bars) {
         // Transparente e líquido ficam sempre assim (escolha explícita do usuário).
@@ -22721,6 +22723,20 @@ static void UpdateSolid() {
             b->solid = solid;
             ApplyGlass(b);
             BarSyncShadow(b);
+            InvalidateRect(b->hwnd, nullptr, FALSE);
+        }
+        // "Cor da janela": transparente na área de trabalho; com a janela ativa
+        // maximizada neste monitor, a barra pega a cor da barra de título dela.
+        if (g_settings.barStyle == 4 && !b->autoShown) {
+            bool zoomed = g_active.hwnd && IsWindow(g_active.hwnd) && IsZoomed(g_active.hwnd) && !IsIconic(g_active.hwnd) &&
+                          MonitorFromWindow(g_active.hwnd, MONITOR_DEFAULTTONULL) == b->monitor;
+            if (zoomed) BarSamplePeekColor(b);
+            else if (b->peekColorOn) {
+                b->peekColorOn = false;
+                InvalidateRect(b->hwnd, nullptr, FALSE);
+            }
+        } else if (g_settings.barStyle != 4 && !b->autoShown && b->peekColorOn) {
+            b->peekColorOn = false;  // trocou de fundo
             InvalidateRect(b->hwnd, nullptr, FALSE);
         }
     }
@@ -23073,10 +23089,11 @@ static void UpdateActiveApp(HWND fg) {
 // (logo depois, e uma vez só para uma rajada de avisos), para a barra sumir e
 // voltar sem atraso.
 static void MaxCheckSoon() {
-    if (g_settings.hideWhenMaximized && g_owner) SetTimer(g_owner, TIMER_MAXNOW, 15, nullptr);
+    if ((g_settings.hideWhenMaximized || g_settings.barStyle == 4) && g_owner) SetTimer(g_owner, TIMER_MAXNOW, 15, nullptr);
 }
 static void CALLBACK MaxEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
-    if (!g_settings.hideWhenMaximized || idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !hwnd) return;
+    if ((!g_settings.hideWhenMaximized && g_settings.barStyle != 4) || idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !hwnd)
+        return;
     if (GetAncestor(hwnd, GA_ROOT) != hwnd) return;
     // Só interessa uma janela maximizada agora, ou qualquer uma enquanto a barra
     // estiver escondida por isso (ela pode ter restaurado, minimizado ou fechado).
@@ -23474,12 +23491,14 @@ static LRESULT CALLBACK OwnerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
             if (wp == TIMER_MAXCHECK || wp == TIMER_MAXNOW) {
                 if (wp == TIMER_MAXNOW) KillTimer(hwnd, TIMER_MAXNOW);
                 UpdateFullscreen();
+                if (g_settings.barStyle == 4) UpdateSolid();  // a cor da janela maximizada
                 return 0;
             }
             if (wp == TIMER_STATUS) {
                 PollStatus(false);
                 ExtrasPoll();
                 UpdateFullscreen();
+                if (g_settings.barStyle == 4) UpdateSolid();
                 if (g_statusTick % 5 == 0) PurgeDeadTrayIcons();
                 if (g_cc.hwnd && g_cc.drag < 0) CcOnUpdate();
                 if (g_active.hwnd && !IsWindow(g_active.hwnd)) {
@@ -24432,6 +24451,7 @@ const UiTr kUiTr[] = {
     {L"Com a alça, um clique na pílula fina no topo mostra a barra (as janelas descem e ela fica na cor da janela ativa) e outro clique a esconde", L"With the handle, a click on the thin pill at the top shows the bar (windows move down and it takes the active window's color) and another click hides it", L"Con la asa, un clic en la píldora fina de arriba muestra la barra (las ventanas bajan y toma el color de la ventana activa) y otro clic la oculta", L"Avec la poignée, un clic sur la fine pilule en haut affiche la barre (les fenêtres descendent et elle prend la couleur de la fenêtre active) et un autre clic la masque", L"Mit dem Griff zeigt ein Klick auf die schmale Pille oben die Leiste (Fenster rücken nach unten, sie nimmt die Farbe des aktiven Fensters an), ein weiterer Klick blendet sie aus", L"Con la maniglia, un clic sulla pillola sottile in alto mostra la barra (le finestre scendono e prende il colore della finestra attiva) e un altro clic la nasconde", L"使用拉手时，点击顶部的细长胶囊显示菜单栏（窗口下移，菜单栏采用活动窗口的颜色），再次点击隐藏"},
     {L"Ao encostar o mouse no topo", L"When the pointer touches the top", L"Al tocar la parte superior con el puntero", L"Quand le pointeur touche le haut", L"Wenn der Mauszeiger oben anstößt", L"Quando il puntatore tocca il bordo superiore", L"鼠标碰到顶部时"},
     {L"Com a alça (clique)", L"With the handle (click)", L"Con la asa (clic)", L"Avec la poignée (clic)", L"Mit dem Griff (Klick)", L"Con la maniglia (clic)", L"使用拉手（点击）"},
+    {L"Cor da janela", L"Window color", L"Color de la ventana", L"Couleur de la fenêtre", L"Fensterfarbe", L"Colore della finestra", L"窗口颜色"},
     {L"Discos", L"Disks", L"Discos", L"Disques", L"Laufwerke", L"Dischi", L"磁盘"},
     {L"Clique para ver os discos e quanto cada um está cheio", L"Click to see the disks and how full each one is", L"Haz clic para ver los discos y cuánto está lleno cada uno", L"Cliquez pour voir les disques et leur remplissage", L"Klicken, um die Laufwerke und ihre Belegung zu sehen", L"Fai clic per vedere i dischi e quanto è pieno ciascuno", L"点击查看磁盘及其使用量"},
     {L"Discos: o do sistema está %s% cheio", L"Disks: the system disk is %s% full", L"Discos: el del sistema está al %s%", L"Disques : le disque système est plein à %s %", L"Laufwerke: Systemlaufwerk zu %s% voll", L"Dischi: quello di sistema è pieno al %s%", L"磁盘：系统磁盘已用 %s%"},
