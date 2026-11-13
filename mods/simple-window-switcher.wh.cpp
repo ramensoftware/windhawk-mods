@@ -437,35 +437,31 @@ nothing failed.
           - custom: Custom
         - customCornerRadius: 8
           $name: Custom Corner Radius (px)
-          $description: Corner radius in pixels (0-32), used when Corner Preference is Custom. Thumbnails use about half of it.
-        - taskRoundedCorners: auto
-          $name: Round Task Borders and Close Button
-          $description: Apply rounded corners to the selected task border and close button.
+          $description: Corner radius in pixels (0-32), used when Corner Preference is Custom.
+        - taskRoundedCorners: "true"
+          $name: Task Border and Close Button Corners
+          $description: Corners of the selected task border and the close button. Follow Corner Preference uses the switcher's radius, so a Squared switcher gives square corners here too.
           $options:
-          - auto: Auto (Enabled when the switcher's corners are rounded)
-          - true: Enabled
-          - false: Disabled
-        - roundThumbnailCorners: auto
-          $name: Round Thumbnail Corners
-          $description: Round the corners of window thumbnails. Uses the radius from Corner Preference.
+          - true: Follow Corner Preference
+          - false: Squared
+        - roundThumbnailCorners: "true"
+          $name: Thumbnail Corners
+          $description: Corners of the window thumbnails, their shadow and hover outline. Follow Corner Preference uses the switcher's radius, so a Squared switcher gives square corners here too. Windows draws live thumbnails above the switcher, so their corners are only cut with the None material at 99-100% opacity.
           $options:
-          - auto: Auto (Enabled when the switcher's corners are rounded)
-          - true: Enabled
-          - false: Disabled
-        - roundGroupIndicator: auto
-          $name: Round Group Indicator
-          $description: Round the corners of the group indicator. Uses the radius from Corner Preference.
+          - true: Follow Corner Preference
+          - false: Squared
+        - roundGroupIndicator: "true"
+          $name: Group Indicator Corners
+          $description: Corners of the group indicator. Follow Corner Preference uses the switcher's radius, limited to half the indicator's height.
           $options:
-          - auto: Auto (Enabled when the switcher's corners are rounded)
-          - true: Enabled
-          - false: Disabled
-        - roundBadgeIconBackground: auto
-          $name: Round Badge Icon Background
-          $description: Round the corners of the badge icon background (Badge layout). Uses the radius from Corner Preference.
+          - true: Follow Corner Preference
+          - false: Squared
+        - roundBadgeIconBackground: "true"
+          $name: Badge Icon Background Corners
+          $description: Corners of the badge icon background (Badge layout). Follow Corner Preference uses the switcher's radius, limited to half the background's size.
           $options:
-          - auto: Auto (Enabled when the switcher's corners are rounded)
-          - true: Enabled
-          - false: Disabled
+          - true: Follow Corner Preference
+          - false: Squared
       $name: Corners
     - Thumbnails:
         - thumbnailPosition: bottom
@@ -3663,7 +3659,7 @@ static bool s_applyingThemeToWindow = false;
 // itself: a click-through window directly below each presentation surface
 // hosts a composition backdrop clipped to the exact radius, and the surface
 // switches to the layered renderer the None theme uses.
-static void GetResolvedCornerRadiiDIP(int* outStdDIP, int* outSmallDIP);
+static int GetResolvedCornerRadiusDIP();
 
 #define SWS_MATERIAL_CLASSNAME L"WindhawkSWS_Material"
 
@@ -3885,8 +3881,7 @@ static bool ComposedMaterialWanted() {
     if (ThemeIs(L"backdrop") && g_nativeTransientBackdropUnsupported) return true;
     if (!ThemeIs(L"mica") && !ThemeIs(L"backdrop")) return false;
     if (CornerPreferenceIsDefault()) return false;
-    int radiusDIP = 0;
-    GetResolvedCornerRadiiDIP(&radiusDIP, nullptr);
+    int radiusDIP = GetResolvedCornerRadiusDIP();
     return NativeCornerPreferenceForRadius(radiusDIP) < 0;
 }
 
@@ -6762,8 +6757,7 @@ static INT GetCornerPref() {
         if (g_systemDwmRadius <= 0) return 1; // DWMWCP_DONOTROUND
         return 0; // DWMWCP_DEFAULT (Let Windows / DWM mod decide)
     }
-    int radiusDIP = 0;
-    GetResolvedCornerRadiiDIP(&radiusDIP, nullptr);
+    int radiusDIP = GetResolvedCornerRadiusDIP();
     int exact = NativeCornerPreferenceForRadius(radiusDIP);
     if (exact >= 0) return exact;
     // DWM can't draw this radius; the composed material owns the shape. If it
@@ -6773,43 +6767,27 @@ static INT GetCornerPref() {
                : 2;  // DWMWCP_ROUND
 }
 
-static void GetResolvedCornerRadiiDIP(int* outStdDIP, int* outSmallDIP) {
-    int stdDIP = 0;
-    int smallDIP = 0;
-
+// The switcher's corner radius in DIP from Corner Preference (0 = square).
+static int GetResolvedCornerRadiusDIP() {
+    int radiusDIP = 0;
     if (wcscmp(g_settings.cornerPreference, L"none") == 0) {
-        stdDIP = 0;
-        smallDIP = 0;
+        radiusDIP = 0;
     } else if (wcscmp(g_settings.cornerPreference, L"roundSmall") == 0) {
-        stdDIP = 4;
-        smallDIP = 4;
+        radiusDIP = 4;
     } else if (wcscmp(g_settings.cornerPreference, L"round") == 0) {
-        stdDIP = 8;
-        smallDIP = 4;
+        radiusDIP = 8;
     } else if (wcscmp(g_settings.cornerPreference, L"custom") == 0) {
-        stdDIP = g_settings.customCornerRadius;
-        smallDIP = (stdDIP <= 0) ? 0 : std::max(1, (stdDIP + 1) / 2);
+        radiusDIP = g_settings.customCornerRadius;
     } else { // "default" or legacy "auto"
-        stdDIP = g_systemDwmRadius;
-        smallDIP = g_systemDwmSmallRadius;
+        radiusDIP = g_systemDwmRadius;
     }
-
-    // If the standard radius is 0 (square corners), the small radius is 0 too.
-    if (stdDIP <= 0) {
-        stdDIP = 0;
-        smallDIP = 0;
-    }
-
-    if (outStdDIP) *outStdDIP = stdDIP;
-    if (outSmallDIP) *outSmallDIP = smallDIP;
+    return std::max(radiusDIP, 0);
 }
 
 static int GetWindowCornerRadiusPx() {
-    int stdDIP = 0, smallDIP = 0;
-    GetResolvedCornerRadiiDIP(&stdDIP, &smallDIP);
-    if (stdDIP <= 0) return 0;
-
-    return MulDiv(stdDIP, g_dpiX, 96);
+    int radiusDIP = GetResolvedCornerRadiusDIP();
+    if (radiusDIP <= 0) return 0;
+    return MulDiv(radiusDIP, g_dpiX, 96);
 }
 
 static void ClearPresentationWindowRegion(HWND hWnd) {
@@ -6864,8 +6842,7 @@ static void ApplyPresentationWindowRegion(HWND hWnd) {
     if (!GetWindowRect(hWnd, &actual)) return;
     int width = actual.right - actual.left;
     int height = actual.bottom - actual.top;
-    int radiusDIP = 0;
-    GetResolvedCornerRadiiDIP(&radiusDIP, nullptr);
+    int radiusDIP = GetResolvedCornerRadiusDIP();
     UINT dpi = QueryWindowDpi(hWnd);
     if (!dpi) dpi = g_dpiX;
     int radius = radiusDIP > 0 ? MulDiv(radiusDIP, dpi, 96) : 0;
@@ -6917,47 +6894,30 @@ static int GetTaskUiCornerRadiusPx() {
     if (!UseTaskRoundedCorners()) {
         return 0;
     }
-    int stdDIP = 0, smallDIP = 0;
-    GetResolvedCornerRadiiDIP(&stdDIP, &smallDIP);
-    if (stdDIP <= 0) return 0;
-    return MulDiv(stdDIP, g_dpiX, 96);
+    return GetWindowCornerRadiusPx();
 }
 
-// Thumbnail corner rounding is controlled independently from the task border /
-// close button rounding, but shares the same radius from Corner Preference.
+// Each element's corner setting either follows the switcher's own radius from
+// Corner Preference or keeps the element square.
 static int GetThumbnailCornerRadiusPx() {
     if (!g_settings.roundThumbnailCorners) {
         return 0;
     }
-    int stdDIP = 0, smallDIP = 0;
-    GetResolvedCornerRadiiDIP(&stdDIP, &smallDIP);
-    if (stdDIP <= 0 || smallDIP <= 0) return 0;
-    int effectiveDIP = std::min(smallDIP, stdDIP);
-    return MulDiv(effectiveDIP, g_dpiX, 96);
+    return GetWindowCornerRadiusPx();
 }
 
 static int GetGroupIndicatorCornerRadiusPx(int maxRadius) {
     if (!g_settings.roundGroupIndicator) {
         return 0;
     }
-    int stdDIP = 0, smallDIP = 0;
-    GetResolvedCornerRadiiDIP(&stdDIP, &smallDIP);
-    if (stdDIP <= 0 || smallDIP <= 0) return 0;
-    int effectiveDIP = std::min(smallDIP, stdDIP);
-    int r = MulDiv(effectiveDIP, g_dpiX, 96);
-    return (r > maxRadius) ? maxRadius : r;
+    return std::min(GetWindowCornerRadiusPx(), maxRadius);
 }
 
 static int GetBadgeIconBackgroundCornerRadiusPx(int maxRadius) {
     if (!g_settings.roundBadgeIconBackground) {
         return 0;
     }
-    int stdDIP = 0, smallDIP = 0;
-    GetResolvedCornerRadiiDIP(&stdDIP, &smallDIP);
-    if (stdDIP <= 0 || smallDIP <= 0) return 0;
-    int effectiveDIP = std::min(smallDIP, stdDIP);
-    int r = MulDiv(effectiveDIP, g_dpiX, 96);
-    return (r > maxRadius) ? maxRadius : r;
+    return std::min(GetWindowCornerRadiusPx(), maxRadius);
 }
 
 static void GetSwitcherPosition(const RECT& workArea, int* outX, int* outY,
@@ -7005,12 +6965,7 @@ static void GetSwitcherPosition(const RECT& workArea, int* outX, int* outY,
 }
 
 static int GetCloseButtonCornerRadiusPx() {
-    if (!UseTaskRoundedCorners()) return 0;
-    int stdDIP = 0, smallDIP = 0;
-    GetResolvedCornerRadiiDIP(&stdDIP, &smallDIP);
-    if (stdDIP <= 0 || smallDIP <= 0) return 0;
-    int effectiveDIP = std::min(smallDIP, stdDIP);
-    return MulDiv(effectiveDIP, g_dpiX, 96);
+    return GetTaskUiCornerRadiusPx();
 }
 static bool ShouldUseDarkMode() {
     if (wcscmp(g_settings.colorScheme, L"light") == 0) return false;
@@ -21476,15 +21431,12 @@ static void LoadSettings() {
     g_settings.customCornerRadius = Wh_GetIntSetting(L"Appearance.Corners.customCornerRadius");
     if (g_settings.customCornerRadius < 0) g_settings.customCornerRadius = 0;
     if (g_settings.customCornerRadius > 32) g_settings.customCornerRadius = 32;
-    // Auto element rounding follows the switcher's own corner radius: the Windows
-    // radius for Default, otherwise the selected Corner Preference.
-    int resolvedCornerDIP = 0;
-    GetResolvedCornerRadiiDIP(&resolvedCornerDIP, nullptr);
-    const bool autoRoundCorners = resolvedCornerDIP > 0;
-    g_settings.taskRoundedCorners = LoadAutoBoolSetting(L"Appearance.Corners.taskRoundedCorners", autoRoundCorners);
-    g_settings.roundThumbnailCorners = LoadAutoBoolSetting(L"Appearance.Corners.roundThumbnailCorners", autoRoundCorners);
-    g_settings.roundGroupIndicator = LoadAutoBoolSetting(L"Appearance.Corners.roundGroupIndicator", autoRoundCorners);
-    g_settings.roundBadgeIconBackground = LoadAutoBoolSetting(L"Appearance.Corners.roundBadgeIconBackground", autoRoundCorners);
+    // Element corners follow the switcher's own radius (true) or stay square
+    // (false). An empty or earlier "auto" value follows, the default.
+    g_settings.taskRoundedCorners = LoadAutoBoolSetting(L"Appearance.Corners.taskRoundedCorners", true);
+    g_settings.roundThumbnailCorners = LoadAutoBoolSetting(L"Appearance.Corners.roundThumbnailCorners", true);
+    g_settings.roundGroupIndicator = LoadAutoBoolSetting(L"Appearance.Corners.roundGroupIndicator", true);
+    g_settings.roundBadgeIconBackground = LoadAutoBoolSetting(L"Appearance.Corners.roundBadgeIconBackground", true);
     LoadStringSetting(L"Accessibility.scrollWheelBehavior", g_settings.scrollWheelBehavior, L"never");
     LoadStringSetting(L"Accessibility.scrollWheelAction", g_settings.scrollWheelAction, L"selection");
     LoadStringSetting(L"Accessibility.scrollSecondaryAction", g_settings.scrollSecondaryAction, L"page");
