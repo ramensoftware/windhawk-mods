@@ -24073,8 +24073,33 @@ BOOL Wh_ModInit() {
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            ExitProcess(1);
+            // After a recompile or update this process can start while the
+            // previous host is still shutting down. The named mutex exists until
+            // that host's handle closes on exit, so retry for a few seconds
+            // instead of leaving no host at all. Mutex ownership cannot be used
+            // here: it ends with the thread that created it.
+            ULONGLONG waitStart = GetTickCount64();
+            bool previousExited = false;
+            while (GetTickCount64() - waitStart < 5000) {
+                CloseHandle(g_toolModProcessMutex);
+                Sleep(50);
+                g_toolModProcessMutex =
+                    CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+                if (!g_toolModProcessMutex) {
+                    Wh_Log(L"CreateMutex failed");
+                    ExitProcess(1);
+                }
+                if (GetLastError() != ERROR_ALREADY_EXISTS) {
+                    previousExited = true;
+                    break;
+                }
+            }
+            if (!previousExited) {
+                Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+                ExitProcess(1);
+            }
+            Wh_Log(L"Previous tool mod host exited after %llu ms",
+                   GetTickCount64() - waitStart);
         }
 
         if (!WhTool_ModInit()) {
