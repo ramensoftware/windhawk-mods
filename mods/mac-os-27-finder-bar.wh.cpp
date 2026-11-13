@@ -930,6 +930,9 @@ struct Bar {
     HWND shadow = nullptr;        // sombra projetada embaixo da barra
     HWND handle = nullptr;        // a alça no topo (barra escondida)
     bool handleHot = false;
+    // Animação da alça (mola): "vis" aparece/some, "grow" cresce com o mouse.
+    float hVisFrom = 0, hVisTo = 0, hGrowFrom = 0, hGrowTo = 0;
+    ULONGLONG hVisTick = 0, hGrowTick = 0;
     bool maxHidden = false;       // escondida por janela maximizada
     bool peekReserved = false;    // mostrada pela alça: o espaço do topo reservado só enquanto ela fica
     bool peekColorOn = false;     // mostrada pela alça: a barra na cor da barra de título da janela ativa
@@ -22728,6 +22731,36 @@ static void UpdateSolid() {
 // maximizada", a barra pode voltar com um clique numa pílula estreita no centro
 // do topo (em vez de encostar o mouse, que cobria os botões das janelas).
 static const wchar_t kHandleClass[] = L"WhFinderTopBarHandle";
+// A mola da alça: sai do valor de antes e chega ao novo passando um pouco do
+// ponto e voltando (um "pulinho" suave). Termina em ~0,6 s.
+static float HandleSpring(float from, float to, ULONGLONG tick) {
+    double t = (GetTickCount64() - tick) / 1000.0;
+    if (!tick || t >= 0.65) return to;
+    double k = 1.0 - std::exp(-t * 7.5) * std::cos(t * 15.0);
+    return (float)(from + (to - from) * k);
+}
+static bool HandleAnimating(const Bar* b) {
+    ULONGLONG now = GetTickCount64();
+    return (b->hVisTick && now - b->hVisTick < 650) || (b->hGrowTick && now - b->hGrowTick < 650);
+}
+static void HandleRender(Bar* b);
+// Novos alvos: visível (escondida a barra, ou o mouse em cima) e crescida (mouse em cima).
+static void HandleAnimTo(Bar* b) {
+    float vis = (!b->autoShown || b->handleHot) ? 1.0f : 0.0f, grow = b->handleHot ? 1.0f : 0.0f;
+    if (vis != b->hVisTo) {
+        b->hVisFrom = HandleSpring(b->hVisFrom, b->hVisTo, b->hVisTick);
+        b->hVisTo = vis;
+        b->hVisTick = GetTickCount64();
+    }
+    if (grow != b->hGrowTo) {
+        b->hGrowFrom = HandleSpring(b->hGrowFrom, b->hGrowTo, b->hGrowTick);
+        b->hGrowTo = grow;
+        b->hGrowTick = GetTickCount64();
+    }
+    if (b->handle) SetTimer(b->handle, 1, 15, nullptr);
+    HandleRender(b);
+}
+
 static void HandleRender(Bar* b) {
     if (!b->handle) return;
     float s = b->dpi / 96.0f;
@@ -22761,18 +22794,23 @@ static void HandleRender(Bar* b) {
         // mantém a área clicável (pixel com alfa 0 não recebe o mouse).
         br->SetColor(D2D1::ColorF(0, 0, 0, 0.012f));
         rt->FillRectangle(D2D1::RectF(0, 0, (float)W, (float)H), br);
-        if (!b->autoShown || b->handleHot) {
-        // Clara com contorno escuro: aparece sobre qualquer fundo. Com o mouse, cresce.
-        float pw = (b->handleHot ? 64 : 52) * s, ph = (b->handleHot ? 6 : 5) * s;
-        D2D1_RECT_F r = D2D1::RectF((W - pw) / 2, 4 * s, (W + pw) / 2, 4 * s + ph);
-        D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(r, ph / 2, ph / 2);
-        br->SetColor(D2D1::ColorF(0, 0, 0, 0.18f));
-        rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left - 1 * s, r.top, r.right + 1 * s, r.bottom + 2 * s),
-                                                   ph / 2 + 1 * s, ph / 2 + 1 * s), br);
-        br->SetColor(D2D1::ColorF(1, 1, 1, b->handleHot ? 1.0f : 0.88f));
-        rt->FillRoundedRectangle(rr, br);
-        br->SetColor(D2D1::ColorF(0, 0, 0, 0.35f));
-        rt->DrawRoundedRectangle(rr, br, std::max(1.0f, 0.8f * s));
+        float vis = HandleSpring(b->hVisFrom, b->hVisTo, b->hVisTick);
+        float grow = HandleSpring(b->hGrowFrom, b->hGrowTo, b->hGrowTick);
+        float alpha = std::clamp(vis, 0.0f, 1.0f);
+        if (alpha > 0.01f) {
+            // Clara com contorno escuro: aparece sobre qualquer fundo. Ao aparecer,
+            // cresce do meio; com o mouse, estica e engorda um pouco, com mola.
+            float sc = 0.35f + 0.65f * std::max(0.0f, vis);
+            float pw = (52 + 16 * grow) * s * sc, ph = std::max(1.5f * s, (5 + 1.8f * grow) * s * (0.6f + 0.4f * sc));
+            D2D1_RECT_F r = D2D1::RectF((W - pw) / 2, 4 * s, (W + pw) / 2, 4 * s + ph);
+            D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(r, ph / 2, ph / 2);
+            br->SetColor(D2D1::ColorF(0, 0, 0, 0.18f * alpha));
+            rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left - 1 * s, r.top, r.right + 1 * s, r.bottom + 2 * s),
+                                                       ph / 2 + 1 * s, ph / 2 + 1 * s), br);
+            br->SetColor(D2D1::ColorF(1, 1, 1, (0.88f + 0.12f * std::clamp(grow, 0.0f, 1.0f)) * alpha));
+            rt->FillRoundedRectangle(rr, br);
+            br->SetColor(D2D1::ColorF(0, 0, 0, 0.35f * alpha));
+            rt->DrawRoundedRectangle(rr, br, std::max(1.0f, 0.8f * s));
         }
         rt->EndDraw();
     }
@@ -22804,7 +22842,10 @@ static void HandleSync(Bar* b) {
     if (!b->handle) return;
     if (want != (IsWindowVisible(b->handle) != FALSE)) {
         if (want) {
-            HandleRender(b);
+            // Reaparece crescendo do meio.
+            b->hVisFrom = b->hVisTo = 0;  // parte do zero
+            b->hVisTick = 0;
+            HandleAnimTo(b);
             SetWindowPos(b->handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
         } else {
             ShowWindow(b->handle, SW_HIDE);
@@ -22876,7 +22917,7 @@ static void BarRevealTemp(Bar* b) {
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
     BarSyncShadow(b);
     HandleSync(b);
-    HandleRender(b);  // a alça vai para a borda de baixo da barra
+    HandleAnimTo(b);  // a alça vai para a borda de baixo da barra (some quando o mouse sai)
     if (b->handle) SetWindowPos(b->handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     if (g_owner) SetTimer(g_owner, TIMER_PEEKCOLOR, 180, nullptr);  // depois que as janelas descem
 }
@@ -22903,10 +22944,16 @@ static LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case WM_SETCURSOR:
             SetCursor(LoadCursorW(nullptr, IDC_HAND));
             return TRUE;
+        case WM_TIMER:
+            if (b) {
+                HandleRender(b);
+                if (!HandleAnimating(b)) KillTimer(hwnd, 1);
+            }
+            return 0;
         case WM_MOUSEMOVE:
             if (b && !b->handleHot) {
                 b->handleHot = true;
-                HandleRender(b);
+                HandleAnimTo(b);
                 TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd, 0};
                 TrackMouseEvent(&tme);
             }
@@ -22914,7 +22961,7 @@ static LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case WM_MOUSELEAVE:
             if (b) {
                 b->handleHot = false;
-                HandleRender(b);
+                HandleAnimTo(b);
             }
             return 0;
         case WM_LBUTTONUP:
@@ -22926,7 +22973,7 @@ static LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 ShowWindow(b->hwnd, SW_HIDE);
                 if (b->shadow) ShowWindow(b->shadow, SW_HIDE);
                 BarPeekEnd(b);
-                HandleRender(b);
+                HandleAnimTo(b);  // volta ao alto e reaparece crescendo
             } else {
                 BarRevealTemp(b);
             }
