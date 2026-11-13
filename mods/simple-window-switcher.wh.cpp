@@ -163,11 +163,15 @@ navigation can change the selection while the UI remains hidden.
     restored only when the switcher is inactive.
 - Mica requires Windows 11. The automatic theme uses Mica on Windows 11 and
   Acrylic on Windows 10; backdrop blur is a separate, optional setting.
-- The switcher and its Auto corner settings follow **Corner Preference**. With
-  Default, that is the Windows corner radius, including changes made by the
+- The switcher and its element corners set to Follow Corner Preference follow
+  **Corner Preference**. With Default, that is the Windows corner radius,
+  including changes made by the
   [Custom Window Corner Radius](https://windhawk.net/mods/custom-corner-radius)
   mod on regular and portable Windhawk installs. Squared, Rounded, Rounded small,
   and Custom take precedence over it for the switcher and all of its elements.
+- On Windows 11, live thumbnails are rounded on every material. Thumbnail
+  Corners can also use its own Custom radius, for example when the Windows
+  corner radius is 0.
 - On Windows 11, Mica and Acrylic keep their material at every corner radius.
   Radii that Windows does not draw itself use a material drawn by the switcher,
   which has no Windows drop shadow.
@@ -446,10 +450,14 @@ nothing failed.
           - false: Squared
         - roundThumbnailCorners: "true"
           $name: Thumbnail Corners
-          $description: Corners of the window thumbnails, their shadow and hover outline. Follow Corner Preference uses the switcher's radius, so a Squared switcher gives square corners here too. Windows draws live thumbnails above the switcher, so their corners are only cut with the None material at 99-100% opacity.
+          $description: Corners of the live window thumbnails, their shadow and hover outline. Follow Corner Preference uses the switcher's radius, so a Squared switcher gives square corners here too. Custom uses Thumbnail Corner Radius instead, for example when the Windows corner radius is 0.
           $options:
           - true: Follow Corner Preference
           - false: Squared
+          - custom: Custom
+        - thumbnailCornerRadius: 8
+          $name: Thumbnail Corner Radius (px)
+          $description: Thumbnail corner radius in pixels (0-32), used when Thumbnail Corners is Custom.
         - roundGroupIndicator: "true"
           $name: Group Indicator Corners
           $description: Corners of the group indicator. Follow Corner Preference uses the switcher's radius, limited to half the indicator's height.
@@ -949,6 +957,7 @@ nothing failed.
 #include <windows.h>
 #include <sddl.h>
 #include <dwmapi.h>
+#include <dcomp.h>
 #include <uxtheme.h>
 #include <shellapi.h>
 #include <shldisp.h>
@@ -1397,6 +1406,8 @@ struct Settings {
     bool perMonitorWindows;
     bool taskRoundedCorners;
     bool roundThumbnailCorners;
+    bool customThumbnailCorners;
+    int thumbnailCornerRadius;
     bool roundGroupIndicator;
     bool roundBadgeIconBackground;
     bool reverseScrollDirection;
@@ -3095,6 +3106,207 @@ static void InvalidateThumbCache(HTHUMBNAIL thumbnail) {
     g_lastThumbState.erase(thumbnail);
 }
 
+// Rounded live thumbnails. A classic DWM thumbnail is drawn by DWM above the
+// destination window and ignores its regions and corner preference. When the
+// thumbnail radius is above zero, the thumbnail is created as a composition
+// visual instead (dwmapi ordinal 147, DwmpCreateSharedThumbnailVisual) and
+// placed under a rounded rectangle clip in a topmost composition target of the
+// destination window. Any failure falls back to a classic registration.
+static constexpr DWORD SWS_DWM_TNP_ENABLE3D = 0x04000000;
+using SwsCreateSharedThumbnailVisual_t = HRESULT(WINAPI*)(
+    HWND destination, HWND source, DWORD flags,
+    DWM_THUMBNAIL_PROPERTIES* properties, void* device, void** visual,
+    HTHUMBNAIL* thumbnail);
+using SwsCreateCompositionDevice3_t = HRESULT(WINAPI*)(IUnknown*, REFIID, void**);
+
+struct SharedThumbnailTarget {
+    IDCompositionTarget* target = nullptr;
+    IDCompositionVisual2* root = nullptr;
+};
+struct SharedThumbnailVisual {
+    HWND destination = nullptr;
+    IUnknown* visual = nullptr;
+    IDCompositionVisual2* container = nullptr;
+    IDCompositionRectangleClip* clip = nullptr;
+    RECT clipRect = {};
+    float radius = -1.0f;
+};
+static IDCompositionDesktopDevice* g_sharedThumbnailDevice = nullptr;
+static SwsCreateSharedThumbnailVisual_t g_createSharedThumbnailVisual = nullptr;
+static bool g_sharedThumbnailApiResolved = false;
+static std::map<HWND, SharedThumbnailTarget> g_sharedThumbnailTargets;
+static std::map<HTHUMBNAIL, SharedThumbnailVisual> g_sharedThumbnailVisuals;
+
+static int GetThumbnailCornerRadiusPx();
+
+static bool EnsureSharedThumbnailDevice() {
+    if (g_sharedThumbnailDevice) return true;
+    if (g_sharedThumbnailApiResolved) return false;
+    g_sharedThumbnailApiResolved = true;
+    if (!g_isWin11OrGreater) return false;
+    HMODULE dwmapi = GetModuleHandleW(L"dwmapi.dll");
+    if (dwmapi) {
+        g_createSharedThumbnailVisual = reinterpret_cast<SwsCreateSharedThumbnailVisual_t>(
+            GetProcAddress(dwmapi, MAKEINTRESOURCEA(147)));
+    }
+    HMODULE dcomp = LoadLibraryExW(L"dcomp.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    auto createDevice = dcomp ? reinterpret_cast<SwsCreateCompositionDevice3_t>(
+        GetProcAddress(dcomp, "DCompositionCreateDevice3")) : nullptr;
+    if (!g_createSharedThumbnailVisual || !createDevice) {
+        Wh_Log(L"SWS: rounded thumbnails unavailable (shared visual=%d device=%d)",
+               g_createSharedThumbnailVisual ? 1 : 0, createDevice ? 1 : 0);
+        return false;
+    }
+    HRESULT hr = createDevice(nullptr, __uuidof(IDCompositionDesktopDevice),
+                              reinterpret_cast<void**>(&g_sharedThumbnailDevice));
+    if (FAILED(hr) || !g_sharedThumbnailDevice) {
+        Wh_Log(L"SWS: rounded thumbnails unavailable (device hr=0x%08X)", (unsigned)hr);
+        g_sharedThumbnailDevice = nullptr;
+        return false;
+    }
+    return true;
+}
+
+static SharedThumbnailTarget* EnsureSharedThumbnailTarget(HWND destination) {
+    auto it = g_sharedThumbnailTargets.find(destination);
+    if (it != g_sharedThumbnailTargets.end()) return &it->second;
+    if (!EnsureSharedThumbnailDevice()) return nullptr;
+    SharedThumbnailTarget target;
+    HRESULT hr = g_sharedThumbnailDevice->CreateTargetForHwnd(destination, TRUE, &target.target);
+    if (SUCCEEDED(hr)) hr = g_sharedThumbnailDevice->CreateVisual(&target.root);
+    if (SUCCEEDED(hr)) hr = target.target->SetRoot(target.root);
+    if (FAILED(hr)) {
+        Wh_Log(L"SWS: rounded thumbnail target failed hwnd=%p hr=0x%08X",
+               destination, (unsigned)hr);
+        if (target.root) target.root->Release();
+        if (target.target) target.target->Release();
+        return nullptr;
+    }
+    return &(g_sharedThumbnailTargets[destination] = target);
+}
+
+static void DetachSharedThumbnailVisual(HTHUMBNAIL thumbnail) {
+    auto it = g_sharedThumbnailVisuals.find(thumbnail);
+    if (it == g_sharedThumbnailVisuals.end()) return;
+    SharedThumbnailVisual entry = it->second;
+    g_sharedThumbnailVisuals.erase(it);
+    auto target = g_sharedThumbnailTargets.find(entry.destination);
+    if (target != g_sharedThumbnailTargets.end() && entry.container) {
+        target->second.root->RemoveVisual(entry.container);
+    }
+    if (entry.clip) entry.clip->Release();
+    if (entry.container) entry.container->Release();
+    if (entry.visual) entry.visual->Release();
+    if (g_sharedThumbnailDevice) g_sharedThumbnailDevice->Commit();
+}
+
+// Releases the composition target of a destination window that is about to be
+// destroyed. Its thumbnails are normally unregistered before this runs.
+static void ReleaseSharedThumbnailTarget(HWND destination) {
+    for (auto it = g_sharedThumbnailVisuals.begin(); it != g_sharedThumbnailVisuals.end();) {
+        if (it->second.destination != destination) { ++it; continue; }
+        HTHUMBNAIL thumbnail = it->first;
+        ++it;
+        DwmUnregisterThumbnail(thumbnail);
+        DetachSharedThumbnailVisual(thumbnail);
+    }
+    auto it = g_sharedThumbnailTargets.find(destination);
+    if (it == g_sharedThumbnailTargets.end()) return;
+    it->second.target->SetRoot(nullptr);
+    it->second.root->Release();
+    it->second.target->Release();
+    g_sharedThumbnailTargets.erase(it);
+    if (g_sharedThumbnailDevice) g_sharedThumbnailDevice->Commit();
+}
+
+static void ReleaseSharedThumbnailDevice() {
+    while (!g_sharedThumbnailTargets.empty()) {
+        ReleaseSharedThumbnailTarget(g_sharedThumbnailTargets.begin()->first);
+    }
+    while (!g_sharedThumbnailVisuals.empty()) {
+        HTHUMBNAIL thumbnail = g_sharedThumbnailVisuals.begin()->first;
+        DwmUnregisterThumbnail(thumbnail);
+        DetachSharedThumbnailVisual(thumbnail);
+    }
+    if (g_sharedThumbnailDevice) {
+        g_sharedThumbnailDevice->Release();
+        g_sharedThumbnailDevice = nullptr;
+    }
+    g_createSharedThumbnailVisual = nullptr;
+    g_sharedThumbnailApiResolved = false;
+}
+
+static HRESULT RegisterSwitcherThumbnail(HWND destination, HWND source, HTHUMBNAIL* thumbnail) {
+    *thumbnail = nullptr;
+    if (GetThumbnailCornerRadiusPx() > 0) {
+        if (SharedThumbnailTarget* target = EnsureSharedThumbnailTarget(destination)) {
+            // Creation fails with E_INVALIDARG unless the thumbnail starts
+            // visible with a destination; the caller positions it right after.
+            DWM_THUMBNAIL_PROPERTIES properties = {};
+            properties.dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_VISIBLE |
+                                 DWM_TNP_OPACITY | DWM_TNP_SOURCECLIENTAREAONLY;
+            properties.rcDestination = {0, 0, 1, 1};
+            properties.fVisible = TRUE;
+            properties.opacity = 255;
+            properties.fSourceClientAreaOnly = FALSE;
+            SharedThumbnailVisual entry;
+            entry.destination = destination;
+            HTHUMBNAIL handle = nullptr;
+            void* visual = nullptr;
+            HRESULT hr = g_createSharedThumbnailVisual(destination, source, 0,
+                                                       &properties, g_sharedThumbnailDevice,
+                                                       &visual, &handle);
+            entry.visual = static_cast<IUnknown*>(visual);
+            if (SUCCEEDED(hr) && handle && entry.visual) {
+                hr = g_sharedThumbnailDevice->CreateVisual(&entry.container);
+                if (SUCCEEDED(hr)) hr = g_sharedThumbnailDevice->CreateRectangleClip(&entry.clip);
+                if (SUCCEEDED(hr)) hr = entry.container->SetClip(entry.clip);
+                if (SUCCEEDED(hr)) {
+                    hr = entry.container->AddVisual(
+                        static_cast<IDCompositionVisual*>(visual), TRUE, nullptr);
+                }
+                if (SUCCEEDED(hr)) hr = target->root->AddVisual(entry.container, TRUE, nullptr);
+                if (SUCCEEDED(hr)) {
+                    g_sharedThumbnailVisuals[handle] = entry;
+                    *thumbnail = handle;
+                    return S_OK;
+                }
+            }
+            if (handle) DwmUnregisterThumbnail(handle);
+            if (entry.clip) entry.clip->Release();
+            if (entry.container) entry.container->Release();
+            if (entry.visual) entry.visual->Release();
+            Wh_Log(L"SWS: rounded thumbnail failed source=%p hr=0x%08X, using a classic thumbnail",
+                   source, (unsigned)hr);
+        }
+    }
+    return DwmRegisterThumbnail(destination, source, thumbnail);
+}
+
+// Keeps a shared visual's rounded clip on its unclipped thumbnail rectangle, so
+// an edge cut by the viewport stays straight.
+static void UpdateSharedThumbnailClip(SharedThumbnailVisual& entry, const RECT& rect) {
+    int width = rect.right - rect.left;
+    int height = rect.bottom - rect.top;
+    float radius = (float)std::max(0, std::min(GetThumbnailCornerRadiusPx(),
+                                               std::min(width, height) / 2));
+    if (EqualRect(&entry.clipRect, &rect) && entry.radius == radius) return;
+    entry.clipRect = rect;
+    entry.radius = radius;
+    entry.clip->SetLeft((float)rect.left);
+    entry.clip->SetTop((float)rect.top);
+    entry.clip->SetRight((float)rect.right);
+    entry.clip->SetBottom((float)rect.bottom);
+    entry.clip->SetTopLeftRadiusX(radius);
+    entry.clip->SetTopLeftRadiusY(radius);
+    entry.clip->SetTopRightRadiusX(radius);
+    entry.clip->SetTopRightRadiusY(radius);
+    entry.clip->SetBottomLeftRadiusX(radius);
+    entry.clip->SetBottomLeftRadiusY(radius);
+    entry.clip->SetBottomRightRadiusX(radius);
+    entry.clip->SetBottomRightRadiusY(radius);
+}
+
 static void ReleaseDwmThumbnailRegistration(DwmThumbnailRegistration* record) {
     if (!record || !record->handle) return;
     HTHUMBNAIL handle = record->handle;
@@ -3103,6 +3315,7 @@ static void ReleaseDwmThumbnailRegistration(DwmThumbnailRegistration* record) {
     const bool alreadyReleased = result == E_INVALIDARG;
     if (SUCCEEDED(result) || alreadyReleased) {
         record->handle = nullptr;
+        DetachSharedThumbnailVisual(handle);
         auto it = g_dwmThumbnailRegistrations.find(handle);
         if (it != g_dwmThumbnailRegistrations.end()) {
             if (auto current = it->second.lock(); !current || current.get() == record) {
@@ -3116,10 +3329,27 @@ static void ReleaseDwmThumbnailRegistration(DwmThumbnailRegistration* record) {
     }
 }
 
-static HRESULT UpdateDwmThumbnail(HTHUMBNAIL thumbnail, const DWM_THUMBNAIL_PROPERTIES* properties) {
+// roundedRect is the unclipped thumbnail rectangle when the destination was cut
+// by the viewport; the rounded clip of a shared visual follows it.
+static HRESULT UpdateDwmThumbnail(HTHUMBNAIL thumbnail, const DWM_THUMBNAIL_PROPERTIES* properties,
+                                  const RECT* roundedRect = nullptr) {
     // Direct layout/visibility writes invalidate the animation cache too.
     InvalidateThumbCache(thumbnail);
-    HRESULT result = DwmUpdateThumbnailProperties(thumbnail, properties);
+    HRESULT result;
+    auto shared = g_sharedThumbnailVisuals.find(thumbnail);
+    if (shared != g_sharedThumbnailVisuals.end()) {
+        // Shared visuals reject property updates without the private 3D flag.
+        DWM_THUMBNAIL_PROPERTIES sharedProperties = *properties;
+        sharedProperties.dwFlags |= SWS_DWM_TNP_ENABLE3D;
+        result = DwmUpdateThumbnailProperties(thumbnail, &sharedProperties);
+        if (SUCCEEDED(result) && (properties->dwFlags & DWM_TNP_RECTDESTINATION)) {
+            UpdateSharedThumbnailClip(shared->second,
+                                      roundedRect ? *roundedRect : properties->rcDestination);
+        }
+        if (g_sharedThumbnailDevice) g_sharedThumbnailDevice->Commit();
+    } else {
+        result = DwmUpdateThumbnailProperties(thumbnail, properties);
+    }
     if (SUCCEEDED(result) && (properties->dwFlags & DWM_TNP_RECTSOURCE)) {
         g_thumbSourceRects[thumbnail] = properties->rcSource;
     }
@@ -3145,6 +3375,7 @@ static inline HRESULT SafeDwmUnregisterThumbnail(HTHUMBNAIL h) {
             if (auto current = it->second.lock()) current->handle = nullptr;
             g_dwmThumbnailRegistrations.erase(it);
         }
+        DetachSharedThumbnailVisual(h);
         g_thumbSourceRects.erase(h);
     } else {
         Wh_Log(L"SWS: DwmUnregisterThumbnail failed handle=%p hr=0x%08X",
@@ -6148,7 +6379,7 @@ static void SubmitAnimatedThumbnail(HTHUMBNAIL thumbnail, HWND sourceWindow,
     } else {
         useSource = false;
     }
-    if (SUCCEEDED(UpdateDwmThumbnail(thumbnail, &properties))) {
+    if (SUCCEEDED(UpdateDwmThumbnail(thumbnail, &properties, &destination))) {
         g_lastThumbState[thumbnail] = { clipped, alpha, TRUE, submittedSource, useSource };
     }
 }
@@ -6220,7 +6451,7 @@ static void UpdateThumbnailAnimations() {
         if (!w.hThumbs.count(g_hSwitcher)) {
             w.thumbnailSourceReady = false;
             HTHUMBNAIL hT = NULL;
-            HRESULT registerHr = DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &hT);
+            HRESULT registerHr = RegisterSwitcherThumbnail(g_hSwitcher, w.hWnd, &hT);
             HRESULT sourceHr = registerHr;
             bool dwmSourceReady = false;
             if (SUCCEEDED(registerHr) && hT) {
@@ -6902,6 +7133,9 @@ static int GetTaskUiCornerRadiusPx() {
 static int GetThumbnailCornerRadiusPx() {
     if (!g_settings.roundThumbnailCorners) {
         return 0;
+    }
+    if (g_settings.customThumbnailCorners) {
+        return MulDiv(g_settings.thumbnailCornerRadius, g_dpiX, 96);
     }
     return GetWindowCornerRadiusPx();
 }
@@ -10025,7 +10259,7 @@ static void RegisterThumbnailsEarly() {
         if (!w.hThumbs.count(g_hSwitcher)) {
             w.thumbnailSourceReady = false;
             HTHUMBNAIL hT = NULL;
-            HRESULT registerHr = DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &hT);
+            HRESULT registerHr = RegisterSwitcherThumbnail(g_hSwitcher, w.hWnd, &hT);
             HRESULT sourceHr = registerHr;
             bool dwmSourceReady = false;
             if (SUCCEEDED(registerHr) && hT) {
@@ -10068,7 +10302,7 @@ static void RegisterThumbnailsEarly() {
         for (HWND m : g_hMirrorSwitchers) {
             if (!w.hThumbs.count(m)) {
                 HTHUMBNAIL hT = NULL;
-                if (SUCCEEDED(DwmRegisterThumbnail(m, w.hWnd, &hT))) w.hThumbs[m] = DwmThumbnailRef(hT);
+                if (SUCCEEDED(RegisterSwitcherThumbnail(m, w.hWnd, &hT))) w.hThumbs[m] = DwmThumbnailRef(hT);
             }
         }
         UpdateEntrySourceCrop(w);
@@ -10089,7 +10323,7 @@ static void UpdateDockThumbnailDwm() {
         if (!selWnd.hThumbs.count(g_hSwitcher)) {
             selWnd.thumbnailSourceReady = false;
             HTHUMBNAIL hT = NULL;
-            HRESULT registerHr = DwmRegisterThumbnail(g_hSwitcher, selWnd.hWnd, &hT);
+            HRESULT registerHr = RegisterSwitcherThumbnail(g_hSwitcher, selWnd.hWnd, &hT);
             HRESULT sourceHr = registerHr;
             bool dwmSourceReady = false;
             if (SUCCEEDED(registerHr) && hT) {
@@ -10136,7 +10370,7 @@ static void UpdateDockThumbnailDwm() {
         for (HWND m : g_hMirrorSwitchers) {
             if (!selWnd.hThumbs.count(m)) {
                 HTHUMBNAIL hT = NULL;
-                if (SUCCEEDED(DwmRegisterThumbnail(m, selWnd.hWnd, &hT))) {
+                if (SUCCEEDED(RegisterSwitcherThumbnail(m, selWnd.hWnd, &hT))) {
                     selWnd.hThumbs[m] = DwmThumbnailRef(hT);
                 }
             }
@@ -11081,7 +11315,7 @@ static void RegisterThumbnails() {
         if (!w.hThumbs.count(g_hSwitcher)) {
             w.thumbnailSourceReady = false;
             HTHUMBNAIL hT = NULL;
-            HRESULT registerHr = DwmRegisterThumbnail(g_hSwitcher, w.hWnd, &hT);
+            HRESULT registerHr = RegisterSwitcherThumbnail(g_hSwitcher, w.hWnd, &hT);
             HRESULT sourceHr = registerHr;
             bool dwmSourceReady = false;
             if (SUCCEEDED(registerHr) && hT) {
@@ -11123,7 +11357,7 @@ static void RegisterThumbnails() {
         for (HWND m : g_hMirrorSwitchers) {
             if (!w.hThumbs.count(m)) {
                 HTHUMBNAIL hT = NULL;
-                if (SUCCEEDED(DwmRegisterThumbnail(m, w.hWnd, &hT))) w.hThumbs[m] = DwmThumbnailRef(hT);
+                if (SUCCEEDED(RegisterSwitcherThumbnail(m, w.hWnd, &hT))) w.hThumbs[m] = DwmThumbnailRef(hT);
             }
         }
 
@@ -11472,6 +11706,14 @@ static std::shared_ptr<WindowIconShadow> GetWindowIconShadow(
     if (!record->bitmap) return {};
     if (cacheable) s_iconShadowCache[key] = record;
     return record;
+}
+
+// Classic thumbnails are square, so their corners are painted over with the
+// background, which only matches an opaque None material. Thumbnails drawn as
+// rounded composition visuals need no mask.
+static bool ThumbnailCornersNeedMask(int cornerRadius) {
+    return cornerRadius > 0 && !g_sharedThumbnailDevice && ThemeIs(L"none") &&
+           g_settings.opacity >= 99;
 }
 
 static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpaque = false, COLORREF overrideBg = CLR_INVALID) {
@@ -12211,7 +12453,7 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, int padLeft, int rowTitleH, i
         DrawThumbnailShadow(hdc, e.rcThumbActual, cornerRadius, alpha, 1.0f);
     }
 
-    if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
+    if (g_settings.showThumbnails && ThumbnailCornersNeedMask(cornerRadius)) {
         MaskRectCorners(hdc, e.rcThumbActual, cornerRadius);
     }
 
@@ -12519,7 +12761,7 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, bool includeSelectionFill
         if (g_settings.showThumbnailShadow && shadowAlphaMult > 0.01f && !g_layoutTransition.active && !g_dockPreviewSlide.active) {
             DrawThumbnailShadow(hdc, shadowRc, cornerRadius, shadowAlphaMult);
         }
-        if (cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
+        if (ThumbnailCornersNeedMask(cornerRadius)) {
             MaskRectCorners(hdc, shadowRc, cornerRadius);
         }
     }
@@ -13013,7 +13255,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             }
             if (collidesWithIncoming) continue;
 
-            if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
+            if (g_settings.showThumbnails && ThumbnailCornersNeedMask(cornerRadius)) {
                 COLORREF maskColor = GetBgColor();
                 MaskRectCorners(hdc, snapThumb, cornerRadius, true, maskColor);
             }
@@ -13029,7 +13271,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             if (dep.alpha <= 0.01f) continue;
             RECT depThumb = dep.rcThumbCurrent;
 
-            if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
+            if (g_settings.showThumbnails && ThumbnailCornersNeedMask(cornerRadius)) {
                 COLORREF maskColor = GetBgColor();
                 MaskRectCorners(hdc, depThumb, cornerRadius, true, maskColor);
             }
@@ -13056,7 +13298,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             OffsetRect(&rcThumbSlot, offX, offY);
         }
 
-        if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
+        if (g_settings.showThumbnails && ThumbnailCornersNeedMask(cornerRadius)) {
             COLORREF maskColor = GetBgColor();
             if (i == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
                 maskColor = GetSelectionFillOnBgColor();
@@ -13382,7 +13624,7 @@ static void DrawSwitcherOverlayStaticContent(HDC hdc, HWND hWnd) {
         RECT rcThumbActual = e.rcThumbActual;
         RECT rcCell = e.rcCell;
 
-        if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
+        if (g_settings.showThumbnails && ThumbnailCornersNeedMask(cornerRadius)) {
             COLORREF maskColor = GetBgColor();
             if (i == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
                 maskColor = GetSelectionFillOnBgColor();
@@ -13545,7 +13787,7 @@ static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
         const auto& e = g_windows[g_hoverThumbIndex];
         if (e.hoverScale > 1.0001f) {
             RECT rcThumbActual = GetScaledThumbRect(e);
-            if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
+            if (g_settings.showThumbnails && ThumbnailCornersNeedMask(cornerRadius)) {
                 COLORREF maskColor = GetBgColor();
                 if (g_hoverThumbIndex == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
                     maskColor = GetSelectionFillOnBgColor();
@@ -15327,6 +15569,7 @@ static void DestroyMirrorSwitchers() {
         g_nativeAcrylicWindows.erase(hMirror);
         g_presentationMaterialStates.erase(hMirror);
         DestroyComposedMaterial(hMirror);
+        ReleaseSharedThumbnailTarget(hMirror);
         if (IsWindow(hMirror)) {
             ShowWindow(hMirror, SW_HIDE);
             DestroyWindow(hMirror);
@@ -21451,7 +21694,16 @@ static void LoadSettings() {
     // Element corners follow the switcher's own radius (true) or stay square
     // (false). An empty or earlier "auto" value follows, the default.
     g_settings.taskRoundedCorners = LoadAutoBoolSetting(L"Appearance.Corners.taskRoundedCorners", true);
-    g_settings.roundThumbnailCorners = LoadAutoBoolSetting(L"Appearance.Corners.roundThumbnailCorners", true);
+    {
+        PCWSTR thumbnailCorners = Wh_GetStringSetting(L"Appearance.Corners.roundThumbnailCorners");
+        g_settings.customThumbnailCorners =
+            thumbnailCorners && _wcsicmp(thumbnailCorners, L"custom") == 0;
+        if (thumbnailCorners) Wh_FreeStringSetting(thumbnailCorners);
+    }
+    g_settings.roundThumbnailCorners = g_settings.customThumbnailCorners ||
+        LoadAutoBoolSetting(L"Appearance.Corners.roundThumbnailCorners", true);
+    g_settings.thumbnailCornerRadius =
+        std::clamp(Wh_GetIntSetting(L"Appearance.Corners.thumbnailCornerRadius"), 0, 32);
     g_settings.roundGroupIndicator = LoadAutoBoolSetting(L"Appearance.Corners.roundGroupIndicator", true);
     g_settings.roundBadgeIconBackground = LoadAutoBoolSetting(L"Appearance.Corners.roundBadgeIconBackground", true);
     LoadStringSetting(L"Accessibility.scrollWheelBehavior", g_settings.scrollWheelBehavior, L"never");
@@ -23084,6 +23336,8 @@ thread_exit:
     DestroyBackdropWindow();
     if (g_hCloseBtnWnd) { DestroyWindow(g_hCloseBtnWnd); g_hCloseBtnWnd = NULL; }
     RemoveNativeSwipePolicy();
+    ReleaseSavedAppListThumbnails();
+    ReleaseSharedThumbnailDevice();
     if (g_hSwitcher) { DeregisterShellHookWindow(g_hSwitcher); DestroyWindow(g_hSwitcher); g_hSwitcher = NULL; }
     ReleaseTouchpadGestureTakeover();
     g_presentationRegions.clear();
