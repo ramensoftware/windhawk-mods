@@ -7,7 +7,7 @@
 // @description:de-DE Heftet Dateien und Ordner im Datei-Explorer in ihrem übergeordneten Ordner an
 // @description:pt-BR Fixa arquivos e pastas na pasta que os contém no Explorador de Arquivos
 // @description:zh-CN 在文件资源管理器中将文件和文件夹固定在各自的上级文件夹内
-// @version         1.1.1
+// @version         1.1.5
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -16,7 +16,7 @@
 // @architecture    x86-64
 // @compilerOptions -lruntimeobject -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdi32 -lcomctl32 -ladvapi32
 // ==/WindhawkMod==
-// Build: 27
+// Build: 31
 
 // ==WindhawkModReadme==
 /*
@@ -28,7 +28,7 @@ Explorer Item Pins keeps selected files and folders at the top of their parent f
 
 ## Features
 
-| ![Dark theme with large icons and the Unpin command](https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Explorer_Item_Pins/Assets/Screenshots/Dark_Large_Icons.png) | ![Light theme with small icons, the Pinned group, and the Pin command](https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Explorer_Item_Pins/Assets/Screenshots/Light_Small_Icons.png) |
+| ![Dark theme with large icons and the Pin command](https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Explorer_Item_Pins/Assets/Screenshots/Dark_Large_Icons.png) | ![Light theme with the Unpin command and its toolbar tooltip](https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Explorer_Item_Pins/Assets/Screenshots/Light_Small_Icons.png) |
 | :---: | :---: |
 
 - **Two ways to pin.** Use the modern context menu or the pin button between **Share** and **Delete** on the command bar.
@@ -38,27 +38,13 @@ Explorer Item Pins keeps selected files and folders at the top of their parent f
 
 ## Platforms
 
-The mod requires [Windhawk](https://windhawk.net/) and Windows 11 x64 or ARM64 with the tabbed File Explorer. Tested in File Explorer on Windows 11 26H2 x64 (build `26300.9974`) with Windhawk 1.7.3. ARM64 verification covers native compilation, symbol resolution, and automated tests. Compatibility with other Explorer builds depends on available symbols and compatible internal interfaces.
+Requires Windows 11 x64 or ARM64 with the tabbed File Explorer.
 
 ## Data exchange
 
-Each Windows account uses a separate `pins-<SID>.json` file in the mod's Windhawk storage directory. Removing the mod removes its storage. Replacing a file under the same name keeps its pin. A rename within the same folder can keep the pin when the mod can identify the original file by its file ID. Copying or moving an item to another folder does not carry its pin with it.
+Pins are stored separately for each Windows account. Uninstalling the mod removes its pins. Replacing a file under the same name keeps its pin. A rename within the same folder can keep the pin when the mod can identify the original file. Copying or moving an item to another folder does not carry its pin with it.
 
-## Operations
-
-### Installation
-
-Install Explorer Item Pins from the Windhawk catalog. To build a local copy from source, follow these steps.
-
-1. Open Windhawk and choose **Create a New Mod**.
-2. Replace the contents of `mod.wh.cpp` with the complete [mod source](https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/Explorer_Item_Pins/Mod/explorer-item-pins.wh.cpp).
-3. Use **Compile Mod** or `Ctrl+B` with the Windhawk sidebar open. Exit the editor and check that **Explorer Item Pins** is enabled on the Windhawk home page.
-
-To update an existing local installation, edit that mod in Windhawk, replace its source and compile it again.
-
-[Windhawk editing mode guide](https://github.com/ramensoftware/windhawk/wiki/Editing-mode-guidelines)
-
-### Usage
+## Usage
 
 1. Select a file or folder and choose **Pin in item pane** in its context menu, or click the pin on the command bar.
 2. To remove the pin, select the item and choose **Unpin from item pane** or click the crossed-out pin on the command bar. The item returns to its usual position in the folder.
@@ -72,17 +58,6 @@ If the pin commands are missing from a File Explorer window that was already ope
 | Context menu command | Pin and unpin in the context menu |
 | Command bar button | Pin and unpin on the File Explorer command bar |
 | Pinned item indicator | The pushpin on pinned file and folder icons |
-
-### Verification
-
-Run the tests from this mod directory on Windows with PowerShell and the compiler bundled with Windhawk 1.7.3.
-
-```powershell
-pwsh -NoProfile -File .\Tests\Test-PinStore.ps1
-pwsh -NoProfile -File .\Tests\Test-ExplorerCommands.ps1
-```
-
-The tests cover storage, concurrent access, pin operations, sorting, grouping, and indicator rendering in a native Explorer view hosted in the test process.
 
 ## Links
 
@@ -136,8 +111,8 @@ The tests cover storage, concurrent access, pin operations, sorting, grouping, a
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <initializer_list>
 #include <iterator>
@@ -403,6 +378,23 @@ void ReplacePinFile(const fs::path& path, std::string_view bytes) {
 
 }  // namespace
 
+constexpr size_t fileIdentityLength = 49;
+
+void FormatFileIdentity(ULONGLONG volume, const FILE_ID_128& id,
+                        std::array<wchar_t, fileIdentityLength>& identity) {
+    constexpr wchar_t digits[] = L"0123456789abcdef";
+    auto out = identity.begin();
+    const auto appendByte = [&](BYTE byte) {
+        *out++ = digits[byte >> 4];
+        *out++ = digits[byte & 0xf];
+    };
+    for (int shift = 56; shift >= 0; shift -= 8) {
+        appendByte(static_cast<BYTE>(volume >> shift));
+    }
+    *out++ = L':';
+    for (const auto byte : id.Identifier) appendByte(byte);
+}
+
 Item ReadItem(const fs::path& path) {
     Item item{path.filename().native(), {}};
     const HANDLE raw = CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES,
@@ -412,22 +404,12 @@ Item ReadItem(const fs::path& path) {
     if (raw == INVALID_HANDLE_VALUE) return item;
     const FileHandle file(raw, CloseHandle);
     FILE_ID_INFO info{};
-    if (!GetFileInformationByHandleEx(file.get(), FileIdInfo, &info, sizeof(info)) ||
-        std::ranges::all_of(info.FileId.Identifier, [](BYTE byte) { return byte == 0; })) {
-        return item;
+    if (GetFileInformationByHandleEx(file.get(), FileIdInfo, &info, sizeof(info)) &&
+        std::ranges::any_of(info.FileId.Identifier, [](BYTE byte) { return byte != 0; })) {
+        std::array<wchar_t, fileIdentityLength> identity;
+        FormatFileIdentity(info.VolumeSerialNumber, info.FileId, identity);
+        item.identity.assign(identity.begin(), identity.end());
     }
-
-    constexpr wchar_t digits[] = L"0123456789abcdef";
-    const auto appendByte = [&](BYTE byte) {
-        item.identity.push_back(digits[byte >> 4]);
-        item.identity.push_back(digits[byte & 0xf]);
-    };
-    item.identity.reserve(16 + 1 + 32);
-    for (int shift = 56; shift >= 0; shift -= 8) {
-        appendByte(static_cast<BYTE>(info.VolumeSerialNumber >> shift));
-    }
-    item.identity.push_back(L':');
-    for (const auto byte : info.FileId.Identifier) appendByte(byte);
     return item;
 }
 
@@ -464,27 +446,19 @@ public:
     }
 
     std::vector<Item> ReadFolder(const fs::path& folder) const {
-        const auto key = FolderKey(folder);
-        const auto file = OpenPinFile(path_);
-        if (!file) return {};
-        const auto lookup = [&](const Folders& folders) {
-            const auto found = folders.find(key);
-            return found != folders.end() ? found->second : std::vector<Item>{};
-        };
-        BY_HANDLE_FILE_INFORMATION info{};
-        if (!GetFileInformationByHandle(file.get(), &info)) return lookup(ParseFolders(file.get()));
-        const FileVersion version{info.dwVolumeSerialNumber, info.nFileIndexHigh, info.nFileIndexLow,
-                                  info.ftLastWriteTime.dwHighDateTime, info.ftLastWriteTime.dwLowDateTime,
-                                  info.nFileSizeHigh, info.nFileSizeLow};
+        const auto records = FindFolder(LoadSnapshot(), FolderKey(folder));
+        return records ? *records : std::vector<Item>{};
+    }
+
+    void PrimeCache() const { LoadSnapshot(); }
+
+    std::shared_ptr<const std::vector<Item>> CachedFolder(const std::wstring& key) const {
+        std::shared_ptr<const Folders> folders;
         {
             const std::scoped_lock lock(cache_->mutex);
-            if (cache_->version == version) return lookup(cache_->folders);
+            folders = cache_->folders;
         }
-        auto folders = ParseFolders(file.get());
-        const std::scoped_lock lock(cache_->mutex);
-        cache_->folders = std::move(folders);
-        cache_->version = version;
-        return lookup(cache_->folders);
+        return FindFolder(std::move(folders), key);
     }
 
     bool SetPinned(const fs::path& folder, const Item& item, bool pinned) const {
@@ -518,10 +492,39 @@ private:
     };
 
     struct ReadCache {
+        std::mutex readMutex;
         std::mutex mutex;
         std::optional<FileVersion> version;
-        Folders folders;
+        std::shared_ptr<const Folders> folders;
     };
+
+    static std::shared_ptr<const std::vector<Item>> FindFolder(std::shared_ptr<const Folders> folders,
+                                                               const std::wstring& key) {
+        if (!folders) return {};
+        const auto found = folders->find(key);
+        if (found == folders->end()) return {};
+        return {std::move(folders), &found->second};
+    }
+
+    std::shared_ptr<const Folders> LoadSnapshot() const {
+        const std::scoped_lock readLock(cache_->readMutex);
+        const auto file = OpenPinFile(path_);
+        std::optional<FileVersion> version;
+        BY_HANDLE_FILE_INFORMATION info{};
+        if (file && GetFileInformationByHandle(file.get(), &info)) {
+            version = FileVersion{info.dwVolumeSerialNumber, info.nFileIndexHigh, info.nFileIndexLow,
+                                  info.ftLastWriteTime.dwHighDateTime, info.ftLastWriteTime.dwLowDateTime,
+                                  info.nFileSizeHigh, info.nFileSizeLow};
+        }
+        if (version && cache_->version == version) {
+            const std::scoped_lock lock(cache_->mutex);
+            return cache_->folders;
+        }
+        auto folders = std::make_shared<const Folders>(file ? ParseFolders(file.get()) : Folders{});
+        const std::scoped_lock lock(cache_->mutex);
+        cache_->version = version;
+        return cache_->folders = std::move(folders);
+    }
 
     fs::path path_;
     std::shared_ptr<ReadCache> cache_ = std::make_shared<ReadCache>();
@@ -682,40 +685,95 @@ using PinNames = std::set<std::wstring, std::less<>>;
 using PinNamesSnapshot = std::shared_ptr<const PinNames>;
 using FindFolderPins = PinNamesSnapshot (*)(const fs::path&);
 
-PinNames ReadPinNames(std::span<const Item> pins, const fs::path& folder) {
-    PinNames names;
-    for (const auto& pin : pins) {
-        WIN32_FIND_DATAW found{};
-        HANDLE search = FindFirstFileW((folder / pin.name).c_str(), &found);
-        if (search == INVALID_HANDLE_VALUE) continue;
-        FindClose(search);
-        if (pin.name == found.cFileName) names.insert(pin.name);
-    }
-    if (names.size() == pins.size()) return names;
+bool ReadDirectoryIdentities(const fs::path& folder, std::span<const Item> pins, std::vector<Item>& entries) {
+    const auto raw = CreateFileW(folder.c_str(), FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES,
+                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                                 OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (raw == INVALID_HANDLE_VALUE) return false;
+    const FileHandle directory(raw, CloseHandle);
+    FILE_ID_INFO identity{};
+    if (!GetFileInformationByHandleEx(directory.get(), FileIdInfo, &identity, sizeof(identity))) return false;
 
-    // Only a missing exact name needs enumeration and possible identity lookup.
-    const bool lookUpIdentities = std::ranges::any_of(pins, [&](const Item& pin) {
-        return !pin.identity.empty() && !names.contains(pin.name);
-    });
-    std::vector<Item> entries;
-    std::error_code error;
-    for (fs::directory_iterator entry(folder, error), end; !error && entry != end; entry.increment(error)) {
-        if (lookUpIdentities) {
-            entries.push_back(ReadItem(entry->path()));
-        } else {
-            entries.push_back({entry->path().filename().native(), {}});
+    std::set<std::wstring_view> pinnedIds;
+    for (const auto& pin : pins) {
+        if (!pin.identity.empty()) pinnedIds.insert(pin.identity);
+    }
+
+    alignas(FILE_ID_EXTD_DIR_INFO) std::array<std::byte, 64 * 1024> buffer;
+    auto query = FileIdExtdDirectoryRestartInfo;
+    while (GetFileInformationByHandleEx(directory.get(), query, buffer.data(), buffer.size())) {
+        query = FileIdExtdDirectoryInfo;
+        size_t offset = 0;
+        while (true) {
+            constexpr size_t headerSize = offsetof(FILE_ID_EXTD_DIR_INFO, FileName);
+            const size_t remaining = buffer.size() - offset;
+            if (remaining < headerSize) return false;
+            const auto entry = reinterpret_cast<const FILE_ID_EXTD_DIR_INFO*>(buffer.data() + offset);
+            const size_t entrySize = entry->NextEntryOffset ? entry->NextEntryOffset : remaining;
+            if (entrySize < headerSize || entrySize > remaining ||
+                entrySize % alignof(FILE_ID_EXTD_DIR_INFO) ||
+                entry->FileNameLength % sizeof(wchar_t) || entry->FileNameLength > entrySize - headerSize) {
+                return false;
+            }
+            const std::wstring_view name(entry->FileName, entry->FileNameLength / sizeof(wchar_t));
+            if (name != L"." && name != L"..") {
+                std::array<wchar_t, fileIdentityLength> id;
+                FormatFileIdentity(identity.VolumeSerialNumber, entry->FileId, id);
+                // Verify possible aliases through the same handle-based lookup
+                // used for a selected item. Some providers omit directory IDs.
+                if (pinnedIds.contains(std::wstring_view(id.data(), id.size())) ||
+                    std::ranges::all_of(entry->FileId.Identifier, [](BYTE byte) { return byte == 0; })) {
+                    entries.push_back(ReadItem(folder / name));
+                } else {
+                    entries.push_back({std::wstring(name), {}});
+                }
+            }
+            if (!entry->NextEntryOffset) break;
+            offset += entrySize;
         }
     }
-    if (error) return names;
-    names.clear();
-    for (const auto& index : ResolvePins(pins, entries)) {
-        if (index) names.insert(std::move(entries[*index].name));
+    return GetLastError() == ERROR_NO_MORE_FILES;
+}
+
+bool HasExactName(const fs::path& folder, const std::wstring& name) {
+    WIN32_FIND_DATAW found{};
+    HANDLE search = FindFirstFileW((folder / name).c_str(), &found);
+    if (search == INVALID_HANDLE_VALUE) return false;
+    FindClose(search);
+    return name == found.cFileName;
+}
+
+PinNames ReadExactPinNames(std::span<const Item> pins, const fs::path& folder) {
+    PinNames names;
+    for (const auto& pin : pins) {
+        if (HasExactName(folder, pin.name)) names.insert(pin.name);
     }
     return names;
 }
 
-PinNames ReadPinNames(const PinStore& store, const fs::path& folder) {
-    return ReadPinNames(store.ReadFolder(folder), folder);
+PinNames ResolvePinAliases(std::span<const Item> pins, const fs::path& folder, const PinNames& exactNames) {
+    // Only a missing exact name needs enumeration and possible identity lookup.
+    const bool lookUpIdentities = std::ranges::any_of(pins, [&](const Item& pin) {
+        return !pin.identity.empty() && !exactNames.contains(pin.name);
+    });
+    std::vector<Item> entries;
+    if (!lookUpIdentities || !ReadDirectoryIdentities(folder, pins, entries)) {
+        entries.clear();
+        std::error_code error;
+        for (fs::directory_iterator entry(folder, error), end; !error && entry != end; entry.increment(error)) {
+            if (lookUpIdentities) {
+                entries.push_back(ReadItem(entry->path()));
+            } else {
+                entries.push_back({entry->path().filename().native(), {}});
+            }
+        }
+        if (error) return exactNames;
+    }
+    PinNames names;
+    for (const auto& index : ResolvePins(pins, entries)) {
+        if (index) names.insert(std::move(entries[*index].name));
+    }
+    return names;
 }
 
 namespace {
@@ -723,6 +781,11 @@ namespace {
 using CompareViewItems = int (*)(const void*, const void*, void*);
 using GetComparedItem = HRESULT (*)(IUnknown*, const void*, IShellFolder*, void*, REFIID, void**);
 using RunViewSort = BOOL (*)(void*);
+
+std::wstring_view LeafName(std::wstring_view path) {
+    const auto separator = path.find_last_of(L"\\/");
+    return separator == std::wstring_view::npos ? path : path.substr(separator + 1);
+}
 
 // Keep the folder snapshot for one synchronous sort. The request stays opaque.
 class SortPins {
@@ -738,6 +801,7 @@ public:
         if (folder_.Get() != &folder) {
             folder_ = &folder;
             names_.reset();
+            pinnedItems_.clear();
             try {
                 Microsoft::WRL::ComPtr<IPersistFolder2> parent;
                 if (SUCCEEDED(folder_.As(&parent))) {
@@ -750,13 +814,36 @@ public:
         return names_.get();
     }
 
+    bool IsPinned(PCUITEMID_CHILD id) {
+        if (!id) return false;
+        // The sort can move keys between slots. Cache by the child PIDL's
+        // bytes, whose identity remains stable when the keys move.
+        const std::string_view key(reinterpret_cast<const char*>(id), ILGetSize(id));
+        if (const auto found = pinnedItems_.find(key); found != pinnedItems_.end()) return found->second;
+        STRRET display{};
+        if (FAILED(folder_->GetDisplayNameOf(id, SHGDN_INFOLDER | SHGDN_FORPARSING, &display))) return false;
+        PWSTR raw = nullptr;
+        const auto status = StrRetToStrW(&display, id, &raw);
+        const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> name(raw, CoTaskMemFree);
+        if (FAILED(status) || !name) return false;
+        const bool pinned = names_->contains(LeafName(name.get()));
+        if (pinnedItems_.size() < 4096) pinnedItems_.emplace(std::string(key), pinned);
+        return pinned;
+    }
+
     inline static thread_local SortPins* current = nullptr;
 
 private:
+    struct PidlHash {
+        using is_transparent = void;
+        size_t operator()(std::string_view key) const { return std::hash<std::string_view>{}(key); }
+    };
+
     FindFolderPins findPins_;
     SortPins* previous_;
     Microsoft::WRL::ComPtr<IShellFolder> folder_;
     PinNamesSnapshot names_;
+    std::unordered_map<std::string, bool, PidlHash, std::equal_to<>> pinnedItems_;
 };
 
 [[maybe_unused]] BOOL RunSortWithPins(FindFolderPins findPins, RunViewSort original, void* request) {
@@ -793,11 +880,6 @@ struct ViewComparison {
     return result;
 }
 
-std::wstring_view LeafName(std::wstring_view path) {
-    const auto separator = path.find_last_of(L"\\/");
-    return separator == std::wstring_view::npos ? path : path.substr(separator + 1);
-}
-
 [[maybe_unused]] int CompareWithPins(CompareViewItems original, const void* left, const void* right, void* context) {
     const auto pins = SortPins::current;
     if (!pins || !pins->Needed()) return original(left, right, context);
@@ -814,19 +896,8 @@ std::wstring_view LeafName(std::wstring_view path) {
     try {
         const auto* names = pins->ForFolder(*comparison.folder.Get());
         if (!names || names->empty()) return stock;
-        const auto isPinned = [&](ChildId& child) {
-            const auto id = child.GetPtr();
-            STRRET display{};
-            if (!id || FAILED(comparison.folder->GetDisplayNameOf(id, SHGDN_INFOLDER | SHGDN_FORPARSING, &display))) {
-                return false;
-            }
-            PWSTR raw = nullptr;
-            const auto status = StrRetToStrW(&display, id, &raw);
-            const std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> name(raw, CoTaskMemFree);
-            return SUCCEEDED(status) && name && names->contains(LeafName(name.get()));
-        };
-        const bool pinnedLeft = isPinned(*comparison.leftId.Get());
-        const bool pinnedRight = isPinned(*comparison.rightId.Get());
+        const bool pinnedLeft = pins->IsPinned(comparison.leftId->GetPtr());
+        const bool pinnedRight = pins->IsPinned(comparison.rightId->GetPtr());
         if (pinnedLeft != pinnedRight) return pinnedLeft ? -1 : 1;
     } catch (...) {
         // A pin lookup failure leaves the native comparison result intact.
@@ -1099,9 +1170,9 @@ public:
         sources_.insert_or_assign(renderer, source);
     }
 
-    void Erase(const void* renderer) {
+    bool Erase(const void* renderer) {
         const std::scoped_lock lock(mutex_);
-        sources_.erase(renderer);
+        return sources_.erase(renderer) != 0;
     }
 
     std::optional<ImageSource> Find(const void* renderer) {
@@ -1232,6 +1303,7 @@ public:
         const std::scoped_lock lock(mutex_);
         const auto found = folders_.find(folder);
         if (found == folders_.end() || !found->second.ready || found->second.expires <= GetTickCount64()) return std::nullopt;
+        found->second.lastUsed = ++sequence_;
         return found->second.names->contains(item.filename().native());
     }
 
@@ -1246,6 +1318,14 @@ public:
             const std::scoped_lock lock(mutex_);
             const auto entry = FindEntry(folder);
             if (!entry) return {};
+            entry->lastUsed = ++sequence_;
+            if (!entry->names) {
+                if (const auto records = store.CachedFolder(folder)) {
+                    auto names = std::make_shared<PinNames>();
+                    for (const auto& record : *records) names->insert(record.name);
+                    entry->names = std::move(names);
+                }
+            }
             names = entry->names;
             if (!entry->request && entry->expires <= now) {
                 if (pending_ < 4) {
@@ -1295,7 +1375,9 @@ private:
 
     struct Resolution {
         std::vector<Item> records;
-        std::optional<DirectoryVersion> version;
+        PinNames exactNames;
+        std::optional<DirectoryVersion> scannedVersion;
+        ULONGLONG scannedAt;
         PinNamesSnapshot names;
     };
 
@@ -1310,11 +1392,34 @@ private:
     static std::shared_ptr<const Resolution> ResolveFolder(const PinStore& store, const fs::path& parent,
                                                             const std::shared_ptr<const Resolution>& previous) {
         auto records = store.ReadFolder(parent);
-        const auto version = records.empty() ? std::nullopt : ReadDirectoryVersion(parent);
-        // A missing item only needs another identity lookup after the folder or its pins change.
-        if (previous && previous->records == records && previous->version == version) return previous;
-        auto names = std::make_shared<const PinNames>(ReadPinNames(records, parent));
-        return std::make_shared<const Resolution>(Resolution{std::move(records), version, std::move(names)});
+        auto exactNames = ReadExactPinNames(records, parent);
+        const bool sameInputs = previous && previous->records == records && previous->exactNames == exactNames;
+        if (exactNames.size() == records.size()) {
+            if (sameInputs) return previous;
+            auto names = std::make_shared<const PinNames>(exactNames);
+            return std::make_shared<const Resolution>(Resolution{std::move(records), std::move(exactNames),
+                                                                 std::nullopt, 0, std::move(names)});
+        }
+
+        constexpr ULONGLONG unchangedFolderRetryMs = 5000;
+        const auto version = ReadDirectoryVersion(parent);
+        if (!sameInputs || version != previous->scannedVersion ||
+            GetTickCount64() - previous->scannedAt >= unchangedFolderRetryMs) {
+            auto names = ResolvePinAliases(records, parent, exactNames);
+            auto snapshot = previous && *previous->names == names ? previous->names
+                : std::make_shared<const PinNames>(std::move(names));
+            return std::make_shared<const Resolution>(Resolution{std::move(records), std::move(exactNames),
+                                                                 version, GetTickCount64(), std::move(snapshot)});
+        }
+
+        // Recheck the already resolved aliases while waiting for the next full scan.
+        auto names = exactNames;
+        for (const auto& name : *previous->names) {
+            if (!names.contains(name) && HasExactName(parent, name)) names.insert(name);
+        }
+        if (*previous->names == names) return previous;
+        return std::make_shared<const Resolution>(Resolution{std::move(records), std::move(exactNames),
+            previous->scannedVersion, previous->scannedAt, std::make_shared<const PinNames>(std::move(names))});
     }
 
     struct Entry {
@@ -1322,13 +1427,18 @@ private:
         std::shared_ptr<const Resolution> resolved;
         ULONGLONG expires = 0;
         uint64_t request = 0;
+        uint64_t lastUsed = 0;
         bool ready = false;
     };
 
     Entry* FindEntry(const std::wstring& folder) {
         if (const auto found = folders_.find(folder); found != folders_.end()) return &found->second;
         if (folders_.size() >= 64) {
-            const auto evict = std::ranges::find_if(folders_, [](const auto& entry) { return !entry.second.request; });
+            auto evict = folders_.end();
+            for (auto entry = folders_.begin(); entry != folders_.end(); ++entry) {
+                if (!entry->second.request &&
+                    (evict == folders_.end() || entry->second.lastUsed < evict->second.lastUsed)) evict = entry;
+            }
             if (evict == folders_.end()) return nullptr;
             folders_.erase(evict);
         }
@@ -1769,7 +1879,7 @@ HWND CommandWindow(const xaml::XamlRoot& root) {
            WindowHasClass(window, L"CabinetWClass") ? window : nullptr;
 }
 
-xaml::Controls::IconElement CommandIcon(PinAction action, xaml::ElementTheme theme) {
+xaml::Controls::IconElement CommandSvgIcon(PinAction action, xaml::ElementTheme theme) {
     wchar_t windows[MAX_PATH]{};
     if (!GetWindowsDirectoryW(windows, ARRAYSIZE(windows))) return nullptr;
     std::wstring path = windows;
@@ -1789,6 +1899,21 @@ xaml::Controls::IconElement CommandIcon(PinAction action, xaml::ElementTheme the
     svg.UriSource(winrt::Windows::Foundation::Uri(L"file:///" + path));
     controls::ImageIcon icon;
     icon.Source(svg);
+    icon.Width(16);
+    icon.Height(16);
+    return icon;
+}
+
+xaml::Controls::IconElement CommandIcon(PinAction action, xaml::ElementTheme theme) {
+    try {
+        if (const auto svg = CommandSvgIcon(action, theme)) return svg;
+    } catch (const winrt::hresult_error&) {
+        // Use the system glyph if the packaged asset cannot be loaded.
+    }
+    controls::FontIcon icon;
+    icon.FontFamily(xaml::Media::FontFamily(L"Segoe Fluent Icons"));
+    icon.Glyph(action == PinAction::Pin ? L"\uE718" : L"\uE77A");
+    icon.FontSize(16);
     icon.Width(16);
     icon.Height(16);
     return icon;
@@ -1827,14 +1952,17 @@ void InheritCommandStyle(const controls::AppBarButton& command, const controls::
 std::optional<CommandPlacement> FindCommandPlacement(const controls::CommandBar& bar, bool context) {
     const auto primary = bar.PrimaryCommands();
     if (!context) {
-        // This command bar's editing buttons are followed by a separator and
-        // the named Sort and Group command, independent of the display language.
-        if (primary.Size() < 10 || !primary.GetAt(8).try_as<controls::AppBarSeparator>()) return std::nullopt;
-        const auto sort = primary.GetAt(9).try_as<controls::AppBarButton>();
-        const auto share = primary.GetAt(6).try_as<controls::AppBarButton>();
-        const auto remove = primary.GetAt(7).try_as<controls::AppBarButton>();
-        if (!sort || sort.Name() != L"SortAndGroupButton" || !share || !remove) return std::nullopt;
-        return CommandPlacement{primary, 7, remove};
+        // Share and Delete end the editing section immediately before Sort and Group.
+        for (uint32_t i = 3; i < primary.Size(); ++i) {
+            const auto sort = primary.GetAt(i).try_as<controls::AppBarButton>();
+            if (!sort || sort.Name() != L"SortAndGroupButton") continue;
+            if (!primary.GetAt(i - 1).try_as<controls::AppBarSeparator>()) break;
+            const auto share = primary.GetAt(i - 3).try_as<controls::AppBarButton>();
+            const auto remove = primary.GetAt(i - 2).try_as<controls::AppBarButton>();
+            if (share && remove) return CommandPlacement{primary, i - 2, remove};
+            break;
+        }
+        return std::nullopt;
     }
 
     for (const auto* verb : {L"PinToStartScreen", L"pintohomefile", L"pintohome", L"Windows.CompressTo"}) {
@@ -2433,26 +2561,43 @@ void WINAPI CommandBarManagerSetBarHook(void* self, const controls::CommandBar& 
     } catch (...) {}
 }
 
-std::atomic_bool commandSymbolsAttempted;
+std::atomic_bool commandSymbolsReady;
+std::atomic_bool commandSymbolsResolving;
+bool commandHookQueued = false;
+PTP_TIMER commandSymbolsRetry = nullptr;
+unsigned commandSymbolRetries = 0;
 
 void HookCommandSymbols(bool apply) noexcept try {
-    if (!commandUiActive || commandSymbolsAttempted) return;
+    if (!commandUiActive || commandSymbolsReady) return;
     const auto extensions = GetModuleHandleW(L"FileExplorerExtensions.dll");
-    if (!extensions || commandSymbolsAttempted.exchange(true)) return;
+    if (!extensions || commandSymbolsResolving.exchange(true)) return;
+    struct ResetResolving {
+        ~ResetResolving() { commandSymbolsResolving = false; }
+    } resetResolving;
     const std::scoped_lock lock(commandHooksMutex);
-    if (!commandUiActive) return;
-    if (!HookExplorerCommandBar(extensions, &commandBarManagerSetBarOriginal, CommandBarManagerSetBarHook)) {
-        Wh_Log(L"File Explorer command bar symbol is unavailable");
+    if (!commandUiActive || commandSymbolsReady) return;
+    if (!commandHookQueued) {
+        commandHookQueued = HookExplorerCommandBar(extensions, &commandBarManagerSetBarOriginal, CommandBarManagerSetBarHook);
+    }
+    if (commandHookQueued && (!apply || Wh_ApplyHookOperations())) {
+        commandSymbolsReady = true;
+        if (commandSymbolsRetry) SetThreadpoolTimer(commandSymbolsRetry, nullptr, 0, 0);
         return;
     }
-    if (apply) Wh_ApplyHookOperations();
+    Wh_Log(L"File Explorer command bar hook is unavailable");
+    constexpr std::array retrySeconds{5, 30, 120};
+    if (commandSymbolsRetry && commandSymbolRetries < retrySeconds.size()) {
+        const auto delay = static_cast<ULONGLONG>(-10'000'000LL * retrySeconds[commandSymbolRetries++]);
+        FILETIME due{static_cast<DWORD>(delay), static_cast<DWORD>(delay >> 32)};
+        SetThreadpoolTimer(commandSymbolsRetry, &due, 0, 0);
+    }
 } catch (...) {}
 
 decltype(&LoadLibraryExW) commandLoadLibraryExOriginal;
 
 HMODULE WINAPI CommandLoadLibraryExHook(PCWSTR path, HANDLE file, DWORD flags) {
     const auto module = commandLoadLibraryExOriginal(path, file, flags);
-    if (module && path && commandUiActive && !commandSymbolsAttempted) {
+    if (module && path && commandUiActive && !commandSymbolsReady) {
         const auto name = std::wstring_view(path).substr(std::wstring_view(path).find_last_of(L"\\/") + 1);
         if (CompareNames(name, L"FileExplorerExtensions.dll") == CSTR_EQUAL ||
             CompareNames(name, L"FileExplorerExtensions") == CSTR_EQUAL) HookCommandSymbols(true);
@@ -2464,6 +2609,9 @@ void PrepareNativeCommands() noexcept {
     contextCommandEnabled = Wh_GetIntSetting(L"contextMenu") != 0;
     toolbarCommandEnabled = Wh_GetIntSetting(L"commandBar") != 0;
     if ((!contextCommandEnabled && !toolbarCommandEnabled) || !CommandUiMessage()) return;
+    commandSymbolsRetry = CreateThreadpoolTimer([](PTP_CALLBACK_INSTANCE, void*, PTP_TIMER) {
+        HookCommandSymbols(true);
+    }, nullptr, nullptr);
     commandUiActive = true;
     if (GetModuleHandleW(L"FileExplorerExtensions.dll")) {
         HookCommandSymbols(false);
@@ -2477,7 +2625,16 @@ void StartNativeCommands() noexcept { HookCommandSymbols(true); }
 
 void BeginStopNativeCommands() noexcept {
     commandUiActive = false;
-    const std::scoped_lock lock(commandHooksMutex);
+    PTP_TIMER retry;
+    {
+        const std::scoped_lock lock(commandHooksMutex);
+        retry = std::exchange(commandSymbolsRetry, nullptr);
+        if (retry) SetThreadpoolTimer(retry, nullptr, 0, 0);
+    }
+    if (retry) {
+        WaitForThreadpoolTimerCallbacks(retry, TRUE);
+        CloseThreadpoolTimer(retry);
+    }
 }
 
 void StopNativeCommands() noexcept {
@@ -2760,6 +2917,11 @@ BOOL Wh_ModInit() {
     } catch (const std::exception& error) {
         Wh_Log(L"Cannot initialize pin storage (%hs)", error.what());
         return FALSE;
+    }
+    try {
+        nativePinStore->PrimeCache();
+    } catch (const std::exception& error) {
+        Wh_Log(L"Cannot preload pin storage (%hs)", error.what());
     }
     nativeGrouping = native->grouping;
     nativeSetGroupingTarget = setGrouping;
