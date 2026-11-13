@@ -38,7 +38,7 @@ improvements by [Asteski](https://github.com/Asteski) and
 - Live DWM window previews, with optional titles, icons, close buttons, and
   overflow indicators.
 - Entrance, exit, selection, hover, scrolling, and layout-resize animations that
-  respect the Windows animation setting.
+  respect the Windows animation setting and can be turned off one by one.
 - Solid/transparent, Acrylic, and Mica themes; light/dark color schemes; custom
   or accent colors; configurable fonts, highlights, shadows, and corner radii.
 - Optional desktop-snapshot or wallpaper backdrop blur behind the switcher.
@@ -748,6 +748,9 @@ nothing failed.
         - enableHoverAnimation: true
           $name: Hover Focus Animation
           $description: Fade and motion when hovering an entry with the mouse.
+        - enableLayoutAnimation: true
+          $name: Layout Resize Animation
+          $description: Resize the switcher and previews smoothly when the layout changes, such as expanding a group, closing a window or moving through the Dock.
       $name: Animations
   $name: Appearance
 - Dimensions:
@@ -1441,6 +1444,7 @@ struct Settings {
     bool enableSelectionAnimation;
     bool enableScrollAnimation;
     bool enableHoverAnimation;
+    bool enableLayoutAnimation;
     bool excludeXboxMode;
     bool handleTouchpadGestures;
     bool stickyTouchpadMode;
@@ -1750,6 +1754,7 @@ static bool g_backdropWorkerIsWallpaper = false;
 static BackdropWallpaperInfo g_backdropWorkerWallpaperInfo;
 
 static bool AreAnimationsGloballyEnabled(); // defined further down
+static bool LayoutAnimationsEnabled();
 static bool IsWin11OrGreater();             // defined further down
 static void StartAnimationTicker();          // defined further down
 
@@ -4992,8 +4997,12 @@ static void CommitLayoutTransition(HMONITOR monitor, bool scrollReflow = false) 
     g_layoutTransition.rcDockTitleTarget = g_rcDockTitleBar;
     g_layoutTransition.rcDockSlotTarget = g_rcCentralPreviewSlot;
     g_layoutTransition.scrollReflow = scrollReflow;
+    // A scroll reflow belongs to the row/page slide; every other reflow is a
+    // layout resize.
     bool animate = g_isVisible && !g_isPendingShow && !g_animExitActive &&
-                   AreAnimationsGloballyEnabled();
+                   AreAnimationsGloballyEnabled() &&
+                   (scrollReflow ? g_settings.enableScrollAnimation
+                                 : g_settings.enableLayoutAnimation);
     for (auto& entry : g_windows) {
         entry.rcCellTarget = entry.rcCell;
         entry.rcThumbTarget = entry.rcThumbActual;
@@ -5567,6 +5576,10 @@ static void RefreshClientAreaAnimCache() {
 static bool AreAnimationsGloballyEnabled() {
     if (!g_settings.enableAnimations) return false;
     return s_clientAreaAnimCached;
+}
+
+static bool LayoutAnimationsEnabled() {
+    return AreAnimationsGloballyEnabled() && g_settings.enableLayoutAnimation;
 }
 
 static bool s_animationTimerResolutionOwned = false;
@@ -16474,7 +16487,7 @@ static void EnterAppGroup() {
     if (members.size() <= 1) return;  // nothing to expand
 
     CaptureGroupTransitionStart();
-    if (AreAnimationsGloballyEnabled() && g_settings.enableAnimations) {
+    if (LayoutAnimationsEnabled()) {
         // ── Animated drill-down path ──────────────────────────────────
 
         // 3. Snapshot visible app-list items as departing entries
@@ -16613,7 +16626,7 @@ static void ExitAppGroup() {
     if (!g_drilledIn) return;
 
     CaptureGroupTransitionStart();
-    if (AreAnimationsGloballyEnabled() && g_settings.enableAnimations) {
+    if (LayoutAnimationsEnabled()) {
         // ── Animated return path ──────────────────────────────────────
 
         // 3. Snapshot visible drilled-in items as departing entries
@@ -16723,7 +16736,7 @@ static void ScrollDockWithDynamicResize(int targetStart, int targetSelected, int
     g_layoutStartIndex = targetStart;
     g_selectedIndex = targetSelected;
 
-    if (!AreAnimationsGloballyEnabled() || !g_settings.enableAnimations) {
+    if (!LayoutAnimationsEnabled()) {
         RecomputeAndReposition();
         UpdateDockPreviewForSelection();
         RegisterThumbnails();
@@ -16758,7 +16771,7 @@ static void UpdateDockSelectionWithDynamicResize() {
     int n = (int)g_windows.size();
     if (g_selectedIndex < 0 || g_selectedIndex >= n) return;
 
-    if (!AreAnimationsGloballyEnabled() || !g_settings.enableAnimations) {
+    if (!LayoutAnimationsEnabled()) {
         RecomputeAndReposition();
         UpdateDockPreviewForSelection();
         RegisterThumbnails();
@@ -17456,7 +17469,7 @@ static void UpdateChevronAnimationTargets(bool immediate) {
 
     g_animChevronDuration = 0.167f;
 
-    if (immediate || !AreAnimationsGloballyEnabled()) {
+    if (immediate || !AreAnimationsGloballyEnabled() || !g_settings.enableScrollAnimation) {
         g_animChevronAlphaPrev = g_animChevronAlphaTargetPrev;
         g_animChevronAlphaNext = g_animChevronAlphaTargetNext;
         g_animChevronTransformPrev = g_animChevronAlphaTargetPrev;
@@ -17828,7 +17841,7 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
                 }
             }
 
-            if (g_isVisible && AreAnimationsGloballyEnabled() && g_settings.enableAnimations) {
+            if (g_isVisible && LayoutAnimationsEnabled()) {
                 bool wasFocused = (i == g_selectedIndex);
                 int closedIndex = i;
                 int oldSize = (int)g_windows.size();
@@ -18170,7 +18183,7 @@ static void AddWindowEntry(HWND hWnd, bool removeIfIneligible) {
     }
 
     if (g_isVisible) {
-        if (AreAnimationsGloballyEnabled() && g_settings.enableAnimations) {
+        if (LayoutAnimationsEnabled()) {
             CaptureLayoutTransitionStart();
             HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
             RegisterThumbnailsEarly();
@@ -21489,6 +21502,7 @@ static void LoadSettings() {
     g_settings.enableSelectionAnimation = LoadBoolSetting(L"Appearance.Animations.enableSelectionAnimation", true);
     g_settings.enableScrollAnimation = LoadBoolSetting(L"Appearance.Animations.enableScrollAnimation", true);
     g_settings.enableHoverAnimation = LoadBoolSetting(L"Appearance.Animations.enableHoverAnimation", true);
+    g_settings.enableLayoutAnimation = LoadBoolSetting(L"Appearance.Animations.enableLayoutAnimation", true);
 
     g_settings.maxWidthPercent = Wh_GetIntSetting(L"Dimensions.maxWidthPercent");
     if (g_settings.maxWidthPercent <= 0 || g_settings.maxWidthPercent > 100) g_settings.maxWidthPercent = 80;
