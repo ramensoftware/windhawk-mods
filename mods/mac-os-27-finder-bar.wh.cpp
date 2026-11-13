@@ -912,6 +912,7 @@ struct Bar {
     ULONGLONG lastFrame = 0;
     bool animating = false;  // barra
     bool marquee = false;          // o nome da música está passando
+    ULONGLONG edgeSince = 0;       // ocultar automaticamente: desde quando o mouse está no topo
     ULONGLONG fsSince = 0;         // desde quando há algo em tela cheia
     std::wstring marqueeText;      // ... e qual nome (recomeça quando muda)
     ULONGLONG marqueeStart = 0;
@@ -22663,7 +22664,32 @@ static void AutoHideTick() {
         bool inX = pt.x >= b->monRect.left && pt.x < b->monRect.right;
         float s = b->dpi / 96.0f;
         if (!b->autoShown) {
-            if (inX && pt.y <= b->monRect.top + 1 && pt.y >= b->monRect.top - 2) {
+            bool atEdge = inX && pt.y <= b->monRect.top + 1 && pt.y >= b->monRect.top - 2;
+            if (!atEdge) {
+                b->edgeSince = 0;
+                continue;
+            }
+            // Em cima de uma janela (maximizada, por exemplo), o topo tem os botões
+            // dela: minimizar, maximizar, fechar, captura... Sobre os botões de
+            // janela a barra nunca aparece; no resto, só se o mouse parar ali por
+            // meio segundo (um clique rápido não traz a barra por cima).
+            HWND under = WindowFromPoint(pt);
+            HWND root = under ? GetAncestor(under, GA_ROOT) : nullptr;
+            bool overApp = root && !ClassIs(root, L"Progman") && !ClassIs(root, L"WorkerW") &&
+                           !ClassIs(root, L"Shell_TrayWnd") && !ClassIs(root, kBarClass);
+            if (overApp) {
+                DWORD_PTR hit = HTNOWHERE;
+                SendMessageTimeoutW(root, WM_NCHITTEST, 0, MAKELPARAM((short)pt.x, (short)pt.y), SMTO_ABORTIFHUNG, 50, &hit);
+                if (hit == HTMINBUTTON || hit == HTMAXBUTTON || hit == HTCLOSE || hit == HTHELP) {
+                    b->edgeSince = 0;
+                    continue;
+                }
+                ULONGLONG now = GetTickCount64();
+                if (!b->edgeSince) b->edgeSince = now;
+                if (now - b->edgeSince < 450) continue;
+            }
+            {
+                b->edgeSince = 0;
                 b->autoShown = true;
                 b->hideCountdown = 6;
                 SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top,
