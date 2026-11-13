@@ -81,6 +81,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 - Bar text and icons in white, black or automatic (following the Windows theme), for all displays or each display on its own
 - Clicking the album cover (Control Center or Now Playing) brings the playing app's window to the front
 - Optional: hide the bar while a window is maximized on its display (the window gets the whole height) and bring it back when none is
+- Optional handle: a thin pill at the top center brings a hidden bar back with a click (auto-hide or maximized window); with auto-hide, touching the top edge still works, and the bar never appears over a window's caption buttons
 - Choose where the bar shows: all displays, the main one, or a specific display (listed by name); if that display is disconnected, the bar moves to the main one
 - **Disks** (optional): its menu lists every local and removable disk with a usage bar and opens it in Explorer
 - Bar icons share one size: each icon is measured and scaled to the same height, and they all grow together with the icon size setting
@@ -330,7 +331,8 @@ struct Settings {
     std::wstring barMonitor;  // "all", "primary" ou o nome do monitor (\\.\DISPLAY2)
     bool autoHide;
     bool hideOnFullscreen;
-    bool hideWhenMaximized;  // some com janela maximizada no monitor, volta sem ela
+    bool hideWhenMaximized;
+    bool revealHandle;  // barra escondida: também volta por uma alça (clique) no topo  // some com janela maximizada no monitor, volta sem ela
     std::wstring desktopName;
     bool showGlobalMenu, genericMenus;
     bool showDisplay, showKeyboard, showBattery, showBatteryPercent;
@@ -496,6 +498,7 @@ static const UiDefault kUiDefaults[] = {
     {L"autoHide", L"0"},
     {L"hideOnFullscreen", L"1"},
     {L"hideWhenMaximized", L"0"},
+    {L"revealHandle", L"0"},
     {L"showGlobalMenu", L"1"},
     {L"showDisplay", L"1"},
     {L"showKeyboard", L"1"},
@@ -746,6 +749,7 @@ static void LoadSettings() {
     s.autoHide = OvrInt(L"autoHide") != 0;
     s.hideOnFullscreen = OvrInt(L"hideOnFullscreen") != 0;
     s.hideWhenMaximized = OvrInt(L"hideWhenMaximized") != 0;
+    s.revealHandle = OvrInt(L"revealHandle") != 0;
     s.desktopName = ReadStr(L"desktopName");
     if (s.desktopName.empty()) s.desktopName = L"Finder";
     s.showGlobalMenu = OvrInt(L"showGlobalMenu") != 0;
@@ -922,6 +926,9 @@ struct Bar {
     bool dragging = false;
     float pressX = 0, dragX = 0;
     HWND shadow = nullptr;        // sombra projetada embaixo da barra
+    HWND handle = nullptr;        // a alça no topo (barra escondida)
+    bool handleHot = false;
+    bool maxHidden = false;       // escondida por janela maximizada
     ID2D1HwndRenderTarget* rt = nullptr;
     ID2D1SolidColorBrush* brush = nullptr;
     IDWriteTextFormat* fmtBold = nullptr;
@@ -12328,7 +12335,7 @@ enum BsVal {
     BV_BATTPCT, BV_AUTOHIDE, BV_HIDEFS, BV_SOLIDMAX, BV_ALLMON, BV_FLYOUTS, BV_OSD, BV_DIM,
     BV_G_TRANSP, BV_G_CLEAR, BV_G_LIQUID, BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_ICONS, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_SELMENU, BV_UPDATES,
     BV_G_TINT, BV_SEARCHTGT, BV_LANG, BV_NPBAR, BV_ICSADD, BV_ICSCLEAR,
-    BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_TEXTMON, BV_HIDEMAX,
+    BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_TEXTMON, BV_HIDEMAX, BV_REVEAL,
 };
 struct BsRowDef {
     int kind;
@@ -12374,6 +12381,7 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_AUTOHIDE, L"Ocultar e mostrar a barra automaticamente", 0, 0, L"Aparece ao encostar o mouse no topo da tela"},
     {BR_SWITCH, BV_HIDEFS, L"Ocultar em tela cheia", 0, 0, L"Jogos, vídeos e apps em tela cheia ficam sem a barra"},
     {BR_SWITCH, BV_HIDEMAX, L"Ocultar com janela maximizada", 0, 0, L"A barra some quando uma janela é maximizada e volta quando não há nenhuma (na área de trabalho)"},
+    {BR_SWITCH, BV_REVEAL, L"Alça para trazer a barra", 0, 0, L"Barra escondida (automática ou por janela maximizada): uma pílula fina no centro do topo também traz a barra com um clique"},
     {BR_SWITCH, BV_SOLIDMAX, L"Fundo sólido com janela maximizada", 0, 0},
     {BR_CHOICE, BV_BARMON, L"Mostrar a barra em", 0, 0, L"Todos os monitores, o principal ou um deles; se o escolhido for desconectado, a barra vai para o principal"},
     {BR_SWITCH, BV_MORE, L"Recolher numa seta os ícones que não cabem", 0, 0, L"Como as setas ao lado do notch no macOS 27"},
@@ -12497,6 +12505,7 @@ static const BsBoolKey kBsKeys[] = {
     {BV_AUTOHIDE, L"autoHide", &Settings::autoHide},
     {BV_HIDEFS, L"hideOnFullscreen", &Settings::hideOnFullscreen},
     {BV_HIDEMAX, L"hideWhenMaximized", &Settings::hideWhenMaximized},
+    {BV_REVEAL, L"revealHandle", &Settings::revealHandle},
     {BV_SOLIDMAX, L"solidWhenMaximized", &Settings::solidWhenMaximized},
     {BV_ALLMON, L"allMonitors", &Settings::allMonitors},
     {BV_FLYOUTS, L"flyouts", &Settings::flyouts},
@@ -12725,6 +12734,10 @@ static void BsSet(int val, int v) {
             if (val == BV_HIDEMAX && g_owner) {
                 if (on) SetTimer(g_owner, TIMER_MAXCHECK, 250, nullptr);
                 else KillTimer(g_owner, TIMER_MAXCHECK);
+            }
+            if ((val == BV_HIDEMAX || val == BV_REVEAL) && g_owner) {
+                if (g_settings.autoHide || g_settings.hideWhenMaximized) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
+                else KillTimer(g_owner, TIMER_FAST);
             }
             BarsApplyLive(false);
         }
@@ -22489,6 +22502,7 @@ static bool ForegroundIsFullscreenOn(Bar* b) {
            r.right >= b->monRect.right && r.bottom >= b->monRect.bottom;
 }
 
+static void HandleSync(Bar* b);  // a alça no topo (mais abaixo)
 // Há uma janela maximizada à vista neste monitor? (minimizadas, escondidas, de
 // ferramenta e as do shell não contam)
 struct MaxFind {
@@ -22558,6 +22572,13 @@ static void UpdateFullscreen() {
                 Wh_Log(L"Tela cheia: barra oculta (janela %s)", cls);
             }
         }
+        b->maxHidden = hide && forMax;
+        if (!b->maxHidden && !g_settings.autoHide) b->autoShown = false;
+        if (b->maxHidden && b->autoShown && b->hiddenForFullscreen) {
+            // Mostrada pela alça por cima da janela maximizada: o tique rápido a esconde.
+            BarReleaseSpace(b, true);
+            continue;
+        }
         if (hide != b->hiddenForFullscreen) {
             b->hiddenForFullscreen = hide;
             ShowWindow(b->hwnd, hide ? SW_HIDE : SW_SHOWNOACTIVATE);
@@ -22568,6 +22589,7 @@ static void UpdateFullscreen() {
         // Escondida por janela maximizada, a barra devolve o espaço do topo; ao
         // voltar, reserva de novo.
         BarReleaseSpace(b, hide && forMax);
+        HandleSync(b);
     }
 }
 
@@ -22657,13 +22679,141 @@ static void UpdateSolid() {
     }
 }
 
+// ---- Alça: a pílula fina no topo que traz a barra escondida de volta ----
+// Com "Ocultar e mostrar a barra automaticamente" ou "Ocultar com janela
+// maximizada", a barra pode voltar com um clique numa pílula estreita no centro
+// do topo (em vez de encostar o mouse, que cobria os botões das janelas).
+static const wchar_t kHandleClass[] = L"WhFinderTopBarHandle";
+static void HandleRender(Bar* b) {
+    if (!b->handle) return;
+    float s = b->dpi / 96.0f;
+    int W = (int)std::ceil(96 * s), H = (int)std::ceil(14 * s);
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+    bi.bmiHeader.biWidth = W;
+    bi.bmiHeader.biHeight = -H;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HDC dc = CreateCompatibleDC(nullptr);
+    HBITMAP bmp = dc ? CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0) : nullptr;
+    if (!bmp) {
+        if (dc) DeleteDC(dc);
+        return;
+    }
+    HGDIOBJ old = SelectObject(dc, bmp);
+    ID2D1DCRenderTarget* rt = nullptr;
+    ID2D1SolidColorBrush* br = nullptr;
+    auto props = D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                                              D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), 96, 96);
+    RECT rc = {0, 0, W, H};
+    if (SUCCEEDED(g_d2d->CreateDCRenderTarget(&props, &rt)) && SUCCEEDED(rt->BindDC(dc, &rc)) &&
+        SUCCEEDED(rt->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &br))) {
+        rt->BeginDraw();
+        rt->Clear(D2D1::ColorF(0, 0, 0, 0));
+        // Clara com contorno escuro: aparece sobre qualquer fundo. Com o mouse, cresce.
+        float pw = (b->handleHot ? 64 : 52) * s, ph = (b->handleHot ? 6 : 5) * s;
+        D2D1_RECT_F r = D2D1::RectF((W - pw) / 2, 4 * s, (W + pw) / 2, 4 * s + ph);
+        D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(r, ph / 2, ph / 2);
+        br->SetColor(D2D1::ColorF(0, 0, 0, 0.18f));
+        rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left - 1 * s, r.top, r.right + 1 * s, r.bottom + 2 * s),
+                                                   ph / 2 + 1 * s, ph / 2 + 1 * s), br);
+        br->SetColor(D2D1::ColorF(1, 1, 1, b->handleHot ? 1.0f : 0.88f));
+        rt->FillRoundedRectangle(rr, br);
+        br->SetColor(D2D1::ColorF(0, 0, 0, 0.35f));
+        rt->DrawRoundedRectangle(rr, br, std::max(1.0f, 0.8f * s));
+        rt->EndDraw();
+    }
+    SafeRelease(br);
+    SafeRelease(rt);
+    POINT dst = {(b->monRect.left + b->monRect.right - W) / 2, b->monRect.top};
+    POINT src = {0, 0};
+    SIZE sz = {W, H};
+    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    UpdateLayeredWindow(b->handle, nullptr, &dst, &sz, dc, &src, 0, &bf, ULW_ALPHA);
+    SelectObject(dc, old);
+    DeleteObject(bmp);
+    DeleteDC(dc);
+}
+// A alça aparece só quando a barra está escondida por um desses dois modos.
+static void HandleSync(Bar* b) {
+    bool want = g_settings.revealHandle && !b->autoShown &&
+                ((g_settings.autoHide && !b->hiddenForFullscreen) || b->maxHidden);
+    if (want && !b->handle) {
+        b->handle = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOACTIVATE, kHandleClass, L"",
+                                    WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, g_hInst, nullptr);
+        if (!b->handle) return;
+        SetWindowLongPtrW(b->handle, GWLP_USERDATA, (LONG_PTR)b);
+        HideFromCapture(b->handle);
+    }
+    if (!b->handle) return;
+    if (want != (IsWindowVisible(b->handle) != FALSE)) {
+        if (want) {
+            b->handleHot = false;
+            HandleRender(b);
+            SetWindowPos(b->handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        } else {
+            ShowWindow(b->handle, SW_HIDE);
+        }
+    } else if (want) {
+        // Uma janela "sempre visível" pode ter subido por cima.
+        SetWindowPos(b->handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+}
+static void BarRevealTemp(Bar* b) {
+    b->autoShown = true;
+    b->hideCountdown = 10;
+    SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top, b->monRect.right - b->monRect.left, b->heightPx,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    BarSyncShadow(b);
+    HandleSync(b);
+}
+static LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    Bar* b = reinterpret_cast<Bar*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    switch (msg) {
+        case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
+        case WM_SETCURSOR:
+            SetCursor(LoadCursorW(nullptr, IDC_HAND));
+            return TRUE;
+        case WM_MOUSEMOVE:
+            if (b && !b->handleHot) {
+                b->handleHot = true;
+                HandleRender(b);
+                TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd, 0};
+                TrackMouseEvent(&tme);
+            }
+            return 0;
+        case WM_MOUSELEAVE:
+            if (b) {
+                b->handleHot = false;
+                HandleRender(b);
+            }
+            return 0;
+        case WM_LBUTTONUP:
+            if (b) BarRevealTemp(b);
+            return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
 static void AutoHideTick() {
     POINT pt;
     if (!GetCursorPos(&pt)) return;
     for (Bar* b : g_bars) {
         bool inX = pt.x >= b->monRect.left && pt.x < b->monRect.right;
         float s = b->dpi / 96.0f;
+        // Só o modo automático e a barra escondida por janela maximizada usam isto.
+        if (!g_settings.autoHide && !b->maxHidden) {
+            b->autoShown = false;
+            HandleSync(b);
+            continue;
+        }
+        HandleSync(b);
         if (!b->autoShown) {
+            // Encostando o mouse no topo: só no modo automático (a alça, se ligada,
+            // é um jeito a mais; escondida por janela maximizada, só pela alça).
+            if (!g_settings.autoHide) continue;
             bool atEdge = inX && pt.y <= b->monRect.top + 1 && pt.y >= b->monRect.top - 2;
             if (!atEdge) {
                 b->edgeSince = 0;
@@ -22705,6 +22855,8 @@ static void AutoHideTick() {
                 b->autoShown = false;
                 b->hover = -1;
                 ShowWindow(b->hwnd, SW_HIDE);
+                if (b->shadow) ShowWindow(b->shadow, SW_HIDE);
+                HandleSync(b);
             }
         }
     }
@@ -23245,7 +23397,8 @@ static BOOL CALLBACK MonitorEnumProc(HMONITOR mon, HDC, LPRECT, LPARAM chosenPre
 static void CreateBars() {
     ResolveTheme();
     EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, BarChosenMonitorPresent() ? 1 : 0);
-    if (g_settings.autoHide) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
+    // O tique rápido: o modo automático e a barra mostrada pela alça.
+    if (g_settings.autoHide || g_settings.hideWhenMaximized) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
     else KillTimer(g_owner, TIMER_FAST);
     if (g_settings.hideWhenMaximized) SetTimer(g_owner, TIMER_MAXCHECK, 250, nullptr);
     else KillTimer(g_owner, TIMER_MAXCHECK);
@@ -23254,6 +23407,7 @@ static void CreateBars() {
 
 static void DestroyBars() {
     for (Bar* b : g_bars) {
+        if (b->handle) DestroyWindow(b->handle);
         DestroyWindow(b->hwnd);
         ReleaseBarResources(b);
         delete b;
@@ -23413,6 +23567,14 @@ static DWORD WINAPI BarThread(LPVOID) {
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpszClassName = kBarClass;
     RegisterClassExW(&wc);
+
+    WNDCLASSEXW hc{};
+    hc.cbSize = sizeof(hc);
+    hc.lpfnWndProc = HandleWndProc;
+    hc.hInstance = g_hInst;
+    hc.hCursor = LoadCursorW(nullptr, IDC_HAND);
+    hc.lpszClassName = kHandleClass;
+    RegisterClassExW(&hc);
 
     WNDCLASSEXW calc{};
     calc.cbSize = sizeof(calc);
@@ -23641,7 +23803,7 @@ static DWORD WINAPI BarThread(LPVOID) {
     }
     if (g_owner) { DestroyWindow(g_owner); g_owner = nullptr; }
     for (PCWSTR cls : {kWorkerClass, kOsdClass, kFlyClass, kNpClass, kNtfClass, kBsClass, kWxClass, kShadowClass, kTipClass,
-                       kIslClass, kCalClass, kCcClass, kGmClass, kCcGlassClass, kTrayClass, kBarClass, kOwnerClass})
+                       kIslClass, kCalClass, kCcClass, kGmClass, kCcGlassClass, kTrayClass, kBarClass, kHandleClass, kOwnerClass})
         UnregisterClassW(cls, g_hInst);
     // 4) Composição: os painéis (e os visuais dentro deles) saem aqui, na
     //    thread que os criou, antes do compositor e da fila de despacho.
@@ -24046,6 +24208,8 @@ const UiTr kUiTr[] = {
     {L"Como nos outros", L"Same as the others", L"Como en los demás", L"Comme les autres", L"Wie die anderen", L"Come gli altri", L"与其他相同"},
     {L"Ocultar com janela maximizada", L"Hide when a window is maximized", L"Ocultar con una ventana maximizada", L"Masquer quand une fenêtre est agrandie", L"Bei maximiertem Fenster ausblenden", L"Nascondi con una finestra ingrandita", L"窗口最大化时隐藏"},
     {L"A barra some quando uma janela é maximizada e volta quando não há nenhuma (na área de trabalho)", L"The bar hides when a window is maximized and comes back when none is (on the desktop)", L"La barra se oculta al maximizar una ventana y vuelve cuando no hay ninguna (en el escritorio)", L"La barre se masque quand une fenêtre est agrandie et revient quand il n'y en a plus (sur le bureau)", L"Die Leiste verschwindet bei einem maximierten Fenster und kommt zurück, wenn keines mehr da ist (auf dem Desktop)", L"La barra si nasconde quando una finestra è ingrandita e torna quando non ce ne sono (sul desktop)", L"窗口最大化时菜单栏隐藏，没有最大化窗口时（桌面上）重新出现"},
+    {L"Alça para trazer a barra", L"Handle to bring the bar back", L"Asa para traer la barra", L"Poignée pour rappeler la barre", L"Griff zum Zurückholen der Leiste", L"Maniglia per richiamare la barra", L"用拉手显示菜单栏"},
+    {L"Barra escondida (automática ou por janela maximizada): uma pílula fina no centro do topo também traz a barra com um clique", L"Hidden bar (auto-hide or maximized window): a thin pill at the top center also brings it back with a click", L"Barra oculta (automática o por ventana maximizada): una píldora fina arriba en el centro también la trae con un clic", L"Barre masquée (automatique ou par fenêtre agrandie) : une fine pilule en haut au centre la rappelle aussi d'un clic", L"Ausgeblendete Leiste (automatisch oder bei maximiertem Fenster): eine schmale Pille oben in der Mitte holt sie auch per Klick zurück", L"Barra nascosta (automatica o per finestra ingrandita): una pillola sottile in alto al centro la richiama anche con un clic", L"隐藏菜单栏时（自动或因窗口最大化）：也可点击顶部中央的细长胶囊来显示"},
     {L"Discos", L"Disks", L"Discos", L"Disques", L"Laufwerke", L"Dischi", L"磁盘"},
     {L"Clique para ver os discos e quanto cada um está cheio", L"Click to see the disks and how full each one is", L"Haz clic para ver los discos y cuánto está lleno cada uno", L"Cliquez pour voir les disques et leur remplissage", L"Klicken, um die Laufwerke und ihre Belegung zu sehen", L"Fai clic per vedere i dischi e quanto è pieno ciascuno", L"点击查看磁盘及其使用量"},
     {L"Discos: o do sistema está %s% cheio", L"Disks: the system disk is %s% full", L"Discos: el del sistema está al %s%", L"Disques : le disque système est plein à %s %", L"Laufwerke: Systemlaufwerk zu %s% voll", L"Dischi: quello di sistema è pieno al %s%", L"磁盘：系统磁盘已用 %s%"},
