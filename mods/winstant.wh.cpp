@@ -3199,6 +3199,9 @@ struct SavedLayout {
 };
 
 constexpr int kMaxSavedLayouts = 20;
+// Portable Windhawk keeps mod storage in an INI file, which reads back at
+// most 32,767 characters per value; each layout is one value.
+constexpr size_t kMaxLayoutValueChars = 32000;
 
 // Values are stored as one string each; fields are '|'-separated, items
 // ';'-separated, and those characters (plus '%', '=', line breaks) are
@@ -3275,7 +3278,7 @@ std::vector<SavedLayout> LoadSavedLayouts() {
     std::vector<SavedLayout> layouts;
     int count =
         Clamp(Wh_GetIntValue(UserValueName(L"layoutCount").c_str(), 0), 0, kMaxSavedLayouts);
-    std::vector<wchar_t> buf(1 << 17);  // 128K chars: room for ~200 windows
+    std::vector<wchar_t> buf(32768);  // a value never exceeds kMaxLayoutValueChars
     for (int i = 0; i < count; i++) {
         if (!Wh_GetStringValue(LayoutValueName(i).c_str(), buf.data(), buf.size())) continue;
         std::vector<std::wstring> parts = Split(buf.data(), L';');
@@ -3302,13 +3305,19 @@ void StoreSavedLayouts(const std::vector<SavedLayout>& layouts) {
     int oldCount = Wh_GetIntValue(UserValueName(L"layoutCount").c_str(), 0);
     int count = std::min((int)layouts.size(), kMaxSavedLayouts);
     for (int i = 0; i < count; i++) {
-        std::wstring s = EscapeField(layouts[i].name);
+        std::wstring s = EscapeField(layouts[i].name.substr(0, 200));
+        // Items are in z-order, top first: the windows that don't fit are
+        // the ones at the bottom.
         for (auto& it : layouts[i].items) {
-            s += L";" + EscapeField(it.path) + L"|" + EscapeField(it.cls) + L"|" +
-                 EscapeField(it.title) + L"|" + std::to_wstring(it.state) + L"|" +
-                 std::to_wstring(it.rect.left) + L"|" + std::to_wstring(it.rect.top) +
-                 L"|" + std::to_wstring(it.rect.right) + L"|" +
-                 std::to_wstring(it.rect.bottom);
+            std::wstring item = L";" + EscapeField(it.path) + L"|" + EscapeField(it.cls) +
+                                L"|" + EscapeField(it.title) + L"|" +
+                                std::to_wstring(it.state) + L"|" +
+                                std::to_wstring(it.rect.left) + L"|" +
+                                std::to_wstring(it.rect.top) + L"|" +
+                                std::to_wstring(it.rect.right) + L"|" +
+                                std::to_wstring(it.rect.bottom);
+            if (s.size() + item.size() > kMaxLayoutValueChars) break;
+            s += item;
         }
         Wh_SetStringValue(LayoutValueName(i).c_str(), s.c_str());
     }
