@@ -196,8 +196,23 @@ void UpdateButton(muxc::AppBarButton const& button) {
     const bool paused = g_paused.load(std::memory_order_relaxed);
     const wchar_t* caption = paused ? L"Resume" : L"Pause";
     if (button.Label() == caption) return;
+
+    // The label and Click handler must remain usable even if creating or
+    // assigning the native SymbolIcon fails on this Task Manager build.
     button.Label(caption);
-    button.Icon(muxc::SymbolIcon(paused ? muxc::Symbol::Play : muxc::Symbol::Pause));
+    try {
+        button.Icon(muxc::SymbolIcon(paused ? muxc::Symbol::Play : muxc::Symbol::Pause));
+    } catch (...) {
+        const HRESULT iconError = winrt::to_hresult();
+        // Avoid showing a stale Play/Pause icon from an earlier state.
+        try {
+            button.Icon(nullptr);
+        } catch (...) {
+            // The text label remains correct if clearing the icon also fails.
+        }
+        Wh_Log(L"Pause/Resume icon unavailable (HRESULT=0x%08X); text label kept",
+               static_cast<unsigned int>(iconError));
+    }
 }
 
 void TogglePause() {
