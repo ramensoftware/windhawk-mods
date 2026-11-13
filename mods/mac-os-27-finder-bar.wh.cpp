@@ -78,7 +78,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 - **Live glass**: panels blur what's behind them in real time, with an experimental liquid glass with edge refraction (on by default)
 - **Custom liquid glass** (the theme from Siri Plus Launchpad): your color at the top, fading to clear glass at the bottom, with a fine line of light along the bottom edge. For the panels and pills, the bar's background or both; color, strength and how far down the color goes are set in Menu Bar Settings
 - **One glass for everything**: the Control Center, menus, panels and pills share the same glass settings (style, tint, liquid glass, refraction, blur, live)
-- Bar text and icons in white, black or automatic (following the Windows theme)
+- Bar text and icons in white, black or automatic (following the Windows theme), for all displays or each display on its own
 - Clicking the album cover (Control Center or Now Playing) brings the playing app's window to the front
 - Choose where the bar shows: all displays, the main one, or a specific display (listed by name); if that display is disconnected, the bar moves to the main one
 - **Disks** (optional): its menu lists every local and removable disk with a usage bar and opens it in Explorer
@@ -325,6 +325,7 @@ struct Settings {
     DWORD tintDark, tintLight;
     bool solidWhenMaximized;
     bool allMonitors;
+    std::wstring textColorMon;  // cor do texto por monitor: "\\.\DISPLAY2=1|..." (0 auto, 1 branco, 2 preto)
     std::wstring barMonitor;  // "all", "primary" ou o nome do monitor (\\.\DISPLAY2)
     bool autoHide;
     bool hideOnFullscreen;
@@ -737,6 +738,7 @@ static void LoadSettings() {
     s.solidWhenMaximized = OvrInt(L"solidWhenMaximized") != 0;
     s.allMonitors = OvrInt(L"allMonitors") != 0;
     // Onde a barra aparece; sem escolha guardada, segue o antigo "todos os monitores".
+    if (!UiStored(L"textColorMon", s.textColorMon)) s.textColorMon.clear();
     if (!UiStored(L"barMonitor", s.barMonitor) || s.barMonitor.empty()) s.barMonitor = s.allMonitors ? L"all" : L"primary";
     s.autoHide = OvrInt(L"autoHide") != 0;
     s.hideOnFullscreen = OvrInt(L"hideOnFullscreen") != 0;
@@ -873,6 +875,7 @@ struct Item {
 struct Bar {
     HWND hwnd = nullptr;
     HMONITOR monitor = nullptr;
+    std::wstring device;  // nome do monitor (\\.\DISPLAY2), para a cor própria dele
     RECT monRect{};
     UINT dpi = 96;
     int heightPx = 28;
@@ -1346,7 +1349,54 @@ struct ACCENT_POLICY { int AccentState; int AccentFlags; DWORD GradientColor; in
 struct WINCOMPATTRDATA { int Attribute; PVOID Data; SIZE_T SizeOfData; };
 using SetWindowCompositionAttribute_t = BOOL(WINAPI*)(HWND, WINCOMPATTRDATA*);
 
+// Cor do texto e dos ícones de um monitor: -1 = a de todos; 0 automático, 1 branco, 2 preto.
+static int TextColorFor(const std::wstring& device) {
+    const std::wstring& all = g_settings.textColorMon;
+    for (size_t a = 0; a < all.size();) {
+        size_t e = all.find(L'|', a);
+        if (e == std::wstring::npos) e = all.size();
+        std::wstring item = all.substr(a, e - a);
+        size_t eq = item.rfind(L'=');
+        if (eq != std::wstring::npos && _wcsicmp(item.substr(0, eq).c_str(), device.c_str()) == 0)
+            return std::clamp(_wtoi(item.c_str() + eq + 1), 0, 2);
+        a = e + 1;
+    }
+    return -1;
+}
+static void TextColorSet(const std::wstring& device, int v) {
+    std::wstring out;
+    const std::wstring& all = g_settings.textColorMon;
+    for (size_t a = 0; a < all.size();) {
+        size_t e = all.find(L'|', a);
+        if (e == std::wstring::npos) e = all.size();
+        std::wstring item = all.substr(a, e - a);
+        size_t eq = item.rfind(L'=');
+        if (!item.empty() && !(eq != std::wstring::npos && _wcsicmp(item.substr(0, eq).c_str(), device.c_str()) == 0))
+            out += (out.empty() ? L"" : L"|") + item;
+        a = e + 1;
+    }
+    if (v >= 0) out += (out.empty() ? L"" : L"|") + device + L"=" + std::to_wstring(v);
+    g_settings.textColorMon = out;
+    OvrSetStr(L"textColorMon", out);
+}
+// Claro ou escuro na barra deste monitor (o texto escuro vai num fundo claro).
+static bool BarLight(const Bar* b) {
+    if (g_settings.barStyle == 3) return g_light;  // segue a cor do vidro
+    int t = TextColorFor(b->device);
+    if (t < 0) return g_light;
+    if (t == 1) return false;
+    if (t == 2) return true;
+    return ReadPersonalizeDword(L"SystemUsesLightTheme", 0) != 0;
+}
+// Enquanto desenha (ou aplica o vidro de) uma barra, o tema é o do monitor dela.
+struct BarLightScope {
+    bool saved;
+    explicit BarLightScope(const Bar* b) : saved(g_light) { g_light = BarLight(b); }
+    ~BarLightScope() { g_light = saved; }
+};
+
 static void ApplyGlass(Bar* b) {
+    BarLightScope barLight(b);
     static auto pSWCA = (SetWindowCompositionAttribute_t)(void*)GetProcAddress(
         GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute");
 
@@ -12137,7 +12187,7 @@ enum BsVal {
     BV_BATTPCT, BV_AUTOHIDE, BV_HIDEFS, BV_SOLIDMAX, BV_ALLMON, BV_FLYOUTS, BV_OSD, BV_DIM,
     BV_G_TRANSP, BV_G_CLEAR, BV_G_LIQUID, BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_ICONS, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_SELMENU, BV_UPDATES,
     BV_G_TINT, BV_SEARCHTGT, BV_LANG, BV_NPBAR, BV_ICSADD, BV_ICSCLEAR,
-    BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON,
+    BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_TEXTMON,
 };
 struct BsRowDef {
     int kind;
@@ -12170,6 +12220,7 @@ static const BsRowDef kBsRows[] = {
     {BR_HEADER, BV_NONE, L"Barra", 0xE771, 0x0A84FF, L"Fundo, cores de seleção, tamanho e quando a barra aparece"},
     {BR_CHOICE, BV_LANG, L"Idioma", 0, 0, L"Automático segue o idioma do Windows"},
     {BR_CHOICE, BV_BARSTYLE, L"Fundo", 0, 0},
+    {BR_CHOICE, BV_TEXTMON, L"Cor do texto: monitor", 0, 0, L"Escolha um monitor para dar a ele uma cor própria"},
     {BR_CHOICE, BV_TEXTCOLOR, L"Cor do texto e dos ícones", 0, 0, L"Automático segue o tema do Windows"},
     {BR_COLORS, BV_SELBAR, L"Seleção na barra", 0, 0},
     {BR_COLORS, BV_SELMENU, L"Seleção nos menus", 0, 0},
@@ -12411,6 +12462,29 @@ static bool BarChosenMonitorPresent() {
     return false;
 }
 
+// O monitor cuja cor está sendo ajustada (0 = todos), só enquanto os Ajustes estão abertos.
+static int g_textMonEdit = 0;
+static const PCWSTR* BsTextMonLabels(int* count) {
+    static std::vector<std::wstring> names;
+    static std::vector<PCWSTR> ptrs;
+    static ULONGLONG tick = 0;
+    ULONGLONG now = GetTickCount64();
+    if (ptrs.empty() || now - tick > 1500) {
+        tick = now;
+        names = {L"Todos os monitores"};
+        for (const MonChoice& c : MonitorChoices()) names.push_back(c.label);
+        ptrs.clear();
+        for (const std::wstring& n : names) ptrs.push_back(n.c_str());
+    }
+    if (count) *count = (int)ptrs.size();
+    return ptrs.data();
+}
+static std::wstring TextMonEditDevice() {
+    if (g_textMonEdit <= 0) return L"";
+    std::vector<MonChoice> list = MonitorChoices();
+    return g_textMonEdit - 1 < (int)list.size() ? list[g_textMonEdit - 1].device : L"";
+}
+
 static void TintApply();
 
 static int BsGet(int val) {
@@ -12429,7 +12503,11 @@ static int BsGet(int val) {
         case BV_G_STYLE: return g_glass.tinted ? 1 : 0;
         case BV_CCCLOSE: return g_settings.ccCloseAnim;
         case BV_NTFSHAPE: return g_settings.ntfIconShape;
-        case BV_TEXTCOLOR: return g_settings.theme;
+        case BV_TEXTCOLOR: {
+            std::wstring dev = TextMonEditDevice();
+            return dev.empty() ? g_settings.theme : TextColorFor(dev) + 1;
+        }
+        case BV_TEXTMON: return g_textMonEdit;
         case BV_BARMON: {
             if (g_settings.barMonitor == L"all") return 0;
             if (g_settings.barMonitor == L"primary") return 1;
@@ -12624,6 +12702,18 @@ static void BsSet(int val, int v) {
         g_settings.barMonitor = want;
         OvrSetStr(L"barMonitor", want);
         RequestReload(1);  // refaz as barras nos monitores escolhidos
+        return;
+    }
+    if (val == BV_TEXTMON) {
+        int n = 0;
+        BsTextMonLabels(&n);
+        g_textMonEdit = std::clamp(v, 0, std::max(0, n - 1));
+        return;
+    }
+    if (val == BV_TEXTCOLOR && !TextMonEditDevice().empty()) {
+        // Cor própria do monitor escolhido ("Como nos outros" tira a dele).
+        TextColorSet(TextMonEditDevice(), std::clamp(v, 0, 3) - 1);
+        TintApply();
         return;
     }
     if (val == BV_TEXTCOLOR) {
@@ -12956,6 +13046,7 @@ static const PCWSTR kBsBarChoices[] = {L"Vidro", L"Transparente", L"Líquido", L
 static const PCWSTR kBsGlassStyle[] = {L"Transparente", L"Vidro líquido personalizado"};
 static const PCWSTR kBsNtfShape[] = {L"Círculo", L"Formato macOS"};
 static const PCWSTR kBsTextColor[] = {L"Automático", L"Branco", L"Preto"};
+static const PCWSTR kBsTextColorMon[] = {L"Como nos outros", L"Automático", L"Branco", L"Preto"};
 static const PCWSTR kBsCcClose[] = {L"Cascata", L"Encolher", L"Esmaecer", L"Deslizar para cima", L"Nenhuma"};
 static const PCWSTR kBsLookChoices[] = {L"Desfoque", L"Líquido", L"Transparente"};
 static const PCWSTR kBsIslStyle[] = {L"Vidro", L"Escuro"};
@@ -13007,7 +13098,8 @@ static const PCWSTR* BsChoiceLabels(int val) {
         case BV_G_STYLE: return kBsGlassStyle;
         case BV_CCCLOSE: return kBsCcClose;
         case BV_NTFSHAPE: return kBsNtfShape;
-        case BV_TEXTCOLOR: return kBsTextColor;
+        case BV_TEXTCOLOR: return g_textMonEdit > 0 ? kBsTextColorMon : kBsTextColor;
+        case BV_TEXTMON: return BsTextMonLabels(nullptr);
     }
     return kBsChoices;
 }
@@ -13023,6 +13115,12 @@ static int BsChoiceCount(int val) {
             BsMonitorLabels(&n);
             return n;
         }
+        case BV_TEXTMON: {
+            int n = 0;
+            BsTextMonLabels(&n);
+            return n;
+        }
+        case BV_TEXTCOLOR: return g_textMonEdit > 0 ? 4 : 3;
     }
     return 3;
 }
@@ -13816,6 +13914,11 @@ static bool BsRowDisabled(int rowIdx) {
         return !g_glass.tinted && g_settings.barStyle != 3;
     // Com a barra no Vidro líquido personalizado, o texto segue a cor do vidro.
     if (d.val == BV_TEXTCOLOR) return g_settings.barStyle == 3;
+    if (d.val == BV_TEXTMON) {
+        int n = 0;
+        BsTextMonLabels(&n);
+        return g_settings.barStyle == 3 || n <= 2;  // com um monitor só, não há o que escolher
+    }
     return false;
 }
 static int BsHitRaw(float x, float y, int* part);
@@ -21719,6 +21822,7 @@ struct Placed { RightSpec spec; float l, r, prefixW; };
 
 static void Render(Bar* b) {
     if (!EnsureResources(b)) return;
+    BarLightScope barLight(b);  // a cor do texto deste monitor
 
     RECT rc;
     GetClientRect(b->hwnd, &rc);
@@ -22847,6 +22951,7 @@ static BOOL CALLBACK MonitorEnumProc(HMONITOR mon, HDC, LPRECT, LPARAM chosenPre
 
     Bar* b = new Bar();
     b->monitor = mon;
+    b->device = mix.szDevice;
     b->monRect = mi.rcMonitor;
     b->dpi = dx;
     b->heightPx = MulDiv(g_settings.height, dx, 96);
@@ -23678,6 +23783,9 @@ const UiTr kUiTr[] = {
     {L"Todos os monitores", L"All displays", L"Todos los monitores", L"Tous les écrans", L"Alle Bildschirme", L"Tutti i monitor", L"所有显示器"},
     {L"Monitor principal", L"Main display", L"Monitor principal", L"Écran principal", L"Hauptbildschirm", L"Monitor principale", L"主显示器"},
     {L"Monitor", L"Display", L"Monitor", L"Écran", L"Bildschirm", L"Monitor", L"显示器"},
+    {L"Cor do texto: monitor", L"Text color: display", L"Color del texto: monitor", L"Couleur du texte : écran", L"Textfarbe: Bildschirm", L"Colore del testo: monitor", L"文字颜色：显示器"},
+    {L"Escolha um monitor para dar a ele uma cor própria", L"Pick a display to give it its own color", L"Elige un monitor para darle su propio color", L"Choisissez un écran pour lui donner sa propre couleur", L"Wähle einen Bildschirm für eine eigene Farbe", L"Scegli un monitor per dargli un colore proprio", L"选择一台显示器，为它单独设置颜色"},
+    {L"Como nos outros", L"Same as the others", L"Como en los demás", L"Comme les autres", L"Wie die anderen", L"Come gli altri", L"与其他相同"},
     {L"Discos", L"Disks", L"Discos", L"Disques", L"Laufwerke", L"Dischi", L"磁盘"},
     {L"Clique para ver os discos e quanto cada um está cheio", L"Click to see the disks and how full each one is", L"Haz clic para ver los discos y cuánto está lleno cada uno", L"Cliquez pour voir les disques et leur remplissage", L"Klicken, um die Laufwerke und ihre Belegung zu sehen", L"Fai clic per vedere i dischi e quanto è pieno ciascuno", L"点击查看磁盘及其使用量"},
     {L"Discos: o do sistema está %s% cheio", L"Disks: the system disk is %s% full", L"Discos: el del sistema está al %s%", L"Disques : le disque système est plein à %s %", L"Laufwerke: Systemlaufwerk zu %s% voll", L"Dischi: quello di sistema è pieno al %s%", L"磁盘：系统磁盘已用 %s%"},
