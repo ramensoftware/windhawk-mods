@@ -1,3 +1,8 @@
+## 2.2.1 ([Nov 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e89ea96891fa6369bb76755d830f106d338a613c/mods/start-everything.wh.cpp))
+
+* Preserve Windows shortcut settings, including arguments, the working directory and the saved Run as administrator option.
+* Stop launching when the administrator prompt is declined, preventing a second or unelevated launch.
+
 ## 2.2 ([Nov 6, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1e59c5e80950f4b2f82b43edcb31e3eedf6c592a/mods/start-everything.wh.cpp))
 
 * Size the first Apps and Files batches to the panel height and append 40 results near the bottom. The installed inventory also appends 40 results; remove the initial-result settings.

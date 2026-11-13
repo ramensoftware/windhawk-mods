@@ -1,3 +1,9 @@
+## 1.6.0 ([Nov 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/67d017e02ad5ad872c23b0a820ca8cd83a655120/mods/wintips-osd.wh.cpp))
+
+* Switched text rendering to DirectWrite for smooth, subpixel-positioned text like the native Windows 11 OSD (fixes #6977)
+* Added a setting to show/hide the ×N count badge on copy/cut/paste cards (fixes #7304)
+* Aligned the ×N badge and label layout with the WinTips standalone app
+
 ## 1.5.2 ([Nov 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3a33b42eeb7bf2faacab922f5e9aeeef8a13bb28/mods/wintips-osd.wh.cpp))
 
 * Added an input language tip: Win+Space, Ctrl+Shift, Alt+Shift and Shift inside an IME now show the input language, or the Chinese/English mode inside a Chinese IME. Off by default.

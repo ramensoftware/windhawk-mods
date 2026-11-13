@@ -2,7 +2,7 @@
 // @id              start-everything
 // @name            Everything & Power Tools in the Start Menu
 // @description     Replace Windows 11 search with Everything-powered files, apps and settings in a separate search window.
-// @version         2.2
+// @version         2.2.1
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @include         StartMenuExperienceHost.exe
@@ -11504,6 +11504,7 @@ struct App {
     std::wstring nameLower;        // precomputed, so filtering never allocates
     std::wstring targetPath;       // file path, AUMID, or ms-settings: URI
     std::wstring targetPathLower;  // precomputed lowercase target path
+    std::wstring shortcutPath;     // original link, when the shell exposes it
     std::wstring linkTarget;       // the program an app-ID entry's shortcut runs, if the shell knows it
     std::wstring exeNameLower;     // executable / command name (e.g. "cmd", "wt", "calc")
     std::wstring acronym;          // acronym from name words (e.g. "cp" for Command Prompt)
@@ -11712,11 +11713,13 @@ inline std::wstring ResolveAppParsingPath(const std::wstring& parse) {
     return parse;
 }
 
+inline bool IsShellShortcut(std::wstring_view path) {
+    return path.size() >= 4 &&
+           CompareStringOrdinal(path.data() + path.size() - 4, 4, L".lnk", 4, TRUE) == CSTR_EQUAL;
+}
+
 inline std::wstring ResolveLnkTarget(const std::wstring& lnkPath) {
-    if (lnkPath.size() < 4) return L"";
-    std::wstring ext = lnkPath.substr(lnkPath.size() - 4);
-    for (auto& c : ext) c = static_cast<wchar_t>(towlower(c));
-    if (ext != L".lnk") return L"";
+    if (!IsShellShortcut(lnkPath)) return L"";
 
     IShellLinkW* psl = nullptr;
     if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&psl)))) {
@@ -12271,6 +12274,7 @@ class Index {
             }
             LPWSTR fsPath = nullptr;
             if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &fsPath)) && fsPath) {
+                if (IsShellShortcut(fsPath)) a.shortcutPath = fsPath;
                 std::wstring resolved = ResolveLnkTarget(fsPath);
                 if (!resolved.empty()) {
                     a.targetPath = resolved;
@@ -16496,12 +16500,42 @@ std::vector<std::wstring> g_commandUsageRequests; // g_queryMutex; drained by th
 
 // Opens what was clicked.
 //
+HRESULT ExecuteSearchShell(SHELLEXECUTEINFOW& info) {
+    if (ShellExecuteExW(&info)) return S_OK;
+    const DWORD error = GetLastError();
+    return error ? HRESULT_FROM_WIN32(error) : E_FAIL;
+}
+
+bool StopShellLaunchFallback(HRESULT result) {
+    return SUCCEEDED(result) || result == HRESULT_FROM_WIN32(ERROR_CANCELLED) ||
+           result == E_ABORT || result == E_ACCESSDENIED;
+}
+
+bool OpenShellShortcut(const std::wstring& path, bool asAdmin) {
+    // Let Windows apply the original link's arguments, Start in and elevation.
+    SHELLEXECUTEINFOW info{sizeof(info)};
+    info.fMask = SEE_MASK_NOASYNC;
+    info.lpVerb = asAdmin ? L"runas" : nullptr;
+    info.lpFile = path.c_str();
+    info.nShow = SW_SHOWNORMAL;
+    const HRESULT result = ExecuteSearchShell(info);
+    if (FAILED(result)) {
+        Wh_Log(L"shortcut launch ended (%08X): %ls", static_cast<unsigned>(result), path.c_str());
+    }
+    return SUCCEEDED(result);
+}
+
 // ShellExecute rather than CreateProcess: these are paths of any kind, and
 // the shell decides what opening one means. This process runs at the user's
 // own integrity in Explorer, so what opens is what the user would have opened.
 void OpenResult(std::wstring path, bool asAdmin = false, bool recordHistory = false) {
     SpawnTrackedLaunch([path = std::move(path), asAdmin, recordHistory] {
         HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        if (apps::IsShellShortcut(path)) {
+            if (OpenShellShortcut(path, asAdmin) && recordHistory) everything::RecordFileOpen(path);
+            if (SUCCEEDED(comHr)) CoUninitialize();
+            return;
+        }
         wchar_t userProfile[MAX_PATH] = {};
         if (!GetEnvironmentVariableW(L"USERPROFILE", userProfile, MAX_PATH) || !userProfile[0]) {
             PWSTR kf = nullptr;
@@ -23169,7 +23203,25 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
         Wh_Log(L"Settings target activation failed (%08X): %ls", static_cast<unsigned>(hr), settingArguments.c_str());
     }
 
-    bool launched = false;
+    if (apps::IsShellShortcut(path)) {
+        OpenShellShortcut(path, asAdmin);
+        if (SUCCEEDED(comHr)) CoUninitialize();
+        return;
+    }
+
+    // Cancellation and access denial end this request, including when the
+    // target itself required elevation during a normal Open.
+    const auto launch = [&](SHELLEXECUTEINFOW& info, PCWSTR method) {
+        const HRESULT result = ExecuteSearchShell(info);
+        if (SUCCEEDED(result)) {
+            Wh_Log(L"launched app (%ls): %ls", method, name.c_str());
+        } else {
+            Wh_Log(L"app launch failed (%ls, %08X): %ls", method,
+                   static_cast<unsigned>(result), name.c_str());
+        }
+        return StopShellLaunchFallback(result);
+    };
+    bool launchFinished = false;
 
     wchar_t userProfile[MAX_PATH] = {};
     if (!GetEnvironmentVariableW(L"USERPROFILE", userProfile, MAX_PATH) || !userProfile[0]) {
@@ -23211,27 +23263,27 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
     if (!path.empty()) {
         if (path.starts_with(L"ms-settings:") || path.starts_with(L"windowsdefender:") ||
             path.starts_with(L"http:") || path.starts_with(L"https:")) {
-            if (HINSTANCE hInst = ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-                reinterpret_cast<INT_PTR>(hInst) > 32) {
-                Wh_Log(L"launched URI setting: %ls", path.c_str());
-                launched = true;
-            } else {
-                Wh_Log(L"URI launch failed (%ld): %ls", reinterpret_cast<INT_PTR>(hInst), path.c_str());
-            }
+            SHELLEXECUTEINFOW info{sizeof(info)};
+            info.fMask = SEE_MASK_NOASYNC;
+            info.lpVerb = asAdmin ? L"runas" : L"open";
+            info.lpFile = path.c_str();
+            info.nShow = SW_SHOWNORMAL;
+            launchFinished = launch(info, L"URI");
         } else if (path.starts_with(L"control ")) {
-            std::wstring params = path.substr(8);
-            if (HINSTANCE hInst = ShellExecuteW(nullptr, asAdmin ? L"runas" : L"open", L"control.exe", params.c_str(), nullptr, SW_SHOWNORMAL);
-                reinterpret_cast<INT_PTR>(hInst) > 32) {
-                Wh_Log(L"launched control applet: %ls", path.c_str());
-                launched = true;
-            }
+            SHELLEXECUTEINFOW info{sizeof(info)};
+            info.fMask = SEE_MASK_NOASYNC;
+            info.lpVerb = asAdmin ? L"runas" : L"open";
+            info.lpFile = L"control.exe";
+            info.lpParameters = path.c_str() + 8;
+            info.nShow = SW_SHOWNORMAL;
+            launchFinished = launch(info, L"Control Panel");
         }
     }
 
     // 1. If path is a real file on disk or executable in PATH (e.g. C:\Windows\System32\cmd.exe, ncpa.cpl, services.msc, cleanmgr.exe):
     bool isFileOnDisk = false;
     std::wstring extraParams;
-    if (!launched && !path.empty() && path.find(L"http") != 0 && !path.starts_with(L"ms-settings:")) {
+    if (!launchFinished && !path.empty() && path.find(L"http") != 0 && !path.starts_with(L"ms-settings:")) {
         DWORD attr = GetFileAttributesW(path.c_str());
         if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
             isFileOnDisk = true;
@@ -23280,80 +23332,23 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
         }
         info.lpDirectory = workDir;
         info.nShow = SW_SHOWNORMAL;
-        if (ShellExecuteExW(&info)) {
-            Wh_Log(L"launched app (by file path): %ls (admin=%d, dir=%ls)", name.c_str(), asAdmin ? 1 : 0, workDir ? workDir : L"(null)");
-            launched = true;
-        } else {
-            Wh_Log(L"app file launch failed (%lu): %ls, trying fallback", GetLastError(), path.c_str());
-        }
+        launchFinished = launch(info, L"file path");
     }
 
-    // 2. If not launched yet and we have a PIDL:
-    if (!launched && pidl) {
-        if (asAdmin) {
-            // Try IContextMenu verb "runas"
-            IShellItem* item = nullptr;
-            if (SUCCEEDED(SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&item))) && item) {
-                IContextMenu* menu = nullptr;
-                if (SUCCEEDED(item->BindToHandler(nullptr, BHID_SFUIObject, IID_PPV_ARGS(&menu))) && menu) {
-                    CMINVOKECOMMANDINFOEX ici{};
-                    ici.cbSize = sizeof(ici);
-                    ici.fMask = CMIC_MASK_UNICODE;
-                    ici.lpVerb = "runas";
-                    ici.lpVerbW = L"runas";
-                    ici.lpDirectoryW = workDir;
-                    ici.nShow = SW_SHOWNORMAL;
-                    HRESULT hr = menu->InvokeCommand(reinterpret_cast<CMINVOKECOMMANDINFO*>(&ici));
-                    menu->Release();
-                    item->Release();
-                    if (SUCCEEDED(hr)) {
-                        Wh_Log(L"launched app (by IContextMenu runas): %ls", name.c_str());
-                        launched = true;
-                    } else {
-                        Wh_Log(L"IContextMenu runas failed (%08X) for %ls", static_cast<unsigned>(hr), name.c_str());
-                    }
-                } else if (item) {
-                    item->Release();
-                }
-            }
-
-            if (!launched) {
-                // Fallback: ShellExecuteExW with SEE_MASK_IDLIST and "runas"
-                SHELLEXECUTEINFOW info{};
-                info.cbSize = sizeof(info);
-                info.fMask = SEE_MASK_IDLIST | SEE_MASK_NOASYNC;
-                info.lpIDList = pidl;
-                info.lpVerb = L"runas";
-                info.lpDirectory = workDir;
-                info.nShow = SW_SHOWNORMAL;
-                if (ShellExecuteExW(&info)) {
-                    Wh_Log(L"launched app (by PIDL runas): %ls", name.c_str());
-                    launched = true;
-                } else {
-                    Wh_Log(L"app PIDL runas failed (%lu): %ls", GetLastError(), name.c_str());
-                }
-            }
-        }
-
-        if (!launched) {
-            SHELLEXECUTEINFOW info{};
-            info.cbSize = sizeof(info);
-            info.fMask = SEE_MASK_IDLIST | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
-            info.lpIDList = pidl;
-            info.lpVerb = L"open";
-            info.lpDirectory = workDir;
-            info.nShow = SW_SHOWNORMAL;
-            if (ShellExecuteExW(&info)) {
-                Wh_Log(L"launched app (by PIDL open): %ls", name.c_str());
-                launched = true;
-            } else {
-                Wh_Log(L"app PIDL open failed (%lu): %ls", GetLastError(), name.c_str());
-            }
-        }
+    // 2. Ask the shell to launch the same app by its shell identity.
+    if (!launchFinished && pidl) {
+        SHELLEXECUTEINFOW info{sizeof(info)};
+        info.fMask = SEE_MASK_NOASYNC |
+            (asAdmin ? SEE_MASK_INVOKEIDLIST : SEE_MASK_IDLIST | SEE_MASK_FLAG_NO_UI);
+        info.lpIDList = pidl;
+        info.lpVerb = asAdmin ? L"runas" : L"open";
+        info.lpDirectory = workDir;
+        info.nShow = SW_SHOWNORMAL;
+        launchFinished = launch(info, L"shell identity");
     }
 
-    // 3. Fallback direct ShellExecuteExW for any remaining commands without PIDL:
-    if (!launched && !path.empty()) {
+    // 3. Let the shell resolve a remaining target that the file check could not resolve.
+    if (!launchFinished && !isFileOnDisk && !path.empty()) {
         SHELLEXECUTEINFOW info{};
         info.cbSize = sizeof(info);
         info.fMask = SEE_MASK_NOASYNC | (asAdmin ? 0 : SEE_MASK_FLAG_NO_UI);
@@ -23361,12 +23356,7 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
         info.lpFile = path.c_str();
         info.lpDirectory = workDir;
         info.nShow = SW_SHOWNORMAL;
-        if (ShellExecuteExW(&info)) {
-            Wh_Log(L"launched app (by direct fallback): %ls (admin=%d)", path.c_str(), asAdmin ? 1 : 0);
-            launched = true;
-        } else {
-            Wh_Log(L"app direct fallback launch failed (%lu): %ls", GetLastError(), path.c_str());
-        }
+        launch(info, L"direct fallback");
     }
 
     if (SUCCEEDED(comHr)) {
@@ -26743,7 +26733,7 @@ void SearchThreadMain() {
                     apps::UsageCounts* usage = learnedUsage();
                     apps::RecordUsage(usage,app->nameLower);
                     std::wstring name = app->name;
-                    std::wstring targetPath = app->targetPath;
+                    std::wstring targetPath = app->shortcutPath.empty() ? app->targetPath : app->shortcutPath;
                     std::wstring settingArguments = app->settingArguments;
                     ITEMIDLIST* pidlClone = app->pidl ? ILClone(app->pidl.get()) : nullptr;
                     lock.unlock();

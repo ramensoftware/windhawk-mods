@@ -13793,7 +13793,7 @@
         "ratingUsers": 0,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794470710000,
+        "updated": 1794592930000,
         "users": 4
       },
       "metadata": {
@@ -13808,7 +13808,7 @@
           "chrome.exe"
         ],
         "name": "PWA Tray Center",
-        "version": "0.5.610"
+        "version": "0.5.790"
       }
     },
     "quick-explorer-switcher": {
@@ -15989,7 +15989,7 @@
         "ratingUsers": 112,
         "reviews": 0,
         "trendingSorting": 10.706970528235136,
-        "updated": 1793995232000,
+        "updated": 1794592943000,
         "users": 1424
       },
       "metadata": {
@@ -16007,7 +16007,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Everything & Power Tools in the Start Menu",
-        "version": "2.2"
+        "version": "2.2.1"
       }
     },
     "start-menu-all-apps": {
@@ -22985,7 +22985,7 @@
         "ratingUsers": 20,
         "reviews": 0,
         "trendingSorting": 0.7282667360152146,
-        "updated": 1791874871000,
+        "updated": 1794592925000,
         "users": 224
       },
       "metadata": {
@@ -23009,7 +23009,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "Window Wobble",
-        "version": "1.0.0"
+        "version": "1.0.1"
       }
     },
     "windows-10-action-center-restorer": {
@@ -23727,12 +23727,12 @@
         "ratingUsers": 31,
         "reviews": 0,
         "trendingSorting": 15.399392492081176,
-        "updated": 1794466982000,
+        "updated": 1794592937000,
         "users": 508
       },
       "metadata": {
         "author": "DoYouNatureQ",
-        "compilerOptions": "-lgdiplus -lgdi32 -ladvapi32 -lshell32 -lshcore -ldwmapi -limm32",
+        "compilerOptions": "-lgdiplus -lgdi32 -ladvapi32 -lshell32 -lshcore -ldwmapi -limm32 -ldwrite",
         "description": "Shows a Win11-style floating OSD for Caps/Num/Scroll Lock, Insert and copy/paste/cut",
         "github": "https://github.com/DoYouNatureQ",
         "homepage": "https://github.com/DoYouNatureQ/WinTips",
@@ -23741,7 +23741,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "WinTips OSD",
-        "version": "1.5.2"
+        "version": "1.6.0"
       }
     },
     "winui-context-menu-animation": {

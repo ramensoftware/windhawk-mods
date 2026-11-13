@@ -2,12 +2,80 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-13T17:00:21.000Z</updated>
+    <updated>2026-11-13T18:02:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Everything & Power Tools in the Start Menu 2.2.1]]></title>
+        <id>https://windhawk.net/mods/start-everything#e89ea96891fa6369bb76755d830f106d338a613c</id>
+        <link href="https://windhawk.net/mods/start-everything"/>
+        <updated>2026-11-13T18:02:23.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Preserve Windows shortcut settings, including arguments, the working directory and the saved Run as administrator option.</li>
+<li>Stop launching when the administrator prompt is declined, preventing a second or unelevated launch.</li>
+</ul>
+]]></content>
+        <author>
+            <name>bardelyne</name>
+            <uri>https://github.com/bardelyne</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[WinTips OSD 1.6.0]]></title>
+        <id>https://windhawk.net/mods/wintips-osd#67d017e02ad5ad872c23b0a820ca8cd83a655120</id>
+        <link href="https://windhawk.net/mods/wintips-osd"/>
+        <updated>2026-11-13T18:02:17.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Switched text rendering to DirectWrite for smooth, subpixel-positioned text like the native Windows 11 OSD (fixes #6977)</li>
+<li>Added a setting to show/hide the ×N count badge on copy/cut/paste cards (fixes #7304)</li>
+<li>Aligned the ×N badge and label layout with the WinTips standalone app</li>
+</ul>
+]]></content>
+        <author>
+            <name>DoYouNatureQ</name>
+            <uri>https://github.com/DoYouNatureQ</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[PWA Tray Center 0.5.790]]></title>
+        <id>https://windhawk.net/mods/pwa-tray-center#dd4a9a4f460855f892a2aaad3331462069ea8e1d</id>
+        <link href="https://windhawk.net/mods/pwa-tray-center"/>
+        <updated>2026-11-13T18:02:10.000Z</updated>
+        <content type="html"><![CDATA[<p>0.5.780</p>
+<ol>
+<li>
+<p>Small changes throughout the center</p>
+</li>
+<li>
+<p>Adding a simple mod(without a center, just a tray)</p>
+</li>
+<li>
+<p>The UI/UX has become more pleasant</p>
+</li>
+</ol>
+]]></content>
+        <author>
+            <name>Proponent</name>
+            <uri>https://github.com/JJProponent</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Window Wobble 1.0.1]]></title>
+        <id>https://windhawk.net/mods/window-wobble#14b4d0fca3efb5f5ae23a9f898f97aa60a9ccb4d</id>
+        <link href="https://windhawk.net/mods/window-wobble"/>
+        <updated>2026-11-13T18:02:05.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the window stretching off screen and disappearing for a moment when the mouse button was released while the window was still moving. The settle animation was numerically unstable for frame times longer than 7.8 ms, so it affected 60 Hz and 120 Hz displays and any frame hitch. It is now sub-stepped and stable at any refresh rate.</li>
+</ul>
+]]></content>
+        <author>
+            <name>HeyJeay</name>
+            <uri>https://github.com/heyjeay</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Round Everything Interface 2.0.1]]></title>
         <id>https://windhawk.net/mods/round-everything#e886acc3788a96739956aa821580c9fec9c339c3</id>
@@ -1005,103 +1073,6 @@ administrador) passam a flutuar depois de algumas tentativas; Win + Alt + Home t
         <author>
             <name>Analytic Endeavors</name>
             <uri>https://github.com/ae-reid-havens</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Premiere Pro Theme 1.1.0]]></title>
-        <id>https://windhawk.net/mods/premiere-pro-theme#c47dccc74cc4b8cc4b0696cfd0e1911cfa6eda05</id>
-        <link href="https://windhawk.net/mods/premiere-pro-theme"/>
-        <updated>2026-11-13T05:01:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Premiere 27.0 (2027): panels, the timeline and the monitors follow the palette instead of staying at Premiere's stock gray.</li>
-<li>When a Premiere update moves the interface again, the mod log now says what changed, so support for the new version can be added quickly.</li>
-<li>Premiere 26.5: panels, the timeline and the monitors follow the palette again instead of staying at Premiere's stock gray.</li>
-<li>Premiere 26.5: color swatches keep their true colors.</li>
-<li>Premiere 26.3 and later: the color swatches in popup menus now receive all of their arguments, and stay out of the theme as intended.</li>
-<li>UXP panels: a name that merely ends in <code>rgb</code>, such as <code>setRgb(18, 18, 18)</code>, is no longer rewritten as a color.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Threshold Editor</name>
-            <uri>https://github.com/CakeDev4k</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Style Dock 1.1.2]]></title>
-        <id>https://windhawk.net/mods/macos-style-dock#eb317fa97233903f7cf5e1cb5d703debe7ecb248</id>
-        <link href="https://windhawk.net/mods/macos-style-dock"/>
-        <updated>2026-11-12T21:01:41.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New: macOS-style app name labels on hover</li>
-<li>New: hot corners for Task View or Start (bottom left) and the system tray (bottom right)</li>
-<li>New: Auto-hide, either Off, On, or Hybrid (hides while a window is maximized or snapped)</li>
-<li>New: in Hybrid, a window dropped with its title bar under the dock moves back up</li>
-<li>New: Task View hides the dock and shows its row of desktops at the bottom</li>
-<li>New: squircle icons, drawing app icons as macOS-style tiles, with a Squircle color setting</li>
-<li>New: your own File Explorer and Recycle Bin icons from image files, with margin and size settings; they're named Finder and Trash</li>
-<li>New: running indicator styles: round dots, Hybrid dots, or Windows 11's own</li>
-<li>New: dock edge styles (macOS, Standard, None) with an adjustable inner glow</li>
-<li>New: custom dock color, spacing settings and a high resolution icons setting</li>
-<li>New: soft shadow on the system tray's icons and clock</li>
-<li>New: &quot;Keep File Explorer first&quot; setting, on by default; turn it off to leave your pinned order alone</li>
-<li>New: ARM64 builds (not yet tested on an ARM64 PC)</li>
-<li>Improved: Apple's squircle corners on the dock</li>
-<li>Improved: round running dots, the same size at any dock size</li>
-<li>Improved: File Explorer is now truly moved first and stays there</li>
-<li>Improved: smoother dragging; apps stay between File Explorer and the Recycle Bin, and nothing jumps on release</li>
-<li>Improved: the app name label uses less CPU while icons animate</li>
-<li>Improved: the log names any feature whose hook failed to install</li>
-<li>Improved: rewritten readme, with a &quot;Will it work on my PC?&quot; compatibility guide</li>
-<li>Changed: Start is no longer in the dock; use the bottom-left corner or the Windows key</li>
-<li>Changed: window previews open on click; turn on &quot;Window previews&quot; to also show them on hover</li>
-<li>Changed: magnifying over maximized windows is always on; Auto-hide replaces &quot;Magnify over windows&quot;</li>
-<li>Changed: &quot;Tint&quot; is now &quot;Opacity&quot;, with new defaults for size, magnification, blur, color and the divider after File Explorer</li>
-<li>Fixed: clicks and file drops on the Recycle Bin now work wherever its label shows</li>
-<li>Fixed: at Size 40 and below, clicking near an icon's edge could open the app next to it</li>
-<li>Fixed: the tray keeps the taskbar's height on SystemTray.dll 2609.4001 and later</li>
-<li>Fixed: the system tray kept the dock's height after turning the mod off</li>
-<li>Fixed: the taskbar could end up behind windows at startup</li>
-</ul>
-]]></content>
-        <author>
-            <name>Zach Vaughn</name>
-            <uri>https://github.com/zachvdev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Icon Dock 2.1.2]]></title>
-        <id>https://windhawk.net/mods/desktop-icon-dock#21f35ad6fdb6d5271c7be6f147aeb6a6bd5231df</id>
-        <link href="https://windhawk.net/mods/desktop-icon-dock"/>
-        <updated>2026-11-12T20:00:17.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add six background styles and panel tone.</li>
-<li>Rebuild Liquid Glass with adaptive tone, pointer specular and edge refraction.</li>
-<li>Make the Windhawk details page and settings English-only.</li>
-<li>Remove Aero and Dark HUD.</li>
-<li>Document that 1.x users must select a panel style again.</li>
-</ul>
-]]></content>
-        <author>
-            <name>yizqq0721</name>
-            <uri>https://github.com/yizqq0721</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Windows Shortcuts 1.3.1]]></title>
-        <id>https://windhawk.net/mods/disable-windows-shortcuts#4dc76a62bf5ef66ddbdc69d69def009ce65e6f79</id>
-        <link href="https://windhawk.net/mods/disable-windows-shortcuts"/>
-        <updated>2026-11-12T20:00:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a <code>Win+Shift+T</code> toggle (Snipping Tool text extractor) to Standard Shortcuts.</li>
-<li>Fixed the Explorer restart prompt not appearing when the mod is uninstalled.</li>
-<li>Restart prompts now explain the event that triggered them (mod enabled, settings changed, mod disabled, mod uninstalled).</li>
-<li>The restart prompt shown on unload now closes automatically if the mod is re-enabled while it is open.</li>
-<li>The restart prompt for restoring shortcuts is skipped when Explorer never had them blocked.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Lone</name>
-            <uri>https://github.com/Louis047</uri>
         </author>
     </entry>
 </feed>
