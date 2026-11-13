@@ -868,6 +868,7 @@ static void LoadSettings() {
 #define TIMER_FAST      2
 #define TIMER_REBUILD   3
 #define TIMER_MAXCHECK  86  // "Ocultar com janela maximizada": confere 4 vezes por segundo
+#define TIMER_MAXNOW    87  // ...e logo depois de uma janela maximizar ou restaurar
 
 static const wchar_t kBarClass[] = L"WhFinderTopBar";
 static const wchar_t kOwnerClass[] = L"WhFinderTopBarOwner";
@@ -1093,6 +1094,7 @@ static ID2D1Factory* g_d2d = nullptr;
 static IDWriteFactory* g_dwrite = nullptr;
 static std::wstring g_iconFont = L"Segoe Fluent Icons";
 static HWINEVENTHOOK g_fgHook = nullptr;
+static HWINEVENTHOOK g_maxHook = nullptr;  // janelas que maximizam, restauram, somem ("Ocultar com janela maximizada")
 static UINT g_msgTaskbarCreated = 0;
 static std::vector<Bar*> g_bars;
 static ActiveApp g_active;
@@ -22562,7 +22564,8 @@ static void UpdateFullscreen() {
         // que pisca do tamanho da tela não derruba a barra); volta na hora.
         if (!hide) {
             b->fsSince = 0;
-        } else if (!b->hiddenForFullscreen) {
+        } else if (!b->hiddenForFullscreen && !forMax) {
+            // (janela maximizada: esconde na hora, sem esperar)
             ULONGLONG now = GetTickCount64();
             if (!b->fsSince) b->fsSince = now;
             if (now - b->fsSince < 600) hide = false;
@@ -22879,9 +22882,26 @@ static void UpdateActiveApp(HWND fg) {
     UpdateSolid();
 }
 
+// Uma janela maximizou, restaurou, minimizou, sumiu ou fechou: confere em seguida
+// (logo depois, e uma vez só para uma rajada de avisos), para a barra sumir e
+// voltar sem atraso.
+static void MaxCheckSoon() {
+    if (g_settings.hideWhenMaximized && g_owner) SetTimer(g_owner, TIMER_MAXNOW, 15, nullptr);
+}
+static void CALLBACK MaxEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
+    if (!g_settings.hideWhenMaximized || idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !hwnd) return;
+    if (GetAncestor(hwnd, GA_ROOT) != hwnd) return;
+    // Só interessa uma janela maximizada agora, ou qualquer uma enquanto a barra
+    // estiver escondida por isso (ela pode ter restaurado, minimizado ou fechado).
+    bool anyHidden = false;
+    for (Bar* b : g_bars) anyHidden |= b->maxHidden;
+    if (anyHidden || IsZoomed(hwnd)) MaxCheckSoon();
+}
+
 static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG,
                                   DWORD, DWORD) {
     if (idObject != OBJID_WINDOW) return;
+    if (event == EVENT_SYSTEM_MINIMIZESTART || event == EVENT_SYSTEM_MINIMIZEEND) MaxCheckSoon();
     if (event == EVENT_SYSTEM_FOREGROUND) UpdateActiveApp(hwnd);
     else if (hwnd == g_active.hwnd) UpdateSolid();  // minimizar/restaurar
 }
@@ -23257,7 +23277,8 @@ static LRESULT CALLBACK OwnerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
                 CapsPoll();
                 return 0;
             }
-            if (wp == TIMER_MAXCHECK) {
+            if (wp == TIMER_MAXCHECK || wp == TIMER_MAXNOW) {
+                if (wp == TIMER_MAXNOW) KillTimer(hwnd, TIMER_MAXNOW);
                 UpdateFullscreen();
                 return 0;
             }
@@ -23718,6 +23739,9 @@ static DWORD WINAPI BarThread(LPVOID) {
 
     g_fgHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND, nullptr,
                                WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    // Mostrar, esconder, fechar e mudar de tamanho (maximizar/restaurar).
+    g_maxHook = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_LOCATIONCHANGE, nullptr, MaxEventProc, 0, 0,
+                                WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
     UpdateActiveApp(GetForegroundWindow());
     RedrawAll();
 
@@ -23764,6 +23788,7 @@ static DWORD WINAPI BarThread(LPVOID) {
     RemoveTrayHook();
     WinOsdRestore();
     if (g_fgHook) { UnhookWinEvent(g_fgHook); g_fgHook = nullptr; }
+    if (g_maxHook) { UnhookWinEvent(g_maxHook); g_maxHook = nullptr; }
     // 2) Threads de trabalho: cancela o que estiver em andamento e espera todas.
     UiaStop();
     StopCcWorker();
