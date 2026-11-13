@@ -80,6 +80,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 - **One glass for everything**: the Control Center, menus, panels and pills share the same glass settings (style, tint, liquid glass, refraction, blur, live)
 - Bar text and icons in white, black or automatic (following the Windows theme), for all displays or each display on its own
 - Clicking the album cover (Control Center or Now Playing) brings the playing app's window to the front
+- Optional: hide the bar while a window is maximized on its display (the window gets the whole height) and bring it back when none is
 - Choose where the bar shows: all displays, the main one, or a specific display (listed by name); if that display is disconnected, the bar moves to the main one
 - **Disks** (optional): its menu lists every local and removable disk with a usage bar and opens it in Explorer
 - Bar icons share one size: each icon is measured and scaled to the same height, and they all grow together with the icon size setting
@@ -329,6 +330,7 @@ struct Settings {
     std::wstring barMonitor;  // "all", "primary" ou o nome do monitor (\\.\DISPLAY2)
     bool autoHide;
     bool hideOnFullscreen;
+    bool hideWhenMaximized;  // some com janela maximizada no monitor, volta sem ela
     std::wstring desktopName;
     bool showGlobalMenu, genericMenus;
     bool showDisplay, showKeyboard, showBattery, showBatteryPercent;
@@ -493,6 +495,7 @@ static const UiDefault kUiDefaults[] = {
     {L"allMonitors", L"1"},
     {L"autoHide", L"0"},
     {L"hideOnFullscreen", L"1"},
+    {L"hideWhenMaximized", L"0"},
     {L"showGlobalMenu", L"1"},
     {L"showDisplay", L"1"},
     {L"showKeyboard", L"1"},
@@ -742,6 +745,7 @@ static void LoadSettings() {
     if (!UiStored(L"barMonitor", s.barMonitor) || s.barMonitor.empty()) s.barMonitor = s.allMonitors ? L"all" : L"primary";
     s.autoHide = OvrInt(L"autoHide") != 0;
     s.hideOnFullscreen = OvrInt(L"hideOnFullscreen") != 0;
+    s.hideWhenMaximized = OvrInt(L"hideWhenMaximized") != 0;
     s.desktopName = ReadStr(L"desktopName");
     if (s.desktopName.empty()) s.desktopName = L"Finder";
     s.showGlobalMenu = OvrInt(L"showGlobalMenu") != 0;
@@ -859,6 +863,7 @@ static void LoadSettings() {
 #define TIMER_STATUS    1
 #define TIMER_FAST      2
 #define TIMER_REBUILD   3
+#define TIMER_MAXCHECK  86  // "Ocultar com janela maximizada": confere 4 vezes por segundo
 
 static const wchar_t kBarClass[] = L"WhFinderTopBar";
 static const wchar_t kOwnerClass[] = L"WhFinderTopBarOwner";
@@ -883,7 +888,8 @@ struct Bar {
     UINT dpi = 96;
     int heightPx = 28;
     bool appbar = false;
-    bool hiddenForFullscreen = false;
+    bool hiddenForFullscreen = false;  // escondida (tela cheia ou janela maximizada)
+    bool appbarReleased = false;      // escondida por janela maximizada: o espaço do topo foi devolvido
     bool autoShown = false;
     int hideCountdown = 0;
     bool solid = false;
@@ -12321,7 +12327,7 @@ enum BsVal {
     BV_BATTPCT, BV_AUTOHIDE, BV_HIDEFS, BV_SOLIDMAX, BV_ALLMON, BV_FLYOUTS, BV_OSD, BV_DIM,
     BV_G_TRANSP, BV_G_CLEAR, BV_G_LIQUID, BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_ICONS, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_SELMENU, BV_UPDATES,
     BV_G_TINT, BV_SEARCHTGT, BV_LANG, BV_NPBAR, BV_ICSADD, BV_ICSCLEAR,
-    BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_TEXTMON,
+    BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_TEXTMON, BV_HIDEMAX,
 };
 struct BsRowDef {
     int kind;
@@ -12366,6 +12372,7 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_BATTPCT, L"Mostrar a porcentagem da bateria", 0, 0},
     {BR_SWITCH, BV_AUTOHIDE, L"Ocultar e mostrar a barra automaticamente", 0, 0, L"Aparece ao encostar o mouse no topo da tela"},
     {BR_SWITCH, BV_HIDEFS, L"Ocultar em tela cheia", 0, 0, L"Jogos, vídeos e apps em tela cheia ficam sem a barra"},
+    {BR_SWITCH, BV_HIDEMAX, L"Ocultar com janela maximizada", 0, 0, L"A barra some quando uma janela é maximizada e volta quando não há nenhuma (na área de trabalho)"},
     {BR_SWITCH, BV_SOLIDMAX, L"Fundo sólido com janela maximizada", 0, 0},
     {BR_CHOICE, BV_BARMON, L"Mostrar a barra em", 0, 0, L"Todos os monitores, o principal ou um deles; se o escolhido for desconectado, a barra vai para o principal"},
     {BR_SWITCH, BV_MORE, L"Recolher numa seta os ícones que não cabem", 0, 0, L"Como as setas ao lado do notch no macOS 27"},
@@ -12488,6 +12495,7 @@ static const BsBoolKey kBsKeys[] = {
     {BV_UPDATES, L"checkUpdates", &Settings::checkUpdates},
     {BV_AUTOHIDE, L"autoHide", &Settings::autoHide},
     {BV_HIDEFS, L"hideOnFullscreen", &Settings::hideOnFullscreen},
+    {BV_HIDEMAX, L"hideWhenMaximized", &Settings::hideWhenMaximized},
     {BV_SOLIDMAX, L"solidWhenMaximized", &Settings::solidWhenMaximized},
     {BV_ALLMON, L"allMonitors", &Settings::allMonitors},
     {BV_FLYOUTS, L"flyouts", &Settings::flyouts},
@@ -12713,6 +12721,10 @@ static void BsSet(int val, int v) {
         if (val == BV_ALLMON || val == BV_AUTOHIDE) {
             RequestReload(1);
         } else {
+            if (val == BV_HIDEMAX && g_owner) {
+                if (on) SetTimer(g_owner, TIMER_MAXCHECK, 250, nullptr);
+                else KillTimer(g_owner, TIMER_MAXCHECK);
+            }
             BarsApplyLive(false);
         }
         return;
@@ -22476,16 +22488,61 @@ static bool ForegroundIsFullscreenOn(Bar* b) {
            r.right >= b->monRect.right && r.bottom >= b->monRect.bottom;
 }
 
-// Tela cheia: confere a cada segundo (o aviso do Windows nem sempre chega).
+// Há uma janela maximizada à vista neste monitor? (minimizadas, escondidas, de
+// ferramenta e as do shell não contam)
+struct MaxFind {
+    HMONITOR mon;
+    bool found;
+};
+static BOOL CALLBACK MaxFindProc(HWND w, LPARAM lp) {
+    auto* f = reinterpret_cast<MaxFind*>(lp);
+    if (!IsWindowVisible(w) || IsIconic(w) || !IsZoomed(w)) return TRUE;
+    if (GetWindowLongW(w, GWL_EXSTYLE) & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) return TRUE;
+    if (IsCloaked(w) || MonitorFromWindow(w, MONITOR_DEFAULTTONULL) != f->mon) return TRUE;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(w, &pid);
+    if (IsShellOrSelf(pid)) return TRUE;
+    f->found = true;
+    return FALSE;
+}
+static bool AnyMaximizedOn(Bar* b) {
+    MaxFind f{b->monitor, false};
+    EnumWindows(MaxFindProc, (LPARAM)&f);
+    return f.found;
+}
+// Devolve (ou volta a reservar) o espaço da barra no topo: escondida por janela
+// maximizada, a janela ocupa a tela até em cima.
+static void BarReleaseSpace(Bar* b, bool release) {
+    if (release && b->appbar) {
+        APPBARDATA abd{};
+        abd.cbSize = sizeof(abd);
+        abd.hWnd = b->hwnd;
+        SHAppBarMessage(ABM_REMOVE, &abd);
+        b->appbar = false;
+        b->appbarReleased = true;
+    } else if (!release && b->appbarReleased) {
+        APPBARDATA abd{};
+        abd.cbSize = sizeof(abd);
+        abd.hWnd = b->hwnd;
+        abd.uCallbackMessage = WM_APP_APPBAR;
+        b->appbar = SHAppBarMessage(ABM_NEW, &abd) != FALSE;
+        b->appbarReleased = false;
+        if (b->appbar) SetAppBarPos(b, false);
+    }
+}
+
+// Tela cheia (e janela maximizada, se pedido): confere a cada segundo (o aviso do
+// Windows nem sempre chega); com "Ocultar com janela maximizada", 4 vezes por segundo.
 static void UpdateFullscreen() {
     for (Bar* b : g_bars) {
-        bool hide = false;
+        bool hide = false, forMax = false;
         if (g_settings.hideOnFullscreen) {
             HWND fg = GetForegroundWindow();
             DWORD pid = 0;
             if (fg) GetWindowThreadProcessId(fg, &pid);
             hide = !IsShellOrSelf(pid) && ForegroundIsFullscreenOn(b);
         }
+        if (!hide && g_settings.hideWhenMaximized && !g_settings.autoHide && AnyMaximizedOn(b)) hide = forMax = true;
         // Só esconde se continuar em tela cheia na conferência seguinte (uma janela
         // que pisca do tamanho da tela não derruba a barra); volta na hora.
         if (!hide) {
@@ -22507,6 +22564,9 @@ static void UpdateFullscreen() {
             if (!hide) BarSyncShadow(b);
             if (!hide) SetWindowPos(b->hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
+        // Escondida por janela maximizada, a barra devolve o espaço do topo; ao
+        // voltar, reserva de novo.
+        BarReleaseSpace(b, hide && forMax);
     }
 }
 
@@ -23019,6 +23079,10 @@ static LRESULT CALLBACK OwnerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
                 CapsPoll();
                 return 0;
             }
+            if (wp == TIMER_MAXCHECK) {
+                UpdateFullscreen();
+                return 0;
+            }
             if (wp == TIMER_STATUS) {
                 PollStatus(false);
                 ExtrasPoll();
@@ -23157,6 +23221,8 @@ static void CreateBars() {
     EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, BarChosenMonitorPresent() ? 1 : 0);
     if (g_settings.autoHide) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
     else KillTimer(g_owner, TIMER_FAST);
+    if (g_settings.hideWhenMaximized) SetTimer(g_owner, TIMER_MAXCHECK, 250, nullptr);
+    else KillTimer(g_owner, TIMER_MAXCHECK);
     UpdateSolid();
 }
 
@@ -23952,6 +24018,8 @@ const UiTr kUiTr[] = {
     {L"Cor do texto: monitor", L"Text color: display", L"Color del texto: monitor", L"Couleur du texte : écran", L"Textfarbe: Bildschirm", L"Colore del testo: monitor", L"文字颜色：显示器"},
     {L"Escolha um monitor para dar a ele uma cor própria", L"Pick a display to give it its own color", L"Elige un monitor para darle su propio color", L"Choisissez un écran pour lui donner sa propre couleur", L"Wähle einen Bildschirm für eine eigene Farbe", L"Scegli un monitor per dargli un colore proprio", L"选择一台显示器，为它单独设置颜色"},
     {L"Como nos outros", L"Same as the others", L"Como en los demás", L"Comme les autres", L"Wie die anderen", L"Come gli altri", L"与其他相同"},
+    {L"Ocultar com janela maximizada", L"Hide when a window is maximized", L"Ocultar con una ventana maximizada", L"Masquer quand une fenêtre est agrandie", L"Bei maximiertem Fenster ausblenden", L"Nascondi con una finestra ingrandita", L"窗口最大化时隐藏"},
+    {L"A barra some quando uma janela é maximizada e volta quando não há nenhuma (na área de trabalho)", L"The bar hides when a window is maximized and comes back when none is (on the desktop)", L"La barra se oculta al maximizar una ventana y vuelve cuando no hay ninguna (en el escritorio)", L"La barre se masque quand une fenêtre est agrandie et revient quand il n'y en a plus (sur le bureau)", L"Die Leiste verschwindet bei einem maximierten Fenster und kommt zurück, wenn keines mehr da ist (auf dem Desktop)", L"La barra si nasconde quando una finestra è ingrandita e torna quando non ce ne sono (sul desktop)", L"窗口最大化时菜单栏隐藏，没有最大化窗口时（桌面上）重新出现"},
     {L"Discos", L"Disks", L"Discos", L"Disques", L"Laufwerke", L"Dischi", L"磁盘"},
     {L"Clique para ver os discos e quanto cada um está cheio", L"Click to see the disks and how full each one is", L"Haz clic para ver los discos y cuánto está lleno cada uno", L"Cliquez pour voir les disques et leur remplissage", L"Klicken, um die Laufwerke und ihre Belegung zu sehen", L"Fai clic per vedere i dischi e quanto è pieno ciascuno", L"点击查看磁盘及其使用量"},
     {L"Discos: o do sistema está %s% cheio", L"Disks: the system disk is %s% full", L"Discos: el del sistema está al %s%", L"Disques : le disque système est plein à %s %", L"Laufwerke: Systemlaufwerk zu %s% voll", L"Dischi: quello di sistema è pieno al %s%", L"磁盘：系统磁盘已用 %s%"},
