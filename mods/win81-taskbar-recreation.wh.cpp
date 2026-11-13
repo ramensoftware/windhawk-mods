@@ -36,7 +36,7 @@ the Windows build, DPI, taskbar replacement and other shell mods.
 - Horizontal and vertical layouts, Aero Peek and classic flyout options.
 - Change notification area icon visibility using the Control Panel page that the mod attempts to restore, including on Windows 11; availability and behavior can vary.
 - Static taskbar textures and system colors. Optional experimental live blur uses the unsupported per-window accent policy approach from Taskbar Background Helper (m417z, GPL-3.0); enabled by default and not guaranteed to work with layered windows. Windows 7 skin adds a cursor-following, icon-colored hover glow for running apps.
-- In the Windows 7 skin, Start uses the pressed image while a recognized Start menu is visible, even when the pointer hovers over it. Visibility tracking is best-effort and updates asynchronously; recognition and monitor placement may vary with Start replacements.
+- In the Windows 7, Windows 8 Beta and Windows 8.1 skins, the Start button uses its pressed appearance while a recognized Start menu is visible, even when the pointer hovers over it. Visibility tracking is best-effort and updates asynchronously; recognition and monitor placement may vary with Start replacements. The Windows 8.0 hot corner does not use this button state.
 - Local taskbar pins and ordering: the mod does not change Windows pins. Drag to an empty task area to pin; hover a running app to activate its window.
 - An advanced battery flyout option; compatibility may vary between Windows builds.
 - Optional secondary taskbars show pins, windows and the shared private tray. Secondary AppBar registration reserves work area when necessary and allowed by the shell. DPI scaling and flyout positioning are best-effort.
@@ -2498,6 +2498,8 @@ struct State {
     DWORD t81WinMenuPid = 0, t81WinMenuTid = 0;
     unsigned long t81WinMenuGeneration = 0;
     bool nativeLauncherVisible = false, alternateLauncherVisible = false;
+    HWND alternateLauncherWindow = nullptr;
+    int startReconcileChecks = 0;
     HMONITOR nativeLauncherMonitor = nullptr, alternateLauncherMonitor = nullptr;
     bool startMenuVisible = false;
     HMONITOR startMenuMonitor = nullptr;
@@ -2664,7 +2666,13 @@ struct State {
 // State is owned and freed by the UI thread; no destructible globals.
 State* s = nullptr;
 // Launcher state is event-driven independently of the optional keyboard fallback.
+// Preset IDs: Windows 7, Windows 8 Beta and Windows 8.1 have a Start
+// button; Windows 8.0 uses a hot corner and is deliberately excluded.
+static constexpr bool T81SkinHasTrackedStartButton(int skin) {
+    return skin == 1 || skin == 2 || skin == 4;
+}
 static constexpr UINT WM_T81_START_STATE = WM_APP + 354;
+static constexpr UINT_PTR TIMER_T81_START_RECONCILE = 57;
 static HANDLE t81StartObserverThread = nullptr, t81StartObserverStop = nullptr;
 static bool T81StartMenuOn(HWND bar) {
     if (!s || !bar)
@@ -5274,12 +5282,24 @@ static void DrawBetaStartImage(Graphics& g, int w, int h, int frame) {
         return;
     // All three 54x54 frames have identical transparent margins at the top
     // and bottom (rows 0..8 and 47..53). Crop those margins and scale the
-    // visible 54x38 artwork to the bar height, preserving its aspect ratio.
+    // visible 54x38 artwork preserving its aspect ratio. On a tall Beta
+    // bar, extend the tile rather than enlarging the logo beyond the cell.
     // Clip to the Start cell so it never paints over adjacent task buttons.
-    const float width = (float)h * 54.f / 38.f;
-    RectF dst(((float)w - width) / 2.f, 0.f, width, (float)h);
+    float width = (float)h * 54.f / 38.f;
+    float height = (float)h;
     auto saved = g.Save();
     g.SetClip(Rect(0, 0, w, h), CombineModeIntersect);
+    if (taskbarSkin.load() == 2 && width > w) {
+        // A tall, multi-row bar must extend the dark Start tile, not enlarge
+        // and crop its logo. Keep the original sprite's aspect ratio and
+        // centre it within the full-height tile. This also applies to mirrors.
+        BYTE shade = frame == 2 ? 70 : 51;
+        SolidBrush tile(Color(255, shade, shade, shade));
+        g.FillRectangle(&tile, 0, 0, w, h);
+        width = (float)w;
+        height = width * 38.f / 54.f;
+    }
+    RectF dst(((float)w - width) / 2.f, ((float)h - height) / 2.f, width, height);
     if (taskbarSkin.load() == 2 && h < Px(38) && dst.X > 0.f) {
         // The source sprite's left edge is RGB 51 in normal/hover and
         // RGB 70 in pressed state; preserve the actual artwork color.
@@ -5342,6 +5362,24 @@ static void DrawStartImage(Graphics& g, int w, int h, int frame, float opacity =
     }
     attr.SetColorMatrix(&matrix);
     g.DrawImage(s->startImage, dst, 0.0f, (float)(41 * frame), 50.0f, 41.0f, UnitPixel, &attr);
+}
+
+// The antialiased sprite can leave the left and bottom device pixels uncovered.
+// Paint those edges without antialiasing, after the usual hover/pressed art.
+// Do not resize or move the logo, and do not touch other skin presets.
+static void T81PaintWin81StartEdges(Graphics& g, int width, int height, float opacity,
+                                     bool pressed) {
+    if (taskbarSkin.load() != 4 || width <= 0 || height <= 0 || opacity <= 0.f)
+        return;
+    auto state = g.Save();
+    g.SetSmoothingMode(SmoothingModeNone);
+    const BYTE alpha = (BYTE)std::lround(255.f * std::min(1.f, opacity));
+    // The normal tile is RGB 17; the existing pressed overlay darkens it to 14.
+    const BYTE shade = pressed ? 14 : 17;
+    SolidBrush edge(Color(alpha, shade, shade, shade));
+    g.FillRectangle(&edge, 0, 0, 1, height);
+    g.FillRectangle(&edge, 0, height - 1, width, 1);
+    g.Restore(state);
 }
 
 static bool IsModOrShellSurface(HWND hwnd) {
@@ -7415,6 +7453,7 @@ static bool PostOpenShellRequest(WPARAM operation) {
     }
     return false;
 }
+static void T81ArmStartReconcile();
 static void T81ArmOpenShellPosition(HWND bar, bool preservePending) noexcept;
 static void T81CancelOpenShellPosition() noexcept;
 static bool ForegroundProcessElevated();
@@ -7463,6 +7502,8 @@ static bool ToggleOpenShellStart() {
             t81OpenShellFocusDeadline = GetTickCount64() + 1500;
         }
         bool posted = PostOpenShellRequest(visible ? 0 : 2);
+        if (posted)
+            T81ArmStartReconcile();
         if (!posted)
             t81OpenShellFocusSource = nullptr;
         Wh_Log(L"[T81-START] direct click foreground=%p pid=%lu windhawk=%d elevated=%d allow=%d posted=%d",
@@ -10144,9 +10185,10 @@ static void GuardPrivateTray() {
 static bool AttachClassicClockFrame();
 static void T81PlaceSecondaryOpenShell(HWND observed = nullptr) noexcept;
 static void T81StopOpenShellPositionForPopup(HWND popup) noexcept;
-// Re-scan only on launcher show/hide and at startup, not on a timer.
+// Events drive state changes. A low-frequency, temporary reconciliation also
+// repairs missing or early hide/destroy events without continuous idle polling.
 static void T81RefreshAlternateLauncher(HWND exclude = nullptr) {
-    if (!s || !s->bar || taskbarSkin.load() != 1)
+    if (!s || !s->bar || !T81SkinHasTrackedStartButton(taskbarSkin.load()))
         return;
     DWORD shellPid = DesktopShellPid();
     const wchar_t* classes[] = {L"OpenShell.CMenuContainer", L"DV2ControlHost",
@@ -10164,11 +10206,19 @@ static void T81RefreshAlternateLauncher(HWND exclude = nullptr) {
                 continue;
             HMONITOR monitor =
                 MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
-            PostMessageW(s->bar, WM_T81_START_STATE, 3, (LPARAM)monitor);
+            s->alternateLauncherWindow = window;
+            SendMessageW(s->bar, WM_T81_START_STATE, 3, (LPARAM)monitor);
             return;
         }
     }
-    PostMessageW(s->bar, WM_T81_START_STATE, 2, 0);
+    s->alternateLauncherWindow = nullptr;
+    SendMessageW(s->bar, WM_T81_START_STATE, 2, 0);
+}
+static void T81ArmStartReconcile() {
+    if (!s || !s->bar || !T81SkinHasTrackedStartButton(taskbarSkin.load()))
+        return;
+    s->startReconcileChecks = 10;
+    SetTimer(s->bar, TIMER_T81_START_RECONCILE, 125, nullptr);
 }
 static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK,
                                           DWORD event,
@@ -10184,20 +10234,22 @@ static void CALLBACK ShellVisibilityEvent(HWINEVENTHOOK,
         GetWindowThreadProcessId(hwnd, &pid);
         DWORD shellPid = DesktopShellPid();
         wchar_t launcherClass[64]{};
-        if ((event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_HIDE) &&
-            GetClassNameW(hwnd, launcherClass, (int)std::size(launcherClass)) &&
-            !wcscmp(launcherClass, L"OpenShell.CMenuContainer") && shellPid &&
-            pid == shellPid)
+        const bool isVisibilityEvent = event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_HIDE;
+        const bool knownClass = isVisibilityEvent &&
+            GetClassNameW(hwnd, launcherClass, (int)std::size(launcherClass));
+        const bool shellWindow = pid == GetCurrentProcessId() || (shellPid && pid == shellPid);
+        const bool openShell = knownClass && shellWindow &&
+            !wcscmp(launcherClass, L"OpenShell.CMenuContainer");
+        const bool otherLauncher = knownClass &&
+            ((shellWindow && !wcscmp(launcherClass, L"DV2ControlHost")) ||
+             !wcscmp(launcherClass, L"Win8StartScreenMod8045"));
+        const bool trackedDestroyed = event == EVENT_OBJECT_DESTROY &&
+            hwnd == s->alternateLauncherWindow;
+        if (openShell || trackedDestroyed)
             ++t81MenuGeneration;
-        if ((event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_HIDE) &&
-            GetClassNameW(hwnd, launcherClass, (int)std::size(launcherClass)) &&
-            (!wcscmp(launcherClass, L"OpenShell.CMenuContainer") ||
-             !wcscmp(launcherClass, L"DV2ControlHost") ||
-             !wcscmp(launcherClass, L"Win8StartScreenMod8045")) &&
-            (pid == GetCurrentProcessId() || (shellPid && pid == shellPid) ||
-             !wcscmp(launcherClass, L"Win8StartScreenMod8045"))) {
-            T81RefreshAlternateLauncher(event == EVENT_OBJECT_HIDE ? hwnd
-                                                                   : nullptr);
+        if (openShell || otherLauncher || trackedDestroyed) {
+            T81RefreshAlternateLauncher((event == EVENT_OBJECT_HIDE || trackedDestroyed) ? hwnd : nullptr);
+            T81ArmStartReconcile();
         }
         if (pid != GetCurrentProcessId() && (!shellPid || pid != shellPid))
             return;
@@ -17671,11 +17723,11 @@ static void ConfigureBarAlpha(HWND h, bool perPixel) {
     }
     T81SetExperimentalBlur(h);
 }
-// Use only the seventh frame for a flashing notification. All other states
-// fall through to the original renderer; missing art uses the original cue.
+// Windows 8.0 retains its existing attention artwork. Windows 8.1 uses
+// the original drawn frame and attention cue, without the rejected sprite.
 static bool DrawUserTaskTexture(Graphics& g, const RECT& cell, bool attention, bool vertical) {
     if (!attention || !s || !s->taskStateSprite ||
-        (taskbarSkin.load() != 3 && taskbarSkin.load() != 4))
+        taskbarSkin.load() != 3)
         return false;
     auto save = g.Save();
     if (vertical) {
@@ -17707,6 +17759,19 @@ static bool DrawUserTaskTexture(Graphics& g, const RECT& cell, bool attention, b
     g.Restore(save);
     return success;
 }
+// Retain the existing border and its original colors. For Windows 8.1 only,
+// avoid smoothing its axis-aligned, one-pixel strokes into broken/fuzzy edges.
+static void T81DrawExistingTaskBorder(Graphics& g, Pen& pen, int x, int y,
+                                      int width, int height) {
+    if (taskbarSkin.load() != 4) {
+        g.DrawRectangle(&pen, x, y, width, height);
+        return;
+    }
+    auto state = g.Save();
+    g.SetSmoothingMode(SmoothingModeNone);
+    g.DrawRectangle(&pen, x, y, width, height);
+    g.Restore(state);
+}
 static void DrawActiveReferenceTile(Graphics& g, int x, int width, int height, float fade) {
     int edge = std::max(1, Px(1));
     int tileWidth = std::max(1, width - edge);
@@ -17721,7 +17786,8 @@ static void DrawActiveReferenceTile(Graphics& g, int x, int width, int height, f
                                  Color(std::min(255, 100 + extra), 255, 255, 255));
         g.FillRectangle(&fill, x, 0, tileWidth, height);
         Pen border(Color(230, 255, 255, 255), 1);
-        g.DrawRectangle(&border, x, 0, std::max(1, tileWidth - 1), std::max(1, height - 1));
+        T81DrawExistingTaskBorder(g, border, x, 0, std::max(1, tileWidth - 1),
+                                  std::max(1, height - 1));
         return;
     }
     // Separate gradient and borders, rather than a single faint stroke.
@@ -17981,8 +18047,8 @@ static void DrawFlatPinnedHover(Graphics& g, const RECT& cell, float fade, UINT 
     SolidBrush fill(Color((int)std::lround(77 * fade), 255, 255, 255));
     g.FillRectangle(&fill, cell.left, cell.top, width, height);
     Pen border(Color((int)std::lround(125 * fade), 255, 255, 255), 1);
-    g.DrawRectangle(&border, (int)cell.left, (int)cell.top,
-                    std::max(1, width-1), std::max(1, height-1));
+    T81DrawExistingTaskBorder(g, border, (int)cell.left, (int)cell.top,
+                              std::max(1, width-1), std::max(1, height-1));
 }
 static int TaskTileLayers(size_t windows) {
     return (int)std::min<size_t>(windows, 3);
@@ -18004,7 +18070,8 @@ static void DrawTaskTileStack(Graphics& g, int x, int width, int height, int lay
         SolidBrush fill(Color(active ? 58 : 34, 255, 255, 255));
         g.FillRectangle(&fill, left, top, tw, th);
         Pen border(Color((int)std::lround((active ? 150 : 85) + 30 * fade), 255, 255, 255), 1);
-        g.DrawRectangle(&border, left, top, std::max(1, tw - 1), std::max(1, th - 1));
+        T81DrawExistingTaskBorder(g, border, left, top, std::max(1, tw - 1),
+                                  std::max(1, th - 1));
     }
     g.Restore(rearClip);
     if (active)
@@ -18015,7 +18082,8 @@ static void DrawTaskTileStack(Graphics& g, int x, int width, int height, int lay
         SolidBrush fill(Color((int)std::lround(40 + 37 * fade), 255, 255, 255));
         g.FillRectangle(&fill, x, 0, tileWidth, height);
         Pen border(Color((int)std::lround(60 + 65 * fade), 255, 255, 255), 1);
-        g.DrawRectangle(&border, x, 0, std::max(1, tileWidth - 1), std::max(1, height - 1));
+        T81DrawExistingTaskBorder(g, border, x, 0, std::max(1, tileWidth - 1),
+                                  std::max(1, height - 1));
     }
 }
 // Best effort only. RegisterShellHookWindow is documented but explicitly not
@@ -18144,7 +18212,7 @@ static void DrawBarForeground(HDC mem, const Layout& L, int w, int h, const std:
         Graphics g(mem);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         const bool startDown = (s->startPressed && s->hot == HIT_START) ||
-                               (taskbarSkin.load() == 1 && T81StartMenuOn(s->bar));
+                               (T81SkinHasTrackedStartButton(taskbarSkin.load()) && T81StartMenuOn(s->bar));
         if (!startHotCorner.load()) {
             if (taskbarSkin.load() == 1 && (s->win7StartImage || s->betaTexture[30])) {
                 if (!gWin7OrbReady)
@@ -18169,9 +18237,13 @@ static void DrawBarForeground(HDC mem, const Layout& L, int w, int h, const std:
                 if (startDown) {
                     SolidBrush pressedTint(Color(50, 0, 0, 0));
                     g.FillRectangle(&pressedTint, 0, 0, L.start.right, h);
-                    Pen pressedEdge(Color(100, 255, 255, 255), 1);
-                    g.DrawLine(&pressedEdge, 1, h - 2, std::max(1, (int)L.start.right - 2), h - 2);
+                    if (taskbarSkin.load() != 4) {
+                        Pen pressedEdge(Color(100, 255, 255, 255), 1);
+                        g.DrawLine(&pressedEdge, 1, h - 2,
+                                   std::max(1, (int)L.start.right - 2), h - 2);
+                    }
                 }
+                T81PaintWin81StartEdges(g, (int)L.start.right, h, startHover, startDown);
             }
         }
         HWND fg = foreground;
@@ -25001,7 +25073,7 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
             g.SetClip(Rect(0, 0, w, (int)v.start.bottom));
             g.TranslateTransform((w - sw) / 2.0f, ((int)v.start.bottom - sh) / 2.0f);
             bool down = (s->verticalPressed == HIT_START && s->hot == HIT_START) ||
-                        (taskbarSkin.load() == 1 && T81StartMenuOn(s->bar));
+                        (T81SkinHasTrackedStartButton(taskbarSkin.load()) && T81StartMenuOn(s->bar));
             if (taskbarSkin.load() == 1 && (s->win7StartImage || s->betaTexture[30])) {
                 g.Restore(startState);
                 DrawWin7Start(g, w, (int)v.start.bottom, down ? 2 : (s->hot == HIT_START ? 1 : 0));
@@ -25021,7 +25093,7 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
                             0, 0, (int)image->GetWidth(), (int)image->GetHeight(), UnitPixel);
                     } else
                         DrawBetaTexture(g, 11, imageRect);
-                    if (s->hot == HIT_START) {
+                    if (down || s->hot == HIT_START) {
                         SolidBrush stateCue(down ? Color(50, 0, 0, 0) : Color(28, 255, 255, 255));
                         g.FillRectangle(&stateCue, (int)imageRect.left, 0,
                                         (int)(imageRect.right - imageRect.left),
@@ -25052,6 +25124,10 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
                 }
             }
             g.Restore(startState);
+            if (taskbarSkin.load() == 4 && !useBetaStartLogo.load()) {
+                float amount = down ? 1.f : std::max(0.f, std::min(1.f, s->startFade));
+                T81PaintWin81StartEdges(g, w, (int)v.start.bottom, amount, down);
+            }
         }
         EnsureTrayHoverImage();
         for (const auto& t : s->buttonTransitions)
@@ -26105,7 +26181,7 @@ static void T81DrawSecondaryForeground(HDC dc, HWND window, HMONITOR monitor, in
         RECT start = T81SecondaryStartRect(window);
         bool startHot = over && PtInRect(&start, cursor);
         bool startDown = (startHot && (GetKeyState(VK_LBUTTON) & 0x8000)) ||
-                         (taskbarSkin.load() == 1 && T81StartMenuOn(window));
+                         (T81SkinHasTrackedStartButton(taskbarSkin.load()) && T81StartMenuOn(window));
         int startFrame = startDown ? 2 : (startHot ? 1 : 0);
         const T81Mirror* mirror = T81FindSecondary(window);
         float fade = mirror ? std::max(0.f, std::min(1.f, mirror->startFade)) : 0.f;
@@ -26148,6 +26224,7 @@ static void T81DrawSecondaryForeground(HDC dc, HWND window, HMONITOR monitor, in
                     g.FillRectangle(&pressed, 0, 0, logoW, logoH);
                 }
                 g.Restore(state);
+                T81PaintWin81StartEdges(g, sw, sh, amount, startDown);
             }
         }
         for (const auto& button : buttons) {
@@ -27539,12 +27616,19 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_T81_START_STATE: {
+        bool oldNative = s->nativeLauncherVisible;
+        bool oldAlternate = s->alternateLauncherVisible;
         if (wp <= 1) {
             s->nativeLauncherVisible = wp == 1;
             s->nativeLauncherMonitor = (HMONITOR)lp;
         } else {
             s->alternateLauncherVisible = wp == 3;
             s->alternateLauncherMonitor = (HMONITOR)lp;
+        }
+        if (oldNative != s->nativeLauncherVisible || oldAlternate != s->alternateLauncherVisible) {
+            Wh_Log(L"[T81-START-STATE] sources native=%d alternate=%d hwnd=%p",
+                   s->nativeLauncherVisible ? 1 : 0, s->alternateLauncherVisible ? 1 : 0,
+                   s->alternateLauncherWindow);
         }
         bool visible = s->nativeLauncherVisible || s->alternateLauncherVisible;
         HMONITOR monitor = s->alternateLauncherVisible
@@ -27555,7 +27639,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             s->startMenuMonitor = monitor;
             Wh_Log(L"[T81-START-STATE] visible=%d monitor=%p", visible ? 1 : 0,
                    monitor);
-            if (taskbarSkin.load() == 1) {
+            if (T81SkinHasTrackedStartButton(taskbarSkin.load())) {
                 InvalidateRect(h, nullptr, FALSE);
                 for (const auto& mirror : t81Mirrors)
                     if (mirror.window && IsWindow(mirror.window))
@@ -27577,6 +27661,22 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         }
         return 0;
     case WM_TIMER:
+        if (wp == TIMER_T81_START_RECONCILE) {
+            if (!T81SkinHasTrackedStartButton(taskbarSkin.load())) {
+                KillTimer(h, TIMER_T81_START_RECONCILE);
+                return 0;
+            }
+            if (s->startReconcileChecks > 0)
+                --s->startReconcileChecks;
+            T81RefreshAlternateLauncher();
+            if (!s->startReconcileChecks) {
+                if (s->alternateLauncherVisible)
+                    SetTimer(h, TIMER_T81_START_RECONCILE, 250, nullptr);
+                else
+                    KillTimer(h, TIMER_T81_START_RECONCILE);
+            }
+            return 0;
+        }
         if (wp == TIMER_T81_WIN_FALLBACK) {
             KillTimer(h, TIMER_T81_WIN_FALLBACK);
             if (!t81ForceWinRecovery.load())
@@ -28037,6 +28137,16 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             InvalidateRect(s->overflowPanel, nullptr, FALSE);
         return 0;
     case WM_UPDATE_SETTINGS:
+        // A skin change does not require destroying the bar or the private
+        // tray. Start the observer lazily when entering a skin with a Start
+        // button; keep it until normal worker shutdown to avoid losing events.
+        if (T81SkinHasTrackedStartButton(taskbarSkin.load())) {
+            T81StartObserver(h);
+            T81RefreshAlternateLauncher();
+            T81ArmStartReconcile();
+        } else {
+            KillTimer(h, TIMER_T81_START_RECONCILE);
+        }
         s->buttonTransitions.clear();
         s->visualPositions.clear();
         CloseJumpPopup();
@@ -28914,6 +29024,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_DESTROY:
+        KillTimer(h, TIMER_T81_START_RECONCILE);
         T81StopForcedWinRecovery();
         T81StopObserver();
         s->buttonTransitions.clear();
@@ -29109,7 +29220,7 @@ DWORD WINAPI UIThread(LPVOID) {
             barWindow.store(local.bar);
             if (local.bar) {
                 ConfigureBarAlpha(local.bar, perPixelTaskbar.load());
-                if (taskbarSkin.load() == 1)
+                if (T81SkinHasTrackedStartButton(taskbarSkin.load()))
                     T81StartObserver(local.bar);
                 if (t81ForceWinRecovery.load())
                     T81StartForcedWinRecovery(local.bar);
@@ -29127,6 +29238,8 @@ DWORD WINAPI UIThread(LPVOID) {
                     Wh_Log(L"[T81-DIAG] visibility event hook unavailable error=%lu",
                            GetLastError());
                 T81RefreshAlternateLauncher();
+                if (local.alternateLauncherVisible)
+                    T81ArmStartReconcile();
                 UpdatePlacement();
                 Refresh();
                 T81SyncMirrors();
@@ -29475,7 +29588,6 @@ void WhTool_ModSettingsChanged() {
         return;
     bool oldTray = enablePrivateTray.load();
     bool oldForceWinRecovery = t81ForceWinRecovery.load();
-    int oldSkin = taskbarSkin.load();
     LoadSettings();
     if (debugExceptionLog.load())
         InstallExceptionLogger();
@@ -29483,9 +29595,10 @@ void WhTool_ModSettingsChanged() {
         RemoveExceptionLogger();
     if (!toolRuntimeStarted.load(std::memory_order_acquire))
         return;
+    // Tray ownership and the optional keyboard hook still need their existing
+    // lifecycle restart. Appearance changes are applied to the live window.
     if (oldTray != enablePrivateTray.load() ||
-        oldForceWinRecovery != t81ForceWinRecovery.load() ||
-        (oldSkin == 1) != (taskbarSkin.load() == 1)) {
+        oldForceWinRecovery != t81ForceWinRecovery.load()) {
         StopTaskbarWorker();
         if (!StartTaskbarWorker()) {
             Wh_Log(L"[T81-START] worker restart failed; stopping tool process");
