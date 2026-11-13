@@ -8934,11 +8934,15 @@ LiquidRenderer::LensConstants DockLens(double left, double top, double width, do
     ScaleLiquidSettings(lens.optics, float(scale));
     ApplyBorder(lens, border, float(scale));
     ApplyDockShape(lens, outline, float(scale));
+    // What the dock's button lenses share. The shader reads these only once a lens exists.
+    lens.lensRefraction = lens.optics.refraction * .78f;
+    lens.alertTintOpacity = .22f;
+    lens.lensBlend = .72f;
     return lens;
 }
 
 // The one writer of the per-lens arrays: the lens is the intersection of its native rounded rectangle and its clip,
-// drawn with these shape parameters and tint, faded by `fade` (0 visible, 1 gone). Whole-set policy stays with the caller.
+// drawn with these shape parameters and tint, faded by `fade` (0 visible, 1 gone).
 uint32_t StoreLens(LiquidRenderer::LensConstants& lens, float4 nativeRect, float4 clipRect, float4 radii, float4 shape,
                    float4 tint, float fade) {
     auto index = lens.lensCount++;
@@ -8962,9 +8966,6 @@ uint32_t AppendButtonLens(LiquidRenderer::LensConstants& lens,
     auto index=StoreLens(lens,nativeRect,clipRect,radii,{shape.x,shape.y,shape.z,0},
         {kButtonAttentionTint.R/255.0f,kButtonAttentionTint.G/255.0f,kButtonAttentionTint.B/255.0f,attention?1.0f:0.0f},
         1-static_cast<float>(std::clamp(opacity,0.0,1.0)));
-    lens.lensRefraction=lens.optics.refraction*.78f;
-    lens.alertTintOpacity=.22f;
-    lens.lensBlend=.72f;
     return index;
 }
 
