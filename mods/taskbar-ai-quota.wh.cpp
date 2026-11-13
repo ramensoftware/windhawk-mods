@@ -26832,12 +26832,7 @@ static bool HookTaskbarDllSymbols() {
         // off their buttons. Its symbols must still resolve, like the others'.
         {{LR"(protected: long __cdecl CTaskListWnd::_ComputeJumpViewPosition(struct ITaskBtnGroup *,int,struct Windows::Foundation::Point &,enum Windows::UI::Xaml::HorizontalAlignment &,enum Windows::UI::Xaml::VerticalAlignment &)const )"}, &CTaskListWnd_ComputeJumpViewPosition_Original, CTaskListWnd_ComputeJumpViewPosition_Hook, true},  // i18n-en: symbol names
     };
-    // Windhawk skips its online symbol cache for a local build (a `local@` ID), which then needs
-    // Microsoft's PDB and stays unloaded on a Windows build that has none published. Naming the
-    // published mod's entry, the catalog build's default, lets both resolve the same way.
-    WH_HOOK_SYMBOLS_OPTIONS options{sizeof(options)};
-    options.onlineCacheUrl = L"https://ramensoftware.github.io/windhawk-mod-symbol-cache/taskbar-ai-quota/";
-    return WindhawkUtils::HookSymbols(h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks), &options);
+    return WindhawkUtils::HookSymbols(h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
 // src/ui/tokens.h
