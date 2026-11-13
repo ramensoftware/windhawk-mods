@@ -52,15 +52,16 @@ switching and a toast.
 ## Notes and limitations
 - Replacement is clipboard-based (copy/paste simulation), so behavior can vary
   in apps with custom clipboard/shortcut handling.
-- In console windows (conhost, Windows Terminal, ConEmu/Cmder, mintty, WezTerm
-  and Alacritty) the copy uses Ctrl+Insert instead of Ctrl+C, because Ctrl+C
-  without a selection discards the typed line and interrupts a running command.
-  The previous-word fallback is skipped there, and the converted text is left
-  on the clipboard instead of being pasted: a terminal selection covers the
-  screen buffer rather than the input line, so pasting would add a duplicate.
-  Delete the original and paste manually; the previous clipboard content isn't
-  restored in that case. Other terminals can still receive Ctrl+C, which may
-  interrupt the running program.
+- In console windows (conhost, Windows Terminal and mintty) the copy uses
+  Ctrl+Insert instead of Ctrl+C, because Ctrl+C without a selection discards the
+  typed line and interrupts a running command. The previous-word fallback is
+  skipped there, and the converted text is left on the clipboard instead of
+  being pasted: a terminal selection covers the screen buffer rather than the
+  input line, so pasting would add a duplicate. Delete the original and paste
+  manually; the previous clipboard content isn't restored in that case. Only
+  terminals whose Ctrl+Insert copies to the Windows clipboard are handled this
+  way; elsewhere (ConEmu/Cmder, WezTerm, Alacritty, PuTTY, VS Code's integrated
+  terminal, ...) the mod sends Ctrl+C, which may interrupt the running program.
 - If the clipboard holds content that can't be preserved (for example a single
   format above 128 MB), the mod beeps and does not convert, so nothing is lost.
 - Editors such as VS Code or Visual Studio copy the current line when nothing
@@ -1473,15 +1474,14 @@ bool IsConsoleWindow(HWND hwnd) {
     if (!GetClassNameW(hwnd, className, ARRAYSIZE(className))) return false;
     // Terminals where a selection lives on the screen buffer rather than in the
     // input line, and where Ctrl+C can reach the running program. Copying uses
-    // Ctrl+Insert there; terminals without a Ctrl+Insert binding simply leave
-    // nothing on the clipboard instead of sending ^C.
+    // Ctrl+Insert there, so only terminals that bind Ctrl+Insert to the Windows
+    // clipboard are listed. WezTerm maps it to the X11 primary selection and
+    // Alacritty doesn't bind it at all, so both keep Ctrl+C, as does every
+    // terminal that isn't listed here.
     static const wchar_t* const kConsoleClasses[] = {
         L"ConsoleWindowClass",             // conhost
         L"CASCADIA_HOSTING_WINDOW_CLASS",  // Windows Terminal
-        L"VirtualConsoleClass",            // ConEmu / Cmder
         L"mintty",                         // Git Bash / Cygwin
-        L"org.wezfurlong.wezterm",         // WezTerm
-        L"Alacritty",                      // Alacritty
     };
     for (const wchar_t* name : kConsoleClasses) {
         if (_wcsicmp(className, name) == 0) return true;
@@ -1528,8 +1528,8 @@ void PerformConversion() {
         DWORD seq = GetClipboardSequenceNumber();
         if (console) {
             // Ctrl+C without a selection discards the typed line and interrupts
-            // a running command in conhost and Windows Terminal, which both
-            // bind Ctrl+Insert to copy instead.
+            // a running command in a console, and these terminals also bind
+            // Ctrl+Insert to copy.
             SendKeyCombo(VK_INSERT, true, false, false, false);
         } else {
             SendKeyCombo('C', true, false, false, false);
@@ -1585,6 +1585,9 @@ void PerformConversion() {
         // original. Leave the converted text on the clipboard for a manual
         // paste, and skip the restore so it isn't immediately overwritten.
         Wh_Log(L"Console window: converted text left on the clipboard");
+        if (s.switchLayout && targetLayout) {
+            ActivateTargetKeyboardLayout(targetLayout);
+        }
         if (s.showNotification) ShowToast();
         return;
     }
