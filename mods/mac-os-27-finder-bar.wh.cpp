@@ -22122,7 +22122,6 @@ static void UpdateActiveApp(HWND fg) {
     bool changed = a.hwnd != g_active.hwnd || a.name != g_active.name;
     g_active = a;
     if (changed) {
-        Wh_Log(L"App ativo: %s", a.name.c_str());
         BuildTopMenus();
         PollStatus(false);  // o layout de teclado é por janela
         RedrawAll();
@@ -23559,7 +23558,6 @@ const UiTr kUiTr[] = {
     {L"Vidro: o mesmo vidro da Central e dos menus", L"Glass: the same glass as the Control Center and menus", L"Vidrio: el mismo vidrio del Centro de control y los menús", L"Verre : le même verre que le Centre de contrôle et les menus", L"Glas: dasselbe Glas wie Kontrollzentrum und Menüs", L"Vetro: lo stesso vetro del Centro di Controllo e dei menu", L"玻璃：与控制中心和菜单相同的玻璃"},
     {L"Formato dos ícones", L"Icon shape", L"Forma de los iconos", L"Forme des icônes", L"Symbolform", L"Forma delle icone", L"图标形状"},
     {L"Nas notificações: círculo ou o formato dos ícones do macOS", L"In notifications: a circle or the macOS icon shape", L"En las notificaciones: círculo o la forma de los iconos de macOS", L"Dans les notifications : un cercle ou la forme des icônes de macOS", L"In Mitteilungen: Kreis oder die Form der macOS-Symbole", L"Nelle notifiche: cerchio o la forma delle icone di macOS", L"通知中：圆形或 macOS 图标形状"},
-    {L"Círculo", L"Circle", L"Círculo", L"Cercle", L"Kreis", L"Cerchio", L"圆形"},
     {L"Formato macOS", L"macOS shape", L"Forma de macOS", L"Forme macOS", L"macOS-Form", L"Forma macOS", L"macOS 形状"},
     {L"Ao fechar a Central", L"When the Control Center closes", L"Al cerrar el Centro de control", L"À la fermeture du Centre de contrôle", L"Beim Schließen des Kontrollzentrums", L"Alla chiusura del Centro di Controllo", L"控制中心关闭时"},
     {L"Cascata: cada linha volta para dentro da linha de cima, de baixo para cima", L"Cascade: each row slides back into the one above, from the bottom up", L"Cascada: cada fila vuelve a entrar en la de arriba, de abajo hacia arriba", L"Cascade : chaque ligne rentre dans celle du dessus, de bas en haut", L"Kaskade: Jede Reihe gleitet von unten nach oben in die darüber zurück", L"Cascata: ogni riga rientra in quella sopra, dal basso verso l’alto", L"层叠：每一行从下往上收回到上一行里"},
@@ -23670,7 +23668,6 @@ const UiTr kUiTr[] = {
     {L"Dispositivo USB", L"USB device", L"Dispositivo USB", L"Périphérique USB", L"USB-Gerät", L"Dispositivo USB", L"USB 设备"},
     {L"Conectado por USB", L"Connected via USB", L"Conectado por USB", L"Connecté en USB", L"Per USB verbunden", L"Connesso via USB", L"已通过 USB 连接"},
     {L"Copiado", L"Copied", L"Copiado", L"Copié", L"Kopiert", L"Copiato", L"已复制"},
-    {L"Salva · clique para abrir", L"Saved · click to open", L"Guardada · haz clic para abrir", L"Enregistrée · cliquez pour ouvrir", L"Gespeichert · zum Öffnen klicken", L"Salvato · fai clic per aprire", L"已保存 · 点击打开"},
     {L"Download concluído", L"Download complete", L"Descarga completada", L"Téléchargement terminé", L"Download abgeschlossen", L"Download completato", L"下载完成"},
     {L"Nenhuma notificação", L"No notifications", L"No hay notificaciones", L"Aucune notification", L"Keine Mitteilungen", L"Nessuna notifica", L"没有通知"},
     {L"Nenhum aviso", L"No notices", L"No hay avisos", L"Aucune alerte", L"Keine Hinweise", L"Nessun avviso", L"没有提醒"},
