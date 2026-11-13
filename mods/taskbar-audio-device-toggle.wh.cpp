@@ -6,7 +6,7 @@
 // @author          Jed
 // @github          https://github.com/jed84
 // @license         MIT
-// @homepage        [https://github.com/jed84/windhawk-taskbar-audio-device-toggle](https://github.com/jed84/windhawk-taskbar-audio-device-toggle)
+// @homepage        https://github.com/jed84/windhawk-taskbar-audio-device-toggle
 // @include         explorer.exe
 // @architecture    x86-64
 // ==/WindhawkMod==
