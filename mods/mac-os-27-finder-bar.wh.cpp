@@ -2528,7 +2528,7 @@ static HANDLE g_updThread = nullptr, g_updStop = nullptr, g_updKick = nullptr;
 // Avisa (por um evento) quando a busca assíncrona do Windows Update termina.
 // ISearchCompletedCallback (wuapi.h), declarado aqui: nem todo SDK o traz.
 static const IID kIID_SearchCompletedCallback = {0x88AEE058, 0xD4B0, 0x4725, {0xA2, 0xF1, 0x81, 0x4A, 0x67, 0xAE, 0x96, 0x4C}};
-struct UpdSearchDone : IUnknown {
+struct UpdSearchDone final : IUnknown {
     LONG refs = 1;
     HANDLE ev;
     explicit UpdSearchDone(HANDLE e) : ev(e) {}
@@ -5328,7 +5328,8 @@ static void CcLayout() {
             y += 22 * s;  // título "Adicionar controles"
             float gap = 11 * s, chipW = (344 * s - gap) / 2, chipH = 42 * s;
             for (size_t i = 0; i < hidden.size(); i++) {
-                float x = left + (i % 2) * (chipW + gap), cy = y + (i / 2) * (chipH + 9 * s);
+                int row = (int)i / 2;  // linha da grade (divisão inteira de propósito)
+                float x = left + (i % 2) * (chipW + gap), cy = y + row * (chipH + 9 * s);
                 g_cc.addRects.push_back({hidden[i], D2D1::RectF(x, cy, x + chipW, cy + chipH)});
             }
             size_t chipRows = (hidden.size() + 1) / 2;
@@ -9349,7 +9350,8 @@ static void TrayComputeLayout() {
     float gx = M + (panelW - cols * cell) / 2;
     g_tray.cells.clear();
     for (int k = 0; k < n; k++) {
-        float x = gx + (k % cols) * cell, y = M + pad + (k / cols) * cell;
+        int row = k / cols;  // linha da grade (divisão inteira de propósito)
+        float x = gx + (k % cols) * cell, y = M + pad + row * cell;
         g_tray.cells.push_back(D2D1::RectF(x + 2 * s, y + 2 * s, x + cell - 2 * s, y + cell - 2 * s));
     }
     g_tray.footerTop = M + panelH - footer;
@@ -15762,7 +15764,8 @@ static D2D1_RECT_F CalCellRect(int i) {
     float s = g_calw.s;
     const D2D1_RECT_F& P = g_calw.panel;
     float cw = (P.right - P.left - 24 * s) / 7, ch = 36 * s;
-    float x = P.left + 12 * s + (i % 7) * cw, y = P.top + 76 * s + (i / 7) * ch;
+    int week = i / 7;  // semana do mês (divisão inteira de propósito)
+    float x = P.left + 12 * s + (i % 7) * cw, y = P.top + 76 * s + week * ch;
     return D2D1::RectF(x, y, x + cw, y + ch);
 }
 
@@ -16595,7 +16598,7 @@ static SRWLOCK g_camLock = SRWLOCK_INIT;
 static std::vector<DWORD> g_camPids;  // processos com a câmera ligada agora
 static bool g_camMonitorOk = false;
 
-struct CamReportCallback : IUnknown {
+struct CamReportCallback final : IUnknown {
     LONG refs = 1;
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
         if (riid == IID_IUnknown || riid == kIID_SensorReportCallback) {
@@ -20886,7 +20889,8 @@ static void Render(Bar* b) {
                 float gap = logo * 0.08f, half = (logo - gap) / 2;
                 float x0 = it.l + ip, y0 = (h - logo) / 2;
                 for (int q = 0; q < 4; q++) {
-                    float qx = x0 + (q % 2) * (half + gap), qy = y0 + (q / 2) * (half + gap);
+                    int qrow = q / 2;  // linha do quadrante (divisão inteira de propósito)
+                    float qx = x0 + (q % 2) * (half + gap), qy = y0 + qrow * (half + gap);
                     b->rt->FillRoundedRectangle(
                         D2D1::RoundedRect(D2D1::RectF(qx, qy, qx + half, qy + half), 1.2f * s, 1.2f * s),
                         b->brush);
