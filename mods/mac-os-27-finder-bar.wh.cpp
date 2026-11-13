@@ -10269,14 +10269,6 @@ static void CALLBACK WinOsdScanTick(HWND, UINT, UINT_PTR, DWORD) {
     }
     // Enquanto o Windows mostra o volume, ela é mantida fora da tela.
     if (WinOsdIslandOnScreen()) {
-        static int logged = 0;
-        if (logged < 6) {  // TEMPORÁRIO
-            logged++;
-            RECT r{};
-            GetWindowRect(g_winOsdIsland, &r);
-            Wh_Log(L"Volume pill back on screen at %d,%d %dx%d ex=%08X", (int)r.left, (int)r.top, (int)(r.right - r.left),
-                   (int)(r.bottom - r.top), (unsigned)GetWindowLongPtrW(g_winOsdIsland, GWL_EXSTYLE));
-        }
         WinOsdIslandHide(g_winOsdIsland);
     } else if (!g_winOsdIsland || !IsWindow(g_winOsdIsland)) {
         if (HWND x = FindWinOsdIsland()) WinOsdIslandHide(x);
