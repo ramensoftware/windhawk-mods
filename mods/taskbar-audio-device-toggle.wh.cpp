@@ -41,8 +41,6 @@ The icon and tooltip always show the real Windows state of the device, so you ca
 - Device matching - Finds the device from the SoundVolumeView ID or an exact Windows endpoint ID. If more than one device matches, it refuses to guess.
 - Recovery - The icon is re-added after an Explorer restart.
 
-<img width="1146" height="453" alt="obraz" src="https://github.com/user-attachments/assets/34a5fd24-b596-4be9-a1a1-5e97e55dfec7" />
-
 Requirement
 The mod needs SoundVolumeView, a free NirSoft tool. It performs the actual enable and disable, because Windows has no public API for this. Download it and set its path in the mod settings. 
 
