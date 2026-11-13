@@ -42,7 +42,7 @@ rates use).
   a Task Manager build whose symbols aren't on Microsoft's symbol server yet,
   the mod falls back to matching the current build's code by byte patterns.
   The patterns are tied to the executable's function table, so moving code
-  around doesn't break the mod. If an update changes the start of a function
+  around doesn't break the mod. If an update changes the code of a function
   the mod hooks, that hook is skipped until the patterns are updated.
 - Restart Task Manager after enabling or disabling the mod. Graph scale labels
   are cached until the graph rescales.
