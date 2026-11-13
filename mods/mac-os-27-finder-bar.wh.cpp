@@ -2,13 +2,13 @@
 // @id              mac-os-27-finder-bar
 // @name            Mac OS 27 Finder Bar
 // @description     A macOS 27-style menu bar for Windows 11: global app menus, system status, Control Center, clock and live glass
-// @version         1.0.0
+// @version         1.1.0
 // @author          Thiago Silva
 // @github          https://github.com/brideinflame-rgb
 // @homepage        https://github.com/brideinflame-rgb/Mac-OS-27-Finder-Bar
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -ldwmapi -ld2d1 -ldwrite -lversion -lshcore -lshell32 -luser32 -lgdi32 -lole32 -loleaut32 -luuid -lwlanapi -lbthprops -lpowrprof -ladvapi32 -lwindowscodecs -lwbemuuid -ldxva2 -lruntimeobject -lwinhttp -lcfgmgr32
+// @compilerOptions -ldwmapi -ld2d1 -ldwrite -lversion -lshcore -lshell32 -luser32 -lgdi32 -lole32 -loleaut32 -luuid -lwlanapi -lbthprops -lpowrprof -ladvapi32 -lwindowscodecs -lwbemuuid -ldxva2 -lruntimeobject -lwinhttp -lcfgmgr32 -lcomdlg32
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -20,19 +20,9 @@ A [Windhawk](https://windhawk.net) mod that adds a macOS 27-style menu bar to th
 
 Available in English, Português, Español, Français, Deutsch, Italiano and 中文（简体）. The language follows Windows automatically, or can be picked in the settings.
 
-![The bar](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/bar.png)
+![Mac OS 27 Finder Bar in use](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/demo.gif)
 
-![Control Center](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/control-center.png)
-
-![Notifications](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/notifications.png)
-
-![Logo menu](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/logo-menu.png)
-
-![Settings window](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/settings.png)
-
-![Control Center in action](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/control-center.gif)
-
-![Animated weather widget](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/weather.gif)
+[Watch in full quality (MP4)](https://github.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/blob/main/screenshots/demo.mp4)
 
 ---
 
@@ -75,15 +65,17 @@ Small glass pills drop from the bar for headphones, audio output, low battery, c
 
 Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Notice pills** (off by default) and the bar shows your apps' notifications:
 
-- in the pill and in the bell panel, grouped by app
-- **reply** to messages (like WhatsApp) right from the pill, when the app supports replies
+- in the pill and in the bell panel, grouped by app; with liquid glass on, each notification is its own glass card in the Control Center's style
+- a round picture on each notification: the sender's photo when the app saves it on the PC with the notification (with the app's icon in the corner), otherwise the app's icon. Photos sent as web links (WhatsApp does this) aren't downloaded
+- **reply** to messages (like WhatsApp) right from the pill or from the Reply button in the panel, when the app supports replies
 - **drag** a notification aside in the panel to clear it
 - **Only the bar shows notifications**: optional; Windows' own banners move off the screen while the bar shows them, and come back when the option or the mod is turned off
 
 ## Bar and glass
 
-- Bar background: fully transparent (default), Windows blur glass, or liquid glass (experimental); opaque when the active app is maximized (optional)
+- Bar background: fully transparent (default), Windows blur glass, liquid glass (experimental) or custom liquid glass; opaque when the active app is maximized (optional)
 - **Live glass**: panels blur what's behind them in real time, with an experimental liquid glass with edge refraction (on by default)
+- **Custom liquid glass** (the theme from Siri Plus Launchpad): your color at the top, fading to clear glass at the bottom, with a fine line of light along the bottom edge. For the panels, the bar's background or both; color, strength and how far down the color goes are set in Menu Bar Settings
 - Menus use their own frosted glass (with a transparency slider) or **the same glass as the Control Center**
 - Light, dark or automatic theme, nine selection colors for the bar and menus, font, font size, icon size and bar height
 - Hides with full-screen apps, can hide automatically until the mouse touches the top, and shows on every monitor (each optional)
@@ -103,6 +95,8 @@ Some Control Center tiles and menu items change real Windows settings, the same 
 - **Brightness**, **default audio device**, **volume and mute**, **microphone mute**, **Wi-Fi and Bluetooth radios**, **Wi-Fi network** and **display mode** (projection)
 
 Nothing is changed unless you click the matching tile or item.
+
+While the bar's volume and brightness indicator is on, Windows' own volume pill is kept minimized so only one shows. Turning the indicator or the mod off brings it back.
 
 ## Network use
 
@@ -184,11 +178,11 @@ The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so
   $name: Animation when opening the Control Center, menus and tray
   $name:pt-BR: Animação ao abrir a central, os menus e a bandeja
   $options:
-  - cascade: Cascade (tiles appear row by row, growing)
+  - cascade: Cascade (in the Control Center, each row slides out from under the one above)
   - fade: Fade only
   - none: None
   $options:pt-BR:
-  - cascade: Cascata (blocos aparecem linha a linha, crescendo)
+  - cascade: Cascata (na Central, cada linha sai de dentro da linha de cima)
   - fade: Só esmaecer
   - none: Nenhuma
 - ccOnStyle: circle
@@ -243,7 +237,6 @@ The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
 #include <audiopolicy.h>
-#include <appmodel.h>
 #include <propidl.h>
 #include <wincodec.h>
 #include <wbemidl.h>
@@ -266,6 +259,8 @@ The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <functional>
+#include <memory>
 #include <map>
 #include <set>
 #include <uiautomation.h>
@@ -337,12 +332,16 @@ struct Settings {
     int islStyle, islSize, islDur, islIn, islOut, islPos;  // pílulas de aviso
     int npLayout, npSize;  // painel Tocando agora
     int npBar;             // barra de progresso: 0 linha, 1 colorida, 2 onda
-    int barStyle;  // 0 vidro, 1 transparente, 2 vidro líquido
+    int barStyle;  // 0 vidro, 1 transparente, 2 vidro líquido, 3 vidro líquido personalizado
+    DWORD tintColor;          // Vidro líquido personalizado: a cor (0xRRGGBB)
+    int tintLevel, tintReach;  // força da cor no topo e até onde ela desce (%)
     int selBar, selMenu;  // cor da seleção: índice em kSelPalette, -1 = fosca
     int menuGlass;        // 0 vidro fosco próprio, 1 igual à Central
     int menuTransp;       // transparência dos menus no estilo vidro
     int searchTarget;     // ícone de busca: 0 pesquisa do Windows, 1 Siri Plus Launchpad
     int openAnim;  // 0 nenhuma, 1 esmaecer, 2 cascata
+    int ntfIconShape;  // ícones das notificações: 0 círculo, 1 formato macOS (squircle)
+    int ccCloseAnim;  // ao fechar a Central: 0 cascata, 1 encolher, 2 esmaecer, 3 deslizar para cima, 4 nenhuma
     bool showOsd;
     bool flyouts;
     bool bgBlur;
@@ -402,6 +401,7 @@ struct GlassPrefs {
     int refraction = 60;    // refração nas bordas (%)
     int blur = 30;          // desfoque do fundo no vidro líquido (%)
     bool live = false;      // vidro líquido acompanha o fundo ao vivo
+    bool tinted = false;    // Vidro líquido personalizado: a cor no topo, vidro limpo embaixo
 };
 static GlassPrefs g_glass;
 // Distância extra entre a barra e os painéis com vidro líquido (as bordas
@@ -416,14 +416,15 @@ static void (*g_wxGlassChanged)() = nullptr;  // redesenha o widget aberto
 static void LoadGlassPrefs() {
     wchar_t buf[128] = {};
     Wh_GetStringValue(L"glass", buf, ARRAYSIZE(buf));
-    int t, c, l, r, b, v;
-    if (swscanf(buf, L"%d;%d;%d;%d;%d;%d", &t, &c, &l, &r, &b, &v) == 6) {
+    int t, c, l, r, b, v, k = 0;
+    if (swscanf(buf, L"%d;%d;%d;%d;%d;%d;%d", &t, &c, &l, &r, &b, &v, &k) >= 6) {
         g_glass.transparency = std::clamp(t, 0, 100);
         g_glass.clear = c != 0;
         g_glass.liquid = l != 0;
         g_glass.refraction = std::clamp(r, 0, 100);
         g_glass.blur = std::clamp(b, 0, 100);
         g_glass.live = v != 0;
+        g_glass.tinted = k != 0;
     }
 }
 
@@ -448,8 +449,8 @@ static void SaveLater(PCWSTR key, const std::wstring& v) {
 
 static void SaveGlassPrefs() {
     wchar_t buf[128];
-    swprintf(buf, ARRAYSIZE(buf), L"%d;%d;%d;%d;%d;%d", g_glass.transparency, g_glass.clear ? 1 : 0,
-             g_glass.liquid ? 1 : 0, g_glass.refraction, g_glass.blur, g_glass.live ? 1 : 0);
+    swprintf(buf, ARRAYSIZE(buf), L"%d;%d;%d;%d;%d;%d;%d", g_glass.transparency, g_glass.clear ? 1 : 0,
+             g_glass.liquid ? 1 : 0, g_glass.refraction, g_glass.blur, g_glass.live ? 1 : 0, g_glass.tinted ? 1 : 0);
     SaveLater(L"glass", buf);
 }
 
@@ -477,6 +478,7 @@ MenuGlassScope::MenuGlassScope(bool enable)
     g_glass.liquid = false;
     g_glass.live = false;
     g_glass.clear = false;
+    g_glass.tinted = false;
     g_glass.transparency = g_settings.menuTransp;
 }
 // Distância entre a barra e os menus (só afastam com o vidro líquido).
@@ -498,6 +500,9 @@ static const UiDefault kUiDefaults[] = {
     {L"fontSize", L"13"},
     {L"iconScale", L"100"},
     {L"barStyle", L"transparent"},
+    {L"tintColor", L"#050505"},
+    {L"tintLevel", L"100"},
+    {L"tintReach", L"29"},
     {L"selectionBar", L"blue"},
     {L"selectionMenu", L"blue"},
     {L"menuGlass", L"glass"},
@@ -517,6 +522,8 @@ static const UiDefault kUiDefaults[] = {
     {L"showVolume", L"1"},
     {L"showTray", L"1"},
     {L"ccDimScreen", L"0"},
+    {L"ccCloseAnim", L"cascade"},
+    {L"ntfIconShape", L"round"},
     {L"showOsd", L"1"},
     {L"flyouts", L"1"},
     {L"showControlCenter", L"1"},
@@ -804,7 +811,16 @@ static void LoadSettings() {
     if (s.islDur < 15 || s.islDur > 80) s.islDur = 26;
     {
         std::wstring bs = OvrStr(L"barStyle");
-        s.barStyle = bs == L"transparent" ? 1 : bs == L"liquid" ? 2 : 0;
+        s.barStyle = bs == L"transparent" ? 1 : bs == L"liquid" ? 2 : bs == L"tinted" ? 3 : 0;
+        std::wstring tc = OvrStr(L"tintColor");
+        s.tintColor = 0x050505;
+        if (tc.size() == 7 && tc[0] == L'#') {
+            wchar_t* end = nullptr;
+            unsigned long x = wcstoul(tc.c_str() + 1, &end, 16);
+            if (end && *end == 0) s.tintColor = (DWORD)x & 0xFFFFFF;
+        }
+        s.tintLevel = std::clamp(OvrInt(L"tintLevel"), 0, 100);
+        s.tintReach = std::clamp(OvrInt(L"tintReach"), 0, 100);
     }
     s.selBar = SelIndex(OvrStr(L"selectionBar"));
     s.selMenu = SelIndex(OvrStr(L"selectionMenu"));
@@ -817,6 +833,11 @@ static void LoadSettings() {
         s.openAnim = a == L"none" ? 0 : a == L"fade" ? 1 : 2;
     }
     s.bgBlur = OvrInt(L"ccDimScreen") != 0;
+    {
+        std::wstring ca = OvrStr(L"ccCloseAnim");
+        s.ntfIconShape = OvrStr(L"ntfIconShape") == L"squircle" ? 1 : 0;
+        s.ccCloseAnim = ca == L"shrink" ? 1 : ca == L"fade" ? 2 : ca == L"slide" ? 3 : ca == L"none" ? 4 : 0;
+    }
     s.showOsd = OvrInt(L"showOsd") != 0;
     s.flyouts = OvrInt(L"flyouts") != 0;
     s.ccFullPill = ReadStr(L"ccOnStyle") == L"pill";
@@ -961,7 +982,6 @@ struct Status {
 struct ExtState {
     int dnd = -1;                               // Não Perturbe (-1 desconhecido)
     std::vector<std::wstring> micApps, camApps; // apps usando microfone/câmera agora
-    std::vector<std::wstring> camKeys;          // de cada app da câmera: caminho do .exe ou família do pacote
     int micMuted = -1;                          // microfone padrão silenciado (-1 sem microfone)
     bool mediaHas = false, playing = false;
     std::wstring title, artist;
@@ -1317,6 +1337,12 @@ static DWORD ReadPersonalizeDword(PCWSTR value, DWORD fallback) {
     return v;
 }
 
+static bool TintIsLight() {
+    DWORD c = g_settings.tintColor;
+    float r = ((c >> 16) & 255) / 255.0f, g = ((c >> 8) & 255) / 255.0f, b = (c & 255) / 255.0f;
+    return 0.2126f * r + 0.7152f * g + 0.0722f * b > 0.6f;
+}
+
 static void ResolveTheme() {
     PersonalizeForget();
     if (g_settings.theme == 1) g_light = false;
@@ -1325,6 +1351,9 @@ static void ResolveTheme() {
     if (g_settings.panelTheme == 1) g_panelLight = false;
     else if (g_settings.panelTheme == 2) g_panelLight = true;
     else g_panelLight = ReadPersonalizeDword(L"AppsUseLightTheme", 1) != 0;
+    // Vidro líquido personalizado: o texto segue a cor escolhida (escuro numa cor clara).
+    if (g_glass.tinted) g_panelLight = TintIsLight();
+    if (g_settings.barStyle == 3) g_light = TintIsLight();
 }
 
 struct ACCENT_POLICY { int AccentState; int AccentFlags; DWORD GradientColor; int AnimationId; };
@@ -5600,6 +5629,27 @@ static ID2D1LinearGradientBrush* MakeGradient(ID2D1RenderTarget* rt, D2D1_POINT_
     return lg;
 }
 
+// Vidro líquido personalizado (o mesmo do Siri Plus Launchpad): a cor é sólida
+// no topo e dá lugar ao vidro limpo mais embaixo, onde o fundo refratado aparece.
+// A troca é espalhada numa faixa larga e segue uma curva em S sem quinas, em
+// muitos degraus: a cor afina por igual, sem uma linha onde começa ou termina.
+// top/bottom: opacidade no topo e embaixo; reach: onde fica a troca (0..1).
+static ID2D1LinearGradientBrush* MakeTintBrush(ID2D1RenderTarget* rt, float y0, float y1, float top, float bottom,
+                                               float reach) {
+    const DWORD c = g_settings.tintColor;
+    const float cr = ((c >> 16) & 255) / 255.0f, cg = ((c >> 8) & 255) / 255.0f, cb = (c & 255) / 255.0f;
+    constexpr int kStops = 25;
+    const float soft = 0.48f;
+    D2D1_GRADIENT_STOP st[kStops];
+    for (int i = 0; i < kStops; i++) {
+        float t = i / (float)(kStops - 1);
+        float u = std::clamp((t - (reach - soft)) / (2 * soft), 0.0f, 1.0f);
+        float e = u * u * u * (u * (u * 6 - 15) + 10);  // smootherstep
+        st[i] = {t, D2D1::ColorF(cr, cg, cb, top + (bottom - top) * e)};
+    }
+    return MakeGradient(rt, D2D1::Point2F(0, y0), D2D1::Point2F(0, y1), st, kStops);
+}
+
 // ===========================================================================
 // Vidro líquido (experimental), o mesmo do Siri Plus Launchpad
 //
@@ -5670,7 +5720,20 @@ static void LqFree(LiquidSurface*& l) {
     l = nullptr;
 }
 
+// Um painel que está sumindo (animação de fechar) ainda está na tela quando o
+// próximo painel tira a foto do fundo, e entraria nela (ex.: a Central atrás do
+// calendário). Ele sai das capturas ao começar a fechar; a foto seguinte espera
+// o Windows redesenhar a tela uma vez sem ele.
+static bool g_captureNeedsFlush = false;
+static void HideFromCapture(HWND h) {
+    if (h && IsWindow(h) && SetWindowDisplayAffinity(h, WDA_EXCLUDEFROMCAPTURE)) g_captureNeedsFlush = true;
+}
+
 static bool LqCapture(LiquidSurface& l, RECT rc, bool hideBars = true) {
+    if (g_captureNeedsFlush) {
+        g_captureNeedsFlush = false;
+        DwmFlush();
+    }
     RECT vs = {GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN), 0, 0};
     vs.right = vs.left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
     vs.bottom = vs.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
@@ -6034,6 +6097,45 @@ static void DrawLiquidGlass(ID2D1RenderTarget* rt, ID2D1SolidColorBrush* br, con
 
     // 1b. Vidro líquido: o fundo refratado por baixo da tinta.
     if (g_lqCur && !solidWhite && LqDraw(rt, *g_lqCur, r, radius, s)) glassOk = true;
+
+    // Vidro líquido personalizado (Siri Plus Launchpad): a cor escolhida no
+    // topo, sumindo em vidro limpo; a luz se junta numa linha fina na borda de
+    // baixo, que sobe pelos cantos e some, e o topo fica só com uma borda fraca.
+    if (g_glass.tinted && !solidWhite) {
+        float top = g_settings.tintLevel / 100.0f;
+        // Transparente ↔ tingido: 100 % transparente = limpo embaixo; 80 % = um véu leve.
+        float bottom = std::min(top, (100 - g_glass.transparency) / 100.0f * 0.8f);
+        // Sem refração nem desfoque atrás, um fundo limpo deixaria o que está atrás nítido sob o texto.
+        if (!glassOk) bottom = std::max(bottom, std::min(top, 0.55f));
+        // Cada peça tem o seu degradê, inclusive cada pílula e botão da Central.
+        if (auto* body = MakeTintBrush(rt, r.top, r.bottom, top * tint, bottom * tint, g_settings.tintReach / 100.0f)) {
+            rt->FillRoundedRectangle(rr, body);
+            body->Release();
+        }
+        if (hovered) {
+            br->SetColor(g_light ? D2D1::ColorF(0, 0, 0, 0.05f) : D2D1::ColorF(1, 1, 1, 0.07f));
+            rt->FillRoundedRectangle(rr, br);
+        }
+        // O halo suave da linha, por dentro da borda.
+        D2D1_GRADIENT_STOP glowLine[] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.0f)}, {0.62f, D2D1::ColorF(1, 1, 1, 0.0f)},
+                                         {0.88f, D2D1::ColorF(1, 1, 1, 0.04f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.13f)}};
+        if (auto* glow = MakeGradient(rt, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.bottom), glowLine, 4)) {
+            float gw = 2.4f * s, gi = gw / 2 + 0.4f * s, gr = std::max(0.0f, radius - gi);
+            rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + gi, r.top + gi, r.right - gi, r.bottom - gi), gr, gr), glow, gw);
+            glow->Release();
+        }
+        // A linha fina: forte no centro da base, fraca no topo.
+        D2D1_GRADIENT_STOP line[] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.16f)}, {0.12f, D2D1::ColorF(1, 1, 1, 0.05f)},
+                                     {0.55f, D2D1::ColorF(1, 1, 1, 0.05f)}, {0.80f, D2D1::ColorF(1, 1, 1, 0.14f)},
+                                     {0.93f, D2D1::ColorF(1, 1, 1, 0.36f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.62f)}};
+        if (auto* edge = MakeGradient(rt, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.bottom), line, 6)) {
+            float bw = std::max(0.75f, 0.75f * s), half = bw / 2, rad = std::max(0.0f, radius - half);
+            rt->DrawRoundedRectangle(
+                D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half), rad, rad), edge, bw);
+            edge->Release();
+        }
+        return;
+    }
 
     // Estilo transparente (Siri Plus Launchpad): tinta neutra que a
     // transparência controla, brilho fino em cima e uma borda suave.
@@ -6764,9 +6866,20 @@ static void CcDrawPillButton(int id, const std::wstring& src, bool strong) {
 static bool g_ccClosing = false, g_ccCloseRefocus = false;
 static float g_ccPivotX = -1;  // x do botão da central (no painel): de onde ela desce
 static ULONGLONG g_ccCloseTick = 0;
-static const double kCcCloseMs = 240;
+static double g_ccCloseMs = 240;  // duração do fechamento escolhido
 static float CcCloseProgress() {
-    return g_ccClosing ? (float)std::min(1.0, (GetTickCount64() - g_ccCloseTick) / kCcCloseMs) : 0.0f;
+    return g_ccClosing ? (float)std::min(1.0, (GetTickCount64() - g_ccCloseTick) / g_ccCloseMs) : 0.0f;
+}
+// Tempos da cascata (abrir e fechar): espaço entre as linhas e o movimento de cada bloco.
+static const double kCascOpenStep = 55, kCascOpenMs = 340, kCascCloseStep = 40, kCascCloseMs = 240;
+// Quantas linhas de blocos a Central tem agora (a cascata de fechar dura conforme).
+static int CcRowCount() {
+    std::vector<float> tops;
+    for (int id : g_ccOrder) tops.push_back(std::round(g_cc.rc[id].top));
+    if (!g_cc.edit) tops.push_back(std::round(g_cc.rc[CC_EDIT].top));
+    std::sort(tops.begin(), tops.end());
+    tops.erase(std::unique(tops.begin(), tops.end()), tops.end());
+    return std::max(1, (int)tops.size());
 }
 static D2D1_RECT_F g_ccFrom[CC_TILE_COUNT];
 static ULONGLONG g_ccMoveTick = 0;
@@ -6887,21 +7000,95 @@ static void CcRender() {
     AnimV openAv = AnimAt(t, 0, 380.0, 0.5f, -22 * s);
     if (g_ccClosing) {
         float e = closeP * closeP;
-        closeAv.a = 1 - e;
-        closeAv.sc = 1 - 0.5f * e;
-        closeAv.dy = -22 * s * e;
         closeAv.done = false;
+        switch (g_settings.ccCloseAnim) {
+            case 2:  // esmaecer
+                closeAv.a = 1 - closeP;
+                break;
+            case 3:  // deslizar para cima
+                closeAv.a = 1 - e;
+                closeAv.dy = -48 * s * e;
+                break;
+            default:  // encolher de volta para o botão
+                closeAv.a = 1 - e;
+                closeAv.sc = 1 - 0.5f * e;
+                closeAv.dy = -22 * s * e;
+        }
     }
+    // Cascata de verdade: cada bloco sai de dentro do bloco de cima, linha por
+    // linha. Ele começa escondido atrás da borda de baixo do bloco acima (que
+    // também está descendo) e desliza para o lugar dele; a primeira linha sai
+    // do topo do painel.
+    std::map<int, float> cascDy, cascClip;
+    const bool cascadeClose = g_ccClosing && g_settings.ccCloseAnim == 0;
+    const bool cascade = (g_cc.animating && !g_ccClosing && g_settings.openAnim == 2) || cascadeClose;
+    if (cascade) {
+        std::vector<int> ids(g_ccOrder.begin(), g_ccOrder.end());
+        if (!g_cc.edit) ids.push_back(CC_EDIT);
+        std::vector<float> tops;
+        for (int id : ids) tops.push_back(std::round(g_cc.rc[id].top));
+        std::sort(tops.begin(), tops.end());
+        tops.erase(std::unique(tops.begin(), tops.end()), tops.end());
+        float panelTop = g_cc.M;
+        // O bloco "pai": o que está logo acima, cruzando na horizontal.
+        std::map<int, int> parent;
+        for (int id : ids) {
+            const D2D1_RECT_F& r = g_cc.rc[id];
+            int best = -1;
+            for (int o : ids) {
+                const D2D1_RECT_F& q = g_cc.rc[o];
+                if (o == id || q.bottom > r.top + 1 || q.right <= r.left || q.left >= r.right) continue;
+                if (best < 0 || q.bottom > g_cc.rc[best].bottom) best = o;
+            }
+            parent[id] = best;
+        }
+        std::function<float(int)> dyOf = [&](int id) -> float {
+            auto f = cascDy.find(id);
+            if (f != cascDy.end()) return f->second;
+            const D2D1_RECT_F& r = g_cc.rc[id];
+            int row = (int)(std::lower_bound(tops.begin(), tops.end(), std::round(r.top)) - tops.begin());
+            float e;
+            if (cascadeClose) {
+                // Ao fechar: de baixo para cima, cada bloco volta para dentro do de cima.
+                double tc = (double)(GetTickCount64() - g_ccCloseTick);
+                int back = (int)tops.size() - 1 - row;
+                float p = (float)std::clamp((tc - back * kCascCloseStep) / kCascCloseMs, 0.0, 1.0);
+                e = 1 - p * p * p;
+            } else {
+                float p = (float)std::clamp((t - row * kCascOpenStep) / kCascOpenMs, 0.0, 1.0);
+                if (p < 1) allDone = false;
+                e = EaseOutBack(p);
+            }
+            int par = parent[id];
+            float base = par >= 0 ? g_cc.rc[par].bottom : panelTop;
+            float clip = base + (par >= 0 ? dyOf(par) : 0);
+            float h = r.bottom - r.top, gap = r.top - base;
+            float top = clip - h + (gap + h) * e;  // escondido logo acima da linha de corte -> no lugar
+            cascClip[id] = clip;
+            return cascDy[id] = top - r.top;
+        };
+        for (int id : ids) dyOf(id);
+    }
+
     for (int id : g_ccOrder) {
         const D2D1_RECT_F& ar = g_cc.rc[id];
         AnimV av = openAv;
-        if (!av.done) allDone = false;
+        if (cascade) {
+            av = AnimV();
+            av.dy = cascDy[id];
+            av.done = false;
+        }
+        if (!av.done && !cascade) allDone = false;
         D2D1_POINT_2F pivot = closePivot;
-        if (g_ccClosing) {
+        if (g_ccClosing && !cascade) {
             av = closeAv;
             pivot = closePivot;
         }
-        if (g_cc.animating || g_ccClosing) CcGlassAnimate(vi, ar, av, pivot);
+        if (g_cc.animating || g_ccClosing) {
+            AnimV gv = av;
+            if (cascade) gv.a = std::clamp((ar.bottom + av.dy - cascClip[id]) / std::max(1.0f, ar.bottom - ar.top), 0.0f, 1.0f);
+            CcGlassAnimate(vi, ar, gv, pivot);
+        }
         // Troca de forma/lugar em andamento: o bloco é desenhado onde está agora.
         D2D1_RECT_F disp = id == dragged ? ar : CcAnimRect(id);
         bool moving = !RectEq(disp, ar);
@@ -6944,6 +7131,9 @@ static void CcRender() {
             g_cc.rt->SetTransform(tileM);
         }
         bool anim = animLayer && !AnimIsIdentity(av);
+        bool clipped = cascade && std::fabs(av.dy) > 0.05f;
+        if (clipped)  // só aparece abaixo da borda do bloco de cima
+            g_cc.rt->PushAxisAlignedClip(D2D1::RectF(-10000, cascClip[id], 10000, 100000), D2D1_ANTIALIAS_MODE_ALIASED);
         if (anim) PushAnim(g_cc.rt, animLayer, av, pivot, tileM);
         CcDrawTile(id, sh);
         if (g_cc.edit) {
@@ -6952,19 +7142,32 @@ static void CcRender() {
             if (CcCanResize(id)) CcDrawResizeArc(id, ca);
         }
         if (anim) PopAnim(g_cc.rt, tileM);
+        if (clipped) g_cc.rt->PopAxisAlignedClip();
     }
 
     if (!g_cc.edit) {
         const D2D1_RECT_F& er = g_cc.rc[CC_EDIT];
         AnimV av = openAv;
-        if (!av.done) allDone = false;
+        if (cascade) {
+            av = AnimV();
+            av.dy = cascDy[CC_EDIT];
+            av.done = false;
+        }
+        if (!av.done && !cascade) allDone = false;
         D2D1_POINT_2F pivot = closePivot;
-        if (g_ccClosing) {
+        if (g_ccClosing && !cascade) {
             av = closeAv;
             pivot = closePivot;
         }
-        if (g_cc.animating || g_ccClosing) CcGlassAnimate(vi, er, av, pivot);
+        if (g_cc.animating || g_ccClosing) {
+            AnimV gv = av;
+            if (cascade) gv.a = std::clamp((er.bottom + av.dy - cascClip[CC_EDIT]) / std::max(1.0f, er.bottom - er.top), 0.0f, 1.0f);
+            CcGlassAnimate(vi, er, gv, pivot);
+        }
         bool anim = animLayer && !AnimIsIdentity(av);
+        bool clipped = cascade && std::fabs(av.dy) > 0.05f;
+        if (clipped)
+            g_cc.rt->PushAxisAlignedClip(D2D1::RectF(-10000, cascClip[CC_EDIT], 10000, 100000), D2D1_ANTIALIAS_MODE_ALIASED);
         if (anim) PushAnim(g_cc.rt, animLayer, av, pivot);
         CcDrawPillButton(CC_EDIT, L"Editar controles", false);
         if (g_ccPowerBox.right > g_ccPowerBox.left) {
@@ -7001,6 +7204,7 @@ static void CcRender() {
             }
         }
         if (anim) PopAnim(g_cc.rt);
+        if (clipped) g_cc.rt->PopAxisAlignedClip();
     } else {
         if (!g_cc.addRects.empty()) {
             float top = g_cc.addRects.front().second.top - 22 * s;
@@ -7108,7 +7312,8 @@ static void CcRefreshLocal() {
 // cima à direita e some), em vez de sumir de uma vez.
 static void CloseControlCenter(bool refocus) {
     if (!g_cc.hwnd) return;
-    if (g_settings.openAnim == 0) {
+    if (g_settings.openAnim == 0 || g_settings.ccCloseAnim == 4) {
+        g_captureNeedsFlush = true;
         DestroyWindow(g_cc.hwnd);  // WM_DESTROY limpa o resto
         if (refocus) FocusActive();
         return;
@@ -7117,6 +7322,10 @@ static void CloseControlCenter(bool refocus) {
     if (g_ccClosing) return;
     g_ccClosing = true;
     g_ccCloseTick = GetTickCount64();
+    g_ccCloseMs = g_settings.ccCloseAnim == 0 ? (CcRowCount() - 1) * kCascCloseStep + kCascCloseMs
+                : g_settings.ccCloseAnim == 2 ? 200 : g_settings.ccCloseAnim == 3 ? 260 : 240;
+    HideFromCapture(g_cc.hwnd);
+    HideFromCapture(g_cc.glass);
     g_cc.animating = false;
     SetTimer(g_cc.hwnd, 6, 10, nullptr);
 }
@@ -7373,7 +7582,8 @@ static LRESULT CALLBACK CcWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (wp == 6) {  // fechando: volta para o ícone
                 float p = CcCloseProgress();
                 if (g_cc.backdrop) BackdropOpacity(g_cc.backdrop, 1 - p);
-                CcSetGlassOpacity(1 - p * p);
+                // Na cascata cada pedaço de vidro some com o seu bloco.
+                CcSetGlassOpacity(g_settings.ccCloseAnim == 0 ? 1.0f : 1 - p * p);
                 if (p >= 1) {
                     KillTimer(hwnd, 6);
                     bool refocus = g_ccCloseRefocus;
@@ -9325,6 +9535,7 @@ static void LayoutTrayPopup() {
 static void CloseTrayPopup(bool refocus) {
     g_tray.ctxActive = false;
     if (!g_tray.hwnd) return;
+    g_captureNeedsFlush = true;  // a próxima foto do fundo sem a bandeja
     DestroyWindow(g_tray.hwnd);  // WM_DESTROY limpa o resto
     if (refocus) FocusActive();
 }
@@ -9517,6 +9728,7 @@ struct Osd {
     ID2D1DCRenderTarget* rt = nullptr;
     ID2D1SolidColorBrush* brush = nullptr;
     IDWriteTextFormat* fIcon = nullptr;
+    IDWriteTextFormat* fPct = nullptr;  // a porcentagem à direita
     HDC memDC = nullptr;
     HBITMAP dib = nullptr;
     HGDIOBJ oldBmp = nullptr;
@@ -9536,6 +9748,7 @@ static void OsdReleaseGraphics() {
     SafeRelease(g_osd.brush);
     SafeRelease(g_osd.rt);
     SafeRelease(g_osd.fIcon);
+    SafeRelease(g_osd.fPct);
     if (g_osd.memDC) {
         if (g_osd.oldBmp) SelectObject(g_osd.memDC, g_osd.oldBmp);
         DeleteDC(g_osd.memDC);
@@ -9634,16 +9847,28 @@ static void OsdRender() {
 
     D2D1_COLOR_F fg = D2D1::ColorF(1, 1, 1, 0.98f);
     int v = g_osd.mute ? 0 : g_osd.value;
-    wchar_t glyph = g_osd.kind == 1 ? 0xE706 : v <= 0 ? 0xE74F : v < 34 ? 0xE993 : v < 67 ? 0xE994 : 0xE995;
     {
-        (void)glyph;
         float cx = P.left + 42 * s, cy = (P.top + P.bottom) / 2;
         if (g_osd.kind == 1) DrawLevelSun(rt, br, fg, cx, cy, 26 * s, v);
         else DrawLevelVol(rt, br, fg, cx, cy, 26 * s, v, g_osd.mute);
     }
     float cy = (P.top + P.bottom) / 2;
-    DrawSegmentTrack(rt, br, D2D1::RectF(P.left + 74 * s, cy - 2.5f * s, P.right - 34 * s, cy + 2.5f * s), v, s,
+    // A porcentagem à direita da barra de segmentos.
+    if (!g_osd.fPct) {
+        g_osd.fPct = MakeFormat(g_settings.fontFamily.c_str(), DWRITE_FONT_WEIGHT_SEMI_BOLD, 15 * s);
+        if (g_osd.fPct) {
+            g_osd.fPct->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+            g_osd.fPct->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        }
+    }
+    DrawSegmentTrack(rt, br, D2D1::RectF(P.left + 74 * s, cy - 2.5f * s, P.right - 78 * s, cy + 2.5f * s), v, s,
                      0.20f);
+    if (g_osd.fPct) {
+        wchar_t pct[8];
+        swprintf(pct, ARRAYSIZE(pct), L"%d%%", std::clamp(v, 0, 100));
+        br->SetColor(fg);
+        rt->DrawText(pct, (UINT32)wcslen(pct), g_osd.fPct, D2D1::RectF(P.right - 74 * s, P.top, P.right - 26 * s, P.bottom), br);
+    }
     if (anim) PopAnim(rt);
     HRESULT hr = rt->EndDraw();
     SafeRelease(layer);
@@ -9698,7 +9923,38 @@ static LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
+// A pílula de volume e brilho do próprio Windows (a janela NativeHWNDHost com
+// um DirectUIHWND, do Explorer). Com o indicador da barra ligado, ela fica
+// minimizada, e por isso não aparece mais; volta ao normal ao desligar o
+// indicador ou o mod. O Windows só cria essa janela na primeira vez que o
+// volume muda, então ela pode aparecer uma vez antes de ser escondida.
+static HWND g_winOsdHidden = nullptr;
+static HWND FindWinOsd() {
+    HWND h = nullptr;
+    while ((h = FindWindowExW(nullptr, h, L"NativeHWNDHost", L"")) != nullptr) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(h, &pid);
+        if (pid == ShellPid() && FindWindowExW(h, nullptr, L"DirectUIHWND", L"")) return h;
+    }
+    return nullptr;
+}
+static void WinOsdApply() {
+    if (g_settings.showOsd) {
+        HWND h = FindWinOsd();
+        if (h && !IsIconic(h)) ShowWindow(h, SW_MINIMIZE);
+        if (h) g_winOsdHidden = h;
+    } else if (g_winOsdHidden) {
+        if (IsWindow(g_winOsdHidden) && IsIconic(g_winOsdHidden)) ShowWindow(g_winOsdHidden, SW_RESTORE);
+        g_winOsdHidden = nullptr;
+    }
+}
+static void WinOsdRestore() {
+    if (g_winOsdHidden && IsWindow(g_winOsdHidden) && IsIconic(g_winOsdHidden)) ShowWindow(g_winOsdHidden, SW_RESTORE);
+    g_winOsdHidden = nullptr;
+}
+
 static void OsdShow(int kind, int value, bool mute) {
+    WinOsdApply();  // a do Windows não aparece junto
     if (!g_settings.showOsd || g_menuOpen || g_cc.hwnd || !g_gm.empty() || g_bars.empty()) return;
     value = std::clamp(value, 0, 100);
     ULONGLONG now = GetTickCount64();
@@ -10118,6 +10374,7 @@ static void FlyApply() {
 
 static void FlyClose(bool refocus) {
     if (!g_fly.hwnd) return;
+    g_captureNeedsFlush = true;  // a próxima foto do fundo sem esta pílula
     DestroyWindow(g_fly.hwnd);
     if (refocus) FocusActive();
 }
@@ -10872,11 +11129,14 @@ static void NpRender() {
 static void NpClose() {
     if (!g_np.hwnd) return;
     if (g_settings.openAnim == 0) {
+        g_captureNeedsFlush = true;
         DestroyWindow(g_np.hwnd);
         return;
     }
     if (g_np.closing) return;
     g_np.closing = true;
+    HideFromCapture(g_np.hwnd);
+    HideFromCapture(g_np.glass.hwnd);
     g_np.closeTick = GetTickCount64();
     SetTimer(g_np.hwnd, 2, 10, nullptr);
 }
@@ -11159,6 +11419,7 @@ enum BsVal {
     BV_BATTPCT, BV_AUTOHIDE, BV_HIDEFS, BV_SOLIDMAX, BV_ALLMON, BV_FLYOUTS, BV_OSD, BV_DIM,
     BV_G_TRANSP, BV_G_CLEAR, BV_G_LIQUID, BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_ICONS, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_SELMENU, BV_MENUGLASS, BV_MENUTRANSP, BV_UPDATES,
     BV_G_TINT, BV_SEARCHTGT, BV_LANG, BV_NPBAR, BV_ICSADD, BV_ICSCLEAR,
+    BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE,
 };
 
 struct BsRowDef {
@@ -11205,7 +11466,7 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_ALLMON, L"Mostrar em todos os monitores", 0, 0},
     {BR_SWITCH, BV_MORE, L"Recolher numa seta os ícones que não cabem", 0, 0, L"Como as setas ao lado do notch no macOS 27"},
     {BR_HEADER, BV_NONE, L"Menus e painéis", 0xE7C4, 0x5E5CE6, L"Estilo dos menus, Tocando agora, pílulas de volume e brilho"},
-    {BR_CHOICE, BV_MENUGLASS, L"Estilo dos menus", 0, 0, L"Menus da barra, pílula do Bluetooth, Tocando agora e Notificações. A Central de Controle não muda"},
+    {BR_CHOICE, BV_MENUGLASS, L"Estilo dos menus", 0, 0, L"Menus da barra, pílula do Bluetooth e Tocando agora. A Central de Controle e as Notificações não mudam"},
     {BR_SLIDER, BV_MENUTRANSP, L"Transparência dos menus (Vidro)", 0, 0},
     {BR_SWITCH, BV_UPDATES, L"Atualizações pendentes no menu do logo", 0, 0},
     {BR_SWITCH, BV_KBDNAV, L"Ctrl+F2 navega a barra pelo teclado", 0, 0},
@@ -11217,12 +11478,18 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_FLYOUTS, L"Pílulas de vidro (volume, brilho, Bluetooth)", 0, 0},
     {BR_SWITCH, BV_OSD, L"Indicador de volume e brilho", 0, 0, L"Logo abaixo do ícone na barra"},
     {BR_SWITCH, BV_DIM, L"Escurecer a tela com a Central de Controle", 0, 0},
+    {BR_CHOICE, BV_CCCLOSE, L"Ao fechar a Central", 0, 0, L"Cascata: cada linha volta para dentro da linha de cima, de baixo para cima"},
     {BR_HEADER, BV_NONE, L"Vidro dos painéis", 0xE790, 0x5AC8FA, L"Do transparente ao tingido: o vidro dos menus, da Central e dos painéis"},
+    {BR_CHOICE, BV_G_STYLE, L"Estilo do vidro", 0, 0, L"Vidro líquido personalizado: a sua cor no topo, sumindo em vidro limpo embaixo"},
     {BR_SLIDER, BV_G_TINT, L"Transparente ↔ tingido", 0, 0, L"À esquerda o vidro limpo; à direita, mais cor"},
     {BR_SWITCH, BV_G_LIQUID, L"Vidro líquido (experimental)", 0, 0, L"Refração nas bordas, como o Liquid Glass"},
     {BR_SLIDER, BV_G_REFRACT, L"Refração nas bordas", 0, 0},
     {BR_SLIDER, BV_G_BLUR, L"Desfoque do fundo", 0, 0},
     {BR_SWITCH, BV_G_LIVE, L"Acompanhar o fundo ao vivo", 0, 0, L"Vídeos e papéis de parede animados continuam aparecendo atrás do vidro"},
+    {BR_GROUP, BV_NONE, L"Vidro líquido personalizado", 0, 0},
+    {BR_COLORS, BV_TCOLOR, L"Cor do vidro", 0, 0, L"O primeiro círculo abre a paleta do Windows, para qualquer cor"},
+    {BR_SLIDER, BV_TLEVEL, L"Força da cor no topo", 0, 0, L"100 = sólida no topo; menos deixa o fundo aparecer também na parte colorida"},
+    {BR_SLIDER, BV_TREACH, L"Até onde a cor desce", 0, 0, L"Valores baixos mantêm a cor perto do topo; altos a trazem para baixo"},
     {BR_HEADER, BV_NONE, L"Pílulas de aviso", 0xEA8F, 0xFF375F, L"Avisos que descem da barra e o botão de Notificações"},
     {BR_SWITCH, BV_ISLAND, L"Mostrar avisos em pílula", 0, 0},
     {BR_ACTION, BV_ISLTEST, L"Testar a pílula agora", 0, 0},
@@ -11236,6 +11503,7 @@ static const BsRowDef kBsRows[] = {
     {BR_GROUP, BV_NONE, L"Botão de Notificações", 0, 0},
     {BR_SWITCH, BV_ISLHIST, L"Botão de Notificações na barra (sino)", 0, 0, L"Notificações agrupadas por app, em cartões de vidro"},
     {BR_SWITCH, BV_ISLHISTNOT, L"No botão, mostrar também os avisos da pílula", 0, 0},
+    {BR_CHOICE, BV_NTFSHAPE, L"Formato dos ícones", 0, 0, L"Nas notificações: círculo ou o formato dos ícones do macOS"},
     {BR_ACTION, BV_ISLCLEAR, L"Limpar as notificações", 0, 0},
     {BR_GROUP, BV_NONE, L"Avisar quando", 0, 0},
     {BR_SWITCH, BV_WINNOTIF, L"Notificações do Windows (experimental)", 0, 0, L"WhatsApp, Discord, e-mail… Clicar abre o app"},
@@ -11341,6 +11609,18 @@ static void BsAction(int val);
 // por um instante (GlassTranspScope): os sliders leem o valor real daqui.
 static const int* g_glassTranspSaved = nullptr;
 static int GlassTranspValue() { return g_glassTranspSaved ? *g_glassTranspSaved : g_glass.transparency; }
+static void NtfRefresh();
+
+// Cores prontas do Vidro líquido personalizado (o primeiro círculo é a paleta do Windows).
+static const DWORD kTintPalette[] = {0x050505, 0x2C2C2E, 0x0B1F3A, 0x2A1446, 0x3D0B14, 0x0F2A1D, 0x1E3A5F, 0xF2F2F7};
+static_assert(ARRAYSIZE(kTintPalette) == ARRAYSIZE(kSelPalette), "a fileira de cores tem o mesmo tamanho");
+static int TintPaletteIndex() {
+    for (int i = 0; i < (int)ARRAYSIZE(kTintPalette); i++)
+        if (kTintPalette[i] == g_settings.tintColor) return i;
+    return -1;  // uma cor da paleta do Windows
+}
+static void TintApply();
+
 static int BsGet(int val) {
     if (const BsBoolKey* k = BsKeyFor(val)) return g_settings.*(k->field) ? 1 : 0;
     switch (val) {
@@ -11354,6 +11634,12 @@ static int BsGet(int val) {
         case BV_G_LIQUID: return g_glass.liquid;
         case BV_G_LIVE: return g_glass.live;
         case BV_BARSTYLE: return g_settings.barStyle;
+        case BV_G_STYLE: return g_glass.tinted ? 1 : 0;
+        case BV_CCCLOSE: return g_settings.ccCloseAnim;
+        case BV_NTFSHAPE: return g_settings.ntfIconShape;
+        case BV_TCOLOR: return TintPaletteIndex();
+        case BV_TLEVEL: return g_settings.tintLevel;
+        case BV_TREACH: return g_settings.tintReach;
         case BV_BSSTYLE: return g_bsStyle;
         case BV_ISLSTYLE: return g_settings.islStyle;
         case BV_ISLSIZE: return std::clamp((g_settings.islSize - 80) * 100 / 60, 0, 100);
@@ -11391,7 +11677,7 @@ static void BsLoadLook() {
         g_bsStyle = st;
         g_bsTransp = std::clamp(tr, 0, 100);
     } else {
-        g_bsStyle = (g_glass.liquid || g_settings.barStyle == 2) ? 1 : 0;
+        g_bsStyle = (g_glass.liquid || g_settings.barStyle >= 2) ? 1 : 0;
         g_bsTransp = g_glass.transparency;
     }
 }
@@ -11530,12 +11816,68 @@ static void BsSet(int val, int v) {
         return;
     }
     if (val == BV_BARSTYLE) {
-        static const PCWSTR kNames[] = {L"glass", L"transparent", L"liquid"};
-        v = std::clamp(v, 0, 2);
+        static const PCWSTR kNames[] = {L"glass", L"transparent", L"liquid", L"tinted"};
+        v = std::clamp(v, 0, 3);
         if (g_settings.barStyle == v) return;
         g_settings.barStyle = v;
         OvrSetStr(L"barStyle", kNames[v]);
         BarsRestyle();  // troca o fundo na barra que já existe
+        TintApply();    // a cor do texto da barra segue a cor do vidro
+        return;
+    }
+    if (val == BV_NTFSHAPE) {
+        g_settings.ntfIconShape = v == 1 ? 1 : 0;
+        OvrSetStr(L"ntfIconShape", g_settings.ntfIconShape ? L"squircle" : L"round");
+        NtfRefresh();  // painel aberto: muda na hora
+        return;
+    }
+    if (val == BV_CCCLOSE) {
+        static const PCWSTR kNames[] = {L"cascade", L"shrink", L"fade", L"slide", L"none"};
+        g_settings.ccCloseAnim = std::clamp(v, 0, 4);
+        OvrSetStr(L"ccCloseAnim", kNames[g_settings.ccCloseAnim]);
+        return;
+    }
+    if (val == BV_G_STYLE) {
+        bool want = v == 1;
+        if (g_glass.tinted == want) return;
+        g_glass.tinted = want;
+        if (want) {
+            // Os padrões do tema no Siri Plus: limpo abaixo da cor, sem desfoque, refração 70 %.
+            g_glass.liquid = true;
+            g_glass.clear = true;
+            g_glass.transparency = 100;
+            g_glass.blur = 0;
+            g_glass.refraction = 70;
+        }
+        SaveGlassPrefs();
+        TintApply();
+        return;
+    }
+    if (val == BV_TCOLOR) {
+        if (v < 0) {  // o primeiro círculo: a paleta do Windows
+            static COLORREF custom[16] = {};
+            DWORD c = g_settings.tintColor;
+            CHOOSECOLORW cc{sizeof(cc)};
+            cc.hwndOwner = FindWindowW(kBsClass, nullptr);  // a janela de ajustes
+            cc.rgbResult = RGB((c >> 16) & 255, (c >> 8) & 255, c & 255);
+            cc.lpCustColors = custom;
+            cc.Flags = CC_FULLOPEN | CC_RGBINIT;
+            if (!ChooseColorW(&cc)) return;
+            g_settings.tintColor = ((DWORD)GetRValue(cc.rgbResult) << 16) | ((DWORD)GetGValue(cc.rgbResult) << 8) | GetBValue(cc.rgbResult);
+        } else {
+            g_settings.tintColor = kTintPalette[std::min(v, (int)ARRAYSIZE(kTintPalette) - 1)];
+        }
+        wchar_t hex[8];
+        swprintf(hex, ARRAYSIZE(hex), L"#%06X", (unsigned)g_settings.tintColor);
+        OvrSetStr(L"tintColor", hex);
+        TintApply();
+        return;
+    }
+    if (val == BV_TLEVEL || val == BV_TREACH) {
+        v = std::clamp(v, 0, 100);
+        (val == BV_TLEVEL ? g_settings.tintLevel : g_settings.tintReach) = v;
+        OvrSetInt(val == BV_TLEVEL ? L"tintLevel" : L"tintReach", v);
+        TintApply();
         return;
     }
     v = std::clamp(v, 0, 100);
@@ -11553,6 +11895,15 @@ static void BsSet(int val, int v) {
         default: return;
     }
     SaveGlassPrefs();
+}
+
+// Vidro líquido personalizado mudou (estilo, cor, força ou alcance): o texto
+// segue a cor nova e a barra e os painéis abertos se redesenham.
+static void TintApply() {
+    ResolveTheme();
+    for (Bar* b : g_bars) ApplyGlass(b);
+    RedrawAll();
+    if (g_cc.hwnd) CcOnUpdate();
 }
 
 // ---------------------------------------------------------------------------
@@ -11778,6 +12129,10 @@ static void BsReleaseFormats() {
 
 // Opções das escolhas (abrem num menu, como no Siri Plus Launchpad).
 static const PCWSTR kBsChoices[] = {L"Vidro", L"Transparente", L"Líquido"};
+static const PCWSTR kBsBarChoices[] = {L"Vidro", L"Transparente", L"Líquido", L"Vidro líquido personalizado"};
+static const PCWSTR kBsGlassStyle[] = {L"Transparente", L"Vidro líquido personalizado"};
+static const PCWSTR kBsNtfShape[] = {L"Círculo", L"Formato macOS"};
+static const PCWSTR kBsCcClose[] = {L"Cascata", L"Encolher", L"Esmaecer", L"Deslizar para cima", L"Nenhuma"};
 static const PCWSTR kBsLookChoices[] = {L"Desfoque", L"Líquido", L"Transparente"};
 static const PCWSTR kBsMenuChoices[] = {L"Vidro", L"Igual à Central"};
 static const PCWSTR kBsIslStyle[] = {L"Vidro", L"Líquido", L"Escuro"};
@@ -11809,15 +12164,20 @@ static const PCWSTR* BsChoiceLabels(int val) {
         case BV_SEARCHTGT: return kBsSearchTgt;
         case BV_NPBAR: return kBsNpBar;
         case BV_LANG: return kBsLang;
+        case BV_BARSTYLE: return kBsBarChoices;
+        case BV_G_STYLE: return kBsGlassStyle;
+        case BV_CCCLOSE: return kBsCcClose;
+        case BV_NTFSHAPE: return kBsNtfShape;
     }
     return kBsChoices;
 }
 static int BsChoiceCount(int val) {
     switch (val) {
-        case BV_MENUGLASS: case BV_ISLPOS: case BV_WXUNIT: case BV_WXLOOK: case BV_NPLAYOUT: case BV_SEARCHTGT: return 2;
+        case BV_MENUGLASS: case BV_ISLPOS: case BV_WXUNIT: case BV_WXLOOK: case BV_NPLAYOUT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: return 2;
+        case BV_BARSTYLE: return 4;
         case BV_LANG: return (int)ARRAYSIZE(kBsLang);
         case BV_ISLIN: return 4;
-        case BV_ISLOUT: return 5;
+        case BV_ISLOUT: case BV_CCCLOSE: return 5;
     }
     return 3;
 }
@@ -12248,10 +12608,30 @@ static void BsDrawRow(size_t i, const BsRow& row, float oy) {
             for (int k = 0; k <= kSelCount; k++) {
                 D2D1_POINT_2F p = BsSwatchCenter(c, k);
                 D2D1_ELLIPSE el = D2D1::Ellipse(p, rad, rad);
-                if (k == 0) {
+                const bool tintRow = d.val == BV_TCOLOR;
+                if (k == 0 && tintRow) {
+                    // A paleta do Windows: a cor escolhida nela, ou um "+".
+                    DWORD cv = g_settings.tintColor;
+                    if (v < 0) {
+                        g_bs.brush->SetColor(D2D1::ColorF(((cv >> 16) & 255) / 255.0f, ((cv >> 8) & 255) / 255.0f, (cv & 255) / 255.0f, 1));
+                        rt->FillEllipse(el, g_bs.brush);
+                    } else {
+                        g_bs.brush->SetColor(BsFg(0.14f));
+                        rt->FillEllipse(el, g_bs.brush);
+                        BsGlyph(0xE710, p.x, p.y, 9 * s, BsFg(0.80f));
+                    }
+                    g_bs.brush->SetColor(BsFg(0.35f));
+                    rt->DrawEllipse(el, g_bs.brush, 1 * s);
+                } else if (k == 0) {
                     g_bs.brush->SetColor(BsFg(0.14f));
                     rt->FillEllipse(el, g_bs.brush);
                     g_bs.brush->SetColor(BsFg(0.35f));
+                    rt->DrawEllipse(el, g_bs.brush, 1 * s);
+                } else if (tintRow) {
+                    DWORD cv = kTintPalette[k - 1];
+                    g_bs.brush->SetColor(D2D1::ColorF(((cv >> 16) & 255) / 255.0f, ((cv >> 8) & 255) / 255.0f, (cv & 255) / 255.0f, 1));
+                    rt->FillEllipse(el, g_bs.brush);
+                    g_bs.brush->SetColor(BsFg(0.30f));  // o preto e o branco também aparecem sobre o fundo da janela
                     rt->DrawEllipse(el, g_bs.brush, 1 * s);
                 } else {
                     DWORD cv = kSelPalette[k - 1].rgb;
@@ -12586,7 +12966,11 @@ static void BsRender() {
 static bool BsRowDisabled(int rowIdx) {
     if (rowIdx < 0 || rowIdx >= (int)g_bs.rows.size()) return false;
     const BsRowDef& d = kBsRows[g_bs.rows[rowIdx].def];
-    return d.kind != BR_HEADER && d.val == BV_MENUTRANSP && g_settings.menuGlass == 1;
+    if (d.kind == BR_HEADER) return false;
+    if (d.val == BV_MENUTRANSP) return g_settings.menuGlass == 1;
+    // Cor, força e alcance só valem com o Vidro líquido personalizado nos painéis ou na barra.
+    if (d.val == BV_TCOLOR || d.val == BV_TLEVEL || d.val == BV_TREACH) return !g_glass.tinted && g_settings.barStyle != 3;
+    return false;
 }
 static int BsHitRaw(float x, float y, int* part);
 static int BsHit(float x, float y, int* part) {
@@ -14497,7 +14881,9 @@ static void WxSetMode(bool search) {
 }
 
 static void WxClose() {
-    if (g_wxw.hwnd) DestroyWindow(g_wxw.hwnd);
+    if (!g_wxw.hwnd) return;
+    g_captureNeedsFlush = true;  // a próxima foto do fundo sem o widget
+    DestroyWindow(g_wxw.hwnd);
 }
 
 static void WxSelectPlace(const WxPlace& p) {
@@ -15310,7 +15696,6 @@ static void CalEnsureLoaded() {
         }
     }
     g_cal.srcs = std::move(next);
-    ULONGLONG now = GetTickCount64();
     for (CalSrc& c : g_cal.srcs) {
         WIN32_FILE_ATTRIBUTE_DATA fa{};
         if (!GetFileAttributesExW(c.src.c_str(), GetFileExInfoStandard, &fa)) {
@@ -15662,7 +16047,9 @@ static int CalHit(float x, float y) {
 }
 
 static void CalClose() {
-    if (g_calw.hwnd) DestroyWindow(g_calw.hwnd);
+    if (!g_calw.hwnd) return;
+    g_captureNeedsFlush = true;  // a próxima foto do fundo sem o calendário
+    DestroyWindow(g_calw.hwnd);
 }
 
 static LRESULT CALLBACK CalWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -16067,8 +16454,7 @@ static bool PrivInUse(HKEY k) {
     return start != 0 && stop == 0;
 }
 
-static void PrivScanKey(HKEY parent, bool packaged, std::vector<std::wstring>& out,
-                        std::vector<std::wstring>* keys = nullptr) {
+static void PrivScanKey(HKEY parent, bool packaged, std::vector<std::wstring>& out) {
     wchar_t name[512];
     for (DWORD i = 0; i < 400; i++) {
         DWORD len = ARRAYSIZE(name);
@@ -16078,15 +16464,7 @@ static void PrivScanKey(HKEY parent, bool packaged, std::vector<std::wstring>& o
         if (RegOpenKeyExW(parent, name, 0, KEY_READ, &k) != ERROR_SUCCESS) continue;
         if (PrivInUse(k)) {
             std::wstring n = PrivPrettyName(name, packaged);
-            if (!n.empty() && std::find(out.begin(), out.end(), n) == out.end()) {
-                out.push_back(n);
-                if (keys) {
-                    // Sem pacote, o nome da chave é o caminho do .exe com "#" no lugar de "\".
-                    std::wstring key = name;
-                    if (!packaged) std::replace(key.begin(), key.end(), L'#', L'\\');
-                    keys->push_back(key);
-                }
-            }
+            if (!n.empty() && std::find(out.begin(), out.end(), n) == out.end()) out.push_back(n);
         }
         RegCloseKey(k);
     }
@@ -16125,15 +16503,15 @@ static void PrivWatchClose() {
     }
 }
 
-static std::vector<std::wstring> PrivScan(PCWSTR cap, std::vector<std::wstring>* keys = nullptr) {
+static std::vector<std::wstring> PrivScan(PCWSTR cap) {
     std::vector<std::wstring> out;
     std::wstring base = std::wstring(L"Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\") + cap;
     HKEY k;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, base.c_str(), 0, KEY_READ, &k) == ERROR_SUCCESS) {
-        PrivScanKey(k, true, out, keys);
+        PrivScanKey(k, true, out);
         HKEY np;
         if (RegOpenKeyExW(k, L"NonPackaged", 0, KEY_READ, &np) == ERROR_SUCCESS) {
-            PrivScanKey(np, false, out, keys);
+            PrivScanKey(np, false, out);
             RegCloseKey(np);
         }
         RegCloseKey(k);
@@ -16315,7 +16693,7 @@ static void CamMonitorStop() {
 }
 
 // Apps com a câmera ligada (pelo monitor): nome e caminho do .exe.
-static void CamSensorApps(std::vector<std::wstring>& names, std::vector<std::wstring>& keys) {
+static void CamSensorApps(std::vector<std::wstring>& names) {
     std::vector<DWORD> pids;
     AcquireSRWLockShared(&g_camLock);
     pids = g_camPids;
@@ -16331,7 +16709,6 @@ static void CamSensorApps(std::vector<std::wstring>& names, std::vector<std::wst
         if (name.empty()) name = PrivPrettyName(path, false);
         if (name.empty() || std::find(names.begin(), names.end(), name) != names.end()) continue;
         names.push_back(name);
-        keys.push_back(path);
     }
 }
 
@@ -16376,6 +16753,8 @@ struct IslandNote {
     bool isNotif = false;  // notificação de um app (e não um aviso do próprio mod)
     std::wstring app, body, aumid;  // notificação: app, mensagem e o id do app (ícone)
     NotifReply reply;               // notificação: responder e abrir pelo app
+    std::shared_ptr<const std::string> avatar;  // notificação: a foto de quem mandou (arquivo da imagem)
+    unsigned avatarId = 0;                      // para guardar a foto já decodificada
 };
 struct IslandWnd {
     HWND hwnd = nullptr;
@@ -17018,24 +17397,16 @@ static void ExtrasPoll() {
         MicSessionApps(e.micApps);
         // Câmera: o registro (como antes) mais o monitor dos sensores, que vê
         // também os apps que o registro deixa de fora.
-        static std::vector<std::wstring> camReg, camRegKeys;
-        if (PrivChanged(1, L"webcam")) {
-            camRegKeys.clear();
-            camReg = PrivScan(L"webcam", &camRegKeys);
-        }
+        static std::vector<std::wstring> camReg;
+        if (PrivChanged(1, L"webcam")) camReg = PrivScan(L"webcam");
         CamMonitorStart();
         e.camApps.clear();
-        e.camKeys.clear();
-        if (g_camMonitorOk) CamSensorApps(e.camApps, e.camKeys);
-        if (e.camApps.empty()) {  // o monitor não viu nada (ou não existe): vale o registro
-            e.camApps = camReg;
-            e.camKeys = camRegKeys;
-        }
+        if (g_camMonitorOk) CamSensorApps(e.camApps);
+        if (e.camApps.empty()) e.camApps = camReg;  // o monitor não viu nada (ou não existe): vale o registro
         e.micMuted = MicMutedGet();
     } else if (!g_settings.showPrivacy) {
         e.micApps.clear();
         e.camApps.clear();
-        e.camKeys.clear();
         g_privWatch[0].armed = g_privWatch[1].armed = false;  // ao religar, lê de novo
     }
     // Tocando agora: pede a leitura ao trabalhador e copia o último resultado.
@@ -17522,9 +17893,7 @@ static void ClipFlushPending() {
 static void ShotOnSaved(std::wstring* path) {
     g_shotTick = GetTickCount64();
     if (g_settings.shotPills) {
-        size_t k = path->find_last_of(L'\\');
         IslandShow(0xE722, 0xBF5AF2, L"Captura de tela", L"Salva · clique para abrir e editar", *path, false);
-        (void)k;
     }
     delete path;
 }
@@ -17610,6 +17979,7 @@ struct NotifMsg {
     std::wstring app, aumid;
     std::vector<std::wstring> texts;
     NotifReply reply;
+    std::shared_ptr<const std::string> avatar;  // a foto de quem mandou, se o app mandou uma
     IslandNote note;      // 5/6: a notificação respondida
     std::wstring answer;  // 5/6: o texto
 };
@@ -17804,6 +18174,39 @@ static bool FindActivator(const std::wstring& aumid, CLSID* out) {
     return false;
 }
 
+// Caminho no disco de uma imagem do toast: file:///, um caminho comum ou
+// ms-appdata:/// (as pastas do pacote do app). Endereços da internet não.
+static std::wstring ToastImagePath(const std::wstring& aumid, std::wstring src) {
+    auto unescape = [](const std::wstring& u) {
+        std::wstring o;
+        for (size_t i = 0; i < u.size(); i++) {
+            if (u[i] == L'%' && i + 2 < u.size() && iswxdigit(u[i + 1]) && iswxdigit(u[i + 2])) {
+                o += (wchar_t)wcstoul(u.substr(i + 1, 2).c_str(), nullptr, 16);
+                i += 2;
+            } else {
+                o += u[i] == L'/' ? L'\\' : u[i];
+            }
+        }
+        return o;
+    };
+    auto starts = [&](PCWSTR p) { return _wcsnicmp(src.c_str(), p, wcslen(p)) == 0; };
+    if (starts(L"file:///")) return unescape(src.substr(8));
+    if (src.size() > 2 && src[1] == L':' && (src[2] == L'\\' || src[2] == L'/')) return unescape(src);
+    static const struct { PCWSTR prefix, folder; } kAppData[] = {
+        {L"ms-appdata:///local/", L"LocalState"}, {L"ms-appdata:///temp/", L"TempState"},
+        {L"ms-appdata:///roaming/", L"RoamingState"}};
+    for (const auto& a : kAppData) {
+        if (!starts(a.prefix)) continue;
+        size_t bang = aumid.find(L'!');
+        if (bang == std::wstring::npos) return L"";
+        wchar_t local[MAX_PATH];
+        if (!GetEnvironmentVariableW(L"LOCALAPPDATA", local, MAX_PATH)) return L"";
+        return std::wstring(local) + L"\\Packages\\" + aumid.substr(0, bang) + L"\\" + a.folder + L"\\" +
+               unescape(src.substr(wcslen(a.prefix)));
+    }
+    return L"";
+}
+
 // Monta o que dá para fazer com a notificação (na thread das notificações).
 [[maybe_unused]] static void NotifReadReply(NotifMsg* m) {
     if (m->aumid.empty()) return;
@@ -17811,6 +18214,37 @@ static bool FindActivator(const std::wstring& aumid, CLSID* out) {
     std::wstring xml = NotifPayload(m->aumid, title);
     if (xml.empty()) return;
     NotifReply& r = m->reply;
+    // A foto de quem mandou: a imagem que o app põe no lugar do ícone (WhatsApp,
+    // Discord, Teams...). Lida já, porque alguns apps apagam o arquivo depois.
+    // Qual imagem: a que substitui o ícone; senão, a primeira recortada em círculo.
+    std::vector<std::wstring> images = XmlTags(xml, L"image");
+    const std::wstring* pick = nullptr;
+    // Fotos que vêm como endereço da internet (o WhatsApp manda assim) não são
+    // baixadas: o cartão mostra o ícone do app.
+    for (const std::wstring& img : images)
+        if (!pick && _wcsicmp(XmlAttr(img, L"placement").c_str(), L"appLogoOverride") == 0) pick = &img;
+    if (!pick)
+        for (const std::wstring& img : images)
+            if (_wcsicmp(XmlAttr(img, L"hint-crop").c_str(), L"circle") == 0) {
+                pick = &img;
+                break;
+            }
+    if (pick) {
+        std::wstring src = XmlAttr(*pick, L"src");
+        std::wstring path = ToastImagePath(m->aumid, src);
+        HANDLE f = path.empty() ? INVALID_HANDLE_VALUE
+                                : CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                              nullptr, OPEN_EXISTING, 0, nullptr);
+        if (f != INVALID_HANDLE_VALUE) {
+            LARGE_INTEGER size{};
+            if (GetFileSizeEx(f, &size) && size.QuadPart > 0 && size.QuadPart <= 4 * 1024 * 1024) {
+                auto data = std::make_shared<std::string>((size_t)size.QuadPart, '\0');
+                DWORD got = 0;
+                if (ReadFile(f, &(*data)[0], (DWORD)data->size(), &got, nullptr) && got == data->size()) m->avatar = data;
+            }
+            CloseHandle(f);
+        }
+    }
     std::vector<std::wstring> toast = XmlTags(xml, L"toast");
     if (!toast.empty()) {
         std::wstring type = XmlAttr(toast[0], L"activationType");
@@ -18348,6 +18782,11 @@ static void NotifOnMsg(NotifMsg* m) {
             n.body = body;
             n.aumid = m->aumid;
             n.reply = m->reply;
+            if (m->avatar) {
+                static unsigned nextAvatar = 0;
+                n.avatar = m->avatar;
+                n.avatarId = ++nextAvatar;
+            }
             IslandPush(n, false);
         }
     }
@@ -18363,10 +18802,11 @@ static void NotifOnMsg(NotifMsg* m) {
 
 static const wchar_t kNtfClass[] = L"WhFinderTopBarNotifs";
 struct NtfBlock {
-    int kind;        // 0 cabeçalho do app, 1 cartão, 2 chip "+N", 3 título "Avisos", 4 linha de aviso, 5 vazio
+    int kind;        // 1 cartão (com o app dentro), 2 chip "+N", 3 título "Avisos", 4 linha de aviso, 5 vazio
     D2D1_RECT_F r;   // em coordenadas do conteúdo
     int group = -1;
     std::vector<int> items;  // índices em g_islHist (o primeiro é o mais novo)
+    D2D1_RECT_F reply{};     // cartão: o botão Responder (vazio se não dá para responder)
 };
 struct NtfGroup {
     std::wstring app, aumid;
@@ -18387,6 +18827,7 @@ struct NotifPanel {
     std::set<std::wstring> expanded;
     float contentH = 0, scroll = 0;
     int hover = -1;  // bloco; -2 Limpar, -3 central do Windows
+    bool hoverReply = false;  // o mouse está no botão Responder
     bool tracking = false, closing = false;
     // Arrastar para o lado apaga a notificação (só ela).
     int swipeBlock = -1, swipeItem = -1;
@@ -18401,6 +18842,7 @@ struct NotifPanel {
     IDWriteTextFormat *fHead = nullptr, *fApp = nullptr, *fTitle = nullptr, *fBody = nullptr, *fSmall = nullptr,
                       *fIcon = nullptr, *fAvatar = nullptr;
     std::map<std::wstring, ID2D1Bitmap*> icons;  // aumid -> ícone (deste alvo de desenho)
+    std::map<unsigned, ID2D1Bitmap*> avatars;    // foto de quem mandou, já decodificada
 };
 // Guardado num optional sem destrutor automático: os objetos de composição
 // dentro dele são liberados na thread da barra (FreePanelGlobals), nunca no
@@ -18451,6 +18893,106 @@ static ID2D1Bitmap* NtfIcon(const std::wstring& aumid) {
     return bmp;
 }
 
+// A foto que veio na notificação, decodificada uma vez para este alvo de desenho.
+static ID2D1Bitmap* NtfAvatar(const IslandNote& n) {
+    if (!n.avatar || n.avatar->empty() || !n.avatarId || !g_ntf.rt) return nullptr;
+    auto it = g_ntf.avatars.find(n.avatarId);
+    if (it != g_ntf.avatars.end()) return it->second;
+    std::vector<BYTE> bytes(n.avatar->begin(), n.avatar->end());
+    ID2D1Bitmap* bmp = DecodeImage(g_ntf.rt, bytes);
+    if (!bmp) Wh_Log(L"Notification image: couldn't decode %zu bytes", bytes.size());
+    if (g_ntf.avatars.size() > 60) {
+        for (auto& kv : g_ntf.avatars) SafeRelease(kv.second);
+        g_ntf.avatars.clear();
+    }
+    g_ntf.avatars[n.avatarId] = bmp;
+    return bmp;
+}
+
+// Desenha uma imagem recortada em círculo (foto ou ícone do app), preenchendo-o.
+// zoom > 1 amplia um pouco, para a borda transparente do ícone não aparecer.
+// Formato dos ícones das notificações: círculo, ou o formato dos ícones do
+// macOS (um "squircle": superelipse, com os lados quase retos e os cantos
+// suaves). O caminho é montado em volta do centro c, com meia largura `radius`.
+static ID2D1Geometry* NtfIconShape(D2D1_POINT_2F c, float radius) {
+    if (g_settings.ntfIconShape == 0) {
+        ID2D1EllipseGeometry* e = nullptr;
+        g_d2d->CreateEllipseGeometry(D2D1::Ellipse(c, radius, radius), &e);
+        return e;
+    }
+    ID2D1PathGeometry* path = nullptr;
+    ID2D1GeometrySink* sink = nullptr;
+    if (FAILED(g_d2d->CreatePathGeometry(&path)) || FAILED(path->Open(&sink))) {
+        SafeRelease(path);
+        return nullptr;
+    }
+    const int kSteps = 96;
+    const double n = 5.0;  // quanto maior, mais quadrado
+    for (int i = 0; i < kSteps; i++) {
+        double t = i * 2 * 3.14159265358979 / kSteps, ct = std::cos(t), st = std::sin(t);
+        float x = c.x + radius * (float)((ct < 0 ? -1 : 1) * std::pow(std::fabs(ct), 2.0 / n));
+        float y = c.y + radius * (float)((st < 0 ? -1 : 1) * std::pow(std::fabs(st), 2.0 / n));
+        if (i == 0) sink->BeginFigure(D2D1::Point2F(x, y), D2D1_FIGURE_BEGIN_FILLED);
+        else sink->AddLine(D2D1::Point2F(x, y));
+    }
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    sink->Close();
+    sink->Release();
+    return path;
+}
+
+// Aro de vidro em volta do formato: mais claro em cima, como luz batendo na
+// borda, e um contorno escuro bem fino por fora para fundos claros.
+static void NtfRing(ID2D1RenderTarget* rt, D2D1_POINT_2F c, float radius, float width) {
+    if (ID2D1Geometry* inner = NtfIconShape(c, radius - width / 2)) {
+        D2D1_GRADIENT_STOP st[] = {{0.0f, D2D1::ColorF(1, 1, 1, g_light ? 0.95f : 0.62f)},
+                                   {0.5f, D2D1::ColorF(1, 1, 1, g_light ? 0.55f : 0.22f)},
+                                   {1.0f, D2D1::ColorF(1, 1, 1, g_light ? 0.80f : 0.40f)}};
+        if (auto* g = MakeGradient(rt, D2D1::Point2F(c.x, c.y - radius), D2D1::Point2F(c.x, c.y + radius), st, 3)) {
+            rt->DrawGeometry(inner, g, width);
+            g->Release();
+        }
+        inner->Release();
+    }
+    if (ID2D1Geometry* outer = NtfIconShape(c, radius + width * 0.4f)) {
+        ID2D1SolidColorBrush* dark = nullptr;
+        if (SUCCEEDED(rt->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, g_light ? 0.10f : 0.25f), &dark))) {
+            rt->DrawGeometry(outer, dark, std::max(0.6f, width * 0.5f));
+            dark->Release();
+        }
+        outer->Release();
+    }
+}
+
+// Desenha uma imagem (foto ou ícone do app) recortada no formato escolhido,
+// preenchendo-o; zoom > 1 amplia um pouco, para a borda transparente do ícone
+// não aparecer; ring > 0 põe o aro de vidro.
+static void NtfDrawRound(ID2D1RenderTarget* rt, ID2D1Bitmap* bmp, D2D1_POINT_2F c, float radius, float zoom = 1.0f,
+                         float ring = 0) {
+    ID2D1Geometry* shape = NtfIconShape(c, radius);
+    if (!shape) return;
+    ID2D1BitmapBrush* bb = nullptr;
+    if (SUCCEEDED(rt->CreateBitmapBrush(bmp, &bb))) {
+        D2D1_SIZE_F ps = bmp->GetSize();
+        float d = 2 * radius * zoom;
+        float k = d / std::max(1.0f, std::min(ps.width, ps.height));
+        bb->SetInterpolationMode(D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        bb->SetTransform(D2D1::Matrix3x2F::Scale(k, k) *
+                         D2D1::Matrix3x2F::Translation(c.x - ps.width * k / 2, c.y - ps.height * k / 2));
+        rt->FillGeometry(shape, bb);
+        bb->Release();
+    }
+    shape->Release();
+    if (ring > 0) NtfRing(rt, c, radius, ring);
+}
+
+// Dá para responder pela notificação (campo de texto e o ativador do app).
+static bool NtfCanReply(const IslandNote& n) { return n.reply.canReply && n.reply.hasActivator; }
+
+// Os cartões ficam soltos, cada um com o vidro da Central, quando o vidro
+// líquido está ligado; sem ele, o painel único de antes.
+static bool NtfFloating() { return g_glass.liquid; }
+
 static void NtfBuildGroups() {
     g_ntf.groups.clear();
     for (int i = (int)g_islHist.size() - 1; i >= 0; i--) {
@@ -18477,12 +19019,13 @@ static void NtfLayout() {
     float y = 0;
     for (size_t gi = 0; gi < g_ntf.groups.size(); gi++) {
         const NtfGroup& g = g_ntf.groups[gi];
-        g_ntf.blocks.push_back({0, D2D1::RectF(x0, y, x1, y + 28 * s), (int)gi, {}});
-        y += 30 * s;
+        // O ícone e o nome do app ficam dentro do cartão, na linha da hora.
         bool open = g_ntf.expanded.count(g.app) > 0;
         int extra = (int)g.items.size() - 1;
-        float h = NtfCardH(s) + (open ? extra * NtfRowH(s) : 0) + (extra > 0 ? 34 * s : 0);
+        bool canReply = !g.items.empty() && NtfCanReply(g_islHist[g.items[0]].note);
+        float h = NtfCardH(s) + (open ? extra * NtfRowH(s) : 0) + (extra > 0 || canReply ? 34 * s : 0);
         NtfBlock card{1, D2D1::RectF(x0, y, x1, y + h), (int)gi, g.items};
+        if (canReply) card.reply = D2D1::RectF(x1 - 12 * s - 104 * s, y + h - 32 * s, x1 - 12 * s, y + h - 8 * s);
         g_ntf.blocks.push_back(card);
         if (extra > 0)
             g_ntf.blocks.push_back({2, D2D1::RectF(x0 + 12 * s, y + h - 32 * s, x0 + 12 * s + 150 * s, y + h - 8 * s), (int)gi, {}});
@@ -18499,11 +19042,13 @@ static void NtfLayout() {
         if (!avisos.empty()) {
             g_ntf.blocks.push_back({3, D2D1::RectF(x0, y, x1, y + 28 * s), -1, {}});
             y += 30 * s;
-            float h = avisos.size() * 48 * s + 8 * s;
+            // Soltos, cada aviso é um cartão com um respiro entre eles.
+            float step = NtfFloating() ? 56 * s : 48 * s;
+            float h = avisos.size() * step + 8 * s;
             float yy = y + 4 * s;
             for (int i : avisos) {
                 g_ntf.blocks.push_back({4, D2D1::RectF(x0, yy, x1, yy + 48 * s), -1, {i}});
-                yy += 48 * s;
+                yy += step;
             }
             y += h + 12 * s;
         }
@@ -18518,14 +19063,18 @@ static void NtfLayout() {
     float ph = std::min(maxH, top + y + 4 * s);
     g_ntf.panel = D2D1::RectF(M, M, M + pw, M + ph);
     g_ntf.view = D2D1::RectF(M, M + top, M + pw, M + ph - 4 * s);
-    g_ntf.clearBtn = D2D1::RectF(M + pw - 84 * s, M + 14 * s, M + pw - 14 * s, M + 40 * s);
-    g_ntf.winBtn = D2D1::RectF(M + pw - 122 * s, M + 14 * s, M + pw - 92 * s, M + 40 * s);
+    float by = (NtfFloating() ? 10 : 14) * s;  // centrados na pílula do topo
+    float bx = NtfFloating() ? x1 - 10 * s : M + pw - 14 * s;  // soltos: a pílula tem a largura dos cartões
+    g_ntf.clearBtn = D2D1::RectF(bx - 70 * s, M + by, bx, M + by + 26 * s);
+    g_ntf.winBtn = D2D1::RectF(bx - 108 * s, M + by, bx - 78 * s, M + by + 26 * s);
     g_ntf.scroll = std::clamp(g_ntf.scroll, 0.0f, std::max(0.0f, g_ntf.contentH - (g_ntf.view.bottom - g_ntf.view.top)));
 }
 
 static void NtfReleaseGraphics() {
     for (auto& kv : g_ntf.icons) SafeRelease(kv.second);
     g_ntf.icons.clear();
+    for (auto& kv : g_ntf.avatars) SafeRelease(kv.second);
+    g_ntf.avatars.clear();
     SafeRelease(g_ntf.brush);
     SafeRelease(g_ntf.rt);
     if (g_ntf.memDC) {
@@ -18575,8 +19124,7 @@ static void NtfDrawText(ID2D1RenderTarget* rt, ID2D1SolidColorBrush* br, const s
 
 static void NtfRender() {
     if (!g_ntf.hwnd) return;
-    MenuGlassScope menuGlass;
-    PanelThemeScope panelTheme;
+    PanelThemeScope panelTheme;  // o vidro é o da Central (não o dos menus)
     LiquidScope liquid(g_ntf.glass.lq, g_ntf.hwnd);
     float s = g_ntf.s;
     if (!g_ntf.fHead) {
@@ -18664,11 +19212,20 @@ static void NtfRender() {
     rt->BeginDraw();
     rt->Clear(D2D1::ColorF(0, 0, 0, 0));
     if (anim) PushAnim(rt, layer, pv, pivot);
-    DrawLiquidGlass(rt, br, P, 24 * s, s, false, false, g_ntf.glass.ok, true);
+    const bool floating = NtfFloating();
+    if (floating) {
+        // Sem painel atrás: o topo é uma pílula de vidro, e cada notificação o seu cartão.
+        // Mesma largura dos cartões.
+        D2D1_RECT_F head = D2D1::RectF(P.left + 12 * s, P.top, P.right - 12 * s, P.top + 46 * s);
+        DrawLiquidGlass(rt, br, head, 23 * s, s, false, false, g_ntf.glass.ok, true);
+    } else {
+        DrawLiquidGlass(rt, br, P, 24 * s, s, false, false, g_ntf.glass.ok, true);
+    }
 
     // Topo: título, central do Windows e Limpar.
     br->SetColor(fg);
-    rt->DrawText(T(L"Notificações"), (UINT32)wcslen(T(L"Notificações")), g_ntf.fHead, D2D1::RectF(P.left + 18 * s, P.top + 12 * s, P.right - 130 * s, P.top + 42 * s), br);
+    rt->DrawText(T(L"Notificações"), (UINT32)wcslen(T(L"Notificações")), g_ntf.fHead,
+                 D2D1::RectF(P.left + (floating ? 28 : 18) * s, P.top + (floating ? 8 : 12) * s, P.right - 130 * s, P.top + (floating ? 38 : 42) * s), br);
     {
         D2D1_RECT_F c = g_ntf.clearBtn;
         float rr = (c.bottom - c.top) / 2;
@@ -18723,55 +19280,48 @@ static void NtfRender() {
         } swipe(rt, g_ntf.swiping && g_ntf.swipeBlock == (int)bi, g_ntf.swipeDx,
                 1.0f - 0.75f * std::min(1.0f, std::fabs(g_ntf.swipeDx) / std::max(1.0f, (b.r.right - b.r.left) * 0.6f)));
         bool hot = g_ntf.hover == (int)bi && !g_ntf.swiping;
-        if (b.kind == 0) {
-            // Cabeçalho do grupo: ícone do app + nome.
-            const NtfGroup& g = g_ntf.groups[b.group];
-            float is = 18 * s, cy = (r.top + r.bottom) / 2;
-            D2D1_RECT_F ir = D2D1::RectF(r.left + 4 * s, cy - is / 2, r.left + 4 * s + is, cy + is / 2);
-            if (ID2D1Bitmap* ic = NtfIcon(g.aumid)) {
-                rt->DrawBitmap(ic, ir, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
-            } else {
-                DWORD c = g.color;
-                br->SetColor(D2D1::ColorF(((c >> 16) & 255) / 255.0f, ((c >> 8) & 255) / 255.0f, (c & 255) / 255.0f, 1));
-                rt->FillRoundedRectangle(D2D1::RoundedRect(ir, 5 * s, 5 * s), br);
-                std::wstring ini = g.app.substr(0, 1);
-                br->SetColor(D2D1::ColorF(1, 1, 1, 1));
-                IDWriteTextLayout* l = nullptr;
-                if (SUCCEEDED(g_dwrite->CreateTextLayout(ini.c_str(), (UINT32)ini.size(), g_ntf.fAvatar, is, is, &l))) {
-                    DWRITE_TEXT_RANGE all = {0, (UINT32)ini.size()};
-                    l->SetFontSize(11 * s, all);
-                    rt->DrawTextLayout(D2D1::Point2F(ir.left, ir.top), l, br);
-                    l->Release();
-                }
-            }
-            br->SetColor(fg);
-            rt->DrawText(g.app.c_str(), (UINT32)g.app.size(), g_ntf.fApp, D2D1::RectF(ir.right + 8 * s, r.top, r.right, r.bottom), br,
-                         D2D1_DRAW_TEXT_OPTIONS_CLIP);
-        } else if (b.kind == 1) {
-            // Cartão: hora + seta, a "foto" (inicial) e o texto; grupo aberto mostra todos.
+        if (b.kind == 1) {
+            // Cartão: ícone e nome do app, hora e seta; a foto de quem mandou e o
+            // texto; o botão Responder. Grupo aberto mostra todos.
             const NtfGroup& g = g_ntf.groups[b.group];
             D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(r, 18 * s, 18 * s);
-            GlassCard(rt, br, rr,
-                      hot ? (g_light ? D2D1::ColorF(1, 1, 1, 0.55f) : D2D1::ColorF(1, 1, 1, 0.16f))
-                          : (g_light ? D2D1::ColorF(1, 1, 1, 0.40f) : D2D1::ColorF(1, 1, 1, 0.09f)),
-                      s);
-            br->SetColor(g_light ? D2D1::ColorF(1, 1, 1, 0.85f) : D2D1::ColorF(1, 1, 1, 0.30f));
-            rt->DrawRoundedRectangle(rr, br, 1.2f * s);
+            if (floating) {
+                DrawLiquidGlass(rt, br, r, 20 * s, s, false, hot, g_ntf.glass.ok, true);
+            } else {
+                GlassCard(rt, br, rr,
+                          hot ? (g_light ? D2D1::ColorF(1, 1, 1, 0.55f) : D2D1::ColorF(1, 1, 1, 0.16f))
+                              : (g_light ? D2D1::ColorF(1, 1, 1, 0.40f) : D2D1::ColorF(1, 1, 1, 0.09f)),
+                          s);
+                br->SetColor(g_light ? D2D1::ColorF(1, 1, 1, 0.85f) : D2D1::ColorF(1, 1, 1, 0.30f));
+                rt->DrawRoundedRectangle(rr, br, 1.2f * s);
+            }
             bool open = g_ntf.expanded.count(g.app) > 0;
             size_t n = open ? b.items.size() : 1;
             float y = r.top + 10 * s;
             for (size_t k = 0; k < n; k++) {
                 const IslandHist& h = g_islHist[b.items[k]];
                 if (k == 0) {
+                    // Linha de cima: ícone e nome do app; a hora (e a seta do grupo) à direita.
+                    float is = 16 * s;
+                    D2D1_RECT_F ir = D2D1::RectF(r.left + 14 * s, y + 1 * s, r.left + 14 * s + is, y + 1 * s + is);
+                    if (ID2D1Bitmap* ic = NtfIcon(g.aumid))
+                        NtfDrawRound(rt, ic, D2D1::Point2F((ir.left + ir.right) / 2, (ir.top + ir.bottom) / 2), is / 2, 1.12f,
+                                     std::max(0.8f, 0.9f * s));
                     wchar_t when[16];
                     swprintf(when, 16, L"%02d:%02d", h.at.wHour, h.at.wMinute);
+                    float whenW = GmMeasure(g_ntf.fSmall, when);
+                    float chevW = b.items.size() > 1 ? 20 * s : 0;
+                    float right = r.right - 14 * s;
                     br->SetColor(dim);
-                    rt->DrawText(when, (UINT32)wcslen(when), g_ntf.fSmall, D2D1::RectF(r.left + 14 * s, y, r.left + 70 * s, y + 18 * s), br);
+                    rt->DrawText(g.app.c_str(), (UINT32)g.app.size(), g_ntf.fSmall,
+                                 D2D1::RectF(ir.right + 7 * s, y, right - whenW - chevW - 8 * s, y + 18 * s), br,
+                                 D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                    rt->DrawText(when, (UINT32)wcslen(when), g_ntf.fSmall, D2D1::RectF(right - chevW - whenW, y, right - chevW + 2 * s, y + 18 * s), br);
                     if (b.items.size() > 1) {
                         IDWriteTextLayout* l = nullptr;
                         wchar_t chev = open ? 0xE70E : 0xE70D;
                         if (SUCCEEDED(g_dwrite->CreateTextLayout(&chev, 1, g_ntf.fIcon, 18 * s, 18 * s, &l))) {
-                            rt->DrawTextLayout(D2D1::Point2F(r.left + 54 * s, y), l, br);
+                            rt->DrawTextLayout(D2D1::Point2F(right - 17 * s, y), l, br);
                             l->Release();
                         }
                     }
@@ -18780,20 +19330,60 @@ static void NtfRender() {
                     br->SetColor(g_light ? D2D1::ColorF(0, 0, 0, 0.08f) : D2D1::ColorF(1, 1, 1, 0.10f));
                     rt->FillRectangle(D2D1::RectF(r.left + 72 * s, y - 6 * s, r.right - 14 * s, y - 5 * s), br);
                 }
-                // A "foto" de quem mandou: círculo com as iniciais, na cor do app.
+                // A foto de quem mandou (com o ícone do app no canto); sem foto, o
+                // ícone do app; sem os dois, as iniciais na cor do app.
                 float av = 48 * s, ax = r.left + 14 * s, ay = y;
-                DWORD c = g.color;
                 D2D1_ELLIPSE el = D2D1::Ellipse(D2D1::Point2F(ax + av / 2, ay + av / 2), av / 2, av / 2);
-                br->SetColor(D2D1::ColorF(((c >> 16) & 255) / 255.0f, ((c >> 8) & 255) / 255.0f, (c & 255) / 255.0f, 0.9f));
-                rt->FillEllipse(el, br);
-                std::wstring ini = NtfInitials(h.note.title);
-                br->SetColor(D2D1::ColorF(1, 1, 1, 1));
-                rt->DrawText(ini.c_str(), (UINT32)ini.size(), g_ntf.fAvatar, D2D1::RectF(ax, ay, ax + av, ay + av), br);
+                ID2D1Bitmap* photo = NtfAvatar(h.note);
+                ID2D1Bitmap* appIcon = NtfIcon(h.note.aumid.empty() ? g.aumid : h.note.aumid);
+                if (photo) {
+                    NtfDrawRound(rt, photo, el.point, av / 2, 1.0f, std::max(1.0f, 1.6f * s));
+                    if (appIcon) {
+                        float bs = 20 * s;
+                        D2D1_POINT_2F bc = D2D1::Point2F(ax + av - bs / 2 + 3 * s, ay + av - bs / 2 + 3 * s);
+                        br->SetColor(g_light ? D2D1::ColorF(1, 1, 1, 0.95f) : D2D1::ColorF(0.10f, 0.10f, 0.11f, 0.95f));
+                        if (ID2D1Geometry* plate = NtfIconShape(bc, bs / 2 + 1.5f * s)) {
+                            rt->FillGeometry(plate, br);
+                            plate->Release();
+                        }
+                        NtfDrawRound(rt, appIcon, bc, bs / 2, 1.12f, std::max(0.8f, 0.9f * s));
+                    }
+                } else if (appIcon) {
+                    // O ícone do app, redondo como uma foto de contato.
+                    NtfDrawRound(rt, appIcon, el.point, av / 2, 1.12f, std::max(1.0f, 1.6f * s));
+                } else {
+                    DWORD c = g.color;
+                    br->SetColor(D2D1::ColorF(((c >> 16) & 255) / 255.0f, ((c >> 8) & 255) / 255.0f, (c & 255) / 255.0f, 0.9f));
+                    rt->FillEllipse(el, br);
+                    std::wstring ini = NtfInitials(h.note.title);
+                    br->SetColor(D2D1::ColorF(1, 1, 1, 1));
+                    rt->DrawText(ini.c_str(), (UINT32)ini.size(), g_ntf.fAvatar, D2D1::RectF(ax, ay, ax + av, ay + av), br);
+                }
                 float tx = ax + av + 12 * s, tr = r.right - 14 * s;
                 NtfDrawText(rt, br, h.note.title, g_ntf.fTitle, D2D1::RectF(tx, ay, tr, ay + 22 * s), fg, 1);
                 std::wstring body = h.note.body.empty() ? h.note.sub : h.note.body;
                 NtfDrawText(rt, br, body, g_ntf.fBody, D2D1::RectF(tx, ay + 22 * s, tr, ay + (k == 0 ? 58 : 44) * s), dim, 2);
                 y += k == 0 ? 66 * s : NtfRowH(s);
+            }
+            if (b.reply.right > b.reply.left) {
+                // Responder: abre o campo na pílula, que envia pelo app.
+                D2D1_RECT_F c = D2D1::RectF(b.reply.left, b.reply.top + oy, b.reply.right, b.reply.bottom + oy);
+                float cr = (c.bottom - c.top) / 2;
+                GlassCard(rt, br, D2D1::RoundedRect(c, cr, cr),
+                          g_ntf.hoverReply && g_ntf.hover == (int)bi ? (g_light ? D2D1::ColorF(0, 0, 0, 0.14f) : D2D1::ColorF(1, 1, 1, 0.26f))
+                                           : (g_light ? D2D1::ColorF(0, 0, 0, 0.07f) : D2D1::ColorF(1, 1, 1, 0.14f)),
+                          s);
+                IDWriteTextLayout* l = nullptr;
+                std::wstring label = std::wstring(L"\xE97A  ") + T(L"Responder");
+                if (SUCCEEDED(g_dwrite->CreateTextLayout(label.c_str(), (UINT32)label.size(), g_ntf.fSmall, c.right - c.left, c.bottom - c.top, &l))) {
+                    l->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                    l->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                    DWRITE_TEXT_RANGE glyph = {0, 1};
+                    l->SetFontFamilyName(g_iconFont.c_str(), glyph);
+                    br->SetColor(fg);
+                    rt->DrawTextLayout(D2D1::Point2F(c.left, c.top), l, br);
+                    l->Release();
+                }
             }
         } else if (b.kind == 2) {
             // Chip "+N notificações" / "Mostrar menos".
@@ -18814,15 +19404,25 @@ static void NtfRender() {
             rt->DrawText(t.c_str(), (UINT32)t.size(), g_ntf.fSmall, c, br);
             g_ntf.fSmall->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
         } else if (b.kind == 3) {
+            if (floating) {
+                // O título fica numa pílula de vidro, para ler sobre qualquer fundo.
+                float tw = GmMeasure(g_ntf.fApp, T(L"Avisos da pílula")) + 28 * s;
+                D2D1_RECT_F c = D2D1::RectF(r.left, r.top + 1 * s, r.left + tw, r.bottom - 1 * s);
+                DrawLiquidGlass(rt, br, c, (c.bottom - c.top) / 2, s, false, false, g_ntf.glass.ok, false);
+            }
             br->SetColor(fg);
-            rt->DrawText(T(L"Avisos da pílula"), (UINT32)wcslen(T(L"Avisos da pílula")), g_ntf.fApp, D2D1::RectF(r.left + 4 * s, r.top, r.right, r.bottom), br);
+            rt->DrawText(T(L"Avisos da pílula"), (UINT32)wcslen(T(L"Avisos da pílula")), g_ntf.fApp,
+                         D2D1::RectF(r.left + (floating ? 14 : 4) * s, r.top, r.right, r.bottom), br);
         } else if (b.kind == 4) {
             const IslandHist& h = g_islHist[b.items[0]];
             D2D1_RECT_F card = D2D1::RectF(r.left, r.top + 2 * s, r.right, r.bottom - 2 * s);
-            GlassCard(rt, br, D2D1::RoundedRect(card, 14 * s, 14 * s),
-                      hot ? (g_light ? D2D1::ColorF(1, 1, 1, 0.55f) : D2D1::ColorF(1, 1, 1, 0.15f))
-                          : (g_light ? D2D1::ColorF(1, 1, 1, 0.35f) : D2D1::ColorF(1, 1, 1, 0.07f)),
-                      s);
+            if (floating)
+                DrawLiquidGlass(rt, br, card, 16 * s, s, false, hot, g_ntf.glass.ok, true);
+            else
+                GlassCard(rt, br, D2D1::RoundedRect(card, 14 * s, 14 * s),
+                          hot ? (g_light ? D2D1::ColorF(1, 1, 1, 0.55f) : D2D1::ColorF(1, 1, 1, 0.15f))
+                              : (g_light ? D2D1::ColorF(1, 1, 1, 0.35f) : D2D1::ColorF(1, 1, 1, 0.07f)),
+                          s);
             float cy = (card.top + card.bottom) / 2, ir = 14 * s, ix = card.left + 12 * s + ir;
             DWORD c = h.note.color;
             br->SetColor(D2D1::ColorF(((c >> 16) & 255) / 255.0f, ((c >> 8) & 255) / 255.0f, (c & 255) / 255.0f, 1));
@@ -18839,6 +19439,7 @@ static void NtfRender() {
             NtfDrawText(rt, br, h.note.title, g_ntf.fTitle, D2D1::RectF(tx, card.top + 4 * s, card.right - 64 * s, cy + 2 * s), fg, 1);
             NtfDrawText(rt, br, h.note.sub, g_ntf.fBody, D2D1::RectF(tx, cy, card.right - 12 * s, card.bottom - 4 * s), dim, 1);
         } else if (b.kind == 5) {
+            if (floating) DrawLiquidGlass(rt, br, r, 20 * s, s, false, false, g_ntf.glass.ok, true);
             g_ntf.fBody->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
             g_ntf.fBody->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
             br->SetColor(dim);
@@ -18874,7 +19475,7 @@ static int NtfHit(float x, float y) {
         for (size_t i = 0; i < g_ntf.blocks.size(); i++) {
             const NtfBlock& b = g_ntf.blocks[i];
             if ((pass == 0) != (b.kind == 2)) continue;
-            if (b.kind == 0 || b.kind == 3 || b.kind == 5) continue;
+            if (b.kind == 3 || b.kind == 5) continue;
             if (x >= b.r.left && x < b.r.right && cy >= b.r.top && cy < b.r.bottom) return (int)i;
         }
     return -1;
@@ -18883,11 +19484,14 @@ static int NtfHit(float x, float y) {
 static void NtfClose() {
     if (!g_ntf.hwnd) return;
     if (g_settings.openAnim == 0) {
+        g_captureNeedsFlush = true;
         DestroyWindow(g_ntf.hwnd);
         return;
     }
     if (g_ntf.closing) return;
     g_ntf.closing = true;
+    HideFromCapture(g_ntf.hwnd);
+    HideFromCapture(g_ntf.glass.hwnd);
     g_ntf.closeTick = GetTickCount64();
     SetTimer(g_ntf.hwnd, 2, 10, nullptr);
 }
@@ -18909,6 +19513,30 @@ static void NtfRefresh() {
 }
 
 // A notificação (índice em g_islHist) sob o ponto y de um cartão ou aviso.
+// O ponto (da janela) está no botão Responder do cartão `h`.
+static bool NtfOnReply(int h, float x, float y) {
+    if (h < 0 || h >= (int)g_ntf.blocks.size()) return false;
+    const D2D1_RECT_F& c = g_ntf.blocks[h].reply;
+    float cy = y - g_ntf.view.top + g_ntf.scroll;
+    return c.right > c.left && x >= c.left && x < c.right && cy >= c.top && cy < c.bottom;
+}
+
+// Responder pelo painel: fecha o painel e abre o campo de resposta na pílula.
+static void NtfReplyTo(const IslandNote& n) {
+    NtfClose();
+    if (!g_isl.hwnd) {
+        IslandStart(n);
+    } else if (!g_isl.reply) {
+        g_isl.note = n;
+    } else {
+        g_isl.note = n;
+        g_isl.text.clear();
+        IslandRender();
+        return;
+    }
+    IslandEnterReply();
+}
+
 static int NtfItemAt(const NtfBlock& b, float y) {
     int item = b.items.empty() ? -1 : b.items[0];
     if (b.kind == 1 && b.group >= 0 && g_ntf.expanded.count(g_ntf.groups[b.group].app)) {
@@ -18989,8 +19617,10 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 g_ntf.tracking = true;
             }
             int h = NtfHit((float)LP_X(lp), (float)LP_Y(lp));
-            if (h != g_ntf.hover) {
+            bool onReply = NtfOnReply(h, (float)LP_X(lp), (float)LP_Y(lp));
+            if (h != g_ntf.hover || onReply != g_ntf.hoverReply) {
                 g_ntf.hover = h;
+                g_ntf.hoverReply = onReply;
                 NtfRender();
             }
             return 0;
@@ -19035,6 +19665,9 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             } else if (h == -3) {
                 NtfClose();
                 SendKeys(M_WIN, 'N');
+            } else if (NtfOnReply(h, x, y)) {
+                NtfBlock b = g_ntf.blocks[h];
+                if (!b.items.empty() && b.items[0] < (int)g_islHist.size()) NtfReplyTo(g_islHist[b.items[0]].note);
             } else if (h >= 0 && h < (int)g_ntf.blocks.size()) {
                 NtfBlock b = g_ntf.blocks[h];
                 if (b.kind == 2 || (b.kind == 1 && b.items.size() > 1 && y - g_ntf.view.top + g_ntf.scroll < b.r.top + 32 * g_ntf.s)) {
@@ -19049,7 +19682,9 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     if (item >= 0 && item < (int)g_islHist.size()) {
                         IslandNote n = g_islHist[item].note;
                         NtfClose();
-                        IslandRunAction(n);
+                        // Pelo ativador do app abre a conversa certa; senão, o app.
+                        if (n.reply.hasActivator && !n.reply.launch.empty()) ReplySend(n, L"", true);
+                        else IslandRunAction(n);
                     }
                 }
             }
@@ -19117,11 +19752,7 @@ static void NtfToggle(Bar* b, int idx) {
         g_ntf.bar = nullptr;
         return;
     }
-    bool ok;
-    {
-        MenuGlassScope menuGlass;
-        ok = GlassLayerCreate(g_ntf.glass, g_ntf.pos, g_ntf.W, g_ntf.H);
-    }
+    bool ok = GlassLayerCreate(g_ntf.glass, g_ntf.pos, g_ntf.W, g_ntf.H);
     if (ok) {
         GlassLayerShapes(g_ntf.glass, {{g_ntf.panel, 24 * s}});
         GlassLayerOpacity(g_ntf.glass, 1.0f);
@@ -19245,6 +19876,10 @@ static void OpenItemMenu(Bar* b, int idx) {
         SearchOpen();
         return;
     }
+    // O calendário e a previsão fecham antes de outro painel abrir: senão ainda
+    // estariam na tela quando o vidro líquido do painel novo tira a foto do fundo.
+    if (g_calw.hwnd && it.kind != K_CLOCK) CalClose();
+    if (g_wxw.hwnd && it.kind != K_WEATHER) WxClose();
     if (it.kind == K_NOTIF && !g_forceFullMenu) {
         if (g_tray.hwnd) CloseTrayPopup(false);
         if (g_fly.hwnd) FlyClose(false);
@@ -19594,9 +20229,38 @@ static std::wstring VolGlyph() {
 static const wchar_t kShadowClass[] = L"WhFinderTopBarShadow";
 
 // O fundo refratado e uma camada de vidro bem leve (translúcida).
+// Fundo "Vidro líquido personalizado": a cor no topo da barra, sumindo em vidro
+// limpo, e a linha fina de luz ao longo da borda de baixo (sem refração
+// disponível, a cor não some de todo, para o texto continuar legível).
+static void DrawBarTint(Bar* b, float w, float h, float s, bool refracted) {
+    float top = g_settings.tintLevel / 100.0f;
+    float bottom = std::min(top, (100 - g_glass.transparency) / 100.0f * 0.8f);
+    if (!refracted) bottom = std::max(bottom, std::min(top, 0.55f));
+    if (auto* g = MakeTintBrush(b->rt, 0, h, top, bottom, g_settings.tintReach / 100.0f)) {
+        b->rt->FillRectangle(D2D1::RectF(0, 0, w, h), g);
+        g->Release();
+    }
+    // Halo suave logo acima da linha.
+    float gh = 2.4f * s;
+    D2D1_GRADIENT_STOP halo[] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.0f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.13f)}};
+    if (auto* g = MakeGradient(b->rt, D2D1::Point2F(0, h - gh - 0.75f * s), D2D1::Point2F(0, h - 0.75f * s), halo, 2)) {
+        b->rt->FillRectangle(D2D1::RectF(0, h - gh - 0.75f * s, w, h - 0.75f * s), g);
+        g->Release();
+    }
+    // A linha: mais forte no meio da barra, apagando nas pontas.
+    float lw = std::max(0.75f, 0.75f * s);
+    D2D1_GRADIENT_STOP line[] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.14f)}, {0.5f, D2D1::ColorF(1, 1, 1, 0.62f)},
+                                 {1.0f, D2D1::ColorF(1, 1, 1, 0.14f)}};
+    if (auto* g = MakeGradient(b->rt, D2D1::Point2F(0, 0), D2D1::Point2F(w, 0), line, 3)) {
+        b->rt->FillRectangle(D2D1::RectF(0, h - lw, w, h), g);
+        g->Release();
+    }
+}
+
 static void DrawBarLiquid(Bar* b, float w, float h, float s) {
     D2D1_RECT_F r = D2D1::RectF(0, 0, w, h);
     LqDraw(b->rt, *b->lq, r, 0, s);
+    if (g_settings.barStyle == 3) return;  // a cor e a linha vêm de DrawBarTint
     float a = 0;  // totalmente transparente: só a refração, o brilho e as bordas
     D2D1_GRADIENT_STOP body[] = {{0.0f, g_light ? D2D1::ColorF(1, 1, 1, a * 1.4f) : D2D1::ColorF(0.05f, 0.05f, 0.06f, a)},
                                  {1.0f, g_light ? D2D1::ColorF(1, 1, 1, a) : D2D1::ColorF(0.05f, 0.05f, 0.06f, a * 0.8f)}};
@@ -19680,7 +20344,7 @@ static void BarLiquidTick() {
 
 // Prepara a barra para o estilo escolhido (chamado ao criar).
 static void BarSetupStyle(Bar* b) {
-    if (g_settings.barStyle == 2) {
+    if (g_settings.barStyle >= 2) {
         b->lq = new LiquidSurface();
         b->lq->live = true;
         b->lq->wnd = b->hwnd;
@@ -20025,6 +20689,19 @@ static void Render(Bar* b) {
     D2D1_COLOR_F hl = g_light ? D2D1::ColorF(0, 0, 0, 0.10f) : D2D1::ColorF(1, 1, 1, 0.18f);
     D2D1_COLOR_F hlOpen = g_light ? D2D1::ColorF(0, 0, 0, 0.16f) : D2D1::ColorF(1, 1, 1, 0.26f);
 
+    // Os itens são remontados a cada desenho, e o número de menus do app ativo
+    // muda (ex.: ao abrir um painel da barra, o app ativo troca). O destaque
+    // (mouse, painel aberto, indicador) segue o item, não a posição antiga.
+    struct Mark { int* idx; ItemKind kind; int sub; };
+    Mark marks[] = {{&b->hover, K_LOGO, -1}, {&b->open, K_LOGO, -1}, {&b->flash, K_LOGO, -1}};
+    for (Mark& m : marks) {
+        if (*m.idx >= 0 && *m.idx < (int)b->items.size()) {
+            m.kind = b->items[*m.idx].kind;
+            m.sub = b->items[*m.idx].index;
+        } else {
+            m.sub = -2;  // nada marcado
+        }
+    }
     b->items.clear();
 
     // ---- Lado direito (montado da direita para a esquerda) ----
@@ -20149,6 +20826,15 @@ static void Render(Bar* b) {
         lx += mw;
     }
     for (auto& p : placed) b->items.push_back({p.spec.kind, 0, p.l, p.r});
+    for (Mark& m : marks) {
+        if (m.sub == -2) continue;
+        *m.idx = -1;
+        for (int i = 0; i < (int)b->items.size(); i++)
+            if (b->items[i].kind == m.kind && b->items[i].index == m.sub) {
+                *m.idx = i;
+                break;
+            }
+    }
 
     // ---- Desenho ----
     bool animating = BarAnimStep(b);
@@ -20156,7 +20842,8 @@ static void Render(Bar* b) {
     b->rt->BeginDraw();
     b->rt->Clear(D2D1::ColorF(0, 0, 0, 0));
     bool see = g_settings.barStyle != 0 && !b->solid;  // fundo transparente ou líquido
-    if (see && g_settings.barStyle == 2 && b->lq) DrawBarLiquid(b, w, h, s);
+    if (see && g_settings.barStyle >= 2 && b->lq) DrawBarLiquid(b, w, h, s);
+    if (see && g_settings.barStyle == 3) DrawBarTint(b, w, h, s, b->lq != nullptr);
 
     // Destaque em pílula, centralizado na altura da barra; fosco ou azul.
     std::vector<char> selItem(b->items.size(), 0);
@@ -20232,8 +20919,6 @@ static void Render(Bar* b) {
             ItemColor itemColor(fg, b->brush, !shadowPass && placedIdx < selItem.size() && selItem[placedIdx]);
             placedIdx++;
             BounceScope bounce(b->rt, BounceScale(b->bounce[p.spec.kind]), D2D1::Point2F((p.l + p.r) / 2, h / 2));
-            float isz = g_settings.fontSize * s * 1.15f * g_settings.iconScale;
-            (void)isz;
             // Giro: o sol acompanha o brilho.
             float spinDeg = 0;
             if (p.spec.kind == K_DISPLAY) spinDeg = b->sunSpin * 57.2958f;
@@ -20268,8 +20953,7 @@ static void Render(Bar* b) {
                 // Microfone e câmera. Em uso, o ícone fica colorido como no Mac:
                 // laranja no microfone, verde na câmera. Microfone silenciado: o
                 // ícone riscado.
-                float is = s * g_settings.iconScale;
-                float cx = (p.l + p.r) / 2, cy = h / 2, half = (p.r - p.l) / 4;
+                float cx = (p.l + p.r) / 2, half = (p.r - p.l) / 4;
                 struct One { float x; wchar_t g; bool on; D2D1_COLOR_F c; };
                 One ones[2] = {
                     {cx - half, g_ext.micMuted == 1 ? (wchar_t)0xEC54 : (wchar_t)0xE720, !g_ext.micApps.empty(),
@@ -20558,6 +21242,7 @@ static void BarsApplyLive(bool geometry) {
     KbdNavApply();
     NotifApply();
     if (g_settings.showWeather && !g_wx.data.ok) WxRefresh();
+    WinOsdApply();  // o indicador da barra pode ter sido ligado ou desligado
     RedrawAll();
 }
 
@@ -21427,6 +22112,7 @@ static DWORD WINAPI BarThread(LPVOID) {
     WxRefresh();
     SetTimer(g_owner, TIMER_WEATHER, WxIntervalMs(), nullptr);
     InstallTrayHook();
+    WinOsdApply();
     RegisterVolumeCallback();
 
     g_fgHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND, nullptr,
@@ -21474,6 +22160,7 @@ static DWORD WINAPI BarThread(LPVOID) {
     FlushSaves();  // sliders mexidos há pouco
     // 1) A janela que recebe os ícones da bandeja do shell, e o aviso de janela ativa.
     RemoveTrayHook();
+    WinOsdRestore();
     if (g_fgHook) { UnhookWinEvent(g_fgHook); g_fgHook = nullptr; }
     // 2) Threads de trabalho: cancela o que estiver em andamento e espera todas.
     UiaStop();
@@ -21907,7 +22594,6 @@ const UiTr kUiTr[] = {
     {L"A busca abre", L"Search opens", L"La búsqueda abre", L"La recherche ouvre", L"Die Suche öffnet", L"La ricerca apre", L"搜索打开"},
     {L"Siri Plus: a janela padrão dele, no estilo Spotlight", L"Siri Plus: its default window, Spotlight style", L"Siri Plus: su ventana predeterminada, estilo Spotlight", L"Siri Plus : sa fenêtre par défaut, style Spotlight", L"Siri Plus: sein Standardfenster im Spotlight-Stil", L"Siri Plus: la sua finestra predefinita, stile Spotlight", L"Siri Plus: 其默认窗口 (Spotlight 风格)"},
     {L"Privacidade (microfone e câmera)", L"Privacy (microphone and camera)", L"Privacidad (micrófono y cámara)", L"Confidentialité (micro et caméra)", L"Datenschutz (Mikrofon und Kamera)", L"Privacy (microfono e fotocamera)", L"隐私 (麦克风和摄像头)"},
-    {L"Pontos laranja e verde quando um app usa o microfone ou a câmera", L"Orange and green dots when an app uses the microphone or camera", L"Puntos naranja y verde cuando una app usa el micrófono o la cámara", L"Points orange et vert quand une app utilise le micro ou la caméra", L"Orange und grüne Punkte, wenn eine App Mikrofon oder Kamera nutzt", L"Punti arancione e verde quando un’app usa il microfono o la fotocamera", L"应用使用麦克风或摄像头时显示橙色和绿色圆点"},
     {L"Barra", L"Bar", L"Barra", L"Barre", L"Leiste", L"Barra", L"菜单栏"},
     {L"Fundo, cores de seleção, tamanho e quando a barra aparece", L"Background, selection colors, size and when the bar shows", L"Fondo, colores de selección, tamaño y cuándo aparece la barra", L"Arrière-plan, couleurs de sélection, taille et affichage de la barre", L"Hintergrund, Auswahlfarben, Größe und wann die Leiste erscheint", L"Sfondo, colori di selezione, dimensioni e quando compare la barra", L"背景、选中颜色、大小以及菜单栏何时显示"},
     {L"Idioma", L"Language", L"Idioma", L"Langue", L"Sprache", L"Lingua", L"语言"},
@@ -21933,10 +22619,7 @@ const UiTr kUiTr[] = {
     {L"Menus e painéis", L"Menus & Panels", L"Menús y paneles", L"Menus et panneaux", L"Menüs und Bereiche", L"Menu e pannelli", L"菜单和面板"},
     {L"Estilo dos menus, Tocando agora, pílulas de volume e brilho", L"Menu style, Now Playing, volume and brightness pills", L"Estilo de los menús, Reproduciendo, píldoras de volumen y brillo", L"Style des menus, À l’écoute, pastilles de volume et de luminosité", L"Menüstil, Aktuelle Wiedergabe, Pillen für Lautstärke und Helligkeit", L"Stile dei menu, In riproduzione, pillole di volume e luminosità", L"菜单样式、正在播放、音量和亮度胶囊"},
     {L"Estilo dos menus", L"Menu style", L"Estilo de los menús", L"Style des menus", L"Menüstil", L"Stile dei menu", L"菜单样式"},
-    {L"A Central de Controle não muda com esta opção", L"The Control Center doesn’t change with this option", L"El Centro de control no cambia con esta opción", L"Le Centre de contrôle ne change pas avec cette option", L"Das Kontrollzentrum ändert sich mit dieser Option nicht", L"Il Centro di Controllo non cambia con questa opzione", L"此选项不影响控制中心"},
     {L"Transparência dos menus (Vidro)", L"Menu transparency (Glass)", L"Transparencia de los menús (Vidrio)", L"Transparence des menus (Verre)", L"Menütransparenz (Glas)", L"Trasparenza dei menu (Vetro)", L"菜单透明度 (玻璃)"},
-    {L"Menus com menos ícones", L"Menus with fewer icons", L"Menús con menos iconos", L"Menus avec moins d’icônes", L"Menüs mit weniger Symbolen", L"Menu con meno icone", L"精简菜单图标"},
-    {L"Tira os ícones de som, Bluetooth, Tocando agora e Foco; o sinal do Wi-Fi fica", L"Removes the sound, Bluetooth, Now Playing and Focus icons; the Wi-Fi signal stays", L"Quita los iconos de sonido, Bluetooth, Reproduciendo y Concentración; la señal de Wi-Fi se mantiene", L"Retire les icônes de son, Bluetooth, À l’écoute et Concentration ; le signal Wi-Fi reste", L"Entfernt die Symbole für Ton, Bluetooth, Wiedergabe und Fokus; das WLAN-Signal bleibt", L"Toglie le icone di audio, Bluetooth, In riproduzione e Full immersion; il segnale Wi-Fi resta", L"移除声音、蓝牙、正在播放和专注图标; 保留 WLAN 信号"},
     {L"Atualizações pendentes no menu do logo", L"Pending updates in the logo menu", L"Actualizaciones pendientes en el menú del logo", L"Mises à jour en attente dans le menu du logo", L"Ausstehende Updates im Logo-Menü", L"Aggiornamenti in sospeso nel menu del logo", L"在徽标菜单中显示待安装更新"},
     {L"Ctrl+F2 navega a barra pelo teclado", L"Ctrl+F2 navigates the bar with the keyboard", L"Ctrl+F2 recorre la barra con el teclado", L"Ctrl+F2 parcourt la barre au clavier", L"Strg+F2 steuert die Leiste per Tastatur", L"Ctrl+F2 naviga nella barra con la tastiera", L"Ctrl+F2 使用键盘浏览菜单栏"},
     {L"Painel", L"Panel", L"Panel", L"Panneau", L"Bereich", L"Pannello", L"面板"},
@@ -21954,6 +22637,15 @@ const UiTr kUiTr[] = {
     {L"Refração nas bordas", L"Edge refraction", L"Refracción en los bordes", L"Réfraction sur les bords", L"Lichtbrechung an den Rändern", L"Rifrazione sui bordi", L"边缘折射"},
     {L"Desfoque do fundo", L"Background blur", L"Desenfoque del fondo", L"Flou de l’arrière-plan", L"Hintergrundunschärfe", L"Sfocatura dello sfondo", L"背景模糊"},
     {L"Acompanhar o fundo ao vivo", L"Follow the background live", L"Seguir el fondo en vivo", L"Suivre l’arrière-plan en direct", L"Hintergrund live verfolgen", L"Segui lo sfondo in tempo reale", L"实时跟随背景"},
+    {L"Vidro líquido personalizado", L"Custom liquid glass", L"Vidrio líquido personalizado", L"Verre liquide personnalisé", L"Eigenes Flüssigglas", L"Vetro liquido personalizzato", L"自定义液态玻璃"},
+    {L"Estilo do vidro", L"Glass style", L"Estilo del vidrio", L"Style du verre", L"Glasstil", L"Stile del vetro", L"玻璃样式"},
+    {L"Vidro líquido personalizado: a sua cor no topo, sumindo em vidro limpo embaixo", L"Custom liquid glass: your color at the top, fading to clear glass at the bottom", L"Vidrio líquido personalizado: tu color arriba, que se desvanece en vidrio transparente abajo", L"Verre liquide personnalisé : votre couleur en haut, qui s’efface en verre clair en bas", L"Eigenes Flüssigglas: deine Farbe oben, die unten in klares Glas übergeht", L"Vetro liquido personalizzato: il tuo colore in alto, che sfuma in vetro trasparente in basso", L"自定义液态玻璃：顶部是你的颜色，向下渐变为透明玻璃"},
+    {L"Cor do vidro", L"Glass color", L"Color del vidrio", L"Couleur du verre", L"Glasfarbe", L"Colore del vetro", L"玻璃颜色"},
+    {L"O primeiro círculo abre a paleta do Windows, para qualquer cor", L"The first circle opens the Windows color picker, for any color", L"El primer círculo abre la paleta de Windows, para cualquier color", L"Le premier cercle ouvre la palette de Windows, pour n’importe quelle couleur", L"Der erste Kreis öffnet die Windows-Farbauswahl für jede Farbe", L"Il primo cerchio apre la tavolozza di Windows, per qualsiasi colore", L"第一个圆圈打开 Windows 调色板，可选任意颜色"},
+    {L"Força da cor no topo", L"Color strength at the top", L"Intensidad del color arriba", L"Intensité de la couleur en haut", L"Farbstärke oben", L"Intensità del colore in alto", L"顶部颜色强度"},
+    {L"100 = sólida no topo; menos deixa o fundo aparecer também na parte colorida", L"100 = solid at the top; lower lets the background show through the colored part too", L"100 = sólido arriba; menos deja ver el fondo también en la parte de color", L"100 = opaque en haut ; moins laisse aussi voir l’arrière-plan dans la partie colorée", L"100 = oben deckend; weniger lässt den Hintergrund auch im farbigen Teil durchscheinen", L"100 = pieno in alto; meno lascia vedere lo sfondo anche nella parte colorata", L"100 = 顶部不透明；数值越低，彩色部分也越能透出背景"},
+    {L"Até onde a cor desce", L"How far down the color goes", L"Hasta dónde baja el color", L"Jusqu’où descend la couleur", L"Wie weit die Farbe nach unten reicht", L"Fin dove scende il colore", L"颜色向下延伸的范围"},
+    {L"Valores baixos mantêm a cor perto do topo; altos a trazem para baixo", L"Low values keep the color near the top; high values bring it down", L"Valores bajos mantienen el color cerca de arriba; altos lo bajan", L"Des valeurs basses gardent la couleur près du haut ; élevées la font descendre", L"Niedrige Werte halten die Farbe oben; hohe bringen sie nach unten", L"Valori bassi tengono il colore vicino all’alto; alti lo portano in basso", L"数值低时颜色靠近顶部；数值高时向下延伸"},
     {L"Vídeos e papéis de parede animados continuam aparecendo atrás do vidro", L"Videos and animated wallpapers keep showing behind the glass", L"Los vídeos y fondos animados se siguen viendo detrás del vidrio", L"Les vidéos et fonds d’écran animés restent visibles derrière le verre", L"Videos und animierte Hintergründe bleiben hinter dem Glas sichtbar", L"Video e sfondi animati restano visibili dietro il vetro", L"视频和动态壁纸仍会显示在玻璃后面"},
     {L"Pílulas de aviso", L"Notice Pills", L"Píldoras de aviso", L"Pastilles d’alerte", L"Hinweis-Pillen", L"Pillole di avviso", L"提醒胶囊"},
     {L"Avisos que descem da barra e o botão de Notificações", L"Notices that drop from the bar and the Notifications button", L"Avisos que bajan de la barra y el botón de Notificaciones", L"Alertes qui descendent de la barre et bouton Notifications", L"Hinweise, die aus der Leiste fallen, und die Mitteilungstaste", L"Avvisi che scendono dalla barra e il pulsante Notifiche", L"从菜单栏下拉的提醒和通知按钮"},
@@ -21975,8 +22667,6 @@ const UiTr kUiTr[] = {
     {L"Notificações do Windows (experimental)", L"Windows notifications (experimental)", L"Notificaciones de Windows (experimental)", L"Notifications Windows (expérimental)", L"Windows-Mitteilungen (experimentell)", L"Notifiche di Windows (sperimentale)", L"Windows 通知 (实验性)"},
     {L"WhatsApp, Discord, e-mail… Clicar abre o app", L"WhatsApp, Discord, email… Clicking opens the app", L"WhatsApp, Discord, correo… Al hacer clic se abre la app", L"WhatsApp, Discord, e-mail… Un clic ouvre l’app", L"WhatsApp, Discord, E-Mail… Ein Klick öffnet die App", L"WhatsApp, Discord, e-mail… Il clic apre l’app", L"WhatsApp、Discord、电子邮件… 点击打开应用"},
     {L"Texto, imagem ou arquivos copiados", L"Copied text, image or files", L"Texto, imagen o archivos copiados", L"Texte, image ou fichiers copiés", L"Kopierter Text, Bild oder Dateien", L"Testo, immagine o file copiati", L"复制的文本、图片或文件"},
-    {L"Capturas de tela", L"Screenshots", L"Capturas de pantalla", L"Captures d’écran", L"Bildschirmfotos", L"Screenshot", L"截图"},
-    {L"Clique na pílula para abrir a captura", L"Click the pill to open the screenshot", L"Haz clic en la píldora para abrir la captura", L"Cliquez sur la pastille pour ouvrir la capture", L"Auf die Pille klicken, um das Bildschirmfoto zu öffnen", L"Fai clic sulla pillola per aprire lo screenshot", L"点击胶囊打开截图"},
     {L"Downloads concluídos", L"Finished downloads", L"Descargas completadas", L"Téléchargements terminés", L"Abgeschlossene Downloads", L"Download completati", L"下载完成"},
     {L"Clique na pílula para abrir o arquivo", L"Click the pill to open the file", L"Haz clic en la píldora para abrir el archivo", L"Cliquez sur la pastille pour ouvrir le fichier", L"Auf die Pille klicken, um die Datei zu öffnen", L"Fai clic sulla pillola per aprire il file", L"点击胶囊打开文件"},
     {L"Dispositivos USB e discos", L"USB devices and drives", L"Dispositivos USB y discos", L"Périphériques USB et disques", L"USB-Geräte und Laufwerke", L"Dispositivi USB e unità", L"USB 设备和磁盘"},
@@ -22013,6 +22703,15 @@ const UiTr kUiTr[] = {
     {L"Descer", L"Drop", L"Bajar", L"Descendre", L"Herabfallen", L"Scendi", L"下落"},
     {L"Esmaecer", L"Fade", L"Atenuar", L"Fondu", L"Verblassen", L"Dissolvenza", L"淡化"},
     {L"Encolher", L"Shrink", L"Encoger", L"Rétrécir", L"Schrumpfen", L"Riduci", L"收缩"},
+    {L"Cascata", L"Cascade", L"Cascada", L"Cascade", L"Kaskade", L"Cascata", L"层叠"},
+    {L"Deslizar para cima", L"Slide up", L"Deslizar hacia arriba", L"Glisser vers le haut", L"Nach oben gleiten", L"Scorri verso l’alto", L"向上滑动"},
+    {L"Nenhuma", L"None", L"Ninguna", L"Aucune", L"Keine", L"Nessuna", L"无"},
+    {L"Formato dos ícones", L"Icon shape", L"Forma de los iconos", L"Forme des icônes", L"Symbolform", L"Forma delle icone", L"图标形状"},
+    {L"Nas notificações: círculo ou o formato dos ícones do macOS", L"In notifications: a circle or the macOS icon shape", L"En las notificaciones: círculo o la forma de los iconos de macOS", L"Dans les notifications : un cercle ou la forme des icônes de macOS", L"In Mitteilungen: Kreis oder die Form der macOS-Symbole", L"Nelle notifiche: cerchio o la forma delle icone di macOS", L"通知中：圆形或 macOS 图标形状"},
+    {L"Círculo", L"Circle", L"Círculo", L"Cercle", L"Kreis", L"Cerchio", L"圆形"},
+    {L"Formato macOS", L"macOS shape", L"Forma de macOS", L"Forme macOS", L"macOS-Form", L"Forma macOS", L"macOS 形状"},
+    {L"Ao fechar a Central", L"When the Control Center closes", L"Al cerrar el Centro de control", L"À la fermeture du Centre de contrôle", L"Beim Schließen des Kontrollzentrums", L"Alla chiusura del Centro di Controllo", L"控制中心关闭时"},
+    {L"Cascata: cada linha volta para dentro da linha de cima, de baixo para cima", L"Cascade: each row slides back into the one above, from the bottom up", L"Cascada: cada fila vuelve a entrar en la de arriba, de abajo hacia arriba", L"Cascade : chaque ligne rentre dans celle du dessus, de bas en haut", L"Kaskade: Jede Reihe gleitet von unten nach oben in die darüber zurück", L"Cascata: ogni riga rientra in quella sopra, dal basso verso l’alto", L"层叠：每一行从下往上收回到上一行里"},
     {L"Sugar", L"Suck in", L"Absorber", L"Aspirer", L"Einsaugen", L"Risucchio", L"吸入"},
     {L"Subir", L"Rise", L"Subir", L"Monter", L"Aufsteigen", L"Sali", L"上升"},
     {L"Centro", L"Center", L"Centro", L"Centre", L"Mitte", L"Centro", L"居中"},
@@ -22074,7 +22773,6 @@ const UiTr kUiTr[] = {
     {L"Escolher bairro...", L"Choose Neighborhood...", L"Elegir barrio...", L"Choisir le quartier...", L"Stadtteil wählen...", L"Scegli quartiere...", L"选择街区..."},
     {L"Ocultar da barra", L"Hide from the Bar", L"Ocultar de la barra", L"Masquer de la barre", L"Aus der Leiste ausblenden", L"Nascondi dalla barra", L"从菜单栏隐藏"},
     {L"Transparência do vidro", L"Glass Transparency", L"Transparencia del vidrio", L"Transparence du verre", L"Glastransparenz", L"Trasparenza del vetro", L"玻璃透明度"},
-    {L"Não foi possível baixar %s", L"Couldn’t download %s", L"No se pudo descargar %s", L"Impossible de télécharger %s", L"%s konnte nicht heruntergeladen werden", L"Impossibile scaricare %s", L"无法下载 %s"},
     {L"Arquivo não encontrado: %s", L"File not found: %s", L"Archivo no encontrado: %s", L"Fichier introuvable : %s", L"Datei nicht gefunden: %s", L"File non trovato: %s", L"找不到文件: %s"},
     {L"Não foi possível abrir %s", L"Couldn’t open %s", L"No se pudo abrir %s", L"Impossible d’ouvrir %s", L"%s konnte nicht geöffnet werden", L"Impossibile aprire %s", L"无法打开 %s"},
     {L"%s é grande demais", L"%s is too large", L"%s es demasiado grande", L"%s est trop volumineux", L"%s ist zu groß", L"%s è troppo grande", L"%s 太大"},
@@ -22105,7 +22803,6 @@ const UiTr kUiTr[] = {
     {L"Configurações de Foco...", L"Focus Settings...", L"Configuración de concentración...", L"Paramètres de concentration...", L"Fokuseinstellungen...", L"Impostazioni Full immersion...", L"专注设置..."},
     {L"Microfone em uso", L"Microphone in Use", L"Micrófono en uso", L"Micro en cours d’utilisation", L"Mikrofon wird verwendet", L"Microfono in uso", L"麦克风使用中"},
     {L"Câmera em uso", L"Camera in Use", L"Cámara en uso", L"Caméra en cours d’utilisation", L"Kamera wird verwendet", L"Fotocamera in uso", L"摄像头使用中"},
-    {L"Configurações de privacidade...", L"Privacy Settings...", L"Configuración de privacidad...", L"Paramètres de confidentialité...", L"Datenschutzeinstellungen...", L"Impostazioni privacy...", L"隐私设置..."},
     {L"Não Perturbe", L"Do Not Disturb", L"No molestar", L"Ne pas déranger", L"Nicht stören", L"Non disturbare", L"勿扰"},
     {L"Ativado", L"On", L"Activado", L"Activé", L"Ein", L"Attivato", L"已开启"},
     {L"Desativado", L"Off", L"Desactivado", L"Désactivé", L"Aus", L"Disattivato", L"已关闭"},
@@ -22121,10 +22818,7 @@ const UiTr kUiTr[] = {
     {L"Removido", L"Removed", L"Quitado", L"Retiré", L"Entfernt", L"Rimosso", L"已移除"},
     {L"Dispositivo USB", L"USB device", L"Dispositivo USB", L"Périphérique USB", L"USB-Gerät", L"Dispositivo USB", L"USB 设备"},
     {L"Conectado por USB", L"Connected via USB", L"Conectado por USB", L"Connecté en USB", L"Per USB verbunden", L"Connesso via USB", L"已通过 USB 连接"},
-    {L"1 arquivo copiado", L"1 file copied", L"1 archivo copiado", L"1 fichier copié", L"1 Datei kopiert", L"1 file copiato", L"已复制 1 个文件"},
-    {L"%s arquivos copiados", L"%s files copied", L"%s archivos copiados", L"%s fichiers copiés", L"%s Dateien kopiert", L"%s file copiati", L"已复制 %s 个文件"},
     {L"Copiado", L"Copied", L"Copiado", L"Copié", L"Kopiert", L"Copiato", L"已复制"},
-    {L"Imagem copiada", L"Image copied", L"Imagen copiada", L"Image copiée", L"Bild kopiert", L"Immagine copiata", L"已复制图片"},
     {L"Salva · clique para abrir", L"Saved · click to open", L"Guardada · haz clic para abrir", L"Enregistrée · cliquez pour ouvrir", L"Gespeichert · zum Öffnen klicken", L"Salvato · fai clic per aprire", L"已保存 · 点击打开"},
     {L"Download concluído", L"Download complete", L"Descarga completada", L"Téléchargement terminé", L"Download abgeschlossen", L"Download completato", L"下载完成"},
     {L"Nenhuma notificação", L"No notifications", L"No hay notificaciones", L"Aucune notification", L"Keine Mitteilungen", L"Nessuna notifica", L"没有通知"},
@@ -22170,7 +22864,6 @@ const UiTr kUiTr[] = {
     {L"Calendário", L"Calendar", L"Calendario", L"Calendrier", L"Kalender", L"Calendario", L"日历"},
     {L"Importar arquivo .ics", L"Import .ics file", L"Importar archivo .ics", L"Importer un fichier .ics", L".ics-Datei importieren", L"Importa file .ics", L"导入 .ics 文件"},
     {L"Remover os calendários importados", L"Remove imported calendars", L"Quitar los calendarios importados", L"Supprimer les calendriers importés", L"Importierte Kalender entfernen", L"Rimuovi i calendari importati", L"移除已导入的日历"},
-    {L"Links .ics (como o endereço secreto do Google Agenda) ficam nas configurações do mod no Windhawk.", L".ics links (like Google Calendar’s secret address) go in the mod’s settings in Windhawk.", L"Los enlaces .ics (como la dirección secreta de Google Calendar) van en la configuración del mod en Windhawk.", L"Les liens .ics (comme l’adresse secrète de Google Agenda) se placent dans les paramètres du mod dans Windhawk.", L".ics-Links (wie die geheime Adresse von Google Kalender) gehören in die Mod-Einstellungen in Windhawk.", L"I link .ics (come l’indirizzo segreto di Google Calendar) vanno nelle impostazioni della mod in Windhawk.", L".ics 链接 (如 Google 日历的私密地址) 请填写在 Windhawk 中此模组的设置里。"},
     {L"Calendário importado", L"Calendar imported", L"Calendario importado", L"Calendrier importé", L"Kalender importiert", L"Calendario importato", L"已导入日历"},
     {L"%s calendários importados", L"%s calendars imported", L"%s calendarios importados", L"%s calendriers importés", L"%s Kalender importiert", L"%s calendari importati", L"已导入 %s 个日历"},
     {L"Calendários importados removidos", L"Imported calendars removed", L"Calendarios importados quitados", L"Calendriers importés supprimés", L"Importierte Kalender entfernt", L"Calendari importati rimossi", L"已移除导入的日历"},
@@ -22179,7 +22872,8 @@ const UiTr kUiTr[] = {
     {L"Linha colorida", L"Colored line", L"Línea de color", L"Ligne colorée", L"Farbige Linie", L"Linea colorata", L"彩色线条"},
     {L"Somente a barra mostra as notificações", L"Only the bar shows notifications", L"Solo la barra muestra las notificaciones", L"Seule la barre affiche les notifications", L"Nur die Leiste zeigt Mitteilungen", L"Solo la barra mostra le notifiche", L"仅由菜单栏显示通知"},
     {L"Tira as faixas do Windows da tela; chamadas, alarmes e lembretes continuam", L"Takes the Windows banners off the screen; calls, alarms and reminders stay", L"Quita los banners de Windows de la pantalla; las llamadas, alarmas y recordatorios se mantienen", L"Retire les bannières Windows de l’écran ; appels, alarmes et rappels restent", L"Nimmt die Windows-Banner vom Bildschirm; Anrufe, Wecker und Erinnerungen bleiben", L"Toglie i banner di Windows dallo schermo; chiamate, sveglie e promemoria restano", L"将 Windows 横幅移出屏幕; 来电、闹钟和提醒仍会显示"},
-    {L"Menus da barra, pílula do Bluetooth, Tocando agora e Notificações. A Central de Controle não muda", L"Bar menus, the Bluetooth pill, Now Playing and Notifications. The Control Center doesn’t change", L"Menús de la barra, píldora de Bluetooth, Reproduciendo y Notificaciones. El Centro de control no cambia", L"Menus de la barre, pastille Bluetooth, À l’écoute et Notifications. Le Centre de contrôle ne change pas", L"Leistenmenüs, Bluetooth-Pille, Aktuelle Wiedergabe und Mitteilungen. Das Kontrollzentrum ändert sich nicht", L"Menu della barra, pillola Bluetooth, In riproduzione e Notifiche. Il Centro di Controllo non cambia", L"菜单栏菜单、蓝牙胶囊、正在播放和通知。控制中心不受影响"},
+    {L"Menus da barra, pílula do Bluetooth e Tocando agora. A Central de Controle e as Notificações não mudam", L"Bar menus, the Bluetooth pill and Now Playing. The Control Center and Notifications don’t change", L"Menús de la barra, píldora de Bluetooth y Reproduciendo. El Centro de control y las Notificaciones no cambian", L"Menus de la barre, pastille Bluetooth et À l’écoute. Le Centre de contrôle et les Notifications ne changent pas", L"Leistenmenüs, Bluetooth-Pille und Aktuelle Wiedergabe. Kontrollzentrum und Mitteilungen ändern sich nicht", L"Menu della barra, pillola Bluetooth e In riproduzione. Il Centro di Controllo e le Notifiche non cambiano", L"菜单栏菜单、蓝牙胶囊和正在播放。控制中心和通知不受影响"},
+    {L"Responder", L"Reply", L"Responder", L"Répondre", L"Antworten", L"Rispondi", L"回复"},
     {L"Digite uma resposta", L"Type a reply", L"Escribe una respuesta", L"Tapez une réponse", L"Antwort eingeben", L"Scrivi una risposta", L"输入回复"},
     {L"Enviar", L"Send", L"Enviar", L"Envoyer", L"Senden", L"Invia", L"发送"},
     {L"Resposta enviada", L"Reply sent", L"Respuesta enviada", L"Réponse envoyée", L"Antwort gesendet", L"Risposta inviata", L"回复已发送"},
