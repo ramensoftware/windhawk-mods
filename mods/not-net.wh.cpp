@@ -3,7 +3,7 @@
 // @name            !Net — Per-App Kill Switch
 // @description     A panel to manage per app internet connection.
 // @author          Ashix
-// @version         1.2026.1310
+// @version         1.2026.1210
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
 // @donateUrl       https://ko-fi.com/kashix
@@ -2328,7 +2328,11 @@ static void RefreshAppList() {
             e.isExcluded = g_excludedExes.count(low) > 0;
             e.exeExists = FileExistsW(p.exePath);
             auto itExt = extFw.find(low);
-            if (itExt != extFw.end() && (itExt->second.dirMask & 1) != 0) { e.isExternalBlocked = true; e.externalBlockMask = itExt->second.dirMask; e.externalRuleName = itExt->second.ruleName; }
+            if (itExt != extFw.end() && (itExt->second.dirMask & 1) != 0) {
+                e.isExternalBlocked = true;
+                e.externalBlockMask = itExt->second.dirMask;
+                e.externalRuleName = itExt->second.ruleName;
+            }
             auto itDir = g_pendingDirs.find(low);
             e.block.direction = (itDir != g_pendingDirs.end()) ? itDir->second : defDir;
         }
@@ -3499,7 +3503,11 @@ static void HandleClickAction(const HitRect& hr) {
         RequestRepaint();
     } else if (hr.kind == HitRect::RowExclude && hr.rowIndex >= 0 && hr.rowIndex < (int)g_appList.size()) {
         const AppEntry& app = g_appList[hr.rowIndex];
-        if (app.isExternalBlocked) { g_statusBanner = L"!Net can't manage this app — edit its rule in Windows Defender Firewall."; RequestRepaint(); return; }
+        if (app.isExternalBlocked) {
+            g_statusBanner = L"!Net can't manage this app — edit its rule in Windows Defender Firewall.";
+            RequestRepaint();
+            return;
+        }
         std::wstring low = ToLower(app.displayPath);
         if (app.isExcluded) {
             g_excludedExes.erase(low);
@@ -3514,7 +3522,11 @@ static void HandleClickAction(const HitRect& hr) {
         RequestRepaint();
     } else if (hr.kind == HitRect::RowToggle && hr.rowIndex >= 0 && hr.rowIndex < (int)g_appList.size()) {
         const AppEntry& app = g_appList[hr.rowIndex];
-        if (app.isExternalBlocked) { g_statusBanner = L"!Net can't manage this app — edit its rule in Windows Defender Firewall."; RequestRepaint(); return; }
+        if (app.isExternalBlocked) {
+            g_statusBanner = L"!Net can't manage this app — edit its rule in Windows Defender Firewall.";
+            RequestRepaint();
+            return;
+        }
         CycleStatusSnapshot cyc;
         if (GetCycleSnapshot(app.exePath, cyc)) {
             int res = MessageBoxW(g_hWnd,
@@ -3540,7 +3552,11 @@ static void HandleClickAction(const HitRect& hr) {
         RequestRepaint();
     } else if (hr.kind == HitRect::RowDirection && hr.rowIndex >= 0 && hr.rowIndex < (int)g_appList.size()) {
         AppEntry& app = g_appList[hr.rowIndex];
-        if (app.isExternalBlocked) { g_statusBanner = L"!Net can't manage this app — edit its rule in Windows Defender Firewall."; RequestRepaint(); return; }
+        if (app.isExternalBlocked) {
+            g_statusBanner = L"!Net can't manage this app — edit its rule in Windows Defender Firewall.";
+            RequestRepaint();
+            return;
+        }
         std::wstring low = ToLower(app.displayPath);
         Direction nextDir = (Direction)(((int)app.block.direction + 1) % 3);
         g_pendingDirs[low] = nextDir;
