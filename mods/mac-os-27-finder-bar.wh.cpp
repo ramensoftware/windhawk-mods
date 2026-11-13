@@ -81,7 +81,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 - Bar text and icons in white, black or automatic (following the Windows theme), for all displays or each display on its own
 - Clicking the album cover (Control Center or Now Playing) brings the playing app's window to the front
 - Optional: hide the bar while a window is maximized on its display (the window gets the whole height) and bring it back when none is
-- Optional handle: a thin pill at the top center brings a hidden bar back with a click (auto-hide or maximized window), and windows move down while it's shown so nothing sits under it; without the handle, auto-hide shows the bar by touching the top edge, never over a window's caption buttons
+- Hide the bar: never, when the pointer touches the top (never over a window's caption buttons), or with the handle: the bar stays hidden and comes back only with a click on a thin pill at the top center, and windows move down while it's shown. A bar hidden by a maximized window also comes back with the handle
 - Choose where the bar shows: all displays, the main one, or a specific display (listed by name); if that display is disconnected, the bar moves to the main one
 - **Disks** (optional): its menu lists every local and removable disk with a usage bar and opens it in Explorer
 - Bar icons share one size: each icon is measured and scaled to the same height, and they all grow together with the icon size setting
@@ -12338,7 +12338,7 @@ enum BsVal {
     BV_BATTPCT, BV_AUTOHIDE, BV_HIDEFS, BV_SOLIDMAX, BV_ALLMON, BV_FLYOUTS, BV_OSD, BV_DIM,
     BV_G_TRANSP, BV_G_CLEAR, BV_G_LIQUID, BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_ICONS, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_SELMENU, BV_UPDATES,
     BV_G_TINT, BV_SEARCHTGT, BV_LANG, BV_NPBAR, BV_ICSADD, BV_ICSCLEAR,
-    BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_TEXTMON, BV_HIDEMAX, BV_REVEAL,
+    BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_TEXTMON, BV_HIDEMAX, BV_REVEAL, BV_HIDEMODE,
 };
 struct BsRowDef {
     int kind;
@@ -12381,10 +12381,9 @@ static const BsRowDef kBsRows[] = {
     {BR_SLIDER, BV_ICONS, L"Tamanho dos ícones", 0, 0},
     {BR_GROUP, BV_NONE, L"Comportamento", 0, 0},
     {BR_SWITCH, BV_BATTPCT, L"Mostrar a porcentagem da bateria", 0, 0},
-    {BR_SWITCH, BV_AUTOHIDE, L"Ocultar e mostrar a barra automaticamente", 0, 0, L"Aparece ao encostar o mouse no topo da tela"},
+    {BR_CHOICE, BV_HIDEMODE, L"Ocultar a barra", 0, 0, L"Com a alça, a barra fica escondida e volta com um clique na pílula fina no topo; as janelas descem para ela caber"},
     {BR_SWITCH, BV_HIDEFS, L"Ocultar em tela cheia", 0, 0, L"Jogos, vídeos e apps em tela cheia ficam sem a barra"},
     {BR_SWITCH, BV_HIDEMAX, L"Ocultar com janela maximizada", 0, 0, L"A barra some quando uma janela é maximizada e volta quando não há nenhuma (na área de trabalho)"},
-    {BR_SWITCH, BV_REVEAL, L"Alça para trazer a barra", 0, 0, L"Barra escondida (automática ou por janela maximizada): um clique na pílula fina no centro do topo traz a barra e as janelas descem para ela caber; no modo automático, ela substitui encostar o mouse no topo"},
     {BR_SWITCH, BV_SOLIDMAX, L"Fundo sólido com janela maximizada", 0, 0},
     {BR_CHOICE, BV_BARMON, L"Mostrar a barra em", 0, 0, L"Todos os monitores, o principal ou um deles; se o escolhido for desconectado, a barra vai para o principal"},
     {BR_SWITCH, BV_MORE, L"Recolher numa seta os ícones que não cabem", 0, 0, L"Como as setas ao lado do notch no macOS 27"},
@@ -12508,7 +12507,6 @@ static const BsBoolKey kBsKeys[] = {
     {BV_AUTOHIDE, L"autoHide", &Settings::autoHide},
     {BV_HIDEFS, L"hideOnFullscreen", &Settings::hideOnFullscreen},
     {BV_HIDEMAX, L"hideWhenMaximized", &Settings::hideWhenMaximized},
-    {BV_REVEAL, L"revealHandle", &Settings::revealHandle},
     {BV_SOLIDMAX, L"solidWhenMaximized", &Settings::solidWhenMaximized},
     {BV_ALLMON, L"allMonitors", &Settings::allMonitors},
     {BV_FLYOUTS, L"flyouts", &Settings::flyouts},
@@ -12663,6 +12661,7 @@ static int BsGet(int val) {
             return dev.empty() ? g_settings.theme : TextColorFor(dev) + 1;
         }
         case BV_TEXTMON: return g_textMonEdit;
+        case BV_HIDEMODE: return !g_settings.autoHide ? 0 : g_settings.revealHandle ? 2 : 1;
         case BV_BARMON: {
             if (g_settings.barMonitor == L"all") return 0;
             if (g_settings.barMonitor == L"primary") return 1;
@@ -12723,6 +12722,7 @@ static void BsSaveLook() {
 static void BarsApplyLive(bool geometry);
 static void BarsRestyle();
 static HWND BsWindow();
+static void HandleSync(Bar* b);  // a alça no topo
 static void BsSet(int val, int v) {
     if (const BsBoolKey* k = BsKeyFor(val)) {
         bool on = v != 0;
@@ -12738,7 +12738,7 @@ static void BsSet(int val, int v) {
                 if (on) SetTimer(g_owner, TIMER_MAXCHECK, 250, nullptr);
                 else KillTimer(g_owner, TIMER_MAXCHECK);
             }
-            if ((val == BV_HIDEMAX || val == BV_REVEAL) && g_owner) {
+            if (val == BV_HIDEMAX && g_owner) {
                 if (g_settings.autoHide || g_settings.hideWhenMaximized) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
                 else KillTimer(g_owner, TIMER_FAST);
             }
@@ -12867,6 +12867,19 @@ static void BsSet(int val, int v) {
         g_settings.barMonitor = want;
         OvrSetStr(L"barMonitor", want);
         RequestReload(1);  // refaz as barras nos monitores escolhidos
+        return;
+    }
+    if (val == BV_HIDEMODE) {
+        // Uma função só: não ocultar, ocultar e mostrar ao encostar o mouse no topo,
+        // ou ocultar e mostrar só pelo clique na alça.
+        bool hide = v > 0, handle = v == 2;
+        bool rebuild = hide != g_settings.autoHide;
+        g_settings.autoHide = hide;
+        g_settings.revealHandle = handle;
+        OvrSetInt(L"autoHide", hide ? 1 : 0);
+        OvrSetInt(L"revealHandle", handle ? 1 : 0);
+        if (rebuild) RequestReload(1);  // a reserva do espaço no topo muda
+        else for (Bar* b : g_bars) HandleSync(b);
         return;
     }
     if (val == BV_TEXTMON) {
@@ -13211,6 +13224,7 @@ static const PCWSTR kBsBarChoices[] = {L"Vidro", L"Transparente", L"Líquido", L
 static const PCWSTR kBsGlassStyle[] = {L"Transparente", L"Vidro líquido personalizado"};
 static const PCWSTR kBsNtfShape[] = {L"Círculo", L"Formato macOS"};
 static const PCWSTR kBsTextColor[] = {L"Automático", L"Branco", L"Preto"};
+static const PCWSTR kBsHideMode[] = {L"Não", L"Ao encostar o mouse no topo", L"Com a alça (clique)"};
 static const PCWSTR kBsTextColorMon[] = {L"Como nos outros", L"Automático", L"Branco", L"Preto"};
 static const PCWSTR kBsCcClose[] = {L"Cascata", L"Encolher", L"Esmaecer", L"Deslizar para cima", L"Nenhuma"};
 static const PCWSTR kBsLookChoices[] = {L"Desfoque", L"Líquido", L"Transparente"};
@@ -13265,6 +13279,7 @@ static const PCWSTR* BsChoiceLabels(int val) {
         case BV_NTFSHAPE: return kBsNtfShape;
         case BV_TEXTCOLOR: return g_textMonEdit > 0 ? kBsTextColorMon : kBsTextColor;
         case BV_TEXTMON: return BsTextMonLabels(nullptr);
+        case BV_HIDEMODE: return kBsHideMode;
     }
     return kBsChoices;
 }
@@ -22746,8 +22761,9 @@ static void HandleRender(Bar* b) {
 }
 // A alça aparece só quando a barra está escondida por um desses dois modos.
 static void HandleSync(Bar* b) {
-    bool want = g_settings.revealHandle && !b->autoShown &&
-                ((g_settings.autoHide && !b->hiddenForFullscreen) || b->maxHidden);
+    // Modo "com a alça", ou escondida por janela maximizada (aí a alça é o jeito de trazê-la).
+    bool want = !b->autoShown &&
+                ((g_settings.autoHide && g_settings.revealHandle && !b->hiddenForFullscreen) || b->maxHidden);
     if (want && !b->handle) {
         b->handle = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOACTIVATE, kHandleClass, L"",
                                     WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, g_hInst, nullptr);
@@ -24262,8 +24278,11 @@ const UiTr kUiTr[] = {
     {L"Como nos outros", L"Same as the others", L"Como en los demás", L"Comme les autres", L"Wie die anderen", L"Come gli altri", L"与其他相同"},
     {L"Ocultar com janela maximizada", L"Hide when a window is maximized", L"Ocultar con una ventana maximizada", L"Masquer quand une fenêtre est agrandie", L"Bei maximiertem Fenster ausblenden", L"Nascondi con una finestra ingrandita", L"窗口最大化时隐藏"},
     {L"A barra some quando uma janela é maximizada e volta quando não há nenhuma (na área de trabalho)", L"The bar hides when a window is maximized and comes back when none is (on the desktop)", L"La barra se oculta al maximizar una ventana y vuelve cuando no hay ninguna (en el escritorio)", L"La barre se masque quand une fenêtre est agrandie et revient quand il n'y en a plus (sur le bureau)", L"Die Leiste verschwindet bei einem maximierten Fenster und kommt zurück, wenn keines mehr da ist (auf dem Desktop)", L"La barra si nasconde quando una finestra è ingrandita e torna quando non ce ne sono (sul desktop)", L"窗口最大化时菜单栏隐藏，没有最大化窗口时（桌面上）重新出现"},
-    {L"Alça para trazer a barra", L"Handle to bring the bar back", L"Asa para traer la barra", L"Poignée pour rappeler la barre", L"Griff zum Zurückholen der Leiste", L"Maniglia per richiamare la barra", L"用拉手显示菜单栏"},
-    {L"Barra escondida (automática ou por janela maximizada): um clique na pílula fina no centro do topo traz a barra e as janelas descem para ela caber; no modo automático, ela substitui encostar o mouse no topo", L"Hidden bar (auto-hide or maximized window): a click on the thin pill at the top center brings it back and windows move down to make room; in auto-hide, it replaces touching the top edge", L"Barra oculta (automática o por ventana maximizada): un clic en la píldora fina arriba en el centro la trae y las ventanas bajan para dejarle espacio; en el modo automático, reemplaza tocar el borde superior", L"Barre masquée (automatique ou par fenêtre agrandie) : un clic sur la fine pilule en haut au centre la rappelle et les fenêtres descendent pour lui laisser la place ; en mode automatique, cela remplace le bord supérieur", L"Ausgeblendete Leiste (automatisch oder bei maximiertem Fenster): ein Klick auf die schmale Pille oben in der Mitte holt sie zurück, und Fenster rücken nach unten; im Automatikmodus ersetzt das den oberen Rand", L"Barra nascosta (automatica o per finestra ingrandita): un clic sulla pillola sottile in alto al centro la richiama e le finestre scendono per farle spazio; in modalità automatica sostituisce il bordo superiore", L"隐藏菜单栏时（自动或因窗口最大化）：点击顶部中央的细长胶囊即可显示，窗口会下移让出空间；自动模式下，它取代鼠标碰到顶部"},
+    {L"Não", L"No", L"No", L"Non", L"Nein", L"No", L"否"},
+    {L"Ocultar a barra", L"Hide the bar", L"Ocultar la barra", L"Masquer la barre", L"Leiste ausblenden", L"Nascondi la barra", L"隐藏菜单栏"},
+    {L"Com a alça, a barra fica escondida e volta com um clique na pílula fina no topo; as janelas descem para ela caber", L"With the handle, the bar stays hidden and comes back with a click on the thin pill at the top; windows move down to make room", L"Con la asa, la barra queda oculta y vuelve con un clic en la píldora fina de arriba; las ventanas bajan para dejarle espacio", L"Avec la poignée, la barre reste masquée et revient d'un clic sur la fine pilule en haut ; les fenêtres descendent pour lui laisser la place", L"Mit dem Griff bleibt die Leiste ausgeblendet und kommt per Klick auf die schmale Pille oben zurück; Fenster rücken nach unten", L"Con la maniglia, la barra resta nascosta e torna con un clic sulla pillola sottile in alto; le finestre scendono per farle spazio", L"使用拉手时，菜单栏保持隐藏，点击顶部的细长胶囊即可显示；窗口会下移让出空间"},
+    {L"Ao encostar o mouse no topo", L"When the pointer touches the top", L"Al tocar la parte superior con el puntero", L"Quand le pointeur touche le haut", L"Wenn der Mauszeiger oben anstößt", L"Quando il puntatore tocca il bordo superiore", L"鼠标碰到顶部时"},
+    {L"Com a alça (clique)", L"With the handle (click)", L"Con la asa (clic)", L"Avec la poignée (clic)", L"Mit dem Griff (Klick)", L"Con la maniglia (clic)", L"使用拉手（点击）"},
     {L"Discos", L"Disks", L"Discos", L"Disques", L"Laufwerke", L"Dischi", L"磁盘"},
     {L"Clique para ver os discos e quanto cada um está cheio", L"Click to see the disks and how full each one is", L"Haz clic para ver los discos y cuánto está lleno cada uno", L"Cliquez pour voir les disques et leur remplissage", L"Klicken, um die Laufwerke und ihre Belegung zu sehen", L"Fai clic per vedere i dischi e quanto è pieno ciascuno", L"点击查看磁盘及其使用量"},
     {L"Discos: o do sistema está %s% cheio", L"Disks: the system disk is %s% full", L"Discos: el del sistema está al %s%", L"Disques : le disque système est plein à %s %", L"Laufwerke: Systemlaufwerk zu %s% voll", L"Dischi: quello di sistema è pieno al %s%", L"磁盘：系统磁盘已用 %s%"},
