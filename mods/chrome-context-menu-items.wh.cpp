@@ -346,7 +346,7 @@
         Shows this entry only on pages whose address matches one of these
         patterns, separated by spaces or semicolons. * matches any text,
         https:// and www. are optional, and a pattern without a slash matches
-        the whole site. Example: github.com *.wikipedia.org/wiki/*
+        the whole site. Example: github.com *.wikipedia.org
         youtube.com/watch* . Leave empty to show the entry on every page.
     - workingDirectory: ""
       $name: Working directory
