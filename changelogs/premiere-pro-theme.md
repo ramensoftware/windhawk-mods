@@ -1,3 +1,12 @@
+## 1.1.0 ([Nov 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c47dccc74cc4b8cc4b0696cfd0e1911cfa6eda05/mods/premiere-pro-theme.wh.cpp))
+
+* Premiere 27.0 (2027): panels, the timeline and the monitors follow the palette instead of staying at Premiere's stock gray.
+* When a Premiere update moves the interface again, the mod log now says what changed, so support for the new version can be added quickly.
+* Premiere 26.5: panels, the timeline and the monitors follow the palette again instead of staying at Premiere's stock gray.
+* Premiere 26.5: color swatches keep their true colors.
+* Premiere 26.3 and later: the color swatches in popup menus now receive all of their arguments, and stay out of the theme as intended.
+* UXP panels: a name that merely ends in `rgb`, such as `setRgb(18, 18, 18)`, is no longer rewritten as a color.
+
 ## 1.0.1 ([Sep 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/da37018fd20a8b772aa5c5cc9e533aed6f2925f3/mods/premiere-pro-theme.wh.cpp))
 
 * Premiere Pro 26.3 and later are themed again. Those versions no longer ship the module the mod used to hook, so panels, the timeline and the rest of the interface kept Premiere's own gray while only the window frame, the menu bar and the native dialogs followed the palette.

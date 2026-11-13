@@ -2,7 +2,7 @@
 // @id              premiere-pro-theme
 // @name            Premiere Pro Theme
 // @description     Recolors the Adobe Premiere Pro interface — panels, timeline, monitors, window frame and menu bar — with a choice of very dark palettes.
-// @version         1.0.1
+// @version         1.1.0
 // @author          Threshold Editor
 // @license         MIT
 // @include         Adobe Premiere Pro.exe
@@ -401,6 +401,30 @@ points it found in it. A build that offers neither cannot be themed that way,
 and the mod says the interface layer is not installed rather than looking like
 it worked — the window frame, the menu bar and the native dialogs still follow
 the palette there, and the panels keep Premiere's own colors.
+
+**Premiere 26.5 grew two of the tables that path reads.** Each entry point is
+pinned to the length of the vtable it was measured in, so a table that grows is
+refused rather than guessed at — and losing the rectangle fill that way is what
+left the panels at the stock `#1D1D1D`, because they fill from color constants
+that never pass through the theme. The Direct2D surface went from 46 slots to
+48, and `UI_Swatch` from 139 to 142 with its draw moving from slot 29 to 30.
+Both layouts of each are accepted now; a length on neither list is still
+refused, so a later build that grows a table loses that entry point and says so
+in the log, rather than hooking whatever the slot has become.
+
+**Premiere 27.0 (2027) grew them again**, the Direct2D supplier among them (29
+to 34 slots). That one gates the whole interface layer, so on 27.0 the earlier
+layouts hooked nothing at all. The pen and brush stay at slots 9 and 10 and the
+rectangle fill at 7 of 50; `UI_Swatch`, `V7SwatchSkin` and both popup skins
+each moved their draw one slot. These layouts were measured against the 27.0.0
+executable by the contributor who reported them. No 27.0 length has been
+measured for `Theme`, `ThemeClient` or `BaseSwatchSkin`: if those grew too,
+their hooks are refused there and the log names the length each one met.
+
+When a table has a length nobody has measured yet, the log now says which
+length it met — for the supplier, in a line of its own. That line, from a
+Premiere update that left the panels gray, is all it takes to add the next
+build.
 
 ## Questions, bugs and palettes
 
@@ -2107,19 +2131,22 @@ static void InstallHooks(HMODULE module, const HookSpec (&specs)[N],
     }
 }
 
+// A version exports one of the two names, so a function is only counted and
+// logged as absent when it has neither.
+static const char* ExportedName(HMODULE module, const ColorSymbol& sym) {
+    if (sym.before2026 && !GetProcAddress(module, sym.mangled)) {
+        return sym.before2026;
+    }
+
+    return sym.mangled;
+}
+
 static void InstallOneColorHook(HMODULE dvaui, size_t index, void* hook,
                                 void** original, HookCount& count) {
     const ColorSymbol& sym = kColorSymbols[index];
 
-    // A version exports one of the two names, so a function is only counted
-    // and logged as absent when it has neither.
-    const char* mangled = sym.mangled;
-
-    if (sym.before2026 && !GetProcAddress(dvaui, mangled)) {
-        mangled = sym.before2026;
-    }
-
-    InstallHook(dvaui, {mangled, hook, original, sym.label}, &count);
+    InstallHook(dvaui, {ExportedName(dvaui, sym), hook, original, sym.label},
+                &count);
 }
 
 template <size_t... I>
@@ -2221,7 +2248,17 @@ static bool ContentScopesMatter() {
 static bool ConvertForPaint(const DvaColorRGBA* in, DvaColorRGBA* out) {
     const Settings& s = CurrentSettings();
 
-    if (!s.brushHook || !in || InContentScope()) {
+    /*
+        As in ConvertColorRef: a slot taken by position need not be the method
+        measured — PaintRect is found that way on a build with no module — and
+        what it was handed need not be a color. Anything in the first page or
+        misaligned for a float is not one, null included, and is left alone
+        rather than read.
+    */
+    auto address = reinterpret_cast<uintptr_t>(in);
+
+    if (!s.brushHook || address < 0x10000 ||
+        (address & (alignof(DvaColorRGBA) - 1)) != 0 || InContentScope()) {
         return false;
     }
 
@@ -2266,8 +2303,8 @@ void* NewBrush_Hook(void* self, const DvaColorRGBA* color) {
     the color and the rect and jumps into the surface's seventh slot — so where
     the free function cannot be found by name, the slot it jumps to can:
 
-        dvaui::drawbot::d2d::OSSurfaceInterface::FillRect(const ColorRGBA&,
-                                                          const RectT<float>&)
+        dvaui::drawbot::d2d::OSSurfaceInterface::PaintRect(const ColorRGBA&,
+                                                           const RectT<float>&)
 
     The arguments arrive swapped against the free function's, color first,
     which is what the jump does on its way in. Nothing keeps the reference —
@@ -2492,20 +2529,27 @@ static void InstallBrushHooks(HMODULE dvaui, HookCount& count) {
     something else, and popup menus draw label colors through their own
     function.
 
-    All take pointers only, five at most with the fifth on the stack, so one
-    thunk forwarding five integer arguments carries each through unchanged.
+    All take pointers only, six at most with the last two on the stack, so one
+    thunk forwarding six integer arguments carries each through unchanged. For
+    a function that takes fewer, the thunk reads the two stack slots out of its
+    caller's frame, which is committed stack, and hands them straight back to
+    an original that ignores them.
+
+    Every one of these returns nothing, and the thunk passes the register back
+    anyway: where a build has no names, a slot is taken by position, and if the
+    method in it is ever not the one measured, its answer still has to arrive.
 */
-using ContentDraw_t = void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t,
-                               uintptr_t);
+using ContentDraw_t = uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                                    uintptr_t, uintptr_t);
 
 template <size_t I>
 struct ContentDrawHook {
     static inline ContentDraw_t original = nullptr;
 
-    static void Hook(uintptr_t a, uintptr_t b, uintptr_t c, uintptr_t d,
-                     uintptr_t e) {
+    static uintptr_t Hook(uintptr_t a, uintptr_t b, uintptr_t c, uintptr_t d,
+                          uintptr_t e, uintptr_t f) {
         ContentScope scope(__builtin_frame_address(0));
-        original(a, b, c, d, e);
+        return original(a, b, c, d, e, f);
     }
 };
 
@@ -2518,12 +2562,21 @@ static const ColorSymbol kContentDraws[] = {
     {"?DrawSwatch@BaseSwatchSkin@csnext@skins@dvaui@@MEBAXPEAVDrawbot@drawbot@"
      "4@AEBVDrawSwatchParameters@controls@4@@Z",
      L"BaseSwatchSkin::DrawSwatch"},
+
+    // The toolkit added a SkinSetProvider* to the popup swatches in 26.3, read
+    // from After Effects' exports; the earlier name is the one without it.
     {"?DrawColorSwatch@V7PopupSkin@v7@skins@dvaui@@UEBAXPEAVDrawbot@drawbot@4@"
-     "PEBVThemeProvider@ui@4@AEBV?$RectT@M@geom@dvacore@@AEBVColorRGBA@64@@Z",
-     L"V7PopupSkin::DrawColorSwatch"},
+     "PEBVThemeProvider@ui@4@PEBVSkinSetProvider@84@AEBV?$RectT@M@geom@dvacore@@"
+     "AEBVColorRGBA@64@@Z",
+     L"V7PopupSkin::DrawColorSwatch",
+     "?DrawColorSwatch@V7PopupSkin@v7@skins@dvaui@@UEBAXPEAVDrawbot@drawbot@4@"
+     "PEBVThemeProvider@ui@4@AEBV?$RectT@M@geom@dvacore@@AEBVColorRGBA@64@@Z"},
     {"?DrawColorSwatch@V6PopupSkin@v6@skins@dvaui@@UEBAXPEAVDrawbot@drawbot@4@"
-     "PEBVThemeProvider@ui@4@AEBV?$RectT@M@geom@dvacore@@AEBVColorRGBA@64@@Z",
-     L"V6PopupSkin::DrawColorSwatch"},
+     "PEBVThemeProvider@ui@4@PEBVSkinSetProvider@84@AEBV?$RectT@M@geom@dvacore@@"
+     "AEBVColorRGBA@64@@Z",
+     L"V6PopupSkin::DrawColorSwatch",
+     "?DrawColorSwatch@V6PopupSkin@v6@skins@dvaui@@UEBAXPEAVDrawbot@drawbot@4@"
+     "PEBVThemeProvider@ui@4@AEBV?$RectT@M@geom@dvacore@@AEBVColorRGBA@64@@Z"},
 };
 
 constexpr size_t kContentDrawCount = ARRAYSIZE(kContentDraws);
@@ -2532,7 +2585,8 @@ static void InstallOneContentHook(HMODULE dvaui, size_t index, void* hook,
                                   void** original) {
     const ColorSymbol& sym = kContentDraws[index];
 
-    InstallHook(dvaui, {sym.mangled, hook, original, sym.label}, nullptr);
+    InstallHook(dvaui, {ExportedName(dvaui, sym), hook, original, sym.label},
+                nullptr);
 }
 
 template <size_t... I>
@@ -2987,16 +3041,54 @@ static size_t VtableLength(HMODULE module, void* const* vtable) {
 }
 
 /*
-    The one vtable of `className` with exactly `slots` entries, or null: when
-    the image holds no class of that name, or when more than one table answers
-    to it. Ambiguity counts as not found, because a hook has to go somewhere
-    known rather than somewhere likely.
+    Where a hook sits in one build's table: the table's length, which pins the
+    layout, and the slot. A class can carry several of these, one per layout
+    that was measured, and a list of them ends at a zero length.
+
+    Adobe adds virtuals between releases. 26.5 grew OSSurfaceInterface from 46
+    slots to 48 with the rectangle fill staying where it was, and UI_Swatch
+    from 139 to 142 with UI_Draw moving from 29 to 30. 27.0 grew them again,
+    and the supplier with them, which gates the whole layer. A length that is
+    not on the list is a layout nobody measured, and is still refused — and
+    logged with its length, which is what it takes to measure the next one.
+*/
+struct VtableLayout {
+    size_t slots;
+    size_t index;
+};
+
+constexpr size_t kMostLayouts = 4;
+
+// The entry of `layouts` for a table of `slots` entries, or null.
+static const VtableLayout* LayoutOfLength(const VtableLayout* layouts,
+                                          size_t slots) {
+    for (size_t i = 0; i < kMostLayouts && layouts[i].slots; i++) {
+        if (layouts[i].slots == slots) {
+            return &layouts[i];
+        }
+    }
+
+    return nullptr;
+}
+
+/*
+    The one vtable of `className` whose length is one of `layouts`, or null:
+    when the image holds no class of that name, or when more than one table
+    answers to it. Ambiguity counts as not found, because a hook has to go
+    somewhere known rather than somewhere likely. `length`, when it is not
+    null, receives the length of the table found — or, when nothing was found
+    because the class's one table has a length on none of `layouts`, that
+    length, so the caller can say which layout it met. Zero otherwise.
 */
 static void* const* FindVtableByName(HMODULE module, const char* className,
-                                     size_t slots) {
+                                     const VtableLayout* layouts,
+                                     size_t* length) {
     auto base = reinterpret_cast<uintptr_t>(module);
     void* const* found = nullptr;
+    size_t foundLength = 0;
     size_t matches = 0;
+    size_t unmeasuredLength = 0;
+    size_t unmeasured = 0;
 
     // With its terminator, so ".?AVV6PopupSkin@..." cannot match a longer name.
     size_t nameLength = strlen(className) + 1;
@@ -3043,9 +3135,15 @@ static void* const* FindVtableByName(HMODULE module, const char* className,
 
                 auto vtable = reinterpret_cast<void* const*>(slot + sizeof(void*));
 
-                if (VtableLength(module, vtable) == slots) {
+                size_t slots = VtableLength(module, vtable);
+
+                if (LayoutOfLength(layouts, slots)) {
                     matches++;
                     found = vtable;
+                    foundLength = slots;
+                } else if (slots) {
+                    unmeasured++;
+                    unmeasuredLength = slots;
                 }
 
                 return matches < 2;
@@ -3057,7 +3155,19 @@ static void* const* FindVtableByName(HMODULE module, const char* className,
         return matches < 2;
     });
 
-    return matches == 1 ? found : nullptr;
+    if (matches != 1) {
+        if (length) {
+            *length = matches == 0 && unmeasured == 1 ? unmeasuredLength : 0;
+        }
+
+        return nullptr;
+    }
+
+    if (length) {
+        *length = foundLength;
+    }
+
+    return found;
 }
 
 /*
@@ -3192,14 +3302,13 @@ static void InstallVtableHook(HMODULE module, void* const* vtable, size_t index,
 struct ColorVtable {
     size_t symbol;          // which of kColorSymbols this is
     const char* className;  // the decorated name of the class declaring it
-    size_t slots;           // that vtable's length, which pins the layout
-    size_t index;           // the slot holding it
+    VtableLayout layouts[kMostLayouts];  // each measured length and its slot
 };
 
 static constexpr ColorVtable kColorVtables[] = {
-    {0, ".?AVTheme@ui@dvaui@@", 13, 5},         // Theme::GetColor
-    {1, ".?AVThemeClient@ui@dvaui@@", 18, 1},   // ThemeClient::GetColor
-    {2, ".?AVThemeClient@ui@dvaui@@", 18, 15},  // ThemeClient::GetThemeColor
+    {0, ".?AVTheme@ui@dvaui@@", {{13, 5}}},         // Theme::GetColor
+    {1, ".?AVThemeClient@ui@dvaui@@", {{18, 1}}},   // ThemeClient::GetColor
+    {2, ".?AVThemeClient@ui@dvaui@@", {{18, 15}}},  // ThemeClient::GetThemeColor
 };
 
 // Which entry of kColorVtables describes kColorSymbols[symbol], or -1.
@@ -3216,14 +3325,17 @@ static constexpr int ColorVtableFor(size_t symbol) {
 /*
     What this probe has looked up so far. Two hooks can sit in one class's
     vtable, and every search is a pass over the image's data, so an answer is
-    kept — including a miss, which costs the same to find again.
+    kept — including a miss, which costs the same to find again. Those two
+    hooks have a list each, so what makes it the same search is the class and
+    the lengths on the list, not the list.
 
     It is written from InstallStaticToolkitHooks alone, which runs once.
 */
 struct FoundVtable {
     const char* className;
-    size_t slots;
+    const VtableLayout* layouts;
     void* const* vtable;
+    size_t slots;
 };
 
 constexpr size_t kMostLookups = 16;
@@ -3231,19 +3343,31 @@ constexpr size_t kMostLookups = 16;
 FoundVtable g_foundVtables[kMostLookups];
 size_t g_foundVtableCount = 0;
 
+static bool SameLengths(const VtableLayout* a, const VtableLayout* b) {
+    for (size_t i = 0; i < kMostLayouts; i++) {
+        if (a[i].slots != b[i].slots) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static void* const* FindVtableOnce(HMODULE module, const char* className,
-                                   size_t slots) {
+                                   const VtableLayout* layouts, size_t* slots) {
     for (size_t i = 0; i < g_foundVtableCount; i++) {
-        if (g_foundVtables[i].slots == slots &&
+        if (SameLengths(g_foundVtables[i].layouts, layouts) &&
             strcmp(g_foundVtables[i].className, className) == 0) {
+            *slots = g_foundVtables[i].slots;
             return g_foundVtables[i].vtable;
         }
     }
 
-    void* const* vtable = FindVtableByName(module, className, slots);
+    *slots = 0;
+    void* const* vtable = FindVtableByName(module, className, layouts, slots);
 
     if (g_foundVtableCount < kMostLookups) {
-        g_foundVtables[g_foundVtableCount++] = {className, slots, vtable};
+        g_foundVtables[g_foundVtableCount++] = {className, layouts, vtable, *slots};
     }
 
     return vtable;
@@ -3254,12 +3378,20 @@ static void* const* FindVtableOnce(HMODULE module, const char* className,
     the symbol path would have used for it.
 */
 static void InstallHookFromVtable(HMODULE module, const char* className,
-                                  size_t slots, size_t index,
+                                  const VtableLayout* layouts,
                                   const wchar_t* label, void* hook,
                                   void** original, HookCount* count) {
-    void* const* vtable = FindVtableOnce(module, className, slots);
+    size_t slots = 0;
+    void* const* vtable = FindVtableOnce(module, className, layouts, &slots);
+    const VtableLayout* layout = vtable ? LayoutOfLength(layouts, slots) : nullptr;
 
-    if (!vtable) {
+    if (!layout) {
+        if (!vtable && slots) {
+            Wh_Log(L"%s: its table has %u slots, a layout this version was not "
+                   L"measured against",
+                   label, static_cast<unsigned>(slots));
+        }
+
         Wh_Log(L"absent in this version: %s", label);
 
         if (count) {
@@ -3270,8 +3402,8 @@ static void InstallHookFromVtable(HMODULE module, const char* className,
     }
 
     // No mangled name to carry: this one was found by where it sits.
-    InstallVtableHook(module, vtable, index, 0, {nullptr, hook, original, label},
-                      count);
+    InstallVtableHook(module, vtable, layout->index, 0,
+                      {nullptr, hook, original, label}, count);
 }
 
 template <size_t I>
@@ -3281,7 +3413,7 @@ static void InstallOneStaticColorHook(HMODULE module, HookCount& count) {
     if constexpr (at >= 0) {
         const ColorVtable& where = kColorVtables[at];
 
-        InstallHookFromVtable(module, where.className, where.slots, where.index,
+        InstallHookFromVtable(module, where.className, where.layouts,
                               kColorSymbols[I].label,
                               reinterpret_cast<void*>(&ColorHook<I>::Hook),
                               reinterpret_cast<void**>(&ColorHook<I>::original),
@@ -3297,29 +3429,31 @@ static void InstallStaticColorHooks(HMODULE module, HookCount& count,
 
 /*
     Where each of kContentDraws sits when there is no symbol to look it up by:
-    the class whose vtable carries it, that vtable's length, and the slot. The
-    array is as long as kContentDraws by declaration, so the two cannot drift
+    the class whose vtable carries it, and that vtable's measured lengths with
+    the slot at each. The array is as long as kContentDraws by declaration, so the two cannot drift
     apart without the compiler saying so.
 */
 struct ContentVtable {
     const char* className;
-    size_t slots;
-    size_t index;
+    VtableLayout layouts[kMostLayouts];
 };
 
 static const ContentVtable kContentVtables[kContentDrawCount] = {
-    {".?AVUI_Swatch@controls@dvaui@@", 139, 29},
-    {".?AVV7SwatchSkin@v7@skins@dvaui@@", 7, 3},
-    {".?AVBaseSwatchSkin@csnext@skins@dvaui@@", 12, 3},
-    {".?AVV7PopupSkin@v7@skins@dvaui@@", 30, 10},
-    {".?AVV6PopupSkin@v6@skins@dvaui@@", 31, 10},
+    // 139 slots through 26.3, 142 from 26.5 and 149 from 27.0: each release
+    // added virtuals ahead of UI_Draw.
+    {".?AVUI_Swatch@controls@dvaui@@", {{139, 29}, {142, 30}, {149, 31}}},
+    // 27.0 added one slot ahead of each of these draws.
+    {".?AVV7SwatchSkin@v7@skins@dvaui@@", {{7, 3}, {8, 4}}},
+    {".?AVBaseSwatchSkin@csnext@skins@dvaui@@", {{12, 3}}},
+    {".?AVV7PopupSkin@v7@skins@dvaui@@", {{30, 10}, {31, 11}}},
+    {".?AVV6PopupSkin@v6@skins@dvaui@@", {{31, 10}, {32, 11}}},
 };
 
 static void InstallOneStaticContentHook(HMODULE module, size_t index, void* hook,
                                         void** original, HookCount* count) {
     const ContentVtable& where = kContentVtables[index];
 
-    InstallHookFromVtable(module, where.className, where.slots, where.index,
+    InstallHookFromVtable(module, where.className, where.layouts,
                           kContentDraws[index].label, hook, original, count);
 }
 
@@ -3331,6 +3465,16 @@ static void InstallStaticContentHooks(HMODULE module, HookCount& count,
          reinterpret_cast<void**>(&ContentDrawHook<I>::original), &count),
      ...);
 }
+
+// The two brush slots are named where they are hooked, each with its body
+// check, so only the length is read from this one. 27.0 added five slots after
+// the brush; the pen and the brush stay at 9 and 10.
+constexpr char kSupplierClass[] = ".?AVOSSupplier@d2d@drawbot@dvaui@@";
+constexpr VtableLayout kSupplierLayouts[kMostLayouts] = {{29, 0}, {34, 0}};
+
+// 26.5 and 27.0 each added two slots after the rectangle fill, the seventh.
+constexpr char kSurfaceClass[] = ".?AVOSSurfaceInterface@d2d@drawbot@dvaui@@";
+constexpr VtableLayout kSurfaceLayouts[kMostLayouts] = {{46, 7}, {48, 7}, {50, 7}};
 
 volatile LONG g_toolkitProbed = FALSE;
 
@@ -3352,8 +3496,21 @@ static bool InstallStaticToolkitHooks() {
     HMODULE executable = GetModuleHandleW(nullptr);
     ULONGLONG started = GetTickCount64();
 
-    void* const* supplier =
-        FindVtableByName(executable, ".?AVOSSupplier@d2d@drawbot@dvaui@@", 29);
+    size_t supplierSlots = 0;
+    void* const* supplier = FindVtableByName(executable, kSupplierClass,
+                                             kSupplierLayouts, &supplierSlots);
+
+    if (!supplier && supplierSlots) {
+        /*
+            The toolkit is in here, in a build whose tables nobody has
+            measured. Said once, because this is the line that turns a report
+            of "the panels did not change" into the next entry on the list.
+        */
+        Wh_Log(L"the toolkit is linked into the executable, but its Direct2D "
+               L"supplier has %u slots, a layout this version was not measured "
+               L"against, so the interface layer is left alone",
+               static_cast<unsigned>(supplierSlots));
+    }
 
     if (!supplier || !Claim(&g_dvauiHooked)) {
         return false;
@@ -3374,11 +3531,14 @@ static bool InstallStaticToolkitHooks() {
                       &count);
 
     /*
-        The rect fill, which is where utils::DrawFillRect ends up; see
-        FillRect_Hook. Its table is the surface's, not the supplier's.
+        The rect fill, OSSurfaceInterface::PaintRect, which is where
+        utils::DrawFillRect ends up; see SurfaceFillRect_Hook. Its table is the
+        surface's, not the supplier's. Most of the panel backgrounds are
+        painted through it, so a build where it is refused keeps the stock
+        gray behind every panel.
     */
-    InstallHookFromVtable(executable, ".?AVOSSurfaceInterface@d2d@drawbot@dvaui@@",
-                          46, 7, L"d2d::FillRect",
+    InstallHookFromVtable(executable, kSurfaceClass, kSurfaceLayouts,
+                          L"d2d::PaintRect",
                           reinterpret_cast<void*>(SurfaceFillRect_Hook),
                           reinterpret_cast<void**>(&SurfaceFillRect_Original),
                           &count);
@@ -4154,6 +4314,22 @@ static bool CssPrecededBy(const char* text, size_t at, const char* word) {
     return at >= length && _strnicmp(text + at - length, word, length) == 0;
 }
 
+// rgb( or rgba( as a word of its own, not the end of a name like setRgb(.
+static bool CssColorFunctionAt(const char* text, size_t at) {
+    static const char* const kNames[] = {"rgb", "rgba"};
+
+    for (const char* name : kNames) {
+        size_t length = strlen(name);
+
+        if (CssPrecededBy(text, at, name) &&
+            !(at > length && IsCssWordChar(text[at - length - 1]))) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 /*
     Rewrites every color a stylesheet spells out, in place and at its own
     length, and returns how many changed. A value taken from a variable, like
@@ -4242,8 +4418,7 @@ static size_t RecolorStylesheet(char* text, size_t size) {
         } else if (text[i] == ':' && CssPrecededBy(text, i, "-rgb")) {
             recolored =
                 RecolorCssTriplet(text, size, i + 1, CssValueIsChrome(text, i));
-        } else if (text[i] == '(' &&
-                   (CssPrecededBy(text, i, "rgb") || CssPrecededBy(text, i, "rgba"))) {
+        } else if (text[i] == '(' && CssColorFunctionAt(text, i)) {
             recolored =
                 RecolorCssTriplet(text, size, i + 1, CssValueIsChrome(text, i));
         }
@@ -6489,7 +6664,7 @@ static bool ReadThemeColor(PCWSTR setting, COLORREF* color, bool* present) {
     auto value = WindhawkUtils::StringSetting::make(setting);
     PCWSTR text = value;
 
-    *present = text && *text;
+    *present = *text != L'\0';
 
     return *present && ParseHexColor(text, color);
 }

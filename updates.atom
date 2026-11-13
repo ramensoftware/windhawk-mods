@@ -2,12 +2,64 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-12T21:01:41.000Z</updated>
+    <updated>2026-11-13T05:01:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 Taskbar Context Menu Fix for Win11 24H2+ 1.4]]></title>
+        <id>https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2#ccdaeb7521f9379b199727dd47acdbc35ce4e38c</id>
+        <link href="https://windhawk.net/mods/win10-taskbar-context-menu-fix-24h2"/>
+        <updated>2026-11-13T05:01:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixing the taskmgr item (again)</li>
+</ul>
+]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Outlook Refined 0.6.5]]></title>
+        <id>https://windhawk.net/mods/outlook-refined#63b4770b5de06f02844e2d0e9cb283d281dd8819</id>
+        <link href="https://windhawk.net/mods/outlook-refined"/>
+        <updated>2026-11-13T05:01:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>A changed setting now reaches open Outlook windows the next time you switch to them, with no restart.</li>
+<li>With &quot;Calendar, times on event tiles&quot; on, a meeting that is about to start keeps its title on its tile. Outlook adds a row holding only the Join button before the title, and that row was taken for the title, so the tile showed only &quot;Join&quot;.</li>
+<li>Stop the calendar's month and year label clipping when the navigation pane is narrowed. The button carries a 20px left indent on top of its own padding, which at a 180px pane leaves it 91px while the longest labels need 104px, so the text was cut off mid-word under the header's hidden overflow. Dropping the indent gives the button 111px and the label fits at every pane width the mod allows.</li>
+<li>Double-clicking an event in a merged tile opens it, and the merged tile shows how long each event runs.</li>
+<li>Right-click and double-click on a row of a merged tile act the way they do on an Outlook event tile.</li>
+<li>The readme says where to turn on the agenda, the month grid and the Other inbox card.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Analytic Endeavors</name>
+            <uri>https://github.com/ae-reid-havens</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Premiere Pro Theme 1.1.0]]></title>
+        <id>https://windhawk.net/mods/premiere-pro-theme#c47dccc74cc4b8cc4b0696cfd0e1911cfa6eda05</id>
+        <link href="https://windhawk.net/mods/premiere-pro-theme"/>
+        <updated>2026-11-13T05:01:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Premiere 27.0 (2027): panels, the timeline and the monitors follow the palette instead of staying at Premiere's stock gray.</li>
+<li>When a Premiere update moves the interface again, the mod log now says what changed, so support for the new version can be added quickly.</li>
+<li>Premiere 26.5: panels, the timeline and the monitors follow the palette again instead of staying at Premiere's stock gray.</li>
+<li>Premiere 26.5: color swatches keep their true colors.</li>
+<li>Premiere 26.3 and later: the color swatches in popup menus now receive all of their arguments, and stay out of the theme as intended.</li>
+<li>UXP panels: a name that merely ends in <code>rgb</code>, such as <code>setRgb(18, 18, 18)</code>, is no longer rewritten as a color.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Threshold Editor</name>
+            <uri>https://github.com/CakeDev4k</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MacOS Style Dock 1.1.2]]></title>
         <id>https://windhawk.net/mods/macos-style-dock#eb317fa97233903f7cf5e1cb5d703debe7ecb248</id>
@@ -828,84 +880,6 @@ source. Only one of the two runs at a time: if you switch to the mod, quit WinPa
         <author>
             <name>dekvas</name>
             <uri>https://github.com/dekvas</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Round Everything Interface 2.0.0]]></title>
-        <id>https://windhawk.net/mods/round-everything#e6711b07ff48b99f05d93434a45074cdd135dc9d</id>
-        <link href="https://windhawk.net/mods/round-everything"/>
-        <updated>2026-11-12T06:00:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Renamed to Round Everything Interface (the id stays round-everything; installed copies keep running)</li>
-<li>Themes: Solid (default), Tape, Frost, Bleed, Windows, Eclipse, Phantom, Neon and Custom - each sets the frame, fill, bevel, shadow, monitor corners and the dwm.exe window options; their frame fill and edge line follow the Windows mode, in the colors of Windows' own taskbar with transparency effects off (#EEEEEE|#1C1C1C, #BEBEBE|#404040), unless the theme has colors of its own. A few Overrides (frame thickness, screen radius, monitor corner radius, frame color, gradient angle and color source, fill, work-area inset, window radius) apply on top of any theme</li>
-<li>Settings reorganized into Theme / Overrides / General / Custom theme groups; values saved by 1.0.0 under keys that changed fall back to their defaults. Per-edge thickness overrides moved to a new key (edgeOffsetsClockwise, taskbar's edge first, then clockwise) so 1.0.0's left,top,right,bottom values aren't read in the new order. &quot;Inward offset&quot; is now &quot;Frame thickness&quot;, and the monitor corners are one radius setting (0 turns them off)</li>
-<li>Applying a theme logs its values, with the General and Overrides groups, as the mod's settings in Windhawk's JSON form, in rows broken between values so a column selection copies them whole - ready to paste and tweak as the Custom theme</li>
-<li>Frame color: one color, a gradient of several at a set angle, or a light|dark pair following the Windows mode (each side may be a gradient); &quot;accent&quot; (or an empty color) is the Windows accent in a shade that keeps the taskbar readable - SystemAccentColorDark2 on a dark taskbar, SystemAccentColorLight2 on a light one - and follows the accent and the mode as they change</li>
-<li>Fills: Solid; Custom acrylic (live DWM blur through Windows.UI.Composition, with blur, tint, luminosity, saturation and noise); Windows' default (the taskbar's own light or dark acrylic, following the Windows mode). A gradient frame color fills the solid frame and feeds the acrylic's tint and luminosity. The effect graph holds only the effects that change something. Falls back to a layered frame if composition can't be set up</li>
-<li>One frame, one piece: every fill is the same composition window, under the taskbar too (the taskbar's background is made transparent), so the bevel, edge line and corner arcs run along the taskbar's edge as along the others</li>
-<li>Like Windows' own acrylic, the acrylic fills turn solid while transparency effects are off, and while battery saver is on (the &quot;Solid while battery saver is on&quot; setting, on by default)</li>
-<li>Acrylic glass bevel along the inner edge (two lights, specular, Fresnel, an edge line in its own color, edge shade), rasterized once with the frame; its strengths and the edge line color take a light|dark pair following the Windows mode, and the edge line color &quot;accent&quot; too. The edge line shows its color exactly: at full strength it covers the frame's innermost pixel row</li>
-<li>Inner shadow along the rounded screen (blur, opacity, color, offsets); the color takes &quot;accent&quot; or a light|dark pair too</li>
-<li>One-pixel bezel ring along all four screen edges, inside the taskbar too, also with monitor corners off; the frame thickness is measured from inside it. It stays on screen while the frame re-shapes (a settings change, the taskbar moving)</li>
-<li>Frame color source &quot;Title bar&quot;: the frame takes the color of the maximized window's title bar - its fourth row inside the rounded screen, past the inner shadow, read off the screen the way Top Taskbar Bleed reads it (the app is never asked to render), dominant color, columns under a dialog or flyout left out, nothing read while a thumbnail preview shows or while a window is still zooming in or out. A window seen before gets its last color at once; otherwise the row is read every frame until two readings agree, and the frame eases to it over 350 ms. Hovering a thumbnail until Aero Peek shows a maximized window gives the frame that window's color. Each taskbar switches to the light or dark theme to stay readable (per taskbar, via RequestedTheme; the approach is Top Taskbar Bleed's)</li>
-<li>The work area is always shrunk to the rounded screen (the option is gone), so nothing hides under the frame</li>
-<li>Auto-hide taskbar supported: the frame and the work area stay exactly as with the taskbar docked and the taskbar slides over its band; the mod keeps its own appbar over the taskbar's strip, so toggling auto-hide moves no window</li>
-<li>With Monitors set to the primary one, the other monitors' taskbars are handed back and their windows keep Windows' corners, border and shadow</li>
-<li>dwm.exe: one Window corner radius setting (-1 Windows' own, 0 square, else the radius, maximized windows included); border and shadow on maximized windows - the shadow on the topmost maximized window per monitor only, styles learned from DWM's own calls; custom active/inactive border colors with opacity, defaulting to the accent (active) and #3C3C3C (inactive), each also a light|dark pair following the app mode; stays out of dwm.exe after two DWM restarts within a minute of its own load</li>
-<li>dwm.exe: corners stay rounded through maximize, snap and restore animations - DWM's animation clip, which it eases to square, keeps the radius, and on a restore the window being stretched into place has its own clip fitted to the stretch, so its corners don't widen (the clip's geometry is tracked through its destructor; where that can't be hooked, a restore keeps Windows' stretched corner)</li>
-<li>dwm.exe: apps that draw their whole frame themselves, which Windows leaves square (Autodesk AutoCAD 2013, Design Review), are rounded too - &quot;Round apps Windows leaves square&quot; under General, on by default; maximized, their border and clip are cut to the work area, and they stay rounded while AltSnap drags them see-through</li>
-<li>dwm.exe: the accent border color follows the user's accent as it changes - dwm.exe runs under an account of its own, so the explorer.exe part publishes the accent and the app mode - and maximized windows get Windows' accent border only while &quot;Show accent color on title bars and window borders&quot; is on</li>
-<li>Sturdier against Windows updates: every udwm.dll and taskbar.dll symbol is optional, and one an update renames or drops costs only the feature that uses it (logged by name), with fallbacks for the window radius and the taskbar lookup</li>
-<li>Fix: maximized windows' shadows stacked - the windows that don't hold the shadow now get DWM's own no-shadow style</li>
-<li>Fix: maximized windows sometimes came up without their border - a border update DWM makes without asking for the corner radius first now finds the window maximized all the same</li>
-<li>Fix: with Windows' accent option off, maximized windows could pick up an accent border learned from apps that color their own border</li>
-<li>Fix: with a full-screen screen recorder running, the frame covered the taskbar's icons; it now follows the taskbar down when the shell demotes it</li>
-<li>Fix: clicking a grouped taskbar button hid the frame until its thumbnail flyout closed</li>
-<li>Fix: the bezel ring was missing along the taskbar's two ends</li>
-<li>Fix: saving a setting flashed the bezel ring white for a frame or two</li>
-<li>Fix: the edge line showed lighter or darker than its color - it reached its pixel row at three quarters strength, letting the frame or the content behind show through</li>
-<li>Fix: dragging a window under the acrylic frame stuttered (the frame is composed at alpha 255; 254 made DWM render it through a monitor-sized intermediate surface every frame)</li>
-<li>Fix: content DWM changed behind the frame by itself (a minimized window's last image, a shadow after a handover) stayed in the bands; invisible layered windows under each band are repainted on window events so DWM re-reads the backdrop</li>
-<li>Fix: the ArtCraft apps (PhotoCraft and the rest), which drop the caption while maximized, covered the whole monitor and were taken for full-screen apps - the taskbar dropped behind them and Do not disturb came on. Those apps, told by their program, are now moved to the work area once per maximize; other apps that maximize the same way are left as they are</li>
-<li>Fix: screen capture and color picker overlays (ShareX, Snipping Tool, PowerToys Color Picker and others) were taken for full-screen apps and hid the frame they were capturing</li>
-<li>Fix: Show desktop briefly stretches a secondary taskbar's window over its monitor, and the frame on that monitor was torn down and rebuilt; a taskbar window covering its monitor now keeps the strip it was on, and the frame stays</li>
-<li>Performance: title-bar readings no longer allocate a 1 MB histogram each; DWM border updates no longer look up the taskbar window every time</li>
-</ul>
-]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Minimize to tray 1.1.1]]></title>
-        <id>https://windhawk.net/mods/minimize-to-tray#13b147a4d7505612f590bc19bd4a37faab0e90a4</id>
-        <link href="https://windhawk.net/mods/minimize-to-tray"/>
-        <updated>2026-11-12T05:04:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for <a href="https://windhawk.net/mods/touchpad-relaxed-hand-tracking">Touchpad Relaxed Hand Tracking</a></li>
-</ul>
-]]></content>
-        <author>
-            <name>0Allu</name>
-            <uri>https://github.com/0Allu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Bluetooth Auto Toggle 1.3.0]]></title>
-        <id>https://windhawk.net/mods/bluetooth-auto-toggle#be32b2a231e9fe3a4047845117ac1dba414903dc</id>
-        <link href="https://windhawk.net/mods/bluetooth-auto-toggle"/>
-        <updated>2026-11-12T05:04:04.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Changed Default Value</li>
-<li>Set Placement for toggleOnEveryDeviceConnection</li>
-<li>Infinite Loop Prevention &amp; Smart Cooldown</li>
-<li>Zero-Overhead Performance</li>
-</ul>
-]]></content>
-        <author>
-            <name>Dev-StudioCode</name>
-            <uri>https://github.com/Dev-StudioCode</uri>
         </author>
     </entry>
 </feed>

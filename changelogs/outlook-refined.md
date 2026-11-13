@@ -1,3 +1,12 @@
+## 0.6.5 ([Nov 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/63b4770b5de06f02844e2d0e9cb283d281dd8819/mods/outlook-refined.wh.cpp))
+
+* A changed setting now reaches open Outlook windows the next time you switch to them, with no restart.
+* With "Calendar, times on event tiles" on, a meeting that is about to start keeps its title on its tile. Outlook adds a row holding only the Join button before the title, and that row was taken for the title, so the tile showed only "Join".
+* Stop the calendar's month and year label clipping when the navigation pane is narrowed. The button carries a 20px left indent on top of its own padding, which at a 180px pane leaves it 91px while the longest labels need 104px, so the text was cut off mid-word under the header's hidden overflow. Dropping the indent gives the button 111px and the label fits at every pane width the mod allows.
+* Double-clicking an event in a merged tile opens it, and the merged tile shows how long each event runs.
+* Right-click and double-click on a row of a merged tile act the way they do on an Outlook event tile.
+* The readme says where to turn on the agenda, the month grid and the Other inbox card.
+
 ## 0.6.2 ([Nov 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/87d003102cd41f3f7d71e51b44ab84ce8a0f1d7f/mods/outlook-refined.wh.cpp))
 
 * Credit the author in the readme, with a link to their site.
