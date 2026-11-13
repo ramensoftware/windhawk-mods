@@ -9665,8 +9665,13 @@ static void GetAppName(HWND hWnd, WCHAR* out, size_t cch) {
                 LPWSTR desc = nullptr;
                 UINT descLen = 0;
                 if (VerQueryValueW(buf.data(), subBlock, (LPVOID*)&desc, &descLen) &&
-                    desc && desc[0]) {
+                    desc) {
+                    // A blank description (some build tools write one space)
+                    // falls back to the exe name.
+                    while (*desc && iswspace(*desc)) desc++;
                     wcsncpy_s(out, cch, desc, _TRUNCATE);
+                    size_t len = wcslen(out);
+                    while (len && iswspace(out[len - 1])) out[--len] = 0;
                 }
             }
         }
