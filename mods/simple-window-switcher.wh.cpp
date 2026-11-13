@@ -926,7 +926,14 @@ nothing failed.
 - customHeader:
   - - process: ""
       $name: Process Name
-      $description: "Executable name to match. * and ? are wildcards. Leave empty to match by window title only. Example: chrome.exe or *code.exe"
+      $description: "Executable to match, by the property chosen below. * and ? are wildcards. Leave empty to match by window title only. Examples: chrome.exe, *code.exe, C:\\Apps\\MyApp v2\\*, MyApp 2.*"
+    - processMatch: name
+      $name: Match Process By
+      $description: Which property of the executable the Process Name pattern is matched against.
+      $options:
+      - name: Executable name
+      - path: Full executable path
+      - description: File description
     - windowTitle: ""
       $name: Window Title
       $description: "Window title to match. * and ? are wildcards. Leave empty to match any title. Example: *Facebook*"
@@ -937,7 +944,7 @@ nothing failed.
       $name: Application Name
       $description: "Name shown instead of the detected application name. Leave empty to keep the default. Used by the Application Name title modes when grouping is on."
   $name: Custom Header
-  $description: Set a custom icon and/or name for applications by executable name, window title, or both (both must match when both are set). The first matching rule wins, so put specific rules above general ones.
+  $description: Set a custom icon and/or name for applications by executable (name, full path or file description), window title, or both (both must match when both are set). The first matching rule wins, so put specific rules above general ones.
 
 */
 // ==/WindhawkModSettings==
@@ -7491,11 +7498,15 @@ static int GetMruRank(HWND h) {
 
 static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx);
 
+// What a rule's executable pattern is tested against.
+enum class CustomHeaderProcessMatch : BYTE { Name, Path, Description };
+
 struct CustomHeaderRule {
-    std::wstring pattern;      // executable name pattern; wildcards * and ? supported (optional)
+    std::wstring pattern;      // executable pattern; wildcards * and ? supported (optional)
     std::wstring titlePattern; // window title pattern; wildcards * and ? supported (optional)
     std::wstring iconPath;     // .ico / .exe / .dll, or "Light | Dark" (optional)
     std::wstring appName;      // custom display name overriding the detected one (optional)
+    CustomHeaderProcessMatch processMatch = CustomHeaderProcessMatch::Name;
 };
 static std::vector<CustomHeaderRule> g_customHeaderRules;
 // Some rule names different icons for the light and dark theme.
@@ -7748,34 +7759,111 @@ static HICON LoadCustomIconFromPath(const std::wstring& path, int sizePx) {
     return NULL;
 }
 
-// Executable file name of the window's process, or an empty string.
-static void GetWindowExeName(HWND hWnd, WCHAR (&out)[MAX_PATH]) {
+// Full executable path of the window's process, or an empty string.
+static void GetWindowExePath(HWND hWnd, WCHAR (&out)[MAX_PATH]) {
     out[0] = 0;
     DWORD pid = 0;
     GetWindowThreadProcessId(hWnd, &pid);
     if (!pid) return;
     HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!process) return;
-    WCHAR exePath[MAX_PATH] = {};
-    DWORD size = ARRAYSIZE(exePath);
-    if (QueryFullProcessImageNameW(process, 0, exePath, &size)) {
-        wcscpy_s(out, PathFindFileNameW(exePath));
-    }
+    DWORD size = MAX_PATH;
+    if (!QueryFullProcessImageNameW(process, 0, out, &size)) out[0] = 0;
     CloseHandle(process);
+}
+
+// Executable file name of the window's process, or an empty string.
+static void GetWindowExeName(HWND hWnd, WCHAR (&out)[MAX_PATH]) {
+    WCHAR exePath[MAX_PATH];
+    GetWindowExePath(hWnd, exePath);
+    wcscpy_s(out, PathFindFileNameW(exePath));
+}
+
+// FileDescription version-info string of an executable, trimmed. Empty when
+// missing or blank (some build tools write a single space).
+static void ReadExeFileDescription(const WCHAR* exePath, WCHAR* out, size_t cch) {
+    out[0] = 0;
+    DWORD handle = 0;
+    DWORD verSize = GetFileVersionInfoSizeW(exePath, &handle);
+    if (!verSize) return;
+    std::vector<BYTE> buf(verSize);
+    if (!GetFileVersionInfoW(exePath, handle, verSize, buf.data())) return;
+    struct LangAndCodePage { WORD wLanguage; WORD wCodePage; } *translate = nullptr;
+    UINT cbTranslate = 0;
+    if (!VerQueryValueW(buf.data(), L"\\VarFileInfo\\Translation",
+                        (LPVOID*)&translate, &cbTranslate) ||
+        cbTranslate < sizeof(LangAndCodePage)) {
+        return;
+    }
+    WCHAR subBlock[64];
+    swprintf_s(subBlock, ARRAYSIZE(subBlock),
+               L"\\StringFileInfo\\%04x%04x\\FileDescription",
+               translate[0].wLanguage, translate[0].wCodePage);
+    LPWSTR desc = nullptr;
+    UINT descLen = 0;
+    if (!VerQueryValueW(buf.data(), subBlock, (LPVOID*)&desc, &descLen) || !desc) return;
+    while (*desc && iswspace(*desc)) desc++;
+    wcsncpy_s(out, cch, desc, _TRUNCATE);
+    size_t len = wcslen(out);
+    while (len && iswspace(out[len - 1])) out[--len] = 0;
+}
+
+// File descriptions read for Custom Header rules, by executable path. Used by
+// the icon worker and the switcher thread; no file is read under the lock.
+static SRWLOCK s_exeDescriptionLock = SRWLOCK_INIT;
+static std::map<std::wstring, std::wstring> s_exeDescriptions;
+
+static std::wstring GetCachedExeFileDescription(const WCHAR* exePath) {
+    AcquireSRWLockShared(&s_exeDescriptionLock);
+    auto it = s_exeDescriptions.find(exePath);
+    bool found = it != s_exeDescriptions.end();
+    std::wstring result = found ? it->second : std::wstring();
+    ReleaseSRWLockShared(&s_exeDescriptionLock);
+    if (found) return result;
+    WCHAR desc[256];
+    ReadExeFileDescription(exePath, desc, ARRAYSIZE(desc));
+    result = desc;
+    AcquireSRWLockExclusive(&s_exeDescriptionLock);
+    if (s_exeDescriptions.size() >= 128) s_exeDescriptions.clear();
+    s_exeDescriptions[exePath] = result;
+    ReleaseSRWLockExclusive(&s_exeDescriptionLock);
+    return result;
+}
+
+static void ClearExeDescriptionCache() {
+    AcquireSRWLockExclusive(&s_exeDescriptionLock);
+    s_exeDescriptions.clear();
+    ReleaseSRWLockExclusive(&s_exeDescriptionLock);
 }
 
 // First user-defined rule matching the window. A rule names an executable
 // pattern, a window title pattern, or both; every pattern it names must match.
+// The executable pattern is tested against the file name, the full path or
+// the file description, as the rule chooses.
 static const CustomHeaderRule* FindCustomHeaderRule(
     HWND hWnd, const std::vector<CustomHeaderRule>& rules) {
     if (rules.empty()) return nullptr;
-    WCHAR fileName[MAX_PATH];
-    GetWindowExeName(hWnd, fileName);
+    WCHAR exePath[MAX_PATH];
+    GetWindowExePath(hWnd, exePath);
+    const WCHAR* fileName = PathFindFileNameW(exePath);
+    std::wstring description;
+    bool readDescription = false;
     WCHAR title[1024] = {};
     bool readTitle = false;
     for (const auto& rule : rules) {
-        if (!rule.pattern.empty() &&
-            (!fileName[0] || !PathMatchSpecW(fileName, rule.pattern.c_str()))) continue;
+        if (!rule.pattern.empty()) {
+            const WCHAR* subject = fileName;
+            if (rule.processMatch == CustomHeaderProcessMatch::Path) {
+                subject = exePath;
+            } else if (rule.processMatch == CustomHeaderProcessMatch::Description) {
+                if (!readDescription && exePath[0]) {
+                    description = GetCachedExeFileDescription(exePath);
+                }
+                readDescription = true;
+                subject = description.c_str();
+            }
+            if (!subject[0] || !PathMatchSpecW(subject, rule.pattern.c_str())) continue;
+        }
         if (!rule.titlePattern.empty()) {
             if (!readTitle) {
                 // No message to the window: a hung app can't block this.
@@ -9648,34 +9736,8 @@ static void GetAppName(HWND hWnd, WCHAR* out, size_t cch) {
     CloseHandle(hProc);
     if (!gotPath) return;
 
-    DWORD handle = 0;
-    DWORD verSize = GetFileVersionInfoSizeW(exePath, &handle);
-    if (verSize) {
-        std::vector<BYTE> buf(verSize);
-        if (GetFileVersionInfoW(exePath, handle, verSize, buf.data())) {
-            struct LangAndCodePage { WORD wLanguage; WORD wCodePage; } *translate = nullptr;
-            UINT cbTranslate = 0;
-            if (VerQueryValueW(buf.data(), L"\\VarFileInfo\\Translation",
-                               (LPVOID*)&translate, &cbTranslate) &&
-                cbTranslate >= sizeof(LangAndCodePage)) {
-                WCHAR subBlock[64];
-                swprintf_s(subBlock, ARRAYSIZE(subBlock),
-                           L"\\StringFileInfo\\%04x%04x\\FileDescription",
-                           translate[0].wLanguage, translate[0].wCodePage);
-                LPWSTR desc = nullptr;
-                UINT descLen = 0;
-                if (VerQueryValueW(buf.data(), subBlock, (LPVOID*)&desc, &descLen) &&
-                    desc) {
-                    // A blank description (some build tools write one space)
-                    // falls back to the exe name.
-                    while (*desc && iswspace(*desc)) desc++;
-                    wcsncpy_s(out, cch, desc, _TRUNCATE);
-                    size_t len = wcslen(out);
-                    while (len && iswspace(out[len - 1])) out[--len] = 0;
-                }
-            }
-        }
-    }
+    // A blank description falls back to the exe name.
+    ReadExeFileDescription(exePath, out, cch);
     if (!out[0]) {
         wcsncpy_s(out, cch, PathFindFileNameW(exePath), _TRUNCATE);
         PathRemoveExtensionW(out);
@@ -21827,8 +21889,9 @@ static void LoadSettings() {
     g_touchpadStickyLaunchEnabled.store(g_settings.stickyTouchpadMode);
     PublishNativeSwipePolicy();
 
-    // Custom header (array of { process, windowTitle, iconPath, appName }).
+    // Custom header (array of { process, processMatch, windowTitle, iconPath, appName }).
     g_customHeaderRules.clear();
+    ClearExeDescriptionCache();
     s_webAppNames.clear();
     auto trimWs = [](std::wstring s) -> std::wstring {
         size_t a = s.find_first_not_of(L" \t\r\n");
@@ -21853,8 +21916,16 @@ static void LoadSettings() {
             std::wstring tp = hasTitle ? trimWs(title) : L"";
             std::wstring ip = hasIcon ? trimWs(icon) : L"";
             std::wstring an = hasName ? trimWs(name) : L"";
-            if ((!p.empty() || !tp.empty()) && (!ip.empty() || !an.empty()))
-                g_customHeaderRules.push_back({p, tp, ip, an});
+            if ((!p.empty() || !tp.empty()) && (!ip.empty() || !an.empty())) {
+                CustomHeaderRule rule{p, tp, ip, an};
+                PCWSTR match = Wh_GetStringSetting(L"customHeader[%d].processMatch", i);
+                if (match && wcscmp(match, L"path") == 0)
+                    rule.processMatch = CustomHeaderProcessMatch::Path;
+                else if (match && wcscmp(match, L"description") == 0)
+                    rule.processMatch = CustomHeaderProcessMatch::Description;
+                if (match) Wh_FreeStringSetting(match);
+                g_customHeaderRules.push_back(std::move(rule));
+            }
         }
         blankRun = (!hasProc && !hasTitle && !hasIcon && !hasName) ? blankRun + 1 : 0;
         if (proc) Wh_FreeStringSetting(proc);
