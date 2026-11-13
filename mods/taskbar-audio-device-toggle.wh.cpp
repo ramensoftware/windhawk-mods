@@ -11,6 +11,53 @@
 // @architecture    x86-64
 // ==/WindhawkMod==
 
+// ==WindhawkModReadme==
+/*
+The mod adds one tray icon next to the clock. Clicking it enables or disables one chosen Windows audio device. The icon always shows the device's real state, read from Windows. It never shows a guessed state.
+
+Usage scenario (example)
+Windows can play sound through two outputs at once. This is useful when, for example, a monitor's built-in speakers and a subwoofer or headphones on the audio jack should play the same audio. Taskbar Audio Device Toggle lets you turn that second output on or off with one click.
+
+Typical setup
+- The Playback tab lists two devices: the monitor's built-in speakers and the audio jack output. The jack can drive headphones, a second pair of speakers or a subwoofer.
+- In the Recording tab, open the properties of Stereo Mix. On the Listen tab, select Listen to this device and choose the audio jack output as the playback device.
+- Stereo Mix now captures everything the main output plays and replays it on the jack output. Both devices play the same sound.
+
+The problem
+Sometimes you don't want the duplicate output. Examples are late-night listening, a call, or a moment when only the monitor speakers should be used. Switching it off normally means opening the Sound settings and changing the device state by hand each time.
+
+What the mod does
+The mod puts one icon in the system tray, next to the clock. Point it at the device that creates the duplicate, such as Stereo Mix or the jack output.
+Click the icon to disable the device. Sound then plays only through the main output.
+Click it again to enable the device. Sound plays through both outputs again.
+The icon and tooltip always show the real Windows state of the device, so you can see at a glance whether the second output is on.
+
+- Tray icon - A Segoe Fluent Icons glyph. By default it is E7F5 when the device is enabled and E720 when disabled. You can set the color. A "?" appears when the state can't be read.
+- Left click - Runs SoundVolumeView to disable or enable the device. The icon changes only after Windows confirms the new state.
+- Right click - Opens a menu with "Windhawk Settings" and "Audio Settings" (the Windows Sound control panel).
+- Tooltip - Device name and state: Enabled, Disabled, Enabled but unplugged, or Enabled but not present.
+- Verification - After a click it checks every 250 ms for up to 8 s. If the state doesn't change, it logs a timeout and the icon stays on the real state.
+- Periodic check - Reads the device state every N seconds (default 300). This catches changes made outside the mod, such as in Windows Sound settings.
+- Device matching - Finds the device from the SoundVolumeView ID or an exact Windows endpoint ID. If more than one device matches, it refuses to guess.
+- Recovery - The icon is re-added after an Explorer restart.
+
+<img width="1146" height="453" alt="obraz" src="https://github.com/user-attachments/assets/34a5fd24-b596-4be9-a1a1-5e97e55dfec7" />
+
+Requirement
+The mod needs SoundVolumeView, a free NirSoft tool. It performs the actual enable and disable, because Windows has no public API for this. Download it and set its path in the mod settings. 
+
+Why an external app is required
+Windows has no public API that lets a normal program enable or disable an audio device. SoundVolumeView, a free NirSoft tool, does this from the command line. The mod runs it as SoundVolumeView.exe /DisableEnable "<device ID>". The mod only reads state itself, through the Windows audio API (IMMDeviceEnumerator).
+You must download SoundVolumeView yourself and enter its full path in the mod settings. I haven't verified whether it needs administrator rights on your system. If a click does nothing and the Windhawk log shows a launch error such as 740, elevation is the cause. In that case, run the toggle through an elevated shortcut or scheduled task instead.
+
+Limitations
+- One mod instance controls one device and shows one icon. For speakers and a microphone together, you need two copies of the mod. Each copy needs a different @id. The icon ID is fixed at 0x4A45 in the code, so give the second copy a different value, otherwise the icons may conflict.
+- It is a disable/enable switch, not a default-device switcher.
+- If you want to choose between two outputs directly, SoundVolumeView's /SetDefault command is the right tool, and this mod would need changing.
+- A change made outside the mod appears only at the next periodic check, up to 5 minutes by default.
+*/
+// ==/WindhawkModReadme==
+
 // ==WindhawkModSettings==
 /*
 - SoundVolumeViewPath: C:\Files\x86\Portable\Windows\SoundVolumeView.exe
