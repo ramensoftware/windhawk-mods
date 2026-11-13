@@ -265,6 +265,7 @@ constexpr UINT_PTR TIMER_CYCLE_UI        = 5;
 constexpr UINT_PTR TIMER_DEBOUNCE_REFRESH = 6;
 constexpr UINT_PTR TIMER_WIDGET_PROXIMITY = 86;
 constexpr UINT_PTR TIMER_OUTSIDE_CLICK    = 87;
+constexpr UINT_PTR TIMER_LATE_CHILD_POLL  = 88;
 
 constexpr int HK_TOGGLE_FG   = 1;
 constexpr int HK_EXPAND_PILL = 2;
@@ -292,7 +293,7 @@ enum class CycleWidgetAction { SchedulerOnly = 0, NavigatePill = 1 };
 // Settings & Data Models
 // ============================================================================
 
-struct PersistentRuleCfg {
+struct AutoBlockRuleCfg {
     std::wstring appPath;
     Direction direction = Direction::FullyOffline;
     bool includeChildProcesses = true;
@@ -315,14 +316,14 @@ struct ModSettings {
     int hoverHitMarginPx = 12;
     int panelEdgeOffsetPx = 4;
     AppFilter defaultFilter = AppFilter::UserApps;
-        bool showNonActionableInRunning = false;
+    bool showNonActionableInRunning = false;
     bool showTooltips = false;
     bool followCursorMonitor = true;
     bool rememberWindowPosition = true;
     SizePreset windowSizePreset = SizePreset::Default;
 
     FullscreenBehavior fullscreenBehavior = FullscreenBehavior::Hide;
-        bool hideDuringCapture = true;
+    bool hideDuringCapture = true;
     bool enableCycleScheduler = true;
     bool showCycleMs = false;
     bool showCycleWidget = true;
@@ -335,7 +336,7 @@ struct ModSettings {
     HotkeyBinding hkExpandPill;
     HotkeyBinding hkRestoreAll;
 
-    std::vector<PersistentRuleCfg> autoBlockedApps;
+    std::vector<AutoBlockRuleCfg> autoBlockedApps;
 };
 
 struct WfpFilterEntry {
@@ -350,6 +351,7 @@ struct BlockState {
     std::vector<WfpFilterEntry> sessionFilters;
     std::vector<std::wstring> blockedChildren;
     std::unordered_set<std::wstring> blockedChildPaths;
+    std::unordered_set<std::wstring> allowedChildPaths;
 };
 
 struct AppEntry {
@@ -807,9 +809,9 @@ static std::vector<ProcessSnapshotItem> CaptureProcessSnapshot() {
     return out;
 }
 
-static std::vector<std::wstring> CollectChildExePaths(const std::wstring& parentLowerPath) {
+static std::vector<std::wstring> CollectChildExePathsFromSnap(const std::wstring& parentLowerPath,
+                                                               const std::vector<ProcessSnapshotItem>& snap) {
     std::vector<std::wstring> result;
-    auto snap = CaptureProcessSnapshot();
     std::unordered_set<DWORD> rootPids;
     std::unordered_map<DWORD, std::vector<DWORD>> childrenMap;
     std::unordered_map<DWORD, std::wstring> pidToPath;
@@ -870,6 +872,11 @@ static std::vector<std::wstring> CollectChildExePaths(const std::wstring& parent
     }
     result.assign(uniqueExes.begin(), uniqueExes.end());
     return result;
+}
+
+static std::vector<std::wstring> CollectChildExePaths(const std::wstring& parentLowerPath) {
+    auto snap = CaptureProcessSnapshot();
+    return CollectChildExePathsFromSnap(parentLowerPath, snap);
 }
 
 static std::unordered_set<DWORD> GetPidsWithLiveNetwork() {
@@ -1275,9 +1282,7 @@ static void SyncForegroundStateAndFilter(bool allowFilterJump) {
         if (isExtBlk) {
             g_activeFilter = AppFilter::Blocked;
             g_blockedFirewallOnly = true;
-            {
-                g_statusBanner = L"Blocked by Windows Firewall — edit rules in Windows Defender Firewall.";
-            }
+            g_statusBanner = L"Blocked by Windows Firewall — edit rules in Windows Defender Firewall.";
         } else {
             if (g_activeFilter == AppFilter::Blocked && g_blockedFirewallOnly) {
                 ModSettings defS;
@@ -1408,14 +1413,16 @@ static void SyncLateChildBlocks() {
         }
     }
     if (toCheck.empty()) return;
+    auto snap = CaptureProcessSnapshot();
     for (const auto& item : toCheck) {
-        auto children = CollectChildExePaths(item.first);
+        auto children = CollectChildExePathsFromSnap(item.first, snap);
         std::lock_guard<std::mutex> lk(g_engineMtx);
         auto it = g_blocks.find(item.first);
         if (it == g_blocks.end() || !it->second.blocked) continue;
         for (const auto& ch : children) {
             if (ch == item.first) continue;
             if (it->second.blockedChildPaths.count(ch)) continue;
+            if (it->second.allowedChildPaths.count(ch)) continue;
             bool denied = false;
             if (AddWfpBlockForExeLocked(ch, item.second, it->second.sessionFilters, denied)) {
                 it->second.blockedChildPaths.insert(ch);
@@ -1438,6 +1445,7 @@ static bool ApplyAllow(std::wstring exePath) {
                 if (!kv.second.blockedChildPaths.count(low)) continue;
                 std::wstring childFn = GetFileNameOnly(low);
                 kv.second.blockedChildPaths.erase(low);
+                kv.second.allowedChildPaths.insert(low);
                 kv.second.blockedChildren.erase(
                     std::remove(kv.second.blockedChildren.begin(), kv.second.blockedChildren.end(), childFn),
                     kv.second.blockedChildren.end());
@@ -1978,7 +1986,7 @@ static void RestoreAllSessionBlocks() {
 static std::unordered_map<std::wstring, std::pair<Direction, bool>> g_lastAutoBlocked;
 
 static void SyncAutoBlockedApps() {
-    std::vector<PersistentRuleCfg> rules;
+    std::vector<AutoBlockRuleCfg> rules;
     {
         std::lock_guard<std::mutex> lk(g_settingsMtx);
         rules = g_settings.autoBlockedApps;
@@ -2422,7 +2430,7 @@ static void LoadSettings() {
     for (int i = 0; i < 64; ++i) {
         auto app = WindhawkUtils::StringSetting::make(L"autoBlockedApps[%d].appPath", i);
         if (!*app.get()) break;
-        PersistentRuleCfg r;
+        AutoBlockRuleCfg r;
         r.appPath = app.get();
         auto dir = WindhawkUtils::StringSetting::make(L"autoBlockedApps[%d].direction", i);
         r.direction = ParseDirection(dir.get());
@@ -3228,14 +3236,12 @@ static void HandleClickAction(const HitRect& hr) {
         } else if (nextF == AppFilter::Blocked) {
             g_blockedFirewallOnly = false;
         }
-        {
-            if (nextF == AppFilter::Blocked && g_blockedFirewallOnly) {
-                g_statusBanner = L"Blocked by Windows Firewall — edit rules in Windows Defender Firewall.";
-            } else if (nextF == AppFilter::SystemApps) {
-                g_statusBanner = L"Experts only — if you don't know what you're doing, skip System.";
-            } else {
-                g_statusBanner.clear();
-            }
+        if (nextF == AppFilter::Blocked && g_blockedFirewallOnly) {
+            g_statusBanner = L"Blocked by Windows Firewall — edit rules in Windows Defender Firewall.";
+        } else if (nextF == AppFilter::SystemApps) {
+            g_statusBanner = L"Experts only — if you don't know what you're doing, skip System.";
+        } else {
+            g_statusBanner.clear();
         }
         g_activeFilter = nextF;
         g_scrollClock.Start(0.0, 60.0);
@@ -3318,6 +3324,12 @@ static void HandleClickAction(const HitRect& hr) {
         Direction nextDir = (Direction)(((int)app.block.direction + 1) % 3);
         g_pendingDirs[low] = nextDir;
         if (app.block.blocked) {
+            bool isDirectRoot = false;
+            {
+                std::lock_guard<std::mutex> lk(g_engineMtx);
+                isDirectRoot = (g_blocks.find(low) != g_blocks.end());
+            }
+            if (!isDirectRoot) ApplyAllow(app.displayPath);
             ApplyBlock(app.displayPath, nextDir, app.block.includeChildProcesses, true);
         }
         RefreshAppList();
@@ -3928,7 +3940,6 @@ static void PaintCyclePopup(HWND hwnd, CyclePopupState* st) {
         Gdiplus::SolidBrush surfRestBr(Gdiplus::Color(255, 20, 20, 25));
         Gdiplus::SolidBrush surfHoverBr(Gdiplus::Color(255, 28, 28, 34));
         Gdiplus::Pen borderRestPen(Gdiplus::Color(40, 255, 255, 255), 1.0f);
-        Gdiplus::Pen borderAccentPen(Gdiplus::Color(255, 201, 100, 66), 1.0f);
 
         Gdiplus::StringFormat sfLeft;
         sfLeft.SetAlignment(Gdiplus::StringAlignmentNear);
@@ -5492,6 +5503,7 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
                 g_statusBanner = L"Admin permission needed to block apps.";
             }
             SetTimer(hwnd, TIMER_FULLSCREEN, 1000, nullptr);
+            SetTimer(hwnd, TIMER_LATE_CHILD_POLL, 3000, nullptr);
             SyncHoverSensorTimer(hwnd);
             return 0;
         }
@@ -5610,7 +5622,7 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             const HitRect* hr = HitTestControl(pt);
             if (hr && hr->rowIndex >= 0 && hr->rowIndex < (int)g_appList.size()) {
-                const AppEntry& app = g_appList[hr->rowIndex];
+                AppEntry app = g_appList[hr->rowIndex];
                 HMENU menu = CreatePopupMenu();
                 CycleStatusSnapshot cyc;
                 bool active = GetCycleSnapshot(app.exePath, cyc);
@@ -5779,6 +5791,8 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
                     bool inZone = g_cycleWidgetHover || PtInRect(&zone, cur);
                     SetCycleWidgetRevealed(inZone);
                 }
+            } else if (wParam == TIMER_LATE_CHILD_POLL) {
+                SyncLateChildBlocks();
             } else if (wParam == TIMER_DEBOUNCE_REFRESH) {
                 KillTimer(hwnd, TIMER_DEBOUNCE_REFRESH);
                 SyncLateChildBlocks();
@@ -6066,6 +6080,7 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
             KillTimer(hwnd, TIMER_HOVER_SENSOR);
             KillTimer(hwnd, TIMER_CYCLE_UI);
             KillTimer(hwnd, TIMER_NAVIGATE_OPEN_CYCLE);
+            KillTimer(hwnd, TIMER_LATE_CHILD_POLL);
             KillTimer(hwnd, TIMER_DEBOUNCE_REFRESH);
             KillTimer(hwnd, TIMER_WIDGET_PROXIMITY);
             KillTimer(hwnd, TIMER_OUTSIDE_CLICK);
