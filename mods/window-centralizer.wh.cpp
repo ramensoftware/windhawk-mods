@@ -22,7 +22,7 @@ With **Show windows after complete UI load** on, a centered window is also kept 
 
 ## Modes
 
-- **Parent window / monitor**: centered on the window it came from, otherwise the active or topmost window of the same program. Orphan windows, such as the Run dialog or a program just launched, open centered on the monitor where the mouse cursor is. With **Center on the unrelated launcher window** on, a program started from another one opens centered on the window it was started from.
+- **Parent window / monitor**: centered on the window it came from, otherwise the active or topmost window of the same program. Orphan windows, such as the Run dialog or a program just launched, open centered on the monitor where the mouse cursor is. With **Center on the unrelated launcher window** on, a program started from another one opens centered on the window it was started from. Programs that Windows starts on the launcher's behalf (Store apps, some file associations) or that hand the file to an instance already running aren't linked to that window and open at the center of the monitor.
 - **Parent monitor only**: centered on the monitor of the window it came from, or on the monitor with the mouse cursor when orphan. With the window size limit to target at 100%, every window opens at the center of the screen.
 - **Mouse cursor**: centered on the mouse cursor.
 
@@ -63,7 +63,7 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
     - mouse: Mouse cursor
 - centerOnLauncher: false
   $name: Center on the unrelated launcher window
-  $description: A program started from another one (context menu, file opened from a folder, etc.) is centered on the window it was started from, instead of the monitor.
+  $description: A program started from another one (context menu, file opened from a folder, etc.) is centered on the window it was started from, instead of the monitor. Only in the "Parent window / monitor" mode.
   $showIf: {mode: parent}
 - maxAreaPercent: 10
   $name: Window size limit to target — % of the monitor area
@@ -480,15 +480,27 @@ bool SameExecutable(HWND hwnd) {
     return *name && _wcsicmp(name, g_processName) == 0;
 }
 
-wchar_t g_launcherName[MAX_PATH];  // executable of LauncherPid(), set with it
-HWND g_launchForeground;           // foreground window when this process started, set in Wh_ModInit
+HWND g_launchForeground;  // foreground window when this process started, set in Wh_ModInit; null if loaded later
 
-/// The process that started this one, or 0 if unknown or no longer running. Looked up on first use.
-DWORD LauncherPid() {
-    static std::atomic<DWORD> cached{0xFFFFFFFF};  // never a real PID: those are multiples of 4
-    DWORD pid = cached;
-    if (pid != 0xFFFFFFFF)
-        return pid;
+/// True if this process started less than 5 seconds ago. The mod also loads into running processes
+/// (when it is enabled or updated), where the foreground window has nothing to do with the launch.
+bool ProcessJustStarted() {
+    FILETIME created, unused1, unused2, unused3, now;
+    if (!GetProcessTimes(GetCurrentProcess(), &created, &unused1, &unused2, &unused3))
+        return false;
+    GetSystemTimeAsFileTime(&now);
+    auto ticks = [](const FILETIME& ft) { return ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime; };
+    return ticks(now) - ticks(created) < 5 * 10000000ULL;  // 100 ns units
+}
+
+struct Launcher {
+    DWORD pid;  // 0 if unknown or no longer running
+    wchar_t name[MAX_PATH];
+};
+
+/// The process that started this one.
+Launcher FindLauncher() {
+    Launcher launcher = {};
     DWORD self = GetCurrentProcessId(), parent = 0;
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap != INVALID_HANDLE_VALUE) {
@@ -503,19 +515,23 @@ DWORD LauncherPid() {
         CloseHandle(snap);
     }
     // A PID is reused once its process exits; a process started after this one isn't its launcher.
-    pid = 0;
     if (HANDLE proc = parent ? OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, parent) : nullptr) {
         FILETIME parentStart, selfStart, unused1, unused2, unused3;
         if (GetProcessTimes(proc, &parentStart, &unused1, &unused2, &unused3) &&
             GetProcessTimes(GetCurrentProcess(), &selfStart, &unused1, &unused2, &unused3) &&
             CompareFileTime(&parentStart, &selfStart) < 0)
-            pid = parent;
+            launcher.pid = parent;
         CloseHandle(proc);
     }
-    if (pid)
-        ExeNameOfPid(pid, g_launcherName, MAX_PATH);
-    cached = pid;
-    return pid;
+    if (launcher.pid)
+        ExeNameOfPid(launcher.pid, launcher.name, MAX_PATH);
+    return launcher;
+}
+
+/// FindLauncher's result, looked up once on first use.
+const Launcher& GetLauncher() {
+    static const Launcher launcher = FindLauncher();  // thread-safe, trivially destructible
+    return launcher;
 }
 
 /// The window to center on: the owner, else the program's active or topmost window, else the
@@ -558,15 +574,15 @@ HWND FindParent(HWND hwnd) {
     // acted on is the one in the foreground when this process started. Explorer can run folder windows in
     // a different process from the one that launched the program, so any window of the launcher's executable counts.
     if (g_centerOnLauncher && g_mode == MODE_PARENT && IsValidParent(g_launchForeground, hwnd)) {
-        DWORD launcher = LauncherPid();
+        const Launcher& launcher = GetLauncher();
         DWORD startFgPid = 0;
         GetWindowThreadProcessId(g_launchForeground, &startFgPid);
         wchar_t startFgCls[256] = L"", startFgName[MAX_PATH];
         bool startFgIsShell =
             GetClassNameW(g_launchForeground, startFgCls, ARRAYSIZE(startFgCls)) && IsIgnoredClass(startFgCls);
         ExeNameOfPid(startFgPid, startFgName, MAX_PATH);
-        if (launcher && startFgPid != GetCurrentProcessId() && !startFgIsShell &&
-            (startFgPid == launcher || (*startFgName && _wcsicmp(startFgName, g_launcherName) == 0)))
+        if (launcher.pid && startFgPid != GetCurrentProcessId() && !startFgIsShell &&
+            (startFgPid == launcher.pid || (*startFgName && _wcsicmp(startFgName, launcher.name) == 0)))
             return g_launchForeground;
     }
     return nullptr;
@@ -880,8 +896,7 @@ BOOL WINAPI SetWindowPlacement_Hook(HWND hwnd, const WINDOWPLACEMENT* wp) {
         WINDOWPLACEMENT centered = *wp;
         RECT& rc = centered.rcNormalPosition;
         int w = rc.right - rc.left, h = rc.bottom - rc.top;
-        POINT off = WorkspaceOffset(rc);
-        RECT proposed = {rc.left + off.x, rc.top + off.y, rc.left + off.x + w, rc.top + off.y + h};
+        RECT proposed = {0, 0, w, h};  // ComputeTarget uses only the size
         int x, y;
         POINT c;
         if (ComputeTarget(hwnd, proposed, &x, &y, &c)) {
@@ -1078,19 +1093,9 @@ bool AddRule(const wchar_t* rule) {
 }
 
 void ProcessNameOf(HWND hwnd, wchar_t* name, DWORD chars) {
-    name[0] = L'\0';
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
-    HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!proc)
-        return;
-    wchar_t path[MAX_PATH];
-    DWORD size = MAX_PATH;
-    if (QueryFullProcessImageNameW(proc, 0, path, &size)) {
-        const wchar_t* slash = wcsrchr(path, L'\\');
-        wcsncpy_s(name, chars, slash ? slash + 1 : path, _TRUNCATE);
-    }
-    CloseHandle(proc);
+    ExeNameOfPid(pid, name, chars);
 }
 
 // ── UWP app windows ──
@@ -1913,7 +1918,7 @@ BOOL Wh_ModInit() {
         return ToolMod_Init();
     }
 
-    g_launchForeground = GetForegroundWindow();
+    g_launchForeground = ProcessJustStarted() ? GetForegroundWindow() : nullptr;
     LoadCenteringSettings();
     StartRevealing();
     if (HMODULE win32u = GetModuleHandleW(L"win32u.dll")) {
