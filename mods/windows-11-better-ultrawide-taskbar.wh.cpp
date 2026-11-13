@@ -1869,6 +1869,7 @@ void ApplyPreviewMetrics(SettingsEditor& editor, TaskbarPreviewMetrics const& me
 void UpdateTrayReductionMaximum(SettingsEditor& editor, settingsjson::JsonObject const& saved);
 void ChooseTrayImage(SettingsEditor& editor, std::wstring const& key);
 void OpenCatalogPicker(SettingsEditor& editor, std::wstring const& key);
+bool CatalogPreviewLight(SettingsEditor const& editor);
 FrameworkElement Child(FrameworkElement parent, const wchar_t* name, bool byClass);
 
 void StopEditorMotion(SettingsEditor& editor) noexcept {
@@ -2177,9 +2178,7 @@ void RebuildTrayRows(SettingsEditor& editor) {
             detail.Text(L"Custom icon saved · Disabled");
         } else if (custom) {
             auto const& paths = override->second;
-            int color = editor.controls[FieldIndex(L"fontColor")].input.as<Controls::ComboBox>().SelectedIndex();
-            bool light = color == 1 || (color != 2 &&
-                 editor.content.RequestedTheme() == ElementTheme::Dark);
+            bool light = CatalogPreviewLight(editor);
             auto const& path = light ? paths.light : paths.dark;
             detail.Text(paths.Adaptive() ? L"Follows text color · " + path : path);
             try { pixels = LoadTrayImage(path); }
@@ -7036,7 +7035,7 @@ float4 ps(VertexOutput input) : SV_Target {
     winrt::com_ptr<ID3D11Texture2D> renderedBody;
     winrt::com_ptr<ID3D11RenderTargetView> renderedBodyTarget;
     winrt::com_ptr<ID3D11ShaderResourceView> renderedBodyView;
-    // Shared scratch, panel result, and independently blurred window body.
+    // Shared scratch and panel result.
     winrt::com_ptr<ID3D11Texture2D> blurTextures[2];
     winrt::com_ptr<ID3D11RenderTargetView> blurTargets[2];
     winrt::com_ptr<ID3D11ShaderResourceView> blurViews[2];
@@ -9487,7 +9486,6 @@ void UpdateEditorSurface(SettingsEditor& editor, bool updateCards) noexcept {
         lens.optics = ReadUiLiquidSettings(ui, scale);
         ApplyBorder(lens, ReadBorder(ui, L"ui.bodyBorder"), scale);
         std::fill_n(lens.bodyMaterialTint, 3, dark ? 32.0f / 255 : 243.0f / 255);
-        lens.bodyMaterialTint[3] = 0.8f;
         lens.lensRefraction = lens.optics.refraction;
         lens.lensBlend = LocalClamped(ui, L"ui.panelOpacity") / 100.0f;
         lens.alertTintOpacity = 1;
@@ -12552,11 +12550,8 @@ DWORD WINAPI ForegroundSampleWorker(void* raw) {
     try {
         auto result = std::make_unique<ForegroundSampleResult>();
         CaptureForegroundSamples(*request, *result);
-        if (!g_stopping) {
-            std::lock_guard lock(g_foregroundResultsMutex);
-            if (g_stopping) return 0;
-            g_foregroundResults.push_back(std::move(result));
-        }
+        std::lock_guard lock(g_foregroundResultsMutex);
+        if (!g_stopping) g_foregroundResults.push_back(std::move(result));
     } catch (...) {
     }
     return 0;
