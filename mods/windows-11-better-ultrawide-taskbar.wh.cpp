@@ -1983,7 +1983,7 @@ struct DrawnOutline {
 struct EditorPreview {
     int width = 640, height = 420;
     double margin = 48; // The canvas past each side of the dock band: wider when a slanted outline leans further.
-    double widen = 0; // How much wider the dock band is than with kPreviewGap: Separate's facing ends part the bars.
+    double gap = kGap; // From the last button to the tray content, as FitDock sets it: the canvas widens with it.
     TaskbarPreviewMetrics metrics;
     Controls::Canvas canvas{nullptr};
     Controls::Image backdrop{nullptr};
@@ -2003,7 +2003,7 @@ struct EditorPreview {
     std::unique_ptr<GlassPointerBinding> glassPointer;
     std::shared_ptr<GlassShadow> shadow;
     DrawnOutline shadowOutline; // The shadow's mask, in the canvas' DIP.
-    DrawnOutline outline;       // A trace in the material's DIP: clips it and carries its border line.
+    DrawnOutline outline;       // In the material's DIP: clips it and carries its border line, unless it is the hull.
     bool unavailable{};
     std::array<AdaptiveTone,3> foregroundTones;
     std::future<std::array<double,3>> foregroundSample;
@@ -9873,19 +9873,16 @@ void CreateEditorPreview(SettingsEditor& editor) {
 }
 
 // The preview's dock. Its buttons sit kPreviewSpacing apart, the first as far past the dock padding. Its tray content,
-// from the first icon past the clock, is kPreviewTray wide and sits kPreviewGap after the last button in Unified, which
-// is Separate's gap at its default Bar distance between square facing ends, so changing the layout leaves the tray in
-// place.
-constexpr double kPreviewSpacing = 8, kPreviewTray = 240, kPreviewGap = kBarGap + 2 * kDockPadding;
+// from the first icon past the clock, is kPreviewTray wide.
+constexpr double kPreviewSpacing = 8, kPreviewTray = 240;
 
 // Sizes the canvas to the dock band and a margin of 48 DIP, or the outline's reach past the band, on each side.
-void FitPreviewCanvas(SettingsEditor& editor, double reach, double widen) {
+void FitPreviewCanvas(SettingsEditor& editor, double reach, double gap) {
     auto& preview = editor.preview;
     preview.margin = std::max(48.0, std::ceil(reach));
-    preview.widen = widen;
+    preview.gap = gap;
     double step = std::max(44.0, preview.metrics.iconWidth + 16) + kPreviewSpacing;
-    int width = static_cast<int>(std::ceil(5 * step + (2 * kDockPadding + kPreviewGap + kPreviewTray + 2 * 48) + widen +
-                                           2 * (preview.margin - 48)));
+    int width = static_cast<int>(std::ceil(5 * step + 2 * kDockPadding + gap + kPreviewTray + 2 * preview.margin));
     int height = static_cast<int>(std::ceil(std::max(editor.compactLayout?140.0:420.0, preview.metrics.dockHeight + 48)));
     if (preview.width != width || preview.height != height) {
         CloseEditorPreview(editor);
@@ -9900,7 +9897,7 @@ void ApplyPreviewMetrics(SettingsEditor& editor, TaskbarPreviewMetrics const& me
     auto& preview = editor.preview;
     preview.metrics = metrics;
     // UpdateEditorPreview, below, refits the margin to the outline at the new band.
-    FitPreviewCanvas(editor, preview.margin, preview.widen);
+    FitPreviewCanvas(editor, preview.margin, preview.gap);
     auto number = [](double value) {
         wchar_t text[32]{};
         swprintf(text, ARRAYSIZE(text), std::abs(value - std::round(value)) < 0.05 ? L"%.0f" : L"%.1f", value);
@@ -10049,19 +10046,17 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
                             IconBox{kDockPadding + iconInset, buttonIcon.top, buttonIcon.bottom},
                             IconBox{kDockPadding, (dockHeight + drop - 16) / 2, (dockHeight + drop + 16) / 2}};
         // The preview has no host and grows its canvas to the dock, so FitDock gets a host with room for any dock and
-        // hands back the gap, Bar distance and curved tray end the settings ask for. The button area starts at the dock
-        // padding and ends with Separate's last button; Unified's runs on past it, which leaves the tray kPreviewGap
-        // after that button.
-        double trail = style.layout == DockLayout::Separate ? 0 : kPreviewGap - kGap;
-        double buttons = 5 * step + trail;
+        // hands back the gap, Bar distance and curved tray end the settings ask for. The button area runs from the dock
+        // padding to the last button's edge.
+        double buttons = 5 * step;
         auto fit = FitDock(INFINITY, buttons, trayWidth, style, radius, dockHeight, content);
         auto outline = PlacedOutline(fit, style, trayWidth, radius, dockHeight, false, content);
         double dockWidth = kDockPadding + buttons + fit.gap + trayWidth + kDockPadding;
-        // A traced outline clips the material, which the outer flares or the slanted walls widen past the dock band on
-        // both sides.
-        bool traced = OutlineKind(outline) == DrawnOutline::Kind::Path;
+        // An outline that is not the hull clips the material, which the outer flares or the slanted walls widen past
+        // the dock band on both sides. The Border rounds and lines only the hull.
+        bool clipped = OutlineKind(outline) != DrawnOutline::Kind::Hull;
         float flare = static_cast<float>(OutlineReach(outline, dockHeight));
-        FitPreviewCanvas(editor, flare, trail + fit.gap - kPreviewGap);
+        FitPreviewCanvas(editor, flare, fit.gap);
         double left = preview.margin, trayLeft = left + kDockPadding + buttons + fit.gap;
         double y = edge ? preview.height - dockHeight : (preview.height - dockHeight) / 2;
         auto buttonInsets=GetButtonInsets({0,0},dockHeight,buttonPadding);
@@ -10072,7 +10067,7 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         Controls::Canvas::SetTop(preview.material, y);
         preview.material.Height(dockHeight);
         preview.material.Width(dockWidth + 2 * flare);
-        preview.material.CornerRadius(edge ? CornerRadius{radius, radius, 0, 0} : CornerRadius{radius, radius, radius, radius});
+        preview.material.CornerRadius(clipped ? CornerRadius{} : CornerRadius{radius, radius, radius, radius});
         for (size_t i = 0; i < preview.buttons.size(); ++i) {
             auto button = preview.buttons[i];
             button.Width(buttonWidth);
@@ -10167,18 +10162,20 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
                      : winrt::Windows::UI::Color{240, 243, 243, 243}));
         else
             preview.material.Background(GlassMaterial(theme != DockTheme::Glass, dark));
-        float borderWidth = (liquid && !preview.unavailable) || traced ? 0 : border.width;
+        float borderWidth = (liquid && !preview.unavailable) || clipped ? 0 : border.width;
         preview.material.BorderBrush(Media::SolidColorBrush(border.color));
-        preview.material.BorderThickness({borderWidth, borderWidth, borderWidth, edge ? 0 : borderWidth});
-        // A traced outline clips the material to a static trace of it, and the border line is the live dock's
-        // composition stroke inside that clip, since the Border's own line would stop at the hull.
+        preview.material.BorderThickness({borderWidth, borderWidth, borderWidth, borderWidth});
+        // The clip is the outline set in the material's DIP, and the border line is the live dock's composition
+        // stroke inside that clip, since the Border's own line would stop at the hull.
         auto materialVisual = Hosting::ElementCompositionPreview::GetElementVisual(preview.material);
         ShapeVisual materialLine{nullptr};
-        if (traced) {
+        if (clipped) {
             auto compositor = materialVisual.Compositor();
-            SetOutline(preview.outline, compositor, outline, {flare, 0, flare + float(dockWidth), float(dockHeight)});
-            if (!materialVisual.Clip()) materialVisual.Clip(compositor.CreateGeometricClip(preview.outline.geometry));
-            if (borderWidth == 0 && !liquid && border.width > 0)
+            bool replaced = SetOutline(preview.outline, compositor, outline,
+                                       {flare, 0, flare + float(dockWidth), float(dockHeight)});
+            if (replaced || !materialVisual.Clip())
+                materialVisual.Clip(compositor.CreateGeometricClip(preview.outline.geometry));
+            if (!liquid && border.width > 0)
                 materialLine = GlassHighlights(preview.outline.geometry, DockTheme::Native, dark, border);
         } else {
             materialVisual.Clip(nullptr);
