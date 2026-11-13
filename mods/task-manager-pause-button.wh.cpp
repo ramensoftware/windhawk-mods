@@ -34,14 +34,12 @@ Real time update speed setting.
 
 ## Compatibility and limitations
 
-- Uses Task Manager's navigation hooks and public XAML APIs. Processes symbols
-  use the mod's official Windhawk online/local cache, including when testing
-  as a local Windhawk mod. The optional Details entry hook uses a local PDB if
-  available. An advanced setting allows a separate optional Microsoft PDB
-  download for Details, without making the Processes hook depend on it.
-  This request may delay startup if Microsoft's PDB is missing, so the setting
-  is disabled by default. No hardcoded Task Manager offsets or XAML Diagnostics
-  service are used. Windows updates may change private functions.
+- Uses Task Manager's Processes navigation hooks and public XAML APIs.
+  Processes symbols use the official Windhawk symbol cache, including when
+  testing as a local mod. Details is discovered through Frame.Navigated after
+  visiting Processes. No hardcoded Task Manager offsets, extra PDB probing, or
+  XAML Diagnostics service are used. Windows updates may change private
+  functions.
 - Uses Task Manager's Ctrl-key refresh hold through `GetKeyState` calls made
   directly by `Taskmgr.exe`. While paused, some Task Manager keyboard actions
   may behave as if Ctrl is held, including Run new task (Ctrl+click can open
@@ -60,11 +58,9 @@ Real time update speed setting.
   public Frame.Navigated event to discover Details and resume on other pages.
   It retries the command-bar search if the initial navigation hook ran before
   the toolbar was ready or failed to insert a usable button, without repeating
-  successful scans. If the Details symbol is resolved, Details can be the
-  initial page. Otherwise, visit Processes first so the mod can attach to the
-  navigation Frame. If you need direct Details startup, you can enable the
-  optional symbol-download setting, but it won't help if Microsoft has not
-  published the matching PDB.
+  successful scans. Visit Processes at least once after Task Manager opens
+  so the mod can attach to the navigation Frame. Opening Task Manager directly
+  on Details requires visiting Processes once before the button can appear.
 - If the button is missing, close and reopen Task Manager with the mod enabled.
 - No background applications are needed.
 
@@ -75,14 +71,6 @@ Real time update speed setting.
 Author: Luiz Bizzio. License: Apache-2.0.
 */
 // ==/WindhawkModReadme==
-
-// ==WindhawkModSettings==
-/*
-- tryOnlineDetailsPdb: false
-  $name: Try downloading the Details symbol file
-  $description: If the Details symbol file is not available locally, try downloading it from Microsoft's symbol server. This may delay Task Manager startup if the file is missing. Keep this disabled unless you need the Pause button when Task Manager starts directly on Details.
-*/
-// ==/WindhawkModSettings==
 
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Luiz Bizzio
@@ -944,7 +932,7 @@ bool FindCommandBars(mux::FrameworkElement const& page) {
 }
 
 // Frame.Navigated is a public XAML event. We acquire the Frame through the
-// existing Task Manager navigation hook, not through XAML Diagnostics.
+// Processes navigation hook, not through XAML Diagnostics.
 // Unknown page types do not cause an automatic Resume.
 enum class ActivePage { Unknown, Supported, Other };
 
@@ -1137,7 +1125,6 @@ void TryAttachFrameNavigation(mux::DependencyObject object) {
 using PageNavigation_t = HRESULT(__cdecl*)(void*, void*);
 PageNavigation_t g_processesToOriginal{};
 PageNavigation_t g_processesFromOriginal{};
-PageNavigation_t g_detailsToOriginal{};
 
 // Track whether the entry hook inserted or found a usable button on the
 // specific page instance. The frame event retries failed/missing insertions,
@@ -1175,7 +1162,7 @@ bool NeedsFrameNavigationScan(winrt::hstring const& pageType,
     if (EndsWith(name, L"ProcessesPage"))
         hasEntryHook = g_processesToOriginal != nullptr;
     else if (EndsWith(name, L"DetailsPage"))
-        hasEntryHook = g_detailsToOriginal != nullptr;
+        return true; // Discovered through Frame.Navigated, not a private hook.
     else
         return false;
     if (!hasEntryHook) return true;
@@ -1218,73 +1205,6 @@ HRESULT __cdecl ProcessesNavigatedTo_Hook(void* self, void* args) {
     if (SUCCEEDED(result) && !g_stopping.load(std::memory_order_acquire))
         CapturePageFromInterface(self);
     return result;
-}
-
-HRESULT __cdecl DetailsNavigatedTo_Hook(void* self, void* args) {
-    HRESULT result = g_detailsToOriginal(self, args);
-    if (SUCCEEDED(result) && !g_stopping.load(std::memory_order_acquire))
-        CapturePageFromInterface(self);
-    return result;
-}
-
-// Resolve Details separately so its PDB cannot make the required Processes
-// HookSymbols call fail or poison that cache. By default, only a local PDB is
-// used. An explicit setting allows the Microsoft symbol server to be tried
-// on builds whose Details PDB has not already been downloaded.
-bool TryHookDetailsFromPdb(HMODULE host, bool allowDownload) {
-    constexpr std::wstring_view kDetailsToSymbol =
-        L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::DetailsPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)";
-
-    WH_FIND_SYMBOL_OPTIONS options{};
-    options.optionsSize = sizeof(options);
-    options.symbolServer = allowDownload ? nullptr : L"";
-    WH_FIND_SYMBOL symbol{};
-    HANDLE search = Wh_FindFirstSymbol(host, &options, &symbol);
-    if (!search) {
-        Wh_Log(L"Details OnNavigatedTo: PDB unavailable (online=%d); Frame fallback remains active",
-               allowDownload);
-        return false;
-    }
-
-    void* target = nullptr;
-    do {
-        if (symbol.symbol && std::wstring_view{symbol.symbol} == kDetailsToSymbol) {
-            target = symbol.address;
-            break;
-        }
-    } while (Wh_FindNextSymbol(search, &symbol));
-
-    bool installed = false;
-    if (target) {
-        const uintptr_t address = reinterpret_cast<uintptr_t>(target);
-        MEMORY_BASIC_INFORMATION region{};
-        const bool inImage = address >= g_taskBegin && address < g_taskEnd;
-        if (inImage && VirtualQuery(target, &region, sizeof(region)) == sizeof(region) &&
-            region.State == MEM_COMMIT && !(region.Protect & PAGE_GUARD)) {
-            const DWORD protection = region.Protect & 0xff;
-            const bool executable = protection == PAGE_EXECUTE ||
-                protection == PAGE_EXECUTE_READ ||
-                protection == PAGE_EXECUTE_READWRITE ||
-                protection == PAGE_EXECUTE_WRITECOPY;
-            if (executable) {
-                installed = WindhawkUtils::SetFunctionHook(
-                    reinterpret_cast<PageNavigation_t>(target),
-                    DetailsNavigatedTo_Hook, &g_detailsToOriginal);
-            } else {
-                Wh_Log(L"Details OnNavigatedTo: resolved address is not executable");
-            }
-        } else {
-            Wh_Log(L"Details OnNavigatedTo: resolved address is outside a valid executable region");
-        }
-    }
-
-    // Close after installing the hook: unloading the DIA library during
-    // initialization is known to cause hangs with Application Verifier.
-    Wh_FindCloseSymbol(search);
-    if (!installed) g_detailsToOriginal = nullptr;
-    Wh_Log(L"Details OnNavigatedTo from PDB: %s (online=%d)",
-           installed ? L"installed" : L"unavailable", allowDownload);
-    return installed;
 }
 
 // SourcePageType identifies the navigation destination. Preserve Pause when
@@ -1389,27 +1309,12 @@ BOOL Wh_ModInit() {
            processesExitFound ? L"found" : L"missing",
            processesExitHooked ? L"ok" : L"unavailable");
 
-    // If requested by the user, also try the Microsoft symbol server for
-    // Details. This may delay startup for a missing PDB, hence opt-in.
-    // The required Processes hook above remains independent either way.
-    const bool tryOnlineDetailsPdb = Wh_GetIntSetting(L"tryOnlineDetailsPdb") != 0;
-    const bool detailsHooked = TryHookDetailsFromPdb(host, tryOnlineDetailsPdb);
-
     // Intentionally unchanged: preserve the tested GetKeyState-based refresh
     // hold, including its Taskmgr.exe return-address restriction.
     if (!WindhawkUtils::SetFunctionHook(
             GetKeyState, GetKeyState_Hook, &g_getKeyOriginal)) return FALSE;
 
-    Wh_Log(L"Ready: Processes cache, Details PDB hook=%d online=%d, Frame.Navigated (no embedded offsets)",
-           detailsHooked, tryOnlineDetailsPdb);
-    return TRUE;
-}
-
-// Hook availability depends on tryOnlineDetailsPdb, which is read during
-// Wh_ModInit. Reload the mod when settings change so the new value takes
-// effect instead of leaving the existing hooks unchanged.
-BOOL Wh_ModSettingsChanged(BOOL* reload) {
-    *reload = TRUE;
+    Wh_Log(L"Ready: Processes cache, Details via Frame.Navigated (no PDB probing or embedded offsets)");
     return TRUE;
 }
 
