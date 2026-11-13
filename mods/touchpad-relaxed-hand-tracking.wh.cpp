@@ -44,6 +44,10 @@ The mod learns the touchpad's native speed and acceleration by watching ordinary
 
 Right after installing, before anything is learned, the glide uses a default speed. Using the touchpad normally for a few minutes, with slow and fast movements, is enough for it to learn.
 
+## Diagnostics overlay
+
+Off by default. Set **Diagnostics overlay hotkey** (for example Ctrl+Alt+Shift+F) and press it to show how the mod reads each finger: green steers the pointer (bigger, more weight), gray rests, dark gray is the thumb, yellow may still tap, blue scrolls, orange holds, and a red ring is a palm. The dotted rectangle is the pad's edge band and the line across is the top of the thumb zone. Drag it anywhere; the X closes it.
+
 ## Limitations
 
 - Requires a precision touchpad.
@@ -100,9 +104,9 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
   $options:
   - wheel: Mouse wheel
   - touch: Touch
-- diagHotkey: Win+Shift+F
+- diagHotkey: ""
   $name: Diagnostics overlay hotkey
-  $description: Shows how the mod reads each finger. Ctrl, Alt, Shift or Win joined with + to a letter, like Win+Shift+F. Empty for none.
+  $description: Shows how the mod reads each finger, for troubleshooting. Ctrl, Alt, Shift or Win joined with + to a letter, like Win+Shift+F. Empty for none.
 */
 // ==/WindhawkModSettings==
 
@@ -127,6 +131,7 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
 #include <atomic>
 #include <climits>
 #include <cmath>
+#include <cwctype>
 #include <cstdlib>
 #include <deque>
 #include <string>
@@ -194,6 +199,8 @@ constexpr DWORD kRefJoinMs = 300;
 //    farther in is never taken for a crossed index, which would leave the pinky the thumb until a third landed.
 // 2. Of the contacts which landed in this bottom share of the pad, the one farthest in is the thumb.
 // 3. Without any, with 5 contacts down, the one farthest in is the thumb, wherever it landed.
+// With 2, 3 or 4 fingers detection, a thumb is only looked for with one contact more than the smallest count on:
+// without the thumb down, rule 2 took a finger in the zone for it, and the glide or the scroll lost that finger.
 // Thumbs learned from where they landed went wrong with four fingers, where the pinky taught the other hand.
 constexpr double kThumbZone = 1.0 / 3;
 constexpr double kInwardMm = 5.0;
@@ -326,10 +333,10 @@ constexpr double kPinchMm = 0.2;
 // Frames processed back to back would give a near-zero interval and spike the measured speed.
 constexpr double kMinFrameSec = 0.005;
 
-std::atomic<double> g_multFive{2.0};
+std::atomic<double> g_multMore{1.5};
 std::atomic<DWORD> g_lastReportTick;
 std::atomic<DWORD> g_pinchTick;
-std::atomic<double> g_multOne{1.0};
+std::atomic<double> g_multLess{1.0};
 std::atomic<bool> g_armTwo;
 std::atomic<UINT> g_vizHotkeyMods;  // MOD_* flags; with g_vizHotkeyKey 0, no hotkey
 std::atomic<UINT> g_vizHotkeyKey;   // virtual key
@@ -357,7 +364,7 @@ double g_lastSave;
 
 HANDLE g_stopEvent;
 HANDLE g_thread;
-HWND g_hWnd;
+std::atomic<HWND> g_hWnd;  // read by WhTool_ModSettingsChanged on the engine thread
 HANDLE g_hookThread;
 DWORD g_hookThreadId;
 constexpr UINT kWheelBlockMessage = WM_APP + 1;
@@ -454,7 +461,7 @@ struct {
     std::unordered_map<ULONG, DWORD> backAfter;  // contacts back this frame where one left: ms since it left
     bool pendingDouble;  // a click is owed, waiting for a possible hold
     DWORD restLiftTime;  // when a resting finger last lifted with the hand still on the pad
-    int lastHand;  // contacts down outside the thumb zone
+    int lastHand;  // contacts down which aren't the thumb
     DWORD countChangeTime;
     std::vector<ULONG> refIds;  // the fingers which move the pointer
     std::unordered_map<ULONG, std::deque<TrailPoint>> trails;  // every finger's last kWeightWindowSec
@@ -571,13 +578,13 @@ bool ParseHotkey(PCWSTR text, UINT& mods, UINT& key) {
         }
         start = end + 1;
     }
-    // A letter or digit alone would be taken from typing.
-    return key && (mods || (key >= VK_F1 && key <= VK_F24));
+    // A key alone would be taken from every program while the mod runs.
+    return key && mods;
 }
 
 void LoadSettings() {
-    g_multFive = ReadMultiplier(L"multiplierMore", 1.5);
-    g_multOne = ReadMultiplier(L"multiplierLess", 1.0);
+    g_multMore = ReadMultiplier(L"multiplierMore", 1.5);
+    g_multLess = ReadMultiplier(L"multiplierLess", 1.0);
     g_armTwo = Wh_GetIntSetting(L"armTwo");
     UINT mods = 0;
     UINT key = 0;
@@ -1127,6 +1134,18 @@ void StartInertia() {
         g_two.inertia = true;
         g_two.inertiaTime = Now();
         SetTimer(g_hWnd, kInertiaTimerId, kInertiaStepMs, nullptr);
+        return;
+    }
+    // Without inertia, what's below a step goes out now: zeroed at the next touch, a slow scroll fell short.
+    LONG wy = std::lround(g_two.scrollAccY);
+    LONG wx = std::lround(g_two.scrollAccX);
+    g_two.scrollAccY = 0;
+    g_two.scrollAccX = 0;
+    if (wy) {
+        SendWheel(MOUSEEVENTF_WHEEL, wy);
+    }
+    if (wx) {
+        SendWheel(MOUSEEVENTF_HWHEEL, wx);
     }
 }
 
@@ -1691,9 +1710,7 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, const std::vector<
     }
 }
 
-// Diagnostic overlay (local build only): draws each contact as the mod reads it, on a click-through window.
-
-bool IsThumb(ULONG id);
+// Diagnostics overlay: draws each contact as the mod reads it. Sizes are at 96 DPI, scaled to the monitor's.
 
 constexpr WCHAR kVizClassName[] = L"Touchpad_Relaxed_Hand_Overlay";
 constexpr int kVizWidth = 500;
@@ -1740,7 +1757,26 @@ struct {
     std::unordered_map<ULONG, double> weight;                       // smoothed
     std::unordered_map<ULONG, std::pair<double, double>> motion;    // smoothed delta, mm per frame
     std::wstring header, detail, shares;
+    double scale = 1;  // the monitor's DPI over 96
+    HFONT big, small;
 } g_viz;
+
+int VizPx(double v) {
+    return (int)std::lround(v * g_viz.scale);
+}
+
+void VizSetDpi(UINT dpi) {
+    g_viz.scale = (dpi ? dpi : 96) / 96.0;
+    for (HFONT font : {g_viz.big, g_viz.small}) {
+        if (font) {
+            DeleteObject(font);
+        }
+    }
+    g_viz.big = CreateFontW(-VizPx(16), 0, 0, 0, FW_SEMIBOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0,
+                            L"Segoe UI");
+    g_viz.small = CreateFontW(-VizPx(12), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0,
+                              L"Segoe UI");
+}
 
 // Off, nothing is recorded: the frame only pays for this check.
 bool g_vizOn;
@@ -1949,12 +1985,14 @@ void VizArrow(HDC dc, int x0, int y0, int x1, int y1, COLORREF color, int width)
     MoveToEx(dc, x0, y0, nullptr);
     LineTo(dc, x1, y1);
     double len = std::hypot(x1 - x0, y1 - y0);
-    if (len > 6) {
+    if (len > VizPx(6)) {
         double ux = (x1 - x0) / len;
         double uy = (y1 - y0) / len;
-        for (int side : {-1, 1}) {
+        double head = 8 * g_viz.scale;
+        double side = 5 * g_viz.scale;
+        for (int s : {-1, 1}) {
             MoveToEx(dc, x1, y1, nullptr);
-            LineTo(dc, x1 - (int)(8 * ux - side * 5 * uy), y1 - (int)(8 * uy + side * 5 * ux));
+            LineTo(dc, x1 - (int)(head * ux - s * side * uy), y1 - (int)(head * uy + s * side * ux));
         }
     }
     SelectObject(dc, old);
@@ -1975,18 +2013,17 @@ void VizPaint(HWND hWnd) {
     DeleteObject(bg);
     SetBkMode(dc, TRANSPARENT);
 
-    HFONT big = CreateFontW(-16, 0, 0, 0, FW_SEMIBOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0,
-                            L"Segoe UI");
-    HFONT small = CreateFontW(-12, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0,
-                              L"Segoe UI");
-    HGDIOBJ oldFont = SelectObject(dc, big);
+    int margin = VizPx(kVizMargin);
+    HGDIOBJ oldFont = SelectObject(dc, g_viz.big);
     SetTextColor(dc, RGB(240, 240, 240));
-    TextOutW(dc, kVizMargin, 8, g_viz.header.c_str(), (int)g_viz.header.size());
+    TextOutW(dc, margin, VizPx(8), g_viz.header.c_str(), (int)g_viz.header.size());
     {
-        RECT close{rc.right - kVizCloseSize - 6, 6, rc.right - 6, 6 + kVizCloseSize};
-        HPEN pen = CreatePen(PS_SOLID, 2, RGB(170, 170, 170));
+        int size = VizPx(kVizCloseSize);
+        int inset = VizPx(6);
+        RECT close{rc.right - size - inset, inset, rc.right - inset, inset + size};
+        HPEN pen = CreatePen(PS_SOLID, VizPx(2), RGB(170, 170, 170));
         HGDIOBJ old = SelectObject(dc, pen);
-        int pad = 6;
+        int pad = VizPx(6);
         MoveToEx(dc, close.left + pad, close.top + pad, nullptr);
         LineTo(dc, close.right - pad, close.bottom - pad);
         MoveToEx(dc, close.right - pad, close.top + pad, nullptr);
@@ -1994,16 +2031,16 @@ void VizPaint(HWND hWnd) {
         SelectObject(dc, old);
         DeleteObject(pen);
     }
-    SelectObject(dc, small);
+    SelectObject(dc, g_viz.small);
     SetTextColor(dc, RGB(170, 170, 170));
-    TextOutW(dc, kVizMargin, 32, g_viz.detail.c_str(), (int)g_viz.detail.size());
-    TextOutW(dc, kVizMargin, 50, g_viz.shares.c_str(), (int)g_viz.shares.size());
+    TextOutW(dc, margin, VizPx(32), g_viz.detail.c_str(), (int)g_viz.detail.size());
+    TextOutW(dc, margin, VizPx(50), g_viz.shares.c_str(), (int)g_viz.shares.size());
 
     // The pad.
-    int padLeft = kVizMargin;
-    int padTop = kVizHeader;
-    int padRight = rc.right - kVizMargin;
-    int padBottom = rc.bottom - kVizLegend;
+    int padLeft = margin;
+    int padTop = VizPx(kVizHeader);
+    int padRight = rc.right - margin;
+    int padBottom = rc.bottom - VizPx(kVizLegend);
     double scale = std::min((padRight - padLeft) / g_viz.padW, (padBottom - padTop) / g_viz.padH);
     padRight = padLeft + (int)(g_viz.padW * scale);
     padBottom = padTop + (int)(g_viz.padH * scale);
@@ -2011,7 +2048,7 @@ void VizPaint(HWND hWnd) {
     HPEN padPen = CreatePen(PS_SOLID, 1, RGB(80, 80, 80));
     HGDIOBJ oldBrush = SelectObject(dc, padBrush);
     HGDIOBJ oldPen = SelectObject(dc, padPen);
-    RoundRect(dc, padLeft, padTop, padRight, padBottom, 12, 12);
+    RoundRect(dc, padLeft, padTop, padRight, padBottom, VizPx(12), VizPx(12));
     SelectObject(dc, oldPen);
     SelectObject(dc, oldBrush);
     DeleteObject(padPen);
@@ -2048,10 +2085,10 @@ void VizPaint(HWND hWnd) {
     for (const VizDot& dot : g_viz.dots) {
         int cx = px(dot.x);
         int cy = py(dot.y);
-        int r = dot.role == kVizSteer ? 9 + (int)(16 * dot.weight) : 10;
+        int r = VizPx(dot.role == kVizSteer ? 9 + 16 * dot.weight : 10);
         COLORREF color = VizColor(dot.role);
         HBRUSH brush = dot.role == kVizPalm ? (HBRUSH)GetStockObject(NULL_BRUSH) : CreateSolidBrush(color);
-        HPEN pen = CreatePen(PS_SOLID, dot.role == kVizPalm ? 3 : 1, dot.holdCandidate ? RGB(255, 152, 0) : color);
+        HPEN pen = CreatePen(PS_SOLID, VizPx(dot.role == kVizPalm ? 3 : 1), dot.holdCandidate ? RGB(255, 152, 0) : color);
         SelectObject(dc, brush);
         SelectObject(dc, pen);
         Ellipse(dc, cx - r, cy - r, cx + r, cy + r);
@@ -2063,7 +2100,7 @@ void VizPaint(HWND hWnd) {
         }
         if (dot.dx || dot.dy) {
             VizArrow(dc, cx, cy, cx + (int)(dot.dx * scale * kVizArrowGain), cy + (int)(dot.dy * scale * kVizArrowGain),
-                     RGB(220, 220, 220), 1);
+                     RGB(220, 220, 220), VizPx(1));
         }
         WCHAR label[32];
         if (dot.role == kVizSteer) {
@@ -2072,7 +2109,7 @@ void VizPaint(HWND hWnd) {
             swprintf_s(label, L"#%u", dot.id);
         }
         SetTextColor(dc, RGB(220, 220, 220));
-        TextOutW(dc, cx + r + 3, cy - 7, label, (int)wcslen(label));
+        TextOutW(dc, cx + r + VizPx(3), cy - VizPx(7), label, (int)wcslen(label));
     }
 
     // The direction the pointer took this frame, from the pad's center.
@@ -2080,7 +2117,7 @@ void VizPaint(HWND hWnd) {
         int cx = (padLeft + padRight) / 2;
         int cy = (padTop + padBottom) / 2;
         VizArrow(dc, cx, cy, cx + (int)(g_viz.outDx * scale * kVizArrowGain),
-                 cy + (int)(g_viz.outDy * scale * kVizArrowGain), RGB(255, 255, 255), 3);
+                 cy + (int)(g_viz.outDy * scale * kVizArrowGain), RGB(255, 255, 255), VizPx(3));
     }
 
     // Legend.
@@ -2089,23 +2126,22 @@ void VizPaint(HWND hWnd) {
         const wchar_t* name;
     } legend[] = {{kVizSteer, L"steers"}, {kVizRest, L"resting"}, {kVizThumb, L"thumb"}, {kVizTap, L"maybe tap"},
                   {kVizScroll, L"scroll"}, {kVizHold, L"hold"},   {kVizPalm, L"palm"}};
-    int lx = kVizMargin;
-    int ly = rc.bottom - kVizLegend + 14;
+    int lx = margin;
+    int ly = rc.bottom - VizPx(kVizLegend) + VizPx(14);
+    int gap = VizPx(14);
     for (const auto& item : legend) {
         HBRUSH brush = CreateSolidBrush(VizColor(item.role));
-        RECT sw{lx, ly + 2, lx + 10, ly + 12};
+        RECT sw{lx, ly + VizPx(2), lx + VizPx(10), ly + VizPx(12)};
         FillRect(dc, &sw, brush);
         DeleteObject(brush);
         SetTextColor(dc, RGB(190, 190, 190));
-        TextOutW(dc, lx + 14, ly, item.name, (int)wcslen(item.name));
+        TextOutW(dc, lx + gap, ly, item.name, (int)wcslen(item.name));
         SIZE size;
         GetTextExtentPoint32W(dc, item.name, (int)wcslen(item.name), &size);
-        lx += 14 + size.cx + 14;
+        lx += gap + size.cx + gap;
     }
 
     SelectObject(dc, oldFont);
-    DeleteObject(big);
-    DeleteObject(small);
     BitBlt(wdc, 0, 0, rc.right, rc.bottom, dc, 0, 0, SRCCOPY);
     SelectObject(dc, oldBmp);
     DeleteObject(bmp);
@@ -2130,8 +2166,10 @@ void VizShow(bool show) {
 bool VizOnClose(HWND hWnd, POINT screen) {
     RECT rc;
     GetWindowRect(hWnd, &rc);
-    return screen.x >= rc.right - kVizCloseSize - 6 && screen.x < rc.right - 6 && screen.y >= rc.top + 6 &&
-           screen.y < rc.top + 6 + kVizCloseSize;
+    int size = VizPx(kVizCloseSize);
+    int inset = VizPx(6);
+    return screen.x >= rc.right - size - inset && screen.x < rc.right - inset && screen.y >= rc.top + inset &&
+           screen.y < rc.top + inset + size;
 }
 
 // Dragged anywhere but the close button, which hides it. The spot it's dragged to is kept.
@@ -2156,6 +2194,15 @@ LRESULT CALLBACK VizWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case WM_NCLBUTTONDBLCLK:
         case WM_NCRBUTTONUP:
             return 0;
+        // Moved to a monitor with another scale: sized again, to the rect Windows suggests.
+        case WM_DPICHANGED: {
+            VizSetDpi(HIWORD(wParam));
+            const RECT* r = (const RECT*)lParam;
+            SetWindowPos(hWnd, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
         case WM_EXITSIZEMOVE: {
             RECT rc;
             GetWindowRect(hWnd, &rc);
@@ -2167,7 +2214,7 @@ LRESULT CALLBACK VizWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
-// Bottom right of the primary work area, click-through, never activated.
+// Bottom right of the primary work area, or where it was last dragged to; never activated.
 void VizCreate(HINSTANCE hInstance) {
     WNDCLASS wc{
         .lpfnWndProc = VizWndProc,
@@ -2176,24 +2223,31 @@ void VizCreate(HINSTANCE hInstance) {
         .lpszClassName = kVizClassName,
     };
     RegisterClass(&wc);
-    int height = kVizHeader + kVizLegend + (int)((kVizWidth - 2 * kVizMargin) * g_viz.padH / g_viz.padW) + 4;
     RECT work;
     SystemParametersInfo(SPI_GETWORKAREA, 0, &work, 0);
-    int x = work.right - kVizWidth - 16;
-    int y = work.bottom - height - 16;
     // Where it was last dragged to, if that's still on a monitor.
     int savedX = Wh_GetIntValue(L"overlayX", INT_MIN);
     int savedY = Wh_GetIntValue(L"overlayY", INT_MIN);
-    if (savedX != INT_MIN && savedY != INT_MIN && MonitorFromPoint({savedX + 40, savedY + 20}, MONITOR_DEFAULTTONULL)) {
-        x = savedX;
-        y = savedY;
-    }
+    bool saved =
+        savedX != INT_MIN && savedY != INT_MIN && MonitorFromPoint({savedX + 40, savedY + 20}, MONITOR_DEFAULTTONULL);
+    int x = saved ? savedX : work.right - kVizWidth;
+    int y = saved ? savedY : work.bottom - kVizWidth;
+    // Created at its spot first, so that its monitor's DPI is known, then sized for it.
     g_viz.hWnd = CreateWindowEx(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kVizClassName,
-                                nullptr, WS_POPUP, x, y, kVizWidth, height, nullptr, nullptr, hInstance, nullptr);
+                                nullptr, WS_POPUP, x, y, kVizWidth, kVizWidth, nullptr, nullptr, hInstance, nullptr);
     if (!g_viz.hWnd) {
         Wh_Log(L"Overlay window error: %u", GetLastError());
         return;
     }
+    VizSetDpi(GetDpiForWindow(g_viz.hWnd));
+    int width = VizPx(kVizWidth);
+    int height = VizPx(kVizHeader) + VizPx(kVizLegend) +
+                 (int)((width - 2 * VizPx(kVizMargin)) * g_viz.padH / g_viz.padW) + VizPx(4);
+    if (!saved) {
+        x = work.right - width - VizPx(16);
+        y = work.bottom - height - VizPx(16);
+    }
+    SetWindowPos(g_viz.hWnd, nullptr, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
     SetLayeredWindowAttributes(g_viz.hWnd, 0, 225, LWA_ALPHA);
 }
 
@@ -2217,6 +2271,12 @@ void VizDestroy(HINSTANCE hInstance) {
     if (g_viz.hWnd) {
         DestroyWindow(g_viz.hWnd);
         g_viz.hWnd = nullptr;
+    }
+    for (HFONT* font : {&g_viz.big, &g_viz.small}) {
+        if (*font) {
+            DeleteObject(*font);
+            *font = nullptr;
+        }
     }
     UnregisterClass(kVizClassName, hInstance);
 }
@@ -2326,6 +2386,8 @@ void FindThumbs(const std::vector<const Contact*>& tips, DWORD now) {
     if (landed.empty()) {
         return;
     }
+    int contacts = (int)std::count_if(tips.begin(), tips.end(), [](const Contact* c) { return !IsThumbPart(c->id); });
+    int needed = g_armTwo ? 3 : g_armThree ? 4 : g_armFour ? 5 : 1;
     auto inside = [](const Contact* c) { return c->x * g_hand; };  // smaller: farther inside the hand
     auto makeThumb = [&](const Contact* c) {
         // The thumb's other half stays part of it: made a finger, it moved the pointer.
@@ -2338,6 +2400,12 @@ void FindThumbs(const std::vector<const Contact*>& tips, DWORD now) {
         }
         g_state.thumbs[c->id] = 't';
         g_state.thumbMain = c->id;
+        // Its other half may have landed before it was found: taken then for a finger, it would steer.
+        for (const Contact* o : tips) {
+            if (o != c && g_state.thumbs[o->id] == 'n' && partOfThumb(o)) {
+                g_state.thumbs[o->id] = 't';
+            }
+        }
     };
     // Fingers only: the thumb's other half, when it's split in two, isn't a finger crossed over it.
     auto fartherIn = [&](const Contact* c) {
@@ -2349,6 +2417,9 @@ void FindThumbs(const std::vector<const Contact*>& tips, DWORD now) {
         if (IsThumb(t->id) && fartherIn(t) > crossed) {
             g_state.thumbs[t->id] = 'n';
         }
+    }
+    if (contacts < needed) {
+        return;
     }
     const Contact* low = nullptr;
     for (const Contact* c : tips) {
@@ -2362,7 +2433,7 @@ void FindThumbs(const std::vector<const Contact*>& tips, DWORD now) {
         }
         return;
     }
-    if (std::count_if(tips.begin(), tips.end(), [](const Contact* c) { return !IsThumbPart(c->id); }) >= 5) {
+    if (contacts >= 5) {
         const Contact* in = *std::min_element(tips.begin(), tips.end(),
                                               [&](const Contact* a, const Contact* b) { return inside(a) < inside(b); });
         if (!IsThumb(in->id)) {
@@ -2734,7 +2805,7 @@ void ProcessFrame() {
         g_state.steps.clear();
         return;
     }
-    Move(g_state.fewMoving ? g_multOne.load() : g_multFive.load());
+    Move(g_state.fewMoving ? g_multLess.load() : g_multMore.load());
     if (g_vizOn && g_state.stopped) {
         g_viz.estimator = 1;
     }
