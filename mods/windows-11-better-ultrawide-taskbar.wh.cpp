@@ -1729,8 +1729,8 @@ struct CatalogIconPicker {
     Controls::Button::Click_revoker useClick, cancelClick;
     FrameworkElement::Loaded_revoker loaded;
     std::shared_ptr<CatalogIconJob> job;
+    // Running and retired downloads; a retired one is cancelled and stays until its worker reports.
     std::vector<std::shared_ptr<CatalogIconJob>> thumbnailJobs;
-    std::vector<std::shared_ptr<CatalogIconJob>> retiredJobs;
     std::vector<CatalogIconTile> tiles;
     std::vector<CatalogIconEntry> entries;
     std::vector<size_t> filtered;
@@ -1763,20 +1763,18 @@ void StopCatalogJob(CatalogIconPicker& picker) {
 
 void StopCatalogThumbnails(CatalogIconPicker& picker) {
     for (auto const& job : picker.thumbnailJobs) CancelCatalogJob(*job);
-    for (auto const& job : picker.retiredJobs) CancelCatalogJob(*job);
     for (auto const& job : picker.thumbnailJobs) JoinCatalogJob(*job);
-    for (auto const& job : picker.retiredJobs) JoinCatalogJob(*job);
     picker.thumbnailJobs.clear();
-    picker.retiredJobs.clear();
 }
 
 void RetireCatalogThumbnails(CatalogIconPicker& picker) {
-    for (auto const& job : picker.thumbnailJobs) {
+    std::erase_if(picker.thumbnailJobs, [](auto const& job) {
+        if (job->cancel) return false;
         CancelCatalogJob(*job);
-        if (job->done) JoinCatalogJob(*job);
-        else picker.retiredJobs.push_back(job);
-    }
-    picker.thumbnailJobs.clear();
+        if (!job->done) return false;
+        JoinCatalogJob(*job);
+        return true;
+    });
 }
 
 // Native Direct2D saturation effect; no Win2D dependency.
@@ -2497,7 +2495,7 @@ void UpdateCatalogGridStatus(CatalogIconPicker& picker) {
 void LoadCatalogThumbnails(SettingsEditor& editor) {
     auto& picker = editor.iconPicker;
     if (picker.searchPending) return;
-    while (picker.open && picker.thumbnailJobs.size() + picker.retiredJobs.size() < 4) {
+    while (picker.open && picker.thumbnailJobs.size() < 4) {
         size_t index = picker.tiles.size();
         int selected = picker.results.SelectedIndex();
         if (selected >= 0 && static_cast<size_t>(selected) < picker.tiles.size() &&
@@ -2749,15 +2747,6 @@ void OpenCatalogPicker(SettingsEditor& editor, std::wstring const& key) {
 void CatalogIconResult(SettingsEditor& editor, UINT_PTR generation) {
     auto& picker = editor.iconPicker;
     if (!picker.open) return;
-    auto retired = std::find_if(picker.retiredJobs.begin(), picker.retiredJobs.end(),
-        [generation](auto const& job) { return job->generation == generation; });
-    if (retired != picker.retiredJobs.end()) {
-        if (!(*retired)->done) return;
-        JoinCatalogJob(**retired);
-        picker.retiredJobs.erase(retired);
-        LoadCatalogThumbnails(editor);
-        return;
-    }
     auto thumbnail = std::find_if(picker.thumbnailJobs.begin(), picker.thumbnailJobs.end(),
         [generation](auto const& job) { return job->generation == generation; });
     if (thumbnail != picker.thumbnailJobs.end()) {
@@ -2765,6 +2754,10 @@ void CatalogIconResult(SettingsEditor& editor, UINT_PTR generation) {
         if (!job->done) return;
         JoinCatalogJob(*job);
         picker.thumbnailJobs.erase(thumbnail);
+        if (job->cancel) {
+            LoadCatalogThumbnails(editor);
+            return;
+        }
         if (job->tileIndex < picker.tiles.size()) {
             auto& tile = picker.tiles[job->tileIndex];
             tile.failed = !job->error.empty();
