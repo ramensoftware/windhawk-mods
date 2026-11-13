@@ -327,8 +327,11 @@
         Full path to an executable, a document, a folder, or a URL, for example
         C:\Windows\System32\notepad.exe. Environment variables such as
         %ProgramFiles% and %USERPROFILE% are expanded. The placeholders listed
-        under Arguments work here too. Inside a URL their values are
+        under Arguments work here inside a URL you type, where their values are
         URL-encoded, for example https://www.google.com/search?q={selection}.
+        The only other use is a placeholder as the whole start, such as {url}:
+        it accepts only http and https addresses, and the entry is hidden
+        otherwise, so a page can never choose a program, file or protocol.
     - arguments: ""
       $name: Arguments
       $description: >-
@@ -336,18 +339,24 @@
         spaces, including placeholders: "{url}". Environment variables are
         expanded. Placeholders: {url} link address, {page} page address,
         {title} page title, {selection} selected text, {src} image, video or
-        audio address, {frame} address of the clicked frame. An entry that uses
-        {url}, {selection} or {src} appears only when there is a value, for
-        example {url} only on links. Page text is passed as-is, so don't hand
-        {selection} or {title} to cmd.exe or PowerShell as a command.
+        audio address, {frame} address of the clicked frame (the page address
+        outside frames). An entry that uses {url}, {selection} or {src} appears
+        only when there is a value, for example {url} only on links. Values are
+        quoted for the usual Windows rules, which batch files (.bat, .cmd),
+        cmd.exe, PowerShell, wsl and bash don't follow, so entries that pass
+        placeholders to those are not run. A value starting with - is still
+        read as an option even inside quotes; put -- before placeholders if the
+        program supports it, for example -- "{url}".
     - urlFilter: ""
       $name: Show only on pages
       $description: >-
         Shows this entry only on pages whose address matches one of these
-        patterns, separated by spaces or semicolons. * matches any text,
-        https:// and www. are optional, and a pattern without a slash matches
-        the whole site. Example: github.com *.wikipedia.org
-        youtube.com/watch* . Leave empty to show the entry on every page.
+        patterns, separated by spaces or semicolons. * matches any text within
+        the site name or within the path, https:// and www. are optional, and a
+        pattern without a path, such as github.com, https://github.com or
+        localhost:3000, matches the whole site. Example: github.com
+        *.wikipedia.org/wiki/* youtube.com/watch* . Leave empty to show the
+        entry on every page.
     - workingDirectory: ""
       $name: Working directory
       $description: Optional directory the program starts in. Leave empty to use Chrome's.
@@ -457,11 +466,13 @@ Designed for 64-bit Chrome on Windows.
   administrator or in a minimized, maximized or hidden window.
 - **Context placeholders** - pass what you right-clicked to a custom command:
   `{url}` (link), `{page}`, `{title}`, `{selection}`, `{src}` (image, video or
-  audio) and `{frame}`. For example, `"{url}"` as the arguments of
-  `firefox.exe` opens a link in Firefox, and
-  `https://www.deepl.com/translator#auto/en/{selection}` translates the selected
-  text. Placeholders inside a URL are URL-encoded. An entry that uses `{url}`,
-  `{selection}` or `{src}` only appears when there is something to pass.
+  audio) and `{frame}` (the clicked frame, or the page outside frames). For
+  example, `"{url}"` as the arguments of `firefox.exe` opens a link in Firefox,
+  and `https://www.deepl.com/translator#auto/en/{selection}` translates the
+  selected text. Placeholders inside a URL are URL-encoded. An entry that uses
+  `{url}`, `{selection}` or `{src}` only appears when there is something to
+  pass, and one whose address is too long to pass (such as an inline `data:`
+  image) is hidden.
 - **Per-site commands** - show a custom command only on matching pages, for
   example `github.com` or `youtube.com/watch*`.
 - **Chrome's original menu on demand** - optionally hold **Ctrl+Alt** while
@@ -484,6 +495,26 @@ Designed for 64-bit Chrome on Windows.
   menu) and keyboard shortcut labels, without disabling the shortcuts.
 - **Tabs and toolbar** - tab title font size, hidden tab close buttons, tab
   icon-to-title spacing and extension button width.
+
+## Placeholders and safety
+
+The page decides the placeholder values, so the mod limits where they can go:
+
+- In **Program, document, or URL**, placeholders work inside a URL you typed
+  (after `://`). A placeholder can also be the whole start of the program, such
+  as `{url}` to open a link in its default app, but then only `http` and
+  `https` addresses are accepted. On other links (`file:`, `mailto:`, app
+  protocols) the entry is hidden, so a page can never pick the program, file or
+  protocol that runs.
+- In **Arguments**, values are quoted for the usual Windows command-line rules,
+  so `"{selection}"` stays one argument. **Batch files** (`.bat`, `.cmd`),
+  `cmd.exe`, PowerShell, `wsl` and `bash` don't follow those rules and can run
+  page text as commands, so an entry that passes placeholders to one of them is
+  not run (the mod log says why). The same applies to a shortcut or a launcher
+  that starts one of them, which the mod can't detect: don't set those up.
+- A value that starts with `-` is still read as an option by the program, even
+  inside quotes. Put `--` before placeholders if the program supports it, for
+  example `yt-dlp.exe` with `-- "{page}"`.
 
 ## Screenshots
 
@@ -540,9 +571,12 @@ setup is complete.
 The context placeholders come from the details Chrome hands to the page menu
 when it opens. The page title is read through Chrome's own `WebContents`
 functions. The link, selection, media, page and frame addresses are fields of
-Chrome's context menu data, located for Chrome 157. Their layout is checked on
-every menu, so if a Chrome update moves them, entries that need them are hidden
-instead of receiving wrong data.
+Chrome's context menu data, located for Chrome 157. On every menu the mod checks
+that each field looks like a valid address or text, and that the page address
+read there matches the address Chrome reports for the tab. If a Chrome update
+moves the fields, these checks hide the entries that need them in nearly all
+cases. They can't prove every field is right: a change that only moves the
+fields after the page address could still pass `{frame}` the wrong address.
 
 ### Notes
 
@@ -832,6 +866,8 @@ using WebContentsFromRenderFrameHostFn = void* (*)(void*);
 // primary base of WebContentsImpl, so the pointer FromRenderFrameHost returns
 // is the `this` GetTitle expects (verified in Chrome 157's disassembly).
 using WebContentsGetTitleFn = const void* (*)(void*);
+// const GURL& WebContentsImpl::GetLastCommittedURL() const, called the same way.
+using WebContentsGetLastCommittedUrlFn = const void* (*)(void*);
 using ExtensionMatcherCtorFn = void* (*)(void*, void*, void*, void*, void*);
 using ExtensionMatcherDtorFn = void (*)(void*);
 static constexpr int kMenuModelTypeSeparator = 3;
@@ -869,6 +905,7 @@ static SimpleMenuModelInsertSubMenuAtFn g_SimpleMenuModelInsertSubMenuAt;
 static PageContextMenuCtorFn g_PageContextMenuCtorOriginal;
 static WebContentsFromRenderFrameHostFn g_WebContentsFromRenderFrameHost;
 static WebContentsGetTitleFn g_WebContentsGetTitle;
+static WebContentsGetLastCommittedUrlFn g_WebContentsGetLastCommittedUrl;
 static ExtensionMatcherCtorFn g_ExtensionMatcherCtorOriginal;
 static ExtensionMatcherDtorFn g_ExtensionMatcherDtorOriginal;
 static WideToUTF16Fn g_WideToUTF16;
@@ -1183,6 +1220,9 @@ struct CustomMenuItem {
   std::vector<std::wstring> urlPatterns;
   // ContextPlaceholder flags used by the command or its arguments.
   unsigned placeholders = 0;
+  // The command itself uses a placeholder, so whether it can run depends on
+  // the page (see ExpandContextPlaceholders).
+  bool commandUsesPlaceholders = false;
   void* submenu = nullptr;
   const void* nativeLabel = nullptr;
 };
@@ -1435,8 +1475,10 @@ static const ContextPlaceholderInfo kContextPlaceholders[] = {
 // UntrustworthyContextMenuParams::Assign / the ContextMenuParams copy
 // constructor copy GURLs and std::u16strings there.
 // ReadPageMenuContext checks the shape of every field on each menu and
-// discards all of them if one doesn't match, so a later layout change hides the
-// entries that need them instead of passing wrong data.
+// discards all of them if one doesn't match. Shape checks can't tell a field
+// from a neighbouring GURL, so it also compares the page URL with
+// WebContents::GetLastCommittedURL(); that catches any shift of the fields up
+// to and including page_url, leaving only frame_url unconfirmed.
 static constexpr size_t kParamsUnfilteredLinkUrlOffset = 0xA0;
 static constexpr size_t kParamsSrcUrlOffset = 0x118;
 static constexpr size_t kParamsSelectionTextOffset = 0x1C0;
@@ -1534,6 +1576,10 @@ static PageMenuContext ReadPageMenuContext(void* frame, const void* params) {
   PageMenuContext context;
   if (!g_chromeU16StringLayoutValid.load(std::memory_order_acquire)) return context;
 
+  void* webContents = frame && g_WebContentsFromRenderFrameHost
+                          ? g_WebContentsFromRenderFrameHost(frame)
+                          : nullptr;
+
   if (params) {
     const auto* base = static_cast<const unsigned char*>(params);
     // The page URL goes first: a page menu always has one, which makes it the
@@ -1553,15 +1599,34 @@ static PageMenuContext ReadPageMenuContext(void* frame, const void* params) {
                L"per-site entries are unavailable");
       }
     }
+
+    // The checks above reject data that isn't a string or GURL, but not a
+    // neighbouring GURL that a layout change moved into place. The page address
+    // Chrome reports for the tab must match the one read from the params.
+    if (context.available && webContents && g_WebContentsGetLastCommittedUrl) {
+      std::wstring committedUrl;
+      const void* gurl = g_WebContentsGetLastCommittedUrl(webContents);
+      if (!gurl ||
+          !ReadChromeGurl(static_cast<const unsigned char*>(gurl), committedUrl) ||
+          committedUrl != context.pageUrl) {
+        context = PageMenuContext{};
+        if (!g_pageMenuContextLayoutLogged.exchange(true)) {
+          Wh_Log(L"ContextMenuParams page address doesn't match the tab's; page "
+                 L"placeholders and per-site entries are unavailable here");
+        }
+      }
+    }
+
+    // Chrome fills frame_url only for clicks inside a subframe. Elsewhere the
+    // clicked frame is the page itself.
+    if (context.available && context.frameUrl.empty()) context.frameUrl = context.pageUrl;
   }
 
-  if (frame && g_WebContentsFromRenderFrameHost && g_WebContentsGetTitle) {
-    if (void* webContents = g_WebContentsFromRenderFrameHost(frame)) {
-      const void* title = g_WebContentsGetTitle(webContents);
-      if (!title || !ReadChromeString<wchar_t>(static_cast<const unsigned char*>(title),
-                                               kMaxChromeTextLength, context.title)) {
-        context.title.clear();
-      }
+  if (webContents && g_WebContentsGetTitle) {
+    const void* title = g_WebContentsGetTitle(webContents);
+    if (!title || !ReadChromeString<wchar_t>(static_cast<const unsigned char*>(title),
+                                             kMaxChromeTextLength, context.title)) {
+      context.title.clear();
     }
   }
 
@@ -1601,14 +1666,11 @@ static unsigned FindUsedContextPlaceholders(const std::wstring& text) {
 
 enum class PlaceholderEscaping {
   // Program, document or URL: URL-encoded once the text so far contains "://".
+  // Before that, only a web address at the very start is accepted.
   kCommand,
   // Escaped for the usual Windows command-line parsing (CommandLineToArgvW).
   kArguments,
 };
-
-static void AppendWithoutControlCharacters(std::wstring& out, const std::wstring& value) {
-  for (wchar_t c : value) out += c < 0x20 || c == 0x7F ? L' ' : c;
-}
 
 static void AppendUrlEncoded(std::wstring& out, const std::wstring& value) {
   if (value.empty() || value.size() > INT_MAX) return;
@@ -1671,15 +1733,58 @@ static std::wstring ExpandContextPlaceholders(const std::wstring& text,
     } else if (result.find(L"://") != std::wstring::npos) {
       AppendUrlEncoded(result, value);
     } else {
-      AppendWithoutControlCharacters(result, value);
+      // Outside a URL the page's value would decide what ShellExecuteExW opens:
+      // a file: link, a program path or any registered protocol. Allow it only
+      // as the start of the program, and only as a web address, so the result
+      // is always that web address. Chrome's addresses never contain spaces or
+      // quotes, and rejecting them keeps a selected text from adding arguments
+      // to the browser's command line. An empty result hides the entry and
+      // makes RunCustomMenuItem skip it.
+      if (!result.empty() || (_wcsnicmp(value.c_str(), L"http://", 7) != 0 &&
+                              _wcsnicmp(value.c_str(), L"https://", 8) != 0) ||
+          std::any_of(value.begin(), value.end(),
+                      [](wchar_t c) { return c <= L' ' || c == L'"' || c == 0x7F; })) {
+        return std::wstring();
+      }
+      result += value;
     }
     index += wcslen(placeholder->name);
   }
   return result;
 }
 
-// Lowercase patterns from "Show only on pages". A pattern with neither a slash
-// nor a scheme names a whole site, so "github.com" means "github.com/*".
+// Where the address part of a URL or pattern starts: after "scheme://" when
+// there is one, else at the beginning. A "://" after the first slash belongs
+// to the path.
+static size_t UrlHostStart(const std::wstring& text) {
+  const size_t separator = text.find(L"://");
+  return separator != std::wstring::npos && text.find(L'/') == separator + 1 ? separator + 3
+                                                                             : 0;
+}
+
+// Where the host part ends: at the first slash after the scheme, or the end.
+static size_t UrlHostEnd(const std::wstring& text) {
+  const size_t slash = text.find(L'/', UrlHostStart(text));
+  return slash == std::wstring::npos ? text.size() : slash;
+}
+
+// Whether a pattern names a whole site: no path, and no colon other than the
+// one of "scheme://" or a port ("localhost:3000"). "about:blank" and
+// "mailto:*" stay as typed.
+static bool UrlPatternIsSite(const std::wstring& pattern) {
+  const size_t hostStart = UrlHostStart(pattern);
+  if (pattern.find(L'/', hostStart) != std::wstring::npos) return false;
+  const size_t colon = pattern.find(L':', hostStart);
+  if (colon == std::wstring::npos) return true;
+  const size_t portStart = colon + 1;
+  return portStart < pattern.size() &&
+         std::all_of(pattern.begin() + portStart, pattern.end(),
+                     [](wchar_t c) { return (c >= L'0' && c <= L'9') || c == L'*'; });
+}
+
+// Lowercase patterns from "Show only on pages". A pattern without a path names
+// a whole site, so "github.com" means "github.com/*", and so do
+// "https://github.com" and "localhost:3000".
 static std::vector<std::wstring> ParseUrlPatterns(const std::wstring& setting) {
   std::vector<std::wstring> patterns;
   size_t index = 0;
@@ -1690,9 +1795,7 @@ static std::vector<std::wstring> ParseUrlPatterns(const std::wstring& setting) {
     if (end == std::wstring::npos) end = setting.size();
     std::wstring pattern = setting.substr(begin, end - begin);
     std::transform(pattern.begin(), pattern.end(), pattern.begin(), towlower);
-    if (pattern.find(L'/') == std::wstring::npos && pattern.find(L':') == std::wstring::npos) {
-      pattern += L"/*";
-    }
+    if (UrlPatternIsSite(pattern)) pattern += L"/*";
     patterns.push_back(std::move(pattern));
     index = end;
   }
@@ -1722,6 +1825,16 @@ static bool WildcardMatch(const std::wstring& text, const std::wstring& pattern)
   return p == pattern.size();
 }
 
+// Matches the host part and the path part separately, so a `*` in the host
+// stays inside the host: "*.wikipedia.org/*" doesn't match
+// "example.com/a.wikipedia.org/".
+static bool UrlWildcardMatch(const std::wstring& url, const std::wstring& pattern) {
+  const size_t urlHostEnd = UrlHostEnd(url);
+  const size_t patternHostEnd = UrlHostEnd(pattern);
+  return WildcardMatch(url.substr(0, urlHostEnd), pattern.substr(0, patternHostEnd)) &&
+         WildcardMatch(url.substr(urlHostEnd), pattern.substr(patternHostEnd));
+}
+
 // The scheme and a leading "www." are optional in patterns, so each pattern is
 // tried against the full address and against the address without them.
 static bool PageUrlMatchesPatterns(const std::wstring& pageUrl,
@@ -1737,8 +1850,8 @@ static bool PageUrlMatchesPatterns(const std::wstring& pageUrl,
   std::wstring withoutWww = withoutScheme;
   if (withoutWww.starts_with(L"www.")) withoutWww.erase(0, 4);
   for (const auto& pattern : patterns) {
-    if (WildcardMatch(full, pattern) || WildcardMatch(withoutScheme, pattern) ||
-        WildcardMatch(withoutWww, pattern)) {
+    if (UrlWildcardMatch(full, pattern) || UrlWildcardMatch(withoutScheme, pattern) ||
+        UrlWildcardMatch(withoutWww, pattern)) {
       return true;
     }
   }
@@ -1752,12 +1865,65 @@ static bool CustomItemMatchesContext(const CustomMenuItem& item, const PageMenuC
     return false;
   }
   for (const auto& placeholder : kContextPlaceholders) {
-    if (placeholder.required && (item.placeholders & placeholder.flag) &&
-        (context.*(placeholder.value)).empty()) {
-      return false;
-    }
+    if (!(item.placeholders & placeholder.flag)) continue;
+    const std::wstring& value = context.*(placeholder.value);
+    if (placeholder.required && value.empty()) return false;
+    // Text values are cut to this length when read. A longer address, such as
+    // an inline image's data: URL, can't be passed in full: it would exceed
+    // the command-line limit or arrive truncated.
+    if (value.size() > kMaxPlaceholderValueLength) return false;
+  }
+  // A placeholder outside a URL in the program accepts only a web address, so
+  // "{url}" as the program appears on web links only.
+  if (item.commandUsesPlaceholders &&
+      ExpandContextPlaceholders(ExpandEnvironmentPlaceholders(item.command), context,
+                                PlaceholderEscaping::kCommand)
+          .empty()) {
+    return false;
   }
   return true;
+}
+
+// Programs that parse their command line differently from CommandLineToArgvW
+// and treat parts of it as commands: cmd.exe runs batch files, ignores \" and
+// expands %VARIABLES%, and the shells evaluate their arguments. Page text can't
+// be passed to them safely, so entries that do are not run.
+static bool IsCommandInterpreter(const std::wstring& program) {
+  std::wstring path = program;
+  path.erase(std::remove(path.begin(), path.end(), L'"'), path.end());
+  if (path.find(L"://") != std::wstring::npos) return false;
+  std::transform(path.begin(), path.end(), path.begin(), towlower);
+  while (!path.empty() && (path.back() == L' ' || path.back() == L'\\' || path.back() == L'/')) {
+    path.pop_back();
+  }
+  const size_t nameStart = path.find_last_of(L"\\/:");
+  std::wstring name = nameStart == std::wstring::npos ? path : path.substr(nameStart + 1);
+
+  static const PCWSTR kInterpreters[] = {L"cmd", L"powershell", L"pwsh", L"wsl", L"bash"};
+  static const PCWSTR kScriptExtensions[] = {L".bat", L".cmd"};
+
+  const size_t dot = name.rfind(L'.');
+  if (dot != std::wstring::npos) {
+    const std::wstring extension = name.substr(dot);
+    for (PCWSTR scriptExtension : kScriptExtensions) {
+      if (extension == scriptExtension) return true;
+    }
+    if (extension != L".exe") return false;
+    name.resize(dot);
+  } else {
+    // ShellExecuteExW also finds "save" as save.bat or save.cmd.
+    for (PCWSTR scriptExtension : kScriptExtensions) {
+      WCHAR found[MAX_PATH];
+      if (SearchPathW(nullptr, path.c_str(), scriptExtension, ARRAYSIZE(found), found,
+                      nullptr)) {
+        return true;
+      }
+    }
+  }
+  for (PCWSTR interpreter : kInterpreters) {
+    if (name == interpreter) return true;
+  }
+  return false;
 }
 
 struct CustomMenuItemLaunch {
@@ -1766,11 +1932,22 @@ struct CustomMenuItemLaunch {
   std::wstring workingDirectory;
   bool runAsAdmin;
   int showCmd;
+  // The command or arguments contain values from the page.
+  bool usesPageValues;
 };
 
 static DWORD WINAPI CustomMenuItemLaunchThread(LPVOID parameter) {
   std::unique_ptr<CustomMenuItemLaunch> request(
       static_cast<CustomMenuItemLaunch*>(parameter));
+
+  // Checked here rather than on Chrome's UI thread: finding an extension-less
+  // program searches PATH, which may include slow network folders.
+  if (request->usesPageValues && IsCommandInterpreter(request->file)) {
+    Wh_Log(L"Not running '%ls': page placeholders can't be passed safely to a "
+           L"batch file, cmd.exe, PowerShell, wsl or bash",
+           request->file.c_str());
+    return 0;
+  }
 
   // ShellExecuteExW needs an initialized apartment, and running it off Chrome's
   // UI thread keeps a slow shell handler from freezing the browser.
@@ -1829,6 +2006,7 @@ static void RunCustomMenuItem(int commandId) {
         ExpandEnvironmentPlaceholders(item->workingDirectory);
     request->runAsAdmin = item->runAsAdmin;
     request->showCmd = item->showCmd;
+    request->usesPageValues = item->placeholders != 0;
   }
 
   std::lock_guard<std::mutex> lock(g_customLaunchMutex);
@@ -2099,8 +2277,9 @@ static void LoadCustomMenuItems() {
         Wh_GetIntSetting(L"customItems[%d].separatorBefore", i) != 0;
     item.urlPatterns = ParseUrlPatterns(
         WindhawkUtils::StringSetting::make(L"customItems[%d].urlFilter", i).get());
-    item.placeholders = FindUsedContextPlaceholders(item.command) |
-                        FindUsedContextPlaceholders(item.arguments);
+    const unsigned commandPlaceholders = FindUsedContextPlaceholders(item.command);
+    item.commandUsesPlaceholders = commandPlaceholders != 0;
+    item.placeholders = commandPlaceholders | FindUsedContextPlaceholders(item.arguments);
 
     Wh_Log(L"Custom menu item %d: '%ls' -> '%ls' (%zu page patterns)", i,
            item.label.c_str(), item.command.c_str(), item.urlPatterns.size());
@@ -4012,6 +4191,11 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
 
       {{LR"(?GetTitle@WebContentsImpl@content@@UEAAAEBV?$basic_string@_SU?$char_traits@_S@__Cr@std@@V?$allocator@_S@23@@__Cr@std@@XZ)"},
        &g_WebContentsGetTitle, nullptr, true},
+
+      // Confirms on every page menu that the ContextMenuParams offsets still
+      // hold, by comparing the page address read there with this one.
+      {{LR"(?GetLastCommittedURL@WebContentsImpl@content@@UEBAAEBVGURL@@XZ)"},
+       &g_WebContentsGetLastCommittedUrl, nullptr, true},
 
       {{LR"(??0ContextMenuMatcher@extensions@@QEAA@PEAVBrowserContext@content@@PEAVDelegate@SimpleMenuModel@ui@@PEAV56@V?$RepeatingCallback@$$A6A_NPEBVMenuItem@extensions@@@Z@base@@@Z)"},
        &g_ExtensionMatcherCtorOriginal, ExtensionMatcherCtorHook, true},
