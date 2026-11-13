@@ -19,8 +19,10 @@
 Tap either Windows key to open Search instead of Start. Windows-key shortcuts
 (Win+E, Win+R, Win+Shift+S, etc.) still work normally.
 
-The taskbar appears alongside Search, even over fullscreen apps. This relies on
-an internal Windows message and may break in future Windows versions.
+On the Windows 11 taskbar, the taskbar appears alongside Search, even over
+fullscreen apps. This relies on an internal Windows message and may break in
+future Windows versions; it can be turned off in the settings. It isn't used
+on Windows 10 or with a restored Windows 10 taskbar (e.g. ExplorerPatcher).
 
 ## Administrator windows
 
@@ -38,6 +40,11 @@ an internal Windows message and may break in future Windows versions.
 
 // ==WindhawkModSettings==
 /*
+- showTaskbarWithSearch: true
+  $name: Show the taskbar with Search
+  $description: >-
+    Show the taskbar alongside Search, including over fullscreen apps. Windows 11
+    taskbar only.
 - supportAdministratorWindows: false
   $name: Support administrator windows on Windhawk 1.7.3
   $description: >-
@@ -49,6 +56,7 @@ an internal Windows message and may break in future Windows versions.
 
 #include <windows.h>
 #include <shellapi.h>
+#include <atomic>
 #include <cwchar>
 
 namespace {
@@ -84,7 +92,7 @@ constexpr UINT kTaskbarSearchVisibility = WM_USER + 0x1D1;
 UINT_PTR g_taskbarTimer;
 HWND g_taskbarWindow;
 HWND g_taskbarSearchWindow;
-HMONITOR g_taskbarMonitor;
+std::atomic<bool> g_showTaskbar{true};
 ULONGLONG g_taskbarDeadline;
 bool g_taskbarNotified;
 HWND g_lastSearchCandidate;
@@ -101,7 +109,6 @@ void EndTaskbarReveal() {
     }
     g_taskbarWindow = nullptr;
     g_taskbarSearchWindow = nullptr;
-    g_taskbarMonitor = nullptr;
     g_taskbarNotified = false;
     g_lastSearchCandidate = nullptr;
 }
@@ -166,16 +173,16 @@ void CheckTaskbarReveal() {
     if (IsSearchWindow(foreground)) {
         g_taskbarSearchWindow = foreground;
         // Search can open on a monitor other than the former fullscreen app.
-        g_taskbarMonitor = MonitorFromWindow(foreground, MONITOR_DEFAULTTONEAREST);
-        if (!g_taskbarMonitor ||
+        HMONITOR monitor = MonitorFromWindow(foreground, MONITOR_DEFAULTTONEAREST);
+        if (!monitor ||
             !PostMessageW(g_taskbarWindow, kTaskbarSearchVisibility, TRUE,
-                          reinterpret_cast<LPARAM>(g_taskbarMonitor))) {
+                          reinterpret_cast<LPARAM>(monitor))) {
             Wh_Log(L"Could not notify taskbar of Search visibility (error %lu)", GetLastError());
             EndTaskbarReveal();
             return;
         }
         g_taskbarNotified = true;
-        Wh_Log(L"Notified taskbar: Search visible on monitor %p", g_taskbarMonitor);
+        Wh_Log(L"Notified taskbar: Search visible on monitor %p", monitor);
     } else if (g_taskbarNotified || GetTickCount64() >= g_taskbarDeadline) {
         if (!g_taskbarNotified) {
             Wh_Log(L"Search visibility request expired without finding the Search foreground window");
@@ -186,10 +193,23 @@ void CheckTaskbarReveal() {
 
 void PrepareTaskbarReveal() {
     EndTaskbarReveal();
+    if (!g_showTaskbar) {
+        return;
+    }
+    // A tap while Search is open closes it; tracking would re-show the taskbar
+    // until the closing Search window loses the foreground.
+    if (IsSearchWindow(GetForegroundWindow())) {
+        return;
+    }
     // The primary tray forwards this notification to secondary taskbars too.
     HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!taskbar) {
-        Wh_Log(L"Taskbar Search visibility unavailable: Shell_TrayWnd not found");
+    // The message is only verified on the Windows 11 XAML taskbar, not on
+    // Windows 10 or a restored Windows 10 taskbar (e.g. ExplorerPatcher).
+    if (!taskbar ||
+        !FindWindowExW(taskbar, nullptr,
+                       L"Windows.UI.Composition.DesktopWindowContentBridge",
+                       nullptr)) {
+        Wh_Log(L"Taskbar Search visibility unavailable: no Windows 11 taskbar");
         return;
     }
     g_taskbarWindow = taskbar;
@@ -314,6 +334,14 @@ void OpenSearch(WORD win) {
     }
 }
 
+void ResetKeyTracking() {
+    ZeroMemory(g_keys, sizeof(g_keys));
+    ZeroMemory(g_pending, sizeof(g_pending));
+    ZeroMemory(g_tap, sizeof(g_tap));
+    ZeroMemory(g_swallowUp, sizeof(g_swallowUp));
+    ZeroMemory(g_shortcutUsed, sizeof(g_shortcutUsed));
+}
+
 LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
     if (code != HC_ACTION) {
         return CallNextHookEx(nullptr, code, message, param);
@@ -330,11 +358,7 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
     if (!g_hasElevatedInputAccess &&
         (!g_canRemapForeground || GetForegroundWindow() != g_cachedForeground)) {
         // Inaccessible/elevated foreground windows retain their original input.
-        ZeroMemory(g_keys, sizeof(g_keys));
-        ZeroMemory(g_pending, sizeof(g_pending));
-        ZeroMemory(g_tap, sizeof(g_tap));
-        ZeroMemory(g_swallowUp, sizeof(g_swallowUp));
-        ZeroMemory(g_shortcutUsed, sizeof(g_shortcutUsed));
+        ResetKeyTracking();
         return CallNextHookEx(nullptr, code, message, param);
     }
     if (g_searchActive) {
@@ -456,14 +480,6 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
         }
     }
     return CallNextHookEx(nullptr, code, message, param);
-}
-
-void ResetKeyTracking() {
-    ZeroMemory(g_keys, sizeof(g_keys));
-    ZeroMemory(g_pending, sizeof(g_pending));
-    ZeroMemory(g_tap, sizeof(g_tap));
-    ZeroMemory(g_swallowUp, sizeof(g_swallowUp));
-    ZeroMemory(g_shortcutUsed, sizeof(g_shortcutUsed));
 }
 
 void RefreshForegroundAccess() {
@@ -622,6 +638,7 @@ bool HasElevatedInputAccess() {
 }
 
 BOOL WhTool_ModInit() {
+    g_showTaskbar = Wh_GetIntSetting(L"showTaskbarWithSearch") != 0;
     g_hasElevatedInputAccess = HasElevatedInputAccess();
     g_ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_ready) {
@@ -646,6 +663,8 @@ void WhTool_ModUninit() {
 }
 
 void WhTool_ModSettingsChanged() {
+    // Read on the hook thread; this callback runs on another thread.
+    g_showTaskbar = Wh_GetIntSetting(L"showTaskbarWithSearch") != 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
