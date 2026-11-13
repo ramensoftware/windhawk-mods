@@ -9952,11 +9952,12 @@ static LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 // A visualização das miniaturas da barra de tarefas, o Snap Assist, o Alt+Tab e a
 // Visão de Tarefas usam a mesma classe. Por isso a nova só é escolhida quando
 // aparece logo depois de uma mudança de volume, sem título e pequena (bem menor
-// que o monitor); e ao devolver, volta o estilo e a posição de antes, escondida.
+// que o monitor); e ao devolver, volta o estilo, a posição e a visibilidade de antes.
 static HWND g_winOsdHidden = nullptr;
 static HWND g_winOsdIsland = nullptr;  // a nova, escondida
 static LONG_PTR g_winOsdIslandEx = 0;  // o estilo dela antes de esconder
 static WINDOWPLACEMENT g_winOsdIslandPlace = {sizeof(WINDOWPLACEMENT)};  // e a posição
+static bool g_winOsdIslandShown = false;  // e se estava na tela
 static UINT_PTR g_winOsdScanTimer = 0;
 static ULONGLONG g_winOsdScanUntil = 0;
 static HWND FindWinOsd() {
@@ -9999,13 +10000,14 @@ static void WinOsdScanStop() {
     if (g_winOsdScanTimer) KillTimer(nullptr, g_winOsdScanTimer);
     g_winOsdScanTimer = 0;
 }
-// Devolve a nova como estava: o estilo e a posição de antes. Ela fica escondida:
-// quando foi escolhida, só estava na tela para mostrar o volume.
+// Devolve a nova como estava: o estilo, a posição e a visibilidade de antes.
+// O Explorer deixa essa janela na tela e só some com o conteúdo dela; escondida,
+// ele não a mostra de novo e a pílula do Windows não volta.
 static void WinOsdIslandRestore() {
     if (g_winOsdIsland && IsWindow(g_winOsdIsland) && ShellAnswers(g_winOsdIsland)) {
         SetWindowLongPtrW(g_winOsdIsland, GWL_EXSTYLE, g_winOsdIslandEx);
         WINDOWPLACEMENT wp = g_winOsdIslandPlace;
-        wp.showCmd = SW_HIDE;
+        wp.showCmd = g_winOsdIslandShown ? SW_SHOWNOACTIVATE : SW_HIDE;
         wp.flags = 0;
         SetWindowPlacement(g_winOsdIsland, &wp);
     }
@@ -10019,6 +10021,7 @@ static void WinOsdIslandHide(HWND x) {
         if (!GetWindowPlacement(x, &g_winOsdIslandPlace)) return;
         g_winOsdIsland = x;
         g_winOsdIslandEx = GetWindowLongPtrW(x, GWL_EXSTYLE);
+        g_winOsdIslandShown = IsWindowVisible(x) != FALSE;
         RECT r{};
         GetWindowRect(x, &r);
         Wh_Log(L"Hiding Windows' XAML volume pill %p (%dx%d)", x, (int)(r.right - r.left), (int)(r.bottom - r.top));
