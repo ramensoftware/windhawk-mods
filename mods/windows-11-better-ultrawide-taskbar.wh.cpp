@@ -1742,6 +1742,47 @@ struct TaskbarPreviewMetrics {
 };
 std::mutex g_previewMetricsMutex;
 TaskbarPreviewMetrics g_previewMetrics;
+struct AdaptiveTone {
+    struct Sample { ULONGLONG at; double luminance; };
+    std::vector<Sample> samples;
+    double average{};
+    bool light{}, ready{};
+
+    bool Feed(double luminance, ULONGLONG now, ULONGLONG windowMs) {
+        constexpr double pivot = 0.179;  // Equal black/white WCAG contrast.
+        constexpr double hysteresis = 0.02;
+        double mean = Add(luminance, now, windowMs);
+        bool next = !ready ? mean < pivot
+                    : light ? mean < pivot + hysteresis : mean < pivot - hysteresis;
+        if (ready && next == light) return false;
+        light = next;
+        ready = true;
+        return true;
+    }
+
+    double Add(double luminance, ULONGLONG now, ULONGLONG windowMs) {
+        if (!samples.empty() && now <= samples.back().at) return average;
+        // Start immediately, and forget history after a capture gap or resume.
+        if (!windowMs || samples.empty() || now - samples.back().at >= windowMs) {
+            samples.assign(1, {now, luminance});
+            return average = luminance;
+        }
+        ULONGLONG start = now > windowMs ? now - windowMs : 0;
+        // Retain the sample spanning the left edge of the window.
+        while (samples.size() > 1 && samples[1].at <= start)
+            samples.erase(samples.begin());
+        samples.push_back({now, luminance});
+        start = std::max(start, samples.front().at);
+        double total{};
+        for (size_t i = 1; i < samples.size(); ++i) {
+            auto const& previous = samples[i - 1];
+            total += previous.luminance *
+                (samples[i].at - std::max(start, previous.at));
+        }
+        // Weight elapsed time, so timer jitter cannot bias the brightness.
+        return average = total / (now - start);
+    }
+};
 struct EditorPreview {
     int width = 640, height = 420;
     double margin = 48; // The canvas past each side of the dock band: wider when a slanted outline leans further.
@@ -1767,7 +1808,7 @@ struct EditorPreview {
     CompositionGeometry shadowGeometry{nullptr}; // A rounded rect, or Separate's static trace.
     CompositionPathGeometry outline{nullptr};    // Separate: clips the material and carries its border line.
     bool unavailable{};
-    std::array<bool,3> foregroundLight{},foregroundReady{};
+    std::array<AdaptiveTone,3> foregroundTones;
     std::future<std::array<double,3>> foregroundSample;
     uint64_t foregroundRevision{},foregroundSampleRevision{};
     bool foregroundDirty{};
@@ -5269,43 +5310,6 @@ FontColorMode ParseFontColor(std::wstring_view name) {
     return FontColorMode::Default;
 }
 
-bool PreferLightForeground(double luminance, bool previous, bool ready) {
-    constexpr double pivot = 0.179;  // Equal black/white WCAG contrast.
-    constexpr double hysteresis = 0.02;
-    if (!ready) return luminance < pivot;
-    return previous ? luminance < pivot + hysteresis
-                    : luminance < pivot - hysteresis;
-}
-
-struct ForegroundLuminanceHistory {
-    struct Sample { ULONGLONG at; double luminance; };
-    std::vector<Sample> samples;
-    double average{};
-
-    double Add(double luminance, ULONGLONG now, ULONGLONG windowMs) {
-        if (!samples.empty() && now <= samples.back().at) return average;
-        // Start immediately, and forget history after a capture gap or resume.
-        if (!windowMs || samples.empty() || now - samples.back().at >= windowMs) {
-            samples.assign(1, {now, luminance});
-            return average = luminance;
-        }
-        ULONGLONG start = now > windowMs ? now - windowMs : 0;
-        // Retain the sample spanning the left edge of the window.
-        while (samples.size() > 1 && samples[1].at <= start)
-            samples.erase(samples.begin());
-        samples.push_back({now, luminance});
-        start = std::max(start, samples.front().at);
-        double total{};
-        for (size_t i = 1; i < samples.size(); ++i) {
-            auto const& previous = samples[i - 1];
-            total += previous.luminance *
-                (samples[i].at - std::max(start, previous.at));
-        }
-        // Weight elapsed time, so timer jitter cannot bias the brightness.
-        return average = total / (now - start);
-    }
-};
-
 using TaskbarConfiguration_GetFrameSize_t = double(WINAPI*)(int);
 TaskbarConfiguration_GetFrameSize_t TaskbarConfiguration_GetFrameSize_Original;
 double WINAPI TaskbarConfiguration_GetFrameSize_Hook(int taskbarSize) {
@@ -5998,9 +6002,7 @@ struct Root {
         Media::SolidColorBrush brush{nullptr};
         animation::Storyboard transition{nullptr};
         bool owned{};
-        bool light{};
-        bool ready{};
-        ForegroundLuminanceHistory luminance;
+        AdaptiveTone tone;
     };
     struct TrayIconState {
         winrt::weak_ref<FrameworkElement> element;
@@ -6010,8 +6012,8 @@ struct Root {
         TrayIconFiles files;
         Visual originalVisual{nullptr};
         float originalOpacity{};
-        bool opacityOwned{}, light{}, ready{};
-        ForegroundLuminanceHistory luminance;
+        bool opacityOwned{};
+        AdaptiveTone tone;
         int appliedVariant = -1;
         CompositionVisualSurface surface{nullptr};
         SpriteVisual overlay{nullptr};
@@ -10124,9 +10126,9 @@ void UpdateEditorPreview(SettingsEditor& editor) noexcept {
         auto foreground = [&](size_t index) {
             bool light = mode == FontColorMode::Light || (mode == FontColorMode::Default && dark);
             if (mode == FontColorMode::Adaptive) {
-                light=preview.foregroundReady[index]?preview.foregroundLight[index]:dark;
+                light=preview.foregroundTones[index].ready?preview.foregroundTones[index].light:dark;
             } else {
-                preview.foregroundReady[index]=false;
+                preview.foregroundTones[index].ready=false;
             }
             auto color=ForegroundColor(light);
             if(highContrast) {
@@ -12164,7 +12166,7 @@ bool UpdateTrayIconGeometry(Root::TrayIconState& state) {
             (right.X - origin.X) / width, (right.Y - origin.Y) / width, 0, 0,
             (bottom.X - origin.X) / height, (bottom.Y - origin.Y) / height, 0, 0,
             0, 0, 1, 0, 0, 0, 0, 1});
-        int variant = state.light ? 0 : 1;
+        int variant = state.tone.light ? 0 : 1;
         auto const& asset = state.custom[variant];
         if (asset && state.appliedVariant != variant && !asset->failed && asset->Ready()) {
             auto compositor = state.overlay.Compositor();
@@ -12216,7 +12218,7 @@ void PrepareTrayIcon(FrameworkElement const& element, Controls::Image const& ima
             state->originalVisual.Opacity() == 0 &&
             Hosting::ElementCompositionPreview::GetElementChildVisual(element) == state->overlay) {
             if (g_fontColorMode != FontColorMode::Adaptive)
-                state->light = g_fontColorMode == FontColorMode::Light ||
+                state->tone.light = g_fontColorMode == FontColorMode::Light ||
                     (g_fontColorMode == FontColorMode::Default && element.ActualTheme() == ElementTheme::Dark);
             state->taskbar = taskbar;
             UpdateTrayIconGeometry(*state);
@@ -12233,7 +12235,7 @@ void PrepareTrayIcon(FrameworkElement const& element, Controls::Image const& ima
     next.taskbar = taskbar;
     next.key = std::move(key);
     next.files = files;
-    next.light = g_fontColorMode == FontColorMode::Light ||
+    next.tone.light = g_fontColorMode == FontColorMode::Light ||
         (g_fontColorMode != FontColorMode::Dark && element.ActualTheme() == ElementTheme::Dark);
     try {
         next.originalVisual = Hosting::ElementCompositionPreview::GetElementVisual(image);
@@ -12514,9 +12516,9 @@ void UpdatePreviewForeground(SettingsEditor& editor) {
             if(preview.foregroundSampleRevision==preview.foregroundRevision)
                 for(size_t i=0;i<samples.size();++i) {
                     if(!std::isfinite(samples[i])) continue;
-                    bool light=PreferLightForeground(samples[i],preview.foregroundLight[i],preview.foregroundReady[i]);
-                    preview.foregroundLight[i]=light;preview.foregroundReady[i]=true;
-                    auto color=ForegroundColor(light);
+                    // Window 0 reacts to each sample. Revisions order them; ticks can repeat.
+                    preview.foregroundTones[i].Feed(samples[i],preview.foregroundSampleRevision,0);
+                    auto color=ForegroundColor(preview.foregroundTones[i].light);
                     if(i==0) preview.clock.Foreground(Media::SolidColorBrush(color));
                     else preview.icons[i].Foreground(Media::SolidColorBrush(color));
                 }
@@ -12569,17 +12571,15 @@ DWORD WINAPI ForegroundSampleWorker(void* raw) {
     return 0;
 }
 
-bool SetForegroundColor(Root::ForegroundState& state, bool light,
-                        bool fade) {
-    if (!state.brush || (state.ready && state.light == light)) return false;
-    auto target = ForegroundColor(light);
+void SetForegroundColor(Root::ForegroundState& state, bool fade) {
+    auto target = ForegroundColor(state.tone.light);
     try {
         auto from = state.brush.Color();
         if (state.transition) {
             state.transition.Stop();
             state.transition = nullptr;
         }
-        if (fade && state.ready) {
+        if (fade) {
             state.brush.Color(target);
             animation::ColorAnimation color;
             color.From(from);
@@ -12598,19 +12598,11 @@ bool SetForegroundColor(Root::ForegroundState& state, bool light,
         } else {
             state.brush.Color(target);
         }
-        state.light = light;
-        state.ready = true;
-        return true;
     } catch (...) {
         try {
             state.brush.Color(target);
             state.transition = nullptr;
-            state.light = light;
-            state.ready = true;
-            return true;
-        } catch (...) {
-            return false;
-        }
+        } catch (...) {}
     }
 }
 
@@ -12665,19 +12657,16 @@ void ApplyAdaptiveForeground(ForegroundSampleResult const& result) {
                 return candidate.identity == sample.identity;
             });
         if (state != root->foregrounds.end() && state->owned) {
-            double luminance = state->luminance.Add(sample.luminance, result.capturedAt, g_adaptiveWindowMs);
-            bool light = PreferLightForeground(luminance, state->light,
-                                               state->ready);
-            SetForegroundColor(*state, light, true);
+            bool fade = state->tone.ready;
+            if (state->tone.Feed(sample.luminance, result.capturedAt, g_adaptiveWindowMs))
+                SetForegroundColor(*state, fade);
             continue;
         }
         for (auto& icon : g_trayIcons) {
             auto element = icon.element.get();
             if (icon.taskbar != result.taskbar || !icon.files.Adaptive() || !element ||
                 reinterpret_cast<uintptr_t>(winrt::get_abi(element)) != sample.identity) continue;
-            double luminance = icon.luminance.Add(sample.luminance, result.capturedAt, g_adaptiveWindowMs);
-            icon.light = PreferLightForeground(luminance, icon.light, icon.ready);
-            icon.ready = true;
+            icon.tone.Feed(sample.luminance, result.capturedAt, g_adaptiveWindowMs);
             UpdateTrayIconGeometry(icon);
             break;
         }
@@ -12794,9 +12783,12 @@ void PrepareForeground(Root& root, FrameworkElement const& buttons,
                     Wh_Log(L"[UWFONT] external foreground retained");
                 } else if (state->owned &&
                            g_fontColorMode != FontColorMode::Adaptive) {
-                    SetForegroundColor(
-                        *state, g_fontColorMode == FontColorMode::Light,
-                        false);
+                    bool light = g_fontColorMode == FontColorMode::Light;
+                    if (!state->tone.ready || state->tone.light != light) {
+                        state->tone.light = light;
+                        state->tone.ready = true;
+                        SetForegroundColor(*state, false);
+                    }
                 }
                 continue;
             }
@@ -12811,13 +12803,13 @@ void PrepareForeground(Root& root, FrameworkElement const& buttons,
                 local.try_as<Media::Brush>()) {
                 saved.identity = CanonicalIdentity(text);
                 saved.original = local;
-                saved.light =
+                saved.tone.light =
                     g_fontColorMode == FontColorMode::Light ||
                     (g_fontColorMode == FontColorMode::Adaptive &&
                      root.frame.ActualTheme() != ElementTheme::Light);
-                saved.ready = g_fontColorMode != FontColorMode::Adaptive;
+                saved.tone.ready = g_fontColorMode != FontColorMode::Adaptive;
                 saved.brush =
-                    Media::SolidColorBrush(ForegroundColor(saved.light));
+                    Media::SolidColorBrush(ForegroundColor(saved.tone.light));
                 text.Foreground(saved.brush);
                 saved.owned = true;
             }
