@@ -9943,16 +9943,22 @@ static LRESULT CALLBACK OsdWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 // ligado, ela não aparece mais; volta ao normal ao desligar o indicador ou o mod.
 // Há dois tipos, conforme a versão do Windows:
 //  - a antiga: a janela NativeHWNDHost com um DirectUIHWND, do Explorer. Ela fica
-//    minimizada;
-//  - a nova (24H2 em diante, em XAML): uma XamlExplorerHostIslandWindow do Explorer,
-//    sem título, com a ponte de conteúdo do XAML e o InputSite dentro. Ela fica
-//    transparente para o mouse, fora da tela e minimizada (é o que fazem o
-//    HideVolumeOSD e o FluentFlyout); minimizada só, o Windows a mostra de novo.
-// O Windows só cria a janela na primeira vez que o volume muda, então ela pode
-// aparecer uma vez antes de ser escondida.
+//    minimizada. O Windows só cria essa janela na primeira vez que o volume muda,
+//    então ela pode aparecer uma vez antes de ser escondida;
+//  - a nova (24H2 em diante, em XAML, a das teclas de volume): uma
+//    XamlExplorerHostIslandWindow do Explorer. Ela fica transparente para o mouse,
+//    fora da tela e minimizada (é o que fazem o HideVolumeOSD e o FluentFlyout);
+//    minimizada só, o Windows a mostra de novo.
+// A visualização das miniaturas da barra de tarefas, o Snap Assist, o Alt+Tab e a
+// Visão de Tarefas usam a mesma classe. Por isso a nova só é escolhida quando
+// aparece logo depois de uma mudança de volume, sem título e pequena (bem menor
+// que o monitor); e ao devolver, volta o estilo e a posição de antes, escondida.
 static HWND g_winOsdHidden = nullptr;
 static HWND g_winOsdIsland = nullptr;  // a nova, escondida
 static LONG_PTR g_winOsdIslandEx = 0;  // o estilo dela antes de esconder
+static WINDOWPLACEMENT g_winOsdIslandPlace = {sizeof(WINDOWPLACEMENT)};  // e a posição
+static UINT_PTR g_winOsdScanTimer = 0;
+static ULONGLONG g_winOsdScanUntil = 0;
 static HWND FindWinOsd() {
     HWND h = nullptr;
     while ((h = FindWindowExW(nullptr, h, L"NativeHWNDHost", L"")) != nullptr) {
@@ -9962,16 +9968,25 @@ static HWND FindWinOsd() {
     }
     return nullptr;
 }
-// A nova. O título vazio deixa de fora o Alt+Tab e a Visão de Tarefas, que usam a
-// mesma classe com título.
+// A nova, se estiver na tela agora: do Explorer, sem título (o Alt+Tab e a Visão de
+// Tarefas têm), com a ponte do XAML e o InputSite, visível e pequena: no máximo
+// metade da largura e um terço da altura do monitor (a das miniaturas cobre o monitor).
 static HWND FindWinOsdIsland() {
     HWND h = nullptr;
     while ((h = FindWindowExW(nullptr, h, L"XamlExplorerHostIslandWindow", nullptr)) != nullptr) {
         DWORD pid = 0;
         GetWindowThreadProcessId(h, &pid);
         if (pid != ShellPid() || GetWindowTextLengthW(h) > 0) continue;
+        if (!IsWindowVisible(h) || IsIconic(h) || IsCloaked(h)) continue;
         HWND bridge = FindWindowExW(h, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", L"DesktopWindowXamlSource");
-        if (bridge && FindWindowExW(bridge, nullptr, L"Windows.UI.Input.InputSite.WindowClass", nullptr)) return h;
+        if (!bridge || !FindWindowExW(bridge, nullptr, L"Windows.UI.Input.InputSite.WindowClass", nullptr)) continue;
+        RECT r{};
+        MONITORINFO mi{sizeof(mi)};
+        if (!GetWindowRect(h, &r) || !GetMonitorInfoW(MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST), &mi)) continue;
+        int w = r.right - r.left, ht = r.bottom - r.top;
+        int mw = mi.rcMonitor.right - mi.rcMonitor.left, mh = mi.rcMonitor.bottom - mi.rcMonitor.top;
+        if (w <= 0 || ht <= 0 || w * 2 > mw || ht * 3 > mh) continue;
+        return h;
     }
     return nullptr;
 }
@@ -9980,13 +9995,73 @@ static bool ShellAnswers(HWND h) {
     DWORD_PTR r = 0;
     return SendMessageTimeoutW(h, WM_NULL, 0, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 300, &r) != 0;
 }
+static void WinOsdScanStop() {
+    if (g_winOsdScanTimer) KillTimer(nullptr, g_winOsdScanTimer);
+    g_winOsdScanTimer = 0;
+}
+// Devolve a nova como estava: o estilo e a posição de antes. Ela fica escondida:
+// quando foi escolhida, só estava na tela para mostrar o volume.
 static void WinOsdIslandRestore() {
     if (g_winOsdIsland && IsWindow(g_winOsdIsland) && ShellAnswers(g_winOsdIsland)) {
         SetWindowLongPtrW(g_winOsdIsland, GWL_EXSTYLE, g_winOsdIslandEx);
-        SetWindowPos(g_winOsdIsland, nullptr, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
-        ShowWindowAsync(g_winOsdIsland, SW_SHOWNOACTIVATE);
+        WINDOWPLACEMENT wp = g_winOsdIslandPlace;
+        wp.showCmd = SW_HIDE;
+        wp.flags = 0;
+        SetWindowPlacement(g_winOsdIsland, &wp);
     }
     g_winOsdIsland = nullptr;
+}
+static void WinOsdIslandHide(HWND x) {
+    if (!ShellAnswers(x)) return;
+    if (x != g_winOsdIsland) {
+        if (g_winOsdIsland) WinOsdIslandRestore();
+        g_winOsdIslandPlace = {sizeof(WINDOWPLACEMENT)};
+        if (!GetWindowPlacement(x, &g_winOsdIslandPlace)) return;
+        g_winOsdIsland = x;
+        g_winOsdIslandEx = GetWindowLongPtrW(x, GWL_EXSTYLE);
+        RECT r{};
+        GetWindowRect(x, &r);
+        Wh_Log(L"Hiding Windows' XAML volume pill %p (%dx%d)", x, (int)(r.right - r.left), (int)(r.bottom - r.top));
+    }
+    SetWindowLongPtrW(x, GWL_EXSTYLE, g_winOsdIslandEx | WS_EX_LAYERED | WS_EX_TRANSPARENT);
+    SetWindowPos(x, nullptr, -99999, -99999, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+    ShowWindowAsync(x, SW_SHOWMINNOACTIVE);
+}
+// Depois de uma mudança de volume, procura a nova por até 700 ms (ela aparece
+// quase junto com a mudança).
+// Nenhuma serviu: anota uma vez no log as que existem, para saber o porquê.
+static void WinOsdScanMiss() {
+    static bool logged = false;
+    if (logged || g_winOsdIsland) return;
+    logged = true;
+    HWND h = nullptr;
+    while ((h = FindWindowExW(nullptr, h, L"XamlExplorerHostIslandWindow", nullptr)) != nullptr) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(h, &pid);
+        if (pid != ShellPid() || GetWindowTextLengthW(h) > 0) continue;
+        RECT r{};
+        GetWindowRect(h, &r);
+        Wh_Log(L"Volume pill not matched: island %p visible=%d iconic=%d cloaked=%d %dx%d", h, (int)IsWindowVisible(h),
+               (int)IsIconic(h), (int)IsCloaked(h), (int)(r.right - r.left), (int)(r.bottom - r.top));
+    }
+}
+static void CALLBACK WinOsdScanTick(HWND, UINT, UINT_PTR, DWORD) {
+    if (!g_settings.showOsd || GetTickCount64() > g_winOsdScanUntil) {
+        if (g_settings.showOsd) WinOsdScanMiss();
+        WinOsdScanStop();
+        return;
+    }
+    if (HWND x = FindWinOsdIsland()) {
+        WinOsdIslandHide(x);
+        WinOsdScanStop();
+    }
+}
+static void WinOsdScan() {
+    if (!g_settings.showOsd) return;
+    g_winOsdScanUntil = GetTickCount64() + 700;
+    WinOsdScanTick(nullptr, 0, 0, 0);
+    if (g_winOsdScanUntil && !g_winOsdScanTimer && GetTickCount64() <= g_winOsdScanUntil)
+        g_winOsdScanTimer = SetTimer(nullptr, 0, 40, WinOsdScanTick);
 }
 static void WinOsdApply() {
     if (g_settings.showOsd) {
@@ -9995,24 +10070,12 @@ static void WinOsdApply() {
         // volume o Explorer mostra a pílula de novo; só o ShowWindow direto a mantém minimizada.
         if (h && !IsIconic(h) && ShellAnswers(h)) ShowWindow(h, SW_MINIMIZE);
         if (h) g_winOsdHidden = h;
-        HWND x = FindWinOsdIsland();
-        if (x && x != g_winOsdIsland) {
-            if (g_winOsdIsland) WinOsdIslandRestore();
-            if (ShellAnswers(x)) {
-                g_winOsdIsland = x;
-                g_winOsdIslandEx = GetWindowLongPtrW(x, GWL_EXSTYLE);
-            }
-        }
-        if (x && x == g_winOsdIsland && ShellAnswers(x)) {
-            SetWindowLongPtrW(x, GWL_EXSTYLE, g_winOsdIslandEx | WS_EX_LAYERED | WS_EX_TRANSPARENT);
-            SetWindowPos(x, nullptr, -99999, -99999, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
-            ShowWindowAsync(x, SW_SHOWMINNOACTIVE);
-        }
     } else {
         if (g_winOsdHidden) {
             if (IsWindow(g_winOsdHidden) && IsIconic(g_winOsdHidden)) ShowWindowAsync(g_winOsdHidden, SW_SHOWNOACTIVATE);
             g_winOsdHidden = nullptr;
         }
+        WinOsdScanStop();
         WinOsdIslandRestore();
     }
 }
@@ -10020,11 +10083,13 @@ static void WinOsdRestore() {
     if (g_winOsdHidden && IsWindow(g_winOsdHidden) && IsIconic(g_winOsdHidden))
         ShowWindowAsync(g_winOsdHidden, SW_SHOWNOACTIVATE);
     g_winOsdHidden = nullptr;
+    WinOsdScanStop();
     WinOsdIslandRestore();
 }
 
 static void OsdShow(int kind, int value, bool mute) {
     WinOsdApply();  // a do Windows não aparece junto
+    WinOsdScan();   // a nova (XAML) aparece agora; é aqui que dá para reconhecê-la
     if (!g_settings.showOsd || g_menuOpen || g_cc.hwnd || !g_gm.empty() || g_bars.empty()) return;
     value = std::clamp(value, 0, 100);
     ULONGLONG now = GetTickCount64();
@@ -16884,7 +16949,9 @@ struct IslandHist {
     IslandNote note;  // a mais nova da conversa (é ela que se abre e se responde)
     SYSTEMTIME at;
     std::vector<IslandLine> thread;  // a conversa em ordem, ficando no painel até limpar
+    ULONGLONG id = 0;  // fixo: o índice muda quando uma conversa sobe para o fim
 };
+static ULONGLONG g_islHistNext = 1;
 static std::vector<IslandHist> g_islHist;  // o mais novo no fim
 static int g_islUnread = 0;
 
@@ -17230,6 +17297,7 @@ static void IslandPush(const IslandNote& n, bool force) {
             g_islHist.push_back(std::move(h));
         } else {
             IslandHist h{n, {}, {}};
+            h.id = g_islHistNext++;
             GetLocalTime(&h.at);
             if (isNotif) h.thread.push_back({text, false});
             g_islHist.push_back(std::move(h));
@@ -18310,10 +18378,19 @@ static std::wstring ToastImagePath(const std::wstring& aumid, std::wstring src) 
                 bytes += (char)wcstoul(u.substr(i + 1, 2).c_str(), nullptr, 16);
                 i += 2;
             } else {
-                wchar_t c = u[i] == L'/' ? L'\\' : u[i];
-                char buf[8];
-                int n = WideCharToMultiByte(CP_UTF8, 0, &c, 1, buf, sizeof(buf), nullptr, nullptr);
-                bytes.append(buf, n > 0 ? n : 0);
+                // O trecho sem %XX vai de uma vez (um emoji são dois wchar_t).
+                size_t j = i;
+                while (j < u.size() && u[j] != L'%') j++;
+                if (j == i) j = i + 1;
+                std::wstring run = u.substr(i, j - i);
+                std::replace(run.begin(), run.end(), L'/', L'\\');
+                int n = WideCharToMultiByte(CP_UTF8, 0, run.data(), (int)run.size(), nullptr, 0, nullptr, nullptr);
+                if (n > 0) {
+                    size_t at = bytes.size();
+                    bytes.resize(at + n);
+                    WideCharToMultiByte(CP_UTF8, 0, run.data(), (int)run.size(), &bytes[at], n, nullptr, nullptr);
+                }
+                i = j - 1;
             }
         }
         int n = MultiByteToWideChar(CP_UTF8, 0, bytes.data(), (int)bytes.size(), nullptr, 0);
@@ -18971,6 +19048,7 @@ struct NotifPanel {
     bool tracking = false, closing = false;
     // Arrastar para o lado apaga a notificação (só ela).
     int swipeBlock = -1, swipeItem = -1;
+    ULONGLONG swipeId = 0;  // a notificação arrastada (IslandHist::id)
     float swipeX0 = 0, swipeDx = 0;
     bool swiping = false;
     ULONGLONG openTick = 0, closeTick = 0;
@@ -19737,6 +19815,7 @@ static int NtfItemAt(const NtfBlock& b, float y) {
 
 static void NtfSwipeReset() {
     g_ntf.swipeBlock = g_ntf.swipeItem = -1;
+    g_ntf.swipeId = 0;
     g_ntf.swipeDx = 0;
     g_ntf.swiping = false;
 }
@@ -19775,6 +19854,7 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (h >= 0 && h < (int)g_ntf.blocks.size() && (g_ntf.blocks[h].kind == 1 || g_ntf.blocks[h].kind == 4)) {
                 g_ntf.swipeBlock = h;
                 g_ntf.swipeItem = NtfItemAt(g_ntf.blocks[h], y);
+                if (g_ntf.swipeItem >= 0 && g_ntf.swipeItem < (int)g_islHist.size()) g_ntf.swipeId = g_islHist[g_ntf.swipeItem].id;
                 g_ntf.swipeX0 = x;
                 SetCapture(hwnd);
             }
@@ -19824,7 +19904,10 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             float x = (float)LP_X(lp), y = (float)LP_Y(lp);
             if (g_ntf.swipeBlock >= 0) {
                 bool swiped = g_ntf.swiping;
-                int bi = g_ntf.swipeBlock, item = g_ntf.swipeItem;
+                int bi = g_ntf.swipeBlock, item = -1;
+                // Pelo id: se chegou mensagem durante o arrasto, o índice pode ter mudado.
+                for (int q = 0; q < (int)g_islHist.size(); q++)
+                    if (g_ntf.swipeId && g_islHist[q].id == g_ntf.swipeId) item = q;
                 float dx = g_ntf.swipeDx;
                 g_ntf.swiping = false;  // antes de soltar a captura (WM_CAPTURECHANGED)
                 ReleaseCapture();
