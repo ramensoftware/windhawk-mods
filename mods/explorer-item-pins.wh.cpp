@@ -7,7 +7,7 @@
 // @description:de-DE Heftet Dateien und Ordner im Datei-Explorer in ihrem übergeordneten Ordner an
 // @description:pt-BR Fixa arquivos e pastas na pasta que os contém no Explorador de Arquivos
 // @description:zh-CN 在文件资源管理器中将文件和文件夹固定在各自的上级文件夹内
-// @version         1.1.0
+// @version         1.1.1
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -16,7 +16,7 @@
 // @architecture    x86-64
 // @compilerOptions -lruntimeobject -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdi32 -lcomctl32 -ladvapi32
 // ==/WindhawkMod==
-// Build: 26
+// Build: 27
 
 // ==WindhawkModReadme==
 /*
@@ -851,6 +851,7 @@ using MakeGroup = HRESULT (*)(DWORD, UINT64, const PROPERTYKEY*, DWORD, IUnknown
 using ReadGroupValue = HRESULT (*)(IUnknown*, REFPROPERTYKEY, PROPVARIANT*);
 using WriteGroupValue = HRESULT (*)(IUnknown*, REFPROPERTYKEY, const PROPVARIANT&, DWORD);
 using GetGroupAt = HRESULT (*)(GroupList*, UINT, IUnknown**);
+using GetGroupId = HRESULT (*)(IUnknown*, DWORD*);
 
 struct NativeGrouping {
     GroupBatch batch;
@@ -965,6 +966,8 @@ bool IsPinnedGroupItem(ReadGroupValue read, IUnknown* row, const PinNames& names
     return SUCCEEDED(result) ? api.remember(category, pinnedGroupId) : result;
 }
 
+std::atomic<GetGroupId const*> pinnedGroupMethods{};
+
 [[maybe_unused]] HRESULT GroupInfoWithPins(MakeGroup make, GroupInfo original, IUnknown* category,
                                            DWORD group, IUnknown** output) {
     if (group != pinnedGroupId) return original(category, group, output);
@@ -973,58 +976,71 @@ bool IsPinnedGroupItem(ReadGroupValue read, IUnknown* row, const PinNames& names
     if (FAILED(category->QueryInterface(IID_PPV_ARGS(&source))) || !source || FAILED(source->GetPropertyKey(&property))) {
         return original(category, group, output);
     }
-    return make(group, 0, &property, 0, nullptr, LocalizedPinText(GetUserDefaultUILanguage()).group, output);
+    const auto result = make(group, 0, &property, 0, nullptr, LocalizedPinText(GetUserDefaultUILanguage()).group, output);
+    if (SUCCEEDED(result) && *output) {
+        // The shell factory supplies a native ICategoryDescription. Only use
+        // GetId on descriptions with the same interface implementation.
+        pinnedGroupMethods.store(*reinterpret_cast<GetGroupId const* const*>(*output), std::memory_order_release);
+    }
+    return result;
 }
 
-class ReorderedGroupList final : public GroupList {
-public:
-    ReorderedGroupList(GroupList& original, UINT pinned, UINT count)
-        : original_(original), pinned_(pinned), count_(count) {}
+bool IsPinnedGroup(IUnknown& group) {
+    const auto methods = pinnedGroupMethods.load(std::memory_order_acquire);
+    if (!methods || *reinterpret_cast<GetGroupId const* const*>(&group) != methods) return false;
+    DWORD id = 0;
+    return SUCCEEDED(methods[3](&group, &id)) && id == pinnedGroupId;
+}
 
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** output) override {
-        *output = nullptr;
-        if (iid != IID_IUnknown) return E_NOINTERFACE;
-        *output = static_cast<GroupList*>(this);
-        return S_OK;
+class GroupOrder {
+public:
+    explicit GroupOrder(GroupList* groups) : groups_(groups), previous_(std::exchange(current_, this)) {}
+    ~GroupOrder() { current_ = previous_; }
+    GroupOrder(const GroupOrder&) = delete;
+    GroupOrder& operator=(const GroupOrder&) = delete;
+
+    void PinFirst(UINT pinned, UINT count) {
+        pinned_ = pinned;
+        count_ = count;
     }
-    ULONG STDMETHODCALLTYPE AddRef() override { return 1; }
-    ULONG STDMETHODCALLTYPE Release() override { return 1; }
-    HRESULT STDMETHODCALLTYPE GetCount(UINT* count) override { return original_.GetCount(count); }
-    HRESULT STDMETHODCALLTYPE GetAt(UINT index, IUnknown** group) override {
-        if (index >= count_) return original_.GetAt(index, group);
-        // Explorer starts at either end of the array, depending on its group order.
-        if (!first_) first_ = index;
-        const UINT target = *first_;
-        if (target != 0 && target != count_ - 1) return original_.GetAt(index, group);
-        if (index == target) return original_.GetAt(pinned_, group);
-        const UINT withoutPinned = index - (index > target ? 1 : 0);
-        return original_.GetAt(withoutPinned + (withoutPinned >= pinned_ ? 1 : 0), group);
+
+    static UINT Index(GroupList* groups, UINT index) {
+        if (!current_ || current_->groups_ != groups || index >= current_->count_) return index;
+        return current_->Remap(index);
     }
 
 private:
-    GroupList& original_;
-    UINT pinned_;
-    UINT count_;
+    UINT Remap(UINT index) {
+        // Explorer starts at either end of the array, depending on its group order.
+        if (!first_) first_ = index;
+        const UINT target = *first_;
+        if (target != 0 && target != count_ - 1) return index;
+        if (index == target) return pinned_;
+        const UINT withoutPinned = index - (index > target ? 1 : 0);
+        return withoutPinned + (withoutPinned >= pinned_ ? 1 : 0);
+    }
+
+    inline static thread_local GroupOrder* current_ = nullptr;
+    GroupList* groups_;
+    GroupOrder* previous_;
+    UINT pinned_ = 0;
+    UINT count_ = 0;
     std::optional<UINT> first_;
 };
 
-std::optional<DWORD> NativeGroupId(IUnknown& group) {
-    using GetId = HRESULT (*)(IUnknown*, DWORD*);
-    const auto read = reinterpret_cast<GetId>((*reinterpret_cast<void***>(&group))[3]);
-    DWORD id = 0;
-    return SUCCEEDED(read(&group, &id)) ? std::optional(id) : std::nullopt;
-}
-
 [[maybe_unused]] HRESULT ApplyWithPins(const NativeGrouping& api, const unsigned char* view, GroupList* groups,
                                        UINT* added) {
+    const bool hasPinnedDescription = pinnedGroupMethods.load(std::memory_order_acquire) != nullptr;
+    GroupOrder order(groups);
     UINT count = 0;
-    if (!groups || (*reinterpret_cast<GetGroupAt* const*>(groups))[4] != api.getGroupAt ||
-        FAILED(groups->GetCount(&count))) return api.apply(view, groups, added);
-    for (UINT i = 0; i < count; ++i) {
-        Microsoft::WRL::ComPtr<IUnknown> group;
-        if (FAILED(groups->GetAt(i, group.GetAddressOf())) || !group || NativeGroupId(*group.Get()) != pinnedGroupId) continue;
-        ReorderedGroupList reordered(*groups, i, count);
-        return api.apply(view, &reordered, added);
+    if (hasPinnedDescription && groups && (*reinterpret_cast<GetGroupAt* const*>(groups))[4] == api.getGroupAt &&
+        SUCCEEDED(groups->GetCount(&count)) && count > 1) {
+        for (UINT i = 0; i < count; ++i) {
+            Microsoft::WRL::ComPtr<IUnknown> group;
+            if (FAILED(groups->GetAt(i, group.GetAddressOf())) || !group || !IsPinnedGroup(*group.Get())) continue;
+            order.PinFirst(i, count);
+            break;
+        }
     }
     return api.apply(view, groups, added);
 }
@@ -2567,6 +2583,7 @@ RunViewSort nativeSortOriginal = nullptr;
 CompareViewItems nativeCompareOriginal = nullptr;
 GetComparedItem nativeGetComparedItemOriginal = nullptr;
 NativeGrouping nativeGrouping{};
+GetGroupAt nativeGetGroupAtOriginal = nullptr;
 SetGrouping nativeSetGroupingTarget = nullptr;
 DrawItemImage nativeImageOriginal = nullptr;
 PaintFolderImage nativeFolderImagePaintOriginal = nullptr;
@@ -2628,6 +2645,10 @@ HRESULT NativeTextInfoHook(IUnknown* category, DWORD group, IUnknown** output) {
 
 HRESULT NativeApplyGroupsHook(const unsigned char* view, GroupList* groups, UINT* added) {
     return ApplyWithPins(nativeGrouping, view, groups, added);
+}
+
+HRESULT NativeGetGroupAtHook(GroupList* groups, UINT index, IUnknown** group) {
+    return nativeGetGroupAtOriginal(groups, GroupOrder::Index(groups, index), group);
 }
 
 HRESULT NativeSetGroupingHook(IFolderView2* view, REFPROPERTYKEY key, BOOL ascending) {
@@ -2749,6 +2770,7 @@ BOOL Wh_ModInit() {
         !SetFunctionHook(native->grouping.assign, NativeAssignGroupHook, &nativeGrouping.assign) ||
         !SetFunctionHook(native->grouping.rangeInfo, NativeRangeInfoHook, &nativeGrouping.rangeInfo) ||
         !SetFunctionHook(native->grouping.textInfo, NativeTextInfoHook, &nativeGrouping.textInfo) ||
+        !SetFunctionHook(native->grouping.getGroupAt, NativeGetGroupAtHook, &nativeGetGroupAtOriginal) ||
         !SetFunctionHook(native->grouping.apply, NativeApplyGroupsHook, &nativeGrouping.apply) ||
         !SetFunctionHook(setGrouping, NativeSetGroupingHook, &nativeGrouping.setGrouping)) return FALSE;
     if (!moduleWork.Start()) return FALSE;
