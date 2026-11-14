@@ -44,13 +44,16 @@ from dragging.
 ## Adding icons from the flyout
 
 Open a folder and click **Add icon...** at its end. The flyout then lists every
-icon currently in the tray by its app name, with a check mark next to the ones
-in this folder. Click an icon to move it into the folder, click it again to take
+icon in the flyout by its app name, with a check mark next to the ones in this
+folder. Icons that are in another folder say which one. Click an icon to move it into the folder, click it again to take
 it out. Click **Done** to return to the folder.
 
 Icons added this way are remembered by the mod and take priority over the
 patterns below. Icons that are in the folder because of a pattern can only be
-changed in the settings. A folder needs at least one icon, or **Show empty
+changed in the settings. Icons of the same program share one pick, and an icon
+with no app name is remembered by its tooltip, so it's forgotten if the app
+changes that. Renaming a folder clears the icons added to it from the flyout. A
+folder needs at least one icon, or **Show empty
 folders** turned on, to show up, so turn that on to fill a new folder this way.
 
 ## List view
@@ -130,7 +133,8 @@ haven't been tested.
     to it, instead of a grid of icons.
 - listWidth: 260
   $name: List view width
-  $description: Width in pixels of each row in the list view.
+  $description: >-
+    Width in pixels of each row in the list view, from 120 to 800.
 */
 // ==/WindhawkModSettings==
 
@@ -282,20 +286,17 @@ std::wstring FolderKey(std::wstring_view name) {
     return ToLower(NormalizeName(name));
 }
 
+// One value per pick: portable Windhawk keeps its storage in an INI file,
+// which can't hold line breaks.
 std::vector<Pick> LoadPicks() {
     std::vector<Pick> picks;
-    std::wstring text(32768, L'\0');
-    Wh_GetStringValue(L"picks", text.data(), (int)text.size());
-    text.resize(wcslen(text.c_str()));
-
-    size_t pos = 0;
-    while (pos < text.size()) {
-        size_t end = text.find(L'\n', pos);
-        if (end == std::wstring::npos) {
-            end = text.size();
-        }
-        std::wstring_view line(text.data() + pos, end - pos);
-        pos = end + 1;
+    int count = Wh_GetIntValue(L"pickCount", 0);
+    for (int i = 0; i < count && i < 1000; i++) {
+        WCHAR name[32];
+        swprintf_s(name, L"pick%d", i);
+        WCHAR value[1024];
+        Wh_GetStringValue(name, value, ARRAYSIZE(value));
+        std::wstring_view line(value);
         size_t tab = line.find(L'\t');
         if (tab == std::wstring_view::npos || tab == 0 ||
             tab + 1 == line.size()) {
@@ -308,11 +309,19 @@ std::vector<Pick> LoadPicks() {
 }
 
 void SavePicks(std::vector<Pick> const& picks) {
-    std::wstring text;
-    for (const auto& pick : picks) {
-        text += pick.folderKey + L'\t' + pick.iconKey + L'\n';
+    int oldCount = Wh_GetIntValue(L"pickCount", 0);
+    for (int i = 0; i < (int)picks.size(); i++) {
+        WCHAR name[32];
+        swprintf_s(name, L"pick%d", i);
+        Wh_SetStringValue(
+            name, (picks[i].folderKey + L'\t' + picks[i].iconKey).c_str());
     }
-    Wh_SetStringValue(L"picks", text.c_str());
+    for (int i = (int)picks.size(); i < oldCount && i < 1000; i++) {
+        WCHAR name[32];
+        swprintf_s(name, L"pick%d", i);
+        Wh_DeleteValue(name);
+    }
+    Wh_SetIntValue(L"pickCount", (int)picks.size());
 }
 
 Settings LoadSettings() {
@@ -350,6 +359,17 @@ Settings LoadSettings() {
             folder.name = L"Folder";
         }
         folder.key = FolderKey(folder.name);
+
+        // Two folders with the same name would share their picks.
+        std::wstring baseKey = folder.key;
+        for (int n = 2; std::any_of(settings.folders.begin(),
+                                    settings.folders.end(),
+                                    [&](FolderConfig const& other) {
+                                        return other.key == folder.key;
+                                    });
+             n++) {
+            folder.key = baseKey + L"#" + std::to_wstring(n);
+        }
 
         settings.folders.push_back(std::move(folder));
     }
@@ -665,6 +685,42 @@ struct Tile {
     Controls::TextBlock check{nullptr};
 };
 
+// A property as the shell had it: a local value, a binding, or nothing.
+struct SavedProp {
+    DependencyObject object{nullptr};
+    DependencyProperty property{nullptr};
+    wf::IInspectable local{nullptr};
+    Data::Binding binding{nullptr};
+};
+
+SavedProp SaveProp(DependencyObject const& object,
+                   DependencyProperty const& property) {
+    SavedProp saved;
+    saved.object = object;
+    saved.property = property;
+    saved.local = object.ReadLocalValue(property);
+    if (auto element = object.try_as<FrameworkElement>()) {
+        if (auto binding = element.GetBindingExpression(property)) {
+            saved.binding = binding.ParentBinding();
+        }
+    }
+    return saved;
+}
+
+void RestoreProp(SavedProp const& saved) {
+    if (!saved.object) {
+        return;
+    }
+    if (saved.binding) {
+        saved.object.as<FrameworkElement>().SetBinding(saved.property,
+                                                       saved.binding);
+    } else if (saved.local == DependencyProperty::UnsetValue()) {
+        saved.object.ClearValue(saved.property);
+    } else {
+        saved.object.SetValue(saved.property, saved.local);
+    }
+}
+
 // Layout values of the shell's panel, restored when the list layout ends.
 struct SavedLayout {
     double itemsWidth = NAN;
@@ -674,8 +730,8 @@ struct SavedLayout {
     double itemHeight = NAN;
     int maxRowsOrColumns = 0;
     Controls::Orientation orientation = Controls::Orientation::Horizontal;
-    HorizontalAlignment childrenAlignment = HorizontalAlignment::Left;
     bool hasWrapGrid = false;
+    std::vector<SavedProp> props;
 };
 
 struct OverflowState : std::enable_shared_from_this<OverflowState> {
@@ -766,30 +822,38 @@ FrameworkElement FindDescendantByName(DependencyObject const& element,
     return nullptr;
 }
 
-// Fallback for builds where the items control has no x:Name: the first
-// ItemsControl found below the given element.
-Controls::ItemsControl FindAnyItemsControl(DependencyObject const& element) {
+// Fallback for builds where the items control has no x:Name: the ItemsControl
+// below the flyout that shows its icons, or else the first one.
+void CollectItemsControls(DependencyObject const& element,
+                          std::vector<Controls::ItemsControl>& out) {
     int count = Media::VisualTreeHelper::GetChildrenCount(element);
     for (int i = 0; i < count; i++) {
         auto child = Media::VisualTreeHelper::GetChild(element, i);
         if (auto itemsControl = child.try_as<Controls::ItemsControl>()) {
-            return itemsControl;
+            out.push_back(itemsControl);
         }
-        if (auto found = FindAnyItemsControl(child)) {
-            return found;
-        }
+        CollectItemsControls(child, out);
     }
-    return nullptr;
 }
 
 Controls::ItemsControl FindOverflowItemsControl(
-    DependencyObject const& overflow) {
+    Controls::Control const& overflow) {
     auto itemsControl = FindDescendantByName(overflow, L"OverflowItemsControl")
                             .try_as<Controls::ItemsControl>();
-    if (!itemsControl) {
-        itemsControl = FindAnyItemsControl(overflow);
+    if (itemsControl) {
+        return itemsControl;
     }
-    return itemsControl;
+
+    std::vector<Controls::ItemsControl> candidates;
+    CollectItemsControls(overflow, candidates);
+    if (auto icons = GetOverflowIcons(overflow)) {
+        for (auto const& candidate : candidates) {
+            if (candidate.ItemsSource() == icons) {
+                return candidate;
+            }
+        }
+    }
+    return candidates.empty() ? nullptr : candidates.front();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1484,19 +1548,8 @@ void RestoreLayout(OverflowState& state) {
     }
     RemoveContainerLabels(state);
 
-    itemsControl.Width(saved.itemsWidth);
-    if (auto overflow = state.overflow.get()) {
-        overflow.Width(saved.overflowWidth);
-        overflow.MaxWidth(saved.overflowMaxWidth);
-    }
-    if (saved.hasWrapGrid) {
-        if (auto wrapGrid =
-                itemsControl.ItemsPanelRoot().try_as<Controls::WrapGrid>()) {
-            wrapGrid.Orientation(saved.orientation);
-            wrapGrid.MaximumRowsOrColumns(saved.maxRowsOrColumns);
-            wrapGrid.ItemWidth(saved.itemWidth);
-            wrapGrid.ItemHeight(saved.itemHeight);
-        }
+    for (auto const& prop : saved.props) {
+        RestoreProp(prop);
     }
 }
 
@@ -1546,6 +1599,22 @@ void ApplyLayout(OverflowState& state) {
         saved.maxRowsOrColumns = wrapGrid.MaximumRowsOrColumns();
         saved.orientation = wrapGrid.Orientation();
         saved.hasWrapGrid = true;
+        saved.props.push_back(
+            SaveProp(itemsControl, FrameworkElement::WidthProperty()));
+        if (overflow) {
+            saved.props.push_back(
+                SaveProp(overflow, FrameworkElement::WidthProperty()));
+            saved.props.push_back(
+                SaveProp(overflow, FrameworkElement::MaxWidthProperty()));
+        }
+        saved.props.push_back(
+            SaveProp(wrapGrid, Controls::WrapGrid::ItemWidthProperty()));
+        saved.props.push_back(
+            SaveProp(wrapGrid, Controls::WrapGrid::ItemHeightProperty()));
+        saved.props.push_back(SaveProp(
+            wrapGrid, Controls::WrapGrid::MaximumRowsOrColumnsProperty()));
+        saved.props.push_back(
+            SaveProp(wrapGrid, Controls::WrapGrid::OrientationProperty()));
         state.savedLayout = saved;
     }
 
@@ -1666,7 +1735,7 @@ void Rebuild(OverflowState& state, bool opening) {
 
         if (state.openFolder >= (int)folders.size() ||
             (state.openFolder >= 0 && folderCounts[state.openFolder] == 0 &&
-             !g_settings.showEmptyFolders)) {
+             !g_settings.showEmptyFolders && !state.picking)) {
             state.openFolder = -1;
         }
 
