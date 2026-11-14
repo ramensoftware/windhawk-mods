@@ -16,6 +16,12 @@
 /*
 # Modern Run Dialog UI For Windows 10 & 11
 
+> ⚠️ **Lưu ý quan trọng (Smart App Control) / Important Note:**
+> - **🇻🇳 Tiếng Việt:** Nếu máy người dùng đang bật **Smart App Control (Kiểm soát Ứng dụng Thông minh)**, cần mở `windowsdefender://smartapp/` và chuyển sang **Tắt (Off)** thì `explorer.exe` mới được phép nạp các tệp `.dll` do Windhawk biên dịch. Nếu không tắt **Smart App Control** thì mod sẽ không dùng được.
+> - **🌐 English:** If **Smart App Control** is enabled on your PC, open `windowsdefender://smartapp/` and switch it to **Off** so `explorer.exe` is allowed to load the `.dll` files compiled by Windhawk. If **Smart App Control** is not turned off, the mod will not work.
+>
+> ![Smart App Control - Off](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/5.0.104/50104disablesmartappcontrol.png)
+
 ![Modern Run Dialog UI Preview (Minimal Mode)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/5.0.104/50104minimalmode.png)
 
 *Compact Mini-Pill Mode*
@@ -47,6 +53,8 @@
 ---
 
 ## 🌐 English
+
+> **Note (Smart App Control):** If **Smart App Control** is enabled on your system, please open `windowsdefender://smartapp/` and turn it **Off** so `explorer.exe` is permitted to load the `.dll` files compiled by Windhawk. If **Smart App Control** is not turned off, the mod will not work.
 
 Replaces the classic Win32 **Run (`Win + R`)** dialog with a floating, borderless **Liquid Glass / Fluent** pill launcher rendered with **Direct2D & DirectWrite** (`Segoe UI Variable Text`). Works across **Windows 10** and **Windows 11** (including the latest Insider Canary/Dev builds with `.dll.mui` localized resources) without downloading `shell32.pdb`.
 
@@ -87,6 +95,8 @@ Replaces the classic Win32 **Run (`Win + R`)** dialog with a floating, borderles
 ---
 
 ## 🇻🇳 Tiếng Việt
+
+> **Lưu ý (Smart App Control):** Nếu máy đang bật **Smart App Control**, bạn cần mở `windowsdefender://smartapp/` và chuyển sang **Tắt (Off)** thì `explorer.exe` mới được phép nạp các tệp `.dll` do Windhawk biên dịch. Nếu không tắt **Smart App Control** thì mod sẽ không dùng được.
 
 Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng giao diện viên thuốc nổi **Liquid Glass / Fluent** không viền, vẽ trực tiếp bằng **Direct2D & DirectWrite** (`Segoe UI Variable Text`). Tương thích mượt mà với cả **Windows 10** và **Windows 11** (bao gồm các bản Windows 11 Insider mới nhất dùng tài nguyên `.dll.mui`) mà không cần tải `shell32.pdb`.
 
