@@ -3,7 +3,7 @@
 // @name            !Net — Per-App Kill Switch
 // @description     A panel to manage per app internet connection.
 // @author          Ashix
-// @version         1.2026.1310
+// @version         1.2026.1410
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
 // @donateUrl       https://ko-fi.com/kashix
@@ -2151,19 +2151,23 @@ static int CountBlockedApps() {
 
 static void RefreshAppList() {
     HWND fgWnd = GetForegroundWindow();
-    if (fgWnd != g_hWnd) {
+    bool isOwnWnd = (fgWnd == g_hWnd) ||
+                    (g_hCyclePopup && fgWnd == g_hCyclePopup) ||
+                    (g_hCycleWidget && fgWnd == g_hCycleWidget);
+    if (!isOwnWnd) {
         if (!fgWnd || IsDesktopOrShellWindow(fgWnd)) {
             g_lastFgExe.clear();
         } else {
             DWORD fgPid = 0;
             GetWindowThreadProcessId(fgWnd, &fgPid);
-            std::wstring q = fgPid ? ToLower(QueryProcessExePath(fgPid)) : L"";
-            if (!q.empty()) g_lastFgExe = q;
-            else g_lastFgExe.clear();
+            if (fgPid != GetCurrentProcessId()) {
+                std::wstring q = fgPid ? ToLower(QueryProcessExePath(fgPid)) : L"";
+                if (!q.empty()) g_lastFgExe = q;
+                else g_lastFgExe.clear();
+            }
         }
     }
     std::wstring fgExe = g_lastFgExe;
-    NotifyCycleFocusChanged(fgExe);
 
     EnumWinCtx winCtx;
     EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&winCtx));
@@ -6348,6 +6352,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
 
     if (g_hWnd) {
         ShowWindow(g_hWnd, SW_SHOWNOACTIVATE);
+        SyncForegroundStateAndFilter(false);
         UpdateWindowGeometry(true);
         UpdateWindow(g_hWnd);
     }
