@@ -7,7 +7,6 @@
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
 // @architecture    x86-64
-// @architecture    arm64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion
 // @license         GPL-3.0
 // ==/WindhawkMod==
