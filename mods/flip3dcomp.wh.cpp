@@ -158,7 +158,7 @@ using Matrix4x4 = D2D_MATRIX_4X4_F;
 constexpr float  kEnterExitDurationSec = 0.25f;    // uDWM binary: 0.25s
 constexpr float  kExitDurationSec = 0.25f;    // uDWM: same timeline for exit + exit-rotate
 inline std::atomic_bool kCanHasEasing{ false };
-inline std::atomic_bool kHookTabHeld{ false };
+inline std::atomic_bool g_navigationKeysHeld[256]{};
 
 // Timeline easing: CSS cubic-bezier(0, 0, 0, 1) — fast start, soft landing
 constexpr float  kTimelineBezierX1 = 0.0f;
@@ -175,7 +175,7 @@ constexpr float  kFrontCardFadeSpeed = 0.0f;     // front card fade speed (0 = i
 constexpr float  kScrollWheelNotchFraction = 1.0f;     // carousel slots per mouse wheel notch
 constexpr float  kWheelActiveTimeoutSec = 0.15f;    // throttle repeated wheel processing (uDWM CFlip3D::OnWheel)
 constexpr float  kKeyRepeatIntervalSec = 0.135f;   // throttle repeated keydown processing (uDWM CFlip3D::OnKey)
-constexpr float  kHeldKeyStartDelaySec = 0.20f;    // delay continuous rotation so a key tap moves one card
+constexpr float  kHeldKeyStartDelaySec = 0.50f;    // delay continuous rotation so a key tap moves one card
 constexpr float  kHeldKeyRotateSpeed = 6.0f;     // carousel slots per second while a navigation key is held
 constexpr float  kTouchSwipeThresholdPx = 8.0f;     // minimum travel before a touch becomes a swipe
 constexpr float  kTouchSwipeVelocityLimit = 12.0f;    // soft fling speed limit in carousel slots per second
@@ -1233,6 +1233,7 @@ private:
     int                                       m_wheelPendingSlots = 0;
     std::chrono::steady_clock::time_point     m_lastWheelTime{};
     UINT                                      m_heldNavigationKey = 0;
+    bool                                      m_navigationKeyDown[256] = {};
     int                                       m_heldNavigationDirection = 0;
     std::chrono::steady_clock::time_point     m_heldNavigationStart{};
     UINT                                      m_touchId = 0;
@@ -1450,6 +1451,7 @@ void Flip3DCompApp::ExitView(bool commitScroll, float exitDurationSec)
         : InterpolationMode::Linear);
     m_openingTabPending = false;
     m_heldNavigationKey = 0;
+    ZeroMemory(m_navigationKeyDown, sizeof(m_navigationKeyDown));
     m_heldNavigationDirection = 0;
     m_heldNavigationStart = {};
 }
@@ -1473,6 +1475,7 @@ void Flip3DCompApp::BeginExitView()
     m_state = ViewState::Exit;
     m_openingTabPending = false;
     m_heldNavigationKey = 0;
+    ZeroMemory(m_navigationKeyDown, sizeof(m_navigationKeyDown));
     m_heldNavigationDirection = 0;
     m_heldNavigationStart = {};
 }
@@ -2711,6 +2714,7 @@ void Flip3DCompApp::ReplayEnterAnimation()
     m_scrollTarget = 0.0f;
     m_wrapScrollAdjustThisFrame = 0.0f;
     m_heldNavigationKey = 0;
+    ZeroMemory(m_navigationKeyDown, sizeof(m_navigationKeyDown));
     m_heldNavigationDirection = 0;
     m_heldNavigationStart = {};
     m_repeatedRotateStepsRemaining = 0;
@@ -3324,6 +3328,11 @@ void Flip3DCompApp::TickSmoothScroll(float dtSeconds)
     if (m_cards.size() <= 1 || m_state != ViewState::Interactive)
         return;
 
+    // A delayed activation or key message is not evidence that the key is
+    // still held. Repeat follows the input thread's current state.
+    if (m_heldNavigationKey && !g_navigationKeysHeld[m_heldNavigationKey].load())
+        OnKey(false, m_heldNavigationKey, 0);
+
     const auto now = std::chrono::steady_clock::now();
     const float heldTime = std::chrono::duration<float>(now - m_heldNavigationStart).count();
     if (m_heldNavigationDirection != 0 && heldTime >= kHeldKeyStartDelaySec)
@@ -3435,8 +3444,7 @@ void Flip3DCompApp::Update(float dtSeconds)
     if (m_openingTabPending && m_state == ViewState::Interactive)
     {
         const auto now = std::chrono::steady_clock::now();
-        const bool tabStillDown = kHookTabHeld.load(std::memory_order_relaxed)
-            || (GetAsyncKeyState(VK_TAB) & 0x8000) != 0;
+        const bool tabStillDown = g_navigationKeysHeld[VK_TAB].load();
         const float pendingTime =
             std::chrono::duration<float>(now - m_openingTabStart).count();
         if (!tabStillDown)
@@ -4518,8 +4526,16 @@ bool Flip3DCompApp::OnWheel(int wheelDelta)
 // ============================================================================
 bool Flip3DCompApp::OnKey(bool down, UINT vkCode, LPARAM lParam)
 {
+    const bool isNavigationKey = vkCode == VK_TAB
+        || vkCode == VK_LEFT || vkCode == VK_RIGHT
+        || vkCode == VK_UP || vkCode == VK_DOWN;
+
     if (!down)
     {
+        if (isNavigationKey)
+            m_navigationKeyDown[vkCode] = false;
+        if (vkCode == VK_TAB)
+            m_openingTabPending = false;
         if (vkCode == m_heldNavigationKey)
         {
             m_heldNavigationKey = 0;
@@ -4540,6 +4556,15 @@ bool Flip3DCompApp::OnKey(bool down, UINT vkCode, LPARAM lParam)
     const bool isRepeat = (lParam & (1 << 30)) != 0;
     if (isRepeat)
         return true; // held navigation is driven from the frame update
+
+    // The low-level hook and Raw Input can both forward the same physical
+    // key-down. Accept only the first fresh down edge for each navigation key.
+    if (isNavigationKey)
+    {
+        if (m_navigationKeyDown[vkCode])
+            return true;
+        m_navigationKeyDown[vkCode] = true;
+    }
 
     switch (vkCode)
     {
@@ -6367,7 +6392,7 @@ bool Flip3DCompApp::Initialize(HINSTANCE hInstance, bool openingTabHeld)
         : InterpolationMode::Linear);
     m_prevFrame = std::chrono::steady_clock::now();
     m_openingTabPending = openingTabHeld
-        || (GetAsyncKeyState(VK_TAB) & 0x8000) != 0;
+        || g_navigationKeysHeld[VK_TAB].load();
     m_openingTabStart = m_openingTabPending ? m_prevFrame
         : std::chrono::steady_clock::time_point{};
 
@@ -6588,6 +6613,7 @@ LRESULT Flip3DCompApp::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
 
 const wchar_t kHostClassName[] = L"Flip3DCompWindhawkHost";
 const wchar_t kHostWindowName[] = L"Flip3DCompWindhawkHostWindow";
+const wchar_t kKeyboardClassName[] = L"Flip3DCompKeyboardInput";
 const UINT kHostKeyMessage = WM_APP + 0x71;
 const UINT kHostCommitMessage = WM_APP + 0x72;
 const UINT_PTR kHotkeyPollTimerId = 0x7F33;
@@ -6624,6 +6650,7 @@ unsigned g_controlKeyMask = 0;
 bool g_tabDown = false;
 bool g_suppressTabUntilUp = false;
 bool g_navigationDown[256] = {};
+bool g_rawKeysDown[256] = {};
 
 bool SendWindowsKeyEvent(unsigned bit, bool down)
 {
@@ -6776,9 +6803,13 @@ LRESULT CALLBACK HostWindowProc(HWND hwnd, UINT message, WPARAM wParam,
 
     case kHostKeyMessage:
         if (g_app)
-            PostMessageW(g_app->WindowHandle(),
+        {
+            // Both windows belong to this thread. Dispatch before the next
+            // queued input instead of posting through a second queue.
+            SendMessageW(g_app->WindowHandle(),
                 (static_cast<ULONG_PTR>(lParam) & 0x80000000u) ? WM_KEYUP : WM_KEYDOWN,
                 wParam, lParam);
+        }
         return 0;
 
     case kHostCommitMessage:
@@ -6797,14 +6828,30 @@ LRESULT CALLBACK HostWindowProc(HWND hwnd, UINT message, WPARAM wParam,
     return DefWindowProcW(hwnd, message, wParam, lParam);
 }
 
-bool QueueKeyboardActivation(bool sticky)
+bool QueueKeyboardActivation(bool sticky, bool openingTabHeld = true)
 {
     if (g_switcherEngaged.exchange(true))
         return true;
-    if (PostMessageW(g_hostWindow, g_activationMessage, sticky, TRUE))
+    if (PostMessageW(g_hostWindow, g_activationMessage, sticky, openingTabHeld))
         return true;
     g_switcherEngaged = false;
     return false;
+}
+
+void QueueNativeActivation(bool sticky, bool openingTabHeld)
+{
+    // A registered hotkey can consume Tab's make event before WM_INPUT.
+    // Seed its held state here, on the thread which also receives its break.
+    if (openingTabHeld)
+    {
+        g_tabDown = (GetAsyncKeyState(VK_TAB) & 0x8000) != 0;
+        g_rawKeysDown[VK_TAB] = g_tabDown;
+        g_navigationKeysHeld[VK_TAB] = g_tabDown;
+    }
+    if (g_switcherEngaged)
+        PostMessageW(g_hostWindow, g_activationMessage, sticky, openingTabHeld);
+    else
+        QueueKeyboardActivation(sticky, openingTabHeld);
 }
 
 LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM message, LPARAM data)
@@ -6896,14 +6943,24 @@ LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM message, LPARAM data)
         const UINT vk = key->vkCode;
         const bool wasDown = g_navigationDown[vk];
         g_navigationDown[vk] = down && engaged;
-        if (!engaged && !wasDown)
-            break;
-        const LPARAM flags = (wasDown ? 0x40000000u : 0u)
-            | (up ? 0x80000000u : 0u);
-        PostMessageW(g_hostWindow, kHostKeyMessage, vk, flags);
-        return 1;
+        g_navigationKeysHeld[vk] = down;
+        if (engaged || wasDown)
+        {
+            const LPARAM flags = ((wasDown || g_rawKeysDown[vk]) ? 0x40000000u : 0u)
+                | (up ? 0x80000000u : 0u);
+            PostMessageW(g_hostWindow, kHostKeyMessage, vk, flags);
+        }
+        // Raw input means the original down event reached Windows. Its up
+        // event must also pass through, even if the switcher has since opened.
+        if ((down && engaged) || (up && wasDown && !g_rawKeysDown[vk]))
+            return 1;
+        break;
     }
     case VK_TAB:
+    {
+        const bool repeated = g_tabDown;
+        g_tabDown = down;
+        g_navigationKeysHeld[VK_TAB] = down;
         if (down && (engaged || g_windowsKeyMask || IsWindowsKeyPhysicallyDown()))
         {
             const bool sticky = g_controlKeyMask
@@ -6915,34 +6972,187 @@ LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM message, LPARAM data)
             }
             g_suppressWindowsKeyMask |= g_deferredWindowsKeyMask;
             g_deferredWindowsKeyMask = 0;
-            const bool repeated = g_tabDown;
-            g_tabDown = true;
             g_suppressTabUntilUp = true;
-            kHookTabHeld = true;
             if (engaged)
                 PostMessageW(g_hostWindow, kHostKeyMessage, VK_TAB,
                     repeated ? 0x40000000u : 0u);
             return 1;
         }
-        if (up && g_suppressTabUntilUp)
+        if (up)
         {
-            g_tabDown = false;
+            const bool suppress = g_suppressTabUntilUp && !g_rawKeysDown[VK_TAB];
+            if (engaged || g_suppressTabUntilUp)
+                PostMessageW(g_hostWindow, kHostKeyMessage, VK_TAB, 0xC0000000u);
             g_suppressTabUntilUp = false;
-            kHookTabHeld = false;
-            PostMessageW(g_hostWindow, kHostKeyMessage, VK_TAB, 0xC0000000u);
-            return 1;
+            if (suppress)
+                return 1;
         }
         break;
     }
+    }
     return CallNextHookEx(nullptr, code, message, data);
+}
+
+void OnRawKeyboard(const RAWKEYBOARD& key)
+{
+    if (key.ExtraInformation == kReplayedWindowsKeyTag)
+        return;
+    UINT vk = key.VKey;
+    if (vk == VK_CONTROL)
+        vk = (key.Flags & RI_KEY_E0) ? VK_RCONTROL : VK_LCONTROL;
+    if (vk >= ARRAYSIZE(g_rawKeysDown))
+        return;
+    const bool down = !(key.Flags & RI_KEY_BREAK);
+    const bool repeated = g_rawKeysDown[vk];
+    g_rawKeysDown[vk] = down;
+    const bool engaged = g_switcherEngaged.load();
+
+    switch (vk)
+    {
+    case VK_LWIN:
+    case VK_RWIN:
+    {
+        const unsigned bit = vk == VK_LWIN ? 1u : 2u;
+        if (down)
+        {
+            g_windowsKeyMask |= bit;
+            g_forwardedWindowsKeyMask |= bit;
+            // Our hook suppresses an original Win-down. Seeing it here means
+            // that path was bypassed. Without Explorer's hotkey bridge,
+            // restore the hook before Tab can be consumed as a system hotkey.
+            if (!repeated && !GetShellWindow())
+            {
+                if (g_keyboardHook)
+                    UnhookWindowsHookEx(g_keyboardHook);
+                g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL,
+                    LowLevelKeyboardProc, g_modModule, 0);
+                if (!g_keyboardHook)
+                    Wh_Log(L"Failed to restore the keyboard hook: %lu", GetLastError());
+            }
+        }
+        else
+        {
+            g_windowsKeyMask &= ~bit;
+            g_forwardedWindowsKeyMask &= ~bit;
+            if (!g_windowsKeyMask && engaged)
+                PostMessageW(g_hostWindow, kHostCommitMessage, 0, 0);
+        }
+        return;
+    }
+    case VK_LCONTROL:
+    case VK_RCONTROL:
+        if (down)
+            g_controlKeyMask |= vk == VK_LCONTROL ? 1u : 2u;
+        else
+            g_controlKeyMask &= ~(vk == VK_LCONTROL ? 1u : 2u);
+        return;
+
+    case VK_TAB:
+        g_tabDown = down;
+        g_navigationKeysHeld[vk] = down;
+        // Without Explorer there is no shell WM_HOTKEY to forward. Raw input
+        // observes keys the low-level hook did not consume, without reserving
+        // Win+Tab and preventing a restarted Explorer from registering it.
+        if (down && !engaged && g_windowsKeyMask && !GetShellWindow())
+        {
+            QueueKeyboardActivation(g_controlKeyMask != 0);
+            return;
+        }
+        break;
+
+    case VK_LEFT:
+    case VK_RIGHT:
+    case VK_UP:
+    case VK_DOWN:
+    case VK_HOME:
+    case VK_END:
+    case VK_ESCAPE:
+    case VK_RETURN:
+    case VK_F5:
+        g_navigationKeysHeld[vk] = down;
+        break;
+
+    default:
+        return;
+    }
+
+    if (engaged)
+    {
+        const LPARAM flags = (repeated ? 0x40000000u : 0u)
+            | (!down ? 0x80000000u : 0u);
+        PostMessageW(g_hostWindow, kHostKeyMessage, vk, flags);
+    }
+}
+
+LRESULT CALLBACK KeyboardWindowProc(HWND hwnd, UINT message, WPARAM wParam,
+    LPARAM lParam)
+{
+    if (message == g_activationMessage)
+    {
+        QueueNativeActivation(wParam != 0, lParam != 0);
+        return 0;
+    }
+    if (message == WM_INPUT)
+    {
+        RAWINPUT input = {};
+        UINT size = sizeof(input);
+        if (GetRawInputData(reinterpret_cast<HRAWINPUT>(lParam), RID_INPUT,
+            &input, &size, sizeof(RAWINPUTHEADER)) != UINT(-1)
+            && input.header.dwType == RIM_TYPEKEYBOARD)
+            OnRawKeyboard(input.data.keyboard);
+    }
+    return DefWindowProcW(hwnd, message, wParam, lParam);
+}
+
+HWND CreateKeyboardWindow()
+{
+    WNDCLASSW wc = {};
+    wc.lpfnWndProc = KeyboardWindowProc;
+    wc.hInstance = g_modModule;
+    wc.lpszClassName = kKeyboardClassName;
+    if (!RegisterClassW(&wc))
+    {
+        Wh_Log(L"Failed to register the keyboard window class: %lu", GetLastError());
+        return nullptr;
+    }
+    HWND hwnd = CreateWindowExW(0, kKeyboardClassName, L"", 0,
+        0, 0, 0, 0, HWND_MESSAGE, nullptr, g_modModule, nullptr);
+    if (hwnd)
+    {
+        // This runs only in the dedicated tool process, never in Explorer.
+        RAWINPUTDEVICE keyboard = { 0x01, 0x06, RIDEV_INPUTSINK, hwnd };
+        if (RegisterRawInputDevices(&keyboard, 1, sizeof(keyboard)))
+            return hwnd;
+        Wh_Log(L"Failed to register background keyboard input: %lu", GetLastError());
+        DestroyWindow(hwnd);
+    }
+    else
+    {
+        Wh_Log(L"Failed to create the keyboard window: %lu", GetLastError());
+    }
+    UnregisterClassW(kKeyboardClassName, g_modModule);
+    return nullptr;
 }
 
 DWORD WINAPI KeyboardThreadProc(void*)
 {
     MSG msg = {};
     PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
-    g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL,
-        LowLevelKeyboardProc, g_modModule, 0);
+    HWND keyboardWindow = CreateKeyboardWindow();
+    if (keyboardWindow)
+    {
+        for (UINT vk : { VK_LWIN, VK_RWIN, VK_LCONTROL, VK_RCONTROL, VK_TAB })
+            g_rawKeysDown[vk] = (GetAsyncKeyState(vk) & 0x8000) != 0;
+        g_windowsKeyMask = (g_rawKeysDown[VK_LWIN] ? 1u : 0u)
+            | (g_rawKeysDown[VK_RWIN] ? 2u : 0u);
+        g_forwardedWindowsKeyMask = g_windowsKeyMask.load();
+        g_controlKeyMask = (g_rawKeysDown[VK_LCONTROL] ? 1u : 0u)
+            | (g_rawKeysDown[VK_RCONTROL] ? 2u : 0u);
+        g_tabDown = g_rawKeysDown[VK_TAB];
+        g_navigationKeysHeld[VK_TAB] = g_tabDown;
+        g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL,
+            LowLevelKeyboardProc, g_modModule, 0);
+    }
     g_keyboardInitializationSucceeded = g_keyboardHook != nullptr;
     if (!g_keyboardHook)
         Wh_Log(L"Failed to install the keyboard hook: %lu", GetLastError());
@@ -6951,16 +7161,15 @@ DWORD WINAPI KeyboardThreadProc(void*)
     const bool stickyHotkey = g_keyboardHook && RegisterHotKey(nullptr,
         kHotkeyIdCtrlWinTab, MOD_WIN | MOD_CONTROL | MOD_NOREPEAT, VK_TAB);
     SetEvent(g_keyboardReadyEvent);
-    if (!g_keyboardHook)
-        return 1;
 
-    while (MsgWaitForMultipleObjects(1, &g_keyboardStopEvent, FALSE,
-        INFINITE, QS_ALLINPUT) == WAIT_OBJECT_0 + 1)
+    while (g_keyboardInitializationSucceeded
+        && MsgWaitForMultipleObjects(1, &g_keyboardStopEvent, FALSE,
+            INFINITE, QS_ALLINPUT) == WAIT_OBJECT_0 + 1)
     {
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))
         {
             if (msg.message == WM_HOTKEY && msg.wParam == kHotkeyIdCtrlWinTab)
-                QueueKeyboardActivation(true);
+                QueueNativeActivation(true, true);
             else
             {
                 TranslateMessage(&msg);
@@ -6970,8 +7179,17 @@ DWORD WINAPI KeyboardThreadProc(void*)
     }
     if (stickyHotkey)
         UnregisterHotKey(nullptr, kHotkeyIdCtrlWinTab);
-    UnhookWindowsHookEx(g_keyboardHook);
+    if (g_keyboardHook)
+        UnhookWindowsHookEx(g_keyboardHook);
     g_keyboardHook = nullptr;
+    if (keyboardWindow)
+    {
+        RAWINPUTDEVICE keyboard = { 0x01, 0x06, RIDEV_REMOVE, nullptr };
+        if (!RegisterRawInputDevices(&keyboard, 1, sizeof(keyboard)))
+            Wh_Log(L"Failed to unregister background keyboard input: %lu", GetLastError());
+        DestroyWindow(keyboardWindow);
+        UnregisterClassW(kKeyboardClassName, g_modModule);
+    }
     // Do not leave a deferred physical Windows key without its down event
     // when the hook stops before the user releases the key.
     for (unsigned bit : { 1u, 2u })
@@ -6984,8 +7202,10 @@ DWORD WINAPI KeyboardThreadProc(void*)
     g_controlKeyMask = 0;
     g_tabDown = g_suppressTabUntilUp = false;
     std::fill(std::begin(g_navigationDown), std::end(g_navigationDown), false);
-    kHookTabHeld = false;
-    return 0;
+    std::fill(std::begin(g_rawKeysDown), std::end(g_rawKeysDown), false);
+    for (auto& held : g_navigationKeysHeld)
+        held = false;
+    return g_keyboardInitializationSucceeded ? 0 : 1;
 }
 
 DWORD WINAPI HostThreadProc(void*)
@@ -7051,14 +7271,14 @@ DWORD WINAPI HostThreadProc(void*)
 
 bool ForwardSwitcherActivation(bool sticky, bool openingTabHeld)
 {
-    HWND host = FindWindowW(kHostClassName, kHostWindowName);
-    if (!host || !g_activationMessage)
+    HWND input = FindWindowExW(HWND_MESSAGE, nullptr, kKeyboardClassName, nullptr);
+    if (!input || !g_activationMessage)
         return false;
     DWORD processId = 0;
-    GetWindowThreadProcessId(host, &processId);
+    GetWindowThreadProcessId(input, &processId);
     if (!processId || !AllowSetForegroundWindow(processId))
         return false;
-    return PostMessageW(host, g_activationMessage, sticky, openingTabHeld) != FALSE;
+    return PostMessageW(input, g_activationMessage, sticky, openingTabHeld) != FALSE;
 }
 
 enum ALL_UP_VIEW_FLAGS : int;
