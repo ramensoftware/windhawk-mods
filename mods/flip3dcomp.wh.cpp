@@ -96,6 +96,21 @@ Live window previews follow the original Flip3D carousel layout and timing.
 #include <oaidl.h>
 #include <wincodec.h>
 
+// A keyboard hook can consume the user's Win+Tab input before a window in this
+// process receives it. Windows may then deny SetForegroundWindow/SwitchToThisWindow
+// because this process is not the foreground input owner. Insert a no-op input
+// event immediately before those calls to establish the foreground handoff.
+static void PrepareForegroundActivation()
+{
+    INPUT input{};
+    const UINT inserted = SendInput(1, &input, sizeof(input));
+    if (inserted != 1)
+    {
+        Wh_Log(L"Could not insert the foreground handoff input (sent=%u, error=%lu)",
+            inserted, GetLastError());
+    }
+}
+
 
 struct IDCompositionVisual3Compat : IDCompositionVisualDebug
 {
@@ -3502,11 +3517,16 @@ void Flip3DCompApp::Update(float dtSeconds)
                             PostMessageW(tray, WM_COMMAND, 419, 0);
                     }
                 }
+                HWND activationTarget = target;
                 if (!IsWindowEnabled(target))
-                    SwitchToThisWindow(
-                        GetLastActivePopup(GetAncestor(target, GA_ROOTOWNER)), TRUE);
-                else
-                    SwitchToThisWindow(target, TRUE);
+                    activationTarget = GetLastActivePopup(
+                        GetAncestor(target, GA_ROOTOWNER));
+
+                if (activationTarget && IsWindow(activationTarget))
+                {
+                    PrepareForegroundActivation();
+                    SwitchToThisWindow(activationTarget, TRUE);
+                }
             }
             if (!m_hwnd || !IsWindow(m_hwnd) || !DestroyWindow(m_hwnd))
                 PostQuitMessage(0);
@@ -6759,6 +6779,7 @@ void LaunchSwitcher(bool sticky, bool openingTabHeld)
     ShowWindow(g_app->WindowHandle(), SW_SHOW);
     SetWindowPos(g_app->WindowHandle(), HWND_TOPMOST, 0, 0, 0, 0,
         SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    PrepareForegroundActivation();
     if (!SetForegroundWindow(g_app->WindowHandle()))
         Wh_Log(L"Switcher could not take foreground focus; navigation remains on the keyboard hook");
     UpdateWindow(g_app->WindowHandle());
@@ -7600,6 +7621,66 @@ BOOL StartExplorerPart()
 bool g_isExplorer = false;
 bool g_isRundll32 = false;
 
+bool IsDwmApiModuleArgument(std::wstring module)
+{
+    while (!module.empty() && (module.back() == L',' || module.back() == L' ' || module.back() == L'\t'))
+        module.pop_back();
+    const size_t separator = module.find_last_of(L"\\/");
+    if (separator != std::wstring::npos)
+        module.erase(0, separator + 1);
+    return _wcsicmp(module.c_str(), L"dwmapi.dll") == 0
+        || _wcsicmp(module.c_str(), L"dwmapi") == 0;
+}
+
+bool IsDwmApiOrdinal105Invocation()
+{
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv)
+    {
+        Wh_Log(L"CommandLineToArgvW failed for rundll32.exe: %lu", GetLastError());
+        return false;
+    }
+
+    bool matches = false;
+    if (argc >= 2 && argv[1])
+    {
+        std::wstring moduleArgument = argv[1];
+        std::wstring ordinalArgument;
+        const size_t comma = moduleArgument.find_last_of(L',');
+        if (comma != std::wstring::npos)
+        {
+            ordinalArgument = moduleArgument.substr(comma + 1);
+            moduleArgument.resize(comma);
+            if (ordinalArgument.empty() && argc >= 3 && argv[2])
+                ordinalArgument = argv[2];
+        }
+        else if (argc >= 3 && argv[2])
+        {
+            ordinalArgument = argv[2];
+        }
+
+        const auto trim = [](std::wstring& value)
+        {
+            const size_t first = value.find_first_not_of(L" \t");
+            if (first == std::wstring::npos)
+            {
+                value.clear();
+                return;
+            }
+            const size_t last = value.find_last_not_of(L" \t");
+            value = value.substr(first, last - first + 1);
+        };
+        trim(moduleArgument);
+        trim(ordinalArgument);
+        matches = IsDwmApiModuleArgument(moduleArgument)
+            && _wcsicmp(ordinalArgument.c_str(), L"#105") == 0;
+    }
+
+    LocalFree(argv);
+    return matches;
+}
+
 bool InitializeModuleGlobals()
 {
     g_activationMessage = RegisterWindowMessageW(L"Flip3DComp.Windhawk.Activate");
@@ -7651,16 +7732,7 @@ BOOL Wh_ModInit() {
     }
     if (_wcsicmp(name, L"rundll32.exe") == 0) {
         g_isRundll32 = true;
-        int argc = 0;
-        LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-        bool shortcut = false;
-        if (argv && argc > 1) {
-            const WCHAR* entry = wcsrchr(argv[1], L'\\');
-            entry = entry ? entry + 1 : argv[1];
-            shortcut = _wcsicmp(entry, L"dwmapi.dll,#105") == 0;
-        }
-        LocalFree(argv);
-        return shortcut && HookDwmOrdinal105();
+        return IsDwmApiOrdinal105Invocation() && HookDwmOrdinal105();
     }
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
