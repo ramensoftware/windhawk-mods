@@ -4010,9 +4010,8 @@ DWORD WINAPI KeyboardHookThreadProc(void*) {
     g_hookThreadId = GetCurrentThreadId();
     SetEvent(g_hookThreadReady);
 
-    constexpr UINT_PTR kHookDrainTimerId = 0xD1A1;
     constexpr UINT kHookDrainTimeoutMs = 500;
-    bool drainTimerArmed = false;
+    UINT_PTR drainTimerId = 0;
 
     auto updateHook = [&] {
         // Capture can end on key-down, but that key's release should still be
@@ -4028,23 +4027,24 @@ DWORD WINAPI KeyboardHookThreadProc(void*) {
 
         const bool captureActive = g_captureHotkey.load();
         if (captureActive) {
-            if (drainTimerArmed) {
-                KillTimer(nullptr, kHookDrainTimerId);
-                drainTimerArmed = false;
+            if (drainTimerId) {
+                KillTimer(nullptr, drainTimerId);
+                drainTimerId = 0;
             }
-        } else if (hasSuppressedKeys && !drainTimerArmed) {
-            drainTimerArmed = SetTimer(
-                nullptr, kHookDrainTimerId, kHookDrainTimeoutMs, nullptr) != 0;
-            if (!drainTimerArmed) {
+        } else if (hasSuppressedKeys && !drainTimerId) {
+            // Let Windows assign a fresh ID so a stale WM_TIMER queued before
+            // cancellation cannot expire a later capture's release window.
+            drainTimerId = SetTimer(nullptr, 0, kHookDrainTimeoutMs, nullptr);
+            if (!drainTimerId) {
                 Wh_Log(L"SetTimer for keyboard-hook cleanup failed: %u", GetLastError());
                 // Prefer allowing a rare unmatched key-up over leaving a
                 // system-wide low-level hook installed indefinitely.
                 std::memset(g_suppressedHotkeyKeys, 0, sizeof(g_suppressedHotkeyKeys));
                 hasSuppressedKeys = false;
             }
-        } else if (!hasSuppressedKeys && drainTimerArmed) {
-            KillTimer(nullptr, kHookDrainTimerId);
-            drainTimerArmed = false;
+        } else if (!hasSuppressedKeys && drainTimerId) {
+            KillTimer(nullptr, drainTimerId);
+            drainTimerId = 0;
         }
 
         const bool shouldBeInstalled = captureActive || hasSuppressedKeys;
@@ -4068,8 +4068,8 @@ DWORD WINAPI KeyboardHookThreadProc(void*) {
             continue;
         }
         if (message.message == WM_TIMER && !message.hwnd &&
-            message.wParam == kHookDrainTimerId) {
-            drainTimerArmed = false;
+            drainTimerId && message.wParam == drainTimerId) {
+            drainTimerId = 0;
             if (!g_captureHotkey.load()) {
                 // A release may have happened on a desktop where this hook
                 // cannot observe it. Do not leave a system-wide hook installed.
@@ -4082,7 +4082,7 @@ DWORD WINAPI KeyboardHookThreadProc(void*) {
         DispatchMessageW(&message);
     }
 
-    if (drainTimerArmed) KillTimer(nullptr, kHookDrainTimerId);
+    if (drainTimerId) KillTimer(nullptr, drainTimerId);
 
     if (g_captureHook) {
         UnhookWindowsHookEx(g_captureHook);
