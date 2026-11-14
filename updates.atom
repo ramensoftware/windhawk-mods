@@ -2,12 +2,79 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-14T04:04:53.000Z</updated>
+    <updated>2026-11-14T18:04:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chrome Context Menu Items 1.1.0]]></title>
+        <id>https://windhawk.net/mods/chrome-context-menu-items#4f5de75424636c368c4578baee30b02f9487e6c4</id>
+        <link href="https://windhawk.net/mods/chrome-context-menu-items"/>
+        <updated>2026-11-14T18:04:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add {url}, {page}, {title}, {selection}, {src} and {frame} placeholders for custom commands. Values are URL-encoded inside URLs and escaped for the command line in arguments.</li>
+<li>Show entries that use {url}, {selection} or {src} only when the right-clicked item provides a value.</li>
+<li>Allow placeholders in the program only inside a URL, or as the whole program for http and https links, and don't run entries that pass placeholders to batch files or shells.</li>
+<li>Add a per-item &quot;Show only on pages&quot; setting with wildcard address patterns.</li>
+<li>Add a shortcut, Ctrl+Shift by default and configurable, that shows Chrome's original page menu while held (on by default).</li>
+<li>Add a toggle to hide Back, Forward and Reload, and opt-in toggles for Search Google for, Copy link to highlight, Open link in new / incognito window, Open link in another profile, Picture in picture, Loop / Show controls, Emoji, Spell check / Writing direction, Password manager / Autofill and Inspect.</li>
+<li>Anti-alias rounded menu item backgrounds.</li>
+<li>Check the layout of Chrome's context menu data on every menu, and turn off the features that depend on it if the layout doesn't match.</li>
+</ul>
+]]></content>
+        <author>
+            <name>DanRotaru</name>
+            <uri>https://github.com/DanRotaru</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Compact Notifications 1.2]]></title>
+        <id>https://windhawk.net/mods/compact-notifications#06bb6df5b1aebfa91ab73c3e16ec5c616d71d794</id>
+        <link href="https://windhawk.net/mods/compact-notifications"/>
+        <updated>2026-11-14T18:04:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Cards come straight from the notification database, so toasts that arrive in a row show together, and an app updating a shown toast updates its card.</li>
+<li>Replies are typed on the card itself and sent with the app's button (or Enter).</li>
+<li>Copy button for one-time codes (in the Windows language, or English via a setting).</li>
+<li>Mute button (moon, on hover): mutes an app for 15 min, 1 h, 8 h, 24 h or for good (∞); a new setting unmutes the apps muted for good.</li>
+<li>Do not disturb on Windows 11 is respected.</li>
+<li>Cards stay while the mouse is over them; a card goes as soon as one of its buttons is pressed.</li>
+<li>Animations follow the monitor's refresh rate; new optional playful style.</li>
+<li>Chat text formatting (bold, italic, underline, strike, code) can be turned off.</li>
+<li>Sound plays when the card shows instead of when Windows gets to the banner later; new Sound settings (when the card shows, as Windows plays it, or none) and your own .wav file.</li>
+<li>Fixes: a closed card no longer comes back, the card limit keeps reminders, alarms and calls, cards go when the app takes its toast back (e.g. a call answered in the app).</li>
+</ul>
+]]></content>
+        <author>
+            <name>Wheatlay</name>
+            <uri>https://github.com/Wheatlay</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Lock Screen Live Wallpaper 1.1.0]]></title>
+        <id>https://windhawk.net/mods/lock-screen-live-wallpaper#589c9d0677cb6e995c3f1070e40f2e3aea7822fb</id>
+        <link href="https://windhawk.net/mods/lock-screen-live-wallpaper"/>
+        <updated>2026-11-14T18:04:35.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Preview window: check fit, colors and speed without locking the PC. Open it from the settings, an optional hotkey (off by default) or an optional tray icon. It can also draw the real clock, date and status icons over the video (optional, off by default).</li>
+<li>Animated GIF support, alone or inside a folder.</li>
+<li>Low battery saver: lower the frame rate or the render width, or freeze on a still frame.</li>
+<li>Dim setting to darken the video.</li>
+<li>Folder order: random, sequential or fixed.</li>
+<li>Audio fade in and out.</li>
+<li>Still frame duration after boot is now a setting.</li>
+<li>Cached first frames older than 30 days are deleted, and only the 5 newest others are kept.</li>
+<li>Faster color processing when only brightness, contrast, gamma or dim change.</li>
+<li>Fixes: padded decoder frame height (for example 1088 for 1080), audio restarting together with the video on every loop, crash guard no longer counts quick unlocks as failed starts.</li>
+</ul>
+]]></content>
+        <author>
+            <name>grn15RenS</name>
+            <uri>https://github.com/grn15RenS</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Task Manager Network Speed in Bytes 1.3]]></title>
         <id>https://windhawk.net/mods/taskmgr-network-bytes#57b6069a465ecca327e085d3d0b2057fad533a43</id>
@@ -466,63 +533,6 @@ for these values at all.</li>
         <author>
             <name>Lucidic15</name>
             <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Audio Flipper 1.5.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-audio-flipper#b84c547aa1792f8da203658b97e95ce84c60c987</id>
-        <link href="https://windhawk.net/mods/taskbar-audio-flipper"/>
-        <updated>2026-11-13T17:00:05.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Icons only</strong> in the right-click menu shows just the icons, without the device names, volume levels and bars. Switching the output or input then shows its name in a popup for a moment.</li>
-<li><strong>Show volume flyout on hover</strong> in the menu turns the volume flyout off.</li>
-<li><strong>Position</strong> in the menu moves the widget, like the <strong>Position</strong> setting; whichever you changed last is used.</li>
-<li>At the left end of the taskbar, the widget goes right of the Widgets button instead of over it.</li>
-<li>The devices taken out of the rotation and the webcam names are now kept in portable Windhawk too.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Floating Taskbar 2.1.14]]></title>
-        <id>https://windhawk.net/mods/floating-taskbar#68650cb524e6e9976dcf9e2cf602fff41c13ec40</id>
-        <link href="https://windhawk.net/mods/floating-taskbar"/>
-        <updated>2026-11-13T08:01:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add hover-radius support for taskbar and tray controls that expose <code>CornerRadius</code> directly.</li>
-<li>Cover SystemTray icon, notification icon, quick-settings, and tray-frame hover hosts.</li>
-<li>Lower the default hover corner radius from 20 to 10 pixels.</li>
-</ul>
-]]></content>
-        <author>
-            <name>chaochenzhudian</name>
-            <uri>https://github.com/chaochenzhudian</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Drag to Delete 1.1.0]]></title>
-        <id>https://windhawk.net/mods/drag-to-delete#65feabc14ab993c83f5a27bc88216e9d0b948bc6</id>
-        <link href="https://windhawk.net/mods/drag-to-delete"/>
-        <updated>2026-11-13T08:01:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Placement modes: Added Follow cursor, Nearby, and Top.</li>
-<li>Ctrl+Z undo: Added native Shell undo via IFileOperation.</li>
-<li>System icon option: Added sharp native Windows Recycle Bin icon.</li>
-<li>Optional shadow: Added toggleable ShowShadow setting.</li>
-<li>Distance auto-hide: Target fades out when dragging far away.</li>
-<li>Fullscreen Z-order fix: Stays visible over fullscreen background windows.</li>
-<li>Search drag support: Recycles Everything &amp; Power Tools search items.</li>
-<li>Desktop Shell items: Added support for CFSTR_SHELLIDLIST desktop selections.</li>
-<li>Virtual item filtering: Safely ignores non-filesystem virtual items.</li>
-<li>Dynamic monitor DPI: Automatically updates scaling across different monitors.</li>
-</ul>
-]]></content>
-        <author>
-            <name>iMAboud</name>
-            <uri>https://github.com/iMAboud</uri>
         </author>
     </entry>
 </feed>

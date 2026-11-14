@@ -1988,7 +1988,7 @@
         "ratingUsers": 12,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790331791000,
+        "updated": 1794679485000,
         "users": 76
       },
       "metadata": {
@@ -2004,7 +2004,7 @@
           "chrome.exe"
         ],
         "name": "Chrome Context Menu Items",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "chrome-middle-click-new-tab": {
@@ -3585,12 +3585,12 @@
         "ratingUsers": 13,
         "reviews": 0,
         "trendingSorting": 8.50056128101695,
-        "updated": 1793858606000,
+        "updated": 1794679480000,
         "users": 234
       },
       "metadata": {
         "author": "Wheatlay",
-        "compilerOptions": "-lole32 -loleaut32 -ld2d1 -ldwrite -lshcore -lgdi32 -lwindowscodecs -ladvapi32",
+        "compilerOptions": "-lole32 -loleaut32 -ld2d1 -ldwrite -lshcore -lgdi32 -lwindowscodecs -ladvapi32 -lshell32 -ldwmapi -lwinmm",
         "description": "Replaces Windows notification banners with compact chat-style cards: avatar, sender and a few lines of text",
         "github": "https://github.com/Wheatlay",
         "include": [
@@ -3599,7 +3599,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Compact Notifications",
-        "version": "1.0"
+        "version": "1.2"
       }
     },
     "compact-rdp-connection-bar": {
@@ -10574,24 +10574,23 @@
         "ratingUsers": 17,
         "reviews": 0,
         "trendingSorting": 43.1,
-        "updated": 1794114101000,
+        "updated": 1794679475000,
         "users": 431
       },
       "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
         "author": "grn15RenS",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lmfplat -lmfreadwrite -lmfuuid -lwinmm -ladvapi32 -luuid -ld3d11",
-        "description": "Play a video as the lock screen and password screen background",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lmfplat -lmfreadwrite -lmfuuid -lwinmm -luuid -ld3d11 -lgdi32 -luser32 -lshell32 -luxtheme",
+        "description": "Play videos and animated GIFs on the lock screen and sign-in screen",
         "donateUrl": "https://ko-fi.com/grn15rens",
         "github": "https://github.com/grn15RenS",
         "include": [
-          "LogonUI.exe"
+          "LogonUI.exe",
+          "LockApp.exe",
+          "windhawk.exe"
         ],
         "license": "GPL-3.0",
         "name": "Lock Screen Live Wallpaper",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "lockscreen-datetime-format": {
