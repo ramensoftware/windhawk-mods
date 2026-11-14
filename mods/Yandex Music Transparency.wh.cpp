@@ -24,14 +24,19 @@ Makes the Yandex Music desktop application window transparent. You can adjust th
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <wchar.h>
+#include <mutex>
+#include <unordered_set>
 
 struct Settings {
     int alpha;
 };
 
 Settings g_settings;
+std::mutex g_windowsMutex;
+std::unordered_set<HWND> g_subclassedWindows;
 bool g_unloading = false;
 
 void LoadSettings() {
@@ -48,7 +53,7 @@ bool IsTargetWindow(HWND hwnd) {
     if (pid != GetCurrentProcessId()) return false;
     if (GetParent(hwnd) != NULL) return false;
 
-    WCHAR className;
+    WCHAR className[64];
     if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0 ||
         wcscmp(className, L"Chrome_WidgetWin_1") != 0) {
         return false;
@@ -76,7 +81,7 @@ BOOL WINAPI SetLayeredWindowAttributes_Hook(HWND hwnd, COLORREF crKey, BYTE bAlp
 }
 
 void ApplyTransparency(HWND hwnd) {
-    if (!IsTargetWindow(hwnd)) return;
+    if (!IsWindow(hwnd)) return;
 
     LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
     if (exStyle & WS_EX_LAYERED) {
@@ -91,7 +96,7 @@ void ApplyTransparency(HWND hwnd) {
 }
 
 void RestoreTransparency(HWND hwnd) {
-    if (!IsTargetWindow(hwnd)) return;
+    if (!IsWindow(hwnd)) return;
 
     LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
     if ((exStyle & WS_EX_LAYERED) && !UsesColorKey(hwnd)) {
@@ -100,26 +105,83 @@ void RestoreTransparency(HWND hwnd) {
     }
 }
 
-BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
-    if (!IsWindowVisible(hwnd)) return TRUE;
-
-    if (lParam == 1) {
-        RestoreTransparency(hwnd);
-    } else {
-        ApplyTransparency(hwnd);
+LRESULT CALLBACK WindowSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
+    switch (uMsg) {
+        case WM_STYLECHANGING: {
+            if (!g_unloading && wParam == GWL_EXSTYLE) {
+                STYLESTRUCT* ss = (STYLESTRUCT*)lParam;
+                if (ss && !(ss->styleNew & WS_EX_LAYERED) && !UsesColorKey(hwnd)) {
+                    ss->styleNew |= WS_EX_LAYERED;
+                }
+            }
+            break;
+        }
+        case WM_STYLECHANGED: {
+            if (!g_unloading && wParam == GWL_EXSTYLE) {
+                ApplyTransparency(hwnd);
+            }
+            break;
+        }
+        case WM_NCDESTROY: {
+            std::lock_guard<std::mutex> lock(g_windowsMutex);
+            g_subclassedWindows.erase(hwnd);
+            break;
+        }
     }
-    return TRUE;
+
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
 }
 
-using ShowWindow_t = decltype(&ShowWindow);
-ShowWindow_t ShowWindow_Original;
+void AttachToWindow(HWND hwnd) {
+    if (g_unloading || !IsTargetWindow(hwnd)) return;
 
-BOOL WINAPI ShowWindow_Hook(HWND hwnd, int nCmdShow) {
-    BOOL result = ShowWindow_Original(hwnd, nCmdShow);
-    if (!g_unloading && IsWindowVisible(hwnd)) {
-        ApplyTransparency(hwnd);
+    {
+        std::lock_guard<std::mutex> lock(g_windowsMutex);
+        if (g_subclassedWindows.count(hwnd)) {
+            ApplyTransparency(hwnd);
+            return;
+        }
+        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, WindowSubclassProc, 0)) {
+            return;
+        }
+        g_subclassedWindows.insert(hwnd);
     }
-    return result;
+
+    ApplyTransparency(hwnd);
+}
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original;
+
+HWND WINAPI CreateWindowExW_Hook(
+    DWORD dwExStyle,
+    LPCWSTR lpClassName,
+    LPCWSTR lpWindowName,
+    DWORD dwStyle,
+    int X,
+    int Y,
+    int nWidth,
+    int nHeight,
+    HWND hWndParent,
+    HMENU hMenu,
+    HINSTANCE hInstance,
+    LPVOID lpParam
+) {
+    HWND hwnd = CreateWindowExW_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle,
+        X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam
+    );
+
+    if (hwnd && !g_unloading && hWndParent == NULL) {
+        AttachToWindow(hwnd);
+    }
+
+    return hwnd;
+}
+
+BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
+    AttachToWindow(hwnd);
+    return TRUE;
 }
 
 BOOL Wh_ModInit() {
@@ -130,8 +192,8 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
+    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original);
     Wh_SetFunctionHook((void*)SetLayeredWindowAttributes, (void*)SetLayeredWindowAttributes_Hook, (void**)&SetLayeredWindowAttributes_Original);
-    Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
 
     return TRUE;
 }
@@ -142,10 +204,30 @@ void Wh_ModAfterInit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    EnumWindows(EnumWindowsProc, 0);
+
+    std::vector<HWND> windows;
+    {
+        std::lock_guard<std::mutex> lock(g_windowsMutex);
+        windows.assign(g_subclassedWindows.begin(), g_subclassedWindows.end());
+    }
+
+    for (HWND hwnd : windows) {
+        ApplyTransparency(hwnd);
+    }
 }
 
 void Wh_ModUninit() {
     g_unloading = true;
-    EnumWindows(EnumWindowsProc, 1);
+
+    std::vector<HWND> windows;
+    {
+        std::lock_guard<std::mutex> lock(g_windowsMutex);
+        windows.assign(g_subclassedWindows.begin(), g_subclassedWindows.end());
+        g_subclassedWindows.clear();
+    }
+
+    for (HWND hwnd : windows) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, WindowSubclassProc);
+        RestoreTransparency(hwnd);
+    }
 }
