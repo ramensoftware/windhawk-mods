@@ -17,6 +17,8 @@
 
 Transforms Windows 11 desktop icons (`FolderView` `SysListView32`) into sleek Liquid Glass tiles:
 
+![Liquid Glass Icons Preview](https://github.com/user-attachments/assets/4c75fe4d-aa8c-4d23-8273-903a5738355b)
+
 - **Translucent Glass Backing**: Renders customizable glass tiles behind desktop icons with multiple optical presets (`Liquid Glass`, `Clear Transparent Glass`, `Frosted Crystal`, `Obsidian Tint`, `Glacial Aurora`, or custom hex tints).
 - **Independent Rim & Sheen Control**: Dedicated slider to dial in border specular brightness (0–100%) independently from glass body transparency.
 - **Translucent Icons**: Blends the icon graphic itself into the glass tile (`iconOpacity` slider, default `75%`) instead of rendering opaque blocks.
