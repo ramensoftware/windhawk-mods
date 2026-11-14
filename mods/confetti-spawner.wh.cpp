@@ -32,12 +32,18 @@ other program.
 
 | Default | Action |
 | --- | --- |
-| `Ctrl+Shift+C` | Fire a burst. Hold the keys to keep firing |
-| `Ctrl+Shift+E` | Cycle the origin (sides, top, bottom, cursor, random) and fire |
-| `Ctrl+Shift+M` | Cycle the mode (confetti, emoji, mixed) and fire |
+| `Ctrl+Alt+Shift+C` | Fire a burst. Hold the keys to keep firing |
+| none | Cycle the origin (sides, top, bottom, cursor, random) and fire |
+| none | Cycle the mode (confetti, emoji, mixed) and fire |
 
-Hotkeys are written as modifiers plus a key, for example `Ctrl+Shift+C`,
-`Alt+F9`, `Win+X` or `Ctrl+Alt+Space`. Modifiers are `Ctrl`, `Shift`, `Alt` and
+The cycle hotkeys are off by default. Set them in the settings to use them.
+
+While the mod is enabled, its hotkey combinations are reserved system-wide, so
+other apps stop receiving them. Pick combinations you don't use elsewhere (for
+example `Ctrl+Shift+C` is copy in Windows Terminal).
+
+Hotkeys are written as modifiers plus a key, for example `Ctrl+Alt+Shift+C`,
+`Alt+F9`, `Ctrl+Alt+F9` or `Ctrl+Alt+Space`. Modifiers are `Ctrl`, `Shift`, `Alt` and
 `Win`. Keys can be a letter, a digit, `F1` to `F24`, `Space`, `Enter`, `Tab`,
 `Esc`, `Insert`, `Delete`, `Home`, `End`, `PageUp`, `PageDown`, the arrow keys
 (`Up`, `Down`, `Left`, `Right`), `Num0` to `Num9`, `Pause` or `PrintScreen`.
@@ -111,13 +117,13 @@ Each setting's description says how: for example `Gravity` is in hundredths, so
 
 // ==WindhawkModSettings==
 /*
-- hotkeyFire: Ctrl+Shift+C
+- hotkeyFire: Ctrl+Alt+Shift+C
   $name: Fire hotkey
-  $description: Fires a burst, and keeps firing while the keys are held. Examples - Ctrl+Shift+C, Alt+F9, Win+X. Use none to disable.
-- hotkeyCycleOrigin: Ctrl+Shift+E
+  $description: Fires a burst, and keeps firing while the keys are held. Examples - Ctrl+Alt+Shift+C, Alt+F9, Ctrl+Alt+F9. Use none to disable.
+- hotkeyCycleOrigin: none
   $name: Cycle origin hotkey
   $description: Switches to the next origin and fires a burst. Not saved to the settings. Use none to disable.
-- hotkeyCycleMode: Ctrl+Shift+M
+- hotkeyCycleMode: none
   $name: Cycle mode hotkey
   $description: Switches between confetti, emoji and mixed and fires a burst. Not saved to the settings. Use none to disable.
 - mode: confetti
@@ -153,7 +159,7 @@ Each setting's description says how: for example `Gravity` is in hundredths, so
 - spread: 100
   $name: Spread (hundredths)
   $description: Sideways spread of the launch, 10 to 500, where 100 means 1.00. Higher covers more of the screen.
-- density: 300
+- sourceWidth: 300
   $name: Source width (hundredths)
   $description: How wide the source and launch fan are, 10 to 300, where 300 means 3.00. Higher covers more of the screen.
 - wobble: 50
@@ -215,6 +221,8 @@ Each setting's description says how: for example `Gravity` is in hundredths, so
 #include <shellapi.h>
 #include <shobjidl.h>
 #include <wrl/client.h>
+
+#include <windhawk_utils.h>
 
 #include <algorithm>
 #include <cmath>
@@ -316,6 +324,8 @@ struct Emitter {
     float cursorX, cursorY;
 };
 
+struct Overlay;
+
 // A running emission. Streams started by a hotkey press stay alive while the
 // key is held (vk != 0); otherwise they end once `total` particles are out.
 struct Stream {
@@ -324,6 +334,9 @@ struct Stream {
     HMONITOR monitor;  // fixed target, unused for the cursor origin
     UINT mods;
     UINT vk;  // 0 when not tied to a held key
+    // Overlay currently used. Overlays are only destroyed when g_streams is
+    // empty (Tick) or at cleanup, so this stays valid while the stream lives.
+    Overlay* overlay;
     int total;
     int emitted;
     float rate;  // particles per second
@@ -373,12 +386,12 @@ unsigned g_settingsGen = 1;
 Origin g_activeOrigin = Origin::Sides;
 Mode g_activeMode = Mode::Confetti;
 
-ComPtr<ID2D1Factory> g_d2d;
-ComPtr<IDWriteFactory> g_dwrite;
-ComPtr<ID2D1PathGeometry> g_geoTriangle;
-ComPtr<ID2D1PathGeometry> g_geoStar;
-ComPtr<ID2D1PathGeometry> g_geoHeart;
-ComPtr<IVirtualDesktopManager> g_desktopManager;
+[[clang::no_destroy]] ComPtr<ID2D1Factory> g_d2d;
+[[clang::no_destroy]] ComPtr<IDWriteFactory> g_dwrite;
+[[clang::no_destroy]] ComPtr<ID2D1PathGeometry> g_geoTriangle;
+[[clang::no_destroy]] ComPtr<ID2D1PathGeometry> g_geoStar;
+[[clang::no_destroy]] ComPtr<ID2D1PathGeometry> g_geoHeart;
+[[clang::no_destroy]] ComPtr<IVirtualDesktopManager> g_desktopManager;
 
 std::vector<Overlay*> g_overlays;
 std::vector<Stream> g_streams;
@@ -393,8 +406,6 @@ LONGLONG g_nextFrame;
 
 std::mt19937 g_rng;
 
-using SetThreadDpiAwarenessContext_t =
-    DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
 using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
 GetDpiForWindow_t g_getDpiForWindow;
 
@@ -454,22 +465,16 @@ std::vector<std::wstring> Split(const std::wstring& s, WCHAR sep) {
 }
 
 std::wstring GetStringSetting(PCWSTR name) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
-    Wh_FreeStringSetting(value);
-    return result;
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 
 // Reads a Windhawk string array setting. Each item may itself hold several
 // comma separated values.
 std::vector<std::wstring> GetStringArraySetting(PCWSTR name) {
     std::vector<std::wstring> out;
-    WCHAR key[64];
     for (int i = 0; i < 64; i++) {
-        swprintf_s(key, L"%s[%d]", name, i);
-        PCWSTR value = Wh_GetStringSetting(key);
-        std::wstring item = value ? value : L"";
-        Wh_FreeStringSetting(value);
+        std::wstring item =
+            WindhawkUtils::StringSetting::make(L"%s[%d]", name, i).get();
         if (item.empty()) {
             break;
         }
@@ -536,9 +541,6 @@ Origin ParseOrigin(const std::wstring& text) {
     if (s == L"bottom") {
         return Origin::Bottom;
     }
-    if (s == L"center") {
-        return Origin::Cursor;  // center was removed; cursor replaces it
-    }
     if (s == L"cursor") {
         return Origin::Cursor;
     }
@@ -590,7 +592,7 @@ PCWSTR ModeName(Mode mode) {
 ////////////////////////////////////////////////////////////////////////////////
 // Hotkeys
 
-// Parses strings such as "Ctrl+Shift+C", "Alt+F9" or "Win+X". Returns false
+// Parses strings such as "Ctrl+Shift+C", "Alt+F9" or "Ctrl+Alt+F9". Returns false
 // for "none", an empty string or anything that can't be parsed.
 bool ParseHotkey(const std::wstring& text, UINT* modifiers, UINT* vk) {
     static const struct {
@@ -711,7 +713,7 @@ void LoadSettings() {
     s.speed = (float)Clamp(Wh_GetIntSetting(L"speed"), 5, 40);
     s.gravity = Clamp(Wh_GetIntSetting(L"gravity"), 0, 200) / 100.0f;
     s.spread = Clamp(Wh_GetIntSetting(L"spread"), 10, 500) / 100.0f;
-    s.density = Clamp(Wh_GetIntSetting(L"density"), 10, 300) / 100.0f;
+    s.density = Clamp(Wh_GetIntSetting(L"sourceWidth"), 10, 300) / 100.0f;
     s.sideAngle = (float)Clamp(Wh_GetIntSetting(L"sideAngle"), 10, 90);
     s.wobble = Clamp(Wh_GetIntSetting(L"wobble"), 0, 50) / 10.0f;
     s.size = Clamp(Wh_GetIntSetting(L"size"), 10, 300) / 100.0f;
@@ -862,13 +864,33 @@ bool CreateGeometries() {
     return true;
 }
 
+// Optional: lets a reused overlay be skipped after a virtual desktop switch.
+// Without it every burst simply reuses the overlay.
+void CreateDesktopManager() {
+    g_desktopManager.Reset();
+    CoCreateInstance(kClsidVirtualDesktopManager, nullptr, CLSCTX_ALL,
+                     IID_PPV_ARGS(&g_desktopManager));
+}
+
 bool IsOnCurrentDesktop(HWND hwnd) {
     if (!g_desktopManager) {
         return true;
     }
     BOOL onCurrent = TRUE;
-    if (FAILED(g_desktopManager->IsWindowOnCurrentVirtualDesktop(
-            hwnd, &onCurrent))) {
+    HRESULT hr =
+        g_desktopManager->IsWindowOnCurrentVirtualDesktop(hwnd, &onCurrent);
+    if (hr == RPC_E_DISCONNECTED ||
+        hr == HRESULT_FROM_WIN32(RPC_S_SERVER_UNAVAILABLE)) {
+        // Explorer restarted, reconnect and retry once.
+        CreateDesktopManager();
+        if (!g_desktopManager) {
+            return true;
+        }
+        onCurrent = TRUE;
+        hr = g_desktopManager->IsWindowOnCurrentVirtualDesktop(hwnd,
+                                                               &onCurrent);
+    }
+    if (FAILED(hr)) {
         return true;
     }
     return onCurrent != FALSE;
@@ -1462,11 +1484,17 @@ void UpdateStreams(float dt) {
             s.vk = 0;
         }
 
-        HMONITOR monitor =
-            s.origin == Origin::Cursor
-                ? MonitorFromPoint(cursor, MONITOR_DEFAULTTOPRIMARY)
-                : s.monitor;
-        Overlay* o = GetOverlay(monitor);
+        // Fixed origins keep the overlay found in StartStream. The cursor
+        // origin looks it up again only when the pointer changes monitor.
+        if (s.origin == Origin::Cursor) {
+            HMONITOR monitor =
+                MonitorFromPoint(cursor, MONITOR_DEFAULTTOPRIMARY);
+            if (monitor != s.monitor || !s.overlay) {
+                s.monitor = monitor;
+                s.overlay = GetOverlay(monitor);
+            }
+        }
+        Overlay* o = s.overlay;
         if (!o) {
             g_streams.erase(g_streams.begin() + i);
             continue;
@@ -1539,7 +1567,8 @@ void StartStream(UINT mods, UINT vk) {
         cursor = {0, 0};
     }
     HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTOPRIMARY);
-    if (!GetOverlay(monitor)) {
+    Overlay* overlay = GetOverlay(monitor);
+    if (!overlay) {
         return;
     }
 
@@ -1555,6 +1584,7 @@ void StartStream(UINT mods, UINT vk) {
     s.origin = origin;
     s.mode = g_activeMode;
     s.monitor = monitor;
+    s.overlay = overlay;
     s.mods = mods;
     s.vk = vk;
     s.total = g_settings.count;
@@ -1649,13 +1679,6 @@ LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 bool WorkerInit() {
-    auto setThreadDpiAwarenessContext =
-        (SetThreadDpiAwarenessContext_t)GetProcAddress(
-            GetModuleHandle(L"user32.dll"), "SetThreadDpiAwarenessContext");
-    if (setThreadDpiAwarenessContext) {
-        setThreadDpiAwarenessContext(
-            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    }
     g_getDpiForWindow = (GetDpiForWindow_t)GetProcAddress(
         GetModuleHandle(L"user32.dll"), "GetDpiForWindow");
 
@@ -1680,10 +1703,7 @@ bool WorkerInit() {
         return false;
     }
 
-    // Optional: lets a reused overlay be skipped after a virtual desktop
-    // switch. Without it every burst simply reuses the overlay.
-    CoCreateInstance(kClsidVirtualDesktopManager, nullptr, CLSCTX_ALL,
-                     IID_PPV_ARGS(&g_desktopManager));
+    CreateDesktopManager();
 
     g_frameTimer = CreateWaitableTimerExW(
         nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
