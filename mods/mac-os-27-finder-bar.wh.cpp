@@ -793,9 +793,9 @@ static void LoadSettings() {
     s.islHistNotices = OvrInt(L"islHistNotices") != 0;
     {
         std::wstring v = OvrStr(L"islStyle");
-        // 0 acompanha a barra ("glass" das versões anteriores), 1 vidro, 2 transparente,
-        // 3 vidro líquido, 4 vidro líquido personalizado, 5 claro, 6 escuro, 7 OLED.
-        s.islStyle = v == L"frost" ? 1 : v == L"transparent" ? 2 : v == L"liquid" ? 3 : v == L"tinted" ? 4
+        // 0 acompanha a barra ("glass" das versões anteriores), 1 vidro (2, transparente,
+        // saiu: na pílula ele ficava igual ao líquido), 3 vidro líquido, 4 vidro líquido personalizado, 5 claro, 6 escuro, 7 OLED.
+        s.islStyle = v == L"frost" ? 1 : v == L"transparent" ? 3 : v == L"liquid" ? 3 : v == L"tinted" ? 4
                    : v == L"light" ? 5 : v == L"dark"        ? 6 : v == L"oled"   ? 7 : 0;
         v = OvrStr(L"islIn");
         s.islIn = v == L"circle" ? 1 : v == L"drop" ? 2 : v == L"fade" ? 3 : 0;
@@ -12654,7 +12654,7 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_ISLAND, L"Mostrar avisos em pílula", 0, 0},
     {BR_ACTION, BV_ISLTEST, L"Testar a pílula agora", 0, 0},
     {BR_GROUP, BV_NONE, L"Aparência", 0, 0},
-    {BR_CHOICE, BV_ISLSTYLE, L"Estilo", 0, 0, L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro)"},
+    {BR_CHOICE, BV_ISLSTYLE, L"Estilo", 0, 0, L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro; com Transparente, líquido)"},
     {BR_SLIDER, BV_ISLSIZE, L"Tamanho", 0, 0},
     {BR_SLIDER, BV_ISLDUR, L"Tempo na tela", 0, 0, L"Avisos que dá para abrir ou responder ficam 2,5 vezes mais"},
     {BR_CHOICE, BV_ISLPOS, L"Posição", 0, 0},
@@ -12918,7 +12918,7 @@ static int BsGet(int val) {
         case BV_TLEVEL: return g_settings.tintLevel;
         case BV_TREACH: return g_settings.tintReach;
         case BV_BSSTYLE: return g_bsStyle;
-        case BV_ISLSTYLE: return g_settings.islStyle;
+        case BV_ISLSTYLE: return g_settings.islStyle >= 3 ? g_settings.islStyle - 1 : g_settings.islStyle;  // sem o 2
         case BV_ISLSIZE: return std::clamp((g_settings.islSize - 80) * 100 / 60, 0, 100);
         case BV_ISLDUR: return std::clamp((g_settings.islDur - 15) * 100 / 65, 0, 100);
         case BV_ISLIN: return g_settings.islIn;
@@ -12990,7 +12990,8 @@ static void BsSet(int val, int v) {
     switch (val) {
         case BV_ISLSTYLE: {
             static const PCWSTR kNames[] = {L"follow", L"frost", L"transparent", L"liquid", L"tinted", L"light", L"dark", L"oled"};
-            g_settings.islStyle = std::clamp(v, 0, 7);
+            v = std::clamp(v, 0, 6);
+            g_settings.islStyle = v >= 2 ? v + 1 : v;  // a lista não tem o 2 (transparente)
             OvrSetStr(L"islStyle", kNames[g_settings.islStyle]);
             return;
         }
@@ -13469,7 +13470,7 @@ static const PCWSTR kBsHideMode[] = {L"Não", L"Ao encostar o mouse no topo", L"
 static const PCWSTR kBsTextColorMon[] = {L"Como nos outros", L"Automático", L"Branco", L"Preto"};
 static const PCWSTR kBsCcClose[] = {L"Cascata", L"Encolher", L"Esmaecer", L"Deslizar para cima", L"Nenhuma"};
 static const PCWSTR kBsLookChoices[] = {L"Desfoque", L"Líquido", L"Transparente"};
-static const PCWSTR kBsIslStyle[] = {L"Acompanhar a barra", L"Vidro", L"Transparente", L"Líquido",
+static const PCWSTR kBsIslStyle[] = {L"Acompanhar a barra", L"Vidro", L"Líquido",
                                      L"Vidro líquido personalizado", L"Claro", L"Escuro", L"OLED"};
 static const PCWSTR kBsIslIn[] = {L"Expandir", L"Círculo", L"Descer", L"Esmaecer"};
 static const PCWSTR kBsIslOut[] = {L"Encolher", L"Sugar", L"Subir", L"Círculo", L"Esmaecer"};
@@ -13517,7 +13518,8 @@ static const PCWSTR* BsChoiceLabels(int val) {
 static int BsChoiceCount(int val) {
     switch (val) {
         case BV_ISLPOS: case BV_WXUNIT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: return 2;
-        case BV_BARSTYLE: case BV_ISLSTYLE: return 8;
+        case BV_BARSTYLE: return 8;
+        case BV_ISLSTYLE: return 7;
         case BV_LANG: return (int)ARRAYSIZE(kBsLang);
         case BV_ISLIN: return 4;
         case BV_ISLOUT: case BV_CCCLOSE: return 5;
@@ -18300,12 +18302,12 @@ static IslGeom IslandGeom(double t) {
 // O estilo da pílula (1 a 7): o escolhido, ou o da barra ("Cor da janela" vira vidro).
 static int IslStyle() {
     if (g_settings.islStyle != 0) return g_settings.islStyle;
-    static const int kFromBar[] = {1, 2, 3, 4, 1, 5, 6, 7};
+    static const int kFromBar[] = {1, 3, 3, 4, 1, 5, 6, 7};  // barra transparente: pílula líquida
     return kFromBar[std::clamp(g_settings.barStyle, 0, 7)];
 }
 static bool IslSolid() { return IslStyle() >= 5; }
 // Enquanto cria e desenha a pílula, o vidro é o do estilo dela (e não o ajuste
-// de vidro dos menus): vidro = desfoque sem refração; transparente = sem foto.
+// de vidro dos menus): vidro = desfoque sem refração.
 struct IslGlassScope {
     GlassPrefs saved;
     IslGlassScope() : saved(g_glass) {
@@ -18316,12 +18318,6 @@ struct IslGlassScope {
                 g_glass.clear = false;
                 g_glass.refraction = 0;
                 g_glass.blur = std::max(g_glass.blur, 70);
-                break;
-            case 2:
-                g_glass.liquid = false;
-                g_glass.tinted = false;
-                g_glass.clear = true;
-                g_glass.transparency = std::max(g_glass.transparency, 70);
                 break;
             case 3:
                 g_glass.liquid = true;
@@ -24950,7 +24946,7 @@ const UiTr kUiTr[] = {
     {L"Digite %s em %s e tecle Enter.", L"Type %s on %s and press Enter.", L"Escribe %s en %s y pulsa Enter.", L"Tapez %s sur %s puis appuyez sur Entrée.", L"Gib %s auf %s ein und drücke die Eingabetaste.", L"Digita %s su %s e premi Invio.", L"输入 %s（在 %s 上），然后按 Enter。"},
     {L"Um vidro para tudo: Central, menus, painéis e pílulas", L"One glass for everything: Control Center, menus, panels and pills", L"Un vidrio para todo: Centro de control, menús, paneles y píldoras", L"Un verre pour tout : Centre de contrôle, menus, panneaux et pastilles", L"Ein Glas für alles: Kontrollzentrum, Menüs, Bereiche und Pillen", L"Un vetro per tutto: Centro di Controllo, menu, pannelli e pillole", L"一种玻璃用于全部：控制中心、菜单、面板和胶囊"},
     {L"Acompanhar a barra", L"Match the bar", L"Igual que la barra", L"Comme la barre", L"Wie die Leiste", L"Come la barra", L"跟随菜单栏"},
-    {L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro)", L"Match the bar: the bar’s background (glass with Window color)", L"Igual que la barra: el fondo de la barra (vidrio con Color de la ventana)", L"Comme la barre : le fond de la barre (verre avec Couleur de la fenêtre)", L"Wie die Leiste: ihr Hintergrund (Glas bei Fensterfarbe)", L"Come la barra: lo sfondo della barra (vetro con Colore della finestra)", L"跟随菜单栏：与菜单栏相同的背景（窗口颜色时为玻璃）"},
+    {L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro; com Transparente, líquido)", L"Match the bar: the bar’s background (glass with Window color, liquid with Clear)", L"Igual que la barra: el fondo de la barra (vidrio con Color de la ventana, líquido con Transparente)", L"Comme la barre : le fond de la barre (verre avec Couleur de la fenêtre, liquide avec Transparent)", L"Wie die Leiste: ihr Hintergrund (Glas bei Fensterfarbe, flüssig bei Klar)", L"Come la barra: lo sfondo della barra (vetro con Colore della finestra, liquido con Trasparente)", L"跟随菜单栏：与菜单栏相同的背景（窗口颜色时为玻璃，透明时为液态）"},
     {L"Claro", L"Light", L"Claro", L"Clair", L"Hell", L"Chiaro", L"浅色"},
     {L"Vidro: o mesmo vidro da Central e dos menus", L"Glass: the same glass as the Control Center and menus", L"Vidrio: el mismo vidrio del Centro de control y los menús", L"Verre : le même verre que le Centre de contrôle et les menus", L"Glas: dasselbe Glas wie Kontrollzentrum und Menüs", L"Vetro: lo stesso vetro del Centro di Controllo e dei menu", L"玻璃：与控制中心和菜单相同的玻璃"},
     {L"Formato dos ícones", L"Icon shape", L"Forma de los iconos", L"Forme des icônes", L"Symbolform", L"Forma delle icone", L"图标形状"},
