@@ -24081,6 +24081,10 @@ BOOL WhTool_ModInit() {
 
 void WhTool_ModUninit() {
     Wh_Log(L">");
+    // Avisa uma cópia nova do mod (atualização ou recompilação) que esta está
+    // fechando: ela espera esta sair em vez de desistir. O evento existe enquanto
+    // este processo existir.
+    if (HANDLE closing = CreateEventW(nullptr, TRUE, FALSE, L"windhawk-tool-mod-closing_" WH_MOD_ID)) SetEvent(closing);
     if (g_stopEvent) SetEvent(g_stopEvent);
     if (g_thread) {
         // WM_QUIT também tira a thread de uma caixa de mensagem ou do diálogo de
@@ -24854,11 +24858,31 @@ BOOL Wh_ModInit() {
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
             // Finder Bar change: when the mod is updated or recompiled, the new
-            // process can start while the old one is still closing its bar.
-            // Wait for it (the mutex is released when it exits) instead of
-            // quitting, so the bar comes back without toggling the mod.
-            DWORD wait = WaitForSingleObject(g_toolModProcessMutex, 15000);
-            if (wait != WAIT_OBJECT_0 && wait != WAIT_ABANDONED) {
+            // process can start while the old one is still closing its bar. The
+            // mutex object exists for as long as the old process does, so keep
+            // trying to create it for 3 s (15 s once the old process has said it
+            // is closing) instead of quitting at once. A copy that is just
+            // running (for example when the Windhawk window opens) never says
+            // it's closing, so the new process still quits.
+            CloseHandle(g_toolModProcessMutex);
+            g_toolModProcessMutex = nullptr;
+            ULONGLONG start = GetTickCount64();
+            for (;;) {
+                Sleep(100);
+                HANDLE m = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+                if (m && GetLastError() != ERROR_ALREADY_EXISTS) {
+                    g_toolModProcessMutex = m;
+                    break;
+                }
+                if (m) CloseHandle(m);
+                bool closing = false;
+                if (HANDLE ev = OpenEventW(SYNCHRONIZE, FALSE, L"windhawk-tool-mod-closing_" WH_MOD_ID)) {
+                    closing = WaitForSingleObject(ev, 0) == WAIT_OBJECT_0;
+                    CloseHandle(ev);
+                }
+                if (GetTickCount64() - start > (closing ? 15000u : 3000u)) break;
+            }
+            if (!g_toolModProcessMutex) {
                 Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
                 ExitProcess(1);
             }
