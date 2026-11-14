@@ -12623,8 +12623,8 @@ static const BsRowDef kBsRows[] = {
     {BR_GROUP, BV_NONE, L"Comportamento", 0, 0},
     {BR_SWITCH, BV_BATTPCT, L"Mostrar a porcentagem da bateria", 0, 0},
     {BR_CHOICE, BV_HIDEMODE, L"Ocultar a barra", 0, 0, L"Com a alça, um clique na pílula fina no topo mostra a barra (as janelas descem) e outro clique a esconde"},
-    {BR_SWITCH, BV_HIDEFS, L"Ocultar em tela cheia", 0, 0, L"Jogos, vídeos e apps em tela cheia ficam sem a barra"},
-    {BR_SWITCH, BV_HIDEMAX, L"Ocultar com janela maximizada", 0, 0, L"A barra some quando uma janela é maximizada e volta sozinha ao minimizar ou ir para a área de trabalho; ligada, desativa \"Ocultar a barra\""},
+    {BR_SWITCH, BV_HIDEFS, L"Ocultar em tela cheia", 0, 0, L"Some quando um app ocupa a tela inteira sem barra de título (jogos, vídeos, F11 no navegador)"},
+    {BR_SWITCH, BV_HIDEMAX, L"Ocultar com janela maximizada", 0, 0, L"Some também com uma janela comum maximizada (com barra de título), que sobe até o topo; volta ao restaurar, minimizar ou ir para a área de trabalho. Ligada, desativa \"Ocultar a barra\""},
     {BR_CHOICE, BV_BARMON, L"Mostrar a barra em", 0, 0, L"Todos os monitores, o principal ou um deles; se o escolhido for desconectado, a barra vai para o principal"},
     {BR_SWITCH, BV_MORE, L"Recolher numa seta os ícones que não cabem", 0, 0, L"Como as setas ao lado do notch no macOS 27"},
     {BR_HEADER, BV_NONE, L"Menus e painéis", 0xE7C4, 0x5E5CE6, L"Tocando agora, pílulas de volume e brilho"},
@@ -12635,7 +12635,7 @@ static const BsRowDef kBsRows[] = {
     {BR_SLIDER, BV_NPSIZE, L"Tamanho", 0, 0},
     {BR_CHOICE, BV_NPBAR, L"Barra de progresso", 0, 0},
     {BR_GROUP, BV_NONE, L"Volume, brilho e Central", 0, 0},
-    {BR_SWITCH, BV_FLYOUTS, L"Pílulas de vidro (volume, brilho, Bluetooth)", 0, 0},
+    {BR_SWITCH, BV_FLYOUTS, L"Pílula ao vivo", 0, 0, L"Volume, brilho e Bluetooth abrem uma pílula pequena com o controle; desligada, abrem o menu completo"},
     {BR_SWITCH, BV_OSD, L"Indicador de volume e brilho", 0, 0, L"Logo abaixo do ícone na barra"},
     {BR_SWITCH, BV_DIM, L"Escurecer a tela com a Central de Controle", 0, 0},
     {BR_CHOICE, BV_CCCLOSE, L"Ao fechar a Central", 0, 0, L"Cascata: cada linha volta para dentro da linha de cima, de baixo para cima"},
@@ -23017,6 +23017,14 @@ static void UpdateWindowColor() {
         if (g_settings.barStyle == 4 && !b->autoShown) {
             bool zoomed = g_active.hwnd && IsWindow(g_active.hwnd) && IsZoomed(g_active.hwnd) && !IsIconic(g_active.hwnd) &&
                           MonitorFromWindow(g_active.hwnd, MONITOR_DEFAULTTONULL) == b->monitor;
+            // Com um menu da barra ou o Iniciar na frente, a janela continua lá
+            // embaixo: a cor fica (antes a barra ficava transparente).
+            HWND fg = GetForegroundWindow();
+            DWORD fgPid = 0;
+            if (fg) GetWindowThreadProcessId(fg, &fgPid);
+            bool overlay = fg && (fgPid == GetCurrentProcessId() || IsShellOverlayProcess(fg) ||
+                                  ClassIs(fg, L"Shell_TrayWnd") || ClassIs(fg, L"Shell_SecondaryTrayWnd"));
+            if (overlay) continue;
             if (zoomed) BarSamplePeekColor(b);
             else if (b->peekColorOn) {
                 b->peekColorOn = false;
@@ -23171,7 +23179,9 @@ static void BarSamplePeekColor(Bar* b) {
     RECT vr{};
     DWORD pid = 0;
     if (fg) GetWindowThreadProcessId(fg, &pid);
-    if (!fg || IsShellOrSelf(pid) || IsIconic(fg) || MonitorFromWindow(fg, MONITOR_DEFAULTTONULL) != b->monitor ||
+    // (Janelas do Explorador de Arquivos contam; a área de trabalho e a barra de tarefas, não.)
+    bool shellUi = pid == ShellPid() && !ClassIs(fg, L"CabinetWClass");
+    if (!fg || pid == GetCurrentProcessId() || shellUi || IsIconic(fg) || MonitorFromWindow(fg, MONITOR_DEFAULTTONULL) != b->monitor ||
         FAILED(DwmGetWindowAttribute(fg, 9 /*DWMWA_EXTENDED_FRAME_BOUNDS*/, &vr, sizeof(vr))) || vr.right - vr.left < 60) {
         if (b->peekColorOn) {
             b->peekColorOn = false;
@@ -24798,7 +24808,7 @@ const UiTr kUiTr[] = {
     {L"Escolha um monitor para dar a ele uma cor própria", L"Pick a display to give it its own color", L"Elige un monitor para darle su propio color", L"Choisissez un écran pour lui donner sa propre couleur", L"Wähle einen Bildschirm für eine eigene Farbe", L"Scegli un monitor per dargli un colore proprio", L"选择一台显示器，为它单独设置颜色"},
     {L"Como nos outros", L"Same as the others", L"Como en los demás", L"Comme les autres", L"Wie die anderen", L"Come gli altri", L"与其他相同"},
     {L"Ocultar com janela maximizada", L"Hide when a window is maximized", L"Ocultar con una ventana maximizada", L"Masquer quand une fenêtre est agrandie", L"Bei maximiertem Fenster ausblenden", L"Nascondi con una finestra ingrandita", L"窗口最大化时隐藏"},
-    {L"A barra some quando uma janela é maximizada e volta sozinha ao minimizar ou ir para a área de trabalho; ligada, desativa \"Ocultar a barra\"", L"The bar hides when a window is maximized and comes back on its own when you minimize it or go to the desktop; when on, it turns off \"Hide the bar\"", L"La barra se oculta al maximizar una ventana y vuelve sola al minimizarla o ir al escritorio; activada, desactiva \"Ocultar la barra\"", L"La barre se masque quand une fenêtre est agrandie et revient seule quand vous la réduisez ou allez sur le bureau ; activée, elle désactive \"Masquer la barre\"", L"Die Leiste verschwindet bei einem maximierten Fenster und kommt von selbst zurück, wenn du es minimierst oder zum Desktop gehst; eingeschaltet deaktiviert sie \"Leiste ausblenden\"", L"La barra si nasconde quando una finestra è ingrandita e torna da sola quando la riduci o vai sul desktop; attiva, disattiva \"Nascondi la barra\"", L"窗口最大化时菜单栏隐藏，最小化窗口或回到桌面时自动重新出现；开启后会关闭“隐藏菜单栏”"},
+    {L"Some também com uma janela comum maximizada (com barra de título), que sobe até o topo; volta ao restaurar, minimizar ou ir para a área de trabalho. Ligada, desativa \"Ocultar a barra\"", L"Also hides for a normal maximized window (with a title bar), which moves up to the top; comes back when it is restored, minimized or you go to the desktop. On, it turns off \"Hide the bar\"", L"También se oculta con una ventana normal maximizada (con barra de título), que sube hasta arriba; vuelve al restaurarla, minimizarla o ir al escritorio. Activada, desactiva \"Ocultar la barra\"", L"Se masque aussi pour une fenêtre normale agrandie (avec barre de titre), qui monte jusqu’en haut ; revient quand elle est restaurée, réduite ou sur le bureau. Activée, désactive « Masquer la barre »", L"Blendet sich auch bei einem normalen maximierten Fenster (mit Titelleiste) aus, das bis oben reicht; kommt zurück beim Wiederherstellen, Minimieren oder auf dem Desktop. An, schaltet „Leiste ausblenden“ aus", L"Si nasconde anche con una finestra normale ingrandita (con barra del titolo), che sale fino in alto; torna quando viene ripristinata, ridotta o sul desktop. Attiva, disattiva \"Nascondi la barra\"", L"普通窗口（有标题栏）最大化时也隐藏，窗口会升到顶部；还原、最小化或回到桌面时恢复。开启后会关闭“隐藏菜单栏”"},
     {L"Não", L"No", L"No", L"Non", L"Nein", L"No", L"否"},
     {L"Ocultar a barra", L"Hide the bar", L"Ocultar la barra", L"Masquer la barre", L"Leiste ausblenden", L"Nascondi la barra", L"隐藏菜单栏"},
     {L"Com a alça, um clique na pílula fina no topo mostra a barra (as janelas descem) e outro clique a esconde", L"With the handle, a click on the thin pill at the top shows the bar (windows move down) and another click hides it", L"Con la asa, un clic en la píldora fina de arriba muestra la barra (las ventanas bajan) y otro clic la oculta", L"Avec la poignée, un clic sur la fine pilule en haut affiche la barre (les fenêtres descendent) et un autre clic la masque", L"Mit dem Griff zeigt ein Klick auf die schmale Pille oben die Leiste (Fenster rücken nach unten), ein weiterer Klick blendet sie aus", L"Con la maniglia, un clic sulla pillola sottile in alto mostra la barra (le finestre scendono) e un altro clic la nasconde", L"使用拉手时，点击顶部的细长胶囊显示菜单栏（窗口下移），再次点击隐藏"},
@@ -24834,7 +24844,7 @@ const UiTr kUiTr[] = {
     {L"Comportamento", L"Behavior", L"Comportamiento", L"Comportement", L"Verhalten", L"Comportamento", L"行为"},
     {L"Mostrar a porcentagem da bateria", L"Show battery percentage", L"Mostrar el porcentaje de batería", L"Afficher le pourcentage de batterie", L"Akkuladung in Prozent anzeigen", L"Mostra percentuale batteria", L"显示电池百分比"},
     {L"Ocultar em tela cheia", L"Hide in full screen", L"Ocultar en pantalla completa", L"Masquer en plein écran", L"Im Vollbild ausblenden", L"Nascondi a schermo intero", L"全屏时隐藏"},
-    {L"Jogos, vídeos e apps em tela cheia ficam sem a barra", L"Full-screen games, videos and apps don’t show the bar", L"Los juegos, vídeos y apps en pantalla completa no muestran la barra", L"Les jeux, vidéos et apps en plein écran n’affichent pas la barre", L"Spiele, Videos und Apps im Vollbild zeigen die Leiste nicht", L"Giochi, video e app a schermo intero non mostrano la barra", L"全屏游戏、视频和应用中不显示菜单栏"},
+    {L"Some quando um app ocupa a tela inteira sem barra de título (jogos, vídeos, F11 no navegador)", L"Hides when an app fills the whole screen with no title bar (games, videos, F11 in the browser)", L"Se oculta cuando una app ocupa toda la pantalla sin barra de título (juegos, vídeos, F11 en el navegador)", L"Se masque quand une app occupe tout l’écran sans barre de titre (jeux, vidéos, F11 dans le navigateur)", L"Blendet sich aus, wenn eine App den ganzen Bildschirm ohne Titelleiste füllt (Spiele, Videos, F11 im Browser)", L"Si nasconde quando un’app occupa tutto lo schermo senza barra del titolo (giochi, video, F11 nel browser)", L"应用无标题栏占满全屏时隐藏（游戏、视频、浏览器中按 F11）"},
     {L"Recolher numa seta os ícones que não cabem", L"Collapse icons that don’t fit into an arrow", L"Agrupar en una flecha los iconos que no caben", L"Regrouper dans une flèche les icônes qui ne tiennent pas", L"Nicht passende Symbole hinter einem Pfeil zusammenfassen", L"Raccogli in una freccia le icone che non entrano", L"将放不下的图标收进箭头"},
     {L"Como as setas ao lado do notch no macOS 27", L"Like the arrows next to the notch in macOS 27", L"Como las flechas junto al notch en macOS 27", L"Comme les flèches à côté de l’encoche dans macOS 27", L"Wie die Pfeile neben der Notch in macOS 27", L"Come le frecce accanto al notch in macOS 27", L"就像 macOS 27 中刘海旁的箭头"},
     {L"Menus e painéis", L"Menus & Panels", L"Menús y paneles", L"Menus et panneaux", L"Menüs und Bereiche", L"Menu e pannelli", L"菜单和面板"},
@@ -24843,7 +24853,8 @@ const UiTr kUiTr[] = {
     {L"Ctrl+F2 navega a barra pelo teclado", L"Ctrl+F2 navigates the bar with the keyboard", L"Ctrl+F2 recorre la barra con el teclado", L"Ctrl+F2 parcourt la barre au clavier", L"Strg+F2 steuert die Leiste per Tastatur", L"Ctrl+F2 naviga nella barra con la tastiera", L"Ctrl+F2 使用键盘浏览菜单栏"},
     {L"Painel", L"Panel", L"Panel", L"Panneau", L"Bereich", L"Pannello", L"面板"},
     {L"Volume, brilho e Central", L"Volume, brightness and Control Center", L"Volumen, brillo y Centro de control", L"Volume, luminosité et Centre de contrôle", L"Lautstärke, Helligkeit und Kontrollzentrum", L"Volume, luminosità e Centro di Controllo", L"音量、亮度和控制中心"},
-    {L"Pílulas de vidro (volume, brilho, Bluetooth)", L"Glass pills (volume, brightness, Bluetooth)", L"Píldoras de vidrio (volumen, brillo, Bluetooth)", L"Pastilles en verre (volume, luminosité, Bluetooth)", L"Glas-Pillen (Lautstärke, Helligkeit, Bluetooth)", L"Pillole di vetro (volume, luminosità, Bluetooth)", L"玻璃胶囊 (音量、亮度、蓝牙)"},
+    {L"Pílula ao vivo", L"Live pill", L"Píldora en vivo", L"Pastille en direct", L"Live-Pille", L"Pillola dal vivo", L"实时胶囊"},
+    {L"Volume, brilho e Bluetooth abrem uma pílula pequena com o controle; desligada, abrem o menu completo", L"Volume, brightness and Bluetooth open a small pill with the control; off, they open the full menu", L"Volumen, brillo y Bluetooth abren una píldora pequeña con el control; desactivada, abren el menú completo", L"Volume, luminosité et Bluetooth ouvrent une petite pastille avec la commande ; désactivée, le menu complet", L"Lautstärke, Helligkeit und Bluetooth öffnen eine kleine Pille mit dem Regler; aus, das ganze Menü", L"Volume, luminosità e Bluetooth aprono una piccola pillola con il controllo; disattivata, il menu completo", L"音量、亮度和蓝牙打开带控件的小胶囊；关闭时打开完整菜单"},
     {L"Indicador de volume e brilho", L"Volume and brightness indicator", L"Indicador de volumen y brillo", L"Indicateur de volume et de luminosité", L"Lautstärke- und Helligkeitsanzeige", L"Indicatore di volume e luminosità", L"音量和亮度指示器"},
     {L"Logo abaixo do ícone na barra", L"Right below the icon on the bar", L"Justo debajo del icono en la barra", L"Juste sous l’icône dans la barre", L"Direkt unter dem Symbol in der Leiste", L"Subito sotto l’icona nella barra", L"显示在菜单栏图标正下方"},
     {L"Escurecer a tela com a Central de Controle", L"Dim the screen with the Control Center", L"Oscurecer la pantalla con el Centro de control", L"Assombrir l’écran avec le Centre de contrôle", L"Bildschirm mit dem Kontrollzentrum abdunkeln", L"Scurisci lo schermo con il Centro di Controllo", L"打开控制中心时调暗屏幕"},
