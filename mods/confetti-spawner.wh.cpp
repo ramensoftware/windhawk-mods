@@ -32,7 +32,7 @@ other program.
 
 | Default | Action |
 | --- | --- |
-| `Ctrl+Alt+Shift+C` | Fire a burst. Hold the keys to keep firing |
+| `Ctrl+Alt+F10` | Fire a burst. Hold the keys to keep firing |
 | none | Cycle the origin (sides, top, bottom, cursor, random) and fire |
 | none | Cycle the mode (confetti, emoji, mixed) and fire |
 
@@ -40,10 +40,12 @@ The cycle hotkeys are off by default. Set them in the settings to use them.
 
 While the mod is enabled, its hotkey combinations are reserved system-wide, so
 other apps stop receiving them. Pick combinations you don't use elsewhere (for
-example `Ctrl+Shift+C` is copy in Windows Terminal).
+example `Ctrl+Shift+C` is copy in Windows Terminal). On keyboard layouts with
+AltGr, AltGr is sent as `Ctrl+Alt`, so a `Ctrl+Alt+<letter>` hotkey can block a
+character you type with AltGr. Function keys are a safe choice.
 
-Hotkeys are written as modifiers plus a key, for example `Ctrl+Alt+Shift+C`,
-`Alt+F9`, `Ctrl+Alt+F9` or `Ctrl+Alt+Space`. Modifiers are `Ctrl`, `Shift`, `Alt` and
+Hotkeys are written as modifiers plus a key, for example `Ctrl+Alt+F10`,
+`Alt+F9`, `Ctrl+Shift+F9` or `Ctrl+Alt+Space`. Modifiers are `Ctrl`, `Shift`, `Alt` and
 `Win`. Keys can be a letter, a digit, `F1` to `F24`, `Space`, `Enter`, `Tab`,
 `Esc`, `Insert`, `Delete`, `Home`, `End`, `PageUp`, `PageDown`, the arrow keys
 (`Up`, `Down`, `Left`, `Right`), `Num0` to `Num9`, `Pause` or `PrintScreen`.
@@ -117,9 +119,9 @@ Each setting's description says how: for example `Gravity` is in hundredths, so
 
 // ==WindhawkModSettings==
 /*
-- hotkeyFire: Ctrl+Alt+Shift+C
+- hotkeyFire: Ctrl+Alt+F10
   $name: Fire hotkey
-  $description: Fires a burst, and keeps firing while the keys are held. Examples - Ctrl+Alt+Shift+C, Alt+F9, Ctrl+Alt+F9. Use none to disable.
+  $description: Fires a burst, and keeps firing while the keys are held. Examples - Ctrl+Alt+F10, Alt+F9, Ctrl+Shift+F9. Prefer function keys: on AltGr layouts Ctrl+Alt+letter can block typed characters. Use none to disable.
 - hotkeyCycleOrigin: none
   $name: Cycle origin hotkey
   $description: Switches to the next origin and fires a burst. Not saved to the settings. Use none to disable.
