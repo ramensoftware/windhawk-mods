@@ -1,13 +1,14 @@
 // ==WindhawkMod==
 // @id              file-type-description-redirect
 // @name            File Type Description Redirect
-// @description     Override file type descriptions by extension using text or indirect string resources in an INI file
-// @version         1.1.3
+// @description     Customize file type descriptions by extension with text or string resources
+// @version         1.2.0
 // @author          Momo
 // @github          https://github.com/FreshP-0325
+// @license         MIT
 // @include         explorer.exe
 // @architecture    x86
-// @architecture    x86-64
+// @architecture    amd64
 // @compilerOptions -lshell32 -lshlwapi -lole32 -loleaut32 -lpropsys -luuid
 // ==/WindhawkMod==
 // SPDX-License-Identifier: MIT
@@ -16,8 +17,31 @@
 /*
 # File Type Description Redirect
 
-Override file type descriptions by extension without changing the registry,
-file associations, icons, or thumbnails. Configuration example:
+Customize file descriptions by extension without changing file associations or default
+applications. Descriptions appear in the Type column, file properties, details, and native Shell New menus. Icons and thumbnails are preserved.
+
+## Configuration
+
+Choose Configuration source:
+
+* Windhawk settings (default): add entries to the descriptions list. Each entry accepts
+  comma-separated extensions, including the dot. Save settings to apply changes.
+  Windhawk also provides a Textual mode for bulk YAML editing.
+* INI file: set an absolute INI file path. Only that file is read; the settings
+  list is ignored. After editing the file, save a changed mod setting or disable
+  and re-enable the mod, then reopen affected windows or menus.
+
+Extensions are case-insensitive and match the last extension of a filename.
+To end the settings list, leave both fields of its final entry empty.
+INI files support UTF-8 (with or without BOM) or UTF-16 LE with BOM, full-line
+comments starting with ; or #, and paths relative to the INI directory.
+In Windhawk settings, resource paths must be absolute. Environment variables
+are supported in paths. No external preparation script is required.
+
+Descriptions can be Unicode text or indirect strings such as
+@%SystemRoot%\System32\notepad.exe,-469. Relative module paths are supported in
+INI mode. Double-quote paths if needed. Use @@ for literal text starting with @.
+Windows resolves localized resources; IDs depend on the module version.
 
 ```ini
 [types]
@@ -26,89 +50,63 @@ file associations, icons, or thumbnails. Configuration example:
 .md=@%SystemRoot%\System32\notepad.exe,-469
 ```
 
-Set INI file path to an absolute path. Environment variables are supported in
-the INI path and resource module paths. Relative resource paths are resolved
-against the INI directory. Resource module paths may be double-quoted.
+The last valid definition wins. Missing resources retain the system description
+or an earlier valid definition. Only display text is overridden. Raw extensions,
+stored properties, cache states, menu command IDs, templates, and default filenames
+are preserved. The mod does not add missing ShellNew entries. Ordinary directories
+and ProgID-only association queries are excluded.
 
-Use UTF-8 (with or without BOM) or UTF-16 LE with BOM. Extensions include the
-dot, are case-insensitive, and match the last extension. Multiple extensions
-can be separated by commas. The last valid duplicate entry wins. Empty values
-and invalid resources are skipped and logged. Lines starting with ; or # are
-comments; inline comments are unsupported. Literal text is trimmed but otherwise
-preserved, including percent signs and equals signs. Use @@ for a literal
-leading @, for example .example=@@Example file.
+## Refreshing and other applications
 
-Indirect strings use @module,-resourceID and are resolved by Windows, including
-its language-specific resource lookup. Missing resources fall back to the
-original description. Resource IDs depend on the Windows or application version.
+Refresh Explorer when mappings change is off by default. Enable it only if you
+want a global cache refresh after saving changed mappings. It may briefly redraw
+windows and reload thumbnails. Only the taskbar-owning Explorer sends it.
+Startup, shutdown, unchanged mappings, and normal queries send no notifications.
 
-After editing the INI or replacing resources, add 1 to Reload INI file (for
-example, 0 to 1) and save the settings. Reopen affected windows or menus to see
-the changes. This reads the configuration again without restarting the mod.
-These numbers are manual triggers, not timers or statistics. Changing any setting
-rereads the INI; Reload INI file provides a convenient way to do so without
-changing another setting. Startup and shutdown send no global refresh.
-If old descriptions remain, Reload INI and refresh Explorer additionally requests
-one cache refresh from the Explorer process that owns the taskbar. Otherwise,
-leave that value unchanged.
+The default target is explorer.exe. For standard Open/Save dialogs in another
+application, add its executable to Custom process inclusion list in Windhawk's
+advanced settings and restart the application. No additional process toggle is
+required. Applications using private interfaces or caches may be unaffected.
 
-The mod requires a Shell profile matching your Windows system DLLs. Before
-installing, run python scripts/prepare.py --mod description from the repository
-on your PC, then compile the prepared source in Windhawk. Repeat after Windows
-updates change the relevant DLLs. A mismatched profile prevents the mod from
-loading. The profile is embedded in this source; no extra header is needed.
-
-The mod handles the filesystem Type column, System.ItemTypeText through standard
-Shell item APIs, SHGetFileInfo type names, and AssocQueryString friendly document
-names when queried by extension. It also handles native property stores,
-property caches, and formatting of raw System.ItemType for modern Shell views.
-Only returned display values are overridden; raw extensions and cache contents
-are preserved. Stores without a usable ItemType retain their original values.
-The mod also replaces labels in the standard Shell New menu. Each command's
-extension comes from IContextMenu::GetCommandString, including packaged-app items.
-Only menu text changes; command IDs, templates, icons, internal item data, and
-default filenames remain intact. This does not add missing ShellNew entries.
-ProgID-only queries cannot identify a specific extension and are left unchanged.
-Programs using other property stores, private
-caches, or their own type descriptions may be unaffected. Group labels or saved
-search indexes may require a refresh and are not rewritten on disk.
-
-By default, hooks run only in explorer.exe. Other apps require both Allow other
-processes and a matching Custom process inclusion list entry. With that option
-enabled and * included, there is no additional Explorer-only restriction. The
-option controls hook setup, not whether Windhawk loads the mod DLL. Compatibility
-depends on the application. Windhawk's global exclusions still apply.
-File Type Icon Redirect is a separate mod and can be used alongside this one.
+The mod uses Windhawk symbol resolution for the installed system DLLs. Missing
+required symbols prevent loading and are reported in the log. x86 and AMD64 are
+supported; native ARM64 is not currently targeted.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+- configurationSource: settings
+  $name: Configuration source
+  $description: Use the list below, or read a separate INI file. Only the selected source is used.
+  $options:
+    - settings: Windhawk settings
+    - ini: INI file
+- types:
+  - - extensions: ""
+      $name: Extensions
+      $description: Comma-separated file extensions, including the dot. For example, .txt,.log
+    - description: ""
+      $name: Description
+      $description: Unicode text, or an indirect resource such as @%SystemRoot%\System32\notepad.exe,-469
+  $name: File type descriptions
+  $description: Used only when Configuration source is Windhawk settings. Leave both fields of the final entry empty to end the list.
 - iniPath: "%USERPROFILE%\\FileTypeDescriptions\\types.ini"
   $name: INI file path
-  $description: Absolute INI path. Environment variables are supported.
-- reloadCounter: 0
-  $name: Reload INI file
-  $description: After editing the INI file, add 1 to this number (for example, 0 to 1) and save the settings. The mod will read the file again without restarting. Reopen affected windows or menus to see the changes.
-- refreshCounter: 0
-  $name: Reload INI and refresh Explorer
-  $description: Use only if old descriptions remain after reloading the INI. Add 1 to this number and save the settings to reload the INI and request an Explorer refresh. This can briefly redraw windows and reload thumbnails. Otherwise, leave this value unchanged.
-- allowOtherProcesses: false
-  $name: Allow other processes
-  $description: Also allow hooks in non-Explorer processes selected by Windhawk's inclusion list. Requires both controls. This switch does not prevent DLL loading. Default is Explorer-only.
+  $description: Used only in INI file mode. Absolute path; environment variables are supported. Re-enable the mod after editing the file, or save a changed mod setting.
+- refreshExplorer: false
+  $name: Refresh Explorer when mappings change
+  $description: Request one global cache refresh after saving changed mappings. May redraw windows and reload thumbnails. Usually leave off. Startup and shutdown do not request a refresh.
 */
 // ==/WindhawkModSettings==
 
-#ifndef FILE_TYPE_DESCRIPTION_REDIRECT_TEST
-#include <windhawk_api.h>
-#endif
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <propkey.h>
 #include <propsys.h>
 #include <propvarutil.h>
-#include <wrl/client.h>
 #include <atomic>
 #include <array>
 #include <cstring>
@@ -122,50 +120,7 @@ File Type Icon Redirect is a separate mod and can be used alongside this one.
 #include <vector>
 
 namespace {
-using Microsoft::WRL::ComPtr;
-struct HookTarget {
-    PCWSTR module;
-    DWORD machine, timestamp, imageSize, checksum, rva;
-};
-// BEGIN GENERATED SHELL PROFILE
-#ifdef _WIN64
-[[maybe_unused]] constexpr HookTarget k_iconUI{L"windows.storage.dll", 34404u, 3070770283u, 9101312u, 9289426u, 236448u};
-[[maybe_unused]] constexpr HookTarget k_iconIndex{L"windows.storage.dll", 34404u, 3070770283u, 9101312u, 9289426u, 457872u};
-[[maybe_unused]] constexpr HookTarget k_iconFactory{L"windows.storage.dll", 34404u, 3070770283u, 9101312u, 9289426u, 232288u};
-[[maybe_unused]] constexpr HookTarget k_detailsEx{L"windows.storage.dll", 34404u, 3070770283u, 9101312u, 9289426u, 1736240u};
-[[maybe_unused]] constexpr HookTarget k_detailsOf{L"windows.storage.dll", 34404u, 3070770283u, 9101312u, 9289426u, 95040u};
-[[maybe_unused]] constexpr HookTarget k_itemString{L"windows.storage.dll", 34404u, 3070770283u, 9101312u, 9289426u, 2214896u};
-[[maybe_unused]] constexpr HookTarget k_itemProperty{L"windows.storage.dll", 34404u, 3070770283u, 9101312u, 9289426u, 2727136u};
-[[maybe_unused]] constexpr HookTarget k_typeFormat{L"PROPSYS.dll", 34404u, 3169301076u, 1003520u, 1051747u, 158128u};
-[[maybe_unused]] constexpr HookTarget k_storeDefault{L"PROPSYS.dll", 34404u, 3169301076u, 1003520u, 1051747u, 33568u};
-[[maybe_unused]] constexpr HookTarget k_storeFast{L"PROPSYS.dll", 34404u, 3169301076u, 1003520u, 1051747u, 33568u};
-[[maybe_unused]] constexpr HookTarget k_storeBest{L"PROPSYS.dll", 34404u, 3169301076u, 1003520u, 1051747u, 33568u};
-[[maybe_unused]] constexpr HookTarget k_storeDelayed{L"PROPSYS.dll", 34404u, 3169301076u, 1003520u, 1051747u, 33568u};
-[[maybe_unused]] constexpr HookTarget k_storeMemory{L"PROPSYS.dll", 34404u, 3169301076u, 1003520u, 1051747u, 138880u};
-[[maybe_unused]] constexpr HookTarget k_storeCacheValue{L"PROPSYS.dll", 34404u, 3169301076u, 1003520u, 1051747u, 345600u};
-[[maybe_unused]] constexpr HookTarget k_newMenuQuery{L"SHELL32.dll", 34404u, 292758140u, 7979008u, 8158634u, 373664u};
-[[maybe_unused]] constexpr HookTarget k_newMenuMessage{L"SHELL32.dll", 34404u, 292758140u, 7979008u, 8158634u, 5012976u};
-[[maybe_unused]] constexpr HookTarget k_newMenuMessage2{L"SHELL32.dll", 34404u, 292758140u, 7979008u, 8158634u, 1506976u};
-#else
-[[maybe_unused]] constexpr HookTarget k_iconUI{L"windows.storage.dll", 332u, 3130835471u, 7462912u, 7578709u, 1358992u};
-[[maybe_unused]] constexpr HookTarget k_iconIndex{L"windows.storage.dll", 332u, 3130835471u, 7462912u, 7578709u, 1109328u};
-[[maybe_unused]] constexpr HookTarget k_iconFactory{L"windows.storage.dll", 332u, 3130835471u, 7462912u, 7578709u, 1107856u};
-[[maybe_unused]] constexpr HookTarget k_detailsEx{L"windows.storage.dll", 332u, 3130835471u, 7462912u, 7578709u, 1361856u};
-[[maybe_unused]] constexpr HookTarget k_detailsOf{L"windows.storage.dll", 332u, 3130835471u, 7462912u, 7578709u, 5342832u};
-[[maybe_unused]] constexpr HookTarget k_itemString{L"windows.storage.dll", 332u, 3130835471u, 7462912u, 7578709u, 1684048u};
-[[maybe_unused]] constexpr HookTarget k_itemProperty{L"windows.storage.dll", 332u, 3130835471u, 7462912u, 7578709u, 5152304u};
-[[maybe_unused]] constexpr HookTarget k_typeFormat{L"PROPSYS.dll", 332u, 3837759275u, 823296u, 873650u, 343760u};
-[[maybe_unused]] constexpr HookTarget k_storeDefault{L"PROPSYS.dll", 332u, 3837759275u, 823296u, 873650u, 279152u};
-[[maybe_unused]] constexpr HookTarget k_storeFast{L"PROPSYS.dll", 332u, 3837759275u, 823296u, 873650u, 279152u};
-[[maybe_unused]] constexpr HookTarget k_storeBest{L"PROPSYS.dll", 332u, 3837759275u, 823296u, 873650u, 279152u};
-[[maybe_unused]] constexpr HookTarget k_storeDelayed{L"PROPSYS.dll", 332u, 3837759275u, 823296u, 873650u, 279152u};
-[[maybe_unused]] constexpr HookTarget k_storeMemory{L"PROPSYS.dll", 332u, 3837759275u, 823296u, 873650u, 145056u};
-[[maybe_unused]] constexpr HookTarget k_storeCacheValue{L"PROPSYS.dll", 332u, 3837759275u, 823296u, 873650u, 315216u};
-[[maybe_unused]] constexpr HookTarget k_newMenuQuery{L"SHELL32.dll", 332u, 1382932507u, 6729728u, 6853355u, 5300464u};
-[[maybe_unused]] constexpr HookTarget k_newMenuMessage{L"SHELL32.dll", 332u, 1382932507u, 6729728u, 6853355u, 5297904u};
-[[maybe_unused]] constexpr HookTarget k_newMenuMessage2{L"SHELL32.dll", 332u, 1382932507u, 6729728u, 6853355u, 5297840u};
-#endif
-// END GENERATED SHELL PROFILE
+
 using TypeMap = std::unordered_map<std::wstring, std::wstring>;
 std::shared_ptr<const TypeMap> g_types = std::make_shared<const TypeMap>();
 thread_local bool g_inHook = false;
@@ -271,7 +226,7 @@ std::optional<std::wstring> ResolveDescription(std::wstring value,
     if (!expanded || expanded->empty() || expanded->find(L'"') != expanded->npos) return std::nullopt;
     std::filesystem::path path(*expanded);
     if (!path.is_absolute()) {
-        if (path.has_root_name() || path.has_root_directory()) return std::nullopt;
+        if (base.empty() || path.has_root_name() || path.has_root_directory()) return std::nullopt;
         path = base / path;
     }
     auto indirect = L"@" + path.lexically_normal().wstring() + L"," + id;
@@ -315,17 +270,41 @@ TypeMap ParseIni(const std::wstring& text, const std::filesystem::path& base) {
     return types;
 }
 
-void LoadSettings() {
-    auto setting = Wh_GetStringSetting(L"iniPath");
-    auto path = Expand(Trim(setting ? setting : L""));
-    Wh_FreeStringSetting(setting);
-    TypeMap types;
-    std::wstring text;
-    if (path && std::filesystem::path(*path).is_absolute() && ReadText(*path, text)) {
-        types = ParseIni(text, std::filesystem::path(*path).parent_path());
-    } else Wh_Log(L"Cannot read INI: check absolute path, encoding, and size (max 4 MiB)");
-    Wh_Log(L"Loaded %zu type descriptions", types.size());
-    std::atomic_store(&g_types, std::make_shared<const TypeMap>(std::move(types)));
+bool LoadSettings() {
+    TypeMap mappings;
+    auto mode = WindhawkUtils::StringSetting::make(L"configurationSource");
+    if (std::wstring_view(mode.get()) == L"ini") {
+        auto setting = WindhawkUtils::StringSetting::make(L"iniPath");
+        auto path = Expand(Trim(setting.get()));
+        std::wstring text;
+        if (path && std::filesystem::path(*path).is_absolute() && ReadText(*path, text))
+            mappings = ParseIni(text, std::filesystem::path(*path).parent_path());
+        else Wh_Log(L"Cannot read INI: check absolute path, encoding, and size (max 4 MiB)");
+    } else {
+        for (int i = 0; ; ++i) {
+            auto extensions = WindhawkUtils::StringSetting::make(L"types[%d].extensions", i);
+            auto setting = WindhawkUtils::StringSetting::make(L"types[%d].description", i);
+            auto keys = Trim(extensions.get());
+            auto text = Trim(setting.get());
+            if (keys.empty() && text.empty()) break;
+            auto value = ResolveDescription(text, {});
+            if (!value) { Wh_Log(L"Entry %d: invalid description; skipped", i + 1); continue; }
+            size_t pos = 0;
+            do {
+                auto comma = keys.find(L',', pos);
+                auto ext = Lower(Trim(std::wstring_view(keys).substr(pos,
+                    comma == keys.npos ? keys.size() - pos : comma - pos)));
+                if (ValidExtension(ext)) mappings[ext] = *value;
+                else Wh_Log(L"Entry %d: invalid extension; skipped", i + 1);
+                if (comma == keys.npos) break;
+                pos = comma + 1;
+            } while (pos <= keys.size());
+        }
+    }
+    Wh_Log(L"Loaded %zu extension mappings", mappings.size());
+    bool changed = mappings != *std::atomic_load(&g_types);
+    std::atomic_store(&g_types, std::make_shared<const TypeMap>(std::move(mappings)));
+    return changed;
 }
 
 std::optional<std::wstring> LookupExtension(PCWSTR ext) {
@@ -391,7 +370,7 @@ DetailsOf_t g_detailsOf;
 ItemString_t g_itemString;
 ItemProperty_t g_itemProperty;
 TypeFormat_t g_typeFormat;
-std::array<StoreValue_t, 5> g_storeValues{};
+std::array<StoreValue_t, 2> g_storeValues{};
 CacheValue_t g_cacheValue;
 decltype(&AssocQueryStringW) g_assocW;
 decltype(&AssocQueryStringA) g_assocA;
@@ -660,12 +639,23 @@ std::string ToAnsi(const std::wstring& input) {
     text.resize(n - 1); return text;
 }
 template<typename String, typename Char>
-HRESULT AssocResult(const String& text, Char* result, DWORD* size) {
+HRESULT AssocResult(ASSOCF flags, const String& text, Char* result, DWORD* size) {
     if (!size) return E_POINTER;
     DWORD capacity = *size;
     *size = static_cast<DWORD>(text.size() + 1);
     if (!result) return S_FALSE;
-    if (capacity < *size) { if (capacity) result[0] = 0; return E_POINTER; }
+    if (capacity < *size) {
+        if (flags & ASSOCF_NOTRUNCATE) {
+            if (capacity) result[0] = 0;
+            return E_POINTER;
+        }
+        if (capacity) {
+            auto copied = static_cast<size_t>(capacity - 1);
+            std::memcpy(result, text.data(), copied * sizeof(Char));
+            result[copied] = 0;
+        }
+        return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+    }
     std::memcpy(result, text.c_str(), *size * sizeof(Char));
     return S_OK;
 }
@@ -673,7 +663,7 @@ HRESULT WINAPI AssocWHook(ASSOCF flags, ASSOCSTR kind, PCWSTR assoc, PCWSTR extr
                          PWSTR result, DWORD* size) {
     if (!g_inHook && kind == ASSOCSTR_FRIENDLYDOCNAME && !(flags & ASSOCF_OPEN_BYEXENAME)) {
         HookGuard guard;
-        if (auto value = LookupExtension(assoc)) return AssocResult(*value, result, size);
+        if (auto value = LookupExtension(assoc)) return AssocResult(flags, *value, result, size);
     }
     return g_assocW(flags, kind, assoc, extra, result, size);
 }
@@ -681,7 +671,7 @@ HRESULT WINAPI AssocAHook(ASSOCF flags, ASSOCSTR kind, PCSTR assoc, PCSTR extra,
                          PSTR result, DWORD* size) {
     if (!g_inHook && kind == ASSOCSTR_FRIENDLYDOCNAME && !(flags & ASSOCF_OPEN_BYEXENAME)) {
         HookGuard guard;
-        if (auto value = LookupExtension(FromAnsi(assoc).c_str())) return AssocResult(ToAnsi(*value), result, size);
+        if (auto value = LookupExtension(FromAnsi(assoc).c_str())) return AssocResult(flags, ToAnsi(*value), result, size);
     }
     return g_assocA(flags, kind, assoc, extra, result, size);
 }
@@ -728,149 +718,180 @@ DWORD_PTR WINAPI InfoAHook(PCSTR path, DWORD attr, SHFILEINFOA* result, UINT siz
     return status;
 }
 
-// BEGIN SHARED HOOK RUNTIME
-// Embedded into each standalone mod by scripts/prepare.py.
-struct ModuleReferences {
-    std::vector<HMODULE> modules;
-} g_hookModules;
-bool g_allowOtherProcesses = false;
-int g_refreshCounter = 0;
+struct ModuleReferences { std::vector<HMODULE> modules; } g_hookModules;
+bool g_refreshExplorer = false;
 
+HMODULE LoadHookModule(PCWSTR name) {
+    HMODULE module = LoadLibraryExW(name, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (module) g_hookModules.modules.push_back(module);
+    return module;
+}
 void ReleaseHookModules() {
-    // Called by Wh_ModUninit after detours are removed, never by a static
-    // destructor running under DllMain's loader lock. If hook registration
-    // partially fails, let Windows reclaim the bounded references at exit.
-    for (auto module : g_hookModules.modules) FreeLibrary(module);
+    // Windhawk removes detours before this callback. Never FreeLibrary from a
+    // static destructor under the loader lock. On partial setup failure, keep
+    // the bounded module references until process exit while hooks roll back.
+    for (HMODULE module : g_hookModules.modules) FreeLibrary(module);
     g_hookModules.modules.clear();
 }
-
-bool MatchesHookTarget(HMODULE module, const HookTarget& target) {
-    if (!module) return false;
-    auto base = reinterpret_cast<const BYTE*>(module);
-    auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
-    auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE || nt->FileHeader.Machine != target.machine ||
-        nt->FileHeader.TimeDateStamp != target.timestamp ||
-        nt->OptionalHeader.SizeOfImage != target.imageSize ||
-        nt->OptionalHeader.CheckSum != target.checksum || target.rva >= target.imageSize) return false;
-    auto section = IMAGE_FIRST_SECTION(nt);
-    for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
-        if (target.rva >= section[i].VirtualAddress &&
-            target.rva - section[i].VirtualAddress < section[i].Misc.VirtualSize &&
-            (section[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)) return true;
-    }
-    return false;
-}
-
-void* ResolveHookTarget(const HookTarget& target) {
-    if (_wcsicmp(target.module, L"windows.storage.dll") &&
-        _wcsicmp(target.module, L"shell32.dll") && _wcsicmp(target.module, L"propsys.dll")) return nullptr;
-    // Hold a module reference until Wh_ModUninit, after detours are removed.
-    // No COM initialization, folder binding, or Shell object creation.
-    HMODULE module = LoadLibraryExW(target.module, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!module) return nullptr;
-    g_hookModules.modules.push_back(module);
-    if (!MatchesHookTarget(module, target)) {
-        Wh_Log(L"Shell DLL profile mismatch. Run scripts/prepare.py on this PC and recompile.");
-        return nullptr;
-    }
-    return reinterpret_cast<BYTE*>(module) + target.rva;
-}
-
-bool ShouldNotifyShellForProcess(PCWSTR executable, PCWSTR windowsDirectory) {
-    if (!executable || !windowsDirectory) return false;
-    auto explorer = (std::filesystem::path(windowsDirectory) / L"explorer.exe").wstring();
-    return CompareStringOrdinal(executable, -1, explorer.c_str(), -1, TRUE) == CSTR_EQUAL;
-}
-bool IsExplorerProcess() {
-    WCHAR executable[32768], windows[MAX_PATH];
-    DWORD n = GetModuleFileNameW(nullptr, executable, ARRAYSIZE(executable));
-    return n && n < ARRAYSIZE(executable) && GetWindowsDirectoryW(windows, ARRAYSIZE(windows)) &&
-           ShouldNotifyShellForProcess(executable, windows);
-}
-bool LoadProcessPolicy() {
-    g_allowOtherProcesses = Wh_GetIntSetting(L"allowOtherProcesses") != 0;
-    g_refreshCounter = Wh_GetIntSetting(L"refreshCounter");
-    if (!IsExplorerProcess() && !g_allowOtherProcesses) {
-        Wh_Log(L"Skipped non-Explorer process. Other processes require explicit opt-in.");
-        return false;
-    }
-    return true;
-}
 void NotifyShell() {
-    // Called only by an explicit Refresh counter change. Startup, shutdown,
-    // enable/disable, and ordinary INI reloads never broadcast cache invalidation.
-    if (!IsExplorerProcess()) return;
     HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     DWORD owner = 0;
     if (!taskbar || !GetWindowThreadProcessId(taskbar, &owner) || owner != GetCurrentProcessId()) return;
-    Wh_Log(L"Sending explicitly requested Shell cache refresh from taskbar owner");
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 }
-// END SHARED HOOK RUNTIME
 
-template<typename Fn>
-bool Hook(void* address, Fn detour, Fn* original) {
-    return Wh_SetFunctionHook(address, reinterpret_cast<void*>(detour), reinterpret_cast<void**>(original));
-}
 bool InstallHooks() {
-    void* detailsEx = ResolveHookTarget(k_detailsEx);
-    void* detailsOf = ResolveHookTarget(k_detailsOf);
-    void* itemString = ResolveHookTarget(k_itemString);
-    void* itemProperty = ResolveHookTarget(k_itemProperty);
-    void* typeFormat = ResolveHookTarget(k_typeFormat);
-    std::array<void*, 5> storeValues{ResolveHookTarget(k_storeDefault), ResolveHookTarget(k_storeFast),
-        ResolveHookTarget(k_storeBest), ResolveHookTarget(k_storeDelayed), ResolveHookTarget(k_storeMemory)};
-    void* cacheValue = ResolveHookTarget(k_storeCacheValue);
-    void* newQuery = ResolveHookTarget(k_newMenuQuery);
-    void* newMessage = ResolveHookTarget(k_newMenuMessage);
-    void* newMessage2 = ResolveHookTarget(k_newMenuMessage2);
-    bool valid = detailsEx && detailsOf && itemString && itemProperty && typeFormat && cacheValue &&
-                 newQuery && newMessage && newMessage2;
-    for (auto address : storeValues) valid = valid && address;
-    if (!valid) { ReleaseHookModules(); return false; }
-    if (!(Hook(detailsEx, DetailsExHook, &g_detailsEx) &&
-           Hook(detailsOf, DetailsOfHook, &g_detailsOf) &&
-           Hook(itemString, ItemStringHook, &g_itemString) &&
-           Hook(itemProperty, ItemPropertyHook, &g_itemProperty) &&
-           Hook(typeFormat, TypeFormatHook, &g_typeFormat) &&
-           Hook(reinterpret_cast<void*>(AssocQueryStringW), AssocWHook, &g_assocW) &&
-           Hook(reinterpret_cast<void*>(AssocQueryStringA), AssocAHook, &g_assocA) &&
-           Hook(reinterpret_cast<void*>(SHGetFileInfoW), InfoWHook, &g_infoW) &&
-           Hook(reinterpret_cast<void*>(SHGetFileInfoA), InfoAHook, &g_infoA) &&
-           Hook(cacheValue, CacheValueHook, &g_cacheValue) &&
-           Hook(newQuery, NewMenuQueryHook, &g_newMenuQuery) &&
-           Hook(newMessage, NewMenuMessageHook, &g_newMenuMessage) &&
-           Hook(newMessage2, NewMenuMessage2Hook, &g_newMenuMessage2))) return false;
-    const std::array<StoreValue_t, 5> detours{StoreValueHook<0>, StoreValueHook<1>,
-        StoreValueHook<2>, StoreValueHook<3>, StoreValueHook<4>};
-    for (size_t i = 0; i < storeValues.size(); ++i) {
+    HMODULE windowsStorage = LoadHookModule(L"windows.storage.dll");
+    HMODULE propsys = LoadHookModule(L"propsys.dll");
+    HMODULE shell32 = LoadHookModule(L"shell32.dll");
+    if (!(windowsStorage && propsys && shell32)) { ReleaseHookModules(); return false; }
+    // windows.storage.dll
+    const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
+        {
+            {
+#ifdef _WIN64
+                L"public: virtual long __cdecl CFSFolder::GetDetailsEx(struct _ITEMID_CHILD const __unaligned *,struct _tagpropertykey const *,struct tagVARIANT *)"
+#else
+                L"public: virtual long __stdcall CFSFolder::GetDetailsEx(struct _ITEMID_CHILD const *,struct _tagpropertykey const *,struct tagVARIANT *)"
+#endif
+            },
+            &g_detailsEx, DetailsExHook
+        },
+        {
+            {
+#ifdef _WIN64
+                L"public: virtual long __cdecl CFSFolder::GetDetailsOf(struct _ITEMID_CHILD const __unaligned *,unsigned int,struct _SHELLDETAILS *)"
+#else
+                L"public: virtual long __stdcall CFSFolder::GetDetailsOf(struct _ITEMID_CHILD const *,unsigned int,struct _SHELLDETAILS *)"
+#endif
+            },
+            &g_detailsOf, DetailsOfHook
+        },
+        {
+            {
+#ifdef _WIN64
+                L"public: virtual long __cdecl CShellItem::GetString(struct _tagpropertykey const &,unsigned short * *)"
+#else
+                L"public: virtual long __stdcall CShellItem::GetString(struct _tagpropertykey const &,unsigned short * *)"
+#endif
+            },
+            &g_itemString, ItemStringHook
+        },
+        {
+            {
+#ifdef _WIN64
+                L"public: virtual long __cdecl CShellItem::GetProperty(struct _tagpropertykey const &,struct tagPROPVARIANT *)"
+#else
+                L"public: virtual long __stdcall CShellItem::GetProperty(struct _tagpropertykey const &,struct tagPROPVARIANT *)"
+#endif
+            },
+            &g_itemProperty, ItemPropertyHook
+        },
+    };
+    std::array<StoreValue_t, 2> storeTargets{};
+    const WindhawkUtils::SYMBOL_HOOK propsysDllHooks[] = {
+        {
+            {
+#ifdef _WIN64
+                L"public: virtual long __cdecl CPropertyDescription::FormatForDisplay(struct tagPROPVARIANT const &,enum PROPDESC_FORMAT_FLAGS,unsigned short * *)"
+#else
+                L"public: virtual long __stdcall CPropertyDescription::FormatForDisplay(struct tagPROPVARIANT const &,enum PROPDESC_FORMAT_FLAGS,unsigned short * *)"
+#endif
+            },
+            &g_typeFormat, TypeFormatHook
+        },
+        {
+            {
+#ifdef _WIN64
+                L"public: virtual long __cdecl CPropertyProvider::GetValue(struct _tagpropertykey const &,struct tagPROPVARIANT *)"
+#else
+                L"public: virtual long __stdcall CPropertyProvider::GetValue(struct _tagpropertykey const &,struct tagPROPVARIANT *)"
+#endif
+            },
+            &storeTargets[0], nullptr
+        },
+        {
+            {
+#ifdef _WIN64
+                L"public: virtual long __cdecl CMemPropStore::GetValue(struct _tagpropertykey const &,struct tagPROPVARIANT *)"
+#else
+                L"public: virtual long __stdcall CMemPropStore::GetValue(struct _tagpropertykey const &,struct tagPROPVARIANT *)"
+#endif
+            },
+            &storeTargets[1], nullptr
+        },
+        {
+            {
+#ifdef _WIN64
+                L"public: virtual long __cdecl CMemPropStore::GetValueAndState(struct _tagpropertykey const &,struct tagPROPVARIANT *,enum PSC_STATE *)"
+#else
+                L"public: virtual long __stdcall CMemPropStore::GetValueAndState(struct _tagpropertykey const &,struct tagPROPVARIANT *,enum PSC_STATE *)"
+#endif
+            },
+            &g_cacheValue, CacheValueHook
+        },
+    };
+    const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
+        {
+            {
+#ifdef _WIN64
+                L"public: virtual long __cdecl CNewMenu::QueryContextMenu(struct HMENU__ *,unsigned int,unsigned int,unsigned int,unsigned int)"
+#else
+                L"public: virtual long __stdcall CNewMenu::QueryContextMenu(struct HMENU__ *,unsigned int,unsigned int,unsigned int,unsigned int)"
+#endif
+            },
+            &g_newMenuQuery, NewMenuQueryHook
+        },
+        {
+            {
+#ifdef _WIN64
+                L"public: virtual long __cdecl CNewMenu::HandleMenuMsg(unsigned int,unsigned __int64,__int64)"
+#else
+                L"public: virtual long __stdcall CNewMenu::HandleMenuMsg(unsigned int,unsigned int,long)"
+#endif
+            },
+            &g_newMenuMessage, NewMenuMessageHook
+        },
+        {
+            {
+#ifdef _WIN64
+                L"public: virtual long __cdecl CNewMenu::HandleMenuMsg2(unsigned int,unsigned __int64,__int64,__int64 *)"
+#else
+                L"public: virtual long __stdcall CNewMenu::HandleMenuMsg2(unsigned int,unsigned int,long,long *)"
+#endif
+            },
+            &g_newMenuMessage2, NewMenuMessage2Hook
+        },
+    };
+    if (!(WindhawkUtils::HookSymbols(windowsStorage, windowsStorageHooks, ARRAYSIZE(windowsStorageHooks)) &&
+          WindhawkUtils::HookSymbols(propsys, propsysDllHooks, ARRAYSIZE(propsysDllHooks)) &&
+          WindhawkUtils::HookSymbols(shell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks)))) return false;
+    // Multiple native store flags share CPropertyProvider::GetValue. Resolve
+    // each implementation once, and also handle identical-code folding.
+    const std::array<StoreValue_t, 2> detours{StoreValueHook<0>, StoreValueHook<1>};
+    for (size_t i = 0; i < storeTargets.size(); ++i) {
         bool duplicate = false;
-        for (size_t j = 0; j < i; ++j) if (storeValues[i] == storeValues[j]) duplicate = true;
-        if (!duplicate && !Hook(storeValues[i], detours[i], &g_storeValues[i])) return false;
+        for (size_t j = 0; j < i; ++j) if (storeTargets[i] == storeTargets[j]) duplicate = true;
+        if (!duplicate && !WindhawkUtils::SetFunctionHook(storeTargets[i], detours[i], &g_storeValues[i])) return false;
     }
-    return true;
+    return WindhawkUtils::SetFunctionHook(AssocQueryStringW, AssocWHook, &g_assocW) &&
+           WindhawkUtils::SetFunctionHook(AssocQueryStringA, AssocAHook, &g_assocA) &&
+           WindhawkUtils::SetFunctionHook(SHGetFileInfoW, InfoWHook, &g_infoW) &&
+           WindhawkUtils::SetFunctionHook(SHGetFileInfoA, InfoAHook, &g_infoA);
 }
 } // namespace
 
 BOOL Wh_ModInit() {
-    if (!LoadProcessPolicy()) return FALSE;
+    g_refreshExplorer = Wh_GetIntSetting(L"refreshExplorer") != 0;
     LoadSettings();
     bool ok = InstallHooks();
-    if (!ok) Wh_Log(L"Hook profile unavailable or incompatible; mod will not load");
+    if (!ok) Wh_Log(L"Required Shell symbols or hooks unavailable; mod will not load");
     return ok;
 }
-void Wh_ModAfterInit() {}
-BOOL Wh_ModSettingsChanged(BOOL* reload) {
-    if ((Wh_GetIntSetting(L"allowOtherProcesses") != 0) != g_allowOtherProcesses) {
-        *reload = TRUE;
-        return TRUE;
-    }
-    LoadSettings();
-    int refresh = Wh_GetIntSetting(L"refreshCounter");
-    if (refresh != g_refreshCounter) { g_refreshCounter = refresh; NotifyShell(); }
-    return TRUE;
+void Wh_ModSettingsChanged() {
+    bool changed = LoadSettings();
+    g_refreshExplorer = Wh_GetIntSetting(L"refreshExplorer") != 0;
+    if (changed && g_refreshExplorer) NotifyShell();
 }
 void Wh_ModUninit() {
     std::atomic_store(&g_types, std::make_shared<const TypeMap>());
