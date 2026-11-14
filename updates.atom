@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-14T20:03:32.000Z</updated>
+    <updated>2026-11-14T21:00:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Winstant 1.6]]></title>
+        <id>https://windhawk.net/mods/winstant#dc8ad91cc70df48de6f92ab75023be43feba1721</id>
+        <link href="https://windhawk.net/mods/winstant"/>
+        <updated>2026-11-14T21:00:27.000Z</updated>
+        <content type="html"><![CDATA[<p>-there’s a new setting, “Open the panel by hovering the minimize button” (Panel group). Turn it off and the panel opens only with the hotkey or key taps. The mouse wheel on the minimize button keeps its own option.</p>
+]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Adobe Dark Menus 1.1.0]]></title>
+        <id>https://windhawk.net/mods/adobe-dark-menus#c8081b42eb681f51cbc8bd85d68ae5da00319ea7</id>
+        <link href="https://windhawk.net/mods/adobe-dark-menus"/>
+        <updated>2026-11-14T21:00:22.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a crash on exit, seen in InDesign and Audition.</li>
+<li>Fixed the scroll arrows of long menus when Menu Background Color is mid gray or lighter.</li>
+<li>Fixed submenus drawn by Windows taking the custom background of an app-drawn parent menu.</li>
+<li>Fixed dark title bars on right-to-left windows.</li>
+<li>Fixed a case where dropdown list colors could stay on after the list was gone.</li>
+<li>No more arrow flicker after scrolling a long menu with the keyboard, and less work while the mouse moves over one.</li>
+<li>Safer when the mod is turned off or updated while an app is running.</li>
+<li>Added a Scroll Long Menus Instead of Columns setting, on by default: a menu an app splits into columns, such as the After Effects Effect menu with many plugins installed, now opens as one dark column that scrolls instead of staying light.</li>
+<li>Added InCopy, Lightroom and Lightroom Classic.</li>
+<li>Added the Beta versions of Premiere Pro, InDesign, InCopy and Audition.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Saber Naeemi</name>
+            <uri>https://github.com/sabergraphics</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Hover Info 1.2.0]]></title>
         <id>https://windhawk.net/mods/file-hover-info#7002194c5fd74e338f4132bf6ff547825c767877</id>
@@ -518,75 +553,6 @@ fresh Windows installation. The source's defaults do not contain your saved list
         <author>
             <name>Thiago Silva</name>
             <uri>https://github.com/brideinflame-rgb</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Web Search in Start Menu 1.0.0]]></title>
-        <id>https://windhawk.net/mods/disable-web-search-in-start-menu#15a0fabc158cd3b05e041f13f1e21aed77db4712</id>
-        <link href="https://windhawk.net/mods/disable-web-search-in-start-menu"/>
-        <updated>2026-11-13T19:04:39.000Z</updated>
-        <content type="html"><![CDATA[<h1>Disable Web Search in Start Menu</h1>
-<p><img src="https://raw.githubusercontent.com/DeepakBalaraman/disable-web-search-in-start-menu/master/assets/before-after.jpg" alt="Before &amp; After"></p>
-<p>The search UI that the Start menu and the taskbar open mixes results from Bing
-into local results. Windows can be told to stop doing that with settings and
-policies, but they are read when the search UI starts, so changing them means
-signing out, and the registry entries stay behind afterwards.</p>
-<p>This mod does the same thing without touching the registry. It sits in the
-search UI process and answers the setting reads as if web search had been
-turned off. Turning the mod off gives the old behavior back the next time the
-search UI starts.</p>
-<p>On both Windows 10 and Windows 11, typing in the Start menu hands the query to
-this search UI, so the Start menu search is covered as well.</p>
-<h2>Settings</h2>
-<ul>
-<li><strong>Also hide cloud content results</strong> reports the two &quot;Cloud content search&quot;
-switches from Settings as off. The Windows 11 search UI asks for them before
-it puts web results in the list, so turning this setting off can bring web
-results back, and leaving it on also removes OneDrive, Outlook and SharePoint
-results from search.</li>
-</ul>
-<h2>Notes</h2>
-<ul>
-<li>Nothing is written to the registry and no files are touched. The values the
-mod reports are the ones Windows itself uses:
-<ul>
-<li><code>DisableSearchBoxSuggestions</code>, <code>ConnectedSearchUseWeb</code> and
-<code>DisableWebSearch</code>, the web search policies</li>
-<li><code>BingSearchEnabled</code>, the older web results switch</li>
-<li><code>IsMSACloudSearchEnabled</code>, <code>IsAADCloudSearchEnabled</code> and
-<code>AllowCloudSearch</code>, the cloud content switches, only with the setting above
-If you set any of these yourself, the mod simply agrees.</li>
-</ul>
-</li>
-<li>The search UI is a packaged app and reaches the registry through the API sets,
-which end up in <code>kernelbase.dll</code>. Desktop callers import <code>advapi32.dll</code>, whose
-exports are separate entry points rather than forwarders on current builds.
-Both are hooked, so neither path is missed.</li>
-<li>Web results are decided while the search UI sets up, so after enabling the mod
-or changing a setting, end <code>SearchHost.exe</code> in Task Manager. Windows starts it
-again on the next search, and the new settings are read then.</li>
-<li>If web results survive, turn on the mod's log and open the search UI once. The
-log lists every read the mod answered, which shows whether the process asks
-for these values at all.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DpakB</name>
-            <uri>https://github.com/DeepakBalaraman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ExplorerFrame and menubar fixes fork 4.2]]></title>
-        <id>https://windhawk.net/mods/restore-folder-menubar-25h2#455e436eb27730e3f143f4747c739a0ce5562938</id>
-        <link href="https://windhawk.net/mods/restore-folder-menubar-25h2"/>
-        <updated>2026-11-13T19:04:32.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Merge with <code>Classic Theme Explorer Search Fix</code> by aubymori for compatibility with Explorerframe.dll spoofing</li>
-</ul>
-]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

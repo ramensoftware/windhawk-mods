@@ -223,7 +223,7 @@
         "ratingUsers": 8,
         "reviews": 0,
         "trendingSorting": 11.4,
-        "updated": 1794265507000,
+        "updated": 1794690022000,
         "users": 114
       },
       "metadata": {
@@ -236,19 +236,25 @@
           "Photoshop.exe",
           "Illustrator.exe",
           "InDesign.exe",
+          "InDesign (Beta).exe",
+          "InCopy.exe",
+          "InCopy (Beta).exe",
           "Dreamweaver.exe",
           "AfterFX.exe",
           "AfterFX (Beta).exe",
           "Adobe Premiere Pro.exe",
+          "Adobe Premiere Pro (Beta).exe",
           "Adobe Audition.exe",
+          "Adobe Audition (Beta).exe",
           "Adobe Media Encoder.exe",
           "Adobe Media Encoder (Beta).exe",
           "Adobe Bridge.exe",
+          "Lightroom.exe",
           "Acrobat.exe"
         ],
         "name": "Adobe Dark Menus",
         "twitter": "https://x.com/SaberNaeemi",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "aerexplorer": {
@@ -23885,7 +23891,7 @@
         "ratingUsers": 14,
         "reviews": 0,
         "trendingSorting": 0.0475558193104931,
-        "updated": 1791828051000,
+        "updated": 1794690027000,
         "users": 354
       },
       "metadata": {
@@ -23897,7 +23903,7 @@
           "windhawk.exe"
         ],
         "name": "Winstant",
-        "version": "1.5"
+        "version": "1.6"
       }
     },
     "wintips-osd": {
