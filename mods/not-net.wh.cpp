@@ -35,7 +35,7 @@
 ## Cycle Mode
 - **Trigger:** Double-click an app row (or right-click → **Cycle...**) — enabled by default in Settings.
 - **Schedule:** Alternates **Blocked → Allowed** (`min | sec`, optional `ms` in Settings) using the row's direction. Run **Until stopped**, **For N cycles**, or **For a set time** (supports **Sync with Windows clock** in `12h`/`24h`).
-- **Focus & Session:** **Only while app is focused** freezes the timer on focus loss. Cycles are session-only and wipe automatically on app exit/crash, `!Net` exit, or Windows restart.
+- **Focus & Session:** **Only while app is focused** freezes the timer on focus loss; **Allow internet when out of focus** keeps the app online in the background while paused. Per-app Cycle templates are remembered inside Windhawk storage (without auto-starting); active cycles remain session-only and wipe on app exit/crash, `!Net` exit, or Windows restart.
 
 ## Filter Chips
 - **Allowed / Blocked:** Click **Blocked** again to switch between `!Net` blocks and **Blocked · FW** (external Windows Defender Firewall rules).
@@ -542,7 +542,7 @@ struct HitRect {
     std::wstring tooltip;
     enum Kind {
         None = 0, PinBtn, RestoreAllBtn, SettingsBtn, ElevateBtn,
-                FilterChip, RowToggle, RowDirection, RowExclude, RowExternalLocked, RowBody, HeaderDrag
+        FilterChip, RowToggle, RowDirection, RowExclude, RowExternalLocked, RowBody, HeaderDrag
     } kind = None;
 };
 static std::vector<HitRect> g_hitRects;
@@ -608,7 +608,7 @@ struct CycleStatusSnapshot {
     uint64_t allowMs = 5000;
 };
 
-static bool StartCycleForApp(const std::wstring& exePath, const CycleConfig& cfg, std::wstring& outErr);
+static bool StartCycleForApp(std::wstring exePath, const CycleConfig& cfg, std::wstring& outErr);
 static bool StopCycleForApp(const std::wstring& exePath, bool setAllowed);
 static void StopAllCycles(bool setAllowed);
 static bool GetCycleSnapshot(const std::wstring& exePath, CycleStatusSnapshot& outSnap);
@@ -1676,7 +1676,7 @@ static void PostCycleUiSync() {
     if (g_hWnd) PostMessageW(g_hWnd, WM_APP_CYCLE_STATE, 0, 0);
 }
 
-static bool StartCycleForApp(const std::wstring& exePath, const CycleConfig& cfg, std::wstring& outErr) {
+static bool StartCycleForApp(std::wstring exePath, const CycleConfig& cfg, std::wstring& outErr) {
     std::wstring low = ToLower(Trim(exePath));
     if (low.empty()) {
         outErr = L"No application path provided.";
@@ -3517,7 +3517,7 @@ struct CycleHitRect {
     RECT rc{};
     int id = 0;
     enum Kind {
-                None = 0, InputBox, RunDropdown, SyncClockToggle, ClockFormat12h, FocusToggle, AllowUnfocusedToggle, CancelBtn, PrimaryBtn
+        None = 0, InputBox, RunDropdown, SyncClockToggle, ClockFormat12h, FocusToggle, AllowUnfocusedToggle, CancelBtn, PrimaryBtn
     } kind = None;
     int fieldId = CF_NONE;
 };
@@ -3535,6 +3535,7 @@ struct CyclePopupState {
     HWND hRunDrop = nullptr;
     int runDropHoverIdx = -1;
     bool openingRunDrop = false;
+    bool modalOpen = false;
 
     DurationGroupState blockGrp;
     DurationGroupState allowGrp;
@@ -4386,15 +4387,21 @@ static void ExecuteCyclePrimaryAction(CyclePopupState* st) {
     cfg.allowWhenUnfocused = st->focusedOnly && st->allowWhenUnfocused;
     cfg.direction = st->direction;
 
+    std::wstring displayPath = st->displayPath;
+    HWND hwnd = st->hwnd;
     std::wstring err;
-    if (StartCycleForApp(st->displayPath, cfg, err)) {
+    st->modalOpen = true;
+    bool ok = StartCycleForApp(displayPath, cfg, err);
+    if (!IsWindow(hwnd)) return;
+    st->modalOpen = false;
+    if (ok) {
         RefreshAppList();
         RequestRepaint();
-        DestroyWindow(st->hwnd);
+        DestroyWindow(hwnd);
     } else {
         st->valid = false;
         st->summaryText = err;
-        InvalidateRect(st->hwnd, &st->rcSummary, FALSE);
+        InvalidateRect(hwnd, &st->rcSummary, FALSE);
     }
 }
 
@@ -4687,7 +4694,7 @@ static LRESULT CALLBACK CyclePopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             return 0;
         case WM_ACTIVATE: {
             if (LOWORD(wParam) == WA_INACTIVE && st) {
-                if (st->openingRunDrop || (st->hRunDrop && IsWindow(st->hRunDrop))) return 0;
+                if (st->modalOpen || st->openingRunDrop || (st->hRunDrop && IsWindow(st->hRunDrop))) return 0;
                 PostMessageW(hwnd, WM_CLOSE, 0, 0);
             }
             return 0;
@@ -6274,6 +6281,13 @@ static LRESULT CALLBACK ControlWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
     if (msg == WM_APP_RELOAD_SETTINGS) {
         LoadSettings();
         if (!g_settings.enableCycleScheduler) StopAllCycles(true);
+        if (!g_settings.rememberCycleTemplates) {
+            {
+                std::lock_guard<std::mutex> lk(g_cycleMtx);
+                g_cycleTemplates.clear();
+            }
+            SaveCycleTemplates();
+        }
         SyncAutoBlockedApps();
         if (g_hWnd) {
             ApplyCaptureExclusionAll();
