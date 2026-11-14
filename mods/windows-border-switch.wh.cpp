@@ -7,7 +7,7 @@
 // @description:de-DE Blendet die Rahmen von Fenstern, dem Startmenü, der Taskleiste und anderen Systemelementen aus
 // @description:pt-BR Oculta as bordas das janelas, do menu Iniciar, da barra de tarefas e de outros elementos do sistema
 // @description:zh-CN 隐藏窗口、“开始”菜单、任务栏和其他系统元素的边框
-// @version         1.1.3
+// @version         1.1.4
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -22,7 +22,7 @@
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -luuid -ladvapi32
 // ==/WindhawkMod==
-// Build: 44
+// Build: 45
 
 // ==WindhawkModReadme==
 /*
@@ -487,10 +487,6 @@ enum class CaptionEffect { Default, Transparent, Neutral };
 struct WindowFrame {
     bool hideBorder = false;
     CaptionEffect caption = CaptionEffect::Default;
-
-#ifdef BORDER_SWITCH_POLICY_TEST
-    bool operator==(const WindowFrame&) const = default;
-#endif
 };
 
 constexpr WindowFrame WindowFrameFor(WindowSettings settings, bool active, bool dialog,
@@ -593,7 +589,6 @@ constexpr bool IsStartBorderParent(std::wstring_view name, std::wstring_view typ
 
 }  // namespace
 
-#ifndef BORDER_SWITCH_POLICY_TEST
 #include <dwmapi.h>
 #include <roapi.h>
 #include <winstring.h>
@@ -2007,4 +2002,3 @@ void Wh_ModUninit() {
         g_widgetEdits.reset();
     }
 }
-#endif
