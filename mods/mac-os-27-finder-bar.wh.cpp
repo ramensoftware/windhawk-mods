@@ -5984,7 +5984,9 @@ static void HideFromCapture(HWND h) {
     if (h && IsWindow(h) && SetWindowDisplayAffinity(h, WDA_EXCLUDEFROMCAPTURE)) g_captureNeedsFlush = true;
 }
 
-static bool LqCapture(LiquidSurface& l, RECT rc, bool hideBars = true) {
+// clip: só essa área é fotografada (o resto repete a borda dela), como a barra:
+// a refração da borda de baixo não pode puxar o que está logo abaixo dela.
+static bool LqCapture(LiquidSurface& l, RECT rc, bool hideBars = true, const RECT* clip = nullptr) {
     if (g_captureNeedsFlush) {
         g_captureNeedsFlush = false;
         DwmFlush();
@@ -6005,6 +6007,7 @@ static bool LqCapture(LiquidSurface& l, RECT rc, bool hideBars = true) {
         }
     }
     if (!IntersectRect(&rc, &rc, &vs)) return false;
+    if (clip && !IntersectRect(&rc, &rc, clip)) return false;
     int w = rc.right - rc.left, h = rc.bottom - rc.top;
     if (w <= 0 || h <= 0) return false;
     int fw = req.right - req.left, fh = req.bottom - req.top;
@@ -21802,8 +21805,11 @@ static void BarLiquidTick() {
         if (!b->lq || !IsWindowVisible(b->hwnd)) continue;
         RECT wr;
         if (!GetWindowRect(b->hwnd, &wr)) continue;
+        // Só o lugar da própria barra entra na foto: abaixo dela fica a barra de
+        // título de uma janela maximizada, que a borda do vidro refletiria.
+        RECT own = wr;
         InflateRect(&wr, kLiquidMargin, kLiquidMargin);
-        if (LqCapture(*b->lq, wr, false)) InvalidateRect(b->hwnd, nullptr, FALSE);
+        if (LqCapture(*b->lq, wr, false, &own)) InvalidateRect(b->hwnd, nullptr, FALSE);
     }
     // Nenhuma barra no estilo líquido (trocou de estilo): a captura para.
     if (!any) KillTimer(g_owner, TIMER_BARLIQUID);
