@@ -7,7 +7,7 @@
 // @description:de-DE Blendet die Rahmen von Fenstern, dem Startmenü, der Taskleiste und anderen Systemelementen aus
 // @description:pt-BR Oculta as bordas das janelas, do menu Iniciar, da barra de tarefas e de outros elementos do sistema
 // @description:zh-CN 隐藏窗口、“开始”菜单、任务栏和其他系统元素的边框
-// @version         1.1.2
+// @version         1.1.3
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -22,7 +22,7 @@
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -luuid -ladvapi32
 // ==/WindhawkMod==
-// Build: 43
+// Build: 44
 
 // ==WindhawkModReadme==
 /*
@@ -615,6 +615,7 @@ constexpr bool IsStartBorderParent(std::wstring_view name, std::wstring_view typ
 #include <array>
 #include <atomic>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -1129,7 +1130,8 @@ struct XamlBorder {
 };
 
 std::mutex g_shellXamlMutex;
-std::vector<XamlBorder> g_shellXamlEdits;
+// Release the edited properties on their UI threads, never at process detach.
+[[clang::no_destroy]] std::optional<std::vector<XamlBorder>> g_shellXamlEdits{std::in_place};
 std::atomic<unsigned> g_shellXamlMask;
 std::atomic<bool> g_shellXamlStopping;
 Worker g_shellXamlWorker;
@@ -1315,7 +1317,7 @@ struct WidgetEdit {
     WinUI::Media::SolidColorBrush brush;
     DWORD thread;
 };
-std::vector<WidgetEdit> g_widgetEdits;
+[[clang::no_destroy]] std::optional<std::vector<WidgetEdit>> g_widgetEdits{std::in_place};
 
 void ScanWidgetTree(WinUI::DependencyObject const& node, unsigned depth = 0) {
     if (!node || depth == 36) {
@@ -1336,13 +1338,16 @@ void ScanWidgetTree(WinUI::DependencyObject const& node, unsigned depth = 0) {
                 auto local = element.ReadLocalValue(property);
                 const DWORD thread = GetCurrentThreadId();
                 std::lock_guard guard(g_shellXamlMutex);
-                auto edit = std::find_if(g_widgetEdits.begin(), g_widgetEdits.end(), [&](auto const& entry) {
+                if (g_shellXamlStopping) {
+                    return;
+                }
+                auto edit = std::find_if(g_widgetEdits->begin(), g_widgetEdits->end(), [&](auto const& entry) {
                     return entry.thread == thread && entry.element.get() == element;
                 });
-                if (edit == g_widgetEdits.end()) {
+                if (edit == g_widgetEdits->end()) {
                     WinUI::Media::SolidColorBrush brush{winrt::Windows::UI::Color{}};
                     element.SetValue(property, brush);
-                    g_widgetEdits.push_back({winrt::make_weak(element), property, local, brush, thread});
+                    g_widgetEdits->push_back({winrt::make_weak(element), property, local, brush, thread});
                     Wh_Log(L"Hid Widgets border: %s", element.Name().c_str());
                 } else if (local != edit->brush) {
                     element.SetValue(property, edit->brush);
@@ -1362,7 +1367,7 @@ void RefreshWidgets(bool hide) {
         {
             const DWORD thread = GetCurrentThreadId();
             std::lock_guard guard(g_shellXamlMutex);
-            std::erase_if(g_widgetEdits, [thread](auto const& edit) {
+            std::erase_if(*g_widgetEdits, [thread](auto const& edit) {
                 return edit.thread == thread && !edit.element.get();
             });
         }
@@ -1380,10 +1385,10 @@ void RefreshWidgets(bool hide) {
     {
         const DWORD thread = GetCurrentThreadId();
         std::lock_guard guard(g_shellXamlMutex);
-        for (auto it = g_widgetEdits.begin(); it != g_widgetEdits.end();) {
+        for (auto it = g_widgetEdits->begin(); it != g_widgetEdits->end();) {
             if (it->thread == thread) {
                 restore.push_back(std::move(*it));
-                it = g_widgetEdits.erase(it);
+                it = g_widgetEdits->erase(it);
             } else {
                 ++it;
             }
@@ -1415,10 +1420,10 @@ void RestoreXamlBorders(unsigned mask) {
     {
         std::lock_guard guard(g_shellXamlMutex);
         const DWORD thread = GetCurrentThreadId();
-        for (auto it = g_shellXamlEdits.begin(); it != g_shellXamlEdits.end();) {
+        for (auto it = g_shellXamlEdits->begin(); it != g_shellXamlEdits->end();) {
             if (it->thread == thread && !(mask & BorderBit(it->border))) {
                 restore.push_back(std::move(*it));
-                it = g_shellXamlEdits.erase(it);
+                it = g_shellXamlEdits->erase(it);
             } else {
                 ++it;
             }
@@ -1456,15 +1461,18 @@ void HideXamlBorder(Xaml::FrameworkElement const& element, ShellBorder border) {
     {
         const DWORD thread = GetCurrentThreadId();
         std::lock_guard guard(g_shellXamlMutex);
-        std::erase_if(g_shellXamlEdits, [thread](XamlBorder const& edit) {
+        if (g_shellXamlStopping) {
+            return;
+        }
+        std::erase_if(*g_shellXamlEdits, [thread](XamlBorder const& edit) {
             return edit.thread == thread && !edit.element.get();
         });
-        auto current = std::find_if(g_shellXamlEdits.begin(), g_shellXamlEdits.end(),
+        auto current = std::find_if(g_shellXamlEdits->begin(), g_shellXamlEdits->end(),
                                     [&](XamlBorder const& edit) {
             return edit.thread == thread && edit.element.get() == element;
         });
-        if (current == g_shellXamlEdits.end()) {
-            g_shellXamlEdits.push_back({winrt::make_weak(element), property, local, border, thread});
+        if (current == g_shellXamlEdits->end()) {
+            g_shellXamlEdits->push_back({winrt::make_weak(element), property, local, border, thread});
         } else {
             current->previous = local;
         }
@@ -1605,6 +1613,7 @@ enum class TaskbarHookResult { Installed, Missing, Retry };
 
 TaskbarHookResult HookTaskbarLayout(HMODULE module) {
     void* measure = nullptr;
+    // Taskbar.View.dll, ExplorerExtensions.dll
     const WindhawkUtils::SYMBOL_HOOK hook[] = {
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
          &measure, nullptr, true},
@@ -1685,10 +1694,17 @@ UINT ShellScanMessage() {
     return message;
 }
 
+std::mutex g_shellScanMutex;
+std::atomic<HHOOK> g_shellScanHook;
+
 LRESULT CALLBACK ShellScanHook(int code, WPARAM wParam, LPARAM lParam) {
     if (code == HC_ACTION) {
         const auto& message = *reinterpret_cast<const CWPSTRUCT*>(lParam);
-        if (message.message == ShellScanMessage()) {
+        const HHOOK hook = reinterpret_cast<HHOOK>(message.lParam);
+        if (message.message == ShellScanMessage() && hook && g_shellScanHook == hook &&
+            UnhookWindowsHookEx(hook)) {
+            // Remove the hook on its own thread before the synchronous send returns.
+            g_shellScanHook = nullptr;
             ScanShellOnUiThread(message.wParam != 0);
         }
     }
@@ -1706,10 +1722,14 @@ void RequestShellScan(HWND window, bool refresh) {
         ScanShellOnUiThread(refresh);
         return;
     }
+    std::lock_guard guard(g_shellScanMutex);
     if (HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, ShellScanHook, nullptr, thread)) {
-        DWORD_PTR ignored;
-        SendMessageTimeoutW(window, message, refresh, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 1500, &ignored);
-        UnhookWindowsHookEx(hook);
+        g_shellScanHook = hook;
+        SendMessageW(window, message, refresh, reinterpret_cast<LPARAM>(hook));
+        // The window may have gone away before the message reached it.
+        if (g_shellScanHook.exchange(nullptr)) {
+            UnhookWindowsHookEx(hook);
+        }
     }
 }
 
@@ -1725,18 +1745,33 @@ bool IsShellXamlWindow(HWND window) {
     return ClassIs(window, L"Windows.UI.Core.CoreWindow") || ClassIs(window, L"ControlCenterWindow");
 }
 
-void RefreshShellXamlWindows(bool refresh) {
-    struct Request { bool refresh; std::unordered_set<DWORD> scanned; } request{refresh, {}};
+bool RefreshShellXamlWindows(bool refresh, bool visibleOnly = false) {
+    struct Request {
+        bool refresh;
+        bool visibleOnly;
+        std::unordered_set<DWORD> scanned;
+    } request{refresh, visibleOnly, {}};
     EnumWindows([](HWND window, LPARAM value) -> BOOL {
         auto& request = *reinterpret_cast<Request*>(value);
         DWORD pid = 0;
-        DWORD thread = GetWindowThreadProcessId(window, &pid);
-        if (pid == GetCurrentProcessId() && IsShellXamlWindow(window) &&
-            request.scanned.insert(thread).second) {
+        const DWORD thread = GetWindowThreadProcessId(window, &pid);
+        if (pid != GetCurrentProcessId() || !IsShellXamlWindow(window)) {
+            return TRUE;
+        }
+        if (request.visibleOnly) {
+            DWORD cloaked = 0;
+            if (!IsWindowVisible(window) ||
+                (SUCCEEDED(DwmGetWindowAttribute(window, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+                 cloaked)) {
+                return TRUE;
+            }
+        }
+        if (request.scanned.insert(thread).second) {
             RequestShellScan(window, request.refresh);
         }
         return TRUE;
     }, reinterpret_cast<LPARAM>(&request));
+    return !request.scanned.empty();
 }
 
 bool g_shellXamlScanPending;
@@ -1748,23 +1783,29 @@ void CALLBACK OnShellXamlWindow(HWINEVENTHOOK, DWORD event, HWND window, LONG ob
         window = GetAncestor(window, GA_ROOT);
     }
     if (event != EVENT_OBJECT_DESTROY && object == OBJID_WINDOW && child == CHILDID_SELF &&
-        window && IsShellXamlWindow(window)) {
+        window && IsShellXamlWindow(window) && !g_shellXamlScanPending) {
         g_shellXamlScanPending = true;
-        if (!g_shellXamlScanTimer) {
-            g_shellXamlScanTimer = SetTimer(nullptr, 0, 100, nullptr);
+        if (g_shellXamlScanTimer) {
+            KillTimer(nullptr, g_shellXamlScanTimer);
         }
+        g_shellXamlScanTimer = SetTimer(nullptr, 0, 100, nullptr);
     }
 }
 
 DWORD WINAPI RunShellXamlWorker(void* parameter) {
     HANDLE stop = static_cast<HANDLE>(parameter);
     const DWORD pid = GetCurrentProcessId();
-    const DWORD firstEvent = g_shellHost == ShellHost::Explorer ? EVENT_OBJECT_CREATE : EVENT_OBJECT_SHOW;
-    const auto show = SetWinEventHook(firstEvent, EVENT_OBJECT_SHOW, nullptr,
+    const auto show = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW, nullptr,
                                       OnShellXamlWindow, pid, 0, WINEVENT_OUTOFCONTEXT);
     const auto uncloak = SetWinEventHook(EVENT_OBJECT_UNCLOAKED, EVENT_OBJECT_UNCLOAKED, nullptr,
                                          OnShellXamlWindow, pid, 0, WINEVENT_OUTOFCONTEXT);
-    RefreshShellXamlWindows(false);
+    const bool watchVisiblePanels = g_shellHost == ShellHost::Start || g_shellHost == ShellHost::Search ||
+                                    g_shellHost == ShellHost::Flyouts;
+    // Popups and deferred content can appear without another HWND event.
+    constexpr UINT kVisiblePanelScanMs = 750;
+    if (RefreshShellXamlWindows(false, watchVisiblePanels) && watchVisiblePanels) {
+        g_shellXamlScanTimer = SetTimer(nullptr, 0, kVisiblePanelScanMs, nullptr);
+    }
     TaskbarLayoutRetry taskbarLayout;
     while (WaitForSingleObject(stop, 0) == WAIT_TIMEOUT) {
         const DWORD timeout = g_shellHost == ShellHost::Explorer ? taskbarLayout.Update() : INFINITE;
@@ -1780,13 +1821,16 @@ DWORD WINAPI RunShellXamlWorker(void* parameter) {
                PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
             if (!message.hwnd && message.message == WM_TIMER && message.wParam == g_shellXamlScanTimer) {
                 KillTimer(nullptr, std::exchange(g_shellXamlScanTimer, 0));
+                g_shellXamlScanPending = true;
             } else {
                 TranslateMessage(&message);
                 DispatchMessageW(&message);
             }
         }
         if (!g_shellXamlScanTimer && std::exchange(g_shellXamlScanPending, false)) {
-            RefreshShellXamlWindows(false);
+            if (RefreshShellXamlWindows(false, watchVisiblePanels) && watchVisiblePanels) {
+                g_shellXamlScanTimer = SetTimer(nullptr, 0, kVisiblePanelScanMs, nullptr);
+            }
         }
     }
     if (show) {
@@ -1934,8 +1978,33 @@ void Wh_ModSettingsChanged() {
 void Wh_ModBeforeUninit() {
     g_shellXamlStopping = true;
     g_shellXamlWorker.Stop();
-    RefreshShellXamlWindows(true);
+    std::unordered_set<DWORD> editedThreads;
+    {
+        std::lock_guard guard(g_shellXamlMutex);
+        for (auto const& edit : *g_shellXamlEdits) {
+            editedThreads.insert(edit.thread);
+        }
+        for (auto const& edit : *g_widgetEdits) {
+            editedThreads.insert(edit.thread);
+        }
+    }
+    for (DWORD thread : editedThreads) {
+        EnumThreadWindows(thread, [](HWND window, LPARAM) -> BOOL {
+            RequestShellScan(window, true);
+            return FALSE;
+        }, 0);
+    }
     g_windowWorker.Stop();
     g_windowSettingsChanged.close();
+}
+
+void Wh_ModUninit() {
+    // An unreachable UI thread may still own the remaining references.
+    if (g_shellXamlEdits->empty()) {
+        g_shellXamlEdits.reset();
+    }
+    if (g_widgetEdits->empty()) {
+        g_widgetEdits.reset();
+    }
 }
 #endif
