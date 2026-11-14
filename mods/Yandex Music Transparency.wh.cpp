@@ -1,10 +1,10 @@
 // ==WindhawkMod==
 // @id              yandex-music-transparency
 // @name            Yandex Music Transparency
-// @description     Automatically applies custom transparency to Yandex Music (and other selected apps)
+// @description     Automatically applies and enforces custom transparency for Yandex Music
 // @version         1.1
 // @author          NIKTO
-// @github          https://github.com/NIKTO-2
+// @github          https://github.com/NIKTO2-0
 // @include         Яндекс Музыка.exe
 // @compilerOptions -lcomctl32
 // ==/WindhawkMod==
@@ -13,9 +13,9 @@
 /*
 # Yandex Music Transparency
 
-Automatically makes the **Yandex Music** (`Яндекс Музыка.exe`) desktop window transparent on startup and prevents the app from resetting the opacity.
+Automatically makes the **Yandex Music** (`Яндекс Музыка.exe`) desktop window transparent on startup and continuously prevents the Electron application from resetting its opacity or removing `WS_EX_LAYERED`.
 
-Unlike hotkey-based opacity mods, this mod applies your chosen transparency level automatically every time the application runs without manual input.
+Unlike one-shot rule-based or hotkey-based opacity mods, this mod injects into the process to actively preserve your chosen transparency level across window state changes and redraws.
 
 ## Settings
 
@@ -23,7 +23,7 @@ Unlike hotkey-based opacity mods, this mod applies your chosen transparency leve
 
 ## Using with other applications
 
-Although configured for Yandex Music by default, the underlying logic works with other Win32/Electron applications. You can apply the same automatic transparency to additional programs by adding their executable names in the mod's **Advanced** tab under **Custom process inclusion list**.
+Although tailored for Yandex Music by default, you can apply the same persistent transparency to other Chromium/Electron applications by adding their executable names in the mod's **Advanced** tab under **Custom process inclusion list**.
 
 ## Limitations
 
@@ -34,12 +34,6 @@ Although configured for Yandex Music by default, the underlying logic works with
 ## Credits
 
 Created with assistance from ChatGPT.
-
-## Screenshots
-
-![Yandex Music Transparency - Explorer background](https://githubusercontent.com)
-
-![Yandex Music Transparency - Dark background](https://githubusercontent.com)
 */
 // ==/WindhawkModReadme==
 
@@ -194,29 +188,35 @@ void AttachToWindow(HWND hwnd) {
         return;
     }
 
+    bool alreadyTracked = false;
     {
         std::lock_guard<std::mutex> lock(g_windowsMutex);
         if (g_trackedWindows.count(hwnd)) {
-            ApplyTransparency(hwnd);
-            return;
-        }
-
-        OriginalWindowState state{};
-        state.hadLayeredStyle = (exStyle & WS_EX_LAYERED) != 0;
-        if (state.hadLayeredStyle) {
-            BYTE alpha = 255;
-            DWORD flags = 0;
-            if (GetLayeredWindowAttributes(hwnd, NULL, &alpha, &flags) && (flags & LWA_ALPHA)) {
-                state.originalAlpha = alpha;
-                state.hasOriginalAlpha = true;
+            alreadyTracked = true;
+        } else {
+            OriginalWindowState state{};
+            state.hadLayeredStyle = (exStyle & WS_EX_LAYERED) != 0;
+            if (state.hadLayeredStyle) {
+                BYTE alpha = 255;
+                DWORD flags = 0;
+                if (GetLayeredWindowAttributes(hwnd, NULL, &alpha, &flags) && (flags & LWA_ALPHA)) {
+                    state.originalAlpha = alpha;
+                    state.hasOriginalAlpha = true;
+                }
             }
+            g_trackedWindows[hwnd] = state;
         }
+    }
 
-        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, WindowSubclassProc, 0)) {
-            return;
-        }
+    if (alreadyTracked) {
+        ApplyTransparency(hwnd);
+        return;
+    }
 
-        g_trackedWindows[hwnd] = state;
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, WindowSubclassProc, 0)) {
+        std::lock_guard<std::mutex> lock(g_windowsMutex);
+        g_trackedWindows.erase(hwnd);
+        return;
     }
 
     ApplyTransparency(hwnd);
