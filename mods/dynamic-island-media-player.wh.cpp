@@ -5353,12 +5353,9 @@ DWORD WINAPI RenderThreadProc(void*) {
         }
     }
 
-    if (g_captureHook) {
-        UnhookWindowsHookEx(g_captureHook);
-        g_captureHook = nullptr;
-        g_captureHotkey = false;
-        g_captureHotkeyTarget = 0;
-    }
+    // The hook is owned and removed by its dedicated thread.
+    g_captureHotkey = false;
+    g_captureHotkeyTarget = 0;
     DisableHotkeyInput(hwnd);
     renderer.Shutdown();
     DestroyWindow(hwnd);
