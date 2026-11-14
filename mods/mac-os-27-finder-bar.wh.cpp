@@ -6516,7 +6516,7 @@ static void DrawLiquidGlass(ID2D1RenderTarget* rt, ID2D1SolidColorBrush* br, con
     if (int sol = PanelSolid(); sol && !solidWhite) {
         D2D1_COLOR_F c = sol == 5 ? (small ? D2D1::ColorF(1, 1, 1, 1) : D2D1::ColorF(0.95f, 0.95f, 0.96f, 0.99f))
                        : sol == 6 ? (small ? D2D1::ColorF(0.21f, 0.21f, 0.22f, 1) : D2D1::ColorF(0.12f, 0.12f, 0.13f, 0.99f))
-                                  : (small ? D2D1::ColorF(0.11f, 0.11f, 0.12f, 1) : D2D1::ColorF(0, 0, 0, 1));
+                                  : D2D1::ColorF(0, 0, 0, 1);  // OLED: preto, os blocos só com a borda
         c.a *= tint >= 1.0f ? 1.0f : std::max(0.0f, tint);
         br->SetColor(c);
         rt->FillRoundedRectangle(rr, br);
@@ -6524,7 +6524,7 @@ static void DrawLiquidGlass(ID2D1RenderTarget* rt, ID2D1SolidColorBrush* br, con
             br->SetColor(sol == 5 ? D2D1::ColorF(0, 0, 0, 0.05f) : D2D1::ColorF(1, 1, 1, 0.07f));
             rt->FillRoundedRectangle(rr, br);
         }
-        br->SetColor(sol == 5 ? D2D1::ColorF(0, 0, 0, 0.09f) : D2D1::ColorF(1, 1, 1, sol == 7 ? 0.12f : 0.08f));
+        br->SetColor(sol == 5 ? D2D1::ColorF(0, 0, 0, 0.09f) : D2D1::ColorF(1, 1, 1, sol == 7 ? 0.16f : 0.08f));
         float bw = std::max(1.0f, s), half = bw / 2;
         rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half),
                                                    std::max(0.0f, radius - half), std::max(0.0f, radius - half)),
@@ -20682,6 +20682,7 @@ struct NotifPanel {
     D2D1_RECT_F panel{}, view{}, clearBtn{}, winBtn{};
     std::vector<NtfGroup> groups;
     std::vector<NtfBlock> blocks;
+    bool compact = false;  // vazio: o painel pequeno, num cartão só
     std::set<std::wstring> expanded;
     float contentH = 0, scroll = 0;
     int hover = -1;  // bloco; -2 Limpar, -3 central do Windows
@@ -20850,7 +20851,10 @@ static bool NtfCanReply(const IslandNote& n) { return n.reply.canReply && n.repl
 
 // Os cartões ficam soltos, cada um com o vidro da Central, quando o vidro
 // líquido está ligado; sem ele, o painel único de antes.
-static bool NtfFloating() { return GlassLiquid(); }
+// Vidro líquido: cartões soltos. Sem notificações nem avisos, o painel fica
+// inteiro (o título, os botões e a pílula "Nenhuma notificação" num cartão só),
+// em todos os temas.
+static bool NtfFloating() { return GlassLiquid() && !g_ntf.compact; }
 
 static void NtfBuildGroups() {
     g_ntf.groups.clear();
@@ -20902,6 +20906,11 @@ static void NtfLayout() {
             g_ntf.blocks.push_back({2, D2D1::RectF(x0 + 12 * s, y + h - 32 * s, x0 + 12 * s + 150 * s, y + h - 8 * s), (int)gi, {}});
         y += h + 12 * s;
     }
+    // Vazio (sem notificações e sem avisos para mostrar): o painel pequeno.
+    g_ntf.compact = g_ntf.groups.empty();
+    if (g_settings.islHistNotices)
+        for (const auto& h : g_islHist)
+            if (!h.note.isNotif) g_ntf.compact = false;
     if (g_ntf.groups.empty()) {
         // Sem notificações: uma pílula pequena no centro, como "Editar controles".
         // A fonte do painel ainda não existe na primeira montagem: mede com uma igual.
