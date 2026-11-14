@@ -21,14 +21,13 @@ Dynamically manages process priorities and memory allocation to keep foreground 
 - **What it does**: Mitigates micro-stutters and input latency spikes caused by background processes competing for CPU resources.
 - **What it does not do**: It does not increase maximum hardware performance or raw gaming FPS.
 - **Plug & Play**: Safe, balanced defaults work out of the box without requiring any configuration.
-- **Advanced tuning**: Deeper options (e.g., EcoQoS, P/E-core scheduling, dynamic power schemes, anti-timer coalescing) are disabled by default.
+- **Advanced tuning**: Deeper options (e.g., EcoQoS, P/E-core scheduling, dynamic power schemes) are disabled by default.
 
 ## Key Features
 
 ### 1. Foreground Priority Boost
 - Elevates the CPU priority of the active window and its related child processes.
 - Optionally directs the active application to Performance Cores via Windows CPU Sets on hybrid architectures.
-- Optionally instructs the Windows kernel to disable timer coalescing and honor high-precision sub-millisecond timers for active games without DLL injection.
 
 ### 2. Background Throttling
 - Temporarily reduces the CPU priority of background processes exceeding defined utilization thresholds.
@@ -51,6 +50,11 @@ Dynamically manages process priorities and memory allocation to keep foreground 
 ### 6. Dynamic Performance Power Scheme
 - Automatically engages High Performance, Ultimate Performance, or a custom power plan GUID during demanding workloads on AC power.
 - Note: Switches the system-wide power plan for all users. The original plan is restored upon returning to desktop or when the mod is disabled. If the PC crashes, loses power, or if a user signs out while a performance plan (High Performance, Ultimate Performance, or custom scheme) is active, the plan can stay active until the mod restarts (or permanently if the mod is removed while engaged).
+- To enable Ultimate Performance if not already present on your Windows edition, run in an administrator prompt:
+  ```cmd
+  powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+  ```
+  If Windows assigns an alternate GUID to the generated scheme, copy that GUID into the `Custom Power Plan GUID` setting.
 
 ### 7. Inactive Browser & Web App Tab Trimming
 - Detects dormant background browser and Electron renderers and trims their unused memory while keeping active UI and tabs intact.
@@ -65,7 +69,6 @@ Advanced options (e.g., EcoQoS, P/E-core scheduling, power schemes) can be enabl
 - **1. Foreground Priority Boost (ProBalance)**: Automatically increases the CPU priority of the active foreground window family (`true` by default).
 - **Foreground Priority Level**: Priority class assigned to the active foreground application (`Above Normal` or `High`).
 - **Suggest P-Cores to Foreground Window**: Directs the active foreground app to Performance Cores on hybrid CPUs via CPU Sets (`false` by default).
-- **Anti-Timer Coalescing (High-Precision Game Timers)**: Instructs the Windows kernel to disable timer coalescing and honor high-precision sub-millisecond timers for the active foreground game without DLL injection (`false` by default).
 - **Dynamic Performance Power Scheme**: Temporarily activates the configured power scheme during demanding workloads on AC power (`false` by default).
 - **Dynamic Power Plan Selection**: Select High Performance, Ultimate Performance, or Custom GUID (`highPerformance` by default).
 - **Custom Power Plan GUID**: GUID string of a custom power plan when Custom GUID is chosen.
@@ -129,9 +132,6 @@ If you find this mod useful, you can support its development and maintenance:
 - enableForegroundCpuSets: false
   $name: Suggest P-Cores to Foreground Window
   $description: Directs the active foreground app to Performance Cores (P-cores) on hybrid Intel/AMD CPUs to eliminate micro-stutter.
-- enableAntiTimerCoalescing: false
-  $name: Anti-Timer Coalescing (High-Precision Game Timers)
-  $description: Instructs the Windows kernel to disable timer coalescing and honor high-precision sub-millisecond timers for the active foreground game without DLL injection.
 - enableDynamicPowerPlan: false
   $name: Dynamic Performance Power Scheme
   $description: Automatically engages the configured power scheme while a heavy application or game is active on AC power, and restores your plan on desktop.
@@ -484,7 +484,6 @@ struct ModSettings {
     ForegroundPrioritySetting foregroundPriorityLevel =
         ForegroundPrioritySetting::AboveNormal;
     bool enableForegroundCpuSets = false;
-    bool enableAntiTimerCoalescing = false;
     bool enableBackgroundCpuSets = false;
     bool enableBackgroundThrottling = true;
     int backgroundCpuThrottleThresholdPercent = 15;
@@ -578,7 +577,6 @@ struct BoostedProcessEntry {
     ULONG originalIoPriority = IoPriorityNormal;
     ULONG originalMemoryPriority = 5; // MEMORY_PRIORITY_NORMAL
     bool cpuSetsApplied = false;
-    bool antiTimerCoalescingApplied = false;
 };
 static std::atomic<DWORD> g_currentBoostedPid{0};
 static std::vector<BoostedProcessEntry> g_boostedProcesses;
@@ -2270,23 +2268,6 @@ static bool ResetProcessEcoQoS(HANDLE hProcess) {
                                  &state, sizeof(state)) != 0;
 }
 
-// Disables timer coalescing on Windows 10 (1709+) and Windows 11 for active foreground games,
-// ensuring the kernel honors high-resolution sub-millisecond timers without DLL injection.
-static bool SetProcessAntiTimerCoalescing(HANDLE hProcess, bool enable) {
-    PROCESS_POWER_THROTTLING_STATE state{};
-    state.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
-    if (enable) {
-        state.ControlMask = PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION;
-        state.StateMask = 0; // Cleared: timers are not coalesced and high-resolution timers are honored
-    } else {
-        state.ControlMask = 0; // Cleared: restore OS-managed default
-        state.StateMask = 0;
-    }
-    return SetProcessInformation(hProcess,
-                                 (PROCESS_INFORMATION_CLASS)ProcessPowerThrottlingInfoClass,
-                                 &state, sizeof(state)) != 0;
-}
-
 // ---------------------------------------------------------------------------
 // Foreground Priority Boost
 // ---------------------------------------------------------------------------
@@ -2331,9 +2312,6 @@ static void RestoreForegroundBoostLocked() {
                 SetProcessMemoryPriorityHint(entry.hProcess, entry.originalMemoryPriority);
                 if (entry.cpuSetsApplied && g_pfnSetProcessDefaultCpuSets) {
                     g_pfnSetProcessDefaultCpuSets(entry.hProcess, nullptr, 0);
-                }
-                if (entry.antiTimerCoalescingApplied) {
-                    SetProcessAntiTimerCoalescing(entry.hProcess, false);
                 }
             }
             CloseHandle(entry.hProcess);
@@ -2553,13 +2531,6 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
                         }
                     }
 
-                    bool appliedAntiTimerCoalescing = false;
-                    if (settings.enableAntiTimerCoalescing && pid == newForegroundPid) {
-                        if (SetProcessAntiTimerCoalescing(hProc, true)) {
-                            appliedAntiTimerCoalescing = true;
-                        }
-                    }
-
                     if (pid == newForegroundPid) {
                         foregroundBoosted = true;
                         if (itName != nameByPid.end()) {
@@ -2579,7 +2550,6 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
                     entry.originalIoPriority = origIoPriority;
                     entry.originalMemoryPriority = origMemoryPriority;
                     entry.cpuSetsApplied = appliedCpuSets;
-                    entry.antiTimerCoalescingApplied = appliedAntiTimerCoalescing;
                     g_boostedProcesses.push_back(entry);
                     continue;
                 }
@@ -5622,9 +5592,6 @@ static void LoadSettings() {
     g_settings.enableForegroundCpuSets =
         Wh_GetIntSetting(L"enableForegroundCpuSets") != 0;
 
-    g_settings.enableAntiTimerCoalescing =
-        Wh_GetIntSetting(L"enableAntiTimerCoalescing") != 0;
-
     g_settings.enableBackgroundCpuSets =
         Wh_GetIntSetting(L"enableBackgroundCpuSets") != 0;
 
@@ -5840,12 +5807,6 @@ static void LogSettingsTransitions(const ModSettings& oldSettings,
         LogEvent(LogCategory::ProBalance,
                  L"P-Core affinity for foreground app: %s",
                  newSettings.enableForegroundCpuSets ? L"ON" : L"OFF");
-    }
-
-    if (oldSettings.enableAntiTimerCoalescing != newSettings.enableAntiTimerCoalescing) {
-        LogEvent(LogCategory::ProBalance,
-                 L"Anti-Timer Coalescing for foreground games: %s",
-                 newSettings.enableAntiTimerCoalescing ? L"ON" : L"OFF");
     }
 
     if (oldSettings.enableProBalance != newSettings.enableProBalance) {
