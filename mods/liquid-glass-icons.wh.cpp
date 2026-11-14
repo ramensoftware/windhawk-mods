@@ -3,7 +3,8 @@
 // @name            Liquid Glass Icons
 // @description     Transforms desktop icons into translucent Liquid Glass tiles with inset artwork, specular rims, and glossy highlights without altering File Explorer or any windows
 // @version         1.0.0
-// @author          Custom
+// @author          Arbaz14
+// @github          https://github.com/Arbaz14
 // @include         explorer.exe
 // @compilerOptions -lcomctl32 -lgdi32 -lmsimg32 -luser32
 // @license         MIT
