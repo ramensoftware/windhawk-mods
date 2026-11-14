@@ -869,25 +869,25 @@ wux::FrameworkElement FindMenuTile() {
     return nullptr;
 }
 
+wuxc::TextBlock TitleInside(wux::DependencyObject const& root, int depth = 6) {
+    int n = wux::Media::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < n; i++) {
+        auto child = wux::Media::VisualTreeHelper::GetChild(root, i);
+        if (auto tb = child.try_as<wuxc::TextBlock>(); tb && tb.Name() == L"Title") return tb;
+        if (depth > 0) {
+            if (auto tb = TitleInside(child, depth - 1)) return tb;
+        }
+    }
+    return nullptr;
+}
+
 // Recommended items have no name on the Grid; use their "Title" text.
 std::wstring TileName(wux::FrameworkElement const& tile) {
     std::wstring name(wux::Automation::AutomationProperties::GetName(tile));
     if (!name.empty()) return name;
     // Search this item's own subtree: FindName would search the whole list's
     // name scope and return another item's "Title".
-    std::function<wuxc::TextBlock(wux::DependencyObject const&, int)> find =
-        [&](wux::DependencyObject const& node, int depth) -> wuxc::TextBlock {
-        int n = wux::Media::VisualTreeHelper::GetChildrenCount(node);
-        for (int i = 0; i < n; i++) {
-            auto child = wux::Media::VisualTreeHelper::GetChild(node, i);
-            if (auto tb = child.try_as<wuxc::TextBlock>(); tb && tb.Name() == L"Title") return tb;
-            if (depth > 0) {
-                if (auto tb = find(child, depth - 1)) return tb;
-            }
-        }
-        return nullptr;
-    };
-    if (auto title = find(tile, 6)) return std::wstring(title.Text());
+    if (auto title = TitleInside(tile)) return std::wstring(title.Text());
     return name;
 }
 
@@ -1341,5 +1341,7 @@ void Wh_ModUninit() {
     } else {
         drop(nullptr);
     }
+    // A button click that raced the stop event may have started one more.
+    JoinThreads();
     CloseHandle(g_stopEvent);
 }
