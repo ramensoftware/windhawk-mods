@@ -39,6 +39,8 @@ Replaces the icon inside the Windows 11 Start button with a custom SVG, PNG, JPG
 
 Only the icon is replaced. Windows continues to handle clicking, keyboard navigation, accessibility and Start menu activation.
 
+To change the color of the button, use the [Start button colorizer](https://windhawk.net/mods/taskbar-start-button-colorizer) mod.
+
 ## Image sources
 
 Local files:
