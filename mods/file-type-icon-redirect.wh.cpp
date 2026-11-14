@@ -8,7 +8,7 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lshell32 -lshlwapi -lole32 -luuid
 // ==/WindhawkMod==
 
@@ -33,7 +33,8 @@ Choose Configuration source:
   and re-enable the mod, then reopen affected windows or menus.
 
 Extensions are case-insensitive and match the last extension of a filename.
-To end the settings list, leave both fields of its final entry empty.
+Fill in the first entry. An entry with both fields empty ends the settings list;
+entries after it are ignored. No empty final entry is required.
 INI files support UTF-8 (with or without BOM) or UTF-16 LE with BOM, full-line
 comments starting with ; or #, and paths relative to the INI directory.
 In Windhawk settings, resource paths must be absolute. Environment variables
@@ -68,8 +69,8 @@ advanced settings and restart the application. No additional process toggle is
 required. Applications using private interfaces or caches may be unaffected.
 
 The mod uses Windhawk symbol resolution for the installed system DLLs. Missing
-required symbols prevent loading and are reported in the log. x86 and AMD64 are
-supported; native ARM64 is not currently targeted.
+required symbols prevent loading and are reported in the log. The mod targets
+x86, x64, and ARM64. ARM64 has not been tested on a physical device.
 */
 // ==/WindhawkModReadme==
 
@@ -89,7 +90,7 @@ supported; native ARM64 is not currently targeted.
       $name: Icon
       $description: Absolute icon path, optionally followed by an index. Environment variables are supported.
   $name: File type icons
-  $description: Used only when Configuration source is Windhawk settings. Leave both fields of the final entry empty to end the list.
+  $description: Used only in Windhawk settings mode. Fill in the first entry; the list ends at the first entry with both fields empty. Later entries are ignored.
 - iniPath: "%USERPROFILE%\\FileTypeIcons\\icons.ini"
   $name: INI file path
   $description: Used only in INI file mode. Absolute path; environment variables are supported. Re-enable the mod after editing the file, or save a changed mod setting.
@@ -119,9 +120,6 @@ supported; native ARM64 is not currently targeted.
 
 namespace {
 using Microsoft::WRL::ComPtr;
-
-
-
 struct IconValidation { std::once_flag once; bool usable = false; };
 struct IconLocation {
     std::wstring path;
@@ -478,7 +476,6 @@ HRESULT STDMETHODCALLTYPE GetThumbnailHandlerHook(IThumbnailHandlerFactory* fact
 }
 
 struct ModuleReferences { std::vector<HMODULE> modules; } g_hookModules;
-bool g_refreshExplorer = false;
 
 HMODULE LoadHookModule(PCWSTR name) {
     HMODULE module = LoadLibraryExW(name, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -501,7 +498,7 @@ void NotifyShell() {
 
 bool InstallHooks() {
     HMODULE windowsStorage = LoadHookModule(L"windows.storage.dll");
-    if (!(windowsStorage)) { ReleaseHookModules(); return false; }
+    if (!windowsStorage) { ReleaseHookModules(); return false; }
     // windows.storage.dll
     const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
         {
@@ -535,13 +532,12 @@ bool InstallHooks() {
             &g_getThumbnailHandler, GetThumbnailHandlerHook
         },
     };
-    if (!(WindhawkUtils::HookSymbols(windowsStorage, windowsStorageHooks, ARRAYSIZE(windowsStorageHooks)))) return false;
+    if (!WindhawkUtils::HookSymbols(windowsStorage, windowsStorageHooks, ARRAYSIZE(windowsStorageHooks))) return false;
     return WindhawkUtils::SetFunctionHook(SHCreateFileExtractIconW, CreateFileExtractIconHook, &g_createFileExtractIcon);
 }
 } // namespace
 
 BOOL Wh_ModInit() {
-    g_refreshExplorer = Wh_GetIntSetting(L"refreshExplorer") != 0;
     LoadSettings();
     bool ok = InstallHooks();
     if (!ok) Wh_Log(L"Required Shell symbols or hooks unavailable; mod will not load");
@@ -549,8 +545,8 @@ BOOL Wh_ModInit() {
 }
 void Wh_ModSettingsChanged() {
     bool changed = LoadSettings();
-    g_refreshExplorer = Wh_GetIntSetting(L"refreshExplorer") != 0;
-    if (changed && g_refreshExplorer) NotifyShell();
+    bool refreshExplorer = Wh_GetIntSetting(L"refreshExplorer") != 0;
+    if (changed && refreshExplorer) NotifyShell();
 }
 void Wh_ModUninit() {
     std::atomic_store(&g_icons, std::make_shared<const IconMap>());
