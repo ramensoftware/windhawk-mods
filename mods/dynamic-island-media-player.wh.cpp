@@ -591,6 +591,7 @@ std::atomic<unsigned> g_hkPrevMods{MOD_CONTROL};
 std::atomic<unsigned> g_hkPrevVk{'B'};
 std::atomic<unsigned> g_hkPlayPauseMods{MOD_CONTROL};
 std::atomic<unsigned> g_hkPlayPauseVk{'M'};
+bool g_hotkeyRegistered[5] = {};
 
 std::atomic<int> g_captureHotkeyTarget{0};
 std::atomic<bool> g_captureHotkey{false};
@@ -3717,12 +3718,38 @@ void DispatchConfiguredHotkey(int id) {
     }
 }
 
-bool IsRawKeyboardModifier(UINT vk) {
-    return vk == VK_LCONTROL || vk == VK_RCONTROL ||
-           vk == VK_LMENU || vk == VK_RMENU ||
-           vk == VK_LSHIFT || vk == VK_RSHIFT ||
-           vk == VK_LWIN || vk == VK_RWIN ||
-           vk == VK_CONTROL || vk == VK_MENU || vk == VK_SHIFT;
+void RegisterSingleHotkey(HWND hwnd, int id, UINT mods, UINT vk) {
+    if (g_hotkeyRegistered[id]) {
+        UnregisterHotKey(hwnd, id);
+        g_hotkeyRegistered[id] = false;
+    }
+
+    if (g_hotkeyEnabled.load() && vk != 0) {
+        if (RegisterHotKey(hwnd, id, mods | MOD_NOREPEAT, vk)) {
+            g_hotkeyRegistered[id] = true;
+        } else {
+            Wh_Log(L"RegisterHotKey failed for id %d (mods=%u, vk=%u): %u",
+                   id, mods, vk, GetLastError());
+        }
+    }
+}
+
+void ApplyHideShowHotkey(HWND hwnd) {
+    if (!hwnd) return;
+    RegisterSingleHotkey(hwnd, kHotkeyHideShow, g_hotkeyMods.load(), g_hotkeyVk.load());
+    RegisterSingleHotkey(hwnd, kHotkeyNextTrack, g_hkNextMods.load(), g_hkNextVk.load());
+    RegisterSingleHotkey(hwnd, kHotkeyPrevTrack, g_hkPrevMods.load(), g_hkPrevVk.load());
+    RegisterSingleHotkey(hwnd, kHotkeyPlayPause, g_hkPlayPauseMods.load(), g_hkPlayPauseVk.load());
+}
+
+void UnregisterAllHotkeys(HWND hwnd) {
+    if (!hwnd) return;
+    for (int id = kHotkeyHideShow; id <= kHotkeyPlayPause; ++id) {
+        if (g_hotkeyRegistered[id]) {
+            UnregisterHotKey(hwnd, id);
+            g_hotkeyRegistered[id] = false;
+        }
+    }
 }
 
 bool IsHotkeyCombinationUsed(UINT mods, UINT vk, int exceptTarget) {
@@ -3744,14 +3771,6 @@ bool IsHotkeyCombinationUsed(UINT mods, UINT vk, int exceptTarget) {
     return false;
 }
 
-int FindConfiguredHotkey(UINT mods, UINT vk) {
-    if (mods == g_hotkeyMods.load() && vk == g_hotkeyVk.load()) return kHotkeyHideShow;
-    if (mods == g_hkNextMods.load() && vk == g_hkNextVk.load()) return kHotkeyNextTrack;
-    if (mods == g_hkPrevMods.load() && vk == g_hkPrevVk.load()) return kHotkeyPrevTrack;
-    if (mods == g_hkPlayPauseMods.load() && vk == g_hkPlayPauseVk.load()) return kHotkeyPlayPause;
-    return 0;
-}
-
 LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam);
 
 bool RequestKeyboardHookUpdate() {
@@ -3769,13 +3788,14 @@ void RemoveKeyboardHook() {
 }
 
 void ApplyHotkeyInput(HWND) {
-    // Preserve swallowed-key state until its matching key-up is received.
+    // The low-level hook is now used only while recording a new combination.
     RequestKeyboardHookUpdate();
 }
 
-void DisableHotkeyInput(HWND) {
+void DisableHotkeyInput(HWND hwnd) {
     g_hotkeyEnabled = false;
     g_captureHotkey = false;
+    UnregisterAllHotkeys(hwnd);
     ApplyHotkeyInput(nullptr);
 }
 
@@ -3852,40 +3872,9 @@ LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         return 1;
     }
 
-    // Swallow the matching key's key-up as well as key-down. This prevents
-    // games from seeing the base key (e.g. M) when Ctrl+M belongs to the player.
-    if (!down || !g_hotkeyEnabled.load()) {
-        return CallNextHookEx(g_captureHook, nCode, wParam, lParam);
-    }
-    if (g_suppressedHotkeyKeys[vk]) {
-        return 1; // Suppress auto-repeat events for an already handled chord.
-    }
-    if (IsRawKeyboardModifier(vk)) {
-        return CallNextHookEx(g_captureHook, nCode, wParam, lParam);
-    }
-
-    const auto isDown = [](int key) {
-        return (GetAsyncKeyState(key) & 0x8000) != 0;
-    };
-    UINT mods = 0;
-    if (isDown(VK_LCONTROL) || isDown(VK_RCONTROL)) mods |= MOD_CONTROL;
-    if (isDown(VK_LMENU) || isDown(VK_RMENU)) mods |= MOD_ALT;
-    if (isDown(VK_LSHIFT) || isDown(VK_RSHIFT)) mods |= MOD_SHIFT;
-    if (isDown(VK_LWIN) || isDown(VK_RWIN)) mods |= MOD_WIN;
-
-    const int id = FindConfiguredHotkey(mods, vk);
-    if (!id) {
-        return CallNextHookEx(g_captureHook, nCode, wParam, lParam);
-    }
-
-    HWND hSelf = g_hwnd.load();
-    if (!hSelf || !PostMessageW(hSelf, WM_APP_DISPATCH_HOTKEY, static_cast<WPARAM>(id), 0)) {
-        // If the command cannot be queued, do not eat the user's keystroke.
-        return CallNextHookEx(g_captureHook, nCode, wParam, lParam);
-    }
-
-    g_suppressedHotkeyKeys[vk] = true;
-    return 1;
+    // Normal hotkeys are registered with RegisterHotKey. The low-level hook
+    // must not interfere with keyboard input outside the capture dialog.
+    return CallNextHookEx(g_captureHook, nCode, wParam, lParam);
 }
 
 DWORD WINAPI KeyboardHookThreadProc(void*) {
@@ -3896,7 +3885,7 @@ DWORD WINAPI KeyboardHookThreadProc(void*) {
     SetEvent(g_hookThreadReady);
 
     auto updateHook = [] {
-        const bool shouldBeInstalled = g_hotkeyEnabled.load() || g_captureHotkey.load();
+        const bool shouldBeInstalled = g_captureHotkey.load();
         if (shouldBeInstalled && !g_captureHook) {
             g_captureHook = SetWindowsHookExW(
                 WH_KEYBOARD_LL, CaptureKeyboardProc, nullptr, 0);
@@ -3951,7 +3940,7 @@ void StopHotkeyCaptureIfDone() {
     if (NowSeconds() > g_captureDeadline.load()) g_captureHotkey = false;
     if (!g_captureHotkey.load()) {
         g_captureHotkeyTarget = 0;
-        if (!g_hotkeyEnabled.load()) RemoveKeyboardHook();
+        RemoveKeyboardHook();
         g_layoutDirty = true;
     }
 }
@@ -4982,7 +4971,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
         }
 
-        case WM_APP_DISPATCH_HOTKEY: {
+        case WM_HOTKEY: {
             const int id = static_cast<int>(wParam);
             if (g_hotkeyEnabled.load() &&
                 id >= kHotkeyHideShow && id <= kHotkeyPlayPause) {
@@ -4996,6 +4985,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
 
         case WM_APP_APPLY_HOTKEYS:
+            ApplyHideShowHotkey(hwnd);
             ApplyHotkeyInput(hwnd);
             return 0;
 
@@ -5054,6 +5044,7 @@ DWORD WINAPI RenderThreadProc(void*) {
     }
     g_hwnd.store(hwnd);
     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    ApplyHideShowHotkey(hwnd);
 
     Renderer renderer;
     if (!renderer.Initialize(hwnd)) {
