@@ -29,107 +29,83 @@ words, an accent bar. **Ctrl+C / V / X**, plus the classic **Ctrl+Insert**,
 **Shift+Insert** and **Shift+Delete**, show a check mark or scissors with a `×N`
 badge counting consecutive actions. **Win+Space**, **Ctrl+Shift**,
 **Alt+Shift** and **Shift** inside an IME show a globe with the input language
-or the Chinese/English mode; **Caps Lock** works too when the IME is set to
-toggle with it. IMEs that never report their mode to the system (a good number
-of third-party builds) are tracked by the solo-Shift gesture instead.
+or the Chinese/English mode; IMEs that never report their mode to the system
+(a good number of third-party builds) can be tracked by the solo-Shift
+gesture instead, behind an optional setting that is off by default.
 
 ![Light theme, frosted card over a wallpaper](https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-acrylic-light-en.png)
 
 ## Features
 
-- **Blurred backdrop, live.** The card blurs what is behind it, the way the
-  Windows 11 OSD does, and keeps it refreshing (Windows 10 2004 and later) so
-  video and scrolling pages move through as a soft wash instead of a frozen
-  frame. *Card material → Solid* for an opaque card.
+- **Blurred backdrop, live.** The card blurs what is behind it and keeps it
+  refreshing (Windows 10 2004 and later), so video and scrolling pages move
+  through as a soft wash, with the same saturation lift the system acrylic
+  applies. *Card material → Solid* for an opaque card.
 - **Windows 11 look, Windows 10 included.** The mod paints the card itself, so
-  it needs neither system acrylic nor system rounded corners. Per-monitor DPI,
-  light/dark theme and the system accent color are followed. The labels are
-  drawn by DirectWrite — the same engine the native OSD uses — so they stay
-  smooth at every DPI scale, with a GDI+ fallback where dwrite.dll is not
-  available.
-- **Stays in front.** A fullscreen game, recorder or launcher overlay that covers
-  the card is noticed within 100 ms and the card is re-raised; when nothing
-  covers it, no other window is touched.
+  it needs neither system acrylic nor rounded corners. Per-monitor DPI,
+  light/dark theme and the accent color are followed; labels are drawn by
+  DirectWrite with a GDI+ fallback.
+- **Stays in front.** Anything covering the card is noticed within 100 ms and
+  the card is re-raised; when nothing covers it, no other window is touched.
 - **Hugs the taskbar.** Anchored to the taskbar's live edge, so an auto-hiding
-  bar never covers the card, and the card slides in from the nearest edge.
+  bar never covers the card.
 - **Clipboard aware.** Copy and cut tips wait for the clipboard to actually
-  change, so a `Ctrl+C` that interrupts a console app and a permanent
-  `Shift+Delete` stay quiet. Context-menu copies can be reported too.
-- **Works under elevated windows.** Windows stops calling the keyboard hook while
-  an administrator window has focus; the lock keys and Insert then come from Raw
-  Input, which is delivered per device and ignores both focus and integrity
-  level. A key-state poll stays behind it for anything Raw Input cannot see, such
-  as a remote or a virtual keyboard. See below for what does not work there.
-- **Light on resources.** Nothing runs while the card is hidden. A frame takes
-  about 0.5 ms at 100% size; the live backdrop and the topmost guard only tick
-  while a card is up.
+  change, so a stray `Ctrl+C` in a console app stays quiet. Context-menu copies
+  can be reported too.
+- **Works under elevated windows.** While an administrator window has focus,
+  the lock keys and Insert come from Raw Input, with a key-state poll behind it
+  for anything Raw Input cannot see.
+- **Light on resources.** Nothing runs while the card is hidden.
 
 ![Paste tip with an ×3 badge](https://raw.githubusercontent.com/DoYouNatureQ/WinTips/main/Windhawk/preview/osd-paste-en.png)
 
 ## Settings
 
-- **Tips** — Caps Lock, Num Lock, Scroll Lock, Insert, Copy, Paste and Cut, each
-  on or off. *Also notify non-keyboard copies* adds context-menu and in-app
-  copies; *Show the ×N count badge* hides the badge on the copy/paste/cut cards
-  when turned off.
-- **Input language & Chinese/English tip** — off by default; shows the globe card
-  after a language switch. Set it back to off if it fires more often than it
-  helps. *Tip when switching windows* adds the same card for the input state a
-  window restores as it takes focus — the case Windows' "Let me use a different
-  input method for each app window" option creates.
-- **Behaviour** — *Display duration* 500–10000 ms; *Animation speed* 100 is
-  normal (300 ms), 0 disables it; *Skip while a fullscreen app is in front*.
-- **Placement** — *Vertical* above the taskbar or below the top edge,
-  *Horizontal* left, center or right, *Show on* the active window's display
-  (default), the mouse's display or the primary one, plus pixel offsets. The
-  taskbar edge is tracked live.
-- **Look** — *Theme* follow Windows, dark or light; *Card material* acrylic or
-  solid; *Tint opacity* 20–90% (55% by default, acrylic only); *Blur radius*
-  0–40 px; *Accent color* `#RRGGBB`, empty for the system accent; *Card size*
-  60–200%, gap to the screen edge unchanged.
-- **Language** — language of the text on the card: Follow Windows (eight UI
-  languages built in, English for anything else) or pin one.
+- **Tips** — Caps Lock, Num Lock, Scroll Lock, Insert, Copy, Paste and Cut,
+  each on or off. *Also notify non-keyboard copies*; *Show the ×N count badge*.
+- **Input language & Chinese/English tip** — off by default. *Tip when
+  switching windows* covers Windows' "Let me use a different input method for
+  each app window" option; *Infer Chinese/English from Shift* is an opt-in
+  fallback for IMEs that never report their mode.
+- **Behaviour** — display duration 500–10000 ms; animation speed (100 is
+  normal, 0 disables it); skip while a fullscreen app is in front.
+- **Placement** — vertical and horizontal anchors, which display to show on,
+  and pixel offsets; the taskbar edge is tracked live.
+- **Look** — theme, card material, tint opacity 20–90%, blur radius 0–40 px,
+  accent color `#RRGGBB`, card size 60–200%.
+- **Language** — the text on the card: follow Windows (eight UI languages
+  built in) or pin one.
 
 ## Things to know
 
-- Runs as a **tool mod**: it keeps working when Explorer restarts and never loads
-  into other processes. The standalone **WinTips.exe** does the same job and the
-  mod stays quiet while it runs, so both can be installed — but keep only one of
-  the two startup entries.
-- Insert is event-based: Windows keeps no global Insert state, and only a bare
-  Insert counts (with Ctrl or Shift held it is a copy or a paste).
+- Runs as a **tool mod**: never loads into other processes. The standalone
+  **WinTips.exe** does the same job and the mod stays quiet while it runs —
+  but keep only one of the two startup entries.
+- Insert is event-based; only a bare Insert counts (with Ctrl or Shift held it
+  is a copy or a paste).
 - Copy, paste and cut are keyed to Ctrl (+ Shift), never to combos that also
-  hold **Win**: Win+Ctrl+V opens the Volume Mixer, Win+Ctrl+C toggles color
-  filters, and none of those should read as clipboard actions.
-- An **exclusive-fullscreen** game covers the card, since that mode owns the
-  display pipeline. Borderless and windowed games are fine.
-- Behind an **elevated window** the backdrop grab comes back black, so that tip
-  falls back to a solid card. The language is still reported there, the IME mode
-  is not. Copy, paste and cut are not either: they need the key the hook is
-  denied, and Raw Input only answers for the lock keys and Insert.
-- The language card needs a keystroke to hang on, or a foreground change:
-  switching with the mouse from the language bar or an IME status window shows
-  nothing. Window switches are covered when Windows' per-window input method
-  option is on (a watch starts on the focus event); a mouse-driven language-bar
-  switch still is not, because it changes the input state behind the very
-  window that keeps its focus.
+  hold **Win**.
+- An **exclusive-fullscreen** game covers the card; borderless and windowed
+  games are fine.
+- Behind an **elevated window** the backdrop grab comes back black (solid card
+  fallback) and copy / paste / cut are not reported either.
+- The language card needs a keystroke or a window switch to hang on; switching
+  with the mouse from the language bar shows nothing.
+- The *Infer Chinese/English from Shift* fallback has no way to check itself:
+  when the mode is also changed by other means (Caps Lock, the IME's status
+  bar), the card can stay one toggle out of sync until the system reports a
+  switch again. Leave it off unless your IME never reports its mode.
 - The card is **left out of screen capture** while the live backdrop runs
-  (`WDA_EXCLUDEFROMCAPTURE`): screenshots, recordings, streams and screen sharing
-  don't show it. That is what keeps the live blur from feeding on itself. Pick
-  *Card material → Solid* if you want the card in a recording — it uses the
-  one-shot backdrop, which needs no exclusion.
+  (`WDA_EXCLUDEFROMCAPTURE`); pick *Card material → Solid* if you want it in a
+  recording.
 - Without the live-refresh capability the backdrop is a snapshot taken when the
-  card appeared; sliding in and following the taskbar still work, because the
-  grab includes a margin around the card.
+  card appeared.
 
 ## Compared to Lock Keys Notifier
 
-[Lock Keys Notifier](https://windhawk.net/mods/lock-keys-notifier) reports the
-same lock keys but aims elsewhere: it draws a configurable toast on a solid
-background, while this mod reproduces the native Windows 11 OSD and adds
-clipboard tips. Want to tune every pixel of the card — layouts, fonts, shadows,
-sounds? Lock Keys Notifier fits better. Want the native look or clipboard tips?
-This one.
+[Lock Keys Notifier](https://windhawk.net/mods/lock-keys-notifier) draws a
+configurable toast on a solid background — tune every pixel of it if you like.
+This mod reproduces the native Windows 11 OSD and adds clipboard tips.
 
 ## Links
 
@@ -140,8 +116,7 @@ This one.
 
 GPL-3.0-or-later, as the standalone WinTips app. The look and motion take
 reference from the LockWindow design in FluentFlyout (also GPL-3.0); the code
-here is an independent implementation, and redistributed versions must ship the
-complete corresponding source under the GPL.
+here is an independent implementation.
 */
 // ==/WindhawkModReadme==
 
@@ -237,9 +212,11 @@ complete corresponding source under the GPL.
   $description: >-
     Shows the input language after Win+Space, Ctrl+Shift or Alt+Shift, and the
     Chinese/English mode after Shift inside an IME. Off by default: unless you
-    switch often and on purpose, it shows up more often than it helps.
+    switch often and on purpose, it shows up more often than it helps. For IMEs
+    that never report their mode, a separate setting below can infer it from
+    the Shift gesture.
   $description:zh-CN: >-
-    Win+Space、Ctrl+Shift、Alt+Shift 换输入语言，或输入法内按 Shift 切中英文时，浮窗显示当前状态。第三方输入法不上报模式时改按「Shift 单独按下并抬起」推断（连按两次净变化为零则不提示）。默认关闭：除非确实经常刻意切换，否则它出现得比帮到你的次数多。
+    Win+Space、Ctrl+Shift、Alt+Shift 换输入语言，或输入法内按 Shift 切中英文时，浮窗显示当前状态。第三方输入法不上报模式时，可在下方开启「由 Shift 推断中英文状态」。默认关闭：除非确实经常刻意切换，否则它出现得比帮到你的次数多。
 - notifyLanguageOnWindowSwitch: true
   $name: Tip when switching windows
   $name:zh-CN: 切换窗口时提示输入状态
@@ -251,6 +228,22 @@ complete corresponding source under the GPL.
     card stays quiet anyway. Requires the input language tip above.
   $description:zh-CN: >-
     开启系统的「允许我为每个应用窗口使用不同输入法」后，切换到语言或中英文状态与之前不同的窗口时也弹出提示。没开该系统选项时，切换窗口不会改变输入状态，浮窗自然不会出现。
+
+    需要同时开启上面的“输入法语言与中英文提示”。
+- notifyLanguageInferShift: false
+  $name: Infer Chinese/English from Shift
+  $name:zh-CN: 由 Shift 推断中英文状态
+  $description: >-
+    For IMEs that never report their Chinese/English mode to the system
+    (Weasel and a good number of third-party builds), treat a solo Shift
+    press-and-release as a toggle and report the opposite of the tracked
+    state. The guess survives across windows but has no way to self-correct:
+    if the mode is also changed by other means (Caps Lock, the IME's status
+    bar), it can stay backwards until a switch the system does report lands.
+    Turn this on only if your IME toggles on Shift and the card never follows
+    it otherwise. Requires the input language tip above.
+  $description:zh-CN: >-
+    对从不上报中英文模式的输入法（如小狼毫 Weasel 及不少第三方输入法），把「单独按下并抬起 Shift」当作一次中英文切换，按缓存状态的相反面提示（连按两次净变化为零则不提示）。推断无法自我纠正：Caps Lock、输入法状态栏等其他途径切换模式后，推断可能一直反向，直到下一次被系统上报的切换碰巧纠正。仅当你的输入法确实用 Shift 切换、且不开此项时卡片完全不跟随时再开启。
 
     需要同时开启上面的“输入法语言与中英文提示”。
 - displayMs: 2000
@@ -581,6 +574,9 @@ struct Settings {
     bool notify[kKindCount] = {true, true, true, true,
                                true, true, true, false}; // language tip off
     bool notifyLanguageOnWindowSwitch = true;
+    // Solo-Shift inference for IMEs that never report their mode. Off: the
+    // guess can drift backwards with no way to notice, so it is opt-in.
+    bool notifyLanguageInferShift = false;
     bool notifyAnyCopy = true;
     bool countBadge = true; // ×N badge on copy/paste/cut cards (issue #7304)
     int displayMs = 2000;
@@ -696,6 +692,8 @@ void LoadSettings() {
     s.notify[kLanguage] = Wh_GetIntSetting(L"notifyLanguage") != 0;
     s.notifyLanguageOnWindowSwitch =
         Wh_GetIntSetting(L"notifyLanguageOnWindowSwitch") != 0;
+    s.notifyLanguageInferShift =
+        Wh_GetIntSetting(L"notifyLanguageInferShift") != 0;
 
     s.displayMs = Clamp(Wh_GetIntSetting(L"displayMs"), 500, 10000);
     s.animationPercent = Clamp(Wh_GetIntSetting(L"animationPercent"), 0, 300);
@@ -1984,7 +1982,9 @@ void RenderCard(Graphics& g, float scale, float width, float height,
         // each side (~20.5 DIP tall, corner radius 9).
         float badgeHeight = 20.5f * scale;
         float badgeX = width - 12.0f * scale - badgeWidth;
-        float badgeY = (23.0f - badgeHeight / 2.0f) * scale;
+        // badgeHeight is already in pixels; scaling the whole expression again
+        // pushed the pill off the top of the card at scale 2+.
+        float badgeY = 23.0f * scale - badgeHeight / 2.0f;
 
         GraphicsState badgeState = g.Save();
         g.TranslateTransform(badgeX + badgeWidth / 2.0f, badgeY + badgeHeight / 2.0f);
@@ -2288,6 +2288,29 @@ void BlurAxis(BYTE* bits, int width, int height, int radius, bool horizontal) {
     }
 }
 
+// DWM's acrylic lifts background saturation by about 1.25x on top of the blur
+// - that is most of why the system material reads "vivid" where a plain blurred
+// wash reads dull. Applied after blurring so the static grab, the live refresh
+// and the --shot harness all land on the same look. Fixed point: with
+// sat = 1.25 the per-channel result is (C*320 - lum) >> 8, where lum is 0.25 of
+// the luma times 256 (5/39/20 for B/G/R; they sum to exactly 64).
+void SaturateBackdrop(Surface& image) {
+    if (!image.bits) {
+        return;
+    }
+    for (int y = 0; y < image.height; y++) {
+        BYTE* row = (BYTE*)image.bits + (size_t)y * image.stride;
+        for (int x = 0; x < image.width; x++) {
+            BYTE* px = row + x * 4;
+            const int lum = px[0] * 5 + px[1] * 39 + px[2] * 20;
+            for (int c = 0; c < 3; c++) {
+                const int v = (px[c] * 320 - lum) >> 8;
+                px[c] = (BYTE)Clamp(v, 0, 255);
+            }
+        }
+    }
+}
+
 void BlurBackdrop(Surface& image, int radius, int passes) {
     if (!image.bits || radius <= 0) {
         return;
@@ -2296,6 +2319,7 @@ void BlurBackdrop(Surface& image, int radius, int passes) {
         BlurAxis((BYTE*)image.bits, image.width, image.height, radius, true);
         BlurAxis((BYTE*)image.bits, image.width, image.height, radius, false);
     }
+    SaturateBackdrop(image);
 }
 
 // A screen copy of an elevated window comes back black without an error code,
@@ -2673,13 +2697,18 @@ InputState g_inputLast;
 
 // Inference fallback for the IMEs that never answer WM_IME_CONTROL (a good
 // number of third-party builds don't): their Chinese/English state is tracked
-// by flipping this on every solo Shift release. Such IMEs sync the state
-// globally across windows, so the cache survives thread and window changes;
-// whenever the system read does answer, it re-seeds the cache. The one flaw
-// that follows: if the mod loads while the IME sits in English mode, the first
-// inferred report points the wrong way and corrects itself on the next flip.
+// by flipping this on every solo Shift release, behind the (default-off)
+// notifyLanguageInferShift setting. Such IMEs sync the state globally across
+// windows, so the cache survives thread and window changes. A read that
+// actually moves re-seeds the cache; a read that merely answers without
+// moving never does, for re-seeding from a silent read would undo every
+// inferred flip on the next sample. There is no self-correction: once the
+// cache drifts (Caps Lock, the IME's status bar, a wrong first guess), it
+// stays backwards until a read change or an odd/even accident lands it on
+// the truth again - which is why the whole gesture is opt-in.
 // UI thread only, here and below.
 bool g_inferNative = true;
+bool g_readMoved = false; // the system read was seen to actually follow a toggle
 int g_hintCount;         // solo Shift releases inside the running watch
 ULONGLONG g_hintAt;      // when the last one landed, 0 = none pending
 
@@ -5225,7 +5254,8 @@ void StartInputWatch() {
 // down, which makes its baseline pre-toggle - and remember the release so
 // ModeTick can infer the flip when the system read stays silent about it.
 void OnSoloShift() {
-    if (!g_settings.notify[kLanguage]) {
+    if (!g_settings.notify[kLanguage] ||
+        !g_settings.notifyLanguageInferShift) {
         return;
     }
     InputState now = CurrentInputState();
@@ -5292,31 +5322,44 @@ void InputTick() {
 
 // The IME-mode half of the switch watch, split out once it grew a second
 // signal source: the system read (IMM32 conversion mode) first, and - for the
-// third-party IMEs that never answer that question - the solo-Shift gesture
-// second. Returns true when this sample is settled.
+// third-party IMEs that never answer that question, and only when the
+// notifyLanguageInferShift setting is on - the solo-Shift gesture second.
+// Returns true when this sample is settled.
 bool ModeTick(const InputState& now) {
     if (now.HasIme()) {
         if (g_inputLast.HasIme()) {
             if (now.IsNative() == g_inputLast.IsNative()) {
-                // The read lives but says nothing new: the cache still
-                // follows it, then the Shift gesture gets its turn below.
-                g_inferNative = now.IsNative();
+                if (g_readMoved) {
+                    // The read has actually followed a toggle at least once:
+                    // trust it. Silence now means no change, so the Shift
+                    // gesture is worth nothing here - reporting the opposite
+                    // of a read this reliable would be wrong every time an
+                    // IME uses Ctrl (or nothing) for the mode toggle.
+                    return true;
+                }
+                // The read lives but has never been seen to move: this IME
+                // keeps its mode to itself. The Shift gesture gets its turn
+                // below, and the cache is left alone - re-seeding it from a
+                // read that cannot change would undo every inferred flip on
+                // the very next sample and pin the card to one wrong label.
                 return InferTick();
             }
             bool native = now.IsNative();
             g_inputLast = now;
             g_inferNative = native;
+            g_readMoved = true;
             HandleLanguageTip(native ? 1 : 2, nullptr);
             StopInputWatch();
             return true;
         }
 
         // The baseline never read a mode (the thread was busy at the switch
-        // key) but this sample did. A solo Shift landing meanwhile plus a
-        // read that disagrees with the cache means the toggle happened during
-        // the unreadable stretch - report by the read. When they agree it is
-        // not a change: the cache follows reads whenever they answer.
-        if (g_hintCount > 0 && now.IsNative() != g_inferNative) {
+        // key) but this sample did. Once the read has proven itself, a read
+        // that disagrees with the cache means the toggle happened during the
+        // unreadable stretch - report by the read. Before that proof the
+        // cache stays with the inference, and the Shift gesture decides.
+        if (g_hintCount > 0 && g_readMoved &&
+            now.IsNative() != g_inferNative) {
             bool native = now.IsNative();
             g_inputLast = now;
             g_inferNative = native;
@@ -5325,8 +5368,10 @@ bool ModeTick(const InputState& now) {
             return true;
         }
 
-        g_inputLast = now;
-        g_inferNative = now.IsNative();
+        if (g_readMoved) {
+            g_inputLast = now;
+            g_inferNative = now.IsNative();
+        }
         return InferTick();
     }
 
@@ -5341,8 +5386,9 @@ bool ModeTick(const InputState& now) {
 
     // Neither the baseline nor this sample can read a mode: this IME does not
     // answer WM_IME_CONTROL at all. A solo Shift has already flipped its
-    // state by now, so infer directly - there is no read to wait for.
-    if (g_hintCount > 0) {
+    // state by now, so infer directly - there is no read to wait for. Hints
+    // only ever get armed when the inference setting is on.
+    if (g_hintCount > 0 && g_settings.notifyLanguageInferShift) {
         return InferFlip();
     }
     return false;
@@ -5363,6 +5409,11 @@ bool InferTick() {
 // Apply the pending solo-Shift releases to the cache and report the result.
 // Two releases net out to no change: settle silently.
 bool InferFlip() {
+    if (!g_settings.notifyLanguageInferShift) {
+        // The setting went off mid-watch: settle silently, no flip, no card.
+        StopInputWatch();
+        return true;
+    }
     bool native = g_inferNative;
     if (g_hintCount % 2 == 1) {
         native = !native;
