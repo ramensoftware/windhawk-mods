@@ -4037,6 +4037,10 @@ DWORD WINAPI KeyboardHookThreadProc(void*) {
                 nullptr, kHookDrainTimerId, kHookDrainTimeoutMs, nullptr) != 0;
             if (!drainTimerArmed) {
                 Wh_Log(L"SetTimer for keyboard-hook cleanup failed: %u", GetLastError());
+                // Prefer allowing a rare unmatched key-up over leaving a
+                // system-wide low-level hook installed indefinitely.
+                std::memset(g_suppressedHotkeyKeys, 0, sizeof(g_suppressedHotkeyKeys));
+                hasSuppressedKeys = false;
             }
         } else if (!hasSuppressedKeys && drainTimerArmed) {
             KillTimer(nullptr, kHookDrainTimerId);
