@@ -2,7 +2,7 @@
 // @id             dynamic-island-media-player
 // @name           Dynamic Island Media Player
 // @description    A dedicated, standalone Dynamic Island media player for Windows. Forked and optimized from 'Dynamic Island for Windows' by devcode90. Features per-app positioning, custom color morphing, multilingual UI, and optimized rendering.
-// @version        1.6.2
+// @version        1.6.1
 // @author         BOG090909
 // @github         https://github.com/BOG090909
 // @homepage       https://github.com/BOG090909/dynamic-island-media-player
