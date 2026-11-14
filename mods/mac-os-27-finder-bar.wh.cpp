@@ -12654,6 +12654,7 @@ enum BsVal {
     BV_G_LIQUID, BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_ICONS, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_SELMENU, BV_UPDATES,
     BV_G_TINT, BV_SEARCHTGT, BV_LANG, BV_NPBAR, BV_ICSADD, BV_ICSCLEAR,
     BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_HIDEMAX, BV_HANDLE,
+    BV_THEMEHEAD, BV_TGROUP, BV_THEMENONE, BV_THEMERESET,  // Personalizar tema
     // "Personalizar por monitor": para cada monitor ligado (até 8), o título, o fundo e a cor do texto.
     BV_MONHEAD0, BV_MONSTYLE0 = BV_MONHEAD0 + 8, BV_MONTEXT0 = BV_MONSTYLE0 + 8, BV_MONEND = BV_MONTEXT0 + 8,
 };
@@ -12742,15 +12743,18 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_OSD, L"Indicador de volume e brilho", 0, 0, L"Logo abaixo do ícone na barra"},
     {BR_SWITCH, BV_DIM, L"Escurecer a tela com a Central de Controle", 0, 0},
     {BR_CHOICE, BV_CCCLOSE, L"Ao fechar a Central", 0, 0, L"Cascata: cada linha volta para dentro da linha de cima, de baixo para cima"},
-    {BR_HEADER, BV_NONE, L"Vidro", 0xE790, 0x5AC8FA, L"Menus, Central, painéis e pílulas seguem o Fundo da barra; aqui, os ajustes do vidro"},
+    {BR_HEADER, BV_NONE, L"Personalizar tema", 0xE790, 0x5AC8FA, L"Ajusta o tema escolhido em Fundo da barra; vale também para os menus, a Central, os painéis e as pílulas"},
+    {BR_GROUP, BV_THEMEHEAD, L"Tema", 0, 0},
+    {BR_NOTE, BV_THEMENONE, L"Claro, Escuro e OLED são cores sólidas, sem ajustes de vidro.", 0, 0},
     {BR_SLIDER, BV_G_TINT, L"Transparente ↔ tingido", 0, 0, L"À esquerda o vidro limpo; à direita, mais cor"},
     {BR_SLIDER, BV_G_REFRACT, L"Refração nas bordas", 0, 0},
     {BR_SLIDER, BV_G_BLUR, L"Desfoque do fundo", 0, 0},
     {BR_SWITCH, BV_G_LIVE, L"Acompanhar o fundo ao vivo", 0, 0, L"Vídeos e papéis de parede animados continuam aparecendo atrás do vidro"},
-    {BR_GROUP, BV_NONE, L"Vidro líquido personalizado", 0, 0},
+    {BR_GROUP, BV_TGROUP, L"Vidro líquido personalizado", 0, 0},
     {BR_COLORS, BV_TCOLOR, L"Cor do vidro", 0, 0, L"O primeiro círculo abre a paleta do Windows, para qualquer cor"},
     {BR_SLIDER, BV_TLEVEL, L"Força da cor no topo", 0, 0, L"100 = sólida no topo; menos deixa o fundo aparecer também na parte colorida"},
     {BR_SLIDER, BV_TREACH, L"Até onde a cor desce", 0, 0, L"Valores baixos mantêm a cor perto do topo; altos a trazem para baixo"},
+    {BR_ACTION, BV_THEMERESET, L"Restaurar o padrão deste tema", 0, 0, L"Volta os ajustes acima aos valores de quando o mod foi instalado"},
     {BR_HEADER, BV_NONE, L"Pílulas de aviso", 0xEA8F, 0xFF375F, L"Avisos que descem da barra e o botão de Notificações"},
     {BR_SWITCH, BV_ISLAND, L"Mostrar avisos em pílula", 0, 0},
     {BR_ACTION, BV_ISLTEST, L"Testar a pílula agora", 0, 0},
@@ -13525,15 +13529,48 @@ static std::wstring BsFold(std::wstring s) {
 }
 // Linhas que só existem às vezes: as de cada monitor (com "Personalizar por
 // monitor", uma para cada monitor ligado) e a cor do texto de todos (sem ele).
+// Os temas em uso (bit a bit): o de todos, ou os de cada monitor.
+static unsigned BsThemesInUse() {
+    if (!g_settings.barPerMon) return 1u << g_settings.barStyle;
+    unsigned m = 0;
+    for (int k = 0; k < 8; k++) {
+        MonChoice c;
+        if (!BsMonAt(k, &c)) break;
+        int st = MonMapGet(g_settings.barStyleMon, c.device, 7);
+        m |= 1u << (st >= 0 ? st : g_settings.barStyle);
+    }
+    return m ? m : 1u << g_settings.barStyle;
+}
+// Personalizar tema: só os ajustes que valem para o tema escolhido.
+static const unsigned kThemeGlass = 0x1F;    // vidro, transparente, líquido, personalizado, cor da janela
+static const unsigned kThemeLiquid = 0x0E;   // transparente, líquido, personalizado (vidro líquido nos painéis)
+static const unsigned kThemeTinted = 0x08;   // personalizado
 static bool BsRowShown(const BsRowDef& d) {
     if (BvIsMon(d.val)) return g_settings.barPerMon && BsMonAt(BvMonIndex(d.val), nullptr);
     if (d.val == BV_TEXTCOLOR) return !g_settings.barPerMon;
+    unsigned t = BsThemesInUse();
+    switch (d.val) {
+        case BV_G_TINT: return (t & kThemeGlass) != 0;
+        case BV_G_REFRACT: case BV_G_BLUR: case BV_G_LIVE: return (t & kThemeLiquid) != 0;
+        case BV_TGROUP: case BV_TCOLOR: case BV_TLEVEL: case BV_TREACH: return (t & kThemeTinted) != 0;
+        case BV_THEMENONE: return (t & kThemeGlass) == 0;
+    }
     return true;
 }
 // O título de um monitor: "Monitor 1: LG ULTRAWIDE (3440×1440)".
 static std::wstring BsRowLabel(const BsRowDef& d) {
     MonChoice c;
     if (d.val >= BV_MONHEAD0 && d.val < BV_MONSTYLE0 && BsMonAt(BvMonIndex(d.val), &c)) return c.label;
+    if (d.val == BV_THEMEHEAD) {
+        // "Tema: Líquido" (com cada monitor no seu, todos os que estão em uso).
+        std::wstring names;
+        unsigned t = BsThemesInUse();
+        static const PCWSTR kNames[] = {L"Vidro", L"Transparente", L"Líquido", L"Vidro líquido personalizado",
+                                        L"Cor da janela", L"Claro", L"Escuro", L"OLED"};
+        for (int k = 0; k < 8; k++)
+            if (t & (1u << k)) names += (names.empty() ? L"" : L", ") + std::wstring(T(kNames[k]));
+        return std::wstring(T(L"Tema")) + L": " + names;
+    }
     return d.label;
 }
 static bool BsMatch(const BsRowDef& d, const std::wstring& q) {
@@ -13691,6 +13728,7 @@ static PCWSTR BsActionText(int val) {
         case BV_ISLTEST: return L"Testar";
         case BV_ISLCLEAR: return L"Limpar";
         case BV_WXNOW: return L"Atualizar";
+        case BV_THEMERESET: return L"Restaurar";
         case BV_ICSADD: return L"Importar…";
         case BV_ICSCLEAR: return L"Remover";
     }
@@ -14467,12 +14505,6 @@ static bool BsRowDisabled(int rowIdx) {
     if (rowIdx < 0 || rowIdx >= (int)g_bs.rows.size()) return false;
     const BsRowDef& d = kBsRows[g_bs.rows[rowIdx].def];
     if (d.kind == BR_HEADER) return false;
-    // Cor, força e alcance só valem com o Vidro líquido personalizado nos painéis ou na barra.
-    if (d.val == BV_TCOLOR || d.val == BV_TLEVEL || d.val == BV_TREACH)
-        return !GlassTinted() && !AnyBarStyle(3);
-    // O tema vem do Fundo da barra: refração e desfoque só no líquido; nos sólidos, nada do vidro.
-    if (d.val == BV_G_REFRACT || d.val == BV_G_BLUR || d.val == BV_G_LIVE) return !GlassLiquid();
-    if (d.val == BV_G_TINT) return PanelSolid() != 0;
     // Com a barra no Vidro líquido personalizado, o texto segue a cor do vidro.
     if (d.val == BV_TEXTCOLOR) return g_settings.barStyle == 3;
     if (d.val >= BV_MONTEXT0 && d.val < BV_MONEND) return BsGet(d.val - 8) == 3;  // o fundo dele é o personalizado
@@ -21556,6 +21588,31 @@ static void IcsImport() {
 
 static void BsAction(int val) {
     switch (val) {
+        case BV_THEMERESET: {
+            // Só os ajustes do tema (ou temas) em uso voltam ao padrão.
+            unsigned t = BsThemesInUse();
+            const GlassPrefs def;
+            if (t & kThemeGlass) {
+                g_glass.transparency = def.transparency;
+                g_glass.clear = def.clear;
+            }
+            if (t & kThemeLiquid) {
+                g_glass.refraction = def.refraction;
+                g_glass.blur = def.blur;
+                g_glass.live = def.live;
+            }
+            SaveGlassPrefs();
+            if (t & kThemeTinted) {
+                g_settings.tintColor = 0x050505;
+                g_settings.tintLevel = 100;
+                g_settings.tintReach = 29;
+                OvrSetStr(L"tintColor", L"#050505");
+                OvrSetInt(L"tintLevel", 100);
+                OvrSetInt(L"tintReach", 29);
+            }
+            TintApply();
+            break;
+        }
         case BV_ICSADD: IcsImport(); break;
         case BV_ICSCLEAR:
             IcsImportedSave({});
@@ -25050,6 +25107,12 @@ const UiTr kUiTr[] = {
     {L"Comportamento da barra", L"Bar behavior", L"Comportamiento de la barra", L"Comportement de la barre", L"Verhalten der Leiste", L"Comportamento della barra", L"菜单栏行为"},
     {L"Ocultar com a alça", L"Hide with the handle", L"Ocultar con el asa", L"Masquer avec la poignée", L"Mit dem Griff ausblenden", L"Nascondi con la maniglia", L"用手柄隐藏"},
     {L"A barra fica escondida e uma pílula fina no centro do topo a traz de volta: um clique mostra a barra (as janelas descem) e outro a esconde. Só funciona com \"Ocultar com janela maximizada\" desligado", L"The bar stays hidden and a thin pill at the top center brings it back: one click shows the bar (windows move down) and another hides it. Works only with \"Hide when a window is maximized\" off", L"La barra queda oculta y una píldora fina en el centro superior la trae de vuelta: un clic muestra la barra (las ventanas bajan) y otro la oculta. Solo funciona con \"Ocultar con una ventana maximizada\" desactivada", L"La barre reste masquée et une fine pastille en haut au centre la ramène : un clic affiche la barre (les fenêtres descendent) et un autre la masque. Ne fonctionne qu’avec « Masquer quand une fenêtre est agrandie » désactivée", L"Die Leiste bleibt ausgeblendet und eine schmale Pille oben in der Mitte holt sie zurück: ein Klick zeigt die Leiste (Fenster rücken nach unten), ein weiterer blendet sie aus. Nur mit „Bei maximiertem Fenster ausblenden“ aus", L"La barra resta nascosta e una pillola sottile in alto al centro la riporta: un clic mostra la barra (le finestre scendono) e un altro la nasconde. Funziona solo con \"Nascondi con una finestra ingrandita\" disattivata", L"菜单栏保持隐藏，顶部中央的细胶囊可将其调回：单击显示菜单栏（窗口下移），再单击隐藏。仅在“窗口最大化时隐藏”关闭时有效"},
+    {L"Personalizar tema", L"Customize theme", L"Personalizar tema", L"Personnaliser le thème", L"Design anpassen", L"Personalizza tema", L"自定义主题"},
+    {L"Ajusta o tema escolhido em Fundo da barra; vale também para os menus, a Central, os painéis e as pílulas", L"Adjusts the theme chosen in Bar background; it also applies to menus, the Control Center, panels and pills", L"Ajusta el tema elegido en Fondo de la barra; vale también para los menús, el Centro de control, los paneles y las píldoras", L"Règle le thème choisi dans Fond de la barre ; s’applique aussi aux menus, au Centre de contrôle, aux panneaux et aux pastilles", L"Passt das unter Leistenhintergrund gewählte Design an; gilt auch für Menüs, Kontrollzentrum, Bereiche und Pillen", L"Regola il tema scelto in Sfondo della barra; vale anche per menu, Centro di Controllo, pannelli e pillole", L"调整在“菜单栏背景”中选择的主题；也适用于菜单、控制中心、面板和胶囊"},
+    {L"Tema", L"Theme", L"Tema", L"Thème", L"Design", L"Tema", L"主题"},
+    {L"Claro, Escuro e OLED são cores sólidas, sem ajustes de vidro.", L"Light, Dark and OLED are solid colors, with no glass settings.", L"Claro, Oscuro y OLED son colores sólidos, sin ajustes de vidrio.", L"Clair, Sombre et OLED sont des couleurs unies, sans réglages de verre.", L"Hell, Dunkel und OLED sind Volltonfarben, ohne Glaseinstellungen.", L"Chiaro, Scuro e OLED sono colori pieni, senza impostazioni del vetro.", L"浅色、深色和 OLED 是纯色，没有玻璃设置。"},
+    {L"Restaurar o padrão deste tema", L"Restore this theme’s defaults", L"Restaurar los valores predeterminados de este tema", L"Restaurer les valeurs par défaut de ce thème", L"Standard dieses Designs wiederherstellen", L"Ripristina le impostazioni predefinite di questo tema", L"恢复此主题的默认设置"},
+    {L"Volta os ajustes acima aos valores de quando o mod foi instalado", L"Puts the settings above back to their values when the mod was installed", L"Devuelve los ajustes de arriba a sus valores de cuando se instaló el mod", L"Remet les réglages ci-dessus à leurs valeurs d’installation du mod", L"Setzt die Einstellungen oben auf die Werte bei der Installation zurück", L"Riporta le impostazioni qui sopra ai valori di quando la mod è stata installata", L"将上面的设置恢复为安装模组时的值"},
     {L"Acompanhar a barra", L"Match the bar", L"Igual que la barra", L"Comme la barre", L"Wie die Leiste", L"Come la barra", L"跟随菜单栏"},
     {L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro; com Transparente, líquido)", L"Match the bar: the bar’s background (glass with Window color, liquid with Clear)", L"Igual que la barra: el fondo de la barra (vidrio con Color de la ventana, líquido con Transparente)", L"Comme la barre : le fond de la barre (verre avec Couleur de la fenêtre, liquide avec Transparent)", L"Wie die Leiste: ihr Hintergrund (Glas bei Fensterfarbe, flüssig bei Klar)", L"Come la barra: lo sfondo della barra (vetro con Colore della finestra, liquido con Trasparente)", L"跟随菜单栏：与菜单栏相同的背景（窗口颜色时为玻璃，透明时为液态）"},
     {L"Claro", L"Light", L"Claro", L"Clair", L"Hell", L"Chiaro", L"浅色"},
