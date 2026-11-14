@@ -3145,7 +3145,7 @@ void RenderAnsaDynamicIsland(HWND hWnd) {
 
             float dotSz = 6.0f * s;
             float dotGap = 8.0f * s;
-            float totalDotsW = PAGE_COUNT * dotSz + (PAGE_COUNT - 1) * dotGap;
+            float totalDotsW = (float)PAGE_COUNT * dotSz + (float)(PAGE_COUNT - 1) * dotGap;
             float dotsX = padX + (w - totalDotsW) * 0.5f;
             float dotsY = innerPadY + innerH - 13.0f * s;
 
