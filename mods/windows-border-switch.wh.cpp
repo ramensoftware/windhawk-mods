@@ -7,7 +7,7 @@
 // @description:de-DE Blendet die Rahmen von Fenstern, dem Startmenü, der Taskleiste und anderen Systemelementen aus
 // @description:pt-BR Oculta as bordas das janelas, do menu Iniciar, da barra de tarefas e de outros elementos do sistema
 // @description:zh-CN 隐藏窗口、“开始”菜单、任务栏和其他系统元素的边框
-// @version         1.1.4
+// @version         1.2.0
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -22,7 +22,7 @@
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -luuid -ladvapi32
 // ==/WindhawkMod==
-// Build: 45
+// Build: 49
 
 // ==WindhawkModReadme==
 /*
@@ -47,6 +47,7 @@ Windows Border Switch hides system-drawn borders around windows and panels in Wi
 | Search | The Windows Search panel |
 | Notifications | The notification center, calendar, and notification banners on the desktop |
 | Quick Settings | Quick Settings and the media controls above them |
+| Keyboard layout | The outer border of the keyboard layout selector |
 | Widgets | The outer border of the Widgets board |
 | Exceptions | Keep the usual border and title bar for active, inactive, or all windows of selected apps |
 
@@ -332,6 +333,37 @@ Under **Exceptions**, add an executable name such as `steam.exe` and select whic
       $options:zh-CN:
       - default: 由 Windows 决定
       - hide: 隐藏边框
+    - keyboardLayout: hide
+      $name: Keyboard layout
+      $name:ru-RU: Раскладка клавиатуры
+      $name:es-ES: Distribución del teclado
+      $name:de-DE: Tastaturlayout
+      $name:pt-BR: Layout do teclado
+      $name:zh-CN: 键盘布局
+      $description: Outer border of the keyboard layout selector
+      $description:ru-RU: Внешняя рамка панели выбора раскладки клавиатуры
+      $description:es-ES: Borde exterior del selector de distribución del teclado
+      $description:de-DE: Außenrahmen der Tastaturlayout-Auswahl
+      $description:pt-BR: Borda externa do seletor de layout do teclado
+      $description:zh-CN: 键盘布局选择面板的外边框
+      $options:
+      - default: Windows-defined
+      - hide: Hide border
+      $options:ru-RU:
+      - default: Определено Windows
+      - hide: Скрыть рамку
+      $options:es-ES:
+      - default: Definido por Windows
+      - hide: Ocultar borde
+      $options:de-DE:
+      - default: Von Windows festgelegt
+      - hide: Rahmen ausblenden
+      $options:pt-BR:
+      - default: Definido pelo Windows
+      - hide: Ocultar borda
+      $options:zh-CN:
+      - default: 由 Windows 决定
+      - hide: 隐藏边框
     - widgets: hide
       $name: Widgets
       $name:ru-RU: Мини-приложения
@@ -508,7 +540,7 @@ constexpr WindowFrame WindowFrameFor(WindowSettings settings, bool active, bool 
 
 enum class ShellHost { Unknown, Explorer, Start, Search, Flyouts, Widgets };
 enum class ShellBorder {
-    None, Taskbar, TaskView, Start, Search, Notifications, QuickSettings, Widgets
+    None, Taskbar, TaskView, Start, Search, Notifications, QuickSettings, Widgets, KeyboardLayout
 };
 
 struct ShellSetting {
@@ -520,6 +552,7 @@ struct ShellSetting {
 constexpr ShellSetting kShellSettings[] = {
     {ShellHost::Explorer, ShellBorder::Taskbar, L"taskbar"},
     {ShellHost::Explorer, ShellBorder::TaskView, L"taskbar"},
+    {ShellHost::Explorer, ShellBorder::KeyboardLayout, L"keyboardLayout"},
     {ShellHost::Start, ShellBorder::Start, L"startMenu"},
     {ShellHost::Search, ShellBorder::Search, L"search"},
     {ShellHost::Flyouts, ShellBorder::Notifications, L"notificationCenter"},
@@ -585,6 +618,14 @@ constexpr bool IsStartPane(std::wstring_view name) {
 
 constexpr bool IsStartBorderParent(std::wstring_view name, std::wstring_view type) {
     return IsStartPane(name) || (name.empty() && type == L"Windows.UI.Xaml.Controls.Grid");
+}
+
+constexpr bool IsKeyboardLayoutBorder(std::wstring_view type, std::wstring_view parent,
+                                      std::wstring_view content, std::wstring_view owner) {
+    return type == L"Windows.UI.Xaml.Controls.Grid" &&
+           parent == L"Windows.UI.Xaml.Controls.ContentPresenter" &&
+           content == L"Windows.UI.Xaml.Controls.ContentControl" &&
+           owner == L"WindowsInternal.ComposableShell.Experiences.TextInput.Common.InputSwitcher";
 }
 
 }  // namespace
@@ -1165,6 +1206,7 @@ using TaskbarSource = Xaml::Hosting::DesktopWindowXamlSource;
 XamlSources<WidgetSource> g_widgetSources;
 XamlSources<TaskbarSource> g_taskbarSources;
 XamlSources<Xaml::FrameworkElement> g_taskViewRoots;
+XamlSources<Xaml::FrameworkElement> g_controlCenterElements;
 std::mutex g_sourcesMutex;
 
 struct MeasuredTaskbar {
@@ -1218,6 +1260,65 @@ constexpr std::wstring_view kSwitcherMetadata =
     L"WindowsInternal.ComposableShell.Experiences.Switcher.Switcher_XamlTypeInfo.XamlMetaDataProvider";
 constexpr std::wstring_view kVirtualDesktopBar =
     L"WindowsInternal.ComposableShell.Experiences.Switcher.VirtualDesktopBarElement";
+constexpr std::wstring_view kKeyboardLayoutType =
+    L"WindowsInternal.ComposableShell.Experiences.TextInput.Common.InputSwitcher";
+constexpr std::wstring_view kTextInputMetadata =
+    L"TextInput.Extensions.TextInputExtensionsXamlMetadataProvider";
+XamlSources<Xaml::FrameworkElement> g_keyboardLayoutElements;
+ActivateInstance g_activateKeyboardLayout;
+ActivateInstance g_createTextInputMetadata;
+GetXamlType g_getTextInputXamlType;
+
+HRESULT WINAPI CaptureKeyboardLayout(void* factory, void** result) {
+    const HRESULT hr = g_activateKeyboardLayout(factory, result);
+    if (SUCCEEDED(hr) && result && *result && !g_shellXamlStopping) {
+        try {
+            Foundation::IInspectable value{nullptr};
+            winrt::copy_from_abi(value, *result);
+            if (winrt::get_class_name(value) == kKeyboardLayoutType) {
+                if (auto element = value.try_as<Xaml::FrameworkElement>()) {
+                    std::lock_guard guard(g_sourcesMutex);
+                    g_keyboardLayoutElements.Add(element);
+                    Wh_Log(L"Discovered keyboard layout selector on thread %lu", GetCurrentThreadId());
+                }
+            }
+        } catch (...) {
+            Wh_Log(L"Unable to track the keyboard layout selector: %08X", winrt::to_hresult());
+        }
+    }
+    return hr;
+}
+
+HRESULT WINAPI FindKeyboardLayoutType(void* provider, HSTRING name, void** result) {
+    const HRESULT hr = g_getTextInputXamlType(provider, name, result);
+    if (SUCCEEDED(hr) && name && result && *result && !g_shellXamlStopping &&
+        std::wstring_view(WindowsGetStringRawBuffer(name, nullptr)) == kKeyboardLayoutType) {
+        try {
+            Xaml::Markup::IXamlType type{nullptr};
+            winrt::copy_from_abi(type, *result);
+            HookFactoryMethod(type, 18, CaptureKeyboardLayout, g_activateKeyboardLayout);
+        } catch (...) {
+            Wh_Log(L"Unable to hook keyboard layout activation: %08X", winrt::to_hresult());
+        }
+    }
+    return hr;
+}
+
+HRESULT WINAPI CaptureTextInputMetadata(void* factory, void** result) {
+    const HRESULT hr = g_createTextInputMetadata(factory, result);
+    if (SUCCEEDED(hr) && result && *result && !g_shellXamlStopping) {
+        try {
+            Foundation::IInspectable value{nullptr};
+            winrt::copy_from_abi(value, *result);
+            if (auto provider = value.try_as<Xaml::Markup::IXamlMetadataProvider>()) {
+                HookFactoryMethod(provider, 7, FindKeyboardLayoutType, g_getTextInputXamlType);
+            }
+        } catch (...) {
+            Wh_Log(L"Unable to hook text input metadata: %08X", winrt::to_hresult());
+        }
+    }
+    return hr;
+}
 
 HRESULT WINAPI CaptureTaskView(void* factory, void** result) {
     const HRESULT hr = g_activateXamlType(factory, result);
@@ -1297,6 +1398,11 @@ HRESULT WINAPI FindShellFactory(HSTRING classId, REFIID iid, void** result) {
             winrt::copy_from_abi(object, *result);
             if (auto factory = object.try_as<Foundation::IActivationFactory>()) {
                 HookFactoryMethod(factory, 6, CaptureSwitcherMetadata, g_createMetadata);
+            }
+        } else if (g_shellHost == ShellHost::Explorer && name == kTextInputMetadata) {
+            winrt::copy_from_abi(object, *result);
+            if (auto factory = object.try_as<Foundation::IActivationFactory>()) {
+                HookFactoryMethod(factory, 6, CaptureTextInputMetadata, g_createTextInputMetadata);
             }
         }
     } catch (...) {
@@ -1484,7 +1590,17 @@ void ScanShellTree(Xaml::DependencyObject const& node, unsigned mask, unsigned d
         return;
     }
     if (auto element = node.try_as<Xaml::FrameworkElement>()) {
-        auto border = ShellBorderFor(g_shellHost, winrt::get_class_name(element), element.Name());
+        const auto type = winrt::get_class_name(element);
+        auto border = ShellBorderFor(g_shellHost, type, element.Name());
+        if ((mask & BorderBit(ShellBorder::KeyboardLayout)) && element.try_as<Xaml::Controls::Grid>()) {
+            auto presenter = Xaml::Media::VisualTreeHelper::GetParent(element);
+            auto content = presenter ? Xaml::Media::VisualTreeHelper::GetParent(presenter) : nullptr;
+            auto owner = content ? Xaml::Media::VisualTreeHelper::GetParent(content) : nullptr;
+            if (owner && IsKeyboardLayoutBorder(type, winrt::get_class_name(presenter),
+                                                winrt::get_class_name(content), winrt::get_class_name(owner))) {
+                border = ShellBorder::KeyboardLayout;
+            }
+        }
         if (mask & BorderBit(border)) {
             auto parent = border == ShellBorder::Start
                 ? Xaml::Media::VisualTreeHelper::GetParent(element).try_as<Xaml::FrameworkElement>()
@@ -1501,6 +1617,24 @@ void ScanShellTree(Xaml::DependencyObject const& node, unsigned mask, unsigned d
     const int count = Xaml::Media::VisualTreeHelper::GetChildrenCount(node);
     for (int child = 0; child < count; ++child) {
         ScanShellTree(Xaml::Media::VisualTreeHelper::GetChild(node, child), mask, depth + 1, stroke);
+    }
+}
+
+void ScanControlCenter(unsigned mask) {
+    std::vector<Xaml::FrameworkElement> elements;
+    {
+        std::lock_guard guard(g_sourcesMutex);
+        elements = g_controlCenterElements.OnCurrentThread();
+    }
+    std::vector<Xaml::XamlRoot> scanned;
+    for (auto const& element : elements) {
+        if (auto root = element.XamlRoot(); root && std::ranges::find(scanned, root) == scanned.end()) {
+            scanned.push_back(root);
+            ScanShellTree(root.Content(), mask);
+            for (auto popup : Xaml::Media::VisualTreeHelper::GetOpenPopupsForXamlRoot(root)) {
+                ScanShellTree(popup.Child(), mask);
+            }
+        }
     }
 }
 
@@ -1540,7 +1674,27 @@ void ScanShellOnUiThread(bool refresh) noexcept try {
         for (auto const& taskView : taskViews) {
             ScanShellTree(taskView, mask);
         }
+        if (const unsigned keyboardMask = mask & BorderBit(ShellBorder::KeyboardLayout)) {
+            std::vector<Xaml::FrameworkElement> keyboardLayouts;
+            {
+                std::lock_guard guard(g_sourcesMutex);
+                keyboardLayouts = g_keyboardLayoutElements.OnCurrentThread();
+            }
+            for (auto const& layout : keyboardLayouts) {
+                ScanShellTree(layout, keyboardMask);
+            }
+            if (auto window = Xaml::Window::Current()) {
+                ScanShellTree(window.Content(), keyboardMask);
+                for (auto popup : Xaml::Media::VisualTreeHelper::GetOpenPopups(window)) {
+                    ScanShellTree(popup.Child(), keyboardMask);
+                }
+            }
+        }
     } else if (mask) {
+        const unsigned quickSettingsMask = mask & BorderBit(ShellBorder::QuickSettings);
+        if (g_shellHost == ShellHost::Flyouts && quickSettingsMask) {
+            ScanControlCenter(quickSettingsMask);
+        }
         if (auto window = Xaml::Window::Current()) {
             ScanShellTree(window.Content(), mask);
             for (auto popup : Xaml::Media::VisualTreeHelper::GetOpenPopups(window)) {
@@ -1550,6 +1704,60 @@ void ScanShellOnUiThread(bool refresh) noexcept try {
     }
 } catch (...) {
     Wh_Log(L"Shell XAML scan failed: %08X", winrt::to_hresult());
+}
+
+using ControlCenterFocus = HRESULT(WINAPI*)(IUnknown*, void*);
+using ControlCenterConnect = HRESULT(WINAPI*)(IUnknown*, int, IUnknown*);
+ControlCenterFocus g_controlCenterFocus;
+ControlCenterConnect g_controlCenterConnect;
+bool g_controlCenterHooksInstalled;
+
+void RememberControlCenterElement(IUnknown* object) noexcept try {
+    if (!object || g_shellXamlStopping) {
+        return;
+    }
+    Xaml::FrameworkElement element{nullptr};
+    if (FAILED(object->QueryInterface(winrt::guid_of<Xaml::FrameworkElement>(), winrt::put_abi(element)))) {
+        return;
+    }
+    std::lock_guard guard(g_sourcesMutex);
+    const auto elements = g_controlCenterElements.OnCurrentThread();
+    if (!g_shellXamlStopping && std::ranges::find(elements, element) == elements.end()) {
+        g_controlCenterElements.Add(element);
+        Wh_Log(L"Discovered Quick Settings view on thread %lu", GetCurrentThreadId());
+    }
+} catch (...) {
+    Wh_Log(L"Unable to track Quick Settings content: %08X", winrt::to_hresult());
+}
+
+HRESULT WINAPI ControlCenterFocusHook(IUnknown* self, void* args) {
+    const HRESULT hr = g_controlCenterFocus(self, args);
+    if (SUCCEEDED(hr)) {
+        RememberControlCenterElement(self);
+    }
+    return hr;
+}
+
+HRESULT WINAPI ControlCenterConnectHook(IUnknown* self, int id, IUnknown* target) {
+    const HRESULT hr = g_controlCenterConnect(self, id, target);
+    if (SUCCEEDED(hr)) {
+        RememberControlCenterElement(self);
+    }
+    return hr;
+}
+
+bool HookControlCenter(HMODULE module, bool applyNow) {
+    const WindhawkUtils::SYMBOL_HOOK controlCenterDllHooks[] = {
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::ControlCenterView,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnGotFocus(void *))"},
+         &g_controlCenterFocus, ControlCenterFocusHook},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::ControlCenterView,struct winrt::Windows::UI::Xaml::Markup::IComponentConnector>::Connect(int,void *))"},
+         &g_controlCenterConnect, ControlCenterConnectHook, true},
+    };
+    const bool installed =
+        WindhawkUtils::HookSymbols(module, controlCenterDllHooks, ARRAYSIZE(controlCenterDllHooks)) &&
+        (!applyNow || Wh_ApplyHookOperations());
+    Wh_Log(L"Quick Settings discovery hooks: %s", installed ? L"ready" : L"unavailable");
+    return installed;
 }
 
 using MeasureTaskbarFrame = HRESULT(WINAPI*)(IUnknown*, Foundation::Size, Foundation::Size*);
@@ -1732,6 +1940,7 @@ bool IsShellXamlWindow(HWND window) {
     if (g_shellHost == ShellHost::Explorer) {
         return ClassIs(window, L"Shell_TrayWnd") || ClassIs(window, L"Shell_SecondaryTrayWnd") ||
                ClassIs(window, L"XamlExplorerHostIslandWindow") ||
+               ClassIs(window, L"Shell_InputSwitchTopLevelWindow") ||
                ClassIs(window, L"Windows.UI.Core.CoreWindow");
     }
     if (g_shellHost == ShellHost::Widgets) {
@@ -1802,7 +2011,16 @@ DWORD WINAPI RunShellXamlWorker(void* parameter) {
         g_shellXamlScanTimer = SetTimer(nullptr, 0, kVisiblePanelScanMs, nullptr);
     }
     TaskbarLayoutRetry taskbarLayout;
+    ULONGLONG nextControlCenterHookAttempt = 0;
     while (WaitForSingleObject(stop, 0) == WAIT_TIMEOUT) {
+        if (g_shellHost == ShellHost::Flyouts && !g_controlCenterHooksInstalled &&
+            (g_shellXamlMask.load() & BorderBit(ShellBorder::QuickSettings)) &&
+            GetTickCount64() >= nextControlCenterHookAttempt) {
+            if (auto module = GetModuleHandleW(L"ControlCenter.dll")) {
+                g_controlCenterHooksInstalled = HookControlCenter(module, true);
+                nextControlCenterHookAttempt = GetTickCount64() + 65'000;
+            }
+        }
         const DWORD timeout = g_shellHost == ShellHost::Explorer ? taskbarLayout.Update() : INFINITE;
         const DWORD result = MsgWaitForMultipleObjects(1, &stop, FALSE, timeout, QS_ALLINPUT);
         if (result == WAIT_TIMEOUT) {
@@ -1957,6 +2175,10 @@ BOOL Wh_ModInit() {
                                     GetProcAddress(combase, "RoGetActivationFactory")) : nullptr;
         if (!factory || !WindhawkUtils::SetFunctionHook(factory, FindShellFactory, &g_getActivationFactory)) {
             return FALSE;
+        }
+    } else if (g_shellHost == ShellHost::Flyouts) {
+        if (auto module = GetModuleHandleW(L"ControlCenter.dll")) {
+            g_controlCenterHooksInstalled = HookControlCenter(module, false);
         }
     }
     return g_shellHost != ShellHost::Unknown;
