@@ -189,6 +189,32 @@ navigation can change the selection while the UI remains hidden.
   animation, and minimized windows are restored through its restore animation.
   Cancelling the switcher plays no animation.
 
+## Windows 10 and Windows 11 support
+
+What each feature does on each Windows version. Details are in
+**Compatibility and limitations** above.
+
+| Feature | Windows 10 | Windows 11 |
+| --- | --- | --- |
+| **Appearance** | | |
+| None material (solid/transparent) | Yes | Yes |
+| Acrylic material | Yes (follows Switcher Background Color and Background Opacity) | Yes (Windows' own Acrylic) |
+| Mica material | Acrylic | Yes |
+| Mica Alt material | Acrylic | Yes (22H2 or newer; Mica on 21H2) |
+| Auto material | Acrylic | Mica |
+| Material Tuning (tint and luminosity) | No | Yes |
+| Backdrop Blur | Yes | Yes |
+| Auto defaults: highlight style, font, animations, shadows, hover effect, close button and badge backgrounds | Windows 10 style | Windows 11 style |
+| **Corners** | | |
+| Corner Preference: Default | Square | Windows corner radius |
+| Corner Preference: Squared, Rounded, Rounded small, Custom | Yes | Yes |
+| Mica and Acrylic at every corner radius | Not applicable | Yes |
+| Rounded live thumbnails | None material at 99-100% opacity only | Every material |
+| Custom radius for each element's corners | Yes | Yes |
+| **Everything else** | | |
+| Layouts, grouping, Desktop item, Custom Header, filtering, and keyboard, mouse and touchpad controls | Yes | Yes |
+| Exclude in Xbox Mode | Not applicable | Yes |
+
 ## Configuration
 
 - **Theme / Appearance**: colors, materials, layout, positioning, fonts, preview
