@@ -3744,9 +3744,17 @@ LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         return CallNextHookEx(g_captureHook, nCode, wParam, lParam);
     }
 
+    // Always swallow the matching release for a key whose press was swallowed,
+    // even if capture mode ended between its key-down and key-up messages.
+    if (up && g_suppressedHotkeyKeys[vk]) {
+        g_suppressedHotkeyKeys[vk] = false;
+        return 1;
+    }
+
     // Capture mode owns keyboard input temporarily so the selected chord
     // cannot activate controls in the foreground application.
     if (g_captureHotkey.load()) {
+        if (down) g_suppressedHotkeyKeys[vk] = true;
         bool isModifier = true;
         switch (vk) {
             case VK_CONTROL: case VK_LCONTROL: case VK_RCONTROL: g_capCtrl = down; break;
@@ -3792,10 +3800,6 @@ LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
     // Swallow the matching key's key-up as well as key-down. This prevents
     // games from seeing the base key (e.g. M) when Ctrl+M belongs to the player.
-    if (up && g_suppressedHotkeyKeys[vk]) {
-        g_suppressedHotkeyKeys[vk] = false;
-        return 1;
-    }
     if (!down || !g_hotkeyEnabled.load()) {
         return CallNextHookEx(g_captureHook, nCode, wParam, lParam);
     }
