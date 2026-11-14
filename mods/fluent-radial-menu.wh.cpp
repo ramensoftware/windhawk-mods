@@ -2,11 +2,11 @@
 // @id              fluent-radial-menu
 // @name            Fluent Radial Menu
 // @description     Launch apps, files, folders, links, and shortcuts from a customizable radial menu on Windows 11.
-// @version         0.8.2
+// @version         0.8.3
 // @author          Fenryr
 // @github          https://github.com/soldier93HUN
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -ldwrite -ldwmapi -lgdi32 -lole32 -lshell32 -ladvapi32 -lwindowscodecs -luuid -lruntimeobject -lmsimg32 -lcomctl32 -lcomdlg32
+// @compilerOptions -ld2d1 -ldwrite -ldwmapi -lgdi32 -lole32 -loleaut32 -lshell32 -ladvapi32 -lwindowscodecs -luuid -lruntimeobject -lmsimg32 -lcomctl32 -lcomdlg32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -79,13 +79,17 @@ as System32 paths so the same profile works in the 64-bit host.
 #include <d2d1.h>
 #include <dwrite.h>
 #include <dwmapi.h>
+#include <exdisp.h>
 #include <shellapi.h>
+#include <shldisp.h>
 #include <shlobj.h>
 #include <shlguid.h>
 #include <commctrl.h>
 #include <commdlg.h>
 #include <windowsx.h>
+#include <aclapi.h>
 #include <sddl.h>
+#include <servprov.h>
 #include <roapi.h>
 #include <windows.data.json.h>
 #include <wincodec.h>
@@ -97,6 +101,7 @@ as System32 paths so the same profile works in the 64-bit host.
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <cstring>
 #include <cwctype>
 #include <deque>
 #include <functional>
@@ -206,6 +211,10 @@ bool ReplaceSystemDirectory(std::wstring& path, std::wstring_view from, std::wst
 std::wstring NativePath(std::wstring path) {
     if (UsesWow64FileRedirection()) ReplaceSystemDirectory(path, L"System32", L"Sysnative");
     return path;
+}
+
+bool IsExecutablePath(const std::wstring& path) {
+    return path.size() >= 4 && _wcsicmp(path.c_str() + path.size() - 4, L".exe") == 0;
 }
 
 // A resolved bare name may already point into the redirected system directory.
@@ -464,6 +473,9 @@ Settings DefaultSettings() {
 constexpr wchar_t kProfileFile[] = L"\\editor.json";
 constexpr DWORD kMaxProfileBytes = 2 * 1024 * 1024;
 
+using LocalSecurityDescriptor = std::unique_ptr<void, decltype(&LocalFree)>;
+using FileHandle = std::unique_ptr<void, decltype(&CloseHandle)>;
+
 std::wstring CurrentUserSid() {
     HANDLE token;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return {};
@@ -479,17 +491,83 @@ std::wstring CurrentUserSid() {
     return sid;
 }
 
-std::wstring ProfileRoot() {
+bool HasPrivateProfilePermissions(HANDLE directory, PSECURITY_DESCRIPTOR expected) {
+    PSECURITY_DESCRIPTOR actual = nullptr;
+    PSID actualOwner = nullptr, expectedOwner = nullptr;
+    PACL actualDacl = nullptr, expectedDacl = nullptr;
+    PACL actualSacl = nullptr, expectedSacl = nullptr;
+    const DWORD result = GetSecurityInfo(directory, SE_FILE_OBJECT,
+        OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION,
+        &actualOwner, nullptr, &actualDacl, &actualSacl, &actual);
+    const LocalSecurityDescriptor actualDescriptor(actual, LocalFree);
+    BOOL present = FALSE, defaulted = FALSE;
+    SECURITY_DESCRIPTOR_CONTROL control;
+    DWORD revision;
+    if (result != ERROR_SUCCESS ||
+        !GetSecurityDescriptorOwner(expected, &expectedOwner, &defaulted) ||
+        !EqualSid(actualOwner, expectedOwner) ||
+        !GetSecurityDescriptorControl(actual, &control, &revision) ||
+        !(control & SE_DACL_PROTECTED) ||
+        !GetSecurityDescriptorDacl(expected, &present, &expectedDacl, &defaulted) ||
+        !GetSecurityDescriptorSacl(expected, &present, &expectedSacl, &defaulted)) return false;
+
+    // Compare ACEs by their contents. Windows may reorder them or allocate
+    // extra space in the returned ACL.
+    const auto matches = [](PACL actualAcl, PACL expectedAcl) {
+        if (!actualAcl || !expectedAcl || actualAcl->AceCount != expectedAcl->AceCount) return false;
+        for (DWORD i = 0; i < expectedAcl->AceCount; ++i) {
+            void* expectedAce = nullptr;
+            if (!GetAce(expectedAcl, i, &expectedAce)) return false;
+            const auto size = static_cast<ACE_HEADER*>(expectedAce)->AceSize;
+            bool found = false;
+            for (DWORD j = 0; j < actualAcl->AceCount; ++j) {
+                void* actualAce = nullptr;
+                if (GetAce(actualAcl, j, &actualAce) &&
+                    static_cast<ACE_HEADER*>(actualAce)->AceSize == size &&
+                    std::memcmp(actualAce, expectedAce, size) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return false;
+        }
+        return true;
+    };
+    return matches(actualDacl, expectedDacl) && matches(actualSacl, expectedSacl);
+}
+
+std::wstring ProfileRoot(FileHandle& directory) {
     wchar_t storage[MAX_PATH];
     if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage))) return {};
     const auto sid = CurrentUserSid();
     if (sid.empty()) return {};
-    auto path = std::wstring(storage) + L"\\" + sid;
-    if (CreateDirectoryW(path.c_str(), nullptr)) return path;
-    const DWORD attributes = GetFileAttributesW(path.c_str());
-    if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) &&
-        !(attributes & FILE_ATTRIBUTE_REPARSE_POINT)) return path;
-    return {};
+    const auto path = std::wstring(storage) + L"\\" + sid;
+    const auto sddl = L"O:" + sid + L"D:P(A;OICI;FA;;;" + sid +
+                      L")(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)S:(ML;OICI;NW;;;ME)";
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1,
+                                                              &descriptor, nullptr)) return {};
+    const LocalSecurityDescriptor owner(descriptor, LocalFree);
+    SECURITY_ATTRIBUTES security{sizeof(security), descriptor, FALSE};
+    if (!CreateDirectoryW(path.c_str(), &security) && GetLastError() != ERROR_ALREADY_EXISTS)
+        return {};
+
+    // Keep the directory open without delete sharing while its layout is in use.
+    HANDLE handle = CreateFileW(path.c_str(), READ_CONTROL | FILE_READ_ATTRIBUTES,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+                                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) return {};
+    FileHandle candidate(handle, CloseHandle);
+    BY_HANDLE_FILE_INFORMATION info{};
+    if (!GetFileInformationByHandle(handle, &info) ||
+        !(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+        (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ||
+        !HasPrivateProfilePermissions(handle, descriptor)) {
+        Wh_Log(L"Ignoring a radial menu profile directory without the expected private permissions.");
+        return {};
+    }
+    directory = std::move(candidate);
+    return path;
 }
 
 bool IsHex(std::wstring_view text) {
@@ -791,15 +869,25 @@ std::optional<Settings> ParseProfile(const std::wstring& text, std::wstring& err
     return settings;
 }
 
-std::string ReadProfileBytes(const std::wstring& path, std::wstring& error) {
+std::string ReadProfileBytes(const std::wstring& path, std::wstring& error, bool rejectReparse = false) {
     HANDLE file = CreateFileW(path.c_str(), GENERIC_READ,
                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-                              OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+                              OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN |
+                              (rejectReparse ? FILE_FLAG_OPEN_REPARSE_POINT : 0), nullptr);
     if (file == INVALID_HANDLE_VALUE) {
         const auto code = GetLastError();
         error = code == ERROR_FILE_NOT_FOUND || code == ERROR_PATH_NOT_FOUND
                     ? L"No active profile." : L"Could not read the active profile.";
         return {};
+    }
+    if (rejectReparse) {
+        BY_HANDLE_FILE_INFORMATION info{};
+        if (!GetFileInformationByHandle(file, &info) ||
+            (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) || info.nNumberOfLinks != 1) {
+            CloseHandle(file);
+            error = L"The active profile must be an ordinary file in Windhawk storage.";
+            return {};
+        }
     }
     LARGE_INTEGER size{};
     std::string contents;
@@ -1286,14 +1374,29 @@ private:
     }
 
     static void RunAction(const Slot& slot) {
-        auto target = NativePath(Expand(slot.target));
+        auto target = Expand(slot.target);
         const auto arguments = Expand(slot.arguments);
-        if (target.find_first_of(L"\\/:") == std::wstring::npos &&
-            (slot.action == Action::Command || UsesWow64FileRedirection())) {
+        const bool command = slot.action == Action::Command;
+        const bool bare = target.find_first_of(L"\\/:") == std::wstring::npos;
+        if (bare && (command || (UsesWow64FileRedirection() &&
+                                 (IsExecutablePath(target) || target.find(L'.') == target.npos)))) {
             auto resolved = ResolveBareExecutable(target);
-            if (!resolved.empty()) target = std::move(resolved);
+            if (!resolved.empty() && (command || IsExecutablePath(resolved)))
+                target = std::move(resolved);
         }
-        if (slot.action == Action::Command) {
+        if (!command && !IsExecutablePath(target) && UsesWow64FileRedirection()) {
+            if (bare && target.size() >= 4 &&
+                _wcsicmp(target.c_str() + target.size() - 4, L".msc") == 0) {
+                const auto console = WindowsDirectory() + L"\\System32\\" + target;
+                if (GetFileAttributesW(NativePath(console).c_str()) != INVALID_FILE_ATTRIBUTES)
+                    target = console;
+            }
+            auto native = target;
+            if (ReplaceSystemDirectory(native, L"System32", L"Sysnative") &&
+                OpenFromExplorer(target, arguments)) return;
+        }
+        if (command || IsExecutablePath(target)) target = NativePath(std::move(target));
+        if (command) {
             // Pass the executable separately from its arguments.
             std::wstring commandLine = L"\"" + target + L"\" " + arguments;
             STARTUPINFOW startup{};
@@ -1315,6 +1418,43 @@ private:
             if (ShellExecuteExW(&execute)) return;
         }
         Wh_Log(L"Could not open radial menu target (error %lu)", GetLastError());
+    }
+
+    static bool OpenFromExplorer(const std::wstring& target, const std::wstring& arguments) {
+        // Let the desktop shell resolve native System32 paths and file associations.
+        ComPtr<IShellWindows> windows;
+        if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER,
+                                    IID_PPV_ARGS(&windows)))) return false;
+        VARIANT location{}, root{};
+        location.vt = VT_I4;
+        location.lVal = CSIDL_DESKTOP;
+        long window = 0;
+        ComPtr<IDispatch> desktop;
+        ComPtr<IServiceProvider> services;
+        ComPtr<IShellBrowser> browser;
+        ComPtr<IShellView> view;
+        ComPtr<IDispatch> background, application;
+        ComPtr<IShellFolderViewDual> folderView;
+        ComPtr<IShellDispatch2> shell;
+        if (windows->FindWindowSW(&location, &root, SWC_DESKTOP, &window, SWFO_NEEDDISPATCH,
+                                  &desktop) != S_OK || !desktop ||
+            FAILED(desktop.As(&services)) ||
+            FAILED(services->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&browser))) ||
+            FAILED(browser->QueryActiveShellView(&view)) ||
+            FAILED(view->GetItemObject(SVGIO_BACKGROUND, IID_PPV_ARGS(&background))) ||
+            FAILED(background.As(&folderView)) ||
+            FAILED(folderView->get_Application(&application)) ||
+            FAILED(application.As(&shell))) return false;
+
+        std::unique_ptr<wchar_t, decltype(&SysFreeString)> file(SysAllocString(target.c_str()), SysFreeString);
+        std::unique_ptr<wchar_t, decltype(&SysFreeString)> params(SysAllocString(arguments.c_str()), SysFreeString);
+        if (!file || !params) return false;
+        VARIANT parameters{}, show{};
+        parameters.vt = VT_BSTR;
+        parameters.bstrVal = params.get();
+        show.vt = VT_I4;
+        show.lVal = SW_SHOWNORMAL;
+        return SUCCEEDED(shell->ShellExecute(file.get(), parameters, root, root, show));
     }
 
     HWND window_;
@@ -3824,7 +3964,7 @@ public:
                                       kWindowClass, L"Fluent Radial Menu",
                                       WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, instance_, this);
             if (window_ && CreatePointerWindow() && renderer_.Init() && StartShell()) {
-                profileRoot_ = ProfileRoot();
+                profileRoot_ = ProfileRoot(profileDirectory_);
                 if (!profileRoot_.empty()) {
                     MigrateEditorProfile(profileRoot_ + kProfileFile);
                     watcher_ = FindFirstChangeNotificationW(profileRoot_.c_str(), FALSE,
@@ -4057,7 +4197,7 @@ private:
     void ReloadProfile(bool windhawkChanged = false) {
         if (!profileRoot_.empty()) {
             std::wstring error;
-            auto bytes = ReadProfileBytes(profileRoot_ + kProfileFile, error);
+            auto bytes = ReadProfileBytes(profileRoot_ + kProfileFile, error, true);
             if (error.empty() && bytes != profileBytes_) {
                 if (auto updated = ParseProfileBytes(bytes, error)) {
                     profileBytes_ = std::move(bytes);
@@ -4563,6 +4703,7 @@ private:
     bool rightPressedInside_ = false, desktopPreview_ = false;
     int hotkeyId_ = kHotkey;
     HANDLE watcher_ = INVALID_HANDLE_VALUE, stop_ = nullptr;
+    FileHandle profileDirectory_{nullptr, CloseHandle};
     std::wstring profileRoot_, hotkeyError_, registeredShortcut_, windhawkShortcut_;
     std::string profileBytes_;
     std::optional<Chord> hotkey_, pendingKeys_;
