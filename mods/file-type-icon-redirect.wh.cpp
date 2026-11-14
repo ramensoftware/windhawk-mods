@@ -21,6 +21,14 @@
 Customize file icons by extension without changing file associations or default
 applications. System thumbnails remain enabled and use their original providers.
 
+Before:
+
+![Before](https://raw.githubusercontent.com/FreshP-0325/windhawk-mod-assets/refs/heads/master/windows-file-type-icon-redirect/1.2.0/before.png)
+
+After:
+
+![After](https://raw.githubusercontent.com/FreshP-0325/windhawk-mod-assets/refs/heads/master/windows-file-type-icon-redirect/1.2.0/after.png)
+
 ## Configuration
 
 Choose Configuration source:
