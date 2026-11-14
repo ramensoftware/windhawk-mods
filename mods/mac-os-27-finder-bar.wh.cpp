@@ -364,7 +364,6 @@ struct Settings {
     int ntfIconShape;  // ícones das notificações: 0 círculo, 1 formato macOS (squircle)
     int ccCloseAnim;  // ao fechar a Central: 0 cascata, 1 encolher, 2 esmaecer, 3 deslizar para cima, 4 nenhuma
     bool showOsd;
-    bool flyouts;
     bool bgBlur;
     DWORD ccAccent;
     std::wstring dateFormat, timeFormat;
@@ -522,7 +521,6 @@ static const UiDefault kUiDefaults[] = {
     {L"ntfIconShape", L"round"},
     {L"glassBeforeTint", L""},
     {L"showOsd", L"1"},
-    {L"flyouts", L"1"},
     {L"showControlCenter", L"1"},
     {L"showWeather", L"1"},
     {L"showNowPlaying", L"1"},
@@ -863,7 +861,6 @@ static void LoadSettings() {
         s.ccCloseAnim = ca == L"shrink" ? 1 : ca == L"fade" ? 2 : ca == L"slide" ? 3 : ca == L"none" ? 4 : 0;
     }
     s.showOsd = OvrInt(L"showOsd") != 0;
-    s.flyouts = OvrInt(L"flyouts") != 0;
     s.ccFullPill = ReadStr(L"ccOnStyle") == L"pill";
     s.ccRounded = ReadStr(L"ccShape") == L"rounded";
     {
@@ -9436,7 +9433,7 @@ static LRESULT CALLBACK GmWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_LBUTTONDOWN: {
             if (!lv) return 0;
             int hit = GmHitItem(lv, (float)LP_X(lp), (float)LP_Y(lp));
-            if (hit >= 0 && lv->items[hit].isSlider && g_gmBar && g_settings.flyouts &&
+            if (hit >= 0 && lv->items[hit].isSlider && g_gmBar &&
                 (lv->items[hit].id == ID_SLIDER_VOL || lv->items[hit].id == ID_SLIDER_BRIGHT)) {
                 // Volume/brilho no menu da barra: o ajuste abre a pílula de vidro.
                 g_gmResult = lv->items[hit].id;
@@ -9517,7 +9514,7 @@ static int NextBarMenuIdx(Bar* b, int from, int dir) {
         ItemKind k = b->items[i].kind;
         bool left = k == K_LOGO || k == K_APP || k == K_MENU;
         bool right = k == K_DISPLAY || k == K_KBD || k == K_BATTERY || k == K_NET || k == K_VOL || k == K_NOW ||
-                     k == K_FOCUS || k == K_PRIV || k == K_NOTIF || (k == K_BT && !g_settings.flyouts);
+                     k == K_FOCUS || k == K_PRIV || k == K_NOTIF;  // o Bluetooth abre a pílula
         if (left || (g_settings.kbdNav && right)) return i;
     }
     return -1;
@@ -12669,7 +12666,7 @@ enum BsVal {
     BV_ISLFOCUS, BV_ISLCAPS, BV_ISLBATT, BV_ISLBT, BV_ISLAUDIO, BV_ISLHIST, BV_ISLSTYLE, BV_ISLSIZE, BV_ISLDUR, BV_ISLIN, BV_ISLOUT,
     BV_ISLPOS, BV_ISLTEST, BV_ISLCLEAR, BV_NPLAYOUT, BV_NPSIZE, BV_WINNOTIF, BV_WINONLY, BV_ISLHISTNOT,
     BV_WXPROV, BV_WXUNIT, BV_WXLOOK, BV_WXANIM, BV_WXGLASS, BV_WXINT, BV_WXTEMP, BV_WXPLACE, BV_WXNOW, BV_WXRESULT,
-    BV_BATTPCT, BV_HIDEFS, BV_FLYOUTS, BV_OSD, BV_DIM,
+    BV_BATTPCT, BV_HIDEFS, BV_OSD, BV_DIM,
     BV_G_LIQUID, BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_ICONS, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_SELMENU, BV_UPDATES,
     BV_G_TINT, BV_SEARCHTGT, BV_LANG, BV_NPBAR, BV_ICSADD, BV_ICSCLEAR,
     BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_HIDEMAX, BV_HANDLE,
@@ -12762,7 +12759,6 @@ static const BsRowDef kBsRows[] = {
     {BR_SLIDER, BV_NPSIZE, L"Tamanho", 0, 0},
     {BR_CHOICE, BV_NPBAR, L"Barra de progresso", 0, 0},
     {BR_GROUP, BV_NONE, L"Volume, brilho e Central", 0, 0},
-    {BR_SWITCH, BV_FLYOUTS, L"Pílula ao vivo", 0, 0, L"O ícone do Bluetooth abre a pílula dos aparelhos (com procurar e parear), e mexer no volume ou no brilho dentro dos menus abre a pílula grande do controle; desligada, abrem os menus comuns, sem procurar e parear aparelhos"},
     {BR_SWITCH, BV_OSD, L"Indicador de volume e brilho", 0, 0, L"Logo abaixo do ícone na barra"},
     {BR_SWITCH, BV_DIM, L"Escurecer a tela com a Central de Controle", 0, 0},
     {BR_CHOICE, BV_CCCLOSE, L"Ao fechar a Central", 0, 0, L"Cascata: cada linha volta para dentro da linha de cima, de baixo para cima"},
@@ -12874,7 +12870,6 @@ static const BsBoolKey kBsKeys[] = {
     {BV_UPDATES, L"checkUpdates", &Settings::checkUpdates},
     {BV_HIDEFS, L"hideOnFullscreen", &Settings::hideOnFullscreen},
     {BV_HIDEMAX, L"hideWhenMaximized", &Settings::hideWhenMaximized},
-    {BV_FLYOUTS, L"flyouts", &Settings::flyouts},
     {BV_OSD, L"showOsd", &Settings::showOsd},
     {BV_DIM, L"ccDimScreen", &Settings::bgBlur},
 };
@@ -21801,7 +21796,7 @@ static void OpenItemMenu(Bar* b, int idx) {
     if (g_wxw.hwnd) WxClose();
     bool full = g_forceFullMenu;
     g_forceFullMenu = false;
-    if (g_settings.flyouts && !full && it.kind == K_BT) {
+    if (!full && it.kind == K_BT) {  // o Bluetooth abre a pílula (aparelhos, procurar e parear)
         if (g_tray.hwnd) CloseTrayPopup(false);
         FlyToggle(b, idx, it.kind == K_VOL ? FLY_VOL : it.kind == K_DISPLAY ? FLY_BRIGHT : FLY_BT);
         return;
@@ -25087,8 +25082,6 @@ const UiTr kUiTr[] = {
     {L"Ctrl+F2 navega a barra pelo teclado", L"Ctrl+F2 navigates the bar with the keyboard", L"Ctrl+F2 recorre la barra con el teclado", L"Ctrl+F2 parcourt la barre au clavier", L"Strg+F2 steuert die Leiste per Tastatur", L"Ctrl+F2 naviga nella barra con la tastiera", L"Ctrl+F2 使用键盘浏览菜单栏"},
     {L"Painel", L"Panel", L"Panel", L"Panneau", L"Bereich", L"Pannello", L"面板"},
     {L"Volume, brilho e Central", L"Volume, brightness and Control Center", L"Volumen, brillo y Centro de control", L"Volume, luminosité et Centre de contrôle", L"Lautstärke, Helligkeit und Kontrollzentrum", L"Volume, luminosità e Centro di Controllo", L"音量、亮度和控制中心"},
-    {L"Pílula ao vivo", L"Live pill", L"Píldora en vivo", L"Pastille en direct", L"Live-Pille", L"Pillola dal vivo", L"实时胶囊"},
-    {L"O ícone do Bluetooth abre a pílula dos aparelhos (com procurar e parear), e mexer no volume ou no brilho dentro dos menus abre a pílula grande do controle; desligada, abrem os menus comuns, sem procurar e parear aparelhos", L"The Bluetooth icon opens the devices pill (with find and pair), and moving volume or brightness in the menus opens the large control pill; off, they open the regular menus, without finding and pairing devices", L"El icono de Bluetooth abre la píldora de dispositivos (con buscar y vincular), y mover el volumen o el brillo en los menús abre la píldora grande del control; desactivada, abren los menús normales, sin buscar ni vincular dispositivos", L"L’icône Bluetooth ouvre la pastille des appareils (avec rechercher et associer), et régler le volume ou la luminosité dans les menus ouvre la grande pastille du réglage ; désactivée, ils ouvrent les menus habituels, sans rechercher ni associer d’appareils", L"Das Bluetooth-Symbol öffnet die Geräte-Pille (mit Suchen und Koppeln), und Lautstärke oder Helligkeit in den Menüs öffnet die große Regler-Pille; aus, öffnen sich die normalen Menüs, ohne Geräte zu suchen und zu koppeln", L"L’icona Bluetooth apre la pillola dei dispositivi (con cerca e associa), e regolare volume o luminosità nei menu apre la pillola grande del controllo; disattivata, si aprono i menu normali, senza cercare e associare dispositivi", L"蓝牙图标打开设备胶囊（可查找和配对），在菜单中调节音量或亮度会打开大的控制胶囊；关闭时打开普通菜单，无法查找和配对设备"},
     {L"Indicador de volume e brilho", L"Volume and brightness indicator", L"Indicador de volumen y brillo", L"Indicateur de volume et de luminosité", L"Lautstärke- und Helligkeitsanzeige", L"Indicatore di volume e luminosità", L"音量和亮度指示器"},
     {L"Logo abaixo do ícone na barra", L"Right below the icon on the bar", L"Justo debajo del icono en la barra", L"Juste sous l’icône dans la barre", L"Direkt unter dem Symbol in der Leiste", L"Subito sotto l’icona nella barra", L"显示在菜单栏图标正下方"},
     {L"Escurecer a tela com a Central de Controle", L"Dim the screen with the Control Center", L"Oscurecer la pantalla con el Centro de control", L"Assombrir l’écran avec le Centre de contrôle", L"Bildschirm mit dem Kontrollzentrum abdunkeln", L"Scurisci lo schermo con il Centro di Controllo", L"打开控制中心时调暗屏幕"},
