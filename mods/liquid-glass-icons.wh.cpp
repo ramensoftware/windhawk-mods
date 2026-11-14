@@ -17,8 +17,6 @@
 
 Transforms Windows 11 desktop icons (`FolderView` `SysListView32`) into sleek Liquid Glass tiles:
 
-![Liquid Glass Icons Preview](https://raw.githubusercontent.com/Arbaz14/windhawk-mods/main/mods/liquid-glass-icons/screenshot.png)
-
 - **Translucent Glass Backing**: Renders customizable glass tiles behind desktop icons with multiple optical presets (`Liquid Glass`, `Clear Transparent Glass`, `Frosted Crystal`, `Obsidian Tint`, `Glacial Aurora`, or custom hex tints).
 - **Independent Rim & Sheen Control**: Dedicated slider to dial in border specular brightness (0–100%) independently from glass body transparency.
 - **Translucent Icons**: Blends the icon graphic itself into the glass tile (`iconOpacity` slider, default `75%`) instead of rendering opaque blocks.
@@ -147,7 +145,7 @@ struct IconModSettings {
     int iconScale = 84;
     int cornerRadius = 10;
     bool showGlassSheen = true;
-    IconThemingMode iconTheming = IconThemingMode::kColorize;
+    IconThemingMode iconTheming = IconThemingMode::kNone;
     IconThemeColorChoice iconThemeColor = IconThemeColorChoice::kWhite;
     COLORREF iconCustomColor = RGB(0xFF, 0xFF, 0xFF);
 };
@@ -223,12 +221,12 @@ IconGlassPreset ParsePreset(std::wstring_view raw) {
 }
 
 IconThemingMode ParseIconTheming(std::wstring_view raw) {
-    if (EqualsIgnoreCase(raw, L"none")) return IconThemingMode::kNone;
+    if (EqualsIgnoreCase(raw, L"colorize")) return IconThemingMode::kColorize;
     if (EqualsIgnoreCase(raw, L"glass")) return IconThemingMode::kGlass;
     if (EqualsIgnoreCase(raw, L"monochrome")) return IconThemingMode::kMonochrome;
     if (EqualsIgnoreCase(raw, L"silhouette")) return IconThemingMode::kSilhouette;
     if (EqualsIgnoreCase(raw, L"grayscale")) return IconThemingMode::kGrayscale;
-    return IconThemingMode::kColorize;
+    return IconThemingMode::kNone;
 }
 
 IconThemeColorChoice ParseIconThemeColor(std::wstring_view raw) {
@@ -1568,8 +1566,10 @@ LRESULT CALLBACK DesktopListSubclassProc(HWND hWnd,
             break;
         }
         case WM_SETTINGCHANGE: {
-            RefreshSystemDarkMode();
-            InvalidateRect(hWnd, nullptr, TRUE);
+            if (lParam && wcscmp(reinterpret_cast<LPCWSTR>(lParam), L"ImmersiveColorSet") == 0) {
+                RefreshSystemDarkMode();
+                InvalidateRect(hWnd, nullptr, TRUE);
+            }
             break;
         }
         case WM_PAINT:
