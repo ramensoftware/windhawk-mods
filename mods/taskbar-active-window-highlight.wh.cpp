@@ -2,7 +2,7 @@
 // @id              taskbar-active-window-highlight
 // @name            Taskbar Active Window Highlight
 // @description     Highlights the active window's card in the taskbar thumbnail preview
-// @version         0.1.0
+// @version         0.1.1
 // @author          Ephrem T.
 // @github          https://github.com/EphremTil17
 // @include         explorer.exe
@@ -22,6 +22,10 @@ When an app has several windows, Windows 11's thumbnail preview gives no hint
 about which one is active. This mod adds an accent-colored highlight to the
 active window's card. The taskbar button keeps Windows' native indicator.
 
+Requires the Windows 11 taskbar's XAML thumbnail previews (tested on Windows 11
+build 26300). With the classic thumbnails, or with StartAllBack or
+ExplorerPatcher, the mod has no effect.
+
 ![Active window highlighted in the thumbnail preview](https://raw.githubusercontent.com/EphremTil17/taskbar-active-window-highlight/main/screenshots/preview.png)
 
 ## How it works
@@ -39,7 +43,16 @@ Windows 11 Taskbar Styler.
 
 Clicking the taskbar or a preview list briefly moves focus to the taskbar
 itself. By default the last active window stays highlighted until another
-window or the desktop takes focus.
+window or the desktop takes focus, or the window is minimized or closed.
+
+## How it differs from Taskbar Recent Focus Highlight
+
+[Taskbar Recent Focus Highlight](https://windhawk.net/mods/taskbar-recent-focus-highlight)
+ranks apps and windows by recent use, from its own focus history. This mod
+answers a narrower question, which window is active right now, by reading
+Explorer's own active task item, with no focus tracking of its own. While
+another app has focus it marks nothing in this app's preview, and it also
+marks single-window previews.
 
 ## Performance and footprint
 
@@ -52,8 +65,8 @@ window or the desktop takes focus.
   0.004–0.013 ms per event, worst case 0.67 ms (the first time a card's
   highlight is created).
 - **One element per card**, created once and then only shown or hidden.
-- **Small and safe to unload.** About 500 lines of code, three hooks, and no
-  event handlers left in Explorer, so disabling the mod cleanly removes it.
+- **Safe to unload.** No event handlers are left in Explorer, so disabling the
+  mod cleanly removes it.
 */
 // ==/WindhawkModReadme==
 
@@ -73,7 +86,7 @@ window or the desktop takes focus.
   $description: >-
     Clicking the taskbar or a preview list briefly takes focus away from your
     window. Keep showing it as active until another window or the desktop
-    takes focus.
+    takes focus, or the window is minimized or closed.
 */
 // ==/WindhawkModSettings==
 
@@ -201,9 +214,8 @@ void LoadSettings() {
 // State
 // ---------------------------------------------------------------------------
 // Hooks run on the taskbar's UI thread. The mutex covers the hand-off from
-// Windhawk's thread on settings changes and unload.
-
-std::atomic<bool> g_unloading{false};
+// Windhawk's thread on settings changes and unload. (Windhawk removes the
+// hooks before Wh_ModUninit runs, so no hook runs during teardown.)
 
 std::mutex g_stateMutex;
 
@@ -394,17 +406,32 @@ bool IsTaskbarUiWindow(HWND hwnd) {
            _wcsicmp(cls, L"TopLevelWindowForOverflowXamlIsland") == 0;
 }
 
+// A minimized or closed window is not active, even while it is the window
+// kept for taskbar focus. Checked at paint time too, because minimizing or
+// closing a kept window (from the preview's context menu, or after Explorer's
+// event) does not always produce another active-item change.
+bool CanBeActive(HWND hwnd) {
+    return hwnd && IsWindow(hwnd) && !IsIconic(hwnd);
+}
+
 HWND ActiveWindow() {
+    HWND window = nullptr;
+    bool haveState = false;
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
-        if (g_haveActiveState) {
-            return g_activeWindow;
+        haveState = g_haveActiveState;
+        window = g_activeWindow;
+    }
+    if (!haveState) {
+        // Before Explorer's first active-item change after the mod loaded,
+        // its active item is the foreground window, unless the taskbar has
+        // focus.
+        window = GetForegroundWindow();
+        if (window && IsTaskbarUiWindow(window)) {
+            window = nullptr;
         }
     }
-    // Before Explorer's first active-item change after the mod loaded, its
-    // active item is the foreground window (unless the taskbar has focus).
-    HWND fg = GetForegroundWindow();
-    return fg && !IsTaskbarUiWindow(fg) ? fg : nullptr;
+    return CanBeActive(window) ? window : nullptr;
 }
 
 void UpdateCard(FrameworkElement const& card) {
@@ -454,12 +481,12 @@ void OnActiveItemChanged(IUnknown* appsListAbi) {
     }
     HWND window = reinterpret_cast<HWND>(windowId);
 
-    // No active item while the taskbar itself has focus: keep the last one.
-    bool keep = false;
+    // Explorer reports no active item while the taskbar itself has focus.
+    bool taskbarFocused = false;
     if (!window && CurrentSettings()->keepWhileTaskbarFocused) {
         HWND fg = GetForegroundWindow();
         // No foreground window is a transition; the next change resolves it.
-        keep = !fg || IsTaskbarUiWindow(fg);
+        taskbarFocused = !fg || IsTaskbarUiWindow(fg);
     }
 
     bool changed = false;
@@ -472,11 +499,15 @@ void OnActiveItemChanged(IUnknown* appsListAbi) {
         if (window) {
             g_activeWindow = window;
             g_activeSource = appsListAbi;
-        } else if (!keep && (!g_activeSource || g_activeSource == appsListAbi)) {
+        } else if (!g_activeSource || g_activeSource == appsListAbi) {
             // Only the list that reported the active window clears it; another
-            // taskbar's list being empty says nothing about it.
-            g_activeWindow = nullptr;
-            g_activeSource = nullptr;
+            // taskbar's list being empty says nothing about it. While the
+            // taskbar has focus, keep the last window unless it was minimized
+            // (for example by clicking its taskbar button) or closed.
+            if (!taskbarFocused || !CanBeActive(g_activeWindow)) {
+                g_activeWindow = nullptr;
+                g_activeSource = nullptr;
+            }
         }
         changed = !hadState || previous != g_activeWindow;
         activeNow = g_activeWindow;
@@ -495,9 +526,6 @@ void OnActiveItemChanged(IUnknown* appsListAbi) {
 // ---------------------------------------------------------------------------
 
 void OnCardChanged(void* pThis) {
-    if (g_unloading) {
-        return;
-    }
     try {
         FrameworkElement card = nullptr;
         static_cast<IUnknown*>(pThis)->QueryInterface(
@@ -543,7 +571,7 @@ void WINAPI TaskbarController_OnAppsListActiveItemChanged_Hook(void* pThis,
                                                                void* appsList,
                                                                void* args) {
     TaskbarController_OnAppsListActiveItemChanged_Original(pThis, appsList, args);
-    if (!g_unloading && appsList) {
+    if (appsList) {
         try {
             NoteUiThread();
             // `TaskbarAppsList const&` refers to a projected object, which
@@ -556,6 +584,7 @@ void WINAPI TaskbarController_OnAppsListActiveItemChanged_Hook(void* pThis,
 }
 
 bool HookTaskbarViewSymbols(HMODULE module) {
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{LR"(private: void __cdecl winrt::Taskbar::implementation::TaskbarController::OnAppsListActiveItemChanged(struct winrt::WindowsUdk::UI::Shell::TaskbarAppsList const &,struct winrt::Windows::Foundation::IInspectable const &))"},
          &TaskbarController_OnAppsListActiveItemChanged_Original,
@@ -713,7 +742,6 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     Wh_Log(L">");
-    g_unloading = true;
     RunOnUiThreads([] { RemoveOverlaysOnThisThread(); });
 }
 
