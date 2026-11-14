@@ -167,6 +167,11 @@ navigation can change the selection while the UI remains hidden.
     right-click can dismiss the switcher; ordinary physical right-clicks outside
     the switcher still dismiss it. Legacy recovery data from older builds is
     restored only when the switcher is inactive.
+- With Start, Search, Quick Settings, or the notification center open, a
+  touchpad commit is slightly slower than an Alt+Tab commit. A touchpad gesture
+  cannot take the foreground from these shell surfaces, so the switcher closes
+  them first and activates the selected window once they are gone (about a
+  fifth of a second).
 - Mica requires Windows 11. Mica Alt requires Windows 11 22H2 or newer and
   shows Mica on 21H2. On Windows 10, both themes use Acrylic. The automatic theme
   uses Mica on Windows 11 and Acrylic on Windows 10; backdrop blur is a separate,
