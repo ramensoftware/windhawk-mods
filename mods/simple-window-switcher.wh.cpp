@@ -14884,6 +14884,129 @@ static bool TakeMouseCommand(DWORD index, MouseCommand* command) {
     return true;
 }
 
+// Scroll catcher. Precision-touchpad two-finger scrolling over DirectManipulation
+// apps (browsers, editors) arrives as pointer input that the low-level mouse hook
+// never sees, so it scrolled the app behind the switcher. While the switcher is
+// shown and the scroll wheel drives it, a small, nearly invisible window follows
+// the cursor directly below the switcher windows. Over this legacy window Windows
+// delivers the same gesture as wheel input, which the hook consumes like a mouse
+// wheel. Clicks outside the switcher still dismiss it through the hook, but no
+// longer reach the app underneath. It stays small on purpose: a full-screen window
+// reads as a full-screen app to other tools (Top Taskbar Bleed hid its panel).
+#define SWS_SCROLL_CATCHER_CLASSNAME L"WindhawkSWS_ScrollCatcher"
+#define SWS_SCROLL_CATCHER_SIZE 128 // px, centered on the cursor
+#define SWS_SCROLL_CATCHER_FOLLOW_TIMER_ID 1 // on the catcher window itself
+#define SWS_SCROLL_CATCHER_FOLLOW_MS 15
+static HWND g_hScrollCatcherWnd = NULL;
+static bool g_scrollCatcherClassRegistered = false;
+
+static void ScrollCatcherFollowCursor() {
+    POINT pt;
+    RECT current;
+    if (!g_hScrollCatcherWnd || !GetCursorPos(&pt) ||
+        !GetWindowRect(g_hScrollCatcherWnd, &current)) return;
+    const int x = pt.x - SWS_SCROLL_CATCHER_SIZE / 2;
+    const int y = pt.y - SWS_SCROLL_CATCHER_SIZE / 2;
+    if (current.left == x && current.top == y) return;
+    SetWindowPos(g_hScrollCatcherWnd, NULL, x, y, 0, 0,
+                 SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE | SWP_NOOWNERZORDER);
+}
+
+static LRESULT CALLBACK ScrollCatcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATEANDEAT;
+        case WM_MOUSEWHEEL:
+        case WM_MOUSEHWHEEL:
+            return 0; // Only reached when the hook let the wheel through.
+        case WM_MOUSEMOVE:
+            ScrollCatcherFollowCursor();
+            return 0;
+        case WM_TIMER:
+            // The cursor can leave the window between moves; the timer catches up.
+            if (wParam == SWS_SCROLL_CATCHER_FOLLOW_TIMER_ID) {
+                ScrollCatcherFollowCursor();
+                return 0;
+            }
+            break;
+    }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
+static void UpdateScrollCatcher(DWORD flags) {
+    if (!g_hSwitcher || GetWindowThreadProcessId(g_hSwitcher, nullptr) != GetCurrentThreadId()) {
+        return;
+    }
+    const bool wanted = (flags & SWS_MOUSE_VISIBLE) && (flags & SWS_MOUSE_WHEEL) &&
+                        ((flags >> 4) & 3u) && s_mouseHookThread &&
+                        IsWindowVisible(g_hSwitcher);
+    if (!wanted) {
+        if (g_hScrollCatcherWnd && IsWindowVisible(g_hScrollCatcherWnd)) {
+            KillTimer(g_hScrollCatcherWnd, SWS_SCROLL_CATCHER_FOLLOW_TIMER_ID);
+            ShowWindow(g_hScrollCatcherWnd, SW_HIDE);
+        }
+        return;
+    }
+    if (g_hScrollCatcherWnd && IsWindowVisible(g_hScrollCatcherWnd)) return;
+    HINSTANCE instance = GetModuleHandleW(NULL);
+    if (!g_hScrollCatcherWnd) {
+        if (!g_scrollCatcherClassRegistered) {
+            WNDCLASSEXW wc = { sizeof(wc) };
+            wc.lpfnWndProc = ScrollCatcherWndProc;
+            wc.hInstance = instance;
+            wc.lpszClassName = SWS_SCROLL_CATCHER_CLASSNAME;
+            wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
+            wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+            if (RegisterClassExW(&wc)) g_scrollCatcherClassRegistered = true;
+        }
+        if (!g_scrollCatcherClassRegistered) return;
+        g_hScrollCatcherWnd = CreateSWSWindow(
+            WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_LAYERED,
+            SWS_SCROLL_CATCHER_CLASSNAME, L"", WS_POPUP, 0, 0, 0, 0, NULL, NULL,
+            instance, NULL);
+        if (!g_hScrollCatcherWnd) return;
+        // Alpha 1, not 0: a fully transparent layered window is not hit-tested.
+        SetLayeredWindowAttributes(g_hScrollCatcherWnd, 0, 1, LWA_ALPHA);
+        if (IsWin11OrGreater()) {
+            int corner = 1; // DWMWCP_DONOTROUND
+            DwmSetWindowAttribute(g_hScrollCatcherWnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */,
+                                  &corner, sizeof(corner));
+        }
+        BOOL exclude = TRUE;
+        DwmSetWindowAttribute(g_hScrollCatcherWnd, DWMWA_EXCLUDED_FROM_PEEK, &exclude,
+                              sizeof(exclude));
+    }
+    POINT pt = {};
+    GetCursorPos(&pt);
+    // Below the switcher and every visible switcher-thread window directly under it
+    // (material and backdrop surfaces), so it never tints them. Owned windows such
+    // as mirrors and the close button always stay above their owner.
+    HWND insertAfter = g_hSwitcher;
+    const DWORD threadId = GetCurrentThreadId();
+    for (HWND next = GetWindow(g_hSwitcher, GW_HWNDNEXT); next;
+         next = GetWindow(next, GW_HWNDNEXT)) {
+        if (next == g_hScrollCatcherWnd) continue;
+        if (GetWindowThreadProcessId(next, nullptr) != threadId || !IsWindowVisible(next)) break;
+        insertAfter = next;
+    }
+    SetWindowPos(g_hScrollCatcherWnd, insertAfter, pt.x - SWS_SCROLL_CATCHER_SIZE / 2,
+                 pt.y - SWS_SCROLL_CATCHER_SIZE / 2, SWS_SCROLL_CATCHER_SIZE,
+                 SWS_SCROLL_CATCHER_SIZE, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    SetTimer(g_hScrollCatcherWnd, SWS_SCROLL_CATCHER_FOLLOW_TIMER_ID,
+             SWS_SCROLL_CATCHER_FOLLOW_MS, NULL);
+}
+
+static void DestroyScrollCatcherWindow() {
+    if (g_hScrollCatcherWnd) {
+        if (IsWindow(g_hScrollCatcherWnd)) DestroyWindow(g_hScrollCatcherWnd);
+        g_hScrollCatcherWnd = NULL;
+    }
+    if (g_scrollCatcherClassRegistered) {
+        UnregisterClassW(SWS_SCROLL_CATCHER_CLASSNAME, GetModuleHandleW(NULL));
+        g_scrollCatcherClassRegistered = false;
+    }
+}
+
 static void PublishMouseHookPolicy() {
     DWORD flags = 0;
     if (s_mouseUiSessionOpen && !g_isHidingSwitcher && !g_animExitActive) {
@@ -14907,6 +15030,7 @@ static void PublishMouseHookPolicy() {
     ULONGLONG policy = ((ULONGLONG)s_mouseUiGeneration << 32) | flags;
     if (s_mousePolicy.exchange(policy, std::memory_order_acq_rel) != policy &&
         s_mousePolicyChanged) SetEvent(s_mousePolicyChanged);
+    UpdateScrollCatcher(flags);
 }
 
 static void RetireMouseUiSession() {
@@ -20884,6 +21008,9 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 (!g_hSwitcher || !IsWindowVisible(g_hSwitcher))) {
                 HideBackdropBlur();
             }
+            // Same fail-safe for the scroll catcher, which must never stay up on its
+            // own; this also follows late switcher visibility.
+            UpdateScrollCatcher(MousePolicyFlags(s_mousePolicy.load(std::memory_order_acquire)));
             // Never recenter/resize mid-entrance-fade: a SetWindowPos here is
             // exactly the visible "drift to center" during reveal. Sizes are
             // refreshed at show/reveal time, and the next tick after the
@@ -23556,6 +23683,7 @@ thread_exit:
     g_windows.clear();
     g_mruWindows.clear();
     DestroyBackdropWindow();
+    DestroyScrollCatcherWindow();
     if (g_hCloseBtnWnd) { DestroyWindow(g_hCloseBtnWnd); g_hCloseBtnWnd = NULL; }
     RemoveNativeSwipePolicy();
     ReleaseSavedAppListThumbnails();
