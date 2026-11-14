@@ -19580,7 +19580,9 @@ static void EndTouchpadGesture() {
     // A touchpad release is only one half of a combined Alt+Tab session. Do
     // not commit while Alt is still physically held, and do not commit a
     // native handoff until its reader-observed lift reaches the UI thread.
-    if (s_altSessionOwner &&
+    // Sticky mode commits on its own tap and never tracks the Alt release, so
+    // an Alt+Tab pressed inside it must not leave every later tap waiting.
+    if (s_altSessionOwner && !g_isSticky &&
         (s_altHeld || CombinedRawReleasePending())) {
         KeepAltReleasePolling();
         return;
