@@ -2,7 +2,7 @@
 // @id              windows-key-to-search
 // @name            Windows Key to Search
 // @description     Open Windows Search (Win+S) when either Windows key is tapped.
-// @version         1.0
+// @version         1.1
 // @author          Tyler
 // @github          https://github.com/snowtyler
 // @include         windhawk.exe
@@ -16,47 +16,47 @@
 /*
 # Windows Key to Search
 
-Tap either Windows key to open Search instead of Start. Search opens when the
-key is released. Windows-key combinations such as Win+E, Win+R, Win+Shift+S,
-and Win+S continue to work normally. The generated shortcut is held for 50 ms
-before release.
+Tap either Windows key to open Search instead of Start. Windows-key shortcuts
+(Win+E, Win+R, Win+Shift+S, etc.) still work normally.
 
-By default, the helper runs without requesting administrator privileges. On
-Windhawk 1.7.3, administrator windows keep their normal Windows-key behavior.
-On Windhawk 2.0 alpha 4 or later, the mod requests UIAccess, which also covers
-administrator windows when that host is available.
+On the Windows 11 taskbar, the taskbar appears alongside Search, even over
+fullscreen apps. This relies on an internal Windows message and may break in
+future Windows versions; it can be turned off in the settings. It isn't used
+on Windows 10 or with a restored Windows 10 taskbar (e.g. ExplorerPatcher).
 
-The optional **Support administrator windows on Windhawk 1.7.3** setting launches
-an elevated helper. It is off by default. Enabling it can show a UAC prompt at
-every sign-in, and after enabling or updating the mod. The prompt runs on a
-background thread, and an already-running helper prevents another prompt.
-If elevation is cancelled, the helper runs normally instead. Disable and
-re-enable the mod after changing this setting. On Windhawk 2.0, leave this
-setting off and use its UIAccess host.
+## Administrator windows
 
-The helper uses Windhawk's [tool-mod launcher](https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process),
-with an optional background elevation path on older Windhawk versions.
+- **Windhawk 2.0 alpha 4+:** works in administrator windows automatically.
+- **Windhawk 1.7.3:** administrator windows keep normal Windows-key behavior
+  unless you enable **Support administrator windows on Windhawk 1.7.3**. That
+  option shows a UAC prompt at sign-in and after enabling or updating the mod.
 
-Windows-key mouse gestures used by tools such as AltDrag or AltSnap are not
-supported: the mod withholds the Windows key until another keyboard key is
-pressed. UAC's secure desktop is outside the scope of the mod.
+## Limitations
+
+- Windows-key mouse gestures (e.g. AltDrag, AltSnap) aren't supported.
+- Doesn't work on secure desktops such as the UAC prompt.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+- showTaskbarWithSearch: true
+  $name: Show the taskbar with Search
+  $description: >-
+    Show the taskbar alongside Search, including over fullscreen apps. Windows 11
+    taskbar only.
 - supportAdministratorWindows: false
   $name: Support administrator windows on Windhawk 1.7.3
   $description: >-
-    Launch an administrator helper. This can show a UAC prompt at every sign-in
-    and after enabling or updating the mod. Off by default. If cancelled, normal
-    windows still work. Disable and re-enable the mod after changing this option.
-    Leave off on Windhawk 2.0, which provides a UIAccess host.
+    Run as administrator so the mod works in administrator windows. Shows a UAC
+    prompt at sign-in. Re-enable the mod after changing. Not needed on
+    Windhawk 2.0.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <shellapi.h>
+#include <atomic>
 #include <cwchar>
 
 namespace {
@@ -85,6 +85,143 @@ ULONGLONG g_searchReleaseAt;
 INPUT g_restoreKeys[7];
 UINT g_restoreCount;
 constexpr UINT kSearchHoldMs = 50;
+// TrayUI::WndProc forwards this to CTaskBand::_HandleSearchVisibilityChange,
+// updates the Search monitor, unhides the tray, and resets its z-order.
+// Verified in Windows 11 Taskbar.dll; lParam is an HMONITOR, not a pointer.
+constexpr UINT kTaskbarSearchVisibility = WM_USER + 0x1D1;
+UINT_PTR g_taskbarTimer;
+HWND g_taskbarWindow;
+HWND g_taskbarSearchWindow;
+std::atomic<bool> g_showTaskbar{true};
+ULONGLONG g_taskbarDeadline;
+bool g_taskbarNotified;
+HWND g_lastSearchCandidate;
+
+void EndTaskbarReveal() {
+    if (g_taskbarTimer) {
+        KillTimer(nullptr, g_taskbarTimer);
+        g_taskbarTimer = 0;
+    }
+    if (g_taskbarNotified) {
+        if (!PostMessageW(g_taskbarWindow, kTaskbarSearchVisibility, FALSE, 0)) {
+            Wh_Log(L"Could not clear taskbar Search visibility (error %lu)", GetLastError());
+        }
+    }
+    g_taskbarWindow = nullptr;
+    g_taskbarSearchWindow = nullptr;
+    g_taskbarNotified = false;
+    g_lastSearchCandidate = nullptr;
+}
+
+bool IsSearchWindow(HWND window) {
+    DWORD pid = 0;
+    WCHAR className[64] = {};
+    GetClassNameW(window, className, ARRAYSIZE(className));
+    const bool logCandidate = window != g_lastSearchCandidate;
+    g_lastSearchCandidate = window;
+    if (!GetWindowThreadProcessId(window, &pid)) {
+        if (logCandidate) {
+            Wh_Log(L"Waiting for Search: no foreground process (error %lu)", GetLastError());
+        }
+        return false;
+    }
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+        if (logCandidate) {
+            Wh_Log(L"Waiting for Search: HWND=%p, class=%s, PID=%lu; process query denied (error %lu)",
+                   window, className, pid, GetLastError());
+        }
+        return false;
+    }
+    WCHAR path[MAX_PATH];
+    DWORD length = ARRAYSIZE(path);
+    const BOOL read = QueryFullProcessImageNameW(process, 0, path, &length);
+    const DWORD error = read ? ERROR_SUCCESS : GetLastError();
+    CloseHandle(process);
+    if (!read) {
+        if (logCandidate) {
+            Wh_Log(L"Waiting for Search: HWND=%p, class=%s, PID=%lu; path query failed (error %lu)",
+                   window, className, pid, error);
+        }
+        return false;
+    }
+    const WCHAR* name = wcsrchr(path, L'\\');
+    name = name ? name + 1 : path;
+    if (logCandidate) {
+        Wh_Log(L"Search foreground candidate: HWND=%p, class=%s, PID=%lu, process=%s",
+               window, className, pid, name);
+    }
+    // Newer Windows 11 builds host Search in ShellHost.exe. It also hosts
+    // other shell flyouts, so require its frame class; tracking only runs
+    // briefly after our own Win+S, which keeps this from matching others.
+    if (_wcsicmp(name, L"ShellHost.exe") == 0) {
+        return wcscmp(className, L"ShellUXFrameWindowClass") == 0;
+    }
+    return _wcsicmp(name, L"SearchHost.exe") == 0 ||
+           _wcsicmp(name, L"SearchApp.exe") == 0 ||
+           _wcsicmp(name, L"SearchUI.exe") == 0;
+}
+
+void CheckTaskbarReveal() {
+    if (!g_taskbarTimer) {
+        return;
+    }
+    HWND foreground = GetForegroundWindow();
+    if (g_taskbarSearchWindow && foreground == g_taskbarSearchWindow) {
+        return;
+    }
+    if (IsSearchWindow(foreground)) {
+        g_taskbarSearchWindow = foreground;
+        // Search can open on a monitor other than the former fullscreen app.
+        HMONITOR monitor = MonitorFromWindow(foreground, MONITOR_DEFAULTTONEAREST);
+        if (!monitor ||
+            !PostMessageW(g_taskbarWindow, kTaskbarSearchVisibility, TRUE,
+                          reinterpret_cast<LPARAM>(monitor))) {
+            Wh_Log(L"Could not notify taskbar of Search visibility (error %lu)", GetLastError());
+            EndTaskbarReveal();
+            return;
+        }
+        g_taskbarNotified = true;
+        Wh_Log(L"Notified taskbar: Search visible on monitor %p", monitor);
+    } else if (g_taskbarNotified || GetTickCount64() >= g_taskbarDeadline) {
+        if (!g_taskbarNotified) {
+            Wh_Log(L"Search visibility request expired without finding the Search foreground window");
+        }
+        EndTaskbarReveal();
+    }
+}
+
+void PrepareTaskbarReveal() {
+    EndTaskbarReveal();
+    if (!g_showTaskbar) {
+        return;
+    }
+    // A tap while Search is open closes it; tracking would re-show the taskbar
+    // until the closing Search window loses the foreground.
+    if (IsSearchWindow(GetForegroundWindow())) {
+        return;
+    }
+    // The primary tray forwards this notification to secondary taskbars too.
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    // The message is only verified on the Windows 11 XAML taskbar, not on
+    // Windows 10 or a restored Windows 10 taskbar (e.g. ExplorerPatcher).
+    if (!taskbar ||
+        !FindWindowExW(taskbar, nullptr,
+                       L"Windows.UI.Composition.DesktopWindowContentBridge",
+                       nullptr)) {
+        Wh_Log(L"Taskbar Search visibility unavailable: no Windows 11 taskbar");
+        return;
+    }
+    g_taskbarWindow = taskbar;
+    g_taskbarDeadline = GetTickCount64() + 1500;
+    g_taskbarTimer = SetTimer(nullptr, 0, 50, nullptr);
+    if (!g_taskbarTimer) {
+        Wh_Log(L"Could not start Search visibility tracking (error %lu)", GetLastError());
+        EndTaskbarReveal();
+    } else {
+        Wh_Log(L"Tracking Search visibility for taskbar HWND=%p", taskbar);
+    }
+}
 
 bool IsWindowsKey(DWORD vk) {
     return vk == VK_LWIN || vk == VK_RWIN;
@@ -165,6 +302,7 @@ bool CompleteSearch(const KBDLLHOOKSTRUCT* replay = nullptr, bool up = false) {
 
 void OpenSearch(WORD win) {
     CompleteSearch();
+    PrepareTaskbarReveal();
     // Query held keys only after the physical Win-up callback has returned.
     const WORD keys[] = {VK_LSHIFT, VK_RSHIFT, VK_LCONTROL, VK_RCONTROL,
                          VK_LMENU, VK_RMENU, 'S'};
@@ -184,6 +322,7 @@ void OpenSearch(WORD win) {
     const bool accepted = Inject(inputs, count);
     if (!accepted) {
         CompleteSearch();
+        EndTaskbarReveal();
         return;
     }
     // The working physical shortcut has a real hold between down and up.
@@ -193,6 +332,14 @@ void OpenSearch(WORD win) {
     if (!g_searchTimer) {
         CompleteSearch();
     }
+}
+
+void ResetKeyTracking() {
+    ZeroMemory(g_keys, sizeof(g_keys));
+    ZeroMemory(g_pending, sizeof(g_pending));
+    ZeroMemory(g_tap, sizeof(g_tap));
+    ZeroMemory(g_swallowUp, sizeof(g_swallowUp));
+    ZeroMemory(g_shortcutUsed, sizeof(g_shortcutUsed));
 }
 
 LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
@@ -211,11 +358,7 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
     if (!g_hasElevatedInputAccess &&
         (!g_canRemapForeground || GetForegroundWindow() != g_cachedForeground)) {
         // Inaccessible/elevated foreground windows retain their original input.
-        ZeroMemory(g_keys, sizeof(g_keys));
-        ZeroMemory(g_pending, sizeof(g_pending));
-        ZeroMemory(g_tap, sizeof(g_tap));
-        ZeroMemory(g_swallowUp, sizeof(g_swallowUp));
-        ZeroMemory(g_shortcutUsed, sizeof(g_shortcutUsed));
+        ResetKeyTracking();
         return CallNextHookEx(nullptr, code, message, param);
     }
     if (g_searchActive) {
@@ -339,14 +482,6 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM param) {
     return CallNextHookEx(nullptr, code, message, param);
 }
 
-void ResetKeyTracking() {
-    ZeroMemory(g_keys, sizeof(g_keys));
-    ZeroMemory(g_pending, sizeof(g_pending));
-    ZeroMemory(g_tap, sizeof(g_tap));
-    ZeroMemory(g_swallowUp, sizeof(g_swallowUp));
-    ZeroMemory(g_shortcutUsed, sizeof(g_shortcutUsed));
-}
-
 void RefreshForegroundAccess() {
     g_cachedForeground = GetForegroundWindow();
     g_canRemapForeground = g_hasElevatedInputAccess;
@@ -382,8 +517,10 @@ void CALLBACK InputContextChanged(HWINEVENTHOOK, DWORD event, HWND, LONG,
     if (event == EVENT_SYSTEM_DESKTOPSWITCH) {
         // Releases on the lock screen/UAC desktop are invisible to our hook.
         ResetKeyTracking();
+        EndTaskbarReveal();
     }
     RefreshForegroundAccess();
+    CheckTaskbarReveal();
 }
 
 DWORD WINAPI HookThread(void*) {
@@ -414,6 +551,11 @@ DWORD WINAPI HookThread(void*) {
 
     if (g_hooksInstalled) {
         while (GetMessageW(&message, nullptr, 0, 0) > 0) {
+            if (message.message == WM_TIMER && g_taskbarTimer &&
+                message.wParam == g_taskbarTimer) {
+                CheckTaskbarReveal();
+                continue;
+            }
             if (message.message == WM_TIMER && g_searchTimer &&
                 message.wParam == g_searchTimer) {
                 // Timer IDs can be reused while an old WM_TIMER is queued.
@@ -435,6 +577,7 @@ DWORD WINAPI HookThread(void*) {
         }
     }
     CompleteSearch();
+    EndTaskbarReveal();
     if (keyboard) {
         UnhookWindowsHookEx(keyboard);
     }
@@ -495,6 +638,7 @@ bool HasElevatedInputAccess() {
 }
 
 BOOL WhTool_ModInit() {
+    g_showTaskbar = Wh_GetIntSetting(L"showTaskbarWithSearch") != 0;
     g_hasElevatedInputAccess = HasElevatedInputAccess();
     g_ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_ready) {
@@ -519,6 +663,8 @@ void WhTool_ModUninit() {
 }
 
 void WhTool_ModSettingsChanged() {
+    // Read on the hook thread; this callback runs on another thread.
+    g_showTaskbar = Wh_GetIntSetting(L"showTaskbarWithSearch") != 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
