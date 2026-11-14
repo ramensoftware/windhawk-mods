@@ -248,6 +248,7 @@ constexpr UINT WM_APP_APPLY_HOTKEYS = WM_APP + 0x447;
 constexpr UINT WM_APP_PERSIST_HOTKEY = WM_APP + 0x448;
 constexpr UINT WM_APP_START_HOTKEY_CAPTURE = WM_APP + 0x449;
 constexpr UINT WM_APP_DISPATCH_HOTKEY = WM_APP + 0x44A;
+constexpr UINT WM_APP_HOOK_APPLY = WM_APP + 0x44B;
 
 enum HotkeyId : int {
     kHotkeyHideShow = 1,
@@ -566,8 +567,12 @@ std::atomic<unsigned> g_hkPlayPauseVk{'M'};
 std::atomic<int> g_captureHotkeyTarget{0};
 std::atomic<bool> g_captureHotkey{false};
 std::atomic<double> g_captureDeadline{0.0};
+// WH_KEYBOARD_LL is owned exclusively by a lightweight thread with its own message loop.
 HHOOK g_captureHook = nullptr;
 bool g_suppressedHotkeyKeys[256] = {};
+HANDLE g_hookThread = nullptr;
+HANDLE g_hookThreadReady = nullptr;
+std::atomic<DWORD> g_hookThreadId{0};
 
 bool ProcessImageNameForWindow(HWND hwnd, std::wstring* imageName);
 std::wstring BaseNameFromPath(std::wstring path);
@@ -2080,10 +2085,11 @@ DWORD WINAPI MediaThreadProc(void*) {
                     ? now - s_artTrackFirstAttempt : 1000.0;
                 const bool checkingForFreshArtwork = artTrackAge >= 0.0 && artTrackAge < 6.0;
                 const bool checkingForLateArtwork = artTrackAge >= 6.0 && artTrackAge < 20.0;
+                const bool checkingForVeryLateArtwork = artTrackAge >= 20.0;
                 const bool shouldProbeArtwork = artTrackChanged ||
                     (checkingForFreshArtwork && now - s_lastArtAttempt >= 0.5) ||
                     (checkingForLateArtwork && now - s_lastArtAttempt >= 1.5) ||
-                    (!next.art && now - s_lastArtAttempt >= 1.0);
+                    (checkingForVeryLateArtwork && now - s_lastArtAttempt >= 10.0);
                 if (shouldProbeArtwork) {
                     s_lastArtAttempt = now;
                     try {
@@ -2541,21 +2547,19 @@ class Renderer {
 
         const int pw = std::max(1, static_cast<int>(std::ceil(width + kRenderPadX * 2.0f)));
         const int ph = std::max(1, static_cast<int>(std::ceil(height + kRenderPadY * 2.0f)));
+        // Consume dirty flags before potentially expensive bitmap/window work.
+        // Concurrent updates after these exchanges remain pending for the next frame.
+        g_layoutDirty.exchange(false);
+        const bool positionDirty = g_windowPositionDirty.exchange(false);
         if (pw != bitmapWidth_ || ph != bitmapHeight_) {
-            if (!CreateBackingBitmap(pw, ph)) return false;
-            g_layoutDirty = false;
-            // Consume before positioning so a concurrent placement request is not lost.
-            g_windowPositionDirty.exchange(false);
-            PositionOverlayWindow(hwnd_, pw, ph, settings);
-        } else {
-            // Consume the redraw request before doing window work, so a concurrent
-            // update raised during positioning remains pending for the next frame.
-            g_layoutDirty.exchange(false);
-            // Content animations (accent morphing, hover and button feedback) only
-            // need a redraw. Reposition the HWND only for actual placement changes.
-            if (g_windowPositionDirty.exchange(false)) {
-                PositionOverlayWindow(hwnd_, pw, ph, settings);
+            if (!CreateBackingBitmap(pw, ph)) {
+                g_layoutDirty = true;
+                g_windowPositionDirty = true;
+                return false;
             }
+            PositionOverlayWindow(hwnd_, pw, ph, settings);
+        } else if (positionDirty) {
+            PositionOverlayWindow(hwnd_, pw, ph, settings);
         }
 
         RECT rc = {0, 0, bitmapWidth_, bitmapHeight_};
@@ -3704,31 +3708,23 @@ int FindConfiguredHotkey(UINT mods, UINT vk) {
 
 LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam);
 
+bool RequestKeyboardHookUpdate() {
+    const DWORD threadId = g_hookThreadId.load();
+    return threadId != 0 && PostThreadMessageW(threadId, WM_APP_HOOK_APPLY, 0, 0);
+}
+
 bool InstallKeyboardHook() {
-    if (g_captureHook) return true;
-    g_captureHook = SetWindowsHookExW(WH_KEYBOARD_LL, CaptureKeyboardProc, nullptr, 0);
-    if (!g_captureHook) {
-        Wh_Log(L"SetWindowsHookEx(WH_KEYBOARD_LL) failed: %u", GetLastError());
-        return false;
-    }
-    return true;
+    // Installation is performed by the dedicated hook thread, never by the renderer.
+    return RequestKeyboardHookUpdate();
 }
 
 void RemoveKeyboardHook() {
-    if (g_captureHook) {
-        UnhookWindowsHookEx(g_captureHook);
-        g_captureHook = nullptr;
-    }
-    std::memset(g_suppressedHotkeyKeys, 0, sizeof(g_suppressedHotkeyKeys));
+    RequestKeyboardHookUpdate();
 }
 
 void ApplyHotkeyInput(HWND) {
-    std::memset(g_suppressedHotkeyKeys, 0, sizeof(g_suppressedHotkeyKeys));
-    if (g_hotkeyEnabled.load() || g_captureHotkey.load()) {
-        InstallKeyboardHook();
-    } else {
-        RemoveKeyboardHook();
-    }
+    // Preserve swallowed-key state until its matching key-up is received.
+    RequestKeyboardHookUpdate();
 }
 
 void DisableHotkeyInput(HWND) {
@@ -3741,7 +3737,7 @@ bool g_capCtrl = false, g_capAlt = false, g_capShift = false, g_capWin = false;
 
 LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode != HC_ACTION) {
-        return CallNextHookEx(g_captureHook, nCode, wParam, lParam);
+        return CallNextHookEx(nullptr, nCode, wParam, lParam);
     }
 
     const auto* k = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
@@ -3846,6 +3842,47 @@ LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return 1;
 }
 
+DWORD WINAPI KeyboardHookThreadProc(void*) {
+    MSG message = {};
+    // Create this thread's message queue before publishing its ID to other threads.
+    PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    g_hookThreadId = GetCurrentThreadId();
+    SetEvent(g_hookThreadReady);
+
+    auto updateHook = [] {
+        const bool shouldBeInstalled = g_hotkeyEnabled.load() || g_captureHotkey.load();
+        if (shouldBeInstalled && !g_captureHook) {
+            g_captureHook = SetWindowsHookExW(
+                WH_KEYBOARD_LL, CaptureKeyboardProc, nullptr, 0);
+            if (!g_captureHook) {
+                Wh_Log(L"SetWindowsHookEx(WH_KEYBOARD_LL) failed: %u", GetLastError());
+            }
+        } else if (!shouldBeInstalled && g_captureHook) {
+            UnhookWindowsHookEx(g_captureHook);
+            g_captureHook = nullptr;
+            std::memset(g_suppressedHotkeyKeys, 0, sizeof(g_suppressedHotkeyKeys));
+        }
+    };
+
+    updateHook();
+    while (GetMessageW(&message, nullptr, 0, 0) > 0) {
+        if (message.message == WM_APP_HOOK_APPLY) {
+            updateHook();
+            continue;
+        }
+        TranslateMessage(&message);
+        DispatchMessageW(&message);
+    }
+
+    if (g_captureHook) {
+        UnhookWindowsHookEx(g_captureHook);
+        g_captureHook = nullptr;
+    }
+    std::memset(g_suppressedHotkeyKeys, 0, sizeof(g_suppressedHotkeyKeys));
+    g_hookThreadId = 0;
+    return 0;
+}
+
 void StartHotkeyCapture(int target) {
     g_captureHotkeyTarget = target;
     g_capCtrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -3860,7 +3897,7 @@ void StartHotkeyCapture(int target) {
 }
 
 void StopHotkeyCaptureIfDone() {
-    if (!g_captureHook || !g_captureHotkey.load()) return;
+    if (!g_captureHotkey.load()) return;
     if (NowSeconds() > g_captureDeadline.load()) g_captureHotkey = false;
     if (!g_captureHotkey.load()) {
         g_captureHotkeyTarget = 0;
@@ -5329,28 +5366,65 @@ DWORD WINAPI RenderThreadProc(void*) {
 
 DWORD WINAPI RenderThreadProc(void*);
 DWORD WINAPI MediaThreadProc(void*);
+DWORD WINAPI KeyboardHookThreadProc(void*);
+
 bool StartThreads() {
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) return false;
 
-    g_renderThread = CreateThread(nullptr, 0, RenderThreadProc, nullptr, 0, nullptr);
-    if (!g_renderThread) {
+    g_hookThreadReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hookThreadReady) {
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
         return false;
     }
-    
+
+    g_hookThread = CreateThread(nullptr, 0, KeyboardHookThreadProc, nullptr, 0, nullptr);
+    if (!g_hookThread || WaitForSingleObject(g_hookThreadReady, 5000) != WAIT_OBJECT_0) {
+        if (g_hookThread) {
+            const DWORD id = g_hookThreadId.load();
+            if (id) PostThreadMessageW(id, WM_QUIT, 0, 0);
+            WaitForSingleObject(g_hookThread, 2000);
+            CloseHandle(g_hookThread);
+            g_hookThread = nullptr;
+        }
+        CloseHandle(g_hookThreadReady);
+        g_hookThreadReady = nullptr;
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+        return false;
+    }
+
+    g_renderThread = CreateThread(nullptr, 0, RenderThreadProc, nullptr, 0, nullptr);
+    if (!g_renderThread) {
+        PostThreadMessageW(g_hookThreadId.load(), WM_QUIT, 0, 0);
+        WaitForSingleObject(g_hookThread, INFINITE);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+        CloseHandle(g_hookThreadReady);
+        g_hookThreadReady = nullptr;
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+        return false;
+    }
+
     g_mediaThread = CreateThread(nullptr, 0, MediaThreadProc, nullptr, 0, nullptr);
     if (!g_mediaThread) {
         SetEvent(g_stopEvent);
         WaitForSingleObject(g_renderThread, INFINITE);
         CloseHandle(g_renderThread);
         g_renderThread = nullptr;
+        PostThreadMessageW(g_hookThreadId.load(), WM_QUIT, 0, 0);
+        WaitForSingleObject(g_hookThread, INFINITE);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+        CloseHandle(g_hookThreadReady);
+        g_hookThreadReady = nullptr;
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
         return false;
     }
-    
+
     return true;
 }
 
@@ -5379,6 +5453,19 @@ void StopThreads() {
         }
     }
     g_renderThread = g_mediaThread = nullptr;
+
+    if (g_hookThread) {
+        const DWORD id = g_hookThreadId.load();
+        if (id) PostThreadMessageW(id, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_hookThread, 2000);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+    }
+    g_hookThreadId = 0;
+    if (g_hookThreadReady) {
+        CloseHandle(g_hookThreadReady);
+        g_hookThreadReady = nullptr;
+    }
 
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
