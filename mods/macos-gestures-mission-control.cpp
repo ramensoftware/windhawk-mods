@@ -4,10 +4,15 @@
 // @description     Mission Control for Windows: a three-finger swipe up/down opens a live, animated overview of your windows (app icons, minimized windows, taskbar slide, spring physics) that follows your fingers; left/right swipes keep switching apps like Alt+Tab
 // @version         1.3.1
 // @author          Frixed
+// @github          https://github.com/frixed
 // @include         explorer.exe
 // @compilerOptions -luser32 -lwindowsapp -ldwmapi -lgdi32 -ladvapi32 -lole32 -lwindowscodecs -luuid -ld3d11 -ldxgi -ldcomp
 // @license         MIT
 // ==/WindhawkMod==
+
+// Development assistance:
+// AI-assisted development with ChatGPT and Claude.
+// Design, implementation, testing and maintenance by Frixed.
 
 // ==WindhawkModReadme==
 /*
