@@ -1,39 +1,42 @@
 // ==WindhawkMod==
 // @id              explorer-core-context-menu-customizer
-// @name            Explorer Core System Menu Customization
+// @name            Explorer Core Context Menu Customizer
 // @description     Adds customizable icons and dynamic %file% labels to Open, Run as administrator, Delete, Rename, and Properties in the Windows File Explorer context menu without altering row spacing.
-// @version         1.0.2
+// @version         1.0.0
 // @author          akiyorm
 // @github          https://github.com/akiyorm
 // @license         MIT
 // @include         explorer.exe
-// @compilerOptions -lgdi32 -luser32 -lshell32 -lshlwapi -lole32
+// @compilerOptions -lgdi32 -luser32 -lshell32 -lshlwapi -lole32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Explorer Context Menu Icons & Dynamic Labels
+# Explorer Core Context Menu Customizer
 
 Windows does not provide any registry entries or built-in options to customize the icons or labels of core File Explorer context menu commands. This mod was created to fill that gap cleanly and safely.
 
+> **Windows 11 Note:** This mod customizes the classic File Explorer context menu (accessible via **Show more options** or `Shift+F10`, or when the classic context menu is enabled).
+
 ### Supported Context Menu Items:
-1. **Open** - Top bold default action (default icon: `imageres.dll,-185`, default label: `Open: %file%`)
-2. **Run as administrator** - UAC elevation action (keeps native UAC shield and default label unless customized)
-3. **Delete** - File and folder deletion action (default icon: Full Recycle Bin `imageres.dll,-54`)
-4. **Rename** - Inline rename action (default icon: Clipboard `shell32.dll,-16763`)
-5. **Properties** - Bottom item details action (default icon: `imageres.dll,-114`)
+1. **Open** (`open`) - Top bold default action (default icon: `imageres.dll,-185`, default label: `Open: %file%`)
+2. **Run as administrator** (`runas`) - UAC elevation action (keeps native UAC shield and default label unless customized)
+3. **Delete** (`delete`) - File and folder deletion action (default icon: Full Recycle Bin `imageres.dll,-54`)
+4. **Rename** (`rename`) - Inline rename action (default icon: Clipboard `shell32.dll,-16763`)
+5. **Properties** (`properties`) - Bottom item details action (default icon: `imageres.dll,-114`)
 
 ### Dynamic `%file%` Placeholder:
-Include `%file%` (or `%name%`) in any custom label field to dynamically display the right-clicked file or folder name. Names longer than 30 characters are automatically shortened to the first 30 characters followed by `...`:
+Include `%file%` (or `%name%`) in any custom label field to dynamically display the right-clicked file, folder, or shortcut target name. Names longer than 30 characters are automatically shortened to the first 30 characters followed by `...`:
 - `Open: %file%` -> **Open: New folder (2)**
 - `Delete %file%` -> **Delete Very_Long_File_Name_Over_Thirt...**
 - `%file% Properties` -> **report.pdf Properties**
 
 ### Highlights:
-- **Zero Layout Distortion:** Clean, lightweight hooks attach icons before menu rendering so native row height, padding, and bold text remain completely untouched.
+- **Canonical Verb Matching:** Identifies core shell commands via `IContextMenu::GetCommandString` (`GCS_VERBW`), working across every Windows display language without touching third-party shell extension items.
+- **Zero Layout Distortion:** Attaches icons cleanly during `IContextMenu::QueryContextMenu` so native row height, padding, and bold text remain completely untouched.
 - **Clear-to-Reset Behavior:** Clearing an icon path removes the icon for Open, Delete, Rename, or Properties, while Run as administrator reverts to the native Windows UAC shield.
 - **Custom Icon Support:** Easily add your own `.ico` files or use any built-in Windows icon with `dll,index` syntax.
-- **OS-Friendly & Lightweight:** Caches converted icons in memory with zero GDI handle leaks and minimal resource overhead.
+- **OS-Friendly & Lightweight:** Caches converted 32-bpp ARGB bitmaps in memory with zero GDI handle leaks and automatic DPI scaling support.
 */
 // ==/WindhawkModReadme==
 
@@ -47,7 +50,7 @@ Include `%file%` (or `%name%`) in any custom label field to dynamically display 
   $description: "Default is imageres.dll,-185. Leave empty for no icon, or enter a .ico path or DLL index."
 - openCustomText: "Open: %file%"
   $name: "Open Custom Label (Supports %file%)"
-  $description: "Default is Open: %file%. Leave empty for default system name, or enter custom text (truncated after 30 chars)."
+  $description: "Default is Open: %file%. Leave empty for default system name, or enter custom text (%file% is truncated after 30 chars)."
 
 - enableRunAsIcon: true
   $name: "2. Enable Run as administrator Customization"
@@ -57,7 +60,7 @@ Include `%file%` (or `%name%`) in any custom label field to dynamically display 
   $description: "Leave empty to keep the default Windows UAC shield, or enter a .ico path or DLL index (e.g. shell32.dll,44)."
 - runAsCustomText: ""
   $name: "Run as administrator Custom Label (Supports %file%)"
-  $description: "Leave empty to keep default system name untouched, or enter custom text using %file%."
+  $description: "Leave empty to keep default system name untouched, or enter custom text using %file% (%file% is truncated after 30 chars)."
 
 - enableDeleteIcon: true
   $name: "3. Enable Delete Customization"
@@ -95,36 +98,27 @@ Include `%file%` (or `%name%`) in any custom label field to dynamically display 
 #include <shellapi.h>
 #include <shlwapi.h>
 #include <shlobj.h>
+#include <windhawk_utils.h>
+#include <cwchar>
 #include <string>
+#include <utility>
 #include <vector>
 
 // ----------------------------------------------------------------------------
-// Global State, Synchronization & Thread-Local Context Menu Item Name
+// Global Configuration & Synchronization
 // ----------------------------------------------------------------------------
-enum class TargetItemType {
-    None,
-    Open,
-    RunAsAdmin,
-    Delete,
-    Rename,
-    Properties
-};
-
 struct ItemConfig {
     bool enabled = true;
-    HICON hIcon = nullptr;
     HBITMAP hBitmap = nullptr;
     std::wstring customText;
-    std::wstring systemLocalizedText;
 };
 
 struct ItemBinding {
-    TargetItemType type;
     ItemConfig* cfg;
     PCWSTR enableSetting;
     PCWSTR iconSetting;
     PCWSTR textSetting;
-    LPCWSTR canonicalEn;
+    LPCWSTR canonicalVerb;
 };
 
 static ItemConfig g_openCfg;
@@ -134,15 +128,17 @@ static ItemConfig g_renameCfg;
 static ItemConfig g_propsCfg;
 
 static const ItemBinding g_itemBindings[] = {
-    { TargetItemType::Open,       &g_openCfg,   L"enableOpenIcon",       L"openIconPath",       L"openCustomText",       L"Open" },
-    { TargetItemType::RunAsAdmin, &g_runAsCfg,  L"enableRunAsIcon",      L"runAsIconPath",      L"runAsCustomText",      L"Run as administrator" },
-    { TargetItemType::Delete,     &g_deleteCfg, L"enableDeleteIcon",     L"deleteIconPath",     L"deleteCustomText",     L"Delete" },
-    { TargetItemType::Rename,     &g_renameCfg, L"enableRenameIcon",     L"renameIconPath",     L"renameCustomText",     L"Rename" },
-    { TargetItemType::Properties, &g_propsCfg,  L"enablePropertiesIcon", L"propertiesIconPath", L"propertiesCustomText", L"Properties" },
+    { &g_openCfg,   L"enableOpenIcon",       L"openIconPath",       L"openCustomText",       L"open" },
+    { &g_runAsCfg,  L"enableRunAsIcon",      L"runAsIconPath",      L"runAsCustomText",      L"runas" },
+    { &g_deleteCfg, L"enableDeleteIcon",     L"deleteIconPath",     L"deleteCustomText",     L"delete" },
+    { &g_renameCfg, L"enableRenameIcon",     L"renameIconPath",     L"renameCustomText",     L"rename" },
+    { &g_propsCfg,  L"enablePropertiesIcon", L"propertiesIconPath", L"propertiesCustomText", L"properties" },
 };
 
 static SRWLOCK g_configLock = SRWLOCK_INIT;
-static thread_local std::wstring tls_currentItemName;
+static int g_cachedIconCx = 0;
+static int g_cachedIconCy = 0;
+static thread_local WCHAR tls_currentItemName[64] = { 0 };
 
 class SharedConfigGuard {
 public:
@@ -157,7 +153,7 @@ public:
 };
 
 // ----------------------------------------------------------------------------
-// String Helpers: Truncation, Mnemonic Cleaning, Escaping & %file% Expansion
+// String Helpers: Truncation, Escaping & %file% Expansion
 // ----------------------------------------------------------------------------
 static std::wstring TruncateFileName(std::wstring name, size_t maxChars = 30) {
     if (name.size() > maxChars) {
@@ -169,29 +165,6 @@ static std::wstring TruncateFileName(std::wstring name, size_t maxChars = 30) {
         name.append(L"...");
     }
     return name;
-}
-
-static std::wstring CleanMenuText(LPCWSTR text) {
-    std::wstring result;
-    if (!text) return result;
-
-    for (const wchar_t* p = text; *p; ++p) {
-        if (*p != L'&') {
-            result.push_back(*p);
-        }
-    }
-
-    // Strip trailing keyboard accelerators such as "(R)" or "(D)"
-    size_t paren = result.rfind(L'(');
-    if (paren != std::wstring::npos && !result.empty() && result.back() == L')') {
-        result.erase(paren);
-    }
-
-    while (!result.empty() && (result.back() == L' ' || result.back() == L':')) {
-        result.pop_back();
-    }
-
-    return result;
 }
 
 static std::wstring EscapeMenuMnemonics(const std::wstring& input) {
@@ -207,22 +180,11 @@ static std::wstring EscapeMenuMnemonics(const std::wstring& input) {
     return out;
 }
 
-static bool HasDynamicPlaceholder(const std::wstring& tpl) {
-    if (tpl.empty()) return false;
-    std::wstring lower;
-    lower.reserve(tpl.size());
-    for (wchar_t ch : tpl) {
-        lower.push_back(static_cast<wchar_t>(towlower(ch)));
-    }
-    return lower.find(L"%file%") != std::wstring::npos ||
-           lower.find(L"%name%") != std::wstring::npos;
-}
-
-static std::wstring ResolveDynamicLabel(const std::wstring& tpl) {
+static std::wstring ResolveDynamicLabel(const std::wstring& tpl, const std::wstring& itemName) {
     if (tpl.empty()) return std::wstring();
 
     std::wstring result = tpl;
-    std::wstring safeItemName = EscapeMenuMnemonics(tls_currentItemName);
+    std::wstring safeItemName = EscapeMenuMnemonics(itemName);
 
     const wchar_t* tokens[] = { L"%file%", L"%name%" };
     for (const wchar_t* token : tokens) {
@@ -252,99 +214,101 @@ static std::wstring ResolveDynamicLabel(const std::wstring& tpl) {
     return result;
 }
 
-// ----------------------------------------------------------------------------
-// Target Menu Item Identification & Application
-// ----------------------------------------------------------------------------
-static bool MatchesConfigText(const std::wstring& cleanIncoming, const ItemConfig& cfg, LPCWSTR canonicalEn) {
-    if (!cfg.customText.empty()) {
-        std::wstring cleanTpl = CleanMenuText(cfg.customText.c_str());
-        if (_wcsicmp(cleanIncoming.c_str(), cleanTpl.c_str()) == 0) {
-            return true;
-        }
-        if (HasDynamicPlaceholder(cfg.customText)) {
-            std::wstring resolved = CleanMenuText(ResolveDynamicLabel(cfg.customText).c_str());
-            if (!resolved.empty() && _wcsicmp(cleanIncoming.c_str(), resolved.c_str()) == 0) {
-                return true;
-            }
-        }
-    }
-
-    if (canonicalEn && _wcsicmp(cleanIncoming.c_str(), canonicalEn) == 0) {
-        return true;
-    }
-
-    if (!cfg.systemLocalizedText.empty() &&
-        _wcsicmp(cleanIncoming.c_str(), cfg.systemLocalizedText.c_str()) == 0) {
-        return true;
-    }
-
-    return false;
-}
-
-static const ItemConfig* FindMatchingConfig(LPCWSTR rawText) {
-    if (!rawText) return nullptr;
-
-    std::wstring cleanText = CleanMenuText(rawText);
-    if (cleanText.empty()) return nullptr;
+static const ItemConfig* FindConfigByVerb(LPCWSTR verb) {
+    if (!verb || verb[0] == L'\0') return nullptr;
 
     for (const auto& binding : g_itemBindings) {
-        const ItemConfig& cfg = *binding.cfg;
-        if (cfg.enabled && (cfg.hBitmap || !cfg.customText.empty())) {
-            if (MatchesConfigText(cleanText, cfg, binding.canonicalEn)) {
+        if (_wcsicmp(verb, binding.canonicalVerb) == 0) {
+            const ItemConfig& cfg = *binding.cfg;
+            if (cfg.enabled && (cfg.hBitmap || !cfg.customText.empty())) {
                 return &cfg;
             }
+            return nullptr;
         }
     }
 
     return nullptr;
 }
 
-static const ItemConfig* FindMatchingMenuItem(LPCMENUITEMINFOW lpmi) {
-    if (!lpmi || lpmi->hSubMenu != nullptr) return nullptr;
+// ----------------------------------------------------------------------------
+// Extract Clicked Item (or Shortcut Target) Display Name
+// ----------------------------------------------------------------------------
+static std::wstring ResolveShortcutTargetName(IShellFolder* psf, PCUITEMID_CHILD pidlItem) {
+    if (!psf || !pidlItem) return std::wstring();
 
-    LPCWSTR rawText = nullptr;
-    if ((lpmi->fMask & MIIM_STRING) && lpmi->dwTypeData) {
-        rawText = lpmi->dwTypeData;
-    } else if ((lpmi->fMask & MIIM_TYPE) &&
-               !(lpmi->fType & (MFT_BITMAP | MFT_SEPARATOR | MFT_OWNERDRAW)) &&
-               lpmi->dwTypeData) {
-        rawText = lpmi->dwTypeData;
+    SFGAOF attrs = SFGAO_LINK;
+    if (FAILED(psf->GetAttributesOf(1, &pidlItem, &attrs)) || !(attrs & SFGAO_LINK)) {
+        return std::wstring();
     }
 
-    return FindMatchingConfig(rawText);
-}
-
-static void ApplyItemCustomization(MENUITEMINFOW& mii, std::wstring& outResolvedText, const ItemConfig& cfg) {
-    if (cfg.hBitmap) {
-        mii.fMask |= MIIM_BITMAP;
-        mii.hbmpItem = cfg.hBitmap;
+    IShellLinkW* pShellLink = nullptr;
+    if (FAILED(psf->BindToObject(pidlItem, nullptr, IID_IShellLinkW, reinterpret_cast<void**>(&pShellLink))) || !pShellLink) {
+        return std::wstring();
     }
 
-    if (!cfg.customText.empty()) {
-        outResolvedText = ResolveDynamicLabel(cfg.customText);
-        if (!outResolvedText.empty()) {
-            mii.fMask |= MIIM_STRING;
-            mii.dwTypeData = const_cast<LPWSTR>(outResolvedText.c_str());
-            mii.cch = static_cast<UINT>(outResolvedText.length());
+    std::wstring targetName;
+
+    PIDLIST_ABSOLUTE pidlTarget = nullptr;
+    if (SUCCEEDED(pShellLink->GetIDList(&pidlTarget)) && pidlTarget) {
+        PWSTR pszParsingName = nullptr;
+        if (SUCCEEDED(SHGetNameFromIDList(pidlTarget, SIGDN_PARENTRELATIVEPARSING, &pszParsingName)) && pszParsingName) {
+            size_t len = wcslen(pszParsingName);
+            if (len > 0 &&
+                pszParsingName[len - 1] != L'\\' &&
+                pszParsingName[len - 1] != L':' &&
+                wcsncmp(pszParsingName, L"::{", 3) != 0) {
+                targetName = pszParsingName;
+            }
+            CoTaskMemFree(pszParsingName);
+        }
+
+        if (targetName.empty()) {
+            PWSTR pszDisplayName = nullptr;
+            if (SUCCEEDED(SHGetNameFromIDList(pidlTarget, SIGDN_NORMALDISPLAY, &pszDisplayName)) && pszDisplayName) {
+                targetName = pszDisplayName;
+                CoTaskMemFree(pszDisplayName);
+            }
+        }
+
+        CoTaskMemFree(pidlTarget);
+    }
+
+    if (targetName.empty()) {
+        WCHAR szTargetPath[MAX_PATH] = { 0 };
+        if (SUCCEEDED(pShellLink->GetPath(szTargetPath, ARRAYSIZE(szTargetPath), nullptr, 0)) &&
+            szTargetPath[0] != L'\0' &&
+            !PathIsURLW(szTargetPath)) {
+            LPCWSTR fileName = PathFindFileNameW(szTargetPath);
+            if (fileName && fileName[0] != L'\0') {
+                targetName = fileName;
+            }
         }
     }
+
+    pShellLink->Release();
+    return targetName;
 }
 
-// ----------------------------------------------------------------------------
-// Extract Clicked Item Display Name from Shell Context Menu Parameters
-// ----------------------------------------------------------------------------
 static std::wstring GetItemNameFromShellFolder(IShellFolder* psf, UINT cidl, PCUITEMID_CHILD_ARRAY apidl, PCIDLIST_ABSOLUTE pidlFolder) {
     if (cidl > 0 && psf && apidl && apidl[0]) {
-        STRRET strret = {};
-        if (SUCCEEDED(psf->GetDisplayNameOf(apidl[0], SHGDN_INFOLDER, &strret))) {
-            WCHAR szName[MAX_PATH] = { 0 };
-            if (SUCCEEDED(StrRetToBufW(&strret, apidl[0], szName, ARRAYSIZE(szName))) && szName[0] != L'\0') {
-                std::wstring name = TruncateFileName(szName, 30);
-                if (cidl > 1) {
-                    name += L" (+" + std::to_wstring(cidl - 1) + L")";
+        std::wstring rawName = ResolveShortcutTargetName(psf, apidl[0]);
+
+        if (rawName.empty()) {
+            STRRET strret = {};
+            if (SUCCEEDED(psf->GetDisplayNameOf(apidl[0], SHGDN_INFOLDER, &strret))) {
+                WCHAR szName[MAX_PATH] = { 0 };
+                if (SUCCEEDED(StrRetToBufW(&strret, apidl[0], szName, ARRAYSIZE(szName))) && szName[0] != L'\0') {
+                    rawName = szName;
                 }
-                return name;
             }
+        }
+
+        if (!rawName.empty()) {
+            std::wstring name = TruncateFileName(std::move(rawName), 30);
+            if (cidl > 1) {
+                name += L" (+" + std::to_wstring(cidl - 1) + L")";
+            }
+            return name;
         }
     }
 
@@ -392,6 +356,8 @@ static HBITMAP IconToPremultipliedBitmap(HICON hIcon, int width, int height) {
 
     HDC hdc = CreateCompatibleDC(nullptr);
     HBITMAP hbmOld = (HBITMAP)SelectObject(hdc, hbmDIB);
+    // DrawIconEx onto a zeroed 32-bpp DIB already produces premultiplied ARGB pixels
+    // when the icon has an alpha channel; multiplying again would darken edges.
     DrawIconEx(hdc, 0, 0, hIcon, width, height, 0, nullptr, DI_NORMAL);
     GdiFlush();
     SelectObject(hdc, hbmOld);
@@ -406,20 +372,7 @@ static HBITMAP IconToPremultipliedBitmap(HICON hIcon, int width, int height) {
         }
     }
 
-    if (hasAlpha) {
-        for (int i = 0; i < totalPixels; ++i) {
-            DWORD px = pixels[i];
-            BYTE a = (px >> 24) & 0xFF;
-            if (a == 0) {
-                pixels[i] = 0;
-            } else if (a < 255) {
-                BYTE r = static_cast<BYTE>(((px >> 16) & 0xFF) * a / 255);
-                BYTE g = static_cast<BYTE>(((px >> 8) & 0xFF) * a / 255);
-                BYTE b = static_cast<BYTE>((px & 0xFF) * a / 255);
-                pixels[i] = (a << 24) | (r << 16) | (g << 8) | b;
-            }
-        }
-    } else if (ii.hbmMask) {
+    if (!hasAlpha && ii.hbmMask) {
         std::vector<DWORD> maskBits(totalPixels, 0);
         HDC hdcMask = CreateCompatibleDC(nullptr);
         GetDIBits(hdcMask, ii.hbmMask, 0, height, maskBits.data(), &bmi, DIB_RGB_COLORS);
@@ -478,13 +431,8 @@ static HICON LoadIconUniversal(const std::wstring& rawInput, int cx, int cy) {
     }
 
     if (!hIcon) {
-        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-        using PrivateExtractIconsW_t = UINT (WINAPI *)(LPCWSTR, int, int, int, HICON*, UINT*, UINT, UINT);
-        auto pfnPrivateExtractIconsW = (PrivateExtractIconsW_t)GetProcAddress(hUser32, "PrivateExtractIconsW");
-        if (pfnPrivateExtractIconsW) {
-            UINT iconId = 0;
-            pfnPrivateExtractIconsW(path.c_str(), index, cx, cy, &hIcon, &iconId, 1, LR_LOADFROMFILE);
-        }
+        UINT iconId = 0;
+        PrivateExtractIconsW(path.c_str(), index, cx, cy, &hIcon, &iconId, 1, LR_LOADFROMFILE);
     }
 
     if (!hIcon) {
@@ -495,49 +443,12 @@ static HICON LoadIconUniversal(const std::wstring& rawInput, int cx, int cy) {
 }
 
 // ----------------------------------------------------------------------------
-// Localized System String Helpers
-// ----------------------------------------------------------------------------
-static std::wstring LoadShellString(HMODULE hShell32, UINT resourceId) {
-    if (!hShell32) return std::wstring();
-    WCHAR szBuffer[128] = { 0 };
-    if (LoadStringW(hShell32, resourceId, szBuffer, ARRAYSIZE(szBuffer)) > 0) {
-        return CleanMenuText(szBuffer);
-    }
-    return std::wstring();
-}
-
-static std::wstring ResolveRegistryVerbName(HKEY hKeyRoot, LPCWSTR subKey, LPCWSTR valueName) {
-    WCHAR szRegIndirect[128] = { 0 };
-    DWORD cbSize = sizeof(szRegIndirect);
-    if (RegGetValueW(
-            hKeyRoot,
-            subKey,
-            valueName,
-            RRF_RT_REG_SZ,
-            nullptr,
-            szRegIndirect,
-            &cbSize
-        ) == ERROR_SUCCESS && szRegIndirect[0] != L'\0') {
-        WCHAR szResolved[128] = { 0 };
-        if (SUCCEEDED(SHLoadIndirectString(szRegIndirect, szResolved, ARRAYSIZE(szResolved), nullptr))) {
-            return CleanMenuText(szResolved);
-        }
-        return CleanMenuText(szRegIndirect);
-    }
-    return std::wstring();
-}
-
-// ----------------------------------------------------------------------------
-// Cleanup & Load All Configured Icons
+// Cleanup & Settings Loading
 // ----------------------------------------------------------------------------
 static void CleanupSingleConfig(ItemConfig& cfg) {
     if (cfg.hBitmap) {
         DeleteObject(cfg.hBitmap);
         cfg.hBitmap = nullptr;
-    }
-    if (cfg.hIcon) {
-        DestroyIcon(cfg.hIcon);
-        cfg.hIcon = nullptr;
     }
 }
 
@@ -546,86 +457,293 @@ static void CleanupAllResources() {
     for (const auto& binding : g_itemBindings) {
         CleanupSingleConfig(*binding.cfg);
     }
+    g_cachedIconCx = 0;
+    g_cachedIconCy = 0;
 }
 
 static void LoadAllSettings() {
-    ExclusiveConfigGuard lock;
-
     int cx = GetSystemMetrics(SM_CXSMICON);
     int cy = GetSystemMetrics(SM_CYSMICON);
     if (cx <= 0) cx = 16;
     if (cy <= 0) cy = 16;
 
-    for (const auto& binding : g_itemBindings) {
-        ItemConfig& cfg = *binding.cfg;
-        CleanupSingleConfig(cfg);
+    constexpr size_t kBindingCount = ARRAYSIZE(g_itemBindings);
+    ItemConfig newConfigs[kBindingCount];
 
-        cfg.enabled = Wh_GetIntSetting(binding.enableSetting) != 0;
+    for (size_t i = 0; i < kBindingCount; ++i) {
+        const auto& binding = g_itemBindings[i];
+        newConfigs[i].enabled = Wh_GetIntSetting(binding.enableSetting) != 0;
 
-        PCWSTR iconSetting = Wh_GetStringSetting(binding.iconSetting);
-        if (iconSetting && iconSetting[0] != L'\0') {
-            cfg.hIcon = LoadIconUniversal(iconSetting, cx, cy);
-            if (cfg.hIcon) {
-                cfg.hBitmap = IconToPremultipliedBitmap(cfg.hIcon, cx, cy);
+        auto iconSetting = WindhawkUtils::StringSetting::make(binding.iconSetting);
+        if (newConfigs[i].enabled && iconSetting.get()[0] != L'\0') {
+            HICON hIcon = LoadIconUniversal(iconSetting.get(), cx, cy);
+            if (hIcon) {
+                newConfigs[i].hBitmap = IconToPremultipliedBitmap(hIcon, cx, cy);
+                DestroyIcon(hIcon);
             }
         }
-        Wh_FreeStringSetting(iconSetting);
 
-        PCWSTR textSetting = Wh_GetStringSetting(binding.textSetting);
-        if (textSetting && textSetting[0] != L'\0') {
-            cfg.customText = textSetting;
-        } else {
-            cfg.customText.clear();
+        auto textSetting = WindhawkUtils::StringSetting::make(binding.textSetting);
+        if (textSetting.get()[0] != L'\0') {
+            newConfigs[i].customText = textSetting.get();
         }
-        Wh_FreeStringSetting(textSetting);
     }
 
-    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-    g_openCfg.systemLocalizedText = LoadShellString(hShell32, 8496);
-    g_propsCfg.systemLocalizedText = LoadShellString(hShell32, 12849);
-
-    g_runAsCfg.systemLocalizedText = ResolveRegistryVerbName(
-        HKEY_CLASSES_ROOT,
-        L"exefile\\shell\\runas",
-        nullptr
-    );
-    if (g_runAsCfg.systemLocalizedText.empty()) {
-        g_runAsCfg.systemLocalizedText = LoadShellString(hShell32, 37417);
+    {
+        ExclusiveConfigGuard lock;
+        for (size_t i = 0; i < kBindingCount; ++i) {
+            std::swap(*g_itemBindings[i].cfg, newConfigs[i]);
+        }
+        g_cachedIconCx = cx;
+        g_cachedIconCy = cy;
     }
 
-    g_deleteCfg.systemLocalizedText = ResolveRegistryVerbName(
-        HKEY_LOCAL_MACHINE,
-        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CommandStore\\shell\\Windows.delete",
-        L"MUIVerb"
-    );
-    if (g_deleteCfg.systemLocalizedText.empty()) {
-        g_deleteCfg.systemLocalizedText = LoadShellString(hShell32, 31271);
-    }
-
-    g_renameCfg.systemLocalizedText = ResolveRegistryVerbName(
-        HKEY_LOCAL_MACHINE,
-        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CommandStore\\shell\\Windows.rename",
-        L"MUIVerb"
-    );
-    if (g_renameCfg.systemLocalizedText.empty()) {
-        g_renameCfg.systemLocalizedText = LoadShellString(hShell32, 31272);
+    for (size_t i = 0; i < kBindingCount; ++i) {
+        CleanupSingleConfig(newConfigs[i]);
     }
 }
 
+static void EnsureIconsMatchCurrentDpi() {
+    int cx = GetSystemMetrics(SM_CXSMICON);
+    int cy = GetSystemMetrics(SM_CYSMICON);
+    if (cx <= 0) cx = 16;
+    if (cy <= 0) cy = 16;
+
+    {
+        SharedConfigGuard lock;
+        if (cx == g_cachedIconCx && cy == g_cachedIconCy) {
+            return;
+        }
+    }
+
+    LoadAllSettings();
+}
+
 // ----------------------------------------------------------------------------
-// Shell Context Menu Hooks (Capture Clicked File / Folder Name)
+// IContextMenu::QueryContextMenu Vtable Hook (Canonical Verb Identification)
+// ----------------------------------------------------------------------------
+using QueryContextMenu_t = HRESULT (STDMETHODCALLTYPE*)(
+    IContextMenu* pThis,
+    HMENU hmenu,
+    UINT indexMenu,
+    UINT idCmdFirst,
+    UINT idCmdLast,
+    UINT uFlags
+);
+
+struct HookedVtable {
+    void** vtable;
+    QueryContextMenu_t original;
+};
+
+struct MenuItemNameEntry {
+    void* cmIdentity;
+    std::wstring itemName;
+};
+
+static SRWLOCK g_vtableLock = SRWLOCK_INIT;
+static std::vector<HookedVtable> g_hookedVtables;
+static std::vector<MenuItemNameEntry> g_menuItemNames;
+
+static void* GetCanonicalIContextMenuIdentity(IUnknown* pUnk) {
+    if (!pUnk) return nullptr;
+    IContextMenu* pCm = nullptr;
+    if (SUCCEEDED(pUnk->QueryInterface(IID_IContextMenu, reinterpret_cast<void**>(&pCm))) && pCm) {
+        void* identity = pCm;
+        pCm->Release();
+        return identity;
+    }
+    return pUnk;
+}
+
+static void StoreMenuItemName(void* cmIdentity, const std::wstring& itemName) {
+    if (!cmIdentity) return;
+
+    AcquireSRWLockExclusive(&g_vtableLock);
+    for (auto& entry : g_menuItemNames) {
+        if (entry.cmIdentity == cmIdentity) {
+            entry.itemName = itemName;
+            ReleaseSRWLockExclusive(&g_vtableLock);
+            return;
+        }
+    }
+
+    if (g_menuItemNames.size() >= 32) {
+        g_menuItemNames.erase(g_menuItemNames.begin());
+    }
+    g_menuItemNames.push_back({ cmIdentity, itemName });
+    ReleaseSRWLockExclusive(&g_vtableLock);
+}
+
+static std::wstring LookupMenuItemName(IContextMenu* pThis) {
+    void* cmIdentity = GetCanonicalIContextMenuIdentity(pThis);
+
+    AcquireSRWLockShared(&g_vtableLock);
+    for (auto it = g_menuItemNames.rbegin(); it != g_menuItemNames.rend(); ++it) {
+        if (it->cmIdentity == cmIdentity || it->cmIdentity == static_cast<void*>(pThis)) {
+            std::wstring found = it->itemName;
+            ReleaseSRWLockShared(&g_vtableLock);
+            return found;
+        }
+    }
+    ReleaseSRWLockShared(&g_vtableLock);
+
+    return tls_currentItemName;
+}
+
+static HRESULT STDMETHODCALLTYPE QueryContextMenu_Hook(
+    IContextMenu* pThis,
+    HMENU hmenu,
+    UINT indexMenu,
+    UINT idCmdFirst,
+    UINT idCmdLast,
+    UINT uFlags
+) {
+    QueryContextMenu_t original = nullptr;
+    if (pThis) {
+        void** vtable = *reinterpret_cast<void***>(pThis);
+        AcquireSRWLockShared(&g_vtableLock);
+        for (const auto& entry : g_hookedVtables) {
+            if (entry.vtable == vtable) {
+                original = entry.original;
+                break;
+            }
+        }
+        ReleaseSRWLockShared(&g_vtableLock);
+    }
+
+    if (!original) {
+        return E_UNEXPECTED;
+    }
+
+    HRESULT hr = original(pThis, hmenu, indexMenu, idCmdFirst, idCmdLast, uFlags);
+    if (FAILED(hr) || (uFlags & CMF_DEFAULTONLY) || !hmenu) {
+        return hr;
+    }
+
+    EnsureIconsMatchCurrentDpi();
+    std::wstring itemName = LookupMenuItemName(pThis);
+
+    int count = GetMenuItemCount(hmenu);
+    for (int i = 0; i < count; ++i) {
+        UINT id = GetMenuItemID(hmenu, i);
+        if (id == static_cast<UINT>(-1) || id < idCmdFirst || id > idCmdLast) {
+            continue;
+        }
+
+        WCHAR verb[64] = { 0 };
+        if (FAILED(pThis->GetCommandString(id - idCmdFirst, GCS_VERBW, nullptr,
+                                           reinterpret_cast<LPSTR>(verb), ARRAYSIZE(verb)))) {
+            char verbA[64] = { 0 };
+            if (FAILED(pThis->GetCommandString(id - idCmdFirst, GCS_VERBA, nullptr,
+                                               verbA, ARRAYSIZE(verbA)))) {
+                continue;
+            }
+            MultiByteToWideChar(CP_ACP, 0, verbA, -1, verb, ARRAYSIZE(verb));
+        }
+
+        SharedConfigGuard lock;
+        const ItemConfig* cfg = FindConfigByVerb(verb);
+        if (!cfg) {
+            continue;
+        }
+
+        MENUITEMINFOW mii = { sizeof(mii) };
+        std::wstring resolvedText;
+
+        if (cfg->hBitmap) {
+            mii.fMask |= MIIM_BITMAP;
+            mii.hbmpItem = cfg->hBitmap;
+        }
+
+        if (!cfg->customText.empty()) {
+            resolvedText = ResolveDynamicLabel(cfg->customText, itemName);
+            if (!resolvedText.empty()) {
+                mii.fMask |= MIIM_STRING;
+                mii.dwTypeData = const_cast<LPWSTR>(resolvedText.c_str());
+                mii.cch = static_cast<UINT>(resolvedText.length());
+            }
+        }
+
+        if (mii.fMask != 0) {
+            SetMenuItemInfoW(hmenu, i, TRUE, &mii);
+        }
+    }
+
+    return hr;
+}
+
+static void HookContextMenuVtable(IUnknown* pUnk, const std::wstring& itemName) {
+    if (!pUnk) return;
+
+    IContextMenu* pCm = nullptr;
+    if (FAILED(pUnk->QueryInterface(IID_IContextMenu, reinterpret_cast<void**>(&pCm))) || !pCm) {
+        return;
+    }
+
+    StoreMenuItemName(pCm, itemName);
+
+    void** vtable = *reinterpret_cast<void***>(pCm);
+    if (vtable && vtable[3] != reinterpret_cast<void*>(QueryContextMenu_Hook)) {
+        AcquireSRWLockExclusive(&g_vtableLock);
+        bool alreadyHooked = false;
+        for (const auto& entry : g_hookedVtables) {
+            if (entry.vtable == vtable) {
+                alreadyHooked = true;
+                break;
+            }
+        }
+
+        if (!alreadyHooked && vtable[3] != reinterpret_cast<void*>(QueryContextMenu_Hook)) {
+            DWORD oldProtect = 0;
+            if (VirtualProtect(&vtable[3], sizeof(void*), PAGE_EXECUTE_READWRITE, &oldProtect)) {
+                QueryContextMenu_t orig = reinterpret_cast<QueryContextMenu_t>(vtable[3]);
+                vtable[3] = reinterpret_cast<void*>(QueryContextMenu_Hook);
+                DWORD dummy = 0;
+                VirtualProtect(&vtable[3], sizeof(void*), oldProtect, &dummy);
+                g_hookedVtables.push_back({ vtable, orig });
+            }
+        }
+        ReleaseSRWLockExclusive(&g_vtableLock);
+    }
+
+    pCm->Release();
+}
+
+static void UnhookAllContextMenuVtables() {
+    AcquireSRWLockExclusive(&g_vtableLock);
+    for (const auto& entry : g_hookedVtables) {
+        if (entry.vtable && entry.vtable[3] == reinterpret_cast<void*>(QueryContextMenu_Hook)) {
+            DWORD oldProtect = 0;
+            if (VirtualProtect(&entry.vtable[3], sizeof(void*), PAGE_EXECUTE_READWRITE, &oldProtect)) {
+                entry.vtable[3] = reinterpret_cast<void*>(entry.original);
+                DWORD dummy = 0;
+                VirtualProtect(&entry.vtable[3], sizeof(void*), oldProtect, &dummy);
+            }
+        }
+    }
+    g_hookedVtables.clear();
+    g_menuItemNames.clear();
+    ReleaseSRWLockExclusive(&g_vtableLock);
+}
+
+// ----------------------------------------------------------------------------
+// Shell Context Menu Creation Hooks
 // ----------------------------------------------------------------------------
 using SHCreateDefaultContextMenu_t = decltype(&SHCreateDefaultContextMenu);
 static SHCreateDefaultContextMenu_t SHCreateDefaultContextMenu_Original = nullptr;
 
 static HRESULT STDAPICALLTYPE SHCreateDefaultContextMenu_Hook(const DEFCONTEXTMENU* pdcm, REFIID riid, void** ppv) {
-    if (pdcm) {
-        std::wstring extracted = GetItemNameFromShellFolder(pdcm->psf, pdcm->cidl, pdcm->apidl, pdcm->pidlFolder);
-        if (!extracted.empty()) {
-            tls_currentItemName = std::move(extracted);
-        }
+    std::wstring extracted = pdcm
+        ? GetItemNameFromShellFolder(pdcm->psf, pdcm->cidl, pdcm->apidl, pdcm->pidlFolder)
+        : std::wstring();
+    wcsncpy_s(tls_currentItemName, extracted.c_str(), _TRUNCATE);
+
+    HRESULT hr = SHCreateDefaultContextMenu_Original(pdcm, riid, ppv);
+    if (SUCCEEDED(hr) && ppv && *ppv) {
+        HookContextMenuVtable(static_cast<IUnknown*>(*ppv), extracted);
     }
-    return SHCreateDefaultContextMenu_Original(pdcm, riid, ppv);
+    return hr;
 }
 
 using CDefFolderMenu_Create2_t = decltype(&CDefFolderMenu_Create2);
@@ -643,113 +761,13 @@ static HRESULT STDAPICALLTYPE CDefFolderMenu_Create2_Hook(
     IContextMenu** ppcm
 ) {
     std::wstring extracted = GetItemNameFromShellFolder(psf, cidl, apidl, pidlFolder);
-    if (!extracted.empty()) {
-        tls_currentItemName = std::move(extracted);
+    wcsncpy_s(tls_currentItemName, extracted.c_str(), _TRUNCATE);
+
+    HRESULT hr = CDefFolderMenu_Create2_Original(pidlFolder, hwnd, cidl, apidl, psf, pfn, nKeys, ahkeys, ppcm);
+    if (SUCCEEDED(hr) && ppcm && *ppcm) {
+        HookContextMenuVtable(*ppcm, extracted);
     }
-    return CDefFolderMenu_Create2_Original(pidlFolder, hwnd, cidl, apidl, psf, pfn, nKeys, ahkeys, ppcm);
-}
-
-using TrackPopupMenuEx_t = decltype(&TrackPopupMenuEx);
-static TrackPopupMenuEx_t TrackPopupMenuEx_Original = nullptr;
-
-static BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND hwnd, LPTPMPARAMS lptpm) {
-    BOOL res = TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hwnd, lptpm);
-    tls_currentItemName.clear();
-    return res;
-}
-
-using TrackPopupMenu_t = decltype(&TrackPopupMenu);
-static TrackPopupMenu_t TrackPopupMenu_Original = nullptr;
-
-static BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y, int nReserved, HWND hWnd, const RECT* prcRect) {
-    BOOL res = TrackPopupMenu_Original(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
-    tls_currentItemName.clear();
-    return res;
-}
-
-// ----------------------------------------------------------------------------
-// Menu Insertion & Modification Hooks
-// ----------------------------------------------------------------------------
-using InsertMenuItemW_t = decltype(&InsertMenuItemW);
-static InsertMenuItemW_t InsertMenuItemW_Original = nullptr;
-
-static BOOL WINAPI InsertMenuItemW_Hook(HMENU hMenu, UINT item, BOOL fByPosition, LPCMENUITEMINFOW lpmi) {
-    if (lpmi && (!(lpmi->fMask & MIIM_FTYPE) || !(lpmi->fType & MFT_OWNERDRAW))) {
-        SharedConfigGuard lock;
-        const ItemConfig* cfg = FindMatchingMenuItem(lpmi);
-        if (cfg) {
-            MENUITEMINFOW mii = *lpmi;
-            std::wstring resolvedText;
-            ApplyItemCustomization(mii, resolvedText, *cfg);
-            return InsertMenuItemW_Original(hMenu, item, fByPosition, &mii);
-        }
-    }
-    return InsertMenuItemW_Original(hMenu, item, fByPosition, lpmi);
-}
-
-using InsertMenuW_t = decltype(&InsertMenuW);
-static InsertMenuW_t InsertMenuW_Original = nullptr;
-
-static BOOL WINAPI InsertMenuW_Hook(HMENU hMenu, UINT uPosition, UINT uFlags, UINT_PTR uIDNewItem, LPCWSTR lpNewItem) {
-    if (!(uFlags & (MF_BITMAP | MF_OWNERDRAW | MF_SEPARATOR | MF_POPUP)) && lpNewItem) {
-        SharedConfigGuard lock;
-        const ItemConfig* cfg = FindMatchingConfig(lpNewItem);
-        if (cfg) {
-            MENUITEMINFOW mii = { sizeof(mii) };
-            mii.fMask = MIIM_ID | MIIM_STATE | MIIM_FTYPE | MIIM_STRING;
-            mii.fType = MFT_STRING;
-            mii.fState = (uFlags & MF_GRAYED) ? MFS_GRAYED : ((uFlags & MF_DISABLED) ? MFS_DISABLED : MFS_ENABLED);
-            if (uFlags & MF_CHECKED) {
-                mii.fState |= MFS_CHECKED;
-            }
-            mii.wID = static_cast<UINT>(uIDNewItem);
-            mii.dwTypeData = const_cast<LPWSTR>(lpNewItem);
-
-            std::wstring resolvedText;
-            ApplyItemCustomization(mii, resolvedText, *cfg);
-            BOOL fByPosition = (uFlags & MF_BYPOSITION) != 0;
-            return InsertMenuItemW_Original(hMenu, uPosition, fByPosition, &mii);
-        }
-    }
-    return InsertMenuW_Original(hMenu, uPosition, uFlags, uIDNewItem, lpNewItem);
-}
-
-using SetMenuItemInfoW_t = decltype(&SetMenuItemInfoW);
-static SetMenuItemInfoW_t SetMenuItemInfoW_Original = nullptr;
-
-static BOOL WINAPI SetMenuItemInfoW_Hook(HMENU hMenu, UINT item, BOOL fByPosition, LPCMENUITEMINFOW lpmi) {
-    if (lpmi && (lpmi->fMask & (MIIM_BITMAP | MIIM_STRING | MIIM_TYPE))) {
-        if (!(lpmi->fMask & MIIM_FTYPE) || !(lpmi->fType & MFT_OWNERDRAW)) {
-            WCHAR szExisting[256] = { 0 };
-            MENUITEMINFOW query = { sizeof(query) };
-            query.fMask = MIIM_FTYPE | MIIM_STRING | MIIM_SUBMENU;
-            query.dwTypeData = szExisting;
-            query.cch = ARRAYSIZE(szExisting);
-
-            if (GetMenuItemInfoW(hMenu, item, fByPosition, &query) &&
-                !(query.fType & MFT_OWNERDRAW) &&
-                query.hSubMenu == nullptr) {
-                LPCWSTR textToCheck = szExisting;
-                if ((lpmi->fMask & MIIM_STRING) && lpmi->dwTypeData) {
-                    textToCheck = lpmi->dwTypeData;
-                } else if ((lpmi->fMask & MIIM_TYPE) &&
-                           !(lpmi->fType & (MFT_BITMAP | MFT_SEPARATOR | MFT_OWNERDRAW)) &&
-                           lpmi->dwTypeData) {
-                    textToCheck = lpmi->dwTypeData;
-                }
-
-                SharedConfigGuard lock;
-                const ItemConfig* cfg = FindMatchingConfig(textToCheck);
-                if (cfg) {
-                    MENUITEMINFOW mii = *lpmi;
-                    std::wstring resolvedText;
-                    ApplyItemCustomization(mii, resolvedText, *cfg);
-                    return SetMenuItemInfoW_Original(hMenu, item, fByPosition, &mii);
-                }
-            }
-        }
-    }
-    return SetMenuItemInfoW_Original(hMenu, item, fByPosition, lpmi);
+    return hr;
 }
 
 // ----------------------------------------------------------------------------
@@ -758,62 +776,24 @@ static BOOL WINAPI SetMenuItemInfoW_Hook(HMENU hMenu, UINT item, BOOL fByPositio
 BOOL Wh_ModInit() {
     LoadAllSettings();
 
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    if (!hUser32) {
+    if (!WindhawkUtils::SetFunctionHook(
+            SHCreateDefaultContextMenu,
+            SHCreateDefaultContextMenu_Hook,
+            &SHCreateDefaultContextMenu_Original)) {
         return FALSE;
     }
 
-    void* pInsertMenuItemW = (void*)GetProcAddress(hUser32, "InsertMenuItemW");
-    void* pInsertMenuW = (void*)GetProcAddress(hUser32, "InsertMenuW");
-    void* pSetMenuItemInfoW = (void*)GetProcAddress(hUser32, "SetMenuItemInfoW");
-    void* pTrackPopupMenuEx = (void*)GetProcAddress(hUser32, "TrackPopupMenuEx");
-    void* pTrackPopupMenu = (void*)GetProcAddress(hUser32, "TrackPopupMenu");
-
-    if (!pInsertMenuItemW || !pInsertMenuW || !pSetMenuItemInfoW) {
-        return FALSE;
-    }
-
-    if (!Wh_SetFunctionHook(pInsertMenuItemW, (void*)InsertMenuItemW_Hook, (void**)&InsertMenuItemW_Original)) {
-        return FALSE;
-    }
-    if (!Wh_SetFunctionHook(pInsertMenuW, (void*)InsertMenuW_Hook, (void**)&InsertMenuW_Original)) {
-        return FALSE;
-    }
-    if (!Wh_SetFunctionHook(pSetMenuItemInfoW, (void*)SetMenuItemInfoW_Hook, (void**)&SetMenuItemInfoW_Original)) {
-        return FALSE;
-    }
-    if (pTrackPopupMenuEx) {
-        Wh_SetFunctionHook(pTrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook, (void**)&TrackPopupMenuEx_Original);
-    }
-    if (pTrackPopupMenu) {
-        Wh_SetFunctionHook(pTrackPopupMenu, (void*)TrackPopupMenu_Hook, (void**)&TrackPopupMenu_Original);
-    }
-
-    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-    if (hShell32) {
-        void* pSHCreateDefaultContextMenu = (void*)GetProcAddress(hShell32, "SHCreateDefaultContextMenu");
-        void* pCDefFolderMenu_Create2 = (void*)GetProcAddress(hShell32, "CDefFolderMenu_Create2");
-
-        if (pSHCreateDefaultContextMenu) {
-            Wh_SetFunctionHook(
-                pSHCreateDefaultContextMenu,
-                (void*)SHCreateDefaultContextMenu_Hook,
-                (void**)&SHCreateDefaultContextMenu_Original
-            );
-        }
-        if (pCDefFolderMenu_Create2 && pCDefFolderMenu_Create2 != pSHCreateDefaultContextMenu) {
-            Wh_SetFunctionHook(
-                pCDefFolderMenu_Create2,
-                (void*)CDefFolderMenu_Create2_Hook,
-                (void**)&CDefFolderMenu_Create2_Original
-            );
-        }
-    }
+    WindhawkUtils::SetFunctionHook(
+        CDefFolderMenu_Create2,
+        CDefFolderMenu_Create2_Hook,
+        &CDefFolderMenu_Create2_Original
+    );
 
     return TRUE;
 }
 
 void Wh_ModUninit() {
+    UnhookAllContextMenuVtables();
     CleanupAllResources();
 }
 
