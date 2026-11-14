@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              fix-conflict-dialog-checkbox-bg
-// @name            Fix File Conflict Dialog Checkbox Background
-// @description     Fixes black backgrounds in Explorer shell dialogs (Classic Theme): dialog, checkbox, static text and icons
+// @name            Fix file dialogs for Classic theme
+// @description     Fixes black backgrounds in shell dialogs (Classic Theme) under Win 11 24H2+
 // @version         2.0
 // @author          Anixx
 // @github          https://github.com/Anixx
@@ -15,14 +15,13 @@
 
 Fixes black backgrounds in Explorer shell dialogs when Windows Classic
 theme is active:
-- dialog background
+- dialog background (#32770)
 - "Apply to all conflicts" checkbox in the file conflict dialog
-- static text and icons in shell dialogs such as file deletion
+- Static/Label controls (including icon labels) in shell dialogs
+  such as file deletion
 
-Only dialogs created from shell templates (shell32.dll,
-windows.storage.dll) are affected. Dialogs of other applications and
-themed windows are left alone. The mod is injected into all processes
-because file operation dialogs can be shown by any program.
+Only unthemed (under Classic theme) windows are affected. Themed windows are
+ignored completely.
 
 This bug has appeared in recent cumulative updates.
 
@@ -30,9 +29,13 @@ Before:
 
 ![before](https://i.imgur.com/jMGJOHd.png)
 
+![before](https://i.imgur.com/asDIOSr.png)
+
 After:
 
 ![after](https://i.imgur.com/pK0Z0u8.png)
+
+![after](https://i.imgur.com/wZnlaci.png)
 
 */
 // ==/WindhawkModReadme==
@@ -219,24 +222,25 @@ static bool SubclassWindow(HWND hWnd, SubclassRole role)
 
     {
         std::lock_guard<std::mutex> lock(g_mutex);
+
         if (std::find(g_subclassedWindows.begin(), g_subclassedWindows.end(),
                       hWnd) != g_subclassedWindows.end())
         {
             return false;
         }
-        g_subclassedWindows.push_back(hWnd);
-    }
 
-    // Called without the lock held.
-    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc,
-                                                       (DWORD_PTR)role))
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        auto it = std::find(g_subclassedWindows.begin(),
-                            g_subclassedWindows.end(), hWnd);
-        if (it != g_subclassedWindows.end())
-            g_subclassedWindows.erase(it);
-        return false;
+        // Same-thread window: SetWindowSubclassFromAnyThread takes the direct
+        // SetWindowSubclass path and sends no messages, so it is safe to call
+        // under the lock. Doing the check, the subclass call and the insertion
+        // atomically also guarantees that Wh_ModUninit never sees a subclassed
+        // window that is missing from the list.
+        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+                hWnd, SubclassProc, (DWORD_PTR)role))
+        {
+            return false;
+        }
+
+        g_subclassedWindows.push_back(hWnd);
     }
 
     InvalidateRect(hWnd, nullptr, TRUE);
