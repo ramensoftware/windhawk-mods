@@ -19,7 +19,7 @@
 // @donateUrl       https://github.com/sponsors/cesarkali
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -lcomctl32 -lgdi32 -lmsimg32 -ld2d1 -ldwrite -lwlanapi -luuid -lversion -lbthprops -ldxva2 -lshlwapi -lwinhttp -lwinmm -liphlpapi -lshcore -lcomdlg32 -limm32 -lsetupapi -lcfgmgr32 -luserenv
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -lcomctl32 -lgdi32 -lmsimg32 -ld2d1 -ldwrite -lwlanapi -luuid -lversion -lbthprops -ldxva2 -lshlwapi -lwinhttp -lwinmm -liphlpapi -lshcore -lcomdlg32 -limm32 -lsetupapi -lcfgmgr32 -luserenv -lbcrypt
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -647,8 +647,9 @@ tested or fixed.
   kept in the mod's storage), the weather's icons (the same way, about
   a dozen files, when chosen for the weather) and Faísca's Glass sound pack
   (once, when picked for one of her sounds: 25 small WAV files, about 1.3 MB,
-  from the same CDN; only the files are asked for). Updates run only when asked,
-  in a terminal, accepting nothing for you.
+  from the same CDN, at a fixed commit, each one checked against its SHA-256;
+  only the files are asked for). Updates run only when asked, in a terminal,
+  accepting nothing for you.
 * **Storage**: Windhawk keeps the settings, notes and the rest for the whole
   computer (every Windows account sees the same ones; the alarms, the
   timer's lengths, the folders' pins, favorites and order, the shelf's
@@ -1041,7 +1042,8 @@ No Windows 10 ou no Windows de 32 bits ele ainda pode abrir, mas nada ali
   feriados, letras de músicas, agendas, atualizações, imagens nas
   notificações, os pacotes de ícones online, os ícones do clima e o pacote
   de sons Glass da Faísca (uma vez, quando escolhido: 25 arquivos WAV
-  pequenos, cerca de 1,3 MB, da CDN do jsDelivr; só os arquivos são pedidos).
+  pequenos, cerca de 1,3 MB, da CDN do jsDelivr, num commit fixo, cada um
+  conferido pelo SHA-256; só os arquivos são pedidos).
 * **Backup**: as configurações ficam no Windhawk; exporte um backup nas
   configurações da ilha antes de formatar.
 
@@ -2214,6 +2216,7 @@ próprias licenças (acima).
 #include <appmodel.h>
 #include <aclapi.h>
 #include <audiopolicy.h>
+#include <bcrypt.h>
 #include <bluetoothapis.h>
 #include <cfgmgr32.h>
 #include <commdlg.h>
@@ -16764,8 +16767,7 @@ constexpr WCHAR kChineseTexts[] =
     L"Island settings\0" L"灵动岛设置\0"
     L"Island: a pill floating at the top, the windows go under it\0" L"灵动岛：悬浮在顶部的胶囊，窗口会从它下面穿过\0"
     L"It couldn't start.\0" L"无法启动。\0"
-    L"It ended with an error (0x%08X). It starts again the next time Windhawk starts.\0" L"它因错误而结束 (0x%08X)。下次 Windhawk 启动时会重新启动。\0"
-    L"It ended with an error (0x%08X). Reload starts it again.\0" L"它因错误而结束 (0x%08X)。点击“重新加载”即可重新启动。\0"
+    L"It ended with an error (0x%08X). Turn the mod off and on in Windhawk to start it again.\0" L"它因错误而结束 (0x%08X)。在 Windhawk 中关闭再打开此模组即可重新启动。\0"
     L"It failed (see the terminal)\0" L"失败了（请查看终端）\0"
     L"It goes to the screen with the mouse\0" L"移动到鼠标所在的屏幕\0"
     L"It runs only while the island is on. A time missed while the PC slept or the island was off isn't made up.\0" L"只在灵动岛开启时运行。电脑睡眠或灵动岛关闭时错过的时间不会补运行。\0"
@@ -17176,7 +17178,6 @@ constexpr WCHAR kChineseTexts[] =
     L"Recycle Bin appears\0" L"回收站显示\0"
     L"Red\0" L"红色\0"
     L"Reflex\0" L"反应力\0"
-    L"Reload\0" L"重新加载\0"
     L"Remember my choice (it's in the island's settings)\0" L"记住我的选择（可在灵动岛设置中更改）\0"
     L"Reminder\0" L"提醒\0"
     L"Repeat\0" L"重复\0"
@@ -18442,8 +18443,7 @@ constexpr WCHAR kGermanTexts[] =
     L"Island settings\0" L"Inseleinstellungen\0"
     L"Island: a pill floating at the top, the windows go under it\0" L"Insel: eine oben schwebende Kapsel, die Fenster gehen darunter durch\0"
     L"It couldn't start.\0" L"Es konnte nicht starten.\0"
-    L"It ended with an error (0x%08X). It starts again the next time Windhawk starts.\0" L"Sie wurde mit einem Fehler beendet (0x%08X). Sie startet wieder, wenn Windhawk das nächste Mal startet.\0"
-    L"It ended with an error (0x%08X). Reload starts it again.\0" L"Sie wurde mit einem Fehler beendet (0x%08X). Neu laden startet sie wieder.\0"
+    L"It ended with an error (0x%08X). Turn the mod off and on in Windhawk to start it again.\0" L"Sie wurde mit einem Fehler beendet (0x%08X). Schalten Sie den Mod in Windhawk aus und wieder ein, um sie neu zu starten.\0"
     L"It failed (see the terminal)\0" L"Fehlgeschlagen (siehe Terminal)\0"
     L"It goes to the screen with the mouse\0" L"Sie wechselt zum Bildschirm mit der Maus\0"
     L"It runs only while the island is on. A time missed while the PC slept or the island was off isn't made up.\0" L"Es läuft nur, solange die Insel an ist. Eine Zeit, die verpasst wurde, während der PC schlief oder die Insel aus war, wird nicht nachgeholt.\0"
@@ -18854,7 +18854,6 @@ constexpr WCHAR kGermanTexts[] =
     L"Recycle Bin appears\0" L"Papierkorb erscheint\0"
     L"Red\0" L"Rot\0"
     L"Reflex\0" L"Reaktion\0"
-    L"Reload\0" L"Neu laden\0"
     L"Remember my choice (it's in the island's settings)\0" L"Auswahl merken (steht in den Inseleinstellungen)\0"
     L"Reminder\0" L"Erinnerung\0"
     L"Repeat\0" L"Wiederholen\0"
@@ -20120,8 +20119,7 @@ constexpr WCHAR kSpanishTexts[] =
     L"Island settings\0" L"Configuración de la isla\0"
     L"Island: a pill floating at the top, the windows go under it\0" L"Isla: una píldora flotando arriba, las ventanas pasan por debajo\0"
     L"It couldn't start.\0" L"No pudo empezar.\0"
-    L"It ended with an error (0x%08X). It starts again the next time Windhawk starts.\0" L"Se cerró con un error (0x%08X). Volverá a iniciarse la próxima vez que se inicie Windhawk.\0"
-    L"It ended with an error (0x%08X). Reload starts it again.\0" L"Se cerró con un error (0x%08X). Recargar la vuelve a iniciar.\0"
+    L"It ended with an error (0x%08X). Turn the mod off and on in Windhawk to start it again.\0" L"Se cerró con un error (0x%08X). Desactiva y vuelve a activar el mod en Windhawk para iniciarla de nuevo.\0"
     L"It failed (see the terminal)\0" L"Falló (mira el terminal)\0"
     L"It goes to the screen with the mouse\0" L"Va a la pantalla donde está el ratón\0"
     L"It runs only while the island is on. A time missed while the PC slept or the island was off isn't made up.\0" L"Solo se ejecuta mientras la isla está encendida. Una hora perdida mientras el PC dormía o la isla estaba apagada no se recupera.\0"
@@ -20532,7 +20530,6 @@ constexpr WCHAR kSpanishTexts[] =
     L"Recycle Bin appears\0" L"La papelera aparece\0"
     L"Red\0" L"Rojo\0"
     L"Reflex\0" L"Reflejos\0"
-    L"Reload\0" L"Recargar\0"
     L"Remember my choice (it's in the island's settings)\0" L"Recordar mi elección (está en la configuración de la isla)\0"
     L"Reminder\0" L"Recordatorio\0"
     L"Repeat\0" L"Repetir\0"
@@ -21798,8 +21795,7 @@ constexpr WCHAR kRussianTexts[] =
     L"Island settings\0" L"Настройки острова\0"
     L"Island: a pill floating at the top, the windows go under it\0" L"Остров: капсула, парящая вверху, окна проходят под ней\0"
     L"It couldn't start.\0" L"Не удалось запустить.\0"
-    L"It ended with an error (0x%08X). It starts again the next time Windhawk starts.\0" L"Он завершился с ошибкой (0x%08X). Он снова запустится при следующем запуске Windhawk.\0"
-    L"It ended with an error (0x%08X). Reload starts it again.\0" L"Он завершился с ошибкой (0x%08X). «Перезагрузить» запустит его снова.\0"
+    L"It ended with an error (0x%08X). Turn the mod off and on in Windhawk to start it again.\0" L"Он завершился с ошибкой (0x%08X). Выключите и снова включите мод в Windhawk, чтобы запустить его снова.\0"
     L"It failed (see the terminal)\0" L"Не удалось (см. терминал)\0"
     L"It goes to the screen with the mouse\0" L"Переходит на экран, где находится мышь\0"
     L"It runs only while the island is on. A time missed while the PC slept or the island was off isn't made up.\0" L"Работает только при включённом острове. Время, пропущенное, пока ПК спал или остров был выключен, не наверстывается.\0"
@@ -22210,7 +22206,6 @@ constexpr WCHAR kRussianTexts[] =
     L"Recycle Bin appears\0" L"Корзина появляется\0"
     L"Red\0" L"Красный\0"
     L"Reflex\0" L"Реакция\0"
-    L"Reload\0" L"Перезагрузить\0"
     L"Remember my choice (it's in the island's settings)\0" L"Запомнить мой выбор (он в настройках острова)\0"
     L"Reminder\0" L"Напоминание\0"
     L"Repeat\0" L"Повторить\0"
@@ -23476,8 +23471,7 @@ constexpr WCHAR kJapaneseTexts[] =
     L"Island settings\0" L"アイランドの設定\0"
     L"Island: a pill floating at the top, the windows go under it\0" L"アイランド: 上に浮かぶカプセル。ウィンドウはその下を通ります\0"
     L"It couldn't start.\0" L"開始できませんでした。\0"
-    L"It ended with an error (0x%08X). It starts again the next time Windhawk starts.\0" L"エラーで終了しました (0x%08X)。次に Windhawk が起動したときにもう一度起動します。\0"
-    L"It ended with an error (0x%08X). Reload starts it again.\0" L"エラーで終了しました (0x%08X)。「再読み込み」でもう一度起動します。\0"
+    L"It ended with an error (0x%08X). Turn the mod off and on in Windhawk to start it again.\0" L"エラーで終了しました (0x%08X)。もう一度起動するには、Windhawk でこの Mod をオフにしてからオンにしてください。\0"
     L"It failed (see the terminal)\0" L"失敗しました（ターミナルを確認してください）\0"
     L"It goes to the screen with the mouse\0" L"マウスのある画面に移動します\0"
     L"It runs only while the island is on. A time missed while the PC slept or the island was off isn't made up.\0" L"アイランドがオンのときだけ実行されます。PC のスリープ中やアイランドがオフの間に過ぎた時刻の分は、あとから実行されません。\0"
@@ -23888,7 +23882,6 @@ constexpr WCHAR kJapaneseTexts[] =
     L"Recycle Bin appears\0" L"ごみ箱の表示\0"
     L"Red\0" L"赤\0"
     L"Reflex\0" L"反射神経\0"
-    L"Reload\0" L"再読み込み\0"
     L"Remember my choice (it's in the island's settings)\0" L"選択を記憶する（アイランドの設定にあります）\0"
     L"Reminder\0" L"リマインダー\0"
     L"Repeat\0" L"繰り返す\0"
@@ -25154,8 +25147,7 @@ constexpr WCHAR kVietnameseTexts[] =
     L"Island settings\0" L"Cài đặt Island\0"
     L"Island: a pill floating at the top, the windows go under it\0" L"Island: thanh nổi ở cạnh trên; cửa sổ có thể nằm phía sau Island\0"
     L"It couldn't start.\0" L"Không khởi động được.\0"
-    L"It ended with an error (0x%08X). It starts again the next time Windhawk starts.\0" L"Đảo đã dừng do lỗi (0x%08X). Đảo sẽ chạy lại vào lần tới Windhawk khởi động.\0"
-    L"It ended with an error (0x%08X). Reload starts it again.\0" L"Đảo đã dừng do lỗi (0x%08X). Bấm Tải lại để khởi động lại.\0"
+    L"It ended with an error (0x%08X). Turn the mod off and on in Windhawk to start it again.\0" L"Đảo đã dừng do lỗi (0x%08X). Hãy tắt rồi bật lại mod trong Windhawk để chạy lại đảo.\0"
     L"It failed (see the terminal)\0" L"Thất bại (xem chi tiết trong Terminal)\0"
     L"It goes to the screen with the mouse\0" L"Island tự chuyển sang màn hình đang có trỏ chuột\0"
     L"It runs only while the island is on. A time missed while the PC slept or the island was off isn't made up.\0" L"Chỉ chạy khi Island đang bật. Giờ bị lỡ lúc máy ngủ hoặc Island tắt sẽ không được chạy bù.\0"
@@ -25566,7 +25558,6 @@ constexpr WCHAR kVietnameseTexts[] =
     L"Recycle Bin appears\0" L"Điều kiện hiển thị Thùng rác\0"
     L"Red\0" L"Đỏ\0"
     L"Reflex\0" L"Phản xạ\0"
-    L"Reload\0" L"Tải lại\0"
     L"Remember my choice (it's in the island's settings)\0" L"Nhớ lựa chọn này (có thể đổi lại trong cài đặt Island)\0"
     L"Reminder\0" L"Nhắc nhở\0"
     L"Repeat\0" L"Lặp lại\0"
@@ -26832,8 +26823,7 @@ constexpr WCHAR kFrenchTexts[] =
     L"Island settings\0" L"Paramètres de l'île\0"
     L"Island: a pill floating at the top, the windows go under it\0" L"Île\u00A0: une pilule flottant en haut, les fenêtres passent dessous\0"
     L"It couldn't start.\0" L"Impossible de démarrer.\0"
-    L"It ended with an error (0x%08X). It starts again the next time Windhawk starts.\0" L"Elle s'est arrêtée sur une erreur (0x%08X). Elle redémarrera au prochain démarrage de Windhawk.\0"
-    L"It ended with an error (0x%08X). Reload starts it again.\0" L"Elle s'est arrêtée sur une erreur (0x%08X). Recharger la relance.\0"
+    L"It ended with an error (0x%08X). Turn the mod off and on in Windhawk to start it again.\0" L"Elle s'est arrêtée sur une erreur (0x%08X). Désactivez puis réactivez le mod dans Windhawk pour la relancer.\0"
     L"It failed (see the terminal)\0" L"Échec (voir le terminal)\0"
     L"It goes to the screen with the mouse\0" L"Elle va sur l'écran où se trouve la souris\0"
     L"It runs only while the island is on. A time missed while the PC slept or the island was off isn't made up.\0" L"Elle ne s'exécute que lorsque l'île est active. Une heure manquée pendant que le PC dormait ou que l'île était éteinte n'est pas rattrapée.\0"
@@ -27244,7 +27234,6 @@ constexpr WCHAR kFrenchTexts[] =
     L"Recycle Bin appears\0" L"La Corbeille apparaît\0"
     L"Red\0" L"Rouge\0"
     L"Reflex\0" L"Réflexes\0"
-    L"Reload\0" L"Recharger\0"
     L"Remember my choice (it's in the island's settings)\0" L"Mémoriser mon choix (il est dans les paramètres de l'île)\0"
     L"Reminder\0" L"Rappel\0"
     L"Repeat\0" L"Répéter\0"
@@ -28510,8 +28499,7 @@ constexpr WCHAR kTurkishTexts[] =
     L"Island settings\0" L"Ada ayarları\0"
     L"Island: a pill floating at the top, the windows go under it\0" L"Ada: üstte yüzen bir kapsül, pencereler altından geçer\0"
     L"It couldn't start.\0" L"Başlatılamadı.\0"
-    L"It ended with an error (0x%08X). It starts again the next time Windhawk starts.\0" L"Bir hatayla kapandı (0x%08X). Windhawk bir sonraki açılışında tekrar başlayacak.\0"
-    L"It ended with an error (0x%08X). Reload starts it again.\0" L"Bir hatayla kapandı (0x%08X). Yeniden yükle onu tekrar başlatır.\0"
+    L"It ended with an error (0x%08X). Turn the mod off and on in Windhawk to start it again.\0" L"Bir hatayla kapandı (0x%08X). Yeniden başlatmak için Windhawk'ta modu kapatıp açın.\0"
     L"It failed (see the terminal)\0" L"Başarısız oldu (terminale bakın)\0"
     L"It goes to the screen with the mouse\0" L"Fareyle birlikte ekrana geçer\0"
     L"It runs only while the island is on. A time missed while the PC slept or the island was off isn't made up.\0" L"Yalnızca ada açıkken çalışır. Bilgisayar uyurken veya ada kapalıyken kaçırılan zaman telafi edilmez.\0"
@@ -28922,7 +28910,6 @@ constexpr WCHAR kTurkishTexts[] =
     L"Recycle Bin appears\0" L"Geri Dönüşüm Kutusu görünür\0"
     L"Red\0" L"Kırmızı\0"
     L"Reflex\0" L"Refleks\0"
-    L"Reload\0" L"Yeniden yükle\0"
     L"Remember my choice (it's in the island's settings)\0" L"Seçimimi hatırla (adanın ayarlarında)\0"
     L"Reminder\0" L"Hatırlatıcı\0"
     L"Repeat\0" L"Tekrarla\0"
@@ -30188,8 +30175,7 @@ constexpr WCHAR kKoreanTexts[] =
     L"Island settings\0" L"아일랜드 설정\0"
     L"Island: a pill floating at the top, the windows go under it\0" L"아일랜드: 맨 위에 떠 있는 캡슐이며 창은 그 아래로 가요\0"
     L"It couldn't start.\0" L"시작하지 못했어요.\0"
-    L"It ended with an error (0x%08X). It starts again the next time Windhawk starts.\0" L"오류로 종료됐어요 (0x%08X). 다음에 Windhawk가 시작될 때 다시 시작돼요.\0"
-    L"It ended with an error (0x%08X). Reload starts it again.\0" L"오류로 종료됐어요 (0x%08X). 다시 불러오기를 누르면 다시 시작돼요.\0"
+    L"It ended with an error (0x%08X). Turn the mod off and on in Windhawk to start it again.\0" L"오류로 종료됐어요 (0x%08X). 다시 시작하려면 Windhawk에서 모드를 껐다가 켜 주세요.\0"
     L"It failed (see the terminal)\0" L"실패했어요 (터미널 참고)\0"
     L"It goes to the screen with the mouse\0" L"마우스가 있는 화면으로 가요\0"
     L"It runs only while the island is on. A time missed while the PC slept or the island was off isn't made up.\0" L"아일랜드가 켜져 있는 동안만 실행돼요. PC가 잠든 사이나 아일랜드가 꺼져 있는 동안 놓친 시간은 보충되지 않아요.\0"
@@ -30600,7 +30586,6 @@ constexpr WCHAR kKoreanTexts[] =
     L"Recycle Bin appears\0" L"휴지통 표시\0"
     L"Red\0" L"빨강\0"
     L"Reflex\0" L"반사 신경\0"
-    L"Reload\0" L"다시 불러오기\0"
     L"Remember my choice (it's in the island's settings)\0" L"내 선택 기억하기 (아일랜드 설정에 있어요)\0"
     L"Reminder\0" L"미리 알림\0"
     L"Repeat\0" L"반복\0"
@@ -31271,7 +31256,7 @@ const ReleaseNotes kReleaseNotes[] = {
          L"The Bluetooth \"Connected\" notice shows the headset's battery when Windows knows it, like \"Galaxy Buds2\" with \"Connected · 80%\" under it (#6158).\n"
          L"Windows 11 only, 64-bit (x64 and ARM64): Windows 10, whose support Microsoft ended in October 2025, and 32-bit Windows are no longer supported.\n"
          L"Faísca costs much less while she moves: only the small area around her is drawn again and sent to the screen, not the whole island (in the Bar, the whole strip), on every monitor.\n"
-         L"If the island crashes and can't be started again by itself (on Windhawk 2.0, or after three crashes in ten minutes), a window says so, with Reload: on Windhawk 2.0 it turns the mod off and on again, on 1.7.3 it restarts Windhawk. It waits until a full-screen game or presentation is over.\n"
+         L"If the island crashes and can't be started again by itself (on Windhawk 2.0, or after three crashes in ten minutes), a window says so and how to start it again: turn the mod off and on in Windhawk. It waits until a full-screen game or presentation is over.\n"
          L"With \"Glow and hops can leave the island\" on (or her size over 100%), each of her frames draws only her own window, no longer the whole island again behind her.\n"
          L"#Fixes\n"
          L"Windows builds without the parts the dock uses (some Insider builds): the taskbar stays as Windows draws it and the island's taskbar parts (apps asking for attention, the screen-edge watch, the tray icons) now start right away, instead of waiting two minutes and giving up (#7241).\n"
@@ -31330,7 +31315,7 @@ const ReleaseNotes kReleaseNotes[] = {
          L"O aviso \"Conectado\" do Bluetooth mostra a bateria do fone quando o Windows sabe, como \"Galaxy Buds2\" com \"Conectado · 80%\" embaixo (#6158).\n"
          L"Só Windows 11, 64 bits (x64 e ARM64): o Windows 10, cujo suporte a Microsoft encerrou em outubro de 2025, e o Windows de 32 bits não são mais suportados.\n"
          L"A Faísca pesa bem menos enquanto se mexe: só a pequena área em volta dela é desenhada de novo e enviada à tela, não a ilha inteira (na Barra, a faixa inteira), em todos os monitores.\n"
-         L"Se a ilha cair e não puder voltar sozinha (no Windhawk 2.0, ou depois de três quedas em dez minutos), uma janela avisa, com Recarregar: no Windhawk 2.0 ele desliga e liga o mod de novo, no 1.7.3 reinicia o Windhawk. Ela espera um jogo em tela cheia ou uma apresentação terminar.\n"
+         L"Se a ilha cair e não puder voltar sozinha (no Windhawk 2.0, ou depois de três quedas em dez minutos), uma janela avisa e diz como iniciá-la de novo: desligar e ligar o mod no Windhawk. Ela espera um jogo em tela cheia ou uma apresentação terminar.\n"
          L"Com \"Brilho e pulos podem sair da ilha\" ligado (ou o tamanho dela acima de 100%), cada quadro dela desenha só a janela dela, e não mais a ilha inteira de novo por trás.\n"
          L"#Correções\n"
          L"Versões do Windows sem as partes que a dock usa (algumas Insider): a barra fica como o Windows a desenha e as partes da ilha que dependem da barra (apps pedindo atenção, a borda da tela, os ícones da bandeja) agora ligam na hora, em vez de esperar dois minutos e desistir (#7241).\n"
@@ -31389,7 +31374,7 @@ const ReleaseNotes kReleaseNotes[] = {
          L"蓝牙“已连接”提示在 Windows 知道耳机电量时会显示电量，例如“Galaxy Buds2”下方显示“已连接 · 80%” (#6158)。\n"
          L"仅支持 64 位 Windows 11（x64 和 ARM64）：不再支持 Windows 10（微软已于 2025 年 10 月终止支持）和 32 位 Windows。\n"
          L"Faísca 活动时占用的资源大幅减少：只重新绘制并发送到屏幕的是她周围的一小块区域，而不是整个岛（条形样式下是整条横栏），每台显示器都是如此。\n"
-         L"如果灵动岛崩溃且无法自行重新启动（在 Windhawk 2.0 上，或十分钟内崩溃三次后），会弹出窗口提示并提供“重新加载”：在 Windhawk 2.0 上会关闭再打开该模组，在 1.7.3 上会重启 Windhawk。全屏游戏或演示进行时，它会等到结束后再显示。\n"
+         L"如果灵动岛崩溃且无法自行重新启动（在 Windhawk 2.0 上，或十分钟内崩溃三次后），会弹出窗口提示，并说明如何重新启动：在 Windhawk 中关闭再打开此模组。全屏游戏或演示进行时，它会等到结束后再显示。\n"
          L"开启“光晕和跳跃可以超出灵动岛”（或她的大小超过 100%）时，她的每一帧只重绘她自己的窗口，不再把后面的整个灵动岛重新绘制一遍。\n"
          L"#修复\n"
          L"没有程序坞所需组件的 Windows 版本（部分 Insider 版本）：任务栏保持 Windows 原样，灵动岛依赖任务栏的功能（应用请求注意、屏幕边缘检测、托盘图标）现在会立即启动，而不是等待两分钟后放弃 (#7241)。\n"
@@ -31448,7 +31433,7 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Der Bluetooth-Hinweis „Verbunden“ zeigt den Akkustand des Headsets, wenn Windows ihn kennt, etwa „Galaxy Buds2“ mit „Verbunden · 80%“ darunter (#6158).\n"
          L"Nur noch Windows 11, 64 Bit (x64 und ARM64): Windows 10, dessen Support Microsoft im Oktober 2025 beendet hat, und 32-Bit-Windows werden nicht mehr unterstützt.\n"
          L"Faísca braucht viel weniger, während sie sich bewegt: Nur der kleine Bereich um sie herum wird neu gezeichnet und an den Bildschirm geschickt, nicht die ganze Insel (bei der Leiste der ganze Streifen), auf jedem Monitor.\n"
-         L"Stürzt die Insel ab und kann sie nicht von selbst neu starten (unter Windhawk 2.0 oder nach drei Abstürzen in zehn Minuten), meldet ein Fenster das, mit Neu laden: Unter Windhawk 2.0 schaltet es den Mod aus und wieder ein, unter 1.7.3 startet es Windhawk neu. Es wartet, bis ein Vollbildspiel oder eine Präsentation vorbei ist.\n"
+         L"Stürzt die Insel ab und kann sie nicht von selbst neu starten (unter Windhawk 2.0 oder nach drei Abstürzen in zehn Minuten), meldet ein Fenster das und sagt, wie sie wieder startet: den Mod in Windhawk aus- und wieder einschalten. Es wartet, bis ein Vollbildspiel oder eine Präsentation vorbei ist.\n"
          L"Mit „Leuchten und Sprünge dürfen aus der Insel ragen“ (oder ihre Größe über 100 %) zeichnet jedes ihrer Bilder nur noch ihr eigenes Fenster, nicht mehr die ganze Insel dahinter neu.\n"
          L"#Korrekturen\n"
          L"Windows-Versionen ohne die Teile, die das Dock nutzt (einige Insider-Builds): Die Taskleiste bleibt, wie Windows sie zeichnet, und die Teile der Insel, die die Taskleiste brauchen (Apps, die Aufmerksamkeit wollen, der Bildschirmrand, die Tray-Symbole), starten jetzt sofort, statt zwei Minuten zu warten und dann aufzugeben (#7241).\n"
@@ -31507,7 +31492,7 @@ const ReleaseNotes kReleaseNotes[] = {
          L"El aviso \"Conectado\" de Bluetooth muestra la batería de los auriculares cuando Windows la conoce, como \"Galaxy Buds2\" con \"Conectado · 80%\" debajo (#6158).\n"
          L"Solo Windows 11 de 64 bits (x64 y ARM64): Windows 10, cuyo soporte Microsoft terminó en octubre de 2025, y Windows de 32 bits ya no son compatibles.\n"
          L"Faísca consume mucho menos mientras se mueve: solo se vuelve a dibujar y a enviar a la pantalla la pequeña zona a su alrededor, no toda la isla (en la Barra, toda la franja), en cada monitor.\n"
-         L"Si la isla se cierra por un error y no puede volver sola (en Windhawk 2.0, o tras tres cierres en diez minutos), una ventana lo avisa, con Recargar: en Windhawk 2.0 desactiva y vuelve a activar el mod, en 1.7.3 reinicia Windhawk. Espera a que termine un juego en pantalla completa o una presentación.\n"
+         L"Si la isla se cierra por un error y no puede volver sola (en Windhawk 2.0, o tras tres cierres en diez minutos), una ventana lo avisa y dice cómo iniciarla de nuevo: desactivar y volver a activar el mod en Windhawk. Espera a que termine un juego en pantalla completa o una presentación.\n"
          L"Con \"El brillo y los saltos pueden salir de la isla\" activado (o su tamaño por encima del 100%), cada fotograma suyo dibuja solo su propia ventana, ya no toda la isla de nuevo detrás de ella.\n"
          L"#Correcciones\n"
          L"Versiones de Windows sin las partes que usa el dock (algunas Insider): la barra queda como Windows la dibuja y las partes de la isla que dependen de la barra (apps que piden atención, el borde de la pantalla, los iconos de la bandeja) ahora se inician enseguida, en lugar de esperar dos minutos y rendirse (#7241).\n"
@@ -31566,7 +31551,7 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Уведомление Bluetooth «Подключено» показывает заряд гарнитуры, если Windows его знает, например «Galaxy Buds2» и под ним «Подключено · 80%» (#6158).\n"
          L"Только 64-битная Windows 11 (x64 и ARM64): Windows 10, поддержку которой Microsoft прекратила в октябре 2025 года, и 32-битная Windows больше не поддерживаются.\n"
          L"Faísca потребляет гораздо меньше ресурсов, пока двигается: заново рисуется и выводится на экран только небольшая область вокруг неё, а не весь остров (у панели не вся полоса), на каждом мониторе.\n"
-         L"Если остров аварийно завершился и не может перезапуститься сам (в Windhawk 2.0 или после трёх сбоев за десять минут), появится окно с кнопкой «Перезагрузить»: в Windhawk 2.0 она выключает и снова включает мод, в 1.7.3 перезапускает Windhawk. Окно ждёт окончания полноэкранной игры или презентации.\n"
+         L"Если остров аварийно завершился и не может перезапуститься сам (в Windhawk 2.0 или после трёх сбоев за десять минут), появится окно с подсказкой, как запустить его снова: выключить и снова включить мод в Windhawk. Окно ждёт окончания полноэкранной игры или презентации.\n"
          L"При включённом «Свечение и прыжки могут выходить за остров» (или её размер больше 100%) каждый её кадр перерисовывает только её собственное окно, а не весь остров позади неё.\n"
          L"#Исправления\n"
          L"Сборки Windows без элементов, которые использует док (некоторые Insider): панель задач остаётся такой, как её рисует Windows, а части острова, зависящие от панели (приложения, просящие внимания, отслеживание края экрана, значки в трее), теперь запускаются сразу, а не ждут две минуты и не сдаются (#7241).\n"
@@ -31625,7 +31610,7 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Bluetooth の「接続済み」通知に、Windows がバッテリー残量を把握していればヘッドセットの残量が表示されます。例：「Galaxy Buds2」の下に「接続済み · 80%」(#6158)。\n"
          L"64 ビット（x64 と ARM64）の Windows 11 専用になりました。Microsoft のサポートが 2025 年 10 月に終了した Windows 10 と、32 ビットの Windows はサポート対象外です。\n"
          L"Faísca が動いている間の負荷が大きく減りました。アイランド全体（バーではバー全体）ではなく、彼女の周りの小さな範囲だけを描き直して画面に送ります。どのモニターでも同じです。\n"
-         L"アイランドがクラッシュして自動で再起動できないとき (Windhawk 2.0、または 10 分間に 3 回クラッシュしたとき)、ウィンドウでお知らせし、「再読み込み」を表示します。Windhawk 2.0 ではモッドをオフにしてからオンに戻し、1.7.3 では Windhawk を再起動します。全画面のゲームやプレゼンテーション中は終わるまで待ちます。\n"
+         L"アイランドがクラッシュして自動で再起動できないとき (Windhawk 2.0、または 10 分間に 3 回クラッシュしたとき)、ウィンドウでお知らせし、もう一度起動する方法 (Windhawk でモッドをオフにしてからオンに戻す) を表示します。全画面のゲームやプレゼンテーション中は終わるまで待ちます。\n"
          L"「光とジャンプがアイランドの外に出てもよい」がオンのとき（またはサイズが 100% を超えるとき）、彼女のフレームごとに描き直すのは彼女自身のウィンドウだけになり、後ろのアイランド全体は描き直さなくなりました。\n"
          L"#修正\n"
          L"ドックが使う部品のない Windows ビルド（一部の Insider ビルド）：タスクバーは Windows の表示のままになり、タスクバーに頼るアイランドの機能（注意を求めるアプリ、画面端の検出、トレイアイコン）が 2 分待ってあきらめるのではなく、すぐに動くようになりました (#7241)。\n"
@@ -31684,7 +31669,7 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Thông báo Bluetooth \"Đã kết nối\" hiện pin của tai nghe khi Windows biết, ví dụ \"Galaxy Buds2\" kèm \"Đã kết nối · 80%\" bên dưới (#6158).\n"
          L"Chỉ dành cho Windows 11 64-bit (x64 và ARM64): không còn hỗ trợ Windows 10 (Microsoft đã ngừng hỗ trợ từ tháng 10/2025) và Windows 32-bit.\n"
          L"Faísca tốn ít tài nguyên hơn nhiều khi chuyển động: chỉ vùng nhỏ quanh cô ấy được vẽ lại và gửi lên màn hình, không phải cả đảo (với Thanh là cả dải), trên mọi màn hình.\n"
-         L"Nếu đảo bị sập và không tự chạy lại được (trên Windhawk 2.0, hoặc sau ba lần sập trong mười phút), một cửa sổ sẽ báo kèm nút Tải lại: trên Windhawk 2.0 nút này tắt rồi bật lại mod, trên 1.7.3 nút này khởi động lại Windhawk. Cửa sổ chờ đến khi trò chơi toàn màn hình hoặc bản trình chiếu kết thúc.\n"
+         L"Nếu đảo bị sập và không tự chạy lại được (trên Windhawk 2.0, hoặc sau ba lần sập trong mười phút), một cửa sổ sẽ báo và chỉ cách chạy lại: tắt rồi bật lại mod trong Windhawk. Cửa sổ chờ đến khi trò chơi toàn màn hình hoặc bản trình chiếu kết thúc.\n"
          L"Khi bật \"Ánh sáng và cú nhảy có thể ra ngoài Island\" (hoặc kích thước của cô ấy trên 100%), mỗi khung hình của cô ấy chỉ vẽ lại cửa sổ riêng của cô ấy, không còn vẽ lại toàn bộ Island phía sau.\n"
          L"#Sửa lỗi\n"
          L"Các bản Windows không có những phần mà dock dùng (một số bản Insider): thanh tác vụ giữ nguyên như Windows vẽ, và các phần của đảo cần thanh tác vụ (ứng dụng cần chú ý, theo dõi mép màn hình, biểu tượng khay) giờ khởi động ngay thay vì chờ hai phút rồi bỏ cuộc (#7241).\n"
@@ -31743,7 +31728,7 @@ const ReleaseNotes kReleaseNotes[] = {
          L"L'avis Bluetooth \"Connecté\" affiche la batterie du casque quand Windows la connaît, par exemple \"Galaxy Buds2\" avec \"Connecté · 80\u00A0%\" dessous (#6158).\n"
          L"Windows 11 uniquement, 64 bits (x64 et ARM64)\u00A0: Windows 10, dont Microsoft a mis fin à la prise en charge en octobre 2025, et Windows 32 bits ne sont plus pris en charge.\n"
          L"Faísca coûte bien moins quand elle bouge, car seule la petite zone autour d'elle est redessinée et envoyée à l'écran, pas toute l'île (avec la Barre, toute la bande), sur chaque écran.\n"
-         L"Si l'île plante et ne peut pas redémarrer toute seule (sous Windhawk 2.0, ou après trois plantages en dix minutes), une fenêtre le signale, avec Recharger : sous Windhawk 2.0 il désactive puis réactive le mod, sous 1.7.3 il redémarre Windhawk. Elle attend la fin d'un jeu en plein écran ou d'une présentation.\n"
+         L"Si l'île plante et ne peut pas redémarrer toute seule (sous Windhawk 2.0, ou après trois plantages en dix minutes), une fenêtre le signale et dit comment la relancer : désactiver puis réactiver le mod dans Windhawk. Elle attend la fin d'un jeu en plein écran ou d'une présentation.\n"
          L"Avec « L'éclat et les sauts peuvent sortir de l'île » activé (ou sa taille au-delà de 100 %), chacune de ses images ne redessine que sa propre fenêtre, et plus toute l'île derrière elle.\n"
          L"#Corrections\n"
          L"Les versions de Windows sans les éléments qu'utilise le dock (certaines versions Insider)\u00A0: la barre des tâches reste comme Windows la dessine et les parties de la barre des tâches de l'île (apps demandant de l'attention, surveillance du bord de l'écran, icônes de la zone de notification) démarrent maintenant tout de suite, au lieu d'attendre deux minutes puis d'abandonner (#7241).\n"
@@ -31802,7 +31787,7 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Bluetooth \"Bağlı\" uyarısı, Windows biliyorsa kulaklığın pilini gösterir; örneğin \"Galaxy Buds2\" ve altında \"Bağlı · %80\" (#6158).\n"
          L"Yalnızca Windows 11, 64 bit (x64 ve ARM64): Microsoft'un desteği Ekim 2025'te bitirdiği Windows 10 ve 32 bit Windows artık desteklenmiyor.\n"
          L"Faísca hareket ederken çok daha az kaynak harcar: Adanın tamamı (Çubukta tüm şerit) değil, yalnızca çevresindeki küçük alan yeniden çizilip ekrana gönderilir, her monitörde.\n"
-         L"Ada çöker ve kendiliğinden yeniden başlayamazsa (Windhawk 2.0'da ya da on dakikada üç çökmeden sonra), bir pencere bunu Yeniden yükle düğmesiyle bildiriyor: Windhawk 2.0'da modu kapatıp yeniden açıyor, 1.7.3'te Windhawk'ı yeniden başlatıyor. Tam ekran bir oyun ya da sunum bitene kadar bekliyor.\n"
+         L"Ada çöker ve kendiliğinden yeniden başlayamazsa (Windhawk 2.0'da ya da on dakikada üç çökmeden sonra), bir pencere bunu ve yeniden nasıl başlatılacağını bildiriyor: Windhawk'ta modu kapatıp açmak. Tam ekran bir oyun ya da sunum bitene kadar bekliyor.\n"
          L"\"Parıltı ve zıplamalar adanın dışına taşabilir\" açıkken (ya da boyutu %100'ün üstündeyken) her karesi artık yalnızca kendi penceresini çiziyor, arkasındaki tüm adayı yeniden çizmiyor.\n"
          L"#Düzeltmeler\n"
          L"Dock'un kullandığı parçalar olmadan Windows derlemeleri (bazı Insider derlemeleri): görev çubuğu Windows'un çizdiği gibi kalır ve adanın görev çubuğu parçaları (dikkat isteyen uygulamalar, ekran kenarı izleme, sistem tepsisi simgeleri) artık iki dakika bekleyip vazgeçmek yerine hemen başlar (#7241).\n"
@@ -31861,7 +31846,7 @@ const ReleaseNotes kReleaseNotes[] = {
          L"Bluetooth \"연결됨\" 알림 메시지가 Windows가 알 때 헤드셋 배터리를 표시해요. 예를 들어 \"Galaxy Buds2\" 아래에 \"연결됨 · 80%\"가 나와요(#6158).\n"
          L"Windows 11 전용, 64비트(x64 및 ARM64): 2025년 10월에 Microsoft 지원이 끝난 Windows 10과 32비트 Windows는 더 이상 지원하지 않아요.\n"
          L"Faísca가 움직이는 동안 훨씬 가벼워졌어요. 아일랜드 전체(바에서는 바 전체)가 아니라 그 주변의 작은 영역만 다시 그려서 화면에 보내요. 모든 모니터에서 똑같아요.\n"
-         L"아일랜드가 비정상 종료되고 스스로 다시 시작할 수 없으면(Windhawk 2.0에서, 또는 10분 안에 세 번 종료된 뒤) 다시 불러오기 버튼이 있는 창으로 알려 줘요. Windhawk 2.0에서는 모드를 껐다가 다시 켜고, 1.7.3에서는 Windhawk를 다시 시작해요. 전체 화면 게임이나 프레젠테이션이 끝날 때까지 기다려요.\n"
+         L"아일랜드가 비정상 종료되고 스스로 다시 시작할 수 없으면(Windhawk 2.0에서, 또는 10분 안에 세 번 종료된 뒤) 창으로 알려 주고 다시 시작하는 방법을 안내해요. Windhawk에서 모드를 껐다가 켜면 돼요. 전체 화면 게임이나 프레젠테이션이 끝날 때까지 기다려요.\n"
          L"\"빛과 점프가 아일랜드 밖으로 나갈 수 있어요\"가 켜져 있으면(또는 크기가 100%를 넘으면) 그녀의 각 프레임은 이제 그녀 자신의 창만 다시 그리고, 뒤의 아일랜드 전체는 다시 그리지 않아요.\n"
          L"#수정\n"
          L"Dock이 사용하는 부분이 없는 Windows 빌드(일부 Insider 빌드)에서는 작업 표시줄이 Windows가 그리는 그대로 남고, 아일랜드의 작업 표시줄 관련 기능(주의를 요청하는 앱, 화면 가장자리 감시, 트레이 아이콘)이 2분을 기다리다 포기하는 대신 바로 시작돼요(#7241).\n"
@@ -36134,10 +36119,10 @@ HANDLE g_islandProcess;
 HANDLE g_islandProcessWait;
 DWORD g_islandProcessId;
 // Its image, when it may be started again after a crash (see
-// IslandRestartPath; empty: it may not), and its image anyway (what a crash
-// notice's Reload goes by, see PlanIslandReload).
+// IslandRestartPath; empty: it may not), and whether it's Windhawk's at all
+// (windhawk.exe, or 2.0's windhawk-mod.exe): only its crash is told.
 std::wstring g_islandRestartPath;
-std::wstring g_islandImage;
+bool g_islandFromWindhawk;
 SRWLOCK g_islandWatchLock = SRWLOCK_INIT;
 
 // (On a thread of its own: explorer's threads have their own apartments.)
@@ -36221,59 +36206,9 @@ std::wstring IslandRestartPath(HANDLE process) {
     return image;
 }
 
-// What a crash notice's Reload runs (see ShowIslandCrashNotice): empty
-// `file` when there's nothing that would start the island again.
-struct IslandReload {
-    std::wstring file;
-    std::wstring parameters;
-    bool admin = false;
-};
-
-// From the island's process image: Windhawk 1.7.3's (windhawk.exe) restarts
-// Windhawk; Windhawk 2.0's host (windhawk-mod.exe) has the mod turned off
-// and on by windhawk-cli.exe, beside it or one folder up (a host run by the
-// service sits in its own folder), with a pause between so Windhawk sees the
-// change.
-IslandReload PlanIslandReload(const std::wstring& image) {
-    IslandReload reload;
-    if (image.empty()) {
-        return reload;
-    }
-    if (_wcsicmp(PathFindFileName(image.c_str()), L"windhawk.exe") == 0) {
-        reload.file = image;
-        reload.parameters = L"-restart -tray-only";
-        return reload;
-    }
-    std::wstring folder = image.substr(0, image.find_last_of(L'\\'));
-    for (int up = 0; up < 2 && !folder.empty(); up++) {
-        const std::wstring cli = folder + L"\\windhawk-cli.exe";
-        if (GetFileAttributes(cli.c_str()) != INVALID_FILE_ATTRIBUTES) {
-            WCHAR system[MAX_PATH];
-            if (!GetSystemDirectory(system, ARRAYSIZE(system))) {
-                return reload;
-            }
-            reload.file = std::wstring(system) + L"\\cmd.exe";
-            reload.parameters = L"/d /c \"\"" + cli + L"\" mod disable \"" +
-                                WH_MOD_ID + L"\" & ping -n 4 127.0.0.1 >nul & "
-                                L"\"" + cli + L"\" mod enable \"" +
-                                WH_MOD_ID + L"\"\"";
-            reload.admin = true;
-            return reload;
-        }
-        folder = folder.substr(0, folder.find_last_of(L'\\'));
-    }
-    return reload;
-}
-
 // The notice's thread, at most one, and what stops its waiting.
 HANDLE g_crashNoticeThread;
 HANDLE g_crashNoticeStop;
-constexpr int kCrashReloadButton = 100;
-
-struct IslandCrashNotice {
-    DWORD exitCode;
-    IslandReload reload;
-};
 
 // Not over a full-screen game, a presentation or a full-screen app.
 bool CrashNoticeMustWait() {
@@ -36296,9 +36231,10 @@ HRESULT CALLBACK IslandCrashNoticeProc(HWND hwnd,
     return S_OK;
 }
 
+// (It only tells: nothing is started from it. Turning the mod off and on
+// is Windhawk's, which knows where it is and how it runs.)
 DWORD WINAPI IslandCrashNoticeThreadProc(LPVOID parameter) {
-    const std::unique_ptr<IslandCrashNotice> notice(
-        (IslandCrashNotice*)parameter);
+    const DWORD exitCode = (DWORD)(ULONG_PTR)parameter;
     while (CrashNoticeMustWait()) {
         if (WaitForSingleObject(g_crashNoticeStop, 2000) != WAIT_TIMEOUT) {
             return 0;
@@ -36317,20 +36253,13 @@ DWORD WINAPI IslandCrashNoticeThreadProc(LPVOID parameter) {
         }
         return 0;
     }
-    const bool reloads = !notice->reload.file.empty();
     WCHAR content[512];
     swprintf_s(content,
-               reloads ? Tr(L"It ended with an error (0x%08X). Reload starts "
-                            L"it again.",
-                            L"Ela terminou com um erro (0x%08X). Recarregar "
-                            L"inicia de novo.")
-                       : Tr(L"It ended with an error (0x%08X). It starts "
-                            L"again the next time Windhawk starts.",
-                            L"Ela terminou com um erro (0x%08X). Ela volta "
-                            L"na próxima vez que o Windhawk iniciar."),
-               (unsigned)notice->exitCode);
-    const TASKDIALOG_BUTTON buttons[] = {
-        {kCrashReloadButton, Tr(L"Reload", L"Recarregar")}};
+               Tr(L"It ended with an error (0x%08X). Turn the mod off and on "
+                  L"in Windhawk to start it again.",
+                  L"Ela terminou com um erro (0x%08X). Desligue e ligue o mod "
+                  L"no Windhawk para iniciá-la de novo."),
+               (unsigned)exitCode);
     TASKDIALOGCONFIG config{};
     config.cbSize = sizeof(config);
     config.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION | TDF_CALLBACK_TIMER;
@@ -36340,34 +36269,15 @@ DWORD WINAPI IslandCrashNoticeThreadProc(LPVOID parameter) {
     config.pszMainInstruction =
         Tr(L"The island stopped working", L"A ilha parou de funcionar");
     config.pszContent = content;
-    if (reloads) {
-        config.pButtons = buttons;
-        config.cButtons = ARRAYSIZE(buttons);
-        config.nDefaultButton = kCrashReloadButton;
-    }
     config.pfCallback = IslandCrashNoticeProc;
-    int pressed = 0;
-    const HRESULT shown = taskDialog(&config, &pressed, nullptr, nullptr);
+    taskDialog(&config, nullptr, nullptr, nullptr);
     FreeLibrary(comctl);
-    // (After the window: turning the mod off unloads this part, whose
-    // unload waits for this thread.)
-    if (SUCCEEDED(shown) && pressed == kCrashReloadButton && !g_unloading) {
-        SHELLEXECUTEINFO info{sizeof(info)};
-        info.fMask = SEE_MASK_NOASYNC;
-        info.lpVerb = notice->reload.admin ? L"runas" : nullptr;
-        info.lpFile = notice->reload.file.c_str();
-        info.lpParameters = notice->reload.parameters.c_str();
-        info.nShow = notice->reload.admin ? SW_HIDE : SW_SHOWNORMAL;
-        if (!ShellExecuteEx(&info)) {
-            IslandLog(L"The island's reload didn't start: %u", GetLastError());
-        }
-    }
     return 0;
 }
 
 // Tells the island crashed and wasn't started again (on the wait's thread);
 // one notice at a time.
-void ShowIslandCrashNotice(DWORD exitCode, const std::wstring& image) {
+void ShowIslandCrashNotice(DWORD exitCode) {
     if (g_unloading) {
         return;
     }
@@ -36381,15 +36291,11 @@ void ShowIslandCrashNotice(DWORD exitCode, const std::wstring& image) {
     if (!g_crashNoticeStop) {
         g_crashNoticeStop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     }
-    auto* notice = new IslandCrashNotice{exitCode, PlanIslandReload(image)};
-    g_crashNoticeThread = g_crashNoticeStop
-                              ? CreateThread(nullptr, 0,
-                                             IslandCrashNoticeThreadProc,
-                                             notice, 0, nullptr)
-                              : nullptr;
-    if (!g_crashNoticeThread) {
-        delete notice;
-    }
+    g_crashNoticeThread =
+        g_crashNoticeStop
+            ? CreateThread(nullptr, 0, IslandCrashNoticeThreadProc,
+                           (LPVOID)(ULONG_PTR)exitCode, 0, nullptr)
+            : nullptr;
 }
 
 // (After StopWatchingIslandProcess: no new notice starts then.)
@@ -36415,28 +36321,28 @@ void RestartCrashedIsland() {
     static double startedAt[kIslandRestarts];
     static int next;
     std::wstring path;
-    std::wstring image;
     DWORD exitCode = 0;
     AcquireSRWLockShared(&g_islandWatchLock);
     const bool known =
         g_islandProcess && GetExitCodeProcess(g_islandProcess, &exitCode);
     path = g_islandRestartPath;
-    image = g_islandImage;
+    const bool fromWindhawk = g_islandFromWindhawk;
     ReleaseSRWLockShared(&g_islandWatchLock);
-    if (!known || !IslandProcessCrashed(exitCode)) {
+    // (A process that isn't Windhawk's is neither started nor told about.)
+    if (!known || !fromWindhawk || !IslandProcessCrashed(exitCode)) {
         return;
     }
     // (Not started again from here: Windhawk 2.0's host, or an island run
-    // at another level. Told, with a way to start it again.)
+    // at another level. Told, with how to start it again.)
     if (path.empty()) {
         IslandLog(L"The island crashed (%08X): told", (unsigned)exitCode);
-        ShowIslandCrashNotice(exitCode, image);
+        ShowIslandCrashNotice(exitCode);
         return;
     }
     if (!IslandRestartAllowed(startedAt, &next, NowSeconds())) {
         IslandLog(L"The island crashed again (%08X): left stopped",
                   (unsigned)exitCode);
-        ShowIslandCrashNotice(exitCode, image);
+        ShowIslandCrashNotice(exitCode);
         return;
     }
     WCHAR commandLine[MAX_PATH + 64];
@@ -36478,7 +36384,7 @@ void RestartCrashedIsland() {
                        &pi, nullptr)) {
         IslandLog(L"The island crashed (%08X), starting it again failed",
                   (unsigned)exitCode);
-        ShowIslandCrashNotice(exitCode, image);
+        ShowIslandCrashNotice(exitCode);
         return;
     }
     CloseHandle(pi.hProcess);
@@ -36539,7 +36445,7 @@ void StopWatchingIslandProcess() {
     g_islandProcess = nullptr;
     g_islandProcessId = 0;
     g_islandRestartPath.clear();
-    g_islandImage.clear();
+    g_islandFromWindhawk = false;
     ReleaseSRWLockExclusive(&g_islandWatchLock);
     if (wait) {
         // Waits for a callback that's running.
@@ -36572,11 +36478,14 @@ void WatchIslandProcess(HWND island) {
         return;
     }
     std::wstring restartPath = IslandRestartPath(process);
-    WCHAR image[MAX_PATH] = L"";
+    WCHAR image[MAX_PATH];
     DWORD imageSize = ARRAYSIZE(image);
-    if (!QueryFullProcessImageName(process, 0, image, &imageSize)) {
-        image[0] = L'\0';
-    }
+    const PCWSTR name =
+        QueryFullProcessImageName(process, 0, image, &imageSize)
+            ? PathFindFileName(image)
+            : L"";
+    const bool fromWindhawk = _wcsicmp(name, L"windhawk.exe") == 0 ||
+                              _wcsnicmp(name, L"windhawk-mod", 12) == 0;
     HANDLE wait = nullptr;
     if (!RegisterWaitForSingleObject(
             &wait, process, IslandProcessEndedCallback, nullptr, INFINITE,
@@ -36589,7 +36498,7 @@ void WatchIslandProcess(HWND island) {
     g_islandProcessWait = wait;
     g_islandProcessId = processId;
     g_islandRestartPath = std::move(restartPath);
-    g_islandImage = image;
+    g_islandFromWindhawk = fromWindhawk;
     ReleaseSRWLockExclusive(&g_islandWatchLock);
 }
 
@@ -36978,11 +36887,13 @@ constexpr WCHAR kGlyphPet = 0xE945;
 constexpr float kPetThickness = 22;
 constexpr float kPetSideThickness = 28;
 constexpr float kPetLineSize = 20;
-// The island looks at the mouse this often while a pet shows, a picture
+// The island looks at the mouse this often while a pet shows and the mouse
+// moves (her eyes following it), this often while she's idle, a picture
 // this often while it works hard or dances (at most), and this often while
 // it sleeps (the z drifting up).
 constexpr UINT_PTR kPetTimerId = 95;
 constexpr UINT kPetPollMs = 100;
+constexpr UINT kPetIdleMs = 250;
 constexpr UINT kPetFrameMs = 33;
 constexpr UINT kPetSleepMs = 250;
 // After this long asleep she rests drawn still, without the z (see
@@ -37631,16 +37542,46 @@ constexpr int kPetSourcePack = 2;
 // 32 bit, a few seconds at most). Only the files' addresses are asked for:
 // nothing about the user is sent. (A file the pack lacks leaves its event
 // with the island's own sound.) Glass is caliberda's, CC BY 4.0, from
-// github.com/cesarkali/faisca-sounds at a fixed version.
+// github.com/cesarkali/faisca-sounds at a fixed commit; each file is kept
+// only if its SHA-256 is the one here (the files as reviewed), 64 hex digits
+// for each event, in kPetSoundInfo's order.
 constexpr PCWSTR kPetSoundPackUrl =
-    L"https://cdn.jsdelivr.net/gh/cesarkali/faisca-sounds@1.0.1/glass/";
+    L"https://cdn.jsdelivr.net/gh/cesarkali/faisca-sounds@"
+    L"cec274cecb7fc00a3db68b35bfbea58cfd07d7f2/glass/";
+constexpr char kPetSoundPackHashes[] =
+    "cfd65db737b3e8b86fe8a65008fca8005d3f2eefabd88fb29d6f1b286d7041ec"
+    "91cfa64d2ef89e4e9f6190c74bf22ab4496ee8586d63dc4b30ecab6e8c97b60b"
+    "587fa6bf173a5740c28950fdce02beaf417788d9638f19a0fa5aba5ac5783d80"
+    "92ef69aff1ec8fdd4e3445b604238b43a6219d6c2bca5fa0aa804912be8e9035"
+    "2d6c503e3eca1d01e5ab3fd378e9dcb75bab59bdee302a9fd57a30c00804011a"
+    "a8a0ea3df97db6b11656f3fa6a47b41bdd3dc78b9994df83e1388b2a995f969e"
+    "75f98f7dc35e78e04bb02d8ac0b965923d74967171dac76e95fa176e105add7d"
+    "fa807d3e89461694ab3813e8f8f202f9052c51147ecd23abc1385c5970c6e34c"
+    "b36913a847a5f446d9209dfc4bc0a5025ae5d838162fd3c5c65ec4adcbe92658"
+    "aacf5f6b8a456e0f5cf3f10fe0d0ff5ec6dd140c4b68032fc6a3b8550508b523"
+    "f434fbe8af406e2036294fe69ab18047423a646ebf5f7aea3cb4928cf2d4b8fc"
+    "5526efd18078ddf86d0b41e32aac2d3327576fc310f9f59efe9935cf1351fd34"
+    "a1f5c94dccc0532e8eec2f54fd2ee4cd9396daf6c7e9c8156dec496167222b9c"
+    "2aa7c417100ce1bcab844aed8e5f7739285ecb7e30b0bad3b1aad886af8de79a"
+    "897977a9e94476ad7373cdc9fdb9632ff801ba5594e27a0f3608715f0255fd79"
+    "aade7b1bb894ba8f729e8d74bc6f0efcf5f69e598984b80e60f2831335664714"
+    "3ebf67c7666af6411967d8dc2e05fafaccbf84a96a087ad51d9a5213a2ba2081"
+    "c9f68c300bd63052b5e3b8fd631c4ed9dbaccdb42437efe1098c42a6397c88e4"
+    "5284c6222901c7c61a3ee79cbddde1d7fe56b93f5eb09986eff834ba343a338b"
+    "88ee666726afcec8f2afce8b118116a2305d4405f29d0cc6fecfea37de37f9ae"
+    "3314acc00bbafbe1a67c1315fe8570714266a117a73d0bc6910496ebcbe07872"
+    "7cc3292067d757aa4abfb494947cd0a3288ba685ac36539417b3d1722a7c664d"
+    "c2e7f01a0f47cb9d98316f46c39f593671db916b8e47ed1617bde8a99122c9bd"
+    "a52c0e1a5ab7a2e9d040292f80f0d385daa7c0721a0706c670c269ccf01a2aaf"
+    "0d42324d48d0e1f86bd61161e7c9a21108f4cd3ac41252e737ab4f5952af6056";
 struct PetSoundPack {
     PCWSTR folder;
     PCWSTR name;
     PCWSTR url;
+    const char* hashes;
 };
 constexpr PetSoundPack kPetSoundPacks[] = {
-    {L"glass-1", L"Glass", kPetSoundPackUrl},
+    {L"glass-1", L"Glass", kPetSoundPackUrl, kPetSoundPackHashes},
 };
 constexpr int kPetSoundPackCount = (int)std::size(kPetSoundPacks);
 
@@ -38362,11 +38303,12 @@ constexpr GUID kPetMfBits = {
     0x4764,
     {0xaa, 0x33, 0xed, 0x4f, 0x2d, 0x1f, 0xf6, 0x69}};
 // MF_VERSION and MFSTARTUP_NOSOCKET; the reader's first audio stream and
-// "all streams", and MF_SOURCE_READERF_ENDOFSTREAM.
+// "all streams"; MF_SOURCE_READERF_ERROR and _ENDOFSTREAM.
 constexpr ULONG kPetMfVersion = 0x00020070;
 constexpr DWORD kPetMfStartup = 1;
 constexpr DWORD kPetMfAudioStream = 0xFFFFFFFD;
 constexpr DWORD kPetMfAllStreams = 0xFFFFFFFE;
+constexpr DWORD kPetMfError = 1;
 constexpr DWORD kPetMfEnd = 2;
 
 // The decoded audio of a source reader, as 16 bit PCM at kPetSoundRate asked
@@ -38422,7 +38364,7 @@ bool PetReadMedia(IMFSourceReader* source,
             }
             buffer->Unlock();
         }
-        if (flags & kPetMfEnd) {
+        if (flags & (kPetMfError | kPetMfEnd)) {
             break;
         }
     }
@@ -38653,9 +38595,31 @@ struct PetAudio {
     bool audioAlive = false;
     bool loaderAlive = false;
     bool stop = false;
+    // A thread StopPetAudio didn't wait for (stuck): the last one to end
+    // lets new sounds play again (see PetAudioLateEndLocked).
+    bool abandoned = false;
     ULONGLONG failedAt = 0;
 };
 PetAudio g_petAudio;
+
+// (With the lock held, as a thread ends.) The last of the threads that
+// StopPetAudio left running ending: what they kept let go, and `stop` off,
+// so her sounds play again without Windhawk restarting.
+void PetAudioLateEndLocked() {
+    if (!g_petAudio.abandoned || g_petAudio.audioAlive ||
+        g_petAudio.loaderAlive) {
+        return;
+    }
+    g_petAudio.requests.clear();
+    g_petAudio.ready.clear();
+    g_petAudio.loads.clear();
+    g_petAudio.cache.clear();
+    g_petAudio.unreadable.clear();
+    g_petAudio.cacheBytes = 0;
+    g_petAudio.failedAt = 0;
+    g_petAudio.abandoned = false;
+    g_petAudio.stop = false;
+}
 // When each event was last queued (the same one twice in 120 ms is one:
 // two islands, or a game's burst).
 std::atomic<ULONGLONG> g_petSoundAt[kPetSounds];
@@ -38859,6 +38823,7 @@ DWORD WINAPI PetLoaderThreadProc(LPVOID) {
         AcquireSRWLockExclusive(&g_petAudio.lock);
         if (g_petAudio.stop || g_petAudio.loads.empty()) {
             g_petAudio.loaderAlive = false;
+            PetAudioLateEndLocked();
             ReleaseSRWLockExclusive(&g_petAudio.lock);
             break;
         }
@@ -39104,6 +39069,7 @@ DWORD WINAPI PetAudioThreadProc(LPVOID) {
         g_petAudio.cacheBytes = 0;
         g_petAudio.requests.clear();
         g_petAudio.ready.clear();
+        PetAudioLateEndLocked();
         ReleaseSRWLockExclusive(&g_petAudio.lock);
         return 0;
     }
@@ -39233,9 +39199,14 @@ void StopPetAudio() {
         }
     }
     // (One stuck in a slow read or a driver: left to end by itself, with
-    // `stop` set, and with everything it uses; no sound plays meanwhile.)
+    // `stop` set, and with everything it uses; no sound plays meanwhile, and
+    // the last one to end lets them play again.)
     if (running) {
         IslandLog(L"A sound thread of the pet didn't end in time: left to end");
+        AcquireSRWLockExclusive(&g_petAudio.lock);
+        g_petAudio.abandoned = true;
+        PetAudioLateEndLocked();
+        ReleaseSRWLockExclusive(&g_petAudio.lock);
         g_petSoundsOn = false;
         return;
     }
@@ -40017,10 +39988,13 @@ struct PetPaint {
     winrt::com_ptr<ID2D1RadialGradientBrush> core;
     winrt::com_ptr<ID2D1RadialGradientBrush> wash;
     winrt::com_ptr<ID2D1RadialGradientBrush> wave;
+    // (The reflex game's glow, see PetGames::DrawReflex.)
+    winrt::com_ptr<ID2D1RadialGradientBrush> reflex;
     uint64_t haloKey = 0;
     uint64_t coreKey = 0;
     uint64_t washKey = 0;
     uint64_t waveKey = 0;
+    uint64_t reflexKey = 0;
     winrt::com_ptr<ID2D1PathGeometry> rim;
     winrt::com_ptr<ID2D1PathGeometry> fanArc;
     winrt::com_ptr<ID2D1PathGeometry> wifiArc;
@@ -47162,12 +47136,14 @@ constexpr OnlineIconPack kOnlineIconPacks[] = {
      L"https://cdn.jsdelivr.net/npm/heroicons@2.2.0/24/outline/", L".svg",
      &IconInfo::heroicon, L"Tailwind Labs", L"MIT"},
     // Only the weather's (see kWeatherSetMeteocons): Meteocons' static "fill"
-    // icons in color, and Weather Icons' (SIL OFL 1.1) in one color.
+    // icons in color, and Weather Icons' (SIL OFL 1.1) in one color, at the
+    // commit of its 2.0.12 tag (a tag can be moved, a commit can't).
     {kWeatherSetMeteocons, L"meteocons-svg-static-0.1.0",
      L"https://cdn.jsdelivr.net/npm/@meteocons/svg-static@0.1.0/fill/",
      L".svg", &IconInfo::meteocon, L"Bas Milius", L"MIT"},
     {kWeatherSetIcons, L"weather-icons-2.0.12",
-     L"https://cdn.jsdelivr.net/gh/erikflowers/weather-icons@2.0.12/svg/",
+     L"https://cdn.jsdelivr.net/gh/erikflowers/weather-icons@"
+     L"c78b6af3853239d36e0dd7fa056d484b42ddd461/svg/",
      L".svg", &IconInfo::weathericon, L"Erik Flowers", L"SIL OFL 1.1"},
 };
 
@@ -48758,20 +48734,35 @@ void PetPackTell(int pack, PetPackState state, int done, int total) {
     TellIconsRead();
 }
 
+// Whether a downloaded file of a pack is the one reviewed: its SHA-256 is
+// the pack's for that event.
+bool PetPackFileChecked(int pack, int sound, const std::vector<BYTE>& data) {
+    UCHAR hash[32];
+    if (!BCRYPT_SUCCESS(BCryptHash(BCRYPT_SHA256_ALG_HANDLE, nullptr, 0,
+                                   (PUCHAR)data.data(), (ULONG)data.size(),
+                                   hash, sizeof(hash)))) {
+        return false;
+    }
+    char hex[65];
+    for (int i = 0; i < 32; i++) {
+        sprintf_s(hex + i * 2, 3, "%02x", hash[i]);
+    }
+    return memcmp(hex, kPetSoundPacks[pack].hashes + sound * 64, 64) == 0;
+}
+
 // The pack's files not on this computer yet, put in its folder one by one,
 // the count told as it goes; false if one couldn't be, a file the server
-// doesn't have too (a pack has all of them: the whole pack missing, a wrong
-// version, is a failure tried again later, never remembered as "none"). The
-// ones before are kept: the next time, only the rest.
+// doesn't have or that isn't the one reviewed too (a pack has all of them:
+// the whole pack missing, a wrong version, is a failure tried again later,
+// never remembered as "none"). The ones before are kept: the next time, only
+// the rest.
 bool DownloadPetSoundPack(int pack) {
     const std::wstring folder = PetSoundPackFolderMade(pack);
     std::vector<int> missing;
     for (int i = 0; i < kPetSounds && !folder.empty(); i++) {
-        const std::wstring base = folder + L"\\" + kPetSoundInfo[i].key;
-        // (A ".none" left by an earlier test build: gone.)
-        DeleteFile((base + L".none").c_str());
-        if (GetFileAttributes((base + L".wav").c_str()) ==
-            INVALID_FILE_ATTRIBUTES) {
+        const std::wstring path =
+            folder + L"\\" + kPetSoundInfo[i].key + L".wav";
+        if (GetFileAttributes(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
             missing.push_back(i);
         }
     }
@@ -48799,6 +48790,11 @@ bool DownloadPetSoundPack(int pack) {
                       kPetSoundPacks[pack].folder, key, answer);
         }
         PetPcm check;
+        if (ok && !PetPackFileChecked(pack, missing[n], data)) {
+            IslandLog(L"Sound pack %s: %s isn't the file reviewed",
+                      kPetSoundPacks[pack].folder, key);
+            ok = false;
+        }
         if (!ok || !PetDecodeWav(data.data(), data.size(), &check)) {
             PetPackTell(pack, PetPackState::Failed, n, total);
             return false;
@@ -55116,12 +55112,36 @@ bool StartKomorebiCommand(const std::wstring& line,
 // A command run by its schedule, or by its notice's "Try again" (3.2), tells
 // how it went with a notice on the island. Its job keeps this copy of the
 // command (the list may change meanwhile); `wanted` is false for a click's.
+// `terminal`: a failed command line's output was kept (see
+// CommandOutputFile), for the notice's "Open in terminal" (its job sets it).
 struct CommandReport {
     bool wanted = false;
     long long id = 0;
     std::wstring name;
     bool terminal = false;
 };
+
+// The file a scheduled command line's output is kept in if it fails (one for
+// each command: its next run replaces it). Empty if there's no storage.
+std::wstring CommandOutputFile(long long id) {
+    WCHAR storage[MAX_PATH];
+    if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage))) {
+        return {};
+    }
+    return std::wstring(storage) + L"\\kcmd" + std::to_wstring(id) + L".txt";
+}
+
+// A file with what a command printed, in a terminal that waits for a key; the
+// file is deleted there (here if the terminal can't start).
+bool ShowKeptOutput(const std::wstring& path) {
+    const std::wstring file = L"\"" + path + L"\"";
+    if (StartKomorebiCommand(L"type " + file + L" & del " + file + L" & pause",
+                             true, nullptr)) {
+        return true;
+    }
+    DeleteFile(path.c_str());
+    return false;
+}
 
 // A text's "%s" marks filled in order with `values` (the translations keep
 // their order), without a buffer's length limit.
@@ -55154,8 +55174,8 @@ long long CommandOfAction(const std::wstring& arguments, bool* terminal) {
 }
 
 // The notice of a run: "<name> ran" for a moment, or "<name> couldn't run"
-// that stays, with "Try again" and (for a command line) "Open in terminal",
-// which shows what it prints.
+// that stays, with "Try again" and (for a command line that printed and
+// failed) "Open in terminal", which shows what it printed.
 IslandToast CommandRunToast(const CommandReport& report, bool ok) {
     IslandToast toast;
     toast.glyph = ok ? 0xE73E : 0xE7BA;
@@ -55200,6 +55220,7 @@ void ReportCommandRun(const CommandReport& report, bool ok) {
 // output open, and a pipe closed on it could fail its writes), shown in a
 // terminal only if they fail (they're never run a second time: a reload
 // would stop komorebi again), and deleted, or at the next run if still open.
+// (A scheduled one's stays if it fails, see CommandOutputFile.)
 struct KomorebiJob {
     std::wstring commands;
     int button;
@@ -55236,7 +55257,10 @@ DWORD WINAPI KomorebiThreadProc(LPVOID parameter) {
             } while (FindNextFile(find, &data));
             FindClose(find);
         }
-        if (!GetTempFileName(folder, L"kmb", 0, output)) {
+        if (reported) {
+            wcsncpy_s(output, CommandOutputFile(job->report.id).c_str(),
+                      _TRUNCATE);
+        } else if (!GetTempFileName(folder, L"kmb", 0, output)) {
             output[0] = L'\0';
         }
     }
@@ -55260,19 +55284,16 @@ DWORD WINAPI KomorebiThreadProc(LPVOID parameter) {
     }
     const bool stopping = WaitForSingleObject(job->stop, 0) == WAIT_OBJECT_0;
     const bool failed = !started || !ended || exitCode != 0;
+    // (A scheduled one's output stays for its notice's "Open in terminal".)
+    const bool kept = !stopping && reported && ended && exitCode != 0;
     if (!stopping && !started && !reported) {
         // (Nothing ran: it runs once, on the screen, where it waits for a
         // key if it fails.)
         StartKomorebiCommand(job->commands + L" || pause", true, nullptr);
     } else if (!stopping && !reported && ended && exitCode != 0) {
         // What it printed, in a terminal on the screen (which deletes it).
-        const std::wstring file = L"\"" + std::wstring(output) + L"\"";
-        if (!StartKomorebiCommand(
-                L"type " + file + L" & del " + file + L" & pause", true,
-                nullptr)) {
-            DeleteFile(output);
-        }
-    } else if (output[0]) {
+        ShowKeptOutput(output);
+    } else if (output[0] && !kept) {
         // (One still running at the wait's end keeps its file open.)
         DeleteFile(output);
     }
@@ -55281,6 +55302,7 @@ DWORD WINAPI KomorebiThreadProc(LPVOID parameter) {
     }
     // (Still going when the wait ended: it started, which is all it can say.)
     if (!stopping && reported) {
+        job->report.terminal = kept;
         ReportCommandRun(job->report, started && (!ended || exitCode == 0));
     }
     CloseHandle(job->stop);
@@ -56640,9 +56662,12 @@ bool BarHasThreeParts(const std::vector<PillGroup>& order, bool corners) {
 }
 
 // The part each group is in: how many lines come before it in the order (the
-// third line and the others are inside the last part).
+// third line and the others are inside the last part). The clock kept in the
+// middle (`clockCentered`) is in the middle part, wherever the order has it
+// (it is laid out among that part's items).
 std::array<int, kPillGroups> BarPartOfGroups(
-    const std::vector<PillGroup>& order) {
+    const std::vector<PillGroup>& order,
+    bool clockCentered) {
     std::array<int, kPillGroups> parts{};
     int lines = 0;
     for (const PillGroup group : order) {
@@ -56651,6 +56676,9 @@ std::array<int, kPillGroups> BarPartOfGroups(
         } else {
             parts[(int)group] = std::min(lines, kBarParts - 1);
         }
+    }
+    if (clockCentered) {
+        parts[(int)PillGroup::Clock] = 1;
     }
     return parts;
 }
@@ -65918,6 +65946,16 @@ std::wstring NetRateText(const std::vector<float>& history, bool peak) {
     return FormatRate(rate) + L"B/s";
 }
 
+// Defined further down.
+bool UsesFahrenheit();
+std::wstring Degrees(double celsius);
+
+// A temperature in tenths of a degree Celsius, as the weather shows it:
+// "41°C", or in °F.
+std::wstring TemperatureText(int tenths) {
+    return Degrees(tenths / 10.0) + (UsesFahrenheit() ? L"F" : L"C");
+}
+
 std::vector<UsagePanel::Tile> UsagePanel::Tiles() const {
     const UsageDetails& u = m_usage;
     auto percent = [](int value) {
@@ -65939,9 +65977,8 @@ std::vector<UsagePanel::Tile> UsagePanel::Tiles() const {
             };
             // (Only when Windows reports one and its item is on.)
             if (u.cpuTemperature >= 0) {
-                WCHAR text[16];
-                swprintf_s(text, L"%.0f °C", u.cpuTemperature / 10.0);
-                tiles.push_back({Tr(L"Temperature", L"Temperatura"), text});
+                tiles.push_back({Tr(L"Temperature", L"Temperatura"),
+                                 TemperatureText(u.cpuTemperature)});
             }
             return tiles;
         }
@@ -65966,9 +66003,8 @@ std::vector<UsagePanel::Tile> UsagePanel::Tiles() const {
                                       : std::wstring())},
             };
             if (u.gpuTemperature >= 0) {
-                WCHAR text[16];
-                swprintf_s(text, L"%.0f °C", u.gpuTemperature / 10.0);
-                tiles.push_back({Tr(L"Temperature", L"Temperatura"), text});
+                tiles.push_back({Tr(L"Temperature", L"Temperatura"),
+                                 TemperatureText(u.gpuTemperature)});
             }
             if (u.gpuPower > 0) {
                 WCHAR text[16];
@@ -68897,8 +68933,7 @@ bool RunUserCommand(const UserCommand& command, bool report = false) {
         return false;
     }
     const CommandReport told =
-        report ? CommandReport{true, command.id, command.name,
-                               command.terminal}
+        report ? CommandReport{true, command.id, command.name}
                : CommandReport{};
     if (command.terminal) {
         HANDLE thread = nullptr;
@@ -68925,50 +68960,47 @@ bool RunUserCommand(const UserCommand& command, bool report = false) {
 // it couldn't start): a scheduled command's, or its notice's "Try again".
 void RunReportedCommand(const UserCommand& command) {
     if (!RunUserCommand(command, true)) {
-        ReportCommandRun(
-            {true, command.id, command.name, command.terminal}, false);
+        ReportCommandRun({true, command.id, command.name}, false);
     }
 }
 
-// A command line shown in a terminal that waits for a key at its end, so what
-// it prints can be read (a notice's "Open in terminal"): it runs again there.
+// What a failed run printed (kept by its job, see KomorebiThreadProc), shown
+// in a terminal that waits for a key (a notice's "Open in terminal"): the
+// command isn't run again.
 DWORD WINAPI CommandTerminalThreadProc(LPVOID parameter) {
-    std::unique_ptr<std::wstring> line((std::wstring*)parameter);
-    // (Not in parentheses: a ")" in the line would end the group early.)
-    StartKomorebiCommand(*line + L" & pause", true, nullptr);
+    std::unique_ptr<std::wstring> file((std::wstring*)parameter);
+    ShowKeptOutput(*file);
     return 0;
 }
 
 // On a thread of its own (the environment it starts with takes a moment),
 // waited for as the island goes (see StopUserCommands).
-bool OpenCommandInTerminal(const UserCommand& command) {
-    if (!command.terminal || command.target.empty()) {
-        return false;
-    }
-    auto* line = new std::wstring(command.target);
+bool OpenCommandOutput(long long id) {
+    auto* file = new std::wstring(CommandOutputFile(id));
     HANDLE thread =
-        CreateThread(nullptr, 0, CommandTerminalThreadProc, line, 0, nullptr);
+        file->empty() ? nullptr
+                      : CreateThread(nullptr, 0, CommandTerminalThreadProc,
+                                     file, 0, nullptr);
     if (!thread) {
-        delete line;
+        delete file;
         return false;
     }
     g_commandThreads.push_back(thread);
     return true;
 }
 
-// A run notice's button pressed (the island's thread): the command again, or
-// its command line in a terminal. Nothing if it's gone from the list.
+// A run notice's button pressed (the island's thread): the command again
+// (nothing if it's gone from the list), or what it printed in a terminal.
 void RunCommandFromNotice(long long id, bool terminal) {
-    for (const auto& command : Commands()) {
-        if (command.id != id) {
-            continue;
-        }
-        if (terminal) {
-            OpenCommandInTerminal(command);
-        } else {
-            RunReportedCommand(command);
-        }
+    if (terminal) {
+        OpenCommandOutput(id);
         return;
+    }
+    for (const auto& command : Commands()) {
+        if (command.id == id) {
+            RunReportedCommand(command);
+            return;
+        }
     }
 }
 
@@ -68987,6 +69019,19 @@ void StopUserCommands() {
     }
     g_commandJobs.clear();
     g_commandsRead = false;
+    // (What failed runs printed goes with their notices.)
+    const std::wstring kept = CommandOutputFile(0);
+    const std::wstring base = kept.substr(0, kept.rfind(L'\\') + 1);
+    WIN32_FIND_DATA data;
+    const HANDLE find =
+        base.empty() ? INVALID_HANDLE_VALUE
+                     : FindFirstFile((base + L"kcmd*.txt").c_str(), &data);
+    if (find != INVALID_HANDLE_VALUE) {
+        do {
+            DeleteFile((base + data.cFileName).c_str());
+        } while (FindNextFile(find, &data));
+        FindClose(find);
+    }
 }
 
 // A program or a file chosen for a command (on a thread of its own: the
@@ -82729,6 +82774,7 @@ DWORD WINAPI DesktopsThreadProc(LPVOID parameter) {
     if (SUCCEEDED(com)) {
         CoUninitialize();
     }
+    CloseHandle(job->stop);
     return 0;
 }
 
@@ -85165,8 +85211,10 @@ bool ShowShareWindow(std::vector<winrt::Windows::Storage::IStorageItem> items,
         // (Nearly see-through: it only has to exist, shown.)
         SetLayeredWindowAttributes(g_share.window, 0, 1, LWA_ALPHA);
     }
+    // (Never activated: the focus stays where it was, also once the share
+    // window closes.)
     SetWindowPos(g_share.window, HWND_TOPMOST, anchor.x, anchor.y, 1, 1,
-                 SWP_SHOWWINDOW);
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
     try {
         auto interop = winrt::get_activation_factory<
             DataTransferManager, IDataTransferManagerInteropLocal>();
@@ -92528,20 +92576,25 @@ class PetGames {
         const float pw = std::min(m_w - 60, 360.0f), ph = 64;
         const float x = (m_w - pw) / 2, y = m_h / 2 - ph / 2 + 10;
         if (m_lit) {
+            // (Kept in her paint for this target: made again only when the
+            // color or the reach changes, see PetPaint.)
             const float reach = pw * 0.7f;
+            uint64_t key = 0;
+            const D2D1_COLOR_F color =
+                PetAlpha(PetStepped(m_color, &key), 0.35f);
+            key |= (uint64_t)std::lround(reach) << 20;
             const D2D1_GRADIENT_STOP stops[] = {
-                {0, {m_color.r, m_color.g, m_color.b, 0.35f}},
-                {10 / reach, {m_color.r, m_color.g, m_color.b, 0.35f}},
-                {1, {m_color.r, m_color.g, m_color.b, 0}}};
-            winrt::com_ptr<ID2D1GradientStopCollection> collection;
-            winrt::com_ptr<ID2D1RadialGradientBrush> glow;
-            if (SUCCEEDED(ink.target->CreateGradientStopCollection(
-                    stops, ARRAYSIZE(stops), collection.put())) &&
-                SUCCEEDED(ink.target->CreateRadialGradientBrush(
-                    D2D1::RadialGradientBrushProperties(
-                        {m_w / 2, y + ph / 2}, {0, 0}, reach, reach),
-                    collection.get(), glow.put()))) {
-                ink.target->FillRectangle({0, 0, m_w, m_h}, glow.get());
+                {0, color}, {10 / reach, color}, {1, PetAlpha(color, 0)}};
+            PetPaint* paint = PetPaintFor(ink.target);
+            ID2D1RadialGradientBrush* glow =
+                paint ? PetGradient(*paint, paint->reflex, paint->reflexKey,
+                                    key, stops, 3)
+                      : nullptr;
+            if (glow) {
+                glow->SetCenter({m_w / 2, y + ph / 2});
+                glow->SetRadiusX(reach);
+                glow->SetRadiusY(reach);
+                ink.target->FillRectangle({0, 0, m_w, m_h}, glow);
             }
         }
         const D2D1_RECT_F pill{x, y, x + pw, y + ph};
@@ -94237,6 +94290,8 @@ class Island final : public DropTarget::Receiver {
     void OnPlacesChanged();
     // The app in front changed (its place may be another).
     void OnForegroundChanged();
+    // A click away from the banner closes it (see WatchBannerClicks).
+    void CheckBannerClick(bool foreground = false);
     // The app whose place and icons the pill takes now (see islandApps'
     // places per app; none: the general ones).
     void SetPlaceApp(const std::wstring& appId);
@@ -94738,6 +94793,10 @@ class Island final : public DropTarget::Receiver {
     // UpdateCareWatch), the session's lock told to the main island's window.
     PetPanel m_petPanel;
     POINT m_petStrokeAt{};
+    // Where the mouse was at her last step, and whether it had moved since
+    // with her eyes following it (her timer quicker, see UpdatePetTimer).
+    POINT m_petCursorSeen{};
+    bool m_petFollowing = false;
     bool m_sessionWatched = false;
     void UpdateCareWatch();
     void StopCareWatch();
@@ -94773,7 +94832,6 @@ class Island final : public DropTarget::Receiver {
     // (islandBannerClickOutside): the mouse buttons held as it was last
     // looked at, and when it came.
     void WatchBannerClicks();
-    void CheckBannerClick();
     bool BannerClickIsOutside(POINT cursor) const;
     int m_bannerButtons = 0;
     double m_bannerClickSince = 0;
@@ -112037,6 +112095,11 @@ bool ControlPanel::OnMouseUp(POINT pt) {
         case Part::SettingToggle: {
             const IslandPref pref = (IslandPref)hit.index;
             SetIslandPref(pref, GetIslandPref(pref) ? 0 : 1);
+            // (Her sounds turned on here, by a click: one played. Not when a
+            // profile, a backup or an undo turns them on.)
+            if (pref == IslandPref::PetSounds && GetIslandPref(pref)) {
+                PetPreviewSound(PetSound::Notify);
+            }
             // ("All reactions" shows or hides each one's switch.)
             if (pref == IslandPref::PetReactAll) {
                 Layout();
@@ -112894,7 +112957,8 @@ bool ControlPanel::OnKey(WPARAM key) {
     // In the window: Up and Down go through the tabs (nothing searched),
     // Page Up and Page Down scroll; on the setup assistant, Enter is its
     // next step and Escape its Cancel.
-    if (m_windowed && m_view == View::Settings && !m_profileTyping) {
+    if (m_windowed && m_view == View::Settings && !m_profileTyping &&
+        !m_petNameTyping) {
         if ((key == VK_RETURN || key == VK_ESCAPE) &&
             m_settingsTab == kTabSetup && m_search.empty()) {
             PressSetupButton(key == VK_RETURN ? kSetupNext : kSetupCancel);
@@ -113936,6 +114000,11 @@ ToastReply ParseToastReply(const std::wstring& appId,
                                   XmlAttribute(tag, "activationType")};
         if (action.activationType.empty()) {
             action.activationType = L"foreground";
+        }
+        // (The island's own types, for its own notices: never an app's.)
+        if (action.activationType == L"island" ||
+            action.activationType == L"windows") {
+            continue;
         }
         if (action.activationType == L"system") {
             // Windows' own: "Snooze" (the island shows it again a few minutes
@@ -120961,9 +121030,6 @@ void SetIslandPref(IslandPref pref, int value) {
             break;
         case IslandPref::PetSounds:
             g_settings.islandPetSounds = on;
-            if (on) {
-                PetPreviewSound(PetSound::Notify);
-            }
             break;
         case IslandPref::PetGlow:
             g_settings.islandPetGlow = on;
@@ -124527,7 +124593,8 @@ void CheckAutoProfile() {
 }
 
 // The app in front, for its own place. The island's own windows (and the
-// taskbar) don't count.
+// taskbar) don't count. (Also a quick tap away from a banner, see
+// Island::CheckBannerClick.)
 void CALLBACK IslandForegroundProc(HWINEVENTHOOK,
                                    DWORD,
                                    HWND,
@@ -124536,7 +124603,10 @@ void CALLBACK IslandForegroundProc(HWINEVENTHOOK,
                                    DWORD,
                                    DWORD) {
     if (g_island) {
-        ForEachIsland([](Island& island) { island.OnForegroundChanged(); });
+        ForEachIsland([](Island& island) {
+            island.OnForegroundChanged();
+            island.CheckBannerClick(true);
+        });
         if (Island* main = MainIsland(); main && main->Window()) {
             SetTimer(main->Window(), kAutoProfileTimerId, kAutoProfileWaitMs,
                      nullptr);
@@ -127357,7 +127427,8 @@ void Island::UpdatePetTimer() {
         : PetMoodPaced(now) || PetAsking(now) || PetsMoving(now)
             ? kPetFrameMs
         : m_petMood == PetMood::Sleep ? kPetSleepMs
-                                      : kPetPollMs;
+        : m_petFollowing              ? kPetPollMs
+                                      : kPetIdleMs;
     if (ms == m_petTimerMs) {
         return;
     }
@@ -127534,6 +127605,9 @@ void Island::StepPets(double now) {
     const bool asking = PetAsking(now);
     POINT cursor{};
     const bool follow = g_settings.islandPetFollow && GetCursorPos(&cursor);
+    m_petFollowing = follow && (cursor.x != m_petCursorSeen.x ||
+                                cursor.y != m_petCursorSeen.y);
+    m_petCursorSeen = cursor;
     const int level = AnimationLevel();
     const int personality = g_settings.islandPetPersonality;
     const bool dance = g_settings.islandPetDance;
@@ -132836,7 +132910,7 @@ void Island::Layout() {
             // it in a side).
             if (centered && m_bar &&
                 BarHasThreeParts(order, g_settings.islandBarCorners)) {
-                const auto parts = BarPartOfGroups(order);
+                const auto parts = BarPartOfGroups(order, centered);
                 size_t sides = 0;
                 size_t middle = 0;
                 for (const auto& span : others) {
@@ -133113,8 +133187,8 @@ void Island::Layout() {
         // Three parts: each in its place (more than fits: the whole Bar
         // slides as one, below).
         if (threeParts && m_pillOverflow <= 0) {
-            PlaceBarParts(m_slots, realSlots, BarPartOfGroups(order), width,
-                          padding);
+            PlaceBarParts(m_slots, realSlots,
+                          BarPartOfGroups(order, centered), width, padding);
         }
         for (auto& slot : m_slots) {
             if (m_pillOverflow > 0 || threeParts) {
@@ -134730,10 +134804,12 @@ void Island::ShowToasts(std::vector<IslandToast> toasts) {
         return;
     }
     // The one on the pill gives way to a call, an alarm or a reminder, and
-    // shows again after it (with what was being typed).
+    // shows again after it (with what was being typed). Not a live
+    // activity's card: it's the mouse resting on the pill, not a
+    // notification (it opens again so, with what's live then).
     IslandToast interrupted;
     bool interrupting = false;
-    if (!urgent.empty() && m_bannerWanted) {
+    if (!urgent.empty() && m_bannerWanted && !m_banner.card) {
         interrupted = m_banner;
         if (m_bannerTyping) {
             interrupted.draft = m_bannerReplyText;
@@ -134994,7 +135070,9 @@ void Island::HideBanner() {
 
 // A banner closing on a click outside it (islandBannerClickOutside), only
 // while one shows that goes by itself: the mouse buttons are looked at on a
-// short timer (no hook), for one pressed away from the banner and the pill.
+// short timer (no hook), for one pressed away from the banner and the pill,
+// and so is the window coming to the front (a touchpad's quick tap can end
+// between two looks; see IslandForegroundProc).
 void Island::WatchBannerClicks() {
     if (!g_settings.islandBannerClickOutside) {
         KillTimer(m_hwnd, kBannerClickTimerId);
@@ -135014,9 +135092,10 @@ bool Island::BannerClickIsOutside(POINT cursor) const {
            !PointInRect(cursor, m_pill) && !AnyPanelOpen();
 }
 
-void Island::CheckBannerClick() {
+void Island::CheckBannerClick(bool foreground) {
     if (!g_settings.islandBannerClickOutside || !m_bannerWanted ||
-        m_bannerTyping || m_banner.sticky || m_banner.urgent) {
+        m_bannerTyping || m_banner.sticky || m_banner.urgent ||
+        m_banner.card) {
         KillTimer(m_hwnd, kBannerClickTimerId);
         return;
     }
@@ -135025,10 +135104,17 @@ void Island::CheckBannerClick() {
     const int buttons = MouseButtonsHeld();
     const int pressed = buttons & ~m_bannerButtons;
     m_bannerButtons = buttons;
+    // Another app's window come to the front under the mouse counts as a
+    // click (not the island's own windows, all on its thread, nor an app
+    // switched to with the keyboard away from the mouse).
+    const HWND front = foreground ? GetForegroundWindow() : nullptr;
+    const bool tapped =
+        front && GetWindowThreadProcessId(front, nullptr) != g_islandThreadId;
     POINT cursor;
-    if (pressed &&
+    if ((pressed || tapped) &&
         NowSeconds() - m_bannerClickSince >= kBannerClickGraceSeconds &&
-        GetCursorPos(&cursor) && BannerClickIsOutside(cursor)) {
+        GetCursorPos(&cursor) && BannerClickIsOutside(cursor) &&
+        (pressed || GetAncestor(WindowFromPoint(cursor), GA_ROOT) == front)) {
         HideBanner();
     }
 }
@@ -138008,11 +138094,21 @@ void Island::UpdateDesktopsWatch() {
     AcquireSRWLockExclusive(&g_desktopsLock);
     g_desktops = {};
     ReleaseSRWLockExclusive(&g_desktopsLock);
-    auto* job = new DesktopsJob{m_hwnd, m_desktopsStop};
-    m_desktopsThread =
-        CreateThread(nullptr, 0, DesktopsThreadProc, job, 0, nullptr);
+    // (The thread gets its own handle of the stop event, so it stays valid
+    // if the island gives up waiting for it, see StopDesktopsWatch.)
+    HANDLE stop = nullptr;
+    if (DuplicateHandle(GetCurrentProcess(), m_desktopsStop,
+                        GetCurrentProcess(), &stop, 0, FALSE,
+                        DUPLICATE_SAME_ACCESS)) {
+        auto* job = new DesktopsJob{m_hwnd, stop};
+        m_desktopsThread =
+            CreateThread(nullptr, 0, DesktopsThreadProc, job, 0, nullptr);
+        if (!m_desktopsThread) {
+            delete job;
+            CloseHandle(stop);
+        }
+    }
     if (!m_desktopsThread) {
-        delete job;
         CloseHandle(m_desktopsStop);
         m_desktopsStop = nullptr;
     }
@@ -138069,7 +138165,9 @@ void Island::StopWorldClocksWatch() {
 void Island::StopDesktopsWatch() {
     if (m_desktopsThread) {
         SetEvent(m_desktopsStop);
-        WaitForSingleObject(m_desktopsThread, INFINITE);
+        // (A while: its reading asks Explorer, which may not answer. Left to
+        // end by itself then, with its job.)
+        WaitForSingleObject(m_desktopsThread, 5000);
         CloseHandle(m_desktopsThread);
         m_desktopsThread = nullptr;
     }
@@ -142527,38 +142625,41 @@ void Island::CheckAlarms() {
 
 // The last minute the commands' schedules were looked at (like
 // g_alarmsMinute's key), kept while the island restarts: a minute again (the
-// clock going back, or a settings reload) doesn't run anything twice.
+// clock going back, or a settings reload) doesn't run anything twice. -1
+// before the first look, which counts its own minute unless a command ran in
+// it before a restart (stored as commandsMinute).
 long long g_commandsMinute = -1;
 // The same minute in UTC (-1 none): the clock jumping forward in one real
 // minute (summer time) is told from a gap (see CommandMinutesDue).
 long long g_commandsUtcMinute = -1;
 
 // The local minutes (CheckScheduledCommands' keys) whose commands run now:
-// the next one; after the clock jumped forward in a single real minute
-// (summer time: 01:59 to 03:00), every minute it skipped too. Nothing
-// after a longer gap (the PC asleep): a command never runs late.
+// this one; after the clock jumped forward in a single real minute by the
+// zone's summer time step (01:59 to 03:00), every minute it skipped too. Not
+// the ones after a longer gap (the PC asleep, the time zone moved): a command
+// never runs late (the minute it's in isn't).
 std::vector<long long> CommandMinutesDue(long long last,
                                          long long now,
                                          long long lastUtc,
                                          long long nowUtc) {
+    TIME_ZONE_INFORMATION zone;
+    const bool summer =
+        now > last + 1 && nowUtc - lastUtc == 1 &&
+        GetTimeZoneInformation(&zone) == TIME_ZONE_ID_DAYLIGHT &&
+        now - last - 1 == zone.StandardBias - zone.DaylightBias;
     std::vector<long long> due;
-    if (now == last + 1) {
-        due.push_back(now);
-    } else if (now > last + 1 && now - last <= 120 && lastUtc >= 0 &&
-               nowUtc - lastUtc == 1) {
-        for (long long minute = last + 1; minute <= now; minute++) {
-            due.push_back(minute);
-        }
+    for (long long minute = summer ? last + 1 : now; minute <= now; minute++) {
+        due.push_back(minute);
     }
     return due;
 }
 
 // Once a minute (the main island only, and only if some command has a
 // schedule): the commands due now run, as a click would, then a notice tells
-// how it went. Only the minute right after the last look counts: the first
-// look, a sleep, a clock set forward or a schedule just given run nothing late
-// (what was missed isn't made up). Also not unless some island has the
-// commands on, as their keys.
+// how it went. Only the minute it is in counts (also the first one, as the
+// island starts, and after a sleep or a clock set forward): what was missed
+// isn't made up, but summer time's skipped minutes. Also not unless some
+// island has the commands on, as their keys.
 void Island::CheckScheduledCommands() {
     if (!m_main || m_notchBase) {
         return;
@@ -142581,7 +142682,12 @@ void Island::CheckScheduledCommands() {
     const long long utcKey =
         (long long)DayNumber(utc.wYear, utc.wMonth, utc.wDay) * kDay +
         utc.wHour * 60 + utc.wMinute;
-    const long long last = g_commandsMinute;
+    // (The first look: the minute before this one, or this one if a command
+    // ran in it before a restart.)
+    const long long last =
+        g_commandsMinute >= 0 ? g_commandsMinute
+        : Wh_GetIntValue(L"commandsMinute", 0) == minuteKey ? minuteKey
+                                                            : minuteKey - 1;
     const long long lastUtc = g_commandsUtcMinute;
     g_commandsUtcMinute = utcKey;
     if (minuteKey <= last) {
@@ -142593,18 +142699,18 @@ void Island::CheckScheduledCommands() {
         return;
     }
     g_commandsMinute = minuteKey;
-    const std::vector<long long> due =
-        CommandMinutesDue(last, minuteKey, lastUtc, utcKey);
-    if (due.empty() ||
-        !AnyIslandLook([](Island&) { return g_settings.islandCommands; })) {
+    if (!AnyIslandLook([](Island&) { return g_settings.islandCommands; })) {
         return;
     }
-    for (long long key : due) {
+    for (long long key :
+         CommandMinutesDue(last, minuteKey, lastUtc, utcKey)) {
         const int minute = (int)(key % kDay);
         const long long daysBack = minuteKey / kDay - key / kDay;
         const int weekday = (int)(((now.wDayOfWeek - daysBack) % 7 + 7) % 7);
         for (const auto& command : commands) {
             if (CommandDueAt(command, minute, weekday)) {
+                // (Noted: a restart in this minute doesn't run it again.)
+                Wh_SetIntValue(L"commandsMinute", (int)minuteKey);
                 RunReportedCommand(command);
             }
         }
@@ -145452,7 +145558,7 @@ bool Island::GroupDropAt(POINT screen, int group, GroupDrag* drop) const {
         const std::vector<PillGroup>& order =
             place ? PlaceOrder(*place) : g_pillOrder;
         if (BarHasThreeParts(order, g_settings.islandBarCorners)) {
-            const auto parts = BarPartOfGroups(order);
+            const auto parts = BarPartOfGroups(order, PlaceClockCenter(place));
             if (parts[spans[next - 1].group] != parts[spans[next].group]) {
                 const bool later =
                     along > (spans[next - 1].to + spans[next].from) / 2;
