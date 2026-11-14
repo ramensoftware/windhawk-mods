@@ -1127,10 +1127,12 @@ static int g_statusTick = 0;
 static bool g_light = false;       // tema da barra
 static bool g_panelLight = false;  // tema dos menus e painéis
 
-// Enquanto desenha um menu ou painel, as cores seguem o tema dos painéis.
+// Enquanto desenha um menu ou painel, as cores seguem o tema dos painéis (e o
+// fundo da barra: claro, escuro, OLED ou o vidro líquido personalizado).
+static bool PanelLightNow();
 struct PanelThemeScope {
     bool saved;
-    PanelThemeScope() : saved(g_light) { g_light = g_panelLight; }
+    PanelThemeScope() : saved(g_light) { g_light = PanelLightNow(); }
     ~PanelThemeScope() { g_light = saved; }
 };
 static bool g_rebuildScheduled = false;
@@ -1381,7 +1383,6 @@ static void ResolveTheme() {
     else if (g_settings.panelTheme == 2) g_panelLight = true;
     else g_panelLight = ReadPersonalizeDword(L"AppsUseLightTheme", 1) != 0;
     // Vidro líquido personalizado: o texto segue a cor escolhida (escuro numa cor clara).
-    if (g_glass.tinted) g_panelLight = TintIsLight();
     if (g_settings.barStyle == 3) g_light = TintIsLight();
 }
 
@@ -1433,6 +1434,36 @@ static int BarStyleOf(const Bar* b) {
     return v >= 0 ? v : g_settings.barStyle;
 }
 static bool AnyBarStyle(int st);  // alguma barra com este fundo (mais abaixo, depois de g_bars)
+
+// O tema dos menus, da Central e dos painéis segue o fundo da barra de onde
+// foram abertos (com "Personalizar por monitor", a última barra clicada):
+// vidro (e "Cor da janela") = vidro fosco; transparente e líquido = vidro
+// líquido; personalizado = o tingido; claro, escuro e OLED = sólidos.
+// A pílula de aviso pode trocar por um estilo próprio (g_panelThemeOverride).
+static const Bar* g_panelBar = nullptr;
+static int g_panelThemeOverride = -1;
+static int PanelTheme() {
+    if (g_panelThemeOverride >= 0) return g_panelThemeOverride;
+    if (g_settings.barPerMon && g_panelBar)
+        for (Bar* b : g_bars)
+            if (b == g_panelBar) return BarStyleOf(b);
+    return g_settings.barStyle;
+}
+static bool GlassLiquid() {
+    int t = PanelTheme();
+    return t == 1 || t == 2 || t == 3;
+}
+static bool GlassTinted() { return PanelTheme() == 3; }
+static int PanelSolid() {
+    int t = PanelTheme();
+    return t >= 5 ? t : 0;
+}
+static bool PanelLightNow() {
+    int sol = PanelSolid();
+    if (sol) return sol == 5;
+    if (GlassTinted()) return TintIsLight();
+    return g_panelLight;
+}
 // Claro ou escuro na barra deste monitor (o texto escuro vai num fundo claro).
 static bool BarLight(const Bar* b) {
     if (b->peekColorOn) {
@@ -6120,7 +6151,7 @@ static bool LqCapture(LiquidSurface& l, RECT rc, bool hideBars = true, const REC
 // Foto para um painel que vai aparecer em `pos` (W×H). Sem o modo ao vivo a
 // foto desce até o fim do monitor, porque os menus podem crescer para baixo.
 static LiquidSurface* LqCreate(POINT pos, int W, int H, bool force = false) {
-    if (!g_glass.liquid && !force) return nullptr;
+    if (!GlassLiquid() && !force) return nullptr;
     LiquidSurface* l = new LiquidSurface();
     l->live = g_glass.live;
     RECT rc = {pos.x, pos.y, pos.x + W, pos.y + H};
@@ -6410,13 +6441,34 @@ static void DrawLiquidGlass(ID2D1RenderTarget* rt, ID2D1SolidColorBrush* br, con
         SafeRelease(inner);
     }
 
+    // Temas sólidos (claro, escuro, OLED): o painel é uma cor só, com uma borda
+    // fina; botões e blocos dentro dele ficam um tom acima.
+    if (int sol = PanelSolid(); sol && !solidWhite) {
+        D2D1_COLOR_F c = sol == 5 ? (small ? D2D1::ColorF(1, 1, 1, 1) : D2D1::ColorF(0.95f, 0.95f, 0.96f, 0.99f))
+                       : sol == 6 ? (small ? D2D1::ColorF(0.21f, 0.21f, 0.22f, 1) : D2D1::ColorF(0.12f, 0.12f, 0.13f, 0.99f))
+                                  : (small ? D2D1::ColorF(0.11f, 0.11f, 0.12f, 1) : D2D1::ColorF(0, 0, 0, 1));
+        c.a *= tint >= 1.0f ? 1.0f : std::max(0.0f, tint);
+        br->SetColor(c);
+        rt->FillRoundedRectangle(rr, br);
+        if (hovered) {
+            br->SetColor(sol == 5 ? D2D1::ColorF(0, 0, 0, 0.05f) : D2D1::ColorF(1, 1, 1, 0.07f));
+            rt->FillRoundedRectangle(rr, br);
+        }
+        br->SetColor(sol == 5 ? D2D1::ColorF(0, 0, 0, 0.09f) : D2D1::ColorF(1, 1, 1, sol == 7 ? 0.12f : 0.08f));
+        float bw = std::max(1.0f, s), half = bw / 2;
+        rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half),
+                                                   std::max(0.0f, radius - half), std::max(0.0f, radius - half)),
+                                 br, bw);
+        return;
+    }
+
     // 1b. Vidro líquido: o fundo refratado por baixo da tinta.
     if (g_lqCur && !solidWhite && LqDraw(rt, *g_lqCur, r, radius, s)) glassOk = true;
 
     // Vidro líquido personalizado (Siri Plus Launchpad): a cor escolhida no
     // topo, sumindo em vidro limpo; a luz se junta numa linha fina na borda de
     // baixo, que sobe pelos cantos e some, e o topo fica só com uma borda fraca.
-    if (g_glass.tinted && !solidWhite) {
+    if (GlassTinted() && !solidWhite) {
         float top = g_settings.tintLevel / 100.0f;
         // Transparente ↔ tingido: 100 % transparente = limpo embaixo; 80 % = um véu leve.
         float bottom = std::min(top, (100 - g_glass.transparency) / 100.0f * 0.8f);
@@ -12690,10 +12742,8 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_OSD, L"Indicador de volume e brilho", 0, 0, L"Logo abaixo do ícone na barra"},
     {BR_SWITCH, BV_DIM, L"Escurecer a tela com a Central de Controle", 0, 0},
     {BR_CHOICE, BV_CCCLOSE, L"Ao fechar a Central", 0, 0, L"Cascata: cada linha volta para dentro da linha de cima, de baixo para cima"},
-    {BR_HEADER, BV_NONE, L"Vidro", 0xE790, 0x5AC8FA, L"Um vidro para tudo: Central, menus, painéis e pílulas"},
-    {BR_CHOICE, BV_G_STYLE, L"Estilo do vidro", 0, 0, L"Vidro líquido personalizado: a sua cor no topo, sumindo em vidro limpo embaixo"},
+    {BR_HEADER, BV_NONE, L"Vidro", 0xE790, 0x5AC8FA, L"Menus, Central, painéis e pílulas seguem o Fundo da barra; aqui, os ajustes do vidro"},
     {BR_SLIDER, BV_G_TINT, L"Transparente ↔ tingido", 0, 0, L"À esquerda o vidro limpo; à direita, mais cor"},
-    {BR_SWITCH, BV_G_LIQUID, L"Vidro líquido (experimental)", 0, 0, L"Refração nas bordas, como o Liquid Glass"},
     {BR_SLIDER, BV_G_REFRACT, L"Refração nas bordas", 0, 0},
     {BR_SLIDER, BV_G_BLUR, L"Desfoque do fundo", 0, 0},
     {BR_SWITCH, BV_G_LIVE, L"Acompanhar o fundo ao vivo", 0, 0, L"Vídeos e papéis de parede animados continuam aparecendo atrás do vidro"},
@@ -13013,7 +13063,7 @@ static void BsLoadLook() {
         g_bsStyle = st;
         g_bsTransp = std::clamp(tr, 0, 100);
     } else {
-        g_bsStyle = (g_glass.liquid || g_settings.barStyle == 2 || g_settings.barStyle == 3) ? 1 : 0;
+        g_bsStyle = (GlassLiquid() || g_settings.barStyle == 2 || g_settings.barStyle == 3) ? 1 : 0;
         g_bsTransp = g_glass.transparency;
     }
 }
@@ -14419,7 +14469,10 @@ static bool BsRowDisabled(int rowIdx) {
     if (d.kind == BR_HEADER) return false;
     // Cor, força e alcance só valem com o Vidro líquido personalizado nos painéis ou na barra.
     if (d.val == BV_TCOLOR || d.val == BV_TLEVEL || d.val == BV_TREACH)
-        return !g_glass.tinted && g_settings.barStyle != 3;
+        return !GlassTinted() && !AnyBarStyle(3);
+    // O tema vem do Fundo da barra: refração e desfoque só no líquido; nos sólidos, nada do vidro.
+    if (d.val == BV_G_REFRACT || d.val == BV_G_BLUR || d.val == BV_G_LIVE) return !GlassLiquid();
+    if (d.val == BV_G_TINT) return PanelSolid() != 0;
     // Com a barra no Vidro líquido personalizado, o texto segue a cor do vidro.
     if (d.val == BV_TEXTCOLOR) return g_settings.barStyle == 3;
     if (d.val >= BV_MONTEXT0 && d.val < BV_MONEND) return BsGet(d.val - 8) == 3;  // o fundo dele é o personalizado
@@ -18401,7 +18454,10 @@ static bool IslSolid() { return IslStyle() >= 5; }
 // de vidro dos menus): vidro = desfoque sem refração.
 struct IslGlassScope {
     GlassPrefs saved;
-    IslGlassScope() : saved(g_glass) {
+    int savedOverride;
+    IslGlassScope() : saved(g_glass), savedOverride(g_panelThemeOverride) {
+        static const int kTheme[] = {0, 2, 2, 2, 3, 5, 6, 7};  // estilo da pílula → tema dos painéis
+        g_panelThemeOverride = kTheme[std::clamp(IslStyle(), 0, 7)];
         switch (IslStyle()) {
             case 1:
                 g_glass.liquid = true;
@@ -18424,7 +18480,10 @@ struct IslGlassScope {
                 break;
         }
     }
-    ~IslGlassScope() { g_glass = saved; }
+    ~IslGlassScope() {
+        g_glass = saved;
+        g_panelThemeOverride = savedOverride;
+    }
 };
 
 static void IslandRender() {
@@ -20603,7 +20662,7 @@ static bool NtfCanReply(const IslandNote& n) { return n.reply.canReply && n.repl
 
 // Os cartões ficam soltos, cada um com o vidro da Central, quando o vidro
 // líquido está ligado; sem ele, o painel único de antes.
-static bool NtfFloating() { return g_glass.liquid; }
+static bool NtfFloating() { return GlassLiquid(); }
 
 static void NtfBuildGroups() {
     g_ntf.groups.clear();
@@ -23592,6 +23651,7 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_LBUTTONDOWN: {
             KillTimer(hwnd, TIMER_TIP);
             TipHide();
+            g_panelBar = b;  // os menus e painéis abertos daqui seguem o fundo desta barra
             int hit = HitTest(b, LP_X(lp));
             if (hit >= 0 && BarMovable(b->items[hit].kind) && !g_menuOpen) {
                 // Clique: abre ao soltar. Segurar (ou arrastar): move o ícone.
@@ -23658,6 +23718,7 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             break;
         case WM_RBUTTONUP: {
+            g_panelBar = b;
             int hit = HitTest(b, LP_X(lp));
             if (hit >= 0) {
                 b->bounce[b->items[hit].kind] = GetTickCount64();
@@ -24974,7 +25035,7 @@ const UiTr kUiTr[] = {
     {L"O mesmo código aparece em %s?", L"Does the same code show on %s?", L"¿Aparece el mismo código en %s?", L"Le même code s’affiche-t-il sur %s ?", L"Wird derselbe Code auf %s angezeigt?", L"Lo stesso codice appare su %s?", L"%s 上是否显示相同的代码？"},
     {L"Digite este código em %s e tecle Enter.", L"Type this code on %s and press Enter.", L"Escribe este código en %s y pulsa Enter.", L"Tapez ce code sur %s puis appuyez sur Entrée.", L"Gib diesen Code auf %s ein und drücke die Eingabetaste.", L"Digita questo codice su %s e premi Invio.", L"在 %s 上输入此代码，然后按 Enter。"},
     {L"Digite %s em %s e tecle Enter.", L"Type %s on %s and press Enter.", L"Escribe %s en %s y pulsa Enter.", L"Tapez %s sur %s puis appuyez sur Entrée.", L"Gib %s auf %s ein und drücke die Eingabetaste.", L"Digita %s su %s e premi Invio.", L"输入 %s（在 %s 上），然后按 Enter。"},
-    {L"Um vidro para tudo: Central, menus, painéis e pílulas", L"One glass for everything: Control Center, menus, panels and pills", L"Un vidrio para todo: Centro de control, menús, paneles y píldoras", L"Un verre pour tout : Centre de contrôle, menus, panneaux et pastilles", L"Ein Glas für alles: Kontrollzentrum, Menüs, Bereiche und Pillen", L"Un vetro per tutto: Centro di Controllo, menu, pannelli e pillole", L"一种玻璃用于全部：控制中心、菜单、面板和胶囊"},
+    {L"Menus, Central, painéis e pílulas seguem o Fundo da barra; aqui, os ajustes do vidro", L"Menus, Control Center, panels and pills follow the bar background; here, the glass settings", L"Menús, Centro de control, paneles y píldoras siguen el fondo de la barra; aquí, los ajustes del vidrio", L"Menus, Centre de contrôle, panneaux et pastilles suivent le fond de la barre ; ici, les réglages du verre", L"Menüs, Kontrollzentrum, Bereiche und Pillen folgen dem Leistenhintergrund; hier die Glaseinstellungen", L"Menu, Centro di Controllo, pannelli e pillole seguono lo sfondo della barra; qui, le impostazioni del vetro", L"菜单、控制中心、面板和胶囊跟随菜单栏背景；这里是玻璃设置"},
     {L"Idioma, temas, tamanho e comportamento da barra", L"Language, themes, size and behavior of the bar", L"Idioma, temas, tamaño y comportamiento de la barra", L"Langue, thèmes, taille et comportement de la barre", L"Sprache, Designs, Größe und Verhalten der Leiste", L"Lingua, temi, dimensioni e comportamento della barra", L"菜单栏的语言、主题、大小和行为"},
     {L"Idioma da barra", L"Bar language", L"Idioma de la barra", L"Langue de la barre", L"Sprache der Leiste", L"Lingua della barra", L"菜单栏语言"},
     {L"Temas da barra", L"Bar themes", L"Temas de la barra", L"Thèmes de la barre", L"Designs der Leiste", L"Temi della barra", L"菜单栏主题"},
