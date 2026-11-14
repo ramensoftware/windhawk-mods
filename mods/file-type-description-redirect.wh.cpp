@@ -18,7 +18,16 @@
 # File Type Description Redirect
 
 Customize file descriptions by extension without changing file associations or default
-applications. Descriptions appear in the Type column, file properties, details, and native Shell New menus. Icons and thumbnails are preserved.
+applications. Descriptions appear in the Type column, file properties, details, and
+native Shell New menus. Icons and thumbnails are preserved.
+
+Before:
+
+![Before](https://raw.githubusercontent.com/FreshP-0325/windhawk-mod-assets/refs/heads/master/windows-file-type-icon-redirect/1.2.0/before.png)
+
+After:
+
+![After](https://raw.githubusercontent.com/FreshP-0325/windhawk-mod-assets/refs/heads/master/windows-file-type-icon-redirect/1.2.0/after.png)
 
 ## Configuration
 
