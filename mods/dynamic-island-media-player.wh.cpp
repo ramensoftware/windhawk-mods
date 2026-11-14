@@ -525,6 +525,7 @@ HANDLE g_renderThread = nullptr;
 HANDLE g_mediaThread = nullptr;
 HANDLE g_settingsMenuThread = nullptr;
 std::mutex g_settingsMenuThreadMutex;
+std::atomic<bool> g_settingsMenuStopping{false};
 std::atomic<HWND> g_settingsMenuOwner{nullptr};
 std::atomic<bool> g_settingsMenuOpen{false};
 std::atomic<HWND> g_foregroundBeforeSettingsMenu{nullptr};
@@ -4629,7 +4630,9 @@ DWORD WINAPI SettingsMenuThreadProc(void* param) {
             ShowWindow(menuOwner, SW_SHOWNOACTIVATE);
             SetWindowPos(menuOwner, HWND_TOPMOST, ownerPoint.x, ownerPoint.y, 1, 1,
                          SWP_NOACTIVATE | SWP_SHOWWINDOW);
-            ShowSettingsMenu(args->hwnd, menuOwner, args->screenPoint);
+            if (!g_settingsMenuStopping.load()) {
+                ShowSettingsMenu(args->hwnd, menuOwner, args->screenPoint);
+            }
 
             // Restore the previous foreground window only if the menu still
             // owns the foreground (or focus is otherwise still within this
@@ -4666,7 +4669,7 @@ DWORD WINAPI SettingsMenuThreadProc(void* param) {
 }
 
 void StartSettingsMenu(HWND hwnd, POINT screenPoint) {
-    if (g_settingsMenuOpen.exchange(true)) return;
+    if (g_settingsMenuStopping.load() || g_settingsMenuOpen.exchange(true)) return;
     HWND previousForeground = GetForegroundWindow();
     if (previousForeground && previousForeground != hwnd && IsWindow(previousForeground)) {
         g_foregroundBeforeSettingsMenu = previousForeground;
@@ -4679,6 +4682,16 @@ void StartSettingsMenu(HWND hwnd, POINT screenPoint) {
     auto args = std::make_unique<SettingsMenuThreadArgs>();
     args->hwnd = hwnd;
     args->screenPoint = screenPoint;
+
+    // Serialize creation with shutdown so StopThreads cannot miss a newly
+    // created menu thread between checking its handle and joining the render thread.
+    std::lock_guard lock(g_settingsMenuThreadMutex);
+    if (g_settingsMenuStopping.load()) {
+        g_settingsMenuOpen = false;
+        g_foregroundBeforeSettingsMenu = nullptr;
+        return;
+    }
+
     HANDLE thread = CreateThread(nullptr, 0, SettingsMenuThreadProc,
                                  args.get(), 0, nullptr);
     if (!thread) {
@@ -4689,7 +4702,6 @@ void StartSettingsMenu(HWND hwnd, POINT screenPoint) {
     }
     args.release();
 
-    std::lock_guard lock(g_settingsMenuThreadMutex);
     if (g_settingsMenuThread) {
         // The previous menu can clear g_settingsMenuOpen just before its
         // thread returns. Join it before replacing its only handle.
@@ -5425,6 +5437,7 @@ bool StartThreads() {
         g_workerThreadsStopping = false;
         g_activeWorkerThreads = 0;
     }
+    g_settingsMenuStopping = false;
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) return false;
 
@@ -5493,6 +5506,7 @@ void StopThreads() {
         std::lock_guard lock(g_workerThreadsMutex);
         g_workerThreadsStopping = true;
     }
+    g_settingsMenuStopping = true;
     if (g_stopEvent) SetEvent(g_stopEvent);
 
     // The settings menu runs on its own thread so TrackPopupMenu cannot pause
