@@ -278,7 +278,7 @@ constexpr double kScrollUnitsPerMm = 20.0;
 constexpr double kScrollHorizontalShare = 0.05;
 // Many programs round each wheel message to whole lines and dropped the small ones sent every frame while the
 // fingers were down: the wheel only goes out in steps of at least this many units (120 = one notch).
-constexpr double kWheelStepUnits = 40;
+constexpr double kWheelStepUnits = 10;
 // Marks the mod's own input: the wheel block lets its wheel through, and other mods which skip injected input can
 // tell it apart.
 constexpr ULONG_PTR kInputMark = 0x52484754;
@@ -853,7 +853,7 @@ constexpr DWORD kNativeClickMs = 200;
 constexpr WCHAR kBadgeClassName[] = L"Touchpad_Relaxed_Hand_Feedback";
 // The dot, in shares of the pointer's height: its size, and its center right of (X) and below (Y) the hot spot,
 // the point that clicks: off the tip so that it doesn't hide what's clicked, and clear of the arrow's edge.
-constexpr double kBadgeSize = 0.30;
+constexpr double kBadgeSize = 0.28;
 constexpr double kBadgeAtX = 0.60;
 constexpr double kBadgeAtY = 0.60;
 
@@ -968,7 +968,8 @@ void PointerColors(COLORREF& fill, COLORREF& line) {
 
 // A dot in the pointer's colors, antialiased over 4x4 samples a pixel, in premultiplied alpha for
 // UpdateLayeredWindow.
-void BadgeRender(int side, COLORREF fill, COLORREF line) {
+// edge: the outline in px, as thick as the pointer's own.
+void BadgeRender(int side, double edge, COLORREF fill, COLORREF line) {
     if (g_badge.bmp) {
         SelectObject(g_badge.dc, g_badge.oldBmp);
         DeleteObject(g_badge.bmp);
@@ -989,7 +990,7 @@ void BadgeRender(int side, COLORREF fill, COLORREF line) {
     }
     g_badge.oldBmp = SelectObject(g_badge.dc, g_badge.bmp);
     double outer = side / 2.0;
-    double inner = outer - std::max(1.0, side / 7.0);  // inside it the fill, out to outer the outline
+    double inner = outer - edge;  // inside it the fill, out to outer the outline
     DWORD* px = (DWORD*)bits;
     for (int y = 0; y < side; y++) {
         for (int x = 0; x < side; x++) {
@@ -1017,7 +1018,9 @@ void BadgeShow() {
     int height = CursorHeight();
     COLORREF fill, line;
     PointerColors(fill, line);
-    BadgeRender(std::max(6, (int)std::lround(height * kBadgeSize)), fill, line);
+    // The arrow's outline is 1 px at 32 px tall and grows with it: measured on the dot's size instead, it came out
+    // thicker or thinner than the pointer's as the size changed.
+    BadgeRender(std::max(6, (int)std::lround(height * kBadgeSize)), std::max(1.0, height / 32.0), fill, line);
     g_badge.offsetX = (int)std::lround(height * kBadgeAtX) - g_badge.side / 2;
     g_badge.offsetY = (int)std::lround(height * kBadgeAtY) - g_badge.side / 2;
     POINT pt{};
