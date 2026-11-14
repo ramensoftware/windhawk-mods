@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         1.0.3
+// @version         1.1.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -21,22 +21,22 @@ Dynamically manages process priorities and memory allocation to keep foreground 
 - **What it does**: Mitigates micro-stutters and input latency spikes caused by background processes competing for CPU resources.
 - **What it does not do**: It does not increase maximum hardware performance or raw gaming FPS.
 - **Plug & Play**: Safe, balanced defaults work out of the box without requiring any configuration.
-- **Advanced tuning**: Deeper options (e.g. EcoQoS, P/E-core affinity, power plans) are disabled by default.
+- **Advanced tuning**: Deeper options (e.g., EcoQoS, P/E-core scheduling, dynamic power schemes) are disabled by default.
 
 ## Key Features
 
 ### 1. Foreground Priority Boost
 - Elevates the CPU priority of the active window and its related child processes.
-- Optionally assigns the active application to performance cores on hybrid CPU architectures.
+- Optionally directs the active application to Performance Cores via Windows CPU Sets on hybrid architectures.
 
 ### 2. Background Throttling
 - Temporarily reduces the CPU priority of background processes exceeding defined utilization thresholds.
 - Engages when system-wide CPU contention is detected, or when a runaway process saturates a single CPU core (>= 80%).
-- Optionally restricts throttled tasks to efficiency cores or applies Windows EcoQoS.
+- Optionally restricts throttled tasks to Efficiency Cores via CPU Sets or applies Windows EcoQoS.
 
 ### 3. Audio & Network Protection
 - Shields processes with active audio playback from throttling and memory trimming via WASAPI real-time peak metering.
-- Intelligently distinguishes sustained media playback from transient notification sounds or terminal bells.
+- Intelligently distinguishes sustained media playback from transient alert chimes or short system notifications.
 - Shields processes performing active network transfers from throttling.
 
 ### 4. Compute & AI Workload Protection
@@ -47,9 +47,16 @@ Dynamically manages process priorities and memory allocation to keep foreground 
 - Automatically suspends trimming on battery power and during post-sleep transitions.
 - Includes a configurable hotkey (`Ctrl+Alt+F11`) with audio confirmation for manual memory cleanup.
 
-### 6. Dynamic Power Scheme
-- Automatically engages the High Performance power plan during demanding workloads on AC power.
-- Note: Switches the system-wide power plan for all users. The original plan is restored upon returning to desktop or when the mod is disabled. If the PC crashes, loses power, or if a user signs out while High Performance is active, the plan can stay active until the mod restarts (or permanently if the mod is removed while engaged).
+### 6. Dynamic Performance Power Scheme
+- Automatically engages High Performance, Ultimate Performance, or a custom power plan GUID during demanding workloads on AC power.
+- Note: Switches the system-wide power plan for all users. The original plan is restored upon returning to desktop or when the mod is disabled. If the PC crashes, loses power, or if a user signs out while a performance plan (High Performance, Ultimate Performance, or custom scheme) is active, the plan can stay active until the mod restarts (or permanently if the mod is removed while engaged).
+- To enable Ultimate Performance if not already present on your Windows edition, run in an administrator prompt:
+  ```cmd
+  powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+  ```
+  Windows creates an assigned unique GUID for the duplicate. Set **Dynamic Power Plan Selection** to `Custom GUID` and
+  paste the printed GUID into **Custom Power Plan GUID** (the built-in *Ultimate Performance* option only applies
+  to Windows editions where it is pre-installed natively, such as Windows Pro for Workstations).
 
 ### 7. Inactive Browser & Web App Tab Trimming
 - Detects dormant background browser and Electron renderers and trims their unused memory while keeping active UI and tabs intact.
@@ -58,31 +65,47 @@ Dynamically manages process priorities and memory allocation to keep foreground 
 ## Settings
 
 All settings are optional and pre-configured for balanced out-of-the-box use.
-Advanced options (e.g. EcoQoS, P/E-core affinity, power schemes) can be enabled in the mod settings if desired.
+Advanced options (e.g., EcoQoS, P/E-core scheduling, power schemes) can be enabled in the mod settings if desired.
 
-- **Foreground priority boost (ProBalance)**: Automatically increases the CPU priority of the active foreground window.
-- **Suggest P-cores to foreground window**: Directs the active foreground app to Performance Cores on hybrid CPUs.
-- **Dynamic high-performance power scheme**: Temporarily activates the High Performance power scheme for demanding workloads on AC power.
-- **Game Alt-Tab grace period**: Duration in seconds to retain game protections and power scheme after switching away from a full-screen game (default: 30 seconds).
-- **Throttle CPU-heavy background processes**: Temporarily lowers priority of background processes consuming excessive CPU.
-- **Restrict throttled background apps to E-cores**: Confines throttled background tasks to Efficiency Cores on hybrid CPUs.
-- **Windows efficiency mode (EcoQoS)**: Applies Windows power throttling to background processes.
-- **Audio & music protection shield**: Protects applications actively streaming or playing audio against throttling and memory sweeps.
-- **Network activity shield**: Protects applications actively downloading or streaming data.
-- **Protect local AI & shader compilers**: Prevents throttling during local AI inference (Ollama, LM Studio) and shader compilation.
-- **Process startup grace period**: Minimum age in seconds a newly spawned process must reach before being eligible for memory trimming or priority throttling (default: 5 seconds).
-- **Standard free RAM threshold**: Percentage of available physical memory below which background memory cleanup is triggered (0 = Auto-Adaptive).
-- **Inactive browser tabs memory trim**: Reclaims unused memory from dormant background browser renderer tabs.
-- **Early memory cap for heavy apps**: Reclaims memory from listed heavy apps once their memory exceeds the configured cap.
-- **Emergency clean hotkey (`Ctrl+Alt+F11`)**: Triggers an immediate memory reclamation pass with optional audio confirmation.
-- **Excluded processes**: Comma-separated list of executable names that must never be throttled or trimmed.
+### Priority & CPU Scheduling
+- **1. Foreground Priority Boost (ProBalance)**: Automatically increases the CPU priority of the active foreground window family (`true` by default).
+- **Foreground Priority Level**: Priority class assigned to the active foreground application (`Above Normal` or `High`).
+- **Suggest P-Cores to Foreground Window**: Directs the active foreground app to Performance Cores on hybrid CPUs via CPU Sets (`false` by default).
+- **Dynamic Performance Power Scheme**: Temporarily activates the configured power scheme during demanding workloads on AC power (`false` by default).
+- **Dynamic Power Plan Selection**: Select High Performance, Ultimate Performance, or Custom GUID (`highPerformance` by default).
+- **Custom Power Plan GUID**: GUID string of a custom power plan when Custom GUID is chosen.
+- **Game Alt-Tab Grace Period (seconds)**: Duration in seconds to retain game protections and power scheme after switching away from a full-screen game (default: 30 seconds).
+- **2. Throttle CPU-Heavy Background Processes**: Temporarily lowers the priority of background processes consuming excessive CPU (`true` by default).
+- **Restrict Throttled Background Apps to E-Cores**: Confines throttled background tasks to Efficiency Cores on hybrid CPUs via CPU Sets (`false` by default).
+- **Windows Efficiency Mode (EcoQoS)**: Applies Windows power throttling to background processes (`false` by default).
+- **Background CPU Threshold (%)**: Percentage of CPU usage required to throttle a background process (5% to 50%, default: 15%).
+- **System Contention Trigger Threshold (%)**: Total system CPU usage required before background throttling engages (default: 60%). Single-core saturation (>= 80% of one core) also triggers throttling.
+
+### Workload Protection Shields
+- **3. Audio & Music Protection Shield**: Shields applications actively streaming or playing audio (Spotify, YouTube, DAWs, games) against throttling and memory sweeps (`true` by default).
+- **Network Activity Shield (Streaming & Downloads)**: Protects background applications actively downloading files, streaming media, or handling VoIP calls (`true` by default).
+- **Protect Local AI & Shader Compilers**: Prevents throttling or memory trimming during local AI inference (Ollama, LM Studio) and background shader compilation (`true` by default).
+- **Custom AI & Model Processes**: Optional comma-separated list of executable names to treat as protected AI workloads.
+
+### Memory Optimization & Working Set Trimming
+- **4. Standard Free RAM Threshold (%)**: Percentage of available physical memory below which background memory cleanup is triggered (0 = Auto-Adaptive, 5% to 80%).
+- **Clean Minimized Windows**: Reclaims unused memory in the background from applications minimized to the taskbar after a 30-second inactivity guard (`true` by default).
+- **Inactive Browser & Web App Tabs Memory Trim**: Safely reclaims unused memory from dormant background browser tabs and Electron web renderers (`true` by default).
+- **Pause on Battery Power**: Suspends memory cleanups and background throttling on battery power to maximize laptop battery life (`true` by default).
+- **Early Memory Cap for Heavy Apps**: Reclaims memory from listed heavy apps once their memory exceeds the configured cap (`true` by default).
+- **Heavy Apps Memory Cap (MB)**: Maximum memory threshold before an inactive listed application is cleaned (100 to 4000 MB, default: 300 MB).
+- **Process Startup Grace Period (seconds)**: Minimum age in seconds a newly spawned process must reach before being eligible for memory trimming or priority throttling (1 to 60s, default: 5s).
+- **Heavy Memory Hogs Process List**: Optional comma-separated list of additional applications to monitor for preemptive memory trimming beyond standard web/Electron runtimes.
+- **5. Emergency Clean Hotkey (Ctrl+Alt+F11)**: Enables the `Ctrl+Alt+F11` shortcut to trigger an immediate memory reclamation pass (`true` by default).
+- **Emergency Hotkey Audio Feedback**: Emits a subtle confirmation chime when memory reclamation initiated by `Ctrl+Alt+F11` finishes (`true` by default).
+- **Excluded Processes (Immunity List)**: Optional comma-separated list of executable names that must never be throttled or trimmed. Windows system components and Windhawk are protected automatically.
 
 ## Compatibility
 - Supported OS: Windows 11 (all versions including 24H2).
 - Windows 10: Untested and unsupported (not officially validated, though core Win32 APIs may function).
 - Supported Architectures: x86 (32-bit), x64 (64-bit), and ARM64.
 - Compatible with standard and hybrid Intel/AMD CPUs (P/E-cores).
-- Avoid running alongside similar tools (e.g. Process Lasso, Mem Reduct) to prevent conflicting adjustments.
+- Avoid running alongside similar tools (e.g., Process Lasso, Mem Reduct) to prevent conflicting adjustments.
 
 ## Support
 If you find this mod useful, you can support its development and maintenance:
@@ -112,8 +135,18 @@ If you find this mod useful, you can support its development and maintenance:
   $name: Suggest P-Cores to Foreground Window
   $description: Directs the active foreground app to Performance Cores (P-cores) on hybrid Intel/AMD CPUs to eliminate micro-stutter.
 - enableDynamicPowerPlan: false
-  $name: Dynamic High-Performance Power Scheme
-  $description: Automatically engages the High Performance power plan while a heavy application or game is active on AC power, and restores your plan on desktop.
+  $name: Dynamic Performance Power Scheme
+  $description: Automatically engages the configured power scheme while a heavy application or game is active on AC power, and restores your plan on desktop.
+- powerPlanSelection: "highPerformance"
+  $name: Dynamic Power Plan Selection
+  $description: Choose which power scheme to engage for demanding foreground workloads on AC power.
+  $options:
+    - "highPerformance": High Performance (Default)
+    - "ultimatePerformance": Ultimate Performance
+    - "custom": Custom GUID
+- customPowerPlanGuid: ""
+  $name: Custom Power Plan GUID
+  $description: GUID of a custom power plan to engage when Custom GUID is selected (paste the GUID printed by powercfg).
 - gameAltTabGracePeriodSeconds: 30
   $name: Game Alt-Tab Grace Period (seconds)
   $description: Duration in seconds to retain game protections and power scheme after switching away from a full-screen game (0 to 300s, default 30s).
@@ -196,6 +229,7 @@ If you find this mod useful, you can support its development and maintenance:
 // Must follow windows.h for ULONG and WINAPI_FAMILY_PARTITION
 #include <powrprof.h>
 
+#include <objbase.h>
 #include <windhawk_utils.h>
 
 #include <appmodel.h>
@@ -481,6 +515,8 @@ struct ModSettings {
     bool enablePanicHotkey = true;
     bool enableHotkeySound = true;
     bool enableDynamicPowerPlan = false;
+    GUID targetPowerPlanGuid = {
+        0x8c5e7fda, 0xe8bf, 0x4a96, {0x9a, 0x85, 0xa6, 0xe2, 0x3a, 0x8e, 0x63, 0x5c}};
     bool enableBrowserTabTrim = true;
     int browserTabInactivityMinutes = 10;
     int gameAltTabGracePeriodSeconds = 30;
@@ -550,64 +586,160 @@ static std::vector<BoostedProcessEntry> g_boostedProcesses;
 static std::atomic<ULONGLONG> g_lastFocusChangeTick{0};
 
 // ---------------------------------------------------------------------------
-// Dynamic Power Plan Management (High Performance on Demand & Async Dispatch)
+// Dynamic Power Plan Management (High / Ultimate / Custom Scheme on Demand)
 // ---------------------------------------------------------------------------
 
 static const GUID kGuidHighPerformance = {
     0x8c5e7fda, 0xe8bf, 0x4a96, {0x9a, 0x85, 0xa6, 0xe2, 0x3a, 0x8e, 0x63, 0x5c}};
+static const GUID kGuidUltimatePerformance = {
+    0xe9a42b02, 0xd5df, 0x448d, {0xaa, 0x00, 0x03, 0xf1, 0x47, 0x49, 0xeb, 0x61}};
+
+static GUID ParsePowerPlanGuid(const std::wstring& raw, const GUID& fallback) {
+    if (raw.empty()) {
+        return fallback;
+    }
+    std::wstring formatted = raw;
+    formatted.erase(
+        std::remove_if(formatted.begin(), formatted.end(), iswspace),
+        formatted.end());
+    if (formatted.empty()) {
+        return fallback;
+    }
+    if (formatted.front() != L'{') {
+        formatted = L"{" + formatted + L"}";
+    }
+    GUID result{};
+    if (CLSIDFromString(formatted.c_str(), &result) == NOERROR) {
+        return result;
+    }
+    Wh_Log(L"[Power] Invalid custom power plan GUID '%s'. Falling back to High Performance.",
+           raw.c_str());
+    return fallback;
+}
 
 static std::mutex g_powerSchemeMutex;
 static GUID g_originalPowerScheme{};
 static bool g_hasOriginalPowerScheme = false;
-static std::atomic<bool> g_isHighPerformanceActive{false};
+static std::atomic<bool> g_isPerformancePlanEngaged{false};
+static GUID g_engagedPowerPlanGuid{};
+static GUID g_lastFailedPowerPlanGuid{};
+static bool g_hasFailedPowerPlanGuid = false;
 
 // Async background dispatcher for non-blocking ACPI power plan switches
-static std::atomic<bool> g_desiredHighPerformance{false};
+static std::atomic<bool> g_desiredPerformancePlan{false};
 static std::atomic<bool> g_powerWorkerRunning{false};
 static HANDLE g_powerWakeEvent = nullptr;
 [[clang::no_destroy]] static std::optional<std::thread> g_powerWorkerThread;
 
-static void SavePowerSchemeState(const GUID& guid, bool engaged) {
-    Wh_SetBinaryValue(L"OriginalPowerScheme", &guid, sizeof(GUID));
+static void SavePowerSchemeState(const GUID& originalGuid,
+                                 const GUID& engagedGuid,
+                                 bool engaged) {
+    Wh_SetBinaryValue(L"OriginalPowerScheme", &originalGuid, sizeof(GUID));
+    Wh_SetBinaryValue(L"EngagedPowerScheme", &engagedGuid, sizeof(GUID));
+    Wh_SetIntValue(L"HighPerformanceEngagedPid",
+                   static_cast<int>(GetCurrentProcessId()));
     Wh_SetIntValue(L"HighPerformanceEngaged", engaged ? 1 : 0);
 }
 
 static void ClearPowerSchemeState() {
     Wh_DeleteValue(L"HighPerformanceEngaged");
+    Wh_DeleteValue(L"HighPerformanceEngagedPid");
+    Wh_DeleteValue(L"EngagedPowerScheme");
+    Wh_DeleteValue(L"OriginalPowerScheme");
 }
 
 static void RestoreOriginalPowerScheme() {
     std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
-    if (!g_isHighPerformanceActive.load() || !g_hasOriginalPowerScheme) {
+    if (!g_isPerformancePlanEngaged.load() || !g_hasOriginalPowerScheme) {
         return;
     }
-    PowerSetActiveScheme(nullptr, &g_originalPowerScheme);
-    g_isHighPerformanceActive.store(false);
+    GUID* pCurrent = nullptr;
+    if (PowerGetActiveScheme(nullptr, &pCurrent) == ERROR_SUCCESS && pCurrent) {
+        bool currentMatchesEngaged =
+            IsEqualGUID(*pCurrent, g_engagedPowerPlanGuid);
+        LocalFree(pCurrent);
+        if (!currentMatchesEngaged) {
+            // User manually switched power schemes during workload; do not overwrite user's choice
+            g_isPerformancePlanEngaged.store(false);
+            g_hasOriginalPowerScheme = false;
+            g_engagedPowerPlanGuid = GUID{};
+            ClearPowerSchemeState();
+            Wh_Log(L"[Power] Active power plan was modified externally; skipping restore.");
+            return;
+        }
+    }
+    DWORD res = PowerSetActiveScheme(nullptr, &g_originalPowerScheme);
+    g_isPerformancePlanEngaged.store(false);
+    g_hasOriginalPowerScheme = false;
+    g_engagedPowerPlanGuid = GUID{};
     ClearPowerSchemeState();
-    Wh_Log(L"Restored original system power plan.");
+    if (res == ERROR_SUCCESS) {
+        Wh_Log(L"[Power] Restored original system power plan.");
+    } else {
+        Wh_Log(L"[Power] Failed to restore original system power plan (error %lu).", res);
+    }
 }
 
-static void EngageHighPerformancePowerScheme() {
+static void EngageTargetPowerScheme(const GUID& targetGuid) {
     std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
-    if (g_isHighPerformanceActive.load()) {
+    if (g_hasFailedPowerPlanGuid &&
+        IsEqualGUID(g_lastFailedPowerPlanGuid, targetGuid)) {
+        return;
+    }
+    if (g_isPerformancePlanEngaged.load()) {
+        if (IsEqualGUID(g_engagedPowerPlanGuid, targetGuid)) {
+            return;
+        }
+        // Swapping target scheme while already engaged (e.g. settings changed during workload)
+        DWORD res = PowerSetActiveScheme(nullptr, &targetGuid);
+        if (res == ERROR_SUCCESS) {
+            g_engagedPowerPlanGuid = targetGuid;
+            SavePowerSchemeState(g_originalPowerScheme, targetGuid, /*engaged=*/true);
+            wchar_t guidStr[64]{};
+            StringFromGUID2(targetGuid, guidStr, ARRAYSIZE(guidStr));
+            Wh_Log(L"[Power] Switched active performance power plan to %s.", guidStr);
+        } else {
+            g_lastFailedPowerPlanGuid = targetGuid;
+            g_hasFailedPowerPlanGuid = true;
+            wchar_t guidStr[64]{};
+            StringFromGUID2(targetGuid, guidStr, ARRAYSIZE(guidStr));
+            Wh_Log(
+                L"[Power] PowerSetActiveScheme failed for target power plan %s (error %lu). Skipping until settings change.",
+                guidStr, res);
+        }
         return;
     }
 
     GUID* pCurrent = nullptr;
     if (PowerGetActiveScheme(nullptr, &pCurrent) == ERROR_SUCCESS && pCurrent) {
-        if (IsEqualGUID(*pCurrent, kGuidHighPerformance)) {
+        if (IsEqualGUID(*pCurrent, targetGuid)) {
             LocalFree(pCurrent);
             return;
         }
 
-        g_originalPowerScheme = *pCurrent;
-        g_hasOriginalPowerScheme = true;
+        GUID originalGuid = *pCurrent;
         LocalFree(pCurrent);
 
-        if (PowerSetActiveScheme(nullptr, &kGuidHighPerformance) == ERROR_SUCCESS) {
-            g_isHighPerformanceActive.store(true);
-            SavePowerSchemeState(g_originalPowerScheme, /*engaged=*/true);
-            Wh_Log(L"Switched system power plan to High Performance for active foreground workload.");
+        DWORD res = PowerSetActiveScheme(nullptr, &targetGuid);
+        if (res == ERROR_SUCCESS) {
+            g_originalPowerScheme = originalGuid;
+            g_hasOriginalPowerScheme = true;
+            g_isPerformancePlanEngaged.store(true);
+            g_engagedPowerPlanGuid = targetGuid;
+            SavePowerSchemeState(g_originalPowerScheme, targetGuid, /*engaged=*/true);
+            wchar_t guidStr[64]{};
+            StringFromGUID2(targetGuid, guidStr, ARRAYSIZE(guidStr));
+            Wh_Log(
+                L"[Power] Switched system power plan to performance plan %s for active foreground workload.",
+                guidStr);
+        } else {
+            g_lastFailedPowerPlanGuid = targetGuid;
+            g_hasFailedPowerPlanGuid = true;
+            wchar_t guidStr[64]{};
+            StringFromGUID2(targetGuid, guidStr, ARRAYSIZE(guidStr));
+            Wh_Log(
+                L"[Power] PowerSetActiveScheme failed for target power plan %s (error %lu). Skipping until settings change.",
+                guidStr, res);
         }
     }
 }
@@ -620,34 +752,85 @@ static void PowerSchemeWorkerProc() {
                 break;
             }
             if (waitRes == WAIT_OBJECT_0) {
-                bool target = g_desiredHighPerformance.load(std::memory_order_acquire);
+                bool target =
+                    g_desiredPerformancePlan.load(std::memory_order_acquire);
                 if (target) {
-                    EngageHighPerformancePowerScheme();
+                    ModSettings settings = GetSettingsSnapshot();
+                    EngageTargetPowerScheme(settings.targetPowerPlanGuid);
                 } else {
                     RestoreOriginalPowerScheme();
                 }
             }
         }
     } catch (...) {
-        Wh_Log(L"PowerSchemeWorkerProc unhandled exception caught.");
+        Wh_Log(L"[Power] PowerSchemeWorkerProc unhandled exception caught.");
     }
 }
 
-static void RequestPowerSchemeAsync(bool highPerformance) {
-    g_desiredHighPerformance.store(highPerformance, std::memory_order_release);
+static void RequestPerformancePlanAsync(bool engage) {
+    g_desiredPerformancePlan.store(engage, std::memory_order_release);
     if (g_powerWakeEvent) {
         SetEvent(g_powerWakeEvent);
     }
 }
 
 static void CheckAndRecoverCrashedPowerScheme() {
-    GUID saved{};
-    if (Wh_GetIntValue(L"HighPerformanceEngaged", 0) &&
-        Wh_GetBinaryValue(L"OriginalPowerScheme", &saved, sizeof(saved)) == sizeof(saved)) {
-        PowerSetActiveScheme(nullptr, &saved);
-        Wh_DeleteValue(L"HighPerformanceEngaged");
-        Wh_Log(L"Recovered and restored original power scheme after previous crash or shutdown.");
+    if (!Wh_GetIntValue(L"HighPerformanceEngaged", 0)) {
+        return;
     }
+
+    DWORD engagedPid =
+        static_cast<DWORD>(Wh_GetIntValue(L"HighPerformanceEngagedPid", 0));
+    if (engagedPid != 0 && engagedPid != GetCurrentProcessId()) {
+        HANDLE hOther = OpenProcess(SYNCHRONIZE, FALSE, engagedPid);
+        if (hOther) {
+            DWORD waitRes = WaitForSingleObject(hOther, 0);
+            CloseHandle(hOther);
+            if (waitRes == WAIT_TIMEOUT) {
+                // The tool process that engaged the scheme is still actively running in another session
+                return;
+            }
+        } else if (GetLastError() == ERROR_ACCESS_DENIED) {
+            // Process exists in another user session
+            return;
+        }
+    }
+
+    GUID savedOriginal{};
+    if (Wh_GetBinaryValue(L"OriginalPowerScheme", &savedOriginal,
+                          sizeof(savedOriginal)) != sizeof(savedOriginal)) {
+        ClearPowerSchemeState();
+        return;
+    }
+
+    GUID savedEngaged{};
+    bool hasSavedEngaged = (Wh_GetBinaryValue(L"EngagedPowerScheme", &savedEngaged,
+                                              sizeof(savedEngaged)) == sizeof(savedEngaged));
+
+    bool shouldRestore = true;
+    GUID* pCurrent = nullptr;
+    if (PowerGetActiveScheme(nullptr, &pCurrent) == ERROR_SUCCESS && pCurrent) {
+        if (hasSavedEngaged && !IsEqualGUID(*pCurrent, savedEngaged)) {
+            // Active plan is no longer the one engaged by the mod (user changed it or switched manually)
+            shouldRestore = false;
+        }
+        LocalFree(pCurrent);
+    }
+
+    if (shouldRestore) {
+        DWORD res = PowerSetActiveScheme(nullptr, &savedOriginal);
+        if (res == ERROR_SUCCESS) {
+            Wh_Log(
+                L"[Power] Recovered and restored original power scheme after previous crash or shutdown.");
+        } else {
+            Wh_Log(
+                L"[Power] Failed to recover original power scheme after crash (error %lu).",
+                res);
+        }
+    } else {
+        Wh_Log(L"[Power] Power scheme recovery: active plan does not match engaged scheme; skipping restore.");
+    }
+    ClearPowerSchemeState();
 }
 
 // Background CPU-throttling state, guarded by g_priorityMutex.
@@ -899,55 +1082,6 @@ static std::atomic<ULONGLONG> g_lastResumeTick{0};
 static std::atomic<bool> g_resetSamplesRequested{false};
 
 // ---------------------------------------------------------------------------
-// Precision Telemetry & Categorized Diagnostic Logging
-// ---------------------------------------------------------------------------
-
-enum class LogCategory : uint8_t {
-    Boot,
-    ProBalance,
-    Throttler,
-    Sanctuary,
-    Memory,
-    Power,
-    Shutdown,
-};
-
-static void LogEvent(LogCategory cat, const wchar_t* format, ...) {
-    const wchar_t* categoryTag = L"";
-    switch (cat) {
-    case LogCategory::Boot:
-        categoryTag = L"[Boot] ";
-        break;
-    case LogCategory::ProBalance:
-        categoryTag = L"[ProBalance] ";
-        break;
-    case LogCategory::Throttler:
-        categoryTag = L"[Throttler] ";
-        break;
-    case LogCategory::Sanctuary:
-        categoryTag = L"[Sanctuary] ";
-        break;
-    case LogCategory::Memory:
-        categoryTag = L"[Memory] ";
-        break;
-    case LogCategory::Power:
-        categoryTag = L"[Power] ";
-        break;
-    case LogCategory::Shutdown:
-        categoryTag = L"[Shutdown] ";
-        break;
-    }
-
-    wchar_t buffer[1024];
-    va_list args;
-    va_start(args, format);
-    _vsnwprintf_s(buffer, _countof(buffer), _TRUNCATE, format, args);
-    va_end(args);
-
-    Wh_Log(L"%s%s", categoryTag, buffer);
-}
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -1004,20 +1138,20 @@ static bool IsRunningOnBattery() {
 }
 
 static void UpdateDynamicPowerPlanState(const ModSettings& settings,
-                                        bool inGamingLockdown,
-                                        bool onBattery) {
-    if (!settings.enableDynamicPowerPlan) {
-        if (g_isHighPerformanceActive.load(std::memory_order_relaxed)) {
-            RequestPowerSchemeAsync(false);
+                                        bool inGamingLockdown) {
+    if (!settings.enableDynamicPowerPlan || IsRunningOnBattery()) {
+        if (g_isPerformancePlanEngaged.load(std::memory_order_relaxed)) {
+            RequestPerformancePlanAsync(false);
         }
         return;
     }
 
-    bool shouldBeHighPerf = inGamingLockdown && !onBattery;
-    bool currentlyHighPerf = g_isHighPerformanceActive.load(std::memory_order_relaxed);
+    bool shouldEngage = inGamingLockdown;
+    bool currentlyEngaged =
+        g_isPerformancePlanEngaged.load(std::memory_order_relaxed);
 
-    if (shouldBeHighPerf != currentlyHighPerf) {
-        RequestPowerSchemeAsync(shouldBeHighPerf);
+    if (shouldEngage != currentlyEngaged) {
+        RequestPerformancePlanAsync(shouldEngage);
     }
 }
 
@@ -1845,9 +1979,8 @@ GetActiveAudioProcessIdsCached(const ModSettings& settings) {
         if (durMs >= 1500) {
             if (g_loggedSanctuaryPids.insert(pid).second) {
                 std::wstring procName = GetProcessNameByPid(pid);
-                LogEvent(LogCategory::Sanctuary,
-                         L"Audio playback active: %s (PID %u)",
-                         procName.c_str(), pid);
+                Wh_Log(L"[Sanctuary] Audio playback active: %s (PID %u)",
+                       procName.c_str(), pid);
             }
         }
     }
@@ -1869,9 +2002,8 @@ GetActiveAudioProcessIdsCached(const ModSettings& settings) {
         } else {
             if (wasSustained) {
                 std::wstring procName = GetProcessNameByPid(pid);
-                LogEvent(LogCategory::Sanctuary,
-                         L"Audio playback ended: %s (PID %u)",
-                         procName.c_str(), pid);
+                Wh_Log(L"[Sanctuary] Audio playback ended: %s (PID %u)",
+                       procName.c_str(), pid);
             }
             g_audioPidFirstActive.erase(pid);
             g_loggedSanctuaryPids.erase(pid);
@@ -2192,13 +2324,12 @@ static void RestoreForegroundBoostLocked() {
         const wchar_t* pName =
             !primary.procName.empty() ? primary.procName.c_str() : L"process";
         if (g_boostedProcesses.size() > 1) {
-            LogEvent(LogCategory::ProBalance,
-                     L"Restoring priority for %s (PID %u) and %zu related processes",
-                     pName, primary.pid, g_boostedProcesses.size() - 1);
+            Wh_Log(
+                L"[ProBalance] Restoring priority for %s (PID %u) and %zu related processes",
+                pName, primary.pid, g_boostedProcesses.size() - 1);
         } else {
-            LogEvent(LogCategory::ProBalance,
-                     L"Restoring priority for %s (PID %u)",
-                     pName, primary.pid);
+            Wh_Log(L"[ProBalance] Restoring priority for %s (PID %u)",
+                   pName, primary.pid);
         }
     }
     for (auto& entry : g_boostedProcesses) {
@@ -2386,6 +2517,9 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
                 origIoPriority = itThrottled->second.originalIoPriority;
                 origMemoryPriority = itThrottled->second.originalMemoryPriority;
                 bool ecoQosWasApplied = itThrottled->second.ecoQosApplied;
+                bool hasOrigPowerState = itThrottled->second.hasOriginalPowerState;
+                PROCESS_POWER_THROTTLING_STATE origPowerState =
+                    itThrottled->second.originalPowerState;
                 bool cpuSetsWasApplied = itThrottled->second.cpuSetsApplied;
                 if (itThrottled->second.hProcess) {
                     CloseHandle(itThrottled->second.hProcess);
@@ -2396,7 +2530,14 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
                 SetProcessIoPriorityHint(hProc, origIoPriority);
                 SetProcessMemoryPriorityHint(hProc, origMemoryPriority);
                 if (ecoQosWasApplied) {
-                    ResetProcessEcoQoS(hProc);
+                    if (hasOrigPowerState && origPowerState.ControlMask != 0) {
+                        SetProcessInformation(
+                            hProc,
+                            (PROCESS_INFORMATION_CLASS)ProcessPowerThrottlingInfoClass,
+                            &origPowerState, sizeof(origPowerState));
+                    } else {
+                        ResetProcessEcoQoS(hProc);
+                    }
                 }
                 if (cpuSetsWasApplied && g_pfnSetProcessDefaultCpuSets) {
                     g_pfnSetProcessDefaultCpuSets(hProc, nullptr, 0);
@@ -2463,15 +2604,15 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
             size_t addedCount = g_boostedProcesses.size() - initialBoostedCount;
             size_t childCount = (addedCount > 1) ? (addedCount - 1) : 0;
             if (childCount > 0) {
-                LogEvent(LogCategory::ProBalance,
-                         L"Elevating foreground %s (PID %u) and %zu child processes -> Priority: %s",
-                         fgName.c_str(), newForegroundPid, childCount,
-                         (targetPriority == HIGH_PRIORITY_CLASS) ? L"High" : L"AboveNormal");
+                Wh_Log(
+                    L"[ProBalance] Elevating foreground %s (PID %u) and %zu child processes -> Priority: %s",
+                    fgName.c_str(), newForegroundPid, childCount,
+                    (targetPriority == HIGH_PRIORITY_CLASS) ? L"High" : L"AboveNormal");
             } else {
-                LogEvent(LogCategory::ProBalance,
-                         L"Elevating foreground %s (PID %u) -> Priority: %s",
-                         fgName.c_str(), newForegroundPid,
-                         (targetPriority == HIGH_PRIORITY_CLASS) ? L"High" : L"AboveNormal");
+                Wh_Log(
+                    L"[ProBalance] Elevating foreground %s (PID %u) -> Priority: %s",
+                    fgName.c_str(), newForegroundPid,
+                    (targetPriority == HIGH_PRIORITY_CLASS) ? L"High" : L"AboveNormal");
             }
         }
 
@@ -2747,7 +2888,16 @@ static void RestoreAllThrottledProcesses() {
                 SetProcessIoPriorityHint(info.hProcess, info.originalIoPriority);
                 SetProcessMemoryPriorityHint(info.hProcess, info.originalMemoryPriority);
                 if (info.ecoQosApplied) {
-                    ResetProcessEcoQoS(info.hProcess);
+                    if (info.hasOriginalPowerState &&
+                        info.originalPowerState.ControlMask != 0) {
+                        SetProcessInformation(
+                            info.hProcess,
+                            (PROCESS_INFORMATION_CLASS)ProcessPowerThrottlingInfoClass,
+                            &info.originalPowerState,
+                            sizeof(info.originalPowerState));
+                    } else {
+                        ResetProcessEcoQoS(info.hProcess);
+                    }
                 }
                 if (info.cpuSetsApplied && g_pfnSetProcessDefaultCpuSets) {
                     g_pfnSetProcessDefaultCpuSets(info.hProcess, nullptr, 0);
@@ -3050,9 +3200,9 @@ ExpandAudioProcessShield(const std::unordered_set<DWORD>& rawAudioPids,
                     activeAudioPids.insert(dPid);
                     if (g_loggedAudioWorkers.insert(dPid).second) {
                         std::wstring dName = GetProcessNameByPid(dPid);
-                        LogEvent(LogCategory::Sanctuary,
-                                 L"Audio worker active: %s (PID %u, parent=%u)",
-                                 dName.c_str(), dPid, rootPid);
+                        Wh_Log(
+                            L"[Sanctuary] Audio worker active: %s (PID %u, parent=%u)",
+                            dName.c_str(), dPid, rootPid);
                     }
                 }
             }
@@ -3835,13 +3985,13 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
                                     }
 
                                     g_sessionThrottleTransitions.fetch_add(1, std::memory_order_relaxed);
-                                    LogEvent(LogCategory::Throttler,
-                                             L"Throttling background %s (PID %u): CPU load %.1f%% >= %d%% -> Priority: %s | I/O: Low%s%s",
-                                             name.c_str(), pid, cpuPercent,
-                                             settings.backgroundCpuThrottleThresholdPercent,
-                                             L"BelowNormal",
-                                             appliedEcoQos ? L" | EcoQoS" : L"",
-                                             appliedCpuSets ? L" | E-Cores Confined" : L"");
+                                    Wh_Log(
+                                        L"[Throttler] Throttling background %s (PID %u): CPU load %.1f%% >= %d%% -> Priority: %s | I/O: Low%s%s",
+                                        name.c_str(), pid, cpuPercent,
+                                        settings.backgroundCpuThrottleThresholdPercent,
+                                        L"BelowNormal",
+                                        appliedEcoQos ? L" | EcoQoS" : L"",
+                                        appliedCpuSets ? L" | E-Cores Confined" : L"");
 
                                     g_throttledProcesses[pid] = {hProc, prevPriority, prevIo,
                                                                  prevMem, appliedEcoQos, origPowerState,
@@ -4139,8 +4289,9 @@ static void MaybeRequestGameSweep(DWORD pid, HWND hwnd,
     g_lastGameSweepPid = pid;
     g_lastGameSweepTime = now;
 
-    LogEvent(LogCategory::Sanctuary,
-             L"3D / Fullscreen game detected (PID %u). Requesting pre-game RAM sweep...", pid);
+    Wh_Log(
+        L"[Sanctuary] 3D / Fullscreen game detected (PID %u). Requesting pre-game RAM sweep...",
+        pid);
 
     g_gameSweepRequested.store(true);
     if (g_wakeEvent) {
@@ -4496,12 +4647,12 @@ static void PerformEarlyMemoryCapSweep(const ModSettings& settings, DWORD foregr
         if (attempt.trimmed && !attempt.isSoftTrim) {
             g_sessionProcessesTrimmedTotal.fetch_add(1, std::memory_order_relaxed);
             g_sessionBytesReclaimed.fetch_add(attempt.freedBytes, std::memory_order_relaxed);
-            LogEvent(LogCategory::Memory,
-                     L"[Early Memory Cap] Enforced cap on %s (PID %u): %zu MB >= %d MB limit (reclaimed %zu MB)",
-                     entry.name.c_str(), pid,
-                     static_cast<size_t>(attempt.beforeBytes / (1024ULL * 1024ULL)),
-                     settings.electronMemoryCapMb,
-                     static_cast<size_t>(attempt.freedBytes / (1024ULL * 1024ULL)));
+            Wh_Log(
+                L"[Memory] [Early Memory Cap] Enforced cap on %s (PID %u): %zu MB >= %d MB limit (reclaimed %zu MB)",
+                entry.name.c_str(), pid,
+                static_cast<size_t>(attempt.beforeBytes / (1024ULL * 1024ULL)),
+                settings.electronMemoryCapMb,
+                static_cast<size_t>(attempt.freedBytes / (1024ULL * 1024ULL)));
         }
     }
 }
@@ -4878,9 +5029,9 @@ static void PerformMemoryCleanup(const wchar_t* triggerReason,
 
         DWORD accessDenied = g_accessDeniedCount.exchange(0);
         if (accessDenied > 0) {
-            LogEvent(LogCategory::Sanctuary,
-                     L"Notice: %u elevated/system processes skipped (access denied; mod runs in user session).",
-                     accessDenied);
+            Wh_Log(
+                L"[Sanctuary] Notice: %u elevated/system processes skipped (access denied; mod runs in user session).",
+                accessDenied);
         }
 
         MEMORYSTATUSEX memBefore;
@@ -4942,36 +5093,35 @@ static void PerformMemoryCleanup(const wchar_t* triggerReason,
                        L"%.1f MB trimmed", freedMb);
         }
 
-        LogEvent(LogCategory::Memory,
-                 L"%s -> %s (Avail: %.2f/%.1f GB | %u trimmed [%u soft, %u hard], %u kept warm) | Session: %.2f GB trimmed across %u passes (%u hard, %u soft), %s uptime",
-                 triggerReason, detailStr, availAfterGb, totalGb,
-                 trimStats.processesTrimmed, trimStats.processesSoftTrimmed, trimStats.processesHardTrimmed,
-                 trimStats.processesSkippedRecent,
-                 sessionGb,
-                 g_sessionCleanupPasses.load(std::memory_order_relaxed),
-                 g_sessionProcessesTrimmedTotal.load(std::memory_order_relaxed),
-                 g_sessionProcessesSoftTrimmedTotal.load(std::memory_order_relaxed),
-                 uptime.c_str());
+        Wh_Log(
+            L"[Memory] %s -> %s (Avail: %.2f/%.1f GB | %u trimmed [%u soft, %u hard], %u kept warm) | Session: %.2f GB trimmed across %u passes (%u hard, %u soft), %s uptime",
+            triggerReason, detailStr, availAfterGb, totalGb,
+            trimStats.processesTrimmed, trimStats.processesSoftTrimmed,
+            trimStats.processesHardTrimmed, trimStats.processesSkippedRecent,
+            sessionGb, g_sessionCleanupPasses.load(std::memory_order_relaxed),
+            g_sessionProcessesTrimmedTotal.load(std::memory_order_relaxed),
+            g_sessionProcessesSoftTrimmedTotal.load(std::memory_order_relaxed),
+            uptime.c_str());
 
         bool gainWorthLogging =
             freedTotalBytes >= static_cast<DWORDLONG>(kTopAppsLogThresholdMb) * 1024 * 1024 ||
             trimStats.processesSoftTrimmed > 0;
 
         if (!trimStats.topApps.empty() && gainWorthLogging) {
-            LogEvent(LogCategory::Memory, L"Top reclaimed memory consumers:");
+            Wh_Log(L"[Memory] Top reclaimed memory consumers:");
             int rank = 1;
             for (const auto& app : trimStats.topApps) {
                 double beforeMb = app.beforeBytes / (1024.0 * 1024.0);
                 double afterMb = app.afterBytes / (1024.0 * 1024.0);
                 if (app.isSoftTrim) {
-                    LogEvent(LogCategory::Memory,
-                             L"  #%d. %s (PID %u): deprioritized (soft trim, working set: %.1f MB)",
-                             rank++, app.procName.c_str(), app.pid, beforeMb);
+                    Wh_Log(
+                        L"[Memory]   #%d. %s (PID %u): deprioritized (soft trim, working set: %.1f MB)",
+                        rank++, app.procName.c_str(), app.pid, beforeMb);
                 } else {
                     double appFreedMb = app.bytesFreed / (1024.0 * 1024.0);
-                    LogEvent(LogCategory::Memory,
-                             L"  #%d. %s (PID %u): -%.1f MB (%.1f MB -> %.1f MB)",
-                             rank++, app.procName.c_str(), app.pid, appFreedMb, beforeMb, afterMb);
+                    Wh_Log(
+                        L"[Memory]   #%d. %s (PID %u): -%.1f MB (%.1f MB -> %.1f MB)",
+                        rank++, app.procName.c_str(), app.pid, appFreedMb, beforeMb, afterMb);
                 }
             }
         }
@@ -4979,8 +5129,7 @@ static void PerformMemoryCleanup(const wchar_t* triggerReason,
         if (wcscmp(triggerReason, L"[Panic Hotkey Trigger]") == 0) {
             // NOLINTNEXTLINE(bugprone-unused-local-non-trivial-variable)
             std::wstring report = BuildSessionStatsString();
-            LogEvent(LogCategory::Memory, L"%s", report.c_str());
-            Wh_Log(L"%s", report.c_str());
+            Wh_Log(L"[Memory] %s", report.c_str());
             if (settings.enableHotkeySound) {
                 MessageBeep(MB_OK);
             }
@@ -5032,6 +5181,12 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
             std::lock_guard<std::mutex> lock(g_focusMapMutex);
             g_processLastMinimizedTime[pid] = std::chrono::steady_clock::now();
         }
+    } else if (event == EVENT_SYSTEM_MINIMIZEEND) {
+        DWORD pid = GetWindowProcessIdResolved(hwnd);
+        if (pid != 0) {
+            std::lock_guard<std::mutex> lock(g_focusMapMutex);
+            g_processLastMinimizedTime.erase(pid);
+        }
     }
 }
 
@@ -5039,8 +5194,8 @@ static LRESULT CALLBACK PowerWndProc(HWND hwnd, UINT uMsg, WPARAM wParam,
                                      LPARAM lParam) {
     if (uMsg == WM_POWERBROADCAST) {
         if (wParam == PBT_APMSUSPEND) {
-            LogEvent(LogCategory::Power,
-                     L"System entering sleep, restoring priorities and pausing engine");
+            Wh_Log(
+                L"[Power] System entering sleep, restoring priorities and pausing engine");
             g_systemSuspended.store(true);
             {
                 std::lock_guard<std::recursive_mutex> lock(g_priorityMutex);
@@ -5051,8 +5206,8 @@ static LRESULT CALLBACK PowerWndProc(HWND hwnd, UINT uMsg, WPARAM wParam,
                    wParam == PBT_APMRESUMESUSPEND) {
             g_lastResumeTick.store(GetTickCount64(), std::memory_order_release);
             g_resetSamplesRequested.store(true, std::memory_order_release);
-            LogEvent(LogCategory::Power,
-                     L"System resumed from sleep, starting 30s warm-up period");
+            Wh_Log(
+                L"[Power] System resumed from sleep, starting 30s warm-up period");
             auto now = std::chrono::steady_clock::now();
             {
                 std::lock_guard<std::mutex> lock(g_focusMapMutex);
@@ -5103,7 +5258,7 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
             EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, WinEventProc,
             0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
         g_minimizeWinEventHook = SetWinEventHook(
-            EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZESTART, nullptr, WinEventProc,
+            EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, nullptr, WinEventProc,
             0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 
         {
@@ -5129,8 +5284,8 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
                 break;
 
             if (msg.message == WM_HOTKEY && msg.wParam == kPanicHotkeyId) {
-                LogEvent(LogCategory::Memory,
-                         L"Panic hotkey triggered (Ctrl+Alt+F11). Requesting immediate working set sweep...");
+                Wh_Log(
+                    L"[Memory] Panic hotkey triggered (Ctrl+Alt+F11). Requesting immediate working set sweep...");
                 g_forceCleanupRequested.store(true);
                 if (g_wakeEvent) {
                     SetEvent(g_wakeEvent);
@@ -5266,11 +5421,11 @@ static void MemoryOptimizerWorker() {
                 if (onBattery != s_lastOnBatteryState) {
                     s_lastOnBatteryState = onBattery;
                     if (onBattery) {
-                        LogEvent(LogCategory::Power,
-                                 L"Battery power active, pausing background throttling and memory cleanup");
+                        Wh_Log(
+                            L"[Power] Battery power active, pausing background throttling and memory cleanup");
                     } else {
-                        LogEvent(LogCategory::Power,
-                                 L"AC power restored, resuming background optimization and throttling");
+                        Wh_Log(
+                            L"[Power] AC power restored, resuming background optimization and throttling");
                     }
                 }
 
@@ -5284,7 +5439,7 @@ static void MemoryOptimizerWorker() {
                 bool inGamingLockdown =
                     IsGamingLockdownActive(fgPid, std::chrono::steady_clock::now(),
                                            settings.gameAltTabGracePeriodSeconds);
-                UpdateDynamicPowerPlanState(settings, inGamingLockdown, onBattery);
+                UpdateDynamicPowerPlanState(settings, inGamingLockdown);
 
                 if (!onBattery && !recentlyResumed && !inGamingLockdown) {
                     PerformEarlyMemoryCapSweep(settings, fgPid);
@@ -5294,11 +5449,11 @@ static void MemoryOptimizerWorker() {
                 if (inGamingLockdown != s_lastGamingLockdownState) {
                     s_lastGamingLockdownState = inGamingLockdown;
                     if (inGamingLockdown) {
-                        LogEvent(LogCategory::Sanctuary,
-                                 L"Game active, memory trimming suspended");
+                        Wh_Log(
+                            L"[Sanctuary] Game active, memory trimming suspended");
                     } else {
-                        LogEvent(LogCategory::Sanctuary,
-                                 L"Game inactive, resuming memory management");
+                        Wh_Log(
+                            L"[Sanctuary] Game inactive, resuming memory management");
                     }
                 }
 
@@ -5438,8 +5593,8 @@ static void MemoryOptimizerWorker() {
             }
 
             DWORD waitSec = (DWORD)std::clamp(settings.checkIntervalSec, 1, 60);
-            DWORD waitRes =
-                WaitForMultipleObjects(2, waitHandles, FALSE, waitSec * 1000);
+            DWORD waitRes = WaitForMultipleObjects(ARRAYSIZE(waitHandles), waitHandles,
+                                                   FALSE, waitSec * 1000);
 
             if (waitRes == WAIT_OBJECT_0) {
                 break;
@@ -5540,7 +5695,24 @@ static void LoadSettings() {
     g_settings.enableDynamicPowerPlan =
         Wh_GetIntSetting(L"enableDynamicPowerPlan") != 0;
     if (!g_settings.enableDynamicPowerPlan) {
-        RequestPowerSchemeAsync(false);
+        RequestPerformancePlanAsync(false);
+    }
+
+    auto planSelStr = WindhawkUtils::StringSetting::make(L"powerPlanSelection");
+    if (wcscmp(planSelStr.get(), L"ultimatePerformance") == 0) {
+        g_settings.targetPowerPlanGuid = kGuidUltimatePerformance;
+    } else if (wcscmp(planSelStr.get(), L"custom") == 0) {
+        auto customGuidStr =
+            WindhawkUtils::StringSetting::make(L"customPowerPlanGuid");
+        g_settings.targetPowerPlanGuid = ParsePowerPlanGuid(
+            customGuidStr.get(), kGuidHighPerformance);
+    } else {
+        g_settings.targetPowerPlanGuid = kGuidHighPerformance;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
+        g_hasFailedPowerPlanGuid = false;
     }
 
     int gameGrace = (int)Wh_GetIntSetting(L"gameAltTabGracePeriodSeconds");
@@ -5579,16 +5751,14 @@ static void LoadSettings() {
 // ---------------------------------------------------------------------------
 
 BOOL WhTool_ModInit() {
-    LogEvent(
-        LogCategory::Boot,
-        L"Initializing Smart Process Priority & RAM Optimizer...");
+    Wh_Log(L"[Boot] Initializing Smart Process Priority & RAM Optimizer...");
 
     const SystemHardwareProfile& hw = GetHardwareProfile();
-    LogEvent(LogCategory::Boot,
-             L"Hardware Profile: %.1f GB RAM, %u CPU cores%s.",
-             hw.totalRamGb,
-             hw.coreCount,
-             hw.isHybridCpu ? L" (hybrid P/E cores)" : L"");
+    Wh_Log(
+        L"[Boot] Hardware Profile: %.1f GB RAM, %u CPU cores%s.",
+        hw.totalRamGb,
+        hw.coreCount,
+        hw.isHybridCpu ? L" (hybrid P/E cores)" : L"");
 
     HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
     if (hNtdll) {
@@ -5654,22 +5824,109 @@ BOOL WhTool_ModInit() {
     g_workerRunning.store(true);
     g_workerThread.emplace(MemoryOptimizerWorker);
 
-    LogEvent(LogCategory::Boot,
-             L"Mod engine initialized successfully.");
+    Wh_Log(L"[Boot] Mod engine initialized successfully.");
     return TRUE;
 }
 
-void WhTool_ModSettingsChanged() {
-    LogEvent(LogCategory::Boot,
-             L"Settings updated. Reloading configuration...");
-    LoadSettings();
+static void LogSettingsTransitions(const ModSettings& oldSettings,
+                                   const ModSettings& newSettings) {
+    if (oldSettings.enableDynamicPowerPlan != newSettings.enableDynamicPowerPlan) {
+        if (newSettings.enableDynamicPowerPlan) {
+            wchar_t guidStr[64]{};
+            StringFromGUID2(newSettings.targetPowerPlanGuid, guidStr, ARRAYSIZE(guidStr));
+            Wh_Log(
+                L"[Power] Dynamic Performance Power Scheme: ON (Target: %s)",
+                guidStr);
+        } else {
+            Wh_Log(L"[Power] Dynamic Performance Power Scheme: OFF");
+        }
+    } else if (newSettings.enableDynamicPowerPlan &&
+               !IsEqualGUID(oldSettings.targetPowerPlanGuid, newSettings.targetPowerPlanGuid)) {
+        wchar_t guidStr[64]{};
+        StringFromGUID2(newSettings.targetPowerPlanGuid, guidStr, ARRAYSIZE(guidStr));
+        Wh_Log(
+            L"[Power] Dynamic Power Scheme target updated: %s",
+            guidStr);
+    }
 
-    ModSettings settings = GetSettingsSnapshot();
+    if (oldSettings.enableForegroundCpuSets != newSettings.enableForegroundCpuSets) {
+        Wh_Log(
+            L"[ProBalance] P-Core affinity for foreground app: %s",
+            newSettings.enableForegroundCpuSets ? L"ON" : L"OFF");
+    }
+
+    if (oldSettings.enableProBalance != newSettings.enableProBalance) {
+        Wh_Log(
+            L"[ProBalance] Foreground Priority Boost (ProBalance): %s",
+            newSettings.enableProBalance ? L"ON" : L"OFF");
+    } else if (oldSettings.foregroundPriorityLevel != newSettings.foregroundPriorityLevel) {
+        Wh_Log(
+            L"[ProBalance] Foreground Priority Level: %s",
+            (newSettings.foregroundPriorityLevel == ForegroundPrioritySetting::High)
+                ? L"High"
+                : L"AboveNormal");
+    }
+
+    if (oldSettings.enableBackgroundThrottling != newSettings.enableBackgroundThrottling) {
+        Wh_Log(
+            L"[Throttler] Background CPU Throttling: %s",
+            newSettings.enableBackgroundThrottling ? L"ON" : L"OFF");
+    }
+    if (oldSettings.enableEcoQosManagement != newSettings.enableEcoQosManagement) {
+        Wh_Log(
+            L"[Throttler] Windows Efficiency Mode (EcoQoS) for background: %s",
+            newSettings.enableEcoQosManagement ? L"ON" : L"OFF");
+    }
+    if (oldSettings.enableBackgroundCpuSets != newSettings.enableBackgroundCpuSets) {
+        Wh_Log(
+            L"[Throttler] E-Core confinement for background apps: %s",
+            newSettings.enableBackgroundCpuSets ? L"ON" : L"OFF");
+    }
+
+    if (oldSettings.enableAudioShielding != newSettings.enableAudioShielding) {
+        Wh_Log(
+            L"[Sanctuary] Audio & Music Protection Shield: %s",
+            newSettings.enableAudioShielding ? L"ON" : L"OFF");
+    }
+    if (oldSettings.enableNetworkShielding != newSettings.enableNetworkShielding) {
+        Wh_Log(
+            L"[Sanctuary] Network Activity Shield: %s",
+            newSettings.enableNetworkShielding ? L"ON" : L"OFF");
+    }
+
+    if (oldSettings.trimMinimizedWindows != newSettings.trimMinimizedWindows) {
+        Wh_Log(
+            L"[Memory] Clean Minimized Windows: %s",
+            newSettings.trimMinimizedWindows ? L"ON" : L"OFF");
+    }
+    if (oldSettings.enableBrowserTabTrim != newSettings.enableBrowserTabTrim) {
+        Wh_Log(
+            L"[Memory] Inactive Browser & Web App Tabs Trim: %s",
+            newSettings.enableBrowserTabTrim ? L"ON" : L"OFF");
+    }
+    if (oldSettings.freeRamThresholdPercent != newSettings.freeRamThresholdPercent) {
+        if (newSettings.freeRamThresholdPercent <= 0) {
+            Wh_Log(L"[Memory] Standard Free RAM Threshold: Auto-Adaptive");
+        } else {
+            Wh_Log(
+                L"[Memory] Standard Free RAM Threshold: %d%%",
+                newSettings.freeRamThresholdPercent);
+        }
+    }
+}
+
+void WhTool_ModSettingsChanged() {
+    Wh_Log(L"[Boot] Settings updated. Reloading configuration...");
+    ModSettings oldSettings = GetSettingsSnapshot();
+    LoadSettings();
+    ModSettings newSettings = GetSettingsSnapshot();
+
+    LogSettingsTransitions(oldSettings, newSettings);
 
     // If foreground boost was disabled, restore boosted process immediately.
     // Note: Background throttling restoration is handled safely by the worker
     // thread upon waking to avoid cross-thread data races on throttled processes.
-    if (!settings.enableProBalance) {
+    if (!newSettings.enableProBalance) {
         std::lock_guard<std::recursive_mutex> lock(g_priorityMutex);
         RestoreForegroundBoostLocked();
     } else {
@@ -5678,11 +5935,16 @@ void WhTool_ModSettingsChanged() {
     }
 
     if (g_hookThreadRunning.load() && g_hookThreadId != 0) {
-        if (settings.enablePanicHotkey && !g_panicHotkeyRegistered.load()) {
+        if (newSettings.enablePanicHotkey && !g_panicHotkeyRegistered.load()) {
             PostThreadMessageW(g_hookThreadId, WM_APP, 1, 0);
-        } else if (!settings.enablePanicHotkey && g_panicHotkeyRegistered.load()) {
+        } else if (!newSettings.enablePanicHotkey && g_panicHotkeyRegistered.load()) {
             PostThreadMessageW(g_hookThreadId, WM_APP, 0, 0);
         }
+    }
+
+    if (newSettings.enableDynamicPowerPlan &&
+        g_isPerformancePlanEngaged.load()) {
+        RequestPerformancePlanAsync(true);
     }
 
     if (g_wakeEvent) {
@@ -5691,8 +5953,7 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-    LogEvent(LogCategory::Shutdown,
-             L"Deinitializing mod engine...");
+    Wh_Log(L"[Shutdown] Deinitializing mod engine...");
 
     if (g_workerRunning.load()) {
         g_workerRunning.store(false);
