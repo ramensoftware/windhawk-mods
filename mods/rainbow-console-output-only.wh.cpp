@@ -241,6 +241,16 @@ static void rc_MakeRainbow(const WCHAR* src, WCHAR* dst, int dstMax) {
                 int j = i + 2;
                 while (src[j] >= L'0' && src[j] <= L'?')
                     j++;
+                if (src[j] == L'\0') {
+                    // CSI 序列在数据包中间截断（如传到 ESC[1 即结束）：
+                    // 复制已收到的字节后直接结束主循环，避免 ++i 越过
+                    // 终止符、越界读取堆内存脏数据导致乱码/崩溃。
+                    dst[d++] = src[i];
+                    dst[d++] = src[i + 1];
+                    for (int k = i + 2; k < j; k++)
+                        dst[d++] = src[k];
+                    break;
+                }
                 if (src[j] == L'm') {
                     i = j;
                     continue;
@@ -378,7 +388,10 @@ rc_HookWriteFile(HANDLE h, LPCVOID b, DWORD n, LPDWORD w, LPOVERLAPPED o) {
         return pOrigWriteFile(h, b, n, w, o);
     if (!rc_active || n == 0 || n > (DWORD)INT_MAX)
         return pOrigWriteFile(h, b, n, w, o);
-    if (GetFileType(h) != FILE_TYPE_CHAR)
+    // GetConsoleMode 才是真控制台判断：GetFileType==FILE_TYPE_CHAR 对
+    // COM1 串口等字符设备同样成立，会误伤串口（如 copy file.txt COM1）
+    DWORD cmode = 0;
+    if (!GetConsoleMode(h, &cmode))
         return pOrigWriteFile(h, b, n, w, o);
 
     EnterCriticalSection(&rc_cs);
@@ -395,7 +408,17 @@ rc_HookWriteFile(HANDLE h, LPCVOID b, DWORD n, LPDWORD w, LPOVERLAPPED o) {
         return pOrigWriteFile(h, b, n, w, o);
     }
 
-    int wlen = MultiByteToWideChar(CP_UTF8, 0, (LPCCH)b, n, src, (int)n);
+    // 用控制台输出代码页动态解码：Windows 默认可能是 OEM 936(GBK)，
+    // 仅用 CP_UTF8 会把非英文解成 ? 或乱码；加 MB_ERR_INVALID_CHARS 精确校验
+    UINT cp = GetConsoleOutputCP();
+    if (cp == 0)
+        cp = CP_ACP;
+    int wlen =
+        MultiByteToWideChar(cp, MB_ERR_INVALID_CHARS, (LPCCH)b, n, src, (int)n);
+    if (wlen <= 0) {
+        wlen = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, (LPCCH)b, n,
+                                   src, (int)n);
+    }
     if (wlen <= 0) {
         wlen = MultiByteToWideChar(CP_ACP, 0, (LPCCH)b, n, src, (int)n);
     }
@@ -403,13 +426,11 @@ rc_HookWriteFile(HANDLE h, LPCVOID b, DWORD n, LPDWORD w, LPOVERLAPPED o) {
         src[wlen] = L'\0';
         rc_MakeRainbow(src, out, (int)need);
 
-        int clen =
-            WideCharToMultiByte(CP_UTF8, 0, out, -1, NULL, 0, NULL, NULL);
+        int clen = WideCharToMultiByte(cp, 0, out, -1, NULL, 0, NULL, NULL);
         if (clen > 0) {
             CHAR* ansi = (CHAR*)malloc(clen);
             if (ansi) {
-                WideCharToMultiByte(CP_UTF8, 0, out, -1, ansi, clen, NULL,
-                                    NULL);
+                WideCharToMultiByte(cp, 0, out, -1, ansi, clen, NULL, NULL);
                 BOOL ret = pOrigWriteFile(h, ansi, clen - 1, w, o);
                 free(ansi);
                 free(src);
