@@ -2,12 +2,89 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-14T02:01:47.000Z</updated>
+    <updated>2026-11-14T04:04:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Task Manager Network Speed in Bytes 1.3]]></title>
+        <id>https://windhawk.net/mods/taskmgr-network-bytes#57b6069a465ecca327e085d3d0b2057fad533a43</id>
+        <link href="https://windhawk.net/mods/taskmgr-network-bytes"/>
+        <updated>2026-11-14T04:04:53.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed: the mod failed to load when Microsoft's symbol server had no PDB for the installed Task Manager build. Added a byte-pattern fallback for all seven hooks.</li>
+<li>Improved: pattern matching anchors to function starts from the executable's <code>.pdata</code> table, requires an exact and unique match, and refuses ambiguous matches instead of hooking the wrong function.</li>
+<li>Symbol-based hooking is still tried first, and every hook remains optional. No settings changed.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Nehoray-Bitan</name>
+            <uri>https://github.com/Nehoray-Bitan</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Compact RDP connection bar 3.0.0]]></title>
+        <id>https://windhawk.net/mods/compact-rdp-connection-bar#a0a4aa02a5463fd3ee74a5ddb2b6c2d89d8e27b6</id>
+        <link href="https://windhawk.net/mods/compact-rdp-connection-bar"/>
+        <updated>2026-11-14T04:04:48.000Z</updated>
+        <content type="html"><![CDATA[<h1>Compact RDP connection bar</h1>
+<p>Shrinks the top connection bar of Remote Desktop Connection (Ctrl+Alt+Home).</p>
+<p>The bar normally spans a large fixed width: a small button group on the left,
+the hostname in the middle, the window buttons on the right. This mod keeps the
+hostname zone, keeps the button groups, and drops the empty space between them.</p>
+<p>Works with any number of toolbars. A toolbar whose buttons are all hidden needs
+no width and is simply not given any, which is what happens once the pin and
+quality buttons are hidden.</p>
+<p>The right toolbar carries the window buttons - minimize, restore and close.
+Each can be hidden separately; hide all three and the bar shrinks to the
+hostname alone. A single remaining toolbar keeps the side it originally sat on,
+so hiding the window buttons does not move the pin group to the right.</p>
+<p>The quality indicator is a lock icon that mstsc only shows in some sessions.
+Ticking the setting when it is absent changes nothing, and the bar is laid out
+exactly as it would be without the setting.</p>
+<h2>Screenshots</h2>
+<table>
+<thead>
+<tr>
+<th>Before</th>
+<th>After</th>
+<th>After2</th>
+<th>After3</th>
+<th>After4</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/Before.png" alt="Original wide connection bar"></td>
+<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After.png" alt="Compact bar, pin hidden"></td>
+<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After2.png" alt="Compact bar, pin and quality hidden"></td>
+<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After3.png" alt="Compact bar, pin, minimize and restore hidden"></td>
+<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After4.png" alt="Compact bar, all buttons hidden, hostname only"></td>
+</tr>
+</tbody>
+</table>
+<h2>Settings</h2>
+<ul>
+<li><strong>Text area width</strong> - target width of the hostname zone, scaled for DPI.
+Raised automatically when the hostname needs more room.</li>
+<li><strong>Hide pin button</strong> - hides the pin (keep on top) button.</li>
+<li><strong>Hide quality button</strong> - hides the connection quality indicator.</li>
+<li><strong>Hide lock button</strong> - hides the lock icon mstsc shows next to the quality
+indicator. The button is only present in some sessions; when it is absent,
+nothing changes.</li>
+<li><strong>Hide minimize / restore / close</strong> - hide the window buttons on the
+right. Hiding the close button removes the only visible way to disconnect;
+the session can still be closed from the taskbar icon, or Ctrl+Alt+Break
+leaves full screen so the bar and the window controls come back.</li>
+</ul>
+]]></content>
+        <author>
+            <name>hsb5</name>
+            <uri>https://github.com/hsb5</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Unlock "Folder In Use" 1.1.0]]></title>
         <id>https://windhawk.net/mods/unlock-folder-in-use#5d7506d753a4a65ec7ee938a0b9fcb6c165476e1</id>
@@ -446,188 +523,6 @@ for these values at all.</li>
         <author>
             <name>iMAboud</name>
             <uri>https://github.com/iMAboud</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Arabic Keyboard Layout Fixer 1.3.1]]></title>
-        <id>https://windhawk.net/mods/arabic-keyboard-layout-fixer#262de066b0cb265da1ce7fb5eb666fa09bddfa58</id>
-        <link href="https://windhawk.net/mods/arabic-keyboard-layout-fixer"/>
-        <updated>2026-11-13T08:01:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add animated demo GIF to mod details and README</li>
-</ul>
-]]></content>
-        <author>
-            <name>Omar</name>
-            <uri>https://github.com/uomr</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[New Windows Search Extensions 0.1.0]]></title>
-        <id>https://windhawk.net/mods/search-menu-extensions#37956ed345a36863ccd46033d42f032825d01185</id>
-        <link href="https://windhawk.net/mods/search-menu-extensions"/>
-        <updated>2026-11-13T08:01:22.000Z</updated>
-        <content type="html"><![CDATA[<blockquote>
-<p><strong>Updated for Build 26320.9876 (Windows 11 Insider Beta).</strong> Insider builds
-change quickly, so newer builds may break or move this.</p>
-</blockquote>
-<h1>New Windows Search Extensions</h1>
-<p><strong>This is only for the NEW Windows search</strong>: the compact &quot;composer&quot; search box
-on recent Windows 11 Insider builds (hosted by
-<code>shellhost.exe loadComponent SystemComposerControl</code>, the one with inline
-actions like &quot;Turn on dark mode&quot; and the volume slider). It does <strong>nothing</strong> for
-the classic Start menu search, the old taskbar search flyout (<code>SearchHost.exe</code>)
-or Windows 10.</p>
-<p>Adds new kinds of results to the new search box, mixed in with the native ones:</p>
-<ul>
-<li><strong>Calculator</strong>: type <code>12*7.5</code>, <code>(3+4)^2</code>, <code>sqrt(2)</code>, <code>200 * 15%</code>, <code>50 + 10%</code> and press
-Enter to copy the result. Supports <code>+ - * / ^ %</code>, brackets, <code>pi</code>, <code>e</code> and
-<code>sqrt cbrt abs sin cos tan asin acos atan ln log log2 exp round floor ceil</code>.</li>
-<li><strong>Unit converter</strong>: <code>5 km in mi</code>, <code>72 f to c</code>, <code>1.5 gb in mb</code>, <code>3 cups to ml</code>.
-Length, weight, volume, time, speed, data size and temperature.</li>
-<li><strong>Kill process</strong>: <code>kill note</code> lists the running processes whose name contains
-&quot;note&quot;, with their memory use; Enter ends the selected one. It's ended at
-once, like &quot;End task&quot; in Task Manager, so unsaved work in it is lost. Only
-processes you're allowed to end are listed.</li>
-<li><strong>Custom commands</strong>: your own keywords, set in the mod settings. A keyword can
-open a program, file, folder or URL. Put <code>{query}</code> in the command to pass on
-what you type after the keyword: with the default <code>g</code> command, <code>g windhawk</code>
-searches Google for &quot;windhawk&quot;. Such a command shows up once you've typed
-something after the keyword.</li>
-</ul>
-<p>Each one can be turned off in the settings.</p>
-<h2>For developers: add your own results</h2>
-<p>Other mods, and any program or script, can put items into the new search box
-through this mod. Providers see every query and decide for themselves when to
-answer, so no prefix is needed. The <strong>Demo provider</strong> setting adds sample items
-(type <code>wh hello</code>: an echo/copy item, a toggle, a &quot;run&quot; item and a card).</p>
-<p><img src="https://raw.githubusercontent.com/TurtlesMaster1/windhawk-search-menu-extensions/main/images/demo.png" alt="Demo provider items mixed into the new Windows search"></p>
-<p><img src="https://raw.githubusercontent.com/TurtlesMaster1/windhawk-search-menu-extensions/main/images/weather.png" alt="A pipe client showing live weather with an Adaptive Card"></p>
-<p><em>Above: <code>examples/weather_client.py</code>, an out-of-process provider talking over
-the named pipe.</em></p>
-<p>Items are injected as genuine native search providers. Windows' own search is
-built from <em>Palette extensions</em> (<code>Windows.UI.Palettes</code>): Apps, Files, Settings,
-Windows Actions, Command Line and so on are each one extension. This mod adds
-one more extension per provider (the built-in ones included), so the items are
-real <code>PaletteItem</code>s. They mix into the native list with native ranking, keyboard
-navigation, icons, toggles and Adaptive Card content.</p>
-<h2>Two ways to provide items</h2>
-<h3>1. From another Windhawk mod (in-process)</h3>
-<p>Your mod must also <code>@include shellhost.exe</code>. Find this mod's DLL and call its
-exported C API (Windhawk exports every symbol of a mod DLL):</p>
-<pre><code class="language-cpp">typedef struct WSE_ProviderCallbacks {
-    UINT32 cbSize;
-    void* ctx;
-    // Called for every query (text may be empty = zero state). Answer with
-    // WSE_SubmitResults(queryHandle, itemsJson, done) from any thread, now or later.
-    void (WINAPI* onQuery)(void* ctx, UINT64 queryHandle, PCWSTR text, PCWSTR queryJson);
-    // An item was invoked: actionId is &quot;invoke&quot;, &quot;toggle&quot; or a card action id.
-    void (WINAPI* onInvoke)(void* ctx, PCWSTR itemId, PCWSTR actionId, PCWSTR dataJson, PCWSTR inputsJson);
-    // Optional. Query abandoned (user typed more / closed search).
-    void (WINAPI* onCancel)(void* ctx, UINT64 queryHandle);
-    // Optional. The library is unloading: drop the provider handle, don't call the API again.
-    void (WINAPI* onDetach)(void* ctx);
-} WSE_ProviderCallbacks;
-
-int    WINAPI WSE_GetApiVersion(void);                                   // 1
-UINT64 WINAPI WSE_RegisterProvider(PCWSTR providerJson, const WSE_ProviderCallbacks* cb);
-BOOL   WINAPI WSE_SubmitResults(UINT64 queryHandle, PCWSTR itemsJson, BOOL done);
-BOOL   WINAPI WSE_SetStaticItems(UINT64 provider, PCWSTR itemsJson);     // items always offered (GetItems)
-BOOL   WINAPI WSE_UpdateCard(UINT64 provider, PCWSTR itemId, PCWSTR dataJson); // live-update a card's data
-BOOL   WINAPI WSE_NotifyChanged(UINT64 provider);                        // ask search to re-query
-BOOL   WINAPI WSE_UnregisterProvider(UINT64 provider);                   // waits for running callbacks
-</code></pre>
-<p>Finding the library: enumerate the modules of the process and use the first one
-that exports <code>WSE_GetApiVersion</code>. Mods load in any order, so retry for a few
-seconds if it isn't there yet (and again later: the library can be disabled,
-updated or re-enabled while your mod is running; <code>onDetach</code> tells you it's going).</p>
-<p>Callbacks run on the library's worker threads, never on Windows' own threads.
-Call <code>WSE_UnregisterProvider</code> in your <code>Wh_ModUninit</code>: it returns once none of
-your callbacks is running any more, so your DLL can unload safely. (Calling it
-from inside one of your own callbacks is fine too; it then waits for the others.)</p>
-<h3>2. From any process (named pipe)</h3>
-<p>Connect to <code>\\.\pipe\WindhawkSearchExtensions-&lt;session id&gt;</code> (the Windows
-session id of your process, e.g. <code>ProcessIdToSessionId</code>) and exchange
-<strong>newline-delimited UTF-8 JSON</strong> messages. Each connection can register any
-number of providers. They're removed automatically when the connection closes.</p>
-<p>Only processes running as the same user can open the pipe. Any of them can
-register a provider, and a provider sees the text typed into search. That's
-why the <strong>Named pipe API</strong> setting is off by default: turn it on to use the pipe.</p>
-<p>Client to library:</p>
-<pre><code class="language-json">{&quot;op&quot;:&quot;register&quot;,&quot;provider&quot;:{&quot;id&quot;:&quot;weather&quot;,&quot;name&quot;:&quot;Weather&quot;,&quot;glyph&quot;:&quot;\uE706&quot;}}
-{&quot;op&quot;:&quot;results&quot;,&quot;queryId&quot;:&quot;17&quot;,&quot;items&quot;:[ ... ],&quot;done&quot;:true}
-{&quot;op&quot;:&quot;setItems&quot;,&quot;provider&quot;:&quot;weather&quot;,&quot;items&quot;:[ ... ]}
-{&quot;op&quot;:&quot;updateCard&quot;,&quot;provider&quot;:&quot;weather&quot;,&quot;itemId&quot;:&quot;now&quot;,&quot;data&quot;:{ ... }}
-{&quot;op&quot;:&quot;refresh&quot;,&quot;provider&quot;:&quot;weather&quot;}
-{&quot;op&quot;:&quot;unregister&quot;,&quot;provider&quot;:&quot;weather&quot;}
-</code></pre>
-<p>Library to client:</p>
-<pre><code class="language-json">{&quot;op&quot;:&quot;registered&quot;,&quot;provider&quot;:&quot;weather&quot;,&quot;extensionId&quot;:&quot;Windhawk.weather&quot;}
-{&quot;op&quot;:&quot;query&quot;,&quot;provider&quot;:&quot;weather&quot;,&quot;queryId&quot;:&quot;17&quot;,&quot;text&quot;:&quot;weather lond&quot;,&quot;query&quot;:{...}}
-{&quot;op&quot;:&quot;cancel&quot;,&quot;provider&quot;:&quot;weather&quot;,&quot;queryId&quot;:&quot;17&quot;}
-{&quot;op&quot;:&quot;invoke&quot;,&quot;provider&quot;:&quot;weather&quot;,&quot;itemId&quot;:&quot;now&quot;,&quot;actionId&quot;:&quot;invoke&quot;,&quot;data&quot;:&quot;&quot;,&quot;inputs&quot;:&quot;&quot;}
-{&quot;op&quot;:&quot;error&quot;,&quot;message&quot;:&quot;...&quot;}
-</code></pre>
-<h2>Provider JSON</h2>
-<pre><code class="language-json">{
-  &quot;id&quot;: &quot;weather&quot;,                       // unique, [A-Za-z0-9._-]
-  &quot;name&quot;: &quot;Weather&quot;,                     // shown in search settings/diagnostics
-  &quot;description&quot;: &quot;Current conditions&quot;,
-  &quot;glyph&quot;: &quot;\uE706&quot;, &quot;font&quot;: &quot;Segoe Fluent Icons&quot;,  // or &quot;icon&quot;: &quot;C:\\path\\icon.png&quot;
-  &quot;zeroState&quot;: false,                    // also asked when the box is empty
-  &quot;kinds&quot;: [&quot;QueryResult.SystemComposer&quot;],          // advanced: palette kinds this source serves
-  &quot;itemKinds&quot;: [&quot;Command&quot;]               // default kinds for items
-}
-</code></pre>
-<h2>Item JSON</h2>
-<pre><code class="language-json">{
-  &quot;id&quot;: &quot;now&quot;,                           // stable id within the provider
-  &quot;title&quot;: &quot;London: 14°C, light rain&quot;,
-  &quot;subtitle&quot;: &quot;Feels like 12°C&quot;,         // string or array of strings
-  &quot;icon&quot;: {&quot;glyph&quot;: &quot;\uE9E2&quot;, &quot;font&quot;: &quot;Segoe Fluent Icons&quot;},  // or {&quot;uri&quot;: &quot;https://...&quot;} / {&quot;path&quot;: &quot;C:\\x.png&quot;} / &quot;C:\\x.png&quot;
-  &quot;tags&quot;: [{&quot;text&quot;: &quot;Live&quot;, &quot;tooltip&quot;: &quot;Updated just now&quot;}],
-  &quot;kinds&quot;: [&quot;Command&quot;],
-  &quot;score&quot;: 0.9,                          // goes to the native ranking (KnownPaletteProperties.Score)
-  &quot;properties&quot;: {&quot;Path&quot;: &quot;C:\\Users&quot;},   // any extra KnownPaletteProperties
-  &quot;action&quot;: {&quot;type&quot;: &quot;callback&quot;},        // default: onInvoke(id, &quot;invoke&quot;)
-  //  {&quot;type&quot;:&quot;uri&quot;,&quot;uri&quot;:&quot;https://bbc.co.uk/weather&quot;}
-  //  {&quot;type&quot;:&quot;run&quot;,&quot;command&quot;:&quot;notepad.exe&quot;,&quot;args&quot;:&quot;x.txt&quot;}
-  //  {&quot;type&quot;:&quot;copy&quot;,&quot;text&quot;:&quot;14°C&quot;}
-  //  {&quot;type&quot;:&quot;toggle&quot;,&quot;isToggled&quot;:true}   -&gt; onInvoke(id, &quot;toggle&quot;, &quot;true&quot;|&quot;false&quot;)
-  &quot;card&quot;: {                              // optional Adaptive Card content (template + data)
-    &quot;template&quot;: { &quot;type&quot;: &quot;AdaptiveCard&quot;, &quot;version&quot;: &quot;1.5&quot;, &quot;body&quot;: [ ... ], &quot;actions&quot;: [ ... ] },
-    &quot;data&quot;: { ... }                      // Action.Submit/Execute -&gt; onInvoke(id, actionId, data, inputs)
-  }
-}
-</code></pre>
-<h2>Notes</h2>
-<ul>
-<li>This mod only works on builds that have the new composer search
-(<code>Windows.UI.Palettes</code>). Elsewhere it does nothing.</li>
-<li>Windows reads its provider list once, when the composer starts. If the mod
-is enabled while the composer is already running, it restarts the composer
-(setting <strong>Restart search when enabled late</strong>). The composer comes back the
-next time you open search. Providers registered later (other mods, pipe
-clients) are picked up live.</li>
-<li>When the mod is disabled or updated, Windows may still hold some of its
-objects (items it's showing, finished queries). The mod then restarts the
-composer instead of unloading under them; search reopens normally next time.</li>
-<li><strong>Card buttons:</strong> cards render under the selected row and you can update them
-live (<code>WSE_UpdateCard</code> / <code>updateCard</code>). But Windows ignores Action.Submit
-buttons in that inline preview (&quot;slot previews do not support card actions&quot;).
-Put the action on the item itself.</li>
-<li><strong>Pipe clients:</strong> if you open the pipe as an ordinary synchronous handle
-(Python <code>open()</code>, .NET <code>FileStream</code> without async), don't write from one
-thread while another is blocked reading. Windows serializes I/O on
-synchronous handles and the write waits forever. Either answer from the
-reading thread or open the pipe overlapped.</li>
-<li>Enable logging for the mod in Windhawk to see the queries and what Windows
-asks of the providers.</li>
-</ul>
-]]></content>
-        <author>
-            <name>TurtlesMaster1</name>
-            <uri>https://github.com/TurtlesMaster1</uri>
         </author>
     </entry>
 </feed>

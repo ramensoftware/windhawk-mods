@@ -2,12 +2,73 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-13T20:01:37.000Z</updated>
+    <updated>2026-11-14T04:04:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Compact RDP connection bar 3.0.0]]></title>
+        <id>https://windhawk.net/mods/compact-rdp-connection-bar#a0a4aa02a5463fd3ee74a5ddb2b6c2d89d8e27b6</id>
+        <link href="https://windhawk.net/mods/compact-rdp-connection-bar"/>
+        <updated>2026-11-14T04:04:48.000Z</updated>
+        <content type="html"><![CDATA[<h1>Compact RDP connection bar</h1>
+<p>Shrinks the top connection bar of Remote Desktop Connection (Ctrl+Alt+Home).</p>
+<p>The bar normally spans a large fixed width: a small button group on the left,
+the hostname in the middle, the window buttons on the right. This mod keeps the
+hostname zone, keeps the button groups, and drops the empty space between them.</p>
+<p>Works with any number of toolbars. A toolbar whose buttons are all hidden needs
+no width and is simply not given any, which is what happens once the pin and
+quality buttons are hidden.</p>
+<p>The right toolbar carries the window buttons - minimize, restore and close.
+Each can be hidden separately; hide all three and the bar shrinks to the
+hostname alone. A single remaining toolbar keeps the side it originally sat on,
+so hiding the window buttons does not move the pin group to the right.</p>
+<p>The quality indicator is a lock icon that mstsc only shows in some sessions.
+Ticking the setting when it is absent changes nothing, and the bar is laid out
+exactly as it would be without the setting.</p>
+<h2>Screenshots</h2>
+<table>
+<thead>
+<tr>
+<th>Before</th>
+<th>After</th>
+<th>After2</th>
+<th>After3</th>
+<th>After4</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/Before.png" alt="Original wide connection bar"></td>
+<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After.png" alt="Compact bar, pin hidden"></td>
+<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After2.png" alt="Compact bar, pin and quality hidden"></td>
+<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After3.png" alt="Compact bar, pin, minimize and restore hidden"></td>
+<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After4.png" alt="Compact bar, all buttons hidden, hostname only"></td>
+</tr>
+</tbody>
+</table>
+<h2>Settings</h2>
+<ul>
+<li><strong>Text area width</strong> - target width of the hostname zone, scaled for DPI.
+Raised automatically when the hostname needs more room.</li>
+<li><strong>Hide pin button</strong> - hides the pin (keep on top) button.</li>
+<li><strong>Hide quality button</strong> - hides the connection quality indicator.</li>
+<li><strong>Hide lock button</strong> - hides the lock icon mstsc shows next to the quality
+indicator. The button is only present in some sessions; when it is absent,
+nothing changes.</li>
+<li><strong>Hide minimize / restore / close</strong> - hide the window buttons on the
+right. Hiding the close button removes the only visible way to disconnect;
+the session can still be closed from the taskbar icon, or Ctrl+Alt+Break
+leaves full screen so the bar and the window controls come back.</li>
+</ul>
+]]></content>
+        <author>
+            <name>hsb5</name>
+            <uri>https://github.com/hsb5</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chrome clear on exit with keep sites 0.4.1]]></title>
         <id>https://windhawk.net/mods/chrome-clear-on-exit-keep-sites#f796a98b5959eb394186ba836682b193010f44f9</id>
@@ -1680,103 +1741,6 @@ source. Only one of the two runs at a time: if you switch to the mod, quit WinPa
         <author>
             <name>seanmamasde</name>
             <uri>https://github.com/seanmamasde</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8/8.1 Taskbar Recreation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win81-taskbar-recreation#065407515062d95879eb965294ebbba68ea309a8</id>
-        <link href="https://windhawk.net/mods/win81-taskbar-recreation"/>
-        <updated>2026-11-12T04:32:52.000Z</updated>
-        <content type="html"><![CDATA[<h1>Windows 7/8/8.1 Taskbar Recreation</h1>
-<p>This mod recreates taskbars inspired by Windows 7, Windows 8 and Windows 8.1
-on Windows 10 and 11. The taskbar runs in a dedicated Explorer process on a
-best-effort basis. Appearance and behavior can vary with
-the Windows build, DPI, taskbar replacement and other shell mods.</p>
-<h2>Features</h2>
-<ul>
-<li>Four skin presets: Windows 7, Windows 8 Beta 8148, Windows 8.0 and Windows 8.1, plus Custom for individual Start options.</li>
-<li>Task buttons, window previews, Jump Lists, notification icons and toolbars.</li>
-<li>An integrated notification area and taskbar, with a fallback to the native bar if the integrated tray cannot start.</li>
-<li>Horizontal and vertical layouts, Aero Peek and classic flyout options.</li>
-<li>Change notification area icon visibility using the Control Panel page that the mod attempts to restore, including on Windows 11; availability and behavior can vary.</li>
-<li>Static taskbar textures and system colors; the textures do not blur live windows behind the bar. Windows 7 skin adds a cursor-following, icon-colored hover glow for running apps.</li>
-<li>Local taskbar pins and ordering: the mod does not change Windows pins. Drag to an empty task area to pin; hover a running app to activate its window.</li>
-<li>An advanced battery flyout option; compatibility may vary between Windows builds.</li>
-<li>Optional secondary taskbars show pins, windows and the shared private tray. Secondary AppBar registration reserves work area when necessary and allowed by the shell. DPI scaling and flyout positioning are best-effort.</li>
-<li>Experimental shell minimize-rectangle support supplies reconstructed button coordinates to Windows, without changing Windows 7 Window Animations Restorer. Availability depends on Windows shell-hook delivery and ordering.</li>
-<li>Optional icon-only horizontal button width: native default, manual logical width, or read-only following of Taskbar height and icon size for standard registry-based Windhawk installations. This does not change icon size or taskbar height and does not hook or modify the other mod. Unsupported installation layouts use the original width.</li>
-</ul>
-<h2>Themes</h2>
-<h3>Windows 7</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7taskskin.png" alt="Windows 7 taskbar"></p>
-<h3>Windows 8 Beta 8148</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8betatask.png" alt="Windows 8 Beta taskbar"></p>
-<h3>Windows 8.0</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8.0task.png" alt="Windows 8.0 taskbar"></p>
-<h3>Windows 8.1</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81task.png" alt="Windows 8.1 taskbar"></p>
-<h3>Custom</h3>
-<p>Choose individual Start options instead of a preset.</p>
-<h2>Installation</h2>
-<ol>
-<li>Install and enable the mod in Windhawk.</li>
-<li>Choose a skin preset in the mod settings.</li>
-<li>Restart the mod after changing settings that require it.</li>
-</ol>
-<h2>Settings</h2>
-<p>The mod settings control the skin, Start button, taskbar layout, notification
-area, previews, flyouts and other behavior. Individual descriptions in
-Windhawk explain their scope and any restart requirements.</p>
-<h2>Behavior and limitations</h2>
-<ul>
-<li>
-<p>The taskbar runs in a separate <code>explorer.exe</code> process on a best-effort basis.
-Notification-page hooks still run in Explorer, and other Explorer mods can
-load in the separate process. A watchdog attempts to restore the native taskbar
-after an unexpected exit; recovery from a hang or other failure is not guaranteed.</p>
-</li>
-<li>
-<p>Skins are approximations; Windows 7 popup frames use the current system's DWM frame when available.</p>
-</li>
-<li>
-<p>The Windows 8 Start corner is illustrated, not a live Start-screen preview.</p>
-</li>
-<li>
-<p>Vertical layout, Aero Peek and classic flyouts may vary between Windows builds.</p>
-</li>
-<li>
-<p>On first use, the mod downloads <code>pnidui.dll</code>, <code>SndVolSSO.dll</code> and <code>batmeter.dll</code>. The advanced battery flyout also downloads <code>stobject.dll</code> and an English or Italian language-pack CAB. Downloaded files are checked against pinned SHA-256 hashes. The Windows 10 1511 <code>stobject.dll</code> is loaded into the dedicated tool process and stays loaded until that process exits.</p>
-</li>
-<li>
-<p>The integrated tray is enabled by default. It creates a private <code>Shell_TrayWnd</code> host and hides the native taskbar. Applications and mods that find the taskbar by class can encounter the private host; tray and AppBar traffic routed to it is processed or forwarded by the mod's UI thread. The host supplies taskbar geometry and forwards wheel input in supported cases, but it does not contain the native taskbar's <code>ReBarWindow32</code>, <code>MSTaskSwWClass</code>, Start button or XAML content. Mods that depend on those windows or content can fail or conflict. Disable the integrated tray and reload the mod if this compatibility trade-off is unsuitable.</p>
-</li>
-<li>
-<p>The integrated tray keeps “Always show all icons” in memory for the current session. It starts from the Windows preference and does not write that preference to the system registry; it is reset when the mod reloads.</p>
-</li>
-<li>
-<p>The Notification Area Icons page uses a private COM provider. The mod attempts to close its hosting window before unloading the Explorer hooks. Behavior has not been verified on every Windows build; if the window cannot be identified or does not respond, close the page before disabling, updating, or reloading the mod.</p>
-</li>
-<li>
-<p>Keep a way to disable the mod or restart Explorer.</p>
-</li>
-<li>
-<p>Windows 11 Taskbar Styler and its skins are technical references; their authors are not involved in this mod.</p>
-</li>
-</ul>
-<h2>Credits</h2>
-<ul>
-<li>WinBoeing777 - Testing on Windows 10 22H2 and Suggestions</li>
-<li>Cips - Testing on Windows 11 25H2</li>
-<li>Kiyaku - Suggestions and Testing</li>
-</ul>
-<h2>Disclaimer</h2>
-<p>This is an independent, unofficial project. It is not affiliated with, endorsed, sponsored or approved by Microsoft Corporation. Windows is a trademark of Microsoft Corporation, used here only to describe the style and compatibility of this mod.</p>
-<p>The mod is provided &quot;as is&quot;, without warranty of any kind, under the GPL-3.0-or-later license. To the maximum extent permitted by law, the author is not responsible for data loss, system instability, blocked updates, or any other damage or consequence arising from the use or misuse of this mod.</p>
-<p>Use at your own risk. You are responsible for how you use the mod and for complying with the licenses and terms of any software or resources it interacts with, including Microsoft's terms for any resources downloaded on first use. Keep a way to disable the mod or restart Explorer.</p>
-]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

@@ -3598,6 +3598,30 @@
         "version": "1.0"
       }
     },
+    "compact-rdp-connection-bar": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794629088000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794629088000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "hsb5",
+        "compilerOptions": "-luser32 -lgdi32 -lcomctl32",
+        "description": "Shrinks the top connection bar, optionally hides pin/quality/lock buttons, keeps drag working",
+        "github": "https://github.com/hsb5",
+        "include": [
+          "mstsc.exe"
+        ],
+        "name": "Compact RDP connection bar",
+        "version": "3.0.0"
+      }
+    },
     "compact-start-menu": {
       "details": {
         "defaultSorting": 7664,
@@ -19616,7 +19640,7 @@
         "ratingUsers": 7,
         "reviews": 0,
         "trendingSorting": 1.1478322963185716,
-        "updated": 1792317749000,
+        "updated": 1794629093000,
         "users": 204
       },
       "metadata": {
@@ -19631,7 +19655,7 @@
           "taskmgr.exe"
         ],
         "name": "Task Manager Network Speed in Bytes",
-        "version": "1.1"
+        "version": "1.3"
       }
     },
     "taskmgr-tab-slide-animation": {
