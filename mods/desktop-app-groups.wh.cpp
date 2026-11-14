@@ -17,8 +17,9 @@
 # Desktop App Groups
 
 Group your desktop icons into folders that work like Start menu folders.
-Drag one app onto another to make a group, then click the group to open it
-in a popup beside it.
+Drag one app onto another to make a group, then click the group (or just
+hover over it) to open it in a popup beside it. Your other desktop folders
+can open in the same popup too.
 
 ![A group open on the desktop](https://raw.githubusercontent.com/Markc719/desktop-app-groups/main/Screenshot%202026-11-09%20103044.png)
 
@@ -31,10 +32,22 @@ in a popup beside it.
 - **Make a group:** drag an app onto another app, hold it there for a
   moment, and let go. The new group appears in that spot, and its icon
   shows a preview of the first four apps inside.
-- **Open a group:** click it. A popup opens beside it with a blurred
-  background, growing out of the group's icon like a Start menu folder.
-  Click an app to launch it. Click elsewhere, press Esc, or click the group
-  again to close it.
+- **Open a group:** click it, or with the hover option, just rest the mouse
+  on it. A popup opens beside it with a blurred background, growing out of
+  the group's icon like a Start menu folder. Click an app to launch it.
+  Click elsewhere, press Esc, or click the group again to close it. A popup
+  opened by hovering closes when the mouse moves away, unless you click
+  inside it first.
+- **Big groups and folders scroll:** with the mouse wheel or the scroll bar.
+  The popup shows up to 5 rows of icons (12 in the list view) and always
+  fits on screen.
+- **Icons or a list:** show apps as a grid of icons, or as a list with each
+  file's size.
+- **Other folders too:** turn on "Open other desktop folders in the popup
+  too", and any folder on your desktop opens in the same popup, with the
+  same options. Their icons aren't changed.
+- **Open in File Explorer:** the folder button at the top of the popup opens
+  the group as a normal folder window.
 - **Add apps:** drop more apps onto the group.
 - **Rearrange apps:** drag them around inside the popup. The group's icon
   shows the first four.
@@ -49,9 +62,11 @@ in a popup beside it.
   colour you pick. Its desktop icon and its popup are tinted to match, so
   groups are easy to tell apart at a glance.
 - **Group settings:** the gear button next to the group's name opens a panel
-  with apps per row, icon size, app names, colour, sort order (your
-  arrangement or A to Z), and whether a group is removed when one app is
-  left. Each can be set for that group or for all groups.
+  with the view (icons or list), apps per row, icon size, app names, colour,
+  sort order (your arrangement or A to Z), and whether a group is removed
+  when one app is left. Each can be set for that group or for all groups.
+- **High contrast themes:** the popup uses the theme's colours and a clear
+  outline.
 
 ## How groups are stored
 
@@ -103,10 +118,16 @@ In this Settings tab:
 - **How to create a group:** hover over an icon for a moment before
   dropping (the default), hold Shift while dropping, or always.
 - **Hover time** for the hover option.
-- **Open groups with** a single click (the default, like the Start menu) or
-  a double-click (like normal folders).
+- **Open groups with** a single click (the default, like the Start menu), a
+  double-click (like normal folders), or hovering, with its own **hover
+  time**.
+- **Open other desktop folders in the popup too:** off by default. Folders
+  that aren't groups only ever have their popup settings and order kept in
+  Windhawk's storage; the mod never writes into them.
 - **Blurred popup background.** The popup uses a solid background if
-  Windows' Transparency effects setting is off.
+  Windows' Transparency effects setting is off, or with a high contrast
+  theme.
+- **Background colour strength:** how see-through the blurred background is.
 - **Animate the popup** when it opens and closes.
 - **Keep group data inside the group folders:** off by default. Turn it on
   if your desktop is synced between PCs (for example with OneDrive) and you
@@ -134,9 +155,19 @@ Made for Windows 11.
   $options:
   - single: A single click, like Start menu folders
   - double: A double-click, like normal folders
+  - hover: Hovering over them (a click opens them too)
+- openHoverDelay: 400
+  $name: Hover time before opening (milliseconds)
+  $description: Only used when opening by hovering. A popup opened this way closes again when the mouse moves away from it, unless you click inside it first.
+- openAnyFolder: false
+  $name: Open other desktop folders in the popup too
+  $description: Folders of your own, not just groups, open in the same popup, with the same options. Their icons aren't changed.
 - blurredPopup: true
   $name: Blurred popup background
-  $description: A see-through, blurred background like the Start menu's. Uses a solid background instead if Windows' Transparency effects setting is off.
+  $description: A see-through, blurred background like the Start menu's. Uses a solid background instead if Windows' Transparency effects setting is off, or with a high contrast theme.
+- popupOpacity: 60
+  $name: Background colour strength (%)
+  $description: How much colour is laid over the blurred background, from 0 (most see-through) to 100 (solid).
 - animatePopup: true
   $name: Animate the popup
   $description: Grow out of the group's icon when opening, and shrink back into it when closing, like Start menu folders.
@@ -222,7 +253,11 @@ struct {
     GroupTrigger trigger;
     int hoverDelayMs;
     bool openWithSingleClick;
+    bool openWithHover;
+    int openHoverDelayMs;
+    bool openAnyFolder;
     bool blurredPopup;
+    int popupOpacity;  // 0 to 100.
     bool animatePopup;
 } g_settings;
 
@@ -249,11 +284,16 @@ void LoadSettings() {
     }
 
     // Booleans come back from Windhawk as 0 or 1.
+    // With "hover", a single click opens groups too.
     PCWSTR openWith = Wh_GetStringSetting(L"openWith");
     g_settings.openWithSingleClick = wcscmp(openWith, L"double") != 0;
+    g_settings.openWithHover = wcscmp(openWith, L"hover") == 0;
     Wh_FreeStringSetting(openWith);
+    g_settings.openHoverDelayMs = std::max(50, Wh_GetIntSetting(L"openHoverDelay"));
+    g_settings.openAnyFolder = Wh_GetIntSetting(L"openAnyFolder") != 0;
 
     g_settings.blurredPopup = Wh_GetIntSetting(L"blurredPopup") != 0;
+    g_settings.popupOpacity = std::clamp(Wh_GetIntSetting(L"popupOpacity"), 0, 100);
     g_settings.animatePopup = Wh_GetIntSetting(L"animatePopup") != 0;
     g_dataInFolder = Wh_GetIntSetting(L"groupDataInFolder") != 0;
 }
@@ -1095,16 +1135,29 @@ void ForgetStoredGroup(const std::wstring& id) {
 
 // --- Group data, wherever it's kept ------------------------------------------
 
-// Should this group's data be in its desktop.ini? `id` is the folder's ID.
-bool WantDataInFolder(const std::wstring& id) {
-    return g_dataInFolder || id.empty();
+// Where a folder's data belongs. A group's follows the "Keep group data
+// inside the group folders" setting. Other folders (opened in the popup with
+// "Open other desktop folders") only ever use Windhawk's storage, so the mod
+// never writes into folders of your own; without a file ID, their settings
+// just aren't kept.
+enum class DataPlace { Folder, Storage, Nowhere };
+
+DataPlace PlaceForData(const std::wstring& id, bool isGroup) {
+    if (!isGroup) {
+        return id.empty() ? DataPlace::Nowhere : DataPlace::Storage;
+    }
+    return (g_dataInFolder || id.empty()) ? DataPlace::Folder : DataPlace::Storage;
 }
 
 // Moves a group's data to where the setting says it belongs, if it's in the
 // other place. Each value is copied first, and only removed from the old
 // place once it's safely saved in the new one.
-void MoveGroupData(const std::wstring& folderPath, const std::wstring& id) {
-    if (WantDataInFolder(id)) {
+void MoveGroupData(const std::wstring& folderPath, const std::wstring& id, bool isGroup) {
+    DataPlace place = PlaceForData(id, isGroup);
+    if (place == DataPlace::Nowhere) {
+        return;
+    }
+    if (place == DataPlace::Folder) {
         if (id.empty()) {
             return;
         }
@@ -1163,21 +1216,28 @@ std::wstring ReadGroupValue(const std::wstring& folderPath, PCWSTR name) {
     return ReadGroupIniValue(folderPath, kGroupIniSection, name);
 }
 
-// Sets (or, with nullptr, removes) one value of a group's data, in the place
-// the setting says. Any data still in the other place is moved first, so
-// the group's data is never split between the two.
-void WriteGroupValue(const std::wstring& folderPath, PCWSTR name, PCWSTR value) {
-    std::wstring id = GroupIdOf(folderPath);
-    MoveGroupData(folderPath, id);
-    if (WantDataInFolder(id)) {
-        WriteGroupIniValue(folderPath, kGroupIniSection, name, value);
-    } else {
-        SetStoredGroupValue(id, name, value);
-    }
-}
-
 bool IsGroupFolder(const std::wstring& folderPath) {
     return ReadGroupValue(folderPath, L"IsGroup") == L"1";
+}
+
+// Sets (or, with nullptr, removes) one value of a group's (or other
+// folder's) data, in the place it belongs (see PlaceForData). Any data still
+// in the other place is moved first, so it's never split between the two.
+void WriteGroupValue(const std::wstring& folderPath, PCWSTR name, PCWSTR value) {
+    std::wstring id = GroupIdOf(folderPath);
+    bool markingAsGroup = wcscmp(name, L"IsGroup") == 0 && value && wcscmp(value, L"1") == 0;
+    bool isGroup = markingAsGroup || IsGroupFolder(folderPath);
+    MoveGroupData(folderPath, id, isGroup);
+    switch (PlaceForData(id, isGroup)) {
+        case DataPlace::Folder:
+            WriteGroupIniValue(folderPath, kGroupIniSection, name, value);
+            break;
+        case DataPlace::Storage:
+            SetStoredGroupValue(id, name, value);
+            break;
+        case DataPlace::Nowhere:
+            break;
+    }
 }
 
 void MarkAsGroup(const std::wstring& folderPath) {
@@ -1210,6 +1270,7 @@ enum GroupSettingId {
     kSettingSort,
     kSettingRemoveWhenOneLeft,
     kSettingTint,
+    kSettingView,
     kGroupSettingCount
 };
 
@@ -1225,6 +1286,7 @@ const GroupSettingInfo kGroupSettings[kGroupSettingCount] = {
     {L"Sort", 0},               // 0 = your arrangement, 1 = A to Z.
     {L"RemoveWhenOneLeft", 1},  // 1 = remove a group that's down to one app.
     {L"Tint", -1},              // The group's colour, or -1 for none.
+    {L"View", 0},               // 0 = icons in a grid, 1 = a list.
 };
 
 // Group colours. A colour is stored as a COLORREF, a number of the form
@@ -1315,6 +1377,9 @@ int GetGroupSetting(const std::wstring& folderPath, GroupSettingId id) {
 struct GroupEntry {
     std::wstring name;  // What Explorer shows, e.g. "Notepad" (no ".lnk").
     std::wstring path;  // Full path on disk.
+    bool isFolder = false;
+    ULONGLONG size = 0;    // In bytes, for files.
+    size_t position = 0;   // Its place in the saved order (used for sorting).
 };
 
 std::wstring FileNameOf(const std::wstring& path) {
@@ -1323,8 +1388,8 @@ std::wstring FileNameOf(const std::wstring& path) {
 
 // Lists what's in a group, in the order you arranged them in the popup.
 // Anything not in the saved order (like apps added since) goes at the end,
-// sorted the way Explorer sorts ("App 2" before "App 10"). Hidden files,
-// like desktop.ini and the icon, are skipped.
+// folders first, then sorted the way Explorer sorts ("App 2" before
+// "App 10"). Hidden files, like desktop.ini and the icon, are skipped.
 //
 // The order is saved with the group's data as file names separated by "|",
 // a character that can't appear in file names:
@@ -1348,6 +1413,8 @@ std::vector<GroupEntry> ListGroupFiles(const std::wstring& folderPath) {
         GroupEntry entry;
         entry.path = folderPath + L"\\" + fileName;
         entry.name = fileName;
+        entry.isFolder = (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        entry.size = ((ULONGLONG)found.nFileSizeHigh << 32) | found.nFileSizeLow;
 
         ComPtr<IShellItem> shellItem;
         PWSTR displayName = nullptr;
@@ -1378,24 +1445,32 @@ std::vector<GroupEntry> ListGroupFiles(const std::wstring& folderPath) {
         savedOrder.push_back(orderText.substr(start, end - start));
         start = end + 1;
     }
-    auto positionOf = [&](const GroupEntry& entry) {
-        std::wstring fileName = FileNameOf(entry.path);
-        for (size_t i = 0; i < savedOrder.size(); i++) {
-            if (_wcsicmp(savedOrder[i].c_str(), fileName.c_str()) == 0) {
-                return i;
-            }
-        }
-        return savedOrder.size();  // Not in the saved order: after the rest.
+    // Look each entry up once (not on every comparison while sorting, which
+    // would be slow for a big folder). Names are compared in lower case, so
+    // capitals don't matter, as in Windows.
+    auto lowerCase = [](std::wstring text) {
+        CharLowerBuffW(text.data(), (DWORD)text.size());
+        return text;
     };
+    std::map<std::wstring, size_t> savedPositions;
+    for (size_t i = 0; i < savedOrder.size(); i++) {
+        savedPositions.emplace(lowerCase(savedOrder[i]), i);
+    }
+    for (GroupEntry& entry : entries) {
+        auto saved = savedPositions.find(lowerCase(FileNameOf(entry.path)));
+        // Not in the saved order: after the rest.
+        entry.position = saved != savedPositions.end() ? saved->second : savedOrder.size();
+    }
 
-    std::sort(entries.begin(), entries.end(),
-              [&](const GroupEntry& a, const GroupEntry& b) {
-                  size_t positionA = positionOf(a), positionB = positionOf(b);
-                  if (positionA != positionB) {
-                      return positionA < positionB;
-                  }
-                  return StrCmpLogicalW(a.name.c_str(), b.name.c_str()) < 0;
-              });
+    std::sort(entries.begin(), entries.end(), [](const GroupEntry& a, const GroupEntry& b) {
+        if (a.position != b.position) {
+            return a.position < b.position;
+        }
+        if (a.isFolder != b.isFolder) {
+            return a.isFolder;
+        }
+        return StrCmpLogicalW(a.name.c_str(), b.name.c_str()) < 0;
+    });
     return entries;
 }
 
@@ -1441,6 +1516,13 @@ struct TextMask {
     std::vector<BYTE> coverage;
 };
 
+// An app's icon, ready to draw: a square picture, in premultiplied pixels.
+// See LoadItemIcon (after IconCanvas) for how it's made smooth.
+struct IconImage {
+    int size = 0;
+    std::vector<Pixel> pixels;
+};
+
 // A picture we draw into pixel by pixel. Used for group icons (square), and
 // for the popup and settings panel (any size), because it can draw
 // see-through colours, which their blurred backgrounds need.
@@ -1456,10 +1538,40 @@ public:
     int Height() const { return m_height; }
     const std::vector<Pixel>& Pixels() const { return m_pixels; }
 
+    // From now on, only draw on rows top to bottom (not including bottom),
+    // fading out over `fadeTop` and `fadeBottom` rows at the edges. The
+    // popup's scrolling area uses this, so apps scrolled partly out of view
+    // fade softly instead of being cut off.
+    void SetClip(int top, int bottom, int fadeTop, int fadeBottom) {
+        m_clipped = true;
+        m_clipTop = top;
+        m_clipBottom = bottom;
+        m_fadeTop = fadeTop;
+        m_fadeBottom = fadeBottom;
+    }
+
+    void ClearClip() { m_clipped = false; }
+
     // Layer a (premultiplied) pixel over what's already there.
     void BlendPixel(int x, int y, Pixel source) {
         if (x < 0 || y < 0 || x >= m_width || y >= m_height) {
             return;
+        }
+        if (m_clipped) {
+            if (y < m_clipTop || y >= m_clipBottom) {
+                return;
+            }
+            float strength = 1;
+            if (m_fadeTop > 0 && y < m_clipTop + m_fadeTop) {
+                strength = (y - m_clipTop + 0.5f) / m_fadeTop;
+            }
+            if (m_fadeBottom > 0 && y >= m_clipBottom - m_fadeBottom) {
+                strength = std::min(strength, (m_clipBottom - y - 0.5f) / m_fadeBottom);
+            }
+            if (strength < 1) {
+                source = {(BYTE)(source.b * strength), (BYTE)(source.g * strength),
+                          (BYTE)(source.r * strength), (BYTE)(source.a * strength)};
+            }
         }
         Pixel& target = m_pixels[(size_t)y * m_width + x];
         int keep = 255 - source.a;  // How much of the old pixel shows through.
@@ -1535,37 +1647,14 @@ public:
         }
     }
 
-    // Draw an icon picture at (left, top), scaled to `size` if needed.
-    void DrawIcon(HBITMAP bitmap, int left, int top, int size) {
-        BITMAP info;
-        if (!GetObjectW(bitmap, sizeof(info), &info) || info.bmWidth <= 0) {
-            return;
-        }
-        int width = info.bmWidth, height = std::abs(info.bmHeight);
-
-        // Copy the icon's pixels out of Windows' bitmap into a plain list.
-        std::vector<Pixel> source((size_t)width * height);
-        BITMAPINFO format = {};
-        format.bmiHeader.biSize = sizeof(format.bmiHeader);
-        format.bmiHeader.biWidth = width;
-        format.bmiHeader.biHeight = -height;  // Negative = top row first.
-        format.bmiHeader.biPlanes = 1;
-        format.bmiHeader.biBitCount = 32;
-        format.bmiHeader.biCompression = BI_RGB;
-        HDC screen = GetDC(nullptr);
-        int rows = GetDIBits(screen, bitmap, 0, height, source.data(), &format,
-                             DIB_RGB_COLORS);
-        ReleaseDC(nullptr, screen);
-        if (rows != height) {
-            return;
-        }
-
-        // Shell icons usually come back at exactly the size we asked for. If
-        // not, pick the nearest source pixel for each target pixel.
-        for (int y = 0; y < size; y++) {
-            for (int x = 0; x < size; x++) {
-                int sourceX = x * width / size, sourceY = y * height / size;
-                BlendPixel(left + x, top + y, source[(size_t)sourceY * width + sourceX]);
+    // Draw an icon at (left, top), at its own size.
+    void DrawImage(const IconImage& image, int left, int top) {
+        for (int y = 0; y < image.size; y++) {
+            for (int x = 0; x < image.size; x++) {
+                const Pixel& pixel = image.pixels[(size_t)y * image.size + x];
+                if (pixel.a) {
+                    BlendPixel(left + x, top + y, pixel);
+                }
             }
         }
     }
@@ -1588,7 +1677,241 @@ private:
     int m_width;
     int m_height;
     std::vector<Pixel> m_pixels;
+    bool m_clipped = false;
+    int m_clipTop = 0, m_clipBottom = 0, m_fadeTop = 0, m_fadeBottom = 0;
 };
+
+// --- Smooth icons -------------------------------------------------------------
+//
+// To look as smooth as the Start menu's, icons are made the way it makes
+// them: from a big, detailed version of the icon, shrunk down smoothly.
+//
+//   1. Ask Windows for the icon at 256x256 (or, for small icons, at the exact
+//      size: icons often have small versions drawn specially to stay crisp).
+//   2. Windows gives icons in "straight" alpha, where the colours aren't
+//      multiplied by how opaque each pixel is. We draw in "premultiplied"
+//      alpha (see BlendPixel), so convert. Without this, the soft edge pixels
+//      come out at full colour, and edges look jagged.
+//   3. Shrink it to the size needed by averaging: each new pixel is the
+//      average of all the source pixels it covers ("area averaging"), so
+//      every detail contributes and edges stay soft.
+
+// Reads a Windows bitmap's pixels (top row first). Empty if it fails.
+std::vector<Pixel> ReadBitmapPixels(HBITMAP bitmap, int* width, int* height) {
+    BITMAP info;
+    if (!GetObjectW(bitmap, sizeof(info), &info) || info.bmWidth <= 0) {
+        return {};
+    }
+    *width = info.bmWidth;
+    *height = std::abs(info.bmHeight);
+    std::vector<Pixel> pixels((size_t)*width * *height);
+    BITMAPINFO format = {};
+    format.bmiHeader.biSize = sizeof(format.bmiHeader);
+    format.bmiHeader.biWidth = *width;
+    format.bmiHeader.biHeight = -*height;  // Negative = top row first.
+    format.bmiHeader.biPlanes = 1;
+    format.bmiHeader.biBitCount = 32;
+    format.bmiHeader.biCompression = BI_RGB;
+    HDC screen = GetDC(nullptr);
+    int rows = GetDIBits(screen, bitmap, 0, *height, pixels.data(), &format, DIB_RGB_COLORS);
+    ReleaseDC(nullptr, screen);
+    if (rows != *height) {
+        return {};
+    }
+    return pixels;
+}
+
+// Step 2: makes sure the pixels are premultiplied. In premultiplied pixels a
+// colour can never be brighter than the opacity, so if any is, these are
+// straight. (Old icons with no transparency at all come with every opacity
+// at 0; those are made fully opaque.)
+void PremultiplyIfNeeded(std::vector<Pixel>& pixels) {
+    bool anyOpacity = false, anyColour = false, straight = false;
+    for (const Pixel& p : pixels) {
+        anyOpacity = anyOpacity || p.a;
+        anyColour = anyColour || p.r || p.g || p.b;
+        straight = straight || p.r > p.a || p.g > p.a || p.b > p.a;
+    }
+    if (!anyOpacity && anyColour) {
+        for (Pixel& p : pixels) {
+            p.a = 255;
+        }
+        return;
+    }
+    if (straight) {
+        for (Pixel& p : pixels) {
+            p.r = (BYTE)((p.r * p.a + 127) / 255);
+            p.g = (BYTE)((p.g * p.a + 127) / 255);
+            p.b = (BYTE)((p.b * p.a + 127) / 255);
+        }
+    }
+}
+
+// Step 3: resizes a square picture. Shrinking averages every source pixel a
+// new pixel covers (partly covered ones count partly). Growing, which only
+// happens if Windows gave us a smaller picture than we asked for, blends the
+// four nearest pixels instead.
+std::vector<Pixel> ResizeSquare(const std::vector<Pixel>& source, int from, int to) {
+    if (from == to) {
+        return source;
+    }
+    std::vector<Pixel> result((size_t)to * to);
+    if (from < to) {
+        for (int y = 0; y < to; y++) {
+            float sy = std::clamp((y + 0.5f) * from / to - 0.5f, 0.0f, (float)(from - 1));
+            int y0 = (int)sy, y1 = std::min(y0 + 1, from - 1);
+            float fy = sy - y0;
+            for (int x = 0; x < to; x++) {
+                float sx = std::clamp((x + 0.5f) * from / to - 0.5f, 0.0f, (float)(from - 1));
+                int x0 = (int)sx, x1 = std::min(x0 + 1, from - 1);
+                float fx = sx - x0;
+                const Pixel& a = source[(size_t)y0 * from + x0];
+                const Pixel& b = source[(size_t)y0 * from + x1];
+                const Pixel& c = source[(size_t)y1 * from + x0];
+                const Pixel& d = source[(size_t)y1 * from + x1];
+                auto mix = [&](BYTE Pixel::*channel) {
+                    float top = a.*channel + (b.*channel - a.*channel) * fx;
+                    float bottom = c.*channel + (d.*channel - c.*channel) * fx;
+                    return (BYTE)std::lround(top + (bottom - top) * fy);
+                };
+                result[(size_t)y * to + x] = {mix(&Pixel::b), mix(&Pixel::g), mix(&Pixel::r),
+                                              mix(&Pixel::a)};
+            }
+        }
+        return result;
+    }
+
+    // Shrinking, in two passes: across each row, then down each column.
+    // `weights` lists, for each new position, which source positions it
+    // covers and by how much.
+    struct Weight {
+        int index;
+        float amount;
+    };
+    std::vector<std::vector<Weight>> weights(to);
+    float scale = (float)from / to;
+    for (int i = 0; i < to; i++) {
+        float start = i * scale, end = (i + 1) * scale;
+        for (int s = (int)start; s < from && s < end; s++) {
+            float covered = std::min(end, s + 1.0f) - std::max(start, (float)s);
+            if (covered > 0) {
+                weights[i].push_back({s, covered / scale});
+            }
+        }
+    }
+
+    std::vector<float> across((size_t)to * from * 4);  // `to` wide, `from` tall.
+    for (int y = 0; y < from; y++) {
+        for (int x = 0; x < to; x++) {
+            float sum[4] = {};
+            for (const Weight& w : weights[x]) {
+                const Pixel& p = source[(size_t)y * from + w.index];
+                sum[0] += p.b * w.amount;
+                sum[1] += p.g * w.amount;
+                sum[2] += p.r * w.amount;
+                sum[3] += p.a * w.amount;
+            }
+            std::copy(sum, sum + 4, &across[((size_t)y * to + x) * 4]);
+        }
+    }
+    for (int y = 0; y < to; y++) {
+        for (int x = 0; x < to; x++) {
+            float sum[4] = {};
+            for (const Weight& w : weights[y]) {
+                const float* p = &across[((size_t)w.index * to + x) * 4];
+                for (int c = 0; c < 4; c++) {
+                    sum[c] += p[c] * w.amount;
+                }
+            }
+            auto channel = [&](int c) {
+                return (BYTE)std::clamp((int)std::lround(sum[c]), 0, 255);
+            };
+            result[(size_t)y * to + x] = {channel(0), channel(1), channel(2), channel(3)};
+        }
+    }
+    return result;
+}
+
+// Asks Windows for an item's icon at `request` x `request`, as premultiplied
+// pixels (steps 1 and 2 above). Sets `side` to the size it came back at.
+// Empty if Windows has no icon for it.
+std::vector<Pixel> LoadIconPixels(const std::wstring& path, int request, int* side) {
+    HBITMAP bitmap = GetItemIcon(path, request);
+    if (!bitmap) {
+        return {};
+    }
+    int width = 0, height = 0;
+    std::vector<Pixel> source = ReadBitmapPixels(bitmap, &width, &height);
+    DeleteObject(bitmap);
+    if (source.empty()) {
+        return {};
+    }
+    if (width != height) {
+        // Not square (unusual for icons): use the middle square of it.
+        int square = std::min(width, height);
+        std::vector<Pixel> middle((size_t)square * square);
+        int left = (width - square) / 2, top = (height - square) / 2;
+        for (int y = 0; y < square; y++) {
+            for (int x = 0; x < square; x++) {
+                middle[(size_t)y * square + x] = source[(size_t)(y + top) * width + x + left];
+            }
+        }
+        source.swap(middle);
+        width = square;
+    }
+    PremultiplyIfNeeded(source);
+    *side = width;
+    return source;
+}
+
+// How much is drawn in a picture: every pixel's opacity, added up.
+double TotalOpacity(const std::vector<Pixel>& pixels) {
+    double total = 0;
+    for (const Pixel& p : pixels) {
+        total += p.a;
+    }
+    return total;
+}
+
+// An item's icon at `pixels` x `pixels`, made smooth as described above.
+// Empty (size 0) if Windows has no icon for it.
+//
+// Some icons only come in small sizes (game shortcuts made by Steam, for
+// example, are often 32x32 or smaller). Asked for those at 256x256, Windows
+// doesn't enlarge them: it puts the small icon in the middle of a big empty
+// box. So for big icons we also ask at 48x48, which Windows does fill, and
+// compare. Shrunk to the same size, the same icon covers about the same
+// amount either way; if the big one covers much less, it's a small icon in a
+// box, and we enlarge the 48x48 one smoothly instead, like the Start menu.
+IconImage LoadItemIcon(const std::wstring& path, int pixels) {
+    IconImage image;
+    if (pixels <= 0) {
+        return image;
+    }
+    int request = pixels <= 32 ? pixels : std::max(256, pixels);
+    int side = 0;
+    std::vector<Pixel> source = LoadIconPixels(path, request, &side);
+    if (source.empty()) {
+        return image;
+    }
+
+    if (request > 48) {
+        int smallSide = 0;
+        std::vector<Pixel> small = LoadIconPixels(path, 48, &smallSide);
+        if (!small.empty()) {
+            double bigCoverage = TotalOpacity(ResizeSquare(source, side, smallSide));
+            double smallCoverage = TotalOpacity(small);
+            if (smallCoverage > 0 && bigCoverage < 0.6 * smallCoverage) {
+                source.swap(small);
+                side = smallSide;
+            }
+        }
+    }
+
+    image.pixels = ResizeSquare(source, side, pixels);
+    image.size = pixels;
+    return image;
+}
 
 // Draws the whole group icon at one size.
 // A colour `amount` (0 to 1) of the way from `from` to `to`.
@@ -1631,11 +1954,7 @@ IconCanvas DrawGroupIcon(int size, const std::vector<GroupEntry>& apps, int tint
         int left = (int)std::lround(padding + column * (cell + gap));
         int top = (int)std::lround(padding + row * (cell + gap));
 
-        HBITMAP icon = GetItemIcon(apps[i].path, cellPixels);
-        if (icon) {
-            canvas.DrawIcon(icon, left, top, cellPixels);
-            DeleteObject(icon);
-        }
+        canvas.DrawImage(LoadItemIcon(apps[i].path, cellPixels), left, top);
     }
     return canvas;
 }
@@ -1930,6 +2249,25 @@ std::wstring GetDesktopFolderPath() {
     }
     CoTaskMemFree(path);
     return result;
+}
+
+// Lists the names of all folders on the desktop (groups or not).
+std::vector<std::wstring> FindAllFolders(const std::wstring& desktopPath) {
+    std::vector<std::wstring> folders;
+    WIN32_FIND_DATAW found;
+    HANDLE search = FindFirstFileW((desktopPath + L"\\*").c_str(), &found);
+    if (search == INVALID_HANDLE_VALUE) {
+        return folders;
+    }
+    do {
+        std::wstring name = found.cFileName;
+        if ((found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && name != L"." &&
+            name != L"..") {
+            folders.push_back(name);
+        }
+    } while (FindNextFileW(search, &found));
+    FindClose(search);
+    return folders;
 }
 
 // Lists the names of all groups on the desktop.
@@ -2304,7 +2642,7 @@ void CheckGroup(const std::wstring& folderPath) {
     }
     // Make sure its data is where the setting says (it may have just been
     // changed, or the group may be from an older version of the mod).
-    MoveGroupData(folderPath, GroupIdOf(folderPath));
+    MoveGroupData(folderPath, GroupIdOf(folderPath), true);
     std::vector<GroupEntry> entries = ListGroupFiles(folderPath);
     if (GetGroupSetting(folderPath, kSettingRemoveWhenOneLeft) && entries.size() <= 1) {
         DissolveGroup(folderPath, entries);
@@ -2707,10 +3045,15 @@ HRESULT WINAPI DoDragDrop_Hook(IDataObject* dataObject, IDropSource* dropSource,
 //     standard Windows "EDIT" control, placed over the title.
 //   - Press on an app and move the mouse to drag it out of the group, onto
 //     the desktop or anywhere else you can drop files.
+//   - Scroll, if there are more apps than fit (see "Scrolling" below).
+//
+// The same popup also shows other desktop folders, with the "Open other
+// desktop folders in the popup too" setting. g_popup.isGroup tells them apart.
 
 // The popup's window class name. It's made unique each time the mod loads
 // (see RegisterWindowClasses in section 12).
 std::wstring g_popupClassName;
+std::wstring g_panelClassName;  // The settings panel's (further down).
 bool g_windowClassesRegistered = false;
 HMODULE g_module = nullptr;  // This mod's DLL, needed to register the class.
 std::atomic<HWND> g_popupWindow{nullptr};
@@ -2719,6 +3062,10 @@ std::atomic<HWND> g_popupWindow{nullptr};
 // group while its popup is open closes it, instead of closing and reopening.
 std::wstring g_lastClosedGroup;
 ULONGLONG g_lastClosedTime = 0;
+
+// With "Open groups with: hovering": the desktop icon the mouse is resting
+// on (see "Opening by hovering" in section 10), or -1.
+int g_hoverIcon = -1;
 
 // A message of our own that the rename box sends the popup: "finish
 // renaming". wParam is 1 to keep the new name, 0 to cancel. Numbers from
@@ -2736,21 +3083,33 @@ void PositionSettingsPanel();
 void RefreshSettingsPanel();
 void RetintSettingsPanel();
 bool IsSettingsPanelOpen();
+HWND SettingsPanelWindow();
 
 struct PopupItem {
     std::wstring name;
     std::wstring path;
-    HBITMAP icon = nullptr;
-    float x = 0, y = 0;  // Where it's drawn right now (top-left corner). This
-                         // differs from its slot while it slides into place.
-    TextMask labelMask;  // The name, ready to draw (see RenderTextMask).
+    std::wstring detail;      // For the list view: its size, or "Folder".
+    IconImage icon;
+    bool iconLoaded = false;  // Icons are fetched when first shown (see
+                              // DrawPopupApp), so big folders open quickly.
+    float x = 0, y = 0;  // Where it's drawn right now (top-left corner, before
+                         // scrolling). This differs from its slot while it
+                         // slides into place.
+    TextMask labelMask;  // The name, ready to draw (see RenderTextMask)...
+    bool labelIsList = false;  // ...and whether it was laid out for the list.
+    TextMask detailMask;
 };
 
 // Everything the popup needs. Only touched on the desktop's thread.
 struct {
     std::wstring title;
-    std::wstring folderPath;      // Which group is showing.
+    std::wstring folderPath;      // Which group (or folder) is showing.
+    bool isGroup = true;          // False for other folders.
     ULONGLONG openedTime = 0;     // When it opened (GetTickCount64).
+    bool hoverOpened = false;     // Opened by hovering over the group...
+    bool closeOnLeave = false;    // ...so it closes when the mouse leaves it,
+                                  // until you click inside it.
+    ULONGLONG leftTime = 0;       // When the mouse left (0 = it hasn't).
     std::vector<PopupItem> items;
     int hovered = -1;
     int pressed = -1;             // The app the mouse button went down on, or -1.
@@ -2770,6 +3129,7 @@ struct {
     IContextMenu3* contextMenu3 = nullptr;  // helpers for submenus (see below).
     UINT dpi = 96;
     bool dark = false;
+    bool highContrast = false;    // A high contrast theme is on.
     bool glass = false;           // Using the blurred background.
     SIZE layoutSize = {};         // The popup's full size. While it's
                                   // animating, the window is smaller.
@@ -2784,8 +3144,17 @@ struct {
     int iconSize = 48;            // (see "Group settings" in section 5).
     bool showLabels = true;
     int tint = -1;                // The group's colour (kNoTint for none).
+    bool listView = false;
     bool gearHovered = false;
     bool gearPressed = false;
+    bool openHovered = false;     // The "open in File Explorer" button.
+    bool openPressed = false;
+    int viewportHeight = 0;       // The height of the area apps scroll in.
+    float scroll = 0;             // How far it's scrolled down, in pixels...
+    float scrollTarget = 0;       // ...and where it's heading (it glides).
+    bool scrollHovered = false;   // The mouse is over the scroll bar.
+    bool scrollDragging = false;  // The scroll bar is being dragged...
+    int scrollGrab = 0;           // ...held at this far down its thumb.
     TextMask titleMask;           // The title, ready to draw...
     std::wstring titleMaskText;   // ...and which text that was.
     bool trackingMouse = false;
@@ -2809,17 +3178,31 @@ int Px(int value) {
     return MulDiv(value, g_popup.dpi, 96);
 }
 
-// Each app's space in the grid depends on the icon size and whether names
-// are shown (both adjustable in the settings panel).
+// Each app's space depends on the view, the icon size and whether names are
+// shown (all adjustable in the settings panel). In sizes at 100% scaling.
+// In the list view, icons are smaller: 20, 24 or 32 pixels.
+int ItemIconSize() {
+    if (g_popup.listView) {
+        return g_popup.iconSize <= 32 ? 20 : (g_popup.iconSize >= 64 ? 32 : 24);
+    }
+    return g_popup.iconSize;
+}
+
 int CellWidth() {
-    return g_popup.iconSize + 44;
+    return g_popup.listView ? 300 : g_popup.iconSize + 44;
 }
 
 int CellHeight() {
+    if (g_popup.listView) {
+        return ItemIconSize() + 16;
+    }
     return g_popup.showLabels ? g_popup.iconSize + 52 : g_popup.iconSize + 20;
 }
 
 int PopupColumns() {
+    if (g_popup.listView) {
+        return 1;
+    }
     return std::clamp((int)g_popup.items.size(), 1, g_popup.columns);
 }
 
@@ -2828,22 +3211,98 @@ int PopupRows() {
     return count == 0 ? 1 : (count + PopupColumns() - 1) / PopupColumns();
 }
 
+// --- Scrolling ---------------------------------------------------------------
+//
+// The popup shows at most 5 rows of icons (or 12 rows in the list view), and
+// never more than fits on screen. If there are more, they scroll, with the
+// mouse wheel or the thin scroll bar on the right.
+//
+// The apps keep their positions as if nothing was scrolled ("content"
+// positions), and are drawn `g_popup.scroll` pixels higher. Anything about
+// the mouse (which is in window positions) adds the scroll back on.
+constexpr int kMaxIconRows = 5;
+constexpr int kMaxListRows = 12;
+
+// The top of the area the apps scroll in, below the title.
+int ContentTop() {
+    return Px(Layout::padding) + Px(Layout::titleHeight);
+}
+
+// The height of all the rows together.
+int ContentHeight() {
+    return PopupRows() * Px(CellHeight());
+}
+
+int MaxScroll() {
+    return std::max(0, ContentHeight() - g_popup.viewportHeight);
+}
+
+RECT ViewportRect(int clientWidth) {
+    return {0, ContentTop(), clientWidth, ContentTop() + g_popup.viewportHeight};
+}
+
+// Works out the popup's size, including how tall the scrolling area is.
 SIZE PopupSize() {
     int gridWidth = PopupColumns() * Px(CellWidth());
+    int visibleRows = std::min(PopupRows(), g_popup.listView ? kMaxListRows : kMaxIconRows);
+    int viewport = visibleRows * Px(CellHeight());
+
+    // Never taller than the screen (minus the taskbar).
+    int chrome = ContentTop() + Px(Layout::padding);
+    int screenSpace = (g_popup.workArea.bottom - g_popup.workArea.top) -
+                      2 * Px(Layout::screenMargin) - chrome;
+    if (screenSpace > 0 && viewport > screenSpace) {
+        viewport = std::max(Px(CellHeight()), screenSpace);
+    }
+    g_popup.viewportHeight = viewport;
+
     SIZE size;
     size.cx = std::max(Px(Layout::minWidth), gridWidth + 2 * Px(Layout::padding));
-    size.cy = Px(Layout::padding) + Px(Layout::titleHeight) +
-              PopupRows() * Px(CellHeight()) + Px(Layout::padding);
+    size.cy = chrome + viewport;
     return size;
 }
 
-// The title area, which you click to rename the group. The gear button sits
-// to its right, on the same row.
+// Keeps the scroll position within range (after the contents change).
+void ClampScroll() {
+    float maxScroll = (float)MaxScroll();
+    g_popup.scrollTarget = std::clamp(g_popup.scrollTarget, 0.0f, maxScroll);
+    g_popup.scroll = std::clamp(g_popup.scroll, 0.0f, maxScroll);
+}
+
+// A mouse position (in the window) as a content position.
+POINT ToContent(POINT point) {
+    return {point.x, point.y + (LONG)std::lround(g_popup.scroll)};
+}
+
+// The scroll bar: a thin rounded bar at the right edge. The area that reacts
+// to the mouse is wider than the bar itself, so it's easy to grab.
+RECT ScrollTrackRect(int clientWidth) {
+    RECT viewport = ViewportRect(clientWidth);
+    return {clientWidth - Px(14), viewport.top + Px(4), clientWidth - Px(2),
+            viewport.bottom - Px(4)};
+}
+
+// The part of the bar that shows where you are. False if nothing scrolls.
+bool ScrollThumbRect(int clientWidth, RECT* thumb) {
+    int maxScroll = MaxScroll();
+    if (maxScroll <= 0) {
+        return false;
+    }
+    RECT track = ScrollTrackRect(clientWidth);
+    int trackHeight = track.bottom - track.top;
+    int thumbHeight = std::max(Px(24), trackHeight * g_popup.viewportHeight / ContentHeight());
+    int top = track.top + (int)std::lround((trackHeight - thumbHeight) * g_popup.scroll / maxScroll);
+    *thumb = {track.left, top, track.right, top + thumbHeight};
+    return true;
+}
+
+// The title area, which you click to rename the group. Two buttons sit to
+// its right, on the same row: "open in File Explorer", and the gear.
 RECT PopupTitleRect(int clientWidth) {
     RECT title;
     title.left = Px(Layout::padding);
     title.top = Px(Layout::padding) - Px(4);
-    title.right = clientWidth - Px(Layout::padding) - Px(40);
+    title.right = clientWidth - Px(Layout::padding) - Px(76);
     title.bottom = Px(Layout::padding) + Px(Layout::titleHeight) - Px(8);
     return title;
 }
@@ -2858,7 +3317,12 @@ RECT PopupGearRect(int clientWidth) {
     return gear;
 }
 
-// Where app number `index` goes inside the popup.
+RECT PopupOpenRect(int clientWidth) {
+    RECT gear = PopupGearRect(clientWidth);
+    return {gear.left - Px(36), gear.top, gear.left - Px(4), gear.bottom};
+}
+
+// Where app number `index` goes inside the popup (a content position).
 RECT PopupCellRect(int index, int clientWidth) {
     int columns = PopupColumns();
     int gridLeft = (clientWidth - columns * Px(CellWidth())) / 2;
@@ -2867,19 +3331,25 @@ RECT PopupCellRect(int index, int clientWidth) {
 
     RECT cell;
     cell.left = gridLeft + column * Px(CellWidth());
-    cell.top = Px(Layout::padding) + Px(Layout::titleHeight) +
-               row * Px(CellHeight());
+    cell.top = ContentTop() + row * Px(CellHeight());
     cell.right = cell.left + Px(CellWidth());
     cell.bottom = cell.top + Px(CellHeight());
     return cell;
 }
 
+// Which app is at this mouse position (or -1). Only inside the scrolling
+// area: an app scrolled up under the title can't be clicked there.
 int PopupHitTest(HWND window, POINT point) {
     RECT client;
     GetClientRect(window, &client);
+    RECT viewport = ViewportRect(client.right);
+    if (!PtInRect(&viewport, point)) {
+        return -1;
+    }
+    POINT content = ToContent(point);
     for (int i = 0; i < (int)g_popup.items.size(); i++) {
         RECT cell = PopupCellRect(i, client.right);
-        if (PtInRect(&cell, point)) {
+        if (PtInRect(&cell, content)) {
             return i;
         }
     }
@@ -2898,6 +3368,23 @@ bool PopupGearHitTest(HWND window, POINT point) {
     GetClientRect(window, &client);
     RECT gear = PopupGearRect(client.right);
     return PtInRect(&gear, point) != FALSE;
+}
+
+bool PopupOpenHitTest(HWND window, POINT point) {
+    RECT client;
+    GetClientRect(window, &client);
+    RECT button = PopupOpenRect(client.right);
+    return PtInRect(&button, point) != FALSE;
+}
+
+bool PopupScrollBarHitTest(HWND window, POINT point) {
+    if (MaxScroll() <= 0) {
+        return false;
+    }
+    RECT client;
+    GetClientRect(window, &client);
+    RECT track = ScrollTrackRect(client.right);
+    return PtInRect(&track, point) != FALSE;
 }
 
 // Match the Start menu, which follows the Windows (not app) light/dark mode.
@@ -2925,13 +3412,23 @@ struct PopupColors {
     COLORREF shade;
     float hoverOpacity;
     float pressedOpacity;
+    COLORREF onAccent;      // Text on the accent colour.
 };
+
+// Is a high contrast theme on? Then the popup uses the theme's own colours,
+// with no blur or group colours, and a clear border.
+bool IsHighContrast() {
+    HIGHCONTRASTW contrast = {};
+    contrast.cbSize = sizeof(contrast);
+    return SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
+           (contrast.dwFlags & HCF_HIGHCONTRASTON);
+}
 
 // The popup's background colour, mixed with the group's colour if it has
 // one. Not at full strength, so text stays easy to read: a bit less in light
 // mode, where strong colours would wash out the dark text.
 COLORREF TintedBackground(COLORREF themeColor) {
-    if (g_popup.tint == kNoTint) {
+    if (g_popup.tint == kNoTint || g_popup.highContrast) {
         return themeColor;
     }
     return MixColors(themeColor, (COLORREF)g_popup.tint, g_popup.dark ? 0.45f : 0.35f);
@@ -2939,12 +3436,17 @@ COLORREF TintedBackground(COLORREF themeColor) {
 
 PopupColors GetPopupColors() {
     COLORREF accent = GetSysColor(COLOR_HIGHLIGHT);
+    if (g_popup.highContrast) {
+        COLORREF window = GetSysColor(COLOR_WINDOW);
+        return {window, window, GetSysColor(COLOR_WINDOWTEXT), GetSysColor(COLOR_GRAYTEXT),
+                accent, accent, 0.45f, 0.30f, GetSysColor(COLOR_HIGHLIGHTTEXT)};
+    }
     if (g_popup.dark) {
         return {TintedBackground(RGB(44, 44, 44)), RGB(50, 50, 50), RGB(255, 255, 255),
-                RGB(170, 170, 170), accent, RGB(255, 255, 255), 0.10f, 0.05f};
+                RGB(170, 170, 170), accent, RGB(255, 255, 255), 0.10f, 0.05f, RGB(255, 255, 255)};
     }
     return {TintedBackground(RGB(249, 249, 249)), RGB(255, 255, 255), RGB(0, 0, 0),
-            RGB(96, 96, 96), accent, RGB(0, 0, 0), 0.07f, 0.035f};
+            RGB(96, 96, 96), accent, RGB(0, 0, 0), 0.07f, 0.035f, RGB(255, 255, 255)};
 }
 
 void CreatePopupFonts() {
@@ -2991,24 +3493,42 @@ void CreatePopupFonts() {
     }
 }
 
-// Reads the group's apps (see ListGroupFiles in section 5) and each one's
-// icon at the right size. Same order as the group's icon.
-void LoadGroupItems(const std::wstring& folderPath, int iconPixels) {
+// What the list view shows beside an item: "Folder", or a file's size (like
+// "1.2 MB"). Nothing for shortcuts, whose size means nothing to you.
+std::wstring ItemDetail(const GroupEntry& entry) {
+    if (entry.isFolder) {
+        return L"Folder";
+    }
+    PCWSTR extension = PathFindExtensionW(entry.path.c_str());
+    if (_wcsicmp(extension, L".lnk") == 0 || _wcsicmp(extension, L".url") == 0) {
+        return L"";
+    }
+    WCHAR size[32] = L"";
+    StrFormatByteSizeW((LONGLONG)entry.size, size, ARRAYSIZE(size));
+    return size;
+}
+
+// Reads the group's apps (see ListGroupFiles in section 5), in the same order
+// as the group's icon. Their icons are fetched later, when first shown.
+void LoadGroupItems(const std::wstring& folderPath) {
     for (const GroupEntry& entry : ListGroupFiles(folderPath)) {
         PopupItem item;
         item.name = entry.name;
         item.path = entry.path;
-        item.icon = GetItemIcon(entry.path, iconPixels);
+        item.detail = ItemDetail(entry);
         g_popup.items.push_back(item);
     }
 }
 
-void FreePopupResources() {
+// Forgets the apps' icons, so they're fetched again at a new size.
+void ResetItemIcons() {
     for (PopupItem& item : g_popup.items) {
-        if (item.icon) {
-            DeleteObject(item.icon);
-        }
+        item.icon = {};
+        item.iconLoaded = false;
     }
+}
+
+void FreePopupResources() {
     g_popup.items.clear();
     for (HFONT* font : {&g_popup.titleFont, &g_popup.labelFont, &g_popup.symbolFont}) {
         if (*font) {
@@ -3027,6 +3547,10 @@ void FreePopupResources() {
     g_popup.pressed = -1;
     g_popup.titleHovered = false;
     g_popup.titlePressed = false;
+    g_popup.openHovered = false;
+    g_popup.openPressed = false;
+    g_popup.scrollHovered = false;
+    g_popup.scrollDragging = false;
     g_popup.draggingOut = false;
     g_popup.reordering = false;
     g_popup.dragged = -1;
@@ -3096,7 +3620,8 @@ TextMask RenderTextMask(HFONT font, const std::wstring& text, int width, int hei
 }
 
 // Draws one app: an optional rounded background, the icon, and the name
-// underneath (up to two lines).
+// underneath (up to two lines). In the list view: the icon on the left, the
+// name beside it, and its size or "Folder" on the right.
 void DrawPopupApp(IconCanvas& canvas, PopupItem& item, const RECT& cell,
                   COLORREF fillColor, float fillOpacity, const PopupColors& colors) {
     if (fillOpacity > 0) {
@@ -3105,11 +3630,44 @@ void DrawPopupApp(IconCanvas& canvas, PopupItem& item, const RECT& cell,
                                (float)Px(6), fillColor, fillOpacity);
     }
 
-    int iconPixels = Px(g_popup.iconSize);
-    if (item.icon) {
-        canvas.DrawIcon(item.icon, cell.left + (Px(CellWidth()) - iconPixels) / 2,
-                        cell.top + Px(Layout::iconTop), iconPixels);
+    int iconPixels = Px(ItemIconSize());
+    if (!item.iconLoaded) {
+        item.icon = LoadItemIcon(item.path, iconPixels);
+        item.iconLoaded = true;
     }
+
+    if (g_popup.listView) {
+        int iconLeft = cell.left + Px(10);
+        canvas.DrawImage(item.icon, iconLeft,
+                         cell.top + (cell.bottom - cell.top - iconPixels) / 2);
+        int detailWidth = item.detail.empty() ? 0 : Px(76);
+        RECT label = {iconLeft + iconPixels + Px(10), cell.top,
+                      cell.right - Px(10) - detailWidth, cell.bottom};
+        int width = label.right - label.left, height = label.bottom - label.top;
+        if (!item.labelIsList || item.labelMask.width != width ||
+            item.labelMask.height != height) {
+            item.labelMask = RenderTextMask(
+                g_popup.labelFont, item.name, width, height,
+                DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+            item.labelIsList = true;
+        }
+        canvas.BlendMask(item.labelMask, label.left, label.top, colors.text);
+
+        if (detailWidth > 0) {
+            RECT detail = {label.right, cell.top, cell.right - Px(10), cell.bottom};
+            width = detail.right - detail.left;
+            if (item.detailMask.width != width || item.detailMask.height != height) {
+                item.detailMask = RenderTextMask(
+                    g_popup.labelFont, item.detail, width, height,
+                    DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+            }
+            canvas.BlendMask(item.detailMask, detail.left, detail.top, colors.dimText);
+        }
+        return;
+    }
+
+    canvas.DrawImage(item.icon, cell.left + (Px(CellWidth()) - iconPixels) / 2,
+                     cell.top + Px(Layout::iconTop));
 
     if (!g_popup.showLabels) {
         return;
@@ -3118,10 +3676,11 @@ void DrawPopupApp(IconCanvas& canvas, PopupItem& item, const RECT& cell,
                   cell.top + Px(Layout::iconTop) + iconPixels + Px(Layout::labelGap),
                   cell.right - Px(4), cell.bottom - Px(4)};
     int width = label.right - label.left, height = label.bottom - label.top;
-    if (item.labelMask.width != width || item.labelMask.height != height) {
+    if (item.labelIsList || item.labelMask.width != width || item.labelMask.height != height) {
         item.labelMask = RenderTextMask(
             g_popup.labelFont, item.name, width, height,
             DT_CENTER | DT_WORDBREAK | DT_END_ELLIPSIS | DT_EDITCONTROL | DT_NOPREFIX);
+        item.labelIsList = false;
     }
     canvas.BlendMask(item.labelMask, label.left, label.top, colors.text);
 }
@@ -3254,19 +3813,42 @@ void PaintPopup(HWND window, HDC screen) {
     canvas.BlendMask(gearSymbol, gear.left, gear.top,
                      (g_popup.gearHovered || panelOpen) ? colors.text : colors.dimText);
 
+    // The "open in File Explorer" button: an open folder symbol.
+    RECT openButton = PopupOpenRect(fullWidth);
+    if (g_popup.openHovered) {
+        canvas.FillRoundedRect((float)openButton.left, (float)openButton.top,
+                               (float)openButton.right, (float)openButton.bottom, (float)Px(6),
+                               colors.shade,
+                               g_popup.openPressed ? colors.pressedOpacity : colors.hoverOpacity);
+    }
+    TextMask openSymbol = RenderTextMask(g_popup.symbolFont, L"\xE838",
+                                         openButton.right - openButton.left,
+                                         openButton.bottom - openButton.top,
+                                         DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    canvas.BlendMask(openSymbol, openButton.left, openButton.top,
+                     g_popup.openHovered ? colors.text : colors.dimText);
+
     if (g_popup.items.empty()) {
-        RECT message = {0, Px(Layout::padding) + Px(Layout::titleHeight), fullWidth,
-                        fullHeight - Px(Layout::padding)};
-        TextMask text = RenderTextMask(g_popup.labelFont, L"This group is empty",
+        RECT message = {0, ContentTop(), fullWidth, ContentTop() + g_popup.viewportHeight};
+        TextMask text = RenderTextMask(g_popup.labelFont,
+                                       g_popup.isGroup ? L"This group is empty"
+                                                       : L"This folder is empty",
                                        message.right - message.left,
                                        message.bottom - message.top,
                                        DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         canvas.BlendMask(text, message.left, message.top, colors.dimText);
     }
 
-    // Each app, drawn where it currently is. The highlight shows which app
-    // the mouse is over, a little fainter while the button is held down on
-    // it, so you can see a click is in progress.
+    // Each app, drawn where it currently is, moved up by the scroll
+    // position, and only inside the scrolling area (fading out at an edge
+    // with more to scroll to). Apps out of view are skipped. The highlight
+    // shows which app the mouse is over, a little fainter while the button
+    // is held down on it, so you can see a click is in progress.
+    int viewTop = ContentTop(), viewBottom = ContentTop() + g_popup.viewportHeight;
+    int scrolled = (int)std::lround(g_popup.scroll);
+    int fade = Px(16);
+    canvas.SetClip(viewTop, viewBottom, scrolled > 0 ? fade : 0,
+                   scrolled < MaxScroll() ? fade : 0);
     for (int i = 0; i < (int)g_popup.items.size(); i++) {
         if (g_popup.reordering && i == g_popup.dragged) {
             continue;  // The lifted app is drawn last, on top of the others.
@@ -3274,9 +3856,12 @@ void PaintPopup(HWND window, HDC screen) {
         PopupItem& item = g_popup.items[i];
         RECT cell;
         cell.left = (int)std::lround(item.x);
-        cell.top = (int)std::lround(item.y);
+        cell.top = (int)std::lround(item.y) - scrolled;
         cell.right = cell.left + Px(CellWidth());
         cell.bottom = cell.top + Px(CellHeight());
+        if (cell.bottom <= viewTop || cell.top >= viewBottom) {
+            continue;
+        }
 
         float highlight = 0;
         if (!g_popup.reordering && i == g_popup.hovered) {
@@ -3284,12 +3869,30 @@ void PaintPopup(HWND window, HDC screen) {
         }
         DrawPopupApp(canvas, item, cell, colors.shade, highlight, colors);
     }
+    canvas.ClearClip();
+
+    // The scroll bar, if there's anything to scroll: thin, and wider while
+    // the mouse is over it.
+    RECT thumb;
+    if (ScrollThumbRect(fullWidth, &thumb)) {
+        bool active = g_popup.scrollHovered || g_popup.scrollDragging;
+        int barWidth = Px(active ? 6 : 3);
+        float right = (float)thumb.right - Px(2);
+        canvas.FillRoundedRect(right - barWidth, (float)thumb.top, right, (float)thumb.bottom,
+                               barWidth / 2.0f, colors.text, active ? 0.55f : 0.35f);
+    }
 
     // The app being rearranged, "lifted" under the mouse. It gets a mostly
     // solid tile, so it stays readable as it passes over the other apps.
     if (g_popup.reordering) {
         DrawPopupApp(canvas, g_popup.items[g_popup.dragged], FloatingCellRect(),
                      colors.field, 0.92f, colors);
+    }
+
+    // High contrast themes rely on clear outlines.
+    if (g_popup.highContrast) {
+        canvas.FillRoundedRect(0, 0, (float)fullWidth, (float)fullHeight, (float)Px(8), 0, 0,
+                               colors.text, 1.0f, (float)Px(1));
     }
 
     // Copy the canvas to the screen (scaled and faded, if animating). Its
@@ -3341,6 +3944,21 @@ void LaunchPopupItem(HWND window, int index) {
     info.nShow = SW_SHOWNORMAL;
     if (!ShellExecuteExW(&info)) {
         Wh_Log(L"Couldn't launch it (error %u)", (unsigned)GetLastError());
+    }
+}
+
+// Opens the group (or folder) as a normal File Explorer window.
+void OpenFolderInExplorer(HWND window) {
+    std::wstring path = g_popup.folderPath;
+    DestroyWindow(window);
+
+    SHELLEXECUTEINFOW info = {};
+    info.cbSize = sizeof(info);
+    info.lpVerb = L"open";
+    info.lpFile = path.c_str();
+    info.nShow = SW_SHOWNORMAL;
+    if (!ShellExecuteExW(&info)) {
+        Wh_Log(L"Couldn't open the folder (error %u)", (unsigned)GetLastError());
     }
 }
 
@@ -3554,7 +4172,7 @@ void DragAppOut(HWND window, int index) {
     ComPtr<IDragSourceHelper> dragImageHelper;
     if (SUCCEEDED(CoCreateInstance(CLSID_DragDropHelper, nullptr, CLSCTX_INPROC_SERVER,
                                    IID_PPV_ARGS(&dragImageHelper)))) {
-        int size = Px(g_popup.iconSize);
+        int size = Px(ItemIconSize());
         SHDRAGIMAGE image = {};
         image.sizeDragImage = {size, size};
         image.ptOffset = {size / 2, size / 2};
@@ -3611,7 +4229,7 @@ std::vector<int> DisplayOrder() {
     return order;
 }
 
-// The slot whose centre is nearest the mouse.
+// The slot whose centre is nearest the mouse (`point` is a content position).
 int SlotNearest(POINT point, int clientWidth) {
     int nearest = 0;
     long long nearestDistance = LLONG_MAX;
@@ -3657,6 +4275,146 @@ void StartAnimation(HWND window) {
     SetTimer(window, kAnimationTimer, 15, nullptr);  // Every 15 ms.
 }
 
+// --- Gliding while scrolling -------------------------------------------------
+//
+// The mouse wheel moves g_popup.scrollTarget, and a timer glides the scroll
+// position towards it, like the animation above. While an app is lifted to
+// be rearranged and held near the top or bottom of the scrolling area, the
+// timer keeps scrolling that way (faster the closer to the edge), so it can
+// go anywhere in a long list.
+
+constexpr UINT_PTR kScrollTimer = 4;
+
+void StartScrolling(HWND window) {
+    SetTimer(window, kScrollTimer, 15, nullptr);
+}
+
+// The apps' highlight follows the mouse as the contents move under it.
+void UpdateHoveredFromCursor(HWND window) {
+    if (g_popup.pressed >= 0 || g_popup.reordering) {
+        return;
+    }
+    POINT cursor;
+    GetCursorPos(&cursor);
+    ScreenToClient(window, &cursor);
+    SetPopupHovered(window, PopupHitTest(window, cursor));
+}
+
+// One step. Returns false once there's nothing left to do.
+bool StepScroll(HWND window) {
+    RECT client;
+    GetClientRect(window, &client);
+    float maxScroll = (float)MaxScroll();
+
+    bool keepGoing = false;
+    if (g_popup.reordering) {
+        RECT viewport = ViewportRect(client.right);
+        int band = Px(32);
+        float speed = 0;
+        if (g_popup.cursor.y < viewport.top + band) {
+            speed = -(float)(viewport.top + band - g_popup.cursor.y) / band;
+        } else if (g_popup.cursor.y > viewport.bottom - band) {
+            speed = (float)(g_popup.cursor.y - (viewport.bottom - band)) / band;
+        }
+        speed = std::clamp(speed, -1.5f, 1.5f);
+        g_popup.scrollTarget += speed * Px(14);
+        keepGoing = (speed < 0 && g_popup.scrollTarget > 0) ||
+                    (speed > 0 && g_popup.scrollTarget < maxScroll);
+    }
+    g_popup.scrollTarget = std::clamp(g_popup.scrollTarget, 0.0f, maxScroll);
+
+    float distance = g_popup.scrollTarget - g_popup.scroll;
+    bool moving = std::fabs(distance) >= 0.5f;
+    g_popup.scroll = moving ? g_popup.scroll + distance * 0.35f : g_popup.scrollTarget;
+
+    if (g_popup.reordering) {
+        // The lifted app is over a different spot now.
+        int slot = SlotNearest(ToContent(g_popup.cursor), client.right);
+        if (slot != g_popup.reorderSlot) {
+            g_popup.reorderSlot = slot;
+            StartAnimation(window);
+        }
+    } else {
+        UpdateHoveredFromCursor(window);
+    }
+    InvalidateRect(window, nullptr, FALSE);
+    return moving || keepGoing;
+}
+
+// Scrolls by `amount` pixels (negative: up), gliding there.
+void ScrollBy(HWND window, float amount) {
+    g_popup.scrollTarget =
+        std::clamp(g_popup.scrollTarget + amount, 0.0f, (float)MaxScroll());
+    StartScrolling(window);
+}
+
+// Moves the scroll bar's thumb to follow the mouse while it's dragged.
+void DragScrollBar(HWND window, POINT point) {
+    RECT client;
+    GetClientRect(window, &client);
+    RECT track = ScrollTrackRect(client.right);
+    RECT thumb;
+    if (!ScrollThumbRect(client.right, &thumb)) {
+        return;
+    }
+    int travel = (track.bottom - track.top) - (thumb.bottom - thumb.top);
+    if (travel <= 0) {
+        return;
+    }
+    float position = (float)(point.y - g_popup.scrollGrab - track.top) / travel;
+    g_popup.scroll = g_popup.scrollTarget =
+        std::clamp(position, 0.0f, 1.0f) * (float)MaxScroll();
+    InvalidateRect(window, nullptr, FALSE);
+}
+
+// --- Closing when the mouse leaves -------------------------------------------
+//
+// A popup opened by hovering is just a peek: it closes once the mouse has
+// been away from it (and from the group's icon) for a moment. Clicking inside
+// it makes it stay, like a popup opened by clicking. Nothing closes while
+// something's in progress, like a right-click menu or renaming.
+
+constexpr UINT_PTR kLeaveTimer = 5;
+constexpr int kCloseAfterLeavingMilliseconds = 400;
+
+void ClosePopupAnimated(HWND window);
+
+void CheckMouseLeft(HWND window) {
+    if (!g_popup.closeOnLeave || g_popup.animation == 2) {
+        return;
+    }
+    if (GetForegroundWindow() == window) {
+        // You clicked inside it: it stays, and closes when you click away.
+        g_popup.closeOnLeave = false;
+        KillTimer(window, kLeaveTimer);
+        return;
+    }
+    if (g_popup.menuOpen || g_popup.renameBox || g_popup.reordering ||
+        g_popup.draggingOut || g_popup.pressed >= 0 || g_popup.scrollDragging ||
+        GetCapture() == window) {
+        g_popup.leftTime = 0;
+        return;
+    }
+
+    POINT cursor;
+    GetCursorPos(&cursor);
+    RECT popupRect, panelRect = {};
+    GetWindowRect(window, &popupRect);
+    if (HWND panel = SettingsPanelWindow()) {
+        GetWindowRect(panel, &panelRect);
+    }
+    bool inside = PtInRect(&popupRect, cursor) || PtInRect(&g_popup.itemRect, cursor) ||
+                  PtInRect(&panelRect, cursor);
+    ULONGLONG now = GetTickCount64();
+    if (inside) {
+        g_popup.leftTime = 0;
+    } else if (!g_popup.leftTime) {
+        g_popup.leftTime = now;
+    } else if (now - g_popup.leftTime >= kCloseAfterLeavingMilliseconds) {
+        ClosePopupAnimated(window);
+    }
+}
+
 void SaveGroupOrder(const std::wstring& folderPath, const std::vector<PopupItem>& items) {
     std::wstring order;
     for (const PopupItem& item : items) {
@@ -3681,7 +4439,8 @@ void StartReorder(HWND window, int index, POINT point) {
     g_popup.reordering = true;
     g_popup.dragged = index;
     g_popup.reorderSlot = index;
-    g_popup.grabOffset = {g_popup.pressPoint.x - cell.left, g_popup.pressPoint.y - cell.top};
+    POINT pressed = ToContent(g_popup.pressPoint);
+    g_popup.grabOffset = {pressed.x - cell.left, pressed.y - cell.top};
     g_popup.cursor = point;
     g_popup.pressed = -1;
     g_popup.hovered = -1;
@@ -3699,7 +4458,7 @@ void FinishReorder(HWND window, bool keep) {
     // Let the lifted app glide from under the mouse into its slot.
     RECT floating = FloatingCellRect();
     g_popup.items[g_popup.dragged].x = (float)floating.left;
-    g_popup.items[g_popup.dragged].y = (float)floating.top;
+    g_popup.items[g_popup.dragged].y = (float)floating.top + g_popup.scroll;
     g_popup.reordering = false;
     g_popup.dragged = -1;
 
@@ -3715,7 +4474,8 @@ void FinishReorder(HWND window, bool keep) {
         g_popup.items = rearranged;
 
         // Arranging apps by hand only makes sense with "My order", so if this
-        // group was sorted A to Z, switch it.
+        // group was sorted A to Z, switch it. (Other folders' orders are
+        // only kept in Windhawk's storage; see PlaceForData.)
         if (GetGroupSetting(g_popup.folderPath, kSettingSort) != 0) {
             SetGroupOwnSetting(g_popup.folderPath, kSettingSort, 0);
             RefreshSettingsPanel();
@@ -3983,6 +4743,11 @@ LRESULT CALLBACK PopupWindowProc(HWND window, UINT message, WPARAM wParam,
             RECT client;
             GetClientRect(window, &client);
 
+            if (g_popup.scrollDragging) {
+                DragScrollBar(window, point);
+                return 0;
+            }
+
             // While rearranging, the lifted app follows the mouse, and the
             // others make room. Past the popup's edge, it becomes a drag out
             // of the group. (We get mouse messages even outside the popup,
@@ -3995,10 +4760,16 @@ LRESULT CALLBACK PopupWindowProc(HWND window, UINT message, WPARAM wParam,
                     return 0;
                 }
                 g_popup.cursor = point;
-                int slot = SlotNearest(point, client.right);
+                int slot = SlotNearest(ToContent(point), client.right);
                 if (slot != g_popup.reorderSlot) {
                     g_popup.reorderSlot = slot;
                     StartAnimation(window);
+                }
+                // Near the top or bottom: scroll that way (see StepScroll).
+                RECT viewport = ViewportRect(client.right);
+                if (MaxScroll() > 0 && (point.y < viewport.top + Px(32) ||
+                                        point.y > viewport.bottom - Px(32))) {
+                    StartScrolling(window);
                 }
                 InvalidateRect(window, nullptr, FALSE);
                 return 0;
@@ -4019,14 +4790,31 @@ LRESULT CALLBACK PopupWindowProc(HWND window, UINT message, WPARAM wParam,
                 return 0;
             }
 
-            SetPopupHovered(window, PopupHitTest(window, point));
+            bool overScrollBar = PopupScrollBarHitTest(window, point);
+            SetPopupHovered(window, overScrollBar ? -1 : PopupHitTest(window, point));
             bool overTitle = PopupTitleHitTest(window, point);
             bool overGear = PopupGearHitTest(window, point);
-            if (overTitle != g_popup.titleHovered || overGear != g_popup.gearHovered) {
+            bool overOpen = PopupOpenHitTest(window, point);
+            if (overTitle != g_popup.titleHovered || overGear != g_popup.gearHovered ||
+                overOpen != g_popup.openHovered || overScrollBar != g_popup.scrollHovered) {
                 g_popup.titleHovered = overTitle;
                 g_popup.gearHovered = overGear;
+                g_popup.openHovered = overOpen;
+                g_popup.scrollHovered = overScrollBar;
                 InvalidateRect(window, nullptr, FALSE);
             }
+            return 0;
+        }
+
+        case WM_MOUSEWHEEL: {
+            // One row per notch of the wheel (three in the list view).
+            // Touchpads send smaller amounts, for smooth scrolling.
+            if (g_popup.animation || MaxScroll() <= 0) {
+                return 0;
+            }
+            int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+            float rowsPerNotch = g_popup.listView ? 3.0f : 1.0f;
+            ScrollBy(window, -(float)delta / WHEEL_DELTA * rowsPerNotch * Px(CellHeight()));
             return 0;
         }
 
@@ -4034,6 +4822,8 @@ LRESULT CALLBACK PopupWindowProc(HWND window, UINT message, WPARAM wParam,
             g_popup.trackingMouse = false;
             g_popup.titleHovered = false;
             g_popup.gearHovered = false;
+            g_popup.openHovered = false;
+            g_popup.scrollHovered = false;
             SetPopupHovered(window, -1);
             InvalidateRect(window, nullptr, FALSE);
             return 0;
@@ -4048,19 +4838,43 @@ LRESULT CALLBACK PopupWindowProc(HWND window, UINT message, WPARAM wParam,
             }
             // If you double-click a group out of habit, the first click opens
             // the popup and the second lands on it. Ignore presses that come
-            // within Windows' double-click time of the popup opening.
-            if (GetTickCount64() - g_popup.openedTime < GetDoubleClickTime()) {
+            // within Windows' double-click time of the popup opening. (Not
+            // for a popup opened by hovering, which no click opened.)
+            if (!g_popup.hoverOpened &&
+                GetTickCount64() - g_popup.openedTime < GetDoubleClickTime()) {
                 g_popup.pressed = -1;
                 return 0;
             }
 
             POINT point = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+
+            // The scroll bar: drag its thumb, or click above or below it to
+            // move a page.
+            if (PopupScrollBarHitTest(window, point)) {
+                RECT client, thumb;
+                GetClientRect(window, &client);
+                if (ScrollThumbRect(client.right, &thumb)) {
+                    if (point.y >= thumb.top && point.y < thumb.bottom) {
+                        g_popup.scrollDragging = true;
+                        g_popup.scrollGrab = point.y - thumb.top;
+                        SetCapture(window);
+                    } else {
+                        float page = g_popup.viewportHeight * 0.9f;
+                        ScrollBy(window, point.y < thumb.top ? -page : page);
+                    }
+                }
+                InvalidateRect(window, nullptr, FALSE);
+                return 0;
+            }
+
             g_popup.pressPoint = point;
             g_popup.pressed = PopupHitTest(window, point);
             g_popup.titlePressed = g_popup.pressed < 0 && !g_popup.renameBox &&
                                    PopupTitleHitTest(window, point);
             g_popup.gearPressed = g_popup.pressed < 0 && PopupGearHitTest(window, point);
-            if (g_popup.pressed >= 0 || g_popup.titlePressed || g_popup.gearPressed) {
+            g_popup.openPressed = g_popup.pressed < 0 && PopupOpenHitTest(window, point);
+            if (g_popup.pressed >= 0 || g_popup.titlePressed || g_popup.gearPressed ||
+                g_popup.openPressed) {
                 // "Capture" the mouse, so we still hear about the release
                 // even if the pointer is dragged outside the popup first.
                 SetCapture(window);
@@ -4071,6 +4885,14 @@ LRESULT CALLBACK PopupWindowProc(HWND window, UINT message, WPARAM wParam,
 
         case WM_LBUTTONUP: {
             if (g_popup.animation) {
+                return 0;
+            }
+            if (g_popup.scrollDragging) {
+                g_popup.scrollDragging = false;
+                if (GetCapture() == window) {
+                    ReleaseCapture();
+                }
+                InvalidateRect(window, nullptr, FALSE);
                 return 0;
             }
             if (g_popup.reordering) {
@@ -4086,14 +4908,18 @@ LRESULT CALLBACK PopupWindowProc(HWND window, UINT message, WPARAM wParam,
             int pressed = g_popup.pressed;
             bool titlePressed = g_popup.titlePressed;
             bool gearPressed = g_popup.gearPressed;
+            bool openPressed = g_popup.openPressed;
             g_popup.pressed = -1;
             g_popup.titlePressed = false;
             g_popup.gearPressed = false;
+            g_popup.openPressed = false;
             if (GetCapture() == window) {
                 ReleaseCapture();
             }
 
-            if (gearPressed && PopupGearHitTest(window, point)) {
+            if (openPressed && PopupOpenHitTest(window, point)) {
+                OpenFolderInExplorer(window);
+            } else if (gearPressed && PopupGearHitTest(window, point)) {
                 ToggleSettingsPanel(window);
             } else if (titlePressed && PopupTitleHitTest(window, point)) {
                 StartRename(window);
@@ -4109,10 +4935,13 @@ LRESULT CALLBACK PopupWindowProc(HWND window, UINT message, WPARAM wParam,
             // Something else took the mouse (e.g. a window popped up), so
             // the click or rearrange in progress is cancelled.
             FinishReorder(window, false);
-            if (g_popup.pressed >= 0 || g_popup.titlePressed || g_popup.gearPressed) {
+            if (g_popup.pressed >= 0 || g_popup.titlePressed || g_popup.gearPressed ||
+                g_popup.openPressed || g_popup.scrollDragging) {
                 g_popup.pressed = -1;
                 g_popup.titlePressed = false;
                 g_popup.gearPressed = false;
+                g_popup.openPressed = false;
+                g_popup.scrollDragging = false;
                 InvalidateRect(window, nullptr, FALSE);
             }
             return 0;
@@ -4164,6 +4993,12 @@ LRESULT CALLBACK PopupWindowProc(HWND window, UINT message, WPARAM wParam,
                 }
                 InvalidateRect(window, nullptr, FALSE);
             }
+            if (wParam == kScrollTimer && !StepScroll(window)) {
+                KillTimer(window, kScrollTimer);
+            }
+            if (wParam == kLeaveTimer) {
+                CheckMouseLeft(window);
+            }
             return 0;
 
         case WM_CONTEXTMENU: {
@@ -4182,8 +5017,11 @@ LRESULT CALLBACK PopupWindowProc(HWND window, UINT message, WPARAM wParam,
                 index = g_popup.hovered;
                 RECT client;
                 GetClientRect(window, &client);
-                RECT area = index >= 0 ? PopupCellRect(index, client.right)
-                                       : PopupTitleRect(client.right);
+                RECT area = PopupTitleRect(client.right);
+                if (index >= 0) {
+                    area = PopupCellRect(index, client.right);
+                    OffsetRect(&area, 0, -(int)std::lround(g_popup.scroll));
+                }
                 screenPoint = {(area.left + area.right) / 2, (area.top + area.bottom) / 2};
                 ClientToScreen(window, &screenPoint);
             } else {
@@ -4213,13 +5051,24 @@ LRESULT CALLBACK PopupWindowProc(HWND window, UINT message, WPARAM wParam,
             }
             break;
 
-        case WM_NCDESTROY:
+        case WM_NCDESTROY: {
             // The very last message a window gets. Clean up here.
             g_lastClosedGroup = g_popup.folderPath;
             g_lastClosedTime = GetTickCount64();
+
+            // For opening by hovering: if the mouse is still resting on the
+            // group's icon, it shouldn't open again until it moves off.
+            // Otherwise, coming back to it should open it again.
+            POINT cursor;
+            GetCursorPos(&cursor);
+            HWND list = g_desktopList;
+            if (!list || WindowFromPoint(cursor) != list) {
+                g_hoverIcon = -1;
+            }
             FreePopupResources();
             g_popupWindow = nullptr;
             break;
+        }
     }
     return DefWindowProcW(window, message, wParam, lParam);
 }
@@ -4282,8 +5131,9 @@ SetWindowCompositionAttribute_t GetSetWindowCompositionAttribute() {
 }
 
 // Sets (or changes) the blur and the colour laid over it: the theme's
-// background colour, mixed with the group's colour if it has one, at 60%
-// strength (0x99) so what's behind still shows through softly.
+// background colour, mixed with the group's colour if it has one, at the
+// strength set in the "Background colour strength" setting (60% by
+// default), so what's behind still shows through softly.
 bool SetBlurTint(HWND window) {
     auto setCompositionAttribute = GetSetWindowCompositionAttribute();
     if (!setCompositionAttribute) {
@@ -4292,8 +5142,9 @@ bool SetBlurTint(HWND window) {
     AccentPolicy accent = {};
     accent.state = 4;
     accent.flags = 2;
-    accent.tintColor =
-        0x99000000 | TintedBackground(g_popup.dark ? RGB(32, 32, 32) : RGB(243, 243, 243));
+    DWORD alpha = (DWORD)std::lround(g_settings.popupOpacity * 2.55);
+    accent.tintColor = (alpha << 24) |
+                       TintedBackground(g_popup.dark ? RGB(32, 32, 32) : RGB(243, 243, 243));
     WindowCompositionAttributeData data = {19, &accent, sizeof(accent)};
     return setCompositionAttribute(window, &data) != FALSE;
 }
@@ -4330,6 +5181,7 @@ void ReadPopupLayoutSettings() {
     g_popup.iconSize = iconSize <= 32 ? 32 : (iconSize >= 64 ? 64 : 48);
     g_popup.showLabels = GetGroupSetting(g_popup.folderPath, kSettingShowNames) != 0;
     g_popup.tint = GetGroupSetting(g_popup.folderPath, kSettingTint);
+    g_popup.listView = GetGroupSetting(g_popup.folderPath, kSettingView) == 1;
 }
 
 // Where the popup goes: beside the group, with its top level with the top of
@@ -4358,7 +5210,7 @@ RECT ComputePopupRect(SIZE size) {
 // size changed, put the apps in the right order, resize the popup, and let
 // the apps slide into their new places.
 void ApplyPopupSettings(HWND window) {
-    int oldIconSize = g_popup.iconSize;
+    int oldIconSize = ItemIconSize();
     int oldTint = g_popup.tint;
     ReadPopupLayoutSettings();
 
@@ -4371,13 +5223,8 @@ void ApplyPopupSettings(HWND window) {
         RetintSettingsPanel();
     }
 
-    if (g_popup.iconSize != oldIconSize) {
-        for (PopupItem& item : g_popup.items) {
-            if (item.icon) {
-                DeleteObject(item.icon);
-            }
-            item.icon = GetItemIcon(item.path, Px(g_popup.iconSize));
-        }
+    if (ItemIconSize() != oldIconSize) {
+        ResetItemIcons();  // Fetched again at the new size when shown.
     }
 
     // Reorder to match the group's sort setting, keeping each app's icon and
@@ -4396,6 +5243,7 @@ void ApplyPopupSettings(HWND window) {
     g_popup.items = sorted;
 
     SIZE size = PopupSize();
+    ClampScroll();
     g_popup.layoutSize = size;
     g_popup.fullRect = ComputePopupRect(size);
     SetWindowPos(window, nullptr, g_popup.fullRect.left, g_popup.fullRect.top, size.cx,
@@ -4423,11 +5271,12 @@ void ApplyPopupSettings(HWND window) {
 // piece with its position. The same list is used for drawing and for
 // working out what the mouse is over, so the two always agree.
 
-std::wstring g_panelClassName;  // Unique per load, like g_popupClassName.
 constexpr UINT_PTR kPanelTimer = 3;
 constexpr int kPanelOpenMilliseconds = 150;
 
-enum class PanelAction { Scope, Columns, IconSize, ShowNames, Tint, Sort, RemoveWhenOneLeft, Reset };
+enum class PanelAction {
+    Scope, View, Columns, IconSize, ShowNames, Tint, Sort, RemoveWhenOneLeft, Reset
+};
 
 // Something you can click: one option of a choice, a toggle switch, or the
 // reset button.
@@ -4473,6 +5322,10 @@ bool IsSettingsPanelOpen() {
     return g_panel.window != nullptr;
 }
 
+HWND SettingsPanelWindow() {
+    return g_panel.window;
+}
+
 // Redraws the panel (if it's open), e.g. after a setting changed elsewhere.
 void RefreshSettingsPanel() {
     if (g_panel.window) {
@@ -4492,6 +5345,8 @@ void RetintSettingsPanel() {
 
 GroupSettingId SettingForAction(PanelAction action) {
     switch (action) {
+        case PanelAction::View:
+            return kSettingView;
         case PanelAction::Columns:
             return kSettingColumns;
         case PanelAction::IconSize:
@@ -4577,20 +5432,34 @@ PanelLayout BuildPanelLayout() {
         y += Px(40);
     };
 
-    addText(L"Group settings", {padding, y, right, y + Px(28)}, PanelTextStyle::Title);
+    // Other folders (not groups) share the all-groups settings, so with
+    // those turned on, "All" covers them too.
+    bool isGroup = g_popup.isGroup;
+    addText(isGroup ? L"Group settings" : L"Folder settings", {padding, y, right, y + Px(28)},
+            PanelTextStyle::Title);
     y += Px(36);
 
-    addChoices(PanelAction::Scope, {{0, L"This group"}, {1, L"All groups"}},
+    addChoices(PanelAction::Scope,
+               {{0, isGroup ? L"This group" : L"This folder"},
+                {1, g_settings.openAnyFolder ? L"All" : L"All groups"}},
                {padding, y, right, y + Px(32)});
     y += Px(48);
 
+    // The list view has no rows of icons or names under them, so those
+    // settings are only shown for the icon view.
+    bool listView = PanelValue(PanelAction::View) == 1;
     addText(L"Layout", {padding, y, right, y + Px(24)}, PanelTextStyle::Section);
     y += Px(24);
-    addChoiceRow(L"Apps per row", PanelAction::Columns,
-                 {{3, L"3"}, {4, L"4"}, {5, L"5"}, {6, L"6"}}, 36);
+    addChoiceRow(L"View", PanelAction::View, {{0, L"Icons"}, {1, L"List"}}, 60);
+    if (!listView) {
+        addChoiceRow(isGroup ? L"Apps per row" : L"Items per row", PanelAction::Columns,
+                     {{3, L"3"}, {4, L"4"}, {5, L"5"}, {6, L"6"}}, 36);
+    }
     addChoiceRow(L"Icon size", PanelAction::IconSize,
                  {{32, L"Small"}, {48, L"Medium"}, {64, L"Large"}}, 60);
-    addToggleRow(L"Show app names", PanelAction::ShowNames);
+    if (!listView) {
+        addToggleRow(isGroup ? L"Show app names" : L"Show names", PanelAction::ShowNames);
+    }
 
     // A row of colour swatches: None, the presets, and Custom.
     y += Px(8);
@@ -4621,17 +5490,21 @@ PanelLayout BuildPanelLayout() {
     y += Px(8);
     addText(L"Behaviour", {padding, y, right, y + Px(24)}, PanelTextStyle::Section);
     y += Px(24);
-    addChoiceRow(L"Sort apps", PanelAction::Sort, {{0, L"My order"}, {1, L"A to Z"}}, 72);
-    addToggleRow(L"Remove when one app is left", PanelAction::RemoveWhenOneLeft);
+    addChoiceRow(isGroup ? L"Sort apps" : L"Sort items", PanelAction::Sort,
+                 {{0, L"My order"}, {1, L"A to Z"}}, 72);
+    if (isGroup) {
+        addToggleRow(L"Remove when one app is left", PanelAction::RemoveWhenOneLeft);
+    }
 
     y += Px(12);
     if (g_panel.allGroups) {
-        addText(L"Changes apply to every group.", {padding, y, right, y + Px(32)},
-                PanelTextStyle::Note);
+        addText(g_settings.openAnyFolder ? L"Changes apply to every group and folder."
+                                         : L"Changes apply to every group.",
+                {padding, y, right, y + Px(32)}, PanelTextStyle::Note);
     } else {
         PanelControl reset;
         reset.action = PanelAction::Reset;
-        reset.caption = L"Reset to all-groups settings";
+        reset.caption = isGroup ? L"Reset to all-groups settings" : L"Reset to shared settings";
         reset.rect = {padding, y, right, y + Px(32)};
         layout.controls.push_back(reset);
     }
@@ -4660,8 +5533,8 @@ void DrawToggle(IconCanvas& canvas, const RECT& rect, bool on, bool hovered,
     float centerX = on ? right - radius : left + radius;
     float centerY = (top + bottom) / 2;
     canvas.FillRoundedRect(centerX - knob / 2, centerY - knob / 2, centerX + knob / 2,
-                           centerY + knob / 2, knob / 2,
-                           on ? RGB(255, 255, 255) : colors.dimText, 1.0f);
+                           centerY + knob / 2, knob / 2, on ? colors.onAccent : colors.dimText,
+                           1.0f);
 }
 
 // A colour swatch: a filled circle, with a ring around the chosen one. "None"
@@ -4781,7 +5654,7 @@ void PaintPanel(HWND window, HDC screen) {
             canvas.FillRoundedRect((float)r.left + Px(2), (float)r.top + Px(2),
                                    (float)r.right - Px(2), (float)r.bottom - Px(2),
                                    (float)Px(4), colors.accent, 1.0f);
-            textColor = RGB(255, 255, 255);
+            textColor = colors.onAccent;
         } else if (hovered) {
             canvas.FillRoundedRect((float)r.left + Px(2), (float)r.top + Px(2),
                                    (float)r.right - Px(2), (float)r.bottom - Px(2),
@@ -4793,6 +5666,11 @@ void PaintPanel(HWND window, HDC screen) {
                                           DT_CENTER | DT_VCENTER | DT_SINGLELINE |
                                               DT_END_ELLIPSIS | DT_NOPREFIX);
         canvas.BlendMask(caption, r.left, r.top, textColor);
+    }
+
+    if (g_popup.highContrast) {
+        canvas.FillRoundedRect(0, 0, (float)client.right, (float)client.bottom, (float)Px(8), 0, 0,
+                               colors.text, 1.0f, (float)Px(1));
     }
 
     // Copy to the screen, faded while it slides open.
@@ -4865,12 +5743,13 @@ void PositionSettingsPanel() {
 void ChangeGroupSetting(GroupSettingId id, int value) {
     if (g_panel.allGroups) {
         SetAllGroupsSetting(id, value);
-        // "All groups" means every group, so any group's own value for this
-        // setting is removed. Sorting and colour change how group icons look,
-        // so ask the group watcher to redraw those.
+        // "All groups" means every group (and other folder), so any group's
+        // own value for this setting is removed. Sorting and colour change
+        // how group icons look, so ask the group watcher to redraw those (it
+        // skips folders that aren't groups).
         std::wstring desktopPath = GetDesktopFolderPath();
-        for (const std::wstring& group : FindAllGroups(desktopPath)) {
-            std::wstring groupPath = desktopPath + L"\\" + group;
+        for (const std::wstring& folder : FindAllFolders(desktopPath)) {
+            std::wstring groupPath = desktopPath + L"\\" + folder;
             int ownValue;
             if (GetGroupOwnSetting(groupPath, id, &ownValue)) {
                 ClearGroupOwnSetting(groupPath, id);
@@ -5145,11 +6024,12 @@ void ToggleSettingsPanel(HWND popup) {
     }
 }
 
-// Opens the popup for a group, beside it on the desktop. `anchor` is the
-// group's icon and `item` is the icon plus its label, both in screen
-// coordinates.
+// Opens the popup for a group (or other folder), beside it on the desktop.
+// `anchor` is the group's icon and `item` is the icon plus its label, both
+// in screen coordinates. `byHover`: opened by hovering, so it doesn't take
+// the focus, and closes when the mouse leaves (see CheckMouseLeft).
 void ShowGroupPopup(const std::wstring& folderPath, const std::wstring& title,
-                    const RECT& anchor, const RECT& item) {
+                    const RECT& anchor, const RECT& item, bool isGroup, bool byHover) {
     if (HWND existing = g_popupWindow) {
         DestroyWindow(existing);
     }
@@ -5165,8 +6045,15 @@ void ShowGroupPopup(const std::wstring& folderPath, const std::wstring& title,
 
     g_popup.dpi = dpiX;
     g_popup.dark = IsSystemDarkMode();
+    g_popup.highContrast = IsHighContrast();
     g_popup.title = title;
     g_popup.folderPath = folderPath;
+    g_popup.isGroup = isGroup;
+    g_popup.hoverOpened = byHover;
+    g_popup.closeOnLeave = byHover;
+    g_popup.leftTime = 0;
+    g_popup.scroll = 0;
+    g_popup.scrollTarget = 0;
     g_popup.openedTime = GetTickCount64();
     g_popup.hovered = -1;
     g_popup.pressed = -1;
@@ -5178,9 +6065,13 @@ void ShowGroupPopup(const std::wstring& folderPath, const std::wstring& title,
     g_popup.gearHovered = false;
     g_popup.gearPressed = false;
     ReadPopupLayoutSettings();
-    LoadGroupItems(folderPath, Px(g_popup.iconSize));
+    LoadGroupItems(folderPath);
     CreatePopupFonts();
 
+    MONITORINFO monitorInfo = {};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    GetMonitorInfoW(monitor, &monitorInfo);
+    g_popup.workArea = monitorInfo.rcWork;  // PopupSize needs this.
     SIZE size = PopupSize();
 
     // Every app starts in its own slot, so there's nothing to animate yet.
@@ -5190,10 +6081,6 @@ void ShowGroupPopup(const std::wstring& folderPath, const std::wstring& title,
         g_popup.items[i].x = (float)cell.left;
         g_popup.items[i].y = (float)cell.top;
     }
-    MONITORINFO monitorInfo = {};
-    monitorInfo.cbSize = sizeof(monitorInfo);
-    GetMonitorInfoW(monitor, &monitorInfo);
-    g_popup.workArea = monitorInfo.rcWork;
     g_popup.iconRect = anchor;
     g_popup.itemRect = item;
 
@@ -5228,13 +6115,20 @@ void ShowGroupPopup(const std::wstring& folderPath, const std::wstring& title,
 
     // The blurred, see-through background, like the Start menu (see
     // EnableBlurBehind above). If it can't be turned on, the popup is solid.
-    g_popup.glass = g_settings.blurredPopup && EnableBlurBehind(window);
+    g_popup.glass = g_settings.blurredPopup && !g_popup.highContrast && EnableBlurBehind(window);
 
     if (g_settings.animatePopup) {
         g_popup.contentOpacity = 0;  // Fully faded until the first step.
     }
-    ShowWindow(window, SW_SHOW);
-    SetForegroundWindow(window);
+    if (byHover) {
+        // Shown on top, but without taking the focus from whatever has it.
+        ShowWindow(window, SW_SHOWNOACTIVATE);
+        SetWindowPos(window, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        SetTimer(window, kLeaveTimer, 100, nullptr);
+    } else {
+        ShowWindow(window, SW_SHOW);
+        SetForegroundWindow(window);
+    }
     if (g_settings.animatePopup) {
         StartOpenClose(window, 1);
     }
@@ -5255,28 +6149,52 @@ void ShowGroupPopup(const std::wstring& folderPath, const std::wstring& title,
 // message on, so DefView never opens the folder window. Everything else passes
 // straight through.
 
-// `isClick` is true for a single click (NM_CLICK), false for activation.
-bool TryOpenGroup(HWND list, int index, bool isClick) {
+// Click: a single click (NM_CLICK). Activate: a double-click or Enter.
+// Hover: the mouse rested on the icon (with "Open groups with: hovering").
+enum class OpenReason { Click, Activate, Hover };
+
+bool TryOpenGroup(HWND list, int index, OpenReason reason) {
+    bool isClick = reason == OpenReason::Click;
     if (index < 0) {
         // Keyboard activation may not say which icon; use the focused one.
         LRESULT focused = -1;
         SendToList(list, LVM_GETNEXTITEM, (WPARAM)-1, LVNI_FOCUSED, &focused);
         index = (int)focused;
     }
-    if (index < 0 || GetSelectedIcons(list).size() != 1) {
-        return false;  // Nothing, or several icons, opened at once: leave it.
+    if (index < 0) {
+        return false;
+    }
+    if (reason != OpenReason::Hover && GetSelectedIcons(list).size() != 1) {
+        return false;  // Several icons opened at once: leave it.
     }
 
+    // Groups, and with "Open other desktop folders" turned on, any folder.
     ComPtr<IFolderView> folderView = GetDesktopFolderView();
     DesktopItem item;
     if (!folderView || !GetDesktopItem(folderView.Get(), list, index, &item) ||
-        !item.isDirectory || !IsGroupFolder(item.path)) {
-        return false;  // Not a group: let Windows open it normally.
+        !item.isDirectory) {
+        return false;  // Not a folder: let Windows open it normally.
+    }
+    bool isGroup = IsGroupFolder(item.path);
+    if (!isGroup && !g_settings.openAnyFolder) {
+        return false;
     }
 
     ULONGLONG now = GetTickCount64();
     HWND openPopup = g_popupWindow;
+    if (reason == OpenReason::Hover && openPopup && !g_popup.closeOnLeave) {
+        return false;  // A popup you clicked open stays until you're done.
+    }
     if (openPopup && g_popup.folderPath == item.path) {
+        if (reason == OpenReason::Hover) {
+            return true;  // Already showing.
+        }
+        if (isClick && g_popup.closeOnLeave) {
+            // It opened by hovering; clicking the group makes it stay.
+            g_popup.closeOnLeave = false;
+            SetForegroundWindow(openPopup);
+            return true;
+        }
         // This group's popup is already open. If it only just opened, this is
         // the same click arriving a second time (Windows can send both
         // NM_CLICK and LVN_ITEMACTIVATE for one click), so do nothing.
@@ -5287,7 +6205,8 @@ bool TryOpenGroup(HWND list, int index, bool isClick) {
         }
         return true;
     }
-    if (isClick && item.path == g_lastClosedGroup && now - g_lastClosedTime < 300) {
+    if (reason != OpenReason::Activate && item.path == g_lastClosedGroup &&
+        now - g_lastClosedTime < 300) {
         // Clicking the desktop closed this group's popup a moment ago, and
         // this is that same click. Leave it closed.
         return true;
@@ -5306,8 +6225,61 @@ bool TryOpenGroup(HWND list, int index, bool isClick) {
     SendToList(list, LVM_GETITEMRECT, index, (LPARAM)&itemRect);
     MapWindowPoints(list, nullptr, (POINT*)&itemRect, 2);
 
-    ShowGroupPopup(item.path, item.name, iconRect, itemRect);
+    ShowGroupPopup(item.path, item.name, iconRect, itemRect, isGroup,
+                   reason == OpenReason::Hover);
     return true;
+}
+
+// --- Opening by hovering -----------------------------------------------------
+//
+// With "Open groups with: hovering", we also watch the icon list itself
+// (subclassing it, like DefView). Each time the mouse moves onto a different
+// icon, a timer starts; if the mouse is still on that icon when it fires, the
+// group opens. Nothing happens while a mouse button is held (you might be
+// dragging), or for icons that aren't groups (or folders, with "Open other
+// desktop folders" on).
+
+constexpr UINT_PTR kHoverOpenTimer = 0x5DA7;
+
+LRESULT CALLBACK DesktopListSubclassProc(HWND list, UINT message, WPARAM wParam,
+                                         LPARAM lParam, DWORD_PTR) {
+    BusyScope busy;
+    if (message == WM_MOUSEMOVE && g_settings.openWithHover) {
+        int index = -1;
+        if (!(wParam & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON))) {
+            LVHITTESTINFO hit = {};
+            hit.pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            LRESULT result = SendMessageW(list, LVM_HITTEST, 0, (LPARAM)&hit);
+            if (result >= 0 && (hit.flags & LVHT_ONITEM)) {
+                index = (int)result;
+            }
+        }
+        if (index != g_hoverIcon) {
+            g_hoverIcon = index;
+            KillTimer(list, kHoverOpenTimer);
+            if (index >= 0) {
+                SetTimer(list, kHoverOpenTimer, g_settings.openHoverDelayMs, nullptr);
+            }
+        }
+    } else if (message == WM_TIMER && wParam == kHoverOpenTimer) {
+        KillTimer(list, kHoverOpenTimer);
+        int index = g_hoverIcon;
+        g_hoverIcon = -1;  // So moving back onto it later starts again.
+
+        // Still there, with no buttons held, and the list is what's under
+        // the mouse (not some window in front of it)?
+        POINT cursor;
+        GetCursorPos(&cursor);
+        bool buttonHeld = (GetKeyState(VK_LBUTTON) | GetKeyState(VK_RBUTTON) |
+                           GetKeyState(VK_MBUTTON)) & 0x8000;
+        if (g_settings.openWithHover && index >= 0 && !buttonHeld &&
+            WindowFromPoint(cursor) == list && GetIconUnderCursor(list) == index) {
+            TryOpenGroup(list, index, OpenReason::Hover);
+            g_hoverIcon = index;  // Don't start again until it moves off.
+        }
+        return 0;
+    }
+    return DefSubclassProc(list, message, wParam, lParam);
 }
 
 LRESULT CALLBACK DefViewSubclassProc(HWND window, UINT message, WPARAM wParam,
@@ -5331,6 +6303,9 @@ LRESULT CALLBACK DefViewSubclassProc(HWND window, UINT message, WPARAM wParam,
     if (message == g_msgStopPlacing && message) {
         g_placements.clear();
         KillTimer(window, kPlacementTimer);
+        if (HWND list = g_desktopList) {
+            KillTimer(list, kHoverOpenTimer);  // Same thread, so allowed here.
+        }
         return 0;
     }
     if (message == WM_TIMER && wParam == kPlacementTimer) {
@@ -5349,13 +6324,13 @@ LRESULT CALLBACK DefViewSubclassProc(HWND window, UINT message, WPARAM wParam,
                 // Ctrl/Shift/Alt+click are for selecting, so leave those alone.
                 bool modifierHeld = details->uKeyFlags &
                                     (LVKF_CONTROL | LVKF_SHIFT | LVKF_ALT);
-                if (!modifierHeld && TryOpenGroup(list, details->iItem, true)) {
+                if (!modifierHeld && TryOpenGroup(list, details->iItem, OpenReason::Click)) {
                     return 0;  // Handled.
                 }
             }
 
             if (header->code == LVN_ITEMACTIVATE &&
-                TryOpenGroup(list, details->iItem, false)) {
+                TryOpenGroup(list, details->iItem, OpenReason::Activate)) {
                 return 0;  // Handled: don't let DefView open a folder window.
             }
         }
@@ -5500,6 +6475,11 @@ DWORD WINAPI WorkerThread(LPVOID) {
                 } else {
                     Wh_Log(L"Couldn't watch the desktop for double-clicks");
                 }
+                // And the icon list itself, for opening groups by hovering.
+                if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+                        list, DesktopListSubclassProc, 0)) {
+                    Wh_Log(L"Couldn't watch the desktop for hovering");
+                }
 
                 // Start keeping group icons up to date. Only the explorer.exe
                 // that owns the desktop gets here, so only one copy runs.
@@ -5627,6 +6607,9 @@ void Wh_ModUninit() {
         SendMessageW(defView, g_msgStopPlacing, 0, 0);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(defView, DefViewSubclassProc);
         g_desktopDefView = nullptr;
+    }
+    if (HWND list = g_desktopList) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(list, DesktopListSubclassProc);
     }
 
     // Close the popup if it's open. SendMessage runs this on the popup's own
