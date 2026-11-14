@@ -910,17 +910,35 @@ void FeedbackListen() {
     }
 }
 
-// The middle button is the three or four-finger tap set to middle click. A scroll is shown for as long as its
-// wheel turns, like a hold: Windows' two-finger scroll, and the mod's in wheel output.
+// The middle button is the three or four-finger tap set to middle click. Windows keeps a tap's button down for a
+// moment after it, in case the finger comes back to drag: shown until it came up, a native tap lasted longer
+// than the mod's. A native press is shown as a click, and as a hold only once the pointer moves with the button
+// down. A scroll is shown for as long as its wheel turns: Windows' two-finger scroll, and the mod's inertia.
+bool g_nativeDown;     // a native touchpad button is down
+bool g_nativeDragged;  // and the pointer moved with it
+
 void FeedbackMouse(const RAWMOUSE& mouse) {
     USHORT flags = mouse.usButtonFlags;
     bool pad = GetTickCount() - g_lastReportTick <= kNativeClickMs;
-    if ((flags & (RI_MOUSE_LEFT_BUTTON_DOWN | RI_MOUSE_RIGHT_BUTTON_DOWN | RI_MOUSE_MIDDLE_BUTTON_DOWN)) && pad) {
-        Feedback(true);
-    } else if ((flags & (RI_MOUSE_LEFT_BUTTON_UP | RI_MOUSE_RIGHT_BUTTON_UP | RI_MOUSE_MIDDLE_BUTTON_UP)) &&
-               g_feedbackShown) {
-        Feedback(false);
-    } else if ((flags & (RI_MOUSE_WHEEL | RI_MOUSE_HWHEEL)) && pad && !g_feedbackDown) {
+    // The mod's own clicks are shown where it sends them.
+    if (mouse.ulExtraInformation != kInputMark) {
+        if (flags & (RI_MOUSE_LEFT_BUTTON_DOWN | RI_MOUSE_RIGHT_BUTTON_DOWN | RI_MOUSE_MIDDLE_BUTTON_DOWN)) {
+            if (pad) {
+                g_nativeDown = true;
+                g_nativeDragged = false;
+                Feedback(false);
+            }
+        } else if (flags & (RI_MOUSE_LEFT_BUTTON_UP | RI_MOUSE_RIGHT_BUTTON_UP | RI_MOUSE_MIDDLE_BUTTON_UP)) {
+            if (g_nativeDown && g_nativeDragged) {
+                Feedback(false);
+            }
+            g_nativeDown = false;
+        } else if (g_nativeDown && !g_nativeDragged && (mouse.lLastX || mouse.lLastY)) {
+            g_nativeDragged = true;
+            Feedback(true);
+        }
+    }
+    if ((flags & (RI_MOUSE_WHEEL | RI_MOUSE_HWHEEL)) && pad && !g_feedbackDown) {
         Feedback(false);
     }
 }
