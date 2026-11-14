@@ -4,14 +4,14 @@
 // @description     Shows your Claude, Codex, Antigravity and GitHub Copilot usage limits as ring tiles on the Windows 11 taskbar, with a Fluent flyout for the details
 // @description:es-ES Muestra los límites de uso de Claude, Codex, Antigravity y GitHub Copilot como mosaicos con anillos en la barra de tareas de Windows 11, con un panel flotante Fluent para los detalles
 // @description:zh-CN 在 Windows 11 任务栏上以圆环磁贴显示 Claude、Codex、Antigravity 和 GitHub Copilot 的用量上限，并通过 Fluent 浮出面板查看详情
-// @version         1.0.1
+// @version         1.0.2
 // @author          Sof2245
 // @github          https://github.com/Sof2245
 // @homepage        https://github.com/Sof2245/taskbar-ai-usage
 // @include         explorer.exe
 // @architecture    x86-64
 // @license         MIT
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -ladvapi32 -lws2_32 -liphlpapi -lcrypt32 -lbcrypt -lcomctl32 -lcomdlg32 -lxmllite -ld2d1 -ldwrite -ld3d11 -ldxgi -lwindowscodecs
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lwindowsapp -lwinhttp -luser32 -lshell32 -lgdi32 -ladvapi32 -lws2_32 -liphlpapi -lcrypt32 -lbcrypt -lcomctl32 -lcomdlg32 -lxmllite -ld2d1 -ldwrite -ld3d11 -ldxgi -lwindowscodecs -ldwmapi -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -75,6 +75,13 @@ whether you are burning through it faster than the clock.
 
 If you use **Taskbar AI Quota Bars**, disable it first. Both mods would poll the
 same accounts, and they don't share accounts or sign-ins.
+
+Claude uses the selected polling interval. Fresh Claude Code cache readings can
+update the tile between requests. For rate-limit responses without a usable wait
+time, the first two retries use that interval; the third starts increasing the wait
+in five-minute steps up to 15 minutes, with slight jitter within that cap. A selected
+interval longer than 15 minutes is kept. Server-requested waits are respected.
+Cooldowns survive reloads; the flyout keeps the last reading and shows the next retry.
 
 ### Privacy and disclaimers
 
@@ -185,6 +192,8 @@ Found a problem or have an idea?
 #include <wincrypt.h>
 #include <wincred.h>
 #include <dpapi.h>
+#include <dwmapi.h>
+#include <uxtheme.h>
 #include <unknwn.h>
 
 #ifdef GetCurrentTime
@@ -279,8 +288,6 @@ enum class Str : int {
     ParserRateLimitsNoneReported,
     ParserUnexpectedResponseDetail,
     // Antigravity
-    AntigravityNoQuotaGroupsInResponse,
-    AntigravityGroupsIsNotAnArray,
     AntigravityNoUsableAntigravityQuotaBucketsInResponse,
     AntigravityFailedToParseQuotaSummaryJSON,
     AntigravityNoUserStatusObject,
@@ -343,8 +350,6 @@ enum class Str : int {
     FlyoutResetDetail,
     FlyoutNotYetStarted,
     FlyoutResetTimeUnavailable,
-    FlyoutCreditsLeft,
-    FlyoutExtraSpent,
     FlyoutFreeResetOne,
     FlyoutFreeResetOther,
     FlyoutUpdatedStale,
@@ -356,7 +361,6 @@ enum class Str : int {
     FlyoutStaleNextTry,
     FlyoutUpdatedAt,
     FlyoutUpdated,
-    FlyoutLessThan1Minute,
     FlyoutOtherWeekly,
     FlyoutExtraUsage,
     FlyoutCreditsUnlimited,
@@ -441,12 +445,10 @@ enum class Str : int {
     SettingsInfoBarClose,
     SettingsCouldNotSaveTheAccount,
     SettingsWaitForTheCurrentSignInTo,
-    SettingsChangeAccountProvider,
     SettingsTheAccountWasChangedFromAnotherTaskbar,
     SettingsTheStoredSignInCouldNotBe,
     SettingsWaitForTheCurrentSignInTo2,
     SettingsRemoveThisAccount,
-    SettingsRemoveAccount,
     SettingsTheStoredSignInCouldNotBe2,
     SettingsCouldNotRemoveTheAccount,
     SettingsCouldNotReorderTheAccount,
@@ -456,7 +458,6 @@ enum class Str : int {
     SettingsNotNow,
     SettingsRescanNoneFound,
     SettingsCouldNotUpdateAccountVisibility,
-    SettingsResetSettings,
     SettingsCouldNotResetSettings,
     SettingsAccounts,
     SettingsLayout,
@@ -496,14 +497,11 @@ enum class Str : int {
     SettingsShowAmountsForExtraUsageCredits,
     SettingsDollarsOrCreditsInsteadOfPercentages,
     SettingsShowAdditionalOpenAIRateLimits,
-    SettingsExtraCodexModelLanesAndTheSpark,
     SettingsShowAnthropicFableWeeklyLimit,
-    SettingsShowFableWeeklyUsageInTheFlyout,
     SettingsMarkStaleDataWith,
     SettingsFlagARefreshThatFailedOrIs,
     SettingsSystemAccent,
     SettingsUseSystemAccentForUsageColors,
-    SettingsUseTheCurrentWindowsAccentForValid,
     SettingsUsageColors,
     SettingsDefault,
     SettingsAccessible,
@@ -547,9 +545,6 @@ enum class Str : int {
     EditorShowMonthlyExtraUsageArc,
     EditorUseTheCodexSignInOnThis,
     EditorUseTheClaudeCodeSignInOn,
-    EditorAnthropicClaude,
-    EditorOpenAIChatGPTCodex,
-    EditorGoogleAntigravity,
     EditorIcon,
     EditorProviderLogo,
     EditorCharacterNumberOrSymbol,
@@ -580,11 +575,8 @@ enum class Str : int {
     CommonShow,
     CommonHide,
     CommonCustom,
-    CommonPrevious,
-    CommonNext,
     CommonProvider,
     CommonLabel,
-    CommonAccount,
     // Dates and resets
     ResetNow,
     ResetInDaysHours,
@@ -681,8 +673,6 @@ enum class Str : int {
     SettingsChooseNamedColor,
     CopilotProvider,
     CopilotMonthlyCredits,
-    CopilotAiCredits,
-    CopilotCreditsLeft,
     CopilotUnlimited,
     CopilotSignInRequired,
     CopilotQuotaUnavailable,
@@ -781,8 +771,6 @@ static const PCWSTR kStringsEn[] = {
     /* ParserExtraUsageUnlimited */ L"extra usage: unlimited",
     /* ParserRateLimitsNoneReported */ L"rate limits: none reported",
     /* ParserUnexpectedResponseDetail */ L"unexpected response format ({0})",
-    /* AntigravityNoQuotaGroupsInResponse */ L"no quota groups in response",
-    /* AntigravityGroupsIsNotAnArray */ L"groups is not an array",
     /* AntigravityNoUsableAntigravityQuotaBucketsInResponse */ L"no usable Antigravity quota buckets in response",
     /* AntigravityFailedToParseQuotaSummaryJSON */ L"failed to parse quota summary JSON",
     /* AntigravityNoUserStatusObject */ L"no userStatus object",
@@ -842,8 +830,6 @@ static const PCWSTR kStringsEn[] = {
     /* FlyoutResetDetail */ L"Resets {0}",
     /* FlyoutNotYetStarted */ L"Not yet started",
     /* FlyoutResetTimeUnavailable */ L"Reset time unavailable",
-    /* FlyoutCreditsLeft */ L"{0} of {1} credits left",
-    /* FlyoutExtraSpent */ L"${0} of ${1} spent",
     /* FlyoutFreeResetOne */ L"{0} free reset available",
     /* FlyoutFreeResetOther */ L"{0} free resets available",
     /* FlyoutUpdatedStale */ L"{0} (stale)",
@@ -855,7 +841,6 @@ static const PCWSTR kStringsEn[] = {
     /* FlyoutStaleNextTry */ L"Quota data is stale · next try in {0}",
     /* FlyoutUpdatedAt */ L"Updated {0}",
     /* FlyoutUpdated */ L"Updated",
-    /* FlyoutLessThan1Minute */ L"less than 1 minute",
     /* FlyoutOtherWeekly */ L"Other weekly",
     /* FlyoutExtraUsage */ L"Extra usage",
     /* FlyoutCreditsUnlimited */ L"Credits: unlimited",
@@ -938,12 +923,10 @@ static const PCWSTR kStringsEn[] = {
     /* SettingsInfoBarClose */ L"Close",
     /* SettingsCouldNotSaveTheAccount */ L"Could not save the account.",
     /* SettingsWaitForTheCurrentSignInTo */ L"Wait for the current sign-in to finish before changing identity.",
-    /* SettingsChangeAccountProvider */ L"Change account provider",
     /* SettingsTheAccountWasChangedFromAnotherTaskbar */ L"The account was changed from another taskbar window.",
     /* SettingsTheStoredSignInCouldNotBe */ L"The stored sign-in could not be copied. The account was not changed.",
     /* SettingsWaitForTheCurrentSignInTo2 */ L"Wait for the current sign-in to finish before removing accounts.",
     /* SettingsRemoveThisAccount */ L"Remove this account?",
-    /* SettingsRemoveAccount */ L"Remove account",
     /* SettingsTheStoredSignInCouldNotBe2 */ L"The stored sign-in could not be deleted, so the account was not removed.",
     /* SettingsCouldNotRemoveTheAccount */ L"Could not remove the account.",
     /* SettingsCouldNotReorderTheAccount */ L"Could not reorder the account.",
@@ -953,7 +936,6 @@ static const PCWSTR kStringsEn[] = {
     /* SettingsNotNow */ L"Not now",
     /* SettingsRescanNoneFound */ L"No new signed-in AI providers were found.",
     /* SettingsCouldNotUpdateAccountVisibility */ L"Could not update account visibility.",
-    /* SettingsResetSettings */ L"Reset settings",
     /* SettingsCouldNotResetSettings */ L"Could not reset settings.",
     /* SettingsAccounts */ L"Accounts",
     /* SettingsLayout */ L"Layout",
@@ -993,14 +975,11 @@ static const PCWSTR kStringsEn[] = {
     /* SettingsShowAmountsForExtraUsageCredits */ L"Show amounts for extra usage/credits",
     /* SettingsDollarsOrCreditsInsteadOfPercentages */ L"Currency or credit amounts in place of percentages for extra usage and credits.",
     /* SettingsShowAdditionalOpenAIRateLimits */ L"Show additional rate limits",
-    /* SettingsExtraCodexModelLanesAndTheSpark */ L"Extra Codex model lanes and the Spark plan.",
     /* SettingsShowAnthropicFableWeeklyLimit */ L"Show Fable weekly limit",
-    /* SettingsShowFableWeeklyUsageInTheFlyout */ L"Show Fable weekly usage (when available) in the flyout and tooltip.",
     /* SettingsMarkStaleDataWith */ L"Mark stale data",
     /* SettingsFlagARefreshThatFailedOrIs */ L"Show an indicator when a refresh failed or is overdue.",
     /* SettingsSystemAccent */ L"System accent",
     /* SettingsUseSystemAccentForUsageColors */ L"Use system accent color for usage",
-    /* SettingsUseTheCurrentWindowsAccentForValid */ L"Use the current Windows accent for valid usage.",
     /* SettingsUsageColors */ L"Usage colors",
     /* SettingsDefault */ L"Default",
     /* SettingsAccessible */ L"Accessible",
@@ -1043,9 +1022,6 @@ static const PCWSTR kStringsEn[] = {
     /* EditorShowMonthlyExtraUsageArc */ L"Show monthly extra-usage arc",
     /* EditorUseTheCodexSignInOnThis */ L"Use the Codex sign-in on this PC",
     /* EditorUseTheClaudeCodeSignInOn */ L"Use the Claude Code sign-in on this PC",
-    /* EditorAnthropicClaude */ L"Anthropic (Claude)",
-    /* EditorOpenAIChatGPTCodex */ L"OpenAI (ChatGPT/Codex)",
-    /* EditorGoogleAntigravity */ L"Antigravity",
     /* EditorIcon */ L"Icon",
     /* EditorProviderLogo */ L"Provider logo",
     /* EditorCharacterNumberOrSymbol */ L"Character, number or symbol",
@@ -1075,11 +1051,8 @@ static const PCWSTR kStringsEn[] = {
     /* CommonShow */ L"Show",
     /* CommonHide */ L"Hide",
     /* CommonCustom */ L"Custom",
-    /* CommonPrevious */ L"Previous",
-    /* CommonNext */ L"Next",
     /* CommonProvider */ L"Provider",
     /* CommonLabel */ L"Label",
-    /* CommonAccount */ L"Account",
     /* ResetNow */ L"now",
     /* ResetInDaysHours */ L"in {0}d {1}h",
     /* ResetInDays */ L"in {0}d",
@@ -1173,8 +1146,6 @@ static const PCWSTR kStringsEn[] = {
     /* SettingsChooseNamedColor */ L"Choose {0}",
     /* CopilotProvider */ L"GitHub Copilot",
     /* CopilotMonthlyCredits */ L"Monthly AI credits",
-    /* CopilotAiCredits */ L"AI credits",
-    /* CopilotCreditsLeft */ L"{0} of {1} credits left",
     /* CopilotUnlimited */ L"Unlimited",
     /* CopilotSignInRequired */ L"Sign in to see Copilot usage, or use an existing Visual Studio / GitHub CLI account.",
     /* CopilotQuotaUnavailable */ L"Monthly AI credit allowance is unavailable.",
@@ -1272,8 +1243,6 @@ static const PCWSTR kStringsEs[] = {
     /* ParserExtraUsageUnlimited */ L"uso adicional: ilimitado",
     /* ParserRateLimitsNoneReported */ L"límites de velocidad: ninguno notificado",
     /* ParserUnexpectedResponseDetail */ L"formato de respuesta inesperado ({0})",
-    /* AntigravityNoQuotaGroupsInResponse */ L"no hay grupos de cuota en la respuesta",
-    /* AntigravityGroupsIsNotAnArray */ L"groups no es una matriz",
     /* AntigravityNoUsableAntigravityQuotaBucketsInResponse */ L"no hay depósitos de cuota de Antigravity utilizables en la respuesta",
     /* AntigravityFailedToParseQuotaSummaryJSON */ L"no se pudo analizar el JSON del resumen de cuota",
     /* AntigravityNoUserStatusObject */ L"no hay objeto userStatus",
@@ -1333,8 +1302,6 @@ static const PCWSTR kStringsEs[] = {
     /* FlyoutResetDetail */ L"Se restablece {0}",
     /* FlyoutNotYetStarted */ L"Aún sin comenzar",
     /* FlyoutResetTimeUnavailable */ L"Hora de reinicio no disponible",
-    /* FlyoutCreditsLeft */ L"Quedan {0} de {1} créditos",
-    /* FlyoutExtraSpent */ L"${0} de ${1} gastados",
     /* FlyoutFreeResetOne */ L"{0} restablecimiento gratuito disponible",
     /* FlyoutFreeResetOther */ L"{0} restablecimientos gratuitos disponibles",
     /* FlyoutUpdatedStale */ L"{0} (obsoleto)",
@@ -1346,7 +1313,6 @@ static const PCWSTR kStringsEs[] = {
     /* FlyoutStaleNextTry */ L"Los datos de cuota están obsoletos · próximo intento en {0}",
     /* FlyoutUpdatedAt */ L"Actualizado {0}",
     /* FlyoutUpdated */ L"Actualizado",
-    /* FlyoutLessThan1Minute */ L"menos de 1 minuto",
     /* FlyoutOtherWeekly */ L"Otros semanal",
     /* FlyoutExtraUsage */ L"Uso adicional",
     /* FlyoutCreditsUnlimited */ L"Créditos: ilimitados",
@@ -1429,12 +1395,10 @@ static const PCWSTR kStringsEs[] = {
     /* SettingsInfoBarClose */ L"Cerrar",
     /* SettingsCouldNotSaveTheAccount */ L"No se pudo guardar la cuenta.",
     /* SettingsWaitForTheCurrentSignInTo */ L"Espera a que termine el inicio de sesión actual antes de cambiar la identidad.",
-    /* SettingsChangeAccountProvider */ L"Cambiar proveedor de la cuenta",
     /* SettingsTheAccountWasChangedFromAnotherTaskbar */ L"La cuenta se cambió desde otra ventana de la barra de tareas.",
     /* SettingsTheStoredSignInCouldNotBe */ L"No se pudo copiar el inicio de sesión almacenado. La cuenta no se modificó.",
     /* SettingsWaitForTheCurrentSignInTo2 */ L"Espera a que termine el inicio de sesión actual antes de quitar cuentas.",
     /* SettingsRemoveThisAccount */ L"¿Quitar esta cuenta?",
-    /* SettingsRemoveAccount */ L"Quitar cuenta",
     /* SettingsTheStoredSignInCouldNotBe2 */ L"No se pudo eliminar el inicio de sesión almacenado, por lo que la cuenta no se quitó.",
     /* SettingsCouldNotRemoveTheAccount */ L"No se pudo quitar la cuenta.",
     /* SettingsCouldNotReorderTheAccount */ L"No se pudo reordenar la cuenta.",
@@ -1444,7 +1408,6 @@ static const PCWSTR kStringsEs[] = {
     /* SettingsNotNow */ L"Ahora no",
     /* SettingsRescanNoneFound */ L"No se encontraron nuevos proveedores de IA con sesión iniciada.",
     /* SettingsCouldNotUpdateAccountVisibility */ L"No se pudo actualizar la visibilidad de la cuenta.",
-    /* SettingsResetSettings */ L"Restablecer configuración",
     /* SettingsCouldNotResetSettings */ L"No se pudo restablecer la configuración.",
     /* SettingsAccounts */ L"Cuentas",
     /* SettingsLayout */ L"Diseño",
@@ -1484,14 +1447,11 @@ static const PCWSTR kStringsEs[] = {
     /* SettingsShowAmountsForExtraUsageCredits */ L"Mostrar cantidades de uso adicional/créditos",
     /* SettingsDollarsOrCreditsInsteadOfPercentages */ L"Cantidades en moneda o créditos en lugar de porcentajes para el uso adicional y créditos.",
     /* SettingsShowAdditionalOpenAIRateLimits */ L"Mostrar límites de uso adicionales",
-    /* SettingsExtraCodexModelLanesAndTheSpark */ L"Límites de modelo adicionales de Codex y planes Spark.",
     /* SettingsShowAnthropicFableWeeklyLimit */ L"Mostrar límite semanal de Fable",
-    /* SettingsShowFableWeeklyUsageInTheFlyout */ L"Muestra el uso semanal de Fable (cuando está disponible) en el flyout y en la información sobre herramientas.",
     /* SettingsMarkStaleDataWith */ L"Marcar datos obsoletos",
     /* SettingsFlagARefreshThatFailedOrIs */ L"Muestra un indicador cuando una actualización ha fallado o está retrasada.",
     /* SettingsSystemAccent */ L"Énfasis del sistema",
     /* SettingsUseSystemAccentForUsageColors */ L"Usar el color de énfasis del sistema para los indicadores",
-    /* SettingsUseTheCurrentWindowsAccentForValid */ L"Usa el color de énfasis actual de Windows cuando los medidores no están desfasados.",
     /* SettingsUsageColors */ L"Colores de uso",
     /* SettingsDefault */ L"Predeterminado",
     /* SettingsAccessible */ L"Accesible",
@@ -1502,7 +1462,7 @@ static const PCWSTR kStringsEs[] = {
     /* Settings15Minutes */ L"15 minutos",
     /* Settings30Minutes */ L"30 minutos",
     /* Settings60Minutes */ L"60 minutos",
-    /* SettingsHowOftenAnthropicAndOpenAIQuotasAre */ L"Con qué frecuencia se comprueban el uso de las cuentas.",
+    /* SettingsHowOftenAnthropicAndOpenAIQuotasAre */ L"Frecuencia de comprobación de las cuotas.",
     /* SettingsCustomIntervalMinutes */ L"Intervalo personalizado (minutos)",
     /* SettingsUsedWhenThePollIntervalIsCustom */ L"Tiempo entre comprobaciones de cuota cuando el intervalo de consulta es personalizado.",
     /* SettingsCustomIntervalHelp */ L"Acepta de 2 a 1440 minutos (hasta 24 horas). Los intervalos más cortos actualizan antes pero envían más solicitudes.",
@@ -1534,9 +1494,6 @@ static const PCWSTR kStringsEs[] = {
     /* EditorShowMonthlyExtraUsageArc */ L"Mostrar medidor de uso adicional mensual",
     /* EditorUseTheCodexSignInOnThis */ L"Usar la sesión inicida en Codex de este equipo",
     /* EditorUseTheClaudeCodeSignInOn */ L"Usar la sesión iniciada en Claude Code de este equipo",
-    /* EditorAnthropicClaude */ L"Anthropic (Claude)",
-    /* EditorOpenAIChatGPTCodex */ L"OpenAI (ChatGPT/Codex)",
-    /* EditorGoogleAntigravity */ L"Antigravity",
     /* EditorIcon */ L"Icono",
     /* EditorProviderLogo */ L"Logotipo del proveedor",
     /* EditorCharacterNumberOrSymbol */ L"Carácter, número o símbolo",
@@ -1566,11 +1523,8 @@ static const PCWSTR kStringsEs[] = {
     /* CommonShow */ L"Mostrar",
     /* CommonHide */ L"Ocultar",
     /* CommonCustom */ L"Personalizado",
-    /* CommonPrevious */ L"Anterior",
-    /* CommonNext */ L"Siguiente",
     /* CommonProvider */ L"Proveedor",
     /* CommonLabel */ L"Etiqueta",
-    /* CommonAccount */ L"Cuenta",
     /* ResetNow */ L"ahora",
     /* ResetInDaysHours */ L"en {0} d {1} h",
     /* ResetInDays */ L"en {0} d",
@@ -1664,8 +1618,6 @@ static const PCWSTR kStringsEs[] = {
     /* SettingsChooseNamedColor */ L"Elegir {0}",
     /* CopilotProvider */ L"GitHub Copilot",
     /* CopilotMonthlyCredits */ L"Créditos de IA mensuales",
-    /* CopilotAiCredits */ L"Créditos de IA",
-    /* CopilotCreditsLeft */ L"Quedan {0} de {1} créditos",
     /* CopilotUnlimited */ L"Sin límite",
     /* CopilotSignInRequired */ L"Inicia sesión para ver el uso de Copilot o usa una cuenta existente de Visual Studio / GitHub CLI.",
     /* CopilotQuotaUnavailable */ L"La cuota mensual de créditos de IA no está disponible.",
@@ -1763,8 +1715,6 @@ static const PCWSTR kStringsZhHans[] = {
     /* ParserExtraUsageUnlimited */ L"额外用量：无限制",
     /* ParserRateLimitsNoneReported */ L"速率限制：未报告",
     /* ParserUnexpectedResponseDetail */ L"意外的响应格式（{0}）",
-    /* AntigravityNoQuotaGroupsInResponse */ L"响应中没有配额组",
-    /* AntigravityGroupsIsNotAnArray */ L"groups 不是数组",
     /* AntigravityNoUsableAntigravityQuotaBucketsInResponse */ L"响应中没有可用的 Antigravity 配额项",
     /* AntigravityFailedToParseQuotaSummaryJSON */ L"无法解析配额摘要 JSON",
     /* AntigravityNoUserStatusObject */ L"没有 userStatus 对象",
@@ -1824,8 +1774,6 @@ static const PCWSTR kStringsZhHans[] = {
     /* FlyoutResetDetail */ L"{0}重置",
     /* FlyoutNotYetStarted */ L"尚未开始",
     /* FlyoutResetTimeUnavailable */ L"暂无法获取重置时间",
-    /* FlyoutCreditsLeft */ L"剩余 {0} / {1} 额度",
-    /* FlyoutExtraSpent */ L"已花费 ${0} / ${1}",
     /* FlyoutFreeResetOne */ L"可免费重置 {0} 次",
     /* FlyoutFreeResetOther */ L"可免费重置 {0} 次",
     /* FlyoutUpdatedStale */ L"{0}（已过期）",
@@ -1837,7 +1785,6 @@ static const PCWSTR kStringsZhHans[] = {
     /* FlyoutStaleNextTry */ L"配额数据已过期 · {0}后重试",
     /* FlyoutUpdatedAt */ L"更新于 {0}",
     /* FlyoutUpdated */ L"已更新",
-    /* FlyoutLessThan1Minute */ L"不到 1 分钟",
     /* FlyoutOtherWeekly */ L"其他模型每周",
     /* FlyoutExtraUsage */ L"额外用量",
     /* FlyoutCreditsUnlimited */ L"额度：无限制",
@@ -1920,12 +1867,10 @@ static const PCWSTR kStringsZhHans[] = {
     /* SettingsInfoBarClose */ L"关闭",
     /* SettingsCouldNotSaveTheAccount */ L"无法保存账户。",
     /* SettingsWaitForTheCurrentSignInTo */ L"请等待当前登录完成后再更改标识。",
-    /* SettingsChangeAccountProvider */ L"更改账户提供商",
     /* SettingsTheAccountWasChangedFromAnotherTaskbar */ L"该账户已在另一个任务栏窗口中更改。",
     /* SettingsTheStoredSignInCouldNotBe */ L"无法复制已保存的登录信息。账户未更改。",
     /* SettingsWaitForTheCurrentSignInTo2 */ L"请等待当前登录完成后再移除账户。",
     /* SettingsRemoveThisAccount */ L"要移除此账户吗？",
-    /* SettingsRemoveAccount */ L"移除账户",
     /* SettingsTheStoredSignInCouldNotBe2 */ L"无法删除已保存的登录信息，因此未移除该账户。",
     /* SettingsCouldNotRemoveTheAccount */ L"无法移除账户。",
     /* SettingsCouldNotReorderTheAccount */ L"无法调整账户顺序。",
@@ -1935,7 +1880,6 @@ static const PCWSTR kStringsZhHans[] = {
     /* SettingsNotNow */ L"暂不",
     /* SettingsRescanNoneFound */ L"未找到新的已登录 AI 提供商。",
     /* SettingsCouldNotUpdateAccountVisibility */ L"无法更新账户可见性。",
-    /* SettingsResetSettings */ L"重置设置",
     /* SettingsCouldNotResetSettings */ L"无法重置设置。",
     /* SettingsAccounts */ L"账户",
     /* SettingsLayout */ L"布局",
@@ -1975,14 +1919,11 @@ static const PCWSTR kStringsZhHans[] = {
     /* SettingsShowAmountsForExtraUsageCredits */ L"显示额外用量金额或额度数量",
     /* SettingsDollarsOrCreditsInsteadOfPercentages */ L"额外用量显示金额，额度显示数量，而非百分比。",
     /* SettingsShowAdditionalOpenAIRateLimits */ L"显示其他速率限制",
-    /* SettingsExtraCodexModelLanesAndTheSpark */ L"额外的 Codex 模型通道和 Spark 套餐。",
     /* SettingsShowAnthropicFableWeeklyLimit */ L"显示 Fable 每周限制",
-    /* SettingsShowFableWeeklyUsageInTheFlyout */ L"在浮出面板和工具提示中显示 Fable 每周用量（如有）。",
     /* SettingsMarkStaleDataWith */ L"标记过期数据",
     /* SettingsFlagARefreshThatFailedOrIs */ L"刷新失败或逾期时显示指示标记。",
     /* SettingsSystemAccent */ L"系统强调色",
     /* SettingsUseSystemAccentForUsageColors */ L"用量颜色使用系统强调色",
-    /* SettingsUseTheCurrentWindowsAccentForValid */ L"对有效用量使用当前的 Windows 强调色。",
     /* SettingsUsageColors */ L"用量颜色",
     /* SettingsDefault */ L"默认",
     /* SettingsAccessible */ L"无障碍",
@@ -2025,9 +1966,6 @@ static const PCWSTR kStringsZhHans[] = {
     /* EditorShowMonthlyExtraUsageArc */ L"显示每月额外用量圆弧",
     /* EditorUseTheCodexSignInOnThis */ L"使用此电脑上的 Codex 登录信息",
     /* EditorUseTheClaudeCodeSignInOn */ L"使用此电脑上的 Claude Code 登录信息",
-    /* EditorAnthropicClaude */ L"Anthropic (Claude)",
-    /* EditorOpenAIChatGPTCodex */ L"OpenAI (ChatGPT/Codex)",
-    /* EditorGoogleAntigravity */ L"Antigravity",
     /* EditorIcon */ L"图标",
     /* EditorProviderLogo */ L"提供商徽标",
     /* EditorCharacterNumberOrSymbol */ L"字符、数字或符号",
@@ -2057,11 +1995,8 @@ static const PCWSTR kStringsZhHans[] = {
     /* CommonShow */ L"显示",
     /* CommonHide */ L"隐藏",
     /* CommonCustom */ L"自定义",
-    /* CommonPrevious */ L"上一页",
-    /* CommonNext */ L"下一页",
     /* CommonProvider */ L"提供商",
     /* CommonLabel */ L"标签",
-    /* CommonAccount */ L"账户",
     /* ResetNow */ L"现在",
     /* ResetInDaysHours */ L"{0} 天 {1} 小时后",
     /* ResetInDays */ L"{0} 天后",
@@ -2155,8 +2090,6 @@ static const PCWSTR kStringsZhHans[] = {
     /* SettingsChooseNamedColor */ L"选择{0}",
     /* CopilotProvider */ L"GitHub Copilot",
     /* CopilotMonthlyCredits */ L"每月 AI 额度",
-    /* CopilotAiCredits */ L"AI 额度",
-    /* CopilotCreditsLeft */ L"剩余 {0} 点，共 {1} 点",
     /* CopilotUnlimited */ L"无限制",
     /* CopilotSignInRequired */ L"登录以查看 Copilot 用量，或使用现有的 Visual Studio / GitHub CLI 账户。",
     /* CopilotQuotaUnavailable */ L"暂无法获取每月 AI 额度。",
@@ -2437,47 +2370,9 @@ enum class TaskbarMonitorMode {
     Specific,
 };
 
-enum class ClickAction {
-    Refresh,
-    OpenDashboard,
-};
-
-enum class BarLayout {
-    Stacked,
-    Vertical,
-};
-
 enum class BarMode {
     Used,
     Remaining,
-};
-
-enum class PercentTextAlignment {
-    Adaptive,
-    Left,
-    Center,
-    Right,
-};
-
-enum class PercentTextVisibility {
-    Never,
-    Hover,
-    Always,
-};
-
-enum class LabelPosition {
-    Hidden,
-    Left,
-    Top,
-    Right,
-    Bottom,
-};
-
-enum class PaceTickStyle {
-    Caret,
-    Line,
-    Notch,
-    Dot,
 };
 
 static constexpr COLORREF kDefaultPaceTickColor = RGB(222, 222, 222);
@@ -2512,36 +2407,23 @@ struct Settings {
     TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
     // Far left of the tray: the original placement.
     TilePosition tilePosition = TilePosition::TrayFarLeft;
-    ClickAction clickAction = ClickAction::Refresh;
-    BarLayout barLayout = BarLayout::Stacked;
     // Remaining quota ("74% left") is the default.
     BarMode barMode = BarMode::Remaining;
     FlyoutMaterial flyoutMaterial = FlyoutMaterial::Default;
     int taskbarMonitorNumber = 1;
     int pollMinutes = 5;
-    int barLength = 100;
-    int barThickness = 8;
-    int labelFontSize = 11;
-    int percentFontSize = 9;
     int accountMargin = 3;
     // Tile size in DIP; 0 = automatic, otherwise 16..64 (NormalizeSettings clamps it).
     int tileSize = 0;
-    int labelGap = 3;
-    int barGap = 2;
     int rightMargin = 4;
     int yellowThreshold = 50;
     int orangeThreshold = 75;
     int redThreshold = 90;
     std::array<uint32_t, 4> usageColors = kDefaultUsageColors;
-    LabelPosition labelPosition = LabelPosition::Left;
     bool showPaceTicks = true;
     // Shows the markers even when usage is on pace (without the 5-point rule).
     bool persistentPaceMarkers = false;
-    PaceTickStyle paceTickStyle = PaceTickStyle::Caret;
     COLORREF paceTickColor = kDefaultPaceTickColor;
-    bool showBarLabels = false;
-    PercentTextVisibility percentTextVisibility = PercentTextVisibility::Hover;
-    PercentTextAlignment percentTextAlignment = PercentTextAlignment::Adaptive;
     // Extra-usage/credits bars show the amount ($ or credits) instead of a percentage.
     bool showExtraBarAmounts = false;
     // additional_rate_limits lines (Codex Spark, gpt-reserve, ...) and the Spark plan name.
@@ -2861,6 +2743,7 @@ struct QuotaUiInstance {
     bool lightTheme = false;
     bool windowSubclassed = false;
     ULONGLONG buildSettingsGeneration = 0;
+    Settings buildSettings;  // The settings the tiles were last built from.
     bool buildVisualTestMode = false;
     Grid quotaGrid{nullptr};
     Panel injectionParent{nullptr};
@@ -2951,7 +2834,6 @@ static std::vector<HINTERNET> g_httpHandles;
 static HANDLE g_settingsWindowThread = nullptr;
 static std::mutex g_settingsWindowMutex;
 static std::atomic<HWND> g_settingsWindow{nullptr};
-static std::atomic<bool> g_settingsWindowCancelRequested{false};
 
 // Fetch-thread-owned: hidden message-only window that owns the mod's tray icon.
 static HWND g_notifyWnd = nullptr;
@@ -3940,9 +3822,26 @@ static std::vector<uint32_t> RenderAppLogoMaster(bool tight = false) {
     return pixels;
 }
 
-// Validates, renders and stores an SVG already in memory (editor or appearance import).
+// An imported SVG held in memory until the user confirms: nothing is written to the icons folder
+// before CommitStagedIconAsset.
+struct StagedIconAsset {
+    std::wstring asset;
+    std::vector<BYTE> svg;
+    std::vector<BYTE> cache;
+};
+
+static bool CommitStagedIconAsset(const StagedIconAsset& staged) {
+    std::wstring dir;
+    return IsValidIconAsset(staged.asset) && !staged.cache.empty() && !staged.svg.empty() &&
+           GetIconsDirectory(&dir, true) &&
+           WriteFileAtomic(dir, staged.asset + L".bgra", staged.cache.data(), staged.cache.size()) &&
+           WriteFileAtomic(dir, staged.asset + L".svg", staged.svg.data(), staged.svg.size());
+}
+
+// Validates and renders an SVG already in memory (editor or appearance import) and stages it.
 static SvgImportResult ImportSvgIconBytes(const std::vector<BYTE>& bytes,
-                                          std::vector<uint32_t>* master) {
+                                          std::vector<uint32_t>* master,
+                                          StagedIconAsset* staged) {
     SvgImportResult result;
     auto fail = [&](SvgError error) {
         result.error = error;
@@ -4001,19 +3900,17 @@ static SvgImportResult ImportSvgIconBytes(const std::vector<BYTE>& bytes,
     memcpy(cache.data() + sizeof(header), pixels.data(), payloadBytes);
 
     std::wstring asset = HexLower(sourceDigest.data(), sourceDigest.size());
-    std::wstring dir;
-    if (!GetIconsDirectory(&dir, true) ||
-        !WriteFileAtomic(dir, asset + L".bgra", cache.data(), cache.size()) ||
-        !WriteFileAtomic(dir, asset + L".svg", bytes.data(), bytes.size())) {
-        return fail(SvgError::StoreFailed);
-    }
+    staged->asset = asset;
+    staged->svg = bytes;
+    staged->cache = std::move(cache);
     result.asset = std::move(asset);
     result.ignored = std::move(pre.ignored);
     *master = std::move(pixels);
     return result;
 }
 
-static SvgImportResult ImportSvgIcon(const std::wstring& path, std::vector<uint32_t>* master) {
+static SvgImportResult ImportSvgIcon(const std::wstring& path, std::vector<uint32_t>* master,
+                                     StagedIconAsset* staged) {
     std::vector<BYTE> bytes;
     SvgError readError = ReadFileBounded(path, kSvgMaxFileBytes, &bytes);
     if (readError != SvgError::None) {
@@ -4021,7 +3918,7 @@ static SvgImportResult ImportSvgIcon(const std::wstring& path, std::vector<uint3
         result.error = readError;
         return result;
     }
-    return ImportSvgIconBytes(bytes, master);
+    return ImportSvgIconBytes(bytes, master, staged);
 }
 
 // Custom SVG stored for an asset (to export the appearance). Checks that the content still matches
@@ -4435,7 +4332,7 @@ static winrt::Windows::UI::Color UsageColor(double pct, bool stale, int yellowTh
 }
 
 // Must match @version (shown in Settings > About).
-static constexpr PCWSTR kModVersion = L"1.0.1";
+static constexpr PCWSTR kModVersion = L"1.0.2";
 static constexpr PCWSTR kAboutQuotaBarsUrl = L"https://github.com/Cleroth/windhawk-taskbar-ai-quota";
 static constexpr PCWSTR kAboutMediaPlayerUrl = L"https://github.com/Salyts/Taskbar-Fluent-Media-Player";
 static constexpr PCWSTR kAboutT3CodeUrl = L"https://github.com/pingdotgg/t3code";
@@ -4575,7 +4472,7 @@ static void OpenDashboardForIdentity(uint64_t identityHash) {
 }
 
 // Right-click menu: flip an account's show/hide state, keep at least one visible, persist the
-// hidden-set to mod storage, then wake the fetch thread and refresh all taskbars. Runs on a
+// visibility to mod storage, then wake the fetch thread and refresh all taskbars. Runs on a
 // taskbar UI thread (menu click); `sender` is the clicked ToggleMenuFlyoutItem (already flipped).
 static void ToggleAccountVisibility(uint64_t identityHash,
                                     winrt::Windows::Foundation::IInspectable const& sender) {
@@ -4584,7 +4481,6 @@ static void ToggleAccountVisibility(uint64_t identityHash,
     bool clickedVisible = toggle && toggle.IsChecked();
     std::unique_lock<std::mutex> configLock(g_configEditMutex);
 
-    std::wstring hashes;
     Settings settingsSnapshot;
     bool refreshNow = false;
     bool oldHidden = false;
@@ -4636,15 +4532,6 @@ static void ToggleAccountVisibility(uint64_t identityHash,
                     }
                 }
             }
-
-            wchar_t buf[24];
-            for (const auto& a : settingsSnapshot.accounts) {
-                if (!a.hidden) continue;
-                if (!hashes.empty()) hashes += L";";
-                swprintf(buf, ARRAYSIZE(buf), L"%016llx",
-                         (unsigned long long)AccountIdentityHash(a));
-                hashes += buf;
-            }
         }
     }
     if (rejectedLastVisible) {
@@ -4661,7 +4548,6 @@ static void ToggleAccountVisibility(uint64_t identityHash,
         return;
     }
     PublishSettings(settingsSnapshot);
-    Wh_SetStringValue(L"hiddenAccounts", hashes.c_str());
     // RefreshQuota re-queries only this account (and posts the UI); otherwise just repaint so the
     // column collapses/reappears with its existing data without any network request.
     configLock.unlock();
@@ -8395,7 +8281,33 @@ struct ClaudePollState {
     ULONGLONG lastAttemptMs = 0;
     ULONGLONG retryDeadlineMs = 0;
     bool lastRateLimited = false;
+    unsigned rateLimitStreak = 0;
 };
+
+// Count only consecutive refusals without a useful provider wait. The first two use
+// the selected interval exactly; subsequent waits grow in five-minute steps.
+static int ClaudeRateLimitCooldownSec(unsigned streak, int intervalSec, ULONG jitter) {
+    if (streak <= 2 || intervalSec >= 900) return intervalSec;
+    int steps = (int)std::clamp(streak, 3U, 5U) - 2;
+    int seconds = std::min(900, (intervalSec / 300 + steps) * 300);
+    return std::min(900, seconds + (int)(jitter % 31));
+}
+
+static int UpdateClaudePollCooldown(ClaudePollState& state, bool rateLimited,
+                                   bool succeeded, int retryAfterSec, int intervalSec, ULONG jitter) {
+    state.lastRateLimited = rateLimited;
+    if (rateLimited) {
+        if (retryAfterSec > 0) {
+            state.rateLimitStreak = 0;
+            return retryAfterSec;
+        }
+        state.rateLimitStreak = std::min(state.rateLimitStreak, 4U) + 1;
+        return ClaudeRateLimitCooldownSec(state.rateLimitStreak, intervalSec, jitter);
+    }
+    // A network or parse failure is not evidence that the provider's throttle has cleared.
+    if (succeeded) state.rateLimitStreak = 0;
+    return retryAfterSec;
+}
 
 static std::mutex g_claudePollMutex;
 static std::map<std::wstring, ClaudePollState> g_claudePollStates;
@@ -8439,10 +8351,13 @@ static ClaudePollState& LoadClaudePollStateLocked(const std::wstring& key) {
         entry->second.lastAttemptMs = std::min(now, timestamp(L"lastAttemptMs", now + 60000));
         // Keep provider waits within one day, including state saved with an unbounded header.
         entry->second.retryDeadlineMs = timestamp(L"retryDeadlineMs", now + 86400000ULL, true);
-        // Older saved state: its counters no longer extend the interval. A pending deadline is
-        // kept because those counters mixed Retry-After and the penalty.
+        // Older state has no streak; preserve its pending deadline and count a refusal once.
         entry->second.lastRateLimited = GetNum(json, L"lastRateLimited",
             GetNum(json, L"rateLimitCount", 0) > 0 ? 1 : 0) == 1;
+        double streak = GetNum(json, L"rateLimitStreak",
+                               entry->second.lastRateLimited ? 1 : 0);
+        entry->second.rateLimitStreak = std::isfinite(streak) && streak >= 0 &&
+            streak == std::floor(streak) ? (unsigned)std::min(streak, 5.0) : 0;
     } catch (...) {
         Wh_Log(L"Invalid Claude polling state; using normal cadence");
     }
@@ -8452,9 +8367,9 @@ static ClaudePollState& LoadClaudePollStateLocked(const std::wstring& key) {
 static void SaveClaudePollStateLocked(const std::wstring& key, const ClaudePollState& state) {
     wchar_t text[256];
     swprintf(text, ARRAYSIZE(text),
-             L"{\"lastAttemptMs\":%llu,\"retryDeadlineMs\":%llu,\"lastRateLimited\":%u}",
+             L"{\"lastAttemptMs\":%llu,\"retryDeadlineMs\":%llu,\"lastRateLimited\":%u,\"rateLimitStreak\":%u}",
              state.lastAttemptMs, std::min(state.retryDeadlineMs, NowUnixMs() + 86400000ULL),
-             state.lastRateLimited ? 1U : 0U);
+             state.lastRateLimited ? 1U : 0U, std::min(state.rateLimitStreak, 5U));
     if (!Wh_SetStringValue(key.c_str(), text)) Wh_Log(L"Could not save Claude polling state");
 }
 
@@ -8485,6 +8400,7 @@ static void RenameClaudePollState(const AccountConfig& before, const AccountConf
     merged.retryDeadlineMs = std::min(std::max(merged.retryDeadlineMs, destination.retryDeadlineMs),
                                       NowUnixMs() + 86400000ULL);
     merged.lastRateLimited = merged.lastRateLimited || destination.lastRateLimited;
+    merged.rateLimitStreak = std::max(merged.rateLimitStreak, destination.rateLimitStreak);
     g_claudePollStates[newKey] = merged;
     SaveClaudePollStateLocked(newKey, merged);
     // In-flight results with the old identity will be saved under the new one.
@@ -8872,7 +8788,8 @@ static void FetchAntigravityAccount(const AccountConfig& account, AccountData* d
     if (result.retryAfterSec > 0) *retryAfterSec = result.retryAfterSec;
 }
 
-// fallbackRetrySec keeps the configured interval when the server gives no Retry-After.
+// fallbackRetrySec keeps the configured interval without Retry-After, except for Claude
+// quota 429s, whose adaptive deadline is set by the fetch loop.
 static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec,
                          int fallbackRetrySec, bool* rateLimited = nullptr,
                          int* usageHttpStatus = nullptr) {
@@ -9054,7 +8971,9 @@ static void FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAft
         if (rateLimited) *rateLimited = true;
         d->stale = true;
         d->error = Tr(Str::StatusRateLimitedByAPI);
-        *retryAfterSec = r.retryAfterSec > 0 ? r.retryAfterSec : fallbackRetrySec;
+        // Claude's fetch loop supplies an adaptive cooldown when Retry-After is absent or zero.
+        *retryAfterSec = acc.provider == L"anthropic" ? r.retryAfterSec :
+            (r.retryAfterSec > 0 ? r.retryAfterSec : fallbackRetrySec);
         return;
     }
     if (r.status != 200) {
@@ -9618,9 +9537,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         ULONGLONG nextPollMs = 0;
         bool anyError = false;
         bool watchClaudeCache = false;
-        const ULONGLONG pollIntervalMs = (ULONGLONG)intervalMin * 60000;
         for (size_t i = 0; i < accounts.size() && !g_unloading; i++) {
             ULONGLONG nowMs = NowUnixMs();
+            const ULONGLONG pollIntervalMs = (ULONGLONG)intervalMin * 60000;
             // Hidden accounts are never fetched (poll or Refresh all); results[i] keeps the
             // prior g_data[i] value and goes stale via the lastSuccessMs/interval check.
             if (accounts[i].hidden) continue;
@@ -9715,20 +9634,25 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 continue;
             }
 
-            // The Claude Code cache covers this reading if its sample is newer than the interval
-            // and the free resets (which it does not carry) were read from the API recently and
-            // have not expired. Otherwise, or on a manual refresh, the API is queried.
+            // Fresh Claude Code samples cover the quota reading. Optional free-reset metadata
+            // is checked at most every 30 minutes while cache samples keep arriving.
             if (!manualRefresh && claudeSampleFresh) {
                 const AccountData& d = results[i];
                 bool ticketsCurrent = d.resetCreditsFetchedMs &&
                                       nowMs - d.resetCreditsFetchedMs < kClaudeResetTicketsMaxAgeMs &&
                                       !(d.resetCreditsAvailable > 0 && d.resetCreditsExpiresMs &&
                                         d.resetCreditsExpiresMs <= nowMs);
-                if (ticketsCurrent) {
-                    ULONGLONG deadline = std::min(claudeSample->fetchedAtMs + pollIntervalMs,
-                                                  d.resetCreditsFetchedMs +
-                                                      kClaudeResetTicketsMaxAgeMs);
-                    if (d.resetCreditsAvailable > 0 && d.resetCreditsExpiresMs > nowMs) {
+                // Missing optional reset metadata must not turn fresh cached quotas into
+                // frequent HTTP probes. Try it at most every 30 minutes while the cache is fresh.
+                bool ticketsRecentlyAttempted = claudePoll.lastAttemptMs &&
+                    nowMs - claudePoll.lastAttemptMs < kClaudeResetTicketsMaxAgeMs;
+                if (ticketsCurrent || ticketsRecentlyAttempted) {
+                    ULONGLONG deadline = claudeSample->fetchedAtMs + pollIntervalMs;
+                    deadline = std::min(deadline, ticketsCurrent ?
+                        d.resetCreditsFetchedMs + kClaudeResetTicketsMaxAgeMs :
+                        claudePoll.lastAttemptMs + kClaudeResetTicketsMaxAgeMs);
+                    if (ticketsCurrent && d.resetCreditsAvailable > 0 &&
+                        d.resetCreditsExpiresMs > nowMs) {
                         deadline = std::min(deadline, d.resetCreditsExpiresMs);
                     }
                     retryDeadlineMs[i] = 0;
@@ -9764,7 +9688,14 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             int providerRetryAfter = retryAfter;
             if (claudeAccount) {
                 claudePoll.lastAttemptMs = NowUnixMs();
-                claudePoll.lastRateLimited = claudeRateLimited;
+                ULONG jitter = 0;
+                if (claudeRateLimited) {
+                    BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(&jitter), sizeof(jitter),
+                                    BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+                }
+                retryAfter = UpdateClaudePollCooldown(claudePoll, claudeRateLimited,
+                    usageHttpStatus == 200 && results[i].error.empty(), retryAfter,
+                    intervalMin * 60, jitter);
                 if (retryAfter > 0 && !claudeRateLimited) {
                     retryAfter = std::max(retryAfter, intervalMin * 60);
                 }
@@ -9801,10 +9732,10 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 WriteClaudePollState(accounts[i], claudePoll);
                 ULONGLONG deadline = std::max(retryDeadlineMs[i], nextPollDeadlineMs[i]);
                 ULONGLONG loggedAtMs = NowUnixMs();
-                Wh_Log(L"Claude HTTP attempt: status=%d, retry=%d s, next_in=%llu s, limited=%d",
+                Wh_Log(L"Claude HTTP attempt: status=%d, retry=%d s, next_in=%llu s, limited=%d, streak=%u",
                        usageHttpStatus, providerRetryAfter,
                        (deadline > loggedAtMs ? deadline - loggedAtMs : 0) / 1000,
-                       claudePoll.lastRateLimited ? 1 : 0);
+                       claudePoll.lastRateLimited ? 1 : 0, claudePoll.rateLimitStreak);
             }
             if (antigravityAccount) {
                 ULONGLONG deadline = std::max(retryDeadlineMs[i], nextPollDeadlineMs[i]);
@@ -12096,24 +12027,39 @@ static winrt::Windows::UI::Composition::CompositionBrush MakeMicaBrush(
     return brush;
 }
 
-// Default: the blurred wallpaper under the palette's surface color at 80% opacity. One effect
-// brush, not a tint sprite over a wallpaper sprite: the flyout's entrance fade applies its opacity
-// to each visual separately, so with two layers the bright wallpaper outweighed the half-faded tint
-// and the card flashed brighter than its final state.
+// Default: light mode overlays the palette's surface color at 80% opacity. Dark mode blends
+// wallpaper color at 53% over a #2F2F2F base, keeping luminosity dark as wallpaper hues change.
+// Keep both recipes in one effect brush so the entrance fade cannot brighten separate layers.
 static winrt::Windows::UI::Composition::Visual MakeDefaultMicaVisual(
-    winrt::Windows::UI::Composition::Compositor const& compositor, UiColor tint) {
+    winrt::Windows::UI::Composition::Compositor const& compositor, UiColor tint, bool light) {
     using winrt::Windows::Foundation::PropertyValue;
+    using winrt::Windows::Graphics::Effects::IGraphicsEffect;
     auto wallpaper = compositor.TryCreateBlurredWallpaperBackdropBrush();
     if (!wallpaper) return nullptr;
-    constexpr uint32_t kCompositeSourceOver = 0;
-    float color[4] = {tint.R / 255.f, tint.G / 255.f, tint.B / 255.f, 0xCC / 255.f};
-    auto overlay = MakeFlyoutEffect(kClsidD2D1Flood, {PropertyValue::CreateSingleArray(color)}, {});
     winrt::Windows::UI::Composition::CompositionEffectSourceParameter backdrop{
         L"BlurredWallpaperBackdrop"};
-    auto composite = MakeFlyoutEffect(kClsidD2D1Composite,
-                                      {PropertyValue::CreateUInt32(kCompositeSourceOver)},
-                                      {backdrop, overlay});
-    auto brush = compositor.CreateEffectFactory(composite).CreateBrush();
+    IGraphicsEffect effect{nullptr};
+    if (light) {
+        constexpr uint32_t kCompositeSourceOver = 0;
+        float color[4] = {tint.R / 255.f, tint.G / 255.f, tint.B / 255.f, 0xCC / 255.f};
+        auto overlay = MakeFlyoutEffect(kClsidD2D1Flood,
+                                        {PropertyValue::CreateSingleArray(color)}, {});
+        effect = MakeFlyoutEffect(kClsidD2D1Composite,
+                                  {PropertyValue::CreateUInt32(kCompositeSourceOver)},
+                                  {backdrop, overlay});
+    } else {
+        float color[4] = {0x2F / 255.f, 0x2F / 255.f, 0x2F / 255.f, 1.f};
+        auto base = MakeFlyoutEffect(kClsidD2D1Flood,
+                                     {PropertyValue::CreateSingleArray(color)}, {});
+        auto wallpaperColor = MakeFlyoutEffect(kClsidD2D1Opacity,
+                                                {PropertyValue::CreateSingle(0.53f)}, {backdrop});
+        // Composition swaps Color and Luminosity, as in MakeMicaBrush above.
+        constexpr uint32_t kBlendLuminosity = 23;
+        effect = MakeFlyoutEffect(kClsidD2D1Blend,
+                                  {PropertyValue::CreateUInt32(kBlendLuminosity)},
+                                  {base, wallpaperColor});
+    }
+    auto brush = compositor.CreateEffectFactory(effect).CreateBrush();
     brush.SetSourceParameter(L"BlurredWallpaperBackdrop", wallpaper);
     auto sprite = compositor.CreateSpriteVisual();
     sprite.RelativeSizeAdjustment({1.f, 1.f});
@@ -12149,7 +12095,7 @@ static void ApplyNativeFlyoutMica(QuotaUiInstance& state, Grid const& layout,
         auto compositor = hostVisual.Compositor();
         winrt::Windows::UI::Composition::Visual background{nullptr};
         if (defaultMaterial) {
-            background = MakeDefaultMicaVisual(compositor, pal.acrylicTint);
+            background = MakeDefaultMicaVisual(compositor, pal.acrylicTint, state.lightTheme);
         } else if (auto brush = MakeMicaBrush(compositor, recipe)) {
             auto sprite = compositor.CreateSpriteVisual();
             sprite.RelativeSizeAdjustment({1.f, 1.f});
@@ -13053,6 +12999,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
         {
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             state.buildSettingsGeneration = g_settingsGeneration;
+            state.buildSettings = g_settings;
             accounts = g_settings.accounts;
             accountMargin = g_settings.accountMargin;
             rightMargin = g_settings.rightMargin;
@@ -13108,11 +13055,11 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                     OpenSettingsWindow();
                 });
             state.tileClicks.push_back({setupTile, token});
-            ToolTipService::SetToolTip(
-                setupTile,
-                winrt::box_value(g_settingsLoadError.load() ?
-                    Tr(Str::MenuAddAnAIAccountStoredSettingsCould) :
-                    Tr(Str::MenuAddAnAIAccount)));
+            std::wstring setupLabel = g_settingsLoadError.load() ?
+                Tr(Str::MenuAddAnAIAccountStoredSettingsCould) : Tr(Str::MenuAddAnAIAccount);
+            ToolTipService::SetToolTip(setupTile, winrt::box_value(setupLabel));
+            winrt::Windows::UI::Xaml::Automation::AutomationProperties::SetName(
+                setupTile, setupLabel);
 
             MenuFlyout menu;
             MenuFlyoutItem settingsItem;
@@ -14380,20 +14327,10 @@ static void NormalizeSettings(Settings* s) {
                                 24 * 60);
     s->taskbarMonitorNumber = std::clamp(s->taskbarMonitorNumber > 0 ?
                                              s->taskbarMonitorNumber : 1, 1, 64);
-    s->barLength = std::clamp(s->barLength > 0 ? s->barLength : 100, 10, 500);
-    s->barThickness = std::clamp(s->barThickness > 0 ? s->barThickness : 8, 2, 50);
-    s->labelFontSize = std::clamp(s->labelFontSize > 0 ? s->labelFontSize : 11, 6, 24);
-    s->percentFontSize = std::clamp(s->percentFontSize > 0 ? s->percentFontSize : 9, 6, 24);
     s->accountMargin = std::clamp(s->accountMargin, 0, 500);
     // 0 = automatic; a custom size is clamped to 16..64 DIP.
     s->tileSize = s->tileSize <= 0 ? 0 : std::clamp(s->tileSize, 16, 64);
-    s->labelGap = std::clamp(s->labelGap, 0, 500);
-    s->barGap = std::clamp(s->barGap, 0, 500);
     s->rightMargin = std::clamp(s->rightMargin, 0, 500);
-    if (s->labelPosition < LabelPosition::Hidden ||
-        s->labelPosition > LabelPosition::Bottom) {
-        s->labelPosition = LabelPosition::Left;
-    }
     if (s->flyoutMaterial < FlyoutMaterial::Default ||
         s->flyoutMaterial > FlyoutMaterial::Acrylic) {
         s->flyoutMaterial = FlyoutMaterial::Default;
@@ -14401,18 +14338,6 @@ static void NormalizeSettings(Settings* s) {
     if (s->tilePosition < TilePosition::TaskbarLeftOfStart ||
         s->tilePosition >= TilePosition::Count) {
         s->tilePosition = TilePosition::TrayFarLeft;
-    }
-    if (s->paceTickStyle < PaceTickStyle::Caret ||
-        s->paceTickStyle > PaceTickStyle::Dot) {
-        s->paceTickStyle = PaceTickStyle::Caret;
-    }
-    if (s->percentTextAlignment < PercentTextAlignment::Adaptive ||
-        s->percentTextAlignment > PercentTextAlignment::Right) {
-        s->percentTextAlignment = PercentTextAlignment::Adaptive;
-    }
-    if (s->percentTextVisibility < PercentTextVisibility::Never ||
-        s->percentTextVisibility > PercentTextVisibility::Always) {
-        s->percentTextVisibility = PercentTextVisibility::Hover;
     }
     s->yellowThreshold = std::clamp(s->yellowThreshold, 0, 100);
     s->orangeThreshold = std::clamp(s->orangeThreshold, s->yellowThreshold, 100);
@@ -14479,41 +14404,17 @@ static std::wstring SerializeSettings(const Settings& s) {
                                    s.taskbarMonitorMode == TaskbarMonitorMode::Specific ? L"specific" : L"primary");
         setNumber(L"monitorNumber", s.taskbarMonitorNumber);
         setString(L"tilePosition", kTilePositions[(int)s.tilePosition].id);
-        setString(L"clickAction", s.clickAction == ClickAction::OpenDashboard ? L"dashboard" : L"refresh");
         setNumber(L"pollMinutes", s.pollMinutes);
-        setNumber(L"barLength", s.barLength);
-        setNumber(L"barThickness", s.barThickness);
-        setString(L"barLayout", s.barLayout == BarLayout::Vertical ? L"vertical" : L"stacked");
         setString(L"barMode", s.barMode == BarMode::Remaining ? L"remaining" : L"used");
         setString(L"flyoutMaterial", s.flyoutMaterial == FlyoutMaterial::MicaAlt ? L"micaAlt" :
                   s.flyoutMaterial == FlyoutMaterial::Default ? L"default" :
                   s.flyoutMaterial == FlyoutMaterial::Acrylic ? L"acrylic" : L"mica");
         setBool(L"showPaceTicks", s.showPaceTicks);
         setBool(L"persistentPaceMarkers", s.persistentPaceMarkers);
-        setString(L"paceTickStyle", s.paceTickStyle == PaceTickStyle::Line ? L"line" :
-                                    s.paceTickStyle == PaceTickStyle::Notch ? L"notch" :
-                                    s.paceTickStyle == PaceTickStyle::Dot ? L"dot" : L"caret");
         setNumber(L"paceTickColor", (int)s.paceTickColor);
-        setString(L"labelPosition",
-                  s.labelPosition == LabelPosition::Hidden ? L"hidden" :
-                  s.labelPosition == LabelPosition::Top ? L"top" :
-                  s.labelPosition == LabelPosition::Right ? L"right" :
-                  s.labelPosition == LabelPosition::Bottom ? L"bottom" : L"left");
-        setNumber(L"labelFontSize", s.labelFontSize);
-        setNumber(L"percentFontSize", s.percentFontSize);
         setNumber(L"accountMargin", s.accountMargin);
         setNumber(L"tileSize", s.tileSize);
-        setNumber(L"labelGap", s.labelGap);
-        setNumber(L"barGap", s.barGap);
         setNumber(L"rightMargin", s.rightMargin);
-        setString(L"percentTextVisibility",
-                  s.percentTextVisibility == PercentTextVisibility::Never ? L"never" :
-                  s.percentTextVisibility == PercentTextVisibility::Always ? L"always" : L"hover");
-        setString(L"percentTextAlignment",
-                  s.percentTextAlignment == PercentTextAlignment::Left ? L"left" :
-                  s.percentTextAlignment == PercentTextAlignment::Center ? L"center" :
-                  s.percentTextAlignment == PercentTextAlignment::Right ? L"right" : L"adaptive");
-        setBool(L"showBarLabels", s.showBarLabels);
         setBool(L"extraBarAmounts", s.showExtraBarAmounts);
         setNumber(L"yellowThreshold", s.yellowThreshold);
         setNumber(L"orangeThreshold", s.orangeThreshold);
@@ -14607,13 +14508,7 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
                                                             TaskbarMonitorMode::Primary;
         s.taskbarMonitorNumber = (int)GetNum(root, L"monitorNumber", 1);
         s.tilePosition = TilePositionFromId(GetStr(root, L"tilePosition"));
-        s.clickAction = GetStr(root, L"clickAction") == L"dashboard" ?
-                            ClickAction::OpenDashboard : ClickAction::Refresh;
         s.pollMinutes = (int)GetNum(root, L"pollMinutes", Settings{}.pollMinutes);
-        s.barLength = (int)GetNum(root, L"barLength", 100);
-        s.barThickness = (int)GetNum(root, L"barThickness", 8);
-        s.barLayout = GetStr(root, L"barLayout") == L"vertical" ?
-                          BarLayout::Vertical : BarLayout::Stacked;
         s.barMode = GetStr(root, L"barMode") == L"used" ?
                         BarMode::Used : BarMode::Remaining;
         s.showPaceTicks = getBoolDefault(L"showPaceTicks", true);
@@ -14623,54 +14518,13 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out) {
                            material == L"default" ? FlyoutMaterial::Default :
                            material == L"mica" ? FlyoutMaterial::Mica :
                            material == L"acrylic" ? FlyoutMaterial::Acrylic : FlyoutMaterial::Default;
-        std::wstring paceTickStyle = GetStr(root, L"paceTickStyle");
-        s.paceTickStyle = paceTickStyle == L"line" ? PaceTickStyle::Line :
-                          paceTickStyle == L"notch" ? PaceTickStyle::Notch :
-                          paceTickStyle == L"dot" ? PaceTickStyle::Dot : PaceTickStyle::Caret;
         double paceTickColor = GetNum(root, L"paceTickColor", kDefaultPaceTickColor);
         s.paceTickColor = std::isfinite(paceTickColor) && paceTickColor >= 0 &&
                                   paceTickColor <= 0x00FFFFFF ?
                               (COLORREF)paceTickColor : kDefaultPaceTickColor;
-        std::wstring labelPosition = GetStr(root, L"labelPosition");
-        if (labelPosition == L"hidden") s.labelPosition = LabelPosition::Hidden;
-        else if (labelPosition == L"top") s.labelPosition = LabelPosition::Top;
-        else if (labelPosition == L"right") s.labelPosition = LabelPosition::Right;
-        else if (labelPosition == L"bottom") s.labelPosition = LabelPosition::Bottom;
-        else if (labelPosition == L"left") s.labelPosition = LabelPosition::Left;
-        else {
-            bool showLabels = getBoolDefault(L"showLabels", true);
-            bool labelOnLeft = getBoolDefault(L"labelOnLeft", true);
-            s.labelPosition = !showLabels ? LabelPosition::Hidden :
-                              labelOnLeft ? LabelPosition::Left : LabelPosition::Top;
-        }
-        s.labelFontSize = (int)GetNum(root, L"labelFontSize", 11);
-        s.percentFontSize = (int)GetNum(
-            root, L"percentFontSize",
-            std::max(8, std::clamp(s.labelFontSize > 0 ? s.labelFontSize : 11, 6, 24) - 2));
         s.accountMargin = (int)GetNum(root, L"accountMargin", 3);
         s.tileSize = (int)GetNum(root, L"tileSize", 0);
-        s.labelGap = (int)GetNum(root, L"labelGap", 3);
-        s.barGap = (int)GetNum(root, L"barGap", 2);
         s.rightMargin = (int)GetNum(root, L"rightMargin", 4);
-        std::wstring percentTextVisibility = GetStr(root, L"percentTextVisibility");
-        if (percentTextVisibility == L"never") {
-            s.percentTextVisibility = PercentTextVisibility::Never;
-        } else if (percentTextVisibility == L"always") {
-            s.percentTextVisibility = PercentTextVisibility::Always;
-        } else if (percentTextVisibility == L"hover") {
-            s.percentTextVisibility = PercentTextVisibility::Hover;
-        } else if (root.HasKey(L"showPercentText") &&
-                   root.GetNamedValue(L"showPercentText").ValueType() == JsonValueType::Boolean) {
-            s.percentTextVisibility = root.GetNamedBoolean(L"showPercentText") ?
-                                          PercentTextVisibility::Always :
-                                          PercentTextVisibility::Never;
-        }
-        std::wstring percentTextAlignment = GetStr(root, L"percentTextAlignment");
-        s.percentTextAlignment = percentTextAlignment == L"left" ? PercentTextAlignment::Left :
-                                 percentTextAlignment == L"center" ? PercentTextAlignment::Center :
-                                 percentTextAlignment == L"right" ? PercentTextAlignment::Right :
-                                                                    PercentTextAlignment::Adaptive;
-        s.showBarLabels = getBoolDefault(L"showBarLabels", false);
         s.showExtraBarAmounts = getBoolDefault(L"extraBarAmounts", false);
         s.yellowThreshold = (int)GetNum(root, L"yellowThreshold", 50);
         s.orangeThreshold = (int)GetNum(root, L"orangeThreshold", 75);
@@ -14748,23 +14602,10 @@ static OwnedSettingsLoadResult LoadOwnedSettings(Settings* out) {
     if (!copied || !buf[0]) {
         int storedLength = Wh_GetIntValue(kSettingsLengthStorageKey, 0);
         if (storedLength <= 0) return OwnedSettingsLoadResult::Missing;
-        if (storedLength >= 1024 * 1024) {
-            Wh_Log(L"Settings load failed: stored length is unreasonable");
-            return OwnedSettingsLoadResult::Unreadable;
-        }
-        constexpr size_t kMaximumReadChars = 1024 * 1024;
-        size_t nextBufferChars = std::max(buf.size() * 2, (size_t)storedLength + 1);
-        while (nextBufferChars <= kMaximumReadChars) {
-            buf.assign(nextBufferChars, L'\0');
-            copied = Wh_GetStringValue(kSettingsStorageKey, buf.data(), buf.size());
-            if (copied && buf[0]) break;
-            if (nextBufferChars == kMaximumReadChars) break;
-            nextBufferChars = std::min(nextBufferChars * 2, kMaximumReadChars);
-        }
-        if (!copied || !buf[0]) {
-            Wh_Log(L"Settings load failed: stored configuration is unreadable");
-            return OwnedSettingsLoadResult::Unreadable;
-        }
+        // A saved length means settings exist but this read failed: never treat them as missing.
+        // SaveOwnedSettings caps JSON below the buffer size, so a larger buffer can't help.
+        Wh_Log(L"Settings load failed: stored configuration is unreadable");
+        return OwnedSettingsLoadResult::Unreadable;
     }
     if (!DeserializeSettings(buf.data(), out)) {
         Wh_Log(L"Settings load failed: invalid stored configuration");
@@ -14773,158 +14614,6 @@ static OwnedSettingsLoadResult LoadOwnedSettings(Settings* out) {
     }
     Wh_SetIntValue(kSettingsLengthStorageKey, (int)copied);
     return OwnedSettingsLoadResult::Loaded;
-}
-
-static bool LoadLegacySettings(Settings* out) {
-    auto getText = [](PCWSTR name) {
-        PCWSTR text = Wh_GetStringSetting(name);
-        std::wstring value = text;
-        Wh_FreeStringSetting(text);
-        return value;
-    };
-    auto getIndexedText = [](PCWSTR name, int index) {
-        PCWSTR text = Wh_GetStringSetting(name, index);
-        std::wstring value = text;
-        Wh_FreeStringSetting(text);
-        return value;
-    };
-    wchar_t hiddenBuf[4096] = {};
-    Wh_GetStringValue(L"hiddenAccounts", hiddenBuf, ARRAYSIZE(hiddenBuf));
-    std::vector<wchar_t> tokenBuf(16384);
-    Wh_GetStringValue(TokenStorageKey(AccountIdentityHash({L"anthropic", L"A"})).c_str(),
-                      tokenBuf.data(), tokenBuf.size());
-    bool foundDefaultToken = tokenBuf[0] != L'\0';
-    tokenBuf[0] = L'\0';
-    Wh_GetStringValue(TokenStorageKey(AccountIdentityHash({L"openai", L"O"})).c_str(),
-                      tokenBuf.data(), tokenBuf.size());
-    foundDefaultToken = foundDefaultToken || tokenBuf[0] != L'\0';
-
-    bool found = !getIndexedText(L"accounts[%d].provider", 0).empty() ||
-                  !getText(L"taskbarMonitorMode").empty() ||
-                  !getText(L"barLength").empty() || hiddenBuf[0] || foundDefaultToken;
-    if (!found) return false;
-
-    Settings s;
-    bool reachedLegacyAccountLimit = true;
-    for (int i = 0; i < 64; i++) {
-        std::wstring providerSetting = getIndexedText(L"accounts[%d].provider", i);
-        std::wstring label = getIndexedText(L"accounts[%d].label", i);
-        if (providerSetting.empty() && label.empty()) {
-            reachedLegacyAccountLimit = false;
-            break;
-        }
-        if (providerSetting.empty()) {
-            Wh_Log(L"Ignoring incomplete legacy account at index %d", i);
-            continue;
-        }
-
-        AccountConfig a;
-        if (providerSetting.find(L"antigravity") != std::wstring::npos) a.provider = L"antigravity";
-        else if (providerSetting.find(L"openai") != std::wstring::npos) a.provider = L"openai";
-        else a.provider = L"anthropic";
-        a.label = std::move(label);
-        if (a.label.empty()) {
-            a.label = a.provider == L"anthropic" ? L"A" :
-                      a.provider == L"openai" ? L"O" : L"G";
-        }
-        auto getBool = [&](PCWSTR name, bool defaultValue) {
-            std::wstring value = getIndexedText(name, i);
-            if (value.empty()) return defaultValue;
-            if (_wcsicmp(value.c_str(), L"true") == 0) return true;
-            if (_wcsicmp(value.c_str(), L"false") == 0) return false;
-            return _wtoi(value.c_str()) != 0;
-        };
-        a.showBars[kFiveHourBar] = getBool(L"accounts[%d].showFiveHourBar", true);
-        a.showBars[kWeeklyBar] = getBool(L"accounts[%d].showWeeklyBar", true);
-        a.showBars[kExtraUsageBar] = getBool(L"accounts[%d].showExtraUsageBar", false);
-        s.accounts.push_back(std::move(a));
-    }
-    if (reachedLegacyAccountLimit &&
-        (!getIndexedText(L"accounts[%d].provider", 64).empty() ||
-         !getIndexedText(L"accounts[%d].label", 64).empty())) {
-        Wh_Log(L"Ignoring legacy accounts after the 64-account migration limit");
-    }
-    if (s.accounts.empty()) {
-        s.accounts.push_back({L"anthropic", L"A"});
-        s.accounts.push_back({L"openai", L"O"});
-    }
-
-    std::vector<uint64_t> hiddenHashes;
-    for (std::wstring rest = hiddenBuf; !rest.empty();) {
-        size_t end = rest.find(L';');
-        std::wstring token = rest.substr(0, end);
-        if (!token.empty()) hiddenHashes.push_back(wcstoull(token.c_str(), nullptr, 16));
-        if (end == std::wstring::npos) break;
-        rest.erase(0, end + 1);
-    }
-    for (auto& a : s.accounts) {
-        a.hidden = std::find(hiddenHashes.begin(), hiddenHashes.end(),
-                             AccountIdentityHash(a)) != hiddenHashes.end();
-    }
-
-    auto getInt = [&](PCWSTR name, int defaultValue) {
-        std::wstring value = getText(name);
-        return value.empty() ? defaultValue : _wtoi(value.c_str());
-    };
-    auto getBool = [&](PCWSTR name, bool defaultValue) {
-        std::wstring value = getText(name);
-        if (value.empty()) return defaultValue;
-        if (_wcsicmp(value.c_str(), L"true") == 0) return true;
-        if (_wcsicmp(value.c_str(), L"false") == 0) return false;
-        return _wtoi(value.c_str()) != 0;
-    };
-    std::wstring monitorMode = getText(L"taskbarMonitorMode");
-    s.taskbarMonitorMode = monitorMode == L"all" ? TaskbarMonitorMode::All :
-                           monitorMode == L"specific" ? TaskbarMonitorMode::Specific :
-                                                        TaskbarMonitorMode::Primary;
-    s.taskbarMonitorNumber = getInt(L"taskbarMonitorNumber", 1);
-    s.clickAction = getText(L"clickAction") == L"open-dashboard" ?
-                        ClickAction::OpenDashboard : ClickAction::Refresh;
-    s.pollMinutes = getInt(L"pollIntervalMinutes", 10);
-    s.barLength = getInt(L"barLength", 100);
-    s.barThickness = getInt(L"barThickness", 8);
-    s.barLayout = getText(L"barLayout") == L"vertical" ? BarLayout::Vertical : BarLayout::Stacked;
-    s.barMode = getText(L"barMode") == L"used" ? BarMode::Used : BarMode::Remaining;
-    s.showPaceTicks = getBool(L"showPaceTicks", true);
-    s.labelPosition = !getBool(L"showLabels", true) ? LabelPosition::Hidden :
-                      getBool(L"labelOnLeft", true) ? LabelPosition::Left : LabelPosition::Top;
-    s.labelFontSize = getInt(L"labelFontSize", 11);
-    s.percentFontSize = std::max(
-        8, std::clamp(s.labelFontSize > 0 ? s.labelFontSize : 11, 6, 24) - 2);
-    s.accountMargin = getInt(L"accountMargin", 3);
-    s.labelGap = getInt(L"labelGap", 3);
-    s.barGap = getInt(L"barGap", 2);
-    s.rightMargin = getInt(L"rightMargin", 4);
-    s.percentTextVisibility = getBool(L"showPercentText", false) ?
-                                  PercentTextVisibility::Always : PercentTextVisibility::Never;
-    // Keeps the preference from the earlier catalog when moving it to the OpenAI accounts.
-    bool legacyOpenAiExtras = getBool(L"showCodexSparkInTooltip", false);
-    for (auto& account : s.accounts) account.showOpenAiExtraLimits = legacyOpenAiExtras;
-    s.yellowThreshold = getInt(L"yellowThreshold", 50);
-    s.orangeThreshold = getInt(L"orangeThreshold", 75);
-    s.redThreshold = getInt(L"redThreshold", 90);
-    s.notifyThreshold = getBool(L"enableNotifications", true) ? 3 : 0;
-    s.usageColors = getBool(L"colorblindMode", false) ?
-                        kAccessibleUsageColors : kDefaultUsageColors;
-    s.showStaleWarning = getBool(L"showStaleWarning", true);
-    int oldBarLength = s.barLength;
-    int oldAccountMargin = s.accountMargin;
-    int oldLabelGap = s.labelGap;
-    int oldBarGap = s.barGap;
-    int oldRightMargin = s.rightMargin;
-    NormalizeSettings(&s);
-    auto logCeilingClamp = [](PCWSTR name, int oldValue, int newValue) {
-        if (oldValue > newValue) {
-            Wh_Log(L"Clamped legacy %s from %d to %d", name, oldValue, newValue);
-        }
-    };
-    logCeilingClamp(L"barLength", oldBarLength, s.barLength);
-    logCeilingClamp(L"accountMargin", oldAccountMargin, s.accountMargin);
-    logCeilingClamp(L"labelGap", oldLabelGap, s.labelGap);
-    logCeilingClamp(L"barGap", oldBarGap, s.barGap);
-    logCeilingClamp(L"rightMargin", oldRightMargin, s.rightMargin);
-    *out = std::move(s);
-    return true;
 }
 
 static void PublishSettings(Settings s, uint64_t oldIdentity, uint64_t newIdentity) {
@@ -14978,9 +14667,71 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
     return SettingsApplyResult::Changed;
 }
 
+// Settings the tiles never read when they are built or laid out: the fetch loop reads the poll
+// interval, notifications read the threshold, and the repaint (UpdateQuotaUi) picks up the poll
+// interval for the stale check. Every other field, including any added later, forces a rebuild.
+static void ClearNonTileSettings(Settings* s) {
+    s->pollMinutes = 0;
+    s->notifyThreshold = 0;
+}
+
+// Runs on the tile's UI thread. Keeps the built tiles when the settings differ from the ones they
+// were built from only in fields that don't affect them, and repaints them.
+static bool RefreshTileInPlace(void* param) {
+    if (g_unloading) return false;
+    HWND hWnd = static_cast<HWND>(param);
+    try {
+        auto* state = FindUiState(hWnd);
+        if (!state || !state->quotaGrid || state->placementStale || state->trackingConflict ||
+            state->buildVisualTestMode != g_visualTestMode.load(std::memory_order_acquire)) {
+            return false;
+        }
+        Settings current;
+        ULONGLONG generation;
+        {
+            std::lock_guard<std::mutex> lk(g_settingsMutex);
+            current = g_settings;
+            generation = g_settingsGeneration;
+        }
+        Settings built = state->buildSettings;
+        ClearNonTileSettings(&built);
+        Settings wanted = current;
+        ClearNonTileSettings(&wanted);
+        if (!(built == wanted)) return false;
+        state->buildSettings = std::move(current);
+        state->buildSettingsGeneration = generation;
+        UpdateQuotaUi(*state);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+// True when every taskbar keeps its tiles: only settings that don't affect them changed.
+static bool RefreshTilesInPlace() {
+    std::vector<std::pair<HWND, DWORD>> windows;
+    {
+        std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
+        if (!g_uiInstances || g_uiInstances->empty()) return false;
+        for (auto& state : *g_uiInstances) {
+            windows.push_back({state->hWnd, state->ownerThreadId});
+        }
+    }
+    for (auto [hWnd, ownerThreadId] : windows) {
+        if (g_unloading || !hWnd || !IsWindow(hWnd) ||
+            GetWindowThreadProcessId(hWnd, nullptr) != ownerThreadId ||
+            !RunFromWindowThread(hWnd, RefreshTileInPlace, hWnd)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static void FinishSettingsApply(bool wakeFetch = true) {
-    RemoveAllQuotaGrids();
-    StartRetryInject();
+    if (!RefreshTilesInPlace()) {
+        RemoveAllQuotaGrids();
+        StartRetryInject();
+    }
     if (wakeFetch && g_refreshEvent) SetEvent(g_refreshEvent);
 }
 
@@ -15046,12 +14797,10 @@ static void LoadSettings() {
     g_settingsLoadError = false;
     OwnedSettingsLoadResult loadResult = LoadOwnedSettings(&s);
     if (loadResult == OwnedSettingsLoadResult::Missing) {
-        bool imported = LoadLegacySettings(&s);
-        if (!imported) s = Settings{};
+        s = Settings{};
         NormalizeSettings(&s);
         if (SaveOwnedSettings(s)) {
-            if (imported) Wh_Log(L"Imported legacy Windhawk settings");
-            else Wh_Log(L"Initialized empty mod-owned settings");
+            Wh_Log(L"Initialized empty mod-owned settings");
         }
     } else if (loadResult == OwnedSettingsLoadResult::Invalid ||
                loadResult == OwnedSettingsLoadResult::Unreadable) {
@@ -15192,7 +14941,6 @@ enum SettingsControlId {
 struct SettingsRow {
     HWND label = nullptr;
     HWND control = nullptr;
-    HWND slider = nullptr;
     HWND spin = nullptr;
     // Colors: `colorPicker` is the swatch button of the threshold rows (on the base row and the
     // pace marker row the swatch is `control`); `colorReset` is the icon button.
@@ -15230,8 +14978,8 @@ struct SettingsRow {
 };
 
 // A single list so a subrow's accessories are hidden too.
-static std::array<HWND, 10> SettingsRowWindows(const SettingsRow& row) {
-    return {row.label, row.caption, row.control, row.slider, row.spin,
+static std::array<HWND, 9> SettingsRowWindows(const SettingsRow& row) {
+    return {row.label, row.caption, row.control, row.spin,
             row.colorPicker, row.colorReset, row.extra, row.inlineButtons[0],
             row.inlineButtons[1]};
 }
@@ -15921,6 +15669,11 @@ struct SettingsWindowState {
         int ghostLeft = 0;         // Left edge of the lifted row (list client coordinates).
         int rowHeight = 0;
     } accountDrag;
+    // What the account list showed last, so a commit that cannot change it skips the rebuild.
+    bool accountListBuilt = false;
+    std::vector<AccountConfig> listedAccounts;
+    bool listedLoginInProgress = false;
+    uint64_t listedLoginIdentity = 0;
 };
 
 static SettingsRow* FindSettingsRow(SettingsWindowState& state, HWND control);
@@ -15969,6 +15722,8 @@ struct AccountEditorState {
     bool done = false;
     // SVG icon: premultiplied BGRA master bitmap (empty if none).
     std::vector<uint32_t> svgPixels;
+    // The SVG imported in this edit; stored only when the editor is accepted.
+    StagedIconAsset stagedIcon;
     // Provider logos in white (only alpha counts), by list index; drawn with the theme color when
     // painting the icon's square button.
     std::array<std::vector<uint32_t>, 4> logoPixels;
@@ -16092,38 +15847,23 @@ static bool IsWindowsDarkMode() {
 
 static void ResetNativeBackdrop(HWND hWnd, NativeBackdrop& backdrop) {
     backdrop.enabled = false;
-    if (HMODULE dwm = GetModuleHandleW(L"dwmapi.dll")) {
-        using SetAttribute_t = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
-        struct NativeMargins { int left, right, top, bottom; } margins{};
-        using ExtendFrame_t = HRESULT(WINAPI*)(HWND, const NativeMargins*);
-        auto setAttribute = reinterpret_cast<SetAttribute_t>(
-            GetProcAddress(dwm, "DwmSetWindowAttribute"));
-        auto extendFrame = reinterpret_cast<ExtendFrame_t>(
-            GetProcAddress(dwm, "DwmExtendFrameIntoClientArea"));
-        DWORD none = 1;
-        if (setAttribute) setAttribute(hWnd, 38, &none, sizeof(none));
-        if (extendFrame) extendFrame(hWnd, &margins);
-    }
+    MARGINS margins{};
+    DWORD none = DWMSBT_NONE;
+    DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &none, sizeof(none));
+    DwmExtendFrameIntoClientArea(hWnd, &margins);
 }
 
 // DWMWA_CLOAK: the window keeps painting, but DWM does not show it. With a material, each direct
 // GDI paint shows up as a light block; this way a window or list is uncloaked already composed.
 static bool SetNativeCloak(HWND hWnd, bool cloaked) {
-    HMODULE dwm = GetModuleHandleW(L"dwmapi.dll");
-    using SetAttribute_t = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
-    auto setAttribute = dwm ? reinterpret_cast<SetAttribute_t>(
-                                  GetProcAddress(dwm, "DwmSetWindowAttribute")) : nullptr;
     BOOL value = cloaked;
-    return setAttribute && SUCCEEDED(setAttribute(hWnd, 13, &value, sizeof(value)));
+    return SUCCEEDED(DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &value, sizeof(value)));
 }
 
 // Waits until DWM has the painted frame before uncloaking the window.
 static void UncloakNativeWindowComposed(HWND hWnd) {
     GdiFlush();
-    if (HMODULE dwm = GetModuleHandleW(L"dwmapi.dll")) {
-        using Flush_t = HRESULT(WINAPI*)();
-        if (auto flush = reinterpret_cast<Flush_t>(GetProcAddress(dwm, "DwmFlush"))) flush();
-    }
+    DwmFlush();
     SetNativeCloak(hWnd, false);
 }
 
@@ -16552,75 +16292,45 @@ static bool InstallNativePopupPainting(HWND popup, NativeBackdrop& backdrop) {
 }
 
 static void ApplyNativeWindowTheme(HWND hWnd, bool dark, bool highContrast = false,
-                                   NativeBackdrop* backdropState = nullptr, DWORD backdropType = 2) {
-    HMODULE uxTheme = GetModuleHandleW(L"uxtheme.dll");
-    if (!uxTheme) {
-        uxTheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
-    if (uxTheme) {
-        using SetWindowTheme_t = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
-        auto setWindowTheme = reinterpret_cast<SetWindowTheme_t>(
-            GetProcAddress(uxTheme, "SetWindowTheme"));
-        if (setWindowTheme) {
-            struct ThemeContext {
-                SetWindowTheme_t setWindowTheme;
-                bool dark;
-            } context{setWindowTheme, dark};
-            EnumChildWindows(hWnd, [](HWND child, LPARAM param) -> BOOL {
-                auto* context = reinterpret_cast<ThemeContext*>(param);
-                wchar_t className[32] = {};
-                GetClassNameW(child, className, ARRAYSIZE(className));
-                PCWSTR theme = context->dark ? L"DarkMode_Explorer" : L"Explorer";
-                if (context->dark && _wcsicmp(className, L"ComboBox") == 0) {
-                    theme = L"DarkMode_CFD";
-                } else if (context->dark && _wcsicmp(className, WC_HEADERW) == 0) {
-                    theme = L"DarkMode_ItemsView";
-                } else if (_wcsicmp(className, WC_LISTVIEWW) == 0) {
-                    // Explorer items view: without the vertical lines between columns.
-                    theme = context->dark ? L"DarkMode_ItemsView" : L"ItemsView";
-                }
-                context->setWindowTheme(child, theme, nullptr);
-                return TRUE;
-            }, reinterpret_cast<LPARAM>(&context));
+                                   NativeBackdrop* backdropState = nullptr,
+                                   DWORD backdropType = DWMSBT_MAINWINDOW) {
+    EnumChildWindows(hWnd, [](HWND child, LPARAM param) -> BOOL {
+        bool dark = param != 0;
+        wchar_t className[32] = {};
+        GetClassNameW(child, className, ARRAYSIZE(className));
+        PCWSTR theme = dark ? L"DarkMode_Explorer" : L"Explorer";
+        if (dark && _wcsicmp(className, L"ComboBox") == 0) {
+            theme = L"DarkMode_CFD";
+        } else if (dark && _wcsicmp(className, WC_HEADERW) == 0) {
+            theme = L"DarkMode_ItemsView";
+        } else if (_wcsicmp(className, WC_LISTVIEWW) == 0) {
+            // Explorer items view: without the vertical lines between columns.
+            theme = dark ? L"DarkMode_ItemsView" : L"ItemsView";
         }
-    }
+        SetWindowTheme(child, theme, nullptr);
+        return TRUE;
+    }, (LPARAM)dark);
 
-    HMODULE dwm = GetModuleHandleW(L"dwmapi.dll");
-    if (!dwm) {
-        dwm = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
-    if (dwm) {
-        using DwmSetWindowAttribute_t = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
-        auto setAttribute = reinterpret_cast<DwmSetWindowAttribute_t>(
-            GetProcAddress(dwm, "DwmSetWindowAttribute"));
-        if (setAttribute) {
-            BOOL enabled = dark;
-            setAttribute(hWnd, 20, &enabled, sizeof(enabled));
-            // Own windows extend the material into the client area with explicit alpha; the lists
-            // request the transient material instead of the main window one.
-            DWORD corners = 2;
-            setAttribute(hWnd, 33, &corners, sizeof(corners));
-            DWORD backdrop = highContrast ? 1 : backdropType;
-            if (!backdropState) {
-                setAttribute(hWnd, 38, &backdrop, sizeof(backdrop));
-            } else {
-                struct NativeMargins { int left, right, top, bottom; } margins{-1, -1, -1, -1};
-                using ExtendFrame_t = HRESULT(WINAPI*)(HWND, const NativeMargins*);
-                using CompositionEnabled_t = HRESULT(WINAPI*)(BOOL*);
-                auto extendFrame = reinterpret_cast<ExtendFrame_t>(
-                    GetProcAddress(dwm, "DwmExtendFrameIntoClientArea"));
-                auto compositionEnabled = reinterpret_cast<CompositionEnabled_t>(
-                    GetProcAddress(dwm, "DwmIsCompositionEnabled"));
-                BOOL composing = FALSE;
-                bool allow = !g_unloading && !highContrast && !backdropState->childPaintFailed &&
-                    InstallNativeChildPainting(hWnd, *backdropState) && TransparencyEffectsEnabled() &&
-                    compositionEnabled && SUCCEEDED(compositionEnabled(&composing)) && composing;
-                backdropState->enabled = allow && extendFrame &&
-                    SUCCEEDED(setAttribute(hWnd, 38, &backdrop, sizeof(backdrop))) &&
-                    SUCCEEDED(extendFrame(hWnd, &margins));
-                if (!backdropState->enabled) ResetNativeBackdrop(hWnd, *backdropState);
-            }
-        }
+    BOOL enabled = dark;
+    DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &enabled, sizeof(enabled));
+    // Own windows extend the material into the client area with explicit alpha; the lists
+    // request the transient material instead of the main window one.
+    DWORD corners = DWMWCP_ROUND;
+    DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corners, sizeof(corners));
+    DWORD backdrop = highContrast ? DWMSBT_NONE : backdropType;
+    if (!backdropState) {
+        DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
+    } else {
+        MARGINS margins{-1, -1, -1, -1};
+        BOOL composing = FALSE;
+        bool allow = !g_unloading && !highContrast && !backdropState->childPaintFailed &&
+            InstallNativeChildPainting(hWnd, *backdropState) && TransparencyEffectsEnabled() &&
+            SUCCEEDED(DwmIsCompositionEnabled(&composing)) && composing;
+        backdropState->enabled = allow &&
+            SUCCEEDED(DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop,
+                                            sizeof(backdrop))) &&
+            SUCCEEDED(DwmExtendFrameIntoClientArea(hWnd, &margins));
+        if (!backdropState->enabled) ResetNativeBackdrop(hWnd, *backdropState);
     }
 }
 
@@ -17963,7 +17673,7 @@ static void PrepareFluentComboPopup(HWND combo, const NativeTheme& t) {
     // DWMSBT_NONE with the extended frame (per-pixel alpha from the compositor) and the Acrylic
     // through the accent policy (SetNativePopupAccent). Without the accent, the list goes back to
     // the opaque fill.
-    ApplyNativeWindowTheme(list, t.dark, t.highContrast, &popupState->backdrop, 1);
+    ApplyNativeWindowTheme(list, t.dark, t.highContrast, &popupState->backdrop, DWMSBT_NONE);
     bool accent = popupState->backdrop.enabled && SetNativePopupAccent(list, true, t.popupTint);
     if (!accent) {
         if (popupState->accent) SetNativePopupAccent(list, false);
@@ -17986,17 +17696,11 @@ static void PrepareFluentComboPopup(HWND combo, const NativeTheme& t) {
     if (wanted != style) SetWindowLongPtrW(list, GWL_STYLE, wanted);
     SetWindowPos(list, nullptr, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-    HMODULE dwm = GetModuleHandleW(L"dwmapi.dll");
-    using SetAttribute_t = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
-    auto setAttribute = dwm ? reinterpret_cast<SetAttribute_t>(
-                                  GetProcAddress(dwm, "DwmSetWindowAttribute")) : nullptr;
-    if (setAttribute) {
-        DWORD corners = t.highContrast ? 0 : 2;  // DWMWCP_DEFAULT / DWMWCP_ROUND.
-        setAttribute(list, 33, &corners, sizeof(corners));
-        COLORREF stroke = t.highContrast ? 0xFFFFFFFF :  // DWMWA_COLOR_DEFAULT.
-                                           BlendColor(t.popupStroke, t.popup);
-        setAttribute(list, 34, &stroke, sizeof(stroke));
-    }
+    DWORD corners = t.highContrast ? DWMWCP_DEFAULT : DWMWCP_ROUND;
+    DwmSetWindowAttribute(list, DWMWA_WINDOW_CORNER_PREFERENCE, &corners, sizeof(corners));
+    COLORREF stroke = t.highContrast ? 0xFFFFFFFF :  // DWMWA_COLOR_DEFAULT.
+                                       BlendColor(t.popupStroke, t.popup);
+    DwmSetWindowAttribute(list, DWMWA_BORDER_COLOR, &stroke, sizeof(stroke));
     // When dropped down with the mouse, the ComboBox animates the list with AnimateWindow, which
     // copies strips to the screen without alpha (rows appearing one by one over the empty
     // material). The list stays cloaked from DWM until the message sent now arrives, once the
@@ -18420,12 +18124,8 @@ static void RefreshNativeCaption(HWND hWnd) {
 
 static LRESULT DwmCaptionHitTest(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam,
                                  bool& handled) {
-    using DwmDefWindowProc_t = BOOL(WINAPI*)(HWND, UINT, WPARAM, LPARAM, LRESULT*);
-    HMODULE dwm = GetModuleHandleW(L"dwmapi.dll");
-    auto dwmDefWindowProc = dwm ? reinterpret_cast<DwmDefWindowProc_t>(
-        GetProcAddress(dwm, "DwmDefWindowProc")) : nullptr;
     LRESULT result = 0;
-    handled = dwmDefWindowProc && dwmDefWindowProc(hWnd, message, wParam, lParam, &result);
+    handled = DwmDefWindowProc(hWnd, message, wParam, lParam, &result) != FALSE;
     return result;
 }
 
@@ -18504,12 +18204,9 @@ static LRESULT CALLBACK NativeCaptionSubclassProc(HWND hWnd, UINT message, WPARA
         if (NativeCaptionUsesDwmButtons(*state)) {
             // Maximized, DwmDefWindowProc does not resolve the buttons DWM does draw: their bounds
             // (DWMWA_CAPTION_BUTTON_BOUNDS) are used and DefWindowProc handles the press.
-            using GetAttribute_t = HRESULT(WINAPI*)(HWND, DWORD, PVOID, DWORD);
-            HMODULE dwm = GetModuleHandleW(L"dwmapi.dll");
-            auto getAttribute = dwm ? reinterpret_cast<GetAttribute_t>(
-                GetProcAddress(dwm, "DwmGetWindowAttribute")) : nullptr;
             RECT bounds{}, window{};
-            if (getAttribute && SUCCEEDED(getAttribute(hWnd, 5, &bounds, sizeof(bounds))) &&
+            if (SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_CAPTION_BUTTON_BOUNDS, &bounds,
+                                                sizeof(bounds))) &&
                 GetWindowRect(hWnd, &window)) {
                 OffsetRect(&bounds, window.left, window.top);
                 LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
@@ -18703,8 +18400,7 @@ struct SettingsDialogState {
 };
 
 static void UpdateSettingsDialogSmoke(HWND hWnd, SettingsDialogState& state) {
-    if (state.theme.highContrast || g_unloading || g_settingsWindowCancelRequested ||
-        !IsWindow(state.owner)) {
+    if (state.theme.highContrast || g_unloading || !IsWindow(state.owner)) {
         if (IsWindow(state.smoke)) DestroyWindow(state.smoke);
         state.smoke = nullptr;
         return;
@@ -18789,7 +18485,7 @@ static void LayoutSettingsDialog(HWND hWnd, SettingsDialogState& state) {
 }
 
 static void RecreateSettingsDialogVisuals(HWND hWnd, SettingsDialogState& state) {
-    if (g_unloading || g_settingsWindowCancelRequested) return;
+    if (g_unloading) return;
     BuildNativeTheme(state.theme, state.dpi);
     HFONT oldTitle = state.titleFont;
     state.titleFont = CreateSettingsFont(state.dpi, 20, FW_SEMIBOLD, true);
@@ -18810,16 +18506,11 @@ static void RecreateSettingsDialogVisuals(HWND hWnd, SettingsDialogState& state)
         BlendColor(t.dark ? UiColor{0x0D, 255, 255, 255} : UiColor{0xFF, 255, 255, 255}, t.back);
     InstallFluentFocusTracking(hWnd);
     // Solid surfaces; DWM supplies the border, shadow, and rounded corners without a caption.
-    ApplyNativeWindowTheme(hWnd, t.dark, t.highContrast, nullptr, 1);
+    ApplyNativeWindowTheme(hWnd, t.dark, t.highContrast, nullptr, DWMSBT_NONE);
     if (!t.highContrast) {
         // SurfaceStrokeColorDefault, the ContentDialog border.
         COLORREF border = BlendColor(UiColor{0x66, 0x75, 0x75, 0x75}, t.back);
-        if (HMODULE dwm = GetModuleHandleW(L"dwmapi.dll")) {
-            using DwmSetWindowAttribute_t = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
-            if (auto setAttribute = reinterpret_cast<DwmSetWindowAttribute_t>(
-                    GetProcAddress(dwm, "DwmSetWindowAttribute")))
-                setAttribute(hWnd, 34, &border, sizeof(border));
-        }
+        DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &border, sizeof(border));
     }
     LayoutSettingsDialog(hWnd, state);
     if (IsWindowVisible(hWnd)) UpdateSettingsDialogSmoke(hWnd, state);
@@ -18842,7 +18533,7 @@ static LRESULT CALLBACK SettingsDialogWndProc(HWND hWnd, UINT message, WPARAM wP
         case WM_NCHITTEST:
             return HTCLIENT;
         case WM_CREATE: {
-            if (g_unloading || g_settingsWindowCancelRequested) return -1;
+            if (g_unloading) return -1;
             HINSTANCE instance = GetModuleHandleW(nullptr);
             if (!CreateWindowExW(0, L"STATIC", state->title.c_str(),
                     WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX,
@@ -19022,7 +18713,7 @@ static int SettingsMessageBoxW(HWND owner, LPCWSTR text, LPCWSTR caption, UINT t
             add(IDOK, okLabel ? okLabel : Tr(Str::EditorOK));
             break;
     }
-    if (g_unloading || g_settingsWindowCancelRequested || (owner && !IsWindow(owner)))
+    if (g_unloading || (owner && !IsWindow(owner)))
         return context.forcedResult;
     state.result = context.forcedResult;
     size_t defaultIndex = (type & MB_DEFMASK) >> 8;
@@ -19062,18 +18753,17 @@ static int SettingsMessageBoxW(HWND owner, LPCWSTR text, LPCWSTR caption, UINT t
     bool ownerEnabled = owner && IsWindowEnabled(owner);
     if (window) {
         if (ownerEnabled) EnableWindow(owner, FALSE);
-        if (!g_unloading && !g_settingsWindowCancelRequested && (!owner || IsWindow(owner))) {
+        if (!g_unloading && (!owner || IsWindow(owner))) {
             UpdateSettingsDialogSmoke(window, state);
             ShowNativeWindowComposed(window);
             SetFocus(GetDlgItem(window, state.defaultId));
         }
-        while (!state.done && !g_unloading && !g_settingsWindowCancelRequested &&
-               (!owner || IsWindow(owner))) {
+        while (!state.done && !g_unloading && (!owner || IsWindow(owner))) {
             // A bounded message wait also notices cancellation without relying on an owner message.
             DWORD wait = MsgWaitForMultipleObjectsEx(0, nullptr, 100, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
             if (wait == WAIT_FAILED) { context.forced = true; break; }
             MSG message;
-            while (!state.done && !g_unloading && !g_settingsWindowCancelRequested &&
+            while (!state.done && !g_unloading &&
                    (!owner || IsWindow(owner)) && PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
                 if (message.message == WM_QUIT) {
                     PostQuitMessage((int)message.wParam);
@@ -19087,12 +18777,12 @@ static int SettingsMessageBoxW(HWND owner, LPCWSTR text, LPCWSTR caption, UINT t
                 }
             }
         }
-        if (g_unloading || g_settingsWindowCancelRequested || (owner && !IsWindow(owner)))
+        if (g_unloading || (owner && !IsWindow(owner)))
             context.forced = true;
         if (IsWindow(state.smoke)) DestroyWindow(state.smoke);
         if (ownerEnabled && IsWindow(owner)) EnableWindow(owner, TRUE);
         if (IsWindow(window)) DestroyWindow(window);
-        if (ownerEnabled && IsWindow(owner) && !g_unloading && !g_settingsWindowCancelRequested) {
+        if (ownerEnabled && IsWindow(owner) && !g_unloading) {
             SetForegroundWindow(owner);
             if (IsWindow(previousFocus) && (previousFocus == owner || IsChild(owner, previousFocus)))
                 SetFocus(previousFocus);
@@ -19644,21 +19334,6 @@ static LRESULT CALLBACK AccountListSubclassProc(HWND hWnd, UINT message, WPARAM 
     return DefSubclassProc(hWnd, message, wParam, lParam);
 }
 
-static LRESULT CALLBACK SettingsNoEraseSubclassProc(HWND hWnd, UINT message, WPARAM wParam,
-                                                    LPARAM lParam, UINT_PTR subclassId,
-                                                    DWORD_PTR referenceData) {
-    if (message == WM_ERASEBKGND) {
-        auto* state = reinterpret_cast<SettingsWindowState*>(referenceData);
-        if (state && state->theme.dark) {
-            // Preserve the previous frame until the native dark paint pass replaces it.
-            return 1;
-        }
-    } else if (message == WM_NCDESTROY) {
-        RemoveWindowSubclass(hWnd, SettingsNoEraseSubclassProc, subclassId);
-    }
-    return DefSubclassProc(hWnd, message, wParam, lParam);
-}
-
 static HWND CreateSettingsControl(SettingsWindowState& state, int page, PCWSTR className,
                                   PCWSTR text, DWORD style, DWORD exStyle, int id) {
     bool combo = _wcsicmp(className, L"COMBOBOX") == 0;
@@ -19709,8 +19384,7 @@ static void AddSettingsGroup(SettingsWindowState& state, int page, PCWSTR labelT
 }
 
 static HWND AddNumericRow(SettingsWindowState& state, int page, PCWSTR labelText, int id,
-                          int minimum, int maximum, bool addSlider = false,
-                          int sliderMaximum = -1) {
+                          int minimum, int maximum) {
     // No 3D border: the window paints the Fluent frame (PaintInputFrame).
     HWND edit = AddSettingsRow(state, page, labelText, L"EDIT", ES_NUMBER | ES_AUTOHSCROLL,
                                0, id);
@@ -19723,20 +19397,6 @@ static HWND AddNumericRow(SettingsWindowState& state, int page, PCWSTR labelText
     InstallFluentSpin(row.spin, &state.theme);
     SendMessageW(row.spin, UDM_SETBUDDY, reinterpret_cast<WPARAM>(edit), 0);
     SendMessageW(row.spin, UDM_SETRANGE32, minimum, maximum);
-    if (addSlider) {
-        row.slider = CreateSettingsControl(
-            state, page, TRACKBAR_CLASSW, L"",
-            WS_VISIBLE | WS_TABSTOP | TBS_HORZ | TBS_AUTOTICKS, 0, -1);
-        if (row.slider &&
-            !SetWindowSubclass(row.slider, SettingsNoEraseSubclassProc, 0,
-                               reinterpret_cast<DWORD_PTR>(&state))) {
-            Wh_Log(L"Could not subclass settings slider");
-        }
-        int trackMaximum = sliderMaximum >= minimum ? sliderMaximum : maximum;
-        SendMessageW(row.slider, TBM_SETRANGE, TRUE, MAKELPARAM(minimum, trackMaximum));
-        SendMessageW(row.slider, TBM_SETPAGESIZE, 0,
-                     std::max(1, (trackMaximum - minimum) / 10));
-    }
     return edit;
 }
 
@@ -19969,7 +19629,7 @@ static void AddSettingsToolTip(SettingsWindowState& state, int id, PCWSTR text) 
         }
     }
     const HWND targets[] = {row ? row->label : nullptr, control,
-                            row ? row->slider : nullptr, row ? row->spin : nullptr,
+                            row ? row->spin : nullptr,
                             row ? row->caption : nullptr};
     for (HWND target : targets) {
         if (!target) continue;
@@ -21087,10 +20747,7 @@ static bool HandOffSettingsPageSnapshot(SettingsWindowState& state) {
     GdiFlush();
     std::copy(animation.content.begin(), animation.content.end(),
               static_cast<uint32_t*>(output.bits));
-    if (HMODULE dwm = GetModuleHandleW(L"dwmapi.dll")) {
-        using Flush_t = HRESULT(WINAPI*)();
-        if (auto flush = reinterpret_cast<Flush_t>(GetProcAddress(dwm, "DwmFlush"))) flush();
-    }
+    DwmFlush();
     HDC target = GetDCEx(state.hWnd, nullptr, DCX_CACHE);
     if (!target) return false;
     bool presented = BitBlt(target, animation.area.left, animation.area.top, width, height,
@@ -21488,10 +21145,7 @@ static void OnSettingsPageAnimationTimer(SettingsWindowState& state) {
             std::fill_n(static_cast<uint32_t*>(animation.output.bits), animation.previous.size(),
                         animation.background);
             animation.outputBackground = true;
-            if (HMODULE dwm = GetModuleHandleW(L"dwmapi.dll")) {
-                using Flush_t = HRESULT(WINAPI*)();
-                if (auto flush = reinterpret_cast<Flush_t>(GetProcAddress(dwm, "DwmFlush"))) flush();
-            }
+            DwmFlush();
             if (AnimateSettingsPageExit(state, GetTickCount64())) {
                 animation.exitComposed = true;
                 animation.attachedAt = GetTickCount64();
@@ -21554,11 +21208,7 @@ static void OnSettingsPageAnimationTimer(SettingsWindowState& state) {
                             animation.content.size(), animation.background);
                         animation.outputBackground = true;
                         // Switch the uploaded visual and native background near a DWM boundary.
-                        if (HMODULE dwm = GetModuleHandleW(L"dwmapi.dll")) {
-                            using Flush_t = HRESULT(WINAPI*)();
-                            if (auto flush = reinterpret_cast<Flush_t>(
-                                    GetProcAddress(dwm, "DwmFlush"))) flush();
-                        }
+                        DwmFlush();
                     }
                     auto frame = CurrentSettingsPageFrame(state, GetTickCount64());
                     healthy = animation.composition.PresentExit(frame.offset, frame.opacity, true);
@@ -22041,7 +21691,6 @@ static void LayoutSettingsWindow(SettingsWindowState& state, bool freeze = true,
                 setVisible(row.extra, row.extra != nullptr);
                 setVisible(row.spin, row.spin != nullptr);
                 setVisible(row.colorReset, row.colorReset != nullptr);
-                setVisible(row.slider, false);
             }
 
             // Label and help on the left; without help, the label is centered.
@@ -22073,7 +21722,7 @@ static void LayoutSettingsWindow(SettingsWindowState& state, bool freeze = true,
 
 static void ShowSettingsInfoBar(SettingsWindowState& state, InfoBarSeverity severity,
                                 std::wstring message) {
-    if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(state.hWnd) ||
+    if (g_unloading || !IsWindow(state.hWnd) ||
         !state.infoBarMessage || !state.infoBarClose) return;
     {
         SettingsRedrawBatch batch(state.hWnd);
@@ -22088,8 +21737,7 @@ static void ShowSettingsInfoBar(SettingsWindowState& state, InfoBarSeverity seve
 }
 
 static void HideSettingsInfoBar(SettingsWindowState& state) {
-    if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(state.hWnd) ||
-        !state.infoBarVisible) return;
+    if (g_unloading || !IsWindow(state.hWnd) || !state.infoBarVisible) return;
     SettingsRedrawBatch batch(state.hWnd);
     StopSettingsPageAnimation(state, false);
     if (GetFocus() == state.infoBarClose) SetFocus(state.pageButtons[state.currentPage]);
@@ -23299,12 +22947,31 @@ static void UpdateAccountButtons(SettingsWindowState& state) {
     }
 }
 
-static void RefreshAccountList(SettingsWindowState& state) {
+// `force` rebuilds even when neither the accounts nor the sign-in progress changed; every caller
+// that can change a sign-in (or any other external state shown) passes it.
+static void RefreshAccountList(SettingsWindowState& state, bool force = true) {
     std::vector<AccountConfig> accounts;
     {
         std::lock_guard<std::mutex> lk(g_settingsMutex);
         accounts = g_settings.accounts;
     }
+    bool loginInProgress = g_loginInProgress.load();
+    uint64_t loginIdentity = g_loginAccountIdentity.load();
+    if (!force && state.accountListBuilt && accounts == state.listedAccounts &&
+        loginInProgress == state.listedLoginInProgress &&
+        (!loginInProgress || loginIdentity == state.listedLoginIdentity)) {
+        return;
+    }
+    state.accountListBuilt = true;
+    state.listedAccounts = accounts;
+    state.listedLoginInProgress = loginInProgress;
+    state.listedLoginIdentity = loginIdentity;
+    // The Credential Manager is read at most once per rebuild, and only if a row needs it.
+    std::optional<std::vector<std::wstring>> borrowedLogins;
+    auto detectedLogins = [&]() -> const std::vector<std::wstring>& {
+        if (!borrowedLogins) borrowedLogins = DetectCopilotLogins();
+        return *borrowedLogins;
+    };
     uint64_t selectedIdentity = 0;
     int selected = SelectedAccountIndex(state);
     if (selected >= 0) {
@@ -23317,8 +22984,6 @@ static void RefreshAccountList(SettingsWindowState& state) {
     }
     ListView_DeleteAllItems(state.accountList);
     int restoredSelection = -1;
-    bool loginInProgress = g_loginInProgress.load();
-    uint64_t loginIdentity = g_loginAccountIdentity.load();
     for (size_t i = 0; i < accounts.size(); i++) {
         LVITEMW item{};
         item.mask = LVIF_TEXT | LVIF_PARAM;
@@ -23370,8 +23035,8 @@ static void RefreshAccountList(SettingsWindowState& state) {
             WipeBuffer(token.refreshToken);
             bool ownCredentialsPresent = accounts[i].copilotLogin.empty() &&
                 HasStoredTokenValue(AccountIdentityHash(accounts[i]));
-            auto borrowedLogins = ownCredentialsPresent ? std::vector<std::wstring>() : DetectCopilotLogins();
-            bool borrowed = std::any_of(borrowedLogins.begin(), borrowedLogins.end(),
+            bool borrowed = !ownCredentialsPresent && std::any_of(
+                detectedLogins().begin(), detectedLogins().end(),
                 [&](const auto& login) {
                     return accounts[i].copilotLogin.empty() ||
                         SameGithubLogin(login, accounts[i].copilotLogin);
@@ -23382,8 +23047,10 @@ static void RefreshAccountList(SettingsWindowState& state) {
             status = TrFormat(Str::SettingsUsesCli, {CliDisplayName(accounts[i].provider)});
         } else {
             StoredToken token;
-            status = LoadStoredToken(AccountIdentityHash(accounts[i]), &token) ?
-                         Tr(Str::SettingsSignedIn) : Tr(Str::SettingsNotSignedIn);
+            bool signedIn = LoadStoredToken(AccountIdentityHash(accounts[i]), &token);
+            WipeBuffer(token.accessToken);
+            WipeBuffer(token.refreshToken);
+            status = signedIn ? Tr(Str::SettingsSignedIn) : Tr(Str::SettingsNotSignedIn);
         }
         ListView_SetItemText(state.accountList, (int)i, 4, const_cast<PWSTR>(status.c_str()));
     }
@@ -23428,11 +23095,6 @@ static void SetControlInt(SettingsWindowState& state, int id, int value) {
         for (const auto& row : pageRows) {
             if (row.control != control) continue;
             if (row.spin) SendMessageW(row.spin, UDM_SETPOS32, 0, value);
-            if (row.slider) {
-                int maximum = (int)SendMessageW(row.slider, TBM_GETRANGEMAX, 0, 0);
-                SendMessageW(row.slider, TBM_SETPOS, TRUE,
-                             std::clamp(value, row.minimum, maximum));
-            }
             return;
         }
     }
@@ -23450,7 +23112,7 @@ static SettingsRow* FindSettingsRow(SettingsWindowState& state, HWND control) {
     if (!control) return nullptr;
     for (auto& pageRows : state.rows) {
         for (auto& row : pageRows) {
-            if (row.control == control || row.slider == control || row.spin == control) {
+            if (row.control == control || row.spin == control) {
                 return &row;
             }
         }
@@ -23612,7 +23274,6 @@ static void EnableSettingsRow(SettingsWindowState& state, int id, bool enabled) 
             if (row.label) InvalidateRect(row.label, nullptr, TRUE);
             if (row.caption) InvalidateRect(row.caption, nullptr, TRUE);
             EnableWindow(row.control, enabled);
-            if (row.slider) EnableWindow(row.slider, enabled);
             if (row.spin) EnableWindow(row.spin, enabled);
             if (row.colorReset) EnableWindow(row.colorReset, enabled);
             if (row.spin) InvalidateRect(state.hWnd, &row.inputFrame, FALSE);
@@ -23834,7 +23495,8 @@ static std::wstring UsageColorsPresetName(const std::array<uint32_t, 4>& colors)
     return Tr(Str::CommonCustom);
 }
 
-static void RefreshSettingsControls(SettingsWindowState& state, bool animateDependencies = false) {
+static void RefreshSettingsControls(SettingsWindowState& state, bool animateDependencies = false,
+                                    bool forceAccountList = true) {
     if (!animateDependencies) StopSettingsExpanderAnimation(state);
     Settings s;
     {
@@ -23886,7 +23548,7 @@ static void RefreshSettingsControls(SettingsWindowState& state, bool animateDepe
     state.updating = false;
     UpdateDependentSettingsControls(state, animateDependencies);
     UpdateUsageBaseDescription(state);
-    RefreshAccountList(state);
+    RefreshAccountList(state, forceAccountList);
 }
 
 static void CommitScalarSettings(SettingsWindowState& state, bool refreshControls = true) {
@@ -23968,7 +23630,8 @@ static void CommitScalarSettings(SettingsWindowState& state, bool refreshControl
     } else if (applyResult == SettingsApplyResult::Changed) {
         FinishSettingsApply();
     }
-    if (refreshControls) RefreshSettingsControls(state, true);
+    // A scalar commit does not touch the accounts or their sign-ins.
+    if (refreshControls) RefreshSettingsControls(state, true, false);
 }
 
 /**********************************************/
@@ -24668,7 +24331,7 @@ static LRESULT CALLBACK AppearanceReviewWndProc(HWND hWnd, UINT message, WPARAM 
 
 // Modal review dialog. Returns true only if "Apply" is confirmed.
 static bool ShowAppearanceReview(HWND owner, const std::wstring& text, bool canApply) {
-    if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(owner)) return false;
+    if (g_unloading || !IsWindow(owner)) return false;
     HINSTANCE instance = GetModuleHandleW(nullptr);
     WNDCLASSEXW windowClass{};
     windowClass.cbSize = sizeof(windowClass);
@@ -24722,7 +24385,7 @@ static bool ShowAppearanceReview(HWND owner, const std::wstring& text, bool canA
     // The settings window defers its close until this loop returns (see SettingsWindowProc).
     SettingsModalWindowScope modalScope(window);
     MSG message;
-    while (!g_unloading && !g_settingsWindowCancelRequested && !state.done && IsWindow(owner)) {
+    while (!g_unloading && !state.done && IsWindow(owner)) {
         int result = GetMessageW(&message, nullptr, 0, 0);
         if (result == 0) {
             PostQuitMessage((int)message.wParam);
@@ -24821,9 +24484,9 @@ static bool DismissSettingsModals(SettingsWindowState& state) {
         return true;
     }
     if (g_settingsModalWindow && IsWindow(g_settingsModalWindow)) {
-        // On unload the nested loop ends by itself once it sees the cancel request; otherwise ask
+        // On unload the nested loop ends by itself once it sees g_unloading; otherwise ask
         // the modal window to close.
-        if (!g_settingsWindowCancelRequested) PostMessageW(g_settingsModalWindow, WM_CLOSE, 0, 0);
+        if (!g_unloading) PostMessageW(g_settingsModalWindow, WM_CLOSE, 0, 0);
         return true;
     }
     return false;
@@ -24853,7 +24516,7 @@ static bool ChooseAppearanceFile(SettingsWindowState& state, bool save, std::wst
         accepted = save ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog);
     }
     if (accepted) *path = buffer;
-    return accepted && !g_unloading && !g_settingsWindowCancelRequested && IsWindow(state.hWnd);
+    return accepted && !g_unloading && IsWindow(state.hWnd);
 }
 
 static void ExportAppearanceFromSettingsWindow(SettingsWindowState& state) {
@@ -24904,16 +24567,20 @@ static void ImportAppearanceFromSettingsWindow(SettingsWindowState& state) {
                             TrFormat(Str::AppearanceImportFailed, {error}));
         return;
     }
-    // SVGs are validated and imported before the review with the same parser as the editor;
-    // rejected ones are listed with their reason and do not change their account's icon. New assets
-    // stay pinned until applied so cleanup does not delete them.
+    // SVGs are validated and rendered before the review with the same parser as the editor;
+    // rejected ones are listed with their reason and do not change their account's icon. Accepted
+    // ones stay in memory and reach the icons folder only if the review is confirmed.
+    std::vector<StagedIconAsset> stagedAssets;
     for (AppearanceIcon& icon : data.icons) {
         if (icon.mode != 2 || g_unloading) continue;
         std::vector<uint32_t> master;
-        SvgImportResult imported = ImportSvgIconBytes(icon.svgBytes, &master);
+        StagedIconAsset staged;
+        SvgImportResult imported = ImportSvgIconBytes(icon.svgBytes, &master, &staged);
         if (imported.error == SvgError::None) {
             icon.asset = imported.asset;
-            PinIconAsset(icon.asset);
+            bool known = std::any_of(stagedAssets.begin(), stagedAssets.end(),
+                [&](const StagedIconAsset& other) { return other.asset == staged.asset; });
+            if (!known) stagedAssets.push_back(std::move(staged));
         } else {
             icon.svgError = SvgImportMessage(imported);
         }
@@ -24921,8 +24588,23 @@ static void ImportAppearanceFromSettingsWindow(SettingsWindowState& state) {
     }
     AppearanceReview review = BuildAppearanceReview(current, data);
     if (!ShowAppearanceReview(state.hWnd, review.text, review.anyChange) || g_unloading ||
-        g_settingsWindowCancelRequested || !IsWindow(state.hWnd)) {
+        !IsWindow(state.hWnd)) {
+        return;
+    }
+
+    // The assets must exist before the tiles load them; pinned until the settings are applied so
+    // cleanup does not delete them.
+    bool assetsStored = true;
+    for (const StagedIconAsset& staged : stagedAssets) {
+        PinIconAsset(staged.asset);
+        if (!CommitStagedIconAsset(staged)) {
+            assetsStored = false;
+            break;
+        }
+    }
+    if (!assetsStored) {
         ReleaseIconPins();
+        ShowSettingsInfoBar(state, InfoBarSeverity::Error, Tr(Str::AppearanceApplyFailed));
         return;
     }
 
@@ -25049,7 +24731,7 @@ static int MeasureEditorMessages(HWND hWnd, AccountEditorState& state) {
 }
 
 static void LayoutAccountEditor(HWND hWnd, AccountEditorState& state) {
-    if (state.layingOut || g_unloading || g_settingsWindowCancelRequested) return;
+    if (state.layingOut || g_unloading) return;
     state.layingOut = true;
     auto sc = [&](int value) { return ScaleForDpi(value, state.dpi); };
     constexpr UINT flags = SWP_NOZORDER | SWP_NOACTIVATE;
@@ -25281,7 +24963,7 @@ static void LayoutAccountEditor(HWND hWnd, AccountEditorState& state) {
 }
 
 static void RefreshEditorMessages(HWND hWnd, AccountEditorState& state) {
-    if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(hWnd)) return;
+    if (g_unloading || !IsWindow(hWnd)) return;
     RECT frame{}, client{};
     if (!GetWindowRect(hWnd, &frame) || !GetClientRect(hWnd, &client)) return;
     int provider = (int)SendDlgItemMessageW(hWnd, kAccountProvider, CB_GETCURSEL, 0, 0);
@@ -25337,7 +25019,7 @@ static void EnsureEditorFocusVisible(HWND hWnd, AccountEditorState& state) {
 }
 
 static void RecreateAccountEditorVisuals(HWND hWnd, AccountEditorState& state) {
-    if (state.updatingVisuals || g_unloading || g_settingsWindowCancelRequested) return;
+    if (state.updatingVisuals || g_unloading) return;
     state.updatingVisuals = true;
     BuildNativeTheme(state.theme, state.dpi);
     const NativeTheme& t = state.theme;
@@ -25364,11 +25046,7 @@ static void RecreateAccountEditorVisuals(HWND hWnd, AccountEditorState& state) {
     InstallFluentFocusTracking(hWnd);
     ApplyNativeWindowTheme(hWnd, t.dark, t.highContrast, &state.backdrop);
     // The window scrollbar appears only when the form cannot fit the monitor's work area.
-    if (HMODULE uxTheme = GetModuleHandleW(L"uxtheme.dll")) {
-        using SetWindowTheme_t = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
-        auto setTheme = reinterpret_cast<SetWindowTheme_t>(GetProcAddress(uxTheme, "SetWindowTheme"));
-        if (setTheme) setTheme(hWnd, t.dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
-    }
+    SetWindowTheme(hWnd, t.dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
     InstallNativeCaption(hWnd, t, false, &state.backdrop);
     RedrawWindow(hWnd, nullptr, nullptr,
                  RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
@@ -25753,18 +25431,19 @@ static void ChooseSvgForEditor(HWND hWnd, AccountEditorState& state) {
         SettingsPickerScope pickerScope(hWnd);
         picked = GetOpenFileNameW(&dialog);
     }
-    if (!picked || g_unloading || g_settingsWindowCancelRequested) return;
+    if (!picked || g_unloading) return;
     HCURSOR previousCursor = SetCursor(LoadCursorW(nullptr, IDC_WAIT));
     std::vector<uint32_t> master;
-    SvgImportResult result = ImportSvgIcon(file, &master);
+    StagedIconAsset staged;
+    SvgImportResult result = ImportSvgIcon(file, &master, &staged);
     SetCursor(previousCursor);
     if (result.error == SvgError::None) {
-        PinIconAsset(result.asset);
+        state.stagedIcon = std::move(staged);
         state.account.iconAsset = result.asset;
         state.svgPixels = std::move(master);
     }
     UpdateAccountEditorIcon(hWnd, state);
-    if (g_unloading || g_settingsWindowCancelRequested) return;
+    if (g_unloading) return;
     if (result.error != SvgError::None) {
         SetEditorMessage(hWnd, state, EditorMessageField::Icon, SvgImportMessage(result));
     } else if (!result.ignored.empty()) {
@@ -26015,7 +25694,7 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
             return 0;
         }
         case kEditorIconUnavailableMessage:
-            if (state && !g_unloading && !g_settingsWindowCancelRequested &&
+            if (state && !g_unloading &&
                 SendDlgItemMessageW(hWnd, kAccountIconKind, CB_GETCURSEL, 0, 0) == 2) {
                 SetEditorMessage(hWnd, *state, EditorMessageField::Icon,
                                  Tr(Str::EditorSvgSavedIconUnavailable), EditorMessageKind::Warning);
@@ -26084,7 +25763,7 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
             break;
         case WM_COMMAND:
             if (!state) break;
-            if (g_unloading || g_settingsWindowCancelRequested) return 0;
+            if (g_unloading) return 0;
             if (HWND control = reinterpret_cast<HWND>(lParam); IsFluentCombo(control)) {
                 HandleFluentComboCommand(control, HIWORD(wParam), state->theme);
             }
@@ -26316,6 +25995,16 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
                     EnsureEditorFocusVisible(hWnd, *state);
                     return 0;
                 }
+                if (candidate.iconKind == 2 && !state->stagedIcon.asset.empty() &&
+                    candidate.iconAsset == state->stagedIcon.asset) {
+                    PinIconAsset(candidate.iconAsset);
+                    if (!CommitStagedIconAsset(state->stagedIcon)) {
+                        SetEditorMessage(hWnd, *state, EditorMessageField::Icon,
+                                         Tr(Str::SvgErrStoreFailed));
+                        RefreshEditorMessages(hWnd, *state);
+                        return 0;
+                    }
+                }
                 state->account = std::move(candidate);
                 state->accepted = true;
                 DestroyOwnedModal(hWnd);
@@ -26384,7 +26073,7 @@ static LRESULT CALLBACK AccountEditorWndProc(HWND hWnd, UINT message,
             return 0;
         case WM_MOUSEWHEEL:
         case WM_VSCROLL:
-            if (state && state->scrollExtent && !g_unloading && !g_settingsWindowCancelRequested) {
+            if (state && state->scrollExtent && !g_unloading) {
                 int offset = state->scrollY;
                 int step = ScaleForDpi(24, state->dpi);
                 RECT client{};
@@ -26525,7 +26214,7 @@ static bool ShowAccountEditor(HWND owner, AccountConfig* account, bool adding) {
     // The settings window defers its close until this loop returns (see SettingsWindowProc).
     SettingsModalWindowScope modalScope(window);
     MSG message;
-    while (!g_unloading && !g_settingsWindowCancelRequested && !state.done) {
+    while (!g_unloading && !state.done) {
         int result = GetMessageW(&message, nullptr, 0, 0);
         if (result == 0) {
             PostQuitMessage((int)message.wParam);
@@ -26564,7 +26253,7 @@ static void AddAccountFromSettingsWindow(SettingsWindowState& state) {
         account.label = DefaultAccountLabel(g_settings, account.provider);
     }
     if (!ShowAccountEditor(state.hWnd, &account, true)) return;
-    if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(state.hWnd)) return;
+    if (g_unloading || !IsWindow(state.hWnd)) return;
     std::unique_lock<std::mutex> configLock(g_configEditMutex);
     Settings settings;
     {
@@ -26599,7 +26288,7 @@ static void EditAccountFromSettingsWindow(SettingsWindowState& state) {
     }
     AccountConfig newAccount = oldAccount;
     if (!ShowAccountEditor(state.hWnd, &newAccount, false)) return;
-    if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(state.hWnd)) return;
+    if (g_unloading || !IsWindow(state.hWnd)) return;
 
     bool identityChanged = AccountIdentityHash(oldAccount) != AccountIdentityHash(newAccount);
     // The arc layout (refs.arcSpecs) is only computed when building the tile: if it changes, the
@@ -26913,16 +26602,6 @@ static void ToggleAccountFromSettingsWindow(SettingsWindowState& state) {
         ShowSettingsInfoBar(state, InfoBarSeverity::Error,
                             Tr(Str::SettingsCouldNotUpdateAccountVisibility));
     } else if (applyResult == SettingsApplyResult::Changed) {
-        std::wstring hashes;
-        wchar_t buffer[24];
-        for (const auto& account : settings.accounts) {
-            if (!account.hidden) continue;
-            if (!hashes.empty()) hashes += L";";
-            swprintf(buffer, ARRAYSIZE(buffer), L"%016llx",
-                     (unsigned long long)AccountIdentityHash(account));
-            hashes += buffer;
-        }
-        Wh_SetStringValue(L"hiddenAccounts", hashes.c_str());
         FinishSettingsApply();
     }
     RefreshSettingsControls(state);
@@ -26972,7 +26651,7 @@ static void PromptAccountDetection(SettingsWindowState& state) {
                                      Tr(Str::NotificationAppName), MB_YESNO | MB_ICONQUESTION, nullptr,
                                      {Tr(Str::SettingsFindAccounts), Tr(Str::SettingsNotNow), nullptr,
                                       IDYES});
-    if (g_unloading || g_settingsWindowCancelRequested || !IsWindow(state.hWnd)) return;
+    if (g_unloading || !IsWindow(state.hWnd)) return;
     ApplyAccountDetection(state, result == IDYES ? AccountDetection::Allowed : AccountDetection::Declined,
                           false);
 }
@@ -27001,27 +26680,15 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
         settings.taskbarMonitorMode = defaults.taskbarMonitorMode;
         settings.taskbarMonitorNumber = defaults.taskbarMonitorNumber;
         settings.tilePosition = defaults.tilePosition;
-        settings.barLayout = defaults.barLayout;
         settings.barMode = defaults.barMode;
-        settings.barLength = defaults.barLength;
-        settings.barThickness = defaults.barThickness;
-        settings.labelFontSize = defaults.labelFontSize;
-        settings.percentFontSize = defaults.percentFontSize;
         settings.accountMargin = defaults.accountMargin;
         settings.tileSize = defaults.tileSize;
-        settings.labelGap = defaults.labelGap;
-        settings.barGap = defaults.barGap;
         settings.rightMargin = defaults.rightMargin;
     } else if (page == 2) {
-        settings.labelPosition = defaults.labelPosition;
         settings.flyoutMaterial = defaults.flyoutMaterial;
         settings.showPaceTicks = defaults.showPaceTicks;
         settings.persistentPaceMarkers = defaults.persistentPaceMarkers;
-        settings.paceTickStyle = defaults.paceTickStyle;
         settings.paceTickColor = defaults.paceTickColor;
-        settings.showBarLabels = defaults.showBarLabels;
-        settings.percentTextVisibility = defaults.percentTextVisibility;
-        settings.percentTextAlignment = defaults.percentTextAlignment;
         settings.showExtraBarAmounts = defaults.showExtraBarAmounts;
         settings.useAccentUsageColor = defaults.useAccentUsageColor;
         settings.usageColors = defaults.usageColors;
@@ -27030,7 +26697,6 @@ static void ResetCurrentSettingsPage(SettingsWindowState& state) {
         settings.orangeThreshold = defaults.orangeThreshold;
         settings.redThreshold = defaults.redThreshold;
     } else {
-        settings.clickAction = defaults.clickAction;
         settings.pollMinutes = defaults.pollMinutes;
         settings.notifyThreshold = defaults.notifyThreshold;
         settings.openFlyoutOnHover = defaults.openFlyoutOnHover;
@@ -27675,29 +27341,6 @@ static LRESULT CALLBACK SettingsWindowProc(HWND hWnd, UINT message,
                 } else if (reinterpret_cast<NMHDR*>(lParam)->code == NM_DBLCLK) {
                     PostMessageW(hWnd, WM_COMMAND,
                                  MAKEWPARAM(kAccountEdit, BN_CLICKED), 0);
-                }
-            }
-            break;
-        case WM_HSCROLL:
-            if (state && lParam) {
-                HWND slider = reinterpret_cast<HWND>(lParam);
-                if (SettingsRow* row = FindSettingsRow(*state, slider);
-                    row && row->slider == slider) {
-                    int id = GetDlgCtrlID(row->control);
-                    int value = (int)SendMessageW(slider, TBM_GETPOS, 0, 0);
-                    state->updating = true;
-                    SetControlInt(*state, id, value);
-                    state->updating = false;
-                    int action = LOWORD(wParam);
-                    if (action == TB_ENDTRACK) {
-                        CommitScalarSettings(*state);
-                    } else if (action == TB_LINEUP || action == TB_LINEDOWN ||
-                               action == TB_PAGEUP || action == TB_PAGEDOWN ||
-                               action == TB_TOP || action == TB_BOTTOM ||
-                               action == TB_THUMBPOSITION) {
-                        SetTimer(hWnd, kSettingsAutosaveTimer, 250, nullptr);
-                    }
-                    return 0;
                 }
             }
             break;
@@ -28425,7 +28068,7 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
             return 0;
         }
     }
-    if (g_unloading || g_settingsWindowCancelRequested) {
+    if (g_unloading) {
         UnregisterClassW(kAccountEditorClass, instance);
         UnregisterClassW(kSettingsWindowClass, instance);
         if (apartmentInitialized) winrt::uninit_apartment();
@@ -28478,7 +28121,7 @@ static DWORD WINAPI SettingsWindowThreadProc(LPVOID) {
         FitSettingsWindowToContent(state);
         LayoutSettingsWindow(state);
         g_settingsWindow.store(window);
-        if (g_unloading || g_settingsWindowCancelRequested) {
+        if (g_unloading) {
             PostMessageW(window, WM_CLOSE, 0, 0);
         } else {
             // The page also slides in from below when opening.
@@ -28604,7 +28247,6 @@ static void OpenSettingsWindow() {
         g_settingsWindowThread = nullptr;
     }
     if (g_unloading) return;
-    g_settingsWindowCancelRequested = false;
     g_settingsWindowThread = CreateThread(nullptr, 0, SettingsWindowThreadProc,
                                           nullptr, 0, nullptr);
     if (!g_settingsWindowThread) Wh_Log(L"Could not create settings window thread");
@@ -28625,7 +28267,6 @@ BOOL Wh_ModInit() {
     g_fetchThreadStarted.store(false, std::memory_order_release);
     g_loginInProgress.store(false);
     g_loginAccountIdentity.store(0);
-    g_settingsWindowCancelRequested = false;
     g_winsockStarted = false;
 
     // C++/WinRT caches agile activation factories process-wide. Keep the MTA alive so a
@@ -28717,7 +28358,6 @@ void Wh_ModUninit() {
     if (g_stopEvent) SetEvent(g_stopEvent);
     CloseActiveHttpHandles();
 
-    g_settingsWindowCancelRequested = true;
     HANDLE settingsWindowThread = nullptr;
     {
         std::lock_guard<std::mutex> lock(g_settingsWindowMutex);
