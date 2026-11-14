@@ -1,32 +1,43 @@
 // ==WindhawkMod==
 // @id              yandex-music-transparency
 // @name            Yandex Music Transparency
-// @description     Makes Yandex Music window transparent
+// @description     Makes the Yandex Music window transparent
 // @version         1.1
 // @author          ChatGPT with tester 'NIKTO'
+// @github          NIKTO-2
 // @include         Яндекс Музыка.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*...*/
+/*
+# Yandex Music Transparency
+
+Makes the Yandex Music desktop application window transparent. You can adjust the opacity level in the mod settings.
+*/
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
-/*...*/
+/*
+- Alpha: 220
+  $name: Window Opacity
+  $description: Transparency level from 50 (more transparent) to 255 (opaque).
+*/
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 
 struct Settings {
-    int Alpha;
+    int alpha;
 };
 
 Settings g_settings;
+HANDLE g_hStopEvent = NULL;
+HANDLE g_hThread = NULL;
 
 void LoadSettings() {
-    g_settings.Alpha = Wh_GetIntSetting(L"Alpha");
-    if (g_settings.Alpha < 50) g_settings.Alpha = 50;
-    if (g_settings.Alpha > 255) g_settings.Alpha = 255;
+    g_settings.alpha = Wh_GetIntSetting(L"Alpha");
+    if (g_settings.alpha < 50) g_settings.alpha = 50;
+    if (g_settings.alpha > 255) g_settings.alpha = 255;
 }
 
 void ApplyTransparency(HWND hwnd) {
@@ -37,33 +48,24 @@ void ApplyTransparency(HWND hwnd) {
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
     }
 
-    SetLayeredWindowAttributes(hwnd, 0, (BYTE)g_settings.Alpha, LWA_ALPHA);
+    SetLayeredWindowAttributes(hwnd, 0, (BYTE)g_settings.alpha, LWA_ALPHA);
 }
 
 BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
 
-    // Ищем окна только нашего процесса
     if (pid != GetCurrentProcessId()) return TRUE;
-
-    // Ищем только главные окна (без родителей)
     if (GetParent(hwnd) != NULL) return TRUE;
-
-    // Ищем только видимые окна
     if (!IsWindowVisible(hwnd)) return TRUE;
 
-    // Принудительно применяем прозрачность
     ApplyTransparency(hwnd);
-
     return TRUE;
 }
 
-// Поток, который каждую секунду пробивает прозрачность (для защиты от сброса самим приложением)
 DWORD WINAPI ForceTransparencyThread(LPVOID lpParam) {
-    while (true) {
+    while (WaitForSingleObject(g_hStopEvent, 1000) == WAIT_TIMEOUT) {
         EnumWindows(EnumWindowsProc, 0);
-        Sleep(1000); // пауза 1 секунда
     }
     return 0;
 }
@@ -71,8 +73,17 @@ DWORD WINAPI ForceTransparencyThread(LPVOID lpParam) {
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    // Запускаем фоновый процесс, который будет следить за прозрачностью
-    CreateThread(NULL, 0, ForceTransparencyThread, NULL, 0, NULL);
+    g_hStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (!g_hStopEvent) {
+        return FALSE;
+    }
+
+    g_hThread = CreateThread(NULL, 0, ForceTransparencyThread, NULL, 0, NULL);
+    if (!g_hThread) {
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = NULL;
+        return FALSE;
+    }
 
     return TRUE;
 }
@@ -84,4 +95,19 @@ void Wh_ModAfterInit() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
     EnumWindows(EnumWindowsProc, 0);
+}
+
+void Wh_ModUninit() {
+    if (g_hStopEvent) {
+        SetEvent(g_hStopEvent);
+    }
+    if (g_hThread) {
+        WaitForSingleObject(g_hThread, INFINITE);
+        CloseHandle(g_hThread);
+        g_hThread = NULL;
+    }
+    if (g_hStopEvent) {
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = NULL;
+    }
 }
