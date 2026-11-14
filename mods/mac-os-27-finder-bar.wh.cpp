@@ -350,6 +350,7 @@ struct Settings {
     bool showDisks;  // discos na barra, com quanto está cheio
     bool usbPills, downloadPills, clipPills, shotPills;
     bool islFocus, islBattery, islBluetooth, islAudio, islHistory, winNotifs, islHistNotices, islCaps;
+    bool islLive;  // pílulas de aviso com vidro: a foto do fundo acompanha ao vivo
     bool winNotifsOnly;  // só a barra mostra as notificações (faixas do Windows desligadas)
     int islStyle, islSize, islDur, islIn, islOut, islPos;  // pílulas de aviso
     int npLayout, npSize;  // painel Tocando agora
@@ -583,6 +584,7 @@ static const UiDefault kUiDefaults[] = {
     {L"islBluetooth", L"1"},
     {L"islAudio", L"1"},
     {L"islHistory", L"1"},
+    {L"islLive", L"0"},
     {L"islHistNotices", L"1"},
     {L"islCaps", L"1"},
     {L"islStyle", L"follow"},
@@ -846,6 +848,7 @@ static void LoadSettings() {
     s.islBluetooth = OvrInt(L"islBluetooth") != 0;
     s.islAudio = OvrInt(L"islAudio") != 0;
     s.islHistory = OvrInt(L"islHistory") != 0;
+    s.islLive = OvrInt(L"islLive") != 0;
     s.islHistNotices = OvrInt(L"islHistNotices") != 0;
     {
         std::wstring v = OvrStr(L"islStyle");
@@ -1515,7 +1518,11 @@ static const ThemeGlass& CtxGlass() {
 static int GlassT() { return g_glassRaw || g_glassTranspSaved ? g_glass.transparency : CtxGlass().transparency; }
 static int GlassR() { return g_glassRaw ? g_glass.refraction : CtxGlass().refraction; }
 static int GlassB() { return g_glassRaw ? g_glass.blur : CtxGlass().blur; }
-static bool GlassLive() { return g_glassRaw ? g_glass.live : CtxGlass().live; }
+static int g_glassLiveOverride = -1;  // a pílula de aviso: o "Fundo ao vivo" dela
+static bool GlassLive() {
+    if (g_glassLiveOverride >= 0) return g_glassLiveOverride != 0;
+    return g_glassRaw ? g_glass.live : CtxGlass().live;
+}
 struct GlassThemeCtx {
     int saved;
     explicit GlassThemeCtx(int t) : saved(g_glassThemeCtx) { g_glassThemeCtx = t; }
@@ -12744,6 +12751,7 @@ enum BsVal {
     BV_PANELLOOK, BV_PANELSTYLE,                           // Tema dos painéis
     BV_NTFLAYOUT,                                          // painel do sino: caixa ou cartões
     BV_THEMECLEAR, BV_G_LIVEFIXED,                         // Personalizar tema: Transparente; Vidro sempre ao vivo
+    BV_ISLLIVE,                                            // pílulas de aviso: fundo ao vivo
     BV_SIZERESET,                                          // Tamanho da barra: restaurar
     // "Personalizar por monitor": para cada monitor ligado (até 8), o título, o fundo e a cor do texto.
     BV_MONHEAD0, BV_MONSTYLE0 = BV_MONHEAD0 + 8, BV_MONTEXT0 = BV_MONSTYLE0 + 8, BV_MONEND = BV_MONTEXT0 + 8,
@@ -12853,6 +12861,7 @@ static const BsRowDef kBsRows[] = {
     {BR_ACTION, BV_ISLTEST, L"Testar a pílula agora", 0, 0},
     {BR_GROUP, BV_NONE, L"Aparência", 0, 0},
     {BR_CHOICE, BV_ISLSTYLE, L"Estilo", 0, 0, L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro; com Transparente, líquido)"},
+    {BR_SWITCH, BV_ISLLIVE, L"Fundo ao vivo", 0, 0, L"Com um estilo de vidro, vídeos e papéis de parede animados continuam aparecendo atrás da pílula"},
     {BR_SLIDER, BV_ISLSIZE, L"Tamanho", 0, 0},
     {BR_SLIDER, BV_ISLDUR, L"Tempo na tela", 0, 0, L"Avisos que dá para abrir ou responder ficam 2,5 vezes mais"},
     {BR_CHOICE, BV_ISLPOS, L"Posição", 0, 0},
@@ -12941,6 +12950,7 @@ static const BsBoolKey kBsKeys[] = {
     {BV_ISLBT, L"islBluetooth", &Settings::islBluetooth},
     {BV_ISLAUDIO, L"islAudio", &Settings::islAudio},
     {BV_ISLHIST, L"islHistory", &Settings::islHistory},
+    {BV_ISLLIVE, L"islLive", &Settings::islLive},
     {BV_ISLHISTNOT, L"islHistNotices", &Settings::islHistNotices},
     {BV_BATTPCT, L"showBatteryPercent", &Settings::showBatteryPercent},
     {BV_UPDATES, L"checkUpdates", &Settings::checkUpdates},
@@ -13647,6 +13657,7 @@ static std::wstring BsFold(std::wstring s) {
 // Linhas que só existem às vezes: as de cada monitor (com "Personalizar por
 // monitor", uma para cada monitor ligado) e a cor do texto de todos (sem ele).
 // Os temas em uso (bit a bit): o de todos, ou os de cada monitor.
+static bool IslSolid();  // a pílula de aviso num estilo sólido (mais abaixo)
 static unsigned BsThemesInUse() {
     // (O tema próprio dos painéis também se personaliza aqui.)
     unsigned panel = g_settings.panelLookCustom ? 1u << g_settings.panelLookStyle : 0;
@@ -13677,6 +13688,7 @@ static bool BsRowShown(const BsRowDef& d) {
     if (BvIsMon(d.val)) return g_settings.barPerMon && BsMonAt(BvMonIndex(d.val), nullptr);
     if (d.val == BV_TEXTCOLOR) return !g_settings.barPerMon;
     if (d.val == BV_PANELSTYLE) return g_settings.panelLookCustom;
+    if (d.val == BV_ISLLIVE) return !IslSolid();  // só com um estilo de vidro
     unsigned t = BsThemesInUse(), e = (t & kThemeGlass) ? 1u << ThemeEdit() : 0;
     switch (d.val) {
         // Transparente (1) não tem ajustes; Vidro e Cor da janela (0, 4) são o
@@ -18659,9 +18671,11 @@ static bool IslSolid() { return IslStyle() >= 5; }
 // de vidro dos menus): vidro = desfoque sem refração.
 struct IslGlassScope {
     GlassPrefs saved;
-    int savedOverride;
+    int savedOverride, savedLive;
     bool savedRaw;
-    IslGlassScope() : saved(g_glass), savedOverride(g_panelThemeOverride), savedRaw(g_glassRaw) {
+    IslGlassScope()
+        : saved(g_glass), savedOverride(g_panelThemeOverride), savedLive(g_glassLiveOverride), savedRaw(g_glassRaw) {
+        g_glassLiveOverride = g_settings.islLive ? 1 : 0;  // o "Fundo ao vivo" da pílula
         static const int kTheme[] = {0, 2, 2, 2, 3, 5, 6, 7};  // estilo da pílula → tema dos painéis
         g_panelThemeOverride = kTheme[std::clamp(IslStyle(), 0, 7)];
         switch (IslStyle()) {
@@ -18694,6 +18708,7 @@ struct IslGlassScope {
     ~IslGlassScope() {
         g_glass = saved;
         g_glassRaw = savedRaw;
+        g_glassLiveOverride = savedLive;
         g_panelThemeOverride = savedOverride;
     }
 };
@@ -25340,6 +25355,8 @@ const UiTr kUiTr[] = {
     {L"Em cartões soltos", L"As separate cards", L"En tarjetas sueltas", L"En cartes séparées", L"Als einzelne Karten", L"In schede separate", L"独立卡片"},
     {L"O tema Transparente não tem ajustes: a barra fica sem vidro nenhum.", L"The Clear theme has no settings: the bar has no glass at all.", L"El tema Transparente no tiene ajustes: la barra no lleva vidrio.", L"Le thème Transparent n’a pas de réglages : la barre n’a aucun verre.", L"Das Design Klar hat keine Einstellungen: die Leiste hat kein Glas.", L"Il tema Trasparente non ha impostazioni: la barra non ha vetro.", L"透明主题没有设置：菜单栏完全没有玻璃。"},
     {L"No Vidro, o desfoque do Windows sempre acompanha o fundo ao vivo", L"With Glass, the Windows blur always follows the background live", L"En Vidrio, el desenfoque de Windows siempre sigue el fondo en vivo", L"Avec Verre, le flou de Windows suit toujours l’arrière-plan en direct", L"Bei Glas folgt die Windows-Unschärfe dem Hintergrund immer live", L"Con Vetro, la sfocatura di Windows segue sempre lo sfondo in tempo reale", L"在“玻璃”中，Windows 模糊始终实时跟随背景"},
+    {L"Fundo ao vivo", L"Live background", L"Fondo en vivo", L"Arrière-plan en direct", L"Live-Hintergrund", L"Sfondo dal vivo", L"实时背景"},
+    {L"Com um estilo de vidro, vídeos e papéis de parede animados continuam aparecendo atrás da pílula", L"With a glass style, videos and animated wallpapers keep showing behind the pill", L"Con un estilo de vidrio, los vídeos y fondos animados siguen viéndose detrás de la píldora", L"Avec un style en verre, les vidéos et fonds animés restent visibles derrière la pastille", L"Mit einem Glasstil bleiben Videos und animierte Hintergründe hinter der Pille sichtbar", L"Con uno stile in vetro, video e sfondi animati restano visibili dietro la pillola", L"使用玻璃样式时，胶囊后面仍会显示视频和动态壁纸"},
     {L"Acompanhar a barra", L"Match the bar", L"Igual que la barra", L"Comme la barre", L"Wie die Leiste", L"Come la barra", L"跟随菜单栏"},
     {L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro; com Transparente, líquido)", L"Match the bar: the bar’s background (glass with Window color, liquid with Clear)", L"Igual que la barra: el fondo de la barra (vidrio con Color de la ventana, líquido con Transparente)", L"Comme la barre : le fond de la barre (verre avec Couleur de la fenêtre, liquide avec Transparent)", L"Wie die Leiste: ihr Hintergrund (Glas bei Fensterfarbe, flüssig bei Klar)", L"Come la barra: lo sfondo della barra (vetro con Colore della finestra, liquido con Trasparente)", L"跟随菜单栏：与菜单栏相同的背景（窗口颜色时为玻璃，透明时为液态）"},
     {L"Claro", L"Light", L"Claro", L"Clair", L"Hell", L"Chiaro", L"浅色"},
