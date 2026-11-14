@@ -2,7 +2,7 @@
 // @id             dynamic-island-media-player
 // @name           Dynamic Island Media Player
 // @description    A dedicated, standalone Dynamic Island media player for Windows. Forked and optimized from 'Dynamic Island for Windows' by devcode90. Features per-app positioning, custom color morphing, multilingual UI, and optimized rendering.
-// @version        1.6.1
+// @version        1.6.2
 // @author         BOG090909
 // @github         https://github.com/BOG090909
 // @homepage       https://github.com/BOG090909/dynamic-island-media-player
@@ -244,7 +244,7 @@ namespace {
 constexpr wchar_t kWindowClass[] = L"Windhawk.DynamicIslandMediaPlayer";
 constexpr UINT WM_APP_NEW_EVENT = WM_APP + 0x443;
 constexpr UINT WM_APP_WAKE = WM_APP + 0x446;
-constexpr UINT WM_APP_APPLY_HOTKEY = WM_APP + 0x447;
+constexpr UINT WM_APP_APPLY_HOTKEYS = WM_APP + 0x447;
 constexpr UINT WM_APP_PERSIST_HOTKEY = WM_APP + 0x448;
 constexpr UINT WM_APP_START_HOTKEY_CAPTURE = WM_APP + 0x449;
 
@@ -1378,7 +1378,7 @@ void LoadSettings() {
     g_windowPositionDirty = true;
     HWND hSelf = g_hwnd.load();
     if (hSelf) {
-        PostMessageW(hSelf, WM_APP_APPLY_HOTKEY, 0, 0);
+        PostMessageW(hSelf, WM_APP_APPLY_HOTKEYS, 0, 0);
         PostMessageW(hSelf, WM_APP_WAKE, 0, 0);
     }
 }
@@ -3646,11 +3646,16 @@ void PersistHotkeys() {
 }
 
 UINT GetRawKeyboardModifiers() {
+    // Raw Input can be interrupted by the secure desktop (Win+L, Ctrl+Alt+Del,
+    // UAC). Query the live keyboard state so modifiers cannot remain stuck.
+    auto isDown = [](int vk) {
+        return (GetAsyncKeyState(vk) & 0x8000) != 0;
+    };
     UINT mods = 0;
-    if (g_rawKeyDown[VK_LCONTROL] || g_rawKeyDown[VK_RCONTROL]) mods |= MOD_CONTROL;
-    if (g_rawKeyDown[VK_LMENU] || g_rawKeyDown[VK_RMENU]) mods |= MOD_ALT;
-    if (g_rawKeyDown[VK_LSHIFT] || g_rawKeyDown[VK_RSHIFT]) mods |= MOD_SHIFT;
-    if (g_rawKeyDown[VK_LWIN] || g_rawKeyDown[VK_RWIN]) mods |= MOD_WIN;
+    if (isDown(VK_LCONTROL) || isDown(VK_RCONTROL)) mods |= MOD_CONTROL;
+    if (isDown(VK_LMENU) || isDown(VK_RMENU)) mods |= MOD_ALT;
+    if (isDown(VK_LSHIFT) || isDown(VK_RSHIFT)) mods |= MOD_SHIFT;
+    if (isDown(VK_LWIN) || isDown(VK_RWIN)) mods |= MOD_WIN;
     return mods;
 }
 
@@ -3685,12 +3690,49 @@ void DispatchConfiguredHotkey(int id) {
     }
 }
 
+// Raw Input is a fallback for games that prevent WM_HOTKEY from reaching
+// the overlay. If RegisterHotKey succeeds, give its input-consuming path a
+// short head start before dispatching the matching Raw Input event.
+constexpr double kRawHotkeyFallbackDelay = 0.10;
+constexpr double kHotkeyDuplicateWindow = 0.20;
+bool g_registeredHotkeys[5] = {};
+double g_pendingRawHotkeyDeadline[5] = {};
+double g_lastHotkeyDispatchTime[5] = {};
+
+void DispatchHotkeyOnce(int id) {
+    if (id < kHotkeyHideShow || id > kHotkeyPlayPause) return;
+    const double now = NowSeconds();
+    if (now - g_lastHotkeyDispatchTime[id] < kHotkeyDuplicateWindow) return;
+    g_lastHotkeyDispatchTime[id] = now;
+    DispatchConfiguredHotkey(id);
+}
+
+void QueueRawHotkey(int id) {
+    if (id < kHotkeyHideShow || id > kHotkeyPlayPause) return;
+    if (g_registeredHotkeys[id]) {
+        g_pendingRawHotkeyDeadline[id] = NowSeconds() + kRawHotkeyFallbackDelay;
+    } else {
+        // Another application may already own this chord. Preserve the
+        // game-compatible fallback, although the foreground app may also see it.
+        DispatchHotkeyOnce(id);
+    }
+}
+
+void ProcessPendingRawHotkeys(double now) {
+    for (int id = kHotkeyHideShow; id <= kHotkeyPlayPause; ++id) {
+        const double deadline = g_pendingRawHotkeyDeadline[id];
+        if (deadline > 0.0 && now >= deadline) {
+            g_pendingRawHotkeyDeadline[id] = 0.0;
+            DispatchHotkeyOnce(id);
+        }
+    }
+}
+
 void HandleRawKeyboardInput(const RAWKEYBOARD& keyboard) {
     UINT vk = keyboard.VKey;
     if (vk == 0 || vk == 0xFF) return;
 
-    // RAWKEYBOARD can report generic modifier VKs. Resolve them to the
-    // left/right variants so modifier state is tracked consistently.
+    // Resolve generic modifier VKs to left/right variants for repeat tracking.
     if (vk == VK_SHIFT) {
         const UINT mapped = MapVirtualKeyW(keyboard.MakeCode, MAPVK_VSC_TO_VK_EX);
         vk = (mapped == VK_RSHIFT) ? VK_RSHIFT : VK_LSHIFT;
@@ -3702,60 +3744,87 @@ void HandleRawKeyboardInput(const RAWKEYBOARD& keyboard) {
 
     if (vk >= 256) return;
     const bool isDown = (keyboard.Flags & RI_KEY_BREAK) == 0;
+
+    // Secure-desktop transitions can hide key-up events. Reconcile stale
+    // non-modifier entries before testing whether this is an auto-repeat.
+    if (isDown) {
+        for (UINT key = 1; key < 256; ++key) {
+            if (g_rawKeyDown[key] && !IsRawKeyboardModifier(key) &&
+                (GetAsyncKeyState(static_cast<int>(key)) & 0x8000) == 0) {
+                g_rawKeyDown[key] = false;
+            }
+        }
+    }
+
     const bool wasDown = g_rawKeyDown[vk];
     g_rawKeyDown[vk] = isDown;
-
-    // Ignore key-up and auto-repeat events. This handler never blocks or
-    // modifies input delivered to the foreground application.
     if (!isDown || wasDown || !g_hotkeyEnabled.load() || g_captureHotkey.load() ||
         IsRawKeyboardModifier(vk)) {
         return;
     }
 
     const UINT mods = GetRawKeyboardModifiers();
-    if (mods == g_hotkeyMods.load() && vk == g_hotkeyVk.load()) {
-        DispatchConfiguredHotkey(kHotkeyHideShow);
-    }
-    if (mods == g_hkNextMods.load() && vk == g_hkNextVk.load()) {
-        DispatchConfiguredHotkey(kHotkeyNextTrack);
-    }
-    if (mods == g_hkPrevMods.load() && vk == g_hkPrevVk.load()) {
-        DispatchConfiguredHotkey(kHotkeyPrevTrack);
-    }
-    if (mods == g_hkPlayPauseMods.load() && vk == g_hkPlayPauseVk.load()) {
-        DispatchConfiguredHotkey(kHotkeyPlayPause);
+    if (mods == g_hotkeyMods.load() && vk == g_hotkeyVk.load()) QueueRawHotkey(kHotkeyHideShow);
+    if (mods == g_hkNextMods.load() && vk == g_hkNextVk.load()) QueueRawHotkey(kHotkeyNextTrack);
+    if (mods == g_hkPrevMods.load() && vk == g_hkPrevVk.load()) QueueRawHotkey(kHotkeyPrevTrack);
+    if (mods == g_hkPlayPauseMods.load() && vk == g_hkPlayPauseVk.load()) QueueRawHotkey(kHotkeyPlayPause);
+}
+
+void UnregisterConfiguredHotkeys(HWND hwnd) {
+    for (int id = kHotkeyHideShow; id <= kHotkeyPlayPause; ++id) {
+        if (g_registeredHotkeys[id]) {
+            UnregisterHotKey(hwnd, id);
+            g_registeredHotkeys[id] = false;
+        }
     }
 }
 
-bool RegisterRawKeyboardInput(HWND hwnd) {
+void RegisterConfiguredHotkeys(HWND hwnd) {
+    UnregisterConfiguredHotkeys(hwnd);
+    if (!g_hotkeyEnabled.load()) return;
+
+    const UINT modifiers[] = {
+        0, g_hotkeyMods.load(), g_hkNextMods.load(),
+        g_hkPrevMods.load(), g_hkPlayPauseMods.load()
+    };
+    const UINT keys[] = {
+        0, g_hotkeyVk.load(), g_hkNextVk.load(),
+        g_hkPrevVk.load(), g_hkPlayPauseVk.load()
+    };
+
+    for (int id = kHotkeyHideShow; id <= kHotkeyPlayPause; ++id) {
+        g_registeredHotkeys[id] =
+            RegisterHotKey(hwnd, id, modifiers[id] | MOD_NOREPEAT, keys[id]) != FALSE;
+        if (!g_registeredHotkeys[id]) {
+            Wh_Log(L"RegisterHotKey(%d) unavailable; using Raw Input fallback (error %u)",
+                   id, GetLastError());
+        }
+    }
+}
+
+void ApplyHotkeyInput(HWND hwnd) {
+    std::memset(g_rawKeyDown, 0, sizeof(g_rawKeyDown));
+    std::memset(g_pendingRawHotkeyDeadline, 0, sizeof(g_pendingRawHotkeyDeadline));
+    std::memset(g_lastHotkeyDispatchTime, 0, sizeof(g_lastHotkeyDispatchTime));
+
     RAWINPUTDEVICE device = {};
     device.usUsagePage = 0x01; // Generic Desktop Controls
     device.usUsage = 0x06;     // Keyboard
-    device.dwFlags = RIDEV_INPUTSINK;
-    device.hwndTarget = hwnd;
+    const bool enable = g_hotkeyEnabled.load();
+    device.dwFlags = enable ? RIDEV_INPUTSINK : RIDEV_REMOVE;
+    device.hwndTarget = enable ? hwnd : nullptr;
     if (!RegisterRawInputDevices(&device, 1, sizeof(device))) {
-        Wh_Log(L"RegisterRawInputDevices(keyboard) failed: %u", GetLastError());
-        return false;
+        Wh_Log(L"RegisterRawInputDevices(keyboard, enabled=%d) failed: %u",
+               enable ? 1 : 0, GetLastError());
     }
-    std::memset(g_rawKeyDown, 0, sizeof(g_rawKeyDown));
-    return true;
+
+    UnregisterConfiguredHotkeys(hwnd);
+    if (enable) RegisterConfiguredHotkeys(hwnd);
 }
 
-void UnregisterRawKeyboardInput() {
-    RAWINPUTDEVICE device = {};
-    device.usUsagePage = 0x01;
-    device.usUsage = 0x06;
-    device.dwFlags = RIDEV_REMOVE;
-    device.hwndTarget = nullptr;
-    if (!RegisterRawInputDevices(&device, 1, sizeof(device))) {
-        Wh_Log(L"UnregisterRawInputDevices(keyboard) failed: %u", GetLastError());
-    }
-}
-
-void ApplyHideShowHotkey(HWND) {
-    // Raw Input registration is independent of shortcut configuration.
-    // Clear stale key state after a shortcut is changed or recaptured.
-    std::memset(g_rawKeyDown, 0, sizeof(g_rawKeyDown));
+void DisableHotkeyInput(HWND hwnd) {
+    g_hotkeyEnabled = false;
+    ApplyHotkeyInput(hwnd);
 }
 
 bool g_capCtrl = false, g_capAlt = false, g_capShift = false, g_capWin = false;
@@ -3791,7 +3860,7 @@ LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     HWND hSelf = g_hwnd.load();
                     if (hSelf) {
                         PostMessageW(hSelf, WM_APP_PERSIST_HOTKEY, 0, 0);
-                        PostMessageW(hSelf, WM_APP_APPLY_HOTKEY, 0, 0);
+                        PostMessageW(hSelf, WM_APP_APPLY_HOTKEYS, 0, 0);
                     }
                 }
             }
@@ -4394,7 +4463,7 @@ void ShowSettingsMenu(HWND hwnd, HWND menuOwner, POINT screenPoint) {
         case ID_HOTKEY_ENABLE_TOGGLE:
             g_hotkeyEnabled = !g_hotkeyEnabled.load();
             PersistHotkeys();
-            PostMessageW(hwnd, WM_APP_APPLY_HOTKEY, 0, 0);
+            PostMessageW(hwnd, WM_APP_APPLY_HOTKEYS, 0, 0);
             break;
         case ID_HOTKEY_HIDESHOW_SET:
             if (g_hotkeyEnabled.load()) { g_moveMode = false; PostMessageW(hwnd, WM_APP_START_HOTKEY_CAPTURE, 1, 0); }
@@ -4837,6 +4906,15 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
         }
 
+        case WM_HOTKEY: {
+            const int id = static_cast<int>(wParam);
+            if (g_hotkeyEnabled.load() && id >= kHotkeyHideShow && id <= kHotkeyPlayPause) {
+                g_pendingRawHotkeyDeadline[id] = 0.0;
+                DispatchHotkeyOnce(id);
+            }
+            return 0;
+        }
+
         case WM_INPUT: {
             RAWINPUT rawInput = {};
             UINT size = sizeof(rawInput);
@@ -4854,8 +4932,8 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             PersistHotkeys();
             return 0;
 
-        case WM_APP_APPLY_HOTKEY:
-            ApplyHideShowHotkey(hwnd);
+        case WM_APP_APPLY_HOTKEYS:
+            ApplyHotkeyInput(hwnd);
             return 0;
 
         case WM_APP_START_HOTKEY_CAPTURE:
@@ -4921,7 +4999,7 @@ DWORD WINAPI RenderThreadProc(void*) {
         if (SUCCEEDED(hrCo)) CoUninitialize();
         return 0;
     }
-    RegisterRawKeyboardInput(hwnd);
+    ApplyHotkeyInput(hwnd);
 
     SpringValue widthSpring, heightSpring, nudgeSpring;
     widthSpring.Reset(0.0f);
@@ -4968,6 +5046,7 @@ DWORD WINAPI RenderThreadProc(void*) {
         }
 
         const double now = NowSeconds();
+        ProcessPendingRawHotkeys(now);
         StopHotkeyCaptureIfDone();
 
         // Resolving the foreground process requires window/process queries.
@@ -5280,7 +5359,7 @@ DWORD WINAPI RenderThreadProc(void*) {
         g_captureHotkey = false;
         g_captureHotkeyTarget = 0;
     }
-    UnregisterRawKeyboardInput();
+    DisableHotkeyInput(hwnd);
     renderer.Shutdown();
     DestroyWindow(hwnd);
     g_hwnd.store(nullptr);
