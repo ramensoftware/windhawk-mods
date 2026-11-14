@@ -3774,7 +3774,7 @@ void DisableHotkeyInput(HWND) {
     ApplyHotkeyInput(nullptr);
 }
 
-bool g_capCtrl = false, g_capAlt = false, g_capShift = false, g_capWin = false;
+std::atomic<bool> g_capCtrl{false}, g_capAlt{false}, g_capShift{false}, g_capWin{false};
 
 LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode != HC_ACTION) {
@@ -5508,7 +5508,7 @@ void StopThreads() {
     if (g_hookThread) {
         const DWORD id = g_hookThreadId.load();
         if (id) PostThreadMessageW(id, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_hookThread, 2000);
+        WaitForSingleObject(g_hookThread, INFINITE);
         CloseHandle(g_hookThread);
         g_hookThread = nullptr;
     }
