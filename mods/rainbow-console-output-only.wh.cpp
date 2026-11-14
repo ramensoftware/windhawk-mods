@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              rainbow-console-output-only
-// @name            Rainbow Console
-// @description     Continuous true-color rainbow output for terminals
+// @name            Rainbow Console (Regex)
+// @description     Continuous true-color rainbow output with regex process targeting and safe global toggle.
 // @version         1.0
 // @author          nopp
 // @github          https://github.com/848488489-ff
@@ -10,34 +10,36 @@
 
 // ==WindhawkModReadme==
 /*
-# Rainbow Console
-This mod injects true-color (24-bit) rainbow colors into your terminal output.
+# Rainbow Console (Regex Target)
+This mod injects true-color (24-bit) rainbow colors into your terminal output. 
 
 ### Features:
-- **Continuous Rainbow**: Text is colored character by character using HSV color space.
-- **Safe Override**: Replaces original ANSI colors with the rainbow spectrum.
-- **Triggers**: Type `::rainbow_on` to enable and `::rainbow_off` to disable.
+- **Regex Targeting**: Target specific processes using simple wildcards (e.g., `cmd|git*|node`). 
+  *Note: Advanced regex features like `[]`, `+`, or `{}` are NOT supported.*
+- **Global Toggle**: Optionally inject into ALL processes, but this is NOT recommended.
+- **AI Safeguard**: Warning included for Terminal AI Agents.
 
-### ⚠️ IMPORTANT WARNING
-**DO NOT use this mod with `Always On` enabled when running Terminal AI Agents (e.g., Claude Code, Aider, Cursor CLI, Gemini CLI).** 
-The rainbow injection adds massive amounts of invisible ANSI escape sequences to every single character. This will severely pollute the AI's context window (wasting tokens) and may break terminal buffer calculations, leading to hallucinations or logic errors. Keep `Always On` disabled and use the `::rainbow_on` trigger only for manual, visual commands.
+### ⚠️ WARNING
+1. **DO NOT** enable "Inject All" (Global Mode) unless you want to risk crashing legacy apps. It is disabled by default.
+2. **DO NOT** enable "Always On" when running AI agents (Claude Code, Aider, etc.), as ANSI codes will break their context.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+- injectAll: false
+  $name: Inject into All Processes
+  $description: "[NOT RECOMMENDED] Injects into every process, which may cause legacy or GUI apps to crash. Default is false."
+- targetRegex: "cmd|powershell|pwsh|WindowsTerminal|OpenConsole|conhost|git|bash|mintty|py|node"
+  $name: Target Processes Regex
+  $description: "Simple wildcards only (e.g., 'cmd|git*|python'). No complex regex like [] or +. Do NOT include .exe."
 - alwaysOn: false
   $name: Always On
-  $description: "Enable rainbow immediately. [WARNING: DO NOT enable this when using Terminal AI Agents like Claude Code, as it will pollute their context with ANSI codes.]"
+  $description: "Enable rainbow immediately. [WARNING: DO NOT use with AI Agents.]"
 - triggerCommand: "::rainbow_on"
   $name: Trigger Command
-  $description: Type this command to enable rainbow.
 - disableCommand: "::rainbow_off"
   $name: Disable Command
-  $description: Type this command to disable rainbow.
-- targetProcesses: "*"
-  $name: Target Processes
-  $description: Comma-separated list of processes to support. Use "*" for all processes.
 */
 // ==/WindhawkModSettings==
 
@@ -51,44 +53,89 @@ static BOOL (WINAPI *pOrigWriteFile)(HANDLE, LPCVOID, DWORD, LPDWORD, void*) = N
 static CRITICAL_SECTION rc_cs;
 static int rc_colorIndex = 0;
 static BOOL rc_active = FALSE;
-static BOOL rc_isTarget = FALSE;
 
 static WCHAR rc_triggerCmd[256] = L"::rainbow_on";
 static WCHAR rc_disableCmd[256] = L"::rainbow_off";
 
-static void rc_ToLowerCase(WCHAR* str) {
-    for (int i = 0; str[i] != L'\0'; i++) {
-        if (str[i] >= L'A' && str[i] <= L'Z') str[i] += (L'a' - L'A');
+// 手写轻量级正则/通配符匹配器
+static BOOL rc_WildcardMatch(const WCHAR* str, const WCHAR* pattern) {
+    if (*pattern == L'\0') return *str == L'\0';
+    if (*pattern == L'*') {
+        while (*(pattern + 1) == L'*') pattern++; 
+        if (rc_WildcardMatch(str, pattern + 1)) return TRUE;
+        if (*str == L'\0') return FALSE;
+        return rc_WildcardMatch(str + 1, pattern);
     }
+    if (*pattern == L'?') {
+        if (*str == L'\0') return FALSE;
+        return rc_WildcardMatch(str + 1, pattern + 1);
+    }
+    if (*str != L'\0' && towlower(*str) == towlower(*pattern)) {
+        return rc_WildcardMatch(str + 1, pattern + 1);
+    }
+    return FALSE;
 }
 
+// 解析用户输入的正则表达式（支持 | 分隔和 * 通配符）
 static BOOL rc_IsTargetProcess() {
-    PCWSTR targetStr = Wh_GetStringSetting(L"targetProcesses");
-    if (!targetStr) return FALSE;
-
-    if (wcscmp(targetStr, L"*") == 0) {
-        Wh_FreeStringSetting(targetStr);
+    BOOL injectAll = Wh_GetIntSetting(L"injectAll") != 0;
+    if (injectAll) {
+        Wh_Log(L"[RainbowConsole] Global Injection enabled. Targeting ALL processes.");
         return TRUE;
+    }
+
+    PCWSTR regexStr = Wh_GetStringSetting(L"targetRegex");
+    if (!regexStr || wcslen(regexStr) == 0) {
+        Wh_Log(L"[RainbowConsole] Error: Target Regex is empty and Global Injection is false. Mod will not load.");
+        if (regexStr) Wh_FreeStringSetting(regexStr);
+        return FALSE;
+    }
+
+    // 🚨 格式强校验：扫描不支持的复杂正则符号
+    BOOL hasInvalidFormat = FALSE;
+    for (int i = 0; regexStr[i] != L'\0'; i++) {
+        WCHAR c = regexStr[i];
+        if (c == L'[' || c == L']' || c == L'+' || c == L'{' || c == L'}' || c == L'^' || c == L'$' || c == L'\\') {
+            Wh_Log(L"[RainbowConsole] Warning: Unsupported regex character '%c' detected in Target Regex. Only '*' and '?' wildcards are supported.", c);
+            hasInvalidFormat = TRUE;
+        }
+    }
+    if (hasInvalidFormat) {
+        Wh_Log(L"[RainbowConsole] Format error! Please simplify your regex. Example: 'cmd|git*|python'");
     }
 
     WCHAR procPath[MAX_PATH];
     GetModuleFileNameW(NULL, procPath, MAX_PATH);
     WCHAR* procName = wcsrchr(procPath, L'\\');
     if (procName) procName++; else procName = procPath;
-    
+
+    // 核心逻辑：自动砍掉 .exe 后缀，让用户填 "cmd" 就能匹配 "cmd.exe"
+    WCHAR* dot = wcsrchr(procName, L'.');
+    if (dot && _wcsicmp(dot, L".exe") == 0) *dot = L'\0';
+
     WCHAR targets[MAX_PATH * 4];
-    wcsncpy_s(targets, MAX_PATH * 4, targetStr, MAX_PATH * 4 - 1);
-    Wh_FreeStringSetting(targetStr);
-    
-    rc_ToLowerCase(procName);
-    rc_ToLowerCase(targets);
+    wcsncpy_s(targets, MAX_PATH * 4, regexStr, MAX_PATH * 4 - 1);
+    Wh_FreeStringSetting(regexStr);
 
     BOOL found = FALSE;
     WCHAR* nextToken = NULL;
-    WCHAR* token = wcstok_s(targets, L", ", &nextToken);
+    WCHAR* token = wcstok_s(targets, L"|", &nextToken);
     while (token) {
-        if (wcscmp(procName, token) == 0) { found = TRUE; break; }
-        token = wcstok_s(NULL, L", ", &nextToken);
+        // 兼容性处理：如果用户填了带 .exe 的，也帮他们砍掉
+        WCHAR* tDot = wcsrchr(token, L'.');
+        if (tDot && _wcsicmp(tDot, L".exe") == 0) *tDot = L'\0';
+
+        if (rc_WildcardMatch(procName, token)) {
+            found = TRUE;
+            Wh_Log(L"[RainbowConsole] Success: Process '%s' matched pattern '%s'. Mod loaded.", procName, token);
+            break;
+        }
+        token = wcstok_s(NULL, L"|", &nextToken);
+    }
+
+    if (!found) {
+        // 这里用普通日志，如果你在 Windhawk 日志里看到这行，说明当前程序没在白名单里
+        Wh_Log(L"[RainbowConsole] Process '%s' did not match any Target Regex.", procName);
     }
     return found;
 }
@@ -126,10 +173,8 @@ static void rc_HSVtoRGB(float H, float S, float V, int* r, int* g, int* b) {
 
 static void rc_MakeRainbow(const WCHAR* src, WCHAR* dst, int dstMax) {
     int d = 0;
-
     for (int i = 0; src[i] != L'\0' && d < dstMax - 32; ++i) {
         WCHAR ch = src[i];
-
         if (ch == L'\x1b') {
             if (src[i + 1] == L'\0') { dst[d++] = ch; continue; }
             if (src[i + 1] == L'[') {
@@ -154,32 +199,29 @@ static void rc_MakeRainbow(const WCHAR* src, WCHAR* dst, int dstMax) {
                 continue;
             }
         }
-
         if (ch == L'\r') { dst[d++] = ch; rc_colorIndex = 0; continue; }
         if (ch < L' ' || ch == 0x7f) { dst[d++] = ch; continue; }
 
         int r, g, b;
         float hue = (float)((rc_colorIndex * 15) % 360);
         rc_HSVtoRGB(hue, 100.0f, 100.0f, &r, &g, &b);
-        
         dst[d++] = L'\x1b'; dst[d++] = L'['; dst[d++] = L'3'; dst[d++] = L'8'; dst[d++] = L';';
         dst[d++] = L'2'; dst[d++] = L';';
         d += rc_UIntToWStr((unsigned int)r, &dst[d]); dst[d++] = L';';
         d += rc_UIntToWStr((unsigned int)g, &dst[d]); dst[d++] = L';';
         d += rc_UIntToWStr((unsigned int)b, &dst[d]); dst[d++] = L'm';
         dst[d++] = ch;
-        
         rc_colorIndex++;
     }
     if (d < dstMax - 5) wcscpy_s(&dst[d], dstMax - d, L"\x1b[0m");
 }
 
 static BOOL WINAPI rc_HookWriteConsoleW(HANDLE h, const VOID* b, DWORD n, LPDWORD w, LPVOID r) {
-    if (!rc_active || !rc_isTarget) return pOrigWriteConsoleW(h, b, n, w, r);
+    if (!rc_active || n == 0 || n > 8192) return pOrigWriteConsoleW(h, b, n, w, r);
 
     EnterCriticalSection(&rc_cs);
-    WCHAR src[MAX_RC_BUF] = {0};
-    wcsncpy_s(src, MAX_RC_BUF, (const WCHAR*)b, n < MAX_RC_BUF - 1 ? n : MAX_RC_BUF - 1);
+    WCHAR src[8192 + 1] = {0};
+    wcsncpy_s(src, 8192, (const WCHAR*)b, n);
 
     if (rc_triggerCmd[0] != L'\0' && wcsstr(src, rc_triggerCmd)) {
         rc_active = TRUE; if (w) *w = n; LeaveCriticalSection(&rc_cs); return TRUE;
@@ -198,29 +240,22 @@ static BOOL WINAPI rc_HookWriteConsoleW(HANDLE h, const VOID* b, DWORD n, LPDWOR
 }
 
 static BOOL WINAPI rc_HookWriteFile(HANDLE h, LPCVOID b, DWORD n, LPDWORD w, void* o) {
-    if (!rc_active || !rc_isTarget || n == 0) return pOrigWriteFile(h, b, n, w, o);
-    if (h != GetStdHandle(STD_OUTPUT_HANDLE) && h != GetStdHandle(STD_ERROR_HANDLE)) {
-        return pOrigWriteFile(h, b, n, w, o);
-    }
+    if (!rc_active || n == 0 || n > 8192) return pOrigWriteFile(h, b, n, w, o);
+    if (GetFileType(h) != FILE_TYPE_CHAR) return pOrigWriteFile(h, b, n, w, o);
 
     EnterCriticalSection(&rc_cs);
 
-    DWORD allocSize = n * 20;
-    if (allocSize < 512) allocSize = 512;
-    if (allocSize > MAX_RC_BUF) allocSize = MAX_RC_BUF;
-
-    WCHAR* src = (WCHAR*)malloc(allocSize * sizeof(WCHAR));
-    WCHAR* out = (WCHAR*)malloc(allocSize * sizeof(WCHAR));
+    WCHAR* src = (WCHAR*)malloc((n + 1) * sizeof(WCHAR));
+    WCHAR* out = (WCHAR*)malloc((n * 20 + 64) * sizeof(WCHAR));
     
     if (src && out) {
-        int wlen = MultiByteToWideChar(CP_UTF8, 0, (LPCCH)b, n, src, allocSize - 1);
+        int wlen = MultiByteToWideChar(CP_UTF8, 0, (LPCCH)b, n, src, n);
         if (wlen <= 0) {
-            wlen = MultiByteToWideChar(CP_ACP, 0, (LPCCH)b, n, src, allocSize - 1);
+            wlen = MultiByteToWideChar(CP_ACP, 0, (LPCCH)b, n, src, n);
         }
-        
         if (wlen > 0) {
             src[wlen] = L'\0';
-            rc_MakeRainbow(src, out, allocSize);
+            rc_MakeRainbow(src, out, n * 20 + 64);
 
             int clen = WideCharToMultiByte(CP_UTF8, 0, out, -1, NULL, 0, NULL, NULL);
             if (clen > 0) {
@@ -229,20 +264,16 @@ static BOOL WINAPI rc_HookWriteFile(HANDLE h, LPCVOID b, DWORD n, LPDWORD w, voi
                     WideCharToMultiByte(CP_UTF8, 0, out, -1, ansi, clen, NULL, NULL);
                     LeaveCriticalSection(&rc_cs);
                     BOOL ret = pOrigWriteFile(h, ansi, clen - 1, w, o);
-                    free(ansi);
-                    free(src);
-                    free(out);
+                    free(ansi); free(src); free(out);
                     return ret;
                 }
             }
         }
     }
-
     if (src) free(src);
     if (out) free(out);
-    
     LeaveCriticalSection(&rc_cs);
-    return pOrigWriteFile(h, b, n, w, o);
+    return pOrigWriteFile(h, b, n, w, o); 
 }
 
 static void LoadSettings() {
@@ -254,8 +285,7 @@ static void LoadSettings() {
 }
 
 BOOL Wh_ModInit() {
-    rc_isTarget = rc_IsTargetProcess();
-    if (!rc_isTarget) return FALSE;
+    if (!rc_IsTargetProcess()) return FALSE;
 
     InitializeCriticalSection(&rc_cs);
     LoadSettings();
