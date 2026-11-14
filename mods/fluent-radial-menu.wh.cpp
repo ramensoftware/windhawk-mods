@@ -2,7 +2,7 @@
 // @id              fluent-radial-menu
 // @name            Fluent Radial Menu
 // @description     Launch apps, files, folders, links, and shortcuts from a customizable radial menu on Windows 11.
-// @version         0.8.1
+// @version         0.8.2
 // @author          Fenryr
 // @github          https://github.com/soldier93HUN
 // @include         windhawk.exe
@@ -15,6 +15,8 @@
 
 Fluent Radial Menu adds a circular launcher to Windows 11. It comes with
 three pages of apps, folders, and Windows shortcuts and a built-in editor.
+
+![Fluent Radial Menu in action](https://i.imgur.com/fj0r5vV.gif)
 
 ## Getting started
 
@@ -49,11 +51,14 @@ select **Apply** when you are ready to use it. Shared profiles reference apps,
 folders, and custom icon files by path, so those may need to be updated on
 another PC. The built-in icons travel with the profile.
 
-Windhawk's **Profile source** setting selects the built-in editor or the
-optional standalone profile editor. A shortcut set in Windhawk takes
-priority over either profile's shortcut. Clear the Windhawk field to use the
-profile shortcut again. If Windows cannot register a new shortcut, check
-the Windhawk mod log for details.
+A shortcut set in Windhawk takes priority over the profile shortcut. Clear
+the Windhawk field to use the profile shortcut again. Check the Windhawk mod
+log if Windows cannot register a new shortcut.
+
+On 64-bit Windows, the menu opens native system apps from either Windhawk
+host. In the 32-bit file picker, enter **%WINDIR%\Sysnative** in the address
+bar to browse the native System32 folder. The editor saves those selections
+as System32 paths so the same profile works in the 64-bit host.
 */
 // ==/WindhawkModReadme==
 
@@ -64,15 +69,6 @@ the Windhawk mod log for details.
   $description: >-
     Enter a shortcut such as Ctrl+Alt+Space or Ctrl+Shift+M.
     Leave blank to use the profile shortcut (Ctrl+Alt+Space by default).
-- ConfigurationSource: editor
-  $name: Profile source
-  $description: >-
-    Use the built-in editor for actions, appearance, and profile settings.
-    Open the wheel and press F2, or right-click it and choose Edit radial menu.
-    Select Standalone profile only if you use the optional profile editor.
-  $options:
-    - editor: Built-in editor
-    - companion: Standalone profile
 */
 // ==/WindhawkModSettings==
 
@@ -149,13 +145,98 @@ std::wstring Trim(std::wstring_view value) {
     return std::wstring(value.substr(first, value.find_last_not_of(L" \t\r\n") - first + 1));
 }
 
-std::wstring Expand(const std::wstring& value) {
-    const DWORD size = ExpandEnvironmentStrings(value.c_str(), nullptr, 0);
+bool UsesWow64FileRedirection() {
+    static const bool redirected = [] {
+        USHORT machine = IMAGE_FILE_MACHINE_UNKNOWN;
+        return IsWow64Process2(GetCurrentProcess(), &machine, nullptr) &&
+               (machine == IMAGE_FILE_MACHINE_I386 || machine == IMAGE_FILE_MACHINE_ARMNT);
+    }();
+    return redirected;
+}
+
+std::wstring Expand(std::wstring value) {
+    if (UsesWow64FileRedirection() && GetEnvironmentVariableW(L"ProgramW6432", nullptr, 0)) {
+        for (size_t start = value.find(L'%'); start != value.npos;) {
+            const size_t end = value.find(L'%', start + 1);
+            if (end == value.npos) break;
+            constexpr std::wstring_view programFiles = L"%ProgramFiles%";
+            constexpr std::wstring_view nativeProgramFiles = L"%ProgramW6432%";
+            if (end - start + 1 == programFiles.size() &&
+                _wcsnicmp(value.c_str() + start, programFiles.data(), programFiles.size()) == 0) {
+                value.replace(start, programFiles.size(), nativeProgramFiles);
+                start = value.find(L'%', start + nativeProgramFiles.size());
+            } else {
+                start = value.find(L'%', end + 1);
+            }
+        }
+    }
+    const DWORD size = ExpandEnvironmentStringsW(value.c_str(), nullptr, 0);
     if (!size || size > 32768) return value;
     std::wstring result(size, L'\0');
-    if (ExpandEnvironmentStrings(value.c_str(), result.data(), size) != size) return value;
+    if (ExpandEnvironmentStringsW(value.c_str(), result.data(), size) != size) return value;
     result.pop_back();
     return result;
+}
+
+const std::wstring& WindowsDirectory() {
+    static const std::wstring directory = [] {
+        wchar_t path[MAX_PATH];
+        const UINT length = GetSystemWindowsDirectoryW(path, ARRAYSIZE(path));
+        return length && length < ARRAYSIZE(path) ? std::wstring(path, length) : std::wstring{};
+    }();
+    return directory;
+}
+
+bool ReplaceSystemDirectory(std::wstring& path, std::wstring_view from, std::wstring_view to) {
+    const auto& windows = WindowsDirectory();
+    if (windows.empty()) return false;
+    const std::wstring prefix = windows + L"\\" + std::wstring(from);
+    const size_t offset = path.starts_with(L"\\\\?\\") ? 4 : 0;
+    if (path.size() < offset + prefix.size()) return false;
+    std::wstring leading = path.substr(offset, prefix.size());
+    std::replace(leading.begin(), leading.end(), L'/', L'\\');
+    if (_wcsicmp(leading.c_str(), prefix.c_str()) != 0) return false;
+    const size_t boundary = offset + prefix.size();
+    if (boundary < path.size() && path[boundary] != L'\\' && path[boundary] != L'/') return false;
+    path.replace(boundary - from.size(), from.size(), to);
+    if (to == L"Sysnative") std::replace(path.begin() + offset, path.end(), L'/', L'\\');
+    return true;
+}
+
+std::wstring NativePath(std::wstring path) {
+    if (UsesWow64FileRedirection()) ReplaceSystemDirectory(path, L"System32", L"Sysnative");
+    return path;
+}
+
+// A resolved bare name may already point into the redirected system directory.
+// Keep the resolved file when Windows ships it only in that directory.
+std::wstring ResolveBareExecutable(const std::wstring& name) {
+    auto search = [&name](PCWSTR directory) -> std::wstring {
+        wchar_t path[MAX_PATH];
+        const DWORD length = SearchPathW(directory, name.c_str(), L".exe", ARRAYSIZE(path), path, nullptr);
+        return length && length < ARRAYSIZE(path) ? std::wstring(path, length) : std::wstring{};
+    };
+    auto resolved = search(nullptr);
+    if (!UsesWow64FileRedirection() || WindowsDirectory().empty()) return resolved;
+    if (resolved.empty()) {
+        const auto nativeDirectory = WindowsDirectory() + L"\\Sysnative";
+        return search(nativeDirectory.c_str());
+    }
+
+    auto native = resolved;
+    wchar_t wowPath[MAX_PATH];
+    const UINT length = GetSystemWow64DirectoryW(wowPath, ARRAYSIZE(wowPath));
+    const auto wowDirectory = length && length < ARRAYSIZE(wowPath)
+        ? std::wstring_view(wowPath, length) : std::wstring_view{};
+    const auto separator = wowDirectory.find_last_of(L'\\');
+    if (ReplaceSystemDirectory(native, L"System32", L"Sysnative") ||
+        (separator != wowDirectory.npos &&
+         ReplaceSystemDirectory(native, wowDirectory.substr(separator + 1), L"Sysnative"))) {
+        const DWORD attributes = GetFileAttributesW(native.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY))
+            return native;
+    }
+    return resolved;
 }
 
 std::optional<unsigned long> ParseNumber(std::wstring_view value, int base) {
@@ -249,7 +330,7 @@ enum class Theme { System, Light, Dark };
 enum class PageTransition { Instant, Crossfade, Rotate };
 
 struct Slot {
-    std::wstring name, target, arguments, icon, assetPath;
+    std::wstring name, target, arguments, icon;
     Action action = Action::Empty;
     ActionCategory category = ActionCategory::Unspecified;
     wchar_t glyph = 0;
@@ -327,10 +408,6 @@ std::wstring ReadString(PCWSTR path) {
     return value ? value.get() : L"";
 }
 
-int ReadInt(PCWSTR path, int low, int high) {
-    return std::clamp(Wh_GetIntSetting(L"%s", path), low, high);
-}
-
 Settings DefaultSettings() {
     Settings settings{};
     settings.transparency = settings.blur = 18;
@@ -349,30 +426,30 @@ Settings DefaultSettings() {
     settings.name = L"Default";
     settings.revision = L"00000000000000000000000000000000";
     const Slot slots[] = {
-        {L"File Explorer", L"%WINDIR%\\explorer.exe", L"", L"glyph:E8B7", L"", Action::Open},
-        {L"Windows Settings", L"ms-settings:", L"", L"glyph:E713", L"", Action::Open},
-        {L"Task Manager", L"%WINDIR%\\System32\\Taskmgr.exe", L"", L"glyph:E9D9", L"", Action::Open},
-        {L"Calculator", L"%WINDIR%\\System32\\calc.exe", L"", L"glyph:E8EF", L"", Action::Open},
-        {L"Notepad", L"%WINDIR%\\System32\\notepad.exe", L"", L"glyph:E70B", L"", Action::Open},
-        {L"Snipping Tool", L"Win+Shift+S", L"", L"glyph:E8C8", L"", Action::Shortcut},
-        {L"Terminal", L"wt.exe", L"", L"glyph:E756", L"", Action::Open},
-        {L"Task View", L"Win+Tab", L"", L"glyph:E7C4", L"", Action::Shortcut},
-        {L"Home Folder", L"%USERPROFILE%", L"", L"glyph:E80F", L"", Action::Open},
-        {L"Documents", L"shell:Personal", L"", L"glyph:E8A5", L"", Action::Open},
-        {L"Downloads", L"shell:Downloads", L"", L"glyph:E896", L"", Action::Open},
-        {L"Pictures", L"shell:My Pictures", L"", L"glyph:EB9F", L"", Action::Open},
-        {L"Music", L"shell:My Music", L"", L"glyph:E8D6", L"", Action::Open},
-        {L"Videos", L"shell:My Video", L"", L"glyph:E714", L"", Action::Open},
-        {L"Desktop Folder", L"shell:Desktop", L"", L"glyph:E7F4", L"", Action::Open},
-        {L"Recycle Bin", L"shell:RecycleBinFolder", L"", L"glyph:E74D", L"", Action::Open},
-        {L"Web Browser", L"https://www.bing.com/", L"", L"glyph:E774", L"", Action::Open},
-        {L"Search", L"Win+S", L"", L"glyph:E721", L"", Action::Shortcut},
-        {L"Clipboard History", L"Win+V", L"", L"glyph:E77F", L"", Action::Shortcut},
-        {L"Emoji Panel", L"Win+Period", L"", L"glyph:E899", L"", Action::Shortcut},
-        {L"Quick Settings", L"Win+A", L"", L"glyph:E9E9", L"", Action::Shortcut},
-        {L"Display Settings", L"ms-settings:display", L"", L"glyph:E7F4", L"", Action::Open},
-        {L"Sound Settings", L"ms-settings:sound", L"", L"glyph:E767", L"", Action::Open},
-        {L"Show Desktop", L"Win+D", L"", L"glyph:E8A7", L"", Action::Shortcut},
+        {L"File Explorer", L"%WINDIR%\\explorer.exe", L"", L"glyph:E8B7", Action::Open},
+        {L"Windows Settings", L"ms-settings:", L"", L"glyph:E713", Action::Open},
+        {L"Task Manager", L"%WINDIR%\\System32\\Taskmgr.exe", L"", L"glyph:E9D9", Action::Open},
+        {L"Calculator", L"%WINDIR%\\System32\\calc.exe", L"", L"glyph:E8EF", Action::Open},
+        {L"Notepad", L"%WINDIR%\\System32\\notepad.exe", L"", L"glyph:E70B", Action::Open},
+        {L"Snipping Tool", L"Win+Shift+S", L"", L"glyph:E8C8", Action::Shortcut},
+        {L"Terminal", L"wt.exe", L"", L"glyph:E756", Action::Open},
+        {L"Task View", L"Win+Tab", L"", L"glyph:E7C4", Action::Shortcut},
+        {L"Home Folder", L"%USERPROFILE%", L"", L"glyph:E80F", Action::Open},
+        {L"Documents", L"shell:Personal", L"", L"glyph:E8A5", Action::Open},
+        {L"Downloads", L"shell:Downloads", L"", L"glyph:E896", Action::Open},
+        {L"Pictures", L"shell:My Pictures", L"", L"glyph:EB9F", Action::Open},
+        {L"Music", L"shell:My Music", L"", L"glyph:E8D6", Action::Open},
+        {L"Videos", L"shell:My Video", L"", L"glyph:E714", Action::Open},
+        {L"Desktop Folder", L"shell:Desktop", L"", L"glyph:E7F4", Action::Open},
+        {L"Recycle Bin", L"shell:RecycleBinFolder", L"", L"glyph:E74D", Action::Open},
+        {L"Web Browser", L"https://www.bing.com/", L"", L"glyph:E774", Action::Open},
+        {L"Search", L"Win+S", L"", L"glyph:E721", Action::Shortcut},
+        {L"Clipboard History", L"Win+V", L"", L"glyph:E77F", Action::Shortcut},
+        {L"Emoji Panel", L"Win+Period", L"", L"glyph:E899", Action::Shortcut},
+        {L"Quick Settings", L"Win+A", L"", L"glyph:E9E9", Action::Shortcut},
+        {L"Display Settings", L"ms-settings:display", L"", L"glyph:E7F4", Action::Open},
+        {L"Sound Settings", L"ms-settings:sound", L"", L"glyph:E767", Action::Open},
+        {L"Show Desktop", L"Win+D", L"", L"glyph:E8A7", Action::Shortcut},
     };
     static_assert(ARRAYSIZE(slots) % kSlots == 0);
     for (size_t i = 0; i < ARRAYSIZE(slots); i += kSlots) {
@@ -384,92 +461,39 @@ Settings DefaultSettings() {
     return settings;
 }
 
-// Use legacy values if Windhawk still supplies the previous settings.
-std::optional<Settings> ReadLegacySettings() {
-    const auto shortcut = ReadString(L"Behavior.Shortcut");
-    if (shortcut.empty() || !Wh_GetIntSetting(L"Behavior.Pages")) return std::nullopt;
-    Settings settings{};
-    const auto theme = ReadString(L"Appearance.Theme");
-    if (theme == L"light") settings.theme = Theme::Light;
-    if (theme == L"dark") settings.theme = Theme::Dark;
-    if (ReadString(L"Appearance.Accent") == L"custom") {
-        std::wstring hex = Trim(ReadString(L"Appearance.AccentColor"));
-        if (hex.starts_with(L'#')) hex.erase(0, 1);
-        if (hex.size() == 6) settings.accent = ParseNumber(hex, 16);
-    }
-    settings.transparency = ReadInt(L"Appearance.Transparency", 0, 55);
-    settings.blur = ReadInt(L"Appearance.Blur", 0, 36);
-    settings.diameter = ReadInt(L"Appearance.Diameter", 220, 720);
-    settings.centerDiameter = ReadInt(L"Appearance.CenterDiameter", 88, settings.diameter - 96);
-    settings.iconSize = ReadInt(L"Appearance.IconSize", 12, 64);
-    settings.border = ReadInt(L"Appearance.Border", 0, 4);
-    settings.dividers = Wh_GetIntSetting(L"Appearance.Dividers");
-    settings.outerLabels = Wh_GetIntSetting(L"Labels.Outer");
-    settings.centerLabel = Wh_GetIntSetting(L"Labels.Center");
-    settings.pageLabel = Wh_GetIntSetting(L"Labels.Page");
-    settings.idleLabel = ReadString(L"Labels.Idle");
-    settings.animations = Wh_GetIntSetting(L"Animation.Enabled");
-    settings.respectMotion = Wh_GetIntSetting(L"Animation.RespectReducedMotion");
-    settings.speed = ReadInt(L"Animation.Speed", 25, 300);
-    settings.iconScale = ReadInt(L"Animation.IconScale", 100, 150);
-    settings.selectionMs = ReadInt(L"Animation.SelectionMs", 80, 600);
-    const auto transition = ReadString(L"Animation.PageTransition");
-    if (transition == L"none") settings.transition = PageTransition::Instant;
-    if (transition == L"rotate") settings.transition = PageTransition::Rotate;
-    settings.shortcutText = shortcut;
-    settings.shortcut = ParseChord(settings.shortcutText);
-    settings.centerOnMonitor = ReadString(L"Behavior.Position") == L"monitor";
-    settings.wheelSensitivity = ReadInt(L"Behavior.WheelSensitivity", 40, 360);
-    settings.closeAfterSelection = Wh_GetIntSetting(L"Behavior.CloseAfterSelection");
-    settings.holdToSelect = Wh_GetIntSetting(L"Behavior.HoldToSelect");
-    settings.pages.resize(ReadInt(L"Behavior.Pages", 1, kMaxPages));
-    settings.name = L"Imported Windhawk settings";
-    settings.revision = L"00000000000000000000000000000000";
-    for (size_t page = 0; page < settings.pages.size(); ++page) {
-        settings.pageNames.push_back(L"Page " + std::to_wstring(page + 1));
-        for (int index = 0; index < kSlots; ++index) {
-            Slot& slot = settings.pages[page][index];
-            const auto prefix = L"Slots[" + std::to_wstring(page * kSlots + index) + L"].";
-            const auto type = ReadString((prefix + L"Type").c_str());
-            if (type == L"open") slot.action = Action::Open;
-            if (type == L"command") slot.action = Action::Command;
-            if (type == L"shortcut") slot.action = Action::Shortcut;
-            slot.name = Trim(ReadString((prefix + L"Name").c_str()));
-            slot.target = Trim(ReadString((prefix + L"Target").c_str()));
-            slot.arguments = ReadString((prefix + L"Arguments").c_str());
-            slot.icon = Trim(ReadString((prefix + L"Icon").c_str()));
-            ResolveGlyph(slot);
-        }
-    }
-    return settings;
-}
-
-
-constexpr wchar_t kProfileFolder[] = L"\\FluentRadialMenu";
-constexpr wchar_t kEditorPath[] = L"\\Editor\\FluentRadialMenu.Settings.exe";
+constexpr wchar_t kProfileFile[] = L"\\editor.json";
 constexpr DWORD kMaxProfileBytes = 2 * 1024 * 1024;
 
-std::wstring ProfileRoot() {
-    PWSTR path = nullptr;
-    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &path))) return {};
-    std::wstring root = std::wstring(path) + kProfileFolder;
-    CoTaskMemFree(path);
-    return root;
+std::wstring CurrentUserSid() {
+    HANDLE token;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return {};
+    DWORD length = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &length);
+    std::vector<BYTE> user(length);
+    const bool found = length && GetTokenInformation(token, TokenUser, user.data(), length, &length);
+    CloseHandle(token);
+    PWSTR sid = nullptr;
+    if (!found || !ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(user.data())->User.Sid,
+                                          &sid)) return {};
+    std::unique_ptr<wchar_t, decltype(&LocalFree)> owner(sid, LocalFree);
+    return sid;
 }
 
-bool IsFile(const std::wstring& path) {
+std::wstring ProfileRoot() {
+    wchar_t storage[MAX_PATH];
+    if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage))) return {};
+    const auto sid = CurrentUserSid();
+    if (sid.empty()) return {};
+    auto path = std::wstring(storage) + L"\\" + sid;
+    if (CreateDirectoryW(path.c_str(), nullptr)) return path;
     const DWORD attributes = GetFileAttributesW(path.c_str());
-    return attributes != INVALID_FILE_ATTRIBUTES &&
-           !(attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT));
+    if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) &&
+        !(attributes & FILE_ATTRIBUTE_REPARSE_POINT)) return path;
+    return {};
 }
 
 bool IsHex(std::wstring_view text) {
     return text.find_first_not_of(L"0123456789abcdefABCDEF") == text.npos;
-}
-
-bool IsAssetName(std::wstring_view name) {
-    return name.size() == 68 && name.ends_with(L".png") &&
-           name.substr(0, 64).find_first_not_of(L"0123456789abcdef") == name.npos;
 }
 
 std::wstring FromUtf8(const std::string& text) {
@@ -672,8 +696,7 @@ void AppendProfile(std::wstring& json, const Settings& settings) {
     json += L"]}";
 }
 
-std::optional<Settings> ParseProfile(const std::wstring& text, const std::wstring& folder,
-                                     std::wstring& error) {
+std::optional<Settings> ParseProfile(const std::wstring& text, std::wstring& error) {
     // Windows.Data.Json is a public OS API. Use the declared WinRT interfaces
     // and query the activation factory and vector by their interface IDs.
     ComPtr<Json::IJsonValueStatics> factory;
@@ -761,11 +784,7 @@ std::optional<Settings> ParseProfile(const std::wstring& text, const std::wstrin
             if (slot.action != Action::Empty && slot.target.empty()) reader.Invalid(L"slot target");
             ResolveGlyph(slot);
             if (slot.icon.starts_with(L"glyph:") && !slot.glyph) reader.Invalid(L"slot glyph");
-            if (slot.icon.starts_with(L"asset:")) {
-                auto name = std::wstring_view(slot.icon).substr(6);
-                if (IsAssetName(name)) slot.assetPath = folder + L"\\Assets\\" + std::wstring(name);
-                if (slot.assetPath.empty() || !IsFile(slot.assetPath)) reader.Invalid(L"slot icon asset");
-            }
+            if (slot.icon.starts_with(L"asset:")) reader.Invalid(L"slot icon");
             if (!error.empty()) return {};
         }
     }
@@ -777,8 +796,9 @@ std::string ReadProfileBytes(const std::wstring& path, std::wstring& error) {
                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
                               OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
     if (file == INVALID_HANDLE_VALUE) {
-        error = GetLastError() == ERROR_FILE_NOT_FOUND ? L"No active profile." :
-                                                      L"Could not read the active profile.";
+        const auto code = GetLastError();
+        error = code == ERROR_FILE_NOT_FOUND || code == ERROR_PATH_NOT_FOUND
+                    ? L"No active profile." : L"Could not read the active profile.";
         return {};
     }
     LARGE_INTEGER size{};
@@ -794,7 +814,7 @@ std::string ReadProfileBytes(const std::wstring& path, std::wstring& error) {
     return contents;
 }
 
-bool SaveProfileBytes(const std::wstring& path, const std::string& contents) {
+bool SaveProfileBytes(const std::wstring& path, const std::string& contents, bool replaceExisting = true) {
     GUID id;
     wchar_t unique[40];
     if (contents.empty() || contents.size() > kMaxProfileBytes || FAILED(CoCreateGuid(&id)) ||
@@ -808,7 +828,7 @@ bool SaveProfileBytes(const std::wstring& path, const std::string& contents) {
                  written == contents.size() && FlushFileBuffers(file);
     CloseHandle(file);
     if (saved) saved = MoveFileExW(temporary.c_str(), path.c_str(),
-                                   MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+                                   MOVEFILE_WRITE_THROUGH | (replaceExisting ? MOVEFILE_REPLACE_EXISTING : 0));
     if (!saved) DeleteFileW(temporary.c_str());
     return saved;
 }
@@ -822,154 +842,36 @@ std::wstring NewRevision() {
     return revision;
 }
 
-// One local client at a time. Every request is one byte. The reply is a
-// little-endian length and UTF-8 JSON. Keep the reply alive until the client
-// closes, and bound all connection I/O so a stuck client cannot block unload.
-class CompanionPipe {
-public:
-    ~CompanionPipe() {
-        if (pipe_ != INVALID_HANDLE_VALUE) {
-            Cancel();
-            CloseHandle(pipe_);
-        }
-        if (io_.hEvent) CloseHandle(io_.hEvent);
+std::optional<Settings> ParseProfileBytes(const std::string& bytes, std::wstring& error) {
+    auto text = FromUtf8(bytes);
+    if (text.starts_with(L'\xfeff')) text.erase(0, 1);
+    if (text.empty()) {
+        error = L"The active profile is not valid UTF-8.";
+        return {};
     }
+    return ParseProfile(text, error);
+}
 
-    bool Start() {
-        if (Event()) return true;
-        if (io_.hEvent) CloseHandle(std::exchange(io_.hEvent, nullptr));
-        HANDLE token;
-        if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
-        DWORD length = 0;
-        GetTokenInformation(token, TokenUser, nullptr, 0, &length);
-        std::vector<BYTE> user(length);
-        bool found = GetTokenInformation(token, TokenUser, user.data(), length, &length);
-        CloseHandle(token);
-        PWSTR sid = nullptr;
-        if (!found || !ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(user.data())->User.Sid,
-                                              &sid)) return false;
-        const std::wstring userSid = sid;
-        LocalFree(sid);
-        if (!ProcessIdToSessionId(GetCurrentProcessId(), &session_)) return false;
-        const auto name = L"\\\\.\\pipe\\FluentRadialMenu.v1." + userSid + L"." +
-                          std::to_wstring(session_);
-        const auto sddl = L"O:" + userSid + L"D:P(A;;GA;;;" + userSid + L")";
-        PSECURITY_DESCRIPTOR descriptor = nullptr;
-        if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                sddl.c_str(), SDDL_REVISION_1, &descriptor, nullptr)) return false;
-        SECURITY_ATTRIBUTES security{sizeof(security), descriptor, FALSE};
-        io_.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (io_.hEvent) {
-            pipe_ = CreateNamedPipeW(name.c_str(), PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED |
-                                     FILE_FLAG_FIRST_PIPE_INSTANCE,
-                                     PIPE_TYPE_BYTE | PIPE_REJECT_REMOTE_CLIENTS, 1, 65536, 16, 0, &security);
-        }
-        LocalFree(descriptor);
-        if (pipe_ == INVALID_HANDLE_VALUE) return false;
-        Listen();
-        return true;
+void MigrateEditorProfile(const std::wstring& path) {
+    if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES ||
+        GetLastError() != ERROR_FILE_NOT_FOUND) return;
+
+    PWSTR folder = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &folder))) return;
+    std::unique_ptr<wchar_t, decltype(&CoTaskMemFree)> owner(folder, CoTaskMemFree);
+    const auto oldPath = std::wstring(folder) + L"\\FluentRadialMenu" + kProfileFile;
+    std::wstring error;
+    const auto bytes = ReadProfileBytes(oldPath, error);
+    if (error == L"No active profile.") return;
+    if (!error.empty() || !ParseProfileBytes(bytes, error)) {
+        Wh_Log(L"Could not import the prerelease radial menu layout: %s", error.c_str());
+        return;
     }
-
-    HANDLE Event() const { return pipe_ == INVALID_HANDLE_VALUE ? nullptr : io_.hEvent; }
-
-    DWORD Timeout() const {
-        if (!Event() || stage_ == Stage::Connect) return INFINITE;
-        const auto remaining = std::chrono::ceil<std::chrono::milliseconds>(deadline_ - Clock::now());
-        return static_cast<DWORD>(std::max<int64_t>(0, remaining.count()));
+    if (!SaveProfileBytes(path, bytes, false) &&
+        GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        Wh_Log(L"Could not copy the prerelease radial menu layout to Windhawk storage.");
     }
-
-    void Expire() {
-        if (Timeout() == 0) {
-            Cancel();
-            Restart();
-        }
-    }
-
-    template<class Reply>
-    void Complete(Reply reply) {
-        DWORD transferred = immediateBytes_;
-        if (pending_) {
-            const bool completed = GetOverlappedResult(pipe_, &io_, &transferred, FALSE);
-            pending_ = false;
-            if (!completed) {
-                Restart();
-                return;
-            }
-        }
-        if (stage_ == Stage::Connect && !failed_) {
-            ULONG session;
-            if (GetNamedPipeClientSessionId(pipe_, &session) && session == session_) {
-                deadline_ = Clock::now() + 3s;
-                Read(Stage::Request);
-                return;
-            }
-        } else if (stage_ == Stage::Request && !failed_ && transferred == 1) {
-            const std::string json = reply(request_);
-            const DWORD length = static_cast<DWORD>(json.size());
-            response_.assign(reinterpret_cast<const char*>(&length), sizeof(length));
-            response_ += json;
-            Prepare(Stage::Reply);
-            const bool done = WriteFile(pipe_, response_.data(), static_cast<DWORD>(response_.size()),
-                                        &immediateBytes_, &io_);
-            FinishStart(done);
-            return;
-        } else if (stage_ == Stage::Reply && !failed_ && transferred == response_.size()) {
-            Read(Stage::Disconnect);
-            return;
-        }
-        Restart();
-    }
-
-private:
-    enum class Stage { Connect, Request, Reply, Disconnect };
-    HANDLE pipe_ = INVALID_HANDLE_VALUE;
-    OVERLAPPED io_{};
-    Stage stage_ = Stage::Connect;
-    Time deadline_{};
-    DWORD session_ = 0, immediateBytes_ = 0;
-    bool pending_ = false, failed_ = false;
-    char request_ = 0;
-    std::string response_;
-
-    void Prepare(Stage stage) {
-        stage_ = stage;
-        const HANDLE event = io_.hEvent;
-        io_ = {};
-        io_.hEvent = event;
-        ResetEvent(event);
-        immediateBytes_ = 0;
-    }
-
-    void FinishStart(bool done, bool connecting = false) {
-        const DWORD error = done ? ERROR_SUCCESS : GetLastError();
-        pending_ = error == ERROR_IO_PENDING;
-        failed_ = !done && !pending_ && !(connecting && error == ERROR_PIPE_CONNECTED);
-        if (!pending_) SetEvent(io_.hEvent);
-    }
-
-    void Listen() {
-        Prepare(Stage::Connect);
-        FinishStart(ConnectNamedPipe(pipe_, &io_), true);
-    }
-
-    void Read(Stage stage) {
-        Prepare(stage);
-        FinishStart(ReadFile(pipe_, &request_, 1, &immediateBytes_, &io_));
-    }
-
-    void Cancel() {
-        if (!pending_) return;
-        CancelIoEx(pipe_, &io_);
-        DWORD transferred;
-        GetOverlappedResult(pipe_, &io_, &transferred, TRUE);
-        pending_ = false;
-    }
-
-    void Restart() {
-        DisconnectNamedPipe(pipe_);
-        Listen();
-    }
-};
+}
 
 float EaseOut(float progress) {
     const float remainder = 1 - progress;
@@ -1173,14 +1075,14 @@ std::wstring AutomaticIconKey(const Slot& slot) {
 
 std::wstring IconKey(const Slot& slot) {
     if (!slot.Active() || slot.glyph) return {};
-    if (!slot.icon.empty()) return L"custom:" + (slot.assetPath.empty() ? slot.icon : slot.assetPath);
+    if (!slot.icon.empty()) return L"custom:" + slot.icon;
     return AutomaticIconKey(slot);
 }
 
 std::shared_ptr<IconPixels> LoadIconPixels(IWICImagingFactory* wic, const std::wstring& key) {
     ComPtr<IWICBitmapSource> source;
     const bool custom = key.starts_with(L"custom:");
-    std::wstring path = Expand(key.substr(custom ? 7 : 6));
+    std::wstring path = NativePath(Expand(key.substr(custom ? 7 : 6)));
     if (path.starts_with(L"\\\\") || path.starts_with(L"//")) return {};
     if (custom) {
         ComPtr<IWICBitmapDecoder> decoder;
@@ -1384,23 +1286,20 @@ private:
     }
 
     static void RunAction(const Slot& slot) {
-        const auto target = Expand(slot.target);
+        auto target = NativePath(Expand(slot.target));
         const auto arguments = Expand(slot.arguments);
+        if (target.find_first_of(L"\\/:") == std::wstring::npos &&
+            (slot.action == Action::Command || UsesWow64FileRedirection())) {
+            auto resolved = ResolveBareExecutable(target);
+            if (!resolved.empty()) target = std::move(resolved);
+        }
         if (slot.action == Action::Command) {
-            // Resolve a bare executable name via PATH. Pass the application name
-            // explicitly so arguments are never treated as part of the path.
-            std::wstring executable = target;
-            if (target.find_first_of(L"\\/:") == std::wstring::npos) {
-                wchar_t resolved[MAX_PATH];
-                const DWORD length = SearchPathW(nullptr, target.c_str(), L".exe",
-                                                 ARRAYSIZE(resolved), resolved, nullptr);
-                if (length && length < ARRAYSIZE(resolved)) executable.assign(resolved, length);
-            }
-            std::wstring commandLine = L"\"" + executable + L"\" " + arguments;
+            // Pass the executable separately from its arguments.
+            std::wstring commandLine = L"\"" + target + L"\" " + arguments;
             STARTUPINFOW startup{};
             startup.cb = sizeof(startup);
             PROCESS_INFORMATION process{};
-            if (CreateProcessW(executable.c_str(), commandLine.data(), nullptr, nullptr, FALSE, 0,
+            if (CreateProcessW(target.c_str(), commandLine.data(), nullptr, nullptr, FALSE, 0,
                                nullptr, nullptr, &startup, &process)) {
                 CloseHandle(process.hThread);
                 CloseHandle(process.hProcess);
@@ -2874,7 +2773,7 @@ private:
         UpdatePages();
         BuildFields();
         UpdateApply();
-        Status(profileRoot_.empty() ? L"Local profile storage is unavailable."
+        Status(profileRoot_.empty() ? L"Windhawk profile storage is unavailable."
                                    : L"Select a wedge to edit it. Drag an icon to move or swap it.");
         building_ = false;
         Layout();
@@ -3348,9 +3247,9 @@ private:
             if (std::any_of(draft_.pages[page_].begin(), draft_.pages[page_].end(), [](const Slot& s) { return s.Active(); })) {
                 if (!SetTimer(window_, kModalTimer, 100, nullptr)) return;
                 const int answer = MessageBoxW(window_, L"Remove this page and its actions? You can undo this change.",
-                                               L"Remove page", MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING);
+                                               L"Remove page", MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONWARNING);
                 KillTimer(window_, kModalTimer);
-                if (answer != IDYES) return;
+                if (answer != IDOK) return;
             }
             Remember();
             draft_.pages.erase(draft_.pages.begin() + page_);
@@ -3419,13 +3318,14 @@ private:
             {L"All files", L"*.*"},
         };
         const bool executable = category == ActionCategory::App || category == ActionCategory::Command;
-        const auto path = PickFile(CLSID_FileOpenDialog,
+        auto path = PickFile(CLSID_FileOpenDialog,
             icon ? L"Choose an icon file" : folder ? L"Choose a folder" :
             executable ? L"Choose an application" : L"Choose a file",
             folder ? FOS_PICKFOLDERS : FOS_FILEMUSTEXIST,
             icon ? iconFilters : executable ? appFilters : nullptr,
             icon ? ARRAYSIZE(iconFilters) : executable ? ARRAYSIZE(appFilters) : 0);
         if (path.empty()) return;
+        ReplaceSystemDirectory(path, L"Sysnative", L"System32");
         if (path.size() > (icon ? 1024u : 2048u)) {
             Status(L"The selected path is too long.");
             return;
@@ -3443,7 +3343,6 @@ private:
 
     static void SetIcon(Slot& slot, std::wstring icon) {
         if (slot.icon == icon) return;
-        slot.assetPath.clear();
         slot.icon = std::move(icon);
         slot.glyph = 0;
         ResolveGlyph(slot);
@@ -3565,17 +3464,9 @@ private:
         constexpr COMDLG_FILTERSPEC filters[] = {{L"Radial menu profile", L"*.json"}};
         if (exporting) {
             if (!FinishRename()) return;
-            auto profile = draft_;
-            // Resolve assets from the standalone editor to ordinary file paths
-            // so the export does not depend on an internal asset name.
-            for (auto& page : profile.pages) {
-                for (auto& slot : page) {
-                    if (!slot.assetPath.empty()) slot.icon = slot.assetPath;
-                }
-            }
             std::wstring json, error;
-            AppendProfile(json, profile);
-            if (!ParseProfile(json, profileRoot_, error)) {
+            AppendProfile(json, draft_);
+            if (!ParseProfile(json, error)) {
                 Status(error);
                 return;
             }
@@ -3583,8 +3474,7 @@ private:
                                        FOS_OVERWRITEPROMPT, filters, ARRAYSIZE(filters));
             if (path.empty()) return;
             if (!profileRoot_.empty() &&
-                (_wcsicmp(path.c_str(), (profileRoot_ + L"\\editor.json").c_str()) == 0 ||
-                 _wcsicmp(path.c_str(), (profileRoot_ + L"\\active.json").c_str()) == 0)) {
+                _wcsicmp(path.c_str(), (profileRoot_ + kProfileFile).c_str()) == 0) {
                 Status(L"Choose a file other than the active profile.");
                 return;
             }
@@ -3603,7 +3493,7 @@ private:
             return;
         }
         if (json.starts_with(L'\xfeff')) json.erase(0, 1);
-        auto imported = ParseProfile(json, profileRoot_, error);
+        auto imported = ParseProfile(json, error);
         if (!imported) {
             Status(error);
             return;
@@ -3936,23 +3826,21 @@ public:
             if (window_ && CreatePointerWindow() && renderer_.Init() && StartShell()) {
                 profileRoot_ = ProfileRoot();
                 if (!profileRoot_.empty()) {
-                    CreateDirectoryW(profileRoot_.c_str(), nullptr);
+                    MigrateEditorProfile(profileRoot_ + kProfileFile);
                     watcher_ = FindFirstChangeNotificationW(profileRoot_.c_str(), FALSE,
                         FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_SIZE);
+                } else {
+                    Wh_Log(L"Windhawk profile storage is unavailable.");
                 }
                 ReloadWindhawkSettings();
                 for (;;) {
-                    HANDLE events[4] = {stop, reload};
+                    HANDLE events[3] = {stop, reload};
                     DWORD count = 2;
                     const DWORD watchIndex = watcher_ != INVALID_HANDLE_VALUE ? count++ : MAXDWORD;
                     if (watchIndex != MAXDWORD) events[watchIndex] = watcher_;
-                    const DWORD pipeIndex = pipe_.Event() ? count++ : MAXDWORD;
-                    if (pipeIndex != MAXDWORD) events[pipeIndex] = pipe_.Event();
-                    pipe_.Expire();
                     const DWORD result = MsgWaitForMultipleObjectsEx(
-                        count, events, pipe_.Timeout(), QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+                        count, events, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
                     if (result == WAIT_OBJECT_0) break;
-                    if (result == WAIT_TIMEOUT) continue;
                     if (result == WAIT_OBJECT_0 + 1) {
                         ReloadWindhawkSettings();
                         continue;
@@ -3962,10 +3850,6 @@ public:
                             FindCloseChangeNotification(std::exchange(watcher_, INVALID_HANDLE_VALUE));
                         }
                         ReloadProfile();
-                        continue;
-                    }
-                    if (pipeIndex != MAXDWORD && result == WAIT_OBJECT_0 + pipeIndex) {
-                        pipe_.Complete([this](char request) { return CompanionReply(request); });
                         continue;
                     }
                     if (result != WAIT_OBJECT_0 + count) break;
@@ -4166,92 +4050,33 @@ private:
     }
 
     void ReloadWindhawkSettings() {
-        const auto source = ReadString(L"ConfigurationSource");
-        const auto mode = source == L"companion" ? Source::Companion : Source::Editor;
-        if (mode != source_) {
-            editor_.Close();
-            profileError_.clear();
-            profileBytes_.clear();
-            appliedProfile_ = false;
-        }
-        source_ = mode;
         windhawkShortcut_ = Trim(ReadString(L"ActivationShortcut"));
-        if (!pipe_.Start() && source_ == Source::Companion) Wh_Log(L"Could not start the companion pipe");
         ReloadProfile(true);
     }
 
-    std::wstring ActivePath() const {
-        return profileRoot_ + (source_ == Source::Companion ? L"\\active.json" : L"\\editor.json");
-    }
-
     void ReloadProfile(bool windhawkChanged = false) {
-        std::wstring error;
-        auto bytes = profileRoot_.empty() ? std::string{} : ReadProfileBytes(ActivePath(), error);
-        if (profileRoot_.empty()) error = L"Local application data is unavailable.";
-        if (!bytes.empty() && bytes == profileBytes_ && appliedProfile_) {
-            profileError_.clear();
-            if (windhawkChanged) UpdateHotkey(settings_);
-            return;
-        }
-        if (error.empty()) {
-            auto text = FromUtf8(bytes);
-            if (text.starts_with(L'\xfeff')) text.erase(0, 1);
-            if (text.empty()) error = L"The active profile is not valid UTF-8.";
-            else if (auto updated = ParseProfile(text, profileRoot_, error)) {
-                profileBytes_ = std::move(bytes);
-                appliedProfile_ = true;
-                profileError_.clear();
-                ApplySettings(std::move(*updated));
-                return;
-            }
-        }
-        profileError_ = source_ == Source::Editor && error == L"No active profile."
-            ? std::wstring{} : std::move(error);
-        if (windhawkChanged) {
-            if (appliedProfile_) {
-                UpdateHotkey(settings_);
-                return;
-            }
-            auto legacy = ReadLegacySettings();
-            if (legacy && legacy->shortcut) {
-                std::wstring json, validationError;
-                AppendProfile(json, *legacy);
-                if (ParseProfile(json, profileRoot_, validationError)) {
-                    ApplySettings(std::move(*legacy));
+        if (!profileRoot_.empty()) {
+            std::wstring error;
+            auto bytes = ReadProfileBytes(profileRoot_ + kProfileFile, error);
+            if (error.empty() && bytes != profileBytes_) {
+                if (auto updated = ParseProfileBytes(bytes, error)) {
+                    profileBytes_ = std::move(bytes);
+                    ApplySettings(std::move(*updated));
                     return;
                 }
             }
-            ApplySettings(DefaultSettings());
+            if (!error.empty() && error != L"No active profile.") Wh_Log(L"%s", error.c_str());
         }
-    }
-
-    std::string CompanionReply(char request) {
-        bool previewOpened = false;
-        if (request == 'P') previewOpened = Open(Clock::now(), true);
-        std::wstring json = L"{";
-        JsonWriter response{json};
-        response.Flag(L"companionEnabled", source_ == Source::Companion);
-        response.Flag(L"previewOpened", previewOpened);
-        response.String(L"revision", appliedProfile_ && source_ == Source::Companion ? settings_.revision : L"");
-        response.String(L"error", profileError_);
-        response.String(L"hotkeyError", hotkeyError_);
-        if (request == 'S') {
-            response.Key(L"settings");
-            AppendProfile(json, settings_);
-        }
-        json += L'}';
-        return ToUtf8(json);
+        if (settings_.pages.empty()) ApplySettings(DefaultSettings());
+        else if (windhawkChanged) UpdateHotkey(settings_);
     }
 
     void ShowEditMenu() {
-        const auto editor = profileRoot_ + kEditorPath;
         POINT point;
         if (!GetCursorPos(&point)) return;
         const HMENU popup = CreatePopupMenu();
         if (!popup) return;
         AppendMenuW(popup, MF_STRING, 1, L"Edit radial menu");
-        if (!profileRoot_.empty() && IsFile(editor))
-            AppendMenuW(popup, MF_STRING, 2, L"Open standalone profile editor");
         RECT ownerBounds{};
         GetWindowRect(pointerWindow_, &ownerBounds);
         Hide();
@@ -4269,12 +4094,6 @@ private:
         ShowWindow(pointerWindow_, SW_HIDE);
         DestroyMenu(popup);
         if (choice == 1) OpenEditor();
-        if (choice == 2) {
-            Slot action;
-            action.action = Action::Open;
-            action.target = editor;
-            shell_->Launch(action);
-        }
     }
 
     void OpenEditor() {
@@ -4290,23 +4109,19 @@ private:
 
     bool SaveEditor(Settings draft, std::wstring& status) {
         if (profileRoot_.empty()) {
-            status = L"Local profile storage is unavailable.";
+            status = L"Windhawk profile storage is unavailable.";
             return false;
         }
         draft.revision = NewRevision();
-        if (source_ == Source::Editor) draft.name = L"Built-in editor";
+        draft.name = L"Built-in editor";
         std::wstring json;
         AppendProfile(json, draft);
-        if (!ParseProfile(json, profileRoot_, status)) return false;
-        if (!SaveProfileBytes(ActivePath(), ToUtf8(json))) {
+        if (!ParseProfile(json, status)) return false;
+        if (!SaveProfileBytes(profileRoot_ + kProfileFile, ToUtf8(json))) {
             status = L"Could not save the radial menu profile.";
             return false;
         }
         ReloadProfile();
-        if (!profileError_.empty()) {
-            status = profileError_;
-            return false;
-        }
         if (settings_.revision != draft.revision) {
             status = L"The saved profile could not be applied.";
             return false;
@@ -4746,12 +4561,9 @@ private:
     bool pointerPosted_ = false, keyboardSelection_ = false, animate_ = false;
     bool leftPressedInside_ = false;
     bool rightPressedInside_ = false, desktopPreview_ = false;
-    enum class Source { Editor, Companion };
-    Source source_ = Source::Editor;
-    bool appliedProfile_ = false;
     int hotkeyId_ = kHotkey;
     HANDLE watcher_ = INVALID_HANDLE_VALUE, stop_ = nullptr;
-    std::wstring profileRoot_, profileError_, hotkeyError_, registeredShortcut_, windhawkShortcut_;
+    std::wstring profileRoot_, hotkeyError_, registeredShortcut_, windhawkShortcut_;
     std::string profileBytes_;
     std::optional<Chord> hotkey_, pendingKeys_;
     Time keyDeadline_{};
@@ -4761,7 +4573,6 @@ private:
     VisualState state_;
     Renderer renderer_;
     MenuEditor editor_;
-    CompanionPipe pipe_;
     IconPixels backdrop_;
     std::shared_ptr<ShellWorker> shell_;
 };
@@ -4892,10 +4703,7 @@ BOOL Wh_ModInit() {
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
-        if (!Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr)) {
-            Wh_Log(L"Could not hook the tool host entry point");
-            ExitProcess(1);
-        }
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
