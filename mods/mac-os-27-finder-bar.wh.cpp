@@ -14964,10 +14964,13 @@ static LRESULT CALLBACK BsWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                         BsRender();
                     }
                 } else if (d.kind == BR_CHOICE) {
-                    BsChoiceMenu(hit);
+                    // Só o clique na caixa ou no botão vale (não no nome da linha).
+                    if (part == 1) BsChoiceMenu(hit);
                 } else if (d.kind == BR_ACTION) {
-                    BsAction(d.val);
-                    if (g_bs.hwnd) BsRender();
+                    if (part == 1) {
+                        BsAction(d.val);
+                        if (g_bs.hwnd) BsRender();
+                    }
                 } else if (d.kind == BR_PLACE) {
                     int k = g_bs.rows[hit].extra;
                     if (k >= 0 && k < (int)g_bsPlaces.size()) {
@@ -14978,7 +14981,7 @@ static LRESULT CALLBACK BsWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                         BsLayout();
                         BsRender();
                     }
-                } else if (d.kind == BR_ITEM || d.kind == BR_SWITCH) {
+                } else if ((d.kind == BR_ITEM || d.kind == BR_SWITCH) && part == 1) {
                     BsSet(d.val, !BsGet(d.val));
                     if (!BsReopenIfNeeded()) BsRender();
                 }
