@@ -933,6 +933,8 @@ struct Bar {
     float hVisFrom = 0, hVisTo = 0, hGrowFrom = 0, hGrowTo = 0;
     ULONGLONG hVisTick = 0, hGrowTick = 0;
     bool maxHidden = false;       // escondida por janela maximizada
+    ULONGLONG lqShot = 0;         // vidro líquido sem "ao vivo": quando a foto do fundo foi tirada
+    bool lqShown = false;         // a barra estava visível na última volta do vidro líquido
     bool peekReserved = false;    // mostrada pela alça: o espaço do topo reservado só enquanto ela fica
     bool peekColorOn = false;     // "Cor da janela": a barra na cor da barra de título da janela ativa
     DWORD peekColor = 0;          // essa cor (0xRRGGBB)
@@ -10549,7 +10551,7 @@ struct Flyout {
     HDC memDC = nullptr;
     HBITMAP dib = nullptr;
     HGDIOBJ oldBmp = nullptr;
-    IDWriteTextFormat *fTitle = nullptr, *fText = nullptr, *fIcon = nullptr;
+    IDWriteTextFormat *fTitle = nullptr, *fText = nullptr, *fIcon = nullptr, *fCode = nullptr;
     std::wstring title;
     std::vector<FlyDev> devs;
     D2D1_RECT_F track{}, more{}, sw{}, footer{};
@@ -10599,8 +10601,12 @@ static void FlyLoadBt() {
 #define WM_APP_BTSCAN (WM_APP + 12)
 struct BtFound {
     std::wstring id, name;
-    int state = 0;  // 0 pronto para parear, 1 pareando, 2 pareado, 3 falhou, 4 pede código (usar as Configurações)
+    int state = 0;  // 0 pronto para parear, 1 pareando, 2 pareado, 3 falhou, 4 pede código (usar as Configurações),
+                    // 5 confirmar o código (pin), 6 digitar o código no aparelho (pin)
+    std::wstring pin;
+    int answer = 0;  // resposta na pílula: 1 parear, 2 cancelar
 };
+static bool BtIsPrompt(int st) { return st == 5 || st == 6; }
 static SRWLOCK g_btLock = SRWLOCK_INIT;
 static std::vector<BtFound> g_btNew;
 static std::atomic<bool> g_btScanning{false}, g_btScanStop{false};
@@ -10680,7 +10686,8 @@ static DWORD WINAPI BtScanThread(LPVOID) {
 static void BtScanStart() {
     if (g_btScanning) return;
     AcquireSRWLockExclusive(&g_btLock);
-    g_btNew.erase(std::remove_if(g_btNew.begin(), g_btNew.end(), [](const BtFound& x) { return x.state != 1; }),
+    g_btNew.erase(std::remove_if(g_btNew.begin(), g_btNew.end(),
+                                 [](const BtFound& x) { return x.state != 1 && !BtIsPrompt(x.state); }),
                   g_btNew.end());
     ReleaseSRWLockExclusive(&g_btLock);
     g_btScanStop = false;
@@ -10688,12 +10695,31 @@ static void BtScanStart() {
     if (!StartJobThread(BtScanThread, nullptr)) g_btScanning = false;
 }
 
-static void BtSetState(const std::wstring& id, int st) {
+static void BtSetState(const std::wstring& id, int st, const std::wstring& pin = L"") {
     AcquireSRWLockExclusive(&g_btLock);
     for (auto& x : g_btNew)
-        if (x.id == id) x.state = st;
+        if (x.id == id) {
+            x.state = st;
+            x.pin = pin;
+            x.answer = 0;
+        }
     ReleaseSRWLockExclusive(&g_btLock);
 }
+static int BtTakeAnswer(const std::wstring& id) {
+    AcquireSRWLockExclusive(&g_btLock);
+    int a = 0;
+    for (auto& x : g_btNew)
+        if (x.id == id) std::swap(a, x.answer);
+    ReleaseSRWLockExclusive(&g_btLock);
+    return a;
+}
+static void BtAnswer(const std::wstring& id, int a) {
+    AcquireSRWLockExclusive(&g_btLock);
+    for (auto& x : g_btNew)
+        if (x.id == id && BtIsPrompt(x.state)) x.answer = a;
+    ReleaseSRWLockExclusive(&g_btLock);
+}
+static bool BtPillOpen();  // a pílula do Bluetooth está aberta (mais abaixo)
 
 // Pergunta do pareamento (código igual? / digite o código), feita na thread do
 // pareamento e não no tratador do WinRT: o tratador só guarda o pedido com um
@@ -10802,27 +10828,58 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
             req->def = nullptr;
             ReleaseSRWLockExclusive(&req->lock);
             if (!have) continue;
-            if (a.PairingKind() == DevicePairingKinds::DisplayPin) {
-                // Aceita já, para o aparelho esperar o código; a caixa só mostra o código.
-                std::wstring pin = a.Pin().c_str();
-                a.Accept();
+            // O código aparece na pílula do Bluetooth (como nas Configurações), com
+            // Parear e Cancelar; sem a pílula (sem o ícone na barra), numa caixa.
+            bool display = a.PairingKind() == DevicePairingKinds::DisplayPin;
+            std::wstring pin = a.Pin().c_str();
+            Wh_Log(L"Bluetooth: pedido de %s (%s)", display ? L"digitar código" : L"confirmar código", name.c_str());
+            if (display) {
+                a.Accept();  // já: o aparelho espera o código digitado
                 def.Complete();
-                BtBox(TF(L"Digite %s em %s e tecle Enter.", {pin, name}), MB_OK | MB_ICONINFORMATION, boxClose);
-            } else {
-                std::wstring q = TF(L"O código %s aparece em %s?", {std::wstring(a.Pin().c_str()), name});
-                if (BtBox(q, MB_YESNO | MB_ICONQUESTION, boxClose) == IDYES) a.Accept();
+            }
+            BtSetState(id, display ? 6 : 5, pin);
+            BtNotify(3);
+            ULONGLONG t0 = GetTickCount64();
+            bool pillSeen = false;
+            int ans = 0;
+            while (!boxClose()) {
+                if ((ans = BtTakeAnswer(id)) != 0) break;
+                if (BtPillOpen()) pillSeen = true;
+                if (!pillSeen && GetTickCount64() - t0 > 1500) {
+                    std::wstring q = display ? TF(L"Digite %s em %s e tecle Enter.", {pin, name})
+                                             : TF(L"O código %s aparece em %s?", {pin, name});
+                    int r = BtBox(q, display ? MB_OKCANCEL | MB_ICONINFORMATION : MB_YESNO | MB_ICONQUESTION, boxClose);
+                    ans = r == IDYES || r == IDOK ? 1 : r == 0 ? 0 : 2;
+                    break;
+                }
+                Sleep(100);
+            }
+            Wh_Log(L"Bluetooth: resposta %d", ans);
+            if (!display) {
+                if (ans == 1) a.Accept();
                 def.Complete();
+            }
+            if (op.Status() == AsyncStatus::Started) BtSetState(id, 1);
+            BtNotify(1);
+            if (ans == 2 && display && op.Status() == AsyncStatus::Started) {
+                WinrtCancelWait(op);  // cancelou com o código na tela
+                break;
             }
         }
         dropReq();
         if (op.Status() == AsyncStatus::Completed) {
             auto st = op.GetResults().Status();
+            Wh_Log(L"Bluetooth: pareamento terminou (%d)", (int)st);
             result = st == DevicePairingResultStatus::Paired || st == DevicePairingResultStatus::AlreadyPaired ? 2
                    : st == DevicePairingResultStatus::RequiredHandlerNotRegistered ? 4
                                                                                    : 3;
         }
+        else Wh_Log(L"Bluetooth: pareamento %s", op.Status() == AsyncStatus::Canceled ? L"cancelado" : L"com erro");
         custom.PairingRequested(token);
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"Bluetooth: erro 0x%08X %s", (unsigned)e.code(), e.message().c_str());
     } catch (...) {
+        Wh_Log(L"Bluetooth: erro no pareamento");
     }
     BtSetState(id, result);
     AcquireSRWLockExclusive(&g_btLock);
@@ -10845,6 +10902,19 @@ static void BtPair(const std::wstring& id) {
     }
 }
 
+// Linha de um aparelho pedindo o código: o código grande, uma frase e os botões.
+static const float kBtPromptH = 128;
+static void BtPromptButtons(const D2D1_RECT_F& r, float s, int state, D2D1_RECT_F& ok, D2D1_RECT_F& no) {
+    float bw = 96 * s, y1 = r.bottom - 8 * s, y0 = y1 - 30 * s;
+    ok = state == 5 ? D2D1::RectF(r.right - 8 * s - bw, y0, r.right - 8 * s, y1) : D2D1::RectF(0, 0, 0, 0);
+    float nr = state == 5 ? ok.left - 8 * s : r.right - 8 * s;
+    no = D2D1::RectF(nr - bw, y0, nr, y1);
+}
+static bool BtPillOpen() {
+    HWND h = g_fly.hwnd;
+    return h && IsWindow(h) && IsWindowVisible(h) && g_fly.kind == FLY_BT;
+}
+
 static void FlyLayout() {
     float s = g_fly.s;
     g_fly.M = std::round(22 * s);
@@ -10862,12 +10932,14 @@ static void FlyLayout() {
         if (RadioStateBt() != 0) {
             g_fly.scan = D2D1::RectF(M + 6 * s, M + y, M + pw - 6 * s, M + y + 32 * s);
             y += 34 * s;
+            std::vector<int> states;
             AcquireSRWLockShared(&g_btLock);
-            size_t n = g_btNew.size();
+            for (auto& x : g_btNew) states.push_back(x.state);
             ReleaseSRWLockShared(&g_btLock);
-            for (size_t i = 0; i < n; i++) {
-                g_fly.newRects.push_back(D2D1::RectF(M + 6 * s, M + y, M + pw - 6 * s, M + y + 36 * s));
-                y += 36 * s;
+            for (int st : states) {
+                float rh = (BtIsPrompt(st) ? kBtPromptH : 36) * s;
+                g_fly.newRects.push_back(D2D1::RectF(M + 6 * s, M + y, M + pw - 6 * s, M + y + rh));
+                y += rh;
             }
             y += 6 * s;
         } else {
@@ -10927,7 +10999,8 @@ static void FlyRender() {
         g_fly.fTitle = MakeFormat(g_settings.fontFamily.c_str(), DWRITE_FONT_WEIGHT_SEMI_BOLD, 13.5f * s);
         g_fly.fText = MakeFormat(g_settings.fontFamily.c_str(), DWRITE_FONT_WEIGHT_NORMAL, 13 * s);
         g_fly.fIcon = MakeFormat(g_iconFont.c_str(), DWRITE_FONT_WEIGHT_NORMAL, 16 * s);
-        if (!g_fly.fTitle || !g_fly.fText || !g_fly.fIcon) return;
+        g_fly.fCode = MakeFormat(g_settings.fontFamily.c_str(), DWRITE_FONT_WEIGHT_SEMI_BOLD, 26 * s);
+        if (!g_fly.fTitle || !g_fly.fText || !g_fly.fIcon || !g_fly.fCode) return;
         g_fly.fIcon->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
         DWRITE_TRIMMING trim = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
         IDWriteInlineObject* ell = nullptr;
@@ -11074,7 +11147,39 @@ static void FlyRender() {
             found = g_btNew;
             ReleaseSRWLockShared(&g_btLock);
             for (size_t i = 0; i < found.size() && i < g_fly.newRects.size(); i++) {
-                const D2D1_RECT_F& r = g_fly.newRects[i];
+                const D2D1_RECT_F& r0 = g_fly.newRects[i];
+                bool prompt = BtIsPrompt(found[i].state);
+                // Pedindo o código: a parte de cima é a linha normal; embaixo, o código.
+                const D2D1_RECT_F r = prompt ? D2D1::RectF(r0.left, r0.top, r0.right, r0.top + 36 * s) : r0;
+                if (prompt) {
+                    GlassCard(rt, br, D2D1::RoundedRect(r0, 10 * s, 10 * s),
+                              g_light ? D2D1::ColorF(0, 0, 0, 0.05f) : D2D1::ColorF(1, 1, 1, 0.07f), s);
+                    std::wstring code = found[i].pin;
+                    if (code.size() == 6) code.insert(3, L" ");
+                    br->SetColor(fg);
+                    rt->DrawText(code.c_str(), (UINT32)code.size(), g_fly.fCode,
+                                 D2D1::RectF(r0.left + 14 * s, r.bottom, r0.right - 14 * s, r.bottom + 36 * s), br);
+                    std::wstring q = TF(found[i].state == 5 ? L"O mesmo código aparece em %s?" : L"Digite este código em %s e tecle Enter.",
+                                        {found[i].name});
+                    br->SetColor(dim);
+                    rt->DrawText(q.c_str(), (UINT32)q.size(), g_fly.fText,
+                                 D2D1::RectF(r0.left + 14 * s, r.bottom + 36 * s, r0.right - 14 * s, r.bottom + 54 * s), br,
+                                 D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                    D2D1_RECT_F okR, noR;
+                    BtPromptButtons(r0, s, found[i].state, okR, noR);
+                    auto button = [&](const D2D1_RECT_F& b, PCWSTR label, bool main) {
+                        if (b.right <= b.left) return;
+                        GlassCard(rt, br, D2D1::RoundedRect(b, 15 * s, 15 * s),
+                                  main ? accent
+                                       : (g_light ? D2D1::ColorF(0, 0, 0, 0.08f) : D2D1::ColorF(1, 1, 1, 0.14f)), s);
+                        float tw = GmMeasure(g_fly.fText, label);
+                        br->SetColor(main ? D2D1::ColorF(1, 1, 1, 1) : fg);
+                        float x = (b.left + b.right - tw) / 2;
+                        rt->DrawText(label, (UINT32)wcslen(label), g_fly.fText, D2D1::RectF(x, b.top, b.right, b.bottom), br);
+                    };
+                    button(noR, T(L"Cancelar"), false);
+                    button(okR, T(L"Parear"), true);
+                }
                 float cy2 = (r.top + r.bottom) / 2;
                 if (g_fly.hover == FH_NEW + (int)i && (found[i].state == 0 || found[i].state >= 3))
                     GlassCard(rt, br, D2D1::RoundedRect(r, 8 * s, 8 * s), hoverC, s);
@@ -11082,7 +11187,8 @@ static void FlyRender() {
                 D2D1_ROUNDED_RECT bub = D2D1::RoundedRect(D2D1::RectF(icx - rad, cy2 - rad, icx + rad, cy2 + rad), rad, rad);
                 GlassCard(rt, br, bub, g_light ? D2D1::ColorF(0, 0, 0, 0.10f) : D2D1::ColorF(1, 1, 1, 0.16f), s);
                 FlyGlyph(0xE702, icx, cy2, 12 * s, fg);
-                PCWSTR st = found[i].state == 1 ? T(L"Pareando…") : found[i].state == 2 ? T(L"Pareado")
+                PCWSTR st = found[i].state == 5 ? T(L"Confirme o código") : found[i].state == 6 ? T(L"Digite o código")
+                          : found[i].state == 1 ? T(L"Pareando…") : found[i].state == 2 ? T(L"Pareado")
                           : found[i].state == 3 ? T(L"Tentar de novo") : found[i].state == 4 ? T(L"Configurações")
                                                                                          : T(L"Parear");
                 float stW = GmMeasure(g_fly.fText, st) + 4 * s;
@@ -11295,7 +11401,14 @@ static LRESULT CALLBACK FlyWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     st = g_btNew[hit - FH_NEW].state;
                 }
                 ReleaseSRWLockShared(&g_btLock);
-                if (st == 0 || st == 3) {
+                if (BtIsPrompt(st) && hit - FH_NEW < (int)g_fly.newRects.size()) {
+                    D2D1_RECT_F okR, noR;
+                    BtPromptButtons(g_fly.newRects[hit - FH_NEW], g_fly.s, st, okR, noR);
+                    float x = (float)LP_X(lp), y = (float)LP_Y(lp);
+                    auto in = [&](const D2D1_RECT_F& r) { return x >= r.left && x < r.right && y >= r.top && y < r.bottom; };
+                    if (in(okR)) BtAnswer(id, 1);
+                    else if (in(noR)) BtAnswer(id, 2);
+                } else if (st == 0 || st == 3) {
                     BtPair(id);
                     FlyRender();
                 } else if (st == 4) {  // pede um código digitado: só as Configurações fazem
@@ -11325,6 +11438,7 @@ static LRESULT CALLBACK FlyWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             GlassLayerDestroy(g_fly.glass);
             FlyReleaseGraphics();
             SafeRelease(g_fly.fTitle);
+            SafeRelease(g_fly.fCode);
             SafeRelease(g_fly.fText);
             SafeRelease(g_fly.fIcon);
             for (Bar* x : g_bars)
@@ -21802,7 +21916,19 @@ static void BarLiquidTick() {
     bool any = false;
     for (Bar* b : g_bars) {
         if (b->lq) any = true;
-        if (!b->lq || !IsWindowVisible(b->hwnd)) continue;
+        if (!b->lq) continue;
+        if (!IsWindowVisible(b->hwnd)) {
+            b->lqShown = false;
+            continue;
+        }
+        // Sem "Vidro líquido ao vivo", a foto do fundo é tirada quando a barra
+        // aparece e renovada a cada 5 s (papel de parede que muda), não 20 vezes
+        // por segundo.
+        bool justShown = !b->lqShown;
+        b->lqShown = true;
+        ULONGLONG now = GetTickCount64();
+        if (!g_glass.live && !justShown && b->lq->w && now - b->lqShot < 5000) continue;
+        b->lqShot = now;
         RECT wr;
         if (!GetWindowRect(b->hwnd, &wr)) continue;
         // Só o lugar da própria barra entra na foto: abaixo dela fica a barra de
@@ -23848,7 +23974,21 @@ static LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             DlOnDone((std::wstring*)lp);
             return 0;
         case WM_APP_BTSCAN: {
-            // Lista de aparelhos mudou (1) ou um pareamento terminou (2).
+            // Lista de aparelhos mudou (1), um pareamento terminou (2) ou um aparelho
+            // pede o código (3): a pílula do Bluetooth abre para mostrá-lo.
+            if (wp == 3 && !BtPillOpen()) {
+                for (Bar* bb : g_bars) {
+                    int k = -1;
+                    for (size_t j = 0; j < bb->items.size() && k < 0; j++)
+                        if (bb->items[j].kind == K_BT) k = (int)j;
+                    if (k >= 0) {
+                        if (g_tray.hwnd) CloseTrayPopup(false);
+                        if (g_fly.hwnd) FlyClose(false);
+                        FlyToggle(bb, k, FLY_BT);
+                        break;
+                    }
+                }
+            }
             if (g_fly.hwnd && g_fly.kind == FLY_BT) {
                 if (wp == 2) FlyLoadBt();  // o pareado aparece entre os conectados
                 FlyApply();
@@ -24716,6 +24856,11 @@ const UiTr kUiTr[] = {
     {L"Não foi possível parear", L"Couldn’t pair", L"No se pudo vincular", L"Impossible d’associer", L"Koppeln fehlgeschlagen", L"Impossibile associare", L"无法配对"},
     {L"Pede um código: use as Configurações de Bluetooth", L"Needs a code: use Bluetooth settings", L"Pide un código: usa la configuración de Bluetooth", L"Demande un code : utilisez les paramètres Bluetooth", L"Braucht einen Code: Bluetooth-Einstellungen verwenden", L"Richiede un codice: usa le impostazioni Bluetooth", L"需要代码：请使用蓝牙设置"},
     {L"O código %s aparece em %s?", L"Does the code %s show on %s?", L"¿Aparece el código %s en %s?", L"Le code %s s’affiche-t-il sur %s ?", L"Wird der Code %s auf %s angezeigt?", L"Il codice %s appare su %s?", L"代码 %s 是否显示在 %s 上？"},
+    {L"Cancelar", L"Cancel", L"Cancelar", L"Annuler", L"Abbrechen", L"Annulla", L"取消"},
+    {L"Confirme o código", L"Confirm the code", L"Confirma el código", L"Confirmez le code", L"Code bestätigen", L"Conferma il codice", L"确认代码"},
+    {L"Digite o código", L"Type the code", L"Escribe el código", L"Tapez le code", L"Code eingeben", L"Digita il codice", L"输入代码"},
+    {L"O mesmo código aparece em %s?", L"Does the same code show on %s?", L"¿Aparece el mismo código en %s?", L"Le même code s’affiche-t-il sur %s ?", L"Wird derselbe Code auf %s angezeigt?", L"Lo stesso codice appare su %s?", L"%s 上是否显示相同的代码？"},
+    {L"Digite este código em %s e tecle Enter.", L"Type this code on %s and press Enter.", L"Escribe este código en %s y pulsa Enter.", L"Tapez ce code sur %s puis appuyez sur Entrée.", L"Gib diesen Code auf %s ein und drücke die Eingabetaste.", L"Digita questo codice su %s e premi Invio.", L"在 %s 上输入此代码，然后按 Enter。"},
     {L"Digite %s em %s e tecle Enter.", L"Type %s on %s and press Enter.", L"Escribe %s en %s y pulsa Enter.", L"Tapez %s sur %s puis appuyez sur Entrée.", L"Gib %s auf %s ein und drücke die Eingabetaste.", L"Digita %s su %s e premi Invio.", L"输入 %s（在 %s 上），然后按 Enter。"},
     {L"Um vidro para tudo: Central, menus, painéis e pílulas", L"One glass for everything: Control Center, menus, panels and pills", L"Un vidrio para todo: Centro de control, menús, paneles y píldoras", L"Un verre pour tout : Centre de contrôle, menus, panneaux et pastilles", L"Ein Glas für alles: Kontrollzentrum, Menüs, Bereiche und Pillen", L"Un vetro per tutto: Centro di Controllo, menu, pannelli e pillole", L"一种玻璃用于全部：控制中心、菜单、面板和胶囊"},
     {L"Vidro: o mesmo vidro da Central e dos menus", L"Glass: the same glass as the Control Center and menus", L"Vidrio: el mismo vidrio del Centro de control y los menús", L"Verre : le même verre que le Centre de contrôle et les menus", L"Glas: dasselbe Glas wie Kontrollzentrum und Menüs", L"Vetro: lo stesso vetro del Centro di Controllo e dei menu", L"玻璃：与控制中心和菜单相同的玻璃"},
