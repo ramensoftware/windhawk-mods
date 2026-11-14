@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-autohide-instant-show
 // @name            Taskbar Auto-Hide Instant Show
-// @description     Removes the delay before the taskbar appears with custom animation types (elastic, bounce, fade, etc.)
-// @version         2.1
+// @description     Removes the delay before the taskbar appears with custom animation types (none, slide, elastic, bounce, fade, slide+fade, overshoot)
+// @version         2.2
 // @author          Bo0ii
 // @github          https://github.com/Bo0ii
 // @homepage        https://github.com/Bo0ii/windhawk-mods
@@ -20,10 +20,19 @@ The animation triggers instantly when your mouse touches the screen edge.
 
 ## Animation Types
 
+### No animation
+Taskbar snaps to final position instantly — no slide, no fade.
+
+### Slide (default)
+Default Windows slide, but sped up. Control speed with the speedup settings.
+
 ### Elastic (spring overshoot)
 The taskbar overshoots its target and oscillates like a spring.
 
 ![Elastic](https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/taskbar-autohide-instant-show/elastic.gif)
+
+### Bounce
+The taskbar bounces at its final position.
 
 ### Fade (opacity)
 The taskbar fades in/out in place.
@@ -31,15 +40,12 @@ The taskbar fades in/out in place.
 ![Fade](https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/taskbar-autohide-instant-show/Fade.gif)
 
 ### Slide + Fade (silky smooth)
-Combines sliding with a fade effect for the smoothest feel.
+Combines sliding with a fade effect using a quintic ease — the silkiest feel.
 
 ![Slide + Fade](https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/taskbar-autohide-instant-show/fade-slide.gif)
 
-### Slide (default)
-Default Windows slide, but sped up. Control speed with the speedup settings.
-
-### Bounce
-The taskbar bounces at its final position.
+### Overshoot
+Subtle spring past the target, then settles back.
 
 ## Settings
 
@@ -55,11 +61,13 @@ For all other modes, use *Show/Hide duration (ms)* to control timing.
   $name: Animation type
   $description: How the taskbar appears and disappears
   $options:
+    - none: No animation (instant)
     - slide: Slide (default with speedup)
     - elastic: Elastic (spring overshoot)
     - bounce: Bounce
     - fade: Fade (opacity)
     - slideFade: Slide + Fade (silky smooth)
+    - overshoot: Overshoot (subtle spring)
 - showSpeedup: 400
   $name: Show speedup % (Slide mode only)
   $description: >-
@@ -104,8 +112,9 @@ For all other modes, use *Show/Hide duration (ms)* to control timing.
   $name: Edge detection for empty monitors
   $description: >-
     Enable this if the taskbar does not appear when hovering the screen
-    edge on a monitor with no visible windows. Creates a background thread
-    that polls the cursor position.
+    edge on a monitor with no visible windows, or when a fullscreen app
+    swallows the mouse-edge event. Creates a background thread that polls
+    the cursor position.
 */
 // ==/WindhawkModSettings==
 
@@ -204,6 +213,28 @@ double EaseInCubic(double t) {
     return t * t * t;
 }
 
+double EaseOutQuint(double t) {
+    double t1 = 1.0 - t;
+    return 1.0 - t1 * t1 * t1 * t1 * t1;
+}
+
+double EaseInQuint(double t) {
+    return t * t * t * t * t;
+}
+
+double EaseOutBack(double t) {
+    const double c1 = 1.70158;
+    const double c3 = c1 + 1.0;
+    double t1 = t - 1.0;
+    return 1.0 + c3 * t1 * t1 * t1 + c1 * t1 * t1;
+}
+
+double EaseInBack(double t) {
+    const double c1 = 1.70158;
+    const double c3 = c1 + 1.0;
+    return c3 * t * t * t - c1 * t * t;
+}
+
 using GetTickCount_t = decltype(&GetTickCount);
 GetTickCount_t GetTickCount_Original;
 DWORD WINAPI GetTickCount_Hook() {
@@ -269,7 +300,8 @@ void DoCustomAnimation(HWND hWnd,
     int totalFrames = (int)(duration / frameDuration);
     if (totalFrames < 1) totalFrames = 1;
 
-    bool usePosition = (animType == 1 || animType == 2 || animType == 4);
+    bool usePosition = (animType == 1 || animType == 2 || animType == 4 ||
+                        animType == 5);
     bool useFade = (animType == 3 || animType == 4);
 
     LONG_PTR originalExStyle = 0;
@@ -314,8 +346,11 @@ void DoCustomAnimation(HWND hWnd,
                     alphaT = EaseOutCubic(t);
                     break;
                 case 4:
-                    posT = EaseOutCubic(t);
-                    alphaT = EaseOutCubic(t);
+                    posT = EaseOutQuint(t);
+                    alphaT = EaseOutQuint(t);
+                    break;
+                case 5:
+                    posT = EaseOutBack(t);
                     break;
             }
         } else {
@@ -330,8 +365,11 @@ void DoCustomAnimation(HWND hWnd,
                     alphaT = EaseInCubic(t);
                     break;
                 case 4:
-                    posT = EaseInCubic(t);
-                    alphaT = EaseInCubic(t);
+                    posT = EaseInQuint(t);
+                    alphaT = EaseInQuint(t);
+                    break;
+                case 5:
+                    posT = EaseInBack(t);
                     break;
             }
         }
@@ -418,7 +456,10 @@ void WINAPI TrayUI_SlideWindow_Hook(void* pThis,
                                     bool animate) {
     Wh_Log(L"> show=%d animType=%d", show, g_settings.animationType);
 
-    if (g_settings.animationType == 0) {
+    if (g_settings.animationType == -1) {
+        // No animation — snap to final position instantly.
+        TrayUI_SlideWindow_Original(pThis, hWnd, rect, monitor, show, false);
+    } else if (g_settings.animationType == 0) {
         g_slideWindowSpeedup =
             show ? g_settings.showSpeedup : g_settings.hideSpeedup;
         g_slideWindowStartTime = TimerGetSeconds();
@@ -496,7 +537,6 @@ UINT_PTR WINAPI SetTimer_Hook(HWND hWnd,
 
 HANDLE g_edgeCheckThread = NULL;
 std::atomic<bool> g_edgeCheckRunning{false};
-std::atomic<bool> g_edgeTriggered{false};
 
 HWND FindTaskbarForMonitor(HMONITOR hMon) {
     HWND hTaskbar = FindWindow(L"Shell_TrayWnd", NULL);
@@ -551,7 +591,16 @@ bool IsCursorAtMonitorEdge(POINT pt, HMONITOR hMon) {
 }
 
 DWORD WINAPI EdgeCheckThreadProc(LPVOID) {
-    const DWORD pollInterval = 50;
+    // Fast poll so we notice the cursor hitting the edge immediately.
+    const DWORD pollInterval = 20;
+    // Re-post the unhide trigger while the cursor sits at the edge and
+    // the taskbar is still hidden. No one-shot latch — a single
+    // PostMessage can be swallowed by foreground apps (fullscreen Chrome,
+    // terminals, games), so we keep retrying until it takes or the cursor
+    // leaves.
+    const DWORD retryInterval = 150;
+
+    DWORD lastRetryTime = 0;
 
     while (g_edgeCheckRunning) {
         POINT pt;
@@ -560,16 +609,18 @@ DWORD WINAPI EdgeCheckThreadProc(LPVOID) {
                 MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
 
             if (IsCursorAtMonitorEdge(pt, hMon)) {
-                if (!g_edgeTriggered.exchange(true)) {
+                DWORD now = GetTickCount();
+                if (lastRetryTime == 0 ||
+                    now - lastRetryTime >= retryInterval) {
                     HWND hTaskbar = FindTaskbarForMonitor(hMon);
                     if (hTaskbar &&
                         IsTaskbarEffectivelyHidden(hTaskbar, hMon)) {
-                        // Trigger the unhide timer handler
                         PostMessage(hTaskbar, WM_TIMER, 3, 0);
                     }
+                    lastRetryTime = now ? now : 1;
                 }
             } else {
-                g_edgeTriggered = false;
+                lastRetryTime = 0;
             }
         }
 
@@ -801,7 +852,9 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 
 void LoadSettings() {
     LPCWSTR animType = Wh_GetStringSetting(L"animationType");
-    if (wcscmp(animType, L"elastic") == 0) {
+    if (wcscmp(animType, L"none") == 0) {
+        g_settings.animationType = -1;
+    } else if (wcscmp(animType, L"elastic") == 0) {
         g_settings.animationType = 1;
     } else if (wcscmp(animType, L"bounce") == 0) {
         g_settings.animationType = 2;
@@ -809,6 +862,8 @@ void LoadSettings() {
         g_settings.animationType = 3;
     } else if (wcscmp(animType, L"slideFade") == 0) {
         g_settings.animationType = 4;
+    } else if (wcscmp(animType, L"overshoot") == 0) {
+        g_settings.animationType = 5;
     } else {
         g_settings.animationType = 0;
     }

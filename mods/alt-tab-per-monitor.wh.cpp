@@ -2,7 +2,7 @@
 // @id              alt-tab-per-monitor
 // @name            Alt+Tab per monitor
 // @description     Pressing Alt+Tab shows all open windows on the primary display. This mod shows only the windows on the monitor where the cursor is.
-// @version         1.1.1
+// @version         1.2.1
 // @author          L3r0y
 // @github          https://github.com/L3r0yThingz
 // @include         explorer.exe
@@ -14,14 +14,16 @@
 /*
 # Alt+Tab per monitor
 
-When you press the Alt+Tab combination, the window switcher will appear on the
-primary display, showing all open windows across all monitors. This mod
-customizes the behavior to display the switcher on the monitor where the cursor
-is currently located, showing only the windows present on that specific monitor.
+By default, pressing Alt+Tab shows all open windows on the primary display. This
+mod customizes the behavior so that Alt+Tab displays the switcher on the monitor
+where the cursor is located, showing only the windows on that monitor.
 
-Additionally, the previous known Windows behavior can still be achieved by
-pressing Win+Alt+Tab, which will show all windows across all monitors. You can
-configure where the Win+Alt+Tab UI appears in the mod settings.
+Both Alt+Tab and Win+Alt+Tab can be independently configured with:
+
+- **Display location**: Primary monitor or monitor where cursor is located.
+- **Windows to show**: All monitors, cursor's monitor only, or cursor's monitor
+  with an exception for the primary monitor (shows all windows when cursor is on
+  the primary monitor).
 
 ![Gif](https://i.imgur.com/Hpg8TKh.gif)
 */
@@ -29,31 +31,63 @@ configure where the Win+Alt+Tab UI appears in the mod settings.
 
 // ==WindhawkModSettings==
 /*
-- winAltTabLocation: primary
-  $name: Win+Alt+Tab display location
-  $description: |
-    Choose where the Alt+Tab switcher appears when using Win+Alt+Tab (which
-    shows all windows from all monitors)
+- altTabLocation: cursor
+  $name: "Alt+Tab: Display location"
+  $description: Choose which monitor the Alt+Tab switcher appears on
   $options:
-  - primary: Primary monitor (default Windows behavior)
   - cursor: Monitor where cursor is located
+  - primary: Primary monitor
+- altTabWindows: cursorMonitor
+  $name: "Alt+Tab: Windows to show"
+  $description: Choose which windows to show when using Alt+Tab
+  $options:
+  - cursorMonitor: Windows from the monitor where cursor is located
+  - allMonitors: Windows from all monitors
+  - cursorMonitorExceptPrimary: >-
+      Windows from cursor's monitor, but all windows when on primary
+- winAltTabLocation: primary
+  $name: "Win+Alt+Tab: Display location"
+  $description: >-
+    Choose which monitor the Alt+Tab switcher appears on when using Win+Alt+Tab
+  $options:
+  - primary: Primary monitor
+  - cursor: Monitor where cursor is located
+- winAltTabWindows: allMonitors
+  $name: "Win+Alt+Tab: Windows to show"
+  $description: Choose which windows to show when using Win+Alt+Tab
+  $options:
+  - allMonitors: Windows from all monitors
+  - cursorMonitor: Windows from the monitor where cursor is located
+  - cursorMonitorExceptPrimary: >-
+      Windows from cursor's monitor, but all windows when on primary
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
+#include <servprov.h>
+
 #include <atomic>
 #include <functional>
 
-#include <winrt/windows.foundation.collections.h>
+#include <winrt/base.h>
 
-enum class WinAltTabLocation {
+enum class Location {
     primary,
     cursor,
 };
 
+enum class WindowsToShow {
+    allMonitors,
+    cursorMonitor,
+    cursorMonitorExceptPrimary,
+};
+
 struct {
-    WinAltTabLocation winAltTabLocation;
+    Location altTabLocation;
+    WindowsToShow altTabWindows;
+    Location winAltTabLocation;
+    WindowsToShow winAltTabWindows;
 } g_settings;
 
 enum class WinVersion {
@@ -67,7 +101,7 @@ WinVersion g_winVersion;
 std::atomic<DWORD> g_threadIdForAltTabShowWindow;
 std::atomic<DWORD> g_lastThreadIdForXamlAltTabViewHost_CreateInstance;
 std::atomic<DWORD> g_threadIdForXamlAltTabViewHost_CreateInstance;
-ULONGLONG g_CreateInstance_TickCount;
+std::atomic<ULONGLONG> g_CreateInstance_TickCount;
 constexpr ULONGLONG kDeltaThreshold = 200;
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
@@ -127,18 +161,27 @@ bool IsWinKeyPressed() {
     return GetAsyncKeyState(VK_LWIN) < 0 || GetAsyncKeyState(VK_RWIN) < 0;
 }
 
-bool HandleAltTabWindow(RECT* rect) {
-    if (g_settings.winAltTabLocation == WinAltTabLocation::primary &&
-        IsWinKeyPressed()) {
-        return false;
+HMONITOR GetAltTabTargetMonitor() {
+    auto location = IsWinKeyPressed() ? g_settings.winAltTabLocation
+                                      : g_settings.altTabLocation;
+
+    if (location == Location::primary) {
+        return nullptr;
     }
 
     POINT pt;
     if (!GetCursorPos(&pt)) {
-        return false;
+        return nullptr;
     }
 
-    auto hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    return MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+}
+
+bool HandleAltTabWindow(RECT* rect) {
+    HMONITOR hMon = GetAltTabTargetMonitor();
+    if (!hMon) {
+        return false;
+    }
 
     MONITORINFO monInfo;
     monInfo.cbSize = sizeof(MONITORINFO);
@@ -239,21 +282,88 @@ HRESULT WINAPI CVirtualDesktop_IsViewVisible_Hook(void* pThis,
     return ret;
 }
 
+// {C2F03A33-21F5-47FA-B4BB-156362A2F239}
+const CLSID CLSID_ImmersiveShell = {
+    0xC2F03A33,
+    0x21F5,
+    0x47FA,
+    {0xB4, 0xBB, 0x15, 0x63, 0x62, 0xA2, 0xF2, 0x39},
+};
+
+// {47094E3A-0CF2-430F-806F-CF9E4F0F12DD}
+const GUID SID_IImmersiveMonitorService = {
+    0x47094E3A,
+    0x0CF2,
+    0x430F,
+    {0x80, 0x6F, 0xCF, 0x9E, 0x4F, 0x0F, 0x12, 0xDD},
+};
+
+// {4D4C1E64-E410-4FAA-BAFA-59CA069BFEC2}
+const IID IID_IImmersiveMonitorManager = {
+    0x4D4C1E64,
+    0xE410,
+    0x4FAA,
+    {0xBA, 0xFA, 0x59, 0xCA, 0x06, 0x9B, 0xFE, 0xC2},
+};
+
+// The returned monitors are IImmersiveMonitor objects.
+struct IImmersiveMonitorManager : public IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetCount(UINT* count) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetConnectedCount(UINT* count) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetAt(UINT index, IUnknown** monitor) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetFromHandle(HMONITOR monitorHandle,
+                                                    IUnknown** monitor) = 0;
+};
+
+winrt::com_ptr<IUnknown> GetImmersiveMonitorFromHandle(HMONITOR monitorHandle) {
+    winrt::com_ptr<IServiceProvider> serviceProvider;
+    HRESULT hr =
+        CoCreateInstance(CLSID_ImmersiveShell, nullptr, CLSCTX_LOCAL_SERVER,
+                         IID_PPV_ARGS(serviceProvider.put()));
+    if (FAILED(hr)) {
+        Wh_Log(L"CoCreateInstance failed: 0x%08X", hr);
+        return nullptr;
+    }
+
+    winrt::com_ptr<IImmersiveMonitorManager> monitorManager;
+    hr = serviceProvider->QueryService(SID_IImmersiveMonitorService,
+                                       IID_IImmersiveMonitorManager,
+                                       monitorManager.put_void());
+    if (FAILED(hr)) {
+        Wh_Log(L"QueryService failed: 0x%08X", hr);
+        return nullptr;
+    }
+
+    winrt::com_ptr<IUnknown> monitor;
+    hr = monitorManager->GetFromHandle(monitorHandle, monitor.put());
+    if (FAILED(hr)) {
+        Wh_Log(L"GetFromHandle failed: 0x%08X", hr);
+        return nullptr;
+    }
+
+    return monitor;
+}
+
 using XamlAltTabViewHost_Show_t = HRESULT(WINAPI*)(void* pThis,
-                                                   void* param1,
-                                                   int param2,
-                                                   void* param3);
+                                                   void* monitor,
+                                                   int flags,
+                                                   void* applicationView);
 XamlAltTabViewHost_Show_t XamlAltTabViewHost_Show_Original;
 HRESULT WINAPI XamlAltTabViewHost_Show_Hook(void* pThis,
-                                            void* param1,
-                                            int param2,
-                                            void* param3) {
+                                            void* monitor,
+                                            int flags,
+                                            void* applicationView) {
     Wh_Log(L">");
-    g_threadIdForAltTabShowWindow = GetCurrentThreadId();
-    HRESULT ret =
-        XamlAltTabViewHost_Show_Original(pThis, param1, param2, param3);
-    g_threadIdForAltTabShowWindow = 0;
-    return ret;
+
+    // The switcher is placed and sized for the monitor passed to Show.
+    winrt::com_ptr<IUnknown> targetMonitor;
+    if (HMONITOR monitorHandle = GetAltTabTargetMonitor()) {
+        targetMonitor = GetImmersiveMonitorFromHandle(monitorHandle);
+    }
+
+    return XamlAltTabViewHost_Show_Original(
+        pThis, targetMonitor ? targetMonitor.get() : monitor, flags,
+        applicationView);
 }
 
 using CAltTabViewHost_Show_t = HRESULT(WINAPI*)(void* pThis,
@@ -269,36 +379,6 @@ HRESULT WINAPI CAltTabViewHost_Show_Hook(void* pThis,
     g_threadIdForAltTabShowWindow = GetCurrentThreadId();
     HRESULT ret = CAltTabViewHost_Show_Original(pThis, param1, param2, param3);
     g_threadIdForAltTabShowWindow = 0;
-    return ret;
-}
-
-using ITaskGroupWindowInformation_Position_t =
-    HRESULT(WINAPI*)(void* pThis, winrt::Windows::Foundation::Rect* rect);
-ITaskGroupWindowInformation_Position_t
-    ITaskGroupWindowInformation_Position_Original;
-HRESULT WINAPI ITaskGroupWindowInformation_Position_Hook(
-    void* pThis,
-    winrt::Windows::Foundation::Rect* rect) {
-    if (g_threadIdForAltTabShowWindow != GetCurrentThreadId()) {
-        return ITaskGroupWindowInformation_Position_Original(pThis, rect);
-    }
-    g_threadIdForAltTabShowWindow = 0;
-
-    RECT newRectNative;
-    if (!HandleAltTabWindow(&newRectNative)) {
-        return ITaskGroupWindowInformation_Position_Original(pThis, rect);
-    }
-
-    winrt::Windows::Foundation::Rect newRect{
-        static_cast<float>(newRectNative.left),
-        static_cast<float>(newRectNative.top),
-        static_cast<float>(newRectNative.right - newRectNative.left),
-        static_cast<float>(newRectNative.bottom - newRectNative.top),
-    };
-
-    HRESULT ret =
-        ITaskGroupWindowInformation_Position_Original(pThis, &newRect);
-
     return ret;
 }
 
@@ -327,8 +407,24 @@ HRESULT WINAPI CMultitaskingViewFrame_CreateFrame_Hook(void* pThis,
 }
 
 HRESULT CreateInstanceHook(std::function<HRESULT()> original) {
-    if (IsWinKeyPressed()) {
+    auto windows = IsWinKeyPressed() ? g_settings.winAltTabWindows
+                                     : g_settings.altTabWindows;
+
+    if (windows == WindowsToShow::allMonitors) {
         return original();
+    }
+
+    if (windows == WindowsToShow::cursorMonitorExceptPrimary) {
+        POINT pt;
+        if (GetCursorPos(&pt)) {
+            HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO monInfo;
+            monInfo.cbSize = sizeof(MONITORINFO);
+            if (GetMonitorInfo(hMon, &monInfo) &&
+                (monInfo.dwFlags & MONITORINFOF_PRIMARY)) {
+                return original();
+            }
+        }
     }
 
     g_threadIdForXamlAltTabViewHost_CreateInstance = GetCurrentThreadId();
@@ -421,20 +517,51 @@ HRESULT WINAPI CAltTabViewHost_CreateInstance_Win11_Hook(void* pThis,
 }
 
 void LoadSettings() {
-    PCWSTR winAltTabLocation = Wh_GetStringSetting(L"winAltTabLocation");
-    g_settings.winAltTabLocation = WinAltTabLocation::primary;
-    if (wcscmp(winAltTabLocation, L"cursor") == 0) {
-        g_settings.winAltTabLocation = WinAltTabLocation::cursor;
-    }
-    Wh_FreeStringSetting(winAltTabLocation);
+    auto loadLocation = [](PCWSTR name, Location defaultVal) {
+        PCWSTR val = Wh_GetStringSetting(name);
+        Location result = defaultVal;
+        if (wcscmp(val, L"primary") == 0) {
+            result = Location::primary;
+        } else if (wcscmp(val, L"cursor") == 0) {
+            result = Location::cursor;
+        }
+        Wh_FreeStringSetting(val);
+        return result;
+    };
+
+    auto loadWindows = [](PCWSTR name, WindowsToShow defaultVal) {
+        PCWSTR val = Wh_GetStringSetting(name);
+        WindowsToShow result = defaultVal;
+        if (wcscmp(val, L"allMonitors") == 0) {
+            result = WindowsToShow::allMonitors;
+        } else if (wcscmp(val, L"cursorMonitor") == 0) {
+            result = WindowsToShow::cursorMonitor;
+        } else if (wcscmp(val, L"cursorMonitorExceptPrimary") == 0) {
+            result = WindowsToShow::cursorMonitorExceptPrimary;
+        }
+        Wh_FreeStringSetting(val);
+        return result;
+    };
+
+    g_settings.altTabLocation =
+        loadLocation(L"altTabLocation", Location::cursor);
+    g_settings.altTabWindows =
+        loadWindows(L"altTabWindows", WindowsToShow::cursorMonitor);
+    g_settings.winAltTabLocation =
+        loadLocation(L"winAltTabLocation", Location::primary);
+    g_settings.winAltTabWindows =
+        loadWindows(L"winAltTabWindows", WindowsToShow::allMonitors);
 }
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
+    LoadSettings();
+
     g_winVersion = GetWindowsVersion();
 
-    HMODULE twinuiPcshellModule = LoadLibrary(L"twinui.pcshell.dll");
+    HMODULE twinuiPcshellModule = LoadLibraryEx(L"twinui.pcshell.dll", nullptr,
+                                                LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!twinuiPcshellModule) {
         Wh_Log(L"Couldn't load twinui.pcshell.dll");
         return FALSE;
@@ -468,11 +595,6 @@ BOOL Wh_ModInit() {
                 {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
                 &XamlAltTabViewHost_Show_Original,
                 XamlAltTabViewHost_Show_Hook,
-            },
-            {
-                {LR"(public: __cdecl winrt::impl::consume_Windows_Internal_Shell_TaskGroups_ITaskGroupWindowInformation<struct winrt::Windows::Internal::Shell::TaskGroups::ITaskGroupWindowInformation>::Position(struct winrt::Windows::Foundation::Rect const &)const )"},
-                &ITaskGroupWindowInformation_Position_Original,
-                ITaskGroupWindowInformation_Position_Hook,
             },
             {
                 {LR"(long __cdecl XamlAltTabViewHost_CreateInstance(struct XamlViewHostInitializeArgs const &,struct _GUID const &,void * *))"},

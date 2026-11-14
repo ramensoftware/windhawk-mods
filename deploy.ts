@@ -2,17 +2,121 @@ import * as child_process from 'child_process';
 import * as fs from 'fs';
 import * as https from 'https';
 import * as path from 'path';
-import ModSourceUtils from './modSourceUtils';
+import ModSourceUtils from './modSourceUtils.js';
 import { Feed } from 'feed';
 import { OutgoingHttpHeaders } from 'http';
-import showdown from 'showdown';
+import MarkdownIt from 'markdown-it';
+
+// Author name variations of the same github account. The first item of each
+// pair is the canonical name.
+const allowedAuthorNamePairs = [
+    ['CatmanFan / Mr._Lechkar', 'CatmanFan'],
+    ['Anixx', 'anixx'],
+    ['Isabella Lulamoon (kawapure)', 'kawapure'],
+];
+
+// Github accounts of the same author, e.g. after a rename, where old mod
+// versions still refer to the old account. The first item of each pair is the
+// current account.
+const allowedAuthorGithubPairs = [
+    ['https://github.com/meteoni', 'https://github.com/meteony'],
+    ['https://github.com/getrektbynoob15', 'https://github.com/getrektbynoob20'],
+    ['https://github.com/sharexza', 'https://github.com/raviadityasetiawan-oss'],
+];
 
 type ModAuthorData = {
     github: string;
+    // The numeric id of the github account, which, unlike the login, is never
+    // reused. Null if the account at the login isn't the author's. Kept from the
+    // last deploy once recorded.
+    githubId?: number | null;
     author: string;
     homepages: string[],
     twitter?: string;
 };
+
+type CommitMeta = {
+    timestamp: number;
+    message: string;
+};
+
+type FileChange = {
+    changeType: string;
+    filePath: string;
+};
+
+// A row of the update server's reviews/get_all.php: approved reviews only,
+// in ascending id. A reply is a review whose parentId names another.
+type PublicReview = {
+    id: number;
+    modId: string;
+    parentId: number | null;
+    timestamp: number;
+    authorName: string;
+    modVersion: string | null;
+    content: string;
+    votes: number;
+};
+
+type ModReviews = {
+    // The number of top-level reviews (replies excluded), what the catalog
+    // carries.
+    count: number;
+    // The file's entries, in the order the server gave them.
+    reviews: Omit<PublicReview, 'modId'>[];
+};
+
+class GitCache {
+    commitMeta: Map<string, CommitMeta>;
+    commitOrder: string[];
+    modCommits: Map<string, { commit: string; changeType: string }[]>;
+    commitFiles: Map<string, FileChange[]>;
+    blobs: Map<string, string>;
+
+    constructor(data: {
+        commitMeta: Map<string, CommitMeta>;
+        commitOrder: string[];
+        modCommits: Map<string, { commit: string; changeType: string }[]>;
+        commitFiles: Map<string, FileChange[]>;
+        blobs: Map<string, string>;
+    }) {
+        this.commitMeta = data.commitMeta;
+        this.commitOrder = data.commitOrder;
+        this.modCommits = data.modCommits;
+        this.commitFiles = data.commitFiles;
+        this.blobs = data.blobs;
+    }
+
+    getCommitMeta(commit: string): CommitMeta {
+        const meta = this.commitMeta.get(commit);
+        if (!meta) {
+            throw new Error(`No metadata for commit ${commit}`);
+        }
+        return meta;
+    }
+
+    getModCommits(modId: string): { commit: string; changeType: string }[] {
+        const entries = this.modCommits.get(modId);
+        if (!entries || entries.length === 0) {
+            throw new Error(`No commit history for mod ${modId}`);
+        }
+        return entries;
+    }
+
+    getBlob(ref: string): string {
+        const content = this.blobs.get(ref);
+        if (content === undefined) {
+            throw new Error(`Blob not found in cache: ${ref}`);
+        }
+        return content;
+    }
+}
+
+class HttpError extends Error {
+    constructor(public statusCode: number | undefined, body: string) {
+        super('Request failed. status: ' + statusCode + ', body: ' + body);
+    }
+}
 
 // Inspired by https://gist.github.com/ktheory/df3440b01d4b9d3197180d5254d7fb65
 async function fetchJson(url: string, headers?: OutgoingHttpHeaders) {
@@ -27,7 +131,7 @@ async function fetchJson(url: string, headers?: OutgoingHttpHeaders) {
                     if (res.statusCode && res.statusCode >= 200 && res.statusCode <= 299) {
                         resolve(JSON.parse(body));
                     } else {
-                        reject('Request failed. status: ' + res.statusCode + ', body: ' + body);
+                        reject(new HttpError(res.statusCode, body));
                     }
                 });
             });
@@ -46,8 +150,22 @@ function JSONstringifyOrder(obj: any, space: number) {
     return JSON.stringify(obj, Array.from(allKeys).sort(), space);
 }
 
+// Puts arrays of plain numbers in formatted JSON on a single line. Can't match
+// inside strings, since JSON strings can't contain raw newlines.
+function JSONcompactNumberArrays(json: string) {
+    return json.replace(/\[\s*(-?[\d.eE+-]+(?:,\s*-?[\d.eE+-]+)*)\s*\]/g,
+        (_match, items: string) => '[' + items.split(/,\s*/).join(', ') + ']');
+}
+
 function gitExec(args: string[]) {
-    const result = child_process.spawnSync('git', args, { encoding: 'utf8' });
+    const result = child_process.spawnSync('git', args, {
+        encoding: 'utf8',
+        maxBuffer: 512 * 1024 * 1024,
+    });
+    if (result.error) {
+        throw new Error('git ' + args.join(' ') + ' failed: ' + result.error.message);
+    }
+
     if (result.status !== 0) {
         throw new Error('git ' + args.join(' ') + ' failed with status ' + result.status + ' and stderr ' + result.stderr);
     }
@@ -59,35 +177,156 @@ function gitExec(args: string[]) {
     return result.stdout;
 }
 
-function getModCreatedTime(modId: string) {
-    const time = parseInt(gitExec([
-        'log',
-        '--diff-filter=A',
-        '--format=%ct',
-        '-1',
-        '--',
-        `mods/${modId}.wh.cpp`,
-    ]), 10);
-    if (isNaN(time)) {
-        throw new Error(`Can't get created time for ${modId}`);
+function batchReadBlobs(refs: string[]): Map<string, string> {
+    if (refs.length === 0) {
+        return new Map();
     }
 
-    return time * 1000;
+    const result = child_process.spawnSync('git', ['cat-file', '--batch'], {
+        input: refs.join('\n') + '\n',
+        maxBuffer: 512 * 1024 * 1024,
+    });
+
+    if (result.status !== 0) {
+        throw new Error('git cat-file --batch failed with status ' + result.status +
+            ' and stderr ' + (result.stderr?.toString() ?? ''));
+    }
+
+    const output = result.stdout;
+    const map = new Map<string, string>();
+    let offset = 0;
+
+    for (let i = 0; i < refs.length; i++) {
+        const headerEnd = output.indexOf(0x0A, offset);
+        if (headerEnd === -1) {
+            throw new Error(`Unexpected end of cat-file output at ref ${refs[i]}`);
+        }
+        const header = output.subarray(offset, headerEnd).toString('utf8');
+
+        if (header.endsWith('missing')) {
+            throw new Error(`git cat-file: ${refs[i]} → ${header}`);
+        }
+
+        const size = parseInt(header.split(' ')[2], 10);
+        const contentStart = headerEnd + 1;
+        const content = output.subarray(contentStart, contentStart + size).toString('utf8');
+        map.set(refs[i], content);
+        offset = contentStart + size + 1;
+    }
+
+    return map;
 }
 
-function getModModifiedTime(modId: string) {
-    const time = parseInt(gitExec([
-        'log',
-        '--format=%ct',
-        '-1',
-        '--',
-        `mods/${modId}.wh.cpp`,
-    ]), 10);
-    if (isNaN(time)) {
-        throw new Error(`Can't get modified time for ${modId}`);
+function buildGitCache(): GitCache {
+    console.log('Building git cache...');
+
+    // Bulk 1: All commit metadata (hash, timestamp, message).
+    // Uses double-null as record separator, single-null as field separator.
+    console.log('  Loading commit metadata...');
+    const metaOutput = gitExec(['log', '--format=%H%x00%ct%x00%B%x00%x00']);
+    const commitMeta = new Map<string, CommitMeta>();
+    const commitOrder: string[] = [];
+
+    for (const record of metaOutput.split('\0\0')) {
+        const trimmed = record.replace(/^\n/, '');
+        if (!trimmed) {
+            continue;
+        }
+        const firstNull = trimmed.indexOf('\0');
+        const secondNull = trimmed.indexOf('\0', firstNull + 1);
+        const hash = trimmed.slice(0, firstNull);
+        const timestamp = parseInt(trimmed.slice(firstNull + 1, secondNull), 10);
+        const message = trimmed.slice(secondNull + 1);
+        commitMeta.set(hash, { timestamp, message });
+        commitOrder.push(hash);
+    }
+    console.log(`  ${commitMeta.size} commits`);
+
+    // Bulk 2: All commits with their changed files (name-status).
+    // Null byte before hash makes commit boundaries unambiguous.
+    console.log('  Loading commit file changes...');
+    const fileOutput = gitExec(['log', '--format=%x00%H', '--name-status', '--no-renames']);
+    const modCommits = new Map<string, { commit: string; changeType: string }[]>();
+    const commitFiles = new Map<string, FileChange[]>();
+
+    const chunks = fileOutput.split('\0');
+    // First chunk is always empty (before the leading null byte).
+    if (chunks[0].trim()) {
+        throw new Error('Unexpected content before first null byte in git log output');
     }
 
-    return time * 1000;
+    for (let ci = 1; ci < chunks.length; ci++) {
+        const chunk = chunks[ci];
+        if (!chunk.trim()) {
+            // Trailing empty chunk after last null byte.
+            if (ci !== chunks.length - 1) {
+                throw new Error('Unexpected empty chunk in git log output');
+            }
+            break;
+        }
+        const lines = chunk.split('\n');
+        const hash = lines[0].trim();
+        if (!/^[0-9a-f]{40}$/.test(hash)) {
+            throw new Error(`Expected a commit hash, got '${hash}'`);
+        }
+
+        const files: FileChange[] = [];
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line) {
+                // Blank lines separate the hash from file entries.
+                continue;
+            }
+            const statusMatch = line.match(/^([A-Z]\d*)\t(.+)$/);
+            if (!statusMatch) {
+                throw new Error(`Unexpected name-status line in commit ${hash}: '${line}'`);
+            }
+            const changeType = statusMatch[1][0];
+            const filePath = statusMatch[2].split('\t').pop()!; // last part handles renames
+
+            files.push({ changeType, filePath });
+
+            const match = filePath.match(/^mods\/(.+)\.wh\.cpp$/);
+            if (match) {
+                const modId = match[1];
+                if (!modCommits.has(modId)) {
+                    modCommits.set(modId, []);
+                }
+                modCommits.get(modId)!.push({ commit: hash, changeType });
+            }
+        }
+        commitFiles.set(hash, files);
+    }
+    console.log(`  ${modCommits.size} mods, ${commitFiles.size} commits with file data`);
+
+    // Bulk 3: Pre-fetch all mod blobs via cat-file --batch.
+    console.log('  Pre-fetching mod blobs...');
+    const blobRefs: string[] = [];
+    for (const [modId, entries] of modCommits) {
+        for (const entry of entries) {
+            if (entry.changeType !== 'D') {
+                blobRefs.push(`${entry.commit}:mods/${modId}.wh.cpp`);
+            }
+        }
+    }
+    const blobs = batchReadBlobs(blobRefs);
+    console.log(`  ${blobs.size} blobs loaded`);
+
+    return new GitCache({ commitMeta, commitOrder, modCommits, commitFiles, blobs });
+}
+
+function getModCreatedTime(modId: string, cache: GitCache) {
+    const entries = cache.getModCommits(modId);
+    const oldest = entries[entries.length - 1];
+    if (oldest.changeType !== 'A') {
+        throw new Error(`Expected first commit for mod ${modId} to be an add, got '${oldest.changeType}'`);
+    }
+    return cache.getCommitMeta(oldest.commit).timestamp * 1000;
+}
+
+function getModModifiedTime(modId: string, cache: GitCache) {
+    const entries = cache.getModCommits(modId);
+    return cache.getCommitMeta(entries[0].commit).timestamp * 1000;
 }
 
 function findCachedMod(modId: string, version: string, arch: string) {
@@ -163,19 +402,11 @@ function validateAndUpdateAuthorData(
     }
 
     if (metadata.author !== entry.author) {
-        // Allow specific known author name variations
-        const allowedPairs = [
-            ['CatmanFan / Mr._Lechkar', 'CatmanFan'],
-            ['Anixx', 'anixx'],
-            ['Isabella Lulamoon (kawapure)', 'kawapure'],
-        ];
-
-        const matchedPair = allowedPairs.find(pair =>
+        const matchedPair = allowedAuthorNamePairs.find(pair =>
             pair.includes(metadata.author) && pair.includes(entry.author)
         );
 
         if (matchedPair) {
-            // Normalize to the first item in the pair
             entry.author = matchedPair[0];
         } else {
             inconsistencies.push(`author: expected '${entry.author}', got '${metadata.author}'`);
@@ -235,13 +466,9 @@ function handleCompiledFiles(
     }
 }
 
-function generateChangelogEntry(modId: string, commit: string, lastCommit: string, metadata: { version: string }) {
-    const commitTime = parseInt(gitExec([
-        'log',
-        '--format=%ct',
-        '-1',
-        commit,
-    ]), 10);
+function generateChangelogEntry(modId: string, commit: string, lastCommit: string, metadata: { version: string }, cache: GitCache) {
+    const meta = cache.getCommitMeta(commit);
+    const commitTime = meta.timestamp;
 
     const commitFormattedDate = new Date(commitTime * 1000)
         .toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -251,13 +478,7 @@ function generateChangelogEntry(modId: string, commit: string, lastCommit: strin
     let changelogEntry = `## ${metadata.version} ([${commitFormattedDate}](${modVersionUrl}))\n\n`;
 
     if (commit !== lastCommit) {
-        const commitMessage = gitExec([
-            'log',
-            '-1',
-            '--pretty=format:%B',
-            commit,
-        ]);
-        const changelogItem = getModChangelogTextForVersion(modId, metadata.version, commitMessage);
+        const changelogItem = getModChangelogTextForVersion(modId, metadata.version, meta.message);
         changelogEntry += `${changelogItem}\n\n`;
     } else {
         changelogEntry += 'Initial release.\n';
@@ -266,7 +487,14 @@ function generateChangelogEntry(modId: string, commit: string, lastCommit: strin
     return { changelogEntry, commitTime };
 }
 
-function generateModData(modId: string, changelogPath: string, modDir: string, modAuthorData: Record<string, ModAuthorData>) {
+function generateModData(
+    modId: string,
+    changelogPath: string,
+    modDir: string,
+    modAuthorData: Record<string, ModAuthorData>,
+    authorFirstSubmission: Map<string, number>,
+    cache: GitCache
+) {
     if (!fs.existsSync(modDir)) {
         fs.mkdirSync(modDir);
     }
@@ -281,19 +509,11 @@ function generateModData(modId: string, changelogPath: string, modDir: string, m
 
     const modSourceUtils = new ModSourceUtils('mods');
 
-    const commits = gitExec([
-        'rev-list',
-        'HEAD',
-        '--',
-        `mods/${modId}.wh.cpp`,
-    ]).trim().split('\n');
+    const commits = cache.getModCommits(modId).map(e => e.commit);
     const lastCommit = commits[commits.length - 1];
 
     for (const commit of commits) {
-        const modFile = gitExec([
-            'show',
-            `${commit}:mods/${modId}.wh.cpp`,
-        ]);
+        const modFile = cache.getBlob(`${commit}:mods/${modId}.wh.cpp`);
 
         const metadata = modSourceUtils.extractMetadata(modFile, 'en-US');
 
@@ -307,6 +527,13 @@ function generateModData(modId: string, changelogPath: string, modDir: string, m
             homepage: metadata.homepage,
             twitter: metadata.twitter,
         }, modAuthorData);
+
+        const authorKey = metadata.github.toLowerCase();
+        const submissionTime = cache.getCommitMeta(commit).timestamp * 1000;
+        const firstSubmission = authorFirstSubmission.get(authorKey);
+        if (firstSubmission === undefined || submissionTime < firstSubmission) {
+            authorFirstSubmission.set(authorKey, submissionTime);
+        }
 
         const prerelease = metadata.version.includes('-');
         if (prerelease && sawReleaseVersion) {
@@ -333,7 +560,7 @@ function generateModData(modId: string, changelogPath: string, modDir: string, m
 
         const { changelogEntry, commitTime } = generateChangelogEntry(modId, commit, lastCommit, {
             version: metadata.version,
-        });
+        }, cache);
         changelog += changelogEntry;
 
         versions.unshift({
@@ -349,8 +576,87 @@ function generateModData(modId: string, changelogPath: string, modDir: string, m
     fs.writeFileSync(versionsPath, JSON.stringify(versions));
 }
 
+async function fetchGithubUser(login: string): Promise<{ id: number; createdAt: number } | null> {
+    try {
+        const user = await fetchJson(`https://api.github.com/users/${encodeURIComponent(login)}`, {
+            Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+        });
+        return { id: user.id, createdAt: Date.parse(user.created_at) };
+    } catch (e) {
+        if (e instanceof HttpError && e.statusCode === 404) {
+            return null;
+        }
+        throw e;
+    }
+}
+
+// Ids are looked up only for accounts with no id recorded in the last deploy,
+// so that a deleted account whose login was registered again by someone else
+// keeps the id of its original owner. A login with no account, or with an
+// account created after the first submission under it, is recorded as null.
+async function assignGithubIds(
+    modAuthorData: Record<string, ModAuthorData>,
+    authorFirstSubmission: Map<string, number>
+) {
+    const lastDeployPath = process.env.WINDHAWK_MODS_LAST_DEPLOY_PATH;
+    if (!lastDeployPath) {
+        throw new Error('WINDHAWK_MODS_LAST_DEPLOY_PATH is not set');
+    }
+
+    const lastModAuthorDataPath = path.join(lastDeployPath, 'mod_author_data.json');
+    const lastModAuthorData: Record<string, ModAuthorData> = fs.existsSync(lastModAuthorDataPath)
+        ? JSON.parse(fs.readFileSync(lastModAuthorDataPath, 'utf8'))
+        : {};
+
+    // The login of a renamed account no longer belongs to the author.
+    const renamedGithubs = new Set(allowedAuthorGithubPairs.flatMap(pair => pair.slice(1)));
+
+    for (const [authorKey, data] of Object.entries(modAuthorData)) {
+        if (renamedGithubs.has(authorKey)) {
+            data.githubId = null;
+            continue;
+        }
+
+        const lastGithubId = lastModAuthorData[authorKey]?.githubId;
+        if (lastGithubId !== undefined) {
+            data.githubId = lastGithubId;
+            continue;
+        }
+
+        const match = data.github.match(/^https:\/\/github\.com\/([A-Za-z0-9-]+)$/);
+        if (!match) {
+            throw new Error(`Unexpected github URL '${data.github}'`);
+        }
+
+        const user = await fetchGithubUser(match[1]);
+        if (user === null) {
+            console.warn(`Github account ${data.github} doesn't exist, recording a null id`);
+            data.githubId = null;
+            continue;
+        }
+
+        const firstSubmission = authorFirstSubmission.get(authorKey);
+        if (firstSubmission === undefined) {
+            throw new Error(`No submissions found for ${data.github}`);
+        }
+
+        if (!(user.createdAt < firstSubmission)) {
+            console.warn(
+                `Github account ${data.github} (id ${user.id}) was created at` +
+                ` ${new Date(user.createdAt).toISOString()}, after its first submission at` +
+                ` ${new Date(firstSubmission).toISOString()}, recording a null id`);
+            data.githubId = null;
+            continue;
+        }
+
+        console.log(`Recording github id ${user.id} for ${data.github}`);
+        data.githubId = user.id;
+    }
+}
+
 function validateModAuthorData(modAuthorData: Record<string, ModAuthorData>) {
     const seenGithub = new Map<string, string>();
+    const seenGithubId = new Map<number, string>();
     const seenAuthor = new Map<string, string>();
     const seenHomepage = new Map<string, string>();
     const seenTwitter = new Map<string, string>();
@@ -362,9 +668,26 @@ function validateModAuthorData(modAuthorData: Record<string, ModAuthorData>) {
         }
         seenGithub.set(githubLower, authorKey);
 
+        if (data.githubId !== undefined && data.githubId !== null) {
+            const seenGithubIdKey = seenGithubId.get(data.githubId);
+            if (seenGithubIdKey !== undefined) {
+                throw new Error(
+                    `Duplicate github id ${data.githubId} found for authors '${authorKey}' and '${seenGithubIdKey}',` +
+                    ` a renamed account must be added to allowedAuthorGithubPairs`);
+            }
+            seenGithubId.set(data.githubId, authorKey);
+        }
+
         const authorLower = data.author.toLowerCase();
-        if (seenAuthor.has(authorLower) && seenAuthor.get(authorLower) !== authorKey) {
-            throw new Error(`Duplicate author name '${data.author}' found for authors '${authorKey}' and '${seenAuthor.get(authorLower)}'`);
+        const seenAuthorKey = seenAuthor.get(authorLower);
+        if (seenAuthorKey !== undefined && seenAuthorKey !== authorKey) {
+            const allowed = allowedAuthorGithubPairs.some(pair =>
+                pair.includes(authorKey) && pair.includes(seenAuthorKey)
+            );
+
+            if (!allowed) {
+                throw new Error(`Duplicate author name '${data.author}' found for authors '${authorKey}' and '${seenAuthorKey}'`);
+            }
         }
         seenAuthor.set(authorLower, authorKey);
 
@@ -386,13 +709,14 @@ function validateModAuthorData(modAuthorData: Record<string, ModAuthorData>) {
     }
 }
 
-function generateModsData() {
+async function generateModsData(cache: GitCache) {
     const changelogDir = 'changelogs';
     if (!fs.existsSync(changelogDir)) {
         fs.mkdirSync(changelogDir);
     }
 
     const modAuthorData: Record<string, ModAuthorData> = {};
+    const authorFirstSubmission = new Map<string, number>();
 
     const modsSourceDir = fs.opendirSync('mods');
     try {
@@ -402,22 +726,74 @@ function generateModsData() {
                 const modId = modsSourceDirEntry.name.slice(0, -'.wh.cpp'.length);
                 const changelogPath = path.join(changelogDir, `${modId}.md`);
                 const modDir = path.join('mods', modId);
-                generateModData(modId, changelogPath, modDir, modAuthorData);
+                generateModData(modId, changelogPath, modDir, modAuthorData, authorFirstSubmission, cache);
             }
         }
     } finally {
         modsSourceDir.closeSync();
     }
 
+    await assignGithubIds(modAuthorData, authorFirstSubmission);
+
     validateModAuthorData(modAuthorData);
 
-    fs.writeFileSync('mod_author_data.json', JSONstringifyOrder(modAuthorData, 4));
+    fs.writeFileSync('mod_author_data.json', JSONstringifyOrder(modAuthorData, 2));
 }
 
-function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: any) {
+function groupReviews(allReviews: PublicReview[], knownModIds: Set<string>): Map<string, ModReviews> {
+    const byMod = new Map<string, ModReviews>();
+    for (const { modId, ...review } of allReviews) {
+        if (!knownModIds.has(modId)) {
+            // A review on a mod that is no longer in the repository has no
+            // page to be read on and no file name to trust.
+            console.warn(`Skipping review ${review.id} on unknown mod ${modId}`);
+            continue;
+        }
+        let entry = byMod.get(modId);
+        if (!entry) {
+            entry = { count: 0, reviews: [] };
+            byMod.set(modId, entry);
+        }
+        entry.reviews.push(review);
+        if (review.parentId === null) {
+            entry.count++;
+        }
+    }
+    return byMod;
+}
+
+// Writes reviews/<modId>.json for each mod with at least one top-level
+// review. The directory is rebuilt from scratch every run, so a mod that lost
+// its last review loses its file at the deploy step's git add -A.
+function writeModReviews(byMod: Map<string, ModReviews>) {
+    const reviewsDir = 'reviews';
+    if (!fs.existsSync(reviewsDir)) {
+        fs.mkdirSync(reviewsDir);
+    }
+    for (const [modId, { count, reviews }] of byMod) {
+        if (count === 0) {
+            // The server omits replies whose review is unapproved, so this
+            // is unreachable today; kept as the file's own invariant.
+            continue;
+        }
+        fs.writeFileSync(
+            path.join(reviewsDir, `${modId}.json`),
+            JSONstringifyOrder({ modId, reviews }, 2),
+        );
+    }
+}
+
+function enrichCatalog(
+    catalog: Record<string, any>,
+    enrichment: any,
+    reviewsByMod: Map<string, ModReviews>,
+    modTimes: any,
+    cache: GitCache,
+) {
     const app = {
         version: enrichment.app.version,
         versionBleedingEdge: enrichment.app.versionBleedingEdge,
+        versionPreRelease: enrichment.app.versionPreRelease,
     };
 
     const mods: Record<string, any> = {};
@@ -428,8 +804,8 @@ function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: 
         }
 
         modTimes[id] = modTimes[id] || {
-            published: getModCreatedTime(id),
-            updated: getModModifiedTime(id),
+            published: getModCreatedTime(id, cache),
+            updated: getModModifiedTime(id, cache),
         };
 
         mods[id] = {
@@ -438,11 +814,15 @@ function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: 
                 published: modTimes[id].published,
                 updated: modTimes[id].updated,
                 defaultSorting: 0,
+                trendingSorting: 0,
                 rating: 0,
                 users: 0,
                 ratingUsers: 0,
                 ratingBreakdown: [0, 0, 0, 0, 0],
                 ...enrichment.mods[id]?.details,
+                // After the spread: the count must come from the same fetch
+                // as the mod's reviews file, whatever the enrichment carries.
+                reviews: reviewsByMod.get(id)?.count ?? 0,
             },
         };
 
@@ -457,9 +837,18 @@ function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: 
     };
 }
 
-async function generateModCatalogs() {
+async function generateModCatalogs(cache: GitCache) {
     const enrichmentUrl = 'https://update.windhawk.net/mods_catalog_enrichment.json';
     const enrichment = await fetchJson(enrichmentUrl);
+
+    // A failed fetch fails the run, like the enrichment: a deploy that went on
+    // with an empty list would delete every reviews file and zero every
+    // count for a day.
+    const reviewsUrl = 'https://update.windhawk.net/reviews/get_all.php';
+    const allReviews: PublicReview[] = await fetchJson(reviewsUrl);
+    if (!Array.isArray(allReviews)) {
+        throw new Error(`Expected an array from ${reviewsUrl}`);
+    }
 
     const translateFilesUrl = 'https://api.github.com/repos/ramensoftware/windhawk-translate/contents';
     const translateFiles = await fetchJson(translateFilesUrl, {
@@ -470,9 +859,12 @@ async function generateModCatalogs() {
 
     const modTimes = {};
 
-    const catalog = modSourceUtils.getMetadataOfMods('en-US');
-    const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes);
-    fs.writeFileSync('catalog.json', JSONstringifyOrder(catalogEnriched, 4));
+    const englishCatalog = modSourceUtils.getMetadataOfMods('en-US');
+    const reviewsByMod = groupReviews(allReviews, new Set(Object.keys(englishCatalog)));
+    writeModReviews(reviewsByMod);
+
+    const englishCatalogEnriched = enrichCatalog(englishCatalog, enrichment, reviewsByMod, modTimes, cache);
+    fs.writeFileSync('catalog.json', JSONcompactNumberArrays(JSONstringifyOrder(englishCatalogEnriched, 2)));
 
     const catalogsDir = 'catalogs';
     if (!fs.existsSync(catalogsDir)) {
@@ -487,8 +879,30 @@ async function generateModCatalogs() {
 
         const language = translateFileName.slice(0, -'.yml'.length);
         const catalog = modSourceUtils.getMetadataOfMods(language);
-        const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes);
-        fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONstringifyOrder(catalogEnriched, 4));
+        const catalogEnriched = enrichCatalog(catalog, enrichment, reviewsByMod, modTimes, cache);
+
+        // Keep the original (English) name and description for searching,
+        // copying each field only if the translation changed it.
+        for (const [modId, mod] of Object.entries(catalogEnriched.mods)) {
+            const englishMod = englishCatalogEnriched.mods[modId];
+            if (!englishMod) {
+                continue;
+            }
+            const metadata = mod.metadata;
+            const englishMetadata = englishMod.metadata;
+            const englishPartial: { name?: string; description?: string } = {};
+            if (metadata.name !== englishMetadata.name) {
+                englishPartial.name = englishMetadata.name;
+            }
+            if (metadata.description !== englishMetadata.description) {
+                englishPartial.description = englishMetadata.description;
+            }
+            if (Object.keys(englishPartial).length > 0) {
+                mod.metadataEnglish = englishPartial;
+            }
+        }
+
+        fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONcompactNumberArrays(JSONstringifyOrder(catalogEnriched, 2)));
     }
 }
 
@@ -508,7 +922,7 @@ function getModChangelogTextForVersion(modId: string, modVersion: string, commit
     }
 }
 
-function generateRssFeed() {
+function generateRssFeed(feedType: 'updates' | 'releases', cache: GitCache) {
     type FeedItem = {
         commit: string;
         title: string;
@@ -525,24 +939,16 @@ function generateRssFeed() {
 
     const modSourceUtils = new ModSourceUtils('mods');
 
-    const commits = gitExec([
-        'rev-list',
-        'HEAD',
-    ]).trim().split('\n');
+    const allowedChangeTypes = feedType === 'releases' ? ['A'] : ['A', 'M'];
 
-    for (const commit of commits) {
-        const changedFiles = gitExec([
-            'show',
-            '--name-status',
-            '--pretty=format:',
-            commit,
-        ]).trim().split('\n');
-        if (changedFiles.length !== 1) {
+    for (const commit of cache.commitOrder) {
+        const files = cache.commitFiles.get(commit);
+        if (!files || files.length !== 1) {
             continue;
         }
 
-        const [changeType, filePath] = changedFiles[0].split('\t');
-        if (changeType !== 'A' && changeType !== 'M') {
+        const { changeType, filePath } = files[0];
+        if (!allowedChangeTypes.includes(changeType)) {
             continue;
         }
 
@@ -553,10 +959,7 @@ function generateRssFeed() {
 
         const modId = match[1];
 
-        const modFile = gitExec([
-            'show',
-            `${commit}:mods/${modId}.wh.cpp`,
-        ]);
+        const modFile = cache.getBlob(`${commit}:mods/${modId}.wh.cpp`);
 
         const metadata = modSourceUtils.extractMetadata(modFile, 'en-US');
 
@@ -564,22 +967,12 @@ function generateRssFeed() {
             throw new Error(`Mod ${modId} has no version in commit ${commit}`);
         }
 
-        const commitTime = parseInt(gitExec([
-            'log',
-            '--format=%ct',
-            '-1',
-            commit,
-        ]), 10);
+        const meta = cache.getCommitMeta(commit);
+        const commitTime = meta.timestamp;
 
         let content = '';
         if (changeType === 'M') {
-            const commitMessage = gitExec([
-                'log',
-                '-1',
-                '--pretty=format:%B',
-                commit,
-            ]);
-            content = getModChangelogTextForVersion(modId, metadata.version, commitMessage);
+            content = getModChangelogTextForVersion(modId, metadata.version, meta.message);
         } else {
             content = modSourceUtils.extractReadme(modFile) || 'Initial release.';
         }
@@ -602,8 +995,12 @@ function generateRssFeed() {
     }
 
     const feed = new Feed({
-        title: 'Windhawk Mod Updates',
-        description: 'Updates in the official collection of Windhawk mods',
+        title: feedType === 'releases'
+            ? 'Windhawk New Mod Releases'
+            : 'Windhawk Mod Updates',
+        description: feedType === 'releases'
+            ? 'New mods in the official collection of Windhawk mods'
+            : 'Updates in the official collection of Windhawk mods',
         id: 'https://windhawk.net/',
         link: 'https://windhawk.net/',
         favicon: 'https://windhawk.net/favicon.ico',
@@ -611,22 +1008,16 @@ function generateRssFeed() {
         updated: feedItems[0].date,
     });
 
-    const showdownConverter = new showdown.Converter();
-
-    const markdownToHtml = (markdown: string) => {
-        // Showdown doesn't support trailing backslashes as newlines. Use double
-        // spaces instead. https://github.com/showdownjs/showdown/issues/394
-        markdown = markdown.replace(/\\\n/g, '  \n');
-
-        return showdownConverter.makeHtml(markdown);
-    }
+    // Feed content is written by mod authors, so raw HTML is escaped rather than
+    // passed on to feed readers.
+    const markdown = new MarkdownIt({ html: false });
 
     for (const feedItem of feedItems) {
         feed.addItem({
             title: feedItem.title,
             id: feedItem.url + '#' + feedItem.commit,
             link: feedItem.url,
-            content: markdownToHtml(feedItem.content),
+            content: markdown.render(feedItem.content),
             date: feedItem.date,
             author: [feedItem.author],
         });
@@ -636,11 +1027,14 @@ function generateRssFeed() {
 }
 
 async function main() {
-    generateModsData();
+    const cache = buildGitCache();
 
-    await generateModCatalogs();
+    await generateModsData(cache);
 
-    fs.writeFileSync('updates.atom', generateRssFeed());
+    await generateModCatalogs(cache);
+
+    fs.writeFileSync('updates.atom', generateRssFeed('updates', cache));
+    fs.writeFileSync('releases.atom', generateRssFeed('releases', cache));
 
     const srcPath = 'public';
     for (const file of fs.readdirSync(srcPath, { withFileTypes: true })) {

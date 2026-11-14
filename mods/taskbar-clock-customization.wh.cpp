@@ -2,7 +2,7 @@
 // @id              taskbar-clock-customization
 // @name            Taskbar Clock Customization
 // @description     Custom date/time format, news feed, weather, performance metrics (upload/download speed, CPU, RAM, GPU, battery), media player info, custom fonts and colors, and more
-// @version         1.7.1
+// @version         1.8.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -30,9 +30,6 @@ and colors, and more.
 
 Only Windows 10 64-bit and Windows 11 are supported.
 
-**Note:** To customize the old taskbar on Windows 11 (if using ExplorerPatcher
-or a similar tool), enable the relevant option in the mod's settings.
-
 ![News screenshot](https://i.imgur.com/p03o9l7.png) \
 _News (default mod settings)_
 
@@ -44,35 +41,39 @@ _System performance metrics_
 
 ## Available patterns
 
-Supported fields - top line, bottom line, middle line (Windows 10 only), tooltip
-extra line - can be configured with text that contains patterns. The following
-patterns can be used:
+The top line, bottom line, middle line (Windows 10 only), and tooltip extra line
+can be configured with text that contains patterns. The following patterns can
+be used:
 
 * `%time%` - the time as configured by the time format in settings.
-  * `%time<n>%` - additional time formats which can be specified by separating
-    the time format string with `;`. `<n>` is the additional time format number,
-    starting with 2.
+  * `%time<n>%` - additional time formats, specified by separating multiple
+    formats with `;` in the time format setting. `<n>` is the additional time
+    format number, starting with 2.
   * `%time_tz<n>%` - the time with a custom time zone. `<n>` is the time zone
-    number in the list of time zones configured in settings.
+    number in the list of time zones configured in the mod settings (not Windows
+    settings).
 * `%date%` - the date as configured by the date format in settings.
-  * `%date<n>%` - additional date formats which can be specified by separating
-    the date format string with `;`. `<n>` is the additional date format number,
-    starting with 2.
+  * `%date<n>%` - additional date formats, specified by separating multiple
+    formats with `;` in the date format setting. `<n>` is the additional date
+    format number, starting with 2. Each date format can have its own locale;
+    refer to the date locale setting for details.
   * `%date_tz<n>%` - the date with a custom time zone. `<n>` is the time zone
-    number in the list of time zones configured in settings.
+    number in the list of time zones configured in the mod settings (not Windows
+    settings).
 * `%weekday%` - the week day as configured in settings.
   * `%weekday_tz<n>%` - the week day with a custom time zone. `<n>` is the time
-    zone number in the list of time zones configured in settings.
-* `%weekday_num%` - the week day number according to the [first day of
-   week](https://superuser.com/q/61002) system configuration. For example, if
-   first day of week is Sunday, then the week day number is 1 for Sunday, 2 for
-   Monday, ..., 7 for Saturday.
-* `%weeknum%` - the week number, calculated as following: The week containing 1
-  January is defined as week 1 of the year. Subsequent weeks start on first day
-  of week according to the system configuration.
+    zone number in the list of time zones configured in the mod settings (not
+    Windows settings).
+* `%weekday_num%` - the week day number according to the [first day of the
+  week](https://superuser.com/q/61002) system configuration. For example, if the
+  first day of the week is Sunday, then the week day number is 1 for Sunday, 2
+  for Monday, ..., 7 for Saturday.
+* `%weeknum%` - the week number, calculated as follows: The week containing 1
+  January is defined as week 1 of the year. Subsequent weeks start on the first
+  day of the week according to the system configuration.
 * `%weeknum_iso%` - the [ISO week
   number](https://en.wikipedia.org/wiki/ISO_week_date).
-* `%dayofyear%` - the day of year starting from January 1st.
+* `%dayofyear%` - the day of the year, where January 1st is day 1.
 * `%timezone%` - the time zone in ISO 8601 format.
 * System performance metrics:
   * `%upload_speed%` - system-wide upload transfer rate.
@@ -83,12 +84,31 @@ patterns can be used:
   * `%disk_total%` - combined disk read and write speed.
   * `%cpu%` - CPU usage.
   * `%ram%` - RAM usage.
+  * `%ram_used%` - used RAM amount in GB.
+  * `%ram_total%` - total RAM amount in GB.
+  * `%ram_committed%` - committed RAM usage (% of memory committed by apps,
+    backed by RAM or the page file).
+  * `%ram_committed_used%` - used committed RAM amount in GB.
+  * `%ram_committed_total%` - total committed RAM amount in GB.
   * `%gpu%` - GPU usage.
+  * `%vram%` - VRAM usage as a percentage of total dedicated VRAM.
+  * `%vram_used%` - used dedicated VRAM amount in GB.
+  * `%vram_total%` - total dedicated VRAM amount in GB.
+  * `%vram_shared%` - shared VRAM usage as a percentage of total shared VRAM
+    (system RAM used as extra GPU memory).
+  * `%vram_shared_used%` - used shared VRAM amount in GB.
+  * `%vram_shared_total%` - total shared VRAM pool size in GB.
+  * `%cpu_temp%` - CPU temperature in °C (average of all ACPI thermal zones).
+  * `%cpu_temp_f%` - CPU temperature in °F (average of all ACPI thermal zones).
+  * `%gpu_temp%` - GPU temperature in °C.
+  * `%gpu_temp_f%` - GPU temperature in °F.
   * `%battery%` - battery level percentage.
   * `%battery_time%` - battery time remaining (charging time left / discharging
-    time left).
+    time left, in h:mm format). If the value is always zero, you might need to
+    enable battery time reporting in the BIOS.
   * `%power%` - battery power in watts (negative when discharging, positive when
-    charging).
+    charging). If the value is always zero, you might need to enable battery
+    time reporting in the BIOS.
 * Media player info (requires a
   [GSMTC-compatible](https://github.com/ModernFlyouts-Community/ModernFlyouts/blob/main/docs/GSMTC-Support-And-Popular-Apps.md)
   media player):
@@ -96,20 +116,22 @@ patterns can be used:
   * `%media_artist%` - currently playing media artist.
   * `%media_album%` - currently playing media album.
   * `%media_status%` - media playback status icon (⏯, ⏸, ⏹).
-  * `%media_info%` - combined media info (Artist - Title), truncated with
-    ellipsis. It's recommended to use this field on the taskbar, and other
-    fields in the tooltip.
-* `%weather%` - Weather information, powered by [wttr.in](https://wttr.in/),
+  * `%media_info%` - combined media info, truncated with an ellipsis. Defaults
+    to "Artist - Title" while media is playing. The formats for when media is
+    playing and when it isn't can be customized in the media player settings.
+    It's recommended to use this field on the taskbar and the other fields in
+    the tooltip.
+* `%weather%` - weather information, powered by [wttr.in](https://wttr.in/),
   using the location and format configured in settings.
-* `%web<n>%` - the web contents as configured in settings, truncated with
-  ellipsis, where `<n>` is the web contents number.
-* `%web<n>_full%` - the full web contents as configured in settings, where `<n>`
-  is the web contents number.
+* `%web<n>%` - the web content as configured in settings, truncated with an
+  ellipsis, where `<n>` is the web content item number.
+* `%web<n>_full%` - the full web content as configured in settings, where `<n>`
+  is the web content item number.
 * `%newline%` or `%n%` - a newline.
 
 ## Text styles
 
-For Windows 11 version 22H2 and newer, the mod allows to change the clock text
+For Windows 11 version 22H2 and newer, the mod allows changing the clock text
 styles, such as the font color and size.
 
 ![Screenshot](https://i.imgur.com/3JiXwjT.png)
@@ -124,18 +146,31 @@ styles, such as the font color and size.
     hh':'mm':'ss tt
   $name: Time format
   $description: >-
-    Leave empty for the default format. For syntax refer to the following page:
+    The format for the %time% pattern. Leave empty for the default format. For
+    the syntax, refer to the following page:
 
     https://docs.microsoft.com/en-us/windows/win32/api/datetimeapi/nf-datetimeapi-gettimeformatex#remarks
 - DateFormat: >-
     ddd',' MMM dd yyyy
   $name: Date format
   $description: >-
-    Leave empty for the default format. For syntax refer to the following page:
+    The format for the %date% pattern. Leave empty for the default format. For
+    the syntax, refer to the following page:
 
     https://docs.microsoft.com/en-us/windows/win32/intl/day--month--year--and-era-format-pictures
+- DateLocale: ""
+  $name: Date locale
+  $description: >-
+    The locale used for formatting the date and the week day. Leave empty for
+    the default locale. Use ";" to set a locale per date format, e.g.
+    "en-US;fr-FR" for an English %date% and a French %date2%. Empty entries use
+    the default locale. For the list of locale names, listed as "Language tag",
+    refer to the following page:
+
+    https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-lcid/a9eac961-e77d-41a6-90a5-ce1a8b0cdb9c
 - WeekdayFormat: dddd
   $name: Week day format
+  $description: The format for the %weekday% pattern.
   $options:
   - dddd: Full day of the week
   - ddd: Abbreviated day of the week
@@ -144,12 +179,12 @@ styles, such as the font color and size.
   $name: Custom week day format
   $description: >-
     A comma-separated list of custom week days, Sunday through Saturday. Used if
-    the custom format is specified for the week day format.
+    the week day format is set to custom.
 - TopLine: '%date% | %time%'
   $name: Top line
   $description: >-
     Text to be shown on the first line. Set to "-" for the default value. Refer
-    to the mod details for list of patterns that can be used.
+    to the mod details for the list of patterns that can be used.
 - BottomLine: '%web1%'
   $name: Bottom line
   $description: >-
@@ -171,7 +206,7 @@ styles, such as the font color and size.
   $name: Clock height (Windows 10 only)
 - MaxWidth: 0
   $name: Clock max width (Windows 11 only)
-  $description: Set to zero to have no max width.
+  $description: Set to zero for no limit.
 - TextSpacing: 0
   $name: Line spacing
   $description: >-
@@ -181,8 +216,7 @@ styles, such as the font color and size.
   - NetworkMetricsFormat: mbs
     $name: Network metrics format
     $description: >-
-      The format to use for displaying the upload/download transfer rate. Also
-      used for the disk read/write speed.
+      The format to use for displaying the upload/download transfer rate.
     $options:
     - mbs: MB/s
     - mbsNumberOnly: MB/s, number only
@@ -193,15 +227,33 @@ styles, such as the font color and size.
   - NetworkMetricsFixedDecimals: -1
     $name: Network metrics fixed decimal places
     $description: >-
-      Always use this amount of decimal places for the upload/download transfer
-      rate (-1 means auto/same width). Also used for the disk read/write speed.
+      Always use this number of decimal places for the upload/download transfer
+      rate (-1 means auto/same width).
+  - DiskMetricsFormat: sameAsNetwork
+    $name: Disk metrics format
+    $description: >-
+      The format to use for displaying the disk read/write speed.
+    $options:
+    - sameAsNetwork: Same as network metrics format
+    - mbs: MB/s
+    - mbsNumberOnly: MB/s, number only
+    - mbsDynamic: MB/s or KB/s (dynamic)
+    - mbits: MBit/s
+    - mbitsNumberOnly: MBit/s, number only
+    - mbitsDynamic: MBit/s or KBit/s (dynamic)
+  - DiskMetricsFixedDecimals: -1
+    $name: Disk metrics fixed decimal places
+    $description: >-
+      Always use this number of decimal places for the disk read/write speed
+      (-1 means auto/same width). Ignored when the disk metrics format is set to
+      "Same as network metrics format".
   - PercentageFormat: spacePaddingAndSymbol
     $name: Percentage format
     $description: >-
       The format to use for displaying percentage values (CPU, RAM, GPU,
       battery).
     $options:
-    - spacePaddingAndSymbol: Pad with spaces, add percentage symbol
+    - spacePaddingAndSymbol: Pad with spaces, add percent sign
     - spacePadding: Pad with spaces, number only
     - singleSpacePadding: >-
         Pad with a single space, number only (for monospaced fonts)
@@ -216,13 +268,16 @@ styles, such as the font color and size.
     $description: >-
       The network adapter to use for upload/download metrics. Leave empty to
       sum all adapters. Partial match is supported. To list adapters, run:
+
       typeperf -qx "Network Interface"
   - GpuAdapterName: ""
     $name: GPU adapter name
     $description: >-
-      The GPU adapter to use for GPU usage metrics. Leave empty to sum all
-      adapters. Partial match is supported. To list adapters, run: wmic path
-      win32_videocontroller get Name
+      The GPU adapter to use for GPU usage, VRAM, and temperature metrics. Leave
+      empty to auto-detect (uses the adapter with the most dedicated VRAM).
+      Partial match is supported. To list adapters, run:
+
+      wmic path win32_videocontroller get Name
   $name: System performance metrics
 - MediaPlayer:
   - IgnoredPlayers: [""]
@@ -233,12 +288,19 @@ styles, such as the font color and size.
   - MaxLength: 28
     $name: Maximum info length
     $description: >-
-      Maximum characters for %media_info%. Longer strings are truncated with
-      ellipsis. Set to 0 for no limit.
-  - NoMediaText: No media
-    $name: No media text
+      The maximum number of characters for %media_info%. Longer text is
+      truncated with an ellipsis. Set to 0 for no limit.
+  - MediaInfoFormat: "%media_artist% - %media_title%"
+    $name: Format when media is playing
     $description: >-
-      Text that will be shown for %media_info% when no media is playing.
+      The format of %media_info% while media is playing. Can contain any
+      patterns, such as %media_artist%, %media_title%, %media_album%, and
+      %media_status%.
+  - NoMediaText: No media
+    $name: Format when media is not playing
+    $description: >-
+      The text shown for %media_info% when no media is playing. Can contain any
+      patterns, such as %date% or %time%.
   - RemoveBrackets: false
     $name: Remove brackets from info
     $description: >-
@@ -248,9 +310,9 @@ styles, such as the font color and size.
 - WebContentWeatherLocation: ""
   $name: Weather location
   $description: >-
-    Get weather information for a specific location. Keep empty to use the
+    Get weather information for a specific location. Leave empty to use the
     current location. For details, refer to the documentation of wttr.in.
-- WebContentWeatherFormat: "%c \uD83C\uDF21\uFE0F%t \uD83C\uDF2C\uFE0F%w"
+- WebContentWeatherFormat: "%c \U0001F321\uFE0F%t \U0001F32C\uFE0F%w"
   $name: Weather format
   $description: >-
     The weather information format. For details, refer to the documentation of
@@ -261,8 +323,8 @@ styles, such as the font color and size.
     The weather units. For details, refer to the documentation of wttr.in.
   $options:
   - autoDetect: Auto (default)
-  - uscs: USCS (used by default in US)
-  - metric: Metric (SI) (used by default everywhere except US)
+  - uscs: USCS (used by default in the US)
+  - metric: Metric (SI) (used by default everywhere except the US)
   - metricMsWind: Metric (SI), but show wind speed in m/s
 - WebContentsItems:
   - - Url: https://rss.nytimes.com/services/xml/rss/nyt/World.xml
@@ -297,11 +359,11 @@ styles, such as the font color and size.
         extracted content.
     - MaxLength: 28
       $name: Web content maximum length
-      $description: Longer strings will be truncated with ellipsis.
+      $description: Longer text is truncated with an ellipsis.
   $name: Web content items
   $description: >-
-    Will be used to fetch data displayed in place of the %web<n>% and
-    %web<n>_full% patterns, where <n> is the web contents number.
+    Used to fetch the data displayed in place of the %web<n>% and %web<n>_full%
+    patterns, where <n> is the web content item number.
 - WebContentsUpdateInterval: 10
   $name: Web content update interval
   $description: >-
@@ -310,8 +372,9 @@ styles, such as the font color and size.
   $name: Time zones
   $description: >-
     The list of time zones for patterns such as %time_tz1%. For a full list of
-    supported time zones, use the following PowerShell command: Get-TimeZone
-    -ListAvailable.
+    supported time zones, run the following PowerShell command:
+
+    Get-TimeZone -ListAvailable
 - TimeStyle:
   - Hidden: false
   - TextColor: ""
@@ -326,6 +389,7 @@ styles, such as the font color and size.
     - Right: Right
     - Center: Center
     - Left: Left
+    - Justify: Justified
   - FontSize: 0
     $name: Font size
     $description: Set to zero for the default size.
@@ -360,7 +424,7 @@ styles, such as the font color and size.
     - Italic: Italic
   - FontStretch: ""
     $name: Font stretch
-    $description: Only supported for some fonts.
+    $description: Only supported by some fonts.
     $options:
     - "": Default
     - Undefined: Undefined
@@ -376,6 +440,11 @@ styles, such as the font color and size.
   - CharacterSpacing: 0
     $name: Character spacing
     $description: Can be a positive or a negative number.
+  - LineHeight: 0
+    $name: Line height
+    $description: >-
+      The line height in pixels, useful when the line contains multiple lines of
+      text (using the %newline% pattern). Set to zero for the default value.
   $name: Top line style (Windows 11 version 22H2 and newer)
 - DateStyle:
   - Hidden: false
@@ -391,6 +460,7 @@ styles, such as the font color and size.
     - Right: Right
     - Center: Center
     - Left: Left
+    - Justify: Justified
   - FontSize: 0
     $name: Font size
     $description: Set to zero for the default size.
@@ -425,7 +495,7 @@ styles, such as the font color and size.
     - Italic: Italic
   - FontStretch: ""
     $name: Font stretch
-    $description: Only supported for some fonts.
+    $description: Only supported by some fonts.
     $options:
     - "": Default
     - Undefined: Undefined
@@ -441,6 +511,11 @@ styles, such as the font color and size.
   - CharacterSpacing: 0
     $name: Character spacing
     $description: Can be a positive or a negative number.
+  - LineHeight: 0
+    $name: Line height
+    $description: >-
+      The line height in pixels, useful when the line contains multiple lines of
+      text (using the %newline% pattern). Set to zero for the default value.
   $name: Bottom line style (Windows 11 version 22H2 and newer)
 - oldTaskbarOnWin11: false
   $name: Customize the old taskbar on Windows 11
@@ -471,6 +546,7 @@ using namespace std::string_view_literals;
 
 #include <comutil.h>
 #include <dxgi.h>
+#include <mshtmdid.h>
 #include <mshtml.h>
 #include <pdh.h>
 #include <pdhmsg.h>
@@ -522,6 +598,8 @@ enum class PercentageFormat {
 struct DataCollectionSettings {
     NetworkMetricsFormat networkMetricsFormat;
     int networkMetricsFixedDecimals;
+    NetworkMetricsFormat diskMetricsFormat;
+    int diskMetricsFixedDecimals;
     PercentageFormat percentageFormat;
     int updateInterval;
     StringSetting networkAdapterName;
@@ -531,6 +609,7 @@ struct DataCollectionSettings {
 struct MediaPlayerSettings {
     std::vector<StringSetting> ignoredPlayers;
     int maxLength;
+    StringSetting mediaInfoFormat;
     StringSetting noMediaText;
     bool removeBrackets;
 };
@@ -569,12 +648,21 @@ struct TextStyleSettings {
     StringSetting fontStyle;
     StringSetting fontStretch;
     int characterSpacing;
+    int lineHeight;
+};
+
+struct ClockElementStyleSettings {
+    int maxWidth;
+    int textSpacing;
+    TextStyleSettings timeStyle;
+    TextStyleSettings dateStyle;
 };
 
 struct {
     bool showSeconds;
     StringSetting timeFormat;
     StringSetting dateFormat;
+    std::vector<std::wstring> dateLocales;
     StringSetting weekdayFormat;
     std::vector<std::wstring> weekdayFormatCustom;
     StringSetting topLine;
@@ -584,7 +672,6 @@ struct {
     TooltipLineMode tooltipLineMode;
     int width;
     int height;
-    int maxWidth;
     int textSpacing;
     DataCollectionSettings dataCollection;
     MediaPlayerSettings mediaPlayer;
@@ -594,8 +681,6 @@ struct {
     std::vector<WebContentsSettings> webContentsItems;
     int webContentsUpdateInterval;
     std::vector<StringSetting> timeZones;
-    TextStyleSettings timeStyle;
-    TextStyleSettings dateStyle;
     bool oldTaskbarOnWin11;
 
     // Kept for compatibility with old settings:
@@ -619,12 +704,20 @@ enum class WinVersion {
 
 WinVersion g_winVersion;
 
-std::atomic<bool> g_taskbarViewDllLoaded;
+std::atomic<bool> g_systemTrayModuleHooked;
 std::atomic<bool> g_initialized;
 std::atomic<bool> g_explorerPatcherInitialized;
 
+bool g_formattingInitialized;
+
 DWORD g_formatIndex;
 SYSTEMTIME g_formatTime;
+
+// Guards g_settings and the formatting state derived from it: the format
+// time/index, the cached formatted strings, the data collection session and
+// the web content/media initialization flags. Settings are replaced wholesale
+// by LoadSettings, which frees the previous string buffers, so a hook must
+// hold this lock for as long as it uses anything from g_settings.
 std::mutex g_formatLineMutex;
 
 template <size_t N>
@@ -655,7 +748,22 @@ FormattedString<FORMATTED_BUFFER_SIZE> g_diskWriteSpeedFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_diskTotalSpeedFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_cpuFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_ramFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_ramUsedFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_ramTotalFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_ramCommittedFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_ramCommittedUsedFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_ramCommittedTotalFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_gpuFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_vramFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_vramUsedFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_vramTotalFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_vramSharedFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_vramSharedUsedFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_vramSharedTotalFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_cpuTempFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_cpuTempFFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_gpuTempFormatted;
+FormattedString<FORMATTED_BUFFER_SIZE> g_gpuTempFFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_batteryFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_batteryTimeFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_powerFormatted;
@@ -666,19 +774,38 @@ FormattedString<FORMATTED_BUFFER_SIZE> g_mediaAlbumFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_mediaStatusFormatted;
 FormattedString<FORMATTED_BUFFER_SIZE> g_mediaInfoFormatted;
 
-winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager
-    g_mediaSessionManager{nullptr};
-winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession
-    g_mediaCurrentSession{nullptr};
+[[clang::no_destroy]] winrt::Windows::Media::Control::
+    GlobalSystemMediaTransportControlsSessionManager g_mediaSessionManager{
+        nullptr};
+[[clang::no_destroy]] winrt::Windows::Media::Control::
+    GlobalSystemMediaTransportControlsSession g_mediaCurrentSession{nullptr};
+// Guards the media session objects, their event tokens and the formatted
+// media strings. The session events fire on arbitrary thread pool threads, so
+// this covers the subscribe/unsubscribe paths as well as the refresh. When
+// both are taken, g_formatLineMutex comes first.
 std::mutex g_mediaMutex;
 std::atomic<bool> g_mediaDataDirty{true};
 winrt::event_token g_mediaSessionsChangedToken;
 winrt::event_token g_mediaPropertiesChangedToken;
 winrt::event_token g_mediaPlaybackChangedToken;
 
+// Lowercased copy of g_settings.mediaPlayer.ignoredPlayers, so that picking a
+// session doesn't have to reach into g_settings from a thread pool thread.
+std::vector<std::wstring> g_mediaIgnoredPlayers;
+
+bool g_mediaActive = false;
+
+// Whether a media pattern is shown. Media changes arrive as events, so the
+// clock refreshes every second to show them without a delay.
+bool g_mediaPatternUsed = false;
+
+// Set while %media_info% expands its format string, to keep a stray
+// %media_info% tag inside that format from recursing into itself.
+bool g_inMediaInfoFormat = false;
+
 std::vector<std::optional<DYNAMIC_TIME_ZONE_INFORMATION>> g_timeZoneInformation;
 
-HANDLE g_webContentUpdateThread;
+std::atomic<HANDLE> g_webContentUpdateThread;
 HANDLE g_webContentUpdateRefreshEvent;
 HANDLE g_webContentUpdateStopEvent;
 std::mutex g_webContentMutex;
@@ -699,8 +826,15 @@ struct ClockElementStyleData {
     std::optional<int64_t> timeVisibilityPropertyChangedToken;
 };
 
-std::atomic<bool> g_clockElementStyleEnabled;
-std::atomic<DWORD> g_clockElementStyleIndex;
+// Guards the clock element style settings, their enabled flag and index, and
+// g_clockElementStyleData. The style settings are kept out of g_settings so
+// that the XAML thread applying them never waits for g_formatLineMutex, which
+// formatting holds across slow work. When both are taken, g_formatLineMutex
+// comes first.
+std::mutex g_clockElementStyleMutex;
+bool g_clockElementStyleEnabled;
+DWORD g_clockElementStyleIndex;
+ClockElementStyleSettings g_clockElementStyleSettings;
 std::vector<ClockElementStyleData> g_clockElementStyleData;
 
 using GetDpiForWindow_t = UINT(WINAPI*)(HWND hwnd);
@@ -732,13 +866,98 @@ GetDateFormatW_t GetDateFormatW_Original;
 using SendMessageW_t = decltype(&SendMessageW);
 SendMessageW_t SendMessageW_Original;
 
+// The WinINet defaults are minutes long, which would hold up whoever waits for
+// the requesting thread to finish.
+constexpr DWORD kUrlRequestTimeoutMs = 30 * 1000;
+
+std::mutex g_urlRequestMutex;
+HINTERNET g_urlRequestOpenHandle = nullptr;
+HINTERNET g_urlRequestUrlHandle = nullptr;
+bool g_urlRequestsCanceled = false;
+
+// Requires g_urlRequestMutex to be held.
+void CloseUrlRequestHandles() {
+    if (g_urlRequestUrlHandle) {
+        InternetCloseHandle(g_urlRequestUrlHandle);
+        g_urlRequestUrlHandle = nullptr;
+    }
+
+    if (g_urlRequestOpenHandle) {
+        InternetCloseHandle(g_urlRequestOpenHandle);
+        g_urlRequestOpenHandle = nullptr;
+    }
+}
+
+// Closes the handles of the request in flight, if any, which makes the blocking
+// WinINet call using them return at once. Further requests fail until
+// ResumeUrlRequests is called.
+void CancelUrlRequests() {
+    std::lock_guard<std::mutex> guard(g_urlRequestMutex);
+    g_urlRequestsCanceled = true;
+    CloseUrlRequestHandles();
+}
+
+void ResumeUrlRequests() {
+    std::lock_guard<std::mutex> guard(g_urlRequestMutex);
+    g_urlRequestsCanceled = false;
+}
+
+// Scope of a single request. At most one request runs at a time, so its handles
+// live in globals where CancelUrlRequests can reach them.
+struct UrlRequestScope {
+    UrlRequestScope() = default;
+    UrlRequestScope(const UrlRequestScope&) = delete;
+    UrlRequestScope& operator=(const UrlRequestScope&) = delete;
+
+    ~UrlRequestScope() {
+        std::lock_guard<std::mutex> guard(g_urlRequestMutex);
+        CloseUrlRequestHandles();
+    }
+
+    bool PublishOpenHandle(HINTERNET handle) {
+        return Publish(&g_urlRequestOpenHandle, handle);
+    }
+
+    bool PublishUrlHandle(HINTERNET handle) {
+        return Publish(&g_urlRequestUrlHandle, handle);
+    }
+
+   private:
+    // Hands the handle over to the globals. Returns false if requests are
+    // canceled, in which case the handle is closed and must not be used.
+    static bool Publish(HINTERNET* slot, HINTERNET handle) {
+        std::lock_guard<std::mutex> guard(g_urlRequestMutex);
+        if (g_urlRequestsCanceled) {
+            InternetCloseHandle(handle);
+            return false;
+        }
+
+        *slot = handle;
+        return true;
+    }
+};
+
 std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl,
                                           bool failIfNot200 = true) {
+    UrlRequestScope requestScope;
+
     HINTERNET hOpenHandle = InternetOpen(
         L"WindhawkMod", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
     if (!hOpenHandle) {
         return std::nullopt;
     }
+
+    if (!requestScope.PublishOpenHandle(hOpenHandle)) {
+        return std::nullopt;
+    }
+
+    DWORD timeout = kUrlRequestTimeoutMs;
+    InternetSetOption(hOpenHandle, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout,
+                      sizeof(timeout));
+    InternetSetOption(hOpenHandle, INTERNET_OPTION_SEND_TIMEOUT, &timeout,
+                      sizeof(timeout));
+    InternetSetOption(hOpenHandle, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeout,
+                      sizeof(timeout));
 
     HINTERNET hUrlHandle =
         InternetOpenUrl(hOpenHandle, lpUrl, nullptr, 0,
@@ -747,7 +966,10 @@ std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl,
                             INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD,
                         0);
     if (!hUrlHandle) {
-        InternetCloseHandle(hOpenHandle);
+        return std::nullopt;
+    }
+
+    if (!requestScope.PublishUrlHandle(hUrlHandle)) {
         return std::nullopt;
     }
 
@@ -758,41 +980,41 @@ std::optional<std::wstring> GetUrlContent(PCWSTR lpUrl,
                            HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
                            &dwStatusCode, &dwStatusCodeSize, nullptr) ||
             dwStatusCode != 200) {
-            InternetCloseHandle(hUrlHandle);
-            InternetCloseHandle(hOpenHandle);
             return std::nullopt;
         }
     }
 
     LPBYTE pUrlContent = (LPBYTE)HeapAlloc(GetProcessHeap(), 0, 0x400);
     if (!pUrlContent) {
-        InternetCloseHandle(hUrlHandle);
-        InternetCloseHandle(hOpenHandle);
         return std::nullopt;
     }
 
     DWORD dwNumberOfBytesRead;
-    InternetReadFile(hUrlHandle, pUrlContent, 0x400, &dwNumberOfBytesRead);
+    if (!InternetReadFile(hUrlHandle, pUrlContent, 0x400,
+                          &dwNumberOfBytesRead)) {
+        HeapFree(GetProcessHeap(), 0, pUrlContent);
+        return std::nullopt;
+    }
+
     DWORD dwLength = dwNumberOfBytesRead;
 
     while (dwNumberOfBytesRead) {
         LPBYTE pNewUrlContent = (LPBYTE)HeapReAlloc(
             GetProcessHeap(), 0, pUrlContent, dwLength + 0x400);
         if (!pNewUrlContent) {
-            InternetCloseHandle(hUrlHandle);
-            InternetCloseHandle(hOpenHandle);
             HeapFree(GetProcessHeap(), 0, pUrlContent);
             return std::nullopt;
         }
 
         pUrlContent = pNewUrlContent;
-        InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
-                         &dwNumberOfBytesRead);
+        if (!InternetReadFile(hUrlHandle, pUrlContent + dwLength, 0x400,
+                              &dwNumberOfBytesRead)) {
+            HeapFree(GetProcessHeap(), 0, pUrlContent);
+            return std::nullopt;
+        }
+
         dwLength += dwNumberOfBytesRead;
     }
-
-    InternetCloseHandle(hUrlHandle);
-    InternetCloseHandle(hOpenHandle);
 
     // Assume UTF-8.
     int charsNeeded = MultiByteToWideChar(CP_UTF8, 0, (PCSTR)pUrlContent,
@@ -913,6 +1135,81 @@ std::wstring ExtractWebContent(std::wstring_view webContent,
     return std::wstring(webContent.substr(start, end - start));
 }
 
+// An MSHTML client site whose DLCONTROL ambient property disables scripts,
+// ActiveX, Java, UI and all downloads.
+class HtmlNoDownloadClientSite
+    : public winrt::
+          implements<HtmlNoDownloadClientSite, IOleClientSite, IDispatch> {
+   public:
+    // IOleClientSite
+    HRESULT STDMETHODCALLTYPE SaveObject() override { return E_NOTIMPL; }
+
+    HRESULT STDMETHODCALLTYPE GetMoniker(DWORD dwAssign,
+                                         DWORD dwWhichMoniker,
+                                         IMoniker** ppmk) override {
+        *ppmk = nullptr;
+        return E_NOTIMPL;
+    }
+
+    HRESULT STDMETHODCALLTYPE
+    GetContainer(IOleContainer** ppContainer) override {
+        *ppContainer = nullptr;
+        return E_NOINTERFACE;
+    }
+
+    HRESULT STDMETHODCALLTYPE ShowObject() override { return S_OK; }
+
+    HRESULT STDMETHODCALLTYPE OnShowWindow(BOOL fShow) override { return S_OK; }
+
+    HRESULT STDMETHODCALLTYPE RequestNewObjectLayout() override {
+        return E_NOTIMPL;
+    }
+
+    // IDispatch
+    HRESULT STDMETHODCALLTYPE GetTypeInfoCount(UINT* pctinfo) override {
+        *pctinfo = 0;
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetTypeInfo(UINT iTInfo,
+                                          LCID lcid,
+                                          ITypeInfo** ppTInfo) override {
+        *ppTInfo = nullptr;
+        return E_NOTIMPL;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetIDsOfNames(REFIID riid,
+                                            LPOLESTR* rgszNames,
+                                            UINT cNames,
+                                            LCID lcid,
+                                            DISPID* rgDispId) override {
+        return E_NOTIMPL;
+    }
+
+    HRESULT STDMETHODCALLTYPE Invoke(DISPID dispIdMember,
+                                     REFIID riid,
+                                     LCID lcid,
+                                     WORD wFlags,
+                                     DISPPARAMS* pDispParams,
+                                     VARIANT* pVarResult,
+                                     EXCEPINFO* pExcepInfo,
+                                     UINT* puArgErr) override {
+        if (dispIdMember != DISPID_AMBIENT_DLCONTROL || !pVarResult) {
+            return DISP_E_MEMBERNOTFOUND;
+        }
+
+        // Omitting DLCTL_DLIMAGES, DLCTL_VIDEOS and DLCTL_BGSOUNDS disables
+        // those downloads.
+        V_VT(pVarResult) = VT_I4;
+        V_I4(pVarResult) = DLCTL_NO_SCRIPTS | DLCTL_NO_JAVA |
+                           DLCTL_NO_RUNACTIVEXCTLS | DLCTL_NO_DLACTIVEXCTLS |
+                           DLCTL_NO_FRAMEDOWNLOAD | DLCTL_NO_BEHAVIORS |
+                           DLCTL_NO_CLIENTPULL | DLCTL_SILENT |
+                           DLCTL_FORCEOFFLINE;
+        return S_OK;
+    }
+};
+
 std::wstring ExtractTextFromHtml(std::wstring html) {
     winrt::com_ptr<IHTMLDocument2> doc;
     winrt::check_hresult(CoCreateInstance(CLSID_HTMLDocument, nullptr,
@@ -921,6 +1218,18 @@ std::wstring ExtractTextFromHtml(std::wstring html) {
     if (!doc) {
         throw std::runtime_error("HTML document creation failed");
     }
+
+    // The content is untrusted.
+    auto oleObject = doc.as<IOleObject>();
+    auto clientSite = winrt::make_self<HtmlNoDownloadClientSite>();
+    winrt::check_hresult(oleObject->SetClientSite(clientSite.get()));
+
+    // The site's code lives in the mod, so don't leave MSHTML holding it once
+    // the document goes away, including on the error paths below.
+    struct ClientSiteDetacher {
+        IOleObject* oleObject;
+        ~ClientSiteDetacher() { oleObject->SetClientSite(nullptr); }
+    } clientSiteDetacher{oleObject.get()};
 
     // Prepare HTML content for processing.
     _bstr_t htmlBstr(
@@ -968,10 +1277,26 @@ std::wstring ExtractTextFromXml(std::wstring xml) {
 }
 
 bool IsStrInDateTimePatternSettings(PCWSTR str) {
-    return wcsstr(g_settings.topLine, str) ||
-           wcsstr(g_settings.bottomLine, str) ||
-           wcsstr(g_settings.middleLine, str) ||
-           wcsstr(g_settings.tooltipLine, str);
+    if (wcsstr(g_settings.topLine, str) || wcsstr(g_settings.bottomLine, str) ||
+        wcsstr(g_settings.middleLine, str) ||
+        wcsstr(g_settings.tooltipLine, str)) {
+        return true;
+    }
+
+    // The media info format strings are expanded as part of %media_info%, so
+    // tags they contain (e.g. %cpu%) need their data collected too. Only search
+    // them when %media_info% itself appears in a configured line.
+    if (wcsstr(g_settings.topLine, L"%media_info%") ||
+        wcsstr(g_settings.bottomLine, L"%media_info%") ||
+        wcsstr(g_settings.middleLine, L"%media_info%") ||
+        wcsstr(g_settings.tooltipLine, L"%media_info%")) {
+        if (wcsstr(g_settings.mediaPlayer.mediaInfoFormat.get(), str) ||
+            wcsstr(g_settings.mediaPlayer.noMediaText.get(), str)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 std::wstring EscapeUrlComponent(PCWSTR input,
@@ -1028,8 +1353,17 @@ bool UpdateWeatherWebContent() {
     }
     weatherUrl += L"format=";
     weatherUrl += EscapeUrlComponent(format.c_str());
+
+    Wh_Log(L"Fetching weather from URL: %s", weatherUrl.c_str());
+
     std::optional<std::wstring> urlContent = GetUrlContent(weatherUrl.c_str());
     if (!urlContent) {
+        return false;
+    }
+
+    // Ignore non-weather responses.
+    if (urlContent->empty() ||
+        *urlContent == L"This query is already being processed") {
         return false;
     }
 
@@ -1245,15 +1579,28 @@ void WebContentUpdateThreadInit() {
 }
 
 void WebContentUpdateThreadUninit() {
-    if (g_webContentUpdateThread) {
-        SetEvent(g_webContentUpdateStopEvent);
-        WaitForSingleObject(g_webContentUpdateThread, INFINITE);
-        CloseHandle(g_webContentUpdateThread);
+    HANDLE thread;
+    HANDLE stopEvent;
+    HANDLE refreshEvent;
+
+    {
+        std::lock_guard<std::mutex> guard(g_webContentMutex);
+        thread = g_webContentUpdateThread;
+        stopEvent = g_webContentUpdateStopEvent;
+        refreshEvent = g_webContentUpdateRefreshEvent;
         g_webContentUpdateThread = nullptr;
-        CloseHandle(g_webContentUpdateRefreshEvent);
-        g_webContentUpdateRefreshEvent = nullptr;
-        CloseHandle(g_webContentUpdateStopEvent);
         g_webContentUpdateStopEvent = nullptr;
+        g_webContentUpdateRefreshEvent = nullptr;
+    }
+
+    if (thread) {
+        SetEvent(stopEvent);
+        CancelUrlRequests();
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+        CloseHandle(refreshEvent);
+        CloseHandle(stopEvent);
+        ResumeUrlRequests();
     }
 
     std::lock_guard<std::mutex> guard(g_webContentMutex);
@@ -1504,6 +1851,24 @@ std::vector<std::wstring> SplitTimeFormatString(std::wstring_view s) {
     return result;
 }
 
+int GetTimeFormatExWithShowSeconds(LPCWSTR lpLocaleName,
+                                   const SYSTEMTIME* lpTime,
+                                   LPCWSTR lpFormat,
+                                   LPWSTR lpTimeStr,
+                                   int cchTime) {
+    DWORD dwFlags = g_settings.showSeconds ? 0 : TIME_NOSECONDS;
+
+    if (!g_settings.showSeconds && lpFormat) {
+        std::wstring formatNoSeconds = ReplaceAll(lpFormat, L"':'ss", L"");
+        return GetTimeFormatEx_Original(lpLocaleName, dwFlags, lpTime,
+                                        formatNoSeconds.c_str(), lpTimeStr,
+                                        cchTime);
+    }
+
+    return GetTimeFormatEx_Original(lpLocaleName, dwFlags, lpTime, lpFormat,
+                                    lpTimeStr, cchTime);
+}
+
 PCWSTR GetTimeFormattedWithExtra(std::vector<std::wstring>** extra) {
     if (g_timeFormatted.formatIndex != g_formatIndex) {
         const SYSTEMTIME* time = &g_formatTime;
@@ -1511,19 +1876,19 @@ PCWSTR GetTimeFormattedWithExtra(std::vector<std::wstring>** extra) {
         auto timeFormatParts =
             SplitTimeFormatString(g_settings.timeFormat.get());
 
-        GetTimeFormatEx_Original(
-            nullptr, g_settings.showSeconds ? 0 : TIME_NOSECONDS, time,
+        GetTimeFormatExWithShowSeconds(
+            nullptr, time,
             !timeFormatParts[0].empty() ? timeFormatParts[0].c_str() : nullptr,
             g_timeFormatted.buffer, ARRAYSIZE(g_timeFormatted.buffer));
 
         g_timeFormattedExtra.resize(timeFormatParts.size() - 1);
         for (size_t i = 1; i < timeFormatParts.size(); i++) {
             WCHAR formatted[FORMATTED_BUFFER_SIZE];
-            GetTimeFormatEx_Original(
-                nullptr, g_settings.showSeconds ? 0 : TIME_NOSECONDS, time,
-                !timeFormatParts[i].empty() ? timeFormatParts[i].c_str()
-                                            : nullptr,
-                formatted, ARRAYSIZE(formatted));
+            GetTimeFormatExWithShowSeconds(nullptr, time,
+                                           !timeFormatParts[i].empty()
+                                               ? timeFormatParts[i].c_str()
+                                               : nullptr,
+                                           formatted, ARRAYSIZE(formatted));
             g_timeFormattedExtra[i - 1] = formatted;
         }
 
@@ -1570,8 +1935,8 @@ PCWSTR GetTimeFormattedTz(size_t index) {
             auto timeFormatParts =
                 SplitTimeFormatString(g_settings.timeFormat.get());
 
-            GetTimeFormatEx_Original(
-                nullptr, g_settings.showSeconds ? 0 : TIME_NOSECONDS, time,
+            GetTimeFormatExWithShowSeconds(
+                nullptr, time,
                 !timeFormatParts[0].empty() ? timeFormatParts[0].c_str()
                                             : nullptr,
                 timeFormattedTz.buffer, ARRAYSIZE(timeFormattedTz.buffer));
@@ -1585,6 +1950,20 @@ PCWSTR GetTimeFormattedTz(size_t index) {
     return timeFormattedTz.buffer;
 }
 
+// Returns the locale of the date format at the given index, falling back to the
+// first locale. GetDateFormatEx treats an empty locale name as the invariant
+// locale, so return nullptr (the user's default locale) for an empty one.
+PCWSTR GetDateLocaleName(size_t index) {
+    const auto& locales = g_settings.dateLocales;
+    if (index >= locales.size()) {
+        index = 0;
+    }
+
+    return index < locales.size() && !locales[index].empty()
+               ? locales[index].c_str()
+               : nullptr;
+}
+
 PCWSTR GetDateFormattedWithExtra(std::vector<std::wstring>** extra) {
     if (g_dateFormatted.formatIndex != g_formatIndex) {
         const SYSTEMTIME* time = &g_formatTime;
@@ -1593,18 +1972,18 @@ PCWSTR GetDateFormattedWithExtra(std::vector<std::wstring>** extra) {
             SplitTimeFormatString(g_settings.dateFormat.get());
 
         GetDateFormatEx_Original(
-            nullptr, DATE_AUTOLAYOUT, time,
+            GetDateLocaleName(0), DATE_AUTOLAYOUT, time,
             !dateFormatParts[0].empty() ? dateFormatParts[0].c_str() : nullptr,
             g_dateFormatted.buffer, ARRAYSIZE(g_dateFormatted.buffer), nullptr);
 
         g_dateFormattedExtra.resize(dateFormatParts.size() - 1);
         for (size_t i = 1; i < dateFormatParts.size(); i++) {
             WCHAR formatted[FORMATTED_BUFFER_SIZE];
-            GetDateFormatEx_Original(nullptr, DATE_AUTOLAYOUT, time,
-                                     !dateFormatParts[i].empty()
-                                         ? dateFormatParts[i].c_str()
-                                         : nullptr,
-                                     formatted, ARRAYSIZE(formatted), nullptr);
+            GetDateFormatEx_Original(
+                GetDateLocaleName(i), DATE_AUTOLAYOUT, time,
+                !dateFormatParts[i].empty() ? dateFormatParts[i].c_str()
+                                            : nullptr,
+                formatted, ARRAYSIZE(formatted), nullptr);
             g_dateFormattedExtra[i - 1] = formatted;
         }
 
@@ -1652,7 +2031,7 @@ PCWSTR GetDateFormattedTz(size_t index) {
                 SplitTimeFormatString(g_settings.dateFormat.get());
 
             GetDateFormatEx_Original(
-                nullptr, DATE_AUTOLAYOUT, time,
+                GetDateLocaleName(0), DATE_AUTOLAYOUT, time,
                 !dateFormatParts[0].empty() ? dateFormatParts[0].c_str()
                                             : nullptr,
                 dateFormattedTz.buffer, ARRAYSIZE(dateFormattedTz.buffer),
@@ -1669,7 +2048,7 @@ PCWSTR GetDateFormattedTz(size_t index) {
 
 void FormatWeekday(const SYSTEMTIME* time, PWSTR buffer, size_t bufferSize) {
     if (g_settings.weekdayFormatCustom.empty()) {
-        GetDateFormatEx_Original(nullptr, DATE_AUTOLAYOUT, time,
+        GetDateFormatEx_Original(GetDateLocaleName(0), DATE_AUTOLAYOUT, time,
                                  *g_settings.weekdayFormat
                                      ? g_settings.weekdayFormat.get()
                                      : L"dddd",
@@ -1717,9 +2096,6 @@ PCWSTR GetWeekdayFormattedTz(size_t index) {
 
             const SYSTEMTIME* time = &timeTz;
 
-            auto weekdayFormatParts =
-                SplitTimeFormatString(g_settings.weekdayFormat.get());
-
             FormatWeekday(time, weekdayFormattedTz.buffer,
                           ARRAYSIZE(weekdayFormattedTz.buffer));
         } else {
@@ -1753,7 +2129,7 @@ PCWSTR GetWeeknumFormatted() {
 
         DWORD startDayOfWeek = GetStartDayOfWeek(time);
 
-        swprintf_s(g_weeknumFormatted.buffer, L"%d",
+        swprintf_s(g_weeknumFormatted.buffer, L"%02d",
                    CalculateWeeknum(time, startDayOfWeek));
 
         g_weeknumFormatted.formatIndex = g_formatIndex;
@@ -1766,7 +2142,7 @@ PCWSTR GetWeeknumIsoFormatted() {
     if (g_weeknumIsoFormatted.formatIndex != g_formatIndex) {
         const SYSTEMTIME* time = &g_formatTime;
 
-        swprintf_s(g_weeknumIsoFormatted.buffer, L"%d",
+        swprintf_s(g_weeknumIsoFormatted.buffer, L"%02d",
                    CalculateWeeknumIso(time));
 
         g_weeknumIsoFormatted.formatIndex = g_formatIndex;
@@ -1799,6 +2175,8 @@ PCWSTR GetTimezoneFormatted() {
     return g_timezoneFormatted.buffer;
 }
 
+constexpr double kGBInBytes = 1024.0 * 1024.0 * 1024.0;
+
 enum class MetricType {
     kUploadSpeed,
     kDownloadSpeed,
@@ -1806,9 +2184,236 @@ enum class MetricType {
     kDiskWriteSpeed,
     kCpu,
     kGpuUsage,
+    kVramUsed,
+    kVramSharedUsed,
+    kCpuTemp,
 
     kCount,
 };
+
+// D3DKMT is used to read the GPU temperature, which has no PDH counter. The
+// types and gdi32 exports below are declared directly to avoid depending on the
+// d3dkmthk.h header, which isn't available in all build environments.
+using D3DKMT_HANDLE = UINT32;
+
+typedef struct _D3DKMT_OPENADAPTERFROMLUID {
+    LUID AdapterLuid;
+    D3DKMT_HANDLE hAdapter;
+} D3DKMT_OPENADAPTERFROMLUID;
+
+typedef struct _D3DKMT_CLOSEADAPTER {
+    D3DKMT_HANDLE hAdapter;
+} D3DKMT_CLOSEADAPTER;
+
+typedef struct _D3DKMT_QUERYADAPTERINFO {
+    D3DKMT_HANDLE hAdapter;
+    UINT Type;  // KMTQUERYADAPTERINFOTYPE
+    VOID* pPrivateDriverData;
+    UINT PrivateDriverDataSize;
+} D3DKMT_QUERYADAPTERINFO;
+
+typedef struct _D3DKMT_ADAPTER_PERFDATA {
+    UINT PhysicalAdapterIndex;
+    ULONGLONG MemoryFrequency;
+    ULONGLONG MaxMemoryFrequency;
+    ULONGLONG MaxMemoryFrequencyOC;
+    ULONGLONG MemoryBandwidth;
+    ULONGLONG PCIEBandwidth;
+    ULONG FanRPM;
+    ULONG Power;
+    ULONG Temperature;
+    UCHAR PowerStateOverride;
+} D3DKMT_ADAPTER_PERFDATA;
+
+// KMTQAITYPE_ADAPTERPERFDATA.
+constexpr UINT kAdapterPerfDataQueryType = 62;
+
+using D3DKMTOpenAdapterFromLuid_t =
+    NTSTATUS(WINAPI*)(D3DKMT_OPENADAPTERFROMLUID*);
+D3DKMTOpenAdapterFromLuid_t pD3DKMTOpenAdapterFromLuid;
+
+using D3DKMTQueryAdapterInfo_t = NTSTATUS(WINAPI*)(D3DKMT_QUERYADAPTERINFO*);
+D3DKMTQueryAdapterInfo_t pD3DKMTQueryAdapterInfo;
+
+using D3DKMTCloseAdapter_t = NTSTATUS(WINAPI*)(const D3DKMT_CLOSEADAPTER*);
+D3DKMTCloseAdapter_t pD3DKMTCloseAdapter;
+
+// GPU adapter info from DXGI. This is static hardware capacity, independent of
+// the PDH sampling session: it is queried lazily and cached, keyed by the
+// configured adapter name so that changing the selection re-queries.
+struct DxgiAdapterInfo {
+    std::wstring description;
+    std::wstring luid;
+    LUID luidValue;
+    SIZE_T dedicated_video_memory;
+    SIZE_T shared_system_memory;
+};
+
+std::optional<std::wstring> g_dxgiAdapterInfoGpuName;
+std::optional<DxgiAdapterInfo> g_dxgiAdapterInfo;
+
+std::optional<DxgiAdapterInfo> GetDxgiAdapterInfo(PCWSTR gpu_name, bool quiet) {
+    std::wstring gpu_name_key = gpu_name ? gpu_name : L"";
+    if (g_dxgiAdapterInfoGpuName == gpu_name_key) {
+        return g_dxgiAdapterInfo;
+    }
+
+    g_dxgiAdapterInfoGpuName = gpu_name_key;
+    g_dxgiAdapterInfo.reset();
+
+    winrt::com_ptr<IDXGIFactory> factory;
+    if (FAILED(CreateDXGIFactory(IID_PPV_ARGS(factory.put())))) {
+        return std::nullopt;
+    }
+
+    DXGI_ADAPTER_DESC best_desc{};
+    bool found = false;
+
+    for (UINT i = 0;; i++) {
+        winrt::com_ptr<IDXGIAdapter> adapter;
+        if (factory->EnumAdapters(i, adapter.put()) == DXGI_ERROR_NOT_FOUND) {
+            break;
+        }
+
+        DXGI_ADAPTER_DESC desc{};
+        if (FAILED(adapter->GetDesc(&desc))) {
+            continue;
+        }
+
+        if (!quiet) {
+            Wh_Log(L"DXGI adapter %u: %s (LUID: 0x%08X_0x%08X, VRAM: %zu)", i,
+                   desc.Description, desc.AdapterLuid.HighPart,
+                   desc.AdapterLuid.LowPart, desc.DedicatedVideoMemory);
+        }
+
+        // If a name is specified, check for a match.
+        if (gpu_name && *gpu_name) {
+            if (StrStrIW(desc.Description, gpu_name)) {
+                best_desc = desc;
+                found = true;
+                break;
+            }
+        } else {
+            // Auto-select the one with most dedicated VRAM.
+            if (!found ||
+                desc.DedicatedVideoMemory > best_desc.DedicatedVideoMemory) {
+                best_desc = desc;
+                found = true;
+            }
+        }
+    }
+
+    if (!found) {
+        return std::nullopt;
+    }
+
+    WCHAR luid_str[32];
+    swprintf_s(luid_str, L"0x%08X_0x%08X", best_desc.AdapterLuid.HighPart,
+               best_desc.AdapterLuid.LowPart);
+
+    g_dxgiAdapterInfo = DxgiAdapterInfo{
+        best_desc.Description,        luid_str,
+        best_desc.AdapterLuid,        best_desc.DedicatedVideoMemory,
+        best_desc.SharedSystemMemory,
+    };
+
+    return g_dxgiAdapterInfo;
+}
+
+// Makes the next GetDxgiAdapterInfo call enumerate the adapters again. A driver
+// update or a GPU reset assigns the adapter a new LUID.
+void InvalidateDxgiAdapterInfo() {
+    g_dxgiAdapterInfoGpuName.reset();
+}
+
+// Invalidates the cached adapter info if D3DKMT no longer recognizes its LUID.
+// This is much cheaper than enumerating the adapters again.
+void InvalidateDxgiAdapterInfoIfStale() {
+    if (!g_dxgiAdapterInfo || !pD3DKMTOpenAdapterFromLuid ||
+        !pD3DKMTCloseAdapter) {
+        return;
+    }
+
+    D3DKMT_OPENADAPTERFROMLUID openAdapter{};
+    openAdapter.AdapterLuid = g_dxgiAdapterInfo->luidValue;
+    if (pD3DKMTOpenAdapterFromLuid(&openAdapter) != 0) {
+        Wh_Log(L"GPU adapter LUID %s is stale",
+               g_dxgiAdapterInfo->luid.c_str());
+        InvalidateDxgiAdapterInfo();
+        return;
+    }
+
+    D3DKMT_CLOSEADAPTER closeAdapter{};
+    closeAdapter.hAdapter = openAdapter.hAdapter;
+    pD3DKMTCloseAdapter(&closeAdapter);
+}
+
+std::optional<double> GetDedicatedVramTotalGb() {
+    auto info =
+        GetDxgiAdapterInfo(g_settings.dataCollection.gpuAdapterName, true);
+    if (info && info->dedicated_video_memory > 0) {
+        return (double)info->dedicated_video_memory / kGBInBytes;
+    }
+    return std::nullopt;
+}
+
+std::optional<double> GetSharedVramTotalGb() {
+    auto info =
+        GetDxgiAdapterInfo(g_settings.dataCollection.gpuAdapterName, true);
+    if (info && info->shared_system_memory > 0) {
+        return (double)info->shared_system_memory / kGBInBytes;
+    }
+    return std::nullopt;
+}
+
+// Queries the GPU temperature via D3DKMT. The selected DXGI adapter provides
+// the LUID that identifies the adapter to D3DKMT. Returns nullopt if the driver
+// doesn't report a temperature.
+std::optional<double> GetGpuTemperatureCelsius() {
+    if (!pD3DKMTOpenAdapterFromLuid || !pD3DKMTQueryAdapterInfo ||
+        !pD3DKMTCloseAdapter) {
+        return std::nullopt;
+    }
+
+    auto info =
+        GetDxgiAdapterInfo(g_settings.dataCollection.gpuAdapterName, true);
+    if (!info) {
+        return std::nullopt;
+    }
+
+    D3DKMT_OPENADAPTERFROMLUID openAdapter{};
+    openAdapter.AdapterLuid = info->luidValue;
+    if (pD3DKMTOpenAdapterFromLuid(&openAdapter) != 0) {
+        InvalidateDxgiAdapterInfo();
+        return std::nullopt;
+    }
+
+    D3DKMT_ADAPTER_PERFDATA perfData{};
+    D3DKMT_QUERYADAPTERINFO queryInfo{};
+    queryInfo.hAdapter = openAdapter.hAdapter;
+    queryInfo.Type = kAdapterPerfDataQueryType;
+    queryInfo.pPrivateDriverData = &perfData;
+    queryInfo.PrivateDriverDataSize = sizeof(perfData);
+
+    NTSTATUS status = pD3DKMTQueryAdapterInfo(&queryInfo);
+
+    D3DKMT_CLOSEADAPTER closeAdapter{};
+    closeAdapter.hAdapter = openAdapter.hAdapter;
+    pD3DKMTCloseAdapter(&closeAdapter);
+
+    if (status != 0) {
+        return std::nullopt;
+    }
+
+    // A zero reading means the driver doesn't expose a temperature; treat it as
+    // unavailable rather than showing an implausible 0 degrees.
+    if (perfData.Temperature == 0) {
+        return std::nullopt;
+    }
+
+    // Temperature is reported in tenths of a degree Celsius.
+    return perfData.Temperature / 10.0;
+}
 
 class QueryDataCollectionSession {
    public:
@@ -1826,11 +2431,19 @@ class QueryDataCollectionSession {
     ~QueryDataCollectionSession() { PdhCloseQuery(query_); }
 
     bool AddMetric(MetricType type);
-    void UpdateMetric(MetricType type);
+    void UpdateAllMetrics();
     bool SampleData();
     std::optional<double> QueryData(MetricType type);
+    std::optional<double> QueryDataAvg(MetricType type);
 
    private:
+    struct QueryDataResult {
+        double sum;
+        size_t count;
+    };
+    std::optional<QueryDataResult> QueryDataWithCount(MetricType type);
+    void UpdateMetric(MetricType type);
+
     std::vector<std::wstring> ExpandEnglishWildcard(PCWSTR wildcard_path,
                                                     bool quiet);
     static std::wstring_view ExtractInstanceName(std::wstring_view path);
@@ -1839,7 +2452,6 @@ class QueryDataCollectionSession {
         const std::vector<std::wstring>& paths,
         PCWSTR adapter_name,
         bool quiet);
-    static std::wstring GetGpuLuidByName(PCWSTR gpu_name, bool quiet);
     static std::vector<std::wstring> FilterGpuPathsByAdapterName(
         const std::vector<std::wstring>& paths,
         PCWSTR gpu_name,
@@ -1852,10 +2464,14 @@ class QueryDataCollectionSession {
         auto paths = ExpandEnglishWildcard(counter_path, quiet);
 
         // Filter paths by adapter name if specified.
-        if (adapter_name && *adapter_name && !paths.empty()) {
-            if (type == MetricType::kGpuUsage) {
+        if (!paths.empty()) {
+            if (type == MetricType::kGpuUsage ||
+                type == MetricType::kVramUsed ||
+                type == MetricType::kVramSharedUsed) {
+                // For GPU metrics, we always filter (to auto-select the best
+                // adapter if name is empty).
                 paths = FilterGpuPathsByAdapterName(paths, adapter_name, quiet);
-            } else {
+            } else if (adapter_name && *adapter_name) {
                 paths =
                     FilterNetworkPathsByAdapterName(paths, adapter_name, quiet);
             }
@@ -1871,7 +2487,7 @@ class QueryDataCollectionSession {
 
     struct MetricData {
         std::vector<CounterEntry> counters;
-        bool is_wildcard = false;
+        PCWSTR wildcard_path = nullptr;
         PCWSTR adapter_name = nullptr;
     };
 
@@ -1910,6 +2526,20 @@ bool QueryDataCollectionSession::AddMetric(MetricType type) {
             is_wildcard = true;
             adapter_name = g_settings.dataCollection.gpuAdapterName;
             break;
+        case MetricType::kVramUsed:
+            counter_path = L"\\GPU Adapter Memory(*)\\Dedicated Usage";
+            is_wildcard = true;
+            adapter_name = g_settings.dataCollection.gpuAdapterName;
+            break;
+        case MetricType::kVramSharedUsed:
+            counter_path = L"\\GPU Adapter Memory(*)\\Shared Usage";
+            is_wildcard = true;
+            adapter_name = g_settings.dataCollection.gpuAdapterName;
+            break;
+        case MetricType::kCpuTemp:
+            counter_path = L"\\Thermal Zone Information(*)\\Temperature";
+            is_wildcard = true;
+            break;
         default:
             return false;
     }
@@ -1919,7 +2549,7 @@ bool QueryDataCollectionSession::AddMetric(MetricType type) {
         return false;
     }
 
-    metric.is_wildcard = is_wildcard;
+    metric.wildcard_path = is_wildcard ? counter_path : nullptr;
     metric.adapter_name = adapter_name;
 
     if (is_wildcard) {
@@ -1928,7 +2558,7 @@ bool QueryDataCollectionSession::AddMetric(MetricType type) {
 
         for (const auto& path : paths) {
             PDH_HCOUNTER counter;
-            HRESULT hr = PdhAddCounter(query_, path.c_str(), 0, &counter);
+            PDH_STATUS hr = PdhAddCounter(query_, path.c_str(), 0, &counter);
             if (SUCCEEDED(hr)) {
                 metric.counters.push_back({path, counter});
             } else {
@@ -1937,7 +2567,7 @@ bool QueryDataCollectionSession::AddMetric(MetricType type) {
         }
     } else {
         PDH_HCOUNTER counter;
-        HRESULT hr = PdhAddEnglishCounter(query_, counter_path, 0, &counter);
+        PDH_STATUS hr = PdhAddEnglishCounter(query_, counter_path, 0, &counter);
         if (SUCCEEDED(hr)) {
             metric.counters.push_back({counter_path, counter});
         } else {
@@ -1951,27 +2581,12 @@ bool QueryDataCollectionSession::AddMetric(MetricType type) {
 void QueryDataCollectionSession::UpdateMetric(MetricType type) {
     auto& metric = metrics_[static_cast<int>(type)];
 
-    if (!metric.is_wildcard) {
+    if (!metric.wildcard_path) {
         return;
     }
 
-    PCWSTR counter_path;
-    switch (type) {
-        case MetricType::kDownloadSpeed:
-            counter_path = L"\\Network Interface(*)\\Bytes Received/sec";
-            break;
-        case MetricType::kUploadSpeed:
-            counter_path = L"\\Network Interface(*)\\Bytes Sent/sec";
-            break;
-        case MetricType::kGpuUsage:
-            counter_path = L"\\GPU Engine(*)\\Utilization Percentage";
-            break;
-        default:
-            return;
-    }
-
     auto current_paths = ExpandAndFilterWildcardPaths(
-        type, counter_path, metric.adapter_name, /*quiet=*/true);
+        type, metric.wildcard_path, metric.adapter_name, /*quiet=*/true);
 
     // Build a set of current paths for quick lookup.
     std::unordered_set<std::wstring> current_path_set(current_paths.begin(),
@@ -1998,7 +2613,7 @@ void QueryDataCollectionSession::UpdateMetric(MetricType type) {
     for (const auto& path : current_paths) {
         if (existing_paths.find(path) == existing_paths.end()) {
             PDH_HCOUNTER counter;
-            HRESULT hr = PdhAddCounter(query_, path.c_str(), 0, &counter);
+            PDH_STATUS hr = PdhAddCounter(query_, path.c_str(), 0, &counter);
             if (SUCCEEDED(hr)) {
                 Wh_Log(L"Adding new counter: %s", path.c_str());
                 metric.counters.push_back({path, counter});
@@ -2009,8 +2624,16 @@ void QueryDataCollectionSession::UpdateMetric(MetricType type) {
     }
 }
 
+void QueryDataCollectionSession::UpdateAllMetrics() {
+    for (int i = 0; i < static_cast<int>(MetricType::kCount); i++) {
+        if (metrics_[i].wildcard_path) {
+            UpdateMetric(static_cast<MetricType>(i));
+        }
+    }
+}
+
 bool QueryDataCollectionSession::SampleData() {
-    HRESULT hr = PdhCollectQueryData(query_);
+    PDH_STATUS hr = PdhCollectQueryData(query_);
     if (FAILED(hr)) {
         Wh_Log(L"PdhCollectQueryData error %08X", hr);
         return false;
@@ -2019,9 +2642,8 @@ bool QueryDataCollectionSession::SampleData() {
     return true;
 }
 
-std::optional<double> QueryDataCollectionSession::QueryData(MetricType type) {
-    UpdateMetric(type);
-
+std::optional<QueryDataCollectionSession::QueryDataResult>
+QueryDataCollectionSession::QueryDataWithCount(MetricType type) {
     const auto& metric = metrics_[static_cast<int>(type)];
 
     if (metric.counters.empty()) {
@@ -2029,18 +2651,47 @@ std::optional<double> QueryDataCollectionSession::QueryData(MetricType type) {
     }
 
     double sum = 0.0;
+    size_t count = 0;
     for (const auto& entry : metric.counters) {
         PDH_FMT_COUNTERVALUE val;
-        HRESULT hr = PdhGetFormattedCounterValue(entry.counter, PDH_FMT_DOUBLE,
-                                                 nullptr, &val);
+        PDH_STATUS hr = PdhGetFormattedCounterValue(
+            entry.counter, PDH_FMT_DOUBLE, nullptr, &val);
         if (SUCCEEDED(hr)) {
+            // Skip dead thermal zones that report implausible values (below 200
+            // Kelvin / -73°C), which would skew the average.
+            if (type == MetricType::kCpuTemp && val.doubleValue < 200) {
+                continue;
+            }
+
             sum += val.doubleValue;
+            count++;
         } else {
             Wh_Log(L"PdhGetFormattedCounterValue error %08X", hr);
         }
     }
 
-    return sum;
+    if (count == 0) {
+        return std::nullopt;
+    }
+
+    return QueryDataResult{sum, count};
+}
+
+std::optional<double> QueryDataCollectionSession::QueryData(MetricType type) {
+    auto result = QueryDataWithCount(type);
+    if (!result) {
+        return std::nullopt;
+    }
+    return result->sum;
+}
+
+std::optional<double> QueryDataCollectionSession::QueryDataAvg(
+    MetricType type) {
+    auto result = QueryDataWithCount(type);
+    if (!result) {
+        return std::nullopt;
+    }
+    return result->sum / result->count;
 }
 
 // Implemented according to the note here:
@@ -2050,7 +2701,8 @@ std::vector<std::wstring> QueryDataCollectionSession::ExpandEnglishWildcard(
     bool quiet) {
     // Step 1: Add English counter with wildcards to get localized path.
     PDH_HCOUNTER temp_counter;
-    HRESULT hr = PdhAddEnglishCounter(query_, wildcard_path, 0, &temp_counter);
+    PDH_STATUS hr =
+        PdhAddEnglishCounter(query_, wildcard_path, 0, &temp_counter);
     if (FAILED(hr)) {
         Wh_Log(L"PdhAddEnglishCounter error %08X", hr);
         return {};
@@ -2059,7 +2711,7 @@ std::vector<std::wstring> QueryDataCollectionSession::ExpandEnglishWildcard(
     // Step 2: Get counter info to obtain localized full path.
     DWORD required = 0;
     hr = PdhGetCounterInfo(temp_counter, FALSE, &required, nullptr);
-    if (FAILED(hr) && hr != static_cast<HRESULT>(PDH_MORE_DATA)) {
+    if (FAILED(hr) && hr != static_cast<PDH_STATUS>(PDH_MORE_DATA)) {
         Wh_Log(L"PdhGetCounterInfo (size) error %08X", hr);
         PdhRemoveCounter(temp_counter);
         return {};
@@ -2085,7 +2737,7 @@ std::vector<std::wstring> QueryDataCollectionSession::ExpandEnglishWildcard(
     required = 0;
     hr = PdhExpandWildCardPath(nullptr, counter_info->szFullPath, nullptr,
                                &required, 0);
-    if (FAILED(hr) && hr != static_cast<HRESULT>(PDH_MORE_DATA)) {
+    if (FAILED(hr) && hr != static_cast<PDH_STATUS>(PDH_MORE_DATA)) {
         Wh_Log(L"PdhExpandWildCardPath (localized, size) error %08X", hr);
         return {};
     }
@@ -2146,7 +2798,7 @@ std::wstring_view QueryDataCollectionSession::ExtractGpuLuid(
     return instance.substr(luid_start, phys_pos - luid_start);
 }
 
-// Filter network paths by adapter name (substring match).
+// Filter network paths by adapter name (case-insensitive substring match).
 std::vector<std::wstring>
 QueryDataCollectionSession::FilterNetworkPathsByAdapterName(
     const std::vector<std::wstring>& paths,
@@ -2163,7 +2815,7 @@ QueryDataCollectionSession::FilterNetworkPathsByAdapterName(
             continue;
         }
 
-        if (instance.find(adapter_name) != std::wstring_view::npos) {
+        if (StrStrIW(std::wstring(instance).c_str(), adapter_name)) {
             if (!quiet) {
                 Wh_Log(L"Matched network adapter: %.*s",
                        static_cast<int>(instance.size()), instance.data());
@@ -2182,46 +2834,6 @@ QueryDataCollectionSession::FilterNetworkPathsByAdapterName(
     return filtered;
 }
 
-// Get the LUID for a GPU adapter by name using DXGI.
-std::wstring QueryDataCollectionSession::GetGpuLuidByName(PCWSTR gpu_name,
-                                                          bool quiet) {
-    winrt::com_ptr<IDXGIFactory> factory;
-    if (FAILED(CreateDXGIFactory(IID_PPV_ARGS(factory.put())))) {
-        return {};
-    }
-
-    for (UINT i = 0;; i++) {
-        winrt::com_ptr<IDXGIAdapter> adapter;
-        if (factory->EnumAdapters(i, adapter.put()) == DXGI_ERROR_NOT_FOUND) {
-            break;
-        }
-
-        DXGI_ADAPTER_DESC desc{};
-        if (FAILED(adapter->GetDesc(&desc))) {
-            continue;
-        }
-
-        if (!quiet) {
-            Wh_Log(L"DXGI adapter %u: %s (LUID: 0x%08X_0x%08X)", i,
-                   desc.Description, desc.AdapterLuid.HighPart,
-                   desc.AdapterLuid.LowPart);
-        }
-
-        if (wcsstr(desc.Description, gpu_name)) {
-            WCHAR luid_str[32];
-            swprintf_s(luid_str, L"0x%08X_0x%08X", desc.AdapterLuid.HighPart,
-                       desc.AdapterLuid.LowPart);
-            if (!quiet) {
-                Wh_Log(L"Matched GPU: %s -> LUID %s", desc.Description,
-                       luid_str);
-            }
-            return luid_str;
-        }
-    }
-
-    return {};
-}
-
 // Filter GPU paths by adapter name (uses DXGI to map name to LUID).
 std::vector<std::wstring>
 QueryDataCollectionSession::FilterGpuPathsByAdapterName(
@@ -2232,13 +2844,17 @@ QueryDataCollectionSession::FilterGpuPathsByAdapterName(
         Wh_Log(L"Filtering GPU adapters by name: %s", gpu_name);
     }
 
-    // Get the LUID for the GPU name.
-    std::wstring target_luid = GetGpuLuidByName(gpu_name, quiet);
-    if (target_luid.empty()) {
+    auto info = GetDxgiAdapterInfo(gpu_name, quiet);
+    if (!info) {
         if (!quiet) {
             Wh_Log(L"GPU not found by name");
         }
         return {};
+    }
+
+    if (!quiet) {
+        Wh_Log(L"Selected GPU: %s -> LUID %s", info->description.c_str(),
+               info->luid.c_str());
     }
 
     std::vector<std::wstring> filtered;
@@ -2253,15 +2869,19 @@ QueryDataCollectionSession::FilterGpuPathsByAdapterName(
             continue;
         }
 
-        if (_wcsicmp(std::wstring(luid).c_str(), target_luid.c_str()) == 0) {
+        if (_wcsicmp(std::wstring(luid).c_str(), info->luid.c_str()) == 0) {
             filtered.push_back(path);
         }
     }
 
     if (filtered.empty()) {
         if (!quiet) {
-            Wh_Log(L"No GPU paths matched LUID %s", target_luid.c_str());
+            Wh_Log(L"No GPU paths matched LUID %s", info->luid.c_str());
         }
+
+        // An idle GPU may have no instances either, so check the LUID before
+        // enumerating the adapters again.
+        InvalidateDxgiAdapterInfoIfStale();
         return {};
     }
 
@@ -2271,15 +2891,18 @@ QueryDataCollectionSession::FilterGpuPathsByAdapterName(
     return filtered;
 }
 
-std::optional<QueryDataCollectionSession> g_dataCollectionSession;
+[[clang::no_destroy]] std::optional<QueryDataCollectionSession>
+    g_dataCollectionSession;
 DWORD g_dataCollectionLastFormatIndex;
+
+// Whether a metric that changes over time is shown, in which case the clock
+// refreshes every second so that the update interval takes effect.
+bool g_dataCollectionPatternUsed;
 
 // Media player helper functions
 
-bool IsMediaPlayerIgnored(const winrt::hstring& appId) {
-    std::wstring appIdLower(appId);
-    std::transform(appIdLower.begin(), appIdLower.end(), appIdLower.begin(),
-                   ::towlower);
+void UpdateMediaIgnoredPlayersNoLock() {
+    g_mediaIgnoredPlayers.clear();
 
     for (const auto& ignored : g_settings.mediaPlayer.ignoredPlayers) {
         std::wstring ignoredLower(ignored.get());
@@ -2288,7 +2911,17 @@ bool IsMediaPlayerIgnored(const winrt::hstring& appId) {
         }
         std::transform(ignoredLower.begin(), ignoredLower.end(),
                        ignoredLower.begin(), ::towlower);
-        if (appIdLower.find(ignoredLower) != std::wstring::npos) {
+        g_mediaIgnoredPlayers.push_back(std::move(ignoredLower));
+    }
+}
+
+bool IsMediaPlayerIgnoredNoLock(const winrt::hstring& appId) {
+    std::wstring appIdLower(appId);
+    std::transform(appIdLower.begin(), appIdLower.end(), appIdLower.begin(),
+                   ::towlower);
+
+    for (const auto& ignored : g_mediaIgnoredPlayers) {
+        if (appIdLower.find(ignored) != std::wstring::npos) {
             return true;
         }
     }
@@ -2298,7 +2931,19 @@ bool IsMediaPlayerIgnored(const winrt::hstring& appId) {
 void RemoveBracketedContent(std::wstring& str, wchar_t open, wchar_t close) {
     size_t start = 0;
     while ((start = str.find(open, start)) != std::wstring::npos) {
-        size_t end = str.find(close, start);
+        // Find the matching close bracket, tracking depth so that nested
+        // brackets of the same type, e.g. "(a (b))", are removed as a whole
+        // instead of leaving a dangling close bracket behind.
+        size_t end = std::wstring::npos;
+        int depth = 0;
+        for (size_t i = start; i < str.size(); i++) {
+            if (str[i] == open) {
+                depth++;
+            } else if (str[i] == close && --depth == 0) {
+                end = i;
+                break;
+            }
+        }
         if (end == std::wstring::npos) {
             break;
         }
@@ -2350,18 +2995,18 @@ std::wstring RemoveBracketsFromString(std::wstring_view input) {
     return result.substr(startPos, endPos - startPos + 1);
 }
 
-void ClearMediaFormattedStrings() {
+// The media helpers below require g_mediaMutex to be held.
+
+void ClearMediaFormattedStringsNoLock() {
+    g_mediaActive = false;
     wcscpy_s(g_mediaTitleFormatted.buffer, L"");
     wcscpy_s(g_mediaArtistFormatted.buffer, L"");
     wcscpy_s(g_mediaAlbumFormatted.buffer, L"");
     wcscpy_s(g_mediaStatusFormatted.buffer, L"");
-    StringCopyTruncatedWithEllipsis(g_mediaInfoFormatted.buffer,
-                                    ARRAYSIZE(g_mediaInfoFormatted.buffer),
-                                    g_settings.mediaPlayer.noMediaText);
 }
 
 winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession
-FindActiveMediaSession() {
+FindActiveMediaSessionNoLock() {
     if (!g_mediaSessionManager) {
         return nullptr;
     }
@@ -2371,7 +3016,7 @@ FindActiveMediaSession() {
     if (currentSession) {
         try {
             auto appId = currentSession.SourceAppUserModelId();
-            if (!IsMediaPlayerIgnored(appId)) {
+            if (!IsMediaPlayerIgnoredNoLock(appId)) {
                 return currentSession;
             }
         } catch (...) {
@@ -2388,7 +3033,7 @@ FindActiveMediaSession() {
             auto session = sessions.GetAt(i);
             try {
                 auto appId = session.SourceAppUserModelId();
-                if (IsMediaPlayerIgnored(appId)) {
+                if (IsMediaPlayerIgnoredNoLock(appId)) {
                     continue;
                 }
 
@@ -2413,7 +3058,7 @@ FindActiveMediaSession() {
             auto session = sessions.GetAt(i);
             try {
                 auto appId = session.SourceAppUserModelId();
-                if (!IsMediaPlayerIgnored(appId)) {
+                if (!IsMediaPlayerIgnoredNoLock(appId)) {
                     return session;
                 }
             } catch (...) {
@@ -2430,18 +3075,20 @@ FindActiveMediaSession() {
     return nullptr;
 }
 
-void RefreshMediaData() {
-    std::lock_guard<std::mutex> guard(g_mediaMutex);
+void RefreshMediaDataNoLock() {
+    // Clear the flag before reading, so that a change signaled while the query
+    // below is in flight schedules another refresh instead of being swallowed.
+    g_mediaDataDirty = false;
 
     try {
         if (!g_mediaSessionManager) {
-            ClearMediaFormattedStrings();
+            ClearMediaFormattedStringsNoLock();
             return;
         }
 
-        auto session = FindActiveMediaSession();
+        auto session = FindActiveMediaSessionNoLock();
         if (!session) {
-            ClearMediaFormattedStrings();
+            ClearMediaFormattedStringsNoLock();
             return;
         }
 
@@ -2449,9 +3096,11 @@ void RefreshMediaData() {
         auto playbackInfo = session.GetPlaybackInfo();
 
         if (!mediaProperties) {
-            ClearMediaFormattedStrings();
+            ClearMediaFormattedStringsNoLock();
             return;
         }
+
+        g_mediaActive = true;
 
         // Get playback status as emoji
         auto status = playbackInfo.PlaybackStatus();
@@ -2473,8 +3122,9 @@ void RefreshMediaData() {
                 break;
         }
 
-        auto title = mediaProperties.Title();
-        auto artist = mediaProperties.Artist();
+        std::wstring title = RemoveBracketsFromString(mediaProperties.Title());
+        std::wstring artist =
+            RemoveBracketsFromString(mediaProperties.Artist());
         auto album = mediaProperties.AlbumTitle();
 
         StringCopyTruncatedWithEllipsis(g_mediaTitleFormatted.buffer,
@@ -2486,33 +3136,11 @@ void RefreshMediaData() {
         StringCopyTruncatedWithEllipsis(g_mediaAlbumFormatted.buffer,
                                         ARRAYSIZE(g_mediaAlbumFormatted.buffer),
                                         album.c_str());
-
-        // Create combined info with bracket removal
-        std::wstring processedArtist = RemoveBracketsFromString(artist);
-        std::wstring processedTitle = RemoveBracketsFromString(title);
-
-        std::wstring combinedInfo;
-        if (!processedArtist.empty() && !processedTitle.empty()) {
-            combinedInfo = processedArtist + L" - " + processedTitle;
-        } else if (!processedTitle.empty()) {
-            combinedInfo = processedTitle;
-        }
-
-        int maxLen = ARRAYSIZE(g_mediaInfoFormatted.buffer) - 1;
-        if (g_settings.mediaPlayer.maxLength > 0 &&
-            g_settings.mediaPlayer.maxLength < maxLen) {
-            maxLen = g_settings.mediaPlayer.maxLength;
-        }
-
-        StringCopyTruncatedWithEllipsis(g_mediaInfoFormatted.buffer, maxLen + 1,
-                                        combinedInfo.c_str());
     } catch (...) {
         HRESULT hr = winrt::to_hresult();
         Wh_Log(L"RefreshMediaData error: %08X", hr);
-        ClearMediaFormattedStrings();
+        ClearMediaFormattedStringsNoLock();
     }
-
-    g_mediaDataDirty = false;
 }
 
 void DataCollectionSessionInit() {
@@ -2543,9 +3171,37 @@ void DataCollectionSessionInit() {
         IsStrInDateTimePatternSettings(L"%cpu%");
     metrics[static_cast<int>(MetricType::kGpuUsage)] =
         IsStrInDateTimePatternSettings(L"%gpu%");
+    // %vram% and %vram_used% both read the dedicated VRAM usage counter; the
+    // percentage is derived from it and the total reported by DXGI. The totals
+    // (%vram_total% / %vram_shared_total%) come straight from DXGI and need no
+    // session, so they don't gate session creation here.
+    metrics[static_cast<int>(MetricType::kVramUsed)] =
+        IsStrInDateTimePatternSettings(L"%vram%") ||
+        IsStrInDateTimePatternSettings(L"%vram_used%");
+    metrics[static_cast<int>(MetricType::kVramSharedUsed)] =
+        IsStrInDateTimePatternSettings(L"%vram_shared%") ||
+        IsStrInDateTimePatternSettings(L"%vram_shared_used%");
+    metrics[static_cast<int>(MetricType::kCpuTemp)] =
+        IsStrInDateTimePatternSettings(L"%cpu_temp%") ||
+        IsStrInDateTimePatternSettings(L"%cpu_temp_f%");
 
-    if (!std::any_of(std::begin(metrics), std::end(metrics),
-                     [](bool x) { return x; })) {
+    bool sessionNeeded = std::any_of(std::begin(metrics), std::end(metrics),
+                                     [](bool x) { return x; });
+
+    // Metrics read without the session. Totals that never change are left out.
+    g_dataCollectionPatternUsed =
+        sessionNeeded || IsStrInDateTimePatternSettings(L"%ram%") ||
+        IsStrInDateTimePatternSettings(L"%ram_used%") ||
+        IsStrInDateTimePatternSettings(L"%ram_committed%") ||
+        IsStrInDateTimePatternSettings(L"%ram_committed_used%") ||
+        IsStrInDateTimePatternSettings(L"%ram_committed_total%") ||
+        IsStrInDateTimePatternSettings(L"%gpu_temp%") ||
+        IsStrInDateTimePatternSettings(L"%gpu_temp_f%") ||
+        IsStrInDateTimePatternSettings(L"%battery%") ||
+        IsStrInDateTimePatternSettings(L"%battery_time%") ||
+        IsStrInDateTimePatternSettings(L"%power%");
+
+    if (!sessionNeeded) {
         return;
     }
 
@@ -2570,6 +3226,7 @@ void DataCollectionSessionInit() {
 void DataCollectionSessionUninit() {
     g_dataCollectionSession.reset();
     g_dataCollectionLastFormatIndex = 0;
+    g_dataCollectionPatternUsed = false;
 }
 
 bool IsMediaPatternUsed() {
@@ -2580,7 +3237,7 @@ bool IsMediaPatternUsed() {
            IsStrInDateTimePatternSettings(L"%media_info%");
 }
 
-void UnsubscribeFromMediaSession() {
+void UnsubscribeFromMediaSessionNoLock() {
     if (g_mediaCurrentSession) {
         try {
             g_mediaCurrentSession.MediaPropertiesChanged(
@@ -2595,15 +3252,15 @@ void UnsubscribeFromMediaSession() {
     }
 }
 
-void SubscribeToMediaSession() {
-    UnsubscribeFromMediaSession();
+void SubscribeToMediaSessionNoLock() {
+    UnsubscribeFromMediaSessionNoLock();
 
     if (!g_mediaSessionManager) {
         return;
     }
 
     try {
-        auto session = FindActiveMediaSession();
+        auto session = FindActiveMediaSessionNoLock();
         if (!session) {
             return;
         }
@@ -2622,48 +3279,79 @@ void SubscribeToMediaSession() {
 }
 
 void MediaSessionUninit() {
-    UnsubscribeFromMediaSession();
+    winrt::Windows::Media::Control::
+        GlobalSystemMediaTransportControlsSessionManager sessionManager{
+            nullptr};
+    winrt::event_token sessionsChangedToken;
 
-    if (g_mediaSessionManager) {
+    {
+        std::lock_guard<std::mutex> guard(g_mediaMutex);
+
+        UnsubscribeFromMediaSessionNoLock();
+
+        sessionManager = std::move(g_mediaSessionManager);
+        sessionsChangedToken = g_mediaSessionsChangedToken;
+        g_mediaSessionsChangedToken = {};
+
+        g_mediaIgnoredPlayers.clear();
+        g_mediaDataDirty = true;
+    }
+
+    // Detach outside the lock: this waits for an in-flight
+    // OnMediaSessionsChanged, which takes the lock itself.
+    if (sessionManager) {
         try {
-            g_mediaSessionManager.SessionsChanged(g_mediaSessionsChangedToken);
+            sessionManager.SessionsChanged(sessionsChangedToken);
         } catch (...) {
             HRESULT hr = winrt::to_hresult();
             Wh_Log(L"MediaSessionUninit error: %08X", hr);
         }
-        g_mediaSessionManager = nullptr;
     }
-
-    g_mediaDataDirty = true;
 }
 
 void OnMediaSessionsChanged() {
     g_mediaDataDirty = true;
-    SubscribeToMediaSession();
+
+    std::lock_guard<std::mutex> guard(g_mediaMutex);
+    SubscribeToMediaSessionNoLock();
 }
 
 void MediaSessionInit() {
-    if (!IsMediaPatternUsed()) {
+    g_mediaPatternUsed = IsMediaPatternUsed();
+    if (!g_mediaPatternUsed) {
         return;
     }
 
-    try {
-        g_mediaSessionManager =
-            winrt::Windows::Media::Control::
-                GlobalSystemMediaTransportControlsSessionManager::RequestAsync()
-                    .get();
+    bool failed = false;
 
-        // Subscribe to SessionsChanged event
-        g_mediaSessionsChangedToken = g_mediaSessionManager.SessionsChanged(
-            [](auto&&, auto&&) { OnMediaSessionsChanged(); });
+    {
+        std::lock_guard<std::mutex> guard(g_mediaMutex);
 
-        // Subscribe to current session events
-        SubscribeToMediaSession();
+        UpdateMediaIgnoredPlayersNoLock();
 
-        RefreshMediaData();
-    } catch (...) {
-        HRESULT hr = winrt::to_hresult();
-        Wh_Log(L"MediaSessionInit error %08X", hr);
+        try {
+            g_mediaSessionManager =
+                winrt::Windows::Media::Control::
+                    GlobalSystemMediaTransportControlsSessionManager::
+                        RequestAsync()
+                            .get();
+
+            // Subscribe to SessionsChanged event
+            g_mediaSessionsChangedToken = g_mediaSessionManager.SessionsChanged(
+                [](auto&&, auto&&) { OnMediaSessionsChanged(); });
+
+            // Subscribe to current session events
+            SubscribeToMediaSessionNoLock();
+
+            RefreshMediaDataNoLock();
+        } catch (...) {
+            HRESULT hr = winrt::to_hresult();
+            Wh_Log(L"MediaSessionInit error %08X", hr);
+            failed = true;
+        }
+    }
+
+    if (failed) {
         MediaSessionUninit();
     }
 }
@@ -2686,11 +3374,29 @@ void DataCollectionSampleIfNeeded() {
     DWORD dataCollectionFormatIndex = GetDataCollectionFormatIndex();
     if (g_dataCollectionLastFormatIndex != dataCollectionFormatIndex) {
         if (g_dataCollectionSession) {
+            g_dataCollectionSession->UpdateAllMetrics();
             g_dataCollectionSession->SampleData();
         }
 
         g_dataCollectionLastFormatIndex = dataCollectionFormatIndex;
     }
+}
+
+// System memory status, sampled at most once per update interval. Empty if the
+// query failed.
+std::optional<MEMORYSTATUSEX> GetRamStatus() {
+    static MEMORYSTATUSEX status{};
+    static bool valid = false;
+    static DWORD lastFormatIndex = 0xFFFFFFFF;
+
+    DWORD formatIndex = GetDataCollectionFormatIndex();
+    if (lastFormatIndex != formatIndex) {
+        status.dwLength = sizeof(status);
+        valid = GlobalMemoryStatusEx(&status);
+        lastFormatIndex = formatIndex;
+    }
+
+    return valid ? std::optional<MEMORYSTATUSEX>(status) : std::nullopt;
 }
 
 std::wstring FormatLocaleNum(double val, unsigned int digitsAfterDecimal) {
@@ -2736,7 +3442,11 @@ std::wstring FormatLocaleNum(double val, unsigned int digitsAfterDecimal) {
     return out;
 }
 
-void FormatTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
+void FormatTransferSpeed(double val,
+                         NetworkMetricsFormat format,
+                         int fixedDecimals,
+                         PWSTR buffer,
+                         size_t bufferSize) {
     constexpr int kKBInBytes = 1024;
     constexpr int kMBInBytes = 1024 * kKBInBytes;
     constexpr int kKbitInBytes = 1000 / 8;
@@ -2745,7 +3455,7 @@ void FormatTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
     double valUnit;
     PCWSTR unit = L"";
 
-    switch (g_settings.dataCollection.networkMetricsFormat) {
+    switch (format) {
         case NetworkMetricsFormat::mbs:
             valUnit = val / kMBInBytes;
             unit = L" MB/s";
@@ -2788,7 +3498,7 @@ void FormatTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
     int digitsAfterDecimal = 0;
     PCWSTR prefix = L"";
 
-    if (g_settings.dataCollection.networkMetricsFixedDecimals == -1) {
+    if (fixedDecimals == -1) {
         // Keep identical width for <1000 values.
         if (valUnit < 10) {
             digitsAfterDecimal = 2;
@@ -2799,8 +3509,7 @@ void FormatTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
             prefix = L"\u2008";
         }
     } else {
-        digitsAfterDecimal =
-            g_settings.dataCollection.networkMetricsFixedDecimals;
+        digitsAfterDecimal = fixedDecimals;
     }
 
     std::wstring valUnitFormatted =
@@ -2808,6 +3517,22 @@ void FormatTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
 
     swprintf_s(buffer, bufferSize, L"%s%s%s", prefix, valUnitFormatted.c_str(),
                unit);
+}
+
+void FormatNetworkTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
+    FormatTransferSpeed(val, g_settings.dataCollection.networkMetricsFormat,
+                        g_settings.dataCollection.networkMetricsFixedDecimals,
+                        buffer, bufferSize);
+}
+
+void FormatDiskTransferSpeed(double val, PWSTR buffer, size_t bufferSize) {
+    FormatTransferSpeed(val, g_settings.dataCollection.diskMetricsFormat,
+                        g_settings.dataCollection.diskMetricsFixedDecimals,
+                        buffer, bufferSize);
+}
+
+void FormatGbValue(double val, PWSTR buffer, size_t bufferSize) {
+    wcscpy_s(buffer, bufferSize, FormatLocaleNum(val, 1).c_str());
 }
 
 void FormatPercentValue(int val, PWSTR buffer, size_t bufferSize, int maxVal) {
@@ -2874,7 +3599,7 @@ PCWSTR GetUploadSpeedFormatted() {
             if (!val) {
                 return false;
             }
-            FormatTransferSpeed(*val, buffer, bufferSize);
+            FormatNetworkTransferSpeed(*val, buffer, bufferSize);
             return true;
         });
 }
@@ -2891,7 +3616,7 @@ PCWSTR GetDownloadSpeedFormatted() {
             if (!val) {
                 return false;
             }
-            FormatTransferSpeed(*val, buffer, bufferSize);
+            FormatNetworkTransferSpeed(*val, buffer, bufferSize);
             return true;
         });
 }
@@ -2911,7 +3636,7 @@ PCWSTR GetTotalSpeedFormatted() {
                 return false;
             }
             double totalSpeed = *uploadSpeed + *downloadSpeed;
-            FormatTransferSpeed(totalSpeed, buffer, bufferSize);
+            FormatNetworkTransferSpeed(totalSpeed, buffer, bufferSize);
             return true;
         });
 }
@@ -2928,7 +3653,7 @@ PCWSTR GetDiskReadSpeedFormatted() {
             if (!val) {
                 return false;
             }
-            FormatTransferSpeed(*val, buffer, bufferSize);
+            FormatDiskTransferSpeed(*val, buffer, bufferSize);
             return true;
         });
 }
@@ -2945,7 +3670,7 @@ PCWSTR GetDiskWriteSpeedFormatted() {
             if (!val) {
                 return false;
             }
-            FormatTransferSpeed(*val, buffer, bufferSize);
+            FormatDiskTransferSpeed(*val, buffer, bufferSize);
             return true;
         });
 }
@@ -2965,7 +3690,7 @@ PCWSTR GetDiskTotalSpeedFormatted() {
                 return false;
             }
             double totalSpeed = *readSpeed + *writeSpeed;
-            FormatTransferSpeed(totalSpeed, buffer, bufferSize);
+            FormatDiskTransferSpeed(totalSpeed, buffer, bufferSize);
             return true;
         });
 }
@@ -2990,17 +3715,87 @@ PCWSTR GetCpuFormatted() {
 }
 
 PCWSTR GetRamFormatted() {
+    return GetMetricFormatted(g_ramFormatted, [](PWSTR buffer,
+                                                 size_t bufferSize) {
+        auto status = GetRamStatus();
+        if (!status) {
+            return false;
+        }
+        // Cap to 99 to keep identical width in all cases.
+        int maxVal = 99;
+        FormatPercentValue(status->dwMemoryLoad, buffer, bufferSize, maxVal);
+        return true;
+    });
+}
+
+PCWSTR GetRamUsedFormatted() {
+    return GetMetricFormatted(g_ramUsedFormatted, [](PWSTR buffer,
+                                                     size_t bufferSize) {
+        auto status = GetRamStatus();
+        if (!status) {
+            return false;
+        }
+        double usedGb =
+            (double)(status->ullTotalPhys - status->ullAvailPhys) / kGBInBytes;
+        FormatGbValue(usedGb, buffer, bufferSize);
+        return true;
+    });
+}
+
+PCWSTR GetRamTotalFormatted() {
     return GetMetricFormatted(
-        g_ramFormatted, [](PWSTR buffer, size_t bufferSize) {
-            MEMORYSTATUSEX status{
-                .dwLength = sizeof(status),
-            };
-            if (!GlobalMemoryStatusEx(&status)) {
+        g_ramTotalFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto status = GetRamStatus();
+            if (!status) {
                 return false;
             }
+            double totalGb = (double)status->ullTotalPhys / kGBInBytes;
+            FormatGbValue(totalGb, buffer, bufferSize);
+            return true;
+        });
+}
+
+PCWSTR GetRamCommittedFormatted() {
+    return GetMetricFormatted(
+        g_ramCommittedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto status = GetRamStatus();
+            if (!status || status->ullTotalPageFile == 0) {
+                return false;
+            }
+            int committed = static_cast<int>(
+                ((status->ullTotalPageFile - status->ullAvailPageFile) * 100) /
+                status->ullTotalPageFile);
             // Cap to 99 to keep identical width in all cases.
             int maxVal = 99;
-            FormatPercentValue(status.dwMemoryLoad, buffer, bufferSize, maxVal);
+            FormatPercentValue(committed, buffer, bufferSize, maxVal);
+            return true;
+        });
+}
+
+PCWSTR GetRamCommittedUsedFormatted() {
+    return GetMetricFormatted(
+        g_ramCommittedUsedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto status = GetRamStatus();
+            if (!status) {
+                return false;
+            }
+            double usedGb =
+                (double)(status->ullTotalPageFile - status->ullAvailPageFile) /
+                kGBInBytes;
+            FormatGbValue(usedGb, buffer, bufferSize);
+            return true;
+        });
+}
+
+PCWSTR GetRamCommittedTotalFormatted() {
+    return GetMetricFormatted(
+        g_ramCommittedTotalFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto status = GetRamStatus();
+            if (!status) {
+                return false;
+            }
+            double totalGb = (double)status->ullTotalPageFile / kGBInBytes;
+            FormatGbValue(totalGb, buffer, bufferSize);
             return true;
         });
 }
@@ -3024,11 +3819,180 @@ PCWSTR GetGpuFormatted() {
     });
 }
 
+PCWSTR GetVramFormatted() {
+    DataCollectionSampleIfNeeded();
+    return GetMetricFormatted(
+        g_vramFormatted, [](PWSTR buffer, size_t bufferSize) {
+            if (!g_dataCollectionSession) {
+                return false;
+            }
+            std::optional<double> usedBytes =
+                g_dataCollectionSession->QueryData(MetricType::kVramUsed);
+            std::optional<double> totalGb = GetDedicatedVramTotalGb();
+            if (!usedBytes || !totalGb || *totalGb <= 0) {
+                return false;
+            }
+            double usedGb = *usedBytes / kGBInBytes;
+            // Cap to 99 to keep identical width in all cases.
+            int maxVal = 99;
+            FormatPercentValue(static_cast<int>(usedGb / *totalGb * 100.0),
+                               buffer, bufferSize, maxVal);
+            return true;
+        });
+}
+
+PCWSTR GetVramUsedFormatted() {
+    DataCollectionSampleIfNeeded();
+    return GetMetricFormatted(
+        g_vramUsedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            if (!g_dataCollectionSession) {
+                return false;
+            }
+            std::optional<double> val =
+                g_dataCollectionSession->QueryData(MetricType::kVramUsed);
+            if (!val) {
+                return false;
+            }
+            FormatGbValue(*val / kGBInBytes, buffer, bufferSize);
+            return true;
+        });
+}
+
+PCWSTR GetVramTotalFormatted() {
+    return GetMetricFormatted(
+        g_vramTotalFormatted, [](PWSTR buffer, size_t bufferSize) {
+            std::optional<double> val = GetDedicatedVramTotalGb();
+            if (!val) {
+                return false;
+            }
+            FormatGbValue(*val, buffer, bufferSize);
+            return true;
+        });
+}
+
+PCWSTR GetVramSharedFormatted() {
+    DataCollectionSampleIfNeeded();
+    return GetMetricFormatted(
+        g_vramSharedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            if (!g_dataCollectionSession) {
+                return false;
+            }
+            std::optional<double> usedBytes =
+                g_dataCollectionSession->QueryData(MetricType::kVramSharedUsed);
+            std::optional<double> totalGb = GetSharedVramTotalGb();
+            if (!usedBytes || !totalGb || *totalGb <= 0) {
+                return false;
+            }
+            double usedGb = *usedBytes / kGBInBytes;
+            // Cap to 99 to keep identical width in all cases.
+            int maxVal = 99;
+            FormatPercentValue(static_cast<int>(usedGb / *totalGb * 100.0),
+                               buffer, bufferSize, maxVal);
+            return true;
+        });
+}
+
+PCWSTR GetVramSharedUsedFormatted() {
+    DataCollectionSampleIfNeeded();
+    return GetMetricFormatted(
+        g_vramSharedUsedFormatted, [](PWSTR buffer, size_t bufferSize) {
+            if (!g_dataCollectionSession) {
+                return false;
+            }
+            std::optional<double> val =
+                g_dataCollectionSession->QueryData(MetricType::kVramSharedUsed);
+            if (!val) {
+                return false;
+            }
+            FormatGbValue(*val / kGBInBytes, buffer, bufferSize);
+            return true;
+        });
+}
+
+PCWSTR GetVramSharedTotalFormatted() {
+    return GetMetricFormatted(
+        g_vramSharedTotalFormatted, [](PWSTR buffer, size_t bufferSize) {
+            std::optional<double> val = GetSharedVramTotalGb();
+            if (!val) {
+                return false;
+            }
+            FormatGbValue(*val, buffer, bufferSize);
+            return true;
+        });
+}
+
+PCWSTR GetCpuTempFormatted() {
+    DataCollectionSampleIfNeeded();
+    return GetMetricFormatted(
+        g_cpuTempFormatted, [](PWSTR buffer, size_t bufferSize) {
+            if (!g_dataCollectionSession) {
+                return false;
+            }
+            auto kelvin =
+                g_dataCollectionSession->QueryDataAvg(MetricType::kCpuTemp);
+            if (!kelvin) {
+                return false;
+            }
+            int celsius = static_cast<int>(*kelvin - 273.15);
+            swprintf_s(buffer, bufferSize, L"%d\u00B0C", celsius);
+            return true;
+        });
+}
+
+PCWSTR GetCpuTempFFormatted() {
+    DataCollectionSampleIfNeeded();
+    return GetMetricFormatted(
+        g_cpuTempFFormatted, [](PWSTR buffer, size_t bufferSize) {
+            if (!g_dataCollectionSession) {
+                return false;
+            }
+            auto kelvin =
+                g_dataCollectionSession->QueryDataAvg(MetricType::kCpuTemp);
+            if (!kelvin) {
+                return false;
+            }
+            double celsius = *kelvin - 273.15;
+            double fahrenheit = celsius * 9.0 / 5.0 + 32.0;
+            swprintf_s(buffer, bufferSize, L"%d\u00B0F",
+                       static_cast<int>(fahrenheit));
+            return true;
+        });
+}
+
+PCWSTR GetGpuTempFormatted() {
+    return GetMetricFormatted(g_gpuTempFormatted,
+                              [](PWSTR buffer, size_t bufferSize) {
+                                  auto celsius = GetGpuTemperatureCelsius();
+                                  if (!celsius) {
+                                      return false;
+                                  }
+                                  swprintf_s(buffer, bufferSize, L"%d\u00B0C",
+                                             static_cast<int>(*celsius));
+                                  return true;
+                              });
+}
+
+PCWSTR GetGpuTempFFormatted() {
+    return GetMetricFormatted(
+        g_gpuTempFFormatted, [](PWSTR buffer, size_t bufferSize) {
+            auto celsius = GetGpuTemperatureCelsius();
+            if (!celsius) {
+                return false;
+            }
+            double fahrenheit = *celsius * 9.0 / 5.0 + 32.0;
+            swprintf_s(buffer, bufferSize, L"%d\u00B0F",
+                       static_cast<int>(fahrenheit));
+            return true;
+        });
+}
+
 PCWSTR GetBatteryFormatted() {
     return GetMetricFormatted(
         g_batteryFormatted, [](PWSTR buffer, size_t bufferSize) {
             SYSTEM_POWER_STATUS powerStatus;
-            if (!GetSystemPowerStatus(&powerStatus)) {
+            // A level of 255 means unknown.
+            if (!GetSystemPowerStatus(&powerStatus) ||
+                powerStatus.BatteryLifePercent == 255) {
                 return false;
             }
             int maxVal = 100;
@@ -3097,9 +4061,12 @@ PCWSTR GetPowerFormatted() {
 }
 
 void RefreshMediaDataIfDirty() {
-    if (g_mediaDataDirty) {
-        RefreshMediaData();
+    if (!g_mediaDataDirty) {
+        return;
     }
+
+    std::lock_guard<std::mutex> guard(g_mediaMutex);
+    RefreshMediaDataNoLock();
 }
 
 PCWSTR GetMediaTitleFormatted() {
@@ -3122,34 +4089,74 @@ PCWSTR GetMediaStatusFormatted() {
     return g_mediaStatusFormatted.buffer;
 }
 
+int FormatLineNoLock(PWSTR buffer, size_t bufferSize, std::wstring_view format);
+
 PCWSTR GetMediaInfoFormatted() {
     RefreshMediaDataIfDirty();
+
+    // A %media_info% tag nested within a media info format expands to nothing.
+    if (g_inMediaInfoFormat) {
+        return L"";
+    }
+
+    if (g_mediaInfoFormatted.formatIndex != g_formatIndex) {
+        // The format strings may contain any tags, including media tags such as
+        // %media_artist% and %media_title%.
+        PCWSTR format = g_mediaActive
+                            ? g_settings.mediaPlayer.mediaInfoFormat.get()
+                            : g_settings.mediaPlayer.noMediaText.get();
+
+        int maxLen = ARRAYSIZE(g_mediaInfoFormatted.buffer) - 1;
+        if (g_settings.mediaPlayer.maxLength > 0 &&
+            g_settings.mediaPlayer.maxLength < maxLen) {
+            maxLen = g_settings.mediaPlayer.maxLength;
+        }
+
+        // Format directly into the buffer, capped at maxLen characters.
+        // FormatLineNoLock truncates with a trailing ellipsis.
+        g_inMediaInfoFormat = true;
+        FormatLineNoLock(g_mediaInfoFormatted.buffer, maxLen + 1, format);
+        g_inMediaInfoFormat = false;
+
+        g_mediaInfoFormatted.formatIndex = g_formatIndex;
+    }
+
     return g_mediaInfoFormatted.buffer;
 }
 
-int ResolveFormatTokenWithDigit(std::wstring_view format,
-                                std::wstring_view formatTokenPrefix,
-                                std::wstring_view formatTokenSuffix) {
-    if (format.size() <
-        formatTokenPrefix.size() + 1 + formatTokenSuffix.size()) {
-        return 0;
-    }
-
+// Matches a token of the form <prefix><n><suffix>, where <n> is a positive
+// decimal number without leading zeros. Returns the token length and sets
+// *number, or returns 0 if there's no match.
+size_t ResolveFormatTokenWithNumber(std::wstring_view format,
+                                    std::wstring_view formatTokenPrefix,
+                                    std::wstring_view formatTokenSuffix,
+                                    int* number) {
     if (!format.starts_with(formatTokenPrefix)) {
         return 0;
     }
 
-    char digitChar = format[formatTokenPrefix.size()];
-    if (digitChar < L'1' || digitChar > L'9') {
+    size_t pos = formatTokenPrefix.size();
+    if (pos >= format.size() || format[pos] < L'1' || format[pos] > L'9') {
         return 0;
     }
 
-    if (!format.substr(formatTokenPrefix.size() + 1)
-             .starts_with(formatTokenSuffix)) {
+    int value = 0;
+    for (; pos < format.size() && format[pos] >= L'0' && format[pos] <= L'9';
+         pos++) {
+        // Prevent overflow, far beyond any practical list size.
+        if (value >= 100000) {
+            return 0;
+        }
+
+        value = value * 10 + (format[pos] - L'0');
+    }
+
+    if (!format.substr(pos).starts_with(formatTokenSuffix)) {
         return 0;
     }
 
-    return digitChar - L'0';
+    *number = value;
+    return pos + formatTokenSuffix.size();
 }
 
 size_t ResolveFormatToken(
@@ -3177,7 +4184,22 @@ size_t ResolveFormatToken(
         {L"%disk_total%"sv, GetDiskTotalSpeedFormatted},
         {L"%cpu%"sv, GetCpuFormatted},
         {L"%ram%"sv, GetRamFormatted},
+        {L"%ram_used%"sv, GetRamUsedFormatted},
+        {L"%ram_total%"sv, GetRamTotalFormatted},
+        {L"%ram_committed%"sv, GetRamCommittedFormatted},
+        {L"%ram_committed_used%"sv, GetRamCommittedUsedFormatted},
+        {L"%ram_committed_total%"sv, GetRamCommittedTotalFormatted},
         {L"%gpu%"sv, GetGpuFormatted},
+        {L"%vram%"sv, GetVramFormatted},
+        {L"%vram_used%"sv, GetVramUsedFormatted},
+        {L"%vram_total%"sv, GetVramTotalFormatted},
+        {L"%vram_shared%"sv, GetVramSharedFormatted},
+        {L"%vram_shared_used%"sv, GetVramSharedUsedFormatted},
+        {L"%vram_shared_total%"sv, GetVramSharedTotalFormatted},
+        {L"%cpu_temp%"sv, GetCpuTempFormatted},
+        {L"%cpu_temp_f%"sv, GetCpuTempFFormatted},
+        {L"%gpu_temp%"sv, GetGpuTempFormatted},
+        {L"%gpu_temp_f%"sv, GetGpuTempFFormatted},
         {L"%battery%"sv, GetBatteryFormatted},
         {L"%battery_time%"sv, GetBatteryTimeFormatted},
         {L"%power%"sv, GetPowerFormatted},
@@ -3209,19 +4231,20 @@ size_t ResolveFormatToken(
     };
 
     for (auto formatTzToken : formatTzTokens) {
-        int digit =
-            ResolveFormatTokenWithDigit(format, formatTzToken.prefix, L"%"sv);
-        if (!digit) {
+        int number;
+        size_t tokenLen = ResolveFormatTokenWithNumber(
+            format, formatTzToken.prefix, L"%"sv, &number);
+        if (!tokenLen) {
             continue;
         }
 
-        PCWSTR value = formatTzToken.valueGetter(digit - 1);
+        PCWSTR value = formatTzToken.valueGetter(number - 1);
         if (!value) {
             value = L"-";
         }
 
         resolvedCallback(value);
-        return formatTzToken.prefix.size() + 2;
+        return tokenLen;
     }
 
     if (auto token = L"%web%"sv; format.starts_with(token)) {
@@ -3247,27 +4270,30 @@ size_t ResolveFormatToken(
     };
 
     for (auto formatExtraToken : formatExtraTokens) {
-        int digit = ResolveFormatTokenWithDigit(format, formatExtraToken.prefix,
-                                                L"%"sv);
-        if (!digit) {
+        int number;
+        size_t tokenLen = ResolveFormatTokenWithNumber(
+            format, formatExtraToken.prefix, L"%"sv, &number);
+        if (!tokenLen) {
             continue;
         }
 
         const auto& valueVector = *formatExtraToken.valueVectorGetter();
 
         PCWSTR value;
-        if (digit < 2 || static_cast<size_t>(digit - 2) >= valueVector.size()) {
+        if (number < 2 ||
+            static_cast<size_t>(number - 2) >= valueVector.size()) {
             value = L"-";
         } else {
-            value = valueVector[digit - 2].c_str();
+            value = valueVector[number - 2].c_str();
         }
 
         resolvedCallback(value);
-        return formatExtraToken.prefix.size() + 2;
+        return tokenLen;
     }
 
-    if (int digit = ResolveFormatTokenWithDigit(format, L"%web"sv, L"%"sv)) {
-        size_t index = digit - 1;
+    if (int number; size_t tokenLen = ResolveFormatTokenWithNumber(
+                        format, L"%web"sv, L"%"sv, &number)) {
+        size_t index = number - 1;
 
         std::lock_guard<std::mutex> guard(g_webContentMutex);
 
@@ -3281,12 +4307,12 @@ size_t ResolveFormatToken(
         }
 
         resolvedCallback(value);
-        return "%web1%"sv.size();
+        return tokenLen;
     }
 
-    if (int digit =
-            ResolveFormatTokenWithDigit(format, L"%web"sv, L"_full%"sv)) {
-        size_t index = digit - 1;
+    if (int number; size_t tokenLen = ResolveFormatTokenWithNumber(
+                        format, L"%web"sv, L"_full%"sv, &number)) {
+        size_t index = number - 1;
 
         std::lock_guard<std::mutex> guard(g_webContentMutex);
 
@@ -3300,7 +4326,7 @@ size_t ResolveFormatToken(
         }
 
         resolvedCallback(value);
-        return "%web1_full%"sv.size();
+        return tokenLen;
     }
 
     if (auto token = L"%weather%"sv; format.starts_with(token)) {
@@ -3313,12 +4339,28 @@ size_t ResolveFormatToken(
     return 0;
 }
 
-int FormatLine(PWSTR buffer, size_t bufferSize, std::wstring_view format) {
+void EnsureFormattingInitialized() {
+    if (g_formattingInitialized) {
+        return;
+    }
+
+    g_formattingInitialized = true;
+
+    WebContentUpdateThreadInit();
+    DataCollectionSessionInit();
+    MediaSessionInit();
+}
+
+// Requires g_formatLineMutex to be held, both for the formatting state and for
+// the format string itself, which is normally owned by g_settings.
+int FormatLineNoLock(PWSTR buffer,
+                     size_t bufferSize,
+                     std::wstring_view format) {
     if (bufferSize == 0) {
         return 0;
     }
 
-    std::lock_guard<std::mutex> guard(g_formatLineMutex);
+    EnsureFormattingInitialized();
 
     std::wstring_view formatSuffix = format;
 
@@ -3360,9 +4402,12 @@ int FormatLine(PWSTR buffer, size_t bufferSize, std::wstring_view format) {
 
 #pragma region Win11Hooks
 
-DWORD g_refreshIconThreadId;
-bool g_refreshIconNeedToAdjustTimer;
-bool g_inGetTimeToolTipString;
+// Scratch state for the refresh currently running on this thread. Several
+// taskbars refresh independently on thread pool threads, so this cannot be
+// shared between them.
+thread_local bool g_inRefreshIcon;
+thread_local bool g_refreshIconNeedToAdjustTimer;
+thread_local bool g_inGetTimeToolTipString;
 
 using ClockSystemTrayIconDataModel_RefreshIcon_t = void(WINAPI*)(
     LPVOID pThis,
@@ -3387,7 +4432,7 @@ ClockSystemTrayIconDataModel_GetTimeToolTipString2_t
 ClockSystemTrayIconDataModel_GetTimeToolTipString2_t
     ClockSystemTrayIconDataModel2_GetTimeToolTipString2_Original;
 
-using DateTimeIconContent_OnApplyTemplate_t = void(WINAPI*)(LPVOID pThis);
+using DateTimeIconContent_OnApplyTemplate_t = HRESULT(WINAPI*)(LPVOID pThis);
 DateTimeIconContent_OnApplyTemplate_t
     DateTimeIconContent_OnApplyTemplate_Original;
 
@@ -3419,14 +4464,28 @@ void ClockSystemTrayIconDataModel_RefreshIcon_Hook_Impl(
     LPVOID pThis,
     LPVOID param1,
     ClockSystemTrayIconDataModel_RefreshIcon_t original) {
-    g_refreshIconThreadId = GetCurrentThreadId();
-    g_refreshIconNeedToAdjustTimer = g_settings.showSeconds ||
-                                     g_dataCollectionSession ||
-                                     !g_webContentLoaded;
+    // Formatting creates the data collection session and the web content thread
+    // on demand, but it only runs while calling the original function below,
+    // after g_refreshIconNeedToAdjustTimer is set. Create them beforehand so
+    // the flag accounts for them, otherwise the first refresh keeps the default
+    // one-minute timer instead of shortening it to one second.
+    {
+        std::lock_guard<std::mutex> guard(g_formatLineMutex);
+
+        EnsureFormattingInitialized();
+
+        bool webContentPending =
+            g_webContentUpdateThread && !g_webContentLoaded;
+        g_refreshIconNeedToAdjustTimer =
+            g_settings.showSeconds || g_dataCollectionPatternUsed ||
+            g_mediaPatternUsed || webContentPending;
+    }
+
+    g_inRefreshIcon = true;
 
     original(pThis, param1);
 
-    g_refreshIconThreadId = 0;
+    g_inRefreshIcon = false;
     g_refreshIconNeedToAdjustTimer = false;
 }
 
@@ -3449,9 +4508,14 @@ void WINAPI ClockSystemTrayIconDataModel2_RefreshIcon_Hook(LPVOID pThis,
 void UpdateToolTipString(LPVOID tooltipPtrPtr) {
     auto separator = L"\r\n\r\n"sv;
 
-    WCHAR extraLine[256];
-    size_t extraLength = FormatLine(extraLine, ARRAYSIZE(extraLine),
-                                    g_settings.tooltipLine.get());
+    WCHAR extraLine[4096];
+    size_t extraLength;
+    {
+        std::lock_guard<std::mutex> guard(g_formatLineMutex);
+        extraLength = FormatLineNoLock(extraLine, ARRAYSIZE(extraLine),
+                                       g_settings.tooltipLine.get());
+    }
+
     if (extraLength == 0) {
         return;
     }
@@ -3670,9 +4734,12 @@ void ApplyTextBlockStyles(
 
     if (noWrap) {
         textBlock.TextWrapping(TextWrapping::NoWrap);
+        textBlock.TextTrimming(TextTrimming::CharacterEllipsis);
     } else {
         textBlock.as<DependencyObject>().ClearValue(
             Controls::TextBlock::TextWrappingProperty());
+        textBlock.as<DependencyObject>().ClearValue(
+            Controls::TextBlock::TextTrimmingProperty());
     }
 
     if (textStyleSettings && *textStyleSettings->textColor) {
@@ -3759,10 +4826,25 @@ void ApplyTextBlockStyles(
         textBlock.as<DependencyObject>().ClearValue(
             Controls::TextBlock::CharacterSpacingProperty());
     }
+
+    if (textStyleSettings && textStyleSettings->lineHeight) {
+        textBlock.LineHeight(textStyleSettings->lineHeight);
+        // Honor the line height exactly, even when it's smaller than the
+        // natural line height. Without this, lines never shrink below the
+        // font's default height.
+        textBlock.LineStackingStrategy(LineStackingStrategy::BlockLineHeight);
+    } else {
+        textBlock.as<DependencyObject>().ClearValue(
+            Controls::TextBlock::LineHeightProperty());
+        textBlock.as<DependencyObject>().ClearValue(
+            Controls::TextBlock::LineStackingStrategyProperty());
+    }
 }
 
 void ApplyDateTimeIconContentStyles(
     FrameworkElement dateTimeIconContentElement) {
+    std::lock_guard<std::mutex> guard(g_clockElementStyleMutex);
+
     ClockElementStyleData* clockElementStyleData = nullptr;
 
     for (auto it = g_clockElementStyleData.begin();
@@ -3835,47 +4917,45 @@ void ApplyDateTimeIconContentStyles(
         clockElementStyleData = &g_clockElementStyleData.back();
     }
 
-    int maxWidth = clockElementStyleEnabled ? g_settings.maxWidth : 0;
-    int textSpacing = clockElementStyleEnabled ? g_settings.textSpacing : 0;
+    const ClockElementStyleSettings* styleSettings =
+        clockElementStyleEnabled ? &g_clockElementStyleSettings : nullptr;
+
+    int maxWidth = styleSettings ? styleSettings->maxWidth : 0;
+    int textSpacing = styleSettings ? styleSettings->textSpacing : 0;
     bool noWrap = maxWidth;
 
     ApplyStackPanelStyles(stackPanel, maxWidth, textSpacing);
     ApplyTextBlockStyles(
-        dateInnerTextBlock,
-        clockElementStyleEnabled ? &g_settings.dateStyle : nullptr, noWrap,
-        &clockElementStyleData->dateVisibilityPropertyChangedToken);
+        dateInnerTextBlock, styleSettings ? &styleSettings->dateStyle : nullptr,
+        noWrap, &clockElementStyleData->dateVisibilityPropertyChangedToken);
     ApplyTextBlockStyles(
-        timeInnerTextBlock,
-        clockElementStyleEnabled ? &g_settings.timeStyle : nullptr, noWrap,
-        &clockElementStyleData->timeVisibilityPropertyChangedToken);
+        timeInnerTextBlock, styleSettings ? &styleSettings->timeStyle : nullptr,
+        noWrap, &clockElementStyleData->timeVisibilityPropertyChangedToken);
 
     clockElementStyleData->styleIndex = clockElementStyleIndex;
 }
 
-void WINAPI DateTimeIconContent_OnApplyTemplate_Hook(LPVOID pThis) {
+HRESULT WINAPI DateTimeIconContent_OnApplyTemplate_Hook(LPVOID pThis) {
     Wh_Log(L">");
 
-    DateTimeIconContent_OnApplyTemplate_Original(pThis);
+    HRESULT ret = DateTimeIconContent_OnApplyTemplate_Original(pThis);
 
-    IUnknown* dateTimeIconContentElementIUnknownPtr = *((IUnknown**)pThis + 1);
-    if (!dateTimeIconContentElementIUnknownPtr) {
-        return;
-    }
-
-    FrameworkElement dateTimeIconContentElement = nullptr;
-    dateTimeIconContentElementIUnknownPtr->QueryInterface(
-        winrt::guid_of<FrameworkElement>(),
-        winrt::put_abi(dateTimeIconContentElement));
-    if (!dateTimeIconContentElement) {
-        return;
+    FrameworkElement dateTimeIconContent = nullptr;
+    ((IUnknown*)pThis)
+        ->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                         winrt::put_abi(dateTimeIconContent));
+    if (!dateTimeIconContent) {
+        return ret;
     }
 
     try {
-        ApplyDateTimeIconContentStyles(dateTimeIconContentElement);
+        ApplyDateTimeIconContentStyles(dateTimeIconContent);
     } catch (...) {
         HRESULT hr = winrt::to_hresult();
         Wh_Log(L"Error %08X", hr);
     }
+
+    return ret;
 }
 
 HRESULT WINAPI BadgeIconContent_get_ViewModel_Hook(LPVOID pThis, LPVOID pArgs) {
@@ -3928,8 +5008,8 @@ ClockSystemTrayIconDataModel_GetTimeToolTipString_2_Hook(LPVOID pThis,
 int WINAPI ICalendar_Second_Hook(LPVOID pThis) {
     Wh_Log(L">");
 
-    if (g_refreshIconThreadId == GetCurrentThreadId() &&
-        !g_inGetTimeToolTipString && g_refreshIconNeedToAdjustTimer) {
+    if (g_inRefreshIcon && !g_inGetTimeToolTipString &&
+        g_refreshIconNeedToAdjustTimer) {
         g_refreshIconNeedToAdjustTimer = false;
 
         // Make the next refresh happen in a second.
@@ -3957,8 +5037,7 @@ LPVOID WINAPI ThreadPoolTimer_CreateTimer_Hook(LPVOID param1,
 
     ULONGLONG elapseNew;
 
-    if (g_refreshIconThreadId == GetCurrentThreadId() &&
-        !g_inGetTimeToolTipString && **elapse == 10000000) {
+    if (g_inRefreshIcon && !g_inGetTimeToolTipString && **elapse == 10000000) {
         // Make the next refresh happen next second. Without this hook, the
         // timer was always set one second forward, and so the clock was
         // accumulating a delay, finally caused one second to be skipped.
@@ -3984,8 +5063,7 @@ LPVOID WINAPI ThreadPoolTimer_CreateTimer_lambda_Hook(DWORD_PTR** param1,
 
     Wh_Log(L"> %zu", *elapse);
 
-    if (g_refreshIconThreadId == GetCurrentThreadId() &&
-        !g_inGetTimeToolTipString && *elapse == 10000000) {
+    if (g_inRefreshIcon && !g_inGetTimeToolTipString && *elapse == 10000000) {
         // Make the next refresh happen next second. Without this hook, the
         // timer was always set one second forward, and so the clock was
         // accumulating a delay, finally caused one second to be skipped.
@@ -4004,8 +5082,8 @@ LPVOID WINAPI ThreadPoolTimer_CreateTimer_lambda_Hook(DWORD_PTR** param1,
 VOID WINAPI GetLocalTime_Hook_Win11(LPSYSTEMTIME lpSystemTime) {
     Wh_Log(L">");
 
-    if (g_refreshIconThreadId == GetCurrentThreadId() &&
-        !g_inGetTimeToolTipString && g_refreshIconNeedToAdjustTimer) {
+    if (g_inRefreshIcon && !g_inGetTimeToolTipString &&
+        g_refreshIconNeedToAdjustTimer) {
         g_refreshIconNeedToAdjustTimer = false;
 
         // Make the next refresh happen in a second.
@@ -4023,15 +5101,18 @@ int WINAPI GetTimeFormatEx_Hook_Win11(LPCWSTR lpLocaleName,
                                       LPCWSTR lpFormat,
                                       LPWSTR lpTimeStr,
                                       int cchTime) {
-    if (g_refreshIconThreadId == GetCurrentThreadId() &&
-        !g_inGetTimeToolTipString) {
+    if (g_inRefreshIcon && !g_inGetTimeToolTipString) {
+        std::lock_guard<std::mutex> guard(g_formatLineMutex);
+
         if (wcscmp(g_settings.topLine, L"-") != 0) {
             if (!cchTime) {
                 // Hopefully a large enough buffer size.
                 return FORMATTED_BUFFER_SIZE;
             }
 
-            return FormatLine(lpTimeStr, cchTime, g_settings.topLine.get()) + 1;
+            return FormatLineNoLock(lpTimeStr, cchTime,
+                                    g_settings.topLine.get()) +
+                   1;
         }
     }
 
@@ -4048,8 +5129,7 @@ int WINAPI GetDateFormatEx_Hook_Win11(LPCWSTR lpLocaleName,
                                       LPWSTR lpDateStr,
                                       int cchDate,
                                       LPCWSTR lpCalendar) {
-    if (g_refreshIconThreadId == GetCurrentThreadId() &&
-        !g_inGetTimeToolTipString) {
+    if (g_inRefreshIcon && !g_inGetTimeToolTipString) {
         // Below is a fix for the following situation. The code inside
         // winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon
         // looks similar to the following (pseudo code):
@@ -4088,6 +5168,8 @@ int WINAPI GetDateFormatEx_Hook_Win11(LPCWSTR lpLocaleName,
         }
 
         if (!(dwFlags & DATE_LONGDATE)) {
+            std::lock_guard<std::mutex> guard(g_formatLineMutex);
+
             if (!cchDate || g_winVersion >= WinVersion::Win11_22H2) {
                 // First call, save date for formatting.
                 g_formatTime = *lpDate;
@@ -4100,8 +5182,8 @@ int WINAPI GetDateFormatEx_Hook_Win11(LPCWSTR lpLocaleName,
                     return FORMATTED_BUFFER_SIZE;
                 }
 
-                return FormatLine(lpDateStr, cchDate,
-                                  g_settings.bottomLine.get()) +
+                return FormatLineNoLock(lpDateStr, cchDate,
+                                        g_settings.bottomLine.get()) +
                        1;
             }
         }
@@ -4159,11 +5241,11 @@ LRESULT WINAPI SendMessageW_Hook(HWND hWnd,
 
 #pragma region Win10Hooks
 
-DWORD g_updateTextStringThreadId;
-int g_getDateFormatExCounter;
-DWORD g_getTooltipTextThreadId;
-WCHAR* g_getTooltipTextBuffer;
-int g_getTooltipTextBufferSize;
+thread_local bool g_inUpdateTextString;
+thread_local int g_getDateFormatExCounter;
+thread_local bool g_inGetTooltipText;
+thread_local WCHAR* g_getTooltipTextBuffer;
+thread_local int g_getTooltipTextBufferSize;
 
 using ClockButton_UpdateTextStringsIfNecessary_t =
     unsigned int(WINAPI*)(LPVOID pThis, bool*);
@@ -4195,22 +5277,24 @@ HRESULT WINAPI ClockButton_v_GetTooltipText_Hook(LPVOID pThis,
                                                  LPVOID param4) {
     Wh_Log(L">");
 
-    g_getTooltipTextThreadId = GetCurrentThreadId();
+    g_inGetTooltipText = true;
 
     HRESULT ret = ClockButton_v_GetTooltipText_Original(pThis, param1, param2,
                                                         param3, param4);
 
     if (g_getTooltipTextBuffer) {
+        std::lock_guard<std::mutex> guard(g_formatLineMutex);
+
         if (g_settings.tooltipLineMode == TooltipLineMode::replace) {
-            FormatLine(g_getTooltipTextBuffer, g_getTooltipTextBufferSize,
-                       g_settings.tooltipLine.get());
+            FormatLineNoLock(g_getTooltipTextBuffer, g_getTooltipTextBufferSize,
+                             g_settings.tooltipLine.get());
         } else {
             size_t stringLen = wcslen(g_getTooltipTextBuffer);
             WCHAR* p = g_getTooltipTextBuffer + stringLen;
             size_t size = g_getTooltipTextBufferSize - stringLen;
             if (size > 4) {
                 wcscpy(p, L"\r\n\r\n");
-                FormatLine(p + 4, size - 4, g_settings.tooltipLine.get());
+                FormatLineNoLock(p + 4, size - 4, g_settings.tooltipLine.get());
             }
         }
     }
@@ -4218,7 +5302,7 @@ HRESULT WINAPI ClockButton_v_GetTooltipText_Hook(LPVOID pThis,
     g_getTooltipTextBuffer = nullptr;
     g_getTooltipTextBufferSize = 0;
 
-    g_getTooltipTextThreadId = 0;
+    g_inGetTooltipText = false;
 
     return ret;
 }
@@ -4227,16 +5311,25 @@ unsigned int WINAPI
 ClockButton_UpdateTextStringsIfNecessary_Hook(LPVOID pThis, bool* param1) {
     Wh_Log(L">");
 
-    g_updateTextStringThreadId = GetCurrentThreadId();
+    g_inUpdateTextString = true;
     g_getDateFormatExCounter = 0;
 
     unsigned int ret =
         ClockButton_UpdateTextStringsIfNecessary_Original(pThis, param1);
 
-    g_updateTextStringThreadId = 0;
+    g_inUpdateTextString = false;
 
-    if (g_settings.showSeconds || g_dataCollectionSession ||
-        !g_webContentLoaded) {
+    bool updateEverySecond;
+    {
+        std::lock_guard<std::mutex> guard(g_formatLineMutex);
+        bool webContentPending =
+            g_webContentUpdateThread && !g_webContentLoaded;
+        updateEverySecond = g_settings.showSeconds ||
+                            g_dataCollectionPatternUsed || g_mediaPatternUsed ||
+                            webContentPending;
+    }
+
+    if (updateEverySecond) {
         // Return the time-out value for the time of the next update.
         SYSTEMTIME time;
         GetLocalTime(&time);
@@ -4316,12 +5409,16 @@ int WINAPI GetTimeFormatEx_Hook_Win10(LPCWSTR lpLocaleName,
                                       LPCWSTR lpFormat,
                                       LPWSTR lpTimeStr,
                                       int cchTime) {
-    if (g_updateTextStringThreadId == GetCurrentThreadId()) {
+    if (g_inUpdateTextString) {
+        std::lock_guard<std::mutex> guard(g_formatLineMutex);
+
         g_formatTime = *lpTime;
         g_formatIndex++;
 
         if (wcscmp(g_settings.topLine, L"-") != 0) {
-            return FormatLine(lpTimeStr, cchTime, g_settings.topLine.get()) + 1;
+            return FormatLineNoLock(lpTimeStr, cchTime,
+                                    g_settings.topLine.get()) +
+                   1;
         }
     }
 
@@ -4338,12 +5435,14 @@ int WINAPI GetDateFormatEx_Hook_Win10(LPCWSTR lpLocaleName,
                                       LPWSTR lpDateStr,
                                       int cchDate,
                                       LPCWSTR lpCalendar) {
-    if (g_updateTextStringThreadId == GetCurrentThreadId()) {
+    if (g_inUpdateTextString) {
+        std::lock_guard<std::mutex> guard(g_formatLineMutex);
+
         g_getDateFormatExCounter++;
         PCWSTR format = g_getDateFormatExCounter > 1 ? g_settings.middleLine
                                                      : g_settings.bottomLine;
         if (wcscmp(format, L"-") != 0) {
-            return FormatLine(lpDateStr, cchDate, format) + 1;
+            return FormatLineNoLock(lpDateStr, cchDate, format) + 1;
         }
     }
 
@@ -4359,8 +5458,7 @@ int WINAPI GetDateFormatW_Hook_Win10(LCID Locale,
                                      LPCWSTR lpFormat,
                                      LPWSTR lpDateStr,
                                      int cchDate) {
-    if (g_getTooltipTextThreadId == GetCurrentThreadId() &&
-        !g_getTooltipTextBuffer) {
+    if (g_inGetTooltipText && !g_getTooltipTextBuffer) {
         g_getTooltipTextBuffer = lpDateStr;
         g_getTooltipTextBufferSize = cchDate;
     }
@@ -4589,8 +5687,8 @@ bool HookWin10TaskbarSymbols() {
     return true;
 }
 
-bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll, ExplorerExtensions.dll
+bool HookSystemTraySymbols(HMODULE module) {
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] =  //
         {
             {
@@ -4629,7 +5727,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 true,  // Added with feature flag 38762814
             },
             {
-                {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
+                {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::DateTimeIconContent,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::OnApplyTemplate(void))"},
                 &DateTimeIconContent_OnApplyTemplate_Original,
                 DateTimeIconContent_OnApplyTemplate_Hook,
                 true,
@@ -4672,7 +5770,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 ThreadPoolTimer_CreateTimer_lambda_Hook,
                 true,  // Only for more precise clock, see comment in the hook.
             },
-        };
+    };
 
     if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed");
@@ -4682,8 +5780,24 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
     return true;
 }
 
-HMODULE GetTaskbarViewModuleHandle() {
-    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+HMODULE GetSystemTrayModuleHandle() {
+    HMODULE module = GetModuleHandle(L"SystemTray.dll");
+    if (!module) {
+        module = GetModuleHandle(L"Taskbar.View.dll");
+        if (module) {
+            // Starting with Taskbar.View.dll 2604.8002.200.6000, the SystemTray
+            // types moved out of Taskbar.View.dll into SystemTray.dll, so don't
+            // hook Taskbar.View.dll at this version and above.
+            VS_FIXEDFILEINFO* fixedFileInfo =
+                GetModuleVersionInfo(module, nullptr);
+            WORD moduleMajor =
+                fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
+            if (!moduleMajor || moduleMajor >= 2604) {
+                Wh_Log(L"Skipping Taskbar.View.dll version %d", moduleMajor);
+                module = nullptr;
+            }
+        }
+    }
     if (!module) {
         module = GetModuleHandle(L"ExplorerExtensions.dll");
     }
@@ -4691,13 +5805,13 @@ HMODULE GetTaskbarViewModuleHandle() {
     return module;
 }
 
-void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded &&
-        GetTaskbarViewModuleHandle() == module &&
-        !g_taskbarViewDllLoaded.exchange(true)) {
+void HandleLoadedModuleIfSystemTray(HMODULE module, LPCWSTR lpLibFileName) {
+    if (g_winVersion >= WinVersion::Win11 && !g_systemTrayModuleHooked &&
+        GetSystemTrayModuleHandle() == module &&
+        !g_systemTrayModuleHooked.exchange(true)) {
         Wh_Log(L"Loaded %s", lpLibFileName);
 
-        if (HookTaskbarViewDllSymbols(module)) {
+        if (HookSystemTraySymbols(module)) {
             Wh_ApplyHookOperations();
         }
     }
@@ -4711,16 +5825,39 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (module) {
         HandleLoadedModuleIfExplorerPatcher(module);
-        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
+        HandleLoadedModuleIfSystemTray(module, lpLibFileName);
     }
 
     return module;
+}
+
+NetworkMetricsFormat ParseNetworkMetricsFormat(PCWSTR value) {
+    if (wcscmp(value, L"mbsNumberOnly") == 0) {
+        return NetworkMetricsFormat::mbsNumberOnly;
+    } else if (wcscmp(value, L"mbsDynamic") == 0) {
+        return NetworkMetricsFormat::mbsDynamic;
+    } else if (wcscmp(value, L"mbits") == 0) {
+        return NetworkMetricsFormat::mbits;
+    } else if (wcscmp(value, L"mbitsNumberOnly") == 0) {
+        return NetworkMetricsFormat::mbitsNumberOnly;
+    } else if (wcscmp(value, L"mbitsDynamic") == 0) {
+        return NetworkMetricsFormat::mbitsDynamic;
+    }
+
+    return NetworkMetricsFormat::mbs;
 }
 
 void LoadSettings() {
     g_settings.showSeconds = Wh_GetIntSetting(L"ShowSeconds");
     g_settings.timeFormat = StringSetting::make(L"TimeFormat");
     g_settings.dateFormat = StringSetting::make(L"DateFormat");
+
+    g_settings.dateLocales.clear();
+    StringSetting dateLocale = StringSetting::make(L"DateLocale");
+    for (const auto locale : SplitStringView(dateLocale.get(), L";")) {
+        g_settings.dateLocales.emplace_back(TrimStringView(locale));
+    }
+
     g_settings.weekdayFormat = StringSetting::make(L"WeekdayFormat");
 
     g_settings.weekdayFormatCustom.clear();
@@ -4748,31 +5885,27 @@ void LoadSettings() {
 
     g_settings.width = Wh_GetIntSetting(L"Width");
     g_settings.height = Wh_GetIntSetting(L"Height");
-    g_settings.maxWidth = Wh_GetIntSetting(L"MaxWidth");
     g_settings.textSpacing = Wh_GetIntSetting(L"TextSpacing");
 
-    g_settings.dataCollection.networkMetricsFormat = NetworkMetricsFormat::mbs;
-    StringSetting networkMetricsFormat =
-        StringSetting::make(L"DataCollection.NetworkMetricsFormat");
-    if (wcscmp(networkMetricsFormat, L"mbsNumberOnly") == 0) {
-        g_settings.dataCollection.networkMetricsFormat =
-            NetworkMetricsFormat::mbsNumberOnly;
-    } else if (wcscmp(networkMetricsFormat, L"mbsDynamic") == 0) {
-        g_settings.dataCollection.networkMetricsFormat =
-            NetworkMetricsFormat::mbsDynamic;
-    } else if (wcscmp(networkMetricsFormat, L"mbits") == 0) {
-        g_settings.dataCollection.networkMetricsFormat =
-            NetworkMetricsFormat::mbits;
-    } else if (wcscmp(networkMetricsFormat, L"mbitsNumberOnly") == 0) {
-        g_settings.dataCollection.networkMetricsFormat =
-            NetworkMetricsFormat::mbitsNumberOnly;
-    } else if (wcscmp(networkMetricsFormat, L"mbitsDynamic") == 0) {
-        g_settings.dataCollection.networkMetricsFormat =
-            NetworkMetricsFormat::mbitsDynamic;
-    }
+    g_settings.dataCollection.networkMetricsFormat = ParseNetworkMetricsFormat(
+        StringSetting::make(L"DataCollection.NetworkMetricsFormat"));
 
     g_settings.dataCollection.networkMetricsFixedDecimals =
         Wh_GetIntSetting(L"DataCollection.NetworkMetricsFixedDecimals");
+
+    StringSetting diskMetricsFormat =
+        StringSetting::make(L"DataCollection.DiskMetricsFormat");
+    if (wcscmp(diskMetricsFormat, L"sameAsNetwork") == 0) {
+        g_settings.dataCollection.diskMetricsFormat =
+            g_settings.dataCollection.networkMetricsFormat;
+        g_settings.dataCollection.diskMetricsFixedDecimals =
+            g_settings.dataCollection.networkMetricsFixedDecimals;
+    } else {
+        g_settings.dataCollection.diskMetricsFormat =
+            ParseNetworkMetricsFormat(diskMetricsFormat);
+        g_settings.dataCollection.diskMetricsFixedDecimals =
+            Wh_GetIntSetting(L"DataCollection.DiskMetricsFixedDecimals");
+    }
 
     g_settings.dataCollection.percentageFormat =
         PercentageFormat::spacePaddingAndSymbol;
@@ -4803,6 +5936,8 @@ void LoadSettings() {
 
     g_settings.mediaPlayer.maxLength =
         Wh_GetIntSetting(L"MediaPlayer.MaxLength");
+    g_settings.mediaPlayer.mediaInfoFormat =
+        StringSetting::make(L"MediaPlayer.MediaInfoFormat");
     g_settings.mediaPlayer.noMediaText =
         StringSetting::make(L"MediaPlayer.NoMediaText");
     g_settings.mediaPlayer.removeBrackets =
@@ -4906,53 +6041,53 @@ void LoadSettings() {
         g_settings.timeZones.push_back(std::move(timeZone));
     }
 
-    g_settings.timeStyle.hidden = Wh_GetIntSetting(L"TimeStyle.Hidden");
-    g_settings.timeStyle.textColor =
-        StringSetting::make(L"TimeStyle.TextColor");
-    g_settings.timeStyle.textAlignment =
-        StringSetting::make(L"TimeStyle.TextAlignment");
-    g_settings.timeStyle.fontSize = Wh_GetIntSetting(L"TimeStyle.FontSize");
-    g_settings.timeStyle.fontFamily =
-        StringSetting::make(L"TimeStyle.FontFamily");
-    g_settings.timeStyle.fontWeight =
-        StringSetting::make(L"TimeStyle.FontWeight");
-    g_settings.timeStyle.fontStyle =
-        StringSetting::make(L"TimeStyle.FontStyle");
-    g_settings.timeStyle.fontStretch =
-        StringSetting::make(L"TimeStyle.FontStretch");
-    g_settings.timeStyle.characterSpacing =
+    ClockElementStyleSettings styleSettings;
+    styleSettings.maxWidth = Wh_GetIntSetting(L"MaxWidth");
+    styleSettings.textSpacing = g_settings.textSpacing;
+
+    TextStyleSettings& timeStyle = styleSettings.timeStyle;
+    timeStyle.hidden = Wh_GetIntSetting(L"TimeStyle.Hidden");
+    timeStyle.textColor = StringSetting::make(L"TimeStyle.TextColor");
+    timeStyle.textAlignment = StringSetting::make(L"TimeStyle.TextAlignment");
+    timeStyle.fontSize = Wh_GetIntSetting(L"TimeStyle.FontSize");
+    timeStyle.fontFamily = StringSetting::make(L"TimeStyle.FontFamily");
+    timeStyle.fontWeight = StringSetting::make(L"TimeStyle.FontWeight");
+    timeStyle.fontStyle = StringSetting::make(L"TimeStyle.FontStyle");
+    timeStyle.fontStretch = StringSetting::make(L"TimeStyle.FontStretch");
+    timeStyle.characterSpacing =
         Wh_GetIntSetting(L"TimeStyle.CharacterSpacing");
+    timeStyle.lineHeight = Wh_GetIntSetting(L"TimeStyle.LineHeight");
 
-    g_settings.dateStyle.hidden = Wh_GetIntSetting(L"DateStyle.Hidden");
-    g_settings.dateStyle.textColor =
-        StringSetting::make(L"DateStyle.TextColor");
-    g_settings.dateStyle.textAlignment =
-        StringSetting::make(L"DateStyle.TextAlignment");
-    g_settings.dateStyle.fontSize = Wh_GetIntSetting(L"DateStyle.FontSize");
-    g_settings.dateStyle.fontFamily =
-        StringSetting::make(L"DateStyle.FontFamily");
-    g_settings.dateStyle.fontWeight =
-        StringSetting::make(L"DateStyle.FontWeight");
-    g_settings.dateStyle.fontStyle =
-        StringSetting::make(L"DateStyle.FontStyle");
-    g_settings.dateStyle.fontStretch =
-        StringSetting::make(L"DateStyle.FontStretch");
-    g_settings.dateStyle.characterSpacing =
+    TextStyleSettings& dateStyle = styleSettings.dateStyle;
+    dateStyle.hidden = Wh_GetIntSetting(L"DateStyle.Hidden");
+    dateStyle.textColor = StringSetting::make(L"DateStyle.TextColor");
+    dateStyle.textAlignment = StringSetting::make(L"DateStyle.TextAlignment");
+    dateStyle.fontSize = Wh_GetIntSetting(L"DateStyle.FontSize");
+    dateStyle.fontFamily = StringSetting::make(L"DateStyle.FontFamily");
+    dateStyle.fontWeight = StringSetting::make(L"DateStyle.FontWeight");
+    dateStyle.fontStyle = StringSetting::make(L"DateStyle.FontStyle");
+    dateStyle.fontStretch = StringSetting::make(L"DateStyle.FontStretch");
+    dateStyle.characterSpacing =
         Wh_GetIntSetting(L"DateStyle.CharacterSpacing");
+    dateStyle.lineHeight = Wh_GetIntSetting(L"DateStyle.LineHeight");
 
-    g_clockElementStyleEnabled =
-        (g_settings.maxWidth || g_settings.textSpacing ||
-         g_settings.timeStyle.hidden || *g_settings.timeStyle.textColor ||
-         *g_settings.timeStyle.textAlignment || g_settings.timeStyle.fontSize ||
-         *g_settings.timeStyle.fontFamily || *g_settings.timeStyle.fontWeight ||
-         *g_settings.timeStyle.fontStyle || *g_settings.timeStyle.fontStretch ||
-         g_settings.timeStyle.characterSpacing || g_settings.dateStyle.hidden ||
-         *g_settings.dateStyle.textColor ||
-         *g_settings.dateStyle.textAlignment || g_settings.dateStyle.fontSize ||
-         *g_settings.dateStyle.fontFamily || *g_settings.dateStyle.fontWeight ||
-         *g_settings.dateStyle.fontStyle || *g_settings.dateStyle.fontStretch ||
-         g_settings.dateStyle.characterSpacing);
-    g_clockElementStyleIndex++;
+    bool clockElementStyleEnabled =
+        styleSettings.maxWidth || styleSettings.textSpacing ||
+        timeStyle.hidden || *timeStyle.textColor || *timeStyle.textAlignment ||
+        timeStyle.fontSize || *timeStyle.fontFamily || *timeStyle.fontWeight ||
+        *timeStyle.fontStyle || *timeStyle.fontStretch ||
+        timeStyle.characterSpacing || timeStyle.lineHeight ||
+        dateStyle.hidden || *dateStyle.textColor || *dateStyle.textAlignment ||
+        dateStyle.fontSize || *dateStyle.fontFamily || *dateStyle.fontWeight ||
+        *dateStyle.fontStyle || *dateStyle.fontStretch ||
+        dateStyle.characterSpacing || dateStyle.lineHeight;
+
+    {
+        std::lock_guard<std::mutex> guard(g_clockElementStyleMutex);
+        g_clockElementStyleSettings = std::move(styleSettings);
+        g_clockElementStyleEnabled = clockElementStyleEnabled;
+        g_clockElementStyleIndex++;
+    }
 
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 
@@ -5128,6 +6263,17 @@ BOOL Wh_ModInit() {
                 hAdvapi32, "EnumDynamicTimeZoneInformation");
     }
 
+    if (HMODULE hGdi32 = LoadLibraryEx(L"gdi32.dll", nullptr,
+                                       LOAD_LIBRARY_SEARCH_SYSTEM32)) {
+        pD3DKMTOpenAdapterFromLuid =
+            (D3DKMTOpenAdapterFromLuid_t)GetProcAddress(
+                hGdi32, "D3DKMTOpenAdapterFromLuid");
+        pD3DKMTQueryAdapterInfo = (D3DKMTQueryAdapterInfo_t)GetProcAddress(
+            hGdi32, "D3DKMTQueryAdapterInfo");
+        pD3DKMTCloseAdapter =
+            (D3DKMTCloseAdapter_t)GetProcAddress(hGdi32, "D3DKMTCloseAdapter");
+    }
+
     LoadSettings();
 
     g_winVersion = GetExplorerVersion();
@@ -5147,13 +6293,13 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
     } else if (g_winVersion >= WinVersion::Win11) {
-        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-            g_taskbarViewDllLoaded = true;
-            if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+        if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+            g_systemTrayModuleHooked = true;
+            if (!HookSystemTraySymbols(systemTrayModule)) {
                 return FALSE;
             }
         } else {
-            Wh_Log(L"Taskbar view module not loaded yet");
+            Wh_Log(L"System tray module not loaded yet");
         }
     } else {
         if (!HookWin10TaskbarSymbols()) {
@@ -5169,9 +6315,9 @@ BOOL Wh_ModInit() {
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
     auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
         kernelBaseModule, "LoadLibraryExW");
-    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
-                                       LoadLibraryExW_Hook,
-                                       &LoadLibraryExW_Original);
+    WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                   LoadLibraryExW_Hook,
+                                   &LoadLibraryExW_Original);
 
     // Must use GetProcAddress for the functions below, otherwise the stubs in
     // kernel32.dll are being hooked.
@@ -5188,19 +6334,19 @@ BOOL Wh_ModInit() {
     }
 
     if (g_winVersion <= WinVersion::Win10) {
-        WindhawkUtils::Wh_SetFunctionHookT(pGetTimeFormatEx,
-                                           GetTimeFormatEx_Hook_Win10,
-                                           &GetTimeFormatEx_Original);
-        WindhawkUtils::Wh_SetFunctionHookT(pGetDateFormatEx,
-                                           GetDateFormatEx_Hook_Win10,
-                                           &GetDateFormatEx_Original);
+        WindhawkUtils::SetFunctionHook(pGetTimeFormatEx,
+                                       GetTimeFormatEx_Hook_Win10,
+                                       &GetTimeFormatEx_Original);
+        WindhawkUtils::SetFunctionHook(pGetDateFormatEx,
+                                       GetDateFormatEx_Hook_Win10,
+                                       &GetDateFormatEx_Original);
 
         auto pGetDateFormatW = (decltype(&GetDateFormatW))GetProcAddress(
             kernelBaseModule, "GetDateFormatW");
         if (pGetDateFormatW) {
-            WindhawkUtils::Wh_SetFunctionHookT(pGetDateFormatW,
-                                               GetDateFormatW_Hook_Win10,
-                                               &GetDateFormatW_Original);
+            WindhawkUtils::SetFunctionHook(pGetDateFormatW,
+                                           GetDateFormatW_Hook_Win10,
+                                           &GetDateFormatW_Original);
         }
     } else {
         if (g_winVersion >= WinVersion::Win11_22H2) {
@@ -5210,23 +6356,19 @@ BOOL Wh_ModInit() {
                 return FALSE;
             }
 
-            WindhawkUtils::Wh_SetFunctionHookT(
+            WindhawkUtils::SetFunctionHook(
                 pGetLocalTime, GetLocalTime_Hook_Win11, &GetLocalTime_Original);
         }
 
-        WindhawkUtils::Wh_SetFunctionHookT(pGetTimeFormatEx,
-                                           GetTimeFormatEx_Hook_Win11,
-                                           &GetTimeFormatEx_Original);
-        WindhawkUtils::Wh_SetFunctionHookT(pGetDateFormatEx,
-                                           GetDateFormatEx_Hook_Win11,
-                                           &GetDateFormatEx_Original);
-        WindhawkUtils::Wh_SetFunctionHookT(SendMessageW, SendMessageW_Hook,
-                                           &SendMessageW_Original);
+        WindhawkUtils::SetFunctionHook(pGetTimeFormatEx,
+                                       GetTimeFormatEx_Hook_Win11,
+                                       &GetTimeFormatEx_Original);
+        WindhawkUtils::SetFunctionHook(pGetDateFormatEx,
+                                       GetDateFormatEx_Hook_Win11,
+                                       &GetDateFormatEx_Original);
+        WindhawkUtils::SetFunctionHook(SendMessageW, SendMessageW_Hook,
+                                       &SendMessageW_Original);
     }
-
-    WebContentUpdateThreadInit();
-    DataCollectionSessionInit();
-    MediaSessionInit();
 
     g_initialized = true;
 
@@ -5236,12 +6378,12 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded) {
-        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-            if (!g_taskbarViewDllLoaded.exchange(true)) {
-                Wh_Log(L"Got Taskbar.View.dll");
+    if (g_winVersion >= WinVersion::Win11 && !g_systemTrayModuleHooked) {
+        if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+            if (!g_systemTrayModuleHooked.exchange(true)) {
+                Wh_Log(L"Got system tray module");
 
-                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                if (HookSystemTraySymbols(systemTrayModule)) {
                     Wh_ApplyHookOperations();
                 }
             }
@@ -5260,40 +6402,68 @@ void Wh_ModAfterInit() {
 void Wh_ModBeforeUninit() {
     Wh_Log(L">");
 
-    if (g_winVersion >= WinVersion::Win11 &&
-        g_clockElementStyleEnabled.exchange(false)) {
-        DWORD styleIndex = ++g_clockElementStyleIndex;
+    if (g_winVersion < WinVersion::Win11) {
+        return;
+    }
 
-        ApplySettings();
+    DWORD styleIndex;
+    {
+        std::lock_guard<std::mutex> guard(g_clockElementStyleMutex);
+        if (!g_clockElementStyleEnabled) {
+            return;
+        }
 
-        // Wait for styles to be restored.
-        for (int i = 0; i < 20; i++) {
-            bool allRestored = true;
+        g_clockElementStyleEnabled = false;
+        styleIndex = ++g_clockElementStyleIndex;
+    }
+
+    ApplySettings();
+
+    // Wait for styles to be restored.
+    for (int i = 0; i < 20; i++) {
+        bool allRestored = true;
+
+        {
+            std::lock_guard<std::mutex> guard(g_clockElementStyleMutex);
             for (const auto& data : g_clockElementStyleData) {
                 if (data.styleIndex < styleIndex) {
                     allRestored = false;
                     break;
                 }
             }
-
-            if (allRestored) {
-                break;
-            }
-
-            Sleep(100);
         }
+
+        if (allRestored) {
+            break;
+        }
+
+        Sleep(100);
     }
+}
+
+// Stops the background work that feeds the format tokens, and keeps it stopped
+// until g_formattingInitialized is cleared. Must be called without
+// g_formatLineMutex held: joining the web content thread waits for an in-flight
+// network fetch and detaching the media handlers waits for an in-flight event,
+// neither of which should hold up the clock.
+void StopFormattingBackgroundWork() {
+    {
+        std::lock_guard<std::mutex> guard(g_formatLineMutex);
+        g_formattingInitialized = true;
+    }
+
+    WebContentUpdateThreadUninit();
+    MediaSessionUninit();
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    WebContentUpdateThreadUninit();
+    StopFormattingBackgroundWork();
 
     {
         std::lock_guard<std::mutex> guard(g_formatLineMutex);
         DataCollectionSessionUninit();
-        MediaSessionUninit();
     }
 
     ApplySettings();
@@ -5302,52 +6472,24 @@ void Wh_ModUninit() {
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
 
-    WebContentUpdateThreadUninit();
+    StopFormattingBackgroundWork();
 
     {
         std::lock_guard<std::mutex> guard(g_formatLineMutex);
         DataCollectionSessionUninit();
-        MediaSessionUninit();
-    }
+        g_formattingInitialized = false;
 
-    bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
+        bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
 
-    LoadSettings();
+        LoadSettings();
 
-    *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
-    if (*bReload) {
-        return TRUE;
-    }
-
-    WebContentUpdateThreadInit();
-
-    {
-        std::lock_guard<std::mutex> guard(g_formatLineMutex);
-        DataCollectionSessionInit();
-        MediaSessionInit();
+        *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
+        if (*bReload) {
+            return TRUE;
+        }
     }
 
     ApplySettings();
-
-    return TRUE;
-}
-
-BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
-    switch (fdwReason) {
-        case DLL_PROCESS_ATTACH:
-        case DLL_THREAD_ATTACH:
-        case DLL_THREAD_DETACH:
-            break;
-
-        case DLL_PROCESS_DETACH:
-            // Do not release media-related objects if process termination
-            // scenario, as it can lead to hangs.
-            if (lpReserved) {
-                winrt::detach_abi(g_mediaSessionManager);
-                winrt::detach_abi(g_mediaCurrentSession);
-            }
-            break;
-    }
 
     return TRUE;
 }

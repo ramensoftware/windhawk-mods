@@ -2,7 +2,7 @@
 // @id              idm-clear-completed-downloads
 // @name            IDM Clear Completed Downloads
 // @description     This mode cleans up as soon as the IDM window appears on the screen.
-// @version         0.5.3
+// @version         0.5.4
 // @author          BCRTVKCS
 // @github          https://github.com/bcrtvkcs
 // @twitter         https://x.com/bcrtvkcs
@@ -49,6 +49,11 @@ The mod hooks the `ShowWindow` function in the Windows API. When IDM makes a win
 #define IDM_CMD_DELETE_COMPLETED 32794
 #define IDYES 6  // Standard Windows IDYES button ID
 
+// TDM_CLICK_BUTTON: the official way to programmatically click a button
+// in both native dialogs (#32770) and TaskDialog windows.
+// Value: WM_USER + 102 = 0x0466
+#define TDM_CLICK_BUTTON (WM_USER + 102)
+
 // Concurrency guard: only one CleanupTask may run at a time
 volatile LONG g_cleanupRunning = 0;
 
@@ -81,18 +86,13 @@ BOOL CALLBACK FindOwnedDialog(HWND hWnd, LPARAM lParam) {
 DWORD WINAPI CleanupTask(LPVOID lpParam) {
     HWND hMainWnd = (HWND)lpParam;
 
-    // Concurrency guard: if another CleanupTask is already running, exit
     if (InterlockedCompareExchange(&g_cleanupRunning, 1, 0) != 0) {
         Wh_Log(L"CleanupTask already running, skipping.");
         return 0;
     }
 
-    // 1. Short delay to let the window state settle
     Sleep(50);
 
-    // 2. Verify the window is truly user-opened (not auto-start background)
-    //    During auto-start, IDM briefly shows the window then hides it to tray.
-    //    After 50ms, a user-opened window will still be visible and foreground.
     if (!IsWindowVisible(hMainWnd) || IsIconic(hMainWnd) ||
         GetForegroundWindow() != hMainWnd) {
         Wh_Log(L"Window not visible/foreground, aborting cleanup (likely auto-start).");
@@ -100,21 +100,16 @@ DWORD WINAPI CleanupTask(LPVOID lpParam) {
         return 0;
     }
 
-    // 3. Send the cleanup command
     PostMessageA(hMainWnd, WM_COMMAND, IDM_CMD_DELETE_COMPLETED, 0);
 
-    // 4. Find the confirmation dialog by ownership (language-independent)
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 40; i++) {
         Sleep(50);
 
         PopupSearch search = { hMainWnd, NULL };
         EnumWindows(FindOwnedDialog, (LPARAM)&search);
 
         if (search.hResult != NULL) {
-            // Hide the popup immediately to keep the UI clean
-            ShowWindow(search.hResult, SW_HIDE);
-
-            // Click the "Yes" button (PostMessage to avoid cross-thread deadlock)
+            PostMessageW(search.hResult, TDM_CLICK_BUTTON, IDYES, 0);
             PostMessageW(search.hResult, WM_COMMAND, IDYES, 0);
 
             Wh_Log(L"Window opened -> Cleanup done -> Confirmation dismissed.");
@@ -122,7 +117,6 @@ DWORD WINAPI CleanupTask(LPVOID lpParam) {
         }
     }
 
-    // Release the concurrency guard
     InterlockedExchange(&g_cleanupRunning, 0);
     return 0;
 }
@@ -178,5 +172,3 @@ BOOL Wh_ModInit() {
 
     return TRUE;
 }
-
-
