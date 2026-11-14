@@ -23,7 +23,7 @@ Move the pointer with more fingers resting on the precision touchpad, as if glid
 - **Trigger:** with 5 (or as few as configured) fingers touching the pad.
 - **Disarm:** after all fingers leave the touchpad. Lifting some keeps the glide going.
 - **Movement:** each finger weighs as much as it moves, so resting fingers drop out and don't fight the others. The thumb is completely ignored (unless it is the only one touching, when Windows takes control). With one or two fingers moving, the lower speed multiplier applies; with more moving together, the higher one.
-- **Click:** excludes the thumb. You don't need to lift all fingers. With more fingers resting, same as native - single finger (double) tap to (double) click, tap and hold to drag, tap-tap and hold to drag-select text. A hold lasts until another tap or the whole hand leaves the pad. 
+- **Click:** excludes the thumb. You don't need to lift all fingers. With more fingers resting, same as native - single finger (double) tap to (double) click, tap and hold to drag, tap-tap and hold to drag-select text. A hold lasts until another tap or the whole hand leaves the pad.
 - **Scrolling:** Windows 2-finger scroll is ignored while more-fingers-gliding. Instead, 2-finger tap-slide to scroll, while "inside" the more-fingers action (or with 2 fingers detection enabled). **Both will get activated if you start with 2 and rest more on the touchpad.**
 
 ## The thumb
@@ -77,6 +77,9 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
   - low: Low
   - medium: Medium
   - high: High
+- tapFeedback: false
+  $name: Tap and hold feedback
+  $description: The pointer briefly turns into the Person Select pointer when taps and holds are captured, since there's no button feedback.
 - multiplierMore: "1.5"
   $name: 5-3 fingers speed multiplier
   $description: When more fingers are gliding and you'd need room to travel. 1.0 is the system's touchpad speed and acceleration, 1.5 is 50% faster.
@@ -349,6 +352,7 @@ std::atomic<bool> g_armThree;
 std::atomic<bool> g_armFour;
 std::atomic<bool> g_armFive{true};
 std::atomic<int> g_tapProfile{2};
+std::atomic<bool> g_tapFeedback;
 
 struct Bin {
     double pxPerMm = 0;
@@ -375,6 +379,7 @@ constexpr UINT_PTR kTwoTapTimerId = 2;
 constexpr UINT_PTR kInertiaTimerId = 3;
 constexpr UINT_PTR kDoubleTimerId = 4;
 constexpr UINT_PTR kShowPointerTimerId = 5;
+constexpr UINT_PTR kFeedbackTimerId = 6;
 
 void SetWheelBlock(bool on);
 
@@ -611,6 +616,7 @@ void LoadSettings() {
         profile = 3;
     }
     g_tapProfile = profile;
+    g_tapFeedback = Wh_GetIntSetting(L"tapFeedback");
 }
 
 // The learned curve.
@@ -833,6 +839,92 @@ void ResetSession() {
 
 // Output.
 
+// Taps and holds have no button under the finger: the pointer turns into the system's Person Select while a
+// button is down, and for kFeedbackMs after a click: the mod's own, and Windows' within kNativeClickMs of a
+// touchpad report (a mouse beside it isn't clicked with the hand on the pad). Touchpad thread only.
+constexpr UINT kFeedbackMs = 200;
+constexpr DWORD kNativeClickMs = 200;
+// Not the I-beam: other tools (a Caps Lock I-beam) swap it too, and the last to write wins.
+constexpr DWORD kFeedbackCursors[] = {32512, 32649};  // OCR_NORMAL, OCR_HAND
+bool g_feedbackShown;
+
+// SetSystemCursor replaces the cursor for every program; SPI_SETCURSORS reloads the user's scheme, so a cross
+// left by a crash goes at the next scheme change or sign-in.
+void FeedbackShow(bool show) {
+    if (show == g_feedbackShown) {
+        return;
+    }
+    g_feedbackShown = show;
+    if (!show) {
+        SystemParametersInfo(SPI_SETCURSORS, 0, nullptr, 0);
+        return;
+    }
+    // Person Select (IDC_PERSON, Windows 10 1703 and later), or the cross where it's missing.
+    HCURSOR shape = LoadCursor(nullptr, MAKEINTRESOURCE(32672));
+    if (!shape) {
+        shape = LoadCursor(nullptr, IDC_CROSS);
+    }
+    for (DWORD id : kFeedbackCursors) {
+        HCURSOR copy = CopyCursor(shape);
+        if (copy && !SetSystemCursor(copy, id)) {
+            DestroyCursor(copy);
+        }
+    }
+}
+
+// down: a button went down (shown until it's up); otherwise it came up, or a click went out (shown a moment).
+bool g_feedbackDown;  // shown for a button held down, until it's up
+
+void Feedback(bool down) {
+    if (!g_tapFeedback) {
+        FeedbackShow(false);
+        return;
+    }
+    g_feedbackDown = down;
+    KillTimer(g_hWnd, kFeedbackTimerId);
+    FeedbackShow(true);
+    if (!down) {
+        SetTimer(g_hWnd, kFeedbackTimerId, kFeedbackMs, nullptr);
+    }
+}
+
+// Windows' taps reach the mod as mouse buttons, read only while the feedback is on: every mouse move of the
+// system comes with them.
+bool g_mouseListening;
+
+void FeedbackListen() {
+    bool listen = g_tapFeedback;
+    if (listen == g_mouseListening) {
+        return;
+    }
+    RAWINPUTDEVICE rid{
+        .usUsagePage = kPageGeneric,
+        .usUsage = 0x02,  // mouse
+        .dwFlags = listen ? (DWORD)RIDEV_INPUTSINK : (DWORD)RIDEV_REMOVE,
+        .hwndTarget = listen ? (HWND)g_hWnd : nullptr,
+    };
+    if (RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
+        g_mouseListening = listen;
+    } else {
+        Wh_Log(L"Mouse buttons for feedback: error %u", GetLastError());
+    }
+}
+
+// The middle button is the three or four-finger tap set to middle click. A scroll is shown for as long as its
+// wheel turns, like a hold: Windows' two-finger scroll, and the mod's in wheel output.
+void FeedbackMouse(const RAWMOUSE& mouse) {
+    USHORT flags = mouse.usButtonFlags;
+    bool pad = GetTickCount() - g_lastReportTick <= kNativeClickMs;
+    if ((flags & (RI_MOUSE_LEFT_BUTTON_DOWN | RI_MOUSE_RIGHT_BUTTON_DOWN | RI_MOUSE_MIDDLE_BUTTON_DOWN)) && pad) {
+        Feedback(true);
+    } else if ((flags & (RI_MOUSE_LEFT_BUTTON_UP | RI_MOUSE_RIGHT_BUTTON_UP | RI_MOUSE_MIDDLE_BUTTON_UP)) &&
+               g_feedbackShown) {
+        Feedback(false);
+    } else if ((flags & (RI_MOUSE_WHEEL | RI_MOUSE_HWHEEL)) && pad && !g_feedbackDown) {
+        Feedback(false);
+    }
+}
+
 // SendInput's button flags name the physical buttons: with the buttons swapped, the primary one is the right.
 void SendPrimaryClick() {
     bool swapped = GetSystemMetrics(SM_SWAPBUTTON);
@@ -844,6 +936,7 @@ void SendPrimaryClick() {
     input[0].mi.dwExtraInfo = kInputMark;
     input[1].mi.dwExtraInfo = kInputMark;
     SendInput(ARRAYSIZE(input), input, sizeof(INPUT));
+    Feedback(false);
 }
 
 void SendPrimary(bool down) {
@@ -854,6 +947,7 @@ void SendPrimary(bool down) {
                             : (swapped ? MOUSEEVENTF_RIGHTUP : MOUSEEVENTF_LEFTUP);
     input.mi.dwExtraInfo = kInputMark;
     SendInput(1, &input, sizeof(input));
+    Feedback(down);
 }
 
 // An absolute move as input: unlike SetCursorPos, programs reading mouse input see it, and a drag with the
@@ -888,6 +982,7 @@ void SendSecondaryClick() {
     input[0].mi.dwExtraInfo = kInputMark;
     input[1].mi.dwExtraInfo = kInputMark;
     SendInput(ARRAYSIZE(input), input, sizeof(INPUT));
+    Feedback(false);
     Wh_Log(L"Right click");
 }
 
@@ -996,6 +1091,7 @@ void TouchEnd() {
 }
 
 void TouchPan(double dxMm, double dyMm) {
+    Feedback(false);  // the touch output's scroll, which reaches no wheel
     double sign = g_scrollReverse ? -1 : 1;
     double ddx = dxMm * kTouchPxPerMm * sign;
     double ddy = dyMm * kTouchPxPerMm * sign;
@@ -1420,6 +1516,8 @@ bool OweClick(DWORD now) {
     }
     g_state.pendingDouble = true;
     SetTimer(g_hWnd, kDoubleTimerId, std::min(kDoubleWaitMs, left - 30), nullptr);
+    // Shown as the tap ends, not as its owed click goes out: the feedback follows the finger.
+    Feedback(false);
     return true;
 }
 
@@ -2452,6 +2550,16 @@ double Median(std::vector<double>& v) {
     return m;
 }
 
+// The mod's scroll (tap, then rest and slide) shows as a hold does: from the rest until it ends, moving or not.
+void FeedbackScroll() {
+    static bool shown;
+    bool scrolling = g_two.scrolling || g_state.scrollSession;
+    if (scrolling != shown) {
+        shown = scrolling;
+        Feedback(scrolling);
+    }
+}
+
 void ProcessFrame() {
     DWORD now = GetTickCount();
     double t = Now();
@@ -2498,8 +2606,10 @@ void ProcessFrame() {
 
     if (touching == 0) {
         ResetSession();
+        FeedbackScroll();
         return;
     }
+    FeedbackScroll();
 
     // A palm or thumb (Confidence = 0) only counts toward the whole hand's five: with three on, a two-finger
     // scroll with the thumb resting would start a glide. A count which is off doesn't start: its swipe is Windows'.
@@ -3008,6 +3118,10 @@ void OnRawInput(HRAWINPUT hRawInput) {
     }
 
     const RAWINPUT* raw = (const RAWINPUT*)buffer.data();
+    if (raw->header.dwType == RIM_TYPEMOUSE) {
+        FeedbackMouse(raw->data.mouse);
+        return;
+    }
     if (raw->header.dwType != RIM_TYPEHID) {
         return;
     }
@@ -3093,9 +3207,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 
         case kHotkeySettingMessage:
             VizUpdateHotkey();
+            FeedbackListen();
+            if (!g_tapFeedback) {
+                FeedbackShow(false);
+            }
             return 0;
 
         case WM_TIMER:
+            if (wParam == kFeedbackTimerId) {
+                KillTimer(hWnd, kFeedbackTimerId);
+                FeedbackShow(false);
+                return 0;
+            }
             if (wParam == kShowPointerTimerId) {
                 ShowPointer();
                 return 0;
@@ -3204,9 +3327,12 @@ DWORD WINAPI WorkerThread(LPVOID) {
     };
     if (RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
         WTSRegisterSessionNotification(g_hWnd, NOTIFY_FOR_THIS_SESSION);
+        FeedbackListen();
 
         RunMessageLoop();
 
+        g_tapFeedback = false;
+        FeedbackListen();
         SetWheelBlock(false);
         WTSUnRegisterSessionNotification(g_hWnd);
 
@@ -3218,6 +3344,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
     }
 
     UnregisterHotKey(g_hWnd, kVizHotkeyId);
+    FeedbackShow(false);
     VizDestroy(hInstance);
     DestroyWindow(g_hWnd);
     g_hWnd = nullptr;
