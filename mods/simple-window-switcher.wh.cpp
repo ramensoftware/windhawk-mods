@@ -39,8 +39,9 @@ improvements by [Asteski](https://github.com/Asteski) and
   overflow indicators.
 - Entrance, exit, selection, hover, scrolling, and layout-resize animations that
   respect the Windows animation setting and can be turned off one by one.
-- Solid/transparent, Acrylic, and Mica themes; light/dark color schemes; custom
-  or accent colors; configurable fonts, highlights, shadows, and corner radii.
+- Solid/transparent, Acrylic, Mica, and Mica Alt themes; light/dark color
+  schemes; custom or accent colors; tint and luminosity tuning for the Windows 11
+  materials; configurable fonts, highlights, shadows, and corner radii.
 - Optional desktop-snapshot or wallpaper backdrop blur behind the switcher.
 - Application grouping with individual-window drill-in, window-count badges,
   and configurable group closing and restoration. Web apps installed from Edge
@@ -161,8 +162,16 @@ navigation can change the selection while the UI remains hidden.
     right-click can dismiss the switcher; ordinary physical right-clicks outside
     the switcher still dismiss it. Legacy recovery data from older builds is
     restored only when the switcher is inactive.
-- Mica requires Windows 11. The automatic theme uses Mica on Windows 11 and
-  Acrylic on Windows 10; backdrop blur is a separate, optional setting.
+- Mica requires Windows 11. Mica Alt requires Windows 11 22H2 or newer and
+  shows Mica on 21H2. On Windows 10, both themes use Acrylic. The automatic theme
+  uses Mica on Windows 11 and Acrylic on Windows 10; backdrop blur is a separate,
+  optional setting.
+- On Windows 11, **Material Tuning** sets the tint color, tint opacity, and
+  luminosity opacity of Mica, Mica Alt, and Acrylic for each color scheme, the
+  way WinUI's own materials are tuned. Values left at Default (or -1) keep the
+  material's own look. The switcher then draws the material itself, which has
+  no Windows drop shadow. On Windows 10, Acrylic follows **Switcher Background
+  Color** and **Background Opacity** instead.
 - The switcher and its element corners set to Follow Corner Preference follow
   **Corner Preference**. With Default, that is the Windows corner radius,
   including changes made by the
@@ -172,9 +181,9 @@ navigation can change the selection while the UI remains hidden.
 - On Windows 11, live thumbnails are rounded on every material. Each element's
   corner setting can also use its own Custom radius, for example when the
   Windows corner radius is 0.
-- On Windows 11, Mica and Acrylic keep their material at every corner radius.
-  Radii that Windows does not draw itself use a material drawn by the switcher,
-  which has no Windows drop shadow.
+- On Windows 11, Mica, Mica Alt, and Acrylic keep their material at every
+  corner radius. Radii that Windows does not draw itself use a material drawn
+  by the switcher, which has no Windows drop shadow.
 - With [Windows Animations](https://windhawk.net/mods/windows-animations) 1.3.7 or
   newer, confirmed keyboard and touchpad selections also play its window-switch
   animation, and minimized windows are restored through its restore animation.
@@ -252,6 +261,10 @@ nothing failed.
       - none: None (Solid/Transparent)
       - backdrop: Acrylic (Windows 10+)
       - mica: Mica Blur (Windows 11 only)
+      - micaAlt: Mica Alt (Windows 11 only)
+    - materialTuning: false
+      $name: Material Tuning
+      $description: Windows 11 only. Tint Mica, Mica Alt and Acrylic with the Material Tint settings of each color scheme. The switcher then draws the material itself, without the Windows drop shadow. On Windows 10, Acrylic uses Switcher Background Color and Background Opacity instead.
     - colorScheme: system
       $name: Color Scheme
       $options:
@@ -349,6 +362,22 @@ nothing failed.
         - customIndicatorTextColor: "#FFFFFF"
           $name: Custom Group Indicator Text Color
           $description: HEX color value, used when Group Indicator Text Color is set to Custom.
+        - materialTintColorMode: default
+          $name: Material Tint Color
+          $description: Tint color of Mica, Mica Alt and Acrylic in dark mode, used when Material Tuning is on. Default keeps the material's own color.
+          $options:
+          - default: Default
+          - custom: Custom
+          - accent: Accent
+        - customMaterialTintColor: "#202020"
+          $name: Custom Material Tint Color
+          $description: HEX color value, used when Material Tint Color is set to Custom.
+        - materialTintOpacity: -1
+          $name: Material Tint Opacity
+          $description: How strongly the tint color colors the material in dark mode (0-100), used when Material Tuning is on. -1 keeps the material's own value.
+        - materialLuminosityOpacity: -1
+          $name: Material Luminosity Opacity
+          $description: How strongly the tint color's brightness replaces the background's in dark mode (0-100), used when Material Tuning is on. -1 keeps the material's own value.
       $name: Dark Mode
     - LightMode:
         - borderColorMode: default
@@ -417,6 +446,22 @@ nothing failed.
         - customIndicatorTextColor: "#000000"
           $name: Custom Group Indicator Text Color
           $description: HEX color value, used when Group Indicator Text Color is set to Custom.
+        - materialTintColorMode: default
+          $name: Material Tint Color
+          $description: Tint color of Mica, Mica Alt and Acrylic in light mode, used when Material Tuning is on. Default keeps the material's own color.
+          $options:
+          - default: Default
+          - custom: Custom
+          - accent: Accent
+        - customMaterialTintColor: "#F3F3F3"
+          $name: Custom Material Tint Color
+          $description: HEX color value, used when Material Tint Color is set to Custom.
+        - materialTintOpacity: -1
+          $name: Material Tint Opacity
+          $description: How strongly the tint color colors the material in light mode (0-100), used when Material Tuning is on. -1 keeps the material's own value.
+        - materialLuminosityOpacity: -1
+          $name: Material Luminosity Opacity
+          $description: How strongly the tint color's brightness replaces the background's in light mode (0-100), used when Material Tuning is on. -1 keeps the material's own value.
       $name: Light Mode
   $name: Theme
 - Appearance:
@@ -1363,6 +1408,8 @@ struct WindowEntry {
 };
 struct Settings {
     WCHAR theme[32];
+    bool micaAlt;         // "mica" theme with the Mica Alt backdrop
+    bool materialTuning;  // Windows 11: custom tint/luminosity for the materials
     WCHAR colorScheme[32];
     WCHAR cornerPreference[32];
     WCHAR scrollWheelBehavior[32];
@@ -1388,12 +1435,16 @@ struct Settings {
     int iconBgOpacityDark;
     WCHAR indicatorBgColorModeDark[16]; WCHAR customIndicatorBgColorDark[16]; int indicatorBgOpacityDark;
     WCHAR indicatorTextColorModeDark[16]; WCHAR customIndicatorTextColorDark[16];
+    WCHAR materialTintColorModeDark[16]; WCHAR customMaterialTintColorDark[16];
+    int materialTintOpacityDark; int materialLuminosityOpacityDark;  // -1: material's own
     // Light Mode color settings
     WCHAR borderColorModeLight[16]; WCHAR highlightFillColorModeLight[16]; WCHAR bgColorModeLight[16]; WCHAR iconBgColorModeLight[16];
     WCHAR customBorderColorLight[16]; WCHAR customHighlightFillColorLight[16]; WCHAR customBgColorLight[16]; WCHAR customIconBgColorLight[16];
     int iconBgOpacityLight;
     WCHAR indicatorBgColorModeLight[16]; WCHAR customIndicatorBgColorLight[16]; int indicatorBgOpacityLight;
     WCHAR indicatorTextColorModeLight[16]; WCHAR customIndicatorTextColorLight[16];
+    WCHAR materialTintColorModeLight[16]; WCHAR customMaterialTintColorLight[16];
+    int materialTintOpacityLight; int materialLuminosityOpacityLight;  // -1: material's own
     WCHAR fontFamily[64]; WCHAR fontStyle[32];
     int fontSize;
     bool applyToGroupIndicator;
@@ -2795,6 +2846,24 @@ static bool IsWin11OrGreater() {
     return false;
 }
 
+// DWMWA_SYSTEMBACKDROP_TYPE, which selects Mica Alt, exists from Windows 11
+// 22H2 (build 22621). Windows 11 21H2 only has Mica.
+static bool MicaAltSupported() {
+    static int s_cached = -1;
+    if (s_cached == -1) {
+        WCHAR build[16] = {};
+        DWORD size = sizeof(build);
+        s_cached = RegGetValueW(HKEY_LOCAL_MACHINE,
+                                L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                                L"CurrentBuildNumber", RRF_RT_REG_SZ, NULL, build,
+                                &size) == ERROR_SUCCESS &&
+                           _wtoi(build) >= 22621
+                       ? 1
+                       : 0;
+    }
+    return s_cached == 1;
+}
+
 static int g_systemDwmRadius = 8;
 static int g_systemDwmSmallRadius = 4;
 static bool g_customCornerRadiusModActive = false;
@@ -3954,16 +4023,23 @@ static const GUID kSwsIidEffectD2D1Interop = {0x2FC57384, 0xA068, 0x44D7, {0xA3,
 static const GUID kSwsIidPropertyValue = {0x4BD682DD, 0x7554, 0x40E9, {0x9A, 0x9B, 0x82, 0x65, 0x4E, 0xDE, 0x7E, 0x62}};
 static const GUID kSwsIidCompositorDesktopInterop = {0x29E691FA, 0x4567, 0x4DCA, {0xB3, 0x19, 0xD0, 0xF2, 0x07, 0xEB, 0x68, 0x07}};
 static const GUID kSwsIidBlurredWallpaper = {0x0D8FB190, 0xF122, 0x5B8D, {0x9F, 0xDD, 0x54, 0x3B, 0x0D, 0x8E, 0xB7, 0xF3}};
-static const GUID kSwsClsidD2D1ColorMatrix = {0x921F03D6, 0x641C, 0x47DF, {0x85, 0x2D, 0xB4, 0xBB, 0x61, 0x53, 0xAE, 0x11}};
+static const GUID kSwsClsidD2D1Flood = {0x61C23C20, 0xAE69, 0x4D8E, {0x94, 0xCF, 0x50, 0x07, 0x8D, 0xF6, 0x38, 0xF2}};
+static const GUID kSwsClsidD2D1Blend = {0x81C5B77B, 0x13F8, 0x4CDD, {0xAD, 0x20, 0xC8, 0x90, 0x54, 0x7A, 0xC6, 0x5D}};
 
-// D2D ColorMatrix over one source, handed to the compositor as an effect.
-class SwsColorMatrixEffect final : public ISwsGraphicsEffect,
-                                   public ISwsGraphicsEffectD2D1Interop {
+// A D2D effect (its CLSID, property values and sources), handed to the
+// compositor as an effect.
+class SwsD2DEffect final : public ISwsGraphicsEffect,
+                           public ISwsGraphicsEffectD2D1Interop {
 public:
-    SwsColorMatrixEffect(const float (&matrix)[20], IUnknown* source)
-        : source_(source) {
-        memcpy(matrix_, matrix, sizeof(matrix_));
-        if (source_) source_->AddRef();
+    SwsD2DEffect(const GUID& effectId,
+                 std::vector<winrt::Windows::Foundation::IInspectable> properties,
+                 std::vector<IUnknown*> sources)
+        : effectId_(effectId),
+          properties_(std::move(properties)),
+          sources_(std::move(sources)) {
+        for (IUnknown* source : sources_) {
+            if (source) source->AddRef();
+        }
     }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** out) override {
         if (!out) return E_POINTER;
@@ -4012,7 +4088,7 @@ public:
     HRESULT STDMETHODCALLTYPE put_Name(HSTRING) override { return S_OK; }
     HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) override {
         if (!id) return E_POINTER;
-        *id = kSwsClsidD2D1ColorMatrix;
+        *id = effectId_;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR, UINT*, int*) override {
@@ -4020,69 +4096,110 @@ public:
     }
     HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) override {
         if (!count) return E_POINTER;
-        *count = 3;
+        *count = (UINT)properties_.size();
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetProperty(UINT index, void** value) override {
         if (!value) return E_POINTER;
         *value = nullptr;
-        try {
-            winrt::Windows::Foundation::IInspectable property{nullptr};
-            using winrt::Windows::Foundation::PropertyValue;
-            if (index == 0) {
-                property = PropertyValue::CreateSingleArray(
-                    winrt::array_view<const float>(matrix_, matrix_ + 20));
-            } else if (index == 1) {
-                property = PropertyValue::CreateUInt32(1);  // premultiplied alpha
-            } else if (index == 2) {
-                property = PropertyValue::CreateBoolean(true);  // clamp output
-            } else {
-                return E_INVALIDARG;
-            }
-            return static_cast<IUnknown*>(winrt::get_abi(property))
-                ->QueryInterface(kSwsIidPropertyValue, value);
-        } catch (...) {
-            return E_FAIL;
-        }
+        if (index >= properties_.size() || !properties_[index]) return E_INVALIDARG;
+        return static_cast<IUnknown*>(winrt::get_abi(properties_[index]))
+            ->QueryInterface(kSwsIidPropertyValue, value);
     }
     HRESULT STDMETHODCALLTYPE GetSource(UINT index, void** source) override {
         if (!source) return E_POINTER;
         *source = nullptr;
-        if (index != 0 || !source_) return E_INVALIDARG;
-        source_->AddRef();
-        *source = source_;
+        if (index >= sources_.size() || !sources_[index]) return E_INVALIDARG;
+        sources_[index]->AddRef();
+        *source = sources_[index];
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) override {
         if (!count) return E_POINTER;
-        *count = 1;
+        *count = (UINT)sources_.size();
         return S_OK;
     }
 
 private:
-    ~SwsColorMatrixEffect() {
-        if (source_) source_->Release();
+    ~SwsD2DEffect() {
+        for (IUnknown* source : sources_) {
+            if (source) source->Release();
+        }
     }
     LONG refs_ = 1;
-    float matrix_[20];
-    IUnknown* source_;
+    GUID effectId_;
+    std::vector<winrt::Windows::Foundation::IInspectable> properties_;
+    std::vector<IUnknown*> sources_;
 };
 
-// out = offset + lumaGain * luma + chromaGain * (channel - luma), Rec. 709 luma.
-// Fitted per pixel against DWM's own transient Acrylic and Mica on Windows 11
-// 26100, over the same wallpaper, solid and saturated color backdrops.
-struct SwsMaterialRecipe {
-    float offset;
-    float lumaGain;
-    float chromaGain;
+static winrt::Windows::Graphics::Effects::IGraphicsEffectSource CreateSwsD2DEffect(
+    const GUID& effectId,
+    std::vector<winrt::Windows::Foundation::IInspectable> properties,
+    std::initializer_list<winrt::Windows::Graphics::Effects::IGraphicsEffectSource> sources) {
+    std::vector<IUnknown*> sourcePointers;
+    for (const auto& source : sources) {
+        sourcePointers.push_back(static_cast<IUnknown*>(winrt::get_abi(source)));
+    }
+    auto* effect = new SwsD2DEffect(effectId, std::move(properties),
+                                    std::move(sourcePointers));
+    winrt::Windows::Graphics::Effects::IGraphicsEffect graphicsEffect{nullptr};
+    winrt::attach_abi(graphicsEffect, static_cast<ISwsGraphicsEffect*>(effect));
+    return graphicsEffect
+        .as<winrt::Windows::Graphics::Effects::IGraphicsEffectSource>();
+}
+
+// The materials as WinUI builds them: the blurred backdrop takes the
+// luminosity of the tint color at luminosityOpacity, then the hue and
+// saturation of the tint color at tintOpacity. With these values the result
+// matches DWM's own materials within 1/255 on Windows 11 26100, over wallpaper,
+// solid and saturated color backdrops in both color schemes. The Mica and
+// Mica Alt values are WinUI's defaults; Acrylic's are measured.
+struct SwsMaterialParams {
+    COLORREF tint;
+    float tintOpacity;
+    float luminosityOpacity;
     COLORREF fallback;  // DWM's solid fill when material effects are off
 };
-static const SwsMaterialRecipe kSwsMaterialRecipes[4] = {
-    {0.2030f, 0.3860f, 0.9699f, RGB(0x54, 0x54, 0x54)},   // Acrylic, dark
-    {0.5139f, 0.3748f, 0.6936f, RGB(0xD3, 0xD3, 0xD3)},   // Acrylic, light
-    {0.1293f, -0.0162f, 0.1594f, RGB(0x20, 0x20, 0x20)},  // Mica, dark
-    {0.9573f, -0.0215f, 0.0693f, RGB(0xF3, 0xF3, 0xF3)},  // Mica, light
+static const SwsMaterialParams kSwsMaterialDefaults[6] = {
+    {RGB(0x54, 0x54, 0x54), 0.0f, 0.64f, RGB(0x54, 0x54, 0x54)},  // Acrylic, dark
+    {RGB(0xD3, 0xD3, 0xD3), 0.0f, 0.64f, RGB(0xD3, 0xD3, 0xD3)},  // Acrylic, light
+    {RGB(0x20, 0x20, 0x20), 0.8f, 1.0f, RGB(0x20, 0x20, 0x20)},   // Mica, dark
+    {RGB(0xF3, 0xF3, 0xF3), 0.5f, 1.0f, RGB(0xF3, 0xF3, 0xF3)},   // Mica, light
+    {RGB(0x0A, 0x0A, 0x0A), 0.0f, 1.0f, RGB(0x20, 0x20, 0x20)},   // Mica Alt, dark
+    {RGB(0xDA, 0xDA, 0xDA), 0.5f, 1.0f, RGB(0xE8, 0xE8, 0xE8)},   // Mica Alt, light
 };
+
+static bool SameMaterialParams(const SwsMaterialParams& a, const SwsMaterialParams& b) {
+    return a.tint == b.tint && a.tintOpacity == b.tintOpacity &&
+           a.luminosityOpacity == b.luminosityOpacity && a.fallback == b.fallback;
+}
+
+static COLORREF ResolveColor(const WCHAR* mode, const WCHAR* customHex, COLORREF defaultColor);
+
+// The current material's values, with Material Tuning applied. Settings left
+// at Default or -1 keep the material's own value.
+static SwsMaterialParams GetComposedMaterialParams() {
+    const int material = ThemeIs(L"mica") ? (g_settings.micaAlt ? 2 : 1) : 0;
+    SwsMaterialParams params = kSwsMaterialDefaults[material * 2 + (g_isDarkMode ? 0 : 1)];
+    if (!g_settings.materialTuning) return params;
+    const bool dark = g_isDarkMode;
+    const WCHAR* tintMode = dark ? g_settings.materialTintColorModeDark
+                                 : g_settings.materialTintColorModeLight;
+    if (wcscmp(tintMode, L"default") != 0) {
+        params.tint = ResolveColor(tintMode,
+                                   dark ? g_settings.customMaterialTintColorDark
+                                        : g_settings.customMaterialTintColorLight,
+                                   params.tint);
+        params.fallback = params.tint;
+    }
+    const int tintOpacity = dark ? g_settings.materialTintOpacityDark
+                                 : g_settings.materialTintOpacityLight;
+    if (tintOpacity >= 0) params.tintOpacity = tintOpacity / 100.0f;
+    const int luminosityOpacity = dark ? g_settings.materialLuminosityOpacityDark
+                                       : g_settings.materialLuminosityOpacityLight;
+    if (luminosityOpacity >= 0) params.luminosityOpacity = luminosityOpacity / 100.0f;
+    return params;
+}
 
 struct SwsComposedMaterial {
     HWND window = nullptr;
@@ -4090,7 +4207,9 @@ struct SwsComposedMaterial {
     winrt::Windows::UI::Composition::ContainerVisual root{nullptr};
     winrt::Windows::UI::Composition::RectangleClip clip{nullptr};
     winrt::Windows::UI::Composition::SpriteVisual fill{nullptr};
-    int recipe = -1;
+    SwsMaterialParams params = {};
+    bool wallpaper = false;
+    bool hasBrush = false;
     bool effects = false;
     int width = 0;
     int height = 0;
@@ -4132,6 +4251,8 @@ static bool ComposedMaterialWanted() {
     if (!IsWin11OrGreater() || g_swsCompositionFailed) return false;
     if (ThemeIs(L"backdrop") && g_nativeTransientBackdropUnsupported) return true;
     if (!ThemeIs(L"mica") && !ThemeIs(L"backdrop")) return false;
+    // Windows' own materials have no tint or luminosity settings.
+    if (g_settings.materialTuning) return true;
     if (CornerPreferenceIsDefault()) return false;
     int radiusDIP = GetResolvedCornerRadiusDIP();
     return NativeCornerPreferenceForRadius(radiusDIP) < 0;
@@ -4215,15 +4336,15 @@ static LRESULT CALLBACK SwsMaterialWndProc(HWND hWnd, UINT uMsg, WPARAM wParam,
 }
 
 static winrt::Windows::UI::Composition::CompositionBrush CreateComposedMaterialBrush(
-    bool mica, const SwsMaterialRecipe& recipe, bool effects) {
+    bool wallpaper, const SwsMaterialParams& params, bool effects) {
     namespace wuc = winrt::Windows::UI::Composition;
     const winrt::Windows::UI::Color fallbackColor{
-        255, GetRValue(recipe.fallback), GetGValue(recipe.fallback),
-        GetBValue(recipe.fallback)};
+        255, GetRValue(params.fallback), GetGValue(params.fallback),
+        GetBValue(params.fallback)};
     if (!effects) return g_swsCompositor.CreateColorBrush(fallbackColor);
 
     wuc::CompositionBrush backdrop{nullptr};
-    if (mica) {
+    if (wallpaper) {
         ISwsCompositorWithBlurredWallpaper* wallpaper = nullptr;
         if (SUCCEEDED(static_cast<IUnknown*>(winrt::get_abi(g_swsCompositor))
                           ->QueryInterface(kSwsIidBlurredWallpaper,
@@ -4243,26 +4364,33 @@ static winrt::Windows::UI::Composition::CompositionBrush CreateComposedMaterialB
     }
     if (!backdrop) return g_swsCompositor.CreateColorBrush(fallbackColor);
 
-    const float luma[3] = {0.2126f, 0.7152f, 0.0722f};
-    float matrix[20] = {};
-    for (int in = 0; in < 3; ++in) {
-        for (int out = 0; out < 3; ++out) {
-            matrix[in * 4 + out] =
-                recipe.lumaGain * luma[in] +
-                recipe.chromaGain * ((in == out ? 1.0f : 0.0f) - luma[in]);
-        }
-    }
-    matrix[15] = 1.0f;  // alpha
-    matrix[16] = matrix[17] = matrix[18] = recipe.offset;
-
+    using winrt::Windows::Foundation::PropertyValue;
+    const float r = GetRValue(params.tint) / 255.0f;
+    const float g = GetGValue(params.tint) / 255.0f;
+    const float b = GetBValue(params.tint) / 255.0f;
+    const float luminosityColor[4] = {r, g, b, params.luminosityOpacity};
+    const float tintColor[4] = {r, g, b, params.tintOpacity};
     wuc::CompositionEffectSourceParameter source(L"Backdrop");
-    auto graphicsSource =
-        source.as<winrt::Windows::Graphics::Effects::IGraphicsEffectSource>();
-    auto* effect = new SwsColorMatrixEffect(
-        matrix, static_cast<IUnknown*>(winrt::get_abi(graphicsSource)));
-    winrt::Windows::Graphics::Effects::IGraphicsEffect graphicsEffect{nullptr};
-    winrt::attach_abi(graphicsEffect, static_cast<ISwsGraphicsEffect*>(effect));
-    auto brush = g_swsCompositor.CreateEffectFactory(graphicsEffect).CreateBrush();
+    // As composition runs them, D2D blend mode 22 keeps the backdrop's hue and
+    // saturation with the flood's luminosity, and mode 23 the reverse.
+    auto luminosityBlend = CreateSwsD2DEffect(
+        kSwsClsidD2D1Blend, {PropertyValue::CreateUInt32(22)},
+        {source.as<winrt::Windows::Graphics::Effects::IGraphicsEffectSource>(),
+         CreateSwsD2DEffect(kSwsClsidD2D1Flood,
+                            {PropertyValue::CreateSingleArray(winrt::array_view<const float>(
+                                luminosityColor, luminosityColor + 4))},
+                            {})});
+    auto tintBlend = CreateSwsD2DEffect(
+        kSwsClsidD2D1Blend, {PropertyValue::CreateUInt32(23)},
+        {luminosityBlend,
+         CreateSwsD2DEffect(kSwsClsidD2D1Flood,
+                            {PropertyValue::CreateSingleArray(
+                                winrt::array_view<const float>(tintColor, tintColor + 4))},
+                            {})});
+    auto brush = g_swsCompositor
+                     .CreateEffectFactory(
+                         tintBlend.as<winrt::Windows::Graphics::Effects::IGraphicsEffect>())
+                     .CreateBrush();
     brush.SetSourceParameter(L"Backdrop", backdrop);
     return brush;
 }
@@ -4341,22 +4469,25 @@ static bool EnsureComposedMaterial(HWND presentation) {
             material.radius = -1;
         }
 
-        const bool mica = ThemeIs(L"mica");
-        const int recipe = (mica ? 2 : 0) + (g_isDarkMode ? 0 : 1);
+        // Mica and Mica Alt tint the blurred wallpaper, Acrylic what is behind.
+        const bool wallpaper = ThemeIs(L"mica");
+        const SwsMaterialParams params = GetComposedMaterialParams();
         const bool effects = MaterialEffectsEnabled();
-        if (recipe != material.recipe || effects != material.effects) {
+        if (!material.hasBrush || wallpaper != material.wallpaper ||
+            !SameMaterialParams(params, material.params) ||
+            effects != material.effects) {
             winrt::Windows::UI::Composition::CompositionBrush brush{nullptr};
             try {
-                brush = CreateComposedMaterialBrush(
-                    mica, kSwsMaterialRecipes[recipe], effects);
+                brush = CreateComposedMaterialBrush(wallpaper, params, effects);
             } catch (winrt::hresult_error const& e) {
                 Wh_Log(L"SWS: composed material brush failed (0x%08X)",
                        (unsigned)e.code());
-                brush = CreateComposedMaterialBrush(
-                    mica, kSwsMaterialRecipes[recipe], false);
+                brush = CreateComposedMaterialBrush(wallpaper, params, false);
             }
             material.fill.Brush(brush);
-            material.recipe = recipe;
+            material.params = params;
+            material.wallpaper = wallpaper;
+            material.hasBrush = true;
             material.effects = effects;
         }
         return true;
@@ -15459,7 +15590,8 @@ static void ApplyNativePresentationMaterial(
 
     if (ThemeIs(L"mica")) {
         if (IsWin11OrGreater()) {
-            int micaVal = 2; // DWMSBT_MAINWINDOW
+            // DWMSBT_TABBEDWINDOW is Mica Alt, DWMSBT_MAINWINDOW is Mica.
+            int micaVal = g_settings.micaAlt ? 4 : 2;
             HRESULT systemBackdropHr = DwmSetWindowAttribute(
                 hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */, &micaVal,
                 sizeof(micaVal));
@@ -21702,10 +21834,24 @@ static int LoadIntSetting(LPCWSTR settingName, int defaultVal) {
     return Wh_GetIntSetting(settingName);
 }
 
+// Material Tuning opacities: 0-100, or -1 for the material's own value.
+static int LoadMaterialOpacitySetting(LPCWSTR settingName) {
+    const int value = LoadIntSetting(settingName, -1);
+    return value < 0 ? -1 : std::min(value, 100);
+}
+
 static void LoadSettings() {
     LPCWSTR v;
     DetectSystemDwmCornerRadius();
     LoadStringSetting(L"Style.theme", g_settings.theme, L"auto");
+    // Mica Alt is the Mica theme with another system backdrop. Windows 11 21H2
+    // shows Mica instead and Windows 10 Acrylic, as for Mica.
+    g_settings.micaAlt = wcscmp(g_settings.theme, L"micaAlt") == 0;
+    if (g_settings.micaAlt) {
+        wcsncpy_s(g_settings.theme, L"mica", _TRUNCATE);
+        g_settings.micaAlt = MicaAltSupported();
+    }
+    g_settings.materialTuning = LoadBoolSetting(L"Style.materialTuning", false);
     if (wcscmp(g_settings.theme, L"auto") == 0) {
         wcsncpy_s(g_settings.theme, IsWin11OrGreater() ? L"mica" : L"backdrop", _TRUNCATE);
     }
@@ -22071,6 +22217,10 @@ static void LoadSettings() {
     
     LoadStringSetting(L"Style.DarkMode.indicatorTextColorMode", g_settings.indicatorTextColorModeDark, L"default");
     LoadStringSetting(L"Style.DarkMode.customIndicatorTextColor", g_settings.customIndicatorTextColorDark, L"#FFFFFF");
+    LoadStringSetting(L"Style.DarkMode.materialTintColorMode", g_settings.materialTintColorModeDark, L"default");
+    LoadStringSetting(L"Style.DarkMode.customMaterialTintColor", g_settings.customMaterialTintColorDark, L"#202020");
+    g_settings.materialTintOpacityDark = LoadMaterialOpacitySetting(L"Style.DarkMode.materialTintOpacity");
+    g_settings.materialLuminosityOpacityDark = LoadMaterialOpacitySetting(L"Style.DarkMode.materialLuminosityOpacity");
 
     // Light Mode color settings
     LoadStringSetting(L"Style.LightMode.borderColorMode", g_settings.borderColorModeLight, L"default");
@@ -22094,6 +22244,10 @@ static void LoadSettings() {
     
     LoadStringSetting(L"Style.LightMode.indicatorTextColorMode", g_settings.indicatorTextColorModeLight, L"default");
     LoadStringSetting(L"Style.LightMode.customIndicatorTextColor", g_settings.customIndicatorTextColorLight, L"#000000");
+    LoadStringSetting(L"Style.LightMode.materialTintColorMode", g_settings.materialTintColorModeLight, L"default");
+    LoadStringSetting(L"Style.LightMode.customMaterialTintColor", g_settings.customMaterialTintColorLight, L"#F3F3F3");
+    g_settings.materialTintOpacityLight = LoadMaterialOpacitySetting(L"Style.LightMode.materialTintOpacity");
+    g_settings.materialLuminosityOpacityLight = LoadMaterialOpacitySetting(L"Style.LightMode.materialLuminosityOpacity");
 
     LoadStringSetting(L"Appearance.Font.fontFamily", g_settings.fontFamily, L"");
     // Trim leading/trailing whitespace
