@@ -10779,7 +10779,12 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
         ULONGLONG start = GetTickCount64();
         auto giveUp = [&] { return g_jobsStopping || GetTickCount64() - start > 60000; };
         std::function<bool()> boxClose = [&] { return giveUp() || op.Status() != AsyncStatus::Started; };
-        while (op.wait_for(std::chrono::milliseconds(200)) == AsyncStatus::Started) {
+        // Só lê o estado: wait_for registra um tratador Completed a cada chamada, e a
+        // segunda chamada na mesma operação lança erro (só um tratador é aceito), o
+        // que acabava o pareamento e deixava o pedido sem resposta.
+        while (op.Status() == AsyncStatus::Started) {
+            Sleep(100);
+            if (op.Status() != AsyncStatus::Started) break;
             if (giveUp()) {
                 dropReq();
                 WinrtCancelWait(op);
