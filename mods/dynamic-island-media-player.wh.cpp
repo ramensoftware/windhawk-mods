@@ -2,7 +2,7 @@
 // @id             dynamic-island-media-player
 // @name           Dynamic Island Media Player
 // @description    A dedicated, standalone Dynamic Island media player for Windows. Forked and optimized from 'Dynamic Island for Windows' by devcode90. Features per-app positioning, custom color morphing, multilingual UI, and optimized rendering.
-// @version        1.6.0
+// @version        1.6.1
 // @author         BOG090909
 // @github         https://github.com/BOG090909
 // @homepage       https://github.com/BOG090909/dynamic-island-media-player
@@ -129,8 +129,9 @@ A focused, customizable Dynamic Island overlay for Windows that becomes an inter
 - Animations:
   - TargetFPS: auto
     $name: Refresh rate / FPS
+    $description: Auto caps continuous animation at 60 FPS. Select an explicit rate for higher-refresh displays.
     $options:
-      - auto: Auto
+      - auto: Auto (up to 60 FPS)
       - '60': 60 FPS
       - '120': 120 FPS
       - '144': 144 FPS
@@ -243,7 +244,7 @@ namespace {
 constexpr wchar_t kWindowClass[] = L"Windhawk.DynamicIslandMediaPlayer";
 constexpr UINT WM_APP_NEW_EVENT = WM_APP + 0x443;
 constexpr UINT WM_APP_WAKE = WM_APP + 0x446;
-constexpr UINT WM_APP_APPLY_HOTKEY = WM_APP + 0x447;
+constexpr UINT WM_APP_APPLY_HOTKEYS = WM_APP + 0x447;
 constexpr UINT WM_APP_PERSIST_HOTKEY = WM_APP + 0x448;
 constexpr UINT WM_APP_START_HOTKEY_CAPTURE = WM_APP + 0x449;
 
@@ -500,6 +501,9 @@ std::atomic<bool> g_settingsMenuOpen{false};
 std::atomic<HWND> g_foregroundBeforeSettingsMenu{nullptr};
 
 std::atomic<bool> g_layoutDirty{true};
+// Redrawing content does not necessarily require moving/resizing the overlay.
+// Keep window placement updates separate to avoid SetWindowPos on color/hover animations.
+std::atomic<bool> g_windowPositionDirty{true};
 std::atomic<bool> g_clickExpanded{false};
 std::atomic<int> g_pressedMediaButton{-1};
 std::atomic<int> g_hoveredMediaButton{-1};
@@ -1371,9 +1375,10 @@ void LoadSettings() {
         g_settings = std::move(next);
     }
     g_layoutDirty = true;
+    g_windowPositionDirty = true;
     HWND hSelf = g_hwnd.load();
     if (hSelf) {
-        PostMessageW(hSelf, WM_APP_APPLY_HOTKEY, 0, 0);
+        PostMessageW(hSelf, WM_APP_APPLY_HOTKEYS, 0, 0);
         PostMessageW(hSelf, WM_APP_WAKE, 0, 0);
     }
 }
@@ -1453,6 +1458,17 @@ void PositionOverlayWindow(HWND hwnd, int width, int height, const Settings& s) 
                                  : HWND_NOTOPMOST;
     SetWindowPos(hwnd, insertAfter, x, y, width, height,
                  SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+}
+
+uint64_t HashArtworkBytes(const std::vector<uint8_t>& bytes) {
+    // FNV-1a is inexpensive and lets the media thread skip WIC decoding when a
+    // provider keeps returning the same (possibly not-yet-updated) thumbnail.
+    uint64_t hash = 14695981039346656037ull;
+    for (const uint8_t byte : bytes) {
+        hash ^= byte;
+        hash *= 1099511628211ull;
+    }
+    return hash;
 }
 
 bool DecodeImageBytesToPixels(const std::vector<uint8_t>& bytes, BitmapPixels* outPixels) {
@@ -2043,39 +2059,59 @@ DWORD WINAPI MediaThreadProc(void*) {
                 static std::wstring s_lastArtTrackKey;
                 static double s_lastArtAttempt = 0.0;
                 static double s_artTrackFirstAttempt = 0.0;
+                static uint64_t s_lastArtBytesHash = 0;
+                static bool s_hasLastArtBytesHash = false;
                 const bool artTrackChanged = next.artTrackKey != s_lastArtTrackKey;
                 if (artTrackChanged) {
                     s_lastArtTrackKey = next.artTrackKey;
                     s_lastArtAttempt = 0.0;
                     s_artTrackFirstAttempt = now;
+                    s_lastArtBytesHash = 0;
+                    s_hasLastArtBytesHash = false;
                 }
 
                 // Some providers publish the title before the final thumbnail,
-                // or briefly return the previous track's cached thumbnail. Probe
-                // every 500 ms for the first 3 seconds and replace the image only
-                // when its decoded pixels actually differ.
+                // or briefly return the previous track's cached thumbnail. Keep
+                // checking frequently while metadata settles, then at a slower
+                // rate for a while so late artwork can still replace a stale cover.
                 const double artTrackAge = s_artTrackFirstAttempt > 0.0
                     ? now - s_artTrackFirstAttempt : 1000.0;
-                const bool checkingForFreshArtwork = artTrackAge >= 0.0 && artTrackAge < 3.0;
+                const bool checkingForFreshArtwork = artTrackAge >= 0.0 && artTrackAge < 6.0;
+                const bool checkingForLateArtwork = artTrackAge >= 6.0 && artTrackAge < 20.0;
                 const bool shouldProbeArtwork = artTrackChanged ||
                     (checkingForFreshArtwork && now - s_lastArtAttempt >= 0.5) ||
-                    (!next.art && now - s_lastArtAttempt >= 2.0);
+                    (checkingForLateArtwork && now - s_lastArtAttempt >= 1.5) ||
+                    (!next.art && now - s_lastArtAttempt >= 1.0);
                 if (shouldProbeArtwork) {
                     s_lastArtAttempt = now;
                     try {
                         auto thumbnail = properties.Thumbnail();
                         if (thumbnail) {
                             auto imageBytes = ReadWinRtStreamBytes(thumbnail);
-                            BitmapPixels decodedArt;
-                            if (DecodeImageBytesToPixels(imageBytes, &decodedArt)) {
-                                const bool artworkChanged = !next.art ||
-                                    next.art->width != decodedArt.width ||
-                                    next.art->height != decodedArt.height ||
-                                    next.art->bgra != decodedArt.bgra;
-                                if (artworkChanged) {
-                                    next.art = std::make_shared<const BitmapPixels>(std::move(decodedArt));
-                                    if (next.previousArt && next.trackId != prev.trackId) {
-                                        next.artTransitionStartedAt = now;
+                            if (!imageBytes.empty()) {
+                                const uint64_t bytesHash = HashArtworkBytes(imageBytes);
+                                // Providers often return the same stale thumbnail for
+                                // several polls. Hash the bytes first and avoid repeating
+                                // the more expensive WIC decode until the payload changes.
+                                // A matching hash only makes decoding redundant when a
+                                // decoded cover is already attached to this snapshot.
+                                // After a media session is recreated, next.art can be empty
+                                // even though the provider returns the same thumbnail bytes.
+                                if (!next.art || !s_hasLastArtBytesHash || bytesHash != s_lastArtBytesHash) {
+                                    s_lastArtBytesHash = bytesHash;
+                                    s_hasLastArtBytesHash = true;
+                                    BitmapPixels decodedArt;
+                                    if (DecodeImageBytesToPixels(imageBytes, &decodedArt)) {
+                                        const bool artworkChanged = !next.art ||
+                                            next.art->width != decodedArt.width ||
+                                            next.art->height != decodedArt.height ||
+                                            next.art->bgra != decodedArt.bgra;
+                                        if (artworkChanged) {
+                                            next.art = std::make_shared<const BitmapPixels>(std::move(decodedArt));
+                                            if (next.previousArt && next.trackId != prev.trackId) {
+                                                next.artTransitionStartedAt = now;
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -2506,9 +2542,18 @@ class Renderer {
         if (pw != bitmapWidth_ || ph != bitmapHeight_) {
             if (!CreateBackingBitmap(pw, ph)) return false;
             g_layoutDirty = false;
+            // Consume before positioning so a concurrent placement request is not lost.
+            g_windowPositionDirty.exchange(false);
             PositionOverlayWindow(hwnd_, pw, ph, settings);
-        } else if (g_layoutDirty.exchange(false)) {
-            PositionOverlayWindow(hwnd_, pw, ph, settings);
+        } else {
+            // Consume the redraw request before doing window work, so a concurrent
+            // update raised during positioning remains pending for the next frame.
+            g_layoutDirty.exchange(false);
+            // Content animations (accent morphing, hover and button feedback) only
+            // need a redraw. Reposition the HWND only for actual placement changes.
+            if (g_windowPositionDirty.exchange(false)) {
+                PositionOverlayWindow(hwnd_, pw, ph, settings);
+            }
         }
 
         RECT rc = {0, 0, bitmapWidth_, bitmapHeight_};
@@ -3584,7 +3629,9 @@ std::wstring FormatHotkey(UINT mods, UINT vk) {
     return s;
 }
 
-bool g_hotkeyRegistered[5] = {false};
+// Raw keyboard state is maintained by WM_INPUT so configured shortcuts can be
+// recognized even while a game or another application owns the foreground.
+bool g_rawKeyDown[256] = {};
 
 void PersistHotkeys() {
     Wh_SetIntValue(L"HotkeyEnabled", g_hotkeyEnabled.load() ? 1 : 0);
@@ -3598,24 +3645,186 @@ void PersistHotkeys() {
     Wh_SetIntValue(L"HkPlayPauseVk", static_cast<int>(g_hkPlayPauseVk.load()));
 }
 
-void RegisterSingleHotkey(HWND hwnd, int id, unsigned mods, unsigned vk) {
-    if (g_hotkeyRegistered[id]) {
-        UnregisterHotKey(hwnd, id);
-        g_hotkeyRegistered[id] = false;
+UINT GetRawKeyboardModifiers() {
+    // Raw Input can be interrupted by the secure desktop (Win+L, Ctrl+Alt+Del,
+    // UAC). Query the live keyboard state so modifiers cannot remain stuck.
+    auto isDown = [](int vk) {
+        return (GetAsyncKeyState(vk) & 0x8000) != 0;
+    };
+    UINT mods = 0;
+    if (isDown(VK_LCONTROL) || isDown(VK_RCONTROL)) mods |= MOD_CONTROL;
+    if (isDown(VK_LMENU) || isDown(VK_RMENU)) mods |= MOD_ALT;
+    if (isDown(VK_LSHIFT) || isDown(VK_RSHIFT)) mods |= MOD_SHIFT;
+    if (isDown(VK_LWIN) || isDown(VK_RWIN)) mods |= MOD_WIN;
+    return mods;
+}
+
+bool IsRawKeyboardModifier(UINT vk) {
+    return vk == VK_LCONTROL || vk == VK_RCONTROL ||
+           vk == VK_LMENU || vk == VK_RMENU ||
+           vk == VK_LSHIFT || vk == VK_RSHIFT ||
+           vk == VK_LWIN || vk == VK_RWIN;
+}
+
+void DispatchConfiguredHotkey(int id) {
+    switch (id) {
+        case kHotkeyHideShow: {
+            const bool nowHidden = !g_hidden.load();
+            if (nowHidden) {
+                g_moveMode = false;
+                g_captureHotkey = false;
+            }
+            g_hidden = nowHidden;
+            g_layoutDirty = true;
+            break;
+        }
+        case kHotkeyNextTrack:
+            TriggerMediaTransportCommandWithConfirmation(2);
+            break;
+        case kHotkeyPrevTrack:
+            TriggerMediaTransportCommandWithConfirmation(0);
+            break;
+        case kHotkeyPlayPause:
+            SendMediaTransportCommand(1);
+            break;
     }
-    if (g_hotkeyEnabled.load() && vk != 0) {
-        if (RegisterHotKey(hwnd, id, mods | MOD_NOREPEAT, vk)) {
-            g_hotkeyRegistered[id] = true;
+}
+
+// Raw Input is a fallback for games that prevent WM_HOTKEY from reaching
+// the overlay. If RegisterHotKey succeeds, give its input-consuming path a
+// short head start before dispatching the matching Raw Input event.
+constexpr double kRawHotkeyFallbackDelay = 0.10;
+constexpr double kHotkeyDuplicateWindow = 0.20;
+bool g_registeredHotkeys[5] = {};
+double g_pendingRawHotkeyDeadline[5] = {};
+double g_lastHotkeyDispatchTime[5] = {};
+
+void DispatchHotkeyOnce(int id) {
+    if (id < kHotkeyHideShow || id > kHotkeyPlayPause) return;
+    const double now = NowSeconds();
+    if (now - g_lastHotkeyDispatchTime[id] < kHotkeyDuplicateWindow) return;
+    g_lastHotkeyDispatchTime[id] = now;
+    DispatchConfiguredHotkey(id);
+}
+
+void QueueRawHotkey(int id) {
+    if (id < kHotkeyHideShow || id > kHotkeyPlayPause) return;
+    if (g_registeredHotkeys[id]) {
+        g_pendingRawHotkeyDeadline[id] = NowSeconds() + kRawHotkeyFallbackDelay;
+    } else {
+        // Another application may already own this chord. Preserve the
+        // game-compatible fallback, although the foreground app may also see it.
+        DispatchHotkeyOnce(id);
+    }
+}
+
+void ProcessPendingRawHotkeys(double now) {
+    for (int id = kHotkeyHideShow; id <= kHotkeyPlayPause; ++id) {
+        const double deadline = g_pendingRawHotkeyDeadline[id];
+        if (deadline > 0.0 && now >= deadline) {
+            g_pendingRawHotkeyDeadline[id] = 0.0;
+            DispatchHotkeyOnce(id);
         }
     }
 }
 
-void ApplyHideShowHotkey(HWND hwnd) {
-    if (!hwnd) return;
-    RegisterSingleHotkey(hwnd, kHotkeyHideShow, g_hotkeyMods.load(), g_hotkeyVk.load());
-    RegisterSingleHotkey(hwnd, kHotkeyNextTrack, g_hkNextMods.load(), g_hkNextVk.load());
-    RegisterSingleHotkey(hwnd, kHotkeyPrevTrack, g_hkPrevMods.load(), g_hkPrevVk.load());
-    RegisterSingleHotkey(hwnd, kHotkeyPlayPause, g_hkPlayPauseMods.load(), g_hkPlayPauseVk.load());
+void HandleRawKeyboardInput(const RAWKEYBOARD& keyboard) {
+    UINT vk = keyboard.VKey;
+    if (vk == 0 || vk == 0xFF) return;
+
+    // Resolve generic modifier VKs to left/right variants for repeat tracking.
+    if (vk == VK_SHIFT) {
+        const UINT mapped = MapVirtualKeyW(keyboard.MakeCode, MAPVK_VSC_TO_VK_EX);
+        vk = (mapped == VK_RSHIFT) ? VK_RSHIFT : VK_LSHIFT;
+    } else if (vk == VK_CONTROL) {
+        vk = (keyboard.Flags & RI_KEY_E0) ? VK_RCONTROL : VK_LCONTROL;
+    } else if (vk == VK_MENU) {
+        vk = (keyboard.Flags & RI_KEY_E0) ? VK_RMENU : VK_LMENU;
+    }
+
+    if (vk >= 256) return;
+    const bool isDown = (keyboard.Flags & RI_KEY_BREAK) == 0;
+
+    // Secure-desktop transitions can hide key-up events. Reconcile stale
+    // non-modifier entries before testing whether this is an auto-repeat.
+    if (isDown) {
+        for (UINT key = 1; key < 256; ++key) {
+            if (g_rawKeyDown[key] && !IsRawKeyboardModifier(key) &&
+                (GetAsyncKeyState(static_cast<int>(key)) & 0x8000) == 0) {
+                g_rawKeyDown[key] = false;
+            }
+        }
+    }
+
+    const bool wasDown = g_rawKeyDown[vk];
+    g_rawKeyDown[vk] = isDown;
+    if (!isDown || wasDown || !g_hotkeyEnabled.load() || g_captureHotkey.load() ||
+        IsRawKeyboardModifier(vk)) {
+        return;
+    }
+
+    const UINT mods = GetRawKeyboardModifiers();
+    if (mods == g_hotkeyMods.load() && vk == g_hotkeyVk.load()) QueueRawHotkey(kHotkeyHideShow);
+    if (mods == g_hkNextMods.load() && vk == g_hkNextVk.load()) QueueRawHotkey(kHotkeyNextTrack);
+    if (mods == g_hkPrevMods.load() && vk == g_hkPrevVk.load()) QueueRawHotkey(kHotkeyPrevTrack);
+    if (mods == g_hkPlayPauseMods.load() && vk == g_hkPlayPauseVk.load()) QueueRawHotkey(kHotkeyPlayPause);
+}
+
+void UnregisterConfiguredHotkeys(HWND hwnd) {
+    for (int id = kHotkeyHideShow; id <= kHotkeyPlayPause; ++id) {
+        if (g_registeredHotkeys[id]) {
+            UnregisterHotKey(hwnd, id);
+            g_registeredHotkeys[id] = false;
+        }
+    }
+}
+
+void RegisterConfiguredHotkeys(HWND hwnd) {
+    UnregisterConfiguredHotkeys(hwnd);
+    if (!g_hotkeyEnabled.load()) return;
+
+    const UINT modifiers[] = {
+        0, g_hotkeyMods.load(), g_hkNextMods.load(),
+        g_hkPrevMods.load(), g_hkPlayPauseMods.load()
+    };
+    const UINT keys[] = {
+        0, g_hotkeyVk.load(), g_hkNextVk.load(),
+        g_hkPrevVk.load(), g_hkPlayPauseVk.load()
+    };
+
+    for (int id = kHotkeyHideShow; id <= kHotkeyPlayPause; ++id) {
+        g_registeredHotkeys[id] =
+            RegisterHotKey(hwnd, id, modifiers[id] | MOD_NOREPEAT, keys[id]) != FALSE;
+        if (!g_registeredHotkeys[id]) {
+            Wh_Log(L"RegisterHotKey(%d) unavailable; using Raw Input fallback (error %u)",
+                   id, GetLastError());
+        }
+    }
+}
+
+void ApplyHotkeyInput(HWND hwnd) {
+    std::memset(g_rawKeyDown, 0, sizeof(g_rawKeyDown));
+    std::memset(g_pendingRawHotkeyDeadline, 0, sizeof(g_pendingRawHotkeyDeadline));
+    std::memset(g_lastHotkeyDispatchTime, 0, sizeof(g_lastHotkeyDispatchTime));
+
+    RAWINPUTDEVICE device = {};
+    device.usUsagePage = 0x01; // Generic Desktop Controls
+    device.usUsage = 0x06;     // Keyboard
+    const bool enable = g_hotkeyEnabled.load();
+    device.dwFlags = enable ? RIDEV_INPUTSINK : RIDEV_REMOVE;
+    device.hwndTarget = enable ? hwnd : nullptr;
+    if (!RegisterRawInputDevices(&device, 1, sizeof(device))) {
+        Wh_Log(L"RegisterRawInputDevices(keyboard, enabled=%d) failed: %u",
+               enable ? 1 : 0, GetLastError());
+    }
+
+    UnregisterConfiguredHotkeys(hwnd);
+    if (enable) RegisterConfiguredHotkeys(hwnd);
+}
+
+void DisableHotkeyInput(HWND hwnd) {
+    g_hotkeyEnabled = false;
+    ApplyHotkeyInput(hwnd);
 }
 
 bool g_capCtrl = false, g_capAlt = false, g_capShift = false, g_capWin = false;
@@ -3651,7 +3860,7 @@ LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     HWND hSelf = g_hwnd.load();
                     if (hSelf) {
                         PostMessageW(hSelf, WM_APP_PERSIST_HOTKEY, 0, 0);
-                        PostMessageW(hSelf, WM_APP_APPLY_HOTKEY, 0, 0);
+                        PostMessageW(hSelf, WM_APP_APPLY_HOTKEYS, 0, 0);
                     }
                 }
             }
@@ -4254,7 +4463,7 @@ void ShowSettingsMenu(HWND hwnd, HWND menuOwner, POINT screenPoint) {
         case ID_HOTKEY_ENABLE_TOGGLE:
             g_hotkeyEnabled = !g_hotkeyEnabled.load();
             PersistHotkeys();
-            PostMessageW(hwnd, WM_APP_APPLY_HOTKEY, 0, 0);
+            PostMessageW(hwnd, WM_APP_APPLY_HOTKEYS, 0, 0);
             break;
         case ID_HOTKEY_HIDESHOW_SET:
             if (g_hotkeyEnabled.load()) { g_moveMode = false; PostMessageW(hwnd, WM_APP_START_HOTKEY_CAPTURE, 1, 0); }
@@ -4393,6 +4602,7 @@ DWORD WINAPI SettingsMenuThreadProc(void* param) {
     }
     g_settingsMenuOpen = false;
     g_layoutDirty = true;
+    g_windowPositionDirty = true;
     return 0;
 }
 
@@ -4405,6 +4615,7 @@ void StartSettingsMenu(HWND hwnd, POINT screenPoint) {
         g_foregroundBeforeSettingsMenu = nullptr;
     }
     g_layoutDirty = true;
+    g_windowPositionDirty = true;
 
     auto args = std::make_unique<SettingsMenuThreadArgs>();
     args->hwnd = hwnd;
@@ -4414,6 +4625,7 @@ void StartSettingsMenu(HWND hwnd, POINT screenPoint) {
     if (!thread) {
         g_settingsMenuOpen = false;
         g_foregroundBeforeSettingsMenu = nullptr;
+        g_windowPositionDirty = true;
         return;
     }
     args.release();
@@ -4465,6 +4677,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                          prcNewWindow->bottom - prcNewWindow->top,
                          SWP_NOZORDER | SWP_NOACTIVATE);
             g_layoutDirty = true;
+            g_windowPositionDirty = true;
             return 0;
         }
         
@@ -4472,6 +4685,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             const Settings cfg = GetSettingsCopy();
             g_targetMonitor.store(ResolveTargetMonitor(cfg.targetMonitor));
             g_layoutDirty = true;
+            g_windowPositionDirty = true;
             return 0;
         }
         
@@ -4694,30 +4908,32 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         case WM_HOTKEY: {
             const int id = static_cast<int>(wParam);
-            if (id == kHotkeyHideShow) {
-                const bool nowHidden = !g_hidden.load();
-                if (nowHidden) {
-                    g_moveMode = false;
-                    g_captureHotkey = false;
-                }
-                g_hidden = nowHidden;
-                g_layoutDirty = true;
-            } else if (id == kHotkeyNextTrack) {
-                TriggerMediaTransportCommandWithConfirmation(2);
-            } else if (id == kHotkeyPrevTrack) {
-                TriggerMediaTransportCommandWithConfirmation(0);
-            } else if (id == kHotkeyPlayPause) {
-                SendMediaTransportCommand(1);
+            if (g_hotkeyEnabled.load() && id >= kHotkeyHideShow && id <= kHotkeyPlayPause) {
+                g_pendingRawHotkeyDeadline[id] = 0.0;
+                DispatchHotkeyOnce(id);
             }
             return 0;
+        }
+
+        case WM_INPUT: {
+            RAWINPUT rawInput = {};
+            UINT size = sizeof(rawInput);
+            const UINT read = GetRawInputData(
+                reinterpret_cast<HRAWINPUT>(lParam), RID_INPUT,
+                &rawInput, &size, sizeof(RAWINPUTHEADER));
+            if (read != static_cast<UINT>(-1) &&
+                rawInput.header.dwType == RIM_TYPEKEYBOARD) {
+                HandleRawKeyboardInput(rawInput.data.keyboard);
+            }
+            return DefWindowProcW(hwnd, msg, wParam, lParam);
         }
 
         case WM_APP_PERSIST_HOTKEY:
             PersistHotkeys();
             return 0;
 
-        case WM_APP_APPLY_HOTKEY:
-            ApplyHideShowHotkey(hwnd);
+        case WM_APP_APPLY_HOTKEYS:
+            ApplyHotkeyInput(hwnd);
             return 0;
 
         case WM_APP_START_HOTKEY_CAPTURE:
@@ -4775,7 +4991,6 @@ DWORD WINAPI RenderThreadProc(void*) {
     }
     g_hwnd.store(hwnd);
     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-    ApplyHideShowHotkey(hwnd);
 
     Renderer renderer;
     if (!renderer.Initialize(hwnd)) {
@@ -4784,6 +4999,7 @@ DWORD WINAPI RenderThreadProc(void*) {
         if (SUCCEEDED(hrCo)) CoUninitialize();
         return 0;
     }
+    ApplyHotkeyInput(hwnd);
 
     SpringValue widthSpring, heightSpring, nudgeSpring;
     widthSpring.Reset(0.0f);
@@ -4804,10 +5020,14 @@ DWORD WINAPI RenderThreadProc(void*) {
     bool prevPlaying = false;
     bool prevCtrlState = false;
     std::wstring lastFgApp;
+    double lastForegroundCheck = -1.0;
     int lastMinute = -1;
-    
+
     int cachedRefreshRate = 60;
     double lastRefreshCheck = 0.0;
+    HMONITOR cachedDpiMonitor = nullptr;
+    float cachedDpiScale = 1.0f;
+    double lastDpiCheck = -1.0;
 
     while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
         MSG message = {};
@@ -4826,13 +5046,21 @@ DWORD WINAPI RenderThreadProc(void*) {
         }
 
         const double now = NowSeconds();
+        ProcessPendingRawHotkeys(now);
         StopHotkeyCaptureIfDone();
 
-        std::wstring currentFgApp = GetForegroundExeName();
-        if (currentFgApp != lastFgApp) {
-            lastFgApp = currentFgApp;
-            g_layoutDirty = true;
+        // Resolving the foreground process requires window/process queries.
+        // Per-app positioning does not need this work on every rendered frame.
+        if (lastForegroundCheck < 0.0 || now - lastForegroundCheck >= 0.25) {
+            lastForegroundCheck = now;
+            std::wstring detectedFgApp = GetForegroundExeName();
+            if (detectedFgApp != lastFgApp) {
+                lastFgApp = std::move(detectedFgApp);
+                g_layoutDirty = true;
+                g_windowPositionDirty = true;
+            }
         }
+        const std::wstring& currentFgApp = lastFgApp;
 
         SYSTEMTIME st;
         GetLocalTime(&st);
@@ -4867,7 +5095,16 @@ DWORD WINAPI RenderThreadProc(void*) {
                 targetMon = g_targetMonitor.load();
                 if (!targetMon) targetMon = ResolveTargetMonitor(cfg.targetMonitor);
             }
-            cfg.sizeScale = cfg.baseSizeScale * GetMonitorDpiScale(targetMon);
+            // Monitor DPI is stable for long periods. Avoid querying it on
+            // every render-loop iteration; refresh on monitor changes or once
+            // per second so display-scale changes are still picked up.
+            if (targetMon != cachedDpiMonitor || lastDpiCheck < 0.0 ||
+                now - lastDpiCheck >= 1.0) {
+                cachedDpiMonitor = targetMon;
+                cachedDpiScale = GetMonitorDpiScale(targetMon);
+                lastDpiCheck = now;
+            }
+            cfg.sizeScale = cfg.baseSizeScale * cachedDpiScale;
         } else {
             cfg.sizeScale = cfg.baseSizeScale;
         }
@@ -4912,6 +5149,7 @@ DWORD WINAPI RenderThreadProc(void*) {
             parked = false;
             ShowWindow(hwnd, SW_SHOWNOACTIVATE);
             g_layoutDirty = true;
+            g_windowPositionDirty = true;
             previousFrame = std::chrono::steady_clock::now();
             nextFrameTarget = previousFrame;
         }
@@ -4945,6 +5183,7 @@ DWORD WINAPI RenderThreadProc(void*) {
                                      !moveMode && !g_settingsMenuOpen.load();
         if (g_forceForeground.exchange(forceForeground) != forceForeground) {
             g_layoutDirty = true;
+            g_windowPositionDirty = true;
         }
 
         const bool isInteracting = (g_clickThrough.load() && ctrlHeld && hover) ||
@@ -4976,7 +5215,7 @@ DWORD WINAPI RenderThreadProc(void*) {
                 g_pressedMediaButton.load() != -1 ||
                 g_dragging.load() ||
                 (g_colorRainbowEnabled.load() && snapshot.media.playing) ||
-                renderer.IsAnimationActive(widthSpring.value / cfg.sizeScale)) {
+                (expanded && renderer.IsAnimationActive(widthSpring.value / cfg.sizeScale))) {
                 needsRender = true;
             }
         }
@@ -5088,7 +5327,9 @@ DWORD WINAPI RenderThreadProc(void*) {
                     cachedRefreshRate = GetMonitorRefreshRate(hwnd);
                     lastRefreshCheck = now;
                 }
-                targetFps = cachedRefreshRate;
+                // Auto mode caps continuous animation at 60 FPS.
+                // Higher refresh rates remain available as explicit settings.
+                targetFps = std::min(cachedRefreshRate, 60);
             }
             targetFps = ClampInt(targetFps, 30, 1000);
             double targetFrameMs = 1000.0 / targetFps;
@@ -5118,12 +5359,7 @@ DWORD WINAPI RenderThreadProc(void*) {
         g_captureHotkey = false;
         g_captureHotkeyTarget = 0;
     }
-    for (int i = 1; i <= 4; ++i) {
-        if (g_hotkeyRegistered[i]) {
-            UnregisterHotKey(hwnd, i);
-            g_hotkeyRegistered[i] = false;
-        }
-    }
+    DisableHotkeyInput(hwnd);
     renderer.Shutdown();
     DestroyWindow(hwnd);
     g_hwnd.store(nullptr);
