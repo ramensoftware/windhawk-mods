@@ -23,18 +23,19 @@
 For laptops whose touchpad no longer clicks physically (worn hinge, broken switch,
 or a battery pushing the pad up), or for anyone who prefers tapping to pressing.
 
-* **Corner tap right-click** - a quick one-finger tap in the bottom-right (or
-  bottom-left) corner of the touchpad becomes a right click. Windows only honors its
-  right-click zone for physical presses; this makes it work for taps too.
-* **Two-finger hold-and-drag** - put two fingers down, hold still for a moment, then
-  move them: the left button is held while you move, so you can select text, move
-  windows or pan maps. Moving two fingers straight away still scrolls as usual.
+A quick one-finger tap in the bottom right (or bottom left) corner of the touchpad
+becomes a right click. Windows only honors its right-click zone for physical presses,
+so tapping there normally just left clicks.
 
-Works with any Windows **Precision Touchpad** (Synaptics, ELAN, Alps, Goodix, Surface,
-...). Older non-precision touchpads that use vendor-only drivers don't send the raw
-finger positions this mod needs.
+For dragging, put two fingers down, hold still for a moment, then move them. The left
+button stays held while you move, so you can select text or move windows around.
+Moving two fingers straight away still scrolls like normal.
 
-Tip: with this mod on you may want to turn off Windows' own "Tap with two fingers to
+Works with any Windows Precision Touchpad (Synaptics, ELAN, Alps, Goodix, Surface and
+so on). Older non-precision touchpads on vendor-only drivers don't send the raw finger
+positions this mod needs.
+
+With this on you'll probably want to turn off Windows' own "Tap with two fingers to
 right-click" and "Tap twice and drag" in Settings > Bluetooth & devices > Touchpad.
 
 ## How it works
@@ -618,20 +619,7 @@ static void RunEngine() {
 }
 
 static DWORD WINAPI WorkerThread(LPVOID) {
-    // Shared with the standalone CornerTapRightClick tray app, so the two never handle
-    // the touchpad at the same time: while the app runs, the mod waits for it to exit.
-    HANDLE mutex = CreateMutexW(nullptr, FALSE, L"Local\\CornerTapRightClick_Singleton");
-    if (!mutex) {
-        Wh_Log(L"CreateMutex failed: %u", GetLastError());
-        return 0;
-    }
-    HANDLE waits[2] = {g_stopEvent, mutex};
-    DWORD r = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
-    if (r == WAIT_OBJECT_0 + 1 || r == WAIT_ABANDONED_0 + 1) {
-        RunEngine();
-        ReleaseMutex(mutex);
-    }
-    CloseHandle(mutex);
+    RunEngine();
     return 0;
 }
 
