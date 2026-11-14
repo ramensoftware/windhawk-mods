@@ -19,6 +19,7 @@
 // @compilerOptions -DWIN32_LEAN_AND_MEAN -lgdiplus -lgdi32 -luser32 -ldwmapi -lshell32 -lole32 -luuid -lpropsys -loleaut32 -lshlwapi -lcomctl32 -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lwinhttp -lbcrypt -lwlanapi -lsetupapi -lruntimeobject
 // ==/WindhawkMod==
 //
+// clang-format off
 // ==WindhawkModReadme==
 /*
 # Windows 7/8/8.1 Taskbar Recreation
@@ -140,6 +141,8 @@ The mod is provided "as is", without warranty of any kind, under the GPL-3.0-or-
 Use at your own risk. You are responsible for how you use the mod and for complying with the licenses and terms of any software or resources it interacts with, including Microsoft's terms for any resources downloaded on first use. Keep a way to disable the mod or restart Explorer.
 */
 // ==/WindhawkModReadme==
+// clang-format on
+// clang-format off
 // ==WindhawkModSettings==
 /*
 - taskbarSkin: "custom"
@@ -691,12 +694,15 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $description:pt: "Esta configuração mostra o idioma e a região de entrada ativos em duas linhas, como ITA sobre IT, ao lado do relógio e abre o painel de idioma no estilo do Windows 8.1."
 */
 // ==/WindhawkModSettings==
+// clang-format on
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0A00
 #endif
+// Preserve Windows header dependency order.
+// clang-format off
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
@@ -740,6 +746,7 @@ Use at your own risk. You are responsible for how you use the mod and for comply
 #include <setupapi.h>
 #include <wlanapi.h>
 #include <cwctype>
+// clang-format on
 
 /*
  * Task-window discovery, activation and group commands use documented Win32
@@ -2699,9 +2706,12 @@ struct State {
     Gdiplus::Image* taskStateSprite = nullptr;
     IStream* taskStateStream = nullptr;
     // Win7Taskbar Aero Basic opaque taskbar texture, GPL-3.0-or-later.
-    Gdiplus::Image* serverSpriteLarge=nullptr; IStream* serverSpriteLargeStream=nullptr;
-    Gdiplus::Image* serverSpriteSmall=nullptr; IStream* serverSpriteSmallStream=nullptr;
-    Gdiplus::Image* serverDesktopReference=nullptr; IStream* serverDesktopReferenceStream=nullptr;
+    Gdiplus::Image* serverSpriteLarge = nullptr;
+    IStream* serverSpriteLargeStream = nullptr;
+    Gdiplus::Image* serverSpriteSmall = nullptr;
+    IStream* serverSpriteSmallStream = nullptr;
+    Gdiplus::Image* serverDesktopReference = nullptr;
+    IStream* serverDesktopReferenceStream = nullptr;
     Gdiplus::Image* serverClassicStart = nullptr;
     IStream* serverClassicStartStream = nullptr;
     Gdiplus::Image* win7BasicTexture = nullptr;
@@ -3204,14 +3214,14 @@ void LoadSettings() {
         PCWSTR value = Wh_GetStringSetting(L"taskbarSkin");
         std::wstring skin(value ? value : L"custom");
         Wh_FreeStringSetting(value);
-        int mode = skin == L"server2008r2" ? 7
-                   : skin == L"win7basic" ? 6
+        int mode = skin == L"server2008r2"   ? 7
+                   : skin == L"win7basic"    ? 6
                    : skin == L"win7beta7000" ? 5
-                   : skin == L"win7"       ? 1
-                   : skin == L"win8beta" ? 2
-                   : skin == L"win8"     ? 3
-                   : skin == L"win81"    ? 4
-                                         : 0;
+                   : skin == L"win7"         ? 1
+                   : skin == L"win8beta"     ? 2
+                   : skin == L"win8"         ? 3
+                   : skin == L"win81"        ? 4
+                                             : 0;
         taskbarSkin.store(mode);
         if (mode) {
             useBetaStartLogo.store(T81IsWin7Skin(mode) || mode == 2);
@@ -4377,313 +4387,617 @@ VwHem/GX4AJx6caHwfkYnOsgPtwuuf7tx7AD+BuM36qzzy+RlgAAAABJRU5ErkJggg==
 // Embedded 54 x 162 sprite with three 54 x 54 state frames.
 // Asset reference: GraphicalResourceBundle, startwin8beta8148orb.
 static const char kWin7Beta7000StartPngBase64[] =
-    "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"
-    "VAMAUojVTLtl2p4AAAAASUVORK5CYII="
-    ;
+    "iVBORw0KGgoAAAANSUhEUgAAADYAAACiCAYAAAAKsj6IAAAQAElEQVR4Aey8B7xlVXk+/"
+    "Ox6er/n"
+    "9nunF2Zg6EgvI0UEjaAoWKJoLImKUWOLYEyUKOavUaMxMYkm1qAGFQEBqdKHgel97sy9c/s99/"
+    "R+"
+    "dvue9wwHBoSh/r9fvu/nYT3nXXuVd73Pet+19jp730HF/08/fyT2/zXH/tFjf/TY/5IZ+GMo/"
+    "i9x"
+    "xAs2448ee8FTBcSg6xfAH78GXUf8BovP2oZVl8xgzZuzWH3JLBat3YHuo36LYPIL0LTXUW8X8Y"
+    "qn"
+    "V9JjxyPa/y0svXBz9LyP3XrGB/7+767867+/+JovXrvqG1+5uuffvnZ18ptfuab781/6wso/"
+    "++tr"
+    "X7P2L750deLCT92Ila/fgtiC75HZacQrll4JYgMk9M848V0PnPL2T37wH7589fDNX/sIfvDpK/"
+    "A3"
+    "bz0TV561Aq9dM4Azl6Vx4VH9+NMzluHqt5yG//"
+    "jEm3HL1z6Mb1732d5z3v2pK7VTP3Af4gt+QGbL"
+    "iJed1JelQTMvw/KL1p321o//+X//w8d83//M23DxCYtguk2MTWcwMklMzWP/TA6js/"
+    "m2HJnKtsvH"
+    "pjJQrBrOXTOEf/n4Zfifr35EefW7PvEOrL70YRjB970su9j5pRMLJv8ueNp7fnb1pz7Y/"
+    "y+fvAJL"
+    "eyI4MD1Ho+cxlS0hW6y2kStVkSvXkCt1wHKWzRcrmM6WMULio1Nz6I/58PWPXIrrrv5gMnHWe/"
+    "+V"
+    "UfBt2qcRLym9WGI+fi72Dx1328Da91zz/c+/"
+    "D5eedgTGaNg+GjiXryBDQm0S5SoKlRpRR7FCVGso"
+    "VuvtaynPk2iWmGd76bd/OovRiTmsPXoRfviF92H5a97zF8bwq+7jeK8nMx/xotKLIab6/"
+    "f7T08uO"
+    "e0/3seee/"
+    "+1Pvx3dERPb909jOleCGJgtVZAnsoUCMtk85jLzyMzPI5vLoVgqo1yro1JvUDZQqhFC"
+    "luTzbQ9WMUM9O8dm4FMc/NNfXY5lp7/"
+    "mlMTykz8i45LVi7EVL7ixYRjHJQcWv77SfcIbrrvqTdBd"
+    "G7vHZ5AplJHjrOdoXHP6AMI778bQ3d/Dop9/GUt+9mXm/"
+    "wPG1nswPzmGzNwcCsUSqvUmqg2i1nyS"
+    "pHg1Sx3z1Cdrs16t4rq/uBTqghPXpoaPeIeMT3IvOL1QYul4Kn1yNn7MlR97+/"
+    "nwqx52HyAphp4Q"
+    "khnvffQWrPnuF7D4F/"
+    "+Fvs2PYEF1Aou8OazIbMXpW27AuY9+F+n992Fmehq5fBGVaoPeaxKtNrki"
+    "ryVURV8mX8ZehmW9VsWn33EBsqljrkil+9aSVZp4QekFEWOcH4vUsjeed87JkaMX9WDH/"
+    "il6qsIN"
+    "oYqCGFQqonfHw/"
+    "CbFkK9JsL9JoI9ZjsfGfAjNhRAf7CM46qjyM9PoVicRCabRb58MDyrjRa92GgT"
+    "LHA9ZrmxzDKUt+8bR38yhDdfeLppp1e9tW0HDvkcJvtCiPXGu/"
+    "qOb6aPOP2SM9Zg+74JSLjIzBa4"
+    "GVQIPTuFqFdCIK3Dn9IQ7DJIzECgV4e/V2sjPOjD3foAutIlLF7ze/"
+    "j9W1DIT2E+l0euUESeazBf"
+    "KCGbm8LYzP3IltfhwIEJbNi6G2uPWQJtYNXRqb4F5wDoJZ43PS8xXdeXIbnwgjOPX6U3G3VMzO"
+    "WQ"
+    "5QZR5MKvcK2UGxYG8yMw/S78SR2BpAFfWoPZrT4Jo1uBPxXAtmYA6eEmotEq+pc/"
+    "hgUr70Q0eSeg"
+    "34mqcxtmrRuwo/"
+    "UL7DYfQ6Y8h4mJcYxOTmOem895J61EM7rogrY9eP6P+jxNzGgisbQcHj72xJWD"
+    "2MvNQtaThEulbqHaclBhGC2sHIAZVuCL6zCSKnRCpJFSYHQpJAiM2wnMNhQMLdQQ9SXRFYkhnW"
+    "4i"
+    "NTiNYO84lNQknGgJLicoFjRRmNJRKleQpzf3HpjGmkV9aCUWrIolk0cCMInDJvWwtUBPIJxaPb"
+    "Rg"
+    "QTTs0zGVybfvRVV6qWY5qFkulHoZg14GvrAGI6ZCJ4y4Aj0BGG14MJPAg9kuxGMe0lE/"
+    "QmYCISOK"
+    "iD+MREhHPKQi5lcRNhUEDAVhJ8B1qKLheBzD43quAp6DlUsW+"
+    "HzR3mNBu4jDJvVwtYZhdHvB5Irh"
+    "3gTmsgXuYE3UWjaEVN12USMW1Q4gpFnQwyq0iEJiBIkIMTXqQaCZKu6ei2LJch0xXwxBPYqASe"
+    "hh"
+    "hEw/"
+    "IgEg5FPapEI+FVYhgkZLgQ0NLU9BnRM4NZdFXzoG258+Quw6nN1Sd1himqbFG77U4ngsjDxP"
+    "Ei3HRYNkmpzJhgPUSfKIxjgMw0HQtGHy3mTNtGDva0LNNaAFHGgph+"
+    "EUwK6KiVWrojD1AHxGED69"
+    "Az9JatxRAVMDQvwqzvtISoWjGrAUHZbrQsK/"
+    "OxVFI5RaIHaJ8YfDYYlxZsINPdIVCAU4gxZcKPB4"
+    "T3c8FS1XgdVqoV8p4BfVJXj7nlNx7qZzcc76tTj13rU46ydn4LpvDqL8WA2P7IzB0SwcsSgJXf"
+    "PB"
+    "aMP/RN4kIR0+A/DpgGubnAgTjqLDM/"
+    "yAZrTHbVo2VMOA4wuHDcMIH46U1B2WmKqqhqX5gut3TNI7"
+    "FugslBstzJVqmMpXMZar40Plk/"
+    "CvvtMxe9TrMHTRu3HOuz+G133gL3HM69+CG4xTccbPX4fPPzyM"
+    "Y1YH0BOOQ1P1J6HTI1obGnQVMEislA1hat5Gtm4jV3dQbtpoMUIs18P6HRNo2qohduF5Purh6k"
+    "WB"
+    "p/u0HaMzuOPR7Vi/"
+    "6wB2jmcwU6iiyF1RifehdNpb0Dj1YvQuPwILu+JYHDFxfF8CbzrrJHznus/i"
+    "fe99B3a3Itg0XsaNj24lARUhv48hqdNzahs+g5Ibh8U1lZ8PwIKOmqtjvmpj91QOj+"
+    "0ex13rd2Aj"
+    "Je8rutiF5/"
+    "kclpjruhZUxYWmcY3VUW1agKpC1Q2omoJ0dxcM1QUDhMN44KTC9jyCl7zQm3WEkgPo"
+    "SgQwEO7HV36q4Mqvr8e/3rEH6/blsWOmgQ0HWrhjo4Zf39GFO27pwZ79YSimD4o/"
+    "CNXnh0IP17kD"
+    "58o1eLQDqkqzeFDlEIdLz0uMRjfANaHqOlRNIzFCU6FL3ARjgO3AJok6w6XJzaVle2jQkCbjtu"
+    "Gq"
+    "uOehR3BkOoe7rj4aP/vASsTVAdx0bwRf+4mBf/xhCP/96z5seXQYA/"
+    "UIrlhQh6eagGFC8YUA3QQ4"
+    "lqppnEydeT897lpk1sLzfNTD1VuWVfE51Rw0KlU1eAqbPyHj0Sia3EQ4f3AdB0USKVOWuVOWGj"
+    "aK"
+    "xHxNwc6RHbhgaY2bTQAnL4vgjo8OYffVMdz/fhV3vKuM9e/bg61//"
+    "iB+cfE9GF6QgK0YgO4HTB8l"
+    "8xwPqgq6jmUmDKdVEbvwPB/2eO4WjuMU/"
+    "M3sAboHMDiQooChCW6OCPDkUOHC1kgG3LGK9FK25aDQ"
+    "dJDn+stWLeyYKGC+YuHCI0NwW2XAysOyytC1BoZ7ylg+"
+    "lEEqMQfPs3iPdHDHRBoqx1F8QUAz6T0V"
+    "T5LSSJLwt3LTYhee58Oez92CM5PRSjO7IbMWjB9sqKqQTgqvZQv2SEqllxpcf+"
+    "MkNcNTyRxJzVRs"
+    "bN6+"
+    "FX3hKo4YTEJpjkO1MlDtDBSBk2UYz8PjedOpupisxrElE4BCYqqfUsJQ4UiEBw8IRAFGjlmc"
+    "3CF2HTTmub/Z87krWTPTzE5v0BqFmhcgMfEYB4ryvlawddi2TQ84NNhqo0RS+xiCY/"
+    "TYeMXlI4M9"
+    "OLE/TzW8B7WmSGqGpGahuIQzBa9ZglN14FSaWF9aiIkSJ830QzGDJGhA4STyi/"
+    "0BL5ykx+t2KzO+"
+    "ngUzxGHT8xFrFQrZnfHa5G6YAUBCxHPR3dXFY5ULXVfRaFVRLeZQn5tFg7+"
+    "h5ssN7OE9aIQey9dK"
+    "uHzVDDx7AopDtCUPvJRevQC3ZJOUiyaJPV4chiq7LcdQfAHyUaEoCsAEuVH7wojVp0fz2ZkNAF"
+    "rE"
+    "YZN62FpW0it7jMn1N3utmov4AGBbcDiaO7MT3p6Hoex7FMr4ZqhT2+"
+    "Dt34D6jseRGR1HfnaaJwYX"
+    "py6YB5q7oVijUFoHgPosCVXgFBzYJQdO2UahYWJdNg1FN6DSW5puQmFkKIpC7zoA75dwbISn1t"
+    "8q"
+    "9tCs503PS4waZkozE/"
+    "d1FXZudQMRgFv8vl1b4eXHobotGuKHGuK2H+0CYkluaBr04gFUJjfi9N4J"
+    "+OpVoFiCy2cZTr4OJ2fBzjmwijaJ2XC5ueyup7GzZAJtYj4oqgZFURh/"
+    "LiDbfjiBWGlkX35s181i"
+    "D/"
+    "G8SX3eFmxQrVYf13ff8yO1NGt56QXtNaAG41BJRkv0Q5Wy3kVQ+5ZA71sErXsItUgXNtUX4hv3"
+    "L0QxA3qJJAoWPWUxb8HjBuM2XZQdFQ/"
+    "UVqMJHZ5pUrcQU6BwXIU3e6QXwqvk3eCuO35IOx5j8QtK"
+    "L4gYNWWys1N39+67/eceT9rKwjVQ/"
+    "RFokRTUSBKIJLi4E9DCJBvvBUjMHV6Gvd2vwqetd+LsDe/E"
+    "Jzefih8eWIrbc4O4KbcA/z5zJD6+/2xctOMK/"
+    "OP+VQDDzwuEefA12qQk5NX+JQA913vgnlsz4yPi"
+    "LU4RXtBHfUGt2Ihb7OO5HY98r3vsvoc9xr+6aCWgaICmw9VUKKoCUMLgdTgEtasb+"
+    "uAwtEVLsHfg"
+    "JHw3cAmuqr8Tl2feg3dm3oFP5d+AH7ZOxU5jEbwQJyWWgsKJcUkQjgOtf5B6DcTHH96Wf/x3/"
+    "8jx"
+    "X7C3wI9KvNDkNhqN+2vrfvml2P77tzk8aehLFgEk5HkKZGaFnCfkTG4CQRNKPAp1oB/"
+    "K0mVQl66A"
+    "snAx1KEFLBuCNjAItXcI6F4Ar28h1PQQJLw9TYO2kKQUDaGxx0cb9/"
+    "74cxz3PoB7Eb9eaFJfaMMn"
+    "2jXL5fK9jQd+8rn41tsea2VywFAKaswPhfdQRaE6XYPCH1aKzwCCBrxoCEin4A0PAIsXgz+"
+    "jSXQl"
+    "1MUroA4vhtI3BCXRy0NvDGo8DGUogRafVoV33Lfdvus7n6lUCndy7CbxohIteVHtpXGxUijcVL"
+    "jn"
+    "B59KPfTDX7Y2brFstwp9IALNr0M8qLS9RtWmBs+"
+    "nwQ0YcMMBuMkY0JUAkkmSSUKNxqEGQlCCPmj9"
+    "YR6mq2hu3uUmH/n5bcVbv31VKZ+/gQMWiRedOPqL7iMdWgyPu2fW/fba5J1f/9vgw/"
+    "fsrj60DlYj"
+    "ByVNIxMmVFOFoqvwdA2OocEmSZEuy0AohkpiJpSUAaeZQ/WRRxF49P596Tu+9sWZ3//"
+    "is6KfA7WI"
+    "l5TUl9TrYCdXFvTk/j3frvz6q+/vvutbXzd+f8uu6q2/syqbN6M5OwH5YeDx0Ms7M1w/"
+    "h1IswKrA"
+    "reVgzY2jvmUT6rff5fjuv3Nf973f/U7lF3//nqnd2zsbBW9iBwd6Kd8c7aV0e1qfAmf3nvEtj/"
+    "59"
+    "4efX/Vn0Z5/7WO/1X/tp+H9+tEG98Tcz3q9uLXk/"
+    "v6mhfO+nLcqm95vbytpvbpmN3PDTzT3Xf+36"
+    "5E+u+avyjz//zvHH7vsb0UPNBeJlp1eCWMeIjG3b92en9kRlQwAAEABJREFUJr49cd/NHy9e/"
+    "7X3"
+    "2N/82OX6de9/c+CL73lr7B8++K7gF959hXHtey9z/vGqtxR/fN27Ju/5zUfnJ0e/"
+    "If2o5AXfo9j2"
+    "edMrSawzGPdHTFuWtYEeuLdard7GnfSX+Xz+pyLlWsqlnh2mCWlP8cqm/"
+    "xvEXlkLX6K2PxJ7jolT"
+    "WC6TI5LZ/z1JjHq51mhUcDg9QlrqRbLp/ztJBny5I4nBPHLguXRJudS/"
+    "3HFeVH8Z9EV1eEbjzo52"
+    "OK8JcRlH5DO6/"
+    "9+7lAFfrnY5IQgx8cqzGS9lUv9KjPWCbX0lBhNiMqDBLyEgRESvQMoEPtaJFPLS"
+    "RuoE0lbA6lc2ifKXq1HCUdAxXgwVvR0SUh7iICJNyg5BaSNtWQSRzwape0kQ5c/"
+    "X8dkGlH4dSL1D"
+    "JWJwkFKMFwiRAK/DRJzgbxYIQSmTOiEuOqT/"
+    "oWDTJ5OUP3nxYjKi+Nnai8LnQqeP1EteQks8JoYK"
+    "CTFeZISKE2Tb5dfRI5LXyScg9X7mWQzpJ3p42U6itwMpeLa8tJdyqX9WPFuDTgeRHUg7MUAgRM"
+    "Sg"
+    "DqRM8nx4hi6Okib4KwsDJLQwGMDSRAiL+"
+    "TtzGX9PLvHrGGbjPrYRL3Y8zCKIHtEtY8m4bAKRUiaQ"
+    "ckGnndQ/"
+    "J6RhB6JEINciBaJQ0BlYQkxmWiDhJFKMC3EEQ9WR4lOBoZCOBSS0uDuM1UuS6tFH9avH"
+    "LEyrawYS6pGJkLqcb4mG+"
+    "Na1l30ihPQXXZ0xZHyBjCskxA6B1Mt4YgO7HT51FIgSgSjqSMkLRJEM"
+    "LGtDjAhRpRgkM55gPs0Re3Qd3VEf+vvCWNUbx5Gr0zjuuH716CO6sWhptzd49JC6/"
+    "ISF2rFrFmsn"
+    "DKTVIzkBg+wnHg5Th+"
+    "iWMViEDmTsjn2SDz7RTsqEqIBFz56kkSiSjh1CMoAMJLPTyQuZKFXEiPa6"
+    "YaceCaughiX0zvK+INYsTWHVqxfhlPefGnr9Z1/"
+    "fd8k1lw1d9LdvX3zx1ZcvveAfP7jqjde+f8Ul"
+    "X/rA4su/"
+    "8bEjPvSJ9x7xiRUrY5fQcxK6MlEyhkDGlnE5RJukyTFlbIGUyXoWUh2w+g+TEBNCokiI"
+    "CEEpk7yQEMigcWpM0Ctpkuk1fBgM+7E0HcTq5Wn1xGN7cOo7Twr+yTffMvy2L1+++"
+    "I2nrllyxnhr"
+    "aNnPNg/0fu323uhXf5s0P/OTGD7/i7TvO7/rDt+0JdXrBnpO+shHT//r/"
+    "7nxHfd85JOnfS+Z9J9P"
+    "8zrEAsx3bEoyL+TFJrlnCiEWtY9wkhfI9dMgJCyWSKV0FMWiUAjy4Rm6SaibhJJcP2k+tugL+"
+    "TDU"
+    "G8Ky5d3qMScNqSe+4Ujz9H9668K3vfHMFeffNTHQ//"
+    "W7EvpvtycxHz4Ci848GWvfdQ4uetepuPzD"
+    "5+CKD52P8y4/BytPPRuN8PH4zcMpfOs/8v6qEj/ti//5ln//"
+    "0N+e9eNg0Dye9gQI8VA3t5RB+k3C"
+    "VW4pHW+J3WKzSDZtbzJyLfk2pEI6yHM7myXkAfGSEDQ1HaFgQBuO+"
+    "LQFsZC6IBlWhxYm9JVH9Rlr"
+    "zligH/XBc/vX/un5R7z6V/"
+    "sH01++LYlKYhnOvvJsvO9jJ+D9Hzkeb7x8Oc48pRsrl4SwZNDEUcuj"
+    "OOW4blx28Wr85fvPwZeueTPe9/43wYwfjR/8oomsFT/p/9x95S9f/c4j/"
+    "4GTOWCGsUIz0QWvbTjN"
+    "a0uFGfUQyLWARe16kW13inuFVIMldYIThBgVJ1RNCxm6Gu2PG8uX9fiPXNljrjpm2Dzi5EX+"
+    "5e88"
+    "d/EpOf+ioc/"
+    "eGEMtvhRXXXshPvCZM7D6hCFojoXCxBzmJouYn8qhOJvla6V5ZGZzmJsrY2a2hNm5"
+    "EhS7ieNW9uIT77oA13787Qgm1+Dfvj+LZa9dfsnb/vvU//"
+    "L36as0QzNokywXWWs+5kUKpEwISnQJ"
+    "OmVtklIhHuuQE8/xxQ6amqb7TV1NBXxqLBrRE6uHQ8tOWhZdtXpBdPjNr15yws3TA7Efr4/"
+    "govec"
+    "iQ/81Rno6QlgfpoGzzRQrHpo5fKo5SuoFWt8sVdGo1xEtVxGpdpEiS/"
+    "6iqU6MoUaJjNFTPGJcjJs"
+    "4iOXvRpvf/M5WE/S44q98K0/fvVfRXoDy3VND0KHRJJAQtT/"
+    "BEEJ2SDzcq1RPpmEmMcrIdaBPKSs"
+    "O45dgwotFjZT3clAOhUPxBYORHrOPWXp6v/"
+    "ZkzR35OL4y89egFNOHkJmuoi5qQqK+QYKJQvFpolm"
+    "uUoyJFWtw6o30KrX0ahVUKs1DpKrtlCstJAjyflKHaO5GWzJbUFoOIfzzl+CSiONzY8bsSt/"
+    "+rpP"
+    "xAcDRwci5kLdp/fCQJL2CsEuyjgh5FTKp6VOwaHkpIF40XZdpWUr8vjdF4lE/"
+    "OFlywf7N+eCpuYL"
+    "4kPvOhIJn4MDo3nkcg0Ui01Uig16qI582UOl1EQjk0UtW0CDBJp8P92q19BstlBrtCB/"
+    "GlhpNFEm"
+    "4fl6FntbO7HV2oid9RGYmh/vPelSeNYirHtEi73thxf/"
+    "VffKruNCXf6lZtBcrAW1JfRgmoaKpyT0"
+    "Ok4RHgJ0iLEN2gXMSEONUicU1YPqqVAWLevvnXBTwdGyH6ecugRaPY/"
+    "C6D40sxkSqqJaasCZySC0"
+    "ewtS992L2J0PoPeO3yHx2CPwxmdQIfkqw69aq6PetFBv2ag1bRSsEqa8UUzgALJeBRXbQ6scgd"
+    "EK"
+    "4ePnXopMPoWxmUj3q6879a09Z6RODS8MrlIDakrXdVlvLm0UJxwqWQSo7e+"
+    "DXwpFByxnV10NhMNm"
+    "rK8/"
+    "2e0fWJy+YYuC5UcfwfdWJrLlFpq1GpTyHLTSHLo2r8fwT3+NntseQGpkBIlGCQmvinRhFoMj"
+    "u7Fo5wYEZsZRzBVRKtfosRaKVhkZTGNeyaHium00Wz4+BQ9hNteC1XTwnrWn4/6xPCpDRn/fG/"
+    "qP"
+    "CwwGejUuOj5kbdFei+hIIejxup1IoC2FkOQF4i1D0xgRphKIp4Jdq05es/"
+    "RXj9UxuHw5kgOLMVnR"
+    "UbRVyGvWhsxVq4Jk/gD8ScA/YCLQr8NI6dATOnwpA/"
+    "4uA1Gzif56AeVSCZXaPLIVwplBgW9qanxd"
+    "W3dVNBwDXi3B9enDdC2L+2uPoNA1imNP7MG6x4oYOHtoId+"
+    "SuW7LrXNj58tt1AA0CJt4khTzUPml"
+    "EJJEyrVsr6ameYFAwIgPLO4bKJjJ2PZSAKcesxz75yqY5Vv+"
+    "2VYABRpSIloNG5ruQu0xoSZ1aDED"
+    "WtKAntIIFUZShclb/W49gWCiidTyTfDCO1FoMZzZt9zyULFUWNUgatUGduFubI/"
+    "ciq3qBmyqbcWq"
+    "nh40SLg2GwkmB7u63LqbgQV5vdQESJVfz0xCpFOmMNP2lq7Dr+"
+    "hGJNUV6R846ojBWzeWsXz5EtRs"
+    "HVOlFrJNF1lbQ9bxI+f6oDfqfFVEVWEDapQgKS2lkZwKnaQ0woyZmGz5Eex1YYQbCA+"
+    "NIDa4FUZk"
+    "J2xtNxrubmSVR7ErcDtG4tuYJ+"
+    "laEdWsh0AhhrWJE7Hr9zqOedsxJ9iOXQHgEJLE7kOl5KG2vwGp"
+    "7EAHdL/"
+    "fZyYi6XhXYvnSwU1ZBUcuWYi9c0VMlV1MVBXMNbnOSGqe8Ldq8PzsFmEoxQUalJgGNSFQ"
+    "SA7IOUHkWypifToMXwzBUAShqItgsgAjlgOCRVi+"
+    "FmxTRYC7YqsQgDIXhDGVQHFKwfGxZcgVA0gu"
+    "GxzWDC0JcOMHOjbjmR/1kALJa7xWoXHskBkP9nbHt0/U1XhPP/"
+    "y+AA7kq8g0HELFVMPAgXoQuaaG"
+    "sIR6kMToLY9AjOS4vpSECo13Gj2hYH8hAl8ECEb80ElMN6Mw/"
+    "WEEAyaCPgNBg1Iz4FN0hOwgnGwU"
+    "Cj3l1HzIVxpQPBvLu/"
+    "pwYEtTXXDykByYxV7wozwBiqfSoZVSKo1UTdN8RjAQCS0YTu2eszDYk+aG"
+    "UUWeW3HBUVDgQs+"
+    "7BjJEuF6ArrnwQjrciA5PSHGdgfB4jYgKVVewMxtAYrFJMjGovoPQzQh8ZhBB"
+    "00BA1+FXdYQIpRqB26QuKLBUFw3PwnQlg75YGBNjTay+ZOWrAHiERihEJz2ZF2JPXjxRy/"
+    "uWanh+"
+    "wwgtX9w9VlQRjsUxX2+hzkFrqoGq5kOJyHkG+"
+    "p15wAdoAQVwPXCXR3MOcLgK3JAGL6WiWjYxW9XR"
+    "vSQMl27zfFGoPOFqRhiGFoCfpAKaioCiIKyoaNUM8O4JcEIczYONFkrNCtLREAolB4tOHhimre"
+    "oT"
+    "UJ6QFE8lqRTmHUiNNFQcV3XVwaF4iV7Rw2FUOHu2zwfXzzAhrECAa8JgeBn4FVbiY9lT8Lapc3"
+    "DF"
+    "6Fl4y44zceU9J+O/"
+    "fj6I4k5g70gEVIfkgjRsegskpOshkvLDr5kIaRrCmkvnuvAxGqyGwnuNB8NU"
+    "YBguFI33NLcGTXfhAuhdGI3DhJ9ZjVCJP0iHFgo56SeArWtKMxIxmvTM5hneIGUmzQCqpoGiz0"
+    "BW"
+    "MzCjmPiy8ipcHzkdkyteg8jpb8OKP/kgVr/lKkQveAf+K/lqXPbw6/"
+    "CNvasQOdZALDYInxFEkH2D"
+    "1BdRxENAiBtcWLERUW3ex3y88VtwvAZsrUKUAK0Ol9gxu5/"
+    "EbISDMAwPQbIRYgqlgOKppD6RFVIC"
+    "IWU7rttwPM1pRGKGo/"
+    "sxMlvAw3vHsU3+4eh8FfJHlgVHg53oR3HVeaiuPhP+4WUIpVIIxMJIdXfj"
+    "iBNOwluv+hRWvvPD+O8lZ+H3ySHsGN+JLqWOPsNCil6IKxbiJJOgt+"
+    "KEn1GhMGz1qh92IYTKnA/T"
+    "k02MHMhg49592Ds5Bc3VkOCi9DRdiOmH2P9E9qBQD4r2txBzmLMU16m26o1K0VVsV/"
+    "PB47GsyONN"
+    "1QYcho5rBOCafgQSXZQGHK6RpuFDlcgbJub4IG6G63HKtVGK9yDe14tuXwxbH5/"
+    "G9fc8gId3b+WR"
+    "iaeOShFz+"
+    "RpGpj3s2BvCvh0xZCai0BthGK0oDCcEnUcsuw5UuTPqngYDOutsRzO0EG01iY7XmH0q"
+    "HUpMSoVcw3aUSrNUz5cc3VJNk8T83Nn8gM68ZsIVafjRCsRgqxpaJFLhOqkwX+"
+    "GtsURNVdlImN87"
+    "OoYl0Ql888KluPK0HvSqfoyOKLh/"
+    "g4UHHlewdUcYxYkYhm0D5ydqCHOzCOoefBzHZH+xnCNzf1Jh"
+    "KAYCKqDXW5aqelIlHntBxNqhCMuq2nUSy5RKqj9ATSSjGnAVE55qMt5N+"
+    "KIxNEnQ1TXYXC81GlHj"
+    "DlznYbZhu6g7LvhrBfnsGE7v4gmIN/LBdAh/cXYMXzxPxTUn2/"
+    "jsCWVce9IEvnzyTvzlym3oT5qI"
+    "+luImh5ChocATfarHrg5wqBug5PHww3q05UKq5g4KBi/"
+    "eFKi81E7GUqPEGIiW2i1SoVd+2b0rgjA"
+    "EIOPIU3vIRiAx3WkJBJoUKdKwCMReqjqeCTkoUpilZaDbKmChlXF2f0KHKdK2LCdFjS1iVS4gt"
+    "54"
+    "AdFAETpYbjsYqwSRDNpIJ5uIRxoI+"
+    "Zrw6xb8igNTVWGoCvoiQDnm9wwAABAASURBVH6sWOClRrYq"
+    "IAbgDz5S0Sn0nsg4lA6/vMrDj+1RF/"
+    "QApg+Ip4BYFG6ap5kww5tEHXrFo0EKJXccFClLT5CSf46V"
+    "mR1Hl7+I5fEgPN7vPLfBOaBfuXUrHm8gLmG3oLRc1Cw/cjUFft7PQoaCGD0XC1VIvIGg2YQ/"
+    "4GN4"
+    "ejhiUMXIppkpBoZFSmKzQnsldaTk2y6Uyg5clkpegQOntWvvGNYs8hAyga40iYUBnwmfrqPJE7"
+    "lb"
+    "a8KttaBaDhSO1KDHciRXtG1UudkUCxNYGcvTI03wjATPq8F165RVwCtB4dMHIYWWhZlWnDpdBE"
+    "kq"
+    "5AMCpkuHKCTjQjwXiJoMzQZetdpxN9w7sZ3DWWgxPqmJNksSu0W2oba/"
+    "D35JhUDKNCjci30+o7Fv"
+    "dBrpKODjaKoO8BlG1AEsPt9QOdMMIrScJux6laijblnI09BctYV6OYtzu+"
+    "egujMklCWKcL0yPHrK"
+    "bdEq/"
+    "krwGh7cuoOpahKmpjD0VARILhmoIRWqkJhNU0zoXM99EYenmpnZ6QPlCTiOTbMF4gwBL59K"
+    "QqJzJa7UeHEQtu26judav7l5K45aDDQ567YJJVuEQi+"
+    "hMA2vcIBEZwGe4xRBcQbO9BgqU3OozwuR"
+    "Fo6OZ+"
+    "mtMZLJMBwL8KwaHD4SoOPgVFW4Fa7LqoEd812o1wPQFIPhCPi4aSSDdfREi4glfTC8Ftau"
+    "MfDArWO76iWr5DhKi7baBKf5aZ5jEdqh2M7wS0gKmIXCKVLdRqPm5fNVz2cXxeOezWrVh8zcFN"
+    "xW"
+    "EapPheL3Q/"
+    "H5Aa45ldu92mxAK02intuFY6NTiLCr12QIstxu2PB4M3T4eM6pe3BKHryah+lGFKMF"
+    "Hwq1CArVBCzeu3RuSCY3jWjIRSppYVGqjFWp2eJDd05srjfsIh1Wp6FC6g+"
+    "8xfIniam8UAhJkvdg"
+    "2x6KxRIsLqBrr73DW3s0F3kVXrwLMP1QwwzPBDeSYBRKIAqVRyXFiEALp6BGutDwR/"
+    "jkqQc37OtC"
+    "jV5xmh5chh2qtKViw7U8es/"
+    "jj1cVu+qDsFwdFg+AFSuC+XIc5UqY9QoM6vbZNVxykoXf37Znd7lQ"
+    "L9lNt64oaNBY8ZgQ85gX+0UyizYxhTmBEBIpDW043J9rtTImJ+"
+    "f5fK2E9fft9FbxUE2N6FsIxGJQ"
+    "gmGoDB2VP+sVHpZVLQA1EAOiXfC6BjEWPQrfbF2ED42fjx/"
+    "OLMODhW5sLiexqZzCI6U+XJ9bga+M"
+    "n4pbZgd5f9QAww9X0bmJ+JDNh5Cxl6Le8GNFt84lkJ19/"
+    "KH5kVbLbnmqw8a0Gu0QVJkTuynQkZBC"
+    "KRCmHUjslumxIgqFKcg/H1cUBT/"
+    "+8cNII4MU72N+A0q6GwpDS+UmgRYnzvPAVuBNCh5DU40koPEs"
+    "qaSGsD+8GrcoJ+M/"
+    "W6fjK6Vz8Y3CmfhF+RhsVBZh2kjD9YXo9QhDOkSCOsBbiBtNI9+I8TlIAqf0"
+    "OaVf/vfoxrGR2lQhZ83xltnicH6ABxKOSKkdAoX5J4lJXjwlpMTFTRaU0GiMY2xsGzZu3IYa9/"
+    "Yv"
+    "f/"
+    "l274ylTc+nwKvb0PxBbtk2PI7y5NzxJuppOlTezJUADY72wEsthJMchh3rg5PohZvogRVJw0hE"
+    "ocWSQCINJZoCfAGApxiV90rXUxC1LXz4DLv+H98efWD7psb++"
+    "YyTqVXcXKPizCkK6mAPIkiYhEaI"
+    "o0RSy0F3CilOO48A4B0MvEMAVa6veZIbxfj4Bqxb9xA2bdqFj3/"
+    "8V96Jw00063D5jBCJEFQ+71Dg"
+    "QqZK/"
+    "iZfMVQohkYPGPD8IbihJKxYL6zEAOz0Atjdw2jxtO+SkC8VBUJxQNZo0M9JCMHhI+8UTfnM"
+    "+dXGP3/9sXsfW5/fs217bcfstDXSaCgFkqrJXYVEyoRKBAk/"
+    "oRFyrckX8+359pgRuJRCUmakTHJz"
+    "JDeBfH4Pw3IHbrnlDqw95zp7iS/j9ERhjU/"
+    "A4W8nLRGAplMvNSqqAglJ6CpcEvQMgz8wA7CDEdiR"
+    "GJxQAlaQMKLw81SrmhrUhJ/3uCbs8Rms4q/uD584V/"
+    "jC5x64+aGHZ3eOjlYO5LOtsVqtNdZs2hMk"
+    "VaKNFlEjOnmDeR9BI6CqzByaOsSEnMMKCUkJzSoUpcpwnMD8/"
+    "GPYuvU3OO20D7nT6zfrrzke4Aw3"
+    "dm+HbRWhRExoIQOqoUAhQVfV4JCwzfB0JE+4PMw6vG75glBDbOeW0dw7gmC5hQ+"
+    "uDeP08J6JT3/m"
+    "wRs3bcju3r+/OjI/"
+    "3xxrNFozJMSbIvgsAiKFlNgoy0fyYidN5kEHUJ9JTCqEnHToQLzn0HMlYvIJ"
+    "jKNYXOe++8qrrDdc8PeBJd507OSV8Ap51LauQ+"
+    "3ATjSLvNc1C3DtCnW24BgqXIXz5TR4g66wPo/y"
+    "gWk0do8iXK7gouPT+ODRs7mb/u2u26+5+uFfbtnKI/"
+    "hoedfMTGMXPbWPpDJUVCSEhEAUCxkqhdjY"
+    "ZJ1A7FaejRjr26EpHaSREJWOBVbIbFUpRXERDXuvvW79Twqnn/"
+    "feyl++9ztdPYWx5ecutwdTfkT4"
+    "skIb3QFlxwZ4j90PPHgP3C2b4OzYC2/fDAJ8SbEsHsGfnNzjXrokN7//tnse/OhV91x/"
+    "yy0HHtm1"
+    "p7RjdLS0OZ9v7G427XGS4uMh5J8YVzwkYShSiIhtYqdA8gLnuYhRB4SQSCEoZATSqaNQlMrizT"
+    "BE"
+    "tzd+d8+PJi55zzXjl1/"
+    "5LeWmH9w5XN+y81U9uZmLVlqlN50WbV1xwQBef3ys9fqVKL1mqJI5Th/b"
+    "b61/eP0PvnDLb77x5Qdvv/4n2+/evjO/"
+    "fd++0pbp6drWWs3Zx7P0JA2QsBNPyZqXsYWA2CYQ28Qm"
+    "KRPItcjDEqPOdpLZERIdBdJZ8jKIlB/0nm1POqXSlvqG7Q/mbr/3sczN924d++FNj23/"
+    "1xse3vit"
+    "nz34wFeu//1D371t3d3f+d1Dv/327+679fsPPnTPr7av3/"
+    "ro9M7H181sGhspbp2ZrG0qFls7SGiM"
+    "I0voSZR0Qk7Gk7GFkIBN2knyHUh9G4fzmPQS9kJCZLsDCyUviuRa8jKgxHqJ6y/"
+    "j1GojlW171xce"
+    "2by1vHt8sjI2kynsnJqe3z4+ObdzYnpu9+z09J7ZyT2PHdi2Z+PE43u2ZR+"
+    "cnqhuqlRao7ZtH6D+"
+    "aULC7lBCMo6M2QGbPGvq1HuHIyaNxHjBM7VInUAGFAh5IVchuVmn1hyp7p/"
+    "YkN+4e3Nuy97dhV3j"
+    "Y8X9s9PZfXNTE9vGd41tmnx8brSwoThf3lQrN3c3q7ZsDhJyEtoS8qJLokH0yvgyVgfPtOVZrw"
+    "9H"
+    "7Fk7HFIoA8mlyA45MaZKchmnWRutTc9vqeyb2VTYPbF5fufklrkt45sKk9ltjUJje7PW3M9NQb"
+    "wj"
+    "hPhWAuIh0SMRIFL0HkpKxnrBeDnEOoMoT2TEGJlhWeRFnl1mYdvjrXJtT71S2lktVLfV8/"
+    "WdzXKT"
+    "3rE6hGRTEELiJVmrHV0dQk+"
+    "ofvHi5RKTWRVjBDK6GCTkJJTEYPHEPCzM0oszXENTbPRsm0Jng5LJ"
+    "kZMDm7289HKJdUYXPUJOiHbISUiJ9zrekKNPZw1JyAoZmQRpLxBSAtHV0fuS5SuhRMiIHoHkxR"
+    "iR"
+    "YqQYLgSEpJART8q1lAsZadeBtBfItUyS6HnJEGNecucnOoqBkpUQEki+"
+    "AzFQIOOIwUJQjJd6uRYp"
+    "9SJFjxCW8k6ZlL8kyIAvqeOzdJLTtegTo0QKhKjOtj5CpEDKBFLP4naSPgIhJQSlUK5FviQcqv"
+    "y5"
+    "FMgAh4P0E2NElxAQo4WA/PiTa/"
+    "56RJCNQoTkpUwmQdpJH9HNqnbqEBMpBYfWyfULhih+tsaisINO"
+    "fef6UCn9xUAxRKQY7WcHISBkwszHiAQRIeRapNQJcZkA0SE4VC+"
+    "bPpk65Z2CZ153yp8mReHTCngh"
+    "HSnaSfICadeBBkBIiFECyYsHJC9GR9lTyHSxsI8PjQeCPgzwR/"
+    "aQXBPdrOdPZogHZSJYBOnb0S/j"
+    "PRs69R0pbajq2dOhjaShXIvsQK7FcBlYIEYIZLY7UowTL/FdJ/"
+    "hqHWlWdJNIH5+ML+Szn6XJMJbG"
+    "AlgaDmCx4cMQyfbQnCQRJKQ/u7TJyVgy5qEQW+Ra6jrt2O3JXx+S/"
+    "wNIhw6kYycvUq4FHUJCRowI"
+    "UIsY1AkrmX0JtYSqo9tvYkGEBFIhLOeT8SUk1dcdVHt6Yupgf1JdRrki4sMikhPPxZ7QJXpFv4"
+    "zV"
+    "GVNsEMi1SKmXdkKU3dCRkv8DSAfpKJC8QGZFlIgUiDLxiISOkBGIQUlWdhP99M4QnwgsTvqxaD"
+    "iB"
+    "o44ZNE45e3nk9NccnTjt9cenzrjktO4z33be4PlvPKf33Ded3XvhG87uedPxq+"
+    "JvSETNE2iR6ApQ"
+    "+g6BEBSIXSJlIsUGISPrWaSAXZ49qSwWSGeB5AVCTAgIGRlU8rJ+JNSSbCh/"
+    "zd1P7yyMh7AyHcTq"
+    "I/v00y45Lv6a95/d/4Yzj1n82lDPsrVj3qqzHi0ee9a9M2tOuWn/"
+    "kSfeMXn8qevzR542pa5au3DV"
+    "UZe/"
+    "9vVHfer8C5b+zaIliXfqOlbRFhmrQ1BsMFgmpMQOyR9KSuwUPCtBqZAbpkjpKEpllgSiuLMR"
+    "RFkZ5+Bdpo7uUACDDLVlfAm3cmW3ftSbTki95rUnLbqwHDji9NunVh69rnHsMiw9r/+4110Sf/"
+    "Nf"
+    "XO5/38cu0z9+9Vv1D3/iCv0t732L7+TXvDESWHp+7y77VUdNeWveuPD44z9y3mXH/"
+    "d2iFcl384HW"
+    "MMnI2EJSxk/"
+    "w2keInRQQW0UKOqRECqSsDWkk9yA55khHuRaF5NHe+fwkI95Jc9F38+FTOhzQhnvC"
+    "6pKBiL7w7CPiJ/7JKYvOndFWnPSriSNXa0tOS7/1w2/Wr/vCG/"
+    "A3nzwX77viWLzu9GGcvDqFYxZF"
+    "ceqqLrz25CG899Lj8MWrXot/++K78ImPvkvvXbE2vat+1Jn9x5/"
+    "44dMuPebvUv3hS2ldDAa6iRDz"
+    "kjqGi9dk4lUWSpmA2faakzLJt9kLMYGQkyONVAg58oBJDUG/"
+    "T+uPB40F8YA+3BtVhgcS2uA5a9LH"
+    "h3sXH/OLkaWrzKWndF/7pSuUz3/mQpxy4hAM18LcVAYTEzlMTucwO1PE9GweU3N5TDA/"
+    "Mc38TJ5P"
+    "kRs4dXU/vvjnF+Ofr/kzDKw4Oz3SXHreMW864aPLz+r9sGZo/"
+    "TRGJrkDWWeS52oATWuTEdlBhySE"
+    "ocyAQDwmxOSwKnlT0/WIZmoBv6lG0hF9cLjLWNSX8vWtPXbo2Al9yep755cvfuv7X6df/"
+    "YnXYqgn"
+    "hGkaPDFVRqbQQKlQQalYQ6lUQ5mP1yrlKq8JPoMslOvIsXwuX8UBEhyfzSHNrfJz774IH/"
+    "2zN+rj"
+    "GFgSPW3F5cdcuuBPTZ/"
+    "JmYKsswhJivcEEqpCxscyISoQUgIWAR1i4jEhJ1IgBOXAqpkKokFTiwWD"
+    "Wjgd83edsmboyB314WVT2rK+"
+    "L37uMpx7yhJMTeUwMVVELl9HvthAseKTc9HoAAAQAElEQVSgSiKV"
+    "cg2VSg3yx5X1WhVVosw3oqUq25QbyBNZkpT/"
+    "3fXY3Dz2zhzA6hURfPrPXgvXXJlsJledf9xlS98e"
+    "CJpLdL/ex7CUe1+Ulgu5jhRywoPFT6VOgZA6FJ0WHlRV9fv1cMhvhpYt7x2eRv9iOz6c/"
+    "txV5yEZ"
+    "UjEymsE8Zz5fqqNIL4iHckIuV0Ypk0Vpng9GCyUSrfGNZRX1RgPVehOVegvlWh0lEs1Vy5ipZz"
+    "Be"
+    "ncaezDR8io6r33QZ/OHVsUp0xRnHXr7y7aGEudxn+AZ0Hb0k2EMDxYPiKWbbN+uO/"
+    "XLd9lg7c8iX"
+    "wrxASCt8/G4omqL1DiZ7K76+/"
+    "jG7P33lFWdCd+qYHJ9EqVBEsVBjyNVhzUwjtPNR9Nx7I3pvvB7D"
+    "N/"
+    "4IPfffDH3PFhTnMijmCu2wrDUs1JoWqpSlZg05K48s35Dm6jXk+VJnbr4Fqsc1l12KurOoy00t"
+    "OX7lnyy9MDjoX6XH/"
+    "EO6psdoo5ByKZ8JFuEPiCksFUICw9M8v2HooXgsnAqm+7rvm0kNvu7Ck6Gr"
+    "GsZmSm0PVctl1Ij0Y/dh2ff+HYM33ozu7VvRXZ/"
+    "n1OYxnNuPVTsexDGbf4vo+FbkMvMoFMsHvdaq"
+    "oWgXUbSqKJFoqWXRgw71OjgwW0Sz0cRVr1+LHYVQv//InhXp41KrzZiWhtfeOFzaKntBB8/"
+    "pMSHT"
+    "QXvXUVX4fH4t1r+wd2BXIbXw2OOP1hcPD2Jkpopc1eLs2ijx5V+dodS1fyt8IQeBPgOhQQN+"
+    "voX0"
+    "89QY6DUR7Pch5a9jaX2W3p1HuTKD+"
+    "dI8cs0sSlYdVdtFtWWj0nRRq6kolm3MlHPYMLcTZlcD5525"
+    "Sh2ZDQx2H9+"
+    "7EC5pKZD1XwcgO7lAyAkxFh1MQkRhtgO5FlK6roP3MCMST0XTarJ7YEJNJ887eRV2"
+    "Tcxjrmxhvuai0HBRaTjwinkE1AbMbgNmSoPJw5aPZ3szzXxaha9LQ6DXwEY9jWiqjv5V66AHt6"
+    "FQ"
+    "zSBbqSJfraFQb6JUaSFfymBf+"
+    "feYwH3YU96DDdPbccKSQThKb9gxkn1mJBCxHbsMQIi1KMVzFE9P"
+    "6tMv26GpscwHTQ8GAkYqlEok9hRD/ceuXq7UWy4mc1Vkay3k6g6KfGFesBQkK7PQ/"
+    "ICeMPiW0oQu"
+    "f3PfpUInDELvAsyED/"
+    "tafkT7bfgjdSQWbkf3onXwxx6BYzyCCh7go6xbsUO7EXvCG5GxMpgpzmBu"
+    "vohWzsXahUdjciTa3bumdzn9JI/qPKB9H1PwLB/1kDJpINBYZhiqGvaHfbHUgqGh/c1I/"
+    "Jhlw9g7"
+    "lUWG77AyVRuFJlDio/"
+    "+S5aG7MQ81okGPG3yBp7WhJTVoSZVQSBCYsyPINhWkhzQEfAlEIlFEkjYi"
+    "PfMwUrPwYrOwQjXYAQ+hgIlS3kCj4ED+"
+    "DHd6ooJjuxeiYiVDPWuGV8JAmDZqhCRFvp4J9ZACaSDX"
+    "KjvqqqGGtWAgWDEjvT39Q3rQ58NEroQcvVVoeMi3FOQsnW/"
+    "4LaSUIrSwASWmA4QS06DEVaiEHgcM"
+    "Yls+jmBUQTQcgGnG4TOiCPhDCAcN8JiGoF+"
+    "H31Rg6goCbgC1ggmnanID0ZDlrUTxbKzsG1DLtVBX"
+    "JBlZA7SjS6GU1JGSb0Ntf6PtUjzxUXVPN/"
+    "hfyIxEwnONYHSwtwvThTJDz0bJ9g7CVVEguuuz8OkM"
+    "87AORHQSIrjOlIQGhUQQBTRTxePzIfQtMUgmBp2kdF8Mhh6Gz/"
+    "QjEFARMFT4dRVBU4NbDfHtqAqX"
+    "tlvw0HBtTOUz6EtGUChokdTK5GraykHZAFDw1OfJfIfYU1VoNzQ81dDMZDw2z/"
+    "ep0XgU2XodDVYJ"
+    "6orGNaGhxL1okT0LxQ+YAUDl+"
+    "59mzkNr0oEnlUEFSlJBqejHeFXH0PIIFDMEzReGTikw9QBJafAb"
+    "CvwaECa5WtkA5wweydqaAsuzUGzUkI6FuYP6Q10LYr3Ak6QU5gUUT6UOMe+"
+    "pIlrPC1fhqaavN1lR"
+    "/T4zFETN8eDoHND0wTH8sCktDhoNuLjBXoEPTJ+CN+57Nd6w6yxcvOEsvOm3p+"
+    "A7PxhEaauDbXsi"
+    "cDQH/QtTNDYE1QhC1wIwVR98qgm/"
+    "qiGoe9xZPWiOhnpVg6oCKr2nkbDCvi23Ds1Q4SmGlhyOpGii"
+    "SbBV216FeQHFwSQVB3OAkBO40NlYVRUvHgu2FJ+6cWweNVZbhomKqiJHFRkSneI6u8Y+"
+    "CT8MnY6Z"
+    "lRchufZPcexlH8Ypb/"
+    "8IBl7zNvwkcjYuuvNifGXbcgwc7UMy2gtT95OMDj+9HlDpKerz04qA6iDE"
+    "kLbKfpTKFsOvhQb/a/"
+    "KdvqM24SoWNo+P0XueGokaAQA+gj1pKzPPTFLRKTtICnAkolwXrhOJ+FzV"
+    "r+yezOL3W/dh0+gs9k4XMFtqoGABbqIfpWMvRu2YVyOyeDlSqSSSsRCG+1I4+ZRX4aOf/"
+    "jTOufL9"
+    "uDO1Gg97ETy6extiNLCLm0RUcxFRDyKqAfK3wDptbBVob8NEsxxAfl7D2HgN2/"
+    "fN4qGte7FjdJK2"
+    "GrLR6DAg5NgTz/o5lJg0cPll8/VP3XKcet32LE/T4ek6itUWTwcOY9+Aq/"
+    "tYZiCc6oLC8ICuwtY0"
+    "NIgKvVBUdJRpZNluwUr2It6TRG8ghVvuKuGrv3wEv92wnaeXOW4IFezPNLBpn4d1m2LYtC6Jib"
+    "Eo"
+    "VCsE1QlDc4PMm2jWPXqxzkWlwaCnDdt1Gbl+2moQz+"
+    "TAIrBtWzzti75Aw23aFR5WGzAY4JqfBEwo"
+    "mgGPRnuqwWuutWAUDlVYHKwKjeGqouYpqLgeakSdL0w3bd+BFbFZ/PDtK3HNxcNIq1Fs2GLg1/"
+    "d4"
+    "+PVdOh54JI6pvWkMWT5c3F1jmKowOFE6o01XdTALU1FgcMJUrklDg9cqtRrQueDBQQ9CwTM+"
+    "h7J9"
+    "MhTZpqFYVqmeKRR1n26DhKDo7T/"
+    "gcpn3iFA0hqZqABzUgYcKe1fhouo4qFoOKi0HxSYwPbMPZw/k"
+    "0XR9WDEYwlcu7cKPr/DhO6918U/"
+    "nlfG9C8fwo9duxrUnPo6h3hD8PpdbvgofGeiaCk1RoXIMDYCm"
+    "awiprt0s1Gq8FNsFCvMCiqeSVMgVzRJBC9GGZTtOrT45M6f41Sq4aYD3G2oGR4YXCkCPJ9o7pS"
+    "J/"
+    "IMaNpMpFWbZdVHgSEVIlHmon58uQfzW7dhE9bVfh2XVYTgMaN4OeRBXDXXnEQzko3M6bnIgt2Q"
+    "ii"
+    "QQ/xhItw2ILftCH3SEPxoKsa+2mIm/"
+    "VGZb5W0gGVFiuEpI6UfBtS2c7wy3sCDqVLeK2J6Uk1qlWg"
+    "m0CsCwiHgHgEStAHLxCG7bAZvaNwt+"
+    "FM8HznIs98oeGgwLPk2PgIukNlrOyKwLVn4DlleHYJcEtQ"
+    "nAIUl+BPFQY+Cs0QJis6DE3jTVtHkJ4LBZoIBFowDQs8ubJOQV+"
+    "wVsxNV7I2wAT5KPJFdCSzaLMW"
+    "QnIhUiB5hV+"
+    "eWyrNOyHkPR8cL5kGwkFwFARME7WWAvkrbqducYHbNNRBzXYww5mfsyzkSSyTGcVR"
+    "qTwHaUGx50ioQBTbULwcPKsKj5PAcxn217pRqnn0kkZSGskp9JDCex3LDBtmNASDK7fHzMxNjR"
+    "XH"
+    "YHMG0Y4uD09JZg8m9aB48lsaCSmFa8fiejLt/"
+    "SPjiChc1X5AM4B6E0nNRKvY4M3UQ8ttosFfwa1i"
+    "AVa5ijJ/"
+    "Fc80LcxULJQreVw0NAu404BDYk4WnhByKfkj06s5JObBrtjYW+mGoWvwGQYMn4YovRUj"
+    "dNUFVB80LoW0r1ovT85NVvLWHJedA2olxGYBs0+"
+    "lZxKT6w4cknO9xzftQUKbAzciqGGgUILXtOFl"
+    "x+DN7QJy+"
+    "4D8ASiFCV7vhzW2C8UDUyjP8cTOM97x3VkoFts403CdDLxWES6fdzAq4ZQVOCUX5ZqJ"
+    "jXPdaLT8UDQf/"
+    "JpK7wARXwOpUAWhVJhbv4UjYnPTI9uzY5bj1gD+eDlIjMzbnmPRU0lIdK4UZg69"
+    "VtFqNd1ms4nJPfu8ZrnsuvQYj0NT4/vg1eZpBKD6A1B4SlcCUSimn160oBUmUZvdjpOSkwg1y/"
+    "Dq"
+    "VTj1Ghx60S3aJOPBqrqwiy5cPtE6UEtgT8GPcjNMxGFx69e5YRiKi2BIRTypYjg0Xw+"
+    "WxvYf2Ffe"
+    "Z1luldHepL0OIcQonk6uQ0SkQFyqsJVID40GLXIc/OY3D6LLGkODliT7oPiCUCIxKMkUT/"
+    "ApqJEu"
+    "qKEkkYYW74Ma70Y9FMOORj9+tLUXlaIHh+vHlb/"
+    "g5s9+r2QBXFtuy0PV1rCpvhhNT4fNkKs7EeRr"
+    "EVRrAXiOAo26dauCExIHJvZsnR1v1u2q4kBIUQnvL2hD7O3YDfkIGZGdik6ly2lrcoHWUCwWUO"
+    "fR"
+    "/sG7H0Pcnmo3HFxGYnGo4RhUPQCFgeOpfqhmkGVJgOTd3kUYTRyHL1tvxDv2/"
+    "Am+NXoUbs8M4OFi"
+    "Nx4o9uC3+YX41uyx+Mi+C/CjySWAasDjhDmULdtAvuhDXluGRsuHpYFSrrBvct/Y/"
+    "tq46zlCqGOz"
+    "eEvhxaHgJbhhtcWTX2K3zas6USWheRLLMA9s3LgTExsf83zVouszoQwMAXz4ojTYnNu+"
+    "wvuZoioA"
+    "NwAvEIAaS0HtHoDaswD7EkfjF8bZ+GrzQnwyfwk+m30d/qV4Bu72jsCo3g/"
+    "PH4HCSQKlp+mA7cLj"
+    "5JRaUSDbLEdn92xZ92BmRy7bnKtX3Bw3RA7Kozo4o2hzUGmjQKEUtAuZbydhLx3EzS2WVOmxOR"
+    "Ib"
+    "hezbFqP6rrseBWa2uVah6pKQnkhAcRx4EumKAiHmKdSv61x7Jo2lwV298PoWw+"
+    "0m0kPw0v1AVx9s"
+    "niGNri5oXT287oea6OFaDcNTNah9PYwvFZFKpn6Ms3HDbbdMPTo50RyvV7xCq+WUudEXaJ/"
+    "YqVOa"
+    "hEEohEqIFCuYBfUchJgoXhPZYE2R5KZRLu/BzMw2zM5O4Pv/"
+    "catn79vsZseL9jz1p2MMPwOKeEyh"
+    "Tl2FYmqEDtXP8AoG4UWTsLv74fQMw+5fAndwMZzexUB3H3zpJBBNsX0YaiQI9ERg81l/"
+    "sjhZWut7"
+    "aMMdt+"
+    "xfNz7WOJDNWGPlemuSQ5Rpl9hWoZTdUaXskJO84ElirGuT68iO5yQkC1xvc6hWx5DP78PI"
+    "yGO49tp/dcbuv8e1Z6ebe/"
+    "d5tlvnzIegGRrAkRWVunXCUOCSpEuCrt8POxyFF4vBjZFoJAnHH4cv"
+    "YNBTJtR0EI5Xh83b5nL7QOaoyt0PXf+TbXeMHqiMVoqtuWq1NWs3IH/"
+    "wPA+gSsjki9fERrGXg8Ng"
+    "OQeGqjJzaBJvCSQspaOEpEA6N+i9OT7R3MXQfBj//M9fs+/48Y1KJL/"
+    "NnZys1DdvgtUqQEmY0KIG"
+    "VEOFoqlwVQ02Q9MiHK4/h9JjuawlKxDkWmQ7K4/"
+    "6lm0ITU3WXpvYtTu4+64HbvjlyL0zM42JQqE1"
+    "Vau2Zhh+WRoq3io+"
+    "IVuUYqeQEoKyqYjtQvBpHmO7dpJKyYgUcgJRILMkygVzcnl2lwAAA4VJREFU"
+    "JLnbvf32f2n93V9/"
+    "Vdl9y62BUGGvM7q3Un34fq+6ZxufBU7CaRTg2RWGaQuOT4On2LyusryEZm4O"
+    "lb37UH9sqxee2F87JTS5f03mt7+/7b/"
+    "uufGmm0bvzmSa46VS60Cj0RrncubRBQUc9JSQEMhkCymx"
+    "TSDEOtfPSoz922EpjQVyLeSEWIkXDUIUV2BZE8hk7mn+54++"
+    "Wv7S1V83tv76ph5t5PFkbmTCv3tz"
+    "ydv0eMtd95Dt3nu3i5tvcd37H3LddRttZdP2VmjX7tLCwtj0Scre7Uumfnffxl/eesv//"
+    "Gz37bt3"
+    "F7Zn862xYrExUq3aE9yyeBZDnmNWCBlXjBd7BOI1kQKxVaTAVdn4uZJ4TOqkoSjsKJGZEcgANT"
+    "Yo"
+    "kuCYOz51T/GnN3w/+3/+6fvNH3/n+sBdP/jVwKM//"
+    "e3ybb++6+jJOx842dq88cjpBx5ZufvWexds"
+    "/PXtkXU33Dr961/"
+    "ddMt3777xdzfteXD7xszGTKYxWi7b+5vN1n6GXudvG2UyZVLFBhlXCIhtHSn2"
+    "dfKd8sMS4xZHswHpKAqFiHQUdMqkXDwoA8+j2dznZHLbavvH9pR3jOzLrtuyY+aexzfvv/"
+    "mh9Vt+"
+    "cucDO25e//j22zY+vu3urRt2PTS6Zd/"
+    "W2R1TE+XRqYnKnmKxNVJutkYaDXus1cIMR5a1JF6SkJNJ"
+    "lfEPJcAmT0ti15P1z+"
+    "cxaSgkRHY6PjMv5GRg8V7BbjQmvWxpV3N6brQxX5pvFssFylx1tpCpzpVy"
+    "lXyVqM1nZ0qj8zPVPYVMY2u90trTaNjTaEHCTtbwoYREv9gg4wuTjpT8s0HqvcMRk07tRpJ5Bq"
+    "Rc"
+    "ioSkQGZTyMns5oWcla/steayI/W5/"
+    "Hg9V55rFCrZaraSqcwWD5Qyld31UmtPs9Yc4SlC1pFsDrLj"
+    "ieclAkTXsxHqjCtjHxbPR+"
+    "xwnTuDiBRyMqtijBhW5K453WrU9jdylZFWvjJCUvvL86W9zXJzf7Pa"
+    "HLMsS8iId2QNCSnxuOiQSRIpeg/"
+    "F4Wz5g7qXQ0yUHTqwGCOQRS4zn+cvpjkSnKAHx5wa11+tOUYP"
+    "CaEcOwshaSdelsmQfp113dHLZi8tvVxinVHFEMl3PCehJAaL8XL/"
+    "Ec8IGZFyLR6SeiEjXhYvCURP"
+    "h5zoe8l4pYgdaoAYJ54TQ4WgeENIiHck3CQv5VIvEyHtBdJH8IoQ+38AAAD//"
+    "wSSSzQAAAAGSURB"
+    "VAMAUojVTLtl2p4AAAAASUVORK5CYII=";
 static const char kWin7StartPngBase64[] =
     "iVBORw0KGgoAAAANSUhEUgAAADYAAACiCAYAAAAKsj6IAAAACXBIWXMAAAsTAAALEwEAmpwYAA"
     "AgAElEQVR42uy9aZBlx5Xf9zuZee99a+1V3V29N4BGg0AD"
@@ -6926,98 +7240,191 @@ static const char kTaskStateSprite[] =
 // 3b4d5f408288364e14b01c78287d9c4d08a43fbb; GPL-3.0-or-later.
 // Win7Taskbar contributors; based on RetroBar by dremin (Apache-2.0).
 static const char kWin7BasicTexture[] =
-    "iVBORw0KGgoAAAANSUhEUgAAAIAAAAAoCAIAAAC5E2UfAAABO0lEQVR42u3WW1rCMBiE4X//O5KDNFUEbEuTqkCbpAU56DKcXcyF"
-    "c/de53smiT01x1l1mtcHgQLb9Lft8b47XQUKrM4/Tfzdp4dAge3i/b1/VMNNoMDWp++3w3VzvAgU2Mvh/Pp5WX9NAgVWQh/QKFBg"
-    "DuqgLFBgBRSgJFBgRZecz2WIAgW2glpoEChAgFS02fkoUGArXEYel1EUKECAXPjRhSRQgEd4dH4qQxYowDcUNaYSNQQGEGBy4Vx2"
-    "o0CBAiiAAugsuAHOLlzKbhIoUAAFUACdhQL84wAryEOjQIEC0AOEsWgn57NAgT0jRYsUWaBAAegBsIU9tpAECmyJFHukSAIFtkSK"
-    "BimiQIECsAMssIUGW4gCBbZAihopBoECmyNFjRSDQIEC0ANgCxW20AsU2AwpKqToBQr+AOP9vlFzaodaAAAAAElFTkSuQmCC"
-;
+    "iVBORw0KGgoAAAANSUhEUgAAAIAAAAAoCAIAAAC5E2UfAAABO0lEQVR42u3WW1rCMBiE4X//"
+    "O5KDNFUEbEuTqkCbpAU56DKcXcyF"
+    "c/de53smiT01x1l1mtcHgQLb9Lft8b47XQUKrM4/Tfzdp4dAge3i/b1/"
+    "VMNNoMDWp++3w3VzvAgU2Mvh/Pp5WX9NAgVWQh/QKFBg"
+    "DuqgLFBgBRSgJFBgRZecz2WIAgW2glpoEChAgFS02fkoUGArXEYel1EUKECAXPjRhSRQgEd4dH"
+    "4qQxYowDcUNaYSNQQGEGBy4Vx2"
+    "o0CBAiiAAugsuAHOLlzKbhIoUAAFUACdhQL84wAryEOjQIEC0AOEsWgn57NAgT0jRYsUWaBAAe"
+    "gBsIU9tpAECmyJFHukSAIFtkSK"
+    "BimiQIECsAMssIUGW4gCBbZAihopBoECmyNFjRSDQIEC0ANgCxW20AsU2AwpKqToBQr+"
+    "AOP9vlFzaodaAAAAAElFTkSuQmCC";
 static const char kServerClassicStartLarge[] =
-    "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"
-;
+    "iVBORw0KGgoAAAANSUhEUgAAAEcAAAByCAYAAAABB8wBAAAKpUlEQVR4nO2cy29cVx3HP+ec+"
+    "5wZj8dxUrtpk75bExDqCxoq"
+    "pFYKLHgJS6iIHVMhgVoJCXZG4g+wEGLBolu8Y1MJb5BAIlDUAqaPqE1DmSSNRJs0jt3EnvE87+"
+    "Ocw2LsNInH1+7T0/p+pFHs"
+    "+M7V73zvOb9zr/"
+    "2xhbXWkrOJp59+GgfgwoULu13LUHH8+HGAfjgAIyMju1bMsCJ3u4BhJg8nA2f7Q/qYdxdp/"
+    "fs4ayf+wsrL"
+    "rxAlBiQIKSncex/lrxxj39e+jz9SQSn1cdb8ibGjcOKT/+L0z56m24lQysEJJaGvkK5AOAJx/"
+    "hztxbPEz/2e8R/9kuDIY3ie"
+    "hxDi467/"
+    "Y2VH4Vx5+"
+    "XmirsEruDgFiVsQqFAifYF0QMj1EExE99RrrBw4xMT4LYTByKc6oB2F0zp5ArcIblnijSjcokA"
+    "VJCoQ"
+    "SJernctRIyyN30btrWdJF1d54OATHN7/"
+    "IK7rIuXm9nb6rVdZiS7y8B1fRyk18JjdZNtw4gtn0csX8UYVXkXilSVuWaIKIAMQ"
+    "ruiHY8GJR+iNT9LqHadrlvhT7TeU5CEmy5+nHOxDa003Snhz6X+8cGaBK3HEQ/"
+    "fczT37vkypVCIIgk9gyDtn23B6Z09idYQ3"
+    "KvErCrciUCOgimI9HBDr4bS6d7BqlgkLLooReqpDMz7DhUunWW0ZGh3LWs/"
+    "QiqFjLEHJZ8KdpNFoEIbhJzDc98e24XRe/QeO"
+    "m+"
+    "KWFe6owBkFVRbXzBwQCoT2aap7aURvM7avQisCJR2kaIHtYhFYCUZKtLCkFg6MFjigDgEMZW/"
+    "KDMd0msRnTuAUJW5J9mfM"
+    "iMApgSz2w5EuoASsBHTHDmHdf+"
+    "FIh4JbQq43I2MNqekRa4hTiFJLlMCo63PL2GHCMMRxdnxX8YmRWVFy7jV0muAU+zNFhesz"
+    "pkD/31BcXVbtdyZp3+QRKAjcIlKsB4NBm5REp/SSlG5s8R1B6Etu8ibYVxrH9/"
+    "2hvDfKDKd78h9Ym+CGiiB0cX0fiUC0UyQJ"
+    "oqQRAQgkjeROVrpvcfD2mxFSA/0Zo01K6kTETo/"
+    "ATfEdgedYxoIi+5jE8zw8zxu6nQq2eXyQSycZv20Mc8v9LB74DufGn+TN"
+    "wpO8Gf6Yt+vfpfH3g5hTINZ81kp3EYslCkEBV/m4ysNVPo7ycNY/"
+    "9xyJ54CrBIF0OTRyF2EY4rru5p4zX6VSqVz3OjpbA+ap"
+    "VipUKlXmP/"
+    "Cwd3aOzJmjvvFTTrRKnGq6NGVAGIaMln2Kgcdhp0eSPMHqG88zfuJ5kocP43EaR7pYa1DSRUkH"
+    "Rzo4wln/WOJI"
+    "gyMtgSpz+4E7CIJgc7+Zr1KpzsP0HPW56Ruqqn2AMD4YW86chf/"
+    "Vqb5Y4uenFL9bdvhbx+GNSLDYhTgRrDkVWvvvRn31e6x+"
+    "4xcUDoSs9npIIa97CaEQQiKERAqBlOD5HhPqIJ7nEQTBpn5Tq/"
+    "UDmJqa2lTXfHXjal9z9WuzHB04y4CNrx2dpTZfpVKpUh1w"
+    "jvcVzrOvL3O8rTmHoKkkCBCiv+UqAcpobBwTOSVWVJlK4TBx7wv86g9/5j/"
+    "n38FyzTcYBQgExrg0mg6LF11uL9yN7/sDn8E2"
+    "QqnNHt002Om5Oab7HzFXr1OvzzE9NcNCvU69XqdeX2BmCmqzVWavm2TzVKvzW55jEFsuq+"
+    "fONzFGgQVtLNpYUgOpsSTGkq7/"
+    "3/nVLt7lS0wWf88PH/wBj972AC+ceYkT/"
+    "z0HTkRY6LF4ZY2SHEeawxwqTTD9xfsYGz9IuVwevIVPz1Gvz1O9pifUZo9Sqc2x"
+    "xTiozR59b7YMPGCKmfrCeijzO+"
+    "pXA8N59XydhhFgLRhDbCyRtvS0oZMa2omhl1o8ZbncaPF5fZ5CWeD757l/vMWdD0xSj46Q"
+    "JJYkjjCHUvx4mSA+y0jzj6w2/"
+    "om981eUSqWM+5v+VV0fOUePzlKr1aixealtBDM1s8DCzBTz1QrVG0c/NTXgnR8gnBffrtOK"
+    "UnAUGEM3NbRTQzMxrCWa1TgldARSQLp2mZvCF9HBEbQVWCdgJFhmVL2GjZqgViB9FxUsYzqaNI"
+    "64EDyGrzVCiJ3dGddq/Ta8"
+    "xQA3etT6Z9Q+"
+    "op49sOe8dKFJN4pBG0g1capZSzSNRLMSaS5HmqVuymIrJkjbjHorpATYtAXpKpgOCIN0Ixy/"
+    "hxtECAQ2sXQi"
+    "QRxMobXesqj56vXNtVKdZ2pmYX3nmmZmZorrmul6D+n3qJ1s8QPOMYBNM+dKK+"
+    "LUcqcfjNaQamyiacSa0EnxZL8hG2tpr/U4"
+    "Ehoq3iVM+"
+    "i6QIkwPYVsIvYYwDYRZg7SD6RlMZGjbIj15K2MZd8XTc3XqGUObmlmgPnPDezaW4CZmWLjx4C3"
+    "OcSObwjl1scGV"
+    "dnJ11qA0JCmRklyWAkk/"
+    "mMhY9uk1Joovo8IJ0EtgU4SNwXQQpokwDdBNTC9B9zQ21qw4X7i6hQ/"
+    "j89S1bKru5MUmK61ef99O"
+    "JfgGdAoxtIElC4mxxMbyLa/JuHsWKwUyXQI02BhhugjbhrSF6UXotsZ0NVEvpVW8l+IWW/"
+    "iwsSmcF99ZY3xiBGzKwaLgSDFF"
+    "YliOEl6rd7nUDYlLAWOkTIxaRtVbyIR+"
+    "mFaDTcD2IIkxvRTd0VdfrVjAzQ8QhuFQPmjeyKZwHr5jjMcnVnlov4/runied/XZ"
+    "J01TFs43+"
+    "e2pVW5VLjcX6pS9y5gYEIC1WG2wicVEBhNpdNdguhoTaVruQYRXwff9oV9SMCCcnzw4SaMRYq0"
+    "lCAJc1716lY0x"
+    "fHv/fo5NdaldXGVSnSJqK4Tu9t9sLVZbTGqxscHE/"
+    "SZsegZrUlZL9+N5Hr7vD+VT+I1sCsd1XcbGxhBC4DjOpr5graVQKPBw"
+    "qUTa/ib/"
+    "Wagxal7nQMWgNFjdD8gmBpNYTGroGkVUniIN76W0Hviw9xsYEI5SKrMfCCFwXRfHcdDBPYjHf8"
+    "3SmedZfPuvjJlX"
+    "KAVtTCywKLo9SdO7m65/"
+    "D2Lfo4RjhygWi5+"
+    "KfgPv4yeeNyKEQClFsVjk4Ocep334S3Q6HS71emit2TBbpJSMuC5hGFIsFikU"
+    "Cp+KfgMfIhzg6tIrFov4vk+5XCZNU4wx1x2zMRs3fn71aVhS8CHD2WBjqbmu+1GcbmgY/"
+    "i1jF8nDycCB9zSvnOsRTz31VC5M"
+    "boHIbdLB5DbpFuQ26Q7Id6sM8nAyyG3SDHKbNIPcJs0gt0kzyG3SDHKbNIPcJs0gt0kzyG3SDH"
+    "KbNIPcJs04KrdJM8ht0twm"
+    "XQ8it0m3ILdJc5t0wJdzmzS3SSG3SXObNLdJc5s0t0mB3Ca9ltwmzSC3STPIbdIMcps0g9wmzW"
+    "D4t4xdJA8ng9wmzSC3STPI"
+    "l9UWPPPMM/1l9cgjj+x2LUPFsWPHgGu28unp6d2qZehoNptAvqwyycPJIA8ng/"
+    "f1+LDXdNsdh7MXddsdh7MXddsdh7MXddud"
+    "Gex7VLfdUTh7VbfdUTh7VbfdNpy9rNtuW81e1m23DWcv67bbVrOXddttZ85e1m0zZ85e120zw9"
+    "nrum3mstrruu2W4eS6bUY4"
+    "uW6b0XNy3XaLmZPrtn0GhpPrtn0GVpbrtn0G/"
+    "+5DrtsCW4ST67Z9BlaX67Z9BoaT67Z9BoaT67Z9PrRN+lnWbT90hZ9l3fYj"
+    "u3yfRd12uLeLXcaBvua1YTPlvEf+5zcz+D+9pNzdiwIZYwAAAABJRU5ErkJggg==";
 static const char kServerClassicStartSmall[] =
-    "iVBORw0KGgoAAAANSUhEUgAAADcAAABFCAYAAADuMX6MAAAFO0lEQVR4nO2aXWxTZRzGf6cfW7v1dGdjHTAG48MtnQmgXtgG"
-    "gUjgCqNp4gVXJo1eDY1XJvbSG00TbwmJ0ZgmxsTLc0GixBCBgJQoSCCao24Mtg7G2MZpu/XrtD1edIMdeooD98GO50ma9OP0"
-    "f57nfd//OX1/KVhYgq7r+lqbWAkdP34cF0AqlVprL8uqM2fOANTCAYiiuGZmVkquRh9MXf+V+6e+ozDyJ5WShmtbL4E3jtEd"
-    "OoQgCKvp8ZllGk7XdUY/ep/q3BxiVxNNkgPh7iTuL64wGvgGKbCZNr9k+E6hUMDj8ayG5yXLNNwD5RrupjLidg8tnQKt7gKC"
-    "oMGWA9xWR/n+/qe0C310e19C0Fq5MnyF1OwQn7/75Wr7f6JMw2V+OUdLl4Bvk4C/OY3XP0dVa+belleYqAwjNmlMZC9xdfwi"
-    "Y1NwK11mb1f/anv/VznM3tRuXKS1S8DXmkb05/A1F3Fu28rMhiDDjms0+Qp0tbvp7nDS2eZgY5uLQzsOGovIUSRJMjzCcQWQ"
-    "iUoSkhRFfmbbS6tRN3PFyXF60jeYfu0tnC23yLrcaJmbqB1hCnoJ76afuaflaRM68Hs34/cWkIrN7Bs4YAwWlSGSQE1EHjuD"
-    "8syRnlZ14VTdjfLO16SdfnSniOQT2a7dxleYQqmepR0/uWozpWqRFrcbf2uBuYKfnsDWR/aVWoBgMFh3Qjm6MNq10YcIiWSQ"
-    "eDhuiB2MJUnGgqDECYfjKMEYyZhCOAqRiFxXQ1UTdeeqW5afJWeIDPfy8Z3NnJjdww+5HZze+TrZTX3s6TjG72M7uVvOc2fK"
-    "x3jGxfSDLt7sf89QYyGUEg8/tiQhkkgQqT0joaqoaoJIMEZSVVFVFVVNUssUJW6YZJloVG5Yw0yGmdN1nR9TGXBVyLT3MZeH"
-    "XDOkfoNp8Tqv9pbxuGJkcjk8/iz5shenqLNr14CxaiSBqspEF/WEEg8jKQka+ECJhx8OgPkBQWJqcj6UvKR+NYT7Y2ySqbwO"
-    "vio5LY/qgfESdJRVJG8O38y3vFzRwN2E7gChmkJTBWY950xK10Z13nltaSkKCvVLdSHYwlKUoxLRx90HgybffLIMy/LC0CSl"
-    "2SJ6oQTZCSbzU4xkoa/lKt2Vv6GizR+pIeTGKN8vMKrvxeH2PfksilLrpwYGF3p0/hXKMl1zDOFODc1BpYJDK0ImS2V6mJH8"
-    "DANiiYB0CRCgUoLcXUjPkk9XcHQfrSsqR423ACkqE4wl56+cEWKxIIsv58z3UK1Hl3KLMKlhIkHXdT2VSiGKIifOD7F/V4CB"
-    "jT50XeDCyAxfXc3wyYsjhJo/hLQTSnnKs1AseCnmS2hHT+Np632qEV1pybLM5cuXjT33wcEXDAcd6e/kSH8ns7cnGD1boSPg"
-    "wKV7KZcEirkKD1r3EnjOgi1Ww13BYvl691F6+zyTIz9RTf+F4GrFuWE3Hdv3r7S//6QlhQNo8nWxYfexlfSy7DL9bWkVueDR"
-    "ttxqEgYHBy0JiCwvG+2tN9loz0Z787LR3irLRns22rPRno32bLQnNz7SPJyN9gAb7dlob2Vko70F2WjvOZSN9tarbLS3XmXZ"
-    "mTt58mSt50Kh0Fp7WVYdPnwYWHQriEQia+Vl2ZXNZoH/w62gkdY7u2wYzgrssmE4K7DLhuGswC4bXlCswC5NZ84q7NI0nFXY"
-    "pemytAq7rJs5K7HLunBWYpd1y9JK7LIunJXYpTA4OKiHQqGHuwIrsMtsNktPT099z1mJXS4Z7a1HdrnkcLD+2KULatvyhd2r"
-    "lWTZ/34B/AN+M1Ka58y2vwAAAABJRU5ErkJggg=="
-;
+    "iVBORw0KGgoAAAANSUhEUgAAADcAAABFCAYAAADuMX6MAAAFO0lEQVR4nO2aXWxTZRzGf6cfW7"
+    "v1dGdjHTAG48MtnQmgXtgG"
+    "gUjgCqNp4gVXJo1eDY1XJvbSG00TbwmJ0ZgmxsTLc0GixBCBgJQoSCCao24Mtg7G2MZpu/"
+    "XrtD1edIMdeooD98GO50ma9OP0"
+    "f57nfd//OX1/"
+    "KVhYgq7r+lqbWAkdP34cF0AqlVprL8uqM2fOANTCAYiiuGZmVkquRh9MXf+V+6e+"
+    "ozDyJ5WShmtbL4E3jtEd"
+    "OoQgCKvp8ZllGk7XdUY/ep/"
+    "q3BxiVxNNkgPh7iTuL64wGvgGKbCZNr9k+E6hUMDj8ayG5yXLNNwD5RrupjLidg8tnQKt7gKC"
+    "oMGWA9xWR/n+/qe0C310e19C0Fq5MnyF1OwQn7/75Wr7f6JMw2V+OUdLl4Bvk4C/"
+    "OY3XP0dVa+belleYqAwjNmlMZC9xdfwi"
+    "Y1NwK11mb1f/anv/VznM3tRuXKS1S8DXmkb05/"
+    "A1F3Fu28rMhiDDjms0+Qp0tbvp7nDS2eZgY5uLQzsOGovIUSRJMjzCcQWQ"
+    "iUoSkhRFfmbbS6tRN3PFyXF60jeYfu0tnC23yLrcaJmbqB1hCnoJ76afuaflaRM68Hs34/"
+    "cWkIrN7Bs4YAwWlSGSQE1EHjuD"
+    "8syRnlZ14VTdjfLO16SdfnSniOQT2a7dxleYQqmepR0/uWozpWqRFrcbf2uBuYKfnsDWR/"
+    "aVWoBgMFh3Qjm6MNq10YcIiWSQ"
+    "eDhuiB2MJUnGgqDECYfjKMEYyZhCOAqRiFxXQ1UTdeeqW5afJWeIDPfy8Z3NnJjdww+5HZze+"
+    "TrZTX3s6TjG72M7uVvOc2fK"
+    "x3jGxfSDLt7sf89QYyGUEg8/"
+    "tiQhkkgQqT0joaqoaoJIMEZSVVFVFVVNUssUJW6YZJloVG5Yw0yGmdN1nR9TGXBVyLT3MZeH"
+    "XDOkfoNp8Tqv9pbxuGJkcjk8/iz5shenqLNr14CxaiSBqspEF/"
+    "WEEg8jKQka+ECJhx8OgPkBQWJqcj6UvKR+NYT7Y2ySqbwO"
+    "vio5LY/"
+    "qgfESdJRVJG8O38y3vFzRwN2E7gChmkJTBWY950xK10Z13nltaSkKCvVLdSHYwlKUoxLRx90Hg"
+    "ybffLIMy/LC0CSl"
+    "2SJ6oQTZCSbzU4xkoa/lKt2Vv6GizR+pIeTGKN8vMKrvxeH2PfksilLrpwYGF3p0/"
+    "hXKMl1zDOFODc1BpYJDK0ImS2V6mJH8"
+    "DANiiYB0CRCgUoLcXUjPkk9XcHQfrSsqR423ACkqE4wl56+"
+    "cEWKxIIsv58z3UK1Hl3KLMKlhIkHXdT2VSiGKIifOD7F/V4CB"
+    "jT50XeDCyAxfXc3wyYsjhJo/"
+    "hLQTSnnKs1AseCnmS2hHT+Np632qEV1pybLM5cuXjT33wcEXDAcd6e/kSH8ns7cnGD1boSPg"
+    "wKV7KZcEirkKD1r3EnjOgi1Ww13BYvl691F6+zyTIz9RTf+F4GrFuWE3Hdv3r7S//"
+    "6QlhQNo8nWxYfexlfSy7DL9bWkVueDR"
+    "ttxqEgYHBy0JiCwvG+"
+    "2tN9loz0Z787LR3irLRns22rPRno32bLQnNz7SPJyN9gAb7dlob2Vko70F2WjvOZSN9tarbLS3"
+    "XmXZ"
+    "mTt58mSt50Kh0Fp7WVYdPnwYWHQriEQia+Vl2ZXNZoH/"
+    "w62gkdY7u2wYzgrssmE4K7DLhuGswC4bXlCswC5NZ84q7NI0nFXY"
+    "pemytAq7rJs5K7HLunBWYpd1y9JK7LIunJXYpTA4OKiHQqGHuwIrsMtsNktPT099z1mJXS4Z7a"
+    "1HdrnkcLD+2KULatvyhd2r"
+    "lWTZ/34B/AN+M1Ka58y2vwAAAABJRU5ErkJggg==";
 static const char kServerClassicDesktopReference[] =
-    "iVBORw0KGgoAAAANSUhEUgAAABYAAAATCAYAAACUef2IAAACJ0lEQVR4nLWUvWsUYRCHn3fmnd29O44EScQTtDCClQixtAhJ"
-    "oY0WYmlnYWvhP6Ag2ugfIdpY+tGqcEnwAwRBsRT8QBELL3omuezuuxa7d/F0C1Fvql2Y95nf/GYYd+PuSkFNiAgArcRotxKm"
-    "WjHtZgxAEhvihEEaAPi2kdHrD1hbTwHYP/UVqYP+j/AAZy8uo76soeJIGob5MsHMYyZ47zArc5oNj6rgqzfmHbPTEScXDo6D"
-    "AY4uzJdgVcQLeSgdynJIC8hCIK9M8+ZwIpi5qrgShU9kefgV7HC4EagohLxyKQ2ODAhAURln3mORjDowE3yaEML2uCbrMc6x"
-    "lbuRQtSTowDkzhOcEoTRHKwZYSZE0VCxYpu9GjCwuZUDsBUETMjFAAgS40QRFXxcFvNxhEWKr6zwkaB5XA9eHwzBHlc4iuFa"
-    "FB71hveK+BKsFqGm6BBsilo0Bp6wx8CXz+8BSIuIxuwBqLZEIsWLx4nipFTsqn/RUpeo4pzUg5eO7QUg7izSfWXM71wB4OmL"
-    "xm9qam9AJWQMfPXMNK87iwBcujbLhStzPOg+A+DUzOXt7GzYXn377Dk++pysx2/evqO7Vq7XvvM9PsycZu7jMgB3Ht3+Y9i5"
-    "w9uKPcBq9yHJ0i0AGvd3s+P6CTpHquE9+bum3M17q0UjNtqtcsGnWgntZkwzKTtQVdKsoL+Z0uuX93bt+4D+RjZ2G36OQ7s2"
-    "Juexe/n8cX3Zf4wfeWqQUrbxKRUAAAAASUVORK5CYII="
-;
+    "iVBORw0KGgoAAAANSUhEUgAAABYAAAATCAYAAACUef2IAAACJ0lEQVR4nLWUvWsUYRCHn3fmnd"
+    "29O44EScQTtDCClQixtAhJ"
+    "oY0WYmlnYWvhP6Ag2ugfIdpY+tGqcEnwAwRBsRT8QBELL3omuezuuxa7d/F0C1Fvql2Y95nf/"
+    "GYYd+PuSkFNiAgArcRotxKm"
+    "WjHtZgxAEhvihEEaAPi2kdHrD1hbTwHYP/UVqYP+j/"
+    "AAZy8uo76soeJIGob5MsHMYyZ47zArc5oNj6rgqzfmHbPTEScXDo6D"
+    "AY4uzJdgVcQLeSgdynJIC8hCIK9M8+"
+    "ZwIpi5qrgShU9kefgV7HC4EagohLxyKQ2ODAhAURln3mORjDowE3yaEML2uCbrMc6x"
+    "lbuRQtSTowDkzhOcEoTRHKwZYSZE0VCxYpu9GjCwuZUDsBUETMjFAAgS40QRFXxcFvNxhEWKr6"
+    "zwkaB5XA9eHwzBHlc4iuFa"
+    "FB71hveK+BKsFqGm6BBsilo0Bp6wx8CXz+8BSIuIxuwBqLZEIsWLx4nipFTsqn/"
+    "RUpeo4pzUg5eO7QUg7izSfWXM71wB4OmL"
+    "xm9qam9AJWQMfPXMNK87iwBcujbLhStzPOg+A+DUzOXt7GzYXn377Dk++pysx2/"
+    "evqO7Vq7XvvM9PsycZu7jMgB3Ht3+Y9i5"
+    "w9uKPcBq9yHJ0i0AGvd3s+P6CTpHquE9+bum3M17q0UjNtqtcsGnWgntZkwzKTtQVdKsoL+"
+    "Z0uuX93bt+4D+RjZ2G36OQ7s2"
+    "Juexe/n8cX3Zf4wfeWqQUrbxKRUAAAAASUVORK5CYII=";
 static const char kServerClassicStart[] =
-    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACc0lEQVR4nKXTS2sTbRjG8f/zzDMznSZpmqRJNZ6I0oNWRRERD7hU"
-    "6Adw48ql4Ndw5dfwA/i+qxdeEEURT+C5qLW2HkIbYzJt0szxmRkXBSNd6MJ7eXNfv9V1i9fPH2b8xci/CQOo7Qvz0T2Cu//hL76H"
-    "LMU6cpj8xXmi2VN/BoTXp3PjOobepFBVWEWJ+nKXtZsf2bxWoFSrMyLHf95nWboNWHyD4wQUdlhYewyMisQZ0bwfPcez9dvE0Quq"
-    "2VmIi7S7G7xuvt0GLDwlVzMYmTEw9kvkhABhY4wcpVZ7Qk8bLHf+pbmm+dyUxHHuFyDR2AsPyNVijFqCnMgQDYEfHsdUNcoVhTnY"
-    "TZKmRHGbgZ8Rd8aGgOy5LE/up3/wEk59H6WCzWT3DkaxjhrXjDvjZDrFs3rkR9cZK2rM3r4hsOSZ3GpcRpQaHKhMMlsvYhvnsaIO"
-    "Hf9/cnmJZUosS6EskEoyXT06BP55p3mla8ykEpHEkGjcQpVdtJnmGP2+ZuCtoN2dFN1DnIwdjhw7swUEUcpys0eiTAa+xYYX8r0f"
-    "ULIkY2aLcmkF33OoGxY+Csf4xGqawy4Wt4Cv3YBv33xUWeD2Q1ZdDyEVU84m9tgSUdRG0aJqf8AUHyDY4Gl0lQNCbAELnwOCQGIF"
-    "KV03JJEmnjaZn+ji5O5DGCKSdUS0im77JK1R0sLMsImd76tcaDSZ2lsmN5pnaX2Dr70KdvgOK3mMDhSEAakboloeK/1pJub2DoEr"
-    "83PA3M9KnAbCMML74hIOXGyZgZdBP4FBykt/Fr3WIp/PIX73zlmW0fy0SLT2GDFoEqR5fKdBfeoElXIZpRQ/AEu6CprzaVCMAAAA"
-    "AElFTkSuQmCC"
-;
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACc0lEQVR4nKXTS2sTbRjG8f/"
+    "zzDMznSZpmqRJNZ6I0oNWRRERD7hU"
+    "6Adw48ql4Ndw5dfwA/"
+    "i+qxdeEEURT+C5qLW2HkIbYzJt0szxmRkXBSNd6MJ7eXNfv9V1i9fPH2b8xci/"
+    "CQOo7Qvz0T2Cu//hL76H"
+    "LMU6cpj8xXmi2VN/"
+    "BoTXp3PjOobepFBVWEWJ+"
+    "nKXtZsf2bxWoFSrMyLHf95nWboNWHyD4wQUdlhYewyMisQZ0bwfPcez9dvE0Quq"
+    "2VmIi7S7G7xuvt0GLDwlVzMYmTEw9kvkhABhY4wcpVZ7Qk8bLHf+pbmm+"
+    "dyUxHHuFyDR2AsPyNVijFqCnMgQDYEfHsdUNcoVhTnY"
+    "TZKmRHGbgZ8Rd8aGgOy5LE/up3/"
+    "wEk59H6WCzWT3DkaxjhrXjDvjZDrFs3rkR9cZK2rM3r4hsOSZ3GpcRpQaHKhMMlsvYhvnsaIO"
+    "Hf9/"
+    "cnmJZUosS6EskEoyXT06BP55p3mla8ykEpHEkGjcQpVdtJnmGP2+"
+    "ZuCtoN2dFN1DnIwdjhw7swUEUcpys0eiTAa+xYYX8r0f"
+    "ULIkY2aLcmkF33OoGxY+"
+    "Csf4xGqawy4Wt4Cv3YBv33xUWeD2Q1ZdDyEVU84m9tgSUdRG0aJqf8AUHyDY4Gl0lQNCbAELnw"
+    "OCQGIF"
+    "KV03JJEmnjaZn+"
+    "ji5O5DGCKSdUS0im77JK1R0sLMsImd76tcaDSZ2lsmN5pnaX2Dr70KdvgOK3mMDhSEAakboloe"
+    "K/1pJub2DoEr"
+    "83PA3M9KnAbCMML74hIOXGyZgZdBP4FBykt/Fr3WIp/"
+    "PIX73zlmW0fy0SLT2GDFoEqR5fKdBfeoElXIZpRQ/AEu6CprzaVCMAAAA"
+    "AElFTkSuQmCC";
 static void DestroyStartImage(State& state) {
     delete state.serverSpriteLarge;
     state.serverSpriteLarge = nullptr;
@@ -7034,11 +7441,15 @@ static void DestroyStartImage(State& state) {
     if (state.serverDesktopReferenceStream)
         state.serverDesktopReferenceStream->Release();
     state.serverDesktopReferenceStream = nullptr;
-    delete state.serverClassicStart; state.serverClassicStart=nullptr;
-    if (state.serverClassicStartStream) state.serverClassicStartStream->Release();
-    state.serverClassicStartStream=nullptr;
-    delete state.win7BasicTexture; state.win7BasicTexture = nullptr;
-    if (state.win7BasicTextureStream) state.win7BasicTextureStream->Release();
+    delete state.serverClassicStart;
+    state.serverClassicStart = nullptr;
+    if (state.serverClassicStartStream)
+        state.serverClassicStartStream->Release();
+    state.serverClassicStartStream = nullptr;
+    delete state.win7BasicTexture;
+    state.win7BasicTexture = nullptr;
+    if (state.win7BasicTextureStream)
+        state.win7BasicTextureStream->Release();
     state.win7BasicTextureStream = nullptr;
     for (int i = 0; i < 3; ++i) {
         delete state.peekStylerImages[i];
@@ -7123,10 +7534,12 @@ static bool LoadWin7Beta7000StartImage(State& state) {
     const auto bytes = DecodeBase64(kWin7Beta7000StartPngBase64);
     if (bytes.empty() || bytes.size() > 0xFFFFFFFFu)
         return false;
-    state.win7Beta7000StartStream = SHCreateMemStream(bytes.data(), (UINT)bytes.size());
+    state.win7Beta7000StartStream =
+        SHCreateMemStream(bytes.data(), (UINT)bytes.size());
     if (!state.win7Beta7000StartStream)
         return false;
-    state.win7Beta7000StartImage = Image::FromStream(state.win7Beta7000StartStream, FALSE);
+    state.win7Beta7000StartImage =
+        Image::FromStream(state.win7Beta7000StartStream, FALSE);
     if (!state.win7Beta7000StartImage ||
         state.win7Beta7000StartImage->GetLastStatus() != Ok ||
         state.win7Beta7000StartImage->GetWidth() != 54 ||
@@ -7160,40 +7573,70 @@ static bool LoadBetaStartImage(State& state) {
     return true;
 }
 static void LoadBetaTextures(State& state) {
-    auto loadServerImage=[](const char* data, Image*& image,IStream*& stream) {
+    auto loadServerImage = [](const char* data, Image*& image,
+                              IStream*& stream) {
         try {
-            auto bytes=DecodeBase64(data);if(bytes.empty() || bytes.size()>0xFFFFFFFFu)return;
-            stream=SHCreateMemStream(bytes.data(),(UINT)bytes.size());if(!stream)return;
-            image=Image::FromStream(stream,FALSE);
-            if(!image || image->GetLastStatus()!=Ok) {delete image;image=nullptr;stream->Release();stream=nullptr;}
+            auto bytes = DecodeBase64(data);
+            if (bytes.empty() || bytes.size() > 0xFFFFFFFFu)
+                return;
+            stream = SHCreateMemStream(bytes.data(), (UINT)bytes.size());
+            if (!stream)
+                return;
+            image = Image::FromStream(stream, FALSE);
+            if (!image || image->GetLastStatus() != Ok) {
+                delete image;
+                image = nullptr;
+                stream->Release();
+                stream = nullptr;
+            }
         } catch (...) {
-            delete image; image=nullptr;
-            if(stream){stream->Release();stream=nullptr;}
-            Wh_Log(L"[T81-CLASSIC] image load C++ exception; using drawing fallback");
+            delete image;
+            image = nullptr;
+            if (stream) {
+                stream->Release();
+                stream = nullptr;
+            }
+            Wh_Log(
+                L"[T81-CLASSIC] image load C++ exception; using drawing "
+                L"fallback");
         }
     };
-    loadServerImage(kServerClassicStartLarge,state.serverSpriteLarge,state.serverSpriteLargeStream);
-    loadServerImage(kServerClassicStartSmall,state.serverSpriteSmall,state.serverSpriteSmallStream);
-    loadServerImage(kServerClassicDesktopReference,state.serverDesktopReference,state.serverDesktopReferenceStream);
+    loadServerImage(kServerClassicStartLarge, state.serverSpriteLarge,
+                    state.serverSpriteLargeStream);
+    loadServerImage(kServerClassicStartSmall, state.serverSpriteSmall,
+                    state.serverSpriteSmallStream);
+    loadServerImage(kServerClassicDesktopReference,
+                    state.serverDesktopReference,
+                    state.serverDesktopReferenceStream);
     auto classic = DecodeBase64(kServerClassicStart);
-    if(!classic.empty()) {
-        state.serverClassicStartStream=SHCreateMemStream(classic.data(),(UINT)classic.size());
-        if(state.serverClassicStartStream) {
-            state.serverClassicStart=Image::FromStream(state.serverClassicStartStream,FALSE);
-            if(!state.serverClassicStart || state.serverClassicStart->GetLastStatus()!=Ok) {
-                delete state.serverClassicStart;state.serverClassicStart=nullptr;
-                state.serverClassicStartStream->Release();state.serverClassicStartStream=nullptr;
+    if (!classic.empty()) {
+        state.serverClassicStartStream =
+            SHCreateMemStream(classic.data(), (UINT)classic.size());
+        if (state.serverClassicStartStream) {
+            state.serverClassicStart =
+                Image::FromStream(state.serverClassicStartStream, FALSE);
+            if (!state.serverClassicStart ||
+                state.serverClassicStart->GetLastStatus() != Ok) {
+                delete state.serverClassicStart;
+                state.serverClassicStart = nullptr;
+                state.serverClassicStartStream->Release();
+                state.serverClassicStartStream = nullptr;
             }
         }
     }
     auto basic = DecodeBase64(kWin7BasicTexture);
     if (!basic.empty()) {
-        state.win7BasicTextureStream=SHCreateMemStream(basic.data(),(UINT)basic.size());
+        state.win7BasicTextureStream =
+            SHCreateMemStream(basic.data(), (UINT)basic.size());
         if (state.win7BasicTextureStream) {
-            state.win7BasicTexture=Gdiplus::Image::FromStream(state.win7BasicTextureStream,FALSE);
-            if (!state.win7BasicTexture || state.win7BasicTexture->GetLastStatus()!=Ok) {
-                delete state.win7BasicTexture; state.win7BasicTexture=nullptr;
-                state.win7BasicTextureStream->Release(); state.win7BasicTextureStream=nullptr;
+            state.win7BasicTexture =
+                Gdiplus::Image::FromStream(state.win7BasicTextureStream, FALSE);
+            if (!state.win7BasicTexture ||
+                state.win7BasicTexture->GetLastStatus() != Ok) {
+                delete state.win7BasicTexture;
+                state.win7BasicTexture = nullptr;
+                state.win7BasicTextureStream->Release();
+                state.win7BasicTextureStream = nullptr;
             }
         }
     }
@@ -7215,147 +7658,238 @@ static void LoadBetaTextures(State& state) {
     }
 }
 // Windows Server 2008 R2 classic: colours measured from the reference image.
-static void T81ClassicFrame(Graphics& g, RECT r, bool sunken, bool fill=true) {
-    if(r.right-r.left<4 || r.bottom-r.top<4)return;
-    auto st=g.Save();g.SetSmoothingMode(SmoothingModeNone);
-    if(fill){SolidBrush face(Color(255,212,208,200));g.FillRectangle(&face,(int)r.left,(int)r.top,(int)(r.right-r.left),(int)(r.bottom-r.top));}
-    Pen light(Color(255,255,255,255)), gray(Color(255,128,128,128)), dark(Color(255,64,64,64));
-    Pen* a=sunken?&gray:&light;Pen* b=sunken?&light:&dark;
-    g.DrawLine(a,(int)r.left,(int)r.bottom-1,(int)r.left,(int)r.top);g.DrawLine(a,(int)r.left,(int)r.top,(int)r.right-1,(int)r.top);
-    g.DrawLine(b,(int)r.right-1,(int)r.top,(int)r.right-1,(int)r.bottom-1);g.DrawLine(b,(int)r.right-1,(int)r.bottom-1,(int)r.left,(int)r.bottom-1);
-    if(!sunken){g.DrawLine(&gray,(int)r.right-2,(int)r.top+1,(int)r.right-2,(int)r.bottom-2);g.DrawLine(&gray,(int)r.right-2,(int)r.bottom-2,(int)r.left+1,(int)r.bottom-2);}
+static void T81ClassicFrame(Graphics& g,
+                            RECT r,
+                            bool sunken,
+                            bool fill = true) {
+    if (r.right - r.left < 4 || r.bottom - r.top < 4)
+        return;
+    auto st = g.Save();
+    g.SetSmoothingMode(SmoothingModeNone);
+    if (fill) {
+        SolidBrush face(Color(255, 212, 208, 200));
+        g.FillRectangle(&face, (int)r.left, (int)r.top, (int)(r.right - r.left),
+                        (int)(r.bottom - r.top));
+    }
+    Pen light(Color(255, 255, 255, 255)), gray(Color(255, 128, 128, 128)),
+        dark(Color(255, 64, 64, 64));
+    Pen* a = sunken ? &gray : &light;
+    Pen* b = sunken ? &light : &dark;
+    g.DrawLine(a, (int)r.left, (int)r.bottom - 1, (int)r.left, (int)r.top);
+    g.DrawLine(a, (int)r.left, (int)r.top, (int)r.right - 1, (int)r.top);
+    g.DrawLine(b, (int)r.right - 1, (int)r.top, (int)r.right - 1,
+               (int)r.bottom - 1);
+    g.DrawLine(b, (int)r.right - 1, (int)r.bottom - 1, (int)r.left,
+               (int)r.bottom - 1);
+    if (!sunken) {
+        g.DrawLine(&gray, (int)r.right - 2, (int)r.top + 1, (int)r.right - 2,
+                   (int)r.bottom - 2);
+        g.DrawLine(&gray, (int)r.right - 2, (int)r.bottom - 2, (int)r.left + 1,
+                   (int)r.bottom - 2);
+    }
     g.Restore(st);
 }
 // Active reference: 50-DIP cell; dark outer top/left, gray inner
 // top/left, white face and bright lower/right edges (image at 125% DPI).
 static void T81ClassicRunningFrame(Graphics& g, RECT r, bool active, int dpi) {
-    if(!active) { T81ClassicFrame(g,r,false); return; }
-    int e=std::max(1,MulDiv(1,dpi,96));
-    if(r.right-r.left<=4*e || r.bottom-r.top<=4*e)return;
-    auto state=g.Save(); g.SetSmoothingMode(SmoothingModeNone);
-    SolidBrush white(Color(255,255,255,255)), dark(Color(255,64,64,64)),
-               mid(Color(255,128,128,128)), face(Color(255,212,208,200));
-    int l=(int)r.left,t=(int)r.top,w=(int)(r.right-r.left),h=(int)(r.bottom-r.top);
-    g.FillRectangle(&white,l,t,w,h);
-    g.FillRectangle(&dark,l,t,w-e,e);g.FillRectangle(&dark,l,t,e,h-e);
-    g.FillRectangle(&mid,l+e,t+e,w-3*e,e);g.FillRectangle(&mid,l+e,t+e,e,h-3*e);
-    g.FillRectangle(&face,l+e,t+h-2*e,w-2*e,e);
-    g.FillRectangle(&face,l+w-2*e,t+e,e,h-2*e);
+    if (!active) {
+        T81ClassicFrame(g, r, false);
+        return;
+    }
+    int e = std::max(1, MulDiv(1, dpi, 96));
+    if (r.right - r.left <= 4 * e || r.bottom - r.top <= 4 * e)
+        return;
+    auto state = g.Save();
+    g.SetSmoothingMode(SmoothingModeNone);
+    SolidBrush white(Color(255, 255, 255, 255)), dark(Color(255, 64, 64, 64)),
+        mid(Color(255, 128, 128, 128)), face(Color(255, 212, 208, 200));
+    int l = (int)r.left, t = (int)r.top, w = (int)(r.right - r.left),
+        h = (int)(r.bottom - r.top);
+    g.FillRectangle(&white, l, t, w, h);
+    g.FillRectangle(&dark, l, t, w - e, e);
+    g.FillRectangle(&dark, l, t, e, h - e);
+    g.FillRectangle(&mid, l + e, t + e, w - 3 * e, e);
+    g.FillRectangle(&mid, l + e, t + e, e, h - 3 * e);
+    g.FillRectangle(&face, l + e, t + h - 2 * e, w - 2 * e, e);
+    g.FillRectangle(&face, l + w - 2 * e, t + e, e, h - 2 * e);
     g.Restore(state);
 }
 // Three-state images use the supplied native large and small Start artwork.
-static void T81ClassicStart(Graphics& g, RECT cell, bool down, bool hot, int dpi) {
-    const bool small=s && s->nativeSmallIcons;
-    Image* img=s ? (small ? s->serverSpriteSmall : s->serverSpriteLarge) : nullptr;
-    if(img && img->GetLastStatus()==Ok && img->GetWidth()>0 && img->GetHeight()>=3) {
-        int frame=down?2:(hot?1:0), sw=(int)img->GetWidth(), sh=(int)img->GetHeight()/3;
+static void T81ClassicStart(Graphics& g,
+                            RECT cell,
+                            bool down,
+                            bool hot,
+                            int dpi) {
+    const bool small = s && s->nativeSmallIcons;
+    Image* img =
+        s ? (small ? s->serverSpriteSmall : s->serverSpriteLarge) : nullptr;
+    if (img && img->GetLastStatus() == Ok && img->GetWidth() > 0 &&
+        img->GetHeight() >= 3) {
+        int frame = down ? 2 : (hot ? 1 : 0), sw = (int)img->GetWidth(),
+            sh = (int)img->GetHeight() / 3;
         // The reference classic buttons have the same top/bottom as the
         // task buttons. Preserve the artwork's width and logo proportions;
         // add height only in the plain areas immediately inside the frame.
         // Match the running-button frame: a visible margin at the left and
         // the same 4/3 DIP top/bottom inset as DrawTaskTileStack.
-        int side=std::max(1,MulDiv(1,dpi,96));
-        int width=std::min(std::max(1,(int)(cell.right-cell.left)-2*side),std::max(1,MulDiv(small?44:57,dpi,96)));
-        int top=std::max(1,MulDiv(4,dpi,96)),bottom=std::max(1,MulDiv(3,dpi,96));
-        if(top+bottom >= cell.bottom-cell.top){top=side;bottom=side;}
+        int side = std::max(1, MulDiv(1, dpi, 96));
+        int width =
+            std::min(std::max(1, (int)(cell.right - cell.left) - 2 * side),
+                     std::max(1, MulDiv(small ? 44 : 57, dpi, 96)));
+        int top = std::max(1, MulDiv(4, dpi, 96)),
+            bottom = std::max(1, MulDiv(3, dpi, 96));
+        if (top + bottom >= cell.bottom - cell.top) {
+            top = side;
+            bottom = side;
+        }
         // A taller taskbar adds rows; it must not stretch the Start button.
-        int height=std::max(1,std::min((int)(cell.bottom-cell.top)-top-bottom,
-                                      MulDiv(small?30:40,dpi,96)));
-        int x=cell.left+((cell.right-cell.left)-width)/2,y=cell.top+top;
-        int natural=std::max(1,MulDiv(width,sh,sw));
-        auto st=g.Save();g.SetInterpolationMode(InterpolationModeNearestNeighbor);
+        int height =
+            std::max(1, std::min((int)(cell.bottom - cell.top) - top - bottom,
+                                 MulDiv(small ? 30 : 40, dpi, 96)));
+        int x = cell.left + ((cell.right - cell.left) - width) / 2,
+            y = cell.top + top;
+        int natural = std::max(1, MulDiv(width, sh, sw));
+        auto st = g.Save();
+        g.SetInterpolationMode(InterpolationModeNearestNeighbor);
         g.SetPixelOffsetMode(PixelOffsetModeHalf);
-        if(height<=natural || sh<8) {
-            g.DrawImage(img,Rect(x,y,width,height),0,frame*sh,sw,sh,UnitPixel);
+        if (height <= natural || sh < 8) {
+            g.DrawImage(img, Rect(x, y, width, height), 0, frame * sh, sw, sh,
+                        UnitPixel);
         } else {
             // Five vertical bands: preserve the border and central artwork,
             // extend a plain interior scanline above and below the content.
-            int cap=std::max(1,MulDiv(3,width,sw));
-            int center=std::max(1,natural-2*cap), extra=height-(2*cap+center);
-            int upper=extra/2, lower=extra-upper, sy=frame*sh, dy=y;
-            auto band=[&](int sy0,int sourceHeight,int destHeight){
-                if(destHeight>0)g.DrawImage(img,Rect(x,dy,width,destHeight),0,sy+sy0,sw,sourceHeight,UnitPixel);
-                dy+=destHeight;
+            int cap = std::max(1, MulDiv(3, width, sw));
+            int center = std::max(1, natural - 2 * cap),
+                extra = height - (2 * cap + center);
+            int upper = extra / 2, lower = extra - upper, sy = frame * sh,
+                dy = y;
+            auto band = [&](int sy0, int sourceHeight, int destHeight) {
+                if (destHeight > 0)
+                    g.DrawImage(img, Rect(x, dy, width, destHeight), 0,
+                                sy + sy0, sw, sourceHeight, UnitPixel);
+                dy += destHeight;
             };
-            auto pad=[&](int sample,int destHeight) {
-                if(destHeight<=0)return;
-                SolidBrush fill(Color(255,240,240,240));
-                g.FillRectangle(&fill,x,dy,width,destHeight);
-                int edge=std::max(1,std::min(width/2,MulDiv(3,width,sw)));
-                g.DrawImage(img,Rect(x,dy,edge,destHeight),0,sy+sample,3,1,UnitPixel);
-                g.DrawImage(img,Rect(x+width-edge,dy,edge,destHeight),sw-3,sy+sample,3,1,UnitPixel);
-                dy+=destHeight;
+            auto pad = [&](int sample, int destHeight) {
+                if (destHeight <= 0)
+                    return;
+                SolidBrush fill(Color(255, 240, 240, 240));
+                g.FillRectangle(&fill, x, dy, width, destHeight);
+                int edge =
+                    std::max(1, std::min(width / 2, MulDiv(3, width, sw)));
+                g.DrawImage(img, Rect(x, dy, edge, destHeight), 0, sy + sample,
+                            3, 1, UnitPixel);
+                g.DrawImage(img, Rect(x + width - edge, dy, edge, destHeight),
+                            sw - 3, sy + sample, 3, 1, UnitPixel);
+                dy += destHeight;
             };
-            band(0,3,cap); pad(3,upper); band(3,sh-6,center);
-            pad(sh-4,lower); band(sh-3,3,cap);
+            band(0, 3, cap);
+            pad(3, upper);
+            band(3, sh - 6, center);
+            pad(sh - 4, lower);
+            band(sh - 3, 3, cap);
         }
         // Redraw the word with a DPI-aware font instead of resampling the
         // low-resolution word in each bitmap frame. Keep the supplied logo,
         // frame and state; the pressed state retains its one-pixel offset.
-        int textLeft=x+MulDiv(width,small?20:35,sw);
-        int textRight=x+width-std::max(2,MulDiv(3,dpi,96));
-        if(textRight>textLeft+2 && height>6) {
+        int textLeft = x + MulDiv(width, small ? 20 : 35, sw);
+        int textRight = x + width - std::max(2, MulDiv(3, dpi, 96));
+        if (textRight > textLeft + 2 && height > 6) {
             FontFamily family(L"Tahoma");
-            if(family.GetLastStatus()==Ok) {
-                REAL px=(REAL)std::max(1,MulDiv(small?9:11,dpi,96));
+            if (family.GetLastStatus() == Ok) {
+                REAL px = (REAL)std::max(1, MulDiv(small ? 9 : 11, dpi, 96));
                 StringFormat fmt(StringFormat::GenericTypographic());
                 fmt.SetFormatFlags(StringFormatFlagsNoWrap);
                 fmt.SetAlignment(StringAlignmentCenter);
                 fmt.SetLineAlignment(StringAlignmentCenter);
                 // Measure without wrapping and fit to the actual available
                 // width (including the pressed offset), not a guessed size.
-                Font measure(&family,px,FontStyleBold,UnitPixel);
+                Font measure(&family, px, FontStyleBold, UnitPixel);
                 RectF bounds;
-                if(measure.GetLastStatus()==Ok &&
-                   g.MeasureString(L"Start",5,&measure,PointF(0,0),&fmt,&bounds)==Ok && bounds.Width>0)
-                    px=std::max(1.f,px*std::min(1.f,((REAL)(textRight-textLeft)-(down?1.f:0.f)-1.f)/bounds.Width));
-                Font font(&family,px,FontStyleBold,UnitPixel);
-                if(font.GetLastStatus()==Ok) {
-                    auto textState=g.Save();
-                    SolidBrush face(Color(255,240,240,240));
-                    g.FillRectangle(&face,textLeft,y+2,std::max(1,x+width-1-textLeft),height-4);
+                if (measure.GetLastStatus() == Ok &&
+                    g.MeasureString(L"Start", 5, &measure, PointF(0, 0), &fmt,
+                                    &bounds) == Ok &&
+                    bounds.Width > 0)
+                    px = std::max(
+                        1.f, px * std::min(1.f, ((REAL)(textRight - textLeft) -
+                                                 (down ? 1.f : 0.f) - 1.f) /
+                                                    bounds.Width));
+                Font font(&family, px, FontStyleBold, UnitPixel);
+                if (font.GetLastStatus() == Ok) {
+                    auto textState = g.Save();
+                    SolidBrush face(Color(255, 240, 240, 240));
+                    g.FillRectangle(&face, textLeft, y + 2,
+                                    std::max(1, x + width - 1 - textLeft),
+                                    height - 4);
                     g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
-                    RectF text((REAL)textLeft+(down?1.f:0.f),(REAL)y+(down?1.f:0.f),
-                               (REAL)(textRight-textLeft)-(down?1.f:0.f),(REAL)height);
-                    SolidBrush ink(Color(255,0,0,0));
-                    g.DrawString(L"Start",5,&font,text,&fmt,&ink);
+                    RectF text(
+                        (REAL)textLeft + (down ? 1.f : 0.f),
+                        (REAL)y + (down ? 1.f : 0.f),
+                        (REAL)(textRight - textLeft) - (down ? 1.f : 0.f),
+                        (REAL)height);
+                    SolidBrush ink(Color(255, 0, 0, 0));
+                    g.DrawString(L"Start", 5, &font, text, &fmt, &ink);
                     g.Restore(textState);
                 }
             }
         }
         // Explicit classic bevel: the source sprite's near-white face made its
         // top rule nearly invisible on the light taskbar. Keep pressed inset.
-        if(width>2 && height>2) {
+        if (width > 2 && height > 2) {
             g.SetSmoothingMode(SmoothingModeNone);
-            SolidBrush upper(down ? Color(255,128,128,128) : Color(255,255,255,255));
-            SolidBrush contrast(down ? Color(255,64,64,64) : Color(255,160,156,150));
-            if(y>cell.top)g.FillRectangle(&contrast,x,y-1,width,1);
-            g.FillRectangle(&upper,x,y,width-1,1);
-            g.FillRectangle(&upper,x,y,1,height-1);
+            SolidBrush upper(down ? Color(255, 128, 128, 128)
+                                  : Color(255, 255, 255, 255));
+            SolidBrush contrast(down ? Color(255, 64, 64, 64)
+                                     : Color(255, 160, 156, 150));
+            if (y > cell.top)
+                g.FillRectangle(&contrast, x, y - 1, width, 1);
+            g.FillRectangle(&upper, x, y, width - 1, 1);
+            g.FillRectangle(&upper, x, y, 1, height - 1);
         }
-        g.Restore(st);return;
+        g.Restore(st);
+        return;
     }
-    RECT r{cell.left+1,cell.top+2,cell.right-1,cell.bottom-2}; T81ClassicFrame(g,r,down);
+    RECT r{cell.left + 1, cell.top + 2, cell.right - 1, cell.bottom - 2};
+    T81ClassicFrame(g, r, down);
 }
 // Screenshot reference for Show Desktop; the Alt+Tab project is GPL-2.0-only
 // while this mod is GPL-3.0-or-later, so its PNG is not embedded here.
-static void T81ClassicDesktop(Graphics& g, RECT cell, bool hot, bool down, int dpi) {
-    if(IsRectEmpty(&cell))return;
-    int e=std::max(1,MulDiv(1,dpi,96)); RECT inner=cell;
+static void T81ClassicDesktop(Graphics& g,
+                              RECT cell,
+                              bool hot,
+                              bool down,
+                              int dpi) {
+    if (IsRectEmpty(&cell))
+        return;
+    int e = std::max(1, MulDiv(1, dpi, 96));
+    RECT inner = cell;
     // The tray's painted frame is 4/3 DIPs inside the top/bottom and 2 DIPs
     // from the outside edge. Draw and clip strictly within that frame.
-    inner.left+=e;inner.right-=3*e;inner.top+=4*e;inner.bottom-=3*e;
-    int w=inner.right-inner.left,h=inner.bottom-inner.top;
-    if(w<=0 || h<=0)return;
-    auto st=g.Save();g.SetClip(Rect((int)inner.left,(int)inner.top,w,h),CombineModeIntersect);
-    if(hot)T81ClassicFrame(g,inner,down,false);
-    int margin=std::max(1,MulDiv(2,dpi,96));
-    int maxw=std::max(1,w-2*margin),maxh=std::max(1,h-2*margin);
-    int iw=std::min(maxw,std::max(1,MulDiv(20,dpi,96))),ih=std::max(1,MulDiv(iw,19,22));
-    if(ih>maxh){ih=maxh;iw=std::max(1,MulDiv(ih,22,19));}
-    if(s && s->serverDesktopReference) {
+    inner.left += e;
+    inner.right -= 3 * e;
+    inner.top += 4 * e;
+    inner.bottom -= 3 * e;
+    int w = inner.right - inner.left, h = inner.bottom - inner.top;
+    if (w <= 0 || h <= 0)
+        return;
+    auto st = g.Save();
+    g.SetClip(Rect((int)inner.left, (int)inner.top, w, h),
+              CombineModeIntersect);
+    if (hot)
+        T81ClassicFrame(g, inner, down, false);
+    int margin = std::max(1, MulDiv(2, dpi, 96));
+    int maxw = std::max(1, w - 2 * margin), maxh = std::max(1, h - 2 * margin);
+    int iw = std::min(maxw, std::max(1, MulDiv(20, dpi, 96))),
+        ih = std::max(1, MulDiv(iw, 19, 22));
+    if (ih > maxh) {
+        ih = maxh;
+        iw = std::max(1, MulDiv(ih, 22, 19));
+    }
+    if (s && s->serverDesktopReference) {
         g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
-        g.DrawImage(s->serverDesktopReference,Rect((int)(inner.left+(w-iw)/2),(int)(inner.top+(h-ih)/2),iw,ih),0,0,22,19,UnitPixel);
+        g.DrawImage(s->serverDesktopReference,
+                    Rect((int)(inner.left + (w - iw) / 2),
+                         (int)(inner.top + (h - ih) / 2), iw, ih),
+                    0, 0, 22, 19, UnitPixel);
     }
     g.Restore(st);
 }
@@ -10652,12 +11186,28 @@ static bool DrawWin7ClockDirectWriteMask(
 static bool DrawClockTextHighQuality(HDC dc,
                                      int dpi,
                                      const std::vector<ClockPaintLine>& lines) {
-    if (taskbarSkin.load()==7) {
-        int saved=SaveDC(dc); if(!saved)return false;
-        HFONT f=CreateTaskbarFont(dpi,true);if(!f){RestoreDC(dc,saved);return false;}
-        SelectObject(dc,f);SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(0,0,0));
-        for(const auto& line:lines) { RECT r=line.rect;if(line.text)DrawTextW(dc,line.text,-1,&r,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX|DT_END_ELLIPSIS); }
-        RestoreDC(dc,saved);DeleteObject(f);return true;
+    if (taskbarSkin.load() == 7) {
+        int saved = SaveDC(dc);
+        if (!saved)
+            return false;
+        HFONT f = CreateTaskbarFont(dpi, true);
+        if (!f) {
+            RestoreDC(dc, saved);
+            return false;
+        }
+        SelectObject(dc, f);
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, RGB(0, 0, 0));
+        for (const auto& line : lines) {
+            RECT r = line.rect;
+            if (line.text)
+                DrawTextW(dc, line.text, -1, &r,
+                          DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX |
+                              DT_END_ELLIPSIS);
+        }
+        RestoreDC(dc, saved);
+        DeleteObject(f);
+        return true;
     }
     if (T81IsWin7Skin(taskbarSkin.load())) {
         if (DrawWin7ClockDirectWriteMask(dc, dpi, lines))
@@ -11411,10 +11961,16 @@ static Layout TaskAreaLayout(int w, int h, int& avail) {
     const bool beta8148 = useBetaStartLogo.load() && s->betaStartImage;
     // Windows 8-style layout: retain a small empty leading margin when Start is
     // hidden.
-    int start = std::min(w, Px(startHotCorner.load() ? 8 : (taskbarSkin.load()==7 ? (s->nativeSmallIcons ? 44 : 57) : kStartLogical)));
-    int desk = s->preservingTray
-                   ? 0
-                   : std::min(std::max(0, w - start), Px(taskbarSkin.load()==7 ? 24 : beta8148 ? 15 : 8));
+    int start = std::min(
+        w, Px(startHotCorner.load()
+                  ? 8
+                  : (taskbarSkin.load() == 7 ? (s->nativeSmallIcons ? 44 : 57)
+                                             : kStartLogical)));
+    int desk = s->preservingTray ? 0
+                                 : std::min(std::max(0, w - start),
+                                            Px(taskbarSkin.load() == 7 ? 24
+                                               : beta8148              ? 15
+                                                                       : 8));
     int desiredClock = std::max(Px(kClockLogical), s->clockWidthPx);
     int clock = s->preservingTray
                     ? 0
@@ -11436,7 +11992,7 @@ static Layout TaskAreaLayout(int w, int h, int& avail) {
     int tw = std::min(PrivateTrayWidth(),
                       std::max(0, (int)L.clock.left - language - start));
     int bandRight;
-    if (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load()==7) {
+    if (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 7) {
         // Win7: independent language cell on the task side of the tray.
         L.tray = {L.clock.left - tw, 0, L.clock.left, h};
         L.language = {L.tray.left - language, 0, L.tray.left, h};
@@ -11488,13 +12044,17 @@ Layout GetLayout(int w, int h) {
     Layout L = TaskAreaLayout(w, h, avail);
     int bandRight = L.first + avail;
     L.labels = s->labelMode;
-    L.width = std::max(1, Px(L.labels ? 150 : (taskbarSkin.load()==7 ? 50 : T81ButtonLogicalWidth())));
+    L.width = std::max(
+        1, Px(L.labels
+                  ? 150
+                  : (taskbarSkin.load() == 7 ? 50 : T81ButtonLogicalWidth())));
     int rowUnit = std::max(1, Px(s->nativeSmallIcons ? 30 : 40));
     L.rows =
         s->privateActive ? std::clamp((h + rowUnit / 2) / rowUnit, 1, 4) : 1;
     L.rowHeight = std::max(1, h / L.rows);
-    if(taskbarSkin.load()==7 && !startHotCorner.load())
-        L.start.bottom=std::min(L.start.bottom,(LONG)(Px(s->nativeSmallIcons?30:40)+Px(7)));
+    if (taskbarSkin.load() == 7 && !startHotCorner.load())
+        L.start.bottom = std::min(
+            L.start.bottom, (LONG)(Px(s->nativeSmallIcons ? 30 : 40) + Px(7)));
     L.columns = std::max(1, avail / L.width);
     int capacity = (avail / L.width) * L.rows;
     if ((int)s->groups.size() > capacity && avail >= Px(34)) {
@@ -12563,20 +13123,23 @@ static DWORD WINAPI T81RecoveryWatchdog(void*) {
             bool guardActive =
                 InterlockedCompareExchange(&r->guardEnabled, 0, 0) == 1 &&
                 InterlockedCompareExchange(&r->ready, 0, 0) == 1;
-            bool barIdentity = T81SameRecoveryWindow(r->guardBar) &&
-                               r->guardBar.pid == pid;
-            bool hostIdentity = T81SameRecoveryWindow(r->guardHost) &&
-                                r->guardHost.pid == pid;
+            bool barIdentity =
+                T81SameRecoveryWindow(r->guardBar) && r->guardBar.pid == pid;
+            bool hostIdentity =
+                T81SameRecoveryWindow(r->guardHost) && r->guardHost.pid == pid;
             // Intentional hiding does not make the bar unhealthy.
-            bool barHung = barIdentity && IsHungAppWindow((HWND)r->guardBar.hwnd);
+            bool barHung =
+                barIdentity && IsHungAppWindow((HWND)r->guardBar.hwnd);
             bool barHealthy = barIdentity && hostIdentity && !barHung;
             if (guardActive && !barHealthy && !restoredForUnresponsiveBar &&
                 InterlockedCompareExchange(&r->nativeHidden, 0, 0) &&
                 T81SameRecoveryWindow(r->native) && r->native.pid == shellPid) {
                 // Restore the native bar, separately hidden Start windows, and
                 // the work area using the same validated crash-recovery path.
-                Wh_Log(L"[T81-RECOVERY] guard diagnosis bar-identity=%d host-identity=%d hung=%d",
-                       barIdentity ? 1 : 0, hostIdentity ? 1 : 0, barHung ? 1 : 0);
+                Wh_Log(
+                    L"[T81-RECOVERY] guard diagnosis bar-identity=%d "
+                    L"host-identity=%d hung=%d",
+                    barIdentity ? 1 : 0, hostIdentity ? 1 : 0, barHung ? 1 : 0);
                 T81RestoreRecovery(r);
                 restoredForUnresponsiveBar = true;
                 Wh_Log(
@@ -13309,11 +13872,15 @@ static VerticalLayout GetVerticalLayout(int width, int height) {
     if (!s || width <= 0 || height < Px(280))
         return v;
     const bool beta8148 = useBetaStartLogo.load() && s->betaStartImage;
-    int start =
-            Px(startHotCorner.load() ? 0
-                                     : (taskbarSkin.load()==7 ? (s->nativeSmallIcons ? 44 : 57) : (beta8148 ? 54 : kVerticalStartLogical))),
-        desk = Px(taskbarSkin.load()==7 ? 24 : beta8148 ? 15 : 8), clock = VerticalClockHeight(),
-        cell = Px(24), arrow = Px(25);
+    int start = Px(startHotCorner.load()
+                       ? 0
+                       : (taskbarSkin.load() == 7
+                              ? (s->nativeSmallIcons ? 44 : 57)
+                              : (beta8148 ? 54 : kVerticalStartLogical))),
+        desk = Px(taskbarSkin.load() == 7 ? 24
+                  : beta8148              ? 15
+                                          : 8),
+        clock = VerticalClockHeight(), cell = Px(24), arrow = Px(25);
     const int taskStep =
         s->nativeSmallIcons ? 32 : (beta8148 ? 50 : kVerticalTaskLogical);
     int y = height;
@@ -13322,7 +13889,7 @@ static VerticalLayout GetVerticalLayout(int width, int height) {
     v.clock = RECT{0, y - clock, width, y};
     y -= clock;
     int language = LanguageIndicatorHeight();
-    if (!T81IsWin7Skin(taskbarSkin.load()) && taskbarSkin.load()!=7) {
+    if (!T81IsWin7Skin(taskbarSkin.load()) && taskbarSkin.load() != 7) {
         v.language = RECT{0, y - language, width, y};
         y -= language;
     }
@@ -13343,7 +13910,7 @@ static VerticalLayout GetVerticalLayout(int width, int height) {
     }
     v.arrow = RECT{0, y - arrow, width, y};
     y -= arrow;
-    if (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load()==7) {
+    if (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 7) {
         v.language = RECT{0, y - language, width, y};
         y -= language;
     }
@@ -13546,7 +14113,8 @@ static void DrawTrayHoverTile(Graphics& g,
                               bool onBar = false,
                               float opacity = 1.0f,
                               UINT dpi = 0) {
-    if(taskbarSkin.load()==7) return;
+    if (taskbarSkin.load() == 7)
+        return;
     opacity = std::max(0.f, std::min(1.f, opacity));
     if (opacity <= 0)
         return;
@@ -13736,7 +14304,8 @@ static void PaintPrivateArea(Graphics& g, HDC dc, const Layout& L, int h) {
     for (auto& p : inner)
         p.Y = TrayArrowY(p.Y, ay, s->nativeEdge == ABE_TOP);
     SolidBrush shade(Color(145, 0, 0, 0)),
-        arrowWhite(taskbarSkin.load()==7 ? Color(255,0,0,0) : Color(255,245,253,255));
+        arrowWhite(taskbarSkin.load() == 7 ? Color(255, 0, 0, 0)
+                                           : Color(255, 245, 253, 255));
     if (!win7Arrow) {
         g.FillPolygon(&shade, outer, 3);
         g.FillPolygon(&arrowWhite, inner, 3);
@@ -13771,20 +14340,22 @@ static int HitPrivateArea(POINT p, const Layout& L) {
 }
 // Overflow positioning helper (GPL-3.0-or-later).
 void ComputeOverflowNear(const RECT& btn, int w, int h, int& x, int& y) {
-    if(taskbarSkin.load()==6 || taskbarSkin.load()==7) {
+    if (taskbarSkin.load() == 6 || taskbarSkin.load() == 7) {
         MONITORINFO mi{sizeof(mi)};
-        if(!GetMonitorInfoW(MonitorFromRect(&btn,MONITOR_DEFAULTTONEAREST),&mi))
-            mi.rcMonitor=RECT{0,0,GetSystemMetrics(SM_CXSCREEN),GetSystemMetrics(SM_CYSCREEN)};
-        const RECT& m=mi.rcMonitor;
-        if(s && s->verticalActive) {
-            x=s->verticalSide==1?btn.right:btn.left-w;
-            y=(btn.top+btn.bottom-h)/2;
+        if (!GetMonitorInfoW(MonitorFromRect(&btn, MONITOR_DEFAULTTONEAREST),
+                             &mi))
+            mi.rcMonitor = RECT{0, 0, GetSystemMetrics(SM_CXSCREEN),
+                                GetSystemMetrics(SM_CYSCREEN)};
+        const RECT& m = mi.rcMonitor;
+        if (s && s->verticalActive) {
+            x = s->verticalSide == 1 ? btn.right : btn.left - w;
+            y = (btn.top + btn.bottom - h) / 2;
         } else {
-            x=(btn.left+btn.right-w)/2;
-            y=(s && s->nativeEdge==ABE_TOP)?btn.bottom:btn.top-h;
+            x = (btn.left + btn.right - w) / 2;
+            y = (s && s->nativeEdge == ABE_TOP) ? btn.bottom : btn.top - h;
         }
-        x=std::clamp(x,(int)m.left,std::max((int)m.left,(int)m.right-w));
-        y=std::clamp(y,(int)m.top,std::max((int)m.top,(int)m.bottom-h));
+        x = std::clamp(x, (int)m.left, std::max((int)m.left, (int)m.right - w));
+        y = std::clamp(y, (int)m.top, std::max((int)m.top, (int)m.bottom - h));
         return;
     }
     const int gapY = (6 + (h * 3) / 100) + (h * 45) / 1000;
@@ -13974,26 +14545,29 @@ static int OverflowRowsShown() {
     return std::min(rows, 10);
 }
 static int OverflowContentPad() {
-    return Px(taskbarSkin.load()==7 ? 5 : T81IsWin7Skin(taskbarSkin.load()) ? 6 : 12);
+    return Px(taskbarSkin.load() == 7             ? 5
+              : T81IsWin7Skin(taskbarSkin.load()) ? 6
+                                                  : 12);
 }
 static RECT OverflowCell(int slot) {
     int cell = Px(30), pad = OverflowContentPad();
     int x = pad + (slot % 3) * cell;
     int y = pad + (slot / 3 - s->overflowScroll) * cell;
-    if(taskbarSkin.load()==6 || taskbarSkin.load()==7) {
-        int rowStart=(slot/3)*3;
-        int count=std::clamp((int)OverflowPrivateItems().size()-rowStart,1,3);
-        x+=(3-count)*cell/2;
-        y+=Px(10);
+    if (taskbarSkin.load() == 6 || taskbarSkin.load() == 7) {
+        int rowStart = (slot / 3) * 3;
+        int count =
+            std::clamp((int)OverflowPrivateItems().size() - rowStart, 1, 3);
+        x += (3 - count) * cell / 2;
+        y += Px(10);
     }
     return RECT{x, y, x + cell, y + cell};
 }
 static RECT OverflowFooter() {
     int pad = OverflowContentPad(),
         top = pad + OverflowRowsShown() * Px(30) + Px(1);
-    if (taskbarSkin.load()==6 || taskbarSkin.load()==7) {
-        top+=Px(taskbarSkin.load()==7 ? 8 : 10);
-        return RECT{0,top,pad*2+3*Px(30),top+Px(44)};
+    if (taskbarSkin.load() == 6 || taskbarSkin.load() == 7) {
+        top += Px(taskbarSkin.load() == 7 ? 8 : 10);
+        return RECT{0, top, pad * 2 + 3 * Px(30), top + Px(44)};
     }
     if (T81IsWin7Skin(taskbarSkin.load()))
         return RECT{0, top, pad * 2 + 3 * Px(30), top + Px(26)};
@@ -14062,41 +14636,60 @@ static void ClampTrackTooltipToMonitor(HWND tip, const RECT& bounds) {
 // Only the two tooltip controls created by this mod are subclassed here.
 // Native tracking, timing, text and monitor clamping remain unchanged.
 struct T81TipStyle {
-    HFONT classicFont=nullptr;
-    int mode=-1, dpi=0;
+    HFONT classicFont = nullptr;
+    int mode = -1, dpi = 0;
 };
 static void T81SetTipTheme(HWND tip, bool classic) {
-    HMODULE uxtheme=LoadLibraryW(L"uxtheme.dll");
-    if(uxtheme) {
-        using Fn=HRESULT(WINAPI*)(HWND,LPCWSTR,LPCWSTR);
-        auto set=(Fn)GetProcAddress(uxtheme,"SetWindowTheme");
-        if(set)set(tip,classic?L"":nullptr,classic?L"":nullptr);
+    HMODULE uxtheme = LoadLibraryW(L"uxtheme.dll");
+    if (uxtheme) {
+        using Fn = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
+        auto set = (Fn)GetProcAddress(uxtheme, "SetWindowTheme");
+        if (set)
+            set(tip, classic ? L"" : nullptr, classic ? L"" : nullptr);
         FreeLibrary(uxtheme);
     }
-    const int corner=classic?1:0; // DWMWCP_DONOTROUND / DEFAULT
-    DwmSetWindowAttribute(tip,33,&corner,sizeof(corner));
+    const int corner = classic ? 1 : 0;  // DWMWCP_DONOTROUND / DEFAULT
+    DwmSetWindowAttribute(tip, 33, &corner, sizeof(corner));
 }
-static LRESULT CALLBACK
-NativeTipFadeProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PTR, DWORD_PTR data) {
-    auto* style=reinterpret_cast<T81TipStyle*>(data);
+static LRESULT CALLBACK NativeTipFadeProc(HWND h,
+                                          UINT m,
+                                          WPARAM w,
+                                          LPARAM l,
+                                          UINT_PTR,
+                                          DWORD_PTR data) {
+    auto* style = reinterpret_cast<T81TipStyle*>(data);
     const UINT_PTR kFadeTimer = 9100;
-    if(style && style->mode==1 && s &&
-       (h==s->infoTip || h==s->overflowTooltip)) {
-        if(m==WM_ERASEBKGND)return 1;
-        if(m==WM_PAINT) {
-            ScopedPaintDC paint(h); HDC dc=paint.dc;
-            if(!dc)return 0;
-            RECT r{};GetClientRect(h,&r);
-            HBRUSH bg=CreateSolidBrush(RGB(255,255,225));
-            if(bg){FillRect(dc,&r,bg);DeleteObject(bg);}
-            HBRUSH edge=(HBRUSH)GetStockObject(BLACK_BRUSH);
-            FrameRect(dc,&r,edge);
-            HFONT font=style->classicFont ? style->classicFont : (HFONT)GetStockObject(DEFAULT_GUI_FONT);
-            ScopedSelection selected(dc,font);
-            SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(0,0,0));
-            RECT text=r;InflateRect(&text,-std::max(1,Px(3)),-std::max(1,Px(1)));
-            const std::wstring& value=h==s->overflowTooltip?s->overflowTooltipText:s->tooltipText;
-            DrawTextW(dc,value.c_str(),-1,&text,DT_LEFT|DT_VCENTER|DT_WORDBREAK|DT_NOPREFIX);
+    if (style && style->mode == 1 && s &&
+        (h == s->infoTip || h == s->overflowTooltip)) {
+        if (m == WM_ERASEBKGND)
+            return 1;
+        if (m == WM_PAINT) {
+            ScopedPaintDC paint(h);
+            HDC dc = paint.dc;
+            if (!dc)
+                return 0;
+            RECT r{};
+            GetClientRect(h, &r);
+            HBRUSH bg = CreateSolidBrush(RGB(255, 255, 225));
+            if (bg) {
+                FillRect(dc, &r, bg);
+                DeleteObject(bg);
+            }
+            HBRUSH edge = (HBRUSH)GetStockObject(BLACK_BRUSH);
+            FrameRect(dc, &r, edge);
+            HFONT font = style->classicFont
+                             ? style->classicFont
+                             : (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+            ScopedSelection selected(dc, font);
+            SetBkMode(dc, TRANSPARENT);
+            SetTextColor(dc, RGB(0, 0, 0));
+            RECT text = r;
+            InflateRect(&text, -std::max(1, Px(3)), -std::max(1, Px(1)));
+            const std::wstring& value = h == s->overflowTooltip
+                                            ? s->overflowTooltipText
+                                            : s->tooltipText;
+            DrawTextW(dc, value.c_str(), -1, &text,
+                      DT_LEFT | DT_VCENTER | DT_WORDBREAK | DT_NOPREFIX);
             return 0;
         }
     }
@@ -14107,73 +14700,107 @@ NativeTipFadeProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PTR, DWORD_PTR data) 
     }
     if (m == WM_TIMER && w == kFadeTimer) {
         int a = (int)(ULONG_PTR)GetPropW(h, L"T81TipAlpha") + 40;
-        if (a >= 255) {a = 255;KillTimer(h, kFadeTimer);}
+        if (a >= 255) {
+            a = 255;
+            KillTimer(h, kFadeTimer);
+        }
         SetPropW(h, L"T81TipAlpha", (HANDLE)(ULONG_PTR)a);
         SetLayeredWindowAttributes(h, 0, (BYTE)a, LWA_ALPHA);
         return 0;
     }
     if (m == WM_NCDESTROY) {
-        KillTimer(h, kFadeTimer);RemovePropW(h, L"T81TipAlpha");
-        RemovePropW(h,L"T81TipStyle");RemoveWindowSubclass(h, NativeTipFadeProc, 1);
-        LRESULT result=DefSubclassProc(h,m,w,l);
-        if(style){if(style->classicFont)DeleteObject(style->classicFont);delete style;}
+        KillTimer(h, kFadeTimer);
+        RemovePropW(h, L"T81TipAlpha");
+        RemovePropW(h, L"T81TipStyle");
+        RemoveWindowSubclass(h, NativeTipFadeProc, 1);
+        LRESULT result = DefSubclassProc(h, m, w, l);
+        if (style) {
+            if (style->classicFont)
+                DeleteObject(style->classicFont);
+            delete style;
+        }
         return result;
     }
     return DefSubclassProc(h, m, w, l);
 }
 static void StyleNativeTip(HWND tip) {
-    if (!tip || !IsWindow(tip)) return;
-    auto* style=reinterpret_cast<T81TipStyle*>(GetPropW(tip,L"T81TipStyle"));
-    if(!style) {
-        style=new(std::nothrow) T81TipStyle();
-        if(!style)return;
-        if(!SetWindowSubclass(tip,NativeTipFadeProc,1,(DWORD_PTR)style)) {delete style;return;}
-        if(!SetPropW(tip,L"T81TipStyle",(HANDLE)style)) {
-            RemoveWindowSubclass(tip,NativeTipFadeProc,1);delete style;return;
+    if (!tip || !IsWindow(tip))
+        return;
+    auto* style = reinterpret_cast<T81TipStyle*>(GetPropW(tip, L"T81TipStyle"));
+    if (!style) {
+        style = new (std::nothrow) T81TipStyle();
+        if (!style)
+            return;
+        if (!SetWindowSubclass(tip, NativeTipFadeProc, 1, (DWORD_PTR)style)) {
+            delete style;
+            return;
+        }
+        if (!SetPropW(tip, L"T81TipStyle", (HANDLE)style)) {
+            RemoveWindowSubclass(tip, NativeTipFadeProc, 1);
+            delete style;
+            return;
         }
     }
-    const bool classic=taskbarSkin.load()==7;
-    const int dpi=Dpi();
+    const bool classic = taskbarSkin.load() == 7;
+    const int dpi = Dpi();
     // Non-classic tooltips use exactly the original common-control font,
     // theme and margins. On a skin change the control is recreated below,
     // never retain a borrowed font across a SetWindowTheme transition.
-    if(classic && (style->mode!=1 || style->dpi!=dpi)) {
-        T81SetTipTheme(tip,true);
-        HFONT font=CreateFontW(-MulDiv(9,dpi,72),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,
-            DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,ANTIALIASED_QUALITY,DEFAULT_PITCH,L"Tahoma");
-        HFONT old=style->classicFont;
-        style->classicFont=font;
-        SendMessageW(tip,WM_SETFONT,(WPARAM)(font?font:GetStockObject(DEFAULT_GUI_FONT)),FALSE);
-        if(old)DeleteObject(old);
-        RECT margin{Px(3),Px(1),Px(3),Px(1)};
-        SendMessageW(tip,TTM_SETMARGIN,0,(LPARAM)&margin);
-        SendMessageW(tip,TTM_SETTIPBKCOLOR,RGB(255,255,225),0);
-        SendMessageW(tip,TTM_SETTIPTEXTCOLOR,RGB(0,0,0),0);
+    if (classic && (style->mode != 1 || style->dpi != dpi)) {
+        T81SetTipTheme(tip, true);
+        HFONT font = CreateFontW(-MulDiv(9, dpi, 72), 0, 0, 0, FW_NORMAL, FALSE,
+                                 FALSE, FALSE, DEFAULT_CHARSET,
+                                 OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                 ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Tahoma");
+        HFONT old = style->classicFont;
+        style->classicFont = font;
+        SendMessageW(tip, WM_SETFONT,
+                     (WPARAM)(font ? font : GetStockObject(DEFAULT_GUI_FONT)),
+                     FALSE);
+        if (old)
+            DeleteObject(old);
+        RECT margin{Px(3), Px(1), Px(3), Px(1)};
+        SendMessageW(tip, TTM_SETMARGIN, 0, (LPARAM)&margin);
+        SendMessageW(tip, TTM_SETTIPBKCOLOR, RGB(255, 255, 225), 0);
+        SendMessageW(tip, TTM_SETTIPTEXTCOLOR, RGB(0, 0, 0), 0);
     }
-    style->mode=classic?1:0;style->dpi=dpi;
+    style->mode = classic ? 1 : 0;
+    style->dpi = dpi;
     SetLayeredWindowAttributes(tip, 0, 255, LWA_ALPHA);
     SendMessageW(tip, TTM_SETMAXTIPWIDTH, 0, Px(300));
 }
 static bool T81TipStyleChanged(HWND tip) {
-    if(!tip || !IsWindow(tip))return false;
-    auto* style=reinterpret_cast<T81TipStyle*>(GetPropW(tip,L"T81TipStyle"));
-    return style && style->mode>=0 && (style->mode==1)!=(taskbarSkin.load()==7);
+    if (!tip || !IsWindow(tip))
+        return false;
+    auto* style = reinterpret_cast<T81TipStyle*>(GetPropW(tip, L"T81TipStyle"));
+    return style && style->mode >= 0 &&
+           (style->mode == 1) != (taskbarSkin.load() == 7);
 }
 // On a theme change, create a fresh control: the common control initializes
 // its own font and theme, as it did before the classic-tooltip feature.
 static bool T81EnsureOverflowTooltip() {
-    if(!s || !s->overflowPanel || !IsWindow(s->overflowPanel))return false;
-    if(T81TipStyleChanged(s->overflowTooltip)) {
-        DestroyWindow(s->overflowTooltip);s->overflowTooltip=nullptr;
+    if (!s || !s->overflowPanel || !IsWindow(s->overflowPanel))
+        return false;
+    if (T81TipStyleChanged(s->overflowTooltip)) {
+        DestroyWindow(s->overflowTooltip);
+        s->overflowTooltip = nullptr;
     }
-    if(s->overflowTooltip && IsWindow(s->overflowTooltip))return true;
-    s->overflowTooltip=CreateWindowExW(WS_EX_TOPMOST|WS_EX_LAYERED,TOOLTIPS_CLASSW,nullptr,
-        WS_POPUP|TTS_ALWAYSTIP|TTS_NOPREFIX,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,
-        s->overflowPanel,nullptr,GetModuleHandleW(nullptr),nullptr);
-    if(!s->overflowTooltip)return false;
-    TOOLINFOW tool{};tool.cbSize=sizeof(tool);tool.hwnd=s->overflowPanel;tool.uId=1;
-    tool.uFlags=TTF_TRACK|TTF_ABSOLUTE;tool.lpszText=const_cast<wchar_t*>(L"");
-    SendMessageW(s->overflowTooltip,TTM_ADDTOOLW,0,(LPARAM)&tool);
+    if (s->overflowTooltip && IsWindow(s->overflowTooltip))
+        return true;
+    s->overflowTooltip = CreateWindowExW(
+        WS_EX_TOPMOST | WS_EX_LAYERED, TOOLTIPS_CLASSW, nullptr,
+        WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX, CW_USEDEFAULT, CW_USEDEFAULT,
+        CW_USEDEFAULT, CW_USEDEFAULT, s->overflowPanel, nullptr,
+        GetModuleHandleW(nullptr), nullptr);
+    if (!s->overflowTooltip)
+        return false;
+    TOOLINFOW tool{};
+    tool.cbSize = sizeof(tool);
+    tool.hwnd = s->overflowPanel;
+    tool.uId = 1;
+    tool.uFlags = TTF_TRACK | TTF_ABSOLUTE;
+    tool.lpszText = const_cast<wchar_t*>(L"");
+    SendMessageW(s->overflowTooltip, TTM_ADDTOOLW, 0, (LPARAM)&tool);
     StyleNativeTip(s->overflowTooltip);
     return true;
 }
@@ -14331,30 +14958,36 @@ static void DismissOverflowOnOutsideClick() {
 // Restore the real system non-client frame for Win7. Its width and material
 // are decided by the current Windows/DWM theme; this is not Win7 Aero glass.
 static DWORD TaskbarPopupStyle() {
-    return WS_POPUP | (T81IsWin7Skin(taskbarSkin.load()) ? WS_THICKFRAME : WS_BORDER);
+    return WS_POPUP |
+           (T81IsWin7Skin(taskbarSkin.load()) ? WS_THICKFRAME : WS_BORDER);
 }
 static void ConfigureSystemPopupFrame(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd))
         return;
-    bool basicOverflow = (taskbarSkin.load()==6 || taskbarSkin.load()==7) && s && hwnd==s->overflowPanel;
-    bool classicJump = taskbarSkin.load()==7 && s && hwnd==s->jumpPopup;
-    bool ownFrame=basicOverflow || classicJump;
+    bool basicOverflow = (taskbarSkin.load() == 6 || taskbarSkin.load() == 7) &&
+                         s && hwnd == s->overflowPanel;
+    bool classicJump = taskbarSkin.load() == 7 && s && hwnd == s->jumpPopup;
+    bool ownFrame = basicOverflow || classicJump;
     LONG_PTR old = GetWindowLongPtrW(hwnd, GWL_STYLE);
-    LONG_PTR wanted = (old & ~((LONG_PTR)(WS_THICKFRAME | WS_BORDER))) |
-                      (ownFrame ? 0 : (TaskbarPopupStyle() & (WS_THICKFRAME | WS_BORDER)));
+    LONG_PTR wanted =
+        (old & ~((LONG_PTR)(WS_THICKFRAME | WS_BORDER))) |
+        (ownFrame ? 0 : (TaskbarPopupStyle() & (WS_THICKFRAME | WS_BORDER)));
     if (old != wanted) {
         SetWindowLongPtrW(hwnd, GWL_STYLE, wanted);
         SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
                      SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
                          SWP_NOACTIVATE | SWP_NOZORDER);
     }
-    DWMNCRENDERINGPOLICY policy = ownFrame ? DWMNCRP_DISABLED :
-        (T81IsWin7Skin(taskbarSkin.load()) ? DWMNCRP_ENABLED : DWMNCRP_USEWINDOWSTYLE);
+    DWMNCRENDERINGPOLICY policy =
+        ownFrame ? DWMNCRP_DISABLED
+                 : (T81IsWin7Skin(taskbarSkin.load()) ? DWMNCRP_ENABLED
+                                                      : DWMNCRP_USEWINDOWSTYLE);
     HRESULT hr = DwmSetWindowAttribute(hwnd, DWMWA_NCRENDERING_POLICY, &policy,
                                        sizeof(policy));
-    if (s && (hwnd==s->overflowPanel || hwnd==s->jumpPopup)) {
-        const int corner=ownFrame ? 1 : 0;  // DONOTROUND / DEFAULT
-        DwmSetWindowAttribute(hwnd,(DWMWINDOWATTRIBUTE)33,&corner,sizeof(corner));
+    if (s && (hwnd == s->overflowPanel || hwnd == s->jumpPopup)) {
+        const int corner = ownFrame ? 1 : 0;  // DONOTROUND / DEFAULT
+        DwmSetWindowAttribute(hwnd, (DWMWINDOWATTRIBUTE)33, &corner,
+                              sizeof(corner));
     }
     if (FAILED(hr))
         Wh_Log(L"[T81-DWM-FRAME] policy failed hr=0x%08lx", (unsigned long)hr);
@@ -14369,8 +15002,9 @@ static void ResizePrivateOverflow() {
     int pad = OverflowContentPad();
     int w = 2 * pad + 3 * Px(30),
         h = 2 * pad + OverflowRowsShown() * Px(30) + Px(26) + Px(1);
-    if(taskbarSkin.load()==6 || taskbarSkin.load()==7)
-        h=pad + OverflowRowsShown()*Px(30)+Px(taskbarSkin.load()==7?9:11)+Px(44)+Px(1);
+    if (taskbarSkin.load() == 6 || taskbarSkin.load() == 7)
+        h = pad + OverflowRowsShown() * Px(30) +
+            Px(taskbarSkin.load() == 7 ? 9 : 11) + Px(44) + Px(1);
     RECT rect{0, 0, w, h};
     using AdjustFn = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
     auto adjust = (AdjustFn)GetProcAddress(GetModuleHandleW(L"user32.dll"),
@@ -14429,7 +15063,10 @@ static void PaintPrivateOverflow(HWND h) {
             std::min(std::max(1, (int)((entries.size() + 2) / 3)), 10);
         {
             Graphics g(mem);
-            int inset = (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load()==7) ? 0 : Px(6);
+            int inset =
+                (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 7)
+                    ? 0
+                    : Px(6);
             if (inset) {
                 COLORREF c = PopupChromeColor();
                 SolidBrush chrome(
@@ -14441,8 +15078,11 @@ static void PaintPrivateOverflow(HWND h) {
             LinearGradientBrush bg(
                 Point(0, 0), Point(0, std::max(1L, r.bottom)),
                 Color(255, 255, 255, 255), Color(255, 244, 244, 244));
-            if(taskbarSkin.load()==6 || taskbarSkin.load()==7) {SolidBrush white(Color(255,255,255,255));g.FillRectangle(&white,paper);}
-            else g.FillRectangle(&bg, paper);
+            if (taskbarSkin.load() == 6 || taskbarSkin.load() == 7) {
+                SolidBrush white(Color(255, 255, 255, 255));
+                g.FillRectangle(&white, paper);
+            } else
+                g.FillRectangle(&bg, paper);
             if (inset) {
                 Pen border(Color(255, 161, 161, 161), 1);
                 g.DrawRectangle(&border, paper.X, paper.Y, paper.Width - 1,
@@ -14454,8 +15094,10 @@ static void PaintPrivateOverflow(HWND h) {
                     continue;
                 RECT cell = OverflowCell((int)i);
                 if (entries[i] == s->overflowHot) {
-                    if(taskbarSkin.load()==7) T81ClassicFrame(g,cell,false);
-                    else DrawTrayHoverTile(g, cell);
+                    if (taskbarSkin.load() == 7)
+                        T81ClassicFrame(g, cell, false);
+                    else
+                        DrawTrayHoverTile(g, cell);
                 }
             }
             if (s->trayDrag.active && s->trayDrag.dropArea == 2 &&
@@ -14468,14 +15110,21 @@ static void PaintPrivateOverflow(HWND h) {
                     std::max(1, (int)(cell.bottom - cell.top) - Px(6)));
             }
             RECT footer = OverflowFooter();
-            int top = std::max(0, (int)footer.top - ((taskbarSkin.load()==6 || taskbarSkin.load()==7)?0:Px(3)));
+            int top = std::max(0, (int)footer.top - ((taskbarSkin.load() == 6 ||
+                                                      taskbarSkin.load() == 7)
+                                                         ? 0
+                                                         : Px(3)));
             LinearGradientBrush foot(
                 Point(0, top), Point(0, std::max(top + 1, (int)r.bottom)),
                 Color(255, 233, 240, 248), Color(255, 240, 245, 252));
-            int footPad = (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load()==7) ? 0 : Px(7);
-            if(taskbarSkin.load()==7) {
-                SolidBrush classicFooter(Color(255,212,208,200));
-                g.FillRectangle(&classicFooter,0,top,(int)r.right,std::max(0,(int)r.bottom-top));
+            int footPad =
+                (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 7)
+                    ? 0
+                    : Px(7);
+            if (taskbarSkin.load() == 7) {
+                SolidBrush classicFooter(Color(255, 212, 208, 200));
+                g.FillRectangle(&classicFooter, 0, top, (int)r.right,
+                                std::max(0, (int)r.bottom - top));
             } else {
                 g.FillRectangle(&foot, footPad, top,
                                 std::max(0, (int)r.right - 2 * footPad),
@@ -14517,9 +15166,9 @@ static void PaintPrivateOverflow(HWND h) {
                                  CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
         HGDIOBJ previous = font ? SelectObject(mem, font) : nullptr;
         SetBkMode(mem, TRANSPARENT);
-        SetTextColor(mem,
-                     taskbarSkin.load()==7 ? RGB(0,0,128) :
-                     s->overflowFooterHot ? RGB(0, 78, 158) : RGB(0, 102, 204));
+        SetTextColor(mem, taskbarSkin.load() == 7 ? RGB(0, 0, 128)
+                          : s->overflowFooterHot  ? RGB(0, 78, 158)
+                                                  : RGB(0, 102, 204));
         RECT footer = OverflowFooter();
         DrawTextW(mem, Tr(L"Personalizza...", L"Customize..."), -1, &footer,
                   DT_SINGLELINE | DT_VCENTER | DT_CENTER);
@@ -14527,9 +15176,13 @@ static void PaintPrivateOverflow(HWND h) {
             SelectObject(mem, previous);
         if (font)
             DeleteObject(font);
-        if(taskbarSkin.load()==6 || taskbarSkin.load()==7) {
-            Graphics border(mem); Pen edge(taskbarSkin.load()==7 ? Color(255,0,0,0) : Color(255,91,102,111),1);
-            border.DrawRectangle(&edge,0,0,std::max(0L,r.right-1),std::max(0L,r.bottom-1));
+        if (taskbarSkin.load() == 6 || taskbarSkin.load() == 7) {
+            Graphics border(mem);
+            Pen edge(taskbarSkin.load() == 7 ? Color(255, 0, 0, 0)
+                                             : Color(255, 91, 102, 111),
+                     1);
+            border.DrawRectangle(&edge, 0, 0, std::max(0L, r.right - 1),
+                                 std::max(0L, r.bottom - 1));
         }
         BitBlt(dc, 0, 0, r.right, r.bottom, mem, 0, 0, SRCCOPY);
     }
@@ -14798,8 +15451,10 @@ static void ShowPrivateOverflow(const RECT* suppliedAnchor = nullptr) {
         s->overflowPanel =
             CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
                             (LPCWSTR)(ULONG_PTR)(WORD)s->overflowClass, L"",
-                            (taskbarSkin.load()==6 || taskbarSkin.load()==7) ? WS_POPUP : TaskbarPopupStyle(), 0, 0, 200, 100, s->bar,
-                            nullptr, instance, nullptr);
+                            (taskbarSkin.load() == 6 || taskbarSkin.load() == 7)
+                                ? WS_POPUP
+                                : TaskbarPopupStyle(),
+                            0, 0, 200, 100, s->bar, nullptr, instance, nullptr);
         if (!s->overflowPanel) {
             UnregisterClassW((LPCWSTR)(ULONG_PTR)(WORD)s->overflowClass,
                              instance);
@@ -18554,63 +19209,97 @@ static constexpr UINT_PTR kBatteryFrameSubclass = 0x8130;
 static constexpr UINT_PTR TIMER_T81_BATTERY_REPAIR = 58;
 static void PositionOriginalBatteryFlyout(HWND flyout);
 static int T81BatteryDpi(HWND h) {
-    UINT dpi=GetDpiForWindow(h); return dpi ? (int)dpi : Dpi();
+    UINT dpi = GetDpiForWindow(h);
+    return dpi ? (int)dpi : Dpi();
 }
 static bool T81BatteryValidSize(int w, int h, int dpi) {
-    return w>=MulDiv(140,dpi,96) && h>=MulDiv(60,dpi,96) &&
-           w<=MulDiv(1000,dpi,96) && h<=MulDiv(800,dpi,96);
+    return w >= MulDiv(140, dpi, 96) && h >= MulDiv(60, dpi, 96) &&
+           w <= MulDiv(1000, dpi, 96) && h <= MulDiv(800, dpi, 96);
 }
 static bool T81BatteryCaptureSize(HWND h) {
-    if(!s || !h || !IsWindow(h) || GetWindowThreadProcessId(h,nullptr)!=GetCurrentThreadId()) return false;
-    RECT r{}; if(!GetWindowRect(h,&r)) return false;
-    int dpi=T81BatteryDpi(h), w=r.right-r.left, ht=r.bottom-r.top;
-    if(!T81BatteryValidSize(w,ht,dpi))return false;
-    s->batterySizeWindow=h;
-    s->batteryGoodSizeDip=SIZE{MulDiv(w,96,dpi),MulDiv(ht,96,dpi)};
-    Wh_Log(L"[T81-BAT-SIZE] captured hwnd=%p size=%dx%d dpi=%d",h,w,ht,dpi);
+    if (!s || !h || !IsWindow(h) ||
+        GetWindowThreadProcessId(h, nullptr) != GetCurrentThreadId())
+        return false;
+    RECT r{};
+    if (!GetWindowRect(h, &r))
+        return false;
+    int dpi = T81BatteryDpi(h), w = r.right - r.left, ht = r.bottom - r.top;
+    if (!T81BatteryValidSize(w, ht, dpi))
+        return false;
+    s->batterySizeWindow = h;
+    s->batteryGoodSizeDip = SIZE{MulDiv(w, 96, dpi), MulDiv(ht, 96, dpi)};
+    Wh_Log(L"[T81-BAT-SIZE] captured hwnd=%p size=%dx%d dpi=%d", h, w, ht, dpi);
     return true;
 }
 // Restore only a severely collapsed window; do not override valid changes made
 // by the flyout's own layout. Never run on a foreign HWND or thread.
 static bool T81BatteryEnsureSize(HWND h) {
-    if(!s || !h || !IsWindow(h) || GetWindowThreadProcessId(h,nullptr)!=GetCurrentThreadId())return false;
-    RECT r{};if(!GetWindowRect(h,&r))return false;
-    int dpi=T81BatteryDpi(h),w=r.right-r.left,ht=r.bottom-r.top;
-    if(T81BatteryValidSize(w,ht,dpi)) {
-        if(s->batterySizeWindow!=h || !s->batteryGoodSizeDip.cx) T81BatteryCaptureSize(h);
+    if (!s || !h || !IsWindow(h) ||
+        GetWindowThreadProcessId(h, nullptr) != GetCurrentThreadId())
+        return false;
+    RECT r{};
+    if (!GetWindowRect(h, &r))
+        return false;
+    int dpi = T81BatteryDpi(h), w = r.right - r.left, ht = r.bottom - r.top;
+    if (T81BatteryValidSize(w, ht, dpi)) {
+        if (s->batterySizeWindow != h || !s->batteryGoodSizeDip.cx)
+            T81BatteryCaptureSize(h);
         return true;
     }
-    if(s->batterySizeWindow!=h || !s->batteryGoodSizeDip.cx || !s->batteryGoodSizeDip.cy) {
-        Wh_Log(L"[T81-BAT-SIZE] collapsed hwnd=%p size=%dx%d; no validated size",h,w,ht);
+    if (s->batterySizeWindow != h || !s->batteryGoodSizeDip.cx ||
+        !s->batteryGoodSizeDip.cy) {
+        Wh_Log(
+            L"[T81-BAT-SIZE] collapsed hwnd=%p size=%dx%d; no validated size",
+            h, w, ht);
         return false;
     }
-    int nw=MulDiv(s->batteryGoodSizeDip.cx,dpi,96),nh=MulDiv(s->batteryGoodSizeDip.cy,dpi,96);
-    if(!T81BatteryValidSize(nw,nh,dpi))return false;
-    BOOL ok=SetWindowPos(h,nullptr,0,0,nw,nh,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
-    RECT after{};bool valid=ok && GetWindowRect(h,&after) &&
-        T81BatteryValidSize(after.right-after.left,after.bottom-after.top,dpi);
-    Wh_Log(L"[T81-BAT-SIZE] restore hwnd=%p from=%dx%d to=%dx%d dpi=%d ok=%d",h,w,ht,nw,nh,dpi,valid?1:0);
+    int nw = MulDiv(s->batteryGoodSizeDip.cx, dpi, 96),
+        nh = MulDiv(s->batteryGoodSizeDip.cy, dpi, 96);
+    if (!T81BatteryValidSize(nw, nh, dpi))
+        return false;
+    BOOL ok = SetWindowPos(h, nullptr, 0, 0, nw, nh,
+                           SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    RECT after{};
+    bool valid = ok && GetWindowRect(h, &after) &&
+                 T81BatteryValidSize(after.right - after.left,
+                                     after.bottom - after.top, dpi);
+    Wh_Log(L"[T81-BAT-SIZE] restore hwnd=%p from=%dx%d to=%dx%d dpi=%d ok=%d",
+           h, w, ht, nw, nh, dpi, valid ? 1 : 0);
     return valid;
 }
 static void T81BatteryArmSizeCheck(HWND h) {
-    if(!s || !s->bar || !h || s->batterySizeWindow!=h)return;
-    s->batteryRepairUntil=GetTickCount64()+1200;
-    SetTimer(s->bar,TIMER_T81_BATTERY_REPAIR,50,nullptr);
+    if (!s || !s->bar || !h || s->batterySizeWindow != h)
+        return;
+    s->batteryRepairUntil = GetTickCount64() + 1200;
+    SetTimer(s->bar, TIMER_T81_BATTERY_REPAIR, 50, nullptr);
 }
 static void T81BatterySizeCheck() {
-    if(!s || !s->bar)return;
-    HWND h=s->batterySizeWindow;
-    if(!h || !IsWindow(h) || !IsWindowVisible(h) ||
-       GetWindowThreadProcessId(h,nullptr)!=GetCurrentThreadId() || GetTickCount64()>s->batteryRepairUntil) {
-        KillTimer(s->bar,TIMER_T81_BATTERY_REPAIR);s->batteryRepairUntil=0;return;
+    if (!s || !s->bar)
+        return;
+    HWND h = s->batterySizeWindow;
+    if (!h || !IsWindow(h) || !IsWindowVisible(h) ||
+        GetWindowThreadProcessId(h, nullptr) != GetCurrentThreadId() ||
+        GetTickCount64() > s->batteryRepairUntil) {
+        KillTimer(s->bar, TIMER_T81_BATTERY_REPAIR);
+        s->batteryRepairUntil = 0;
+        return;
     }
-    RECT before{}; if(!GetWindowRect(h,&before))return;
-    int dpi=T81BatteryDpi(h);
-    if(!T81BatteryValidSize(before.right-before.left,before.bottom-before.top,dpi)) {
-        if(T81BatteryEnsureSize(h)) PositionOriginalBatteryFlyout(h);
-        else {KillTimer(s->bar,TIMER_T81_BATTERY_REPAIR);s->batteryRepairUntil=0;}
-    } else if (MulDiv(before.right-before.left,96,dpi)!=s->batteryGoodSizeDip.cx ||
-               MulDiv(before.bottom-before.top,96,dpi)!=s->batteryGoodSizeDip.cy) {
+    RECT before{};
+    if (!GetWindowRect(h, &before))
+        return;
+    int dpi = T81BatteryDpi(h);
+    if (!T81BatteryValidSize(before.right - before.left,
+                             before.bottom - before.top, dpi)) {
+        if (T81BatteryEnsureSize(h))
+            PositionOriginalBatteryFlyout(h);
+        else {
+            KillTimer(s->bar, TIMER_T81_BATTERY_REPAIR);
+            s->batteryRepairUntil = 0;
+        }
+    } else if (MulDiv(before.right - before.left, 96, dpi) !=
+                   s->batteryGoodSizeDip.cx ||
+               MulDiv(before.bottom - before.top, 96, dpi) !=
+                   s->batteryGoodSizeDip.cy) {
         T81BatteryCaptureSize(h);
     }
 }
@@ -18634,8 +19323,11 @@ static LRESULT CALLBACK BatteryFrameSubclass(HWND h,
         if (s && s->batteryFrameWindow == h)
             s->batteryFrameWindow = nullptr;
         if (s && s->batterySizeWindow == h) {
-            s->batterySizeWindow=nullptr;s->batteryGoodSizeDip=SIZE{};s->batteryRepairUntil=0;
-            if(s->bar)KillTimer(s->bar,TIMER_T81_BATTERY_REPAIR);
+            s->batterySizeWindow = nullptr;
+            s->batteryGoodSizeDip = SIZE{};
+            s->batteryRepairUntil = 0;
+            if (s->bar)
+                KillTimer(s->bar, TIMER_T81_BATTERY_REPAIR);
         }
     }
     return DefSubclassProc(h, msg, wp, lp);
@@ -18644,8 +19336,11 @@ static void CleanupBatteryFrame() {
     if (!s || !s->batteryFrameWindow)
         return;
     HWND h = s->batteryFrameWindow;
-    if(s->bar)KillTimer(s->bar,TIMER_T81_BATTERY_REPAIR);
-    s->batterySizeWindow=nullptr;s->batteryGoodSizeDip=SIZE{};s->batteryRepairUntil=0;
+    if (s->bar)
+        KillTimer(s->bar, TIMER_T81_BATTERY_REPAIR);
+    s->batterySizeWindow = nullptr;
+    s->batteryGoodSizeDip = SIZE{};
+    s->batteryRepairUntil = 0;
     s->batteryFrameWindow = nullptr;
     if (IsWindow(h) &&
         GetWindowThreadProcessId(h, nullptr) == GetCurrentThreadId()) {
@@ -19345,7 +20040,7 @@ static bool TryOriginalBatteryFlyout1511() {
                 PositionOriginalBatteryFlyout(existingBattery);
                 ShowWindow(existingBattery, SW_SHOW);
                 if (!T81BatteryEnsureSize(existingBattery)) {
-                    ShowWindow(existingBattery,SW_HIDE);
+                    ShowWindow(existingBattery, SW_HIDE);
                     Wh_Log(L"[T81-BAT-SIZE] reuse aborted: show collapsed");
                     return false;
                 }
@@ -19513,7 +20208,8 @@ static bool TryOriginalBatteryFlyout1511() {
         DwmSetWindowAttribute(flyout, DWMWA_TRANSITIONS_FORCEDISABLED,
                               &disabled, sizeof(disabled));
         StyleOriginalBatteryFlyout(flyout);
-        if (T81BatteryCaptureSize(flyout)) T81BatteryArmSizeCheck(flyout);
+        if (T81BatteryCaptureSize(flyout))
+            T81BatteryArmSizeCheck(flyout);
         PositionOriginalBatteryFlyout(flyout);
         ClearBatteryInitialChildFocus(flyout);
     } else
@@ -21062,7 +21758,7 @@ static void ShowLanguageIndicatorMenu() {
     PopulateLanguageFlyoutItems();
     if (s->languageFlyoutItems.empty())
         return;
-    if (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load()==7) {
+    if (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 7) {
         ShowWin7LanguageMenu(target, targetPid, targetThread);
         return;
     }
@@ -21458,22 +22154,29 @@ static BYTE EffectiveBarBackgroundOpacity();
 static void PaintTaskbarBackground(Graphics& g, int width, int height);
 // Blend the two darker ends into the brighter center. The Start end
 // occupies only the Start cell; the notification end follows tray geometry.
-static void T81PaintWin7Ends(Graphics& g, int width, int height,
-                             int startEnd, int trayStart, bool vertical) {
+static void T81PaintWin7Ends(Graphics& g,
+                             int width,
+                             int height,
+                             int startEnd,
+                             int trayStart,
+                             bool vertical) {
     if (!T81IsWin7Skin(taskbarSkin.load()) || width <= 0 || height <= 0)
         return;
     int length = vertical ? height : width;
     if (taskbarSkin.load() == 6) {
         // AeroBasic.xaml TrayAreaShade: 00/4D/66/70 at 0/.25/.55/1.
-        int begin=std::clamp(trayStart,0,length), span=length-begin;
-        for(int i=0;i<span;++i) {
-            float t=span>1?(float)i/(span-1):1.f;
-            int alpha=t<.25f ? (int)std::lround(77.f*t/.25f) :
-                      t<.55f ? (int)std::lround(77.f+25.f*(t-.25f)/.30f) :
-                                  (int)std::lround(102.f+10.f*(t-.55f)/.45f);
-            SolidBrush shade(Color(alpha,0,0,0));
-            if(vertical) g.FillRectangle(&shade,0,i+begin,width,1);
-            else g.FillRectangle(&shade,i+begin,0,1,height);
+        int begin = std::clamp(trayStart, 0, length), span = length - begin;
+        for (int i = 0; i < span; ++i) {
+            float t = span > 1 ? (float)i / (span - 1) : 1.f;
+            int alpha =
+                t < .25f   ? (int)std::lround(77.f * t / .25f)
+                : t < .55f ? (int)std::lround(77.f + 25.f * (t - .25f) / .30f)
+                           : (int)std::lround(102.f + 10.f * (t - .55f) / .45f);
+            SolidBrush shade(Color(alpha, 0, 0, 0));
+            if (vertical)
+                g.FillRectangle(&shade, 0, i + begin, width, 1);
+            else
+                g.FillRectangle(&shade, i + begin, 0, 1, height);
         }
         return;
     }
@@ -21736,7 +22439,8 @@ static void T81SetExperimentalBlur(HWND h) {
     static const wchar_t property[] = L"WH_Taskbar81_OwnBlurEnabled";
     // Only Aero-era skins: never change the native flat 8/8.1 or custom skin.
     int skin = taskbarSkin.load();
-    bool enable = experimentalLiveBlur.load() && skin != 6 && (T81IsWin7Skin(skin) || skin == 2) &&
+    bool enable = experimentalLiveBlur.load() && skin != 6 &&
+                  (T81IsWin7Skin(skin) || skin == 2) &&
                   !(s && h == s->bar && s->barDragBlurSuspended);
     if (!enable && !GetPropW(h, property))
         return;
@@ -21803,8 +22507,12 @@ static void ConfigureBarAlpha(HWND h, bool perPixel) {
     s->legacyAlphaReady = false;
     if (!perPixel) {
         s->legacyAlphaReady =
-            SetLayeredWindowAttributes(h, 0, (taskbarSkin.load()==6 || taskbarSkin.load()==7) ? 255 : (BYTE)taskbarOpacity.load(),
-                                       LWA_ALPHA) != FALSE;
+            SetLayeredWindowAttributes(
+                h, 0,
+                (taskbarSkin.load() == 6 || taskbarSkin.load() == 7)
+                    ? 255
+                    : (BYTE)taskbarOpacity.load(),
+                LWA_ALPHA) != FALSE;
         if (!s->legacyAlphaReady)
             Wh_Log(L"[T81-DIAG] could not apply legacy bar alpha error=%lu",
                    GetLastError());
@@ -21987,12 +22695,12 @@ static bool DrawBetaTaskState(Graphics& g,
                                {0, 0, 0, opacity, 0},
                                {0, 0, 0, 0, 1}}};
         attr.SetColorMatrix(&matrix);
-        g.DrawImage(image,
-                    Rect((int)cell.left, (int)cell.top,
-                         (int)(cell.right - cell.left),
-                         (int)(cell.bottom - cell.top)),
-                    0, 0, (int)image->GetWidth(), (int)image->GetHeight(),
-                    UnitPixel, &attr);
+        g.DrawImage(
+            image,
+            Rect((int)cell.left, (int)cell.top, (int)(cell.right - cell.left),
+                 (int)(cell.bottom - cell.top)),
+            0, 0, (int)image->GetWidth(), (int)image->GetHeight(), UnitPixel,
+            &attr);
         if (running && active) {
             SolidBrush light(Color(20, 255, 255, 255));
             g.FillRectangle(&light, (int)cell.left + 2, (int)cell.top + 2,
@@ -22223,12 +22931,13 @@ static void DrawTaskTileStack(Graphics& g,
                               int layers,
                               bool active,
                               float fade) {
-    if(taskbarSkin.load()==7) {
-        int count=std::clamp(layers,1,3),step=std::max(1,Px(3));
-        int frontWidth=std::max(1,width-(count-1)*step);
-        for(int i=count-1;i>=0;--i) {
-            RECT cell{x+Px(1)+i*step,Px(4),x+frontWidth-Px(2)+i*step,height-Px(3)};
-            T81ClassicRunningFrame(g,cell,i==0 && active,Dpi());
+    if (taskbarSkin.load() == 7) {
+        int count = std::clamp(layers, 1, 3), step = std::max(1, Px(3));
+        int frontWidth = std::max(1, width - (count - 1) * step);
+        for (int i = count - 1; i >= 0; --i) {
+            RECT cell{x + Px(1) + i * step, Px(4),
+                      x + frontWidth - Px(2) + i * step, height - Px(3)};
+            T81ClassicRunningFrame(g, cell, i == 0 && active, Dpi());
         }
         return;
     }
@@ -22412,10 +23121,11 @@ static void DrawBarForeground(HDC mem,
             (T81SkinHasTrackedStartButton(taskbarSkin.load()) &&
              T81StartMenuOn(s->bar));
         if (!startHotCorner.load()) {
-            if (taskbarSkin.load()==7) {
-                T81ClassicStart(g,L.start,T81StartMenuOn(s->bar),s->hot==HIT_START,Dpi());
+            if (taskbarSkin.load() == 7) {
+                T81ClassicStart(g, L.start, T81StartMenuOn(s->bar),
+                                s->hot == HIT_START, Dpi());
             } else if (T81IsWin7Skin(taskbarSkin.load()) &&
-                (s->win7StartImage || s->betaTexture[30])) {
+                       (s->win7StartImage || s->betaTexture[30])) {
                 if (!gWin7OrbReady)
                     DrawWin7Start(
                         g, L.start.right, h,
@@ -22532,7 +23242,8 @@ static void DrawBarForeground(HDC mem,
             } else if (fade > 0.001f) {
                 RECT tile{x, 0, x + L.width, rowHeight};
                 if (taskbarSkin.load() == 7)
-                    DrawTaskTileStack(g,x,L.width,rowHeight,1,pressed,fade);
+                    DrawTaskTileStack(g, x, L.width, rowHeight, 1, pressed,
+                                      fade);
                 else if (taskbarSkin.load() == 3 || taskbarSkin.load() == 4)
                     DrawFlatPinnedHover(g, tile, fade);
                 else
@@ -22560,9 +23271,9 @@ static void DrawBarForeground(HDC mem,
             g.Restore(rowTransform);
         }
         g.ResetClip();
-        if(taskbarSkin.load()==7 && !s->preservingTray) {
-            RECT tray{L.tray.left,Px(4),w-Px(2),h-Px(3)};
-            T81ClassicFrame(g,tray,true,false);
+        if (taskbarSkin.load() == 7 && !s->preservingTray) {
+            RECT tray{L.tray.left, Px(4), w - Px(2), h - Px(3)};
+            T81ClassicFrame(g, tray, true, false);
         }
         if (s->dragActive && s->dragInsertion >= 0) {
             int marker =
@@ -22571,9 +23282,11 @@ static void DrawBarForeground(HDC mem,
             g.FillRectangle(&caret, marker - 1, Px(4), std::max(1, Px(2)),
                             std::max(1, h - Px(8)));
         }
-        if (taskbarSkin.load()==7 && !IsRectEmpty(&L.desktop)) {
-            T81ClassicDesktop(g,L.desktop,s->hot==HIT_DESKTOP,s->betaDesktopPressed,Dpi());
-        } else if (T81IsWin7Skin(taskbarSkin.load()) && !IsRectEmpty(&L.desktop)) {
+        if (taskbarSkin.load() == 7 && !IsRectEmpty(&L.desktop)) {
+            T81ClassicDesktop(g, L.desktop, s->hot == HIT_DESKTOP,
+                              s->betaDesktopPressed, Dpi());
+        } else if (T81IsWin7Skin(taskbarSkin.load()) &&
+                   !IsRectEmpty(&L.desktop)) {
             DrawWin7StylerPeek(g, L.desktop, s->hot == HIT_DESKTOP,
                                s->betaDesktopPressed, Dpi());
         } else if (BetaTextureAvailable(0) && !IsRectEmpty(&L.desktop)) {
@@ -22632,13 +23345,15 @@ static void DrawBarForeground(HDC mem,
         int x = xs[i];
         int rowTop = (i / L.columns) * L.rowHeight;
         int rowHeight = i / L.columns == L.rows - 1 ? h - rowTop : L.rowHeight;
-        int drawIcon=icon, front=L.width;
-        if(taskbarSkin.load()==7) {
-            int layers=TaskTileLayers(s->groups[i].tasks.size());
-            front=std::max(1,L.width-std::max(0,layers-1)*std::max(1,Px(3)));
-            drawIcon=std::max(1,std::min({icon,rowHeight-Px(12),front-Px(10)}));
+        int drawIcon = icon, front = L.width;
+        if (taskbarSkin.load() == 7) {
+            int layers = TaskTileLayers(s->groups[i].tasks.size());
+            front = std::max(
+                1, L.width - std::max(0, layers - 1) * std::max(1, Px(3)));
+            drawIcon = std::max(
+                1, std::min({icon, rowHeight - Px(12), front - Px(10)}));
         }
-        int ix=L.labels ? x+Px(10) : x+(front-drawIcon)/2;
+        int ix = L.labels ? x + Px(10) : x + (front - drawIcon) / 2;
         ScopedSavedDC clip(mem);
         const auto* t = LiveButtonTransition(s->groups[i].key);
         if (t && t->reveal) {
@@ -22647,14 +23362,15 @@ static void DrawBarForeground(HDC mem,
                 ButtonTransitionFraction(*t), false);
             IntersectClipRect(mem, c.left, c.top, c.right, c.bottom);
         }
-        DrawIconEx(mem, ix, rowTop + (rowHeight - drawIcon) / 2, GroupIcon(i), drawIcon,
-                   drawIcon, 0, nullptr, DI_NORMAL);
+        DrawIconEx(mem, ix, rowTop + (rowHeight - drawIcon) / 2, GroupIcon(i),
+                   drawIcon, drawIcon, 0, nullptr, DI_NORMAL);
     }
     HFONT font = CreateTaskbarFont(Dpi(), s->perPixelBar);
     std::unique_ptr<std::remove_pointer<HFONT>::type, DeleteFontHandle>
         fontGuard(font);
     ScopedSelection fontSelection(mem, font);
-    SetTextColor(mem, taskbarSkin.load()==7 ? RGB(0,0,0) : RGB(255,255,255));
+    SetTextColor(mem,
+                 taskbarSkin.load() == 7 ? RGB(0, 0, 0) : RGB(255, 255, 255));
     SetBkMode(mem, TRANSPARENT);
     if (L.labels)
         for (const auto& ghost : s->buttonTransitions)
@@ -22694,7 +23410,8 @@ static void DrawBarForeground(HDC mem,
     // overflow and clock text; the font itself is deleted after painting.
     if (font)
         SelectObject(mem, font);
-    SetTextColor(mem, taskbarSkin.load()==7 ? RGB(0,0,0) : RGB(255,255,255));
+    SetTextColor(mem,
+                 taskbarSkin.load() == 7 ? RGB(0, 0, 0) : RGB(255, 255, 255));
     SetBkMode(mem, TRANSPARENT);
     if (L.overflow.right > L.overflow.left) {
         RECT more = L.overflow;
@@ -22721,8 +23438,12 @@ static void DrawBarForeground(HDC mem,
             RectF rect((REAL)row.left, (REAL)row.top,
                        (REAL)(row.right - row.left),
                        (REAL)(row.bottom - row.top));
-            clockGraphics.DrawString(text, -1, &clockFont, rect, &format,
-                                     (taskbarSkin.load()==7 || (taskbarSkin.load()==6 && text==s->languageText.c_str())) ? &basicLanguage : &white);
+            clockGraphics.DrawString(
+                text, -1, &clockFont, rect, &format,
+                (taskbarSkin.load() == 7 ||
+                 (taskbarSkin.load() == 6 && text == s->languageText.c_str()))
+                    ? &basicLanguage
+                    : &white);
         };
         if (!clockDrawn) {
             if (family.GetLastStatus() == Ok &&
@@ -22740,9 +23461,11 @@ static void DrawBarForeground(HDC mem,
             }
         }
         if (!IsRectEmpty(&L.language)) {
-            if(taskbarSkin.load()==6 || taskbarSkin.load()==7) SetTextColor(mem,RGB(26,41,58));
+            if (taskbarSkin.load() == 6 || taskbarSkin.load() == 7)
+                SetTextColor(mem, RGB(26, 41, 58));
             ClockTextRows languageRows = GetClockTextRows(L.language, h, Dpi());
-            bool twoLines = !T81IsWin7Skin(taskbarSkin.load()) && taskbarSkin.load()!=7 && languageRows.showDate &&
+            bool twoLines = !T81IsWin7Skin(taskbarSkin.load()) &&
+                            taskbarSkin.load() != 7 && languageRows.showDate &&
                             !s->languageRegion.empty();
             if (family.GetLastStatus() == Ok &&
                 clockFont.GetLastStatus() == Ok) {
@@ -22872,7 +23595,8 @@ void Paint(HWND hwnd) {
                 Graphics g(bg.dc);
                 PaintTaskbarBackground(g, w, h);
                 T81PaintWin7Ends(g, w, h, (int)L.start.right,
-                                 (int)std::min(L.tray.left, L.language.left), false);
+                                 (int)std::min(L.tray.left, L.language.left),
+                                 false);
             }
             PatBlt(black.dc, 0, 0, w, h, BLACKNESS);
             PatBlt(white.dc, 0, 0, w, h, WHITENESS);
@@ -22922,7 +23646,8 @@ void Paint(HWND hwnd) {
                 Graphics g(mem.get());
                 PaintTaskbarBackground(g, w, h);
                 T81PaintWin7Ends(g, w, h, (int)L.start.right,
-                                 (int)std::min(L.tray.left, L.language.left), false);
+                                 (int)std::min(L.tray.left, L.language.left),
+                                 false);
             }
             DrawBarForeground(mem.get(), L, w, h, xs, drawOrder, foreground,
                               time, date);
@@ -23058,10 +23783,11 @@ static void DrawPreviewBackground(HDC dc, RECT r) {
 }
 // One geometry source for drawing, hover and the enlarged hit target.
 static RECT PreviewCloseButtonRect(const PreviewItem& item) {
-    if ((taskbarSkin.load()==6 || taskbarSkin.load()==7)) {
-        int w=Px(16),h=Px(14); LONG x=item.cell.right-Px(7)-w;
-        LONG y=item.cell.top+(item.cell.bottom-item.cell.top-h)/2;
-        return RECT{x,y,x+w,y+h};
+    if ((taskbarSkin.load() == 6 || taskbarSkin.load() == 7)) {
+        int w = Px(16), h = Px(14);
+        LONG x = item.cell.right - Px(7) - w;
+        LONG y = item.cell.top + (item.cell.bottom - item.cell.top - h) / 2;
+        return RECT{x, y, x + w, y + h};
     }
     if (T81IsWin7Skin(taskbarSkin.load())) {
         LONG left = item.cell.right - Px(25), top = item.cell.top + Px(8);
@@ -23076,9 +23802,9 @@ static RECT PreviewCloseButtonRect(const PreviewItem& item) {
     return RECT{left, top, left + width, top + height};
 }
 static bool PreviewCloseHit(const PreviewItem& item, POINT p) {
-    if ((taskbarSkin.load()==6 || taskbarSkin.load()==7)) {
-        RECT hit=PreviewCloseButtonRect(item);
-        return !item.more && PtInRect(&item.cell,p) && PtInRect(&hit,p);
+    if ((taskbarSkin.load() == 6 || taskbarSkin.load() == 7)) {
+        RECT hit = PreviewCloseButtonRect(item);
+        return !item.more && PtInRect(&item.cell, p) && PtInRect(&hit, p);
     }
     if (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 2) {
         RECT hit = PreviewCloseButtonRect(item);
@@ -23180,45 +23906,42 @@ static void ClipWin7PreviewCorners(BYTE* bits, int w, int h) {
         }
 }
 // Shared Win7 texture renderer for normal, hover fade and pressed states.
-static void T81DrawWin7PreviewCloseTexture(Graphics& g, const RectF& dst, bool down, float fade) {
-                    // Scale the same artwork used by the Jump List with GDI+.
-                    auto savedClose = g.Save();
-                    g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
-                    g.SetPixelOffsetMode(PixelOffsetModeHighQuality);
-                    g.SetCompositingQuality(CompositingQualityHighQuality);
-                    Image* normal = s->betaTexture[8];
-                    Image* pressed =
-                        s->betaTexture[10] ? s->betaTexture[10] : normal;
-                    if (down)
-                        g.DrawImage(pressed, dst, 0.f, 0.f,
-                                    (REAL)pressed->GetWidth(),
-                                    (REAL)pressed->GetHeight(), UnitPixel);
-                    else {
-                        g.DrawImage(normal, dst, 0.f, 0.f,
-                                    (REAL)normal->GetWidth(),
-                                    (REAL)normal->GetHeight(), UnitPixel);
-                        if (s->betaTexture[9] &&
-                            fade > 0.f) {
-                            float a = std::max(
-                                0.f, std::min(1.f, fade));
-                            // A small RGB lift makes hover slightly lighter;
-                            // alpha remains independent and follows the
-                            // Start-style fade.
-                            ColorMatrix cm = {{{1, 0, 0, 0, 0},
-                                               {0, 1, 0, 0, 0},
-                                               {0, 0, 1, 0, 0},
-                                               {0, 0, 0, a, 0},
-                                               {0.035f, 0.035f, 0.035f, 0, 1}}};
-                            ImageAttributes attr;
-                            attr.SetColorMatrix(&cm);
-                            attr.SetWrapMode(WrapModeTileFlipXY);
-                            Image* over = s->betaTexture[9];
-                            g.DrawImage(
-                                over, dst, 0.f, 0.f, (REAL)over->GetWidth(),
-                                (REAL)over->GetHeight(), UnitPixel, &attr);
-                        }
-                    }
-                    g.Restore(savedClose);
+static void T81DrawWin7PreviewCloseTexture(Graphics& g,
+                                           const RectF& dst,
+                                           bool down,
+                                           float fade) {
+    // Scale the same artwork used by the Jump List with GDI+.
+    auto savedClose = g.Save();
+    g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+    g.SetPixelOffsetMode(PixelOffsetModeHighQuality);
+    g.SetCompositingQuality(CompositingQualityHighQuality);
+    Image* normal = s->betaTexture[8];
+    Image* pressed = s->betaTexture[10] ? s->betaTexture[10] : normal;
+    if (down)
+        g.DrawImage(pressed, dst, 0.f, 0.f, (REAL)pressed->GetWidth(),
+                    (REAL)pressed->GetHeight(), UnitPixel);
+    else {
+        g.DrawImage(normal, dst, 0.f, 0.f, (REAL)normal->GetWidth(),
+                    (REAL)normal->GetHeight(), UnitPixel);
+        if (s->betaTexture[9] && fade > 0.f) {
+            float a = std::max(0.f, std::min(1.f, fade));
+            // A small RGB lift makes hover slightly lighter;
+            // alpha remains independent and follows the
+            // Start-style fade.
+            ColorMatrix cm = {{{1, 0, 0, 0, 0},
+                               {0, 1, 0, 0, 0},
+                               {0, 0, 1, 0, 0},
+                               {0, 0, 0, a, 0},
+                               {0.035f, 0.035f, 0.035f, 0, 1}}};
+            ImageAttributes attr;
+            attr.SetColorMatrix(&cm);
+            attr.SetWrapMode(WrapModeTileFlipXY);
+            Image* over = s->betaTexture[9];
+            g.DrawImage(over, dst, 0.f, 0.f, (REAL)over->GetWidth(),
+                        (REAL)over->GetHeight(), UnitPixel, &attr);
+        }
+    }
+    g.Restore(savedClose);
 }
 static void DrawPreviewForeground(HDC mem, RECT r) {
     {
@@ -23268,7 +23991,8 @@ static void DrawPreviewForeground(HDC mem, RECT r) {
             if (!item.more && (int)i == s->previewHot) {
                 bool down = s->previewCloseHot && s->previewClosePress &&
                             s->previewClosePressedIndex == (int)i;
-                if ((T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 2) &&
+                if ((T81IsWin7Skin(taskbarSkin.load()) ||
+                     taskbarSkin.load() == 2) &&
                     BetaTextureAvailable(8)) {
                     RECT button = PreviewCloseButtonRect(item);
                     // Only the Windows 8 beta thumbnail close artwork is 1.3%
@@ -23279,7 +24003,8 @@ static void DrawPreviewForeground(HDC mem, RECT r) {
                     RectF dst((REAL)button.left + bw * (1.f - scale) / 2.f,
                               (REAL)button.top + bh * (1.f - scale) / 2.f,
                               bw * scale, bh * scale);
-                    T81DrawWin7PreviewCloseTexture(g, dst, down, s->win7PreviewCloseFade);
+                    T81DrawWin7PreviewCloseTexture(g, dst, down,
+                                                   s->win7PreviewCloseFade);
                 } else {
                     // The X is already on a red button when the thumbnail
                     // is hot; the X hover uses the brighter reference red.
@@ -23402,52 +24127,88 @@ static void ConfigurePreviewAlpha(HWND h, bool perPixel) {
 // Windows 7 Basic list-mode reconstruction from the supplied screenshots.
 // Uses the same PreviewItem and hit/close/activation machinery as thumbnails.
 static void T81DrawBasicPreview(HDC dc, const RECT& bounds) {
-    Graphics g(dc); g.SetSmoothingMode(SmoothingModeNone);
-    int w=bounds.right, h=bounds.bottom;
-    bool classic=taskbarSkin.load()==7;
-    SolidBrush background(classic ? Color(255,212,208,200) : Color(255,108,128,150));
-    g.FillRectangle(&background,0,0,w,h);
-    Pen outer(classic?Color(255,64,64,64):Color(255,47,61,76),1), inner(classic?Color(255,255,255,255):Color(255,208,219,228),1);
-    g.DrawRectangle(&outer,0,0,std::max(0,w-1),std::max(0,h-1));
-    if(w>4 && h>4)g.DrawRectangle(&inner,2,2,w-5,h-5);
-    for(size_t i=0;i<s->previews.size();++i) {
-        const auto& item=s->previews[i]; const RECT& r=item.cell;
-        int rw=r.right-r.left,rh=r.bottom-r.top;
-        SolidBrush cell(classic ? ((int)i==s->previewHot ? Color(255,10,36,106) : Color(255,212,208,200)) : ((int)i==s->previewHot ? Color(255,140,171,204):Color(255,121,151,182)));
-        g.FillRectangle(&cell,(int)r.left,(int)r.top,rw,rh);
-        Pen frame(Color(255,201,219,236),1);
-        if(!classic)g.DrawRectangle(&frame,(int)r.left,(int)r.top,std::max(0,rw-1),std::max(0,rh-1));
-        if((int)i==s->previewHot && !item.more) {
-            RECT c=PreviewCloseButtonRect(item);
-            bool down=s->previewCloseHot && s->previewClosePress && s->previewClosePressedIndex==(int)i;
-            if(s && s->betaTexture[8]) {
-                RectF dest((REAL)c.left,(REAL)c.top,(REAL)(c.right-c.left),(REAL)(c.bottom-c.top));
-                T81DrawWin7PreviewCloseTexture(g,dest,down,s->win7PreviewCloseFade);
+    Graphics g(dc);
+    g.SetSmoothingMode(SmoothingModeNone);
+    int w = bounds.right, h = bounds.bottom;
+    bool classic = taskbarSkin.load() == 7;
+    SolidBrush background(classic ? Color(255, 212, 208, 200)
+                                  : Color(255, 108, 128, 150));
+    g.FillRectangle(&background, 0, 0, w, h);
+    Pen outer(classic ? Color(255, 64, 64, 64) : Color(255, 47, 61, 76), 1),
+        inner(classic ? Color(255, 255, 255, 255) : Color(255, 208, 219, 228),
+              1);
+    g.DrawRectangle(&outer, 0, 0, std::max(0, w - 1), std::max(0, h - 1));
+    if (w > 4 && h > 4)
+        g.DrawRectangle(&inner, 2, 2, w - 5, h - 5);
+    for (size_t i = 0; i < s->previews.size(); ++i) {
+        const auto& item = s->previews[i];
+        const RECT& r = item.cell;
+        int rw = r.right - r.left, rh = r.bottom - r.top;
+        SolidBrush cell(
+            classic ? ((int)i == s->previewHot ? Color(255, 10, 36, 106)
+                                               : Color(255, 212, 208, 200))
+                    : ((int)i == s->previewHot ? Color(255, 140, 171, 204)
+                                               : Color(255, 121, 151, 182)));
+        g.FillRectangle(&cell, (int)r.left, (int)r.top, rw, rh);
+        Pen frame(Color(255, 201, 219, 236), 1);
+        if (!classic)
+            g.DrawRectangle(&frame, (int)r.left, (int)r.top,
+                            std::max(0, rw - 1), std::max(0, rh - 1));
+        if ((int)i == s->previewHot && !item.more) {
+            RECT c = PreviewCloseButtonRect(item);
+            bool down = s->previewCloseHot && s->previewClosePress &&
+                        s->previewClosePressedIndex == (int)i;
+            if (s && s->betaTexture[8]) {
+                RectF dest((REAL)c.left, (REAL)c.top, (REAL)(c.right - c.left),
+                           (REAL)(c.bottom - c.top));
+                T81DrawWin7PreviewCloseTexture(g, dest, down,
+                                               s->win7PreviewCloseFade);
             } else {
-                SolidBrush red(down?Color(255,130,24,24):s->previewCloseHot?Color(255,186,73,50):Color(255,155,45,35));
-                g.FillRectangle(&red,(int)c.left,(int)c.top,(int)(c.right-c.left),(int)(c.bottom-c.top));
-                Pen x(Color(255,255,255,255),std::max(1,Px(1)));
-                int m=std::max(3,Px(4));
-                g.DrawLine(&x,(int)c.left+m,(int)c.top+m,(int)c.right-m-1,(int)c.bottom-m-1);
-                g.DrawLine(&x,(int)c.right-m-1,(int)c.top+m,(int)c.left+m,(int)c.bottom-m-1);
+                SolidBrush red(down                 ? Color(255, 130, 24, 24)
+                               : s->previewCloseHot ? Color(255, 186, 73, 50)
+                                                    : Color(255, 155, 45, 35));
+                g.FillRectangle(&red, (int)c.left, (int)c.top,
+                                (int)(c.right - c.left),
+                                (int)(c.bottom - c.top));
+                Pen x(Color(255, 255, 255, 255), std::max(1, Px(1)));
+                int m = std::max(3, Px(4));
+                g.DrawLine(&x, (int)c.left + m, (int)c.top + m,
+                           (int)c.right - m - 1, (int)c.bottom - m - 1);
+                g.DrawLine(&x, (int)c.right - m - 1, (int)c.top + m,
+                           (int)c.left + m, (int)c.bottom - m - 1);
             }
         }
     }
     // Finish GDI+ before native icon and text drawing on the same DC.
     g.Flush(FlushIntentionSync);
-    HFONT font=CreateFontW(-MulDiv(9,Dpi(),72),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,ANTIALIASED_QUALITY,DEFAULT_PITCH,L"Segoe UI");
-    HGDIOBJ old=font?SelectObject(dc,font):nullptr;
-    SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(255,255,255));
-    for(size_t i=0;i<s->previews.size();++i) {
-        const auto& item=s->previews[i];const RECT& r=item.cell;
-        SetTextColor(dc, classic && (int)i!=s->previewHot ? RGB(0,0,0) : RGB(255,255,255));
-        int icon=Px(16);
-        if(item.icon)DrawIconEx(dc,r.left+Px(7),r.top+(r.bottom-r.top-icon)/2,item.icon,icon,icon,0,nullptr,DI_NORMAL);
-        RECT text{r.left+Px(29),r.top,r.right-Px(6),r.bottom};
-        if((int)i==s->previewHot && !item.more)text.right=PreviewCloseButtonRect(item).left-Px(4);
-        DrawTextW(dc,item.title.c_str(),-1,&text,DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS|DT_NOPREFIX);
+    HFONT font = CreateFontW(-MulDiv(9, Dpi(), 72), 0, 0, 0, FW_NORMAL, FALSE,
+                             FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                             CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
+                             DEFAULT_PITCH, L"Segoe UI");
+    HGDIOBJ old = font ? SelectObject(dc, font) : nullptr;
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, RGB(255, 255, 255));
+    for (size_t i = 0; i < s->previews.size(); ++i) {
+        const auto& item = s->previews[i];
+        const RECT& r = item.cell;
+        SetTextColor(dc, classic && (int)i != s->previewHot
+                             ? RGB(0, 0, 0)
+                             : RGB(255, 255, 255));
+        int icon = Px(16);
+        if (item.icon)
+            DrawIconEx(dc, r.left + Px(7),
+                       r.top + (r.bottom - r.top - icon) / 2, item.icon, icon,
+                       icon, 0, nullptr, DI_NORMAL);
+        RECT text{r.left + Px(29), r.top, r.right - Px(6), r.bottom};
+        if ((int)i == s->previewHot && !item.more)
+            text.right = PreviewCloseButtonRect(item).left - Px(4);
+        DrawTextW(dc, item.title.c_str(), -1, &text,
+                  DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
     }
-    if(old)SelectObject(dc,old);if(font)DeleteObject(font);
+    if (old)
+        SelectObject(dc, old);
+    if (font)
+        DeleteObject(font);
 }
 static void PaintPreview(HWND h) {
     PAINTSTRUCT ps{};
@@ -23459,11 +24220,21 @@ static void PaintPreview(HWND h) {
         EndPaint(h, &ps);
         return;
     }
-    if((taskbarSkin.load()==6 || taskbarSkin.load()==7)) {
-        HDC mem=CreateCompatibleDC(dc);HBITMAP bmp=CreateCompatibleBitmap(dc,w,hgt);
-        if(mem && bmp) {HGDIOBJ old=SelectObject(mem,bmp);T81DrawBasicPreview(mem,r);BitBlt(dc,0,0,w,hgt,mem,0,0,SRCCOPY);SelectObject(mem,old);}
-        if(bmp)DeleteObject(bmp);if(mem)DeleteDC(mem);
-        EndPaint(h,&ps);return;
+    if ((taskbarSkin.load() == 6 || taskbarSkin.load() == 7)) {
+        HDC mem = CreateCompatibleDC(dc);
+        HBITMAP bmp = CreateCompatibleBitmap(dc, w, hgt);
+        if (mem && bmp) {
+            HGDIOBJ old = SelectObject(mem, bmp);
+            T81DrawBasicPreview(mem, r);
+            BitBlt(dc, 0, 0, w, hgt, mem, 0, 0, SRCCOPY);
+            SelectObject(mem, old);
+        }
+        if (bmp)
+            DeleteObject(bmp);
+        if (mem)
+            DeleteDC(mem);
+        EndPaint(h, &ps);
+        return;
     }
     bool rendered = false;
     if (s->perPixelPreview && (size_t)w * (size_t)hgt > 8u * 1024u * 1024u) {
@@ -23633,11 +24404,13 @@ LRESULT CALLBACK PreviewProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                     s->peekCandidate = candidate;
                     s->peekCandidatePid = candidatePid;
                     KillTimer(h, TIMER_PEEK);
-                    if (candidate && (taskbarSkin.load()!=6 && taskbarSkin.load()!=7))
+                    if (candidate &&
+                        (taskbarSkin.load() != 6 && taskbarSkin.load() != 7))
                         SetTimer(h, TIMER_PEEK, 450, nullptr);
                 }
                 if (hot != s->previewHot || close != s->previewCloseHot) {
-                    if (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 2 || taskbarSkin.load() == 7) {
+                    if (T81IsWin7Skin(taskbarSkin.load()) ||
+                        taskbarSkin.load() == 2 || taskbarSkin.load() == 7) {
                         if (hot != s->previewHot)
                             s->win7PreviewCloseFade = 0.f;
                         s->win7PreviewCloseTick = GetTickCount64();
@@ -23652,7 +24425,8 @@ LRESULT CALLBACK PreviewProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             }
             case WM_TIMER:
                 if (wp == TIMER_WIN7_PREVIEW_CLOSE) {
-                    if (!T81IsWin7Skin(taskbarSkin.load()) && taskbarSkin.load() != 2 && taskbarSkin.load() != 7) {
+                    if (!T81IsWin7Skin(taskbarSkin.load()) &&
+                        taskbarSkin.load() != 2 && taskbarSkin.load() != 7) {
                         KillTimer(h, TIMER_WIN7_PREVIEW_CLOSE);
                         return 0;
                     }
@@ -23736,7 +24510,9 @@ LRESULT CALLBACK PreviewProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                 s->previewClosePress = false;
                 s->previewClosePressedIndex = -1;
                 for (size_t i = 0; i < s->previews.size(); i++)
-                    if (((taskbarSkin.load()!=6 && taskbarSkin.load()!=7) || s->previewHot==(int)i) && PreviewCloseHit(s->previews[i], p)) {
+                    if (((taskbarSkin.load() != 6 && taskbarSkin.load() != 7) ||
+                         s->previewHot == (int)i) &&
+                        PreviewCloseHit(s->previews[i], p)) {
                         const auto& item = s->previews[i];
                         s->previewClosePress = true;
                         s->previewClosePressedIndex = (int)i;
@@ -23991,8 +24767,9 @@ static void ShowInfoTooltip(const std::wstring& message, int center) {
         return;
     if (s->tooltip && IsWindow(s->tooltip))
         ShowWindow(s->tooltip, SW_HIDE);
-    if(T81TipStyleChanged(s->infoTip)) {
-        DestroyWindow(s->infoTip);s->infoTip=nullptr;
+    if (T81TipStyleChanged(s->infoTip)) {
+        DestroyWindow(s->infoTip);
+        s->infoTip = nullptr;
     }
     if (!s->infoTip || !IsWindow(s->infoTip)) {
         s->infoTip = CreateWindowExW(
@@ -24301,7 +25078,9 @@ void ShowPreviewPage(int group, int offset) {
         ShowPinTooltip(group);
         return;
     }
-    ConfigurePreviewAlpha(s->preview, (taskbarSkin.load()!=6 && taskbarSkin.load()!=7) && perPixelPreview.load());
+    ConfigurePreviewAlpha(
+        s->preview, (taskbarSkin.load() != 6 && taskbarSkin.load() != 7) &&
+                        perPixelPreview.load());
     ExcludeFromPeek(s->preview);
     Group g = s->groups[group];
     int total = (int)g.tasks.size();
@@ -24336,13 +25115,18 @@ void ShowPreviewPage(int group, int offset) {
     int cellW =
         std::max(1, std::min(Px(T81IsWin7Skin(taskbarSkin.load()) ? 182 : 188),
                              (available - gap - columns * gap) / columns));
-    if((taskbarSkin.load()==6 || taskbarSkin.load()==7)) {
-        gap=Px(8);cellH=Px(34);
-        maxRows=std::max(1,(availableH-gap)/(cellH+gap));
-        capacity=maxRows;maxCols=1;
-        offset=std::max(0,std::min(offset,((total-1)/capacity)*capacity));
-        count=std::min(total-offset,capacity);columns=1;rows=count;
-        cellW=std::min(Px(124),std::max(1,available-2*gap));
+    if ((taskbarSkin.load() == 6 || taskbarSkin.load() == 7)) {
+        gap = Px(8);
+        cellH = Px(34);
+        maxRows = std::max(1, (availableH - gap) / (cellH + gap));
+        capacity = maxRows;
+        maxCols = 1;
+        offset =
+            std::max(0, std::min(offset, ((total - 1) / capacity) * capacity));
+        count = std::min(total - offset, capacity);
+        columns = 1;
+        rows = count;
+        cellW = std::min(Px(124), std::max(1, available - 2 * gap));
     }
     int width = gap + columns * (cellW + gap),
         height = gap + rows * (cellH + gap);
@@ -24374,7 +25158,9 @@ void ShowPreviewPage(int group, int offset) {
     s->previewTotal = total;
     SetWindowPos(s->preview, HWND_TOPMOST, x, y, width, height,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    if (T81IsWin7Skin(taskbarSkin.load()) && (taskbarSkin.load()!=6 && taskbarSkin.load()!=7) && !s->perPixelPreview) {
+    if (T81IsWin7Skin(taskbarSkin.load()) &&
+        (taskbarSkin.load() != 6 && taskbarSkin.load() != 7) &&
+        !s->perPixelPreview) {
         HRGN region =
             CreateRoundRectRgn(0, 0, width + 1, height + 1, Px(10), Px(10));
         if (region && !SetWindowRgn(s->preview, region, TRUE))
@@ -24397,16 +25183,18 @@ void ShowPreviewPage(int group, int offset) {
         BOOL composition = TRUE;
         HRESULT compositionResult = DwmIsCompositionEnabled(&composition);
         HRESULT registration = E_FAIL;
-        if ((taskbarSkin.load()!=6 && taskbarSkin.load()!=7) && IsWindow(task.hwnd) && (FAILED(compositionResult) || composition))
+        if ((taskbarSkin.load() != 6 && taskbarSkin.load() != 7) &&
+            IsWindow(task.hwnd) && (FAILED(compositionResult) || composition))
             registration =
                 DwmRegisterThumbnail(s->preview, task.hwnd, &item.thumbnail);
         if (FAILED(registration)) {
             item.thumbnail = nullptr;
-            if((taskbarSkin.load()!=6 && taskbarSkin.load()!=7))
-            Wh_Log(
-                L"[T81-PREVIEW] thumbnail registration unavailable hwnd=%p "
-                L"hr=0x%08lX composition=%d",
-                task.hwnd, (unsigned long)registration, composition ? 1 : 0);
+            if ((taskbarSkin.load() != 6 && taskbarSkin.load() != 7))
+                Wh_Log(
+                    L"[T81-PREVIEW] thumbnail registration unavailable hwnd=%p "
+                    L"hr=0x%08lX composition=%d",
+                    task.hwnd, (unsigned long)registration,
+                    composition ? 1 : 0);
         }
         if (SUCCEEDED(registration) && item.thumbnail) {
             SIZE src{};
@@ -24494,14 +25282,16 @@ void ShowPreviewPage(int group, int offset) {
                     item.win7ThumbnailRect = prop.rcDestination;
             }
         }
-        if (!item.thumbnail && (taskbarSkin.load()!=6 && taskbarSkin.load()!=7))
+        if (!item.thumbnail &&
+            (taskbarSkin.load() != 6 && taskbarSkin.load() != 7))
             Wh_Log(L"[T81-PREVIEW] title fallback hwnd=%p", task.hwnd);
         s->previews.push_back(std::move(item));
     }
     // For one failed source use the existing native, non-activating tooltip.
     // For multiple windows retain the interactive popup and a title box for
     // each failed item so selecting/closing a specific window still works.
-    if ((taskbarSkin.load()!=6 && taskbarSkin.load()!=7) && total == 1 && s->previews.size() == 1 && !s->previews[0].thumbnail) {
+    if ((taskbarSkin.load() != 6 && taskbarSkin.load() != 7) && total == 1 &&
+        s->previews.size() == 1 && !s->previews[0].thumbnail) {
         std::wstring title = s->previews[0].title;
         HidePreview();
         RECT client{};
@@ -24864,32 +25654,52 @@ static void DrawWin7AeroTextures(Graphics& g,
 }
 static BYTE EffectiveBarBackgroundOpacity() {
     // The user's setting remains the actual opacity, including for Win7.
-    return (taskbarSkin.load()==6 || taskbarSkin.load()==7) ? 255 : (BYTE)taskbarBackgroundOpacity.load();
+    return (taskbarSkin.load() == 6 || taskbarSkin.load() == 7)
+               ? 255
+               : (BYTE)taskbarBackgroundOpacity.load();
 }
 // Win7Taskbar AeroBasic.xaml: tile the original opaque 128 x 40 texture.
-static void T81PaintBasicTexture(Graphics& g, int width, int height, bool vertical) {
-    auto saved=g.Save();
-    int length=vertical?height:width, thickness=vertical?width:height;
-    if(vertical) {
-        if(s && s->verticalSide==1) {g.TranslateTransform((REAL)width,0);g.RotateTransform(90.f);}
-        else {g.TranslateTransform(0,(REAL)height);g.RotateTransform(-90.f);}
+static void T81PaintBasicTexture(Graphics& g,
+                                 int width,
+                                 int height,
+                                 bool vertical) {
+    auto saved = g.Save();
+    int length = vertical ? height : width,
+        thickness = vertical ? width : height;
+    if (vertical) {
+        if (s && s->verticalSide == 1) {
+            g.TranslateTransform((REAL)width, 0);
+            g.RotateTransform(90.f);
+        } else {
+            g.TranslateTransform(0, (REAL)height);
+            g.RotateTransform(-90.f);
+        }
     }
-    SolidBrush fallback(Color(255,193,210,224));
-    g.FillRectangle(&fallback,0,0,length,thickness);
-    if(s && s->win7BasicTexture && thickness>0) {
-        TextureBrush texture(s->win7BasicTexture,WrapModeTile);
-        REAL scale=(REAL)thickness/40.f;
-        if(texture.GetLastStatus()==Ok && texture.ScaleTransform(scale,scale)==Ok)
-            g.FillRectangle(&texture,0,0,length,thickness);
+    SolidBrush fallback(Color(255, 193, 210, 224));
+    g.FillRectangle(&fallback, 0, 0, length, thickness);
+    if (s && s->win7BasicTexture && thickness > 0) {
+        TextureBrush texture(s->win7BasicTexture, WrapModeTile);
+        REAL scale = (REAL)thickness / 40.f;
+        if (texture.GetLastStatus() == Ok &&
+            texture.ScaleTransform(scale, scale) == Ok)
+            g.FillRectangle(&texture, 0, 0, length, thickness);
     }
     g.Restore(saved);
 }
 static void PaintTaskbarBackground(Graphics& g, int width, int height) {
-    if(taskbarSkin.load()==7) {
-        SolidBrush face(Color(255,212,208,200)), light(Color(255,255,255,255)),gray(Color(255,128,128,128));
-        g.FillRectangle(&face,0,0,width,height);g.FillRectangle(&gray,0,0,width,1);if(height>1)g.FillRectangle(&light,0,1,width,1);return;
+    if (taskbarSkin.load() == 7) {
+        SolidBrush face(Color(255, 212, 208, 200)),
+            light(Color(255, 255, 255, 255)), gray(Color(255, 128, 128, 128));
+        g.FillRectangle(&face, 0, 0, width, height);
+        g.FillRectangle(&gray, 0, 0, width, 1);
+        if (height > 1)
+            g.FillRectangle(&light, 0, 1, width, 1);
+        return;
     }
-    if (taskbarSkin.load()==6) {T81PaintBasicTexture(g,width,height,false);return;}
+    if (taskbarSkin.load() == 6) {
+        T81PaintBasicTexture(g, width, height, false);
+        return;
+    }
     if (s && T81IsWin7Skin(taskbarSkin.load()) && width > 0 && height > 0) {
         SolidBrush base(EffectiveLegacySkinTint());
         g.FillRectangle(&base, 0, 0, width, height);
@@ -28156,12 +28966,15 @@ static Image* JumpClosePrimary(JumpPopupData* d, int style, int size) {
 // Server uses the very same Win7 normal/hover/pressed resources even though
 // it intentionally does not enable the unrelated Beta Start/task textures.
 static bool JumpWin7CloseTextureAvailable(int i) {
-    return BetaTextureAvailable(i) || (taskbarSkin.load()==7 && s && i>=8 && i<=10 && s->betaTexture[i]);
+    return BetaTextureAvailable(i) || (taskbarSkin.load() == 7 && s && i >= 8 &&
+                                       i <= 10 && s->betaTexture[i]);
 }
 static RECT BetaJumpCloseRect(const JumpRow& row) {
     int size = Px(14),
         top = row.rect.top + ((row.rect.bottom - row.rect.top) - size) / 2;
-    int left = Px((T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load()==7) ? 8 : 16);
+    int left =
+        Px((T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 7) ? 8
+                                                                          : 16);
     return RECT{left, top, left + size, top + size};
 }
 static bool BetaJumpCloseHit(JumpPopupData* d, POINT p) {
@@ -28195,7 +29008,7 @@ static void PaintJumpPopup(HWND h, JumpPopupData* d) {
             ? mem
             : screen;
     const bool win7 = T81IsWin7Skin(taskbarSkin.load());
-    const bool classic=taskbarSkin.load()==7;
+    const bool classic = taskbarSkin.load() == 7;
     const int contentOffset = (win7 || classic) ? Px(8) : 0;
     RECT paper = client;
     if (!win7 && !classic) {
@@ -28205,7 +29018,8 @@ static void PaintJumpPopup(HWND h, JumpPopupData* d) {
         DeleteObject(bg);
         InflateRect(&paper, -Px(6), -Px(6));
     }
-    HBRUSH white = CreateSolidBrush(classic ? RGB(212,208,200) : RGB(255,255,255));
+    HBRUSH white =
+        CreateSolidBrush(classic ? RGB(212, 208, 200) : RGB(255, 255, 255));
     FillRect(dc, &paper, white);
     DeleteObject(white);
     if (!win7 && !classic) {
@@ -28233,14 +29047,22 @@ static void PaintJumpPopup(HWND h, JumpPopupData* d) {
     auto drawHeading = [&](int top, int bottom, bool frequent) {
         RECT head{Px(15) - contentOffset, top,
                   client.right - Px(14) + contentOffset, bottom};
-        SetTextColor(dc, classic ? RGB(0,0,0) : RGB(24,83,147));
+        SetTextColor(dc, classic ? RGB(0, 0, 0) : RGB(24, 83, 147));
         const wchar_t* heading = frequent ? Tr(L"Frequenti", L"Frequent")
                                           : Tr(L"Recenti", L"Recent");
-        if(classic) {
-            HFONT bold=CreateFontW(-MulDiv(9,Dpi(),72),0,0,0,FW_BOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,L"Tahoma");
-            HGDIOBJ old=bold?SelectObject(dc,bold):nullptr;
-            DrawTextW(dc,heading,-1,&head,DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
-            if(old)SelectObject(dc,old);if(bold)DeleteObject(bold);return;
+        if (classic) {
+            HFONT bold = CreateFontW(-MulDiv(9, Dpi(), 72), 0, 0, 0, FW_BOLD,
+                                     FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                                     OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                     DEFAULT_QUALITY, DEFAULT_PITCH, L"Tahoma");
+            HGDIOBJ old = bold ? SelectObject(dc, bold) : nullptr;
+            DrawTextW(dc, heading, -1, &head,
+                      DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+            if (old)
+                SelectObject(dc, old);
+            if (bold)
+                DeleteObject(bold);
+            return;
         }
         DrawTextW(dc, heading, -1, &head,
                   DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
@@ -28264,14 +29086,16 @@ static void PaintJumpPopup(HWND h, JumpPopupData* d) {
         DeleteObject(line);
     };
     if (!d->docs.empty())
-        drawHeading((win7 || classic) ? Px(5) : Px(10), d->headerHeight, d->frequent);
+        drawHeading((win7 || classic) ? Px(5) : Px(10), d->headerHeight,
+                    d->frequent);
     if (d->secondHeaderTop >= 0)
         drawHeading(d->secondHeaderTop, d->secondHeaderBottom, false);
     for (size_t i = 0; i < d->rows.size(); ++i) {
         const auto& row = d->rows[i];
         RECT rr = row.rect;
         if (row.kind == JR_APP) {
-            HPEN sep = CreatePen(PS_SOLID, 1, classic ? RGB(128,128,128) : RGB(210,210,210));
+            HPEN sep = CreatePen(
+                PS_SOLID, 1, classic ? RGB(128, 128, 128) : RGB(210, 210, 210));
             HGDIOBJ pen = SelectObject(dc, sep);
             MoveToEx(dc, Px(7), rr.top, nullptr);
             LineTo(dc, client.right - Px(7), rr.top);
@@ -28282,10 +29106,12 @@ static void PaintJumpPopup(HWND h, JumpPopupData* d) {
         if ((int)i == d->hot) {
             RECT hover = rr;
             InflateRect(&hover, -Px(3), -Px(1));
-            HBRUSH hb = CreateSolidBrush(classic ? RGB(10,36,106) : RGB(222,240,252));
+            HBRUSH hb = CreateSolidBrush(classic ? RGB(10, 36, 106)
+                                                 : RGB(222, 240, 252));
             FillRect(dc, &hover, hb);
             DeleteObject(hb);
-            HBRUSH edge = CreateSolidBrush(classic ? RGB(10,36,106) : RGB(137,188,224));
+            HBRUSH edge = CreateSolidBrush(classic ? RGB(10, 36, 106)
+                                                   : RGB(137, 188, 224));
             FrameRect(dc, &hover, edge);
             DeleteObject(edge);
         }
@@ -28408,12 +29234,16 @@ static void PaintJumpPopup(HWND h, JumpPopupData* d) {
                                 : (d->betaCloseHot ? 9 : 8);
                 if (!JumpWin7CloseTextureAvailable(state))
                     state = 8;
-                if(taskbarSkin.load()==7) {
-                    Image* texture=s->betaTexture[state];
-                    gfx.DrawImage(texture,Rect((int)iconRect.left,(int)iconRect.top,
-                        (int)(iconRect.right-iconRect.left),(int)(iconRect.bottom-iconRect.top)),
-                        0,0,(int)texture->GetWidth(),(int)texture->GetHeight(),UnitPixel);
-                } else DrawBetaTexture(gfx, state, iconRect);
+                if (taskbarSkin.load() == 7) {
+                    Image* texture = s->betaTexture[state];
+                    gfx.DrawImage(texture,
+                                  Rect((int)iconRect.left, (int)iconRect.top,
+                                       (int)(iconRect.right - iconRect.left),
+                                       (int)(iconRect.bottom - iconRect.top)),
+                                  0, 0, (int)texture->GetWidth(),
+                                  (int)texture->GetHeight(), UnitPixel);
+                } else
+                    DrawBetaTexture(gfx, state, iconRect);
             } else {
                 Image* primary = JumpClosePrimary(d, style, c);
                 Image* fallback =
@@ -28440,11 +29270,16 @@ static void PaintJumpPopup(HWND h, JumpPopupData* d) {
         }
         RECT tr{Px(37) - contentOffset, rr.top,
                 client.right - Px(15) + contentOffset, rr.bottom};
-        SetTextColor(dc, classic && (int)i==d->hot ? RGB(255,255,255) : RGB(25,25,25));
+        SetTextColor(dc, classic && (int)i == d->hot ? RGB(255, 255, 255)
+                                                     : RGB(25, 25, 25));
         DrawTextW(dc, text.c_str(), -1, &tr,
                   DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
     }
-    if(classic) {HBRUSH edge=CreateSolidBrush(RGB(0,0,0));FrameRect(dc,&client,edge);DeleteObject(edge);}
+    if (classic) {
+        HBRUSH edge = CreateSolidBrush(RGB(0, 0, 0));
+        FrameRect(dc, &client, edge);
+        DeleteObject(edge);
+    }
     if (dc == mem)
         BitBlt(screen, 0, 0, client.right, client.bottom, mem, 0, 0, SRCCOPY);
 }
@@ -28864,13 +29699,14 @@ static bool ShowJumpList(size_t index,
     // that cap discarded a row even when the monitor had ample space.
     bool hasBoth = !d->docs.empty() && d->docs.front().frequent &&
                    !d->docs.back().frequent;
-    const int extraHeader = hasBoth ? Px(T81IsWin7Skin(taskbarSkin.load()) ? 25 : 29) : 0;
+    const int extraHeader =
+        hasBoth ? Px(T81IsWin7Skin(taskbarSkin.load()) ? 25 : 29) : 0;
     int available =
         (int)(mi.rcMonitor.bottom - mi.rcMonitor.top) - Px(150) - extraHeader;
     int maxDocs = std::max(0, std::min(10, available / std::max(1, Px(22))));
     if (d->docs.size() > (size_t)maxDocs)
         d->docs.resize(maxDocs);
-    const bool classicJump = taskbarSkin.load()==7;
+    const bool classicJump = taskbarSkin.load() == 7;
     const bool win7Jump = T81IsWin7Skin(taskbarSkin.load()) || classicJump;
     d->headerHeight =
         d->docs.empty() ? Px(win7Jump ? 4 : 12) : Px(win7Jump ? 25 : 29);
@@ -28961,7 +29797,7 @@ static bool ShowJumpList(size_t index,
         }
     }
     DWORD popupEx = WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
-    DWORD jumpStyle=classicJump ? WS_POPUP : TaskbarPopupStyle();
+    DWORD jumpStyle = classicJump ? WS_POPUP : TaskbarPopupStyle();
     if (T81IsWin7Skin(taskbarSkin.load())) {
         // Measure and retain the system-provided non-client frame.
         using AdjustFn = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
@@ -28996,8 +29832,10 @@ static bool ShowJumpList(size_t index,
             1, (int)(mi.rcWork.right - mi.rcWork.left) - 4 - nonClient);
         width = std::min(maxWidth, std::max(width, pinTextClientWidth));
         for (auto& row : d->rows) {
-            if(classicJump) row.rect.left=Px(2);
-            row.rect.right=std::max(row.rect.left+1L,(LONG)(width-Px(classicJump?2:10)));
+            if (classicJump)
+                row.rect.left = Px(2);
+            row.rect.right = std::max(row.rect.left + 1L,
+                                      (LONG)(width - Px(classicJump ? 2 : 10)));
         }
         frame = RECT{0, 0, width, height};
         AdjustWindowRectEx(&frame, jumpStyle, FALSE, popupEx);
@@ -29041,7 +29879,8 @@ static bool ShowJumpList(size_t index,
     if (testJumpAnimation >= 0)
         move = testJumpAnimation != 0;
 #endif
-    if(classicJump)move=false;
+    if (classicJump)
+        move = false;
     int offset =
         move && !s->verticalActive ? ((top < button.top) ? Px(4) : -Px(4)) : 0;
     int offsetX =
@@ -29051,9 +29890,9 @@ static bool ShowJumpList(size_t index,
     raw->animFinalY = top;
     raw->animStartOffset = offset;
     raw->animStartOffsetX = offsetX;
-    HWND popup = CreateWindowExW(
-        WS_EX_TOOLWINDOW | WS_EX_TOPMOST, kJumpClass, L"", jumpStyle,
-        x + offsetX, top + offset, w, h, s->bar, nullptr, wc.hInstance, raw);
+    HWND popup = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, kJumpClass,
+                                 L"", jumpStyle, x + offsetX, top + offset, w,
+                                 h, s->bar, nullptr, wc.hInstance, raw);
     if (!popup) {
         Wh_Log(L"[T81-DIAG] Jump List window creation failed error=%lu",
                GetLastError());
@@ -30365,7 +31204,8 @@ static void DrawVerticalTaskTile(Graphics& g,
     else if (fade > 0) {
         RECT rotated{0, 0, r.bottom - r.top, r.right - r.left};
         if (taskbarSkin.load() == 7)
-            DrawTaskTileStack(g,0,rotated.right,rotated.bottom,1,false,fade);
+            DrawTaskTileStack(g, 0, rotated.right, rotated.bottom, 1, false,
+                              fade);
         else if (taskbarSkin.load() == 3 || taskbarSkin.load() == 4)
             DrawFlatPinnedHover(g, rotated, fade);
         else
@@ -30392,10 +31232,13 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
                 (s->verticalPressed == HIT_START && s->hot == HIT_START) ||
                 (T81SkinHasTrackedStartButton(taskbarSkin.load()) &&
                  T81StartMenuOn(s->bar));
-            if (taskbarSkin.load()==7) {
-                g.Restore(startState); T81ClassicStart(g,v.start,T81StartMenuOn(s->bar),s->hot==HIT_START,Dpi()); startState=g.Save();
+            if (taskbarSkin.load() == 7) {
+                g.Restore(startState);
+                T81ClassicStart(g, v.start, T81StartMenuOn(s->bar),
+                                s->hot == HIT_START, Dpi());
+                startState = g.Save();
             } else if (T81IsWin7Skin(taskbarSkin.load()) &&
-                (s->win7StartImage || s->betaTexture[30])) {
+                       (s->win7StartImage || s->betaTexture[30])) {
                 g.Restore(startState);
                 DrawWin7Start(g, w, (int)v.start.bottom,
                               down ? 2 : (s->hot == HIT_START ? 1 : 0));
@@ -30563,9 +31406,11 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
             DrawTrayArrowHover(g, r);
             g.Restore(saved);
         }
-        if (taskbarSkin.load()==7 && !IsRectEmpty(&v.desktop)) {
-            T81ClassicDesktop(g,v.desktop,s->hot==HIT_DESKTOP,s->verticalPressed==HIT_DESKTOP,Dpi());
-        } else if (T81IsWin7Skin(taskbarSkin.load()) && !IsRectEmpty(&v.desktop)) {
+        if (taskbarSkin.load() == 7 && !IsRectEmpty(&v.desktop)) {
+            T81ClassicDesktop(g, v.desktop, s->hot == HIT_DESKTOP,
+                              s->verticalPressed == HIT_DESKTOP, Dpi());
+        } else if (T81IsWin7Skin(taskbarSkin.load()) &&
+                   !IsRectEmpty(&v.desktop)) {
             auto ds = g.Save();
             BeginVerticalTile(g, v.desktop);
             RECT rotated{0, 0, v.desktop.bottom - v.desktop.top,
@@ -30632,11 +31477,12 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
         }
     for (int slot = 0; slot < v.count; slot++) {
         int i = v.offset + slot;
-        int size =
-            std::max(1, std::min(Px(s->nativeSmallIcons
-                                        ? 16
-                                        : (BetaTextureAvailable(11) ? 32 : 26)),
-                                 std::min(w, v.step) - Px(taskbarSkin.load()==7 ? 12 : 6)));
+        int size = std::max(
+            1,
+            std::min(
+                Px(s->nativeSmallIcons ? 16
+                                       : (BetaTextureAvailable(11) ? 32 : 26)),
+                std::min(w, v.step) - Px(taskbarSkin.load() == 7 ? 12 : 6)));
         ScopedSavedDC clip(dc);
         const auto* t = LiveButtonTransition(s->groups[i].key);
         if (t && t->reveal) {
@@ -30742,7 +31588,7 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
         format.SetFormatFlags(StringFormatFlagsNoWrap);
         format.SetTrimming(StringTrimmingEllipsisCharacter);
         SolidBrush white(Color(255, 255, 255, 255));
-        SolidBrush basicLanguage(Color(255,26,41,58));
+        SolidBrush basicLanguage(Color(255, 26, 41, 58));
         auto row = [&](const wchar_t* text, RECT rect) {
             if (family.GetLastStatus() == Ok &&
                 clockFont.GetLastStatus() == Ok) {
@@ -30750,7 +31596,11 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
                         (REAL)(rect.right - rect.left),
                         (REAL)(rect.bottom - rect.top));
                 clockGraphics.DrawString(text, -1, &clockFont, r, &format,
-                                         (taskbarSkin.load()==7 || (taskbarSkin.load()==6 && text==s->languageText.c_str())) ? &basicLanguage : &white);
+                                         (taskbarSkin.load() == 7 ||
+                                          (taskbarSkin.load() == 6 &&
+                                           text == s->languageText.c_str()))
+                                             ? &basicLanguage
+                                             : &white);
             } else
                 DrawTextW(dc, text, -1, &rect,
                           DT_CENTER | DT_VCENTER | DT_SINGLELINE |
@@ -30765,15 +31615,16 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
                 top += stride;
             }
         if (!IsRectEmpty(&v.language)) {
-            if(taskbarSkin.load()==6 || taskbarSkin.load()==7) SetTextColor(dc,RGB(26,41,58));
+            if (taskbarSkin.load() == 6 || taskbarSkin.load() == 7)
+                SetTextColor(dc, RGB(26, 41, 58));
             int languageHeight = v.language.bottom - v.language.top;
             int languageStride =
                 std::max(1, std::min(Px(17), languageHeight / 2));
             int languageTop =
                 v.language.top +
                 std::max(0, (languageHeight - 2 * languageStride) / 2);
-            if (!T81IsWin7Skin(taskbarSkin.load()) && taskbarSkin.load()!=7 && !s->languageRegion.empty() &&
-                languageHeight >= 2 * Px(8)) {
+            if (!T81IsWin7Skin(taskbarSkin.load()) && taskbarSkin.load() != 7 &&
+                !s->languageRegion.empty() && languageHeight >= 2 * Px(8)) {
                 RECT first{v.language.left, languageTop, v.language.right,
                            languageTop + languageStride};
                 RECT second{v.language.left, languageTop + languageStride,
@@ -30796,15 +31647,17 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
 static void PaintVerticalBackground(Graphics& g, int w, int h) {
     if (!s || w < 2 || h < 1)
         return;
-    if (taskbarSkin.load()==7) {
-        PaintTaskbarBackground(g,w,h);return;
+    if (taskbarSkin.load() == 7) {
+        PaintTaskbarBackground(g, w, h);
+        return;
     }
-    if (taskbarSkin.load()==6) {
-        T81PaintBasicTexture(g,w,h,true);
-        auto layout=GetVerticalLayout(w,h);
-        int trayTop=std::min((int)layout.arrow.top,(int)layout.language.top);
-        if(trayTop<=0)trayTop=(int)layout.arrow.top;
-        T81PaintWin7Ends(g,w,h,(int)layout.start.bottom,trayTop,true);
+    if (taskbarSkin.load() == 6) {
+        T81PaintBasicTexture(g, w, h, true);
+        auto layout = GetVerticalLayout(w, h);
+        int trayTop = std::min((int)layout.arrow.top, (int)layout.language.top);
+        if (trayTop <= 0)
+            trayTop = (int)layout.arrow.top;
+        T81PaintWin7Ends(g, w, h, (int)layout.start.bottom, trayTop, true);
         return;
     }
     if (BetaTextureAvailable(11)) {
@@ -30827,14 +31680,16 @@ static void PaintVerticalBackground(Graphics& g, int w, int h) {
             g.FillRectangle(&border, 0, separator, w, std::max(1, Px(1)));
         auto layout = GetVerticalLayout(w, h);
         int trayTop = std::min((int)layout.arrow.top, (int)layout.language.top);
-        if (trayTop <= 0) trayTop = (int)layout.arrow.top;
+        if (trayTop <= 0)
+            trayTop = (int)layout.arrow.top;
         T81PaintWin7Ends(g, w, h, (int)layout.start.bottom, trayTop, true);
         return;
     }
     PaintTaskbarBackground(g, w, h);
     auto layout = GetVerticalLayout(w, h);
     int trayTop = std::min((int)layout.arrow.top, (int)layout.language.top);
-    if (trayTop <= 0) trayTop = (int)layout.arrow.top;
+    if (trayTop <= 0)
+        trayTop = (int)layout.arrow.top;
     T81PaintWin7Ends(g, w, h, (int)layout.start.bottom, trayTop, true);
     int dark = s->verticalSide == 1 ? w - 1 : 0,
         light = s->verticalSide == 1 ? w - 2 : 1;
@@ -30946,8 +31801,8 @@ static bool VerticalInput(HWND h,
             s->tracking = true;
         }
         int hit = hitAt();
-        if ((T81IsWin7Skin(taskbarSkin.load()) || BetaTextureAvailable(2)) && hit >= 0 &&
-            hit == s->hot)
+        if ((T81IsWin7Skin(taskbarSkin.load()) || BetaTextureAvailable(2)) &&
+            hit >= 0 && hit == s->hot)
             InvalidateRect(h, nullptr, FALSE);
         if (hit != s->hot) {
             s->hot = hit;
@@ -31550,8 +32405,10 @@ static int T81SecondaryStartExtent(HWND window) {
     if (startHotCorner.load())
         return std::max(1, MulDiv(s->verticalActive ? 2 : 8, (int)dpi, 96));
     bool beta = useBetaStartLogo.load() && s->betaStartImage;
-    int logical = taskbarSkin.load()==7 ? (s->nativeSmallIcons ? 44 : 57) :
-        (s->verticalActive ? (beta ? 54 : kVerticalStartLogical) : kStartLogical);
+    int logical = taskbarSkin.load() == 7
+                      ? (s->nativeSmallIcons ? 44 : 57)
+                      : (s->verticalActive ? (beta ? 54 : kVerticalStartLogical)
+                                           : kStartLogical);
     return std::max(1, MulDiv(logical, (int)dpi, 96));
 }
 static RECT T81SecondaryStartRect(HWND window) {
@@ -31562,9 +32419,11 @@ static RECT T81SecondaryStartRect(HWND window) {
         r.bottom = std::min((int)r.bottom, extent);
     else {
         r.right = std::min((int)r.right, extent);
-        if(taskbarSkin.load()==7 && !startHotCorner.load()) {
-            UINT dpi=T81SecondaryDpi(window);
-            r.bottom=std::min(r.bottom,(LONG)(MulDiv(s->nativeSmallIcons?37:47,(int)dpi,96)));
+        if (taskbarSkin.load() == 7 && !startHotCorner.load()) {
+            UINT dpi = T81SecondaryDpi(window);
+            r.bottom = std::min(
+                r.bottom,
+                (LONG)(MulDiv(s->nativeSmallIcons ? 37 : 47, (int)dpi, 96)));
         }
     }
     return r;
@@ -31587,7 +32446,7 @@ static std::vector<T81SecondaryButton> T81SecondaryButtons(HWND window,
     int logical =
         vertical
             ? (s->nativeSmallIcons ? 32 : (beta ? 50 : kVerticalTaskLogical))
-            : (taskbarSkin.load()==7 ? 50 : T81ButtonLogicalWidth());
+            : (taskbarSkin.load() == 7 ? 50 : T81ButtonLogicalWidth());
     int step = std::max(1, MulDiv(logical, (int)dpi, 96));
     int rowUnit =
         std::max(1, MulDiv(s->nativeSmallIcons ? 30 : 40, (int)dpi, 96));
@@ -31662,10 +32521,11 @@ static void T81DrawSecondaryForeground(
             mirror ? std::max(0.f, std::min(1.f, mirror->startFade)) : 0.f;
         if (!startHotCorner.load()) {
             int sw = start.right, sh = start.bottom;
-            if (taskbarSkin.load()==7)
-                T81ClassicStart(g,start,T81StartMenuOn(window),startHot,(int)dpi);
+            if (taskbarSkin.load() == 7)
+                T81ClassicStart(g, start, T81StartMenuOn(window), startHot,
+                                (int)dpi);
             else if (T81IsWin7Skin(taskbarSkin.load()) &&
-                (s->win7StartImage || s->betaTexture[30]))
+                     (s->win7StartImage || s->betaTexture[30]))
                 DrawWin7Start(g, sw, sh, startFrame, MulDiv(54, (int)dpi, 96),
                               fade);
             else if (useBetaStartLogo.load() && s->betaStartImage) {
@@ -31767,9 +32627,12 @@ static void T81DrawSecondaryForeground(
                     g.Restore(row);
                 } else if (!painted && hot) {
                     if (taskbarSkin.load() == 7) {
-                        RECT r=button.rect; InflateRect(&r,-MulDiv(1,(int)dpi,96),-MulDiv(3,(int)dpi,96));
-                        T81ClassicRunningFrame(g,r,pressed,(int)dpi);
-                    } else if (taskbarSkin.load() == 3 || taskbarSkin.load() == 4)
+                        RECT r = button.rect;
+                        InflateRect(&r, -MulDiv(1, (int)dpi, 96),
+                                    -MulDiv(3, (int)dpi, 96));
+                        T81ClassicRunningFrame(g, r, pressed, (int)dpi);
+                    } else if (taskbarSkin.load() == 3 ||
+                               taskbarSkin.load() == 4)
                         DrawFlatPinnedHover(g, button.rect, 1.f, dpi);
                     else
                         DrawTrayHoverTile(g, button.rect, true, 1.f);
@@ -31825,7 +32688,8 @@ static void T81DrawSecondaryForeground(
         }
         if (!icon)
             icon = GroupIcon((int)button.group);
-        int inset = std::max(1, MulDiv(taskbarSkin.load()==7 ? 12 : 6, (int)dpi, 96));
+        int inset =
+            std::max(1, MulDiv(taskbarSkin.load() == 7 ? 12 : 6, (int)dpi, 96));
         int width = (int)(button.rect.right - button.rect.left),
             height = (int)(button.rect.bottom - button.rect.top);
         int n = std::max(
@@ -31860,8 +32724,9 @@ static void T81DrawSecondaryForeground(
             int frame = (hot && (GetKeyState(VK_LBUTTON) & 0x8000))
                             ? 27
                             : (hot ? 26 : 25);
-            Image* image =
-                T81IsWin7Skin(taskbarSkin.load()) ? s->betaTexture[frame] : nullptr;
+            Image* image = T81IsWin7Skin(taskbarSkin.load())
+                               ? s->betaTexture[frame]
+                               : nullptr;
             if (image) {
                 float ww = MulDiv(frame == 25 ? 9 : 21, (int)dpi, 96),
                       hh = MulDiv(frame == 25 ? 7 : 20, (int)dpi, 96);
@@ -31878,7 +32743,9 @@ static void T81DrawSecondaryForeground(
             } else {
                 if (hot)
                     DrawTrayArrowHover(g, tray.arrow);
-                SolidBrush arrow(taskbarSkin.load()==7 ? Color(255,0,0,0) : Color(255,245,253,255));
+                SolidBrush arrow(taskbarSkin.load() == 7
+                                     ? Color(255, 0, 0, 0)
+                                     : Color(255, 245, 253, 255));
                 float x = (tray.arrow.left + tray.arrow.right) * 0.5f,
                       y = h * 0.5f;
                 PointF points[] = {{x - 4 * scale, y + 2 * scale},
@@ -31936,7 +32803,9 @@ static void T81DrawSecondaryForeground(
 static void T81ConfigureSecondaryAlpha(T81Mirror& bar, bool pixel) {
     if (!bar.window)
         return;
-    BYTE opacity = (taskbarSkin.load()==6 || taskbarSkin.load()==7) ? 255 : (BYTE)taskbarOpacity.load();
+    BYTE opacity = (taskbarSkin.load() == 6 || taskbarSkin.load() == 7)
+                       ? 255
+                       : (BYTE)taskbarOpacity.load();
     if (bar.alphaConfigured && bar.pixelMode == pixel &&
         (pixel || bar.legacyOpacity == opacity))
         return;
@@ -34037,7 +34906,8 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                 s->tracking = true;
             }
             int hit = Hit(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
-            if ((T81IsWin7Skin(taskbarSkin.load()) || BetaTextureAvailable(2)) &&
+            if ((T81IsWin7Skin(taskbarSkin.load()) ||
+                 BetaTextureAvailable(2)) &&
                 hit >= 0 && hit == s->hot)
                 InvalidateRect(h, nullptr, FALSE);
             RECT barClient{};
@@ -34211,8 +35081,8 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             }
             if (hit == HIT_TRAY_MORE && T81IsWin7Skin(taskbarSkin.load()))
                 InvalidateRect(h, nullptr, FALSE);
-            if (hit == HIT_DESKTOP &&
-                (T81IsWin7Skin(taskbarSkin.load()) || BetaTextureAvailable(0))) {
+            if (hit == HIT_DESKTOP && (T81IsWin7Skin(taskbarSkin.load()) ||
+                                       BetaTextureAvailable(0))) {
                 s->betaDesktopPressed = true;
                 SetCapture(h);
                 InvalidateRect(h, nullptr, FALSE);
@@ -34936,7 +35806,9 @@ DWORD WINAPI UIThread(LPVOID) {
         if (!LoadBetaStartImage(local))
             Wh_Log(L"Beta Start sprite failed to load; using default");
         if (!LoadWin7Beta7000StartImage(local))
-            Wh_Log(L"[T81-DIAG] Windows 7 Beta Start image unavailable; using Windows 7 fallback");
+            Wh_Log(
+                L"[T81-DIAG] Windows 7 Beta Start image unavailable; using "
+                L"Windows 7 fallback");
         if (!LoadWin7StartImage(local))
             Wh_Log(
                 L"[T81-DIAG] Windows 7 Start sprite unavailable; using "
