@@ -46,6 +46,10 @@ Live window previews follow the original Flip3D carousel layout and timing.
 - `Esc`: exit
 - `F5`: replay the enter animation
 
+## Mod disclosure
+
+- Unlike to the other alr existing mods on the windhawk store, this mod instead of recreating/replicating Flip3D, this is a reimplementation of the original Windows Vista Flip3D but using DirectComposition as its base.
+
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
