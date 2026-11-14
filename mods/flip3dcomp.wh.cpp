@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              flip3dcomp
 // @name            Flip3DComp
-// @description     a 1:1 replica of the Windows Aero Flip3D window switcher based on DirectComposition
+// @description     a reimplementation of the Windows Aero Flip3D window switcher based on DirectComposition
 // @version         2.0
 // @author          Tails (milestprower92)
 // @github          https://github.com/milestprower92
@@ -17,7 +17,8 @@
 
 Original version by: [ALTaleX531](https://github.com/ALTaleX531)
 
-A 1:1 replica of the Flip3D Window switcher introduced on Windows Vista, for newer versions of Windows, ported from my fork [Flip3DComp](https://github.com/milestprower92/Flip3DComp)
+A DirectComposition reimplementation of the Flip3D Window switcher introduced on Windows Vista, for newer versions of Windows.
+Ported from my repository [Flip3DComp](https://github.com/milestprower92/Flip3DComp)
 
 ## Demo
 
