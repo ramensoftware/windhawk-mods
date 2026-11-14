@@ -34,10 +34,10 @@ Real time update speed setting.
 
 ## Compatibility and limitations
 
-- Uses Task Manager's Processes navigation hooks and public XAML APIs.
-  Windhawk resolves the Processes symbols using its normal symbol cache.
-  Details is discovered through `Frame.Navigated` after visiting Processes.
-  Windows updates may change private functions.
+- Uses Task Manager's Processes and Details navigation symbols and public
+  XAML APIs. Windhawk resolves symbols through its normal symbol cache.
+  When both pages share the same navigation function, the mod hooks it only
+  once. Windows updates may change private functions.
 - Uses Task Manager's Ctrl-key refresh hold through `GetKeyState` calls made
   directly by `Taskmgr.exe`. While paused, some Task Manager keyboard actions
   may behave as if Ctrl is held, including Run new task (Ctrl+click can open
@@ -53,12 +53,10 @@ Real time update speed setting.
   Light/Dark appearance; no fixed foreground/background colors are applied.
   Pause/Resume labels are in English regardless of the Task Manager language.
 - Keeps Pause active when switching between Processes and Details. Uses the
-  public Frame.Navigated event to discover Details and resume on other pages.
-  It retries the command-bar search if the initial navigation hook ran before
-  the toolbar was ready or failed to insert a usable button, without repeating
-  successful scans. Visit Processes at least once after Task Manager opens
-  so the mod can attach to the navigation Frame. Opening Task Manager directly
-  on Details requires visiting Processes once before the button can appear.
+  public `Frame.Navigated` event to resume on other pages and to retry the
+  command-bar search if the toolbar was not ready, without repeating successful
+  scans. If a Windows build lacks the optional Details navigation symbol,
+  visiting Processes first enables the Frame fallback.
 - If the button is missing, close and reopen Task Manager with the mod enabled.
 - No background applications are needed.
 
@@ -1137,7 +1135,12 @@ void TryAttachFrameNavigation(mux::DependencyObject object) {
 // The supplied self pointer is an inspectable ABI interface pointer.
 using PageNavigation_t = HRESULT(__cdecl*)(void*, void*);
 PageNavigation_t g_processesToOriginal{};
+PageNavigation_t g_detailsToOriginal{};
 PageNavigation_t g_processesFromOriginal{};
+PageNavigation_t g_detailsFromOriginal{};
+// The compiler can fold identical Processes/Details navigation functions.
+// In that case the Processes hook covers both page types.
+bool g_detailsToUsesProcessesHook = false;
 
 // Track whether the entry hook inserted or found a usable button on the
 // specific page instance. The frame event retries failed/missing insertions,
@@ -1175,7 +1178,8 @@ bool NeedsFrameNavigationScan(winrt::hstring const& pageType,
     if (EndsWith(name, L"ProcessesPage"))
         hasEntryHook = g_processesToOriginal != nullptr;
     else if (EndsWith(name, L"DetailsPage"))
-        return true; // Discovered through Frame.Navigated, not a private hook.
+        hasEntryHook = g_detailsToOriginal != nullptr ||
+                       g_detailsToUsesProcessesHook;
     else
         return false;
     if (!hasEntryHook) return true;
@@ -1205,6 +1209,10 @@ void CapturePageFromInterface(void* self) {
             Wh_Log(L"Page capture: FrameworkElement unavailable");
             return;
         }
+        // A shared navigation function can also be used by unrelated pages.
+        // Never apply the structural command-bar fallback outside these two.
+        if (ClassifyPageType(winrt::get_class_name(page)) !=
+            ActivePage::Supported) return;
         PruneExpiredEntriesOnCurrentThread();
         const bool buttonReady = FindCommandBars(page);
         RememberHookScan(page, buttonReady);
@@ -1215,6 +1223,13 @@ void CapturePageFromInterface(void* self) {
 
 HRESULT __cdecl ProcessesNavigatedTo_Hook(void* self, void* args) {
     HRESULT result = g_processesToOriginal(self, args);
+    if (SUCCEEDED(result) && !g_stopping.load(std::memory_order_acquire))
+        CapturePageFromInterface(self);
+    return result;
+}
+
+HRESULT __cdecl DetailsNavigatedTo_Hook(void* self, void* args) {
+    HRESULT result = g_detailsToOriginal(self, args);
     if (SUCCEEDED(result) && !g_stopping.load(std::memory_order_acquire))
         CapturePageFromInterface(self);
     return result;
@@ -1260,6 +1275,12 @@ HRESULT __cdecl ProcessesNavigatedFrom_Hook(void* self, void* args) {
     return result;
 }
 
+HRESULT __cdecl DetailsNavigatedFrom_Hook(void* self, void* args) {
+    HRESULT result = g_detailsFromOriginal(self, args);
+    if (SUCCEEDED(result)) OnLeavingSupportedPage(args);
+    return result;
+}
+
 
 } // namespace
 
@@ -1281,31 +1302,52 @@ BOOL Wh_ModInit() {
     HMODULE host = GetModuleHandleW(nullptr);
     if (!host) return FALSE;
 
-    // Ask for the two Processes symbols already present in the Windhawk
-    // ported cache for Taskmgr.exe 26100.9974. Do not ask for Details here:
-    // its missing cache entries would force a PDB request that can return 404.
-    // Other Task Manager versions use the usual Windhawk symbol resolution.
+    // Resolve all four navigation symbols, but do not hook until we can
+    // compare addresses. Identical C++/WinRT produce<> bodies may be folded
+    // into one function by the linker; hook that function only once.
+    PageNavigation_t processesTo{};
+    PageNavigation_t detailsTo{};
+    PageNavigation_t processesFrom{};
+    PageNavigation_t detailsFrom{};
     WindhawkUtils::SYMBOL_HOOK taskmgrExeHooks[] = {
         {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)"},
-         &g_processesToOriginal, ProcessesNavigatedTo_Hook},
+         &processesTo},
+        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::DetailsPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)"},
+         &detailsTo, nullptr, true},
         {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedFrom(void *)"},
-         &g_processesFromOriginal, nullptr, true},
+         &processesFrom, nullptr, true},
+        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::DetailsPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedFrom(void *)"},
+         &detailsFrom, nullptr, true},
     };
-    // Catalog mods use Windhawk's default online symbol cache. Local test
-    // copies must configure their cache URL separately, not in this release.
     if (!WindhawkUtils::HookSymbols(host, taskmgrExeHooks,
                                     ARRAYSIZE(taskmgrExeHooks))) {
-        Wh_Log(L"Processes navigation symbol resolution failed "
-               L"(official cache or PDB unavailable)");
+        Wh_Log(L"Navigation symbol resolution failed (cache or PDB unavailable)");
+        return FALSE;
+    }
+    if (!processesTo ||
+        !WindhawkUtils::SetFunctionHook(processesTo, ProcessesNavigatedTo_Hook,
+                                       &g_processesToOriginal)) {
+        Wh_Log(L"Required ProcessesPage::OnNavigatedTo hook unavailable");
         return FALSE;
     }
     Wh_Log(L"Required ProcessesPage::OnNavigatedTo hook installed via Windhawk symbols");
 
-    // The exit hook is optional: Frame.Navigated also handles leaving the
-    // supported pages when the navigation Frame has been discovered.
-    const bool processesExitFound = g_processesFromOriginal != nullptr;
+    g_detailsToUsesProcessesHook = detailsTo && detailsTo == processesTo;
+    const bool detailsToFound = detailsTo != nullptr;
+    const bool detailsToHooked = g_detailsToUsesProcessesHook ||
+        (detailsToFound && WindhawkUtils::SetFunctionHook(
+            detailsTo, DetailsNavigatedTo_Hook, &g_detailsToOriginal));
+    if (!detailsToHooked) g_detailsToOriginal = nullptr;
+    Wh_Log(L"Optional DetailsPage::OnNavigatedTo: symbol=%s hook=%s",
+           detailsToFound ? L"found" : L"missing",
+           g_detailsToUsesProcessesHook ? L"shared" :
+           detailsToHooked ? L"ok" : L"unavailable");
+
+    // Optional exit hooks. One hook handles both page types when the linker
+    // gave Processes and Details the same OnNavigatedFrom address.
+    const bool processesExitFound = processesFrom != nullptr;
     const bool processesExitHooked = processesExitFound &&
-        WindhawkUtils::SetFunctionHook(g_processesFromOriginal,
+        WindhawkUtils::SetFunctionHook(processesFrom,
                                       ProcessesNavigatedFrom_Hook,
                                       &g_processesFromOriginal);
     if (!processesExitHooked) g_processesFromOriginal = nullptr;
@@ -1313,12 +1355,28 @@ BOOL Wh_ModInit() {
            processesExitFound ? L"found" : L"missing",
            processesExitHooked ? L"ok" : L"unavailable");
 
+    const bool detailsExitFound = detailsFrom != nullptr;
+    const bool sharedExit = processesExitHooked &&
+                            detailsFrom && detailsFrom == processesFrom;
+    const bool detailsExitHooked = sharedExit ||
+        (detailsExitFound && detailsFrom != processesFrom &&
+         WindhawkUtils::SetFunctionHook(detailsFrom,
+                                       DetailsNavigatedFrom_Hook,
+                                       &g_detailsFromOriginal));
+    if (!detailsExitHooked) g_detailsFromOriginal = nullptr;
+    Wh_Log(L"Optional DetailsPage::OnNavigatedFrom: symbol=%s hook=%s",
+           detailsExitFound ? L"found" : L"missing",
+           sharedExit ? L"shared" :
+           detailsExitHooked ? L"ok" : L"unavailable");
+
     // Intentionally unchanged: preserve the tested GetKeyState-based refresh
     // hold, including its Taskmgr.exe return-address restriction.
     if (!WindhawkUtils::SetFunctionHook(
             GetKeyState, GetKeyState_Hook, &g_getKeyOriginal)) return FALSE;
 
-    Wh_Log(L"Ready: Processes cache, Details via Frame.Navigated (no PDB probing or embedded offsets)");
+    Wh_Log(L"Ready: Processes hook, Details hook=%s, Frame.Navigated fallback",
+           g_detailsToUsesProcessesHook ? L"shared" :
+           g_detailsToOriginal ? L"separate" : L"unavailable");
     return TRUE;
 }
 
