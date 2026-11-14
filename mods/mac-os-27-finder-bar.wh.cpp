@@ -5984,12 +5984,25 @@ static bool LqCapture(LiquidSurface& l, RECT rc, bool hideBars = true) {
         g_captureNeedsFlush = false;
         DwmFlush();
     }
-    RECT vs = {GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN), 0, 0};
-    vs.right = vs.left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    vs.bottom = vs.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    // Só o monitor do painel é fotografado. A foto ainda cobre o pedido inteiro:
+    // o que fica fora da tela (um menu encostado na borda) repete a última linha
+    // e coluna de pixels. Sem isso, a refração das bordas puxava "nada" de fora da
+    // tela e ficava uma faixa transparente na beirada do painel.
+    RECT req = rc;
+    RECT vs{};
+    {
+        MONITORINFO mi{sizeof(mi)};
+        if (GetMonitorInfoW(MonitorFromRect(&req, MONITOR_DEFAULTTONEAREST), &mi)) vs = mi.rcMonitor;
+        else {
+            vs = {GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN), 0, 0};
+            vs.right = vs.left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+            vs.bottom = vs.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        }
+    }
     if (!IntersectRect(&rc, &rc, &vs)) return false;
     int w = rc.right - rc.left, h = rc.bottom - rc.top;
     if (w <= 0 || h <= 0) return false;
+    int fw = req.right - req.left, fh = req.bottom - req.top;
     BITMAPINFO bi{};
     bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
     bi.bmiHeader.biWidth = w;
@@ -6010,15 +6023,16 @@ static bool LqCapture(LiquidSurface& l, RECT rc, bool hideBars = true) {
     BitBlt(dc, 0, 0, w, h, screen, rc.left, rc.top, SRCCOPY);
     GdiFlush();
     ReleaseDC(nullptr, screen);
-    if (l.w != w || l.h != h) {
+    if (l.w != fw || l.h != fh) {
         SafeRelease(l.snap);
-        l.px.assign((size_t)w * h, 0);
+        l.px.assign((size_t)fw * fh, 0);
     }
+    std::vector<UINT32> cap((size_t)w * h);
     const UINT32* src = (const UINT32*)bits;
     size_t total = (size_t)w * h, blacks = 0, samples = 0;
     for (size_t i = 0; i < total; i++) {
         // Preto puro vira transparente: onde a captura falhou, aparece o fundo de verdade.
-        l.px[i] = (src[i] & 0x00FFFFFF) == 0 ? 0 : (src[i] | 0xFF000000);
+        cap[i] = (src[i] & 0x00FFFFFF) == 0 ? 0 : (src[i] | 0xFF000000);
         if (i % 7 == 0) {
             samples++;
             if ((src[i] & 0x00FFFFFF) == 0) blacks++;
@@ -6039,14 +6053,26 @@ static bool LqCapture(LiquidSurface& l, RECT rc, bool hideBars = true) {
             if (srcRow < 0 || srcRow >= h) continue;
             int x0 = in.left - rc.left, x1 = in.right - rc.left;
             for (int y = in.top - rc.top; y < srcRow; y++)
-                memcpy(&l.px[(size_t)y * w + x0], &l.px[(size_t)srcRow * w + x0], (size_t)(x1 - x0) * 4);
+                memcpy(&cap[(size_t)y * w + x0], &cap[(size_t)srcRow * w + x0], (size_t)(x1 - x0) * 4);
         }
+    // A foto do tamanho pedido: dentro da tela, a captura; fora, a borda repetida.
+    int ox = rc.left - req.left, oy = rc.top - req.top;
+    for (int y = 0; y < fh; y++) {
+        int sy = std::clamp(y - oy, 0, h - 1);
+        const UINT32* row = &cap[(size_t)sy * w];
+        UINT32* dst = &l.px[(size_t)y * fw];
+        if (ox == 0 && fw == w) {
+            memcpy(dst, row, (size_t)w * 4);
+            continue;
+        }
+        for (int x = 0; x < fw; x++) dst[x] = row[std::clamp(x - ox, 0, w - 1)];
+    }
     SelectObject(dc, old);
     DeleteObject(bmp);
     DeleteDC(dc);
-    l.w = w;
-    l.h = h;
-    l.rc = rc;
+    l.w = fw;
+    l.h = fh;
+    l.rc = req;
     l.fresh = true;
     l.gen++;
     return true;
