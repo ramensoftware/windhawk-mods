@@ -82,7 +82,7 @@ bool IsTargetWindow(HWND hwnd) {
     if (pid != GetCurrentProcessId()) return false;
     if (GetParent(hwnd) != NULL) return false;
 
-    WCHAR className;
+    WCHAR className[256];
     if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0 ||
         wcscmp(className, L"Chrome_WidgetWin_1") != 0) {
         return false;
