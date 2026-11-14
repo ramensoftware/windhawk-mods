@@ -362,6 +362,7 @@ struct Settings {
     int searchTarget;     // ícone de busca: 0 pesquisa do Windows, 1 Siri Plus Launchpad
     int openAnim;  // 0 nenhuma, 1 esmaecer, 2 cascata
     int ntfIconShape;  // ícones das notificações: 0 círculo, 1 formato macOS (squircle)
+    bool ntfCards;     // painel do sino: cartões soltos (true) ou tudo dentro da caixa
     int ccCloseAnim;  // ao fechar a Central: 0 cascata, 1 encolher, 2 esmaecer, 3 deslizar para cima, 4 nenhuma
     bool showOsd;
     bool bgBlur;
@@ -558,6 +559,7 @@ static const UiDefault kUiDefaults[] = {
     {L"ccDimScreen", L"0"},
     {L"ccCloseAnim", L"cascade"},
     {L"ntfIconShape", L"round"},
+    {L"ntfLayout", L"cards"},
     {L"glassBeforeTint", L""},
     {L"showOsd", L"1"},
     {L"showControlCenter", L"1"},
@@ -896,6 +898,7 @@ static void LoadSettings() {
     {
         std::wstring ca = OvrStr(L"ccCloseAnim");
         s.ntfIconShape = OvrStr(L"ntfIconShape") == L"squircle" ? 1 : 0;
+        s.ntfCards = OvrStr(L"ntfLayout") != L"box";
         s.ccCloseAnim = ca == L"shrink" ? 1 : ca == L"fade" ? 2 : ca == L"slide" ? 3 : ca == L"none" ? 4 : 0;
     }
     s.showOsd = OvrInt(L"showOsd") != 0;
@@ -12737,6 +12740,7 @@ enum BsVal {
     BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_HIDEMAX, BV_HANDLE,
     BV_THEMEHEAD, BV_TGROUP, BV_THEMENONE, BV_THEMERESET,  // Personalizar tema
     BV_PANELLOOK, BV_PANELSTYLE,                           // Tema dos painéis
+    BV_NTFLAYOUT,                                          // painel do sino: caixa ou cartões
     BV_SIZERESET,                                          // Tamanho da barra: restaurar
     // "Personalizar por monitor": para cada monitor ligado (até 8), o título, o fundo e a cor do texto.
     BV_MONHEAD0, BV_MONSTYLE0 = BV_MONHEAD0 + 8, BV_MONTEXT0 = BV_MONSTYLE0 + 8, BV_MONEND = BV_MONTEXT0 + 8,
@@ -12851,6 +12855,7 @@ static const BsRowDef kBsRows[] = {
     {BR_CHOICE, BV_ISLOUT, L"Como some", 0, 0},
     {BR_GROUP, BV_NONE, L"Botão de Notificações", 0, 0},
     {BR_SWITCH, BV_ISLHIST, L"Botão de Notificações na barra (sino)", 0, 0, L"Notificações agrupadas por app, em cartões de vidro"},
+    {BR_CHOICE, BV_NTFLAYOUT, L"Notificações", 0, 0, L"Dentro da caixa: tudo num painel só; em cartões soltos: o topo e cada notificação no seu próprio vidro, sem caixa atrás"},
     {BR_SWITCH, BV_ISLHISTNOT, L"No botão, mostrar também os avisos da pílula", 0, 0},
     {BR_CHOICE, BV_NTFSHAPE, L"Formato dos ícones", 0, 0, L"Nas notificações: círculo ou o formato dos ícones do macOS"},
     {BR_ACTION, BV_ISLCLEAR, L"Limpar as notificações", 0, 0},
@@ -13103,6 +13108,7 @@ static int BsGet(int val) {
         case BV_G_STYLE: return g_glass.tinted ? 1 : 0;
         case BV_CCCLOSE: return g_settings.ccCloseAnim;
         case BV_NTFSHAPE: return g_settings.ntfIconShape;
+        case BV_NTFLAYOUT: return g_settings.ntfCards ? 1 : 0;
         case BV_TEXTCOLOR: return g_settings.barStyle >= 5 ? 0 : g_settings.theme;  // sólidos: sempre automático
         case BV_PANELLOOK: return g_settings.panelLookCustom ? 1 : 0;
         case BV_PANELSTYLE: {
@@ -13382,6 +13388,12 @@ static void BsSet(int val, int v) {
         g_settings.theme = std::clamp(v, 0, 2);
         OvrSetStr(L"theme", kNames[g_settings.theme]);
         TintApply();  // a barra muda na hora
+        return;
+    }
+    if (val == BV_NTFLAYOUT) {
+        g_settings.ntfCards = v == 1;
+        OvrSetStr(L"ntfLayout", g_settings.ntfCards ? L"cards" : L"box");
+        NtfRefresh();  // painel aberto: muda na hora
         return;
     }
     if (val == BV_NTFSHAPE) {
@@ -13763,6 +13775,7 @@ static const PCWSTR kBsBarChoicesAll[] = {L"Vidro", L"Transparente", L"Líquido"
                                           L"Claro", L"Escuro", L"OLED", L"Personalizar por monitor"};
 static const PCWSTR kBsGlassStyle[] = {L"Transparente", L"Vidro líquido personalizado"};
 static const PCWSTR kBsNtfShape[] = {L"Círculo", L"Formato macOS"};
+static const PCWSTR kBsNtfLayout[] = {L"Dentro da caixa", L"Em cartões soltos"};
 static const PCWSTR kBsTextColor[] = {L"Automático", L"Branco", L"Preto"};
 static const PCWSTR kBsCcClose[] = {L"Cascata", L"Encolher", L"Esmaecer", L"Deslizar para cima", L"Nenhuma"};
 static const PCWSTR kBsLookChoices[] = {L"Desfoque", L"Líquido", L"Transparente"};
@@ -13811,6 +13824,7 @@ static const PCWSTR* BsChoiceLabels(int val) {
         case BV_G_STYLE: return kBsGlassStyle;
         case BV_CCCLOSE: return kBsCcClose;
         case BV_NTFSHAPE: return kBsNtfShape;
+        case BV_NTFLAYOUT: return kBsNtfLayout;
         case BV_TEXTCOLOR: return kBsTextColor;
     }
     return kBsChoices;
@@ -13819,7 +13833,7 @@ static int BsChoiceCount(int val) {
     if (val >= BV_MONSTYLE0 && val < BV_MONTEXT0) return 8;
     if (val >= BV_MONTEXT0 && val < BV_MONEND) return 3;
     switch (val) {
-        case BV_ISLPOS: case BV_WXUNIT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: return 2;
+        case BV_ISLPOS: case BV_WXUNIT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: case BV_NTFLAYOUT: return 2;
         case BV_BARSTYLE: return 9;
         case BV_PANELLOOK: return 2;
         case BV_PANELSTYLE: return 6;
@@ -20848,10 +20862,10 @@ static bool NtfCanReply(const IslandNote& n) { return n.reply.canReply && n.repl
 
 // Os cartões ficam soltos, cada um com o vidro da Central, quando o vidro
 // líquido está ligado; sem ele, o painel único de antes.
-// Vidro líquido: cartões soltos. Sem notificações nem avisos, o painel fica
-// inteiro (o título, os botões e a pílula "Nenhuma notificação" num cartão só),
-// em todos os temas.
-static bool NtfFloating() { return GlassLiquid() && !g_ntf.compact; }
+// "Em cartões soltos": o topo é uma pílula e cada notificação o seu cartão, sem
+// caixa atrás; "Dentro da caixa": tudo num painel só. Sem notificações nem avisos,
+// o painel fica sempre inteiro (o título, os botões e "Nenhuma notificação").
+static bool NtfFloating() { return g_settings.ntfCards && !g_ntf.compact; }
 
 static void NtfBuildGroups() {
     g_ntf.groups.clear();
@@ -21430,7 +21444,10 @@ static void NtfRefresh() {
         g_ntf.panel.bottom = maxB;
         g_ntf.view.bottom = maxB - 4 * g_ntf.s;
     }
-    GlassLayerShapes(g_ntf.glass, {{g_ntf.panel, 24 * g_ntf.s}});
+    // Em cartões soltos não há caixa: sem o retângulo de desfoque atrás (os
+    // cartões são desenhados com a tinta do vidro; no líquido, com a refração).
+    if (NtfFloating()) GlassLayerShapes(g_ntf.glass, {});
+    else GlassLayerShapes(g_ntf.glass, {{g_ntf.panel, 24 * g_ntf.s}});
     g_islUnread = 0;
     NtfRender();
 }
@@ -21686,7 +21703,8 @@ static void NtfToggle(Bar* b, int idx) {
     }
     bool ok = GlassLayerCreate(g_ntf.glass, g_ntf.pos, g_ntf.W, g_ntf.H);
     if (ok) {
-        GlassLayerShapes(g_ntf.glass, {{g_ntf.panel, 24 * s}});
+        if (NtfFloating()) GlassLayerShapes(g_ntf.glass, {});
+        else GlassLayerShapes(g_ntf.glass, {{g_ntf.panel, 24 * s}});
         GlassLayerOpacity(g_ntf.glass, 1.0f);
     }
     g_islUnread = 0;
@@ -25303,6 +25321,10 @@ const UiTr kUiTr[] = {
     {L"Personalizar", L"Customize", L"Personalizar", L"Personnaliser", L"Anpassen", L"Personalizza", L"自定义"},
     {L"Restaurar o tamanho padrão", L"Restore the default size", L"Restaurar el tamaño predeterminado", L"Restaurer la taille par défaut", L"Standardgröße wiederherstellen", L"Ripristina le dimensioni predefinite", L"恢复默认大小"},
     {L"Altura de 28 px e ícones e fonte de 13 pt", L"28 px high, with 13 pt icons and font", L"28 px de alto, con iconos y fuente de 13 pt", L"28 px de haut, icônes et texte en 13 pt", L"28 px hoch, Symbole und Schrift 13 pt", L"28 px di altezza, icone e carattere a 13 pt", L"高度 28 像素，图标和字体 13 磅"},
+    {L"Notificações", L"Notifications", L"Notificaciones", L"Notifications", L"Mitteilungen", L"Notifiche", L"通知"},
+    {L"Dentro da caixa: tudo num painel só; em cartões soltos: o topo e cada notificação no seu próprio vidro, sem caixa atrás", L"In a box: everything in one panel; as separate cards: the top and each notification in its own glass, with no box behind", L"Dentro de la caja: todo en un panel; en tarjetas sueltas: la parte superior y cada notificación en su propio vidrio, sin caja detrás", L"Dans une boîte : tout dans un seul panneau ; en cartes séparées : le haut et chaque notification dans leur propre verre, sans boîte derrière", L"In einem Kasten: alles in einem Bereich; als einzelne Karten: der Kopf und jede Mitteilung im eigenen Glas, ohne Kasten dahinter", L"In un riquadro: tutto in un pannello; in schede separate: la parte superiore e ogni notifica nel proprio vetro, senza riquadro dietro", L"在框内：全部在一个面板中；独立卡片：顶部和每条通知各自一块玻璃，后面没有框"},
+    {L"Dentro da caixa", L"In a box", L"Dentro de la caja", L"Dans une boîte", L"In einem Kasten", L"In un riquadro", L"在框内"},
+    {L"Em cartões soltos", L"As separate cards", L"En tarjetas sueltas", L"En cartes séparées", L"Als einzelne Karten", L"In schede separate", L"独立卡片"},
     {L"Acompanhar a barra", L"Match the bar", L"Igual que la barra", L"Comme la barre", L"Wie die Leiste", L"Come la barra", L"跟随菜单栏"},
     {L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro; com Transparente, líquido)", L"Match the bar: the bar’s background (glass with Window color, liquid with Clear)", L"Igual que la barra: el fondo de la barra (vidrio con Color de la ventana, líquido con Transparente)", L"Comme la barre : le fond de la barre (verre avec Couleur de la fenêtre, liquide avec Transparent)", L"Wie die Leiste: ihr Hintergrund (Glas bei Fensterfarbe, flüssig bei Klar)", L"Come la barra: lo sfondo della barra (vetro con Colore della finestra, liquido con Trasparente)", L"跟随菜单栏：与菜单栏相同的背景（窗口颜色时为玻璃，透明时为液态）"},
     {L"Claro", L"Light", L"Claro", L"Clair", L"Hell", L"Chiaro", L"浅色"},
@@ -25423,7 +25445,6 @@ const UiTr kUiTr[] = {
     {L"Download concluído", L"Download complete", L"Descarga completada", L"Téléchargement terminé", L"Download abgeschlossen", L"Download completato", L"下载完成"},
     {L"Nenhuma notificação", L"No notifications", L"No hay notificaciones", L"Aucune notification", L"Keine Mitteilungen", L"Nessuna notifica", L"没有通知"},
     {L"Nenhum aviso", L"No notices", L"No hay avisos", L"Aucune alerte", L"Keine Hinweise", L"Nessun avviso", L"没有提醒"},
-    {L"Notificações", L"Notifications", L"Notificaciones", L"Notifications", L"Mitteilungen", L"Notifiche", L"通知"},
     {L"Avisos da pílula", L"Pill notices", L"Avisos de la píldora", L"Alertes des pastilles", L"Pillen-Hinweise", L"Avvisi della pillola", L"胶囊提醒"},
     {L"Central de notificações do Windows...", L"Windows Notification Center...", L"Centro de notificaciones de Windows...", L"Centre de notifications Windows...", L"Windows-Mitteilungszentrale...", L"Centro notifiche di Windows...", L"Windows 通知中心..."},
     {L"Notificações do Windows", L"Windows Notifications", L"Notificaciones de Windows", L"Notifications Windows", L"Windows-Mitteilungen", L"Notifiche di Windows", L"Windows 通知"},
