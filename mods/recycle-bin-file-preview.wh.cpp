@@ -2,10 +2,11 @@
 // @id              recycle-bin-file-preview
 // @name            Recycle Bin File Preview
 // @description     Preview deleted files in the Recycle Bin using the native File Explorer Preview Pane (Alt+P), without restoring them.
-// @version         1.0.0
+// @version         1.0.1
 // @author          Luiz Bizzio
 // @github          https://github.com/luizbizzio
 // @homepage        https://github.com/luizbizzio/recycle-bin-file-preview
+// @donateUrl       https://github.com/sponsors/luizbizzio
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -lshell32 -lshlwapi -luuid

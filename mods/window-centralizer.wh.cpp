@@ -2,12 +2,12 @@
 // @id              window-centralizer
 // @name            Window Centralizer
 // @description     Predictably centers new windows and dialogs to their parent, the screen or the mouse cursor, with configurable threshold and live exclusion list.
-// @version         1.0.0
+// @version         1.1.0
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
 // @include         *
 // @include         windhawk.exe
-// @compilerOptions -lgdi32 -lshell32
+// @compilerOptions -lgdi32 -lshell32 -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -16,7 +16,9 @@
 
 New dialogs and small windows open centered to where they came from, the mouse cursor, or the monitor, instead of randomly around the screen.
 
-The window is placed **before** it appears, so there is no jump, no flicker, and window opening animations play at the final position. Elevated programs are covered as well.
+The window is placed **before** it appears, so there is no jump and no flicker. Elevated programs are covered as well.
+
+With **Show windows already drawn** on, a centered window is also kept invisible for a moment while it draws its contents, so classic dialogs don't flash blank while loading. Its opening animation, from Windows or from an animation mod, may then be skipped; turn the option off to keep animations playing at the final position.
 
 ## Modes
 
@@ -62,6 +64,9 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
 - maxAreaPercent: 10
   $name: Window size limit to target — % of the monitor area
   $description: Windows larger than this keep their assigned position. Standard dialogs are centered regardless, but can be set to be ignored.
+- revealWhenDrawn: true
+  $name: Show windows after complete UI load
+  $description: A centered window stays invisible until its contents finish drawing (half a second at most), avoiding the native flicker. Windows drawn with DirectX (browsers, WPF, WinUI) can't be detected and gain little. Opening animations may be skipped; turn off to keep them.
 - ignoreHotkey: Win+Alt+I
   $name: Ignore hotkey
   $description: Add/remove the active window to the list. Modifiers (Ctrl, Alt, Shift, Win) and one key, joined with + (Win+Alt+I). Leave empty for no hotkey.
@@ -72,6 +77,7 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <dwmapi.h>
 #include <windhawk_utils.h>
 #include <atomic>
 #include <stdio.h>
@@ -92,6 +98,7 @@ enum Mode { MODE_PARENT, MODE_MONITOR, MODE_MOUSE };
 // Read by the hooks on application threads while Wh_ModSettingsChanged rewrites them.
 std::atomic<int> g_mode{MODE_PARENT};
 std::atomic<int> g_maxAreaPercent{10};
+std::atomic<bool> g_revealWhenDrawn{true};
 
 // Tool process only, read and written on the host thread.
 wchar_t g_ignoreHotkey[64];
@@ -100,19 +107,18 @@ wchar_t g_listHotkey[64];
 wchar_t g_processName[MAX_PATH];  // file name of the current process, for ignore rules
 
 void CopySetting(const wchar_t* name, wchar_t* dst, size_t dstChars) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    wcsncpy_s(dst, dstChars, value, _TRUNCATE);
-    Wh_FreeStringSetting(value);
+    auto value = WindhawkUtils::StringSetting::make(name);
+    wcsncpy_s(dst, dstChars, value.get(), _TRUNCATE);
 }
 
 void LoadCenteringSettings() {
-    PCWSTR mode = Wh_GetStringSetting(L"mode");
-    g_mode = wcscmp(mode, L"mouse") == 0     ? MODE_MOUSE
-             : wcscmp(mode, L"monitor") == 0 ? MODE_MONITOR
-                                             : MODE_PARENT;
-    Wh_FreeStringSetting(mode);
+    auto mode = WindhawkUtils::StringSetting::make(L"mode");
+    g_mode = wcscmp(mode.get(), L"mouse") == 0     ? MODE_MOUSE
+             : wcscmp(mode.get(), L"monitor") == 0 ? MODE_MONITOR
+                                                   : MODE_PARENT;
     int pct = Wh_GetIntSetting(L"maxAreaPercent");
     g_maxAreaPercent = pct < 1 ? 1 : (pct > 100 ? 100 : pct);
+    g_revealWhenDrawn = Wh_GetIntSetting(L"revealWhenDrawn") != 0;
 }
 
 void LoadHotkeySettings() {
@@ -177,14 +183,74 @@ void DialogSignature(HWND hwnd, wchar_t* sig, size_t sigChars) {
 
 // ───────────── Ignore list ─────────────
 //
-// Stored in the mod's storage as one string, one rule per line: "process.exe|class|signature|title".
+// Each rule is "process.exe|class|signature|title".
 // - signature: DialogSignature for standard dialogs, empty for any other window (the class is its kind).
 // - title: the window's title when the rule was made, shown in the list only; never matched.
+// Stored as "ruleCount" plus one value per rule ("rule0", "rule1"…), since portable Windhawk keeps
+// storage in an INI file, which can't hold line breaks. In memory, the rules are one string, one per line.
 // "ignoredVersion" is bumped on every change so each process reloads its cached copy only when
 // the list actually changed.
 
 constexpr size_t kIgnoredChars = 32768;
-constexpr wchar_t kRulesKey[] = L"rules";
+constexpr size_t kRuleChars = 1024;
+constexpr wchar_t kLegacyRulesKey[] = L"rules";  // 1.0–1.1: all rules in one value, joined with \n
+
+void RuleValueName(int index, wchar_t* name, size_t chars) {
+    swprintf_s(name, chars, L"rule%d", index);
+}
+
+/// Reads the stored rules into buf, one per line. Falls back to the legacy single value if the list
+/// hasn't been converted yet.
+void ReadRules(wchar_t* buf, size_t chars) {
+    buf[0] = L'\0';
+    int count = Wh_GetIntValue(L"ruleCount", -1);
+    if (count < 0) {
+        Wh_GetStringValue(kLegacyRulesKey, buf, chars);
+        return;
+    }
+    size_t used = 0;
+    for (int i = 0; i < count; i++) {
+        wchar_t name[16], rule[kRuleChars];
+        RuleValueName(i, name, ARRAYSIZE(name));
+        rule[0] = L'\0';
+        Wh_GetStringValue(name, rule, ARRAYSIZE(rule));
+        size_t len = wcslen(rule);
+        if (!len || used + len + 2 >= chars)
+            continue;
+        if (used)
+            buf[used++] = L'\n';
+        wmemcpy(buf + used, rule, len + 1);
+        used += len;
+    }
+}
+
+/// Stores the rules in text (one per line), deletes values left over from a longer list, and bumps
+/// "ignoredVersion".
+void WriteRules(const wchar_t* text) {
+    int oldCount = Wh_GetIntValue(L"ruleCount", 0);
+    int count = 0;
+    for (const wchar_t* line = text; *line;) {
+        const wchar_t* end = wcschr(line, L'\n');
+        size_t len = end ? (size_t)(end - line) : wcslen(line);
+        if (len && len < kRuleChars) {
+            wchar_t name[16], rule[kRuleChars];
+            wmemcpy(rule, line, len);
+            rule[len] = L'\0';
+            RuleValueName(count++, name, ARRAYSIZE(name));
+            Wh_SetStringValue(name, rule);
+        }
+        if (!end)
+            break;
+        line = end + 1;
+    }
+    Wh_SetIntValue(L"ruleCount", count);
+    for (int i = count; i < oldCount; i++) {
+        wchar_t name[16];
+        RuleValueName(i, name, ARRAYSIZE(name));
+        Wh_DeleteValue(name);
+    }
+    Wh_SetIntValue(L"ignoredVersion", Wh_GetIntValue(L"ignoredVersion", 0) + 1);
+}
 
 struct IgnoreCache {
     SRWLOCK lock = SRWLOCK_INIT;
@@ -225,7 +291,7 @@ bool SplitRule(wchar_t* buf, wchar_t** cls, wchar_t** sig, wchar_t** title) {
 }
 
 bool RuleMatches(const wchar_t* rule, size_t ruleLen, WindowKey& key) {
-    wchar_t buf[1024];
+    wchar_t buf[kRuleChars];
     if (ruleLen >= ARRAYSIZE(buf))
         return false;
     wmemcpy(buf, rule, ruleLen);
@@ -246,8 +312,7 @@ bool IsIgnoredAs(const wchar_t* process, HWND hwnd, const wchar_t* cls) {
         if (!g_ignore.text)
             g_ignore.text = (wchar_t*)HeapAlloc(GetProcessHeap(), 0, kIgnoredChars * sizeof(wchar_t));
         if (g_ignore.text) {
-            g_ignore.text[0] = L'\0';
-            Wh_GetStringValue(kRulesKey, g_ignore.text, kIgnoredChars);
+            ReadRules(g_ignore.text, kIgnoredChars);
             g_ignore.version = version;
         }
     }
@@ -524,18 +589,147 @@ bool RecentCenter(HWND hwnd, POINT* c) {
     return true;
 }
 
-void CenterNow(HWND hwnd) {
+/// Centers the window if it is a candidate under the size threshold. True if it was centered.
+bool CenterNow(HWND hwnd) {
     if (!IsCandidate(hwnd))
-        return;
+        return false;
     RECT rc;
     GetWindowRect(hwnd, &rc);
     int x, y;
     POINT c;
     if (!ComputeTarget(hwnd, rc, &x, &y, &c))
-        return;
+        return false;
     if (x != rc.left || y != rc.top)
         SetWindowPos(hwnd, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
     RememberCenter(hwnd, c);
+    return true;
+}
+
+// ───────────── Showing windows already drawn ─────────────
+//
+// A centered window is cloaked (DWM leaves it off the screen, while it is still shown, active and
+// receiving input) until it has painted, so it doesn't flash a blank frame while its contents load.
+// It is revealed once it and its children have no pending paint for two checks in a row, after at
+// least kRevealMinMs, and at the latest after kRevealMaxMs.
+
+constexpr DWORD kRevealMinMs = 80;
+constexpr DWORD kRevealMaxMs = 500;
+constexpr DWORD kRevealCheckMs = 15;
+
+struct PendingReveal {
+    HWND hwnd;
+    DWORD start;
+    int quietChecks;
+};
+
+// All guarded by g_revealLock. The timer runs on a thread pool thread, so no callback is left on
+// application threads when the mod unloads.
+SRWLOCK g_revealLock = SRWLOCK_INIT;
+PendingReveal g_pendingReveal[16];
+int g_pendingRevealCount;
+PTP_TIMER g_revealTimer;
+
+bool SetCloak(HWND hwnd, BOOL cloak) {
+    return SUCCEEDED(DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &cloak, sizeof(cloak)));
+}
+
+// Whoever cloaked a window first (the app itself, or a mod such as Mobile Open Animation) uncloaks it;
+// this mod only ever lifts its own cloak.
+bool IsCloaked(HWND hwnd) {
+    DWORD cloaked = 0;
+    return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked;
+}
+
+BOOL CALLBACK FindPendingPaint(HWND child, LPARAM found) {
+    if (IsWindowVisible(child) && GetUpdateRect(child, nullptr, FALSE)) {
+        *(bool*)found = true;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+bool HasPendingPaint(HWND hwnd) {
+    if (GetUpdateRect(hwnd, nullptr, FALSE))
+        return true;
+    bool found = false;
+    EnumChildWindows(hwnd, FindPendingPaint, (LPARAM)&found);
+    return found;
+}
+
+// Uncloaking happens outside g_revealLock: it fires EVENT_OBJECT_UNCLOAKED, and an in-context WinEvent
+// hook that shows a window from it would reenter HideUntilDrawn on the same thread and deadlock.
+void CALLBACK RevealCheck(PTP_CALLBACK_INSTANCE, PVOID, PTP_TIMER timer) {
+    HWND reveal[ARRAYSIZE(g_pendingReveal)];
+    int revealCount = 0;
+    AcquireSRWLockExclusive(&g_revealLock);
+    DWORD now = GetTickCount();
+    int kept = 0;
+    for (int i = 0; i < g_pendingRevealCount; i++) {
+        PendingReveal p = g_pendingReveal[i];
+        if (!IsWindow(p.hwnd))
+            continue;
+        DWORD elapsed = now - p.start;
+        p.quietChecks = IsWindowVisible(p.hwnd) && !HasPendingPaint(p.hwnd) ? p.quietChecks + 1 : 0;
+        if ((elapsed >= kRevealMinMs && p.quietChecks >= 2) || elapsed >= kRevealMaxMs) {
+            reveal[revealCount++] = p.hwnd;
+            continue;
+        }
+        g_pendingReveal[kept++] = p;
+    }
+    g_pendingRevealCount = kept;
+    if (!kept)
+        SetThreadpoolTimer(timer, nullptr, 0, 0);
+    ReleaseSRWLockExclusive(&g_revealLock);
+    for (int i = 0; i < revealCount; i++)
+        SetCloak(reveal[i], FALSE);
+}
+
+/// Cloaks a window that was just centered, until RevealCheck finds it drawn.
+void HideUntilDrawn(HWND hwnd) {
+    if (!g_revealWhenDrawn)
+        return;
+    AcquireSRWLockExclusive(&g_revealLock);
+    bool listed = false;
+    for (int i = 0; i < g_pendingRevealCount; i++)
+        listed = listed || g_pendingReveal[i].hwnd == hwnd;
+    if (!listed && g_revealTimer && g_pendingRevealCount < (int)ARRAYSIZE(g_pendingReveal) && !IsCloaked(hwnd) &&
+        SetCloak(hwnd, TRUE)) {
+        g_pendingReveal[g_pendingRevealCount++] = {hwnd, GetTickCount(), 0};
+        if (g_pendingRevealCount == 1) {
+            ULARGE_INTEGER due;
+            due.QuadPart = (ULONGLONG)(-(LONGLONG)kRevealCheckMs * 10000);  // negative: relative time
+            FILETIME ft = {due.LowPart, due.HighPart};
+            SetThreadpoolTimer(g_revealTimer, &ft, kRevealCheckMs, 0);
+        }
+    }
+    ReleaseSRWLockExclusive(&g_revealLock);
+}
+
+void StartRevealing() {
+    g_revealTimer = CreateThreadpoolTimer(RevealCheck, nullptr, nullptr);
+}
+
+/// Stops the timer and reveals every window still cloaked.
+void StopRevealing() {
+    AcquireSRWLockExclusive(&g_revealLock);
+    PTP_TIMER timer = g_revealTimer;
+    g_revealTimer = nullptr;
+    ReleaseSRWLockExclusive(&g_revealLock);
+    if (timer) {
+        SetThreadpoolTimer(timer, nullptr, 0, 0);
+        WaitForThreadpoolTimerCallbacks(timer, TRUE);
+        CloseThreadpoolTimer(timer);
+    }
+    HWND reveal[ARRAYSIZE(g_pendingReveal)];
+    AcquireSRWLockExclusive(&g_revealLock);
+    int revealCount = g_pendingRevealCount;
+    for (int i = 0; i < revealCount; i++)
+        reveal[i] = g_pendingReveal[i].hwnd;
+    g_pendingRevealCount = 0;
+    ReleaseSRWLockExclusive(&g_revealLock);
+    for (int i = 0; i < revealCount; i++)
+        if (IsWindow(reveal[i]))
+            SetCloak(reveal[i], FALSE);
 }
 
 bool IsUwpFrame(HWND hwnd) {
@@ -556,8 +750,8 @@ bool IsShowCommand(int cmd) {
 using NtUserShowWindow_t = BOOL(WINAPI*)(HWND, int);
 NtUserShowWindow_t NtUserShowWindow_Original;
 BOOL WINAPI NtUserShowWindow_Hook(HWND hwnd, int cmd) {
-    if (hwnd && IsShowCommand(cmd) && !IsWindowVisible(hwnd))
-        CenterNow(hwnd);
+    if (hwnd && IsShowCommand(cmd) && !IsWindowVisible(hwnd) && CenterNow(hwnd))
+        HideUntilDrawn(hwnd);
     return NtUserShowWindow_Original(hwnd, cmd);
 }
 
@@ -579,6 +773,7 @@ BOOL WINAPI NtUserSetWindowPos_Hook(HWND hwnd, HWND after, int x, int y, int cx,
             y = ny;
             flags &= ~SWP_NOMOVE;
             RememberCenter(hwnd, c);
+            HideUntilDrawn(hwnd);
         }
     } else if (hwnd && !(flags & SWP_NOMOVE) && IsWindowVisible(hwnd) && !IsIconic(hwnd) && !IsZoomed(hwnd)) {
         DWORD pid = 0;
@@ -606,8 +801,8 @@ CreateWindowExW_t CreateWindowExW_Original;
 HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR cls, LPCWSTR name, DWORD style, int x, int y, int w, int h,
                                  HWND parent, HMENU menu, HINSTANCE inst, LPVOID param) {
     HWND hwnd = CreateWindowExW_Original(exStyle, cls, name, style, x, y, w, h, parent, menu, inst, param);
-    if (hwnd && (style & WS_VISIBLE) && !(style & WS_CHILD))
-        CenterNow(hwnd);
+    if (hwnd && (style & WS_VISIBLE) && !(style & WS_CHILD) && CenterNow(hwnd))
+        HideUntilDrawn(hwnd);
     return hwnd;
 }
 
@@ -616,8 +811,8 @@ CreateWindowExA_t CreateWindowExA_Original;
 HWND WINAPI CreateWindowExA_Hook(DWORD exStyle, LPCSTR cls, LPCSTR name, DWORD style, int x, int y, int w, int h,
                                  HWND parent, HMENU menu, HINSTANCE inst, LPVOID param) {
     HWND hwnd = CreateWindowExA_Original(exStyle, cls, name, style, x, y, w, h, parent, menu, inst, param);
-    if (hwnd && (style & WS_VISIBLE) && !(style & WS_CHILD))
-        CenterNow(hwnd);
+    if (hwnd && (style & WS_VISIBLE) && !(style & WS_CHILD) && CenterNow(hwnd))
+        HideUntilDrawn(hwnd);
     return hwnd;
 }
 
@@ -722,13 +917,20 @@ wchar_t* g_hostList;  // kIgnoredChars buffer with the current list
 void HostLoadList() {
     if (!g_hostList)
         g_hostList = (wchar_t*)HeapAlloc(GetProcessHeap(), 0, kIgnoredChars * sizeof(wchar_t));
-    g_hostList[0] = L'\0';
-    Wh_GetStringValue(kRulesKey, g_hostList, kIgnoredChars);
+    ReadRules(g_hostList, kIgnoredChars);
 }
 
 void HostSaveList() {
-    Wh_SetStringValue(kRulesKey, g_hostList);
-    Wh_SetIntValue(L"ignoredVersion", Wh_GetIntValue(L"ignoredVersion", 0) + 1);
+    WriteRules(g_hostList);
+}
+
+/// Converts a list stored by 1.0–1.1 in the single "rules" value to one value per rule.
+void ConvertLegacyRules() {
+    if (Wh_GetIntValue(L"ruleCount", -1) >= 0)
+        return;
+    HostLoadList();
+    HostSaveList();
+    Wh_DeleteValue(kLegacyRulesKey);
 }
 
 /// Line number of the first rule that matches the window, or -1.
@@ -960,7 +1162,7 @@ void ToggleIgnoreActive() {
     bool nowIgnored = index < 0;
     if (nowIgnored) {
         bool dialog = IsDialogClass(cls);
-        wchar_t rule[1024];
+        wchar_t rule[kRuleChars];
         swprintf_s(rule, L"%s|%s|%s|%s", process, cls, dialog ? SignatureOf(key) : L"", dialog ? title : L"");
         if (!AddRule(rule))
             return;
@@ -1341,6 +1543,7 @@ DWORD WINAPI HostThread(void*) {
     if (hostAtom && toastAtom && listAtom) {
         g_hwndHost = CreateWindowExW(0, kHostClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, inst, nullptr);
         if (g_hwndHost) {
+            ConvertLegacyRules();
             ApplyHostSettings(false);
             StartUwpCentering();
             RunHostLoop();
@@ -1609,6 +1812,7 @@ BOOL Wh_ModInit() {
     }
 
     LoadCenteringSettings();
+    StartRevealing();
     if (HMODULE win32u = GetModuleHandleW(L"win32u.dll")) {
         if (auto p = (NtUserShowWindow_t)GetProcAddress(win32u, "NtUserShowWindow"))
             WindhawkUtils::SetFunctionHook(p, NtUserShowWindow_Hook, &NtUserShowWindow_Original);
@@ -1637,6 +1841,7 @@ void Wh_ModUninit() {
         ToolMod_Uninit();
         return;
     }
+    StopRevealing();
     if (g_ignore.text)
         HeapFree(GetProcessHeap(), 0, g_ignore.text);
     g_ignore.text = nullptr;
