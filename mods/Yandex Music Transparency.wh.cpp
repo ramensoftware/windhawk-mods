@@ -28,15 +28,22 @@ Makes the Yandex Music desktop application window transparent. You can adjust th
 #include <windows.h>
 #include <wchar.h>
 #include <mutex>
-#include <unordered_set>
+#include <unordered_map>
+#include <vector>
 
 struct Settings {
     int alpha;
 };
 
+struct OriginalWindowState {
+    bool hadLayeredStyle;
+    BYTE originalAlpha;
+    bool hasOriginalAlpha;
+};
+
 Settings g_settings;
 std::mutex g_windowsMutex;
-std::unordered_set<HWND> g_subclassedWindows;
+std::unordered_map<HWND, OriginalWindowState> g_trackedWindows;
 bool g_unloading = false;
 
 void LoadSettings() {
@@ -53,7 +60,7 @@ bool IsTargetWindow(HWND hwnd) {
     if (pid != GetCurrentProcessId()) return false;
     if (GetParent(hwnd) != NULL) return false;
 
-    WCHAR className[64];
+    WCHAR className[256];
     if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0 ||
         wcscmp(className, L"Chrome_WidgetWin_1") != 0) {
         return false;
@@ -75,6 +82,14 @@ SetLayeredWindowAttributes_t SetLayeredWindowAttributes_Original;
 
 BOOL WINAPI SetLayeredWindowAttributes_Hook(HWND hwnd, COLORREF crKey, BYTE bAlpha, DWORD dwFlags) {
     if (!g_unloading && IsTargetWindow(hwnd) && (dwFlags & LWA_ALPHA) && !(dwFlags & LWA_COLORKEY)) {
+        {
+            std::lock_guard<std::mutex> lock(g_windowsMutex);
+            auto it = g_trackedWindows.find(hwnd);
+            if (it != g_trackedWindows.end()) {
+                it->second.originalAlpha = bAlpha;
+                it->second.hasOriginalAlpha = true;
+            }
+        }
         bAlpha = (BYTE)g_settings.alpha;
     }
     return SetLayeredWindowAttributes_Original(hwnd, crKey, bAlpha, dwFlags);
@@ -95,13 +110,17 @@ void ApplyTransparency(HWND hwnd) {
     SetLayeredWindowAttributes_Original(hwnd, 0, (BYTE)g_settings.alpha, LWA_ALPHA);
 }
 
-void RestoreTransparency(HWND hwnd) {
+void RestoreWindow(HWND hwnd, const OriginalWindowState& state) {
     if (!IsWindow(hwnd)) return;
 
     LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
-    if ((exStyle & WS_EX_LAYERED) && !UsesColorKey(hwnd)) {
-        SetLayeredWindowAttributes_Original(hwnd, 0, 255, LWA_ALPHA);
-        SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
+    if (!state.hadLayeredStyle) {
+        if ((exStyle & WS_EX_LAYERED) && !UsesColorKey(hwnd)) {
+            SetLayeredWindowAttributes_Original(hwnd, 0, 255, LWA_ALPHA);
+            SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
+        }
+    } else if (state.hasOriginalAlpha && (exStyle & WS_EX_LAYERED) && !UsesColorKey(hwnd)) {
+        SetLayeredWindowAttributes_Original(hwnd, 0, state.originalAlpha, LWA_ALPHA);
     }
 }
 
@@ -111,6 +130,13 @@ LRESULT CALLBACK WindowSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             if (!g_unloading && wParam == GWL_EXSTYLE) {
                 STYLESTRUCT* ss = (STYLESTRUCT*)lParam;
                 if (ss && !(ss->styleNew & WS_EX_LAYERED) && !UsesColorKey(hwnd)) {
+                    {
+                        std::lock_guard<std::mutex> lock(g_windowsMutex);
+                        auto it = g_trackedWindows.find(hwnd);
+                        if (it != g_trackedWindows.end()) {
+                            it->second.hadLayeredStyle = false;
+                        }
+                    }
                     ss->styleNew |= WS_EX_LAYERED;
                 }
             }
@@ -124,7 +150,7 @@ LRESULT CALLBACK WindowSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         }
         case WM_NCDESTROY: {
             std::lock_guard<std::mutex> lock(g_windowsMutex);
-            g_subclassedWindows.erase(hwnd);
+            g_trackedWindows.erase(hwnd);
             break;
         }
     }
@@ -135,16 +161,34 @@ LRESULT CALLBACK WindowSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
 void AttachToWindow(HWND hwnd) {
     if (g_unloading || !IsTargetWindow(hwnd)) return;
 
+    LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+    if ((exStyle & WS_EX_LAYERED) && UsesColorKey(hwnd)) {
+        return;
+    }
+
     {
         std::lock_guard<std::mutex> lock(g_windowsMutex);
-        if (g_subclassedWindows.count(hwnd)) {
+        if (g_trackedWindows.count(hwnd)) {
             ApplyTransparency(hwnd);
             return;
         }
+
+        OriginalWindowState state{};
+        state.hadLayeredStyle = (exStyle & WS_EX_LAYERED) != 0;
+        if (state.hadLayeredStyle) {
+            BYTE alpha = 255;
+            DWORD flags = 0;
+            if (GetLayeredWindowAttributes(hwnd, NULL, &alpha, &flags) && (flags & LWA_ALPHA)) {
+                state.originalAlpha = alpha;
+                state.hasOriginalAlpha = true;
+            }
+        }
+
         if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, WindowSubclassProc, 0)) {
             return;
         }
-        g_subclassedWindows.insert(hwnd);
+
+        g_trackedWindows[hwnd] = state;
     }
 
     ApplyTransparency(hwnd);
@@ -208,7 +252,10 @@ void Wh_ModSettingsChanged() {
     std::vector<HWND> windows;
     {
         std::lock_guard<std::mutex> lock(g_windowsMutex);
-        windows.assign(g_subclassedWindows.begin(), g_subclassedWindows.end());
+        windows.reserve(g_trackedWindows.size());
+        for (const auto& pair : g_trackedWindows) {
+            windows.push_back(pair.first);
+        }
     }
 
     for (HWND hwnd : windows) {
@@ -219,15 +266,15 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     g_unloading = true;
 
-    std::vector<HWND> windows;
+    std::vector<std::pair<HWND, OriginalWindowState>> windows;
     {
         std::lock_guard<std::mutex> lock(g_windowsMutex);
-        windows.assign(g_subclassedWindows.begin(), g_subclassedWindows.end());
-        g_subclassedWindows.clear();
+        windows.assign(g_trackedWindows.begin(), g_trackedWindows.end());
+        g_trackedWindows.clear();
     }
 
-    for (HWND hwnd : windows) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, WindowSubclassProc);
-        RestoreTransparency(hwnd);
+    for (const auto& entry : windows) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(entry.first, WindowSubclassProc);
+        RestoreWindow(entry.first, entry.second);
     }
 }
