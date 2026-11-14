@@ -3,7 +3,7 @@
 // @name            1 Letter Language Indicator
 // @description     Shortens the taskbar language indicator ("ENG", "ENG (US)") to a single letter ("E")
 // @version         1.0
-// @author          Skept
+// @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
 // @architecture    x86-64
