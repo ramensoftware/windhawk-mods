@@ -1,3 +1,16 @@
+## 2.21.2 ([Nov 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f5ea1a16e2eaa9677ded54fae897752525e0a323/mods/taskbar-ai-quota.wh.cpp))
+
+- Add a chart for Anthropic extra usage to the details flyout, with its monthly reset time, pace and projected limit time.
+- Add an Extra usage chart setting to chart it over the month or the weekly window, or keep the bar.
+- Add the pace mark to the Anthropic extra usage bar, and the reset time and projection to its notifications.
+- Improve the Gauge % tile style to show a gauge for each quota.
+- Improve the details flyout to list Anthropic's free resets by kind, each with its count and next expiry.
+- Improve reset times a week or more ahead to show the date instead of the weekday.
+- Fix Claude's renamed Max and Ultra plans showing their old names.
+- Fix settings being replaced by defaults when they fail to load.
+- Fix the details flyout opening on another screen, cut off or away from its bars near an end of the taskbar.
+- Fix taskbar buttons' right-click menus opening too far left with the bars on the Left side.
+
 ## 2.18.1 ([Nov 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ad20837f5bc018842c571112b1e60019e831e4a4/mods/taskbar-ai-quota.wh.cpp))
 
 **Taskbar**

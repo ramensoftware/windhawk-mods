@@ -6879,6 +6879,35 @@
         "version": "1.2.0"
       }
     },
+    "explorer-item-pins": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794686596000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794686596000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "CTravkin",
+        "compilerOptions": "-lruntimeobject -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdi32 -lcomctl32 -ladvapi32",
+        "description": "Pin files and folders within their parent folder in File Explorer",
+        "github": "https://github.com/CTravkin",
+        "homepage": "https://ctravkin.ru",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer Item Pins",
+        "version": "1.1.5"
+      }
+    },
     "explorer-large-icons-view": {
       "details": {
         "defaultSorting": 590,
@@ -8155,7 +8184,7 @@
         "ratingUsers": 86,
         "reviews": 0,
         "trendingSorting": 18.0609259987421,
-        "updated": 1792843392000,
+        "updated": 1794686612000,
         "users": 2964
       },
       "metadata": {
@@ -8167,7 +8196,7 @@
           "explorer.exe"
         ],
         "name": "File Hover Info",
-        "version": "1.1.2"
+        "version": "1.2.0"
       }
     },
     "file-operation-styler": {
@@ -16674,7 +16703,7 @@
         "ratingUsers": 21,
         "reviews": 0,
         "trendingSorting": 0.9808801496157853,
-        "updated": 1794157444000,
+        "updated": 1794686601000,
         "users": 151
       },
       "metadata": {
@@ -16690,7 +16719,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar AI Quota",
-        "version": "2.18.1"
+        "version": "2.21.2"
       }
     },
     "taskbar-ai-usage": {
@@ -19196,7 +19225,7 @@
         "ratingUsers": 59,
         "reviews": 0,
         "trendingSorting": 0.9342101976148288,
-        "updated": 1794341002000,
+        "updated": 1794686607000,
         "users": 710
       },
       "metadata": {
@@ -19204,7 +19233,7 @@
           "x86-64"
         ],
         "author": "HaVeN80",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion -lshlwapi -lshell32",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion -lshlwapi -lshell32 -lpdh",
         "description": "Shows RAM, CPU and version of the program on the Windows 11 taskbar thumbnails",
         "github": "https://github.com/haven80",
         "include": [
@@ -19212,7 +19241,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Thumbnail Stats",
-        "version": "1.7"
+        "version": "1.8"
       }
     },
     "taskbar-thumbnails": {

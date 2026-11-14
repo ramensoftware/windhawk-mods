@@ -1,3 +1,8 @@
+## 1.8 ([Nov 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/af4a3fe8d27672c49c79ff3f9a0256cc5b743118/mods/taskbar-thumbnail-stats.wh.cpp))
+
+- New "RAM format" option: show the RAM as a size, as a percentage of the total RAM, or both
+- New "Show GPU" option (off by default): GPU usage in percent, computed like Task Manager and respecting "Include child processes"
+
 ## 1.7 ([Nov 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9991c026f4999fc45d962f6ecdc027da47dadacf/mods/taskbar-thumbnail-stats.wh.cpp))
 
 - New "Title at the bottom" option: moves the window name and the close button to a row at the bottom of the thumbnail, closer to the mouse pointer, with configurable top spacing and an optional separator line

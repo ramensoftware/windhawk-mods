@@ -2,12 +2,79 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-14T19:01:29.000Z</updated>
+    <updated>2026-11-14T20:03:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Item Pins 1.1.5]]></title>
+        <id>https://windhawk.net/mods/explorer-item-pins#43b8a9cd94e699082b09c6c054278f680f583ffd</id>
+        <link href="https://windhawk.net/mods/explorer-item-pins"/>
+        <updated>2026-11-14T20:03:16.000Z</updated>
+        <content type="html"><![CDATA[<h1>Explorer Item Pins</h1>
+<p><strong>English</strong> · <a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/Explorer_Item_Pins/README.ru.md">Русский</a></p>
+<p>Explorer Item Pins keeps selected files and folders at the top of their parent folder in Windows File Explorer. Each folder has its own pins.</p>
+<h2>Features</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:center"><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Explorer_Item_Pins/Assets/Screenshots/Dark_Large_Icons.png" alt="Dark theme with large icons and the Pin command"></th>
+<th style="text-align:center"><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Explorer_Item_Pins/Assets/Screenshots/Light_Small_Icons.png" alt="Light theme with the Unpin command and its toolbar tooltip"></th>
+</tr>
+</thead>
+</table>
+<ul>
+<li><strong>Two ways to pin.</strong> Use the modern context menu or the pin button between <strong>Share</strong> and <strong>Delete</strong> on the command bar.</li>
+<li><strong>Sort and group.</strong> Pins stay at the top in either sort direction. With grouping on, they appear in the first group, <strong>Pinned</strong>. Explorer's sorting still applies within the group.</li>
+<li><strong>Pin indicator.</strong> A pushpin appears at the upper-right corner of the file or folder icon. It follows the icon size and works with thumbnails, lists, details, tiles and content view.</li>
+<li><strong>Interface languages.</strong> English, Russian, Spanish, German, Brazilian Portuguese, and Simplified Chinese.</li>
+</ul>
+<h2>Platforms</h2>
+<p>Requires Windows 11 x64 or ARM64 with the tabbed File Explorer.</p>
+<h2>Data exchange</h2>
+<p>Pins are stored separately for each Windows account. Uninstalling the mod removes its pins. Replacing a file under the same name keeps its pin. A rename within the same folder can keep the pin when the mod can identify the original file. Copying or moving an item to another folder does not carry its pin with it.</p>
+<h2>Usage</h2>
+<ol>
+<li>Select a file or folder and choose <strong>Pin in item pane</strong> in its context menu, or click the pin on the command bar.</li>
+<li>To remove the pin, select the item and choose <strong>Unpin from item pane</strong> or click the crossed-out pin on the command bar. The item returns to its usual position in the folder.</li>
+</ol>
+<p>In Windhawk, open the mod's <strong>Settings</strong> to control these options independently. All three are enabled by default.</p>
+<p>If the pin commands are missing from a File Explorer window that was already open when the mod was enabled or updated, reopen that window.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Controls</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Context menu command</td>
+<td>Pin and unpin in the context menu</td>
+</tr>
+<tr>
+<td>Command bar button</td>
+<td>Pin and unpin on the File Explorer command bar</td>
+</tr>
+<tr>
+<td>Pinned item indicator</td>
+<td>The pushpin on pinned file and folder icons</td>
+</tr>
+</tbody>
+</table>
+<h2>Links</h2>
+<ul>
+<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/tree/main/Explorer_Item_Pins">Explorer Item Pins on GitHub</a></li>
+<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/README.md">DSN Windhawk Mods</a></li>
+</ul>
+]]></content>
+        <author>
+            <name>CTravkin</name>
+            <uri>https://github.com/CTravkin</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Notepad++ Dark Dialog Fix 1.0.3]]></title>
         <id>https://windhawk.net/mods/npp-taskdlg-textcolor#da3467732c84ae737d5d3a156be78075781f0d06</id>
@@ -1673,56 +1740,6 @@ research below. No external helper, script, or runtime download is required.</p>
         <author>
             <name>Fenryr</name>
             <uri>https://github.com/soldier93HUN</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Floating Taskbar 2.1.13]]></title>
-        <id>https://windhawk.net/mods/floating-taskbar#3631c69d3cd1f3e77c840781f48155f42210fd12</id>
-        <link href="https://windhawk.net/mods/floating-taskbar"/>
-        <updated>2026-11-12T07:02:45.000Z</updated>
-        <content type="html"><![CDATA[<h1>Floating Taskbar</h1>
-<p><img src="https://raw.githubusercontent.com/chaochenzhudian/windhawk-mods/assets/floating-taskbar/assets/floating-taskbar-left.png" alt="Floating Taskbar with left-aligned taskbar icons"></p>
-<p>Left-aligned taskbar layout with the default gradient background.</p>
-<h2>Features</h2>
-<ul>
-<li>Configure the floating bar width, taskbar area height, bottom gap, and
-corner radii.</li>
-<li>Configure the corner radius of taskbar hover highlights.</li>
-<li>Use the system background, a transparent background, translucent color, a
-solid color, a linear gradient, or a custom XAML brush.</li>
-<li>Click through blank areas inside the floating taskbar.</li>
-<li>Keep tray menus and Quick Settings aligned with the right edge of the bar.</li>
-</ul>
-<h2>Settings</h2>
-<p>Widths, area height, spacing, and radii are physical pixels. A taskbar area
-height of 0 follows the system. A custom XAML background that is left empty
-also follows the system background.</p>
-<p>The same physical-pixel values appear differently at different display scales.
-Set the values separately if precise consistency across mixed-DPI monitors is
-required.</p>
-<p>Multi-window taskbar highlights are currently detected from the Chinese and
-English taskbar accessible names. On other Windows display languages, those
-highlights may not be hidden.</p>
-<h2>Differences from other mods</h2>
-<p>Windows 11 Taskbar Styler, Taskbar height and icon size, and MacOS Style Dock
-can also create a floating or unusually sized taskbar. Floating Taskbar also
-adds click-through blank space, tray and Quick Settings alignment, automatic
-tray layout reassertion, and multi-window highlight cleanup. It writes
-properties on the taskbar's <code>RootGrid</code> and <code>BackgroundFill</code>, so combining it
-with a Taskbar Styler theme that styles the same properties is not supported.</p>
-<p>Use Windhawk's normal mod toggle to disable the mod; there is no separate
-enable setting.</p>
-<h2>中文说明</h2>
-<p>将 Windows 11 任务栏变为独立的悬浮圆角条，可调整长度、区域高度、悬浮间距、
-任务栏与待选框圆角，以及背景颜色或渐变。悬浮条内部空白区域可以点击穿透，
-托盘菜单与快速设置面板会对齐悬浮条右端。</p>
-<p>长度、区域高度、间距和圆角使用物理像素。多窗口任务栏高亮目前依靠中文或英文
-辅助功能名称识别，其他显示语言可能不隐藏该高亮。若同时使用 Taskbar Styler
-并修改相同的 <code>RootGrid</code> 或 <code>BackgroundFill</code> 属性，两个 Mod 可能冲突。</p>
-]]></content>
-        <author>
-            <name>chaochenzhudian</name>
-            <uri>https://github.com/chaochenzhudian</uri>
         </author>
     </entry>
 </feed>

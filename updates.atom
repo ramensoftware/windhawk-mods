@@ -2,12 +2,133 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-14T19:01:44.000Z</updated>
+    <updated>2026-11-14T20:03:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Hover Info 1.2.0]]></title>
+        <id>https://windhawk.net/mods/file-hover-info#7002194c5fd74e338f4132bf6ff547825c767877</id>
+        <link href="https://windhawk.net/mods/file-hover-info"/>
+        <updated>2026-11-14T20:03:32.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New option to show or hide file extensions in the card's name, or follow
+File Explorer's setting.</li>
+<li>Shortcuts (.lnk, .url) no longer show their extension, as in File Explorer.</li>
+</ul>
+]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Thumbnail Stats 1.8]]></title>
+        <id>https://windhawk.net/mods/taskbar-thumbnail-stats#af4a3fe8d27672c49c79ff3f9a0256cc5b743118</id>
+        <link href="https://windhawk.net/mods/taskbar-thumbnail-stats"/>
+        <updated>2026-11-14T20:03:27.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New &quot;RAM format&quot; option: show the RAM as a size, as a percentage of the total RAM, or both</li>
+<li>New &quot;Show GPU&quot; option (off by default): GPU usage in percent, computed like Task Manager and respecting &quot;Include child processes&quot;</li>
+</ul>
+]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar AI Quota 2.21.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-ai-quota#f5ea1a16e2eaa9677ded54fae897752525e0a323</id>
+        <link href="https://windhawk.net/mods/taskbar-ai-quota"/>
+        <updated>2026-11-14T20:03:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add a chart for Anthropic extra usage to the details flyout, with its monthly reset time, pace and projected limit time.</li>
+<li>Add an Extra usage chart setting to chart it over the month or the weekly window, or keep the bar.</li>
+<li>Add the pace mark to the Anthropic extra usage bar, and the reset time and projection to its notifications.</li>
+<li>Improve the Gauge % tile style to show a gauge for each quota.</li>
+<li>Improve the details flyout to list Anthropic's free resets by kind, each with its count and next expiry.</li>
+<li>Improve reset times a week or more ahead to show the date instead of the weekday.</li>
+<li>Fix Claude's renamed Max and Ultra plans showing their old names.</li>
+<li>Fix settings being replaced by defaults when they fail to load.</li>
+<li>Fix the details flyout opening on another screen, cut off or away from its bars near an end of the taskbar.</li>
+<li>Fix taskbar buttons' right-click menus opening too far left with the bars on the Left side.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Cleroth</name>
+            <uri>https://github.com/Cleroth</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Item Pins 1.1.5]]></title>
+        <id>https://windhawk.net/mods/explorer-item-pins#43b8a9cd94e699082b09c6c054278f680f583ffd</id>
+        <link href="https://windhawk.net/mods/explorer-item-pins"/>
+        <updated>2026-11-14T20:03:16.000Z</updated>
+        <content type="html"><![CDATA[<h1>Explorer Item Pins</h1>
+<p><strong>English</strong> · <a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/Explorer_Item_Pins/README.ru.md">Русский</a></p>
+<p>Explorer Item Pins keeps selected files and folders at the top of their parent folder in Windows File Explorer. Each folder has its own pins.</p>
+<h2>Features</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:center"><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Explorer_Item_Pins/Assets/Screenshots/Dark_Large_Icons.png" alt="Dark theme with large icons and the Pin command"></th>
+<th style="text-align:center"><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Explorer_Item_Pins/Assets/Screenshots/Light_Small_Icons.png" alt="Light theme with the Unpin command and its toolbar tooltip"></th>
+</tr>
+</thead>
+</table>
+<ul>
+<li><strong>Two ways to pin.</strong> Use the modern context menu or the pin button between <strong>Share</strong> and <strong>Delete</strong> on the command bar.</li>
+<li><strong>Sort and group.</strong> Pins stay at the top in either sort direction. With grouping on, they appear in the first group, <strong>Pinned</strong>. Explorer's sorting still applies within the group.</li>
+<li><strong>Pin indicator.</strong> A pushpin appears at the upper-right corner of the file or folder icon. It follows the icon size and works with thumbnails, lists, details, tiles and content view.</li>
+<li><strong>Interface languages.</strong> English, Russian, Spanish, German, Brazilian Portuguese, and Simplified Chinese.</li>
+</ul>
+<h2>Platforms</h2>
+<p>Requires Windows 11 x64 or ARM64 with the tabbed File Explorer.</p>
+<h2>Data exchange</h2>
+<p>Pins are stored separately for each Windows account. Uninstalling the mod removes its pins. Replacing a file under the same name keeps its pin. A rename within the same folder can keep the pin when the mod can identify the original file. Copying or moving an item to another folder does not carry its pin with it.</p>
+<h2>Usage</h2>
+<ol>
+<li>Select a file or folder and choose <strong>Pin in item pane</strong> in its context menu, or click the pin on the command bar.</li>
+<li>To remove the pin, select the item and choose <strong>Unpin from item pane</strong> or click the crossed-out pin on the command bar. The item returns to its usual position in the folder.</li>
+</ol>
+<p>In Windhawk, open the mod's <strong>Settings</strong> to control these options independently. All three are enabled by default.</p>
+<p>If the pin commands are missing from a File Explorer window that was already open when the mod was enabled or updated, reopen that window.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Controls</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Context menu command</td>
+<td>Pin and unpin in the context menu</td>
+</tr>
+<tr>
+<td>Command bar button</td>
+<td>Pin and unpin on the File Explorer command bar</td>
+</tr>
+<tr>
+<td>Pinned item indicator</td>
+<td>The pushpin on pinned file and folder icons</td>
+</tr>
+</tbody>
+</table>
+<h2>Links</h2>
+<ul>
+<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/tree/main/Explorer_Item_Pins">Explorer Item Pins on GitHub</a></li>
+<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/README.md">DSN Windhawk Mods</a></li>
+</ul>
+]]></content>
+        <author>
+            <name>CTravkin</name>
+            <uri>https://github.com/CTravkin</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Top Taskbar Bleed 1.2.1]]></title>
         <id>https://windhawk.net/mods/top-taskbar-bleed#098da0cadd3d85ce8a87e9a7d8021e0547a3a615</id>
@@ -466,92 +587,6 @@ for these values at all.</li>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dynamic Island Media Player 1.6.0]]></title>
-        <id>https://windhawk.net/mods/dynamic-island-media-player#1ae41698ee287ad9e577aa72fc23dc295d21d8b5</id>
-        <link href="https://windhawk.net/mods/dynamic-island-media-player"/>
-        <updated>2026-11-13T19:04:27.000Z</updated>
-        <content type="html"><![CDATA[<h1>Dynamic Island Media Player for Windows</h1>
-<p><img src="https://raw.githubusercontent.com/BOG090909/dynamic-island-media-player/main/assets/preview.png" alt="Dynamic Island Preview"></p>
-<p>A focused, customizable Dynamic Island overlay for Windows that becomes an interactive media player when music or video is playing. Based on the original <strong><a href="https://github.com/devcode90/Dynamic-Island-for-Windows">Dynamic Island for Windows</a></strong>, this standalone mod removes unrelated dashboard modules and concentrates on media playback.</p>
-<h2>Key Features</h2>
-<ul>
-<li><strong>Media integration:</strong> Track title, artist, album, source-app badge, album artwork, playback state, and progress information through Windows System Media Transport Controls. Artwork is refreshed when metadata settles, stale provider thumbnails are rechecked briefly, and large covers are downscaled to reduce memory use.</li>
-<li><strong>Playback controls:</strong> Play/pause, previous/next track, and progress scrubbing.</li>
-<li><strong>Track transitions:</strong> Choose between crossfade (Fade) and horizontal slide animations. Track transitions work independently from the option that disables the island's hover and movement animations.</li>
-<li><strong>Interactive island:</strong> Expand on hover, click-through mode with Ctrl-to-interact, and configurable show/hide, next, previous, and play/pause hotkeys.</li>
-<li><strong>Window behavior:</strong> Always-on-top, above-games behavior, taskbar layering, fullscreen handling, and per-application saved positions.</li>
-<li><strong>Context menu:</strong> Right-click configuration with color and opacity dialogs, playback-related options, and persistent menu overrides.</li>
-<li><strong>Color customization:</strong> Theme presets, background/text colors, automatic/system/custom accent colors, and a user-managed color-morphing palette with speed controls.</li>
-<li><strong>Appearance:</strong> Multiple island shapes, adjustable size and text scale, custom font, button styles, shadow toggle, and monitor selection.</li>
-<li><strong>Localization:</strong> Ukrainian, Russian, and English interface languages.</li>
-<li><strong>Media source filtering:</strong> Optionally restrict the player to the currently selected media source.</li>
-</ul>
-<h2>Credits</h2>
-<ul>
-<li><strong>Himanshu (devcode90):</strong> Original Dynamic Island for Windows framework, rendering foundation, and core interface design.</li>
-<li><strong>BOG090909:</strong> Standalone media-player adaptation, per-app positioning, customization features, localization, playback integration, and performance improvements.</li>
-</ul>
-]]></content>
-        <author>
-            <name>BOG090909</name>
-            <uri>https://github.com/BOG090909</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Everything & Power Tools in the Start Menu 2.2.1]]></title>
-        <id>https://windhawk.net/mods/start-everything#e89ea96891fa6369bb76755d830f106d338a613c</id>
-        <link href="https://windhawk.net/mods/start-everything"/>
-        <updated>2026-11-13T18:02:23.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Preserve Windows shortcut settings, including arguments, the working directory and the saved Run as administrator option.</li>
-<li>Stop launching when the administrator prompt is declined, preventing a second or unelevated launch.</li>
-</ul>
-]]></content>
-        <author>
-            <name>bardelyne</name>
-            <uri>https://github.com/bardelyne</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinTips OSD 1.6.0]]></title>
-        <id>https://windhawk.net/mods/wintips-osd#67d017e02ad5ad872c23b0a820ca8cd83a655120</id>
-        <link href="https://windhawk.net/mods/wintips-osd"/>
-        <updated>2026-11-13T18:02:17.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Switched text rendering to DirectWrite for smooth, subpixel-positioned text like the native Windows 11 OSD (fixes #6977)</li>
-<li>Added a setting to show/hide the ×N count badge on copy/cut/paste cards (fixes #7304)</li>
-<li>Aligned the ×N badge and label layout with the WinTips standalone app</li>
-</ul>
-]]></content>
-        <author>
-            <name>DoYouNatureQ</name>
-            <uri>https://github.com/DoYouNatureQ</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[PWA Tray Center 0.5.790]]></title>
-        <id>https://windhawk.net/mods/pwa-tray-center#dd4a9a4f460855f892a2aaad3331462069ea8e1d</id>
-        <link href="https://windhawk.net/mods/pwa-tray-center"/>
-        <updated>2026-11-13T18:02:10.000Z</updated>
-        <content type="html"><![CDATA[<p>0.5.780</p>
-<ol>
-<li>
-<p>Small changes throughout the center</p>
-</li>
-<li>
-<p>Adding a simple mod(without a center, just a tray)</p>
-</li>
-<li>
-<p>The UI/UX has become more pleasant</p>
-</li>
-</ol>
-]]></content>
-        <author>
-            <name>Proponent</name>
-            <uri>https://github.com/JJProponent</uri>
         </author>
     </entry>
 </feed>

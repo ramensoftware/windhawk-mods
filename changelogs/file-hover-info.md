@@ -1,3 +1,9 @@
+## 1.2.0 ([Nov 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7002194c5fd74e338f4132bf6ff547825c767877/mods/file-hover-info.wh.cpp))
+
+* New option to show or hide file extensions in the card's name, or follow
+  File Explorer's setting.
+* Shortcuts (.lnk, .url) no longer show their extension, as in File Explorer.
+
 ## 1.1.2 ([Oct 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/270fb9181c02b6e02af4604f0a11d6ae777f99cf/mods/file-hover-info.wh.cpp))
 
 * Add Simplified Chinese localization for the info card (thanks @nekOStorm).
