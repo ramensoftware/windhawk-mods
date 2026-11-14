@@ -4013,9 +4013,13 @@ DWORD WINAPI KeyboardHookThreadProc(void*) {
     auto updateHook = [] {
         // Capture can end on key-down, but that key's release must still be
         // swallowed. Keep the hook installed until all swallowed keys are up.
-        const bool hasSuppressedKeys = std::any_of(
-            std::begin(g_suppressedHotkeyKeys), std::end(g_suppressedHotkeyKeys),
-            [](bool suppressed) { return suppressed; });
+        bool hasSuppressedKeys = false;
+        for (bool suppressed : g_suppressedHotkeyKeys) {
+            if (suppressed) {
+                hasSuppressedKeys = true;
+                break;
+            }
+        }
         const bool shouldBeInstalled = g_captureHotkey.load() || hasSuppressedKeys;
         if (shouldBeInstalled && !g_captureHook) {
             g_captureHook = SetWindowsHookExW(
