@@ -25,6 +25,7 @@ Makes the Yandex Music desktop application window transparent. You can adjust th
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <wchar.h>
 
 struct Settings {
     int alpha;
@@ -40,11 +41,23 @@ void LoadSettings() {
     if (g_settings.alpha > 255) g_settings.alpha = 255;
 }
 
+bool UsesColorKey(HWND hwnd) {
+    DWORD flags = 0;
+    if (GetLayeredWindowAttributes(hwnd, NULL, NULL, &flags)) {
+        return (flags & LWA_COLORKEY) != 0;
+    }
+    return false;
+}
+
 void ApplyTransparency(HWND hwnd) {
     if (!IsWindow(hwnd)) return;
 
     LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
-    if (!(exStyle & WS_EX_LAYERED)) {
+    if (exStyle & WS_EX_LAYERED) {
+        if (UsesColorKey(hwnd)) {
+            return;
+        }
+    } else {
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
     }
 
@@ -59,6 +72,12 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
     if (GetParent(hwnd) != NULL) return TRUE;
     if (!IsWindowVisible(hwnd)) return TRUE;
 
+    WCHAR className[64];
+    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0 ||
+        wcscmp(className, L"Chrome_WidgetWin_1") != 0) {
+        return TRUE;
+    }
+
     ApplyTransparency(hwnd);
     return TRUE;
 }
@@ -71,6 +90,11 @@ DWORD WINAPI ForceTransparencyThread(LPVOID lpParam) {
 }
 
 BOOL Wh_ModInit() {
+    LPCWSTR cmdLine = GetCommandLineW();
+    if (cmdLine && wcsstr(cmdLine, L"--type=") != NULL) {
+        return FALSE;
+    }
+
     LoadSettings();
 
     g_hStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
