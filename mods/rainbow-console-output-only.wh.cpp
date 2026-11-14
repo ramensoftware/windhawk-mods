@@ -17,6 +17,7 @@ This mod injects true-color (24-bit) rainbow colors into your terminal output.
 - **Continuous Rainbow**: Text is colored character by character using HSV color
 space.
 - **Safe Override**: Replaces original ANSI colors with the rainbow spectrum.
+- **Triggers**: Type `::rainbow_on` to enable and `::rainbow_off` to disable.
 
 ### ⚠️ IMPORTANT WARNING
 **DO NOT use this mod with `Always On` enabled when running Terminal AI Agents
@@ -30,9 +31,19 @@ break terminal buffer calculations, leading to hallucinations or logic errors.
 // clang-format off
 // ==WindhawkModSettings==
 /*
+- injectAll: false
+  $name: Inject into All Processes
+  $description: "[NOT RECOMMENDED] Injects into every process, which may cause legacy or GUI apps to crash. Default is false."
+- targetRegex: "cmd|powershell|pwsh|WindowsTerminal|OpenConsole|conhost|git|bash|mintty|py|node"
+  $name: Target Processes Regex
+  $description: "Simple wildcards only (e.g., 'cmd|git*|python'). No complex regex like [] or +. Do NOT include .exe."
 - alwaysOn: false
   $name: Always On
   $description: "Enable rainbow immediately. [WARNING: DO NOT use with AI Agents.]"
+- triggerCommand: "::rainbow_on"
+  $name: Trigger Command
+- disableCommand: "::rainbow_off"
+  $name: Disable Command
 */
 // ==/WindhawkModSettings==
 // clang-format on
@@ -51,6 +62,8 @@ WriteFile_t pOrigWriteFile = nullptr;
 static CRITICAL_SECTION rc_cs;
 static int rc_colorIndex = 0;
 static BOOL rc_active = FALSE;
+static WCHAR rc_triggerCmd[256] = L"::rainbow_on";
+static WCHAR rc_disableCmd[256] = L"::rainbow_off";
 
 static int rc_UIntToWStr(unsigned int val, WCHAR* buf) {
     if (val == 0) {
@@ -74,6 +87,108 @@ static float rc_fmod(float a, float b) {
 }
 static float rc_fabs(float x) {
     return x < 0 ? -x : x;
+}
+
+static BOOL rc_WildcardMatch(const WCHAR* str, const WCHAR* pattern) {
+    if (*pattern == L'\0')
+        return *str == L'\0';
+    if (*pattern == L'*') {
+        while (*(pattern + 1) == L'*')
+            pattern++;
+        if (rc_WildcardMatch(str, pattern + 1))
+            return TRUE;
+        if (*str == L'\0')
+            return FALSE;
+        return rc_WildcardMatch(str + 1, pattern);
+    }
+    if (*pattern == L'?') {
+        if (*str == L'\0')
+            return FALSE;
+        return rc_WildcardMatch(str + 1, pattern + 1);
+    }
+    if (*str != L'\0' && towlower(*str) == towlower(*pattern)) {
+        return rc_WildcardMatch(str + 1, pattern + 1);
+    }
+    return FALSE;
+}
+
+static BOOL rc_IsTargetProcess() {
+    BOOL injectAll = Wh_GetIntSetting(L"injectAll") != 0;
+    if (injectAll) {
+        Wh_Log(
+            L"[RainbowConsole] Global Injection enabled. Targeting ALL "
+            L"processes.");
+        return TRUE;
+    }
+
+    PCWSTR regexStr = Wh_GetStringSetting(L"targetRegex");
+    if (!regexStr || wcslen(regexStr) == 0) {
+        Wh_Log(
+            L"[RainbowConsole] Error: Target Regex is empty and Global "
+            L"Injection is false. Mod will not load.");
+        if (regexStr)
+            Wh_FreeStringSetting(regexStr);
+        return FALSE;
+    }
+
+    BOOL hasInvalidFormat = FALSE;
+    for (int i = 0; regexStr[i] != L'\0'; i++) {
+        WCHAR c = regexStr[i];
+        if (c == L'[' || c == L']' || c == L'+' || c == L'{' || c == L'}' ||
+            c == L'^' || c == L'$' || c == L'\\') {
+            Wh_Log(
+                L"[RainbowConsole] Warning: Unsupported regex character '%c' "
+                L"detected. Only '*' and '?' wildcards are supported.",
+                c);
+            hasInvalidFormat = TRUE;
+        }
+    }
+    if (hasInvalidFormat) {
+        Wh_Log(
+            L"[RainbowConsole] Format error! Please simplify your regex. "
+            L"Example: 'cmd|git*|python'");
+    }
+
+    WCHAR procPath[MAX_PATH];
+    GetModuleFileNameW(NULL, procPath, MAX_PATH);
+    WCHAR* procName = wcsrchr(procPath, L'\\');
+    if (procName)
+        procName++;
+    else
+        procName = procPath;
+
+    WCHAR* dot = wcsrchr(procName, L'.');
+    if (dot && _wcsicmp(dot, L".exe") == 0)
+        *dot = L'\0';
+
+    WCHAR targets[MAX_PATH * 4];
+    wcsncpy_s(targets, MAX_PATH * 4, regexStr, MAX_PATH * 4 - 1);
+    Wh_FreeStringSetting(regexStr);
+
+    BOOL found = FALSE;
+    WCHAR* nextToken = NULL;
+    WCHAR* token = wcstok_s(targets, L"|", &nextToken);
+    while (token) {
+        WCHAR* tDot = wcsrchr(token, L'.');
+        if (tDot && _wcsicmp(tDot, L".exe") == 0)
+            *tDot = L'\0';
+
+        if (rc_WildcardMatch(procName, token)) {
+            found = TRUE;
+            Wh_Log(
+                L"[RainbowConsole] Success: Process '%s' matched pattern '%s'. "
+                L"Mod loaded.",
+                procName, token);
+            break;
+        }
+        token = wcstok_s(NULL, L"|", &nextToken);
+    }
+
+    if (!found) {
+        Wh_Log(L"[RainbowConsole] Process '%s' did not match any Target Regex.",
+               procName);
+    }
+    return found;
 }
 
 static void rc_HSVtoRGB(float H, float S, float V, int* r, int* g, int* b) {
@@ -198,7 +313,7 @@ static void rc_MakeRainbow(const WCHAR* src, WCHAR* dst, int dstMax) {
 
 static BOOL WINAPI
 rc_HookWriteConsoleW(HANDLE h, const VOID* b, DWORD n, LPDWORD w, LPVOID r) {
-    if (!rc_active || n == 0 || n > (DWORD)INT_MAX) {
+    if (n == 0 || n > (DWORD)INT_MAX) {
         return pOrigWriteConsoleW(h, b, n, w, r);
     }
 
@@ -217,6 +332,34 @@ rc_HookWriteConsoleW(HANDLE h, const VOID* b, DWORD n, LPDWORD w, LPVOID r) {
     }
 
     wcsncpy_s(src, need, (const WCHAR*)b, n);
+
+    if (rc_triggerCmd[0] != L'\0' && wcsstr(src, rc_triggerCmd)) {
+        rc_active = TRUE;
+        if (w)
+            *w = n;
+        free(src);
+        free(out);
+        LeaveCriticalSection(&rc_cs);
+        return TRUE;
+    }
+    if (rc_disableCmd[0] != L'\0' && wcsstr(src, rc_disableCmd)) {
+        rc_active = FALSE;
+        if (w)
+            *w = n;
+        free(src);
+        free(out);
+        LeaveCriticalSection(&rc_cs);
+        return TRUE;
+    }
+
+    // 未命中命令且彩虹未开启：不染色，直接交给原函数
+    if (!rc_active) {
+        free(src);
+        free(out);
+        LeaveCriticalSection(&rc_cs);
+        return pOrigWriteConsoleW(h, b, n, w, r);
+    }
+
     rc_MakeRainbow(src, out, (int)need);
     DWORD outLen = (DWORD)wcslen(out);
     BOOL ret = pOrigWriteConsoleW(h, out, outLen, w, r);
@@ -285,9 +428,22 @@ rc_HookWriteFile(HANDLE h, LPCVOID b, DWORD n, LPDWORD w, LPOVERLAPPED o) {
 
 static void LoadSettings() {
     rc_active = Wh_GetIntSetting(L"alwaysOn") != 0;
+    PCWSTR trigger = Wh_GetStringSetting(L"triggerCommand");
+    if (trigger) {
+        wcsncpy_s(rc_triggerCmd, 256, trigger, 255);
+        Wh_FreeStringSetting(trigger);
+    }
+    PCWSTR disable = Wh_GetStringSetting(L"disableCommand");
+    if (disable) {
+        wcsncpy_s(rc_disableCmd, 256, disable, 255);
+        Wh_FreeStringSetting(disable);
+    }
 }
 
 BOOL Wh_ModInit() {
+    if (!rc_IsTargetProcess())
+        return FALSE;
+
     InitializeCriticalSection(&rc_cs);
     LoadSettings();
 
