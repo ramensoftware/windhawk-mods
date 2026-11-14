@@ -7019,9 +7019,21 @@ static const char kServerClassicStart[] =
     "AElFTkSuQmCC"
 ;
 static void DestroyStartImage(State& state) {
-    delete state.serverSpriteLarge;state.serverSpriteLarge=nullptr;if(state.serverSpriteLargeStream)state.serverSpriteLargeStream->Release();state.serverSpriteLargeStream=nullptr;
-    delete state.serverSpriteSmall;state.serverSpriteSmall=nullptr;if(state.serverSpriteSmallStream)state.serverSpriteSmallStream->Release();state.serverSpriteSmallStream=nullptr;
-    delete state.serverDesktopReference;state.serverDesktopReference=nullptr;if(state.serverDesktopReferenceStream)state.serverDesktopReferenceStream->Release();state.serverDesktopReferenceStream=nullptr;
+    delete state.serverSpriteLarge;
+    state.serverSpriteLarge = nullptr;
+    if (state.serverSpriteLargeStream)
+        state.serverSpriteLargeStream->Release();
+    state.serverSpriteLargeStream = nullptr;
+    delete state.serverSpriteSmall;
+    state.serverSpriteSmall = nullptr;
+    if (state.serverSpriteSmallStream)
+        state.serverSpriteSmallStream->Release();
+    state.serverSpriteSmallStream = nullptr;
+    delete state.serverDesktopReference;
+    state.serverDesktopReference = nullptr;
+    if (state.serverDesktopReferenceStream)
+        state.serverDesktopReferenceStream->Release();
+    state.serverDesktopReferenceStream = nullptr;
     delete state.serverClassicStart; state.serverClassicStart=nullptr;
     if (state.serverClassicStartStream) state.serverClassicStartStream->Release();
     state.serverClassicStartStream=nullptr;
