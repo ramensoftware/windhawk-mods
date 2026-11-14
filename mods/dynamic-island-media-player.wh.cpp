@@ -3606,6 +3606,18 @@ void SetClickThrough(HWND hwnd, bool clickThrough) {
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 }
 
+void PersistHotkeys() {
+    Wh_SetIntValue(L"HotkeyEnabled", g_hotkeyEnabled.load() ? 1 : 0);
+    Wh_SetIntValue(L"HotkeyMods", static_cast<int>(g_hotkeyMods.load()));
+    Wh_SetIntValue(L"HotkeyVk", static_cast<int>(g_hotkeyVk.load()));
+    Wh_SetIntValue(L"HkNextMods", static_cast<int>(g_hkNextMods.load()));
+    Wh_SetIntValue(L"HkNextVk", static_cast<int>(g_hkNextVk.load()));
+    Wh_SetIntValue(L"HkPrevMods", static_cast<int>(g_hkPrevMods.load()));
+    Wh_SetIntValue(L"HkPrevVk", static_cast<int>(g_hkPrevVk.load()));
+    Wh_SetIntValue(L"HkPlayPauseMods", static_cast<int>(g_hkPlayPauseMods.load()));
+    Wh_SetIntValue(L"HkPlayPauseVk", static_cast<int>(g_hkPlayPauseVk.load()));
+}
+
 std::wstring FormatHotkey(UINT mods, UINT vk) {
     std::wstring s;
     if (mods & MOD_CONTROL) s += L"Ctrl+";
