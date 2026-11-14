@@ -4,7 +4,7 @@
 // @description     Automatically applies custom transparency to Yandex Music (and other selected apps)
 // @version         1.1
 // @author          NIKTO
-// @github          NIKTO-2
+// @github          https://github.com
 // @include         Яндекс Музыка.exe
 // @compilerOptions -lcomctl32
 // ==/WindhawkMod==
@@ -37,9 +37,9 @@ Created with assistance from ChatGPT.
 
 ## Screenshots
 
-![Yandex Music Transparency - Explorer background](https://github.com)
+![Yandex Music Transparency - Explorer background](https://githubusercontent.com)
 
-![Yandex Music Transparency - Dark background](https://github.com)
+![Yandex Music Transparency - Dark background](https://githubusercontent.com)
 */
 // ==/WindhawkModReadme==
 
@@ -88,7 +88,7 @@ bool IsTargetWindow(HWND hwnd) {
     if (pid != GetCurrentProcessId()) return false;
     if (GetParent(hwnd) != NULL) return false;
 
-    WCHAR className[256];
+    WCHAR className;
     if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0 ||
         wcscmp(className, L"Chrome_WidgetWin_1") != 0) {
         return false;
