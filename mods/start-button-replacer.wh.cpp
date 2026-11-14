@@ -37,9 +37,6 @@ Replaces the icon inside the Windows 11 Start button with a custom SVG, PNG, JPG
 
 ![preview](https://raw.githubusercontent.com/EnderDragonEP/asset/7ae3c6659e0237bf98cc67f52576ebaff8d9fd44/windhawk-mods/start-button-replacer/preview-1.gif)
 
-Only the icon is replaced. Windows continues to handle clicking, keyboard navigation, accessibility and Start menu activation.
-
-To change the color of the button, use the [Start button colorizer](https://windhawk.net/mods/taskbar-start-button-colorizer) mod.
 
 ## Image sources
 
@@ -80,7 +77,7 @@ State images crossfade whenever their applicable duration is greater than zero. 
 
 ## Dark mode images
 
-The main **Images** are used in light mode. To use different images while Windows is in dark mode, fill in **Dark mode images**. Blank fields use the corresponding image from **Images**, and the fallback rules above still apply. If the dark mode **Image source** can't be loaded, the main images are used in dark mode too.
+The main **Images** are used in light mode. To use different images while Windows is in dark mode, fill in **Dark mode images**. Blank fields use the corresponding image from **Images**, and the fallback rules above still apply. If the dark mode **Image source** can't be loaded, the main images are used in dark mode too. The main **Image source** is always required: if it's blank or can't be loaded, the stock Start icon is shown in both modes, even when a dark mode image is set.
 
 Both image sets are loaded up front, so images switch immediately when you change **Choose your mode** in Settings > Personalization > Colors. The mod follows the Windows mode (which the taskbar uses), not the app mode. Icon size, effects and animation settings are shared between modes.
 
@@ -448,6 +445,13 @@ struct StartIconInstance {
     wf::IInspectable pointerCaptureLostHandler{nullptr};
 
     bool pointerEventsAttached = false;
+
+    // SVG images are rasterized for the display scale, so they're rasterized
+    // again when the taskbar moves to a monitor with another scale or the
+    // scale setting changes.
+    wux::XamlRoot::Changed_revoker xamlRootChangedRevoker;
+    double rasterizationScale = 0.0;
+
     bool detached = false;
 };
 
@@ -2206,6 +2210,11 @@ void DetachInstance(const std::shared_ptr<StartIconInstance>& instance) {
         instance->pointerEventsAttached = false;
     }
 
+    try {
+        instance->xamlRootChangedRevoker.revoke();
+    } catch (...) {
+    }
+
     for (size_t i = 0; i < kImageSlotCount; i++) {
         auto& resource = instance->imageResources[i];
 
@@ -2646,6 +2655,75 @@ void SetSvgRasterizeSize(const std::shared_ptr<StartIconInstance>& instance,
 
     svg.RasterizePixelWidth(pixels);
     svg.RasterizePixelHeight(pixels);
+}
+
+void OnXamlRootChanged(const std::weak_ptr<StartIconInstance>& weakInstance,
+                       const wux::XamlRoot& xamlRoot) {
+    auto instance = weakInstance.lock();
+
+    if (!instance || instance->detached || g_unloading) {
+        return;
+    }
+
+    double scale = 0.0;
+
+    try {
+        scale = xamlRoot.RasterizationScale();
+    } catch (...) {
+        return;
+    }
+
+    // XamlRoot.Changed also fires for size and visibility changes.
+    if (scale == instance->rasterizationScale) {
+        return;
+    }
+
+    instance->rasterizationScale = scale;
+
+    for (size_t i = 0; i < kImageSlotCount; i++) {
+        auto& resource = instance->imageResources[i];
+
+        if (!resource.svg) {
+            continue;
+        }
+
+        try {
+            // Setting the raster size again makes XAML rasterize the already
+            // loaded SVG for the new scale.
+            SetSvgRasterizeSize(instance, resource.svg);
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"Rasterizing the %s SVG for scale %.2f failed: 0x%08X %s",
+                   ImageSlotName(i), scale, e.code().value,
+                   e.message().c_str());
+        } catch (...) {
+        }
+    }
+}
+
+void TrackRasterizationScale(const std::shared_ptr<StartIconInstance>& instance,
+                             const wux::FrameworkElement& startButton) {
+    try {
+        auto xamlRoot = startButton.XamlRoot();
+
+        if (!xamlRoot) {
+            return;
+        }
+
+        instance->rasterizationScale = xamlRoot.RasterizationScale();
+
+        std::weak_ptr<StartIconInstance> weakInstance = instance;
+
+        instance->xamlRootChangedRevoker = xamlRoot.Changed(
+            winrt::auto_revoke,
+            [weakInstance](const wux::XamlRoot& sender,
+                           const wux::XamlRootChangedEventArgs&) {
+                OnXamlRootChanged(weakInstance, sender);
+            });
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Tracking the display scale failed: 0x%08X %s",
+               e.code().value, e.message().c_str());
+    } catch (...) {
+    }
 }
 
 void OnImageOpened(const std::weak_ptr<StartIconInstance>& weakInstance,
@@ -3443,6 +3521,7 @@ bool AttachToStartButton(const wux::FrameworkElement& startButton) {
         hostPanel.Children().Append(imageHost);
 
         AttachPointerEvents(instance, startButton);
+        TrackRasterizationScale(instance, startButton);
 
         instance->darkImageSetLoaded = HasDarkModeImages(instance->settings);
 
