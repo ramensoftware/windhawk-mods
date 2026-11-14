@@ -92,6 +92,11 @@ from anywhere. The secondary modifier/action settings provide an alternate wheel
 action; two-finger scrolling follows these same settings. Dragging a pressed
 entry or close button cancels the click.
 
+On a PC with a precision touchpad, while the scroll wheel drives the switcher, a
+click outside it only dismisses the switcher; click again to use the window under
+the pointer. Wheel input with no assigned action, such as Shift+wheel when the
+secondary action is None, still reaches the window under the pointer.
+
 Close commands request a normal application close; applications can still ask to
 save changes. Closing a grouped entry follows **Grouping → Group Close Button
 Behavior**, which defaults to closing its most recent window. In sticky mode, a
@@ -14890,15 +14895,80 @@ static bool TakeMouseCommand(DWORD index, MouseCommand* command) {
 // shown and the scroll wheel drives it, a small, nearly invisible window follows
 // the cursor directly below the switcher windows. Over this legacy window Windows
 // delivers the same gesture as wheel input, which the hook consumes like a mouse
-// wheel. Clicks outside the switcher still dismiss it through the hook, but no
-// longer reach the app underneath. It stays small on purpose: a full-screen window
-// reads as a full-screen app to other tools (Top Taskbar Bleed hid its panel).
+// wheel. It is only used on PCs with a precision touchpad; any other device's wheel
+// reaches the hook directly. Wheel input the hook passes on is let through to the
+// app underneath (see ScrollCatcherPassWheel). Clicks outside the switcher still
+// dismiss it through the hook, but a click that lands on the catcher no longer
+// reaches the app underneath: clicks are routed before the hook runs. It stays
+// small on purpose: a full-screen window reads as a full-screen app to other tools
+// (Top Taskbar Bleed hid its panel).
 #define SWS_SCROLL_CATCHER_CLASSNAME L"WindhawkSWS_ScrollCatcher"
 #define SWS_SCROLL_CATCHER_SIZE 128 // px, centered on the cursor
 #define SWS_SCROLL_CATCHER_FOLLOW_TIMER_ID 1 // on the catcher window itself
 #define SWS_SCROLL_CATCHER_FOLLOW_MS 15
+#define SWS_SCROLL_CATCHER_PASS_MS 150 // stays click-through after a passed wheel
 static HWND g_hScrollCatcherWnd = NULL;
 static bool g_scrollCatcherClassRegistered = false;
+static DWORD s_scrollCatcherTouchpadGeneration = 0;
+static bool s_scrollCatcherTouchpad = false;
+// The shown catcher, for the mouse hook thread.
+static std::atomic<HWND> s_scrollCatcherShown{nullptr};
+// Hook thread only: the catcher made click-through for a passed wheel, and until when.
+static HWND s_scrollCatcherPassHwnd = nullptr;
+static ULONGLONG s_scrollCatcherPassUntil = 0;
+
+// Precision touchpads expose a HID digitizer touch pad collection. Legacy touchpads
+// and mice send wheel input the hook already sees, so they never need the catcher.
+static bool PrecisionTouchpadPresent() {
+    if (g_touchpadReaderAvailable.load()) return true;
+    UINT count = 0;
+    if (GetRawInputDeviceList(NULL, &count, sizeof(RAWINPUTDEVICELIST)) == (UINT)-1 || !count) {
+        return false;
+    }
+    std::vector<RAWINPUTDEVICELIST> devices(count);
+    UINT actual = GetRawInputDeviceList(devices.data(), &count, sizeof(RAWINPUTDEVICELIST));
+    if (actual == (UINT)-1) return false;
+    for (UINT i = 0; i < actual; ++i) {
+        if (devices[i].dwType != RIM_TYPEHID) continue;
+        RID_DEVICE_INFO info = {};
+        info.cbSize = sizeof(info);
+        UINT infoSize = sizeof(info);
+        if (GetRawInputDeviceInfoW(devices[i].hDevice, RIDI_DEVICEINFO, &info, &infoSize) !=
+                (UINT)-1 &&
+            info.dwType == RIM_TYPEHID && info.hid.usUsagePage == 0x0D /* digitizer */ &&
+            info.hid.usUsage == 0x05 /* touch pad */) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Hook thread. A wheel the hook passes on (no action for the current modifier state)
+// would otherwise end at the catcher. Wheel input is routed after the hook returns,
+// so dropping the catcher to alpha 0 (not hit-tested) here sends this event to the
+// window underneath. SetLayeredWindowAttributes does not wait for the owner thread.
+static void ScrollCatcherPassWheel() {
+    HWND catcher = s_scrollCatcherShown.load(std::memory_order_acquire);
+    if (!catcher) return;
+    if (s_scrollCatcherPassHwnd != catcher) {
+        SetLayeredWindowAttributes(catcher, 0, 0, LWA_ALPHA);
+        s_scrollCatcherPassHwnd = catcher;
+    }
+    s_scrollCatcherPassUntil = GetTickCount64() + SWS_SCROLL_CATCHER_PASS_MS;
+}
+
+// Hook thread. Makes the catcher hit-testable again once passed wheel input stops.
+// Returns the milliseconds until that is due, or INFINITE when nothing is pending.
+static DWORD ScrollCatcherRestoreAfterPass(ULONGLONG now) {
+    if (!s_scrollCatcherPassHwnd) return INFINITE;
+    if (now < s_scrollCatcherPassUntil) return (DWORD)(s_scrollCatcherPassUntil - now);
+    // A hidden catcher is reset to alpha 1 by its next show.
+    if (s_scrollCatcherShown.load(std::memory_order_acquire) == s_scrollCatcherPassHwnd) {
+        SetLayeredWindowAttributes(s_scrollCatcherPassHwnd, 0, 1, LWA_ALPHA);
+    }
+    s_scrollCatcherPassHwnd = nullptr;
+    return INFINITE;
+}
 
 static void ScrollCatcherFollowCursor() {
     POINT pt;
@@ -14942,12 +15012,19 @@ static void UpdateScrollCatcher(DWORD flags) {
                         IsWindowVisible(g_hSwitcher);
     if (!wanted) {
         if (g_hScrollCatcherWnd && IsWindowVisible(g_hScrollCatcherWnd)) {
+            s_scrollCatcherShown.store(nullptr, std::memory_order_release);
             KillTimer(g_hScrollCatcherWnd, SWS_SCROLL_CATCHER_FOLLOW_TIMER_ID);
             ShowWindow(g_hScrollCatcherWnd, SW_HIDE);
         }
         return;
     }
     if (g_hScrollCatcherWnd && IsWindowVisible(g_hScrollCatcherWnd)) return;
+    // Checked once per session, so the fail-safe timer does not re-enumerate devices.
+    if (s_scrollCatcherTouchpadGeneration != s_mouseUiGeneration) {
+        s_scrollCatcherTouchpadGeneration = s_mouseUiGeneration;
+        s_scrollCatcherTouchpad = PrecisionTouchpadPresent();
+    }
+    if (!s_scrollCatcherTouchpad) return;
     HINSTANCE instance = GetModuleHandleW(NULL);
     if (!g_hScrollCatcherWnd) {
         if (!g_scrollCatcherClassRegistered) {
@@ -14989,14 +15066,19 @@ static void UpdateScrollCatcher(DWORD flags) {
         if (GetWindowThreadProcessId(next, nullptr) != threadId || !IsWindowVisible(next)) break;
         insertAfter = next;
     }
+    // The hook may have left it click-through (alpha 0) when it was last hidden.
+    SetLayeredWindowAttributes(g_hScrollCatcherWnd, 0, 1, LWA_ALPHA);
     SetWindowPos(g_hScrollCatcherWnd, insertAfter, pt.x - SWS_SCROLL_CATCHER_SIZE / 2,
                  pt.y - SWS_SCROLL_CATCHER_SIZE / 2, SWS_SCROLL_CATCHER_SIZE,
                  SWS_SCROLL_CATCHER_SIZE, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     SetTimer(g_hScrollCatcherWnd, SWS_SCROLL_CATCHER_FOLLOW_TIMER_ID,
              SWS_SCROLL_CATCHER_FOLLOW_MS, NULL);
+    s_scrollCatcherShown.store(g_hScrollCatcherWnd, std::memory_order_release);
 }
 
+// Runs after the mouse hook thread has stopped, so the hook cannot touch the window.
 static void DestroyScrollCatcherWindow() {
+    s_scrollCatcherShown.store(nullptr, std::memory_order_release);
     if (g_hScrollCatcherWnd) {
         if (IsWindow(g_hScrollCatcherWnd)) DestroyWindow(g_hScrollCatcherWnd);
         g_hScrollCatcherWnd = NULL;
@@ -15173,6 +15255,7 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
         DWORD action = modActive ? ((flags >> 6) & 3u) : ((flags >> 4) & 3u);
         if (!action) {
             s_wheelDeltaAccum = s_hwheelDeltaAccum = 0;
+            ScrollCatcherPassWheel();
             return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
         }
         short rawDelta = (short)HIWORD(pMouseStruct->mouseData);
@@ -15258,6 +15341,8 @@ static DWORD WINAPI MouseHookThread(LPVOID) {
               SWS_MOUSE_VISIBLE)) {
             timeout = 50;
         }
+        DWORD passWait = ScrollCatcherRestoreAfterPass(GetTickCount64());
+        if (passWait < timeout) timeout = passWait;
         DWORD wake = MsgWaitForMultipleObjectsEx(
             ARRAYSIZE(events), events, timeout, QS_ALLINPUT,
             MWMO_INPUTAVAILABLE);
@@ -15269,6 +15354,7 @@ static DWORD WINAPI MouseHookThread(LPVOID) {
         g_hMouseHook = nullptr;
     }
     s_wheelDeltaAccum = s_hwheelDeltaAccum = 0;
+    s_scrollCatcherPassHwnd = nullptr; // the catcher is reset by its next show
     return 0;
 }
 
