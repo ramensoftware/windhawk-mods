@@ -868,8 +868,7 @@ static void LoadSettings() {
 #define TIMER_STATUS    1
 #define TIMER_FAST      2
 #define TIMER_REBUILD   3
-#define TIMER_MAXCHECK  86  // "Ocultar com janela maximizada": confere 4 vezes por segundo
-#define TIMER_MAXNOW    87  // ...e logo depois de uma janela maximizar ou restaurar
+#define TIMER_MAXNOW    87  // logo depois de uma janela maximizar ou restaurar (o tique de 1 s é a reserva)
 #define TIMER_PEEKCOLOR 88  // a cor da janela ativa, depois que as janelas descem para a barra
 
 static const wchar_t kBarClass[] = L"WhFinderTopBar";
@@ -906,8 +905,7 @@ struct Bar {
     std::vector<Item> items;
     LiquidSurface* lq = nullptr;  // fundo de vidro líquido (ao vivo)
     // Animação dos ícones: valores mostrados que correm atrás do estado real.
-    float volShown = -1, muteShown = -1, sunShown = -1;
-    float wifiShown[3] = {-1, -1, -1};
+    float sunShown = -1;
     float sunSpin = 0;
     int lastVolGlyph = -1, lastWifiLevel = -1, lastRadio = -2;
     ULONGLONG wifiStepTick = 0, btPulseTick = 0;  // Wi-Fi: sinal sobe/desce; Bluetooth: pisca
@@ -12372,10 +12370,10 @@ enum BsVal {
     BV_ISLFOCUS, BV_ISLCAPS, BV_ISLBATT, BV_ISLBT, BV_ISLAUDIO, BV_ISLHIST, BV_ISLSTYLE, BV_ISLSIZE, BV_ISLDUR, BV_ISLIN, BV_ISLOUT,
     BV_ISLPOS, BV_ISLTEST, BV_ISLCLEAR, BV_NPLAYOUT, BV_NPSIZE, BV_WINNOTIF, BV_WINONLY, BV_ISLHISTNOT,
     BV_WXPROV, BV_WXUNIT, BV_WXLOOK, BV_WXANIM, BV_WXGLASS, BV_WXINT, BV_WXTEMP, BV_WXPLACE, BV_WXNOW, BV_WXRESULT,
-    BV_BATTPCT, BV_AUTOHIDE, BV_HIDEFS, BV_ALLMON, BV_FLYOUTS, BV_OSD, BV_DIM,
-    BV_G_TRANSP, BV_G_CLEAR, BV_G_LIQUID, BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_ICONS, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_SELMENU, BV_UPDATES,
+    BV_BATTPCT, BV_HIDEFS, BV_FLYOUTS, BV_OSD, BV_DIM,
+    BV_G_LIQUID, BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_ICONS, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_SELMENU, BV_UPDATES,
     BV_G_TINT, BV_SEARCHTGT, BV_LANG, BV_NPBAR, BV_ICSADD, BV_ICSCLEAR,
-    BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_TEXTMON, BV_HIDEMAX, BV_REVEAL, BV_HIDEMODE,
+    BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_TEXTMON, BV_HIDEMAX, BV_HIDEMODE,
 };
 struct BsRowDef {
     int kind;
@@ -12541,10 +12539,8 @@ static const BsBoolKey kBsKeys[] = {
     {BV_ISLHISTNOT, L"islHistNotices", &Settings::islHistNotices},
     {BV_BATTPCT, L"showBatteryPercent", &Settings::showBatteryPercent},
     {BV_UPDATES, L"checkUpdates", &Settings::checkUpdates},
-    {BV_AUTOHIDE, L"autoHide", &Settings::autoHide},
     {BV_HIDEFS, L"hideOnFullscreen", &Settings::hideOnFullscreen},
     {BV_HIDEMAX, L"hideWhenMaximized", &Settings::hideWhenMaximized},
-    {BV_ALLMON, L"allMonitors", &Settings::allMonitors},
     {BV_FLYOUTS, L"flyouts", &Settings::flyouts},
     {BV_OSD, L"showOsd", &Settings::showOsd},
     {BV_DIM, L"ccDimScreen", &Settings::bgBlur},
@@ -12651,22 +12647,30 @@ static bool BarChosenMonitorPresent() {
     return false;
 }
 
+// As opções com monitores: as fixas primeiro (todos, o principal...) e depois cada
+// monitor ligado. A lista é refeita no máximo a cada 1,5 s.
+struct MonLabelList {
+    std::vector<std::wstring> names;
+    std::vector<PCWSTR> ptrs;
+    ULONGLONG tick = 0;
+};
+static const PCWSTR* MonLabels(MonLabelList& l, std::initializer_list<PCWSTR> head, int* count) {
+    ULONGLONG now = GetTickCount64();
+    if (l.ptrs.empty() || now - l.tick > 1500) {
+        l.tick = now;
+        l.names.assign(head.begin(), head.end());
+        for (const MonChoice& c : MonitorChoices()) l.names.push_back(c.label);
+        l.ptrs.clear();
+        for (const std::wstring& n : l.names) l.ptrs.push_back(n.c_str());
+    }
+    if (count) *count = (int)l.ptrs.size();
+    return l.ptrs.data();
+}
 // O monitor cuja cor está sendo ajustada (0 = todos), só enquanto os Ajustes estão abertos.
 static int g_textMonEdit = 0;
 static const PCWSTR* BsTextMonLabels(int* count) {
-    static std::vector<std::wstring> names;
-    static std::vector<PCWSTR> ptrs;
-    static ULONGLONG tick = 0;
-    ULONGLONG now = GetTickCount64();
-    if (ptrs.empty() || now - tick > 1500) {
-        tick = now;
-        names = {L"Todos os monitores"};
-        for (const MonChoice& c : MonitorChoices()) names.push_back(c.label);
-        ptrs.clear();
-        for (const std::wstring& n : names) ptrs.push_back(n.c_str());
-    }
-    if (count) *count = (int)ptrs.size();
-    return ptrs.data();
+    static MonLabelList l;
+    return MonLabels(l, {L"Todos os monitores"}, count);
 }
 static std::wstring TextMonEditDevice() {
     if (g_textMonEdit <= 0) return L"";
@@ -12682,10 +12686,8 @@ static int BsGet(int val) {
         case BV_G_TINT: return 100 - GlassTranspValue();
         case BV_SEARCHTGT: return g_settings.searchTarget;
         case BV_LANG: return g_langChoice;
-        case BV_G_TRANSP: return GlassTranspValue();
         case BV_G_REFRACT: return g_glass.refraction;
         case BV_G_BLUR: return g_glass.blur;
-        case BV_G_CLEAR: return g_glass.clear;
         case BV_G_LIQUID: return g_glass.liquid;
         case BV_G_LIVE: return g_glass.live;
         case BV_BARSTYLE: return g_settings.barStyle;
@@ -12765,21 +12767,15 @@ static void BsSet(int val, int v) {
         if (g_settings.*(k->field) == on) return;
         g_settings.*(k->field) = on;
         OvrSetInt(k->key, on ? 1 : 0);
-        // Só "todos os monitores" e "ocultar automaticamente" precisam refazer as
-        // barras; o resto vale na hora, sem a barra piscar.
-        if (val == BV_ALLMON || val == BV_AUTOHIDE) {
-            RequestReload(1);
-        } else {
+        // Vale na hora, sem a barra piscar (só "Ocultar com janela maximizada"
+        // desligando "Ocultar a barra" refaz as barras).
+        {
             if (val == BV_HIDEMAX && on && g_settings.autoHide) {
                 // Ocultar com janela maximizada desliga "Ocultar a barra" (alça ou mouse).
                 g_settings.autoHide = false;
                 OvrSetInt(L"autoHide", 0);
                 RequestReload(1);
                 return;
-            }
-            if (val == BV_HIDEMAX && g_owner) {
-                if (on) SetTimer(g_owner, TIMER_MAXCHECK, 250, nullptr);
-                else KillTimer(g_owner, TIMER_MAXCHECK);
             }
             BarsApplyLive(false);
         }
@@ -13015,10 +13011,8 @@ static void BsSet(int val, int v) {
             g_glass.transparency = 100 - v;
             g_glass.clear = true;
             break;
-        case BV_G_TRANSP: g_glass.transparency = v; break;
         case BV_G_REFRACT: g_glass.refraction = v; break;
         case BV_G_BLUR: g_glass.blur = v; break;
-        case BV_G_CLEAR: g_glass.clear = v != 0; break;
         case BV_G_LIQUID: g_glass.liquid = v != 0; break;
         case BV_G_LIVE: g_glass.live = v != 0; break;
         default: return;
@@ -13282,19 +13276,8 @@ static const PCWSTR kBsLang[] = {L"Automático (Windows)", L"Português", L"Engl
                                  L"Français", L"Deutsch", L"Italiano", L"中文（简体）"};
 // As opções de "Mostrar a barra em": todos, o principal e cada monitor ligado.
 static const PCWSTR* BsMonitorLabels(int* count) {
-    static std::vector<std::wstring> names;
-    static std::vector<PCWSTR> ptrs;
-    static ULONGLONG tick = 0;
-    ULONGLONG now = GetTickCount64();
-    if (ptrs.empty() || now - tick > 1500) {
-        tick = now;
-        names = {L"Todos os monitores", L"Monitor principal"};
-        for (const MonChoice& c : MonitorChoices()) names.push_back(c.label);
-        ptrs.clear();
-        for (const std::wstring& n : names) ptrs.push_back(n.c_str());
-    }
-    if (count) *count = (int)ptrs.size();
-    return ptrs.data();
+    static MonLabelList l;
+    return MonLabels(l, {L"Todos os monitores", L"Monitor principal"}, count);
 }
 static const PCWSTR* BsChoiceLabels(int val) {
     switch (val) {
@@ -21788,22 +21771,11 @@ static bool BarAnimStep(Bar* b) {
     float dt = b->lastFrame ? std::min(0.05f, (now - b->lastFrame) / 1000.0f) : 0.016f;
     b->lastFrame = now;
     bool moving = false;
-    // Volume: ondas pelo nível, como o ícone do Windows (0, 1, 2, 3).
     int v = g_status.volume;
-    float waves = v <= 0 ? 0 : v < 33 ? 1 : v < 66 ? 2 : 3;
-    moving |= Chase(b->volShown, waves, 10, dt);
-    moving |= Chase(b->muteShown, g_status.mute || v == 0 ? 1.0f : 0.0f, 12, dt);
-    // Wi-Fi: arcos acesos pela qualidade; ao ligar acendem de dentro para fora,
-    // ao desligar apagam de fora para dentro.
+    // Wi-Fi: o nível do sinal (o ícone "pula" quando ele muda).
     int litN = g_status.net == 1 ? (g_status.wifiQuality >= 75 ? 3 : g_status.wifiQuality >= 50 ? 2
                                    : g_status.wifiQuality >= 25 ? 1 : 0)
                                  : 0;
-    for (int i = 0; i < 3; i++) {
-        float target = i < litN ? 1.0f : 0.0f;
-        bool up = b->wifiShown[i] >= 0 && target > b->wifiShown[i];
-        float rate = up ? 9.0f * (1.0f - i * 0.30f) : 9.0f * (0.40f + i * 0.30f);
-        moving |= Chase(b->wifiShown[i], target, rate, dt);
-    }
     // Brilho.
     AcquireSRWLockShared(&g_ccLock);
     int br = g_ccShared.bright;
@@ -22585,7 +22557,6 @@ static bool ForegroundIsFullscreenOn(Bar* b) {
            r.right >= b->monRect.right && r.bottom >= b->monRect.bottom;
 }
 
-static void HandleSync(Bar* b);  // a alça no topo (mais abaixo)
 // Há uma janela maximizada à vista neste monitor? (minimizadas, escondidas, de
 // ferramenta e as do shell não contam)
 struct MaxFind {
@@ -22634,7 +22605,7 @@ static void BarReleaseSpace(Bar* b, bool release) {
 }
 
 // Tela cheia (e janela maximizada, se pedido): confere a cada segundo (o aviso do
-// Windows nem sempre chega); com "Ocultar com janela maximizada", 4 vezes por segundo.
+// Windows nem sempre chega) e, com janelas maximizando ou restaurando, na hora.
 static void UpdateFullscreen() {
     for (Bar* b : g_bars) {
         bool hide = false, forMax = false;
@@ -22685,7 +22656,7 @@ static void UpdateFullscreen() {
 // Aplica os ajustes nas barras que já existem (sem destruir e recriar).
 // geometry: a altura, a fonte ou os ícones mudaram.
 static void WxRefresh();
-static void UpdateSolid();
+static void UpdateWindowColor();
 static void KbdNavApply();
 static void BarSetupStyle(Bar* b);
 static void ApplyGlass(Bar* b);
@@ -22702,9 +22673,9 @@ static void BarRestyle(Bar* b) {
     BarSyncShadow(b);
     InvalidateRect(b->hwnd, nullptr, FALSE);
 }
-static void UpdateSolid();
+static void UpdateWindowColor();
 static void BarsRestyle() {
-    UpdateSolid();
+    UpdateWindowColor();
     for (Bar* b : g_bars) BarRestyle(b);
 }
 
@@ -22728,7 +22699,7 @@ static void BarsApplyLive(bool geometry) {
         b->moreOpen = false;
     }
     BuildTopMenus();  // menus do app: aparecem/somem já, sem esperar outra janela
-    UpdateSolid();
+    UpdateWindowColor();
     UpdateFullscreen();
     KbdNavApply();
     NotifApply();
@@ -22743,7 +22714,7 @@ static void ApplySettingsLive(const Settings& before) {
     if (before.barStyle != g_settings.barStyle) {
         BarsRestyle();
     } else {
-        UpdateSolid();
+        UpdateWindowColor();
         for (Bar* b : g_bars) {
             ApplyGlass(b);
             BarSyncShadow(b);
@@ -22754,7 +22725,7 @@ static void ApplySettingsLive(const Settings& before) {
 }
 
 static void BarSamplePeekColor(Bar* b);  // a cor da barra de título da janela ativa (mais abaixo)
-static void UpdateSolid() {
+static void UpdateWindowColor() {
     for (Bar* b : g_bars) {
         // "Cor da janela": transparente na área de trabalho; com a janela ativa
         // maximizada neste monitor, a barra pega a cor da barra de título dela.
@@ -22774,9 +22745,9 @@ static void UpdateSolid() {
 }
 
 // ---- Alça: a pílula fina no topo que traz a barra escondida de volta ----
-// Com "Ocultar e mostrar a barra automaticamente" ou "Ocultar com janela
-// maximizada", a barra pode voltar com um clique numa pílula estreita no centro
-// do topo (em vez de encostar o mouse, que cobria os botões das janelas).
+// Com "Ocultar a barra: com a alça", um clique numa pílula estreita no centro do
+// topo mostra a barra e outro a esconde (em vez de encostar o mouse, que cobria
+// os botões das janelas).
 static const wchar_t kHandleClass[] = L"WhFinderTopBarHandle";
 // A mola da alça: sai do valor de antes e chega ao novo passando um pouco do
 // ponto e voltando (um "pulinho" suave). Termina em ~0,6 s.
@@ -22942,7 +22913,7 @@ static void BarSamplePeekColor(Bar* b) {
         InvalidateRect(b->hwnd, nullptr, FALSE);
     }
 }
-static bool BarPeekMode(const Bar*) { return g_settings.autoHide && g_settings.revealHandle; }
+static bool BarPeekMode() { return g_settings.autoHide && g_settings.revealHandle; }
 
 // Clique na alça: a barra aparece e reserva o espaço do topo enquanto estiver à
 // vista, então as janelas (a maximizada também) descem e nada fica por baixo dela.
@@ -23034,7 +23005,7 @@ static void AutoHideTick() {
     for (Bar* b : g_bars) {
         bool inX = pt.x >= b->monRect.left && pt.x < b->monRect.right;
         float s = b->dpi / 96.0f;
-        // Só o modo automático e a barra escondida por janela maximizada usam isto.
+        // Só "Ocultar a barra" (mouse no topo ou alça) usa isto.
         if (!g_settings.autoHide) {
             b->autoShown = false;
             HandleSync(b);
@@ -23077,7 +23048,7 @@ static void AutoHideTick() {
                              b->monRect.right - b->monRect.left, b->heightPx,
                              SWP_NOACTIVATE | SWP_SHOWWINDOW);
             }
-        } else if (BarPeekMode(b)) {
+        } else if (BarPeekMode()) {
             // Com a alça, a barra só some pelo clique nela; enquanto isso, segue a
             // cor da janela ativa (confere 2 vezes por segundo).
             if (++b->hideCountdown % 5 == 0) BarSamplePeekColor(b);
@@ -23112,7 +23083,7 @@ static void UpdateActiveApp(HWND fg) {
         PollStatus(false);  // o layout de teclado é por janela
         RedrawAll();
     }
-    UpdateSolid();
+    UpdateWindowColor();
 }
 
 // Uma janela maximizou, restaurou, minimizou, sumiu ou fechou: confere em seguida
@@ -23138,7 +23109,7 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
     if (event == EVENT_SYSTEM_MINIMIZESTART || event == EVENT_SYSTEM_MINIMIZEEND) MaxCheckSoon();
     if (event == EVENT_SYSTEM_FOREGROUND && g_owner) SetTimer(g_owner, TIMER_PEEKCOLOR, 120, nullptr);  // outra janela ativa: outra cor
     if (event == EVENT_SYSTEM_FOREGROUND) UpdateActiveApp(hwnd);
-    else if (hwnd == g_active.hwnd) UpdateSolid();  // minimizar/restaurar
+    else if (hwnd == g_active.hwnd) UpdateWindowColor();  // minimizar/restaurar
 }
 
 // ===========================================================================
@@ -23515,20 +23486,20 @@ static LRESULT CALLBACK OwnerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
             if (wp == TIMER_PEEKCOLOR) {
                 KillTimer(hwnd, TIMER_PEEKCOLOR);
                 for (Bar* b : g_bars)
-                    if (b->autoShown && BarPeekMode(b)) BarSamplePeekColor(b);
+                    if (b->autoShown && BarPeekMode()) BarSamplePeekColor(b);
                 return 0;
             }
-            if (wp == TIMER_MAXCHECK || wp == TIMER_MAXNOW) {
-                if (wp == TIMER_MAXNOW) KillTimer(hwnd, TIMER_MAXNOW);
+            if (wp == TIMER_MAXNOW) {
+                KillTimer(hwnd, TIMER_MAXNOW);
                 UpdateFullscreen();
-                if (g_settings.barStyle == 4) UpdateSolid();  // a cor da janela maximizada
+                if (g_settings.barStyle == 4) UpdateWindowColor();  // a cor da janela maximizada
                 return 0;
             }
             if (wp == TIMER_STATUS) {
                 PollStatus(false);
                 ExtrasPoll();
                 UpdateFullscreen();
-                if (g_settings.barStyle == 4) UpdateSolid();
+                if (g_settings.barStyle == 4) UpdateWindowColor();
                 if (g_statusTick % 5 == 0) PurgeDeadTrayIcons();
                 if (g_cc.hwnd && g_cc.drag < 0) CcOnUpdate();
                 if (g_active.hwnd && !IsWindow(g_active.hwnd)) {
@@ -23661,12 +23632,10 @@ static BOOL CALLBACK MonitorEnumProc(HMONITOR mon, HDC, LPRECT, LPARAM chosenPre
 static void CreateBars() {
     ResolveTheme();
     EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, BarChosenMonitorPresent() ? 1 : 0);
-    // O tique rápido: o modo automático e a barra mostrada pela alça.
+    // O tique rápido: "Ocultar a barra" (mouse no topo ou alça).
     if (g_settings.autoHide) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
     else KillTimer(g_owner, TIMER_FAST);
-    if (g_settings.hideWhenMaximized) SetTimer(g_owner, TIMER_MAXCHECK, 250, nullptr);
-    else KillTimer(g_owner, TIMER_MAXCHECK);
-    UpdateSolid();
+    UpdateWindowColor();
 }
 
 static void DestroyBars() {
@@ -24510,11 +24479,8 @@ const UiTr kUiTr[] = {
     {L"Tamanho dos ícones", L"Icon size", L"Tamaño de los iconos", L"Taille des icônes", L"Symbolgröße", L"Dimensione icone", L"图标大小"},
     {L"Comportamento", L"Behavior", L"Comportamiento", L"Comportement", L"Verhalten", L"Comportamento", L"行为"},
     {L"Mostrar a porcentagem da bateria", L"Show battery percentage", L"Mostrar el porcentaje de batería", L"Afficher le pourcentage de batterie", L"Akkuladung in Prozent anzeigen", L"Mostra percentuale batteria", L"显示电池百分比"},
-    {L"Ocultar e mostrar a barra automaticamente", L"Automatically hide and show the bar", L"Ocultar y mostrar la barra automáticamente", L"Masquer et afficher la barre automatiquement", L"Leiste automatisch aus- und einblenden", L"Nascondi e mostra la barra automaticamente", L"自动隐藏和显示菜单栏"},
-    {L"Aparece ao encostar o mouse no topo da tela", L"Appears when the mouse touches the top of the screen", L"Aparece al llevar el ratón a la parte superior de la pantalla", L"Apparaît quand la souris touche le haut de l’écran", L"Erscheint, wenn die Maus den oberen Bildschirmrand berührt", L"Compare quando il mouse tocca il bordo superiore dello schermo", L"鼠标移到屏幕顶部时显示"},
     {L"Ocultar em tela cheia", L"Hide in full screen", L"Ocultar en pantalla completa", L"Masquer en plein écran", L"Im Vollbild ausblenden", L"Nascondi a schermo intero", L"全屏时隐藏"},
     {L"Jogos, vídeos e apps em tela cheia ficam sem a barra", L"Full-screen games, videos and apps don’t show the bar", L"Los juegos, vídeos y apps en pantalla completa no muestran la barra", L"Les jeux, vidéos et apps en plein écran n’affichent pas la barre", L"Spiele, Videos und Apps im Vollbild zeigen die Leiste nicht", L"Giochi, video e app a schermo intero non mostrano la barra", L"全屏游戏、视频和应用中不显示菜单栏"},
-    {L"Mostrar em todos os monitores", L"Show on all monitors", L"Mostrar en todos los monitores", L"Afficher sur tous les écrans", L"Auf allen Monitoren anzeigen", L"Mostra su tutti i monitor", L"在所有显示器上显示"},
     {L"Recolher numa seta os ícones que não cabem", L"Collapse icons that don’t fit into an arrow", L"Agrupar en una flecha los iconos que no caben", L"Regrouper dans une flèche les icônes qui ne tiennent pas", L"Nicht passende Symbole hinter einem Pfeil zusammenfassen", L"Raccogli in una freccia le icone che non entrano", L"将放不下的图标收进箭头"},
     {L"Como as setas ao lado do notch no macOS 27", L"Like the arrows next to the notch in macOS 27", L"Como las flechas junto al notch en macOS 27", L"Comme les flèches à côté de l’encoche dans macOS 27", L"Wie die Pfeile neben der Notch in macOS 27", L"Come le frecce accanto al notch in macOS 27", L"就像 macOS 27 中刘海旁的箭头"},
     {L"Menus e painéis", L"Menus & Panels", L"Menús y paneles", L"Menus et panneaux", L"Menüs und Bereiche", L"Menu e pannelli", L"菜单和面板"},
