@@ -3941,6 +3941,9 @@ LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     // even if capture mode ended between its key-down and key-up messages.
     if (up && g_suppressedHotkeyKeys[vk]) {
         g_suppressedHotkeyKeys[vk] = false;
+        // The hook must remain installed until every swallowed key has been
+        // released. Ask its owner thread to remove it as soon as that is safe.
+        if (!g_captureHotkey.load()) RequestKeyboardHookUpdate();
         return 1;
     }
 
@@ -3960,6 +3963,7 @@ LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         if (!isModifier && down) {
             if (vk == VK_ESCAPE) {
                 g_captureHotkey = false;
+                RequestKeyboardHookUpdate();
             } else {
                 const UINT mods = (g_capCtrl ? MOD_CONTROL : 0) |
                                   (g_capAlt ? MOD_ALT : 0) |
@@ -3980,6 +3984,9 @@ LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
                     g_hotkeyEnabled = true;
                     g_captureHotkey = false;
+                    // The current key-down was swallowed. The hook thread will
+                    // keep the hook until its matching key-up has been swallowed.
+                    RequestKeyboardHookUpdate();
                     HWND hSelf = g_hwnd.load();
                     if (hSelf) {
                         PostMessageW(hSelf, WM_APP_PERSIST_HOTKEY, 0, 0);
@@ -4004,7 +4011,12 @@ DWORD WINAPI KeyboardHookThreadProc(void*) {
     SetEvent(g_hookThreadReady);
 
     auto updateHook = [] {
-        const bool shouldBeInstalled = g_captureHotkey.load();
+        // Capture can end on key-down, but that key's release must still be
+        // swallowed. Keep the hook installed until all swallowed keys are up.
+        const bool hasSuppressedKeys = std::any_of(
+            std::begin(g_suppressedHotkeyKeys), std::end(g_suppressedHotkeyKeys),
+            [](bool suppressed) { return suppressed; });
+        const bool shouldBeInstalled = g_captureHotkey.load() || hasSuppressedKeys;
         if (shouldBeInstalled && !g_captureHook) {
             g_captureHook = SetWindowsHookExW(
                 WH_KEYBOARD_LL, CaptureKeyboardProc, nullptr, 0);
@@ -4055,10 +4067,12 @@ void StartHotkeyCapture(int target) {
 }
 
 void StopHotkeyCaptureIfDone() {
-    if (!g_captureHotkey.load()) return;
-    if (NowSeconds() > g_captureDeadline.load()) g_captureHotkey = false;
-    if (!g_captureHotkey.load()) {
-        g_captureHotkeyTarget = 0;
+    if (g_captureHotkey.load() && NowSeconds() > g_captureDeadline.load()) {
+        g_captureHotkey = false;
+    }
+    // This also handles capture being cancelled externally (for example by
+    // Hide/Show). The hook thread delays unhooking until swallowed key-ups arrive.
+    if (!g_captureHotkey.load() && g_captureHotkeyTarget.exchange(0) != 0) {
         RemoveKeyboardHook();
         g_layoutDirty = true;
     }
@@ -4688,7 +4702,30 @@ BOOL CALLBACK CollectThreadPopupMenus(HWND window, LPARAM parameter) {
     return TRUE;
 }
 
+BOOL CALLBACK CloseThreadModalDialogs(HWND window, LPARAM parameter) {
+    const HWND owner = reinterpret_cast<HWND>(parameter);
+    if (window == owner || !IsWindowVisible(window)) return TRUE;
+
+    wchar_t className[32] = {};
+    if (GetClassNameW(window, className, static_cast<int>(std::size(className))) &&
+        wcscmp(className, L"#32768") == 0) {
+        return TRUE; // TrackPopupMenu owns these windows; EndMenu closes them.
+    }
+
+    // This callback runs on the settings-menu thread. Its other visible
+    // top-level windows are modal dialogs opened by menu commands (ChooseColor
+    // or the custom opacity dialog), so closing them lets shutdown proceed.
+    SendMessageW(window, WM_CLOSE, 0, 0);
+    return TRUE;
+}
+
 LRESULT CALLBACK SettingsMenuOwnerProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_CANCELMODE) {
+        EndMenu();
+        EnumThreadWindows(GetCurrentThreadId(), CloseThreadModalDialogs,
+                          reinterpret_cast<LPARAM>(hwnd));
+        return 0;
+    }
     if (message == WM_TIMER && wParam == 1) {
         SettingsMenuWindowSet menus;
         EnumThreadWindows(GetCurrentThreadId(), CollectThreadPopupMenus,
