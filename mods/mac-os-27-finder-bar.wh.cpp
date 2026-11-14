@@ -1507,7 +1507,9 @@ static int g_glassThemeCtx = -1;
 static bool g_glassRaw = false;
 static const int* g_glassTranspSaved = nullptr;
 static const ThemeGlass& CtxGlass() {
+    static const ThemeGlass kDefault;  // Transparente: sem ajustes, sempre o padrão
     int t = g_glassThemeCtx >= 0 ? g_glassThemeCtx : PanelTheme();
+    if (t == 1) return kDefault;
     return g_themeGlass[t >= 0 && t <= 4 ? t : 0];
 }
 static int GlassT() { return g_glassRaw || g_glassTranspSaved ? g_glass.transparency : CtxGlass().transparency; }
@@ -12741,6 +12743,7 @@ enum BsVal {
     BV_THEMEHEAD, BV_TGROUP, BV_THEMENONE, BV_THEMERESET,  // Personalizar tema
     BV_PANELLOOK, BV_PANELSTYLE,                           // Tema dos painéis
     BV_NTFLAYOUT,                                          // painel do sino: caixa ou cartões
+    BV_THEMECLEAR, BV_G_LIVEFIXED,                         // Personalizar tema: Transparente; Vidro sempre ao vivo
     BV_SIZERESET,                                          // Tamanho da barra: restaurar
     // "Personalizar por monitor": para cada monitor ligado (até 8), o título, o fundo e a cor do texto.
     BV_MONHEAD0, BV_MONSTYLE0 = BV_MONHEAD0 + 8, BV_MONTEXT0 = BV_MONSTYLE0 + 8, BV_MONEND = BV_MONTEXT0 + 8,
@@ -12835,10 +12838,12 @@ static const BsRowDef kBsRows[] = {
     {BR_HEADER, BV_NONE, L"Personalizar tema", 0xE790, 0x5AC8FA, L"Ajusta o tema escolhido em Fundo da barra; vale também para os menus, a Central, os painéis e as pílulas"},
     {BR_GROUP, BV_THEMEHEAD, L"Tema", 0, 0},
     {BR_NOTE, BV_THEMENONE, L"Claro, Escuro e OLED são cores sólidas, sem ajustes de vidro.", 0, 0},
+    {BR_NOTE, BV_THEMECLEAR, L"O tema Transparente não tem ajustes: a barra fica sem vidro nenhum.", 0, 0},
     {BR_SLIDER, BV_G_TINT, L"Transparente ↔ fosco", 0, 0, L"À esquerda o vidro limpo; à direita, mais fosco"},
     {BR_SLIDER, BV_G_REFRACT, L"Refração nas bordas", 0, 0},
     {BR_SLIDER, BV_G_BLUR, L"Desfoque do fundo", 0, 0},
     {BR_SWITCH, BV_G_LIVE, L"Acompanhar o fundo ao vivo", 0, 0, L"Vídeos e papéis de parede animados continuam aparecendo atrás do vidro"},
+    {BR_SWITCH, BV_G_LIVEFIXED, L"Acompanhar o fundo ao vivo", 0, 0, L"No Vidro, o desfoque do Windows sempre acompanha o fundo ao vivo"},
     {BR_GROUP, BV_TGROUP, L"Vidro líquido personalizado", 0, 0},
     {BR_SLIDER, BV_TLEVEL, L"Força da cor no topo", 0, 0, L"100 = sólida no topo; menos deixa o fundo aparecer também na parte colorida"},
     {BR_SLIDER, BV_TREACH, L"Até onde a cor desce", 0, 0, L"Valores baixos mantêm a cor perto do topo; altos a trazem para baixo"},
@@ -13109,6 +13114,7 @@ static int BsGet(int val) {
         case BV_CCCLOSE: return g_settings.ccCloseAnim;
         case BV_NTFSHAPE: return g_settings.ntfIconShape;
         case BV_NTFLAYOUT: return g_settings.ntfCards ? 1 : 0;
+        case BV_G_LIVEFIXED: return 1;  // o desfoque do Windows é sempre ao vivo
         case BV_TEXTCOLOR: return g_settings.barStyle >= 5 ? 0 : g_settings.theme;  // sólidos: sempre automático
         case BV_PANELLOOK: return g_settings.panelLookCustom ? 1 : 0;
         case BV_PANELSTYLE: {
@@ -13671,11 +13677,17 @@ static bool BsRowShown(const BsRowDef& d) {
     if (BvIsMon(d.val)) return g_settings.barPerMon && BsMonAt(BvMonIndex(d.val), nullptr);
     if (d.val == BV_TEXTCOLOR) return !g_settings.barPerMon;
     if (d.val == BV_PANELSTYLE) return g_settings.panelLookCustom;
-    unsigned t = BsThemesInUse(), e = 1u << ThemeEdit();
+    unsigned t = BsThemesInUse(), e = (t & kThemeGlass) ? 1u << ThemeEdit() : 0;
     switch (d.val) {
-        case BV_G_REFRACT: case BV_G_BLUR: case BV_G_LIVE: return (e & kThemeLiquid) != 0;
+        // Transparente (1) não tem ajustes; Vidro e Cor da janela (0, 4) são o
+        // desfoque do Windows, sempre ao vivo; Líquido e personalizado (2, 3), tudo.
+        case BV_G_TINT: return (e & 0x1D) != 0;
+        case BV_G_REFRACT: case BV_G_BLUR: case BV_G_LIVE: return (e & 0x0C) != 0;
+        case BV_G_LIVEFIXED: return (e & 0x11) != 0;
         case BV_TGROUP: case BV_TCOLOR: case BV_TLEVEL: case BV_TREACH: return (e & kThemeTinted) != 0;
         case BV_THEMENONE: return (t & kThemeGlass) == 0;
+        case BV_THEMECLEAR: return e == 0x02;
+        case BV_THEMERESET: return (e & 0x1D) != 0;
     }
     return true;
 }
@@ -14658,6 +14670,7 @@ static bool BsRowDisabled(int rowIdx) {
     // Claro, Escuro e OLED: a cor do texto fica no automático (segue o fundo).
     if (d.val == BV_TEXTCOLOR) return g_settings.barStyle >= 5;
     if (d.val >= BV_MONTEXT0 && d.val < BV_MONEND) return BsGet(d.val - 8) >= 5;
+    if (d.val == BV_G_LIVEFIXED) return true;  // só mostra: no Vidro é sempre ao vivo
     if (d.val == BV_HANDLE) return g_settings.hideWhenMaximized;  // bloqueada por "Ocultar com janela maximizada"
     // Com "Ocultar com a alça" ligada, as outras formas de ocultar ficam inativas.
     if (d.val == BV_HIDEFS || d.val == BV_HIDEMAX) return g_settings.autoHide && g_settings.revealHandle;
@@ -22381,7 +22394,7 @@ static void BarLiquidTick() {
         bool justShown = !b->lqShown;
         b->lqShown = true;
         ULONGLONG now = GetTickCount64();
-        if (!g_themeGlass[std::clamp(BarStyleOf(b), 0, 4)].live && !justShown && b->lq->w && now - b->lqShot < 5000) continue;
+        if (!(BarStyleOf(b) == 1 ? ThemeGlass().live : g_themeGlass[std::clamp(BarStyleOf(b), 0, 4)].live) && !justShown && b->lq->w && now - b->lqShot < 5000) continue;
         b->lqShot = now;
         RECT wr;
         if (!GetWindowRect(b->hwnd, &wr)) continue;
@@ -25325,6 +25338,8 @@ const UiTr kUiTr[] = {
     {L"Dentro da caixa: tudo num painel só; em cartões soltos: o topo e cada notificação no seu próprio vidro, sem caixa atrás", L"In a box: everything in one panel; as separate cards: the top and each notification in its own glass, with no box behind", L"Dentro de la caja: todo en un panel; en tarjetas sueltas: la parte superior y cada notificación en su propio vidrio, sin caja detrás", L"Dans une boîte : tout dans un seul panneau ; en cartes séparées : le haut et chaque notification dans leur propre verre, sans boîte derrière", L"In einem Kasten: alles in einem Bereich; als einzelne Karten: der Kopf und jede Mitteilung im eigenen Glas, ohne Kasten dahinter", L"In un riquadro: tutto in un pannello; in schede separate: la parte superiore e ogni notifica nel proprio vetro, senza riquadro dietro", L"在框内：全部在一个面板中；独立卡片：顶部和每条通知各自一块玻璃，后面没有框"},
     {L"Dentro da caixa", L"In a box", L"Dentro de la caja", L"Dans une boîte", L"In einem Kasten", L"In un riquadro", L"在框内"},
     {L"Em cartões soltos", L"As separate cards", L"En tarjetas sueltas", L"En cartes séparées", L"Als einzelne Karten", L"In schede separate", L"独立卡片"},
+    {L"O tema Transparente não tem ajustes: a barra fica sem vidro nenhum.", L"The Clear theme has no settings: the bar has no glass at all.", L"El tema Transparente no tiene ajustes: la barra no lleva vidrio.", L"Le thème Transparent n’a pas de réglages : la barre n’a aucun verre.", L"Das Design Klar hat keine Einstellungen: die Leiste hat kein Glas.", L"Il tema Trasparente non ha impostazioni: la barra non ha vetro.", L"透明主题没有设置：菜单栏完全没有玻璃。"},
+    {L"No Vidro, o desfoque do Windows sempre acompanha o fundo ao vivo", L"With Glass, the Windows blur always follows the background live", L"En Vidrio, el desenfoque de Windows siempre sigue el fondo en vivo", L"Avec Verre, le flou de Windows suit toujours l’arrière-plan en direct", L"Bei Glas folgt die Windows-Unschärfe dem Hintergrund immer live", L"Con Vetro, la sfocatura di Windows segue sempre lo sfondo in tempo reale", L"在“玻璃”中，Windows 模糊始终实时跟随背景"},
     {L"Acompanhar a barra", L"Match the bar", L"Igual que la barra", L"Comme la barre", L"Wie die Leiste", L"Come la barra", L"跟随菜单栏"},
     {L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro; com Transparente, líquido)", L"Match the bar: the bar’s background (glass with Window color, liquid with Clear)", L"Igual que la barra: el fondo de la barra (vidrio con Color de la ventana, líquido con Transparente)", L"Comme la barre : le fond de la barre (verre avec Couleur de la fenêtre, liquide avec Transparent)", L"Wie die Leiste: ihr Hintergrund (Glas bei Fensterfarbe, flüssig bei Klar)", L"Come la barra: lo sfondo della barra (vetro con Colore della finestra, liquido con Trasparente)", L"跟随菜单栏：与菜单栏相同的背景（窗口颜色时为玻璃，透明时为液态）"},
     {L"Claro", L"Light", L"Claro", L"Clair", L"Hell", L"Chiaro", L"浅色"},
