@@ -1,4 +1,3 @@
-
 // ==WindhawkMod==
 // @id              macos-volume-hud
 // @name            macOS Volume HUD (Frosted Glass)
