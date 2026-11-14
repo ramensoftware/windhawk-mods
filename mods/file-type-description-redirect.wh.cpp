@@ -8,7 +8,7 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lshell32 -lshlwapi -lole32 -loleaut32 -lpropsys -luuid
 // ==/WindhawkMod==
 // SPDX-License-Identifier: MIT
@@ -32,7 +32,8 @@ Choose Configuration source:
   and re-enable the mod, then reopen affected windows or menus.
 
 Extensions are case-insensitive and match the last extension of a filename.
-To end the settings list, leave both fields of its final entry empty.
+Fill in the first entry. An entry with both fields empty ends the settings list;
+entries after it are ignored. No empty final entry is required.
 INI files support UTF-8 (with or without BOM) or UTF-16 LE with BOM, full-line
 comments starting with ; or #, and paths relative to the INI directory.
 In Windhawk settings, resource paths must be absolute. Environment variables
@@ -69,8 +70,8 @@ advanced settings and restart the application. No additional process toggle is
 required. Applications using private interfaces or caches may be unaffected.
 
 The mod uses Windhawk symbol resolution for the installed system DLLs. Missing
-required symbols prevent loading and are reported in the log. x86 and AMD64 are
-supported; native ARM64 is not currently targeted.
+required symbols prevent loading and are reported in the log. The mod targets
+x86, x64, and ARM64. ARM64 has not been tested on a physical device.
 */
 // ==/WindhawkModReadme==
 
@@ -90,7 +91,7 @@ supported; native ARM64 is not currently targeted.
       $name: Description
       $description: Unicode text, or an indirect resource such as @%SystemRoot%\System32\notepad.exe,-469
   $name: File type descriptions
-  $description: Used only when Configuration source is Windhawk settings. Leave both fields of the final entry empty to end the list.
+  $description: Used only in Windhawk settings mode. Fill in the first entry; the list ends at the first entry with both fields empty. Later entries are ignored.
 - iniPath: "%USERPROFILE%\\FileTypeDescriptions\\types.ini"
   $name: INI file path
   $description: Used only in INI file mode. Absolute path; environment variables are supported. Re-enable the mod after editing the file, or save a changed mod setting.
@@ -719,7 +720,6 @@ DWORD_PTR WINAPI InfoAHook(PCSTR path, DWORD attr, SHFILEINFOA* result, UINT siz
 }
 
 struct ModuleReferences { std::vector<HMODULE> modules; } g_hookModules;
-bool g_refreshExplorer = false;
 
 HMODULE LoadHookModule(PCWSTR name) {
     HMODULE module = LoadLibraryExW(name, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -882,7 +882,6 @@ bool InstallHooks() {
 } // namespace
 
 BOOL Wh_ModInit() {
-    g_refreshExplorer = Wh_GetIntSetting(L"refreshExplorer") != 0;
     LoadSettings();
     bool ok = InstallHooks();
     if (!ok) Wh_Log(L"Required Shell symbols or hooks unavailable; mod will not load");
@@ -890,8 +889,8 @@ BOOL Wh_ModInit() {
 }
 void Wh_ModSettingsChanged() {
     bool changed = LoadSettings();
-    g_refreshExplorer = Wh_GetIntSetting(L"refreshExplorer") != 0;
-    if (changed && g_refreshExplorer) NotifyShell();
+    bool refreshExplorer = Wh_GetIntSetting(L"refreshExplorer") != 0;
+    if (changed && refreshExplorer) NotifyShell();
 }
 void Wh_ModUninit() {
     std::atomic_store(&g_types, std::make_shared<const TypeMap>());
