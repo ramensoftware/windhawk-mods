@@ -12737,7 +12737,6 @@ enum BsVal {
     BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_HIDEMAX, BV_HANDLE,
     BV_THEMEHEAD, BV_TGROUP, BV_THEMENONE, BV_THEMERESET,  // Personalizar tema
     BV_PANELLOOK, BV_PANELSTYLE,                           // Tema dos painéis
-    BV_THEMEEDIT,                                          // Personalizar tema: qual tema de vidro
     BV_SIZERESET,                                          // Tamanho da barra: restaurar
     // "Personalizar por monitor": para cada monitor ligado (até 8), o título, o fundo e a cor do texto.
     BV_MONHEAD0, BV_MONSTYLE0 = BV_MONHEAD0 + 8, BV_MONTEXT0 = BV_MONSTYLE0 + 8, BV_MONEND = BV_MONTEXT0 + 8,
@@ -12832,7 +12831,6 @@ static const BsRowDef kBsRows[] = {
     {BR_HEADER, BV_NONE, L"Personalizar tema", 0xE790, 0x5AC8FA, L"Ajusta o tema escolhido em Fundo da barra; vale também para os menus, a Central, os painéis e as pílulas"},
     {BR_GROUP, BV_THEMEHEAD, L"Tema", 0, 0},
     {BR_NOTE, BV_THEMENONE, L"Claro, Escuro e OLED são cores sólidas, sem ajustes de vidro.", 0, 0},
-    {BR_CHOICE, BV_THEMEEDIT, L"Tema a personalizar", 0, 0, L"Cada tema de vidro guarda os seus ajustes; ao voltar a ele, eles estão como você deixou"},
     {BR_SLIDER, BV_G_TINT, L"Transparente ↔ fosco", 0, 0, L"À esquerda o vidro limpo; à direita, mais fosco"},
     {BR_SLIDER, BV_G_REFRACT, L"Refração nas bordas", 0, 0},
     {BR_SLIDER, BV_G_BLUR, L"Desfoque do fundo", 0, 0},
@@ -13081,8 +13079,7 @@ static std::wstring BsMonDevice(int k) {
 
 static void TintApply();
 
-static int g_themeEdit = -1;  // Personalizar tema: o tema escolhido na lista (-1 = o que está em uso)
-static int ThemeEdit();
+static int ThemeEdit();  // Personalizar tema: o tema de vidro da barra (mais abaixo)
 static int BsGet(int val) {
     if (const BsBoolKey* k = BsKeyFor(val)) return g_settings.*(k->field) ? 1 : 0;
     if (val >= BV_MONSTYLE0 && val < BV_MONTEXT0) {
@@ -13096,7 +13093,6 @@ static int BsGet(int val) {
     }
     switch (val) {
         case BV_G_TINT: return 100 - g_themeGlass[ThemeEdit()].transparency;
-        case BV_THEMEEDIT: return ThemeEdit();
         case BV_SEARCHTGT: return g_settings.searchTarget;
         case BV_LANG: return g_langChoice;
         case BV_G_REFRACT: return g_themeGlass[ThemeEdit()].refraction;
@@ -13354,10 +13350,6 @@ static void BsSet(int val, int v) {
         OvrSetStr(L"barMonitor", want);
         RequestReload(1);  // refaz as barras nos monitores escolhidos
         return;
-    }
-    if (val == BV_THEMEEDIT) {
-        g_themeEdit = std::clamp(v, 0, 4);
-        return;  // quem chamou refaz as linhas
     }
     if (val == BV_PANELLOOK || val == BV_PANELSTYLE) {
         // Tema dos painéis: acompanha a barra, ou um tema próprio para os menus.
@@ -13650,10 +13642,10 @@ static unsigned BsThemesInUse() {
     }
     return m != panel ? m : m | 1u << g_settings.barStyle;
 }
-// O tema de vidro sendo personalizado: o escolhido na lista, ou o primeiro de
-// vidro em uso (0 vidro, 1 transparente, 2 líquido, 3 personalizado, 4 cor da janela).
+// O tema de vidro sendo personalizado: o tema da barra (o primeiro de vidro em
+// uso: 0 vidro, 1 transparente, 2 líquido, 3 personalizado, 4 cor da janela).
+// Cada tema guarda os seus ajustes; ao voltar a ele, eles estão como ficaram.
 static int ThemeEdit() {
-    if (g_themeEdit >= 0) return g_themeEdit;
     unsigned t = BsThemesInUse();
     for (int k = 0; k < 5; k++)
         if (t & (1u << k)) return k;
@@ -13685,6 +13677,7 @@ static std::wstring BsRowLabel(const BsRowDef& d) {
         unsigned t = BsThemesInUse();
         static const PCWSTR kNames[] = {L"Vidro", L"Transparente", L"Líquido", L"Vidro líquido personalizado",
                                         L"Cor da janela", L"Claro", L"Escuro", L"OLED"};
+        if (t & kThemeGlass) t = 1u << ThemeEdit();  // o tema de vidro que está sendo personalizado
         for (int k = 0; k < 8; k++)
             if (t & (1u << k)) names += (names.empty() ? L"" : L", ") + std::wstring(T(kNames[k]));
         return std::wstring(T(L"Tema")) + L": " + names;
@@ -13801,7 +13794,6 @@ static const PCWSTR* BsChoiceLabels(int val) {
         case BV_BARMON: return BsMonitorLabels(nullptr);
         case BV_BSSTYLE: return kBsLookChoices;
         case BV_PANELLOOK: return kBsPanelLook;
-        case BV_THEMEEDIT: return kBsBarChoices;  // os 5 primeiros: os temas de vidro
         case BV_PANELSTYLE: return kBsPanelStyle;
         case BV_ISLSTYLE: return kBsIslStyle;
         case BV_ISLIN: return kBsIslIn;
@@ -13830,7 +13822,6 @@ static int BsChoiceCount(int val) {
         case BV_ISLPOS: case BV_WXUNIT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: return 2;
         case BV_BARSTYLE: return 9;
         case BV_PANELLOOK: return 2;
-        case BV_THEMEEDIT: return 5;
         case BV_PANELSTYLE: return 6;
         case BV_ISLSTYLE: return 7;
         case BV_LANG: return (int)ARRAYSIZE(kBsLang);
@@ -25196,8 +25187,6 @@ const UiTr kUiTr[] = {
     {L"Escurecer a tela com a Central de Controle", L"Dim the screen with the Control Center", L"Oscurecer la pantalla con el Centro de control", L"Assombrir l’écran avec le Centre de contrôle", L"Bildschirm mit dem Kontrollzentrum abdunkeln", L"Scurisci lo schermo con il Centro di Controllo", L"打开控制中心时调暗屏幕"},
     {L"Transparente ↔ fosco", L"Clear ↔ frosted", L"Transparente ↔ esmerilado", L"Transparent ↔ dépoli", L"Klar ↔ matt", L"Trasparente ↔ satinato", L"透明 ↔ 磨砂"},
     {L"À esquerda o vidro limpo; à direita, mais fosco", L"Left is clear glass; right is more frosted", L"A la izquierda el vidrio limpio; a la derecha, más esmerilado", L"À gauche le verre clair ; à droite, plus dépoli", L"Links klares Glas; rechts matter", L"A sinistra il vetro limpido; a destra, più satinato", L"左边是透明玻璃；右边更磨砂"},
-    {L"Tema a personalizar", L"Theme to customize", L"Tema a personalizar", L"Thème à personnaliser", L"Anzupassendes Design", L"Tema da personalizzare", L"要自定义的主题"},
-    {L"Cada tema de vidro guarda os seus ajustes; ao voltar a ele, eles estão como você deixou", L"Each glass theme keeps its own settings; when you go back to it, they are as you left them", L"Cada tema de vidrio guarda sus ajustes; al volver a él, están como los dejaste", L"Chaque thème de verre garde ses réglages ; en y revenant, ils sont comme vous les avez laissés", L"Jedes Glas-Design behält seine Einstellungen; wenn du zurückkehrst, sind sie wie vorher", L"Ogni tema di vetro conserva le sue impostazioni; tornandoci, sono come le hai lasciate", L"每个玻璃主题保留自己的设置；切换回来时保持原样"},
     {L"Vidro líquido (experimental)", L"Liquid glass (experimental)", L"Vidrio líquido (experimental)", L"Verre liquide (expérimental)", L"Flüssiges Glas (experimentell)", L"Vetro liquido (sperimentale)", L"液态玻璃 (实验性)"},
     {L"Refração nas bordas, como o Liquid Glass", L"Refraction at the edges, like Liquid Glass", L"Refracción en los bordes, como Liquid Glass", L"Réfraction sur les bords, comme Liquid Glass", L"Lichtbrechung an den Rändern wie bei Liquid Glass", L"Rifrazione sui bordi, come Liquid Glass", L"边缘折射, 类似 Liquid Glass"},
     {L"Refração nas bordas", L"Edge refraction", L"Refracción en los bordes", L"Réfraction sur les bords", L"Lichtbrechung an den Rändern", L"Rifrazione sui bordi", L"边缘折射"},
