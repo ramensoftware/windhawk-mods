@@ -32,13 +32,29 @@ struct Settings {
 };
 
 Settings g_settings;
-HANDLE g_hStopEvent = NULL;
-HANDLE g_hThread = NULL;
+bool g_unloading = false;
 
 void LoadSettings() {
     g_settings.alpha = Wh_GetIntSetting(L"Alpha");
     if (g_settings.alpha < 50) g_settings.alpha = 50;
     if (g_settings.alpha > 255) g_settings.alpha = 255;
+}
+
+bool IsTargetWindow(HWND hwnd) {
+    if (!IsWindow(hwnd)) return false;
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId()) return false;
+    if (GetParent(hwnd) != NULL) return false;
+
+    WCHAR className;
+    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0 ||
+        wcscmp(className, L"Chrome_WidgetWin_1") != 0) {
+        return false;
+    }
+
+    return true;
 }
 
 bool UsesColorKey(HWND hwnd) {
@@ -49,8 +65,18 @@ bool UsesColorKey(HWND hwnd) {
     return false;
 }
 
+using SetLayeredWindowAttributes_t = decltype(&SetLayeredWindowAttributes);
+SetLayeredWindowAttributes_t SetLayeredWindowAttributes_Original;
+
+BOOL WINAPI SetLayeredWindowAttributes_Hook(HWND hwnd, COLORREF crKey, BYTE bAlpha, DWORD dwFlags) {
+    if (!g_unloading && IsTargetWindow(hwnd) && (dwFlags & LWA_ALPHA) && !(dwFlags & LWA_COLORKEY)) {
+        bAlpha = (BYTE)g_settings.alpha;
+    }
+    return SetLayeredWindowAttributes_Original(hwnd, crKey, bAlpha, dwFlags);
+}
+
 void ApplyTransparency(HWND hwnd) {
-    if (!IsWindow(hwnd)) return;
+    if (!IsTargetWindow(hwnd)) return;
 
     LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
     if (exStyle & WS_EX_LAYERED) {
@@ -61,32 +87,39 @@ void ApplyTransparency(HWND hwnd) {
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
     }
 
-    SetLayeredWindowAttributes(hwnd, 0, (BYTE)g_settings.alpha, LWA_ALPHA);
+    SetLayeredWindowAttributes_Original(hwnd, 0, (BYTE)g_settings.alpha, LWA_ALPHA);
+}
+
+void RestoreTransparency(HWND hwnd) {
+    if (!IsTargetWindow(hwnd)) return;
+
+    LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+    if ((exStyle & WS_EX_LAYERED) && !UsesColorKey(hwnd)) {
+        SetLayeredWindowAttributes_Original(hwnd, 0, 255, LWA_ALPHA);
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
+    }
 }
 
 BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-
-    if (pid != GetCurrentProcessId()) return TRUE;
-    if (GetParent(hwnd) != NULL) return TRUE;
     if (!IsWindowVisible(hwnd)) return TRUE;
 
-    WCHAR className[64];
-    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0 ||
-        wcscmp(className, L"Chrome_WidgetWin_1") != 0) {
-        return TRUE;
+    if (lParam == 1) {
+        RestoreTransparency(hwnd);
+    } else {
+        ApplyTransparency(hwnd);
     }
-
-    ApplyTransparency(hwnd);
     return TRUE;
 }
 
-DWORD WINAPI ForceTransparencyThread(LPVOID lpParam) {
-    while (WaitForSingleObject(g_hStopEvent, 1000) == WAIT_TIMEOUT) {
-        EnumWindows(EnumWindowsProc, 0);
+using ShowWindow_t = decltype(&ShowWindow);
+ShowWindow_t ShowWindow_Original;
+
+BOOL WINAPI ShowWindow_Hook(HWND hwnd, int nCmdShow) {
+    BOOL result = ShowWindow_Original(hwnd, nCmdShow);
+    if (!g_unloading && IsWindowVisible(hwnd)) {
+        ApplyTransparency(hwnd);
     }
-    return 0;
+    return result;
 }
 
 BOOL Wh_ModInit() {
@@ -97,17 +130,8 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    g_hStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (!g_hStopEvent) {
-        return FALSE;
-    }
-
-    g_hThread = CreateThread(NULL, 0, ForceTransparencyThread, NULL, 0, NULL);
-    if (!g_hThread) {
-        CloseHandle(g_hStopEvent);
-        g_hStopEvent = NULL;
-        return FALSE;
-    }
+    Wh_SetFunctionHook((void*)SetLayeredWindowAttributes, (void*)SetLayeredWindowAttributes_Hook, (void**)&SetLayeredWindowAttributes_Original);
+    Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
 
     return TRUE;
 }
@@ -122,16 +146,6 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    if (g_hStopEvent) {
-        SetEvent(g_hStopEvent);
-    }
-    if (g_hThread) {
-        WaitForSingleObject(g_hThread, INFINITE);
-        CloseHandle(g_hThread);
-        g_hThread = NULL;
-    }
-    if (g_hStopEvent) {
-        CloseHandle(g_hStopEvent);
-        g_hStopEvent = NULL;
-    }
+    g_unloading = true;
+    EnumWindows(EnumWindowsProc, 1);
 }
