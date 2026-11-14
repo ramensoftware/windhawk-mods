@@ -428,11 +428,30 @@ static GlassPrefs g_glass;
 // refratam o que está perto; longe da barra, não puxam as letras dela).
 static int NightGet();
 static bool NightSet(bool on);
-static float PanelGap() { return g_glass.liquid ? 10.0f : 0.0f; }
+static bool GlassLiquid();  // o tema dos painéis é de vidro líquido (mais abaixo)
+static float PanelGap() { return GlassLiquid() ? 10.0f : 0.0f; }
 // Transparência do widget de tempo no estilo vidro (0 = cor forte, 100 = vidro limpo).
 static int g_wxGlassT = 55;
 static void (*g_wxGlassChanged)() = nullptr;  // redesenha o widget aberto
 
+// Personalizar tema: cada tema de vidro guarda os seus ajustes (0 vidro,
+// 1 transparente, 2 líquido, 3 personalizado, 4 cor da janela). Voltar a um
+// tema traz os ajustes que ele tinha.
+struct ThemeGlass {
+    int transparency = 80, refraction = 60, blur = 30;
+    bool live = false;
+};
+static ThemeGlass g_themeGlass[5];
+static void SaveThemeGlass() {
+    std::wstring out;
+    for (const ThemeGlass& g : g_themeGlass) {
+        wchar_t one[48];
+        swprintf(one, ARRAYSIZE(one), L"%s%d,%d,%d,%d", out.empty() ? L"" : L"|", g.transparency, g.refraction, g.blur,
+                 g.live ? 1 : 0);
+        out += one;
+    }
+    Wh_SetStringValue(L"glassTheme", out.c_str());
+}
 static void LoadGlassPrefs() {
     wchar_t buf[128] = {};
     Wh_GetStringValue(L"glass", buf, ARRAYSIZE(buf));
@@ -445,6 +464,24 @@ static void LoadGlassPrefs() {
         g_glass.blur = std::clamp(b, 0, 100);
         g_glass.live = v != 0;
         g_glass.tinted = k != 0;
+    }
+    // Os ajustes de cada tema; sem nada guardado, todos começam com os de antes.
+    for (ThemeGlass& g : g_themeGlass) {
+        g.transparency = g_glass.transparency;
+        g.refraction = g_glass.refraction;
+        g.blur = g_glass.blur;
+        g.live = g_glass.live;
+    }
+    wchar_t tb[256] = {};
+    Wh_GetStringValue(L"glassTheme", tb, ARRAYSIZE(tb));
+    const wchar_t* p = tb;
+    for (int k = 0; k < 5 && *p; k++) {
+        int t2, r2, b2, v2;
+        if (swscanf(p, L"%d,%d,%d,%d", &t2, &r2, &b2, &v2) == 4)
+            g_themeGlass[k] = {std::clamp(t2, 0, 100), std::clamp(r2, 0, 100), std::clamp(b2, 0, 100), v2 != 0};
+        const wchar_t* bar = wcschr(p, L'|');
+        if (!bar) break;
+        p = bar + 1;
     }
 }
 
@@ -1458,6 +1495,26 @@ static int PanelTheme() {
             if (b == g_panelBar) return BarStyleOf(b);
     return g_settings.barStyle;
 }
+// Os ajustes do vidro que está sendo desenhado: o da barra (g_glassThemeCtx,
+// durante o desenho dela) ou o dos painéis. A janela de Ajustes troca a
+// transparência (GlassTranspScope) e a pílula "Vidro" troca tudo (g_glassRaw):
+// aí vale g_glass.
+static int g_glassThemeCtx = -1;
+static bool g_glassRaw = false;
+static const int* g_glassTranspSaved = nullptr;
+static const ThemeGlass& CtxGlass() {
+    int t = g_glassThemeCtx >= 0 ? g_glassThemeCtx : PanelTheme();
+    return g_themeGlass[t >= 0 && t <= 4 ? t : 0];
+}
+static int GlassT() { return g_glassRaw || g_glassTranspSaved ? g_glass.transparency : CtxGlass().transparency; }
+static int GlassR() { return g_glassRaw ? g_glass.refraction : CtxGlass().refraction; }
+static int GlassB() { return g_glassRaw ? g_glass.blur : CtxGlass().blur; }
+static bool GlassLive() { return g_glassRaw ? g_glass.live : CtxGlass().live; }
+struct GlassThemeCtx {
+    int saved;
+    explicit GlassThemeCtx(int t) : saved(g_glassThemeCtx) { g_glassThemeCtx = t; }
+    ~GlassThemeCtx() { g_glassThemeCtx = saved; }
+};
 static bool GlassLiquid() {
     int t = PanelTheme();
     return t == 1 || t == 2 || t == 3;
@@ -1522,6 +1579,8 @@ static void ApplyGlass(Bar* b) {
         return;
     }
     DWORD argb = g_light ? g_settings.tintLight : g_settings.tintDark;
+    // Transparente ↔ fosco do tema Vidro: a opacidade da tinta (80 = a de sempre).
+    argb = (argb & 0x00FFFFFF) | ((DWORD)std::clamp((100 - g_themeGlass[0].transparency) * 4, 0, 255) << 24);
     DWORD abgr = (argb & 0xFF000000) | ((argb & 0x000000FF) << 16) | (argb & 0x0000FF00) |
                  ((argb & 0x00FF0000) >> 16);
     ACCENT_POLICY accent = {4 /*ACRYLICBLURBEHIND*/, 0, abgr, 0};
@@ -6164,7 +6223,7 @@ static bool LqCapture(LiquidSurface& l, RECT rc, bool hideBars = true, const REC
 static LiquidSurface* LqCreate(POINT pos, int W, int H, bool force = false) {
     if (!GlassLiquid() && !force) return nullptr;
     LiquidSurface* l = new LiquidSurface();
-    l->live = g_glass.live;
+    l->live = GlassLive();
     RECT rc = {pos.x, pos.y, pos.x + W, pos.y + H};
     InflateRect(&rc, kLiquidMargin, kLiquidMargin);
     if (!l->live) {
@@ -6339,8 +6398,8 @@ static bool LqDraw(ID2D1RenderTarget* rt, LiquidSurface& l, const D2D1_RECT_F& r
             if (SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(r, radius, radius), &clip))) {
                 rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip), nullptr);
                 float band = std::min(std::min(w, h) * 0.42f, 30 * s);
-                float depth = animating ? 0 : band * g_glass.refraction / 100.0f * 1.6f;
-                float sigma = std::pow(g_glass.blur / 100.0f, 2.0f) * 4 * s;
+                float depth = animating ? 0 : band * GlassR() / 100.0f * 1.6f;
+                float sigma = std::pow(GlassB() / 100.0f, 2.0f) * 4 * s;
                 l.src->SetInput(0, l.snap);
                 l.src->SetValue(D2D1_2DAFFINETRANSFORM_PROP_TRANSFORM_MATRIX,
                                 D2D1::Matrix3x2F::Translation((float)(l.rc.left - wr.left), (float)(l.rc.top - wr.top)));
@@ -6482,7 +6541,7 @@ static void DrawLiquidGlass(ID2D1RenderTarget* rt, ID2D1SolidColorBrush* br, con
     if (GlassTinted() && !solidWhite) {
         float top = g_settings.tintLevel / 100.0f;
         // Transparente ↔ tingido: 100 % transparente = limpo embaixo; 80 % = um véu leve.
-        float bottom = std::min(top, (100 - g_glass.transparency) / 100.0f * 0.8f);
+        float bottom = std::min(top, (100 - GlassT()) / 100.0f * 0.8f);
         // Sem refração nem desfoque atrás, um fundo limpo deixaria o que está atrás nítido sob o texto.
         if (!glassOk) bottom = std::max(bottom, std::min(top, 0.55f));
         // Cada peça tem o seu degradê, inclusive cada pílula e botão da Central.
@@ -6518,7 +6577,7 @@ static void DrawLiquidGlass(ID2D1RenderTarget* rt, ID2D1SolidColorBrush* br, con
     // Estilo transparente (Siri Plus Launchpad): tinta neutra que a
     // transparência controla, brilho fino em cima e uma borda suave.
     if (g_glass.clear && !solidWhite) {
-        float T = (float)g_glass.transparency;
+        float T = (float)GlassT();
         if (!glassOk) T = std::min(T, 15.0f);  // sem desfoque atrás: mais opaco para ler
         ID2D1LinearGradientBrush* body = nullptr;
         if (g_light) {
@@ -6573,7 +6632,7 @@ static void DrawLiquidGlass(ID2D1RenderTarget* rt, ID2D1SolidColorBrush* br, con
     }
 
     // 2. Tinta.
-    float glass = (100 - g_glass.transparency) / 100.0f;
+    float glass = (100 - GlassT()) / 100.0f;
     D2D1_COLOR_F fill;
     if (solidWhite) fill = D2D1::ColorF(1, 1, 1, 0.96f);
     else if (glassOk)
@@ -12672,6 +12731,7 @@ enum BsVal {
     BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_HIDEMAX, BV_HANDLE,
     BV_THEMEHEAD, BV_TGROUP, BV_THEMENONE, BV_THEMERESET,  // Personalizar tema
     BV_PANELLOOK, BV_PANELSTYLE,                           // Tema dos painéis
+    BV_THEMEEDIT,                                          // Personalizar tema: qual tema de vidro
     // "Personalizar por monitor": para cada monitor ligado (até 8), o título, o fundo e a cor do texto.
     BV_MONHEAD0, BV_MONSTYLE0 = BV_MONHEAD0 + 8, BV_MONTEXT0 = BV_MONSTYLE0 + 8, BV_MONEND = BV_MONTEXT0 + 8,
 };
@@ -12765,7 +12825,8 @@ static const BsRowDef kBsRows[] = {
     {BR_HEADER, BV_NONE, L"Personalizar tema", 0xE790, 0x5AC8FA, L"Ajusta o tema escolhido em Fundo da barra; vale também para os menus, a Central, os painéis e as pílulas"},
     {BR_GROUP, BV_THEMEHEAD, L"Tema", 0, 0},
     {BR_NOTE, BV_THEMENONE, L"Claro, Escuro e OLED são cores sólidas, sem ajustes de vidro.", 0, 0},
-    {BR_SLIDER, BV_G_TINT, L"Transparente ↔ tingido", 0, 0, L"À esquerda o vidro limpo; à direita, mais cor"},
+    {BR_CHOICE, BV_THEMEEDIT, L"Tema a personalizar", 0, 0, L"Cada tema de vidro guarda os seus ajustes; ao voltar a ele, eles estão como você deixou"},
+    {BR_SLIDER, BV_G_TINT, L"Transparente ↔ fosco", 0, 0, L"À esquerda o vidro limpo; à direita, mais fosco"},
     {BR_SLIDER, BV_G_REFRACT, L"Refração nas bordas", 0, 0},
     {BR_SLIDER, BV_G_BLUR, L"Desfoque do fundo", 0, 0},
     {BR_SWITCH, BV_G_LIVE, L"Acompanhar o fundo ao vivo", 0, 0, L"Vídeos e papéis de parede animados continuam aparecendo atrás do vidro"},
@@ -12889,8 +12950,6 @@ static void WxSettingSet(int val, int v);
 static void BsAction(int val);
 // Enquanto a janela de Ajustes se desenha, o vidro dela troca a transparência
 // por um instante (GlassTranspScope): os sliders leem o valor real daqui.
-static const int* g_glassTranspSaved = nullptr;
-static int GlassTranspValue() { return g_glassTranspSaved ? *g_glassTranspSaved : g_glass.transparency; }
 static void NtfRefresh();
 
 // Cores prontas do Vidro líquido personalizado (o primeiro círculo é a paleta do Windows).
@@ -13015,6 +13074,8 @@ static std::wstring BsMonDevice(int k) {
 
 static void TintApply();
 
+static int g_themeEdit = -1;  // Personalizar tema: o tema escolhido na lista (-1 = o que está em uso)
+static int ThemeEdit();
 static int BsGet(int val) {
     if (const BsBoolKey* k = BsKeyFor(val)) return g_settings.*(k->field) ? 1 : 0;
     if (val >= BV_MONSTYLE0 && val < BV_MONTEXT0) {
@@ -13027,13 +13088,14 @@ static int BsGet(int val) {
         return t >= 0 ? t : g_settings.theme;  // 0 automático, 1 branco, 2 preto (como o de todos)
     }
     switch (val) {
-        case BV_G_TINT: return 100 - GlassTranspValue();
+        case BV_G_TINT: return 100 - g_themeGlass[ThemeEdit()].transparency;
+        case BV_THEMEEDIT: return ThemeEdit();
         case BV_SEARCHTGT: return g_settings.searchTarget;
         case BV_LANG: return g_langChoice;
-        case BV_G_REFRACT: return g_glass.refraction;
-        case BV_G_BLUR: return g_glass.blur;
+        case BV_G_REFRACT: return g_themeGlass[ThemeEdit()].refraction;
+        case BV_G_BLUR: return g_themeGlass[ThemeEdit()].blur;
         case BV_G_LIQUID: return g_glass.liquid;
-        case BV_G_LIVE: return g_glass.live;
+        case BV_G_LIVE: return g_themeGlass[ThemeEdit()].live;
         case BV_BARSTYLE: return g_settings.barPerMon ? 8 : g_settings.barStyle;  // 8 = "Personalizar por monitor"
         case BV_G_STYLE: return g_glass.tinted ? 1 : 0;
         case BV_CCCLOSE: return g_settings.ccCloseAnim;
@@ -13288,6 +13350,10 @@ static void BsSet(int val, int v) {
         RequestReload(1);  // refaz as barras nos monitores escolhidos
         return;
     }
+    if (val == BV_THEMEEDIT) {
+        g_themeEdit = std::clamp(v, 0, 4);
+        return;  // quem chamou refaz as linhas
+    }
     if (val == BV_PANELLOOK || val == BV_PANELSTYLE) {
         // Tema dos painéis: acompanha a barra, ou um tema próprio para os menus.
         if (val == BV_PANELLOOK) {
@@ -13392,17 +13458,15 @@ static void BsSet(int val, int v) {
     }
     v = std::clamp(v, 0, 100);
     switch (val) {
-        case BV_G_TINT:  // controle único: transparente (0) ↔ tingido (100), no vidro transparente
-            g_glass.transparency = 100 - v;
-            g_glass.clear = true;
-            break;
-        case BV_G_REFRACT: g_glass.refraction = v; break;
-        case BV_G_BLUR: g_glass.blur = v; break;
-        case BV_G_LIQUID: g_glass.liquid = v != 0; break;
-        case BV_G_LIVE: g_glass.live = v != 0; break;
+        // Os ajustes do tema que está sendo personalizado (cada um guarda os seus).
+        case BV_G_TINT: g_themeGlass[ThemeEdit()].transparency = 100 - v; break;
+        case BV_G_REFRACT: g_themeGlass[ThemeEdit()].refraction = v; break;
+        case BV_G_BLUR: g_themeGlass[ThemeEdit()].blur = v; break;
+        case BV_G_LIVE: g_themeGlass[ThemeEdit()].live = v != 0; break;
         default: return;
     }
-    SaveGlassPrefs();
+    SaveThemeGlass();
+    TintApply();  // a barra (o Vidro do Windows e o véu) e os painéis abertos mudam na hora
 }
 
 // Vidro líquido personalizado mudou (estilo, cor, força ou alcance): o texto
@@ -13581,6 +13645,15 @@ static unsigned BsThemesInUse() {
     }
     return m != panel ? m : m | 1u << g_settings.barStyle;
 }
+// O tema de vidro sendo personalizado: o escolhido na lista, ou o primeiro de
+// vidro em uso (0 vidro, 1 transparente, 2 líquido, 3 personalizado, 4 cor da janela).
+static int ThemeEdit() {
+    if (g_themeEdit >= 0) return g_themeEdit;
+    unsigned t = BsThemesInUse();
+    for (int k = 0; k < 5; k++)
+        if (t & (1u << k)) return k;
+    return 0;
+}
 // Personalizar tema: só os ajustes que valem para o tema escolhido.
 static const unsigned kThemeGlass = 0x1F;    // vidro, transparente, líquido, personalizado, cor da janela
 static const unsigned kThemeLiquid = 0x0E;   // transparente, líquido, personalizado (vidro líquido nos painéis)
@@ -13589,11 +13662,10 @@ static bool BsRowShown(const BsRowDef& d) {
     if (BvIsMon(d.val)) return g_settings.barPerMon && BsMonAt(BvMonIndex(d.val), nullptr);
     if (d.val == BV_TEXTCOLOR) return !g_settings.barPerMon;
     if (d.val == BV_PANELSTYLE) return g_settings.panelLookCustom;
-    unsigned t = BsThemesInUse();
+    unsigned t = BsThemesInUse(), e = 1u << ThemeEdit();
     switch (d.val) {
-        case BV_G_TINT: return (t & kThemeGlass) != 0;
-        case BV_G_REFRACT: case BV_G_BLUR: case BV_G_LIVE: return (t & kThemeLiquid) != 0;
-        case BV_TGROUP: case BV_TCOLOR: case BV_TLEVEL: case BV_TREACH: return (t & kThemeTinted) != 0;
+        case BV_G_REFRACT: case BV_G_BLUR: case BV_G_LIVE: return (e & kThemeLiquid) != 0;
+        case BV_TGROUP: case BV_TCOLOR: case BV_TLEVEL: case BV_TREACH: return (e & kThemeTinted) != 0;
         case BV_THEMENONE: return (t & kThemeGlass) == 0;
     }
     return true;
@@ -13724,6 +13796,7 @@ static const PCWSTR* BsChoiceLabels(int val) {
         case BV_BARMON: return BsMonitorLabels(nullptr);
         case BV_BSSTYLE: return kBsLookChoices;
         case BV_PANELLOOK: return kBsPanelLook;
+        case BV_THEMEEDIT: return kBsBarChoices;  // os 5 primeiros: os temas de vidro
         case BV_PANELSTYLE: return kBsPanelStyle;
         case BV_ISLSTYLE: return kBsIslStyle;
         case BV_ISLIN: return kBsIslIn;
@@ -13752,6 +13825,7 @@ static int BsChoiceCount(int val) {
         case BV_ISLPOS: case BV_WXUNIT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: return 2;
         case BV_BARSTYLE: return 9;
         case BV_PANELLOOK: return 2;
+        case BV_THEMEEDIT: return 5;
         case BV_PANELSTYLE: return 6;
         case BV_ISLSTYLE: return 7;
         case BV_LANG: return (int)ARRAYSIZE(kBsLang);
@@ -18562,17 +18636,23 @@ static bool IslSolid() { return IslStyle() >= 5; }
 struct IslGlassScope {
     GlassPrefs saved;
     int savedOverride;
-    IslGlassScope() : saved(g_glass), savedOverride(g_panelThemeOverride) {
+    bool savedRaw;
+    IslGlassScope() : saved(g_glass), savedOverride(g_panelThemeOverride), savedRaw(g_glassRaw) {
         static const int kTheme[] = {0, 2, 2, 2, 3, 5, 6, 7};  // estilo da pílula → tema dos painéis
         g_panelThemeOverride = kTheme[std::clamp(IslStyle(), 0, 7)];
         switch (IslStyle()) {
-            case 1:
+            case 1: {
+                const ThemeGlass& tg = g_themeGlass[0];  // os ajustes do tema Vidro
                 g_glass.liquid = true;
                 g_glass.tinted = false;
                 g_glass.clear = false;
+                g_glass.transparency = tg.transparency;
+                g_glass.live = tg.live;
                 g_glass.refraction = 0;
-                g_glass.blur = std::max(g_glass.blur, 70);
+                g_glass.blur = std::max(tg.blur, 70);
+                g_glassRaw = true;
                 break;
+            }
             case 3:
                 g_glass.liquid = true;
                 g_glass.tinted = false;
@@ -18589,6 +18669,7 @@ struct IslGlassScope {
     }
     ~IslGlassScope() {
         g_glass = saved;
+        g_glassRaw = savedRaw;
         g_panelThemeOverride = savedOverride;
     }
 };
@@ -21664,20 +21745,11 @@ static void IcsImport() {
 static void BsAction(int val) {
     switch (val) {
         case BV_THEMERESET: {
-            // Só os ajustes do tema (ou temas) em uso voltam ao padrão.
-            unsigned t = BsThemesInUse();
-            const GlassPrefs def;
-            if (t & kThemeGlass) {
-                g_glass.transparency = def.transparency;
-                g_glass.clear = def.clear;
-            }
-            if (t & kThemeLiquid) {
-                g_glass.refraction = def.refraction;
-                g_glass.blur = def.blur;
-                g_glass.live = def.live;
-            }
-            SaveGlassPrefs();
-            if (t & kThemeTinted) {
+            // Só o tema que está sendo personalizado volta ao padrão.
+            int k = ThemeEdit();
+            g_themeGlass[k] = ThemeGlass();
+            SaveThemeGlass();
+            if (k == 3) {
                 g_settings.tintColor = 0x050505;
                 g_settings.tintLevel = 100;
                 g_settings.tintReach = 29;
@@ -22164,7 +22236,7 @@ static const wchar_t kShadowClass[] = L"WhFinderTopBarShadow";
 // disponível, a cor não some de todo, para o texto continuar legível).
 static void DrawBarTint(Bar* b, float w, float h, float s, bool refracted) {
     float top = g_settings.tintLevel / 100.0f;
-    float bottom = std::min(top, (100 - g_glass.transparency) / 100.0f * 0.8f);
+    float bottom = std::min(top, (100 - GlassT()) / 100.0f * 0.8f);
     if (!refracted) bottom = std::max(bottom, std::min(top, 0.55f));
     if (auto* g = MakeTintBrush(b->rt, 0, h, top, bottom, g_settings.tintReach / 100.0f)) {
         b->rt->FillRectangle(D2D1::RectF(0, 0, w, h), g);
@@ -22191,7 +22263,9 @@ static void DrawBarLiquid(Bar* b, float w, float h, float s) {
     D2D1_RECT_F r = D2D1::RectF(0, 0, w, h);
     LqDraw(b->rt, *b->lq, r, 0, s);
     if (BarStyleOf(b) == 3) return;  // a cor e a linha vêm de DrawBarTint
-    float a = 0;  // totalmente transparente: só a refração, o brilho e as bordas
+    // No padrão (80) é totalmente transparente: só a refração, o brilho e as bordas;
+    // puxando para "fosco", ganha um véu.
+    float a = std::max(0, 80 - GlassT()) / 80.0f * 0.6f;
     D2D1_GRADIENT_STOP body[] = {{0.0f, g_light ? D2D1::ColorF(1, 1, 1, a * 1.4f) : D2D1::ColorF(0.05f, 0.05f, 0.06f, a)},
                                  {1.0f, g_light ? D2D1::ColorF(1, 1, 1, a) : D2D1::ColorF(0.05f, 0.05f, 0.06f, a * 0.8f)}};
     if (a > 0)
@@ -22273,7 +22347,7 @@ static void BarLiquidTick() {
         bool justShown = !b->lqShown;
         b->lqShown = true;
         ULONGLONG now = GetTickCount64();
-        if (!g_glass.live && !justShown && b->lq->w && now - b->lqShot < 5000) continue;
+        if (!g_themeGlass[std::clamp(BarStyleOf(b), 0, 4)].live && !justShown && b->lq->w && now - b->lqShot < 5000) continue;
         b->lqShot = now;
         RECT wr;
         if (!GetWindowRect(b->hwnd, &wr)) continue;
@@ -22615,6 +22689,7 @@ struct RightSpec { ItemKind kind; std::wstring text; bool icon; float alpha; std
 struct Placed { RightSpec spec; float l, r, prefixW; };
 
 static void Render(Bar* b) {
+    GlassThemeCtx glassCtx(std::clamp(BarStyleOf(b), 0, 4));  // os ajustes do tema desta barra
     if (!EnsureResources(b)) return;
     BarLightScope barLight(b);  // a cor do texto deste monitor
 
@@ -22800,6 +22875,15 @@ static void Render(Bar* b) {
                            : bst == 6 ? D2D1::ColorF(0.11f, 0.11f, 0.12f, 1.0f)
                                                       : D2D1::ColorF(0, 0, 0, 1.0f));
         b->rt->FillRectangle(D2D1::RectF(0, 0, w, h), b->brush);
+    }
+    if (see && (bst == 1 || bst == 4)) {
+        // Transparente e Cor da janela (sem cor): no padrão, nada; puxando para
+        // "fosco", um véu na cor do tema.
+        float a = std::max(0, 80 - GlassT()) / 80.0f * 0.6f;
+        if (a > 0) {
+            b->brush->SetColor(g_light ? D2D1::ColorF(1, 1, 1, a) : D2D1::ColorF(0.05f, 0.05f, 0.06f, a));
+            b->rt->FillRectangle(D2D1::RectF(0, 0, w, h), b->brush);
+        }
     }
     if (see && (bst == 2 || bst == 3) && b->lq) DrawBarLiquid(b, w, h, s);
     if (see && bst == 3) DrawBarTint(b, w, h, s, b->lq != nullptr);
@@ -25085,8 +25169,10 @@ const UiTr kUiTr[] = {
     {L"Indicador de volume e brilho", L"Volume and brightness indicator", L"Indicador de volumen y brillo", L"Indicateur de volume et de luminosité", L"Lautstärke- und Helligkeitsanzeige", L"Indicatore di volume e luminosità", L"音量和亮度指示器"},
     {L"Logo abaixo do ícone na barra", L"Right below the icon on the bar", L"Justo debajo del icono en la barra", L"Juste sous l’icône dans la barre", L"Direkt unter dem Symbol in der Leiste", L"Subito sotto l’icona nella barra", L"显示在菜单栏图标正下方"},
     {L"Escurecer a tela com a Central de Controle", L"Dim the screen with the Control Center", L"Oscurecer la pantalla con el Centro de control", L"Assombrir l’écran avec le Centre de contrôle", L"Bildschirm mit dem Kontrollzentrum abdunkeln", L"Scurisci lo schermo con il Centro di Controllo", L"打开控制中心时调暗屏幕"},
-    {L"Transparente ↔ tingido", L"Clear ↔ tinted", L"Transparente ↔ tintado", L"Transparent ↔ teinté", L"Klar ↔ getönt", L"Trasparente ↔ colorato", L"透明 ↔ 着色"},
-    {L"À esquerda o vidro limpo; à direita, mais cor", L"Left is clear glass; right adds more color", L"A la izquierda, vidrio limpio; a la derecha, más color", L"À gauche, verre clair ; à droite, plus de couleur", L"Links klares Glas, rechts mehr Farbe", L"A sinistra vetro limpido; a destra più colore", L"左侧为透明玻璃; 右侧颜色更深"},
+    {L"Transparente ↔ fosco", L"Clear ↔ frosted", L"Transparente ↔ esmerilado", L"Transparent ↔ dépoli", L"Klar ↔ matt", L"Trasparente ↔ satinato", L"透明 ↔ 磨砂"},
+    {L"À esquerda o vidro limpo; à direita, mais fosco", L"Left is clear glass; right is more frosted", L"A la izquierda el vidrio limpio; a la derecha, más esmerilado", L"À gauche le verre clair ; à droite, plus dépoli", L"Links klares Glas; rechts matter", L"A sinistra il vetro limpido; a destra, più satinato", L"左边是透明玻璃；右边更磨砂"},
+    {L"Tema a personalizar", L"Theme to customize", L"Tema a personalizar", L"Thème à personnaliser", L"Anzupassendes Design", L"Tema da personalizzare", L"要自定义的主题"},
+    {L"Cada tema de vidro guarda os seus ajustes; ao voltar a ele, eles estão como você deixou", L"Each glass theme keeps its own settings; when you go back to it, they are as you left them", L"Cada tema de vidrio guarda sus ajustes; al volver a él, están como los dejaste", L"Chaque thème de verre garde ses réglages ; en y revenant, ils sont comme vous les avez laissés", L"Jedes Glas-Design behält seine Einstellungen; wenn du zurückkehrst, sind sie wie vorher", L"Ogni tema di vetro conserva le sue impostazioni; tornandoci, sono come le hai lasciate", L"每个玻璃主题保留自己的设置；切换回来时保持原样"},
     {L"Vidro líquido (experimental)", L"Liquid glass (experimental)", L"Vidrio líquido (experimental)", L"Verre liquide (expérimental)", L"Flüssiges Glas (experimentell)", L"Vetro liquido (sperimentale)", L"液态玻璃 (实验性)"},
     {L"Refração nas bordas, como o Liquid Glass", L"Refraction at the edges, like Liquid Glass", L"Refracción en los bordes, como Liquid Glass", L"Réfraction sur les bords, comme Liquid Glass", L"Lichtbrechung an den Rändern wie bei Liquid Glass", L"Rifrazione sui bordi, come Liquid Glass", L"边缘折射, 类似 Liquid Glass"},
     {L"Refração nas bordas", L"Edge refraction", L"Refracción en los bordes", L"Réfraction sur les bords", L"Lichtbrechung an den Rändern", L"Rifrazione sui bordi", L"边缘折射"},
