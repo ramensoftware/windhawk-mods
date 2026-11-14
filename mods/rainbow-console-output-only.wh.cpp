@@ -307,65 +307,90 @@ static void rc_MakeRainbow(const WCHAR* src, WCHAR* dst, int dstMax) {
 
 static BOOL WINAPI
 rc_HookWriteConsoleW(HANDLE h, const VOID* b, DWORD n, LPDWORD w, LPVOID r) {
-    if (!rc_active || n == 0 || n > 8192)
+    if (!rc_active || n == 0 || n > (DWORD)INT_MAX)
         return pOrigWriteConsoleW(h, b, n, w, r);
 
     EnterCriticalSection(&rc_cs);
-    WCHAR src[8192 + 1] = {0};
-    wcsncpy_s(src, 8192, (const WCHAR*)b, n);
 
-    WCHAR out[MAX_RC_BUF] = {0};
-    rc_MakeRainbow(src, out, MAX_RC_BUF);
+    // 堆分配，避免 64K 栈数组溢出；每个 WCHAR 最多膨胀约 24 个 WCHAR
+    size_t need = (size_t)n * 24 + 64;
+    if (need > (size_t)INT_MAX)
+        need = (size_t)INT_MAX;
+    WCHAR* src = (WCHAR*)malloc(need * sizeof(WCHAR));
+    WCHAR* out = (WCHAR*)malloc(need * sizeof(WCHAR));
+    if (!src || !out) {
+        free(src);
+        free(out);
+        LeaveCriticalSection(&rc_cs);
+        return pOrigWriteConsoleW(h, b, n, w, r);
+    }
+
+    // 复制并始终保留终止符（修复 8192 字符把结束符挤掉的问题）
+    wcsncpy_s(src, need, (const WCHAR*)b, n);
+
+    rc_MakeRainbow(src, out, (int)need);
     DWORD outLen = (DWORD)wcslen(out);
     BOOL ret = pOrigWriteConsoleW(h, out, outLen, w, r);
     if (w && ret)
         *w = n;
+
+    free(src);
+    free(out);
     LeaveCriticalSection(&rc_cs);
     return ret;
 }
 
 static BOOL WINAPI
 rc_HookWriteFile(HANDLE h, LPCVOID b, DWORD n, LPDWORD w, void* o) {
-    if (!rc_active || n == 0 || n > 8192)
+    // 重叠 I/O：WriteFile 异步返回后系统仍会读取缓冲区，提前释放会导致驱动
+    // 读到脏数据（蓝屏/崩溃）。这类调用不 Hook，交给原函数处理。
+    if (o != NULL)
+        return pOrigWriteFile(h, b, n, w, o);
+    if (!rc_active || n == 0 || n > (DWORD)INT_MAX)
         return pOrigWriteFile(h, b, n, w, o);
     if (GetFileType(h) != FILE_TYPE_CHAR)
         return pOrigWriteFile(h, b, n, w, o);
 
     EnterCriticalSection(&rc_cs);
 
-    WCHAR* src = (WCHAR*)malloc((n + 1) * sizeof(WCHAR));
-    WCHAR* out = (WCHAR*)malloc((n * 20 + 64) * sizeof(WCHAR));
+    size_t need = (size_t)n * 24 + 64;
+    if (need > (size_t)INT_MAX)
+        need = (size_t)INT_MAX;
+    WCHAR* src = (WCHAR*)malloc(((size_t)n + 1) * sizeof(WCHAR));
+    WCHAR* out = (WCHAR*)malloc(need * sizeof(WCHAR));
+    if (!src || !out) {
+        free(src);
+        free(out);
+        LeaveCriticalSection(&rc_cs);
+        return pOrigWriteFile(h, b, n, w, o);
+    }
 
-    if (src && out) {
-        int wlen = MultiByteToWideChar(CP_UTF8, 0, (LPCCH)b, n, src, n);
-        if (wlen <= 0) {
-            wlen = MultiByteToWideChar(CP_ACP, 0, (LPCCH)b, n, src, n);
-        }
-        if (wlen > 0) {
-            src[wlen] = L'\0';
-            rc_MakeRainbow(src, out, n * 20 + 64);
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, (LPCCH)b, n, src, (int)n);
+    if (wlen <= 0)
+        wlen = MultiByteToWideChar(CP_ACP, 0, (LPCCH)b, n, src, (int)n);
+    if (wlen > 0) {
+        src[wlen] = L'\0';
+        rc_MakeRainbow(src, out, (int)need);
 
-            int clen =
-                WideCharToMultiByte(CP_UTF8, 0, out, -1, NULL, 0, NULL, NULL);
-            if (clen > 0) {
-                CHAR* ansi = (CHAR*)malloc(clen);
-                if (ansi) {
-                    WideCharToMultiByte(CP_UTF8, 0, out, -1, ansi, clen, NULL,
-                                        NULL);
-                    LeaveCriticalSection(&rc_cs);
-                    BOOL ret = pOrigWriteFile(h, ansi, clen - 1, w, o);
-                    free(ansi);
-                    free(src);
-                    free(out);
-                    return ret;
-                }
+        int clen =
+            WideCharToMultiByte(CP_UTF8, 0, out, -1, NULL, 0, NULL, NULL);
+        if (clen > 0) {
+            CHAR* ansi = (CHAR*)malloc(clen);
+            if (ansi) {
+                WideCharToMultiByte(CP_UTF8, 0, out, -1, ansi, clen, NULL,
+                                    NULL);
+                BOOL ret = pOrigWriteFile(h, ansi, clen - 1, w, o);
+                free(ansi);
+                free(src);
+                free(out);
+                LeaveCriticalSection(&rc_cs);
+                return ret;
             }
         }
     }
-    if (src)
-        free(src);
-    if (out)
-        free(out);
+
+    free(src);
+    free(out);
     LeaveCriticalSection(&rc_cs);
     return pOrigWriteFile(h, b, n, w, o);
 }
@@ -388,10 +413,20 @@ BOOL Wh_ModInit() {
         SetConsoleMode(hOut, mode);
     }
 
-    Wh_SetFunctionHook((void*)WriteConsoleW, (void*)rc_HookWriteConsoleW,
-                       (void**)&pOrigWriteConsoleW);
-    Wh_SetFunctionHook((void*)WriteFile, (void*)rc_HookWriteFile,
-                       (void**)&pOrigWriteFile);
+    // 关键：kernel32.dll 的 WriteConsoleW/WriteFile 只是转发 stub，真正的实现在
+    // kernelbase.dll。现代程序（cmd.exe、C 运行时等）直接调用 kernelbase，所以
+    // 必须 Hook kernelbase.dll，否则在别人机器上不会生效。
+    HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
+    if (hKernelBase) {
+        void* pWCW = (void*)GetProcAddress(hKernelBase, "WriteConsoleW");
+        void* pWF = (void*)GetProcAddress(hKernelBase, "WriteFile");
+        if (pWCW)
+            Wh_SetFunctionHook(pWCW, (void*)rc_HookWriteConsoleW,
+                               (void**)&pOrigWriteConsoleW);
+        if (pWF)
+            Wh_SetFunctionHook(pWF, (void*)rc_HookWriteFile,
+                               (void**)&pOrigWriteFile);
+    }
 
     return TRUE;
 }
