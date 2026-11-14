@@ -2,14 +2,14 @@
 // @id              start-uninstall-plus
 // @name            Start Uninstall Plus
 // @description     Adds "Find uninstaller..." to Start's app menu: shows which installed program matches the app, then runs its uninstaller or opens Settings filtered to it
-// @version         1.0
+// @version         1.1
 // @author          watdafawx
 // @github          https://github.com/watdafawx
 // @homepage        https://github.com/watdafawx/windhawk-start-uninstall-plus
 // @license         GPL-3.0
 // @include         StartMenuExperienceHost.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -37,20 +37,25 @@ Installed apps, unfiltered. This mod adds **Find uninstaller...** under it, whic
 Packaged (Store/MSIX) apps get no extra item: Start's Uninstall already removes
 them directly.
 
-Works on pinned apps, the All apps list and Recommended. It looks for
-Start's item named "Uninstall", so it needs Windows in English.
+Works on pinned apps, the All apps list and Recommended, in any display
+language.
 
-The XAML hooking (XAML diagnostics TAP + VisualTreeWatcher) follows
-Windows 11 Start Menu Styler by m417z, itself based on TranslucentTB's
-ExplorerTAP.
+Known limit: when the menu is opened from the keyboard (Shift+F10 or the menu
+key) while the mouse rests over another tile, the item targets the tile under
+the mouse. The details show that app's name, so check it before uninstalling.
+
+The mod reaches Start's menu through XAML Diagnostics (a TAP and a
+VisualTreeWatcher), following Windows 11 Start Menu Styler by m417z, itself
+based on TranslucentTB's ExplorerTAP. It has been tested running together with
+Windows 11 Start Menu Styler.
 */
 // ==/WindhawkModReadme==
 
+#include <windhawk_utils.h>
 #include <xamlom.h>
 
 #include <algorithm>
 #include <atomic>
-#include <cstdarg>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -64,7 +69,6 @@ ExplorerTAP.
 #include <exdisp.h>
 #include <shldisp.h>
 #include <shlobj.h>
-#include <shlwapi.h>
 #include <shobjidl.h>
 #include <uiautomation.h>
 #include <winrt/base.h>
@@ -103,14 +107,6 @@ HMODULE GetCurrentModuleHandle() {
 
 HWND GetCoreWnd();
 
-void Log(PCWSTR fmt, ...) {
-    WCHAR buf[2048];
-    va_list args;
-    va_start(args, fmt);
-    _vsnwprintf_s(buf, _TRUNCATE, fmt, args);
-    va_end(args);
-    Wh_Log(L"%s", buf);
-}
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -461,8 +457,44 @@ bool ShellExecuteFromExplorer(const std::wstring& file, const std::wstring& para
     return SUCCEEDED(hr);
 }
 
+// Worker threads. Wh_ModUninit signals g_stopEvent and waits for all of
+// them, so none still runs this DLL's code once it is unloaded.
+HANDLE g_stopEvent;
+SRWLOCK g_threadsLock = SRWLOCK_INIT;
+std::vector<HANDLE> g_threads;
+
+bool Stopping(DWORD waitMs = 0) {
+    return WaitForSingleObject(g_stopEvent, waitMs) == WAIT_OBJECT_0;
+}
+
+void TrackThread(HANDLE t) {
+    AcquireSRWLockExclusive(&g_threadsLock);
+    // Forget the ones that have already finished.
+    g_threads.erase(std::remove_if(g_threads.begin(), g_threads.end(),
+                                   [](HANDLE h) {
+                                       if (WaitForSingleObject(h, 0) != WAIT_OBJECT_0) return false;
+                                       CloseHandle(h);
+                                       return true;
+                                   }),
+                    g_threads.end());
+    g_threads.push_back(t);
+    ReleaseSRWLockExclusive(&g_threadsLock);
+}
+
+void JoinThreads() {
+    std::vector<HANDLE> threads;
+    AcquireSRWLockExclusive(&g_threadsLock);
+    threads.swap(g_threads);
+    ReleaseSRWLockExclusive(&g_threadsLock);
+    for (HANDLE h : threads) {
+        WaitForSingleObject(h, INFINITE);
+        CloseHandle(h);
+    }
+}
+
 template <class F>
 void RunOnThread(F&& f) {
+    if (Stopping()) return;
     auto* fn = new std::function<void()>(std::forward<F>(f));
     HANDLE t = CreateThread(
         nullptr, 0,
@@ -479,7 +511,7 @@ void RunOnThread(F&& f) {
         },
         fn, 0, nullptr);
     if (t)
-        CloseHandle(t);
+        TrackThread(t);
     else
         delete fn;
 }
@@ -502,7 +534,7 @@ void CloseStart() {
 void RunUninstaller(Candidate c) {
     RunOnThread([c] {
         bool ok = ShellExecuteFromExplorer(c.file, c.params, DirOf(c.file));
-        Log(L"run %s %s via Explorer: %d", c.file.c_str(), c.params.c_str(), ok);
+        Wh_Log(L"run %s %s via Explorer: %d", c.file.c_str(), c.params.c_str(), ok);
         if (!ok) {
             // Explorer not reachable: start it from here instead.
             ShellExecute(nullptr, L"open", c.file.c_str(), c.params.c_str(), DirOf(c.file).c_str(), SW_SHOWNORMAL);
@@ -534,7 +566,7 @@ void OpenSettingsFiltered(std::wstring filter) {
         uia->CreatePropertyCondition(UIA_ClassNamePropertyId, cls, byClass.put());
         bool done = false;
         for (int tries = 0; tries < 40 && !done; ++tries) {
-            Sleep(250);
+            if (Stopping(250)) break;
             winrt::com_ptr<IUIAutomationElementArray> frames;
             if (FAILED(root->FindAll(TreeScope_Children, byClass.get(), frames.put())) || !frames) continue;
             int n = 0;
@@ -552,7 +584,7 @@ void OpenSettingsFiltered(std::wstring filter) {
                 }
             }
         }
-        Log(L"settings filter '%s': %d", filter.c_str(), done);
+        Wh_Log(L"settings filter '%s': %d", filter.c_str(), done);
         VariantClear(&aid);
         VariantClear(&cls);
     });
@@ -619,7 +651,7 @@ void ShowDetails(wux::FrameworkElement const& anchor, StartApp app) {
     ResolveTarget(app);
     auto candidates = std::make_shared<std::vector<Candidate>>(FindCandidates(app));
     auto selected = std::make_shared<size_t>(0);
-    Log(L"details: %s target=%s candidates=%zu", app.aumid.c_str(), app.target.c_str(), candidates->size());
+    Wh_Log(L"details: %s target=%s candidates=%zu", app.aumid.c_str(), app.target.c_str(), candidates->size());
 
     wuxc::Flyout flyout;
     wuxc::StackPanel panel;
@@ -766,8 +798,15 @@ struct MenuTarget {
 };
 MenuTarget g_target;
 
-// Presenters we put the item in, to take it back out on unload.
-std::vector<winrt::weak_ref<wuxc::ItemsControl>> g_presenters;
+// The items this mod put into Start's menus, with the menu they are in and
+// their Click handler (code in this DLL). On unload the handler is revoked and
+// the item removed, on Start's UI thread, which owns them.
+struct InjectedItem {
+    winrt::weak_ref<wuxc::MenuFlyoutItem> item;
+    winrt::weak_ref<wuxc::ItemsControl> presenter;
+    winrt::event_token click;
+};
+std::vector<InjectedItem> g_injected;
 
 // Pinned/All apps: the tile's container carries "tile-W~<app ID>" (Win32) as
 // its automation ID. Recommended: no automation ID; the item's Grid has
@@ -790,6 +829,20 @@ bool IsAppContainer(wux::FrameworkElement const& fe) {
     return aid.find(L'~') != std::wstring::npos;
 }
 
+// Recommended: the "W~..." Grid covers only the icon and text, so a click on
+// the item's padding hits its GridViewItem instead. Look inside that.
+wux::FrameworkElement AppContainerInside(wux::DependencyObject const& root, int depth = 8) {
+    int n = wux::Media::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < n; i++) {
+        auto child = wux::Media::VisualTreeHelper::GetChild(root, i);
+        if (auto fe = child.try_as<wux::FrameworkElement>(); fe && IsAppContainer(fe)) return fe;
+        if (depth > 0) {
+            if (auto found = AppContainerInside(child, depth - 1)) return found;
+        }
+    }
+    return nullptr;
+}
+
 // The app container the menu belongs to: under the mouse (the menu opens
 // where it was right-clicked), else the focused one (Shift+F10, menu key).
 wux::FrameworkElement FindMenuTile() {
@@ -802,6 +855,10 @@ wux::FrameworkElement FindMenuTile() {
         wf::Point p{float(pt.x / scale), float(pt.y / scale)};
         for (auto const& el : wux::Media::VisualTreeHelper::FindElementsInHostCoordinates(p, content, false)) {
             if (auto fe = el.try_as<wux::FrameworkElement>(); fe && IsAppContainer(fe)) return fe;
+            if (auto item = el.try_as<wuxc::Primitives::SelectorItem>()) {
+                if (auto inside = AppContainerInside(item)) return inside;
+                break;  // the list item under the mouse has no app ID: not an app
+            }
         }
     }
     if (auto focused = wux::Input::FocusManager::GetFocusedElement().try_as<wux::DependencyObject>()) {
@@ -816,11 +873,25 @@ wux::FrameworkElement FindMenuTile() {
 std::wstring TileName(wux::FrameworkElement const& tile) {
     std::wstring name(wux::Automation::AutomationProperties::GetName(tile));
     if (!name.empty()) return name;
-    if (auto title = tile.FindName(L"Title").try_as<wuxc::TextBlock>()) return std::wstring(title.Text());
+    // Search this item's own subtree: FindName would search the whole list's
+    // name scope and return another item's "Title".
+    std::function<wuxc::TextBlock(wux::DependencyObject const&, int)> find =
+        [&](wux::DependencyObject const& node, int depth) -> wuxc::TextBlock {
+        int n = wux::Media::VisualTreeHelper::GetChildrenCount(node);
+        for (int i = 0; i < n; i++) {
+            auto child = wux::Media::VisualTreeHelper::GetChild(node, i);
+            if (auto tb = child.try_as<wuxc::TextBlock>(); tb && tb.Name() == L"Title") return tb;
+            if (depth > 0) {
+                if (auto tb = find(child, depth - 1)) return tb;
+            }
+        }
+        return nullptr;
+    };
+    if (auto title = find(tile, 6)) return std::wstring(title.Text());
     return name;
 }
 
-wuxc::MenuFlyoutItem MakeOurItem() {
+wuxc::MenuFlyoutItem MakeOurItem(winrt::event_token& click) {
     wuxc::MenuFlyoutItem item;
     // Named apart from Start's own "Uninstall", which sits right above it.
     item.Text(L"Find uninstaller…");
@@ -828,7 +899,7 @@ wuxc::MenuFlyoutItem MakeOurItem() {
     wuxc::FontIcon icon;
     icon.Glyph(L"");  // info
     item.Icon(icon);
-    item.Click([](auto&&, auto&&) {
+    click = item.Click([](auto&&, auto&&) {
         auto target = g_target;
         auto tile = target.tile.get();
         if (!tile) return;
@@ -838,7 +909,7 @@ wuxc::MenuFlyoutItem MakeOurItem() {
                 try {
                     ShowDetails(anchor, target.app);
                 } catch (...) {
-                    Log(L"ShowDetails error %08X", winrt::to_hresult());
+                    Wh_Log(L"ShowDetails error %08X", winrt::to_hresult());
                 }
             }
         });
@@ -856,6 +927,9 @@ void RemoveOurs(wfc::IVector<wuxc::MenuFlyoutItemBase> const& items) {
         if (IsOurs(items.GetAt(i))) items.RemoveAt(i);
 }
 
+// Start's own Uninstall item has this icon in every display language.
+constexpr wchar_t kStockUninstallGlyph[] = L"\uE74D";
+
 void OnStockUninstallItem(wuxc::MenuFlyoutItem const& stock) {
     // The menu is still being laid out; change it once that is done.
     stock.Dispatcher().RunAsync(
@@ -871,12 +945,12 @@ void OnStockUninstallItem(wuxc::MenuFlyoutItem const& stock) {
                     }
                 }
                 if (!presenter) {
-                    Log(L"no presenter");
+                    Wh_Log(L"no presenter");
                     return;
                 }
                 auto items = presenter.ItemsSource().try_as<wfc::IVector<wuxc::MenuFlyoutItemBase>>();
                 if (!items) {
-                    Log(L"presenter items not a MenuFlyoutItemBase vector: %s",
+                    Wh_Log(L"presenter items not a MenuFlyoutItemBase vector: %s",
                            presenter.ItemsSource() ? winrt::get_class_name(presenter.ItemsSource()).c_str()
                                                    : L"null");
                     return;
@@ -884,41 +958,66 @@ void OnStockUninstallItem(wuxc::MenuFlyoutItem const& stock) {
                 RemoveOurs(items);
                 auto tile = FindMenuTile();
                 if (!tile) {
-                    Log(L"no app tile under cursor/focus");
+                    Wh_Log(L"no app tile under cursor/focus");
                     return;
                 }
                 auto id = Win32AppId(tile);
-                if (!id) return;  // a packaged app: Start's own item does it
+                if (!id) {  // a packaged app: Start's own item does it
+                    Wh_Log(L"not a Win32 tile: aid='%s' name='%s'",
+                           std::wstring(wux::Automation::AutomationProperties::GetAutomationId(tile)).c_str(),
+                           tile.Name().c_str());
+                    return;
+                }
                 g_target.app = StartApp{*id, TileName(tile)};
                 g_target.tile = winrt::make_weak(tile);
                 uint32_t index = 0;
                 if (!items.IndexOf(stock, index)) index = items.Size() - 1;
-                items.InsertAt(index + 1, MakeOurItem());
-                g_presenters.push_back(winrt::make_weak(presenter));
-                Log(L"added item for %s (%s)", g_target.app.name.c_str(), id->c_str());
+                winrt::event_token click{};
+                auto item = MakeOurItem(click);
+                items.InsertAt(index + 1, item);
+                // Menus are rebuilt each time they open; forget items Start has let go of.
+                g_injected.erase(std::remove_if(g_injected.begin(), g_injected.end(),
+                                                [](const InjectedItem& i) { return !i.item.get(); }),
+                                 g_injected.end());
+                g_injected.push_back({winrt::make_weak(item), winrt::make_weak(presenter), click});
+                Wh_Log(L"added item for %s (%s)", g_target.app.name.c_str(), id->c_str());
             } catch (...) {
-                Log(L"menu error %08X", winrt::to_hresult());
+                Wh_Log(L"menu error %08X", winrt::to_hresult());
             }
         });
+}
+
+bool IsStockUninstallItem(wuxc::MenuFlyoutItem const& item) {
+    if (IsOurs(item)) return false;
+    if (auto icon = item.Icon().try_as<wuxc::FontIcon>(); icon && icon.Glyph() == kStockUninstallGlyph) return true;
+    return item.Text() == L"Uninstall";
 }
 
 void OnElementAdded(wux::FrameworkElement const& fe, PCWSTR type) {
     if (!type || wcscmp(type, L"Windows.UI.Xaml.Controls.MenuFlyoutItem") != 0) return;
     auto item = fe.try_as<wuxc::MenuFlyoutItem>();
-    if (item && item.Text() == L"Uninstall" && !IsOurs(item)) OnStockUninstallItem(item);
+    if (item && IsStockUninstallItem(item)) OnStockUninstallItem(item);
 }
 
-// Before unloading: no item or flyout of ours may outlive this DLL's code.
+// Before unloading, on Start's UI thread: no item or flyout of ours may
+// outlive this DLL's code.
 void DetachAll() {
-    for (auto& w : g_presenters) {
-        if (auto p = w.get()) {
-            try {
-                if (auto items = p.ItemsSource().try_as<wfc::IVector<wuxc::MenuFlyoutItemBase>>()) RemoveOurs(items);
-            } catch (...) {
+    for (auto& injected : g_injected) {
+        try {
+            auto item = injected.item.get();
+            if (!item) continue;
+            item.Click(injected.click);
+            item.Visibility(wux::Visibility::Collapsed);
+            if (auto presenter = injected.presenter.get()) {
+                if (auto items = presenter.ItemsSource().try_as<wfc::IVector<wuxc::MenuFlyoutItemBase>>()) {
+                    uint32_t index = 0;
+                    if (items.IndexOf(item, index)) items.RemoveAt(index);
+                }
             }
+        } catch (...) {
         }
     }
-    g_presenters.clear();
+    g_injected.clear();
     if (auto f = g_detailsFlyout.get()) {
         try {
             f.Hide();
@@ -948,6 +1047,8 @@ public:
         : m_diag(site.as<IXamlDiagnostics>()) {
         m_diag->QueryInterface(IID_IXamlDiagnosticsTestHooks, m_hooks.put_void());
         // Advising from this thread can hang; the styler does it from a new one.
+        // The thread holds a reference, taken before it can run.
+        AddRef();
         HANDLE thread = CreateThread(
             nullptr, 0,
             [](LPVOID p) -> DWORD {
@@ -956,14 +1057,14 @@ public:
                 HRESULT hr = w->m_diag.as<IVisualTreeService3>()->AdviseVisualTreeChange(w);
                 g_reportCompositionDiagAsDisabled = false;
                 w->Release();
-                if (FAILED(hr)) Log(L"Advise failed %08X", hr);
+                if (FAILED(hr)) Wh_Log(L"Advise failed %08X", hr);
                 return 0;
             },
             this, 0, nullptr);
-        if (thread) {
-            AddRef();
-            CloseHandle(thread);
-        }
+        if (thread)
+            TrackThread(thread);
+        else
+            Release();
     }
 
     void Unadvise() {
@@ -1091,7 +1192,7 @@ void InitializeTap() {
     DWORD none = 0;
     if (!g_targetThreadId.compare_exchange_strong(none, GetCurrentThreadId())) return;
     HRESULT hr = InjectTAP();
-    Log(L"InjectTAP: %08X", hr);
+    Wh_Log(L"InjectTAP: %08X", hr);
 }
 
 // ---------------------------------------------------------------------------
@@ -1200,31 +1301,33 @@ bool RunFromWindowThread(HWND hWnd, RunProc proc, PVOID procParam) {
 }
 
 BOOL Wh_ModInit() {
-    Log(L">");
-    HMODULE user32 = LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (user32) {
-        if (void* p = (void*)GetProcAddress(user32, "CreateWindowInBand"))
-            Wh_SetFunctionHook(p, (void*)CreateWindowInBand_Hook, (void**)&CreateWindowInBand_Original);
-        if (void* p = (void*)GetProcAddress(user32, "CreateWindowInBandEx"))
-            Wh_SetFunctionHook(p, (void*)CreateWindowInBandEx_Hook, (void**)&CreateWindowInBandEx_Original);
-    }
+    g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!g_stopEvent) return FALSE;
+    HMODULE user32 = GetModuleHandle(L"user32.dll");
+    if (auto p = (CreateWindowInBand_t)GetProcAddress(user32, "CreateWindowInBand"))
+        WindhawkUtils::SetFunctionHook(p, CreateWindowInBand_Hook, &CreateWindowInBand_Original);
+    if (auto p = (CreateWindowInBandEx_t)GetProcAddress(user32, "CreateWindowInBandEx"))
+        WindhawkUtils::SetFunctionHook(p, CreateWindowInBandEx_Hook, &CreateWindowInBandEx_Original);
     HMODULE kb = GetModuleHandle(L"kernelbase.dll");
-    Wh_SetFunctionHook((void*)GetProcAddress(kb, "RegOpenKeyExW"), (void*)RegOpenKeyExW_Hook,
-                       (void**)&RegOpenKeyExW_Original);
-    Wh_SetFunctionHook((void*)GetProcAddress(kb, "RegQueryValueExW"), (void*)RegQueryValueExW_Hook,
-                       (void**)&RegQueryValueExW_Original);
+    WindhawkUtils::SetFunctionHook((RegOpenKeyExW_t)GetProcAddress(kb, "RegOpenKeyExW"), RegOpenKeyExW_Hook,
+                                   &RegOpenKeyExW_Original);
+    WindhawkUtils::SetFunctionHook((RegQueryValueExW_t)GetProcAddress(kb, "RegQueryValueExW"),
+                                   RegQueryValueExW_Hook, &RegQueryValueExW_Original);
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
     if (HWND w = GetCoreWnd()) {
-        Log(L"found core window");
+        Wh_Log(L"found core window");
         RunFromWindowThread(w, [](PVOID) { InitializeTap(); }, nullptr);
     }
 }
 
 void Wh_ModUninit() {
-    Log(L">");
+    // Stop and join the workers first, from this (engine) thread: they may
+    // need Start's UI thread, so it must not be blocked while they finish.
+    SetEvent(g_stopEvent);
+    JoinThreads();
     auto drop = [](PVOID) {
         if (g_watcher) {
             g_watcher->Unadvise();
@@ -1238,4 +1341,5 @@ void Wh_ModUninit() {
     } else {
         drop(nullptr);
     }
+    CloseHandle(g_stopEvent);
 }
