@@ -2,7 +2,7 @@
 // @id              system-tray-folders
 // @name            System Tray Folders
 // @description     Group icons in the Windows 11 "Show hidden icons" tray flyout into folders
-// @version         1.0.0
+// @version         1.1.0
 // @author          Ris Peng
 // @github          https://github.com/RisPNG
 // @include         explorer.exe
@@ -40,6 +40,25 @@ tooltips keep working. Dragging icons between the taskbar and the flyout and
 reordering them work as usual, and an icon dragged back into the flyout returns
 to its folder. Which folder an icon belongs to comes from the settings, not
 from dragging.
+
+## Adding icons from the flyout
+
+Open a folder and click **Add icon...** at its end. The flyout then lists every
+icon currently in the tray by its app name, with a check mark next to the ones
+in this folder. Click an icon to move it into the folder, click it again to take
+it out. Click **Done** to return to the folder.
+
+Icons added this way are remembered by the mod and take priority over the
+patterns below. Icons that are in the folder because of a pattern can only be
+changed in the settings. A folder needs at least one icon, or **Show empty
+folders** turned on, to show up, so turn that on to fill a new folder this way.
+
+## List view
+
+Turn on **List view** in the settings to show the flyout as one column, with the
+name of each icon next to it, instead of a grid of icons. **List view width**
+sets the width of a row. Icons stay the real tray icons, so clicking, right
+clicking and dragging work as usual. The picker above is always shown as a list.
 
 ## Choosing icons
 
@@ -104,6 +123,14 @@ haven't been tested.
   - end: After other icons
 - showEmptyFolders: false
   $name: Show empty folders
+- listView: false
+  $name: List view
+  $description: >-
+    Show the flyout as a single column list with the name of each icon next
+    to it, instead of a grid of icons.
+- listWidth: 260
+  $name: List view width
+  $description: Width in pixels of each row in the list view.
 */
 // ==/WindhawkModSettings==
 
@@ -165,15 +192,28 @@ class ScopeExit {
 
 struct FolderConfig {
     std::wstring name;
+    std::wstring key;  // Lowercase, used to refer to the folder from picks.
     std::wstring glyph;
     std::vector<std::wstring> patterns;  // Lowercase.
 };
 
+// An icon added to a folder with the "Add icon..." button. Stored in the mod's
+// own storage rather than in the settings, which a mod can't write to.
+struct Pick {
+    std::wstring folderKey;
+    std::wstring iconKey;
+};
+
 struct Settings {
     std::vector<FolderConfig> folders;
+    std::vector<Pick> picks;
     bool foldersAtEnd = false;
     bool showEmptyFolders = false;
+    bool listView = false;
+    double listWidth = 260;
 };
+
+constexpr double kListRowHeight = 36;
 
 Settings g_settings;
 
@@ -238,6 +278,43 @@ std::wstring ParseGlyph(std::wstring_view value) {
     return glyph;
 }
 
+std::wstring FolderKey(std::wstring_view name) {
+    return ToLower(NormalizeName(name));
+}
+
+std::vector<Pick> LoadPicks() {
+    std::vector<Pick> picks;
+    std::wstring text(32768, L'\0');
+    Wh_GetStringValue(L"picks", text.data(), (int)text.size());
+    text.resize(wcslen(text.c_str()));
+
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t end = text.find(L'\n', pos);
+        if (end == std::wstring::npos) {
+            end = text.size();
+        }
+        std::wstring_view line(text.data() + pos, end - pos);
+        pos = end + 1;
+        size_t tab = line.find(L'\t');
+        if (tab == std::wstring_view::npos || tab == 0 ||
+            tab + 1 == line.size()) {
+            continue;
+        }
+        picks.push_back({std::wstring(line.substr(0, tab)),
+                         std::wstring(line.substr(tab + 1))});
+    }
+    return picks;
+}
+
+void SavePicks(std::vector<Pick> const& picks) {
+    std::wstring text;
+    for (const auto& pick : picks) {
+        text += pick.folderKey + L'\t' + pick.iconKey + L'\n';
+    }
+    Wh_SetStringValue(L"picks", text.c_str());
+}
+
 Settings LoadSettings() {
     Settings settings;
 
@@ -272,6 +349,7 @@ Settings LoadSettings() {
         if (folder.name.empty()) {
             folder.name = L"Folder";
         }
+        folder.key = FolderKey(folder.name);
 
         settings.folders.push_back(std::move(folder));
     }
@@ -280,8 +358,19 @@ Settings LoadSettings() {
         WindhawkUtils::StringSetting::make(L"folderPosition");
     settings.foldersAtEnd = wcscmp(position.get(), L"end") == 0;
     settings.showEmptyFolders = Wh_GetIntSetting(L"showEmptyFolders");
+    settings.listView = Wh_GetIntSetting(L"listView");
+    int listWidth = Wh_GetIntSetting(L"listWidth");
+    settings.listWidth = std::clamp(listWidth > 0 ? listWidth : 260, 120, 800);
+    settings.picks = LoadPicks();
 
-    if (!settings.showEmptyFolders &&
+    bool anyPick = std::any_of(
+        settings.picks.begin(), settings.picks.end(), [&](Pick const& pick) {
+            return std::any_of(settings.folders.begin(), settings.folders.end(),
+                               [&](FolderConfig const& folder) {
+                                   return folder.key == pick.folderKey;
+                               });
+        });
+    if (!settings.showEmptyFolders && !anyPick &&
         std::all_of(settings.folders.begin(), settings.folders.end(),
                     [](FolderConfig const& folder) {
                         return folder.patterns.empty();
@@ -319,7 +408,21 @@ bool WildcardMatch(std::wstring_view pattern, std::wstring_view text) {
 }
 
 // An icon matches a pattern if its app name, tooltip or accessible name does.
-int FindFolderForIcon(std::initializer_list<std::wstring_view> lowerNames) {
+int FindFolderForIcon(std::wstring_view iconKey,
+                      std::initializer_list<std::wstring_view> lowerNames) {
+    // Icons added with the picker win over the patterns.
+    if (!iconKey.empty()) {
+        for (const auto& pick : g_settings.picks) {
+            if (pick.iconKey != iconKey) {
+                continue;
+            }
+            for (size_t i = 0; i < g_settings.folders.size(); i++) {
+                if (g_settings.folders[i].key == pick.folderKey) {
+                    return (int)i;
+                }
+            }
+        }
+    }
     for (size_t i = 0; i < g_settings.folders.size(); i++) {
         for (const auto& pattern : g_settings.folders[i].patterns) {
             for (auto name : lowerNames) {
@@ -382,7 +485,29 @@ struct IconInfo {
     std::wstring lowerName;
     Media::ImageSource image{nullptr};
     int folder = -1;
+    bool fromPick = false;
 };
+
+// What identifies an icon in the picks: its app name, which doesn't change.
+std::wstring IconKey(IconInfo const& info) {
+    if (!info.lowerAppName.empty()) {
+        return info.lowerAppName;
+    }
+    if (!info.lowerToolTip.empty()) {
+        return info.lowerToolTip;
+    }
+    return info.lowerName;
+}
+
+std::wstring GetIconDisplayLabel(IconInfo const& info) {
+    if (!info.toolTip.empty()) {
+        return info.toolTip;
+    }
+    if (!info.appName.empty()) {
+        return info.appName;
+    }
+    return info.name;
+}
 
 [[clang::no_destroy]] Markup::IXamlMember g_contentVmMember{nullptr};
 [[clang::no_destroy]] Markup::IXamlMember g_configurationMember{nullptr};
@@ -533,6 +658,24 @@ struct Tile {
     Controls::Button button{nullptr};
     winrt::event_token clickToken{};
     std::optional<std::wstring> contentGlyph;
+    // List view tiles: icon cell, name and a check mark.
+    bool list = false;
+    Controls::Border iconHost{nullptr};
+    Controls::TextBlock label{nullptr};
+    Controls::TextBlock check{nullptr};
+};
+
+// Layout values of the shell's panel, restored when the list layout ends.
+struct SavedLayout {
+    double itemsWidth = NAN;
+    double overflowWidth = NAN;
+    double overflowMaxWidth = NAN;
+    double itemWidth = NAN;
+    double itemHeight = NAN;
+    int maxRowsOrColumns = 0;
+    Controls::Orientation orientation = Controls::Orientation::Horizontal;
+    HorizontalAlignment childrenAlignment = HorizontalAlignment::Left;
+    bool hasWrapGrid = false;
 };
 
 struct OverflowState : std::enable_shared_from_this<OverflowState> {
@@ -553,8 +696,17 @@ struct OverflowState : std::enable_shared_from_this<OverflowState> {
 
     std::vector<Tile> folderTiles;
     Tile backTile;
+    Tile addTile;
+    std::vector<Tile> pickerTiles;
+    std::vector<std::shared_ptr<IconInfo>> pickerIcons;
     double tileWidth = 0;
     double tileHeight = 0;
+    bool tileList = false;
+
+    std::optional<SavedLayout> savedLayout;
+    winrt::event_token layoutUpdatedToken{};
+    bool updatingContainers = false;
+    bool picking = false;
 
     std::unordered_map<void*, std::shared_ptr<IconInfo>> iconCache;
 
@@ -565,6 +717,10 @@ struct OverflowState : std::enable_shared_from_this<OverflowState> {
     bool detaching = false;
     bool itemsSourceOverridden = false;
 };
+
+bool UseListLayout(OverflowState const& state) {
+    return g_settings.listView || state.picking;
+}
 
 [[clang::no_destroy]] std::optional<std::vector<std::shared_ptr<OverflowState>>>
     g_states{std::in_place};
@@ -610,12 +766,54 @@ FrameworkElement FindDescendantByName(DependencyObject const& element,
     return nullptr;
 }
 
+// Fallback for builds where the items control has no x:Name: the first
+// ItemsControl found below the given element.
+Controls::ItemsControl FindAnyItemsControl(DependencyObject const& element) {
+    int count = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < count; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i);
+        if (auto itemsControl = child.try_as<Controls::ItemsControl>()) {
+            return itemsControl;
+        }
+        if (auto found = FindAnyItemsControl(child)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+Controls::ItemsControl FindOverflowItemsControl(
+    DependencyObject const& overflow) {
+    auto itemsControl = FindDescendantByName(overflow, L"OverflowItemsControl")
+                            .try_as<Controls::ItemsControl>();
+    if (!itemsControl) {
+        itemsControl = FindAnyItemsControl(overflow);
+    }
+    return itemsControl;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Tiles
 
 void GetItemSize(OverflowState& state, double* width, double* height) {
+    if (UseListLayout(state)) {
+        *width = g_settings.listWidth;
+        *height = kListRowHeight;
+        return;
+    }
     *width = 40;
     *height = 40;
+    if (state.savedLayout && state.savedLayout->hasWrapGrid) {
+        if (!std::isnan(state.savedLayout->itemWidth) &&
+            state.savedLayout->itemWidth > 0) {
+            *width = state.savedLayout->itemWidth;
+        }
+        if (!std::isnan(state.savedLayout->itemHeight) &&
+            state.savedLayout->itemHeight > 0) {
+            *height = state.savedLayout->itemHeight;
+        }
+        return;
+    }
     if (auto itemsControl = state.itemsControl.get()) {
         if (auto wrapGrid =
                 itemsControl.ItemsPanelRoot().try_as<Controls::WrapGrid>()) {
@@ -631,7 +829,7 @@ void GetItemSize(OverflowState& state, double* width, double* height) {
     }
 }
 
-Controls::Button CreateTileButton(double width, double height) {
+Controls::Button CreateTileButton(double width, double height, bool list) {
     std::wstring xaml = LR"(
 <Button xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -658,10 +856,9 @@ Controls::Button CreateTileButton(double width, double height) {
           </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
         <Border x:Name="HoverBorder" CornerRadius="4" Background="Transparent"
-                Width="{HOVERWIDTH}" Height="{HOVERHEIGHT}"
-                HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                {HOVERATTRS}/>
         <ContentPresenter x:Name="Presenter" Content="{TemplateBinding Content}"
-                          HorizontalAlignment="Center"
+                          HorizontalAlignment="{PRESENTERALIGN}"
                           VerticalAlignment="Center"/>
       </Grid>
     </ControlTemplate>
@@ -674,9 +871,21 @@ Controls::Button CreateTileButton(double width, double height) {
             xaml.replace(pos, from.size(), to);
         }
     };
-    replace(L"{HOVERWIDTH}", std::to_wstring((int)std::max(width - 4, 16.0)));
-    replace(L"{HOVERHEIGHT}",
-            std::to_wstring((int)std::max(height - 10, 16.0)));
+    if (list) {
+        replace(L"{HOVERATTRS}",
+                L"Margin=\"4,2,4,2\" HorizontalAlignment=\"Stretch\" "
+                L"VerticalAlignment=\"Stretch\"");
+        replace(L"{PRESENTERALIGN}", L"Stretch");
+    } else {
+        replace(L"{HOVERATTRS}",
+                L"Width=\"" +
+                    std::to_wstring((int)std::max(width - 4, 16.0)) +
+                    L"\" Height=\"" +
+                    std::to_wstring((int)std::max(height - 10, 16.0)) +
+                    L"\" HorizontalAlignment=\"Center\" "
+                    L"VerticalAlignment=\"Center\"");
+        replace(L"{PRESENTERALIGN}", L"Center");
+    }
 
     auto button = Markup::XamlReader::Load(xaml).as<Controls::Button>();
     button.Width(width);
@@ -737,6 +946,84 @@ UIElement CreateFolderPreview(double itemSize) {
 
 void OpenFolder(OverflowState& state, int folder);
 void CloseFolder(OverflowState& state);
+void StartPicking(OverflowState& state);
+void StopPicking(OverflowState& state);
+void TogglePick(OverflowState& state, size_t index);
+
+// A tile is a button with just an icon in the grid, or an icon cell, a name
+// and a check mark in the list.
+Tile MakeTile(double width, double height, bool list) {
+    Tile tile;
+    tile.list = list;
+    tile.button = CreateTileButton(width, height, list);
+    if (!list) {
+        return tile;
+    }
+
+    auto grid = Controls::Grid();
+    grid.HorizontalAlignment(HorizontalAlignment::Stretch);
+    grid.VerticalAlignment(VerticalAlignment::Center);
+    for (auto length : {GridLength{40, GridUnitType::Pixel},
+                        GridLength{1, GridUnitType::Star},
+                        GridLength{32, GridUnitType::Pixel}}) {
+        auto column = Controls::ColumnDefinition();
+        column.Width(length);
+        grid.ColumnDefinitions().Append(column);
+    }
+
+    tile.iconHost = Controls::Border();
+    tile.iconHost.Width(40);
+    tile.iconHost.Height(height);
+    tile.iconHost.IsHitTestVisible(false);
+    Controls::Grid::SetColumn(tile.iconHost, 0);
+    grid.Children().Append(tile.iconHost);
+
+    tile.label = Controls::TextBlock();
+    tile.label.VerticalAlignment(VerticalAlignment::Center);
+    tile.label.Margin(Thickness{4, 0, 8, 0});
+    tile.label.TextTrimming(TextTrimming::CharacterEllipsis);
+    tile.label.TextWrapping(TextWrapping::NoWrap);
+    tile.label.FontSize(12.5);
+    tile.label.IsHitTestVisible(false);
+    Controls::Grid::SetColumn(tile.label, 1);
+    grid.Children().Append(tile.label);
+
+    tile.check = Controls::TextBlock();
+    tile.check.Text(L"\uE73E");
+    tile.check.FontFamily(Media::FontFamily(L"Segoe Fluent Icons"));
+    tile.check.FontSize(14);
+    tile.check.HorizontalAlignment(HorizontalAlignment::Center);
+    tile.check.VerticalAlignment(VerticalAlignment::Center);
+    tile.check.Visibility(Visibility::Collapsed);
+    tile.check.IsHitTestVisible(false);
+    Controls::Grid::SetColumn(tile.check, 2);
+    grid.Children().Append(tile.check);
+
+    tile.button.HorizontalContentAlignment(HorizontalAlignment::Stretch);
+    tile.button.Content(grid);
+    return tile;
+}
+
+UIElement GetTileIcon(Tile const& tile) {
+    if (tile.list) {
+        return tile.iconHost.Child();
+    }
+    return tile.button.Content().try_as<UIElement>();
+}
+
+void SetTileIcon(Tile& tile, UIElement const& icon) {
+    if (tile.list) {
+        tile.iconHost.Child(icon);
+    } else {
+        tile.button.Content(icon);
+    }
+}
+
+void SetTileLabel(Tile& tile, std::wstring const& text) {
+    if (tile.list && tile.label.Text() != text) {
+        tile.label.Text(text);
+    }
+}
 
 void ClearTile(Tile& tile) {
     if (tile.button) {
@@ -751,12 +1038,18 @@ void ClearTiles(OverflowState& state) {
     }
     state.folderTiles.clear();
     ClearTile(state.backTile);
+    ClearTile(state.addTile);
+    for (auto& tile : state.pickerTiles) {
+        ClearTile(tile);
+    }
+    state.pickerTiles.clear();
+    state.pickerIcons.clear();
 }
 
 Tile& EnsureFolderTile(OverflowState& state, int folder) {
     Tile& tile = state.folderTiles[folder];
     if (!tile.button) {
-        tile.button = CreateTileButton(state.tileWidth, state.tileHeight);
+        tile = MakeTile(state.tileWidth, state.tileHeight, state.tileList);
         tile.clickToken = tile.button.Click(
             [weakState = state.weak_from_this(), folder](
                 wf::IInspectable const&, RoutedEventArgs const&) {
@@ -773,8 +1066,8 @@ Tile& EnsureFolderTile(OverflowState& state, int folder) {
 Tile& EnsureBackTile(OverflowState& state) {
     Tile& tile = state.backTile;
     if (!tile.button) {
-        tile.button = CreateTileButton(state.tileWidth, state.tileHeight);
-        tile.button.Content(CreateGlyph(
+        tile = MakeTile(state.tileWidth, state.tileHeight, state.tileList);
+        SetTileIcon(tile, CreateGlyph(
             L"\uE72B",
             std::max(std::min(state.tileWidth, state.tileHeight) * 0.35, 8.0)));
         tile.clickToken = tile.button.Click(
@@ -783,11 +1076,105 @@ Tile& EnsureBackTile(OverflowState& state) {
                 if (auto state = weakState.lock();
                     state && state->attached && !state->detaching &&
                     !g_unloading) {
-                    CloseFolder(*state);
+                    if (state->picking) {
+                        StopPicking(*state);
+                    } else {
+                        CloseFolder(*state);
+                    }
                 }
             });
     }
     return tile;
+}
+
+Tile& EnsureAddTile(OverflowState& state) {
+    Tile& tile = state.addTile;
+    if (!tile.button) {
+        tile = MakeTile(state.tileWidth, state.tileHeight, state.tileList);
+        SetTileIcon(tile, CreateGlyph(
+            L"\uE710",
+            std::max(std::min(state.tileWidth, state.tileHeight) * 0.35, 8.0)));
+        SetTileLabel(tile, L"Add icon...");
+        Automation::AutomationProperties::SetName(tile.button, L"Add icon");
+        Controls::ToolTipService::SetToolTip(tile.button,
+                                             winrt::box_value(L"Add icon..."));
+        tile.clickToken = tile.button.Click(
+            [weakState = state.weak_from_this()](
+                wf::IInspectable const&, RoutedEventArgs const&) {
+                if (auto state = weakState.lock();
+                    state && state->attached && !state->detaching &&
+                    !g_unloading) {
+                    StartPicking(*state);
+                }
+            });
+    }
+    return tile;
+}
+
+Tile& EnsurePickerTile(OverflowState& state, size_t index) {
+    while (state.pickerTiles.size() <= index) {
+        state.pickerTiles.emplace_back();
+    }
+    Tile& tile = state.pickerTiles[index];
+    if (!tile.button) {
+        tile = MakeTile(state.tileWidth, state.tileHeight, state.tileList);
+        tile.clickToken = tile.button.Click(
+            [weakState = state.weak_from_this(), index](
+                wf::IInspectable const&, RoutedEventArgs const&) {
+                if (auto state = weakState.lock();
+                    state && state->attached && !state->detaching &&
+                    !g_unloading) {
+                    TogglePick(*state, index);
+                }
+            });
+    }
+    return tile;
+}
+
+// A row of the picker: the icon, its app name, and a check mark when it's in
+// the open folder. Icons that get there through the settings can't be
+// toggled.
+void UpdatePickerTile(Tile& tile,
+                      IconInfo const& info,
+                      bool inFolder,
+                      bool fromSettings,
+                      std::wstring const& otherFolder) {
+    UIElement icon{nullptr};
+    if (info.image) {
+        Controls::Image image;
+        image.Source(info.image);
+        image.Width(24);
+        image.Height(24);
+        image.Stretch(Media::Stretch::Uniform);
+        image.HorizontalAlignment(HorizontalAlignment::Center);
+        image.VerticalAlignment(VerticalAlignment::Center);
+        image.IsHitTestVisible(false);
+        icon = image;
+    } else {
+        icon = CreateGlyph(L"\uE7C4", 16);
+    }
+    SetTileIcon(tile, icon);
+
+    std::wstring name =
+        !info.appName.empty() ? info.appName : GetIconDisplayLabel(info);
+    SetTileLabel(tile, otherFolder.empty()
+                           ? name
+                           : name + L"  (in " + otherFolder + L")");
+    tile.check.Visibility(inFolder ? Visibility::Visible
+                                   : Visibility::Collapsed);
+    tile.button.IsEnabled(!fromSettings);
+    Automation::AutomationProperties::SetName(tile.button, name);
+    std::wstring tip = name;
+    if (!info.toolTip.empty() && info.toolTip != name) {
+        tip += L"\n" + info.toolTip;
+    }
+    if (!otherFolder.empty()) {
+        tip += L"\nCurrently in " + otherFolder;
+    }
+    if (fromSettings) {
+        tip += L"\n(set in the mod's settings)";
+    }
+    Controls::ToolTipService::SetToolTip(tile.button, winrt::box_value(tip));
 }
 
 void UpdateFolderTile(OverflowState& state,
@@ -803,15 +1190,16 @@ void UpdateFolderTile(OverflowState& state,
     if (tile.contentGlyph != glyph) {
         double itemSize = std::min(state.tileWidth, state.tileHeight);
         if (glyph.empty()) {
-            tile.button.Content(CreateFolderPreview(itemSize));
+            SetTileIcon(tile, CreateFolderPreview(itemSize));
         } else {
-            tile.button.Content(CreateGlyph(glyph, std::max(itemSize * 0.4, 8.0)));
+            SetTileIcon(tile,
+                        CreateGlyph(glyph, std::max(itemSize * 0.4, 8.0)));
         }
         tile.contentGlyph = glyph;
     }
 
     if (glyph.empty()) {
-        auto previews = tile.button.Content().as<Controls::Panel>().Children();
+        auto previews = GetTileIcon(tile).as<Controls::Panel>().Children();
         for (uint32_t i = 0; i < previews.Size(); i++) {
             previews.GetAt(i).as<Controls::Image>().Source(
                 i < images.size() ? images[i] : nullptr);
@@ -819,6 +1207,7 @@ void UpdateFolderTile(OverflowState& state,
     }
 
     std::wstring label = folder.name;
+    SetTileLabel(tile, label + L" (" + std::to_wstring(iconCount) + L")");
     Automation::AutomationProperties::SetName(tile.button, label);
     Controls::ToolTipService::SetToolTip(
         tile.button,
@@ -884,6 +1273,308 @@ void EnsureItemsSource(OverflowState& state) {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// List layout
+
+constexpr WCHAR kLabelName[] = L"ModTrayItemLabel";
+
+Controls::Panel FindContainerPanel(DependencyObject const& element) {
+    int count = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < count; i++) {
+        if (auto panel =
+                Media::VisualTreeHelper::GetChild(element, i)
+                    .try_as<Controls::Panel>()) {
+            return panel;
+        }
+    }
+    for (int i = 0; i < count; i++) {
+        if (auto panel = FindContainerPanel(
+                Media::VisualTreeHelper::GetChild(element, i))) {
+            return panel;
+        }
+    }
+    return nullptr;
+}
+
+Controls::Image FindImageElement(DependencyObject const& element) {
+    if (auto image = element.try_as<Controls::Image>()) {
+        return image;
+    }
+    int count = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < count; i++) {
+        if (auto image = FindImageElement(
+                Media::VisualTreeHelper::GetChild(element, i))) {
+            return image;
+        }
+    }
+    return nullptr;
+}
+
+void SetIfDifferent(FrameworkElement const& element,
+                    double width,
+                    double height) {
+    if (element.Width() != width) {
+        element.Width(width);
+    }
+    if (element.Height() != height) {
+        element.Height(height);
+    }
+}
+
+// Gives the icons of the shell their name next to them. The shell's own
+// containers are used so that clicking, dragging and the context menu keep
+// working.
+void UpdateRealizedContainers(OverflowState& state) {
+    if (state.updatingContainers || state.detaching || !state.attached ||
+        g_unloading || state.picking || !g_settings.listView) {
+        return;
+    }
+    auto itemsControl = state.itemsControl.get();
+    if (!itemsControl) {
+        return;
+    }
+    auto panel = itemsControl.ItemsPanelRoot();
+    if (!panel) {
+        return;
+    }
+
+    state.updatingContainers = true;
+    auto reset = ScopeExit([&state] { state.updatingContainers = false; });
+
+    try {
+        uint32_t count = panel.Children().Size();
+        for (uint32_t i = 0; i < count; i++) {
+            auto child = panel.Children().GetAt(i);
+            if (!child || child.try_as<Controls::Button>()) {
+                continue;  // Folder, back and add tiles are labeled already.
+            }
+
+            wf::IInspectable item = itemsControl.ItemFromContainer(child);
+            if (!item) {
+                if (auto fe = child.try_as<FrameworkElement>()) {
+                    item = fe.DataContext();
+                }
+            }
+            if (!item) {
+                continue;
+            }
+            auto it = state.iconCache.find(winrt::get_abi(item));
+            if (it == state.iconCache.end() || !it->second) {
+                continue;
+            }
+            std::wstring label = GetIconDisplayLabel(*it->second);
+
+            if (auto fe = child.try_as<FrameworkElement>()) {
+                SetIfDifferent(fe, state.tileWidth, state.tileHeight);
+                if (fe.HorizontalAlignment() != HorizontalAlignment::Stretch) {
+                    fe.HorizontalAlignment(HorizontalAlignment::Stretch);
+                }
+            }
+
+            int childCount = Media::VisualTreeHelper::GetChildrenCount(child);
+            if (childCount == 0) {
+                if (auto control = child.try_as<Controls::Control>()) {
+                    control.ApplyTemplate();
+                    childCount =
+                        Media::VisualTreeHelper::GetChildrenCount(child);
+                }
+            }
+            for (int c = 0; c < childCount; c++) {
+                if (auto fe = Media::VisualTreeHelper::GetChild(child, c)
+                                  .try_as<FrameworkElement>()) {
+                    SetIfDifferent(fe, state.tileWidth, state.tileHeight);
+                    if (fe.HorizontalAlignment() !=
+                        HorizontalAlignment::Stretch) {
+                        fe.HorizontalAlignment(HorizontalAlignment::Stretch);
+                    }
+                }
+            }
+
+            // The icon goes to the left, and the hover highlight is stretched
+            // over the whole row.
+            if (auto image = FindImageElement(child)) {
+                if (image.HorizontalAlignment() != HorizontalAlignment::Left) {
+                    image.HorizontalAlignment(HorizontalAlignment::Left);
+                    image.VerticalAlignment(VerticalAlignment::Center);
+                    image.Margin(Thickness{10, 0, 0, 0});
+                }
+            }
+
+            auto containerPanel = FindContainerPanel(child);
+            if (!containerPanel) {
+                continue;
+            }
+            for (uint32_t k = 0; k < containerPanel.Children().Size(); k++) {
+                auto border =
+                    containerPanel.Children().GetAt(k).try_as<Controls::Border>();
+                if (border && !FindImageElement(border) &&
+                    border.HorizontalAlignment() !=
+                        HorizontalAlignment::Stretch) {
+                    border.HorizontalAlignment(HorizontalAlignment::Stretch);
+                    border.Width(NAN);
+                    border.Margin(Thickness{4, 2, 4, 2});
+                    border.CornerRadius(CornerRadius{4});
+                }
+            }
+
+            auto textBlock = FindDescendantByName(child, kLabelName)
+                                 .try_as<Controls::TextBlock>();
+            if (!textBlock) {
+                textBlock = Controls::TextBlock();
+                textBlock.Name(kLabelName);
+                textBlock.IsHitTestVisible(false);
+                textBlock.VerticalAlignment(VerticalAlignment::Center);
+                textBlock.Margin(Thickness{40, 0, 8, 0});
+                textBlock.TextTrimming(TextTrimming::CharacterEllipsis);
+                textBlock.TextWrapping(TextWrapping::NoWrap);
+                textBlock.FontSize(12.5);
+                containerPanel.Children().Append(textBlock);
+            }
+            if (textBlock.Text() != label) {
+                textBlock.Text(label);
+            }
+        }
+    } catch (...) {
+        // Layout can race with containers being replaced.
+    }
+}
+
+void RemoveContainerLabels(OverflowState& state) {
+    auto itemsControl = state.itemsControl.get();
+    auto panel = itemsControl ? itemsControl.ItemsPanelRoot() : nullptr;
+    if (!panel) {
+        return;
+    }
+    for (uint32_t i = 0; i < panel.Children().Size(); i++) {
+        auto child = panel.Children().GetAt(i);
+        if (!child || child.try_as<Controls::Button>()) {
+            continue;
+        }
+        if (auto label = FindDescendantByName(child, kLabelName)) {
+            if (auto parent = Media::VisualTreeHelper::GetParent(label)
+                                  .try_as<Controls::Panel>()) {
+                uint32_t index;
+                if (parent.Children().IndexOf(label, index)) {
+                    parent.Children().RemoveAt(index);
+                }
+            }
+        }
+        if (auto fe = child.try_as<FrameworkElement>()) {
+            fe.ClearValue(FrameworkElement::WidthProperty());
+            fe.ClearValue(FrameworkElement::HeightProperty());
+        }
+    }
+}
+
+void RestoreLayout(OverflowState& state) {
+    if (auto token = std::exchange(state.layoutUpdatedToken, {})) {
+        if (auto itemsControl = state.itemsControl.get()) {
+            itemsControl.LayoutUpdated(token);
+        }
+    }
+    if (!state.savedLayout) {
+        return;
+    }
+    auto saved = *state.savedLayout;
+    state.savedLayout.reset();
+
+    auto itemsControl = state.itemsControl.get();
+    if (!itemsControl) {
+        return;
+    }
+    RemoveContainerLabels(state);
+
+    itemsControl.Width(saved.itemsWidth);
+    if (auto overflow = state.overflow.get()) {
+        overflow.Width(saved.overflowWidth);
+        overflow.MaxWidth(saved.overflowMaxWidth);
+    }
+    if (saved.hasWrapGrid) {
+        if (auto wrapGrid =
+                itemsControl.ItemsPanelRoot().try_as<Controls::WrapGrid>()) {
+            wrapGrid.Orientation(saved.orientation);
+            wrapGrid.MaximumRowsOrColumns(saved.maxRowsOrColumns);
+            wrapGrid.ItemWidth(saved.itemWidth);
+            wrapGrid.ItemHeight(saved.itemHeight);
+        }
+    }
+}
+
+void ApplyLayout(OverflowState& state) {
+    auto itemsControl = state.itemsControl.get();
+    if (!itemsControl) {
+        return;
+    }
+    if (!UseListLayout(state)) {
+        RestoreLayout(state);
+        return;
+    }
+
+    if (!state.layoutUpdatedToken) {
+        state.layoutUpdatedToken = itemsControl.LayoutUpdated(
+            [weakState = state.weak_from_this()](wf::IInspectable const&,
+                                                 wf::IInspectable const&) {
+                auto state = weakState.lock();
+                if (!state || !state->attached || state->detaching ||
+                    g_unloading) {
+                    return;
+                }
+                try {
+                    ApplyLayout(*state);
+                    UpdateRealizedContainers(*state);
+                } catch (...) {
+                }
+            });
+    }
+
+    auto panel = itemsControl.ItemsPanelRoot();
+    auto wrapGrid = panel ? panel.try_as<Controls::WrapGrid>() : nullptr;
+    if (!wrapGrid) {
+        return;  // Not realized yet, tried again on the next layout pass.
+    }
+
+    auto overflow = state.overflow.get();
+    if (!state.savedLayout) {
+        SavedLayout saved;
+        saved.itemsWidth = itemsControl.Width();
+        if (overflow) {
+            saved.overflowWidth = overflow.Width();
+            saved.overflowMaxWidth = overflow.MaxWidth();
+        }
+        saved.itemWidth = wrapGrid.ItemWidth();
+        saved.itemHeight = wrapGrid.ItemHeight();
+        saved.maxRowsOrColumns = wrapGrid.MaximumRowsOrColumns();
+        saved.orientation = wrapGrid.Orientation();
+        saved.hasWrapGrid = true;
+        state.savedLayout = saved;
+    }
+
+    double width = g_settings.listWidth;
+    if (itemsControl.Width() != width) {
+        itemsControl.Width(width);
+    }
+    if (overflow) {
+        if (overflow.MaxWidth() < width + 40) {
+            overflow.MaxWidth(width + 40);
+        }
+        if (overflow.Width() < width) {
+            overflow.Width(width + 20);
+        }
+    }
+    if (wrapGrid.Orientation() != Controls::Orientation::Horizontal) {
+        wrapGrid.Orientation(Controls::Orientation::Horizontal);
+    }
+    if (wrapGrid.MaximumRowsOrColumns() != 1) {
+        wrapGrid.MaximumRowsOrColumns(1);
+    }
+    if (wrapGrid.ItemWidth() != width) {
+        wrapGrid.ItemWidth(width);
+    }
+    if (wrapGrid.ItemHeight() != kListRowHeight) {
+        wrapGrid.ItemHeight(kListRowHeight);
+    }
+}
+
 void Rebuild(OverflowState& state, bool opening) {
     if (state.rebuilding || state.detaching || state.itemsSourceOverridden ||
         g_unloading || !state.displayed) {
@@ -908,15 +1599,22 @@ void Rebuild(OverflowState& state, bool opening) {
         }
 
         const auto& folders = g_settings.folders;
+        if (state.picking && state.openFolder < 0) {
+            state.picking = false;
+        }
+        ApplyLayout(state);
+        bool listLayout = UseListLayout(state);
         double tileWidth;
         double tileHeight;
         GetItemSize(state, &tileWidth, &tileHeight);
         if (state.folderTiles.size() != folders.size() ||
-            state.tileWidth != tileWidth || state.tileHeight != tileHeight) {
+            state.tileWidth != tileWidth || state.tileHeight != tileHeight ||
+            state.tileList != listLayout) {
             ClearTiles(state);
             state.folderTiles.resize(folders.size());
             state.tileWidth = tileWidth;
             state.tileHeight = tileHeight;
+            state.tileList = listLayout;
         }
 
         bool logIcons = opening || state.iconCache.empty();
@@ -942,8 +1640,18 @@ void Rebuild(OverflowState& state, bool opening) {
                 info->lowerToolTip = ToLower(info->toolTip);
                 info->lowerName = ToLower(info->name);
             }
+            std::wstring iconKey = IconKey(*info);
             info->folder = FindFolderForIcon(
+                iconKey,
                 {info->lowerAppName, info->lowerToolTip, info->lowerName});
+            info->fromPick =
+                info->folder >= 0 &&
+                std::any_of(g_settings.picks.begin(), g_settings.picks.end(),
+                            [&](Pick const& pick) {
+                                return pick.iconKey == iconKey &&
+                                       pick.folderKey ==
+                                           folders[info->folder].key;
+                            });
             iconCache.emplace(key, info);
             icons.push_back(std::move(info));
         }
@@ -976,15 +1684,38 @@ void Rebuild(OverflowState& state, bool opening) {
         if (state.openFolder >= 0) {
             Tile& backTile = EnsureBackTile(state);
             const auto& folder = folders[state.openFolder];
+            std::wstring backName = state.picking ? L"Done" : L"Back";
+            SetTileLabel(backTile, backName);
             Automation::AutomationProperties::SetName(backTile.button,
-                                                      L"Back");
+                                                      backName);
             Controls::ToolTipService::SetToolTip(
-                backTile.button, winrt::box_value(L"Back (" + folder.name + L")"));
+                backTile.button,
+                winrt::box_value(backName + L" (" + folder.name + L")"));
             items.push_back(backTile.button);
-            for (const auto& icon : icons) {
-                if (icon->folder == state.openFolder) {
-                    items.push_back(icon->viewModel);
+            state.pickerIcons.clear();
+            if (state.picking) {
+                for (const auto& icon : icons) {
+                    if (IconKey(*icon).empty()) {
+                        continue;
+                    }
+                    size_t index = state.pickerIcons.size();
+                    state.pickerIcons.push_back(icon);
+                    Tile& tile = EnsurePickerTile(state, index);
+                    UpdatePickerTile(
+                        tile, *icon, icon->folder == state.openFolder,
+                        icon->folder == state.openFolder && !icon->fromPick,
+                        icon->folder >= 0 && icon->folder != state.openFolder
+                            ? folders[icon->folder].name
+                            : std::wstring());
+                    items.push_back(tile.button);
                 }
+            } else {
+                for (const auto& icon : icons) {
+                    if (icon->folder == state.openFolder) {
+                        items.push_back(icon->viewModel);
+                    }
+                }
+                items.push_back(EnsureAddTile(state).button);
             }
         } else {
             std::vector<wf::IInspectable> folderItems;
@@ -1058,9 +1789,58 @@ void FocusFirstItem(OverflowState& state) {
     }
 }
 
+void StartPicking(OverflowState& state) {
+    Wh_Log(L"Picking icons for folder %d", state.openFolder);
+    state.picking = true;
+    Rebuild(state);
+    FocusFirstItem(state);
+}
+
+void StopPicking(OverflowState& state) {
+    Wh_Log(L"Done picking");
+    state.picking = false;
+    Rebuild(state);
+    if (auto itemsControl = state.itemsControl.get()) {
+        itemsControl.UpdateLayout();
+    }
+    if (auto button = state.addTile.button) {
+        button.Focus(FocusState::Programmatic);
+    }
+}
+
+void TogglePick(OverflowState& state, size_t index) {
+    int folder = state.openFolder;
+    if (!state.picking || folder < 0 || folder >= (int)g_settings.folders.size() ||
+        index >= state.pickerIcons.size()) {
+        return;
+    }
+    const auto& info = *state.pickerIcons[index];
+    std::wstring key = IconKey(info);
+    const std::wstring& folderKey = g_settings.folders[folder].key;
+    auto& picks = g_settings.picks;
+    auto it = std::find_if(picks.begin(), picks.end(), [&](Pick const& pick) {
+        return pick.iconKey == key;
+    });
+    if (it != picks.end()) {
+        if (it->folderKey == folderKey) {
+            picks.erase(it);
+        } else {
+            it->folderKey = folderKey;
+        }
+    } else if (info.folder != folder) {
+        picks.push_back({folderKey, key});
+    } else {
+        return;
+    }
+    Wh_Log(L"Pick changed for \"%s\", folder %d", key.c_str(), folder);
+    SavePicks(picks);
+    Rebuild(state);
+}
+
 void OpenFolder(OverflowState& state, int folder) {
     Wh_Log(L"Opening folder %d", folder);
     state.openFolder = folder;
+    state.picking = false;
     Rebuild(state);
     FocusFirstItem(state);
 }
@@ -1069,6 +1849,7 @@ void CloseFolder(OverflowState& state) {
     Wh_Log(L"Closing folder %d", state.openFolder);
     int previous = state.openFolder;
     state.openFolder = -1;
+    state.picking = false;
     Rebuild(state);
 
     if (previous >= 0 && previous < (int)state.folderTiles.size()) {
@@ -1223,6 +2004,8 @@ void Detach(OverflowState& state) {
     }
     ClearTiles(state);
     state.openFolder = -1;
+    state.picking = false;
+    step([&] { RestoreLayout(state); });
 
     // Try to give the shell its own list back before reporting any failure. If
     // the original value can't be put back, fall back to the shell's current
@@ -1302,6 +2085,9 @@ void Detach(OverflowState& state) {
     state.iconCache.clear();
     state.tileWidth = 0;
     state.tileHeight = 0;
+    state.tileList = false;
+    state.layoutUpdatedToken = {};
+    state.savedLayout.reset();
 
     if (error) {
         std::rethrow_exception(error);
@@ -1348,9 +2134,8 @@ std::shared_ptr<OverflowState> EnsureAttached(
     }
 
     overflow.ApplyTemplate();
-    auto itemsControl =
-        FindDescendantByName(overflow, L"OverflowItemsControl")
-            .try_as<Controls::ItemsControl>();
+    overflow.UpdateLayout();
+    auto itemsControl = FindOverflowItemsControl(overflow);
     if (state && state->attached && state->overflow.get() == overflow &&
         itemsControl && state->itemsControl.get() == itemsControl) {
         return state;
@@ -1387,9 +2172,7 @@ std::shared_ptr<OverflowState> EnsureAttached(
                         if (state->overflow.get() != overflow) {
                             return;
                         }
-                        auto itemsControl =
-                            FindDescendantByName(overflow, L"OverflowItemsControl")
-                                .try_as<Controls::ItemsControl>();
+                        auto itemsControl = FindOverflowItemsControl(overflow);
                         if (itemsControl) {
                             Attach(*state, overflow, itemsControl);
                         } else {
@@ -1419,6 +2202,8 @@ void ApplyPendingSettings() {
         return;
     }
 
+    bool layoutChanged = g_settings.listView != settings->listView ||
+                         g_settings.listWidth != settings->listWidth;
     g_settings = std::move(*settings);
     auto states = *g_states;
     for (auto& state : states) {
@@ -1431,6 +2216,12 @@ void ApplyPendingSettings() {
                 Detach(*state);
             } else if (state->attached) {
                 state->openFolder = -1;
+                state->picking = false;
+                if (layoutChanged) {
+                    // Make the shell create fresh icon containers.
+                    RestoreLayout(*state);
+                    SetDisplayedItems(*state, {});
+                }
                 Rebuild(*state);
             }
         } catch (...) {
@@ -1519,6 +2310,7 @@ void WINAPI NotificationAreaOverflow_Measure_Hook(
             if (auto state = EnsureAttached(manager, overflow)) {
                 // Always open at the top level, and pick up renamed icons.
                 state->openFolder = -1;
+                state->picking = false;
                 Rebuild(*state, /*opening=*/true);
                 RefreshTileSize(*state);
             }
