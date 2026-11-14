@@ -43,7 +43,7 @@ Available in English, Português, Español, Français, Deutsch, Italiano and 中
 - Keyboard layout (when there is more than one), emoji, on-screen keyboard
 - **Battery** (percentage, charging, time remaining), **Wi-Fi** (current network, available and known networks), **Bluetooth** and **Sound** (scroll on the icon to change the volume, right-click to mute, switch output and input)
 - **Now Playing**: the song name scrolls across the bar when it doesn't fit; the panel has a large-cover, compact or full-cover layout (the cover fills the panel, with glass buttons on top) and a progress bar drawn as a line, a colored line or a wave
-- **Focus** (when Do Not Disturb is on), **Search** (Windows Search or Siri Plus Launchpad), **microphone and camera** (the icons turn orange and green while an app uses them, as on the Mac; click to see which apps use them and mute the microphone), **Weather** (Open-Meteo, MET Norway or wttr.in, no account needed) and the **Notifications** button
+- **Focus** (when Do Not Disturb is on), **Search** (Windows Search or Siri Plus Launchpad), **microphone and camera** (the icons turn orange and green while an app uses them, as on the Mac; click to see which apps use them and mute the microphone), **Weather** (Open-Meteo, MET Norway or wttr.in, no account needed; the widget is colored, liquid glass or plain glass, and its animations can be turned off) and the **Notifications** button
 - **Clock**: the calendar and your agenda from your own .ics files, imported right from the settings window. Date and time formats are configurable
 - An arrow collapses the icons that don't fit; each icon can be turned on or off in the settings
 
@@ -709,7 +709,7 @@ static void LoadSettings() {
             // Também o vidro, a ordem dos ícones, o vidro desta janela e as opções
             // da previsão. Ficam: o lugar da previsão, os calendários importados e
             // os blocos da Central (são dados do usuário, não aparência).
-            for (PCWSTR k : {L"glass", L"settingsLook", L"barOrder", L"weatherGlass", L"weatherOpts", L"weatherStyle"})
+            for (PCWSTR k : {L"glass", L"settingsLook", L"barOrder", L"weatherGlass", L"weatherOpts", L"weatherStyle", L"weatherAnim"})
                 Wh_SetStringValue(k, L"");
             Wh_SetIntValue(L"resetDone", 1);
             Wh_Log(L"Ajustes da barra restaurados ao padrão");
@@ -12345,7 +12345,7 @@ enum BsVal {
     BV_NOW, BV_FOCUS, BV_SEARCH, BV_PRIV, BV_MORE, BV_ISLAND, BV_KBDNAV, BV_USB, BV_DLDONE, BV_CLIP, BV_SHOT,
     BV_ISLFOCUS, BV_ISLCAPS, BV_ISLBATT, BV_ISLBT, BV_ISLAUDIO, BV_ISLHIST, BV_ISLSTYLE, BV_ISLSIZE, BV_ISLDUR, BV_ISLIN, BV_ISLOUT,
     BV_ISLPOS, BV_ISLTEST, BV_ISLCLEAR, BV_NPLAYOUT, BV_NPSIZE, BV_WINNOTIF, BV_WINONLY, BV_ISLHISTNOT,
-    BV_WXPROV, BV_WXUNIT, BV_WXLOOK, BV_WXGLASS, BV_WXINT, BV_WXTEMP, BV_WXPLACE, BV_WXNOW, BV_WXRESULT,
+    BV_WXPROV, BV_WXUNIT, BV_WXLOOK, BV_WXANIM, BV_WXGLASS, BV_WXINT, BV_WXTEMP, BV_WXPLACE, BV_WXNOW, BV_WXRESULT,
     BV_BATTPCT, BV_AUTOHIDE, BV_HIDEFS, BV_ALLMON, BV_FLYOUTS, BV_OSD, BV_DIM,
     BV_G_TRANSP, BV_G_CLEAR, BV_G_LIQUID, BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_ICONS, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_SELMENU, BV_UPDATES,
     BV_G_TINT, BV_SEARCHTGT, BV_LANG, BV_NPBAR, BV_ICSADD, BV_ICSCLEAR,
@@ -12459,6 +12459,7 @@ static const BsRowDef kBsRows[] = {
     {BR_ACTION, BV_WXNOW, L"Atualizar agora", 0, 0},
     {BR_GROUP, BV_NONE, L"Widget", 0, 0},
     {BR_CHOICE, BV_WXLOOK, L"Aparência do widget", 0, 0},
+    {BR_SWITCH, BV_WXANIM, L"Animações do tempo", 0, 0, L"Chuva, neve, nuvens, raios e ícones animados no widget"},
     {BR_SLIDER, BV_WXGLASS, L"Transparência do widget de vidro", 0, 0},
     {BR_NOTE, BV_NONE,
      L"Open-Meteo: 7 dias, por hora. MET Norway (Yr): 7 dias, do instituto meteorológico norueguês. wttr.in: 3 dias, de 3 em 3 horas.", 0, 0},
@@ -12692,7 +12693,7 @@ static int BsGet(int val) {
         case BV_NPSIZE: return std::clamp((g_settings.npSize - 240) * 100 / 200, 0, 100);
         case BV_ISLOUT: return g_settings.islOut;
         case BV_ISLPOS: return g_settings.islPos;
-        case BV_WXPROV: case BV_WXUNIT: case BV_WXLOOK: case BV_WXGLASS: case BV_WXINT: case BV_WXTEMP:
+        case BV_WXPROV: case BV_WXUNIT: case BV_WXLOOK: case BV_WXANIM: case BV_WXGLASS: case BV_WXINT: case BV_WXTEMP:
             return WxSettingGet(val);
         case BV_SELBAR: return g_settings.selBar;
         case BV_SELMENU: return g_settings.selMenu;
@@ -12804,7 +12805,7 @@ static void BsSet(int val, int v) {
             g_settings.islPos = v == 1 ? 1 : 0;
             OvrSetStr(L"islPos", g_settings.islPos ? L"right" : L"center");
             return;
-        case BV_WXPROV: case BV_WXUNIT: case BV_WXLOOK: case BV_WXGLASS: case BV_WXINT: case BV_WXTEMP:
+        case BV_WXPROV: case BV_WXUNIT: case BV_WXLOOK: case BV_WXANIM: case BV_WXGLASS: case BV_WXINT: case BV_WXTEMP:
             WxSettingSet(val, v);
             return;
     }
@@ -13248,7 +13249,7 @@ static const PCWSTR kBsNpLayout[] = {L"Capa grande", L"Compacto", L"Capa inteira
 static const PCWSTR kBsWxProv[] = {L"Open-Meteo", L"MET Norway", L"wttr.in"};
 static const PCWSTR kBsWxUnit[] = {L"°C", L"°F"};
 static const PCWSTR kBsWxInt[] = {L"10 min", L"20 min", L"1 hora"};
-static const PCWSTR kBsWxLook[] = {L"Colorido", L"Vidro líquido"};
+static const PCWSTR kBsWxLook[] = {L"Colorido", L"Vidro líquido", L"Vidro"};
 static const PCWSTR kBsSearchTgt[] = {L"Pesquisa do Windows", L"Siri Plus"};
 static const PCWSTR kBsNpBar[] = {L"Linha", L"Linha colorida", L"Onda"};
 static const PCWSTR kBsLang[] = {L"Automático (Windows)", L"Português", L"English", L"Español",
@@ -13297,7 +13298,7 @@ static const PCWSTR* BsChoiceLabels(int val) {
 }
 static int BsChoiceCount(int val) {
     switch (val) {
-        case BV_ISLPOS: case BV_ISLSTYLE: case BV_WXUNIT: case BV_WXLOOK: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: return 2;
+        case BV_ISLPOS: case BV_ISLSTYLE: case BV_WXUNIT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: return 2;
         case BV_BARSTYLE: return 5;
         case BV_LANG: return (int)ARRAYSIZE(kBsLang);
         case BV_ISLIN: return 4;
@@ -14896,7 +14897,9 @@ struct WxData {
 };
 
 struct WxState {
-    bool colored = true;  // widget colorido (azul do tempo) ou de vidro líquido
+    bool colored = true;  // widget colorido (azul do tempo) ou de vidro
+    bool plain = false;   // vidro: o normal (desfoque) em vez do vidro líquido
+    bool anim = true;     // chuva, nuvens, sol e ícones animados
     bool hasPlace = false;
     std::wstring label;
     double lat = 0, lon = 0;
@@ -14938,9 +14941,13 @@ static void WxLoad() {
             g_wx.showTemp = tp != 0;
         }
     }
-    wchar_t st[8] = L"";
+    wchar_t st[12] = L"";
     Wh_GetStringValue(L"weatherStyle", st, ARRAYSIZE(st));
-    g_wx.colored = wcscmp(st, L"glass") != 0;
+    g_wx.colored = wcscmp(st, L"glass") != 0 && wcscmp(st, L"plain") != 0;
+    g_wx.plain = wcscmp(st, L"plain") == 0;
+    wchar_t an[4] = L"";
+    Wh_GetStringValue(L"weatherAnim", an, ARRAYSIZE(an));
+    g_wx.anim = an[0] != L'0';
     wchar_t gt[16] = L"";
     Wh_GetStringValue(L"weatherGlass", gt, ARRAYSIZE(gt));
     if (gt[0]) g_wxGlassT = std::clamp(_wtoi(gt), 0, 100);
@@ -15847,7 +15854,8 @@ static void WxRender() {
     ID2D1SolidColorBrush* br = g_wxw.brush;
     const D2D1_RECT_F& P = g_wxw.panel;
     float radius = 28 * s;
-    float t = (float)((GetTickCount64() % 3600000ULL) / 1000.0);
+    // Sem animações: o tempo para (ícones parados) e o fundo fica sem chuva e nuvens.
+    float t = g_wx.anim ? (float)((GetTickCount64() % 3600000ULL) / 1000.0) : 0.0f;
     D2D1_COLOR_F white = D2D1::ColorF(1, 1, 1, 0.98f), dim = D2D1::ColorF(1, 1, 1, 0.62f);
     auto text = [&](const std::wstring& src, IDWriteTextFormat* f, D2D1_RECT_F r, D2D1_COLOR_F c) {
         std::wstring str = T(src);
@@ -15875,7 +15883,7 @@ static void WxRender() {
     if (SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(P, radius, radius), &clip)) &&
         SUCCEEDED(rt->CreateLayer(&clipLayer))) {
         rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip), clipLayer);
-        if (!g_wxw.search) WxEffects(rt, br, P, s, t);
+        if (!g_wxw.search && g_wx.anim) WxEffects(rt, br, P, s, t);
         rt->PopLayer();
     }
     SafeRelease(clipLayer);
@@ -16108,7 +16116,8 @@ static void WxOptionsMenu(int x, int y, bool alignRight, UINT dpi) {
     AddSep(m);
     AddHeader(m, L"Aparência do widget");
     AddItem(m, 6, L"Colorido", g_wx.colored, false, true);
-    AddItem(m, 7, L"Vidro líquido (experimental)", !g_wx.colored, false, true);
+    AddItem(m, 7, L"Vidro líquido (experimental)", !g_wx.colored && !g_wx.plain, false, true);
+    AddItem(m, 8, L"Vidro", g_wx.plain, false, true);
     if (!g_wx.colored) {
         AddHeader(m, L"Transparência do vidro");
         AddItem(m, ID_SLIDER_WXGLASS, L"\x02" L"transparencia");
@@ -16151,8 +16160,10 @@ static void WxOptionsMenu(int x, int y, bool alignRight, UINT dpi) {
             break;
         case 6:
         case 7:
+        case 8:
             g_wx.colored = cmd == 6;
-            Wh_SetStringValue(L"weatherStyle", g_wx.colored ? L"color" : L"glass");
+            g_wx.plain = cmd == 8;
+            Wh_SetStringValue(L"weatherStyle", g_wx.colored ? L"color" : g_wx.plain ? L"plain" : L"glass");
             if (g_wxw.hwnd) {
                 // Reabre para trocar o vidro (a foto do vidro líquido é tirada ao abrir).
                 Bar* b = g_wxw.bar;
@@ -16179,6 +16190,8 @@ static LRESULT CALLBACK WxWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (!g_wxw.menuOpen) DestroyWindow(hwnd);
             return 0;
         case WM_TIMER:
+            // Sem animações, depois de abrir não há o que redesenhar (só na busca).
+            if (!g_wx.anim && !g_wxw.search && GetTickCount64() - g_wxw.openTick > 600) return 0;
             WxRender();
             return 0;
         case WM_KEYDOWN:
@@ -16337,7 +16350,8 @@ static void WxOpen(Bar* b, int idx, bool search) {
         return;
     }
     // Estilo vidro: vidro líquido (experimental) sempre. Colorido: o desfoque comum basta.
-    if (GlassLayerCreate(g_wxw.glass, g_wxw.pos, g_wxw.W, g_wxw.H, true, !g_wx.colored)) {
+    // Vidro normal: o desfoque do Windows, sem a refração do vidro líquido.
+    if (GlassLayerCreate(g_wxw.glass, g_wxw.pos, g_wxw.W, g_wxw.H, !g_wx.plain, !g_wx.colored && !g_wx.plain)) {
         GlassLayerShapes(g_wxw.glass, {{g_wxw.panel, 28 * g_wxw.s}});
         GlassLayerOpacity(g_wxw.glass, 1.0f);
     }
@@ -16402,7 +16416,8 @@ static int WxSettingGet(int val) {
     switch (val) {
         case BV_WXPROV: return g_wx.provider;
         case BV_WXUNIT: return g_wx.fahrenheit ? 1 : 0;
-        case BV_WXLOOK: return g_wx.colored ? 0 : 1;
+        case BV_WXLOOK: return g_wx.colored ? 0 : g_wx.plain ? 2 : 1;
+        case BV_WXANIM: return g_wx.anim ? 1 : 0;
         case BV_WXGLASS: return g_wxGlassT;
         case BV_WXINT: return g_wx.interval;
         case BV_WXTEMP: return g_wx.showTemp ? 1 : 0;
@@ -16423,9 +16438,14 @@ static void WxSettingSet(int val, int v) {
             g_wx.fahrenheit = v == 1;
             WxSave();
             break;
+        case BV_WXANIM:
+            g_wx.anim = v != 0;
+            Wh_SetStringValue(L"weatherAnim", g_wx.anim ? L"1" : L"0");
+            break;
         case BV_WXLOOK:
             g_wx.colored = v == 0;
-            Wh_SetStringValue(L"weatherStyle", g_wx.colored ? L"color" : L"glass");
+            g_wx.plain = v == 2;
+            Wh_SetStringValue(L"weatherStyle", g_wx.colored ? L"color" : g_wx.plain ? L"plain" : L"glass");
             if (g_wxw.hwnd) {
                 Bar* b = g_wxw.bar;
                 int idx = g_wxw.barIdx;
@@ -24436,6 +24456,8 @@ const UiTr kUiTr[] = {
     {L"Ao encostar o mouse no topo", L"When the pointer touches the top", L"Al tocar la parte superior con el puntero", L"Quand le pointeur touche le haut", L"Wenn der Mauszeiger oben anstößt", L"Quando il puntatore tocca il bordo superiore", L"鼠标碰到顶部时"},
     {L"Com a alça (clique)", L"With the handle (click)", L"Con la asa (clic)", L"Avec la poignée (clic)", L"Mit dem Griff (Klick)", L"Con la maniglia (clic)", L"使用拉手（点击）"},
     {L"Cor da janela", L"Window color", L"Color de la ventana", L"Couleur de la fenêtre", L"Fensterfarbe", L"Colore della finestra", L"窗口颜色"},
+    {L"Animações do tempo", L"Weather animations", L"Animaciones del tiempo", L"Animations météo", L"Wetteranimationen", L"Animazioni meteo", L"天气动画"},
+    {L"Chuva, neve, nuvens, raios e ícones animados no widget", L"Rain, snow, clouds, lightning and animated icons in the widget", L"Lluvia, nieve, nubes, rayos e iconos animados en el widget", L"Pluie, neige, nuages, éclairs et icônes animées dans le widget", L"Regen, Schnee, Wolken, Blitze und animierte Symbole im Widget", L"Pioggia, neve, nuvole, fulmini e icone animate nel widget", L"小组件中的雨、雪、云、闪电和动画图标"},
     {L"Discos", L"Disks", L"Discos", L"Disques", L"Laufwerke", L"Dischi", L"磁盘"},
     {L"Clique para ver os discos e quanto cada um está cheio", L"Click to see the disks and how full each one is", L"Haz clic para ver los discos y cuánto está lleno cada uno", L"Cliquez pour voir les disques et leur remplissage", L"Klicken, um die Laufwerke und ihre Belegung zu sehen", L"Fai clic per vedere i dischi e quanto è pieno ciascuno", L"点击查看磁盘及其使用量"},
     {L"Discos: o do sistema está %s% cheio", L"Disks: the system disk is %s% full", L"Discos: el del sistema está al %s%", L"Disques : le disque système est plein à %s %", L"Laufwerke: Systemlaufwerk zu %s% voll", L"Dischi: quello di sistema è pieno al %s%", L"磁盘：系统磁盘已用 %s%"},
