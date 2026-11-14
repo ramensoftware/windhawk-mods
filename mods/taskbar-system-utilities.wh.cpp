@@ -16,8 +16,9 @@
 /*
 # Taskbar System Utilities & Custom Items
 
-System utilities and custom launch items integrated natively into the Windows 11
-Taskbar XAML context menu with **native XAML flyout cards**, for built-in tools, and fully customizable user shortcuts.
+System utilities with **native XAML result cards** and **zero UAC prompts**,
+plus your own customizable launch items, integrated natively into the Windows 11
+Taskbar XAML context menu.
 
 ![Taskbar System Utilities Screenshot](https://i.imgur.com/kOz6nZ9.gif)
 
@@ -216,20 +217,20 @@ taskbar right-click menu:
     - hideWindow: false
   $name: Custom Menu Items
   $description: "Add your own custom items to the taskbar right-click menu: programs, folders, scripts, URLs and settings pages."
-- placement: bottom
+- customPlacement: bottom
   $name: Custom items placement
   $description: Where the custom items appear in the taskbar context menu.
   $options:
   - bottom: Below built-in items
   - top: Above built-in items
   - submenu: Inside System Utilities submenu
-- separator: true
+- customSeparator: true
   $name: Custom items separator line
   $description: Draw a separator line between the custom items and adjacent menu items.
-- submenuName: ""
+- customSubmenuName: ""
   $name: Custom items submenu name
   $description: If set, custom items are grouped into a dedicated submenu with this name instead of being listed directly in the menu.
-- submenuIcon: E71D
+- customSubmenuIcon: E71D
   $name: Custom items submenu icon
   $description: "Optional hex code of a Segoe Fluent Icons glyph (e.g. E71D) or a single character/emoji for the custom items submenu."
 */
@@ -263,7 +264,6 @@ taskbar right-click menu:
 #include <atomic>
 #include <cctype>
 #include <cwchar>
-#include <cwctype>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -530,6 +530,13 @@ bool IsHexDigit(wchar_t ch) {
 // Accepts hex code points ("E756", "0xE756", "U+E756", "\uE756", "\xE756")
 // as well as literal characters or emojis.
 std::wstring GlyphFromIconSetting(const std::wstring& icon, bool* isCodePoint) {
+    // Treat a single Private Use Area character (U+E000..U+F8FF) pasted directly
+    // as a Segoe Fluent Icons / MDL2 glyph.
+    if (icon.size() == 1 && icon[0] >= 0xE000 && icon[0] <= 0xF8FF) {
+        *isCodePoint = true;
+        return icon;
+    }
+
     *isCodePoint = false;
 
     std::wstring_view hex = icon;
@@ -1805,6 +1812,22 @@ std::vector<wuxc::MenuFlyoutItemBase> CreateUtilityElements(
     std::vector<wuxc::MenuFlyoutItemBase> utilityElements;
     wuxc::MenuFlyoutSubItem subItem{nullptr};
 
+    auto ensureSubmenu = [&]() {
+        if (!subItem) {
+            subItem = wuxc::MenuFlyoutSubItem();
+            subItem.Name(kInjectedElementName);
+            subItem.Text(cfg.textSubmenu);
+            if (!cfg.glyphSubmenu.empty()) {
+                subItem.Icon(CreateIconFromSetting(cfg.glyphSubmenu, 16.0));
+            }
+
+            InjectedElement trackedSub;
+            trackedSub.element =
+                winrt::make_weak<wuxc::MenuFlyoutItemBase>(subItem);
+            TrackInjectedElement(std::move(trackedSub));
+        }
+    };
+
     const MenuItemSpec specs[] = {
         {cfg.showRestartExplorer, cfg.inSubmenuRestartExplorer,
          cfg.textRestartExplorer, L"\xE72C", &OnRestartExplorerClick},
@@ -1840,46 +1863,21 @@ std::vector<wuxc::MenuFlyoutItemBase> CreateUtilityElements(
         TrackInjectedElement(std::move(tracked));
 
         if (cfg.enableSubmenu && spec.inSubmenu) {
-            if (!subItem) {
-                subItem = wuxc::MenuFlyoutSubItem();
-                subItem.Name(kInjectedElementName);
-                subItem.Text(cfg.textSubmenu);
-                if (!cfg.glyphSubmenu.empty()) {
-                    subItem.Icon(CreateIconFromSetting(cfg.glyphSubmenu, 16.0));
-                }
-
-                InjectedElement trackedSub;
-                trackedSub.element =
-                    winrt::make_weak<wuxc::MenuFlyoutItemBase>(subItem);
-                TrackInjectedElement(std::move(trackedSub));
-            }
+            ensureSubmenu();
             subItem.Items().Append(menuItem);
         } else {
             utilityElements.push_back(menuItem);
         }
     }
 
-    // If custom items are configured to appear inside the System Utilities
-    // group:
+    // If custom items are configured to appear inside the System Utilities group:
     if (cfg.customPlacement == CustomPlacement::Submenu &&
         !cfg.customItems.empty()) {
         auto customElements = CreateCustomElements(
             cfg.customItems, cfg.customSubmenuName, cfg.customSubmenuIcon);
 
         if (cfg.enableSubmenu) {
-            if (!subItem) {
-                subItem = wuxc::MenuFlyoutSubItem();
-                subItem.Name(kInjectedElementName);
-                subItem.Text(cfg.textSubmenu);
-                if (!cfg.glyphSubmenu.empty()) {
-                    subItem.Icon(CreateIconFromSetting(cfg.glyphSubmenu, 16.0));
-                }
-
-                InjectedElement trackedSub;
-                trackedSub.element =
-                    winrt::make_weak<wuxc::MenuFlyoutItemBase>(subItem);
-                TrackInjectedElement(std::move(trackedSub));
-            }
+            ensureSubmenu();
 
             if (subItem.Items().Size() > 0 && cfg.customSeparator) {
                 subItem.Items().Append(CreateSeparator());
@@ -2276,7 +2274,7 @@ void LoadSettings() {
     }
 
     // 10. Custom items placement, separator, and submenu settings
-    std::wstring placementStr = GetStringSetting(L"placement");
+    std::wstring placementStr = GetStringSetting(L"customPlacement");
     if (placementStr == L"top") {
         fresh->customPlacement = CustomPlacement::Top;
     } else if (placementStr == L"submenu") {
@@ -2285,9 +2283,9 @@ void LoadSettings() {
         fresh->customPlacement = CustomPlacement::Bottom;
     }
 
-    fresh->customSeparator = Wh_GetIntSetting(L"separator") != 0;
-    fresh->customSubmenuName = GetStringSetting(L"submenuName");
-    fresh->customSubmenuIcon = GetStringSetting(L"submenuIcon");
+    fresh->customSeparator = Wh_GetIntSetting(L"customSeparator") != 0;
+    fresh->customSubmenuName = GetStringSetting(L"customSubmenuName");
+    fresh->customSubmenuIcon = GetStringSetting(L"customSubmenuIcon");
 
     Wh_Log(L"Loaded settings: %zu custom item(s)", fresh->customItems.size());
 
