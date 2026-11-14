@@ -30,12 +30,6 @@ break terminal buffer calculations, leading to hallucinations or logic errors.
 // clang-format off
 // ==WindhawkModSettings==
 /*
-- injectAll: false
-  $name: Inject into All Processes
-  $description: "[NOT RECOMMENDED] Injects into every process, which may cause legacy or GUI apps to crash. Default is false."
-- targetRegex: "cmd|powershell|pwsh|WindowsTerminal|OpenConsole|conhost|git|bash|mintty|py|node"
-  $name: Target Processes Regex
-  $description: "Simple wildcards only (e.g., 'cmd|git*|python'). No complex regex like [] or +. Do NOT include .exe."
 - alwaysOn: false
   $name: Always On
   $description: "Enable rainbow immediately. [WARNING: DO NOT use with AI Agents.]"
@@ -44,122 +38,19 @@ break terminal buffer calculations, leading to hallucinations or logic errors.
 // clang-format on
 
 #include <windows.h>
+#include <windhawk_utils.h>
 
-#define MAX_RC_BUF 65536
+typedef BOOL(
+    WINAPI* WriteConsoleW_t)(HANDLE, const VOID*, DWORD, LPDWORD, LPVOID);
+WriteConsoleW_t pOrigWriteConsoleW = nullptr;
 
-static BOOL(WINAPI* pOrigWriteConsoleW)(HANDLE,
-                                        const VOID*,
-                                        DWORD,
-                                        LPDWORD,
-                                        LPVOID) = NULL;
-static BOOL(WINAPI* pOrigWriteFile)(HANDLE, LPCVOID, DWORD, LPDWORD, void*) =
-    NULL;
+typedef BOOL(
+    WINAPI* WriteFile_t)(HANDLE, LPCVOID, DWORD, LPDWORD, LPOVERLAPPED);
+WriteFile_t pOrigWriteFile = nullptr;
 
 static CRITICAL_SECTION rc_cs;
 static int rc_colorIndex = 0;
 static BOOL rc_active = FALSE;
-
-static BOOL rc_WildcardMatch(const WCHAR* str, const WCHAR* pattern) {
-    if (*pattern == L'\0')
-        return *str == L'\0';
-    if (*pattern == L'*') {
-        while (*(pattern + 1) == L'*')
-            pattern++;
-        if (rc_WildcardMatch(str, pattern + 1))
-            return TRUE;
-        if (*str == L'\0')
-            return FALSE;
-        return rc_WildcardMatch(str + 1, pattern);
-    }
-    if (*pattern == L'?') {
-        if (*str == L'\0')
-            return FALSE;
-        return rc_WildcardMatch(str + 1, pattern + 1);
-    }
-    if (*str != L'\0' && towlower(*str) == towlower(*pattern)) {
-        return rc_WildcardMatch(str + 1, pattern + 1);
-    }
-    return FALSE;
-}
-
-static BOOL rc_IsTargetProcess() {
-    BOOL injectAll = Wh_GetIntSetting(L"injectAll") != 0;
-    if (injectAll) {
-        Wh_Log(
-            L"[RainbowConsole] Global Injection enabled. Targeting ALL "
-            L"processes.");
-        return TRUE;
-    }
-
-    PCWSTR regexStr = Wh_GetStringSetting(L"targetRegex");
-    if (!regexStr || wcslen(regexStr) == 0) {
-        Wh_Log(
-            L"[RainbowConsole] Error: Target Regex is empty and Global "
-            L"Injection is false. Mod will not load.");
-        if (regexStr)
-            Wh_FreeStringSetting(regexStr);
-        return FALSE;
-    }
-
-    BOOL hasInvalidFormat = FALSE;
-    for (int i = 0; regexStr[i] != L'\0'; i++) {
-        WCHAR c = regexStr[i];
-        if (c == L'[' || c == L']' || c == L'+' || c == L'{' || c == L'}' ||
-            c == L'^' || c == L'$' || c == L'\\') {
-            Wh_Log(
-                L"[RainbowConsole] Warning: Unsupported regex character '%c' "
-                L"detected. Only '*' and '?' wildcards are supported.",
-                c);
-            hasInvalidFormat = TRUE;
-        }
-    }
-    if (hasInvalidFormat) {
-        Wh_Log(
-            L"[RainbowConsole] Format error! Please simplify your regex. "
-            L"Example: 'cmd|git*|python'");
-    }
-
-    WCHAR procPath[MAX_PATH];
-    GetModuleFileNameW(NULL, procPath, MAX_PATH);
-    WCHAR* procName = wcsrchr(procPath, L'\\');
-    if (procName)
-        procName++;
-    else
-        procName = procPath;
-
-    WCHAR* dot = wcsrchr(procName, L'.');
-    if (dot && _wcsicmp(dot, L".exe") == 0)
-        *dot = L'\0';
-
-    WCHAR targets[MAX_PATH * 4];
-    wcsncpy_s(targets, MAX_PATH * 4, regexStr, MAX_PATH * 4 - 1);
-    Wh_FreeStringSetting(regexStr);
-
-    BOOL found = FALSE;
-    WCHAR* nextToken = NULL;
-    WCHAR* token = wcstok_s(targets, L"|", &nextToken);
-    while (token) {
-        WCHAR* tDot = wcsrchr(token, L'.');
-        if (tDot && _wcsicmp(tDot, L".exe") == 0)
-            *tDot = L'\0';
-
-        if (rc_WildcardMatch(procName, token)) {
-            found = TRUE;
-            Wh_Log(
-                L"[RainbowConsole] Success: Process '%s' matched pattern '%s'. "
-                L"Mod loaded.",
-                procName, token);
-            break;
-        }
-        token = wcstok_s(NULL, L"|", &nextToken);
-    }
-
-    if (!found) {
-        Wh_Log(L"[RainbowConsole] Process '%s' did not match any Target Regex.",
-               procName);
-    }
-    return found;
-}
 
 static int rc_UIntToWStr(unsigned int val, WCHAR* buf) {
     if (val == 0) {
@@ -307,12 +198,12 @@ static void rc_MakeRainbow(const WCHAR* src, WCHAR* dst, int dstMax) {
 
 static BOOL WINAPI
 rc_HookWriteConsoleW(HANDLE h, const VOID* b, DWORD n, LPDWORD w, LPVOID r) {
-    if (!rc_active || n == 0 || n > (DWORD)INT_MAX)
+    if (!rc_active || n == 0 || n > (DWORD)INT_MAX) {
         return pOrigWriteConsoleW(h, b, n, w, r);
+    }
 
     EnterCriticalSection(&rc_cs);
 
-    // 堆分配，避免 64K 栈数组溢出；每个 WCHAR 最多膨胀约 24 个 WCHAR
     size_t need = (size_t)n * 24 + 64;
     if (need > (size_t)INT_MAX)
         need = (size_t)INT_MAX;
@@ -325,9 +216,7 @@ rc_HookWriteConsoleW(HANDLE h, const VOID* b, DWORD n, LPDWORD w, LPVOID r) {
         return pOrigWriteConsoleW(h, b, n, w, r);
     }
 
-    // 复制并始终保留终止符（修复 8192 字符把结束符挤掉的问题）
     wcsncpy_s(src, need, (const WCHAR*)b, n);
-
     rc_MakeRainbow(src, out, (int)need);
     DWORD outLen = (DWORD)wcslen(out);
     BOOL ret = pOrigWriteConsoleW(h, out, outLen, w, r);
@@ -341,9 +230,7 @@ rc_HookWriteConsoleW(HANDLE h, const VOID* b, DWORD n, LPDWORD w, LPVOID r) {
 }
 
 static BOOL WINAPI
-rc_HookWriteFile(HANDLE h, LPCVOID b, DWORD n, LPDWORD w, void* o) {
-    // 重叠 I/O：WriteFile 异步返回后系统仍会读取缓冲区，提前释放会导致驱动
-    // 读到脏数据（蓝屏/崩溃）。这类调用不 Hook，交给原函数处理。
+rc_HookWriteFile(HANDLE h, LPCVOID b, DWORD n, LPDWORD w, LPOVERLAPPED o) {
     if (o != NULL)
         return pOrigWriteFile(h, b, n, w, o);
     if (!rc_active || n == 0 || n > (DWORD)INT_MAX)
@@ -366,8 +253,9 @@ rc_HookWriteFile(HANDLE h, LPCVOID b, DWORD n, LPDWORD w, void* o) {
     }
 
     int wlen = MultiByteToWideChar(CP_UTF8, 0, (LPCCH)b, n, src, (int)n);
-    if (wlen <= 0)
+    if (wlen <= 0) {
         wlen = MultiByteToWideChar(CP_ACP, 0, (LPCCH)b, n, src, (int)n);
+    }
     if (wlen > 0) {
         src[wlen] = L'\0';
         rc_MakeRainbow(src, out, (int)need);
@@ -400,9 +288,6 @@ static void LoadSettings() {
 }
 
 BOOL Wh_ModInit() {
-    if (!rc_IsTargetProcess())
-        return FALSE;
-
     InitializeCriticalSection(&rc_cs);
     LoadSettings();
 
@@ -413,19 +298,18 @@ BOOL Wh_ModInit() {
         SetConsoleMode(hOut, mode);
     }
 
-    // 关键：kernel32.dll 的 WriteConsoleW/WriteFile 只是转发 stub，真正的实现在
-    // kernelbase.dll。现代程序（cmd.exe、C 运行时等）直接调用 kernelbase，所以
-    // 必须 Hook kernelbase.dll，否则在别人机器上不会生效。
     HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
     if (hKernelBase) {
         void* pWCW = (void*)GetProcAddress(hKernelBase, "WriteConsoleW");
         void* pWF = (void*)GetProcAddress(hKernelBase, "WriteFile");
-        if (pWCW)
+        if (pWCW) {
             Wh_SetFunctionHook(pWCW, (void*)rc_HookWriteConsoleW,
                                (void**)&pOrigWriteConsoleW);
-        if (pWF)
+        }
+        if (pWF) {
             Wh_SetFunctionHook(pWF, (void*)rc_HookWriteFile,
                                (void**)&pOrigWriteFile);
+        }
     }
 
     return TRUE;
@@ -434,6 +318,7 @@ BOOL Wh_ModInit() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
 }
+
 void Wh_ModUninit() {
     DeleteCriticalSection(&rc_cs);
 }
