@@ -2,7 +2,7 @@
 // @id              fluent-radial-menu
 // @name            Fluent Radial Menu
 // @description     Launch apps, files, folders, links, and shortcuts from a customizable radial menu on Windows 11.
-// @version         0.8.3
+// @version         0.8.4
 // @author          Fenryr
 // @github          https://github.com/soldier93HUN
 // @include         windhawk.exe
@@ -1384,19 +1384,24 @@ private:
             if (!resolved.empty() && (command || IsExecutablePath(resolved)))
                 target = std::move(resolved);
         }
-        if (!command && !IsExecutablePath(target) && UsesWow64FileRedirection()) {
+        if (!command && UsesWow64FileRedirection()) {
             if (bare && target.size() >= 4 &&
                 _wcsicmp(target.c_str() + target.size() - 4, L".msc") == 0) {
                 const auto console = WindowsDirectory() + L"\\System32\\" + target;
                 if (GetFileAttributesW(NativePath(console).c_str()) != INVALID_FILE_ATTRIBUTES)
                     target = console;
             }
-            auto native = target;
-            if (ReplaceSystemDirectory(native, L"System32", L"Sysnative") &&
-                OpenFromExplorer(target, arguments)) return;
+            // Bare-name resolution can return the alias used for this process.
+            // Explorer and the elevation service need the real System32 path.
+            if (ReplaceSystemDirectory(target, L"Sysnative", L"System32") ||
+                ReplaceSystemDirectory(target, L"System32", L"System32")) {
+                if (!OpenFromExplorer(target, arguments))
+                    Wh_Log(L"Could not open the native System32 target through Explorer.");
+                return;
+            }
         }
-        if (command || IsExecutablePath(target)) target = NativePath(std::move(target));
         if (command) {
+            target = NativePath(std::move(target));
             // Pass the executable separately from its arguments.
             std::wstring commandLine = L"\"" + target + L"\" " + arguments;
             STARTUPINFOW startup{};
