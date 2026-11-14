@@ -4690,7 +4690,12 @@ void StartSettingsMenu(HWND hwnd, POINT screenPoint) {
     args.release();
 
     std::lock_guard lock(g_settingsMenuThreadMutex);
-    if (g_settingsMenuThread) CloseHandle(g_settingsMenuThread);
+    if (g_settingsMenuThread) {
+        // The previous menu can clear g_settingsMenuOpen just before its
+        // thread returns. Join it before replacing its only handle.
+        WaitForSingleObject(g_settingsMenuThread, INFINITE);
+        CloseHandle(g_settingsMenuThread);
+    }
     g_settingsMenuThread = thread;
 }
 
@@ -5433,6 +5438,10 @@ bool StartThreads() {
     g_hookThread = CreateThread(nullptr, 0, KeyboardHookThreadProc, nullptr, 0, nullptr);
     if (!g_hookThread || WaitForSingleObject(g_hookThreadReady, 5000) != WAIT_OBJECT_0) {
         if (g_hookThread) {
+            // Even after the startup timeout, wait until the thread has created
+            // its message queue before posting WM_QUIT; otherwise it could
+            // remain blocked in GetMessage while its handle is closed.
+            WaitForSingleObject(g_hookThreadReady, INFINITE);
             const DWORD id = g_hookThreadId.load();
             if (id) PostThreadMessageW(id, WM_QUIT, 0, 0);
             WaitForSingleObject(g_hookThread, INFINITE);
