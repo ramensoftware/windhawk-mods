@@ -171,9 +171,9 @@ animation tuning (speed, bounce, stretch, background fade).
 #include <wincodec.h>
 #include <d3d11.h>
 #include <dxgi.h>
-#include <dxgi1_2.h>
 #include <dcomp.h>
 #include <shobjidl.h>
+#include <windhawk_utils.h>
 
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
@@ -466,18 +466,18 @@ struct Tile {
     bool placed = false;
 
     // DirectComposition path (null when the tile uses the legacy thumbnail).
-    void* dcVisual = nullptr;      // IDCompositionVisual2*
+    IDCompositionVisual2* dcVisual = nullptr;
     HTHUMBNAIL dcThumb = nullptr;
     float srcW = 1.0f;             // natural size of the thumbnail visual
     float srcH = 1.0f;
 
     bool minimized = false;        // tile of a minimized window
     bool fadeIn = false;           // its opacity follows the swipe progress
-    void* dcFx = nullptr;          // IDCompositionEffectGroup* (tile opacity)
+    IDCompositionEffectGroup* dcFx = nullptr;  // tile opacity
     float fxOp = 1.0f;
 
-    void* iconVisual = nullptr;    // IDCompositionVisual2*
-    void* iconFx = nullptr;        // IDCompositionEffectGroup*
+    IDCompositionVisual2* iconVisual = nullptr;
+    IDCompositionEffectGroup* iconFx = nullptr;
     bool iconPlaced = false;
     float iconOp = 0.0f;
 
@@ -599,24 +599,23 @@ struct DesktopCard {
     std::vector<CardWin> wins;  // windows of this desktop (top-most first)
     int x = 0;                // position inside the bar
     int w = 0;
-    void* visual = nullptr;   // IDCompositionVisual2*
+    IDCompositionVisual2* visual = nullptr;
     float hover = 0.0f;
     float hoverTarget = 0.0f;
 
-    void* thumbHost = nullptr;  // IDCompositionVisual2*: holds the live thumbnails
-    void* thumbTop = nullptr;   // top-most thumbnail added so far
-    std::vector<void*> thumbVisuals;
+    IDCompositionVisual2* thumbHost = nullptr;  // holds the live thumbnails
+    IDCompositionVisual2* thumbTop = nullptr;   // top-most thumbnail added so far
+    std::vector<IDCompositionVisual2*> thumbVisuals;
     std::vector<HTHUMBNAIL> thumbs;
-    void* xVisual = nullptr;    // IDCompositionVisual2*: the close button
-    void* xFx = nullptr;        // IDCompositionEffectGroup*: its opacity
+    IDCompositionVisual2* xVisual = nullptr;  // the close button
+    IDCompositionEffectGroup* xFx = nullptr;  // its opacity
 };
 static std::vector<DesktopCard> g_cards;
 
-// "No apps opened" as a DirectComposition visual (void* so this compiles
-// without the DComp headers).
-static void* g_emptyVisual = nullptr;   // IDCompositionVisual2*
-static void* g_emptyFx = nullptr;       // IDCompositionEffectGroup*
-static void* g_emptySurface = nullptr;  // IDCompositionSurface*
+// "No apps opened" as a DirectComposition visual.
+static IDCompositionVisual2* g_emptyVisual = nullptr;
+static IDCompositionEffectGroup* g_emptyFx = nullptr;
+static IDCompositionSurface* g_emptySurface = nullptr;
 static int g_emptyW = 0, g_emptyH = 0;
 static bool g_emptyPlaced = false;
 static float g_emptyOp = 0.0f;
@@ -2226,7 +2225,7 @@ static void PlaceDCompTile(Tile& t, const RECT& r) {
         static_cast<float>(r.right - r.left) / t.srcW, 0.0f,
         0.0f, static_cast<float>(r.bottom - r.top) / t.srcH,
         static_cast<float>(r.left), static_cast<float>(r.top));
-    static_cast<IDCompositionVisual2*>(t.dcVisual)->SetTransform(m);
+    t.dcVisual->SetTransform(m);
 }
 
 // Dialogs ride along with their owner's tile: same scale, same relative spot.
@@ -2262,7 +2261,7 @@ static void PlaceDCompIcon(Tile& t, const RECT& r) {
                     static_cast<float>(ICON_SIZE) * 0.5f;
     const float y = static_cast<float>(r.bottom + ICON_GAP);
     const D2D_MATRIX_3X2_F m = MakeMatrix(1.0f, 0.0f, 0.0f, 1.0f, x, y);
-    static_cast<IDCompositionVisual2*>(t.iconVisual)->SetTransform(m);
+    t.iconVisual->SetTransform(m);
 }
 
 
@@ -2345,6 +2344,115 @@ static std::wstring ReadDesktopName(const GUID& id) {
         return name;
     }
     return L"";
+}
+
+static std::wstring GetWallpaperPath();
+
+// The wallpaper of a desktop. Windows 11 can give each virtual desktop its own
+// one (kept next to its name in the registry); otherwise, and for the current
+// desktop (slideshows, Spotlight), it is the one Windows reports right now.
+static std::wstring DesktopWallpaperPath(const GUID& id, bool current) {
+    if (!current) {
+        wchar_t guid[64] = {};
+        if (StringFromGUID2(id, guid, 64)) {
+            std::wstring key =
+                L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VirtualDesktops\\Desktops\\";
+            key += guid;
+            wchar_t path[MAX_PATH] = {};
+            DWORD size = sizeof(path);
+            if (RegGetValueW(HKEY_CURRENT_USER, key.c_str(), L"Wallpaper", RRF_RT_REG_SZ, nullptr,
+                             path, &size) == ERROR_SUCCESS &&
+                path[0] && GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES) {
+                return path;
+            }
+        }
+    }
+    return GetWallpaperPath();
+}
+
+// Wallpapers shrunk to the size of a card's little screen, as opaque BGRA.
+// Decoding a full-size wallpaper is slow, so they are kept between gestures
+// (key: path, last write time and size).
+static std::map<std::wstring, std::vector<uint32_t>> g_wallThumbs;
+
+static const std::vector<uint32_t>* GetWallpaperThumb(const std::wstring& path, int w, int h) {
+    if (path.empty() || w <= 0 || h <= 0) {
+        return nullptr;
+    }
+    WIN32_FILE_ATTRIBUTE_DATA fa{};
+    GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fa);
+    wchar_t tail[96];
+    swprintf(tail, 96, L"|%lu|%lu|%d|%d",
+             static_cast<unsigned long>(fa.ftLastWriteTime.dwHighDateTime),
+             static_cast<unsigned long>(fa.ftLastWriteTime.dwLowDateTime), w, h);
+    const std::wstring key = path + tail;
+
+    auto it = g_wallThumbs.find(key);
+    if (it != g_wallThumbs.end()) {
+        return it->second.empty() ? nullptr : &it->second;  // empty = known failure
+    }
+    if (g_wallThumbs.size() > 16) {
+        g_wallThumbs.clear();  // wallpapers or monitors changed a lot: start over
+    }
+
+    std::vector<uint32_t> px;
+    try {
+        winrt::com_ptr<IWICImagingFactory> factory;
+        winrt::check_hresult(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
+                                              CLSCTX_INPROC_SERVER, IID_IWICImagingFactory,
+                                              factory.put_void()));
+        winrt::com_ptr<IWICBitmapDecoder> decoder;
+        winrt::check_hresult(factory->CreateDecoderFromFilename(
+            path.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, decoder.put()));
+        winrt::com_ptr<IWICBitmapFrameDecode> frame;
+        winrt::check_hresult(decoder->GetFrame(0, frame.put()));
+
+        UINT sw = 0, sh = 0;
+        winrt::check_hresult(frame->GetSize(&sw, &sh));
+        if (sw && sh) {
+            // "Fill": cover the little screen and crop the center.
+            UINT cw = sw, ch = sh;
+            const double srcAspect = static_cast<double>(sw) / sh;
+            const double dstAspect = static_cast<double>(w) / h;
+            if (srcAspect > dstAspect) {
+                cw = static_cast<UINT>(sh * dstAspect + 0.5);
+            } else {
+                ch = static_cast<UINT>(sw / dstAspect + 0.5);
+            }
+            cw = cw ? cw : 1;
+            ch = ch ? ch : 1;
+            WICRect clip{ static_cast<INT>((sw - cw) / 2), static_cast<INT>((sh - ch) / 2),
+                          static_cast<INT>(cw), static_cast<INT>(ch) };
+
+            winrt::com_ptr<IWICBitmapClipper> clipper;
+            winrt::check_hresult(factory->CreateBitmapClipper(clipper.put()));
+            winrt::check_hresult(clipper->Initialize(frame.get(), &clip));
+            winrt::com_ptr<IWICBitmapScaler> scaler;
+            winrt::check_hresult(factory->CreateBitmapScaler(scaler.put()));
+            winrt::check_hresult(scaler->Initialize(clipper.get(), static_cast<UINT>(w),
+                                                    static_cast<UINT>(h),
+                                                    WICBitmapInterpolationModeFant));
+            winrt::com_ptr<IWICFormatConverter> conv;
+            winrt::check_hresult(factory->CreateFormatConverter(conv.put()));
+            winrt::check_hresult(conv->Initialize(scaler.get(), GUID_WICPixelFormat32bppBGRA,
+                                                  WICBitmapDitherTypeNone, nullptr, 0.0,
+                                                  WICBitmapPaletteTypeCustom));
+            px.resize(static_cast<size_t>(w) * h);
+            winrt::check_hresult(conv->CopyPixels(nullptr, static_cast<UINT>(w) * 4,
+                                                  static_cast<UINT>(px.size() * 4),
+                                                  reinterpret_cast<BYTE*>(px.data())));
+            for (uint32_t& p : px) {
+                p |= 0xFF000000u;  // a wallpaper is opaque
+            }
+        }
+    } catch (...) {
+        px.clear();
+        Wh_Log(L"Desktop bar: could not load the wallpaper %s", path.c_str());
+    }
+
+    auto& slot = g_wallThumbs[key];
+    slot = std::move(px);
+    return slot.empty() ? nullptr : &slot;
 }
 
 struct DesktopWin {
@@ -2624,8 +2732,29 @@ static void RenderDesktopCard(const DesktopCard& c, std::vector<uint32_t>& px) {
     const float wy0 = static_cast<float>(BAR_WELL_Y);
     const float wx1 = wx0 + static_cast<float>(BAR_WELL_W);
     const float wy1 = wy0 + static_cast<float>(BAR_WELL_H);
-    FillRoundRect(px, w, h, wx0, wy0, wx1, wy1, 6.0f * k, 1.0f - tone, 1.0f - tone, 1.0f - tone,
-                  dark ? 0.30f : 0.55f);
+    const float wellRad = 6.0f * k;
+    const std::vector<uint32_t>* wall = GetWallpaperThumb(
+        DesktopWallpaperPath(c.id, c.current), BAR_WELL_W, BAR_WELL_H);
+    if (wall) {
+        // The desktop's wallpaper, with the screen's rounded corners.
+        for (int y = 0; y < BAR_WELL_H; y++) {
+            const int ty = BAR_WELL_Y + y;
+            for (int x = 0; x < BAR_WELL_W; x++) {
+                const int tx = static_cast<int>(std::floor(wx0)) + x;
+                const float cov = RoundRectCoverage(tx + 0.5f, ty + 0.5f, wx0, wy0, wx1, wy1, wellRad);
+                if (cov <= 0.0f) {
+                    continue;
+                }
+                const uint32_t s = (*wall)[static_cast<size_t>(y) * BAR_WELL_W + x];
+                PutOver(px, w, h, tx, ty, static_cast<float>((s >> 16) & 0xFF) / 255.0f,
+                        static_cast<float>((s >> 8) & 0xFF) / 255.0f,
+                        static_cast<float>(s & 0xFF) / 255.0f, cov);
+            }
+        }
+    } else {
+        FillRoundRect(px, w, h, wx0, wy0, wx1, wy1, wellRad, 1.0f - tone, 1.0f - tone, 1.0f - tone,
+                      dark ? 0.30f : 0.55f);
+    }
 
     const float monW = static_cast<float>(g_workRect.right - g_workRect.left);
     const float monH = static_cast<float>(g_workRect.bottom - g_workRect.top);
@@ -2688,7 +2817,7 @@ static void PlaceBarCard(const DesktopCard& c) {
     }
     const float s = 1.0f + 0.06f * c.hover;
     const float cy = static_cast<float>(BAR_H - BAR_CARD_H) * 0.5f;
-    static_cast<IDCompositionVisual2*>(c.visual)->SetTransform(MakeMatrix(
+    c.visual->SetTransform(MakeMatrix(
         s, 0.0f, 0.0f, s,
         static_cast<float>(c.x) + (1.0f - s) * static_cast<float>(c.w) * 0.5f,
         cy + (1.0f - s) * static_cast<float>(BAR_CARD_H) * 0.5f - 4.0f * c.hover));
@@ -2775,8 +2904,8 @@ static bool AddCardThumb(DesktopCard& c, const CardWin& w) {
                                wx0 + static_cast<float>(w.rect.left) * sx,
                                static_cast<float>(BAR_WELL_Y) + static_cast<float>(w.rect.top) * sy));
 
-    auto* host = static_cast<IDCompositionVisual2*>(c.thumbHost);
-    if (FAILED(host->AddVisual(v, TRUE, static_cast<IDCompositionVisual2*>(c.thumbTop)))) {
+    auto* host = c.thumbHost;
+    if (FAILED(host->AddVisual(v, TRUE, c.thumbTop))) {
         v->Release();
         if (th) {
             DwmUnregisterThumbnail(th);
@@ -2905,7 +3034,7 @@ static void CreateDesktopBarVisuals() {
                     xv->SetTransform(MakeMatrix(1.0f, 0.0f, 0.0f, 1.0f,
                                                 static_cast<float>(c.w - BAR_X_INSET - xs),
                                                 static_cast<float>(BAR_X_INSET)));
-                    if (SUCCEEDED(v->AddVisual(xv, TRUE, static_cast<IDCompositionVisual2*>(c.thumbHost)))) {
+                    if (SUCCEEDED(v->AddVisual(xv, TRUE, c.thumbHost))) {
                         c.xVisual = xv;
                         c.xFx = fx;
                     } else {
@@ -2946,31 +3075,31 @@ static void ClearDesktopBar() {
         c.thumbs.clear();
 
         if (c.thumbHost) {
-            static_cast<IDCompositionVisual2*>(c.thumbHost)->RemoveAllVisuals();
+            c.thumbHost->RemoveAllVisuals();
         }
-        for (void* tv : c.thumbVisuals) {
-            static_cast<IDCompositionVisual2*>(tv)->Release();
+        for (IDCompositionVisual2* tv : c.thumbVisuals) {
+            tv->Release();
         }
         c.thumbVisuals.clear();
         c.thumbTop = nullptr;
 
         if (c.visual) {
-            static_cast<IDCompositionVisual2*>(c.visual)->RemoveAllVisuals();
+            c.visual->RemoveAllVisuals();
         }
         if (c.thumbHost) {
-            static_cast<IDCompositionVisual2*>(c.thumbHost)->Release();
+            c.thumbHost->Release();
             c.thumbHost = nullptr;
         }
         if (c.xVisual) {
-            static_cast<IDCompositionVisual2*>(c.xVisual)->Release();
+            c.xVisual->Release();
             c.xVisual = nullptr;
         }
         if (c.xFx) {
-            static_cast<IDCompositionEffectGroup*>(c.xFx)->Release();
+            c.xFx->Release();
             c.xFx = nullptr;
         }
         if (c.visual) {
-            static_cast<IDCompositionVisual2*>(c.visual)->Release();
+            c.visual->Release();
             c.visual = nullptr;
         }
     }
@@ -3048,7 +3177,7 @@ static void SetBarCloseHover(int idx) {
     auto show = [](int i, bool hot) {
         if (i >= 0 && i < static_cast<int>(g_cards.size()) &&
             g_cards[static_cast<size_t>(i)].xVisual && g_xSurf[hot ? 1 : 0]) {
-            static_cast<IDCompositionVisual2*>(g_cards[static_cast<size_t>(i)].xVisual)
+            g_cards[static_cast<size_t>(i)].xVisual
                 ->SetContent(g_xSurf[hot ? 1 : 0]);
         }
     };
@@ -3086,7 +3215,7 @@ static void StepBarHover() {
         }
         PlaceBarCard(c);
         if (c.xFx) {
-            static_cast<IDCompositionEffectGroup*>(c.xFx)->SetOpacity(c.hover);  // the X shows on hover
+            c.xFx->SetOpacity(c.hover);  // the X shows on hover
         }
     }
     if (g_dcDevice) {
@@ -3106,7 +3235,7 @@ static void ReleaseDCompVisuals(Tile& t, bool& changed) {
     t.kids.clear();
 
     if (t.iconVisual) {
-        auto* iv = static_cast<IDCompositionVisual2*>(t.iconVisual);
+        auto* iv = t.iconVisual;
         if (g_dcIcons) {
             g_dcIcons->RemoveVisual(iv);
         }
@@ -3115,11 +3244,11 @@ static void ReleaseDCompVisuals(Tile& t, bool& changed) {
         changed = true;
     }
     if (t.iconFx) {
-        static_cast<IDCompositionEffectGroup*>(t.iconFx)->Release();
+        t.iconFx->Release();
         t.iconFx = nullptr;
     }
     if (t.dcVisual) {
-        auto* v = static_cast<IDCompositionVisual2*>(t.dcVisual);
+        auto* v = t.dcVisual;
         if (g_dcTiles) {
             g_dcTiles->RemoveVisual(v);
         }
@@ -3128,7 +3257,7 @@ static void ReleaseDCompVisuals(Tile& t, bool& changed) {
         changed = true;
     }
     if (t.dcFx) {
-        static_cast<IDCompositionEffectGroup*>(t.dcFx)->Release();
+        t.dcFx->Release();
         t.dcFx = nullptr;
     }
     if (t.dcThumb) {
@@ -3146,7 +3275,7 @@ static void UnregisterTiles() {
         ReleaseDCompVisuals(t, dcChanged);
     }
     if (g_emptyVisual) {
-        auto* ev = static_cast<IDCompositionVisual2*>(g_emptyVisual);
+        auto* ev = g_emptyVisual;
         if (g_dcIcons) {
             g_dcIcons->RemoveVisual(ev);
         }
@@ -3155,11 +3284,11 @@ static void UnregisterTiles() {
         dcChanged = true;
     }
     if (g_emptyFx) {
-        static_cast<IDCompositionEffectGroup*>(g_emptyFx)->Release();
+        g_emptyFx->Release();
         g_emptyFx = nullptr;
     }
     if (g_emptySurface) {
-        static_cast<IDCompositionSurface*>(g_emptySurface)->Release();
+        g_emptySurface->Release();
         g_emptySurface = nullptr;
     }
     g_dcTop = nullptr;
@@ -3322,7 +3451,7 @@ struct TaskbarSlide {
     bool cloaked = false; // the real taskbar is hidden while its copy slides
     double createdMs = 0.0;
     float srcW = 1.0f, srcH = 1.0f;
-    void* visual = nullptr;        // IDCompositionVisual2*: the copy
+    IDCompositionVisual2* visual = nullptr;  // the copy
     HTHUMBNAIL thumb = nullptr;
 };
 static std::vector<TaskbarSlide> g_taskbars;
@@ -3358,7 +3487,7 @@ static void RestoreTaskbars() {
 
     for (auto& s : g_taskbars) {
         if (s.visual) {
-            auto* v = static_cast<IDCompositionVisual2*>(s.visual);
+            auto* v = s.visual;
             if (g_dcTaskbarLayer) {
                 g_dcTaskbarLayer->RemoveVisual(v);
             }
@@ -3499,7 +3628,7 @@ static void PlaceTaskbarCopy(TaskbarSlide& s, int ox, int oy) {
         0.0f, h / s.srcH,
         static_cast<float>(s.orig.left - g_workRect.left + ox),
         static_cast<float>(s.orig.top - g_workRect.top + oy));
-    static_cast<IDCompositionVisual2*>(s.visual)->SetTransform(m);
+    s.visual->SetTransform(m);
 }
 
 
@@ -3755,7 +3884,7 @@ static void ApplyProgress(float p) {
                 dcChanged = true;
             }
             if (t.dcFx && t.fadeIn && OpacityChanged(minOp, t.fxOp)) {
-                static_cast<IDCompositionEffectGroup*>(t.dcFx)->SetOpacity(minOp);
+                t.dcFx->SetOpacity(minOp);
                 t.fxOp = minOp;
                 dcChanged = true;
             }
@@ -3767,7 +3896,7 @@ static void ApplyProgress(float p) {
                     dcChanged = true;
                 }
                 if (OpacityChanged(iconOp, t.iconOp)) {
-                    static_cast<IDCompositionEffectGroup*>(t.iconFx)->SetOpacity(iconOp);
+                    t.iconFx->SetOpacity(iconOp);
                     t.iconOp = iconOp;
                     dcChanged = true;
                 }
@@ -3830,7 +3959,7 @@ static void ApplyProgress(float p) {
         }
     }
     if (g_emptyVisual) {
-        auto* ev = static_cast<IDCompositionVisual2*>(g_emptyVisual);
+        auto* ev = g_emptyVisual;
         if (!g_emptyPlaced) {
             const float W = static_cast<float>(g_workRect.right - g_workRect.left);
             const float H = static_cast<float>(g_workRect.bottom - g_workRect.top);
@@ -3844,7 +3973,7 @@ static void ApplyProgress(float p) {
         }
         const float eop = Smooth01((g_progress - EMPTY_FADE_START) / (1.0f - EMPTY_FADE_START));
         if (OpacityChanged(eop, g_emptyOp)) {
-            static_cast<IDCompositionEffectGroup*>(g_emptyFx)->SetOpacity(eop);
+            g_emptyFx->SetOpacity(eop);
             g_emptyOp = eop;
             dcChanged = true;
         }
@@ -4864,7 +4993,7 @@ static void StepAnimation() {
 // so there is no frame without it. Stays live: it is still a DWM thumbnail.
 static void BringTileToFront(Tile& t) {
     if (t.dcVisual && g_dcTiles && g_dcDevice) {
-        auto* v = static_cast<IDCompositionVisual2*>(t.dcVisual);
+        auto* v = t.dcVisual;
 
         // A normal window goes above every normal window but stays below the
         // always-on-top ones, exactly like the real z-order will be once it is
@@ -4874,7 +5003,7 @@ static void BringTileToFront(Tile& t) {
             for (size_t i = g_tiles.size(); i-- > 0;) {
                 const Tile& o = g_tiles[i];
                 if (&o != &t && o.topmost && !o.minimized && o.dcVisual) {
-                    below = static_cast<IDCompositionVisual2*>(o.dcVisual);
+                    below = o.dcVisual;
                     break;
                 }
             }
@@ -4883,7 +5012,7 @@ static void BringTileToFront(Tile& t) {
         // Already on top (the owner or one of its dialogs is the top-most visual)?
         bool groupIsTop = (v == g_dcTop);
         for (auto& k : t.kids) {
-            if (k.dcVisual && static_cast<IDCompositionVisual2*>(k.dcVisual) == g_dcTop) {
+            if (k.dcVisual && k.dcVisual == g_dcTop) {
                 groupIsTop = true;
             }
         }
@@ -4894,7 +5023,7 @@ static void BringTileToFront(Tile& t) {
         g_dcTiles->RemoveVisual(v);
         for (auto& k : t.kids) {
             if (k.dcVisual) {
-                g_dcTiles->RemoveVisual(static_cast<IDCompositionVisual2*>(k.dcVisual));
+                g_dcTiles->RemoveVisual(k.dcVisual);
             }
         }
 
@@ -4910,7 +5039,7 @@ static void BringTileToFront(Tile& t) {
             if (!t.kids[k].dcVisual) {
                 continue;
             }
-            auto* kv = static_cast<IDCompositionVisual2*>(t.kids[k].dcVisual);
+            auto* kv = t.kids[k].dcVisual;
             g_dcTiles->AddVisual(kv, TRUE, prev);
             prev = kv;
         }
@@ -4972,7 +5101,7 @@ static void BeginClose(int pickIndex) {
             // fully visible instead of fading it out with the swipe.
             t.fadeIn = false;
             t.fxOp = 1.0f;
-            static_cast<IDCompositionEffectGroup*>(t.dcFx)->SetOpacity(1.0f);
+            t.dcFx->SetOpacity(1.0f);
         }
         g_holdTiles = t.minimized;  // a minimized pick keeps the tiles up while it is restored
         BringTileToFront(t);
@@ -5008,10 +5137,10 @@ static void FixTopMarker() {
         if (!t.dcVisual) {
             continue;
         }
-        g_dcTop = static_cast<IDCompositionVisual2*>(t.dcVisual);
+        g_dcTop = t.dcVisual;
         for (auto& k : t.kids) {  // dialogs, top-most first
             if (k.dcVisual) {
-                g_dcTop = static_cast<IDCompositionVisual2*>(k.dcVisual);
+                g_dcTop = k.dcVisual;
                 break;
             }
         }
@@ -6325,7 +6454,8 @@ static int SettingInt(PCWSTR name, int lo, int hi) {
 static void LoadSettings() {
     BACKDROP_MODE = 0;
     BACKDROP_TYPE = 2;  // Mica
-    PCWSTR bd = Wh_GetStringSetting(L"backdrop");
+    const auto backdrop = WindhawkUtils::StringSetting::make(L"backdrop");
+    PCWSTR bd = backdrop.get();
     if (!wcscmp(bd, L"micaAlt")) {
         BACKDROP_TYPE = 4;
     } else if (!wcscmp(bd, L"acrylic")) {
@@ -6335,14 +6465,12 @@ static void LoadSettings() {
     } else if (!wcscmp(bd, L"wallpaper")) {
         BACKDROP_MODE = 2;
     }
-    Wh_FreeStringSetting(bd);
 
     GESTURE_DISTANCE = static_cast<float>(SettingInt(L"swipeDistance", 60, 400));
     INVERT_Y = Wh_GetIntSetting(L"invertSwipe") != 0;
 
-    PCWSTR hs = Wh_GetStringSetting(L"horizontalSwipe");
-    ENABLE_ALT_TAB_SWIPE = wcscmp(hs, L"ignore") != 0;
-    Wh_FreeStringSetting(hs);
+    ENABLE_ALT_TAB_SWIPE =
+        wcscmp(WindhawkUtils::StringSetting::make(L"horizontalSwipe").get(), L"ignore") != 0;
     ALT_TAB_RIGHT_IS_FORWARD = Wh_GetIntSetting(L"altTabReverse") == 0;
 
     SHOW_ICONS = Wh_GetIntSetting(L"showIcons") != 0;
