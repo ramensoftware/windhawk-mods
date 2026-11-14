@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-audio-device-toggle
-// @name            Taskbar Audio Device Toggle
+// @name            SoundVolumeView Device Toggle
 // @description     Toggles an audio device by SoundVolumeView and synchronizes its tray icon with the actual Windows device state.
-// @version         1.6.0
+// @version         1.7
 // @author          Jed
 // @github          https://github.com/jed84
 // @homepage        https://github.com/jed84/windhawk-taskbar-audio-device-toggle
@@ -13,72 +13,69 @@
 
 // ==WindhawkModReadme==
 /*
-The mod adds one tray icon next to the clock. Clicking it enables or disables one chosen Windows audio device. The icon always shows the device's real state, read from Windows. It never shows a guessed state.
+# Taskbar Audio Device Toggle
 
-Usage scenario (example)
-Windows can play sound through two outputs at once. This is useful when, for example, a monitor's built-in speakers and a subwoofer or headphones on the audio jack should play the same audio. Taskbar Audio Device Toggle lets you turn that second output on or off with one click.
+Toggles a selected audio device using SoundVolumeView and keeps a tray icon
+synchronized with the actual Windows device state.
 
-Typical setup
-- The Playback tab lists two devices: the monitor's built-in speakers and the audio jack output. The jack can drive headphones, a second pair of speakers or a subwoofer.
-- In the Recording tab, open the properties of Stereo Mix. On the Listen tab, select Listen to this device and choose the audio jack output as the playback device.
-- Stereo Mix now captures everything the main output plays and replays it on the jack output. Both devices play the same sound.
+## Requirements
 
-The problem
-Sometimes you don't want the duplicate output. Examples are late-night listening, a call, or a moment when only the monitor speakers should be used. Switching it off normally means opening the Sound settings and changing the device state by hand each time.
+- SoundVolumeView must be installed and its executable path must be configured.
+- Enter the SoundVolumeView device ID, or optionally provide an exact Windows
+  audio endpoint ID.
 
-What the mod does
-The mod puts one icon in the system tray, next to the clock. Point it at the device that creates the duplicate, such as Stereo Mix or the jack output.
-Click the icon to disable the device. Sound then plays only through the main output.
-Click it again to enable the device. Sound plays through both outputs again.
-The icon and tooltip always show the real Windows state of the device, so you can see at a glance whether the second output is on.
+## Usage
 
-- Tray icon - A Segoe Fluent Icons glyph. By default it is E7F5 when the device is enabled and E720 when disabled. You can set the color. A "?" appears when the state can't be read.
-- Left click - Runs SoundVolumeView to disable or enable the device. The icon changes only after Windows confirms the new state.
-- Right click - Opens a menu with "Windhawk Settings" and "Audio Settings" (the Windows Sound control panel).
-- Tooltip - Device name and state: Enabled, Disabled, Enabled but unplugged, or Enabled but not present.
-- Verification - After a click it checks every 250 ms for up to 8 s. If the state doesn't change, it logs a timeout and the icon stays on the real state.
-- Periodic check - Reads the device state every N seconds (default 300). This catches changes made outside the mod, such as in Windows Sound settings.
-- Device matching - Finds the device from the SoundVolumeView ID or an exact Windows endpoint ID. If more than one device matches, it refuses to guess.
-- Recovery - The icon is re-added after an Explorer restart.
-
-Requirement
-The mod needs SoundVolumeView, a free NirSoft tool. It performs the actual enable and disable, because Windows has no public API for this. Download it and set its path in the mod settings. 
-
-Why an external app is required
-Windows has no public API that lets a normal program enable or disable an audio device. SoundVolumeView, a free NirSoft tool, does this from the command line. The mod runs it as SoundVolumeView.exe /DisableEnable "<device ID>". The mod only reads state itself, through the Windows audio API (IMMDeviceEnumerator).
-You must download SoundVolumeView yourself and enter its full path in the mod settings. I haven't verified whether it needs administrator rights on your system. If a click does nothing and the Windhawk log shows a launch error such as 740, elevation is the cause. In that case, run the toggle through an elevated shortcut or scheduled task instead.
-
-Limitations
-- One mod instance controls one device and shows one icon. For speakers and a microphone together, you need two copies of the mod. Each copy needs a different @id. The icon ID is fixed at 0x4A45 in the code, so give the second copy a different value, otherwise the icons may conflict.
-- It is a disable/enable switch, not a default-device switcher.
-- If you want to choose between two outputs directly, SoundVolumeView's /SetDefault command is the right tool, and this mod would need changing.
-- A change made outside the mod appears only at the next periodic check, up to 5 minutes by default.
+- Left-click the tray icon to toggle the configured audio device.
+- Right-click the tray icon to open Windhawk or Windows sound settings.
+- The icon reflects the actual device state reported by Windows.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- SoundVolumeViewPath: C:\Files\x86\Portable\Windows\SoundVolumeView.exe
-  $name: SoundVolumeView path
-  $description: Full path to SoundVolumeView.exe.
-- DeviceId: Realtek(R) Audio
+- SoundVolumeViewPath: ""
+  $name: SoundVolumeView executable path
+  $description: >-
+    Full path to SoundVolumeView.exe, for example:
+    C:\Tools\SoundVolumeView\SoundVolumeView.exe
+
+- DeviceId: ""
   $name: SoundVolumeView device ID
-  $description: Command-line friendly ID used to toggle the device.
+  $description: >-
+    Device item name from SoundVolumeView, for example:
+    Realtek(R) Audio\Device\Speakers\Render
+    Alternatively, enter an exact Windows audio endpoint ID.
+
 - EndpointId: ""
-  $name: Windows audio endpoint ID
-  $description: Optional exact Windows endpoint ID. Leave empty for automatic matching.
+  $name: Windows audio endpoint ID override
+  $description: >-
+    Optional exact Windows endpoint ID, for example:
+    {0.0.1000.000000000}.{guid}
+    If entered, it overrides device matching by name.
+
 - SyncIntervalSeconds: 300
   $name: State synchronization interval
-  $description: Time between actual device state checks, in seconds. Any value of 1 or more. Default is 300 (5 minutes).
-- EnabledIconGlyph: E7F5
-  $name: Enabled icon glyph
-  $description: Hexadecimal Segoe Fluent Icons glyph code shown when the device is enabled.
-- DisabledIconGlyph: E720
-  $name: Disabled icon glyph
-  $description: Hexadecimal Segoe Fluent Icons glyph code shown when the device is disabled.
-- IconColor: FFFFFF
+  $description: >-
+    How often, in seconds, the actual audio device state is checked.
+    Minimum value is 1 second.
+
+- IconColor: "FFFFFF"
   $name: Icon color
-  $description: Enter a color in RRGGBB format, without #. For example, FFFFFF for white or 000000 for black.
+  $description: >-
+    Tray icon color in RRGGBB format, for example FFFFFF.
+
+- EnabledIconGlyph: "UE7F5"
+  $name: Enabled icon glyph
+  $description: >-
+    Segoe Fluent Icons glyph code for the enabled state.
+    Use U+XXXX or hexadecimal notation, for example UE7F5.
+
+- DisabledIconGlyph: "UE720"
+  $name: Disabled icon glyph
+  $description: >-
+    Segoe Fluent Icons glyph code for the disabled state.
+    Use U+XXXX or hexadecimal notation, for example UE720.
 */
 // ==/WindhawkModSettings==
 
@@ -425,6 +422,8 @@ static bool FindEndpoint() {
 }
 
 static void RefreshTray() {
+    if (!g_nid.hWnd) return;
+
     HICON icon = g_unknownIcon;
     if (g_stateKnown) {
         icon = (g_state == DEVICE_STATE_DISABLED) ? g_disabledIcon : g_enabledIcon;
@@ -437,14 +436,22 @@ static void RefreshTray() {
     g_nid.hIcon = icon;
     StringCchCopyW(g_nid.szTip, ARRAYSIZE(g_nid.szTip), tip.c_str());
 
-    if (g_iconAdded) {
-        if (!Shell_NotifyIconW(NIM_MODIFY, &g_nid)) g_iconAdded = false;
+    // Prefer modifying the existing icon. Never blindly add a second one.
+    if (Shell_NotifyIconW(NIM_MODIFY, &g_nid)) {
+        g_iconAdded = true;
+        return;
     }
-    if (!g_iconAdded) {
-        if (Shell_NotifyIconW(NIM_ADD, &g_nid)) {
-            g_iconAdded = true;
-            Wh_Log(L"The tray icon was added successfully.");
-        }
+
+    // The icon may have been removed by Explorer, a taskbar restart,
+    // or a previous failed update. Remove any stale entry, then add once.
+    Shell_NotifyIconW(NIM_DELETE, &g_nid);
+
+    if (Shell_NotifyIconW(NIM_ADD, &g_nid)) {
+        g_iconAdded = true;
+        Wh_Log(L"The tray icon was added successfully.");
+    } else {
+        g_iconAdded = false;
+        Wh_Log(L"Could not add the tray icon. Error: %lu.", GetLastError());
     }
 }
 
@@ -624,6 +631,9 @@ static void ToggleDevice(HWND owner) {
 
 static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
     if (g_taskbarCreated && message == g_taskbarCreated) {
+        // Explorer recreated the taskbar. Remove our previous tray entry
+        // before allowing RefreshTray() to add it again.
+        Shell_NotifyIconW(NIM_DELETE, &g_nid);
         g_iconAdded = false;
         g_nextCheck = 0;
         return 0;
@@ -751,10 +761,14 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     }
 
     if (window) KillTimer(window, SYNC_TIMER);
-    if (g_iconAdded) {
+
+    // Always attempt to remove the tray entry during cleanup. This prevents
+    // an orphaned icon if g_iconAdded became out of sync with the shell.
+    if (g_nid.hWnd) {
         Shell_NotifyIconW(NIM_DELETE, &g_nid);
         g_iconAdded = false;
     }
+
     if (window && IsWindow(window)) DestroyWindow(window);
     if (atom) UnregisterClassW(className, instance);
     if (g_toggleProcess) {
