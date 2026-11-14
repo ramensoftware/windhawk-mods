@@ -4,7 +4,7 @@
 // @description     Automatically applies custom transparency to Yandex Music (and other selected apps)
 // @version         1.1
 // @author          NIKTO
-// @github          https://github.com
+// @github          https://github.com/NIKTO-2
 // @include         Яндекс Музыка.exe
 // @compilerOptions -lcomctl32
 // ==/WindhawkMod==
