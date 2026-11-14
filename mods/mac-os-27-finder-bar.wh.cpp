@@ -350,7 +350,8 @@ struct Settings {
     int islStyle, islSize, islDur, islIn, islOut, islPos;  // pílulas de aviso
     int npLayout, npSize;  // painel Tocando agora
     int npBar;             // barra de progresso: 0 linha, 1 colorida, 2 onda
-    int barStyle;  // 0 vidro, 1 transparente, 2 vidro líquido, 3 vidro líquido personalizado, 4 cor da janela
+    int barStyle;  // 0 vidro, 1 transparente, 2 vidro líquido, 3 vidro líquido personalizado, 4 cor da janela,
+                   // 5 claro, 6 escuro, 7 OLED (fundos sólidos)
     DWORD tintColor;          // Vidro líquido personalizado: a cor (0xRRGGBB)
     int tintLevel, tintReach;  // força da cor no topo e até onde ela desce (%)
     int selBar, selMenu;  // cor da seleção: índice em kSelPalette, -1 = fosca
@@ -538,7 +539,7 @@ static const UiDefault kUiDefaults[] = {
     {L"islHistory", L"1"},
     {L"islHistNotices", L"1"},
     {L"islCaps", L"1"},
-    {L"islStyle", L"glass"},
+    {L"islStyle", L"follow"},
     {L"islSize", L"100"},
     {L"islDuration", L"26"},
     {L"islIn", L"expand"},
@@ -792,7 +793,10 @@ static void LoadSettings() {
     s.islHistNotices = OvrInt(L"islHistNotices") != 0;
     {
         std::wstring v = OvrStr(L"islStyle");
-        s.islStyle = v == L"dark" ? 2 : 0;  // 0 o vidro de tudo (o antigo "Líquido" também), 2 escuro
+        // 0 acompanha a barra ("glass" das versões anteriores), 1 vidro, 2 transparente,
+        // 3 vidro líquido, 4 vidro líquido personalizado, 5 claro, 6 escuro, 7 OLED.
+        s.islStyle = v == L"frost" ? 1 : v == L"transparent" ? 2 : v == L"liquid" ? 3 : v == L"tinted" ? 4
+                   : v == L"light" ? 5 : v == L"dark"        ? 6 : v == L"oled"   ? 7 : 0;
         v = OvrStr(L"islIn");
         s.islIn = v == L"circle" ? 1 : v == L"drop" ? 2 : v == L"fade" ? 3 : 0;
         v = OvrStr(L"islOut");
@@ -815,7 +819,8 @@ static void LoadSettings() {
     if (s.islDur < 15 || s.islDur > 80) s.islDur = 26;
     {
         std::wstring bs = OvrStr(L"barStyle");
-        s.barStyle = bs == L"transparent" ? 1 : bs == L"liquid" ? 2 : bs == L"tinted" ? 3 : bs == L"window" ? 4 : 0;
+        s.barStyle = bs == L"transparent" ? 1 : bs == L"liquid" ? 2 : bs == L"tinted" ? 3 : bs == L"window" ? 4
+                   : bs == L"light"     ? 5 : bs == L"dark"   ? 6 : bs == L"oled"   ? 7 : 0;
         std::wstring tc = OvrStr(L"tintColor");
         s.tintColor = 0x050505;
         if (tc.size() == 7 && tc[0] == L'#') {
@@ -1417,6 +1422,8 @@ static bool BarLight(const Bar* b) {
     }
     if (g_settings.barStyle == 3) return g_light;  // segue a cor do vidro
     int t = TextColorFor(b->device);
+    // Fundos sólidos: no automático, o texto segue o fundo (escuro no claro).
+    if (g_settings.barStyle >= 5 && t <= 0) return g_settings.barStyle == 5;
     if (t < 0) return g_light;
     if (t == 1) return false;
     if (t == 2) return true;
@@ -10629,7 +10636,13 @@ static DWORD WINAPI BtScanThread(LPVOID) {
             if (name.empty()) return;
             AcquireSRWLockExclusive(&g_btLock);
             bool dup = false;
-            for (auto& x : g_btNew) dup = dup || x.id == id || x.name == name;
+            for (auto& x : g_btNew) {
+                if (x.id != id && x.name != name) continue;
+                dup = true;
+                // Celulares e fones aparecem duas vezes (clássico e LE): pareia pelo
+                // clássico, como as Configurações (o LE de um celular não pareia).
+                if (x.state == 0 && x.id.rfind(L"BluetoothLE#", 0) == 0 && id.rfind(L"Bluetooth#", 0) == 0) x.id = id;
+            }
             if (!dup && g_btNew.size() < 8) g_btNew.push_back({id, name, 0});
             ReleaseSRWLockExclusive(&g_btLock);
             if (!dup) BtNotify(1);
@@ -10760,6 +10773,7 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
     }();
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
     int result = 3;
+    Wh_Log(L"Bluetooth: parear %s (%s)", name.c_str(), id.c_str());
     try {
         using namespace winrt::Windows::Devices::Enumeration;
         using winrt::Windows::Foundation::AsyncStatus;
@@ -12640,7 +12654,7 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_ISLAND, L"Mostrar avisos em pílula", 0, 0},
     {BR_ACTION, BV_ISLTEST, L"Testar a pílula agora", 0, 0},
     {BR_GROUP, BV_NONE, L"Aparência", 0, 0},
-    {BR_CHOICE, BV_ISLSTYLE, L"Estilo", 0, 0, L"Vidro: o mesmo vidro da Central e dos menus"},
+    {BR_CHOICE, BV_ISLSTYLE, L"Estilo", 0, 0, L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro)"},
     {BR_SLIDER, BV_ISLSIZE, L"Tamanho", 0, 0},
     {BR_SLIDER, BV_ISLDUR, L"Tempo na tela", 0, 0, L"Avisos que dá para abrir ou responder ficam 2,5 vezes mais"},
     {BR_CHOICE, BV_ISLPOS, L"Posição", 0, 0},
@@ -12904,7 +12918,7 @@ static int BsGet(int val) {
         case BV_TLEVEL: return g_settings.tintLevel;
         case BV_TREACH: return g_settings.tintReach;
         case BV_BSSTYLE: return g_bsStyle;
-        case BV_ISLSTYLE: return g_settings.islStyle == 2 ? 1 : 0;
+        case BV_ISLSTYLE: return g_settings.islStyle;
         case BV_ISLSIZE: return std::clamp((g_settings.islSize - 80) * 100 / 60, 0, 100);
         case BV_ISLDUR: return std::clamp((g_settings.islDur - 15) * 100 / 65, 0, 100);
         case BV_ISLIN: return g_settings.islIn;
@@ -12975,8 +12989,9 @@ static void BsSet(int val, int v) {
     }
     switch (val) {
         case BV_ISLSTYLE: {
-            g_settings.islStyle = v == 1 ? 2 : 0;
-            OvrSetStr(L"islStyle", g_settings.islStyle == 2 ? L"dark" : L"glass");
+            static const PCWSTR kNames[] = {L"follow", L"frost", L"transparent", L"liquid", L"tinted", L"light", L"dark", L"oled"};
+            g_settings.islStyle = std::clamp(v, 0, 7);
+            OvrSetStr(L"islStyle", kNames[g_settings.islStyle]);
             return;
         }
         case BV_ISLSIZE:
@@ -13075,8 +13090,8 @@ static void BsSet(int val, int v) {
         return;
     }
     if (val == BV_BARSTYLE) {
-        static const PCWSTR kNames[] = {L"glass", L"transparent", L"liquid", L"tinted", L"window"};
-        v = std::clamp(v, 0, 4);
+        static const PCWSTR kNames[] = {L"glass", L"transparent", L"liquid", L"tinted", L"window", L"light", L"dark", L"oled"};
+        v = std::clamp(v, 0, 7);
         if (g_settings.barStyle == v) return;
         g_settings.barStyle = v;
         OvrSetStr(L"barStyle", kNames[v]);
@@ -13445,7 +13460,8 @@ static void BsReleaseFormats() {
 
 // Opções das escolhas (abrem num menu, como no Siri Plus Launchpad).
 static const PCWSTR kBsChoices[] = {L"Vidro", L"Transparente", L"Líquido"};
-static const PCWSTR kBsBarChoices[] = {L"Vidro", L"Transparente", L"Líquido", L"Vidro líquido personalizado", L"Cor da janela"};
+static const PCWSTR kBsBarChoices[] = {L"Vidro", L"Transparente", L"Líquido", L"Vidro líquido personalizado", L"Cor da janela",
+                                       L"Claro", L"Escuro", L"OLED"};
 static const PCWSTR kBsGlassStyle[] = {L"Transparente", L"Vidro líquido personalizado"};
 static const PCWSTR kBsNtfShape[] = {L"Círculo", L"Formato macOS"};
 static const PCWSTR kBsTextColor[] = {L"Automático", L"Branco", L"Preto"};
@@ -13453,7 +13469,8 @@ static const PCWSTR kBsHideMode[] = {L"Não", L"Ao encostar o mouse no topo", L"
 static const PCWSTR kBsTextColorMon[] = {L"Como nos outros", L"Automático", L"Branco", L"Preto"};
 static const PCWSTR kBsCcClose[] = {L"Cascata", L"Encolher", L"Esmaecer", L"Deslizar para cima", L"Nenhuma"};
 static const PCWSTR kBsLookChoices[] = {L"Desfoque", L"Líquido", L"Transparente"};
-static const PCWSTR kBsIslStyle[] = {L"Vidro", L"Escuro"};
+static const PCWSTR kBsIslStyle[] = {L"Acompanhar a barra", L"Vidro", L"Transparente", L"Líquido",
+                                     L"Vidro líquido personalizado", L"Claro", L"Escuro", L"OLED"};
 static const PCWSTR kBsIslIn[] = {L"Expandir", L"Círculo", L"Descer", L"Esmaecer"};
 static const PCWSTR kBsIslOut[] = {L"Encolher", L"Sugar", L"Subir", L"Círculo", L"Esmaecer"};
 static const PCWSTR kBsIslPos[] = {L"Centro", L"Direita"};
@@ -13499,8 +13516,8 @@ static const PCWSTR* BsChoiceLabels(int val) {
 }
 static int BsChoiceCount(int val) {
     switch (val) {
-        case BV_ISLPOS: case BV_ISLSTYLE: case BV_WXUNIT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: return 2;
-        case BV_BARSTYLE: return 5;
+        case BV_ISLPOS: case BV_WXUNIT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: return 2;
+        case BV_BARSTYLE: case BV_ISLSTYLE: return 8;
         case BV_LANG: return (int)ARRAYSIZE(kBsLang);
         case BV_ISLIN: return 4;
         case BV_ISLOUT: case BV_CCCLOSE: return 5;
@@ -18280,8 +18297,52 @@ static IslGeom IslandGeom(double t) {
     return {D2D1::RectF(cx - w / 2, y, cx + w / 2, y + h), a, ca};
 }
 
+// O estilo da pílula (1 a 7): o escolhido, ou o da barra ("Cor da janela" vira vidro).
+static int IslStyle() {
+    if (g_settings.islStyle != 0) return g_settings.islStyle;
+    static const int kFromBar[] = {1, 2, 3, 4, 1, 5, 6, 7};
+    return kFromBar[std::clamp(g_settings.barStyle, 0, 7)];
+}
+static bool IslSolid() { return IslStyle() >= 5; }
+// Enquanto cria e desenha a pílula, o vidro é o do estilo dela (e não o ajuste
+// de vidro dos menus): vidro = desfoque sem refração; transparente = sem foto.
+struct IslGlassScope {
+    GlassPrefs saved;
+    IslGlassScope() : saved(g_glass) {
+        switch (IslStyle()) {
+            case 1:
+                g_glass.liquid = true;
+                g_glass.tinted = false;
+                g_glass.clear = false;
+                g_glass.refraction = 0;
+                g_glass.blur = std::max(g_glass.blur, 70);
+                break;
+            case 2:
+                g_glass.liquid = false;
+                g_glass.tinted = false;
+                g_glass.clear = true;
+                g_glass.transparency = std::max(g_glass.transparency, 70);
+                break;
+            case 3:
+                g_glass.liquid = true;
+                g_glass.tinted = false;
+                break;
+            case 4:
+                g_glass.liquid = true;
+                g_glass.tinted = true;
+                break;
+            default:
+                g_glass.liquid = false;
+                g_glass.tinted = false;
+                break;
+        }
+    }
+    ~IslGlassScope() { g_glass = saved; }
+};
+
 static void IslandRender() {
     if (!g_isl.hwnd) return;
+    IslGlassScope islGlass;
     PanelThemeScope panelTheme;
     float s = g_isl.s;
     LiquidScope liquid(g_isl.glass.lq, g_isl.hwnd);
@@ -18289,7 +18350,10 @@ static void IslandRender() {
     IslGeom gm = IslandGeom(t);
     D2D1_RECT_F P = gm.r;
     float alpha = gm.alpha, minW = g_isl.ph, cw = P.right - P.left;
-    bool dark = g_settings.islStyle == 2;
+    int islSt = IslStyle();
+    bool dark = islSt == 6 || islSt == 7;  // fundo sólido escuro
+    // Texto escuro: na pílula clara, ou no vidro com o tema claro.
+    bool inkDark = islSt == 5 || (!dark && g_light);
 
     BITMAPINFO bi{};
     bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
@@ -18324,14 +18388,16 @@ static void IslandRender() {
                                                 D2D1::IdentityMatrix(), alpha, nullptr, D2D1_LAYER_OPTIONS_NONE),
                           layer);
         float rad = std::min((P.bottom - P.top) / 2, g_isl.reply ? 22 * s : 1e6f);
-        if (dark) {
-            // Escuro: a pílula preta (estilo "ilha").
+        if (islSt >= 5) {
+            // Claro, escuro e OLED: a pílula sólida (estilo "ilha").
             D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(P, rad, rad);
-            br->SetColor(D2D1::ColorF(0, 0, 0, 0.28f));
+            br->SetColor(D2D1::ColorF(0, 0, 0, islSt == 5 ? 0.16f : 0.28f));
             rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(P.left, P.top + 2 * s, P.right, P.bottom + 2 * s), rad, rad), br);
-            br->SetColor(D2D1::ColorF(0.02f, 0.02f, 0.03f, 0.96f));
+            br->SetColor(islSt == 5 ? D2D1::ColorF(0.96f, 0.96f, 0.97f, 0.98f)
+                         : islSt == 6 ? D2D1::ColorF(0.13f, 0.13f, 0.14f, 0.98f)
+                                      : D2D1::ColorF(0, 0, 0, 1.0f));
             rt->FillRoundedRectangle(rr, br);
-            br->SetColor(D2D1::ColorF(1, 1, 1, 0.08f));
+            br->SetColor(islSt == 5 ? D2D1::ColorF(0, 0, 0, 0.08f) : D2D1::ColorF(1, 1, 1, 0.08f));
             rt->DrawRoundedRectangle(rr, br, 1.0f * s);
         } else {
             DrawLiquidGlass(rt, br, P, rad, s, false, false, g_isl.glass.lq != nullptr, true);
@@ -18339,7 +18405,7 @@ static void IslandRender() {
         // Conteúdo: aparece quando a pílula já abriu boa parte.
         float ca = gm.content;
         if (ca > 0.01f && cw > 2 * minW) {
-            D2D1_COLOR_F fg = g_light && !dark ? D2D1::ColorF(0.07f, 0.07f, 0.08f, ca) : D2D1::ColorF(1, 1, 1, 0.96f * ca);
+            D2D1_COLOR_F fg = inkDark ? D2D1::ColorF(0.07f, 0.07f, 0.08f, ca) : D2D1::ColorF(1, 1, 1, 0.96f * ca);
             D2D1_COLOR_F dim = fg;
             dim.a *= 0.6f;
             // Linha de cima (ícone e textos); no cartão de resposta, o campo vem embaixo.
@@ -18378,9 +18444,9 @@ static void IslandRender() {
                 g_isl.btn = D2D1::RectF(P.right - 12 * s - bw, fy0, P.right - 12 * s, fy1);
                 g_isl.field = D2D1::RectF(P.left + 12 * s, fy0, g_isl.btn.left - 8 * s, fy1);
                 float fr = (fy1 - fy0) / 2;
-                br->SetColor(g_light && !dark ? D2D1::ColorF(0, 0, 0, 0.07f * ca) : D2D1::ColorF(1, 1, 1, 0.12f * ca));
+                br->SetColor(inkDark ? D2D1::ColorF(0, 0, 0, 0.07f * ca) : D2D1::ColorF(1, 1, 1, 0.12f * ca));
                 rt->FillRoundedRectangle(D2D1::RoundedRect(g_isl.field, fr, fr), br);
-                br->SetColor(g_light && !dark ? D2D1::ColorF(0, 0, 0, 0.10f * ca) : D2D1::ColorF(1, 1, 1, 0.16f * ca));
+                br->SetColor(inkDark ? D2D1::ColorF(0, 0, 0, 0.10f * ca) : D2D1::ColorF(1, 1, 1, 0.16f * ca));
                 rt->DrawRoundedRectangle(D2D1::RoundedRect(g_isl.field, fr, fr), br, 1.0f * s);
                 D2D1_RECT_F tf = D2D1::RectF(g_isl.field.left + 14 * s, g_isl.field.top, g_isl.field.right - 12 * s, g_isl.field.bottom);
                 fS->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
@@ -18409,7 +18475,7 @@ static void IslandRender() {
                 rt->PopAxisAlignedClip();
                 bool send = !g_isl.text.empty();
                 if (send) br->SetColor(D2D1::ColorF(0.04f, 0.52f, 1.0f, ca));
-                else br->SetColor(g_light && !dark ? D2D1::ColorF(0, 0, 0, 0.08f * ca) : D2D1::ColorF(1, 1, 1, 0.16f * ca));
+                else br->SetColor(inkDark ? D2D1::ColorF(0, 0, 0, 0.08f * ca) : D2D1::ColorF(1, 1, 1, 0.16f * ca));
                 rt->FillRoundedRectangle(D2D1::RoundedRect(g_isl.btn, fr, fr), br);
                 std::wstring bl = g_isl.sending ? std::wstring(L"…") : std::wstring(T(send ? L"Enviar" : L"Abrir"));
                 fS->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -18461,7 +18527,8 @@ static void IslandStart(const IslandNote& n) {
     if (g_settings.islPos == 1) cx = b->monRect.right - (int)std::round(10 * s) - (int)std::ceil(g_isl.fullW / 2);
     g_isl.pos = {cx - g_isl.W / 2, wr.bottom + (LONG)std::round(6 * s) - (LONG)g_isl.M};
     GlassLayerDestroy(g_isl.glass);
-    if (g_settings.islStyle != 2) {
+    if (!IslSolid()) {
+        IslGlassScope islGlass;
         // O mesmo vidro da Central: ao vivo, a foto do fundo acompanha a janela
         // de baixo (mas a pílula sai de gravações e capturas); sem ao vivo, a
         // foto é tirada quando ela aparece, e a pílula aparece nas gravações.
@@ -18579,7 +18646,8 @@ static void ReplySend(const IslandNote& n, const std::wstring& text, bool open);
 // e não some enquanto se digita.
 static void IslandMakeGlass() {
     GlassLayerDestroy(g_isl.glass);
-    if (g_settings.islStyle == 2) return;
+    if (IslSolid()) return;
+    IslGlassScope islGlass;
     if (GlassLayerCreate(g_isl.glass, g_isl.pos, g_isl.W, g_isl.H) && !g_isl.glass.lq) GlassLayerDestroy(g_isl.glass);
     if (g_isl.glass.lq && g_isl.glass.lq->live && g_owner) SetTimer(g_owner, TIMER_LIQUID, 40, nullptr);
 }
@@ -22447,6 +22515,13 @@ static void Render(Bar* b) {
         b->brush->SetColor(D2D1::ColorF(((c >> 16) & 255) / 255.0f, ((c >> 8) & 255) / 255.0f, (c & 255) / 255.0f, 1.0f));
         b->rt->FillRectangle(D2D1::RectF(0, 0, w, h), b->brush);
     }
+    if (see && g_settings.barStyle >= 5) {
+        // Claro, escuro e OLED: fundo sólido, sem vidro.
+        b->brush->SetColor(g_settings.barStyle == 5 ? D2D1::ColorF(0.95f, 0.95f, 0.96f, 1.0f)
+                           : g_settings.barStyle == 6 ? D2D1::ColorF(0.11f, 0.11f, 0.12f, 1.0f)
+                                                      : D2D1::ColorF(0, 0, 0, 1.0f));
+        b->rt->FillRectangle(D2D1::RectF(0, 0, w, h), b->brush);
+    }
     if (see && (g_settings.barStyle == 2 || g_settings.barStyle == 3) && b->lq) DrawBarLiquid(b, w, h, s);
     if (see && g_settings.barStyle == 3) DrawBarTint(b, w, h, s, b->lq != nullptr);
 
@@ -24863,6 +24938,9 @@ const UiTr kUiTr[] = {
     {L"Digite este código em %s e tecle Enter.", L"Type this code on %s and press Enter.", L"Escribe este código en %s y pulsa Enter.", L"Tapez ce code sur %s puis appuyez sur Entrée.", L"Gib diesen Code auf %s ein und drücke die Eingabetaste.", L"Digita questo codice su %s e premi Invio.", L"在 %s 上输入此代码，然后按 Enter。"},
     {L"Digite %s em %s e tecle Enter.", L"Type %s on %s and press Enter.", L"Escribe %s en %s y pulsa Enter.", L"Tapez %s sur %s puis appuyez sur Entrée.", L"Gib %s auf %s ein und drücke die Eingabetaste.", L"Digita %s su %s e premi Invio.", L"输入 %s（在 %s 上），然后按 Enter。"},
     {L"Um vidro para tudo: Central, menus, painéis e pílulas", L"One glass for everything: Control Center, menus, panels and pills", L"Un vidrio para todo: Centro de control, menús, paneles y píldoras", L"Un verre pour tout : Centre de contrôle, menus, panneaux et pastilles", L"Ein Glas für alles: Kontrollzentrum, Menüs, Bereiche und Pillen", L"Un vetro per tutto: Centro di Controllo, menu, pannelli e pillole", L"一种玻璃用于全部：控制中心、菜单、面板和胶囊"},
+    {L"Acompanhar a barra", L"Match the bar", L"Igual que la barra", L"Comme la barre", L"Wie die Leiste", L"Come la barra", L"跟随菜单栏"},
+    {L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro)", L"Match the bar: the bar’s background (glass with Window color)", L"Igual que la barra: el fondo de la barra (vidrio con Color de la ventana)", L"Comme la barre : le fond de la barre (verre avec Couleur de la fenêtre)", L"Wie die Leiste: ihr Hintergrund (Glas bei Fensterfarbe)", L"Come la barra: lo sfondo della barra (vetro con Colore della finestra)", L"跟随菜单栏：与菜单栏相同的背景（窗口颜色时为玻璃）"},
+    {L"Claro", L"Light", L"Claro", L"Clair", L"Hell", L"Chiaro", L"浅色"},
     {L"Vidro: o mesmo vidro da Central e dos menus", L"Glass: the same glass as the Control Center and menus", L"Vidrio: el mismo vidrio del Centro de control y los menús", L"Verre : le même verre que le Centre de contrôle et les menus", L"Glas: dasselbe Glas wie Kontrollzentrum und Menüs", L"Vetro: lo stesso vetro del Centro di Controllo e dei menu", L"玻璃：与控制中心和菜单相同的玻璃"},
     {L"Formato dos ícones", L"Icon shape", L"Forma de los iconos", L"Forme des icônes", L"Symbolform", L"Forma delle icone", L"图标形状"},
     {L"Nas notificações: círculo ou o formato dos ícones do macOS", L"In notifications: a circle or the macOS icon shape", L"En las notificaciones: círculo o la forma de los iconos de macOS", L"Dans les notifications : un cercle ou la forme des icônes de macOS", L"In Mitteilungen: Kreis oder die Form der macOS-Symbole", L"Nelle notifiche: cerchio o la forma delle icone di macOS", L"通知中：圆形或 macOS 图标形状"},
