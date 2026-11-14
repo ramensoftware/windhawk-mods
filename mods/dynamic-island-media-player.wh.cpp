@@ -223,6 +223,7 @@ A focused, customizable Dynamic Island overlay for Windows that becomes an inter
 #include <cstdint>
 #include <cwchar>
 #include <cstring>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -240,6 +241,32 @@ A focused, customizable Dynamic Island overlay for Windows that becomes an inter
 using Microsoft::WRL::ComPtr;
 
 namespace {
+
+std::mutex g_workerThreadsMutex;
+std::condition_variable g_workerThreadsCv;
+size_t g_activeWorkerThreads = 0;
+bool g_workerThreadsStopping = false;
+
+bool BeginTrackedWorkerThread() {
+    std::lock_guard lock(g_workerThreadsMutex);
+    if (g_workerThreadsStopping) return false;
+    ++g_activeWorkerThreads;
+    return true;
+}
+
+void EndTrackedWorkerThread() {
+    {
+        std::lock_guard lock(g_workerThreadsMutex);
+        if (g_activeWorkerThreads > 0) --g_activeWorkerThreads;
+    }
+    g_workerThreadsCv.notify_all();
+}
+
+void WaitForTrackedWorkerThreads() {
+    std::unique_lock lock(g_workerThreadsMutex);
+    g_workerThreadsCv.wait(lock, [] { return g_activeWorkerThreads == 0; });
+}
+
 
 constexpr wchar_t kWindowClass[] = L"Windhawk.DynamicIslandMediaPlayer";
 constexpr UINT WM_APP_NEW_EVENT = WM_APP + 0x443;
@@ -2248,7 +2275,11 @@ void SeekMediaToTicks(int64_t targetTicks) {
     static std::mutex seekMutex;
     const uint64_t requestGeneration = seekGeneration.fetch_add(1, std::memory_order_relaxed) + 1;
 
-    std::thread([targetTicks, requestGeneration]() {
+    if (!BeginTrackedWorkerThread()) return;
+    try {
+        std::thread([targetTicks, requestGeneration]() {
+        struct WorkerCompletion { ~WorkerCompletion() { EndTrackedWorkerThread(); } };
+        WorkerCompletion completion;
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
         try {
             // Serialize seek requests. A queued older mouse-move request is discarded
@@ -2269,7 +2300,10 @@ void SeekMediaToTicks(int64_t targetTicks) {
             }
         } catch (...) {}
         winrt::uninit_apartment();
-    }).detach();
+        }).detach();
+    } catch (...) {
+        EndTrackedWorkerThread();
+    }
 }
 
 void SendMediaTransportCommand(int cmd) {
@@ -2303,7 +2337,11 @@ void SendMediaTransportCommand(int cmd) {
         PostMessageW(h, WM_APP_WAKE, 0, 0);
     }
 
-    std::thread([cmd]() {
+    if (!BeginTrackedWorkerThread()) return;
+    try {
+        std::thread([cmd]() {
+        struct WorkerCompletion { ~WorkerCompletion() { EndTrackedWorkerThread(); } };
+        WorkerCompletion completion;
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
         bool sessionAttempted = false;
         try {
@@ -2329,7 +2367,10 @@ void SendMediaTransportCommand(int cmd) {
             SendNotifyMessageW(fg, WM_APPCOMMAND, (WPARAM)fg, MAKELONG(0, appCmd));
         }
         winrt::uninit_apartment();
-    }).detach();
+        }).detach();
+    } catch (...) {
+        EndTrackedWorkerThread();
+    }
 }
 
 struct WindowSearch {
@@ -5370,6 +5411,11 @@ DWORD WINAPI MediaThreadProc(void*);
 DWORD WINAPI KeyboardHookThreadProc(void*);
 
 bool StartThreads() {
+    {
+        std::lock_guard lock(g_workerThreadsMutex);
+        g_workerThreadsStopping = false;
+        g_activeWorkerThreads = 0;
+    }
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) return false;
 
@@ -5385,7 +5431,7 @@ bool StartThreads() {
         if (g_hookThread) {
             const DWORD id = g_hookThreadId.load();
             if (id) PostThreadMessageW(id, WM_QUIT, 0, 0);
-            WaitForSingleObject(g_hookThread, 2000);
+            WaitForSingleObject(g_hookThread, INFINITE);
             CloseHandle(g_hookThread);
             g_hookThread = nullptr;
         }
@@ -5430,6 +5476,10 @@ bool StartThreads() {
 }
 
 void StopThreads() {
+    {
+        std::lock_guard lock(g_workerThreadsMutex);
+        g_workerThreadsStopping = true;
+    }
     if (g_stopEvent) SetEvent(g_stopEvent);
 
     // The settings menu runs on its own thread so TrackPopupMenu cannot pause
@@ -5439,7 +5489,7 @@ void StopThreads() {
     {
         std::lock_guard lock(g_settingsMenuThreadMutex);
         if (g_settingsMenuThread) {
-            WaitForSingleObject(g_settingsMenuThread, 2000);
+            WaitForSingleObject(g_settingsMenuThread, INFINITE);
             CloseHandle(g_settingsMenuThread);
             g_settingsMenuThread = nullptr;
         }
@@ -5449,7 +5499,7 @@ void StopThreads() {
     HANDLE handles[] = {g_renderThread, g_mediaThread};
     for (HANDLE h : handles) {
         if (h) {
-            WaitForSingleObject(h, 2000); 
+            WaitForSingleObject(h, INFINITE); 
             CloseHandle(h);
         }
     }
@@ -5463,6 +5513,9 @@ void StopThreads() {
         g_hookThread = nullptr;
     }
     g_hookThreadId = 0;
+    // Detached media-command workers execute code from this module too.
+    // Wait for them before allowing Windhawk to unload the module.
+    WaitForTrackedWorkerThreads();
     if (g_hookThreadReady) {
         CloseHandle(g_hookThreadReady);
         g_hookThreadReady = nullptr;
