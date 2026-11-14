@@ -102,6 +102,7 @@ Some Control Center tiles and menu items change real Windows settings, the same 
 - **Power mode and power plan**: picking a power mode also switches the plan to Balanced, as Windows requires
 - **Energy saver** and **Do Not Disturb**
 - **Brightness**, **default audio device**, **volume and mute**, **microphone mute**, **Wi-Fi and Bluetooth radios**, **Wi-Fi network** and **display mode** (projection)
+- **Bluetooth pairing**: a device paired from the bar's Bluetooth pill stays paired, as if it were paired in Settings (remove it in Settings to unpair it)
 
 Nothing is changed unless you click the matching tile or item.
 
@@ -1099,7 +1100,8 @@ static ID2D1Factory* g_d2d = nullptr;
 static IDWriteFactory* g_dwrite = nullptr;
 static std::wstring g_iconFont = L"Segoe Fluent Icons";
 static HWINEVENTHOOK g_fgHook = nullptr;
-static HWINEVENTHOOK g_maxHook = nullptr;  // janelas que maximizam, restauram, somem ("Ocultar com janela maximizada")
+static HWINEVENTHOOK g_maxHook = nullptr;  // janelas que somem ou fecham ("Ocultar com janela maximizada", "Cor da janela")
+static HWINEVENTHOOK g_maxLocHook = nullptr;  // janelas que mudam de tamanho (maximizar/restaurar)
 static UINT g_msgTaskbarCreated = 0;
 static std::vector<Bar*> g_bars;
 static ActiveApp g_active;
@@ -4121,7 +4123,12 @@ static void HostCloakPill(HWND x, bool on) {
     DWORD pid = 0;
     wchar_t cls[64] = L"";
     if (!x || !IsWindow(x) || !GetWindowThreadProcessId(x, &pid) || pid != GetCurrentProcessId()) return;
-    if (!GetClassNameW(x, cls, 64) || wcscmp(cls, L"XamlExplorerHostIslandWindow") != 0 || GetWindowTextLengthW(x) > 0)
+    if (!GetClassNameW(x, cls, 64) || wcscmp(cls, L"XamlExplorerHostIslandWindow") != 0)
+        return;
+    // InternalGetWindowText lê o título sem mandar mensagem (o hook roda na thread
+    // da barra de tarefas e não pode esperar outra thread).
+    wchar_t title[2] = L"";
+    if (InternalGetWindowText(x, title, ARRAYSIZE(title)) > 0)
         return;
     BOOL v = on ? TRUE : FALSE;
     if (SUCCEEDED(DwmSetWindowAttribute(x, 13 /*DWMWA_CLOAK*/, &v, sizeof(v)))) g_hostCloaked = on ? x : nullptr;
@@ -10595,7 +10602,7 @@ static SRWLOCK g_btLock = SRWLOCK_INIT;
 static std::vector<BtFound> g_btNew;
 static std::atomic<bool> g_btScanning{false}, g_btScanStop{false};
 static std::atomic<int> g_btPairing{0};  // pareamentos em andamento
-static std::wstring g_btPairMsg;         // aviso para a pílula (nome + resultado), lido na thread da barra
+static std::vector<std::wstring> g_btPairMsgs;  // avisos para a pílula (nome + resultado), lidos na thread da barra
 
 static void BtNotify(WPARAM what) {
     if (g_worker) PostMessageW(g_worker, WM_APP_BTSCAN, what, 0);
@@ -10685,6 +10692,33 @@ static void BtSetState(const std::wstring& id, int st) {
     ReleaseSRWLockExclusive(&g_btLock);
 }
 
+// Pergunta do pareamento (código igual? / digite o código), feita na thread do
+// pareamento e não no tratador do WinRT: o tratador só guarda o pedido com um
+// adiamento (GetDeferral) e volta na hora. A caixa fecha sozinha quando o
+// pareamento termina, passa de 60 s ou o mod para (um timer da thread confere).
+static thread_local const std::function<bool()>* t_btBoxClose = nullptr;
+static thread_local bool t_btBoxClosed = false;
+static BOOL CALLBACK BtBoxEnd(HWND h, LPARAM) {
+    wchar_t c[16] = L"";
+    if (GetClassNameW(h, c, ARRAYSIZE(c)) && wcscmp(c, L"#32770") == 0) EndDialog(h, IDCANCEL);
+    return TRUE;
+}
+static void CALLBACK BtBoxTimer(HWND, UINT, UINT_PTR, DWORD) {
+    if (!t_btBoxClose || t_btBoxClosed || !(*t_btBoxClose)()) return;
+    t_btBoxClosed = true;
+    EnumThreadWindows(GetCurrentThreadId(), BtBoxEnd, 0);
+}
+// Devolve a resposta da caixa, ou 0 se ela foi fechada pelo mod.
+static int BtBox(const std::wstring& text, UINT type, const std::function<bool()>& close) {
+    t_btBoxClose = &close;
+    t_btBoxClosed = false;
+    UINT_PTR t = SetTimer(nullptr, 0, 150, BtBoxTimer);
+    int r = MessageBoxW(nullptr, text.c_str(), L"Bluetooth", type | MB_TOPMOST | MB_SETFOREGROUND);
+    if (t) KillTimer(nullptr, t);
+    t_btBoxClose = nullptr;
+    return t_btBoxClosed ? 0 : r;
+}
+
 static DWORD WINAPI BtPairThread(LPVOID p) {
     std::unique_ptr<std::wstring> idp((std::wstring*)p);
     const std::wstring id = *idp, name = [&] {
@@ -10699,45 +10733,81 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
     int result = 3;
     try {
         using namespace winrt::Windows::Devices::Enumeration;
+        using winrt::Windows::Foundation::AsyncStatus;
         auto infoOp = DeviceInformation::CreateFromIdAsync(id);
         DeviceInformation info = CcAwait(infoOp, 10000);
         DeviceInformationCustomPairing custom = info.Pairing().Custom();
-        // Sim/não e "o código aparece no aparelho?": confirma; exibir um código:
-        // ele aparece numa janela para digitar no aparelho (teclados, por exemplo).
-        auto token = custom.PairingRequested([name](DeviceInformationCustomPairing const&,
-                                                     DevicePairingRequestedEventArgs const& a) {
-            switch (a.PairingKind()) {
-                case DevicePairingKinds::ConfirmOnly:
-                    a.Accept();
-                    break;
-                case DevicePairingKinds::ConfirmPinMatch: {
-                    std::wstring q = TF(L"O código %s aparece em %s?", {std::wstring(a.Pin().c_str()), name});
-                    if (MessageBoxW(nullptr, q.c_str(), L"Bluetooth", MB_YESNO | MB_ICONQUESTION | MB_TOPMOST | MB_SETFOREGROUND) == IDYES)
-                        a.Accept();
-                    break;
-                }
-                case DevicePairingKinds::DisplayPin: {
-                    std::wstring q = TF(L"Digite %s em %s e tecle Enter.", {std::wstring(a.Pin().c_str()), name});
-                    a.Accept();
-                    MessageBoxW(nullptr, q.c_str(), L"Bluetooth", MB_OK | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND);
-                    break;
-                }
-                default:
-                    break;
+        // O pedido guardado pelo tratador, respondido aqui.
+        struct Req {
+            SRWLOCK lock = SRWLOCK_INIT;
+            bool pending = false;
+            DevicePairingRequestedEventArgs args{nullptr};
+            winrt::Windows::Foundation::Deferral def{nullptr};
+        };
+        auto req = std::make_shared<Req>();
+        auto token = custom.PairingRequested([req](DeviceInformationCustomPairing const&,
+                                                    DevicePairingRequestedEventArgs const& a) {
+            if (a.PairingKind() == DevicePairingKinds::ConfirmOnly) {
+                a.Accept();
+                return;
             }
+            if (a.PairingKind() != DevicePairingKinds::ConfirmPinMatch && a.PairingKind() != DevicePairingKinds::DisplayPin)
+                return;
+            auto def = a.GetDeferral();
+            AcquireSRWLockExclusive(&req->lock);
+            if (req->pending) req->def.Complete();  // um pedido novo troca o anterior
+            req->args = a;
+            req->def = def;
+            req->pending = true;
+            ReleaseSRWLockExclusive(&req->lock);
         });
+        // Fecha o pedido que ainda não foi respondido, sem aceitar.
+        auto dropReq = [req] {
+            AcquireSRWLockExclusive(&req->lock);
+            if (req->pending) {
+                req->def.Complete();
+                req->pending = false;
+                req->args = nullptr;
+                req->def = nullptr;
+            }
+            ReleaseSRWLockExclusive(&req->lock);
+        };
         auto op = custom.PairAsync(DevicePairingKinds::ConfirmOnly | DevicePairingKinds::ConfirmPinMatch |
                                    DevicePairingKinds::DisplayPin);
         // Espera o pareamento (a pessoa pode precisar confirmar no aparelho); no
-        // encerramento do mod, cancela.
+        // encerramento do mod ou depois de 60 s, desiste.
         ULONGLONG start = GetTickCount64();
-        while (op.wait_for(std::chrono::milliseconds(200)) == winrt::Windows::Foundation::AsyncStatus::Started) {
-            if (g_jobsStopping || GetTickCount64() - start > 60000) {
+        auto giveUp = [&] { return g_jobsStopping || GetTickCount64() - start > 60000; };
+        std::function<bool()> boxClose = [&] { return giveUp() || op.Status() != AsyncStatus::Started; };
+        while (op.wait_for(std::chrono::milliseconds(200)) == AsyncStatus::Started) {
+            if (giveUp()) {
+                dropReq();
                 WinrtCancelWait(op);
                 break;
             }
+            AcquireSRWLockExclusive(&req->lock);
+            bool have = req->pending;
+            DevicePairingRequestedEventArgs a = req->args;
+            winrt::Windows::Foundation::Deferral def = req->def;
+            req->pending = false;
+            req->args = nullptr;
+            req->def = nullptr;
+            ReleaseSRWLockExclusive(&req->lock);
+            if (!have) continue;
+            if (a.PairingKind() == DevicePairingKinds::DisplayPin) {
+                // Aceita já, para o aparelho esperar o código; a caixa só mostra o código.
+                std::wstring pin = a.Pin().c_str();
+                a.Accept();
+                def.Complete();
+                BtBox(TF(L"Digite %s em %s e tecle Enter.", {pin, name}), MB_OK | MB_ICONINFORMATION, boxClose);
+            } else {
+                std::wstring q = TF(L"O código %s aparece em %s?", {std::wstring(a.Pin().c_str()), name});
+                if (BtBox(q, MB_YESNO | MB_ICONQUESTION, boxClose) == IDYES) a.Accept();
+                def.Complete();
+            }
         }
-        if (op.Status() == winrt::Windows::Foundation::AsyncStatus::Completed) {
+        dropReq();
+        if (op.Status() == AsyncStatus::Completed) {
             auto st = op.GetResults().Status();
             result = st == DevicePairingResultStatus::Paired || st == DevicePairingResultStatus::AlreadyPaired ? 2
                    : st == DevicePairingResultStatus::RequiredHandlerNotRegistered ? 4
@@ -10748,7 +10818,7 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
     }
     BtSetState(id, result);
     AcquireSRWLockExclusive(&g_btLock);
-    g_btPairMsg = name + L"\n" + std::to_wstring(result);
+    g_btPairMsgs.push_back(name + L"\n" + std::to_wstring(result));
     ReleaseSRWLockExclusive(&g_btLock);
     g_btPairing--;
     BtNotify(2);
@@ -11429,7 +11499,7 @@ static void OpenMediaApp() {
     }
     EnumWindows(MediaWinProc, (LPARAM)&f);
     if (f.found) {
-        if (IsIconic(f.found)) ShowWindow(f.found, SW_RESTORE);
+        if (IsIconic(f.found)) ShowWindowAsync(f.found, SW_RESTORE);  // não espera o app
         ForceForeground(f.found);
         return;
     }
@@ -22674,7 +22744,9 @@ static void BarRestyle(Bar* b) {
     InvalidateRect(b->hwnd, nullptr, FALSE);
 }
 static void UpdateWindowColor();
+static void MaxHookSync(bool off = false);  // os ganchos de janela maximizada (mais abaixo)
 static void BarsRestyle() {
+    MaxHookSync();
     UpdateWindowColor();
     for (Bar* b : g_bars) BarRestyle(b);
 }
@@ -22699,6 +22771,7 @@ static void BarsApplyLive(bool geometry) {
         b->moreOpen = false;
     }
     BuildTopMenus();  // menus do app: aparecem/somem já, sem esperar outra janela
+    MaxHookSync();
     UpdateWindowColor();
     UpdateFullscreen();
     KbdNavApply();
@@ -22868,8 +22941,15 @@ static void HandleSync(Bar* b) {
             ShowWindow(b->handle, SW_HIDE);
         }
     } else if (want) {
-        // Uma janela "sempre visível" pode ter subido por cima.
-        SetWindowPos(b->handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        // Uma janela "sempre visível" de outro app pode ter subido por cima: só então
+        // a alça volta para cima (a lista acima dela é curta, só janelas do topo).
+        DWORD me = GetCurrentProcessId();
+        bool covered = false;
+        for (HWND w = GetWindow(b->handle, GW_HWNDPREV); w && !covered; w = GetWindow(w, GW_HWNDPREV)) {
+            DWORD pid = 0;
+            if (IsWindowVisible(w) && GetWindowThreadProcessId(w, &pid) && pid != me) covered = true;
+        }
+        if (covered) SetWindowPos(b->handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 }
 // A cor da barra de título da janela ativa: a mediana de alguns pontos logo abaixo
@@ -22889,17 +22969,41 @@ static void BarSamplePeekColor(Bar* b) {
     }
     float s = b->dpi / 96.0f;
     int y = std::max<LONG>(vr.top, b->monRect.top + b->heightPx) + (int)std::round(5 * s);
+    // Uma leitura só da tela: a faixa de 1 pixel de altura vai para um DIB, e os 9
+    // pontos saem dele (GetPixel lia a tela uma vez para cada ponto).
+    int w = vr.right - vr.left;
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+    bi.bmiHeader.biWidth = w;
+    bi.bmiHeader.biHeight = -1;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
     HDC dc = GetDC(nullptr);
     if (!dc) return;
-    std::vector<int> rs, gs, bs;
-    for (int i = 0; i < 9; i++) {
-        int x = vr.left + (int)((vr.right - vr.left) * (0.18f + 0.64f * i / 8.0f));
-        COLORREF c = GetPixel(dc, x, y);
-        if (c == CLR_INVALID) continue;
-        rs.push_back(GetRValue(c));
-        gs.push_back(GetGValue(c));
-        bs.push_back(GetBValue(c));
+    HDC mem = CreateCompatibleDC(dc);
+    HBITMAP bmp = mem ? CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0) : nullptr;
+    bool ok = false;
+    if (bmp) {
+        HGDIOBJ old = SelectObject(mem, bmp);
+        ok = BitBlt(mem, 0, 0, w, 1, dc, vr.left, y, SRCCOPY) != FALSE;
+        GdiFlush();
+        SelectObject(mem, old);
     }
+    std::vector<int> rs, gs, bs;
+    if (ok) {
+        const DWORD* px = (const DWORD*)bits;
+        for (int i = 0; i < 9; i++) {
+            int x = (int)(w * (0.18f + 0.64f * i / 8.0f));
+            DWORD c = px[std::clamp(x, 0, w - 1)];  // BGRA
+            rs.push_back((c >> 16) & 0xFF);
+            gs.push_back((c >> 8) & 0xFF);
+            bs.push_back(c & 0xFF);
+        }
+    }
+    if (bmp) DeleteObject(bmp);
+    if (mem) DeleteDC(mem);
     ReleaseDC(nullptr, dc);
     if (rs.empty()) return;
     auto med = [](std::vector<int>& v) {
@@ -23105,6 +23209,23 @@ static void CALLBACK MaxEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject
     bool anyHidden = false;
     for (Bar* b : g_bars) anyHidden |= b->maxHidden;
     if (anyHidden || IsZoomed(hwnd)) MaxCheckSoon();
+}
+
+// Os ganchos só existem com "Ocultar com janela maximizada" ou "Cor da janela"
+// (os dois desligados por padrão), e só para os avisos usados: fechar, mostrar e
+// esconder num, mudar de tamanho no outro. Minimizar e restaurar vêm por g_fgHook.
+static void MaxHookSync(bool off) {
+    bool want = !off && (g_settings.hideWhenMaximized || g_settings.barStyle == 4);
+    if (want && !g_maxHook) {
+        g_maxHook = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, nullptr, MaxEventProc, 0, 0,
+                                    WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+        g_maxLocHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr, MaxEventProc, 0, 0,
+                                       WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    } else if (!want) {
+        if (g_maxHook) UnhookWinEvent(g_maxHook);
+        if (g_maxLocHook) UnhookWinEvent(g_maxLocHook);
+        g_maxHook = g_maxLocHook = nullptr;
+    }
 }
 
 static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG,
@@ -23723,11 +23844,12 @@ static LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             if (wp == 2) {
                 AcquireSRWLockExclusive(&g_btLock);
-                std::wstring m;
-                m.swap(g_btPairMsg);
+                std::vector<std::wstring> msgs;
+                msgs.swap(g_btPairMsgs);
                 ReleaseSRWLockExclusive(&g_btLock);
-                size_t nl = m.rfind(L'\n');
-                if (nl != std::wstring::npos) {
+                for (const std::wstring& m : msgs) {  // dois pareamentos juntos: uma pílula para cada
+                    size_t nl = m.rfind(L'\n');
+                    if (nl == std::wstring::npos) continue;
                     std::wstring name = m.substr(0, nl);
                     int r = _wtoi(m.c_str() + nl + 1);
                     if (r == 2) IslandShow(0xE702, 0x0A84FF, name, T(L"Pareado"));
@@ -23955,9 +24077,7 @@ static DWORD WINAPI BarThread(LPVOID) {
 
     g_fgHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND, nullptr,
                                WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    // Mostrar, esconder, fechar e mudar de tamanho (maximizar/restaurar).
-    g_maxHook = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_LOCATIONCHANGE, nullptr, MaxEventProc, 0, 0,
-                                WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    MaxHookSync();
     UpdateActiveApp(GetForegroundWindow());
     RedrawAll();
 
@@ -24004,7 +24124,7 @@ static DWORD WINAPI BarThread(LPVOID) {
     RemoveTrayHook();
     WinOsdRestore();
     if (g_fgHook) { UnhookWinEvent(g_fgHook); g_fgHook = nullptr; }
-    if (g_maxHook) { UnhookWinEvent(g_maxHook); g_maxHook = nullptr; }
+    MaxHookSync(true);
     // 2) Threads de trabalho: cancela o que estiver em andamento e espera todas.
     UiaStop();
     StopCcWorker();
