@@ -3691,40 +3691,44 @@ void DispatchConfiguredHotkey(int id) {
 }
 
 // Raw Input is a fallback for games that prevent WM_HOTKEY from reaching
-// the overlay. If RegisterHotKey succeeds, give its input-consuming path a
-// short head start before dispatching the matching Raw Input event.
-constexpr double kRawHotkeyFallbackDelay = 0.10;
+// the overlay. A one-shot window timer makes the fallback independent of the
+// render loop's sleep interval. WM_HOTKEY cancels it when the normal path wins.
+constexpr UINT_PTR kRawHotkeyTimerBase = 0x100;
 constexpr double kHotkeyDuplicateWindow = 0.20;
 bool g_registeredHotkeys[5] = {};
-double g_pendingRawHotkeyDeadline[5] = {};
 double g_lastHotkeyDispatchTime[5] = {};
 
 void DispatchHotkeyOnce(int id) {
     if (id < kHotkeyHideShow || id > kHotkeyPlayPause) return;
     const double now = NowSeconds();
-    if (now - g_lastHotkeyDispatchTime[id] < kHotkeyDuplicateWindow) return;
+    const double lastDispatch = g_lastHotkeyDispatchTime[id];
+    if (lastDispatch > 0.0 && now - lastDispatch < kHotkeyDuplicateWindow) return;
     g_lastHotkeyDispatchTime[id] = now;
     DispatchConfiguredHotkey(id);
 }
 
 void QueueRawHotkey(int id) {
     if (id < kHotkeyHideShow || id > kHotkeyPlayPause) return;
-    if (g_registeredHotkeys[id]) {
-        g_pendingRawHotkeyDeadline[id] = NowSeconds() + kRawHotkeyFallbackDelay;
-    } else {
+    if (!g_registeredHotkeys[id]) {
         // Another application may already own this chord. Preserve the
         // game-compatible fallback, although the foreground app may also see it.
         DispatchHotkeyOnce(id);
+        return;
     }
-}
 
-void ProcessPendingRawHotkeys(double now) {
-    for (int id = kHotkeyHideShow; id <= kHotkeyPlayPause; ++id) {
-        const double deadline = g_pendingRawHotkeyDeadline[id];
-        if (deadline > 0.0 && now >= deadline) {
-            g_pendingRawHotkeyDeadline[id] = 0.0;
-            DispatchHotkeyOnce(id);
-        }
+    // WM_HOTKEY is normally dispatched before WM_INPUT. If it already ran
+    // for this press, do not schedule a second action.
+    const double lastDispatch = g_lastHotkeyDispatchTime[id];
+    if (lastDispatch > 0.0 &&
+        NowSeconds() - lastDispatch < kHotkeyDuplicateWindow) {
+        return;
+    }
+
+    const UINT_PTR timerId = kRawHotkeyTimerBase + static_cast<UINT_PTR>(id);
+    if (!SetTimer(g_hwnd.load(), timerId, 100, nullptr)) {
+        Wh_Log(L"SetTimer(raw hotkey fallback, id=%d) failed: %u", id, GetLastError());
+        // Do not lose the shortcut if Windows cannot create the timer.
+        DispatchHotkeyOnce(id);
     }
 }
 
@@ -3780,9 +3784,6 @@ void UnregisterConfiguredHotkeys(HWND hwnd) {
 }
 
 void RegisterConfiguredHotkeys(HWND hwnd) {
-    UnregisterConfiguredHotkeys(hwnd);
-    if (!g_hotkeyEnabled.load()) return;
-
     const UINT modifiers[] = {
         0, g_hotkeyMods.load(), g_hkNextMods.load(),
         g_hkPrevMods.load(), g_hkPlayPauseMods.load()
@@ -3804,8 +3805,10 @@ void RegisterConfiguredHotkeys(HWND hwnd) {
 
 void ApplyHotkeyInput(HWND hwnd) {
     std::memset(g_rawKeyDown, 0, sizeof(g_rawKeyDown));
-    std::memset(g_pendingRawHotkeyDeadline, 0, sizeof(g_pendingRawHotkeyDeadline));
     std::memset(g_lastHotkeyDispatchTime, 0, sizeof(g_lastHotkeyDispatchTime));
+    for (int id = kHotkeyHideShow; id <= kHotkeyPlayPause; ++id) {
+        KillTimer(hwnd, kRawHotkeyTimerBase + static_cast<UINT_PTR>(id));
+    }
 
     RAWINPUTDEVICE device = {};
     device.usUsagePage = 0x01; // Generic Desktop Controls
@@ -4909,10 +4912,24 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_HOTKEY: {
             const int id = static_cast<int>(wParam);
             if (g_hotkeyEnabled.load() && id >= kHotkeyHideShow && id <= kHotkeyPlayPause) {
-                g_pendingRawHotkeyDeadline[id] = 0.0;
+                KillTimer(hwnd, kRawHotkeyTimerBase + static_cast<UINT_PTR>(id));
                 DispatchHotkeyOnce(id);
             }
             return 0;
+        }
+
+        case WM_TIMER: {
+            const UINT_PTR timerId = static_cast<UINT_PTR>(wParam);
+            if (timerId > kRawHotkeyTimerBase &&
+                timerId <= kRawHotkeyTimerBase + kHotkeyPlayPause) {
+                KillTimer(hwnd, timerId);
+                if (g_hotkeyEnabled.load()) {
+                    const int id = static_cast<int>(timerId - kRawHotkeyTimerBase);
+                    DispatchHotkeyOnce(id);
+                }
+                return 0;
+            }
+            break;
         }
 
         case WM_INPUT: {
@@ -5046,7 +5063,6 @@ DWORD WINAPI RenderThreadProc(void*) {
         }
 
         const double now = NowSeconds();
-        ProcessPendingRawHotkeys(now);
         StopHotkeyCaptureIfDone();
 
         // Resolving the foreground process requires window/process queries.
