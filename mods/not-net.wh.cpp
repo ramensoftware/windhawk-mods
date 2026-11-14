@@ -128,6 +128,9 @@
   - showCycleMs: false
     $name: Show milliseconds (ms) in Cycle popup
     $description: Show the ms input box in the Cycle Mode popup.
+  - rememberCycleTemplates: true
+    $name: Remember last Cycle template per app
+    $description: Save each app's last used Cycle Mode settings inside Windhawk storage so they pre-fill next time (does not auto-start).
   - fullscreenBehavior: hide
     $name: Fullscreen behavior
     $options:
@@ -325,6 +328,7 @@ struct ModSettings {
     FullscreenBehavior fullscreenBehavior = FullscreenBehavior::Hide;
     bool hideDuringCapture = true;
     bool enableCycleScheduler = true;
+    bool rememberCycleTemplates = true;
     bool showCycleMs = false;
     bool showCycleWidget = true;
     CycleWidgetAction cycleWidgetAction = CycleWidgetAction::SchedulerOnly;
@@ -1493,10 +1497,77 @@ struct CycleRuntime {
 static std::mutex g_cycleMtx;
 static std::condition_variable g_cycleCv;
 static std::unordered_map<std::wstring, CycleRuntime> g_cycles;
+static std::unordered_map<std::wstring, CycleConfig> g_cycleTemplates;
 static std::wstring g_cycleFgExe;
 static std::wstring g_lastWidgetCycleExe;
-static CycleConfig g_lastCycleConfig; // session-only memory, never saved to YAML
-static bool g_hasLastCycleConfig = false;
+
+static void LoadCycleTemplates() {
+    std::unordered_map<std::wstring, CycleConfig> loaded;
+    int count = Wh_GetIntValue(L"cycleTemplateCount", 0);
+    for (int i = 0; i < count && i < 256; ++i) {
+        std::wstring kKey = L"cycleTplKey_" + std::to_wstring(i);
+        std::wstring vKey = L"cycleTplVal_" + std::to_wstring(i);
+        wchar_t keyBuf[1024]{};
+        wchar_t valBuf[256]{};
+        if (Wh_GetStringValue(kKey.c_str(), keyBuf, ARRAYSIZE(keyBuf)) > 0 &&
+            Wh_GetStringValue(vKey.c_str(), valBuf, ARRAYSIZE(valBuf)) > 0) {
+            std::wstring exeLow = ToLower(Trim(keyBuf));
+            if (exeLow.empty()) continue;
+            std::vector<std::wstring> parts;
+            std::wstringstream wss(valBuf);
+            std::wstring tok;
+            while (std::getline(wss, tok, L'|')) parts.push_back(tok);
+            if (parts.size() == 6) {
+                uint64_t bMs = (uint64_t)_wcstoui64(parts[0].c_str(), nullptr, 10);
+                uint64_t aMs = (uint64_t)_wcstoui64(parts[1].c_str(), nullptr, 10);
+                int rMode = _wtoi(parts[2].c_str());
+                uint64_t rVal = (uint64_t)_wcstoui64(parts[3].c_str(), nullptr, 10);
+                int foc = _wtoi(parts[4].c_str());
+                int allowUnfoc = _wtoi(parts[5].c_str());
+                if (bMs >= 100 && aMs >= 100 && rMode >= 0 && rMode <= 2) {
+                    CycleConfig cfg;
+                    cfg.blockMs = bMs;
+                    cfg.allowMs = aMs;
+                    cfg.runMode = (CycleRunMode)rMode;
+                    cfg.runValue = rVal;
+                    cfg.focusedOnly = (foc != 0);
+                    cfg.allowWhenUnfocused = (allowUnfoc != 0);
+                    loaded[exeLow] = cfg;
+                }
+            }
+        }
+    }
+    std::lock_guard<std::mutex> lk(g_cycleMtx);
+    g_cycleTemplates = std::move(loaded);
+}
+
+static void SaveCycleTemplates() {
+    std::vector<std::pair<std::wstring, CycleConfig>> items;
+    {
+        std::lock_guard<std::mutex> lk(g_cycleMtx);
+        items.reserve(g_cycleTemplates.size());
+        for (const auto& kv : g_cycleTemplates) {
+            items.push_back(kv);
+        }
+    }
+    if (items.size() > 256) items.resize(256);
+    Wh_SetIntValue(L"cycleTemplateCount", (int)items.size());
+    for (int i = 0; i < (int)items.size(); ++i) {
+        std::wstring kKey = L"cycleTplKey_" + std::to_wstring(i);
+        std::wstring vKey = L"cycleTplVal_" + std::to_wstring(i);
+        const CycleConfig& c = items[i].second;
+        wchar_t valBuf[256]{};
+        swprintf_s(valBuf, L"%llu|%llu|%d|%llu|%d|%d",
+                   (unsigned long long)c.blockMs,
+                   (unsigned long long)c.allowMs,
+                   (int)c.runMode,
+                   (unsigned long long)c.runValue,
+                   c.focusedOnly ? 1 : 0,
+                   c.allowWhenUnfocused ? 1 : 0);
+        Wh_SetStringValue(kKey.c_str(), items[i].first.c_str());
+        Wh_SetStringValue(vKey.c_str(), valBuf);
+    }
+}
 struct CyclePendingAction {
     enum Kind { SwitchBlock, SwitchAllow, EndAllow, WipeExited } kind;
     std::wstring displayPath;
@@ -1663,6 +1734,22 @@ static bool StartCycleForApp(const std::wstring& exePath, const CycleConfig& cfg
             outErr = g_statusBanner.empty() ? L"Failed to apply initial block." : g_statusBanner;
             return false;
         }
+    } else {
+        bool warnVpn = true;
+        {
+            std::lock_guard<std::mutex> lk(g_settingsMtx);
+            warnVpn = g_settings.warnOnVpnOrRemote;
+        }
+        if (warnVpn && IsVpnOrRemoteExe(low)) {
+            int res = MessageBoxW(g_hWnd,
+                                  L"Blocking this app may disconnect your active VPN or Remote Desktop session.\n\nContinue?",
+                                  L"!Net Safety Warning", MB_YESNO | MB_ICONWARNING | MB_TOPMOST);
+            if (res != IDYES) {
+                outErr = L"Cancelled by user.";
+                return false;
+            }
+        }
+        ApplyAllow(exePath);
     }
 
     double nowMs = QpcNowMs();
@@ -1685,8 +1772,18 @@ static bool StartCycleForApp(const std::wstring& exePath, const CycleConfig& cfg
 
         g_cycles[low] = std::move(rt);
         g_lastWidgetCycleExe = low;
-        g_lastCycleConfig = cfg;
-        g_hasLastCycleConfig = true;
+    }
+    bool rememberTpl = true;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMtx);
+        rememberTpl = g_settings.rememberCycleTemplates;
+    }
+    if (rememberTpl) {
+        {
+            std::lock_guard<std::mutex> lk(g_cycleMtx);
+            g_cycleTemplates[low] = cfg;
+        }
+        SaveCycleTemplates();
     }
     g_cycleCv.notify_all();
     LogAudit(L"CYCLE START " + exePath + L" (Block " + FormatDurationCompact(cfg.blockMs) +
@@ -2066,6 +2163,7 @@ static void RefreshAppList() {
         }
     }
     std::wstring fgExe = g_lastFgExe;
+    NotifyCycleFocusChanged(fgExe);
 
     EnumWinCtx winCtx;
     EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&winCtx));
@@ -2434,6 +2532,7 @@ static void LoadSettings() {
 
     next.hideDuringCapture = Wh_GetIntSetting(L"Behavior.hideDuringCapture") != 0;
     next.enableCycleScheduler = Wh_GetIntSetting(L"Behavior.enableCycleScheduler") != 0;
+    next.rememberCycleTemplates = Wh_GetIntSetting(L"Behavior.rememberCycleTemplates") != 0;
     next.showCycleMs = Wh_GetIntSetting(L"Behavior.showCycleMs") != 0;
     next.showCycleWidget = Wh_GetIntSetting(L"Behavior.showCycleWidget") != 0;
     auto sCycAct = WindhawkUtils::StringSetting::make(L"Behavior.cycleWidgetAction");
@@ -4953,8 +5052,19 @@ static void OpenCyclePopupForApp(const AppEntry& app) {
         defCfg.runValue = (activeSnap.runMode == CycleRunMode::ForCycles) ? activeSnap.targetCycles : activeSnap.totalRemainingMs;
         defCfg.focusedOnly = activeSnap.focusedOnly;
         defCfg.allowWhenUnfocused = activeSnap.allowWhenUnfocused;
-    } else if (g_hasLastCycleConfig) {
-        defCfg = g_lastCycleConfig;
+    } else {
+        bool rememberTpl = true;
+        {
+            std::lock_guard<std::mutex> lk(g_settingsMtx);
+            rememberTpl = g_settings.rememberCycleTemplates;
+        }
+        if (rememberTpl) {
+            std::lock_guard<std::mutex> lk(g_cycleMtx);
+            auto itTpl = g_cycleTemplates.find(app.exePath);
+            if (itTpl != g_cycleTemplates.end()) {
+                defCfg = itTpl->second;
+            }
+        }
     }
 
     WriteDurationGroupMs(st->blockGrp, defCfg.blockMs, false);
@@ -6094,7 +6204,12 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
                 if (act.kind == CyclePendingAction::SwitchBlock || act.kind == CyclePendingAction::SwitchAllow) {
                     std::wstring low = ToLower(act.displayPath);
                     std::lock_guard<std::mutex> lk(g_cycleMtx);
-                    if (!g_cycles.count(low)) continue;
+                    auto itC = g_cycles.find(low);
+                    if (itC == g_cycles.end()) continue;
+                    if (act.kind == CyclePendingAction::SwitchBlock &&
+                        itC->second.pausedByFocus && itC->second.cfg.allowWhenUnfocused) {
+                        continue;
+                    }
                 }
                 if (act.kind == CyclePendingAction::SwitchBlock) {
                     ApplyBlock(act.displayPath, act.dir, act.includeChildren, false);
@@ -6252,6 +6367,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
 BOOL WhTool_ModInit() {
     LoadSettings();
     LoadExcludedApps();
+    LoadCycleTemplates();
     SyncAutoBlockedApps();
 
     g_uiReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
