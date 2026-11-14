@@ -1,13 +1,14 @@
 // ==WindhawkMod==
 // @id              file-type-icon-redirect
 // @name            File Type Icon Redirect
-// @description     Override file icons by extension using an INI file, preserving system thumbnails
-// @version         1.1.1
+// @description     Customize file icons by extension while preserving system thumbnails
+// @version         1.2.0
 // @author          Momo
 // @github          https://github.com/FreshP-0325
+// @license         MIT
 // @include         explorer.exe
 // @architecture    x86
-// @architecture    x86-64
+// @architecture    amd64
 // @compilerOptions -lshell32 -lshlwapi -lole32 -luuid
 // ==/WindhawkMod==
 
@@ -17,81 +18,88 @@
 /*
 # File Type Icon Redirect
 
-Override file icons in File Explorer by extension without changing file
-associations or the registry. Windows continues to generate thumbnails for
-images, videos, and documents. Mapped icons appear in icon-based views and
-when a thumbnail is unavailable.
+Customize file icons by extension without changing file associations or default
+applications. System thumbnails remain enabled and use their original providers.
 
-Set the absolute INI file path in the mod settings. Environment variables are
-supported. For example:
+## Configuration
+
+Choose Configuration source:
+
+* Windhawk settings (default): add entries to the icons list. Each entry accepts
+  comma-separated extensions, including the dot. Save settings to apply changes.
+  Windhawk also provides a Textual mode for bulk YAML editing.
+* INI file: set an absolute INI file path. Only that file is read; the settings
+  list is ignored. After editing the file, save a changed mod setting or disable
+  and re-enable the mod, then reopen affected windows or menus.
+
+Extensions are case-insensitive and match the last extension of a filename.
+To end the settings list, leave both fields of its final entry empty.
+INI files support UTF-8 (with or without BOM) or UTF-16 LE with BOM, full-line
+comments starting with ; or #, and paths relative to the INI directory.
+In Windhawk settings, resource paths must be absolute. Environment variables
+are supported in paths. No external preparation script is required.
+
+Icon values support ICO, DLL, EXE, MUN, and other Windows icon resources.
+Use path,index; indexes start at 0, while negative values select resource IDs.
+For ICO files, omit the index or use 0. Quote a path containing a comma.
 
 ```ini
 [icons]
+.txt,.log=%SystemRoot%\System32\shell32.dll,70
 .jpg,.jpeg,.png=icons\image.ico
-.mp4,.mkv=icons\video.dll,0
 .pdf="C:\My Icons\documents.exe",-101
-.txt=%SystemRoot%\System32\shell32.dll,70
 ```
 
-* Supports ICO, DLL, EXE, MUN, and other files from which Windows can extract icons.
-* Relative icon paths are resolved against the INI directory.
-* Supports UTF-8 with or without a BOM, and UTF-16 LE with a BOM.
-* Icon indexes start at 0. Negative indexes specify resource IDs.
-  For ICO files, omit the index or use 0.
-* Extensions are case-insensitive, must include the dot, and match the last
-  extension of a filename.
-* Separate multiple extensions with commas. The last valid duplicate entry wins.
-* Lines starting with a semicolon or # are comments. Inline comments are unsupported.
-* After editing the INI or replacing icon files, add 1 to Reload INI file (for
-  example, 0 to 1) and save the settings. Reopen affected windows to see changes.
-* Invalid paths or icons that cannot be extracted are skipped and logged.
-  Files without a valid mapping keep their original icons.
+Icon resources are validated on their first mapped icon request, not while the
+mod initializes. Missing or invalid icons fall back to Windows. If an extension
+has repeated definitions, the last extractable icon wins. Ordinary directories
+are excluded. Existing application icon caches may require reopening windows.
 
-By default, hooks run in explorer.exe, including the desktop. To apply them to
-system Open/Save dialogs in other programs, enable Allow other processes, add
-the programs to Custom process inclusion list in Windhawk's advanced settings,
-then restart them. Programs that draw their own icons or bypass standard
-filesystem Shell interfaces may be unaffected.
+## Refreshing and other applications
 
-Only icon requests are overridden. The mod does not change thumbnail providers
-or the "Always show icons, never thumbnails" setting. It sends no global refresh
-when loaded or unloaded. Reload INI and refresh Explorer additionally requests
-one cache refresh, sent only by the Explorer process that owns the taskbar.
-Use it only if old icons remain after reloading. With Resource Redirect,
-its resource redirection may also affect the final icon source.
+Refresh Explorer when mappings change is off by default. Enable it only if you
+want a global cache refresh after saving changed mappings. It may briefly redraw
+windows and reload thumbnails. Only the taskbar-owning Explorer sends it.
+Startup, shutdown, unchanged mappings, and normal queries send no notifications.
 
-The mod requires a Shell profile matching your Windows system DLLs. Before
-installing, run python scripts/prepare.py --mod icon from the repository on your
-PC, then compile the prepared source in Windhawk. Repeat after Windows updates
-change the relevant DLLs. A mismatched profile prevents the mod from loading.
-The profile is embedded in this source; no extra header is needed in Windhawk.
+The default target is explorer.exe. For standard Open/Save dialogs in another
+application, add its executable to Custom process inclusion list in Windhawk's
+advanced settings and restart the application. No additional process toggle is
+required. Applications using private interfaces or caches may be unaffected.
 
-Allow other processes defaults to off. Other apps require both this setting and
-a matching Custom process inclusion list entry. This controls hook setup, not
-whether Windhawk loads the mod DLL. Compatibility depends on the application.
+The mod uses Windhawk symbol resolution for the installed system DLLs. Missing
+required symbols prevent loading and are reported in the log. x86 and AMD64 are
+supported; native ARM64 is not currently targeted.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+- configurationSource: settings
+  $name: Configuration source
+  $description: Use the list below, or read a separate INI file. Only the selected source is used.
+  $options:
+    - settings: Windhawk settings
+    - ini: INI file
+- icons:
+  - - extensions: ""
+      $name: Extensions
+      $description: Comma-separated file extensions, including the dot. For example, .txt,.log
+    - icon: ""
+      $name: Icon
+      $description: Absolute icon path, optionally followed by an index. Environment variables are supported.
+  $name: File type icons
+  $description: Used only when Configuration source is Windhawk settings. Leave both fields of the final entry empty to end the list.
 - iniPath: "%USERPROFILE%\\FileTypeIcons\\icons.ini"
   $name: INI file path
-  $description: An absolute path, with environment variables supported. Relative icon paths are resolved against the INI directory.
-- reloadCounter: 0
-  $name: Reload INI file
-  $description: After editing the INI file, add 1 to this number (for example, 0 to 1) and save the settings. The mod will read the file again without restarting. Reopen affected windows or menus to see the changes.
-- refreshCounter: 0
-  $name: Reload INI and refresh Explorer
-  $description: Use only if old icons remain after reloading the INI. Add 1 to this number and save the settings to reload the INI and request an Explorer refresh. This can briefly redraw windows and reload thumbnails. Otherwise, leave this value unchanged.
-- allowOtherProcesses: false
-  $name: Allow other processes
-  $description: Also allow hooks in non-Explorer processes selected by Windhawk's inclusion list. Requires both controls. This switch does not prevent DLL loading. Default is Explorer-only.
+  $description: Used only in INI file mode. Absolute path; environment variables are supported. Re-enable the mod after editing the file, or save a changed mod setting.
+- refreshExplorer: false
+  $name: Refresh Explorer when mappings change
+  $description: Request one global cache refresh after saving changed mappings. May redraw windows and reload thumbnails. Usually leave off. Startup and shutdown do not request a refresh.
 */
 // ==/WindhawkModSettings==
 
-#ifndef FILE_TYPE_ICON_REDIRECT_TEST
-#include <windhawk_api.h>
-#endif
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -102,6 +110,7 @@ whether Windhawk loads the mod DLL. Compatibility depends on the application.
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -111,35 +120,16 @@ whether Windhawk loads the mod DLL. Compatibility depends on the application.
 namespace {
 using Microsoft::WRL::ComPtr;
 
-struct HookTarget {
-    PCWSTR module;
-    DWORD machine, timestamp, imageSize, checksum, rva;
-};
-// BEGIN GENERATED SHELL PROFILE
-#ifdef _WIN64
-[[maybe_unused]] constexpr HookTarget k_iconUI{L"windows.storage.dll", 34404u, 3070770283u, 9101312u, 9289426u, 236448u};
-[[maybe_unused]] constexpr HookTarget k_iconIndex{L"windows.storage.dll", 34404u, 3070770283u, 9101312u, 9289426u, 457872u};
-[[maybe_unused]] constexpr HookTarget k_iconFactory{L"windows.storage.dll", 34404u, 3070770283u, 9101312u, 9289426u, 232288u};
-[[maybe_unused]] constexpr HookTarget k_detailsEx{L"windows.storage.dll", 34404u, 3070770283u, 9101312u, 9289426u, 1736240u};
-[[maybe_unused]] constexpr HookTarget k_detailsOf{L"windows.storage.dll", 34404u, 3070770283u, 9101312u, 9289426u, 95040u};
-[[maybe_unused]] constexpr HookTarget k_itemString{L"windows.storage.dll", 34404u, 3070770283u, 9101312u, 9289426u, 2214896u};
-[[maybe_unused]] constexpr HookTarget k_itemProperty{L"windows.storage.dll", 34404u, 3070770283u, 9101312u, 9289426u, 2727136u};
-#else
-[[maybe_unused]] constexpr HookTarget k_iconUI{L"windows.storage.dll", 332u, 3130835471u, 7462912u, 7578709u, 1358992u};
-[[maybe_unused]] constexpr HookTarget k_iconIndex{L"windows.storage.dll", 332u, 3130835471u, 7462912u, 7578709u, 1109328u};
-[[maybe_unused]] constexpr HookTarget k_iconFactory{L"windows.storage.dll", 332u, 3130835471u, 7462912u, 7578709u, 1107856u};
-[[maybe_unused]] constexpr HookTarget k_detailsEx{L"windows.storage.dll", 332u, 3130835471u, 7462912u, 7578709u, 1361856u};
-[[maybe_unused]] constexpr HookTarget k_detailsOf{L"windows.storage.dll", 332u, 3130835471u, 7462912u, 7578709u, 5342832u};
-[[maybe_unused]] constexpr HookTarget k_itemString{L"windows.storage.dll", 332u, 3130835471u, 7462912u, 7578709u, 1684048u};
-[[maybe_unused]] constexpr HookTarget k_itemProperty{L"windows.storage.dll", 332u, 3130835471u, 7462912u, 7578709u, 5152304u};
-#endif
-// END GENERATED SHELL PROFILE
 
+
+struct IconValidation { std::once_flag once; bool usable = false; };
 struct IconLocation {
     std::wstring path;
     int index = 0;
+    std::shared_ptr<IconValidation> validation = std::make_shared<IconValidation>();
+    bool operator==(const IconLocation& other) const { return path == other.path && index == other.index; }
 };
-using IconMap = std::unordered_map<std::wstring, IconLocation>;
+using IconMap = std::unordered_map<std::wstring, std::vector<IconLocation>>;
 std::shared_ptr<const IconMap> g_icons = std::make_shared<const IconMap>();
 thread_local bool g_inHook = false;
 
@@ -226,7 +216,7 @@ std::optional<IconLocation> ParseLocation(std::wstring text,
     std::filesystem::path p(*expanded);
     // Reject drive-relative and root-relative paths; they depend on host state.
     if (!p.is_absolute()) {
-        if (p.has_root_name() || p.has_root_directory()) return std::nullopt;
+        if (base.empty() || p.has_root_name() || p.has_root_directory()) return std::nullopt;
         p = base / p;
     }
     icon.path = p.lexically_normal().wstring();
@@ -305,7 +295,7 @@ IconMap ParseIni(const std::wstring& text, const std::filesystem::path& base) {
         const auto equals = line.find(L'=');
         auto icon = equals == line.npos ? std::nullopt :
             ParseLocation(line.substr(equals + 1), base);
-        if (!icon || !CanExtract(*icon)) {
+        if (!icon) {
             Wh_Log(L"INI line %zu: invalid or unreadable icon; skipped", lineNumber);
             continue;
         }
@@ -316,7 +306,7 @@ IconMap ParseIni(const std::wstring& text, const std::filesystem::path& base) {
             auto ext = Lower(Trim(std::wstring_view(keys).substr(
                 pos, comma == keys.npos ? keys.size() - pos : comma - pos)));
             if (ValidExtension(ext)) {
-                icons[ext] = *icon;
+                icons[ext].push_back(*icon);
             } else {
                 Wh_Log(L"INI line %zu: invalid extension '%s'; skipped", lineNumber,
                        ext.c_str());
@@ -328,19 +318,41 @@ IconMap ParseIni(const std::wstring& text, const std::filesystem::path& base) {
     return icons;
 }
 
-void LoadSettings() {
-    PCWSTR setting = Wh_GetStringSetting(L"iniPath");
-    auto path = Expand(Trim(setting ? setting : L""));
-    Wh_FreeStringSetting(setting);
-    IconMap icons;
-    std::wstring text;
-    if (path && std::filesystem::path(*path).is_absolute() && ReadText(*path, text)) {
-        icons = ParseIni(text, std::filesystem::path(*path).parent_path());
+bool LoadSettings() {
+    IconMap mappings;
+    auto mode = WindhawkUtils::StringSetting::make(L"configurationSource");
+    if (std::wstring_view(mode.get()) == L"ini") {
+        auto setting = WindhawkUtils::StringSetting::make(L"iniPath");
+        auto path = Expand(Trim(setting.get()));
+        std::wstring text;
+        if (path && std::filesystem::path(*path).is_absolute() && ReadText(*path, text))
+            mappings = ParseIni(text, std::filesystem::path(*path).parent_path());
+        else Wh_Log(L"Cannot read INI: check absolute path, encoding, and size (max 4 MiB)");
     } else {
-        Wh_Log(L"INI missing, invalid encoding, too large, or not an absolute path");
+        for (int i = 0; ; ++i) {
+            auto extensions = WindhawkUtils::StringSetting::make(L"icons[%d].extensions", i);
+            auto setting = WindhawkUtils::StringSetting::make(L"icons[%d].icon", i);
+            auto keys = Trim(extensions.get());
+            auto text = Trim(setting.get());
+            if (keys.empty() && text.empty()) break;
+            auto value = ParseLocation(text, {});
+            if (!value) { Wh_Log(L"Entry %d: invalid icon; skipped", i + 1); continue; }
+            size_t pos = 0;
+            do {
+                auto comma = keys.find(L',', pos);
+                auto ext = Lower(Trim(std::wstring_view(keys).substr(pos,
+                    comma == keys.npos ? keys.size() - pos : comma - pos)));
+                if (ValidExtension(ext)) mappings[ext].push_back(*value);
+                else Wh_Log(L"Entry %d: invalid extension; skipped", i + 1);
+                if (comma == keys.npos) break;
+                pos = comma + 1;
+            } while (pos <= keys.size());
+        }
     }
-    Wh_Log(L"Loaded %zu extension mappings", icons.size());
-    std::atomic_store(&g_icons, std::make_shared<const IconMap>(std::move(icons)));
+    Wh_Log(L"Loaded %zu extension mappings", mappings.size());
+    bool changed = mappings != *std::atomic_load(&g_icons);
+    std::atomic_store(&g_icons, std::make_shared<const IconMap>(std::move(mappings)));
+    return changed;
 }
 
 std::optional<IconLocation> LookupPath(PCWSTR path) {
@@ -349,7 +361,11 @@ std::optional<IconLocation> LookupPath(PCWSTR path) {
     if (icons->empty()) return std::nullopt;
     auto it = icons->find(Lower(PathFindExtensionW(path)));
     if (it == icons->end()) return std::nullopt;
-    return it->second;
+    for (auto candidate = it->second.rbegin(); candidate != it->second.rend(); ++candidate) {
+        std::call_once(candidate->validation->once, [&] { candidate->validation->usable = CanExtract(*candidate); });
+        if (candidate->validation->usable) return *candidate;
+    }
+    return std::nullopt;
 }
 
 std::optional<IconLocation> LookupItem(IShellFolder* folder, PCUITEMID_CHILD pidl) {
@@ -461,123 +477,80 @@ HRESULT STDMETHODCALLTYPE GetThumbnailHandlerHook(IThumbnailHandlerFactory* fact
     return g_getThumbnailHandler(factory, item, bindCtx, iid, result);
 }
 
-// BEGIN SHARED HOOK RUNTIME
-// Embedded into each standalone mod by scripts/prepare.py.
-struct ModuleReferences {
-    std::vector<HMODULE> modules;
-} g_hookModules;
-bool g_allowOtherProcesses = false;
-int g_refreshCounter = 0;
+struct ModuleReferences { std::vector<HMODULE> modules; } g_hookModules;
+bool g_refreshExplorer = false;
 
+HMODULE LoadHookModule(PCWSTR name) {
+    HMODULE module = LoadLibraryExW(name, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (module) g_hookModules.modules.push_back(module);
+    return module;
+}
 void ReleaseHookModules() {
-    // Called by Wh_ModUninit after detours are removed, never by a static
-    // destructor running under DllMain's loader lock. If hook registration
-    // partially fails, let Windows reclaim the bounded references at exit.
-    for (auto module : g_hookModules.modules) FreeLibrary(module);
+    // Windhawk removes detours before this callback. Never FreeLibrary from a
+    // static destructor under the loader lock. On partial setup failure, keep
+    // the bounded module references until process exit while hooks roll back.
+    for (HMODULE module : g_hookModules.modules) FreeLibrary(module);
     g_hookModules.modules.clear();
 }
-
-bool MatchesHookTarget(HMODULE module, const HookTarget& target) {
-    if (!module) return false;
-    auto base = reinterpret_cast<const BYTE*>(module);
-    auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
-    auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE || nt->FileHeader.Machine != target.machine ||
-        nt->FileHeader.TimeDateStamp != target.timestamp ||
-        nt->OptionalHeader.SizeOfImage != target.imageSize ||
-        nt->OptionalHeader.CheckSum != target.checksum || target.rva >= target.imageSize) return false;
-    auto section = IMAGE_FIRST_SECTION(nt);
-    for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
-        if (target.rva >= section[i].VirtualAddress &&
-            target.rva - section[i].VirtualAddress < section[i].Misc.VirtualSize &&
-            (section[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)) return true;
-    }
-    return false;
-}
-
-void* ResolveHookTarget(const HookTarget& target) {
-    if (wcscmp(target.module, L"windows.storage.dll") &&
-        wcscmp(target.module, L"shell32.dll")) return nullptr;
-    // Hold a module reference until Wh_ModUninit, after detours are removed.
-    // No COM initialization, folder binding, or Shell object creation.
-    HMODULE module = LoadLibraryExW(target.module, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!module) return nullptr;
-    g_hookModules.modules.push_back(module);
-    if (!MatchesHookTarget(module, target)) {
-        Wh_Log(L"Shell DLL profile mismatch. Run scripts/prepare.py on this PC and recompile.");
-        return nullptr;
-    }
-    return reinterpret_cast<BYTE*>(module) + target.rva;
-}
-
-bool ShouldNotifyShellForProcess(PCWSTR executable, PCWSTR windowsDirectory) {
-    if (!executable || !windowsDirectory) return false;
-    auto explorer = (std::filesystem::path(windowsDirectory) / L"explorer.exe").wstring();
-    return CompareStringOrdinal(executable, -1, explorer.c_str(), -1, TRUE) == CSTR_EQUAL;
-}
-bool IsExplorerProcess() {
-    WCHAR executable[32768], windows[MAX_PATH];
-    DWORD n = GetModuleFileNameW(nullptr, executable, ARRAYSIZE(executable));
-    return n && n < ARRAYSIZE(executable) && GetWindowsDirectoryW(windows, ARRAYSIZE(windows)) &&
-           ShouldNotifyShellForProcess(executable, windows);
-}
-bool LoadProcessPolicy() {
-    g_allowOtherProcesses = Wh_GetIntSetting(L"allowOtherProcesses") != 0;
-    g_refreshCounter = Wh_GetIntSetting(L"refreshCounter");
-    if (!IsExplorerProcess() && !g_allowOtherProcesses) {
-        Wh_Log(L"Skipped non-Explorer process. Other processes require explicit opt-in.");
-        return false;
-    }
-    return true;
-}
 void NotifyShell() {
-    // Called only by an explicit Refresh counter change. Startup, shutdown,
-    // enable/disable, and ordinary INI reloads never broadcast cache invalidation.
-    if (!IsExplorerProcess()) return;
     HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     DWORD owner = 0;
     if (!taskbar || !GetWindowThreadProcessId(taskbar, &owner) || owner != GetCurrentProcessId()) return;
-    Wh_Log(L"Sending explicitly requested Shell cache refresh from taskbar owner");
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 }
-// END SHARED HOOK RUNTIME
 
 bool InstallHooks() {
-    // Resolve and validate all targets before registering any detours.
-    void* ui = ResolveHookTarget(k_iconUI);
-    void* index = ResolveHookTarget(k_iconIndex);
-    void* factory = ResolveHookTarget(k_iconFactory);
-    if (!ui || !index || !factory) { ReleaseHookModules(); return false; }
-    return Wh_SetFunctionHook(ui, reinterpret_cast<void*>(GetUIObjectOfHook),
-                              reinterpret_cast<void**>(&g_getUIObjectOf)) &&
-           Wh_SetFunctionHook(index, reinterpret_cast<void*>(GetIconOfHook),
-                              reinterpret_cast<void**>(&g_getIconOf)) &&
-           Wh_SetFunctionHook(factory, reinterpret_cast<void*>(GetThumbnailHandlerHook),
-                              reinterpret_cast<void**>(&g_getThumbnailHandler)) &&
-           Wh_SetFunctionHook(reinterpret_cast<void*>(SHCreateFileExtractIconW),
-                              reinterpret_cast<void*>(CreateFileExtractIconHook),
-                              reinterpret_cast<void**>(&g_createFileExtractIcon));
+    HMODULE windowsStorage = LoadHookModule(L"windows.storage.dll");
+    if (!(windowsStorage)) { ReleaseHookModules(); return false; }
+    // windows.storage.dll
+    const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
+        {
+            {
+#ifdef _WIN64
+                L"public: virtual long __cdecl CFSFolder::GetUIObjectOf(struct HWND__ *,unsigned int,struct _ITEMID_CHILD const __unaligned * const *,struct _GUID const &,unsigned int *,void * *)"
+#else
+                L"public: virtual long __stdcall CFSFolder::GetUIObjectOf(struct HWND__ *,unsigned int,struct _ITEMID_CHILD const * const *,struct _GUID const &,unsigned int *,void * *)"
+#endif
+            },
+            &g_getUIObjectOf, GetUIObjectOfHook
+        },
+        {
+            {
+#ifdef _WIN64
+                L"public: virtual long __cdecl CFSFolder::GetIconOf(struct _ITEMID_CHILD const __unaligned *,unsigned int,int *)"
+#else
+                L"public: virtual long __stdcall CFSFolder::GetIconOf(struct _ITEMID_CHILD const *,unsigned int,int *)"
+#endif
+            },
+            &g_getIconOf, GetIconOfHook
+        },
+        {
+            {
+#ifdef _WIN64
+                L"public: virtual long __cdecl CFSFolder::GetThumbnailHandler(struct _ITEMID_CHILD const __unaligned *,struct IBindCtx *,struct _GUID const &,void * *)"
+#else
+                L"public: virtual long __stdcall CFSFolder::GetThumbnailHandler(struct _ITEMID_CHILD const *,struct IBindCtx *,struct _GUID const &,void * *)"
+#endif
+            },
+            &g_getThumbnailHandler, GetThumbnailHandlerHook
+        },
+    };
+    if (!(WindhawkUtils::HookSymbols(windowsStorage, windowsStorageHooks, ARRAYSIZE(windowsStorageHooks)))) return false;
+    return WindhawkUtils::SetFunctionHook(SHCreateFileExtractIconW, CreateFileExtractIconHook, &g_createFileExtractIcon);
 }
-}  // namespace
+} // namespace
 
 BOOL Wh_ModInit() {
-    if (!LoadProcessPolicy()) return FALSE;
+    g_refreshExplorer = Wh_GetIntSetting(L"refreshExplorer") != 0;
     LoadSettings();
     bool ok = InstallHooks();
-    if (!ok) Wh_Log(L"Hook profile unavailable or incompatible; mod will not load");
+    if (!ok) Wh_Log(L"Required Shell symbols or hooks unavailable; mod will not load");
     return ok;
 }
-void Wh_ModAfterInit() {}
-BOOL Wh_ModSettingsChanged(BOOL* reload) {
-    if ((Wh_GetIntSetting(L"allowOtherProcesses") != 0) != g_allowOtherProcesses) {
-        *reload = TRUE;
-        return TRUE;
-    }
-    LoadSettings();
-    int refresh = Wh_GetIntSetting(L"refreshCounter");
-    if (refresh != g_refreshCounter) { g_refreshCounter = refresh; NotifyShell(); }
-    return TRUE;
+void Wh_ModSettingsChanged() {
+    bool changed = LoadSettings();
+    g_refreshExplorer = Wh_GetIntSetting(L"refreshExplorer") != 0;
+    if (changed && g_refreshExplorer) NotifyShell();
 }
 void Wh_ModUninit() {
     std::atomic_store(&g_icons, std::make_shared<const IconMap>());
