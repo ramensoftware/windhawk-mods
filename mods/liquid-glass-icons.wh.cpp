@@ -20,7 +20,7 @@ Transforms Windows 11 desktop icons (`FolderView` `SysListView32`) into sleek Li
 ![Liquid Glass Icons Preview](https://raw.githubusercontent.com/Arbaz14/windhawk-mods/main/mods/liquid-glass-icons/screenshot.png)
 
 - **Translucent Glass Backing**: Renders customizable glass tiles behind desktop icons with multiple optical presets (`Liquid Glass`, `Clear Transparent Glass`, `Frosted Crystal`, `Obsidian Tint`, `Glacial Aurora`, or custom hex tints).
-- **Independent Rim & Sheen Control**: Dedicated slider to dial in border specular brightness (0â€“100%) independently from glass body transparency.
+- **Independent Rim & Sheen Control**: Dedicated slider to dial in border specular brightness (0–100%) independently from glass body transparency.
 - **Translucent Icons**: Blends the icon graphic itself into the glass tile (`iconOpacity` slider, default `75%`) instead of rendering opaque blocks.
 - **Inset Framing (No Clipped Corners)**: Scales icon artwork and shortcut overlays proportionally inside the Liquid Glass squircle so square icons never poke through the rounded glass border.
 - **Logo Theming**: Optional colorize, liquid glass embossed logo, monochrome, silhouette, or silver grayscale.
@@ -85,6 +85,7 @@ Transforms Windows 11 desktop icons (`FolderView` `SysListView32`) into sleek Li
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
 #include <commctrl.h>
 #include <d2d1.h>
 
@@ -176,8 +177,6 @@ struct IconCacheEntry {
 
 constexpr WCHAR kRegistryPersonalize[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
-
-constexpr UINT_PTR kDesktopListSubclassId = 0x4C47494Fu;  // "LGIO"
 
 int HexDigit(WCHAR ch) {
     if (ch >= L'0' && ch <= L'9') return ch - L'0';
