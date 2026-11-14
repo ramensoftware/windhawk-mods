@@ -19,6 +19,8 @@
 /*
 # macOS Gestures - Mission Control
 
+![macOS Gestures for Windows](https://i.imgur.com/9ONH63E.gif)
+
 Mission Control for Windows. A **three-finger swipe up** on a precision touchpad opens a
 live, animated overview of all your windows; the overview **follows your fingers** the whole
 way, and springs into place when you let go. Swipe back down, press Esc, or pick a window to
