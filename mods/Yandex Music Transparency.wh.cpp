@@ -1,9 +1,9 @@
 // ==WindhawkMod==
 // @id              yandex-music-transparency
 // @name            Yandex Music Transparency
-// @description     Makes the Yandex Music window transparent
+// @description     Automatically applies custom transparency to Yandex Music (and other selected apps)
 // @version         1.1
-// @author          ChatGPT with tester 'NIKTO'
+// @author          NIKTO
 // @github          NIKTO-2
 // @include         Яндекс Музыка.exe
 // @compilerOptions -lcomctl32
@@ -13,7 +13,33 @@
 /*
 # Yandex Music Transparency
 
-Makes the Yandex Music desktop application window transparent. You can adjust the opacity level in the mod settings.
+Automatically makes the **Yandex Music** (`Яндекс Музыка.exe`) desktop window transparent on startup and prevents the app from resetting the opacity.
+
+Unlike hotkey-based opacity mods, this mod applies your chosen transparency level automatically every time the application runs without manual input.
+
+## Settings
+
+* **Window Opacity (`Alpha`)**: Controls the opacity level from `50` (more transparent) to `255` (fully opaque). Default is `220`.
+
+## Using with other applications
+
+Although configured for Yandex Music by default, the underlying logic works with other Win32/Electron applications. You can apply the same automatic transparency to additional programs by adding their executable names in the mod's **Advanced** tab under **Custom process inclusion list**.
+
+## Limitations
+
+* Only affects top-level windows with the `Chrome_WidgetWin_1` window class.
+* Windows that already use color-key transparency (`LWA_COLORKEY`) are skipped to avoid visual artifacts.
+* Disabling or unloading the mod restores the window's original opacity and layered style.
+
+## Credits
+
+Created with assistance from ChatGPT.
+
+## Screenshots
+
+![Yandex Music Transparency - Explorer background](https://github.com)
+
+![Yandex Music Transparency - Dark background](https://github.com)
 */
 // ==/WindhawkModReadme==
 
