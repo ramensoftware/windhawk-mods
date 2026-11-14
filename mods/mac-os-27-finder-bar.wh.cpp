@@ -86,7 +86,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 - Choose where the bar shows: all displays, the main one, or a specific display (listed by name); if that display is disconnected, the bar moves to the main one
 - **Disks** (optional): its menu lists every local and removable disk with a usage bar and opens it in Explorer
 - Bar icons share one size: each icon is measured and scaled to the same height, and icons and text grow together with one size setting; the bar height is set on its own
-- Nine selection colors for the bar and menus, and the font
+- Nine selection colors: one for the bar, the menus and their switches; and the font
 - Hides with full-screen apps (optional)
 
 ## Settings
@@ -358,7 +358,7 @@ struct Settings {
                    // 5 claro, 6 escuro, 7 OLED (fundos sólidos)
     DWORD tintColor;          // Vidro líquido personalizado: a cor (0xRRGGBB)
     int tintLevel, tintReach;  // força da cor no topo e até onde ela desce (%)
-    int selBar, selMenu;  // cor da seleção: índice em kSelPalette, -1 = fosca
+    int selBar;  // cor da seleção (barra, menus e pílulas): índice em kSelPalette, -1 = fosca
     int searchTarget;     // ícone de busca: 0 pesquisa do Windows, 1 Siri Plus Launchpad
     int openAnim;  // 0 nenhuma, 1 esmaecer, 2 cascata
     int ntfIconShape;  // ícones das notificações: 0 círculo, 1 formato macOS (squircle)
@@ -387,16 +387,19 @@ static int SelIndex(const std::wstring& v) {
     return 0;  // vazio/desconhecido: azul
 }
 
-// Cor da seleção da barra (menu=false) ou dos menus (menu=true). Falso = fosca.
+// Cor da seleção (a da barra vale também para os menus). Falso = fosca.
 // darkText: o texto por cima deve ser escuro (amarelo é claro demais para branco).
-static bool SelColor(bool menu, D2D1_COLOR_F* c, bool* darkText = nullptr) {
-    int i = menu ? g_settings.selMenu : g_settings.selBar;
+static bool SelColor(bool /*menu*/, D2D1_COLOR_F* c, bool* darkText = nullptr) {
+    int i = g_settings.selBar;
     if (i < 0 || i >= kSelCount) return false;
     DWORD v = kSelPalette[i].rgb;
     *c = D2D1::ColorF(((v >> 16) & 255) / 255.0f, ((v >> 8) & 255) / 255.0f, (v & 255) / 255.0f, 1.0f);
     if (darkText) *darkText = v == 0xFFD60A;
     return true;
 }
+// A cor de destaque dos menus e das pílulas (interruptores ligados, controles):
+// a cor da seleção da barra; com a seleção fosca, a cor de destaque da Central.
+static D2D1_COLOR_F MenuAccent();
 
 static int WhInt(PCWSTR key) { return Wh_GetIntSetting(key); }
 static std::wstring ReadStr(PCWSTR name) {
@@ -537,7 +540,6 @@ static const UiDefault kUiDefaults[] = {
     {L"tintLevel", L"100"},
     {L"tintReach", L"29"},
     {L"selectionBar", L"blue"},
-    {L"selectionMenu", L"blue"},
     {L"allMonitors", L"1"},
     {L"autoHide", L"0"},
     {L"hideOnFullscreen", L"1"},
@@ -884,7 +886,6 @@ static void LoadSettings() {
         s.tintReach = std::clamp(OvrInt(L"tintReach"), 0, 100);
     }
     s.selBar = SelIndex(OvrStr(L"selectionBar"));
-    s.selMenu = SelIndex(OvrStr(L"selectionMenu"));
     s.searchTarget = OvrStr(L"searchTarget") == L"siri" ? 1 : 0;
     SetUiLangChoice(OvrStr(L"language"));
     {
@@ -5936,6 +5937,11 @@ static D2D1_COLOR_F Argb(DWORD argb) {
     return D2D1::ColorF(((argb >> 16) & 0xFF) / 255.0f, ((argb >> 8) & 0xFF) / 255.0f, (argb & 0xFF) / 255.0f,
                         ((argb >> 24) & 0xFF) / 255.0f);
 }
+static D2D1_COLOR_F MenuAccent() {
+    D2D1_COLOR_F c;
+    if (SelColor(true, &c)) return c;
+    return Argb(g_settings.ccAccent | 0xFF000000);
+}
 
 static void CcGlyph(wchar_t ch, float cx, float cy, float size, D2D1_COLOR_F color) {
     IDWriteTextLayout* l = nullptr;
@@ -8964,7 +8970,7 @@ static void GmRender(GmLevel* lv) {
     D2D1_COLOR_F fg = g_light ? D2D1::ColorF(0.07f, 0.07f, 0.08f, 1) : D2D1::ColorF(1, 1, 1, 0.96f);
     D2D1_COLOR_F dim = fg;
     dim.a = 0.45f;
-    D2D1_COLOR_F accent = Argb(g_settings.ccAccent | 0xFF000000);
+    D2D1_COLOR_F accent = MenuAccent();  // a cor da seleção da barra
 
     rt->BeginDraw();
     rt->Clear(D2D1::ColorF(0, 0, 0, 0));
@@ -11212,7 +11218,7 @@ static void FlyRender() {
     D2D1_COLOR_F fg = g_light ? D2D1::ColorF(0.07f, 0.07f, 0.08f, 1) : D2D1::ColorF(1, 1, 1, 0.96f);
     D2D1_COLOR_F dim = fg;
     dim.a = 0.55f;
-    D2D1_COLOR_F accent = Argb(g_settings.ccAccent | 0xFF000000);
+    D2D1_COLOR_F accent = MenuAccent();  // a cor da seleção da barra
     D2D1_COLOR_F hoverC = g_light ? D2D1::ColorF(0, 0, 0, 0.07f) : D2D1::ColorF(1, 1, 1, 0.12f);
 
     double t = (double)(GetTickCount64() - g_fly.openTick);
@@ -12726,7 +12732,7 @@ enum BsVal {
     BV_ISLPOS, BV_ISLTEST, BV_ISLCLEAR, BV_NPLAYOUT, BV_NPSIZE, BV_WINNOTIF, BV_WINONLY, BV_ISLHISTNOT,
     BV_WXPROV, BV_WXUNIT, BV_WXLOOK, BV_WXANIM, BV_WXGLASS, BV_WXINT, BV_WXTEMP, BV_WXPLACE, BV_WXNOW, BV_WXRESULT,
     BV_BATTPCT, BV_HIDEFS, BV_OSD, BV_DIM,
-    BV_G_LIQUID, BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_ICONS, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_SELMENU, BV_UPDATES,
+    BV_G_LIQUID, BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_ICONS, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_UPDATES,
     BV_G_TINT, BV_SEARCHTGT, BV_LANG, BV_NPBAR, BV_ICSADD, BV_ICSCLEAR,
     BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_HIDEMAX, BV_HANDLE,
     BV_THEMEHEAD, BV_TGROUP, BV_THEMENONE, BV_THEMERESET,  // Personalizar tema
@@ -12798,7 +12804,7 @@ static const BsRowDef kBsRows[] = {
     {BR_CHOICE, BV_MONSTYLE0 + 7, L"Fundo da barra", 0, 0},
     {BR_CHOICE, BV_MONTEXT0 + 7, L"Cor do texto e dos ícones", 0, 0},
     {BR_GROUP, BV_NONE, L"Seleção na barra", 0, 0},
-    {BR_COLORS, BV_SELBAR, L"Cor da pílula de seleção na barra", 0, 0},
+    {BR_COLORS, BV_SELBAR, L"Cor da pílula de seleção na barra", 0, 0, L"Vale também para a seleção e os interruptores dos menus e das pílulas"},
     {BR_GROUP, BV_NONE, L"Tamanho da barra", 0, 0},
     {BR_SLIDER, BV_HEIGHT, L"Altura da barra", 0, 0, L"Só a altura: do topo da tela até a borda de baixo da barra"},
     {BR_SLIDER, BV_FONT, L"Tamanho dos ícones e da fonte", 0, 0, L"Ícones e texto crescem e diminuem juntos, na mesma proporção"},
@@ -12808,10 +12814,9 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_HANDLE, L"Ocultar com a alça", 0, 0, L"A barra fica escondida e uma pílula fina no centro do topo a traz de volta: um clique mostra a barra (as janelas descem) e outro a esconde. Só funciona com \"Ocultar com janela maximizada\" desligado; ligada, as outras formas de ocultar ficam inativas"},
     {BR_SWITCH, BV_MORE, L"Recolher numa seta os ícones que não cabem", 0, 0, L"Como as setas ao lado do notch no macOS 27"},
     {BR_CHOICE, BV_BARMON, L"Mostrar a barra em", 0, 0, L"Todos os monitores, o principal ou um deles; se o escolhido for desconectado, a barra vai para o principal"},
-    {BR_HEADER, BV_NONE, L"Menus e painéis", 0xE7C4, 0x5E5CE6, L"Seleção nos menus, Tocando agora, pílulas de volume e brilho"},
+    {BR_HEADER, BV_NONE, L"Menus e painéis", 0xE7C4, 0x5E5CE6, L"Tema dos painéis, Tocando agora, pílulas de volume e brilho"},
     {BR_CHOICE, BV_PANELLOOK, L"Tema dos painéis", 0, 0, L"Menus, Central de Controle e painéis: o tema da barra ou um tema próprio"},
     {BR_CHOICE, BV_PANELSTYLE, L"Tema dos menus", 0, 0},
-    {BR_COLORS, BV_SELMENU, L"Seleção nos menus", 0, 0},
     {BR_SWITCH, BV_UPDATES, L"Atualizações pendentes no menu do logo", 0, 0},
     {BR_SWITCH, BV_KBDNAV, L"Ctrl+F2 navega a barra pelo teclado", 0, 0},
     {BR_GROUP, BV_NONE, L"Tocando agora", 0, 0},
@@ -13131,7 +13136,6 @@ static int BsGet(int val) {
         case BV_WXPROV: case BV_WXUNIT: case BV_WXLOOK: case BV_WXANIM: case BV_WXGLASS: case BV_WXINT: case BV_WXTEMP:
             return WxSettingGet(val);
         case BV_SELBAR: return g_settings.selBar;
-        case BV_SELMENU: return g_settings.selMenu;
         case BV_BSTRANSP: return g_bsTransp;
         case BV_HEIGHT: return std::clamp((g_settings.height - 20) * 100 / 28, 0, 100);
         case BV_FONT: return std::clamp((int)std::lround((g_settings.fontSize - 10) * 10), 0, 100);
@@ -13252,11 +13256,10 @@ static void BsSet(int val, int v) {
         OvrSetStr(L"searchTarget", g_settings.searchTarget ? L"siri" : L"windows");
         return;
     }
-    if (val == BV_SELBAR || val == BV_SELMENU) {
+    if (val == BV_SELBAR) {
         int idx = v < 0 || v >= kSelCount ? -1 : v;
-        (val == BV_SELBAR ? g_settings.selBar : g_settings.selMenu) = idx;
-        OvrSetStr(val == BV_SELBAR ? L"selectionBar" : L"selectionMenu",
-                  idx < 0 ? L"frosted" : kSelPalette[idx].key);
+        g_settings.selBar = idx;
+        OvrSetStr(L"selectionBar", idx < 0 ? L"frosted" : kSelPalette[idx].key);
         RedrawAll();
         return;
     }
@@ -17577,7 +17580,7 @@ static void CalRender() {
     D2D1_COLOR_F fg = g_light ? D2D1::ColorF(0.07f, 0.07f, 0.08f, 1) : D2D1::ColorF(1, 1, 1, 0.96f);
     D2D1_COLOR_F dim = fg;
     dim.a = 0.45f;
-    D2D1_COLOR_F accent = Argb(g_settings.ccAccent | 0xFF000000);
+    D2D1_COLOR_F accent = MenuAccent();  // a cor da seleção da barra
     D2D1_COLOR_F hoverC = g_light ? D2D1::ColorF(0, 0, 0, 0.07f) : D2D1::ColorF(1, 1, 1, 0.12f);
     auto text = [&](const std::wstring& src, IDWriteTextFormat* f, D2D1_RECT_F r, D2D1_COLOR_F c) {
         std::wstring t = T(src);
@@ -25160,7 +25163,6 @@ const UiTr kUiTr[] = {
     {L"Automático segue o idioma do Windows", L"Automatic follows the language of Windows", L"Automático sigue el idioma de Windows", L"Automatique suit la langue de Windows", L"Automatisch folgt der Sprache von Windows", L"Automatico segue la lingua di Windows", L"自动: 跟随 Windows 语言"},
     {L"Automático (Windows)", L"Automatic (Windows)", L"Automático (Windows)", L"Automatique (Windows)", L"Automatisch (Windows)", L"Automatico (Windows)", L"自动 (Windows)"},
     {L"Seleção na barra", L"Selection on the bar", L"Selección en la barra", L"Sélection dans la barre", L"Auswahl in der Leiste", L"Selezione nella barra", L"菜单栏选中颜色"},
-    {L"Seleção nos menus", L"Selection in menus", L"Selección en los menús", L"Sélection dans les menus", L"Auswahl in Menüs", L"Selezione nei menu", L"菜单选中颜色"},
     {L"Tamanho", L"Size", L"Tamaño", L"Taille", L"Größe", L"Dimensioni", L"大小"},
     {L"Altura da barra", L"Bar height", L"Altura de la barra", L"Hauteur de la barre", L"Leistenhöhe", L"Altezza della barra", L"菜单栏高度"},
     {L"Comportamento", L"Behavior", L"Comportamiento", L"Comportement", L"Verhalten", L"Comportamento", L"行为"},
@@ -25170,7 +25172,8 @@ const UiTr kUiTr[] = {
     {L"Recolher numa seta os ícones que não cabem", L"Collapse icons that don’t fit into an arrow", L"Agrupar en una flecha los iconos que no caben", L"Regrouper dans une flèche les icônes qui ne tiennent pas", L"Nicht passende Symbole hinter einem Pfeil zusammenfassen", L"Raccogli in una freccia le icone che non entrano", L"将放不下的图标收进箭头"},
     {L"Como as setas ao lado do notch no macOS 27", L"Like the arrows next to the notch in macOS 27", L"Como las flechas junto al notch en macOS 27", L"Comme les flèches à côté de l’encoche dans macOS 27", L"Wie die Pfeile neben der Notch in macOS 27", L"Come le frecce accanto al notch in macOS 27", L"就像 macOS 27 中刘海旁的箭头"},
     {L"Menus e painéis", L"Menus & Panels", L"Menús y paneles", L"Menus et panneaux", L"Menüs und Bereiche", L"Menu e pannelli", L"菜单和面板"},
-    {L"Seleção nos menus, Tocando agora, pílulas de volume e brilho", L"Menu selection, Now Playing, volume and brightness pills", L"Selección en los menús, Reproduciendo, píldoras de volumen y brillo", L"Sélection dans les menus, À l’écoute, pastilles de volume et de luminosité", L"Auswahl in Menüs, Aktuelle Wiedergabe, Pillen für Lautstärke und Helligkeit", L"Selezione nei menu, In riproduzione, pillole di volume e luminosità", L"菜单选中、正在播放、音量和亮度胶囊"},
+    {L"Tema dos painéis, Tocando agora, pílulas de volume e brilho", L"Panel theme, Now Playing, volume and brightness pills", L"Tema de los paneles, Reproduciendo, píldoras de volumen y brillo", L"Thème des panneaux, À l’écoute, pastilles de volume et de luminosité", L"Design der Bereiche, Aktuelle Wiedergabe, Pillen für Lautstärke und Helligkeit", L"Tema dei pannelli, In riproduzione, pillole di volume e luminosità", L"面板主题、正在播放、音量和亮度胶囊"},
+    {L"Vale também para a seleção e os interruptores dos menus e das pílulas", L"Also used for the selection and the switches in menus and pills", L"También se usa para la selección y los interruptores de los menús y las píldoras", L"Sert aussi à la sélection et aux interrupteurs des menus et des pastilles", L"Gilt auch für die Auswahl und die Schalter in Menüs und Pillen", L"Vale anche per la selezione e gli interruttori di menu e pillole", L"也用于菜单和胶囊中的选中项和开关"},
     {L"Atualizações pendentes no menu do logo", L"Pending updates in the logo menu", L"Actualizaciones pendientes en el menú del logo", L"Mises à jour en attente dans le menu du logo", L"Ausstehende Updates im Logo-Menü", L"Aggiornamenti in sospeso nel menu del logo", L"在徽标菜单中显示待安装更新"},
     {L"Ctrl+F2 navega a barra pelo teclado", L"Ctrl+F2 navigates the bar with the keyboard", L"Ctrl+F2 recorre la barra con el teclado", L"Ctrl+F2 parcourt la barre au clavier", L"Strg+F2 steuert die Leiste per Tastatur", L"Ctrl+F2 naviga nella barra con la tastiera", L"Ctrl+F2 使用键盘浏览菜单栏"},
     {L"Painel", L"Panel", L"Panel", L"Panneau", L"Bereich", L"Pannello", L"面板"},
