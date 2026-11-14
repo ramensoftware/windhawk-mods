@@ -686,8 +686,10 @@ struct Tile {
 };
 
 // A property as the shell had it: a local value, a binding, or nothing.
+// The object is held weakly, so that a flyout the shell has thrown away isn't
+// kept alive by the mod.
 struct SavedProp {
-    DependencyObject object{nullptr};
+    winrt::weak_ref<DependencyObject> object;
     DependencyProperty property{nullptr};
     wf::IInspectable local{nullptr};
     Data::Binding binding{nullptr};
@@ -696,7 +698,7 @@ struct SavedProp {
 SavedProp SaveProp(DependencyObject const& object,
                    DependencyProperty const& property) {
     SavedProp saved;
-    saved.object = object;
+    saved.object = winrt::make_weak(object);
     saved.property = property;
     saved.local = object.ReadLocalValue(property);
     if (auto element = object.try_as<FrameworkElement>()) {
@@ -708,28 +710,24 @@ SavedProp SaveProp(DependencyObject const& object,
 }
 
 void RestoreProp(SavedProp const& saved) {
-    if (!saved.object) {
+    auto object = saved.object.get();
+    if (!object) {
         return;
     }
     if (saved.binding) {
-        saved.object.as<FrameworkElement>().SetBinding(saved.property,
-                                                       saved.binding);
+        object.as<FrameworkElement>().SetBinding(saved.property,
+                                                 saved.binding);
     } else if (saved.local == DependencyProperty::UnsetValue()) {
-        saved.object.ClearValue(saved.property);
+        object.ClearValue(saved.property);
     } else {
-        saved.object.SetValue(saved.property, saved.local);
+        object.SetValue(saved.property, saved.local);
     }
 }
 
 // Layout values of the shell's panel, restored when the list layout ends.
 struct SavedLayout {
-    double itemsWidth = NAN;
-    double overflowWidth = NAN;
-    double overflowMaxWidth = NAN;
     double itemWidth = NAN;
     double itemHeight = NAN;
-    int maxRowsOrColumns = 0;
-    Controls::Orientation orientation = Controls::Orientation::Horizontal;
     bool hasWrapGrid = false;
     std::vector<SavedProp> props;
 };
@@ -1589,15 +1587,8 @@ void ApplyLayout(OverflowState& state) {
     auto overflow = state.overflow.get();
     if (!state.savedLayout) {
         SavedLayout saved;
-        saved.itemsWidth = itemsControl.Width();
-        if (overflow) {
-            saved.overflowWidth = overflow.Width();
-            saved.overflowMaxWidth = overflow.MaxWidth();
-        }
         saved.itemWidth = wrapGrid.ItemWidth();
         saved.itemHeight = wrapGrid.ItemHeight();
-        saved.maxRowsOrColumns = wrapGrid.MaximumRowsOrColumns();
-        saved.orientation = wrapGrid.Orientation();
         saved.hasWrapGrid = true;
         saved.props.push_back(
             SaveProp(itemsControl, FrameworkElement::WidthProperty()));
