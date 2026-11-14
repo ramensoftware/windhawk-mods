@@ -7,7 +7,7 @@
 // @description:de-DE Blendet die Rahmen von Fenstern, dem Startmenü, der Taskleiste und anderen Systemelementen aus
 // @description:pt-BR Oculta as bordas das janelas, do menu Iniciar, da barra de tarefas e de outros elementos do sistema
 // @description:zh-CN 隐藏窗口、“开始”菜单、任务栏和其他系统元素的边框
-// @version         1.2.0
+// @version         1.2.1
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -22,7 +22,7 @@
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -luuid -ladvapi32
 // ==/WindhawkMod==
-// Build: 49
+// Build: 50
 
 // ==WindhawkModReadme==
 /*
@@ -632,6 +632,7 @@ constexpr bool IsKeyboardLayoutBorder(std::wstring_view type, std::wstring_view 
 
 #include <dwmapi.h>
 #include <roapi.h>
+#include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
 #include <winstring.h>
 #include <windhawk_utils.h>
 
@@ -1638,7 +1639,11 @@ void ScanControlCenter(unsigned mask) {
     }
 }
 
-void ScanShellOnUiThread(bool refresh) noexcept try {
+bool IsKeyboardLayoutWindow(HWND window) {
+    return ClassIs(window, L"Shell_InputSwitchTopLevelWindow");
+}
+
+void ScanShellOnUiThread(HWND hwnd, bool refresh) noexcept try {
     const unsigned mask = g_shellXamlStopping ? 0 : g_shellXamlMask.load();
     if (g_shellHost == ShellHost::Widgets) {
         RefreshWidgets(mask != 0);
@@ -1648,6 +1653,9 @@ void ScanShellOnUiThread(bool refresh) noexcept try {
         RestoreXamlBorders(mask);
     }
     if (mask && g_shellHost == ShellHost::Explorer) {
+        const unsigned keyboardMask = mask & BorderBit(ShellBorder::KeyboardLayout);
+        const unsigned shellMask = mask & ~keyboardMask;
+        const bool keyboardWindow = keyboardMask && IsKeyboardLayoutWindow(hwnd);
         std::vector<TaskbarSource> taskbars;
         std::vector<Xaml::FrameworkElement> taskViews, measuredTaskbars;
         {
@@ -1666,15 +1674,28 @@ void ScanShellOnUiThread(bool refresh) noexcept try {
             }
         }
         for (auto const& taskbar : taskbars) {
-            ScanShellTree(taskbar.Content(), mask);
+            if (keyboardWindow) {
+                HWND island = nullptr;
+                auto native = taskbar.try_as<IDesktopWindowXamlSourceNative>();
+                if (native && SUCCEEDED(native->get_WindowHandle(&island)) &&
+                    GetAncestor(island, GA_ROOT) == hwnd) {
+                    ScanShellTree(taskbar.Content(), keyboardMask);
+                    continue;
+                }
+            }
+            if (shellMask) {
+                ScanShellTree(taskbar.Content(), shellMask);
+            }
         }
         for (auto const& frame : measuredTaskbars) {
             ScanShellTree(frame, BorderBit(ShellBorder::Taskbar));
         }
         for (auto const& taskView : taskViews) {
-            ScanShellTree(taskView, mask);
+            if (shellMask) {
+                ScanShellTree(taskView, shellMask);
+            }
         }
-        if (const unsigned keyboardMask = mask & BorderBit(ShellBorder::KeyboardLayout)) {
+        if (keyboardMask) {
             std::vector<Xaml::FrameworkElement> keyboardLayouts;
             {
                 std::lock_guard guard(g_sourcesMutex);
@@ -1683,10 +1704,12 @@ void ScanShellOnUiThread(bool refresh) noexcept try {
             for (auto const& layout : keyboardLayouts) {
                 ScanShellTree(layout, keyboardMask);
             }
-            if (auto window = Xaml::Window::Current()) {
-                ScanShellTree(window.Content(), keyboardMask);
-                for (auto popup : Xaml::Media::VisualTreeHelper::GetOpenPopups(window)) {
-                    ScanShellTree(popup.Child(), keyboardMask);
+            if (keyboardWindow) {
+                if (auto window = Xaml::Window::Current()) {
+                    ScanShellTree(window.Content(), keyboardMask);
+                    for (auto popup : Xaml::Media::VisualTreeHelper::GetOpenPopups(window)) {
+                        ScanShellTree(popup.Child(), keyboardMask);
+                    }
                 }
             }
         }
@@ -1710,7 +1733,6 @@ using ControlCenterFocus = HRESULT(WINAPI*)(IUnknown*, void*);
 using ControlCenterConnect = HRESULT(WINAPI*)(IUnknown*, int, IUnknown*);
 ControlCenterFocus g_controlCenterFocus;
 ControlCenterConnect g_controlCenterConnect;
-bool g_controlCenterHooksInstalled;
 
 void RememberControlCenterElement(IUnknown* object) noexcept try {
     if (!object || g_shellXamlStopping) {
@@ -1746,19 +1768,69 @@ HRESULT WINAPI ControlCenterConnectHook(IUnknown* self, int id, IUnknown* target
     return hr;
 }
 
-bool HookControlCenter(HMODULE module, bool applyNow) {
+enum class ControlCenterHookResult { Installed, Missing, Retry, Failed };
+
+ControlCenterHookResult HookControlCenter(HMODULE module, bool applyNow) {
+    void* focus = nullptr;
+    void* connect = nullptr;
     const WindhawkUtils::SYMBOL_HOOK controlCenterDllHooks[] = {
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::ControlCenterView,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnGotFocus(void *))"},
-         &g_controlCenterFocus, ControlCenterFocusHook},
+         &focus, nullptr, true},
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::ControlCenterView,struct winrt::Windows::UI::Xaml::Markup::IComponentConnector>::Connect(int,void *))"},
-         &g_controlCenterConnect, ControlCenterConnectHook, true},
+         &connect, nullptr, true},
     };
-    const bool installed =
-        WindhawkUtils::HookSymbols(module, controlCenterDllHooks, ARRAYSIZE(controlCenterDllHooks)) &&
-        (!applyNow || Wh_ApplyHookOperations());
+    if (!WindhawkUtils::HookSymbols(module, controlCenterDllHooks, ARRAYSIZE(controlCenterDllHooks))) {
+        return ControlCenterHookResult::Retry;
+    }
+    if (!focus && !connect) {
+        Wh_Log(L"Quick Settings discovery symbols are unavailable on this build");
+        return ControlCenterHookResult::Missing;
+    }
+    const bool focusHook = focus && WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<ControlCenterFocus>(focus), ControlCenterFocusHook, &g_controlCenterFocus);
+    const bool connectHook = connect && WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<ControlCenterConnect>(connect), ControlCenterConnectHook, &g_controlCenterConnect);
+    const bool installed = (focusHook || connectHook) && (!applyNow || Wh_ApplyHookOperations());
     Wh_Log(L"Quick Settings discovery hooks: %s", installed ? L"ready" : L"unavailable");
-    return installed;
+    return installed ? ControlCenterHookResult::Installed : ControlCenterHookResult::Failed;
 }
+
+struct ControlCenterHookRetry {
+    size_t retries = 0;
+    ULONGLONG nextAttempt = 0;
+    bool finished = false;
+
+    DWORD Update(bool applyNow) {
+        if (finished) {
+            return INFINITE;
+        }
+        HMODULE module = GetModuleHandleW(L"ControlCenter.dll");
+        if (!module) {
+            return INFINITE;
+        }
+        const ULONGLONG now = GetTickCount64();
+        if (nextAttempt > now) {
+            return static_cast<DWORD>(nextAttempt - now);
+        }
+        // Allow Windhawk's regular and startup failure caches to expire.
+        constexpr DWORD delays[] = {65'000, 4 * 60 * 60 * 1'000 + 2'000};
+        if (HookControlCenter(module, applyNow) != ControlCenterHookResult::Retry) {
+            finished = true;
+            return INFINITE;
+        }
+        if (retries == ARRAYSIZE(delays)) {
+            Wh_Log(L"Quick Settings symbol lookup exhausted its retries");
+            finished = true;
+            return INFINITE;
+        }
+        const DWORD delay = delays[retries++];
+        nextAttempt = GetTickCount64() + delay;
+        return delay;
+    }
+};
+
+// Keep the retry budget if the shell worker is stopped and restarted by settings.
+ControlCenterHookRetry g_controlCenterHookRetry;
 
 using MeasureTaskbarFrame = HRESULT(WINAPI*)(IUnknown*, Foundation::Size, Foundation::Size*);
 MeasureTaskbarFrame g_measureTaskbarFrame;
@@ -1908,7 +1980,7 @@ LRESULT CALLBACK ShellScanHook(int code, WPARAM wParam, LPARAM lParam) {
             UnhookWindowsHookEx(hook)) {
             // Remove the hook on its own thread before the synchronous send returns.
             g_shellScanHook = nullptr;
-            ScanShellOnUiThread(message.wParam != 0);
+            ScanShellOnUiThread(message.hwnd, message.wParam != 0);
         }
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -1922,7 +1994,7 @@ void RequestShellScan(HWND window, bool refresh) {
         return;
     }
     if (thread == GetCurrentThreadId()) {
-        ScanShellOnUiThread(refresh);
+        ScanShellOnUiThread(window, refresh);
         return;
     }
     std::lock_guard guard(g_shellScanMutex);
@@ -1940,7 +2012,7 @@ bool IsShellXamlWindow(HWND window) {
     if (g_shellHost == ShellHost::Explorer) {
         return ClassIs(window, L"Shell_TrayWnd") || ClassIs(window, L"Shell_SecondaryTrayWnd") ||
                ClassIs(window, L"XamlExplorerHostIslandWindow") ||
-               ClassIs(window, L"Shell_InputSwitchTopLevelWindow") ||
+               IsKeyboardLayoutWindow(window) ||
                ClassIs(window, L"Windows.UI.Core.CoreWindow");
     }
     if (g_shellHost == ShellHost::Widgets) {
@@ -1953,7 +2025,7 @@ bool RefreshShellXamlWindows(bool refresh, bool visibleOnly = false) {
     struct Request {
         bool refresh;
         bool visibleOnly;
-        std::unordered_set<DWORD> scanned;
+        std::unordered_map<DWORD, HWND> windows;
     } request{refresh, visibleOnly, {}};
     EnumWindows([](HWND window, LPARAM value) -> BOOL {
         auto& request = *reinterpret_cast<Request*>(value);
@@ -1970,12 +2042,16 @@ bool RefreshShellXamlWindows(bool refresh, bool visibleOnly = false) {
                 return TRUE;
             }
         }
-        if (request.scanned.insert(thread).second) {
-            RequestShellScan(window, request.refresh);
+        const auto [it, inserted] = request.windows.try_emplace(thread, window);
+        if (!inserted && g_shellHost == ShellHost::Explorer && IsKeyboardLayoutWindow(window)) {
+            it->second = window;
         }
         return TRUE;
     }, reinterpret_cast<LPARAM>(&request));
-    return !request.scanned.empty();
+    for (auto const& [thread, window] : request.windows) {
+        RequestShellScan(window, request.refresh);
+    }
+    return !request.windows.empty();
 }
 
 bool g_shellXamlScanPending;
@@ -2011,17 +2087,14 @@ DWORD WINAPI RunShellXamlWorker(void* parameter) {
         g_shellXamlScanTimer = SetTimer(nullptr, 0, kVisiblePanelScanMs, nullptr);
     }
     TaskbarLayoutRetry taskbarLayout;
-    ULONGLONG nextControlCenterHookAttempt = 0;
     while (WaitForSingleObject(stop, 0) == WAIT_TIMEOUT) {
-        if (g_shellHost == ShellHost::Flyouts && !g_controlCenterHooksInstalled &&
-            (g_shellXamlMask.load() & BorderBit(ShellBorder::QuickSettings)) &&
-            GetTickCount64() >= nextControlCenterHookAttempt) {
-            if (auto module = GetModuleHandleW(L"ControlCenter.dll")) {
-                g_controlCenterHooksInstalled = HookControlCenter(module, true);
-                nextControlCenterHookAttempt = GetTickCount64() + 65'000;
-            }
+        DWORD timeout = INFINITE;
+        if (g_shellHost == ShellHost::Explorer) {
+            timeout = taskbarLayout.Update();
+        } else if (g_shellHost == ShellHost::Flyouts &&
+                   (g_shellXamlMask.load() & BorderBit(ShellBorder::QuickSettings))) {
+            timeout = g_controlCenterHookRetry.Update(true);
         }
-        const DWORD timeout = g_shellHost == ShellHost::Explorer ? taskbarLayout.Update() : INFINITE;
         const DWORD result = MsgWaitForMultipleObjects(1, &stop, FALSE, timeout, QS_ALLINPUT);
         if (result == WAIT_TIMEOUT) {
             continue;
@@ -2177,9 +2250,7 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
     } else if (g_shellHost == ShellHost::Flyouts) {
-        if (auto module = GetModuleHandleW(L"ControlCenter.dll")) {
-            g_controlCenterHooksInstalled = HookControlCenter(module, false);
-        }
+        g_controlCenterHookRetry.Update(false);
     }
     return g_shellHost != ShellHost::Unknown;
 }
