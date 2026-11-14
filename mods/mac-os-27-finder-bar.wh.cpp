@@ -12733,7 +12733,7 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_HIDEFS, L"Ocultar em tela cheia", 0, 0, L"Some quando um app ocupa a tela inteira sem barra de título (jogos, vídeos, F11 no navegador)"},
     {BR_SWITCH, BV_HIDEMAX, L"Ocultar com janela maximizada", 0, 0, L"Some também com uma janela comum maximizada (com barra de título), que sobe até o topo; volta ao restaurar, minimizar ou ir para a área de trabalho. Ligada, desativa \"Ocultar com a alça\""},
     {BR_SWITCH, BV_MORE, L"Recolher numa seta os ícones que não cabem", 0, 0, L"Como as setas ao lado do notch no macOS 27"},
-    {BR_SWITCH, BV_HANDLE, L"Ocultar com a alça", 0, 0, L"A barra fica escondida e uma pílula fina no centro do topo a traz de volta: um clique mostra a barra (as janelas descem) e outro a esconde. Só funciona com \"Ocultar com janela maximizada\" desligado"},
+    {BR_SWITCH, BV_HANDLE, L"Ocultar com a alça", 0, 0, L"A barra fica escondida e uma pílula fina no centro do topo a traz de volta: um clique mostra a barra (as janelas descem) e outro a esconde. Só funciona com \"Ocultar com janela maximizada\" desligado; ligada, as outras formas de ocultar ficam inativas"},
     {BR_CHOICE, BV_BARMON, L"Mostrar a barra em", 0, 0, L"Todos os monitores, o principal ou um deles; se o escolhido for desconectado, a barra vai para o principal"},
     {BR_HEADER, BV_NONE, L"Menus e painéis", 0xE7C4, 0x5E5CE6, L"Seleção nos menus, Tocando agora, pílulas de volume e brilho"},
     {BR_COLORS, BV_SELMENU, L"Seleção nos menus", 0, 0},
@@ -14515,6 +14515,8 @@ static bool BsRowDisabled(int rowIdx) {
     if (d.val == BV_TEXTCOLOR) return g_settings.barStyle >= 5;
     if (d.val >= BV_MONTEXT0 && d.val < BV_MONEND) return BsGet(d.val - 8) >= 5;
     if (d.val == BV_HANDLE) return g_settings.hideWhenMaximized;  // bloqueada por "Ocultar com janela maximizada"
+    // Com "Ocultar com a alça" ligada, as outras formas de ocultar ficam inativas.
+    if (d.val == BV_HIDEFS || d.val == BV_HIDEMAX) return g_settings.autoHide && g_settings.revealHandle;
     return false;
 }
 static int BsHitRaw(float x, float y, int* part);
@@ -23110,7 +23112,8 @@ static void BarReleaseSpace(Bar* b, bool release) {
 static void UpdateFullscreen() {
     for (Bar* b : g_bars) {
         bool hide = false, forMax = false;
-        if (g_settings.hideOnFullscreen) {
+        // (Com "Ocultar com a alça", só a alça esconde e mostra a barra.)
+        if (g_settings.hideOnFullscreen && !(g_settings.autoHide && g_settings.revealHandle)) {
             HWND fg = GetForegroundWindow();
             DWORD pid = 0;
             if (fg) GetWindowThreadProcessId(fg, &pid);
@@ -23852,7 +23855,7 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_APP_APPBAR:
             if (wp == ABN_POSCHANGED) {
                 SetAppBarPos(b, true);
-            } else if (wp == ABN_FULLSCREENAPP && g_settings.hideOnFullscreen) {
+            } else if (wp == ABN_FULLSCREENAPP && g_settings.hideOnFullscreen && !(g_settings.autoHide && g_settings.revealHandle)) {
                 bool hide = lp && ForegroundIsFullscreenOn(b);
                 if (hide != b->hiddenForFullscreen) {
                     b->hiddenForFullscreen = hide;
@@ -25121,7 +25124,7 @@ const UiTr kUiTr[] = {
     {L"Ícones e texto crescem e diminuem juntos, na mesma proporção", L"Icons and text grow and shrink together, in the same proportion", L"Los iconos y el texto crecen y se reducen juntos, en la misma proporción", L"Les icônes et le texte grandissent et rétrécissent ensemble, dans la même proportion", L"Symbole und Text wachsen und schrumpfen zusammen, im selben Verhältnis", L"Icone e testo crescono e diminuiscono insieme, nella stessa proporzione", L"图标和文字按相同比例一起放大或缩小"},
     {L"Comportamento da barra", L"Bar behavior", L"Comportamiento de la barra", L"Comportement de la barre", L"Verhalten der Leiste", L"Comportamento della barra", L"菜单栏行为"},
     {L"Ocultar com a alça", L"Hide with the handle", L"Ocultar con el asa", L"Masquer avec la poignée", L"Mit dem Griff ausblenden", L"Nascondi con la maniglia", L"用手柄隐藏"},
-    {L"A barra fica escondida e uma pílula fina no centro do topo a traz de volta: um clique mostra a barra (as janelas descem) e outro a esconde. Só funciona com \"Ocultar com janela maximizada\" desligado", L"The bar stays hidden and a thin pill at the top center brings it back: one click shows the bar (windows move down) and another hides it. Works only with \"Hide when a window is maximized\" off", L"La barra queda oculta y una píldora fina en el centro superior la trae de vuelta: un clic muestra la barra (las ventanas bajan) y otro la oculta. Solo funciona con \"Ocultar con una ventana maximizada\" desactivada", L"La barre reste masquée et une fine pastille en haut au centre la ramène : un clic affiche la barre (les fenêtres descendent) et un autre la masque. Ne fonctionne qu’avec « Masquer quand une fenêtre est agrandie » désactivée", L"Die Leiste bleibt ausgeblendet und eine schmale Pille oben in der Mitte holt sie zurück: ein Klick zeigt die Leiste (Fenster rücken nach unten), ein weiterer blendet sie aus. Nur mit „Bei maximiertem Fenster ausblenden“ aus", L"La barra resta nascosta e una pillola sottile in alto al centro la riporta: un clic mostra la barra (le finestre scendono) e un altro la nasconde. Funziona solo con \"Nascondi con una finestra ingrandita\" disattivata", L"菜单栏保持隐藏，顶部中央的细胶囊可将其调回：单击显示菜单栏（窗口下移），再单击隐藏。仅在“窗口最大化时隐藏”关闭时有效"},
+    {L"A barra fica escondida e uma pílula fina no centro do topo a traz de volta: um clique mostra a barra (as janelas descem) e outro a esconde. Só funciona com \"Ocultar com janela maximizada\" desligado; ligada, as outras formas de ocultar ficam inativas", L"The bar stays hidden and a thin pill at the top center brings it back: one click shows the bar (windows move down) and another hides it. Works only with \"Hide when a window is maximized\" off; while on, the other ways to hide are inactive", L"La barra queda oculta y una píldora fina en el centro superior la trae de vuelta: un clic muestra la barra (las ventanas bajan) y otro la oculta. Solo funciona con \"Ocultar con una ventana maximizada\" desactivada; activada, las otras formas de ocultar quedan inactivas", L"La barre reste masquée et une fine pastille en haut au centre la ramène : un clic affiche la barre (les fenêtres descendent) et un autre la masque. Ne fonctionne qu’avec « Masquer quand une fenêtre est agrandie » désactivée ; activée, les autres façons de masquer sont inactives", L"Die Leiste bleibt ausgeblendet und eine schmale Pille oben in der Mitte holt sie zurück: ein Klick zeigt die Leiste (Fenster rücken nach unten), ein weiterer blendet sie aus. Nur mit „Bei maximiertem Fenster ausblenden“ aus; an, sind die anderen Ausblendarten inaktiv", L"La barra resta nascosta e una pillola sottile in alto al centro la riporta: un clic mostra la barra (le finestre scendono) e un altro la nasconde. Funziona solo con \"Nascondi con una finestra ingrandita\" disattivata; attiva, gli altri modi di nascondere sono inattivi", L"菜单栏保持隐藏，顶部中央的细胶囊可将其调回：单击显示菜单栏（窗口下移），再单击隐藏。仅在“窗口最大化时隐藏”关闭时有效；开启后，其他隐藏方式不可用"},
     {L"Personalizar tema", L"Customize theme", L"Personalizar tema", L"Personnaliser le thème", L"Design anpassen", L"Personalizza tema", L"自定义主题"},
     {L"Ajusta o tema escolhido em Fundo da barra; vale também para os menus, a Central, os painéis e as pílulas", L"Adjusts the theme chosen in Bar background; it also applies to menus, the Control Center, panels and pills", L"Ajusta el tema elegido en Fondo de la barra; vale también para los menús, el Centro de control, los paneles y las píldoras", L"Règle le thème choisi dans Fond de la barre ; s’applique aussi aux menus, au Centre de contrôle, aux panneaux et aux pastilles", L"Passt das unter Leistenhintergrund gewählte Design an; gilt auch für Menüs, Kontrollzentrum, Bereiche und Pillen", L"Regola il tema scelto in Sfondo della barra; vale anche per menu, Centro di Controllo, pannelli e pillole", L"调整在“菜单栏背景”中选择的主题；也适用于菜单、控制中心、面板和胶囊"},
     {L"Tema", L"Theme", L"Tema", L"Thème", L"Design", L"Tema", L"主题"},
