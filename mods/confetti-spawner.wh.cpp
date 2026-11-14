@@ -121,7 +121,7 @@ Each setting's description says how: for example `Gravity` is in hundredths, so
 /*
 - hotkeyFire: Ctrl+Alt+F10
   $name: Fire hotkey
-  $description: Fires a burst, and keeps firing while the keys are held. Examples - Ctrl+Alt+F10, Alt+F9, Ctrl+Shift+F9. Prefer function keys: on AltGr layouts Ctrl+Alt+letter can block typed characters. Use none to disable.
+  $description: Fires a burst, and keeps firing while the keys are held. Examples - Ctrl+Alt+F10, Alt+F9, Ctrl+Shift+F9. Prefer function keys, because on AltGr layouts Ctrl+Alt+letter can block typed characters. Use none to disable.
 - hotkeyCycleOrigin: none
   $name: Cycle origin hotkey
   $description: Switches to the next origin and fires a burst. Not saved to the settings. Use none to disable.
