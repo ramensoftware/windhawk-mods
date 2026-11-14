@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              ansa-dynamic-island
 // @name            Ansa Dynamic Island
-// @description     A sleek, fluent Dynamic Island for Windows crafted by dev-apox — featuring fluid spring physics, curved notch & floating pill modes, live media & waveform bar, two-finger touchpad gestures, ShelfBook drag-and-drop, calendar, inline tasks, and adaptive hardware HUDs.
-// @description:it-IT Una Dynamic Island fluida ed elegante per Windows creata da dev-apox — con fisica a molla, modalità pillola o notch curvo, player musicale con onda animata, gesture touchpad a due dita, ShelfBook drag-and-drop, calendario, task rapidi e HUD adattivi.
+// @description     A sleek Dynamic Island for Windows featuring spring physics, notch & pill modes, live media controls with wavy progress bar, ShelfBook drag-and-drop, calendar, tasks, and hardware HUDs.
+// @description:it-IT Una Dynamic Island fluida per Windows con fisica a molla, modalità pillola o notch, player musicale con onda animata, ShelfBook drag-and-drop, calendario, task rapidi e HUD hardware.
 // @version         6.5.1
 // @author          dev-apox
 // @github          https://github.com/dev-apox
@@ -21,7 +21,6 @@ A sleek, fluent **Dynamic Island** experience for Windows 10 & 11, crafted from 
 - **Releases & Changelog:** [View Releases](https://github.com/dev-apox/ansa-dynamic-island/releases)
 - **Issues & Feedback:** [Report a Bug](https://github.com/dev-apox/ansa-dynamic-island/issues)
 
-![Ansa Dynamic Island Idle](https://raw.githubusercontent.com/dev-apox/ansa-dynamic-island/main/imgs/idle.jpeg)
 *Clean idle pill displaying the circular battery ring, 12-hour digital clock, and animated audio visualizer during playback.*
 
 ---
@@ -29,19 +28,15 @@ A sleek, fluent **Dynamic Island** experience for Windows 10 & 11, crafted from 
 ## ✨ Features
 
 ### 🎵 Live Media Control & One UI 9.0 Wavy Bar
-![Media Control](https://raw.githubusercontent.com/dev-apox/ansa-dynamic-island/main/imgs/mediacontrol.jpeg)
 *Real-time album artwork extraction, adaptive ambient glow matching the cover art, playback controls, and an interactive One UI 9.0 wavy progress bar with click-to-seek.*
 
 ### 📁 ShelfBook (Drag & Drop File Staging)
-![ShelfBook](https://raw.githubusercontent.com/dev-apox/ansa-dynamic-island/main/imgs/bookshelf.jpeg)
 *Drop files or folders directly onto the island to stage them with color-coded type badges, and drag them out anytime into any browser, chat, or Explorer window.*
 
 ### 📅 Interactive Calendar
-![Calendar](https://raw.githubusercontent.com/dev-apox/ansa-dynamic-island/main/imgs/calendar.jpeg)
 *Quick-glance date card paired with an interactive 7-day strip and daily schedule preview right at the top of your screen.*
 
 ### ✅ Inline Things To Do
-![Things To Do](https://raw.githubusercontent.com/dev-apox/ansa-dynamic-island/main/imgs/todo.jpeg)
 *Type, check off, and clear personal tasks directly inside the island without opening any external app.*
 
 ### ⚡ Additional Capabilities
@@ -69,20 +64,17 @@ A sleek, fluent **Dynamic Island** experience for Windows 10 & 11, crafted from 
 Right-click the island (or click the gear icon) to customize everything live inside **Ansa Studio**:
 
 ### 🎨 Style & Physics
-![Settings - Style & Physics](https://raw.githubusercontent.com/dev-apox/ansa-dynamic-island/main/imgs/set1.jpeg)
 *Switch between Floating Pill and Curved Top Notch, adjust UI Scale (100%–150%), choose visual themes (Album Glow, Dark Glass, OLED Black), set Normal or Bouncy spring physics, and toggle Fullscreen Auto-Hide.*
 
 ### 🧩 Idle & Behavior
-![Settings - Idle & Behavior](https://raw.githubusercontent.com/dev-apox/ansa-dynamic-island/main/imgs/set2.jpeg)
 *Customize the idle layout (Ring + Clock, Ring Only, Clock Only, or Minimal), media module, top screen edge hover expansion, Bluetooth HUD, and notification interception.*
 
 ### 🌈 Accent Theme
-![Settings - Accent Theme](https://raw.githubusercontent.com/dev-apox/ansa-dynamic-island/main/imgs/set3.jpeg)
 *Pick your live system accent color from six curated presets: iOS Blue, Indigo, Emerald, Amber, Crimson, and Pure Silver.*
 
 ---
 
-## 👨‍💻 Author
+## 👤 Author
 Made by **dev-apox**.
 */
 // ==/WindhawkModReadme==
@@ -95,14 +87,14 @@ Made by **dev-apox**.
   $options:
   - floating: Floating Pill
   - notch: Top Notch
-- UiScale: 115
+- UiScale: "115"
   $name: UI Scale (%)
   $description: Overall scale multiplier for high-DPI or larger screens.
   $options:
-  - 100: 100% (Standard)
-  - 115: 115% (Large - Recommended)
-  - 130: 130% (Extra Large)
-  - 150: 150% (2K / 4K Display)
+  - "100": 100% (Standard)
+  - "115": 115% (Large - Recommended)
+  - "130": 130% (Extra Large)
+  - "150": 150% (2K / 4K Display)
 - TopMargin: 12
   $name: Top Screen Offset (pixels)
 - IdleWidth: 196
@@ -137,12 +129,12 @@ Made by **dev-apox**.
 - HideFullscreen: true
   $name: Auto-Hide in Fullscreen
   $description: Automatically hides the Dynamic Island when games, videos, or apps run in fullscreen.
-- IdleOpacity: 100
+- IdleOpacity: "100"
   $name: Idle Opacity (%)
   $options:
-  - 100: 100% (Solid)
-  - 85: 85% (Subtle)
-  - 70: 70% (Translucent)
+  - "100": 100% (Solid)
+  - "85": 85% (Subtle)
+  - "70": 70% (Translucent)
 - EdgeHoverExpand: true
   $name: Expand on Top Screen Edge Hover
 - EnableMedia: true
@@ -1060,7 +1052,9 @@ void LoadWindhawkConfiguration() {
     g_cfg.isNotch = (wcscmp(style, L"notch") == 0);
     Wh_FreeStringSetting(style);
 
-    int scalePct = Wh_GetIntSetting(L"UiScale");
+    PCWSTR scaleStr = Wh_GetStringSetting(L"UiScale");
+    int scalePct = _wtoi(scaleStr);
+    Wh_FreeStringSetting(scaleStr);
     if (scalePct < 80 || scalePct > 200) scalePct = 115;
     g_cfg.uiScale = scalePct / 100.0f;
 
@@ -1096,8 +1090,12 @@ void LoadWindhawkConfiguration() {
 
     g_cfg.minimalMode = Wh_GetIntSetting(L"MinimalMode") != 0;
     g_cfg.hideFullscreen = Wh_GetIntSetting(L"HideFullscreen") != 0;
-    g_cfg.idleOpacity = Wh_GetIntSetting(L"IdleOpacity");
-    if (g_cfg.idleOpacity < 30 || g_cfg.idleOpacity > 100) g_cfg.idleOpacity = 100;
+
+    PCWSTR opacityStr = Wh_GetStringSetting(L"IdleOpacity");
+    int opacityPct = _wtoi(opacityStr);
+    Wh_FreeStringSetting(opacityStr);
+    if (opacityPct < 30 || opacityPct > 100) opacityPct = 100;
+    g_cfg.idleOpacity = opacityPct;
 
     g_cfg.edgeHoverExpand = Wh_GetIntSetting(L"EdgeHoverExpand") != 0;
     g_cfg.enableMedia = Wh_GetIntSetting(L"EnableMedia") != 0;
