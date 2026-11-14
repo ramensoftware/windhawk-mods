@@ -3889,10 +3889,14 @@ void StartHotkeyCapture(int target) {
     g_capAlt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
     g_capShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     g_capWin = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+    // Publish capture state before waking the hook thread; otherwise it could
+    // process the update while capture is still false and leave the hook uninstalled.
+    g_captureHotkey = true;
     if (InstallKeyboardHook()) {
-        g_captureHotkey = true;
         g_captureDeadline = NowSeconds() + 10.0;
         g_layoutDirty = true;
+    } else {
+        g_captureHotkey = false;
     }
 }
 
