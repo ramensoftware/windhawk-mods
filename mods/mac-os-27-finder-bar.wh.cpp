@@ -12738,6 +12738,7 @@ enum BsVal {
     BV_THEMEHEAD, BV_TGROUP, BV_THEMENONE, BV_THEMERESET,  // Personalizar tema
     BV_PANELLOOK, BV_PANELSTYLE,                           // Tema dos painéis
     BV_THEMEEDIT,                                          // Personalizar tema: qual tema de vidro
+    BV_SIZERESET,                                          // Tamanho da barra: restaurar
     // "Personalizar por monitor": para cada monitor ligado (até 8), o título, o fundo e a cor do texto.
     BV_MONHEAD0, BV_MONSTYLE0 = BV_MONHEAD0 + 8, BV_MONTEXT0 = BV_MONSTYLE0 + 8, BV_MONEND = BV_MONTEXT0 + 8,
 };
@@ -12808,6 +12809,7 @@ static const BsRowDef kBsRows[] = {
     {BR_GROUP, BV_NONE, L"Tamanho da barra", 0, 0},
     {BR_SLIDER, BV_HEIGHT, L"Altura da barra", 0, 0, L"Só a altura: do topo da tela até a borda de baixo da barra"},
     {BR_SLIDER, BV_FONT, L"Tamanho dos ícones e da fonte", 0, 0, L"Ícones e texto crescem e diminuem juntos, na mesma proporção"},
+    {BR_ACTION, BV_SIZERESET, L"Restaurar o tamanho padrão", 0, 0, L"Altura de 28 px e ícones e fonte de 13 pt"},
     {BR_GROUP, BV_NONE, L"Comportamento da barra", 0, 0},
     {BR_SWITCH, BV_HIDEFS, L"Ocultar em tela cheia", 0, 0, L"Some quando um app ocupa a tela inteira sem barra de título (jogos, vídeos, F11 no navegador)"},
     {BR_SWITCH, BV_HIDEMAX, L"Ocultar com janela maximizada", 0, 0, L"Some também com uma janela comum maximizada (com barra de título), que sobe até o topo; volta ao restaurar, minimizar ou ir para a área de trabalho. Ligada, desativa \"Ocultar com a alça\""},
@@ -13853,6 +13855,7 @@ static PCWSTR BsActionText(int val) {
         case BV_ISLCLEAR: return L"Limpar";
         case BV_WXNOW: return L"Atualizar";
         case BV_THEMERESET: return L"Restaurar";
+        case BV_SIZERESET: return L"Restaurar";
         case BV_ICSADD: return L"Importar…";
         case BV_ICSCLEAR: return L"Remover";
     }
@@ -21756,6 +21759,16 @@ static void IcsImport() {
 
 static void BsAction(int val) {
     switch (val) {
+        case BV_SIZERESET:
+            // A altura e o tamanho dos ícones e da fonte de quando o mod foi instalado.
+            g_settings.height = 28;
+            g_settings.fontSize = 13;
+            g_settings.iconScale = 1.0f;
+            OvrSetInt(L"height", 28);
+            OvrSetInt(L"fontSize", 13);
+            OvrSetInt(L"iconScale", 100);
+            BarsApplyLive(true);
+            break;
         case BV_THEMERESET: {
             // Só o tema que está sendo personalizado volta ao padrão.
             int k = ThemeEdit();
@@ -25299,6 +25312,8 @@ const UiTr kUiTr[] = {
     {L"Tema dos menus", L"Menu theme", L"Tema de los menús", L"Thème des menus", L"Design der Menüs", L"Tema dei menu", L"菜单主题"},
     {L"Acompanhar o tema da barra", L"Match the bar’s theme", L"Igual que el tema de la barra", L"Comme le thème de la barre", L"Wie das Design der Leiste", L"Come il tema della barra", L"跟随菜单栏主题"},
     {L"Personalizar", L"Customize", L"Personalizar", L"Personnaliser", L"Anpassen", L"Personalizza", L"自定义"},
+    {L"Restaurar o tamanho padrão", L"Restore the default size", L"Restaurar el tamaño predeterminado", L"Restaurer la taille par défaut", L"Standardgröße wiederherstellen", L"Ripristina le dimensioni predefinite", L"恢复默认大小"},
+    {L"Altura de 28 px e ícones e fonte de 13 pt", L"28 px high, with 13 pt icons and font", L"28 px de alto, con iconos y fuente de 13 pt", L"28 px de haut, icônes et texte en 13 pt", L"28 px hoch, Symbole und Schrift 13 pt", L"28 px di altezza, icone e carattere a 13 pt", L"高度 28 像素，图标和字体 13 磅"},
     {L"Acompanhar a barra", L"Match the bar", L"Igual que la barra", L"Comme la barre", L"Wie die Leiste", L"Come la barra", L"跟随菜单栏"},
     {L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro; com Transparente, líquido)", L"Match the bar: the bar’s background (glass with Window color, liquid with Clear)", L"Igual que la barra: el fondo de la barra (vidrio con Color de la ventana, líquido con Transparente)", L"Comme la barre : le fond de la barre (verre avec Couleur de la fenêtre, liquide avec Transparent)", L"Wie die Leiste: ihr Hintergrund (Glas bei Fensterfarbe, flüssig bei Klar)", L"Come la barra: lo sfondo della barra (vetro con Colore della finestra, liquido con Trasparente)", L"跟随菜单栏：与菜单栏相同的背景（窗口颜色时为玻璃，透明时为液态）"},
     {L"Claro", L"Light", L"Claro", L"Clair", L"Hell", L"Chiaro", L"浅色"},
