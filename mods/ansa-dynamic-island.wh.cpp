@@ -6,8 +6,7 @@
 // @version         6.5.2
 // @author          dev-apox
 // @github          https://github.com/dev-apox
-// @include         explorer.exe
-// @architecture    x86-64
+// @include         windhawk.exe
 // @compilerOptions -lgdi32 -lgdiplus -luser32 -lshell32 -lwininet -lole32 -loleaut32 -luuid -ldxva2 -lwbemuuid -lshlwapi
 // ==/WindhawkMod==
 
@@ -29,12 +28,11 @@ The idle pill shows a circular battery ring, a 12-hour digital clock, and an ani
 
 ### 🎵 Live Media Control & One UI 9.0 Wavy Bar
 Real-time album artwork extraction, adaptive ambient glow matching the cover art, playback controls, and an interactive One UI 9.0 wavy progress bar with click-to-seek.
-
 ### 📁 ShelfBook (Drag & Drop File Staging)
 Drop files or folders directly onto the island to stage them with color-coded type badges, and drag them out anytime into any browser, chat, or Explorer window.
 
 ### 📅 Interactive Calendar
-Quick-glance date card paired with an interactive 7-day strip and daily schedule preview right at the top of your screen.
+Quick-glance date card paired with an interactive 7-day strip right at the top of your screen.
 
 ### ✅ Inline Things To Do
 Type, check off, and clear personal tasks directly inside the island without opening any external app.
@@ -787,9 +785,12 @@ static HMODULE g_hComBase = NULL;
 static HMODULE g_hShCore = NULL;
 static HMODULE g_hBthProps = NULL;
 
-// Single-instance / lifecycle guards (see Wh_ModInit / Wh_ModUninit)
-static HANDLE g_hSingleInstanceMutex = NULL;
+// Lifecycle synchronization.
+static HANDLE g_stopEvent = NULL;
+static HANDLE g_readyEvent = NULL;
 static bool g_modActive = false;
+static float g_dpiScale = 1.0f;
+static float g_userUiScale = 1.15f;
 
 struct SpringVal {
     float current;
@@ -860,7 +861,6 @@ static int g_shelfPage = 0;
 
 // Calendar & Personalized To-Do State
 static int g_selectedCalDayOffset = 0;
-static int g_calEventCycle = 0;
 static std::vector<TodoItem> g_todos;
 static bool g_isTypingTask = false;
 static std::wstring g_taskDraft = L"";
@@ -902,7 +902,6 @@ struct HitBoxes {
     RECT shelfClearAll;
     // Page 2: Calendar
     RECT calDays[7];
-    RECT calEventPill;
     // Page 3: Things To Do
     RECT todoRows[3];
     RECT todoRowDel[3];
@@ -929,6 +928,10 @@ static void PostOwnedString(UINT msg, WPARAM wp, std::wstring* p) {
     if (!g_hWnd || !PostMessageW(g_hWnd, msg, wp, (LPARAM)p)) {
         delete p;
     }
+}
+
+static void RequestAnimationTimer(HWND hWnd) {
+    SetTimer(hWnd, 1, 13, NULL);
 }
 
 // Sends a media key press through SendInput (replacement for deprecated keybd_event).
@@ -1075,6 +1078,29 @@ Color ExtractDominantColor(Bitmap* bmp) {
 // SECTION 6: CONFIGURATION, FULLSCREEN CHECK & SPRING PHYSICS
 // ============================================================================
 
+static float GetMonitorDpiScale(HMONITOR monitor) {
+    UINT dpiX = 96, dpiY = 96;
+    using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
+    if (!g_hShCore) {
+        g_hShCore = LoadLibraryW(L"shcore.dll");
+    }
+    static GetDpiForMonitor_t pGetDpiForMonitor = NULL;
+    if (!pGetDpiForMonitor && g_hShCore) {
+        pGetDpiForMonitor =
+            (GetDpiForMonitor_t)GetProcAddress(g_hShCore, "GetDpiForMonitor");
+    }
+    if (pGetDpiForMonitor && monitor) {
+        pGetDpiForMonitor(monitor, 0, &dpiX, &dpiY);
+    }
+    return std::max(1.0f, (float)dpiX / 96.0f);
+}
+
+static void UpdateDpiScale() {
+    HMONITOR monitor = g_hWnd ? MonitorFromWindow(g_hWnd, MONITOR_DEFAULTTOPRIMARY)
+                              : MonitorFromPoint({ 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
+    g_dpiScale = GetMonitorDpiScale(monitor);
+}
+
 void LoadWindhawkConfiguration() {
     PCWSTR style = Wh_GetStringSetting(L"IslandStyle");
     g_cfg.isNotch = (wcscmp(style, L"notch") == 0);
@@ -1084,7 +1110,8 @@ void LoadWindhawkConfiguration() {
     int scalePct = _wtoi(scaleStr);
     Wh_FreeStringSetting(scaleStr);
     if (scalePct < 80 || scalePct > 200) scalePct = 115;
-    g_cfg.uiScale = scalePct / 100.0f;
+    g_userUiScale = scalePct / 100.0f;
+    g_cfg.uiScale = g_userUiScale * g_dpiScale;
 
     g_cfg.topMargin = Wh_GetIntSetting(L"TopMargin");
     if (g_cfg.topMargin < 0) g_cfg.topMargin = 12;
@@ -1756,7 +1783,8 @@ BOOL CALLBACK ScanToastWindowsProc(HWND hwnd, LPARAM lParam) {
     if (!GetWindowRect(hwnd, &rc)) return TRUE;
     int w = rc.right - rc.left;
     int h = rc.bottom - rc.top;
-    if (w < 280 || w > 520 || h < 60 || h > 360) return TRUE;
+    if (w < (int)(280 * g_dpiScale) || w > (int)(520 * g_dpiScale) ||
+        h < (int)(60 * g_dpiScale) || h > (int)(360 * g_dpiScale)) return TRUE;
 
     ToastScanContext* ctx = (ToastScanContext*)lParam;
     ctx->found = true;
@@ -1927,7 +1955,7 @@ DWORD WINAPI BackgroundTelemetryWorker(LPVOID lpParam) {
             }
         }
 
-        if (g_cfg.enableBrightness && (tickCounter % 3 == 0)) {
+        if (g_cfg.enableBrightness && (tickCounter % 21 == 0)) {
             int bri = ReadCurrentBrightnessPercent();
             if (bri >= 0) {
                 if (g_lastBrightness >= 0 && bri != g_lastBrightness) {
@@ -1941,7 +1969,7 @@ DWORD WINAPI BackgroundTelemetryWorker(LPVOID lpParam) {
             PollSmtcMediaSession(pSmtcManager);
         }
 
-        if (tickCounter % 7 == 0) {
+        if (tickCounter % 20 == 0) {
             if (g_cfg.enableBattery) {
                 SYSTEM_POWER_STATUS sps;
                 if (GetSystemPowerStatus(&sps)) {
@@ -1983,12 +2011,14 @@ DWORD WINAPI BackgroundTelemetryWorker(LPVOID lpParam) {
             }
         }
 
-        if (g_cfg.enableBluetooth && (tickCounter % 18 == 0)) {
+        if (g_cfg.enableBluetooth && (tickCounter % 42 == 0)) {
             PollBluetoothDevices();
         }
 
         tickCounter++;
-        Sleep(48);
+        if (WaitForSingleObject(g_stopEvent, 48) == WAIT_OBJECT_0) {
+            break;
+        }
     }
 
     if (pSmtcManager) pSmtcManager->Release();
@@ -2635,7 +2665,7 @@ void RenderAnsaDynamicIsland(HWND hWnd) {
                 std::wstring labels[6];
                 labels[0] = g_cfg.isNotch ? L"Shape: Top Notch" : L"Shape: Floating Pill";
                 wchar_t scaleStr[48];
-                swprintf_s(scaleStr, L"UI Scale: %d%%", (int)std::round(g_cfg.uiScale * 100.0f));
+                swprintf_s(scaleStr, L"UI Scale: %d%%", (int)std::round(g_userUiScale * 100.0f));
                 labels[1] = scaleStr;
                 labels[2] = (g_cfg.theme == THEME_GLOW) ? L"Theme: Album Glow" : (g_cfg.theme == THEME_GLASS ? L"Theme: Dark Glass" : L"Theme: OLED Black");
                 labels[3] = (g_cfg.springPreset == SPRING_BOUNCY) ? L"Physics: Bouncy" : L"Physics: Normal";
@@ -3004,24 +3034,6 @@ void RenderAnsaDynamicIsland(HWND hWnd) {
                         }
                     }
 
-                    float evY = bodyY + 54.0f * s;
-                    float evH = 50.0f * s;
-                    GraphicsPath evP;
-                    BuildPillRect(evP, rightX, evY, rightW, evH, 12.0f * s);
-                    SolidBrush evBg(Color(pa, 22, 22, 28));
-                    g.FillPath(&evBg, &evP);
-
-                    const wchar_t* sampleEvents[3] = {
-                        L"•  Focus & Deep Work Session",
-                        L"•  Review Weekly Goals & Tasks",
-                        L"•  No Conflicts • Free Afternoon"
-                    };
-                    RectF evR(rightX + 12.0f * s, evY, rightW - 24.0f * s, evH);
-                    g.DrawString(sampleEvents[g_calEventCycle % 3], -1, &subFont, evR, &leftFmt, &pWhite);
-
-                    if (p == g_hubPage) {
-                        g_hit.calEventPill = { (LONG)rightX, (LONG)evY, (LONG)(rightX + rightW), (LONG)(evY + evH) };
-                    }
                 }
                 // ============================================================
                 // PAGE 3: PERSONALIZED THINGS TO DO (INLINE TYPING EDITOR)
@@ -3408,14 +3420,18 @@ void StepHubPageBy(int deltaPages) {
 // ============================================================================
 
 LRESULT CALLBACK AnsaWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg != WM_TIMER && msg != WM_CREATE && msg != WM_DESTROY) {
+        RequestAnimationTimer(hWnd);
+    }
+
     switch (msg) {
         case WM_CREATE: {
             DragAcceptFiles(hWnd, TRUE);
             pGetPointerInfo = (PFN_GetPointerInfo)GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetPointerInfo");
             GESTURECONFIG gc = { GID_PAN, GC_PAN, 0 };
             SetGestureConfig(hWnd, 0, 1, &gc, sizeof(GESTURECONFIG));
-            SetTimer(hWnd, 1, 13, NULL);
-            SetTimer(hWnd, 2, 140, NULL);
+            RequestAnimationTimer(hWnd);
+            SetTimer(hWnd, 2, 1000, NULL);
             break;
         }
 
@@ -3436,6 +3452,17 @@ LRESULT CALLBACK AnsaWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 }
                 return 0;
             }
+            break;
+        }
+
+        case WM_DPICHANGED:
+        case WM_DISPLAYCHANGE: {
+            UpdateDpiScale();
+            g_cfg.uiScale = g_userUiScale * g_dpiScale;
+            float tw = 0.0f, th = 0.0f;
+            ComputeTargetDimensions(g_viewMode, tw, th);
+            g_sprW.target = tw;
+            g_sprH.target = th;
             break;
         }
 
@@ -3796,10 +3823,11 @@ LRESULT CALLBACK AnsaWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                     if (PtInRect(&g_hit.optBtn[0], pt)) {
                         g_cfg.isNotch = !g_cfg.isNotch;
                     } else if (PtInRect(&g_hit.optBtn[1], pt)) {
-                        if (g_cfg.uiScale < 1.10f) g_cfg.uiScale = 1.15f;
-                        else if (g_cfg.uiScale < 1.25f) g_cfg.uiScale = 1.30f;
-                        else if (g_cfg.uiScale < 1.45f) g_cfg.uiScale = 1.50f;
-                        else g_cfg.uiScale = 1.00f;
+                        if (g_userUiScale < 1.10f) g_userUiScale = 1.15f;
+                        else if (g_userUiScale < 1.25f) g_userUiScale = 1.30f;
+                        else if (g_userUiScale < 1.45f) g_userUiScale = 1.50f;
+                        else g_userUiScale = 1.00f;
+                        g_cfg.uiScale = g_userUiScale * g_dpiScale;
                         float tw = 0.0f, th = 0.0f;
                         ComputeTargetDimensions(VIEW_SETTINGS_STUDIO, tw, th);
                         g_sprW.target = tw;
@@ -3900,9 +3928,6 @@ LRESULT CALLBACK AnsaWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                             break;
                         }
                     }
-                    if (PtInRect(&g_hit.calEventPill, pt)) {
-                        g_calEventCycle++;
-                    }
                 } else if (g_hubPage == PAGE_TODO) {
                     if (g_isTypingTask) {
                         if (PtInRect(&g_hit.todoInputSave, pt)) {
@@ -3964,6 +3989,7 @@ LRESULT CALLBACK AnsaWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 if (g_hud.expireTick > 0 && GetTickCount64() > g_hud.expireTick && !g_isTypingTask) {
                     g_hud.expireTick = 0;
                     g_viewMode = g_isHovered ? VIEW_EXPANDED_HUB : VIEW_IDLE;
+                    RequestAnimationTimer(hWnd);
                 }
 
                 if (g_lastTouchpadEventTick > 0 && (GetTickCount64() - g_lastTouchpadEventTick > 340)) {
@@ -4022,6 +4048,16 @@ LRESULT CALLBACK AnsaWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 }
 
                 RenderAnsaDynamicIsland(hWnd);
+                bool animationActive = isMediaPlaying ||
+                    g_waveAmplitude > 0.01f ||
+                    g_viewMode == VIEW_TOAST_NOTIFICATION ||
+                    std::abs(g_sprW.target - g_sprW.current) > 0.03f ||
+                    std::abs(g_sprH.target - g_sprH.current) > 0.03f ||
+                    std::abs(g_sprGlow.target - g_sprGlow.current) > 0.03f ||
+                    std::abs(g_sprBounceY.velocity) > 0.03f ||
+                    std::abs(g_sprBounceX.velocity) > 0.03f ||
+                    std::abs(g_sprPageScroll.target - g_sprPageScroll.current) > 0.03f;
+                if (!animationActive) KillTimer(hWnd, 1);
             } else if (wParam == 2) {
                 if (g_cfg.hideFullscreen && !g_isTypingTask) {
                     bool fs = IsForegroundWindowFullscreen();
@@ -4048,6 +4084,9 @@ LRESULT CALLBACK AnsaWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                             g_hud.expireTick = GetTickCount64() + 2800;
                         }
                     }
+                }
+                if (!g_isHiddenByFullscreen) {
+                    RenderAnsaDynamicIsland(hWnd);
                 }
             }
             break;
@@ -4079,7 +4118,13 @@ DWORD WINAPI IslandUiThread(LPVOID lpParam) {
     wc.hInstance = GetModuleHandle(NULL);
     wc.lpszClassName = L"AnsaDynamicIslandDevApoxClass";
     wc.hCursor = LoadCursor(NULL, IDC_HAND);
-    RegisterClassW(&wc);
+    if (!RegisterClassW(&wc)) {
+        Wh_Log(L"Failed to register island window class (error %lu)", GetLastError());
+        SetEvent(g_readyEvent);
+        GdiplusShutdown(g_gdiplusToken);
+        OleUninitialize();
+        return 0;
+    }
 
     float initW = 0.0f, initH = 0.0f;
     ComputeTargetDimensions(VIEW_IDLE, initW, initH);
@@ -4099,6 +4144,7 @@ DWORD WINAPI IslandUiThread(LPVOID lpParam) {
     );
 
     if (g_hWnd) {
+        SetEvent(g_readyEvent);
         ActivateHudEvent(VIEW_TOAST_NOTIFICATION, L"Ansa Dynamic Island", L"", L"Made by dev-apox", 1.0f, GetAccentColorByIndex(g_cfg.accentIdx), 3600, 0);
 
         // Run until WM_QUIT (posted by WM_DESTROY). Do NOT gate this loop on g_running,
@@ -4114,6 +4160,7 @@ DWORD WINAPI IslandUiThread(LPVOID lpParam) {
         }
     } else {
         Wh_Log(L"Failed to create island window (error %lu)", GetLastError());
+        SetEvent(g_readyEvent);
     }
 
     {
@@ -4133,31 +4180,19 @@ DWORD WINAPI IslandUiThread(LPVOID lpParam) {
 // SECTION 13: WINDHAWK LIFECYCLE ENTRY POINTS
 // ============================================================================
 
-// explorer.exe can be spawned multiple times (e.g. "Launch folder windows in a
-// separate process", COM -Embedding servers). Only the main shell instance
-// should host the island.
-static bool IsMainExplorerProcess() {
-    const wchar_t* cmd = GetCommandLineW();
-    return !(cmd && (wcsstr(cmd, L"-Embedding") || wcsstr(cmd, L"/factory")));
-}
-
-BOOL Wh_ModInit() {
-    if (!IsMainExplorerProcess()) {
-        Wh_Log(L"Secondary explorer process, skipping");
-        return TRUE;
-    }
-
-    g_hSingleInstanceMutex = CreateMutexW(NULL, FALSE, L"Local\\AnsaDynamicIsland_dev-apox");
-    if (!g_hSingleInstanceMutex) {
+BOOL WhTool_ModInit() {
+    g_stopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    g_readyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!g_stopEvent || !g_readyEvent) {
+        Wh_Log(L"Failed to create lifecycle events");
+        if (g_stopEvent) CloseHandle(g_stopEvent);
+        if (g_readyEvent) CloseHandle(g_readyEvent);
+        g_stopEvent = NULL;
+        g_readyEvent = NULL;
         return FALSE;
     }
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(g_hSingleInstanceMutex);
-        g_hSingleInstanceMutex = NULL;
-        Wh_Log(L"Another instance is already active, skipping");
-        return TRUE;
-    }
 
+    UpdateDpiScale();
     LoadWindhawkConfiguration();
     g_running.store(true);
 
@@ -4167,19 +4202,39 @@ BOOL Wh_ModInit() {
     if (!g_hWorkerThread || !g_hUiThread) {
         Wh_Log(L"Failed to create worker threads");
         g_running.store(false);
+        SetEvent(g_stopEvent);
         if (g_hWorkerThread) {
-            WaitForSingleObject(g_hWorkerThread, 5000);
+            WaitForSingleObject(g_hWorkerThread, INFINITE);
             CloseHandle(g_hWorkerThread);
             g_hWorkerThread = NULL;
         }
         if (g_hUiThread) {
             if (g_hWnd) PostMessageW(g_hWnd, WM_CLOSE, 0, 0);
-            WaitForSingleObject(g_hUiThread, 5000);
+            WaitForSingleObject(g_hUiThread, INFINITE);
             CloseHandle(g_hUiThread);
             g_hUiThread = NULL;
         }
-        CloseHandle(g_hSingleInstanceMutex);
-        g_hSingleInstanceMutex = NULL;
+        CloseHandle(g_stopEvent);
+        CloseHandle(g_readyEvent);
+        g_stopEvent = NULL;
+        g_readyEvent = NULL;
+        return FALSE;
+    }
+
+    WaitForSingleObject(g_readyEvent, INFINITE);
+    if (!g_hWnd) {
+        g_running.store(false);
+        SetEvent(g_stopEvent);
+        WaitForSingleObject(g_hWorkerThread, INFINITE);
+        WaitForSingleObject(g_hUiThread, INFINITE);
+        CloseHandle(g_hWorkerThread);
+        CloseHandle(g_hUiThread);
+        g_hWorkerThread = NULL;
+        g_hUiThread = NULL;
+        CloseHandle(g_stopEvent);
+        CloseHandle(g_readyEvent);
+        g_stopEvent = NULL;
+        g_readyEvent = NULL;
         return FALSE;
     }
 
@@ -4187,13 +4242,14 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     if (g_modActive) {
         g_running.store(false);
+        SetEvent(g_stopEvent);
 
         // Stop the worker first: it is the thread that posts messages to the UI window.
         if (g_hWorkerThread) {
-            WaitForSingleObject(g_hWorkerThread, 5000);
+            WaitForSingleObject(g_hWorkerThread, INFINITE);
             CloseHandle(g_hWorkerThread);
             g_hWorkerThread = NULL;
         }
@@ -4202,7 +4258,7 @@ void Wh_ModUninit() {
             PostMessageW(g_hWnd, WM_CLOSE, 0, 0);
         }
         if (g_hUiThread) {
-            WaitForSingleObject(g_hUiThread, 5000);
+            WaitForSingleObject(g_hUiThread, INFINITE);
             CloseHandle(g_hUiThread);
             g_hUiThread = NULL;
         }
@@ -4212,13 +4268,186 @@ void Wh_ModUninit() {
         g_modActive = false;
     }
 
-    if (g_hSingleInstanceMutex) {
-        CloseHandle(g_hSingleInstanceMutex);
-        g_hSingleInstanceMutex = NULL;
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = NULL;
+    }
+    if (g_readyEvent) {
+        CloseHandle(g_readyEvent);
+        g_readyEvent = NULL;
     }
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     if (!g_modActive) return;
     LoadWindhawkConfiguration();
+    if (g_hWnd) PostMessageW(g_hWnd, WM_APP + 7, 0, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Tool-mod launcher boilerplate.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFO lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
