@@ -2280,26 +2280,28 @@ void SeekMediaToTicks(int64_t targetTicks) {
         std::thread([targetTicks, requestGeneration]() {
         struct WorkerCompletion { ~WorkerCompletion() { EndTrackedWorkerThread(); } };
         WorkerCompletion completion;
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        bool apartmentInitialized = false;
         try {
+            winrt::init_apartment(winrt::apartment_type::multi_threaded);
+            apartmentInitialized = true;
+
             // Serialize seek requests. A queued older mouse-move request is discarded
             // if a newer position has already been requested by the user.
             std::lock_guard seekLock(seekMutex);
             if (requestGeneration != seekGeneration.load(std::memory_order_relaxed)) {
-                winrt::uninit_apartment();
-                return;
-            }
-
-            winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession session = nullptr;
-            {
-                std::lock_guard lock(g_stateMutex);
-                session = g_activeSession;
-            }
-            if (session) {
-                session.TryChangePlaybackPositionAsync(targetTicks).get();
+                // The apartment is released by the common cleanup below.
+            } else {
+                winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession session = nullptr;
+                {
+                    std::lock_guard lock(g_stateMutex);
+                    session = g_activeSession;
+                }
+                if (session) {
+                    session.TryChangePlaybackPositionAsync(targetTicks).get();
+                }
             }
         } catch (...) {}
-        winrt::uninit_apartment();
+        if (apartmentInitialized) winrt::uninit_apartment();
         }).detach();
     } catch (...) {
         EndTrackedWorkerThread();
@@ -2342,9 +2344,11 @@ void SendMediaTransportCommand(int cmd) {
         std::thread([cmd]() {
         struct WorkerCompletion { ~WorkerCompletion() { EndTrackedWorkerThread(); } };
         WorkerCompletion completion;
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        bool apartmentInitialized = false;
         bool sessionAttempted = false;
         try {
+            winrt::init_apartment(winrt::apartment_type::multi_threaded);
+            apartmentInitialized = true;
             winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession session = nullptr;
             {
                 std::lock_guard lock(g_stateMutex);
@@ -2366,7 +2370,7 @@ void SendMediaTransportCommand(int cmd) {
             WORD appCmd = (cmd == 0) ? 12 : ((cmd == 1) ? 14 : 11);
             SendNotifyMessageW(fg, WM_APPCOMMAND, (WPARAM)fg, MAKELONG(0, appCmd));
         }
-        winrt::uninit_apartment();
+        if (apartmentInitialized) winrt::uninit_apartment();
         }).detach();
     } catch (...) {
         EndTrackedWorkerThread();
