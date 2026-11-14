@@ -6,6 +6,7 @@
 // @author          ChatGPT with tester 'NIKTO'
 // @github          NIKTO-2
 // @include         Яндекс Музыка.exe
+// @compilerOptions -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
