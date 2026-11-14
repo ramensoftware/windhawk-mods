@@ -78,7 +78,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 - **Live glass**: panels blur what's behind them in real time, with an experimental liquid glass with edge refraction (on by default)
 - **Custom liquid glass** (the theme from Siri Plus Launchpad): your color at the top, fading to clear glass at the bottom, with a fine line of light along the bottom edge. For the panels and pills, the bar's background or both; color, strength and how far down the color goes are set in Menu Bar Settings
 - **One glass for everything**: the Control Center, menus, panels and pills share the same glass settings (style, tint, liquid glass, refraction, blur, live)
-- "Window color" bar background: transparent over the desktop, and the color of the active window's title bar when that window is maximized
+- "Window color" bar background: transparent over the desktop, and the color of the title bar of the maximized window on that display (it stays while a menu, search or another window is in front)
 - Bar text and icons in white, black or automatic (following the Windows theme, or the solid background)
 - Clicking the album cover (Control Center or Now Playing) brings the playing app's window to the front
 - Optional: hide the bar while a window is maximized on its display (the window gets the whole height) and bring it back when none is
@@ -945,6 +945,7 @@ struct Bar {
     float hVisFrom = 0, hVisTo = 0, hGrowFrom = 0, hGrowTo = 0;
     ULONGLONG hVisTick = 0, hGrowTick = 0;
     bool maxHidden = false;       // escondida por janela maximizada
+    HWND peekSrc = nullptr;       // a janela de onde veio peekColor
     ULONGLONG lqShot = 0;         // vidro líquido sem "ao vivo": quando a foto do fundo foi tirada
     bool lqShown = false;         // a barra estava visível na última volta do vidro líquido
     bool peekReserved = false;    // mostrada pela alça: o espaço do topo reservado só enquanto ela fica
@@ -1383,7 +1384,8 @@ static void ResolveTheme() {
     else if (g_settings.panelTheme == 2) g_panelLight = true;
     else g_panelLight = ReadPersonalizeDword(L"AppsUseLightTheme", 1) != 0;
     // Vidro líquido personalizado: o texto segue a cor escolhida (escuro numa cor clara).
-    if (g_settings.barStyle == 3) g_light = TintIsLight();
+    // Vidro líquido personalizado com o texto no automático: segue a cor do vidro.
+    if (g_settings.barStyle == 3 && g_settings.theme == 0) g_light = TintIsLight();
 }
 
 struct ACCENT_POLICY { int AccentState; int AccentFlags; DWORD GradientColor; int AnimationId; };
@@ -1473,11 +1475,13 @@ static bool BarLight(const Bar* b) {
         return lum > 0.58f;
     }
     int st = BarStyleOf(b);
-    if (st == 3) return TintIsLight();  // segue a cor do vidro
+    // Fundos sólidos: o texto é sempre o automático, que segue o fundo (escuro no claro).
+    if (st >= 5) return st == 5;
     int t = TextColorFor(b->device);
-    // Fundos sólidos: no automático, o texto segue o fundo (escuro no claro).
-    if (st >= 5 && t <= 0) return st == 5;
-    if (t < 0) return g_light;
+    if (t < 0) t = g_settings.theme;  // a escolha de todos (0 automático, 1 branco, 2 preto)
+    // Vidro líquido personalizado: branco ou preto se escolhido; no automático, segue a cor do vidro.
+    if (st == 3) return t == 1 ? false : t == 2 ? true : TintIsLight();
+    if (TextColorFor(b->device) < 0) return g_light;
     if (t == 1) return false;
     if (t == 2) return true;
     return ReadPersonalizeDword(L"SystemUsesLightTheme", 0) != 0;
@@ -12694,7 +12698,8 @@ static const BsRowDef kBsRows[] = {
     {BR_CHOICE, BV_LANG, L"Idioma", 0, 0, L"Automático segue o idioma do Windows"},
     {BR_GROUP, BV_NONE, L"Temas da barra", 0, 0},
     {BR_CHOICE, BV_BARSTYLE, L"Fundo da barra", 0, 0, L"Personalizar por monitor: cada monitor com fundo e cor do texto próprios"},
-    {BR_CHOICE, BV_TEXTCOLOR, L"Cor do texto e dos ícones", 0, 0, L"Automático segue o tema do Windows"},
+    {BR_CHOICE, BV_TEXTCOLOR, L"Cor do texto e dos ícones", 0, 0, L"Automático segue o tema do Windows (no Vidro líquido personalizado, a cor do vidro; em Claro, Escuro e OLED, o fundo)"},
+    {BR_COLORS, BV_TCOLOR, L"Cor do vidro", 0, 0, L"Vidro líquido personalizado: o primeiro círculo abre a paleta do Windows, para qualquer cor"},
     {BR_GROUP, BV_MONHEAD0 + 0, L"Monitor", 0, 0},
     {BR_CHOICE, BV_MONSTYLE0 + 0, L"Fundo da barra", 0, 0},
     {BR_CHOICE, BV_MONTEXT0 + 0, L"Cor do texto e dos ícones", 0, 0},
@@ -12751,7 +12756,6 @@ static const BsRowDef kBsRows[] = {
     {BR_SLIDER, BV_G_BLUR, L"Desfoque do fundo", 0, 0},
     {BR_SWITCH, BV_G_LIVE, L"Acompanhar o fundo ao vivo", 0, 0, L"Vídeos e papéis de parede animados continuam aparecendo atrás do vidro"},
     {BR_GROUP, BV_TGROUP, L"Vidro líquido personalizado", 0, 0},
-    {BR_COLORS, BV_TCOLOR, L"Cor do vidro", 0, 0, L"O primeiro círculo abre a paleta do Windows, para qualquer cor"},
     {BR_SLIDER, BV_TLEVEL, L"Força da cor no topo", 0, 0, L"100 = sólida no topo; menos deixa o fundo aparecer também na parte colorida"},
     {BR_SLIDER, BV_TREACH, L"Até onde a cor desce", 0, 0, L"Valores baixos mantêm a cor perto do topo; altos a trazem para baixo"},
     {BR_ACTION, BV_THEMERESET, L"Restaurar o padrão deste tema", 0, 0, L"Volta os ajustes acima aos valores de quando o mod foi instalado"},
@@ -13005,6 +13009,7 @@ static int BsGet(int val) {
         return st >= 0 ? st : g_settings.barStyle;
     }
     if (val >= BV_MONTEXT0 && val < BV_MONEND) {
+        if (BsGet(val - 8) >= 5) return 0;  // fundo sólido: sempre automático
         int t = MonMapGet(g_settings.textColorMon, BsMonDevice(BvMonIndex(val)), 2);
         return t >= 0 ? t : g_settings.theme;  // 0 automático, 1 branco, 2 preto (como o de todos)
     }
@@ -13020,7 +13025,7 @@ static int BsGet(int val) {
         case BV_G_STYLE: return g_glass.tinted ? 1 : 0;
         case BV_CCCLOSE: return g_settings.ccCloseAnim;
         case BV_NTFSHAPE: return g_settings.ntfIconShape;
-        case BV_TEXTCOLOR: return g_settings.theme;
+        case BV_TEXTCOLOR: return g_settings.barStyle >= 5 ? 0 : g_settings.theme;  // sólidos: sempre automático
         case BV_HANDLE: return g_settings.autoHide && g_settings.revealHandle && !g_settings.hideWhenMaximized;
         case BV_BARMON: {
             if (g_settings.barMonitor == L"all") return 0;
@@ -14506,8 +14511,9 @@ static bool BsRowDisabled(int rowIdx) {
     const BsRowDef& d = kBsRows[g_bs.rows[rowIdx].def];
     if (d.kind == BR_HEADER) return false;
     // Com a barra no Vidro líquido personalizado, o texto segue a cor do vidro.
-    if (d.val == BV_TEXTCOLOR) return g_settings.barStyle == 3;
-    if (d.val >= BV_MONTEXT0 && d.val < BV_MONEND) return BsGet(d.val - 8) == 3;  // o fundo dele é o personalizado
+    // Claro, Escuro e OLED: a cor do texto fica no automático (segue o fundo).
+    if (d.val == BV_TEXTCOLOR) return g_settings.barStyle >= 5;
+    if (d.val >= BV_MONTEXT0 && d.val < BV_MONEND) return BsGet(d.val - 8) >= 5;
     if (d.val == BV_HANDLE) return g_settings.hideWhenMaximized;  // bloqueada por "Ocultar com janela maximizada"
     return false;
 }
@@ -23048,6 +23054,7 @@ static bool ForegroundIsFullscreenOn(Bar* b) {
 struct MaxFind {
     HMONITOR mon;
     bool found;
+    HWND hwnd = nullptr;  // a de cima (EnumWindows vai de cima para baixo)
 };
 static BOOL CALLBACK MaxFindProc(HWND w, LPARAM lp) {
     auto* f = reinterpret_cast<MaxFind*>(lp);
@@ -23056,9 +23063,17 @@ static BOOL CALLBACK MaxFindProc(HWND w, LPARAM lp) {
     if (IsCloaked(w) || MonitorFromWindow(w, MONITOR_DEFAULTTONULL) != f->mon) return TRUE;
     DWORD pid = 0;
     GetWindowThreadProcessId(w, &pid);
-    if (IsShellOrSelf(pid)) return TRUE;
+    // (Janelas do Explorador de Arquivos contam; a área de trabalho e a barra de tarefas, não.)
+    if (IsShellOrSelf(pid) && !ClassIs(w, L"CabinetWClass")) return TRUE;
     f->found = true;
+    f->hwnd = w;
     return FALSE;
+}
+// A janela maximizada mais de cima neste monitor (ou nenhuma).
+static HWND TopMaximizedOn(Bar* b) {
+    MaxFind f{b->monitor, false};
+    EnumWindows(MaxFindProc, (LPARAM)&f);
+    return f.hwnd;
 }
 static bool AnyMaximizedOn(Bar* b) {
     MaxFind f{b->monitor, false};
@@ -23213,24 +23228,22 @@ static void ApplySettingsLive(const Settings& before) {
     BarsApplyLive(true);
 }
 
-static void BarSamplePeekColor(Bar* b);  // a cor da barra de título da janela ativa (mais abaixo)
+static void BarSamplePeekColor(Bar* b, HWND target = nullptr);  // a cor da barra de título (mais abaixo)
+static HWND TopMaximizedOn(Bar* b);  // (mais abaixo)
 static void UpdateWindowColor() {
     for (Bar* b : g_bars) {
-        // "Cor da janela": transparente na área de trabalho; com a janela ativa
+        // "Cor da janela": transparente na área de trabalho; com uma janela
         // maximizada neste monitor, a barra pega a cor da barra de título dela.
         if (BarStyleOf(b) == 4 && !b->autoShown) {
-            bool zoomed = g_active.hwnd && IsWindow(g_active.hwnd) && IsZoomed(g_active.hwnd) && !IsIconic(g_active.hwnd) &&
-                          MonitorFromWindow(g_active.hwnd, MONITOR_DEFAULTTONULL) == b->monitor;
-            // Com um menu da barra ou o Iniciar na frente, a janela continua lá
-            // embaixo: a cor fica (antes a barra ficava transparente).
-            HWND fg = GetForegroundWindow();
-            DWORD fgPid = 0;
-            if (fg) GetWindowThreadProcessId(fg, &fgPid);
-            bool overlay = fg && (fgPid == GetCurrentProcessId() || IsShellOverlayProcess(fg) ||
-                                  ClassIs(fg, L"Shell_TrayWnd") || ClassIs(fg, L"Shell_SecondaryTrayWnd"));
-            if (overlay) continue;
-            if (zoomed) BarSamplePeekColor(b);
-            else if (b->peekColorOn) {
+            // A cor vem da janela maximizada mais de cima neste monitor, e não da
+            // janela ativa: com a busca, um menu, o Iniciar ou uma janela comum na
+            // frente, a maximizada continua lá embaixo e a cor fica.
+            HWND top = TopMaximizedOn(b);
+            if (top) {
+                // Com outra janela na frente, a faixa de baixo da barra pode estar
+                // coberta: mantém a cor já tirada dessa mesma janela.
+                if (!(b->peekColorOn && b->peekSrc == top && GetForegroundWindow() != top)) BarSamplePeekColor(b, top);
+            } else if (b->peekColorOn) {
                 b->peekColorOn = false;
                 InvalidateRect(b->hwnd, nullptr, FALSE);
             }
@@ -23377,13 +23390,15 @@ static void HandleSync(Bar* b) {
 }
 // A cor da barra de título da janela ativa: a mediana de alguns pontos logo abaixo
 // do topo dela (a tela de verdade, então vale para qualquer app e tema).
-static void BarSamplePeekColor(Bar* b) {
-    HWND fg = GetForegroundWindow();
+// target: a janela da cor ("Cor da janela": a maximizada de cima); sem ela, a ativa (alça).
+static void BarSamplePeekColor(Bar* b, HWND target) {
+    HWND fg = target ? target : GetForegroundWindow();
     RECT vr{};
     DWORD pid = 0;
     if (fg) GetWindowThreadProcessId(fg, &pid);
     // (Janelas do Explorador de Arquivos contam; a área de trabalho e a barra de tarefas, não.)
     bool shellUi = pid == ShellPid() && !ClassIs(fg, L"CabinetWClass");
+    if (fg) b->peekSrc = fg;
     if (!fg || pid == GetCurrentProcessId() || shellUi || IsIconic(fg) || MonitorFromWindow(fg, MONITOR_DEFAULTTONULL) != b->monitor ||
         FAILED(DwmGetWindowAttribute(fg, 9 /*DWMWA_EXTENDED_FRAME_BOUNDS*/, &vr, sizeof(vr))) || vr.right - vr.left < 60) {
         if (b->peekColorOn) {
@@ -24951,7 +24966,7 @@ const UiTr kUiTr[] = {
     {L"Foco (quando ativo)", L"Focus (when on)", L"Concentración (cuando está activo)", L"Concentration (si activée)", L"Fokus (wenn aktiv)", L"Full immersion (quando attivo)", L"专注 (开启时)"},
     {L"Busca", L"Search", L"Búsqueda", L"Recherche", L"Suche", L"Ricerca", L"搜索"},
     {L"Cor do texto e dos ícones", L"Text and icon color", L"Color del texto y los iconos", L"Couleur du texte et des icônes", L"Text- und Symbolfarbe", L"Colore di testo e icone", L"文字和图标颜色"},
-    {L"Automático segue o tema do Windows", L"Automatic follows the Windows theme", L"Automático sigue el tema de Windows", L"Automatique suit le thème de Windows", L"Automatisch folgt dem Windows-Design", L"Automatico segue il tema di Windows", L"自动跟随 Windows 主题"},
+    {L"Automático segue o tema do Windows (no Vidro líquido personalizado, a cor do vidro; em Claro, Escuro e OLED, o fundo)", L"Automatic follows the Windows theme (with custom liquid glass, the glass color; with Light, Dark and OLED, the background)", L"Automático sigue el tema de Windows (en Vidrio líquido personalizado, el color del vidrio; en Claro, Oscuro y OLED, el fondo)", L"Automatique suit le thème de Windows (avec le verre liquide personnalisé, la couleur du verre ; avec Clair, Sombre et OLED, le fond)", L"Automatisch folgt dem Windows-Design (bei eigenem Flüssigglas der Glasfarbe; bei Hell, Dunkel und OLED dem Hintergrund)", L"Automatico segue il tema di Windows (con il vetro liquido personalizzato, il colore del vetro; con Chiaro, Scuro e OLED, lo sfondo)", L"自动跟随 Windows 主题（自定义液态玻璃时跟随玻璃颜色；浅色、深色和 OLED 时跟随背景）"},
     {L"Branco", L"White", L"Blanco", L"Blanc", L"Weiß", L"Bianco", L"白色"},
     {L"Preto", L"Black", L"Negro", L"Noir", L"Schwarz", L"Nero", L"黑色"},
     {L"Abrir %s", L"Open %s", L"Abrir %s", L"Ouvrir %s", L"%s öffnen", L"Apri %s", L"打开 %s"},
@@ -25013,7 +25028,7 @@ const UiTr kUiTr[] = {
     {L"Estilo do vidro", L"Glass style", L"Estilo del vidrio", L"Style du verre", L"Glasstil", L"Stile del vetro", L"玻璃样式"},
     {L"Vidro líquido personalizado: a sua cor no topo, sumindo em vidro limpo embaixo", L"Custom liquid glass: your color at the top, fading to clear glass at the bottom", L"Vidrio líquido personalizado: tu color arriba, que se desvanece en vidrio transparente abajo", L"Verre liquide personnalisé : votre couleur en haut, qui s’efface en verre clair en bas", L"Eigenes Flüssigglas: deine Farbe oben, die unten in klares Glas übergeht", L"Vetro liquido personalizzato: il tuo colore in alto, che sfuma in vetro trasparente in basso", L"自定义液态玻璃：顶部是你的颜色，向下渐变为透明玻璃"},
     {L"Cor do vidro", L"Glass color", L"Color del vidrio", L"Couleur du verre", L"Glasfarbe", L"Colore del vetro", L"玻璃颜色"},
-    {L"O primeiro círculo abre a paleta do Windows, para qualquer cor", L"The first circle opens the Windows color picker, for any color", L"El primer círculo abre la paleta de Windows, para cualquier color", L"Le premier cercle ouvre la palette de Windows, pour n’importe quelle couleur", L"Der erste Kreis öffnet die Windows-Farbauswahl für jede Farbe", L"Il primo cerchio apre la tavolozza di Windows, per qualsiasi colore", L"第一个圆圈打开 Windows 调色板，可选任意颜色"},
+    {L"Vidro líquido personalizado: o primeiro círculo abre a paleta do Windows, para qualquer cor", L"Custom liquid glass: the first circle opens the Windows palette, for any color", L"Vidrio líquido personalizado: el primer círculo abre la paleta de Windows, para cualquier color", L"Verre liquide personnalisé : le premier cercle ouvre la palette de Windows, pour n’importe quelle couleur", L"Eigenes Flüssigglas: Der erste Kreis öffnet die Windows-Palette für jede Farbe", L"Vetro liquido personalizzato: il primo cerchio apre la tavolozza di Windows, per qualsiasi colore", L"自定义液态玻璃：第一个圆圈打开 Windows 调色板，可选任意颜色"},
     {L"Força da cor no topo", L"Color strength at the top", L"Intensidad del color arriba", L"Intensité de la couleur en haut", L"Farbstärke oben", L"Intensità del colore in alto", L"顶部颜色强度"},
     {L"100 = sólida no topo; menos deixa o fundo aparecer também na parte colorida", L"100 = solid at the top; lower lets the background show through the colored part too", L"100 = sólido arriba; menos deja ver el fondo también en la parte de color", L"100 = opaque en haut ; moins laisse aussi voir l’arrière-plan dans la partie colorée", L"100 = oben deckend; weniger lässt den Hintergrund auch im farbigen Teil durchscheinen", L"100 = pieno in alto; meno lascia vedere lo sfondo anche nella parte colorata", L"100 = 顶部不透明；数值越低，彩色部分也越能透出背景"},
     {L"Até onde a cor desce", L"How far down the color goes", L"Hasta dónde baja el color", L"Jusqu’où descend la couleur", L"Wie weit die Farbe nach unten reicht", L"Fin dove scende il colore", L"颜色向下延伸的范围"},
