@@ -2,12 +2,12 @@
 // @id              unlock-folder-in-use
 // @name            Unlock "Folder In Use"
 // @description     When Explorer says "Folder/File In Use", shows what is blocking it and lets you choose: end the processes and continue, or only end them
-// @version         1.0.0
+// @version         1.1.0
 // @author          LyricsPortal
 // @github          https://github.com/LyricsPortal
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -lshell32 -lrstrtmgr -luser32 -lshlwapi -luuid
+// @compilerOptions -lole32 -loleaut32 -lshell32 -lrstrtmgr -luser32 -lshlwapi -luuid -lgdi32 -ldwmapi -luxtheme -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -16,7 +16,9 @@
 
 When Explorer refuses to delete, move or rename something because it is in use ("Folder In Use" / "File In Use"), this mod finds out which processes are blocking it and lets you decide what to do.
 
-![Screenshot](https://i.imgur.com/goeqtLD.png)
+| Before | After |
+|:------:|:-----:|
+| ![Before](https://i.imgur.com/9EMduqU.png) | ![After](https://i.imgur.com/vGv3Znc.png) |
 
 When the warning appears, a small dialog lists the blocking processes and offers:
 
@@ -25,6 +27,8 @@ When the warning appears, a small dialog lists the blocking processes and offers
 * **Cancel** - does nothing.
 
 If Explorer windows are open inside the item being processed, they are moved up one level.
+
+The dialog follows the Windows app theme: if apps are set to dark mode, the dialog is dark too.
 
 ## How it works
 
@@ -44,16 +48,16 @@ If Explorer windows are open inside the item being processed, they are moved up 
 
 ## Settings
 
-* **Modern dialogs** - use task-dialog style windows instead of classic message boxes.
+* **Expand details by default** - show the list of matched items, processes and windows already expanded. If disabled, the *Details* row starts collapsed.
 * **Show message when nothing is found** - show a dialog when the blocked item or its blocking process could not be identified (enabled by default).
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- modernDialogs: true
-  $name: Modern dialogs
-  $description: Use task-dialog style windows instead of classic message boxes
+- expandDetails: true
+  $name: Expand details by default
+  $description: Show the list of matched items and processes already expanded in the prompt
 - showNoResultDialog: true
   $name: Show message when nothing is found
   $description: Show a dialog when the blocked item or its blocking process could not be identified
@@ -61,13 +65,15 @@ If Explorer windows are open inside the item being processed, they are moved up 
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <windowsx.h>
 #include <shlobj.h>
 #include <shldisp.h>
 #include <exdisp.h>
 #include <shlwapi.h>
-#include <commctrl.h>
 #include <restartmanager.h>
 #include <tlhelp32.h>
+#include <dwmapi.h>
+#include <uxtheme.h>
 #include <string>
 #include <vector>
 #include <map>
@@ -80,6 +86,8 @@ If Explorer windows are open inside the item being processed, they are moved up 
 static const wchar_t* kRetryId = L"eltInterruptRetryBtn";
 
 static const wchar_t* kDialogClass = L"OperationStatusWindow";
+
+static const wchar_t* kPromptClass = L"UnlockFolderInUsePrompt";
 
 static const wchar_t* kTitle = L"Unlock \"Folder In Use\"";
 
@@ -124,6 +132,7 @@ static std::vector<ThreadInfo> g_threads;
 static std::set<HWND> g_handled;
 static std::map<HWND, std::wstring> g_seen;
 static std::vector<HWND> g_candidates;
+static ATOM g_promptClass = 0;
 
 static void CloseLockers(std::map<DWORD, Locker>& m) {
     for (auto& kv : m)
@@ -317,99 +326,688 @@ static void PressRetry(HWND dlg) {
     Wh_Log(L"Retry pressed via WM_COMMAND");
 }
 
-typedef HRESULT (WINAPI *TaskDialogIndirect_t)(const TASKDIALOGCONFIG*, int*, int*, BOOL*);
-
-static TaskDialogIndirect_t GetTaskDialog() {
-    static TaskDialogIndirect_t fn = []() -> TaskDialogIndirect_t {
-        HMODULE m = LoadLibraryW(L"comctl32.dll");
-        return m ? (TaskDialogIndirect_t)GetProcAddress(m, "TaskDialogIndirect") : nullptr;
-    }();
-    return fn;
-}
-
-static HRESULT CALLBACK TdCallback(HWND h, UINT msg, WPARAM, LPARAM, LONG_PTR) {
-    if (msg == TDN_CREATED) {
-        SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        if (g_stop) PostMessageW(h, TDM_CLICK_BUTTON, IDCANCEL, 0);
-    }
-    return S_OK;
-}
+////////////////////////////////////////////////////////////////////////////////
+// Prompt window
+//
+// A small custom window instead of a TaskDialog, because TaskDialog can't be
+// drawn in dark mode.
 
 enum Choice { CHOICE_CANCEL = 0, CHOICE_CLOSE_CONTINUE = 1, CHOICE_CLOSE_ONLY = 2 };
 
-static void FillCommon(TASKDIALOGCONFIG& cfg, const std::wstring& instruction,
-                       const std::wstring& content, const std::wstring& details) {
-    cfg.cbSize = sizeof(cfg);
-    cfg.hwndParent = nullptr;
-    cfg.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION;
-    cfg.pszWindowTitle = kTitle;
-    cfg.pszMainInstruction = instruction.c_str();
-    cfg.pszContent = content.empty() ? nullptr : content.c_str();
-    cfg.pfCallback = TdCallback;
-    if (!details.empty()) {
-        cfg.pszExpandedInformation = details.c_str();
-        cfg.pszCollapsedControlText = L"Details";
-        cfg.pszExpandedControlText = L"Hide details";
+enum { ID_TOGGLE = 2001, ID_PRIMARY = 2002, ID_SECONDARY = 2003, ID_CANCEL = 2005 };
+
+struct Theme {
+    bool dark = false;
+    COLORREF bg = 0, editBg = 0, text = 0, sub = 0;
+    COLORREF btn = 0, btnHot = 0, btnDown = 0, border = 0;
+    COLORREF accent = 0, accentHot = 0, accentDown = 0, accentText = 0;
+};
+
+struct Fonts {
+    HFONT base = nullptr;
+    HFONT semi = nullptr;
+    HFONT head = nullptr;
+};
+
+struct PromptBtn {
+    int id;
+    std::wstring title;
+    std::wstring note;
+    bool primary;
+    RECT rc;
+};
+
+struct PromptState {
+    std::wstring instruction, content, details;
+    std::vector<PromptBtn> btns;
+    bool expanded = false;
+    Choice result = CHOICE_CANCEL;
+    bool done = false;
+    bool tracking = false;
+    bool kbdActive = false;
+    int hot = -1, down = -1, kbd = -1;
+    UINT dpi = 96;
+    Theme th;
+    Fonts fonts;
+    HWND edit = nullptr;
+    HBRUSH bgBrush = nullptr;
+    HBRUSH editBrush = nullptr;
+    RECT rInstr = {}, rContent = {}, rEdit = {};
+    int clientW = 0, clientH = 0;
+};
+
+static bool SystemUsesDarkMode() {
+    DWORD v = 1, sz = sizeof(v);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &v, &sz) != ERROR_SUCCESS)
+        return false;
+    return v == 0;
+}
+
+static COLORREF MixColor(COLORREF a, COLORREF b, int pct) {
+    return RGB(GetRValue(a) + (GetRValue(b) - GetRValue(a)) * pct / 100,
+               GetGValue(a) + (GetGValue(b) - GetGValue(a)) * pct / 100,
+               GetBValue(a) + (GetBValue(b) - GetBValue(a)) * pct / 100);
+}
+
+static Theme MakeTheme() {
+    Theme t;
+    t.dark = SystemUsesDarkMode();
+    if (t.dark) {
+        t.bg = RGB(32, 32, 32);
+        t.editBg = RGB(43, 43, 43);
+        t.text = RGB(255, 255, 255);
+        t.sub = RGB(190, 190, 190);
+        t.btn = RGB(52, 52, 52);
+        t.btnHot = RGB(62, 62, 62);
+        t.btnDown = RGB(45, 45, 45);
+        t.border = RGB(72, 72, 72);
+    } else {
+        t.bg = RGB(243, 243, 243);
+        t.editBg = RGB(255, 255, 255);
+        t.text = RGB(26, 26, 26);
+        t.sub = RGB(96, 96, 96);
+        t.btn = RGB(253, 253, 253);
+        t.btnHot = RGB(249, 249, 249);
+        t.btnDown = RGB(245, 245, 245);
+        t.border = RGB(219, 219, 219);
+    }
+
+    COLORREF accent = RGB(0, 120, 212);
+    DWORD c = 0;
+    BOOL opaque = FALSE;
+    if (SUCCEEDED(DwmGetColorizationColor(&c, &opaque)))
+        accent = RGB((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
+    int lum = (GetRValue(accent) * 299 + GetGValue(accent) * 587 + GetBValue(accent) * 114) / 1000;
+    COLORREF towards = lum < 128 ? RGB(255, 255, 255) : RGB(0, 0, 0);
+    t.accent = accent;
+    t.accentHot = MixColor(accent, towards, 12);
+    t.accentDown = MixColor(accent, towards, 24);
+    t.accentText = lum < 150 ? RGB(255, 255, 255) : RGB(0, 0, 0);
+    return t;
+}
+
+typedef BOOL (WINAPI *SpiForDpi_t)(UINT, UINT, PVOID, UINT, UINT);
+typedef BOOL (WINAPI *AdjustRectDpi_t)(LPRECT, DWORD, BOOL, DWORD, UINT);
+typedef HANDLE (WINAPI *SetThreadDpiCtx_t)(HANDLE);
+typedef HRESULT (WINAPI *GetDpiForMonitor_t)(HMONITOR, int, UINT*, UINT*);
+
+static UINT DpiForPoint(POINT pt) {
+    static HMODULE shcore = LoadLibraryW(L"shcore.dll");
+    auto fn = shcore ? (GetDpiForMonitor_t)GetProcAddress(shcore, "GetDpiForMonitor") : nullptr;
+    UINT x = 96, y = 96;
+    if (fn && SUCCEEDED(fn(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), 0, &x, &y)) && x) return x;
+    return 96;
+}
+
+static void MakeFonts(Fonts& f, UINT dpi) {
+    NONCLIENTMETRICSW ncm = {};
+    ncm.cbSize = sizeof(ncm);
+    bool ok = false;
+    auto spi = (SpiForDpi_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SystemParametersInfoForDpi");
+    if (spi) ok = spi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0, dpi) != 0;
+    if (!ok) ok = SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0) != 0;
+
+    LOGFONTW lf = ncm.lfMessageFont;
+    if (!ok || !lf.lfHeight) {
+        lf = {};
+        wcscpy_s(lf.lfFaceName, L"Segoe UI");
+        lf.lfHeight = -MulDiv(9, (int)dpi, 72);
+    }
+    lf.lfQuality = CLEARTYPE_QUALITY;
+    lf.lfWeight = FW_NORMAL;
+    f.base = CreateFontIndirectW(&lf);
+
+    LOGFONTW semi = lf;
+    semi.lfWeight = FW_SEMIBOLD;
+    f.semi = CreateFontIndirectW(&semi);
+
+    LOGFONTW head = lf;
+    head.lfHeight = lf.lfHeight * 6 / 5;
+    head.lfWeight = FW_SEMIBOLD;
+    f.head = CreateFontIndirectW(&head);
+}
+
+static void DeleteFonts(Fonts& f) {
+    if (f.base) DeleteObject(f.base);
+    if (f.semi) DeleteObject(f.semi);
+    if (f.head) DeleteObject(f.head);
+    f = Fonts();
+}
+
+static PromptBtn* FindBtn(PromptState& s, int id) {
+    for (auto& b : s.btns)
+        if (b.id == id) return &b;
+    return nullptr;
+}
+
+static int MeasureText(HDC dc, HFONT f, const std::wstring& t, int w) {
+    HGDIOBJ old = SelectObject(dc, f);
+    RECT r = {0, 0, w, 0};
+    DrawTextW(dc, t.c_str(), -1, &r, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
+    SelectObject(dc, old);
+    return r.bottom - r.top;
+}
+
+static void LayoutPrompt(HWND hwnd, PromptState& s) {
+    HDC dc = GetDC(hwnd);
+    auto S = [&](int v) { return MulDiv(v, (int)s.dpi, 96); };
+    const int m = S(20);
+    const int W = S(420);
+    const int inner = W - 2 * m;
+    int y = S(18);
+
+    int h = MeasureText(dc, s.fonts.head, s.instruction, inner);
+    s.rInstr = {m, y, m + inner, y + h};
+    y += h + S(6);
+
+    if (!s.content.empty()) {
+        h = MeasureText(dc, s.fonts.base, s.content, inner);
+        s.rContent = {m, y, m + inner, y + h};
+        y += h + S(10);
+    } else {
+        s.rContent = {0, 0, 0, 0};
+        y += S(4);
+    }
+
+    if (PromptBtn* t = FindBtn(s, ID_TOGGLE)) {
+        t->title = s.expanded ? L"Hide details" : L"Details";
+        t->rc = {m, y, m + inner, y + S(26)};
+        y += S(26) + S(4);
+        if (s.expanded) {
+            s.rEdit = {m, y, m + inner, y + S(84)};
+            if (s.edit) {
+                MoveWindow(s.edit, s.rEdit.left + 1, s.rEdit.top + 1,
+                           (s.rEdit.right - s.rEdit.left) - 2, (s.rEdit.bottom - s.rEdit.top) - 2, TRUE);
+                ShowWindow(s.edit, SW_SHOW);
+            }
+            y += S(84) + S(10);
+        } else {
+            if (s.edit) ShowWindow(s.edit, SW_HIDE);
+            s.rEdit = {0, 0, 0, 0};
+            y += S(4);
+        }
+    } else {
+        y += S(4);
+    }
+
+    for (int id : {ID_PRIMARY, ID_SECONDARY}) {
+        if (PromptBtn* b = FindBtn(s, id)) {
+            int bh = b->note.empty() ? S(32) : S(50);
+            b->rc = {m, y, m + inner, y + bh};
+            y += bh + S(6);
+        }
+    }
+
+    y += S(4);
+    int cw = S(100), bh = S(30);
+    if (PromptBtn* c = FindBtn(s, ID_CANCEL)) {
+        c->rc = {m + inner - cw, y, m + inner, y + bh};
+    }
+    y += bh + S(16);
+
+    s.clientW = W;
+    s.clientH = y;
+    ReleaseDC(hwnd, dc);
+}
+
+static void ResizePrompt(HWND hwnd, PromptState& s, bool center) {
+    RECT rc = {0, 0, s.clientW, s.clientH};
+    DWORD style = (DWORD)GetWindowLongW(hwnd, GWL_STYLE);
+    DWORD ex = (DWORD)GetWindowLongW(hwnd, GWL_EXSTYLE);
+    auto adj = (AdjustRectDpi_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "AdjustWindowRectExForDpi");
+    if (adj) adj(&rc, style, FALSE, ex, s.dpi);
+    else AdjustWindowRectEx(&rc, style, FALSE, ex);
+    int w = rc.right - rc.left, h = rc.bottom - rc.top;
+
+    UINT flags = SWP_NOZORDER | SWP_NOACTIVATE;
+    int x = 0, y = 0;
+    if (center) {
+        POINT pt = {};
+        GetCursorPos(&pt);
+        MONITORINFO mi = {sizeof(mi)};
+        if (GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi)) {
+            x = mi.rcWork.left + ((mi.rcWork.right - mi.rcWork.left) - w) / 2;
+            y = mi.rcWork.top + ((mi.rcWork.bottom - mi.rcWork.top) - h) / 2;
+            if (y < mi.rcWork.top) y = mi.rcWork.top;
+        }
+    } else {
+        flags |= SWP_NOMOVE;
+    }
+    SetWindowPos(hwnd, nullptr, x, y, w, h, flags);
+}
+
+static void FillRound(HDC dc, const RECT& rc, COLORREF fill, COLORREF edge, int radius) {
+    HBRUSH br = CreateSolidBrush(fill);
+    HPEN pen = CreatePen(PS_SOLID, 1, edge);
+    HGDIOBJ ob = SelectObject(dc, br);
+    HGDIOBJ op = SelectObject(dc, pen);
+    RoundRect(dc, rc.left, rc.top, rc.right, rc.bottom, radius * 2, radius * 2);
+    SelectObject(dc, ob);
+    SelectObject(dc, op);
+    DeleteObject(br);
+    DeleteObject(pen);
+}
+
+static void DrawPromptButton(HDC dc, const PromptState& s, size_t idx) {
+    const PromptBtn& b = s.btns[idx];
+    const Theme& th = s.th;
+    auto S = [&](int v) { return MulDiv(v, (int)s.dpi, 96); };
+    bool hot = (int)idx == s.hot;
+    bool down = hot && (int)idx == s.down;
+    bool ring = s.kbdActive && (int)idx == s.kbd;
+    RECT rc = b.rc;
+
+    if (b.id == ID_TOGGLE) {
+        if (hot) FillRound(dc, rc, th.btnHot, th.btnHot, S(4));
+
+        int cx = rc.left + S(14), cy = (rc.top + rc.bottom) / 2;
+        POINT pts[3];
+        if (s.expanded) {
+            pts[0] = {cx - S(4), cy - S(2)};
+            pts[1] = {cx, cy + S(2)};
+            pts[2] = {cx + S(4), cy - S(2)};
+        } else {
+            pts[0] = {cx - S(2), cy - S(4)};
+            pts[1] = {cx + S(2), cy};
+            pts[2] = {cx - S(2), cy + S(4)};
+        }
+        HPEN pen = CreatePen(PS_SOLID, std::max(1, S(1)), th.text);
+        HGDIOBJ op = SelectObject(dc, pen);
+        Polyline(dc, pts, 3);
+        SelectObject(dc, op);
+        DeleteObject(pen);
+
+        HGDIOBJ of = SelectObject(dc, s.fonts.base);
+        SetTextColor(dc, th.text);
+        RECT tr = {rc.left + S(30), rc.top, rc.right, rc.bottom};
+        DrawTextW(dc, b.title.c_str(), -1, &tr, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+        SelectObject(dc, of);
+
+        if (ring) {
+            RECT fr = rc;
+            InflateRect(&fr, -S(1), -S(1));
+            DrawFocusRect(dc, &fr);
+        }
+        return;
+    }
+
+    COLORREF fill, edge, tcol, scol;
+    if (b.primary) {
+        fill = down ? th.accentDown : hot ? th.accentHot : th.accent;
+        edge = fill;
+        tcol = scol = th.accentText;
+    } else {
+        fill = down ? th.btnDown : hot ? th.btnHot : th.btn;
+        edge = th.border;
+        tcol = th.text;
+        scol = th.sub;
+    }
+    FillRound(dc, rc, fill, edge, S(4));
+
+    int h = rc.bottom - rc.top;
+    if (b.note.empty()) {
+        HGDIOBJ of = SelectObject(dc, s.fonts.base);
+        SetTextColor(dc, tcol);
+        RECT tr = {rc.left + S(8), rc.top, rc.right - S(8), rc.bottom};
+        DrawTextW(dc, b.title.c_str(), -1, &tr, DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+        SelectObject(dc, of);
+    } else {
+        TEXTMETRICW tm1 = {}, tm2 = {};
+        HGDIOBJ of = SelectObject(dc, s.fonts.semi);
+        GetTextMetricsW(dc, &tm1);
+        SelectObject(dc, s.fonts.base);
+        GetTextMetricsW(dc, &tm2);
+        int total = tm1.tmHeight + S(2) + tm2.tmHeight;
+        int top = rc.top + (h - total) / 2;
+
+        RECT r1 = {rc.left + S(16), top, rc.right - S(12), top + tm1.tmHeight};
+        RECT r2 = {rc.left + S(16), top + tm1.tmHeight + S(2), rc.right - S(12), top + total};
+
+        SelectObject(dc, s.fonts.semi);
+        SetTextColor(dc, tcol);
+        DrawTextW(dc, b.title.c_str(), -1, &r1, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        SelectObject(dc, s.fonts.base);
+        SetTextColor(dc, scol);
+        DrawTextW(dc, b.note.c_str(), -1, &r2, DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        SelectObject(dc, of);
+    }
+
+    if (ring) {
+        RECT fr = rc;
+        InflateRect(&fr, -S(3), -S(3));
+        HPEN pen = CreatePen(PS_SOLID, std::max(1, S(2)), b.primary ? th.accentText : th.text);
+        HGDIOBJ op = SelectObject(dc, pen);
+        HGDIOBJ ob = SelectObject(dc, GetStockObject(NULL_BRUSH));
+        RoundRect(dc, fr.left, fr.top, fr.right, fr.bottom, S(6), S(6));
+        SelectObject(dc, ob);
+        SelectObject(dc, op);
+        DeleteObject(pen);
     }
 }
 
-static void ShowInfo(const std::wstring& instruction, const std::wstring& content,
-                     const std::wstring& details, bool error) {
-    if (g_stop) return;
-    if (GetTaskDialog() && Wh_GetIntSetting(L"modernDialogs")) {
-        TASKDIALOGCONFIG cfg = {};
-        FillCommon(cfg, instruction, content, details);
-        cfg.dwCommonButtons = TDCBF_OK_BUTTON;
-        if (error) cfg.pszMainIcon = TD_ERROR_ICON;
-        int pressed = 0;
-        if (SUCCEEDED(GetTaskDialog()(&cfg, &pressed, nullptr, nullptr))) return;
+static std::wstring ToCrLf(const std::wstring& t) {
+    std::wstring out;
+    for (wchar_t c : t) {
+        if (c == L'\n') out += L"\r\n";
+        else out += c;
     }
-    std::wstring text = instruction;
-    if (!content.empty()) text += L"\n\n" + content;
-    if (!details.empty()) text += L"\n\n" + details;
-    MessageBoxW(nullptr, text.c_str(), kTitle,
-                MB_OK | MB_TOPMOST | MB_SETFOREGROUND | (error ? MB_ICONERROR : MB_ICONINFORMATION));
+    return out;
+}
+
+static void ActivatePrompt(HWND hwnd, PromptState& s, int idx) {
+    if (idx < 0 || idx >= (int)s.btns.size()) return;
+    switch (s.btns[idx].id) {
+        case ID_TOGGLE:
+            s.expanded = !s.expanded;
+            LayoutPrompt(hwnd, s);
+            ResizePrompt(hwnd, s, false);
+            InvalidateRect(hwnd, nullptr, FALSE);
+            break;
+        case ID_PRIMARY:
+            s.result = CHOICE_CLOSE_CONTINUE;
+            DestroyWindow(hwnd);
+            break;
+        case ID_SECONDARY:
+            s.result = CHOICE_CLOSE_ONLY;
+            DestroyWindow(hwnd);
+            break;
+        case ID_CANCEL:
+            s.result = CHOICE_CANCEL;
+            DestroyWindow(hwnd);
+            break;
+    }
+}
+
+static int PromptHitTest(const PromptState& s, int x, int y) {
+    POINT p = {x, y};
+    for (size_t i = 0; i < s.btns.size(); i++)
+        if (PtInRect(&s.btns[i].rc, p)) return (int)i;
+    return -1;
+}
+
+static LRESULT CALLBACK PromptProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_NCCREATE) {
+        auto* cs = (CREATESTRUCTW*)lp;
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)cs->lpCreateParams);
+        return DefWindowProcW(hwnd, msg, wp, lp);
+    }
+    PromptState* s = (PromptState*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    if (!s) return DefWindowProcW(hwnd, msg, wp, lp);
+
+    switch (msg) {
+        case WM_CREATE: {
+            if (!s->details.empty()) {
+                std::wstring text = ToCrLf(s->details);
+                s->edit = CreateWindowExW(0, L"EDIT", text.c_str(),
+                                          WS_CHILD | WS_VSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL,
+                                          0, 0, 10, 10, hwnd, nullptr, GetModuleHandleW(nullptr), nullptr);
+                if (s->edit) {
+                    SendMessageW(s->edit, WM_SETFONT, (WPARAM)s->fonts.base, FALSE);
+                    int pad = MulDiv(8, (int)s->dpi, 96);
+                    SendMessageW(s->edit, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(pad, pad));
+                    SetWindowTheme(s->edit, s->th.dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
+                }
+            }
+            return 0;
+        }
+
+        case WM_ERASEBKGND:
+            return 1;
+
+        case WM_CTLCOLORSTATIC:
+        case WM_CTLCOLOREDIT: {
+            HDC hdc = (HDC)wp;
+            SetTextColor(hdc, s->th.text);
+            SetBkColor(hdc, s->th.editBg);
+            return (LRESULT)s->editBrush;
+        }
+
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+            RECT cr;
+            GetClientRect(hwnd, &cr);
+            HDC mdc = CreateCompatibleDC(hdc);
+            HBITMAP bmp = CreateCompatibleBitmap(hdc, cr.right, cr.bottom);
+            HGDIOBJ ob = SelectObject(mdc, bmp);
+
+            FillRect(mdc, &cr, s->bgBrush);
+            SetBkMode(mdc, TRANSPARENT);
+            SetTextColor(mdc, s->th.text);
+
+            HGDIOBJ of = SelectObject(mdc, s->fonts.head);
+            DrawTextW(mdc, s->instruction.c_str(), -1, &s->rInstr, DT_WORDBREAK | DT_NOPREFIX);
+            if (!s->content.empty()) {
+                SelectObject(mdc, s->fonts.base);
+                DrawTextW(mdc, s->content.c_str(), -1, &s->rContent, DT_WORDBREAK | DT_NOPREFIX);
+            }
+            SelectObject(mdc, of);
+
+            if (s->expanded && !s->details.empty()) {
+                HBRUSH fb = CreateSolidBrush(s->th.border);
+                FrameRect(mdc, &s->rEdit, fb);
+                DeleteObject(fb);
+            }
+            for (size_t i = 0; i < s->btns.size(); i++) DrawPromptButton(mdc, *s, i);
+
+            BitBlt(hdc, 0, 0, cr.right, cr.bottom, mdc, 0, 0, SRCCOPY);
+            SelectObject(mdc, ob);
+            DeleteObject(bmp);
+            DeleteDC(mdc);
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+
+        case WM_MOUSEMOVE: {
+            if (!s->tracking) {
+                TRACKMOUSEEVENT t = {sizeof(t), TME_LEAVE, hwnd, 0};
+                TrackMouseEvent(&t);
+                s->tracking = true;
+            }
+            int h = PromptHitTest(*s, GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+            if (h != s->hot) {
+                s->hot = h;
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            return 0;
+        }
+
+        case WM_MOUSELEAVE:
+            s->tracking = false;
+            s->hot = -1;
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+
+        case WM_SETCURSOR:
+            if (LOWORD(lp) == HTCLIENT && s->hot >= 0) {
+                SetCursor(LoadCursorW(nullptr, IDC_HAND));
+                return TRUE;
+            }
+            break;
+
+        case WM_LBUTTONDOWN:
+            SetFocus(hwnd);
+            s->down = PromptHitTest(*s, GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+            s->kbdActive = false;
+            if (s->down >= 0) SetCapture(hwnd);
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+
+        case WM_LBUTTONUP: {
+            if (GetCapture() == hwnd) ReleaseCapture();
+            int hit = PromptHitTest(*s, GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+            int pressed = s->down;
+            s->down = -1;
+            InvalidateRect(hwnd, nullptr, FALSE);
+            if (pressed >= 0 && pressed == hit) ActivatePrompt(hwnd, *s, hit);
+            return 0;
+        }
+
+        case WM_KEYDOWN: {
+            if (wp == VK_ESCAPE) {
+                s->result = CHOICE_CANCEL;
+                DestroyWindow(hwnd);
+                return 0;
+            }
+            if (wp == VK_TAB) {
+                SetFocus(hwnd);
+                int n = (int)s->btns.size();
+                if (n > 0) {
+                    bool back = GetKeyState(VK_SHIFT) < 0;
+                    s->kbdActive = true;
+                    s->kbd = ((s->kbd < 0 ? 0 : s->kbd) + (back ? n - 1 : 1)) % n;
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                }
+                return 0;
+            }
+            if (wp == VK_RETURN || (wp == VK_SPACE && s->kbdActive)) {
+                ActivatePrompt(hwnd, *s, s->kbd);
+                return 0;
+            }
+            break;
+        }
+
+        case WM_DPICHANGED: {
+            s->dpi = HIWORD(wp);
+            Fonts nf;
+            MakeFonts(nf, s->dpi);
+            if (s->edit) {
+                SendMessageW(s->edit, WM_SETFONT, (WPARAM)nf.base, TRUE);
+                int pad = MulDiv(8, (int)s->dpi, 96);
+                SendMessageW(s->edit, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, MAKELPARAM(pad, pad));
+            }
+            DeleteFonts(s->fonts);
+            s->fonts = nf;
+            LayoutPrompt(hwnd, *s);
+            ResizePrompt(hwnd, *s, false);
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+        }
+
+        case WM_CLOSE:
+            s->result = CHOICE_CANCEL;
+            DestroyWindow(hwnd);
+            return 0;
+
+        case WM_DESTROY:
+            s->done = true;
+            return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+static Choice RunPrompt(PromptState& s) {
+    if (g_stop || !g_promptClass) return CHOICE_CANCEL;
+
+    // Per-monitor DPI awareness for this worker thread only, so the window is crisp.
+    auto setCtx = (SetThreadDpiCtx_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext");
+    HANDLE oldCtx = setCtx ? setCtx((HANDLE)(LONG_PTR)-4 /*PER_MONITOR_AWARE_V2*/) : nullptr;
+
+    POINT pt = {};
+    GetCursorPos(&pt);
+    s.dpi = DpiForPoint(pt);
+    s.th = MakeTheme();
+    MakeFonts(s.fonts, s.dpi);
+    s.bgBrush = CreateSolidBrush(s.th.bg);
+    s.editBrush = CreateSolidBrush(s.th.editBg);
+
+    HWND hwnd = CreateWindowExW(WS_EX_TOPMOST, kPromptClass, kTitle,
+                                WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN,
+                                0, 0, 100, 100, nullptr, nullptr, GetModuleHandleW(nullptr), &s);
+    if (hwnd) {
+        BOOL dark = s.th.dark;
+        DwmSetWindowAttribute(hwnd, 20 /*DWMWA_USE_IMMERSIVE_DARK_MODE*/, &dark, sizeof(dark));
+        COLORREF cap = s.th.bg, txt = s.th.text;
+        DwmSetWindowAttribute(hwnd, 35 /*DWMWA_CAPTION_COLOR*/, &cap, sizeof(cap));
+        DwmSetWindowAttribute(hwnd, 36 /*DWMWA_TEXT_COLOR*/, &txt, sizeof(txt));
+
+        LayoutPrompt(hwnd, s);
+        ResizePrompt(hwnd, s, true);
+        ShowWindow(hwnd, SW_SHOWNORMAL);
+        SetForegroundWindow(hwnd);
+        SetFocus(hwnd);
+
+        MSG msg;
+        while (!s.done) {
+            DWORD r = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE, QS_ALLINPUT);
+            if (r == WAIT_OBJECT_0) {
+                s.result = CHOICE_CANCEL;
+                break;
+            }
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                if (msg.message == WM_QUIT) {
+                    s.done = true;
+                    break;
+                }
+                // Esc / Tab must work even when the details box has the focus.
+                if (msg.message == WM_KEYDOWN && (msg.wParam == VK_ESCAPE || msg.wParam == VK_TAB) &&
+                    msg.hwnd != hwnd && IsChild(hwnd, msg.hwnd))
+                    msg.hwnd = hwnd;
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+        if (IsWindow(hwnd)) DestroyWindow(hwnd);
+    }
+
+    DeleteFonts(s.fonts);
+    if (s.bgBrush) DeleteObject(s.bgBrush);
+    if (s.editBrush) DeleteObject(s.editBrush);
+    s.bgBrush = s.editBrush = nullptr;
+    if (setCtx && oldCtx) setCtx(oldCtx);
+    return g_stop ? CHOICE_CANCEL : s.result;
+}
+
+static void AddToggle(PromptState& s) {
+    if (!s.details.empty()) s.btns.push_back({ID_TOGGLE, L"Details", L"", false, {0, 0, 0, 0}});
+}
+
+static void AddCancel(PromptState& s, const wchar_t* text) {
+    s.btns.push_back({ID_CANCEL, text, L"", false, {0, 0, 0, 0}});
+    s.kbd = (int)s.btns.size() - 1;
+}
+
+static void SplitTitleNote(const std::wstring& t, std::wstring& title, std::wstring& note) {
+    size_t p = t.find(L'\n');
+    title = t.substr(0, p);
+    note = p == std::wstring::npos ? L"" : t.substr(p + 1);
+}
+
+static void ShowInfo(const std::wstring& instruction, const std::wstring& content,
+                     const std::wstring& details, bool /*error*/) {
+    if (g_stop) return;
+    PromptState s;
+    s.instruction = instruction;
+    s.content = content;
+    s.details = details;
+    s.expanded = !details.empty() && Wh_GetIntSetting(L"expandDetails");
+    AddToggle(s);
+    AddCancel(s, L"OK");
+    RunPrompt(s);
 }
 
 static Choice ShowChoice(const std::wstring& instruction, const std::wstring& content,
                          const std::wstring& details, const std::wstring& primary,
                          const std::wstring& secondary) {
-    const int kPrimary = 1001, kSecondary = 1002;
-    const bool hasSecondary = !secondary.empty();
     if (g_stop) return CHOICE_CANCEL;
+    PromptState s;
+    s.instruction = instruction;
+    s.content = content;
+    s.details = details;
+    s.expanded = !details.empty() && Wh_GetIntSetting(L"expandDetails");
 
-    if (GetTaskDialog() && Wh_GetIntSetting(L"modernDialogs")) {
-        TASKDIALOG_BUTTON btns[2] = {{kPrimary, primary.c_str()}, {kSecondary, secondary.c_str()}};
-        TASKDIALOGCONFIG cfg = {};
-        FillCommon(cfg, instruction, content, details);
-        cfg.dwFlags |= TDF_USE_COMMAND_LINKS_NO_ICON;
-        cfg.dwCommonButtons = TDCBF_CANCEL_BUTTON;
-        cfg.pButtons = btns;
-        cfg.cButtons = hasSecondary ? 2 : 1;
-        cfg.nDefaultButton = IDCANCEL;
-        int pressed = 0;
-        if (SUCCEEDED(GetTaskDialog()(&cfg, &pressed, nullptr, nullptr))) {
-            if (pressed == kPrimary) return CHOICE_CLOSE_CONTINUE;
-            if (pressed == kSecondary) return CHOICE_CLOSE_ONLY;
-            return CHOICE_CANCEL;
-        }
+    AddToggle(s);
+    std::wstring title, note;
+    SplitTitleNote(primary, title, note);
+    s.btns.push_back({ID_PRIMARY, title, note, true, {0, 0, 0, 0}});
+    if (!secondary.empty()) {
+        SplitTitleNote(secondary, title, note);
+        s.btns.push_back({ID_SECONDARY, title, note, false, {0, 0, 0, 0}});
     }
-
-    std::wstring text = instruction;
-    if (!content.empty()) text += L"\n\n" + content;
-    if (!details.empty()) text += L"\n\n" + details;
-    if (hasSecondary) {
-        text += L"\n\nYes: end processes and continue\nNo: only end processes\nCancel: do nothing";
-        int r = MessageBoxW(nullptr, text.c_str(), kTitle,
-                            MB_YESNOCANCEL | MB_DEFBUTTON3 | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
-        if (r == IDYES) return CHOICE_CLOSE_CONTINUE;
-        if (r == IDNO) return CHOICE_CLOSE_ONLY;
-        return CHOICE_CANCEL;
-    }
-    text += L"\n\nContinue?";
-    int r = MessageBoxW(nullptr, text.c_str(), kTitle,
-                        MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
-    return r == IDYES ? CHOICE_CLOSE_CONTINUE : CHOICE_CANCEL;
+    AddCancel(s, L"Cancel");
+    return RunPrompt(s);
 }
 
 static bool PathStartsWith(const std::wstring& cwd, const std::wstring& root) {
@@ -1208,13 +1806,9 @@ static DWORD WINAPI MonitorThread(LPVOID) {
 }
 
 static BOOL CALLBACK CancelWindowProc(HWND h, LPARAM) {
-    WCHAR cls[32] = {};
-    GetClassNameW(h, cls, 32);
-    if (wcscmp(cls, L"#32770") != 0) return TRUE;
-    PostMessageW(h, TDM_CLICK_BUTTON, IDCANCEL, 0);
-    PostMessageW(h, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), 0);
-    PostMessageW(h, WM_COMMAND, MAKEWPARAM(IDNO, BN_CLICKED), 0);
-    PostMessageW(h, WM_CLOSE, 0, 0);
+    WCHAR cls[64] = {};
+    GetClassNameW(h, cls, 64);
+    if (wcscmp(cls, kPromptClass) == 0) PostMessageW(h, WM_CLOSE, 0, 0);
     return TRUE;
 }
 
@@ -1255,6 +1849,18 @@ BOOL WhTool_ModInit() {
     GetWindowsDirectoryW(win, MAX_PATH);
     g_explorerPath = std::wstring(win) + L"\\explorer.exe";
 
+    WNDCLASSEXW wc = {};
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = PromptProc;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.lpszClassName = kPromptClass;
+    g_promptClass = RegisterClassExW(&wc);
+    if (!g_promptClass) {
+        Wh_Log(L"RegisterClassEx failed");
+        return FALSE;
+    }
+
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) return FALSE;
 
@@ -1275,6 +1881,10 @@ void WhTool_ModUninit() {
     }
     WaitWorkers();
     CloseAllThreads();
+    if (g_promptClass) {
+        UnregisterClassW(kPromptClass, GetModuleHandleW(nullptr));
+        g_promptClass = 0;
+    }
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
