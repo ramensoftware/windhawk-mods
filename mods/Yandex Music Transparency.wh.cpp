@@ -29,6 +29,7 @@ Makes the Yandex Music desktop application window transparent. You can adjust th
 #include <wchar.h>
 #include <mutex>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 struct Settings {
