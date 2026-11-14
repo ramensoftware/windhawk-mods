@@ -2,12 +2,90 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-14T18:04:45.000Z</updated>
+    <updated>2026-11-14T19:01:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Top Taskbar Bleed 1.2.1]]></title>
+        <id>https://windhawk.net/mods/top-taskbar-bleed#098da0cadd3d85ce8a87e9a7d8021e0547a3a615</id>
+        <link href="https://windhawk.net/mods/top-taskbar-bleed"/>
+        <updated>2026-11-14T19:01:44.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>A Windows mode or accent change while a bleed is showing no longer leaves the taskbar with a background computed for the previous theme: the taskbar’s background element is kept on the Windows mode’s theme while the mod forces the panel’s theme on the rest of the bar</li>
+<li>The background element’s theme is left alone when it already has an explicit RequestedTheme of its own (a Taskbar Styler style); a local Default, which the taskbar leaves there and which inherits like an unset value, is pinned over and put back when the mod releases it</li>
+<li>README theme note updated</li>
+</ul>
+]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows Key to Search 1.1]]></title>
+        <id>https://windhawk.net/mods/windows-key-to-search#67fcfd331c26b0b9a87a1a4c7976c04ab976ef05</id>
+        <link href="https://windhawk.net/mods/windows-key-to-search"/>
+        <updated>2026-11-14T19:01:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The taskbar now appears alongside Search, including over fullscreen apps.</li>
+<li>Support for the new Search UI in Windows Insider builds.</li>
+<li>New setting to turn off showing the taskbar with Search.</li>
+<li>Simplified readme and settings text.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Tyler</name>
+            <uri>https://github.com/snowtyler</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Network Speed Indicator 1.7]]></title>
+        <id>https://windhawk.net/mods/net-speed-taskbar#806a8f3b7d33ca19ccf588fa38ed0281042f1f78</id>
+        <link href="https://windhawk.net/mods/net-speed-taskbar"/>
+        <updated>2026-11-14T19:01:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added custom font family setting (<code>fontFamily</code>) with fallback to Segoe UI.</li>
+<li>Added bold text styling toggle (<code>isBold</code>).</li>
+<li>Added custom HEX color settings (<code>textColor</code> and <code>uploadColor</code>).</li>
+<li>Added dynamic text measurement to expand widget width and prevent font clipping.</li>
+<li>Disabled GDI+ word wrapping to avoid accidental multiline breaks.</li>
+<li>Clamped widget height and vertical offset to ensure the meter never overflows the taskbar.</li>
+<li>Added safe clamps to font size (6–36), vertical nudge, and update interval.</li>
+<li>Updated demo GIF.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Narayan</name>
+            <uri>https://github.com/NarayanChetri</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Notepad++ Dark Dialog Fix 1.0.3]]></title>
+        <id>https://windhawk.net/mods/npp-taskdlg-textcolor#da3467732c84ae737d5d3a156be78075781f0d06</id>
+        <link href="https://windhawk.net/mods/npp-taskdlg-textcolor"/>
+        <updated>2026-11-14T19:01:29.000Z</updated>
+        <content type="html"><![CDATA[<h1>Notepad++ Dark Dialog Fix</h1>
+<p>In dark mode, Notepad++ paints its Save and confirm dialogs dark but leaves the
+text black, so you can barely read it. This mod makes that text light again.</p>
+<p><img src="https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/npp-taskdlg-textcolor.png" alt="Notepad++ Dark Dialog Fix preview"></p>
+<h2>Features</h2>
+<ul>
+<li><strong>Readable dialog text</strong> in Save, Save changes and other confirm dialogs.</li>
+<li><strong>Fixes labels and buttons</strong> drawn with the theme's text color.</li>
+<li><strong>Only in dark mode.</strong> The mod asks Notepad++ whether dark mode is on, so
+light mode dialogs are left alone. Needs Notepad++ 8.4.1 or newer.</li>
+<li><strong>Only touches Notepad++.</strong> No other app is affected, and nothing is changed
+on disk.</li>
+</ul>
+]]></content>
+        <author>
+            <name>DavidHiFi</name>
+            <uri>https://github.com/DavidHiFi</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chrome Context Menu Items 1.1.0]]></title>
         <id>https://windhawk.net/mods/chrome-context-menu-items#4f5de75424636c368c4578baee30b02f9487e6c4</id>
@@ -474,65 +552,6 @@ for these values at all.</li>
         <author>
             <name>Proponent</name>
             <uri>https://github.com/JJProponent</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Wobble 1.0.1]]></title>
-        <id>https://windhawk.net/mods/window-wobble#14b4d0fca3efb5f5ae23a9f898f97aa60a9ccb4d</id>
-        <link href="https://windhawk.net/mods/window-wobble"/>
-        <updated>2026-11-13T18:02:05.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the window stretching off screen and disappearing for a moment when the mouse button was released while the window was still moving. The settle animation was numerically unstable for frame times longer than 7.8 ms, so it affected 60 Hz and 120 Hz displays and any frame hitch. It is now sub-stepped and stable at any refresh rate.</li>
-</ul>
-]]></content>
-        <author>
-            <name>HeyJeay</name>
-            <uri>https://github.com/heyjeay</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Round Everything Interface 2.0.1]]></title>
-        <id>https://windhawk.net/mods/round-everything#e886acc3788a96739956aa821580c9fec9c339c3</id>
-        <link href="https://windhawk.net/mods/round-everything"/>
-        <updated>2026-11-13T17:00:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix: on Windows builds whose symbols aren't public yet (26300.9974), windows weren't rounded and maximized ones got no border or shadow - one optional symbol the online cache doesn't list failed the whole udwm.dll lookup; the restore animation's clip is now tracked through symbols it does list</li>
-</ul>
-]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Snipper 1.4.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-snipper#66b700c6645c8bcbc1b793d74a78d5d206ce2782</id>
-        <link href="https://windhawk.net/mods/taskbar-snipper"/>
-        <updated>2026-11-13T17:00:16.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Position</strong> in the right-click menu moves the buttons, like the <strong>Position</strong> setting; whichever you changed last is used.</li>
-<li>At the left end of the taskbar, the buttons go right of the Widgets button instead of over it.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar RDP Launcher 1.5.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-rdp-launcher#65ff3f1ef0c3fccd7987974b45a4fe4fba802057</id>
-        <link href="https://windhawk.net/mods/taskbar-rdp-launcher"/>
-        <updated>2026-11-13T17:00:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Position</strong> in the right-click menu moves the widget, like the <strong>Position</strong> setting; whichever you changed last is used.</li>
-<li>At the left end of the taskbar, the widget goes right of the Widgets button instead of over it.</li>
-<li>The computers, display buttons and display IDs are now kept in portable Windhawk too.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
         </author>
     </entry>
 </feed>

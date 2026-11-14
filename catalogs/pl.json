@@ -12106,7 +12106,7 @@
         "ratingUsers": 34,
         "reviews": 1,
         "trendingSorting": 0.9297001071941056,
-        "updated": 1788624275000,
+        "updated": 1794682894000,
         "users": 1423
       },
       "metadata": {
@@ -12123,7 +12123,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar Network Speed Indicator",
-        "version": "1.6"
+        "version": "1.7"
       }
     },
     "net-toggle": {
@@ -12613,6 +12613,33 @@
         "name": "Customize Windows notifications placement",
         "twitter": "https://twitter.com/m417z",
         "version": "1.2.4"
+      }
+    },
+    "npp-taskdlg-textcolor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794682889000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794682889000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "DavidHiFi",
+        "compilerOptions": "-luxtheme",
+        "description": "Readable text in Notepad++ Save and confirm dialogs when dark mode is on",
+        "donateUrl": "https://ko-fi.com/DavidHiFi",
+        "github": "https://github.com/DavidHiFi",
+        "homepage": "https://github.com/DavidHiFi/davids-windhawk-mods",
+        "include": [
+          "notepad++.exe"
+        ],
+        "license": "MIT",
+        "name": "Notepad++ Dark Dialog Fix",
+        "version": "1.0.3"
       }
     },
     "numbered-taskbar": {
@@ -19995,7 +20022,7 @@
         "ratingUsers": 20,
         "reviews": 0,
         "trendingSorting": 2.5166221336587693,
-        "updated": 1794373393000,
+        "updated": 1794682904000,
         "users": 250
       },
       "metadata": {
@@ -20011,7 +20038,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Top Taskbar Bleed",
-        "version": "1.2.0"
+        "version": "1.2.1"
       }
     },
     "tortoisegit-progress-animation-background-fix": {
@@ -23581,7 +23608,7 @@
         "ratingUsers": 4,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792875660000,
+        "updated": 1794682899000,
         "users": 22
       },
       "metadata": {
@@ -23596,7 +23623,7 @@
         ],
         "license": "MIT",
         "name": "Windows Key to Search",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "windows-sandbox-close-no-confirm": {

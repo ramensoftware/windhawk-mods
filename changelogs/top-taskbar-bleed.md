@@ -1,3 +1,9 @@
+## 1.2.1 ([Nov 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/098da0cadd3d85ce8a87e9a7d8021e0547a3a615/mods/top-taskbar-bleed.wh.cpp))
+
+* A Windows mode or accent change while a bleed is showing no longer leaves the taskbar with a background computed for the previous theme: the taskbar’s background element is kept on the Windows mode’s theme while the mod forces the panel’s theme on the rest of the bar
+* The background element’s theme is left alone when it already has an explicit RequestedTheme of its own (a Taskbar Styler style); a local Default, which the taskbar leaves there and which inherits like an unset value, is pinned over and put back when the mod releases it
+* README theme note updated
+
 ## 1.2.0 ([Nov 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fd16d4dc5e0d1e00d0fe5af20c46178a71d1303f/mods/top-taskbar-bleed.wh.cpp))
 
 * The first four rows of the title bar are sampled instead of one, so a hairline, a recorder border or a row of a gradient can’t decide the color

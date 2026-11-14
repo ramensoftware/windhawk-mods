@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-14T04:04:48.000Z</updated>
+    <updated>2026-11-14T19:01:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Notepad++ Dark Dialog Fix 1.0.3]]></title>
+        <id>https://windhawk.net/mods/npp-taskdlg-textcolor#da3467732c84ae737d5d3a156be78075781f0d06</id>
+        <link href="https://windhawk.net/mods/npp-taskdlg-textcolor"/>
+        <updated>2026-11-14T19:01:29.000Z</updated>
+        <content type="html"><![CDATA[<h1>Notepad++ Dark Dialog Fix</h1>
+<p>In dark mode, Notepad++ paints its Save and confirm dialogs dark but leaves the
+text black, so you can barely read it. This mod makes that text light again.</p>
+<p><img src="https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/npp-taskdlg-textcolor.png" alt="Notepad++ Dark Dialog Fix preview"></p>
+<h2>Features</h2>
+<ul>
+<li><strong>Readable dialog text</strong> in Save, Save changes and other confirm dialogs.</li>
+<li><strong>Fixes labels and buttons</strong> drawn with the theme's text color.</li>
+<li><strong>Only in dark mode.</strong> The mod asks Notepad++ whether dark mode is on, so
+light mode dialogs are left alone. Needs Notepad++ 8.4.1 or newer.</li>
+<li><strong>Only touches Notepad++.</strong> No other app is affected, and nothing is changed
+on disk.</li>
+</ul>
+]]></content>
+        <author>
+            <name>DavidHiFi</name>
+            <uri>https://github.com/DavidHiFi</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Compact RDP connection bar 3.0.0]]></title>
         <id>https://windhawk.net/mods/compact-rdp-connection-bar#a0a4aa02a5463fd3ee74a5ddb2b6c2d89d8e27b6</id>
@@ -1699,48 +1723,6 @@ enable setting.</p>
         <author>
             <name>chaochenzhudian</name>
             <uri>https://github.com/chaochenzhudian</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinPager 0.1.2]]></title>
-        <id>https://windhawk.net/mods/winpager#fe7db7aa5add612e6df8048ac9d71384b10936f0</id>
-        <link href="https://windhawk.net/mods/winpager"/>
-        <updated>2026-11-12T06:00:36.000Z</updated>
-        <content type="html"><![CDATA[<h1>WinPager</h1>
-<p>A virtual desktop pager like KDE Plasma's, living in the Windows 11 taskbar.</p>
-<p><img src="https://raw.githubusercontent.com/seanmamasde/WinPager/main/assets/screenshot1.png" alt="WinPager in the taskbar, showing a desktop's windows"></p>
-<p><img src="https://raw.githubusercontent.com/seanmamasde/WinPager/main/assets/screenshot2.png" alt="The on-screen display when switching desktops"></p>
-<ul>
-<li>Shows every virtual desktop with live window outlines, optionally with application icons</li>
-<li>Click a desktop to switch to it; click the current one to open Task View (configurable)</li>
-<li>Scroll over it to flip through desktops</li>
-<li>Drag a window outline onto another desktop to move that window there</li>
-<li>Hover a desktop for a list of its windows; right-click to add or remove desktops</li>
-<li>Ctrl+Shift+Win+Left/Right moves the active window to the neighbouring desktop and follows it</li>
-<li>KWin-style on-screen display when switching, and an option to hide Windows' own &quot;Desktop N&quot; popup</li>
-<li>A pager on each monitor's taskbar, or one on the main taskbar showing all monitors</li>
-<li>Can show only a few desktops at a time, scrolling along with the current one</li>
-<li>Follows light/dark mode and the accent color</li>
-</ul>
-<p>The settings mirror those of Plasma's Pager widget, plus position, theme and the switching popups.</p>
-<p>The mod runs in its own process; it isn't injected into explorer.exe.</p>
-<h2>Notes</h2>
-<ul>
-<li>Windows 11 24H2/25H2 (build 26100 and later) only. Like other virtual desktop tools, it relies on undocumented
-virtual desktop interfaces, so a Windows update can break it. On a build it doesn't know, it shows an error.</li>
-<li>The taskbar doesn't reserve space for it. Next to a centered row of buttons it shows only as many desktops as fit
-(at least the current one); on a left-aligned taskbar, a row of buttons long enough to reach the tray runs under it.</li>
-<li>With &quot;Hide the Windows &quot;Desktop N&quot; popup&quot; on, a volume or brightness popup shown within 0.6 s of a switch is hidden
-too, since Explorer shows both in the same window.</li>
-<li>WinPager is also a standalone app, <a href="https://github.com/seanmamasde/WinPager">WinPager.exe</a>, built from the same
-source. Only one of the two runs at a time: if you switch to the mod, quit WinPager.exe and turn off its
-&quot;Start with Windows&quot;.</li>
-<li>Bugs and ideas: <a href="https://github.com/seanmamasde/WinPager/issues">github.com/seanmamasde/WinPager/issues</a></li>
-</ul>
-]]></content>
-        <author>
-            <name>seanmamasde</name>
-            <uri>https://github.com/seanmamasde</uri>
         </author>
     </entry>
 </feed>
