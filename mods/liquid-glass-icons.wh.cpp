@@ -6,7 +6,8 @@
 // @author          Arbaz14
 // @github          https://github.com/Arbaz14
 // @include         explorer.exe
-// @compilerOptions -lcomctl32 -lgdi32 -lmsimg32 -luser32
+// @architecture    x86-64
+// @compilerOptions -lcomctl32 -lgdi32 -luser32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -14,19 +15,16 @@
 /*
 # Liquid Glass Icons
 
-Focused, lightweight icon transformation mod for Windows 11 desktop icons
-(`FolderView` `SysListView32`):
+Transforms Windows 11 desktop icons (`FolderView` `SysListView32`) into sleek Liquid Glass tiles:
 
-- **Translucent Icons**: Blends the icon graphic itself into the frosted glass
-  card (`iconOpacity` slider, default `68%`) instead of rendering opaque blocks.
-- **Inset Framing (No Clipped Corners)**: Scales icon artwork and shortcut
-  overlays proportionally inside the Liquid Glass squircle so square icons
-  never poke through the rounded glass border.
-- **Customizable Liquid Glass Tiles**: Adjust preset style (`Frosted`,
-  `Obsidian`, `Aurora`, `Custom Tint`), tile opacity, icon opacity, corner
-  radius, icon scale, and curved glass top sheen.
-- **Icons Only**: Leaves File Explorer, titlebars, Start/Search, context menus,
-  and all other apps untouched so other transparency mods work conflict-free.
+![Liquid Glass Icons Preview](https://raw.githubusercontent.com/Arbaz14/windhawk-mods/main/mods/liquid-glass-icons/screenshot.png)
+
+- **Translucent Glass Backing**: Renders customizable glass tiles behind desktop icons with multiple optical presets (`Liquid Glass`, `Clear Transparent Glass`, `Frosted Crystal`, `Obsidian Tint`, `Glacial Aurora`, or custom hex tints).
+- **Independent Rim & Sheen Control**: Dedicated slider to dial in border specular brightness (0â€“100%) independently from glass body transparency.
+- **Translucent Icons**: Blends the icon graphic itself into the glass tile (`iconOpacity` slider, default `75%`) instead of rendering opaque blocks.
+- **Inset Framing (No Clipped Corners)**: Scales icon artwork and shortcut overlays proportionally inside the Liquid Glass squircle so square icons never poke through the rounded glass border.
+- **Logo Theming**: Optional colorize, liquid glass embossed logo, monochrome, silhouette, or silver grayscale.
+- **Icons Only**: Strictly scoped to desktop icons (`FolderView` `SysListView32`), leaving File Explorer, taskbar, Start menu, and windows untouched.
 */
 // ==/WindhawkModReadme==
 
@@ -63,16 +61,16 @@ Focused, lightweight icon transformation mod for Windows 11 desktop icons
 - showGlassSheen: true
   $name: Top Glass Reflection Sheen
   $description: Adds a soft curved glossy highlight across the upper half of each icon tile.
-- iconTheming: colorize
+- iconTheming: none
   $name: Icon Theming Mode
   $description: How to recolor desktop app icon logos.
   $options:
+  - none: Original Icon Colors
   - colorize: Colorize Logo (Preserves white lines, outlines, & details - keeps the real logo shape!)
   - glass: Liquid Glass Logo (Logo itself becomes translucent glass with specular highlights & rim!)
   - monochrome: Monochrome / Material You (Uniform single-color luminance)
   - silhouette: Flat Android Silhouette (Solid single-color icon glyph)
   - grayscale: Silver Grayscale (Clean monochromatic gray)
-  - none: Original Icon Colors
 - iconThemeColor: white
   $name: Themed Icon Color
   $description: The color applied to the icon artwork when Icon Theming is enabled.
@@ -99,13 +97,12 @@ Focused, lightweight icon transformation mod for Windows 11 desktop icons
 
 #include <algorithm>
 #include <atomic>
-#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <cwctype>
 #include <optional>
-#include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -351,7 +348,7 @@ COLORREF ResolveIconThemeColor(const IconModSettings& cfg, bool dark) {
         case IconThemeColorChoice::kWhite:
             return RGB(255, 255, 255);
         case IconThemeColorChoice::kDark:
-            return RGB(32, 32, 32);
+            return RGB(30, 30, 30);
         case IconThemeColorChoice::kTile: {
             ResolvedIconPalette pal = ResolveIconPalette(cfg, dark);
             return RGB(pal.topRim.r, pal.topRim.g, pal.topRim.b);
@@ -424,10 +421,11 @@ std::unordered_map<uint64_t, IconCacheEntry> g_iconCache;
 std::atomic<bool> g_unloading = false;
 std::atomic<HWND> g_desktopListWnd = nullptr;
 std::atomic<UINT> g_desktopDpi = 96;
+std::atomic<bool> g_isDarkMode = true;
 
 thread_local int g_desktopListPaintDepth = 0;
 thread_local int g_iconDrawDepth = 0;
-thread_local std::vector<PaintedDesktopIcon> g_paintedIconsThisFrame;
+std::vector<PaintedDesktopIcon> g_paintedIconsThisFrame;
 
 using ImageList_DrawIndirect_t = decltype(&ImageList_DrawIndirect);
 ImageList_DrawIndirect_t ImageList_DrawIndirect_Original = nullptr;
@@ -837,15 +835,20 @@ struct ScopedIconScaleTransform {
     }
 };
 
-bool IsDesktopSystemDarkMode() {
+void RefreshSystemDarkMode() {
     DWORD val = 0;
     DWORD cb = sizeof(val);
     if (RegGetValueW(HKEY_CURRENT_USER, kRegistryPersonalize,
-                     L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &val,
+                     L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &val,
                      &cb) == ERROR_SUCCESS) {
-        return val == 0;
+        g_isDarkMode.store(val == 0, std::memory_order_relaxed);
+    } else {
+        g_isDarkMode.store(true, std::memory_order_relaxed);
     }
-    return true;
+}
+
+bool IsDesktopSystemDarkMode() {
+    return g_isDarkMode.load(std::memory_order_relaxed);
 }
 
 UINT ResolveDesktopIconDpi(HDC hdc) {
@@ -1060,9 +1063,17 @@ void RecolorIconPixels(DWORD* pixels,
                     outR = (ur * a) / 255;
                     outG = (ug * a) / 255;
                     outB = (ub * a) / 255;
+                } else if (targetS <= 0.05f) {
+                    // White/charcoal targets have no hue: produce a neutral tone, not hue 0 (red).
+                    float newL = pl + (targetL - pl) * 0.5f;
+                    BYTE cr, cg, cb;
+                    HslToRgb(0.0f, 0.0f, newL, cr, cg, cb);
+                    outR = (static_cast<int>(cr) * a) / 255;
+                    outG = (static_cast<int>(cg) * a) / 255;
+                    outB = (static_cast<int>(cb) * a) / 255;
                 } else {
                     BYTE cr, cg, cb;
-                    float newS = std::max(ps, targetS > 0.05f ? targetS : 0.8f);
+                    float newS = std::max(ps, targetS);
                     HslToRgb(targetH, newS, pl, cr, cg, cb);
                     outR = (static_cast<int>(cr) * a) / 255;
                     outG = (static_cast<int>(cg) * a) / 255;
@@ -1207,7 +1218,8 @@ auto HandleImageListDrawParams(void* comSelf,
                                IMAGELISTDRAWPARAMS* p,
                                OrigFn&& callOrig,
                                IsOkFn&& isOk) -> decltype(callOrig(p)) {
-    if (!p || p->cbSize < IMAGELISTDRAWPARAMS_V3_SIZE) {
+    if (g_desktopListPaintDepth <= 0 || g_iconDrawDepth > 0 || !p ||
+        p->cbSize < IMAGELISTDRAWPARAMS_V3_SIZE) {
         return callOrig(p);
     }
     HIMAGELIST himl =
@@ -1283,13 +1295,18 @@ auto HandleImageListDrawParams(void* comSelf,
                 std::memset(rawBits, 0x00,
                             static_cast<size_t>(w) * h * sizeof(DWORD));
 
-                IMAGELISTDRAWPARAMS offParams = *p;
+                IMAGELISTDRAWPARAMS offParams = {};
+                size_t copyBytes =
+                    p->cbSize < sizeof(offParams) ? p->cbSize : sizeof(offParams);
+                std::memcpy(&offParams, p, copyBytes);
+                offParams.cbSize = sizeof(IMAGELISTDRAWPARAMS);
                 offParams.hdcDst = memDc;
                 offParams.x = 0;
                 offParams.y = 0;
                 offParams.cx = w;
                 offParams.cy = h;
-                offParams.fStyle = ILD_TRANSPARENT;
+                offParams.fStyle =
+                    (p->fStyle & ILD_OVERLAYMASK) | ILD_TRANSPARENT;
                 offParams.fState &= ~ILS_ALPHA;
                 offParams.Frame = 255;
 
@@ -1503,75 +1520,6 @@ void HookComctl32V6Module(HMODULE comctlMod, bool applyOpsNow) {
     }
 }
 
-using RunFromWindowThreadProc_t = void (*)(PVOID);
-
-struct RunFromWindowThreadParam {
-    RunFromWindowThreadProc_t proc;
-    PVOID procParam;
-    std::atomic<int> state;
-};
-
-UINT GetRunFromWindowThreadMsg() {
-    static const UINT s_msg =
-        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-    return s_msg;
-}
-
-LRESULT CALLBACK RunFromWindowThreadHookProc(int nCode,
-                                             WPARAM wParam,
-                                             LPARAM lParam) {
-    if (nCode == HC_ACTION) {
-        const auto* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
-        if (cwp->message == GetRunFromWindowThreadMsg()) {
-            auto* item =
-                reinterpret_cast<RunFromWindowThreadParam*>(cwp->lParam);
-            int expected = 0;
-            if (item && item->state.compare_exchange_strong(expected, 1)) {
-                item->proc(item->procParam);
-                item->state.store(2);
-            }
-        }
-    }
-    return CallNextHookEx(nullptr, nCode, wParam, lParam);
-}
-
-bool RunFromWindowThread(HWND hWnd,
-                         RunFromWindowThreadProc_t proc,
-                         PVOID procParam) {
-    const UINT msg = GetRunFromWindowThreadMsg();
-    DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
-    if (tid == 0) {
-        return false;
-    }
-    if (tid == GetCurrentThreadId()) {
-        proc(procParam);
-        return true;
-    }
-    if (IsHungAppWindow(hWnd)) {
-        return false;
-    }
-    auto* p = new RunFromWindowThreadParam{proc, procParam, 0};
-    HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, RunFromWindowThreadHookProc,
-                                   nullptr, tid);
-    if (!hook) {
-        delete p;
-        return false;
-    }
-    SendMessageTimeoutW(hWnd, msg, 0, reinterpret_cast<LPARAM>(p),
-                        SMTO_ABORTIFHUNG | SMTO_BLOCK, 300, nullptr);
-    UnhookWindowsHookEx(hook);
-    if (p->state.load() == 1) {
-        for (int i = 0; i < 100 && p->state.load() == 1; ++i) {
-            Sleep(5);
-        }
-    }
-    bool done = (p->state.load() == 2);
-    if (done || p->state.load() == 0) {
-        delete p;
-    }
-    return done;
-}
-
 bool IsDesktopListViewWnd(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) {
         return false;
@@ -1604,14 +1552,12 @@ LRESULT CALLBACK DesktopListSubclassProc(HWND hWnd,
                                          UINT uMsg,
                                          WPARAM wParam,
                                          LPARAM lParam,
-                                         UINT_PTR uIdSubclass,
                                          DWORD_PTR dwRefData) {
     switch (uMsg) {
         case WM_NCDESTROY: {
             HWND self = hWnd;
             g_desktopListWnd.compare_exchange_strong(
                 self, nullptr, std::memory_order_relaxed);
-            RemoveWindowSubclass(hWnd, DesktopListSubclassProc, uIdSubclass);
             break;
         }
         case WM_DPICHANGED_BEFOREPARENT:
@@ -1623,11 +1569,8 @@ LRESULT CALLBACK DesktopListSubclassProc(HWND hWnd,
             break;
         }
         case WM_SETTINGCHANGE: {
-            if (lParam &&
-                wcscmp(reinterpret_cast<LPCWSTR>(lParam),
-                       L"ImmersiveColorSet") == 0) {
-                InvalidateRect(hWnd, nullptr, TRUE);
-            }
+            RefreshSystemDarkMode();
+            InvalidateRect(hWnd, nullptr, TRUE);
             break;
         }
         case WM_PAINT:
@@ -1639,13 +1582,7 @@ LRESULT CALLBACK DesktopListSubclassProc(HWND hWnd,
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-void UnsubclassDesktopListViewProc(PVOID p) {
-    HWND w = reinterpret_cast<HWND>(p);
-    RemoveWindowSubclass(w, DesktopListSubclassProc, kDesktopListSubclassId);
-    InvalidateRect(w, nullptr, TRUE);
-}
-
-void AttachDesktopListViewOnCurrentThread(HWND hWnd) {
+void AttachDesktopListView(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) {
         return;
     }
@@ -1653,19 +1590,16 @@ void AttachDesktopListViewOnCurrentThread(HWND hWnd) {
     if (dpi) {
         g_desktopDpi.store(dpi, std::memory_order_relaxed);
     }
-    if (!SetWindowSubclass(hWnd, DesktopListSubclassProc,
-                           kDesktopListSubclassId, 0)) {
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hWnd, DesktopListSubclassProc, 0)) {
         return;
     }
     HWND prev = g_desktopListWnd.exchange(hWnd, std::memory_order_relaxed);
     if (prev && prev != hWnd && IsWindow(prev)) {
-        RunFromWindowThread(prev, UnsubclassDesktopListViewProc, prev);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            prev, DesktopListSubclassProc);
     }
     InvalidateRect(hWnd, nullptr, TRUE);
-}
-
-void AttachDesktopListViewProc(PVOID p) {
-    AttachDesktopListViewOnCurrentThread(reinterpret_cast<HWND>(p));
 }
 
 HWND FindDesktopListUnder(HWND shellView) {
@@ -1711,33 +1645,6 @@ HWND FindExistingDesktopListView() {
     return nullptr;
 }
 
-void SyncDesktopIconSubclass(bool enable) {
-    if (!enable) {
-        HWND prev =
-            g_desktopListWnd.exchange(nullptr, std::memory_order_relaxed);
-        if (prev && IsWindow(prev)) {
-            RunFromWindowThread(prev, UnsubclassDesktopListViewProc, prev);
-        }
-        return;
-    }
-
-    HWND lv = FindExistingDesktopListView();
-    if (!lv) {
-        return;
-    }
-    HookComctl32V6Module(
-        reinterpret_cast<HMODULE>(GetClassLongPtrW(lv, GCLP_HMODULE)), true);
-    if (g_desktopListWnd.load(std::memory_order_relaxed) == lv) {
-        UINT dpi = GetDpiForWindow(lv);
-        if (dpi) {
-            g_desktopDpi.store(dpi, std::memory_order_relaxed);
-        }
-        InvalidateRect(lv, nullptr, TRUE);
-        return;
-    }
-    RunFromWindowThread(lv, AttachDesktopListViewProc, lv);
-}
-
 HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
                                  LPCWSTR lpClassName,
                                  LPCWSTR lpWindowName,
@@ -1761,7 +1668,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
         HookComctl32V6Module(
             reinterpret_cast<HMODULE>(GetClassLongPtrW(hWnd, GCLP_HMODULE)),
             true);
-        AttachDesktopListViewOnCurrentThread(hWnd);
+        AttachDesktopListView(hWnd);
     }
     return hWnd;
 }
@@ -1774,6 +1681,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
 
 BOOL Wh_ModInit() {
     LoadSettings();
+    RefreshSystemDarkMode();
 
     Wh_SetFunctionHook(reinterpret_cast<void*>(ImageList_DrawIndirect),
                        reinterpret_cast<void*>(ImageList_DrawIndirect_Hook),
@@ -1794,7 +1702,12 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    SyncDesktopIconSubclass(true);
+    if (HWND lv = FindExistingDesktopListView()) {
+        HookComctl32V6Module(
+            reinterpret_cast<HMODULE>(GetClassLongPtrW(lv, GCLP_HMODULE)),
+            true);
+        AttachDesktopListView(lv);
+    }
 }
 
 void Wh_ModBeforeUninit() {
@@ -1802,7 +1715,14 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
-    SyncDesktopIconSubclass(false);
+    if (HWND lv =
+            g_desktopListWnd.exchange(nullptr, std::memory_order_relaxed)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            lv, DesktopListSubclassProc);
+        InvalidateRect(lv, nullptr, TRUE);
+    }
+    g_paintedIconsThisFrame.clear();
+    g_paintedIconsThisFrame.shrink_to_fit();
     ClearIconTileCache();
     if (g_d2dFactory) {
         g_d2dFactory->Release();
@@ -1818,5 +1738,7 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
     ClearIconTileCache();
-    SyncDesktopIconSubclass(true);
+    if (HWND lv = FindExistingDesktopListView()) {
+        AttachDesktopListView(lv);
+    }
 }
