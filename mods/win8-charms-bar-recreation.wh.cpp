@@ -51,12 +51,25 @@ While a charm pane is open:
 - **Charms Bar enabled**: turns the Charms Bar on or off. Share is always included.
 - **In-mod language**: English, Italian, German, French, Spanish, Japanese, Portuguese, Russian, Chinese
   (Simplified) or Korean. The choice applies to the rail, the charm panes and the Project panel alike.
-- **Activation mode**: full right edge, top-right corner, Win+C, or combinations.
+- **Activation mode**: full right edge, top-right corner, both right corners, Win+C, or combinations.
+- **Edge hint delay**: how long the pointer must rest on the right edge before the Charms Bar opens, which is
+  the Windows 8 desktop behaviour and what 1.0.0 did. A delay written under *EdgeUI* in the registry takes
+  precedence, like the other Windows 8 edge settings.
+- **Two-stage edge gesture**: for a touch screen or a pen. Only the two right corner squares start the gesture,
+  the translucent icon hint slides in after the delay, and the full bar follows a slide along the edge, a tap on
+  the hint or the optional dwell. With *Slide along the edge to open* and *Open the full bar from the hint
+  after* it is tuned. A mouse is never gated this way.
 - **Hide after choosing a charm**: closes the Charms Bar after a charm is activated. Turn off to leave it open.
 - **Close on outside click or focus change**: light-dismiss behavior.
 - **Animate show and hide**: enables pane motion. Windows' own *Settings > Accessibility > Visual effects >
-  Animation effects* switch is always honoured: when it is off, the rail and the panes appear and disappear
-  instantly even if this setting is on.
+  Animation effects* switch is always honoured: when it is off, the rail, the panes and the popups appear and
+  disappear instantly even if this setting is on.
+- **Charm pane animation engine, speed and slide**: the panes and the popups are timed by the animation values
+  of the current Windows theme: the duration and the curve of the content slide, the panel show and hide
+  storyboards, the fade of the popups, and the stagger between the title and the body of the pane. The speed
+  setting scales all of it; the slide distances are set separately, in pixels and as a percentage for the
+  title. With the engine off, or with *Animate show and hide* off, the previous slide and an instant popup are
+  used.
 - **Start logo style**: Windows 8/8.1 logo (system accent) or the Windows 8 Build 8102 beta logo.
 - **Charms Bar icons**: Windows 8/8.1 icons, or the Windows 8 Build 8102 beta set for Search, Share, Devices and Settings. The Start logo is set separately.
 - **Enable rail transparency**: optional subtle rail transparency.
@@ -114,7 +127,7 @@ Live system data (volume, brightness, network, battery) is read only while a pan
     - ko: 한국어
 - activationMode: edgeAndWinC
   $name: Activation mode
-  $description: "This setting chooses how the Charms Bar opens: from the full right edge, from the top-right corner, with Win+C, or with a combination of these."
+  $description: "This setting chooses how the Charms Bar opens: from the full right edge, from the top-right corner, from both right corners, with Win+C, or with a combination of these. In the corner modes the pointer only enters through the corner square, and the slide along the edge finishes the gesture."
   $options:
     - edgeAndWinC: Full right edge + Win+C
     - edgeOnly: Full right edge only
@@ -123,15 +136,18 @@ Live system data (volume, brightness, network, battery) is read only while a pan
     - bothCornersAndWinC: Both right corners + Win+C
     - bothCornersOnly: Both right corners only
     - winCOnly: Win+C only
+- edgeStagedGesture: false
+  $name: Two-stage edge gesture (touch and pen)
+  $description: "Off is the Windows 8 desktop behaviour, which is what a mouse uses: the pointer comes up to the right edge or the corner and the Charms Bar opens after the delay below, without any slide along the edge. Turn this on for a touch screen or a pen: only the two right corner squares start the gesture, the icon hint slides in after the delay, and the full bar follows a slide along the edge or a tap on the hint. A mouse is never gated this way."
 - edgeHintDelayMs: 200
   $name: Edge hint delay (ms)
-  $description: "How long the pointer must rest on the activation edge or corner before the icon hint slides in, and how long it must rest again after leaving before it slides in a second time. 200 ms is the Windows 8 default. Increase it if the bar still feels too sensitive."
+  $description: "How long the pointer must rest on the right edge, and how long it must rest again after leaving, before the Charms Bar opens. 200 ms is the Windows 8 default for the desktop; increase it if the bar feels too sensitive. A CharmsBarDesktopDelay or CharmsBarImmersiveDelay value under HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\ImmersiveShell\\EdgeUI takes precedence over this setting, like the rest of the Windows 8 edge settings. With Two-stage edge gesture on, this is the delay of the icon hint instead."
 - edgeSlidePx: 32
   $name: Slide along the edge to open (px)
-  $description: "After the icon hint is up, the solid bar appears when the pointer travels this far along the edge, up or down. 32 px is the Windows 8 default. Set it to 0 to open the solid bar from the hint immediately."
+  $description: "Two-stage edge gesture only. After the icon hint is up, the solid bar appears when the pointer travels this far along the edge, up or down. 32 px is the Windows 8 default. Set it to 0 to open the solid bar from the hint immediately."
 - edgeHintDwellMs: 0
   $name: Open the full bar from the hint after (ms)
-  $description: "While the icon hint is up and the pointer rests on the edge, the solid bar opens by itself after this delay. 0 is the Windows 8 behaviour: the bar waits for a slide along the edge or a click."
+  $description: "Two-stage edge gesture only. While the icon hint is up and the pointer rests on the edge, the solid bar opens by itself after this delay. 0 is the Windows 8 behaviour: the bar waits for a slide along the edge or a click on the hint."
 - hideAfterClick: true
   $name: Hide after choosing a charm
   $description: "This setting closes the Charms Bar after you activate a charm. Turn it off to leave the rail open."
@@ -148,20 +164,20 @@ Live system data (volume, brightness, network, battery) is read only while a pan
   $name: Charm pane animation speed (%)
   $description: "Scales every duration the engine reads from the theme. 100 % uses the theme's own timing; lower values are faster."
 - paneThemeSlide: false
-  $name: Take the content slide from the theme
-  $description: "Read the content slide distance from the current theme (storyboard 32) instead of the Windows 8.1 value the engine falls back to."
+  $name: Take the pane slide timing from the theme
+  $description: "Read the duration and the curve of the content slide, and the curve of the content fade, from the current Windows theme (storyboard 32) instead of using the Windows 8.1 values the engine falls back to. The slide distances are set by the two settings below."
 - paneContentSlidePx: -1
   $name: Content slide distance (px)
-  $description: "How far the body of the pane slides in. -1 uses the engine's default: the theme's value when it is taken from the theme, 100 px otherwise."
+  $description: "How far the body of the pane slides in, in pixels at 96 dpi. -1 keeps the Windows 8.1 distance of 100 px."
 - paneTitleSlidePct: 40
   $name: Title slide distance (%)
-  $description: "How far the title slides in, as a percentage of the content distance. The title has no delay, the body has one."
+  $description: "How far the title slides in, as a percentage of the content slide distance. The title has no delay, the body has one."
 - paneGroupStagger: 0
   $name: Body group delay index
   $description: "Delay of the body group, in steps of the theme's element stagger (35 ms by default). 0 means the title and the body start together; 1 delays the body by one step."
 - paneThemeFade: true
   $name: Take the popup fade from the theme
-  $description: "Use the theme's content fade curve for the panes and the popups. Turn it off to use the engine's Windows 8.1 fallback curve."
+  $description: "Use the theme's content fade curve and duration for the popup fade (the context menu and the volume and brightness flyout). Turn it off to use the engine's Windows 8.1 fallback curve instead."
 - startLogoStyle: windows8
   $name: Start logo style
   $description: "This setting chooses the Start logo in the rail: the Windows 8/8.1 logo, drawn with the system accent color, or the Windows 8 Build 8102 beta logo."
@@ -4268,15 +4284,26 @@ static const GUID kIidPlayToManagerStatics = {
     0x4f3b,
     {0xba, 0x20, 0x61, 0x55, 0xe4, 0x35, 0x32, 0x5b}};
 
-constexpr UINT WM_PORT_OPEN = WM_APP + 0x461;
-// 1.1.0 edge hint messages. wParam/lParam carry no payload: the hook only reports transitions and every
-// coordinate is re-read from the cursor on the UI thread, so the hook never touches a window.
-constexpr UINT WM_PORT_HINT_SHOW =
-    WM_APP + 0x46A;  // the icon hint should slide in
-constexpr UINT WM_PORT_HINT_FULL =
-    WM_APP + 0x46B;  // the solid bar should follow the hint
-constexpr UINT WM_PORT_HINT_HIDE =
-    WM_APP + 0x46C;  // the pointer left before the solid bar appeared
+// Every private message the mod posts is declared here, in one enum, so that a later addition cannot take a
+// value that is already in use. wParam/lParam carry no payload: the input hook only reports transitions and
+// every coordinate is re-read from the cursor on the UI thread, so the hook never has to touch a window.
+enum : UINT {
+    WM_PORT_OPEN = WM_APP + 0x461,
+    WM_PORT_CLOSE,
+    WM_PORT_REFRESH,
+    WM_PORT_MENU,
+    WM_PORT_NAVIGATE,
+    WM_PORT_ACTIVATE,
+    WM_PORT_PANECLOSE,
+    WM_PORT_MENU_COMMAND,
+    WM_PORT_STARTTIPHIDE,   // the pointer left the corner
+    WM_PORT_STARTTIPARM,    // start the dwell timer for the corner
+    WM_PORT_STARTTIPLEAVE,  // pointer left: run the grace down on a timer
+    // 1.1.0 edge hint messages.
+    WM_PORT_HINT_SHOW,  // the icon hint should slide in
+    WM_PORT_HINT_FULL,  // the solid bar should follow the hint
+    WM_PORT_HINT_HIDE,  // the pointer left before the solid bar appeared
+};
 enum EdgeHintStage : int { HINT_NONE = 0, HINT_ICONS = 1, HINT_FULL = 2 };
 // 200 ms is the Windows 8 default hint delay (HKCU EdgeUI\CharmsBarDesktopDelay) and 32 logical px is one
 // 8.1 gesture increment along the edge. The dwell is off by default: Windows 8 waited for the slide or a
@@ -4284,11 +4311,6 @@ enum EdgeHintStage : int { HINT_NONE = 0, HINT_ICONS = 1, HINT_FULL = 2 };
 constexpr int kDefaultEdgeHintMs = 200;
 constexpr int kDefaultEdgeSlidePx = 32;
 constexpr int kDefaultEdgeDwellMs = 0;
-constexpr UINT WM_PORT_CLOSE = WM_APP + 0x462;
-constexpr UINT WM_PORT_REFRESH = WM_APP + 0x463;
-constexpr UINT WM_PORT_MENU = WM_APP + 0x464;
-constexpr UINT WM_PORT_NAVIGATE = WM_APP + 0x465;
-constexpr UINT WM_PORT_ACTIVATE = WM_APP + 0x466;
 constexpr UINT_PTR TIMER_ANIMATION = 1;
 constexpr UINT_PTR TIMER_STATUS = 2;
 constexpr UINT_PTR TIMER_CLOCK_STATUS = 3;
@@ -4296,8 +4318,6 @@ constexpr UINT_PTR TIMER_PANE = 4;
 constexpr UINT_PTR TIMER_VOLUME = 5;
 constexpr UINT_PTR TIMER_BRIGHTNESS_APPLY = 6;
 constexpr UINT_PTR TIMER_PANE_METRICS = 7;
-constexpr UINT_PTR TIMER_POPUP_FADE =
-    11;  // 1.1.0: the engine popup fade, 8 ms frames
 constexpr UINT_PTR TIMER_SEARCH_VERIFY =
     8;  // 700 ms after a Win chord: did the Windows search UI appear?
 constexpr UINT_PTR TIMER_START_VERIFY =
@@ -4312,6 +4332,9 @@ constexpr UINT_PTR TIMER_STARTTIP_CLOSE =
     13;  // 450 ms after a click: did the Start screen really close?
 constexpr UINT_PTR TIMER_STARTTIP_EXIT =
     14;  // grace expired: has the pointer really left for good?
+constexpr UINT_PTR TIMER_POPUP_FADE =
+    15;  // 1.1.0: the engine popup fade, 8 ms frames. The ids above belong to other windows, but this
+         // one is kept apart from TIMER_STARTTIP_FRAME all the same.
 // The companion does not snap its window shut: it slides the Start screen out over its own closeSlideMs,
 // 600 ms unless that setting was changed. So the close is watched rather than timed: a fixed check would
 // either fire into the middle of the slide or wait far too long for it.
@@ -4321,14 +4344,6 @@ constexpr int kStartTipCloseTimeoutMs =
     4000;  // stop watching after this; nothing is ever forced
 constexpr int kStartTipSuppressAfterClickMs =
     900;  // the tip also stays away this long after a click
-constexpr UINT WM_PORT_PANECLOSE = WM_APP + 0x467;
-constexpr UINT WM_PORT_MENU_COMMAND = WM_APP + 0x468;
-constexpr UINT WM_PORT_STARTTIPHIDE =
-    WM_APP + 0x469;  // the pointer left the corner
-constexpr UINT WM_PORT_STARTTIPARM =
-    WM_APP + 0x46A;  // start the dwell timer for the corner
-constexpr UINT WM_PORT_STARTTIPLEAVE =
-    WM_APP + 0x46B;  // pointer left: run the grace down on a timer
 // The Windows 8.1 "Start tip": a 48 px black square in the bottom-left corner holding the 30 px Windows
 // flag, all at 96 dpi. Windows showed it as soon as the pointer reached the corner - practically at once
 // there, after a short pause when the pointer only brushed the edge - so the corner has its own dwell.
@@ -4867,13 +4882,13 @@ struct MotionCurve {
 };
 static const MotionCurve kIdentityCurve = {
     {0.1, 0.9, 0.2, 1.0}};  // Windows 8.1 fallback
-static MotionCurve g_curveSlide = kIdentityCurve, g_curveFade = kIdentityCurve;
+static MotionCurve g_curveSlide = kIdentityCurve;
 static MotionCurve g_curveContentFade = kIdentityCurve;
 static MotionCurve g_curvePanelShow = kIdentityCurve,
                    g_curvePanelHide = kIdentityCurve;
 
 // ---- durations and distances ----------------------------------------------------------------------------
-static double g_durSlide = 1000, g_durFade = 170, g_durContentFade = 170;
+static double g_durSlide = 1000, g_durContentFade = 170;
 static double g_durPanelShow = 550, g_durPanelHide = 550;
 static double g_stagger = 35, g_staggerCap = 333;
 static int g_motionScalePct = 100;  // animation speed (%)
@@ -4976,10 +4991,8 @@ static bool ReadContentFade(MotionTransformFn gtr,
 
 // Reads every animation export the panes use. Failure of any single export keeps its Windows 8.1 fallback.
 static void LoadThemeMotion(HWND hwnd) {
-    g_curveSlide = g_curveFade = g_curvePanelShow = g_curvePanelHide =
-        kIdentityCurve;
+    g_curveSlide = g_curvePanelShow = g_curvePanelHide = kIdentityCurve;
     g_durSlide = 1000;
-    g_durFade = 170;
     g_durPanelShow = g_durPanelHide = 550;
     g_curveContentFade = kIdentityCurve;
     g_durContentFade = 170;
@@ -5006,9 +5019,9 @@ static void LoadThemeMotion(HWND hwnd) {
         ht = OpenThemeData(hwnd, L"timingfunction");
     if (ha && ht) {
         if (g_motionThemeSlide) {
+            // Storyboard 32, index 0 is the content translate: its duration and curve.
             ReadStoryboard(gtr, gtf, ha, ht, 32, 0, 0, g_durSlide,
                            g_curveSlide);
-            ReadStoryboard(gtr, gtf, ha, ht, 32, 1, 1, g_durFade, g_curveFade);
         }
         if (g_motionThemeFade)
             ReadContentFade(gtr, gtf, ha, ht, g_durContentFade,
@@ -5058,16 +5071,17 @@ static double GroupDelay() {
 }
 
 // ---- distances ------------------------------------------------------------------------------------------
+// The two distances are the mod's own settings, so they apply whether or not the timing is taken from the
+// theme: an explicit pixel value is honoured, and only -1 (or a missing setting) falls back to the Windows 8.1
+// distance. The theme supplies the timing (duration and curve), not the distances.
 static double ContentPx() {
-    const double base = g_motionThemeSlide && g_motionContentPx >= 0
-                            ? (double)g_motionContentPx
-                            : 100.0;
+    const int configured = g_motionContentPx;
+    // 100 px is the Windows 8.1 distance.
+    const double base = configured >= 0 ? (double)configured : 100.0;
     return base * (double)g_motionDpi / 96.0;
 }
 static double TitlePx() {
-    return g_motionThemeSlide
-               ? ContentPx() * (double)g_motionTitlePercent / 100.0
-               : 40.0 * (double)g_motionDpi / 96.0;
+    return ContentPx() * (double)g_motionTitlePercent / 100.0;
 }
 
 // ---- per-frame values -----------------------------------------------------------------------------------
@@ -5118,61 +5132,42 @@ static void Prepare(HWND hwnd,
                     int groupStagger,
                     bool themeFade,
                     int dpi) {
-    try {
-        g_motionScalePct = scalePct >= 10 && scalePct <= 400 ? scalePct : 100;
-        g_motionThemeSlide = themeSlide ? 1 : 0;
-        g_motionContentPx = contentPx;
-        g_motionTitlePercent = titlePercent >= 0 ? titlePercent : 40;
-        g_motionGroupStagger =
-            groupStagger >= 0 && groupStagger <= 10 ? groupStagger : 0;
-        g_motionThemeFade = themeFade ? 1 : 0;
-        g_motionDpi = dpi > 0 ? dpi : 96;
-        LoadThemeMotion(hwnd);
-    } catch (...) {
-        Wh_Log(
-            L"charm animation: theme timing unavailable, finishing the "
-            L"transition instead");
-        g_motionScalePct = 100;
-        g_durPanelShow = g_durPanelHide = 550;
-    }
+    g_motionScalePct = scalePct >= 10 && scalePct <= 400 ? scalePct : 100;
+    g_motionThemeSlide = themeSlide ? 1 : 0;
+    g_motionContentPx = contentPx;
+    g_motionTitlePercent = titlePercent >= 0 ? titlePercent : 40;
+    g_motionGroupStagger =
+        groupStagger >= 0 && groupStagger <= 10 ? groupStagger : 0;
+    g_motionThemeFade = themeFade ? 1 : 0;
+    g_motionDpi = dpi > 0 ? dpi : 96;
+    // Every export that cannot be read keeps its Windows 8.1 fallback.
+    LoadThemeMotion(hwnd);
 }
 
 // Pane offset for one frame: the opening slides in from the off-screen edge, the closing slides out from
-// whatever position the pane has at this moment.
+// whatever position the pane has at this moment. Plain arithmetic on doubles, so there is nothing to catch.
 static int PanelOffset(int ageMs,
                        int fromX,
                        int toX,
                        int edgeOffset,
                        int startOffset,
                        bool opening) {
-    try {
-        if (!opening)
-            return HideOffset((double)ageMs, startOffset, edgeOffset);
-        const double remaining = RemainingPanel((double)ageMs, fromX, toX);
-        if (!(remaining >= -1e6 && remaining <= 1e6))
-            return 0;
-        return (int)(remaining < 0 ? remaining - 0.5 : remaining + 0.5);
-    } catch (...) {
-        return opening ? 0 : edgeOffset;
-    }
+    if (!opening)
+        return HideOffset((double)ageMs, startOffset, edgeOffset);
+    const double remaining = RemainingPanel((double)ageMs, fromX, toX);
+    if (!(remaining >= -1e6 && remaining <= 1e6))
+        return 0;
+    return (int)(remaining < 0 ? remaining - 0.5 : remaining + 0.5);
 }
 
 static int TitleOffset(int ageMs) {
-    try {
-        const int v = ContentOffset(0, (double)ageMs);
-        return v > 0 ? v : 0;
-    } catch (...) {
-        return 0;
-    }
+    const int v = ContentOffset(0, (double)ageMs);
+    return v > 0 ? v : 0;
 }
 
 static int BodyOffset(int ageMs) {
-    try {
-        const int v = ContentOffset(1, (double)ageMs);
-        return v > 0 ? v : 0;
-    } catch (...) {
-        return 0;
-    }
+    const int v = ContentOffset(1, (double)ageMs);
+    return v > 0 ? v : 0;
 }
 
 static double ShowDurationMs() {
@@ -5186,12 +5181,8 @@ static double PopupDurationMs() {
 }
 
 static double PopupValue(double age) {
-    try {
-        const double v = PopupOpacity(age);
-        return v < 0 ? 0.0 : (v > 1 ? 1.0 : v);
-    } catch (...) {
-        return 1.0;
-    }
+    const double v = PopupOpacity(age);
+    return v < 0 ? 0.0 : (v > 1 ? 1.0 : v);
 }
 
 }  // namespace CharmMotion
@@ -5251,6 +5242,7 @@ std::atomic<bool> g_edgeLatched, g_menuEdgeLatched, g_edgePosted;
 // Edge timing, read from the settings in ReadWindhawkSettings and by the input hook through the registry
 // values Windows 8 itself used (CharmsBarDesktopDelay / CharmsBarImmersiveDelay, milliseconds).
 std::atomic<int> g_edgeHintMs, g_edgeSlidePx, g_edgeDwellMs;
+std::atomic<bool> g_stagedGesture;
 // Hint state machine, owned by the input hook thread and read by the UI thread through WM_PORT_HINT*. A
 // "hint" is the Windows 8 icon-only band: the rail is on screen and translucent with the clock and the
 // status stack hidden, and the solid bar (captions, opaque background) only follows a slide or a dwell.
@@ -5271,11 +5263,10 @@ void SetHintStage(int stage) {
     g_hintStage.store(stage);
     g_hintStageSince.store(GetTickCount64());
 }
-std::atomic<LONG>
-    g_edgeArmOrigin;  // pointer position along the edge when the pointer reached it
-std::atomic<DWORD>
-    g_edgeArmedTick;  // GetTickCount() of the last time the pointer reached the edge
 std::atomic<ULONGLONG> g_edgeSince;
+// True while a mouse button is held. Written and read by the low-level hook thread only, which is the thread
+// that runs MouseProcImpl.
+bool s_mouseButtonDown = false;
 std::wstring g_shareTitle, g_shareText;
 
 void HideVolumeFlyout();
@@ -5446,7 +5437,9 @@ static PopupFade g_menuFade;
 static void PopupFadeBegin(PopupFade& fade, BYTE to, bool hideAtEnd) {
     fade.active = true;
     fade.start = CharmMotion::PopupClock();
-    fade.from = 0;  // a popup always starts transparent
+    // A show starts transparent; a hide starts from fully opaque, otherwise it would run from 0 to 0 and the
+    // window would sit invisible but "visible" until SW_HIDE finally arrived.
+    fade.from = hideAtEnd ? 255 : 0;
     fade.to = to;
     fade.hideAtEnd = hideAtEnd;
 }
@@ -5464,11 +5457,13 @@ static bool PopupFadeStep(PopupFade& fade, BYTE& opacity) {
                      (fade.to - fade.from) * CharmMotion::PopupValue(age));
     return true;
 }
-// Fades a popup in from transparent. With the engine off it is simply set opaque.
+// Fades a popup in from transparent. With the engine off, or with animations off, it is simply set opaque: the
+// "Animate show and hide" setting and the Windows animation setting have to switch off both directions, and the
+// hide path already checked AnimationsEnabled().
 static void ShowPopupWithEngineFade(HWND hwnd, PopupFade& fade) {
     if (!hwnd)
         return;
-    if (!g_paneEngineOn.load()) {
+    if (!g_paneEngineOn.load() || !AnimationsEnabled()) {
         KillTimer(hwnd, TIMER_POPUP_FADE);
         fade.active = false;
         SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
@@ -5477,6 +5472,11 @@ static void ShowPopupWithEngineFade(HWND hwnd, PopupFade& fade) {
     PopupFadeBegin(fade, 255, false);
     SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
     SetTimer(hwnd, TIMER_POPUP_FADE, 8, nullptr);
+}
+// A popup that is fading out is on its way to being hidden: a click that arrives during those ~170 ms must not
+// be read as "the popup is already open".
+static bool PopupIsFadingOut(const PopupFade& fade) {
+    return fade.active && fade.hideAtEnd;
 }
 // Fades a popup out and hides it at the end of the fade.
 static void HidePopupWithEngineFade(HWND hwnd, PopupFade& fade) {
@@ -5542,6 +5542,10 @@ void ReadWindhawkSettings() {
         const int hint = Wh_GetIntSetting(L"edgeHintDelayMs");
         const int slide = Wh_GetIntSetting(L"edgeSlidePx");
         const int dwell = Wh_GetIntSetting(L"edgeHintDwellMs");
+        // Wh_GetIntSetting returns 0 both for "0" and for a setting that does not exist yet (an install that is
+        // being upgraded from 1.0.0), so 0 falls back to the Windows 8 default instead of turning the hint into
+        // an instant gesture. A delay of 0 is still reachable through the EdgeUI override, which the hook reads
+        // as "no delay".
         g_edgeHintMs.store(hint > 0 && hint <= 2000 ? hint
                                                     : kDefaultEdgeHintMs);
         g_edgeSlidePx.store(slide >= 0 && slide <= 400 ? slide
@@ -5549,6 +5553,7 @@ void ReadWindhawkSettings() {
         g_edgeDwellMs.store(dwell >= 0 && dwell <= 15000 ? dwell
                                                          : kDefaultEdgeDwellMs);
     }
+    g_stagedGesture.store(Wh_GetIntSetting(L"edgeStagedGesture") != 0);
     g_charmsEnabled.store(Wh_GetIntSetting(L"charmsEnabled") != 0);
     g_hideAfterClick.store(Wh_GetIntSetting(L"hideAfterClick") != 0);
 
@@ -5830,19 +5835,24 @@ void RestoreThreadDpiContext(HANDLE previous) noexcept {
 // GetDpiForWindow is not available there; GetDpiForMonitor is the documented call for "which scaling does
 // this monitor use". Without it the hook would scale its 32 px slide threshold with the DPI of the monitor
 // the rail happens to live on, which is wrong on multi-monitor setups with mixed scaling.
+//
+// This runs on every mouse move while edge activation is on, inside a low-level hook, so it has to stay
+// allocation free and must not touch the loader: LoadLibraryW waits for the loader lock, which another thread
+// of the same process may hold while it starts a COM class, and the whole pointer would stall meanwhile. The
+// mod links shcore.lib, so the module is loaded already; it is looked up once and cached.
 UINT QueryMonitorDpiDirect(HMONITOR monitor) noexcept {
     if (monitor) {
-        HMODULE shcore = LoadLibraryW(L"shcore.dll");
-        if (shcore) {
-            auto getDpiForMonitor = reinterpret_cast<GetDpiForMonitorFn>(
-                GetProcAddress(shcore, "GetDpiForMonitor"));
-            UINT dpiX = 0, dpiY = 0;
-            if (getDpiForMonitor) {
-                HRESULT hr = getDpiForMonitor(monitor, 0, &dpiX, &dpiY);
-                if (SUCCEEDED(hr) && dpiX >= 48 && dpiX <= 768)
-                    return dpiX;
-            }
-        }
+        static const auto getDpiForMonitor = []() noexcept {
+            HMODULE shcore = GetModuleHandleW(L"shcore.dll");
+            return shcore ? reinterpret_cast<GetDpiForMonitorFn>(
+                                GetProcAddress(shcore, "GetDpiForMonitor"))
+                          : nullptr;
+        }();
+        UINT dpiX = 0, dpiY = 0;
+        if (getDpiForMonitor &&
+            SUCCEEDED(getDpiForMonitor(monitor, 0, &dpiX, &dpiY)) &&
+            dpiX >= 48 && dpiX <= 768)
+            return dpiX;
     }
     HDC screen = GetDC(nullptr);
     if (screen) {
@@ -5899,43 +5909,6 @@ bool ConfigureDpiCanvas(HDC dc) noexcept {
         return false;
     }
     return true;
-}
-
-// Where this explorer.exe stands relative to the shell window. Explorer restarts and cold boots inject the
-// mod before the new shell window exists, and for a short while GetShellWindow() still returns the window of
-// the old, already exiting Explorer. That transient state used to be mistaken for "this is a secondary
-// Explorer process", so the mod went idle for the whole restarted process; the three states below keep the
-// difference between "not ready yet" (keep waiting) and "another live Explorer owns the shell" (give up).
-enum class ShellHostState { Host, OtherLive, NotReady };
-
-ShellHostState QueryShellHostState() {
-    const DWORD currentPid = GetCurrentProcessId();
-    const HWND shell = GetShellWindow();
-    if (!shell || !IsWindow(shell))
-        return ShellHostState::NotReady;
-    DWORD shellPid = 0;
-    if (!GetWindowThreadProcessId(shell, &shellPid) || !shellPid)
-        return ShellHostState::NotReady;
-    if (shellPid == currentPid)
-        return ShellHostState::Host;
-    // A live owner means this process will never host the shell in this session. An exited owner is the
-    // stale window of a restart in progress, so keep waiting for the new shell window instead of bailing out.
-    ScopedHandle shellProcess(OpenProcess(SYNCHRONIZE, FALSE, shellPid));
-    if (shellProcess &&
-        WaitForSingleObject(shellProcess.get(), 0) == WAIT_TIMEOUT)
-        return ShellHostState::OtherLive;
-    return ShellHostState::NotReady;
-}
-
-PCWSTR ShellHostStateName(ShellHostState state) {
-    switch (state) {
-        case ShellHostState::Host:
-            return L"host";
-        case ShellHostState::OtherLive:
-            return L"other-live-explorer";
-        default:
-            return L"shell-not-ready";
-    }
 }
 
 int GetCharmAction(int slot) noexcept {
@@ -11228,8 +11201,6 @@ constexpr UINT kPaneMetricsDelayMs = 60;
 HBITMAP g_paneSlideBitmap = nullptr;
 int g_paneSlideWidth = 0, g_paneSlideHeight = 0;
 COLORREF g_paneSlideBackground = 0;
-int g_paneSlideRestingOffset =
-    0;  // content offset the cached bitmap was drawn with (always 0)
 
 void DrawPane(HDC dc, RECT rc);
 
@@ -11277,8 +11248,6 @@ void BuildPaneSlideCache(HWND hwnd) {
     g_paneSlideWidth = rc.right;
     g_paneSlideHeight = rc.bottom;
     g_paneSlideBackground = GetPaneBackground();
-    g_paneSlideRestingOffset =
-        0;  // the bitmap was drawn with the parallax at zero, see BuildPaneSlideCache
 }
 
 // One blit per animation frame while the Settings pane slides. Any mismatch (DPI change, accent change,
@@ -11293,11 +11262,6 @@ bool BlitPaneSlideFrame(HDC dc, const RECT& device) {
     // A hover or press highlight changes the content, so let the regular path draw those frames.
     if (g_paneHover >= 0 || g_panePressed >= 0)
         return false;
-    // 1.1.0: the cache holds the resting layout only. If a frame is requested while the content parallax is
-    // not zero the pre-shifted blit below would apply the offset twice, which is what made the opening frames
-    // of the Settings pane jump; the regular path draws those frames instead.
-    if (g_paneContentOffset != 0 || g_paneTitleOffset != 0)
-        return false;
     ScopedDC memory(CreateCompatibleDC(dc));
     if (!memory)
         return false;
@@ -11307,12 +11271,32 @@ bool BlitPaneSlideFrame(HDC dc, const RECT& device) {
     ScopedGdiObject background(CreateSolidBrush(g_paneSlideBackground));
     if (!background)
         return false;
+    // The cached frame is the resting layout, drawn with both parallax offsets at zero. A frame that needs an
+    // offset gets it here, in the same blit: the whole layout moves by the body offset and the title row moves
+    // by its own offset relative to that. Nothing is drawn twice, which is what made the opening frames of the
+    // Settings pane jump in the earlier version of this cache.
     const int shift =
         (std::max)(0, (std::min)(g_paneSlideWidth, g_paneContentOffset));
+    const int titleShift = g_paneTitleOffset - g_paneContentOffset;
     FillRect(dc, &device, (HBRUSH)background.get());
     if (shift < g_paneSlideWidth)
         BitBlt(dc, shift, 0, g_paneSlideWidth - shift, g_paneSlideHeight,
                memory.get(), 0, 0, SRCCOPY);
+    if (titleShift != 0) {
+        RECT title{shift, DpiScale(24), g_paneSlideWidth, DpiScale(74)};
+        OffsetRect(&title, titleShift, 0);
+        if (title.left < shift) {
+            const int cut = shift - title.left;
+            title.left += cut;
+            title.right += cut;
+        }
+        if (title.left < title.right) {
+            const int stripHeight = title.bottom - title.top;
+            BitBlt(dc, title.left, title.top, title.right - title.left,
+                   stripHeight, memory.get(), title.left - shift, DpiScale(24),
+                   SRCCOPY);
+        }
+    }
     return true;
 }
 
@@ -11327,47 +11311,30 @@ static int CharmPaneDpi() {
     return DpiScale(96);
 }
 
-// One opening: read the timing, put the pane fully off screen and start the panel clock.
+// One opening: read the timing, put the pane fully off screen and start the panel clock. A theme export that
+// cannot be read keeps the engine's Windows 8.1 fallback, so there is no failure path to handle here.
 static void CharmPaneBeginShow() {
-    try {
-        CharmMotion::Prepare(
-            g_pane, g_paneAnimScalePct.load(), g_paneThemeSlide.load() != 0,
-            g_paneContentSlidePx.load(), g_paneTitleSlidePct.load(),
-            g_paneGroupStagger.load(), g_paneThemeFade.load() != 0,
-            CharmPaneDpi());
-        const int width = DpiScale(kPaneWidth);
-        g_paneEngineDriven = true;
-        g_paneAnimStart = PaneAnimNow();
-        g_paneAnimOffset = width;
-        g_paneContentOffset = CharmMotion::BodyOffset(0);
-        g_paneTitleOffset = CharmMotion::TitleOffset(0);
-    } catch (...) {
-        // No timing at all: show the pane without a slide rather than leaving it half way.
-        Wh_Log(
-            L"charm pane: opening timing failed, showing the pane without a "
-            L"slide");
-        g_paneEngineDriven = false;
-        g_paneAnimOffset = 0;
-        g_paneContentOffset = 0;
-        g_paneTitleOffset = 0;
-    }
+    CharmMotion::Prepare(
+        g_pane, g_paneAnimScalePct.load(), g_paneThemeSlide.load() != 0,
+        g_paneContentSlidePx.load(), g_paneTitleSlidePct.load(),
+        g_paneGroupStagger.load(), g_paneThemeFade.load() != 0, CharmPaneDpi());
+    const int width = DpiScale(kPaneWidth);
+    g_paneEngineDriven = true;
+    g_paneAnimStart = PaneAnimNow();
+    g_paneAnimOffset = width;
+    g_paneContentOffset = CharmMotion::BodyOffset(0);
+    g_paneTitleOffset = CharmMotion::TitleOffset(0);
 }
 
-// One closing: read the timing and start the clock from the position the pane has right now.
-static void CharmPaneBeginHide(int currentOffset) {
-    try {
-        CharmMotion::Prepare(
-            g_pane, g_paneAnimScalePct.load(), g_paneThemeSlide.load() != 0,
-            g_paneContentSlidePx.load(), g_paneTitleSlidePct.load(),
-            g_paneGroupStagger.load(), g_paneThemeFade.load() != 0,
-            CharmPaneDpi());
-        g_paneEngineDriven = true;
-        g_paneAnimStart = PaneAnimNow();
-        (void)currentOffset;
-    } catch (...) {
-        Wh_Log(L"charm pane: closing timing failed, hiding the pane at once");
-        g_paneEngineDriven = false;
-    }
+// One closing: read the timing and start the clock. The start offset is read from the pane by the frame
+// timer, so a pane closed while it is still opening leaves from where it is.
+static void CharmPaneBeginHide() {
+    CharmMotion::Prepare(
+        g_pane, g_paneAnimScalePct.load(), g_paneThemeSlide.load() != 0,
+        g_paneContentSlidePx.load(), g_paneTitleSlidePct.load(),
+        g_paneGroupStagger.load(), g_paneThemeFade.load() != 0, CharmPaneDpi());
+    g_paneEngineDriven = true;
+    g_paneAnimStart = PaneAnimNow();
 }
 
 // Per-frame offsets. The pane window moves by the panel value; the title and the body get their own content
@@ -11429,7 +11396,7 @@ void ClosePaneWindow(bool immediate) {
     g_paneEngineDriven = (g_paneEngineOn.load() != 0) && AnimationsEnabled() &&
                          g_closeMs.load() != 0;
     if (g_paneEngineDriven)
-        CharmPaneBeginHide(g_paneAnimOffset);
+        CharmPaneBeginHide();
     g_paneAnimDurationMs =
         g_paneEngineDriven
             ? (std::max)(80, (int)std::lround(CharmMotion::HideDurationMs()))
@@ -12275,11 +12242,17 @@ void NudgeVolume(HWND hwnd, int delta) {
             current = 0;
         const int next = (std::max)(0, (std::min)(100, current + delta));
         g_paneBrightness = next;
-        // Same deferred write as a drag: one WMI call per 100 ms instead of one per notch.
-        if (!SetWmiBrightnessPercent(next) && !g_volumeDragging) {
-            int actual = -1;
-            if (QueryWmiBrightness(&actual) && actual >= 0)
-                g_paneBrightness = actual;
+        // Same deferred write as a drag, and the same timer as UpdateVolumeFromPoint: WMI is an out-of-process
+        // call, so a spin of the wheel must not run one per notch on the UI thread.
+        g_brightnessPending = next;
+        KillTimer(hwnd, TIMER_BRIGHTNESS_APPLY);
+        if (!SetTimer(hwnd, TIMER_BRIGHTNESS_APPLY, 100, nullptr)) {
+            if (!SetWmiBrightnessPercent(next) && !g_volumeDragging) {
+                int actual = -1;
+                if (QueryWmiBrightness(&actual) && actual >= 0)
+                    g_paneBrightness = actual;
+            }
+            g_brightnessPending = -1;
         }
         InvalidateRect(hwnd, nullptr, FALSE);
         if (g_pane)
@@ -12344,7 +12317,9 @@ bool ShowVolumeFlyout() {
     RefreshSystemAccent();
     if (!g_volumeFlyout || !g_paneVisible.load())
         return false;
-    if (IsWindowVisible(g_volumeFlyout)) {
+    // A flyout that is still fading out is treated as gone: without this, a second click during the fade closed
+    // nothing and the panel stayed empty for as long as the fade lasted.
+    if (IsWindowVisible(g_volumeFlyout) && !PopupIsFadingOut(g_volumeFade)) {
         if (g_flyoutKind == FLYOUT_VOLUME) {
             HideVolumeFlyout();
             return true;
@@ -12379,7 +12354,8 @@ bool ShowBrightnessFlyout() {
     RefreshSystemAccent();
     if (!g_volumeFlyout || !g_paneVisible.load())
         return false;
-    if (IsWindowVisible(g_volumeFlyout)) {
+    // Same as the volume flyout: one that is fading out is already on its way to being hidden.
+    if (IsWindowVisible(g_volumeFlyout) && !PopupIsFadingOut(g_volumeFade)) {
         if (g_flyoutKind == FLYOUT_BRIGHTNESS) {
             HideVolumeFlyout();
             return true;
@@ -13067,8 +13043,10 @@ LRESULT CALLBACK PaneProcImpl(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (!GetClientRect(hwnd, &device) || device.right <= 0 ||
                 device.bottom <= 0)
                 return 0;
-            // Cheap slide frames: the cached Settings layout, shifted by the content parallax.
-            if (BlitPaneSlideFrame(dc, device))
+            // Cheap slide frames: the cached Settings layout, shifted by the two parallax offsets. They are not
+            // used by the animation engine, whose offsets do not move in whole pixels and which repaints the
+            // window itself; allowing the cache there would redraw every frame twice.
+            if (!g_paneEngineDriven && BlitPaneSlideFrame(dc, device))
                 return 0;
             ScopedDC memory(CreateCompatibleDC(dc));
             ScopedGdiObject bitmap(
@@ -13148,22 +13126,15 @@ LRESULT CALLBACK PaneProcImpl(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 // slide is over when the panel duration is (the content groups always finish earlier).
                 if (g_paneEngineDriven) {
                     const int ageMs = (int)std::lround(elapsedMs);
-                    bool done = false;
-                    try {
-                        g_paneAnimOffset = CharmPanePanelOffset(
-                            ageMs, opening, g_paneAnimFromOffset);
-                        if (opening) {
-                            g_paneContentOffset =
-                                CharmMotion::BodyOffset(ageMs);
-                            g_paneTitleOffset = CharmMotion::TitleOffset(ageMs);
-                        }
-                        done = elapsedMs >=
-                               (opening ? CharmMotion::ShowDurationMs()
-                                        : CharmMotion::HideDurationMs());
-                    } catch (...) {
-                        // Any failure ends the transition here instead of freezing the pane mid-flight.
-                        done = true;
+                    g_paneAnimOffset = CharmPanePanelOffset(
+                        ageMs, opening, g_paneAnimFromOffset);
+                    if (opening) {
+                        g_paneContentOffset = CharmMotion::BodyOffset(ageMs);
+                        g_paneTitleOffset = CharmMotion::TitleOffset(ageMs);
                     }
+                    const bool done =
+                        elapsedMs >= (opening ? CharmMotion::ShowDurationMs()
+                                              : CharmMotion::HideDurationMs());
                     if (done) {
                         g_paneAnimOffset = g_paneAnimToOffset;
                         g_paneContentOffset = g_paneContentToOffset;
@@ -13430,13 +13401,13 @@ LRESULT CALLBACK RailProcImpl(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case 0x02E0:
             HandleDpiChanged(hwnd, wp);
             return 0;  // WM_DPICHANGED (Win8.1+).
-        // 1.1.0: clicking the bar hands it the focus so that the outside-click dismissal and Esc behave like
-        // they do in Windows 8. The hint, being a preview, never takes the focus. The bar still does not appear
-        // in the taskbar (WS_EX_TOOLWINDOW) and is re-shown with SW_SHOWNOACTIVATE, so nothing flashes.
+        // The bar is WS_EX_NOACTIVATE and is shown with SW_SHOWNOACTIVATE: clicking a charm must not take the
+        // focus away from the window the charm acts on (Share picks up the foreground window, and the automatic
+        // Win+Q/Win+S choice depends on whether that window is an immersive app). MA_ACTIVATE would hand the
+        // keyboard to the rail instead. Esc and the outside click are handled by the input hooks, so the bar
+        // does not need the focus for them; the hint is a preview and never takes it either.
         case WM_MOUSEACTIVATE:
-            if (RailHintOnly())
-                return MA_NOACTIVATE;
-            return MA_ACTIVATE;
+            return MA_NOACTIVATE;
         // 1.1.0: follow accent and composition colour changes while the rail is on screen.
         case WM_SETTINGCHANGE:
             if (lp &&
@@ -13914,6 +13885,21 @@ LRESULT CALLBACK MouseProcImpl(int code, WPARAM wp, LPARAM lp) {
     if (code == HC_ACTION && lp) {
         const MSLLHOOKSTRUCT* m = (const MSLLHOOKSTRUCT*)lp;
         POINT p = m->pt;
+        // Only the state is needed, so the hook never queries the system for it.
+        switch (wp) {
+            case WM_LBUTTONDOWN:
+            case WM_RBUTTONDOWN:
+            case WM_MBUTTONDOWN:
+            case WM_XBUTTONDOWN:
+                s_mouseButtonDown = true;
+                break;
+            case WM_LBUTTONUP:
+            case WM_RBUTTONUP:
+            case WM_MBUTTONUP:
+            case WM_XBUTTONUP:
+                s_mouseButtonDown = false;
+                break;
+        }
         if (wp == WM_MOUSEMOVE) {
             HMONITOR mon = MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST);
             MONITORINFO mi{sizeof(mi)};
@@ -13925,7 +13911,12 @@ LRESULT CALLBACK MouseProcImpl(int code, WPARAM wp, LPARAM lp) {
                 //      or clicks the hint, and only then does the solid bar appear.
                 // Leaving the edge before step 2 cancels everything, so a pointer that is merely dragged to the
                 // far right of the screen no longer opens the bar.
-                if (g_edgeActivation.load() && g_charmsEnabled.load()) {
+                // A button held down means a drag, not an edge gesture: dragging the thumb of a maximized
+                // window's scrollbar along the right edge used to open the bar. The state is tracked from this
+                // hook's own button events, because GetAsyncKeyState cannot tell an injected event from a real
+                // one.
+                if (g_edgeActivation.load() && g_charmsEnabled.load() &&
+                    !s_mouseButtonDown) {
                     const UINT dpi = QueryMonitorDpiDirect(mon);
                     auto scale = [dpi](int logical) {
                         return MulDiv(logical, (int)dpi, kReferenceDpi);
@@ -13940,9 +13931,17 @@ LRESULT CALLBACK MouseProcImpl(int code, WPARAM wp, LPARAM lp) {
                         (std::max)(0, scale(g_edgeSlidePx.load()));
                     const bool cornerMode = g_topRightCornerOnly.load() ||
                                             g_bottomRightCorner.load();
+                    // Only the touch and pen gesture is staged; with a mouse the whole right edge opens the
+                    // bar exactly as 1.0.0 did, whatever the pointer does after it got there.
+                    const bool staged = g_stagedGesture.load();
                     // Activation zone: the two right corner squares in corner mode, the whole right edge in
                     // edge mode. The height is the same corner square the rest of the module uses.
                     const int cornerHeight = scale(40);
+                    // In corner mode the corner square is the way in, but the hint must not be cancelled the
+                    // moment the pointer leaves it: Windows 8 let the slide continue along the whole edge once
+                    // the icons were showing, and only a slide of 32 px is needed, which would otherwise be
+                    // impossible unless the hint appeared within a few pixels of the corner.
+                    const bool hintShowing = g_hintStage.load() == HINT_ICONS;
                     const bool atRight = p.x >= mi.rcMonitor.right - scale(2);
                     const bool inTopRightZone =
                         p.y <= mi.rcMonitor.top + cornerHeight;
@@ -13951,8 +13950,13 @@ LRESULT CALLBACK MouseProcImpl(int code, WPARAM wp, LPARAM lp) {
                     const bool inRightCornerModeZone =
                         (g_topRightCornerOnly.load() && inTopRightZone) ||
                         (g_bottomRightCorner.load() && inBottomRightZone);
+                    // Once the icon hint is up, the whole right edge counts as inside the zone, so the slide can
+                    // be completed; before that only the corner square opens the gesture. Only the staged
+                    // gesture uses the corner squares at all, so the widening is pointless without it.
                     const bool validActivationZone =
-                        cornerMode ? inRightCornerModeZone : true;
+                        (cornerMode && staged)
+                            ? (inRightCornerModeZone || hintShowing)
+                            : true;
                     // The corners the user disabled through EdgeUI are still respected.
                     const bool blockedCorner =
                         (g_disableTRCorner.load() &&
@@ -13995,29 +13999,38 @@ LRESULT CALLBACK MouseProcImpl(int code, WPARAM wp, LPARAM lp) {
                     } else if (atRight && validActivationZone &&
                                !blockedCorner) {
                         if (!g_edgeLatched.exchange(true)) {
-                            // Reaching the edge: remember the position along the edge and start the dwell.
-                            g_edgeArmOrigin.store(edgePos);
-                            g_edgeArmedTick.store((DWORD)now);
+                            // Reaching the edge: start the dwell. The travel along the edge is measured from
+                            // the mark taken when the hint appears, so the position is not needed here.
                             g_edgeSince.store(now);
                         }
                         const ULONGLONG armedFor = now - g_edgeSince.load();
+                        // How far the pointer travelled along the edge since the hint appeared: one 8.1
+                        // gesture increment is 32 logical px.
+                        const LONG travel =
+                            std::abs((LONG)(edgePos - g_edgeTravelMark.load()));
                         if (stage == HINT_NONE) {
-                            // Step 1. Arm once per edge entry, then idle for the hint delay. DisableCharmsHint
-                            // is the "no hint" mode and keeps the instantaneous behaviour of 1.0.0.
+                            // Armed once per edge entry, then idle for the hint delay. The mouse tail of the
+                            // gesture is the one Windows 8 shipped on the desktop, and it is what 1.0.0 did:
+                            // the delay expires and the bar opens. The two-stage tail (icon hint, then a slide
+                            // along the edge) is for touch and pen, where the pointer has no hover to wait on.
                             const bool instant = noHint || delay <= 0;
                             if ((armedFor >= (ULONGLONG)delay || instant) &&
                                 !g_visible.load() &&
                                 !g_edgePosted.exchange(true)) {
-                                SetHintStage(HINT_ICONS);
                                 g_edgeTravelMark.store(edgePos);
-                                PostThreadMessageW(g_threadId,
-                                                   WM_PORT_HINT_SHOW, 0, 0);
+                                if (staged) {
+                                    SetHintStage(HINT_ICONS);
+                                    PostThreadMessageW(g_threadId,
+                                                       WM_PORT_HINT_SHOW, 0, 0);
+                                } else {
+                                    SetHintStage(HINT_FULL);
+                                    PostThreadMessageW(g_threadId,
+                                                       WM_PORT_HINT_FULL, 0, 0);
+                                }
                             }
-                        } else if (stage == HINT_ICONS) {
-                            // Step 2. A slide along the edge, a click (handled in pointerDown), or the optional
-                            // dwell promotes the hint to the solid bar.
-                            const LONG travel = std::abs(
-                                (LONG)(edgePos - g_edgeTravelMark.load()));
+                        } else if (staged && stage == HINT_ICONS) {
+                            // Second stage of the touch and pen gesture: the slide along the edge, a tap on
+                            // the hint (handled in pointerDown) or the optional dwell opens the solid bar.
                             const int dwell = g_edgeDwellMs.load();
                             const bool dwelled =
                                 dwell > 0 &&
@@ -14535,6 +14548,9 @@ DWORD WINAPI UiThreadProc(LPVOID) {
                 continue;
             }
             if (message.hwnd == nullptr && message.message == WM_PORT_REFRESH) {
+                // The EdgeUI overrides of the hint delay are re-read here too, otherwise the first gesture after
+                // a settings change still uses the previous delay until the bar has been shown once.
+                RefreshEdgeUiRegistry();
                 POINT point{};
                 if (g_monitorRect.right > g_monitorRect.left &&
                     g_monitorRect.bottom > g_monitorRect.top) {
@@ -14792,118 +14808,19 @@ void ReturnToCharmsBarFromDisplaySwitch() {
 // -----------------------------------------------------------------------------------------------------
 // Startup, persistence and logging
 //
-// Windhawk injects a mod at process creation, and Wh_ModInit runs before the target process starts
-// executing (see the Windhawk "Creating a new mod" documentation). At a cold boot or after an Explorer
-// restart there is no shell window yet, and for a moment GetShellWindow() still returns the window of the
-// old, exiting Explorer. Both cases are transient, so the mod no longer decides at init time that it is a
-// "secondary" Explorer process and stays idle: it starts a supervisor thread instead, which waits for this
-// process to own the shell window and then starts the Charms Bar. The supervisor also retries a failed
-// startup instead of giving up, so the mod recovers by itself after an Explorer restart.
-constexpr PCWSTR kModVersion = L"1.0.0";
-// Assigned explicitly in Wh_ModInit/StartSupervisorIfNeeded, like the other atomics in this file, so builds
-// whose standard library omits value-taking atomic constructors keep working.
+// The mod runs in a dedicated explorer.exe tool process (explorer.exe -tool-mod "<mod id>"), started by the
+// launcher at the end of this file, so it never has to wait for this process to own the shell window and no
+// supervisor thread is needed: WhTool_ModInit starts the Charms Bar services directly.
+// One version string for every log line: the one Windhawk compiles in from the @version field, so a log can
+// never report a version other than the one that is installed.
+constexpr PCWSTR kModVersion = WH_MOD_VERSION;
+// Assigned explicitly in Wh_ModInit/WhTool_ModInit, like the other atomics in this file, so builds whose
+// standard library omits value-taking atomic constructors keep working.
 std::atomic<bool> g_charmsServicesStarted;
-std::atomic<bool> g_supervisorStop;
-HANDLE g_supervisorThread = nullptr;
 
 bool StartCharmsServices();  // defined below; the body of the former Wh_ModInit
 
-DWORD WINAPI ShellHostSupervisorProc(LPVOID) {
-    constexpr int kMaxStartAttempts = 8;
-    int startAttempts = 0;
-    unsigned readyPolls = 0;
-    ShellHostState lastState = ShellHostState::NotReady;
-    Wh_Log(L"supervisor started for pid %lu", GetCurrentProcessId());
-    for (;;) {
-        if (g_supervisorStop.load())
-            break;
-        const ShellHostState state = QueryShellHostState();
-        if (state != lastState) {
-            DWORD shellPid = 0;
-            const HWND shell = GetShellWindow();
-            if (shell)
-                GetWindowThreadProcessId(shell, &shellPid);
-            Wh_Log(L"shell host state is now %s (shell pid %lu, this pid %lu)",
-                   ShellHostStateName(state), (unsigned long)shellPid,
-                   GetCurrentProcessId());
-            lastState = state;
-        }
-        if (state == ShellHostState::OtherLive) {
-            Wh_Log(
-                L"another live Explorer process owns the shell window; "
-                L"the Charms Bar stays idle in this process (this is the "
-                L"normal case for extra explorer.exe instances)");
-            break;
-        }
-        if (state == ShellHostState::Host) {
-            if (g_charmsServicesStarted.load())
-                break;
-            ++startAttempts;
-            Wh_Log(
-                L"shell window is ready, starting the Charms Bar (attempt %d "
-                L"of %d)",
-                startAttempts, kMaxStartAttempts);
-            if (StartCharmsServices()) {
-                g_charmsServicesStarted.store(true);
-                Wh_Log(L"Charms Bar initialized and running in pid %lu",
-                       GetCurrentProcessId());
-                break;
-            }
-            Wh_Log(L"startup attempt %d failed", startAttempts);
-            if (startAttempts >= kMaxStartAttempts) {
-                Wh_Log(
-                    L"giving up after %d startup attempts; the mod stays "
-                    L"loaded but idle",
-                    kMaxStartAttempts);
-                break;
-            }
-            Sleep((
-                DWORD)(std::
-                           min)(5000,
-                                500 *
-                                    startAttempts));  // linear backoff, 0.5 s .. 4 s
-            continue;
-        }
-        // Shell window not available yet (cold boot, Explorer restart, or the stale window of the old
-        // Explorer). Poll every 250 ms and log the wait every 30 s so an idle log still shows the mod is
-        // alive and what it is waiting for.
-        if (readyPolls == 0 || readyPolls % 120 == 0)
-            Wh_Log(
-                L"waiting for this process to own the shell window (poll %u)",
-                readyPolls);
-        ++readyPolls;
-        Sleep(250);
-    }
-    Wh_Log(L"supervisor exiting for pid %lu", GetCurrentProcessId());
-    return 0;
-}
-
-bool StartSupervisorIfNeeded() {
-    if (g_supervisorThread)
-        return true;
-    g_supervisorStop.store(false);
-    g_supervisorThread =
-        CreateThread(nullptr, 0, ShellHostSupervisorProc, nullptr, 0, nullptr);
-    if (!g_supervisorThread) {
-        Wh_Log(L"supervisor thread creation failed (%lu)", GetLastError());
-        return false;
-    }
-    return true;
-}
-
-void StopSupervisor() {
-    g_supervisorStop.store(true);
-    if (!g_supervisorThread)
-        return;
-    // The supervisor may be inside a startup attempt, which can take up to ~15 s, so wait
-    // without a bounded timeout.  Returning while the thread is still alive would let
-    // Windhawk unload the image under a running thread and crash Explorer.
-    WaitForSingleObject(g_supervisorThread, INFINITE);
-    CloseHandle(g_supervisorThread);
-    g_supervisorThread = nullptr;
-}
-
-// The original Wh_ModInit body, now callable both at init time and from the supervisor retry loop.
+// The original Wh_ModInit body, callable from the tool host entry point.
 bool StartCharmsServices() {
     try {
         g_stop.store(false);
@@ -14961,10 +14878,9 @@ bool StartCharmsServices() {
         g_edgePosted.store(false);
         SetHintStage(HINT_NONE);
         g_edgeTravelMark.store(0);
-        g_edgeArmOrigin.store(0);
-        g_edgeArmedTick.store(0);
         g_hintStageSince.store(0);
         g_edgeHintMs.store(kDefaultEdgeHintMs);
+        g_stagedGesture.store(false);
         g_edgeSlidePx.store(kDefaultEdgeSlidePx);
         g_edgeDwellMs.store(kDefaultEdgeDwellMs);
         g_bottomRightCorner.store(false);
@@ -15056,50 +14972,6 @@ bool StartCharmsServices() {
     }
 }
 
-// Entry point used by Wh_ModInit. Starts immediately when this process already owns the shell window;
-// otherwise arms the supervisor so a cold boot or an Explorer restart cannot leave the mod dormant.
-BOOL InitializeCharmsMod() {
-    // A fresh init after a disable/enable cycle in the same process must not inherit the previous run's state.
-    g_charmsServicesStarted.store(false);
-    DWORD sessionId = 0;
-    ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
-    const ShellHostState state = QueryShellHostState();
-    const HWND shell = GetShellWindow();
-    DWORD shellPid = 0;
-    if (shell)
-        GetWindowThreadProcessId(shell, &shellPid);
-    Wh_Log(L"v%s, Wh_ModInit: pid=%lu, session=%lu, shell pid=%lu, state=%s",
-           kModVersion, GetCurrentProcessId(), (unsigned long)sessionId,
-           (unsigned long)shellPid, ShellHostStateName(state));
-
-    if (state == ShellHostState::Host) {
-        if (StartCharmsServices()) {
-            g_charmsServicesStarted.store(true);
-            Wh_Log(L"v%s initialized in pid %lu", kModVersion,
-                   GetCurrentProcessId());
-            return TRUE;
-        }
-        Wh_Log(L"immediate start failed; handing over to the supervisor");
-    } else if (state == ShellHostState::OtherLive) {
-        Wh_Log(
-            L"another live Explorer process owns the shell window; this "
-            L"process stays idle");
-        return TRUE;
-    } else {
-        Wh_Log(
-            L"shell window not ready yet (the usual state right after an "
-            L"Explorer restart); "
-            L"startup is deferred to the supervisor");
-    }
-    // Returning TRUE keeps the mod loaded so the supervisor can finish the job once the shell is up. A
-    // FALSE return would make Windhawk unload the mod for this Explorer process until it is restarted again.
-    if (!StartSupervisorIfNeeded())
-        Wh_Log(
-            L"WARNING supervisor could not be started; the Charms Bar will not "
-            L"initialize in this process");
-    return TRUE;
-}
-
 BOOL WhTool_ModInit() {
     try {
         // Tool host: explorer.exe -tool-mod "win8-charms-bar-recreation"
@@ -15116,12 +14988,9 @@ BOOL WhTool_ModInit() {
             Wh_Log(L"v%s initialized in tool host pid %lu", kModVersion,
                    GetCurrentProcessId());
             // Also log the former Wh_ModAfterInit info for parity
-            Wh_Log(
-                L"v%s, WhTool_ModAfterInit: pid=%lu, services started=%s, "
-                L"supervisor=%s",
-                kModVersion, GetCurrentProcessId(),
-                g_charmsServicesStarted.load() ? L"yes" : L"no",
-                g_supervisorThread ? L"yes" : L"no");
+            Wh_Log(L"v%s, WhTool_ModAfterInit: pid=%lu, services started=%s",
+                   kModVersion, GetCurrentProcessId(),
+                   g_charmsServicesStarted.load() ? L"yes" : L"no");
             return TRUE;
         }
         Wh_Log(L"tool host startup failed");
@@ -15134,17 +15003,15 @@ BOOL WhTool_ModInit() {
 
 // Optional Windhawk callback: runs after Wh_ModInit and after the engine finished applying hooks.
 void WhTool_ModAfterInit() {
-    Wh_Log(L"v%s, Wh_ModAfterInit: pid=%lu, services started=%s, supervisor=%s",
-           kModVersion, GetCurrentProcessId(),
-           g_charmsServicesStarted.load() ? L"yes" : L"no",
-           g_supervisorThread ? L"yes" : L"no");
+    Wh_Log(L"v%s, Wh_ModAfterInit: pid=%lu, services started=%s", kModVersion,
+           GetCurrentProcessId(),
+           g_charmsServicesStarted.load() ? L"yes" : L"no");
 }
 
 void WhTool_ModUninit() {
     Wh_Log(L"v%s, Wh_ModUninit: pid=%lu, services started=%s", kModVersion,
            GetCurrentProcessId(),
            g_charmsServicesStarted.load() ? L"yes" : L"no");
-    StopSupervisor();
     DisplaySwitchMod::Uninit();
     try {
         g_stop.store(true);
