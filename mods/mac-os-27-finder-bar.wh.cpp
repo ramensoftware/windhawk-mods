@@ -1537,9 +1537,14 @@ static bool g_glassRaw = false;
 static const int* g_glassTranspSaved = nullptr;
 static int CtxTheme() { return g_glassThemeCtx >= 0 ? g_glassThemeCtx : PanelTheme(); }
 static const ThemeGlass& CtxGlass() {
-    static const ThemeGlass kDefault;  // Transparente: sem ajustes, sempre o padrão
+    // Transparente: os ajustes padrão; só o "ao vivo" é dele.
+    static ThemeGlass clear;
     int t = CtxTheme();
-    if (t == 1) return kDefault;
+    if (t == 1) {
+        clear = ThemeGlass();
+        clear.live = g_themeGlass[1].live;
+        return clear;
+    }
     return g_themeGlass[t >= 0 && t <= 4 ? t : 0];
 }
 static int GlassT() { return g_glassRaw || g_glassTranspSaved ? g_glass.transparency : CtxGlass().transparency; }
@@ -12127,6 +12132,7 @@ static void NpRender() {
         GlassLayerShapes(g_np.glass, {{g_np.panel, 22 * s}});
     }
 
+    const bool npThemeLight = g_light;  // o tema claro (a capa inteira usa botões pretos nele)
     if (g_np.full) g_light = false;  // capa inteira: texto branco sobre a capa escurecida
     D2D1_COLOR_F fg = g_light ? D2D1::ColorF(0.07f, 0.07f, 0.08f, 1) : D2D1::ColorF(1, 1, 1, 0.97f);
     D2D1_COLOR_F dim = fg;
@@ -12386,6 +12392,28 @@ static void NpRender() {
             float rr = (r.right - r.left) / 2, mx = (r.left + r.right) / 2, my = (r.top + r.bottom) / 2;
             bool hot = g_np.hover == bt.id;
             D2D1_ROUNDED_RECT disc = D2D1::RoundedRect(r, rr, rr);
+            if (npThemeLight) {
+                // Tema claro: botões pretos com contorno branco e o ícone branco.
+                br->SetColor(D2D1::ColorF(0, 0, 0, 0.22f));  // sombra
+                rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left, r.top + 2 * s, r.right, r.bottom + 2 * s), rr, rr), br);
+                br->SetColor(hot ? D2D1::ColorF(0.16f, 0.16f, 0.17f, 1) : D2D1::ColorF(0.04f, 0.04f, 0.05f, 1));
+                rt->FillRoundedRectangle(disc, br);
+                float bw = 1.5f * s;
+                br->SetColor(D2D1::ColorF(1, 1, 1, 0.95f));
+                rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + bw / 2, r.top + bw / 2, r.right - bw / 2,
+                                                                       r.bottom - bw / 2), rr - bw / 2, rr - bw / 2),
+                                         br, bw);
+                IDWriteTextLayout* gl = nullptr;
+                if (SUCCEEDED(g_dwrite->CreateTextLayout(&bt.g, 1, g_np.fIcon, r.right - r.left, r.bottom - r.top, &gl))) {
+                    DWRITE_TEXT_RANGE all = {0, 1};
+                    gl->SetFontSize((bt.id == 2 ? 26 : 19) * s * g_np.k, all);
+                    gl->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                    br->SetColor(D2D1::ColorF(1, 1, 1, sh.mediaHas ? 1.0f : 0.5f));
+                    rt->DrawTextLayout(D2D1::Point2F(r.left, r.top), gl, br);
+                    gl->Release();
+                }
+                continue;
+            }
             ID2D1RoundedRectangleGeometry* lens = nullptr;
             ID2D1Layer* ll = nullptr;
             if (g_np.artBmp && sh.mediaHas && SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(disc, &lens)) &&
@@ -12882,7 +12910,7 @@ static const BsRowDef kBsRows[] = {
     {BR_HEADER, BV_NONE, L"Personalizar tema", 0xE790, 0x5AC8FA, L"Ajusta o tema escolhido em Fundo da barra; vale também para os menus, a Central, os painéis e as pílulas"},
     {BR_GROUP, BV_THEMEHEAD, L"Tema", 0, 0},
     {BR_NOTE, BV_THEMENONE, L"Claro, Escuro e OLED são cores sólidas, sem ajustes de vidro.", 0, 0},
-    {BR_NOTE, BV_THEMECLEAR, L"O tema Transparente não tem ajustes: a barra fica sem vidro nenhum.", 0, 0},
+    {BR_NOTE, BV_THEMECLEAR, L"No tema Transparente a barra fica sem vidro; os painéis podem acompanhar o fundo ao vivo.", 0, 0},
     {BR_SLIDER, BV_G_TINT, L"Transparente ↔ fosco", 0, 0, L"À esquerda o vidro limpo; à direita, mais fosco"},
     {BR_SLIDER, BV_G_REFRACT, L"Refração nas bordas", 0, 0},
     {BR_SLIDER, BV_G_BLUR, L"Desfoque do fundo", 0, 0},
@@ -13776,15 +13804,15 @@ static bool BsRowShown(const BsRowDef& d) {
     if (d.val == BV_ISLLIVE) return !IslSolid();  // só com um estilo de vidro
     unsigned t = BsThemesInUse(), e = (t & kThemeGlass) ? 1u << ThemeEdit() : 0;
     switch (d.val) {
-        // Transparente (1) não tem ajustes; Vidro e Cor da janela (0, 4) são o
+        // Transparente (1): só o "ao vivo" (dos painéis); Vidro e Cor da janela (0, 4) são o
         // desfoque do Windows, sempre ao vivo; Líquido e personalizado (2, 3), tudo.
         case BV_G_TINT: return (e & 0x1D) != 0;
         case BV_G_REFRACT: case BV_G_BLUR: return (e & 0x0C) != 0;
-        case BV_G_LIVE: return (e & 0x1D) != 0;  // vidro, líquido, personalizado e cor da janela
+        case BV_G_LIVE: return e != 0;  // todos os de vidro, o Transparente também (os painéis dele)
         case BV_TGROUP: case BV_TCOLOR: case BV_TLEVEL: case BV_TREACH: return (e & kThemeTinted) != 0;
         case BV_THEMENONE: return (t & kThemeGlass) == 0;
         case BV_THEMECLEAR: return e == 0x02;
-        case BV_THEMERESET: return (e & 0x1D) != 0;
+        case BV_THEMERESET: return e != 0;
     }
     return true;
 }
@@ -21952,6 +21980,7 @@ static void BsAction(int val) {
             // Só o tema que está sendo personalizado volta ao padrão.
             int k = ThemeEdit();
             g_themeGlass[k] = ThemeGlass();
+            g_themeGlass[k].live = k == 0 || k == 4;  // o Vidro e a Cor da janela começam ao vivo
             SaveThemeGlass();
             if (k == 3) {
                 g_settings.tintColor = 0x050505;
@@ -25503,7 +25532,7 @@ const UiTr kUiTr[] = {
     {L"Altura de 28 px e ícones e fonte de 13 pt", L"28 px high, with 13 pt icons and font", L"28 px de alto, con iconos y fuente de 13 pt", L"28 px de haut, icônes et texte en 13 pt", L"28 px hoch, Symbole und Schrift 13 pt", L"28 px di altezza, icone e carattere a 13 pt", L"高度 28 像素，图标和字体 13 磅"},
     {L"Notificações", L"Notifications", L"Notificaciones", L"Notifications", L"Mitteilungen", L"Notifiche", L"通知"},
     {L"Dentro da caixa", L"In a box", L"Dentro de la caja", L"Dans une boîte", L"In einem Kasten", L"In un riquadro", L"在框内"},
-    {L"O tema Transparente não tem ajustes: a barra fica sem vidro nenhum.", L"The Clear theme has no settings: the bar has no glass at all.", L"El tema Transparente no tiene ajustes: la barra no lleva vidrio.", L"Le thème Transparent n’a pas de réglages : la barre n’a aucun verre.", L"Das Design Klar hat keine Einstellungen: die Leiste hat kein Glas.", L"Il tema Trasparente non ha impostazioni: la barra non ha vetro.", L"透明主题没有设置：菜单栏完全没有玻璃。"},
+    {L"No tema Transparente a barra fica sem vidro; os painéis podem acompanhar o fundo ao vivo.", L"With the Clear theme the bar has no glass; the panels can follow the background live.", L"Con el tema Transparente la barra no lleva vidrio; los paneles pueden seguir el fondo en vivo.", L"Avec le thème Transparent la barre n’a pas de verre ; les panneaux peuvent suivre l’arrière-plan en direct.", L"Mit dem Design Klar hat die Leiste kein Glas; die Bereiche können dem Hintergrund live folgen.", L"Con il tema Trasparente la barra non ha vetro; i pannelli possono seguire lo sfondo in tempo reale.", L"透明主题下菜单栏没有玻璃；面板可以实时跟随背景。"},
     {L"Fundo ao vivo", L"Live background", L"Fondo en vivo", L"Arrière-plan en direct", L"Live-Hintergrund", L"Sfondo dal vivo", L"实时背景"},
     {L"Com um estilo de vidro, vídeos e papéis de parede animados continuam aparecendo atrás da pílula", L"With a glass style, videos and animated wallpapers keep showing behind the pill", L"Con un estilo de vidrio, los vídeos y fondos animados siguen viéndose detrás de la píldora", L"Avec un style en verre, les vidéos et fonds animés restent visibles derrière la pastille", L"Mit einem Glasstil bleiben Videos und animierte Hintergründe hinter der Pille sichtbar", L"Con uno stile in vetro, video e sfondi animati restano visibili dietro la pillola", L"使用玻璃样式时，胶囊后面仍会显示视频和动态壁纸"},
     {L"Fonte", L"Font", L"Fuente", L"Police", L"Schrift", L"Carattere", L"字体"},
