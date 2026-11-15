@@ -91,7 +91,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 
 ## Settings
 
-Logo → **Menu Bar Settings…** opens a window in the same style as Siri Plus Launchpad: sections on the left with search, every setting applied live without restarting the bar. It's the only place for those settings. Windhawk's settings page has the few the window doesn't: font, glass tints, theme, the name shown for the desktop, ready-made menus, Control Center tile look, opening animation, tray click, the app update count and .ics file paths, plus **Reset the bar's settings**, which puts the window's options back to their defaults if the bar ever doesn't show up.
+Logo → **Menu Bar Settings…** opens a window in the same style as Siri Plus Launchpad: sections on the left with search, every setting applied live without restarting the bar. It's the only place for those settings. Windhawk's settings page has the few the window doesn't: glass tints, theme, the name shown for the desktop, ready-made menus, Control Center tile look, opening animation, tray click, the app update count and .ics file paths, plus **Reset the bar's settings**, which puts the window's options back to their defaults if the bar ever doesn't show up.
 
 ## What changes Windows settings
 
@@ -137,9 +137,6 @@ The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so
 
 // ==WindhawkModSettings==
 /*
-- fontFamily: "Segoe UI Variable Text"
-  $name: Font
-  $name:pt-BR: Fonte
 - theme: auto
   $name: Theme
   $name:pt-BR: Tema
@@ -771,8 +768,12 @@ static void LoadSettings() {
     Settings& s = g_settings;
     s.height = OvrInt(L"height");
     if (s.height < 16 || s.height > 80) s.height = 28;
-    s.fontFamily = ReadStr(L"fontFamily");
-    if (s.fontFamily.empty()) s.fontFamily = L"Segoe UI";
+    // A fonte é escolhida nos Ajustes da barra; antes ficava nas configurações do
+    // Windhawk (o valor antigo, se houver, vale até a primeira escolha).
+    if (!UiStored(L"fontFamily", s.fontFamily) || s.fontFamily.empty()) {
+        s.fontFamily = ReadStr(L"fontFamily");
+        if (s.fontFamily.empty()) s.fontFamily = L"Segoe UI Variable Text";
+    }
     s.fontSize = (float)OvrInt(L"fontSize");
     if (s.fontSize < 8 || s.fontSize > 32) s.fontSize = 13;
     {
@@ -12752,6 +12753,7 @@ enum BsVal {
     BV_NTFLAYOUT,                                          // painel do sino: caixa ou cartões
     BV_THEMECLEAR, BV_G_LIVEFIXED,                         // Personalizar tema: Transparente; Vidro sempre ao vivo
     BV_ISLLIVE,                                            // pílulas de aviso: fundo ao vivo
+    BV_FONTFAM,                                            // fonte da barra e dos painéis
     BV_SIZERESET,                                          // Tamanho da barra: restaurar
     // "Personalizar por monitor": para cada monitor ligado (até 8), o título, o fundo e a cor do texto.
     BV_MONHEAD0, BV_MONSTYLE0 = BV_MONHEAD0 + 8, BV_MONTEXT0 = BV_MONSTYLE0 + 8, BV_MONEND = BV_MONTEXT0 + 8,
@@ -12790,6 +12792,8 @@ static const BsRowDef kBsRows[] = {
     {BR_HEADER, BV_NONE, L"Barra", 0xE771, 0x0A84FF, L"Idioma, temas, tamanho e comportamento da barra"},
     {BR_GROUP, BV_NONE, L"Idioma da barra", 0, 0},
     {BR_CHOICE, BV_LANG, L"Idioma", 0, 0, L"Automático segue o idioma do Windows"},
+    {BR_GROUP, BV_NONE, L"Fonte", 0, 0},
+    {BR_CHOICE, BV_FONTFAM, L"Fonte da barra e dos painéis", 0, 0, L"As fontes desta lista que estão instaladas no Windows"},
     {BR_GROUP, BV_NONE, L"Temas da barra", 0, 0},
     {BR_CHOICE, BV_BARSTYLE, L"Fundo da barra", 0, 0, L"Personalizar por monitor: cada monitor com fundo e cor do texto próprios"},
     {BR_CHOICE, BV_TEXTCOLOR, L"Cor do texto e dos ícones", 0, 0, L"Automático segue o tema do Windows (no Vidro líquido personalizado, a cor do vidro; em Claro, Escuro e OLED, o fundo)"},
@@ -13100,6 +13104,31 @@ static std::wstring BsMonDevice(int k) {
 static void TintApply();
 
 static int ThemeEdit();  // Personalizar tema: o tema de vidro da barra (mais abaixo)
+// As fontes para escolher: as conhecidas que estão instaladas, e a atual (mesmo
+// que não esteja na lista). Refeita a cada abertura da lista.
+static std::vector<std::wstring> g_bsFonts;
+static std::vector<PCWSTR> g_bsFontPtrs;
+static void BsFontsRefresh() {
+    static const PCWSTR kFonts[] = {L"Segoe UI Variable Text", L"Segoe UI Variable Display", L"Segoe UI", L"SF Pro Display",
+                                    L"SF Pro Text", L"SF Pro", L"Inter", L"Aptos", L"Roboto", L"Open Sans", L"Noto Sans",
+                                    L"Lato", L"Montserrat", L"Poppins", L"Ubuntu", L"Helvetica Neue", L"Helvetica",
+                                    L"Arial", L"Calibri", L"Bahnschrift", L"Verdana", L"Tahoma", L"Trebuchet MS"};
+    g_bsFonts.clear();
+    IDWriteFontCollection* coll = nullptr;
+    if (g_dwrite && SUCCEEDED(g_dwrite->GetSystemFontCollection(&coll, FALSE)) && coll) {
+        for (PCWSTR f : kFonts) {
+            UINT32 idx = 0;
+            BOOL exists = FALSE;
+            if (SUCCEEDED(coll->FindFamilyName(f, &idx, &exists)) && exists) g_bsFonts.push_back(f);
+        }
+        coll->Release();
+    }
+    bool have = false;
+    for (const std::wstring& f : g_bsFonts) have = have || _wcsicmp(f.c_str(), g_settings.fontFamily.c_str()) == 0;
+    if (!have) g_bsFonts.insert(g_bsFonts.begin(), g_settings.fontFamily);
+    g_bsFontPtrs.clear();
+    for (const std::wstring& f : g_bsFonts) g_bsFontPtrs.push_back(f.c_str());
+}
 static int BsGet(int val) {
     if (const BsBoolKey* k = BsKeyFor(val)) return g_settings.*(k->field) ? 1 : 0;
     if (val >= BV_MONSTYLE0 && val < BV_MONTEXT0) {
@@ -13124,6 +13153,12 @@ static int BsGet(int val) {
         case BV_CCCLOSE: return g_settings.ccCloseAnim;
         case BV_NTFSHAPE: return g_settings.ntfIconShape;
         case BV_NTFLAYOUT: return g_settings.ntfCards ? 1 : 0;
+        case BV_FONTFAM: {
+            if (g_bsFonts.empty()) BsFontsRefresh();
+            for (size_t i = 0; i < g_bsFonts.size(); i++)
+                if (_wcsicmp(g_bsFonts[i].c_str(), g_settings.fontFamily.c_str()) == 0) return (int)i;
+            return 0;
+        }
         case BV_G_LIVEFIXED: return 1;  // o desfoque do Windows é sempre ao vivo
         case BV_TEXTCOLOR: return g_settings.barStyle >= 5 ? 0 : g_settings.theme;  // sólidos: sempre automático
         case BV_PANELLOOK: return g_settings.panelLookCustom ? 1 : 0;
@@ -13404,6 +13439,13 @@ static void BsSet(int val, int v) {
         g_settings.theme = std::clamp(v, 0, 2);
         OvrSetStr(L"theme", kNames[g_settings.theme]);
         TintApply();  // a barra muda na hora
+        return;
+    }
+    if (val == BV_FONTFAM) {
+        if (v < 0 || v >= (int)g_bsFonts.size() || g_bsFonts[v] == g_settings.fontFamily) return;
+        g_settings.fontFamily = g_bsFonts[v];
+        OvrSetStr(L"fontFamily", g_settings.fontFamily);
+        BarsApplyLive(true);  // a barra refaz as fontes na hora; os painéis, ao abrir
         return;
     }
     if (val == BV_NTFLAYOUT) {
@@ -13849,6 +13891,9 @@ static const PCWSTR* BsChoiceLabels(int val) {
         case BV_CCCLOSE: return kBsCcClose;
         case BV_NTFSHAPE: return kBsNtfShape;
         case BV_NTFLAYOUT: return kBsNtfLayout;
+        case BV_FONTFAM:
+            if (g_bsFonts.empty()) BsFontsRefresh();
+            return g_bsFontPtrs.data();
         case BV_TEXTCOLOR: return kBsTextColor;
     }
     return kBsChoices;
@@ -13858,6 +13903,9 @@ static int BsChoiceCount(int val) {
     if (val >= BV_MONTEXT0 && val < BV_MONEND) return 3;
     switch (val) {
         case BV_ISLPOS: case BV_WXUNIT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: case BV_NTFLAYOUT: return 2;
+        case BV_FONTFAM:
+            if (g_bsFonts.empty()) BsFontsRefresh();
+            return (int)g_bsFonts.size();
         case BV_BARSTYLE: return 9;
         case BV_PANELLOOK: return 2;
         case BV_PANELSTYLE: return 6;
@@ -14801,6 +14849,7 @@ static bool BsReopenIfNeeded() {
 static void BsChoiceMenu(int rowIdx) {
     const BsRow row = g_bs.rows[rowIdx];
     const int val = kBsRows[row.def].val;
+    if (val == BV_FONTFAM) BsFontsRefresh();
     int n = BsChoiceCount(val), v = BsGet(val);
     HMENU m = CreatePopupMenu();
     for (int k = 0; k < n; k++) AddItem(m, 1 + k, BsChoiceLabels(val)[k], k == v, false, true);
@@ -25357,6 +25406,9 @@ const UiTr kUiTr[] = {
     {L"No Vidro, o desfoque do Windows sempre acompanha o fundo ao vivo", L"With Glass, the Windows blur always follows the background live", L"En Vidrio, el desenfoque de Windows siempre sigue el fondo en vivo", L"Avec Verre, le flou de Windows suit toujours l’arrière-plan en direct", L"Bei Glas folgt die Windows-Unschärfe dem Hintergrund immer live", L"Con Vetro, la sfocatura di Windows segue sempre lo sfondo in tempo reale", L"在“玻璃”中，Windows 模糊始终实时跟随背景"},
     {L"Fundo ao vivo", L"Live background", L"Fondo en vivo", L"Arrière-plan en direct", L"Live-Hintergrund", L"Sfondo dal vivo", L"实时背景"},
     {L"Com um estilo de vidro, vídeos e papéis de parede animados continuam aparecendo atrás da pílula", L"With a glass style, videos and animated wallpapers keep showing behind the pill", L"Con un estilo de vidrio, los vídeos y fondos animados siguen viéndose detrás de la píldora", L"Avec un style en verre, les vidéos et fonds animés restent visibles derrière la pastille", L"Mit einem Glasstil bleiben Videos und animierte Hintergründe hinter der Pille sichtbar", L"Con uno stile in vetro, video e sfondi animati restano visibili dietro la pillola", L"使用玻璃样式时，胶囊后面仍会显示视频和动态壁纸"},
+    {L"Fonte", L"Font", L"Fuente", L"Police", L"Schrift", L"Carattere", L"字体"},
+    {L"Fonte da barra e dos painéis", L"Bar and panel font", L"Fuente de la barra y los paneles", L"Police de la barre et des panneaux", L"Schrift der Leiste und Bereiche", L"Carattere della barra e dei pannelli", L"菜单栏和面板字体"},
+    {L"As fontes desta lista que estão instaladas no Windows", L"The fonts on this list that are installed in Windows", L"Las fuentes de esta lista instaladas en Windows", L"Les polices de cette liste installées dans Windows", L"Die Schriften dieser Liste, die in Windows installiert sind", L"I caratteri di questo elenco installati in Windows", L"此列表中已安装在 Windows 中的字体"},
     {L"Acompanhar a barra", L"Match the bar", L"Igual que la barra", L"Comme la barre", L"Wie die Leiste", L"Come la barra", L"跟随菜单栏"},
     {L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro; com Transparente, líquido)", L"Match the bar: the bar’s background (glass with Window color, liquid with Clear)", L"Igual que la barra: el fondo de la barra (vidrio con Color de la ventana, líquido con Transparente)", L"Comme la barre : le fond de la barre (verre avec Couleur de la fenêtre, liquide avec Transparent)", L"Wie die Leiste: ihr Hintergrund (Glas bei Fensterfarbe, flüssig bei Klar)", L"Come la barra: lo sfondo della barra (vetro con Colore della finestra, liquido con Trasparente)", L"跟随菜单栏：与菜单栏相同的背景（窗口颜色时为玻璃，透明时为液态）"},
     {L"Claro", L"Light", L"Claro", L"Clair", L"Hell", L"Chiaro", L"浅色"},
