@@ -12903,9 +12903,8 @@ static const BsRowDef kBsRows[] = {
     {BR_CHOICE, BV_ISLIN, L"Como aparece", 0, 0},
     {BR_CHOICE, BV_ISLOUT, L"Como some", 0, 0},
     {BR_GROUP, BV_NONE, L"Botão de Notificações", 0, 0},
-    {BR_SWITCH, BV_ISLHIST, L"Botão de Notificações na barra (sino)", 0, 0, L"Notificações agrupadas por app, em cartões de vidro"},
+    {BR_CHOICE, BV_NTFLAYOUT, L"Notificações na barra (sino)", 0, 0, L"Desligado tira o sino da barra; dentro da caixa: tudo num painel só; em cartões soltos: o topo e cada notificação no seu próprio vidro, sem caixa atrás"},
     {BR_CHOICE, BV_NTFTEXT, L"Cor do texto das notificações", 0, 0, L"Seguir o tema, ou sempre branco ou preto, em qualquer tema"},
-    {BR_CHOICE, BV_NTFLAYOUT, L"Notificações", 0, 0, L"Dentro da caixa: tudo num painel só; em cartões soltos: o topo e cada notificação no seu próprio vidro, sem caixa atrás"},
     {BR_SWITCH, BV_ISLHISTNOT, L"No botão, mostrar também os avisos da pílula", 0, 0},
     {BR_CHOICE, BV_NTFSHAPE, L"Formato dos ícones", 0, 0, L"Nas notificações: círculo ou o formato dos ícones do macOS"},
     {BR_ACTION, BV_ISLCLEAR, L"Limpar as notificações", 0, 0},
@@ -13184,7 +13183,7 @@ static int BsGet(int val) {
         case BV_G_STYLE: return g_glass.tinted ? 1 : 0;
         case BV_CCCLOSE: return g_settings.ccCloseAnim;
         case BV_NTFSHAPE: return g_settings.ntfIconShape;
-        case BV_NTFLAYOUT: return g_settings.ntfCards ? 1 : 0;
+        case BV_NTFLAYOUT: return !g_settings.islHistory ? 0 : g_settings.ntfCards ? 2 : 1;
         case BV_ISLTEXT: return g_settings.islTextColor;
         case BV_NTFTEXT: return g_settings.ntfTextColor;
         case BV_FONTFAM: {
@@ -13490,9 +13489,13 @@ static void BsSet(int val, int v) {
         return;
     }
     if (val == BV_NTFLAYOUT) {
-        g_settings.ntfCards = v == 1;
-        OvrSetStr(L"ntfLayout", g_settings.ntfCards ? L"cards" : L"box");
-        NtfRefresh();  // painel aberto: muda na hora
+        // Desligado (sem o sino na barra), dentro da caixa ou em cartões soltos.
+        BsSet(BV_ISLHIST, v != 0);
+        if (v != 0) {
+            g_settings.ntfCards = v == 2;
+            OvrSetStr(L"ntfLayout", g_settings.ntfCards ? L"cards" : L"box");
+            NtfRefresh();  // painel aberto: muda na hora
+        }
         return;
     }
     if (val == BV_NTFSHAPE) {
@@ -13883,7 +13886,7 @@ static const PCWSTR kBsBarChoicesAll[] = {L"Vidro", L"Transparente", L"Líquido"
                                           L"Claro", L"Escuro", L"OLED", L"Personalizar por monitor"};
 static const PCWSTR kBsGlassStyle[] = {L"Transparente", L"Vidro líquido personalizado"};
 static const PCWSTR kBsNtfShape[] = {L"Círculo", L"Formato macOS"};
-static const PCWSTR kBsNtfLayout[] = {L"Dentro da caixa", L"Em cartões soltos"};
+static const PCWSTR kBsNtfLayout[] = {L"Desligado", L"Dentro da caixa", L"Em cartões soltos"};
 static const PCWSTR kBsTextFollow[] = {L"Seguir o tema", L"Branco", L"Preto"};
 static const PCWSTR kBsTextColor[] = {L"Automático", L"Branco", L"Preto"};
 static const PCWSTR kBsCcClose[] = {L"Cascata", L"Encolher", L"Esmaecer", L"Deslizar para cima", L"Nenhuma"};
@@ -13946,7 +13949,8 @@ static int BsChoiceCount(int val) {
     if (val >= BV_MONSTYLE0 && val < BV_MONTEXT0) return 8;
     if (val >= BV_MONTEXT0 && val < BV_MONEND) return 3;
     switch (val) {
-        case BV_ISLPOS: case BV_WXUNIT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: case BV_NTFLAYOUT: return 2;
+        case BV_ISLPOS: case BV_WXUNIT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: return 2;
+        case BV_NTFLAYOUT: return 3;
         case BV_FONTFAM:
             if (g_bsFonts.empty()) BsFontsRefresh();
             return (int)g_bsFonts.size();
@@ -14778,6 +14782,7 @@ static bool BsRowDisabled(int rowIdx) {
     // Claro, Escuro e OLED: a cor do texto fica no automático (segue o fundo).
     if (d.val == BV_TEXTCOLOR) return g_settings.barStyle >= 5;
     if (d.val >= BV_MONTEXT0 && d.val < BV_MONEND) return BsGet(d.val - 8) >= 5;
+    if (d.val == BV_NTFTEXT) return !g_settings.islHistory;  // sem o sino na barra
     if (d.val == BV_HANDLE) return g_settings.hideWhenMaximized;  // bloqueada por "Ocultar com janela maximizada"
     // Com "Ocultar com a alça" ligada, as outras formas de ocultar ficam inativas.
     if (d.val == BV_HIDEFS || d.val == BV_HIDEMAX) return g_settings.autoHide && g_settings.revealHandle;
@@ -25397,8 +25402,6 @@ const UiTr kUiTr[] = {
     {L"Como aparece", L"How it appears", L"Cómo aparece", L"Apparition", L"Einblenden", L"Come appare", L"出现方式"},
     {L"Como some", L"How it disappears", L"Cómo desaparece", L"Disparition", L"Ausblenden", L"Come scompare", L"消失方式"},
     {L"Botão de Notificações", L"Notifications Button", L"Botón de Notificaciones", L"Bouton Notifications", L"Mitteilungstaste", L"Pulsante Notifiche", L"通知按钮"},
-    {L"Botão de Notificações na barra (sino)", L"Notifications button on the bar (bell)", L"Botón de Notificaciones en la barra (campana)", L"Bouton Notifications dans la barre (cloche)", L"Mitteilungstaste in der Leiste (Glocke)", L"Pulsante Notifiche nella barra (campanella)", L"菜单栏中的通知按钮 (铃铛)"},
-    {L"Notificações agrupadas por app, em cartões de vidro", L"Notifications grouped by app, on glass cards", L"Notificaciones agrupadas por app, en tarjetas de vidrio", L"Notifications regroupées par app, sur des cartes en verre", L"Mitteilungen nach App gruppiert, auf Glaskarten", L"Notifiche raggruppate per app, su schede di vetro", L"按应用分组的通知, 显示在玻璃卡片上"},
     {L"No botão, mostrar também os avisos da pílula", L"Also show the pill notices in the button", L"Mostrar también los avisos de la píldora en el botón", L"Afficher aussi les alertes des pastilles dans le bouton", L"Pillen-Hinweise auch in der Taste zeigen", L"Mostra anche gli avvisi della pillola nel pulsante", L"在按钮中也显示胶囊提醒"},
     {L"Limpar as notificações", L"Clear notifications", L"Borrar las notificaciones", L"Effacer les notifications", L"Mitteilungen löschen", L"Cancella le notifiche", L"清除通知"},
     {L"Avisar quando", L"Notify when", L"Avisar cuando", L"Alerter quand", L"Hinweis bei", L"Avvisa quando", L"在以下情况提醒"},
@@ -25488,7 +25491,8 @@ const UiTr kUiTr[] = {
     {L"Restaurar o tamanho padrão", L"Restore the default size", L"Restaurar el tamaño predeterminado", L"Restaurer la taille par défaut", L"Standardgröße wiederherstellen", L"Ripristina le dimensioni predefinite", L"恢复默认大小"},
     {L"Altura de 28 px e ícones e fonte de 13 pt", L"28 px high, with 13 pt icons and font", L"28 px de alto, con iconos y fuente de 13 pt", L"28 px de haut, icônes et texte en 13 pt", L"28 px hoch, Symbole und Schrift 13 pt", L"28 px di altezza, icone e carattere a 13 pt", L"高度 28 像素，图标和字体 13 磅"},
     {L"Notificações", L"Notifications", L"Notificaciones", L"Notifications", L"Mitteilungen", L"Notifiche", L"通知"},
-    {L"Dentro da caixa: tudo num painel só; em cartões soltos: o topo e cada notificação no seu próprio vidro, sem caixa atrás", L"In a box: everything in one panel; as separate cards: the top and each notification in its own glass, with no box behind", L"Dentro de la caja: todo en un panel; en tarjetas sueltas: la parte superior y cada notificación en su propio vidrio, sin caja detrás", L"Dans une boîte : tout dans un seul panneau ; en cartes séparées : le haut et chaque notification dans leur propre verre, sans boîte derrière", L"In einem Kasten: alles in einem Bereich; als einzelne Karten: der Kopf und jede Mitteilung im eigenen Glas, ohne Kasten dahinter", L"In un riquadro: tutto in un pannello; in schede separate: la parte superiore e ogni notifica nel proprio vetro, senza riquadro dietro", L"在框内：全部在一个面板中；独立卡片：顶部和每条通知各自一块玻璃，后面没有框"},
+    {L"Notificações na barra (sino)", L"Notifications on the bar (bell)", L"Notificaciones en la barra (campana)", L"Notifications dans la barre (cloche)", L"Mitteilungen in der Leiste (Glocke)", L"Notifiche nella barra (campanella)", L"菜单栏中的通知 (铃铛)"},
+    {L"Desligado tira o sino da barra; dentro da caixa: tudo num painel só; em cartões soltos: o topo e cada notificação no seu próprio vidro, sem caixa atrás", L"Off removes the bell from the bar; in a box: everything in one panel; as separate cards: the top and each notification in its own glass, with no box behind", L"Desactivado quita la campana de la barra; dentro de la caja: todo en un panel; en tarjetas sueltas: la parte superior y cada notificación en su propio vidrio, sin caja detrás", L"Désactivé retire la cloche de la barre ; dans une boîte : tout dans un seul panneau ; en cartes séparées : le haut et chaque notification dans leur propre verre, sans boîte derrière", L"Aus entfernt die Glocke aus der Leiste; in einem Kasten: alles in einem Bereich; als einzelne Karten: der Kopf und jede Mitteilung im eigenen Glas, ohne Kasten dahinter", L"Disattivato toglie la campanella dalla barra; in un riquadro: tutto in un pannello; in schede separate: la parte superiore e ogni notifica nel proprio vetro, senza riquadro dietro", L"关闭会从菜单栏移除铃铛；在框内：全部在一个面板中；独立卡片：顶部和每条通知各自一块玻璃，后面没有框"},
     {L"Dentro da caixa", L"In a box", L"Dentro de la caja", L"Dans une boîte", L"In einem Kasten", L"In un riquadro", L"在框内"},
     {L"Em cartões soltos", L"As separate cards", L"En tarjetas sueltas", L"En cartes séparées", L"Als einzelne Karten", L"In schede separate", L"独立卡片"},
     {L"O tema Transparente não tem ajustes: a barra fica sem vidro nenhum.", L"The Clear theme has no settings: the bar has no glass at all.", L"El tema Transparente no tiene ajustes: la barra no lleva vidrio.", L"Le thème Transparent n’a pas de réglages : la barre n’a aucun verre.", L"Das Design Klar hat keine Einstellungen: die Leiste hat kein Glas.", L"Il tema Trasparente non ha impostazioni: la barra non ha vetro.", L"透明主题没有设置：菜单栏完全没有玻璃。"},
