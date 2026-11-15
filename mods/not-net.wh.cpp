@@ -3,7 +3,7 @@
 // @name            !Net — Per-App Kill Switch
 // @description     A panel to manage per app internet connection.
 // @author          Ashix
-// @version         1.2026.1510
+// @version         1.2026.1410
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
 // @donateUrl       https://ko-fi.com/kashix
@@ -192,9 +192,6 @@
 #include <gdiplus.h>
 #include <d2d1.h>
 #include <dwrite.h>
-#ifndef D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT
-#define D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT ((D2D1_DRAW_TEXT_OPTIONS)0x00000004)
-#endif
 
 // Official Microsoft SDK WFP GUIDs (omitted in MinGW-w64 fwpmu.h)
 static const GUID kWfpCondAleAppId = {
@@ -487,16 +484,6 @@ static int g_lastSettingDockEdge = -1;
 static int g_posX = 0;
 static int g_posY = 0;
 static bool g_posLoaded = false;
-static bool g_isLightTheme = false;
-
-static void RefreshLightThemeCache() {
-    DWORD val = 0;
-    DWORD sz = sizeof(val);
-    g_isLightTheme = (RegGetValueW(HKEY_CURRENT_USER,
-        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-        L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &val, &sz) == ERROR_SUCCESS)
-        && (val != 0);
-}
 
 static std::mutex g_engineMtx;
 static HANDLE g_wfpEngine = nullptr;
@@ -702,10 +689,9 @@ static void SaveExcludedApps() {
         std::wstring key = L"excluded_" + std::to_wstring(idx++);
         Wh_SetStringValue(key.c_str(), ex.c_str());
     }
-    for (int i = newCount; ; ++i) {
+    for (int i = newCount; i < prevCount; ++i) {
         std::wstring key = L"excluded_" + std::to_wstring(i);
-        BOOL deleted = Wh_DeleteValue(key.c_str());
-        if (!deleted && i >= prevCount) break;
+        Wh_DeleteValue(key.c_str());
     }
 }
 
@@ -1590,12 +1576,11 @@ static void SaveCycleTemplates() {
         Wh_SetStringValue(kKey.c_str(), items[i].first.c_str());
         Wh_SetStringValue(vKey.c_str(), valBuf);
     }
-    for (int i = newCount; i < 256; ++i) {
+    for (int i = newCount; i < prevCount; ++i) {
         std::wstring kKey = L"cycleTplKey_" + std::to_wstring(i);
         std::wstring vKey = L"cycleTplVal_" + std::to_wstring(i);
-        BOOL delK = Wh_DeleteValue(kKey.c_str());
-        BOOL delV = Wh_DeleteValue(vKey.c_str());
-        if (!delK && !delV && i >= prevCount) break;
+        Wh_DeleteValue(kKey.c_str());
+        Wh_DeleteValue(vKey.c_str());
     }
 }
 struct CyclePendingAction {
@@ -2013,12 +1998,33 @@ static DWORD WINAPI CycleSchedulerThreadProc(LPVOID) {
         std::vector<CyclePendingAction> actions;
         double nextWakeMs = 250.0;
 
+        std::vector<std::wstring> dueProcChecks;
         {
             std::unique_lock<std::mutex> lk(g_cycleMtx);
             if (g_cycles.empty()) {
                 g_cycleCv.wait(lk, []() { return g_cycleStopping.load() || !g_cycles.empty(); });
                 if (g_cycleStopping.load()) break;
             }
+            double nowMs = QpcNowMs();
+            for (auto& kv : g_cycles) {
+                if (nowMs - kv.second.lastProcCheckMs >= 500.0) {
+                    kv.second.lastProcCheckMs = nowMs;
+                    dueProcChecks.push_back(kv.first);
+                }
+            }
+        }
+
+        std::unordered_set<std::wstring> deadExes;
+        for (const auto& exeLow : dueProcChecks) {
+            if (g_cycleStopping.load()) break;
+            if (!IsAnyProcessAliveForExe(exeLow)) {
+                deadExes.insert(exeLow);
+            }
+        }
+
+        {
+            std::lock_guard<std::mutex> lk(g_cycleMtx);
+            if (g_cycleStopping.load()) break;
 
             double nowMs = QpcNowMs();
             std::vector<std::wstring> toErase;
@@ -2026,14 +2032,10 @@ static DWORD WINAPI CycleSchedulerThreadProc(LPVOID) {
             for (auto& kv : g_cycles) {
                 CycleRuntime& rt = kv.second;
 
-                // Periodic process-exit / crash detection (every 500 ms)
-                if (nowMs - rt.lastProcCheckMs >= 500.0) {
-                    rt.lastProcCheckMs = nowMs;
-                    if (!IsAnyProcessAliveForExe(rt.exePath)) {
-                        actions.push_back({CyclePendingAction::WipeExited, rt.displayPath, rt.cfg.direction, rt.includeChildren});
-                        toErase.push_back(kv.first);
-                        continue;
-                    }
+                if (deadExes.count(kv.first)) {
+                    actions.push_back({CyclePendingAction::WipeExited, rt.displayPath, rt.cfg.direction, rt.includeChildren});
+                    toErase.push_back(kv.first);
+                    continue;
                 }
 
                 if (rt.pausedByFocus || rt.pausedByUser) {
@@ -5395,6 +5397,11 @@ static void ComputeCycleWidgetRect(RECT& outRc, double revealProgress = 1.0) {
 
 static ID2D1Factory* g_d2dFactory = nullptr;
 static IDWriteFactory* g_dwriteFactory = nullptr;
+static ID2D1DCRenderTarget* g_d2dDcRt = nullptr;
+static ID2D1SolidColorBrush* g_d2dFallbackBrush = nullptr;
+static IDWriteTextFormat* g_dwriteEmojiFormat = nullptr;
+static int g_cachedEmojiSizeStep = -1;
+static UINT g_cachedEmojiDpi = 0;
 
 static void RenderCycleWidgetLayered(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return;
@@ -5462,38 +5469,46 @@ static void RenderCycleWidgetLayered(HWND hwnd) {
             DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
                                 reinterpret_cast<IUnknown**>(&g_dwriteFactory));
         }
-        if (g_d2dFactory && g_dwriteFactory) {
+        if (g_d2dFactory && !g_d2dDcRt) {
             D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
-                D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                D2D1_RENDER_TARGET_TYPE_SOFTWARE,
                 D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
                 96.0f, 96.0f);
-            ID2D1DCRenderTarget* dcRt = nullptr;
-            if (SUCCEEDED(g_d2dFactory->CreateDCRenderTarget(&rtProps, &dcRt)) && dcRt) {
-                RECT bindRc{0, 0, w, h};
-                if (SUCCEEDED(dcRt->BindDC(memDC, &bindRc))) {
-                    float emojiPx = (13.0f + (float)sizeStep * 2.5f) * scale;
-                    IDWriteTextFormat* fmt = nullptr;
-                    if (SUCCEEDED(g_dwriteFactory->CreateTextFormat(
-                            L"Segoe UI Emoji", nullptr,
-                            DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                            emojiPx, L"", &fmt)) && fmt) {
-                        fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-                        fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-                        ID2D1SolidColorBrush* fallbackBr = nullptr;
-                        if (SUCCEEDED(dcRt->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f), &fallbackBr)) && fallbackBr) {
-                            dcRt->BeginDraw();
-                            D2D1_RECT_F layoutRc = D2D1::RectF(0.0f, pressDy, (FLOAT)w, (FLOAT)h);
-                            dcRt->DrawText(L"\u23F1\uFE0F", 2, fmt, layoutRc, fallbackBr,
-                                           D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
-                            if (SUCCEEDED(dcRt->EndDraw())) {
-                                drewD2D = true;
-                            }
-                            fallbackBr->Release();
-                        }
-                        fmt->Release();
-                    }
+            if (SUCCEEDED(g_d2dFactory->CreateDCRenderTarget(&rtProps, &g_d2dDcRt)) && g_d2dDcRt) {
+                g_d2dDcRt->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f), &g_d2dFallbackBrush);
+            }
+        }
+        if (g_dwriteFactory && (!g_dwriteEmojiFormat || g_cachedEmojiSizeStep != sizeStep || g_cachedEmojiDpi != dpi)) {
+            if (g_dwriteEmojiFormat) {
+                g_dwriteEmojiFormat->Release();
+                g_dwriteEmojiFormat = nullptr;
+            }
+            float emojiPx = (13.0f + (float)sizeStep * 2.5f) * scale;
+            if (SUCCEEDED(g_dwriteFactory->CreateTextFormat(
+                    L"Segoe UI Emoji", nullptr,
+                    DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                    emojiPx, L"", &g_dwriteEmojiFormat)) && g_dwriteEmojiFormat) {
+                g_dwriteEmojiFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                g_dwriteEmojiFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                g_cachedEmojiSizeStep = sizeStep;
+                g_cachedEmojiDpi = dpi;
+            }
+        }
+        if (g_d2dDcRt && g_dwriteEmojiFormat && g_d2dFallbackBrush) {
+            RECT bindRc{0, 0, w, h};
+            if (SUCCEEDED(g_d2dDcRt->BindDC(memDC, &bindRc))) {
+                g_d2dDcRt->BeginDraw();
+                D2D1_RECT_F layoutRc = D2D1::RectF(0.0f, pressDy, (FLOAT)w, (FLOAT)h);
+                g_d2dDcRt->DrawText(L"\u23F1\uFE0F", 2, g_dwriteEmojiFormat, layoutRc, g_d2dFallbackBrush,
+                                    D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+                HRESULT hrEnd = g_d2dDcRt->EndDraw();
+                if (SUCCEEDED(hrEnd)) {
+                    drewD2D = true;
+                } else if (hrEnd == (HRESULT)D2DERR_RECREATE_TARGET) {
+                    if (g_d2dFallbackBrush) { g_d2dFallbackBrush->Release(); g_d2dFallbackBrush = nullptr; }
+                    g_d2dDcRt->Release();
+                    g_d2dDcRt = nullptr;
                 }
-                dcRt->Release();
             }
         }
         if (!drewD2D) {
@@ -5507,6 +5522,18 @@ static void RenderCycleWidgetLayered(HWND hwnd) {
             sfCenter.SetLineAlignment(Gdiplus::StringAlignmentCenter);
             Gdiplus::RectF rf(0.0f, pressDy, (Gdiplus::REAL)w, (Gdiplus::REAL)h);
             g.DrawString(L"\u23F1\uFE0F", -1, &emojiFont, rf, &sfCenter, &emojiBr);
+        }
+        if (hasSnap) {
+            Gdiplus::Graphics g(memDC);
+            g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            Gdiplus::Color phaseCol = (snap.phase == CyclePhase::Blocked)
+                ? Gdiplus::Color(255, 225, 58, 58)
+                : Gdiplus::Color(255, 34, 175, 85);
+            Gdiplus::SolidBrush dotBr(phaseCol);
+            float dotD = std::max(4.0f, (4.5f + (float)sizeStep * 0.5f) * scale);
+            float dotX = (float)w - dotD - 1.5f * scale;
+            float dotY = (float)h - dotD - 1.5f * scale + pressDy;
+            g.FillEllipse(&dotBr, dotX, dotY, dotD, dotD);
         }
     }
 
@@ -5742,7 +5769,6 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
             g_wmTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
             if (g_wmTaskbarCreated) ChangeWindowMessageFilterEx(hwnd, g_wmTaskbarCreated, MSGFLT_ALLOW, nullptr);
             ChangeWindowMessageFilterEx(hwnd, WM_APP_TRAY_CALLBACK, MSGFLT_ALLOW, nullptr);
-            RefreshLightThemeCache();
             SetWindowFrameMode(hwnd, false);
             ApplyCaptureExclusionToWindow(hwnd);
             RegisterAllHotkeys(hwnd);
@@ -6269,7 +6295,6 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
             return 0;
         }
         case WM_SETTINGCHANGE: {
-            RefreshLightThemeCache();
             if (g_hCycleWidget && IsWindow(g_hCycleWidget) && IsWindowVisible(g_hCycleWidget)) {
                 RenderCycleWidgetLayered(g_hCycleWidget);
             }
@@ -6448,6 +6473,9 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     UnregisterClassW(kWndClass, wc.hInstance);
     UnregisterClassW(kCtrlWndClass, cwc.hInstance);
 
+    if (g_dwriteEmojiFormat) { g_dwriteEmojiFormat->Release(); g_dwriteEmojiFormat = nullptr; }
+    if (g_d2dFallbackBrush) { g_d2dFallbackBrush->Release(); g_d2dFallbackBrush = nullptr; }
+    if (g_d2dDcRt) { g_d2dDcRt->Release(); g_d2dDcRt = nullptr; }
     if (g_dwriteFactory) { g_dwriteFactory->Release(); g_dwriteFactory = nullptr; }
     if (g_d2dFactory) { g_d2dFactory->Release(); g_d2dFactory = nullptr; }
     if (g_gdiplusToken) { Gdiplus::GdiplusShutdown(g_gdiplusToken); g_gdiplusToken = 0; }
