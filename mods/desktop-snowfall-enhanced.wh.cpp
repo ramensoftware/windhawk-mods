@@ -5,9 +5,9 @@
 // @description     Enhanced Desktop Snowfall with plowing Steam Train / Bulldozer, snowman building, presets, and customization
 // @description:ru-RU Улучшенный снегопад с паровозиком и бульдозером для расчистки снега, лепкой снеговиков, пресетами и кастомизацией
 // @version         2.0
-// @author          hiol09 & mikybuilds
+// @author          hiol09
 // @github          https://github.com/hiol09
-// @homepage        https://github.com/mikybuilds/desktop-snowfall
+// @homepage        https://github.com/hiol09/windhawk-mods
 // @license         MIT
 // @include         windhawk.exe
 // @compilerOptions -ld2d1 -ld3d11 -ldcomp -ldwmapi -luser32 -lole32 -loleaut32 -lshell32
@@ -144,8 +144,8 @@ Snow falls over your desktop and settles on top of windows and the taskbar, with
 - enableSnowman: false
   $name: Enable Snowman Building
   $name:ru-RU: Включить лепку снеговиков
-  $description: Hold [Ctrl + E] over snow to roll a snowball; stack 2 to build a snowman! Click to melt.
-  $description:ru-RU: Зажмите [Ctrl + E] над сугробом для лепки снежка; соедините 2 снежка в снеговика! Кликните ЛКМ, чтобы растопить.
+  $description: Hold [Ctrl + E] over snow to roll a snowball; stack 2 to build a snowman! (Note: Ctrl+E also opens search in Explorer/Browsers; click snowmen with LMB to melt)
+  $description:ru-RU: Зажмите [Ctrl + E] над сугробом для лепки снежка; соедините 2 снежка в снеговика! (Примечание: в Проводнике/браузерах Ctrl+E также открывает поиск; клик ЛКМ растапливает)
 - hatStyle: tophat
   $name: Snowman Hat Style
   $name:ru-RU: Головной убор снеговика
@@ -656,7 +656,6 @@ struct VehicleItem {
     uint64_t bodyKey = 0;
     float width = 46.0f;
     float height = 24.0f;
-    float trackAnim = 0;
     float wheelAngle = 0;
     bool isBeingDragged = false;
     float smokeTimer = 0;
@@ -758,7 +757,7 @@ class Overlay {
 
     // Vehicle and Snowman updates
     void UpdateVehicle(const POINT& cursor, bool isLButtonDown, float dt);
-    void SummonVehicle();
+    void SummonVehicle(uint64_t targetKey = 0);
     bool IsCursorOverSnow(const POINT& cursor);
     void UpdateSnowballKeyE(const POINT& cursor, bool isEKeyDown, float dt);
     void CheckClickSnowman(const POINT& cursor, bool isLButtonDown);
@@ -1853,9 +1852,12 @@ bool Overlay::InheritSnow(Cap& cap, unsigned lastSeen) {
 }
 
 void Overlay::UpdateCaps(float dt) {
-    unsigned lastSeen = m_frame - 1;
-    std::vector<HWND> inheritedFrom;
+    if (g_settings.capHeight <= 0) {
+        m_caps.clear();
+        return;
+    }
 
+    std::vector<HWND> inheritedFrom;
     for (const Body& b : m_bodies) {
         if (!b.snowCap) {
             continue;
@@ -1863,12 +1865,25 @@ void Overlay::UpdateCaps(float dt) {
 
         auto [it, inserted] = m_caps.try_emplace(b.key);
         Cap& cap = it->second;
-        if (inserted) {
-            cap.hwnd = b.hwnd;
+        const int width = b.rc.right - b.rc.left;
+
+        if (inserted || cap.seenFrame != m_frame - 1) {
+            // New, or back after being minimized or hidden: just put the snow
+            // on top.
+            unsigned lastSeen = inserted ? 0 : cap.seenFrame;
+            if (inserted) {
+                cap.hwnd = b.hwnd;
+                cap.seed = Hash32(static_cast<uint32_t>(b.key) ^
+                                  static_cast<uint32_t>(b.key >> 32));
+            }
             cap.rc = b.rc;
-            cap.seed = Hash32(static_cast<uint32_t>(b.key) ^
-                              static_cast<uint32_t>(b.key >> 32));
-            cap.cols.resize(b.rc.right - b.rc.left);
+            cap.cols.resize(width);
+            for (Column& col : cap.cols) {
+                col.lift = col.vel = col.hang = 0;
+            }
+            cap.vx = cap.vy = cap.carry = 0;
+            cap.squash = cap.squashVel = 0;
+            cap.airborne = false;
             if (InheritSnow(cap, lastSeen)) {
                 inheritedFrom.push_back(cap.hwnd);
             }
@@ -1883,10 +1898,12 @@ void Overlay::UpdateCaps(float dt) {
 
     for (HWND hwnd : inheritedFrom) {
         for (auto it = m_caps.begin(); it != m_caps.end();) {
-            Cap& cap = it->second;
-            if (cap.hwnd == hwnd && cap.seenFrame != m_frame) {
-                if (cap.seenFrame == m_frame - 1) {
-                    DropColumns(cap, 0, static_cast<int>(cap.cols.size()));
+            Cap& other = it->second;
+            if (other.hwnd == hwnd && other.seenFrame != m_frame) {
+                for (size_t c = 0; c < other.cols.size(); c++) {
+                    if (other.cols[c].h > 0) {
+                        DropColumns(other, static_cast<int>(c), 1);
+                    }
                 }
                 it = m_caps.erase(it);
             } else {
@@ -1903,19 +1920,30 @@ void Overlay::UpdateCaps(float dt) {
 }
 
 // ─── VEHICLE (STEAM TRAIN & BULLDOZER) ───
-void Overlay::SummonVehicle() {
+void Overlay::SummonVehicle(uint64_t targetKey) {
     if (m_bodies.empty()) return;
-    int bestIdx = 0;
-    int bestW = 0;
-    for (size_t i = 0; i < m_bodies.size(); i++) {
-        if (m_bodies[i].snowCap) {
-            int w = m_bodies[i].rc.right - m_bodies[i].rc.left;
-            if (w > bestW) {
-                bestW = w;
+    int bestIdx = -1;
+    if (targetKey != 0) {
+        for (size_t i = 0; i < m_bodies.size(); i++) {
+            if (m_bodies[i].key == targetKey && m_bodies[i].snowCap) {
                 bestIdx = static_cast<int>(i);
+                break;
             }
         }
     }
+    if (bestIdx == -1) {
+        int bestW = 0;
+        for (size_t i = 0; i < m_bodies.size(); i++) {
+            if (m_bodies[i].snowCap) {
+                int w = m_bodies[i].rc.right - m_bodies[i].rc.left;
+                if (w > bestW) {
+                    bestW = w;
+                    bestIdx = static_cast<int>(i);
+                }
+            }
+        }
+    }
+    if (bestIdx == -1) return;
     const auto& b = m_bodies[bestIdx];
     float vWidth = (g_settings.vehicleType == VehicleType::Train) ? 110.0f : 46.0f;
     float vHeight = (g_settings.vehicleType == VehicleType::Train) ? 40.0f : 24.0f;
@@ -1947,10 +1975,11 @@ void Overlay::UpdateVehicle(const POINT& cursor, bool isLButtonDown, float dt) {
         m_vehicleCooldown = std::max(0.0f, m_vehicleCooldown - dt);
 
         if (g_settings.vehicleSpawnMode == VehicleSpawnMode::Always) {
-            SummonVehicle();
+            SummonVehicle(0);
         } else { // Auto
             if (m_vehicleCooldown <= 0.0f) {
                 float maxAvgSnow = 0.0f;
+                uint64_t bestTargetKey = 0;
                 for (size_t i = 0; i < m_bodies.size(); i++) {
                     const auto& b = m_bodies[i];
                     if (!b.snowCap) continue;
@@ -1961,11 +1990,12 @@ void Overlay::UpdateVehicle(const POINT& cursor, bool isLButtonDown, float dt) {
                     float avgH = sumH / it->second.cols.size();
                     if (avgH > maxAvgSnow && (b.rc.right - b.rc.left) > 150) {
                         maxAvgSnow = avgH;
+                        bestTargetKey = b.key;
                     }
                 }
 
-                if (maxAvgSnow >= 2.0f) {
-                    SummonVehicle();
+                if (maxAvgSnow >= 2.0f && bestTargetKey != 0) {
+                    SummonVehicle(bestTargetKey);
                 }
             }
         }
@@ -2021,7 +2051,6 @@ void Overlay::UpdateVehicle(const POINT& cursor, bool isLButtonDown, float dt) {
     m_vehicle.speed = static_cast<float>(g_settings.vehicleSpeed);
 
     m_vehicle.x += m_vehicle.speed * m_vehicle.direction * dt;
-    m_vehicle.trackAnim += m_vehicle.speed * 0.05f * dt;
     m_vehicle.wheelAngle += m_vehicle.speed * 0.08f * dt;
 
     // Chimney smoke puffs
@@ -2055,17 +2084,20 @@ void Overlay::UpdateVehicle(const POINT& cursor, bool isLButtonDown, float dt) {
         }
     }
 
-    // Check if body still exists
+    // Check if body still exists and is currently visible
     auto it = m_caps.find(m_vehicle.bodyKey);
-    if (it == m_caps.end()) {
-        // Body was closed or minimized: snap to nearest or despawn
+    if (it == m_caps.end() || it->second.seenFrame != m_frame) {
+        // Body was closed, minimized, or hidden: find another active body or despawn
         bool foundOther = false;
         for (const auto& b : m_bodies) {
-            if (b.snowCap && m_caps.count(b.key)) {
-                m_vehicle.bodyKey = b.key;
-                m_vehicle.y = static_cast<float>(b.rc.top);
-                foundOther = true;
-                break;
+            if (b.snowCap) {
+                auto otherIt = m_caps.find(b.key);
+                if (otherIt != m_caps.end() && otherIt->second.seenFrame == m_frame) {
+                    m_vehicle.bodyKey = b.key;
+                    m_vehicle.y = static_cast<float>(b.rc.top);
+                    foundOther = true;
+                    break;
+                }
             }
         }
         if (!foundOther) {
