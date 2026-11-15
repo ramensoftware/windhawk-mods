@@ -537,8 +537,8 @@ static bool IsSafeToOpen(const std::wstring& path) {
         L".jpg", L".jpeg", L".png", L".gif", L".webp", L".heic", L".heif", L".bmp", L".tif", L".tiff", L".avif",
         L".mp4", L".mov", L".mkv", L".webm", L".3gp", L".avi", L".m4v",
         L".mp3", L".m4a", L".aac", L".wav", L".ogg", L".opus", L".flac", L".amr",
-        L".pdf", L".txt", L".md", L".csv", L".rtf", L".odt", L".ods", L".odp",
-        L".doc", L".docx", L".xls", L".xlsx", L".ppt", L".pptx", L".zip",
+        L".pdf", L".txt", L".md", L".csv", L".odt", L".ods", L".odp",
+        L".docx", L".xlsx", L".pptx", L".zip",  // not .doc/.xls/.ppt/.rtf: they can carry macros or embedded objects
     };
     size_t dot = path.find_last_of(L'.');
     size_t slash = path.find_last_of(L"\\/");
