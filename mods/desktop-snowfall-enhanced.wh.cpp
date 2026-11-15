@@ -7,10 +7,9 @@
 // @version         2.0
 // @author          hiol09
 // @github          https://github.com/hiol09
-// @homepage        https://github.com/hiol09/windhawk-mods
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -ld3d11 -ldcomp -ldwmapi -luser32 -lole32 -loleaut32 -lshell32
+// @compilerOptions -ld2d1 -ld3d11 -ldcomp -ldwmapi -luser32 -lole32 -loleaut32 -lshell32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -840,7 +839,7 @@ class Overlay {
     unsigned m_frame = 0;
 };
 
-constexpr wchar_t kOverlayClass[] = L"WindhawkDesktopSnowfallOverlay";
+constexpr wchar_t kOverlayClass[] = L"WindhawkWinterWonderlandOverlay";
 
 Overlay::~Overlay() {
     ReleaseDeviceResources();
@@ -1159,7 +1158,7 @@ bool Overlay::Create() {
     m_hwnd = CreateWindowEx(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW |
             WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP,
-        kOverlayClass, L"Desktop Snowfall", WS_POPUP, m_area.left, m_area.top,
+        kOverlayClass, L"Desktop Snowfall & Winter Wonderland", WS_POPUP, m_area.left, m_area.top,
         m_width, m_height, nullptr, nullptr, wc.hInstance, nullptr);
     if (!m_hwnd) {
         return false;
@@ -1900,10 +1899,8 @@ void Overlay::UpdateCaps(float dt) {
         for (auto it = m_caps.begin(); it != m_caps.end();) {
             Cap& other = it->second;
             if (other.hwnd == hwnd && other.seenFrame != m_frame) {
-                for (size_t c = 0; c < other.cols.size(); c++) {
-                    if (other.cols[c].h > 0) {
-                        DropColumns(other, static_cast<int>(c), 1);
-                    }
+                if (other.seenFrame == m_frame - 1) {
+                    DropColumns(other, 0, static_cast<int>(other.cols.size()));
                 }
                 it = m_caps.erase(it);
             } else {
@@ -2095,6 +2092,7 @@ void Overlay::UpdateVehicle(const POINT& cursor, bool isLButtonDown, float dt) {
                 if (otherIt != m_caps.end() && otherIt->second.seenFrame == m_frame) {
                     m_vehicle.bodyKey = b.key;
                     m_vehicle.y = static_cast<float>(b.rc.top);
+                    m_vehicle.x = (m_vehicle.direction > 0) ? static_cast<float>(b.rc.left) : static_cast<float>(b.rc.right);
                     foundOther = true;
                     break;
                 }
