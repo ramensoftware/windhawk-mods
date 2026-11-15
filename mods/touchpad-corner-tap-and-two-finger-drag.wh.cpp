@@ -35,14 +35,24 @@ Works with any Windows Precision Touchpad (Synaptics, ELAN, Alps, Goodix, Surfac
 so on). Older non-precision touchpads on vendor-only drivers don't send the raw finger
 positions this mod needs.
 
-With this on you'll probably want to turn off Windows' own "Tap with two fingers to
-right-click" and "Tap twice and drag" in Settings > Bluetooth & devices > Touchpad.
+The corner tap builds on Windows' own tap to click, so keep "Tap with a single finger
+to single-click" turned on in Settings > Bluetooth & devices > Touchpad. You'll
+probably want to turn off "Tap with two fingers to right-click" and "Tap twice and
+drag" there though.
+
+If you also use Touchpad Relaxed Hand Tracking, leave its two-finger option off, since
+both mods would be handling the same two fingers.
 
 ## How it works
 The mod reads raw finger positions from the touchpad (HID Raw Input) and watches mouse
 events with a low-level hook. When Windows turns a corner tap into a left click, the
-click is swapped for a right click. Two fingers held still start a drag that the mod
-drives itself, and Windows' scroll events are dropped for the duration of the drag.
+click is swapped for a right click. A resting palm is ignored, as long as the touchpad
+reports it as one.
+
+Two fingers held still start a drag that the mod drives itself, and Windows' scroll
+events are dropped for the duration of the drag. Apps that scroll with the touchpad
+directly instead of with scroll events (browsers, File Explorer and most newer apps)
+can still scroll a little while you drag.
 
 It runs as a Windhawk tool mod in its own background process (with UIAccess when
 available, so it also works over windows of apps running as administrator). It doesn't
@@ -52,12 +62,9 @@ inject into or change any other program.
 
 // ==WindhawkModSettings==
 /*
-- cornerTap: enabled
+- cornerTap: true
   $name: Corner tap right-click
   $description: A quick one-finger tap in the chosen corner right-clicks
-  $options:
-  - enabled: Enabled
-  - disabled: Disabled
 - corner: bottomRight
   $name: Corner
   $options:
@@ -72,63 +79,57 @@ inject into or change any other program.
 - maxTapMs: 400
   $name: Maximum tap length (ms)
   $description: A touch longer than this is not treated as a tap
-- twoFingerDrag: enabled
+- twoFingerDrag: true
   $name: Two-finger hold-and-drag
   $description: Hold two fingers still, then move them, to drag
-  $options:
-  - enabled: Enabled
-  - disabled: Disabled
 - holdMs: 350
   $name: Hold time before drag (ms)
   $description: Longer avoids starting a drag when you rest two fingers before scrolling
 - dragSpeed: 130
   $name: Drag pointer speed (%)
-  $description: 100 means moving across the whole touchpad moves the pointer across the whole screen
+  $description: At 100, moving across the whole width of the touchpad moves the pointer across the whole width of the screen
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 
+#include <hidusage.h>
+#include <hidpi.h>
+
+#include <windhawk_utils.h>
+
 #include <cmath>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
-// ---------------------------------------------------------------------------
-// HID parser declarations (hid.dll). Declared here to avoid depending on DDK headers.
-// ---------------------------------------------------------------------------
-extern "C" {
-struct TP_HIDP_CAPS {
-    USHORT Usage, UsagePage, InputReportByteLength, OutputReportByteLength,
-        FeatureReportByteLength;
-    USHORT Reserved[17];
-    USHORT NumberLinkCollectionNodes, NumberInputButtonCaps, NumberInputValueCaps,
-        NumberInputDataIndices, NumberOutputButtonCaps, NumberOutputValueCaps,
-        NumberOutputDataIndices, NumberFeatureButtonCaps, NumberFeatureValueCaps,
-        NumberFeatureDataIndices;
-};
-LONG __stdcall HidP_GetCaps(PVOID preparsed, TP_HIDP_CAPS* caps);
-LONG __stdcall HidP_GetValueCaps(int reportType, PVOID valueCaps, PUSHORT length,
-                                 PVOID preparsed);
-LONG __stdcall HidP_GetUsageValue(int reportType, USHORT usagePage, USHORT linkCollection,
-                                  USHORT usage, PULONG value, PVOID preparsed,
-                                  PCHAR report, ULONG reportLength);
-LONG __stdcall HidP_GetUsages(int reportType, USHORT usagePage, USHORT linkCollection,
-                              PUSHORT usageList, PULONG usageLength, PVOID preparsed,
-                              PCHAR report, ULONG reportLength);
-}
+constexpr USAGE kPageGeneric = 0x01;
+constexpr USAGE kUsageX = 0x30;
+constexpr USAGE kUsageY = 0x31;
+constexpr USAGE kPageDigitizer = 0x0D;
+constexpr USAGE kUsageTouchPad = 0x05;
+constexpr USAGE kUsageTipSwitch = 0x42;
+constexpr USAGE kUsageConfidence = 0x47;
+constexpr USAGE kUsageContactId = 0x51;
+constexpr USAGE kUsageContactCount = 0x54;
 
-constexpr LONG kHidpOk = 0x00110000;
-constexpr int kHidpInput = 0;
-constexpr int kValueCapsSize = 72;  // sizeof(HIDP_VALUE_CAPS)
 constexpr ULONG_PTR kMarker = 0xC0FFEE42;  // tags input we inject ourselves
-constexpr UINT WM_TP_RIGHTCLICK = WM_APP + 1;
-constexpr DWORD kClickAfterLiftMs = 800;
-constexpr double kMaxTapMove = 0.04;
+constexpr UINT kMsgReloadSettings = WM_APP + 1;  // thread message from the Windhawk thread
+
+constexpr UINT_PTR kHoldTimer = 1;   // only while two fingers are held still
+constexpr UINT_PTR kTapTimer = 2;    // only while a click is held back
+constexpr UINT_PTR kStaleTimer = 3;  // only while something touches the pad
+
+constexpr DWORD kClickAfterLiftMs = 800;  // a tap's click comes this soon after the lift
+constexpr DWORD kLiftWaitMs = 60;         // how long a held-back click waits for the lift report
+constexpr DWORD kPendingMaxMs = 1500;     // never hold a click back longer than this
+constexpr DWORD kStaleFrameMs = 500;      // no report for this long means the touch is over
+constexpr DWORD kAfterDragMs = 600;       // Windows' leftover scroll events after a drag
+constexpr double kMaxTapMove = 0.04;      // fraction of the touchpad width
 constexpr double kHoldMove = 0.015;
 
 // ---------------------------------------------------------------------------
-// Settings
+// Settings. Written on the Windhawk thread only before the worker starts, then
+// reloaded on the worker thread itself.
 // ---------------------------------------------------------------------------
 struct Settings {
     bool cornerTap = true;
@@ -142,21 +143,6 @@ struct Settings {
 Settings g_s;
 
 static int Clamp(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
-
-// A setting the user never changed reads back empty (0 for an int), not the
-// default declared above, so 0 means "use the default" for every number here.
-static int IntOr(PCWSTR name, int def, int lo, int hi) {
-    int v = Wh_GetIntSetting(name);
-    return v == 0 ? def : Clamp(v, lo, hi);
-}
-
-// Empty also means untouched, so only an explicit "disabled" turns a feature off.
-static bool Enabled(PCWSTR name) {
-    PCWSTR v = Wh_GetStringSetting(name);
-    bool off = v && wcscmp(v, L"disabled") == 0;
-    Wh_FreeStringSetting(v);
-    return !off;
-}
 
 static void ReadWindowsZone(double* w, double* h) {
     const wchar_t* key = L"Software\\Microsoft\\Windows\\CurrentVersion\\PrecisionTouchPad";
@@ -172,21 +158,20 @@ static void ReadWindowsZone(double* w, double* h) {
 
 static void LoadSettings() {
     Settings s;
-    s.cornerTap = Enabled(L"cornerTap");
-    PCWSTR corner = Wh_GetStringSetting(L"corner");
-    s.bottomLeft = corner && wcscmp(corner, L"bottomLeft") == 0;
-    Wh_FreeStringSetting(corner);
+    s.cornerTap = Wh_GetIntSetting(L"cornerTap") != 0;
+    s.bottomLeft =
+        wcscmp(WindhawkUtils::StringSetting::make(L"corner"), L"bottomLeft") == 0;
 
     double ww = 0.5, wh = 0.33;
     ReadWindowsZone(&ww, &wh);
     int zw = Wh_GetIntSetting(L"zoneWidth"), zh = Wh_GetIntSetting(L"zoneHeight");
-    s.zoneW = (zw > 0 && zw <= 100) ? zw / 100.0 : ww;
-    s.zoneH = (zh > 0 && zh <= 100) ? zh / 100.0 : wh;
+    s.zoneW = zw > 0 ? Clamp(zw, 1, 100) / 100.0 : ww;
+    s.zoneH = zh > 0 ? Clamp(zh, 1, 100) / 100.0 : wh;
 
-    s.maxTapMs = IntOr(L"maxTapMs", 400, 100, 1500);
-    s.twoFingerDrag = Enabled(L"twoFingerDrag");
-    s.holdMs = IntOr(L"holdMs", 350, 100, 2000);
-    s.dragSpeed = IntOr(L"dragSpeed", 130, 20, 500) / 100.0;
+    s.maxTapMs = Clamp(Wh_GetIntSetting(L"maxTapMs"), 100, 1500);
+    s.twoFingerDrag = Wh_GetIntSetting(L"twoFingerDrag") != 0;
+    s.holdMs = Clamp(Wh_GetIntSetting(L"holdMs"), 100, 2000);
+    s.dragSpeed = Clamp(Wh_GetIntSetting(L"dragSpeed"), 20, 500) / 100.0;
     g_s = s;
     Wh_Log(L"Settings: corner %s %.2fx%.2f, cornerTap %d, twoFingerDrag %d, hold %u ms",
            s.bottomLeft ? L"bottomLeft" : L"bottomRight", s.zoneW, s.zoneH, s.cornerTap,
@@ -194,41 +179,10 @@ static void LoadSettings() {
 }
 
 // ---------------------------------------------------------------------------
-// Touch tracking (worker thread only)
+// Output. SendInput's button flags name the physical buttons, so with the
+// buttons swapped the primary one is the right.
 // ---------------------------------------------------------------------------
-struct Dev {
-    bool valid = false;
-    std::vector<BYTE> preparsed;
-    std::vector<USHORT> slots;  // link collections that each hold one finger
-    LONG xMin = 0, xMax = 0, yMin = 0, yMax = 0;
-    int frameRemaining = 0;
-};
-
-std::unordered_map<HANDLE, Dev> g_devs;
-std::unordered_set<ULONG> g_down;
-std::unordered_map<ULONG, std::pair<double, double>> g_pos;  // raw pad units
-
-bool g_haveSession, g_sessionEnded, g_consumed;
-DWORD g_startTick, g_endTick;
-ULONG g_primaryId;
-double g_sx, g_sy, g_lx, g_ly;  // normalized 0..1
-int g_maxContacts;
-
-bool g_swallowUp;
-DWORD g_swallowTick;
-
-int g_twoMode;  // 0 idle, 1 holding, 2 dragging, 3 done until all fingers lift
-DWORD g_twoStart, g_dragEndTick;
-double g_startCx, g_startCy, g_refX, g_refY, g_accX, g_accY;
-int g_lastCount;
-bool g_buttonHeld;
-Dev* g_lastDev;
-
-HWND g_hwnd;
-HHOOK g_hook;
-HANDLE g_thread, g_stopEvent;
-
-static void SendMouse(DWORD flags, int dx = 0, int dy = 0) {
+static void SendMouse(DWORD flags, LONG dx = 0, LONG dy = 0) {
     INPUT in = {};
     in.type = INPUT_MOUSE;
     in.mi.dx = dx;
@@ -238,6 +192,73 @@ static void SendMouse(DWORD flags, int dx = 0, int dy = 0) {
     SendInput(1, &in, sizeof(in));
 }
 
+static void SendPrimary(bool down) {
+    bool swapped = GetSystemMetrics(SM_SWAPBUTTON);
+    SendMouse(down ? (swapped ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_LEFTDOWN)
+                   : (swapped ? MOUSEEVENTF_RIGHTUP : MOUSEEVENTF_LEFTUP));
+}
+
+static void SendSecondaryClick() {
+    bool swapped = GetSystemMetrics(SM_SWAPBUTTON);
+    SendMouse(swapped ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_RIGHTDOWN);
+    SendMouse(swapped ? MOUSEEVENTF_LEFTUP : MOUSEEVENTF_RIGHTUP);
+}
+
+// An absolute move skips the pointer speed and acceleration settings.
+static void SendCursorPos(int x, int y) {
+    int vx = GetSystemMetrics(SM_XVIRTUALSCREEN), vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN), vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (vw <= 0 || vh <= 0) {
+        SetCursorPos(x, y);
+        return;
+    }
+    // Windows maps n to the pixel n * width / 65536 rounded down, so round up here.
+    LONG ax = (LONG)(((LONGLONG)(x - vx) * 65536 + vw - 1) / vw);
+    LONG ay = (LONG)(((LONGLONG)(y - vy) * 65536 + vh - 1) / vh);
+    SendMouse(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, ax, ay);
+}
+
+// ---------------------------------------------------------------------------
+// Touchpad devices
+// ---------------------------------------------------------------------------
+struct Dev {
+    bool valid = false;
+    std::vector<BYTE> preparsed;
+    std::vector<USHORT> slots;  // link collections that each hold one finger
+    bool hasCount = false;
+    USHORT countCollection = 0;
+    double xMin = 0, xRange = 0, yMin = 0, yRange = 0;
+    double aspect = 1;  // physical height / width of the pad
+};
+
+struct Contact {
+    ULONG id;
+    double x, y;  // 0..1 across the pad
+    bool tip, conf;
+};
+
+std::unordered_map<HANDLE, Dev> g_devs;
+
+static double LogicalRange(const HIDP_VALUE_CAPS& c) {
+    LONGLONG lo = c.LogicalMin, hi = c.LogicalMax;
+    if (hi <= lo && c.BitSize > 0 && c.BitSize <= 32) {  // a maximum that only fits unsigned
+        lo = 0;
+        hi = (1LL << c.BitSize) - 1;
+    }
+    return (double)(hi - lo);
+}
+
+// Physical size in millimeters, or 0 when the device doesn't say.
+static double ExtentMm(const HIDP_VALUE_CAPS& c) {
+    int exponent = c.UnitsExp & 0xF;
+    if (exponent > 7)
+        exponent -= 16;
+    ULONG system = c.Units & 0xF;
+    double unitMm = system == 1 ? 10.0 : system == 3 ? 25.4 : 0;
+    double mm = ((double)c.PhysicalMax - c.PhysicalMin) * std::pow(10.0, exponent) * unitMm;
+    return mm >= 20 && mm <= 400 ? mm : 0;
+}
+
 static Dev* GetDev(HANDLE hDevice) {
     auto it = g_devs.find(hDevice);
     if (it != g_devs.end())
@@ -245,68 +266,109 @@ static Dev* GetDev(HANDLE hDevice) {
 
     Dev& d = g_devs[hDevice];
     UINT size = 0;
-    GetRawInputDeviceInfoW(hDevice, RIDI_PREPARSEDDATA, nullptr, &size);
-    if (!size)
+    if (GetRawInputDeviceInfoW(hDevice, RIDI_PREPARSEDDATA, nullptr, &size) != 0 || !size)
         return nullptr;
     d.preparsed.resize(size);
     if (GetRawInputDeviceInfoW(hDevice, RIDI_PREPARSEDDATA, d.preparsed.data(), &size) ==
         (UINT)-1)
         return nullptr;
-    PVOID pp = d.preparsed.data();
+    auto pp = (PHIDP_PREPARSED_DATA)d.preparsed.data();
 
-    TP_HIDP_CAPS caps;
-    if (HidP_GetCaps(pp, &caps) != kHidpOk)
+    HIDP_CAPS caps;
+    if (HidP_GetCaps(pp, &caps) != HIDP_STATUS_SUCCESS)
         return nullptr;
     USHORT n = caps.NumberInputValueCaps;
-    std::vector<BYTE> vc(kValueCapsSize * (n ? n : 1));
-    if (HidP_GetValueCaps(kHidpInput, vc.data(), &n, pp) != kHidpOk)
+    std::vector<HIDP_VALUE_CAPS> vc(n);
+    if (!n || HidP_GetValueCaps(HidP_Input, vc.data(), &n, pp) != HIDP_STATUS_SUCCESS)
         return nullptr;
 
-    bool gotY = false;
-    for (int i = 0; i < n; i++) {
-        const BYTE* p = vc.data() + i * kValueCapsSize;
-        USHORT page = *(const USHORT*)(p + 0);
-        USHORT link = *(const USHORT*)(p + 6);
-        bool isRange = p[12] != 0;
-        LONG lmin = *(const LONG*)(p + 40), lmax = *(const LONG*)(p + 44);
-        USHORT usage = *(const USHORT*)(p + 56);
-        if (page != 0x01 || isRange)
-            continue;
-        if (usage == 0x30) {
-            d.slots.push_back(link);
-            d.xMin = lmin;
-            d.xMax = lmax;
-        } else if (usage == 0x31 && !gotY) {
-            d.yMin = lmin;
-            d.yMax = lmax;
-            gotY = true;
+    const HIDP_VALUE_CAPS* xCaps = nullptr;
+    const HIDP_VALUE_CAPS* yCaps = nullptr;
+    for (USHORT i = 0; i < n; i++) {
+        const HIDP_VALUE_CAPS& c = vc[i];
+        USAGE usage = c.IsRange ? c.Range.UsageMin : c.NotRange.Usage;
+        if (c.UsagePage == kPageDigitizer && usage == kUsageContactCount) {
+            d.hasCount = true;
+            d.countCollection = c.LinkCollection;
+        } else if (c.UsagePage == kPageGeneric && usage == kUsageX) {
+            bool known = false;
+            for (USHORT s : d.slots)
+                known = known || s == c.LinkCollection;
+            if (!known)
+                d.slots.push_back(c.LinkCollection);
+            if (!xCaps)
+                xCaps = &c;
+        } else if (c.UsagePage == kPageGeneric && usage == kUsageY && !yCaps) {
+            yCaps = &c;
         }
     }
+    if (!xCaps || !yCaps)
+        return nullptr;
 
-    d.valid = !d.slots.empty() && d.xMax > d.xMin && d.yMax > d.yMin;
-    if (d.valid)
-        Wh_Log(L"Touchpad found: %zu contact slots, X %ld..%ld, Y %ld..%ld", d.slots.size(),
-               d.xMin, d.xMax, d.yMin, d.yMax);
-    else
-        Wh_Log(L"Device %p ignored (no usable X/Y contacts)", hDevice);
+    d.xMin = xCaps->LogicalMin;
+    d.xRange = LogicalRange(*xCaps);
+    d.yMin = yCaps->LogicalMin;
+    d.yRange = LogicalRange(*yCaps);
+    double wMm = ExtentMm(*xCaps), hMm = ExtentMm(*yCaps);
+    // Without a physical size, assume the X and Y units are the same size.
+    d.aspect = wMm > 0 && hMm > 0 ? hMm / wMm
+                                  : (d.xRange > 0 ? d.yRange / d.xRange : 1);
+
+    d.valid = !d.slots.empty() && d.xRange > 0 && d.yRange > 0;
+    Wh_Log(L"Touchpad %p: valid %d, %u contact slots, contact count %d, aspect %.2f",
+           hDevice, d.valid, (UINT)d.slots.size(), d.hasCount, d.aspect);
     return d.valid ? &d : nullptr;
 }
 
+// ---------------------------------------------------------------------------
+// Touch state (worker thread only). Rebuilt from every frame, so a lift report
+// that never arrives can't leave a finger "down" for good.
+// ---------------------------------------------------------------------------
+HWND g_hwnd;
+HHOOK g_hook;
+HANDLE g_thread, g_stopEvent;
+
+std::vector<Contact> g_frame;
+ULONG g_frameExpected;
+bool g_seenConfidence;  // until the pad reports Confidence once, nothing counts as a palm
+std::unordered_map<ULONG, std::pair<double, double>> g_fingers;  // this frame, palms left out
+int g_touching;  // everything on the pad this frame, palms included
+double g_aspect = 1;
+
+// Corner tap session, from the first finger down to the last one up.
+bool g_haveSession, g_sessionEnded, g_consumed;
+DWORD g_startTick, g_endTick;
+ULONG g_primaryId;
+double g_sx, g_sy, g_lx, g_ly;
+int g_maxFingers;
+
+// A primary click held back until it's clear whether it was a corner tap.
+bool g_pending, g_pendingUp;
+DWORD g_pendingTick, g_upTick;
+
+// Two-finger drag.
+int g_twoMode;  // 0 idle, 1 holding, 2 dragging, 3 done until all fingers lift
+DWORD g_twoStart, g_dragEndTick;
+double g_startCx, g_startCy, g_refX, g_refY;
+double g_curX, g_curY, g_scaleX, g_scaleY;  // pointer position and pixels per pad width
+int g_lastCount;
+bool g_buttonHeld;
+
 static void Centroid(double* cx, double* cy) {
     *cx = *cy = 0;
-    int n = 0;
-    for (ULONG id : g_down) {
-        auto it = g_pos.find(id);
-        if (it == g_pos.end())
-            continue;
-        *cx += it->second.first;
-        *cy += it->second.second;
-        n++;
+    for (auto& f : g_fingers) {
+        *cx += f.second.first;
+        *cy += f.second.second;
     }
-    if (n) {
-        *cx /= n;
-        *cy /= n;
+    if (!g_fingers.empty()) {
+        *cx /= g_fingers.size();
+        *cy /= g_fingers.size();
     }
+}
+
+static double Distance(double dx, double dy) {
+    dy *= g_aspect;  // in pad widths, so both axes count the same
+    return std::sqrt(dx * dx + dy * dy);
 }
 
 static void EndDrag() {
@@ -314,150 +376,214 @@ static void EndDrag() {
         return;
     g_buttonHeld = false;
     g_dragEndTick = GetTickCount();
-    SendMouse(MOUSEEVENTF_LEFTUP);
+    SendPrimary(false);
     Wh_Log(L"Two-finger drag end");
 }
 
+static void SetTwoMode(int mode) {
+    if (g_twoMode == 1 && mode != 1)
+        KillTimer(g_hwnd, kHoldTimer);
+    g_twoMode = mode;
+}
+
 static void TryStartDrag() {
-    if (g_twoMode != 1 || !g_s.twoFingerDrag || g_down.size() != 2 || !g_lastDev)
+    if (g_twoMode != 1 || !g_s.twoFingerDrag || g_fingers.size() != 2)
         return;
     if (GetTickCount() - g_twoStart < g_s.holdMs)
         return;
-    g_twoMode = 2;
+
+    POINT pt;
+    GetCursorPos(&pt);
+    MONITORINFO mi = {sizeof(mi)};
+    int width = GetSystemMetrics(SM_CXSCREEN);
+    if (GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi))
+        width = mi.rcMonitor.right - mi.rcMonitor.left;
+    g_curX = pt.x;
+    g_curY = pt.y;
+    g_scaleX = width * g_s.dragSpeed;
+    g_scaleY = g_scaleX * g_aspect;
+
+    SetTwoMode(2);
     Centroid(&g_refX, &g_refY);
     g_lastCount = 2;
-    g_accX = g_accY = 0;
-    SendMouse(MOUSEEVENTF_LEFTDOWN);
+    SendPrimary(true);
     g_buttonHeld = true;
     Wh_Log(L"Two-finger drag start");
 }
 
-static void UpdateTwoFinger(Dev& d) {
-    int count = (int)g_down.size();
+static void UpdateTwoFinger() {
+    int count = (int)g_fingers.size();
     if (count == 0) {
         EndDrag();
-        g_twoMode = 0;
+        SetTwoMode(0);
         return;
     }
-    double w = (double)(d.xMax - d.xMin);
     double cx, cy;
 
     if (g_twoMode == 2) {
         if (count < 2) {
             EndDrag();
-            g_twoMode = 3;
+            SetTwoMode(3);
             return;
         }
         Centroid(&cx, &cy);
-        if (count != g_lastCount) {
+        if (count != g_lastCount) {  // a finger joined: the centroid jumps, so start over from here
             g_refX = cx;
             g_refY = cy;
             g_lastCount = count;
             return;
         }
-        double scale = GetSystemMetrics(SM_CXSCREEN) * g_s.dragSpeed / w;
-        g_accX += (cx - g_refX) * scale;
-        g_accY += (cy - g_refY) * scale;
+        g_curX += (cx - g_refX) * g_scaleX;
+        g_curY += (cy - g_refY) * g_scaleY;
         g_refX = cx;
         g_refY = cy;
-        int mx = (int)g_accX, my = (int)g_accY;
-        g_accX -= mx;
-        g_accY -= my;
-        if (mx || my)
-            SendMouse(MOUSEEVENTF_MOVE, mx, my);
+        SendCursorPos((int)std::lround(g_curX), (int)std::lround(g_curY));
         return;
     }
     if (g_twoMode == 0) {
         if (count == 2 && g_s.twoFingerDrag) {
-            g_twoMode = 1;
+            SetTwoMode(1);
             g_twoStart = GetTickCount();
             Centroid(&g_startCx, &g_startCy);
+            SetTimer(g_hwnd, kHoldTimer, g_s.holdMs, nullptr);
         } else if (count > 2) {
-            g_twoMode = 3;
+            SetTwoMode(3);
         }
         return;
     }
     if (g_twoMode == 1) {
         if (count != 2) {
-            g_twoMode = 3;
+            SetTwoMode(3);
             return;
         }
         Centroid(&cx, &cy);
-        double dx = (cx - g_startCx) / w, dy = (cy - g_startCy) / w;
-        if (std::sqrt(dx * dx + dy * dy) > kHoldMove) {
-            g_twoMode = 3;  // moved before the hold finished: it's a scroll
+        if (Distance(cx - g_startCx, cy - g_startCy) > kHoldMove) {
+            SetTwoMode(3);  // moved before the hold finished, so it's a scroll
             return;
         }
         TryStartDrag();
     }
 }
 
-static void ProcessReport(Dev& d, BYTE* report, ULONG len) {
-    PVOID pp = d.preparsed.data();
-    PCHAR r = (PCHAR)report;
-
-    ULONG cc = 0;
-    bool hasCount =
-        HidP_GetUsageValue(kHidpInput, 0x0D, 0, 0x54, &cc, pp, r, len) == kHidpOk;
-    if (!hasCount)
-        d.frameRemaining = (int)d.slots.size();  // each report is a whole frame
-    else if (cc > 0)
-        d.frameRemaining = (int)cc;  // first report of a (hybrid mode) frame
-
-    int todo = d.frameRemaining < (int)d.slots.size() ? d.frameRemaining : (int)d.slots.size();
-    d.frameRemaining -= todo;
-
-    for (int i = 0; i < todo; i++) {
-        USHORT lc = d.slots[i];
-        USHORT usages[16];
-        ULONG ulen = ARRAYSIZE(usages);
-        bool tip = false;
-        if (HidP_GetUsages(kHidpInput, 0x0D, lc, usages, &ulen, pp, r, len) == kHidpOk)
-            for (ULONG u = 0; u < ulen; u++)
-                if (usages[u] == 0x42)
-                    tip = true;
-        ULONG id, x, y;
-        if (HidP_GetUsageValue(kHidpInput, 0x0D, lc, 0x51, &id, pp, r, len) != kHidpOk)
-            id = lc;
-        if (HidP_GetUsageValue(kHidpInput, 0x01, lc, 0x30, &x, pp, r, len) != kHidpOk)
-            continue;
-        if (HidP_GetUsageValue(kHidpInput, 0x01, lc, 0x31, &y, pp, r, len) != kHidpOk)
-            continue;
-        double nx = ((LONG)x - d.xMin) / (double)(d.xMax - d.xMin);
-        double ny = ((LONG)y - d.yMin) / (double)(d.yMax - d.yMin);
-
-        if (tip) {
-            if (g_down.empty() && (!g_haveSession || g_sessionEnded)) {
-                g_haveSession = true;
-                g_sessionEnded = false;
-                g_consumed = false;
-                g_startTick = GetTickCount();
-                g_primaryId = id;
-                g_maxContacts = 0;
-                g_sx = g_lx = nx;
-                g_sy = g_ly = ny;
-            }
-            g_down.insert(id);
-            g_pos[id] = {(double)(LONG)x, (double)(LONG)y};
-            if (id == g_primaryId) {
-                g_lx = nx;
-                g_ly = ny;
-            }
-        } else {
-            g_down.erase(id);
-            g_pos.erase(id);
-        }
-    }
-
-    if ((int)g_down.size() > g_maxContacts)
-        g_maxContacts = (int)g_down.size();
-    if (d.frameRemaining == 0 && g_down.empty() && g_haveSession && !g_sessionEnded) {
+// Forget everything on the pad, for when its reports stop mid-touch (a secure
+// desktop, or raw input paused while an elevated window has the focus).
+static void ResetTouch() {
+    EndDrag();
+    SetTwoMode(0);
+    g_fingers.clear();
+    g_touching = 0;
+    if (g_haveSession && !g_sessionEnded) {
         g_sessionEnded = true;
-        g_endTick = GetTickCount();
+        g_consumed = true;  // a cut-off touch is never a tap
     }
-    if (d.frameRemaining == 0) {
-        g_lastDev = &d;
-        UpdateTwoFinger(d);
+    KillTimer(g_hwnd, kStaleTimer);
+}
+
+static void ProcessFrame(const Dev& d) {
+    DWORD now = GetTickCount();
+    g_aspect = d.aspect;
+
+    for (const Contact& c : g_frame)
+        g_seenConfidence = g_seenConfidence || c.conf;
+
+    g_fingers.clear();
+    g_touching = 0;
+    for (const Contact& c : g_frame) {
+        if (!c.tip)
+            continue;
+        g_touching++;
+        // Confidence 0 marks a resting palm, which neither taps nor drags.
+        if (c.conf || !g_seenConfidence)
+            g_fingers[c.id] = {c.x, c.y};
+    }
+
+    if (!g_fingers.empty()) {
+        if (!g_haveSession || g_sessionEnded) {
+            auto& first = *g_fingers.begin();
+            g_haveSession = true;
+            g_sessionEnded = false;
+            g_consumed = false;
+            g_startTick = now;
+            g_primaryId = first.first;
+            g_maxFingers = 0;
+            g_sx = g_lx = first.second.first;
+            g_sy = g_ly = first.second.second;
+        }
+        auto it = g_fingers.find(g_primaryId);
+        if (it != g_fingers.end()) {
+            g_lx = it->second.first;
+            g_ly = it->second.second;
+        }
+        if ((int)g_fingers.size() > g_maxFingers)
+            g_maxFingers = (int)g_fingers.size();
+    } else if (g_haveSession && !g_sessionEnded) {
+        g_sessionEnded = true;
+        g_endTick = now;
+    }
+
+    // Restarted by every frame, so it only fires once the reports stop.
+    if (g_touching)
+        SetTimer(g_hwnd, kStaleTimer, kStaleFrameMs, nullptr);
+    else
+        KillTimer(g_hwnd, kStaleTimer);
+
+    UpdateTwoFinger();
+}
+
+// In hybrid mode a frame is spread over several reports. Only the first one
+// carries a contact count above zero, the rest carry zero.
+static void ProcessReport(const Dev& d, PCHAR report, ULONG len) {
+    auto pp = (PHIDP_PREPARSED_DATA)d.preparsed.data();
+
+    if (d.hasCount) {
+        ULONG count = 0;
+        if (HidP_GetUsageValue(HidP_Input, kPageDigitizer, d.countCollection,
+                               kUsageContactCount, &count, pp, report,
+                               len) == HIDP_STATUS_SUCCESS &&
+            count > 0) {
+            g_frame.clear();
+            g_frameExpected = count;
+        }
+        if (!g_frameExpected)
+            return;  // the rest of a frame whose start was missed
+    } else {
+        g_frame.clear();
+        g_frameExpected = (ULONG)d.slots.size();
+    }
+
+    for (USHORT lc : d.slots) {
+        if (g_frame.size() >= g_frameExpected)
+            break;
+        ULONG x, y;
+        if (HidP_GetUsageValue(HidP_Input, kPageGeneric, lc, kUsageX, &x, pp, report, len) !=
+                HIDP_STATUS_SUCCESS ||
+            HidP_GetUsageValue(HidP_Input, kPageGeneric, lc, kUsageY, &y, pp, report, len) !=
+                HIDP_STATUS_SUCCESS)
+            continue;
+        ULONG id = lc;
+        HidP_GetUsageValue(HidP_Input, kPageDigitizer, lc, kUsageContactId, &id, pp, report,
+                           len);
+
+        bool tip = false, conf = false;
+        USAGE usages[16];
+        ULONG ulen = ARRAYSIZE(usages);
+        if (HidP_GetUsages(HidP_Input, kPageDigitizer, lc, usages, &ulen, pp, report, len) ==
+            HIDP_STATUS_SUCCESS) {
+            for (ULONG u = 0; u < ulen; u++) {
+                if (usages[u] == kUsageTipSwitch)
+                    tip = true;
+                else if (usages[u] == kUsageConfidence)
+                    conf = true;
+            }
+        }
+        g_frame.push_back({id, ((LONG)x - d.xMin) / d.xRange, ((LONG)y - d.yMin) / d.yRange,
+                           tip, conf});
+    }
+
+    if (g_frame.size() >= g_frameExpected) {
+        ProcessFrame(d);
+        g_frame.clear();
+        g_frameExpected = 0;
     }
 }
 
@@ -477,62 +603,97 @@ static void OnRawInput(HRAWINPUT hRaw) {
         return;
     DWORD sz = ri->data.hid.dwSizeHid, cnt = ri->data.hid.dwCount;
     for (DWORD i = 0; i < cnt; i++)
-        ProcessReport(*d, ri->data.hid.bRawData + i * sz, sz);
+        ProcessReport(*d, (PCHAR)ri->data.hid.bRawData + i * sz, sz);
 }
 
 // ---------------------------------------------------------------------------
-// Corner tap + mouse hook
+// Corner tap. The hook and WM_INPUT run on the same thread, and the hook can
+// run before the report of the finger lifting has been read. So a click that
+// might be a corner tap is held back, and decided once the lift has been seen.
 // ---------------------------------------------------------------------------
 static bool InZone(double x, double y) {
     bool inX = g_s.bottomLeft ? x <= g_s.zoneW : x >= 1.0 - g_s.zoneW;
     return inX && y >= 1.0 - g_s.zoneH;
 }
 
+static bool TapShape(DWORD length) {
+    return g_s.cornerTap && g_haveSession && !g_consumed && g_maxFingers == 1 &&
+           length <= g_s.maxTapMs && InZone(g_sx, g_sy) &&
+           Distance(g_lx - g_sx, g_ly - g_sy) <= kMaxTapMove;
+}
+
+// Could this click still turn out to be a corner tap?
+static bool MaybeCornerTap(DWORD now) {
+    if (g_sessionEnded)
+        return now - g_endTick <= kClickAfterLiftMs && TapShape(g_endTick - g_startTick);
+    return TapShape(now - g_startTick);
+}
+
 static bool IsCornerTap() {
-    // A tap's click arrives only after the finger lifts. A button-down while a finger is
-    // still on the pad is a drag or a held press, so leave it alone.
-    if (!g_s.cornerTap || !g_haveSession || g_consumed || !g_sessionEnded || !g_down.empty())
-        return false;
+    return g_sessionEnded && TapShape(g_endTick - g_startTick);
+}
+
+static void CheckPending() {
+    if (!g_pending) {
+        KillTimer(g_hwnd, kTapTimer);
+        return;
+    }
     DWORD now = GetTickCount();
-    if (now - g_endTick > kClickAfterLiftMs)
-        return false;
-    if (g_endTick - g_startTick > g_s.maxTapMs)
-        return false;
-    if (g_maxContacts != 1 || !InZone(g_sx, g_sy))
-        return false;
-    double dx = g_lx - g_sx, dy = g_ly - g_sy;
-    if (std::sqrt(dx * dx + dy * dy) > kMaxTapMove)
-        return false;
-    g_consumed = true;
-    return true;
+    bool lifted = g_haveSession && g_sessionEnded;
+
+    if (!g_pendingUp) {
+        // Still pressed with the finger down: a press or a drag, so let it through.
+        if ((!lifted && now - g_pendingTick > kLiftWaitMs) ||
+            now - g_pendingTick > kPendingMaxMs) {
+            g_pending = false;
+            KillTimer(g_hwnd, kTapTimer);
+            SendPrimary(true);
+        }
+        return;
+    }
+    if (!lifted && now - g_upTick < kLiftWaitMs)
+        return;
+
+    g_pending = false;
+    KillTimer(g_hwnd, kTapTimer);
+    if (IsCornerTap()) {
+        g_consumed = true;
+        Wh_Log(L"Corner tap -> right click");
+        SendSecondaryClick();
+    } else {
+        SendPrimary(true);
+        SendPrimary(false);
+    }
 }
 
 static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode >= 0) {
-        auto* m = (MSLLHOOKSTRUCT*)lParam;
-        if (m->dwExtraInfo != kMarker) {
-            DWORD now = GetTickCount();
-            if (g_swallowUp && now - g_swallowTick > 1500)
-                g_swallowUp = false;  // safety reset
+    if (nCode >= 0 && ((MSLLHOOKSTRUCT*)lParam)->dwExtraInfo != kMarker) {
+        bool swapped = GetSystemMetrics(SM_SWAPBUTTON);
+        WPARAM primaryDown = swapped ? WM_RBUTTONDOWN : WM_LBUTTONDOWN;
+        WPARAM primaryUp = swapped ? WM_RBUTTONUP : WM_LBUTTONUP;
+        WPARAM secondaryDown = swapped ? WM_LBUTTONDOWN : WM_RBUTTONDOWN;
+        WPARAM secondaryUp = swapped ? WM_LBUTTONUP : WM_RBUTTONUP;
+        DWORD now = GetTickCount();
 
-            // During (and just after) a two-finger drag Windows still thinks the fingers
-            // are scrolling or two-finger-tapping: drop those events.
-            bool dragging = g_twoMode == 2 || (g_twoMode == 3 && now - g_dragEndTick < 600);
-            if (dragging && (wParam == WM_MOUSEWHEEL || wParam == WM_MOUSEHWHEEL ||
-                             wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONUP))
-                return 1;
+        // During (and just after) a two-finger drag Windows still thinks the fingers
+        // are scrolling or two-finger-tapping, so drop those events.
+        bool dragging = g_twoMode == 2 || (g_twoMode == 3 && g_dragEndTick &&
+                                           now - g_dragEndTick < kAfterDragMs);
+        if (dragging && (wParam == WM_MOUSEWHEEL || wParam == WM_MOUSEHWHEEL ||
+                         wParam == secondaryDown || wParam == secondaryUp))
+            return 1;
 
-            if (wParam == WM_LBUTTONDOWN && IsCornerTap()) {
-                g_swallowUp = true;
-                g_swallowTick = now;
-                Wh_Log(L"Corner tap -> right click");
-                return 1;
-            }
-            if (wParam == WM_LBUTTONUP && g_swallowUp) {
-                g_swallowUp = false;
-                PostMessageW(g_hwnd, WM_TP_RIGHTCLICK, 0, 0);
-                return 1;
-            }
+        if (wParam == primaryDown && !g_pending && MaybeCornerTap(now)) {
+            g_pending = true;
+            g_pendingUp = false;
+            g_pendingTick = now;
+            SetTimer(g_hwnd, kTapTimer, 15, nullptr);
+            return 1;
+        }
+        if (wParam == primaryUp && g_pending && !g_pendingUp) {
+            g_pendingUp = true;
+            g_upTick = now;
+            return 1;
         }
     }
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
@@ -544,14 +705,32 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             OnRawInput((HRAWINPUT)lParam);
             break;
         case WM_TIMER:
-            TryStartDrag();
-            return 0;
-        case WM_TP_RIGHTCLICK:
-            SendMouse(MOUSEEVENTF_RIGHTDOWN);
-            SendMouse(MOUSEEVENTF_RIGHTUP);
+            if (wParam == kHoldTimer) {
+                TryStartDrag();
+                // GetTickCount is coarse, so the hold can come up a few ms short.
+                if (g_twoMode == 1)
+                    SetTimer(hwnd, kHoldTimer, 20, nullptr);
+                else
+                    KillTimer(hwnd, kHoldTimer);
+            } else if (wParam == kTapTimer) {
+                CheckPending();
+            } else if (wParam == kStaleTimer) {
+                Wh_Log(L"Touchpad reports stopped mid-touch, resetting");
+                ResetTouch();
+                g_frame.clear();
+                g_frameExpected = 0;
+            }
             return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+static void OnSettingsReloaded() {
+    LoadSettings();
+    if (!g_s.twoFingerDrag && (g_twoMode == 1 || g_twoMode == 2)) {
+        EndDrag();
+        SetTwoMode(3);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -565,7 +744,10 @@ static HMODULE ThisModule() {
     return h;
 }
 
-static void RunEngine() {
+static DWORD WINAPI WorkerThread(LPVOID) {
+    // Physical pixels, so the drag lands right on every monitor.
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     HMODULE mod = ThisModule();
     const wchar_t* cls = L"WH_TouchpadCornerTap";
     WNDCLASSW wc = {};
@@ -578,10 +760,10 @@ static void RunEngine() {
     if (!g_hwnd) {
         Wh_Log(L"CreateWindow failed: %u", GetLastError());
         UnregisterClassW(cls, mod);
-        return;
+        return 0;
     }
 
-    RAWINPUTDEVICE rid = {0x0D, 0x05, RIDEV_INPUTSINK, g_hwnd};
+    RAWINPUTDEVICE rid = {kPageDigitizer, kUsageTouchPad, RIDEV_INPUTSINK, g_hwnd};
     if (!RegisterRawInputDevices(&rid, 1, sizeof(rid)))
         Wh_Log(L"RegisterRawInputDevices failed: %u", GetLastError());
 
@@ -589,7 +771,6 @@ static void RunEngine() {
     if (!g_hook)
         Wh_Log(L"SetWindowsHookEx failed: %u", GetLastError());
 
-    SetTimer(g_hwnd, 1, 20, nullptr);
     Wh_Log(L"Running");
 
     for (;;) {
@@ -598,28 +779,36 @@ static void RunEngine() {
             break;
         MSG msg;
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (!msg.hwnd && msg.message == kMsgReloadSettings) {
+                OnSettingsReloaded();
+                continue;
+            }
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
     }
 
-    EndDrag();  // never leave the left button stuck down
-    KillTimer(g_hwnd, 1);
+    EndDrag();  // never leave the button stuck down
+    if (g_pending) {
+        g_pending = false;
+        SendPrimary(true);
+        if (g_pendingUp)
+            SendPrimary(false);
+    }
+    KillTimer(g_hwnd, kHoldTimer);
+    KillTimer(g_hwnd, kTapTimer);
+    KillTimer(g_hwnd, kStaleTimer);
     if (g_hook)
         UnhookWindowsHookEx(g_hook);
     g_hook = nullptr;
 
-    RAWINPUTDEVICE rm = {0x0D, 0x05, RIDEV_REMOVE, nullptr};
+    RAWINPUTDEVICE rm = {kPageDigitizer, kUsageTouchPad, RIDEV_REMOVE, nullptr};
     RegisterRawInputDevices(&rm, 1, sizeof(rm));
 
     DestroyWindow(g_hwnd);
     g_hwnd = nullptr;
     UnregisterClassW(cls, mod);
     g_devs.clear();
-}
-
-static DWORD WINAPI WorkerThread(LPVOID) {
-    RunEngine();
     return 0;
 }
 
@@ -654,8 +843,10 @@ void WhTool_ModUninit() {
     }
 }
 
+// Settings belong to the worker thread, so it reloads them itself.
 void WhTool_ModSettingsChanged() {
-    LoadSettings();
+    if (g_thread)
+        PostThreadMessageW(GetThreadId(g_thread), kMsgReloadSettings, 0, 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
