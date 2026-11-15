@@ -14,9 +14,12 @@ permissions:
   pull-requests: read
 
 jobs:
+  # Fails on errors, which block the merge.
   run:
     runs-on: ubuntu-latest
     name: Test changed files
+    outputs:
+      review-item-count: ${{ steps.validate.outputs.review_item_count }}
     steps:
       # The test merge commit and its parents, which are diffed to list the
       # changed files.
@@ -50,6 +53,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Validate the changes
+        id: validate
         env:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_AUTHOR_ID: ${{ github.event.pull_request.user.id }}
@@ -57,3 +61,22 @@ jobs:
           PR_LABELS: ${{ steps.pr-labels.outputs.labels }}
         run: |
           python .github/pr_validation.py
+
+  # Fails on review items, which are left to the reviewer and don't block the
+  # merge by themselves.
+  review-items:
+    needs: run
+    # The review items are reported even when there are errors. A validation that
+    # didn't complete has no count, and nothing to report.
+    if: ${{ !cancelled() && needs.run.outputs.review-item-count != '' }}
+    runs-on: ubuntu-latest
+    name: Manual review
+    steps:
+      - name: Check for review items
+        env:
+          REVIEW_ITEM_COUNT: ${{ needs.run.outputs.review-item-count }}
+        run: |
+          if [ "$REVIEW_ITEM_COUNT" -gt 0 ]; then
+            echo "::error::Got $REVIEW_ITEM_COUNT review items, which require manual inspection by a reviewer. See the warnings of the \"Test changed files\" job."
+            exit 1
+          fi
