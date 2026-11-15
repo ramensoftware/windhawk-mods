@@ -17,9 +17,7 @@
 /*
 
 ## Screenshots
-![!Net Panel](https://raw.githubusercontent.com/k-ashix/not-net/main/assets/!Net.png)
-
-![!Net Cycle Scheduler](https://raw.githubusercontent.com/k-ashix/not-net/main/assets/!Netscheduler.png)
+![!Net](https://raw.githubusercontent.com/k-ashix/ashix-windhawk-mods/main/Not_Net/!Net.png)
 
 ## Two Modes
 - **Session-Only (Floating Pill / Panel, default):** Uses Windows Filtering Platform (WFP) dynamic sessions (`FWPM_SESSION_DYNAMIC`). Blocks vanish automatically on Windows restart, shutdown, or when `!Net` exits or crashes.
@@ -125,9 +123,9 @@
   - showCycleWidget: true
     $name: Show clock widget near pill
     $description: Keep a compact clock button beside the collapsed pill when Cycle Mode is enabled.
-  - cycleWidgetSize: 0
-    $name: Clock widget size (0-5)
-    $description: Customize the clock widget size (0 = default, 1-5 = larger).
+  - cycleWidgetSize: 5
+    $name: Clock widget size (0-10)
+    $description: Customize the clock widget size (0-10, 5 = default).
   - cycleWidgetAction: scheduler_only
     $name: Clock widget open behavior
     $description: Choose whether opening from the clock widget shows only the Cycle Mode popup or expands the pill, selects the app, and opens its scheduler.
@@ -343,7 +341,7 @@ struct ModSettings {
     bool rememberCycleTemplates = true;
     bool showCycleMs = false;
     bool showCycleWidget = true;
-    int cycleWidgetSize = 0;
+    int cycleWidgetSize = 5;
     CycleWidgetAction cycleWidgetAction = CycleWidgetAction::SchedulerOnly;
 
     bool lockSystemProcesses = true;
@@ -537,6 +535,10 @@ static int g_lastRowStride = 54;
 
 static std::vector<AppEntry> g_appList;
 static std::wstring g_lastFgExe;
+static bool g_lastFgIsOtherSessionOrUser = false;
+static std::mutex g_otherSessionCacheMtx;
+static std::unordered_set<std::wstring> g_cachedOtherSessionOnlyExes;
+static bool g_otherSessionCacheInitialized = false;
 static std::wstring g_statusBanner;
 static bool g_needsElevation = false;
 
@@ -735,41 +737,107 @@ static void LogAudit(const std::wstring& msg) {
 // Safety Classification
 // ============================================================================
 
+static const std::wstring& GetSelfDirLower() {
+    static std::wstring s_dir = []() {
+        wchar_t buf[MAX_PATH * 2]{};
+        DWORD len = GetModuleFileNameW(nullptr, buf, ARRAYSIZE(buf));
+        std::wstring p = (len > 0 && len < ARRAYSIZE(buf)) ? ToLower(std::wstring(buf, len)) : L"";
+        size_t pos = p.find_last_of(L"\\/");
+        return (pos != std::wstring::npos) ? p.substr(0, pos + 1) : L"";
+    }();
+    return s_dir;
+}
+
 static bool IsImmutableProtectedExe(const std::wstring& lowerExePath) {
+    if (lowerExePath.empty()) return false;
     std::wstring name = GetFileNameOnly(lowerExePath);
-    static const wchar_t* kImmutable[] = {
-        // Core OS kernel & session managers
+    if (name == L"system") return true;
+
+    bool hasDir = (lowerExePath.find_first_of(L"\\/") != std::wstring::npos);
+    bool inWinSys = !hasDir ||
+                    lowerExePath.find(L"\\windows\\system32\\") != std::wstring::npos ||
+                    lowerExePath.find(L"\\windows\\syswow64\\") != std::wstring::npos ||
+                    lowerExePath.find(L"\\windows\\winsxs\\") != std::wstring::npos;
+
+    // Core OS kernel, session managers, and Windows Security / SmartScreen in System32/SysWOW64
+    static const wchar_t* kCoreWinSys[] = {
         L"svchost.exe", L"lsass.exe", L"services.exe", L"csrss.exe",
-        L"winlogon.exe", L"smss.exe", L"wininit.exe", L"system", L"ntoskrnl.exe",
-        // Windhawk hosts (1.7.3 & 2.0)
-        L"windhawk.exe", L"windhawk-mod.exe", L"windhawk-mod-elevated.exe", L"windhawk-mod-uiaccess.exe",
-        // Microsoft Defender & SmartScreen
-        L"msmpeng.exe", L"nissrv.exe", L"mpcmdrun.exe", L"mpdefendercoreservice.exe",
-        L"securityhealthservice.exe", L"securityhealthsystray.exe", L"smartscreen.exe",
-        // Kaspersky
-        L"avp.exe", L"avpui.exe",
-        // Bitdefender
-        L"vsserv.exe", L"bdservicehost.exe", L"bdagent.exe", L"updatesrv.exe",
-        // ESET
-        L"ekrn.exe", L"egui.exe", L"eguiproxy.exe",
-        // Malwarebytes
-        L"mbamservice.exe", L"mbam.exe", L"mbamtray.exe",
-        // Avast / AVG
-        L"avastsvc.exe", L"avastui.exe", L"afwserv.exe", L"avgsvc.exe", L"avgui.exe",
-        // McAfee / Trellix
-        L"mcshield.exe", L"mfemms.exe", L"mfevtps.exe", L"masvc.exe",
-        // Trend Micro
-        L"coreframeworkhost.exe", L"coreserviceshell.exe", L"ntrtscan.exe", L"tmccsf.exe",
-        // Sophos
-        L"sophosfs.exe", L"sophoshealth.exe", L"sophosnetfilter.exe", L"sspservice.exe", L"savservice.exe",
-        // Norton / Symantec
-        L"nortonsecurity.exe", L"ns.exe", L"ccsvchst.exe", L"symcorpui.exe",
-        // CrowdStrike Falcon & SentinelOne
-        L"csfalconservice.exe", L"csfalconcontainer.exe",
-        L"sentinelagent.exe", L"sentinelservicehost.exe", L"sentinelstaticengine.exe", L"sentinelui.exe"
+        L"winlogon.exe", L"smss.exe", L"wininit.exe", L"ntoskrnl.exe",
+        L"smartscreen.exe", L"securityhealthservice.exe", L"securityhealthsystray.exe"
     };
-    for (auto* item : kImmutable) {
-        if (name == item) return true;
+    if (inWinSys) {
+        for (auto* c : kCoreWinSys) {
+            if (name == c) return true;
+        }
+    }
+
+    // Windhawk hosts (1.7.3 & 2.0) in Windhawk's install folder
+    if (name == L"windhawk.exe" || name == L"windhawk-mod.exe" ||
+        name == L"windhawk-mod-elevated.exe" || name == L"windhawk-mod-uiaccess.exe") {
+        const std::wstring& selfDir = GetSelfDirLower();
+        if (!hasDir ||
+            (!selfDir.empty() && lowerExePath.compare(0, selfDir.size(), selfDir) == 0) ||
+            lowerExePath.find(L"\\windhawk\\") != std::wstring::npos) {
+            return true;
+        }
+    }
+
+    // Microsoft Defender platform & service executables
+    if (name == L"msmpeng.exe" || name == L"nissrv.exe" ||
+        name == L"mpcmdrun.exe" || name == L"mpdefendercoreservice.exe") {
+        if (!hasDir || inWinSys ||
+            lowerExePath.find(L"\\microsoft\\windows defender\\") != std::wstring::npos ||
+            lowerExePath.find(L"\\windows defender\\") != std::wstring::npos ||
+            lowerExePath.find(L"\\windows defender advanced threat protection\\") != std::wstring::npos) {
+            return true;
+        }
+    }
+
+    // Third-party AV / EDR executables: require Program Files / ProgramData / System32 AND vendor folder match
+    bool inProtectedRoot = !hasDir || inWinSys ||
+                           lowerExePath.find(L"\\program files\\") != std::wstring::npos ||
+                           lowerExePath.find(L"\\program files (x86)\\") != std::wstring::npos ||
+                           lowerExePath.find(L"\\programdata\\") != std::wstring::npos;
+    if (!inProtectedRoot) return false;
+
+    struct VendorAvRule {
+        const wchar_t* exeName;
+        const wchar_t* vendorDir;
+    };
+    static const VendorAvRule kVendorAv[] = {
+        // Kaspersky
+        {L"avp.exe", L"\\kaspersky"}, {L"avpui.exe", L"\\kaspersky"},
+        // Bitdefender
+        {L"vsserv.exe", L"\\bitdefender"}, {L"bdservicehost.exe", L"\\bitdefender"},
+        {L"bdagent.exe", L"\\bitdefender"}, {L"updatesrv.exe", L"\\bitdefender"},
+        // ESET
+        {L"ekrn.exe", L"\\eset"}, {L"egui.exe", L"\\eset"}, {L"eguiproxy.exe", L"\\eset"},
+        // Malwarebytes
+        {L"mbamservice.exe", L"\\malwarebytes"}, {L"mbam.exe", L"\\malwarebytes"}, {L"mbamtray.exe", L"\\malwarebytes"},
+        // Avast / AVG
+        {L"avastsvc.exe", L"\\avast"}, {L"avastui.exe", L"\\avast"}, {L"afwserv.exe", L"\\avast"},
+        {L"avgsvc.exe", L"\\avg"}, {L"avgui.exe", L"\\avg"},
+        // McAfee / Trellix
+        {L"mcshield.exe", L"\\mcafee"}, {L"mfemms.exe", L"\\mcafee"}, {L"mfevtps.exe", L"\\mcafee"}, {L"masvc.exe", L"\\mcafee"},
+        {L"mcshield.exe", L"\\trellix"}, {L"mfemms.exe", L"\\trellix"}, {L"mfevtps.exe", L"\\trellix"}, {L"masvc.exe", L"\\trellix"},
+        // Trend Micro
+        {L"coreframeworkhost.exe", L"\\trend micro"}, {L"coreserviceshell.exe", L"\\trend micro"},
+        {L"ntrtscan.exe", L"\\trend micro"}, {L"tmccsf.exe", L"\\trend micro"},
+        // Sophos
+        {L"sophosfs.exe", L"\\sophos"}, {L"sophoshealth.exe", L"\\sophos"},
+        {L"sophosnetfilter.exe", L"\\sophos"}, {L"sspservice.exe", L"\\sophos"}, {L"savservice.exe", L"\\sophos"},
+        // Norton / Symantec
+        {L"nortonsecurity.exe", L"\\norton"}, {L"ns.exe", L"\\norton"}, {L"ccsvchst.exe", L"\\norton"},
+        {L"nortonsecurity.exe", L"\\symantec"}, {L"ns.exe", L"\\symantec"}, {L"ccsvchst.exe", L"\\symantec"}, {L"symcorpui.exe", L"\\symantec"},
+        // CrowdStrike Falcon & SentinelOne
+        {L"csfalconservice.exe", L"\\crowdstrike"}, {L"csfalconcontainer.exe", L"\\crowdstrike"},
+        {L"sentinelagent.exe", L"\\sentinelone"}, {L"sentinelservicehost.exe", L"\\sentinelone"},
+        {L"sentinelstaticengine.exe", L"\\sentinelone"}, {L"sentinelui.exe", L"\\sentinelone"}
+    };
+    for (const auto& rule : kVendorAv) {
+        if (name == rule.exeName && (!hasDir || lowerExePath.find(rule.vendorDir) != std::wstring::npos)) {
+            return true;
+        }
     }
     return false;
 }
@@ -869,20 +937,32 @@ static const std::vector<BYTE>& GetCurrentUserSidBytes() {
     return s_sid;
 }
 
-static std::vector<BYTE> GetInteractiveShellUserSidBytes() {
+static const std::vector<BYTE>& GetInteractiveShellUserSidBytes() {
+    static std::mutex s_shellMtx;
+    static DWORD s_cachedShellPid = 0;
+    static std::vector<BYTE> s_cachedShellSid;
+
     HWND hShell = GetShellWindow();
-    if (!hShell) return {};
     DWORD shellPid = 0;
-    GetWindowThreadProcessId(hShell, &shellPid);
-    if (!shellPid) return {};
-    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, shellPid);
-    if (!hProc) return {};
-    std::vector<BYTE> sid = ExtractProcessUserSidBytes(hProc);
-    CloseHandle(hProc);
-    return sid;
+    if (hShell) GetWindowThreadProcessId(hShell, &shellPid);
+
+    std::lock_guard<std::mutex> lk(s_shellMtx);
+    if (shellPid != 0 && shellPid == s_cachedShellPid && !s_cachedShellSid.empty()) {
+        return s_cachedShellSid;
+    }
+    s_cachedShellPid = shellPid;
+    s_cachedShellSid.clear();
+    if (shellPid != 0) {
+        HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, shellPid);
+        if (hProc) {
+            s_cachedShellSid = ExtractProcessUserSidBytes(hProc);
+            CloseHandle(hProc);
+        }
+    }
+    return s_cachedShellSid;
 }
 
-static bool IsProcessInCurrentUserSession(DWORD pid) {
+static bool IsProcessInCurrentUserSession(DWORD pid, HANDLE hExistingProc = nullptr) {
     if (pid == 0 || pid == 4) return false;
     static DWORD s_selfSession = []() {
         DWORD sid = 0;
@@ -896,20 +976,22 @@ static bool IsProcessInCurrentUserSession(DWORD pid) {
     const auto& selfSid = GetCurrentUserSidBytes();
     if (selfSid.empty()) return true;
 
-    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!hProc) return false;
+    HANDLE hProc = hExistingProc ? hExistingProc : OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    // If a protection/anti-cheat driver shields a process in the user's own interactive session from handle/token queries,
+    // treat it as belonging to the current interactive user rather than locking it as Session 0 / Other User.
+    if (!hProc) return true;
     std::vector<BYTE> procSid = ExtractProcessUserSidBytes(hProc);
-    CloseHandle(hProc);
-    if (procSid.empty()) return false;
+    if (!hExistingProc) CloseHandle(hProc);
+    if (procSid.empty()) return true;
 
     if (EqualSid(reinterpret_cast<PSID>(const_cast<BYTE*>(selfSid.data())),
                  reinterpret_cast<PSID>(procSid.data()))) {
         return true;
     }
     // Support Over-the-Shoulder UAC where a Standard desktop user elevates !Net with a separate Admin account
-    std::vector<BYTE> shellSid = GetInteractiveShellUserSidBytes();
+    const auto& shellSid = GetInteractiveShellUserSidBytes();
     if (!shellSid.empty() &&
-        EqualSid(reinterpret_cast<PSID>(shellSid.data()),
+        EqualSid(reinterpret_cast<PSID>(const_cast<BYTE*>(shellSid.data())),
                  reinterpret_cast<PSID>(procSid.data()))) {
         return true;
     }
@@ -923,6 +1005,24 @@ struct ProcessSnapshotItem {
     bool isCurrentUserSession = false;
 };
 
+static void UpdateOtherSessionCacheFromSnap(const std::vector<ProcessSnapshotItem>& snap) {
+    std::unordered_set<std::wstring> curUserSet;
+    std::unordered_set<std::wstring> otherSet;
+    for (const auto& item : snap) {
+        std::wstring low = ToLower(item.exePath);
+        if (low.empty()) continue;
+        if (item.isCurrentUserSession) curUserSet.insert(low);
+        else otherSet.insert(low);
+    }
+    std::unordered_set<std::wstring> onlyOther;
+    for (const auto& low : otherSet) {
+        if (curUserSet.count(low) == 0) onlyOther.insert(low);
+    }
+    std::lock_guard<std::mutex> lk(g_otherSessionCacheMtx);
+    g_cachedOtherSessionOnlyExes = std::move(onlyOther);
+    g_otherSessionCacheInitialized = true;
+}
+
 static std::vector<ProcessSnapshotItem> CaptureProcessSnapshot() {
     std::vector<ProcessSnapshotItem> out;
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -931,35 +1031,50 @@ static std::vector<ProcessSnapshotItem> CaptureProcessSnapshot() {
     pe.dwSize = sizeof(pe);
     if (Process32FirstW(snap, &pe)) {
         do {
-            std::wstring path = QueryProcessExePath(pe.th32ProcessID);
-            if (!path.empty()) {
-                bool inCurSession = IsProcessInCurrentUserSession(pe.th32ProcessID);
-                out.push_back({pe.th32ProcessID, pe.th32ParentProcessID, path, inCurSession});
+            DWORD pid = pe.th32ProcessID;
+            if (pid == 0 || pid == 4) continue;
+            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+            if (!hProc) continue;
+            wchar_t buf[MAX_PATH * 2]{};
+            DWORD len = (DWORD)(sizeof(buf) / sizeof(buf[0]));
+            if (QueryFullProcessImageNameW(hProc, 0, buf, &len) && len > 0) {
+                std::wstring path(buf, len);
+                bool inCurSession = IsProcessInCurrentUserSession(pid, hProc);
+                out.push_back({pid, pe.th32ParentProcessID, std::move(path), inCurSession});
             }
+            CloseHandle(hProc);
         } while (Process32NextW(snap, &pe));
     }
     CloseHandle(snap);
+    UpdateOtherSessionCacheFromSnap(out);
     return out;
 }
 
 static bool IsExeOnlyInOtherSessionOrUser(const std::wstring& lowerExePath,
                                           const std::vector<ProcessSnapshotItem>* optSnap = nullptr) {
     if (lowerExePath.empty()) return false;
-    std::vector<ProcessSnapshotItem> localSnap;
-    const auto* snapPtr = optSnap;
-    if (!snapPtr) {
-        localSnap = CaptureProcessSnapshot();
-        snapPtr = &localSnap;
+    if (optSnap) {
+        bool hasCurrentUser = false;
+        bool hasOther = false;
+        for (const auto& item : *optSnap) {
+            if (ToLower(item.exePath) == lowerExePath) {
+                if (item.isCurrentUserSession) hasCurrentUser = true;
+                else hasOther = true;
+            }
+        }
+        return hasOther && !hasCurrentUser;
     }
-    bool hasCurrentUser = false;
-    bool hasOther = false;
-    for (const auto& item : *snapPtr) {
-        if (ToLower(item.exePath) == lowerExePath) {
-            if (item.isCurrentUserSession) hasCurrentUser = true;
-            else hasOther = true;
+    if (!g_lastFgExe.empty() && lowerExePath == g_lastFgExe) {
+        return g_lastFgIsOtherSessionOrUser;
+    }
+    {
+        std::lock_guard<std::mutex> lk(g_otherSessionCacheMtx);
+        if (g_otherSessionCacheInitialized) {
+            return g_cachedOtherSessionOnlyExes.count(lowerExePath) > 0;
         }
     }
-    return hasOther && !hasCurrentUser;
+    auto localSnap = CaptureProcessSnapshot();
+    return IsExeOnlyInOtherSessionOrUser(lowerExePath, &localSnap);
 }
 
 static std::vector<std::wstring> CollectChildExePathsFromSnap(const std::wstring& parentLowerPath,
@@ -1028,11 +1143,6 @@ static std::vector<std::wstring> CollectChildExePathsFromSnap(const std::wstring
     }
     result.assign(uniqueExes.begin(), uniqueExes.end());
     return result;
-}
-
-static std::vector<std::wstring> CollectChildExePaths(const std::wstring& parentLowerPath) {
-    auto snap = CaptureProcessSnapshot();
-    return CollectChildExePathsFromSnap(parentLowerPath, snap);
 }
 
 static std::unordered_set<DWORD> GetPidsWithLiveNetwork() {
@@ -1387,6 +1497,7 @@ static void SyncForegroundStateAndFilter(bool allowFilterJump) {
 
     if (!fg || IsDesktopOrShellWindow(fg)) {
         g_lastFgExe.clear();
+        g_lastFgIsOtherSessionOrUser = false;
         NotifyCycleFocusChanged(L"");
         if (g_statusBanner.find(L"Windows Defender Firewall") != std::wstring::npos) {
             g_statusBanner.clear();
@@ -1396,10 +1507,11 @@ static void SyncForegroundStateAndFilter(bool allowFilterJump) {
 
     DWORD pid = 0;
     GetWindowThreadProcessId(fg, &pid);
+    DWORD resolvedPid = pid;
     std::wstring exe = pid ? QueryProcessExePath(pid) : L"";
     std::wstring low = ToLower(exe);
     if (GetFileNameOnly(low) == L"applicationframehost.exe") {
-        struct UwpCtx { DWORD hostPid; std::wstring childExe; } uwp{pid, L""};
+        struct UwpCtx { DWORD hostPid; DWORD childPid; std::wstring childExe; } uwp{pid, 0, L""};
         struct UwpEnum {
             static BOOL CALLBACK Proc(HWND ch, LPARAM lp) {
                 auto* ctx = reinterpret_cast<UwpCtx*>(lp);
@@ -1407,20 +1519,22 @@ static void SyncForegroundStateAndFilter(bool allowFilterJump) {
                 GetWindowThreadProcessId(ch, &cpid);
                 if (cpid && cpid != ctx->hostPid) {
                     std::wstring ce = QueryProcessExePath(cpid);
-                    if (!ce.empty()) { ctx->childExe = ce; return FALSE; }
+                    if (!ce.empty()) { ctx->childPid = cpid; ctx->childExe = ce; return FALSE; }
                 }
                 return TRUE;
             }
         };
         EnumChildWindows(fg, UwpEnum::Proc, reinterpret_cast<LPARAM>(&uwp));
-        if (!uwp.childExe.empty()) { exe = uwp.childExe; low = ToLower(exe); }
+        if (!uwp.childExe.empty()) { resolvedPid = uwp.childPid; exe = uwp.childExe; low = ToLower(exe); }
     }
     if (exe.empty()) {
         g_lastFgExe.clear();
+        g_lastFgIsOtherSessionOrUser = false;
         NotifyCycleFocusChanged(L"");
         return;
     }
     g_lastFgExe = low;
+    g_lastFgIsOtherSessionOrUser = resolvedPid ? !IsProcessInCurrentUserSession(resolvedPid) : false;
     NotifyCycleFocusChanged(low);
 
     auto extFw = (g_extFwScanTick == 0) ? ScanExternalFirewallBlocks(false) : GetCachedExternalFirewallBlocks();
@@ -1499,7 +1613,8 @@ static bool ApplyBlock(std::wstring exePath, Direction dir, bool includeChildren
         g_statusBanner = L"System-critical process is locked.";
         return false;
     }
-    if (IsExeOnlyInOtherSessionOrUser(low)) {
+    auto snap = CaptureProcessSnapshot();
+    if (IsExeOnlyInOtherSessionOrUser(low, &snap)) {
         g_statusBanner = L"Session 0 / other-user process is isolated and locked.";
         return false;
     }
@@ -1512,14 +1627,13 @@ static bool ApplyBlock(std::wstring exePath, Direction dir, bool includeChildren
 
     std::vector<std::wstring> targets;
     if (includeChildren) {
-        targets = CollectChildExePaths(low);
+        targets = CollectChildExePathsFromSnap(low, snap);
     }
     if (targets.empty()) targets.push_back(low);
     targets.erase(std::remove_if(targets.begin(), targets.end(),
         [lockCrit](const std::wstring& t) {
             return IsImmutableProtectedExe(t) ||
-                   (lockCrit && IsCriticalSystemExe(t)) ||
-                   IsExeOnlyInOtherSessionOrUser(t);
+                   (lockCrit && IsCriticalSystemExe(t));
         }), targets.end());
     if (targets.empty()) return false;
 
@@ -2350,13 +2464,19 @@ static void RefreshAppList() {
     if (!isOwnWnd) {
         if (!fgWnd || IsDesktopOrShellWindow(fgWnd)) {
             g_lastFgExe.clear();
+            g_lastFgIsOtherSessionOrUser = false;
         } else {
             DWORD fgPid = 0;
             GetWindowThreadProcessId(fgWnd, &fgPid);
             if (fgPid != GetCurrentProcessId()) {
                 std::wstring q = fgPid ? ToLower(QueryProcessExePath(fgPid)) : L"";
-                if (!q.empty()) g_lastFgExe = q;
-                else g_lastFgExe.clear();
+                if (!q.empty()) {
+                    g_lastFgExe = q;
+                    g_lastFgIsOtherSessionOrUser = !IsProcessInCurrentUserSession(fgPid);
+                } else {
+                    g_lastFgExe.clear();
+                    g_lastFgIsOtherSessionOrUser = false;
+                }
             }
         }
     }
@@ -2751,7 +2871,7 @@ static void LoadSettings() {
     next.rememberCycleTemplates = Wh_GetIntSetting(L"Behavior.rememberCycleTemplates") != 0;
     next.showCycleMs = Wh_GetIntSetting(L"Behavior.showCycleMs") != 0;
     next.showCycleWidget = Wh_GetIntSetting(L"Behavior.showCycleWidget") != 0;
-    next.cycleWidgetSize = std::clamp(Wh_GetIntSetting(L"Behavior.cycleWidgetSize"), 0, 5);
+    next.cycleWidgetSize = std::clamp(Wh_GetIntSetting(L"Behavior.cycleWidgetSize"), 0, 10);
     auto sCycAct = WindhawkUtils::StringSetting::make(L"Behavior.cycleWidgetAction");
     next.cycleWidgetAction = (_wcsicmp(sCycAct.get(), L"navigate_pill") == 0)
         ? CycleWidgetAction::NavigatePill
@@ -5379,7 +5499,11 @@ static bool IsExeEligibleForCycle(const std::wstring& exeLower) {
     if (exeLower.empty()) return false;
     if (g_excludedExes.count(exeLower)) return false;
     if (IsImmutableProtectedExe(exeLower)) return false;
-    if (IsExeOnlyInOtherSessionOrUser(exeLower)) return false;
+    if (exeLower == g_lastFgExe) {
+        if (g_lastFgIsOtherSessionOrUser) return false;
+    } else if (IsExeOnlyInOtherSessionOrUser(exeLower)) {
+        return false;
+    }
     bool lockCrit = true;
     {
         std::lock_guard<std::mutex> lk(g_settingsMtx);
@@ -5500,7 +5624,7 @@ static void OpenCycleTargetFromWidget(const CycleStatusSnapshot* activeSnap) {
         targetApp.isExcluded = g_excludedExes.count(g_lastFgExe) > 0;
         targetApp.isImmutableLocked = IsImmutableProtectedExe(g_lastFgExe);
         targetApp.isCriticalLocked = IsCriticalSystemExe(g_lastFgExe);
-        targetApp.isOtherSessionOrUser = IsExeOnlyInOtherSessionOrUser(g_lastFgExe);
+        targetApp.isOtherSessionOrUser = g_lastFgIsOtherSessionOrUser;
         auto extFw = GetCachedExternalFirewallBlocks();
         auto itExt = extFw.find(g_lastFgExe);
         if (itExt != extFw.end() && itExt->second.dirMask != 0) targetApp.isExternalBlocked = true;
@@ -5545,7 +5669,7 @@ static void ComputeCycleWidgetRect(RECT& outRc, double revealProgress = 1.0) {
     GetMonitorInfoW(mon, &mi);
     RECT wa = mi.rcWork;
 
-    int sizeStep = std::clamp(s.cycleWidgetSize, 0, 5);
+    int sizeStep = std::clamp(s.cycleWidgetSize, 0, 10);
     int w = DpiScale(24 + sizeStep * 4, dpi);
     int h = DpiScale(20 + sizeStep * 4, dpi);
     int gap = DpiScale(4, dpi);
@@ -5615,10 +5739,10 @@ static void RenderCycleWidgetLayered(HWND hwnd) {
     int h = wrc.bottom - wrc.top;
     if (w <= 0 || h <= 0) return;
 
-    int sizeStep = 0;
+    int sizeStep = 5;
     {
         std::lock_guard<std::mutex> lk(g_settingsMtx);
-        sizeStep = std::clamp(g_settings.cycleWidgetSize, 0, 5);
+        sizeStep = std::clamp(g_settings.cycleWidgetSize, 0, 10);
     }
 
     UINT dpi = GetDpiForWindow(hwnd);
@@ -6255,7 +6379,7 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
                     }
                 }
                 if (!ShouldWidgetBeAvailable()) {
-                    SetCycleWidgetRevealed(false);
+                    if (g_widgetRevealed) SetCycleWidgetRevealed(false);
                     KillTimer(hwnd, TIMER_WIDGET_PROXIMITY);
                 } else {
                     POINT cur{};
@@ -6269,7 +6393,9 @@ static LRESULT CALLBACK FloatingWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
                     int prox = DpiScale(42, dpi);
                     InflateRect(&zone, prox, prox);
                     bool inZone = g_cycleWidgetHover || PtInRect(&zone, cur);
-                    SetCycleWidgetRevealed(inZone);
+                    if (inZone != g_widgetRevealed) {
+                        SetCycleWidgetRevealed(inZone);
+                    }
                 }
             } else if (wParam == TIMER_LATE_CHILD_POLL) {
                 SyncLateChildBlocks();
