@@ -16,11 +16,9 @@
 /*
 # Modern Run Dialog UI For Windows 10 & 11
 
-> ⚠️ **Lưu ý quan trọng (Smart App Control) / Important Note:**
-> - **🇻🇳 Tiếng Việt:** Nếu máy người dùng đang bật **Smart App Control (Kiểm soát Ứng dụng Thông minh)**, cần mở `windowsdefender://smartapp/` và chuyển sang **Tắt (Off)** thì `explorer.exe` mới được phép nạp các tệp `.dll` do Windhawk biên dịch. Nếu không tắt **Smart App Control** thì mod sẽ không dùng được.
-> - **🌐 English:** If **Smart App Control** is enabled on your PC, open `windowsdefender://smartapp/` and switch it to **Off** so `explorer.exe` is allowed to load the `.dll` files compiled by Windhawk. If **Smart App Control** is not turned off, the mod will not work.
->
-> ![Smart App Control - Off](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/5.0.104/50104disablesmartappcontrol.png)
+> ℹ️ **Compatibility Note (Smart App Control) / Lưu ý tương thích:**
+> - **🌐 English:** Like all Windhawk mods, this mod is compiled locally into an unsigned `.dll` file and loaded into `explorer.exe`. If Windows **Smart App Control** is active on your PC, Windows will block the compiled `.dll` and the mod will not load. See [Windhawk's documentation and guidance on Smart App Control](https://github.com/ramensoftware/windhawk/issues/696) for details.
+> - **🇻🇳 Tiếng Việt:** Giống như mọi bản mod trên Windhawk, mod này được biên dịch cục bộ thành tệp `.dll` không có chữ ký số để nạp vào `explorer.exe`. Nếu máy đang bật **Smart App Control (Kiểm soát Ứng dụng Thông minh)**, Windows sẽ chặn tệp `.dll` này khiến mod không thể hoạt động. Xem thêm [hướng dẫn và thảo luận chính thức của Windhawk về Smart App Control](https://github.com/ramensoftware/windhawk/issues/696).
 
 ![Modern Run Dialog UI Preview (Minimal Mode)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-run-dialog/main/5.0.104/50104minimalmode.png)
 
@@ -54,7 +52,7 @@
 
 ## 🌐 English
 
-> **Note (Smart App Control):** If **Smart App Control** is enabled on your system, please open `windowsdefender://smartapp/` and turn it **Off** so `explorer.exe` is permitted to load the `.dll` files compiled by Windhawk. If **Smart App Control** is not turned off, the mod will not work.
+> **Compatibility Note (Smart App Control):** If Windows **Smart App Control** is active, it blocks locally compiled Windhawk `.dll` files from loading into `explorer.exe` (see [Windhawk Issue #696](https://github.com/ramensoftware/windhawk/issues/696)).
 
 Replaces the classic Win32 **Run (`Win + R`)** dialog with a floating, borderless **Liquid Glass / Fluent** pill launcher rendered with **Direct2D & DirectWrite** (`Segoe UI Variable Text`). Works across **Windows 10** and **Windows 11** (including the latest Insider Canary/Dev builds with `.dll.mui` localized resources) without downloading `shell32.pdb`.
 
@@ -96,7 +94,7 @@ Replaces the classic Win32 **Run (`Win + R`)** dialog with a floating, borderles
 
 ## 🇻🇳 Tiếng Việt
 
-> **Lưu ý (Smart App Control):** Nếu máy đang bật **Smart App Control**, bạn cần mở `windowsdefender://smartapp/` và chuyển sang **Tắt (Off)** thì `explorer.exe` mới được phép nạp các tệp `.dll` do Windhawk biên dịch. Nếu không tắt **Smart App Control** thì mod sẽ không dùng được.
+> **Lưu ý tương thích (Smart App Control):** Nếu máy đang bật **Smart App Control**, Windows sẽ chặn nạp các tệp `.dll` biên dịch cục bộ của Windhawk vào `explorer.exe` khiến mod không hoạt động (xem chi tiết tại [Windhawk Issue #696](https://github.com/ramensoftware/windhawk/issues/696)).
 
 Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng giao diện viên thuốc nổi **Liquid Glass / Fluent** không viền, vẽ trực tiếp bằng **Direct2D & DirectWrite** (`Segoe UI Variable Text`). Tương thích mượt mà với cả **Windows 10** và **Windows 11** (bao gồm các bản Windows 11 Insider mới nhất dùng tài nguyên `.dll.mui`) mà không cần tải `shell32.pdb`.
 
@@ -115,7 +113,7 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
   * Gõ trực tiếp phép tính vào ô nhập Run (ví dụ `1+1`, `(25*4)/2`, `sqrt(144)`, `sin(pi/2)`, `2^10`) để xem ngay kết quả tính toán ở đầu hộp gợi ý; nhấn `Enter` hoặc nhấp chuột vào dòng kết quả để sao chép và điền ngay vào ô nhập.
 
 - **Dịch đa ngôn ngữ trực tiếp bằng Google Dịch (`文A`):**
-  * Nhấn vào nút biểu tượng **Google Dịch (`文A`)** trên thanh nhập (nằm giữa nút Chạy và nút Cài đặt) để chuyển sang **Chế độ Dịch** với ô nhập tự động giãn chiều cao nhiều dòng, thanh chọn ngôn ngữ nguồn/đích (22 ngôn ngữ + Tự động phát hiện) kèm nút đảo chiều (`⇄`) và thẻ hiển thị bản dịch tách rời (nhấp vào thẻ kết quả để sao chép nhanh).
+  * Nhấn vào nút biểu tượng **Google Dịch (`文A`)** trên thanh nhập (nằm giữa nút Chạy và nút Cài đặt) để chuyển sang **Chế độ Dịch** với ô nhập tự động giãn chiều cao nhiều dòng, thanh chọn ngôn ngữ nguồn/đích (22 ngôn ngữ + Tự động phát hiện) kèm nút đảo chiều (`⇄`) và thẻ hiển thị bản dịch tách rời ngay phía trên thanh nhập (nhấp vào thẻ kết quả để sao chép nhanh).
 
 - **Menu Cài đặt nhanh đồng bộ (`⚙️`) với Công tắc Liquid Glass:**
   * Menu cài đặt nhanh bo tròn đồng bộ với thanh nhập, sử dụng **cần gạt bật/tắt (Toggle Switch) hiệu ứng Liquid Glass 3D** cho các tính năng bật/tắt (**Chế độ thu nhỏ** và **Hiển thị lịch sử lệnh** – tự động bật sẵn và làm mờ khóa lại khi đang ở Chế độ thu nhỏ) cùng dấu tích `✓` chuẩn xác cho các mục chọn đơn trong menu con.
@@ -3684,9 +3682,22 @@ const std::wstring& GetCachedUserSidString() {
     return kSid;
 }
 
+constexpr size_t kMaxHiddenMruEntries = 64;
+
 const std::wstring& GetHistoryStorageKey() {
     static const std::wstring kKey = L"HistoryTimestamps_" + GetCachedUserSidString();
     return kKey;
+}
+
+const std::wstring& GetHistoryCountStorageKey() {
+    static const std::wstring kCountKey = L"HistoryTimestampCount_" + GetCachedUserSidString();
+    return kCountKey;
+}
+
+std::wstring GetHistoryItemFieldKey(const wchar_t* fieldPrefix, size_t index) {
+    wchar_t buf[160] = {};
+    swprintf_s(buf, L"HistoryTimestamp%s_%s_%zu", fieldPrefix, GetCachedUserSidString().c_str(), index);
+    return buf;
 }
 
 const std::wstring& GetHiddenMruStorageKey() {
@@ -3694,51 +3705,67 @@ const std::wstring& GetHiddenMruStorageKey() {
     return kHiddenKey;
 }
 
+const std::wstring& GetHiddenMruCountStorageKey() {
+    static const std::wstring kHiddenCountKey = L"HiddenRunMruCount_" + GetCachedUserSidString();
+    return kHiddenCountKey;
+}
+
+std::wstring GetHiddenMruItemStorageKey(size_t index) {
+    wchar_t buf[160] = {};
+    swprintf_s(buf, L"HiddenRunMru_%s_%zu", GetCachedUserSidString().c_str(), index);
+    return buf;
+}
+
 const std::wstring& GetClearAckStorageKey() {
     static const std::wstring kAckKey = L"ClearHistoryAck_" + GetCachedUserSidString();
     return kAckKey;
 }
 
+void DeleteAllStoredHistoryTimestampValues() {
+    int oldCount = std::clamp(Wh_GetIntValue(GetHistoryCountStorageKey().c_str(), 0), 0, (int)kMaxMruEntries);
+    for (int i = 0; i < oldCount; ++i) {
+        Wh_DeleteValue(GetHistoryItemFieldKey(L"Time", (size_t)i).c_str());
+        Wh_DeleteValue(GetHistoryItemFieldKey(L"Key",  (size_t)i).c_str());
+        Wh_DeleteValue(GetHistoryItemFieldKey(L"Cmd",  (size_t)i).c_str());
+    }
+    Wh_DeleteValue(GetHistoryCountStorageKey().c_str());
+    Wh_DeleteValue(GetHistoryStorageKey().c_str());
+}
+
 std::vector<std::wstring> LoadHiddenMruCommands() {
     std::vector<std::wstring> hiddenKeys;
-    std::vector<wchar_t> buffer(8192, L'\0');
-    size_t charsRead = Wh_GetStringValue(GetHiddenMruStorageKey().c_str(), buffer.data(), buffer.size());
-    if (charsRead == 0 || buffer[0] == L'\0') {
-        return hiddenKeys;
-    }
-
-    std::wstring data(buffer.data());
-    size_t pos = 0;
-    while (pos < data.size()) {
-        size_t endLine = data.find(L'\n', pos);
-        if (endLine == std::wstring::npos) {
-            endLine = data.size();
+    int count = std::clamp(Wh_GetIntValue(GetHiddenMruCountStorageKey().c_str(), 0), 0, (int)kMaxHiddenMruEntries);
+    for (int i = 0; i < count; ++i) {
+        wchar_t buf[MAX_PATH + 32] = {};
+        std::wstring itemKey = GetHiddenMruItemStorageKey((size_t)i);
+        if (Wh_GetStringValue(itemKey.c_str(), buf, ARRAYSIZE(buf)) > 0 && buf[0] != L'\0') {
+            std::wstring norm = NormalizeCmdKey(buf);
+            if (!norm.empty() && std::find(hiddenKeys.begin(), hiddenKeys.end(), norm) == hiddenKeys.end()) {
+                hiddenKeys.push_back(std::move(norm));
+            }
         }
-        std::wstring line = data.substr(pos, endLine - pos);
-        if (!line.empty() && line.back() == L'\r') {
-            line.pop_back();
-        }
-        std::wstring norm = NormalizeCmdKey(line);
-        if (!norm.empty() && std::find(hiddenKeys.begin(), hiddenKeys.end(), norm) == hiddenKeys.end()) {
-            hiddenKeys.push_back(std::move(norm));
-        }
-        pos = endLine + 1;
     }
     return hiddenKeys;
 }
 
 void SaveHiddenMruCommands(const std::vector<std::wstring>& hiddenKeys) {
-    if (hiddenKeys.empty()) {
-        Wh_DeleteValue(GetHiddenMruStorageKey().c_str());
-        return;
+    int oldCount = std::clamp(Wh_GetIntValue(GetHiddenMruCountStorageKey().c_str(), 0), 0, (int)kMaxHiddenMruEntries);
+    size_t newCount = (std::min)(hiddenKeys.size(), kMaxHiddenMruEntries);
+
+    for (size_t i = 0; i < newCount; ++i) {
+        std::wstring itemKey = GetHiddenMruItemStorageKey(i);
+        Wh_SetStringValue(itemKey.c_str(), hiddenKeys[i].c_str());
     }
-    std::wstring serialized;
-    size_t count = (std::min)(hiddenKeys.size(), (size_t)64);
-    for (size_t i = 0; i < count; ++i) {
-        serialized += hiddenKeys[i];
-        serialized += L'\n';
+    for (size_t i = newCount; i < (size_t)oldCount; ++i) {
+        Wh_DeleteValue(GetHiddenMruItemStorageKey(i).c_str());
     }
-    Wh_SetStringValue(GetHiddenMruStorageKey().c_str(), serialized.c_str());
+    Wh_DeleteValue(GetHiddenMruStorageKey().c_str());
+
+    if (newCount == 0) {
+        Wh_DeleteValue(GetHiddenMruCountStorageKey().c_str());
+    } else {
+        Wh_SetIntValue(GetHiddenMruCountStorageKey().c_str(), (int)newCount);
+    }
 }
 
 void AddCommandToHiddenMru(const std::wstring& cmd) {
@@ -3763,7 +3790,7 @@ void RemoveCommandFromHiddenMru(const std::wstring& cmd) {
 }
 
 void ClearCurrentUserStoredHistory() {
-    Wh_DeleteValue(GetHistoryStorageKey().c_str());
+    DeleteAllStoredHistoryTimestampValues();
 
     auto hiddenKeys = LoadHiddenMruCommands();
     auto addHidden = [&](const std::wstring& rawCmd) {
@@ -4797,14 +4824,6 @@ std::wstring GetWindhawkModIconFolderPath() {
     if (Wh_GetModStoragePath(storageDir, ARRAYSIZE(storageDir)) > 0 && storageDir[0] != L'\0') {
         CreateDirectoryW(storageDir, nullptr);
         res = storageDir;
-    } else {
-        wchar_t modPath[MAX_PATH] = {};
-        if (GetModuleFileNameW(GetModInstanceHandle(), modPath, ARRAYSIZE(modPath)) > 0 && modPath[0] != L'\0') {
-            PathRemoveFileSpecW(modPath);
-            if (modPath[0] != L'\0') {
-                res = modPath;
-            }
-        }
     }
     while (!res.empty() && (res.back() == L'\\' || res.back() == L'/')) {
         res.pop_back();
@@ -5052,7 +5071,7 @@ void SyncSystemRunShortcutIcon(const std::wstring&, bool) {
     // and WM_GETICON / GCLP_HICON without mutating Run.lnk or broadcasting SHCNE_ASSOCCHANGED.
 }
 
-// Automatically installs or updates modern-run-icon.ico and modern-run-icon.png inside Windhawk folder
+// Automatically installs or updates modern-run-icon.ico and modern-run-icon.png inside Windhawk mod storage
 void EnsureWindhawkRunIconInstalled(bool forceUpdate = false) {
     std::wstring icoPath;
     {
@@ -5060,13 +5079,10 @@ void EnsureWindhawkRunIconInstalled(bool forceUpdate = false) {
 
         std::wstring folder = GetWindhawkModIconFolderPath();
         if (folder.empty()) {
-            wchar_t tempDir[MAX_PATH] = {};
-            if (GetTempPathW(ARRAYSIZE(tempDir), tempDir) > 0 && tempDir[0] != L'\0') {
-                folder = std::wstring(tempDir) + L"WindhawkModernRun";
-                CreateDirectoryW(folder.c_str(), nullptr);
-            }
+            g_cachedRunIcoPath.clear();
+            g_cachedRunPngPath.clear();
+            return;
         }
-        if (folder.empty()) return;
 
         icoPath = folder + L"\\" + kRunIconIcoFileName;
         std::wstring pngPath = folder + L"\\" + kRunIconPngFileName;
@@ -5084,20 +5100,12 @@ void EnsureWindhawkRunIconInstalled(bool forceUpdate = false) {
             bool wrotePng = WriteBinaryFileAtomically(pngPath, kEmbeddedModernRunPng, sizeof(kEmbeddedModernRunPng));
             bool wroteIco = builtIco && WriteBinaryFileAtomically(icoPath, icoBytes.data(), icoBytes.size());
 
-            if (!wroteIco && builtIco) {
-                wchar_t tempDir[MAX_PATH] = {};
-                if (GetTempPathW(ARRAYSIZE(tempDir), tempDir) > 0 && tempDir[0] != L'\0') {
-                    std::wstring fallbackDir = std::wstring(tempDir) + L"WindhawkModernRun";
-                    CreateDirectoryW(fallbackDir.c_str(), nullptr);
-                    icoPath = fallbackDir + L"\\" + kRunIconIcoFileName;
-                    pngPath = fallbackDir + L"\\" + kRunIconPngFileName;
-                    wrotePng = WriteBinaryFileAtomically(pngPath, kEmbeddedModernRunPng, sizeof(kEmbeddedModernRunPng));
-                    wroteIco = WriteBinaryFileAtomically(icoPath, icoBytes.data(), icoBytes.size());
-                }
-            }
-
             if (wrotePng && wroteIco) {
                 Wh_SetStringValue(kRunIconVersionKey, kRunIconAssetVersion);
+            } else {
+                g_cachedRunIcoPath.clear();
+                g_cachedRunPngPath.clear();
+                return;
             }
         }
 
@@ -5408,6 +5416,7 @@ std::atomic<HWND> g_hActiveRunDlg{nullptr};
 std::atomic<HWND> g_hTrackedRunDlg{nullptr};
 std::atomic<HWND> g_hFallbackInterceptedDlg{nullptr};
 std::atomic<int> g_fallbackDialogRefCount{0};
+std::atomic<bool> g_dialogSubclassInstalled{false};
 std::atomic<ULONGLONG> g_openTick{0};
 std::atomic<ULONGLONG> g_lastToggleTick{0};
 std::atomic<bool> g_winRReleasedSinceOpen{false};
@@ -5805,16 +5814,7 @@ void ForceFocusModernEdit(HWND hDlg, RunDialogState* state) {
 
     HWND hFg = GetForegroundWindow();
     if (hFg != hDlg) {
-        DWORD fgThread = hFg ? GetWindowThreadProcessId(hFg, nullptr) : 0;
-        DWORD curThread = GetCurrentThreadId();
-        bool attached = false;
-        if (fgThread != 0 && fgThread != curThread) {
-            attached = (AttachThreadInput(fgThread, curThread, TRUE) != FALSE);
-        }
         g_internalActivation = true;
-        if (SwitchToThisWindow_Orig) {
-            SwitchToThisWindow_Orig(hDlg, TRUE);
-        }
         if (SetForegroundWindow_Orig) {
             SetForegroundWindow_Orig(hDlg);
         } else {
@@ -5822,9 +5822,6 @@ void ForceFocusModernEdit(HWND hDlg, RunDialogState* state) {
         }
         SetActiveWindow(hDlg);
         g_internalActivation = false;
-        if (attached) {
-            AttachThreadInput(fgThread, curThread, FALSE);
-        }
     } else if (GetActiveWindow() != hDlg) {
         SetActiveWindow(hDlg);
     }
@@ -5960,9 +5957,10 @@ void OpenBrowseExecutableDialog(RunDialogState* state, bool autoExecute = false)
         return;
     }
 
-    if (state->pendingUninit) {
+    if (state->pendingUninit || g_unloading.load()) {
         g_isBrowsingFile.store(false);
         state->isBrowsingFile = false;
+        PerformDialogUninit(hDlg, state);
         return;
     }
 
@@ -6011,65 +6009,61 @@ struct StoredTimestampEntry {
 
 std::vector<StoredTimestampEntry> LoadStoredTimestamps() {
     std::vector<StoredTimestampEntry> entries;
-    std::vector<wchar_t> buffer(16384, L'\0');
-    size_t charsRead = Wh_GetStringValue(GetHistoryStorageKey().c_str(), buffer.data(), buffer.size());
-    if (charsRead == 0 || buffer[0] == L'\0') {
-        return entries;
-    }
+    int count = std::clamp(Wh_GetIntValue(GetHistoryCountStorageKey().c_str(), 0), 0, (int)kMaxMruEntries);
+    for (int i = 0; i < count; ++i) {
+        wchar_t timeBuf[64] = {};
+        wchar_t keyBuf[MAX_PATH + 32] = {};
+        wchar_t cmdBuf[MAX_PATH + 32] = {};
 
-    std::wstring data(buffer.data());
-    size_t pos = 0;
-    while (pos < data.size()) {
-        size_t endLine = data.find(L'\n', pos);
-        if (endLine == std::wstring::npos) {
-            endLine = data.size();
+        std::wstring kTime = GetHistoryItemFieldKey(L"Time", (size_t)i);
+        std::wstring kKey  = GetHistoryItemFieldKey(L"Key",  (size_t)i);
+        std::wstring kCmd  = GetHistoryItemFieldKey(L"Cmd",  (size_t)i);
+
+        if (Wh_GetStringValue(kTime.c_str(), timeBuf, ARRAYSIZE(timeBuf)) == 0 || timeBuf[0] == L'\0') {
+            continue;
         }
-        std::wstring line = data.substr(pos, endLine - pos);
-        if (!line.empty() && line.back() == L'\r') {
-            line.pop_back();
+        if (Wh_GetStringValue(kKey.c_str(), keyBuf, ARRAYSIZE(keyBuf)) == 0 || keyBuf[0] == L'\0') {
+            continue;
         }
-        size_t tab1 = line.find(L'\t');
-        if (tab1 != std::wstring::npos && tab1 > 0 && tab1 + 1 < line.size()) {
-            wchar_t* endPtr = nullptr;
-            ULONGLONG ftVal = wcstoull(line.substr(0, tab1).c_str(), &endPtr, 10);
-            size_t tab2 = line.find(L'\t', tab1 + 1);
-            std::wstring key;
-            std::wstring origCmd;
-            if (tab2 != std::wstring::npos) {
-                key = line.substr(tab1 + 1, tab2 - (tab1 + 1));
-                origCmd = line.substr(tab2 + 1);
-            } else {
-                key = line.substr(tab1 + 1);
-                origCmd = key;
-            }
-            if (ftVal != 0 && !key.empty()) {
-                if (origCmd.empty()) origCmd = key;
-                entries.push_back({ ftVal, std::move(key), std::move(origCmd) });
-            }
+        Wh_GetStringValue(kCmd.c_str(), cmdBuf, ARRAYSIZE(cmdBuf));
+
+        wchar_t* endPtr = nullptr;
+        ULONGLONG ftVal = wcstoull(timeBuf, &endPtr, 10);
+        std::wstring key = NormalizeCmdKey(keyBuf);
+        std::wstring origCmd = TrimCommandString(cmdBuf[0] != L'\0' ? cmdBuf : keyBuf);
+        if (ftVal != 0 && !key.empty()) {
+            if (origCmd.empty()) origCmd = key;
+            entries.push_back({ ftVal, std::move(key), std::move(origCmd) });
         }
-        pos = endLine + 1;
     }
     return entries;
 }
 
 void SaveStoredTimestamps(const std::vector<StoredTimestampEntry>& entries) {
     if (entries.empty()) {
-        Wh_DeleteValue(GetHistoryStorageKey().c_str());
+        DeleteAllStoredHistoryTimestampValues();
         return;
     }
-    std::wstring serialized;
-    size_t count = (std::min)(entries.size(), kMaxMruEntries);
-    for (size_t i = 0; i < count; ++i) {
+
+    int oldCount = std::clamp(Wh_GetIntValue(GetHistoryCountStorageKey().c_str(), 0), 0, (int)kMaxMruEntries);
+    size_t newCount = (std::min)(entries.size(), kMaxMruEntries);
+
+    for (size_t i = 0; i < newCount; ++i) {
         wchar_t numBuf[32] = {};
         swprintf_s(numBuf, L"%llu", entries[i].fileTime);
-        serialized += numBuf;
-        serialized += L'\t';
-        serialized += entries[i].cmdKey;
-        serialized += L'\t';
-        serialized += entries[i].displayCmd.empty() ? entries[i].cmdKey : entries[i].displayCmd;
-        serialized += L'\n';
+        const std::wstring& disp = entries[i].displayCmd.empty() ? entries[i].cmdKey : entries[i].displayCmd;
+
+        Wh_SetStringValue(GetHistoryItemFieldKey(L"Time", i).c_str(), numBuf);
+        Wh_SetStringValue(GetHistoryItemFieldKey(L"Key",  i).c_str(), entries[i].cmdKey.c_str());
+        Wh_SetStringValue(GetHistoryItemFieldKey(L"Cmd",  i).c_str(), disp.c_str());
     }
-    Wh_SetStringValue(GetHistoryStorageKey().c_str(), serialized.c_str());
+    for (size_t i = newCount; i < (size_t)oldCount; ++i) {
+        Wh_DeleteValue(GetHistoryItemFieldKey(L"Time", i).c_str());
+        Wh_DeleteValue(GetHistoryItemFieldKey(L"Key",  i).c_str());
+        Wh_DeleteValue(GetHistoryItemFieldKey(L"Cmd",  i).c_str());
+    }
+    Wh_DeleteValue(GetHistoryStorageKey().c_str());
+    Wh_SetIntValue(GetHistoryCountStorageKey().c_str(), (int)newCount);
 }
 
 void SaveCommandTimestamp(const std::wstring& cmd) {
@@ -6333,9 +6327,21 @@ std::wstring GetCompactTranslateLangDisplayName(const std::wstring& code, bool i
     return full;
 }
 
+struct TranslateWorkerTask {
+    HWND hTargetDlg = nullptr;
+    std::wstring rawText;
+    std::wstring srcLang;
+    std::wstring dstLang;
+    uint64_t reqId = 0;
+    bool isVi = false;
+};
+
 static std::mutex g_translateMutex;
+static std::condition_variable g_translateCv;
+[[clang::no_destroy]] static std::optional<std::thread> g_translateWorkerThread;
+static std::optional<TranslateWorkerTask> g_pendingTranslateTask;
+static bool g_translateWorkerStop = false;
 static std::atomic<uint64_t> g_translateReqCounter{0};
-static std::atomic<int> g_activeTranslateThreads{0};
 static std::wstring g_pendingTranslateResult;
 
 std::string ParseGoogleTranslateGtxJson(const std::string& json) {
@@ -6429,15 +6435,17 @@ std::string ParseGoogleTranslateGtxJson(const std::string& json) {
 }
 
 bool FetchGoogleTranslateViaWinHttp(const std::wstring& text, const std::wstring& srcLang,
-                                    const std::wstring& dstLang, std::wstring* outTranslated) {
+                                    const std::wstring& dstLang, uint64_t reqId, std::wstring* outTranslated) {
     if (!outTranslated) return false;
     outTranslated->clear();
+    if (g_unloading.load()) return false;
 
     HMODULE hWinHttp = LoadLibraryW(L"winhttp.dll");
     if (!hWinHttp) return false;
 
     using HINTERNET_WH = void*;
     using WinHttpOpen_t = HINTERNET_WH(WINAPI*)(LPCWSTR, DWORD, LPCWSTR, LPCWSTR, DWORD);
+    using WinHttpSetTimeouts_t = BOOL(WINAPI*)(HINTERNET_WH, int, int, int, int);
     using WinHttpConnect_t = HINTERNET_WH(WINAPI*)(HINTERNET_WH, LPCWSTR, WORD, DWORD);
     using WinHttpOpenRequest_t = HINTERNET_WH(WINAPI*)(HINTERNET_WH, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR*, DWORD);
     using WinHttpSendRequest_t = BOOL(WINAPI*)(HINTERNET_WH, LPCWSTR, DWORD, LPVOID, DWORD, DWORD, DWORD_PTR);
@@ -6446,6 +6454,7 @@ bool FetchGoogleTranslateViaWinHttp(const std::wstring& text, const std::wstring
     using WinHttpCloseHandle_t = BOOL(WINAPI*)(HINTERNET_WH);
 
     auto pOpen = reinterpret_cast<WinHttpOpen_t>(GetProcAddress(hWinHttp, "WinHttpOpen"));
+    auto pSetTimeouts = reinterpret_cast<WinHttpSetTimeouts_t>(GetProcAddress(hWinHttp, "WinHttpSetTimeouts"));
     auto pConnect = reinterpret_cast<WinHttpConnect_t>(GetProcAddress(hWinHttp, "WinHttpConnect"));
     auto pOpenReq = reinterpret_cast<WinHttpOpenRequest_t>(GetProcAddress(hWinHttp, "WinHttpOpenRequest"));
     auto pSendReq = reinterpret_cast<WinHttpSendRequest_t>(GetProcAddress(hWinHttp, "WinHttpSendRequest"));
@@ -6459,27 +6468,34 @@ bool FetchGoogleTranslateViaWinHttp(const std::wstring& text, const std::wstring
         std::wstring path = L"/translate_a/single?client=gtx&sl=" + srcLang +
                             L"&tl=" + dstLang + L"&dt=t&q=" + encodedQ;
 
-        HINTERNET_WH hSession = pOpen(L"Mozilla/5.0 (Windows NT 10.0; Win64; x64)", 0, nullptr, nullptr, 0);
+        HINTERNET_WH hSession = pOpen(L"WindhawkModernRun/5.0", 0, nullptr, nullptr, 0);
         if (hSession) {
+            if (pSetTimeouts) {
+                pSetTimeouts(hSession, 2500, 2500, 2500, 2500);
+            }
             HINTERNET_WH hConn = pConnect(hSession, L"translate.googleapis.com", 443, 0);
             if (hConn) {
                 HINTERNET_WH hReq = pOpenReq(hConn, L"GET", path.c_str(), nullptr, nullptr, nullptr, 0x00800000 /*WINHTTP_FLAG_SECURE*/);
                 if (hReq) {
-                    if (pSendReq(hReq, nullptr, 0, nullptr, 0, 0, 0) && pRecvResp(hReq, nullptr)) {
+                    if (!g_unloading.load() && reqId == g_translateReqCounter.load() &&
+                        pSendReq(hReq, nullptr, 0, nullptr, 0, 0, 0) && pRecvResp(hReq, nullptr)) {
                         std::string respBody;
                         char buf[4096];
                         DWORD dwRead = 0;
-                        while (pReadData(hReq, buf, sizeof(buf), &dwRead) && dwRead > 0) {
+                        while (!g_unloading.load() && reqId == g_translateReqCounter.load() &&
+                               pReadData(hReq, buf, sizeof(buf), &dwRead) && dwRead > 0) {
                             respBody.append(buf, dwRead);
                             dwRead = 0;
                         }
-                        std::string utf8Trans = ParseGoogleTranslateGtxJson(respBody);
-                        if (!utf8Trans.empty()) {
-                            int wlen = MultiByteToWideChar(CP_UTF8, 0, utf8Trans.data(), (int)utf8Trans.size(), nullptr, 0);
-                            if (wlen > 0) {
-                                outTranslated->resize(wlen);
-                                MultiByteToWideChar(CP_UTF8, 0, utf8Trans.data(), (int)utf8Trans.size(), outTranslated->data(), wlen);
-                                ok = true;
+                        if (!g_unloading.load()) {
+                            std::string utf8Trans = ParseGoogleTranslateGtxJson(respBody);
+                            if (!utf8Trans.empty()) {
+                                int wlen = MultiByteToWideChar(CP_UTF8, 0, utf8Trans.data(), (int)utf8Trans.size(), nullptr, 0);
+                                if (wlen > 0) {
+                                    outTranslated->resize(wlen);
+                                    MultiByteToWideChar(CP_UTF8, 0, utf8Trans.data(), (int)utf8Trans.size(), outTranslated->data(), wlen);
+                                    ok = true;
+                                }
                             }
                         }
                     }
@@ -6494,8 +6510,64 @@ bool FetchGoogleTranslateViaWinHttp(const std::wstring& text, const std::wstring
     return ok;
 }
 
+void TranslateWorkerThreadProc() {
+    for (;;) {
+        TranslateWorkerTask task;
+        {
+            std::unique_lock<std::mutex> lock(g_translateMutex);
+            g_translateCv.wait(lock, []() {
+                return g_translateWorkerStop || g_pendingTranslateTask.has_value();
+            });
+            if (g_translateWorkerStop) {
+                break;
+            }
+            task = std::move(*g_pendingTranslateTask);
+            g_pendingTranslateTask.reset();
+        }
+
+        if (g_unloading.load()) {
+            break;
+        }
+
+        std::wstring result;
+        bool ok = FetchGoogleTranslateViaWinHttp(task.rawText, task.srcLang, task.dstLang, task.reqId, &result);
+        if (!ok || result.empty()) {
+            result = task.isVi
+                ? L"[Không thể kết nối dịch tự động. Kiểm tra mạng Internet và thử lại.]"
+                : L"[Could not reach translation service. Check your connection and try again.]";
+        }
+        if (g_unloading.load()) {
+            break;
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_translateMutex);
+            if (task.reqId == g_translateReqCounter.load()) {
+                g_pendingTranslateResult = std::move(result);
+            }
+        }
+        if (IsWindow(task.hTargetDlg) && !g_unloading.load()) {
+            PostMessageW(task.hTargetDlg, g_msgToggle, kActionTranslateDone, (LPARAM)task.reqId);
+        }
+    }
+}
+
+void StopTranslateWorkerThread() {
+    {
+        std::lock_guard<std::mutex> lock(g_translateMutex);
+        g_translateWorkerStop = true;
+        g_pendingTranslateTask.reset();
+    }
+    g_translateCv.notify_all();
+    if (g_translateWorkerThread.has_value()) {
+        if (g_translateWorkerThread->joinable()) {
+            g_translateWorkerThread->join();
+        }
+        g_translateWorkerThread.reset();
+    }
+}
+
 void TriggerTranslationRequest(RunDialogState* state) {
-    if (!state || !state->hDlg || !IsWindow(state->hDlg)) return;
+    if (!state || !state->hDlg || !IsWindow(state->hDlg) || g_unloading.load()) return;
     std::wstring rawText = TrimCommandString(GetEffectiveInputText(state->hModernEdit));
     if (rawText.empty()) {
         int oldH = state->totalHeight;
@@ -6516,32 +6588,21 @@ void TriggerTranslationRequest(RunDialogState* state) {
     InvalidateRect(state->hDlg, nullptr, FALSE);
     UpdateWindow(state->hDlg);
 
-    HWND hTargetDlg = state->hDlg;
-    std::wstring srcLang = state->translateSourceLang;
-    std::wstring dstLang = state->translateTargetLang;
-    bool isVi = IsDialogVietnameseUI(state);
-
-    g_activeTranslateThreads.fetch_add(1);
-    std::thread([hTargetDlg, rawText, srcLang, dstLang, reqId, isVi]() {
-        struct ThreadGuard { ~ThreadGuard() { g_activeTranslateThreads.fetch_sub(1); } } guard;
-        std::wstring result;
-        bool ok = FetchGoogleTranslateViaWinHttp(rawText, srcLang, dstLang, &result);
-        if (!ok || result.empty()) {
-            result = isVi
-                ? L"[Không thể kết nối dịch tự động. Kiểm tra mạng Internet và thử lại.]"
-                : L"[Could not reach translation service. Check your connection and try again.]";
+    {
+        std::lock_guard<std::mutex> lock(g_translateMutex);
+        if (!g_translateWorkerThread.has_value() && !g_translateWorkerStop) {
+            g_translateWorkerThread.emplace(TranslateWorkerThreadProc);
         }
-        if (g_unloading.load()) return;
-        {
-            std::lock_guard<std::mutex> lock(g_translateMutex);
-            if (reqId == g_translateReqCounter.load()) {
-                g_pendingTranslateResult = std::move(result);
-            }
-        }
-        if (IsWindow(hTargetDlg) && !g_unloading.load()) {
-            PostMessageW(hTargetDlg, g_msgToggle, kActionTranslateDone, (LPARAM)reqId);
-        }
-    }).detach();
+        g_pendingTranslateTask = TranslateWorkerTask{
+            state->hDlg,
+            std::move(rawText),
+            state->translateSourceLang,
+            state->translateTargetLang,
+            reqId,
+            IsDialogVietnameseUI(state)
+        };
+    }
+    g_translateCv.notify_one();
 }
 
 // --- Experimental Instant Math Calculator in Run Dialog ---
@@ -6966,6 +7027,10 @@ void ExecuteHistoryOrSuggestionItem(RunDialogState* state, const HistoryItem& it
             PostMessageW(hDlg, WM_NULL, 0, 0);
         } else if (g_hActiveRunDlg.load() == hDlg) {
             state->isTriggeringRun = false;
+            if (state->pendingUninit || g_unloading.load()) {
+                PerformDialogUninit(hDlg, state);
+                return;
+            }
         }
     }
 }
@@ -10848,7 +10913,11 @@ void OpenCustomSizeDialog(RunDialogState* state) {
     wc.hInstance = GetModInstanceHandle();
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpszClassName = kCustomSizeClass;
-    RegisterClassExW(&wc);
+    if (!RegisterClassExW(&wc)) {
+        g_isBrowsingFile.store(false);
+        state->isBrowsingFile = false;
+        return;
+    }
 
     CustomSizeDialogSession session;
     session.dlgState = state;
@@ -10922,6 +10991,11 @@ void OpenCustomSizeDialog(RunDialogState* state) {
     UnregisterClassW(kCustomSizeClass, GetModInstanceHandle());
     g_isBrowsingFile.store(false);
     state->isBrowsingFile = false;
+
+    if (IsWindow(hDlg) && g_hActiveRunDlg.load() == hDlg && (state->pendingUninit || g_unloading.load())) {
+        PerformDialogUninit(hDlg, state);
+        return;
+    }
 
     if (IsWindow(hDlg) && IsWindowVisible(hDlg) && !IsIconic(hDlg) && !state->pendingUninit && !g_unloading.load()) {
         SetForegroundWindow(hDlg);
@@ -11136,7 +11210,13 @@ void OpenGearSettingsMenu(RunDialogState* state) {
         return;
     }
 
-    if (state->pendingUninit || g_unloading.load() || !IsWindowVisible(hDlg)) {
+    if (state->pendingUninit || g_unloading.load()) {
+        g_isBrowsingFile.store(false);
+        state->isBrowsingFile = false;
+        PerformDialogUninit(hDlg, state);
+        return;
+    }
+    if (!IsWindowVisible(hDlg)) {
         g_isBrowsingFile.store(false);
         state->isBrowsingFile = false;
         return;
@@ -11242,6 +11322,10 @@ void OpenTranslateLanguagePopup(RunDialogState* state, bool isSourceLang) {
     g_isBrowsingFile.store(false);
     if (!IsWindow(hDlg) || g_hActiveRunDlg.load() != hDlg) return;
     state->isBrowsingFile = false;
+    if (state->pendingUninit || g_unloading.load()) {
+        PerformDialogUninit(hDlg, state);
+        return;
+    }
 
     if (cmd >= 800 && cmd <= 821) {
         for (const auto& entry : kTranslateLangs) {
@@ -11257,7 +11341,7 @@ void OpenTranslateLanguagePopup(RunDialogState* state, bool isSourceLang) {
             }
         }
         InvalidateRect(hDlg, nullptr, FALSE);
-        if (!TrimCommandString(GetEffectiveInputText(state->hModernEdit)).empty()) {
+        if (!state->translatedText.empty() && !TrimCommandString(GetEffectiveInputText(state->hModernEdit)).empty()) {
             TriggerTranslationRequest(state);
         }
     }
@@ -11517,7 +11601,11 @@ LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     return res;
 }
 
+LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+                                    UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+
 void CleanupDialogState(HWND hWnd, RunDialogState* state) {
+    RemoveWindowSubclass(hWnd, RunDlgSubclassProc, 1);
     CloseActiveGearMenu();
     KillTimer(hWnd, kTimerCaret);
     KillTimer(hWnd, kTimerLuminance);
@@ -11592,10 +11680,9 @@ void CleanupDialogState(HWND hWnd, RunDialogState* state) {
         }
         delete state;
     }
-}
 
-LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
-                                    UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+    g_dialogSubclassInstalled.store(false, std::memory_order_release);
+}
 
 void PerformDialogUninit(HWND hWnd, RunDialogState* state) {
     RemoveWindowSubclass(hWnd, RunDlgSubclassProc, 1);
@@ -11617,6 +11704,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 
     if (uMsg == g_msgUninit && g_msgUninit != 0) {
         if (!state) {
+            g_dialogSubclassInstalled.store(false, std::memory_order_release);
             return 1;
         }
         if (state->isBrowsingFile || state->isTriggeringRun) {
@@ -12300,7 +12388,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                         SetWindowTextW(state->hModernEdit, prevTrans.c_str());
                         SendMessageW(state->hModernEdit, EM_SETSEL, prevTrans.size(), prevTrans.size());
                     }
-                    if (!TrimCommandString(GetEffectiveInputText(state->hModernEdit)).empty()) {
+                    if (!state->translatedText.empty() && !TrimCommandString(GetEffectiveInputText(state->hModernEdit)).empty()) {
                         TriggerTranslationRequest(state);
                     } else {
                         InvalidateRect(hWnd, nullptr, FALSE);
@@ -12368,9 +12456,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                     }
                     RecomputeDialogMetrics(state);
                     ResizeDialogPreservingBottomAnchor(state, oldH);
-                    if (state->translateMode && !TrimCommandString(curText).empty()) {
-                        TriggerTranslationRequest(state);
-                    }
                     if (state->hModernEdit && IsWindow(state->hModernEdit)) {
                         SetFocus(state->hModernEdit);
                     }
@@ -12440,6 +12525,10 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 g_isBrowsingFile.store(false);
                 if (!IsWindow(hWnd) || g_hActiveRunDlg.load() != hWnd) return 0;
                 state->isBrowsingFile = false;
+                if (state->pendingUninit || g_unloading.load()) {
+                    PerformDialogUninit(hWnd, state);
+                    return 0;
+                }
 
                 if (cmd == 799) {
                     int oldH = state->totalHeight;
@@ -13368,6 +13457,7 @@ void TransformRunDialog(HWND hDlg) {
     state->hOrigClassIconSmall = reinterpret_cast<HICON>(GetClassLongPtrW(hDlg, GCLP_HICONSM));
     state->hOrigClassIconBig   = reinterpret_cast<HICON>(GetClassLongPtrW(hDlg, GCLP_HICON));
 
+    g_dialogSubclassInstalled.store(true, std::memory_order_release);
     SetWindowSubclass(hDlg, RunDlgSubclassProc, 1, (DWORD_PTR)state);
     RefreshDialogRunIcons(state);
     if (!state->hRunIcon) {
@@ -13427,23 +13517,7 @@ void TransformRunDialog(HWND hDlg) {
         );
     }
 
-    // Pre-warm app suggestion catalog in background so typing & Space never block the UI thread
-    {
-        bool needWarmup = false;
-        {
-            std::lock_guard<std::mutex> lock(g_catalogMutex);
-            needWarmup = g_appCatalog.empty();
-        }
-        if (needWarmup && !g_unloading.load()) {
-            g_activeTranslateThreads.fetch_add(1);
-            std::thread([]() {
-                struct WarmupGuard { ~WarmupGuard() { g_activeTranslateThreads.fetch_sub(1); } } guard;
-                if (!g_unloading.load()) {
-                    EnsureAppCatalogPopulated();
-                }
-            }).detach();
-        }
-    }
+    // App catalog is populated lazily on first keystroke under g_catalogMutex (no detached warmup thread)
 
     {
         wchar_t srcBuf[32] = {}, dstBuf[32] = {};
@@ -13627,6 +13701,11 @@ void ReleaseGlobalResources() {
 
 BOOL Wh_ModInit() {
     g_unloading.store(false);
+    {
+        std::lock_guard<std::mutex> lock(g_translateMutex);
+        g_translateWorkerStop = false;
+        g_pendingTranslateTask.reset();
+    }
     g_glassCpuSupported = DetectGlassCpuSupport();
 
     WNDCLASSEXW wc = { sizeof(wc) };
@@ -13635,13 +13714,12 @@ BOOL Wh_ModInit() {
     wc.hInstance = GetModInstanceHandle();
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpszClassName = kFluentMenuClassName;
-    if (!RegisterClassExW(&wc)) {
-        DWORD err = GetLastError();
-        if (err != ERROR_CLASS_ALREADY_EXISTS) {
-            Wh_Log(L"Warning: RegisterClassExW returned %lu", err);
-        }
+    if (RegisterClassExW(&wc)) {
+        g_fluentMenuClassRegistered = true;
+    } else {
+        Wh_Log(L"Warning: RegisterClassExW failed with error %lu", GetLastError());
+        g_fluentMenuClassRegistered = false;
     }
-    g_fluentMenuClassRegistered = true;
 
     LoadSettings(false);
     g_msgUninit = RegisterWindowMessageW(L"Windhawk_Uninit_" WH_MOD_ID);
@@ -13676,34 +13754,41 @@ void Wh_ModSettingsChanged() {
     }
 }
 
+void WaitUntilDialogSubclassRemoved() {
+    while (g_dialogSubclassInstalled.load(std::memory_order_acquire)) {
+        CloseActiveGearMenu();
+        HWND hDlg = g_hTrackedRunDlg.load();
+        if (!hDlg) hDlg = g_hActiveRunDlg.load();
+        if (!hDlg || !IsWindow(hDlg)) {
+            g_dialogSubclassInstalled.store(false, std::memory_order_release);
+            break;
+        }
+        HWND hPopup = GetWindow(hDlg, GW_ENABLEDPOPUP);
+        if (hPopup && hPopup != hDlg && IsWindow(hPopup)) {
+            PostMessageW(hPopup, WM_COMMAND, MAKEWPARAM(IDCANCEL, BN_CLICKED), 0);
+            PostMessageW(hPopup, WM_CLOSE, 0, 0);
+        }
+        DWORD_PTR dwRes = 0;
+        SendMessageTimeoutW(hDlg, g_msgUninit, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 200, &dwRes);
+        if (g_dialogSubclassInstalled.load(std::memory_order_acquire) && IsWindow(hDlg)) {
+            PostMessageW(hDlg, g_msgUninit, 0, 0);
+            PostMessageW(hDlg, WM_CLOSE, 0, 0);
+            PostMessageW(hDlg, WM_NULL, 0, 0);
+            Sleep(20);
+        }
+    }
+}
+
 void Wh_ModBeforeUninit() {
     g_unloading.store(true);
     g_translateReqCounter.fetch_add(1);
     CloseActiveGearMenu();
-
-    HWND hDlg = g_hTrackedRunDlg.load();
-    if (!hDlg) hDlg = g_hActiveRunDlg.load();
-    if (hDlg && IsWindow(hDlg)) {
-        DWORD_PTR dwRes = 0;
-        SendMessageTimeoutW(hDlg, g_msgUninit, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 800, &dwRes);
-        if (IsWindow(hDlg)) {
-            PostMessageW(hDlg, WM_CLOSE, 0, 0);
-            PostMessageW(hDlg, WM_NULL, 0, 0);
-        }
-    }
-
-    for (int waitTick = 0; waitTick < 25 && ((hDlg && IsWindow(hDlg)) || g_activeTranslateThreads.load() > 0); ++waitTick) {
-        if (hDlg && IsWindow(hDlg)) {
-            PostMessageW(hDlg, WM_CLOSE, 0, 0);
-            PostMessageW(hDlg, WM_NULL, 0, 0);
-        }
-        Sleep(20);
-    }
+    WaitUntilDialogSubclassRemoved();
+    StopTranslateWorkerThread();
 }
 
 void Wh_ModUninit() {
-    for (int waitTick = 0; waitTick < 25 && g_activeTranslateThreads.load() > 0; ++waitTick) {
-        Sleep(20);
-    }
+    WaitUntilDialogSubclassRemoved();
+    StopTranslateWorkerThread();
     ReleaseGlobalResources();
 }
