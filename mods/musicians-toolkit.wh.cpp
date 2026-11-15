@@ -47,7 +47,8 @@ letter, and the one you settle on is drawn underneath.
   acoustic guitar or played on a piano. **Tab** asks for the same chord from the
   keyboard, and **Space** or **Enter** do too, so one hand can stay on the
   arrows while the other types.
-- **Instrument** - **Shift+Tab** cycles guitar, ukulele and piano.
+- **Instrument** - **Shift+Tab** steps back through guitar, piano and
+  ukulele, the same key every tool uses.
 
 ## Tap Tempo
 
@@ -159,8 +160,10 @@ listens and you play it before the clock runs out.
 
 - **Win+Y** - open or close the panel.
 - **Ctrl+Tab** - switch tools.
-- **Tab** - play the chord on the card, or step through the pattern list.
-- **Shift+Tab** - switch instruments.
+- **Tab** - play the chord on the card, step through the pattern list, or step
+  forward through the instruments in the Circle and the note drill.
+- **Shift+Tab** - step back through the instruments, in every tool that has
+  more than one.
 - **Space / Enter** - play the chord on the card as well; Space also taps the
   tempo and starts the trainer.
 - **Up / Down** - move through search results, step the metronome, hop
@@ -4794,535 +4797,6 @@ void ToggleFlyout() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Chord playback
-//
-// Parked until the freeze it caused is understood. Bringing it back needs the
-// #include <mmreg.h> above as well.
-//
-// The mod bundles no audio libraries, so the handful of WASAPI interfaces it
-// needs are declared here. A render thread owns the device, synthesises the
-// requested chord at the device's own sample rate and feeds it in shared mode:
-// a plucked string model for guitar and ukulele, a struck one for the piano.
-
-#if 0
-
-struct AudioUnknown {
-    virtual HRESULT QueryInterface(const GUID& iid, void** out) = 0;
-    virtual ULONG AddRef() = 0;
-    virtual ULONG Release() = 0;
-};
-
-struct AudioDevice {
-    virtual HRESULT Activate(const GUID& iid, DWORD context, void* params,
-                             void** out) = 0;
-};
-
-struct AudioDeviceEnumerator {
-    virtual HRESULT EnumAudioEndpoints(int flow, DWORD mask, void** out) = 0;
-    virtual HRESULT GetDefaultAudioEndpoint(int flow, int role, AudioDevice** out) = 0;
-};
-
-// Every method has to be listed, in order, for the virtual table to line up.
-struct AudioClient {
-    virtual HRESULT Initialize(int mode, DWORD flags, LONGLONG duration,
-                               LONGLONG periodicity, const WAVEFORMATEX* format,
-                               const GUID* session) = 0;
-    virtual HRESULT GetBufferSize(UINT32* frames) = 0;
-    virtual HRESULT GetStreamLatency(LONGLONG* latency) = 0;
-    virtual HRESULT GetCurrentPadding(UINT32* padding) = 0;
-    virtual HRESULT IsFormatSupported(int mode, const WAVEFORMATEX* format,
-                                      WAVEFORMATEX** closest) = 0;
-    virtual HRESULT GetMixFormat(WAVEFORMATEX** format) = 0;
-    virtual HRESULT GetDevicePeriod(LONGLONG* minimum, LONGLONG* alignment) = 0;
-    virtual HRESULT Start() = 0;
-    virtual HRESULT Stop() = 0;
-    virtual HRESULT Reset() = 0;
-    virtual HRESULT SetEventHandle(HANDLE event) = 0;
-    virtual HRESULT GetService(const GUID& iid, void** out) = 0;
-};
-
-struct AudioRenderClient {
-    virtual HRESULT GetBuffer(UINT32 frames, BYTE** data) = 0;
-    virtual HRESULT ReleaseBuffer(UINT32 frames, DWORD flags) = 0;
-};
-
-const GUID kMmDeviceEnumeratorClsid = {0xBCDE0395, 0xE52F, 0x467C,
-                                       {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
-const GUID kMmDeviceEnumeratorIid = {0xA95664D2, 0x9614, 0x4F35,
-                                     {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
-const GUID kAudioClientIid = {0x1CB9AD4C, 0xDBFA, 0x4C32,
-                              {0xB1, 0x78, 0xC2, 0xF5, 0x68, 0xA7, 0x03, 0xB2}};
-const GUID kAudioRenderClientIid = {0xF294ACFC, 0x3146, 0x4483,
-                                    {0xA7, 0xBF, 0xAD, 0xDC, 0xA7, 0xC2, 0x60, 0xE2}};
-
-struct AudioRequest {
-    int generation = 0;
-    bool plucked = true;
-    float damping = 0.9975f;  // How long a plucked string rings.
-    float arpeggio = 0.0f;    // Seconds between notes; 0 sounds them together.
-    int noteCount = 0;
-    int notes[kMaxNotes] = {};
-};
-
-struct AudioOutput {
-    AudioClient* client = nullptr;
-    AudioRenderClient* render = nullptr;
-    WAVEFORMATEX* format = nullptr;
-    UINT32 frames = 0;
-    int channels = 0;
-    int bits = 0;
-    bool floating = false;
-};
-
-CRITICAL_SECTION g_audioLock;
-bool g_audioLockReady = false;
-AudioRequest g_audioRequest;
-HANDLE g_audioWake = nullptr;
-HANDLE g_audioStop = nullptr;
-HANDLE g_audioThread = nullptr;
-double g_audioBusyUntil = 0.0;
-// Asking for the device ahead of time, and handing it back once the panel is
-// gone, keeps an idle stream from holding the audio engine awake all day.
-bool g_audioWarm = false;
-bool g_audioRelease = false;
-
-inline void ReleaseUnknown(void* object) {
-    if (object) {
-        static_cast<AudioUnknown*>(object)->Release();
-    }
-}
-
-inline float NoteFrequency(int midi) {
-    return 440.0f * powf(2.0f, (static_cast<float>(midi) - 69.0f) / 12.0f);
-}
-
-inline float AudioNoise(uint32_t& state) {
-    state ^= state << 13;
-    state ^= state >> 17;
-    state ^= state << 5;
-    return static_cast<float>(state) / 2147483648.0f - 1.0f;
-}
-
-// Karplus-Strong: noise recirculated through a two tap average, which is close
-// enough to a plucked string for a handful of lines.
-void MixPluck(std::vector<float>& out,
-              int channels,
-              int rate,
-              float frequency,
-              double start,
-              float damping,
-              float gain) {
-    const int delay =
-        std::max(2, static_cast<int>(static_cast<float>(rate) / frequency));
-    std::vector<float> line(static_cast<size_t>(delay));
-    uint32_t seed = 0x9E3779B9u ^ static_cast<uint32_t>(frequency * 11.0f);
-    float previous = 0.0f;
-    for (int i = 0; i < delay; i++) {
-        previous = 0.5f * (previous + AudioNoise(seed));
-        line[static_cast<size_t>(i)] = previous;
-    }
-
-    const size_t total = out.size() / static_cast<size_t>(channels);
-    const size_t first = static_cast<size_t>(start * rate);
-    if (first >= total) {
-        return;
-    }
-    size_t index = 0;
-    for (size_t n = first; n < total; n++) {
-        const size_t next = (index + 1) % static_cast<size_t>(delay);
-        const float value = 0.5f * (line[index] + line[next]) * damping;
-        line[index] = value;
-        index = next;
-        float* frame = &out[n * static_cast<size_t>(channels)];
-        frame[0] += value * gain;
-        if (channels > 1) {
-            frame[1] += value * gain * 0.94f;
-        }
-    }
-}
-
-// A struck string is a stack of slightly inharmonic partials that fade at their
-// own pace, which reads as a piano rather than a plain tone.
-void MixStrike(std::vector<float>& out,
-               int channels,
-               int rate,
-               float frequency,
-               double start,
-               float gain) {
-    const size_t total = out.size() / static_cast<size_t>(channels);
-    const size_t first = static_cast<size_t>(start * rate);
-    if (first >= total) {
-        return;
-    }
-    for (int partial = 1; partial <= 8; partial++) {
-        const float order = static_cast<float>(partial);
-        const float partialFrequency =
-            frequency * order * sqrtf(1.0f + 0.0004f * order * order);
-        if (partialFrequency > static_cast<float>(rate) * 0.45f) {
-            break;
-        }
-        const float amplitude = gain / powf(order, 1.35f);
-        const float step = 6.2831853f * partialFrequency / static_cast<float>(rate);
-        const float fall = 1.7f / (0.55f + order * 0.45f);
-        const float decay = expf(-1.0f / (fall * static_cast<float>(rate)));
-        float envelope = amplitude;
-        float phase = order * 0.9f;
-        for (size_t n = first; n < total; n++) {
-            phase += step;
-            const float attack = (n - first) < 128 ? static_cast<float>(n - first) / 128.0f : 1.0f;
-            const float value = sinf(phase) * envelope * attack;
-            envelope *= decay;
-            float* frame = &out[n * static_cast<size_t>(channels)];
-            frame[0] += value;
-            if (channels > 1) {
-                frame[1] += value * 0.96f;
-            }
-        }
-    }
-}
-
-void RenderChord(std::vector<float>& out,
-                 int channels,
-                 int rate,
-                 const AudioRequest& request) {
-    const double baseLength = request.plucked ? 3.2 : 2.8;
-    // A scale asks for a real arpeggio: each note starts well after the last,
-    // so it rises where a chord's two-centimetre spread would blur together.
-    const bool spaced = request.arpeggio > 0.0f && request.noteCount > 1;
-    const double spread =
-        spaced ? (request.noteCount - 1) * static_cast<double>(request.arpeggio)
-               : 0.0;
-    const double length = baseLength + spread;
-    out.assign(static_cast<size_t>(length * rate) *
-                   static_cast<size_t>(channels),
-               0.0f);
-    for (int i = 0; i < request.noteCount; i++) {
-        const float frequency = NoteFrequency(request.notes[i]);
-        const double start =
-            spaced ? i * static_cast<double>(request.arpeggio)
-                   : i * (request.plucked ? 0.022 : 0.007);
-        if (request.plucked) {
-            MixPluck(out, channels, rate, frequency, start, request.damping,
-                     0.20f);
-        } else {
-            MixStrike(out, channels, rate, frequency, start, 0.09f);
-        }
-    }
-    // Soft clipping keeps a dense chord from crackling and leaves headroom.
-    for (size_t i = 0; i < out.size(); i++) {
-        out[i] = tanhf(out[i] * 1.35f) * 0.82f;
-    }
-    // The tail fades out so the buffer never ends on a step.
-    const size_t totalFrames = out.size() / static_cast<size_t>(channels);
-    const size_t fade =
-        std::min(totalFrames, static_cast<size_t>(0.18 * static_cast<double>(rate)));
-    for (size_t i = 0; i < fade; i++) {
-        const float tail = static_cast<float>(i) / static_cast<float>(fade);
-        float* frame = &out[(totalFrames - fade + i) * static_cast<size_t>(channels)];
-        for (int c = 0; c < channels; c++) {
-            frame[c] *= tail;
-        }
-    }
-}
-
-void FillAudio(BYTE* data,
-               UINT32 frames,
-               const std::vector<float>& samples,
-               size_t& playhead,
-               const AudioOutput& output) {
-    const size_t channels = static_cast<size_t>(output.channels);
-    const size_t total = samples.size() / channels;
-    for (UINT32 i = 0; i < frames; i++, playhead++) {
-        float left = 0.0f;
-        float right = 0.0f;
-        if (playhead < total) {
-            const float* source = &samples[playhead * channels];
-            left = source[0];
-            right = channels > 1 ? source[1] : left;
-        }
-        const size_t frame = static_cast<size_t>(i) * channels;
-        if (output.bits == 16) {
-            auto* target = reinterpret_cast<int16_t*>(data) + frame;
-            target[0] = static_cast<int16_t>(left * 32767.0f);
-            for (size_t c = 1; c < channels; c++) {
-                target[c] = static_cast<int16_t>(right * 32767.0f);
-            }
-        } else if (output.floating) {
-            auto* target = reinterpret_cast<float*>(data) + frame;
-            target[0] = left;
-            for (size_t c = 1; c < channels; c++) {
-                target[c] = right;
-            }
-        } else {
-            auto* target = reinterpret_cast<int32_t*>(data) + frame;
-            target[0] = static_cast<int32_t>(left * 2147483000.0f);
-            for (size_t c = 1; c < channels; c++) {
-                target[c] = static_cast<int32_t>(right * 2147483000.0f);
-            }
-        }
-    }
-}
-
-void CloseAudio(AudioOutput& output) {
-    ReleaseUnknown(output.render);
-    ReleaseUnknown(output.client);
-    if (output.format) {
-        CoTaskMemFree(output.format);
-    }
-    output = AudioOutput();
-}
-
-bool OpenAudio(AudioOutput& output) {
-    AudioDeviceEnumerator* enumerator = nullptr;
-    if (FAILED(CoCreateInstance(kMmDeviceEnumeratorClsid, nullptr, CLSCTX_ALL,
-                                kMmDeviceEnumeratorIid,
-                                reinterpret_cast<void**>(&enumerator))) ||
-        !enumerator) {
-        Wh_Log(L"Audio: no device enumerator");
-        return false;
-    }
-    AudioDevice* device = nullptr;
-    const HRESULT deviceResult = enumerator->GetDefaultAudioEndpoint(
-        0 /* eRender */, 0 /* eConsole */, &device);
-    ReleaseUnknown(enumerator);
-    if (FAILED(deviceResult) || !device) {
-        Wh_Log(L"Audio: no default output device");
-        return false;
-    }
-    AudioClient* client = nullptr;
-    const HRESULT activateResult = device->Activate(
-        kAudioClientIid, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&client));
-    ReleaseUnknown(device);
-    if (FAILED(activateResult) || !client) {
-        Wh_Log(L"Audio: no audio client");
-        return false;
-    }
-
-    WAVEFORMATEX* format = nullptr;
-    if (FAILED(client->GetMixFormat(&format)) || !format) {
-        Wh_Log(L"Audio: no mix format");
-        ReleaseUnknown(client);
-        return false;
-    }
-    constexpr int kSharedMode = 0;
-    if (FAILED(client->Initialize(kSharedMode, 0, 0, 0, format, nullptr))) {
-        Wh_Log(L"Audio: shared mode init failed");
-        CoTaskMemFree(format);
-        ReleaseUnknown(client);
-        return false;
-    }
-    AudioRenderClient* render = nullptr;
-    if (FAILED(client->GetService(kAudioRenderClientIid,
-                                  reinterpret_cast<void**>(&render))) ||
-        !render) {
-        Wh_Log(L"Audio: no render client");
-        CoTaskMemFree(format);
-        ReleaseUnknown(client);
-        return false;
-    }
-
-    UINT32 frames = 0;
-    client->GetBufferSize(&frames);
-    if (frames == 0) {
-        Wh_Log(L"Audio: empty buffer");
-        ReleaseUnknown(render);
-        CoTaskMemFree(format);
-        ReleaseUnknown(client);
-        return false;
-    }
-
-    bool floating = format->wFormatTag == WAVE_FORMAT_IEEE_FLOAT;
-    if (format->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
-        const auto* extensible =
-            reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(format);
-        floating = extensible->SubFormat.Data1 == 3;  // 3 is IEEE float.
-    }
-
-    output.client = client;
-    output.render = render;
-    output.format = format;
-    output.frames = frames;
-    output.channels = format->nChannels > 0 ? format->nChannels : 2;
-    output.bits = format->wBitsPerSample;
-    output.floating = floating;
-    Wh_Log(L"Audio: %u Hz, %d channels, %d bits, float %d",
-           format->nSamplesPerSec, output.channels, output.bits,
-           floating ? 1 : 0);
-    return true;
-}
-
-DWORD WINAPI AudioThreadProc(void*) {
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
-
-    AudioOutput output;
-    bool opened = OpenAudio(output);
-    std::vector<float> samples;
-    size_t playhead = 0;
-    int rendered = 0;
-    bool running = false;
-
-    while (WaitForSingleObject(g_audioStop, 0) != WAIT_OBJECT_0) {
-        if (!opened) {
-            bool wanted = g_audioWarm;
-            g_audioWarm = false;
-            EnterCriticalSection(&g_audioLock);
-            if (g_audioRequest.generation != rendered) {
-                wanted = true;
-            }
-            LeaveCriticalSection(&g_audioLock);
-            if (wanted) {
-                opened = OpenAudio(output);
-                if (opened) {
-                    continue;
-                }
-            }
-            WaitForSingleObject(g_audioWake, 500);
-            continue;
-        }
-        g_audioWarm = false;  // The device is up, so nothing is pending.
-
-        AudioRequest request;
-        bool pending = false;
-        EnterCriticalSection(&g_audioLock);
-        if (g_audioRequest.generation != rendered) {
-            request = g_audioRequest;
-            pending = true;
-        }
-        LeaveCriticalSection(&g_audioLock);
-
-        if (pending) {
-            if (running) {
-                output.client->Stop();
-                running = false;
-            }
-            RenderChord(samples, output.channels,
-                        static_cast<int>(output.format->nSamplesPerSec), request);
-            playhead = 0;
-            rendered = request.generation;
-        }
-
-        if (playhead >= samples.size() / static_cast<size_t>(output.channels)) {
-            if (running) {
-                output.client->Stop();
-                running = false;
-            }
-            if (g_audioRelease) {
-                g_audioRelease = false;
-                CloseAudio(output);
-                opened = false;
-                samples.clear();
-                continue;
-            }
-            WaitForSingleObject(g_audioWake, 200);
-            continue;
-        }
-        if (!running) {
-            if (FAILED(output.client->Start())) {
-                Wh_Log(L"Audio: start failed");
-                CloseAudio(output);
-                opened = false;
-                continue;
-            }
-            running = true;
-        }
-
-        UINT32 padding = 0;
-        if (FAILED(output.client->GetCurrentPadding(&padding))) {
-            Sleep(5);
-            continue;
-        }
-        const UINT32 available =
-            output.frames > padding ? output.frames - padding : 0;
-        if (available == 0) {
-            Sleep(2);
-            continue;
-        }
-        BYTE* data = nullptr;
-        if (FAILED(output.render->GetBuffer(available, &data))) {
-            Sleep(2);
-            continue;
-        }
-        FillAudio(data, available, samples, playhead, output);
-        output.render->ReleaseBuffer(available, 0);
-    }
-
-    if (running) {
-        output.client->Stop();
-    }
-    CloseAudio(output);
-    CoUninitialize();
-    return 0;
-}
-
-void AudioPrepare() {
-    if (g_audioThread) {
-        g_audioRelease = false;
-        g_audioWarm = true;
-        if (g_audioWake) {
-            SetEvent(g_audioWake);
-        }
-        return;
-    }
-    InitializeCriticalSection(&g_audioLock);
-    g_audioLockReady = true;
-    g_audioWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    g_audioStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_audioThread = CreateThread(nullptr, 0, AudioThreadProc, nullptr, 0, nullptr);
-}
-
-void AudioRelease() {
-    if (!g_audioThread) {
-        return;
-    }
-    g_audioRelease = true;
-    if (g_audioWake) {
-        SetEvent(g_audioWake);
-    }
-}
-
-void AudioPlay(const AudioRequest& request) {
-    AudioPrepare();
-    if (!g_audioLockReady || !g_audioWake) {
-        return;
-    }
-    EnterCriticalSection(&g_audioLock);
-    g_audioRequest = request;
-    g_audioRequest.generation++;
-    LeaveCriticalSection(&g_audioLock);
-    SetEvent(g_audioWake);
-    g_audioBusyUntil = NowMs() + 2600.0;
-    if (g_panel.Hwnd()) {
-        SetTimer(g_panel.Hwnd(), kAudioTimer, 250, nullptr);
-    }
-}
-
-void AudioShutdown() {
-    if (g_audioStop) {
-        SetEvent(g_audioStop);
-    }
-    if (g_audioThread) {
-        WaitForSingleObject(g_audioThread, 2000);
-        CloseHandle(g_audioThread);
-        g_audioThread = nullptr;
-    }
-    if (g_audioWake) {
-        CloseHandle(g_audioWake);
-        g_audioWake = nullptr;
-    }
-    if (g_audioStop) {
-        CloseHandle(g_audioStop);
-        g_audioStop = nullptr;
-    }
-    if (g_audioLockReady) {
-        DeleteCriticalSection(&g_audioLock);
-        g_audioLockReady = false;
-    }
-}
-
-#endif  // Chord playback
-
-////////////////////////////////////////////////////////////////////////////////
 // Metronome audio
 //
 // winmm keeps this small: one shared mode stream, refilled block by block on
@@ -9729,10 +9203,14 @@ void SetTool(int tool) {
         g_selAnchor = g_caret;
         g_caretStart = NowMs();
     }
-    if (g_app.tool == kToolTuner && g_phase == kPhaseOpen) {
+    // The panel counts as up while it fades in, so a tool picked from the tray
+    // menu, or switched to during the animation, gets its microphone like any
+    // other switch.
+    const bool onScreen = g_phase == kPhaseOpen || g_phase == kPhaseOpening;
+    if (g_app.tool == kToolTuner && onScreen) {
         TunerStart();
     }
-    if (g_app.tool == kToolTrainer && g_phase == kPhaseOpen) {
+    if (g_app.tool == kToolTrainer && onScreen) {
         TrainerEnter();
     }
     Repaint();
@@ -11276,45 +10754,6 @@ void OnMouseMove(HWND hwnd, POINT pt) {
     }
 }
 
-#if 0  // Chord playback, parked with the engine above.
-void PlaySelectedChord() {
-    const Voicing* voicing = SelectedVoicing();
-    if (!voicing) {
-        return;
-    }
-    const auto& info = chorddata::kInstruments[g_app.instrument];
-    AudioRequest request;
-    request.plucked = info.kind == chorddata::kFretted;
-    // A four string neck reads as a ukulele: shorter and brighter than a guitar.
-    request.damping = info.strings > 0 && info.strings <= 4 ? 0.9962f : 0.9975f;
-    if (request.plucked && info.tuning) {
-        // Low string first, so the render thread strums upwards.
-        for (int i = 0; i < voicing->stringCount && request.noteCount < kMaxNotes;
-             i++) {
-            const int fret = voicing->frets[i];
-            if (fret == kMutedFret) {
-                continue;
-            }
-            // An open string is fret zero at the nut, not the base fret.
-            const int absolute = fret == 0 ? 0 : voicing->baseFret + fret - 1;
-            request.notes[request.noteCount++] =
-                info.tuning[i] + absolute;
-        }
-    } else {
-        const int count = std::min(voicing->noteCount, kMaxNotes);
-        for (int i = 0; i < count; i++) {
-            request.notes[i] = voicing->notes[i];
-        }
-        std::sort(request.notes, request.notes + count);
-        request.noteCount = count;
-    }
-    if (request.noteCount == 0) {
-        return;
-    }
-    AudioPlay(request);
-}
-#endif  // PlaySelectedChord
-
 void OnMouseDown(HWND hwnd, POINT pt) {
     const HitResult hit = HitTest(pt);
     if (MenuVisual(g_toolMenu) && hit.id == kHitNone) {
@@ -11746,6 +11185,57 @@ void OnWheel(HWND hwnd, WPARAM wParam, POINT pt) {
     Repaint();
 }
 
+// The chips list the instruments in an order of their own, so the walk follows
+// that order rather than the enum's.
+int StepInstrumentChip(int instrument, int delta) {
+    int step = 0;
+    for (int i = 0; i < kInstrumentChipCount; i++) {
+        if (kInstrumentChipOrder[i] == instrument) {
+            step = i;
+            break;
+        }
+    }
+    return kInstrumentChipOrder[(step + delta + kInstrumentChipCount) %
+                                kInstrumentChipCount];
+}
+
+// Shift+Tab steps back through the instruments, and Tab steps forward where it
+// is not already taken, in every tool that has more than one to offer. Each
+// tool keeps its own idea of which one is showing, so the walk goes through
+// that tool's own setter.
+void CycleInstrument(int delta) {
+    switch (g_app.tool) {
+        case kToolChords:
+            // Tab is the speaker on this card, so Shift+Tab is its only way to
+            // change instrument, and the search box keeps the caret.
+            g_searchFocused = true;
+            SetInstrument(StepInstrumentChip(static_cast<int>(g_app.instrument),
+                                             delta),
+                          true);
+            Repaint();
+            return;
+        case kToolTuner:
+            TunerStepInstrument(delta);
+            return;
+        case kToolStrum:
+            // The strumming card only offers the two fretted voices, so either
+            // direction lands on the other one.
+            StrumSetInstrument(g_strum.instrument == kInstrumentGuitar
+                                   ? kInstrumentUkulele
+                                   : kInstrumentGuitar);
+            return;
+        case kToolCircle:
+            CircleSetInstrument(StepInstrumentChip(g_circle.instrument, delta));
+            return;
+        case kToolTrainer:
+            TrainerSetInstrument(
+                StepInstrumentChip(g_trainer.instrument, delta));
+            return;
+        default:
+            return;  // The metronome and the tap tempo have no instrument.
+    }
+}
+
 void OnKeyDown(WPARAM key) {
     const bool shift = GetKeyState(VK_SHIFT) < 0;
     const bool ctrl = GetKeyState(VK_CONTROL) < 0;
@@ -11796,6 +11286,8 @@ void OnKeyDown(WPARAM key) {
             Repaint();
             return;
         }
+        // The list is modal: the card behind it takes no key while it is up.
+        return;
     }
     if (g_app.tool == kToolTempo) {
         if (key == VK_ESCAPE) {
@@ -11937,7 +11429,11 @@ void OnKeyDown(WPARAM key) {
             return;
         }
         if (key == VK_TAB) {
-            StrumStepPreset(shift ? -1 : 1);
+            if (shift) {
+                CycleInstrument(-1);
+            } else {
+                StrumStepPreset(1);
+            }
             return;
         }
         // The letters lay a stroke on the focused cell; a g t reach the marks
@@ -12002,16 +11498,9 @@ void OnKeyDown(WPARAM key) {
             return;
         }
         if (key == VK_TAB) {
-            // Tab walks the instrument chips in the order they are drawn.
-            int step = 0;
-            for (int i = 0; i < kInstrumentChipCount; i++) {
-                if (kInstrumentChipOrder[i] == g_circle.instrument) {
-                    step = i;
-                    break;
-                }
-            }
-            CircleSetInstrument(
-                kInstrumentChipOrder[(step + 1) % kInstrumentChipCount]);
+            // Tab walks the instrument chips and Shift+Tab walks them back,
+            // the same pair the rest of the panel uses.
+            CycleInstrument(shift ? -1 : 1);
             return;
         }
         // The number keys play the diatonic chord built on that degree.
@@ -12035,16 +11524,8 @@ void OnKeyDown(WPARAM key) {
             return;
         }
         if (key == VK_TAB) {
-            // Tab walks the instrument chips in the order they are drawn.
-            int step = 0;
-            for (int i = 0; i < kInstrumentChipCount; i++) {
-                if (kInstrumentChipOrder[i] == g_trainer.instrument) {
-                    step = i;
-                    break;
-                }
-            }
-            TrainerSetInstrument(
-                kInstrumentChipOrder[(step + 1) % kInstrumentChipCount]);
+            // Tab walks the instruments and Shift+Tab walks them back.
+            CycleInstrument(shift ? -1 : 1);
             return;
         }
         if (key == 'N') {
@@ -12107,6 +11588,10 @@ void OnKeyDown(WPARAM key) {
         }
         if (key == VK_UP || key == VK_DOWN) {
             TunerStepInstrument(key == VK_UP ? -1 : 1);
+            return;
+        }
+        if (key == VK_TAB) {
+            CycleInstrument(shift ? -1 : 1);
             return;
         }
         if (key == VK_LEFT || key == VK_RIGHT) {
@@ -12198,11 +11683,9 @@ void OnKeyDown(WPARAM key) {
             return;
         case VK_TAB:
             if (shift) {
-                // Tab took over the speaker, so the instrument walk lives on
-                // Shift+Tab and runs forward, the way Tab walks it elsewhere.
-                g_searchFocused = true;
-                SetInstrument((g_app.instrument + 1) % kInstrumentCount, true);
-                Repaint();
+                // Tab is the speaker here, so the instrument walk lives on
+                // Shift+Tab, which steps back like it does everywhere else.
+                CycleInstrument(-1);
             } else {
                 ChordPlaySelected();
             }
@@ -12404,9 +11887,10 @@ bool TrayPrepare(NOTIFYICONDATAW& data) {
     if (!g_taskbarCreated) {
         g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
         if (g_taskbarCreated) {
-            // Explorer runs higher up the integrity ladder than a normal app,
-            // so the broadcast it sends when it restarts is filtered out of
-            // this window unless it is allowed through by hand.
+            // Explorer and the mod normally run at the same level, so nothing
+            // is filtered and this call changes nothing. It matters when the
+            // mod runs elevated, as a portable Windhawk started as admin does:
+            // Explorer's broadcast would then be dropped before it got here.
             ChangeWindowMessageFilterEx(g_panel.Hwnd(), g_taskbarCreated,
                                         MSGFLT_ALLOW, nullptr);
         }
@@ -12613,7 +12097,7 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
                                       g_app.tool == kToolCircle ||
                                       g_app.tool == kToolTrainer)) ||
                     (g_app.tool == kToolChords && transportKey) ||
-                    (g_app.tool == kToolChords && wParam == VK_TAB) ||
+                    wParam == VK_TAB ||
                     (g_app.tool == kToolCircle && wParam >= '1' &&
                      wParam <= '7');
                 if (repeat && singleShot) {
@@ -13045,6 +12529,20 @@ void WhTool_ModUninit() {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
@@ -13146,9 +12644,9 @@ void Wh_ModAfterInit() {
             return;
     }
 
-    WCHAR commandLine[MAX_PATH + 2 +
-                     (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) -
-                     1];
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
@@ -13169,20 +12667,22 @@ void Wh_ModAfterInit() {
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
-    auto createProcessInternal = reinterpret_cast<CreateProcessInternalW_t>(
-        GetProcAddress(kernelModule, "CreateProcessInternalW"));
-    if (!createProcessInternal) {
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    STARTUPINFO si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
     PROCESS_INFORMATION pi;
-    if (!createProcessInternal(nullptr, currentProcessPath, commandLine, nullptr,
-                               nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr,
-                               nullptr, &si, &pi, nullptr)) {
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
         Wh_Log(L"CreateProcess failed");
         return;
     }
