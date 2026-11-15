@@ -130,7 +130,7 @@ The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so
 - Power mode and energy saver use undocumented Windows functions; if Windows refuses, the tile opens the matching Settings page.
 - Screen recording uses Win+Shift+R and needs an up-to-date Snipping Tool.
 - Replying from the pill works with apps that register a notification activator with Windows; otherwise the pill opens the app and copies your text.
-- With live glass (and the bar's liquid background), the bar and panels don't show up in screenshots.
+- With live glass, the bar's liquid backgrounds and the Glass background without "live", the bar (and, with live glass, the panels) doesn't show up in screenshots.
 - If Windhawk itself runs as administrator (portable mode started elevated), the bar doesn't show the tray icons: letting the shell's tray data reach an elevated bar would also let any app send it fake icons.
 */
 // ==/WindhawkModReadme==
@@ -149,8 +149,8 @@ The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so
   - dark: Escuro (texto claro)
   - light: Claro (texto escuro)
 - panelLook: auto
-  $name: Look of menus and panels (Control Center, tray, Bluetooth)
-  $name:pt-BR: Aparência dos menus e painéis (central, bandeja, Bluetooth)
+  $name: Look of menus and panels with a glass theme (Control Center, tray, Bluetooth); a solid Panel theme in Menu Bar Settings takes over
+  $name:pt-BR: Aparência dos menus e painéis com um tema de vidro (central, bandeja, Bluetooth); um Tema dos painéis sólido nos Ajustes da barra tem prioridade
   $options:
   - auto: Follow the Windows theme
   - dark: Dark glass
@@ -160,11 +160,11 @@ The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so
   - dark: Vidro escuro
   - light: Vidro claro
 - tintDark: "#401A1A1A"
-  $name: Glass tint in the dark theme (#AARRGGBB)
-  $name:pt-BR: Tinta do vidro no tema escuro (#AARRGGBB)
+  $name: Glass tint in the dark theme (#AARRGGBB; "Clear ↔ frosted" in Customize theme scales the alpha)
+  $name:pt-BR: Tinta do vidro no tema escuro (#AARRGGBB; o "Transparente ↔ fosco" de Personalizar tema escala o alfa)
 - tintLight: "#50F2F2F2"
-  $name: Glass tint in the light theme (#AARRGGBB)
-  $name:pt-BR: Tinta do vidro no tema claro (#AARRGGBB)
+  $name: Glass tint in the light theme (#AARRGGBB; "Clear ↔ frosted" in Customize theme scales the alpha)
+  $name:pt-BR: Tinta do vidro no tema claro (#AARRGGBB; o "Transparente ↔ fosco" de Personalizar tema escala o alfa)
 - desktopName: "Finder"
   $name: Name shown for the desktop and File Explorer
   $name:pt-BR: Nome exibido para a área de trabalho e o Explorador de Arquivos
@@ -389,7 +389,7 @@ static int SelIndex(const std::wstring& v) {
 
 // Cor da seleção (a da barra vale também para os menus). Falso = fosca.
 // darkText: o texto por cima deve ser escuro (amarelo é claro demais para branco).
-static bool SelColor(bool /*menu*/, D2D1_COLOR_F* c, bool* darkText = nullptr) {
+static bool SelColor(D2D1_COLOR_F* c, bool* darkText = nullptr) {
     int i = g_settings.selBar;
     if (i < 0 || i >= kSelCount) return false;
     DWORD v = kSelPalette[i].rgb;
@@ -551,8 +551,8 @@ static const UiDefault kUiDefaults[] = {
     {L"iconScale", L"100"},
     {L"barStyle", L"transparent"},
     {L"barPerMon", L"0"},
-    {L"panelLook", L"follow"},
-    {L"panelLookStyle", L"glass"},
+    {L"panelThemeMode", L"follow"},  // (não confundir com "panelLook", das configurações do Windhawk)
+    {L"panelThemeStyle", L"glass"},
     {L"tintColor", L"#050505"},
     {L"tintLevel", L"100"},
     {L"tintReach", L"29"},
@@ -576,7 +576,6 @@ static const UiDefault kUiDefaults[] = {
     {L"ccCloseAnim", L"cascade"},
     {L"ntfIconShape", L"round"},
     {L"ntfLayout", L"cards"},
-    {L"glassBeforeTint", L""},
     {L"showOsd", L"1"},
     {L"showControlCenter", L"1"},
     {L"showWeather", L"1"},
@@ -625,7 +624,7 @@ static const UiDefault* UiDefFor(PCWSTR key) {
 }
 // O valor guardado (versões de teste guardavam "valor|..." ou "valor\x1F...").
 static bool UiStored(PCWSTR key, std::wstring& out) {
-    wchar_t name[80], buf[256] = {};
+    wchar_t name[80], buf[2048] = {};  // (os mapas por monitor crescem com cada monitor)
     swprintf(name, ARRAYSIZE(name), L"ui.%s", key);
     Wh_GetStringValue(name, buf, ARRAYSIZE(buf));
     if (!buf[0]) return false;
@@ -796,11 +795,7 @@ static void LoadSettings() {
     }
     s.fontSize = (float)OvrInt(L"fontSize");
     if (s.fontSize < 8 || s.fontSize > 32) s.fontSize = 13;
-    {
-        int ic = OvrInt(L"iconScale");
-        (void)ic;
-        s.iconScale = 1.0f;  // ícones e fonte num tamanho só (os ícones seguem a fonte)
-    }
+    s.iconScale = 1.0f;  // ícones e fonte num tamanho só (os ícones seguem a fonte)
     // Cor do texto e dos ícones da barra: a escolhida nos Ajustes da barra, senão
     // a das configurações do mod.
     std::wstring theme;
@@ -817,9 +812,9 @@ static void LoadSettings() {
     if (!UiStored(L"textColorMon", s.textColorMon)) s.textColorMon.clear();
     if (!UiStored(L"barStyleMon", s.barStyleMon)) s.barStyleMon.clear();
     s.barPerMon = OvrInt(L"barPerMon") != 0;
-    s.panelLookCustom = OvrStr(L"panelLook") == L"custom";
+    s.panelLookCustom = OvrStr(L"panelThemeMode") == L"custom";
     {
-        std::wstring v = OvrStr(L"panelLookStyle");
+        std::wstring v = OvrStr(L"panelThemeStyle");
         s.panelLookStyle = v == L"liquid" ? 2 : v == L"tinted" ? 3 : v == L"light" ? 5 : v == L"dark" ? 6 : v == L"oled" ? 7 : 0;
     }
     if (!UiStored(L"barMonitor", s.barMonitor) || s.barMonitor.empty()) s.barMonitor = s.allMonitors ? L"all" : L"primary";
@@ -1599,6 +1594,12 @@ struct BarLightScope {
     ~BarLightScope() { g_light = saved; }
 };
 
+// A tinta do vidro (#AARRGGBB das configurações) com o alfa escalado pelo
+// "Transparente ↔ fosco": 80 (o padrão) dá o alfa da configuração; 0, cinco vezes ele.
+static DWORD TintScaled(DWORD argb, int transparency) {
+    int a = std::min(255, (int)(argb >> 24) * std::clamp(100 - transparency, 0, 100) / 20);
+    return (argb & 0x00FFFFFF) | ((DWORD)a << 24);
+}
 static void ApplyGlass(Bar* b) {
     BarLightScope barLight(b);
     static auto pSWCA = (SetWindowCompositionAttribute_t)(void*)GetProcAddress(
@@ -1620,9 +1621,8 @@ static void ApplyGlass(Bar* b) {
         pSWCA(b->hwnd, &cd);
         return;
     }
-    DWORD argb = g_light ? g_settings.tintLight : g_settings.tintDark;
-    // Transparente ↔ fosco do tema Vidro: a opacidade da tinta (80 = a de sempre).
-    argb = (argb & 0x00FFFFFF) | ((DWORD)std::clamp((100 - g_themeGlass[0].transparency) * 4, 0, 255) << 24);
+    // Transparente ↔ fosco do tema Vidro escala o alfa da tinta (no padrão, 80, fica o da configuração).
+    DWORD argb = TintScaled(g_light ? g_settings.tintLight : g_settings.tintDark, g_themeGlass[0].transparency);
     DWORD abgr = (argb & 0xFF000000) | ((argb & 0x000000FF) << 16) | (argb & 0x0000FF00) |
                  ((argb & 0x00FF0000) >> 16);
     ACCENT_POLICY accent = {4 /*ACRYLICBLURBEHIND*/, 0, abgr, 0};
@@ -5980,7 +5980,7 @@ static D2D1_COLOR_F Argb(DWORD argb) {
 }
 static D2D1_COLOR_F MenuAccent() {
     D2D1_COLOR_F c;
-    if (SelColor(true, &c)) return c;
+    if (SelColor(&c)) return c;
     return Argb(g_settings.ccAccent | 0xFF000000);
 }
 
@@ -9112,7 +9112,7 @@ static void GmRender(GmLevel* lv) {
             bool hot = ((int)i == lv->hover || (int)i == lv->childFor) && GmSelectable(it) && !it.isSwitch;
             D2D1_COLOR_F selC = accent;
             bool selDark = false;
-            bool selColored = hot && SelColor(true, &selC, &selDark);
+            bool selColored = hot && SelColor(&selC, &selDark);
             if (selColored) {
                 // Destaque na cor escolhida, com a luz de vidro por cima.
                 D2D1_ROUNDED_RECT hr = D2D1::RoundedRect(r, 7 * s, 7 * s);
@@ -10969,6 +10969,7 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
     }();
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
     int result = 3;
+    bool canceled = false;  // a pessoa tocou em Cancelar: sem aviso de falha
     std::wstring detail;  // o motivo da falha, mostrado na pílula
     Wh_Log(L"Bluetooth: parear %s (%s)", name.c_str(), id.c_str());
     // A procura (inquiry) atrapalha a conexão com um aparelho clássico: para antes.
@@ -10999,7 +11000,8 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
             winrt::Windows::Foundation::Deferral def{nullptr};
         };
         auto req = std::make_shared<Req>();
-        auto token = custom.PairingRequested([req](DeviceInformationCustomPairing const&,
+        // auto_revoke: o tratador sai em qualquer caminho, também se algo lançar erro.
+        auto token = custom.PairingRequested(winrt::auto_revoke, [req](DeviceInformationCustomPairing const&,
                                                     DevicePairingRequestedEventArgs const& a) {
             if (a.PairingKind() == DevicePairingKinds::ConfirmOnly) {
                 a.Accept();
@@ -11032,6 +11034,20 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
         for (int attempt = 0;; attempt++) {
         auto op = custom.PairAsync(DevicePairingKinds::ConfirmOnly | DevicePairingKinds::ConfirmPinMatch |
                                    DevicePairingKinds::DisplayPin);
+        // Em qualquer saída (inclusive um erro lançado no meio da espera): fecha o
+        // pedido sem resposta e cancela o pareamento que ainda está em andamento.
+        struct OpGuard {
+            std::function<void()> f;
+            ~OpGuard() {
+                try {
+                    f();
+                } catch (...) {
+                }
+            }
+        } opGuard{[&] {
+            dropReq();
+            if (op.Status() == AsyncStatus::Started) WinrtCancelWait(op);
+        }};
         // Espera o pareamento (a pessoa pode precisar confirmar no aparelho); no
         // encerramento do mod ou depois de 60 s, desiste.
         ULONGLONG start = GetTickCount64();
@@ -11084,6 +11100,7 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
                 Sleep(100);
             }
             Wh_Log(L"Bluetooth: resposta %d", ans);
+            if (ans == 2) canceled = true;
             if (!display) {
                 if (ans == 1) a.Accept();
                 def.Complete();
@@ -11119,7 +11136,6 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
         }
         break;
         }
-        custom.PairingRequested(token);
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"Bluetooth: erro 0x%08X %s", (unsigned)e.code(), e.message().c_str());
         wchar_t h[16];
@@ -11128,10 +11144,15 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
     } catch (...) {
         Wh_Log(L"Bluetooth: erro no pareamento");
     }
-    BtSetState(id, result);
-    AcquireSRWLockExclusive(&g_btLock);
-    g_btPairMsgs.push_back(name + L"\n" + std::to_wstring(result) + L"\n" + detail);
-    ReleaseSRWLockExclusive(&g_btLock);
+    if (canceled && result != 2) {
+        // Cancelado na pílula ou na caixa: o aparelho volta a "Parear", sem aviso.
+        BtSetState(id, 0);
+    } else {
+        BtSetState(id, result);
+        AcquireSRWLockExclusive(&g_btLock);
+        g_btPairMsgs.push_back(name + L"\n" + std::to_wstring(result) + L"\n" + detail);
+        ReleaseSRWLockExclusive(&g_btLock);
+    }
     g_btPairing--;
     BtNotify(2);
     winrt::uninit_apartment();
@@ -12846,9 +12867,9 @@ enum BsVal {
     BV_ISLPOS, BV_ISLTEST, BV_ISLCLEAR, BV_NPLAYOUT, BV_NPSIZE, BV_WINNOTIF, BV_WINONLY, BV_ISLHISTNOT,
     BV_WXPROV, BV_WXUNIT, BV_WXLOOK, BV_WXANIM, BV_WXGLASS, BV_WXINT, BV_WXTEMP, BV_WXPLACE, BV_WXNOW, BV_WXRESULT,
     BV_BATTPCT, BV_HIDEFS, BV_OSD, BV_DIM,
-    BV_G_LIQUID, BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_ICONS, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_UPDATES,
+    BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_UPDATES,
     BV_G_TINT, BV_SEARCHTGT, BV_LANG, BV_NPBAR, BV_ICSADD, BV_ICSCLEAR,
-    BV_G_STYLE, BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_HIDEMAX, BV_HANDLE,
+    BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_HIDEMAX, BV_HANDLE,
     BV_THEMEHEAD, BV_TGROUP, BV_THEMENONE, BV_THEMERESET,  // Personalizar tema
     BV_PANELLOOK, BV_PANELSTYLE,                           // Tema dos painéis
     BV_NTFLAYOUT,                                          // painel do sino: caixa ou cartões
@@ -13251,10 +13272,8 @@ static int BsGet(int val) {
         case BV_LANG: return g_langChoice;
         case BV_G_REFRACT: return g_themeGlass[ThemeEdit()].refraction;
         case BV_G_BLUR: return g_themeGlass[ThemeEdit()].blur;
-        case BV_G_LIQUID: return g_glass.liquid;
         case BV_G_LIVE: return g_themeGlass[ThemeEdit()].live;
         case BV_BARSTYLE: return g_settings.barPerMon ? 8 : g_settings.barStyle;  // 8 = "Personalizar por monitor"
-        case BV_G_STYLE: return g_glass.tinted ? 1 : 0;
         case BV_CCCLOSE: return g_settings.ccCloseAnim;
         case BV_NTFSHAPE: return g_settings.ntfIconShape;
         case BV_NTFLAYOUT: return g_settings.ntfCards ? 0 : 1;
@@ -13452,7 +13471,6 @@ static void BsSet(int val, int v) {
             g_settings.fontSize = (float)(10 + (int)std::lround(v / 10.0));
             OvrSetInt(L"fontSize", (int)g_settings.fontSize);
             g_settings.iconScale = 1.0f;
-            OvrSetInt(L"iconScale", 100);
         }
         g_bsPendingReload = true;
         return;
@@ -13521,13 +13539,13 @@ static void BsSet(int val, int v) {
     if (val == BV_CLEARMENUS) {
         // A mesma escolha de "Tema dos painéis", vista de Personalizar tema.
         g_settings.panelLookCustom = v > 0;
-        OvrSetStr(L"panelLook", v > 0 ? L"custom" : L"follow");
+        OvrSetStr(L"panelThemeMode", v > 0 ? L"custom" : L"follow");
         if (v > 0) {
             static const int kTheme[] = {0, 2, 3, 5, 6, 7};
             static const PCWSTR kNames[] = {L"glass", L"liquid", L"tinted", L"light", L"dark", L"oled"};
             int k = std::clamp(v - 1, 0, 5);
             g_settings.panelLookStyle = kTheme[k];
-            OvrSetStr(L"panelLookStyle", kNames[k]);
+            OvrSetStr(L"panelThemeStyle", kNames[k]);
         }
         TintApply();
         return;
@@ -13536,13 +13554,13 @@ static void BsSet(int val, int v) {
         // Tema dos painéis: acompanha a barra, ou um tema próprio para os menus.
         if (val == BV_PANELLOOK) {
             g_settings.panelLookCustom = v == 1;
-            OvrSetStr(L"panelLook", g_settings.panelLookCustom ? L"custom" : L"follow");
+            OvrSetStr(L"panelThemeMode", g_settings.panelLookCustom ? L"custom" : L"follow");
         } else {
             static const int kTheme[] = {0, 2, 3, 5, 6, 7};
             static const PCWSTR kNames[] = {L"glass", L"liquid", L"tinted", L"light", L"dark", L"oled"};
             int k = std::clamp(v, 0, 5);
             g_settings.panelLookStyle = kTheme[k];
-            OvrSetStr(L"panelLookStyle", kNames[k]);
+            OvrSetStr(L"panelThemeStyle", kNames[k]);
         }
         TintApply();  // o texto dos painéis segue o tema novo; a Central aberta se redesenha
         return;
@@ -13597,36 +13615,6 @@ static void BsSet(int val, int v) {
         static const PCWSTR kNames[] = {L"cascade", L"shrink", L"fade", L"slide", L"none"};
         g_settings.ccCloseAnim = std::clamp(v, 0, 4);
         OvrSetStr(L"ccCloseAnim", kNames[g_settings.ccCloseAnim]);
-        return;
-    }
-    if (val == BV_G_STYLE) {
-        bool want = v == 1;
-        if (g_glass.tinted == want) return;
-        g_glass.tinted = want;
-        if (want) {
-            // Guarda o vidro de antes, para voltar a ele ao sair do tema.
-            wchar_t prev[64];
-            swprintf(prev, ARRAYSIZE(prev), L"%d;%d;%d;%d;%d", g_glass.liquid ? 1 : 0, g_glass.clear ? 1 : 0,
-                     g_glass.transparency, g_glass.blur, g_glass.refraction);
-            OvrSetStr(L"glassBeforeTint", prev);
-            // Os padrões do tema no Siri Plus: limpo abaixo da cor, sem desfoque, refração 70 %.
-            g_glass.liquid = true;
-            g_glass.clear = true;
-            g_glass.transparency = 100;
-            g_glass.blur = 0;
-            g_glass.refraction = 70;
-        } else {
-            int l, c, t, b, r;
-            if (swscanf(OvrStr(L"glassBeforeTint").c_str(), L"%d;%d;%d;%d;%d", &l, &c, &t, &b, &r) == 5) {
-                g_glass.liquid = l != 0;
-                g_glass.clear = c != 0;
-                g_glass.transparency = std::clamp(t, 0, 100);
-                g_glass.blur = std::clamp(b, 0, 100);
-                g_glass.refraction = std::clamp(r, 0, 100);
-            }
-        }
-        SaveGlassPrefs();
-        TintApply();
         return;
     }
     if (val == BV_TCOLOR) {
@@ -13980,7 +13968,6 @@ static const PCWSTR kBsBarChoices[] = {L"Vidro", L"Transparente", L"Líquido", L
                                        L"Claro", L"Escuro", L"OLED"};
 static const PCWSTR kBsBarChoicesAll[] = {L"Vidro", L"Transparente", L"Líquido", L"Vidro líquido personalizado", L"Cor da janela",
                                           L"Claro", L"Escuro", L"OLED", L"Personalizar por monitor"};
-static const PCWSTR kBsGlassStyle[] = {L"Transparente", L"Vidro líquido personalizado"};
 static const PCWSTR kBsNtfShape[] = {L"Círculo", L"Formato macOS"};
 static const PCWSTR kBsNtfLayout[] = {L"Flutuante", L"Dentro da caixa"};
 static const PCWSTR kBsTextFollow[] = {L"Seguir o tema", L"Branco", L"Preto"};
@@ -14032,7 +14019,6 @@ static const PCWSTR* BsChoiceLabels(int val) {
         case BV_NPBAR: return kBsNpBar;
         case BV_LANG: return kBsLang;
         case BV_BARSTYLE: return kBsBarChoicesAll;
-        case BV_G_STYLE: return kBsGlassStyle;
         case BV_CCCLOSE: return kBsCcClose;
         case BV_NTFSHAPE: return kBsNtfShape;
         case BV_NTFLAYOUT: return kBsNtfLayout;
@@ -14048,7 +14034,7 @@ static int BsChoiceCount(int val) {
     if (val >= BV_MONSTYLE0 && val < BV_MONTEXT0) return 8;
     if (val >= BV_MONTEXT0 && val < BV_MONEND) return 3;
     switch (val) {
-        case BV_ISLPOS: case BV_WXUNIT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: case BV_NTFLAYOUT: return 2;
+        case BV_ISLPOS: case BV_WXUNIT: case BV_SEARCHTGT: case BV_NTFSHAPE: case BV_NTFLAYOUT: return 2;
         case BV_FONTFAM:
             if (g_bsFonts.empty()) BsFontsRefresh();
             return (int)g_bsFonts.size();
@@ -14632,7 +14618,7 @@ static void BsDrawWindow() {
     {
         D2D1_COLOR_F selC = BsAccent();
         bool selDark = false;
-        SelColor(true, &selC, &selDark);
+        SelColor(&selC, &selDark);
         int n = 0;
         for (size_t k = 0; k < g_bs.sideRows.size(); k++) {
             float ph = BsPhase(0.42f + std::min(n++, 12) * 0.02f);
@@ -22047,7 +22033,6 @@ static void BsAction(int val) {
             g_settings.iconScale = 1.0f;
             OvrSetInt(L"height", 28);
             OvrSetInt(L"fontSize", 13);
-            OvrSetInt(L"iconScale", 100);
             BarsApplyLive(true);
             break;
         case BV_THEMERESET: {
@@ -23198,9 +23183,7 @@ static void Render(Bar* b) {
     if (bst == 0 && b->lq && !b->peekColorOn) {
         // Vidro sem "ao vivo": a foto do fundo desfocada e a tinta do Vidro.
         LqDraw(b->rt, *b->lq, D2D1::RectF(0, 0, w, h), 0, s);
-        DWORD argb = g_light ? g_settings.tintLight : g_settings.tintDark;
-        D2D1_COLOR_F c = Argb(argb | 0xFF000000);
-        c.a = std::clamp((100 - GlassT()) * 4, 0, 255) / 255.0f;
+        D2D1_COLOR_F c = Argb(TintScaled(g_light ? g_settings.tintLight : g_settings.tintDark, GlassT()));
         b->brush->SetColor(c);
         b->rt->FillRectangle(D2D1::RectF(0, 0, w, h), b->brush);
     }
@@ -23217,7 +23200,7 @@ static void Render(Bar* b) {
             D2D1::RectF(it.l + 1 * s, (h - pillH) / 2, it.r - 1 * s, (h + pillH) / 2), pillH / 2, pillH / 2);
         D2D1_COLOR_F ac;
         bool acDark = false;
-        if (SelColor(false, &ac, &acDark)) {
+        if (SelColor(&ac, &acDark)) {
             ac.a = i == b->open || i == b->flash ? 0.95f : 0.80f;
             b->brush->SetColor(ac);
             b->rt->FillRoundedRectangle(pill, b->brush);
@@ -23897,7 +23880,6 @@ static void BarSamplePeekColor(Bar* b, HWND target) {
     if (fg) GetWindowThreadProcessId(fg, &pid);
     // (Janelas do Explorador de Arquivos contam; a área de trabalho e a barra de tarefas, não.)
     bool shellUi = pid == ShellPid() && !ClassIs(fg, L"CabinetWClass");
-    if (fg) b->peekSrc = fg;
     if (!fg || pid == GetCurrentProcessId() || shellUi || IsIconic(fg) || MonitorFromWindow(fg, MONITOR_DEFAULTTONULL) != b->monitor ||
         FAILED(DwmGetWindowAttribute(fg, 9 /*DWMWA_EXTENDED_FRAME_BOUNDS*/, &vr, sizeof(vr))) || vr.right - vr.left < 60) {
         if (b->peekColorOn) {
@@ -23935,6 +23917,12 @@ static void BarSamplePeekColor(Bar* b, HWND target) {
         const DWORD* px = (const DWORD*)bits;
         for (int i = 0; i < 9; i++) {
             int x = (int)(w * (0.18f + 0.64f * i / 8.0f));
+            // "Cor da janela": só os pontos onde a própria janela aparece (outra
+            // janela por cima daria a cor dela).
+            if (target) {
+                HWND at = WindowFromPoint(POINT{vr.left + x, y});
+                if (!at || GetAncestor(at, GA_ROOT) != target) continue;
+            }
             DWORD c = px[std::clamp(x, 0, w - 1)];  // BGRA
             rs.push_back((c >> 16) & 0xFF);
             gs.push_back((c >> 8) & 0xFF);
@@ -23944,7 +23932,8 @@ static void BarSamplePeekColor(Bar* b, HWND target) {
     if (bmp) DeleteObject(bmp);
     if (mem) DeleteDC(mem);
     ReleaseDC(nullptr, dc);
-    if (rs.empty()) return;
+    if (rs.empty()) return;  // coberta: tenta de novo na próxima conferência
+    b->peekSrc = fg;
     auto med = [](std::vector<int>& v) {
         std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
         return v[v.size() / 2];
