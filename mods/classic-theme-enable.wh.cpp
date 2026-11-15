@@ -2,7 +2,7 @@
 // @id             classic-theme-enable
 // @name           Classic Theme
 // @description    Disables theming (enables Classic theme)
-// @version        1.2.8
+// @version        1.2.9
 // @author         Anixx
 // @github         https://github.com/Anixx
 // @include        winlogon.exe
@@ -64,6 +64,7 @@ On 24H2 and later you are advised to import a classic color scheme (see the bott
 to get rid of black backgrounds.
 
 7. If you are using the Windows 10 taskbar, install the [OpenShell utility](https://github.com/Open-Shell/Open-Shell-Menu).
+After that set the taskbar property to opaque in the settings.
 If you want the Windows logo on the Start button, import this registry file:
 
     ```
@@ -81,7 +82,8 @@ to mitigate this.
 10. Some windows will manifest the unwanted transparency. 
 To fix this, install the [*Classic theme transparency fix*](https://windhawk.net/mods/classic-theme-transparency-fix) mod.
 
-11. On Windows 11 22H2 and later it is recommended to install the mod [*ExplorerFrame and menubar fixes fork*](https://windhawk.net/mods/restore-folder-menubar-25h2).
+11. On Windows 11 22H2 and later it is recommended to install the mod [*ExplorerFrame and menubar fixes fork*](https://windhawk.net/mods/restore-folder-menubar-25h2). For this mod to have effect, on Win11 24H2 and higher
+install also [*Classic Explorerframe for 24H2 and later*](https://windhawk.net/mods/classic-explorerframe).
 
 12. To fix the empty context menus in Explorer, install the mods
 [*Disable Immersive Context Menus*](https://windhawk.net/mods/disable-immersive-context-menus),

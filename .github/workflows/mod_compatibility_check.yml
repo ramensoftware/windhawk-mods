@@ -6,6 +6,13 @@ defaults:
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/mod_compatibility_check.yml
+  schedule:
+    - cron: '17 3 * * *'
   pull_request:
     branches:
       - main
@@ -39,9 +46,9 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: '3.x'
-      - name: Cache Windhawk
+      - name: Restore Windhawk
         id: cache-windhawk
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/windhawk
           key: v1-${{ runner.os }}-${{ matrix.version }}
@@ -67,6 +74,13 @@ jobs:
           extract_path="${{ runner.temp }}\windhawk"
           echo "Extracting $installer_path to $extract_path"
           MSYS_NO_PATHCONV=1 "$installer_path" /S /PORTABLE $installer_args "/D=$extract_path"
+      # A cache saved by a PR run is only visible to that PR.
+      - name: Save Windhawk
+        if: steps.cache-windhawk.outputs.cache-hit != 'true' && github.event_name != 'pull_request'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/windhawk
+          key: ${{ steps.cache-windhawk.outputs.cache-primary-key }}
       - name: Compile mod
         if: github.event_name == 'pull_request'
         run: |

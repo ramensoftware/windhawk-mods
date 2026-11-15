@@ -2,7 +2,7 @@
 // @id              chrome-context-menu-items
 // @name            Chrome Context Menu Items
 // @description     Hide, add, group, and reorder Chrome context menu items, restyle Chrome's menus, and tweak tabs and extension buttons
-// @version         1.0.0
+// @version         1.1.0
 // @author          DanRotaru
 // @github          https://github.com/DanRotaru
 // @homepage        https://dan13.me/
@@ -153,6 +153,19 @@
       Negative positions count from the bottom: -1 is last, -2 is second-last,
       and so on. 0 appends before negative positions are placed. Hidden entries
       and separators do not count. Used when extension grouping is enabled.
+  - holdKeysShowOriginalMenu: true
+    $name: Hold a shortcut to show Chrome's original page menu
+    $description: >-
+      When the shortcut below is held as the page context menu opens, the menu
+      appears exactly as Chrome built it: no hidden entries, custom commands,
+      Custom and Extensions groups, or appearance changes.
+  - originalMenuShortcut: Ctrl+Shift
+    $name: Original page menu shortcut
+    $description: >-
+      Keys joined with +, for example Ctrl+Shift, Ctrl+Alt, or Shift+Alt+O.
+      Use any of Ctrl, Shift, Alt, and Win, plus at most one letter, digit, or
+      F1-F24 key. Case and spaces are ignored. An invalid value uses
+      Ctrl+Shift. Used when the toggle above is on.
   $name: Settings
 - themes:
   - customItemBackgroundColor: false
@@ -210,6 +223,9 @@
     $description: Enter six HEX digits with or without # (for example, #606060). Invalid values use #606060. The border stays solid when background transparency is enabled.
   $name: Themes
 - hideContextMenuItems:
+  - hideNavigation: false
+    $name: Hide Back, Forward and Reload
+    $description: Hides the page navigation entries at the top of the page context menu. Keyboard shortcuts and toolbar buttons keep working.
   - hideAskGemini: true
     $name: Hide Ask Gemini
     $description: Hides Gemini's page and selected-text context-menu entry.
@@ -243,6 +259,34 @@
     $name: Hide Open link in split view
   - hideSearchImageWithGoogleLens: true
     $name: Hide Search image with Google Lens
+  - hideSearchWebFor: false
+    $name: Hide Search Google for "..."
+    $description: Hides the selected-text web search entry for any search engine, in the current or a new tab.
+  - hideCopyLinkToHighlight: false
+    $name: Hide Copy link to highlight
+    $description: Also hides Recopy link to highlight and Remove highlight.
+  - hideOpenLinkInNewWindow: false
+    $name: Hide Open link in new window / incognito window
+  - hideOpenLinkInProfile: false
+    $name: Hide Open link as / in other profile
+    $description: Hides the single-profile entry and the profile submenu.
+  - hidePictureInPicture: false
+    $name: Hide Picture in picture
+  - hideMediaLoopControls: false
+    $name: Hide Loop and Show controls
+    $description: Hides the media toggles shown on video and audio elements.
+  - hideEmoji: false
+    $name: Hide Emoji
+    $description: Hides the emoji entry in text fields. Win+. keeps working.
+  - hideSpellCheck: false
+    $name: Hide Spell check and Writing direction
+    $description: Hides the spell-check options and writing direction submenus in text fields. Spelling suggestions for a misspelled word stay visible.
+  - hidePasswordsAutofill: false
+    $name: Hide Password manager and Autofill entries
+    $description: Hides password, passkey, autofill and autofill feedback entries in form fields.
+  - hideInspect: false
+    $name: Hide Inspect
+    $description: Hides Inspect and Inspect background page. Ctrl+Shift+I and F12 keep working.
   - hideIcons: false
     $name: Hide menu item icons
     $description: Hides leading icons in the enabled menu families. Reopen menus after changing. Checkmarks and submenu arrows remain visible.
@@ -289,12 +333,37 @@
       $description: >-
         Full path to an executable, a document, a folder, or a URL, for example
         C:\Windows\System32\notepad.exe. Environment variables such as
-        %ProgramFiles% and %USERPROFILE% are expanded.
+        %ProgramFiles% and %USERPROFILE% are expanded. The placeholders listed
+        under Arguments work here inside a URL you type, where their values are
+        URL-encoded, for example https://www.google.com/search?q={selection}.
+        The only other use is a placeholder as the whole start, such as {url}:
+        it accepts only http and https addresses, and the entry is hidden
+        otherwise, so a page can never choose a program, file or protocol.
     - arguments: ""
       $name: Arguments
       $description: >-
         Command line passed to the program. Quote any argument that contains
-        spaces. Environment variables are expanded.
+        spaces, including placeholders: "{url}". Environment variables are
+        expanded. Placeholders: {url} link address, {page} page address,
+        {title} page title, {selection} selected text, {src} image, video or
+        audio address, {frame} address of the clicked frame (the page address
+        outside frames). An entry that uses {url}, {selection} or {src} appears
+        only when there is a value, for example {url} only on links. Values are
+        quoted for the usual Windows rules, which batch files (.bat, .cmd),
+        cmd.exe, PowerShell, wsl and bash don't follow, so entries that pass
+        placeholders to those are not run. A value starting with - is still
+        read as an option even inside quotes; put -- before placeholders if the
+        program supports it, for example -- "{url}".
+    - urlFilter: ""
+      $name: Show only on pages
+      $description: >-
+        Shows this entry only on pages whose address matches one of these
+        patterns, separated by spaces or semicolons. * matches any text within
+        the site name or within the path, https:// and www. are optional, and a
+        pattern without a path, such as github.com, https://github.com or
+        localhost:3000, matches the whole site. Example: github.com
+        *.wikipedia.org/wiki* youtube.com/watch* . Leave empty to show the
+        entry on every page.
     - workingDirectory: ""
       $name: Working directory
       $description: Optional directory the program starts in. Leave empty to use Chrome's.
@@ -386,10 +455,15 @@ Designed for 64-bit Chrome on Windows.
 
 ## Features
 
-- **Hide built-in items** - individually hide Ask Gemini, Print, Cast, Save page
+- **Hide built-in items** - individually hide Back / Forward / Reload (one
+  toggle), Ask Gemini, Print, Cast, Save page
   as, Open in reading mode, Search with Google Lens, Send to your devices, Create
   QR Code, Translate, Translate selection, View page source, Save link as, Open
-  link in split view and Search image with Google Lens.
+  link in split view and Search image with Google Lens. Optional toggles (off by
+  default) also cover Search Google for, Copy link to highlight, Open link in new
+  / incognito window, Open link as another profile, Picture in picture, Loop /
+  Show controls, Emoji, Spell check / Writing direction, Password manager /
+  Autofill entries and Inspect.
 - **Hide by label** - hide any page menu entry whose label contains a piece of
   text, ignoring case. Works for Chrome commands, extension entries, submenus and
   your own items (up to 64 rules).
@@ -397,6 +471,21 @@ Designed for 64-bit Chrome on Windows.
   one opens a program, document, folder or URL, with optional arguments, working
   directory and environment variables such as `%USERPROFILE%`, and can run as
   administrator or in a minimized, maximized or hidden window.
+- **Context placeholders** - pass what you right-clicked to a custom command:
+  `{url}` (link), `{page}`, `{title}`, `{selection}`, `{src}` (image, video or
+  audio) and `{frame}` (the clicked frame, or the page outside frames). For
+  example, `"{url}"` as the arguments of `firefox.exe` opens a link in Firefox,
+  and `https://www.deepl.com/translator#auto/en/{selection}` translates the
+  selected text. Placeholders inside a URL are URL-encoded. An entry that uses
+  `{url}`, `{selection}` or `{src}` only appears when there is something to
+  pass, and one whose address is too long to pass (such as an inline `data:`
+  image) is hidden.
+- **Per-site commands** - show a custom command only on matching pages, for
+  example `github.com` or `youtube.com/watch*`.
+- **Chrome's original menu on demand** - optionally hold **Ctrl+Shift** (or a
+  shortcut of your choice) while opening the page menu to see it without the
+  mod's hidden entries, custom commands, groups and appearance changes (on by
+  default).
 - **Custom items group** - optionally put your custom commands into one submenu
   with a label of your choice.
 - **Extensions submenu** - move all extension commands into a single
@@ -414,6 +503,26 @@ Designed for 64-bit Chrome on Windows.
   menu) and keyboard shortcut labels, without disabling the shortcuts.
 - **Tabs and toolbar** - tab title font size, hidden tab close buttons, tab
   icon-to-title spacing and extension button width.
+
+## Placeholders and safety
+
+The page decides the placeholder values, so the mod limits where they can go:
+
+- In **Program, document, or URL**, placeholders work inside a URL you typed
+  (after `://`). A placeholder can also be the whole start of the program, such
+  as `{url}` to open a link in its default app, but then only `http` and
+  `https` addresses are accepted. On other links (`file:`, `mailto:`, app
+  protocols) the entry is hidden, so a page can never pick the program, file or
+  protocol that runs.
+- In **Arguments**, values are quoted for the usual Windows command-line rules,
+  so `"{selection}"` stays one argument. **Batch files** (`.bat`, `.cmd`),
+  `cmd.exe`, PowerShell, `wsl` and `bash` don't follow those rules and can run
+  page text as commands, so an entry that passes placeholders to one of them is
+  not run (the mod log says why). The same applies to a shortcut or a launcher
+  that starts one of them, which the mod can't detect: don't set those up.
+- A value that starts with `-` is still read as an option by the program, even
+  inside quotes. Put `--` before placeholders if the program supports it, for
+  example `yt-dlp.exe` with `-- "{page}"`.
 
 ## Screenshots
 
@@ -438,8 +547,8 @@ Out of the box the mod:
   transparency is off.
 * Hides Ask Gemini, Print, Cast, Save page as, Open in reading mode, Search with
   Google Lens, Send to your devices, Create QR Code, both Translate entries, Open
-  link in split view and Search image with Google Lens. *View page source* and
-  *Save link as* stay visible.
+  link in split view and Search image with Google Lens. *Back / Forward /
+  Reload*, *View page source* and *Save link as* stay visible.
 * Hides icons in the main page right-click menu and keyboard shortcut labels.
 * Groups extension commands into an **Extensions** submenu, second-last.
 * Adds no custom commands and leaves tabs and extension buttons at Chrome's
@@ -467,6 +576,16 @@ If preparing a new build takes longer than 5 seconds, Chrome starts without the
 mod's changes and a tray icon reports the progress. Restart Chrome once it says
 setup is complete.
 
+The context placeholders come from the details Chrome hands to the page menu
+when it opens. The page title is read through Chrome's own `WebContents`
+functions. The link, selection, media, page and frame addresses are fields of
+Chrome's context menu data, located for Chrome 157. On every menu the mod checks
+that each field looks like a valid address or text, and that the page address
+read there matches the address Chrome reports for the tab. If a Chrome update
+moves the fields, these checks hide the entries that need them in nearly all
+cases. They can't prove every field is right: a change that only moves the
+fields after the page address could still pass `{frame}` the wrong address.
+
 ### Notes
 
 * Close and reopen menus after changing settings. Open menus are closed when the
@@ -477,7 +596,8 @@ setup is complete.
 * The tab, extension button and menu font / spacing / corner radius options
   overlap with Chrome Native UI Tweaks. If you use both mods, configure each of
   those options in one mod only and leave it at Chrome default in the other.
-* Thanks to Dron007, this mod started from it.
+* This mod started from [Chrome Native UI Tweaks](https://windhawk.net/mods/chrome-native-ui-tweaks)
+  by Dron007 - thanks!
 */
 // ==/WindhawkModReadme==
 // clang-format on
@@ -494,6 +614,7 @@ setup is complete.
 #include <cstring>
 #include <cstdlib>
 #include <cwchar>
+#include <cwctype>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -747,6 +868,14 @@ using SimpleMenuModelCtorFn = void* (*)(void*, void*);
 using SimpleMenuModelDtorFn = void (*)(void*);
 using SimpleMenuModelInsertSubMenuAtFn = void (*)(void*, size_t, int, const void*, void*);
 using PageContextMenuCtorFn = void* (*)(void*, void*, const void*, bool, bool);
+// static content::WebContents* WebContents::FromRenderFrameHost(RenderFrameHost*)
+using WebContentsFromRenderFrameHostFn = void* (*)(void*);
+// const std::u16string& WebContentsImpl::GetTitle(). WebContents is the
+// primary base of WebContentsImpl, so the pointer FromRenderFrameHost returns
+// is the `this` GetTitle expects (verified in Chrome 157's disassembly).
+using WebContentsGetTitleFn = const void* (*)(void*);
+// const GURL& WebContentsImpl::GetLastCommittedURL() const, called the same way.
+using WebContentsGetLastCommittedUrlFn = const void* (*)(void*);
 using ExtensionMatcherCtorFn = void* (*)(void*, void*, void*, void*, void*);
 using ExtensionMatcherDtorFn = void (*)(void*);
 static constexpr int kMenuModelTypeSeparator = 3;
@@ -782,6 +911,9 @@ static SimpleMenuModelCtorFn g_SimpleMenuModelCtor;
 static SimpleMenuModelDtorFn g_SimpleMenuModelDtor;
 static SimpleMenuModelInsertSubMenuAtFn g_SimpleMenuModelInsertSubMenuAt;
 static PageContextMenuCtorFn g_PageContextMenuCtorOriginal;
+static WebContentsFromRenderFrameHostFn g_WebContentsFromRenderFrameHost;
+static WebContentsGetTitleFn g_WebContentsGetTitle;
+static WebContentsGetLastCommittedUrlFn g_WebContentsGetLastCommittedUrl;
 static ExtensionMatcherCtorFn g_ExtensionMatcherCtorOriginal;
 static ExtensionMatcherDtorFn g_ExtensionMatcherDtorOriginal;
 static WideToUTF16Fn g_WideToUTF16;
@@ -798,6 +930,8 @@ enum MenuScope : int {
   kMenuScopeApp,
   kMenuScopeTab,
   kMenuScopeBookmark,
+  // A page menu opened with the original-menu shortcut held. Never styled.
+  kMenuScopeOriginalPage,
   kMenuScopeCount,
 };
 
@@ -890,6 +1024,10 @@ static CanvasTranslateFn g_CanvasTranslate;
 static thread_local const void* g_menuItemPaintColorProvider = nullptr;
 static thread_local bool g_normalizeMenuBackgroundAlpha = false;
 static thread_local uint32_t g_menuItemPaintColor = 0;
+// Inside NativeTheme::PaintMenuItemBackground: the fill color GetColor just
+// returned (0 once used), so its rounded fill can be drawn anti-aliased.
+static thread_local bool g_paintingMenuItemBackground = false;
+static thread_local uint32_t g_menuItemPaintedColor = 0;
 static FontListCopyCtorFn g_FontListCopyCtor;
 
 static FontListGetFontSizeFn g_FontListGetFontSize;
@@ -957,10 +1095,15 @@ static std::atomic_int g_menuVerticalSpacing = -1;
 struct ContextMenuVisibilitySetting {
   PCWSTR setting;
   int commandId;
+  // Inclusive end of a command ID range; 0 matches commandId only.
+  int commandIdLast = 0;
   std::atomic_bool hidden{false};
 };
 
 static ContextMenuVisibilitySetting g_contextMenuVisibility[] = {
+    {L"hideContextMenuItems.hideNavigation", 33000},  // IDC_BACK
+    {L"hideContextMenuItems.hideNavigation", 33001},  // IDC_FORWARD
+    {L"hideContextMenuItems.hideNavigation", 33002},  // IDC_RELOAD
     {L"hideContextMenuItems.hideAskGemini", 50234},   // IDC_CONTENT_CONTEXT_GLIC
     {L"hideContextMenuItems.hidePrint", 35003},       // IDC_PRINT
     {L"hideContextMenuItems.hideCast", 35011},        // IDC_ROUTE_MEDIA
@@ -975,6 +1118,33 @@ static ContextMenuVisibilitySetting g_contextMenuVisibility[] = {
     {L"hideContextMenuItems.hideSaveLinkAs", 50103},   // IDC_CONTENT_CONTEXT_SAVELINKAS
     {L"hideContextMenuItems.hideOpenLinkInSplitView", 50111}, // IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW
     {L"hideContextMenuItems.hideSearchImageWithGoogleLens", 50127}, // IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE
+    {L"hideContextMenuItems.hideSearchWebFor", 50191},        // IDC_CONTENT_CONTEXT_SEARCHWEBFOR
+    {L"hideContextMenuItems.hideSearchWebFor", 50192},        // IDC_CONTENT_CONTEXT_SEARCHWEBFORNEWTAB
+    {L"hideContextMenuItems.hideCopyLinkToHighlight", 50158}, // IDC_CONTENT_CONTEXT_COPYLINKTOTEXT
+    {L"hideContextMenuItems.hideCopyLinkToHighlight", 50159}, // IDC_CONTENT_CONTEXT_RESHARELINKTOTEXT
+    {L"hideContextMenuItems.hideCopyLinkToHighlight", 50160}, // IDC_CONTENT_CONTEXT_REMOVELINKTOTEXT
+    {L"hideContextMenuItems.hideOpenLinkInNewWindow", 50101}, // IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW
+    {L"hideContextMenuItems.hideOpenLinkInNewWindow", 50102}, // IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD
+    {L"hideContextMenuItems.hideOpenLinkInProfile", 50108},   // IDC_CONTENT_CONTEXT_OPENLINKINPROFILE (submenu)
+    // IDC_OPEN_LINK_IN_PROFILE_FIRST..LAST (kMaxOpenLinkInProfileItems = 100)
+    {L"hideContextMenuItems.hideOpenLinkInProfile", 52300, 52399},
+    {L"hideContextMenuItems.hidePictureInPicture", 50137},    // IDC_CONTENT_CONTEXT_PICTUREINPICTURE
+    {L"hideContextMenuItems.hideMediaLoopControls", 50140},   // IDC_CONTENT_CONTEXT_LOOP
+    {L"hideContextMenuItems.hideMediaLoopControls", 50141},   // IDC_CONTENT_CONTEXT_CONTROLS
+    {L"hideContextMenuItems.hideEmoji", 50220},               // IDC_CONTENT_CONTEXT_EMOJI
+    {L"hideContextMenuItems.hideSpellCheck", 57329},          // IDC_SPELLCHECK_MENU
+    {L"hideContextMenuItems.hideSpellCheck", 57328},          // IDC_WRITING_DIRECTION_MENU
+    {L"hideContextMenuItems.hidePasswordsAutofill", 52990},   // IDC_CONTENT_CONTEXT_AUTOFILL_FEEDBACK
+    {L"hideContextMenuItems.hidePasswordsAutofill", 52998},   // ..._AUTOFILL_FALLBACK_PASSWORDS_SELECT_PASSWORD
+    {L"hideContextMenuItems.hidePasswordsAutofill", 52999},   // ..._AUTOFILL_FALLBACK_PASSWORDS_IMPORT_PASSWORDS
+    {L"hideContextMenuItems.hidePasswordsAutofill", 53000},   // ..._AUTOFILL_FALLBACK_PASSWORDS_SUGGEST_PASSWORD
+    {L"hideContextMenuItems.hidePasswordsAutofill", 53002},   // ..._AUTOFILL_FALLBACK_PASSWORDS_USE_PASSKEY_FROM_ANOTHER_DEVICE
+    {L"hideContextMenuItems.hidePasswordsAutofill", 53003},   // IDC_CONTENT_CONTEXT_AUTOFILL_FALLBACK_AT_MEMORY
+    {L"hideContextMenuItems.hidePasswordsAutofill", 50176},   // IDC_CONTENT_CONTEXT_GENERATEPASSWORD (older builds)
+    {L"hideContextMenuItems.hidePasswordsAutofill", 50178},   // IDC_CONTENT_CONTEXT_SHOWALLSAVEDPASSWORDS (older builds)
+    {L"hideContextMenuItems.hidePasswordsAutofill", 57341},   // IDC_PASSWORDS_AND_AUTOFILL_MENU
+    {L"hideContextMenuItems.hideInspect", 50162},             // IDC_CONTENT_CONTEXT_INSPECTELEMENT
+    {L"hideContextMenuItems.hideInspect", 50171},             // IDC_CONTENT_CONTEXT_INSPECTBACKGROUNDPAGE
 };
 static std::atomic_int g_menuCornerRadius = -1;
 // 100 bypasses the extra paint layer entirely (disabled/default).
@@ -1060,9 +1230,110 @@ struct CustomMenuItem {
   bool runAsAdmin;
   int showCmd;
   bool separatorBefore;
+  // Lowercase "Show only on pages" patterns; empty shows the entry everywhere.
+  std::vector<std::wstring> urlPatterns;
+  // ContextPlaceholder flags used by the command or its arguments.
+  unsigned placeholders = 0;
+  // The command itself uses a placeholder, so whether it can run depends on
+  // the page (see ExpandContextPlaceholders).
+  bool commandUsesPlaceholders = false;
   void* submenu = nullptr;
   const void* nativeLabel = nullptr;
 };
+
+// "Hold a shortcut to show Chrome's original page menu". g_pageMenuBypass is
+// decided when a page menu is constructed and holds until the next one; Chrome
+// shows one page context menu at a time.
+enum : uint32_t {
+  kShortcutCtrl = 1u << 0,
+  kShortcutShift = 1u << 1,
+  kShortcutAlt = 1u << 2,
+  kShortcutWin = 1u << 3,
+};
+
+// Low byte: optional non-modifier virtual key (0 = none). Bits 8+: modifiers.
+static constexpr uint32_t PackShortcut(uint32_t modifiers, uint32_t vk) {
+  return (modifiers << 8) | (vk & 0xFF);
+}
+
+static constexpr uint32_t kDefaultOriginalMenuShortcut =
+    PackShortcut(kShortcutCtrl | kShortcutShift, 0);
+
+static std::atomic_bool g_holdKeysShowOriginalMenu = true;
+static std::atomic<uint32_t> g_originalMenuShortcut = kDefaultOriginalMenuShortcut;
+static std::atomic_bool g_pageMenuBypass = false;
+
+// Parses "Ctrl+Shift", "shift + alt + o", "Ctrl+F2". Returns 0 when invalid.
+static uint32_t ParseShortcut(PCWSTR text) {
+  uint32_t modifiers = 0;
+  uint32_t vk = 0;
+  std::wstring token;
+  auto takeToken = [&]() -> bool {
+    if (token.empty()) return false;
+    uint32_t modifier = 0;
+    if (token == L"CTRL" || token == L"CONTROL") modifier = kShortcutCtrl;
+    else if (token == L"SHIFT") modifier = kShortcutShift;
+    else if (token == L"ALT") modifier = kShortcutAlt;
+    else if (token == L"WIN" || token == L"WINDOWS") modifier = kShortcutWin;
+    if (modifier) {
+      if (modifiers & modifier) return false;
+      modifiers |= modifier;
+    } else {
+      uint32_t key = 0;
+      if (token.size() == 1 && ((token[0] >= L'A' && token[0] <= L'Z') ||
+                                (token[0] >= L'0' && token[0] <= L'9'))) {
+        key = token[0];
+      } else if (token.size() >= 2 && token.size() <= 3 && token[0] == L'F') {
+        int number = 0;
+        for (size_t i = 1; i < token.size(); ++i) {
+          if (token[i] < L'0' || token[i] > L'9') return false;
+          number = number * 10 + (token[i] - L'0');
+        }
+        if (token[1] == L'0' || number < 1 || number > 24) return false;
+        key = VK_F1 + number - 1;
+      }
+      if (!key || vk) return false;
+      vk = key;
+    }
+    token.clear();
+    return true;
+  };
+  for (PCWSTR p = text ? text : L""; ; ++p) {
+    if (*p == L'+' || *p == L'\0') {
+      // Empty tokens ("", "Ctrl+", "Ctrl++Shift") and unknown keys are invalid.
+      if (!takeToken()) return 0;
+      if (*p == L'\0') break;
+    } else if (!iswspace(*p)) {
+      token.push_back(static_cast<wchar_t>(towupper(*p)));
+    }
+  }
+  if (!modifiers && !vk) return 0;
+  return PackShortcut(modifiers, vk);
+}
+
+static bool KeyDown(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
+
+static bool OriginalMenuShortcutHeld() {
+  const uint32_t shortcut = g_originalMenuShortcut.load(std::memory_order_relaxed);
+  const uint32_t modifiers = shortcut >> 8;
+  const int vk = static_cast<int>(shortcut & 0xFF);
+  // Modifiers must match exactly so Ctrl+Shift does not fire on Ctrl+Shift+Alt.
+  if (KeyDown(VK_CONTROL) != ((modifiers & kShortcutCtrl) != 0)) return false;
+  if (KeyDown(VK_SHIFT) != ((modifiers & kShortcutShift) != 0)) return false;
+  if (KeyDown(VK_MENU) != ((modifiers & kShortcutAlt) != 0)) return false;
+  if ((KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) != ((modifiers & kShortcutWin) != 0)) {
+    return false;
+  }
+  return !vk || KeyDown(vk);
+}
+
+static bool PageMenuBypassed() {
+  return g_pageMenuBypass.load(std::memory_order_relaxed);
+}
+
+static int PageMenuScope() {
+  return PageMenuBypassed() ? kMenuScopeOriginalPage : kMenuScopePage;
+}
 
 static std::mutex g_customItemsMutex;
 static std::vector<CustomMenuItem> g_customItems;
@@ -1246,17 +1517,535 @@ static std::wstring TrimCustomItemSetting(PCWSTR value) {
   return result;
 }
 
+// -----------------------------------------------------------------------------
+// Page context: what was right-clicked, for placeholders and per-site entries
+// -----------------------------------------------------------------------------
+
+// What the open page menu was built for. Captured by the RenderViewContextMenu
+// constructor hook, while Chrome's ContextMenuParams is alive, and used both to
+// choose the custom entries and to expand a clicked entry's placeholders.
+struct PageMenuContext {
+  // The ContextMenuParams fields below passed the layout checks.
+  bool available = false;
+  std::wstring linkUrl;
+  std::wstring pageUrl;
+  std::wstring frameUrl;
+  std::wstring srcUrl;
+  std::wstring selection;
+  std::wstring title;
+};
+
+static std::mutex g_pageMenuContextMutex;
+static PageMenuContext g_pageMenuContext;
+static std::atomic_bool g_pageMenuContextLayoutLogged = false;
+
+enum ContextPlaceholder : unsigned {
+  kPlaceholderUrl = 1u << 0,
+  kPlaceholderPage = 1u << 1,
+  kPlaceholderTitle = 1u << 2,
+  kPlaceholderSelection = 1u << 3,
+  kPlaceholderSrc = 1u << 4,
+  kPlaceholderFrame = 1u << 5,
+};
+
+struct ContextPlaceholderInfo {
+  PCWSTR name;
+  unsigned flag;
+  std::wstring PageMenuContext::*value;
+  // An entry that uses this placeholder is hidden while it has no value.
+  bool required;
+};
+
+static const ContextPlaceholderInfo kContextPlaceholders[] = {
+    {L"{url}", kPlaceholderUrl, &PageMenuContext::linkUrl, true},
+    {L"{page}", kPlaceholderPage, &PageMenuContext::pageUrl, true},
+    {L"{title}", kPlaceholderTitle, &PageMenuContext::title, false},
+    {L"{selection}", kPlaceholderSelection, &PageMenuContext::selection, true},
+    {L"{src}", kPlaceholderSrc, &PageMenuContext::srcUrl, true},
+    {L"{frame}", kPlaceholderFrame, &PageMenuContext::frameUrl, true},
+};
+
+// content::ContextMenuParams, which derives from
+// blink::UntrustworthyContextMenuParams. Chrome has no out-of-line accessors
+// for these fields. The offsets are from Chrome 157, where
+// extensions::MenuManager::ExecuteCommand reads linkUrl, srcUrl, pageUrl,
+// frameUrl and selectionText at exactly these offsets, and
+// UntrustworthyContextMenuParams::Assign / the ContextMenuParams copy
+// constructor copy GURLs and std::u16strings there.
+// ReadPageMenuContext checks the shape of every field on each menu and
+// discards all of them if one doesn't match. Shape checks can't tell a field
+// from a neighbouring GURL, so it also compares the page URL with
+// WebContents::GetLastCommittedURL(); that catches any shift of the fields up
+// to and including page_url, leaving only frame_url unconfirmed.
+static constexpr size_t kParamsUnfilteredLinkUrlOffset = 0xA0;
+static constexpr size_t kParamsSrcUrlOffset = 0x118;
+static constexpr size_t kParamsSelectionTextOffset = 0x1C0;
+static constexpr size_t kParamsPageUrlOffset = 0x358;
+static constexpr size_t kParamsFrameUrlOffset = 0x3D0;
+// GURL starts with `std::string spec_` followed by `bool is_valid_`.
+static constexpr size_t kGurlIsValidOffset = 24;
+// url::kMaxURLChars.
+static constexpr size_t kMaxChromeUrlLength = 2 * 1024 * 1024;
+static constexpr size_t kMaxChromeTextLength = 16 * 1024 * 1024;
+// Windows command lines are limited to 32767 characters.
+static constexpr size_t kMaxPlaceholderValueLength = 8192;
+
+static bool IsReadableMemory(const void* address, size_t size) {
+  uintptr_t current = reinterpret_cast<uintptr_t>(address);
+  const uintptr_t end = current + size;
+  if (end < current) return false;
+  constexpr DWORD kReadable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
+                              PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE |
+                              PAGE_EXECUTE_WRITECOPY;
+  while (current < end) {
+    MEMORY_BASIC_INFORMATION info;
+    if (!VirtualQuery(reinterpret_cast<const void*>(current), &info, sizeof(info)) ||
+        info.State != MEM_COMMIT || (info.Protect & (PAGE_GUARD | PAGE_NOACCESS)) ||
+        !(info.Protect & kReadable)) {
+      return false;
+    }
+    current = reinterpret_cast<uintptr_t>(info.BaseAddress) + info.RegionSize;
+  }
+  return true;
+}
+
+// Copies a libc++ std::basic_string that Chrome owns, without freeing it. The
+// object is checked against the layout described at IsValidChromeU16String
+// (including the null terminator libc++ keeps) before anything it points to is
+// read.
+template <typename Char>
+static bool ReadChromeString(const unsigned char* object, size_t maxLength,
+                             std::basic_string<Char>& text) {
+  static_assert(sizeof(Char) == 1 || sizeof(Char) == 2);
+  constexpr size_t kShortCapacity = kChromeU16StringSize / sizeof(Char) - 1;
+  const unsigned char lastByte = object[kChromeU16StringSize - 1];
+  if (!(lastByte & 0x80)) {
+    const size_t length = lastByte;
+    const Char* data = reinterpret_cast<const Char*>(object);
+    if (length > kShortCapacity || data[length] != 0) return false;
+    text.assign(data, length);
+    return true;
+  }
+  const Char* data = nullptr;
+  size_t length = 0;
+  size_t capacity = 0;
+  memcpy(&data, object, sizeof(data));
+  memcpy(&length, object + sizeof(data), sizeof(length));
+  memcpy(&capacity, object + 2 * sizeof(data), sizeof(capacity));
+  capacity &= ~(size_t{1} << 63);
+  if (!data || length > maxLength || length >= capacity ||
+      !IsReadableMemory(data, (length + 1) * sizeof(Char)) || data[length] != 0) {
+    return false;
+  }
+  text.assign(data, length);
+  return true;
+}
+
+// Reads a GURL's canonical spec. Canonical specs are ASCII and start with a
+// scheme; an empty GURL is invalid with an empty spec.
+static bool ReadChromeGurl(const unsigned char* gurl, std::wstring& spec) {
+  std::string narrow;
+  if (!ReadChromeString<char>(gurl, kMaxChromeUrlLength, narrow)) return false;
+  const unsigned char isValid = gurl[kGurlIsValidOffset];
+  if (isValid > 1) return false;
+  spec.clear();
+  if (narrow.empty()) return true;
+  for (char c : narrow) {
+    if (c < 0x20 || c > 0x7E) return false;
+  }
+  size_t colon = narrow.find(':');
+  if (colon == 0 || colon == std::string::npos ||
+      !((narrow[0] >= 'a' && narrow[0] <= 'z') || (narrow[0] >= 'A' && narrow[0] <= 'Z'))) {
+    return false;
+  }
+  for (size_t i = 1; i < colon; ++i) {
+    const char c = narrow[i];
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+          c == '+' || c == '-' || c == '.')) {
+      return false;
+    }
+  }
+  // An invalid GURL keeps its input as the spec; don't hand that out.
+  if (isValid) spec.assign(narrow.begin(), narrow.end());
+  return true;
+}
+
+static PageMenuContext ReadPageMenuContext(void* frame, const void* params) {
+  PageMenuContext context;
+  if (!g_chromeU16StringLayoutValid.load(std::memory_order_acquire)) return context;
+
+  void* webContents = frame && g_WebContentsFromRenderFrameHost
+                          ? g_WebContentsFromRenderFrameHost(frame)
+                          : nullptr;
+
+  if (params) {
+    const auto* base = static_cast<const unsigned char*>(params);
+    // The page URL goes first: a page menu always has one, which makes it the
+    // strongest check that the fields are where this build expects them.
+    context.available =
+        ReadChromeGurl(base + kParamsPageUrlOffset, context.pageUrl) &&
+        !context.pageUrl.empty() &&
+        ReadChromeGurl(base + kParamsFrameUrlOffset, context.frameUrl) &&
+        ReadChromeGurl(base + kParamsUnfilteredLinkUrlOffset, context.linkUrl) &&
+        ReadChromeGurl(base + kParamsSrcUrlOffset, context.srcUrl) &&
+        ReadChromeString<wchar_t>(base + kParamsSelectionTextOffset, kMaxChromeTextLength,
+                                  context.selection);
+    if (!context.available) {
+      context = PageMenuContext{};
+      if (!g_pageMenuContextLayoutLogged.exchange(true)) {
+        Wh_Log(L"Unexpected ContextMenuParams layout; page placeholders and "
+               L"per-site entries are unavailable");
+      }
+    }
+
+    // The checks above reject data that isn't a string or GURL, but not a
+    // neighbouring GURL that a layout change moved into place. The page address
+    // Chrome reports for the tab must match the one read from the params.
+    if (context.available && webContents && g_WebContentsGetLastCommittedUrl) {
+      std::wstring committedUrl;
+      const void* gurl = g_WebContentsGetLastCommittedUrl(webContents);
+      if (!gurl ||
+          !ReadChromeGurl(static_cast<const unsigned char*>(gurl), committedUrl) ||
+          committedUrl != context.pageUrl) {
+        context = PageMenuContext{};
+        if (!g_pageMenuContextLayoutLogged.exchange(true)) {
+          Wh_Log(L"ContextMenuParams page address doesn't match the tab's; page "
+                 L"placeholders and per-site entries are unavailable here");
+        }
+      }
+    }
+
+    // Chrome fills frame_url only for clicks inside a subframe. Elsewhere the
+    // clicked frame is the page itself.
+    if (context.available && context.frameUrl.empty()) context.frameUrl = context.pageUrl;
+  }
+
+  if (webContents && g_WebContentsGetTitle) {
+    const void* title = g_WebContentsGetTitle(webContents);
+    if (!title || !ReadChromeString<wchar_t>(static_cast<const unsigned char*>(title),
+                                             kMaxChromeTextLength, context.title)) {
+      context.title.clear();
+    }
+  }
+
+  for (std::wstring* value : {&context.selection, &context.title}) {
+    if (value->size() > kMaxPlaceholderValueLength) value->resize(kMaxPlaceholderValueLength);
+  }
+  return context;
+}
+
+static PageMenuContext CopyPageMenuContext() {
+  std::lock_guard<std::mutex> lock(g_pageMenuContextMutex);
+  return g_pageMenuContext;
+}
+
+static const ContextPlaceholderInfo* FindContextPlaceholderAt(const std::wstring& text,
+                                                              size_t index) {
+  for (const auto& placeholder : kContextPlaceholders) {
+    const size_t length = wcslen(placeholder.name);
+    if (text.size() - index >= length &&
+        _wcsnicmp(text.c_str() + index, placeholder.name, length) == 0) {
+      return &placeholder;
+    }
+  }
+  return nullptr;
+}
+
+static unsigned FindUsedContextPlaceholders(const std::wstring& text) {
+  unsigned used = 0;
+  for (size_t index = text.find(L'{'); index != std::wstring::npos;
+       index = text.find(L'{', index + 1)) {
+    if (const auto* placeholder = FindContextPlaceholderAt(text, index)) {
+      used |= placeholder->flag;
+    }
+  }
+  return used;
+}
+
+enum class PlaceholderEscaping {
+  // Program, document or URL: URL-encoded once the text so far contains "://".
+  // Before that, only a web address at the very start is accepted.
+  kCommand,
+  // Escaped for the usual Windows command-line parsing (CommandLineToArgvW).
+  kArguments,
+};
+
+static void AppendUrlEncoded(std::wstring& out, const std::wstring& value) {
+  if (value.empty() || value.size() > INT_MAX) return;
+  const int size = WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()),
+                                       nullptr, 0, nullptr, nullptr);
+  if (size <= 0) return;
+  std::string utf8(size, '\0');
+  WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), utf8.data(),
+                      size, nullptr, nullptr);
+  static constexpr wchar_t kHex[] = L"0123456789ABCDEF";
+  for (unsigned char c : utf8) {
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+        c == '-' || c == '.' || c == '_' || c == '~') {
+      out += static_cast<wchar_t>(c);
+    } else {
+      out += L'%';
+      out += kHex[c >> 4];
+      out += kHex[c & 0xF];
+    }
+  }
+}
+
+// Escapes quotes and the backslashes in front of them, including trailing
+// ones, so a value placed between the user's quotes ("{selection}") stays a
+// single argument.
+static void AppendArgumentEscaped(std::wstring& out, const std::wstring& value) {
+  size_t backslashes = 0;
+  for (wchar_t c : value) {
+    if (c == L'\\') {
+      ++backslashes;
+      continue;
+    }
+    if (c == L'"') {
+      out.append(backslashes * 2 + 1, L'\\');
+      out += L'"';
+    } else {
+      out.append(backslashes, L'\\');
+      out += c < 0x20 || c == 0x7F ? L' ' : c;
+    }
+    backslashes = 0;
+  }
+  out.append(backslashes * 2, L'\\');
+}
+
+static std::wstring ExpandContextPlaceholders(const std::wstring& text,
+                                              const PageMenuContext& context,
+                                              PlaceholderEscaping escaping) {
+  if (text.find(L'{') == std::wstring::npos) return text;
+  std::wstring result;
+  for (size_t index = 0; index < text.size();) {
+    const ContextPlaceholderInfo* placeholder =
+        text[index] == L'{' ? FindContextPlaceholderAt(text, index) : nullptr;
+    if (!placeholder) {
+      result += text[index++];
+      continue;
+    }
+    const std::wstring& value = context.*(placeholder->value);
+    if (escaping == PlaceholderEscaping::kArguments) {
+      AppendArgumentEscaped(result, value);
+    } else if (result.find(L"://") != std::wstring::npos) {
+      AppendUrlEncoded(result, value);
+    } else {
+      // Outside a URL the page's value would decide what ShellExecuteExW opens:
+      // a file: link, a program path or any registered protocol. Allow it only
+      // as the start of the program, and only as a web address, so the result
+      // is always that web address. Chrome's addresses never contain spaces or
+      // quotes, and rejecting them keeps a selected text from adding arguments
+      // to the browser's command line. An empty result hides the entry and
+      // makes RunCustomMenuItem skip it.
+      if (!result.empty() || (_wcsnicmp(value.c_str(), L"http://", 7) != 0 &&
+                              _wcsnicmp(value.c_str(), L"https://", 8) != 0) ||
+          std::any_of(value.begin(), value.end(),
+                      [](wchar_t c) { return c <= L' ' || c == L'"' || c == 0x7F; })) {
+        return std::wstring();
+      }
+      result += value;
+    }
+    index += wcslen(placeholder->name);
+  }
+  return result;
+}
+
+// Where the address part of a URL or pattern starts: after "scheme://" when
+// there is one, else at the beginning. A "://" after the first slash belongs
+// to the path.
+static size_t UrlHostStart(const std::wstring& text) {
+  const size_t separator = text.find(L"://");
+  return separator != std::wstring::npos && text.find(L'/') == separator + 1 ? separator + 3
+                                                                             : 0;
+}
+
+// Where the host part ends: at the first slash after the scheme, or the end.
+static size_t UrlHostEnd(const std::wstring& text) {
+  const size_t slash = text.find(L'/', UrlHostStart(text));
+  return slash == std::wstring::npos ? text.size() : slash;
+}
+
+// Whether a pattern names a whole site: no path, and no colon other than the
+// one of "scheme://" or a port ("localhost:3000"). "about:blank" and
+// "mailto:*" stay as typed.
+static bool UrlPatternIsSite(const std::wstring& pattern) {
+  const size_t hostStart = UrlHostStart(pattern);
+  if (pattern.find(L'/', hostStart) != std::wstring::npos) return false;
+  const size_t colon = pattern.find(L':', hostStart);
+  if (colon == std::wstring::npos) return true;
+  const size_t portStart = colon + 1;
+  return portStart < pattern.size() &&
+         std::all_of(pattern.begin() + portStart, pattern.end(),
+                     [](wchar_t c) { return (c >= L'0' && c <= L'9') || c == L'*'; });
+}
+
+// Lowercase patterns from "Show only on pages". A pattern without a path names
+// a whole site, so "github.com" means "github.com/*", and so do
+// "https://github.com" and "localhost:3000".
+static std::vector<std::wstring> ParseUrlPatterns(const std::wstring& setting) {
+  std::vector<std::wstring> patterns;
+  size_t index = 0;
+  while (index < setting.size()) {
+    const size_t begin = setting.find_first_not_of(L" \t;", index);
+    if (begin == std::wstring::npos) break;
+    size_t end = setting.find_first_of(L" \t;", begin);
+    if (end == std::wstring::npos) end = setting.size();
+    std::wstring pattern = setting.substr(begin, end - begin);
+    std::transform(pattern.begin(), pattern.end(), pattern.begin(), towlower);
+    if (UrlPatternIsSite(pattern)) pattern += L"/*";
+    patterns.push_back(std::move(pattern));
+    index = end;
+  }
+  return patterns;
+}
+
+// `*` matches any run of characters; everything else, `?` included because
+// URLs use it, is literal.
+static bool WildcardMatch(const std::wstring& text, const std::wstring& pattern) {
+  size_t t = 0, p = 0;
+  size_t starPattern = std::wstring::npos, starText = 0;
+  while (t < text.size()) {
+    if (p < pattern.size() && pattern[p] == L'*') {
+      starPattern = p++;
+      starText = t;
+    } else if (p < pattern.size() && pattern[p] == text[t]) {
+      ++p;
+      ++t;
+    } else if (starPattern != std::wstring::npos) {
+      p = starPattern + 1;
+      t = ++starText;
+    } else {
+      return false;
+    }
+  }
+  while (p < pattern.size() && pattern[p] == L'*') ++p;
+  return p == pattern.size();
+}
+
+// Matches the host part and the path part separately, so a `*` in the host
+// stays inside the host: "*.wikipedia.org/*" doesn't match
+// "example.com/a.wikipedia.org/".
+static bool UrlWildcardMatch(const std::wstring& url, const std::wstring& pattern) {
+  const size_t urlHostEnd = UrlHostEnd(url);
+  const size_t patternHostEnd = UrlHostEnd(pattern);
+  return WildcardMatch(url.substr(0, urlHostEnd), pattern.substr(0, patternHostEnd)) &&
+         WildcardMatch(url.substr(urlHostEnd), pattern.substr(patternHostEnd));
+}
+
+// The scheme and a leading "www." are optional in patterns, so each pattern is
+// tried against the full address and against the address without them.
+static bool PageUrlMatchesPatterns(const std::wstring& pageUrl,
+                                   const std::vector<std::wstring>& patterns) {
+  std::wstring full = pageUrl;
+  std::transform(full.begin(), full.end(), full.begin(), towlower);
+  std::wstring withoutScheme = full;
+  if (size_t separator = full.find(L"://"); separator != std::wstring::npos) {
+    withoutScheme = full.substr(separator + 3);
+  } else if (size_t colon = full.find(L':'); colon != std::wstring::npos) {
+    withoutScheme = full.substr(colon + 1);
+  }
+  std::wstring withoutWww = withoutScheme;
+  if (withoutWww.starts_with(L"www.")) withoutWww.erase(0, 4);
+  for (const auto& pattern : patterns) {
+    if (UrlWildcardMatch(full, pattern) || UrlWildcardMatch(withoutScheme, pattern) ||
+        UrlWildcardMatch(withoutWww, pattern)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Whether a custom entry belongs in a menu opened for |context|.
+static bool CustomItemMatchesContext(const CustomMenuItem& item, const PageMenuContext& context) {
+  if (!item.urlPatterns.empty() &&
+      (context.pageUrl.empty() || !PageUrlMatchesPatterns(context.pageUrl, item.urlPatterns))) {
+    return false;
+  }
+  for (const auto& placeholder : kContextPlaceholders) {
+    if (!(item.placeholders & placeholder.flag)) continue;
+    const std::wstring& value = context.*(placeholder.value);
+    if (placeholder.required && value.empty()) return false;
+    // Text values are cut to this length when read. A longer address, such as
+    // an inline image's data: URL, can't be passed in full: it would exceed
+    // the command-line limit or arrive truncated.
+    if (value.size() > kMaxPlaceholderValueLength) return false;
+  }
+  // A placeholder outside a URL in the program accepts only a web address, so
+  // "{url}" as the program appears on web links only.
+  if (item.commandUsesPlaceholders &&
+      ExpandContextPlaceholders(ExpandEnvironmentPlaceholders(item.command), context,
+                                PlaceholderEscaping::kCommand)
+          .empty()) {
+    return false;
+  }
+  return true;
+}
+
+// Programs that parse their command line differently from CommandLineToArgvW
+// and treat parts of it as commands: cmd.exe runs batch files, ignores \" and
+// expands %VARIABLES%, and the shells evaluate their arguments. Page text can't
+// be passed to them safely, so entries that do are not run.
+static bool IsCommandInterpreter(const std::wstring& program) {
+  std::wstring path = program;
+  path.erase(std::remove(path.begin(), path.end(), L'"'), path.end());
+  if (path.find(L"://") != std::wstring::npos) return false;
+  std::transform(path.begin(), path.end(), path.begin(), towlower);
+  while (!path.empty() && (path.back() == L' ' || path.back() == L'\\' || path.back() == L'/')) {
+    path.pop_back();
+  }
+  const size_t nameStart = path.find_last_of(L"\\/:");
+  std::wstring name = nameStart == std::wstring::npos ? path : path.substr(nameStart + 1);
+
+  static const PCWSTR kInterpreters[] = {L"cmd", L"powershell", L"pwsh", L"wsl", L"bash"};
+  static const PCWSTR kScriptExtensions[] = {L".bat", L".cmd"};
+
+  const size_t dot = name.rfind(L'.');
+  if (dot != std::wstring::npos) {
+    const std::wstring extension = name.substr(dot);
+    for (PCWSTR scriptExtension : kScriptExtensions) {
+      if (extension == scriptExtension) return true;
+    }
+    if (extension != L".exe") return false;
+    name.resize(dot);
+  } else {
+    // ShellExecuteExW also finds "save" as save.bat or save.cmd.
+    for (PCWSTR scriptExtension : kScriptExtensions) {
+      WCHAR found[MAX_PATH];
+      if (SearchPathW(nullptr, path.c_str(), scriptExtension, ARRAYSIZE(found), found,
+                      nullptr)) {
+        return true;
+      }
+    }
+  }
+  for (PCWSTR interpreter : kInterpreters) {
+    if (name == interpreter) return true;
+  }
+  return false;
+}
+
 struct CustomMenuItemLaunch {
   std::wstring file;
   std::wstring arguments;
   std::wstring workingDirectory;
   bool runAsAdmin;
   int showCmd;
+  // The command or arguments contain values from the page.
+  bool usesPageValues;
 };
 
 static DWORD WINAPI CustomMenuItemLaunchThread(LPVOID parameter) {
   std::unique_ptr<CustomMenuItemLaunch> request(
       static_cast<CustomMenuItemLaunch*>(parameter));
+
+  // Checked here rather than on Chrome's UI thread: finding an extension-less
+  // program searches PATH, which may include slow network folders.
+  if (request->usesPageValues && IsCommandInterpreter(request->file)) {
+    Wh_Log(L"Not running '%ls': page placeholders can't be passed safely to a "
+           L"batch file, cmd.exe, PowerShell, wsl or bash",
+           request->file.c_str());
+    return 0;
+  }
 
   // ShellExecuteExW needs an initialized apartment, and running it off Chrome's
   // UI thread keeps a slow shell handler from freezing the browser.
@@ -1291,6 +2080,7 @@ static DWORD WINAPI CustomMenuItemLaunchThread(LPVOID parameter) {
 
 static void RunCustomMenuItem(int commandId) {
   auto request = std::make_unique<CustomMenuItemLaunch>();
+  const PageMenuContext context = CopyPageMenuContext();
 
   {
     std::lock_guard<std::mutex> lock(g_customItemsMutex);
@@ -1302,12 +2092,19 @@ static void RunCustomMenuItem(int commandId) {
 
     if (item == g_customItems.end() || item->command.empty()) return;
 
-    request->file = ExpandEnvironmentPlaceholders(item->command);
-    request->arguments = ExpandEnvironmentPlaceholders(item->arguments);
+    // Page values go in after environment expansion, so text from a page is
+    // never treated as a %VARIABLE%.
+    request->file = ExpandContextPlaceholders(ExpandEnvironmentPlaceholders(item->command),
+                                              context, PlaceholderEscaping::kCommand);
+    request->arguments = ExpandContextPlaceholders(
+        ExpandEnvironmentPlaceholders(item->arguments), context,
+        PlaceholderEscaping::kArguments);
+    if (request->file.empty()) return;
     request->workingDirectory =
         ExpandEnvironmentPlaceholders(item->workingDirectory);
     request->runAsAdmin = item->runAsAdmin;
     request->showCmd = item->showCmd;
+    request->usesPageValues = item->placeholders != 0;
   }
 
   std::lock_guard<std::mutex> lock(g_customLaunchMutex);
@@ -1576,9 +2373,14 @@ static void LoadCustomMenuItems() {
     item.showCmd = ReadCustomItemWindowState(i);
     item.separatorBefore =
         Wh_GetIntSetting(L"customItems[%d].separatorBefore", i) != 0;
+    item.urlPatterns = ParseUrlPatterns(
+        WindhawkUtils::StringSetting::make(L"customItems[%d].urlFilter", i).get());
+    const unsigned commandPlaceholders = FindUsedContextPlaceholders(item.command);
+    item.commandUsesPlaceholders = commandPlaceholders != 0;
+    item.placeholders = commandPlaceholders | FindUsedContextPlaceholders(item.arguments);
 
-    Wh_Log(L"Custom menu item %d: '%ls' -> '%ls'", i, item.label.c_str(),
-           item.command.c_str());
+    Wh_Log(L"Custom menu item %d: '%ls' -> '%ls' (%zu page patterns)", i,
+           item.label.c_str(), item.command.c_str(), item.urlPatterns.size());
 
     items.push_back(std::move(item));
   }
@@ -1597,6 +2399,16 @@ static void LoadCustomMenuItems() {
 static void LoadSettings() {
   g_groupExtensions.store(Wh_GetIntSetting(L"menus.groupExtensions") != 0);
   g_extensionsGroupOrder.store(Wh_GetIntSetting(L"menus.extensionsGroupOrder"));
+  g_holdKeysShowOriginalMenu.store(Wh_GetIntSetting(L"menus.holdKeysShowOriginalMenu") != 0);
+  {
+    auto value = WindhawkUtils::StringSetting::make(L"menus.originalMenuShortcut");
+    uint32_t shortcut = ParseShortcut(value.get());
+    if (!shortcut) {
+      Wh_Log(L"Invalid original menu shortcut '%s'; using Ctrl+Shift", value.get());
+      shortcut = kDefaultOriginalMenuShortcut;
+    }
+    g_originalMenuShortcut.store(shortcut, std::memory_order_relaxed);
+  }
   const struct {
     MenuScope scope;
     PCWSTR setting;
@@ -1822,7 +2634,7 @@ static void MenuControllerRunHook(void* self, void* parent, void* button,
 
 static void ToolkitDelegateRunMenuAtHook(void* self, void* widget,
                                          const void* point, int sourceType) {
-  SetPendingMenuScope(kMenuScopePage);
+  SetPendingMenuScope(PageMenuScope());
   g_ToolkitDelegateRunMenuAtOriginal(self, widget, point, sourceType);
 }
 
@@ -1954,9 +2766,12 @@ static FontListOpaque* MenuItemGetFontListHook(const void* self, FontListOpaque*
 static bool ContextMenuIsCommandIdVisibleHook(const void* self, int commandId) {
   if (IsGroupCommandId(commandId)) return true;
   if (IsCustomMenuCommandId(commandId)) return true;
+  if (PageMenuBypassed()) return g_ContextMenuIsCommandIdVisibleOriginal(self, commandId);
 
   for (const auto& item : g_contextMenuVisibility) {
-    if (item.commandId == commandId && item.hidden.load(std::memory_order_relaxed)) {
+    const int last = item.commandIdLast ? item.commandIdLast : item.commandId;
+    if (commandId >= item.commandId && commandId <= last &&
+        item.hidden.load(std::memory_order_relaxed)) {
       return false;
     }
   }
@@ -1997,7 +2812,7 @@ static bool GetPageMenuLabel(const void* model, size_t index, std::wstring& labe
 // so an entry hidden by label doesn't take a numbered position.
 static bool IsPageMenuEntryVisible(const void* model, size_t index) {
   if (!g_SimpleMenuModelIsVisibleAt(model, index)) return false;
-  if (!IsPageLabelModel(model)) return true;
+  if (!IsPageLabelModel(model) || PageMenuBypassed()) return true;
 
   std::shared_ptr<const std::vector<std::wstring>> patterns;
   {
@@ -2041,6 +2856,15 @@ static bool ExtensionGroupingReady() {
 
 static void* PageContextMenuCtorHook(void* self, void* frame, const void* params,
                                      bool paste, bool pasteMatchStyle) {
+  // Decide before the original runs: it builds the extension submenus.
+  g_pageMenuBypass.store(g_holdKeysShowOriginalMenu.load(std::memory_order_relaxed) &&
+                             OriginalMenuShortcutHeld(),
+                         std::memory_order_relaxed);
+  {
+    PageMenuContext context = ReadPageMenuContext(frame, params);
+    std::lock_guard<std::mutex> lock(g_pageMenuContextMutex);
+    g_pageMenuContext = std::move(context);
+  }
   const bool previous = g_constructingPageContextMenu;
   g_constructingPageContextMenu = true;
   void* result = g_PageContextMenuCtorOriginal(self, frame, params, paste, pasteMatchStyle);
@@ -2053,7 +2877,7 @@ static void* PageContextMenuCtorHook(void* self, void* frame, const void* params
 // No Chrome object fields or C++ containers are read or rewritten here.
 static void* ExtensionMatcherCtorHook(void* self, void* browserContext,
                                       void* delegate, void* rootModel, void* filter) {
-  if (g_constructingPageContextMenu && g_groupExtensions.load() &&
+  if (g_constructingPageContextMenu && g_groupExtensions.load() && !PageMenuBypassed() &&
       ExtensionGroupingReady()) {
     const void* label = GetCustomMenuItemLabel(L"Extensions");
     if (label) {
@@ -2258,6 +3082,7 @@ static void* AddMenuItemFromModelAtHook(void* model, size_t modelIndex,
 
 static bool ShouldHideMainPageMenuIcon(void* item) {
   if (!g_hideMainPageMenuIcons.load(std::memory_order_relaxed)) return false;
+  if (PageMenuBypassed()) return false;
   if (g_buildingMainPageMenuItem) return true;
   if (!g_pageMenuTrackedCount.load(std::memory_order_relaxed)) return false;
   std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
@@ -2389,7 +3214,7 @@ static void GroupCustomMenuItems(void* rootModel, std::vector<CustomMenuItem>& i
 
 // The complete model can be edited before Chrome turns it into menu views.
 static void ToolkitDelegateInitHook(void* self, void* menuModel) {
-  SetPendingMenuScope(kMenuScopePage);
+  SetPendingMenuScope(PageMenuScope());
   if (menuModel && PageLabelFilteringReady()) {
     std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
     g_pageLabelModels.insert(menuModel);
@@ -2400,13 +3225,19 @@ static void ToolkitDelegateInitHook(void* self, void* menuModel) {
     g_pageMenuRootModels.insert(menuModel);
     UpdatePageMenuTrackedCount();
   }
-  if (menuModel) {
+  if (menuModel && !PageMenuBypassed()) {
     std::vector<CustomMenuItem> items;
     CustomItemsGroupSettings grouping;
     {
       std::lock_guard<std::mutex> lock(g_customItemsMutex);
       if (g_customMenuItemsReady.load(std::memory_order_acquire)) items = g_customItems;
       grouping = g_customItemsGroupSettings;
+    }
+    if (!items.empty()) {
+      const PageMenuContext context = CopyPageMenuContext();
+      std::erase_if(items, [&context](const CustomMenuItem& item) {
+        return !CustomItemMatchesContext(item, context);
+      });
     }
     GroupCustomMenuItems(menuModel, items, grouping);
     AppendExtensionGroupPlacement(menuModel, items);
@@ -2497,9 +3328,13 @@ static uint32_t ColorProviderGetColorHook(const void* self, int colorId) {
     // NativeTheme::PaintMenuItemBackground makes one GetColor call. Consume
     // the override so later incidental queries cannot inherit this color.
     g_menuItemPaintColor = 0;
+    g_menuItemPaintedColor = color;
     return color;
   }
   const uint32_t color = g_ColorProviderGetColorOriginal(self, colorId);
+  if (g_paintingMenuItemBackground && self == g_menuItemPaintColorProvider) {
+    g_menuItemPaintedColor = color;
+  }
   // The outer layer supplies the requested alpha exactly once. Preserve fully
   // transparent colors (no fill), but remove existing translucency from the
   // native background's colors so it cannot multiply the selected opacity.
@@ -2527,15 +3362,102 @@ static void PaintMenuItemBackgroundHook(
   if (radius >= 0 && expectedLayout) adjusted.params.cornerRadius = radius;
   const auto previousProvider = g_menuItemPaintColorProvider;
   const uint32_t previousColor = g_menuItemPaintColor;
+  const bool previousPainting = g_paintingMenuItemBackground;
+  const uint32_t previousPaintedColor = g_menuItemPaintedColor;
   g_menuItemPaintColorProvider = colorProvider;
   g_menuItemPaintColor = g_ColorProviderGetColorOriginal
       ? g_menuItemBackgroundColor.load(std::memory_order_relaxed) : 0;
+  g_paintingMenuItemBackground = true;
+  g_menuItemPaintedColor = 0;
   // This canvas is cc::PaintCanvas, not gfx::Canvas. Keep Chrome's original
   // painting path and override only its scoped background-color lookup.
   g_PaintMenuItemBackgroundOriginal(self, canvas, colorProvider, state, rect,
                                     expectedLayout ? &adjusted.params : params);
+  g_menuItemPaintedColor = previousPaintedColor;
+  g_paintingMenuItemBackground = previousPainting;
   g_menuItemPaintColor = previousColor;
   g_menuItemPaintColorProvider = previousProvider;
+}
+
+// cc/paint/paint_flags.h: CorePaintFlags starts with SkColor4f color_, float
+// width_, float miter_limit_, then a uint32_t bitfield whose lowest bit is
+// anti_alias_. NativeTheme::PaintMenuItemBackground draws its rounded fill
+// with default flags, so the corners come out jagged. Turn on anti-aliasing
+// for that one draw, but only when the flags hold exactly the color GetColor
+// just returned plus default width, miter limit, and style bits; otherwise
+// the layout is not the expected one and the draw is left alone.
+static constexpr size_t kPaintFlagsBitfieldOffset = 24;
+
+static bool IsExpectedMenuItemPaintFlags(const void* flags) {
+  const uint32_t color = g_menuItemPaintedColor;
+  if (!flags || !color) return false;
+  float values[6];
+  memcpy(values, flags, sizeof(values));
+  const float expected[4] = {((color >> 16) & 0xFF) / 255.0f,
+                             ((color >> 8) & 0xFF) / 255.0f,
+                             (color & 0xFF) / 255.0f,
+                             ((color >> 24) & 0xFF) / 255.0f};
+  for (int i = 0; i < 4; ++i) {
+    const float difference = values[i] - expected[i];
+    if (difference > 0.002f || difference < -0.002f) return false;
+  }
+  if (values[4] != 0.0f || values[5] != 4.0f) return false;
+  uint32_t bits;
+  memcpy(&bits, static_cast<const unsigned char*>(flags) + kPaintFlagsBitfieldOffset,
+         sizeof(bits));
+  // anti_alias, dither, cap, join, and style are all zero by default.
+  return (bits & 0xFF) == 0;
+}
+
+// Runs |draw| with anti-aliasing temporarily enabled on Chrome's local flags.
+template <typename Draw>
+static void DrawMenuItemBackgroundAntiAliased(const void* flags, Draw draw) {
+  if (!g_paintingMenuItemBackground || !IsExpectedMenuItemPaintFlags(flags)) {
+    draw();
+    return;
+  }
+  // One draw per paint call: later draws keep Chrome's flags untouched.
+  g_menuItemPaintedColor = 0;
+  auto* bits = reinterpret_cast<uint32_t*>(
+      const_cast<unsigned char*>(static_cast<const unsigned char*>(flags)) +
+      kPaintFlagsBitfieldOffset);
+  const uint32_t original = *bits;
+  *bits = original | 1u;
+  draw();
+  *bits = original;
+}
+
+using PaintCanvasDrawRoundRectFn = void (*)(void*, const void*, float, float, const void*);
+using PaintCanvasDrawRRectFn = void (*)(void*, const void*, const void*);
+static PaintCanvasDrawRoundRectFn g_RecordCanvasDrawRoundRectOriginal;
+static PaintCanvasDrawRoundRectFn g_SkiaCanvasDrawRoundRectOriginal;
+static PaintCanvasDrawRRectFn g_RecordCanvasDrawRRectOriginal;
+static PaintCanvasDrawRRectFn g_SkiaCanvasDrawRRectOriginal;
+
+static void RecordCanvasDrawRoundRectHook(void* self, const void* rect, float rx,
+                                          float ry, const void* flags) {
+  DrawMenuItemBackgroundAntiAliased(flags, [&] {
+    g_RecordCanvasDrawRoundRectOriginal(self, rect, rx, ry, flags);
+  });
+}
+
+static void SkiaCanvasDrawRoundRectHook(void* self, const void* rect, float rx,
+                                        float ry, const void* flags) {
+  DrawMenuItemBackgroundAntiAliased(flags, [&] {
+    g_SkiaCanvasDrawRoundRectOriginal(self, rect, rx, ry, flags);
+  });
+}
+
+static void RecordCanvasDrawRRectHook(void* self, const void* rrect, const void* flags) {
+  DrawMenuItemBackgroundAntiAliased(flags, [&] {
+    g_RecordCanvasDrawRRectOriginal(self, rrect, flags);
+  });
+}
+
+static void SkiaCanvasDrawRRectHook(void* self, const void* rrect, const void* flags) {
+  DrawMenuItemBackgroundAntiAliased(flags, [&] {
+    g_SkiaCanvasDrawRRectOriginal(self, rrect, flags);
+  });
 }
 
 static bool MenuGroupBorderReady() {
@@ -3461,6 +4383,18 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
       {{LR"(??0RenderViewContextMenu@@QEAA@AEAVRenderFrameHost@content@@AEBUContextMenuParams@2@_N2@Z)"},
        &g_PageContextMenuCtorOriginal, PageContextMenuCtorHook, true},
 
+      // The {title} placeholder: the page title of the right-clicked frame.
+      {{LR"(?FromRenderFrameHost@WebContents@content@@SAPEAV12@PEAVRenderFrameHost@2@@Z)"},
+       &g_WebContentsFromRenderFrameHost, nullptr, true},
+
+      {{LR"(?GetTitle@WebContentsImpl@content@@UEAAAEBV?$basic_string@_SU?$char_traits@_S@__Cr@std@@V?$allocator@_S@23@@__Cr@std@@XZ)"},
+       &g_WebContentsGetTitle, nullptr, true},
+
+      // Confirms on every page menu that the ContextMenuParams offsets still
+      // hold, by comparing the page address read there with this one.
+      {{LR"(?GetLastCommittedURL@WebContentsImpl@content@@UEBAAEBVGURL@@XZ)"},
+       &g_WebContentsGetLastCommittedUrl, nullptr, true},
+
       {{LR"(??0ContextMenuMatcher@extensions@@QEAA@PEAVBrowserContext@content@@PEAVDelegate@SimpleMenuModel@ui@@PEAV56@V?$RepeatingCallback@$$A6A_NPEBVMenuItem@extensions@@@Z@base@@@Z)"},
        &g_ExtensionMatcherCtorOriginal, ExtensionMatcherCtorHook, true},
 
@@ -3521,6 +4455,21 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
        &g_ColorProviderGetColorOriginal,
        ColorProviderGetColorHook,
        true},
+
+      // Anti-aliased rounded menu item backgrounds; see
+      // DrawMenuItemBackgroundAntiAliased. Menus normally paint through a
+      // recording canvas; the Skia canvas covers direct raster paints.
+      {{LR"(?drawRoundRect@RecordPaintCanvas@cc@@UEAAXAEBUSkRect@@MMAEBVPaintFlags@2@@Z)"},
+       &g_RecordCanvasDrawRoundRectOriginal, RecordCanvasDrawRoundRectHook, true},
+
+      {{LR"(?drawRoundRect@SkiaPaintCanvas@cc@@UEAAXAEBUSkRect@@MMAEBVPaintFlags@2@@Z)"},
+       &g_SkiaCanvasDrawRoundRectOriginal, SkiaCanvasDrawRoundRectHook, true},
+
+      {{LR"(?drawRRect@RecordPaintCanvas@cc@@UEAAXAEBVSkRRect@@AEBVPaintFlags@2@@Z)"},
+       &g_RecordCanvasDrawRRectOriginal, RecordCanvasDrawRRectHook, true},
+
+      {{LR"(?drawRRect@SkiaPaintCanvas@cc@@UEAAXAEBVSkRRect@@AEBVPaintFlags@2@@Z)"},
+       &g_SkiaCanvasDrawRRectOriginal, SkiaCanvasDrawRRectHook, true},
 
       // Public virtual in Chrome 153, protected in earlier builds.
       {{LR"(?OnPaintBackground@MenuScrollViewContainer@views@@UEAAXPEAVCanvas@gfx@@@Z)",
