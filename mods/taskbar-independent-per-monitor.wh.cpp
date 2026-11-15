@@ -215,6 +215,7 @@ taskbar*.
 #include <cstdio>
 #include <cwchar>
 #include <cwctype>
+#include <list>
 #include <map>
 #include <atomic>
 #include <mutex>
@@ -576,29 +577,78 @@ static bool PathMatches(FindCtx* c, DWORD pid) {
 }
 
 // Monitor of a window. Windows parks minimized windows (and apps park hidden ones) at -32000,-32000:
-// "nearest" would then be the leftmost monitor, so a parked window keeps the monitor it was last seen on
-// (leaf lock: nothing is called while it is held, so it is safe with g_mx held or not).
+// "nearest" would then be the leftmost monitor, so a parked window keeps the monitor it was last seen on.
+// Only tracked windows (those with a taskbar button) are remembered; they are forgotten once the window
+// is destroyed (UntrackWindow/ReleaseWindows). The cache is a LRU list: above kLastMonMax the entries of windows that no
+// longer exist go first, then the least recently used ones. The mutex is a leaf lock: no other lock is
+// taken while it is held (IsWindow doesn't block), so it's safe to call with g_mx held or not.
+static const size_t kLastMonMax = 2000, kLastMonKeep = 1800;
 static std::mutex g_lastMonMx;
-static std::map<HWND, HMONITOR> g_lastMon;
+static std::list<HWND> g_lastMonLru;  // most recently used first
+static std::map<HWND, std::pair<HMONITOR, std::list<HWND>::iterator>> g_lastMon;
 
-static HMONITOR WinMonitor(HWND h) {
+static void LastMonSet(HWND h, HMONITOR m) {
+    std::lock_guard<std::mutex> l(g_lastMonMx);
+    auto it = g_lastMon.find(h);
+    if (it != g_lastMon.end()) {
+        it->second.first = m;
+        g_lastMonLru.splice(g_lastMonLru.begin(), g_lastMonLru, it->second.second);
+        return;
+    }
+    g_lastMonLru.push_front(h);
+    g_lastMon.emplace(h, std::make_pair(m, g_lastMonLru.begin()));
+    if (g_lastMon.size() <= kLastMonMax) return;
+    for (auto e = g_lastMon.begin(); e != g_lastMon.end();) {
+        if (IsWindow(e->first)) {
+            ++e;
+        } else {
+            g_lastMonLru.erase(e->second.second);
+            e = g_lastMon.erase(e);
+        }
+    }
+    if (g_lastMon.size() <= kLastMonMax) return;
+    while (g_lastMon.size() > kLastMonKeep) {  // all alive: drop the least recently used
+        g_lastMon.erase(g_lastMonLru.back());
+        g_lastMonLru.pop_back();
+    }
+}
+
+static HMONITOR LastMonGet(HWND h) {
+    std::lock_guard<std::mutex> l(g_lastMonMx);
+    auto it = g_lastMon.find(h);
+    if (it == g_lastMon.end()) return nullptr;
+    g_lastMonLru.splice(g_lastMonLru.begin(), g_lastMonLru, it->second.second);
+    return it->second.first;
+}
+
+static void LastMonForget(HWND h) {
+    std::lock_guard<std::mutex> l(g_lastMonMx);
+    auto it = g_lastMon.find(h);
+    if (it == g_lastMon.end()) return;
+    g_lastMonLru.erase(it->second.second);
+    g_lastMon.erase(it);
+}
+
+static void LastMonClear() {
+    std::lock_guard<std::mutex> l(g_lastMonMx);
+    g_lastMon.clear();
+    g_lastMonLru.clear();
+}
+
+// remember: the window is tracked, so its monitor is stored for later (see above)
+static HMONITOR WinMonitor(HWND h, bool remember = false) {
     if (!h) return nullptr;
     // Touches a monitor, or minimized (then its restore rectangle counts)
     HMONITOR m = MonitorFromWindow(h, MONITOR_DEFAULTTONULL);
     if (m) {
-        std::lock_guard<std::mutex> l(g_lastMonMx);
-        if (g_lastMon.size() > 2000) g_lastMon.clear();
-        g_lastMon[h] = m;
+        if (remember) LastMonSet(h, m);
         return m;
     }
     RECT r;
     if (GetWindowRect(h, &r) && (r.left <= -30000 || r.top <= -30000)) {
-        {
-            std::lock_guard<std::mutex> l(g_lastMonMx);
-            auto it = g_lastMon.find(h);
-            MONITORINFO mi{.cbSize = sizeof(mi)};
-            if (it != g_lastMon.end() && GetMonitorInfoW(it->second, &mi)) return it->second;  // still connected
-        }
+        HMONITOR last = LastMonGet(h);
+        MONITORINFO mi{.cbSize = sizeof(mi)};
+        if (last && GetMonitorInfoW(last, &mi)) return last;  // still connected
         return MonitorFromWindow(h, MONITOR_DEFAULTTOPRIMARY);
     }
     return MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
@@ -791,7 +841,7 @@ static void TrackWindow(HWND h, void* g) {
             w.g = g;
             ((IUnknown*)g)->AddRef();
         }
-        w.mon = WinMonitor(h);
+        w.mon = WinMonitor(h, true);
         w.frame = frame;
     }
     if (old) ((IUnknown*)old)->Release();
@@ -808,6 +858,9 @@ static void UntrackWindow(HWND h) {
         if (it == g_wins.end()) return;
         old = it->second.g;
         g_wins.erase(it);
+        // A hidden window (e.g. an app closed to the tray) loses its button but may come back parked
+        // at -32000: keep its monitor until the window is destroyed (the LRU limit covers the rest)
+        if (!IsWindow(h)) LastMonForget(h);
     }
     if (old) ((IUnknown*)old)->Release();
 }
@@ -823,8 +876,10 @@ static void ReleaseWindows(bool all) {
                 continue;
             }
             groups.push_back(it->second.g);
+            LastMonForget(it->first);
             it = g_wins.erase(it);
         }
+        if (all) LastMonClear();
     }
     for (void* g : groups) ((IUnknown*)g)->Release();
 }
@@ -1380,7 +1435,7 @@ static void FrameTimerProc() {
         for (auto& [h, w] : g_wins) {
             if (!w.frame) continue;
             any = true;
-            HMONITOR now = WinMonitor(h);
+            HMONITOR now = WinMonitor(h, true);
             if (now == w.mon) continue;
             MONITORINFO a{.cbSize = sizeof(a)}, b{.cbSize = sizeof(b)};
             if (w.mon && GetMonitorInfoW(w.mon, &a) && GetMonitorInfoW(now, &b)) {
@@ -1403,7 +1458,12 @@ static void FrameTimerProc() {
 // remember the direction for the sideways slide-in and re-evaluate the window
 // Before the original: remember the new monitor (and the direction). true = the window moved.
 static bool NoteMove(HWND h, HMONITOR& now) {
-    now = WinMonitor(h);
+    bool tracked;
+    {
+        std::lock_guard<std::mutex> l(g_mx);
+        tracked = g_wins.count(h) != 0;
+    }
+    now = WinMonitor(h, tracked);
     HMONITOR old = nullptr;
     bool moved = false;
     if (now) {
