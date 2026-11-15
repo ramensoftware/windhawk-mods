@@ -11026,6 +11026,10 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
             }
             ReleaseSRWLockExclusive(&req->lock);
         };
+        // "Já existe um pareamento em andamento" (15): o Windows ainda está terminando
+        // outro (uma tentativa anterior, as Configurações, o Swift Pair). Espera e
+        // tenta de novo, até 4 vezes.
+        for (int attempt = 0;; attempt++) {
         auto op = custom.PairAsync(DevicePairingKinds::ConfirmOnly | DevicePairingKinds::ConfirmPinMatch |
                                    DevicePairingKinds::DisplayPin);
         // Espera o pareamento (a pessoa pode precisar confirmar no aparelho); no
@@ -11099,6 +11103,11 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
             result = st == DevicePairingResultStatus::Paired || st == DevicePairingResultStatus::AlreadyPaired ? 2
                    : st == DevicePairingResultStatus::RequiredHandlerNotRegistered ? 4
                                                                                    : 3;
+            if (st == DevicePairingResultStatus::OperationAlreadyInProgress && attempt < 3 && !g_jobsStopping) {
+                Wh_Log(L"Bluetooth: outro pareamento em andamento, nova tentativa em 3 s");
+                for (int k = 0; k < 30 && !g_jobsStopping; k++) Sleep(100);
+                if (!g_jobsStopping) continue;
+            }
         }
         else {
             Wh_Log(L"Bluetooth: pareamento %s", op.Status() == AsyncStatus::Canceled ? L"cancelado" : L"com erro");
@@ -11107,6 +11116,8 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
                 swprintf(h, ARRAYSIZE(h), L"0x%08X", (unsigned)op.ErrorCode());
                 detail = h;
             }
+        }
+        break;
         }
         custom.PairingRequested(token);
     } catch (winrt::hresult_error const& e) {
@@ -11128,6 +11139,13 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
 }
 
 static void BtPair(const std::wstring& id) {
+    // Um clique a mais não começa um segundo pareamento do mesmo aparelho.
+    AcquireSRWLockShared(&g_btLock);
+    bool busy = false;
+    for (auto& x : g_btNew)
+        if (x.id == id && (x.state == 1 || BtIsPrompt(x.state))) busy = true;
+    ReleaseSRWLockShared(&g_btLock);
+    if (busy) return;
     BtSetState(id, 1);
     g_btPairing++;
     auto* arg = new std::wstring(id);
