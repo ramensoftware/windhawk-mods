@@ -2,12 +2,12 @@
 // @id              win8-charms-bar-recreation
 // @name            Windows 8/8.1 Charms Bar Recreation
 // @description     This mod recreates the Windows 8/8.1 Charms Bar on Windows 10 and Windows 11
-// @version         1.0.0
+// @version         1.1.0
 // @author 	        babamohammed
 // @github          https://github.com/babamohammed2022
 // @license         GPL-3.0
 // @include         explorer.exe
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -lshlwapi -ldwmapi -lshcore -lgdiplus -lmsimg32 -lwlanapi -liphlpapi -lwininet -lwindowsapp -luuid -ladvapi32 -lpowrprof -lcrypt32 -lwindowscodecs
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -lshlwapi -ldwmapi -lshcore -lgdiplus -lmsimg32 -lwlanapi -liphlpapi -lwininet -lwindowsapp -luuid -ladvapi32 -lpowrprof -lcrypt32 -lwindowscodecs -luxtheme
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -120,7 +120,18 @@ Live system data (volume, brightness, network, battery) is read only while a pan
     - edgeOnly: Full right edge only
     - topRightAndWinC: Top-right corner + Win+C
     - topRightOnly: Top-right corner only
+    - bothCornersAndWinC: Both right corners + Win+C
+    - bothCornersOnly: Both right corners only
     - winCOnly: Win+C only
+- edgeHintDelayMs: 200
+  $name: Edge hint delay (ms)
+  $description: "How long the pointer must rest on the activation edge or corner before the icon hint slides in, and how long it must rest again after leaving before it slides in a second time. 200 ms is the Windows 8 default. Increase it if the bar still feels too sensitive."
+- edgeSlidePx: 32
+  $name: Slide along the edge to open (px)
+  $description: "After the icon hint is up, the solid bar appears when the pointer travels this far along the edge, up or down. 32 px is the Windows 8 default. Set it to 0 to open the solid bar from the hint immediately."
+- edgeHintDwellMs: 0
+  $name: Open the full bar from the hint after (ms)
+  $description: "While the icon hint is up and the pointer rests on the edge, the solid bar opens by itself after this delay. 0 is the Windows 8 behaviour: the bar waits for a slide along the edge or a click."
 - hideAfterClick: true
   $name: Hide after choosing a charm
   $description: "This setting closes the Charms Bar after you activate a charm. Turn it off to leave the rail open."
@@ -130,6 +141,27 @@ Live system data (volume, brightness, network, battery) is read only while a pan
 - useAnimations: true
   $name: Animate show and hide
   $description: "This setting animates the Charms Bar and its panes when they open and close. Turn it off for instant show and hide. The Windows animation setting (Settings > Accessibility > Visual effects > Animation effects) is always honoured: when Windows animations are off, the Charms Bar always appears and disappears instantly."
+- charmPaneEngine: true
+  $name: Charm pane animation engine
+  $description: "This setting animates the Settings, Devices and Share panes and the volume and menu popups with theme driven timing: the durations and the curves are read from the current Windows theme, and the pane content slides in two groups (title, then body). Turn it off to fall back to the previous slide."
+- paneAnimScalePct: 100
+  $name: Charm pane animation speed (%)
+  $description: "Scales every duration the engine reads from the theme. 100 % uses the theme's own timing; lower values are faster."
+- paneThemeSlide: false
+  $name: Take the content slide from the theme
+  $description: "Read the content slide distance from the current theme (storyboard 32) instead of the Windows 8.1 value the engine falls back to."
+- paneContentSlidePx: -1
+  $name: Content slide distance (px)
+  $description: "How far the body of the pane slides in. -1 uses the engine's default: the theme's value when it is taken from the theme, 100 px otherwise."
+- paneTitleSlidePct: 40
+  $name: Title slide distance (%)
+  $description: "How far the title slides in, as a percentage of the content distance. The title has no delay, the body has one."
+- paneGroupStagger: 0
+  $name: Body group delay index
+  $description: "Delay of the body group, in steps of the theme's element stagger (35 ms by default). 0 means the title and the body start together; 1 delays the body by one step."
+- paneThemeFade: true
+  $name: Take the popup fade from the theme
+  $description: "Use the theme's content fade curve for the panes and the popups. Turn it off to use the engine's Windows 8.1 fallback curve."
 - startLogoStyle: windows8
   $name: Start logo style
   $description: "This setting chooses the Start logo in the rail: the Windows 8/8.1 logo, drawn with the system accent color, or the Windows 8 Build 8102 beta logo."
@@ -236,6 +268,8 @@ Live system data (volume, brightness, network, battery) is read only while a pan
 #include <shellapi.h>
 #include <shlwapi.h>
 #include <dwmapi.h>
+#include <uxtheme.h>
+#include <vssym32.h>
 #include <gdiplus.h>
 #include <wlanapi.h>
 #include <wininet.h>
@@ -2221,8 +2255,8 @@ static int MenuWidth() {
     int maxW = S(220);
     ScopedWindowDc dc(NULL);
     if (dc.get()) {
-        GdiObj<HFONT> font(CreateFontW(-S(15), 0, 0, 0, FW_NORMAL, 0, 0, 0,
-                                       DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI"));
+        GdiObj<HFONT> font(CreateFontW(-S(15), 0, 0, 0, FW_SEMIBOLD, 0, 0, 0,
+                                       DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI Semibold"));
         ScopedSelectedObject selFont(dc.get(), font.get());
         for (const MenuEntry& e : g_menu) {
             if (e.cmd == MC_SEP || e.text.empty()) continue;
@@ -2301,15 +2335,17 @@ static void MenuPaint(HWND h) {
     GdiObj<HBRUSH> bg(CreateSolidBrush(RGB(255, 255, 255)));
     FillRect(dc.get(), &rc, bg.get());
 
-    GdiObj<HPEN> border(CreatePen(PS_SOLID, 1, RGB(200, 200, 200)));
+    // Windows 8.1 menus are framed in black, not in light grey.
+    GdiObj<HPEN> border(CreatePen(PS_SOLID, 1, RGB(0, 0, 0)));
     {
         ScopedSelectedObject selPen(dc.get(), border.get());
         ScopedSelectedObject selBrush(dc.get(), GetStockObject(NULL_BRUSH));
         Rectangle(dc.get(), rc.left, rc.top, rc.right, rc.bottom);
     }
 
-    GdiObj<HFONT> font(CreateFontW(-S(15), 0, 0, 0, FW_NORMAL, 0, 0, 0,
-                                   DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI"));
+    // Segoe UI Semibold: the face and the weight of the Windows 8.1 context menus.
+    GdiObj<HFONT> font(CreateFontW(-S(15), 0, 0, 0, FW_SEMIBOLD, 0, 0, 0,
+                                   DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI Semibold"));
     ScopedSelectedObject selFont(dc.get(), font.get());
     ScopedBkMode bkMode(dc.get(), TRANSPARENT);
 
@@ -3440,6 +3476,18 @@ static const GUID kIidPlayToManagerStatics =
     {0x64e6a887,0x3982,0x4f3b,{0xba,0x20,0x61,0x55,0xe4,0x35,0x32,0x5b}};
 
 constexpr UINT WM_PORT_OPEN = WM_APP + 0x461;
+// 1.1.0 edge hint messages. wParam/lParam carry no payload: the hook only reports transitions and every
+// coordinate is re-read from the cursor on the UI thread, so the hook never touches a window.
+constexpr UINT WM_PORT_HINT_SHOW = WM_APP + 0x46A;   // the icon hint should slide in
+constexpr UINT WM_PORT_HINT_FULL = WM_APP + 0x46B;   // the solid bar should follow the hint
+constexpr UINT WM_PORT_HINT_HIDE = WM_APP + 0x46C;   // the pointer left before the solid bar appeared
+enum EdgeHintStage : int { HINT_NONE=0, HINT_ICONS=1, HINT_FULL=2 };
+// 200 ms is the Windows 8 default hint delay (HKCU EdgeUI\CharmsBarDesktopDelay) and 32 logical px is one
+// 8.1 gesture increment along the edge. The dwell is off by default: Windows 8 waited for the slide or a
+// click, and a dwell timer would make the bar open just because the pointer was parked on the edge.
+constexpr int kDefaultEdgeHintMs = 200;
+constexpr int kDefaultEdgeSlidePx = 32;
+constexpr int kDefaultEdgeDwellMs = 0;
 constexpr UINT WM_PORT_CLOSE = WM_APP + 0x462;
 constexpr UINT WM_PORT_REFRESH = WM_APP + 0x463;
 constexpr UINT WM_PORT_MENU = WM_APP + 0x464;
@@ -3452,6 +3500,7 @@ constexpr UINT_PTR TIMER_PANE = 4;
 constexpr UINT_PTR TIMER_VOLUME = 5;
 constexpr UINT_PTR TIMER_BRIGHTNESS_APPLY = 6;
 constexpr UINT_PTR TIMER_PANE_METRICS = 7;
+constexpr UINT_PTR TIMER_POPUP_FADE = 11; // 1.1.0: the engine popup fade, 8 ms frames
 constexpr UINT_PTR TIMER_SEARCH_VERIFY = 8; // 700 ms after a Win chord: did the Windows search UI appear?
 constexpr UINT_PTR TIMER_START_VERIFY = 9;  // 900 ms after handing Start over: did that window appear?
 constexpr UINT_PTR TIMER_STARTTIP_DWELL = 10; // is the pointer still parked in the corner?
@@ -3823,6 +3872,10 @@ RECT g_monitorRect = {}, g_workRect = {};
 // value-taking atomic constructors.
 std::atomic<bool> g_stop;
 std::atomic<bool> g_useWinC, g_edgeActivation, g_topRightCornerOnly, g_useAnimations;
+// 1.1.0: the corner modes are two independent switches. topRightCornerOnly is kept as the top-right half so
+// the existing hit tests keep working; g_bottomRightCorner adds the bottom-right corner square for the new
+// "both right corners" modes. Neither of them ever arms the middle of the right edge.
+std::atomic<bool> g_bottomRightCorner;
 std::atomic<bool> g_charmsEnabled, g_hideAfterClick;
 std::atomic<bool> g_showClock, g_showQuickMenu, g_fullHeight;
 std::atomic<bool> g_closeOnClickOutside;
@@ -3832,6 +3885,274 @@ std::atomic<int> g_charmIconSet{0};
 std::atomic<bool> g_enableTransparency;
 std::atomic<bool> g_settingsPane{true}, g_paneVisible{false};
 std::atomic<int> g_paneColorMode{0}, g_paneKind{PANE_SETTINGS};
+// 1.1.0: settings of the charm pane animation (see the CharmMotion block).
+std::atomic<int> g_paneEngineOn{1}, g_paneThemeSlide{0}, g_paneContentSlidePx{-1};
+std::atomic<int> g_paneTitleSlidePct{40}, g_paneGroupStagger{0}, g_paneThemeFade{1};
+std::atomic<int> g_paneAnimScalePct{100};
+// Extra horizontal offset applied to the pane title by the engine's title group; the body keeps using
+// g_paneContentOffset.
+int g_paneTitleOffset=0;
+
+// ---------------------------------------------------------------------------------------------------------
+// 1.1.0 - charm pane animation: theme driven timing for the panes and the popups.
+//
+// The timing does not live in this mod: it is read from the Windows theme the user is running (the
+// "animations" and "timingfunction" theme data), with the Windows 8.1 values as the fallback when the theme
+// does not export them. Everything here runs on the mod's UI thread. Every entry point that samples a curve or
+// moves a window is wrapped in try/catch, so a malformed theme export can never take the shell hook down: on
+// failure the pane simply finishes its transition instead of animating.
+// ---------------------------------------------------------------------------------------------------------
+namespace CharmMotion {
+
+// QPC milliseconds: the clock every duration in this block is measured against.
+static double MotionNowMs() {
+    LARGE_INTEGER f{}, c{};
+    QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&c);
+    if (f.QuadPart <= 0) return 0.0;
+    return (double)c.QuadPart * 1000.0 / (double)f.QuadPart;
+}
+
+// ---- theme animation exports --------------------------------------------------------------------------
+typedef HRESULT (WINAPI *MotionTransformFn)(HTHEME, int, int, DWORD, TA_TRANSFORM*, DWORD, DWORD*);
+typedef HRESULT (WINAPI *MotionTimingFn)(HTHEME, int, TA_TIMINGFUNCTION*, DWORD, DWORD*);
+typedef HRESULT (WINAPI *MotionPropFn)(HTHEME, int, int, int, void*, DWORD, DWORD*);
+typedef HTHEME (WINAPI *MotionOpenDpiFn)(HWND, LPCWSTR, UINT);
+typedef HRESULT (WINAPI *MotionCloseFn)(HTHEME);
+
+// ---- curves ---------------------------------------------------------------------------------------------
+struct MotionCurve { double v[4]; };
+static const MotionCurve kIdentityCurve = {{0.1, 0.9, 0.2, 1.0}}; // Windows 8.1 fallback
+static MotionCurve g_curveSlide = kIdentityCurve, g_curveFade = kIdentityCurve;
+static MotionCurve g_curveContentFade = kIdentityCurve;
+static MotionCurve g_curvePanelShow = kIdentityCurve, g_curvePanelHide = kIdentityCurve;
+
+// ---- durations and distances ----------------------------------------------------------------------------
+static double g_durSlide = 1000, g_durFade = 170, g_durContentFade = 170;
+static double g_durPanelShow = 550, g_durPanelHide = 550;
+static double g_stagger = 35, g_staggerCap = 333;
+static int g_motionScalePct = 100;       // animation speed (%)
+static int g_motionThemeSlide = 0;       // take the content slide from the theme
+static int g_motionContentPx = -1;       // content slide distance, -1 = default
+static int g_motionTitlePercent = 40;    // title distance, percent of the content distance
+static int g_motionGroupStagger = 0;     // stagger index of the body group
+static int g_motionThemeFade = 1;        // take the content fade from the theme
+static int g_motionDpi = 96;             // pane DPI for the distances
+
+// Solves the cubic bezier for y at the given x. Bounded, no allocation, cannot fail.
+static double CurveY(const MotionCurve& b, double t) {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    double lo = 0, hi = 1, s = 0;
+    for (int i = 0; i < 24; i++) {
+        s = (lo + hi) / 2;
+        double u = 1 - s;
+        double x = 3 * u * u * s * b.v[0] + 3 * u * s * s * b.v[2] + s * s * s;
+        if (x < t) lo = s; else hi = s;
+    }
+    double u = 1 - s;
+    return 3 * u * u * s * b.v[1] + 3 * u * s * s * b.v[3] + s * s * s;
+}
+
+static bool ReadCurve(MotionTimingFn gtf, HTHEME ht, DWORD id, MotionCurve& out) {
+    TA_CUBIC_BEZIER cb = {};
+    DWORD n = 0;
+    if (FAILED(gtf(ht, (int)id, (TA_TIMINGFUNCTION*)&cb, sizeof(cb), &n))) return false;
+    if (n < sizeof(TA_CUBIC_BEZIER)) return false;
+    if (cb.header.eTimingFunctionType != TTFT_CUBIC_BEZIER) return false;
+    const float v[4] = {cb.rX0, cb.rY0, cb.rX1, cb.rY1};
+    for (int i = 0; i < 4; i++) {
+        if (!(v[i] >= 0.0f && v[i] <= 1.0f)) return false;
+        out.v[i] = (double)v[i];
+    }
+    return true;
+}
+
+// One storyboard: kind 0 = a translate (a slide), 1 = an opacity (a fade).
+static bool ReadStoryboard(MotionTransformFn gtr, MotionTimingFn gtf, HTHEME ha, HTHEME ht,
+                           DWORD storyboard, DWORD index, int kind, double& duration, MotionCurve& curve) {
+    TA_TRANSFORM_2D t = {}; // the largest transform this reads, so the buffer always fits
+    DWORD n = 0;
+    if (FAILED(gtr(ha, (int)storyboard, (int)index, 0, (TA_TRANSFORM*)&t, sizeof(t), &n))) return false;
+    if (n < sizeof(TA_TRANSFORM)) return false;
+    const bool matches = kind == 0 ? t.header.eTransformType == TATT_TRANSLATE_2D
+                                   : t.header.eTransformType == TATT_OPACITY;
+    if (!matches) return false;
+    if (t.header.dwDurationTime > 0 && t.header.dwDurationTime < 5000) duration = (double)t.header.dwDurationTime;
+    ReadCurve(gtf, ht, t.header.dwTimingFunctionId, curve);
+    return true;
+}
+
+// The content fade export has changed place between Windows versions, so both places are tried.
+static bool ReadContentFade(MotionTransformFn gtr, MotionTimingFn gtf, HTHEME ha, HTHEME ht,
+                            double& duration, MotionCurve& curve) {
+    TA_TRANSFORM_2D t = {};
+    DWORD n = 0;
+    if (FAILED(gtr(ha, 32, 1, 1, (TA_TRANSFORM*)&t, sizeof(t), &n)) || n < sizeof(TA_TRANSFORM))
+        return ReadStoryboard(gtr, gtf, ha, ht, 32, 1, 1, duration, curve);
+    if (t.header.eTransformType != TATT_OPACITY) return false;
+    if (t.header.dwDurationTime > 0 && t.header.dwDurationTime < 5000) duration = (double)t.header.dwDurationTime;
+    return ReadCurve(gtf, ht, t.header.dwTimingFunctionId, curve);
+}
+
+// Reads every animation export the panes use. Failure of any single export keeps its Windows 8.1 fallback.
+static void LoadThemeMotion(HWND hwnd) {
+    g_curveSlide = g_curveFade = g_curvePanelShow = g_curvePanelHide = kIdentityCurve;
+    g_durSlide = 1000; g_durFade = 170; g_durPanelShow = g_durPanelHide = 550;
+    g_curveContentFade = kIdentityCurve; g_durContentFade = 170;
+    g_stagger = 35; g_staggerCap = 333;
+    HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
+    if (!ux) return;
+    auto openDpi = (MotionOpenDpiFn)GetProcAddress(ux, "OpenThemeDataForDpi");
+    auto close = (MotionCloseFn)GetProcAddress(ux, "CloseThemeData");
+    auto gtr = (MotionTransformFn)GetProcAddress(ux, "GetThemeAnimationTransform");
+    auto gtf = (MotionTimingFn)GetProcAddress(ux, "GetThemeTimingFunction");
+    auto gprop = (MotionPropFn)GetProcAddress(ux, "GetThemeAnimationProperty");
+    if (!close || !gtr || !gtf) return;
+    HTHEME ha = openDpi ? openDpi(hwnd, L"animations", 96) : OpenThemeData(hwnd, L"animations");
+    HTHEME ht = openDpi ? openDpi(hwnd, L"timingfunction", 96) : OpenThemeData(hwnd, L"timingfunction");
+    if (!ha) ha = OpenThemeData(hwnd, L"animations");
+    if (!ht) ht = OpenThemeData(hwnd, L"timingfunction");
+    if (ha && ht) {
+        if (g_motionThemeSlide) {
+            ReadStoryboard(gtr, gtf, ha, ht, 32, 0, 0, g_durSlide, g_curveSlide);
+            ReadStoryboard(gtr, gtf, ha, ht, 32, 1, 1, g_durFade, g_curveFade);
+        }
+        if (g_motionThemeFade) ReadContentFade(gtr, gtf, ha, ht, g_durContentFade, g_curveContentFade);
+        ReadStoryboard(gtr, gtf, ha, ht, 84, 0, 0, g_durPanelShow, g_curvePanelShow);
+        ReadStoryboard(gtr, gtf, ha, ht, 85, 0, 0, g_durPanelHide, g_curvePanelHide);
+    }
+    if (ha && gprop) {
+        DWORD v = 0, n = 0;
+        if (SUCCEEDED(gprop(ha, 32, 1, 2, &v, sizeof(v), &n)) && n >= sizeof(v) && v > 0 && v < 1000) g_stagger = (double)v;
+        v = 0; n = 0;
+        if (SUCCEEDED(gprop(ha, 32, 1, 3, &v, sizeof(v), &n)) && n >= sizeof(v) && v > 0 && v < 5000) g_staggerCap = (double)v;
+    }
+    if (ha) close(ha);
+    if (ht) close(ht);
+}
+
+// ---- durations ------------------------------------------------------------------------------------------
+static double ScaleDur(double ms) {
+    const double pct = g_motionScalePct > 0 ? (double)g_motionScalePct : 100.0;
+    const double scaled = ms * pct / 100.0;
+    return scaled < 1.0 ? 1.0 : scaled;
+}
+static double SlideDur() { return ScaleDur(g_durSlide); }
+static double ShowDur() { return ScaleDur(g_durPanelShow); }
+static double HideDur() { return ScaleDur(g_durPanelHide); }
+static double GroupDelay() {
+    const double steps = (double)g_motionGroupStagger * g_stagger;
+    const double capped = steps < g_staggerCap ? steps : g_staggerCap;
+    return capped * (double)(g_motionScalePct > 0 ? g_motionScalePct : 100) / 100.0;
+}
+
+// ---- distances ------------------------------------------------------------------------------------------
+static double ContentPx() {
+    const double base = g_motionThemeSlide && g_motionContentPx >= 0 ? (double)g_motionContentPx : 100.0;
+    return base * (double)g_motionDpi / 96.0;
+}
+static double TitlePx() {
+    return g_motionThemeSlide ? ContentPx() * (double)g_motionTitlePercent / 100.0
+                              : 40.0 * (double)g_motionDpi / 96.0;
+}
+
+// ---- per-frame values -----------------------------------------------------------------------------------
+// The pane slides from fromX towards toX: at the given age the opening already covers all but `remaining` of
+// that travel, so the window offset is the remaining part.
+static double RemainingPanel(double age, int fromX, int toX) {
+    const double span = (double)(fromX - toX);
+    return span * (1.0 - CurveY(g_curvePanelShow, age / ShowDur()));
+}
+// The closing runs the other way and starts wherever the pane is right now (startOffset), so a pane closed while
+// it is still opening leaves from that position instead of jumping.
+static int HideOffset(double age, int startOffset, int edgeOffset) {
+    const double y = CurveY(g_curvePanelHide, age / HideDur());
+    const double v = (double)startOffset + ((double)edgeOffset - (double)startOffset) * y;
+    return (int)(v + 0.5);
+}
+
+// Group 0 is the title (its own distance, no delay), group 1 the body (delayed by GroupDelay()).
+static int ContentOffset(int group, double age) {
+    const double distance = group == 0 ? TitlePx() : ContentPx();
+    const double delay = group == 0 ? 0.0 : GroupDelay();
+    const double remaining = distance * (1.0 - CurveY(g_curveSlide, (age - delay) / SlideDur()));
+    return (int)(remaining + 0.5);
+}
+
+// ---- the popups -----------------------------------------------------------------------------------------
+// The popups are not the main bar: they fade in and out over the theme's content fade duration (170 ms by
+// default, scaled by the speed setting) with the theme's content fade curve.
+static double PopupDur() { return ScaleDur(g_durContentFade); }
+static double PopupOpacity(double age) { return CurveY(g_curveContentFade, age / PopupDur()); }
+static double PopupClock() { return MotionNowMs(); }
+
+// ---- entry points used by the mod -----------------------------------------------------------------------
+// Applies the mod's settings, then reads the theme exports for one transition.
+static void Prepare(HWND hwnd, int scalePct, bool themeSlide, int contentPx, int titlePercent,
+                    int groupStagger, bool themeFade, int dpi) {
+    try {
+        g_motionScalePct = scalePct >= 10 && scalePct <= 400 ? scalePct : 100;
+        g_motionThemeSlide = themeSlide ? 1 : 0;
+        g_motionContentPx = contentPx;
+        g_motionTitlePercent = titlePercent >= 0 ? titlePercent : 40;
+        g_motionGroupStagger = groupStagger >= 0 && groupStagger <= 10 ? groupStagger : 0;
+        g_motionThemeFade = themeFade ? 1 : 0;
+        g_motionDpi = dpi > 0 ? dpi : 96;
+        LoadThemeMotion(hwnd);
+    } catch (...) {
+        Wh_Log(L"charm animation: theme timing unavailable, finishing the transition instead");
+        g_motionScalePct = 100;
+        g_durPanelShow = g_durPanelHide = 550;
+    }
+}
+
+// Pane offset for one frame: the opening slides in from the off-screen edge, the closing slides out from
+// whatever position the pane has at this moment.
+static int PanelOffset(int ageMs, int fromX, int toX, int edgeOffset, int startOffset, bool opening) {
+    try {
+        if (!opening) return HideOffset((double)ageMs, startOffset, edgeOffset);
+        const double remaining = RemainingPanel((double)ageMs, fromX, toX);
+        if (!(remaining >= -1e6 && remaining <= 1e6)) return 0;
+        return (int)(remaining < 0 ? remaining - 0.5 : remaining + 0.5);
+    } catch (...) {
+        return opening ? 0 : edgeOffset;
+    }
+}
+
+static int TitleOffset(int ageMs) {
+    try {
+        const int v = ContentOffset(0, (double)ageMs);
+        return v > 0 ? v : 0;
+    } catch (...) {
+        return 0;
+    }
+}
+
+static int BodyOffset(int ageMs) {
+    try {
+        const int v = ContentOffset(1, (double)ageMs);
+        return v > 0 ? v : 0;
+    } catch (...) {
+        return 0;
+    }
+}
+
+static double ShowDurationMs() { return ShowDur(); }
+static double HideDurationMs() { return HideDur(); }
+static double PopupDurationMs() { return PopupDur(); }
+
+static double PopupValue(double age) {
+    try {
+        const double v = PopupOpacity(age);
+        return v < 0 ? 0.0 : (v > 1 ? 1.0 : v);
+    } catch (...) {
+        return 1.0;
+    }
+}
+
+} // namespace CharmMotion
+
 
 std::atomic<int> g_searchHotkey, g_shareBehavior, g_clockFormat, g_uiScalePercent, g_uiDpi;
 // 0 = automatic (the companion search mod when it is installed, otherwise the Windows shortcut),
@@ -3879,6 +4200,28 @@ int g_animFromAlpha = 0, g_animFromSlide = 0, g_animToSlide = 0;
 int g_animDurationMs = 0;
 LONGLONG g_animStartQpc = 0, g_animQpcFrequency = 0;
 std::atomic<bool> g_edgeLatched, g_menuEdgeLatched, g_edgePosted;
+// Edge timing, read from the settings in ReadWindhawkSettings and by the input hook through the registry
+// values Windows 8 itself used (CharmsBarDesktopDelay / CharmsBarImmersiveDelay, milliseconds).
+std::atomic<int> g_edgeHintMs, g_edgeSlidePx, g_edgeDwellMs;
+// Hint state machine, owned by the input hook thread and read by the UI thread through WM_PORT_HINT*. A
+// "hint" is the Windows 8 icon-only band: the rail is on screen and translucent with the clock and the
+// status stack hidden, and the solid bar (captions, opaque background) only follows a slide or a dwell.
+std::atomic<int> g_hintStage;              // HINT_NONE / HINT_ICONS / HINT_FULL
+std::atomic<ULONGLONG> g_edgeTravelMark;   // pointer position along the edge when the hint appeared
+std::atomic<ULONGLONG> g_hintStageSince;   // GetTickCount64() of the last stage change (watchdog below)
+// While a hint is on screen (and until its fade-out finishes) the rail is painted and blended as the icon
+// band. Keeping this separate from g_hintStage means the stage can go back to idle the moment the pointer
+// leaves without the closing frames popping back to the solid, opaque look halfway through.
+std::atomic<bool> g_railHintVisual;
+
+// Single place that changes the stage, so the watchdog timestamp can never be left behind.
+void SetHintStage(int stage) {
+    if(g_hintStage.load()==stage) return;
+    g_hintStage.store(stage);
+    g_hintStageSince.store(GetTickCount64());
+}
+std::atomic<LONG> g_edgeArmOrigin;         // pointer position along the edge when the pointer reached it
+std::atomic<DWORD> g_edgeArmedTick;        // GetTickCount() of the last time the pointer reached the edge
 std::atomic<ULONGLONG> g_edgeSince;
 std::wstring g_shareTitle, g_shareText;
 
@@ -4003,10 +4346,70 @@ bool AnimationsEnabled() {
     return g_useAnimations.load() && SystemAnimationsEnabled();
 }
 
+// 1.1.0: fade state of the popups that are not the main bar. The opacity follows the theme's content fade curve
+// over 100 ms and is applied with SetLayeredWindowAttributes, which is what a layered window uses as alpha.
+struct PopupFade {
+    bool active=false;
+    double start=0;
+    BYTE from=255, to=255;
+    bool hideAtEnd=false;
+};
+static PopupFade g_volumeFade;
+static PopupFade g_menuFade;
+
+static void PopupFadeBegin(PopupFade& fade,BYTE to,bool hideAtEnd) {
+    fade.active=true;
+    fade.start=CharmMotion::PopupClock();
+    fade.from=0; // a popup always starts transparent
+    fade.to=to;
+    fade.hideAtEnd=hideAtEnd;
+}
+static bool PopupFadeStep(PopupFade& fade,BYTE& opacity) {
+    if(!fade.active) return false;
+    const double age=CharmMotion::PopupClock()-fade.start;
+    const double duration=CharmMotion::PopupDurationMs();
+    if(age>=duration) {
+        opacity=fade.to;
+        fade.active=false;
+        return !fade.hideAtEnd;
+    }
+    opacity=(BYTE)(fade.from+(fade.to-fade.from)*CharmMotion::PopupValue(age));
+    return true;
+}
+// Fades a popup in from transparent. With the engine off it is simply set opaque.
+static void ShowPopupWithEngineFade(HWND hwnd,PopupFade& fade) {
+    if(!hwnd) return;
+    if(!g_paneEngineOn.load()) {
+        KillTimer(hwnd,TIMER_POPUP_FADE);
+        fade.active=false;
+        SetLayeredWindowAttributes(hwnd,0,255,LWA_ALPHA);
+        return;
+    }
+    PopupFadeBegin(fade,255,false);
+    SetLayeredWindowAttributes(hwnd,0,0,LWA_ALPHA);
+    SetTimer(hwnd,TIMER_POPUP_FADE,8,nullptr);
+}
+// Fades a popup out and hides it at the end of the fade.
+static void HidePopupWithEngineFade(HWND hwnd,PopupFade& fade) {
+    if(!hwnd) return;
+    if(!g_paneEngineOn.load() || !IsWindowVisible(hwnd) || !AnimationsEnabled()) {
+        KillTimer(hwnd,TIMER_POPUP_FADE);
+        fade.active=false;
+        ShowWindow(hwnd,SW_HIDE);
+        return;
+    }
+    PopupFadeBegin(fade,0,true);
+    SetLayeredWindowAttributes(hwnd,0,255,LWA_ALPHA);
+    SetTimer(hwnd,TIMER_POPUP_FADE,8,nullptr);
+}
+
 void ReadWindhawkSettings() {
     bool useWinC=true;
     bool edgeActivation=true;
     bool topRightCornerOnly=false;
+    // 1.1.0: the corner modes are explicit. "Both right corners" is the mode Windows 8.1 actually had -
+    // the TR and BR corner squares, never the middle of the right edge.
+    bool bottomRightCorner=false;
     ScopedWhString activationMode(Wh_GetStringSetting(L"activationMode"));
     if(activationMode.get()) {
         if(wcscmp(activationMode.get(),L"edgeAndWinC")==0) {
@@ -4017,6 +4420,10 @@ void ReadWindhawkSettings() {
             useWinC=true; edgeActivation=true; topRightCornerOnly=true;
         } else if(wcscmp(activationMode.get(),L"topRightOnly")==0) {
             useWinC=false; edgeActivation=true; topRightCornerOnly=true;
+        } else if(wcscmp(activationMode.get(),L"bothCornersAndWinC")==0) {
+            useWinC=true; edgeActivation=true; topRightCornerOnly=true; bottomRightCorner=true;
+        } else if(wcscmp(activationMode.get(),L"bothCornersOnly")==0) {
+            useWinC=false; edgeActivation=true; topRightCornerOnly=true; bottomRightCorner=true;
         } else if(wcscmp(activationMode.get(),L"winCOnly")==0) {
             useWinC=true; edgeActivation=false;
         }
@@ -4024,6 +4431,17 @@ void ReadWindhawkSettings() {
     g_useWinC.store(useWinC);
     g_edgeActivation.store(edgeActivation);
     g_topRightCornerOnly.store(topRightCornerOnly);
+    g_bottomRightCorner.store(bottomRightCorner);
+
+    // Edge timing. Wh_GetIntSetting returns 0 for a missing value, so clamp rather than trust the range.
+    {
+        const int hint=Wh_GetIntSetting(L"edgeHintDelayMs");
+        const int slide=Wh_GetIntSetting(L"edgeSlidePx");
+        const int dwell=Wh_GetIntSetting(L"edgeHintDwellMs");
+        g_edgeHintMs.store(hint>0 && hint<=2000 ? hint : kDefaultEdgeHintMs);
+        g_edgeSlidePx.store(slide>=0 && slide<=400 ? slide : kDefaultEdgeSlidePx);
+        g_edgeDwellMs.store(dwell>=0 && dwell<=15000 ? dwell : kDefaultEdgeDwellMs);
+    }
     g_charmsEnabled.store(Wh_GetIntSetting(L"charmsEnabled")!=0);
     g_hideAfterClick.store(Wh_GetIntSetting(L"hideAfterClick")!=0);
 
@@ -4043,6 +4461,21 @@ void ReadWindhawkSettings() {
     else if(uiLanguage.get() && wcscmp(uiLanguage.get(),L"zh")==0) languageIndex=9;
     else if(uiLanguage.get() && wcscmp(uiLanguage.get(),L"ko")==0) languageIndex=10;
     g_uiLanguage.store(languageIndex);
+
+    // 1.1.0: the charm pane animation engine. The durations and the curves come from the current theme (the
+    // animations/timingfunction stories 32, 84 and 85, read by the engine); these settings choose how much of
+    // that theme is used and how far the content travels.
+    g_paneEngineOn.store(Wh_GetIntSetting(L"charmPaneEngine")!=0);
+    g_paneAnimScalePct.store((int)Wh_GetIntSetting(L"paneAnimScalePct"));
+    if(g_paneAnimScalePct.load()<10 || g_paneAnimScalePct.load()>400) g_paneAnimScalePct.store(100);
+    g_paneThemeSlide.store(Wh_GetIntSetting(L"paneThemeSlide")!=0);
+    g_paneContentSlidePx.store((int)Wh_GetIntSetting(L"paneContentSlidePx"));
+    if(g_paneContentSlidePx.load()<-1) g_paneContentSlidePx.store(-1);
+    g_paneTitleSlidePct.store((int)Wh_GetIntSetting(L"paneTitleSlidePct"));
+    if(g_paneTitleSlidePct.load()<0) g_paneTitleSlidePct.store(40);
+    g_paneGroupStagger.store((int)Wh_GetIntSetting(L"paneGroupStagger"));
+    if(g_paneGroupStagger.load()<0 || g_paneGroupStagger.load()>10) g_paneGroupStagger.store(0);
+    g_paneThemeFade.store(Wh_GetIntSetting(L"paneThemeFade")!=0);
 
     g_useAnimations.store(Wh_GetIntSetting(L"useAnimations")!=0);
     g_showClock.store(Wh_GetIntSetting(L"showClock")!=0);
@@ -4079,7 +4512,9 @@ void ReadWindhawkSettings() {
     g_opacity.store(g_enableTransparency.load()?210:255);
     g_openMs.store(300);
     g_closeMs.store(250);
-    g_edgeDelay.store(100);
+    // 1.1.0: g_edgeDelay is only the fallback for the two derived values below; 200 ms is the Windows 8 hint
+    // delay, not the 100 ms that made the hint feel instant.
+    g_edgeDelay.store(kDefaultEdgeHintMs);
 
     ScopedWhString startStyle(Wh_GetStringSetting(L"startLogoStyle"));
     int startStyleIndex=0;
@@ -4151,6 +4586,24 @@ void RefreshSystemAccent() {
     }
 }
 
+// 1.1.0: accent/theme changes while a surface is on screen. The rail polled the accent once a second, but
+// that timer only runs while the rail is visible; a Settings pane, a volume flyout or a Share pane that was
+// already open kept the colour it was created with, which is the colourization bug seen in the network flyout
+// as well. Windows broadcasts WM_SETTINGCHANGE with "ImmersiveColorSet" when the accent changes and sends
+// WM_DWMCOLORIZATIONCOLORCHANGED when the composition colour does, so every mod-owned top-level window now
+// answers both and repaints with the new colour.
+void DiscardPaneSlideCache(); // defined with the Settings pane cache further down
+
+void HandleSystemColorChange() {
+    RefreshSystemAccent();
+    DiscardPaneSlideCache();
+    if(g_rail && IsWindowVisible(g_rail)) InvalidateRect(g_rail,nullptr,TRUE);
+    if(g_clock && IsWindowVisible(g_clock)) InvalidateRect(g_clock,nullptr,TRUE);
+    if(g_pane && IsWindowVisible(g_pane)) InvalidateRect(g_pane,nullptr,TRUE);
+    if(g_volumeFlyout && IsWindowVisible(g_volumeFlyout)) InvalidateRect(g_volumeFlyout,nullptr,TRUE);
+    if(g_menu && IsWindowVisible(g_menu)) InvalidateRect(g_menu,nullptr,TRUE);
+}
+
 COLORREF GetRailBackground() {
     return RGB(17,17,17);
 }
@@ -4202,6 +4655,32 @@ void RestoreThreadDpiContext(HANDLE previous) noexcept {
     if (!previous) return;
     SetThreadDpiAwarenessContextFn setContext = GetSetThreadDpiAwarenessContext();
     if (setContext) setContext(previous);
+}
+
+// DPI of the monitor under the pointer, for the input hook thread. That thread owns no window, so
+// GetDpiForWindow is not available there; GetDpiForMonitor is the documented call for "which scaling does
+// this monitor use". Without it the hook would scale its 32 px slide threshold with the DPI of the monitor
+// the rail happens to live on, which is wrong on multi-monitor setups with mixed scaling.
+UINT QueryMonitorDpiDirect(HMONITOR monitor) noexcept {
+    if (monitor) {
+        HMODULE shcore = LoadLibraryW(L"shcore.dll");
+        if (shcore) {
+            auto getDpiForMonitor = reinterpret_cast<GetDpiForMonitorFn>(
+                GetProcAddress(shcore, "GetDpiForMonitor"));
+            UINT dpiX = 0, dpiY = 0;
+            if (getDpiForMonitor) {
+                HRESULT hr = getDpiForMonitor(monitor, 0, &dpiX, &dpiY);
+                if (SUCCEEDED(hr) && dpiX >= 48 && dpiX <= 768) return dpiX;
+            }
+        }
+    }
+    HDC screen = GetDC(nullptr);
+    if (screen) {
+        const UINT dpi = (UINT)GetDeviceCaps(screen, LOGPIXELSX);
+        ReleaseDC(nullptr, screen);
+        if (dpi >= 48 && dpi <= 768) return dpi;
+    }
+    return kReferenceDpi;
 }
 
 UINT QueryMonitorDpi(HMONITOR monitor) noexcept {
@@ -4349,10 +4828,14 @@ void RefreshEdgeUiRegistry() {
     g_disableBRCorner.store(ReadRegDWORD(L"DisableBRCorner", 0) != 0);
     g_disableCharmsHint.store(ReadRegDWORD(L"DisableCharmsHint", 0) != 0);
     g_registryQuickMenu.store(false); // Disabled for now; legacy menu renderer remains available in source.
-    int desktopDelay=ReadRegDWORD(L"CharmsBarDesktopDelay",g_edgeDelay.load());
-    int immersiveDelay=ReadRegDWORD(L"CharmsBarImmersiveDelay",g_edgeDelay.load());
-    if(desktopDelay<0||desktopDelay>2000)desktopDelay=g_edgeDelay.load();
-    if(immersiveDelay<0||immersiveDelay>2000)immersiveDelay=g_edgeDelay.load();
+    // These are the Windows 8/8.1 hint delays and this mod keeps its own values in the same registry shape.
+    // The mod setting is the base value; a value written under EdgeUI overrides it, and anything outside
+    // 0..2000 ms is ignored instead of being clamped to 0 (which used to make the bar open on the first move).
+    const int baseDelay=g_edgeHintMs.load();
+    int desktopDelay=ReadRegDWORD(L"CharmsBarDesktopDelay",baseDelay);
+    int immersiveDelay=ReadRegDWORD(L"CharmsBarImmersiveDelay",baseDelay);
+    if(desktopDelay<0||desktopDelay>2000)desktopDelay=baseDelay;
+    if(immersiveDelay<0||immersiveDelay>2000)immersiveDelay=baseDelay;
     g_desktopEdgeDelay.store(desktopDelay);
     g_immersiveEdgeDelay.store(immersiveDelay);
 }
@@ -4457,28 +4940,47 @@ void HandleDpiChanged(HWND hwnd,WPARAM wParam) {
 
 void UpdateStatus();
 
+// True while the rail is the Windows 8 icon hint: the band of icons is on screen, the captions and the solid
+// background are not, and the clock/status flyout stays hidden. Everything else behaves as before.
+bool RailHintOnly() {
+    return g_railHintVisual.load();
+}
+
 void ApplyRailFrame(int alpha, int slideOffset) {
     alpha = (std::max)(0, (std::min)(255, alpha));
     slideOffset = (std::max)(0, (std::min)(kRailWidth, slideOffset));
     g_animStep.store(alpha);
     g_slideOffset.store(slideOffset);
     if (g_rail) {
-        SetLayeredWindowAttributes(g_rail, 0, GetRailWindowAlpha(alpha), LWA_ALPHA);
+        // The hint is a translucent band: same window, 85 % opacity, so the desktop shows through until the
+        // solid bar takes over. The solid bar keeps the values it always had.
+        const int windowAlpha = RailHintOnly() ? alpha * 217 / 255 : alpha;
+        SetLayeredWindowAttributes(g_rail, 0, GetRailWindowAlpha(windowAlpha), LWA_ALPHA);
         const int railTop = g_fullHeight ? g_monitorRect.top : g_workRect.top;
         SetWindowPos(g_rail, nullptr,
             g_monitorRect.right - DpiScale(kRailWidth) + DpiScale(slideOffset), railTop, 0, 0,
             SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER);
     }
-    if (g_clock) SetLayeredWindowAttributes(g_clock, 0, (BYTE)alpha, LWA_ALPHA);
+    // The hint never shows the clock: Windows 8 slid the icons in first and only then brought up the status
+    // stack together with the solid bar.
+    if (g_clock && IsWindowVisible(g_clock) && !RailHintOnly())
+        SetLayeredWindowAttributes(g_clock, 0, (BYTE)alpha, LWA_ALPHA);
 }
 
-void StartRailAnimation(bool opening) {
+// openStage: HINT_ICONS opens the icon hint (translucent, no captions, no clock), HINT_FULL opens the solid
+// bar. A transition from the hint to the solid bar is a cross-fade in place, so the rail does not slide twice.
+void StartRailAnimation(bool opening, int openStage = HINT_FULL) {
     g_animFromAlpha = g_animStep.load();
     g_animFromSlide = g_slideOffset.load();
+    // fromHint: the icon band is already on screen and the solid bar follows it in place.
+    const bool fromHint = opening ? (g_railHintVisual.load() && openStage == HINT_FULL) : false;
+    // fadingHint: only the icons are on screen, so the close is a cross-fade and not a slide.
+    const bool fadingHint = !opening && g_railHintVisual.load();
     const int targetAlpha = opening ? 255 : 0;
     g_animTarget.store(targetAlpha);
-    g_animToSlide = opening ? 0 : kRailWidth;
-    const int fullDuration = opening ? g_openMs.load() : g_closeMs.load();
+    g_animToSlide = opening ? 0 : (fadingHint ? g_slideOffset.load() : kRailWidth);
+    const int fullDuration = opening ? (fromHint ? (std::max)(120, g_openMs.load() / 2) : g_openMs.load())
+                                     : (fadingHint ? (std::min)(g_closeMs.load(), 140) : g_closeMs.load());
     const double alphaFraction = (double)std::abs(targetAlpha - g_animFromAlpha) / 255.0;
     const double slideFraction = (double)std::abs(g_animToSlide - g_animFromSlide) / kRailWidth;
     const double distanceFraction = (std::max)(alphaFraction, slideFraction);
@@ -4487,6 +4989,8 @@ void StartRailAnimation(bool opening) {
         if (!opening) {
             if (g_clock) ShowWindow(g_clock, SW_HIDE);
             ShowWindow(g_rail, SW_HIDE);
+            SetHintStage(HINT_NONE);
+            g_railHintVisual.store(false);
         }
         KillTimer(g_rail, TIMER_ANIMATION);
         return;
@@ -4524,13 +5028,54 @@ void ClosePaneWindow(bool immediate);
 static bool CompanionStartScreenVisible();
 static void RaiseCharmsOverCompanionStartScreen();
 
-void ShowCharms(POINT pt, bool byKeyboard) {
-    if (!g_rail || !g_charmsEnabled.load()) return;
+// stage: HINT_FULL for Win+C and for a slide along the edge, HINT_ICONS for the Windows 8 icon hint.
+// Promotes: as soon as the solid bar is asked for, the stage becomes HINT_FULL even if the hint is still
+// sliding in, and a second call while the rail is already on screen only changes the stage.
+void ShowCharms(POINT pt, bool byKeyboard, int stage = HINT_FULL) {
+    if (!g_rail || !g_charmsEnabled.load()) {
+        SetHintStage(HINT_NONE); // never leave the input hook waiting for a bar that will not appear
+        return;
+    }
     if(g_paneVisible.load() || (g_pane && IsWindowVisible(g_pane))) {
-        if(!byKeyboard) return;
+        if(!byKeyboard) {
+            // A charm pane owns the screen: the edge gesture is ignored, and the hook has to go back to idle
+            // instead of believing that an icon hint is on screen.
+            if(g_hintStage.load()!=HINT_FULL) SetHintStage(HINT_NONE);
+            return;
+        }
         ClosePaneWindow(true);
     }
     const bool alreadyVisible = IsWindowVisible(g_rail) != FALSE;
+    const int previousStage = g_hintStage.load();
+    if (stage == HINT_ICONS) g_railHintVisual.store(true);
+    if (stage == HINT_FULL) g_railHintVisual.store(false);
+    if (stage == HINT_FULL && previousStage == HINT_ICONS && alreadyVisible) {
+        // The hint is already on screen: cross-fade to the solid bar instead of sliding the band again.
+        SetHintStage(HINT_FULL);
+        g_visible = true;
+        g_hover = -1;
+        g_pressed = -1;
+        CaptureForeground(); // the Share charm still has to know what was in front before the bar appeared
+        g_noFocusDismissUntil.store(0);
+        g_openTick.store(GetTickCount());
+        if (g_showClock && ReadRegDWORD(L"DisableCharmsClock") != 1 && g_clock) {
+            UpdateStatus();
+            SetLayeredWindowAttributes(g_clock, 0, (BYTE)g_animStep.load(), LWA_ALPHA);
+            ShowWindow(g_clock, SW_SHOWNOACTIVATE);
+        }
+        if (g_rail) SetTimer(g_rail, TIMER_STATUS, 1000, nullptr);
+        InvalidateRect(g_rail, nullptr, TRUE);
+        if (AnimationsEnabled() && g_openMs.load() > 0) {
+            StartRailAnimation(true, HINT_FULL);
+        } else {
+            KillTimer(g_rail, TIMER_ANIMATION);
+            ApplyRailFrame(255, 0);
+        }
+        return;
+    }
+    if (stage == HINT_ICONS && (previousStage == HINT_ICONS || previousStage == HINT_FULL) && alreadyVisible)
+        return; // the hint is already up: the hook keeps track of the slide and the dwell
+    SetHintStage(stage);
     if (!alreadyVisible) {
         const bool animate = AnimationsEnabled() && g_openMs.load() > 0;
         g_animStep.store(animate ? 0 : 255);
@@ -4554,20 +5099,22 @@ void ShowCharms(POINT pt, bool byKeyboard) {
     g_visible = true;
     g_noFocusDismissUntil.store(0);
     g_openTick.store(GetTickCount());
-    if (g_showClock && ReadRegDWORD(L"DisableCharmsClock") != 1 && g_clock) {
+    const bool hintOnly = RailHintOnly();
+    if (!hintOnly && g_showClock && ReadRegDWORD(L"DisableCharmsClock") != 1 && g_clock) {
         UpdateStatus();
         SetLayeredWindowAttributes(g_clock, 0, (BYTE)g_animStep.load(), LWA_ALPHA);
         ShowWindow(g_clock, SW_SHOWNOACTIVATE);
     } else if (g_clock) {
         ShowWindow(g_clock, SW_HIDE);
     }
-    SetLayeredWindowAttributes(g_rail, 0, GetRailWindowAlpha(g_animStep.load()), LWA_ALPHA);
+    SetLayeredWindowAttributes(g_rail, 0,
+        GetRailWindowAlpha(hintOnly ? g_animStep.load() * 217 / 255 : g_animStep.load()), LWA_ALPHA);
     ShowWindow(g_rail, SW_SHOWNOACTIVATE);
     RaiseCharmsOverCompanionStartScreen();
-    if (g_rail) SetTimer(g_rail, TIMER_STATUS, 1000, nullptr);
+    if (!hintOnly && g_rail) SetTimer(g_rail, TIMER_STATUS, 1000, nullptr);
 
     if (AnimationsEnabled() && g_openMs.load() > 0) {
-        StartRailAnimation(true);
+        StartRailAnimation(true, g_hintStage.load());
     } else {
         KillTimer(g_rail, TIMER_ANIMATION);
         ApplyRailFrame(255, 0);
@@ -4583,8 +5130,11 @@ void ShowCharms(POINT pt, bool byKeyboard) {
 
 void HideCharms(bool immediate = false) {
     if(!g_rail) return;
+    // 1.1.0: leaving the hint also resets the stage, so the next edge gesture starts from scratch. The
+    // *visual* hint flag (g_railHintVisual) is cleared only when the window is really gone, otherwise the
+    // closing frames would switch back to the solid, opaque look halfway through the fade.
     const bool wasVisible=g_visible.exchange(false);
-    if(!wasVisible && !immediate) return;
+    if(!wasVisible && !immediate) { SetHintStage(HINT_NONE); return; }
     g_noFocusDismissUntil.store(0);
     g_keyboardOpened = false;
     g_hover = -1;
@@ -4597,9 +5147,12 @@ void HideCharms(bool immediate = false) {
         ApplyRailFrame(0, kRailWidth);
         if (g_clock) ShowWindow(g_clock, SW_HIDE);
         ShowWindow(g_rail, SW_HIDE);
+        SetHintStage(HINT_NONE);
+        g_railHintVisual.store(false);
         return;
     }
-    StartRailAnimation(false);
+    StartRailAnimation(false); // reads the stage to decide whether this is a fade or a slide
+    SetHintStage(HINT_NONE);
 }
 
 void CompleteCharmAction() {
@@ -5557,7 +6110,25 @@ static void ShowStartTip() {
 // Windows search flyout takes the foreground when it opens and gives it back when it is dismissed, which the
 // foreground hook below already observes. Every chord we send is verified 700 ms later, so a chord that did
 // nothing cannot leave the charm stuck in a falsely "open" state.
+// 1.1.0: the hand-off is now split in two. A chord is "pending" from the moment it is injected until the
+// 700 ms verification answers (or 1.5 s pass, whichever comes first); only a pending chord that Windows has
+// not answered may be re-sent. Before this, g_searchKnownOpen was set to true on the mere attempt, so the
+// first press optimistically marked search as open, the verification could clear it a moment later, and the
+// second press was the one that actually worked - exactly the "it works only the 2nd time" report.
+static std::atomic<DWORD> g_searchPendingSince;
+bool SearchHandOffPending() {
+    const DWORD since=g_searchPendingSince.load();
+    if(!since) return false;
+    if((DWORD)(GetTickCount()-since)<1500) return true;
+    // Safety net: a verification that never ran (the rail was destroyed, the timer was lost) must not make
+    // the charm dead forever.
+    g_searchPendingSince.store(0);
+    g_searchKnownOpen.store(false);
+    return false;
+}
+
 static void NoteSearchChordSent() {
+    g_searchPendingSince.store(GetTickCount());
     g_searchKnownOpen.store(true);
     g_searchVerifyTick.store(GetTickCount());
     if(g_rail) {
@@ -5571,6 +6142,7 @@ static void NoteSearchChordSent() {
 // next press sends the chord again. Without this, one chord that Windows ignored would make every following
 // click look dead, which is the failure the log showed.
 static void VerifySearchChord() {
+    g_searchPendingSince.store(0);
     if(FindWindowsSearchWindow()) {
         Wh_Log(L"search UI confirmed open after the Win chord");
         return;
@@ -5596,9 +6168,16 @@ void ActivateCharm(int slot) {
             CompleteCharmAction();
             return;
         }
-        // 2. Native Windows search: leave it alone when it is already open.
+        // 2. Native Windows search. 1.1.0: an on-screen window is the only reliable "already open" signal;
+        //    a press that arrives while a hand-off is still pending re-sends the chord once instead of being
+        //    swallowed as "already open", because Windows drops an injected Win chord while another shell
+        //    surface is taking the focus - which is exactly what the first press after opening the rail does.
+        const bool pending=SearchHandOffPending();
+        if(pending)
+            Wh_Log(L"Search charm pressed while a hand-off was still pending; sending the chord again");
         const HWND searchWindow=FindWindowsSearchWindow();
-        if(searchWindow || g_searchKnownOpen.load()) {
+        const bool searchAlreadyOpen=!pending && (searchWindow!=nullptr || g_searchKnownOpen.load());
+        if(searchAlreadyOpen) {
             if(searchWindow) {
                 wchar_t searchClass[64]{};
                 GetClassNameW(searchWindow,searchClass,_countof(searchClass));
@@ -5626,13 +6205,11 @@ void ActivateCharm(int slot) {
             else
                 NoteSearchChordSent();
         };
-        if(g_hideAfterClick.load()) {
-            sendSearchChord();
-            CompleteCharmAction();
-        } else {
-            CompleteCharmAction();
-            sendSearchChord();
-        }
+        // 1.1.0: the chord goes out first, then the rail is closed. The rail is a no-activate, no-foreground
+        // overlay, so hiding it cannot steal the focus the injected chord just gave to search; the old order
+        // hid the rail first, and the hand-off then landed on a foreground change instead of on search.
+        sendSearchChord();
+        CompleteCharmAction(); // hides the rail only when "Hide after choosing a charm" is on
         return;
     }
     if(id==1) {
@@ -6826,8 +7403,15 @@ void DrawRail(HDC dc, RECT rc) {
     // once.
     const int width=rc.right;
     const int logicalHeight=DpiUnscale(rc.bottom);
-    ScopedGdiObject background(CreateSolidBrush(GetRailBackground()));
-    if(background) FillRect(dc,&rc,(HBRUSH)background.get());
+    // 1.1.0: the icon hint is the Windows 8 translucent band - icons and nothing else. The solid background,
+    // the hover highlight and the captions belong to the solid bar, which is what the slide or the click brings
+    // in. Without this split the hint was indistinguishable from the full bar, which is why the old behaviour
+    // read as "the bar opens instantly".
+    const bool hintOnly=RailHintOnly();
+    if(!hintOnly) {
+        ScopedGdiObject background(CreateSolidBrush(GetRailBackground()));
+        if(background) FillRect(dc,&rc,(HBRUSH)background.get());
+    }
 
     // UIFILE 7001 reserves an 86×62rp icon area with 19rp/14rp side/top padding; the existing 44×44 glyphs
     // centered inside it land at x=21,y=16.
@@ -6840,8 +7424,9 @@ void DrawRail(HDC dc, RECT rc) {
         if(charm<0 || g_hidden[charm]) continue;
         const int rowTop=DpiScale(GetCharmTop(i,logicalHeight));
         const int rowHeight=DpiScale(kGridCell);
-        const bool active=g_hover.load()==i || (g_keyboardOpened.load() && g_keyboardSelection.load()==i);
-        const bool pressed=g_pressed.load()==i;
+        const bool active=!hintOnly && (g_hover.load()==i ||
+            (g_keyboardOpened.load() && g_keyboardSelection.load()==i));
+        const bool pressed=!hintOnly && g_pressed.load()==i;
         if(active || pressed) {
             RECT row{0,rowTop,width,rowTop+rowHeight};
             ScopedGdiObject highlight(CreateSolidBrush(GetRailHighlight(pressed)));
@@ -6855,6 +7440,7 @@ void DrawRail(HDC dc, RECT rc) {
         if(!DrawCharmIconGdiplus(dc,charm,iconX,iconY,iconWidth,iconHeight,iconColor))
             DrawFallbackCharmIcon(dc,charm,(width-DpiScale(44))/2,
                                   rowTop+DpiScale(16),DpiScale(44),DpiScale(44));
+        if(hintOnly) continue;
         try {
             const std::wstring label=LocalizedCharm(charm);
             RECT text{DpiScale(2),rowTop+DpiScale(64), width-DpiScale(2),rowTop+DpiScale(86)};
@@ -7538,6 +8124,13 @@ void PositionVolumeFlyout() {
     const int paneInset=DpiScale(6);
     x=(std::max)(paneLeft+paneInset, (std::min)(paneRight-width-paneInset,x));
     y=(std::max)(paneTop+paneInset,y);
+    // 1.1.0: also keep the flyout inside the monitor. On a Settings pane that spans the whole screen height the
+    // upper clamp alone let the flyout slide off the bottom edge for the last few tiles, which made the thumb
+    // travel map to a position that was no longer where the user saw it.
+    if(g_monitorRect.bottom>g_monitorRect.top) {
+        const int maxY=g_monitorRect.bottom-paneInset-height;
+        if(maxY>=g_monitorRect.top+paneInset) y=(std::min)(y,maxY);
+    }
     SetWindowPos(g_volumeFlyout,HWND_TOPMOST,x,y,width,height,SWP_NOACTIVATE);
 }
 
@@ -7554,7 +8147,8 @@ void HideVolumeFlyout() {
     g_brightnessPending=-1;
     g_volumeHoverSettings=false;
     HideVolumeTip();
-    ShowWindow(g_volumeFlyout,SW_HIDE);
+    // 1.1.0: the flyout leaves with the engine's popup fade instead of disappearing on the spot.
+    HidePopupWithEngineFade(g_volumeFlyout,g_volumeFade);
 }
 
 int g_paneHover=-1, g_panePressed=-1;
@@ -7574,6 +8168,7 @@ static double PaneAnimElapsedMs(LONGLONG start) {
     if(f.QuadPart<=0) return 0.0;
     return (double)(PaneAnimNow()-start)*1000.0/(double)f.QuadPart;
 }
+bool g_paneEngineDriven=false; // 1.1.0: the theme timing is driving the current slide
 int g_paneAnimOffset=0; // physical px the pane is pushed off-screen
 int g_paneAnimFromOffset=0, g_paneAnimToOffset=0, g_paneAnimDurationMs=0;
 int g_paneContentOffset=0; // physical px of the delayed inner-content parallax
@@ -7588,6 +8183,7 @@ constexpr UINT kPaneMetricsDelayMs=60;
 HBITMAP g_paneSlideBitmap=nullptr;
 int g_paneSlideWidth=0,g_paneSlideHeight=0;
 COLORREF g_paneSlideBackground=0;
+int g_paneSlideRestingOffset=0; // content offset the cached bitmap was drawn with (always 0)
 
 void DrawPane(HDC dc,RECT rc);
 
@@ -7615,17 +8211,21 @@ void BuildPaneSlideCache(HWND hwnd) {
     if(!selected) return;
     // Cache the resting layout (content parallax at zero, no hover); each slide frame is that frame shifted.
     const int savedShift=g_paneContentOffset;
+    const int savedTitleShift=g_paneTitleOffset;
     const int savedHover=g_paneHover,savedPressed=g_panePressed;
     g_paneContentOffset=0;
+    g_paneTitleOffset=0;
     g_paneHover=g_panePressed=-1;
     DrawPane(memory.get(),rc);
     g_paneContentOffset=savedShift;
+    g_paneTitleOffset=savedTitleShift;
     g_paneHover=savedHover;
     g_panePressed=savedPressed;
     g_paneSlideBitmap=(HBITMAP)bitmap.release();
     g_paneSlideWidth=rc.right;
     g_paneSlideHeight=rc.bottom;
     g_paneSlideBackground=GetPaneBackground();
+    g_paneSlideRestingOffset=0; // the bitmap was drawn with the parallax at zero, see BuildPaneSlideCache
 }
 
 // One blit per animation frame while the Settings pane slides. Any mismatch (DPI change, accent change,
@@ -7636,6 +8236,10 @@ bool BlitPaneSlideFrame(HDC dc,const RECT& device) {
     if(GetPaneBackground()!=g_paneSlideBackground) return false;
     // A hover or press highlight changes the content, so let the regular path draw those frames.
     if(g_paneHover>=0 || g_panePressed>=0) return false;
+    // 1.1.0: the cache holds the resting layout only. If a frame is requested while the content parallax is
+    // not zero the pre-shifted blit below would apply the offset twice, which is what made the opening frames
+    // of the Settings pane jump; the regular path draws those frames instead.
+    if(g_paneContentOffset!=0 || g_paneTitleOffset!=0) return false;
     ScopedDC memory(CreateCompatibleDC(dc));
     if(!memory) return false;
     ScopedSelectObject selected(memory.get(),g_paneSlideBitmap);
@@ -7649,6 +8253,58 @@ bool BlitPaneSlideFrame(HDC dc,const RECT& device) {
     return true;
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// 1.1.0 - the charms that are not the main bar: panes and popups, timed by CharmMotion above.
+//
+// The main charms bar is not involved and keeps its own 160 ms opacity fade. What is animated here is the
+// Settings, Devices and Share panes and the two popups (the Metro context menu and the volume/brightness
+// flyout). A transition reads the theme timing once, at the moment it starts, and then samples it per frame.
+// ---------------------------------------------------------------------------------------------------------
+static int CharmPaneDpi() { return DpiScale(96); }
+
+// One opening: read the timing, put the pane fully off screen and start the panel clock.
+static void CharmPaneBeginShow() {
+    try {
+        CharmMotion::Prepare(g_pane,g_paneAnimScalePct.load(),
+                             g_paneThemeSlide.load()!=0,g_paneContentSlidePx.load(),g_paneTitleSlidePct.load(),
+                             g_paneGroupStagger.load(),g_paneThemeFade.load()!=0,CharmPaneDpi());
+        const int width=DpiScale(kPaneWidth);
+        g_paneEngineDriven=true;
+        g_paneAnimStart=PaneAnimNow();
+        g_paneAnimOffset=width;
+        g_paneContentOffset=CharmMotion::BodyOffset(0);
+        g_paneTitleOffset=CharmMotion::TitleOffset(0);
+    } catch (...) {
+        // No timing at all: show the pane without a slide rather than leaving it half way.
+        Wh_Log(L"charm pane: opening timing failed, showing the pane without a slide");
+        g_paneEngineDriven=false;
+        g_paneAnimOffset=0;
+        g_paneContentOffset=0;
+        g_paneTitleOffset=0;
+    }
+}
+
+// One closing: read the timing and start the clock from the position the pane has right now.
+static void CharmPaneBeginHide(int currentOffset) {
+    try {
+        CharmMotion::Prepare(g_pane,g_paneAnimScalePct.load(),g_paneThemeSlide.load()!=0,
+                             g_paneContentSlidePx.load(),g_paneTitleSlidePct.load(),g_paneGroupStagger.load(),
+                             g_paneThemeFade.load()!=0,CharmPaneDpi());
+        g_paneEngineDriven=true;
+        g_paneAnimStart=PaneAnimNow();
+        (void)currentOffset;
+    } catch (...) {
+        Wh_Log(L"charm pane: closing timing failed, hiding the pane at once");
+        g_paneEngineDriven=false;
+    }
+}
+
+// Per-frame offsets. The pane window moves by the panel value; the title and the body get their own content
+// offsets, the title leading and the body following after the group delay.
+static int CharmPanePanelOffset(int ageMs,bool opening,int startOffset) {
+    const int edge=DpiScale(kPaneWidth);
+    return CharmMotion::PanelOffset(ageMs,edge,0,edge,startOffset,opening);
+}
 void PositionPane(int offset) {
     if(!g_pane) return;
     const int width=DpiScale(kPaneWidth);
@@ -7670,6 +8326,8 @@ void ClosePaneWindow(bool immediate) {
         KillTimer(g_pane,TIMER_PANE);
         g_paneAnimOffset=DpiScale(kPaneWidth);
         g_paneContentOffset=0;
+        g_paneTitleOffset=0;
+        g_paneEngineDriven=false;
         ShowWindow(g_pane,SW_HIDE);
         return;
     }
@@ -7679,21 +8337,29 @@ void ClosePaneWindow(bool immediate) {
     if(!AnimationsEnabled() || g_closeMs.load()==0) {
         g_paneAnimOffset=DpiScale(kPaneWidth);
         g_paneContentOffset=0;
+        g_paneTitleOffset=0;
+        g_paneEngineDriven=false;
         ShowWindow(g_pane,SW_HIDE);
         return;
     }
     const int full=DpiScale(kPaneWidth);
     g_paneAnimOpening=false;
-    g_paneAnimStart=PaneAnimNow();
     g_paneAnimFromOffset=g_paneAnimOffset;
     g_paneAnimToOffset=full;
     const int distance=std::abs(g_paneAnimToOffset-g_paneAnimFromOffset);
-    g_paneAnimDurationMs=(std::max)(80,(int)std::lround(g_closeMs.load()*(double)distance/(std::max)(1,full)));
+    // 1.1.0: the hide uses the theme's panel hide storyboard (550 ms by default) and runs from wherever the pane
+    // is at this moment towards the off-screen edge, so a pane closed mid-opening leaves from where it is.
+    g_paneEngineDriven = (g_paneEngineOn.load()!=0) && AnimationsEnabled() && g_closeMs.load()!=0;
+    if(g_paneEngineDriven) CharmPaneBeginHide(g_paneAnimOffset);
+    g_paneAnimDurationMs=g_paneEngineDriven?(std::max)(80,(int)std::lround(CharmMotion::HideDurationMs()))
+                                            :(std::max)(80,(int)std::lround(g_closeMs.load()*(double)distance/(std::max)(1,full)));
     g_paneContentFromOffset=g_paneContentOffset;
     g_paneContentToOffset=DpiScale(16);
     g_paneContentDurationMs=g_paneAnimDurationMs;
+    g_paneTitleOffset=0;
     // Same cached-frame slide as the opening animation, so leaving Settings is as smooth as entering it.
     BuildPaneSlideCache(g_pane);
+    g_paneAnimStart=PaneAnimNow(); // same reason as in ShowCharmPane: the clock starts after the cache build
     SetTimer(g_pane,TIMER_PANE,kPaneFrameMs,nullptr);
 }
 
@@ -7720,14 +8386,22 @@ bool ShowCharmPane(int kind) {
     g_paneVisible.store(true);
     const bool animate=AnimationsEnabled() && g_openMs.load()>0;
     const int full=DpiScale(kPaneWidth);
+    // 1.1.0: the opening takes the duration read from the theme (the panel show storyboard, 550 ms by default,
+    // scaled by the speed setting) instead of g_openMs, and the content starts where the first frame of that
+    // timing puts it instead of at a fixed 16 px.
+    g_paneEngineDriven = animate && g_paneEngineOn.load()!=0;
+    if(g_paneEngineDriven) CharmPaneBeginShow();
     g_paneAnimOpening=true;
-    g_paneAnimStart=PaneAnimNow();
     g_paneAnimFromOffset=full;
     g_paneAnimToOffset=0;
-    g_paneAnimDurationMs=(std::max)(80,(int)g_openMs.load());
-    g_paneContentFromOffset=animate?DpiScale(16):0;
+    g_paneAnimDurationMs=animate?(g_paneEngineDriven?(std::max)(80,(int)std::lround(CharmMotion::ShowDurationMs()))
+                                          :(std::max)(80,(int)g_openMs.load()))
+                                 :(std::max)(80,(int)g_openMs.load());
+    g_paneContentFromOffset=animate?(g_paneEngineDriven?g_paneContentOffset:DpiScale(16)):0;
     g_paneContentToOffset=0;
-    g_paneContentDurationMs=animate?(std::max)(80,g_paneAnimDurationMs*3/2):0;
+    // 1.1.0: the parallax used to last 1.5x longer than the slide, so the content kept drifting after the pane
+    // had already stopped - the "bad animation" in the report. One motion, one duration.
+    g_paneContentDurationMs=g_paneAnimDurationMs;
     g_paneAnimOffset=animate?g_paneAnimFromOffset:0;
     g_paneContentOffset=animate?g_paneContentFromOffset:0;
     PositionPane(g_paneAnimOffset);
@@ -7735,6 +8409,10 @@ bool ShowCharmPane(int kind) {
     // now deferred until the slide is over, so the first frame is on screen immediately, exactly as it is
     // for the Share and Devices panes.
     if(animate) BuildPaneSlideCache(g_pane);
+    // 1.1.0: the animation clock starts only now. Building the cached frame and painting the first one are the
+    // two most expensive steps in this function, and starting the clock before them ate a large part of the
+    // 300 ms budget: the pane then jumped most of the way in its first frame.
+    g_paneAnimStart=PaneAnimNow();
     InvalidateRect(g_pane,nullptr,TRUE);
     if(kind==PANE_SHARE && g_showClock.load() &&
        ReadRegDWORD(L"DisableCharmsClock")!=1 && g_clock) {
@@ -7800,6 +8478,8 @@ static void PaneStrokeIcon(Gdiplus::Graphics& g,int icon,COLORREF color,COLORREF
     }
 }
 
+// 1.1.0: the title slides with its own distance and no delay while the body follows after the group delay, so
+// the two need separate offsets.
 void DrawPane(HDC dc,RECT rc) {
     const COLORREF bg=GetPaneBackground();
     ScopedGdiObject background(CreateSolidBrush(bg));
@@ -7808,19 +8488,21 @@ void DrawPane(HDC dc,RECT rc) {
     const COLORREF white=RGB(255,255,255);
     const COLORREF dim=PaneSecondaryTextColor(bg);
     const int contentShift=g_paneContentOffset;
-    const int margin=DpiScale(40)+contentShift;
+    const int titleShift=g_paneTitleOffset;
+    const int margin=DpiScale(40)+titleShift;
+    const int bodyMargin=DpiScale(40)+contentShift;
 
-    RECT title{margin,DpiScale(24),w-DpiScale(20)+contentShift,DpiScale(74)};
+    RECT title{margin,DpiScale(24),w-DpiScale(20)+titleShift,DpiScale(74)};
     DrawTextBox(dc,LocalizedPaneText(0),title,DpiScale(28),white,FW_LIGHT,
                 DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS,L"Segoe UI Light");
-    RECT sub{margin,DpiScale(79),w-DpiScale(20)+contentShift,DpiScale(109)};
+    RECT sub{bodyMargin,DpiScale(79),w-DpiScale(20)+contentShift,DpiScale(109)};
     DrawTextBox(dc,LocalizedPaneText(1),sub,DpiScale(15),dim,FW_NORMAL,
                 DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS,L"Segoe UI");
 
     // Thin separator above the system-wide tiles.
     {
         ScopedGdiObject line(CreateSolidBrush(BlendColor(bg,white,28)));
-        RECT sep{margin,h-DpiScale(281),w-margin,h-DpiScale(281)+(std::max)(1,DpiScale(1))};
+        RECT sep{bodyMargin,h-DpiScale(281),w-bodyMargin,h-DpiScale(281)+(std::max)(1,DpiScale(1))};
         if(line) FillRect(dc,&sep,(HBRUSH)line.get());
     }
 
@@ -7990,14 +8672,15 @@ PCWSTR LocalizedDevicesWin8Text(int index) {
 static void DrawDevicesPane(HDC dc,RECT rc) {
     const int w=rc.right;
     const int shift=g_paneContentOffset;
-    const int margin=DpiScale(32)+shift;
+    const int titleShift=g_paneTitleOffset;
+    const int margin=DpiScale(32)+titleShift;
     const COLORREF bg=GetPaneBackground();
     const COLORREF white=RGB(255,255,255);
     ScopedGdiObject background(CreateSolidBrush(bg));
     if(background) FillRect(dc,&rc,(HBRUSH)background.get());
-    RECT titleRect{margin,DpiScale(24),w-DpiScale(20)+shift,DpiScale(74)};
-    RECT subtitleRect{margin,DpiScale(79),w-DpiScale(20)+shift,DpiScale(109)};
-    RECT messageRect{margin,DpiScale(126),w-DpiScale(20)+shift,DpiScale(156)};
+    RECT titleRect{margin,DpiScale(24),w-DpiScale(20)+titleShift,DpiScale(74)};
+    RECT subtitleRect{margin,DpiScale(79),w-DpiScale(20)+titleShift,DpiScale(109)};
+    RECT messageRect{margin,DpiScale(126),w-DpiScale(20)+titleShift,DpiScale(156)};
     DrawTextBox(dc,LocalizedCharmPaneTitle(PANE_DEVICES),titleRect,DpiScale(28),white,FW_LIGHT,
                 DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS,L"Segoe UI Light");
     DrawTextBox(dc,LocalizedPaneText(1),subtitleRect,DpiScale(15),PaneSecondaryTextColor(bg),FW_NORMAL,
@@ -8038,8 +8721,9 @@ static void DrawSharePane(HDC dc,RECT rc) {
 
     // Share uses the same single pane color as Settings and Devices.
 
-    const int margin=DpiScale(40)+shift;
-    RECT title{margin,DpiScale(24),w-DpiScale(20)+shift,DpiScale(74)};
+    const int titleShift=g_paneTitleOffset;
+    const int margin=DpiScale(40)+titleShift;
+    RECT title{margin,DpiScale(24),w-DpiScale(20)+titleShift,DpiScale(74)};
     DrawTextBox(dc,LocalizedCharmPaneTitle(PANE_SHARE),title,DpiScale(28),white,FW_LIGHT,
                 DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS,L"Segoe UI Light");
     RECT subtitle{margin,DpiScale(79),w-DpiScale(20)+shift,DpiScale(145)};
@@ -8239,12 +8923,15 @@ LRESULT CALLBACK VolumeTipProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
             RECT rc{}; GetClientRect(hwnd,&rc);
             ScopedGdiObject background(CreateSolidBrush(RGB(255,255,255)));
             if(background) FillRect(dc,&rc,(HBRUSH)background.get());
-            ScopedGdiObject frame(CreateSolidBrush(RGB(200,200,200)));
-            if(frame) FrameRect(dc,&rc,(HBRUSH)frame.get());
+            // The Windows 8.1 menu frame and face, the same a context menu uses.
+            ScopedGdiObject frame(CreatePen(PS_SOLID,1,RGB(0,0,0)));
+            ScopedSelectObject pen(dc,frame.get());
+            ScopedSelectObject nullBrush(dc,GetStockObject(NULL_BRUSH));
+            if(frame && pen && nullBrush) Rectangle(dc,rc.left,rc.top,rc.right,rc.bottom);
             const int value=g_flyoutKind==FLYOUT_BRIGHTNESS?g_paneBrightness:g_paneVolume;
             const std::wstring text=value>=0?std::to_wstring(value):std::wstring(L"--");
-            DrawTextBox(dc,text.c_str(),rc,DpiScale(15),RGB(32,32,32),FW_NORMAL,
-                        DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX,L"Segoe UI");
+            DrawTextBox(dc,text.c_str(),rc,DpiScale(15),RGB(32,32,32),FW_SEMIBOLD,
+                        DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX,L"Segoe UI Semibold");
             return 0; }
     }
     return DefWindowProcW(hwnd,msg,wp,lp);
@@ -8255,7 +8942,10 @@ void HideVolumeTip() {
 }
 
 void UpdateVolumeTip() {
-    if(!g_volumeTip || !g_volumeFlyout || !g_volumeDragging || !IsWindowVisible(g_volumeFlyout)) {
+    // 1.1.0: the tip no longer requires g_volumeDragging, so the wheel path can show it too; it only needs
+    // the flyout to be on screen and a known value.
+    if(!g_volumeTip || !g_volumeFlyout || !IsWindowVisible(g_volumeFlyout) ||
+       (g_flyoutKind==FLYOUT_BRIGHTNESS ? g_paneBrightness<0 : g_paneVolume<0)) {
         HideVolumeTip();
         return;
     }
@@ -8279,20 +8969,66 @@ int VolumeFlyoutHitTest(HWND hwnd,int physicalX,int physicalY) {
     RECT rc{}; GetClientRect(hwnd,&rc);
     const int x=DpiUnscale(physicalX),y=DpiUnscale(physicalY),w=DpiUnscale(rc.right);
     const HwFlyoutMetrics hw=HwMetrics();
-    const RECT mute{w/2-24,0,w/2+24,hw.trackTop};
-    const RECT slider{0,hw.trackTop-4,w,hw.height};
+    // 1.1.0: the slider is grabbable in the whole column that the track, the thumb and the value tip occupy,
+    // not only in a narrow band around the painted bar. Missing the 6 px wide thumb by two pixels used to
+    // jump the volume to an unrelated value or do nothing at all, which is the "inaccurate" behaviour.
+    const int columnHalf=(std::max)(12,hw.barWidth*2);
+    const int centerX=kVolShotTrackX+hw.barWidth/2;
+    const RECT slider{centerX-columnHalf,hw.trackTop-6,centerX+columnHalf,hw.trackBottom+6};
+    const RECT mute{0,0,w,(std::max)(0,hw.trackTop-6)};
     const RECT settings{0,0,0,0}; // link removed (see DrawVolumeFlyout)
-    if(g_flyoutKind==FLYOUT_VOLUME && PtInRect(&mute,POINT{x,y})) return 1;
     if(PtInRect(&slider,POINT{x,y})) return 2;
+    if(g_flyoutKind==FLYOUT_VOLUME && PtInRect(&mute,POINT{x,y})) return 1;
     if(PtInRect(&settings,POINT{x,y})) return 3;
     return 0;
 }
-void UpdateVolumeFromPoint(HWND hwnd,int physicalY) {
-    const int y=DpiUnscale(physicalY);
+
+// 1.1.0: map a pointer position on the track to a percentage with the same rounding the thumb is painted
+// with (see DrawVolumeFlyout), so the number the tip shows is the number the bar shows.
+int VolumePercentFromY(int logicalY) {
     const HwFlyoutMetrics hw=HwMetrics();
-    const int top=hw.trackTop+hw.thumbHeight/2;
-    const int bottom=hw.trackBottom-hw.thumbHeight/2;
-    const int percent=(std::max)(0,(std::min)(100,(bottom-y)*100/(bottom-top)));
+    const int travelTop=hw.trackTop+hw.thumbHeight/2;
+    const int travelBottom=hw.trackBottom-hw.thumbHeight/2;
+    if(travelBottom<=travelTop) return 0;
+    int percent=(travelBottom-logicalY)*100/(travelBottom-travelTop);
+    if(percent<0) percent=0;
+    if(percent>100) percent=100;
+    return percent;
+}
+
+// Mouse wheel over the flyout: +-2 % per notch, the same step Windows 8 used for the hardware keys.
+void NudgeVolume(HWND hwnd,int delta) {
+    if(g_flyoutKind==FLYOUT_BRIGHTNESS) {
+        int current=g_paneBrightness;
+        if(current<0) QueryWmiBrightness(&current); // WMI may not have answered yet; read it once here
+        if(current<0) current=0;
+        const int next=(std::max)(0,(std::min)(100,current+delta));
+        g_paneBrightness=next;
+        // Same deferred write as a drag: one WMI call per 100 ms instead of one per notch.
+        if(!SetWmiBrightnessPercent(next) && !g_volumeDragging) {
+            int actual=-1;
+            if(QueryWmiBrightness(&actual) && actual>=0) g_paneBrightness=actual;
+        }
+        InvalidateRect(hwnd,nullptr,FALSE);
+        if(g_pane) InvalidateRect(g_pane,nullptr,FALSE);
+        UpdateVolumeTip();
+        return;
+    }
+    const int current=g_paneVolume>=0?g_paneVolume:0;
+    const int next=(std::max)(0,(std::min)(100,current+delta));
+    if(SetMasterVolumePercent(next)) {
+        g_paneVolume=next;
+        if(next>0) g_paneMuted=false;
+        InvalidateRect(hwnd,nullptr,FALSE);
+        if(g_pane) InvalidateRect(g_pane,nullptr,FALSE);
+        UpdateVolumeTip();
+    }
+}
+void UpdateVolumeFromPoint(HWND hwnd,int physicalY) {
+    const int percent=VolumePercentFromY(DpiUnscale(physicalY));
+    // 1.1.0: one value in one place. The thumb is painted from g_paneVolume/g_paneBrightness, the tip shows
+    // the same number, and the device is only written when the mapped percentage actually changes, so a small
+    // pointer move no longer produces a stream of 1 % writes that the audio engine then reports back late.
     if(g_flyoutKind==FLYOUT_BRIGHTNESS) {
         g_paneBrightness=percent;
         g_brightnessPending=percent;
@@ -8309,6 +9045,7 @@ void UpdateVolumeFromPoint(HWND hwnd,int physicalY) {
         UpdateVolumeTip();
         return;
     }
+    if(percent==g_paneVolume && !g_paneMuted) { UpdateVolumeTip(); return; }
     if(SetMasterVolumePercent(percent)) {
         g_paneVolume=percent;
         if(percent>0) g_paneMuted=false;
@@ -8321,6 +9058,9 @@ void UpdateVolumeFromPoint(HWND hwnd,int physicalY) {
 void PositionVolumeFlyout();
 
 bool ShowVolumeFlyout() {
+    // 1.1.0: re-read the accent before the first frame, so the flyout is drawn with the current colour even
+    // when the Settings pane has been on screen for a while (see HandleSystemColorChange).
+    RefreshSystemAccent();
     if(!g_volumeFlyout || !g_paneVisible.load()) return false;
     if(IsWindowVisible(g_volumeFlyout)) {
         if(g_flyoutKind==FLYOUT_VOLUME) { HideVolumeFlyout(); return true; }
@@ -8335,12 +9075,16 @@ bool ShowVolumeFlyout() {
     SetTimer(g_volumeFlyout,TIMER_VOLUME,500,nullptr);
     g_volumeHoverSettings=false;
     ShowWindow(g_volumeFlyout,SW_SHOWNOACTIVATE);
+    ShowPopupWithEngineFade(g_volumeFlyout,g_volumeFade);
     InvalidateRect(g_volumeFlyout,nullptr,TRUE);
     if(g_pane) InvalidateRect(g_pane,nullptr,FALSE);
     return true;
 }
 
 bool ShowBrightnessFlyout() {
+    // 1.1.0: re-read the accent before the first frame, so the flyout is drawn with the current colour even
+    // when the Settings pane has been on screen for a while (see HandleSystemColorChange).
+    RefreshSystemAccent();
     if(!g_volumeFlyout || !g_paneVisible.load()) return false;
     if(IsWindowVisible(g_volumeFlyout)) {
         if(g_flyoutKind==FLYOUT_BRIGHTNESS) { HideVolumeFlyout(); return true; }
@@ -8357,6 +9101,7 @@ bool ShowBrightnessFlyout() {
     PositionVolumeFlyout();
     g_volumeHoverSettings=false;
     ShowWindow(g_volumeFlyout,SW_SHOWNOACTIVATE);
+    ShowPopupWithEngineFade(g_volumeFlyout,g_volumeFade);
     InvalidateRect(g_volumeFlyout,nullptr,TRUE);
     if(g_pane) InvalidateRect(g_pane,nullptr,FALSE);
     return true;
@@ -8380,6 +9125,13 @@ LRESULT CALLBACK VolumeFlyoutProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
     switch(msg) {
         case WM_ERASEBKGND:return 1;
         case WM_MOUSEACTIVATE:return MA_NOACTIVATE;
+        case WM_SETTINGCHANGE:
+            if(lp && wcscmp(reinterpret_cast<PCWSTR>(lp),L"ImmersiveColorSet")==0)
+                HandleSystemColorChange();
+            break;
+        case WM_DWMCOLORIZATIONCOLORCHANGED:
+            HandleSystemColorChange();
+            return 0;
         case WM_PAINT: {
             ScopedPaint paint(hwnd);
             HDC dc=paint.get();
@@ -8397,6 +9149,12 @@ LRESULT CALLBACK VolumeFlyoutProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
         case WM_MOUSELEAVE:
             if(g_volumeHoverSettings) { g_volumeHoverSettings=false; InvalidateRect(hwnd,nullptr,FALSE); }
             return 0;
+        case WM_MOUSEWHEEL: {
+            // 1.1.0: the wheel works over the flyout, so the volume can be changed without hitting the 6 px
+            // thumb. One notch is 2 %, and the value tip shows the result exactly as it does during a drag.
+            const int delta=GET_WHEEL_DELTA_WPARAM(wp);
+            if(delta!=0) NudgeVolume(hwnd,delta>0?2:-2);
+            return 0; }
         case WM_SETCURSOR:
             if(LOWORD(lp)==HTCLIENT) {
                 SetCursor(LoadCursorW(nullptr,IDC_ARROW));
@@ -8446,6 +9204,18 @@ LRESULT CALLBACK VolumeFlyoutProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
         case WM_TIMER:
             if(wp==TIMER_BRIGHTNESS_APPLY) {
                 ApplyPendingBrightness(hwnd);
+                return 0;
+            }
+            if(wp==TIMER_POPUP_FADE) {
+                BYTE opacity=255;
+                if(!g_paneEngineOn.load()) { KillTimer(hwnd,TIMER_POPUP_FADE); g_volumeFade.active=false; return 0; }
+                if(!PopupFadeStep(g_volumeFade,opacity)) {
+                    KillTimer(hwnd,TIMER_POPUP_FADE);
+                    ShowWindow(hwnd,SW_HIDE);
+                    return 0;
+                }
+                SetLayeredWindowAttributes(hwnd,0,opacity,LWA_ALPHA);
+                if(!g_volumeFade.active) KillTimer(hwnd,TIMER_POPUP_FADE);
                 return 0;
             }
             if(wp==TIMER_VOLUME && g_flyoutKind==FLYOUT_VOLUME && !g_volumeDragging) {
@@ -8579,7 +9349,8 @@ static bool ShowMetroContextMenu(int purpose,POINT anchor,bool fromKeyboard,HWND
         Wh_Log(L"positioning the Metro context menu failed (%lu)",GetLastError());
         return false;
     }
-    SetLayeredWindowAttributes(g_menu,0,255,LWA_ALPHA);
+    // 1.1.0: the menu is another popup that is not the main bar, so it enters with the engine fade too.
+    ShowPopupWithEngineFade(g_menu,g_menuFade);
     InvalidateRect(g_menu,nullptr,TRUE);
     if(!SetForegroundWindow(g_menu))
         Wh_Log(L"foreground activation of the Metro menu was declined");
@@ -8601,6 +9372,9 @@ void HideMetroContextMenu(bool restoreFocus) {
     g_metroMenuHover=-1;
     if(oldPurpose==METRO_MENU_POWER) g_paneMenuOpen=false;
     if(g_menu) {
+        // A closing menu would be gone before its fade could run, so it is cut here as it always was.
+        KillTimer(g_menu,TIMER_POPUP_FADE);
+        g_menuFade.active=false;
         ShowWindow(g_menu,SW_HIDE);
         SetWindowLongPtrW(g_menu,GWLP_HWNDPARENT,0);
         InvalidateRect(g_menu,nullptr,TRUE);
@@ -8810,6 +9584,15 @@ LRESULT CALLBACK PaneProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
     switch(msg) {
         case WM_ERASEBKGND: return 1;
         case WM_MOUSEACTIVATE: return MA_ACTIVATE;
+        // 1.1.0: the pane repaints with the new accent as soon as Windows reports a colour change, so it can
+        // no longer keep a stale colour that disagrees with the flyout next to it.
+        case WM_SETTINGCHANGE:
+            if(lp && wcscmp(reinterpret_cast<PCWSTR>(lp),L"ImmersiveColorSet")==0)
+                HandleSystemColorChange();
+            break;
+        case WM_DWMCOLORIZATIONCOLORCHANGED:
+            HandleSystemColorChange();
+            return 0;
         case WM_PAINT: {
             ScopedPaint paint(hwnd);
             HDC dc=paint.get();
@@ -8867,6 +9650,39 @@ LRESULT CALLBACK PaneProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
             if(wp==TIMER_PANE) {
                 const bool opening=g_paneAnimOpening;
                 const double elapsedMs=PaneAnimElapsedMs(g_paneAnimStart);
+                // 1.1.0: when the theme timing drives this slide, both offsets come from it, and the
+                // slide is over when the panel duration is (the content groups always finish earlier).
+                if(g_paneEngineDriven) {
+                    const int ageMs=(int)std::lround(elapsedMs);
+                    bool done=false;
+                    try {
+                        g_paneAnimOffset=CharmPanePanelOffset(ageMs,opening,g_paneAnimFromOffset);
+                        if(opening) {
+                            g_paneContentOffset=CharmMotion::BodyOffset(ageMs);
+                            g_paneTitleOffset=CharmMotion::TitleOffset(ageMs);
+                        }
+                        done=elapsedMs>=(opening?CharmMotion::ShowDurationMs():CharmMotion::HideDurationMs());
+                    } catch (...) {
+                        // Any failure ends the transition here instead of freezing the pane mid-flight.
+                        done=true;
+                    }
+                    if(done) {
+                        g_paneAnimOffset=g_paneAnimToOffset;
+                        g_paneContentOffset=g_paneContentToOffset;
+                        g_paneTitleOffset=0;
+                    }
+                    PositionPane(g_paneAnimOffset);
+                    InvalidateRect(hwnd,nullptr,FALSE);
+                    UpdateWindow(hwnd);
+                    if(done) {
+                        KillTimer(hwnd,TIMER_PANE);
+                        g_paneEngineDriven=false;
+                        DiscardPaneSlideCache();
+                        if(opening) InvalidateRect(hwnd,nullptr,TRUE);
+                        else ShowWindow(hwnd,SW_HIDE);
+                    }
+                    return 0;
+                }
                 const int paneDuration=(std::max)(80,g_paneAnimDurationMs);
                 const int contentDuration=(std::max)(80,g_paneContentDurationMs);
                 const double t=(std::min)(1.0,elapsedMs/paneDuration);
@@ -8955,8 +9771,18 @@ void DrawMetroMenu(HDC dc,RECT rc) {
     if(!dc) return;
     ScopedGdiObject background(CreateSolidBrush(RGB(255,255,255)));
     if(background) FillRect(dc,&rc,(HBRUSH)background.get());
-    ScopedGdiObject border(CreateSolidBrush(RGB(200,200,200)));
-    if(border) FrameRect(dc,&rc,(HBRUSH)border.get());
+    // The context menus of Windows 8.1 carry a 1 px black frame, not the light grey one that was here.
+    {
+        ScopedGdiObject frame(CreatePen(PS_SOLID,1,RGB(0,0,0)));
+        ScopedSelectObject pen(dc,frame.get());
+        ScopedSelectObject nullBrush(dc,GetStockObject(NULL_BRUSH));
+        if(frame && pen && nullBrush)
+            Rectangle(dc,rc.left,rc.top,rc.right,rc.bottom);
+        else {
+            ScopedGdiObject fallback(CreateSolidBrush(RGB(0,0,0)));
+            if(fallback) FrameRect(dc,&rc,(HBRUSH)fallback.get());
+        }
+    }
 
     const COLORREF accent=EnsureReadableWithWhite(g_accent.load());
     for(size_t i=0;i<g_metroMenuItems.size();++i) {
@@ -8980,9 +9806,10 @@ void DrawMetroMenu(HDC dc,RECT rc) {
         text.right-=kMetroMenuPadX;
         const COLORREF color=!item.enabled?RGB(150,150,150):
             (hovered?RGB(255,255,255):RGB(32,32,32));
-        DrawTextBox(dc,item.text.c_str(),text,15,color,FW_NORMAL,
+        // Segoe UI Semibold: the face and the weight the Windows 8.1 context menus use.
+        DrawTextBox(dc,item.text.c_str(),text,15,color,FW_SEMIBOLD,
                     DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX|DT_END_ELLIPSIS,
-                    L"Segoe UI");
+                    L"Segoe UI Semibold");
     }
 }
 
@@ -9042,6 +9869,8 @@ void UpdateAnimation() {
             KillTimer(g_rail, TIMER_STATUS);
             if (g_clock) ShowWindow(g_clock, SW_HIDE);
             ShowWindow(g_rail, SW_HIDE);
+            SetHintStage(HINT_NONE);
+            g_railHintVisual.store(false);
         }
     }
 }
@@ -9050,9 +9879,24 @@ LRESULT CALLBACK RailProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
     switch(msg) {
         case WM_ERASEBKGND:return 1;
         case 0x02E0: HandleDpiChanged(hwnd,wp); return 0; // WM_DPICHANGED (Win8.1+).
+        // 1.1.0: clicking the bar hands it the focus so that the outside-click dismissal and Esc behave like
+        // they do in Windows 8. The hint, being a preview, never takes the focus. The bar still does not appear
+        // in the taskbar (WS_EX_TOOLWINDOW) and is re-shown with SW_SHOWNOACTIVATE, so nothing flashes.
+        case WM_MOUSEACTIVATE:
+            if(RailHintOnly()) return MA_NOACTIVATE;
+            return MA_ACTIVATE;
+        // 1.1.0: follow accent and composition colour changes while the rail is on screen.
+        case WM_SETTINGCHANGE:
+            if(lp && wcscmp(reinterpret_cast<PCWSTR>(lp),L"ImmersiveColorSet")==0)
+                HandleSystemColorChange();
+            break;
+        case WM_DWMCOLORIZATIONCOLORCHANGED:
+            HandleSystemColorChange();
+            return 0;
         case WM_PAINT: return PaintRailWindow(hwnd);
         case WM_TIMER:
             if (wp == TIMER_ANIMATION) UpdateAnimation();
+
             else if (wp == TIMER_SEARCH_VERIFY) {
                 KillTimer(hwnd,TIMER_SEARCH_VERIFY);
                 VerifySearchChord();
@@ -9086,6 +9930,16 @@ LRESULT CALLBACK RailProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
             return 0;
         }
         case WM_LBUTTONDOWN:{
+            if(RailHintOnly()) {
+                // Windows 8: a click on the icon hint opens the solid bar. Pinning it down with the button is
+                // the gesture that always worked, even before the pointer had slid far enough.
+                SetHintStage(HINT_FULL);
+                PostThreadMessageW(g_threadId,WM_PORT_HINT_FULL,0,0);
+                // No SetCapture here: while the hint window holds the mouse capture the pointer never reaches
+                // the solid bar on its way down, so the click that promoted the hint would leave the bar in a
+                // state where the next click did not work.
+                return 0;
+            }
             const int y=DpiUnscale(GET_Y_LPARAM(lp));
             RECT rc{}; GetClientRect(hwnd,&rc);
             const int height=DpiUnscale(rc.bottom);
@@ -9098,6 +9952,21 @@ LRESULT CALLBACK RailProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
             }
             return 0;
         }
+        case WM_LBUTTONDBLCLK:
+            // 1.1.0: a double click on the same charm must behave like two presses, not like a lost one.
+            if(!RailHintOnly()) {
+                const int y=DpiUnscale(GET_Y_LPARAM(lp));
+                RECT rc{}; GetClientRect(hwnd,&rc);
+                const int height=DpiUnscale(rc.bottom);
+                for(int i=0;i<GetCharmSlotCount();i++) {
+                    const int top=GetCharmTop(i,height);
+                    const int charm=GetCharmAction(i);
+                    if(charm>=0&&!g_hidden[charm]&&y>=top&&y<top+kGridCell) {
+                        g_pressed=i; InvalidateRect(hwnd,nullptr,FALSE); break;
+                    }
+                }
+            }
+            return 0;
         case WM_LBUTTONUP:{
             ReleaseCapture(); const int id=g_pressed.load(); g_pressed=-1;
             InvalidateRect(hwnd,nullptr,FALSE);
@@ -9110,6 +9979,12 @@ LRESULT CALLBACK RailProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
             return 0;
         }
         case WM_RBUTTONUP:{
+            if(RailHintOnly()) {
+                // The hint is only icons: a right click opens the solid bar, exactly like a left click.
+                SetHintStage(HINT_FULL);
+                PostThreadMessageW(g_threadId,WM_PORT_HINT_FULL,0,0);
+                return 0;
+            }
             if(g_showQuickMenu||g_registryQuickMenu.load()) {
                 POINT point{}; GetCursorPos(&point);
                 if(g_monitor) PlaceWindows(point);
@@ -9197,6 +10072,15 @@ LRESULT CALLBACK MenuProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
     switch(msg) {
         case WM_ERASEBKGND:return 1;
         case WM_PAINT:return PaintMenuWindow(hwnd);
+        case WM_TIMER:
+            if(wp==TIMER_POPUP_FADE) {
+                BYTE opacity=255;
+                if(!PopupFadeStep(g_menuFade,opacity)) { KillTimer(hwnd,TIMER_POPUP_FADE); return 0; }
+                SetLayeredWindowAttributes(hwnd,0,opacity,LWA_ALPHA);
+                if(!g_menuFade.active) KillTimer(hwnd,TIMER_POPUP_FADE);
+                return 0;
+            }
+            break;
         case WM_MOUSEACTIVATE:return MA_ACTIVATE;
         case WM_GETDLGCODE:return DLGC_WANTARROWS|DLGC_WANTCHARS|DLGC_WANTALLKEYS;
         case WM_MOUSEMOVE: {
@@ -9373,34 +10257,107 @@ LRESULT CALLBACK MouseProcImpl(int code,WPARAM wp,LPARAM lp) {
             HMONITOR mon=MonitorFromPoint(p,MONITOR_DEFAULTTONEAREST);
             MONITORINFO mi{sizeof(mi)};
             if(mon && GetMonitorInfoW(mon,&mi)) {
+                // Windows 8/8.1 edge gesture, as described by Microsoft's edge-swipe guidance:
+                //   1. the pointer rests on the activation edge for the hint delay (200 ms by default) and the
+                //      icon hint slides in - icons only, translucent, no clock, no solid background;
+                //   2. the pointer then travels along the edge (8.1 counted gesture increments, 32 px is one)
+                //      or clicks the hint, and only then does the solid bar appear.
+                // Leaving the edge before step 2 cancels everything, so a pointer that is merely dragged to the
+                // far right of the screen no longer opens the bar.
                 if(g_edgeActivation.load() && g_charmsEnabled.load()) {
-                    const bool atRight=p.x>=mi.rcMonitor.right-DpiScale(2);
-                    const bool atTopEdge=p.y<=mi.rcMonitor.top+DpiScale(2);
-                    const bool inTopRightZone=p.y<=mi.rcMonitor.top+DpiScale(40);
-                    const bool atBottom=p.y>=mi.rcMonitor.bottom-DpiScale(2);
-                    const bool cornerOnly=g_topRightCornerOnly.load();
-                    const bool validActivationZone=!cornerOnly||inTopRightZone;
-                    const bool blockedCorner=((cornerOnly?inTopRightZone:atTopEdge) && g_disableTRCorner.load()) ||
-                                             (atBottom && g_disableBRCorner.load());
-                    const bool noHint=g_disableCharmsHint.load();
+                    const UINT dpi=QueryMonitorDpiDirect(mon);
+                    auto scale=[dpi](int logical){ return MulDiv(logical,(int)dpi,kReferenceDpi); };
                     const ULONGLONG now=GetTickCount64();
                     HWND foreground=GetForegroundWindow();
-                    const int delay=IsImmersiveWindow(foreground) ?
-                        g_immersiveEdgeDelay.load() : g_desktopEdgeDelay.load();
-                    if(atRight && validActivationZone && !blockedCorner) {
-                        if(!g_edgeLatched.exchange(true)) g_edgeSince=now;
-                        if(!noHint && now-g_edgeSince.load()>=(ULONGLONG)delay && !g_visible.load() && !g_edgePosted.exchange(true))
-                            PostThreadMessageW(g_threadId,WM_PORT_OPEN,0,MAKELPARAM((SHORT)p.x,(SHORT)p.y));
-                    } else if(g_edgeLatched.exchange(false)) {
-                        // With DisableCharmsHint, require an inward swipe from the selected edge zone.
-                        const int inward=mi.rcMonitor.right-p.x;
-                        if(validActivationZone && !blockedCorner && inward>=0 && inward<=DpiScale(48) &&
-                           now-g_edgeSince.load()>=(ULONGLONG)delay && !g_visible.load() && !g_edgePosted.exchange(true))
-                            PostThreadMessageW(g_threadId,WM_PORT_OPEN,0,MAKELPARAM((SHORT)p.x,(SHORT)p.y));
+                    const int delay=(std::max)(0,IsImmersiveWindow(foreground) ?
+                        g_immersiveEdgeDelay.load() : g_desktopEdgeDelay.load());
+                    const int slideDistance=(std::max)(0,scale(g_edgeSlidePx.load()));
+                    const bool cornerMode=g_topRightCornerOnly.load() || g_bottomRightCorner.load();
+                    // Activation zone: the two right corner squares in corner mode, the whole right edge in
+                    // edge mode. The height is the same corner square the rest of the module uses.
+                    const int cornerHeight=scale(40);
+                    const bool atRight=p.x>=mi.rcMonitor.right-scale(2);
+                    const bool inTopRightZone=p.y<=mi.rcMonitor.top+cornerHeight;
+                    const bool inBottomRightZone=p.y>=mi.rcMonitor.bottom-cornerHeight;
+                    const bool inRightCornerModeZone=(g_topRightCornerOnly.load() && inTopRightZone) ||
+                                                      (g_bottomRightCorner.load() && inBottomRightZone);
+                    const bool validActivationZone=cornerMode ? inRightCornerModeZone : true;
+                    // The corners the user disabled through EdgeUI are still respected.
+                    const bool blockedCorner=(g_disableTRCorner.load() &&
+                                              (cornerMode ? inTopRightZone : p.y<=mi.rcMonitor.top+scale(2))) ||
+                                             (g_disableBRCorner.load() &&
+                                              (cornerMode ? inBottomRightZone : p.y>=mi.rcMonitor.bottom-scale(2)));
+                    const bool noHint=g_disableCharmsHint.load();
+                    int stage=g_hintStage.load();
+                    // Watchdog: a hint that was requested but never turned into a visible bar (the UI thread was
+                    // busy, a pane took over, the rail failed) must not leave the state machine stuck in the
+                    // hint stage, where every later edge gesture would be swallowed.
+                    // A visible bar without a stage is not a hint either: when an outside click closed it, the
+                    // stage must not survive as HINT_FULL and block the next edge gesture.
+                    if(stage!=HINT_NONE && !g_visible.load() &&
+                       (g_hintStageSince.load()==0 || now-g_hintStageSince.load()>5000)) {
+                        stage=HINT_NONE;
+                        SetHintStage(HINT_NONE);
+                        g_edgePosted.store(false);
+                        g_hintStageSince.store(now);
                     }
-                    if((!atRight && mi.rcMonitor.right-p.x>DpiScale(48)) || blockedCorner || !validActivationZone)
+                    // Where along the edge the pointer is, measured from the corner it came from: in corner mode
+                    // the distance from that corner, in edge mode the absolute Y. A slide is monotonic, so the
+                    // travel is measured from where the pointer entered the activation zone, not from where it
+                    // happened to be when the hint appeared.
+                    const LONG edgePos=cornerMode ? (inTopRightZone ? p.y-mi.rcMonitor.top
+                                                                    : mi.rcMonitor.bottom-p.y)
+                                                  : p.y;
+
+                    if(g_stop.load()) {
+                        // Shutting down: nothing to arm, and no hint may survive into the next session.
+                        g_edgeLatched=false; g_edgePosted=false;
+                        if(g_hintStage.load()!=HINT_FULL) SetHintStage(HINT_NONE);
+                    } else if(atRight && validActivationZone && !blockedCorner) {
+                        if(!g_edgeLatched.exchange(true)) {
+                            // Reaching the edge: remember the position along the edge and start the dwell.
+                            g_edgeArmOrigin.store(edgePos);
+                            g_edgeArmedTick.store((DWORD)now);
+                            g_edgeSince.store(now);
+                        }
+                        const ULONGLONG armedFor=now-g_edgeSince.load();
+                        if(stage==HINT_NONE) {
+                            // Step 1. Arm once per edge entry, then idle for the hint delay. DisableCharmsHint
+                            // is the "no hint" mode and keeps the instantaneous behaviour of 1.0.0.
+                            const bool instant=noHint || delay<=0;
+                            if((armedFor>=(ULONGLONG)delay || instant) && !g_visible.load() &&
+                               !g_edgePosted.exchange(true)) {
+                                SetHintStage(HINT_ICONS);
+                                g_edgeTravelMark.store(edgePos);
+                                PostThreadMessageW(g_threadId,WM_PORT_HINT_SHOW,0,0);
+                            }
+                        } else if(stage==HINT_ICONS) {
+                            // Step 2. A slide along the edge, a click (handled in pointerDown), or the optional
+                            // dwell promotes the hint to the solid bar.
+                            const LONG travel=std::abs((LONG)(edgePos-g_edgeTravelMark.load()));
+                            const int dwell=g_edgeDwellMs.load();
+                            const bool dwelled=dwell>0 && armedFor>=(ULONGLONG)(delay+dwell);
+                            if(travel>=slideDistance || dwelled) {
+                                SetHintStage(HINT_FULL);
+                                PostThreadMessageW(g_threadId,WM_PORT_HINT_FULL,0,0);
+                            }
+                        }
+                    } else if(g_edgeLatched.exchange(false)) {
+                        // Left the edge (or the pointer was on a disabled corner): cancel a pending hint and
+                        // let the UI thread start the leave grace for a hint that is already visible.
                         g_edgePosted=false;
-                } else { g_edgeLatched=false; g_edgePosted=false; }
+                        if(g_hintStage.load()==HINT_ICONS) {
+                            SetHintStage(HINT_NONE);
+                            if(g_visible.load()) PostThreadMessageW(g_threadId,WM_PORT_HINT_HIDE,0,0);
+                        }
+                    }
+                    // Once the solid bar is up this hook keeps only g_edgeLatched honest: like in Windows 8 the
+                    // bar then stays until the pointer clicks outside, the focus moves or Esc is pressed.
+                    if(!atRight && mi.rcMonitor.right-p.x>scale(48)) g_edgePosted=false;
+                } else {
+                    g_edgeLatched=false; g_edgePosted=false;
+                    if(g_hintStage.load()==HINT_ICONS) SetHintStage(HINT_NONE);
+                }
 
                 bool menuEnabled=g_showQuickMenu.load() || g_registryQuickMenu.load();
                 bool atBottomLeft=p.x>=mi.rcMonitor.left && p.x<mi.rcMonitor.left+DpiScale(136) &&
@@ -9485,6 +10442,10 @@ LRESULT CALLBACK MouseProcImpl(int code,WPARAM wp,LPARAM lp) {
                 PostMessageW(g_menu,WM_CLOSE,0,0);
             if(g_visible.load() && g_closeOnClickOutside.load() &&
                !inRail && !inClock && !inMenu) {
+                // 1.1.0: the rail never takes the focus, so clicking the desktop produces no foreground change
+                // at all and the WinEvent hook cannot see the click. The foreground filter below is bypassed
+                // for this one event; without this the bar opened by the edge gesture stayed on screen when
+                // the user clicked away from it.
                 // Post to the UI queue rather than relying on activation or a WM_CLOSE delivery to a possibly
                 // non-activating overlay HWND.
                 PostThreadMessageW(g_threadId,WM_PORT_CLOSE,0,0);
@@ -9627,6 +10588,9 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);
         wc.lpfnWndProc=RailProc;
         wc.lpszClassName=kRailClass;
+        // 1.1.0: CS_DBLCLKS. Without it the second click of a double click arrives as an ordinary WM_LBUTTONDOWN
+        // with the button already down, which is why a second click on a charm sometimes did nothing.
+        wc.style|=CS_DBLCLKS;
         const bool railClassRegistered = RegisterClassExW(&wc) != 0;
         if(!railClassRegistered)
             Wh_Log(L"critical: rail window class registration failed (%lu)",GetLastError());
@@ -9665,7 +10629,9 @@ DWORD WINAPI UiThreadProc(LPVOID) {
             Wh_Log(L"optional: settings flyout class registration failed (%lu)",GetLastError());
         // Owned by the pane, so it has to share the pane's band or it would be drawn behind its own owner.
         if(volumeClassRegistered && g_pane) {
-            g_volumeFlyout=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,
+            // 1.1.0: WS_EX_LAYERED, because the engine's popup fade is applied to this window with
+            // SetLayeredWindowAttributes. Without it the call fails and the fade would never be visible.
+            g_volumeFlyout=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_LAYERED,
                 kVolumeFlyoutClass,L"Volume",WS_POPUP,0,0,DpiScale(kVolumeFlyoutWidth),
                 DpiScale(kVolumeFlyoutHeight),g_pane,wc.hInstance);
         }
@@ -9757,6 +10723,27 @@ DWORD WINAPI UiThreadProc(LPVOID) {
                         continue; // let Windows 8/8.1 open its native Charms surface
                 }
                 ShowCharms(point,keyboard);
+                continue;
+            }
+            if(message.hwnd==nullptr && message.message==WM_PORT_HINT_SHOW) {
+                // Step 1: the icon hint. ShowCharms places the rail on the monitor under the pointer, so the
+                // hook does not have to send any coordinates.
+                POINT point{};
+                GetCursorPos(&point);
+                ShowCharms(point,false,HINT_ICONS);
+                continue;
+            }
+            if(message.hwnd==nullptr && message.message==WM_PORT_HINT_FULL) {
+                // Step 2: the slide along the edge (or a click on the hint) turned the hint into the solid bar.
+                POINT point{};
+                GetCursorPos(&point);
+                ShowCharms(point,false,HINT_FULL);
+                continue;
+            }
+            if(message.hwnd==nullptr && message.message==WM_PORT_HINT_HIDE) {
+                // The pointer left while only the icons were shown: slide them back out, nothing else.
+                if(RailHintOnly()) HideCharms();
+                else SetHintStage(HINT_NONE);
                 continue;
             }
             if(message.hwnd==nullptr && message.message==WM_PORT_REFRESH) {
@@ -10092,8 +11079,13 @@ bool StartCharmsServices() {
     g_animFromAlpha=g_animFromSlide=g_animToSlide=g_animDurationMs=0;
     g_animStartQpc=g_animQpcFrequency=0;
     g_edgeLatched.store(false); g_menuEdgeLatched.store(false); g_edgePosted.store(false);
+    SetHintStage(HINT_NONE);
+    g_edgeTravelMark.store(0); g_edgeArmOrigin.store(0); g_edgeArmedTick.store(0); g_hintStageSince.store(0);
+    g_edgeHintMs.store(kDefaultEdgeHintMs); g_edgeSlidePx.store(kDefaultEdgeSlidePx);
+    g_edgeDwellMs.store(kDefaultEdgeDwellMs); g_bottomRightCorner.store(false);
     g_edgeSince.store(0);
     g_searchTarget.store(0); g_searchKnownOpen.store(false); g_searchVerifyTick.store(0);
+    g_searchPendingSince.store(0);
     g_companionStartRetryAfter.store(0);
 
     ReadWindhawkSettings();
