@@ -21124,6 +21124,13 @@ static void NtfGlassShapes() {
         r.bottom = std::min(r.bottom, g_ntf.view.bottom);
         v.push_back({r, rad});
     }
+    // Um pouco para dentro de cada vidro: o desfoque nunca aparece fora da
+    // borda arredondada (nas pontas da pílula do topo ficava uma rebarba).
+    float in = 2 * s;
+    for (CcShape& c : v) {
+        c.r = D2D1::RectF(c.r.left + in, c.r.top + in, c.r.right - in, c.r.bottom - in);
+        c.radius = std::max(0.0f, c.radius - in);
+    }
     GlassLayerShapes(g_ntf.glass, v);
 }
 
