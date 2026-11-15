@@ -144,8 +144,8 @@ Snow falls over your desktop and settles on top of windows and the taskbar, with
 - enableSnowman: false
   $name: Enable Snowman Building
   $name:ru-RU: Включить лепку снеговиков
-  $description: Hold [Ctrl + E] over snow to roll a snowball; stack 2 to build a snowman! (Note: Ctrl+E also opens search in Explorer/Browsers; click snowmen with LMB to melt)
-  $description:ru-RU: Зажмите [Ctrl + E] над сугробом для лепки снежка; соедините 2 снежка в снеговика! (Примечание: в Проводнике/браузерах Ctrl+E также открывает поиск; клик ЛКМ растапливает)
+  $description: Hold [Ctrl + E] over snow to roll a snowball; stack 2 to build a snowman! Note that Ctrl+E also opens search in Explorer or Browsers; click snowmen with LMB to melt
+  $description:ru-RU: Зажмите [Ctrl + E] над сугробом для лепки снежка; соедините 2 снежка в снеговика! Обратите внимание что Ctrl+E также открывает поиск в Проводнике или браузерах; клик ЛКМ растапливает
 - hatStyle: tophat
   $name: Snowman Hat Style
   $name:ru-RU: Головной убор снеговика
