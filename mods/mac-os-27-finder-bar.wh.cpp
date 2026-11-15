@@ -348,6 +348,7 @@ struct Settings {
     bool usbPills, downloadPills, clipPills, shotPills;
     bool islFocus, islBattery, islBluetooth, islAudio, islHistory, winNotifs, islHistNotices, islCaps;
     bool islLive;  // pílulas de aviso com vidro: a foto do fundo acompanha ao vivo
+    int islTextColor, ntfTextColor;  // cor do texto nas pílulas e nas notificações: 0 tema, 1 branco, 2 preto
     bool winNotifsOnly;  // só a barra mostra as notificações (faixas do Windows desligadas)
     int islStyle, islSize, islDur, islIn, islOut, islPos;  // pílulas de aviso
     int npLayout, npSize;  // painel Tocando agora
@@ -582,6 +583,8 @@ static const UiDefault kUiDefaults[] = {
     {L"islAudio", L"1"},
     {L"islHistory", L"1"},
     {L"islLive", L"0"},
+    {L"islTextColor", L"theme"},
+    {L"ntfTextColor", L"theme"},
     {L"islHistNotices", L"1"},
     {L"islCaps", L"1"},
     {L"islStyle", L"follow"},
@@ -850,6 +853,11 @@ static void LoadSettings() {
     s.islAudio = OvrInt(L"islAudio") != 0;
     s.islHistory = OvrInt(L"islHistory") != 0;
     s.islLive = OvrInt(L"islLive") != 0;
+    {
+        auto tc = [](const std::wstring& v) { return v == L"white" ? 1 : v == L"black" ? 2 : 0; };
+        s.islTextColor = tc(OvrStr(L"islTextColor"));
+        s.ntfTextColor = tc(OvrStr(L"ntfTextColor"));
+    }
     s.islHistNotices = OvrInt(L"islHistNotices") != 0;
     {
         std::wstring v = OvrStr(L"islStyle");
@@ -12754,6 +12762,7 @@ enum BsVal {
     BV_THEMECLEAR, BV_G_LIVEFIXED,                         // Personalizar tema: Transparente; Vidro sempre ao vivo
     BV_ISLLIVE,                                            // pílulas de aviso: fundo ao vivo
     BV_FONTFAM,                                            // fonte da barra e dos painéis
+    BV_ISLTEXT, BV_NTFTEXT,                                // cor do texto: pílulas, notificações
     BV_SIZERESET,                                          // Tamanho da barra: restaurar
     // "Personalizar por monitor": para cada monitor ligado (até 8), o título, o fundo e a cor do texto.
     BV_MONHEAD0, BV_MONSTYLE0 = BV_MONHEAD0 + 8, BV_MONTEXT0 = BV_MONSTYLE0 + 8, BV_MONEND = BV_MONTEXT0 + 8,
@@ -12865,6 +12874,7 @@ static const BsRowDef kBsRows[] = {
     {BR_ACTION, BV_ISLTEST, L"Testar a pílula agora", 0, 0},
     {BR_GROUP, BV_NONE, L"Aparência", 0, 0},
     {BR_CHOICE, BV_ISLSTYLE, L"Estilo", 0, 0, L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro; com Transparente, líquido)"},
+    {BR_CHOICE, BV_ISLTEXT, L"Cor do texto", 0, 0, L"Seguir o tema, ou sempre branco ou preto, em qualquer estilo"},
     {BR_SWITCH, BV_ISLLIVE, L"Fundo ao vivo", 0, 0, L"Com um estilo de vidro, vídeos e papéis de parede animados continuam aparecendo atrás da pílula"},
     {BR_SLIDER, BV_ISLSIZE, L"Tamanho", 0, 0},
     {BR_SLIDER, BV_ISLDUR, L"Tempo na tela", 0, 0, L"Avisos que dá para abrir ou responder ficam 2,5 vezes mais"},
@@ -12873,6 +12883,7 @@ static const BsRowDef kBsRows[] = {
     {BR_CHOICE, BV_ISLOUT, L"Como some", 0, 0},
     {BR_GROUP, BV_NONE, L"Botão de Notificações", 0, 0},
     {BR_SWITCH, BV_ISLHIST, L"Botão de Notificações na barra (sino)", 0, 0, L"Notificações agrupadas por app, em cartões de vidro"},
+    {BR_CHOICE, BV_NTFTEXT, L"Cor do texto das notificações", 0, 0, L"Seguir o tema, ou sempre branco ou preto, em qualquer tema"},
     {BR_CHOICE, BV_NTFLAYOUT, L"Notificações", 0, 0, L"Dentro da caixa: tudo num painel só; em cartões soltos: o topo e cada notificação no seu próprio vidro, sem caixa atrás"},
     {BR_SWITCH, BV_ISLHISTNOT, L"No botão, mostrar também os avisos da pílula", 0, 0},
     {BR_CHOICE, BV_NTFSHAPE, L"Formato dos ícones", 0, 0, L"Nas notificações: círculo ou o formato dos ícones do macOS"},
@@ -13153,6 +13164,8 @@ static int BsGet(int val) {
         case BV_CCCLOSE: return g_settings.ccCloseAnim;
         case BV_NTFSHAPE: return g_settings.ntfIconShape;
         case BV_NTFLAYOUT: return g_settings.ntfCards ? 1 : 0;
+        case BV_ISLTEXT: return g_settings.islTextColor;
+        case BV_NTFTEXT: return g_settings.ntfTextColor;
         case BV_FONTFAM: {
             if (g_bsFonts.empty()) BsFontsRefresh();
             for (size_t i = 0; i < g_bsFonts.size(); i++)
@@ -13446,6 +13459,14 @@ static void BsSet(int val, int v) {
         g_settings.fontFamily = g_bsFonts[v];
         OvrSetStr(L"fontFamily", g_settings.fontFamily);
         BarsApplyLive(true);  // a barra refaz as fontes na hora; os painéis, ao abrir
+        return;
+    }
+    if (val == BV_ISLTEXT || val == BV_NTFTEXT) {
+        static const PCWSTR kNames[] = {L"theme", L"white", L"black"};
+        int c = std::clamp(v, 0, 2);
+        (val == BV_ISLTEXT ? g_settings.islTextColor : g_settings.ntfTextColor) = c;
+        OvrSetStr(val == BV_ISLTEXT ? L"islTextColor" : L"ntfTextColor", kNames[c]);
+        if (val == BV_NTFTEXT) NtfRefresh();  // painel aberto: muda na hora
         return;
     }
     if (val == BV_NTFLAYOUT) {
@@ -13842,6 +13863,7 @@ static const PCWSTR kBsBarChoicesAll[] = {L"Vidro", L"Transparente", L"Líquido"
 static const PCWSTR kBsGlassStyle[] = {L"Transparente", L"Vidro líquido personalizado"};
 static const PCWSTR kBsNtfShape[] = {L"Círculo", L"Formato macOS"};
 static const PCWSTR kBsNtfLayout[] = {L"Dentro da caixa", L"Em cartões soltos"};
+static const PCWSTR kBsTextFollow[] = {L"Seguir o tema", L"Branco", L"Preto"};
 static const PCWSTR kBsTextColor[] = {L"Automático", L"Branco", L"Preto"};
 static const PCWSTR kBsCcClose[] = {L"Cascata", L"Encolher", L"Esmaecer", L"Deslizar para cima", L"Nenhuma"};
 static const PCWSTR kBsLookChoices[] = {L"Desfoque", L"Líquido", L"Transparente"};
@@ -13891,6 +13913,7 @@ static const PCWSTR* BsChoiceLabels(int val) {
         case BV_CCCLOSE: return kBsCcClose;
         case BV_NTFSHAPE: return kBsNtfShape;
         case BV_NTFLAYOUT: return kBsNtfLayout;
+        case BV_ISLTEXT: case BV_NTFTEXT: return kBsTextFollow;
         case BV_FONTFAM:
             if (g_bsFonts.empty()) BsFontsRefresh();
             return g_bsFontPtrs.data();
@@ -13906,6 +13929,7 @@ static int BsChoiceCount(int val) {
         case BV_FONTFAM:
             if (g_bsFonts.empty()) BsFontsRefresh();
             return (int)g_bsFonts.size();
+        case BV_ISLTEXT: case BV_NTFTEXT: return 3;
         case BV_BARSTYLE: return 9;
         case BV_PANELLOOK: return 2;
         case BV_PANELSTYLE: return 6;
@@ -18776,6 +18800,7 @@ static void IslandRender() {
     bool dark = islSt == 6 || islSt == 7;  // fundo sólido escuro
     // Texto escuro: na pílula clara, ou no vidro com o tema claro.
     bool inkDark = islSt == 5 || (!dark && g_light);
+    if (g_settings.islTextColor) inkDark = g_settings.islTextColor == 2;  // branco ou preto escolhido
 
     BITMAPINFO bi{};
     bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
@@ -21185,7 +21210,9 @@ static void NtfRender() {
     if (FAILED(g_ntf.rt->BindDC(g_ntf.memDC, &bind))) return;
     ID2D1DCRenderTarget* rt = g_ntf.rt;
     ID2D1SolidColorBrush* br = g_ntf.brush;
-    D2D1_COLOR_F fg = g_light ? D2D1::ColorF(0.07f, 0.07f, 0.08f, 1) : D2D1::ColorF(1, 1, 1, 0.97f);
+    // Cor do texto: a do tema, ou branco ou preto escolhido nos Ajustes.
+    bool ntfInk = g_settings.ntfTextColor ? g_settings.ntfTextColor == 2 : g_light;
+    D2D1_COLOR_F fg = ntfInk ? D2D1::ColorF(0.07f, 0.07f, 0.08f, 1) : D2D1::ColorF(1, 1, 1, 0.97f);
     D2D1_COLOR_F dim = fg;
     dim.a = 0.62f;
     D2D1_COLOR_F faint = fg;
@@ -25436,6 +25463,11 @@ const UiTr kUiTr[] = {
     {L"Fonte", L"Font", L"Fuente", L"Police", L"Schrift", L"Carattere", L"字体"},
     {L"Fonte da barra e dos painéis", L"Bar and panel font", L"Fuente de la barra y los paneles", L"Police de la barre et des panneaux", L"Schrift der Leiste und Bereiche", L"Carattere della barra e dei pannelli", L"菜单栏和面板字体"},
     {L"As fontes desta lista que estão instaladas no Windows", L"The fonts on this list that are installed in Windows", L"Las fuentes de esta lista instaladas en Windows", L"Les polices de cette liste installées dans Windows", L"Die Schriften dieser Liste, die in Windows installiert sind", L"I caratteri di questo elenco installati in Windows", L"此列表中已安装在 Windows 中的字体"},
+    {L"Cor do texto", L"Text color", L"Color del texto", L"Couleur du texte", L"Textfarbe", L"Colore del testo", L"文字颜色"},
+    {L"Cor do texto das notificações", L"Notification text color", L"Color del texto de las notificaciones", L"Couleur du texte des notifications", L"Textfarbe der Mitteilungen", L"Colore del testo delle notifiche", L"通知文字颜色"},
+    {L"Seguir o tema, ou sempre branco ou preto, em qualquer estilo", L"Follow the theme, or always white or black, in any style", L"Seguir el tema, o siempre blanco o negro, en cualquier estilo", L"Suivre le thème, ou toujours blanc ou noir, quel que soit le style", L"Dem Design folgen oder immer weiß oder schwarz, in jedem Stil", L"Segui il tema, o sempre bianco o nero, in qualsiasi stile", L"跟随主题，或在任何样式中始终为白色或黑色"},
+    {L"Seguir o tema, ou sempre branco ou preto, em qualquer tema", L"Follow the theme, or always white or black, in any theme", L"Seguir el tema, o siempre blanco o negro, en cualquier tema", L"Suivre le thème, ou toujours blanc ou noir, quel que soit le thème", L"Dem Design folgen oder immer weiß oder schwarz, in jedem Design", L"Segui il tema, o sempre bianco o nero, in qualsiasi tema", L"跟随主题，或在任何主题中始终为白色或黑色"},
+    {L"Seguir o tema", L"Follow the theme", L"Seguir el tema", L"Suivre le thème", L"Dem Design folgen", L"Segui il tema", L"跟随主题"},
     {L"Acompanhar a barra", L"Match the bar", L"Igual que la barra", L"Comme la barre", L"Wie die Leiste", L"Come la barra", L"跟随菜单栏"},
     {L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro; com Transparente, líquido)", L"Match the bar: the bar’s background (glass with Window color, liquid with Clear)", L"Igual que la barra: el fondo de la barra (vidrio con Color de la ventana, líquido con Transparente)", L"Comme la barre : le fond de la barre (verre avec Couleur de la fenêtre, liquide avec Transparent)", L"Wie die Leiste: ihr Hintergrund (Glas bei Fensterfarbe, flüssig bei Klar)", L"Come la barra: lo sfondo della barra (vetro con Colore della finestra, liquido con Trasparente)", L"跟随菜单栏：与菜单栏相同的背景（窗口颜色时为玻璃，透明时为液态）"},
     {L"Claro", L"Light", L"Claro", L"Clair", L"Hell", L"Chiaro", L"浅色"},
