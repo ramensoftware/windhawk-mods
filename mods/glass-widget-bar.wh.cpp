@@ -21,6 +21,8 @@ shows through a soft, dark-tinted rounded panel with thin light edges. The
 widgets have no glass of their own; they are drawn straight onto the frame and
 separated by thin dividers.
 
+![Glass Widget Bar in English, Turkish, German and Japanese](https://raw.githubusercontent.com/TheRealAlperN/glass-widget-bar/main/screenshots/glass-widget-bar.gif)
+
 | Widget | What it does |
 | --- | --- |
 | **Clock** | Analog clock with an orange second hand |
@@ -160,7 +162,7 @@ released under **GPL-3.0** as well.
   $name:tr-TR: Çerçeve bulanıklığı (0-100, dock varsayılanı 10)
 - hotkeyEnabled: true
   $name: Enable the "bring to front" hotkey
-  $name:tr-TR: "Öne getir" kısayolunu etkinleştir
+  $name:tr-TR: '"Öne getir" kısayolunu etkinleştir'
   $description: Turn this off if the key combination is needed by another app. A hotkey that another app already owns cannot be registered; the reason is written to the Windhawk log.
   $description:tr-TR: Tuş birleşimi başka bir uygulamada gerekiyorsa kapatın. Başka bir uygulamanın kullandığı kısayol kaydedilemez; sebep Windhawk günlüğüne yazılır.
 - hotkeyModifiers: ctrl_alt
