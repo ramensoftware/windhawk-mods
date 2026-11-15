@@ -120,10 +120,6 @@ constexpr wchar_t kTrayNotifyClass[] = L"TrayNotifyWnd";
 constexpr wchar_t kIndicatorClass[] = L"TrayInputIndicatorWClass";
 constexpr wchar_t kImeModeClass[] = L"IMEModeButton";
 constexpr wchar_t kMainIconClass[] = L"InputIndicatorButton";
-constexpr wchar_t kSysPagerClass[] = L"SysPager";
-
-// CTrayChevron::RuntimeClassInitialize creates the chevron with (HMENU)0x5DE.
-constexpr int kChevronCtrlId = 0x05DE;
 
 // CTrayNotify::_SizeWindows asks every band for its minimum size with this
 // private WM_USER-range message. TrayInputIndicatorWClass answers it from
@@ -137,20 +133,24 @@ constexpr UINT kMsgGetMinSize = 0x464;
 // width changes.
 constexpr UINT kMsgRelayout = 0x415;
 
-constexpr int kMaxShift = 8;
-
 struct Tray {
     std::atomic<HWND> hNotify{nullptr};
     std::atomic<HWND> hIndicator{nullptr};
     std::atomic<HWND> hImeMode{nullptr};
     std::atomic<HWND> hMainIcon{nullptr};
-    std::atomic<HWND> shift[kMaxShift];
-    std::atomic<int> shiftCount{0};
     std::atomic<int> bandWidth{0};
 };
 
 Tray g_tray;
 std::atomic<bool> g_unloading{false};
+
+// Untransformed x of the indicator, as last seen in a layout pass. It is the
+// boundary that decides which bands move: everything with a smaller x sits left
+// of the indicator. The value cannot be known earlier than the indicator's own
+// message, and the layout chains the bands to its left before it reaches it, so
+// the shift procs run one pass behind. IndicatorProc notices when the value
+// changed and asks for another pass.
+std::atomic<int> g_indicatorX{0};
 
 void LoadSettings() {
     g_movePosition.store(Wh_GetIntSetting(L"moveToLeft") != 0,
@@ -175,23 +175,22 @@ inline bool IsOwnedByCurrentProcess(HWND hWnd) {
 // this is safe to call on every layout as well as from the mod entry points.
 void EnforceImeModeHidden() {
     HWND hImeMode = g_tray.hImeMode.load(std::memory_order_relaxed);
-    if (IsOwnedByCurrentProcess(hImeMode)) {
+    if (hImeMode) {
         ShowWindow(hImeMode, g_hideImeMode.load(std::memory_order_relaxed)
                                  ? SW_HIDE
                                  : SW_SHOW);
     }
 }
 
-bool Transformable(HWND hWnd) {
+// True when the notification area is horizontal, which is the only case with a
+// horizontal reflow to fix: a vertical taskbar stacks its bands along y.
+bool Transformable() {
     if (g_unloading.load(std::memory_order_relaxed)) {
         return false;
     }
-    HWND hNotify = g_tray.hNotify.load(std::memory_order_relaxed);
-    if (!IsOwnedByCurrentProcess(hNotify) || !IsWindow(hWnd)) {
-        return false;
-    }
     RECT rc;
-    return GetClientRect(hNotify, &rc) &&
+    HWND hNotify = g_tray.hNotify.load(std::memory_order_relaxed);
+    return hNotify && GetClientRect(hNotify, &rc) &&
            (rc.right - rc.left) >= (rc.bottom - rc.top);
 }
 
@@ -219,13 +218,13 @@ int OverrideBandWidth(HWND hWnd) {
     return MulDiv(width, static_cast<int>(DpiOf(hWnd)), 96);
 }
 
-// Takes the first slot.
+// Records the band width the layout will use, and applies the configured one.
 LRESULT CALLBACK IndicatorProc(HWND hWnd, UINT msg, WPARAM wParam,
                                LPARAM lParam, DWORD_PTR /*dwRefData*/) {
     // CTrayNotify::_SizeWindows asks every band for its minimum size right
     // before it chains the bands, so recording the reply is enough: by the time
-    // the children get their WM_WINDOWPOSCHANGING, the width is already known.
-    // No query of our own is needed.
+    // the bands are placed, the width is already known. No query of our own is
+    // needed.
     if (msg == kMsgGetMinSize) {
         LRESULT result = DefSubclassProc(hWnd, msg, wParam, lParam);
         int width = LOWORD(result);
@@ -245,29 +244,34 @@ LRESULT CALLBACK IndicatorProc(HWND hWnd, UINT msg, WPARAM wParam,
         EnforceImeModeHidden();
         auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
         if (g_movePosition.load(std::memory_order_relaxed) &&
-            !(wp->flags & SWP_NOMOVE) && Transformable(hWnd)) {
+            !(wp->flags & SWP_NOMOVE) && Transformable()) {
+            // Everything left of this x moved right by the band width, using the
+            // value from the previous pass. If this pass computes a different
+            // one, a band was added, removed or resized to the left of us and
+            // that pass is off by the difference, so ask for another one.
+            if (wp->x != g_indicatorX.exchange(wp->x,
+                                               std::memory_order_relaxed)) {
+                HWND hNotify = g_tray.hNotify.load(std::memory_order_relaxed);
+                if (hNotify) {
+                    PostMessageW(hNotify, kMsgRelayout, 0, 0);
+                }
+            }
             wp->x = 0;
         }
     }
     return DefSubclassProc(hWnd, msg, wParam, lParam);
 }
 
-// Everything that used to sit left of the indicator moves right by its width,
-// which keeps the total width of the notification area unchanged.
-//
-// This adds to the incoming position instead of placing the window absolutely,
-// which is only correct because every caller passes the *untransformed* x:
-// CTrayNotify::_SizeWindows is the sole producer of band moves, and it chains
-// each rectangle from the band widths starting at x = 0 without ever reading a
-// child's current geometry. A caller that echoed the current position back would
-// be shifted a second time. The other two procs do not have this caveat because
-// they assign absolute positions.
+// Bands that sit left of the indicator move right by its width. Membership is
+// decided per message from the position, so a band that appears later is handled
+// without re-wiring; the CreateWindowExW hook subclasses it when it is created.
 LRESULT CALLBACK ShiftRightProc(HWND hWnd, UINT msg, WPARAM wParam,
                                 LPARAM lParam, DWORD_PTR /*dwRefData*/) {
     if (msg == WM_WINDOWPOSCHANGING) {
         auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
         if (g_movePosition.load(std::memory_order_relaxed) &&
-            !(wp->flags & SWP_NOMOVE) && Transformable(hWnd)) {
+            !(wp->flags & SWP_NOMOVE) && Transformable() &&
+            wp->x < g_indicatorX.load(std::memory_order_relaxed)) {
             wp->x += g_tray.bandWidth.load(std::memory_order_relaxed);
         }
     }
@@ -290,7 +294,7 @@ LRESULT CALLBACK MainIconProc(HWND hWnd, UINT msg, WPARAM wParam,
             g_mainIconWidth.store(wp->cx, std::memory_order_relaxed);
         }
         if (g_hideImeMode.load(std::memory_order_relaxed) &&
-            !(wp->flags & SWP_NOMOVE) && Transformable(hWnd)) {
+            !(wp->flags & SWP_NOMOVE) && Transformable()) {
             int band = g_tray.bandWidth.load(std::memory_order_relaxed);
             if (band > 0 && wp->cx > 0) {
                 wp->x = band > wp->cx ? (band - wp->cx) / 2 : 0;
@@ -339,60 +343,17 @@ inline HWND FindTrayNotify(HWND hTray) {
                  : nullptr;
 }
 
-// explorer registers Shell_TrayWnd in the process that hosts the taskbar. A
-// file-browser explorer.exe never does, so this tells the two apart without
-// waiting for the window itself to exist.
-inline bool IsShellProcess() {
-    WNDCLASS wc;
-    return GetClassInfoW(GetModuleHandleW(nullptr), kTrayWndClass, &wc) != 0;
-}
-
-// Picks the windows to subclass. Subclassing has to target specific windows, so
-// this classification cannot be deferred to the layout pass; everything else
-// about the transform is worked out per layout.
+// Installs the subclasses. Every child of the notification area gets ShiftRightProc
+// and decides for itself whether it moves; the indicator and its main glyph get
+// their own procs. Children created later are picked up by the CreateWindowExW
+// hook, so there is no fixed window set to go stale.
 void SyncNotify(HWND hNotify) {
-    if (!IsOwnedByCurrentProcess(hNotify)) {
-        return;
-    }
-    g_tray.hNotify.store(hNotify, std::memory_order_relaxed);
-
-    // Direct child of the taskbar, which was just verified to be ours.
+    // Direct child of the taskbar, which the caller has already verified is ours.
     HWND hIndicator = FindWindowExW(hNotify, nullptr, kIndicatorClass, nullptr);
     RECT indicatorRect;
     if (!hIndicator || !GetWindowRect(hIndicator, &indicatorRect)) {
         return;
     }
-
-    // Everything that sits left of the indicator. The chevron and SysPager are
-    // also matched by identity, so the classification still holds if this ever
-    // runs while the transform is already in place.
-    HWND shift[kMaxShift];
-    int shiftCount = 0;
-
-    auto addShift = [&](HWND hwnd) {
-        if (!hwnd || hwnd == hIndicator || shiftCount >= kMaxShift) {
-            return;
-        }
-        for (int i = 0; i < shiftCount; ++i) {
-            if (shift[i] == hwnd) {
-                return;
-            }
-        }
-        shift[shiftCount++] = hwnd;
-    };
-
-    for (HWND child = GetWindow(hNotify, GW_CHILD); child;
-         child = GetWindow(child, GW_HWNDNEXT)) {
-        RECT rc;
-        if (!GetWindowRect(child, &rc)) {
-            continue;
-        }
-        if (rc.left < indicatorRect.left ||
-            GetDlgCtrlID(child) == kChevronCtrlId) {
-            addShift(child);
-        }
-    }
-    addShift(FindWindowExW(hNotify, nullptr, kSysPagerClass, nullptr));
 
     g_tray.hIndicator.store(hIndicator, std::memory_order_relaxed);
     g_tray.hImeMode.store(
@@ -401,11 +362,6 @@ void SyncNotify(HWND hNotify) {
     HWND hMainIcon =
         FindWindowExW(hIndicator, nullptr, kMainIconClass, nullptr);
     g_tray.hMainIcon.store(hMainIcon, std::memory_order_relaxed);
-    g_tray.shiftCount.store(shiftCount, std::memory_order_relaxed);
-    for (int i = 0; i < kMaxShift; ++i) {
-        g_tray.shift[i].store(i < shiftCount ? shift[i] : nullptr,
-                              std::memory_order_relaxed);
-    }
 
     // The glyph width is already there whenever the indicator was laid out at
     // least once, so take it now instead of waiting for the next layout pass.
@@ -428,8 +384,8 @@ void SyncNotify(HWND hNotify) {
     //
     // A hidden indicator answers the size query with 0 (see
     // CTrayInputIndicator::v_WndProc, case 1124), so its stale rectangle must
-    // not leak into the seed: that would shift the bands for one pass by a width
-    // the layout did not allocate.
+    // not leak into the seed: that would move the bands by a width the layout
+    // did not allocate.
     int seed = IsWindowVisible(hIndicator)
                    ? indicatorRect.right - indicatorRect.left
                    : 0;
@@ -439,13 +395,16 @@ void SyncNotify(HWND hNotify) {
     }
     g_tray.bandWidth.store(seed, std::memory_order_relaxed);
 
+    for (HWND child = GetWindow(hNotify, GW_CHILD); child;
+         child = GetWindow(child, GW_HWNDNEXT)) {
+        if (child != hIndicator) {
+            WindhawkUtils::SetWindowSubclassFromAnyThread(child, ShiftRightProc,
+                                                          0);
+        }
+    }
     WindhawkUtils::SetWindowSubclassFromAnyThread(hIndicator, IndicatorProc, 0);
     if (hMainIcon) {
         WindhawkUtils::SetWindowSubclassFromAnyThread(hMainIcon, MainIconProc,
-                                                      0);
-    }
-    for (int i = 0; i < shiftCount; ++i) {
-        WindhawkUtils::SetWindowSubclassFromAnyThread(shift[i], ShiftRightProc,
                                                       0);
     }
 }
@@ -453,22 +412,22 @@ void SyncNotify(HWND hNotify) {
 // Re-runs the whole notification area layout. kMsgRelayout reaches
 // CTrayNotify::_ResizeOnIconChange, which notifies the host through
 // _OnSizeChanged first and only then lays the children out, so the container is
-// already resized by the time the children are placed. A plain WM_SIZE would
-// only re-lay out the children inside the current rectangle, which is wrong
-// whenever the band width changed.
+// already resized by the time the bands are placed. A plain WM_SIZE would only
+// re-lay out the children inside the current rectangle, which is wrong whenever
+// the band width changed.
 void Refresh(HWND hNotify) {
-    // PostMessage crosses process boundaries, so the target is verified first.
-    if (IsOwnedByCurrentProcess(hNotify)) {
+    if (hNotify) {
         PostMessageW(hNotify, kMsgRelayout, 0, 0);
     }
 }
 
-// The one place that wires the mod up. Both entry points call it, and each can
-// reach it at most once, so it carries no guard of its own: SyncNotify
-// re-subclasses idempotently (SetWindowSubclass replaces a subclass that has the
-// same procedure), EnforceImeModeHidden is a no-op when the window is already in
-// the requested state, and Refresh only posts a message.
+// The one place that wires the mod up.
 void HandleIdentifiedTrayNotify(HWND hNotify) {
+    if (!IsOwnedByCurrentProcess(hNotify)) {
+        return;
+    }
+
+    g_tray.hNotify.store(hNotify, std::memory_order_relaxed);
     SyncNotify(hNotify);
     EnforceImeModeHidden();
     Refresh(hNotify);
@@ -478,7 +437,7 @@ void HandleIdentifiedTrayNotify(HWND hNotify) {
 // when Wh_ModAfterInit runs. CTrayNotify::TrayNotifyCreate creates it through
 // CreateWindowExW with the class name passed as a string literal, so the textual
 // comparison below is sufficient and the atom case never reaches it.
-void HandleCreatedWindow(HWND hWnd, LPCWSTR className) {
+void HandleCreatedWindow(HWND hWnd, LPCWSTR className, DWORD style) {
     if (g_unloading.load(std::memory_order_relaxed)) {
         return;
     }
@@ -488,12 +447,20 @@ void HandleCreatedWindow(HWND hWnd, LPCWSTR className) {
     BOOL textualClassName =
         (reinterpret_cast<ULONG_PTR>(className) &
          ~static_cast<ULONG_PTR>(0xffff)) != 0;
-    if (!textualClassName || _wcsicmp(className, kTrayNotifyClass)) {
+    if (textualClassName && !_wcsicmp(className, kTrayNotifyClass)) {
+        Wh_Log(L"TrayNotifyWnd created, wiring up");
+        HandleIdentifiedTrayNotify(hWnd);
         return;
     }
 
-    Wh_Log(L"TrayNotifyWnd created, wiring up");
-    HandleIdentifiedTrayNotify(hWnd);
+    // A band created after wiring, such as the touch keyboard button when it is
+    // switched on. GA_PARENT rather than GetParent, which returns the owner for
+    // popup windows and would match a popup owned by the taskbar. The WS_CHILD
+    // test keeps this off the common path of top-level window creation.
+    HWND hNotify = g_tray.hNotify.load(std::memory_order_relaxed);
+    if ((style & WS_CHILD) && hNotify && GetAncestor(hWnd, GA_PARENT) == hNotify) {
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ShiftRightProc, 0);
+    }
 }
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
@@ -507,7 +474,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR className,
                                          x, y, cx, cy, parent, menu, instance,
                                          param);
     if (hWnd) {
-        HandleCreatedWindow(hWnd, className);
+        HandleCreatedWindow(hWnd, className, style);
     }
     return hWnd;
 }
@@ -527,17 +494,11 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    // explorer registers Shell_TrayWnd in the process that hosts the taskbar; a
-    // file-browser explorer.exe never does. The check also fails when the shell
-    // process has not got that far yet, in which case the creation hook picks the
-    // notification area up later.
-    if (!IsShellProcess()) {
-        return;
-    }
-
+    // FindCurrentProcessTaskbarWindow already scopes the search to this process,
+    // so a file-browser explorer.exe simply finds nothing here.
     HWND hNotify = FindTrayNotify(FindCurrentProcessTaskbarWindow());
     if (!hNotify) {
-        Wh_Log(L"Notification area not created yet, waiting for the hook");
+        Wh_Log(L"No notification area in this process yet, waiting for the hook");
         return;
     }
 
@@ -558,18 +519,23 @@ void Wh_ModUninit() {
 
     // Remove synchronously: the DLL is about to be unloaded and a lingering
     // subclass proc would be a dangling pointer.
+    //
+    // Each removal is a SendMessage that SubclassProcWrapper acts on only if it
+    // is installed, otherwise the message falls through to the window's own
+    // procedure, so a proc that was never installed is a no-op. The guards are
+    // only about having a handle to send it to.
+    HWND hNotify = g_tray.hNotify.load(std::memory_order_relaxed);
+    if (hNotify) {
+        for (HWND child = GetWindow(hNotify, GW_CHILD); child;
+             child = GetWindow(child, GW_HWNDNEXT)) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(child,
+                                                            ShiftRightProc);
+        }
+    }
     HWND hIndicator = g_tray.hIndicator.load(std::memory_order_relaxed);
     if (hIndicator) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hIndicator,
                                                         IndicatorProc);
-    }
-    int shiftCount = g_tray.shiftCount.load(std::memory_order_relaxed);
-    for (int i = 0; i < shiftCount; ++i) {
-        HWND hwnd = g_tray.shift[i].load(std::memory_order_relaxed);
-        if (hwnd) {
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd,
-                                                            ShiftRightProc);
-        }
     }
     HWND hMainIcon = g_tray.hMainIcon.load(std::memory_order_relaxed);
     if (hMainIcon) {
