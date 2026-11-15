@@ -3,8 +3,8 @@
 // process, documented at:
 // https://github.com/ramensoftware/windhawk/wiki/Mod-submission-review-process
 //
-// Loaded by actions/github-script from the pr_labels and pr_commands workflows.
-// All API calls run as the windhawk-reviewer app.
+// Loaded by actions/github-script from the pr_labels, pr_commands and
+// pr_queued_ai_review workflows. All API calls run as the windhawk-reviewer app.
 
 const { react, commentOnFailure } = require('./comment_commands.cjs');
 
@@ -32,6 +32,11 @@ const FLOW_LABELS = [
   WAITING_FOR_AI_REVIEW,
   WAITING_FOR_REVIEWER,
 ];
+
+// Marks a pull request with an /ai-review that waits for the validation of the
+// head commit to complete. It's not a flow label, since the pull request keeps
+// waiting for its author meanwhile.
+const AI_REVIEW_QUEUED = 'ai-review-queued';
 
 const WIKI_URL =
   'https://github.com/ramensoftware/windhawk/wiki/Mod-submission-review-process';
@@ -104,7 +109,15 @@ function flowLabelsOf(labels) {
 }
 
 /**
- * Reads the flow labels that are on the pull request right now. An event payload
+ * @param {{ name: string }[]} labels
+ * @returns {boolean}
+ */
+function isAiReviewQueued(labels) {
+  return labels.some((label) => label.name === AI_REVIEW_QUEUED);
+}
+
+/**
+ * Reads the labels that are on the pull request right now. An event payload
  * carries the labels from the moment the event fired, which another run of the
  * flow may have changed by the time this one starts.
  *
@@ -113,17 +126,15 @@ function flowLabelsOf(labels) {
  * @param {string} params.owner
  * @param {string} params.repo
  * @param {number} params.prNumber
- * @returns {Promise<string[]>}
+ * @returns {Promise<{ name: string }[]>}
  */
-async function getCurrentFlowLabels({ github, owner, repo, prNumber }) {
-  const labels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+function getCurrentLabels({ github, owner, repo, prNumber }) {
+  return github.paginate(github.rest.issues.listLabelsOnIssue, {
     owner,
     repo,
     issue_number: prNumber,
     per_page: 100,
   });
-
-  return flowLabelsOf(labels);
 }
 
 /**
@@ -286,15 +297,21 @@ function formatOutOfScopeRefusal(outOfScopeReason) {
 }
 
 /**
+ * Whether a command can be carried out, has to wait for the validation of the
+ * head commit, or is refused for the given reason.
+ *
+ * @typedef {{ status: 'ready' } | { status: 'pending' } | { status: 'refused', reason: string }} Verdict
+ */
+
+/**
  * @param {object} params
  * @param {Github} params.github
  * @param {string} params.owner
  * @param {string} params.repo
  * @param {RestPullRequest} params.pullRequest
- * @returns {Promise<string | null>} The reason the pull request can't be
- *   reviewed, or null when the validation of the head commit passed.
+ * @returns {Promise<Verdict>} The verdict of the validation of the head commit.
  */
-async function getValidationFailureReason({ github, owner, repo, pullRequest }) {
+async function getValidationVerdict({ github, owner, repo, pullRequest }) {
   const { data } = await github.rest.checks.listForRef({
     owner,
     repo,
@@ -306,14 +323,11 @@ async function getValidationFailureReason({ github, owner, repo, pullRequest }) 
   const checkRun = data.check_runs.sort((a, b) => b.id - a.id)[0];
 
   if (!checkRun || checkRun.status !== 'completed') {
-    return (
-      "the validation of the current commit hasn't completed yet. " +
-      `Comment again once the "${VALIDATION_CHECK_NAME}" [check](${pullRequest.html_url}/checks) passes.`
-    );
+    return { status: 'pending' };
   }
 
   if (checkRun.conclusion === 'success') {
-    return null;
+    return { status: 'ready' };
   }
 
   const annotations = await github.paginate(github.rest.checks.listAnnotations, {
@@ -333,7 +347,10 @@ async function getValidationFailureReason({ github, owner, repo, pullRequest }) 
 
   // A crash or a cancelled run fails the check without reporting any errors.
   if (errors.length === 0) {
-    return `the [validation](${checkRun.html_url}) of the current commit didn't pass, see the check for details.`;
+    return {
+      status: 'refused',
+      reason: `the [validation](${checkRun.html_url}) of the current commit didn't pass, see the check for details.`,
+    };
   }
 
   // The messages quote the mod source, so they're shown verbatim, in a fence
@@ -342,11 +359,13 @@ async function getValidationFailureReason({ github, owner, repo, pullRequest }) 
   const longestBacktickRun = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
   const fence = '`'.repeat(Math.max(3, longestBacktickRun + 1));
 
-  return (
-    `the [validation](${checkRun.html_url}) of the current commit reported errors, which have to be fixed first:\n\n` +
-    `${fence}text\n${text}\n${fence}\n\n` +
-    `Push a fix, then comment \`${AI_REVIEW_COMMAND}\`.`
-  );
+  return {
+    status: 'refused',
+    reason:
+      `the [validation](${checkRun.html_url}) of the current commit reported errors, which have to be fixed first:\n\n` +
+      `${fence}text\n${text}\n${fence}\n\n` +
+      `Push a fix, then comment \`${AI_REVIEW_COMMAND}\`.`,
+  };
 }
 
 /**
@@ -431,14 +450,20 @@ async function handlePullRequestEvent({ github, context, core }) {
     return;
   }
 
-  const currentFlowLabels = await getCurrentFlowLabels({ github, owner, repo, prNumber });
+  const currentLabels = await getCurrentLabels({ github, owner, repo, prNumber });
+  const currentFlowLabels = flowLabelsOf(currentLabels);
 
   const args = { github, core, owner, repo, prNumber, currentFlowLabels };
 
   // A pull request that is no longer open is out of the flow, and the labels
-  // only describe whose turn it is while it's open.
+  // only describe whose turn it is while it's open. A queued AI review is
+  // dropped as well.
   if (payload.action === 'closed') {
     await removeFlowLabels(args);
+    if (isAiReviewQueued(currentLabels)) {
+      await removeLabels({ github, owner, repo, prNumber, labels: [AI_REVIEW_QUEUED] });
+      core.info(`Removed ${AI_REVIEW_QUEUED} from pull request #${prNumber}`);
+    }
     return;
   }
 
@@ -481,38 +506,80 @@ async function handlePullRequestEvent({ github, context, core }) {
 /**
  * @param {object} params
  * @param {Github} params.github
+ * @param {string} params.owner
+ * @param {string} params.repo
+ * @param {RestPullRequest} params.pullRequest
+ * @param {string[]} params.currentFlowLabels
+ * @returns {Promise<Verdict>}
+ */
+async function getAiReviewVerdict({ github, owner, repo, pullRequest, currentFlowLabels }) {
+  if (pullRequest.state !== 'open') {
+    return { status: 'refused', reason: 'this pull request is closed.' };
+  }
+
+  if (currentFlowLabels.includes(WAITING_FOR_AI_REVIEW)) {
+    return {
+      status: 'refused',
+      reason: 'an AI review was already requested, please wait for it to be posted.',
+    };
+  }
+
+  const outOfScopeReason = await getOutOfScopeReason({
+    github,
+    owner,
+    repo,
+    prNumber: pullRequest.number,
+  });
+  if (outOfScopeReason) {
+    return { status: 'refused', reason: formatOutOfScopeRefusal(outOfScopeReason) };
+  }
+
+  // Last, so that only a request with nothing but the validation left to wait
+  // for is queued.
+  return getValidationVerdict({ github, owner, repo, pullRequest });
+}
+
+/**
+ * Requests an AI review, or queues the request while the validation of the
+ * head commit is running. handleValidationCompleted runs a queued request again
+ * once the validation completes.
+ *
+ * @param {object} params
+ * @param {Github} params.github
  * @param {Core} params.core
  * @param {string} params.owner
  * @param {string} params.repo
  * @param {RestPullRequest} params.pullRequest
  * @param {string[]} params.currentFlowLabels
  * @returns {Promise<string | null>} The reason the command was refused, or null
- *   when it was carried out.
+ *   when it was carried out or queued.
  */
 async function runAiReview({ github, core, owner, repo, pullRequest, currentFlowLabels }) {
   const prNumber = pullRequest.number;
+  const isQueued = isAiReviewQueued(pullRequest.labels ?? []);
+  const verdict = await getAiReviewVerdict({ github, owner, repo, pullRequest, currentFlowLabels });
 
-  if (pullRequest.state !== 'open') {
-    return 'this pull request is closed.';
+  if (verdict.status === 'pending') {
+    if (!isQueued) {
+      await github.rest.issues.addLabels({
+        owner,
+        repo,
+        issue_number: prNumber,
+        labels: [AI_REVIEW_QUEUED],
+      });
+    }
+
+    core.info(`An AI review is queued for pull request #${prNumber}`);
+    return null;
   }
 
-  if (currentFlowLabels.includes(WAITING_FOR_AI_REVIEW)) {
-    return 'an AI review was already requested, please wait for it to be posted.';
+  if (isQueued) {
+    await removeLabels({ github, owner, repo, prNumber, labels: [AI_REVIEW_QUEUED] });
+    core.info(`Removed ${AI_REVIEW_QUEUED} from pull request #${prNumber}`);
   }
 
-  const outOfScopeReason = await getOutOfScopeReason({ github, owner, repo, prNumber });
-  if (outOfScopeReason) {
-    return formatOutOfScopeRefusal(outOfScopeReason);
-  }
-
-  const validationFailureReason = await getValidationFailureReason({
-    github,
-    owner,
-    repo,
-    pullRequest,
-  });
-  if (validationFailureReason) {
-    return validationFailureReason;
+  if (verdict.status === 'refused') {
+    return verdict.reason;
   }
 
   if (AI_REVIEW_UNAVAILABLE) {
@@ -573,19 +640,13 @@ async function runReadyForReviewer({
     return 'an AI review is being prepared, please wait for it to be posted.';
   }
 
+  if (isAiReviewQueued(pullRequest.labels ?? [])) {
+    return 'an AI review is queued to run once the validation of the current commit passes, please wait for it to be posted.';
+  }
+
   const outOfScopeReason = await getOutOfScopeReason({ github, owner, repo, prNumber });
   if (outOfScopeReason) {
     return formatOutOfScopeRefusal(outOfScopeReason);
-  }
-
-  const validationFailureReason = await getValidationFailureReason({
-    github,
-    owner,
-    repo,
-    pullRequest,
-  });
-  if (validationFailureReason) {
-    return validationFailureReason;
   }
 
   const headSha = pullRequest.head.sha;
@@ -603,6 +664,20 @@ async function runReadyForReviewer({
       `the most recent AI review covers ${reviewedSha.slice(0, 7)}, but the current head of this pull request is ${headSha.slice(0, 7)}. ` +
       `Comment \`${AI_REVIEW_COMMAND}\` to get a review of the current code.`
     );
+  }
+
+  // Last, so that the refusals above don't wait for the validation to complete.
+  const validationVerdict = await getValidationVerdict({ github, owner, repo, pullRequest });
+
+  if (validationVerdict.status === 'pending') {
+    return (
+      "the validation of the current commit hasn't completed yet. " +
+      `Comment again once the "${VALIDATION_CHECK_NAME}" [check](${pullRequest.html_url}/checks) passes.`
+    );
+  }
+
+  if (validationVerdict.status === 'refused') {
+    return validationVerdict.reason;
   }
 
   await setFlowLabel({
@@ -742,7 +817,80 @@ async function runComment({ github, core, owner, repo, payload, comment, issue, 
   await react({ github, core, owner, repo, commentId: comment.id, content: 'eyes' });
 }
 
+/**
+ * Handles workflow_run for a completed validation of the head commit. Runs the
+ * queued AI review of the pull request again, which either requests the review,
+ * or refuses it and tells the author why.
+ *
+ * @param {object} params
+ * @param {Github} params.github
+ * @param {Context} params.context
+ * @param {Core} params.core
+ * @param {number} params.prNumber
+ */
+async function handleValidationCompleted({ github, context, core, prNumber }) {
+  const { owner, repo } = context.repo;
+
+  if (!isFlowEnabled(prNumber)) {
+    core.info(`The flow is not enabled for pull request #${prNumber}`);
+    return;
+  }
+
+  const { data: pullRequest } = await github.rest.pulls.get({
+    owner,
+    repo,
+    pull_number: prNumber,
+  });
+
+  // A closed pull request is out of the flow, and its labels are removed.
+  if (pullRequest.state !== 'open') {
+    core.info(`Ignoring closed pull request #${prNumber}`);
+    return;
+  }
+
+  if (!isAiReviewQueued(pullRequest.labels ?? [])) {
+    core.info(`No AI review is queued for pull request #${prNumber}`);
+    return;
+  }
+
+  await commentOnFailure(
+    {
+      github,
+      context,
+      core,
+      issueNumber: prNumber,
+      message: `Something went wrong while running the queued \`${AI_REVIEW_COMMAND}\`.`,
+    },
+    async () => {
+      const refusalReason = await runAiReview({
+        github,
+        core,
+        owner,
+        repo,
+        pullRequest,
+        currentFlowLabels: flowLabelsOf(pullRequest.labels ?? []),
+      });
+
+      if (!refusalReason) {
+        return;
+      }
+
+      // The label doesn't record who asked for the review, so the refusal goes
+      // to the author.
+      core.info(`Refused the queued ${AI_REVIEW_COMMAND}: ${refusalReason}`);
+      await postComment({
+        github,
+        owner,
+        repo,
+        prNumber,
+        body: `@${pullRequest.user.login} the queued \`${AI_REVIEW_COMMAND}\` can't be applied: ${refusalReason}`,
+      });
+    },
+  );
+}
+
 module.exports = {
   handlePullRequestEvent,
   handleComment,
+  handleValidationCompleted,
 };
