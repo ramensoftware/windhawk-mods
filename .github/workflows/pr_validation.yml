@@ -2,13 +2,21 @@ name: PR mod validation
 
 on:
   pull_request:
+    # The validation covers the PR description, so edits run it again. Title
+    # edits do too, since a skipped job's check run would hide the last result.
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
     branches:
       - main
 
 env:
   PYTHONUTF8: '1'
 
-# The pull request comments are read on top of the checked out code.
+# The pull request description and comments are read on top of the checked out
+# code.
 permissions:
   contents: read
   pull-requests: read
@@ -37,6 +45,21 @@ jobs:
       - name: Install Python dependencies
         run: python -m pip install pyyaml
 
+      # A re-run gets the event payload of the original run, so the description
+      # is read here to pick up the edits made since.
+      - name: Get the PR description
+        id: pr-body
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          delimiter="EOF_$(openssl rand -hex 16)"
+          {
+            echo "body<<$delimiter"
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.body // ""'
+            echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+
       # The maintainer verifies X (Twitter) accounts in pull request comments.
       # Reading them here lets a re-run pick up a verification that was just
       # posted. 4129781 is the user ID of m417z, the maintainer.
@@ -59,7 +82,7 @@ jobs:
         env:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_AUTHOR_ID: ${{ github.event.pull_request.user.id }}
-          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BODY: ${{ steps.pr-body.outputs.body }}
           PR_MAINTAINER_COMMENTS: ${{ steps.maintainer-comments.outputs.comments }}
         run: |
           python .github/pr_validation.py
