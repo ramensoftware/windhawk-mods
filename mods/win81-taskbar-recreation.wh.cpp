@@ -31,13 +31,13 @@ the Windows build, DPI, taskbar replacement and other shell mods.
 
 ## Features
 
-- Seven skin presets, in this order: Windows 7, Windows 7 Aero Basic, Windows Server 2008 R2, Windows 7 Beta 7000, Windows 8.0 Beta 8148, Windows 8.0 and Windows 8.1; Custom keeps individual Start options.
+- Nine skin presets, in this order: Windows 7, Windows 7 Aero Basic, Windows Server 2008 R2, Windows 7 Beta 7000, Windows 7 build 7048, Windows 8.0 Beta 8148, Windows 8 Release Preview, Windows 8.0 and Windows 8.1; Custom keeps individual Start options.
 - Task buttons, window previews, Jump Lists, notification icons and toolbars.
 - An integrated notification area and taskbar, with a fallback to the native bar if the integrated tray cannot start.
 - Horizontal and vertical layouts, Aero Peek and classic flyout options.
 - Change notification area icon visibility using the Control Panel page that the mod attempts to restore, including on Windows 11; availability and behavior can vary.
-- Static taskbar textures and system colors. Optional experimental live blur uses the unsupported per-window accent policy approach from Taskbar Background Helper (m417z, GPL-3.0); enabled by default for Windows 7 and Windows 8 Beta (not Aero Basic) and not guaranteed to work with layered windows. Windows 7 skin adds a cursor-following, icon-colored hover glow for running apps.
-- In the Windows 7, Windows 7 Aero Basic, Windows 7 Beta 7000, Windows 8.0 Beta and Windows 8.1 skins, the Start button uses its pressed appearance while a recognized Start menu is visible, even when the pointer hovers over it. Visibility tracking is best-effort and updates asynchronously; recognition and monitor placement may vary with Start replacements. The Windows 8.0 hot corner does not use this button state.
+- Static taskbar textures and system colors. Optional experimental live blur uses the unsupported per-window accent policy approach from Taskbar Background Helper (m417z, GPL-3.0); enabled by default for Windows 7, Windows 8 Beta and Windows 8 Release Preview (not Aero Basic) and not guaranteed to work with layered windows. Windows 7 skin adds a cursor-following, icon-colored hover glow for running apps.
+- In the Windows 7, Windows 7 Aero Basic, Windows 7 Beta 7000, Windows 7 build 7048, Windows 8.0 Beta and Windows 8.1 skins, the Start button uses its pressed appearance while a recognized Start menu is visible, even when the pointer hovers over it. Visibility tracking is best-effort and updates asynchronously; recognition and monitor placement may vary with Start replacements. The Windows 8.0 hot corner does not use this button state.
 - Local taskbar pins and ordering: the mod does not change Windows pins. Drag to an empty task area to pin; hover a running app to activate its window.
 - An advanced battery flyout option; compatibility may vary between Windows builds.
 - Optional secondary taskbars show pins, windows and the shared private tray. Secondary AppBar registration reserves work area when necessary and allowed by the shell. DPI scaling and flyout positioning are best-effort.
@@ -62,9 +62,17 @@ the Windows build, DPI, taskbar replacement and other shell mods.
 
 ![Windows 7 Beta 7000 taskbar](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7beta7000.png)
 
+### Windows 7 build 7048
+
+![Windows 7 build 7048 taskbar](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/beta7048.png)
+
 ### Windows 8.0 Beta 8148
 
 ![Windows 8 Beta taskbar](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8betatask.png)
+
+### Windows 8 Release Preview (build 8400)
+
+![Windows 8 Release Preview taskbar](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/8releasepreview.png)
 
 ### Windows 8.0
 
@@ -116,17 +124,20 @@ confirms resolution, not whether a fresh download occurred.
 - Skins are approximations; Windows 7 popup frames can use the current system's DWM frame when available. The Aero Basic notification overflow uses its own thin border instead; the Basic window list is opaque and does not use DWM thumbnails.
 - The Windows 8 Start corner is illustrated, not a live Start-screen preview.
 - Vertical layout, Aero Peek and classic flyouts may vary between Windows builds.
-- On first use, the mod downloads `pnidui.dll`, `SndVolSSO.dll` and `batmeter.dll`. The advanced battery flyout also downloads `stobject.dll` and a Windows 10 1511 x64 language-pack CAB selected from the Windows UI language (Italian, English, Spanish, French, Portuguese Portugal or Portuguese Brazil; other languages use English). Spanish uses es-ES and French uses fr-FR; regional variants are not all available. The CAB is temporary and is deleted after successful extraction of the verified battery MUI. Windows resource fallback may still affect some strings. Downloaded files are checked against pinned SHA-256 hashes. The Windows 10 1511 `stobject.dll` is loaded into the dedicated tool process and stays loaded until that process exits.
+- On first use, the mod downloads `pnidui.dll`, `SndVolSSO.dll` and `batmeter.dll`. Windows 7 and Server 2008 R2 presets also download Windows 7 `pnidui.dll` and `batmeter.dll` resources from the Microsoft symbol server. These are pinned, cached separately, and loaded as data only; if unavailable, the existing 8.1 artwork is used. The advanced battery flyout also downloads `stobject.dll` and a Windows 10 1511 x64 language-pack CAB selected from the Windows UI language (Italian, English, Spanish, French, Portuguese Portugal or Portuguese Brazil; other languages use English). Spanish uses es-ES and French uses fr-FR; regional variants are not all available. The CAB is temporary and is deleted after successful extraction of the verified battery MUI. Windows resource fallback may still affect some strings. Downloaded files are checked against pinned SHA-256 hashes. The Windows 10 1511 `stobject.dll` is loaded into the dedicated tool process and stays loaded until that process exits.
 - The integrated tray is enabled by default. It creates a private `Shell_TrayWnd` host and hides the native taskbar. Applications and mods that find the taskbar by class can encounter the private host; tray and AppBar traffic routed to it is processed or forwarded by the mod's UI thread. The host supplies taskbar geometry and forwards wheel input in supported cases, but it does not contain the native taskbar's `ReBarWindow32`, `MSTaskSwWClass`, Start button or XAML content. Mods that depend on those windows or content can fail or conflict. Disable the integrated tray and reload the mod if this compatibility trade-off is unsuitable.
 - The integrated tray keeps “Always show all icons” in memory for the current session. It starts from the Windows preference and does not write that preference to the system registry; it is reset when the mod reloads.
 - The Notification Area Icons page uses a private COM provider. The mod attempts to close its hosting window before unloading the Explorer hooks. Behavior has not been verified on every Windows build; if the window cannot be identified or does not respond, close the page before disabling, updating, or reloading the mod.
 - Keep a way to disable the mod or restart Explorer.
 - Windows 11 Taskbar Styler and its skins are technical references; their authors are not involved in this mod.
 
+The integrated primary taskbar follows the Windows taskbar auto-hide setting using the running Explorer AppBar state, intercepted AppBar requests and setting-change notifications. The `StuckRects3` registry value is a startup fallback only. The registry format is undocumented and compatibility with third-party settings dialogs must be verified on the target system. Secondary bars are unchanged; the native bar or other AppBars may still reserve work area.
+
 ## Credits
 
 - Windows Server 2008 R2 classic is an approximation of the supplied reference for the mod's taskbar. It does not change the desktop background, system theme or external Start menu.
 - RetroBar Windows 2000 theme (dremin and contributors, Apache-2.0): classic colors and bevel reference; https://github.com/dremin/RetroBar/blob/master/LICENSE
+- RetroBar and ManagedShell contributors (Apache-2.0): experimental auto-hide behavior adapted from Taskbar.xaml.cs and AppBarWindow.cs; https://github.com/cairoshell/ManagedShell/blob/master/LICENSE
 - Win7Taskbar contributors: Aero Basic taskbar texture and theme reference (GPL-3.0-or-later).
 - WinBoeing777 - Testing on Windows 10 22H2 and Suggestions
 - Cips - Testing on Windows 11 25H2
@@ -161,7 +172,9 @@ Use at your own risk. You are responsible for how you use the mod and for comply
     - win7basic: "Windows 7 Aero Basic"
     - server2008r2: "Windows Server 2008 R2"
     - win7beta7000: "Windows 7 Beta 7000"
+    - win7build7048: "Windows 7 build 7048"
     - win8beta: "Windows 8.0 Beta 8148"
+    - win8releasepreview: "Windows 8 Release Preview (8400)"
     - win8: "Windows 8.0"
     - win81: "Windows 8.1"
     - custom: "Custom (individual options)"
@@ -170,7 +183,9 @@ Use at your own risk. You are responsible for how you use the mod and for comply
     - win7basic: "Windows 7 Aero Basic"
     - server2008r2: "Windows Server 2008 R2"
     - win7beta7000: "Windows 7 Beta 7000"
+    - win7build7048: "Windows 7 build 7048"
     - win8beta: "Windows 8.0 Beta 8148"
+    - win8releasepreview: "Windows 8 Release Preview (8400)"
     - win8: "Windows 8.0"
     - win81: "Windows 8.1"
     - custom: "Personalizzata (opzioni singole)"
@@ -179,7 +194,9 @@ Use at your own risk. You are responsible for how you use the mod and for comply
     - win7basic: "Windows 7 Aero Basic"
     - server2008r2: "Windows Server 2008 R2"
     - win7beta7000: "Windows 7 Beta 7000"
+    - win7build7048: "Windows 7 build 7048"
     - win8beta: "Windows 8.0 Beta 8148"
+    - win8releasepreview: "Windows 8 Release Preview (8400)"
     - win8: "Windows 8.0"
     - win81: "Windows 8.1"
     - custom: "Personalizado (opciones individuales)"
@@ -188,7 +205,9 @@ Use at your own risk. You are responsible for how you use the mod and for comply
     - win7basic: "Windows 7 Aero Basic"
     - server2008r2: "Windows Server 2008 R2"
     - win7beta7000: "Windows 7 Beta 7000"
+    - win7build7048: "Windows 7 build 7048"
     - win8beta: "Windows 8.0 Bêta 8148"
+    - win8releasepreview: "Windows 8 Release Preview (8400)"
     - win8: "Windows 8.0"
     - win81: "Windows 8.1"
     - custom: "Personnalisé (options individuelles)"
@@ -197,7 +216,9 @@ Use at your own risk. You are responsible for how you use the mod and for comply
     - win7basic: "Windows 7 Aero Basic"
     - server2008r2: "Windows Server 2008 R2"
     - win7beta7000: "Windows 7 Beta 7000"
+    - win7build7048: "Windows 7 build 7048"
     - win8beta: "Windows 8.0 Beta 8148"
+    - win8releasepreview: "Windows 8 Release Preview (8400)"
     - win8: "Windows 8.0"
     - win81: "Windows 8.1"
     - custom: "Personalizado (opções individuais)"
@@ -346,11 +367,11 @@ Use at your own risk. You are responsible for how you use the mod and for comply
   $name:es: "Desenfoque dinámico experimental (API de Windows no documentada)"
   $name:fr: "Flou dynamique expérimental (API Windows non documentée)"
   $name:pt: "Desfoque dinâmico experimental (API Windows não documentada)"
-  $description: "This setting enables experimental live blur, on by default only for the Windows 7 and Windows 8 Beta skins, except Windows 7 Aero Basic. If unavailable or the request fails, the original background remains. It requests DWM blur only for recreated taskbar windows. Compatibility with layered rendering, Windows builds and other mods is not guaranteed. Disable it if the bar disappears or glitches. This is not the original Windows 7 glass renderer."
-  $description:it: "Questa impostazione attiva la sfocatura dinamica sperimentale, attiva per impostazione predefinita solo per le skin Windows 7 e Windows 8 Beta, esclusa Windows 7 Aero Basic. Se non è disponibile o la richiesta fallisce, rimane lo sfondo originale. Richiede il blur DWM solo per le finestre della barra ricreata. La compatibilità con la trasparenza per pixel, le versioni di Windows e le altre mod non è garantita. Disattivala se la barra scompare o presenta difetti. Non è il renderer originale del vetro di Windows 7."
-  $description:es: "Esta configuración activa el desenfoque dinámico experimental, activado de forma predeterminada solo para los estilos Windows 7 y Windows 8 Beta, excepto Windows 7 Aero Basic. Si no está disponible o falla la solicitud, se conserva el fondo original. Solicita desenfoque DWM solo para las ventanas de la barra recreada. La compatibilidad con la transparencia por píxel, las versiones de Windows y otros mods no está garantizada. Desactívala si la barra desaparece o presenta fallos. No es el renderizador de cristal original de Windows 7."
-  $description:fr: "Ce paramètre active le flou dynamique expérimental, activé par défaut uniquement pour les thèmes Windows 7 et Windows 8 Beta, sauf Windows 7 Aero Basic. Si le flou est indisponible ou si la demande échoue, le fond d’origine est conservé. Il demande le flou DWM uniquement pour les fenêtres de la barre recréée. La compatibilité avec la transparence par pixel, les versions de Windows et les autres mods n’est pas garantie. Désactivez-le si la barre disparaît ou présente des défauts. Ce n’est pas le moteur de rendu du verre original de Windows 7."
-  $description:pt: "Esta configuração ativa o desfoque dinâmico experimental, ativado por padrão apenas para os temas Windows 7 e Windows 8 Beta, exceto Windows 7 Aero Basic. Se não estiver disponível ou se a solicitação falhar, o fundo original será mantido. Ela solicita o desfoque DWM apenas para as janelas da barra recriada. A compatibilidade com transparência por pixel, versões do Windows e outros mods não é garantida. Desative-a se a barra desaparecer ou apresentar falhas. Este não é o renderizador de vidro original do Windows 7."
+  $description: "This setting enables experimental live blur, on by default for Windows 7, Windows 8 Beta and Windows 8 Release Preview, except Windows 7 Aero Basic. If unavailable or the request fails, the original background remains. It requests DWM blur only for recreated taskbar windows. Compatibility with layered rendering, Windows builds and other mods is not guaranteed. Disable it if the bar disappears or glitches. This is not the original Windows 7 glass renderer."
+  $description:it: "Questa impostazione attiva la sfocatura dinamica sperimentale, attiva per impostazione predefinita per le skin Windows 7, Windows 8 Beta e Windows 8 Release Preview, esclusa Windows 7 Aero Basic. Se non è disponibile o la richiesta fallisce, rimane lo sfondo originale. Richiede il blur DWM solo per le finestre della barra ricreata. La compatibilità con la trasparenza per pixel, le versioni di Windows e le altre mod non è garantita. Disattivala se la barra scompare o presenta difetti. Non è il renderer originale del vetro di Windows 7."
+  $description:es: "Esta configuración activa el desenfoque dinámico experimental, activado de forma predeterminada para los estilos Windows 7, Windows 8 Beta y Windows 8 Release Preview, excepto Windows 7 Aero Basic. Si no está disponible o falla la solicitud, se conserva el fondo original. Solicita desenfoque DWM solo para las ventanas de la barra recreada. La compatibilidad con la transparencia por píxel, las versiones de Windows y otros mods no está garantizada. Desactívala si la barra desaparece o presenta fallos. No es el renderizador de cristal original de Windows 7."
+  $description:fr: "Ce paramètre active le flou dynamique expérimental, activé par défaut pour les thèmes Windows 7, Windows 8 Beta et Windows 8 Release Preview, sauf Windows 7 Aero Basic. Si le flou est indisponible ou si la demande échoue, le fond d’origine est conservé. Il demande le flou DWM uniquement pour les fenêtres de la barre recréée. La compatibilité avec la transparence par pixel, les versions de Windows et les autres mods n’est pas garantie. Désactivez-le si la barre disparaît ou présente des défauts. Ce n’est pas le moteur de rendu du verre original de Windows 7."
+  $description:pt: "Esta configuração ativa o desfoque dinâmico experimental, ativado por padrão para os temas Windows 7, Windows 8 Beta e Windows 8 Release Preview, exceto Windows 7 Aero Basic. Se não estiver disponível ou se a solicitação falhar, o fundo original será mantido. Ela solicita o desfoque DWM apenas para as janelas da barra recriada. A compatibilidade com transparência por pixel, versões do Windows e outros mods não é garantida. Desative-a se a barra desaparecer ou apresentar falhas. Este não é o renderizador de vidro original do Windows 7."
 - taskbarRows: 0
   $name: "Taskbar rows (0 = follow native height, 1-4 = custom)"
   $name:it: "Righe della barra (0 = altezza nativa, 1-4 = personalizzate)"
@@ -2349,6 +2370,9 @@ const UINT_PTR TIMER_BATTERY_SLIDE = 19, TIMER_RESOURCE_RELOAD = 20,
 const UINT_PTR TIMER_ATTENTION = 27, TIMER_BUTTON_TRANSITION = 28,
                TIMER_LANGUAGE_REFRESH = 29, TIMER_WIN7_PREVIEW_CLOSE = 30;
 const UINT_PTR TIMER_OPENSHELL_VERIFY = 31, TIMER_T81_SECONDARY_START = 32;
+static constexpr UINT_PTR TIMER_T81_BLUR_REAPPLY = 59;
+static constexpr UINT_PTR TIMER_T81_AUTOHIDE = 62;
+static constexpr UINT_PTR TIMER_T81_AUTOHIDE_REFRESH = 63;
 const UINT WM_T81_APPBAR = WM_APP + 452;
 const UINT WM_T81_OPEN_CUSTOMIZE = WM_APP + 455;
 const UINT WM_T81_PINS_READY = WM_APP + 456;
@@ -2438,7 +2462,7 @@ struct PendingButtonChanges {
 // NotificationArea and NotifyIcon (Apache-2.0, cairoshell/ManagedShell,
 // commit 855222035e927910ca53fd3215caef056337a048). This is NOT the original
 // C#/WPF implementation. In particular, ExplorerTrayService's legacy toolbar
-// full ExplorerTrayService enumeration, balloon UI, and the original overflow
+// full ExplorerTrayService enumeration and the original overflow
 // class are not ported. The private model has persisted pinning and drag/drop;
 // classic Explorer toolbar startup import is partial and undocumented.
 #pragma pack(push, 4)
@@ -2706,6 +2730,8 @@ struct State {
     Gdiplus::Image* taskStateSprite = nullptr;
     IStream* taskStateStream = nullptr;
     // Win7Taskbar Aero Basic opaque taskbar texture, GPL-3.0-or-later.
+    Gdiplus::Image* serverStartReference = nullptr;
+    IStream* serverStartReferenceStream = nullptr;
     Gdiplus::Image* serverSpriteLarge = nullptr;
     IStream* serverSpriteLargeStream = nullptr;
     Gdiplus::Image* serverSpriteSmall = nullptr;
@@ -2829,10 +2855,14 @@ State* s = nullptr;
 // fallback. Preset IDs: Windows 7, Windows 8 Beta and Windows 8.1 have a Start
 // button; Windows 8.0 uses a hot corner and is deliberately excluded.
 static constexpr bool T81IsWin7Skin(int skin) {
-    return skin == 1 || skin == 5 || skin == 6;
+    return skin == 1 || skin == 5 || skin == 6 || skin == 8 || skin == 9;
+}
+static constexpr bool T81IsWin7BetaBar(int skin) {
+    return skin == 5 || skin == 9;
 }
 static constexpr bool T81SkinHasTrackedStartButton(int skin) {
-    return T81IsWin7Skin(skin) || skin == 2 || skin == 4 || skin == 7;
+    return (T81IsWin7Skin(skin) && skin != 8) || skin == 2 || skin == 4 ||
+           skin == 7;
 }
 static constexpr UINT WM_T81_START_STATE = WM_APP + 354;
 static constexpr UINT_PTR TIMER_T81_START_RECONCILE = 57;
@@ -3083,6 +3113,7 @@ std::atomic<HWND> barWindow{nullptr};
 std::atomic<HWND> nativeWindow{nullptr};
 std::atomic<bool> quitting{false};
 std::atomic<bool> enablePrivateTray{true}, reserveWorkArea{true};
+std::atomic<bool> autoHideIntegratedBar{false};
 std::atomic<bool> secondaryVisualMirror{true};
 // 0 original width, 1 custom width.
 std::atomic<int> buttonWidthMode{0}, customTaskButtonWidth{72};
@@ -3214,18 +3245,21 @@ void LoadSettings() {
         PCWSTR value = Wh_GetStringSetting(L"taskbarSkin");
         std::wstring skin(value ? value : L"custom");
         Wh_FreeStringSetting(value);
-        int mode = skin == L"server2008r2"   ? 7
-                   : skin == L"win7basic"    ? 6
-                   : skin == L"win7beta7000" ? 5
-                   : skin == L"win7"         ? 1
-                   : skin == L"win8beta"     ? 2
-                   : skin == L"win8"         ? 3
-                   : skin == L"win81"        ? 4
-                                             : 0;
+        int mode = skin == L"win8releasepreview" ? 8
+                   : skin == L"server2008r2"     ? 7
+                   : skin == L"win7basic"        ? 6
+                   : skin == L"win7build7048"    ? 9
+                   : skin == L"win7beta7000"     ? 5
+                   : skin == L"win7"             ? 1
+                   : skin == L"win8beta"         ? 2
+                   : skin == L"win8"             ? 3
+                   : skin == L"win81"            ? 4
+                                                 : 0;
         taskbarSkin.store(mode);
         if (mode) {
-            useBetaStartLogo.store(T81IsWin7Skin(mode) || mode == 2);
-            startHotCorner.store(mode == 3);
+            useBetaStartLogo.store((T81IsWin7Skin(mode) && mode != 8) ||
+                                   mode == 2);
+            startHotCorner.store(mode == 3 || mode == 8);
         }
     }
     customStartColor.store(Wh_GetIntSetting(L"customStartColor") != 0);
@@ -3348,6 +3382,20 @@ static const LegacyFile kLegacyFiles[] = {
      L"/download/symbols/batmeter.dll/545054931F3000/batmeter.dll",
      "f32f18d44f9a6511c73ca1a9a4a6edad38aff23a15fd4c75d9aaaaf31526a506",
      2022912}};
+// Windows 7 SP1 resources: the network image is a 32-bit PE, opened only
+// as a data/image resource, never executed. Keep distinct cache names.
+static const LegacyFile kWin7Network = {
+    L"win7-pnidui.dll",
+    L"/download/symbols/pnidui.dll/4CE7B99D1ae000/pnidui.dll",
+    "9ab7c9f2e7f3d1cec4553d0df57e074121957055a9a4349946d354acb6fc4579",
+    1750528};
+static const LegacyFile kWin7Battery = {
+    L"win7-batmeter.dll",
+    L"/download/symbols/batmeter.dll/4CE7C4E9ba000/batmeter.dll",
+    "ebbb7ca199ba4df231123922bd310d43de0104c6185b70fe0281b938d5336f2e", 749568};
+static bool T81UsesWin7SystemArtwork(int skin) {
+    return skin == 1 || skin == 5 || skin == 6 || skin == 7 || skin == 9;
+}
 // This is Windows 10 1511, NOT the 8.1 batmeter resource DLL. Never overwrite
 // system files. ShowBatteryUI below is internal and version-specific.
 static const LegacyFile kBattery1511 = {
@@ -3969,7 +4017,28 @@ static DWORD WINAPI ResourceWorker(void* parameter) {
             Wh_Log(
                 L"[T81-DIAG] original battery resources deferred: no battery "
                 L"or power status unknown");
+        bool win7NetworkReady = false;
+        bool win7BatteryReady = false;
+        ULONGLONG win7RetryAt = 0;
         while (WaitForSingleObject(work->stop, 0) != WAIT_OBJECT_0) {
+            if (T81UsesWin7SystemArtwork(taskbarSkin.load()) &&
+                (!win7NetworkReady || !win7BatteryReady) &&
+                GetTickCount64() >= win7RetryAt) {
+                try {
+                    if (!win7NetworkReady)
+                        win7NetworkReady = FetchResourceWithRetry(
+                            work->directory, kWin7Network, work->stop);
+                    if (!win7BatteryReady &&
+                        WaitForSingleObject(work->stop, 0) != WAIT_OBJECT_0)
+                        win7BatteryReady = FetchResourceWithRetry(
+                            work->directory, kWin7Battery, work->stop);
+                    if (WaitForSingleObject(work->stop, 0) != WAIT_OBJECT_0)
+                        PostMessageW(work->bar, WM_RESOURCES_READY, 0, 0);
+                } catch (...) {
+                    Wh_Log(L"[T81-DIAG] Win7 artwork preparation failed");
+                }
+                win7RetryAt = GetTickCount64() + 300000;
+            }
             // Recheck so a battery attached later can enable the feature
             // without reload.
             if (!batteryResourcesReady && batteryArchitecture &&
@@ -4259,38 +4328,56 @@ static void LoadLegacyImages() {
     const int artwork = networkUse100PercentArtwork.load()
                             ? 16
                             : dimension;  // old setting key preserves upgrades
-    ResourceModule network, volume, battery;
-    if (OpenVerifiedResource(ResourcePath(s->resourceDir, kLegacyFiles[0]),
-                             kLegacyFiles[0], network)) {
-        int ids[] = {3020, 3048, 3021, 3022, 3023, 3024, 3025, 3026};
-        for (int i = 0; i < 8; i++)
+    ResourceModule network, network7, volume, battery, battery7;
+    const bool useWin7 = T81UsesWin7SystemArtwork(taskbarSkin.load());
+    bool haveNetwork =
+        OpenVerifiedResource(ResourcePath(s->resourceDir, kLegacyFiles[0]),
+                             kLegacyFiles[0], network);
+    bool haveNetwork7 =
+        useWin7 &&
+        OpenVerifiedResource(ResourcePath(s->resourceDir, kWin7Network),
+                             kWin7Network, network7);
+    int ids[] = {3020, 3048, 3021, 3022, 3023, 3024, 3025, 3026};
+    for (int i = 0; i < 8; i++) {
+        if (haveNetwork7)
+            s->netImages[i] = ResourceIcon(network7.h, ids[i], artwork);
+        if (!s->netImages[i] && haveNetwork)
             s->netImages[i] = ResourceIcon(network.h, ids[i], artwork);
     }
     if (OpenVerifiedResource(ResourcePath(s->resourceDir, kLegacyFiles[1]),
                              kLegacyFiles[1], volume))
         for (int i = 0; i < 6; i++)
             s->volumeImages[i] = ResourceIcon(volume.h, 120 + i, artwork);
-    if (OpenVerifiedResource(ResourcePath(s->resourceDir, kLegacyFiles[2]),
-                             kLegacyFiles[2], battery)) {
-        int resource = artwork == 16   ? 353
-                       : artwork == 20 ? 354
-                       : artwork == 24 ? 355
-                                       : 356;
-        s->batteryStrip = ResourceBattery(battery.h, resource, artwork);
-        if (s->batteryStrip) {
-            s->batteryFrameSize = artwork;
-            // Isolate frames before interpolation: the strip's neighbouring
-            // charging/discharging images must never bleed into this frame.
-            for (int i = 0; i < 43; i++) {
-                Bitmap* frame = s->batteryStrip->Clone(
-                    i * artwork, 0, artwork, artwork, PixelFormat32bppARGB);
-                if (frame && frame->GetLastStatus() == Ok)
-                    s->batteryFrames[i] = frame;
-                else
-                    delete frame;
-            }
+    bool haveBattery7 =
+        useWin7 &&
+        OpenVerifiedResource(ResourcePath(s->resourceDir, kWin7Battery),
+                             kWin7Battery, battery7);
+    bool haveBattery =
+        OpenVerifiedResource(ResourcePath(s->resourceDir, kLegacyFiles[2]),
+                             kLegacyFiles[2], battery);
+    int sizeIndex = artwork == 16   ? 0
+                    : artwork == 20 ? 1
+                    : artwork == 24 ? 2
+                                    : 3;
+    // Both strips have 43 states in the same order. The Win7 resource IDs
+    // are 303-306, while Windows 8.1 uses 353-356.
+    if (haveBattery7)
+        s->batteryStrip = ResourceBattery(battery7.h, 303 + sizeIndex, artwork);
+    if (!s->batteryStrip && haveBattery)
+        s->batteryStrip = ResourceBattery(battery.h, 353 + sizeIndex, artwork);
+    if (s->batteryStrip) {
+        s->batteryFrameSize = artwork;
+        for (int i = 0; i < 43; i++) {
+            Bitmap* frame = s->batteryStrip->Clone(
+                i * artwork, 0, artwork, artwork, PixelFormat32bppARGB);
+            if (frame && frame->GetLastStatus() == Ok)
+                s->batteryFrames[i] = frame;
+            else
+                delete frame;
         }
     }
+    Wh_Log(L"[T81-DIAG] Win7 artwork requested=%d network=%d battery=%d",
+           useWin7, haveNetwork7, haveBattery7);
     Wh_Log(
         L"[T81-DIAG] 8.1 data resources network=%d volume=%d battery=%d "
         L"dpiSize=%d",
@@ -7250,6 +7337,43 @@ static const char kWin7BasicTexture[] =
     "gBsIU9tpAECmyJFHukSAIFtkSK"
     "BimiQIECsAMssIUGW4gCBbZAihopBoECmyNFjRSDQIEC0ANgCxW20AsU2AwpKqToBQr+"
     "AOP9vlFzaodaAAAAAElFTkSuQmCC";
+// Start artwork cropped from the classic reference screenshot (49 x 18).
+static const char kServerStartReference[] =
+    "iVBORw0KGgoAAAANSUhEUgAAADEAAAASCAIAAAB9xqHTAAADtklEQVR4nM2WXWhbZRjHn/"
+    "Oer5x8"
+    "NM1nNa7N0rXpZGk4KMV2LkO8qFCoUEj9YPPCC5VBb3pRAlKQwrwYuQheFRG8sUOkwagDFdTh6H"
+    "Bx"
+    "Ch5dVrbWmjRt6Nfy0WQ5Xzk5x4vGNOmyiw1s9+fcnPO+/+f9nf/"
+    "zXLxYgovDEyZ01AAtRDS+kL8u"
+    "iNe+F5aXQFOpfp/xlRH55AtHyYTxpWz4Q1y5b3IQlBkRa9c25/"
+    "65P2GyOF061L63R9NUsVJmKNNh"
+    "MS3fZhjR9BRFdeK4DTE6ZUl/5o/"
+    "C1Yr8p0N7ESrmndxuInOn13DqjeG3Dotp8XeDE9f14Xg3QnYM"
+    "MBrX+Z3O34oKnsx+k9lU0hlUqRhO24b/VyDYn/GqQi/"
+    "+YnZWdE6ZtguURxCf7iMdTquNsBmPOS12"
+    "hw23WcFGtPn6fDXL9Us+drD+nL+"
+    "8DnBjhh30sZcWHgGghaWWEyrmkx3dpWdfY1xui4nuyP2Mm11E"
+    "u9LOtGuKylNFo77QZlbIotvhsNeAJmIQjCSmhxqqrT1mMs2qMa3w5Feec5jFc8LWcdJlpvGzlJ"
+    "zN"
+    "Cj8YjIgiEUURBAWIQF6HHyEEAOnVvwGA9XQ21lq4ODkPABC7wMYAxmavHP94NML9t8pORefOHY"
+    "O1"
+    "L86PRjj/5LfvpkYmYDwYa7JwoUC9d1/"
+    "fVW4pTklFWLUCVSWvdxCU6mXYttJL1cJzSnbAnHt1oPLm"
+    "EHt6b3+XuwcAuHCwoXEQmI6MAwCMzXLxBBcKdL4+x8UTXDzBRUN+4MIzn+3n+"
+    "OP7EzEAePmApZ6T"
+    "KKvJTLFKkGWB2uWleyXRQqE2cstqSQk848IpAQgGX91QDbTZXKt5JpTgzs6we8EAFw76kpHE9M"
+    "Eu"
+    "pC+/MxK+1aI9f/"
+    "W8x30SAAC4cfWBRQQA6zlxe1tQRSVfkjbyfHKnDPw2ra3I8iYBcQf9+Ym2T13U"
+    "Txn5GQzDGrxDH+zFcGWSBYCldLoVEDsVTXDx2WDzmv+"
+    "4uwVpTQQALKZFUUSUqObyUhWRvEKO2HOM"
+    "4TpIElYtYPKGsiNUt/"
+    "Sqqa91jdUUBwDerq4Dn5P1hNZTSw9HaMmUvbcx7Mn0dlkNeuNKYXe9aKOl"
+    "u1T1piISIIlqXiK2+FTJaz+1f+jCxcEL0f0qtfkFeHuqfz5cH9jIeHRyPhz0hftZ/"
+    "8MAhpotoQAA"
+    "9uC9QJJkfu27AfIjGmnAa1CqQln9UhhT3KPenm6SJB/"
+    "hlx9LLZgAQNO0zOqyvHkTK2dE1SgwHlfv"
+    "8zarlSCI5pE6RKaj1ZN4f/oX0e2XZCnzwxkAAAAASUVORK5CYII=";
 static const char kServerClassicStartLarge[] =
     "iVBORw0KGgoAAAANSUhEUgAAAEcAAAByCAYAAAABB8wBAAAKpUlEQVR4nO2cy29cVx3HP+ec+"
     "5wZj8dxUrtpk75bExDqCxoq"
@@ -7426,6 +7550,11 @@ static const char kServerClassicStart[] =
     "PIX73zlmW0fy0SLT2GDFoEqR5fKdBfeoElXIZpRQ/AEu6CprzaVCMAAAA"
     "AElFTkSuQmCC";
 static void DestroyStartImage(State& state) {
+    delete state.serverStartReference;
+    state.serverStartReference = nullptr;
+    if (state.serverStartReferenceStream)
+        state.serverStartReferenceStream->Release();
+    state.serverStartReferenceStream = nullptr;
     delete state.serverSpriteLarge;
     state.serverSpriteLarge = nullptr;
     if (state.serverSpriteLargeStream)
@@ -7601,6 +7730,8 @@ static void LoadBetaTextures(State& state) {
                 L"fallback");
         }
     };
+    loadServerImage(kServerStartReference, state.serverStartReference,
+                    state.serverStartReferenceStream);
     loadServerImage(kServerClassicStartLarge, state.serverSpriteLarge,
                     state.serverSpriteLargeStream);
     loadServerImage(kServerClassicStartSmall, state.serverSpriteSmall,
@@ -7714,142 +7845,68 @@ static void T81ClassicRunningFrame(Graphics& g, RECT r, bool active, int dpi) {
     g.FillRectangle(&face, l + w - 2 * e, t + e, e, h - 2 * e);
     g.Restore(state);
 }
-// Three-state images use the supplied native large and small Start artwork.
+// Use the reference artwork for the normal face and a sunken frame for the
+// tracked pressed state. Hover leaves the classic face unchanged.
 static void T81ClassicStart(Graphics& g,
                             RECT cell,
                             bool down,
                             bool hot,
                             int dpi) {
-    const bool small = s && s->nativeSmallIcons;
-    Image* img =
-        s ? (small ? s->serverSpriteSmall : s->serverSpriteLarge) : nullptr;
-    if (img && img->GetLastStatus() == Ok && img->GetWidth() > 0 &&
-        img->GetHeight() >= 3) {
-        int frame = down ? 2 : (hot ? 1 : 0), sw = (int)img->GetWidth(),
-            sh = (int)img->GetHeight() / 3;
-        // The reference classic buttons have the same top/bottom as the
-        // task buttons. Preserve the artwork's width and logo proportions;
-        // add height only in the plain areas immediately inside the frame.
-        // Match the running-button frame: a visible margin at the left and
-        // the same 4/3 DIP top/bottom inset as DrawTaskTileStack.
-        int side = std::max(1, MulDiv(1, dpi, 96));
-        int width =
-            std::min(std::max(1, (int)(cell.right - cell.left) - 2 * side),
-                     std::max(1, MulDiv(small ? 44 : 57, dpi, 96)));
-        int top = std::max(1, MulDiv(4, dpi, 96)),
-            bottom = std::max(1, MulDiv(3, dpi, 96));
-        if (top + bottom >= cell.bottom - cell.top) {
-            top = side;
-            bottom = side;
-        }
-        // A taller taskbar adds rows; it must not stretch the Start button.
-        int height =
-            std::max(1, std::min((int)(cell.bottom - cell.top) - top - bottom,
-                                 MulDiv(small ? 30 : 40, dpi, 96)));
-        int x = cell.left + ((cell.right - cell.left) - width) / 2,
-            y = cell.top + top;
-        int natural = std::max(1, MulDiv(width, sh, sw));
-        auto st = g.Save();
-        g.SetInterpolationMode(InterpolationModeNearestNeighbor);
-        g.SetPixelOffsetMode(PixelOffsetModeHalf);
-        if (height <= natural || sh < 8) {
-            g.DrawImage(img, Rect(x, y, width, height), 0, frame * sh, sw, sh,
-                        UnitPixel);
-        } else {
-            // Five vertical bands: preserve the border and central artwork,
-            // extend a plain interior scanline above and below the content.
-            int cap = std::max(1, MulDiv(3, width, sw));
-            int center = std::max(1, natural - 2 * cap),
-                extra = height - (2 * cap + center);
-            int upper = extra / 2, lower = extra - upper, sy = frame * sh,
-                dy = y;
-            auto band = [&](int sy0, int sourceHeight, int destHeight) {
-                if (destHeight > 0)
-                    g.DrawImage(img, Rect(x, dy, width, destHeight), 0,
-                                sy + sy0, sw, sourceHeight, UnitPixel);
-                dy += destHeight;
-            };
-            auto pad = [&](int sample, int destHeight) {
-                if (destHeight <= 0)
-                    return;
-                SolidBrush fill(Color(255, 240, 240, 240));
-                g.FillRectangle(&fill, x, dy, width, destHeight);
-                int edge =
-                    std::max(1, std::min(width / 2, MulDiv(3, width, sw)));
-                g.DrawImage(img, Rect(x, dy, edge, destHeight), 0, sy + sample,
-                            3, 1, UnitPixel);
-                g.DrawImage(img, Rect(x + width - edge, dy, edge, destHeight),
-                            sw - 3, sy + sample, 3, 1, UnitPixel);
-                dy += destHeight;
-            };
-            band(0, 3, cap);
-            pad(3, upper);
-            band(3, sh - 6, center);
-            pad(sh - 4, lower);
-            band(sh - 3, 3, cap);
-        }
-        // Redraw the word with a DPI-aware font instead of resampling the
-        // low-resolution word in each bitmap frame. Keep the supplied logo,
-        // frame and state; the pressed state retains its one-pixel offset.
-        int textLeft = x + MulDiv(width, small ? 20 : 35, sw);
-        int textRight = x + width - std::max(2, MulDiv(3, dpi, 96));
-        if (textRight > textLeft + 2 && height > 6) {
-            FontFamily family(L"Tahoma");
-            if (family.GetLastStatus() == Ok) {
-                REAL px = (REAL)std::max(1, MulDiv(small ? 9 : 11, dpi, 96));
-                StringFormat fmt(StringFormat::GenericTypographic());
-                fmt.SetFormatFlags(StringFormatFlagsNoWrap);
-                fmt.SetAlignment(StringAlignmentCenter);
-                fmt.SetLineAlignment(StringAlignmentCenter);
-                // Measure without wrapping and fit to the actual available
-                // width (including the pressed offset), not a guessed size.
-                Font measure(&family, px, FontStyleBold, UnitPixel);
-                RectF bounds;
-                if (measure.GetLastStatus() == Ok &&
-                    g.MeasureString(L"Start", 5, &measure, PointF(0, 0), &fmt,
-                                    &bounds) == Ok &&
-                    bounds.Width > 0)
-                    px = std::max(
-                        1.f, px * std::min(1.f, ((REAL)(textRight - textLeft) -
-                                                 (down ? 1.f : 0.f) - 1.f) /
-                                                    bounds.Width));
-                Font font(&family, px, FontStyleBold, UnitPixel);
-                if (font.GetLastStatus() == Ok) {
-                    auto textState = g.Save();
-                    SolidBrush face(Color(255, 240, 240, 240));
-                    g.FillRectangle(&face, textLeft, y + 2,
-                                    std::max(1, x + width - 1 - textLeft),
-                                    height - 4);
-                    g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
-                    RectF text(
-                        (REAL)textLeft + (down ? 1.f : 0.f),
-                        (REAL)y + (down ? 1.f : 0.f),
-                        (REAL)(textRight - textLeft) - (down ? 1.f : 0.f),
-                        (REAL)height);
-                    SolidBrush ink(Color(255, 0, 0, 0));
-                    g.DrawString(L"Start", 5, &font, text, &fmt, &ink);
-                    g.Restore(textState);
-                }
-            }
-        }
-        // Explicit classic bevel: the source sprite's near-white face made its
-        // top rule nearly invisible on the light taskbar. Keep pressed inset.
-        if (width > 2 && height > 2) {
-            g.SetSmoothingMode(SmoothingModeNone);
-            SolidBrush upper(down ? Color(255, 128, 128, 128)
-                                  : Color(255, 255, 255, 255));
-            SolidBrush contrast(down ? Color(255, 64, 64, 64)
-                                     : Color(255, 160, 156, 150));
-            if (y > cell.top)
-                g.FillRectangle(&contrast, x, y - 1, width, 1);
-            g.FillRectangle(&upper, x, y, width - 1, 1);
-            g.FillRectangle(&upper, x, y, 1, height - 1);
-        }
-        g.Restore(st);
+    if (IsRectEmpty(&cell))
+        return;
+    // Match the screenshot's 52 x 38 px button on a 125% display. Keep the
+    // layout DPI-aware: 44 DIP cell with a one-DIP margin on each side.
+    int side = std::max(1, MulDiv(1, dpi, 96));
+    int top = std::max(1, MulDiv(4, dpi, 96));
+    int bottom = std::max(1, MulDiv(3, dpi, 96));
+    int width = std::min((int)(cell.right - cell.left) - 2 * side,
+                         MulDiv(s && s->nativeSmallIcons ? 38 : 42, dpi, 96));
+    int height = std::min((int)(cell.bottom - cell.top) - top - bottom,
+                          MulDiv(s && s->nativeSmallIcons ? 23 : 31, dpi, 96));
+    if (width < 4 || height < 4)
+        return;
+    int x = cell.left + ((cell.right - cell.left) - width) / 2;
+    int y = cell.top + top;
+    RECT button{x, y, x + width, y + height};
+    T81ClassicFrame(g, button, down, true);
+    Image* artwork = s ? s->serverStartReference : nullptr;
+    if (!artwork || artwork->GetLastStatus() != Ok) {
+        auto fallback = g.Save();
+        FontFamily family(L"Tahoma");
+        Font font(&family, (REAL)std::max(1, MulDiv(8, dpi, 96)), FontStyleBold,
+                  UnitPixel);
+        StringFormat format(StringFormat::GenericTypographic());
+        format.SetAlignment(StringAlignmentCenter);
+        format.SetLineAlignment(StringAlignmentCenter);
+        SolidBrush ink(Color(255, 0, 0, 0));
+        g.DrawString(L"Start", 5, &font,
+                     RectF((REAL)x, (REAL)y, (REAL)width, (REAL)height),
+                     &format, &ink);
+        g.Restore(fallback);
         return;
     }
-    RECT r{cell.left + 1, cell.top + 2, cell.right - 1, cell.bottom - 2};
-    T81ClassicFrame(g, r, down);
+    auto saved = g.Save();
+    g.SetClip(Rect(x + 1, y + 1, width - 2, height - 2), CombineModeIntersect);
+    int artWidth = std::max(1, MulDiv(49, dpi, 120));
+    int artHeight = std::max(1, MulDiv(18, dpi, 120));
+    if (artWidth > width - 2) {
+        artHeight = std::max(1, MulDiv(artHeight, width - 2, artWidth));
+        artWidth = width - 2;
+    }
+    if (artHeight > height - 2) {
+        artWidth = std::max(1, MulDiv(artWidth, height - 2, artHeight));
+        artHeight = height - 2;
+    }
+    int shift = down ? side : 0;
+    int artX = x + (width - artWidth) / 2 + shift;
+    int artY = y + (height - artHeight) / 2 + shift;
+    g.SetInterpolationMode(artWidth == 49 && artHeight == 18
+                               ? InterpolationModeNearestNeighbor
+                               : InterpolationModeHighQualityBicubic);
+    g.SetPixelOffsetMode(PixelOffsetModeHalf);
+    g.DrawImage(artwork, Rect(artX, artY, artWidth, artHeight), 0, 0, 49, 18,
+                UnitPixel);
+    g.Restore(saved);
 }
 // Screenshot reference for Show Desktop; the Alt+Tab project is GPL-2.0-only
 // while this mod is GPL-3.0-or-later, so its PNG is not embedded here.
@@ -7894,7 +7951,8 @@ static void T81ClassicDesktop(Graphics& g,
     g.Restore(st);
 }
 static bool BetaTextureAvailable(int index) {
-    return s && useBetaStartLogo.load() && s->betaStartImage && index >= 0 &&
+    return s && (useBetaStartLogo.load() || taskbarSkin.load() == 8) &&
+           s->betaStartImage && index >= 0 &&
            index < (int)std::size(s->betaTexture) && s->betaTexture[index];
 }
 static void DrawBetaTexture(Graphics& g, int index, const RECT& rect) {
@@ -10665,6 +10723,11 @@ int Px(int n) {
 // different face if it is missing. The per-pixel black/white reconstruction
 // uses grayscale antialiasing; normal GDI mode respects system smoothing.
 static HFONT CreateTaskbarFont(int dpi, bool perPixel) {
+    if (taskbarSkin.load() == 7)
+        return CreateFontW(-MulDiv(8, dpi, 72), 0, 0, 0, FW_NORMAL, FALSE,
+                           FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                           CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY,
+                           DEFAULT_PITCH, L"Tahoma");
     return CreateFontW(-MulDiv(9, dpi, 72), 0, 0, 0, FW_NORMAL, FALSE, FALSE,
                        FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                        CLIP_DEFAULT_PRECIS,
@@ -11964,13 +12027,14 @@ static Layout TaskAreaLayout(int w, int h, int& avail) {
     int start = std::min(
         w, Px(startHotCorner.load()
                   ? 8
-                  : (taskbarSkin.load() == 7 ? (s->nativeSmallIcons ? 44 : 57)
+                  : (taskbarSkin.load() == 7 ? (s->nativeSmallIcons ? 40 : 44)
                                              : kStartLogical)));
-    int desk = s->preservingTray ? 0
-                                 : std::min(std::max(0, w - start),
-                                            Px(taskbarSkin.load() == 7 ? 24
-                                               : beta8148              ? 15
-                                                                       : 8));
+    int desk = s->preservingTray
+                   ? 0
+                   : std::min(std::max(0, w - start),
+                              Px(taskbarSkin.load() == 7                 ? 24
+                                 : (beta8148 || taskbarSkin.load() == 8) ? 15
+                                                                         : 8));
     int desiredClock = std::max(Px(kClockLogical), s->clockWidthPx);
     int clock = s->preservingTray
                     ? 0
@@ -12642,6 +12706,17 @@ static bool ReadableSharedBlock(void* p, size_t bytes) {
     return start >= base && start - base <= mbi.RegionSize &&
            bytes <= mbi.RegionSize - (start - base);
 }
+static std::atomic<int> t81AppbarObservedState{-1};
+static void T81ObserveAppBarSetState(DWORD flags) {
+    bool state = (flags & ABS_AUTOHIDE) != 0;
+    t81AppbarObservedState.store(state ? 1 : 0);
+    Wh_Log(L"[T81-AUTOHIDE] forwarded ABM_SETSTATE flags=0x%lx state=%d",
+           (unsigned long)flags, state ? 1 : 0);
+    // Never re-enter Explorer from within its synchronous request. The timer
+    // reconciles geometry after this WM_COPYDATA has returned to the caller.
+    if (s && s->bar)
+        SetTimer(s->bar, TIMER_T81_AUTOHIDE_REFRESH, 150, nullptr);
+}
 static LRESULT ForwardPrivateAppBar(WPARAM sender, const COPYDATASTRUCT* data) {
     if (!s || !data || !data->lpData || !IsExpectedNativeTray(s->native))
         return 0;
@@ -12659,8 +12734,15 @@ static LRESULT ForwardPrivateAppBar(WPARAM sender, const COPYDATASTRUCT* data) {
     memcpy(&pid, packet + pidOffset, 4);
     if (cb != 40)
         return 0;
-    if (!raw || pid != GetCurrentProcessId())
-        return ForwardShellMessage(WM_COPYDATA, sender, (LPARAM)data);
+    DWORD requestedFlags = 0;
+    if (operation == ABM_SETSTATE)
+        memcpy(&requestedFlags, packet + 32, sizeof(requestedFlags));
+    if (!raw || pid != GetCurrentProcessId()) {
+        LRESULT result = ForwardShellMessage(WM_COPYDATA, sender, (LPARAM)data);
+        if (operation == ABM_SETSTATE && result)
+            T81ObserveAppBarSetState(requestedFlags);
+        return result;
+    }
     HMODULE shlwapi = GetModuleHandleW(L"shlwapi.dll");
     using Lock = void*(WINAPI*)(HANDLE, DWORD);
     using Unlock = BOOL(WINAPI*)(void*);
@@ -12733,8 +12815,784 @@ static LRESULT ForwardPrivateAppBar(WPARAM sender, const COPYDATASTRUCT* data) {
         result = 0;
     }
     unlock(original);
+    if (operation == ABM_SETSTATE && delivered && result)
+        T81ObserveAppBarSetState(requestedFlags);
     return (LRESULT)result;
 }
+// Own balloon presenter for NIF_INFO packets received by the private tray.
+// Inspired by RetroBar/ManagedShell's one-at-a-time notification UI and
+// callbacks; this is an independent native Win32 implementation, not WPF.
+// https://github.com/dremin/RetroBar/blob/d2b0b8535a395f3f13578d2825ca2094845c1779/RetroBar/Controls/NotifyBalloon.xaml.cs
+// https://learn.microsoft.com/en-us/windows/win32/shell/notification-area
+// RetroBar Taskbar.xaml.cs and ManagedShell AppBarWindow.cs (Apache-2.0):
+// Win32 adaptation of the 2-DIP reveal strip, 400 ms hide delay, 300/150 ms
+// animation and menu/drag exclusion. This moves our HWND, not WPF content.
+// Source AppBarWindow.cs at commit 86830dacd352400864fbd042a1d5a3568c3983c8:
+// https://github.com/cairoshell/ManagedShell/blob/86830dacd352400864fbd042a1d5a3568c3983c8/src/ManagedShell.AppBar/AppBarWindow.cs
+// https://github.com/dremin/RetroBar/blob/master/RetroBar/Taskbar.xaml.cs
+struct T81AutoHideState {
+    RECT shown{};
+    bool valid = false;
+    float fraction = 0.0f;
+    float from = 0.0f, target = 0.0f;
+    ULONGLONG animStart = 0, idleSince = 0;
+};
+static T81AutoHideState t81AutoHide;
+static void T81AutoHideRevealNow() {
+    if (!s || !s->bar || !autoHideIntegratedBar.load() || !t81AutoHide.valid)
+        return;
+    t81AutoHide.fraction = t81AutoHide.from = t81AutoHide.target = 0.0f;
+    t81AutoHide.idleSince = 0;
+    SetWindowPos(s->bar, nullptr, t81AutoHide.shown.left, t81AutoHide.shown.top,
+                 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    InvalidateRect(s->bar, nullptr, FALSE);
+}
+static constexpr UINT_PTR TIMER_T81_BALLOON = 61;
+struct T81Balloon {
+    HWND owner = nullptr;
+    DWORD pid = 0, id = 0, callback = 0, version = 0, flags = 0;
+    GUID guid{};
+    std::wstring title, text;
+    // NIIF_USER is copied while the sender's handle is still valid.
+    std::shared_ptr<void> balloonIcon;
+    ULONGLONG queued = 0;
+};
+static std::vector<T81Balloon> t81BalloonQueue;
+static T81Balloon t81BalloonCurrent;
+static HWND t81BalloonWindow = nullptr;
+static bool t81BalloonVisible = false;
+static ULONGLONG t81BalloonUntil = 0;
+static ULONGLONG t81BalloonShownAt = 0;
+static bool t81BalloonMouseInside = false;
+static ULONGLONG t81BalloonPausedRemaining = 0;
+// Microsoft notes that moving the pointer over a Vista-era balloon rescues it
+// from fading; the exact post-leave grace is not specified there.
+// https://devblogs.microsoft.com/oldnewthing/20110518-00/?p=10643/
+static RECT t81BalloonClose{};
+static RECT t81BalloonSettings{};
+// 0 = none, 1 = close, 2 = notification settings.
+static int t81BalloonHot = 0;
+static void T81DrawClassicAppIcon(HDC dc, HICON icon, int x, int y, int size);
+static void OpenNotificationIconsPage(HWND owner);
+static POINT t81BalloonAnchor{};
+
+static bool T81BalloonSame(const T81Balloon& item,
+                           HWND owner,
+                           DWORD id,
+                           const GUID& guid) {
+    if (GuidPresent(guid) && GuidPresent(item.guid))
+        return IsEqualGUID(guid, item.guid);
+    return owner && owner == item.owner && id == item.id;
+}
+static void T81BalloonCallback(const T81Balloon& b, UINT event) {
+    DWORD pid = 0;
+    if (!b.owner || !IsWindow(b.owner) || b.callback < WM_USER ||
+        !GetWindowThreadProcessId(b.owner, &pid) || pid != b.pid)
+        return;
+    WPARAM wp = b.version >= 4 ? MAKELONG((WORD)t81BalloonAnchor.x,
+                                          (WORD)t81BalloonAnchor.y)
+                               : b.id;
+    LPARAM lp = event | (b.version >= 4 ? ((b.id & 0xffffu) << 16) : 0);
+    PostMessageW(b.owner, b.callback, wp, lp);
+}
+static void T81BalloonFinish(UINT event) {
+    if (!t81BalloonVisible)
+        return;
+    T81Balloon old = std::move(t81BalloonCurrent);
+    t81BalloonCurrent = T81Balloon{};
+    t81BalloonVisible = false;
+    t81BalloonHot = 0;
+    t81BalloonMouseInside = false;
+    t81BalloonPausedRemaining = 0;
+    if (t81BalloonWindow && IsWindow(t81BalloonWindow)) {
+        KillTimer(t81BalloonWindow, 1);
+        ShowWindow(t81BalloonWindow, SW_HIDE);
+    }
+    if (s && s->bar)
+        InvalidateRect(s->bar, nullptr, FALSE);
+    T81BalloonCallback(old, event);
+    if (s && s->bar)
+        SetTimer(s->bar, TIMER_T81_BALLOON, 50, nullptr);
+}
+// Win7-style balloon geometry. The tail is clamped inside the rounded body
+// and points toward the visual tray anchor, not the hidden Shell_TrayWnd.
+static int t81BalloonTailX = 0;
+static bool t81BalloonTailTop = false;
+// 0: horizontal taskbar, 1: left bar, 2: right bar.
+static int t81BalloonTailSide = 0;
+static int t81BalloonTailY = 0;
+static bool t81BalloonWin7 = false;
+static void T81PaintWin7Balloon(HDC dc, const RECT& bounds) {
+    int tail = Px(16);
+    RECT body = bounds;
+    if (t81BalloonTailSide == 1)
+        body.left += tail;
+    else if (t81BalloonTailSide == 2)
+        body.right -= tail;
+    else if (t81BalloonTailTop)
+        body.top += tail;
+    else
+        body.bottom -= tail;
+    Graphics g(dc);
+    g.SetSmoothingMode(SmoothingModeAntiAlias);
+    Rect bodyRect(body.left, body.top, body.right - body.left,
+                  body.bottom - body.top);
+    LinearGradientBrush fill(bodyRect, Color(255, 255, 255, 255),
+                             Color(255, 231, 233, 239),
+                             LinearGradientModeVertical);
+    g.FillRectangle(&fill, bodyRect);
+    Point points[3];
+    if (t81BalloonTailSide) {
+        int edge =
+            t81BalloonTailSide == 1 ? (int)body.left : (int)body.right - 1;
+        int tip = t81BalloonTailSide == 1 ? 0 : (int)bounds.right - 1;
+        points[0] = Point(edge, t81BalloonTailY - Px(18));
+        points[1] = Point(tip, t81BalloonTailY);
+        points[2] = Point(edge, t81BalloonTailY);
+    } else if (t81BalloonTailTop) {
+        points[0] = Point(t81BalloonTailX - Px(18), body.top);
+        points[1] = Point(t81BalloonTailX, body.top - tail + 1);
+        points[2] = Point(t81BalloonTailX, body.top);
+    } else {
+        points[0] = Point(t81BalloonTailX - Px(18), body.bottom - 1);
+        points[1] = Point(t81BalloonTailX, body.bottom + tail - 2);
+        points[2] = Point(t81BalloonTailX, body.bottom - 1);
+    }
+    SolidBrush tailFill(Color(255, 231, 233, 239));
+    g.FillPolygon(&tailFill, points, 3);
+    Pen border(Color(255, 158, 166, 181), 1.0f);
+    int l = body.left, r = body.right - 1, t = body.top, b = body.bottom - 1;
+    if (t81BalloonTailSide == 1) {
+        g.DrawLine(&border, l, t, l, points[0].Y);
+        g.DrawLine(&border, l, points[2].Y, l, b);
+    } else
+        g.DrawLine(&border, l, t, l, b);
+    if (t81BalloonTailSide == 2) {
+        g.DrawLine(&border, r, t, r, points[0].Y);
+        g.DrawLine(&border, r, points[2].Y, r, b);
+    } else
+        g.DrawLine(&border, r, t, r, b);
+    if (!t81BalloonTailSide && t81BalloonTailTop) {
+        g.DrawLine(&border, l, t, points[0].X, t);
+        g.DrawLine(&border, points[2].X, t, r, t);
+    } else
+        g.DrawLine(&border, l, t, r, t);
+    if (!t81BalloonTailSide && !t81BalloonTailTop) {
+        g.DrawLine(&border, l, b, points[0].X, b);
+        g.DrawLine(&border, points[2].X, b, r, b);
+    } else
+        g.DrawLine(&border, l, b, r, b);
+    g.DrawLine(&border, points[0], points[1]);
+    g.DrawLine(&border, points[1], points[2]);
+    int pad = Px(11);
+    int icon = Px((t81BalloonCurrent.flags & NIIF_LARGE_ICON) ? 32 : 16);
+    int textLeft = Px((t81BalloonCurrent.flags & NIIF_LARGE_ICON) ? 49 : 33);
+    DWORD kind = t81BalloonCurrent.flags & 0xf;
+    LPCWSTR stock = kind == NIIF_INFO      ? IDI_INFORMATION
+                    : kind == NIIF_WARNING ? IDI_WARNING
+                    : kind == NIIF_ERROR   ? IDI_ERROR
+                                           : nullptr;
+    HICON image = kind == NIIF_USER
+                      ? (HICON)t81BalloonCurrent.balloonIcon.get()
+                      : (stock ? (HICON)LoadImageW(nullptr, stock, IMAGE_ICON,
+                                                   icon, icon, LR_SHARED)
+                               : nullptr);
+    // The supplied icon is the source of truth; preserve its alpha and use
+    // high-quality GDI+ resampling when the native frame needs resizing.
+    g.Flush(FlushIntentionSync);
+    if (image && !t81BalloonCurrent.title.empty())
+        T81DrawClassicAppIcon(dc, image, (int)body.left + pad,
+                              (int)body.top + Px(12), icon);
+    t81BalloonClose = RECT{body.right - Px(26), body.top + Px(7),
+                           body.right - Px(8), body.top + Px(25)};
+    g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+    FontFamily family(L"Segoe UI");
+    const FontFamily* face =
+        family.GetLastStatus() == Ok ? &family : FontFamily::GenericSansSerif();
+    Font titleFont(face, (REAL)Px(16), FontStyleRegular, UnitPixel);
+    Font textFont(face, (REAL)Px(12), FontStyleRegular, UnitPixel);
+    SolidBrush blue(Color(255, 0, 51, 153));
+    SolidBrush black(Color(255, 0, 0, 0));
+    SolidBrush gray(Color(255, 105, 105, 105));
+    StringFormat titleFormat;
+    titleFormat.SetFormatFlags(StringFormatFlagsNoWrap);
+    titleFormat.SetTrimming(StringTrimmingEllipsisCharacter);
+    RectF title((REAL)(body.left + textLeft), (REAL)(body.top + Px(9)),
+                (REAL)std::max(
+                    1L, t81BalloonClose.left - body.left - textLeft - Px(20)),
+                (REAL)Px(22));
+    g.DrawString(t81BalloonCurrent.title.c_str(), -1, &titleFont, title,
+                 &titleFormat, &blue);
+    StringFormat bodyFormat;
+    bodyFormat.SetTrimming(StringTrimmingEllipsisWord);
+    RectF text((REAL)(body.left + textLeft), (REAL)(body.top + Px(31)),
+               (REAL)std::max(1L, body.right - body.left - textLeft - Px(10)),
+               (REAL)std::max(1L, body.bottom - body.top - Px(37)));
+    g.DrawString(t81BalloonCurrent.text.c_str(), -1, &textFont, text,
+                 &bodyFormat, &black);
+    StringFormat center;
+    center.SetAlignment(StringAlignmentCenter);
+    center.SetLineAlignment(StringAlignmentCenter);
+    RectF close((REAL)t81BalloonClose.left, (REAL)t81BalloonClose.top,
+                (REAL)(t81BalloonClose.right - t81BalloonClose.left),
+                (REAL)(t81BalloonClose.bottom - t81BalloonClose.top));
+    // Coverage masks sampled from the supplied reference at 96 DPI. They
+    // are color-independent, so the background remains transparent.
+    static const BYTE wrenchMask[110] = {
+        0,   0,   0,   171, 180, 153, 0,   0,   0,   0,   0,   0,   0,   0,
+        0,   162, 173, 168, 0,   0,   0,   0,   0,   166, 0,   0,   0,   149,
+        200, 166, 0,   0,   0,   0,   180, 158, 0,   0,   0,   162, 164, 0,
+        0,   0,   0,   186, 188, 169, 0,   160, 200, 180, 0,   0,   0,   0,
+        0,   169, 182, 184, 186, 153, 200, 153, 0,   0,   0,   0,   0,   149,
+        186, 142, 189, 182, 173, 184, 0,   0,   0,   0,   0,   0,   0,   171,
+        158, 206, 158, 186, 0,   0,   0,   0,   0,   0,   0,   193, 162, 193,
+        166, 0,   0,   0,   0,   0,   0,   0,   0,   171, 180, 180};
+    static const BYTE closeMask[96] = {
+        0,   144, 180, 180, 0,   0,   0,   168, 166, 175, 0,   0,   0,   0,
+        171, 178, 169, 0,   162, 168, 186, 0,   0,   0,   0,   0,   0,   180,
+        195, 148, 169, 202, 0,   0,   0,   0,   0,   0,   0,   0,   182, 182,
+        173, 0,   0,   0,   0,   0,   0,   0,   0,   0,   162, 182, 168, 0,
+        0,   0,   0,   0,   0,   0,   0,   148, 208, 157, 162, 213, 0,   0,
+        0,   0,   0,   0,   168, 197, 155, 0,   177, 148, 206, 0,   0,   0,
+        0,   158, 177, 164, 0,   0,   0,   166, 184, 160, 0,   0};
+    t81BalloonSettings = RECT{body.right - Px(46), body.top + Px(7),
+                              body.right - Px(29), body.top + Px(25)};
+    // Plausible Vista/Win7-style hot feedback, not an extracted theme asset.
+    // Keep the small icon shapes and use a soft tint only under the hot target.
+    if (t81BalloonHot) {
+        RECT hot = t81BalloonHot == 1 ? t81BalloonClose : t81BalloonSettings;
+        Rect box(hot.left, hot.top, hot.right - hot.left, hot.bottom - hot.top);
+        Color top = t81BalloonHot == 1 ? Color(255, 255, 225, 216)
+                                       : Color(255, 231, 244, 252);
+        Color bottom = t81BalloonHot == 1 ? Color(255, 238, 144, 127)
+                                          : Color(255, 179, 216, 239);
+        LinearGradientBrush fill(box, top, bottom, LinearGradientModeVertical);
+        Pen outline(t81BalloonHot == 1 ? Color(255, 193, 107, 93)
+                                       : Color(255, 133, 180, 208));
+        g.FillRectangle(&fill, box);
+        g.DrawRectangle(&outline, box.X, box.Y, std::max(0, box.Width - 1),
+                        std::max(0, box.Height - 1));
+    }
+    auto paintMask = [&](const BYTE* mask, int w, int h, int x, int y) {
+        Bitmap bitmap(w, h, PixelFormat32bppARGB);
+        for (int row = 0; row < h; ++row) {
+            for (int col = 0; col < w; ++col) {
+                BYTE alpha = mask[row * w + col];
+                Color ink = t81BalloonHot == 1 && mask == closeMask
+                                ? Color(alpha, 127, 24, 17)
+                                : Color(alpha, 92, 92, 92);
+                bitmap.SetPixel(col, row, ink);
+            }
+        }
+        g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+        g.SetPixelOffsetMode(PixelOffsetModeHighQuality);
+        g.DrawImage(&bitmap, Rect(x, y, Px(w), Px(h)), 0, 0, w, h, UnitPixel);
+    };
+    paintMask(
+        wrenchMask, 11, 10,
+        t81BalloonSettings.left +
+            (t81BalloonSettings.right - t81BalloonSettings.left - Px(11)) / 2,
+        t81BalloonSettings.top +
+            (t81BalloonSettings.bottom - t81BalloonSettings.top - Px(10)) / 2);
+    paintMask(closeMask, 12, 8,
+              t81BalloonClose.left +
+                  (t81BalloonClose.right - t81BalloonClose.left - Px(12)) / 2,
+              t81BalloonClose.top +
+                  (t81BalloonClose.bottom - t81BalloonClose.top - Px(8)) / 2);
+    // Wine or a damaged font configuration may reject GDI+ fonts. Never leave
+    // a notification unreadable: use the system GUI font only as a fallback.
+    if (titleFont.GetLastStatus() != Ok || textFont.GetLastStatus() != Ok) {
+        SetBkMode(dc, TRANSPARENT);
+        HFONT font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+        HGDIOBJ old = SelectObject(dc, font);
+        SetTextColor(dc, RGB(0, 51, 153));
+        RECT tr{(LONG)title.X, (LONG)title.Y, (LONG)(title.X + title.Width),
+                (LONG)(title.Y + title.Height)};
+        DrawTextW(dc, t81BalloonCurrent.title.c_str(), -1, &tr,
+                  DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        SetTextColor(dc, RGB(0, 0, 0));
+        RECT br{(LONG)text.X, (LONG)text.Y, (LONG)(text.X + text.Width),
+                (LONG)(text.Y + text.Height)};
+        DrawTextW(dc, t81BalloonCurrent.text.c_str(), -1, &br,
+                  DT_WORDBREAK | DT_END_ELLIPSIS | DT_NOPREFIX);
+        SelectObject(dc, old);
+    }
+}
+static void T81ShapeWin7Balloon(HWND hwnd, int width, int height) {
+    int tail = Px(16);
+    int left = t81BalloonTailSide == 1 ? tail : 0;
+    int right = t81BalloonTailSide == 2 ? width - tail : width;
+    int top = !t81BalloonTailSide && t81BalloonTailTop ? tail : 0;
+    int bottom =
+        !t81BalloonTailSide && !t81BalloonTailTop ? height - tail : height;
+    HRGN body =
+        CreateRoundRectRgn(left, top, right + 1, bottom + 1, Px(5), Px(5));
+    POINT points[3];
+    if (t81BalloonTailSide) {
+        int edge = t81BalloonTailSide == 1 ? left + 1 : right - 1;
+        int tip = t81BalloonTailSide == 1 ? 0 : width - 1;
+        points[0] = POINT{edge, t81BalloonTailY - Px(18)};
+        points[1] = POINT{tip, t81BalloonTailY};
+        points[2] = POINT{edge, t81BalloonTailY};
+    } else if (t81BalloonTailTop) {
+        points[0] = POINT{t81BalloonTailX - Px(18), top + 1};
+        points[1] = POINT{t81BalloonTailX, 0};
+        points[2] = POINT{t81BalloonTailX, top + 1};
+    } else {
+        points[0] = POINT{t81BalloonTailX - Px(18), bottom - 1};
+        points[1] = POINT{t81BalloonTailX, height - 1};
+        points[2] = POINT{t81BalloonTailX, bottom - 1};
+    }
+    HRGN tip = CreatePolygonRgn(points, 3, WINDING);
+    if (body && tip && CombineRgn(body, body, tip, RGN_OR) != ERROR) {
+        if (!SetWindowRgn(hwnd, body, FALSE))
+            DeleteObject(body);
+    } else if (body) {
+        DeleteObject(body);
+    }
+    if (tip)
+        DeleteObject(tip);
+}
+static LRESULT CALLBACK T81BalloonProc(HWND hwnd,
+                                       UINT msg,
+                                       WPARAM wp,
+                                       LPARAM lp) {
+    switch (msg) {
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
+        case WM_ERASEBKGND:
+            return 1;
+        case WM_PAINT: {
+            PAINTSTRUCT ps{};
+            HDC dc = BeginPaint(hwnd, &ps);
+            RECT r{};
+            GetClientRect(hwnd, &r);
+            if (t81BalloonWin7) {
+                T81PaintWin7Balloon(dc, r);
+                EndPaint(hwnd, &ps);
+                return 0;
+            }
+            HBRUSH bg = CreateSolidBrush(RGB(255, 255, 225));
+            FillRect(dc, &r, bg);
+            DeleteObject(bg);
+            HBRUSH edge = CreateSolidBrush(RGB(90, 90, 90));
+            FrameRect(dc, &r, edge);
+            DeleteObject(edge);
+            SetBkMode(dc, TRANSPARENT);
+            SetTextColor(dc, RGB(0, 0, 0));
+            int pad = std::max(4, Px(8));
+            int iconSize = std::max(16, Px(20));
+            int closeSize = std::max(14, Px(18));
+            t81BalloonClose = RECT{r.right - pad - closeSize, pad,
+                                   r.right - pad, pad + closeSize};
+            RECT close = t81BalloonClose;
+            DrawTextW(dc, L"\u00d7", -1, &close,
+                      DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+            DWORD kind = t81BalloonCurrent.flags & 0xf;
+            LPCWSTR resource = kind == NIIF_WARNING ? IDI_WARNING
+                               : kind == NIIF_ERROR ? IDI_ERROR
+                               : kind == NIIF_INFO  ? IDI_INFORMATION
+                                                    : nullptr;
+            if (resource) {
+                HICON icon = LoadIconW(nullptr, resource);
+                if (icon)
+                    DrawIconEx(dc, pad, pad, icon, iconSize, iconSize, 0,
+                               nullptr, DI_NORMAL);
+            }
+            int left = pad + (resource ? iconSize + pad : 0);
+            LOGFONTW lf{};
+            lf.lfHeight = -std::max(10, Px(12));
+            lf.lfWeight = FW_BOLD;
+            wcscpy_s(lf.lfFaceName, L"Segoe UI");
+            HFONT bold = CreateFontIndirectW(&lf);
+            HFONT normal = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+            HGDIOBJ old = SelectObject(dc, bold ? bold : normal);
+            RECT title{left, pad, t81BalloonClose.left - pad, pad + iconSize};
+            DrawTextW(
+                dc, t81BalloonCurrent.title.c_str(), -1, &title,
+                DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX | DT_VCENTER);
+            SelectObject(dc, normal);
+            RECT body{pad, pad + iconSize + pad / 2, r.right - pad,
+                      r.bottom - pad};
+            DrawTextW(dc, t81BalloonCurrent.text.c_str(), -1, &body,
+                      DT_WORDBREAK | DT_NOPREFIX | DT_END_ELLIPSIS);
+            SelectObject(dc, old);
+            if (bold)
+                DeleteObject(bold);
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+        case WM_TIMER:
+            if (wp == 1 && t81BalloonVisible && t81BalloonWin7) {
+                ULONGLONG now = GetTickCount64();
+                ULONGLONG in =
+                    now > t81BalloonShownAt
+                        ? std::min<ULONGLONG>(500, now - t81BalloonShownAt)
+                        : 0;
+                ULONGLONG out =
+                    t81BalloonMouseInside
+                        ? 500
+                        : (t81BalloonUntil > now
+                               ? std::min<ULONGLONG>(500, t81BalloonUntil - now)
+                               : 0);
+                BYTE alpha = (BYTE)(std::min(in, out) * 255 / 500);
+                SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
+                if (!t81BalloonMouseInside && now >= t81BalloonUntil)
+                    T81BalloonFinish(NIN_BALLOONTIMEOUT);
+                return 0;
+            }
+            break;
+        case WM_MOUSEMOVE:
+            if (t81BalloonVisible && !t81BalloonMouseInside) {
+                ULONGLONG now = GetTickCount64();
+                t81BalloonMouseInside = true;
+                t81BalloonPausedRemaining =
+                    t81BalloonUntil > now ? t81BalloonUntil - now : 0;
+                if (t81BalloonWin7)
+                    SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+            }
+            if (t81BalloonVisible) {
+                TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, hwnd, 0};
+                TrackMouseEvent(&track);
+            }
+            if (t81BalloonWin7 && t81BalloonVisible) {
+                POINT p{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+                int hot = PtInRect(&t81BalloonClose, p)      ? 1
+                          : PtInRect(&t81BalloonSettings, p) ? 2
+                                                             : 0;
+                if (hot != t81BalloonHot) {
+                    t81BalloonHot = hot;
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                }
+            }
+            return 0;
+        case WM_MOUSELEAVE:
+            if (t81BalloonVisible && t81BalloonMouseInside) {
+                t81BalloonMouseInside = false;
+                // Three seconds is a deliberate grace period, not an asserted
+                // native Win7 constant. Preserve any longer remaining time.
+                t81BalloonUntil =
+                    GetTickCount64() +
+                    std::max<ULONGLONG>(3000, t81BalloonPausedRemaining);
+                t81BalloonPausedRemaining = 0;
+            }
+            if (t81BalloonHot) {
+                t81BalloonHot = 0;
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            return 0;
+        case WM_LBUTTONUP: {
+            POINT p{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+            if (t81BalloonWin7 && PtInRect(&t81BalloonSettings, p)) {
+                T81BalloonFinish(NIN_BALLOONHIDE);
+                OpenNotificationIconsPage(s ? s->bar : nullptr);
+            } else {
+                T81BalloonFinish(PtInRect(&t81BalloonClose, p)
+                                     ? NIN_BALLOONTIMEOUT
+                                     : NIN_BALLOONUSERCLICK);
+            }
+            return 0;
+        }
+        case WM_RBUTTONUP:
+            return 0;
+        case WM_NCDESTROY:
+            if (t81BalloonWindow == hwnd)
+                t81BalloonWindow = nullptr;
+            break;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+static bool T81BalloonEnsureWindow() {
+    if (t81BalloonWindow && IsWindow(t81BalloonWindow))
+        return true;
+    if (!s || !s->bar || !IsWindow(s->bar))
+        return false;
+    const wchar_t* name = L"WH_Taskbar81Balloon";
+    HINSTANCE instance = GetModuleHandleW(nullptr);
+    WNDCLASSW wc{};
+    wc.lpfnWndProc = T81BalloonProc;
+    wc.hInstance = instance;
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.lpszClassName = name;
+    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+        return false;
+    WNDCLASSW registered{};
+    if (!GetClassInfoW(instance, name, &registered) ||
+        registered.lpfnWndProc != T81BalloonProc)
+        return false;
+    t81BalloonWindow = CreateWindowExW(
+        WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE, name, L"",
+        WS_POPUP, 0, 0, 1, 1, s->bar, nullptr, instance, nullptr);
+    return t81BalloonWindow != nullptr;
+}
+static void T81BalloonTick() {
+    if (!s || !s->bar)
+        return;
+    if (t81BalloonVisible) {
+        if (!t81BalloonMouseInside && GetTickCount64() >= t81BalloonUntil)
+            T81BalloonFinish(NIN_BALLOONTIMEOUT);
+        return;
+    }
+    while (!t81BalloonQueue.empty()) {
+        T81Balloon b = std::move(t81BalloonQueue.front());
+        t81BalloonQueue.erase(t81BalloonQueue.begin());
+        int index = FindPrivateIcon(b.owner, b.id, b.guid);
+        if (GetTickCount64() - b.queued > 120000 || index < 0 ||
+            s->trayIcons[index].ownerPid != b.pid || !IsWindow(b.owner))
+            continue;
+        if (!T81BalloonEnsureWindow())
+            break;
+        // Temporarily reveal an overflow icon during its balloon, without
+        // changing the user's pinned-icon preferences.
+        T81AutoHideRevealNow();
+        t81BalloonCurrent = std::move(b);
+        t81BalloonVisible = true;
+        InvalidateRect(s->bar, nullptr, FALSE);
+        RECT anchor{};
+        anchor = PrivateIconRect(index);
+        if (!IsRectEmpty(&anchor))
+            MapWindowPoints(s->bar, nullptr, (POINT*)&anchor, 2);
+        else
+            OverflowIconScreenRect(index, &anchor);
+        if (IsRectEmpty(&anchor))
+            GetWindowRect(s->bar, &anchor);
+        MONITORINFO mi{sizeof(mi)};
+        if (!GetMonitorInfoW(MonitorFromRect(&anchor, MONITOR_DEFAULTTONEAREST),
+                             &mi)) {
+            t81BalloonVisible = false;
+            t81BalloonCurrent = T81Balloon{};
+            break;
+        }
+        // The reference Win7 balloon body is approximately 280 x 70 at 96 DPI.
+        t81BalloonWin7 = T81IsWin7Skin(taskbarSkin.load());
+        t81BalloonTailSide =
+            t81BalloonWin7 && s->verticalActive ? s->verticalSide : 0;
+        int width = std::min(
+            Px(t81BalloonWin7 ? (t81BalloonTailSide ? 296 : 280) : 310),
+            (int)(mi.rcWork.right - mi.rcWork.left));
+        int bodyHeight = Px(70);
+        if (t81BalloonWin7 && width > Px(55)) {
+            HDC measure = GetDC(t81BalloonWindow);
+            if (measure) {
+                LOGFONTW lf{};
+                lf.lfHeight = -Px(12);
+                wcscpy_s(lf.lfFaceName, L"Segoe UI");
+                HFONT font = CreateFontIndirectW(&lf);
+                HGDIOBJ old = SelectObject(
+                    measure, font ? font : GetStockObject(DEFAULT_GUI_FONT));
+                RECT measured{0, 0, width - Px(t81BalloonTailSide ? 59 : 43),
+                              0};
+                DrawTextW(measure, t81BalloonCurrent.text.c_str(), -1,
+                          &measured, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
+                bodyHeight = std::max(Px(70), (int)measured.bottom + Px(39));
+                SelectObject(measure, old);
+                if (font)
+                    DeleteObject(font);
+                ReleaseDC(t81BalloonWindow, measure);
+            }
+        }
+        int height = std::min(
+            t81BalloonWin7 ? bodyHeight + (t81BalloonTailSide ? 0 : Px(16))
+                           : Px(100),
+            (int)(mi.rcWork.bottom - mi.rcWork.top));
+        if (width <= 0 || height <= 0) {
+            t81BalloonVisible = false;
+            t81BalloonCurrent = T81Balloon{};
+            break;
+        }
+        int anchorX = (anchor.left + anchor.right) / 2;
+        int x = t81BalloonWin7 ? anchorX - width + Px(14)
+                               : (anchor.left + anchor.right - width) / 2;
+        int y = s->nativeEdge == ABE_TOP ? anchor.bottom : anchor.top - height;
+        if (t81BalloonWin7) {
+            // Anchor to the icon artwork (roughly 16 logical pixels high),
+            // rather than to the outer edge of its taller taskbar cell.
+            int iconCenterY = (anchor.top + anchor.bottom) / 2;
+            y = s->nativeEdge == ABE_TOP ? iconCenterY + Px(8)
+                                         : iconCenterY - Px(8) - height;
+        }
+        if (s->verticalActive) {
+            x = s->verticalSide == 1 ? anchor.right : anchor.left - width;
+            y = t81BalloonTailSide
+                    ? (anchor.top + anchor.bottom) / 2 - height + Px(12)
+                    : (anchor.top + anchor.bottom - height) / 2;
+        }
+        x = std::max((int)mi.rcWork.left,
+                     std::min(x, (int)mi.rcWork.right - width));
+        // The tip may enter the taskbar so it can approach the icon; bound it
+        // to the monitor, while keeping all non-Win7 placement unchanged.
+        const RECT& yBounds = t81BalloonWin7 ? mi.rcMonitor : mi.rcWork;
+        y = std::max((int)yBounds.top,
+                     std::min(y, (int)yBounds.bottom - height));
+        if (t81BalloonWin7 && width > Px(30) && height > Px(20)) {
+            t81BalloonTailX =
+                std::max(Px(20), std::min(anchorX - x, width - Px(4)));
+            t81BalloonTailTop = s->nativeEdge == ABE_TOP;
+            t81BalloonTailY = std::max(
+                Px(20), std::min((int)((anchor.top + anchor.bottom) / 2 - y),
+                                 height - Px(4)));
+            T81ShapeWin7Balloon(t81BalloonWindow, width, height);
+        } else {
+            SetWindowRgn(t81BalloonWindow, nullptr, FALSE);
+        }
+        t81BalloonAnchor = POINT{(anchor.left + anchor.right) / 2,
+                                 (anchor.top + anchor.bottom) / 2};
+        t81BalloonVisible = true;
+        t81BalloonShownAt = GetTickCount64();
+        t81BalloonUntil = t81BalloonShownAt + 10000;
+        t81BalloonMouseInside = false;
+        t81BalloonPausedRemaining = 0;
+        if (t81BalloonWin7) {
+            SetWindowLongPtrW(t81BalloonWindow, GWL_EXSTYLE,
+                              GetWindowLongPtrW(t81BalloonWindow, GWL_EXSTYLE) |
+                                  WS_EX_LAYERED);
+            SetLayeredWindowAttributes(t81BalloonWindow, 0, 0, LWA_ALPHA);
+        } else {
+            SetWindowLongPtrW(t81BalloonWindow, GWL_EXSTYLE,
+                              GetWindowLongPtrW(t81BalloonWindow, GWL_EXSTYLE) &
+                                  ~((LONG_PTR)WS_EX_LAYERED));
+        }
+        if (!SetWindowPos(t81BalloonWindow, HWND_TOPMOST, x, y, width, height,
+                          SWP_NOACTIVATE | SWP_SHOWWINDOW)) {
+            t81BalloonVisible = false;
+            t81BalloonCurrent = T81Balloon{};
+            break;
+        }
+        if (t81BalloonWin7) {
+            if (!SetTimer(t81BalloonWindow, 1, 16, nullptr))
+                SetLayeredWindowAttributes(t81BalloonWindow, 0, 255, LWA_ALPHA);
+        }
+        Wh_Log(
+            L"[T81-BALLOON] geometry index=%d anchor=%ld,%ld,%ld,%ld "
+            L"popup=%d,%d,%d,%d tail=%d",
+            index, anchor.left, anchor.top, anchor.right, anchor.bottom, x, y,
+            width, height, t81BalloonTailX);
+        InvalidateRect(t81BalloonWindow, nullptr, TRUE);
+        T81BalloonCallback(t81BalloonCurrent, NIN_BALLOONSHOW);
+        SetTimer(s->bar, TIMER_T81_BALLOON, 250, nullptr);
+        Wh_Log(L"[T81-BALLOON] shown id=%lu",
+               (unsigned long)t81BalloonCurrent.id);
+        return;
+    }
+    KillTimer(s->bar, TIMER_T81_BALLOON);
+}
+static void T81BalloonCancel(HWND owner, DWORD id, const GUID& guid) {
+    t81BalloonQueue.erase(
+        std::remove_if(t81BalloonQueue.begin(), t81BalloonQueue.end(),
+                       [&](const T81Balloon& b) {
+                           return T81BalloonSame(b, owner, id, guid);
+                       }),
+        t81BalloonQueue.end());
+    if (t81BalloonVisible && T81BalloonSame(t81BalloonCurrent, owner, id, guid))
+        T81BalloonFinish(NIN_BALLOONHIDE);
+}
+// True means NIF_INFO was consumed; caller must forward the rest of the
+// registration to Explorer with that single flag cleared to avoid duplicates.
+static bool T81BalloonConsume(const COPYDATASTRUCT* data, bool deleting) {
+    if (!s || !s->privateActive || !data || !data->lpData ||
+        data->dwData != 1 ||
+        data->cbData <
+            offsetof(TrayWireData, icon) + offsetof(TrayWireIcon, callback) ||
+        data->cbData > 65536)
+        return false;
+    TrayWireData wire{};
+    memcpy(&wire, data->lpData, std::min<size_t>(data->cbData, sizeof(wire)));
+    const auto& n = wire.icon;
+    GUID guid{};
+    if ((n.flags & NIF_GUID) &&
+        TrayFieldAvailable(data->cbData, n.cbSize,
+                           offsetof(TrayWireIcon, guid) + sizeof(GUID)))
+        guid = n.guid;
+    HWND owner = (HWND)(ULONG_PTR)n.hwnd32;
+    if (deleting) {
+        T81BalloonCancel(owner, n.id, guid);
+        return false;
+    }
+    if ((wire.message != NIM_ADD && wire.message != NIM_MODIFY) ||
+        !(n.flags & NIF_INFO) ||
+        !TrayFieldAvailable(data->cbData, n.cbSize,
+                            offsetof(TrayWireIcon, infoFlags) + sizeof(DWORD)))
+        return false;
+    int index = FindPrivateIcon(owner, n.id, guid);
+    if (index < 0 || s->trayIcons[index].hidden)
+        return false;
+    // Real-time delivery requires semantics not yet provided.
+    if (n.flags & NIF_REALTIME)
+        return false;
+    size_t textLength = 0, titleLength = 0;
+    while (textLength < std::size(n.info) && n.info[textLength])
+        ++textLength;
+    while (titleLength < std::size(n.title) && n.title[titleLength])
+        ++titleLength;
+    if (!textLength) {
+        T81BalloonCancel(owner, n.id, guid);
+        return true;
+    }
+    if (!T81BalloonEnsureWindow())
+        return false;
+    const PrivateIcon& icon = s->trayIcons[index];
+    T81Balloon b;
+    b.owner = icon.owner;
+    b.pid = icon.ownerPid;
+    b.id = icon.id;
+    b.guid = icon.guid;
+    b.callback = icon.callback;
+    b.version = icon.version;
+    b.flags = n.infoFlags;
+    if ((n.infoFlags & 0xf) == NIIF_USER) {
+        HICON supplied = nullptr;
+        if (TrayFieldAvailable(
+                data->cbData, n.cbSize,
+                offsetof(TrayWireIcon, balloonIcon) + sizeof(DWORD)) &&
+            n.balloonIcon) {
+            supplied = CopyIcon((HICON)(ULONG_PTR)n.balloonIcon);
+            if (!supplied)
+                return false;
+        } else if (icon.icon)
+            supplied = CopyIcon(icon.icon);
+        if (!supplied)
+            return false;  // preserve the Explorer fallback
+        b.balloonIcon = std::shared_ptr<void>(
+            supplied, [](void* p) { DestroyIcon((HICON)p); });
+    }
+    b.title.assign(n.title, titleLength);
+    b.text.assign(n.info, textLength);
+    b.queued = GetTickCount64();
+    QUERY_USER_NOTIFICATION_STATE state{};
+    if (SUCCEEDED(SHQueryUserNotificationState(&state))) {
+        if ((n.infoFlags & NIIF_RESPECT_QUIET_TIME) &&
+            state == QUNS_QUIET_TIME) {
+            T81BalloonCallback(b, NIN_BALLOONHIDE);
+            return true;
+        }
+        // Leave presentation/full-screen/absent policy to the real Shell.
+        if (state == QUNS_BUSY || state == QUNS_RUNNING_D3D_FULL_SCREEN ||
+            state == QUNS_PRESENTATION_MODE || state == QUNS_NOT_PRESENT)
+            return false;
+    }
+    if (t81BalloonQueue.size() >= 16)
+        t81BalloonQueue.erase(t81BalloonQueue.begin());
+    t81BalloonQueue.push_back(std::move(b));
+    if (!SetTimer(s->bar, TIMER_T81_BALLOON, 50, nullptr)) {
+        t81BalloonQueue.pop_back();
+        return false;
+    }
+    return true;
+}
+static void T81BalloonCleanup() {
+    if (s && s->bar)
+        KillTimer(s->bar, TIMER_T81_BALLOON);
+    if (t81BalloonVisible)
+        T81BalloonCallback(t81BalloonCurrent, NIN_BALLOONHIDE);
+    t81BalloonVisible = false;
+    t81BalloonCurrent = T81Balloon{};
+    t81BalloonQueue.clear();
+    if (t81BalloonWindow && IsWindow(t81BalloonWindow))
+        DestroyWindow(t81BalloonWindow);
+    t81BalloonWindow = nullptr;
+    UnregisterClassW(L"WH_Taskbar81Balloon", GetModuleHandleW(nullptr));
+}
+
 static LRESULT CALLBACK PrivateTrayProc(HWND hwnd,
                                         UINT msg,
                                         WPARAM wp,
@@ -12747,10 +13605,61 @@ static LRESULT CALLBACK PrivateTrayProc(HWND hwnd,
             if (data->dwData == 0)
                 return ForwardPrivateAppBar(wp, data);
             if (data->dwData == 1) {
+                TrayWireData wire{};
+                if (data->lpData && data->cbData >= sizeof(DWORD) * 2)
+                    memcpy(&wire, data->lpData,
+                           std::min<size_t>(data->cbData, sizeof(wire)));
+                if (wire.message == NIM_DELETE)
+                    T81BalloonConsume(data, true);
                 LRESULT own = ProcessTrayCopy(data);
-                // Keep Explorer informed: system shell services may depend on
-                // its copy, and NIF_INFO balloons are not implemented here.
-                LRESULT native = ForwardShellMessage(msg, wp, lp);
+                bool consumed = own && T81BalloonConsume(data, false);
+                if ((wire.message == NIM_ADD || wire.message == NIM_MODIFY) &&
+                    (wire.icon.flags & NIF_INFO)) {
+                    GUID guid{};
+                    if ((wire.icon.flags & NIF_GUID) &&
+                        TrayFieldAvailable(
+                            data->cbData, wire.icon.cbSize,
+                            offsetof(TrayWireIcon, guid) + sizeof(GUID)))
+                        guid = wire.icon.guid;
+                    int index = FindPrivateIcon(
+                        (HWND)(ULONG_PTR)wire.icon.hwnd32, wire.icon.id, guid);
+                    QUERY_USER_NOTIFICATION_STATE state{};
+                    HRESULT stateHr = SHQueryUserNotificationState(&state);
+                    Wh_Log(
+                        L"[T81-BALLOON] packet msg=%lu bytes=%lu cb=%lu "
+                        L"flags=0x%lx infoFlags=0x%lx owner=%p id=%lu own=%lld "
+                        L"index=%d hidden=%d active=%d stateHr=0x%08lx "
+                        L"state=%d consumed=%d",
+                        (unsigned long)wire.message,
+                        (unsigned long)data->cbData,
+                        (unsigned long)wire.icon.cbSize,
+                        (unsigned long)wire.icon.flags,
+                        (unsigned long)wire.icon.infoFlags,
+                        (HWND)(ULONG_PTR)wire.icon.hwnd32,
+                        (unsigned long)wire.icon.id, (long long)own, index,
+                        index >= 0 ? (int)s->trayIcons[index].hidden : -1,
+                        (int)s->privateActive, (unsigned long)stateHr,
+                        (int)state, (int)consumed);
+                }
+                LRESULT native = 0;
+                if (consumed && data->cbData <= 65536 &&
+                    data->cbData >= offsetof(TrayWireData, icon) +
+                                        offsetof(TrayWireIcon, flags) +
+                                        sizeof(DWORD)) {
+                    std::vector<BYTE> bytes(data->cbData);
+                    memcpy(bytes.data(), data->lpData, bytes.size());
+                    DWORD flags = 0;
+                    size_t offset = offsetof(TrayWireData, icon) +
+                                    offsetof(TrayWireIcon, flags);
+                    memcpy(&flags, bytes.data() + offset, sizeof(flags));
+                    flags &= ~NIF_INFO;
+                    memcpy(bytes.data() + offset, &flags, sizeof(flags));
+                    COPYDATASTRUCT copy{data->dwData, data->cbData,
+                                        bytes.data()};
+                    native = ForwardShellMessage(msg, wp, (LPARAM)&copy);
+                } else {
+                    native = ForwardShellMessage(msg, wp, lp);
+                }
                 return own ? own : native;
             }
             if (data->dwData == 3) {
@@ -13875,14 +14784,17 @@ static VerticalLayout GetVerticalLayout(int width, int height) {
     int start = Px(startHotCorner.load()
                        ? 0
                        : (taskbarSkin.load() == 7
-                              ? (s->nativeSmallIcons ? 44 : 57)
+                              ? (s->nativeSmallIcons ? 40 : 44)
                               : (beta8148 ? 54 : kVerticalStartLogical))),
-        desk = Px(taskbarSkin.load() == 7 ? 24
-                  : beta8148              ? 15
-                                          : 8),
+        desk = Px(taskbarSkin.load() == 7                 ? 24
+                  : (beta8148 || taskbarSkin.load() == 8) ? 15
+                                                          : 8),
         clock = VerticalClockHeight(), cell = Px(24), arrow = Px(25);
     const int taskStep =
-        s->nativeSmallIcons ? 32 : (beta8148 ? 50 : kVerticalTaskLogical);
+        s->nativeSmallIcons
+            ? 32
+            : ((beta8148 || taskbarSkin.load() == 8) ? 50
+                                                     : kVerticalTaskLogical);
     int y = height;
     v.desktop = RECT{0, y - desk, width, y};
     y -= desk;
@@ -13984,6 +14896,17 @@ static std::vector<int> VisiblePrivateIcons() {
         capacity = std::min(8, std::max(0, remaining / std::max(1, Px(24))));
     }
     capacity = std::min(capacity, 80);
+    auto revealBalloonIcon = [&]() {
+        if (!t81BalloonVisible || capacity <= 0)
+            return;
+        int index =
+            FindPrivateIcon(t81BalloonCurrent.owner, t81BalloonCurrent.id,
+                            t81BalloonCurrent.guid);
+        if (index >= 0 && !s->trayIcons[index].hidden &&
+            s->trayIcons[index].icon &&
+            std::find(list.begin(), list.end(), index) == list.end())
+            list.push_back(index);
+    };
     // [T81-CNI] Additive fast path: the original pinned-only algorithm
     // below remains unchanged and is used whenever show-all is disabled.
     if (s->trayShowAll) {
@@ -13996,6 +14919,7 @@ static std::vector<int> VisiblePrivateIcons() {
         }
         if (capacity == 0)
             list.clear();
+        revealBalloonIcon();
         return list;
     }
     for (const auto& key : s->trayPinned) {
@@ -14011,6 +14935,7 @@ static std::vector<int> VisiblePrivateIcons() {
     }
     if (capacity == 0)
         list.clear();
+    revealBalloonIcon();
     return list;
 }
 // RetroBar Controls/NotifyIconList.xaml.cs UpdateIconOrder and
@@ -14037,6 +14962,19 @@ static std::vector<int> VisibleTrayEntries() {
     };
     std::stable_sort(entries.begin(), entries.end(),
                      [&](int a, int b) { return rank(a) < rank(b); });
+    if (t81BalloonVisible && !s->trayShowAll) {
+        int index =
+            FindPrivateIcon(t81BalloonCurrent.owner, t81BalloonCurrent.id,
+                            t81BalloonCurrent.guid);
+        if (index >= 0) {
+            const auto& key = s->trayIcons[index].preferenceKey;
+            bool pinned = std::find(s->trayPinned.begin(), s->trayPinned.end(),
+                                    key) != s->trayPinned.end();
+            auto it = std::find(entries.begin(), entries.end(), index);
+            if (!pinned && it != entries.end())
+                std::rotate(entries.begin(), it, it + 1);
+        }
+    }
     return entries;
 }
 static int OverflowButtonWidth() {
@@ -14180,6 +15118,30 @@ static RECT ArrowHoverRect(RECT cell) {
     return RECT{left, top, left + tw, top + th};
 }
 static void DrawArrowHover(Graphics& g, RECT cell) {
+    if (T81IsWin7Skin(taskbarSkin.load())) {
+        RECT r = cell;
+        r.top += Px(2);
+        r.bottom -= Px(2);
+        if (IsRectEmpty(&r))
+            return;
+        Rect box(r.left, r.top, r.right - r.left, r.bottom - r.top);
+        LinearGradientBrush fill(box, Color(255, 106, 155, 187),
+                                 Color(255, 10, 142, 180),
+                                 LinearGradientModeVertical);
+        Color colors[] = {Color(255, 106, 155, 187), Color(255, 7, 92, 128),
+                          Color(255, 10, 142, 180)};
+        REAL positions[] = {0.0f, 0.52f, 1.0f};
+        fill.SetInterpolationColors(colors, positions, 3);
+        g.FillRectangle(&fill, box);
+        Pen outer(Color(255, 36, 75, 100));
+        Pen inner(Color(255, 91, 146, 166));
+        g.DrawRectangle(&outer, box.X, box.Y, std::max(1, box.Width - 1),
+                        std::max(1, box.Height - 1));
+        if (box.Width > 3 && box.Height > 3)
+            g.DrawRectangle(&inner, box.X + 1, box.Y + 1, box.Width - 3,
+                            box.Height - 3);
+        return;
+    }
     RECT r = ArrowHoverRect(cell);
     SmoothingMode previous = g.GetSmoothingMode();
     g.SetSmoothingMode(SmoothingModeNone);
@@ -14215,6 +15177,61 @@ static void DrawTrayArrowHover(Graphics& g, RECT cell) {
             g.FillRectangle(&edge, (int)r.right - 1, (int)r.top + 1, 1, h - 2);
     }
     g.SetSmoothingMode(old);
+}
+// Classic Server: preserve the two existing five-pixel chevron shapes.
+// GDI+ antialiases fractional DPI boundaries without widening the glyph.
+static void T81DrawClassicChevron(Graphics& g,
+                                  RECT cell,
+                                  int dpi,
+                                  int rotation,
+                                  bool hot,
+                                  bool pressed) {
+    if (IsRectEmpty(&cell))
+        return;
+    auto saved = g.Save();
+    g.SetClip(Rect(cell.left, cell.top, cell.right - cell.left,
+                   cell.bottom - cell.top),
+              CombineModeIntersect);
+    g.SetSmoothingMode(SmoothingModeNone);
+    if (hot) {
+        RECT frame = cell;
+        int inset = std::max(1, MulDiv(3, dpi, 96));
+        InflateRect(&frame, -inset, -inset);
+        T81ClassicFrame(g, frame, pressed, false);
+    }
+    static const unsigned char rows[8] = {0x04, 0x0e, 0x1b, 0x11,
+                                          0x04, 0x0e, 0x1b, 0x11};
+    const bool sideways = rotation == 1 || rotation == 3;
+    int w = std::max(1, MulDiv(sideways ? 8 : 5, dpi, 96));
+    int h = std::max(1, MulDiv(sideways ? 5 : 8, dpi, 96));
+    int left = cell.left + ((cell.right - cell.left) - w) / 2;
+    int top = cell.top + ((cell.bottom - cell.top) - h) / 2;
+    SolidBrush ink(Color(255, 0, 0, 0));
+    GraphicsPath glyph(FillModeWinding);
+    for (int y = 0; y < 8; ++y) {
+        for (int x = 0; x < 5; ++x) {
+            if (!(rows[y] & (1u << (4 - x))))
+                continue;
+            int xx = x, yy = y;
+            if (rotation == 1) {
+                xx = 7 - y;
+                yy = x;
+            } else if (rotation == 2) {
+                xx = 4 - x;
+                yy = 7 - y;
+            } else if (rotation == 3) {
+                xx = y;
+                yy = 4 - x;
+            }
+            REAL scale = (REAL)dpi / 96.f;
+            glyph.AddRectangle(
+                RectF(left + xx * scale, top + yy * scale, scale, scale));
+        }
+    }
+    g.SetSmoothingMode(SmoothingModeAntiAlias);
+    g.SetPixelOffsetMode(PixelOffsetModeHighQuality);
+    g.FillPath(&ink, &glyph);
+    g.Restore(saved);
 }
 static bool DrawWin7OverflowButton(Graphics& g,
                                    const RECT& cell,
@@ -14283,7 +15300,17 @@ static void PaintPrivateArea(Graphics& g, HDC dc, const Layout& L, int h) {
                         std::max(1, h - Px(10)));
     }
     RECT overflowCell{L.tray.left, 0, L.tray.left + OverflowButtonWidth(), h};
-    bool win7Arrow = DrawWin7OverflowButton(g, overflowCell, false);
+    bool win7Arrow = false;
+    if (taskbarSkin.load() == 7) {
+        bool hot = s->hot == HIT_TRAY_MORE ||
+                   (s->overflowPanel && IsWindowVisible(s->overflowPanel));
+        T81DrawClassicChevron(g, overflowCell, Dpi(),
+                              s->nativeEdge == ABE_TOP ? 2 : 0, hot,
+                              hot && (GetKeyState(VK_LBUTTON) & 0x8000));
+        win7Arrow = true;
+    } else {
+        win7Arrow = DrawWin7OverflowButton(g, overflowCell, false);
+    }
     if (!win7Arrow &&
         (s->hot == HIT_TRAY_MORE ||
          (s->overflowPanel && IsWindowVisible(s->overflowPanel)))) {
@@ -19207,6 +20234,9 @@ static RECT PrivateSystemAnchor(int hit) {
 // noninteractive and remove the subclass on the owning thread at teardown.
 static constexpr UINT_PTR kBatteryFrameSubclass = 0x8130;
 static constexpr UINT_PTR TIMER_T81_BATTERY_REPAIR = 58;
+static constexpr UINT_PTR TIMER_T81_BATTERY_PERCENT = 60;
+static void T81BatteryLiveForget(HWND flyout);
+static void T81BatteryLiveRefresh(bool force);
 static void PositionOriginalBatteryFlyout(HWND flyout);
 static int T81BatteryDpi(HWND h) {
     UINT dpi = GetDpiForWindow(h);
@@ -19319,6 +20349,7 @@ static LRESULT CALLBACK BatteryFrameSubclass(HWND h,
         return hit;
     }
     if (msg == WM_NCDESTROY) {
+        T81BatteryLiveForget(h);
         RemoveWindowSubclass(h, BatteryFrameSubclass, id);
         if (s && s->batteryFrameWindow == h)
             s->batteryFrameWindow = nullptr;
@@ -19333,6 +20364,8 @@ static LRESULT CALLBACK BatteryFrameSubclass(HWND h,
     return DefSubclassProc(h, msg, wp, lp);
 }
 static void CleanupBatteryFrame() {
+    if (s)
+        T81BatteryLiveForget(s->batteryFrameWindow);
     if (!s || !s->batteryFrameWindow)
         return;
     HWND h = s->batteryFrameWindow;
@@ -19596,7 +20629,7 @@ static void RefreshOriginalBatterySnapshot(HMODULE module) {
 }
 // Experimental display-only correction for the verified 1511 flyout. The
 // status formatter is private; confine changes to the thread and synchronous
-// ShowBatteryUI call, and only replace a standalone zero-percent value. The
+// flyout creation or refresh, and replace one unambiguous percentage. The
 // system reading is the aggregate, not necessarily an individual battery.
 using BatteryStatusTextFn = BOOL(WINAPI*)(const void*, WCHAR*, int);
 static BatteryStatusTextFn realBatteryStatusText = nullptr;
@@ -19609,7 +20642,7 @@ static BOOL WINAPI BatteryStatusTextHook(const void* data,
     if (!realBatteryStatusText)
         return FALSE;
     BOOL ok = realBatteryStatusText(data, text, capacity);
-    if (!ok || batteryDisplayPercent <= 0 || batteryDisplayPercent > 100 ||
+    if (!ok || batteryDisplayPercent < 0 || batteryDisplayPercent > 100 ||
         !text || capacity <= 0)
         return ok;
     size_t n = 0;
@@ -19617,18 +20650,24 @@ static BOOL WINAPI BatteryStatusTextHook(const void* data,
         ++n;
     if (n == (size_t)capacity)
         return ok;
-    size_t zero = n, matches = 0;
-    for (size_t i = 0; i < n; ++i) {
-        if (text[i] != L'0' ||
-            (i && text[i - 1] >= L'0' && text[i - 1] <= L'9'))
+    size_t first = n, last = n, matches = 0;
+    for (size_t i = 0; i < n;) {
+        if (text[i] < L'0' || text[i] > L'9') {
+            ++i;
             continue;
-        size_t j = i + 1;
+        }
+        size_t begin = i;
+        while (i < n && text[i] >= L'0' && text[i] <= L'9')
+            ++i;
+        size_t end = i;
+        size_t j = end;
         while (j < n &&
                (text[j] == L' ' || text[j] == L'\t' || text[j] == 0x00a0))
             ++j;
         if (j < n &&
             (text[j] == L'%' || text[j] == 0xff05 || text[j] == 0x066a)) {
-            zero = i;
+            first = begin;
+            last = end;
             ++matches;
         }
     }
@@ -19637,10 +20676,12 @@ static BOOL WINAPI BatteryStatusTextHook(const void* data,
     WCHAR digits[4]{};
     int count =
         swprintf(digits, std::size(digits), L"%d", batteryDisplayPercent);
-    if (count < 1 || count > 3 || n + (size_t)count - 1 >= (size_t)capacity)
+    size_t oldDigits = last - first;
+    if (count < 1 || count > 3 ||
+        n - oldDigits + (size_t)count >= (size_t)capacity)
         return ok;
-    memmove(text + zero + count, text + zero + 1, (n - zero) * sizeof(WCHAR));
-    memcpy(text + zero, digits, (size_t)count * sizeof(WCHAR));
+    memmove(text + first + count, text + last, (n - last + 1) * sizeof(WCHAR));
+    memcpy(text + first, digits, (size_t)count * sizeof(WCHAR));
     ++batteryDisplayCorrections;
     return ok;
 }
@@ -20007,15 +21048,240 @@ static void ClearBatteryInitialChildFocus(HWND flyout) {
         child, previous, after, IsWindowVisible(flyout) ? 1 : 0,
         GetLastError());
 }
+// The verified 1511 PDB and XML identify the existing DirectUI root and its
+// BatteryDescription element. Update that element rather than re-running
+// ShowBatteryUI, which can append a second tree. All private access is limited
+// to the pinned, hash-verified module and its owning UI thread.
+static HWND batteryLiveWindow = nullptr;
+static HMODULE batteryLiveModule = nullptr;
+static int batteryLiveLastPercent = -1;
+static BYTE batteryLiveLastAC = 255;
+static BYTE batteryLiveLastFlags = 255;
+static bool batteryLiveBusy = false;
+
+static void T81BatteryLiveForget(HWND flyout) {
+    if (flyout && flyout != batteryLiveWindow)
+        return;
+    if (s && s->bar)
+        KillTimer(s->bar, TIMER_T81_BATTERY_PERCENT);
+    batteryLiveWindow = nullptr;
+    batteryLiveModule = nullptr;
+    batteryLiveLastPercent = -1;
+    batteryLiveLastAC = 255;
+    batteryLiveLastFlags = 255;
+}
+
+static void T81BatteryLiveRefresh(bool force) {
+    HWND flyout = batteryLiveWindow;
+    HMODULE module = batteryLiveModule;
+    if (batteryLiveBusy || !s || !flyout || !module || !IsWindow(flyout) ||
+        !IsWindowVisible(flyout) ||
+        GetWindowThreadProcessId(flyout, nullptr) != GetCurrentThreadId() ||
+        batteryOwnerThread != GetCurrentThreadId())
+        return;
+    SYSTEM_POWER_STATUS status{};
+    if (!GetSystemPowerStatus(&status) || status.BatteryLifePercent > 100 ||
+        (status.BatteryFlag != 255 && (status.BatteryFlag & 128)))
+        return;
+    if (!force && batteryLiveLastPercent == status.BatteryLifePercent &&
+        batteryLiveLastAC == status.ACLineStatus &&
+        batteryLiveLastFlags == status.BatteryFlag)
+        return;
+    if (!InstallBatteryStatusTextHook())
+        return;
+    HMODULE dui = GetModuleHandleW(L"dui70.dll");
+    using StrToIdFn = unsigned short(WINAPI*)(const wchar_t*);
+    using FindFn = void*(WINAPI*)(void*, unsigned short);
+    using SetTextFn = HRESULT(WINAPI*)(void*, const wchar_t*);
+    auto id = dui ? reinterpret_cast<StrToIdFn>(GetProcAddress(dui, "StrToID"))
+                  : nullptr;
+    auto find =
+        dui ? reinterpret_cast<FindFn>(GetProcAddress(
+                  dui, "?FindDescendent@Element@DirectUI@@QEAAPEAV12@G@Z"))
+            : nullptr;
+    auto setText =
+        dui ? reinterpret_cast<SetTextFn>(GetProcAddress(
+                  dui, "?SetContentString@Element@DirectUI@@QEAAJPEBG@Z"))
+            : nullptr;
+    auto setName = dui ? reinterpret_cast<SetTextFn>(GetProcAddress(
+                             dui, "?SetAccName@Element@DirectUI@@QEAAJPEBG@Z"))
+                       : nullptr;
+    if (!id || !find || !setText) {
+        Wh_Log(L"[T81-BAT-LIVE] DirectUI exports unavailable; refresh skipped");
+        return;
+    }
+    BYTE* rootSlot = (BYTE*)module + 0x3dec0;
+    MEMORY_BASIC_INFORMATION mem{};
+    if (!VirtualQuery(rootSlot, &mem, sizeof(mem)) || mem.State != MEM_COMMIT ||
+        (mem.Protect & (PAGE_GUARD | PAGE_NOACCESS)) ||
+        (BYTE*)mem.BaseAddress + mem.RegionSize < rootSlot + sizeof(void*))
+        return;
+    void* root = *reinterpret_cast<void**>(rootSlot);
+    if (!root)
+        return;
+    // MainBatteryElement is added to CompositeBattery, not to body.
+    void* composite = find(root, id(L"CompositeBattery"));
+    void* description =
+        composite ? find(composite, id(L"BatteryDescription")) : nullptr;
+    if (!description) {
+        Wh_Log(L"[T81-BAT-LIVE] main battery description not found");
+        return;
+    }
+    batteryLiveBusy = true;
+    RefreshOriginalBatterySnapshot(module);
+    wchar_t text[512]{};
+    batteryDisplayPercent = (int)status.BatteryLifePercent;
+    batteryDisplayCorrections = 0;
+    BOOL formatted = BatteryStatusTextHook((BYTE*)module + 0x3d320, text,
+                                           (int)std::size(text));
+    batteryDisplayPercent = -1;
+    if (formatted && batteryDisplayCorrections == 1) {
+        HRESULT hr = setText(description, text);
+        if (SUCCEEDED(hr)) {
+            if (setName)
+                setName(description, text);
+            batteryLiveLastPercent = status.BatteryLifePercent;
+            batteryLiveLastAC = status.ACLineStatus;
+            batteryLiveLastFlags = status.BatteryFlag;
+            Wh_Log(L"[T81-BAT-LIVE] updated aggregate=%u AC=%u hr=0x%08lx",
+                   (unsigned)status.BatteryLifePercent,
+                   (unsigned)status.ACLineStatus, (unsigned long)hr);
+        } else {
+            Wh_Log(L"[T81-BAT-LIVE] DirectUI text update failed hr=0x%08lx",
+                   (unsigned long)hr);
+        }
+    } else {
+        Wh_Log(L"[T81-BAT-LIVE] no unambiguous percentage; update skipped");
+    }
+    batteryLiveBusy = false;
+}
+
+// HideFlyout in the pinned 1511 image clears the dynamic DirectUI children.
+// Use it on explicit dismissal too, so the normal private show path can
+// rebuild exactly one tree on the next open. Do not invoke a foreign module.
+static bool T81BatteryNativeHide(HWND flyout) {
+    if (!flyout || flyout != batteryLiveWindow || !batteryLiveModule ||
+        !IsWindow(flyout) ||
+        GetWindowThreadProcessId(flyout, nullptr) != GetCurrentThreadId() ||
+        batteryOwnerThread != GetCurrentThreadId())
+        return false;
+    const BYTE signature[] = {0x48, 0x83, 0xec, 0x28, 0x48, 0x8b, 0x0d};
+    BYTE* entry = (BYTE*)batteryLiveModule + 0x18380;
+    if (memcmp(entry, signature, sizeof(signature)))
+        return false;
+    if (IsWindowVisible(flyout)) {
+        using HideFn = HRESULT(WINAPI*)();
+        reinterpret_cast<HideFn>(entry)();
+    }
+    KillTimer(s->bar, TIMER_T81_BATTERY_PERCENT);
+    return !IsWindowVisible(flyout);
+}
+
+// Distinguish an intact hidden tree from one cleared by HideFlyout. A
+// missing DirectUI export or root is unknown, never permission to rebuild.
+static int T81BatteryMainTreeState(HMODULE module) {
+    HMODULE dui = GetModuleHandleW(L"dui70.dll");
+    using IdFn = unsigned short(WINAPI*)(const wchar_t*);
+    using FindFn = void*(WINAPI*)(void*, unsigned short);
+    auto id =
+        dui ? reinterpret_cast<IdFn>(GetProcAddress(dui, "StrToID")) : nullptr;
+    auto find =
+        dui ? reinterpret_cast<FindFn>(GetProcAddress(
+                  dui, "?FindDescendent@Element@DirectUI@@QEAAPEAV12@G@Z"))
+            : nullptr;
+    if (!module || !id || !find)
+        return -1;
+    BYTE* slot = (BYTE*)module + 0x3dec0;
+    MEMORY_BASIC_INFORMATION mem{};
+    if (!VirtualQuery(slot, &mem, sizeof(mem)) || mem.State != MEM_COMMIT ||
+        (mem.Protect & (PAGE_GUARD | PAGE_NOACCESS)) ||
+        (BYTE*)mem.BaseAddress + mem.RegionSize < slot + sizeof(void*))
+        return -1;
+    void* root = *reinterpret_cast<void**>(slot);
+    if (!root)
+        return -1;
+    void* composite = find(root, id(L"CompositeBattery"));
+    if (!composite)
+        return -1;
+    return find(composite, id(L"BatteryDescription")) ? 1 : 0;
+}
+
+// Rebuild the native content using the same 1511 ShowBatteryUI path used at
+// first opening. Only after a verified native hide, which clears the three
+// dynamic containers; unlike ShowWindow(SW_SHOW), this restores their content.
+static bool T81BatteryNativeReopen(HWND flyout) {
+    if (!flyout || flyout != batteryLiveWindow || !batteryLiveModule ||
+        !IsWindow(flyout) || IsWindowVisible(flyout) ||
+        GetWindowThreadProcessId(flyout, nullptr) != GetCurrentThreadId() ||
+        batteryOwnerThread != GetCurrentThreadId())
+        return false;
+    int tree = T81BatteryMainTreeState(batteryLiveModule);
+    if (tree < 0) {
+        Wh_Log(L"[T81-BAT-REBUILD] tree state unavailable; rebuild skipped");
+        return false;
+    }
+    if (tree == 1) {
+        // A hide outside the native cleanup path left the tree intact.
+        ShowWindow(flyout, SW_SHOW);
+        if (!IsWindowVisible(flyout))
+            return false;
+        T81BatteryLiveRefresh(true);
+        PositionOriginalBatteryFlyout(flyout);
+        SetTimer(s->bar, TIMER_T81_BATTERY_PERCENT, 5000, nullptr);
+        Wh_Log(L"[T81-BAT-REBUILD] intact tree reused");
+        return true;
+    }
+    BYTE* entry = (BYTE*)batteryLiveModule + 0x187e0;
+    const BYTE signature[] = {0x40, 0x53, 0x48, 0x83, 0xec, 0x20};
+    if (memcmp(entry, signature, sizeof(signature)))
+        return false;
+    SYSTEM_POWER_STATUS status{};
+    RefreshOriginalBatterySnapshot(batteryLiveModule);
+    HICON overrideIcon = nullptr;
+    if (InstallBatteryCompositeHook(batteryLiveModule) &&
+        GetSystemPowerStatus(&status)) {
+        overrideIcon = CreateLegacyLargeBatteryIcon(status);
+        batteryCompositeOverride = overrideIcon;
+        batteryCompositeHits = 0;
+    }
+    batteryDisplayCorrections = 0;
+    batteryDisplayPercent = -1;
+    if (InstallBatteryStatusTextHook() && GetSystemPowerStatus(&status) &&
+        status.BatteryLifePercent <= 100 &&
+        !(status.BatteryFlag != 255 && (status.BatteryFlag & 128)))
+        batteryDisplayPercent = (int)status.BatteryLifePercent;
+    using ShowFn = HRESULT(WINAPI*)();
+    HRESULT hr = reinterpret_cast<ShowFn>(entry)();
+    batteryDisplayPercent = -1;
+    batteryCompositeOverride = nullptr;
+    if (overrideIcon)
+        DestroyIcon(overrideIcon);
+    bool visible = SUCCEEDED(hr) && IsWindow(flyout) && IsWindowVisible(flyout);
+    Wh_Log(
+        L"[T81-BAT-REBUILD] show hr=0x%08lx visible=%d corrected=%u "
+        L"icon-calls=%u",
+        (unsigned long)hr, visible ? 1 : 0, batteryDisplayCorrections,
+        batteryCompositeHits);
+    if (!visible)
+        return false;
+    StyleOriginalBatteryFlyout(flyout);
+    T81BatteryCaptureSize(flyout);
+    PositionOriginalBatteryFlyout(flyout);
+    T81BatteryArmSizeCheck(flyout);
+    T81BatteryLiveRefresh(true);
+    SetTimer(s->bar, TIMER_T81_BATTERY_PERCENT, 5000, nullptr);
+    ClearBatteryInitialChildFocus(flyout);
+    return true;
+}
+
 // Opt-in only: direct call into the exact 1511 x64 binary, RVA from its
 // matching Microsoft public PDB. It initializes DirectUI and creates the
 // BatMeterFlyout class. These private APIs are version-sensitive.
 static bool TryOriginalBatteryFlyout1511() {
     if (!s || !useOriginalBatteryFlyout.load() || s->resourceDir.empty())
         return false;
-    // ShowBatteryUI is a private initializer, not a documented toggle. Reusing
-    // it against an existing window can append another DirectUI tree. Keep a
-    // validated same-thread HWND and toggle visibility without reinitializing.
+    // Native HideFlyout clears dynamic content. Rebuild only when the main
+    // description is absent; keep an intact hidden tree instead of appending.
     static HWND existingBattery = nullptr;
     if (existingBattery && IsWindow(existingBattery)) {
         wchar_t cls[64]{};
@@ -20026,33 +21292,19 @@ static bool TryOriginalBatteryFlyout1511() {
             !wcscmp(cls, L"BatMeterFlyout")) {
             if (IsWindowVisible(existingBattery)) {
                 T81BatteryCaptureSize(existingBattery);
-                ShowWindow(existingBattery, SW_HIDE);
-                Wh_Log(L"[T81-BAT-REUSE] toggle hidden hwnd=%p",
-                       existingBattery);
-            } else {
-                // The hidden DirectUI host can shrink to a 42x16 frame. Restore
-                // its validated outer size before placement and re-check after
-                // showing, without re-running the private initializer.
-                if (!T81BatteryEnsureSize(existingBattery)) {
-                    Wh_Log(L"[T81-BAT-SIZE] reuse aborted: no usable geometry");
+                if (!T81BatteryNativeHide(existingBattery)) {
+                    Wh_Log(L"[T81-BAT-REBUILD] native hide unavailable");
                     return false;
                 }
-                PositionOriginalBatteryFlyout(existingBattery);
-                ShowWindow(existingBattery, SW_SHOW);
-                if (!T81BatteryEnsureSize(existingBattery)) {
-                    ShowWindow(existingBattery, SW_HIDE);
-                    Wh_Log(L"[T81-BAT-SIZE] reuse aborted: show collapsed");
-                    return false;
-                }
-                T81BatteryCaptureSize(existingBattery);
-                PositionOriginalBatteryFlyout(existingBattery);
-                T81BatteryArmSizeCheck(existingBattery);
-                SetForegroundWindow(existingBattery);
-                ClearBatteryInitialChildFocus(existingBattery);
-                Wh_Log(
-                    L"[T81-BAT-REUSE] existing flyout shown without "
-                    L"reinitialization hwnd=%p visible=%d",
-                    existingBattery, IsWindowVisible(existingBattery) ? 1 : 0);
+                Wh_Log(L"[T81-BAT-REUSE] native hide hwnd=%p", existingBattery);
+                return true;
+            }
+            // Deactivation normally invokes HideFlyout and removes the
+            // dynamic content. Merely restoring the outer rectangle leaves a
+            // white window. Re-enter the original show path instead.
+            if (!T81BatteryNativeReopen(existingBattery)) {
+                Wh_Log(L"[T81-BAT-REBUILD] reopen failed; use fallback");
+                return false;
             }
             return true;
         }
@@ -20184,7 +21436,7 @@ static bool TryOriginalBatteryFlyout1511() {
         batteryDisplayPercent = (int)status.BatteryLifePercent;
     HRESULT hr = show();
     batteryDisplayPercent = -1;
-    Wh_Log(L"[T81-BAT-PERCENT] zero-percent text corrections=%u",
+    Wh_Log(L"[T81-BAT-PERCENT] percentage text corrections=%u",
            batteryDisplayCorrections);
     batteryCompositeOverride = nullptr;
     if (overrideIcon) {
@@ -20202,6 +21454,10 @@ static bool TryOriginalBatteryFlyout1511() {
         (unsigned long)hr, visible ? 1 : 0, flyout);
     if (visible) {
         existingBattery = flyout;
+        batteryLiveWindow = flyout;
+        batteryLiveModule = module;
+        T81BatteryLiveRefresh(true);
+        SetTimer(s->bar, TIMER_T81_BATTERY_PERCENT, 5000, nullptr);
         Wh_Log(L"[T81-BAT-REUSE] tracking initialized hwnd=%p",
                existingBattery);
         BOOL disabled = TRUE;
@@ -20524,7 +21780,8 @@ static void T81DismissClockAndVolume(int exceptHit) {
         EnumThreadWindows(GetCurrentThreadId(), FindOwnBatteryFlyout,
                           (LPARAM)&battery);
         if (battery && IsWindowVisible(battery)) {
-            ShowWindow(battery, SW_HIDE);
+            if (!T81BatteryNativeHide(battery))
+                ShowWindow(battery, SW_HIDE);
             Wh_Log(L"[T81-FLYOUT] battery dismiss hwnd=%p visible=%d", battery,
                    IsWindowVisible(battery) ? 1 : 0);
         }
@@ -22182,9 +23439,10 @@ static void T81PaintWin7Ends(Graphics& g,
     }
     startEnd = std::clamp(startEnd, 0, length);
     trayStart = std::clamp(trayStart, startEnd, length);
-    const int strength = taskbarSkin.load() == 5 ? 72 : 55;
+    const int strength = T81IsWin7BetaBar(taskbarSkin.load()) ? 72 : 55;
     auto saved = g.Save();
-    SolidBrush middle(Color(taskbarSkin.load() == 5 ? 22 : 14, 255, 255, 255));
+    SolidBrush middle(
+        Color(T81IsWin7BetaBar(taskbarSkin.load()) ? 22 : 14, 255, 255, 255));
     g.FillRectangle(&middle, 0, 0, width, height);
 
     auto paintColumn = [&](int position, int alpha) {
@@ -22246,6 +23504,91 @@ struct AlphaSurface {
     AlphaSurface(const AlphaSurface&) = delete;
     AlphaSurface& operator=(const AlphaSurface&) = delete;
 };
+// Draw only classic taskbar application icons through a high-quality GDI+
+// resize when the supplied HICON's native size differs from the destination.
+// DrawIconEx on black and white preserves alpha and legacy AND masks; the
+// reconstructed premultiplied bitmap is temporary and has no stale HICON cache.
+// Microsoft documents high-quality bicubic interpolation for image scaling:
+// https://learn.microsoft.com/en-us/windows/win32/gdiplus/-gdiplus-using-interpolation-mode-to-control-image-quality-during-scaling-use
+static void T81DrawClassicAppIcon(HDC dc, HICON icon, int x, int y, int size) {
+    if (!dc || !icon || size <= 0)
+        return;
+    auto fallback = [&] {
+        DrawIconEx(dc, x, y, icon, size, size, 0, nullptr, DI_NORMAL);
+    };
+    ICONINFO info{};
+    if (!GetIconInfo(icon, &info)) {
+        fallback();
+        return;
+    }
+    BITMAP bitmap{};
+    HBITMAP source = info.hbmColor ? info.hbmColor : info.hbmMask;
+    bool ok =
+        source && GetObjectW(source, sizeof(bitmap), &bitmap) == sizeof(bitmap);
+    if (info.hbmColor)
+        DeleteObject(info.hbmColor);
+    if (info.hbmMask)
+        DeleteObject(info.hbmMask);
+    int sw = bitmap.bmWidth;
+    int sh = info.hbmColor ? std::abs(bitmap.bmHeight)
+                           : std::abs(bitmap.bmHeight) / 2;
+    if (!ok || sw <= 0 || sh <= 0 || sw > 256 || sh > 256 ||
+        (sw == size && sh == size)) {
+        fallback();
+        return;
+    }
+    AlphaSurface black(dc, sw, sh), white(dc, sw, sh);
+    if (!black.ok() || !white.ok() ||
+        !PatBlt(black.dc, 0, 0, sw, sh, BLACKNESS) ||
+        !PatBlt(white.dc, 0, 0, sw, sh, WHITENESS) ||
+        !DrawIconEx(black.dc, 0, 0, icon, sw, sh, 0, nullptr, DI_NORMAL) ||
+        !DrawIconEx(white.dc, 0, 0, icon, sw, sh, 0, nullptr, DI_NORMAL)) {
+        fallback();
+        return;
+    }
+    GdiFlush();
+    bool inverted = false;
+    for (size_t i = 0; i < (size_t)sw * sh; ++i) {
+        BYTE* k = black.bits + i * 4;
+        BYTE* w = white.bits + i * 4;
+        int alpha = 0;
+        for (int c = 0; c < 3; ++c) {
+            if (w[c] < k[c])
+                inverted = true;
+            alpha = std::max(alpha, 255 - std::max(0, (int)w[c] - (int)k[c]));
+        }
+        for (int c = 0; c < 3; ++c)
+            k[c] = (BYTE)std::min(alpha, (int)k[c]);
+        k[3] = (BYTE)alpha;
+    }
+    // XOR/inverting monochrome icons cannot be represented by alpha blending.
+    if (inverted) {
+        fallback();
+        return;
+    }
+    Bitmap image(sw, sh, sw * 4, PixelFormat32bppPARGB, black.bits);
+    if (image.GetLastStatus() != Ok) {
+        fallback();
+        return;
+    }
+    Graphics graphics(dc);
+    graphics.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+    graphics.SetPixelOffsetMode(PixelOffsetModeHighQuality);
+    graphics.SetCompositingMode(CompositingModeSourceOver);
+    ImageAttributes attributes;
+    attributes.SetWrapMode(WrapModeTileFlipXY);
+    Status result = graphics.DrawImage(&image, Rect(x, y, size, size), 0, 0, sw,
+                                       sh, UnitPixel, &attributes);
+    graphics.Flush(FlushIntentionSync);
+    if (result != Ok)
+        fallback();
+}
+static void T81DrawAppIcon(HDC dc, HICON icon, int x, int y, int size) {
+    if (taskbarSkin.load() == 7)
+        T81DrawClassicAppIcon(dc, icon, x, y, size);
+    else if (icon && size > 0)
+        DrawIconEx(dc, x, y, icon, size, size, 0, nullptr, DI_NORMAL);
+}
 static const wchar_t kWin7OrbClass[] = L"WH_Taskbar81Win7OrbSurface";
 static LRESULT CALLBACK Win7OrbProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == WM_MOUSEACTIVATE)
@@ -22318,6 +23661,7 @@ static void HideWin7OrbSurface() {
 }
 static bool UpdateWin7OrbSurface(HWND bar, int cellWidth, int barHeight) {
     if (!s || !T81IsWin7Skin(taskbarSkin.load()) || startHotCorner.load() ||
+        (autoHideIntegratedBar.load() && t81AutoHide.fraction > 0.001f) ||
         s->verticalActive || barHeight >= Px(38) || cellWidth <= 0 ||
         (!s->win7StartImage && !s->betaTexture[30]) || !IsWindowVisible(bar)) {
         HideWin7OrbSurface();
@@ -22518,6 +23862,10 @@ static void ConfigureBarAlpha(HWND h, bool perPixel) {
                    GetLastError());
     }
     T81SetExperimentalBlur(h);
+    // Layered-mode changes and the first ULW frame can race the compositor.
+    // Coalesce a single later request; the callback checks the current skin.
+    if (h == s->bar && !quitting.load())
+        SetTimer(h, TIMER_T81_BLUR_REAPPLY, 300, nullptr);
 }
 // Windows 8.0 retains its existing attention artwork. Windows 8.1 uses
 // the original drawn frame and attention cue, without the rejected sprite.
@@ -22683,7 +24031,7 @@ static bool DrawBetaTaskState(Graphics& g,
         return BetaTextureAvailable(2);  // unhovered pin has no tile
     if (!BetaTextureAvailable(tex))
         return false;
-    if (taskbarSkin.load() == 5 && !attention && !vertical &&
+    if (T81IsWin7BetaBar(taskbarSkin.load()) && !attention && !vertical &&
         BetaTextureAvailable(tex)) {
         // Reuse the Windows 7 artwork; change opacity, not border geometry.
         float opacity = running && !active && !hot && !pressed ? 0.45f : 1.f;
@@ -23338,8 +24686,7 @@ static void DrawBarForeground(HDC mem,
             int ix = L.labels ? t.rect.left + Px(10)
                               : t.rect.left +
                                     (t.rect.right - t.rect.left - icon) / 2;
-            DrawIconEx(mem, ix, (h - icon) / 2, t.icon.get(), icon, icon, 0,
-                       nullptr, DI_NORMAL);
+            T81DrawAppIcon(mem, t.icon.get(), ix, (h - icon) / 2, icon);
         }
     for (int i : drawOrder) {
         int x = xs[i];
@@ -23362,8 +24709,8 @@ static void DrawBarForeground(HDC mem,
                 ButtonTransitionFraction(*t), false);
             IntersectClipRect(mem, c.left, c.top, c.right, c.bottom);
         }
-        DrawIconEx(mem, ix, rowTop + (rowHeight - drawIcon) / 2, GroupIcon(i),
-                   drawIcon, drawIcon, 0, nullptr, DI_NORMAL);
+        T81DrawAppIcon(mem, GroupIcon(i), ix,
+                       rowTop + (rowHeight - drawIcon) / 2, drawIcon);
     }
     HFONT font = CreateTaskbarFont(Dpi(), s->perPixelBar);
     std::unique_ptr<std::remove_pointer<HFONT>::type, DeleteFontHandle>
@@ -23498,6 +24845,13 @@ static void DrawBarForeground(HDC mem,
         DrawTextW(mem, title, -1, &band,
                   DT_VCENTER | DT_CENTER | DT_SINGLELINE | DT_END_ELLIPSIS |
                       DT_NOPREFIX);
+        // The Win7 deskband chevron sits at the top of its tall hover tile,
+        // not vertically centred with the band title. Keep the full cell for
+        // hit-testing and move only the glyph.
+        if (T81IsWin7Skin(taskbarSkin.load())) {
+            arrow.top += Px(1);
+            arrow.bottom = std::min(arrow.bottom, arrow.top + Px(14));
+        }
         DrawTextW(mem, L"»", -1, &arrow,
                   DT_VCENTER | DT_CENTER | DT_SINGLELINE | DT_NOPREFIX);
     };
@@ -24122,7 +25476,18 @@ static void ConfigurePreviewAlpha(HWND h, bool perPixel) {
     SetWindowLongPtrW(h, GWL_EXSTYLE, style);
     s->perPixelPreview = perPixel;
     s->previewPixelFrame = false;
-    // Deliberately do not apply taskbar blur to thumbnail preview hosts.
+    // Experimental: the taskbar's accent policy must be requested separately
+    // for the preview window. Acceptance is not proof of visible blur, and
+    // layered rendering or opaque preview pixels can mask the effect.
+    T81SetExperimentalBlur(h);
+    Wh_Log(
+        L"[T81-PREVIEW-BLUR] hwnd=%p layered=%d requested=%d accepted=%d", h,
+        perPixel ? 1 : 0,
+        experimentalLiveBlur.load() && taskbarSkin.load() != 6 &&
+                (T81IsWin7Skin(taskbarSkin.load()) || taskbarSkin.load() == 2)
+            ? 1
+            : 0,
+        GetPropW(h, L"WH_Taskbar81_OwnBlurEnabled") ? 1 : 0);
 }
 // Windows 7 Basic list-mode reconstruction from the supplied screenshots.
 // Uses the same PreviewItem and hit/close/activation machinery as thumbnails.
@@ -27057,6 +28422,200 @@ static void ReserveVerticalAppbar(RECT& desired,
         edge, abd.rc.left, abd.rc.top, abd.rc.right, abd.rc.bottom);
 }
 
+static void T81AutoHideOffset(RECT& r, float fraction) {
+    if (!s)
+        return;
+    int strip = std::max(1, Px(2));
+    int w = r.right - r.left, h = r.bottom - r.top;
+    int dx = 0, dy = 0;
+    if (s->verticalActive) {
+        int dist = std::max(0, w - strip);
+        dx =
+            (s->verticalSide == 1 ? -1 : 1) * (int)std::lround(dist * fraction);
+    } else {
+        int dist = std::max(0, h - strip);
+        dy = (s->nativeEdge == ABE_TOP ? -1 : 1) *
+             (int)std::lround(dist * fraction);
+    }
+    OffsetRect(&r, dx, dy);
+}
+static bool T81AutoHideBlocked() {
+    if (!s || !s->bar)
+        return true;
+    GUITHREADINFO gui{sizeof(gui)};
+    if (GetGUIThreadInfo(GetCurrentThreadId(), &gui) &&
+        ((gui.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_INMOVESIZE)) ||
+         gui.hwndCapture))
+        return true;
+    auto visible = [](HWND h) {
+        return h && IsWindow(h) && IsWindowVisible(h);
+    };
+    return s->startMenuVisible || s->barDragCandidate || s->dragCandidate ||
+           s->dragActive || s->trayDrag.active || s->bandDragHit ||
+           t81BalloonVisible || visible(s->overflowPanel) ||
+           visible(s->desktopPopup) || visible(s->jumpPopup) ||
+           visible(s->preview) || visible(s->languageFlyout) ||
+           visible(s->batteryFrameWindow) || visible(s->clockFlyout) ||
+           (s->addressEdit && GetFocus() == s->addressEdit);
+}
+void UpdatePlacement();
+// StuckRects3 can lag the running shell. It is an undocumented fallback only;
+// the active state is obtained from Explorer's ABM_GETSTATE response.
+static int T81ReadPersistedAutoHide() {
+    BYTE data[4096]{};
+    DWORD size = sizeof(data), type = 0;
+    LSTATUS result = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StuckRects3",
+        L"Settings", RRF_RT_REG_BINARY, &type, data, &size);
+    if (result != ERROR_SUCCESS || type != REG_BINARY || size < 16 ||
+        size > sizeof(data))
+        return -1;
+    DWORD cb = 0, flags = 0;
+    memcpy(&cb, data, sizeof(cb));
+    memcpy(&flags, data + 8, sizeof(flags));
+    if (cb < 16 || cb > size)
+        return -1;
+    return (flags & ABS_AUTOHIDE) ? 1 : 0;
+}
+static int T81ReadLiveAutoHide() {
+    if (!s || !IsExpectedNativeTray(s->native) || s->native == s->privateHost)
+        return -1;
+    // Shell32 routes ABM_GETSTATE as WM_COPYDATA/dwData 0. Ask the already
+    // validated real Shell_TrayWnd directly, not our private proxy. GETSTATE
+    // has no output structure; a successfully delivered zero means OFF.
+    // This 64-byte wire format is undocumented; retain the previous value if
+    // the bounded delivery fails. No system state is modified.
+    BYTE packet[64]{};
+    DWORD cb = 40, op = ABM_GETSTATE;
+    memcpy(packet, &cb, sizeof(cb));
+    memcpy(packet + 40, &op, sizeof(op));
+    COPYDATASTRUCT request{0, sizeof(packet), packet};
+    DWORD_PTR reply = 0;
+    if (!SendMessageTimeoutW(s->native, WM_COPYDATA, (WPARAM)s->bar,
+                             (LPARAM)&request, SMTO_ABORTIFHUNG | SMTO_BLOCK,
+                             150, &reply))
+        return -1;
+    return (reply & ABS_AUTOHIDE) ? 1 : 0;
+}
+static void T81SyncSystemAutoHide() {
+    static bool liveKnown = false;
+    static int lastLogged = -2;
+    static bool warned = false;
+    int observed = t81AppbarObservedState.exchange(-1);
+    int state = observed >= 0 ? observed : T81ReadLiveAutoHide();
+    const wchar_t* source =
+        observed >= 0 ? L"ABM-SETSTATE" : L"Explorer-GETSTATE";
+    if (state >= 0) {
+        liveKnown = true;
+        warned = false;
+    } else if (!liveKnown && s && s->privateActive) {
+        state = T81ReadPersistedAutoHide();
+        source = L"registry-fallback";
+    }
+    if (state < 0) {
+        if (!warned && s && s->privateActive) {
+            Wh_Log(L"[T81-AUTOHIDE] live query unavailable; retaining state");
+            warned = true;
+        }
+        return;
+    }
+    bool previous = autoHideIntegratedBar.exchange(state != 0);
+    if (state != lastLogged || previous != (state != 0)) {
+        Wh_Log(L"[T81-AUTOHIDE] source=%ls state=%d previous=%d", source, state,
+               previous ? 1 : 0);
+        lastLogged = state;
+    }
+    if (s && s->bar && s->privateActive && previous != (state != 0))
+        UpdatePlacement();
+}
+static void T81AutoHideTick() {
+    if (!s || !s->bar || !t81AutoHide.valid)
+        return;
+    if (!autoHideIntegratedBar.load() || !s->privateActive) {
+        if (t81AutoHide.fraction > 0) {
+            t81AutoHide.fraction = t81AutoHide.target = t81AutoHide.from = 0;
+            SetWindowPos(s->bar, nullptr, t81AutoHide.shown.left,
+                         t81AutoHide.shown.top, 0, 0,
+                         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            InvalidateRect(s->bar, nullptr, FALSE);
+        }
+        t81AutoHide.idleSince = 0;
+        return;
+    }
+    if (!IsWindowVisible(s->bar))
+        return;  // fullscreen/arranging owns visibility
+    ULONGLONG now = GetTickCount64();
+    POINT cursor{};
+    RECT current{};
+    bool haveCursor = GetCursorPos(&cursor) != FALSE;
+    bool onBar = haveCursor && GetWindowRect(s->bar, &current) &&
+                 PtInRect(&current, cursor);
+    // Include the real screen edge, even while another HWND overlaps the strip.
+    MONITORINFO mi{sizeof(mi)};
+    if (haveCursor && GetMonitorInfoW(MonitorFromRect(&t81AutoHide.shown,
+                                                      MONITOR_DEFAULTTONEAREST),
+                                      &mi)) {
+        int edge = std::max(1, Px(2));
+        RECT hot = mi.rcMonitor;
+        if (s->verticalActive) {
+            if (s->verticalSide == 1)
+                hot.right = hot.left + edge;
+            else
+                hot.left = hot.right - edge;
+            hot.top = std::max(hot.top, t81AutoHide.shown.top);
+            hot.bottom = std::min(hot.bottom, t81AutoHide.shown.bottom);
+        } else {
+            if (s->nativeEdge == ABE_TOP)
+                hot.bottom = hot.top + edge;
+            else
+                hot.top = hot.bottom - edge;
+            hot.left = std::max(hot.left, t81AutoHide.shown.left);
+            hot.right = std::min(hot.right, t81AutoHide.shown.right);
+        }
+        onBar = onBar || PtInRect(&hot, cursor);
+    }
+    bool reveal = onBar || T81AutoHideBlocked();
+    if (reveal)
+        t81AutoHide.idleSince = 0;
+    else if (!t81AutoHide.idleSince)
+        t81AutoHide.idleSince = now;
+    float wanted = !reveal && now - t81AutoHide.idleSince >= 400 ? 1.0f : 0.0f;
+    if (wanted != t81AutoHide.target) {
+        Wh_Log(
+            L"[T81-AUTOHIDE] animation target=%ls cursor=%d blocked=%d edge=%u "
+            L"vertical=%d",
+            wanted > 0 ? L"hide" : L"show", onBar ? 1 : 0,
+            T81AutoHideBlocked() ? 1 : 0, s->nativeEdge,
+            s->verticalActive ? s->verticalSide : 0);
+        t81AutoHide.from = t81AutoHide.fraction;
+        t81AutoHide.target = wanted;
+        t81AutoHide.animStart = now;
+        if (wanted > 0) {
+            HideWin7OrbSurface();
+            HidePreview();
+        }
+    }
+    float duration = wanted > 0 ? 300.0f : 150.0f;
+    float t = std::min(1.0f, (float)(now - t81AutoHide.animStart) / duration);
+    // Sine ease-in, like ManagedShell's default SineEase.
+    float eased = 1.0f - std::cos(t * 1.57079632679f);
+    float next =
+        t81AutoHide.from + (t81AutoHide.target - t81AutoHide.from) * eased;
+    if (std::abs(next - t81AutoHide.fraction) < 0.0001f)
+        return;
+    t81AutoHide.fraction = next;
+    RECT target = t81AutoHide.shown;
+    T81AutoHideOffset(target, next);
+    if (SetWindowPos(s->bar, nullptr, target.left, target.top, 0, 0,
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)) {
+        if (next > 0.001f)
+            HideWin7OrbSurface();
+        UpdateAddressBand();
+        if (t >= 1.0f && wanted == 0.0f)
+            InvalidateRect(s->bar, nullptr, FALSE);
+    }
+}
 void UpdatePlacement() {
     if (quitting.load() || !s || !s->bar)
         return;
@@ -27176,7 +28735,18 @@ void UpdatePlacement() {
     if (!onScreen && s->privateActive) {
         // Some shells move a hidden taskbar off-screen. A working private bar
         // must not disappear with it; use the primary-screen fallback instead.
-        full = FallbackRect();
+        RECT previous = s->nativeRect;
+        MONITORINFO previousMonitor{sizeof(previousMonitor)};
+        RECT previousVisible{};
+        bool previousUsable =
+            previous.right > previous.left && previous.bottom > previous.top &&
+            GetMonitorInfoW(MonitorFromRect(&previous, MONITOR_DEFAULTTONULL),
+                            &previousMonitor) &&
+            IntersectRect(&previousVisible, &previous,
+                          &previousMonitor.rcMonitor) &&
+            previousVisible.bottom - previousVisible.top >=
+                (previous.bottom - previous.top) / 2;
+        full = previousUsable ? previous : FallbackRect();
         mi.cbSize = sizeof(mi);
         onScreen =
             GetMonitorInfoW(MonitorFromRect(&full, MONITOR_DEFAULTTOPRIMARY),
@@ -27280,7 +28850,9 @@ void UpdatePlacement() {
     if (groupingEdgeChanged)
         BuildGroups();
     ULONGLONG t81ReserveStart = GetTickCount64();
-    if (s->privateActive && vertical)
+    if (s->privateActive && autoHideIntegratedBar.load())
+        RemoveWorkAreaAppBar();
+    else if (s->privateActive && vertical)
         ReserveVerticalAppbar(full, mi, requested);
     else if (s->privateActive)
         ReserveWorkAreaAppBar(full, mi);
@@ -27289,6 +28861,15 @@ void UpdatePlacement() {
     s->rectValid = true;
     s->preservingTray = !s->privateActive;
     RECT overlay = full;
+    if (s->privateActive && autoHideIntegratedBar.load()) {
+        t81AutoHide.shown = overlay;
+        t81AutoHide.valid = true;
+        T81AutoHideOffset(overlay, t81AutoHide.fraction);
+    } else {
+        t81AutoHide.valid = false;
+        t81AutoHide.fraction = t81AutoHide.from = t81AutoHide.target = 0;
+        t81AutoHide.idleSince = 0;
+    }
     if (!s->privateActive)
         overlay.right = NativeTrayLeft(native, full);
     RECT tray = full;
@@ -27604,9 +29185,9 @@ static void LogTaskbarDiagnostics(const wchar_t* reason) {
                 GetTextFaceW(dc, LF_FACESIZE, face);
         }
         Wh_Log(
-            L"[T81-DIAG] taskbar-GDI-font-requested=Segoe UI 9pt selected=%ls "
-            L"clock-GDIplus-font-requested=Segoe UI 9pt clock-width=%d "
-            L"per-pixel=%d",
+            L"[T81-DIAG] taskbar-GDI-font-requested=%ls selected=%ls "
+            L"clock-width=%d per-pixel=%d",
+            taskbarSkin.load() == 7 ? L"Tahoma 8pt" : L"Segoe UI 9pt",
             face[0] ? face : L"unavailable", s->clockWidthPx,
             s->perPixelBar ? 1 : 0);
     }
@@ -31162,7 +32743,7 @@ static bool DrawBetaVerticalTaskState(Graphics& g,
     g.Restore(textureState);
     if (!drawn)
         return false;
-    if (taskbarSkin.load() == 5)
+    if (T81IsWin7BetaBar(taskbarSkin.load()))
         return true;  // Keep the Windows 7 artwork, not the 8.1 perimeter.
     // Paint only the perimeter with the existing 8.1 frame/stack logic. This
     // leaves the horizontal beta bitmap untouched inside the frame.
@@ -31395,7 +32976,17 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
             g.FillRectangle(&cue, Px(5), y, std::max(1, w - Px(10)),
                             std::max(1, Px(2)));
         }
-        bool win7Arrow = DrawWin7OverflowButton(g, v.arrow, true);
+        bool win7Arrow = false;
+        if (taskbarSkin.load() == 7) {
+            bool hot = s->hot == HIT_TRAY_MORE ||
+                       (s->overflowPanel && IsWindowVisible(s->overflowPanel));
+            T81DrawClassicChevron(g, v.arrow, Dpi(),
+                                  s->verticalSide == 1 ? 1 : 3, hot,
+                                  hot && (GetKeyState(VK_LBUTTON) & 0x8000));
+            win7Arrow = true;
+        } else {
+            win7Arrow = DrawWin7OverflowButton(g, v.arrow, true);
+        }
         if (!win7Arrow &&
             (s->hot == HIT_TRAY_MORE ||
              (s->overflowPanel && IsWindowVisible(s->overflowPanel)))) {
@@ -31472,8 +33063,8 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
                                       true);
             ScopedSavedDC clip(dc);
             IntersectClipRect(dc, c.left, c.top, c.right, c.bottom);
-            DrawIconEx(dc, (w - size) / 2, t.rect.top + (step - size) / 2,
-                       t.icon.get(), size, size, 0, nullptr, DI_NORMAL);
+            T81DrawAppIcon(dc, t.icon.get(), (w - size) / 2,
+                           t.rect.top + (step - size) / 2, size);
         }
     for (int slot = 0; slot < v.count; slot++) {
         int i = v.offset + slot;
@@ -31491,9 +33082,8 @@ static void DrawVerticalForeground(HDC dc, int w, int h) {
             RECT c = ButtonRevealRect(cell, ButtonTransitionFraction(*t), true);
             IntersectClipRect(dc, c.left, c.top, c.right, c.bottom);
         }
-        DrawIconEx(dc, (w - size) / 2,
-                   v.first + slot * v.step + (v.step - size) / 2, GroupIcon(i),
-                   size, size, 0, nullptr, DI_NORMAL);
+        T81DrawAppIcon(dc, GroupIcon(i), (w - size) / 2,
+                       v.first + slot * v.step + (v.step - size) / 2, size);
     }
     HFONT font = CreateTaskbarFont(Dpi(), s->perPixelBar);
     ScopedSelection sel(dc, font);
@@ -31676,7 +33266,7 @@ static void PaintVerticalBackground(Graphics& g, int w, int h) {
         int edge = s->verticalSide == 1 ? w - 1 : 0;
         g.FillRectangle(&border, edge, 0, 1, h);
         int separator = Px(57);
-        if (separator < h)
+        if (taskbarSkin.load() != 8 && separator < h)
             g.FillRectangle(&border, 0, separator, w, std::max(1, Px(1)));
         auto layout = GetVerticalLayout(w, h);
         int trayTop = std::min((int)layout.arrow.top, (int)layout.language.top);
@@ -32406,7 +33996,7 @@ static int T81SecondaryStartExtent(HWND window) {
         return std::max(1, MulDiv(s->verticalActive ? 2 : 8, (int)dpi, 96));
     bool beta = useBetaStartLogo.load() && s->betaStartImage;
     int logical = taskbarSkin.load() == 7
-                      ? (s->nativeSmallIcons ? 44 : 57)
+                      ? (s->nativeSmallIcons ? 40 : 44)
                       : (s->verticalActive ? (beta ? 54 : kVerticalStartLogical)
                                            : kStartLogical);
     return std::max(1, MulDiv(logical, (int)dpi, 96));
@@ -32696,9 +34286,9 @@ static void T81DrawSecondaryForeground(
             1, std::min(MulDiv(s->nativeSmallIcons ? 16 : 32, (int)dpi, 96),
                         std::min(width, height) - inset));
         if (icon)
-            DrawIconEx(dc, (button.rect.left + button.rect.right - n) / 2,
-                       (button.rect.top + button.rect.bottom - n) / 2, icon, n,
-                       n, 0, nullptr, DI_NORMAL);
+            T81DrawAppIcon(dc, icon,
+                           (button.rect.left + button.rect.right - n) / 2,
+                           (button.rect.top + button.rect.bottom - n) / 2, n);
     }
     if (!vertical && s->privateActive) {
         std::unique_ptr<std::remove_pointer<HFONT>::type, DeleteFontHandle>
@@ -32727,7 +34317,11 @@ static void T81DrawSecondaryForeground(
             Image* image = T81IsWin7Skin(taskbarSkin.load())
                                ? s->betaTexture[frame]
                                : nullptr;
-            if (image) {
+            if (taskbarSkin.load() == 7) {
+                T81DrawClassicChevron(
+                    g, tray.arrow, (int)dpi, s->nativeEdge == ABE_TOP ? 2 : 0,
+                    hot, hot && (GetKeyState(VK_LBUTTON) & 0x8000));
+            } else if (image) {
                 float ww = MulDiv(frame == 25 ? 9 : 21, (int)dpi, 96),
                       hh = MulDiv(frame == 25 ? 7 : 20, (int)dpi, 96);
                 auto state = g.Save();
@@ -34070,6 +35664,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             InvalidateRect(h, nullptr, FALSE);
             return 0;
         case WM_CREATE:
+            SetTimer(h, TIMER_T81_AUTOHIDE, 16, nullptr);
             SetTimer(h, TIMER_REFRESH, 1000, nullptr);
             SetTimer(h, TIMER_Z_GUARD, 100, nullptr);
             return 0;
@@ -34181,6 +35776,20 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             }
             return 0;
         case WM_TIMER:
+            if (wp == TIMER_T81_BLUR_REAPPLY) {
+                KillTimer(h, TIMER_T81_BLUR_REAPPLY);
+                T81SetExperimentalBlur(h);
+                for (const auto& mirror : t81Mirrors)
+                    if (mirror.window && IsWindow(mirror.window))
+                        T81SetExperimentalBlur(mirror.window);
+                Wh_Log(
+                    L"[T81-BLUR] reapply skin=%d requested=%d accepted=%d "
+                    L"per-pixel=%d suspended=%d",
+                    taskbarSkin.load(), experimentalLiveBlur.load(),
+                    GetPropW(h, L"WH_Taskbar81_OwnBlurEnabled") != nullptr,
+                    s->perPixelBar, s->barDragBlurSuspended);
+                return 0;
+            }
             if (wp == TIMER_T81_START_RECONCILE) {
                 if (!T81SkinHasTrackedStartButton(taskbarSkin.load())) {
                     KillTimer(h, TIMER_T81_START_RECONCILE);
@@ -34431,6 +36040,36 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             if (wp == TIMER_RESOURCE_RELOAD) {
                 KillTimer(h, TIMER_RESOURCE_RELOAD);
                 LoadLegacyImages();
+                return 0;
+            }
+            if (wp == TIMER_T81_BALLOON) {
+                T81BalloonTick();
+                return 0;
+            }
+            if (wp == TIMER_T81_AUTOHIDE_REFRESH) {
+                KillTimer(h, TIMER_T81_AUTOHIDE_REFRESH);
+                T81SyncSystemAutoHide();
+                return 0;
+            }
+            if (wp == TIMER_T81_AUTOHIDE) {
+                // TraySettings broadcasts can arrive before Explorer has
+                // persisted its value. A bounded periodic reread also covers
+                // writers which do not broadcast a setting-change message.
+                static ULONGLONG lastRead = 0;
+                ULONGLONG now = GetTickCount64();
+                if (!lastRead || now - lastRead >= 1000) {
+                    lastRead = now;
+                    T81SyncSystemAutoHide();
+                }
+                T81AutoHideTick();
+                return 0;
+            }
+            if (wp == TIMER_T81_BATTERY_PERCENT) {
+                if (!batteryLiveWindow || !IsWindow(batteryLiveWindow) ||
+                    !IsWindowVisible(batteryLiveWindow))
+                    KillTimer(h, TIMER_T81_BATTERY_PERCENT);
+                else
+                    T81BatteryLiveRefresh(false);
                 return 0;
             }
             if (wp == TIMER_T81_BATTERY_REPAIR) {
@@ -34707,8 +36346,10 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             }
             return DefWindowProcW(h, m, wp, lp);
         case WM_POWERBROADCAST:
-            if (wp == PBT_APMPOWERSTATUSCHANGE)
+            if (wp == PBT_APMPOWERSTATUSCHANGE) {
                 RefreshBattery();
+                T81BatteryLiveRefresh(false);
+            }
             return TRUE;
         case WM_RESOURCES_READY:
             if (!SetTimer(h, TIMER_RESOURCE_RELOAD, 120, nullptr))
@@ -34763,7 +36404,12 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             UpdatePlacement();
             InvalidateRect(h, nullptr, FALSE);
             return 0;
+        case WM_THEMECHANGED:
+            SetTimer(h, TIMER_T81_BLUR_REAPPLY, 300, nullptr);
+            InvalidateRect(h, nullptr, FALSE);
+            return DefWindowProcW(h, m, wp, lp);
         case WM_DWMCOMPOSITIONCHANGED:
+            SetTimer(h, TIMER_T81_BLUR_REAPPLY, 300, nullptr);
             T81SetExperimentalBlur(h);
             for (const auto& mirror : t81Mirrors)
                 if (mirror.window && IsWindow(mirror.window))
@@ -34777,6 +36423,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             InvalidateRect(h, nullptr, FALSE);
             return 0;
         case WM_DWMCOLORIZATIONCOLORCHANGED:
+            SetTimer(h, TIMER_T81_BLUR_REAPPLY, 300, nullptr);
             T81SetExperimentalBlur(h);
             for (const auto& mirror : t81Mirrors)
                 if (mirror.window && IsWindow(mirror.window))
@@ -34790,6 +36437,9 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         case WM_DISPLAYCHANGE:
         case WM_SETTINGCHANGE:
         case WM_DPICHANGED:
+            if (m == WM_SETTINGCHANGE)
+                SetTimer(h, TIMER_T81_AUTOHIDE_REFRESH, 150, nullptr);
+            SetTimer(h, TIMER_T81_BLUR_REAPPLY, 300, nullptr);
             s->buttonTransitions.clear();
             KillTimer(h, TIMER_BUTTON_TRANSITION);
             InvalidateClockTimeFormat();
@@ -35675,6 +37325,9 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             return 0;
         }
         case WM_DESTROY:
+            T81BalloonCleanup();
+            KillTimer(h, TIMER_T81_AUTOHIDE);
+            KillTimer(h, TIMER_T81_AUTOHIDE_REFRESH);
             KillTimer(h, TIMER_T81_START_RECONCILE);
             T81StopForcedWinRecovery();
             T81StopObserver();
@@ -35690,6 +37343,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             RemoveWorkAreaAppBar();
             KillTimer(h, TIMER_CLASSIC_POSITION_NOTIFY);
             KillTimer(h, TIMER_RESOURCE_RELOAD);
+            KillTimer(h, TIMER_T81_BLUR_REAPPLY);
             CancelBatterySlide();
             CleanupBatteryFrame();
             CancelDragHover();
