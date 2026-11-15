@@ -8,7 +8,6 @@
 // @github          https://github.com/igoredm
 // @include         windhawk.exe
 // @include         explorer.exe
-// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -ldwmapi -lshell32 -lshlwapi -lshcore -lpropsys
 // ==/WindhawkMod==
 
@@ -741,7 +740,7 @@ void RebuildApps() {
 
     // Running windows in z-order (top first).
     std::vector<HWND> wins;
-    EnumWindows([](HWND h, LPARAM lp) -> BOOL {
+    EnumWindows([](HWND h, LPARAM lp) WINAPI -> BOOL {
         if (IsTaskWindow(h)) ((std::vector<HWND>*)lp)->push_back(h);
         return TRUE;
     }, (LPARAM)&wins);
@@ -3476,7 +3475,7 @@ void DestroyDocks() {
 
 void CreateDocks() {
     DestroyDocks();
-    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR mon, HDC, LPRECT, LPARAM) -> BOOL {
+    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR mon, HDC, LPRECT, LPARAM) WINAPI -> BOOL {
         MONITORINFO mi = {sizeof(mi)};
         if (!GetMonitorInfoW(mon, &mi)) return TRUE;
         const wchar_t* group = MonitorGroup(mon, mi.rcMonitor);
@@ -3845,12 +3844,12 @@ static BOOL ExplorerInit() {
         Wh_Log(L"twinui.pcshell.dll not loaded");
         return FALSE;
     }
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
         {{L"public: virtual long __cdecl XamlLauncherState::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum "
           L"IMMERSIVELAUNCHERSHOWFLAGS)"},
          (void**)&ShowStartView_orig, (void*)ShowStartView_hook, false},
     };
-    if (!WindhawkUtils::HookSymbols(twinui, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(twinui, twinuiPcshellDllHooks, ARRAYSIZE(twinuiPcshellDllHooks))) {
         Wh_Log(L"ShowStartView not found: the Windows key keeps opening Windows' Start");
         return FALSE;
     }
