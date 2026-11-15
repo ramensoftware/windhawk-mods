@@ -2,11 +2,11 @@
 // @id              desktop-snowfall
 // @name            Desktop Snowfall
 // @description     Snow falls over your desktop and settles on top of windows and the taskbar
-// @version         1.0
+// @version         1.1
 // @author          mikybuilds
 // @github          https://github.com/mikybuilds
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -ld3d11 -ldcomp -ldwmapi -luser32 -lole32 -loleaut32 -lshell32
+// @compilerOptions -ld2d1 -ld3d11 -ldcomp -ldwmapi -luser32 -lole32 -loleaut32 -lshell32 -lwtsapi32 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -23,25 +23,39 @@ the taskbar and slowly build up snow drifts of different heights.
   the top and the snow hangs in the air for a moment before it falls back onto
   the window.
 * Make a window narrower and the snow on the cut-off part falls down.
+* Shake a window and its snow flies off. Close or minimize it and the snow
+  drops in lumps that burst into powder where they land.
 * Optionally, the snow slides off windows moved sideways: it stays where it is,
   and the part the window slides out from under falls down.
 * Sweep the snow off with the mouse cursor - it falls down to the windows below
   or to the taskbar.
 * The wind blows powder off the drifts, and now and then a lump slides off a
   window corner.
+* The snow can fall over all windows, or behind them, on the desktop: then the
+  falling snow shows only where the desktop is uncovered, and the snow still
+  settles on top of the windows and the taskbar.
+* Optionally, the lying snow slowly melts, and the snow can be kept out of
+  screenshots and screen sharing.
 * Works with the default taskbar, an auto-hidden taskbar (the snow rides along
   when it slides in and out) and custom taskbar styles (for example, floating
   "dock" themes of the Windows 11 Taskbar Styler mod): the snow lies on the
   visible taskbar parts.
+* Snow piles up along the bottom of the screen where the taskbar doesn't cover
+  it (an auto-hidden or see-through taskbar).
+* With several monitors, each monitor gets its own snow, and the snow is sized
+  for each monitor's display scale.
 
 The snow is drawn on the GPU on a transparent, click-through overlay, so it
-never gets in the way of mouse input. The overlay is hidden automatically while
+never gets in the way of mouse input. Menus, tooltips and the shell's flyouts
+stay in front of the snow. The snow is hidden automatically on a monitor where
 a fullscreen app (a game or a video) is in the foreground. The mod runs in its
 own process, separately from Explorer.
 
-The overlay is redrawn every frame, so the snow keeps the GPU a little busy even
-when nothing else on the screen changes. On a laptop running on battery, a lower
-frame rate limit (for example, 30) saves power.
+The snow is light on power: calm snowfall is drawn at about 30 frames per
+second, and the full frame rate is used only while something moves (a window,
+the cursor in the snow, falling lumps). Snow that lies still isn't redrawn at
+all. On battery the frame rate is capped at 60, and lower in energy saver mode.
+The snow pauses while the screen is locked or turned off.
 */
 // ==/WindhawkModReadme==
 
@@ -61,14 +75,36 @@ frame rate limit (for example, 30) saves power.
 - size: 100
   $name: Flake size (%)
   $description: 100 is the default size (20-400)
+- snowLayer: top
+  $name: Where the snow falls
+  $description: >-
+    "Behind windows" keeps the falling snow on the desktop, behind your
+    windows. The snow still settles on top of the windows and the taskbar.
+  $options:
+  - top: Over all windows
+  - behind: Behind windows, on the desktop
 - capHeight: 8
   $name: Snow cap height (pixels)
   $description: >-
-    Maximum height of the snow that settles on windows and the taskbar. 0
-    disables the caps (0-40)
+    Maximum height of the snow that settles on windows and the taskbar, at 100%
+    display scale. 0 disables the caps (0-40)
+- groundSnow: true
+  $name: Snow at the bottom of the screen
+  $description: >-
+    The snow piles up along the bottom of the screen where nothing covers it:
+    under an auto-hidden or see-through taskbar, or on a monitor without a
+    taskbar at the bottom
+- melt: false
+  $name: Snow slowly melts
+  $description: >-
+    The lying snow slowly melts away, so the drifts come and go, and they
+    disappear when the snowfall stops
 - sweepWithCursor: true
   $name: Sweep snow with the cursor
   $description: Moving the mouse cursor through a snow cap pushes the snow off
+- shakeOff: true
+  $name: Shake windows to throw the snow off
+  $description: Quickly moving a window from side to side throws its snow off
 - slideOff: false
   $name: Snow slides off moved windows
   $description: >-
@@ -87,13 +123,23 @@ frame rate limit (for example, 30) saves power.
   - off: No snow on the taskbar
 - maxFps: 60
   $name: Frame rate limit
-  $description: Lower values use less GPU and CPU (15-240)
+  $description: >-
+    The frame rate used while something moves. Calm snowfall is drawn at about
+    30 frames per second. Lower values use less GPU and CPU (15-240)
 - allMonitors: false
   $name: All monitors
-  $description: Draw the snow on every monitor instead of only the primary one
+  $description: >-
+    Snow on every monitor instead of only the primary one. Each monitor has its
+    own snow, and a fullscreen app hides only the snow on its own monitor
 - pauseInFullscreen: true
   $name: Hide in fullscreen apps
   $description: Hide the snow while a fullscreen app is in the foreground
+- hideFromCapture: false
+  $name: Hide from screenshots and screen sharing
+  $description: >-
+    Screenshots, screen recordings and screen sharing show the desktop without
+    the snow. Works with "Over all windows" on Windows 10 version 2004 and
+    later
 */
 // ==/WindhawkModSettings==
 
@@ -105,7 +151,9 @@ frame rate limit (for example, 30) saves power.
 #include <dcomp.h>
 #include <dwmapi.h>
 #include <dxgi1_3.h>
+#include <shellscalingapi.h>
 #include <uiautomation.h>
+#include <wtsapi32.h>
 #include <wrl/client.h>
 
 #include <windhawk_utils.h>
@@ -120,6 +168,8 @@ frame rate limit (for example, 30) saves power.
 
 using Microsoft::WRL::ComPtr;
 
+// Sizes and speeds are in pixels at 100% display scale, and are scaled with
+// the monitor's DPI.
 constexpr float kGravity = 2600.0f;      // px/s^2, for snow caps
 constexpr float kHangSeconds = 0.12f;    // snow hangs in the air this long
 constexpr float kTossFactor = 0.5f;      // share of the window speed snow keeps
@@ -150,12 +200,28 @@ struct {
     std::atomic<int> maxFps{60};
     std::atomic<bool> allMonitors{false};
     std::atomic<bool> pauseInFullscreen{true};
+    std::atomic<bool> behindWindows{false};
+    std::atomic<bool> melt{false};
+    std::atomic<bool> shakeOff{true};
+    std::atomic<bool> hideFromCapture{false};
+    std::atomic<bool> groundSnow{true};
 } g_settings;
 
 HANDLE g_stopEvent;
 HANDLE g_snowThread;
 HANDLE g_taskbarThread;
-std::atomic<bool> g_overlayHidden{false};  // hidden while a fullscreen app runs
+std::atomic<int> g_visibleOverlays{0};  // the taskbar is looked at only if > 0
+std::atomic<bool> g_locked{false};
+std::atomic<bool> g_displayOff{false};
+
+// Each monitor's snow runs on a thread of its own. Set there by the window
+// event hook, read by the overlay on the same thread.
+struct WakeFlags {
+    bool windows = false;  // a window moved, appeared or disappeared
+    bool cursor = false;   // the mouse cursor moved
+    bool restack = false;  // the overlay may need to go back in its place
+};
+thread_local WakeFlags g_wake;
 
 void LoadSettings() {
     g_settings.intensity = std::clamp(Wh_GetIntSetting(L"intensity"), 0, 600);
@@ -168,6 +234,14 @@ void LoadSettings() {
     g_settings.maxFps = std::clamp(Wh_GetIntSetting(L"maxFps"), 15, 240);
     g_settings.allMonitors = Wh_GetIntSetting(L"allMonitors") != 0;
     g_settings.pauseInFullscreen = Wh_GetIntSetting(L"pauseInFullscreen") != 0;
+    g_settings.melt = Wh_GetIntSetting(L"melt") != 0;
+    g_settings.shakeOff = Wh_GetIntSetting(L"shakeOff") != 0;
+    g_settings.hideFromCapture = Wh_GetIntSetting(L"hideFromCapture") != 0;
+    g_settings.groundSnow = Wh_GetIntSetting(L"groundSnow") != 0;
+
+    WindhawkUtils::StringSetting snowLayer =
+        WindhawkUtils::StringSetting::make(L"snowLayer");
+    g_settings.behindWindows = !wcscmp(snowLayer, L"behind");
 
     WindhawkUtils::StringSetting taskbarSnow =
         WindhawkUtils::StringSetting::make(L"taskbarSnow");
@@ -189,6 +263,112 @@ static bool IsTaskbarClass(const wchar_t* cls) {
 
 static bool IsShellWindowClass(const wchar_t* cls) {
     return !wcscmp(cls, L"Progman") || !wcscmp(cls, L"WorkerW");
+}
+
+static bool IsCloaked(HWND hwnd) {
+    DWORD cloaked = 0;
+    return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked,
+                                           sizeof(cloaked))) &&
+           cloaked;
+}
+
+// Windows that are never something the snow lies on or is hidden by: shadows
+// and invisible helper windows.
+static bool IsIgnoredClass(const wchar_t* cls) {
+    static const wchar_t* const kClasses[] = {
+        L"SysShadow",
+        L"EdgeUiInputTopWndClass",
+        L"EdgeUiInputWndClass",
+        L"ApplicationManager_ImmersiveShellWindow",
+        L"Internet Explorer_Hidden",
+    };
+    for (const wchar_t* c : kClasses) {
+        if (!wcscmp(cls, c)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Menus, tooltips and the shell's flyouts (Start, the tray overflow, task
+// thumbnails and the like).
+static bool IsPopupClass(const wchar_t* cls) {
+    static const wchar_t* const kClasses[] = {
+        L"#32768",
+        L"tooltips_class32",
+        L"Xaml_WindowedPopupClass",
+        L"Windows.UI.Core.CoreWindow",
+        L"XamlExplorerHostIslandWindow",
+        L"TopLevelWindowForOverflowXamlIsland",
+        L"NotifyIconOverflowWindow",
+        L"TaskListThumbnailWnd",
+        L"MultitaskingViewFrame",
+        L"ForegroundStaging",
+    };
+    for (const wchar_t* c : kClasses) {
+        if (!wcscmp(cls, c)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Whether a layered window shows its whole rectangle. Desktop widgets and the
+// like are drawn with per-pixel alpha or a color key and are mostly empty.
+static bool IsSolidLayered(HWND hwnd) {
+    BYTE alpha = 255;
+    DWORD flags = 0;
+    if (!GetLayeredWindowAttributes(hwnd, nullptr, &alpha, &flags)) {
+        return false;  // per-pixel alpha (UpdateLayeredWindow)
+    }
+    return !(flags & LWA_COLORKEY) && !((flags & LWA_ALPHA) && alpha < 77);
+}
+
+// Where the snow goes in the "behind windows" mode: into Explorer's wallpaper
+// layer, just under the desktop icons.
+struct DesktopLayer {
+    HWND parent;
+    HWND icons;  // the icons' window when it shares the parent, or null
+};
+
+static bool FindDesktopLayer(DesktopLayer* layer) {
+    HWND progman = FindWindow(L"Progman", nullptr);
+    if (!progman) {
+        return false;
+    }
+
+    // Ask Explorer to put the wallpaper into a window of its own behind the
+    // icons, as wallpaper apps do. Undocumented, so it's checked below.
+    SendMessageTimeout(progman, 0x052C, 0xD, 0x1, SMTO_NORMAL, 1000, nullptr);
+    SendMessageTimeout(progman, 0x052C, 0, 0, SMTO_NORMAL, 1000, nullptr);
+
+    // Windows 11 24H2 and later keep the icons and the wallpaper as children
+    // of Progman.
+    HWND icons = FindWindowEx(progman, nullptr, L"SHELLDLL_DefView", nullptr);
+    if (icons && FindWindowEx(progman, nullptr, L"WorkerW", nullptr)) {
+        *layer = {progman, icons};
+        return true;
+    }
+
+    // Earlier versions: the wallpaper is the top-level WorkerW right behind
+    // the one holding the icons.
+    HWND wallpaper = nullptr;
+    EnumWindows(
+        [](HWND hwnd, LPARAM lParam) WINAPI -> BOOL {
+            if (!FindWindowEx(hwnd, nullptr, L"SHELLDLL_DefView", nullptr)) {
+                return TRUE;
+            }
+            *reinterpret_cast<HWND*>(lParam) =
+                FindWindowEx(nullptr, hwnd, L"WorkerW", nullptr);
+            return FALSE;
+        },
+        reinterpret_cast<LPARAM>(&wallpaper));
+    if (!wallpaper) {
+        return false;
+    }
+
+    *layer = {wallpaper, nullptr};
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -333,7 +513,7 @@ DWORD WINAPI TaskbarThread(LPVOID) {
             do {
                 TaskbarSnow mode = g_settings.taskbarSnow;
                 if ((mode != TaskbarSnow::Auto && mode != TaskbarSnow::Parts) ||
-                    g_overlayHidden) {
+                    g_visibleOverlays == 0) {
                     continue;
                 }
 
@@ -399,15 +579,31 @@ struct Chunk {
     float size;
     float area;
     uint64_t ignoreKey;  // the cap it came from
+    bool burst;          // bursts into powder where it lands
 };
 
-// Something that snow can lie on: a window, the taskbar or a part of it.
+// Something that snow can lie on: a window, the taskbar or a part of it. Bodies
+// without a snow cap (maximized windows, menus, tool windows) only hide the
+// snow behind them.
 struct Body {
     uint64_t key;
     HWND hwnd;
     RECT rc;
     bool snowCap;
 };
+
+static bool SameBodies(const std::vector<Body>& a, const std::vector<Body>& b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); i++) {
+        if (a[i].key != b[i].key || a[i].snowCap != b[i].snowCap ||
+            !EqualRect(&a[i].rc, &b[i].rc)) {
+            return false;
+        }
+    }
+    return true;
+}
 
 // A puff of powder snow. It drifts with the wind and melts away.
 struct Puff {
@@ -437,12 +633,18 @@ struct Cap {
     float squash = 0, squashVel = 0;
     bool airborne = false;  // some of the snow is in the air
     unsigned seenFrame = 0;
+    float shakeDir = 0;   // the direction of the last fast sideways move
+    float shakeTime = 0;  // seconds since then
+    float shakeSpeed = 0;
+    float heightScale = 1;  // the ground holds more snow than windows
 };
 
 static uint64_t BodyKey(HWND hwnd, int part) {
     return (static_cast<uint64_t>(reinterpret_cast<uintptr_t>(hwnd)) << 2) |
            part;
 }
+
+constexpr uint64_t kGroundKey = 3;  // BodyKey(nullptr, 3)
 
 static uint32_t Hash32(uint32_t x) {
     x ^= x >> 16;
@@ -471,41 +673,63 @@ static float CapNoise(const Cap& cap, int column, uint32_t salt, float scale) {
 
 // The most snow a column can hold. It varies along the cap so that the snow
 // settles in drifts of different heights instead of a flat strip.
-static float SnowLimit(const Cap& cap, int column, float maxHeight) {
-    float n = 0.65f * CapNoise(cap, column, 1, 70.0f) +
-              0.35f * CapNoise(cap, column, 2, 23.0f);
+static float SnowLimit(const Cap& cap, int column, float maxHeight,
+                       float scale) {
+    float n = 0.65f * CapNoise(cap, column, 1, 70.0f * scale) +
+              0.35f * CapNoise(cap, column, 2, 23.0f * scale);
     n = std::clamp((n - 0.5f) * 1.8f + 0.5f, 0.0f, 1.0f);
     return maxHeight * (0.3f + 0.7f * n);
 }
 
+// How briskly the snow changes, which sets how often it's drawn.
+enum class Pace {
+    Still,        // nothing moves: the last frame stays on the screen
+    Calm,         // only the snowfall and powder: about 30 fps
+    Interactive,  // a window, the cursor or lumps of snow move: full rate
+};
+
+enum class RunResult { Stop, Recreate, Retry };
+
 class Overlay {
    public:
+    Overlay(HMONITOR monitor, const RECT& area, HANDLE stopEvent)
+        : m_monitor(monitor), m_area(area), m_stop(stopEvent) {}
     ~Overlay();
 
     bool Create();
-    void Run();
+    RunResult Run();
 
    private:
     bool CreateDeviceResources();
     void ReleaseDeviceResources();
     bool CreateTargetBitmap();
     bool CreateFlakeSprite();
-    RECT ComputeArea();
-    bool ApplyArea(const RECT& area);
-    UINT ComputeSyncInterval();
+    void PlaceWindow();
+    void Restack();
+    HWND LowestOpenPopup();
+    void ApplyCaptureSetting();
+    void UpdateRefreshRate();
+    UINT SyncIntervalFor(int fps);
+    void Step(float dt);
 
     float Rand();
     void SpawnFlake(Flake& f, bool scatter);
     void SpawnChunk(float x, float y, float area, float vx, float vy,
-                    uint64_t ignoreKey);
+                    uint64_t ignoreKey, bool burst = false);
     void SpawnPuff(float x, float y, float vx, float vy, float size,
                    float life);
-    void DropColumns(Cap& cap, int first, int count);
+    void DropColumns(Cap& cap, int first, int count, int group = kChunkColumns,
+                     bool burst = false);
+    void ShakeOff(Cap& cap, const RECT& rc, float vx);
+    float CapMax(const Cap& cap) const;
+    void Melt(Cap& cap, float dt);
 
     void CollectBodies();
     void AddTaskbarBodies(HWND hwnd, const RECT& rc);
     bool IsFullscreenAppActive();
     bool IsCoveredAbove(size_t bodyIndex, int x, int y);
+    bool IsOnThisMonitor(const RECT& rc) const;
+    bool IsOnThisMonitor(HWND hwnd) const;
     const Body* FindLanding(float x, float oldY, float newY,
                             uint64_t ignoreKey);
     void AddSnow(uint64_t key, int column, float amount);
@@ -519,15 +743,23 @@ class Overlay {
     void UpdateFlakes(float dt);
     void UpdateChunks(float dt);
     void UpdatePuffs(float dt);
-    bool Render();
+    bool Render(UINT syncInterval);
     void DrawCap(const Cap& cap, const RECT& rc);
 
     HWND m_hwnd = nullptr;
-    RECT m_area = {};
+    bool m_behind = false;       // in the desktop's wallpaper layer
+    bool m_wantBehind = false;   // the setting when the overlay was made
+    DesktopLayer m_layer = {};
+    bool m_hiddenFromCapture = false;
+    HMONITOR m_monitor;
+    RECT m_area;  // the monitor
+    HANDLE m_stop;
+    float m_scale = 1.0f;  // the monitor's display scale
+    bool m_counted = false;  // counted in g_visibleOverlays
     int m_width = 0;
     int m_height = 0;
     bool m_visible = true;
-    UINT m_syncInterval = 1;
+    double m_refreshRate = 60.0;
 
     ComPtr<ID3D11Device> m_d3dDevice;
     ComPtr<ID2D1Factory1> m_d2dFactory;
@@ -546,6 +778,7 @@ class Overlay {
     std::vector<Chunk> m_chunks;
     std::vector<Puff> m_puffs;
     std::vector<Body> m_bodies;
+    std::vector<Body> m_prevBodies;
     std::unordered_map<uint64_t, Cap> m_caps;
 
     POINT m_lastCursor = {};
@@ -554,17 +787,39 @@ class Overlay {
     float m_time = 0;
     float m_frameTime = 1.0f / 60;
     unsigned m_frame = 0;
+
+    Pace m_pace = Pace::Calm;
+    double m_activeUntil = 0;   // keep the full frame rate until then
+    bool m_anyAirborne = false; // some cap's snow is in the air or springs
+    bool m_melting = false;     // some snow is melting
 };
 
 constexpr wchar_t kOverlayClass[] = L"WindhawkDesktopSnowfallOverlay";
 
 Overlay::~Overlay() {
+    if (m_counted && m_visible) {
+        g_visibleOverlays--;
+    }
     ReleaseDeviceResources();
-    if (m_hwnd) {
+    if (m_hwnd && IsWindow(m_hwnd)) {
         RemoveProp(m_hwnd, L"NonRudeHWND");
         DestroyWindow(m_hwnd);
-        UnregisterClass(kOverlayClass, GetModuleHandle(nullptr));
     }
+}
+
+float Overlay::CapMax(const Cap& cap) const {
+    return g_settings.capHeight * m_scale * cap.heightScale;
+}
+
+static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam,
+                                       LPARAM lParam) {
+    switch (msg) {
+        case WM_NCHITTEST:
+            return HTTRANSPARENT;
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
+    }
+    return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
 float Overlay::Rand() {
@@ -574,69 +829,203 @@ float Overlay::Rand() {
     return (m_rng & 0xFFFFFF) / 16777216.0f;
 }
 
-RECT Overlay::ComputeArea() {
-    RECT rc;
-    if (g_settings.allMonitors) {
-        rc.left = GetSystemMetrics(SM_XVIRTUALSCREEN);
-        rc.top = GetSystemMetrics(SM_YVIRTUALSCREEN);
-        rc.right = rc.left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
-        rc.bottom = rc.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    } else {
-        MONITORINFO mi = {sizeof(mi)};
-        GetMonitorInfo(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY), &mi);
-        rc = mi.rcMonitor;
+void Overlay::UpdateRefreshRate() {
+    MONITORINFOEX mi = {};
+    mi.cbSize = sizeof(mi);
+    DEVMODE dm = {};
+    dm.dmSize = sizeof(dm);
+    if (GetMonitorInfo(m_monitor, &mi) &&
+        EnumDisplaySettings(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) &&
+        dm.dmDisplayFrequency > 1) {
+        m_refreshRate = dm.dmDisplayFrequency;
     }
-    return rc;
 }
 
-UINT Overlay::ComputeSyncInterval() {
-    DWM_TIMING_INFO ti = {sizeof(ti)};
-    double refresh = 60.0;
-    if (SUCCEEDED(DwmGetCompositionTimingInfo(nullptr, &ti)) &&
-        ti.rateRefresh.uiDenominator) {
-        refresh = static_cast<double>(ti.rateRefresh.uiNumerator) /
-                  ti.rateRefresh.uiDenominator;
-    }
-    int interval = static_cast<int>(std::lround(refresh / g_settings.maxFps));
+// Frames are shown on whole refreshes of the display, so the rate is the
+// display's rate divided by a whole number.
+UINT Overlay::SyncIntervalFor(int fps) {
+    int interval = static_cast<int>(std::lround(m_refreshRate / fps));
     return static_cast<UINT>(std::clamp(interval, 1, 4));
 }
 
 bool Overlay::Create() {
-    WNDCLASSEX wc = {sizeof(wc)};
-    wc.lpfnWndProc = DefWindowProc;
-    wc.hInstance = GetModuleHandle(nullptr);
-    wc.lpszClassName = kOverlayClass;
-    RegisterClassEx(&wc);
-
-    m_area = ComputeArea();
+    HINSTANCE instance = GetModuleHandle(nullptr);
     m_width = m_area.right - m_area.left;
     m_height = m_area.bottom - m_area.top;
 
-    m_hwnd = CreateWindowEx(
-        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW |
-            WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP,
-        kOverlayClass, L"Desktop Snowfall", WS_POPUP, m_area.left, m_area.top,
-        m_width, m_height, nullptr, nullptr, wc.hInstance, nullptr);
-    if (!m_hwnd) {
-        return false;
+    UINT dpiX = 96, dpiY = 96;
+    if (SUCCEEDED(GetDpiForMonitor(m_monitor, MDT_EFFECTIVE_DPI, &dpiX,
+                                   &dpiY))) {
+        m_scale = std::max(dpiX, 96u) / 96.0f;
     }
 
-    // Needed for a layered window to be shown; the content itself comes from
-    // DirectComposition.
-    SetLayeredWindowAttributes(m_hwnd, 0, 255, LWA_ALPHA);
+    m_wantBehind = g_settings.behindWindows;
+    if (m_wantBehind) {
+        m_behind = FindDesktopLayer(&m_layer);
+        if (!m_behind) {
+            Wh_Log(L"The desktop's wallpaper layer wasn't found, the snow "
+                   L"falls over all windows for now");
+        }
+    }
 
-    // The overlay covers the whole monitor, so the taskbar would treat it as a
-    // fullscreen app and stop staying on top of other windows: an auto-hidden
-    // taskbar would then slide out behind a maximized window.
-    SetProp(m_hwnd, L"NonRudeHWND", reinterpret_cast<HANDLE>(TRUE));
+    if (m_behind) {
+        // A child of the wallpaper layer, under the desktop icons, so it needs
+        // neither to be click-through nor to stay above other windows.
+        POINT origin = {m_area.left, m_area.top};
+        ScreenToClient(m_layer.parent, &origin);
+        // Not layered, a child counts as opaque, and the wallpaper under it
+        // may stop being drawn.
+        for (DWORD layered : {static_cast<DWORD>(WS_EX_LAYERED), 0ul}) {
+            m_hwnd = CreateWindowEx(
+                WS_EX_NOREDIRECTIONBITMAP | WS_EX_NOACTIVATE | layered,
+                kOverlayClass, L"Desktop Snowfall",
+                WS_CHILD | WS_DISABLED | WS_CLIPSIBLINGS, origin.x, origin.y,
+                m_width, m_height, m_layer.parent, nullptr, instance, nullptr);
+            if (m_hwnd) {
+                if (layered) {
+                    SetLayeredWindowAttributes(m_hwnd, 0, 255, LWA_ALPHA);
+                }
+                break;
+            }
+        }
+        if (!m_hwnd) {
+            Wh_Log(L"Creating the overlay in the wallpaper layer failed: %u",
+                   GetLastError());
+            return false;
+        }
+    } else {
+        m_hwnd = CreateWindowEx(
+            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST |
+                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP,
+            kOverlayClass, L"Desktop Snowfall", WS_POPUP, m_area.left,
+            m_area.top, m_width, m_height, nullptr, nullptr, instance, nullptr);
+        if (!m_hwnd) {
+            return false;
+        }
+
+        // Needed for a layered window to be shown; the content itself comes
+        // from DirectComposition.
+        SetLayeredWindowAttributes(m_hwnd, 0, 255, LWA_ALPHA);
+
+        // The overlay covers the whole monitor, so the taskbar would treat it
+        // as a fullscreen app and stop staying on top of other windows: an
+        // auto-hidden taskbar would then slide out behind a maximized window.
+        SetProp(m_hwnd, L"NonRudeHWND", reinterpret_cast<HANDLE>(TRUE));
+        ApplyCaptureSetting();
+    }
 
     if (!CreateDeviceResources()) {
         return false;
     }
 
     ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
-    m_syncInterval = ComputeSyncInterval();
+    Restack();
+    UpdateRefreshRate();
+    m_visible = true;
+    m_counted = true;
+    g_visibleOverlays++;
     return true;
+}
+
+// The window right above this one, looking past the other monitors' snow.
+static HWND WindowAboveOverlay(HWND hwnd) {
+    HWND above = GetWindow(hwnd, GW_HWNDPREV);
+    wchar_t cls[64];
+    while (above && GetClassName(above, cls, ARRAYSIZE(cls)) &&
+           !wcscmp(cls, kOverlayClass)) {
+        above = GetWindow(above, GW_HWNDPREV);
+    }
+    return above;
+}
+
+#ifndef WDA_EXCLUDEFROMCAPTURE
+#define WDA_EXCLUDEFROMCAPTURE 0x00000011
+#endif
+
+// Only top-level windows can be kept out of screenshots.
+void Overlay::ApplyCaptureSetting() {
+    bool hide = g_settings.hideFromCapture && !m_behind;
+    if (hide == m_hiddenFromCapture) {
+        return;
+    }
+    if (SetWindowDisplayAffinity(m_hwnd,
+                                 hide ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE)) {
+        m_hiddenFromCapture = hide;
+    } else {
+        Wh_Log(L"SetWindowDisplayAffinity failed: %u", GetLastError());
+        m_hiddenFromCapture = hide;  // don't retry every second
+    }
+}
+
+// Moves the overlay over the area, in its parent's coordinates when it's in
+// the wallpaper layer.
+void Overlay::PlaceWindow() {
+    POINT origin = {m_area.left, m_area.top};
+    if (m_behind) {
+        ScreenToClient(m_layer.parent, &origin);
+    }
+    SetWindowPos(m_hwnd, nullptr, origin.x, origin.y, m_width, m_height,
+                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+}
+
+// The lowest of the menus, tooltips and shell flyouts open at the very top,
+// which the snow goes just under. Click-through windows are looked past: they
+// are overlays like this one.
+HWND Overlay::LowestOpenPopup() {
+    DWORD shellProcess = 0;
+    if (HWND tray = FindWindow(L"Shell_TrayWnd", nullptr)) {
+        GetWindowThreadProcessId(tray, &shellProcess);
+    }
+
+    HWND lowest = nullptr;
+    for (HWND hwnd = GetTopWindow(nullptr); hwnd;
+         hwnd = GetWindow(hwnd, GW_HWNDNEXT)) {
+        LONG exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+        if (!(exStyle & WS_EX_TOPMOST)) {
+            break;
+        }
+        if (hwnd == m_hwnd || (exStyle & WS_EX_TRANSPARENT) ||
+            !IsWindowVisible(hwnd) || IsCloaked(hwnd)) {
+            continue;
+        }
+
+        wchar_t cls[64];
+        if (!GetClassName(hwnd, cls, ARRAYSIZE(cls))) {
+            continue;
+        }
+        DWORD process = 0;
+        GetWindowThreadProcessId(hwnd, &process);
+        bool popup = IsPopupClass(cls) || IsIgnoredClass(cls) ||
+                     (process == shellProcess && !IsTaskbarClass(cls));
+        if (!popup) {
+            break;
+        }
+        lowest = hwnd;
+    }
+    return lowest;
+}
+
+// Other topmost windows (the taskbar, for one) end up above the overlay when
+// they're activated; this puts the snow back on top of them, but still under
+// open menus. In the wallpaper layer, the snow is kept just under the icons
+// and above live wallpapers, which go into the same layer.
+void Overlay::Restack() {
+    HWND above = WindowAboveOverlay(m_hwnd);
+    HWND after;
+    if (m_behind) {
+        after = m_layer.icons ? m_layer.icons : HWND_TOP;
+        if (above == m_layer.icons) {
+            return;
+        }
+    } else {
+        HWND popup = LowestOpenPopup();
+        after = popup ? popup : HWND_TOPMOST;
+        if (above == popup) {
+            return;
+        }
+    }
+    SetWindowPos(m_hwnd, after, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 }
 
 bool Overlay::CreateDeviceResources() {
@@ -807,50 +1196,20 @@ bool Overlay::CreateFlakeSprite() {
     return SUCCEEDED(hr);
 }
 
-bool Overlay::ApplyArea(const RECT& area) {
-    int width = area.right - area.left;
-    int height = area.bottom - area.top;
-    if (width <= 0 || height <= 0) {
-        return false;
-    }
-
-    m_ctx->SetTarget(nullptr);
-    m_targetBitmap.Reset();
-    if (FAILED(m_swapChain->ResizeBuffers(
-            2, width, height, DXGI_FORMAT_B8G8R8A8_UNORM,
-            DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT)) ||
-        !CreateTargetBitmap()) {
-        return false;
-    }
-
-    m_area = area;
-    m_width = width;
-    m_height = height;
-    SetWindowPos(m_hwnd, HWND_TOPMOST, area.left, area.top, width, height,
-                 SWP_NOACTIVATE);
-
-    for (Flake& f : m_flakes) {
-        SpawnFlake(f, true);
-    }
-    m_chunks.clear();
-    m_puffs.clear();
-    return true;
-}
-
 void Overlay::SpawnFlake(Flake& f, bool scatter) {
     float depth = Rand();
-    f.size = (0.8f + depth * depth * 2.7f) * g_settings.size / 100.0f;
-    f.fallSpeed = 35.0f + f.size * 22.0f;
+    f.size = (0.8f + depth * depth * 2.7f) * g_settings.size / 100.0f * m_scale;
+    f.fallSpeed = 35.0f * m_scale + f.size * 22.0f;
     f.phase = Rand() * 6.2832f;
-    f.sway = 6.0f + Rand() * 14.0f;
+    f.sway = (6.0f + Rand() * 14.0f) * m_scale;
     f.alpha = 0.45f + 0.5f * Rand();
     f.x = m_area.left + Rand() * m_width;
     f.y = scatter ? m_area.top + Rand() * m_height
-                  : m_area.top - f.size * 2 - Rand() * 40.0f;
+                  : m_area.top - f.size * 2 - Rand() * 40.0f * m_scale;
 }
 
 void Overlay::SpawnChunk(float x, float y, float area, float vx, float vy,
-                         uint64_t ignoreKey) {
+                         uint64_t ignoreKey, bool burst) {
     if (m_chunks.size() >= kMaxChunks || area < 0.5f) {
         return;
     }
@@ -861,8 +1220,10 @@ void Overlay::SpawnChunk(float x, float y, float area, float vx, float vy,
     c.vx = vx;
     c.vy = vy;
     c.area = area;
-    c.size = std::clamp(std::sqrt(area) * 0.55f, 1.0f, 3.5f);
+    c.size = std::clamp(std::sqrt(area) * 0.55f, m_scale,
+                        (burst ? 5.0f : 3.5f) * m_scale);
     c.ignoreKey = ignoreKey;
+    c.burst = burst;
     m_chunks.push_back(c);
 }
 
@@ -871,28 +1232,33 @@ void Overlay::SpawnPuff(float x, float y, float vx, float vy, float size,
     if (m_puffs.size() >= kMaxPuffs) {
         return;
     }
-    m_puffs.push_back({x, y, vx, vy, size, life, life});
+    m_puffs.push_back({x, y, vx, vy, size * m_scale, life, life});
 }
 
 // Turns snow columns that lost their support (the cap's position is from the
 // previous frame) into falling chunks.
-void Overlay::DropColumns(Cap& cap, int first, int count) {
-    for (int i = 0; i < count; i += kChunkColumns) {
+void Overlay::DropColumns(Cap& cap, int first, int count, int group,
+                          bool burst) {
+    for (int i = 0; i < count; i += group) {
         float area = 0, top = 0, lift = 0;
-        for (int k = i; k < std::min(i + kChunkColumns, count); k++) {
+        for (int k = i; k < std::min(i + group, count); k++) {
             const Column& col = cap.cols[first + k];
             area += col.h;
             top = std::max(top, col.h);
             lift = std::max(lift, col.lift);
         }
-        SpawnChunk(cap.rc.left + first + i + 1.0f, cap.rc.top - lift - top / 2,
-                   area, (Rand() - 0.5f) * 30.0f, 0, 0);
+        SpawnChunk(cap.rc.left + first + i + group / 2.0f,
+                   cap.rc.top - lift - top / 2, area,
+                   (Rand() - 0.5f) * (burst ? 50.0f : 30.0f),
+                   burst ? -Rand() * 40.0f : 0, 0, burst);
     }
 }
 
 void Overlay::AddTaskbarBodies(HWND hwnd, const RECT& rc) {
     TaskbarSnow mode = g_settings.taskbarSnow;
     if (mode == TaskbarSnow::Off) {
+        // No snow on it, but it hides the snow on the ground.
+        m_bodies.push_back({BodyKey(hwnd, 0), hwnd, rc, false});
         return;
     }
 
@@ -929,6 +1295,21 @@ void Overlay::AddTaskbarBodies(HWND hwnd, const RECT& rc) {
     m_bodies.push_back({BodyKey(hwnd, 0), hwnd, rc, true});
 }
 
+bool Overlay::IsOnThisMonitor(const RECT& rc) const {
+    POINT top = {rc.left + (rc.right - rc.left) / 2, rc.top};
+    return MonitorFromPoint(top, MONITOR_DEFAULTTONEAREST) == m_monitor;
+}
+
+bool Overlay::IsOnThisMonitor(HWND hwnd) const {
+    RECT rc;
+    if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rc,
+                                     sizeof(rc))) &&
+        !GetWindowRect(hwnd, &rc)) {
+        return true;
+    }
+    return IsOnThisMonitor(rc);
+}
+
 void Overlay::CollectBodies() {
     m_bodies.clear();
     EnumWindows(
@@ -941,25 +1322,16 @@ void Overlay::CollectBodies() {
 
             wchar_t cls[64];
             if (!GetClassName(hwnd, cls, ARRAYSIZE(cls)) ||
-                IsShellWindowClass(cls)) {
+                IsShellWindowClass(cls) || IsIgnoredClass(cls)) {
                 return TRUE;
             }
 
             bool isTaskbar = IsTaskbarClass(cls);
             LONG exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-            if (!isTaskbar) {
-                if (exStyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) {
-                    return TRUE;
-                }
-                if ((exStyle & WS_EX_LAYERED) && (exStyle & WS_EX_TRANSPARENT)) {
-                    return TRUE;
-                }
+            if (!isTaskbar && (exStyle & WS_EX_TRANSPARENT)) {
+                return TRUE;  // click-through overlays
             }
-
-            DWORD cloaked = 0;
-            DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked,
-                                  sizeof(cloaked));
-            if (cloaked) {
+            if (IsCloaked(hwnd)) {
                 return TRUE;
             }
 
@@ -968,19 +1340,72 @@ void Overlay::CollectBodies() {
                                              &rc, sizeof(rc)))) {
                 GetWindowRect(hwnd, &rc);
             }
-            if (rc.right - rc.left < 80 || rc.bottom - rc.top < 30) {
+
+            RECT visible;
+            if (!IntersectRect(&visible, &rc, &self->m_area)) {
+                return TRUE;  // on another monitor
+            }
+
+            // Menus, tool windows and small windows don't get snow, but they
+            // hide the snow behind them.
+            const float scale = self->m_scale;
+            bool coverOnly = !isTaskbar &&
+                             ((exStyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) ||
+                              IsPopupClass(cls) ||
+                              rc.right - rc.left < 80 * scale ||
+                              rc.bottom - rc.top < 30 * scale);
+            if (coverOnly) {
+                if (rc.right - rc.left < 2 || rc.bottom - rc.top < 2 ||
+                    ((exStyle & WS_EX_LAYERED) && !IsSolidLayered(hwnd))) {
+                    return TRUE;
+                }
+                // An invisible window over the whole screen would hide all the
+                // snow.
+                MONITORINFO mi = {sizeof(mi)};
+                if (GetMonitorInfo(MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST),
+                                   &mi)) {
+                    const RECT& m = mi.rcMonitor;
+                    RECT both;
+                    IntersectRect(&both, &rc, &m);
+                    double covered = static_cast<double>(both.right - both.left) *
+                                     (both.bottom - both.top);
+                    if (covered >= 0.9 * (m.right - m.left) * (m.bottom - m.top)) {
+                        return TRUE;
+                    }
+                }
+                self->m_bodies.push_back({BodyKey(hwnd, 0), hwnd, rc, false});
                 return TRUE;
             }
 
+            // A window's snow lies on the monitor with the middle of its top
+            // edge. On the other monitors the window only hides the snow.
+            bool here = self->IsOnThisMonitor(rc);
             if (isTaskbar) {
-                self->AddTaskbarBodies(hwnd, rc);
+                if (here && rc.right - rc.left >= 80 * scale &&
+                    rc.bottom - rc.top >= 30 * scale) {
+                    self->AddTaskbarBodies(hwnd, rc);
+                } else {
+                    self->m_bodies.push_back({BodyKey(hwnd, 0), hwnd, rc, false});
+                }
             } else {
-                self->m_bodies.push_back(
-                    {BodyKey(hwnd, 0), hwnd, rc, !IsZoomed(hwnd)});
+                // Snow on a window that touches the top of the screen (snapped
+                // to the top half, say) couldn't be seen.
+                bool snowCap =
+                    here && !IsZoomed(hwnd) && rc.top > self->m_area.top;
+                self->m_bodies.push_back({BodyKey(hwnd, 0), hwnd, rc, snowCap});
             }
             return TRUE;
         },
         reinterpret_cast<LPARAM>(this));
+
+    // The ground: the bottom edge of the screen, under everything else. It
+    // shows only where nothing covers it, such as under an auto-hidden or
+    // see-through taskbar.
+    if (g_settings.groundSnow) {
+        RECT ground = {m_area.left, m_area.bottom, m_area.right,
+                       m_area.bottom + 100};
+        m_bodies.push_back({kGroundKey, nullptr, ground, true});
+    }
 }
 
 bool Overlay::IsFullscreenAppActive() {
@@ -997,8 +1422,9 @@ bool Overlay::IsFullscreenAppActive() {
 
     RECT rc;
     MONITORINFO mi = {sizeof(mi)};
-    if (!GetWindowRect(fg, &rc) ||
-        !GetMonitorInfo(MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST), &mi)) {
+    HMONITOR monitor = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+    if (monitor != m_monitor || !GetWindowRect(fg, &rc) ||
+        !GetMonitorInfo(monitor, &mi)) {
         return false;
     }
 
@@ -1050,7 +1476,7 @@ void Overlay::AddSnow(uint64_t key, int column, float amount) {
     Cap& cap = it->second;
     std::vector<Column>& cols = cap.cols;
     const int width = static_cast<int>(cols.size());
-    const float maxHeight = static_cast<float>(g_settings.capHeight);
+    const float maxHeight = CapMax(cap);
 
     // Let the pile relax so it doesn't form needles, and keep it under the
     // drift profile.
@@ -1063,7 +1489,7 @@ void Overlay::AddSnow(uint64_t key, int column, float amount) {
 
     float limit[2 * kReach + 1];
     for (int c = from; c <= to; c++) {
-        limit[c - from] = SnowLimit(cap, c, maxHeight);
+        limit[c - from] = SnowLimit(cap, c, maxHeight, m_scale);
     }
 
     for (int i = 0; i < 9; i++) {
@@ -1146,6 +1572,7 @@ void Overlay::ResizeCap(Cap& cap, const RECT& rc) {
 }
 
 void Overlay::UpdateCaps(float dt) {
+    m_anyAirborne = false;
     if (g_settings.capHeight <= 0) {
         m_caps.clear();
         return;
@@ -1167,6 +1594,7 @@ void Overlay::UpdateCaps(float dt) {
             unsigned lastSeen = inserted ? 0 : cap.seenFrame;
             if (inserted) {
                 cap.hwnd = b.hwnd;
+                cap.heightScale = b.key == kGroundKey ? 1.5f : 1.0f;
                 cap.seed = Hash32(static_cast<uint32_t>(b.key) ^
                                   static_cast<uint32_t>(b.key >> 32));
             }
@@ -1206,10 +1634,37 @@ void Overlay::UpdateCaps(float dt) {
         }
     }
 
-    if (m_frame % 60 == 0) {
-        for (auto it = m_caps.begin(); it != m_caps.end();) {
-            it = IsWindow(it->second.hwnd) ? std::next(it) : m_caps.erase(it);
+    // A window that was closed, minimized or hidden drops its snow in lumps.
+    // A maximized window keeps its snow for later, and so do a window on
+    // another virtual desktop (it's cloaked) and one that moved to another
+    // monitor.
+    for (auto it = m_caps.begin(); it != m_caps.end();) {
+        Cap& cap = it->second;
+        if (cap.seenFrame == m_frame) {
+            m_anyAirborne = m_anyAirborne || cap.airborne ||
+                            cap.squash != 0 || cap.squashVel != 0;
+            ++it;
+            continue;
         }
+
+        bool alive = IsWindow(cap.hwnd);
+        if (cap.seenFrame == m_frame - 1 && alive &&
+            (IsZoomed(cap.hwnd) || IsCloaked(cap.hwnd))) {
+            ++it;
+            continue;
+        }
+        if (cap.seenFrame == m_frame - 1 && alive && !IsIconic(cap.hwnd) &&
+            IsWindowVisible(cap.hwnd) && !IsOnThisMonitor(cap.hwnd)) {
+            // The other monitor's snow takes over.
+            it = m_caps.erase(it);
+            continue;
+        }
+        if (cap.seenFrame == m_frame - 1) {
+            DropColumns(cap, 0, static_cast<int>(cap.cols.size()), 6, true);
+            it = m_caps.erase(it);
+            continue;
+        }
+        it = alive ? std::next(it) : m_caps.erase(it);
     }
 }
 
@@ -1245,17 +1700,41 @@ void Overlay::MoveCap(Cap& cap, const RECT& rc, float dt) {
     cap.vy = cap.vy * 0.5f + dTop / dt * 0.5f;
     cap.vx = cap.vx * 0.5f + vxNow * 0.5f;
 
+    // Shaken from side to side: each quick turn throws some snow off, which
+    // flies on the way the window was going.
+    if (g_settings.shakeOff && !g_settings.slideOff) {
+        const float shakeSpeed = 450.0f * m_scale;  // px/s
+        cap.shakeTime += dt;
+        if (std::fabs(cap.vx) > shakeSpeed) {
+            float dir = cap.vx > 0 ? 1.0f : -1.0f;
+            if (cap.shakeDir != 0 && dir != cap.shakeDir &&
+                cap.shakeTime < 0.3f) {
+                ShakeOff(cap, rc, cap.shakeDir * cap.shakeSpeed);
+            }
+            if (dir != cap.shakeDir) {
+                cap.shakeSpeed = 0;
+            }
+            cap.shakeDir = dir;
+            cap.shakeTime = 0;
+            cap.shakeSpeed = std::max(cap.shakeSpeed, std::fabs(cap.vx));
+        } else if (cap.shakeTime > 0.3f) {
+            cap.shakeDir = 0;
+        }
+    }
+
     // Thrown up: the snow rides up with the body, and flies on when the body
     // slows down.
+    const float s = m_scale;
+    const float minToss = kMinTossSpeed * s, maxToss = kMaxTossSpeed * s;
     bool launch = false;
     float tossSpeed = 0;
     if (cap.vy < cap.carry) {
         cap.carry = cap.vy;
-    } else if (cap.carry < -kMinTossSpeed && cap.vy > cap.carry * 0.35f) {
+    } else if (cap.carry < -minToss && cap.vy > cap.carry * 0.35f) {
         launch = true;
-        tossSpeed = std::max(cap.carry * kTossFactor, -kMaxTossSpeed);
+        tossSpeed = std::max(cap.carry * kTossFactor, -maxToss);
         cap.carry = 0;
-    } else if (cap.vy > -kMinTossSpeed * 0.5f) {
+    } else if (cap.vy > -minToss * 0.5f) {
         cap.carry = 0;
     }
 
@@ -1263,10 +1742,11 @@ void Overlay::MoveCap(Cap& cap, const RECT& rc, float dt) {
     // snow keeps its speed and falls after the body, and after a sudden jump
     // it hangs in the air for a moment.
     const float excess = dTop - std::max(prevVy, 0.0f) * dt;
-    const bool drop = excess > 3.0f;
+    const bool drop = excess > 3.0f * s;
     const float hang =
-        excess > 8.0f
-            ? kHangSeconds * std::clamp((excess - 8.0f) / 20.0f, 0.3f, 1.0f)
+        excess > 8.0f * s
+            ? kHangSeconds *
+                  std::clamp((excess - 8.0f * s) / (20.0f * s), 0.3f, 1.0f)
             : 0.0f;
 
     if (!cap.airborne && !launch && !drop) {
@@ -1289,7 +1769,7 @@ void Overlay::MoveCap(Cap& cap, const RECT& rc, float dt) {
         } else if (drop) {
             col.lift = dTop;
             col.vel = std::max(prevVy, 0.0f);
-            col.hang = hang * (0.8f + 0.4f * CapNoise(cap, c, 3, 60.0f));
+            col.hang = hang * (0.8f + 0.4f * CapNoise(cap, c, 3, 60.0f * s));
         } else if (launch) {
             // The cap flies up as one piece; loose bits break off below.
             col.vel = tossSpeed;
@@ -1302,7 +1782,7 @@ void Overlay::MoveCap(Cap& cap, const RECT& rc, float dt) {
             // The body caught up with the snow from below and pushes it.
             col.lift = 0;
             col.hang = 0;
-            col.vel = std::max(std::min(col.vel, cap.vy), -kMaxTossSpeed);
+            col.vel = std::max(std::min(col.vel, cap.vy), -maxToss);
         }
 
         if (col.hang > 0) {
@@ -1311,13 +1791,13 @@ void Overlay::MoveCap(Cap& cap, const RECT& rc, float dt) {
             continue;
         }
 
-        col.vel += kGravity * dt;
+        col.vel += kGravity * s * dt;
         col.lift -= col.vel * dt;
         if (col.lift <= 0) {
             col.lift = 0;
-            if (col.vel > kBounceSpeed) {
-                impact = std::max(impact, col.vel);
-                if (col.vel > 550.0f && Rand() < 0.06f) {
+            if (col.vel > kBounceSpeed * s) {
+                impact = std::max(impact, col.vel / s);
+                if (col.vel > 550.0f * s && Rand() < 0.06f) {
                     SpawnPuff(rc.left + c + 0.5f, rc.top - col.h,
                               (Rand() - 0.5f) * 90.0f,
                               -40.0f - Rand() * 90.0f, 0.7f + Rand() * 0.8f,
@@ -1340,7 +1820,7 @@ void Overlay::MoveCap(Cap& cap, const RECT& rc, float dt) {
         // A few lumps and some powder break off and fly a bit higher than
         // the cap; a hard throw breaks off more.
         float breakShare =
-            0.06f + std::clamp((-tossSpeed / kTossFactor - 900.0f) / 2500.0f,
+            0.06f + std::clamp((-tossSpeed / s / kTossFactor - 900.0f) / 2500.0f,
                                0.0f, 0.25f);
         for (int c = 0; c + kChunkColumns <= width; c += kChunkColumns) {
             float top = 0;
@@ -1374,12 +1854,63 @@ void Overlay::MoveCap(Cap& cap, const RECT& rc, float dt) {
     }
 }
 
+// Throws part of the snow off a shaken window: the harder the shake, the more.
+void Overlay::ShakeOff(Cap& cap, const RECT& rc, float vx) {
+    std::vector<Column>& cols = cap.cols;
+    const int width = static_cast<int>(cols.size());
+    const float share =
+        std::clamp(std::fabs(vx) / m_scale / 2500.0f, 0.25f, 0.7f);
+    for (int c = 0; c + kChunkColumns <= width; c += kChunkColumns) {
+        float area = 0, top = 0;
+        for (int k = c; k < c + kChunkColumns; k++) {
+            top = std::max(top, cols[k].h);
+        }
+        if (top < 0.5f || Rand() > share) {
+            continue;
+        }
+        for (int k = c; k < c + kChunkColumns; k++) {
+            area += cols[k].h;
+            cols[k].h = 0;
+        }
+        SpawnChunk(rc.left + c + 1.0f, rc.top - top, area,
+                   vx * (0.25f + 0.25f * Rand()), -60.0f - Rand() * 180.0f,
+                   BodyKey(cap.hwnd, 0));
+        if (Rand() < 0.15f) {
+            SpawnPuff(rc.left + c + 1.0f, rc.top - top,
+                      vx * 0.15f + (Rand() - 0.5f) * 60.0f,
+                      -30.0f - Rand() * 60.0f, 0.6f + Rand() * 0.7f,
+                      0.5f + Rand() * 0.5f);
+        }
+    }
+    m_activeUntil = std::max(m_activeUntil, static_cast<double>(m_time) + 0.5);
+}
+
+// The snow melts slowly and unevenly: a full drift is gone in about two
+// minutes once the snowfall stops.
+void Overlay::Melt(Cap& cap, float dt) {
+    const float rate = CapMax(cap) / 120.0f;
+    for (size_t c = 0; c < cap.cols.size(); c++) {
+        Column& col = cap.cols[c];
+        if (col.h <= 0) {
+            continue;
+        }
+        float unevenness =
+            0.5f + CapNoise(cap, static_cast<int>(c), 4, 40.0f * m_scale);
+        col.h = std::max(0.0f, col.h - rate * unevenness * dt);
+        m_melting = true;
+    }
+}
+
 // Small things that happen to the snow at rest: the wind blows powder off the
-// drifts, and now and then a lump slides off a window corner.
+// drifts, now and then a lump slides off a window corner, and the snow melts
+// if it's set to. The wind and the lumps come only while it snows, so that the
+// snow lying still isn't redrawn.
 void Overlay::Ambient(float dt) {
-    const float maxHeight = static_cast<float>(g_settings.capHeight);
-    const float wind = g_settings.wind * 0.6f;
+    const float wind = g_settings.wind * 0.6f * m_scale;
     const float powderRate = 0.4f + std::fabs(wind) / 30.0f;  // per 1000 px
+    const bool snowing = g_settings.intensity > 0;
+    const bool melt = g_settings.melt;
+    m_melting = false;
 
     for (size_t i = 0; i < m_bodies.size(); i++) {
         const Body& b = m_bodies[i];
@@ -1393,6 +1924,7 @@ void Overlay::Ambient(float dt) {
         }
 
         Cap& cap = it->second;
+        const float maxHeight = CapMax(cap);
 
         // The squash and stretch of the whole cap settles like a spring.
         if (cap.squash != 0 || cap.squashVel != 0) {
@@ -1407,7 +1939,13 @@ void Overlay::Ambient(float dt) {
 
         std::vector<Column>& cols = cap.cols;
         const int width = static_cast<int>(cols.size());
-        if (cap.airborne || width < 40) {
+        if (cap.airborne) {
+            continue;
+        }
+        if (melt) {
+            Melt(cap, dt);
+        }
+        if (!snowing || width < 40) {
             continue;
         }
 
@@ -1415,7 +1953,7 @@ void Overlay::Ambient(float dt) {
             int c = static_cast<int>(Rand() * width);
             float x = static_cast<float>(b.rc.left + c);
             float y = b.rc.top - cols[c].h;
-            if (cols[c].h > 0.6f * SnowLimit(cap, c, maxHeight) &&
+            if (cols[c].h > 0.6f * SnowLimit(cap, c, maxHeight, m_scale) &&
                 !IsCoveredAbove(i, static_cast<int>(x),
                                 static_cast<int>(y) - 1)) {
                 SpawnPuff(x, y, wind * (0.5f + Rand()) + (Rand() - 0.5f) * 20.0f,
@@ -1463,15 +2001,17 @@ void Overlay::Sweep(float dt) {
         return;
     }
 
-    const float maxHeight = static_cast<float>(g_settings.capHeight);
-    const float cursorVx = std::clamp((pt.x - last.x) / dt, -1500.0f, 1500.0f);
+    const float s = m_scale;
+    const float cursorVx =
+        std::clamp((pt.x - last.x) / dt, -1500.0f * s, 1500.0f * s);
+    const int radius = static_cast<int>(std::lround(kSweepRadius * s));
 
-    int x0 = std::min(last.x, pt.x) - kSweepRadius;
-    int x1 = std::max(last.x, pt.x) + kSweepRadius;
-    if (x1 - x0 > 300) {
+    int x0 = std::min(last.x, pt.x) - radius;
+    int x1 = std::max(last.x, pt.x) + radius;
+    if (x1 - x0 > 300 * s) {
         // The cursor jumped; only sweep where it is now.
-        x0 = pt.x - kSweepRadius;
-        x1 = pt.x + kSweepRadius;
+        x0 = pt.x - radius;
+        x1 = pt.x + radius;
     }
 
     for (size_t i = 0; i < m_bodies.size(); i++) {
@@ -1486,10 +2026,18 @@ void Overlay::Sweep(float dt) {
         }
 
         Cap& cap = it->second;
+        const float maxHeight = CapMax(cap);
         const float top = static_cast<float>(b.rc.top);
-        if (pt.y > top + 4 || pt.y < top - 400 || x1 < b.rc.left ||
+        if (pt.y > top + 4 * s || pt.y < top - 400 * s || x1 < b.rc.left ||
             x0 >= b.rc.right || IsCoveredAbove(i, pt.x, b.rc.top - 2)) {
             continue;
+        }
+
+        // The cursor is near the snow: draw at the full frame rate so that
+        // the sweep looks smooth.
+        if (pt.y > top - maxHeight - 60 * s) {
+            m_activeUntil =
+                std::max(m_activeUntil, static_cast<double>(m_time) + 0.3);
         }
 
         std::vector<Column>& cols = cap.cols;
@@ -1499,7 +2047,7 @@ void Overlay::Sweep(float dt) {
         for (int c = from; c < to; c += kChunkColumns) {
             float area = 0, height = 0;
             const float base = top - cols[c].lift;
-            if (pt.y < base - maxHeight - 6 || pt.y > base + 4) {
+            if (pt.y < base - maxHeight - 6 * s || pt.y > base + 4 * s) {
                 continue;
             }
             for (int k = c; k < std::min(c + kChunkColumns, to); k++) {
@@ -1526,10 +2074,11 @@ void Overlay::Sweep(float dt) {
 void Overlay::UpdateFlakes(float dt) {
     m_time += dt;
 
-    // 100% is 150 flakes per 1920x1080 of screen area.
+    // 100% is 150 flakes per 1920x1080 of screen area at 100% scale.
     size_t target = static_cast<size_t>(
         g_settings.intensity * 1.5 *
-        (static_cast<double>(m_width) * m_height) / (1920.0 * 1080.0));
+        (static_cast<double>(m_width) * m_height) /
+        (1920.0 * 1080.0 * m_scale * m_scale));
     if (m_flakes.size() > target) {
         m_flakes.resize(target);
     }
@@ -1540,7 +2089,7 @@ void Overlay::UpdateFlakes(float dt) {
     }
 
     const float speedScale = g_settings.speed / 100.0f;
-    const float wind = g_settings.wind * 0.6f;
+    const float wind = g_settings.wind * 0.6f * m_scale;
     const bool caps = g_settings.capHeight > 0;
     const float left = static_cast<float>(m_area.left);
     const float right = static_cast<float>(m_area.right);
@@ -1548,7 +2097,7 @@ void Overlay::UpdateFlakes(float dt) {
     for (Flake& f : m_flakes) {
         float oldY = f.y;
         f.y += f.fallSpeed * speedScale * dt;
-        f.x += (wind * (0.6f + 0.4f * f.size / 3.5f) +
+        f.x += (wind * (0.6f + 0.4f * f.size / (3.5f * m_scale)) +
                 std::sin(m_time * 1.3f + f.phase) * f.sway) *
                dt;
 
@@ -1563,7 +2112,7 @@ void Overlay::UpdateFlakes(float dt) {
                 // Each flake lands on ~9 columns, so this is tuned for a full
                 // cap to build up in about half a minute.
                 AddSnow(b->key, static_cast<int>(f.x) - b->rc.left,
-                        2.0f + 1.5f * f.size);
+                        2.0f * m_scale + 1.5f * f.size);
                 SpawnFlake(f, false);
                 continue;
             }
@@ -1581,12 +2130,28 @@ void Overlay::UpdateChunks(float dt) {
     for (size_t i = 0; i < m_chunks.size(); i++) {
         Chunk c = m_chunks[i];
         float oldY = c.y;
-        c.vy = std::min(c.vy + kGravity * 0.5f * dt, kChunkMaxSpeed);
+        c.vy = std::min(c.vy + kGravity * 0.5f * m_scale * dt,
+                        kChunkMaxSpeed * m_scale);
         c.vx *= drag;
         c.x += c.vx * dt;
         c.y += c.vy * dt;
 
         if (const Body* b = FindLanding(c.x, oldY, c.y, c.ignoreKey)) {
+            if (c.burst) {
+                // A lump bursts into powder; some of it stays.
+                AddSnow(b->key, static_cast<int>(c.x) - b->rc.left,
+                        c.area * 0.4f / kSnowKernelSum);
+                int puffs = 2 + static_cast<int>(Rand() * 3);
+                for (int k = 0; k < puffs; k++) {
+                    SpawnPuff(c.x + (Rand() - 0.5f) * c.size * 3,
+                              static_cast<float>(b->rc.top) - 2,
+                              c.vx * 0.3f + (Rand() - 0.5f) * 120.0f,
+                              -40.0f - Rand() * 80.0f,
+                              0.6f + c.size * 0.25f + Rand() * 0.5f,
+                              0.5f + Rand() * 0.5f);
+                }
+                continue;
+            }
             AddSnow(b->key, static_cast<int>(c.x) - b->rc.left,
                     c.area / kSnowKernelSum);
             if (c.vy > 450.0f && Rand() < 0.5f) {
@@ -1608,7 +2173,7 @@ void Overlay::UpdateChunks(float dt) {
 
 void Overlay::UpdatePuffs(float dt) {
     const float drag = std::exp(-3.0f * dt);
-    const float wind = g_settings.wind * 0.6f;
+    const float wind = g_settings.wind * 0.6f * m_scale;
     size_t kept = 0;
     for (size_t i = 0; i < m_puffs.size(); i++) {
         Puff p = m_puffs[i];
@@ -1617,7 +2182,7 @@ void Overlay::UpdatePuffs(float dt) {
             continue;
         }
         p.vx = p.vx * drag + wind * (1.0f - drag);
-        p.vy = p.vy * drag + 40.0f * dt;
+        p.vy = p.vy * drag + 40.0f * m_scale * dt;
         p.x += p.vx * dt;
         p.y += p.vy * dt;
         m_puffs[kept++] = p;
@@ -1667,7 +2232,8 @@ void Overlay::DrawCap(const Cap& cap, const RECT& rc) {
     auto height = [&](int c) {
         // Round off the cap at the window corners.
         float edge = static_cast<float>(std::min(c, width - 1 - c));
-        return cols[c].h * scale * std::clamp(edge / kCapEdgeTaper, 0.0f, 1.0f);
+        return cols[c].h * scale *
+               std::clamp(edge / (kCapEdgeTaper * m_scale), 0.0f, 1.0f);
     };
 
     // One figure per run of snow, so that bare stretches aren't drawn as thin
@@ -1710,7 +2276,7 @@ void Overlay::DrawCap(const Cap& cap, const RECT& rc) {
     m_ctx->FillGeometry(path.Get(), m_capBrush.Get());
 }
 
-bool Overlay::Render() {
+bool Overlay::Render(UINT syncInterval) {
     m_ctx->BeginDraw();
     m_ctx->SetTransform(D2D1::Matrix3x2F::Translation(
         static_cast<float>(-m_area.left), static_cast<float>(-m_area.top)));
@@ -1768,103 +2334,477 @@ bool Overlay::Render() {
         return false;
     }
 
-    HRESULT hr = m_swapChain->Present(m_syncInterval, 0);
+    HRESULT hr = m_swapChain->Present(syncInterval, 0);
     return SUCCEEDED(hr) || hr == DXGI_STATUS_OCCLUDED;
 }
 
-void Overlay::Run() {
-    LARGE_INTEGER freq, last;
+// One step of the snow.
+void Overlay::Step(float dt) {
+    m_frameTime = m_frameTime * 0.9f + dt * 0.1f;
+    m_frame++;
+
+    UpdateCaps(dt);
+    Ambient(dt);
+    Sweep(dt);
+    UpdateFlakes(dt);
+    UpdateChunks(dt);
+    UpdatePuffs(dt);
+}
+
+RunResult Overlay::Run() {
+    LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
-    QueryPerformanceCounter(&last);
+    auto clock = [&freq]() {
+        LARGE_INTEGER t;
+        QueryPerformanceCounter(&t);
+        return static_cast<double>(t.QuadPart) / freq.QuadPart;
+    };
+
+    double lastStep = clock();
+    double nextStep = lastStep;
+    double nextCheck = 0;    // the checks done once a second
+    double nextCollect = 0;  // windows are listed again at least this often
+    double nextRestack = 0;
+    double nextLayerSearch = lastStep + 5.0;
+    bool waitingForFrame = false;
+    int fastFps = g_settings.maxFps;
+    int calmFps = std::min(fastFps, 30);
 
     for (;;) {
-        DWORD result;
-        if (m_visible && m_frameWait) {
-            HANDLE handles[] = {g_stopEvent, m_frameWait};
-            result = WaitForMultipleObjects(2, handles, FALSE, 200);
-        } else {
-            // Hidden: just check now and then whether it's time to come back.
-            result = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE,
-                                               m_visible ? 16 : 100,
-                                               QS_ALLINPUT);
-        }
-        if (result == WAIT_OBJECT_0) {
-            break;
+        double now = clock();
+        if (!waitingForFrame && (g_wake.windows || g_wake.cursor)) {
+            nextStep = std::min(nextStep, lastStep + 1.0 / fastFps);
         }
 
-        MSG msg;
-        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
+        if (waitingForFrame || now < nextStep) {
+            HANDLE handles[] = {m_stop, m_frameWait};
+            DWORD count = waitingForFrame ? 2 : 1;
+            DWORD timeout =
+                waitingForFrame
+                    ? 200
+                    : static_cast<DWORD>(std::ceil((nextStep - now) * 1000.0));
+            DWORD result = MsgWaitForMultipleObjects(count, handles, FALSE,
+                                                     timeout, QS_ALLINPUT);
+            if (result == WAIT_OBJECT_0) {
+                return RunResult::Stop;
+            }
+            if (waitingForFrame &&
+                (result == WAIT_OBJECT_0 + 1 || result == WAIT_TIMEOUT)) {
+                waitingForFrame = false;
+            }
 
-        LARGE_INTEGER now;
-        QueryPerformanceCounter(&now);
-        float dt = static_cast<float>(now.QuadPart - last.QuadPart) /
-                   freq.QuadPart;
-        last = now;
-        dt = std::clamp(dt, 0.001f, 0.05f);
-        m_frameTime = m_frameTime * 0.9f + dt * 0.1f;
-        m_frame++;
-
-        bool fullscreen =
-            g_settings.pauseInFullscreen && IsFullscreenAppActive();
-        if (fullscreen == m_visible) {
-            m_visible = !fullscreen;
-            g_overlayHidden = !m_visible;
-            ShowWindow(m_hwnd, m_visible ? SW_SHOWNOACTIVATE : SW_HIDE);
-            m_cursorValid = false;
-        }
-        if (!m_visible) {
+            MSG msg;
+            while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
             continue;
         }
 
-        if (m_frame % 60 == 0) {
-            RECT area = ComputeArea();
-            if (!EqualRect(&area, &m_area)) {
-                ApplyArea(area);
+        if (now >= nextCheck) {
+            nextCheck = now + 1.0;
+
+            if (!IsWindow(m_hwnd) ||
+                (m_behind && !IsWindow(m_layer.parent))) {
+                // Explorer restarted and took the wallpaper layer with it.
+                Wh_Log(L"The overlay window is gone");
+                return RunResult::Retry;
             }
-            m_syncInterval = ComputeSyncInterval();
-            // Other topmost windows (the taskbar, for one) can end up above
-            // the overlay.
-            SetWindowPos(m_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            if (g_settings.behindWindows != m_wantBehind) {
+                return RunResult::Recreate;
+            }
+            if (m_wantBehind && !m_behind && now >= nextLayerSearch) {
+                nextLayerSearch = now + 5.0;
+                DesktopLayer layer;
+                if (FindDesktopLayer(&layer)) {
+                    return RunResult::Recreate;
+                }
+            }
+
+            UpdateRefreshRate();
+            ApplyCaptureSetting();
+            Restack();
+
+            // On battery, faster frame rates are hard to tell apart in snow
+            // anyway; in energy saver mode the snow is drawn less often.
+            fastFps = g_settings.maxFps;
+            calmFps = 30;
+            SYSTEM_POWER_STATUS power;
+            if (GetSystemPowerStatus(&power)) {
+                if (power.ACLineStatus == 0) {
+                    fastFps = std::min(fastFps, 60);
+                }
+                if (power.SystemStatusFlag & 1) {
+                    fastFps = std::min(fastFps, 30);
+                    calmFps = 20;
+                }
+            }
+            calmFps = std::min(calmFps, fastFps);
         }
 
-        CollectBodies();
-        UpdateCaps(dt);
-        Ambient(dt);
-        Sweep(dt);
-        UpdateFlakes(dt);
-        UpdateChunks(dt);
-        UpdatePuffs(dt);
+        if (g_wake.restack && now >= nextRestack) {
+            g_wake.restack = false;
+            nextRestack = now + 0.1;
+            Restack();
+        }
 
-        if (!Render()) {
+        // Nobody can see the snow while the screen is locked or off.
+        bool paused = g_locked || g_displayOff;
+        bool fullscreen =
+            !paused && g_settings.pauseInFullscreen && IsFullscreenAppActive();
+        bool visible = !paused && !fullscreen;
+        if (visible != m_visible) {
+            m_visible = visible;
+            g_visibleOverlays += m_visible ? 1 : -1;
+            ShowWindow(m_hwnd, m_visible ? SW_SHOWNOACTIVATE : SW_HIDE);
+            m_cursorValid = false;
+            m_pace = Pace::Calm;  // draw at least one frame when it's back
+            if (m_visible) {
+                Restack();
+            }
+        }
+        if (!m_visible) {
+            g_wake.windows = g_wake.cursor = false;
+            lastStep = now;
+            nextStep = now + (paused ? 0.25 : 0.1);
+            continue;
+        }
+
+        float dt =
+            std::clamp(static_cast<float>(now - lastStep), 0.001f, 0.05f);
+        lastStep = now;
+
+        // The windows are listed again when they change, and twice a second
+        // in case a change went unreported (or the taskbar's parts changed).
+        bool windowsChanged = g_wake.windows;
+        g_wake.windows = g_wake.cursor = false;
+        if (windowsChanged || now >= nextCollect) {
+            nextCollect = now + 0.5;
+            CollectBodies();
+        }
+        bool bodiesChanged = !SameBodies(m_bodies, m_prevBodies);
+        if (bodiesChanged) {
+            m_prevBodies = m_bodies;
+        }
+
+        Step(dt);
+
+        if (bodiesChanged) {
+            m_activeUntil =
+                std::max(m_activeUntil, static_cast<double>(m_time) + 0.3);
+        }
+
+        Pace pace;
+        if (!m_chunks.empty() || m_anyAirborne ||
+            static_cast<double>(m_time) < m_activeUntil) {
+            pace = Pace::Interactive;
+        } else if (!m_flakes.empty() || !m_puffs.empty() || m_melting) {
+            pace = Pace::Calm;
+        } else {
+            pace = Pace::Still;
+        }
+
+        // Snow that lies still isn't drawn again: the last frame stays on
+        // the screen. One more frame is drawn after things stop moving.
+        bool draw = pace != Pace::Still || m_pace != Pace::Still;
+        m_pace = pace;
+        if (!draw) {
+            nextStep = now + 0.1;
+            continue;
+        }
+
+        UINT sync = SyncIntervalFor(pace == Pace::Calm ? calmFps : fastFps);
+        if (!Render(sync)) {
             // The GPU device was lost (driver update, adapter change).
             Wh_Log(L"Recreating device resources");
             ReleaseDeviceResources();
             if (!CreateDeviceResources()) {
                 Wh_Log(L"Failed to recreate device resources");
-                break;
+                return RunResult::Retry;
             }
+            waitingForFrame = false;
+            nextStep = now;
+            continue;
+        }
+
+        // The next frame is made as soon as this one is shown, after `sync`
+        // refreshes of the display.
+        waitingForFrame = m_frameWait != nullptr;
+        nextStep = waitingForFrame ? now : now + sync / m_refreshRate;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// What the snow listens to: window events (so that it reacts at once to
+// windows moving, and doesn't have to look at all windows on every frame), and
+// the screen being locked or turned off.
+
+void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
+                           LONG idChild, DWORD, DWORD) {
+    if (idObject == OBJID_CURSOR) {
+        g_wake.cursor = true;
+        return;
+    }
+    if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !hwnd) {
+        return;
+    }
+
+    // Location changes come for every control and caret too; only top-level
+    // windows matter. A window that's already gone may have had snow on it.
+    if (IsWindow(hwnd)) {
+        if (GetAncestor(hwnd, GA_ROOT) != hwnd) {
+            return;
+        }
+    } else if (event == EVENT_OBJECT_LOCATIONCHANGE) {
+        return;
+    }
+
+    g_wake.windows = true;
+    if (event == EVENT_SYSTEM_FOREGROUND || event == EVENT_OBJECT_SHOW) {
+        g_wake.restack = true;
+    }
+}
+
+constexpr wchar_t kListenerClass[] = L"WindhawkDesktopSnowfallListener";
+
+// GUID_CONSOLE_DISPLAY_STATE, defined here to avoid linking with uuid.lib.
+constexpr GUID kGuidConsoleDisplayState = {
+    0x6fe69556, 0x704a, 0x47a0, {0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47}};
+
+LRESULT CALLBACK ListenerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
+                                 LPARAM lParam) {
+    switch (msg) {
+        case WM_WTSSESSION_CHANGE:
+            if (wParam == WTS_SESSION_LOCK) {
+                g_locked = true;
+            } else if (wParam == WTS_SESSION_UNLOCK) {
+                g_locked = false;
+            }
+            return 0;
+
+        case WM_POWERBROADCAST:
+            if (wParam == PBT_POWERSETTINGCHANGE) {
+                auto* setting =
+                    reinterpret_cast<const POWERBROADCAST_SETTING*>(lParam);
+                if (IsEqualGUID(setting->PowerSetting,
+                                kGuidConsoleDisplayState) &&
+                    setting->DataLength >= sizeof(DWORD)) {
+                    // 0 is off, 1 is on, 2 is dimmed.
+                    g_displayOff =
+                        *reinterpret_cast<const DWORD*>(setting->Data) == 0;
+                }
+            }
+            return TRUE;
+    }
+    return DefWindowProc(hwnd, msg, wParam, lParam);
+}
+
+// Waits while handling messages. Returns true if `stop` was set.
+static bool WaitForStop(HANDLE stop, DWORD ms) {
+    DWORD start = GetTickCount();
+    for (;;) {
+        DWORD elapsed = GetTickCount() - start;
+        if (elapsed >= ms) {
+            return WaitForSingleObject(stop, 0) == WAIT_OBJECT_0;
+        }
+        DWORD result =
+            MsgWaitForMultipleObjects(1, &stop, FALSE, ms - elapsed, QS_ALLINPUT);
+        if (result == WAIT_OBJECT_0) {
+            return true;
+        }
+        MSG msg;
+        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
         }
     }
 }
 
+struct MonitorSnow {
+    HMONITOR monitor;
+    RECT area;
+    UINT dpi;
+    HANDLE stop;  // set when this monitor's snow should end
+};
+
+// The monitors that get snow: all of them, or only the main one.
+static std::vector<MonitorSnow> ListMonitors(bool all) {
+    std::vector<MonitorSnow> monitors;
+    EnumDisplayMonitors(
+        nullptr, nullptr,
+        [](HMONITOR monitor, HDC, LPRECT, LPARAM lParam) WINAPI -> BOOL {
+            auto* list = reinterpret_cast<std::vector<MonitorSnow>*>(lParam);
+            MONITORINFO mi = {sizeof(mi)};
+            if (!GetMonitorInfo(monitor, &mi)) {
+                return TRUE;
+            }
+            UINT dpiX = 96, dpiY = 96;
+            GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+            MonitorSnow m = {monitor, mi.rcMonitor, dpiX, nullptr};
+            if (mi.dwFlags & MONITORINFOF_PRIMARY) {
+                list->insert(list->begin(), m);
+            } else {
+                list->push_back(m);
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&monitors));
+    if (!all && monitors.size() > 1) {
+        monitors.resize(1);
+    }
+    return monitors;
+}
+
+static bool SameMonitors(const std::vector<MonitorSnow>& a,
+                         const std::vector<MonitorSnow>& b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); i++) {
+        if (a[i].monitor != b[i].monitor || !EqualRect(&a[i].area, &b[i].area) ||
+            a[i].dpi != b[i].dpi) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// The snow of one monitor. Each monitor has its own thread, so that a monitor
+// with a higher refresh rate doesn't hold back the others.
+DWORD WINAPI OverlayThread(LPVOID param) {
+    const MonitorSnow monitor = *static_cast<MonitorSnow*>(param);
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+    // The events come to the thread that asked for them.
+    static const DWORD kEventRanges[][2] = {
+        {EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND},
+        {EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MINIMIZEEND},
+        {EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE},
+        {EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE},
+        {EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED},
+    };
+    std::vector<HWINEVENTHOOK> hooks;
+    for (const auto& range : kEventRanges) {
+        if (HWINEVENTHOOK hook = SetWinEventHook(
+                range[0], range[1], nullptr, WinEventProc, 0, 0,
+                WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS)) {
+            hooks.push_back(hook);
+        }
+    }
+
+    for (;;) {
+        RunResult result = RunResult::Retry;
+        {
+            Overlay overlay(monitor.monitor, monitor.area, monitor.stop);
+            if (overlay.Create()) {
+                result = overlay.Run();
+            } else {
+                Wh_Log(L"Failed to create the overlay");
+            }
+        }
+        if (result == RunResult::Stop) {
+            break;
+        }
+        // Explorer may be restarting: try again in a moment.
+        if (WaitForStop(monitor.stop, result == RunResult::Retry ? 2000 : 0)) {
+            break;
+        }
+    }
+
+    for (HWINEVENTHOOK hook : hooks) {
+        UnhookWinEvent(hook);
+    }
+    return 0;
+}
+
+// Starts the snow on each monitor, and starts it anew when the monitors change
+// (added, removed, moved, resized or rescaled).
 DWORD WINAPI SnowThread(LPVOID) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     g_taskbarThread = CreateThread(nullptr, 0, TaskbarThread, nullptr, 0,
                                    nullptr);
 
-    {
-        Overlay overlay;
-        if (overlay.Create()) {
-            overlay.Run();
-        } else {
-            Wh_Log(L"Failed to create the overlay");
+    HINSTANCE instance = GetModuleHandle(nullptr);
+    WNDCLASSEX wc = {sizeof(wc)};
+    wc.lpfnWndProc = OverlayWndProc;
+    wc.hInstance = instance;
+    wc.lpszClassName = kOverlayClass;
+    RegisterClassEx(&wc);
+
+    wc.lpfnWndProc = ListenerWndProc;
+    wc.lpszClassName = kListenerClass;
+    RegisterClassEx(&wc);
+    HWND listener =
+        CreateWindowEx(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kListenerClass,
+                       L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, instance,
+                       nullptr);
+    HPOWERNOTIFY powerNotify = nullptr;
+    if (listener) {
+        WTSRegisterSessionNotification(listener, NOTIFY_FOR_THIS_SESSION);
+        powerNotify = RegisterPowerSettingNotification(
+            listener, &kGuidConsoleDisplayState, DEVICE_NOTIFY_WINDOW_HANDLE);
+    }
+
+    bool stopping = false;
+    while (!stopping) {
+        bool all = g_settings.allMonitors;
+        std::vector<MonitorSnow> monitors = ListMonitors(all);
+        HANDLE stop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+        std::vector<HANDLE> threads;
+        if (stop) {
+            for (MonitorSnow& m : monitors) {
+                m.stop = stop;
+                if (HANDLE thread = CreateThread(nullptr, 0, OverlayThread, &m,
+                                                 0, nullptr)) {
+                    threads.push_back(thread);
+                }
+            }
+        }
+        Wh_Log(L"Snow on %d monitor(s)", static_cast<int>(threads.size()));
+
+        for (;;) {
+            if (WaitForStop(g_stopEvent, 1000)) {
+                stopping = true;
+                break;
+            }
+            if (g_settings.allMonitors != all ||
+                !SameMonitors(ListMonitors(all), monitors)) {
+                Wh_Log(L"The monitors changed");
+                break;
+            }
+        }
+
+        if (stop) {
+            SetEvent(stop);
+        }
+        for (HANDLE thread : threads) {
+            // Keep handling messages: a thread that's ending may be waiting
+            // for a message sent to a window of this thread.
+            while (MsgWaitForMultipleObjects(1, &thread, FALSE, INFINITE,
+                                             QS_ALLINPUT) != WAIT_OBJECT_0) {
+                MSG msg;
+                while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                    TranslateMessage(&msg);
+                    DispatchMessage(&msg);
+                }
+            }
+            CloseHandle(thread);
+        }
+        if (stop) {
+            CloseHandle(stop);
         }
     }
+
+    if (listener) {
+        if (powerNotify) {
+            UnregisterPowerSettingNotification(powerNotify);
+        }
+        WTSUnRegisterSessionNotification(listener);
+        DestroyWindow(listener);
+    }
+    UnregisterClass(kListenerClass, instance);
+    UnregisterClass(kOverlayClass, instance);
 
     if (g_taskbarThread) {
         SetEvent(g_stopEvent);
