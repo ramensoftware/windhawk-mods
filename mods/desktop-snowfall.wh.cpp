@@ -53,9 +53,10 @@ own process, separately from Explorer.
 
 The snow is light on power: calm snowfall is drawn at about 30 frames per
 second, and the full frame rate is used only while something moves (a window,
-the cursor in the snow, falling lumps). Snow that lies still isn't redrawn at
-all. On battery the frame rate is capped at 60, and lower in energy saver mode.
-The snow pauses while the screen is locked or turned off.
+the cursor in the snow, falling lumps). With the snowfall off (intensity 0),
+snow that lies still isn't redrawn at all. On battery the frame rate is capped
+at 60, and lower in energy saver mode. The snow pauses while the screen is
+locked or turned off.
 */
 // ==/WindhawkModReadme==
 
@@ -104,7 +105,9 @@ The snow pauses while the screen is locked or turned off.
   $description: Moving the mouse cursor through a snow cap pushes the snow off
 - shakeOff: true
   $name: Shake windows to throw the snow off
-  $description: Quickly moving a window from side to side throws its snow off
+  $description: >-
+    Quickly moving a window from side to side throws its snow off. Has no
+    effect while "Snow slides off moved windows" is on
 - slideOff: false
   $name: Snow slides off moved windows
   $description: >-
@@ -138,8 +141,8 @@ The snow pauses while the screen is locked or turned off.
   $name: Hide from screenshots and screen sharing
   $description: >-
     Screenshots, screen recordings and screen sharing show the desktop without
-    the snow. Works with "Over all windows" on Windows 10 version 2004 and
-    later
+    the snow. Works with "Over all windows", on Windows 10 version 2004 and
+    later (on earlier versions the setting does nothing)
 */
 // ==/WindhawkModSettings==
 
@@ -339,8 +342,9 @@ static bool FindDesktopLayer(DesktopLayer* layer) {
 
     // Ask Explorer to put the wallpaper into a window of its own behind the
     // icons, as wallpaper apps do. Undocumented, so it's checked below.
-    SendMessageTimeout(progman, 0x052C, 0xD, 0x1, SMTO_NORMAL, 1000, nullptr);
-    SendMessageTimeout(progman, 0x052C, 0, 0, SMTO_NORMAL, 1000, nullptr);
+    SendMessageTimeout(progman, 0x052C, 0xD, 0x1, SMTO_ABORTIFHUNG, 1000,
+                       nullptr);
+    SendMessageTimeout(progman, 0x052C, 0, 0, SMTO_ABORTIFHUNG, 1000, nullptr);
 
     // Windows 11 24H2 and later keep the icons and the wallpaper as children
     // of Progman.
@@ -490,7 +494,6 @@ static bool QueryTaskbarParts(IUIAutomation* uia,
 }
 
 DWORD WINAPI TaskbarThread(LPVOID) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
         return 0;
@@ -704,7 +707,6 @@ class Overlay {
     void ReleaseDeviceResources();
     bool CreateTargetBitmap();
     bool CreateFlakeSprite();
-    void PlaceWindow();
     void Restack();
     HWND LowestOpenPopup();
     void ApplyCaptureSetting();
@@ -729,7 +731,6 @@ class Overlay {
     bool IsFullscreenAppActive();
     bool IsCoveredAbove(size_t bodyIndex, int x, int y);
     bool IsOnThisMonitor(const RECT& rc) const;
-    bool IsOnThisMonitor(HWND hwnd) const;
     const Body* FindLanding(float x, float oldY, float newY,
                             uint64_t ignoreKey);
     void AddSnow(uint64_t key, int column, float amount);
@@ -874,10 +875,12 @@ bool Overlay::Create() {
         POINT origin = {m_area.left, m_area.top};
         ScreenToClient(m_layer.parent, &origin);
         // Not layered, a child counts as opaque, and the wallpaper under it
-        // may stop being drawn.
+        // may stop being drawn. WS_EX_NOPARENTNOTIFY: creating and destroying
+        // the window doesn't wait for Explorer, which might be hung.
         for (DWORD layered : {static_cast<DWORD>(WS_EX_LAYERED), 0ul}) {
             m_hwnd = CreateWindowEx(
-                WS_EX_NOREDIRECTIONBITMAP | WS_EX_NOACTIVATE | layered,
+                WS_EX_NOREDIRECTIONBITMAP | WS_EX_NOACTIVATE |
+                    WS_EX_NOPARENTNOTIFY | layered,
                 kOverlayClass, L"Desktop Snowfall",
                 WS_CHILD | WS_DISABLED | WS_CLIPSIBLINGS, origin.x, origin.y,
                 m_width, m_height, m_layer.parent, nullptr, instance, nullptr);
@@ -942,9 +945,24 @@ static HWND WindowAboveOverlay(HWND hwnd) {
 #define WDA_EXCLUDEFROMCAPTURE 0x00000011
 #endif
 
+// Before Windows 10 version 2004, WDA_EXCLUDEFROMCAPTURE acts as
+// WDA_MONITOR: the overlay would show up as a black screen in captures.
+static bool CanExcludeFromCapture() {
+    static const bool supported = [] {
+        using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW*);
+        auto rtlGetVersion = reinterpret_cast<RtlGetVersion_t>(
+            GetProcAddress(GetModuleHandle(L"ntdll.dll"), "RtlGetVersion"));
+        OSVERSIONINFOW version = {sizeof(version)};
+        return rtlGetVersion && rtlGetVersion(&version) == 0 &&
+               version.dwBuildNumber >= 19041;
+    }();
+    return supported;
+}
+
 // Only top-level windows can be kept out of screenshots.
 void Overlay::ApplyCaptureSetting() {
-    bool hide = g_settings.hideFromCapture && !m_behind;
+    bool hide = g_settings.hideFromCapture && !m_behind &&
+                CanExcludeFromCapture();
     if (hide == m_hiddenFromCapture) {
         return;
     }
@@ -955,17 +973,6 @@ void Overlay::ApplyCaptureSetting() {
         Wh_Log(L"SetWindowDisplayAffinity failed: %u", GetLastError());
         m_hiddenFromCapture = hide;  // don't retry every second
     }
-}
-
-// Moves the overlay over the area, in its parent's coordinates when it's in
-// the wallpaper layer.
-void Overlay::PlaceWindow() {
-    POINT origin = {m_area.left, m_area.top};
-    if (m_behind) {
-        ScreenToClient(m_layer.parent, &origin);
-    }
-    SetWindowPos(m_hwnd, nullptr, origin.x, origin.y, m_width, m_height,
-                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 }
 
 // The lowest of the menus, tooltips and shell flyouts open at the very top,
@@ -1300,16 +1307,6 @@ bool Overlay::IsOnThisMonitor(const RECT& rc) const {
     return MonitorFromPoint(top, MONITOR_DEFAULTTONEAREST) == m_monitor;
 }
 
-bool Overlay::IsOnThisMonitor(HWND hwnd) const {
-    RECT rc;
-    if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rc,
-                                     sizeof(rc))) &&
-        !GetWindowRect(hwnd, &rc)) {
-        return true;
-    }
-    return IsOnThisMonitor(rc);
-}
-
 void Overlay::CollectBodies() {
     m_bodies.clear();
     EnumWindows(
@@ -1634,10 +1631,9 @@ void Overlay::UpdateCaps(float dt) {
         }
     }
 
-    // A window that was closed, minimized or hidden drops its snow in lumps.
-    // A maximized window keeps its snow for later, and so do a window on
-    // another virtual desktop (it's cloaked) and one that moved to another
-    // monitor.
+    // A window that was closed, minimized, hidden or moved to another monitor
+    // drops its snow in lumps. A maximized window keeps its snow for later, and
+    // so does a window on another virtual desktop (it's cloaked).
     for (auto it = m_caps.begin(); it != m_caps.end();) {
         Cap& cap = it->second;
         if (cap.seenFrame == m_frame) {
@@ -1651,12 +1647,6 @@ void Overlay::UpdateCaps(float dt) {
         if (cap.seenFrame == m_frame - 1 && alive &&
             (IsZoomed(cap.hwnd) || IsCloaked(cap.hwnd))) {
             ++it;
-            continue;
-        }
-        if (cap.seenFrame == m_frame - 1 && alive && !IsIconic(cap.hwnd) &&
-            IsWindowVisible(cap.hwnd) && !IsOnThisMonitor(cap.hwnd)) {
-            // The other monitor's snow takes over.
-            it = m_caps.erase(it);
             continue;
         }
         if (cap.seenFrame == m_frame - 1) {
@@ -2360,6 +2350,22 @@ RunResult Overlay::Run() {
         return static_cast<double>(t.QuadPart) / freq.QuadPart;
     };
 
+    // A high resolution timer exists since Windows 10 version 1803.
+    struct TimerHandle {
+        HANDLE handle;
+        ~TimerHandle() {
+            if (handle) {
+                CloseHandle(handle);
+            }
+        }
+        HANDLE get() const { return handle; }
+    } timer{CreateWaitableTimerEx(nullptr, nullptr,
+                                  CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                                  TIMER_ALL_ACCESS)};
+    if (!timer.handle) {
+        timer.handle = CreateWaitableTimer(nullptr, FALSE, nullptr);
+    }
+
     double lastStep = clock();
     double nextStep = lastStep;
     double nextCheck = 0;    // the checks done once a second
@@ -2377,12 +2383,26 @@ RunResult Overlay::Run() {
         }
 
         if (waitingForFrame || now < nextStep) {
-            HANDLE handles[] = {m_stop, m_frameWait};
-            DWORD count = waitingForFrame ? 2 : 1;
-            DWORD timeout =
-                waitingForFrame
-                    ? 200
-                    : static_cast<DWORD>(std::ceil((nextStep - now) * 1000.0));
+            HANDLE handles[2] = {m_stop, nullptr};
+            DWORD count = 1;
+            DWORD timeout;
+            if (waitingForFrame) {
+                handles[count++] = m_frameWait;
+                timeout = 200;
+            } else {
+                timeout =
+                    static_cast<DWORD>(std::ceil((nextStep - now) * 1000.0));
+                // A timeout is only as precise as the system timer (often
+                // 15.6 ms), too coarse for frame pacing.
+                LARGE_INTEGER due;
+                due.QuadPart = -static_cast<LONGLONG>((nextStep - now) * 1e7);
+                if (timer.get() &&
+                    SetWaitableTimer(timer.get(), &due, 0, nullptr, nullptr,
+                                     FALSE)) {
+                    handles[count++] = timer.get();
+                    timeout += 50;
+                }
+            }
             DWORD result = MsgWaitForMultipleObjects(count, handles, FALSE,
                                                      timeout, QS_ALLINPUT);
             if (result == WAIT_OBJECT_0) {
@@ -2513,7 +2533,8 @@ RunResult Overlay::Run() {
             continue;
         }
 
-        UINT sync = SyncIntervalFor(pace == Pace::Calm ? calmFps : fastFps);
+        const int fps = pace == Pace::Calm ? calmFps : fastFps;
+        UINT sync = SyncIntervalFor(fps);
         if (!Render(sync)) {
             // The GPU device was lost (driver update, adapter change).
             Wh_Log(L"Recreating device resources");
@@ -2527,10 +2548,15 @@ RunResult Overlay::Run() {
             continue;
         }
 
-        // The next frame is made as soon as this one is shown, after `sync`
-        // refreshes of the display.
+        // The next frame is made once this one is shown, after `sync`
+        // refreshes of the display, and not sooner than the frame rate allows:
+        // on a fast display, even the longest sync interval may be too short.
+        // The small margin keeps a frame that's due at the same refresh from
+        // waiting for the next one.
+        const double gap = 1.0 / fps - 0.002;
         waitingForFrame = m_frameWait != nullptr;
-        nextStep = waitingForFrame ? now : now + sync / m_refreshRate;
+        nextStep = now + (waitingForFrame ? gap
+                                          : std::max(gap, sync / m_refreshRate));
     }
 }
 
@@ -2673,7 +2699,6 @@ static bool SameMonitors(const std::vector<MonitorSnow>& a,
 // with a higher refresh rate doesn't hold back the others.
 DWORD WINAPI OverlayThread(LPVOID param) {
     const MonitorSnow monitor = *static_cast<MonitorSnow*>(param);
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     // The events come to the thread that asked for them.
     static const DWORD kEventRanges[][2] = {
@@ -2720,7 +2745,6 @@ DWORD WINAPI OverlayThread(LPVOID param) {
 // Starts the snow on each monitor, and starts it anew when the monitors change
 // (added, removed, moved, resized or rescaled).
 DWORD WINAPI SnowThread(LPVOID) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     g_taskbarThread = CreateThread(nullptr, 0, TaskbarThread, nullptr, 0,
                                    nullptr);
