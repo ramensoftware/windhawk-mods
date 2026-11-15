@@ -6477,7 +6477,7 @@ bool IsCandidateTranslatePopupWindow(HWND hWnd, const RunDialogState* state) {
 
     wchar_t cls[64] = {};
     if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return false;
-    if (_wcsicmp(cls, L"Chrome_WidgetWin_1") != 0 && _wcsicmp(cls, L"MozillaWindowClass") != 0) {
+    if (_wcsicmp(cls, L"Chrome_WidgetWin_1") != 0) {
         return false;
     }
 
@@ -6502,6 +6502,9 @@ bool OpenTranslationInBrowser(const std::wstring& text, const std::wstring& src,
     ComputeTranslatePopupTargetBounds(state, 0, 0, &popupX, &popupY, &popupW, &popupH);
 
     if (state) {
+        if (state->hDlg && IsWindow(state->hDlg)) {
+            KillTimer(state->hDlg, kTimerSnapTranslatePopup);
+        }
         state->hTranslatePopup = nullptr;
         state->preLaunchBrowserWindows.clear();
         EnumWindows([](HWND w, LPARAM lParam) -> BOOL {
@@ -6513,6 +6516,7 @@ bool OpenTranslationInBrowser(const std::wstring& text, const std::wstring& src,
     }
 
     bool launched = false;
+    bool launchedAppWindow = false;
     std::wstring defBrowser = GetDefaultBrowserExecutablePath();
     if (IsChromiumAppModeBrowser(defBrowser) && PathFileExistsW(defBrowser.c_str())) {
         std::wstring params = L"--app=\"" + url + L"\" --window-size=" +
@@ -6527,6 +6531,7 @@ bool OpenTranslationInBrowser(const std::wstring& text, const std::wstring& src,
         seiApp.nShow = SW_SHOWNORMAL;
         if (ShellExecuteExW(&seiApp)) {
             launched = true;
+            launchedAppWindow = true;
         }
     }
 
@@ -6538,7 +6543,7 @@ bool OpenTranslationInBrowser(const std::wstring& text, const std::wstring& src,
         launched = (ShellExecuteExW(&sei) != FALSE);
     }
 
-    if (launched && state && state->hDlg && IsWindow(state->hDlg)) {
+    if (launchedAppWindow && state && state->hDlg && IsWindow(state->hDlg)) {
         state->translatePopupLaunchTick = GetTickCount64();
         state->translatePopupFirstSeenTick = 0;
         SetTimer(state->hDlg, kTimerSnapTranslatePopup, 25, nullptr);
