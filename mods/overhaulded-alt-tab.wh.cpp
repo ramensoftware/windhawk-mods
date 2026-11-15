@@ -2564,6 +2564,9 @@ static bool RegisterUserWindow(HWND hwnd, bool activity)
 {
     if (!hwnd || IsWindowPendingClose(hwnd))
         return false;
+    // Cheap rejection before CaptureWindowIdentity opens the process.
+    if (!IsWindowVisible(hwnd))
+        return false;
 
     DWORD processId = 0, threadId = 0;
     FILETIME processCreationTime = {};
@@ -2784,6 +2787,74 @@ static HMONITOR ResolveFilterMonitor(HWND originWindow)
     return nullptr;
 }
 
+// Single predicate for "should this window appear in the switcher", used by
+// both RefreshWindowList and PollSelectorWindowList so the two never disagree
+// about windows that the monitor filter hides.
+static bool ShouldListWindow(HWND hwnd)
+{
+    return IsRealUserApplicationWindow(hwnd, nullptr, nullptr, nullptr) &&
+           (!g_filterMonitor ||
+            GetWindowMonitorForFilter(hwnd) == g_filterMonitor);
+}
+
+#ifndef CHILDID_SELF
+#define CHILDID_SELF 0
+#endif
+
+// Event-driven window list tracking (installed only while the switcher is
+// open). The callback marks the list dirty; PollSelectorWindowList rescans
+// only when the flag is set.
+static HWINEVENTHOOK g_windowListEventHook = nullptr;
+static HWINEVENTHOOK g_windowListCloakHook = nullptr;
+static volatile LONG g_windowListDirty = 1;
+
+static void CALLBACK WindowListWinEventProc(HWINEVENTHOOK, DWORD, HWND hwnd,
+                                            LONG idObject, LONG idChild,
+                                            DWORD, DWORD)
+{
+    if (!hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF)
+        return;
+    InterlockedExchange(&g_windowListDirty, 1);
+}
+
+static void InstallWindowListEventHooks()
+{
+    if (g_windowListEventHook)
+        return;
+    // EVENT_OBJECT_DESTROY..EVENT_OBJECT_HIDE also covers EVENT_OBJECT_SHOW.
+    // The range is contiguous, so one hook is enough for show/hide/destroy;
+    // cloak changes need a second hook.
+    g_windowListEventHook = SetWinEventHook(
+        EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, nullptr,
+        WindowListWinEventProc, 0, 0,
+        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    if (!g_windowListEventHook)
+    {
+        Wh_Log(L"SetWinEventHook (window list) failed: %lu", GetLastError());
+        return;
+    }
+    g_windowListCloakHook = SetWinEventHook(
+        EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED, nullptr,
+        WindowListWinEventProc, 0, 0,
+        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    if (!g_windowListCloakHook)
+        Wh_Log(L"SetWinEventHook (cloak) failed: %lu", GetLastError());
+}
+
+static void RemoveWindowListEventHooks()
+{
+    if (g_windowListEventHook)
+    {
+        UnhookWinEvent(g_windowListEventHook);
+        g_windowListEventHook = nullptr;
+    }
+    if (g_windowListCloakHook)
+    {
+        UnhookWinEvent(g_windowListCloakHook);
+        g_windowListCloakHook = nullptr;
+    }
+}
+
 static void RefreshWindowList(bool fallbackToAllIfEmpty = false)
 {
     ReleaseGroupResources();
@@ -2799,10 +2870,7 @@ static void RefreshWindowList(bool fallbackToAllIfEmpty = false)
         bool anyOnMonitor = false;
         for (size_t i = 0; i < g_userWindows.size() && !anyOnMonitor; ++i)
         {
-            const HWND candidate = g_userWindows[i].hwnd;
-            anyOnMonitor =
-                IsRealUserApplicationWindow(candidate, nullptr, nullptr, nullptr) &&
-                GetWindowMonitorForFilter(candidate) == g_filterMonitor;
+            anyOnMonitor = ShouldListWindow(g_userWindows[i].hwnd);
         }
         if (!anyOnMonitor)
             g_filterMonitor = nullptr;
@@ -2811,9 +2879,7 @@ static void RefreshWindowList(bool fallbackToAllIfEmpty = false)
     for (size_t i = 0; i < g_userWindows.size(); ++i)
     {
         UserWindowInfo& item = g_userWindows[i];
-        if (!IsRealUserApplicationWindow(item.hwnd, nullptr, nullptr, nullptr))
-            continue;
-        if (g_filterMonitor && GetWindowMonitorForFilter(item.hwnd) != g_filterMonitor)
+        if (!ShouldListWindow(item.hwnd))
             continue;
 
         bool duplicate = false;
@@ -4752,6 +4818,15 @@ static void PollSelectorWindowList()
         g_selectorAnimation == SelectorAnimationState::SelectionExpansion)
         return;
 
+    // With the event hooks active, rescan only when a window was shown,
+    // hidden, destroyed or (un)cloaked. If the hooks failed to install, fall
+    // back to scanning on every tick.
+    if (g_windowListEventHook)
+    {
+        if (!InterlockedCompareExchange(&g_windowListDirty, 0, 1))
+            return;
+    }
+
     g_gridLayoutDirty = true;
     EnumWindows(EnumWindowsProc, 0);
     PruneUserWindowRegistry();
@@ -4762,14 +4837,19 @@ static void PollSelectorWindowList()
         if (IsWindow(hwnd) && IsWindowVisible(hwnd) && !IsWindowPendingClose(hwnd))
             continue;
 
+        // Work is deferred to a later tick; keep the flag set so it isn't lost.
         if (g_selectorAnimation != SelectorAnimationState::Open)
+        {
+            InterlockedExchange(&g_windowListDirty, 1);
             return;
+        }
 
         for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
         {
             if (ResolveGroupIndex(slot) == groupIndex)
             {
                 StartCardExitForSlot(slot, hwnd, false);
+                InterlockedExchange(&g_windowListDirty, 1);
                 return;
             }
         }
@@ -4798,7 +4878,7 @@ static void PollSelectorWindowList()
     bool hasNewWindow = false;
     for (const UserWindowInfo& item : g_userWindows)
     {
-        if (!IsRealUserApplicationWindow(item.hwnd, nullptr, nullptr, nullptr))
+        if (!ShouldListWindow(item.hwnd))
             continue;
 
         bool listed = false;
@@ -7939,6 +8019,8 @@ static bool CreateSelector(bool shiftHeld)
 
     g_pendingCloseWindows.clear();
     g_filterMonitor = ResolveFilterMonitor(g_selectorOriginWindow);
+    InstallWindowListEventHooks();
+    InterlockedExchange(&g_windowListDirty, 0);
     RefreshWindowList(true);
     // Start without reserving space for indicators. The grid should use the
     // complete selector surface whenever all of its rows fit. We decide
@@ -8057,6 +8139,7 @@ static void HideSelectorForSession()
     KillTimer(g_selector, kPatternTimerId);
     KillTimer(g_selector, kActivityTimerId);
     KillTimer(g_selector, kWindowListRefreshTimerId);
+    RemoveWindowListEventHooks();
     g_layoutTransitions.clear();
     g_layoutTransitionActive = false;
     g_tabRepeatStarted = false;
@@ -8140,6 +8223,7 @@ static void ShutdownPersistentSelector()
         KillTimer(g_selector, kPatternTimerId);
         KillTimer(g_selector, kActivityTimerId);
         KillTimer(g_selector, kWindowListRefreshTimerId);
+        RemoveWindowListEventHooks();
         UnregisterAllThumbnails();
         HWND selector = g_selector;
         g_selector = nullptr;
@@ -8586,7 +8670,9 @@ static bool TryActivateWindowOnInputThread(HWND target)
         bool restoreRequested = false;
         if (GetWindowPlacement(target, &placement))
         {
-            placement.flags &= ~WPF_ASYNCWINDOWPLACEMENT;
+            // Async so a hung target app cannot block the input thread
+            // (which also handles the forwarded Alt+Tab hotkey).
+            placement.flags |= WPF_ASYNCWINDOWPLACEMENT;
             if (placement.flags & WPF_RESTORETOMAXIMIZED)
             {
                 placement.flags &= ~WPF_RESTORETOMAXIMIZED;
@@ -8599,11 +8685,14 @@ static bool TryActivateWindowOnInputThread(HWND target)
             restoreRequested = SetWindowPlacement(target, &placement) != FALSE;
         }
 
-        if (!restoreRequested || IsIconic(target))
+        // With the async flag the window is still minimized right after the
+        // call, so only fall back when the request itself failed. The retry
+        // timer waits for the restore to complete.
+        if (!restoreRequested)
         {
-            Wh_Log(L"SetWindowPlacement did not restore hwnd=%p; using ShowWindow",
+            Wh_Log(L"SetWindowPlacement failed hwnd=%p; using ShowWindowAsync",
                    target);
-            ShowWindow(target, SW_RESTORE);
+            ShowWindowAsync(target, SW_RESTORE);
         }
     }
 
