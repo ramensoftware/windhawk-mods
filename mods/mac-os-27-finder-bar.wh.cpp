@@ -10969,12 +10969,27 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
     }();
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
     int result = 3;
+    std::wstring detail;  // o motivo da falha, mostrado na pílula
     Wh_Log(L"Bluetooth: parear %s (%s)", name.c_str(), id.c_str());
+    // A procura (inquiry) atrapalha a conexão com um aparelho clássico: para antes.
+    if (g_btScanning) {
+        g_btScanStop = true;
+        for (int k = 0; k < 40 && g_btScanning; k++) Sleep(50);
+        Wh_Log(L"Bluetooth: procura parada (%d)", g_btScanning ? 0 : 1);
+    }
     try {
         using namespace winrt::Windows::Devices::Enumeration;
         using winrt::Windows::Foundation::AsyncStatus;
-        auto infoOp = DeviceInformation::CreateFromIdAsync(id);
-        DeviceInformation info = CcAwait(infoOp, 10000);
+        // O id veio de um DeviceWatcher de AssociationEndpoint: o tipo precisa ir junto,
+        // senão a busca procura uma interface com esse id e não acha.
+        DeviceInformation info{nullptr};
+        try {
+            info = CcAwait(DeviceInformation::CreateFromIdAsync(id, {}, DeviceInformationKind::AssociationEndpoint), 10000);
+        } catch (winrt::hresult_error const& e) {
+            Wh_Log(L"Bluetooth: aparelho (AEP) 0x%08X", (unsigned)e.code());
+            info = CcAwait(DeviceInformation::CreateFromIdAsync(id), 10000);
+        }
+        Wh_Log(L"Bluetooth: pode parear %d, já pareado %d", (int)info.Pairing().CanPair(), (int)info.Pairing().IsPaired());
         DeviceInformationCustomPairing custom = info.Pairing().Custom();
         // O pedido guardado pelo tratador, respondido aqui.
         struct Req {
@@ -11080,20 +11095,31 @@ static DWORD WINAPI BtPairThread(LPVOID p) {
         if (op.Status() == AsyncStatus::Completed) {
             auto st = op.GetResults().Status();
             Wh_Log(L"Bluetooth: pareamento terminou (%d)", (int)st);
+            detail = std::to_wstring((int)st);
             result = st == DevicePairingResultStatus::Paired || st == DevicePairingResultStatus::AlreadyPaired ? 2
                    : st == DevicePairingResultStatus::RequiredHandlerNotRegistered ? 4
                                                                                    : 3;
         }
-        else Wh_Log(L"Bluetooth: pareamento %s", op.Status() == AsyncStatus::Canceled ? L"cancelado" : L"com erro");
+        else {
+            Wh_Log(L"Bluetooth: pareamento %s", op.Status() == AsyncStatus::Canceled ? L"cancelado" : L"com erro");
+            if (op.Status() != AsyncStatus::Canceled) {
+                wchar_t h[16];
+                swprintf(h, ARRAYSIZE(h), L"0x%08X", (unsigned)op.ErrorCode());
+                detail = h;
+            }
+        }
         custom.PairingRequested(token);
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"Bluetooth: erro 0x%08X %s", (unsigned)e.code(), e.message().c_str());
+        wchar_t h[16];
+        swprintf(h, ARRAYSIZE(h), L"0x%08X", (unsigned)e.code());
+        detail = h;
     } catch (...) {
         Wh_Log(L"Bluetooth: erro no pareamento");
     }
     BtSetState(id, result);
     AcquireSRWLockExclusive(&g_btLock);
-    g_btPairMsgs.push_back(name + L"\n" + std::to_wstring(result));
+    g_btPairMsgs.push_back(name + L"\n" + std::to_wstring(result) + L"\n" + detail);
     ReleaseSRWLockExclusive(&g_btLock);
     g_btPairing--;
     BtNotify(2);
@@ -24653,13 +24679,18 @@ static LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 msgs.swap(g_btPairMsgs);
                 ReleaseSRWLockExclusive(&g_btLock);
                 for (const std::wstring& m : msgs) {  // dois pareamentos juntos: uma pílula para cada
-                    size_t nl = m.rfind(L'\n');
+                    // nome \n resultado \n motivo (o código da falha)
+                    size_t nl2 = m.rfind(L'\n');
+                    if (nl2 == std::wstring::npos || nl2 == 0) continue;
+                    size_t nl = m.rfind(L'\n', nl2 - 1);
                     if (nl == std::wstring::npos) continue;
-                    std::wstring name = m.substr(0, nl);
+                    std::wstring name = m.substr(0, nl), why = m.substr(nl2 + 1);
                     int r = _wtoi(m.c_str() + nl + 1);
                     if (r == 2) IslandShow(0xE702, 0x0A84FF, name, T(L"Pareado"));
                     else if (r == 4) IslandShow(0xE702, 0xFF9F0A, name, T(L"Pede um código: use as Configurações de Bluetooth"));
-                    else IslandShow(0xE702, 0xFF453A, name, T(L"Não foi possível parear"));
+                    else IslandShow(0xE702, 0xFF453A, name,
+                                    why.empty() ? T(L"Não foi possível parear")
+                                                : TF(L"Não foi possível parear (%s)", {why}));
                 }
             }
             return 0;
@@ -25492,6 +25523,7 @@ const UiTr kUiTr[] = {
     {L"Pareando…", L"Pairing…", L"Vinculando…", L"Association…", L"Wird gekoppelt…", L"Associazione…", L"正在配对…"},
     {L"Pareado", L"Paired", L"Vinculado", L"Associé", L"Gekoppelt", L"Associato", L"已配对"},
     {L"Tentar de novo", L"Try again", L"Reintentar", L"Réessayer", L"Erneut versuchen", L"Riprova", L"重试"},
+    {L"Não foi possível parear (%s)", L"Couldn’t pair (%s)", L"No se pudo vincular (%s)", L"Impossible d’associer (%s)", L"Koppeln fehlgeschlagen (%s)", L"Impossibile associare (%s)", L"无法配对 (%s)"},
     {L"Não foi possível parear", L"Couldn’t pair", L"No se pudo vincular", L"Impossible d’associer", L"Koppeln fehlgeschlagen", L"Impossibile associare", L"无法配对"},
     {L"Pede um código: use as Configurações de Bluetooth", L"Needs a code: use Bluetooth settings", L"Pide un código: usa la configuración de Bluetooth", L"Demande un code : utilisez les paramètres Bluetooth", L"Braucht einen Code: Bluetooth-Einstellungen verwenden", L"Richiede un codice: usa le impostazioni Bluetooth", L"需要代码：请使用蓝牙设置"},
     {L"O código %s aparece em %s?", L"Does the code %s show on %s?", L"¿Aparece el código %s en %s?", L"Le code %s s’affiche-t-il sur %s ?", L"Wird der Code %s auf %s angezeigt?", L"Il codice %s appare su %s?", L"代码 %s 是否显示在 %s 上？"},
