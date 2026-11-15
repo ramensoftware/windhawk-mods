@@ -68,7 +68,7 @@
 
 Mod nâng cấp **File Explorer** trên cả **Windows 11** và **Windows 10** với giao diện **WinUI 3** hiện đại và hỗ trợ **26 ngôn ngữ phổ biến trên thế giới**:
 
-## Điểm mới ở phiên bản 2.3.1
+## Điểm mới ở phiên bản 2.0.202
 - **Khắc phục triệt để lỗi treo `Uninitializing...` khi cập nhật hoặc tắt mod**: Loại bỏ hoàn toàn việc hook các hàm chặn luồng (`GetMessageW` / `DispatchMessageW`), thay bằng cơ chế bắt sự kiện không chặn (`TranslateAcceleratorW` / `IsDialogMessageW` / `TranslateMessage`) kết hợp đánh thức luồng tức thì (`PostThreadMessageW`), giúp Windhawk nạp lại hoặc gỡ mod trong tích tắc.
 - **Đa ngôn ngữ (26 ngôn ngữ)**: Tự động nhận diện ngôn ngữ hệ điều hành hoặc chọn trực tiếp trong phần Cài đặt (Tiếng Việt, English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Русский, Português, Italiano, العربية, हिन्दी, Bahasa Indonesia, Bahasa Melayu, ไทย, Türkçe, Polski, Nederlands, Українська, Čeština, Svenska, Română, Ελληνικά, עברית).
 - **Ô tìm kiếm chuẩn Win32 Edit (TSF/IME)**: Có con trỏ nhấp nháy trực quan và gõ tiếng Việt mượt mà trên cả bàn phím Tiếng Việt mặc định của Windows lẫn UniKey/EVKey.
@@ -3436,7 +3436,7 @@ void ScanExistingExplorerWindows() {
 
 BOOL Wh_ModInit() {
     g_uninitializing.store(false, std::memory_order_seq_cst);
-    Wh_Log(L"Initializing explorer-reopen-closed-tabs v2.3.1 (Non-blocking hooks + 26 languages)");
+    Wh_Log(L"Initializing explorer-reopen-closed-tabs v2.0.202 (Non-blocking hooks + 26 languages)");
 
     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
     Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
@@ -3479,7 +3479,7 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"Uninitializing explorer-reopen-closed-tabs v2.3.1");
+    Wh_Log(L"Uninitializing explorer-reopen-closed-tabs v2.0.202");
     g_uninitializing.store(true, std::memory_order_seq_cst);
 
     HWND hDlg = nullptr;
