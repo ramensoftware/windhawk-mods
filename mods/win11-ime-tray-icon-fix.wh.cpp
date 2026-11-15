@@ -52,8 +52,8 @@ Yes. But the docked language bar is broken in win10 (unstable, and won't work in
 - This mod is separated from the Win 10 fix because the UI technology (XAML vs Win32) is completely different. So they share no common code.
 - No alternative modes. You can adjust width / hide icon using the offcial (m417z) mods "Taskbar height and icon size" and "Taskbar tray system icon tweaks".
 - Source code and reverse engineering credit goes to AI bot (hy4). Heavily guided to follow the framework of the official mods above, with AI-hallucinated overhead (it added a repeating timer) dropped. But not fully revised (don't want to learn XAML 🙂).
-- Tested on Windows 11 24H2. Crossing version should work due to we mimicked the same mechanism in the official mods. (3 hooking modules, SystemTray.dll / Taskbar.View.dll / ExplorerExtensions.dll, Win 11 put the system tray logic in on these dlls dependent of the exact Windows version, while the logic / implementation stay unchanged.)
-
+- Verified on Windows 11 24H2 (OS build 26100), where `SystemTrayFrameGrid` is a `Grid` with one Auto column per tray stack. On that template the mod rewrites `Grid.Column`.
+- Some newer Windows 11 builds use a horizontal `StackPanel` named `SystemTrayFrameGrid` instead. Not tested yet.
 
 */
 // ==/WindhawkModReadme==
@@ -70,6 +70,7 @@ Yes. But the docked language bar is broken in win10 (unstable, and won't work in
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -83,6 +84,8 @@ std::atomic<bool> g_unloading;
 std::atomic<bool> g_systemTrayModuleHooked;
 std::atomic<bool> g_columnsApplied;
 std::atomic<int> g_originalColumn{3};
+std::atomic<bool> g_panelReorderApplied;
+std::atomic<uint32_t> g_originalPanelIndex{3};
 std::atomic<bool> g_taskbarDllSymbolsHooked;
 
 // Addresses looked up in taskbar.dll by symbol name. These are not hooks:
@@ -244,23 +247,28 @@ FrameworkElement FindFrameGrid(FrameworkElement seed) {
     }
 }
 
-// The tray grid has one auto-sized column per named stack. Moving the language
-// stack to column 0 and shifting the stacks that used to be to its left is
-// enough: the grid is right-aligned, so after the move a width change of the
-// language stack only stretches its own left edge.
-void ApplyColumnReorder(FrameworkElement grid, bool enable) {
-    FrameworkElement languageStack =
-        FindChildByName(grid, L"NonActivatableStack");
-    if (!languageStack) {
-        return;
-    }
-
+// SystemTrayFrameGrid comes in two shapes across Windows 11 builds: a Grid
+// with one auto-sized column per named stack (classic template), or a
+// horizontal StackPanel (newer template). Taskbar Styler themes target
+// "StackPanel#SystemTrayFrameGrid, Grid#SystemTrayFrameGrid" for that reason,
+// and taskbar-multi-tray swaps tray children with the same two branches.
+// Grid.Column is inert on a StackPanel child and reads back as 0, so the panel
+// case has to move the child inside Children() instead.
+//
+// In both cases: moving the language stack to the first slot and pushing the
+// stacks that used to be to its left is enough. The tray is right-aligned, so
+// after the move a width change of the language stack only stretches its own
+// left edge.
+void ApplyGridColumnReorder(FrameworkElement grid,
+                            FrameworkElement languageStack,
+                            bool enable) {
     int current = xamlcontrols::Grid::GetColumn(languageStack);
     int count = ChildCount(grid);
 
     if (enable) {
+        // Already first: do nothing and do not claim we changed it. A theme
+        // can legitimately put the stack at column 0 on its own.
         if (current == 0) {
-            g_columnsApplied = true;
             return;
         }
         if (!g_columnsApplied.load()) {
@@ -287,6 +295,11 @@ void ApplyColumnReorder(FrameworkElement grid, bool enable) {
         g_columnsApplied = true;
         Wh_Log(L"Moved NonActivatableStack from column %d to 0", current);
     } else {
+        // Only undo a move we actually made, so a theme that already places
+        // the stack first is not rearranged on unload.
+        if (!g_columnsApplied.load()) {
+            return;
+        }
         if (current != 0) {
             g_columnsApplied = false;
             return;
@@ -313,6 +326,74 @@ void ApplyColumnReorder(FrameworkElement grid, bool enable) {
         xamlcontrols::Grid::SetColumn(languageStack, target);
         g_columnsApplied = false;
         Wh_Log(L"Restored NonActivatableStack to column %d", target);
+    }
+}
+
+// StackPanel (and any other Panel) template: order is the child index, not an
+// attached property. Move() shifts every child between the two indices, so
+// moving the language stack to 0 pushes the stacks that were left of it one
+// slot to the right, exactly like the column shift above. The runtime index is
+// saved because Taskbar Styler themes and other mods can change it too.
+void ApplyPanelChildReorder(xamlcontrols::Panel panel,
+                            FrameworkElement languageStack,
+                            bool enable) {
+    auto children = panel.Children();
+    uint32_t index = 0;
+    if (!children.IndexOf(languageStack, index)) {
+        Wh_Log(L"NonActivatableStack is not a child of SystemTrayFrameGrid");
+        return;
+    }
+    uint32_t size = children.Size();
+
+    if (enable) {
+        if (index == 0) {
+            return;
+        }
+        if (!g_panelReorderApplied.load()) {
+            g_originalPanelIndex = index;
+        }
+        children.Move(index, 0);
+        g_panelReorderApplied = true;
+        Wh_Log(L"Moved NonActivatableStack from child index %u to 0 (Panel)",
+               index);
+    } else {
+        if (!g_panelReorderApplied.load()) {
+            return;
+        }
+        if (index != 0) {
+            g_panelReorderApplied = false;
+            return;
+        }
+        uint32_t target = g_originalPanelIndex.load();
+        if (target == 0 || target >= size) {
+            // Template order: NotifyIconStack, NotificationAreaIcons,
+            // MainStack, NonActivatableStack, ...
+            target = 3;
+            if (target >= size) {
+                target = size - 1;
+            }
+        }
+        children.Move(0, target);
+        g_panelReorderApplied = false;
+        Wh_Log(L"Restored NonActivatableStack to child index %u", target);
+    }
+}
+
+void ApplyColumnReorder(FrameworkElement grid, bool enable) {
+    FrameworkElement languageStack =
+        FindChildByName(grid, L"NonActivatableStack");
+    if (!languageStack) {
+        Wh_Log(L"NonActivatableStack not found in SystemTrayFrameGrid");
+        return;
+    }
+
+    // Grid derives from Panel, so the Grid check must come first.
+    if (grid.try_as<xamlcontrols::Grid>()) {
+        ApplyGridColumnReorder(grid, languageStack, enable);
+    } else if (auto panel = grid.try_as<xamlcontrols::Panel>()) {
+        ApplyPanelChildReorder(panel, languageStack, enable);
+    } else {
+        Wh_Log(L"SystemTrayFrameGrid is neither a Grid nor a Panel");
     }
 }
 
