@@ -2,12 +2,82 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-15T18:02:35.000Z</updated>
+    <updated>2026-11-15T19:03:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[1 Letter Language Indicator 1.0]]></title>
+        <id>https://windhawk.net/mods/one-letter-language-indicator#b4d2a8ee55b15e05776a0a38fe0c22d62c08a931</id>
+        <link href="https://windhawk.net/mods/one-letter-language-indicator"/>
+        <updated>2026-11-15T19:03:56.000Z</updated>
+        <content type="html"><![CDATA[<h1>1 Letter Language Indicator</h1>
+<p>Simplifies the input language indicator in the Windows 11 taskbar tray to a
+single letter: <code>ENG</code> becomes <code>E</code>, and <code>ENG (US)</code> becomes <code>E</code>.</p>
+<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/one-letter-language-indicator/demo.png" alt="Demo"></p>
+<p>The indicator keeps updating when you switch input languages, and the original
+text is restored when the mod is disabled.</p>
+<h2>Settings</h2>
+<ul>
+<li><strong>Letter size</strong>: the font size of the letter. Set it to 0 to keep the
+Windows size (12).</li>
+<li><strong>Letter color</strong>: separate colors for light mode and dark mode, chosen by the
+taskbar's theme (the Windows mode). Each one can be:
+<ul>
+<li>A hex color (<code>#RRGGBB</code> or <code>#AARRGGBB</code>) or a color name (<code>Red</code>, <code>White</code>).</li>
+<li><code>accent</code> for the Windows accent color, or one of its shades:
+<code>accentLight1</code> to <code>accentLight3</code>, <code>accentDark1</code> to <code>accentDark3</code>. The
+letter follows accent color changes.</li>
+<li>Empty, to keep the Windows color in that mode.</li>
+</ul>
+</li>
+<li><strong>Vertical offset</strong>: moves the letter up (negative) or down (positive), in
+pixels. Useful for re-centering the letter after changing its size.</li>
+<li><strong>Indicator width</strong>: the language indicator normally reserves room for three
+letters. With a single letter that leaves empty space, so by default the
+indicator is narrowed to 32 pixels, the width of a regular tray icon. Set it
+to 0 to keep the Windows width.</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>Languages and layouts which start with the same letter look the same, e.g.
+<code>ENG (US)</code> and <code>ENG (UK)</code>, or <code>ENG</code> and <code>ESP</code>.</li>
+<li>Other mods may set the same properties. &quot;Taskbar tray icon spacing and grid&quot;
+sets the width of the language indicator: while <strong>Indicator width</strong> is set,
+this mod's width wins. Windows 11 Taskbar Styler themes which change the font
+size or color of the indicator conflict with <strong>Letter size</strong> and <strong>Letter
+color</strong>, and whichever mod applies last wins. To let the other mod control a
+property, set the matching setting to 0 (or leave the color empty).</li>
+</ul>
+<h2>Target</h2>
+<pre><code>SystemTray.LanguageTextIconContent &gt; Grid#ContainerGrid &gt;
+SystemTray.AdaptiveTextBlock#LanguageInnerTextBlock &gt; TextBlock#InnerTextBlock
+</code></pre>
+<p>Only Windows 11 is supported.</p>
+]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[System Tray Folders 1.1.0]]></title>
+        <id>https://windhawk.net/mods/system-tray-folders#2f824cd0da0b2c0a7a297289bd393d4adee3d6d1</id>
+        <link href="https://windhawk.net/mods/system-tray-folders"/>
+        <updated>2026-11-15T19:03:51.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the flyout's icon list not being found on Windows builds where it has no name.</li>
+<li>Added a <strong>List view</strong> option that shows the flyout as one column with each icon's name next to it, plus <strong>List view width</strong>.</li>
+<li>Added an <strong>Add icon...</strong> tile inside each folder that lists the tray icons by app name, shows which folder each one is in, and moves icons in or out with a click. Picks are remembered by the mod and take priority over the patterns.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ris Peng</name>
+            <uri>https://github.com/RisPNG</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fix file dialogs for Classic theme 2.0]]></title>
         <id>https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg#efdfb5f5c7cc20e512d3c2bfbc50485374121a69</id>
@@ -390,83 +460,6 @@ on disk.</li>
         <author>
             <name>grn15RenS</name>
             <uri>https://github.com/grn15RenS</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Task Manager Network Speed in Bytes 1.3]]></title>
-        <id>https://windhawk.net/mods/taskmgr-network-bytes#57b6069a465ecca327e085d3d0b2057fad533a43</id>
-        <link href="https://windhawk.net/mods/taskmgr-network-bytes"/>
-        <updated>2026-11-14T04:04:53.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed: the mod failed to load when Microsoft's symbol server had no PDB for the installed Task Manager build. Added a byte-pattern fallback for all seven hooks.</li>
-<li>Improved: pattern matching anchors to function starts from the executable's <code>.pdata</code> table, requires an exact and unique match, and refuses ambiguous matches instead of hooking the wrong function.</li>
-<li>Symbol-based hooking is still tried first, and every hook remains optional. No settings changed.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Nehoray-Bitan</name>
-            <uri>https://github.com/Nehoray-Bitan</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Compact RDP connection bar 3.0.0]]></title>
-        <id>https://windhawk.net/mods/compact-rdp-connection-bar#a0a4aa02a5463fd3ee74a5ddb2b6c2d89d8e27b6</id>
-        <link href="https://windhawk.net/mods/compact-rdp-connection-bar"/>
-        <updated>2026-11-14T04:04:48.000Z</updated>
-        <content type="html"><![CDATA[<h1>Compact RDP connection bar</h1>
-<p>Shrinks the top connection bar of Remote Desktop Connection (Ctrl+Alt+Home).</p>
-<p>The bar normally spans a large fixed width: a small button group on the left,
-the hostname in the middle, the window buttons on the right. This mod keeps the
-hostname zone, keeps the button groups, and drops the empty space between them.</p>
-<p>Works with any number of toolbars. A toolbar whose buttons are all hidden needs
-no width and is simply not given any, which is what happens once the pin and
-quality buttons are hidden.</p>
-<p>The right toolbar carries the window buttons - minimize, restore and close.
-Each can be hidden separately; hide all three and the bar shrinks to the
-hostname alone. A single remaining toolbar keeps the side it originally sat on,
-so hiding the window buttons does not move the pin group to the right.</p>
-<p>The quality indicator is a lock icon that mstsc only shows in some sessions.
-Ticking the setting when it is absent changes nothing, and the bar is laid out
-exactly as it would be without the setting.</p>
-<h2>Screenshots</h2>
-<table>
-<thead>
-<tr>
-<th>Before</th>
-<th>After</th>
-<th>After2</th>
-<th>After3</th>
-<th>After4</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/Before.png" alt="Original wide connection bar"></td>
-<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After.png" alt="Compact bar, pin hidden"></td>
-<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After2.png" alt="Compact bar, pin and quality hidden"></td>
-<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After3.png" alt="Compact bar, pin, minimize and restore hidden"></td>
-<td><img src="https://raw.githubusercontent.com/hsb5/screenshots/main/After4.png" alt="Compact bar, all buttons hidden, hostname only"></td>
-</tr>
-</tbody>
-</table>
-<h2>Settings</h2>
-<ul>
-<li><strong>Text area width</strong> - target width of the hostname zone, scaled for DPI.
-Raised automatically when the hostname needs more room.</li>
-<li><strong>Hide pin button</strong> - hides the pin (keep on top) button.</li>
-<li><strong>Hide quality button</strong> - hides the connection quality indicator.</li>
-<li><strong>Hide lock button</strong> - hides the lock icon mstsc shows next to the quality
-indicator. The button is only present in some sessions; when it is absent,
-nothing changes.</li>
-<li><strong>Hide minimize / restore / close</strong> - hide the window buttons on the
-right. Hiding the close button removes the only visible way to disconnect;
-the session can still be closed from the taskbar icon, or Ctrl+Alt+Break
-leaves full screen so the bar and the window controls come back.</li>
-</ul>
-]]></content>
-        <author>
-            <name>hsb5</name>
-            <uri>https://github.com/hsb5</uri>
         </author>
     </entry>
 </feed>

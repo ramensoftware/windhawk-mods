@@ -2,12 +2,66 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-14T20:03:16.000Z</updated>
+    <updated>2026-11-15T19:03:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[1 Letter Language Indicator 1.0]]></title>
+        <id>https://windhawk.net/mods/one-letter-language-indicator#b4d2a8ee55b15e05776a0a38fe0c22d62c08a931</id>
+        <link href="https://windhawk.net/mods/one-letter-language-indicator"/>
+        <updated>2026-11-15T19:03:56.000Z</updated>
+        <content type="html"><![CDATA[<h1>1 Letter Language Indicator</h1>
+<p>Simplifies the input language indicator in the Windows 11 taskbar tray to a
+single letter: <code>ENG</code> becomes <code>E</code>, and <code>ENG (US)</code> becomes <code>E</code>.</p>
+<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/one-letter-language-indicator/demo.png" alt="Demo"></p>
+<p>The indicator keeps updating when you switch input languages, and the original
+text is restored when the mod is disabled.</p>
+<h2>Settings</h2>
+<ul>
+<li><strong>Letter size</strong>: the font size of the letter. Set it to 0 to keep the
+Windows size (12).</li>
+<li><strong>Letter color</strong>: separate colors for light mode and dark mode, chosen by the
+taskbar's theme (the Windows mode). Each one can be:
+<ul>
+<li>A hex color (<code>#RRGGBB</code> or <code>#AARRGGBB</code>) or a color name (<code>Red</code>, <code>White</code>).</li>
+<li><code>accent</code> for the Windows accent color, or one of its shades:
+<code>accentLight1</code> to <code>accentLight3</code>, <code>accentDark1</code> to <code>accentDark3</code>. The
+letter follows accent color changes.</li>
+<li>Empty, to keep the Windows color in that mode.</li>
+</ul>
+</li>
+<li><strong>Vertical offset</strong>: moves the letter up (negative) or down (positive), in
+pixels. Useful for re-centering the letter after changing its size.</li>
+<li><strong>Indicator width</strong>: the language indicator normally reserves room for three
+letters. With a single letter that leaves empty space, so by default the
+indicator is narrowed to 32 pixels, the width of a regular tray icon. Set it
+to 0 to keep the Windows width.</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>Languages and layouts which start with the same letter look the same, e.g.
+<code>ENG (US)</code> and <code>ENG (UK)</code>, or <code>ENG</code> and <code>ESP</code>.</li>
+<li>Other mods may set the same properties. &quot;Taskbar tray icon spacing and grid&quot;
+sets the width of the language indicator: while <strong>Indicator width</strong> is set,
+this mod's width wins. Windows 11 Taskbar Styler themes which change the font
+size or color of the indicator conflict with <strong>Letter size</strong> and <strong>Letter
+color</strong>, and whichever mod applies last wins. To let the other mod control a
+property, set the matching setting to 0 (or leave the color empty).</li>
+</ul>
+<h2>Target</h2>
+<pre><code>SystemTray.LanguageTextIconContent &gt; Grid#ContainerGrid &gt;
+SystemTray.AdaptiveTextBlock#LanguageInnerTextBlock &gt; TextBlock#InnerTextBlock
+</code></pre>
+<p>Only Windows 11 is supported.</p>
+]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Item Pins 1.1.5]]></title>
         <id>https://windhawk.net/mods/explorer-item-pins#43b8a9cd94e699082b09c6c054278f680f583ffd</id>
@@ -1644,102 +1698,6 @@ Redraw areas after changing monitors; avoid running other icon hiding mods.</p>
         <author>
             <name>CTabdul15</name>
             <uri>https://github.com/CTabdul15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Gradual Night Light 0.4.2]]></title>
-        <id>https://windhawk.net/mods/gradual-night-light#46cd778f855d3036a63dfca46ec94348d2ba0cc1</id>
-        <link href="https://windhawk.net/mods/gradual-night-light"/>
-        <updated>2026-11-12T07:02:50.000Z</updated>
-        <content type="html"><![CDATA[<h1>Gradual Night Light</h1>
-<p>Automatically adjust Windows' native Night light throughout the evening, with
-an editable daily schedule and optional gradual transitions.</p>
-<h2>Default schedule</h2>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Time</th>
-<th>Strength</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Stage 1</td>
-<td>19:00</td>
-<td>50</td>
-</tr>
-<tr>
-<td>Stage 2</td>
-<td>20:00</td>
-<td>60</td>
-</tr>
-<tr>
-<td>Stage 3</td>
-<td>21:00</td>
-<td>70</td>
-</tr>
-<tr>
-<td>Off time</td>
-<td>07:00</td>
-<td>Off</td>
-</tr>
-</tbody>
-</table>
-<h2>Settings</h2>
-<ul>
-<li><strong>Off time</strong>: the local time when Night light turns off each day.</li>
-<li><strong>Stages</strong>: add or remove stages with Windhawk's list controls. Each stage has
-a time and a strength from 1 (weakest) to 100 (warmest). Three stages are
-provided by default; between 1 and 96 stages are supported.</li>
-<li><strong>Gradual transitions</strong>: interpolate strength between stages. For example,
-the default schedule produces strength 55 at 19:30. Disable this option to
-change strength only at each stage's start time.</li>
-</ul>
-<p>Times use the local 24-hour <code>HH:MM</code> format. Stages are sorted automatically and
-the schedule repeats daily, including across midnight. All stage times must be
-unique and different from Off time. Invalid settings are reported in the mod
-log; an invalid edit keeps the last valid configuration. If saved settings are
-invalid at startup, the tool stays running without applying a schedule until
-valid settings are saved.</p>
-<p>Night light switches off at Off time and stays off until the next stage. The
-last stage holds its strength until Off time. To fade in from almost no warmth,
-add a stage such as 18:30 with strength 1 before 19:00 with strength 50. Add
-further stages to create a five-stage schedule or a gradual morning fade.</p>
-<h2>Behavior and restoration</h2>
-<p>The scheduler runs in a dedicated Windhawk tool process. Every ten seconds it
-applies the scheduled temperature directly through Windows' display pipeline.
-It also checks after display changes, resume, and session unlock.</p>
-<p>Settings and Quick Settings show Windows' own Night light configuration.
-Windows continues running its own schedule in the background. Its transitions
-can briefly take precedence until the next mod check. The mod pauses while
-Windows previews its strength slider. Disabling the mod reapplies the
-temperature requested by Windows' current settings.</p>
-<p>The mod reads the current user's Night light settings and state from CloudStore.
-It applies all scheduled changes at runtime without writing either record. If
-Windhawk is terminated during a stage, the runtime tint may last until Windows
-next applies Night light or the user signs out.</p>
-<p>If you tested an earlier prerelease, disable it before upgrading so that version
-can restore the settings it saved.</p>
-<h2>Requirements and limitations</h2>
-<p>The mod uses internal Windows Night light display interfaces and the modern
-CloudStore <code>Current</code> layout. The display driver must support Night light.
-The tool launcher supports Windhawk 1.7.3 and newer. The runtime interfaces
-were tested on Windows 11 build 26100, x64, with two displays. HDR and ARM64
-have not been verified. If records are missing, open
-<strong>Settings &gt; System &gt; Display &gt; Night light</strong> once.</p>
-<h2>Technical references</h2>
-<p>The parser and scheduler are independently implemented using the documented
-research below. No external helper, script, or runtime download is required.</p>
-<ul>
-<li><a href="https://github.com/kvnxiao/win-nightlight-cli/blob/main/docs/nightlight-registry-format.md">Night light registry format research</a></li>
-<li><a href="https://github.com/microsoft/bond/blob/master/cpp/inc/bond/protocol/compact_binary.h">Microsoft Bond CompactBinary protocol</a></li>
-<li><a href="https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process">Official Windhawk tool mod launcher</a></li>
-</ul>
-]]></content>
-        <author>
-            <name>Fenryr</name>
-            <uri>https://github.com/soldier93HUN</uri>
         </author>
     </entry>
 </feed>

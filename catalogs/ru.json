@@ -13131,6 +13131,34 @@
         "version": "1.0"
       }
     },
+    "one-letter-language-indicator": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794769436000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794769436000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Deen-0x",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
+        "description": "Shortens the taskbar language indicator (\"ENG\", \"ENG (US)\") to a single letter (\"E\")",
+        "github": "https://github.com/Deen-0x",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "1 Letter Language Indicator",
+        "version": "1.0"
+      }
+    },
     "onenote-cursor-teleport-fix": {
       "details": {
         "defaultSorting": 240,
@@ -16650,7 +16678,7 @@
         "ratingUsers": 16,
         "reviews": 0,
         "trendingSorting": 0.4445777654567595,
-        "updated": 1790094152000,
+        "updated": 1794769431000,
         "users": 202
       },
       "metadata": {
@@ -16666,7 +16694,7 @@
         ],
         "license": "GPL-3.0-only",
         "name": "System Tray Folders",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "task-manager-pause-button": {
