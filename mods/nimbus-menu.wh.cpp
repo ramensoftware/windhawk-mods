@@ -3844,6 +3844,7 @@ static BOOL ExplorerInit() {
         Wh_Log(L"twinui.pcshell.dll not loaded");
         return FALSE;
     }
+    // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
         {{L"public: virtual long __cdecl XamlLauncherState::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum "
           L"IMMERSIVELAUNCHERSHOWFLAGS)"},
