@@ -20,6 +20,8 @@
 NectarLink project. It works with [NectarLink](https://github.com/thtbee/nectarlink),
 the free, open-source app that links an Android phone with a Windows PC.
 
+![The NectarLink panel in the Start menu](https://raw.githubusercontent.com/vampirakos/phone-panel-for-nectarlink/main/screenshot.png)
+
 It puts your phone in the Start menu's phone panel (the one Phone Link uses):
 
 * your phone's name, connection and battery
@@ -87,6 +89,7 @@ what this mod works with.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <shellapi.h>
 #include <winhttp.h>
@@ -95,6 +98,7 @@ what this mod works with.
 #include <atomic>
 #include <chrono>
 #include <ctime>
+#include <cwctype>
 #include <functional>
 #include <mutex>
 #include <optional>
@@ -136,10 +140,7 @@ struct Settings {
 } g_settings;
 
 static std::wstring GetStr(PCWSTR name) {
-    PCWSTR v = Wh_GetStringSetting(name);
-    std::wstring s = v ? v : L"";
-    Wh_FreeStringSetting(v);
-    return s;
+    return std::wstring(WindhawkUtils::StringSetting::make(name).get());
 }
 
 static void LoadSettings() {
@@ -553,15 +554,15 @@ static bool IsSafeToOpen(const std::wstring& path) {
 static void OpenRecent(const RecentItem& r) {
     std::wstring target = r.target.substr(0, r.target.find(L'\n'));  // several paths are newline-separated
     while (!target.empty() && (target.back() == L'\r' || target.back() == L' ')) target.pop_back();
-    if (target.rfind(L"\\\\", 0) == 0) {  // network share or device path: never touch it from Start
-        RunTask(L"open-timeline");
-        return;
-    }
     if (target.rfind(L"http://", 0) == 0 || target.rfind(L"https://", 0) == 0) {
         ShellOpen(target);
         return;
     }
-    DWORD attrs = target.empty() ? INVALID_FILE_ATTRIBUTES : GetFileAttributesW(target.c_str());
+    // Only plain drive-letter paths (C:\...) are touched. Network shares (\\server, //server) and
+    // NT or device paths (\??\UNC\..., \\?\...) are never opened from Start.
+    std::replace(target.begin(), target.end(), L'/', L'\\');
+    bool localPath = target.size() >= 3 && iswalpha(target[0]) && target[1] == L':' && target[2] == L'\\';
+    DWORD attrs = localPath ? GetFileAttributesW(target.c_str()) : INVALID_FILE_ATTRIBUTES;
     if (attrs == INVALID_FILE_ATTRIBUTES) {
         RunTask(L"open-timeline");
     } else if (attrs & FILE_ATTRIBUTE_DIRECTORY) {
@@ -728,7 +729,7 @@ struct UiState {
     winrt::weak_ref<wux::FrameworkElement> hiddenContent;
     wux::Visibility hiddenPrev = wux::Visibility::Visible;  // what hiddenContent was before we collapsed it
     ULONGLONG nextSearch = 0;   // don't look for Start's phone panel again before this tick count
-    DWORD searchDelay = 500;    // grows after each miss, up to 30 s
+    DWORD searchDelay = 500;    // grows after each miss, up to 3 s (Start may only build its phone panel when opened)
     wuxc::TextBlock nameText{nullptr}, statusText{nullptr}, hintText{nullptr}, battText{nullptr};
     wuxc::FontIcon battIcon{nullptr}, phoneIcon{nullptr};
     wuxc::StackPanel recentSection{nullptr}, recentList{nullptr}, clipSection{nullptr}, clipList{nullptr};
@@ -991,7 +992,7 @@ static void TickPanel() {
         }
         if (companion) host = FindByName(companion, L"CompanionRoot", 0).try_as<wuxc::Grid>();
         if (!host) {
-            g_ui->searchDelay = std::min<DWORD>(g_ui->searchDelay * 2, 30000);
+            g_ui->searchDelay = std::min<DWORD>(g_ui->searchDelay * 2, 3000);
             g_ui->nextSearch = now + g_ui->searchDelay;
             if (!g_ui->dumped && content) {
                 g_ui->dumped = true;
