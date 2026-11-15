@@ -244,7 +244,6 @@ If you find this mod useful, you can support its development and maintenance:
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <cstdarg>
 #include <cstdint>
 #include <deque>
 #include <mutex>
@@ -629,19 +628,28 @@ static bool g_hasFailedPowerPlanGuid = false;
 static std::atomic<bool> g_desiredPerformancePlan{false};
 static std::atomic<bool> g_powerWorkerRunning{false};
 static HANDLE g_powerWakeEvent = nullptr;
+static HANDLE g_powerEngagedMutex = nullptr;
+static constexpr const wchar_t* kPowerEngagedMutexName =
+    L"Global\\windhawk-smart-process-priority-ram-optimizer-power-engaged";
 [[clang::no_destroy]] static std::optional<std::thread> g_powerWorkerThread;
 
 static void SavePowerSchemeState(const GUID& originalGuid,
                                  const GUID& engagedGuid,
                                  bool engaged) {
+    if (engaged && !g_powerEngagedMutex) {
+        g_powerEngagedMutex =
+            CreateMutexW(nullptr, FALSE, kPowerEngagedMutexName);
+    }
     Wh_SetBinaryValue(L"OriginalPowerScheme", &originalGuid, sizeof(GUID));
     Wh_SetBinaryValue(L"EngagedPowerScheme", &engagedGuid, sizeof(GUID));
-    Wh_SetIntValue(L"HighPerformanceEngagedPid",
-                   static_cast<int>(GetCurrentProcessId()));
     Wh_SetIntValue(L"HighPerformanceEngaged", engaged ? 1 : 0);
 }
 
 static void ClearPowerSchemeState() {
+    if (g_powerEngagedMutex) {
+        CloseHandle(g_powerEngagedMutex);
+        g_powerEngagedMutex = nullptr;
+    }
     Wh_DeleteValue(L"HighPerformanceEngaged");
     Wh_DeleteValue(L"HighPerformanceEngagedPid");
     Wh_DeleteValue(L"EngagedPowerScheme");
@@ -779,21 +787,15 @@ static void CheckAndRecoverCrashedPowerScheme() {
         return;
     }
 
-    DWORD engagedPid =
-        static_cast<DWORD>(Wh_GetIntValue(L"HighPerformanceEngagedPid", 0));
-    if (engagedPid != 0 && engagedPid != GetCurrentProcessId()) {
-        HANDLE hOther = OpenProcess(SYNCHRONIZE, FALSE, engagedPid);
-        if (hOther) {
-            DWORD waitRes = WaitForSingleObject(hOther, 0);
-            CloseHandle(hOther);
-            if (waitRes == WAIT_TIMEOUT) {
-                // The tool process that engaged the scheme is still actively running in another session
-                return;
-            }
-        } else if (GetLastError() == ERROR_ACCESS_DENIED) {
-            // Process exists in another user session
-            return;
-        }
+    HANDLE hMutex = OpenMutexW(SYNCHRONIZE, FALSE, kPowerEngagedMutexName);
+    if (hMutex) {
+        CloseHandle(hMutex);
+        // The tool process that engaged the scheme is still actively running
+        return;
+    }
+    if (GetLastError() == ERROR_ACCESS_DENIED) {
+        // Another user session's tool process actively holds the engaged mutex
+        return;
     }
 
     GUID savedOriginal{};
