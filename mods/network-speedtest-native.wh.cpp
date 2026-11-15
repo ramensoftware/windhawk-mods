@@ -11,7 +11,7 @@
 // @include         RuntimeBroker.exe
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -D_WIN32_WINNT=0x0A00 -lshlwapi -lshell32 -lole32 -ladvapi32 -luser32 -ld2d1 -ld3d11 -ldcomp -ldwrite -ldwmapi -lwinhttp -liphlpapi -lshcore -luuid -loleacc -loleaut32
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lshlwapi -lshell32 -lole32 -ladvapi32 -luser32 -ld2d1 -ld3d11 -ldcomp -ldwrite -ldwmapi -lwinhttp -liphlpapi -lshcore -luuid -loleacc -loleaut32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
