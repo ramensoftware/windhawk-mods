@@ -21047,6 +21047,36 @@ static void NtfLayout() {
     g_ntf.scroll = std::clamp(g_ntf.scroll, 0.0f, std::max(0.0f, g_ntf.contentH - (g_ntf.view.bottom - g_ntf.view.top)));
 }
 
+// O desfoque do Windows atrás do painel (temas Vidro e Cor da janela): a caixa
+// inteira, ou, em cartões soltos, só o topo e cada cartão visível (cada um
+// com o seu vidro, como no líquido). No vidro líquido isto não é usado.
+static void NtfGlassShapes() {
+    float s = g_ntf.s;
+    if (!NtfFloating()) {
+        GlassLayerShapes(g_ntf.glass, {{g_ntf.panel, 24 * s}});
+        return;
+    }
+    std::vector<CcShape> v;
+    const D2D1_RECT_F& P = g_ntf.panel;
+    v.push_back({D2D1::RectF(P.left + 12 * s, P.top, P.right - 12 * s, P.top + 46 * s), 23 * s});
+    float oy = g_ntf.view.top - g_ntf.scroll;
+    for (const NtfBlock& b : g_ntf.blocks) {
+        D2D1_RECT_F r = D2D1::RectF(b.r.left, b.r.top + oy, b.r.right, b.r.bottom + oy);
+        float rad;
+        if (b.kind == 1) rad = 20 * s;
+        else if (b.kind == 4) {
+            r.top += 2 * s;
+            r.bottom -= 2 * s;
+            rad = 16 * s;
+        } else continue;
+        if (r.bottom <= g_ntf.view.top || r.top >= g_ntf.view.bottom) continue;
+        r.top = std::max(r.top, g_ntf.view.top);  // cortado na borda da rolagem
+        r.bottom = std::min(r.bottom, g_ntf.view.bottom);
+        v.push_back({r, rad});
+    }
+    GlassLayerShapes(g_ntf.glass, v);
+}
+
 static void NtfReleaseGraphics() {
     for (auto& kv : g_ntf.icons) SafeRelease(kv.second);
     g_ntf.icons.clear();
@@ -21521,10 +21551,7 @@ static void NtfRefresh() {
         g_ntf.panel.bottom = maxB;
         g_ntf.view.bottom = maxB - 4 * g_ntf.s;
     }
-    // Em cartões soltos não há caixa: sem o retângulo de desfoque atrás (os
-    // cartões são desenhados com a tinta do vidro; no líquido, com a refração).
-    if (NtfFloating()) GlassLayerShapes(g_ntf.glass, {});
-    else GlassLayerShapes(g_ntf.glass, {{g_ntf.panel, 24 * g_ntf.s}});
+    NtfGlassShapes();
     g_islUnread = 0;
     NtfRender();
 }
@@ -21596,6 +21623,7 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_MOUSEWHEEL: {
             float maxS = std::max(0.0f, g_ntf.contentH - (g_ntf.view.bottom - g_ntf.view.top));
             g_ntf.scroll = std::clamp(g_ntf.scroll - GET_WHEEL_DELTA_WPARAM(wp) / 120.0f * 60 * g_ntf.s, 0.0f, maxS);
+            NtfGlassShapes();  // em cartões soltos, o desfoque acompanha cada cartão
             NtfRender();
             return 0;
         }
@@ -21780,8 +21808,7 @@ static void NtfToggle(Bar* b, int idx) {
     }
     bool ok = GlassLayerCreate(g_ntf.glass, g_ntf.pos, g_ntf.W, g_ntf.H);
     if (ok) {
-        if (NtfFloating()) GlassLayerShapes(g_ntf.glass, {});
-        else GlassLayerShapes(g_ntf.glass, {{g_ntf.panel, 24 * s}});
+        NtfGlassShapes();
         GlassLayerOpacity(g_ntf.glass, 1.0f);
     }
     g_islUnread = 0;
