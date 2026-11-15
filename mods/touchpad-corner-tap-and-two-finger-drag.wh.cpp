@@ -44,8 +44,9 @@ If you also use Touchpad Relaxed Hand Tracking, leave its two-finger option off,
 both mods would be handling the same two fingers.
 
 ## How it works
-The mod reads raw finger positions from the touchpad (HID Raw Input) and watches mouse
-events with a low-level hook. When Windows turns a corner tap into a left click, the
+The mod reads raw finger positions from the touchpad (HID Raw Input) and, while you're
+touching the pad and for a second after, watches mouse events with a low-level hook.
+When Windows turns a corner tap into a left click, the
 click is swapped for a right click. A resting palm is ignored, as long as the touchpad
 reports it as one.
 
@@ -54,9 +55,10 @@ events are dropped for the duration of the drag. Apps that scroll with the touch
 directly instead of with scroll events (browsers, File Explorer and most newer apps)
 can still scroll a little while you drag.
 
-It runs as a Windhawk tool mod in its own background process (with UIAccess when
-available, so it also works over windows of apps running as administrator). It doesn't
-inject into or change any other program.
+It runs as a Windhawk tool mod in its own background process, and doesn't inject into
+or change any other program. On Windhawk 2.0 that process runs with UIAccess, so the
+mod also works over windows of apps running as administrator. On Windhawk 1.x it
+doesn't, so neither the corner tap nor the drag works over those windows.
 */
 // ==/WindhawkModReadme==
 
@@ -98,6 +100,7 @@ inject into or change any other program.
 
 #include <windhawk_utils.h>
 
+#include <algorithm>
 #include <cmath>
 #include <unordered_map>
 #include <vector>
@@ -118,12 +121,15 @@ constexpr UINT kMsgReloadSettings = WM_APP + 1;  // thread message from the Wind
 constexpr UINT_PTR kHoldTimer = 1;   // only while two fingers are held still
 constexpr UINT_PTR kTapTimer = 2;    // only while a click is held back
 constexpr UINT_PTR kStaleTimer = 3;  // only while something touches the pad
+constexpr UINT_PTR kHookTimer = 4;   // removes the mouse hook once the pad is idle
 
 constexpr DWORD kClickAfterLiftMs = 800;  // a tap's click comes this soon after the lift
 constexpr DWORD kLiftWaitMs = 60;         // how long a held-back click waits for the lift report
 constexpr DWORD kPendingMaxMs = 1500;     // never hold a click back longer than this
 constexpr DWORD kStaleFrameMs = 500;      // no report for this long means the touch is over
+constexpr DWORD kStaleDragMs = 5000;      // the same during a drag, where fingers may rest still
 constexpr DWORD kAfterDragMs = 600;       // Windows' leftover scroll events after a drag
+constexpr DWORD kHookIdleMs = 1000;       // longer than kClickAfterLiftMs and kAfterDragMs
 constexpr double kMaxTapMove = 0.04;      // fraction of the touchpad width
 constexpr double kHoldMove = 0.015;
 
@@ -354,6 +360,43 @@ double g_curX, g_curY, g_scaleX, g_scaleY;  // pointer position and pixels per p
 int g_lastCount;
 bool g_buttonHeld;
 
+static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam);
+
+static HMODULE ThisModule() {
+    HMODULE h = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&g_s, &h);
+    return h;
+}
+
+// Restarted by every frame, so it only fires once the reports stop. A pad may
+// send nothing while the fingers rest still, so a hold or a drag waits longer.
+static void ArmStaleTimer() {
+    DWORD ms = kStaleFrameMs;
+    if (g_twoMode == 1)
+        ms = std::max<DWORD>(kStaleFrameMs, g_s.holdMs + 250);
+    else if (g_twoMode == 2)
+        ms = kStaleDragMs;
+    SetTimer(g_hwnd, kStaleTimer, ms, nullptr);
+}
+
+// The mouse hook is only needed during a touch and shortly after it, so it's
+// installed on a touch's first frame (before Windows sends the tap's click,
+// which comes on the lift) and removed once the pad has been idle a while.
+static void UpdateHook() {
+    if (g_touching) {
+        KillTimer(g_hwnd, kHookTimer);
+        if (!g_hook) {
+            g_hook = SetWindowsHookExW(WH_MOUSE_LL, MouseHook, ThisModule(), 0);
+            if (!g_hook)
+                Wh_Log(L"SetWindowsHookEx failed: %u", GetLastError());
+        }
+    } else if (g_hook) {
+        SetTimer(g_hwnd, kHookTimer, kHookIdleMs, nullptr);
+    }
+}
+
 static void Centroid(double* cx, double* cy) {
     *cx = *cy = 0;
     for (auto& f : g_fingers) {
@@ -404,6 +447,7 @@ static void TryStartDrag() {
     g_scaleY = g_scaleX * g_aspect;
 
     SetTwoMode(2);
+    ArmStaleTimer();
     Centroid(&g_refX, &g_refY);
     g_lastCount = 2;
     SendPrimary(true);
@@ -437,6 +481,14 @@ static void UpdateTwoFinger() {
         g_curY += (cy - g_refY) * g_scaleY;
         g_refX = cx;
         g_refY = cy;
+        // Keep the target on a monitor, so moving back from an edge (or a gap
+        // between monitors) moves the pointer straight away.
+        POINT pt = {(LONG)std::lround(g_curX), (LONG)std::lround(g_curY)};
+        MONITORINFO mi = {sizeof(mi)};
+        if (GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi)) {
+            g_curX = std::clamp(g_curX, (double)mi.rcMonitor.left, mi.rcMonitor.right - 1.0);
+            g_curY = std::clamp(g_curY, (double)mi.rcMonitor.top, mi.rcMonitor.bottom - 1.0);
+        }
         SendCursorPos((int)std::lround(g_curX), (int)std::lround(g_curY));
         return;
     }
@@ -477,6 +529,7 @@ static void ResetTouch() {
         g_consumed = true;  // a cut-off touch is never a tap
     }
     KillTimer(g_hwnd, kStaleTimer);
+    UpdateHook();
 }
 
 static void ProcessFrame(const Dev& d) {
@@ -521,13 +574,13 @@ static void ProcessFrame(const Dev& d) {
         g_endTick = now;
     }
 
-    // Restarted by every frame, so it only fires once the reports stop.
+    UpdateHook();
+    UpdateTwoFinger();
+
     if (g_touching)
-        SetTimer(g_hwnd, kStaleTimer, kStaleFrameMs, nullptr);
+        ArmStaleTimer();
     else
         KillTimer(g_hwnd, kStaleTimer);
-
-    UpdateTwoFinger();
 }
 
 // In hybrid mode a frame is spread over several reports. Only the first one
@@ -668,29 +721,26 @@ static void CheckPending() {
 
 static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode >= 0 && ((MSLLHOOKSTRUCT*)lParam)->dwExtraInfo != kMarker) {
-        bool swapped = GetSystemMetrics(SM_SWAPBUTTON);
-        WPARAM primaryDown = swapped ? WM_RBUTTONDOWN : WM_LBUTTONDOWN;
-        WPARAM primaryUp = swapped ? WM_RBUTTONUP : WM_LBUTTONUP;
-        WPARAM secondaryDown = swapped ? WM_LBUTTONDOWN : WM_RBUTTONDOWN;
-        WPARAM secondaryUp = swapped ? WM_LBUTTONUP : WM_RBUTTONUP;
+        // Low-level hooks see the buttons after the swap, so WM_LBUTTON* is always
+        // the primary button here. Only the SendInput side needs to know the swap.
         DWORD now = GetTickCount();
 
         // During (and just after) a two-finger drag Windows still thinks the fingers
         // are scrolling or two-finger-tapping, so drop those events.
-        bool dragging = g_twoMode == 2 || (g_twoMode == 3 && g_dragEndTick &&
-                                           now - g_dragEndTick < kAfterDragMs);
+        bool dragging = g_twoMode == 2 ||
+                        (g_dragEndTick && now - g_dragEndTick < kAfterDragMs);
         if (dragging && (wParam == WM_MOUSEWHEEL || wParam == WM_MOUSEHWHEEL ||
-                         wParam == secondaryDown || wParam == secondaryUp))
+                         wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONUP))
             return 1;
 
-        if (wParam == primaryDown && !g_pending && MaybeCornerTap(now)) {
+        if (wParam == WM_LBUTTONDOWN && !g_pending && MaybeCornerTap(now)) {
             g_pending = true;
             g_pendingUp = false;
             g_pendingTick = now;
             SetTimer(g_hwnd, kTapTimer, 15, nullptr);
             return 1;
         }
-        if (wParam == primaryUp && g_pending && !g_pendingUp) {
+        if (wParam == WM_LBUTTONUP && g_pending && !g_pendingUp) {
             g_pendingUp = true;
             g_upTick = now;
             return 1;
@@ -719,6 +769,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 ResetTouch();
                 g_frame.clear();
                 g_frameExpected = 0;
+            } else if (wParam == kHookTimer) {
+                // Otherwise the timer fires again and checks once more.
+                if (!g_hook) {
+                    KillTimer(hwnd, kHookTimer);
+                } else if (!g_touching && !g_pending && !g_buttonHeld) {
+                    KillTimer(hwnd, kHookTimer);
+                    UnhookWindowsHookEx(g_hook);
+                    g_hook = nullptr;
+                }
             }
             return 0;
     }
@@ -736,18 +795,7 @@ static void OnSettingsReloaded() {
 // ---------------------------------------------------------------------------
 // Worker thread
 // ---------------------------------------------------------------------------
-static HMODULE ThisModule() {
-    HMODULE h = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       (LPCWSTR)&WndProc, &h);
-    return h;
-}
-
 static DWORD WINAPI WorkerThread(LPVOID) {
-    // Physical pixels, so the drag lands right on every monitor.
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-
     HMODULE mod = ThisModule();
     const wchar_t* cls = L"WH_TouchpadCornerTap";
     WNDCLASSW wc = {};
@@ -766,10 +814,6 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     RAWINPUTDEVICE rid = {kPageDigitizer, kUsageTouchPad, RIDEV_INPUTSINK, g_hwnd};
     if (!RegisterRawInputDevices(&rid, 1, sizeof(rid)))
         Wh_Log(L"RegisterRawInputDevices failed: %u", GetLastError());
-
-    g_hook = SetWindowsHookExW(WH_MOUSE_LL, MouseHook, GetModuleHandleW(nullptr), 0);
-    if (!g_hook)
-        Wh_Log(L"SetWindowsHookEx failed: %u", GetLastError());
 
     Wh_Log(L"Running");
 
@@ -798,6 +842,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     KillTimer(g_hwnd, kHoldTimer);
     KillTimer(g_hwnd, kTapTimer);
     KillTimer(g_hwnd, kStaleTimer);
+    KillTimer(g_hwnd, kHookTimer);
     if (g_hook)
         UnhookWindowsHookEx(g_hook);
     g_hook = nullptr;
