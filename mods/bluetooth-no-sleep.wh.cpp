@@ -6,7 +6,7 @@
 // @author          Dev-StudioCode
 // @github          https://github.com/Dev-StudioCode
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -lshell32
+// @compilerOptions -lole32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -41,7 +41,8 @@ to the active audio endpoint:
 - **Near-Zero CPU Overhead:** Uses buffer-synchronized wait events and sleep
   cycles to keep CPU usage below 0.1%.
 - **Optional Inactivity Gate:** Can automatically pause the keep-alive stream
-  after prolonged user inactivity to allow intentional battery conservation.
+  after prolonged user inactivity to allow intentional battery conservation
+  and permit normal Windows system sleep (`powercfg /requests`).
 - **Dedicated Tool Mod:** Runs inside `windhawk.exe` as a dedicated background
   tool without injecting into or hooking any system processes.
 */
@@ -50,12 +51,12 @@ to the active audio endpoint:
 // clang-format off
 // ==WindhawkModSettings==
 /*
-- targetMode: defaultDevice
+- targetMode: bluetoothOnly
   $name: Target Playback Endpoints
   $description: Choose which audio playback devices should be kept awake.
   $options:
-  - defaultDevice: Default Playback Device (Tracks system default output)
-  - bluetoothOnly: Default Device (Only if Bluetooth transport detected)
+  - bluetoothOnly: Default Device (Only if Bluetooth transport detected, recommended)
+  - defaultDevice: Default Playback Device (Tracks system default output regardless of transport)
   - allDevices: All Active Playback Devices (Keeps all connected outputs awake)
 
 - silenceMode: zero
@@ -74,19 +75,7 @@ to the active audio endpoint:
 
 - idleTimeoutMinutes: 30
   $name: Inactivity Timeout Duration (minutes)
-  $description: Number of minutes of user inactivity before pausing the keep-alive stream (only applies when Keep-Alive Strategy is set to Inactivity Timeout Gate).
-
-- antiPopPreRoll: true
-  $name: Anti-Pop Digital Silence Pre-Roll
-  $description: Pre-rolls 250 milliseconds of digital silence when initializing an audio endpoint to prevent DAC startup pop or click artifacts.
-
-- logVerbosity: normal
-  $name: Windhawk Log Verbosity
-  $description: Level of diagnostic details written to the Windhawk log.
-  $options:
-  - quiet: Errors only
-  - normal: Device events and stream status
-  - verbose: Detailed buffer and format diagnostics
+  $description: "Number of minutes of user inactivity before pausing the keep-alive stream (Range: 1-240 minutes)."
 */
 // ==/WindhawkModSettings==
 // clang-format on
@@ -95,10 +84,11 @@ to the active audio endpoint:
 #include <initguid.h>
 #include <mmdeviceapi.h>
 #include <audioclient.h>
-#include <endpointvolume.h>
+#include <audiopolicy.h>
 #include <functiondiscoverykeys_devpkey.h>
-#include <windhawk_api.h>
+#include <windhawk_utils.h>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <memory>
@@ -106,12 +96,18 @@ to the active audio endpoint:
 #include <algorithm>
 #include <cwctype>
 
+// Static subformat GUID definitions for WAVEFORMATEXTENSIBLE without requiring ksuser.lib
+static const GUID GUID_SUBTYPE_PCM =
+    { 0x00000001, 0x0000, 0x0010, { 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 } };
+static const GUID GUID_SUBTYPE_IEEE_FLOAT =
+    { 0x00000003, 0x0000, 0x0010, { 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 } };
+
 constexpr REFERENCE_TIME REFTIMES_PER_SEC = 10000000;
 constexpr REFERENCE_TIME BUFFER_DURATION_HNS = (REFTIMES_PER_SEC / 5); // 200 ms buffer
 
 enum class TargetMode {
-    DefaultDevice,
     BluetoothOnly,
+    DefaultDevice,
     AllDevices
 };
 
@@ -125,19 +121,11 @@ enum class KeepAliveStrategy {
     TimeoutGate
 };
 
-enum class LogVerbosity {
-    Quiet,
-    Normal,
-    Verbose
-};
-
 struct ModSettings {
-    TargetMode targetMode = TargetMode::DefaultDevice;
+    TargetMode targetMode = TargetMode::BluetoothOnly;
     SilenceMode silenceMode = SilenceMode::Zero;
     KeepAliveStrategy strategy = KeepAliveStrategy::Continuous;
     int idleTimeoutMinutes = 30;
-    bool antiPopPreRoll = true;
-    LogVerbosity logVerbosity = LogVerbosity::Normal;
 };
 
 static ModSettings g_settings;
@@ -147,52 +135,10 @@ static HANDLE g_hStopEvent = NULL;
 static HANDLE g_hReconfigureEvent = NULL;
 static HANDLE g_hManagerThread = NULL;
 
-static void LogInfo(const WCHAR* format, ...) {
-    AcquireSRWLockShared(&g_settingsLock);
-    LogVerbosity verbosity = g_settings.logVerbosity;
-    ReleaseSRWLockShared(&g_settingsLock);
-
-    if (verbosity == LogVerbosity::Quiet) return;
-
-    WCHAR buffer[1024];
-    va_list args;
-    va_start(args, format);
-    _vsnwprintf_s(buffer, _countof(buffer), _TRUNCATE, format, args);
-    va_end(args);
-
-    Wh_Log(L"[Bluetooth No Sleep] %s", buffer);
-}
-
-static void LogVerbose(const WCHAR* format, ...) {
-    AcquireSRWLockShared(&g_settingsLock);
-    LogVerbosity verbosity = g_settings.logVerbosity;
-    ReleaseSRWLockShared(&g_settingsLock);
-
-    if (verbosity != LogVerbosity::Verbose) return;
-
-    WCHAR buffer[1024];
-    va_list args;
-    va_start(args, format);
-    _vsnwprintf_s(buffer, _countof(buffer), _TRUNCATE, format, args);
-    va_end(args);
-
-    Wh_Log(L"[Bluetooth No Sleep:Verbose] %s", buffer);
-}
-
-static void LogError(const WCHAR* format, ...) {
-    WCHAR buffer[1024];
-    va_list args;
-    va_start(args, format);
-    _vsnwprintf_s(buffer, _countof(buffer), _TRUNCATE, format, args);
-    va_end(args);
-
-    Wh_Log(L"[Bluetooth No Sleep:Error] %s", buffer);
-}
-
 static bool IsBluetoothDevice(IMMDevice* pDevice) {
     if (!pDevice) return false;
 
-    IPropertyStore* pProps = NULL;
+    IPropertyStore* pProps = nullptr;
     HRESULT hr = pDevice->OpenPropertyStore(STGM_READ, &pProps);
     if (FAILED(hr) || !pProps) return false;
 
@@ -200,33 +146,21 @@ static bool IsBluetoothDevice(IMMDevice* pDevice) {
     PROPVARIANT var;
     PropVariantInit(&var);
 
-    // 1. Check Enumerator Name (BTHENUM, BTHHFENUM)
+    // 1. Check Enumerator Name (BTHENUM, BTHHFENUM, BTHLEENUM, etc.)
     if (SUCCEEDED(pProps->GetValue(PKEY_Device_EnumeratorName, &var)) && var.vt == VT_LPWSTR && var.pwszVal) {
-        if (_wcsicmp(var.pwszVal, L"BTHENUM") == 0 ||
-            _wcsicmp(var.pwszVal, L"BTHHFENUM") == 0 ||
-            wcsstr(var.pwszVal, L"BTH") != nullptr) {
+        if (wcsstr(var.pwszVal, L"BTH") != nullptr) {
             isBluetooth = true;
         }
     }
     PropVariantClear(&var);
 
-    // 2. Check Instance ID for Bluetooth tokens
+    // 2. Check Instance ID for Bluetooth hardware bus identifiers
     if (!isBluetooth && SUCCEEDED(pProps->GetValue(PKEY_Device_InstanceId, &var)) && var.vt == VT_LPWSTR && var.pwszVal) {
         std::wstring id = var.pwszVal;
         std::transform(id.begin(), id.end(), id.begin(), ::towlower);
         if (id.find(L"bthenum") != std::wstring::npos ||
             id.find(L"bthhfenum") != std::wstring::npos ||
             id.find(L"bluetooth") != std::wstring::npos) {
-            isBluetooth = true;
-        }
-    }
-    PropVariantClear(&var);
-
-    // 3. Check Friendly Name / Interface Name for Bluetooth indicators
-    if (!isBluetooth && SUCCEEDED(pProps->GetValue(PKEY_DeviceInterface_FriendlyName, &var)) && var.vt == VT_LPWSTR && var.pwszVal) {
-        std::wstring name = var.pwszVal;
-        std::transform(name.begin(), name.end(), name.begin(), ::towlower);
-        if (name.find(L"bluetooth") != std::wstring::npos) {
             isBluetooth = true;
         }
     }
@@ -239,7 +173,7 @@ static bool IsBluetoothDevice(IMMDevice* pDevice) {
 static std::wstring GetDeviceFriendlyName(IMMDevice* pDevice) {
     if (!pDevice) return L"Unknown Device";
 
-    IPropertyStore* pProps = NULL;
+    IPropertyStore* pProps = nullptr;
     HRESULT hr = pDevice->OpenPropertyStore(STGM_READ, &pProps);
     if (FAILED(hr) || !pProps) return L"Unknown Device";
 
@@ -281,21 +215,15 @@ public:
 
         HRESULT hr = m_pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&m_pAudioClient);
         if (FAILED(hr) || !m_pAudioClient) {
-            LogError(L"Failed to activate IAudioClient on %s (0x%08X)", friendlyName.c_str(), hr);
+            Wh_Log(L"Failed to activate IAudioClient on %s (0x%08X)", friendlyName.c_str(), hr);
             return false;
         }
 
         hr = m_pAudioClient->GetMixFormat(&m_pwfx);
         if (FAILED(hr) || !m_pwfx) {
-            LogError(L"GetMixFormat failed on %s (0x%08X)", friendlyName.c_str(), hr);
+            Wh_Log(L"GetMixFormat failed on %s (0x%08X)", friendlyName.c_str(), hr);
             return false;
         }
-
-        LogVerbose(L"%s format: %u Hz, %u channels, %u bits/sample",
-                   friendlyName.c_str(),
-                   m_pwfx->nSamplesPerSec,
-                   m_pwfx->nChannels,
-                   m_pwfx->wBitsPerSample);
 
         // Attempt event-driven shared mode
         m_bEventMode = true;
@@ -322,7 +250,7 @@ public:
         }
 
         if (FAILED(hr)) {
-            LogError(L"AudioClient Initialize failed on %s (0x%08X)", friendlyName.c_str(), hr);
+            Wh_Log(L"AudioClient Initialize failed on %s (0x%08X)", friendlyName.c_str(), hr);
             return false;
         }
 
@@ -335,35 +263,33 @@ public:
 
         hr = m_pAudioClient->GetService(__uuidof(IAudioRenderClient), (void**)&m_pRenderClient);
         if (FAILED(hr) || !m_pRenderClient) {
-            LogError(L"GetService(IAudioRenderClient) failed on %s (0x%08X)", friendlyName.c_str(), hr);
+            Wh_Log(L"GetService(IAudioRenderClient) failed on %s (0x%08X)", friendlyName.c_str(), hr);
             return false;
         }
 
         hr = m_pAudioClient->GetBufferSize(&m_bufferFrameCount);
         if (FAILED(hr) || m_bufferFrameCount == 0) {
-            LogError(L"GetBufferSize failed on %s (0x%08X)", friendlyName.c_str(), hr);
+            Wh_Log(L"GetBufferSize failed on %s (0x%08X)", friendlyName.c_str(), hr);
             return false;
         }
 
-        // Pre-fill buffer with digital silence
+        // Set friendly display name in Windows Volume Mixer
+        IAudioSessionControl* pSessionControl = nullptr;
+        if (SUCCEEDED(m_pAudioClient->GetService(__uuidof(IAudioSessionControl), (void**)&pSessionControl)) && pSessionControl) {
+            pSessionControl->SetDisplayName(L"Bluetooth No Sleep", nullptr);
+            pSessionControl->Release();
+        }
+
+        // Pre-fill buffer with digital silence before starting playback
         BYTE* pBuffer = nullptr;
         if (SUCCEEDED(m_pRenderClient->GetBuffer(m_bufferFrameCount, &pBuffer)) && pBuffer) {
             memset(pBuffer, 0, m_bufferFrameCount * m_pwfx->nBlockAlign);
             m_pRenderClient->ReleaseBuffer(m_bufferFrameCount, 0);
         }
 
-        AcquireSRWLockShared(&g_settingsLock);
-        bool antiPop = g_settings.antiPopPreRoll;
-        ReleaseSRWLockShared(&g_settingsLock);
-
-        if (antiPop) {
-            LogVerbose(L"Pre-rolling digital silence for %s...", friendlyName.c_str());
-            Sleep(50);
-        }
-
         hr = m_pAudioClient->Start();
         if (FAILED(hr)) {
-            LogError(L"AudioClient Start failed on %s (0x%08X)", friendlyName.c_str(), hr);
+            Wh_Log(L"AudioClient Start failed on %s (0x%08X)", friendlyName.c_str(), hr);
             return false;
         }
 
@@ -371,15 +297,14 @@ public:
         m_bPaused = false;
         m_hThread = CreateThread(nullptr, 0, StreamThreadStatic, this, 0, nullptr);
         if (!m_hThread) {
-            LogError(L"Failed to create stream thread for %s", friendlyName.c_str());
+            Wh_Log(L"Failed to create stream thread for %s", friendlyName.c_str());
             m_pAudioClient->Stop();
             return false;
         }
 
-        SetThreadPriority(m_hThread, THREAD_PRIORITY_ABOVE_NORMAL);
-        LogInfo(L"Keep-alive active on: %s (%s)",
-                friendlyName.c_str(),
-                isBluetooth ? L"Bluetooth" : L"Direct/Other");
+        Wh_Log(L"Keep-alive active on: %s (%s)",
+               friendlyName.c_str(),
+               isBluetooth ? L"Bluetooth" : L"Direct/Other");
         return true;
     }
 
@@ -391,7 +316,7 @@ public:
         }
 
         if (m_hThread) {
-            WaitForSingleObject(m_hThread, 1500);
+            WaitForSingleObject(m_hThread, INFINITE);
             CloseHandle(m_hThread);
             m_hThread = NULL;
         }
@@ -433,16 +358,19 @@ public:
         if (m_pAudioClient) {
             if (pause) {
                 m_pAudioClient->Stop();
-                LogInfo(L"Inactivity timeout reached: Keep-alive paused for %s", friendlyName.c_str());
+                Wh_Log(L"Inactivity timeout reached: Keep-alive paused for %s", friendlyName.c_str());
             } else {
                 m_pAudioClient->Start();
-                LogInfo(L"User activity resumed: Keep-alive resumed for %s", friendlyName.c_str());
+                Wh_Log(L"User activity resumed: Keep-alive resumed for %s", friendlyName.c_str());
             }
         }
     }
 
     bool IsPaused() const { return m_bPaused; }
-    bool IsRunning() const { return m_hThread != NULL && !m_bStop; }
+
+    bool IsRunning() const {
+        return m_hThread && WaitForSingleObject(m_hThread, 0) == WAIT_TIMEOUT;
+    }
 
 private:
     IMMDevice* m_pDevice;
@@ -464,6 +392,26 @@ private:
 
     void StreamLoop() {
         bool ditherState = false;
+        bool exitWithError = false;
+
+        // Inspect format characteristics for dither generation
+        bool isFloat = false;
+        bool is16BitPCM = false;
+
+        if (m_pwfx) {
+            if (m_pwfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) {
+                isFloat = true;
+            } else if (m_pwfx->wFormatTag == WAVE_FORMAT_PCM && m_pwfx->wBitsPerSample == 16) {
+                is16BitPCM = true;
+            } else if (m_pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
+                const auto* pEx = reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(m_pwfx);
+                if (IsEqualGUID(pEx->SubFormat, GUID_SUBTYPE_IEEE_FLOAT) && m_pwfx->wBitsPerSample == 32) {
+                    isFloat = true;
+                } else if (IsEqualGUID(pEx->SubFormat, GUID_SUBTYPE_PCM) && m_pwfx->wBitsPerSample == 16) {
+                    is16BitPCM = true;
+                }
+            }
+        }
 
         while (!m_bStop) {
             if (m_bPaused) {
@@ -478,7 +426,7 @@ private:
                     break;
                 }
             } else {
-                Sleep(50); // Periodic fallback for timer mode
+                Sleep(50); // Fallback for timer-driven mode
             }
 
             if (m_bStop) break;
@@ -486,10 +434,8 @@ private:
             UINT32 padding = 0;
             HRESULT hr = m_pAudioClient->GetCurrentPadding(&padding);
             if (FAILED(hr)) {
-                if (hr == AUDCLNT_E_DEVICE_INVALIDATED || hr == AUDCLNT_E_RESOURCES_INVALIDATED) {
-                    LogInfo(L"Audio endpoint %s was invalidated or disconnected.", friendlyName.c_str());
-                    SetEvent(g_hReconfigureEvent);
-                }
+                Wh_Log(L"GetCurrentPadding failed on %s (0x%08X)", friendlyName.c_str(), hr);
+                exitWithError = true;
                 break;
             }
 
@@ -499,9 +445,8 @@ private:
             BYTE* pData = nullptr;
             hr = m_pRenderClient->GetBuffer(framesNeeded, &pData);
             if (FAILED(hr) || !pData) {
-                if (hr == AUDCLNT_E_DEVICE_INVALIDATED) {
-                    SetEvent(g_hReconfigureEvent);
-                }
+                Wh_Log(L"GetBuffer failed on %s (0x%08X)", friendlyName.c_str(), hr);
+                exitWithError = true;
                 break;
             }
 
@@ -512,28 +457,37 @@ private:
             if (sMode == SilenceMode::Zero) {
                 memset(pData, 0, framesNeeded * m_pwfx->nBlockAlign);
             } else {
-                // Sub-audible 1-LSB dither
-                ditherState = !ditherState;
-                if (m_pwfx->wFormatTag == WAVE_FORMAT_PCM && m_pwfx->wBitsPerSample == 16) {
-                    int16_t* pSamples = reinterpret_cast<int16_t*>(pData);
-                    size_t sampleCount = framesNeeded * m_pwfx->nChannels;
-                    int16_t val = ditherState ? 1 : -1;
-                    for (size_t i = 0; i < sampleCount; ++i) {
-                        pSamples[i] = val;
-                    }
-                } else if (m_pwfx->wBitsPerSample == 32) {
+                // Sub-audible 1-LSB dither (~ -90 dBFS, alternating per sample)
+                if (isFloat) {
                     float* pSamples = reinterpret_cast<float*>(pData);
                     size_t sampleCount = framesNeeded * m_pwfx->nChannels;
-                    float val = ditherState ? 1.0e-7f : -1.0e-7f;
                     for (size_t i = 0; i < sampleCount; ++i) {
-                        pSamples[i] = val;
+                        ditherState = !ditherState;
+                        pSamples[i] = ditherState ? (1.0f / 32768.0f) : (-1.0f / 32768.0f);
+                    }
+                } else if (is16BitPCM) {
+                    int16_t* pSamples = reinterpret_cast<int16_t*>(pData);
+                    size_t sampleCount = framesNeeded * m_pwfx->nChannels;
+                    for (size_t i = 0; i < sampleCount; ++i) {
+                        ditherState = !ditherState;
+                        pSamples[i] = ditherState ? 1 : -1;
                     }
                 } else {
                     memset(pData, 0, framesNeeded * m_pwfx->nBlockAlign);
                 }
             }
 
-            m_pRenderClient->ReleaseBuffer(framesNeeded, 0);
+            hr = m_pRenderClient->ReleaseBuffer(framesNeeded, 0);
+            if (FAILED(hr)) {
+                Wh_Log(L"ReleaseBuffer failed on %s (0x%08X)", friendlyName.c_str(), hr);
+                exitWithError = true;
+                break;
+            }
+        }
+
+        if (exitWithError && !m_bStop) {
+            Wh_Log(L"Audio endpoint %s encountered an error, signaling reconfigure.", friendlyName.c_str());
+            SetEvent(g_hReconfigureEvent);
         }
     }
 };
@@ -561,13 +515,13 @@ public:
         );
 
         if (FAILED(hr) || !m_pEnumerator) {
-            LogError(L"Failed to create MMDeviceEnumerator (0x%08X)", hr);
+            Wh_Log(L"Failed to create MMDeviceEnumerator (0x%08X)", hr);
             return false;
         }
 
         hr = m_pEnumerator->RegisterEndpointNotificationCallback(this);
         if (FAILED(hr)) {
-            LogInfo(L"Warning: RegisterEndpointNotificationCallback failed (0x%08X)", hr);
+            Wh_Log(L"Warning: RegisterEndpointNotificationCallback failed (0x%08X)", hr);
         }
 
         Reconfigure();
@@ -575,24 +529,17 @@ public:
     }
 
     void Reconfigure() {
-        AcquireSRWLockExclusive(&m_sessionsLock);
-
         AcquireSRWLockShared(&g_settingsLock);
         TargetMode targetMode = g_settings.targetMode;
         ReleaseSRWLockShared(&g_settingsLock);
 
-        if (!m_pEnumerator) {
-            ReleaseSRWLockExclusive(&m_sessionsLock);
-            return;
-        }
+        if (!m_pEnumerator) return;
 
         if (targetMode == TargetMode::AllDevices) {
             ConfigureAllDevices();
         } else {
             ConfigureDefaultDevice(targetMode == TargetMode::BluetoothOnly);
         }
-
-        ReleaseSRWLockExclusive(&m_sessionsLock);
     }
 
     void CheckIdleTimeout() {
@@ -603,13 +550,11 @@ public:
 
         if (strategy != KeepAliveStrategy::TimeoutGate) {
             // Restore playback if strategy switched back to Continuous
-            AcquireSRWLockExclusive(&m_sessionsLock);
             for (auto& session : m_sessions) {
                 if (session->IsPaused()) {
                     session->SetPaused(false);
                 }
             }
-            ReleaseSRWLockExclusive(&m_sessionsLock);
             return;
         }
 
@@ -619,20 +564,30 @@ public:
         DWORD idleMs = GetTickCount() - lii.dwTime;
         bool shouldPause = (idleMs >= static_cast<DWORD>(timeoutMinutes * 60 * 1000));
 
-        AcquireSRWLockExclusive(&m_sessionsLock);
         for (auto& session : m_sessions) {
             session->SetPaused(shouldPause);
         }
-        ReleaseSRWLockExclusive(&m_sessionsLock);
+    }
+
+    void EnsureActiveStreams() {
+        // If there are no running sessions, attempt reconfigure (e.g. exclusive lock was released)
+        bool hasRunning = false;
+        for (const auto& s : m_sessions) {
+            if (s->IsRunning()) {
+                hasRunning = true;
+                break;
+            }
+        }
+        if (!hasRunning) {
+            Reconfigure();
+        }
     }
 
     void StopAll() {
-        AcquireSRWLockExclusive(&m_sessionsLock);
         for (auto& session : m_sessions) {
             session->Stop();
         }
         m_sessions.clear();
-        ReleaseSRWLockExclusive(&m_sessionsLock);
     }
 
     // IMMNotificationClient Implementation
@@ -661,7 +616,7 @@ public:
 
     STDMETHODIMP OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDeviceId) override {
         if (flow == eRender && (role == eMultimedia || role == eConsole)) {
-            LogInfo(L"Default audio endpoint changed: %s", pwstrDeviceId ? pwstrDeviceId : L"None");
+            Wh_Log(L"Default audio endpoint changed: %s", pwstrDeviceId ? pwstrDeviceId : L"None");
             SetEvent(g_hReconfigureEvent);
         }
         return S_OK;
@@ -669,20 +624,17 @@ public:
 
     STDMETHODIMP OnDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState) override {
         if (dwNewState == DEVICE_STATE_ACTIVE || dwNewState == DEVICE_STATE_UNPLUGGED || dwNewState == DEVICE_STATE_NOTPRESENT) {
-            LogVerbose(L"Device state changed (0x%X): %s", dwNewState, pwstrDeviceId ? pwstrDeviceId : L"None");
             SetEvent(g_hReconfigureEvent);
         }
         return S_OK;
     }
 
     STDMETHODIMP OnDeviceAdded(LPCWSTR pwstrDeviceId) override {
-        LogVerbose(L"Audio device added: %s", pwstrDeviceId ? pwstrDeviceId : L"None");
         SetEvent(g_hReconfigureEvent);
         return S_OK;
     }
 
     STDMETHODIMP OnDeviceRemoved(LPCWSTR pwstrDeviceId) override {
-        LogVerbose(L"Audio device removed: %s", pwstrDeviceId ? pwstrDeviceId : L"None");
         SetEvent(g_hReconfigureEvent);
         return S_OK;
     }
@@ -695,7 +647,6 @@ private:
     LONG m_cRef;
     IMMDeviceEnumerator* m_pEnumerator;
     std::vector<std::unique_ptr<AudioStreamSession>> m_sessions;
-    SRWLOCK m_sessionsLock = SRWLOCK_INIT;
 
     void ConfigureDefaultDevice(bool bluetoothOnly) {
         IMMDevice* pDefaultDevice = nullptr;
@@ -714,13 +665,12 @@ private:
         bool isBth = IsBluetoothDevice(pDefaultDevice);
 
         if (bluetoothOnly && !isBth) {
-            LogVerbose(L"Default endpoint %s is not Bluetooth; skipping keep-alive.", friendlyName.c_str());
             StopAll();
             pDefaultDevice->Release();
             return;
         }
 
-        // Check if existing session already targets this device
+        // Check if existing session already targets this device and is actively running
         if (m_sessions.size() == 1 && m_sessions[0]->deviceId == currentId && m_sessions[0]->IsRunning()) {
             pDefaultDevice->Release();
             return; // Already streaming cleanly
@@ -737,6 +687,15 @@ private:
     }
 
     void ConfigureAllDevices() {
+        // Prune dead sessions before enumerating
+        m_sessions.erase(
+            std::remove_if(m_sessions.begin(), m_sessions.end(),
+                [](const std::unique_ptr<AudioStreamSession>& s) {
+                    return !s->IsRunning();
+                }),
+            m_sessions.end()
+        );
+
         IMMDeviceCollection* pCollection = nullptr;
         HRESULT hr = m_pEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pCollection);
         if (FAILED(hr) || !pCollection) {
@@ -758,7 +717,6 @@ private:
 
                 activeIds.push_back(devId);
 
-                // Check if already active
                 bool alreadyRunning = false;
                 for (auto& s : m_sessions) {
                     if (s->deviceId == devId && s->IsRunning()) {
@@ -798,7 +756,7 @@ static AudioKeepAliveManager* g_pManager = nullptr;
 static DWORD WINAPI ManagerThreadProc(LPVOID lpParam) {
     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(hr)) {
-        LogError(L"Failed to initialize COM on manager thread (0x%08X)", hr);
+        Wh_Log(L"Failed to initialize COM on manager thread (0x%08X)", hr);
         return 1;
     }
 
@@ -820,14 +778,14 @@ static DWORD WINAPI ManagerThreadProc(LPVOID lpParam) {
             break;
         } else if (waitRes == WAIT_OBJECT_0 + 1) {
             // Reconfigure requested
-            LogVerbose(L"Reconfiguring keep-alive endpoints...");
             if (g_pManager) {
                 g_pManager->Reconfigure();
             }
         } else if (waitRes == WAIT_TIMEOUT) {
-            // Periodic idle timeout check
+            // Periodic idle timeout check and stream health check
             if (g_pManager) {
                 g_pManager->CheckIdleTimeout();
+                g_pManager->EnsureActiveStreams();
             }
         }
     }
@@ -846,60 +804,36 @@ static void LoadSettings() {
     AcquireSRWLockExclusive(&g_settingsLock);
 
     // 1. targetMode
-    PCWSTR targetModeStr = Wh_GetStringSetting(L"targetMode");
-    if (targetModeStr) {
-        if (wcscmp(targetModeStr, L"bluetoothOnly") == 0) {
-            g_settings.targetMode = TargetMode::BluetoothOnly;
-        } else if (wcscmp(targetModeStr, L"allDevices") == 0) {
-            g_settings.targetMode = TargetMode::AllDevices;
-        } else {
-            g_settings.targetMode = TargetMode::DefaultDevice;
-        }
-        Wh_FreeStringSetting(targetModeStr);
+    auto targetMode = WindhawkUtils::StringSetting::make(L"targetMode");
+    if (wcscmp(targetMode.get(), L"defaultDevice") == 0) {
+        g_settings.targetMode = TargetMode::DefaultDevice;
+    } else if (wcscmp(targetMode.get(), L"allDevices") == 0) {
+        g_settings.targetMode = TargetMode::AllDevices;
+    } else {
+        g_settings.targetMode = TargetMode::BluetoothOnly;
     }
 
     // 2. silenceMode
-    PCWSTR silenceModeStr = Wh_GetStringSetting(L"silenceMode");
-    if (silenceModeStr) {
-        if (wcscmp(silenceModeStr, L"dither") == 0) {
-            g_settings.silenceMode = SilenceMode::Dither;
-        } else {
-            g_settings.silenceMode = SilenceMode::Zero;
-        }
-        Wh_FreeStringSetting(silenceModeStr);
+    auto silenceMode = WindhawkUtils::StringSetting::make(L"silenceMode");
+    if (wcscmp(silenceMode.get(), L"dither") == 0) {
+        g_settings.silenceMode = SilenceMode::Dither;
+    } else {
+        g_settings.silenceMode = SilenceMode::Zero;
     }
 
     // 3. keepAliveStrategy
-    PCWSTR strategyStr = Wh_GetStringSetting(L"keepAliveStrategy");
-    if (strategyStr) {
-        if (wcscmp(strategyStr, L"timeoutGate") == 0) {
-            g_settings.strategy = KeepAliveStrategy::TimeoutGate;
-        } else {
-            g_settings.strategy = KeepAliveStrategy::Continuous;
-        }
-        Wh_FreeStringSetting(strategyStr);
+    auto strategy = WindhawkUtils::StringSetting::make(L"keepAliveStrategy");
+    if (wcscmp(strategy.get(), L"timeoutGate") == 0) {
+        g_settings.strategy = KeepAliveStrategy::TimeoutGate;
+    } else {
+        g_settings.strategy = KeepAliveStrategy::Continuous;
     }
 
-    // 4. idleTimeoutMinutes
-    g_settings.idleTimeoutMinutes = Wh_GetIntSetting(L"idleTimeoutMinutes");
-    if (g_settings.idleTimeoutMinutes < 1) g_settings.idleTimeoutMinutes = 1;
-    if (g_settings.idleTimeoutMinutes > 240) g_settings.idleTimeoutMinutes = 240;
-
-    // 5. antiPopPreRoll
-    g_settings.antiPopPreRoll = Wh_GetIntSetting(L"antiPopPreRoll") != 0;
-
-    // 6. logVerbosity
-    PCWSTR verbosityStr = Wh_GetStringSetting(L"logVerbosity");
-    if (verbosityStr) {
-        if (wcscmp(verbosityStr, L"quiet") == 0) {
-            g_settings.logVerbosity = LogVerbosity::Quiet;
-        } else if (wcscmp(verbosityStr, L"verbose") == 0) {
-            g_settings.logVerbosity = LogVerbosity::Verbose;
-        } else {
-            g_settings.logVerbosity = LogVerbosity::Normal;
-        }
-        Wh_FreeStringSetting(verbosityStr);
-    }
+    // 4. idleTimeoutMinutes (range: 1 - 240)
+    int timeoutMin = Wh_GetIntSetting(L"idleTimeoutMinutes");
+    if (timeoutMin < 1) timeoutMin = 1;
+    if (timeoutMin > 240) timeoutMin = 240;
+    g_settings.idleTimeoutMinutes = timeoutMin;
 
     ReleaseSRWLockExclusive(&g_settingsLock);
 }
