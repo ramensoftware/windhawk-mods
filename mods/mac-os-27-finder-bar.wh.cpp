@@ -12125,7 +12125,10 @@ static void NpRender() {
         GlassLayerShapes(g_np.glass, {{g_np.panel, 22 * s}});
     }
 
-    const bool npThemeLight = g_light;  // o tema claro (a capa inteira usa botões pretos nele)
+    // Capa inteira: nos temas de vidro claros os botões são brancos; nos temas
+    // sólidos (Claro, Escuro, OLED), botões de vidro.
+    const bool npSolidTheme = PanelSolid() != 0;
+    const bool npThemeLight = g_light && !npSolidTheme;
     if (g_np.full) g_light = false;  // capa inteira: texto branco sobre a capa escurecida
     D2D1_COLOR_F fg = g_light ? D2D1::ColorF(0.07f, 0.07f, 0.08f, 1) : D2D1::ColorF(1, 1, 1, 0.97f);
     D2D1_COLOR_F dim = fg;
@@ -12427,7 +12430,10 @@ static void NpRender() {
                 // O vidro da Central, sem a foto da tela por trás (a "foto" aqui é a capa).
                 LiquidSurface* keep = g_lqCur;
                 g_lqCur = nullptr;
+                int keepTheme = g_panelThemeOverride;
+                if (npSolidTheme) g_panelThemeOverride = 0;  // temas sólidos: o vidro, não a cor sólida
                 DrawLiquidGlass(rt, br, r, rr, s, false, hot, true, true);
+                g_panelThemeOverride = keepTheme;
                 g_lqCur = keep;
             }
             IDWriteTextLayout* gl = nullptr;
