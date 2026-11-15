@@ -3,18 +3,23 @@
 // @name            !Net — Per-App Kill Switch
 // @description     A panel to manage per app internet connection.
 // @author          Ashix
-// @version         1.2026.1410
+// @version         1.2026.1510
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
 // @donateUrl       https://ko-fi.com/kashix
 // @include         windhawk-mod-elevated.exe
 // @include         windhawk-mod.exe
 // @include         windhawk.exe
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lfwpuclnt -lrpcrt4 -lole32 -loleaut32 -luuid -lshell32 -lgdi32 -lgdiplus -ldwmapi -luser32 -lcomctl32 -liphlpapi -ladvapi32
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lfwpuclnt -lrpcrt4 -lole32 -loleaut32 -luuid -lshell32 -lgdi32 -lgdiplus -ld2d1 -ldwrite -ldwmapi -luser32 -lcomctl32 -liphlpapi -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
+
+## Screenshots
+![!Net Panel](https://raw.githubusercontent.com/k-ashix/not-net/main/assets/!Net.png)
+
+![!Net Cycle Scheduler](https://raw.githubusercontent.com/k-ashix/not-net/main/assets/!Netscheduler.png)
 
 ## Two Modes
 - **Session-Only (Floating Pill / Panel, default):** Uses Windows Filtering Platform (WFP) dynamic sessions (`FWPM_SESSION_DYNAMIC`). Blocks vanish automatically on Windows restart, shutdown, or when `!Net` exits or crashes.
@@ -119,6 +124,9 @@
   - showCycleWidget: true
     $name: Show clock widget near pill
     $description: Keep a compact clock button beside the collapsed pill when Cycle Mode is enabled.
+  - cycleWidgetSize: 0
+    $name: Clock widget size (0-5)
+    $description: Customize the clock widget size (0 = default, 1-5 = larger).
   - cycleWidgetAction: scheduler_only
     $name: Clock widget open behavior
     $description: Choose whether opening from the clock widget shows only the Cycle Mode popup or expands the pill, selects the app, and opens its scheduler.
@@ -182,6 +190,11 @@
 #include <netfw.h>
 #include <oleauto.h>
 #include <gdiplus.h>
+#include <d2d1.h>
+#include <dwrite.h>
+#ifndef D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT
+#define D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT ((D2D1_DRAW_TEXT_OPTIONS)0x00000004)
+#endif
 
 // Official Microsoft SDK WFP GUIDs (omitted in MinGW-w64 fwpmu.h)
 static const GUID kWfpCondAleAppId = {
@@ -331,6 +344,7 @@ struct ModSettings {
     bool rememberCycleTemplates = true;
     bool showCycleMs = false;
     bool showCycleWidget = true;
+    int cycleWidgetSize = 0;
     CycleWidgetAction cycleWidgetAction = CycleWidgetAction::SchedulerOnly;
 
     bool lockSystemProcesses = true;
@@ -680,11 +694,18 @@ static void LoadExcludedApps() {
 }
 
 static void SaveExcludedApps() {
-    Wh_SetIntValue(L"excludedCount", (int)g_excludedExes.size());
+    int prevCount = Wh_GetIntValue(L"excludedCount", 0);
+    int newCount = (int)g_excludedExes.size();
+    Wh_SetIntValue(L"excludedCount", newCount);
     int idx = 0;
     for (const auto& ex : g_excludedExes) {
         std::wstring key = L"excluded_" + std::to_wstring(idx++);
         Wh_SetStringValue(key.c_str(), ex.c_str());
+    }
+    for (int i = newCount; ; ++i) {
+        std::wstring key = L"excluded_" + std::to_wstring(i);
+        BOOL deleted = Wh_DeleteValue(key.c_str());
+        if (!deleted && i >= prevCount) break;
     }
 }
 
@@ -1551,8 +1572,10 @@ static void SaveCycleTemplates() {
         }
     }
     if (items.size() > 256) items.resize(256);
-    Wh_SetIntValue(L"cycleTemplateCount", (int)items.size());
-    for (int i = 0; i < (int)items.size(); ++i) {
+    int prevCount = std::min(Wh_GetIntValue(L"cycleTemplateCount", 0), 256);
+    int newCount = (int)items.size();
+    Wh_SetIntValue(L"cycleTemplateCount", newCount);
+    for (int i = 0; i < newCount; ++i) {
         std::wstring kKey = L"cycleTplKey_" + std::to_wstring(i);
         std::wstring vKey = L"cycleTplVal_" + std::to_wstring(i);
         const CycleConfig& c = items[i].second;
@@ -1566,6 +1589,13 @@ static void SaveCycleTemplates() {
                    c.allowWhenUnfocused ? 1 : 0);
         Wh_SetStringValue(kKey.c_str(), items[i].first.c_str());
         Wh_SetStringValue(vKey.c_str(), valBuf);
+    }
+    for (int i = newCount; i < 256; ++i) {
+        std::wstring kKey = L"cycleTplKey_" + std::to_wstring(i);
+        std::wstring vKey = L"cycleTplVal_" + std::to_wstring(i);
+        BOOL delK = Wh_DeleteValue(kKey.c_str());
+        BOOL delV = Wh_DeleteValue(vKey.c_str());
+        if (!delK && !delV && i >= prevCount) break;
     }
 }
 struct CyclePendingAction {
@@ -2539,6 +2569,7 @@ static void LoadSettings() {
     next.rememberCycleTemplates = Wh_GetIntSetting(L"Behavior.rememberCycleTemplates") != 0;
     next.showCycleMs = Wh_GetIntSetting(L"Behavior.showCycleMs") != 0;
     next.showCycleWidget = Wh_GetIntSetting(L"Behavior.showCycleWidget") != 0;
+    next.cycleWidgetSize = std::clamp(Wh_GetIntSetting(L"Behavior.cycleWidgetSize"), 0, 5);
     auto sCycAct = WindhawkUtils::StringSetting::make(L"Behavior.cycleWidgetAction");
     next.cycleWidgetAction = (_wcsicmp(sCycAct.get(), L"navigate_pill") == 0)
         ? CycleWidgetAction::NavigatePill
@@ -5308,8 +5339,9 @@ static void ComputeCycleWidgetRect(RECT& outRc, double revealProgress = 1.0) {
     GetMonitorInfoW(mon, &mi);
     RECT wa = mi.rcWork;
 
-    int w = DpiScale(24, dpi);
-    int h = DpiScale(20, dpi);
+    int sizeStep = std::clamp(s.cycleWidgetSize, 0, 5);
+    int w = DpiScale(24 + sizeStep * 4, dpi);
+    int h = DpiScale(20 + sizeStep * 4, dpi);
     int gap = DpiScale(4, dpi);
     int slideOff = (int)std::round((1.0 - std::clamp(revealProgress, 0.0, 1.0)) * (double)DpiScale(6, dpi));
     int x = 0;
@@ -5361,6 +5393,9 @@ static void ComputeCycleWidgetRect(RECT& outRc, double revealProgress = 1.0) {
     outRc = {x, y, x + w, y + h};
 }
 
+static ID2D1Factory* g_d2dFactory = nullptr;
+static IDWriteFactory* g_dwriteFactory = nullptr;
+
 static void RenderCycleWidgetLayered(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return;
     RECT wrc{};
@@ -5368,6 +5403,12 @@ static void RenderCycleWidgetLayered(HWND hwnd) {
     int w = wrc.right - wrc.left;
     int h = wrc.bottom - wrc.top;
     if (w <= 0 || h <= 0) return;
+
+    int sizeStep = 0;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMtx);
+        sizeStep = std::clamp(g_settings.cycleWidgetSize, 0, 5);
+    }
 
     UINT dpi = GetDpiForWindow(hwnd);
     HDC hdcScreen = GetDC(nullptr);
@@ -5390,60 +5431,89 @@ static void RenderCycleWidgetLayered(HWND hwnd) {
         for (size_t i = 0; i < total; ++i) px[i] = 0x01000000u;
     }
 
-    {
+    CycleStatusSnapshot snap;
+    bool hasSnap = GetWidgetCycleTarget(snap);
+    bool isPaused = hasSnap && (snap.pausedByFocus || snap.pausedByUser);
+    BYTE alpha = (BYTE)std::clamp((int)std::round(g_widgetRevealClock.currentVal * 255.0), 0, 255);
+    float scale = (float)dpi / 96.0f;
+    float pressDy = g_cycleWidgetPressed ? 1.0f * scale : 0.0f;
+
+    if (hasSnap && isPaused) {
         Gdiplus::Graphics g(memDC);
-        g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
-        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-        g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
-
-        CycleStatusSnapshot snap;
-        bool hasSnap = GetWidgetCycleTarget(snap);
-        bool isPaused = hasSnap && (snap.pausedByFocus || snap.pausedByUser);
-
-        bool isLightMode = g_isLightTheme;
-        BYTE r = isLightMode ? 0 : 255;
-        BYTE gr = isLightMode ? 0 : 255;
-        BYTE b = isLightMode ? 0 : 255;
-        if (hasSnap) {
-            if (isPaused) {
-                r = isLightMode ? 90 : 178;
-                gr = isLightMode ? 94 : 184;
-                b = isLightMode ? 104 : 196;
-            } else if (snap.phase == CyclePhase::Blocked) {
-                r = 225; gr = 58; b = 58;
-            } else {
-                r = 34; gr = 175; b = 85;
-            }
-        }
-
-        BYTE alpha = (BYTE)std::clamp((int)std::round(g_widgetRevealClock.currentVal * 255.0), 0, 255);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
-        Gdiplus::Color col(alpha, r, gr, b);
-        Gdiplus::REAL scale = (Gdiplus::REAL)dpi / 96.0f;
+        float sizeMul = 1.0f + (float)sizeStep * 0.18f;
+        Gdiplus::Color col(255, 160, 166, 178);
         Gdiplus::REAL cx = (Gdiplus::REAL)w * 0.5f;
-        Gdiplus::REAL cy = (Gdiplus::REAL)h * 0.5f + (g_cycleWidgetPressed ? 1.0f * scale : 0.0f);
-        Gdiplus::Pen pen(col, std::max(1.5f, 1.55f * scale));
+        Gdiplus::REAL cy = (Gdiplus::REAL)h * 0.5f + pressDy;
+        Gdiplus::Pen pen(col, std::max(1.5f, 1.55f * scale * sizeMul));
         pen.SetStartCap(Gdiplus::LineCapRound);
         pen.SetEndCap(Gdiplus::LineCapRound);
-        if (hasSnap && isPaused) {
-            Gdiplus::REAL dx = 2.6f * scale;
-            Gdiplus::REAL hy = 4.2f * scale;
-            g.DrawLine(&pen, cx - dx, cy - hy, cx - dx, cy + hy);
-            g.DrawLine(&pen, cx + dx, cy - hy, cx + dx, cy + hy);
-        } else {
-            Gdiplus::REAL rad = 5.4f * scale;
-            g.DrawEllipse(&pen, cx - rad, cy - rad + 0.6f * scale, rad * 2.0f, rad * 2.0f);
-            g.DrawLine(&pen, cx, cy - rad - 1.4f * scale, cx, cy - rad + 0.3f * scale);
-            g.DrawLine(&pen, cx, cy + 0.6f * scale, cx, cy - 2.3f * scale);
-            g.DrawLine(&pen, cx, cy + 0.6f * scale, cx + 2.6f * scale, cy + 1.8f * scale);
+        Gdiplus::REAL dx = 2.6f * scale * sizeMul;
+        Gdiplus::REAL hy = 4.2f * scale * sizeMul;
+        g.DrawLine(&pen, cx - dx, cy - hy, cx - dx, cy + hy);
+        g.DrawLine(&pen, cx + dx, cy - hy, cx + dx, cy + hy);
+    } else {
+        bool drewD2D = false;
+        if (!g_d2dFactory) {
+            D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_d2dFactory);
+        }
+        if (!g_dwriteFactory) {
+            DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+                                reinterpret_cast<IUnknown**>(&g_dwriteFactory));
+        }
+        if (g_d2dFactory && g_dwriteFactory) {
+            D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
+                D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                96.0f, 96.0f);
+            ID2D1DCRenderTarget* dcRt = nullptr;
+            if (SUCCEEDED(g_d2dFactory->CreateDCRenderTarget(&rtProps, &dcRt)) && dcRt) {
+                RECT bindRc{0, 0, w, h};
+                if (SUCCEEDED(dcRt->BindDC(memDC, &bindRc))) {
+                    float emojiPx = (13.0f + (float)sizeStep * 2.5f) * scale;
+                    IDWriteTextFormat* fmt = nullptr;
+                    if (SUCCEEDED(g_dwriteFactory->CreateTextFormat(
+                            L"Segoe UI Emoji", nullptr,
+                            DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                            emojiPx, L"", &fmt)) && fmt) {
+                        fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                        fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                        ID2D1SolidColorBrush* fallbackBr = nullptr;
+                        if (SUCCEEDED(dcRt->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f), &fallbackBr)) && fallbackBr) {
+                            dcRt->BeginDraw();
+                            D2D1_RECT_F layoutRc = D2D1::RectF(0.0f, pressDy, (FLOAT)w, (FLOAT)h);
+                            dcRt->DrawText(L"\u23F1\uFE0F", 2, fmt, layoutRc, fallbackBr,
+                                           D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+                            if (SUCCEEDED(dcRt->EndDraw())) {
+                                drewD2D = true;
+                            }
+                            fallbackBr->Release();
+                        }
+                        fmt->Release();
+                    }
+                }
+                dcRt->Release();
+            }
+        }
+        if (!drewD2D) {
+            Gdiplus::Graphics g(memDC);
+            g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+            float emojiPx = (13.0f + (float)sizeStep * 2.5f) * scale;
+            Gdiplus::Font emojiFont(L"Segoe UI Emoji", emojiPx, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+            Gdiplus::SolidBrush emojiBr(Gdiplus::Color(255, 160, 166, 178));
+            Gdiplus::StringFormat sfCenter;
+            sfCenter.SetAlignment(Gdiplus::StringAlignmentCenter);
+            sfCenter.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+            Gdiplus::RectF rf(0.0f, pressDy, (Gdiplus::REAL)w, (Gdiplus::REAL)h);
+            g.DrawString(L"\u23F1\uFE0F", -1, &emojiFont, rf, &sfCenter, &emojiBr);
         }
     }
 
     POINT ptDst{wrc.left, wrc.top};
     SIZE sz{w, h};
     POINT ptSrc{0, 0};
-    BLENDFUNCTION bf{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    BLENDFUNCTION bf{AC_SRC_OVER, 0, alpha, AC_SRC_ALPHA};
     UpdateLayeredWindow(hwnd, hdcScreen, &ptDst, &sz, memDC, &ptSrc, 0, &bf, ULW_ALPHA);
 
     SelectObject(memDC, oldBmp);
@@ -6352,9 +6422,9 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
 
     if (g_hWnd) {
         ShowWindow(g_hWnd, SW_SHOWNOACTIVATE);
-        SyncForegroundStateAndFilter(false);
         UpdateWindowGeometry(true);
         UpdateWindow(g_hWnd);
+        PostMessageW(g_hWnd, WM_APP_FOREGROUND_CHG, 0, 0);
     }
 
     g_hookFg = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND, nullptr,
@@ -6378,6 +6448,8 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     UnregisterClassW(kWndClass, wc.hInstance);
     UnregisterClassW(kCtrlWndClass, cwc.hInstance);
 
+    if (g_dwriteFactory) { g_dwriteFactory->Release(); g_dwriteFactory = nullptr; }
+    if (g_d2dFactory) { g_d2dFactory->Release(); g_d2dFactory = nullptr; }
     if (g_gdiplusToken) { Gdiplus::GdiplusShutdown(g_gdiplusToken); g_gdiplusToken = 0; }
     CoUninitialize();
     return 0;
