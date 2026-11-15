@@ -1,0 +1,2672 @@
+// ==WindhawkMod==
+// @id              macos-close-genie-animation
+// @name            MacOS Genie Closing Animation
+// @description     Plays a configurable genie-style animation when supported windows close.
+// @version         1.0.0
+// @author          MrCrustyToast
+// @github          https://github.com/MrCrustyToast
+// @include         *
+// @compilerOptions -ldwmapi -lgdi32 -ld2d1 -lole32 -loleaut32 -luuid -lshell32
+// @license         MIT
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# MacOS Genie Closing Animation
+
+Plays a macOS-style genie effect when a supported window closes. Choose the style,
+direction, duration, and quality in the settings. Lower quality uses fewer tiles
+and can reduce graphics work on smaller PCs.
+
+![Closing animation preview](https://i.imgur.com/Vzpi1re.gif)
+
+This mod adds a genie effect for closing windows. MacOS Minimize Animation focuses
+on minimizing and restoring windows, while Windows Animations offers several
+closing effects. These mods use overlapping window hooks, so do not run this mod
+alongside either one unless compatibility has been confirmed.
+
+No processes are excluded by default. Add process names in the settings to skip
+specific apps.
+
+Credits: The genie animation is based on MacOS Minimize Animation by
+[Abdullah Masood](https://github.com/Abdullah-Masood-05), with modern animation
+work by [Potassiumuncher](https://github.com/Potassiumuncher). The close trigger
+is based on Windows Animations by [ReDrag](https://github.com/redrag2105).
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- duration_ms: 450
+  $name: Animation duration
+  $description: How long the closing animation lasts (50 to 2000 milliseconds).
+- close_direction: up
+  $name: Direction
+  $description: Choose where the window shrinks toward. Up goes to the center of the top edge; left and right go to the center of that screen edge.
+  $options:
+  - up: Up (top center)
+  - left: Left (center)
+  - right: Right (center)
+- engine: modern
+  $name: Animation style
+  $description: Modern has a smoother look. Classic is simpler and lighter.
+  $options:
+  - modern: Modern
+  - classic: Classic
+- tile_quality: medium
+  $name: Animation quality
+  $description: Detail level for Modern style. Lower settings use fewer tiles and less graphics work.
+  $options:
+  - potato: Potato (20x20 tiles)
+  - low: Low (26x26 tiles)
+  - medium: Medium (35x35 tiles)
+  - high: High (52x52 tiles)
+- hide_as_close: true
+  $name: Animate apps that hide on close
+  $description: >-
+    Some apps hide their window instead of closing it. Turn this off if you do
+    not want those windows animated.
+- multi_monitor: true
+  $name: Use the window's screen
+  $description: Send the animation toward the chosen edge of the screen where the window is.
+- excluded_programs: [""]
+  $name: Excluded programs
+  $description: >-
+    Optionally enter process names or full executable paths, one per entry, to
+    skip specific apps. Leave empty to animate all supported apps.
+*/
+// ==/WindhawkModSettings==
+
+#include <windows.h>
+#include <dwmapi.h>
+#include <d2d1.h>
+#include <math.h>
+#include <atomic>
+#include <unordered_map>
+#include <unordered_set>
+#include <mutex>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <cwctype>
+#include <uiautomation.h>
+#include <shellapi.h>
+
+#ifndef DWMWA_EXTENDED_FRAME_BOUNDS
+#define DWMWA_EXTENDED_FRAME_BOUNDS 9
+#endif
+
+#ifndef PW_RENDERFULLCONTENT
+#define PW_RENDERFULLCONTENT 2
+#endif
+
+// High-resolution waitable timer flag (Win10 1803+). The kernel rejects the
+// flag on 1709 and earlier (and Win7/8.1), so CreateWaitableTimerExW is retried
+// without it; the pacer then just ticks coarser. A plain Sleep(1) floor keeps
+// the loop from ever degrading to a busy spin.
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
+
+// Ported from Potassiumuncher's genie engine (github.com/Potassiumuncher).
+#define PI 3.14159265f
+// Mesh tile-count bounds for the modern engine (Potassiumuncher's v1.5 update:
+// resolution is now a user setting instead of a fixed 20x20 grid).
+#define TILE_COUNT_MIN 8
+#define TILE_COUNT_MAX 96
+#define TILE_COUNT_DEFAULT 35
+#define COMPAT_TASKBAR_HEIGHT 70
+#define COMPAT_ICON_SIZE      33
+#define GENIE_DEFERRED_ASYNC_HIDE (WM_APP + 0x4A1)
+
+// Ported from Potassiumuncher's genie engine (github.com/Potassiumuncher).
+struct Geometry { float x, y, width, height; };
+
+typedef LRESULT (WINAPI *DefWindowProcW_t)(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+DefWindowProcW_t DefWindowProcW_Original;
+
+typedef BOOL (WINAPI *DestroyWindow_t)(HWND hWnd);
+DestroyWindow_t DestroyWindow_Original;
+
+typedef BOOL (WINAPI *ShowWindow_t)(HWND hWnd, int nCmdShow);
+ShowWindow_t ShowWindow_Original;
+
+typedef BOOL (WINAPI *ShowWindowAsync_t)(HWND hWnd, int nCmdShow);
+ShowWindowAsync_t ShowWindowAsync_Original;
+
+typedef BOOL (WINAPI *SetWindowPlacement_t)(HWND hWnd, const WINDOWPLACEMENT* lpwndpl);
+SetWindowPlacement_t SetWindowPlacement_Original;
+
+typedef BOOL (WINAPI *CloseWindow_t)(HWND hWnd);
+CloseWindow_t CloseWindow_Original;
+
+typedef BOOL (WINAPI *SetWindowPos_t)(HWND hWnd, HWND hWndInsertAfter, int X, int Y,
+                                      int cx, int cy, UINT uFlags);
+SetWindowPos_t SetWindowPos_Original;
+
+// Shared Direct2D factory (multi-threaded: several worker threads may render at
+// once). Ported from Potassiumuncher's genie engine.
+ID2D1Factory* g_d2dFactory = nullptr;
+
+struct MacGenieAnimData {
+    HWND hRealWnd;
+    HBITMAP hBitmap;      // 32-bit top-down premultiplied DIB snapshot (w x h)
+    void* pBits;          // its bits (fed straight to D2D CreateBitmap)
+    RECT targetRect;      // the window's DWM extended-frame rect when anim started
+    HMONITOR hMon;        // monitor the genie targets (window's when multi-monitor
+                          // support is on, else the primary)
+    int width;
+    int height;
+    int targetDockX;      // taskbar button X located via UI Automation
+    BOOL isRising;        // FALSE = minimize (flow in), TRUE = restore (flow out)
+    LONG_PTR originalExStyle;
+    BOOL hiddenByCloak;   // rising only: TRUE = hidden via DWM cloak (restore path),
+                          // FALSE = via WS_EX_LAYERED + alpha 0 (launch path)
+    HANDLE hFirstFrameShown; // falling only: event signaled once the ghost's first
+                             // frame is composed; NULL when unused
+    int durationMs;
+    // Auto-hide "unhide" (deferred minimize) - Potassiumuncher's engine. Only used
+    // on the DefWindowProcW SC_MINIMIZE path when the taskbar is set to auto-hide.
+    BOOL requestedUnhide;
+    HWND hNextApp;
+    int  unhideDurationMs;
+    BOOL deferredMinimize;
+    BOOL isClosing;
+    UINT closeMsg;
+};
+
+// Handed to MacGenieLaunchThread: the launch worker needs the window's TRUE
+// pre-hide extended style (captured at the hook site, before WS_EX_LAYERED was
+// added) so the layered bit can be removed again after the reveal.
+struct MacGenieLaunchData {
+    HWND     hWnd;
+    LONG_PTR originalExStyle;
+};
+
+// Cached snapshot for the restore animation. The DIB section owns pBits, so
+// DeleteObject(hBmp) frees both. Snapshot model from Potassiumuncher's engine.
+struct SnapCache { HBITMAP hBmp; void* pBits; int w; int h; };
+
+// --- THE VAULTS ---
+std::unordered_map<HWND, SnapCache> g_SnapshotCache;
+std::unordered_map<HWND, int> g_IconPositions;            // per-window learned icon X
+std::unordered_map<std::wstring, int> g_ProcessIconPositions; // per-process fallback
+std::unordered_set<HWND> g_LaunchSeen;   // windows we've already shown/animated once
+std::unordered_set<HWND> g_AnimActive;   // windows with a genie currently in flight
+std::mutex g_CacheMutex;
+
+// --- SETTINGS ---
+std::atomic<int> g_durationMs{450};
+std::atomic<bool> g_openAnimation{true};
+std::atomic<bool> g_launchAnimation{false};
+std::atomic<bool> g_hideAsClose{true};
+std::atomic<bool> g_multiMonitor{false};
+std::atomic<int>  g_unhideDurationMs{450};
+std::atomic<bool> g_unhideEnabled{true};
+// false = modern Direct2D genie (Potassiumuncher's engine), true = the original
+// v2.2.0 strip-based GDI genie, offered as an opt-in "classic" style.
+std::atomic<bool> g_classicEngine{false};
+// Mesh resolution of the modern engine (Potassiumuncher's tile-count setting).
+std::atomic<int> g_tileCount{TILE_COUNT_DEFAULT};
+std::atomic<int> g_closeDirection{2}; // 0=left, 1=right, 2=up
+// Lowercased entries of the "Excluded programs" setting. Guarded by g_CacheMutex
+// (written only from LoadSettings, read once per animation start).
+std::vector<std::wstring> g_ExcludedPrograms;
+
+// --- WORKER LIFETIME ---
+// Keep thread handles until their threads have fully exited. Registration and
+// the unloading check share a lock so shutdown cannot miss a newly-created worker.
+void MacGenieSetCloak(HWND hWnd, BOOL cloak);
+std::atomic<bool> g_unloading{false};
+std::mutex g_WorkerMutex;
+std::vector<HANDLE> g_WorkerThreads;
+
+HANDLE MacGenieCreateWorkerThread(LPTHREAD_START_ROUTINE threadProc, LPVOID data) {
+    std::lock_guard<std::mutex> lock(g_WorkerMutex);
+    if (g_unloading.load(std::memory_order_acquire)) {
+        SetLastError(ERROR_OPERATION_ABORTED);
+        return NULL;
+    }
+
+    // Reap finished workers during normal operation so handles don't accumulate.
+    for (auto it = g_WorkerThreads.begin(); it != g_WorkerThreads.end();) {
+        if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
+            CloseHandle(*it);
+            it = g_WorkerThreads.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    HANDLE thread = CreateThread(NULL, 0, threadProc, data, 0, NULL);
+    if (thread) g_WorkerThreads.push_back(thread);
+    return thread;
+}
+
+void MacGenieStopAndJoinWorkerThreads() {
+    std::vector<HANDLE> threads;
+    {
+        std::lock_guard<std::mutex> lock(g_WorkerMutex);
+        g_unloading.store(true, std::memory_order_release);
+        threads.swap(g_WorkerThreads);
+    }
+
+    for (HANDLE thread : threads) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
+}
+
+static bool MacGenieMarkCloseAndCloak(HWND hWnd) {
+    std::lock_guard<std::mutex> lock(g_WorkerMutex);
+    if (g_unloading.load(std::memory_order_acquire)) return false;
+    SetPropW(hWnd, L"GenieCloseHandled", (HANDLE)1);
+    MacGenieSetCloak(hWnd, TRUE);
+    return true;
+}
+
+void MacGenieLoadSettings() {
+    int ms = Wh_GetIntSetting(L"duration_ms");
+    if (ms < 50) ms = 50;
+    if (ms > 2000) ms = 2000;
+    g_durationMs.store(ms, std::memory_order_relaxed);
+    g_openAnimation.store(Wh_GetIntSetting(L"open_animation") != 0, std::memory_order_relaxed);
+    g_launchAnimation.store(Wh_GetIntSetting(L"launch_animation") != 0, std::memory_order_relaxed);
+    g_hideAsClose.store(Wh_GetIntSetting(L"hide_as_close") != 0, std::memory_order_relaxed);
+    g_multiMonitor.store(Wh_GetIntSetting(L"multi_monitor") != 0, std::memory_order_relaxed);
+
+    int unhide_ms = Wh_GetIntSetting(L"unhide_duration_ms");
+    if (unhide_ms < 0) unhide_ms = 0;
+    if (unhide_ms > 5000) unhide_ms = 5000;
+    g_unhideDurationMs.store(unhide_ms, std::memory_order_relaxed);
+    g_unhideEnabled.store(Wh_GetIntSetting(L"unhide_taskbar") != 0, std::memory_order_relaxed);
+
+    PCWSTR engine = Wh_GetStringSetting(L"engine");
+    // Wh_GetStringSetting never returns NULL (it returns L"" on error / unset),
+    // so only the string comparison matters.
+    g_classicEngine.store(wcscmp(engine, L"classic") == 0, std::memory_order_relaxed);
+    Wh_FreeStringSetting(engine);
+
+    int tiles = Wh_GetIntSetting(L"tile_count");
+    if (tiles < TILE_COUNT_MIN) tiles = TILE_COUNT_MIN;
+    if (tiles > TILE_COUNT_MAX) tiles = TILE_COUNT_MAX;
+    PCWSTR quality = Wh_GetStringSetting(L"tile_quality");
+    if (wcscmp(quality, L"potato") == 0) tiles = 20;
+    else if (wcscmp(quality, L"low") == 0) tiles = 26;
+    else if (wcscmp(quality, L"medium") == 0) tiles = 35;
+    else if (wcscmp(quality, L"high") == 0) tiles = 52;
+    Wh_FreeStringSetting(quality);
+    g_tileCount.store(tiles, std::memory_order_relaxed);
+    PCWSTR direction = Wh_GetStringSetting(L"close_direction");
+    g_closeDirection.store(wcscmp(direction, L"left") == 0 ? 0 :
+                           wcscmp(direction, L"right") == 0 ? 1 : 2,
+                           std::memory_order_relaxed);
+    Wh_FreeStringSetting(direction);
+
+    // "Excluded programs" list: lowercase each entry once here so the per-anim
+    // check is a straight comparison.
+    std::vector<std::wstring> excluded;
+    for (int i = 0;; i++) {
+        PCWSTR prog = Wh_GetStringSetting(L"excluded_programs[%d]", i);
+        bool has = *prog;   // L"" on unset, so *prog alone signals presence
+        if (has) {
+            std::wstring s = prog;
+            std::transform(s.begin(), s.end(), s.begin(), ::towlower);
+            excluded.push_back(std::move(s));
+        }
+        Wh_FreeStringSetting(prog);
+        if (!has) break;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        g_ExcludedPrograms.swap(excluded);
+    }
+}
+
+// TRUE if the process that OWNS hWnd is on the "Excluded programs" list. This is
+// checked at the single animation choke point (StartMacGenieAnim), NOT via
+// Windhawk's own exclusion list: that list only prevents the mod from being
+// LOADED into a process, but this mod's hooks animate a window from whichever
+// process manipulates it (Explorer's taskbar click, the shell, the app itself),
+// so an app excluded there would still animate. Matching the window's owning
+// process here respects the exclusion no matter where the trigger came from.
+bool MacGenieIsExcluded(HWND hWnd) {
+    {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        if (g_ExcludedPrograms.empty()) return false;
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (!pid) return false;
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProc) return false;
+    WCHAR path[MAX_PATH];
+    DWORD len = MAX_PATH;
+    bool ok = QueryFullProcessImageNameW(hProc, 0, path, &len) != 0;
+    CloseHandle(hProc);
+    if (!ok) return false;
+
+    std::wstring full = path;
+    std::transform(full.begin(), full.end(), full.begin(), ::towlower);
+    size_t slash = full.find_last_of(L"\\/");
+    std::wstring base = (slash == std::wstring::npos) ? full : full.substr(slash + 1);
+    std::wstring baseNoExt = base;
+    if (baseNoExt.size() > 4 && baseNoExt.compare(baseNoExt.size() - 4, 4, L".exe") == 0) {
+        baseNoExt.resize(baseNoExt.size() - 4);
+    }
+
+    std::lock_guard<std::mutex> lock(g_CacheMutex);
+    for (const std::wstring& e : g_ExcludedPrograms) {
+        if (e == full || e == base || e == baseNoExt) return true;
+    }
+    return false;
+}
+
+void MacGenieSetDwmTransitions(HWND hWnd, BOOL enable) {
+    BOOL disable = !enable;
+    DwmSetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &disable, sizeof(disable));
+}
+
+// Hide / show a window at the DWM level. A cloaked window is simply not rendered
+// (frame included) while staying "visible" to Win32 and painting normally
+// underneath, so a restore can happen invisibly under the genie with no
+// layered-surface rebuild flash. Kept from MINE in preference to HIS's
+// WS_EX_LAYERED + alpha 0 restore hide, which flashes the bare frame.
+void MacGenieSetCloak(HWND hWnd, BOOL cloak) {
+    DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
+}
+
+// Undo a rising caller's pre-animation hide (used whenever the animation can't run
+// or is refused): uncloak or un-hide depending on how the window was hidden, and
+// re-enable its DWM transitions.
+static void MacGenieUndoRisingHide(HWND hWnd, LONG_PTR originalExStyle, BOOL cloakHidden) {
+    if (cloakHidden) {
+        MacGenieSetCloak(hWnd, FALSE);
+    } else {
+        SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+        if (!(originalExStyle & WS_EX_LAYERED)) {
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, originalExStyle);
+        }
+    }
+    MacGenieSetDwmTransitions(hWnd, TRUE);
+}
+
+// Should we animate this window at all? Skip child / tiny windows so the effect
+// only fires on real top-level windows. The size check stays on the placement /
+// window rect; the animation geometry (below) uses the DWM extended frame bounds.
+static bool MacGenieShouldAnimate(HWND hWnd) {
+    if (!hWnd) return false;
+    LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+    if (style & WS_CHILD) return false;
+
+    RECT r;
+    if (IsIconic(hWnd)) {
+        WINDOWPLACEMENT wp;
+        wp.length = sizeof(wp);
+        if (!GetWindowPlacement(hWnd, &wp)) return false;
+        r = wp.rcNormalPosition;
+    } else if (!GetWindowRect(hWnd, &r)) {
+        return false;
+    }
+    if ((r.right - r.left) < 40 || (r.bottom - r.top) < 40) return false;
+    return true;
+}
+
+// A real, top-level window with a title bar (skips child windows, tool windows,
+// and borderless popups / menus / tooltips / splash screens).
+static bool MacGenieIsLaunchWindow(HWND hWnd) {
+    if (!hWnd) return false;
+    if (GetAncestor(hWnd, GA_ROOT) != hWnd) return false;
+    LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+    if (!(style & WS_CAPTION)) return false;
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    if (exStyle & WS_EX_TOOLWINDOW) return false;
+    return MacGenieShouldAnimate(hWnd);
+}
+
+// Adapt the trigger source's DestroyWindow gate. Keep its visibility, root,
+// ownership, and calling-thread checks, while allowing compact app windows.
+static bool MacGenieIsCloseTarget(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd) || !IsWindowVisible(hWnd) || IsIconic(hWnd) ||
+        GetAncestor(hWnd, GA_ROOT) != hWnd ||
+        GetWindowThreadProcessId(hWnd, nullptr) != GetCurrentThreadId()) {
+        return false;
+    }
+    // Explorer creates this small taskbar tab proxy for browser windows. The
+    // log showed Explorer animating it alongside Edge's real 983x632 window,
+    // producing the second thin genie artifact at the top of the screen.
+    WCHAR className[128]{};
+    if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+        _wcsicmp(className, L"Windows.Internal.Shell.TabProxyWindow") == 0) {
+        return false;
+    }
+    LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    if ((style & WS_CHILD) || (exStyle & WS_EX_TOOLWINDOW) ||
+        GetWindow(hWnd, GW_OWNER)) {
+        return false;
+    }
+    RECT r{};
+    // Keep the working 1.0.1 size threshold here. The source's 300 px
+    // application-main-window heuristic excluded compact browser windows and
+    // custom app windows even though they are valid close-animation targets.
+    return GetWindowRect(hWnd, &r) && r.right - r.left >= 40 &&
+           r.bottom - r.top >= 40;
+}
+
+static bool MacGenieCanAnimateCloseMessage(HWND hWnd) {
+    WCHAR className[128]{};
+    if (!hWnd || !GetClassNameW(hWnd, className, ARRAYSIZE(className)))
+        return false;
+    return _wcsicmp(className, L"ConsoleWindowClass") == 0 ||
+           _wcsicmp(className, L"CASCADIA_HOSTING_WINDOW_CLASS") == 0 ||
+           _wcsicmp(className, L"TaskManagerWindow") == 0 ||
+           _wcsicmp(className, L"WinUIDesktopWin32WindowClass") == 0;
+}
+
+bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
+                       BOOL cloakHidden, BOOL deferredMinimize,
+                       BOOL requestedUnhide, HWND hNextApp,
+                       BOOL isClosing, UINT closeMsg);
+
+// Mirrors the attached trigger's ShouldTreatHideAsClose / IsAppMainWindow
+// checks. Hide handling is only for a visible, real application window; SW_HIDE
+// on child controls, tray helpers, splash windows, and the known close-message
+// classes is passed through untouched.
+static bool MacGenieShouldTreatHideAsClose(HWND hWnd) {
+    if (!g_hideAsClose.load(std::memory_order_relaxed) || !IsWindow(hWnd) ||
+        !IsWindowVisible(hWnd) || IsIconic(hWnd) ||
+        GetAncestor(hWnd, GA_ROOT) != hWnd ||
+        GetWindowThreadProcessId(hWnd, nullptr) == 0) {
+        return false;
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (pid != GetCurrentProcessId()) return false;
+    LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    if ((style & WS_CHILD) || (exStyle & WS_EX_TOOLWINDOW) ||
+        GetWindow(hWnd, GW_OWNER) || MacGenieCanAnimateCloseMessage(hWnd)) {
+        return false;
+    }
+    WCHAR className[128]{};
+    if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+        (_wcsicmp(className, L"Xaml_WindowedPopupClass") == 0 ||
+         _wcsicmp(className, L"Popup") == 0 ||
+         _wcsicmp(className, L"Overlay") == 0 ||
+         _wcsicmp(className, L"ToolTip") == 0 ||
+         _wcsicmp(className, L"CoreWindow") == 0 ||
+         _wcsicmp(className, L"ApplicationFrameWindow") == 0 ||
+         _wcsicmp(className, L"XamlExplorerHostIslandWindow") == 0)) {
+        return false;
+    }
+    RECT r{};
+    return GetWindowRect(hWnd, &r) && r.right - r.left >= 300 &&
+           r.bottom - r.top >= 300;
+}
+
+// Run the falling genie before the caller hides the HWND. The renderer keeps
+// the original window cloaked at teardown (WM_DESTROY is used as a no-repost
+// sentinel); the API hook then performs the requested hide and uncloaks it.
+static bool MacGenieAnimateBeforeNativeHide(HWND hWnd, const WCHAR* apiName) {
+    const bool eligible = MacGenieShouldTreatHideAsClose(hWnd);
+    if (IsWindow(hWnd) && GetAncestor(hWnd, GA_ROOT) == hWnd) {
+        WCHAR cls[96]{};
+        RECT r{};
+        GetClassNameW(hWnd, cls, ARRAYSIZE(cls));
+        GetWindowRect(hWnd, &r);
+        Wh_Log(L"Close genie DEBUG: %s hide request hwnd=%p class=%s eligible=%d visible=%d iconic=%d size=%dx%d handled=%d",
+               apiName, hWnd, cls, eligible, IsWindowVisible(hWnd), IsIconic(hWnd),
+               r.right-r.left, r.bottom-r.top,
+               GetPropW(hWnd, L"GenieCloseHandled") != nullptr);
+    }
+    if (!eligible ||
+        GetPropW(hWnd, L"GenieCloseBypass") ||
+        GetPropW(hWnd, L"GenieCloseHandled") ||
+        GetPropW(hWnd, L"GenieCloseAnimating") ||
+        g_unloading.load(std::memory_order_relaxed)) {
+        return false;
+    }
+    Wh_Log(L"Close genie DEBUG: %s hide-as-close accepted hwnd=%p", apiName, hWnd);
+    MacGenieSetDwmTransitions(hWnd, FALSE);
+    SetPropW(hWnd, L"GenieCloseAnimating", (HANDLE)1);
+    if (!StartMacGenieAnim(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE),
+                           FALSE, FALSE, FALSE, NULL, TRUE, WM_DESTROY)) {
+        Wh_Log(L"Close genie DEBUG: %s hide-as-close setup failed hwnd=%p", apiName, hWnd);
+        RemovePropW(hWnd, L"GenieCloseAnimating");
+        MacGenieSetDwmTransitions(hWnd, TRUE);
+        return false;
+    }
+    if (!MacGenieMarkCloseAndCloak(hWnd)) return false;
+    for (int i = 0; i < 350 && IsWindow(hWnd) &&
+         !g_unloading.load(std::memory_order_relaxed); ++i) {
+        bool active;
+        {
+            std::lock_guard<std::mutex> lock(g_CacheMutex);
+            active = g_AnimActive.count(hWnd) != 0;
+        }
+        if (!active) break;
+        Sleep(10);
+    }
+    return true;
+}
+
+static void MacGenieFinishNativeHide(HWND hWnd, bool animated) {
+    if (!animated || !IsWindow(hWnd)) return;
+    MacGenieSetCloak(hWnd, FALSE);
+    RemovePropW(hWnd, L"GenieCloseAnimating");
+    // Keep GenieCloseHandled until WM_DESTROY or the next real show. Some apps
+    // hide first and destroy later; clearing it here would animate that same
+    // close a second time.
+    MacGenieSetDwmTransitions(hWnd, TRUE);
+}
+
+// -------------------------------------------------------------------------
+// Direct2D genie renderer helpers - ported verbatim from Potassiumuncher's
+// genie engine (github.com/Potassiumuncher).
+// -------------------------------------------------------------------------
+
+// Ported from Potassiumuncher's genie engine (github.com/Potassiumuncher).
+static ID2D1PathGeometry* CreateQuadGeo(
+    ID2D1Factory* factory,
+    D2D1_POINT_2F p0, D2D1_POINT_2F p1,
+    D2D1_POINT_2F p2, D2D1_POINT_2F p3)
+{
+    ID2D1PathGeometry* geo = nullptr;
+    factory->CreatePathGeometry(&geo);
+    if (!geo) return nullptr;
+    ID2D1GeometrySink* sink = nullptr;
+    geo->Open(&sink);
+    sink->BeginFigure(p0, D2D1_FIGURE_BEGIN_FILLED);
+    sink->AddLine(p1);
+    sink->AddLine(p2);
+    sink->AddLine(p3);
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    sink->Close();
+    sink->Release();
+    return geo;
+}
+
+// Ported from Potassiumuncher's genie engine (github.com/Potassiumuncher).
+static D2D1_POINT_2F BloatPoint(D2D1_POINT_2F p, D2D1_POINT_2F c, float amount = 0.5f) {
+    float dx = p.x - c.x; float dy = p.y - c.y;
+    float len = sqrtf(dx*dx + dy*dy);
+    if (len < 0.001f) return p;
+    return D2D1::Point2F(p.x + (dx/len)*amount, p.y + (dy/len)*amount);
+}
+
+// Ported from Potassiumuncher's genie engine (github.com/Potassiumuncher).
+HWND FindTaskbarForMonitor(HMONITOR hMon) {
+    HWND hMainTray = FindWindowW(L"Shell_TrayWnd", NULL);
+    HMONITOR mainMon = MonitorFromWindow(hMainTray, MONITOR_DEFAULTTOPRIMARY);
+    if (hMon == mainMon || !hMon) return hMainTray;
+
+    HWND hSecTray = NULL;
+    while ((hSecTray = FindWindowExW(NULL, hSecTray, L"Shell_SecondaryTrayWnd", NULL)) != NULL) {
+        if (MonitorFromWindow(hSecTray, MONITOR_DEFAULTTONULL) == hMon) {
+            return hSecTray;
+        }
+    }
+    return hMainTray;
+}
+
+// Ported from Potassiumuncher's genie engine (github.com/Potassiumuncher).
+// Locates the app's taskbar button via UI Automation and returns its center X
+// (falls back to fallbackX, then to the per-window / per-process learned cache).
+// Runs on the hook (app UI) thread: CoInitializeEx(APARTMENTTHREADED) matches the
+// typical GUI-thread apartment (S_FALSE) or reports RPC_E_CHANGED_MODE on an MTA
+// thread; either way CoUninitialize is balanced only when we actually initialized.
+int GetTaskbarButtonX(HWND hWndApp, int fallbackX, HMONITOR hMon) {
+    int targetX = fallbackX;
+    bool uiaFound = false;
+
+    std::wstring procNameLower = L"";
+    DWORD ownerPid = 0;
+    GetWindowThreadProcessId(hWndApp, &ownerPid);
+    if (ownerPid) {
+        HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, ownerPid);
+        if (hProc) {
+            WCHAR exePath[MAX_PATH] = {0};
+            DWORD exePathLen = MAX_PATH;
+            if (QueryFullProcessImageNameW(hProc, 0, exePath, &exePathLen)) {
+                WCHAR* name = wcsrchr(exePath, L'\\');
+                if (name) {
+                    procNameLower = (name + 1);
+                    size_t dotPos = procNameLower.find(L'.');
+                    if (dotPos != std::wstring::npos) procNameLower = procNameLower.substr(0, dotPos);
+                    std::transform(procNameLower.begin(), procNameLower.end(), procNameLower.begin(), ::towlower);
+                }
+            }
+            CloseHandle(hProc);
+        }
+    }
+
+    std::wstring processKey = procNameLower;
+    if (!processKey.empty() && hMon) {
+        processKey += L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
+    }
+
+    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    bool coInit = (hr == S_OK || hr == S_FALSE);
+
+    if (hr == S_OK || hr == S_FALSE || hr == RPC_E_CHANGED_MODE) {
+        IUIAutomation* pAutomation = nullptr;
+        HRESULT hrUia = CoCreateInstance(__uuidof(CUIAutomation8), NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&pAutomation);
+        if (FAILED(hrUia)) {
+            hrUia = CoCreateInstance(__uuidof(CUIAutomation), NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&pAutomation);
+        }
+
+        if (SUCCEEDED(hrUia) && pAutomation) {
+            HWND hTray = FindTaskbarForMonitor(hMon);
+            if (hTray) {
+                IUIAutomationElement* pTrayElement = nullptr;
+                if (SUCCEEDED(pAutomation->ElementFromHandle(hTray, &pTrayElement)) && pTrayElement) {
+
+                    WCHAR titleW[512] = {0};
+                    GetWindowTextW(hWndApp, titleW, 512);
+                    std::wstring titleLower = titleW;
+                    std::transform(titleLower.begin(), titleLower.end(), titleLower.begin(), ::towlower);
+
+                    std::wstring procHintLower = procNameLower;
+                    if (procNameLower == L"chrome") procHintLower = L"google chrome";
+                    else if (procNameLower == L"msedge") procHintLower = L"microsoft edge";
+                    else if (procNameLower == L"firefox") procHintLower = L"firefox";
+                    else if (procNameLower == L"brave") procHintLower = L"brave";
+                    else if (procNameLower == L"opera") procHintLower = L"opera";
+                    else if (procNameLower == L"vivaldi") procHintLower = L"vivaldi";
+
+                    IUIAutomationCondition* pButtonCond = nullptr;
+                    IUIAutomationCondition* pListItemCond = nullptr;
+                    IUIAutomationCondition* pOrCond = nullptr;
+
+                    VARIANT varBtn; varBtn.vt = VT_I4; varBtn.lVal = UIA_ButtonControlTypeId;
+                    pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varBtn, &pButtonCond);
+
+                    VARIANT varList; varList.vt = VT_I4; varList.lVal = UIA_ListItemControlTypeId;
+                    pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varList, &pListItemCond);
+
+                    if (pButtonCond && pListItemCond) {
+                        pAutomation->CreateOrCondition(pButtonCond, pListItemCond, &pOrCond);
+                    }
+
+                    IUIAutomationElementArray* pArray = nullptr;
+                    if (pOrCond && SUCCEEDED(pTrayElement->FindAll(TreeScope_Descendants, pOrCond, &pArray)) && pArray) {
+                        int length = 0;
+                        pArray->get_Length(&length);
+
+                        MONITORINFO mi = {0};
+                        mi.cbSize = sizeof(MONITORINFO);
+                        GetMonitorInfoW(hMon, &mi);
+                        int monRight = mi.rcMonitor.right;
+
+                        int bestScore = 0;
+
+                        for (int i = 0; i < length; i++) {
+                            IUIAutomationElement* pItem = nullptr;
+                            if (SUCCEEDED(pArray->GetElement(i, &pItem)) && pItem) {
+                                BSTR name;
+                                if (SUCCEEDED(pItem->get_CurrentName(&name)) && name) {
+                                    std::wstring uiaNameLower = name;
+                                    std::transform(uiaNameLower.begin(), uiaNameLower.end(), uiaNameLower.begin(), ::towlower);
+
+                                    if (!uiaNameLower.empty()) {
+                                        int score = 0;
+
+                                        if (titleLower == uiaNameLower) score += 1000;
+                                        if (!titleLower.empty() && titleLower.find(uiaNameLower) != std::wstring::npos) score += 500;
+                                        if (!uiaNameLower.empty() && uiaNameLower.find(titleLower) != std::wstring::npos) score += 500;
+
+                                        if (!procNameLower.empty() && uiaNameLower.find(procNameLower) != std::wstring::npos) score += 400;
+                                        if (!procHintLower.empty() && procHintLower != procNameLower &&
+                                            uiaNameLower.find(procHintLower) != std::wstring::npos) score += 900;
+
+                                        std::wstring currentWord;
+                                        for (wchar_t c : titleLower) {
+                                            if (iswalnum(c)) {
+                                                currentWord += c;
+                                            } else {
+                                                if (currentWord.length() >= 4 && uiaNameLower.find(currentWord) != std::wstring::npos) score += 50;
+                                                currentWord.clear();
+                                            }
+                                        }
+                                        if (currentWord.length() >= 4 && uiaNameLower.find(currentWord) != std::wstring::npos) score += 50;
+
+                                        if (uiaNameLower.find(L"start") != std::wstring::npos) score -= 500;
+                                        if (uiaNameLower.find(L"search") != std::wstring::npos) score -= 500;
+                                        if (uiaNameLower.find(L"task view") != std::wstring::npos) score -= 500;
+                                        if (uiaNameLower.find(L"widgets") != std::wstring::npos) score -= 500;
+
+                                        if (score > bestScore) {
+                                            RECT bRect;
+                                            if (SUCCEEDED(pItem->get_CurrentBoundingRectangle(&bRect))) {
+                                                if (bRect.right > bRect.left && bRect.left < monRight - 50) {
+                                                    bestScore = score;
+                                                    targetX = bRect.left + (bRect.right - bRect.left) / 2;
+                                                    uiaFound = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    SysFreeString(name);
+                                }
+                                pItem->Release();
+                            }
+                        }
+                        pArray->Release();
+                    }
+                    if (pButtonCond) pButtonCond->Release();
+                    if (pListItemCond) pListItemCond->Release();
+                    if (pOrCond) pOrCond->Release();
+                    pTrayElement->Release();
+                }
+            }
+            pAutomation->Release();
+        }
+        if (coInit) CoUninitialize();
+    }
+
+    std::lock_guard<std::mutex> lock(g_CacheMutex);
+    if (uiaFound) {
+        g_IconPositions[hWndApp] = targetX;
+        if (!processKey.empty()) {
+            g_ProcessIconPositions[processKey] = targetX;
+        }
+    } else if (g_IconPositions.count(hWndApp)) {
+        targetX = g_IconPositions[hWndApp];
+    } else if (!processKey.empty() && g_ProcessIconPositions.count(processKey)) {
+        targetX = g_ProcessIconPositions[processKey];
+    }
+
+    return targetX;
+}
+
+// Ported from Potassiumuncher's genie engine (github.com/Potassiumuncher).
+// The macOS "lamp" curve: maps a mesh vertex (tx,ty in 0..1) at progress p to its
+// warped screen position, given the window rect w and the taskbar icon rect i.
+static void CalculateLampVertexMacOS(float tx, float ty, float p, const Geometry& w, const Geometry& i, float *outX, float *outY) {
+    float split = 0.3f;
+    float k = (p <= split) ? (p / split) : 1.0f;
+    float j = (p > split) ? ((p - split) / (1.0f - split)) : 0.0f;
+
+    float expandHeight = (i.y - w.y - w.height);
+    float fullHeight = (i.y - w.y) - (expandHeight * (1.0f - k));
+    float height = fullHeight - (j * fullHeight);
+
+    float y = ty * height;
+    float x = tx * (i.width) + tx * (w.width - i.width) * (1.0f - j) * (1.0f - ty) + tx * (w.width - i.width) * (1.0f - k) * ty;
+
+    float offsetX = (i.x - w.x) * (y / (fullHeight + 0.1f)) * k + (i.x - w.x) * j;
+    float offsetY = i.y - w.y - height - (expandHeight * (1.0f - k));
+
+    float effectX = sinf(((height - y) / fullHeight) * 2.0f * PI + PI) * (w.x + w.width * tx - (i.x + i.width * tx)) / 7.0f * k;
+
+    *outX = w.x + x + offsetX + effectX;
+    *outY = w.y + y + offsetY;
+}
+
+// Shared by both engines: union of the monitors involved (the window's own
+// monitor and the monitor the genie funnels to). With Multi-monitor support off
+// (the default) data->hMon is the primary monitor, so a window sitting on a
+// secondary display still needs its own monitor in the union or the canvas would
+// collapse onto the primary and clip the first half of the animation.
+static RECT GetGenieMonitorUnion(const RECT& winRect, HMONITOR hDockMon) {
+    RECT winMon;
+    HMONITOR hWinMon = MonitorFromRect(&winRect, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO wmi = {0};
+    wmi.cbSize = sizeof(wmi);
+    if (hWinMon && GetMonitorInfoW(hWinMon, &wmi)) {
+        winMon = wmi.rcMonitor;
+    } else {
+        winMon = winRect;
+    }
+
+    RECT dockMon;
+    MONITORINFO dmi = {0};
+    dmi.cbSize = sizeof(dmi);
+    if (hDockMon && GetMonitorInfoW(hDockMon, &dmi)) {
+        dockMon = dmi.rcMonitor;
+    } else {
+        dockMon = winMon;
+    }
+
+    RECT u;
+    u.left   = (winMon.left   < dockMon.left)   ? winMon.left   : dockMon.left;
+    u.top    = (winMon.top    < dockMon.top)    ? winMon.top    : dockMon.top;
+    u.right  = (winMon.right  > dockMon.right)  ? winMon.right  : dockMon.right;
+    u.bottom = (winMon.bottom > dockMon.bottom) ? winMon.bottom : dockMon.bottom;
+    return u;
+}
+
+// Shared by both engines: clamp a proposed canvas rect to the union of the
+// monitors involved, then re-expand it so it can never clip the window rect or
+// the dock target column away. The monitor clamp only trims the box to the
+// screens actually used; it must never cut geometry the animation draws.
+static void ClampGenieCanvas(int& left, int& top, int& right, int& bottom,
+                             const RECT& winRect, int dockX, const RECT& monUnion) {
+    if (left   < monUnion.left)   left   = monUnion.left;
+    if (right  > monUnion.right)  right  = monUnion.right;
+    if (top    < monUnion.top)    top    = monUnion.top;
+    if (bottom > monUnion.bottom) bottom = monUnion.bottom;
+
+    if (left  > winRect.left)  left  = winRect.left;
+    if (right < winRect.right) right = winRect.right;
+    if (top   > winRect.top)   top   = winRect.top;
+    if (bottom < winRect.bottom) bottom = winRect.bottom;
+    if (left  > dockX - 16)    left  = dockX - 16;   // iGeom is dockX ± 11
+    if (right < dockX + 16)    right = dockX + 16;
+}
+
+// -------------------------------------------------------------------------
+// Genie Animation Thread
+//
+// MINE's loop and lifecycle - g_unloading early-out, the
+// first-frame sync event, g_AnimActive teardown - with HIS's Direct2D mesh
+// renderer as the per-frame draw call. Frames are paced by a high-resolution
+// waitable timer at 2x the display's refresh rate (never a busy loop), so DWM
+// always has a fresh frame to composite at each vsync.
+// -------------------------------------------------------------------------
+DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
+    MacGenieAnimData* data = (MacGenieAnimData*)lpParam;
+
+    // Matches the in-repo standalone genie mod (genie-minimize-animation.wh.cpp):
+    // HIGHEST, not TIME_CRITICAL. A TIME_CRITICAL thread that never yields would
+    // preempt the host app's UI thread for the whole animation on slow or 2-core
+    // machines; the pacer below keeps the frame rate up without that.
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+
+    // --- Target geometry (Potassiumuncher's engine), using the monitor picked by
+    // the multi-monitor setting (data->hMon), so "off" keeps the primary-monitor
+    // behavior and "on" targets the window's monitor taskbar edge. ---
+    Geometry wGeom = { (float)data->targetRect.left, (float)data->targetRect.top, (float)data->width, (float)data->height };
+
+    MONITORINFO mi = {0};
+    mi.cbSize = sizeof(MONITORINFO);
+    HMONITOR hMon = data->hMon;
+    GetMonitorInfoW(hMon, &mi);
+
+    UINT dpiX = 96, dpiY = 96;
+    // System32-only search: Shcore.dll is not a KnownDLL, and under @include *
+    // this code runs inside every process - a bare-name LoadLibrary would search
+    // the host .exe's own directory first, letting a planted Shcore.dll next to
+    // any portable app execute in that process (windhawk-mods #2063 pattern).
+    HMODULE hShcore = LoadLibraryExW(L"Shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (hShcore) {
+        typedef HRESULT (WINAPI *GetDpiForMonitor_t)(HMONITOR, int, UINT*, UINT*);
+        auto pGetDpiForMonitor = (GetDpiForMonitor_t)GetProcAddress(hShcore, "GetDpiForMonitor");
+        if (pGetDpiForMonitor) pGetDpiForMonitor(hMon, 0, &dpiX, &dpiY);
+        FreeLibrary(hShcore);
+    }
+    float dpiScale = dpiY / 96.0f;
+    float scaledTaskbarHeight = COMPAT_TASKBAR_HEIGHT * dpiScale;
+    float scaledIconSize = COMPAT_ICON_SIZE * dpiScale;
+
+    float iGeomTaskbarTop = (float)mi.rcMonitor.bottom - scaledTaskbarHeight;
+
+    HWND hTrayGeom = FindTaskbarForMonitor(hMon);
+    if (hTrayGeom) {
+        RECT tr;
+        if (GetWindowRect(hTrayGeom, &tr)) {
+            int th = tr.bottom - tr.top;
+            if (th > 0) iGeomTaskbarTop = (float)tr.top;
+        }
+    }
+
+    Geometry iGeom = {
+        (float)data->targetDockX - 11.0f,
+        iGeomTaskbarTop,
+        22.0f,
+        scaledIconSize
+    };
+    if (data->isClosing) {
+        const int direction = g_closeDirection.load(std::memory_order_relaxed);
+        if (direction == 0) {
+            iGeom.x = (float)mi.rcMonitor.left;
+            iGeom.y = (float)(mi.rcMonitor.top + mi.rcMonitor.bottom) * 0.5f;
+            iGeom.height = 22.0f;
+        } else if (direction == 1) {
+            iGeom.x = (float)(mi.rcMonitor.right - 22);
+            iGeom.y = (float)(mi.rcMonitor.top + mi.rcMonitor.bottom) * 0.5f;
+            iGeom.height = 22.0f;
+        } else {
+            iGeom.x = (float)(mi.rcMonitor.left + mi.rcMonitor.right) * 0.5f - 11.0f;
+            iGeom.y = (float)mi.rcMonitor.top;
+            iGeom.height = 22.0f;
+        }
+    }
+
+    // Mesh resolution from the tile-count setting (Potassiumuncher's v1.5).
+    int xTiles = g_tileCount.load(std::memory_order_relaxed);
+    int yTiles = xTiles;
+
+    // Tight bounding-box canvas: the genie mesh is written in screen-space
+    // coordinates and only ever occupies the region between the window rect and
+    // the dock target. Rendering over the full virtual desktop wasted CPU on
+    // every frame - UpdateLayeredWindow of a whole-screen layered window is slow,
+    // most visibly on AMD drivers. A ~W/2 pad alone can't bound the mesh's sway
+    // term in CalculateLampVertexMacOS (its amplitude scales with the
+    // window-to-dock distance, not the window width), so the horizontal pad is
+    // the exact sway bound: max(|w.x-i.x|, |w.right-i.right|)/7.
+    const int origLeftB = data->targetRect.left;
+    const int wB = data->width;
+    const int dockXB = data->isClosing
+        ? (int)(iGeom.x + iGeom.width * 0.5f)
+        : data->targetDockX;
+
+    const float iLeftF = iGeom.x;
+    const float iWidthF = iGeom.width;
+    const float sway = fmaxf(fabsf((float)origLeftB - iLeftF),
+                             fabsf((float)origLeftB + wB - iLeftF - iWidthF)) / 7.0f;
+    const float halfWindowWidth = (float)wB * 0.5f;
+    int padX = (int)((halfWindowWidth > sway ? halfWindowWidth : sway) + 1.0f);
+
+    // iGeom is known here, so a top/side taskbar (iGeom.y above/beside the
+    // window) is covered: the box spans min..max of the window and the icon rect,
+    // with no band below the taskbar top ever wasted.
+    int boundLeft   = ((origLeftB < dockXB) ? origLeftB : dockXB) - padX;
+    int boundRight  = (((origLeftB + wB) > dockXB) ? (origLeftB + wB) : dockXB) + padX;
+    int boundTop    = (int)fminf(wGeom.y, iGeom.y);
+    int boundBottom = (int)fmaxf(wGeom.y + wGeom.height, iGeom.y + iGeom.height);
+
+    // Trim the box to the union of the monitors actually involved, but never
+    // clip the window rect or the dock target column away.
+    RECT monUnion = GetGenieMonitorUnion(data->targetRect, data->hMon);
+    ClampGenieCanvas(boundLeft, boundTop, boundRight, boundBottom,
+                     data->targetRect, dockXB, monUnion);
+
+    int vLeft = boundLeft;
+    int vTop = boundTop;
+    int vWidth = boundRight - boundLeft;
+    int vHeight = (boundBottom - boundTop) - 1;
+    if (vWidth < 1) vWidth = 1;
+    if (vHeight < 1) vHeight = 1;
+
+    HDC hScreenDC = GetDC(NULL);
+    HDC hMemDC = CreateCompatibleDC(hScreenDC);
+
+    BITMAPINFO bmi = {{0}};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = vWidth;
+    bmi.bmiHeader.biHeight = -vHeight;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* pTargetBits = nullptr;
+    HBITMAP hTargetBmp = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &pTargetBits, NULL, 0);
+    HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, hTargetBmp);
+
+    // Full-screen layered ghost. Created hidden (plain STATIC class, torn down by
+    // this thread) so we keep MINE's in-thread ghost lifecycle instead of HIS's
+    // registered window class + g_activeGhosts vector.
+    HWND hGhost = CreateWindowExW(
+        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
+        L"STATIC", NULL, WS_POPUP,
+        vLeft, vTop, vWidth, vHeight,
+        NULL, NULL, NULL, NULL);
+    if (hGhost) SetPropW(hGhost, L"GenieGhost", (HANDLE)1);
+
+    // --- Direct2D setup (Potassiumuncher's engine) ---
+    ID2D1DCRenderTarget* rt = nullptr;
+    ID2D1Bitmap* snapshotBmp = nullptr;
+    ID2D1BitmapBrush* bmpBrush = nullptr;
+
+    if (g_d2dFactory) {
+        D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
+            D2D1_RENDER_TARGET_TYPE_DEFAULT,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+            0, 0, D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE, D2D1_FEATURE_LEVEL_DEFAULT
+        );
+        g_d2dFactory->CreateDCRenderTarget(&rtProps, &rt);
+        if (rt) {
+            // Potassiumuncher's v1.5: text AA fixed once at creation (the geometry
+            // AA mode is set per frame in the draw loop below).
+            rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+            D2D1_BITMAP_PROPERTIES bmpProps = D2D1::BitmapProperties(
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)
+            );
+            rt->CreateBitmap(D2D1::SizeU(data->width, data->height), data->pBits, data->width * 4, bmpProps, &snapshotBmp);
+            if (snapshotBmp) {
+                D2D1_BITMAP_BRUSH_PROPERTIES brushProps = D2D1::BitmapBrushProperties(
+                    D2D1_EXTEND_MODE_CLAMP, D2D1_EXTEND_MODE_CLAMP,
+                    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR
+                );
+                rt->CreateBitmapBrush(snapshotBmp, &brushProps, nullptr, &bmpBrush);
+            }
+        }
+    }
+    bool d2dOk = (rt && bmpBrush);
+
+    const double animDur = (double)data->durationMs;
+    LARGE_INTEGER qpcFreq, qpcStart, qpcNow;
+    QueryPerformanceFrequency(&qpcFreq);
+    QueryPerformanceCounter(&qpcStart);
+
+    std::vector<std::vector<D2D1_POINT_2F>> grid(yTiles + 1, std::vector<D2D1_POINT_2F>(xTiles + 1));
+
+    ID2D1PathGeometry* cachedOutlineGeo = nullptr;
+    float cachedLeft = -1e9f, cachedRight = -1e9f, cachedTop = -1e9f, cachedBottom = -1e9f;
+
+    BOOL firstFrame = TRUE;
+
+    // Frame pacing, 2x the display's refresh rate (or 240 fps if we can't read
+    // it): the pacer is a rate LIMITER, not a vsync gate. Dropping the old
+    // per-frame DwmFlush removed the render_time + vsync serialization that cut
+    // delivered frames in half on fast displays; this timer caps the loop below
+    // a busy spin while still handing DWM a fresh frame at every compose tick.
+    double frameIntervalMs = 1000.0 / 240.0;   // fallback
+    DWM_TIMING_INFO ti = { sizeof(ti) };
+    if (SUCCEEDED(DwmGetCompositionTimingInfo(NULL, &ti)) && ti.rateRefresh.uiDenominator) {
+        double hz = (double)ti.rateRefresh.uiNumerator / ti.rateRefresh.uiDenominator;
+        frameIntervalMs = 1000.0 / (hz * 2.0);
+    }
+    HANDLE hFrameTimer = CreateWaitableTimerExW(
+        nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+        TIMER_MODIFY_STATE | SYNCHRONIZE);
+    if (!hFrameTimer) {
+        // Pre-1803: the high-resolution flag isn't recognized. A plain waitable
+        // timer paces coarser, but it still isn't a spin.
+        hFrameTimer = CreateWaitableTimerExW(nullptr, nullptr, 0,
+                                             TIMER_MODIFY_STATE | SYNCHRONIZE);
+    }
+
+    if (d2dOk) {
+        for (;;) {
+            QueryPerformanceCounter(&qpcNow);
+            const LARGE_INTEGER qpcFrameStart = qpcNow;
+            double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
+            BOOL lastFrame = (elapsedMs >= animDur);
+
+            float raw_p = (float)fmin(elapsedMs / animDur, 1.0);
+            float eased_p = raw_p * raw_p * (3.0f - 2.0f * raw_p);
+            // Minimize runs 0->1, restore runs 1->0 so the same warp plays in reverse.
+            float t = data->isRising ? (1.0f - eased_p) : eased_p;
+
+            RECT bindRect = { 0, 0, vWidth, vHeight };
+            rt->BindDC(hMemDC, &bindRect);
+            rt->BeginDraw();
+            rt->Clear(D2D1::ColorF(0, 0, 0, 0));
+            rt->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+
+            for (int y = 0; y <= yTiles; y++) {
+                for (int x = 0; x <= xTiles; x++) {
+                    float tx = (float)x / xTiles, ty = (float)y / yTiles;
+                    float px, py;
+                    // Warp this mesh vertex. CalculateLampVertexMacOS returns SCREEN
+                    // (virtual-desktop) coordinates - wGeom / iGeom are both
+                    // screen-space (targetRect, targetDockX, taskbar-top Y are all
+                    // virtual-screen). The ONLY conversion to the ghost's
+                    // bounding-box canvas is the (px - vLeft, py - vTop)
+                    // subtraction below - vLeft/vTop are negative on monitors left of
+                    // / above the primary. Every mesh coordinate passes through here
+                    // exactly once; nothing downstream re-offsets.
+                    CalculateLampVertexMacOS(tx, ty, t, wGeom, iGeom, &px, &py);
+                    grid[y][x] = D2D1::Point2F(px - vLeft, py - vTop);
+                }
+            }
+
+            bool degenerate = false;
+            ID2D1PathGeometry* outlineGeo = nullptr;
+            {
+                float left   = grid[0][0].x, right  = grid[0][0].x;
+                float top    = grid[0][0].y, bottom = grid[0][0].y;
+                for (int gy = 0; gy <= yTiles; gy++) {
+                    for (int gx = 0; gx <= xTiles; gx++) {
+                        left   = fminf(left,   grid[gy][gx].x);
+                        right  = fmaxf(right,  grid[gy][gx].x);
+                        top    = fminf(top,    grid[gy][gx].y);
+                        bottom = fmaxf(bottom, grid[gy][gx].y);
+                    }
+                }
+
+                // Belt-and-suspenders guard: if the warped mesh has collapsed to a
+                // near-zero-width/height box, don't present it - that is what would
+                // flash as a single horizontal line for one frame (seen at the tail
+                // of the collapse, and at the very start of a restore where the mesh
+                // emerges from the dock). Skipping these frames removes the flash
+                // regardless of monitor / arrangement.
+                degenerate = (right - left) < 2.0f || (bottom - top) < 2.0f;
+
+                bool needRebuild = (cachedOutlineGeo == nullptr)
+                    || fabsf(left   - cachedLeft)   > 0.5f
+                    || fabsf(right  - cachedRight)  > 0.5f
+                    || fabsf(top    - cachedTop)    > 0.5f
+                    || fabsf(bottom - cachedBottom) > 0.5f;
+
+                if (needRebuild) {
+                    if (cachedOutlineGeo) { cachedOutlineGeo->Release(); cachedOutlineGeo = nullptr; }
+                    cachedLeft = left; cachedRight = right; cachedTop = top; cachedBottom = bottom;
+
+                    float w = right - left;
+                    float h = bottom - top;
+                    float r = fminf(12.0f, fminf(w, h) / 2.0f);   // Potassiumuncher's v1.5 radius
+                    const float K = 0.5523f;
+                    float L = left, T = top, R = right, B = bottom;
+
+                    g_d2dFactory->CreatePathGeometry(&cachedOutlineGeo);
+                    if (cachedOutlineGeo) {
+                        ID2D1GeometrySink* sink = nullptr;
+                        cachedOutlineGeo->Open(&sink);
+                        sink->BeginFigure(D2D1::Point2F(L + r, T), D2D1_FIGURE_BEGIN_FILLED);
+                        sink->AddLine(D2D1::Point2F(R - r, T));
+                        { D2D1_BEZIER_SEGMENT s;
+                          s.point1 = D2D1::Point2F(R - r + K*r, T);
+                          s.point2 = D2D1::Point2F(R, T + r - K*r);
+                          s.point3 = D2D1::Point2F(R, T + r);
+                          sink->AddBezier(s); }
+                        sink->AddLine(D2D1::Point2F(R, B - r));
+                        { D2D1_BEZIER_SEGMENT s;
+                          s.point1 = D2D1::Point2F(R, B - r + K*r);
+                          s.point2 = D2D1::Point2F(R - r + K*r, B);
+                          s.point3 = D2D1::Point2F(R - r, B);
+                          sink->AddBezier(s); }
+                        sink->AddLine(D2D1::Point2F(L + r, B));
+                        { D2D1_BEZIER_SEGMENT s;
+                          s.point1 = D2D1::Point2F(L + r - K*r, B);
+                          s.point2 = D2D1::Point2F(L, B - r + K*r);
+                          s.point3 = D2D1::Point2F(L, B - r);
+                          sink->AddBezier(s); }
+                        sink->AddLine(D2D1::Point2F(L, T + r));
+                        { D2D1_BEZIER_SEGMENT s;
+                          s.point1 = D2D1::Point2F(L, T + r - K*r);
+                          s.point2 = D2D1::Point2F(L + r - K*r, T);
+                          s.point3 = D2D1::Point2F(L + r, T);
+                          sink->AddBezier(s); }
+                        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                        sink->Close();
+                        sink->Release();
+                    }
+                }
+                outlineGeo = cachedOutlineGeo;
+            }
+
+            if (outlineGeo) {
+                D2D1_LAYER_PARAMETERS layerParams = D2D1::LayerParameters();
+                layerParams.geometricMask = outlineGeo;
+                // Per-primitive AA on the outline mask (Potassiumuncher's v1.5):
+                // smooth silhouette edges without per-tile seam artifacts.
+                layerParams.maskAntialiasMode = D2D1_ANTIALIAS_MODE_PER_PRIMITIVE;
+                // nullptr layer: D2D manages its own layer pool, avoiding a fresh
+                // ID2D1Layer create/release on every frame.
+                rt->PushLayer(&layerParams, nullptr);
+
+                for (int y = 0; y < yTiles; y++) {
+                    for (int x = 0; x < xTiles; x++) {
+                        D2D1_POINT_2F p1 = grid[y][x];
+                        D2D1_POINT_2F p2 = grid[y][x+1];
+                        D2D1_POINT_2F p3 = grid[y+1][x];
+                        D2D1_POINT_2F p4 = grid[y+1][x+1];
+
+                        D2D1_POINT_2F c = D2D1::Point2F((p1.x+p2.x+p3.x+p4.x)/4.0f, (p1.y+p2.y+p3.y+p4.y)/4.0f);
+
+                        float quadW = fmaxf(fabsf(p2.x - p1.x), fabsf(p4.x - p3.x));
+                        float quadH = fmaxf(fabsf(p3.y - p1.y), fabsf(p4.y - p2.y));
+                        // Potassiumuncher's v1.5 bloat: slightly larger overlap so
+                        // tile seams stay closed at higher tile counts.
+                        float bloatAmt = fminf(quadW, quadH) * 0.05f;
+                        bloatAmt = fmaxf(0.20f, fminf(0.40f, bloatAmt));
+
+                        ID2D1PathGeometry* quadGeo = CreateQuadGeo(g_d2dFactory,
+                            BloatPoint(p1, c, bloatAmt), BloatPoint(p2, c, bloatAmt),
+                            BloatPoint(p4, c, bloatAmt), BloatPoint(p3, c, bloatAmt));
+
+                        if (quadGeo) {
+                            float sx = ((float)x / xTiles) * wGeom.width;
+                            float sy = ((float)y / yTiles) * wGeom.height;
+                            float sw = wGeom.width / xTiles;
+                            float sh = wGeom.height / yTiles;
+
+                            float m11 = (p2.x - p1.x) / sw;
+                            float m12 = (p2.y - p1.y) / sw;
+                            float m21 = (p3.x - p1.x) / sh;
+                            float m22 = (p3.y - p1.y) / sh;
+                            float m31 = p1.x - sx * m11 - sy * m21;
+                            float m32 = p1.y - sx * m12 - sy * m22;
+
+                            bmpBrush->SetTransform(D2D1::Matrix3x2F(m11, m12, m21, m22, m31, m32));
+                            rt->FillGeometry(quadGeo, bmpBrush);
+                            quadGeo->Release();
+                        }
+                    }
+                }
+                rt->PopLayer();
+            }
+            rt->EndDraw();
+
+            // Only present / reveal the ghost on a non-degenerate frame, so a
+            // collapsed mesh never flashes as a line. The ghost stays hidden until
+            // the first real frame (restore) and simply holds its last good frame if
+            // the tail collapses (minimize) - both invisible to the eye.
+            if (!degenerate) {
+                POINT ptDst = { vLeft, vTop };
+                SIZE sz = { vWidth, vHeight };
+                POINT ptSrc = { 0, 0 };
+                BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+                UpdateLayeredWindow(hGhost, hScreenDC, &ptDst, &sz, hMemDC, &ptSrc, 0, &bf, ULW_ALPHA);
+
+                if (firstFrame) {
+                    ShowWindow(hGhost, SW_SHOWNOACTIVATE);
+                }
+            }
+
+            if (lastFrame) break;
+
+            // Mod is being unloaded: cut the animation short. The teardown below
+            // still reveals the real window (rising) and re-enables its DWM
+            // transitions.
+            if (g_unloading.load(std::memory_order_relaxed)) break;
+
+            // The first real frame has been presented on the ghost. For a
+            // minimize the hook is holding the REAL minimize (or, on the
+            // auto-hide path, the cloak-hide) back until this moment - otherwise
+            // the window would vanish a few frames before the genie appears.
+            // One DwmFlush here guarantees it is composed on screen before the
+            // handoff; every subsequent frame is capped only by the pacer below.
+            if (firstFrame && !degenerate) {
+                DwmFlush();
+                firstFrame = FALSE;
+                if (data->hFirstFrameShown) SetEvent(data->hFirstFrameShown);
+            }
+
+            // Rate-limit to ~2x refresh so we never busy-spin. The deadline is
+            // measured from the START of the frame, so the period is
+            // max(render, interval), not render + interval (a render faster than
+            // the interval just sleeps the difference; a slower one runs as-is).
+            // Capped wait keeps the g_unloading check responsive. When a frame
+            // overruns its budget, SwitchToThread still yields the quantum.
+            if (hFrameTimer) {
+                LARGE_INTEGER qpcAfter;
+                QueryPerformanceCounter(&qpcAfter);
+                double spentMs = (qpcAfter.QuadPart - qpcFrameStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
+                double waitMs = frameIntervalMs - spentMs;
+                if (waitMs > 0.1) {
+                    LARGE_INTEGER due;
+                    due.QuadPart = -(LONGLONG)(waitMs * 10000.0);   // 100ns units
+                    SetWaitableTimer(hFrameTimer, &due, 0, nullptr, nullptr, FALSE);
+                    WaitForSingleObject(hFrameTimer, 100);
+                } else {
+                    SwitchToThread();   // overran the budget - yield the quantum anyway
+                }
+            } else {
+                Sleep(1);   // last resort: never spin
+            }
+        }
+    }
+
+    if (hFrameTimer) { CloseHandle(hFrameTimer); hFrameTimer = nullptr; }
+    if (cachedOutlineGeo) { cachedOutlineGeo->Release(); cachedOutlineGeo = nullptr; }
+
+    // -------------------- COMMON TEARDOWN --------------------
+    if (data->isRising) {
+        // Reveal the real window the same way it was hidden.
+        if (data->hiddenByCloak) {
+            MacGenieSetCloak(data->hRealWnd, FALSE);
+        } else {
+            SetLayeredWindowAttributes(data->hRealWnd, 0, 255, LWA_ALPHA);
+            if (!(data->originalExStyle & WS_EX_LAYERED)) {
+                SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->originalExStyle);
+            }
+        }
+    }
+
+    // For the auto-hide deferred path we keep DWM transitions disabled through the
+    // real (deferred) minimize just below, so the system's own minimize animation
+    // never plays; every other path re-enables them now.
+    if (!data->deferredMinimize && !data->isClosing) {
+        MacGenieSetDwmTransitions(data->hRealWnd, TRUE);
+    }
+
+    if (data->isClosing && !g_unloading.load(std::memory_order_relaxed) &&
+        IsWindow(data->hRealWnd)) {
+        if (data->closeMsg == GENIE_DEFERRED_ASYNC_HIDE) {
+            SetPropW(data->hRealWnd, L"GenieCloseHandled", (HANDLE)1);
+            ShowWindowAsync_Original(data->hRealWnd, SW_HIDE);
+            for (int i = 0; i < 50 && IsWindow(data->hRealWnd) &&
+                 IsWindowVisible(data->hRealWnd); ++i) Sleep(10);
+            if (IsWindow(data->hRealWnd)) {
+                MacGenieSetCloak(data->hRealWnd, FALSE);
+                RemovePropW(data->hRealWnd, L"GenieCloseAnimating");
+                MacGenieSetDwmTransitions(data->hRealWnd, TRUE);
+            }
+        } else if (data->closeMsg != WM_DESTROY) {
+            SetPropW(data->hRealWnd, L"GenieCloseHandled", (HANDLE)1);
+            SetPropW(data->hRealWnd, L"GenieCloseBypass", (HANDLE)1);
+            if (data->closeMsg == WM_SYSCOMMAND)
+                PostMessageW(data->hRealWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+            else
+                PostMessageW(data->hRealWnd, WM_CLOSE, 0, 0);
+            // Keep the real HWND cloaked until the app actually hides or
+            // destroys it. A persistent handled marker prevents duplicate
+            // WM_CLOSE / DestroyWindow paths from replaying the animation.
+            for (int i = 0; i < 200 && IsWindow(data->hRealWnd) &&
+                 IsWindowVisible(data->hRealWnd) &&
+                 !g_unloading.load(std::memory_order_relaxed); ++i) {
+                Sleep(10);
+            }
+            if (IsWindow(data->hRealWnd)) {
+                MacGenieSetCloak(data->hRealWnd, FALSE);
+                RemovePropW(data->hRealWnd, L"GenieCloseAnimating");
+                MacGenieSetDwmTransitions(data->hRealWnd, TRUE);
+            }
+        }
+    }
+    if (data->isClosing && g_unloading.load(std::memory_order_acquire) &&
+        IsWindow(data->hRealWnd)) {
+        MacGenieSetCloak(data->hRealWnd, FALSE);
+        MacGenieSetDwmTransitions(data->hRealWnd, TRUE);
+        RemovePropW(data->hRealWnd, L"GenieCloseAnimating");
+        RemovePropW(data->hRealWnd, L"GenieCloseBypass");
+        RemovePropW(data->hRealWnd, L"GenieCloseHandled");
+    }
+
+    if (bmpBrush) { bmpBrush->Release(); bmpBrush = nullptr; }
+    if (snapshotBmp) { snapshotBmp->Release(); snapshotBmp = nullptr; }
+    if (rt) { rt->Release(); rt = nullptr; }
+
+    SelectObject(hMemDC, hOldBmp);
+    DeleteObject(hTargetBmp);
+    DeleteObject(data->hBitmap);   // frees data->pBits (DIB section)
+    DeleteDC(hMemDC);
+    ReleaseDC(NULL, hScreenDC);
+    DestroyWindow(hGhost);
+
+    // Unblock the waiting minimize hook (in case we bailed before the first frame
+    // was ever composed), then release the event (this thread owns it).
+    if (data->hFirstFrameShown) {
+        SetEvent(data->hFirstFrameShown);
+        CloseHandle(data->hFirstFrameShown);
+    }
+
+    // Auto-hide "unhide" completion - Potassiumuncher's engine, reconciled with
+    // MINE's cloak hide. The caller cloaked the real window after our first frame
+    // (flash-free, unlike HIS's WS_EX_LAYERED+alpha hide) and deferred the real
+    // minimize to us so the revealed taskbar didn't slide away mid-animation.
+    if (data->deferredMinimize) {
+        int unhideMs = data->unhideDurationMs;
+        int animMs = data->durationMs;
+        if (data->requestedUnhide && unhideMs > animMs) {
+            // Chunked sleep so the unload drain (which waits ~3 s for workers to
+            // see g_unloading) never times out on the up-to-~5 s unhide wait and
+            // leaves this thread in unmapped code.
+            int remaining = unhideMs - animMs;
+            while (remaining > 0 && !g_unloading.load(std::memory_order_relaxed)) {
+                int chunk = remaining < 20 ? remaining : 20;
+                Sleep(chunk);
+                remaining -= chunk;
+            }
+        }
+
+        // Perform the delayed minimize with transitions still disabled (instant, no
+        // system animation). GenieBypass stops our own DefWindowProcW hook from
+        // re-triggering the genie. Hardened with IsWindow guards (HIS's unhide path
+        // could race a closed window / silent SetForegroundWindow failure).
+        if (!g_unloading.load(std::memory_order_relaxed) && IsWindow(data->hRealWnd)) {
+            SetPropW(data->hRealWnd, L"GenieBypass", (HANDLE)1);
+            SendMessageTimeoutW(data->hRealWnd, WM_SYSCOMMAND, SC_MINIMIZE, 0, SMTO_NORMAL, 1000, NULL);
+            RemovePropW(data->hRealWnd, L"GenieBypass");
+        }
+        // Always uncloak so we never leave an invisible, non-minimized window, then
+        // re-enable transitions for future system animations.
+        if (IsWindow(data->hRealWnd)) {
+            MacGenieSetCloak(data->hRealWnd, FALSE);
+            MacGenieSetDwmTransitions(data->hRealWnd, TRUE);
+        }
+        // Shift focus so the taskbar slides back down natively.
+        if (data->requestedUnhide && !g_unloading.load(std::memory_order_relaxed)) {
+            if (data->hNextApp && IsWindow(data->hNextApp) && IsWindowVisible(data->hNextApp)) {
+                SetForegroundWindow(data->hNextApp);
+            } else {
+                SetForegroundWindow(FindWindowW(L"Progman", NULL));
+            }
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        g_AnimActive.erase(data->hRealWnd);
+    }
+    delete data;
+    return 0;
+}
+
+// -------------------------------------------------------------------------
+// CLASSIC engine: the mod's original (v2.2.0) per-output-scanline GDI strip warp,
+// kept as an opt-in alternative to Potassiumuncher's Direct2D engine (some users
+// preferred it). It consumes the SAME MacGenieAnimData contract the modern engine
+// does - snapshot bitmap, extended-frame rect, dock target, first-frame event - and
+// runs the SAME teardown (reveal, DWM transitions, auto-hide deferred minimize,
+// worker drain), so it drops in behind the identical setup/capture path; only the
+// per-frame rendering differs. Selected by the "Animation style" setting.
+// -------------------------------------------------------------------------
+DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
+    MacGenieAnimData* data = (MacGenieAnimData*)lpParam;
+
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+
+    const int W = data->width;
+    const int H = data->height;
+    // The monitor the genie plays on, in virtual-screen coords (from the shared
+    // setup: the primary when multi-monitor support is off, else the window's).
+    RECT mon;
+    MONITORINFO mmi; mmi.cbSize = sizeof(mmi);
+    if (data->hMon && GetMonitorInfoW(data->hMon, &mmi)) {
+        mon = mmi.rcMonitor;
+    } else {
+        mon.left = 0; mon.top = 0;
+        mon.right = GetSystemMetrics(SM_CXSCREEN);
+        mon.bottom = GetSystemMetrics(SM_CYSCREEN);
+    }
+
+    const int origLeft = data->targetRect.left;
+    const int origTop  = data->targetRect.top;
+    const float origCenterX = (float)origLeft + W * 0.5f;
+
+    // Where the genie funnels to: the learned taskbar icon X. The dock Y is taken
+    // from the real per-monitor taskbar window (the same signal the modern engine
+    // uses), so a taskbar pinned to the top of the screen is honored too -
+    // previously the classic style always assumed the taskbar was at the bottom of
+    // the monitor. A single global shell query would get the wrong edge on setups
+    // where each monitor's taskbar can be on a different edge.
+    int dockX = data->targetDockX;
+    if (dockX < mon.left) dockX = mon.left;
+    if (dockX > mon.right) dockX = mon.right;
+    float dockY = (float)mon.bottom;
+    if (HWND hTray = FindTaskbarForMonitor(data->hMon)) {
+        RECT tr;
+        if (GetWindowRect(hTray, &tr) && tr.bottom > tr.top &&
+            (tr.top + tr.bottom) < (mon.top + mon.bottom)) {   // taskbar in the upper half
+            dockY = (float)mon.top;
+        }
+    }
+    if (data->isClosing) {
+        const int direction = g_closeDirection.load(std::memory_order_relaxed);
+        if (direction == 0) { dockX = mon.left; dockY = (float)(mon.top + mon.bottom) * 0.5f; }
+        else if (direction == 1) { dockX = mon.right; dockY = (float)(mon.top + mon.bottom) * 0.5f; }
+        else { dockX = (mon.left + mon.right) / 2; dockY = (float)mon.top; }
+    }
+    const float dockXf = (float)dockX;
+    // Which end leads the morph. Taken from the window's mid-line so a dock that
+    // lands exactly on the window edge still picks a sane direction, and kept
+    // outside the window's own vertical span so the yb[] map below stays
+    // monotonic (a hard requirement of the scanline walk).
+    const float origBottomF = (float)(origTop + H);
+    const bool dockAbove = dockY < ((float)origTop + origBottomF) * 0.5f;
+    if (dockAbove) { if (dockY > (float)origTop) dockY = (float)origTop; }
+    else           { if (dockY < origBottomF)    dockY = origBottomF; }
+    float neckW = W * 0.03f;
+    if (neckW < 12.0f) neckW = 12.0f;
+    if (neckW > 60.0f) neckW = 60.0f;
+
+    // Bounding box the funnel can occupy. Both the window's own monitor and the
+    // monitor it funnels to are unioned; the box is trimmed to them but never
+    // allowed to clip the window rect or the dock column away (shared helper -
+    // the same clipping bug the modern engine had, when multi-monitor support is
+    // off and the window sits on a secondary display).
+    int boundLeft   = (origLeft < dockX ? origLeft : dockX) - W / 2;
+    int boundRight  = ((origLeft + W) > dockX ? (origLeft + W) : dockX) + W / 2;
+    // Span from the dock edge up/down to the window so a top taskbar (dock above
+    // the window) is inside the canvas instead of below the box.
+    int boundTop    = std::min<int>(origTop, (int)dockY);
+    int boundBottom = std::max<int>(origTop + H, (int)dockY);
+    RECT monUnion = GetGenieMonitorUnion(data->targetRect, data->hMon);
+    ClampGenieCanvas(boundLeft, boundTop, boundRight, boundBottom,
+                     data->targetRect, dockX, monUnion);
+    int boundW = boundRight - boundLeft;
+    int boundH = boundBottom - boundTop;
+    if (boundW < 1) boundW = 1;
+    if (boundH < 1) boundH = 1;
+
+    // Layered "ghost" window (plain STATIC class - no custom WndProc, so no clash
+    // with the modern engine's ghost class). Created hidden, shown after frame 1.
+    HWND hGhost = CreateWindowExW(
+        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT,
+        L"STATIC", NULL, WS_POPUP,
+        boundLeft, boundTop, boundW, boundH,
+        NULL, NULL, NULL, NULL);
+    if (hGhost) SetPropW(hGhost, L"GenieGhost", (HANDLE)1);
+
+    HDC hScreenDC = GetDC(NULL);
+
+    // Source pixels as a readable 32-bit top-down DIB.
+    HDC hSrcDC = CreateCompatibleDC(hScreenDC);
+    HBITMAP hOldSrc = (HBITMAP)SelectObject(hSrcDC, data->hBitmap);
+
+    BITMAPINFO sbmi;
+    ZeroMemory(&sbmi, sizeof(sbmi));
+    sbmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    sbmi.bmiHeader.biWidth = W;
+    sbmi.bmiHeader.biHeight = -H;       // negative height = top-down
+    sbmi.bmiHeader.biPlanes = 1;
+    sbmi.bmiHeader.biBitCount = 32;
+    sbmi.bmiHeader.biCompression = BI_RGB;
+    BYTE* srcBits = NULL;
+    HBITMAP hSrcDib = CreateDIBSection(hScreenDC, &sbmi, DIB_RGB_COLORS, (void**)&srcBits, NULL, 0);
+    HDC hSrcDibDC = CreateCompatibleDC(hScreenDC);
+    HBITMAP hOldSrcDib = (HBITMAP)SelectObject(hSrcDibDC, hSrcDib);
+    BitBlt(hSrcDibDC, 0, 0, W, H, hSrcDC, 0, 0, SRCCOPY);
+    GdiFlush();
+    const int srcStride = W * 4;
+
+    // Canvas: 32-bit top-down DIB for genuine per-pixel alpha.
+    BITMAPINFO bmi;
+    ZeroMemory(&bmi, sizeof(bmi));
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = boundW;
+    bmi.bmiHeader.biHeight = -boundH;   // negative height = top-down
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    BYTE* pBits = NULL;
+    HBITMAP hCanvas = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, (void**)&pBits, NULL, 0);
+    HDC hCanvasDC = CreateCompatibleDC(hScreenDC);
+    HBITMAP hOldCanvas = (HBITMAP)SelectObject(hCanvasDC, hCanvas);
+    const int canvasStride = boundW * 4;
+
+    const float SPREAD = 0.65f;   // rows nearest the dock lead the morph (the
+                                  // spread v is flipped when the dock is above)
+    const size_t canvasBytes = (size_t)boundW * 4 * boundH;
+
+    const double totalMs = (double)data->durationMs;
+
+    auto morphAt = [&](float v, float tt) -> float {
+        float m = tt * (1.0f + SPREAD) - (1.0f - v) * SPREAD;
+        if (m < 0.0f) m = 0.0f;
+        if (m > 1.0f) m = 1.0f;
+        return m * m * (3.0f - 2.0f * m);
+    };
+
+    float* yb = new float[H + 1];
+
+    // Time-based progress; frames paced at 2x refresh below (no per-frame
+    // DwmFlush, same as the modern engine, so the classic warp hits the same
+    // half-rate cliff only if its per-frame work ever exceeds the interval).
+    LARGE_INTEGER qpcFreq, qpcStart, qpcNow;
+    QueryPerformanceFrequency(&qpcFreq);
+    QueryPerformanceCounter(&qpcStart);
+
+    // Frame pacing, 2x the display's refresh rate (fallback 240 fps).
+    double frameIntervalMs = 1000.0 / 240.0;
+    DWM_TIMING_INFO ti = { sizeof(ti) };
+    if (SUCCEEDED(DwmGetCompositionTimingInfo(NULL, &ti)) && ti.rateRefresh.uiDenominator) {
+        double hz = (double)ti.rateRefresh.uiNumerator / ti.rateRefresh.uiDenominator;
+        frameIntervalMs = 1000.0 / (hz * 2.0);
+    }
+    HANDLE hFrameTimer = CreateWaitableTimerExW(
+        nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+        TIMER_MODIFY_STATE | SYNCHRONIZE);
+    if (!hFrameTimer) {
+        // Pre-1803: the high-resolution flag isn't recognized. A plain waitable
+        // timer paces coarser, but it still isn't a spin.
+        hFrameTimer = CreateWaitableTimerExW(nullptr, nullptr, 0,
+                                             TIMER_MODIFY_STATE | SYNCHRONIZE);
+    }
+
+    BOOL firstFrame = TRUE;
+    for (;;) {
+        QueryPerformanceCounter(&qpcNow);
+        const LARGE_INTEGER qpcFrameStart = qpcNow;
+        double elapsedMs = (qpcNow.QuadPart - qpcStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
+        BOOL lastFrame = (elapsedMs >= totalMs);
+        float progress = lastFrame ? 1.0f : (float)(elapsedMs / totalMs);
+
+        // 0 = full window at its place, 1 = collapsed at the dock; restore reverses.
+        float tt = data->isRising ? (1.0f - progress) : progress;
+
+        float fade = 1.0f;
+        if (tt > 0.8f) fade = (1.0f - tt) / 0.2f;
+        if (fade < 0.0f) fade = 0.0f;
+        if (fade > 1.0f) fade = 1.0f;
+
+        memset(pBits, 0, canvasBytes);
+
+        // Vertical map: where each source row lands on screen this frame. The rows
+        // nearest the dock lead the morph (bottom-first neck when the dock is
+        // below the window, top-first when it's above), so the spread v is
+        // flipped accordingly.
+        for (int k = 0; k <= H; ++k) {
+            float v = (float)k / (float)H;
+            float e = morphAt(dockAbove ? (1.0f - v) : v, tt);
+            float idY = (float)origTop + (float)H * v;
+            yb[k] = idY + (dockY - idY) * e;
+        }
+
+        int kSeg = 0;
+        for (int yC = 0; yC < boundH; ++yC) {
+            float screenY = (float)(yC + boundTop) + 0.5f;
+            if (screenY < yb[0] || screenY >= yb[H]) continue;
+
+            while (kSeg < H - 1 && yb[kSeg + 1] <= screenY) kSeg++;
+            float segH = yb[kSeg + 1] - yb[kSeg];
+            float frac = segH > 1e-4f ? (screenY - yb[kSeg]) / segH : 0.0f;
+            float v = ((float)kSeg + frac) / (float)H;
+
+            float em = morphAt(dockAbove ? (1.0f - v) : v, tt);
+            float width = (float)W + (neckW - (float)W) * em;
+            if (width < 1.0f) width = 1.0f;
+            float cx = origCenterX + (dockXf - origCenterX) * em;
+            float leftCanvas = (cx - width * 0.5f) - (float)boundLeft;
+
+            int srcRow = (int)(v * (float)H);
+            if (srcRow < 0) srcRow = 0;
+            if (srcRow > H - 1) srcRow = H - 1;
+            const BYTE* srcRowPtr = srcBits + (size_t)srcRow * srcStride;
+            BYTE* dstRowPtr = pBits + (size_t)yC * canvasStride;
+
+            int xStart = (int)leftCanvas;
+            int xEnd   = (int)(leftCanvas + width) + 1;
+            if (xStart < 0) xStart = 0;
+            if (xEnd > boundW) xEnd = boundW;
+
+            float invW = 1.0f / width;
+            for (int xC = xStart; xC < xEnd; ++xC) {
+                float u = ((float)xC + 0.5f - leftCanvas) * invW;
+                if (u < 0.0f || u >= 1.0f) continue;
+                int srcX = (int)(u * (float)W);
+                if (srcX < 0) srcX = 0;
+                if (srcX > W - 1) srcX = W - 1;
+                const BYTE* sp = srcRowPtr + (size_t)srcX * 4;
+                BYTE* dp = dstRowPtr + (size_t)xC * 4;
+                // Snapshots carry premultiplied per-pixel alpha since the v1.5
+                // capture fix (translucent regions have a<255); propagate it so
+                // acrylic areas stay see-through in the classic style too. The
+                // constant alpha below still applies the global fade on top.
+                dp[0] = sp[0];
+                dp[1] = sp[1];
+                dp[2] = sp[2];
+                dp[3] = sp[3];
+            }
+        }
+
+        POINT ptDst = { boundLeft, boundTop };
+        SIZE  sz    = { boundW, boundH };
+        POINT ptSrc = { 0, 0 };
+        BLENDFUNCTION bf;
+        bf.BlendOp = AC_SRC_OVER;
+        bf.BlendFlags = 0;
+        bf.SourceConstantAlpha = (BYTE)(255.0f * fade);
+        bf.AlphaFormat = AC_SRC_ALPHA;
+        UpdateLayeredWindow(hGhost, hScreenDC, &ptDst, &sz, hCanvasDC, &ptSrc, 0, &bf, ULW_ALPHA);
+
+        if (firstFrame) {
+            ShowWindow(hGhost, SW_SHOWNOACTIVATE);
+        }
+
+        if (lastFrame) break;
+        if (g_unloading.load(std::memory_order_relaxed)) break;
+
+        // First frame is on screen; release the minimize hook it was holding.
+        // One DwmFlush here matches the modern engine's handoff sync; subsequent
+        // frames are paced by the timer below instead of a per-frame DwmFlush.
+        if (firstFrame) {
+            DwmFlush();
+            firstFrame = FALSE;
+            if (data->hFirstFrameShown) SetEvent(data->hFirstFrameShown);
+        }
+
+        // Rate-limit to ~2x refresh so we never busy-spin. The deadline is
+        // measured from the START of the frame, so the period is
+        // max(render, interval), not render + interval (a render faster than
+        // the interval just sleeps the difference; a slower one runs as-is).
+        // Capped wait keeps the g_unloading check responsive. When a frame
+        // overruns its budget, SwitchToThread still yields the quantum.
+        if (hFrameTimer) {
+            LARGE_INTEGER qpcAfter;
+            QueryPerformanceCounter(&qpcAfter);
+            double spentMs = (qpcAfter.QuadPart - qpcFrameStart.QuadPart) * 1000.0 / qpcFreq.QuadPart;
+            double waitMs = frameIntervalMs - spentMs;
+            if (waitMs > 0.1) {
+                LARGE_INTEGER due;
+                due.QuadPart = -(LONGLONG)(waitMs * 10000.0);   // 100ns units
+                SetWaitableTimer(hFrameTimer, &due, 0, nullptr, nullptr, FALSE);
+                WaitForSingleObject(hFrameTimer, 100);
+            } else {
+                SwitchToThread();   // overran the budget - yield the quantum anyway
+            }
+        } else {
+            Sleep(1);   // last resort: never spin
+        }
+    }
+
+    if (hFrameTimer) { CloseHandle(hFrameTimer); hFrameTimer = nullptr; }
+
+    // -------------------- COMMON TEARDOWN (identical to the modern engine) -----
+    if (data->isRising) {
+        // Reveal the real window the same way it was hidden.
+        if (data->hiddenByCloak) {
+            MacGenieSetCloak(data->hRealWnd, FALSE);
+        } else {
+            SetLayeredWindowAttributes(data->hRealWnd, 0, 255, LWA_ALPHA);
+            if (!(data->originalExStyle & WS_EX_LAYERED)) {
+                SetWindowLongPtrW(data->hRealWnd, GWL_EXSTYLE, data->originalExStyle);
+            }
+        }
+    }
+
+    // The auto-hide deferred path keeps transitions disabled through the real
+    // (deferred) minimize below; every other path re-enables them now.
+    if (!data->deferredMinimize && !data->isClosing) {
+        MacGenieSetDwmTransitions(data->hRealWnd, TRUE);
+    }
+
+    if (data->isClosing && !g_unloading.load(std::memory_order_relaxed) &&
+        IsWindow(data->hRealWnd)) {
+        if (data->closeMsg == GENIE_DEFERRED_ASYNC_HIDE) {
+            SetPropW(data->hRealWnd, L"GenieCloseHandled", (HANDLE)1);
+            ShowWindowAsync_Original(data->hRealWnd, SW_HIDE);
+            for (int i = 0; i < 50 && IsWindow(data->hRealWnd) &&
+                 IsWindowVisible(data->hRealWnd); ++i) Sleep(10);
+            if (IsWindow(data->hRealWnd)) {
+                MacGenieSetCloak(data->hRealWnd, FALSE);
+                RemovePropW(data->hRealWnd, L"GenieCloseAnimating");
+                MacGenieSetDwmTransitions(data->hRealWnd, TRUE);
+            }
+        } else if (data->closeMsg != WM_DESTROY) {
+            SetPropW(data->hRealWnd, L"GenieCloseHandled", (HANDLE)1);
+            SetPropW(data->hRealWnd, L"GenieCloseBypass", (HANDLE)1);
+            if (data->closeMsg == WM_SYSCOMMAND)
+                PostMessageW(data->hRealWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+            else
+                PostMessageW(data->hRealWnd, WM_CLOSE, 0, 0);
+            for (int i = 0; i < 200 && IsWindow(data->hRealWnd) &&
+                 IsWindowVisible(data->hRealWnd) &&
+                 !g_unloading.load(std::memory_order_relaxed); ++i) {
+                Sleep(10);
+            }
+            if (IsWindow(data->hRealWnd)) {
+                MacGenieSetCloak(data->hRealWnd, FALSE);
+                RemovePropW(data->hRealWnd, L"GenieCloseAnimating");
+                MacGenieSetDwmTransitions(data->hRealWnd, TRUE);
+            }
+        }
+    }
+    if (data->isClosing && g_unloading.load(std::memory_order_acquire) &&
+        IsWindow(data->hRealWnd)) {
+        MacGenieSetCloak(data->hRealWnd, FALSE);
+        MacGenieSetDwmTransitions(data->hRealWnd, TRUE);
+        RemovePropW(data->hRealWnd, L"GenieCloseAnimating");
+        RemovePropW(data->hRealWnd, L"GenieCloseBypass");
+        RemovePropW(data->hRealWnd, L"GenieCloseHandled");
+    }
+
+    delete[] yb;
+    SelectObject(hCanvasDC, hOldCanvas);
+    SelectObject(hSrcDibDC, hOldSrcDib);
+    SelectObject(hSrcDC, hOldSrc);
+    DeleteObject(hCanvas);
+    DeleteObject(hSrcDib);
+    DeleteObject(data->hBitmap);
+    DeleteDC(hCanvasDC);
+    DeleteDC(hSrcDibDC);
+    DeleteDC(hSrcDC);
+    ReleaseDC(NULL, hScreenDC);
+    DestroyWindow(hGhost);
+
+    if (data->hFirstFrameShown) {
+        SetEvent(data->hFirstFrameShown);
+        CloseHandle(data->hFirstFrameShown);
+    }
+
+    // Auto-hide "unhide" completion (Potassiumuncher's engine) - same as the modern
+    // thread, so the auto-hide feature behaves identically under the classic style.
+    if (data->deferredMinimize) {
+        int unhideMs = data->unhideDurationMs;
+        int animMs = data->durationMs;
+        if (data->requestedUnhide && unhideMs > animMs) {
+            // Chunked sleep so the unload drain (which waits ~3 s for workers to
+            // see g_unloading) never times out on the up-to-~5 s unhide wait and
+            // leaves this thread in unmapped code.
+            int remaining = unhideMs - animMs;
+            while (remaining > 0 && !g_unloading.load(std::memory_order_relaxed)) {
+                int chunk = remaining < 20 ? remaining : 20;
+                Sleep(chunk);
+                remaining -= chunk;
+            }
+        }
+        if (!g_unloading.load(std::memory_order_relaxed) && IsWindow(data->hRealWnd)) {
+            SetPropW(data->hRealWnd, L"GenieBypass", (HANDLE)1);
+            SendMessageTimeoutW(data->hRealWnd, WM_SYSCOMMAND, SC_MINIMIZE, 0, SMTO_NORMAL, 1000, NULL);
+            RemovePropW(data->hRealWnd, L"GenieBypass");
+        }
+        if (IsWindow(data->hRealWnd)) {
+            MacGenieSetCloak(data->hRealWnd, FALSE);
+            MacGenieSetDwmTransitions(data->hRealWnd, TRUE);
+        }
+        if (data->requestedUnhide && !g_unloading.load(std::memory_order_relaxed)) {
+            if (data->hNextApp && IsWindow(data->hNextApp) && IsWindowVisible(data->hNextApp)) {
+                SetForegroundWindow(data->hNextApp);
+            } else {
+                SetForegroundWindow(FindWindowW(L"Progman", NULL));
+            }
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        g_AnimActive.erase(data->hRealWnd);
+    }
+    delete data;
+    return 0;
+}
+
+// -------------------------------------------------------------------------
+// Core Setup Engine & Smart Tracking Logic
+// -------------------------------------------------------------------------
+// Returns TRUE if the worker thread was spawned (the animation is now in flight).
+// `originalExStyle` is the window's TRUE extended style, captured by the caller
+// BEFORE any WS_EX_LAYERED was added for the hide (rising callers hide first).
+// `cloakHidden` says how a rising caller hid the window: TRUE = DWM cloak (restore),
+// FALSE = WS_EX_LAYERED + alpha 0 (launch). The deferred* args drive the auto-hide
+// "unhide" path (falling only): the caller cloaks the window after our first frame
+// and we perform the real minimize at teardown.
+bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
+                       BOOL cloakHidden = FALSE, BOOL deferredMinimize = FALSE,
+                       BOOL requestedUnhide = FALSE, HWND hNextApp = NULL,
+                       BOOL isClosing = FALSE, UINT closeMsg = WM_CLOSE) {
+    // Bound the snapshot cache: windows closed while minimized (the common
+    // WM_DESTROY + PostQuitMessage path never reaches DefWindowProcW, where the
+    // usual cleanup lives) would otherwise leave their full DIB behind until
+    // unload. Cheap sweep at the single animation entry point.
+    {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        for (auto it = g_SnapshotCache.begin(); it != g_SnapshotCache.end();) {
+            if (!IsWindow(it->first)) {
+                DeleteObject(it->second.hBmp);
+                it = g_SnapshotCache.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    // "Excluded programs" gate - single choke point for every animation path
+    // (all six minimize/restore hooks AND the launch thread funnel through here).
+    // Bail exactly like the other early-outs so hook-side state is restored: a
+    // rising caller gets its hide undone, a falling caller gets DWM transitions
+    // back so the DEFAULT system animation plays for the excluded app.
+    if (MacGenieIsExcluded(hWnd)) {
+        if (isClosing) Wh_Log(L"Close genie DEBUG: rejected: excluded process hwnd=%p", hWnd);
+        if (rising) MacGenieUndoRisingHide(hWnd, originalExStyle, cloakHidden);
+        else MacGenieSetDwmTransitions(hWnd, TRUE);
+        return false;
+    }
+
+    // Animation geometry via DWM extended frame bounds (Goal D / bug #4670):
+    // GetWindowRect returns the legacy frame (invisible resize borders / shadow),
+    // which is offset a few px from where the pixels actually are on composited
+    // windows. Snapshot AND warp both use the extended-frame rect, so keyboard /
+    // AutoHotkey minimizes are pixel-aligned. Scheme from Potassiumuncher's engine.
+    RECT winRect;
+    if (!GetWindowRect(hWnd, &winRect)) {
+        if (isClosing) Wh_Log(L"Close genie DEBUG: rejected: GetWindowRect failed hwnd=%p err=%u", hWnd, GetLastError());
+        if (rising) MacGenieUndoRisingHide(hWnd, originalExStyle, cloakHidden);
+        else MacGenieSetDwmTransitions(hWnd, TRUE);
+        return false;
+    }
+    RECT rect = winRect, extRect;
+    if (SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &extRect, sizeof(extRect)))) {
+        rect = extRect;
+    }
+    int w = rect.right - rect.left;
+    int h = rect.bottom - rect.top;
+    int offsetX = rect.left - winRect.left;
+    int offsetY = rect.top - winRect.top;
+    int rawW = winRect.right - winRect.left;
+    int rawH = winRect.bottom - winRect.top;
+
+    if (w <= 0 || h <= 0 || rawW <= 0 || rawH <= 0) {
+        if (isClosing) Wh_Log(L"Close genie DEBUG: rejected: invalid size hwnd=%p frame=%dx%d raw=%dx%d", hWnd, w, h, rawW, rawH);
+        if (rising) MacGenieUndoRisingHide(hWnd, originalExStyle, cloakHidden);
+        else MacGenieSetDwmTransitions(hWnd, TRUE);
+        return false;
+    }
+
+    // One genie per window at a time (MINE). Any window we animate also counts as
+    // "seen", so the launch path won't fire on it later. Refused while unloading.
+    bool blocked = g_unloading.load(std::memory_order_relaxed);
+    if (!blocked) {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        blocked = !g_AnimActive.insert(hWnd).second;
+        if (!blocked) g_LaunchSeen.insert(hWnd);
+    }
+    if (blocked) {
+        if (isClosing) Wh_Log(L"Close genie DEBUG: rejected: already active or unloading hwnd=%p", hWnd);
+        if (rising) {
+            MacGenieUndoRisingHide(hWnd, originalExStyle, cloakHidden);
+        } else {
+            bool owned;
+            {
+                std::lock_guard<std::mutex> lock(g_CacheMutex);
+                owned = g_AnimActive.count(hWnd) != 0;
+            }
+            if (!owned) MacGenieSetDwmTransitions(hWnd, TRUE);
+        }
+        return false;
+    }
+
+    // Monitor the genie targets. Multi-monitor support (experimental) targets the
+    // window's monitor; otherwise the primary, which reproduces the old behavior.
+    bool multiMon = g_multiMonitor.load(std::memory_order_relaxed);
+    HMONITOR hMon = multiMon
+        ? MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST)
+        : MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO mi;
+    mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfoW(hMon, &mi)) {
+        mi.rcMonitor.left = 0; mi.rcMonitor.top = 0;
+        mi.rcMonitor.right = GetSystemMetrics(SM_CXSCREEN);
+        mi.rcMonitor.bottom = GetSystemMetrics(SM_CYSCREEN);
+    }
+    int monWidth = mi.rcMonitor.right - mi.rcMonitor.left;
+
+    // The taskbar button target is only used by minimize/restore animations.
+    // Closing animations choose their destination from close_direction in the
+    // renderer, so don't query the registry, cursor, or Explorer UI Automation here.
+    int learnedTargetX = mi.rcMonitor.left + monWidth / 2;
+    if (!isClosing) {
+        // Default dock target before UIA: left-aligned taskbars start near the
+        // monitor's left; centered taskbars use its middle.
+        DWORD alignVal = 1, dataSize = sizeof(alignVal);
+        RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                     L"TaskbarAl", RRF_RT_REG_DWORD, NULL, &alignVal, &dataSize);
+        learnedTargetX = (alignVal == 0) ? (mi.rcMonitor.left + 160)
+                                         : (mi.rcMonitor.left + monWidth / 2);
+
+        POINT pt;
+        GetCursorPos(&pt);
+        RECT workArea;
+        MONITORINFO cursorMi;
+        cursorMi.cbSize = sizeof(cursorMi);
+        if (GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &cursorMi)) {
+            workArea = cursorMi.rcWork;
+        } else {
+            SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
+        }
+
+        if (!PtInRect(&workArea, pt)) {
+            learnedTargetX = pt.x;
+            std::lock_guard<std::mutex> lock(g_CacheMutex);
+            g_IconPositions[hWnd] = learnedTargetX;
+        } else {
+            learnedTargetX = GetTaskbarButtonX(hWnd, learnedTargetX, hMon);
+        }
+    }
+
+    MacGenieAnimData* data = new MacGenieAnimData();
+    data->hRealWnd = hWnd;
+    data->targetRect = rect;
+    data->hMon = hMon;
+    data->width = w;
+    data->height = h;
+    data->isRising = rising;
+    data->targetDockX = learnedTargetX;
+    data->originalExStyle = originalExStyle;
+    data->hiddenByCloak = cloakHidden;
+    data->hFirstFrameShown = NULL;
+    data->durationMs = g_durationMs.load(std::memory_order_relaxed);
+    data->requestedUnhide = requestedUnhide;
+    data->hNextApp = hNextApp;
+    data->unhideDurationMs = g_unhideDurationMs.load(std::memory_order_relaxed);
+    data->deferredMinimize = deferredMinimize;
+    data->isClosing = isClosing;
+    data->closeMsg = closeMsg;
+    data->pBits = nullptr;
+    data->hBitmap = NULL;
+
+    HDC hScreenDC = GetDC(NULL);
+
+    // Premultiplied 32-bit top-down DIB - D2D's CreateBitmap reads pBits directly.
+    BITMAPINFO bmi = {{0}};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    data->hBitmap = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &data->pBits, NULL, 0);
+
+    if (!data->hBitmap || !data->pBits) {
+        if (isClosing) Wh_Log(L"Close genie DEBUG: rejected: snapshot bitmap allocation failed hwnd=%p", hWnd);
+        ReleaseDC(NULL, hScreenDC);
+        if (rising) MacGenieUndoRisingHide(hWnd, originalExStyle, cloakHidden);
+        else MacGenieSetDwmTransitions(hWnd, TRUE);
+        if (data->hBitmap) DeleteObject(data->hBitmap);
+        delete data;
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        g_AnimActive.erase(hWnd);
+        return false;
+    }
+
+    // Copy a rawW x rawH PrintWindow capture into the w x h snapshot at the
+    // extended-frame offset. Potassiumuncher's v1.5 grey-screen fix: PrintWindow
+    // (PW_RENDERFULLCONTENT) returns pixels that are ALREADY premultiplied, so pass
+    // them through untouched and keep a==0 pixels fully TRANSPARENT. The old code
+    // forced every pixel opaque, which flattened acrylic / Mica backdrop regions
+    // (alpha 0 or partial) into a solid grey - the "grey top" on translucent
+    // windows. With alpha preserved, those regions stay see-through during the
+    // genie and the desktop shows through them, matching the window's real look.
+    auto CopySnapshot = [&](void* srcBits) {
+        DWORD* src = (DWORD*)srcBits;
+        DWORD* dst = (DWORD*)data->pBits;
+        int inBounds = 0, zeroAlpha = 0;
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int sx = x + offsetX;
+                int sy = y + offsetY;
+                if (sx >= 0 && sx < rawW && sy >= 0 && sy < rawH) {
+                    DWORD p = src[sy * rawW + sx];
+                    BYTE a = (BYTE)((p >> 24) & 0xFF);
+                    inBounds++;
+                    if (a == 0) zeroAlpha++;
+                    dst[y * w + x] = (a == 0) ? 0 : p;
+                } else {
+                    dst[y * w + x] = 0;
+                }
+            }
+        }
+        // Fallback: on NON-PRIMARY monitors DWM often returns the entire Mica /
+        // acrylic backdrop region as a==0 - with alpha preserved the whole window
+        // background would simply VANISH during the genie (reported on Explorer on
+        // a secondary display). If most of the window came back fully transparent,
+        // the alpha channel clearly isn't describing real translucency, so force
+        // those pixels opaque - restoring the pre-3.1 dark-backdrop look for this
+        // case, which beats a see-through hole. Windows where transparency is
+        // sparse (rounded corners, small blur regions) keep the faithful alpha.
+        if (inBounds > 0 && zeroAlpha * 2 > inBounds) {
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    int sx = x + offsetX;
+                    int sy = y + offsetY;
+                    if (sx >= 0 && sx < rawW && sy >= 0 && sy < rawH) {
+                        DWORD p = src[sy * rawW + sx];
+                        if (((p >> 24) & 0xFF) == 0) {
+                            dst[y * w + x] = 0xFF000000u | (p & 0x00FFFFFFu);
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    // Window-only capture: grab the window into a rawW x rawH DIB via PrintWindow,
+    // then CopySnapshot into the extended-frame snapshot. PrintWindow renders only
+    // the window's own content, so the taskbar / other windows can never bleed into
+    // the animation (Potassiumuncher's taskbar fix) - and it also works on a
+    // cloaked window (the rising-no-cache path), where a screen grab would not.
+    auto CaptureNow = [&]() -> bool {
+        HDC hTempDC = CreateCompatibleDC(hScreenDC);
+        BITMAPINFO bmiTemp = bmi;
+        bmiTemp.bmiHeader.biWidth = rawW;
+        bmiTemp.bmiHeader.biHeight = -rawH;
+        void* pTempBits = nullptr;
+        HBITMAP hTempBmp = CreateDIBSection(hScreenDC, &bmiTemp, DIB_RGB_COLORS, &pTempBits, NULL, 0);
+        if (!hTempBmp || !pTempBits) {
+            if (hTempBmp) DeleteObject(hTempBmp);
+            DeleteDC(hTempDC);
+            return false;
+        }
+        HBITMAP hOldTempBmp = (HBITMAP)SelectObject(hTempDC, hTempBmp);
+        BOOL captured = FALSE;
+        BOOL screenCapture = FALSE;
+        // The attached trigger prefers a composed-screen capture for a closing
+        // foreground window. Chromium's PrintWindow can return only its title
+        // band, which is exactly the thin strip seen on Edge.
+        if (isClosing && GetForegroundWindow() == hWnd) {
+            captured = BitBlt(hTempDC, 0, 0, rawW, rawH, hScreenDC,
+                              winRect.left, winRect.top, SRCCOPY);
+            screenCapture = captured;
+        }
+        if (!captured) captured = PrintWindow(hWnd, hTempDC, PW_RENDERFULLCONTENT);
+        GdiFlush();
+        CopySnapshot(pTempBits);
+        if (isClosing) {
+            Wh_Log(L"Close genie DEBUG: capture hwnd=%p source=%s succeeded=%d size=%dx%d",
+                   hWnd, screenCapture ? L"desktop" : L"PrintWindow",
+                   captured, rawW, rawH);
+        }
+        SelectObject(hTempDC, hOldTempBmp);
+        DeleteObject(hTempBmp);
+        DeleteDC(hTempDC);
+        return captured != FALSE;
+    };
+
+    if (rising) {
+        BOOL fromCache = FALSE;
+        {
+            std::lock_guard<std::mutex> lock(g_CacheMutex);
+            auto it = g_SnapshotCache.find(hWnd);
+            if (it != g_SnapshotCache.end()) {
+                SnapCache& c = it->second;
+                if (c.w == w && c.h == h) {
+                    memcpy(data->pBits, c.pBits, (size_t)w * h * 4);
+                    fromCache = TRUE;
+                }
+                DeleteObject(c.hBmp);
+                g_SnapshotCache.erase(it);
+            }
+        }
+        // No cached minimize snapshot (e.g. window was already minimized before the
+        // mod loaded): snapshot the freshly-restored (cloaked) window directly.
+        if (!fromCache) CaptureNow();
+    } else {
+        // Falling: capture the WINDOW ONLY via PrintWindow (Potassiumuncher's
+        // method), NOT a screen BitBlt. A screen grab of the window rect also pulls
+        // in whatever is behind / around the window - most visibly the taskbar on
+        // maximized / fullscreen apps, which then warps inside the genie. PrintWindow
+        // renders just the window's own content, so the taskbar (a separate window)
+        // can never bleed in. Tradeoff: DWM acrylic/translucency backdrops aren't
+        // part of the window's own render, so translucent windows animate opaque - a
+        // documented limitation, far less jarring than the taskbar appearing.
+        const bool captured = CaptureNow();
+        if (isClosing) Wh_Log(L"Close genie DEBUG: PrintWindow capture hwnd=%p captured=%d size=%dx%d", hWnd, captured, rawW, rawH);
+        // Cache a copy keyed by HWND for the later restore animation.
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        auto it = g_SnapshotCache.find(hWnd);
+        if (it != g_SnapshotCache.end()) {
+            DeleteObject(it->second.hBmp);
+            g_SnapshotCache.erase(it);
+        }
+        void* pCacheBits = nullptr;
+        HBITMAP hCacheBmp = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &pCacheBits, NULL, 0);
+        if (hCacheBmp && pCacheBits) {
+            memcpy(pCacheBits, data->pBits, (size_t)w * h * 4);
+            g_SnapshotCache[hWnd] = { hCacheBmp, pCacheBits, w, h };
+        } else if (hCacheBmp) {
+            DeleteObject(hCacheBmp);
+        }
+    }
+
+    ReleaseDC(NULL, hScreenDC);
+
+    // For a minimize (normal OR deferred) hold the caller back until the ghost's
+    // first frame is composed - otherwise the window (or, on the deferred path, the
+    // cloak-hide) would happen a few frames before the genie appears (a visible
+    // gap, especially on power-throttled CPUs). Two handles to one event: the
+    // thread owns its duplicate, we own and wait on the original.
+    HANDLE hFirstShown = NULL;
+    if (!rising) {
+        hFirstShown = CreateEventW(NULL, TRUE, FALSE, NULL);
+        if (hFirstShown &&
+            !DuplicateHandle(GetCurrentProcess(), hFirstShown, GetCurrentProcess(),
+                             &data->hFirstFrameShown, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
+            data->hFirstFrameShown = NULL;
+        }
+    }
+    bool waitForFirstFrame = (data->hFirstFrameShown != NULL);
+
+    // Same setup and capture for both styles; only the render thread differs.
+    LPTHREAD_START_ROUTINE renderProc =
+        g_classicEngine.load(std::memory_order_relaxed) ? MacGenieAnimThreadClassic
+                                                        : MacGenieAnimThread;
+    HANDLE hThread = MacGenieCreateWorkerThread(renderProc, data);
+    if (hThread) {
+        if (isClosing) Wh_Log(L"Close genie DEBUG: renderer started hwnd=%p engine=%s", hWnd,
+            g_classicEngine.load(std::memory_order_relaxed) ? L"classic" : L"modern");
+        if (hFirstShown) {
+            if (waitForFirstFrame) {
+                DWORD frameWait = WaitForSingleObject(hFirstShown, 200);   // capped: worst case = old behavior
+                if (isClosing) Wh_Log(L"Close genie DEBUG: first-frame wait hwnd=%p result=%lu", hWnd, frameWait);
+            }
+            CloseHandle(hFirstShown);
+        }
+        return true;
+    }
+
+    // Thread couldn't start - undo our state so the window isn't left invisible or
+    // with transitions permanently disabled.
+    if (isClosing) Wh_Log(L"Close genie DEBUG: renderer thread creation failed hwnd=%p error=%u", hWnd, GetLastError());
+    if (rising) {
+        MacGenieUndoRisingHide(hWnd, data->originalExStyle, data->hiddenByCloak);
+    } else {
+        MacGenieSetDwmTransitions(hWnd, TRUE);
+    }
+    if (hFirstShown) CloseHandle(hFirstShown);
+    if (data->hFirstFrameShown) CloseHandle(data->hFirstFrameShown);
+    DeleteObject(data->hBitmap);
+    delete data;
+    {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        g_AnimActive.erase(hWnd);
+    }
+    return false;
+}
+
+// -------------------------------------------------------------------------
+// Hooks
+// -------------------------------------------------------------------------
+DWORD WINAPI MacGenieLaunchThread(LPVOID lpParam);   // defined below
+
+// Arm the launch animation: check eligibility, kill DWM transition and hide the
+// window (alpha 0) *before* the real show call, so the system's open animation
+// never appears. Writes the TRUE pre-hide extended style to *origExOut.
+static bool MacGenieLaunchPrepare(HWND hWnd, int nCmdShow, LONG_PTR* origExOut) {
+    if (g_unloading.load(std::memory_order_relaxed)) return false;
+    if (!g_launchAnimation.load(std::memory_order_relaxed)) return false;
+    if (nCmdShow != SW_SHOW && nCmdShow != SW_SHOWNORMAL &&
+        nCmdShow != SW_SHOWDEFAULT && nCmdShow != SW_SHOWMAXIMIZED) return false;
+    if (IsWindowVisible(hWnd) || IsIconic(hWnd)) return false;
+    if (!MacGenieIsLaunchWindow(hWnd)) return false;
+    {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        if (!g_LaunchSeen.insert(hWnd).second) return false;
+    }
+    MacGenieSetDwmTransitions(hWnd, FALSE);
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    *origExOut = exStyle;
+    SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+    SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+    return true;
+}
+
+// Second half of the launch sequence: spawn the reveal worker (or roll back).
+static void MacGenieLaunchCommit(HWND hWnd, LONG_PTR originalExStyle) {
+    MacGenieLaunchData* ld = new MacGenieLaunchData();
+    ld->hWnd = hWnd;
+    ld->originalExStyle = originalExStyle;
+    HANDLE h = MacGenieCreateWorkerThread(MacGenieLaunchThread, ld);
+    if (h) {
+        // The tracked handle is retained until the worker exits and is reaped.
+    } else {
+        delete ld;
+        SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+        if (!(originalExStyle & WS_EX_LAYERED)) {
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, originalExStyle);
+        }
+        MacGenieSetDwmTransitions(hWnd, TRUE);
+    }
+}
+
+BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
+    if (nCmdShow == SW_HIDE) {
+        bool animated = MacGenieAnimateBeforeNativeHide(hWnd, L"ShowWindow");
+        BOOL result = ShowWindow_Original(hWnd, nCmdShow);
+        MacGenieFinishNativeHide(hWnd, animated);
+        if (animated) Wh_Log(L"Close genie DEBUG: ShowWindow hide completed hwnd=%p result=%d", hWnd, result);
+        return result;
+    }
+    RemovePropW(hWnd, L"GenieCloseHandled");
+    return ShowWindow_Original(hWnd, nCmdShow);
+}
+
+BOOL WINAPI DestroyWindow_Hook(HWND hWnd) {
+    // Many Chromium, Firefox, and Electron windows destroy themselves directly
+    // after their own close handling, without passing WM_CLOSE through the
+    // exported DefWindowProcW. Animate at this confirmed-destruction point.
+    WCHAR className[128]{};
+    GetClassNameW(hWnd, className, ARRAYSIZE(className));
+    const bool closeTarget = MacGenieIsCloseTarget(hWnd);
+    if (closeTarget || (IsWindow(hWnd) && !GetPropW(hWnd, L"GenieGhost") &&
+                        GetAncestor(hWnd, GA_ROOT) == hWnd)) {
+        RECT r{};
+        GetWindowRect(hWnd, &r);
+        Wh_Log(L"Close genie DEBUG: DestroyWindow entry hwnd=%p class=%s target=%d visible=%d iconic=%d root=%d owner=%p size=%dx%d thread=%lu current=%lu ghost=%d animating=%d unloading=%d",
+               hWnd, className, closeTarget, IsWindowVisible(hWnd), IsIconic(hWnd),
+               GetAncestor(hWnd, GA_ROOT) == hWnd, GetWindow(hWnd, GW_OWNER),
+               r.right-r.left, r.bottom-r.top,
+               GetWindowThreadProcessId(hWnd, nullptr), GetCurrentThreadId(),
+               GetPropW(hWnd, L"GenieGhost") != nullptr,
+               GetPropW(hWnd, L"GenieCloseAnimating") != nullptr,
+               g_unloading.load(std::memory_order_relaxed));
+    }
+    bool animated = false;
+    if (closeTarget && !GetPropW(hWnd, L"GenieGhost") &&
+        !GetPropW(hWnd, L"GenieCloseHandled") &&
+        !GetPropW(hWnd, L"GenieCloseAnimating") &&
+        !g_unloading.load(std::memory_order_relaxed)) {
+        MacGenieSetDwmTransitions(hWnd, FALSE);
+        SetPropW(hWnd, L"GenieCloseAnimating", (HANDLE)1);
+        if (StartMacGenieAnim(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE),
+                              FALSE, FALSE, FALSE, NULL, TRUE, WM_DESTROY)) {
+            animated = true;
+            Wh_Log(L"Close genie DEBUG: DestroyWindow animation accepted hwnd=%p", hWnd);
+            MacGenieMarkCloseAndCloak(hWnd);
+            // The worker leaves the window cloaked. Wait for its cleanup before
+            // allowing the application's confirmed DestroyWindow call through.
+            for (int i = 0; i < 400 && IsWindow(hWnd) &&
+                 !g_unloading.load(std::memory_order_relaxed); ++i) {
+                bool active;
+                {
+                    std::lock_guard<std::mutex> lock(g_CacheMutex);
+                    active = g_AnimActive.count(hWnd) != 0;
+                }
+                if (!active) break;
+                Sleep(10);
+            }
+        } else {
+            Wh_Log(L"Close genie DEBUG: DestroyWindow animation failed setup hwnd=%p", hWnd);
+            RemovePropW(hWnd, L"GenieCloseAnimating");
+            MacGenieSetDwmTransitions(hWnd, TRUE);
+        }
+    }
+    BOOL result = DestroyWindow_Original(hWnd);
+    if (closeTarget) Wh_Log(L"Close genie DEBUG: DestroyWindow original returned hwnd=%p result=%d animated=%d", hWnd, result, animated);
+    if (!result && animated && IsWindow(hWnd)) {
+        RemovePropW(hWnd, L"GenieCloseHandled");
+        RemovePropW(hWnd, L"GenieCloseAnimating");
+        RemovePropW(hWnd, L"GenieCloseBypass");
+        MacGenieSetCloak(hWnd, FALSE);
+        MacGenieSetDwmTransitions(hWnd, TRUE);
+    }
+    return result;
+}
+
+LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
+    if (Msg == WM_SHOWWINDOW && wParam && !IsIconic(hWnd)) {
+        RemovePropW(hWnd, L"GenieCloseHandled");
+    }
+    const bool closeMessage = Msg == WM_CLOSE ||
+        (Msg == WM_SYSCOMMAND && (wParam & 0xFFF0) == SC_CLOSE);
+    const bool canAnimateMessage = closeMessage && MacGenieCanAnimateCloseMessage(hWnd);
+    const bool closeRequest = canAnimateMessage;
+    if (closeMessage) {
+        WCHAR className[128]{};
+        GetClassNameW(hWnd, className, ARRAYSIZE(className));
+        Wh_Log(L"Close genie DEBUG: DefWindowProc close hwnd=%p class=%s msg=0x%04X allowed=%d visible=%d iconic=%d root=%d bypass=%d animating=%d",
+               hWnd, className, Msg, canAnimateMessage, IsWindowVisible(hWnd),
+               IsIconic(hWnd), GetAncestor(hWnd, GA_ROOT) == hWnd,
+               GetPropW(hWnd, L"GenieCloseBypass") != nullptr,
+               GetPropW(hWnd, L"GenieCloseAnimating") != nullptr);
+    }
+    if (closeMessage && IsWindowVisible(hWnd) &&
+        GetPropW(hWnd, L"GenieCloseAnimating") &&
+        !GetPropW(hWnd, L"GenieCloseBypass")) {
+        Wh_Log(L"Close genie DEBUG: suppress duplicate close request hwnd=%p msg=0x%04X", hWnd, Msg);
+        return 0;
+    }
+    if (closeRequest) {
+        if (GetPropW(hWnd, L"GenieCloseBypass")) {
+            // SC_CLOSE's default processing can synchronously generate WM_CLOSE.
+            // Carry the bypass through that handoff and consume it there.
+            if (Msg == WM_CLOSE) RemovePropW(hWnd, L"GenieCloseBypass");
+        } else if (IsWindowVisible(hWnd) && !IsIconic(hWnd) &&
+                   GetAncestor(hWnd, GA_ROOT) == hWnd &&
+                   !g_unloading.load(std::memory_order_relaxed)) {
+            Wh_Log(L"Close genie: intercepted hwnd=%p message=0x%04X", hWnd, Msg);
+            MacGenieSetDwmTransitions(hWnd, FALSE);
+            SetPropW(hWnd, L"GenieCloseAnimating", (HANDLE)1);
+            if (StartMacGenieAnim(hWnd, FALSE,
+                    GetWindowLongPtrW(hWnd, GWL_EXSTYLE), FALSE, FALSE,
+                    FALSE, NULL, TRUE,
+                    Msg)) {
+                if (MacGenieMarkCloseAndCloak(hWnd)) return 0;
+                return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
+            }
+            Wh_Log(L"Close genie: animation setup failed hwnd=%p", hWnd);
+            RemovePropW(hWnd, L"GenieCloseAnimating");
+            MacGenieSetDwmTransitions(hWnd, TRUE);
+        }
+    }
+    if (Msg == WM_DESTROY) {
+        RemovePropW(hWnd, L"GenieCloseHandled");
+        RemovePropW(hWnd, L"GenieCloseAnimating");
+        RemovePropW(hWnd, L"GenieCloseBypass");
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        auto it = g_SnapshotCache.find(hWnd);
+        if (it != g_SnapshotCache.end()) {
+            DeleteObject(it->second.hBmp);
+            g_SnapshotCache.erase(it);
+        }
+        g_IconPositions.erase(hWnd);
+        g_LaunchSeen.erase(hWnd);
+    }
+
+    if (!closeRequest) {
+        return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
+    }
+
+    if (Msg == WM_SYSCOMMAND) {
+        UINT cmd = wParam & 0xFFF0;
+        if (cmd == SC_MINIMIZE) {
+            // Our own deferred minimize (auto-hide path) re-enters here via
+            // SendMessageTimeoutW - let it pass straight through, no recursion.
+            if (GetPropW(hWnd, L"GenieBypass")) {
+                return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
+            }
+            if (MacGenieShouldAnimate(hWnd)) {
+                // Auto-hide taskbar? Reveal it, defer the real minimize until the
+                // animation finishes so it doesn't slide away mid-genie.
+                // (Potassiumuncher's engine, reconciled with MINE's cloak hide.)
+                BOOL requestedUnhide = FALSE;
+                HWND hNext = NULL;
+                if (g_unhideEnabled.load(std::memory_order_relaxed)) {
+                    HWND hTray = FindTaskbarForMonitor(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST));
+                    if (hTray) {
+                        APPBARDATA abd = { sizeof(APPBARDATA) };
+                        abd.hWnd = hTray;
+                        UINT uState = (UINT)SHAppBarMessage(ABM_GETSTATE, &abd);
+                        if (uState & ABS_AUTOHIDE) {
+                            requestedUnhide = TRUE;
+                            HWND hwndIter = GetWindow(hWnd, GW_HWNDNEXT);
+                            while (hwndIter) {
+                                if (IsWindowVisible(hwndIter) && !IsIconic(hwndIter) &&
+                                    GetAncestor(hwndIter, GA_ROOT) == hwndIter &&
+                                    GetWindowTextLengthW(hwndIter) > 0 &&
+                                    hwndIter != hWnd && hwndIter != hTray) {
+                                    DWORD exStyle = GetWindowLongPtrW(hwndIter, GWL_EXSTYLE);
+                                    if (!(exStyle & WS_EX_TOOLWINDOW)) { hNext = hwndIter; break; }
+                                }
+                                hwndIter = GetWindow(hwndIter, GW_HWNDNEXT);
+                            }
+                            SetForegroundWindow(hTray);
+                        }
+                    }
+                }
+
+                MacGenieSetDwmTransitions(hWnd, FALSE);
+                if (requestedUnhide) {
+                    // Deferred path: animate, then (in the worker) cloak-hide is
+                    // applied by us here after the first frame, and the worker does
+                    // the real minimize + focus juggle at the end.
+                    bool ok = StartMacGenieAnim(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE),
+                                                FALSE, TRUE, TRUE, hNext);
+                    if (ok) {
+                        // First frame is up (StartMacGenieAnim waited): hide the real
+                        // window with a flash-free cloak; worker minimizes it later.
+                        MacGenieSetCloak(hWnd, TRUE);
+                        return 0;
+                    }
+                    // Spawn failed: fall back to a normal immediate minimize.
+                    return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
+                }
+                // Normal minimize (MINE): first-frame gate, then real minimize.
+                StartMacGenieAnim(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
+            }
+            return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
+        }
+        else if (cmd == SC_RESTORE && IsIconic(hWnd) &&
+                 g_openAnimation.load(std::memory_order_relaxed) &&
+                 MacGenieShouldAnimate(hWnd)) {
+            MacGenieSetDwmTransitions(hWnd, FALSE);
+            MacGenieSetCloak(hWnd, TRUE);
+            LRESULT res = DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
+            StartMacGenieAnim(hWnd, TRUE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE), TRUE);
+            return res;
+        }
+    }
+    return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
+}
+
+// Custom-title-bar apps (Zed/GPUI, some Electron) minimize via ShowWindowAsync,
+// SetWindowPlacement, or CloseWindow. Shared minimize kick-off for those paths (no
+// unhide handling - that lives on the SC_MINIMIZE path only).
+static void MacGenieTryMinimizeAnim(HWND hWnd) {
+    if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return;
+    if (!MacGenieShouldAnimate(hWnd)) return;
+    MacGenieSetDwmTransitions(hWnd, FALSE);
+    StartMacGenieAnim(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
+}
+
+BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int nCmdShow) {
+    if (nCmdShow == SW_HIDE) {
+        const bool eligible = MacGenieShouldTreatHideAsClose(hWnd);
+        if (IsWindow(hWnd) && GetAncestor(hWnd, GA_ROOT) == hWnd) {
+            WCHAR cls[96]{};
+            RECT r{};
+            GetClassNameW(hWnd, cls, ARRAYSIZE(cls));
+            GetWindowRect(hWnd, &r);
+            Wh_Log(L"Close genie DEBUG: ShowWindowAsync hide request hwnd=%p class=%s eligible=%d visible=%d iconic=%d size=%dx%d handled=%d",
+                   hWnd, cls, eligible, IsWindowVisible(hWnd), IsIconic(hWnd),
+                   r.right-r.left, r.bottom-r.top,
+                   GetPropW(hWnd, L"GenieCloseHandled") != nullptr);
+        }
+        if (eligible &&
+            !GetPropW(hWnd, L"GenieCloseHandled") &&
+            !GetPropW(hWnd, L"GenieCloseAnimating") &&
+            !GetPropW(hWnd, L"GenieCloseBypass") &&
+            !g_unloading.load(std::memory_order_relaxed)) {
+            Wh_Log(L"Close genie DEBUG: ShowWindowAsync deferred hide accepted hwnd=%p", hWnd);
+            MacGenieSetDwmTransitions(hWnd, FALSE);
+            SetPropW(hWnd, L"GenieCloseAnimating", (HANDLE)1);
+            if (StartMacGenieAnim(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE),
+                                  FALSE, FALSE, FALSE, NULL, TRUE,
+                                  GENIE_DEFERRED_ASYNC_HIDE)) {
+                if (MacGenieMarkCloseAndCloak(hWnd)) return TRUE;
+                RemovePropW(hWnd, L"GenieCloseAnimating");
+                return ShowWindowAsync_Original(hWnd, nCmdShow);
+            }
+            Wh_Log(L"Close genie DEBUG: ShowWindowAsync deferred hide setup failed hwnd=%p", hWnd);
+            RemovePropW(hWnd, L"GenieCloseHandled");
+            RemovePropW(hWnd, L"GenieCloseAnimating");
+            MacGenieSetDwmTransitions(hWnd, TRUE);
+        }
+        return ShowWindowAsync_Original(hWnd, nCmdShow);
+    }
+    RemovePropW(hWnd, L"GenieCloseHandled");
+    return ShowWindowAsync_Original(hWnd, nCmdShow);
+}
+
+BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* lpwndpl) {
+    if (lpwndpl && lpwndpl->showCmd == SW_HIDE &&
+        !(lpwndpl->flags & WPF_ASYNCWINDOWPLACEMENT)) {
+        bool animated = MacGenieAnimateBeforeNativeHide(hWnd, L"SetWindowPlacement");
+        BOOL result = SetWindowPlacement_Original(hWnd, lpwndpl);
+        MacGenieFinishNativeHide(hWnd, animated);
+        if (animated) Wh_Log(L"Close genie DEBUG: SetWindowPlacement hide completed hwnd=%p result=%d", hWnd, result);
+        return result;
+    }
+    if (lpwndpl && lpwndpl->showCmd != SW_HIDE &&
+        lpwndpl->showCmd != SW_MINIMIZE &&
+        lpwndpl->showCmd != SW_SHOWMINIMIZED &&
+        lpwndpl->showCmd != SW_SHOWMINNOACTIVE) {
+        RemovePropW(hWnd, L"GenieCloseHandled");
+    }
+    return SetWindowPlacement_Original(hWnd, lpwndpl);
+}
+
+BOOL WINAPI CloseWindow_Hook(HWND hWnd) {
+    MacGenieTryMinimizeAnim(hWnd);
+    return CloseWindow_Original(hWnd);
+}
+
+// Store / UWP apps show their first window via SetWindowPos + SWP_SHOWWINDOW.
+BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y,
+                              int cx, int cy, UINT uFlags) {
+    if ((uFlags & SWP_HIDEWINDOW) && !(uFlags & SWP_ASYNCWINDOWPOS)) {
+        bool animated = MacGenieAnimateBeforeNativeHide(hWnd, L"SetWindowPos");
+        BOOL result = SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+        MacGenieFinishNativeHide(hWnd, animated);
+        if (animated) Wh_Log(L"Close genie DEBUG: SetWindowPos hide completed hwnd=%p result=%d", hWnd, result);
+        return result;
+    }
+    if (uFlags & SWP_SHOWWINDOW) RemovePropW(hWnd, L"GenieCloseHandled");
+    return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+}
+
+// -------------------------------------------------------------------------
+// App-launch animation (experimental)
+// -------------------------------------------------------------------------
+DWORD WINAPI MacGenieLaunchThread(LPVOID lpParam) {
+    MacGenieLaunchData* ld = (MacGenieLaunchData*)lpParam;
+    HWND hWnd = ld->hWnd;
+    LONG_PTR originalExStyle = ld->originalExStyle;
+    delete ld;
+
+    // Let the freshly-shown (still hidden) window paint; UWP apps stay DWM-cloaked
+    // behind their splash for a while - wait (bounded) for the cloak to lift.
+    Sleep(60);
+    for (int i = 0; i < 30; ++i) {
+        if (!IsWindow(hWnd) || g_unloading.load(std::memory_order_relaxed)) break;
+        UINT cloaked = 0;
+        if (FAILED(DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) ||
+            !cloaked) {
+            break;
+        }
+        Sleep(50);
+    }
+
+    if (g_unloading.load(std::memory_order_relaxed) ||
+        !IsWindow(hWnd) || IsIconic(hWnd) || !IsWindowVisible(hWnd)) {
+        if (IsWindow(hWnd)) {
+            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+            if (!(originalExStyle & WS_EX_LAYERED)) {
+                SetWindowLongPtrW(hWnd, GWL_EXSTYLE, originalExStyle);
+            }
+            MacGenieSetDwmTransitions(hWnd, TRUE);
+        }
+        return 0;
+    }
+
+    // Rising genie; reveals the real window. (Launch uses layered+alpha hide, not
+    // cloak - cloakHidden defaults FALSE - so the UWP uncloak-wait above still works.)
+    StartMacGenieAnim(hWnd, TRUE, originalExStyle);
+    return 0;
+}
+
+BOOL Wh_ModInit() {
+    MacGenieLoadSettings();
+    Wh_Log(L"Close genie DEBUG: mod init pid=%lu", GetCurrentProcessId());
+
+    // Direct2D factory for the genie renderer (Potassiumuncher's engine). Released
+    // in Wh_ModUninit. If it fails, workers skip the animation gracefully.
+    HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED,
+                                   __uuidof(ID2D1Factory),
+                                   reinterpret_cast<void**>(&g_d2dFactory));
+    if (FAILED(hr)) g_d2dFactory = nullptr;
+
+    Wh_SetFunctionHook((void*)DefWindowProcW, (void*)DefWindowProcW_Hook, (void**)&DefWindowProcW_Original);
+    Wh_SetFunctionHook((void*)DestroyWindow, (void*)DestroyWindow_Hook, (void**)&DestroyWindow_Original);
+    Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
+    Wh_SetFunctionHook((void*)ShowWindowAsync, (void*)ShowWindowAsync_Hook, (void**)&ShowWindowAsync_Original);
+    Wh_SetFunctionHook((void*)SetWindowPlacement, (void*)SetWindowPlacement_Hook, (void**)&SetWindowPlacement_Original);
+    Wh_SetFunctionHook((void*)SetWindowPos, (void*)SetWindowPos_Hook, (void**)&SetWindowPos_Original);
+    Wh_Log(L"Close genie DEBUG: close hooks requested for DefWindowProcW, DestroyWindow, ShowWindow, ShowWindowAsync, SetWindowPlacement, SetWindowPos pid=%lu", GetCurrentProcessId());
+    return TRUE;
+}
+
+void Wh_ModSettingsChanged() {
+    MacGenieLoadSettings();
+}
+
+// Signal workers to stop, then join every registered thread before the mod DLL can
+// be unmapped. Registration and this state change are serialized by g_WorkerMutex.
+void Wh_ModBeforeUninit() {
+    MacGenieStopAndJoinWorkerThreads();
+}
+
+void Wh_ModUninit() {
+    std::vector<HWND> activeWindows;
+    {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        activeWindows.assign(g_AnimActive.begin(), g_AnimActive.end());
+    }
+    for (HWND hWnd : activeWindows) {
+        if (IsWindow(hWnd)) {
+            MacGenieSetCloak(hWnd, FALSE);
+            MacGenieSetDwmTransitions(hWnd, TRUE);
+            RemovePropW(hWnd, L"GenieCloseAnimating");
+            RemovePropW(hWnd, L"GenieCloseBypass");
+            RemovePropW(hWnd, L"GenieCloseHandled");
+        }
+    }
+    if (g_d2dFactory) {
+        g_d2dFactory->Release();
+        g_d2dFactory = nullptr;
+    }
+    std::lock_guard<std::mutex> lock(g_CacheMutex);
+    for (auto& pair : g_SnapshotCache) {
+        DeleteObject(pair.second.hBmp);
+    }
+    g_SnapshotCache.clear();
+    g_IconPositions.clear();
+    g_ProcessIconPositions.clear();
+    g_LaunchSeen.clear();
+}
