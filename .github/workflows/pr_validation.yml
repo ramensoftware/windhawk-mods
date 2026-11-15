@@ -1,0 +1,88 @@
+name: PR mod validation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+env:
+  PYTHONUTF8: '1'
+
+# The pull request comments are read on top of the checked out code.
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # Fails on errors, which block the merge.
+  run:
+    runs-on: ubuntu-latest
+    name: Test changed files
+    outputs:
+      review-item-count: ${{ steps.validate.outputs.review_item_count }}
+      review-items: ${{ steps.validate.outputs.review_items }}
+    steps:
+      # The test merge commit and its parents, which are diffed to list the
+      # changed files.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+
+      - name: Install Python dependencies
+        run: python -m pip install pyyaml
+
+      # The maintainer verifies X (Twitter) accounts in pull request comments.
+      # Reading them here lets a re-run pick up a verification that was just
+      # posted. 4129781 is the user ID of m417z, the maintainer.
+      - name: Get the maintainer's comments
+        id: maintainer-comments
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          delimiter="EOF_$(openssl rand -hex 16)"
+          {
+            echo "comments<<$delimiter"
+            gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              --jq '.[] | select(.user.id == 4129781) | .body'
+            echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate the changes
+        id: validate
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_AUTHOR_ID: ${{ github.event.pull_request.user.id }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_MAINTAINER_COMMENTS: ${{ steps.maintainer-comments.outputs.comments }}
+        run: |
+          python .github/pr_validation.py
+
+  # Fails on review items, which are left to the reviewer and don't block the
+  # merge by themselves.
+  review-items:
+    needs: run
+    # The review items are reported even when there are errors. A validation that
+    # didn't complete has no count, and nothing to report.
+    if: ${{ !cancelled() && needs.run.outputs.review-item-count != '' }}
+    runs-on: ubuntu-latest
+    name: Manual review
+    steps:
+      # The review items are annotation commands, each on a single line, which
+      # are printed to attach the annotations to this job.
+      - name: Check for review items
+        env:
+          REVIEW_ITEM_COUNT: ${{ needs.run.outputs.review-item-count }}
+          REVIEW_ITEMS: ${{ needs.run.outputs.review-items }}
+        run: |
+          if [ "$REVIEW_ITEM_COUNT" -gt 0 ]; then
+            printf '%s\n' "$REVIEW_ITEMS"
+            echo "::error::Got $REVIEW_ITEM_COUNT review items, which require manual inspection by a reviewer."
+            exit 1
+          fi

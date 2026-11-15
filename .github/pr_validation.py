@@ -1,0 +1,2268 @@
+'''
+PROJECT:     PR Validation for Windhawk
+LICENSE:     MIT (https://spdx.org/licenses/MIT)
+PURPOSE:     Verifies the mod information in the modified mods.
+COPYRIGHT:   Copyright 2023 Mark Jansen <mark.jansen@reactos.org>
+'''
+
+import hashlib
+import http.client
+import json
+import math
+import os
+import re
+import secrets
+import subprocess
+import sys
+import time
+import unicodedata
+import urllib.error
+import urllib.parse
+import urllib.request
+from functools import cache
+from io import StringIO
+from pathlib import Path
+from typing import Callable, Optional, TextIO, Tuple
+
+import yaml
+
+from extract_mod_symbols import get_mod_symbols
+from preprocessor import blank_comments, get_literal_spans
+
+DISALLOWED_AUTHORS = [
+    # https://github.com/ramensoftware/windhawk-mods/pull/676
+    'arukateru',
+]
+
+
+@cache
+def get_verified_twitter_urls() -> set[str]:
+    """
+    X (Twitter) URLs that the maintainer confirmed belong to the pull request
+    author, each with a "Verified <url>" line in one of their comments on the
+    pull request, as passed in by the workflow.
+    """
+    comments = os.environ.get('PR_MAINTAINER_COMMENTS', '')
+    return {
+        match.group(1)
+        for line in comments.splitlines()
+        if (match := re.fullmatch(r'Verified\s+(\S+)', line.strip()))
+    }
+
+
+ALLOWED_AUTHOR_NAME_CHANGES = {
+    'anixx': 'Anixx',
+    'kawapure': 'Isabella Lulamoon (kawapure)',
+}
+
+
+MOD_METADATA_PARAMS = {
+    'singleValue': {
+        'id',
+        'version',
+        'github',
+        'twitter',
+        'homepage',
+        'compilerOptions',
+        'license',
+        'donateUrl',
+    },
+    'singleValueLocalizable': {
+        'name',
+        'description',
+        'author',
+    },
+    'multiValue': {
+        'include',
+        'exclude',
+        'architecture',
+    },
+}
+
+
+CALLBACK_SIGNATURES: dict[str, list[str]] = {
+    'Wh_ModInit': ['BOOL Wh_ModInit()'],
+    'Wh_ModAfterInit': ['void Wh_ModAfterInit()'],
+    'Wh_ModBeforeUninit': ['void Wh_ModBeforeUninit()'],
+    'Wh_ModUninit': ['void Wh_ModUninit()'],
+    'Wh_ModSettingsChanged': [
+        'void Wh_ModSettingsChanged()',
+        'BOOL Wh_ModSettingsChanged(BOOL* bReload)',
+    ],
+    'WhTool_ModInit': ['BOOL WhTool_ModInit()'],
+    'WhTool_ModUninit': ['void WhTool_ModUninit()'],
+    'WhTool_ModSettingsChanged': ['void WhTool_ModSettingsChanged()'],
+    'WhTool_ModEntryPoint': ['void WhTool_ModEntryPoint()'],
+}
+
+
+# A tool mod runs in Windhawk's own processes rather than being injected into
+# other programs. Its Windhawk targets must be exactly one of these sets.
+TOOL_MOD_ALLOWED_INCLUDES = [
+    ['windhawk.exe'],
+    ['windhawk.exe', 'windhawk-mod.exe'],
+    ['windhawk.exe', 'windhawk-mod.exe', 'windhawk-mod-uiaccess.exe'],
+    ['windhawk.exe', 'windhawk-mod.exe', 'windhawk-mod-elevated.exe'],
+    [
+        'windhawk.exe',
+        'windhawk-mod.exe',
+        'windhawk-mod-uiaccess.exe',
+        'windhawk-mod-elevated.exe',
+    ],
+]
+
+
+# RFC 3986 unreserved and reserved characters, plus % for percent-encoding.
+# Anything else, whitespace included, has to be percent-encoded.
+URL_ALLOWED_CHARS = r"0-9A-Za-z\-._~:/?#\[\]@!$&'()*+,;=%"
+
+# Scheme, dotted host, optional port, optional path/query/fragment.
+URL_PATTERN = (
+    r'https?://'
+    r'[0-9A-Za-z]([0-9A-Za-z-]*[0-9A-Za-z])?'
+    r'(\.[0-9A-Za-z]([0-9A-Za-z-]*[0-9A-Za-z])?)+'
+    r'(:[0-9]+)?'
+    rf'([/?#][{URL_ALLOWED_CHARS}]*)?'
+)
+
+
+def format_annotation(level: str, file: Path, line: int, message: str) -> str:
+    # https://github.com/orgs/community/discussions/26736
+    def escape_data(s: str) -> str:
+        return s.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+
+    def escape_property(s: str) -> str:
+        return (
+            s.replace('%', '%25')
+            .replace('\r', '%0D')
+            .replace('\n', '%0A')
+            .replace(':', '%3A')
+            .replace(',', '%2C')
+        )
+
+    return (
+        f'::{level} file={escape_property(str(file))},'
+        f'line={line}::{escape_data(message)}'
+    )
+
+
+# Errors block the merge until they're fixed. Review items are left for a
+# reviewer to inspect, and don't block the merge by themselves. They're shown by
+# a separate job, so they're collected instead of printed.
+error_count = 0
+review_item_annotations: list[str] = []
+
+
+def add_error(file: Path, line: int, message: str):
+    global error_count
+    error_count += 1
+    print(format_annotation('error', file, line, message))
+
+
+def add_review_item(file: Path, line: int, message: str):
+    review_item_annotations.append(format_annotation('warning', file, line, message))
+
+
+ModPropertyKey = Tuple[str, Optional[str]]  # (key_name, language)
+ModPropertyValue = Tuple[str, int]  # (value, line_number)
+
+
+def get_mod_file_metadata(
+    file: TextIO, warn_callback: Optional[Callable[[int, str], None]] = None
+) -> dict[ModPropertyKey, ModPropertyValue]:
+    """
+    Parse mod metadata from file content.
+
+    Args:
+        file: Text stream to read from
+        warn_callback: Optional callback(line_number, message) for warnings
+
+    Returns:
+        Properties dict
+    """
+
+    def warn(line_number: int, message: str):
+        if warn_callback:
+            warn_callback(line_number, message)
+
+    properties: dict[ModPropertyKey, ModPropertyValue] = {}
+
+    inside_metadata_block = False
+
+    line_number = 0
+    while line := file.readline():
+        line = line.rstrip('\n')
+        line_number += 1
+
+        if not inside_metadata_block:
+            if re.fullmatch(r'//[ \t]+==WindhawkMod==[ \t]*', line):
+                inside_metadata_block = True
+                if line_number != 1:
+                    warn(line_number, 'Metadata block must start at line 1')
+            continue
+
+        if re.fullmatch(r'//[ \t]+==\/WindhawkMod==[ \t]*', line):
+            inside_metadata_block = False
+            break
+
+        if line.strip() == '':
+            continue
+
+        match = re.fullmatch(
+            r'//[ \t]+@([a-zA-Z]+)(?::([a-z]{2}(?:-[A-Z]{2})?))?[ \t]+(.*)',
+            line.strip(),
+        )
+        if not match:
+            warn(line_number, 'Invalid metadata line format')
+            continue
+
+        key = match.group(1)
+        language = match.group(2)
+        value = match.group(3)
+
+        if not any(key in x for x in MOD_METADATA_PARAMS.values()):
+            warn(line_number, f'{key} is not a valid metadata parameter')
+            continue
+
+        if (
+            key not in MOD_METADATA_PARAMS['singleValueLocalizable']
+            and language is not None
+        ):
+            warn(line_number, 'Language cannot be specified for this property')
+            continue
+
+        if key in MOD_METADATA_PARAMS['multiValue']:
+            prefix = properties.get((key, language), ('', 1))[0]
+            properties[(key, language)] = f'{prefix}{value}\n', line_number
+        else:
+            if (key, language) in properties:
+                warn(line_number, f'{key} must be specified only once')
+                continue
+
+            properties[(key, language)] = value, line_number
+
+    if inside_metadata_block:
+        warn(1, 'Metadata block must be closed')
+
+    return properties
+
+
+FETCH_ATTEMPTS = 3
+
+
+class FetchError(Exception):
+    """A fetch failed even after retries, most likely due to a transient network
+    problem rather than anything in the mod being validated."""
+
+
+def fetch_url(url: str, headers: Optional[dict[str, str]] = None) -> bytes:
+    """Fetch a URL, retrying connection errors and 5xx responses. 4xx responses
+    are raised as HTTPError right away so callers can treat 404 as "not found"."""
+    request = urllib.request.Request(url, headers=headers or {})
+    last_error: Optional[Exception] = None
+    for attempt in range(1, FETCH_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(request) as response:
+                return response.read()
+        except urllib.error.HTTPError as e:
+            if e.code < 500:
+                raise
+            last_error = e
+        except (OSError, http.client.HTTPException) as e:
+            last_error = e
+
+        if attempt < FETCH_ATTEMPTS:
+            print(f'Fetching {url} failed ({last_error!r}), retrying...')
+            time.sleep(2)
+
+    raise FetchError(
+        f'Failed to fetch {url} after {FETCH_ATTEMPTS} attempts ({last_error!r}).'
+        ' This is most likely a temporary network error unrelated to the mod'
+        ' itself, re-run the workflow to try again.'
+    )
+
+
+@cache
+def get_mod_author_data():
+    url = 'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mod_author_data.json'
+    return json.loads(fetch_url(url))
+
+
+@cache
+def get_valid_license_identifiers_lowercase():
+    url = 'https://spdx.org/licenses/licenses.json'
+    data = json.loads(fetch_url(url))
+    return {license['licenseId'].lower() for license in data['licenses']}
+
+
+def is_valid_license_identifier(license_id: str):
+    return license_id.lower() in get_valid_license_identifiers_lowercase()
+
+
+@cache
+def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
+    """Fetch existing mod metadata from mods.windhawk.net, or None if mod doesn't exist."""
+    try:
+        url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{urllib.parse.quote(mod_id)}.wh.cpp'
+        content = fetch_url(url).decode('utf-8')
+
+        # Use existing robust metadata parser (no warnings needed for existing mods)
+        properties = get_mod_file_metadata(StringIO(content), warn_callback=None)
+
+        # Convert to simple dict with only non-localized single values
+        metadata = {}
+        for (key, language), (value, _) in properties.items():
+            # Only include non-localized properties for validation
+            if language is None:
+                metadata[key] = value
+
+        return metadata if metadata else None
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+
+
+@cache
+def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
+    """Fetch list of existing versions for a mod, or None if mod doesn't exist."""
+    try:
+        url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{urllib.parse.quote(mod_id)}/versions.json'
+        data = json.loads(fetch_url(url))
+        return [item['version'] for item in data]
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+
+
+def at(key_name: str) -> str:
+    """Format property name with Zero Width Non-Joiner to prevent GitHub tagging."""
+    return f'@\u200c{key_name}'
+
+
+class ValidationContext:
+    """Reports the findings of a file."""
+
+    def __init__(self, path: Path):
+        self.path = path
+
+    def add_error(self, message: str, line_number: Optional[int] = None) -> None:
+        add_error(self.path, line_number if line_number is not None else 1, message)
+
+    def add_review_item(self, message: str, line_number: Optional[int] = None) -> None:
+        add_review_item(
+            self.path, line_number if line_number is not None else 1, message
+        )
+
+
+class PropertyValidator:
+    """Represents a single property with fluent validation methods."""
+
+    def __init__(
+        self, ctx: ValidationContext, key_name: str, value: str, line_number: int
+    ):
+        self.ctx = ctx
+        self.key_name = key_name
+        self.value = value
+        self.line_number = line_number
+
+    def add_error(self, message: str) -> 'PropertyValidator':
+        """Add an error for this property. Use @@ as placeholder for property name."""
+        message = message.replace('@@', at(self.key_name))
+        self.ctx.add_error(message, self.line_number)
+        return self
+
+    def add_review_item(self, message: str) -> 'PropertyValidator':
+        """Add a review item for this property. Use @@ as placeholder for property
+        name."""
+        message = message.replace('@@', at(self.key_name))
+        self.ctx.add_review_item(message, self.line_number)
+        return self
+
+    def validate_match(self, pattern: str, error_msg: str) -> 'PropertyValidator':
+        """Validate value matches regex pattern."""
+        if not re.fullmatch(pattern, self.value):
+            self.add_error(error_msg)
+        return self
+
+    def validate_url_format(self) -> 'PropertyValidator':
+        """Validate value is a well-formed http(s) URL."""
+        if not re.match(r'https?://', self.value):
+            self.add_error('@@ must start with "http://" or "https://"')
+            return self
+
+        disallowed = set(re.findall(f'[^{URL_ALLOWED_CHARS}]', self.value))
+        if disallowed:
+            chars = ', '.join(f'U+{ord(c):04X}' for c in sorted(disallowed))
+            self.add_error(
+                f'@@ contains characters which are not allowed in a URL ({chars}),'
+                ' they must be percent-encoded'
+            )
+        elif not re.fullmatch(URL_PATTERN, self.value):
+            self.add_error(f'@@ is not a valid URL: "{self.value}"')
+
+        return self
+
+    def validate_no_tabs(self) -> 'PropertyValidator':
+        """Validate value contains no tab characters."""
+        if '\t' in self.value:
+            self.add_error('@@ must not contain tab characters')
+        return self
+
+
+class ModMetadataValidator:
+    """High-level validator that orchestrates all metadata validations."""
+
+    def __init__(
+        self,
+        path: Path,
+        properties: dict[ModPropertyKey, ModPropertyValue],
+        expected_author: str,
+        expected_author_id: Optional[int],
+        mod_source: str,
+    ):
+        self.ctx = ValidationContext(path)
+        self.properties = properties
+        self.expected_author = expected_author
+        self.expected_author_id = expected_author_id
+        self.mod_source = mod_source
+        self.mod_author_data = get_mod_author_data()
+
+        # Extract mod ID and fetch existing mod data
+        id_prop = self.property('id')
+        self.mod_id = id_prop.value if id_prop else None
+        self.existing_metadata = (
+            get_existing_mod_metadata(self.mod_id) if self.mod_id else None
+        )
+        self.existing_versions = (
+            get_existing_mod_versions(self.mod_id) if self.mod_id else None
+        )
+
+        # Extract github URL and fetch author data
+        github_prop = self.property('github')
+        self.github_url = github_prop.value if github_prop else None
+        self.author_data = (
+            self.mod_author_data.get(self.github_url.lower())
+            if self.github_url
+            else None
+        )
+
+        # Another account on record with the id of the pull request author,
+        # meaning that the pull request author renamed their account.
+        self.renamed_from_github = None
+        if expected_author_id is not None:
+            expected_github = f'https://github.com/{expected_author}'.lower()
+            for other_github, other_data in self.mod_author_data.items():
+                if (
+                    other_data.get('githubId') == expected_author_id
+                    and other_github != expected_github
+                ):
+                    self.renamed_from_github = other_data['github']
+                    break
+
+    def renamed_account_note(self) -> str:
+        if not self.renamed_from_github:
+            return ''
+
+        return (
+            '\nNote: The GitHub user id of the pull request author matches the one'
+            f' on record for {self.renamed_from_github}, which suggests that the'
+            ' account was renamed. Renamed accounts require a manual update of the'
+            ' records, please mention the rename in the pull request.'
+        )
+
+    def property(
+        self,
+        key_name: str,
+        language: Optional[str] = None,
+        warn_if_missing: bool = False,
+    ) -> Optional[PropertyValidator]:
+        """Get a property validator for the given key, or None if property doesn't exist."""
+        key = (key_name, language)
+        if key in self.properties:
+            value, line_number = self.properties[key]
+            return PropertyValidator(self.ctx, key_name, value, line_number)
+        if warn_if_missing:
+            self.ctx.add_error(f'Missing {at(key_name)}')
+        return None
+
+    def property_variants(self, key_name: str) -> list[PropertyValidator]:
+        """Get validators for the given key and all of its language variants."""
+        return [
+            PropertyValidator(
+                self.ctx,
+                key_name if language is None else f'{key_name}:{language}',
+                value,
+                line_number,
+            )
+            for (key, language), (value, line_number) in self.properties.items()
+            if key == key_name
+        ]
+
+    def validate_all(self):
+        """Run all validations."""
+        self.validate_github()
+        self.validate_id()
+        self.validate_version()
+        self.validate_author()
+        self.validate_twitter()
+        self.validate_homepage()
+        self.validate_donate_url()
+        self.validate_compiler_options()
+        self.validate_license()
+        self.validate_name()
+        self.validate_description()
+        self.validate_architecture()
+        self.validate_tool_mod()
+
+    def validate_github(self):
+        """Validate GitHub URL."""
+        prop = self.property('github', warn_if_missing=True)
+        if not prop:
+            return
+
+        # Check if mod already exists - github must not change
+        if self.existing_metadata and 'github' in self.existing_metadata:
+            if prop.value != self.existing_metadata['github']:
+                prop.add_error(
+                    '@@ cannot be changed for existing mods. Expected'
+                    f' "{self.existing_metadata["github"]}", got "{prop.value}"\n'
+                    'Note that only the original author of the mod is allowed to'
+                    ' submit updates.\n'
+                    'If you are not the original author, you might want to contact'
+                    ' them to submit the update instead.\n'
+                    'For more information about submitting a mod update, refer to the'
+                    ' "Submitting a Mod Update" section in the repository\'s README.md.'
+                    + self.renamed_account_note()
+                )
+
+        expected = f'https://github.com/{self.expected_author}'
+        if not prop.value.startswith('https://github.com/'):
+            prop.add_error('@@ must start with https://github.com/')
+        elif prop.value != expected and prop.value.lower() == expected.lower():
+            prop.add_error(f'Expected @@ to be {expected} (case-sensitive)')
+        elif prop.value == expected + '/':
+            prop.add_error(f'Expected @@ to be {expected} (no trailing slash)')
+        elif prop.value.startswith(expected + '/'):
+            prop.add_error(f'Expected @@ to be {expected} (user profile URL only)')
+        elif prop.value != expected:
+            prop.add_error(
+                f'Expected @@ ({prop.value}) to match the pull request author'
+                f' ({expected}).\n'
+                'Note that only the original author of the mod is allowed to submit'
+                ' updates.\n'
+                'If you are not the original author, you might want to contact them to'
+                ' submit the update instead.\n'
+                'For more information about submitting a mod update, refer to the'
+                ' "Submitting a Mod Update" section in the repository\'s README.md.'
+                + self.renamed_account_note()
+            )
+        elif self.renamed_from_github and not self.author_data:
+            prop.add_review_item(
+                f'@@ ({prop.value}) has no previous submissions.'
+                + self.renamed_account_note()
+            )
+
+        self.validate_github_id(prop)
+
+    def validate_github_id(self, prop: PropertyValidator):
+        """Validate that the GitHub account is the one on record, and not a new
+        account registered with the same name after the original was deleted."""
+        if self.expected_author_id is None or not self.author_data:
+            return
+
+        if prop.value.lower() != f'https://github.com/{self.expected_author}'.lower():
+            return
+
+        github_id = self.author_data.get('githubId')
+        if github_id is None:
+            prop.add_review_item(
+                f'No GitHub user id is on record for {prop.value}, manual'
+                ' verification is required'
+            )
+        elif github_id != self.expected_author_id:
+            prop.add_error(
+                'The GitHub user id of the pull request author'
+                f' ({self.expected_author_id}) doesn\'t match the one on record for'
+                f' {prop.value} ({github_id}).\n'
+                'This can happen if the original account was deleted, and a new'
+                ' account was registered with the same name. Only the original'
+                ' author of the mod is allowed to submit updates.'
+            )
+
+    def validate_id(self):
+        """Validate mod ID."""
+        prop = self.property('id', warn_if_missing=True)
+        if not prop:
+            return
+
+        # Check if mod already exists - id must not change
+        if self.existing_metadata and 'id' in self.existing_metadata:
+            if prop.value != self.existing_metadata['id']:
+                prop.add_error(
+                    '@@ cannot be changed for existing mods. Expected'
+                    f' "{self.existing_metadata["id"]}", got "{prop.value}"'
+                )
+
+        expected = self.ctx.path.name.removesuffix('.cpp').removesuffix('.wh')
+        if prop.value != expected:
+            prop.add_error(
+                f'Expected @@ ({prop.value}) to match the file name ({expected})'
+            )
+
+        prop.validate_match(
+            r'([0-9a-z]+-)*[0-9a-z]+',
+            '@@ must contain only lowercase letters, numbers and dashes',
+        )
+
+        min_len = 6
+        max_len = 48
+        if len(prop.value) < min_len or len(prop.value) > max_len:
+            prop.add_error(f'@@ must be between {min_len} and {max_len} characters')
+
+    def validate_version(self):
+        """Validate version format."""
+        prop = self.property('version', warn_if_missing=True)
+        if not prop:
+            return
+
+        prop.validate_match(
+            r'([0-9]+\.)*[0-9]+',
+            '@@ must contain only numbers and dots',
+        )
+
+        # Check if version is already used
+        if self.existing_versions and prop.value in self.existing_versions:
+            prop.add_error(
+                f'@@ "{prop.value}" is already used. Please use a new, unused'
+                ' version.\n'
+                f'Previous versions: {", ".join(self.existing_versions)}'
+            )
+
+    def validate_author(self):
+        """Validate author name against existing records."""
+        for variant in self.property_variants('author'):
+            variant.validate_no_tabs()
+
+        prop = self.property('author', warn_if_missing=True)
+        if not prop:
+            return
+
+        # Check if mod already exists - author must not change
+        if self.existing_metadata and 'author' in self.existing_metadata:
+            if prop.value != self.existing_metadata['author'] and (
+                ALLOWED_AUTHOR_NAME_CHANGES.get(self.existing_metadata['author'])
+                != prop.value
+            ):
+                prop.add_error(
+                    '@@ cannot be changed for existing mods. Expected'
+                    f' "{self.existing_metadata["author"]}", got "{prop.value}"'
+                )
+
+        if self.author_data:
+            # Existing author - must match exactly
+            if prop.value != self.author_data['author']:
+                prop.add_error(
+                    f'Expected @@ to be "{self.author_data["author"]}" based on'
+                    f' previous submissions for {self.github_url}'
+                )
+        else:
+            for other_github, other_data in self.mod_author_data.items():
+                if other_data['author'].lower() == prop.value.lower():
+                    prop.add_error(
+                        f'Author name "{prop.value}" is already used by {other_github}.'
+                    )
+                    break
+
+        min_len = 3
+        max_len = 28
+        if len(prop.value) < min_len or len(prop.value) > max_len:
+            prop.add_error(f'@@ must be between {min_len} and {max_len} characters')
+
+    def validate_twitter(self):
+        """Validate Twitter handle."""
+        prop = self.property('twitter')
+        if not prop:
+            return
+
+        # Check if mod already exists - twitter must not change
+        if self.existing_metadata and 'twitter' in self.existing_metadata:
+            if prop.value != self.existing_metadata['twitter']:
+                prop.add_error(
+                    '@@ cannot be changed for existing mods. Expected'
+                    f' "{self.existing_metadata["twitter"]}", got "{prop.value}"'
+                )
+
+        if self.author_data and 'twitter' in self.author_data:
+            # Existing author with twitter - must match exactly
+            if prop.value != self.author_data['twitter']:
+                prop.add_error(
+                    f'Expected @@ to be "{self.author_data["twitter"]}" based on'
+                    f' previous submissions for {self.github_url}'
+                )
+        else:
+            # New twitter value - check it's not used by someone else
+            for other_github, other_data in self.mod_author_data.items():
+                if (
+                    'twitter' in other_data
+                    and other_data['twitter'].lower() == prop.value.lower()
+                ):
+                    prop.add_error(
+                        f'Twitter account "{prop.value}" is already used by'
+                        f' {other_github}.'
+                    )
+                    break
+            else:
+                # Not used by anyone else, so it takes a manual check that the
+                # same person owns both accounts.
+                if prop.value not in get_verified_twitter_urls():
+                    prop.add_review_item(
+                        '@@ requires manual verification\n\n'
+                        'To verify your X (Twitter) account, please send me'
+                        ' (https://x.com/m417z) a direct message with the following'
+                        ' content:\n\n'
+                        'I attest that I\'m the sole owner of both this Twitter account'
+                        f' ({prop.value}) and the following GitHub account:'
+                        f' {self.github_url}'
+                    )
+
+        prop.validate_url_format()
+
+        if not re.match(r'https://(x|twitter)\.com/', prop.value):
+            prop.add_error('@@ must start with https://x.com/ or https://twitter.com/')
+        elif not re.match(r'https://(x|twitter)\.com/[^/]+$', prop.value):
+            prop.add_error(
+                '@@ must be an X (Twitter) profile URL with no extra slashes'
+            )
+
+    def validate_homepage(self):
+        """Validate homepage URL."""
+        prop = self.property('homepage')
+        if not prop:
+            return
+
+        prop.validate_url_format()
+
+        # Check if this homepage is used by someone else
+        homepage_already_used = False
+        if self.author_data:
+            # For existing authors, check if it's in their list
+            homepage_already_used = prop.value in self.author_data.get('homepages', [])
+
+        if not homepage_already_used:
+            # New homepage - check it's not used by another author
+            for other_github, other_data in self.mod_author_data.items():
+                if other_github.lower() != (self.github_url or '').lower():
+                    if prop.value.lower() in [
+                        h.lower() for h in other_data.get('homepages', [])
+                    ]:
+                        prop.add_error(
+                            f'Homepage "{prop.value}" is already used by'
+                            f' {other_github}.'
+                        )
+                        break
+
+    def validate_donate_url(self):
+        """Validate donate URL format."""
+        prop = self.property('donateUrl')
+        if prop:
+            prop.validate_url_format()
+
+    def validate_compiler_options(self):
+        """Validate compiler options format."""
+        prop = self.property('compilerOptions')
+        if not prop:
+            return
+
+        # WIL headers require -fms-extensions.
+        includes_wil = re.search(
+            r'^\s*#\s*include\s*[<"]wil/',
+            blank_comments(self.mod_source),
+            re.MULTILINE,
+        )
+
+        def is_allowed_option(option: str) -> bool:
+            return bool(
+                option.startswith('-l')
+                or option
+                in [
+                    '-DWIN32_LEAN_AND_MEAN',
+                    '-ffp-exception-behavior=maytrap',
+                ]
+                or (option == '-fms-extensions' and includes_wil)
+            )
+
+        options = prop.value.split()
+        disallowed_options = [opt for opt in options if not is_allowed_option(opt)]
+        if disallowed_options:
+            prop.add_review_item(
+                f'@@ require manual verification: {" ".join(disallowed_options)}'
+            )
+
+    def validate_license(self):
+        """Validate license identifier."""
+        prop = self.property('license')
+        if not prop:
+            return
+
+        if not is_valid_license_identifier(prop.value):
+            prop.add_error(
+                f'Unknown license identifier "{prop.value}". The license must be'
+                ' a valid SPDX identifier from https://spdx.org/licenses/.'
+            )
+
+    def validate_name(self):
+        """Validate name exists and is unique."""
+        for variant in self.property_variants('name'):
+            variant.validate_no_tabs()
+
+        prop = self.property('name', warn_if_missing=True)
+        if not prop:
+            return
+
+        min_len = 6
+        max_len = 68
+        if len(prop.value) < min_len or len(prop.value) > max_len:
+            prop.add_error(f'@@ must be between {min_len} and {max_len} characters')
+
+        # Check for duplicate names across existing mods
+        filename_mod_id = self.ctx.path.name.removesuffix('.cpp').removesuffix('.wh')
+        all_names = get_all_mod_names()
+        for other_mod_id, other_name in all_names.items():
+            if (
+                other_mod_id != filename_mod_id
+                and other_name.lower() == prop.value.lower()
+            ):
+                prop.add_error(
+                    f'@@ "{prop.value}" is already used by mod "{other_mod_id}"'
+                )
+                break
+
+    def validate_description(self):
+        """Validate description exists."""
+        for variant in self.property_variants('description'):
+            variant.validate_no_tabs()
+
+        prop = self.property('description', warn_if_missing=True)
+        if not prop:
+            return
+
+        min_len = 30
+        max_len = 250
+        if len(prop.value) < min_len or len(prop.value) > max_len:
+            prop.add_error(f'@@ must be between {min_len} and {max_len} characters')
+
+    def validate_architecture(self):
+        """Validate architecture values."""
+        prop = self.property('architecture')
+        if not prop:
+            return
+
+        unknown_msg = ''
+        uncommon_msg = ''
+        for arch in prop.value.split('\n'):
+            if arch.strip() == '':
+                pass
+            elif arch not in {'x86', 'x86-64', 'amd64', 'arm64'}:
+                unknown_msg += f'Unknown architecture "{arch}"\n'
+            elif arch not in {'x86', 'x86-64'}:
+                uncommon_msg += (
+                    f'Architecture "{arch}" isn\'t commonly used, manual verification'
+                    ' is required\n'
+                )
+
+        if unknown_msg:
+            prop.add_error(unknown_msg.rstrip('\n'))
+        if uncommon_msg:
+            prop.add_review_item(uncommon_msg.rstrip('\n'))
+
+    def validate_tool_mod(self):
+        """Validate the metadata of a tool mod: one that targets windhawk.exe
+        with a WhTool_ModInit entry point or a -tool-mod launcher, or any
+        windhawk-*.exe process other than windhawk-ui.exe and windhawk-cli.exe."""
+        prop = self.property('include')
+        if not prop:
+            return
+
+        includes = {x.lower() for x in prop.value.split('\n') if x != ''}
+        windhawk_includes = {
+            x
+            for x in includes
+            if re.fullmatch(r'windhawk(-[\w-]+)?\.exe', x)
+            and x not in ('windhawk-ui.exe', 'windhawk-cli.exe')
+        }
+        defines_tool_mod_init = (
+            re.search(r'\bWhTool_ModInit\s*\([^)]*\)\s*\{', self.mod_source)
+            is not None
+        )
+        is_tool_mod = any(x != 'windhawk.exe' for x in windhawk_includes) or (
+            'windhawk.exe' in windhawk_includes
+            and (defines_tool_mod_init or '-tool-mod' in self.mod_source)
+        )
+        if not is_tool_mod:
+            return
+
+        if windhawk_includes not in [set(x) for x in TOOL_MOD_ALLOWED_INCLUDES]:
+            prop.add_error(
+                'Tool mods must @@ exactly one of the following combinations of'
+                ' Windhawk processes:\n'
+                + '\n'.join(f'* {", ".join(x)}' for x in TOOL_MOD_ALLOWED_INCLUDES)
+            )
+        elif windhawk_includes == {'windhawk.exe'} and not defines_tool_mod_init:
+            prop.add_error(
+                'Tool mods which @@ only windhawk.exe must define'
+                ' WhTool_ModInit, use the tool mod template:'
+                ' https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process'
+            )
+
+        arch_prop = self.property('architecture')
+        if arch_prop:
+            arch_prop.add_error('@@ must not be specified for tool mods')
+
+
+def validate_metadata(
+    path: Path,
+    mod_source: str,
+    expected_author: str,
+    expected_author_id: Optional[int],
+):
+    properties = get_mod_file_metadata(
+        StringIO(mod_source),
+        warn_callback=lambda line, msg: add_error(path, line, msg),
+    )
+
+    # Validate metadata properties
+    validator = ModMetadataValidator(
+        path, properties, expected_author, expected_author_id, mod_source
+    )
+    validator.validate_all()
+
+    # Validate file path
+    if not path.name.endswith('.wh.cpp'):
+        add_error(path, 1, 'Filename should end with .wh.cpp')
+    if path.parent != Path('mods'):
+        add_error(path, 1, 'File is not placed in the mods folder')
+
+
+def validate_marker_block(
+    path: Path,
+    source: str,
+    marker_name: str,
+    label: str,
+    *,
+    required: bool,
+):
+    """Validate a `// ==X== \\n /* ... */ \\n // ==/X==` block in a mod source.
+
+    Args:
+        path: source file path (used in error output).
+        source: full file contents.
+        marker_name: the marker text without `==` decoration, e.g.
+            `WindhawkModReadme`.
+        label: human-friendly name used in error messages, e.g. `README`.
+        required: if True, report an error when the block is absent.
+    """
+    open_marker = f'=={marker_name}=='
+    close_marker = f'==/{marker_name}=='
+
+    # The body capture group keeps its surrounding whitespace so we can check
+    # for the required newlines around /* and */.
+    block_re = re.compile(
+        r'^//[ \t]+' + re.escape(open_marker) + r'[ \t]*$'
+        r'\s*/\*([\s\S]+?)\*/\s*'
+        r'^//[ \t]+' + re.escape(close_marker) + r'[ \t]*$',
+        re.MULTILINE,
+    )
+    match = block_re.search(source)
+
+    def line_of(pos: int) -> int:
+        return source.count('\n', 0, pos) + 1
+
+    def find_all(haystack: str, needle: str):
+        start = 0
+        while (pos := haystack.find(needle, start)) != -1:
+            yield pos
+            start = pos + len(needle)
+
+    # Stray-marker scan: report any line that looks like a marker comment
+    # line but isn't the one consumed by the matched block. The pattern is
+    # intentionally more permissive than block_re (it tolerates leading
+    # whitespace) so improperly indented marker lines are still caught, while
+    # incidental occurrences of the marker text inside other comments (e.g. "//
+    # must conform to ==X== above") are not. This runs even when the block is
+    # missing or optional.
+    open_marker_line_re = re.compile(
+        r'^[ \t]*//[ \t]+' + re.escape(open_marker) + r'[ \t]*$',
+        re.MULTILINE,
+    )
+    close_marker_line_re = re.compile(
+        r'^[ \t]*//[ \t]+' + re.escape(close_marker) + r'[ \t]*$',
+        re.MULTILINE,
+    )
+
+    # Sentinel -1 (str.find's not-found value) when there is no matched block,
+    # so the skip-the-matched-line check below naturally fails.
+    matched_open_pos = -1
+    matched_close_pos = -1
+    if match is not None:
+        matched_open_pos = source.find(open_marker, match.start(), match.end())
+        matched_close_pos = source.rfind(close_marker, match.start(), match.end())
+
+    for m in open_marker_line_re.finditer(source):
+        if m.start() <= matched_open_pos < m.end():
+            continue
+        add_error(path, line_of(m.start()), f'Unexpected extra "{open_marker}" marker')
+
+    for m in close_marker_line_re.finditer(source):
+        if m.start() <= matched_close_pos < m.end():
+            continue
+        add_error(path, line_of(m.start()), f'Unexpected extra "{close_marker}" marker')
+
+    if match is None:
+        if required:
+            add_error(
+                path,
+                1,
+                f'Mod source must contain a {label} block ({open_marker})',
+            )
+        return
+
+    body = match.group(1)
+    body_start = match.start(1)
+    open_line = line_of(matched_open_pos)
+
+    # The body must not contain another */ - that would actually terminate the
+    # comment block at that point in C/C++.
+    for idx in find_all(body, '*/'):
+        add_error(
+            path,
+            line_of(body_start + idx),
+            f'{label} body must not contain an additional "*/"',
+        )
+
+    # /* must be followed by a newline and */ must be preceded by one
+    # (trailing/leading spaces or tabs on those lines are tolerated).
+    if not re.match(r'[ \t]*\n', body):
+        add_error(path, open_line, f'{label} /* must be followed by a newline')
+    if not re.search(r'\n[ \t]*\Z', body):
+        add_error(path, open_line, f'{label} */ must be preceded by a newline')
+
+    # The body must contain non-whitespace content.
+    if body.strip() == '':
+        add_error(path, open_line, f'{label} block must not be empty')
+
+
+def validate_readme(path: Path, mod_source: str):
+    """Validate the mod's README block."""
+    validate_marker_block(
+        path, mod_source, 'WindhawkModReadme', 'README', required=True
+    )
+    validate_readme_images(path, mod_source)
+
+
+# Must match the patterns in scripts/archive_mod_images.py, which archives the
+# README images at the URL-derived paths. The script's image pattern is this one
+# restricted to the supported hosts. The image description excludes brackets so
+# that an unclosed one doesn't extend into the next link or image.
+ARCHIVED_README_PATTERN = r'^//[ \t]+==WindhawkModReadme==[ \t]*$\s*/\*\s*([\s\S]+?)\s*\*/\s*^//[ \t]+==/WindhawkModReadme==[ \t]*$'
+ARCHIVED_IMAGE_URL_PATTERN = r'!\[[^\[\]]*\]\(\s*([^)]+?)\s*\)'
+ARCHIVED_IMAGE_HOSTS = ['i.imgur.com', 'raw.githubusercontent.com']
+
+# Images under this prefix are shown from their original URL instead of the
+# archived copy, so they may change after being archived.
+DIRECTLY_SERVED_IMAGE_URL_PREFIX = 'https://raw.githubusercontent.com/ramensoftware/'
+
+# The archive runs on Windows, and the images folder is several directories
+# deep, so the path is kept well within MAX_PATH.
+ARCHIVED_IMAGE_MAX_PATH_LENGTH = 200
+
+# Must match LOSSY_GIF_MIN_SIZE in scripts/archive_mod_images.py. GIFs this large
+# are compressed lossily when archived.
+LARGE_GIF_MIN_SIZE = 20 * 1024 * 1024
+LARGE_ANIMATED_WEBP_MIN_SIZE = 20 * 1024 * 1024
+LARGE_IMAGE_MIN_SIZE = 2 * 1024 * 1024
+
+# Must match ORIGINAL_HASHES_FILE_NAME in scripts/archive_mod_images.py.
+ARCHIVED_ORIGINAL_HASHES_PATH = 'original_hashes.json'
+
+WINDOWS_RESERVED_FILE_NAMES = {
+    'CON', 'PRN', 'AUX', 'NUL',
+    *(f'COM{i}' for i in range(1, 10)),
+    *(f'LPT{i}' for i in range(1, 10)),
+}
+
+
+def get_archived_image_path_error(path: str) -> Optional[str]:
+    """Return why the path, relative to the images folder, can't be used on
+    Windows, or None if it can."""
+    if len(path) > ARCHIVED_IMAGE_MAX_PATH_LENGTH:
+        return f'path is longer than {ARCHIVED_IMAGE_MAX_PATH_LENGTH} characters'
+
+    for component in path.split('/'):
+        if component in ('', '.', '..') or component.startswith('..'):
+            return f'path component "{component}" is not allowed'
+        invalid_chars = sorted(
+            {c for c in component if c in '<>:"\\|?*' or ord(c) < 0x20}
+        )
+        if invalid_chars:
+            chars = ', '.join(f'U+{ord(c):04X}' for c in invalid_chars)
+            return f'path component "{component}" contains invalid characters ({chars})'
+        if component[-1] in '. ':
+            return f'path component "{component}" must not end with a dot or a space'
+        if component.split('.')[0].upper() in WINDOWS_RESERVED_FILE_NAMES:
+            return f'path component "{component}" is a reserved Windows file name'
+
+    return None
+
+
+def get_archived_image(path: str) -> Optional[bytes]:
+    """Return the archived image at the path relative to the images folder, or
+    None if it isn't archived."""
+    try:
+        url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/images/{urllib.parse.quote(path)}'
+        return fetch_url(url)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+
+
+def get_large_image_warning(image: bytes) -> Optional[str]:
+    """Return why the image is too large, or None if it isn't."""
+    size = len(image)
+    size_mb = f'{size / (1024 * 1024):.1f} MB'
+
+    if image.startswith((b'GIF87a', b'GIF89a')):
+        if size < LARGE_GIF_MIN_SIZE:
+            return None
+        return (
+            f'GIF is {size_mb}. GIFs of {LARGE_GIF_MIN_SIZE // (1024 * 1024)} MB'
+            ' or more are compressed lossily when archived, consider making it'
+            ' smaller, e.g. with a lower resolution or frame rate, or a shorter clip'
+        )
+
+    # An extended WebP file with the animation flag set.
+    if (
+        image[:4] == b'RIFF'
+        and image[8:16] == b'WEBPVP8X'
+        and len(image) > 20
+        and image[20] & 0x02
+    ):
+        if size < LARGE_ANIMATED_WEBP_MIN_SIZE:
+            return None
+        return (
+            f'Animated WebP is {size_mb}, consider making it smaller (under'
+            f' {LARGE_ANIMATED_WEBP_MIN_SIZE // (1024 * 1024)} MB), e.g. with a'
+            ' lower resolution or frame rate, or a shorter clip'
+        )
+
+    if size < LARGE_IMAGE_MIN_SIZE:
+        return None
+    return (
+        f'Image is {size_mb}, consider making it smaller (under'
+        f' {LARGE_IMAGE_MIN_SIZE // (1024 * 1024)} MB), e.g. with a lower'
+        ' resolution'
+    )
+
+
+@cache
+def get_archived_original_hashes() -> dict[str, str]:
+    """Return the SHA-256 of the original of each compressed archived image, by
+    its path relative to the images folder."""
+    data = get_archived_image(ARCHIVED_ORIGINAL_HASHES_PATH)
+    return json.loads(data) if data is not None else {}
+
+
+def validate_readme_images(path: Path, mod_source: str):
+    """Validate that the README images can be archived, and that the already
+    archived ones are unchanged."""
+    readme_match = re.search(ARCHIVED_README_PATTERN, mod_source, re.MULTILINE)
+    if not readme_match:
+        return
+
+    readme = readme_match.group(1)
+
+    def line_of(pos: int) -> int:
+        return mod_source.count('\n', 0, readme_match.start(1) + pos) + 1
+
+    for match in re.finditer(r'<img\b', readme, re.IGNORECASE):
+        add_error(
+            path,
+            line_of(match.start()),
+            'HTML <img> tags are not supported in the README, use Markdown'
+            ' image syntax: ![description](url)',
+        )
+
+    image_matches = list(re.finditer(ARCHIVED_IMAGE_URL_PATTERN, readme))
+
+    image_starts = {match.start() for match in image_matches}
+    for match in re.finditer(r'!\[', readme):
+        if match.start() not in image_starts:
+            add_error(
+                path,
+                line_of(match.start()),
+                'Malformed Markdown image, expected: ![description](url)',
+            )
+
+    hosts = ', '.join(ARCHIVED_IMAGE_HOSTS)
+    for match in image_matches:
+        url = match.group(1)
+        line = line_of(match.start(1))
+
+        if not any(url.startswith(f'https://{host}/') for host in ARCHIVED_IMAGE_HOSTS):
+            add_error(
+                path,
+                line,
+                f'Image host is not supported, images must be hosted on one of:'
+                f' {hosts}. Got: "{url}"',
+            )
+            continue
+
+        if not re.fullmatch(URL_PATTERN, url):
+            add_error(path, line, f'Invalid image URL: "{url}"')
+            continue
+
+        image_path = urllib.parse.unquote(url.removeprefix('https://'))
+        if error := get_archived_image_path_error(image_path):
+            add_error(path, line, f'Image URL can\'t be archived, {error}: "{url}"')
+            continue
+
+        try:
+            image = fetch_url(url, headers={'User-Agent': 'Mozilla/5.0'})
+        except urllib.error.HTTPError as e:
+            add_error(path, line, f'Image URL returned HTTP {e.code}: "{url}"')
+            continue
+
+        if url.startswith(DIRECTLY_SERVED_IMAGE_URL_PREFIX):
+            continue
+
+        original_hash = get_archived_original_hashes().get(image_path)
+        if original_hash is not None:
+            # The archived copy is compressed, so the original's hash is compared.
+            archived = True
+            changed = hashlib.sha256(image).hexdigest() != original_hash
+        else:
+            archived_image = get_archived_image(image_path)
+            archived = archived_image is not None
+            changed = archived and archived_image != image
+
+        if not archived and (large_image_warning := get_large_image_warning(image)):
+            add_review_item(path, line, f'{large_image_warning}: "{url}"')
+
+        if changed:
+            add_error(
+                path,
+                line,
+                'Image differs from its archived copy. Images are archived once'
+                ' and are not updated, to have the image updated, use a'
+                f' different URL: "{url}"',
+            )
+
+
+def validate_settings(path: Path, mod_source: str):
+    """Validate the mod's settings block, if present."""
+    validate_marker_block(
+        path, mod_source, 'WindhawkModSettings', 'Settings', required=False
+    )
+    validate_settings_yaml(path, mod_source)
+
+
+class SettingsYamlLoader(yaml.SafeLoader):
+    """PyYAML loader that behaves like js-yaml's JSON_SCHEMA, which Windhawk
+    parses the settings block with.
+
+    Plain scalars resolve only to null, bool, int and float, with js-yaml's
+    patterns (so e.g. `yes`, `2024-01-01` and `<<` are plain strings), explicit
+    tags are limited to the same set, mapping keys are strings, and duplicate
+    keys are an error.
+    """
+
+    # The failsafe types and the fallback for unknown tags; the JSON_SCHEMA
+    # scalar types are registered with add_scalar_type below.
+    yaml_constructors = {
+        tag: yaml.SafeLoader.yaml_constructors[tag]
+        for tag in (
+            None,
+            'tag:yaml.org,2002:str',
+            'tag:yaml.org,2002:seq',
+            'tag:yaml.org,2002:map',
+        )
+    }
+    yaml_implicit_resolvers = {}
+
+    @classmethod
+    def add_scalar_type(cls, tag: str, regexp: re.Pattern, construct: Callable):
+        """Register a scalar type that plain scalars matching regexp resolve to.
+
+        Like js-yaml, an explicit tag on a scalar that doesn't match is an error.
+        """
+
+        def construct_checked(loader, node):
+            value = loader.construct_scalar(node)
+            if not regexp.match(value):
+                raise yaml.constructor.ConstructorError(
+                    None,
+                    None,
+                    f'cannot resolve {value!r} with explicit tag {node.tag}',
+                    node.start_mark,
+                )
+            return construct(loader, node)
+
+        cls.add_implicit_resolver(tag, regexp, None)
+        cls.add_constructor(tag, construct_checked)
+
+    def construct_mapping(self, node, deep=False):
+        if not isinstance(node, yaml.MappingNode):
+            raise yaml.constructor.ConstructorError(
+                None,
+                None,
+                f'expected a mapping node, but found {node.id}',
+                node.start_mark,
+            )
+        mapping = {}
+        for key_node, value_node in node.value:
+            key = self.key_string(key_node)
+            if key in mapping:
+                raise yaml.constructor.ConstructorError(
+                    None, None, f'found duplicate key {key!r}', key_node.start_mark
+                )
+            mapping[key] = self.construct_object(value_node, deep=deep)
+        return mapping
+
+    def key_string(self, key_node) -> str:
+        """The mapping key as JavaScript's String() would render it."""
+        key = self.construct_object(key_node)
+        if key is None:
+            return 'null'
+        if isinstance(key, bool):
+            return 'true' if key else 'false'
+        # Integral floats print without a fraction, up to where JavaScript
+        # switches to exponent notation.
+        if isinstance(key, float) and key.is_integer() and abs(key) < 1e21:
+            return str(int(key))
+        if isinstance(key, (int, float, str)):
+            return str(key)
+        raise yaml.constructor.ConstructorError(
+            None, None, 'complex mapping keys are not supported', key_node.start_mark
+        )
+
+
+def construct_js_number(loader: SettingsYamlLoader, node):
+    """Number construction with js-yaml's semantics for both int and float."""
+    value = loader.construct_scalar(node).replace('_', '')
+    sign = -1 if value.startswith('-') else 1
+    value = value.lstrip('+-')
+    if value.lower() == '.inf':
+        return sign * math.inf
+    if value.lower() == '.nan':
+        return math.nan
+    if value[:2] in ('0b', '0x', '0o'):
+        return sign * int(value, 0)
+    if value.isdigit():
+        return sign * int(value)
+    return sign * float(value)
+
+
+# js-yaml's JSON_SCHEMA scalar types, in its resolution order.
+for _tag, _pattern, _construct in [
+    ('null', r'~|null|Null|NULL|', lambda loader, node: None),
+    (
+        'bool',
+        r'true|True|TRUE|false|False|FALSE',
+        lambda loader, node: loader.construct_scalar(node) in ('true', 'True', 'TRUE'),
+    ),
+    (
+        'int',
+        r'[-+]?(?:0b[01_]*[01]|0x[0-9a-fA-F_]*[0-9a-fA-F]|0o[0-7_]*[0-7]'
+        r'|[1-9][0-9_]*(?<!_)|0(?:[0-9][0-9_]*(?<!_))?)',
+        construct_js_number,
+    ),
+    (
+        'float',
+        r'(?:[-+]?[0-9][0-9_]*(?:\.[0-9_]*)?(?:[eE][-+]?[0-9]+)?'
+        r'|\.[0-9_]+(?:[eE][-+]?[0-9]+)?)(?<!_)'
+        r'|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN)',
+        construct_js_number,
+    ),
+]:
+    SettingsYamlLoader.add_scalar_type(
+        f'tag:yaml.org,2002:{_tag}', re.compile(rf'(?:{_pattern})\Z'), _construct
+    )
+
+
+def is_js_number(value) -> bool:
+    """A finite number, as JSON schema's "number" type accepts it. Unlike in
+    Python, a boolean is not a number."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
+
+
+class SettingsSchemaError(Exception):
+    """A settings structure that Windhawk rejects, located by its YAML node."""
+
+    def __init__(self, node, message: str):
+        super().__init__(message)
+        self.node = node
+
+
+class SettingsSchemaChecker:
+    """Checks a parsed settings node tree against the structure Windhawk
+    accepts: a non-empty array of objects, each with exactly one setting key
+    plus optional $name, $description and $options (each optionally suffixed
+    with a :language), where a setting's value is a boolean, number, string,
+    array of numbers, array of strings, nested settings, or array of nested
+    settings.
+    """
+
+    SETTING_KEY_RE = re.compile(r'[0-9A-Za-z_-]+')
+    TEXT_META_KEY_RE = re.compile(r'\$(?:name|description)(?::[a-z]{2}(?:-[A-Z]{2})?)?')
+    OPTIONS_META_KEY_RE = re.compile(r'\$options(?::[a-z]{2}(?:-[A-Z]{2})?)?')
+
+    def __init__(self, loader: SettingsYamlLoader):
+        self.loader = loader
+
+    def value(self, node):
+        return self.loader.construct_object(node)
+
+    def check_settings(self, node):
+        if not isinstance(node, yaml.SequenceNode):
+            raise SettingsSchemaError(node, 'Settings must be a YAML array')
+        if not node.value:
+            raise SettingsSchemaError(
+                node, 'Settings array must have at least one item'
+            )
+        for item_node in node.value:
+            self.check_settings_object(item_node)
+
+    def check_settings_object(self, node):
+        if not isinstance(node, yaml.MappingNode):
+            raise SettingsSchemaError(node, 'Settings array items must be objects')
+        if not node.value:
+            raise SettingsSchemaError(
+                node, 'Settings object must have at least one property'
+            )
+
+        setting_keys = []
+        for key_node, value_node in node.value:
+            key = self.loader.key_string(key_node)
+            if self.SETTING_KEY_RE.fullmatch(key):
+                setting_keys.append(key)
+                self.check_setting_value(key, value_node)
+            elif self.TEXT_META_KEY_RE.fullmatch(key):
+                if not isinstance(self.value(value_node), str):
+                    raise SettingsSchemaError(
+                        value_node, f'Settings property "{key}" must be a string'
+                    )
+            elif self.OPTIONS_META_KEY_RE.fullmatch(key):
+                self.check_options(key, value_node)
+            elif key.startswith('$'):
+                raise SettingsSchemaError(
+                    key_node,
+                    f'Unsupported settings property "{key}"; only $name, $description'
+                    ' and $options are allowed, optionally with a :language suffix',
+                )
+            else:
+                raise SettingsSchemaError(
+                    key_node,
+                    f'Invalid settings key "{key}"; keys may only contain letters,'
+                    ' digits, "_" and "-"',
+                )
+
+        if not setting_keys:
+            raise SettingsSchemaError(
+                node, 'Settings object has no setting key, only $ properties'
+            )
+        if len(setting_keys) > 1:
+            raise SettingsSchemaError(
+                node,
+                'Settings object has more than one setting key: '
+                + ', '.join(setting_keys),
+            )
+
+    def check_setting_value(self, key: str, node):
+        value = self.value(node)
+        if isinstance(value, (bool, str)) or is_js_number(value):
+            return
+        if value is None:
+            raise SettingsSchemaError(node, f'Setting "{key}" has no value')
+        if isinstance(value, float):
+            raise SettingsSchemaError(node, f'Setting "{key}" must be a finite number')
+        if isinstance(value, dict):
+            raise SettingsSchemaError(
+                node,
+                f'Setting "{key}" must not be an object; nested settings are an'
+                ' array of objects',
+            )
+        if not isinstance(value, list):
+            raise SettingsSchemaError(
+                node, f'Setting "{key}" must be a boolean, number, string or array'
+            )
+
+        if not value:
+            raise SettingsSchemaError(
+                node, f'Setting "{key}" array must have at least one item'
+            )
+        if all(is_js_number(x) for x in value) or all(
+            isinstance(x, str) for x in value
+        ):
+            return
+        if all(isinstance(x, dict) for x in value):
+            self.check_settings(node)
+        elif all(isinstance(x, list) for x in value):
+            for item_node in node.value:
+                self.check_settings(item_node)
+        else:
+            raise SettingsSchemaError(
+                node,
+                f'Setting "{key}" array must contain only numbers, only strings, or'
+                ' only nested settings',
+            )
+
+    def check_options(self, key: str, node):
+        value = self.value(node)
+        if not isinstance(value, list):
+            raise SettingsSchemaError(
+                node, f'Settings property "{key}" must be an array'
+            )
+        if len(value) < 2:
+            raise SettingsSchemaError(
+                node, f'Settings property "{key}" must have at least two items'
+            )
+        for item_node in node.value:
+            if not isinstance(self.value(item_node), dict):
+                raise SettingsSchemaError(
+                    item_node, f'Settings property "{key}" items must be objects'
+                )
+            if len(item_node.value) != 1:
+                raise SettingsSchemaError(
+                    item_node,
+                    f'Settings property "{key}" items must have exactly one property',
+                )
+            ((_, label_node),) = item_node.value
+            if not isinstance(self.value(label_node), str):
+                raise SettingsSchemaError(
+                    label_node, f'Settings property "{key}" labels must be strings'
+                )
+
+
+def validate_settings_yaml(path: Path, mod_source: str):
+    """Validate that the settings block parses as the structure Windhawk expects.
+
+    Mirrors Windhawk's extraction (windhawk-vscode modSourceUtils.ts,
+    extractInitialSettings): the block body is parsed like js-yaml with its
+    JSON_SCHEMA and then checked against Windhawk's settings schema, so that
+    anything Windhawk rejects is reported here. The structural integrity of the
+    comment block itself (markers, /* */ placement, etc.) is reported separately
+    by validate_marker_block, so a block that doesn't match the pattern below is
+    simply skipped here.
+    """
+    # Use the same extraction Windhawk uses. The surrounding \s* consumes the
+    # whitespace around the body, so we parse exactly the text Windhawk feeds to
+    # its YAML parser.
+    block_re = re.compile(
+        r'^//[ \t]+==WindhawkModSettings==[ \t]*$'
+        r'\s*/\*\s*([\s\S]+?)\s*\*/\s*'
+        r'^//[ \t]+==/WindhawkModSettings==[ \t]*$',
+        re.MULTILINE,
+    )
+    match = block_re.search(mod_source)
+    if match is None:
+        return
+
+    body = match.group(1)
+    body_start_line = mod_source.count('\n', 0, match.start(1)) + 1
+
+    loader = SettingsYamlLoader(body)
+    try:
+        node = loader.get_single_node()
+        if node is None:
+            add_error(path, body_start_line, 'Settings must be a YAML array')
+            return
+        # Constructing the whole document reports duplicate keys and bad tags,
+        # and caches every node's value for the checker to read.
+        loader.construct_object(node, deep=True)
+        SettingsSchemaChecker(loader).check_settings(node)
+    except yaml.YAMLError as e:
+        line = body_start_line
+        mark = getattr(e, 'problem_mark', None)
+        if mark is not None:
+            # problem_mark.line is 0-based and relative to the parsed body.
+            line = body_start_line + mark.line
+        add_error(path, line, f'Settings block is not valid YAML: {e}')
+    except SettingsSchemaError as e:
+        add_error(path, body_start_line + e.node.start_mark.line, str(e))
+    finally:
+        loader.dispose()
+
+
+@cache
+def get_all_mod_names() -> dict[str, str]:
+    """Scan all mod files and return a mapping of mod_id (from filename) to @name."""
+    result = {}
+    for path in Path('mods').glob('*.wh.cpp'):
+        mod_id = path.name.removesuffix('.wh.cpp')
+        with path.open(encoding='utf-8') as f:
+            properties = get_mod_file_metadata(f)
+        name_prop = properties.get(('name', None))
+        if name_prop:
+            result[mod_id] = name_prop[0]
+    return result
+
+
+@cache
+def get_existing_windows_file_names():
+    url = 'https://winbindex.m417z.com/data/filenames.json'
+    return json.loads(fetch_url(url))
+
+
+def is_existing_windows_file_name(name: str):
+    # Temporary special case - not yet in stable Windows builds.
+    if name.lower() in ['systemtray.dll']:
+        return True
+
+    return name.lower() in get_existing_windows_file_names()
+
+
+# Non-Windows modules accepted as symbol hook targets in any mod.
+NON_WINDOWS_TARGET_MODULES = {'chrome.dll'}
+
+# Non-Windows modules accepted as symbol hook targets in specific mods.
+MOD_NON_WINDOWS_TARGET_MODULES = {
+    'win7-alttab-loader': {'alttab.dll'},
+    'word-image-resize-anti-flip': {'oart.dll'},
+    'word-mathtype-dark-fix': {'wwlib.dll'},
+    'word-omath-shade-fix': {'wwlib.dll'},
+}
+
+# Mods accepted with noUndecoratedSymbols, with their symbol hook targets.
+# Hooking any other target brings back the manual inspection.
+MOD_NO_UNDECORATED_SYMBOLS_TARGETS = {
+    'chrome-context-menu-items': {'chrome.dll'},
+    'chrome-native-ui-tweaks': {'chrome.dll'},
+    'word-image-resize-anti-flip': {'oart.dll'},
+    'word-mathtype-dark-fix': {'wwlib.dll'},
+    'word-omath-shade-fix': {'wwlib.dll'},
+}
+
+
+def is_known_module(mod_id: str, name: str):
+    name = name.lower()
+    return (
+        name in NON_WINDOWS_TARGET_MODULES
+        or name in MOD_NON_WINDOWS_TARGET_MODULES.get(mod_id, set())
+        or is_existing_windows_file_name(name)
+    )
+
+
+def get_target_module_from_symbol_block_name(symbol_block_name: str):
+    p = r'(.*?)_?(exe|dll|cpl)_?hooks?'
+    match = re.fullmatch(p, symbol_block_name, flags=re.IGNORECASE)
+    if not match:
+        return None
+
+    base_name = match.group(1)
+    suffix = match.group(2)
+    return f'{base_name}.{suffix}'
+
+
+def get_target_modules_from_previous_line(previous_line: str):
+    previous_line = previous_line.lstrip()
+    if not previous_line.startswith('//'):
+        return []
+
+    comment = previous_line.removeprefix('//').strip()
+    if comment == '':
+        return []
+
+    names = [x.strip() for x in comment.split(',')]
+    if not all(re.search(r'\.(exe|dll|cpl)$', x) for x in names):
+        return []
+
+    return names
+
+
+def get_symbol_hook_blocks(mod_source: str):
+    """Yield (line_num, target_from_name, targets_from_comment) for each symbol
+    hooks variable."""
+    mod_source_lines = mod_source.splitlines()
+
+    p = r'^[ \t]*(?:(?:static|const)[ \t]+)*(?:WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)'
+    for match in re.finditer(p, mod_source, re.MULTILINE):
+        symbol_block_name = match.group(1)
+
+        line_num = 1 + mod_source[: match.start()].count('\n')
+
+        target_from_name = get_target_module_from_symbol_block_name(symbol_block_name)
+
+        previous_line = mod_source_lines[line_num - 2]
+        targets_from_comment = get_target_modules_from_previous_line(previous_line)
+
+        yield line_num, target_from_name, targets_from_comment
+
+
+def is_no_undecorated_symbols_accepted(mod_id: str, mod_source: str):
+    """Whether the mod is accepted with noUndecoratedSymbols and all of its symbol
+    hook targets are known and among the accepted ones."""
+    accepted_targets = MOD_NO_UNDECORATED_SYMBOLS_TARGETS.get(mod_id)
+    if not accepted_targets:
+        return False
+
+    blocks = list(get_symbol_hook_blocks(mod_source))
+    if not blocks:
+        return False
+
+    for _, target_from_name, targets_from_comment in blocks:
+        targets = [x for x in [target_from_name, *targets_from_comment] if x]
+        if not targets or any(x.lower() not in accepted_targets for x in targets):
+            return False
+
+    return True
+
+
+def validate_symbol_hooks(path: Path, mod_source: str):
+    mod_id = path.name.removesuffix('.wh.cpp')
+    mod_source_lines = mod_source.splitlines()
+
+    blocks = get_symbol_hook_blocks(mod_source)
+    for line_num, target_from_name, targets_from_comment in blocks:
+        if targets_from_comment and line_num > 2:
+            line_before_comment = mod_source_lines[line_num - 3].strip()
+            if line_before_comment.startswith('//') and line_before_comment.endswith(','):
+                warning_msg = 'List all target modules in a single comment line'
+                add_error(path, line_num - 1, warning_msg)
+
+        if target_from_name and targets_from_comment:
+            warning_msg = (
+                'Use either a comment or a variable name, not both. For example, you'
+                ' can rename the variable from "user32DllHooks" to "user32Hooks".'
+            )
+            add_error(path, line_num, warning_msg)
+        elif target_from_name or targets_from_comment:
+            if target_from_name and not is_known_module(mod_id, target_from_name):
+                warning_msg = (
+                    f'"{target_from_name}" is not recognized as a Windows file name.'
+                    ' If the target module name can\'t be represented by a variable'
+                    ' name, add the target module in a comment above the symbol hooks'
+                    ' variable. Example:\n'
+                    '// Taskbar.View.dll\n'
+                    'WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {...};'
+                )
+                add_review_item(path, line_num, warning_msg)
+
+            for target in targets_from_comment:
+                if not is_known_module(mod_id, target):
+                    warning_msg = f'"{target}" is not recognized as a Windows file name'
+                    add_review_item(path, line_num - 1, warning_msg)
+            continue
+
+        warning_msg = (
+            'Please rename the symbol hooks variable to indicate the target module.'
+            ' Examples (can end with "hook" or "hooks"):\n'
+            '* user32DllHooks\n'
+            '* user32dll_hooks\n'
+            '* user32_dll_hooks\n'
+            'If the target module name can\'t be represented by a variable name, or'
+            ' if there is more than one target module, add all target modules in a'
+            ' comment above the symbol hooks variable, separated with commas.'
+            ' Example:\n'
+            '// explorer.exe, taskbar.dll\n'
+            'WindhawkUtils::SYMBOL_HOOK hooks[] = {...};'
+        )
+        add_error(path, line_num, warning_msg)
+
+
+def validate_encoding(path: Path):
+    """Validate that the file is valid UTF-8 without BOM."""
+    raw = path.read_bytes()
+
+    try:
+        raw.decode('utf-8')
+    except UnicodeDecodeError as e:
+        add_error(path, 1, f'File is not valid UTF-8: {e}')
+        return
+
+    if raw.startswith(b'\xef\xbb\xbf'):
+        add_error(path, 1, 'File must not start with a UTF-8 BOM')
+
+
+def validate_specific_keywords(path: Path, mod_source: str):
+    """Check for specific keywords in mod source code."""
+    # Split on newlines only; splitlines() would also split on vertical tab,
+    # form feed and similar, hiding them from the control character check.
+    mod_source_lines = mod_source.split('\n')
+
+    # fmt: off
+    keyword_patterns = [
+        (r'\bInternalWh', 'InternalWh', 'Avoid using internal API unless absolutely necessary'),
+        (r'\bWH_EDITING\b', 'WH_EDITING', 'Avoid using WH_EDITING unless absolutely necessary'),
+        (r'\bWH_MOD\b', 'WH_MOD', 'Avoid using WH_MOD unless absolutely necessary'),
+        (r'(^|,)\s*GWL_WNDPROC\b', 'GWL_WNDPROC', '`WindhawkUtils::SetWindowSubclassFromAnyThread` is usually preferred for subclassing'),
+        (r'(^|,)\s*GWLP_WNDPROC\b', 'GWLP_WNDPROC', '`WindhawkUtils::SetWindowSubclassFromAnyThread` is usually preferred for subclassing'),
+        (r'\bWh_FindFirstSymbol\b', 'Wh_FindFirstSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
+        (r'\bWh_FindNextSymbol\b', 'Wh_FindNextSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
+        (r'\bWh_FindCloseSymbol\b', 'Wh_FindCloseSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
+        (r'\bnoUndecoratedSymbols\b', 'noUndecoratedSymbols', 'Decorated symbols don\'t support online caching, undecorated symbols are usually preferred'),
+        (r'\bWh_SetFunctionHookT\b', 'Wh_SetFunctionHookT', 'Deprecated, use `WindhawkUtils::SetFunctionHook` instead'),
+        (r'\b__ptr64\b', '__ptr64', 'Windhawk doesn\'t use symbols with __ptr64 markers (UNDNAME_NO_PTR64)'),
+        (r'\b__try\b', '__try', 'Using SEH is usually discouraged'),
+        (r'^\s*#\s*define\s+(?!WH_WINRT_WINUI2\b)W[Hh]_', 'Windhawk symbol redefinition', 'Avoid redefining Windhawk symbols'),
+    ]
+    # fmt: on
+
+    mod_id = path.name.removesuffix('.wh.cpp')
+    no_undecorated_symbols_accepted = is_no_undecorated_symbols_accepted(
+        mod_id, mod_source
+    )
+
+    for line_num, line in enumerate(mod_source_lines, start=1):
+        for pattern, word, description in keyword_patterns:
+            if re.search(pattern, line):
+                # Skip GWL(P)_WNDPROC when used with GetWindowLong(Ptr)
+                if word in ('GWL_WNDPROC', 'GWLP_WNDPROC') and re.search(
+                    r'GetWindowLong(Ptr)?[AW]?\s*\([^,]+,\s*GWLP?_WNDPROC\s*\)', line
+                ):
+                    continue
+
+                if word == 'noUndecoratedSymbols' and no_undecorated_symbols_accepted:
+                    continue
+
+                add_review_item(
+                    path,
+                    line_num,
+                    f'Line requires manual inspection for "{word}": {description}',
+                )
+
+        hidden_ws = [
+            c
+            for c in line
+            if unicodedata.category(c) == 'Cf'
+            or (unicodedata.category(c) == 'Zs' and c != ' ')
+        ]
+        if hidden_ws:
+            chars = ', '.join(f'U+{ord(c):04X}' for c in sorted(set(hidden_ws)))
+            add_review_item(
+                path,
+                line_num,
+                f'Line contains {len(hidden_ws)} non-standard whitespace characters'
+                f' ({chars}), requires manual inspection',
+            )
+
+        control_chars = [
+            c for c in line if unicodedata.category(c) == 'Cc' and c != '\t'
+        ]
+        if control_chars:
+            chars = ', '.join(f'U+{ord(c):04X}' for c in sorted(set(control_chars)))
+            add_error(
+                path,
+                line_num,
+                f'Line contains {len(control_chars)} control characters ({chars}),'
+                ' which are not allowed',
+            )
+
+
+MAX_LINE_LENGTH = 4096
+
+# A single long statement, such as a function call with many arguments, is
+# allowed. Only lines which pack several statements are limited.
+DENSE_CODE_LINE_MIN_STATEMENTS = 3
+DENSE_CODE_LINE_MAX_LENGTH = 150
+
+
+def get_code_lines(mod_source: str) -> list[str]:
+    """The lines of the source without comments, with each string or character
+    literal and each run of spaces and tabs shortened to a single character."""
+    code = blank_comments(mod_source)
+    parts = []
+    copied = 0
+    for start, end in get_literal_spans(code):
+        # Newlines inside a literal are kept so that the line numbers match.
+        parts.append(code[copied:start] + '"' + '\n' * code.count('\n', start, end))
+        copied = end
+    parts.append(code[copied:])
+    return re.sub(r'[ \t]+', ' ', ''.join(parts)).split('\n')
+
+
+def count_statements(code_line: str) -> int:
+    """The number of statements in the line, counted as the semicolons outside
+    of parentheses and brackets."""
+    depth = 0
+    statements = 0
+    for c in code_line:
+        if c in '([':
+            depth += 1
+        elif c in ')]':
+            depth = max(0, depth - 1)
+        elif c == ';' and depth == 0:
+            statements += 1
+    return statements
+
+
+def validate_line_lengths(path: Path, mod_source: str):
+    """Validate that lines, and the code in them, aren't overly long."""
+    for line_num, line in enumerate(mod_source.split('\n'), start=1):
+        if len(line) > MAX_LINE_LENGTH:
+            add_error(
+                path,
+                line_num,
+                f'Line is {len(line)} characters long, lines must not be longer'
+                f' than {MAX_LINE_LENGTH} characters',
+            )
+
+    for line_num, line in enumerate(get_code_lines(mod_source), start=1):
+        statements = count_statements(line)
+        if (
+            statements >= DENSE_CODE_LINE_MIN_STATEMENTS
+            and len(line) > DENSE_CODE_LINE_MAX_LENGTH
+        ):
+            add_error(
+                path,
+                line_num,
+                f'Line packs {statements} statements into {len(line)} characters'
+                ' of code, which makes it difficult to review, please split it into'
+                f' multiple lines.',
+            )
+
+
+# Assignment, comparison and logical operators. Operators which are also used
+# in other syntax, such as `<`, `*` and `&`, are left out.
+SPACED_OPERATOR_RE = re.compile(
+    r'(?<![<>=!+\-*/%&|^])(?:==|!=|<=|>=|&&|\|\||[+\-*/%&|^]?=)(?!=)'
+)
+
+# Formatted code has almost no operators without spaces around them and few
+# lines with several statements. Compacted code has them throughout the file.
+# Operators without spaces alone are a coding style, which is readable as long
+# as statements are on separate lines.
+COMPACT_CODE_MIN_LINES = 200
+COMPACT_CODE_MAX_UNSPACED_OPERATORS = 0.4
+COMPACT_CODE_MIN_UNSPACED_PACKED_LINES = 50
+COMPACT_CODE_MAX_PACKED_LINES = 0.1
+
+
+def validate_code_compactness(path: Path, mod_source: str):
+    """Validate that the code isn't compacted, with operators and statements
+    run together throughout the file."""
+    lines = 0
+    operators = 0
+    unspaced_operators = 0
+    packed_lines = 0
+    densest_line_num = 1
+    densest_line_score = 0
+
+    for line_num, line in enumerate(get_code_lines(mod_source), start=1):
+        line = line.strip()
+        if line == '' or line.startswith('#'):
+            continue
+
+        lines += 1
+
+        line_unspaced_operators = 0
+        padded = f' {line} '
+        for match in SPACED_OPERATOR_RE.finditer(padded):
+            operators += 1
+            if padded[match.start() - 1] != ' ' and padded[match.end()] != ' ':
+                line_unspaced_operators += 1
+        unspaced_operators += line_unspaced_operators
+
+        # `case X: f(); break;` is a common idiom, not a packed line.
+        statements = count_statements(line)
+        if statements >= 2 and not re.match(r'(case\b|default\s*:)', line):
+            packed_lines += 1
+
+        if line_unspaced_operators + statements > densest_line_score:
+            densest_line_num = line_num
+            densest_line_score = line_unspaced_operators + statements
+
+    if lines < COMPACT_CODE_MIN_LINES:
+        return
+
+    unspaced_ratio = unspaced_operators / operators if operators else 0
+    packed_ratio = packed_lines / lines
+    if not (
+        (
+            unspaced_ratio > COMPACT_CODE_MAX_UNSPACED_OPERATORS
+            and packed_lines >= COMPACT_CODE_MIN_UNSPACED_PACKED_LINES
+        )
+        or packed_ratio > COMPACT_CODE_MAX_PACKED_LINES
+    ):
+        return
+
+    add_error(
+        path,
+        densest_line_num,
+        'The code is compacted throughout the file, which makes it difficult to'
+        f' review: {unspaced_ratio:.0%} of the operators have no spaces around'
+        f' them and {packed_ratio:.0%} of the lines have several statements,'
+        ' this line is one example. Please format the code, for example with'
+        ' clang-format and the .clang-format file of the repository.',
+    )
+
+
+def normalize_callback_param_types(params: str) -> str:
+    """Strip parameter names and normalize whitespace/pointer style in a C parameter list."""
+    p = re.sub(r'\s+', ' ', params.strip())
+    if p in ('', 'void', 'VOID'):
+        return ''
+
+    types = []
+    for arg in p.split(','):
+        arg = re.sub(r'\s*\*\s*', '* ', arg.strip())
+        tokens = arg.split()
+        # Drop the trailing parameter name if present.
+        if len(tokens) > 1 and re.fullmatch(r'\w+', tokens[-1]):
+            tokens = tokens[:-1]
+        types.append(' '.join(tokens))
+
+    return ', '.join(types)
+
+
+def normalize_return_type(return_type: str) -> str:
+    """Treat VOID (the Windows macro) as a synonym for void."""
+    return 'void' if return_type == 'VOID' else return_type
+
+
+def validate_callback_signatures(path: Path, mod_source: str):
+    """Validate signatures of well-known Windhawk mod callback functions."""
+    for callback_name, expected_signatures in CALLBACK_SIGNATURES.items():
+        # Parse expected signatures once: (return_type, normalized_param_types).
+        expected = []
+        for sig in expected_signatures:
+            m = re.fullmatch(rf'(\w+)\s+{re.escape(callback_name)}\s*\((.*)\)', sig)
+            assert m, sig
+            expected.append((m.group(1), normalize_callback_param_types(m.group(2))))
+
+        # Match: optional specifiers + return type + callback name + ( params ).
+        # Requiring a bare identifier before the name naturally skips function
+        # calls (e.g. "= Wh_Mod..." or "(Wh_Mod...").
+        pattern = (
+            r'((?:\b(?:static|extern(?:\s+"C")?|inline)\s+)*)\b(\w+)\s+'
+            + re.escape(callback_name)
+            + r'\s*\(([^)]*)\)'
+        )
+        for match in re.finditer(pattern, mod_source):
+            # Skip if inside a single-line comment.
+            line_start = mod_source.rfind('\n', 0, match.start()) + 1
+            if '//' in mod_source[line_start : match.start()]:
+                continue
+
+            line_num = 1 + mod_source[: match.start()].count('\n')
+            specifiers, return_type, params = match.groups()
+
+            if specifiers:
+                add_error(
+                    path,
+                    line_num,
+                    f'Unexpected "{" ".join(specifiers.split())}" before'
+                    f' {callback_name}',
+                )
+
+            normalized_return_type = normalize_return_type(return_type)
+            normalized_params = normalize_callback_param_types(params)
+
+            if any(
+                normalized_return_type == exp_ret and normalized_params == exp_params
+                for exp_ret, exp_params in expected
+            ):
+                continue
+
+            expected_list = ' or '.join(f'"{s}"' for s in expected_signatures)
+            add_error(
+                path,
+                line_num,
+                f'Unexpected {callback_name} signature:'
+                f' "{return_type} {callback_name}({params.strip()})".'
+                f' Expected: {expected_list}',
+            )
+
+
+def validate_mod_file(path: Path, pr_author: str, pr_author_id: Optional[int]):
+    mod_source = path.read_text(encoding='utf-8', errors='ignore').removeprefix(
+        '\ufeff'
+    )
+
+    validate_encoding(path)
+    validate_metadata(path, mod_source, pr_author, pr_author_id)
+    validate_readme(path, mod_source)
+    validate_settings(path, mod_source)
+    validate_symbol_hooks(path, mod_source)
+    validate_specific_keywords(path, mod_source)
+    validate_line_lengths(path, mod_source)
+    validate_code_compactness(path, mod_source)
+    validate_callback_signatures(path, mod_source)
+
+
+def test_run():
+    if len(sys.argv) not in [3, 4]:
+        print(
+            'Test run usage: pr_validation.py <mod_file_path> <pr_author>'
+            ' [pr_author_id]'
+        )
+        sys.exit(1)
+
+    print('Test run: Validating single file...')
+    path = Path(sys.argv[1])
+    pr_author = sys.argv[2]
+    pr_author_id = int(sys.argv[3]) if len(sys.argv) == 4 else None
+    validate_mod_file(path, pr_author, pr_author_id)
+    for annotation in review_item_annotations:
+        print(annotation)
+    if error_count > 0 or review_item_annotations:
+        print(
+            f'Got {error_count} errors and {len(review_item_annotations)} review'
+            ' items'
+        )
+
+
+def validate_pr_changelog(pr_body: str):
+    """Mod updates must describe the changes in the PR description."""
+    start_marker_re = re.compile(r'<!--\s*changelog:start\s*-->', re.IGNORECASE)
+    end_marker_re = re.compile(r'<!--\s*changelog:end\s*-->', re.IGNORECASE)
+
+    # The sample items of the pull request template, which are to be replaced
+    # with the actual changes.
+    placeholder_item_re = re.compile(
+        r'^[ \t]*\*[ \t]*Changelog item \d+\.\.\.[ \t]*$', re.MULTILINE
+    )
+
+    template_hint = (
+        ' See the pull request template'
+        ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1).'
+    )
+
+    starts = list(start_marker_re.finditer(pr_body))
+    ends = list(end_marker_re.finditer(pr_body))
+    if len(starts) != 1 or len(ends) != 1 or starts[0].end() > ends[0].start():
+        add_error(
+            Path('.github/pull_request_template.md'),
+            1,
+            'Mod updates must have a changelog in the PR description, between a single'
+            ' "<!-- changelog:start -->" marker and a single "<!-- changelog:end -->"'
+            f' marker after it, found {len(starts)} start and {len(ends)} end markers.'
+            + template_hint,
+        )
+        return
+
+    changelog = pr_body[starts[0].end() : ends[0].start()]
+    changelog = placeholder_item_re.sub('', changelog).strip()
+    if changelog == '':
+        add_error(
+            Path('.github/pull_request_template.md'),
+            1,
+            'The changelog between the "<!-- changelog:start -->" and'
+            ' "<!-- changelog:end -->" markers in the PR description is empty,'
+            ' please describe the changes of this mod update.'
+            + template_hint,
+        )
+        return
+
+    print(f'Changelog:\n{changelog}')
+
+
+def set_github_output(name: str, value: str):
+    # A random delimiter, so that a value which quotes the mod source can't
+    # contain it.
+    delimiter = f'EOF_{secrets.token_hex(16)}'
+    with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as f:
+        f.write(f'{name}<<{delimiter}\n{value}\n{delimiter}\n')
+
+
+def get_pr_changes() -> list[tuple[str, Path]]:
+    """(status, path) pairs for the files changed by the pull request."""
+    # The checkout is GitHub's test merge commit, whose first parent is the tip
+    # of the base branch.
+    output = subprocess.check_output(
+        ['git', 'diff-tree', '-r', '-z', '--no-renames', '--name-status', 'HEAD^1', 'HEAD'],
+        text=True,
+    )
+    fields = output.split('\0')[:-1]
+    return [(status, Path(path)) for status, path in zip(fields[::2], fields[1::2])]
+
+
+def main():
+    if len(sys.argv) > 1:
+        test_run()
+        return
+
+    print('Validating PR...')
+
+    pr_author = os.environ['PR_AUTHOR']
+    pr_author_id = int(os.environ['PR_AUTHOR_ID'])
+    if pr_author in DISALLOWED_AUTHORS:
+        sys.exit(f'Submissions from {pr_author} are not allowed')
+
+    changes = get_pr_changes()
+    if len(changes) == 0:
+        sys.exit('No files changed')
+
+    statuses = [status for status, _ in changes]
+    added_count = statuses.count('A')
+    modified_count = statuses.count('M')
+    all_count = len(changes)
+
+    if (added_count, modified_count, all_count) not in [(1, 0, 1), (0, 1, 1)]:
+        add_error(
+            changes[0][1],
+            1,
+            'Must be one added or one modified file, got '
+            f'{added_count=} {modified_count=} {all_count=}',
+        )
+
+    # The PR body is sent with CRLF line endings.
+    pr_body = os.environ.get('PR_BODY', '').replace('\r\n', '\n')
+
+    if added_count != 0 and '## Mod authorship' not in pr_body:
+        add_error(
+            Path('.github/pull_request_template.md'),
+            1,
+            'New mod submissions must keep the "## Mod authorship" section from the'
+            ' pull request template'
+            ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1)'
+            ' in the PR description, so reviewers know how the mod was authored.'
+            ' Please restore that section and fill it in.',
+        )
+
+    if modified_count != 0:
+        validate_pr_changelog(pr_body)
+
+    for status, path in changes:
+        if status == 'D':
+            continue
+
+        print(f'Checking {path=}')
+
+        errors_before = error_count
+        validate_mod_file(path, pr_author, pr_author_id)
+
+        if error_count == errors_before:
+            try:
+                mod_symbols = get_mod_symbols(path, [])
+                print('Extracted symbols:\n' + json.dumps(mod_symbols, indent=2))
+            except Exception as e:
+                print(f'Symbol extraction error: {e}')
+                add_review_item(
+                    path, 1, 'Failed to extract symbols, manual inspection required'
+                )
+
+    review_item_count = len(review_item_annotations)
+    set_github_output('review_item_count', str(review_item_count))
+    set_github_output('review_items', '\n'.join(review_item_annotations))
+
+    if review_item_count > 0:
+        print(
+            f'Got {review_item_count} review items, which require manual inspection'
+            ' by a reviewer, see the "Manual review" job'
+        )
+    if error_count > 0:
+        sys.exit(f'Got {error_count} errors, which must be fixed')
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except FetchError as e:
+        print(f'::error::{e}')
+        sys.exit(1)
