@@ -6,7 +6,7 @@
 // @author          Narayan
 // @github          https://github.com/NarayanChetri
 // @include         windhawk.exe
-// @compilerOptions -lwinhttp -luser32 -lshell32
+// @compilerOptions -lwinhttp -luser32 -lshell32 -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -57,9 +57,9 @@ Get a free key from either provider below and paste it into the mod settings:
 
 - **What Data is Sent**: When you type an active trigger (e.g. `?fix`, `?formal`), the text content of the active field (whatever Select All selects, up to the configured `max_chars` limit, 4,000 characters by default) is sent over an encrypted HTTPS connection directly to your chosen AI provider (`generativelanguage.googleapis.com` for Google Gemini, or `api.groq.com` for Groq). When you add or change an API key in settings, a brief connection test request sending the word `"Hi"` is performed to verify your key.
 - **Provider Terms & Data Handling**: Because this mod uses your own direct API key with the provider, each provider's respective privacy policy and terms of service apply. For example, on Google Gemini's free tier, Google's terms state that submitted content may be used to improve products and may be reviewed by human reviewers. Groq's data retention and privacy policies apply when using Groq.
-- **Transient Clipboard Protection**: To replace the field contents, the mod momentarily captures the text via `Ctrl+C` (which may briefly register in local `Win+V` history) and pastes the replacement via `Ctrl+V`. During the paste and when restoring your previous clipboard content, the mod applies Windows exclusion formats (`ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory`, and `CanUploadToCloudClipboard`) so that intermediate changes and restored clipboard data are not duplicated into clipboard history or synced across devices.
-- **Accidental Typing Protection**: While the AI processes your request, keyboard input in the target window is safely paused so typed keystrokes do not interleave with the animated spinner. You can cancel any in-flight request at any time by pressing `Esc`. If you switch to another window or app while the AI is thinking, input in your other window is never blocked.
-- **Terminal Protection**: Command prompts and terminal windows (PowerShell, Command Prompt, Windows Terminal, ConHost, MinTTY) are excluded by default so shortcuts and triggers never interfere with console sessions.
+- **Clipboard History & Cloud Sync**: Reading the field uses `Ctrl+C`, so each time you use a command, the field's full text is added to your clipboard history (`Win+V`) and, if clipboard sync is set to automatic, synced to your other devices. However, during the replacement paste and when restoring your previous clipboard content, the mod applies Windows exclusion formats (`ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory`, and `CanUploadToCloudClipboard`) so that intermediate changes and restored clipboard data are not duplicated into clipboard history or synced across devices.
+- **Accidental Typing Protection**: While the AI processes your request, keyboard input in the target window is safely paused so typed keystrokes do not interfere with processing. You can cancel any in-flight request at any time by pressing `Esc`. If you switch to another window or app while the AI is thinking, input in your other window is never blocked.
+- **Terminal Protection**: Command prompts and terminal windows (PowerShell, Command Prompt, Windows Terminal, ConHost, MinTTY, PuTTY, ConEmu) are excluded by class and process so shortcuts and triggers never interfere with console sessions.
 - **Document Protection**: Fields longer than the configured maximum character limit (`max_chars`) are left untouched to protect large open files and documents.
 - **Dedicated Background Process**: This mod runs safely as a dedicated Windhawk tool mod, isolating network and keyboard handling from `explorer.exe` to protect your taskbar and desktop stability.
 */
@@ -104,9 +104,9 @@ Get a free key from either provider below and paste it into the mod settings:
 - max_chars: 4000
   $name: "Maximum text length"
   $description: "Fields longer than this character count will be left untouched to protect large documents."
-- excluded_apps: [WindowsTerminal.exe, cmd.exe, powershell.exe, pwsh.exe, conhost.exe, mintty.exe]
+- excluded_apps: [WindowsTerminal.exe, cmd.exe, powershell.exe, pwsh.exe, conhost.exe, mintty.exe, putty.exe, ConEmu64.exe, ConEmu.exe]
   $name: "Excluded applications"
-  $description: "Applications where commands will be ignored. Terminals must stay excluded."
+  $description: "Applications where commands will be ignored. Terminals (Command Prompt, PowerShell, Windows Terminal, MinTTY, PuTTY, ConEmu) are also automatically excluded by window class."
 */
 // ==/WindhawkModSettings==
 
@@ -116,6 +116,7 @@ Get a free key from either provider below and paste it into the mod settings:
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -130,7 +131,6 @@ Get a free key from either provider below and paste it into the mod settings:
 namespace {
 
 constexpr ULONG_PTR kInjectMarker = 0x57484149;
-constexpr DWORD kSpinnerFrameMs = 100;
 constexpr DWORD kMaxWaitMs = 30000;
 constexpr size_t kMaxResponseBytes = 2 * 1024 * 1024;
 constexpr DWORD kDialogThrottleMs = 30000;
@@ -201,6 +201,7 @@ struct TriggerInfo {
 struct LastActionState {
     HWND window = nullptr;
     std::wstring originalText;
+    std::wstring expectedFieldText;
     ULONGLONG timestamp = 0;
 };
 
@@ -508,13 +509,37 @@ private:
                                 else if (h >= 'a' && h <= 'f') cp |= (h - 'a' + 10);
                                 else if (h >= 'A' && h <= 'F') cp |= (h - 'A' + 10);
                             }
+                            if (cp >= 0xD800 && cp <= 0xDBFF && p_ + 6 <= n_ && s_[p_] == '\\' && s_[p_ + 1] == 'u') {
+                                size_t savedP = p_;
+                                p_ += 2;
+                                unsigned int low = 0;
+                                bool lowOk = true;
+                                for (int i = 0; i < 4; ++i) {
+                                    char h = Get();
+                                    low <<= 4;
+                                    if (h >= '0' && h <= '9') low |= (h - '0');
+                                    else if (h >= 'a' && h <= 'f') low |= (h - 'a' + 10);
+                                    else if (h >= 'A' && h <= 'F') low |= (h - 'A' + 10);
+                                    else { lowOk = false; break; }
+                                }
+                                if (lowOk && low >= 0xDC00 && low <= 0xDFFF) {
+                                    cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+                                } else {
+                                    p_ = savedP;
+                                }
+                            }
                             if (cp < 0x80) {
                                 res.push_back(static_cast<char>(cp));
                             } else if (cp < 0x800) {
                                 res.push_back(static_cast<char>(0xC0 | (cp >> 6)));
                                 res.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-                            } else {
+                            } else if (cp < 0x10000) {
                                 res.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+                                res.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+                                res.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+                            } else {
+                                res.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+                                res.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
                                 res.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
                                 res.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
                             }
@@ -618,7 +643,7 @@ PCWSTR ProviderKeyHint(Provider p) {
 
 std::wstring ReadStringSetting(PCWSTR name) {
     PCWSTR p = Wh_GetStringSetting(name);
-    std::wstring s = p ? p : L"";
+    std::wstring s = p;
     Wh_FreeStringSetting(p);
     return s;
 }
@@ -655,7 +680,7 @@ Settings LoadSettings() {
 
     for (int i = 0; i < 64; ++i) {
         PCWSTR p = Wh_GetStringSetting(L"excluded_apps[%d]", i);
-        std::wstring name = p ? TrimWide(p) : L"";
+        std::wstring name = TrimWide(p);
         Wh_FreeStringSetting(p);
         if (name.empty()) break;
         s.excludedApps.push_back(ToLowerWide(name));
@@ -781,6 +806,118 @@ std::wstring ErrorHint(ErrorKind kind, Provider provider) {
         default:
             return L"";
     }
+}
+
+// =====================================================================
+//  Floating Spinner HUD
+// =====================================================================
+
+constexpr wchar_t kSpinnerClassName[] = L"Windhawk_AI_SpinnerHUD";
+
+LRESULT CALLBACK SpinnerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_ERASEBKGND:
+            return 1;
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+
+            HDC memDC = CreateCompatibleDC(hdc);
+            HBITMAP memBmp = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
+            HGDIOBJ oldBmp = SelectObject(memDC, memBmp);
+
+            HBRUSH bgBrush = CreateSolidBrush(RGB(28, 30, 33));
+            FillRect(memDC, &rc, bgBrush);
+            DeleteObject(bgBrush);
+
+            HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(70, 75, 82));
+            HGDIOBJ oldPen = SelectObject(memDC, borderPen);
+            HGDIOBJ oldBrush = SelectObject(memDC, GetStockObject(HOLLOW_BRUSH));
+            RoundRect(memDC, rc.left, rc.top, rc.right, rc.bottom, 12, 12);
+            SelectObject(memDC, oldPen);
+            SelectObject(memDC, oldBrush);
+            DeleteObject(borderPen);
+
+            int frame = static_cast<int>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+            static const wchar_t* kFrames[] = {
+                L"|", L"/", L"-", L"\\"
+            };
+            std::wstring text = std::wstring(L"AI thinking ") + kFrames[frame % 4];
+
+            HFONT font = CreateFontW(-12, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                     CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+            HGDIOBJ oldFont = SelectObject(memDC, font);
+
+            SetBkMode(memDC, TRANSPARENT);
+            SetTextColor(memDC, RGB(240, 243, 246));
+            DrawTextW(memDC, text.c_str(), -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+            SelectObject(memDC, oldFont);
+            DeleteObject(font);
+
+            BitBlt(hdc, 0, 0, rc.right, rc.bottom, memDC, 0, 0, SRCCOPY);
+            SelectObject(memDC, oldBmp);
+            DeleteObject(memBmp);
+            DeleteDC(memDC);
+
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            return 0;
+        default:
+            return DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
+}
+
+HWND CreateSpinnerHUD(HWND targetWindow) {
+    POINT pt = {};
+    bool gotCaret = false;
+    DWORD tid = GetWindowThreadProcessId(targetWindow, nullptr);
+    GUITHREADINFO gti{sizeof(GUITHREADINFO)};
+    if (GetGUIThreadInfo(tid, &gti) && gti.hwndCaret &&
+        (gti.rcCaret.right > gti.rcCaret.left || gti.rcCaret.bottom > gti.rcCaret.top)) {
+        pt = {gti.rcCaret.left, gti.rcCaret.bottom + 6};
+        ClientToScreen(gti.hwndCaret, &pt);
+        gotCaret = true;
+    }
+    if (!gotCaret) {
+        GetCursorPos(&pt);
+        pt.x += 12;
+        pt.y += 18;
+    }
+
+    constexpr int kW = 120;
+    constexpr int kH = 26;
+
+    HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = {sizeof(mi)};
+    if (GetMonitorInfoW(hMon, &mi)) {
+        if (pt.x + kW > mi.rcWork.right) pt.x = mi.rcWork.right - kW - 5;
+        if (pt.y + kH > mi.rcWork.bottom) pt.y = pt.y - kH - 35;
+        if (pt.x < mi.rcWork.left) pt.x = mi.rcWork.left + 5;
+        if (pt.y < mi.rcWork.top) pt.y = mi.rcWork.top + 5;
+    }
+
+    HWND hwnd = CreateWindowExW(
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+        kSpinnerClassName,
+        L"AI Thinking",
+        WS_POPUP,
+        pt.x, pt.y, kW, kH,
+        nullptr, nullptr, GetModuleHandleW(nullptr), nullptr
+    );
+    if (!hwnd) return nullptr;
+
+    HRGN rgn = CreateRoundRectRgn(0, 0, kW + 1, kH + 1, 12, 12);
+    SetWindowRgn(hwnd, rgn, TRUE);
+    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    UpdateWindow(hwnd);
+    return hwnd;
 }
 
 // =====================================================================
@@ -994,6 +1131,12 @@ AIResult CallGemini(const Settings& s, const std::string& model, ActionType acti
     "}";
 
     HttpResult http = HttpPost(L"generativelanguage.googleapis.com", Utf8ToWide(path), headers, body);
+    if (http.status == 0) {
+        res.ok = false;
+        res.kind = ErrorKind::Network;
+        res.error = http.error.empty() ? "Network connection failed." : http.error;
+        return res;
+    }
     if (http.status != 200) {
         auto doc = ParseJson(http.body);
         std::string err = ExtractApiErrorMessage(doc.get(), http.body);
@@ -1051,6 +1194,12 @@ AIResult CallGroq(const Settings& s, const std::string& model, ActionType action
     "}";
 
     HttpResult http = HttpPost(L"api.groq.com", Utf8ToWide(path), headers, body);
+    if (http.status == 0) {
+        res.ok = false;
+        res.kind = ErrorKind::Network;
+        res.error = http.error.empty() ? "Network connection failed." : http.error;
+        return res;
+    }
     if (http.status != 200) {
         auto doc = ParseJson(http.body);
         std::string err = ExtractApiErrorMessage(doc.get(), http.body);
@@ -1154,6 +1303,11 @@ struct ClipEntry {
 };
 using ClipSnapshot = std::vector<ClipEntry>;
 
+struct ClipSnapshotResult {
+    bool ok = false;
+    ClipSnapshot snapshot;
+};
+
 void SetTransientClipboardExclusions() {
     UINT f1 = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
     UINT f2 = RegisterClipboardFormatW(L"CanIncludeInClipboardHistory");
@@ -1177,10 +1331,11 @@ void SetTransientClipboardExclusions() {
     }
 }
 
-ClipSnapshot TakeClipboardSnapshot() {
-    ClipSnapshot snap;
+ClipSnapshotResult TakeClipboardSnapshot() {
+    ClipSnapshotResult result;
     ClipboardLock lock;
-    if (!lock.ok()) return snap;
+    if (!lock.ok()) return result;
+    result.ok = true;
 
     size_t total = 0;
     constexpr size_t kMaxTotal = 32 * 1024 * 1024;
@@ -1203,12 +1358,12 @@ ClipSnapshot TakeClipboardSnapshot() {
         entry.format = fmt;
         entry.data.resize(size);
         memcpy(entry.data.data(), p, size);
-        snap.push_back(std::move(entry));
+        result.snapshot.push_back(std::move(entry));
 
         GlobalUnlock(h);
         total += size;
     }
-    return snap;
+    return result;
 }
 
 void RestoreClipboardSnapshot(const ClipSnapshot& snap) {
@@ -1434,6 +1589,19 @@ std::wstring GetProcessNameForHwnd(HWND hwnd) {
 }
 
 bool IsExcludedWindow(HWND hwnd, const Settings& s) {
+    if (!hwnd) return true;
+
+    WCHAR cls[64] = {};
+    if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) {
+        if (wcscmp(cls, L"ConsoleWindowClass") == 0 ||             // conhost
+            wcscmp(cls, L"CASCADIA_HOSTING_WINDOW_CLASS") == 0 ||  // Windows Terminal
+            wcscmp(cls, L"mintty") == 0 ||
+            wcscmp(cls, L"PuTTY") == 0 ||
+            wcscmp(cls, L"VirtualConsoleClass") == 0) {            // ConEmu
+            return true;
+        }
+    }
+
     std::wstring proc = GetProcessNameForHwnd(hwnd);
     if (proc.empty()) return false;
     for (const auto& ex : s.excludedApps) {
@@ -1596,15 +1764,7 @@ std::wstring CleanModelOutput(std::wstring out, const std::wstring& original) {
     return out;
 }
 
-bool DeliverText(const TriggerInfo& trig, const std::wstring& finalText) {
-    if (GetForegroundWindow() != trig.foreground) {
-        INPUT input{};
-        input.type = INPUT_MOUSE;
-        input.mi.dwFlags = MOUSEEVENTF_MOVE;
-        SendInput(1, &input, sizeof(INPUT));
-        SetForegroundWindow(trig.foreground);
-        Sleep(120);
-    }
+bool DeliverText(const TriggerInfo& trig, const std::wstring& finalText, const std::wstring& expectedOriginalText) {
     if (GetForegroundWindow() != trig.foreground) {
         Wh_Log(L"Deliver: window lost focus.");
         return false;
@@ -1619,9 +1779,20 @@ bool DeliverText(const TriggerInfo& trig, const std::wstring& finalText) {
         }
     }
 
-    SendBackspaces(1); // Remove spinning pipe
-    Sleep(30);
+    // Verify field content in shared-window apps (Chromium, Electron, XAML)
+    std::wstring fieldContent;
+    if (!CaptureFieldText(fieldContent)) {
+        Wh_Log(L"Deliver: could not inspect field.");
+        return false;
+    }
 
+    if (TrimWide(fieldContent) != TrimWide(expectedOriginalText)) {
+        Wh_Log(L"Deliver: field content does not match original text. User moved focus or edited field.");
+        CollapseSelection();
+        return false;
+    }
+
+    // Field verified! Because CaptureFieldText performed Ctrl+A, the original text is currently selected.
     WaitModifiersReleased();
     std::wstring crlf = ToCrlf(finalText);
     if (SetClipboardTextTransient(crlf)) {
@@ -1636,7 +1807,13 @@ bool DeliverText(const TriggerInfo& trig, const std::wstring& finalText) {
 }
 
 void RunFixWorkflow(TriggerInfo trig) {
-    struct BusyReset { ~BusyReset() { g_busy = false; } } busyReset;
+    struct WorkflowGuard {
+        ~WorkflowGuard() {
+            g_swallowUntil = 0;
+            g_swallowWindow.store(nullptr);
+            g_busy = false;
+        }
+    } guard;
 
     Sleep(80);
     if (g_unloading.load()) return;
@@ -1657,7 +1834,12 @@ void RunFixWorkflow(TriggerInfo trig) {
     if (!fg || fg != trig.foreground) return;
     if (IsExcludedWindow(fg, s)) return;
 
-    ClipSnapshot saved = TakeClipboardSnapshot();
+    ClipSnapshotResult snapResult = TakeClipboardSnapshot();
+    if (!snapResult.ok) {
+        Wh_Log(L"Trigger aborted: could not open clipboard for snapshot.");
+        return;
+    }
+
     struct ClipRestore {
         const ClipSnapshot& snap;
         bool skip = false;
@@ -1666,7 +1848,7 @@ void RunFixWorkflow(TriggerInfo trig) {
             Sleep(350);
             RestoreClipboardSnapshot(snap);
         }
-    } restore{saved};
+    } restore{snapResult.snapshot};
 
     // 1) Capture full text
     std::wstring raw;
@@ -1675,6 +1857,11 @@ void RunFixWorkflow(TriggerInfo trig) {
         MessageBeep(MB_ICONWARNING);
         NotifyProblemThrottled(L"Could not read the text field. The app may block Select All / Copy.",
                                s.provider, false);
+        return;
+    }
+
+    if (g_cancel.load() || g_unloading.load()) {
+        CollapseSelection();
         return;
     }
 
@@ -1693,22 +1880,10 @@ void RunFixWorkflow(TriggerInfo trig) {
         return;
     }
 
-    // 2) Replace with single-character spinning pipe & swallow input in target window
-    g_cancel = false;
-    g_swallowWindow.store(trig.foreground);
-    g_swallowUntil = GetTickCount64() + kMaxWaitMs + 5000;
-    struct SwallowGuard {
-        ~SwallowGuard() {
-            g_swallowUntil = 0;
-            g_swallowWindow.store(nullptr);
-        }
-    } swallowGuard;
+    // Move caret to end of field so original text remains intact while AI processes
+    CollapseSelection();
 
-    const wchar_t* frames = kSpinnerFrames;
-    int frame = 0;
-    SendUnicodeChar(frames[frame]);
-
-    // 3) Request AI on worker thread
+    // 2) Request AI on worker thread
     auto job = std::make_shared<AiJob>();
     std::string payload = WideToUtf8(text);
     ActionType action = trig.action;
@@ -1720,23 +1895,36 @@ void RunFixWorkflow(TriggerInfo trig) {
         job->done = true;
     }
 
+    HWND hwndSpinner = CreateSpinnerHUD(trig.foreground);
+
     const ULONGLONG deadline = GetTickCount64() + kMaxWaitMs;
     bool timedOut = false;
+    int frame = 0;
     while (!job->done.load()) {
         if (g_cancel.load() || g_unloading.load()) break;
         if (GetTickCount64() > deadline) { timedOut = true; break; }
-        Sleep(kSpinnerFrameMs);
-        if (job->done.load()) break;
-        if (GetForegroundWindow() == trig.foreground) {
-            frame = (frame + 1) % 4;
-            SendBackspaces(1);
-            SendUnicodeChar(frames[frame]);
-        }
-    }
-    g_swallowUntil = 0;
-    g_swallowWindow.store(nullptr);
 
-    // 4) Deliver result or restore original text
+        if (hwndSpinner) {
+            MSG msg;
+            while (PeekMessageW(&msg, hwndSpinner, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+            ++frame;
+            SetWindowLongPtrW(hwndSpinner, GWLP_USERDATA, frame);
+            InvalidateRect(hwndSpinner, nullptr, FALSE);
+            UpdateWindow(hwndSpinner);
+        }
+
+        Sleep(80);
+    }
+
+    if (hwndSpinner) {
+        DestroyWindow(hwndSpinner);
+        hwndSpinner = nullptr;
+    }
+
+    // 3) Deliver result or restore original text
     const bool cancelled = g_cancel.load() || g_unloading.load();
     AIResult result;
     std::wstring finalText = text;
@@ -1759,26 +1947,28 @@ void RunFixWorkflow(TriggerInfo trig) {
         result.error = "Request timed out.";
     }
 
-    bool delivered = DeliverText(trig, finalText);
+    bool delivered = DeliverText(trig, finalText, raw);
     if (!delivered) {
         MessageBeep(MB_ICONHAND);
-        // Leave original text on clipboard and save for ?undo so user doesn't lose text
+        // Leave result text on clipboard and save for ?undo so user doesn't lose text
         restore.skip = true;
-        SetClipboardTextTransient(ToCrlf(text));
+        SetClipboardTextTransient(ToCrlf(finalText));
         {
             std::lock_guard<std::mutex> lock(g_undoMutex);
             g_lastAction.window = trig.foreground;
             g_lastAction.originalText = text;
+            g_lastAction.expectedFieldText = raw;
             g_lastAction.timestamp = GetTickCount64();
         }
         NotifyProblemThrottled(
             L"Could not deliver text (field or focus changed).\n\n"
-            L"Your original text was copied to your clipboard and saved for ?undo so it is not lost.",
+            L"Your result text was copied to your clipboard so it is not lost.",
             s.provider, false);
     } else if (success) {
         std::lock_guard<std::mutex> lock(g_undoMutex);
         g_lastAction.window = trig.foreground;
         g_lastAction.originalText = text;
+        g_lastAction.expectedFieldText = finalText;
         g_lastAction.timestamp = GetTickCount64();
     }
 
@@ -1793,7 +1983,13 @@ void RunFixWorkflow(TriggerInfo trig) {
 }
 
 void RunUndoWorkflow(TriggerInfo trig) {
-    struct BusyReset { ~BusyReset() { g_busy = false; } } busyReset;
+    struct WorkflowGuard {
+        ~WorkflowGuard() {
+            g_swallowUntil = 0;
+            g_swallowWindow.store(nullptr);
+            g_busy = false;
+        }
+    } guard;
 
     Sleep(80);
     if (g_unloading.load()) return;
@@ -1806,6 +2002,7 @@ void RunUndoWorkflow(TriggerInfo trig) {
     }
 
     std::wstring restoreText;
+    std::wstring expectedFieldText;
     {
         std::lock_guard<std::mutex> lock(g_undoMutex);
         if (g_lastAction.window != fg || g_lastAction.originalText.empty() ||
@@ -1815,39 +2012,63 @@ void RunUndoWorkflow(TriggerInfo trig) {
             return;
         }
         restoreText = g_lastAction.originalText;
+        expectedFieldText = g_lastAction.expectedFieldText;
     }
 
     WaitModifiersReleased();
 
-    ClipSnapshot saved = TakeClipboardSnapshot();
+    ClipSnapshotResult snapResult = TakeClipboardSnapshot();
+    if (!snapResult.ok) {
+        Wh_Log(L"Undo aborted: could not open clipboard for snapshot.");
+        return;
+    }
+
     struct ClipRestore {
         const ClipSnapshot& snap;
         ~ClipRestore() {
             Sleep(350);
             RestoreClipboardSnapshot(snap);
         }
-    } restore{saved};
+    } restore{snapResult.snapshot};
 
-    if (GetForegroundWindow() != trig.foreground) {
-        INPUT input{};
-        input.type = INPUT_MOUSE;
-        input.mi.dwFlags = MOUSEEVENTF_MOVE;
-        SendInput(1, &input, sizeof(INPUT));
-        SetForegroundWindow(trig.foreground);
-        Sleep(100);
+    // Read current field content
+    std::wstring currentField;
+    if (!CaptureFieldText(currentField)) {
+        CollapseSelection();
+        Wh_Log(L"Undo: could not read current field.");
+        MessageBeep(MB_ICONHAND);
+        return;
     }
 
-    // Select all and replace with restoreText
-    SendCtrlCombo('A');
-    Sleep(80);
+    // Strip trailing undo trigger
+    std::wstring stripped = currentField;
+    size_t cutLen = 0;
+    if (CheckTriggerMatch(ToLowerWide(stripped), s.triggerUndo, cutLen)) {
+        stripped.resize(stripped.size() - cutLen);
+    }
+    size_t lastNonWs = stripped.find_last_not_of(L" \t\r\n");
+    if (lastNonWs != std::wstring::npos) {
+        stripped.resize(lastNonWs + 1);
+    } else {
+        stripped.clear();
+    }
 
+    // Verify that current field content matches what was previously delivered/left
+    if (!expectedFieldText.empty() && TrimWide(stripped) != TrimWide(expectedFieldText)) {
+        Wh_Log(L"Undo ignored: field content does not match last result.");
+        CollapseSelection();
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+
+    // Field verified! Because CaptureFieldText ran Ctrl+A, the field is currently selected.
     WaitModifiersReleased();
     std::wstring crlf = ToCrlf(restoreText);
     bool pasted = false;
     if (SetClipboardTextTransient(crlf)) {
         SendCtrlCombo('V');
         pasted = true;
-    } else {
+    } else if (restoreText.find(L'\n') == std::wstring::npos) {
         SendUnicodeText(restoreText);
         pasted = true;
     }
@@ -1856,9 +2077,14 @@ void RunUndoWorkflow(TriggerInfo trig) {
         std::lock_guard<std::mutex> lock(g_undoMutex);
         if (g_lastAction.window == fg) {
             g_lastAction.originalText.clear();
+            g_lastAction.expectedFieldText.clear();
         }
         MessageBeep(MB_OK);
         Wh_Log(L"Undo: Restored %zu characters of original text.", restoreText.size());
+    } else {
+        Wh_Log(L"Undo failed: clipboard unavailable and text contains line breaks.");
+        CollapseSelection();
+        MessageBeep(MB_ICONHAND);
     }
 }
 
@@ -1889,6 +2115,9 @@ bool OnKeyDown(const KBDLLHOOKSTRUCT& k) {
 
     if (GetTickCount64() < g_swallowUntil.load()) {
         if (vk == VK_ESCAPE) g_cancel = true;
+        if (IsModifierVk(vk) || IsKeyDown(VK_MENU) || IsKeyDown(VK_LWIN) || IsKeyDown(VK_RWIN)) {
+            return false;
+        }
         HWND target = g_swallowWindow.load();
         if (!target || GetForegroundWindow() == target) {
             return true;
@@ -1942,6 +2171,9 @@ bool OnKeyDown(const KBDLLHOOKSTRUCT& k) {
     TriggerCache tc = GetTriggerCache();
     ActionType action = ActionType::Fix;
     if (MatchTriggerInString(g_typed, tc, action)) {
+        g_cancel = false;
+        g_swallowWindow.store(fg);
+        g_swallowUntil = now + kMaxWaitMs + 10000;
         g_typed.clear();
         g_busy = true;
 
@@ -1954,10 +2186,16 @@ bool OnKeyDown(const KBDLLHOOKSTRUCT& k) {
             trig.focus = gti.hwndFocus;
         }
 
+        bool spawned = false;
         if (action == ActionType::Undo) {
-            if (!SpawnWorker([trig]() { RunUndoWorkflow(trig); })) g_busy = false;
+            spawned = SpawnWorker([trig]() { RunUndoWorkflow(trig); });
         } else {
-            if (!SpawnWorker([trig]() { RunFixWorkflow(trig); })) g_busy = false;
+            spawned = SpawnWorker([trig]() { RunFixWorkflow(trig); });
+        }
+        if (!spawned) {
+            g_swallowUntil = 0;
+            g_swallowWindow.store(nullptr);
+            g_busy = false;
         }
     }
     return false;
@@ -2013,6 +2251,13 @@ BOOL WhTool_ModInit() {
         g_settings = LoadSettings();
     }
     UpdateTriggerCache(g_settings);
+
+    WNDCLASSEXW wc = {sizeof(wc)};
+    wc.lpfnWndProc = SpinnerWndProc;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpszClassName = kSpinnerClassName;
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    RegisterClassExW(&wc);
 
     g_hookReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_hookReady) return FALSE;
@@ -2091,6 +2336,7 @@ void WhTool_ModUninit() {
 
     // 3. Close open message boxes and wait indefinitely for all worker threads
     JoinAllWorkers();
+    UnregisterClassW(kSpinnerClassName, GetModuleHandleW(nullptr));
     Wh_Log(L"AI Text Assistant tool mod uninitialized cleanly.");
 }
 
@@ -2102,6 +2348,14 @@ void WhTool_ModUninit() {
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
 // The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+////////////////////////////////////////////////////////////////////////////////
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
