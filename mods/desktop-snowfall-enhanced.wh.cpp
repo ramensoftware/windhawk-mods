@@ -179,18 +179,11 @@ Realistic, GPU-accelerated snowfall effect for your desktop that settles on top 
 - maxFps: 60
   $name: Maximum Framerate
   $name:ru-RU: Ограничение FPS
-  $description: Frame rate limit to optimize GPU and CPU performance
-  $description:ru-RU: Ограничение частоты кадров для энергосбережения
-  $options:
-    - 30: 30 FPS (Power Saver)
-    - 60: 60 FPS (Balanced)
-    - 120: 120 FPS (High Refresh)
-    - 144: 144 FPS (Ultra)
-  $options:ru-RU:
-    - 30: 30 FPS (Энергосбережение)
-    - 60: 60 FPS (Баланс)
-    - 120: 120 FPS (Плавный)
-    - 144: 144 FPS (Ультра)
+  $description: Frame rate limit to optimize GPU and CPU performance (15-240)
+  $description:ru-RU: Частота кадров анимации снега (15-240)
+  #! $min: 15
+  #! $max: 240
+  #! $format: slider
 - allMonitors: false
   $name: Show on all monitors
   $name:ru-RU: Показывать на всех мониторах
