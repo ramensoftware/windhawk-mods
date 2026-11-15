@@ -841,7 +841,7 @@ HttpResult HttpPost(const std::wstring& host, const std::wstring& path, const st
         }
     } tokenGuard{token};
 
-    std::wstring userAgent = L"Windhawk-AITextAssistant/" + Utf8ToWide(WH_MOD_VERSION);
+    std::wstring userAgent = std::wstring(L"Windhawk-AITextAssistant/") + WH_MOD_VERSION;
     WinHttpHandle session(WinHttpOpen(userAgent.c_str(), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                       WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
     if (!session) { r.error = DescribeWinHttpError(GetLastError()); return r; }
@@ -1127,27 +1127,12 @@ AIResult CallAI(const Settings& s, ActionType action, const std::string& userTex
 //  Clipboard helpers
 // =====================================================================
 
-class OwnerWindow {
-public:
-    OwnerWindow() {
-        hwnd_ = CreateWindowExW(0, L"STATIC", L"AIInlineOwner", 0, 0, 0, 0, 0,
-                                HWND_MESSAGE, nullptr, GetModuleHandle(nullptr), nullptr);
-    }
-    ~OwnerWindow() {
-        if (hwnd_) DestroyWindow(hwnd_);
-    }
-    HWND get() const { return hwnd_; }
-
-private:
-    HWND hwnd_ = nullptr;
-};
-
 class ClipboardLock {
 public:
-    explicit ClipboardLock(HWND owner, DWORD timeoutMs = 800) {
+    explicit ClipboardLock(DWORD timeoutMs = 800) {
         const ULONGLONG deadline = GetTickCount64() + timeoutMs;
         while (GetTickCount64() <= deadline) {
-            if (OpenClipboard(owner)) {
+            if (OpenClipboard(nullptr)) {
                 ok_ = true;
                 return;
             }
@@ -1192,9 +1177,9 @@ void SetTransientClipboardExclusions() {
     }
 }
 
-ClipSnapshot TakeClipboardSnapshot(HWND owner) {
+ClipSnapshot TakeClipboardSnapshot() {
     ClipSnapshot snap;
-    ClipboardLock lock(owner);
+    ClipboardLock lock;
     if (!lock.ok()) return snap;
 
     size_t total = 0;
@@ -1226,8 +1211,8 @@ ClipSnapshot TakeClipboardSnapshot(HWND owner) {
     return snap;
 }
 
-void RestoreClipboardSnapshot(HWND owner, const ClipSnapshot& snap) {
-    ClipboardLock lock(owner);
+void RestoreClipboardSnapshot(const ClipSnapshot& snap) {
+    ClipboardLock lock;
     if (!lock.ok()) return;
     EmptyClipboard();
     for (const auto& e : snap) {
@@ -1242,13 +1227,13 @@ void RestoreClipboardSnapshot(HWND owner, const ClipSnapshot& snap) {
     SetTransientClipboardExclusions();
 }
 
-bool ClearClipboard(HWND owner) {
-    ClipboardLock lock(owner);
+bool ClearClipboard() {
+    ClipboardLock lock;
     return lock.ok() && EmptyClipboard();
 }
 
-bool ReadClipboardText(HWND owner, std::wstring& out) {
-    ClipboardLock lock(owner);
+bool ReadClipboardText(std::wstring& out) {
+    ClipboardLock lock;
     if (!lock.ok()) return false;
     HANDLE h = GetClipboardData(CF_UNICODETEXT);
     if (!h) return false;
@@ -1262,8 +1247,8 @@ bool ReadClipboardText(HWND owner, std::wstring& out) {
     return true;
 }
 
-bool SetClipboardTextTransient(HWND owner, const std::wstring& text) {
-    ClipboardLock lock(owner);
+bool SetClipboardTextTransient(const std::wstring& text) {
+    ClipboardLock lock;
     if (!lock.ok()) return false;
     EmptyClipboard();
 
@@ -1291,23 +1276,35 @@ bool IsKeyDown(int vk) {
     return (GetAsyncKeyState(vk) & 0x8000) != 0;
 }
 
-void ReleaseStuckModifiers() {
-    INPUT inputs[8] = {};
+void WaitModifiersReleased() {
+    static constexpr int kModifiers[] = {
+        VK_SHIFT, VK_LSHIFT, VK_RSHIFT,
+        VK_CONTROL, VK_LCONTROL, VK_RCONTROL,
+        VK_MENU, VK_LMENU, VK_RMENU,
+        VK_LWIN, VK_RWIN
+    };
+    auto anyHeld = [] {
+        for (int vk : kModifiers) {
+            if ((GetAsyncKeyState(vk) & 0x8000) != 0) return true;
+        }
+        return false;
+    };
+    for (int i = 0; i < 20 && anyHeld(); ++i) {
+        Sleep(25);
+    }
+
+    INPUT inputs[12] = {};
     int count = 0;
-    auto addUp = [&](WORD vk) {
-        if (IsKeyDown(vk)) {
+    for (int vk : kModifiers) {
+        if ((GetAsyncKeyState(vk) & 0x8000) != 0) {
             inputs[count].type = INPUT_KEYBOARD;
-            inputs[count].ki.wVk = vk;
+            inputs[count].ki.wVk = static_cast<WORD>(vk);
+            inputs[count].ki.wScan = static_cast<WORD>(MapVirtualKeyW(vk, MAPVK_VK_TO_VSC));
             inputs[count].ki.dwFlags = KEYEVENTF_KEYUP;
             inputs[count].ki.dwExtraInfo = kInjectMarker;
             ++count;
         }
-    };
-    addUp(VK_CONTROL);
-    addUp(VK_SHIFT);
-    addUp(VK_MENU);
-    addUp(VK_LWIN);
-    addUp(VK_RWIN);
+    }
     if (count > 0) {
         SendInput(count, inputs, sizeof(INPUT));
         Sleep(20);
@@ -1316,26 +1313,37 @@ void ReleaseStuckModifiers() {
 
 void SendCtrlCombo(char c) {
     WORD vk = static_cast<WORD>(std::toupper(static_cast<unsigned char>(c)));
-    INPUT in[4] = {};
-    in[0].type = INPUT_KEYBOARD;
-    in[0].ki.wVk = VK_CONTROL;
-    in[0].ki.dwExtraInfo = kInjectMarker;
+    WORD scanCtrl = static_cast<WORD>(MapVirtualKeyW(VK_CONTROL, MAPVK_VK_TO_VSC));
+    WORD scanKey = static_cast<WORD>(MapVirtualKeyW(vk, MAPVK_VK_TO_VSC));
 
-    in[1].type = INPUT_KEYBOARD;
-    in[1].ki.wVk = vk;
-    in[1].ki.dwExtraInfo = kInjectMarker;
+    // 1. Control DOWN
+    INPUT in = {};
+    in.type = INPUT_KEYBOARD;
+    in.ki.wVk = VK_CONTROL;
+    in.ki.wScan = scanCtrl;
+    in.ki.dwFlags = 0;
+    in.ki.dwExtraInfo = kInjectMarker;
+    SendInput(1, &in, sizeof(INPUT));
+    Sleep(25);
 
-    in[2].type = INPUT_KEYBOARD;
-    in[2].ki.wVk = vk;
-    in[2].ki.dwFlags = KEYEVENTF_KEYUP;
-    in[2].ki.dwExtraInfo = kInjectMarker;
+    // 2. Key DOWN
+    in.ki.wVk = vk;
+    in.ki.wScan = scanKey;
+    in.ki.dwFlags = 0;
+    SendInput(1, &in, sizeof(INPUT));
+    Sleep(25);
 
-    in[3].type = INPUT_KEYBOARD;
-    in[3].ki.wVk = VK_CONTROL;
-    in[3].ki.dwFlags = KEYEVENTF_KEYUP;
-    in[3].ki.dwExtraInfo = kInjectMarker;
+    // 3. Key UP
+    in.ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(1, &in, sizeof(INPUT));
+    Sleep(25);
 
-    SendInput(4, in, sizeof(INPUT));
+    // 4. Control UP
+    in.ki.wVk = VK_CONTROL;
+    in.ki.wScan = scanCtrl;
+    in.ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(1, &in, sizeof(INPUT));
+    Sleep(25);
 }
 
 void SendBackspaces(size_t count) {
@@ -1495,24 +1503,66 @@ bool StripTrigger(std::wstring& text, const Settings& s, ActionType expectedActi
         default:                  targetTrig = &s.triggerFix; break;
     }
 
-    if (targetTrig && !targetTrig->empty()) {
-        size_t len = 0;
-        if (CheckTriggerMatch(lower, *targetTrig, len)) {
-            text.resize(end + 1 - len);
-            while (!text.empty() && (text.back() == L' ' || text.back() == L'\t')) text.pop_back();
-            return !text.empty();
-        }
-    }
-    return false;
+    if (!targetTrig || targetTrig->empty()) return false;
+    size_t cutLen = 0;
+    if (!CheckTriggerMatch(lower, *targetTrig, cutLen)) return false;
+
+    t.resize(t.size() - cutLen);
+    size_t keep = t.find_last_not_of(L" \t");
+    if (keep == std::wstring::npos) return false;
+    t.resize(keep + 1);
+    text = t;
+    return !text.empty();
 }
 
-bool CaptureFieldText(HWND owner, std::wstring& out) {
-    ClearClipboard(owner);
+bool CaptureFieldText(std::wstring& out) {
+    WaitModifiersReleased();
+
+    if (!ClearClipboard()) {
+        Wh_Log(L"Capture: could not clear clipboard.");
+        return false;
+    }
+    const DWORD seqBefore = GetClipboardSequenceNumber();
+
+    // Select all text in the field
     SendCtrlCombo('A');
-    Sleep(30);
+    Sleep(120);
+
+    // Copy selected text
     SendCtrlCombo('C');
-    Sleep(80);
-    return ReadClipboardText(owner, out);
+
+    // Poll for the clipboard sequence number to change when the target app writes the copied text
+    for (int i = 0; i < 40; ++i) {
+        Sleep(25);
+        if (GetClipboardSequenceNumber() != seqBefore) {
+            Sleep(25);
+            if (ReadClipboardText(out) && !out.empty()) {
+                return true;
+            }
+        }
+    }
+
+    // In some web / Electron apps, if selection was still establishing, retry copy once
+    if (out.empty()) {
+        SendCtrlCombo('C');
+        for (int i = 0; i < 25; ++i) {
+            Sleep(25);
+            if (GetClipboardSequenceNumber() != seqBefore) {
+                Sleep(25);
+                if (ReadClipboardText(out) && !out.empty()) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Fallback check
+    if (ReadClipboardText(out) && !out.empty()) {
+        return true;
+    }
+
+    Wh_Log(L"Capture: target window did not respond to Ctrl+C.");
+    return false;
 }
 
 void CollapseSelection() {
@@ -1546,9 +1596,11 @@ std::wstring CleanModelOutput(std::wstring out, const std::wstring& original) {
     return out;
 }
 
-bool DeliverText(HWND owner, const TriggerInfo& trig, const std::wstring& finalText) {
+bool DeliverText(const TriggerInfo& trig, const std::wstring& finalText) {
     if (GetForegroundWindow() != trig.foreground) {
         INPUT input{};
+        input.type = INPUT_MOUSE;
+        input.mi.dwFlags = MOUSEEVENTF_MOVE;
         SendInput(1, &input, sizeof(INPUT));
         SetForegroundWindow(trig.foreground);
         Sleep(120);
@@ -1570,9 +1622,9 @@ bool DeliverText(HWND owner, const TriggerInfo& trig, const std::wstring& finalT
     SendBackspaces(1); // Remove spinning pipe
     Sleep(30);
 
-    ReleaseStuckModifiers();
+    WaitModifiersReleased();
     std::wstring crlf = ToCrlf(finalText);
-    if (SetClipboardTextTransient(owner, crlf)) {
+    if (SetClipboardTextTransient(crlf)) {
         SendCtrlCombo('V');
         return true;
     }
@@ -1599,30 +1651,26 @@ void RunFixWorkflow(TriggerInfo trig) {
         return;
     }
 
-    ReleaseStuckModifiers();
+    WaitModifiersReleased();
 
     HWND fg = GetForegroundWindow();
     if (!fg || fg != trig.foreground) return;
     if (IsExcludedWindow(fg, s)) return;
 
-    OwnerWindow owner;
-    if (!owner.get()) return;
-
-    ClipSnapshot saved = TakeClipboardSnapshot(owner.get());
+    ClipSnapshot saved = TakeClipboardSnapshot();
     struct ClipRestore {
-        HWND owner;
         const ClipSnapshot& snap;
         bool skip = false;
         ~ClipRestore() {
             if (skip) return;
             Sleep(350);
-            RestoreClipboardSnapshot(owner, snap);
+            RestoreClipboardSnapshot(snap);
         }
-    } restore{owner.get(), saved};
+    } restore{saved};
 
     // 1) Capture full text
     std::wstring raw;
-    if (!CaptureFieldText(owner.get(), raw)) {
+    if (!CaptureFieldText(raw)) {
         CollapseSelection();
         MessageBeep(MB_ICONWARNING);
         NotifyProblemThrottled(L"Could not read the text field. The app may block Select All / Copy.",
@@ -1711,12 +1759,12 @@ void RunFixWorkflow(TriggerInfo trig) {
         result.error = "Request timed out.";
     }
 
-    bool delivered = DeliverText(owner.get(), trig, finalText);
+    bool delivered = DeliverText(trig, finalText);
     if (!delivered) {
         MessageBeep(MB_ICONHAND);
         // Leave original text on clipboard and save for ?undo so user doesn't lose text
         restore.skip = true;
-        SetClipboardTextTransient(owner.get(), ToCrlf(text));
+        SetClipboardTextTransient(ToCrlf(text));
         {
             std::lock_guard<std::mutex> lock(g_undoMutex);
             g_lastAction.window = trig.foreground;
@@ -1769,23 +1817,21 @@ void RunUndoWorkflow(TriggerInfo trig) {
         restoreText = g_lastAction.originalText;
     }
 
-    ReleaseStuckModifiers();
+    WaitModifiersReleased();
 
-    OwnerWindow owner;
-    if (!owner.get()) return;
-
-    ClipSnapshot saved = TakeClipboardSnapshot(owner.get());
+    ClipSnapshot saved = TakeClipboardSnapshot();
     struct ClipRestore {
-        HWND owner;
         const ClipSnapshot& snap;
         ~ClipRestore() {
             Sleep(350);
-            RestoreClipboardSnapshot(owner, snap);
+            RestoreClipboardSnapshot(snap);
         }
-    } restore{owner.get(), saved};
+    } restore{saved};
 
     if (GetForegroundWindow() != trig.foreground) {
         INPUT input{};
+        input.type = INPUT_MOUSE;
+        input.mi.dwFlags = MOUSEEVENTF_MOVE;
         SendInput(1, &input, sizeof(INPUT));
         SetForegroundWindow(trig.foreground);
         Sleep(100);
@@ -1793,12 +1839,12 @@ void RunUndoWorkflow(TriggerInfo trig) {
 
     // Select all and replace with restoreText
     SendCtrlCombo('A');
-    Sleep(30);
+    Sleep(80);
 
-    ReleaseStuckModifiers();
+    WaitModifiersReleased();
     std::wstring crlf = ToCrlf(restoreText);
     bool pasted = false;
-    if (SetClipboardTextTransient(owner.get(), crlf)) {
+    if (SetClipboardTextTransient(crlf)) {
         SendCtrlCombo('V');
         pasted = true;
     } else {
