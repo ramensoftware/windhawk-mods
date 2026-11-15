@@ -55,10 +55,10 @@ While a charm pane is open:
 - **Edge hint delay**: how long the pointer must rest on the right edge before the Charms Bar opens, which is
   the Windows 8 desktop behaviour and what 1.0.0 did. A delay written under *EdgeUI* in the registry takes
   precedence, like the other Windows 8 edge settings.
-- **Two-stage edge gesture**: for a touch screen or a pen. Only the two right corner squares start the gesture,
-  the translucent icon hint slides in after the delay, and the full bar follows a slide along the edge, a tap on
-  the hint or the optional dwell. With *Slide along the edge to open* and *Open the full bar from the hint
-  after* it is tuned. A mouse is never gated this way.
+- **Two-stage edge gesture**: for a touch screen or a pen. The translucent icon hint slides in after the delay,
+  and the full bar follows a slide along the edge, a tap on the hint or the optional dwell; *Slide along the
+  edge to open* and *Open the full bar from the hint after* tune it. In the corner modes only the corner
+  squares start the gesture, in edge mode the whole right edge does. A mouse is never gated this way.
 - **Hide after choosing a charm**: closes the Charms Bar after a charm is activated. Turn off to leave it open.
 - **Close on outside click or focus change**: light-dismiss behavior.
 - **Animate show and hide**: enables pane motion. Windows' own *Settings > Accessibility > Visual effects >
@@ -138,10 +138,10 @@ Live system data (volume, brightness, network, battery) is read only while a pan
     - winCOnly: Win+C only
 - edgeStagedGesture: false
   $name: Two-stage edge gesture (touch and pen)
-  $description: "Off is the Windows 8 desktop behaviour, which is what a mouse uses: the pointer comes up to the right edge or the corner and the Charms Bar opens after the delay below, without any slide along the edge. Turn this on for a touch screen or a pen: only the two right corner squares start the gesture, the icon hint slides in after the delay, and the full bar follows a slide along the edge or a tap on the hint. A mouse is never gated this way."
+  $description: "Off is the Windows 8 desktop behaviour, which is what a mouse uses: the pointer comes up to the right edge or the corner and the Charms Bar opens after the delay below, without any slide along the edge. Turn this on for a touch screen or a pen: the icon hint slides in after the delay, and the full bar follows a slide of the distance below along the edge, a tap on the hint, or the dwell below. Only pen and touch input is gated this way, and in the corner modes only the corner squares start the gesture."
 - edgeHintDelayMs: 200
   $name: Edge hint delay (ms)
-  $description: "How long the pointer must rest on the right edge, and how long it must rest again after leaving, before the Charms Bar opens. 200 ms is the Windows 8 default for the desktop; increase it if the bar feels too sensitive. A CharmsBarDesktopDelay or CharmsBarImmersiveDelay value under HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\ImmersiveShell\\EdgeUI takes precedence over this setting, like the rest of the Windows 8 edge settings. With Two-stage edge gesture on, this is the delay of the icon hint instead."
+  $description: "How long the pointer must rest on the right edge, and how long it must rest again after leaving, before the Charms Bar opens. Accepted values are 1 to 2000 ms, and 0 is read as the 200 ms default. 200 ms is the Windows 8 default for the desktop; increase it if the bar feels too sensitive. A CharmsBarDesktopDelay or CharmsBarImmersiveDelay value under HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\ImmersiveShell\\EdgeUI takes precedence over this setting, like the rest of the Windows 8 edge settings. With Two-stage edge gesture on, this is the delay of the icon hint instead."
 - edgeSlidePx: 32
   $name: Slide along the edge to open (px)
   $description: "Two-stage edge gesture only. After the icon hint is up, the solid bar appears when the pointer travels this far along the edge, up or down. 32 px is the Windows 8 default. Set it to 0 to open the solid bar from the hint immediately."
@@ -165,7 +165,7 @@ Live system data (volume, brightness, network, battery) is read only while a pan
   $description: "Scales every duration the engine reads from the theme. 100 % uses the theme's own timing; lower values are faster."
 - paneThemeSlide: false
   $name: Take the pane slide timing from the theme
-  $description: "Read the duration and the curve of the content slide, and the curve of the content fade, from the current Windows theme (storyboard 32) instead of using the Windows 8.1 values the engine falls back to. The slide distances are set by the two settings below."
+  $description: "Read the duration and the curve of the content slide from the current Windows theme (storyboard 32) instead of using the Windows 8.1 values the engine falls back to. The slide distances are set by the two settings below; the fade is read by the popup fade setting."
 - paneContentSlidePx: -1
   $name: Content slide distance (px)
   $description: "How far the body of the pane slides in, in pixels at 96 dpi. -1 keeps the Windows 8.1 distance of 100 px."
@@ -13900,23 +13900,35 @@ LRESULT CALLBACK MouseProcImpl(int code, WPARAM wp, LPARAM lp) {
                 s_mouseButtonDown = false;
                 break;
         }
+        // Pen and touch that Windows promotes to mouse messages carry MI_WP_SIGNATURE in dwExtraInfo; bit 0x80
+        // of the low byte marks touch. A hovering pen also sends WM_MOUSEMOVE with no button held, so without
+        // this check it is indistinguishable from a mouse.
+        const DWORD_PTR kMiWpSignature = 0xFF515700;
+        const bool fromTouchOrPen =
+            (m->dwExtraInfo & 0xFFFFFF00) == kMiWpSignature;
+        const bool fromTouch = fromTouchOrPen && (m->dwExtraInfo & 0x80) != 0;
         if (wp == WM_MOUSEMOVE) {
             HMONITOR mon = MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST);
             MONITORINFO mi{sizeof(mi)};
             if (mon && GetMonitorInfoW(mon, &mi)) {
-                // Windows 8/8.1 edge gesture, as described by Microsoft's edge-swipe guidance:
-                //   1. the pointer rests on the activation edge for the hint delay (200 ms by default) and the
-                //      icon hint slides in - icons only, translucent, no clock, no solid background;
-                //   2. the pointer then travels along the edge (8.1 counted gesture increments, 32 px is one)
-                //      or clicks the hint, and only then does the solid bar appear.
-                // Leaving the edge before step 2 cancels everything, so a pointer that is merely dragged to the
-                // far right of the screen no longer opens the bar.
+                // The desktop edge gesture, and the touch one on top of it.
+                // Mouse, and the default: the pointer rests on the activation edge for the hover delay (100 ms
+                // on the desktop, 200 ms for immersive windows, or CharmsBarDesktopDelay/CharmsBarImmersiveDelay)
+                // and the solid bar opens. Nothing has to slide, which is what 1.0.0 did and what the mouse
+                // expects.
+                // Touch and pen with Two-stage edge gesture on: the icon hint slides in first (icons only,
+                // translucent, no clock, no solid background), then a travel of 32 px along the edge, a tap on
+                // the hint or the optional dwell brings up the solid bar. Leaving the edge before that cancels
+                // everything.
                 // A button held down means a drag, not an edge gesture: dragging the thumb of a maximized
                 // window's scrollbar along the right edge used to open the bar. The state is tracked from this
                 // hook's own button events, because GetAsyncKeyState cannot tell an injected event from a real
-                // one.
+                // one. A finger keeps the left button down for the whole contact, so the check only applies to
+                // a mouse.
+                const bool pointerDragging =
+                    s_mouseButtonDown && !fromTouchOrPen;
                 if (g_edgeActivation.load() && g_charmsEnabled.load() &&
-                    !s_mouseButtonDown) {
+                    !pointerDragging) {
                     const UINT dpi = QueryMonitorDpiDirect(mon);
                     auto scale = [dpi](int logical) {
                         return MulDiv(logical, (int)dpi, kReferenceDpi);
@@ -13931,9 +13943,10 @@ LRESULT CALLBACK MouseProcImpl(int code, WPARAM wp, LPARAM lp) {
                         (std::max)(0, scale(g_edgeSlidePx.load()));
                     const bool cornerMode = g_topRightCornerOnly.load() ||
                                             g_bottomRightCorner.load();
-                    // Only the touch and pen gesture is staged; with a mouse the whole right edge opens the
-                    // bar exactly as 1.0.0 did, whatever the pointer does after it got there.
-                    const bool staged = g_stagedGesture.load();
+                    // Only pen and touch are staged; a mouse opens the bar exactly as 1.0.0 did, whatever it
+                    // does after it got there. fromTouch is used by the tap-on-the-hint path below.
+                    const bool staged =
+                        g_stagedGesture.load() && fromTouchOrPen;
                     // Activation zone: the two right corner squares in corner mode, the whole right edge in
                     // edge mode. The height is the same corner square the rest of the module uses.
                     const int cornerHeight = scale(40);
@@ -13950,13 +13963,12 @@ LRESULT CALLBACK MouseProcImpl(int code, WPARAM wp, LPARAM lp) {
                     const bool inRightCornerModeZone =
                         (g_topRightCornerOnly.load() && inTopRightZone) ||
                         (g_bottomRightCorner.load() && inBottomRightZone);
-                    // Once the icon hint is up, the whole right edge counts as inside the zone, so the slide can
-                    // be completed; before that only the corner square opens the gesture. Only the staged
-                    // gesture uses the corner squares at all, so the widening is pointless without it.
-                    const bool validActivationZone =
-                        (cornerMode && staged)
-                            ? (inRightCornerModeZone || hintShowing)
-                            : true;
+                    // Same zone as 1.0.0: the whole right edge in edge mode, the corner squares in corner
+                    // mode. The zone widens to the whole edge only while the two-stage icon hint is showing,
+                    // so the slide can be completed; with a mouse nothing is widened at all.
+                    const bool validActivationZone = !cornerMode ||
+                                                     inRightCornerModeZone ||
+                                                     (staged && hintShowing);
                     // The corners the user disabled through EdgeUI are still respected.
                     const bool blockedCorner =
                         (g_disableTRCorner.load() &&
@@ -14976,8 +14988,8 @@ BOOL WhTool_ModInit() {
     try {
         // Tool host: explorer.exe -tool-mod "win8-charms-bar-recreation"
         // Runs in a dedicated explorer.exe tool process, isolated from the shell.
-        // Bypass the ShellHostSupervisor (which is for injected explorer.exe) and
-        // start the Charms services directly. Supervisor stays dormant (no thread).
+        // The mod runs in a dedicated tool host process, so the Charms services are
+        // started here directly.
         g_charmsServicesStarted.store(false);
         DWORD sessionId = 0;
         ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
@@ -14987,10 +14999,6 @@ BOOL WhTool_ModInit() {
             g_charmsServicesStarted.store(true);
             Wh_Log(L"v%s initialized in tool host pid %lu", kModVersion,
                    GetCurrentProcessId());
-            // Also log the former Wh_ModAfterInit info for parity
-            Wh_Log(L"v%s, WhTool_ModAfterInit: pid=%lu, services started=%s",
-                   kModVersion, GetCurrentProcessId(),
-                   g_charmsServicesStarted.load() ? L"yes" : L"no");
             return TRUE;
         }
         Wh_Log(L"tool host startup failed");
@@ -15002,11 +15010,6 @@ BOOL WhTool_ModInit() {
 }
 
 // Optional Windhawk callback: runs after Wh_ModInit and after the engine finished applying hooks.
-void WhTool_ModAfterInit() {
-    Wh_Log(L"v%s, Wh_ModAfterInit: pid=%lu, services started=%s", kModVersion,
-           GetCurrentProcessId(),
-           g_charmsServicesStarted.load() ? L"yes" : L"no");
-}
 
 void WhTool_ModUninit() {
     Wh_Log(L"v%s, Wh_ModUninit: pid=%lu, services started=%s", kModVersion,
