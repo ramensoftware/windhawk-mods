@@ -8,8 +8,10 @@
 // @include         ShellHost.exe
 // @include         ShellExperienceHost.exe
 // @include         SystemSettings.exe
+// @include         RuntimeBroker.exe
 // @include         explorer.exe
-// @compilerOptions -lshlwapi -lshell32 -lole32 -ladvapi32 -lgdi32 -luser32 -ld2d1 -ld3d11 -ldxgi -ldcomp -ldwrite -ldwmapi -lwinhttp -lws2_32 -liphlpapi -lshcore -luuid -loleacc -loleaut32
+// @architecture    x86-64
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -D_WIN32_WINNT=0x0A00 -lshlwapi -lshell32 -lole32 -ladvapi32 -luser32 -ld2d1 -ld3d11 -ldcomp -ldwrite -ldwmapi -lwinhttp -liphlpapi -lshcore -luuid -loleacc -loleaut32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -29,6 +31,34 @@ handler is involved. The test talks to the public Cloudflare speed test
 endpoints (`speed.cloudflare.com`), the same stateless endpoints used by the
 website.
 
+### Screenshots
+
+| Light theme | Dark theme |
+| --- | --- |
+| ![Light theme](https://raw.githubusercontent.com/Alessandro-Vecchio/windhawk-mods/assets/light.png) | ![Dark theme](https://raw.githubusercontent.com/Alessandro-Vecchio/windhawk-mods/assets/dark.png) |
+
+| Desktop Acrylic | Results card |
+| --- | --- |
+| ![Desktop Acrylic](https://raw.githubusercontent.com/Alessandro-Vecchio/windhawk-mods/assets/acrylic.png) | ![Results card](https://raw.githubusercontent.com/Alessandro-Vecchio/windhawk-mods/assets/results.png) |
+
+### Data usage
+
+The test transfers real data with a per-direction budget of **512 MB**. Lines
+at or below ~340 Mbps complete the full 12 s window per direction without
+reaching the budget; faster lines end the phase once the budget is spent
+(minimum 4 s window, and the result divides bytes by the time the transfer
+was actually moving data). Total usage stays under ~1 GB regardless of line
+speed, and the results card shows the bytes used ("Data used: 762 MB", also
+included in the clipboard text).
+
+The **Start the test automatically** setting defaults to `auto`: the test
+starts when the flyout opens, except when Windows reports the connection as
+metered - then the flyout opens idle and waits for a click on Start.
+
+**Coexistence**: the mod [perform-speedtest-redirect](https://github.com/ramensoftware/windhawk-mods)
+intercepts the same URL launches. If both are enabled, whichever mod hooks
+the launch first wins - disable the other one to keep this mod's flyout.
+
 The flyout opens above the taskbar, on the monitor under the mouse. It closes
 when you click outside, but never while a measurement is running.
 
@@ -47,10 +77,13 @@ instant. The error view shrinks the window to fit its content.
   `ERROR_CANCELLED` because no browser process is created; turning it off makes
   the menu open the browser normally when the shell skips the shell-execute
   path.
+- **Start the test automatically**: `auto` starts the test when the flyout
+  opens, but waits for a click when Windows reports the connection as metered;
+  `always` starts unconditionally; `never` always waits for a click.
 - **Language**: `auto` (follows the Windows display language), `it` or `en`.
-- **Verbose logging**: writes detailed diagnostic messages (which URLs match,
-  where the flyout is hosted, measurement steps) to the mod log in Windhawk.
-  Keep it off unless you are diagnosing a problem.
+
+Diagnostics go to the Windhawk mod log: enable logging for this mod from its
+Details page in Windhawk when you need them.
 
 Note: when the network menu launches the browser directly through
 `CreateProcessW`, the flyout is shown but process creation returns
@@ -70,9 +103,13 @@ requested browser process.
 - interceptProcessLaunch: true
   $name: Also intercept browser process launches
   $description: Catch direct browser launches from the network menu. The launch returns ERROR_CANCELLED because no browser process is created.
-- verboseLogging: false
-  $name: Verbose logging
-  $description: Write detailed diagnostic messages (URL matching, flyout hosting, measurement steps) to the mod log in Windhawk.
+- autoStart: auto
+  $name: Start the test automatically
+  $description: Starts the test when the flyout opens. Auto waits for a click on metered connections. Never requires a click every time.
+  $options:
+  - auto: Auto (waits on metered connections)
+  - always: Always
+  - never: Never (click to start)
 - language: auto
   $name: Language
   $description: Language of the flyout texts. Auto follows the Windows display language.
@@ -83,16 +120,14 @@ requested browser process.
 */
 // ==/WindhawkModSettings==
 
-#define WIN32_LEAN_AND_MEAN
-#define _WIN32_WINNT 0x0A00
 #include <windows.h>
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-W#warnings"
-// Included after windows.h because the Windhawk prelude pulls it in first; the
-// header only warns, and the guard is what makes <iptypes.h> declare
-// IP_ADAPTER_ADDRESSES.
+// WIN32_LEAN_AND_MEAN (set in @compilerOptions) makes windows.h skip these:
+// - shellapi.h: the hooks use SHELLEXECUTEINFOW/ShellExecuteW.
+// - winsock2.h/ws2tcpip.h: iptypes.h (IP_ADAPTER_ADDRESSES) is built on the
+//   Winsock address types, and the adapter matching uses SOCKADDR_IN6. The mod
+//   itself never calls Winsock functions.
+#include <shellapi.h>
 #include <winsock2.h>
-#pragma clang diagnostic pop
 #include <ws2tcpip.h>
 #include <windowsx.h>
 #include <shlwapi.h>
@@ -104,11 +139,11 @@ requested browser process.
 #include <dcomp.h>
 #include <dwrite.h>
 #include <dwmapi.h>
-#include <uxtheme.h>
 #include <oleacc.h>
 #include <winhttp.h>
 #include <iphlpapi.h>
 #include <iptypes.h>
+#include <netlistmgr.h>
 #include <cmath>
 #include <algorithm>
 #include <deque>
@@ -119,11 +154,11 @@ requested browser process.
 #include <new>
 #include <atomic>
 
-using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
-using ShellExecuteW_t = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, INT);
-using CreateProcessW_t = BOOL(WINAPI*)(LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES,
-                                        LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID,
-                                        LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION);
+#include <windhawk_utils.h>
+
+using ShellExecuteExW_t = decltype(&ShellExecuteExW);
+using ShellExecuteW_t = decltype(&ShellExecuteW);
+using CreateProcessW_t = decltype(&CreateProcessW);
 
 static ShellExecuteExW_t ShellExecuteExW_Original;
 static ShellExecuteW_t ShellExecuteW_Original;
@@ -136,9 +171,9 @@ static std::vector<std::wstring> g_patterns;
 static SRWLOCK g_patternsLock = SRWLOCK_INIT;
 static std::atomic<bool> g_fallbackToOriginal = true;
 static std::atomic<bool> g_interceptProcessLaunch = true;
-// Verbose logging is off by default: Dbg() still reaches debug viewers, but it
-// reaches the Windhawk mod log (visible to any user) only when enabled.
-static std::atomic<bool> g_verboseLogging = false;
+// Start mode for the flyout: 0 = auto (start unless the connection is
+// metered), 1 = always start, 2 = never start (wait for the Start button).
+static std::atomic<int> g_autoStart = 0;
 
 // ---------------------------------------------------------------------------
 // UI strings (Italian / English, chosen from the Windows display language)
@@ -156,6 +191,7 @@ struct UiStrings {
     PCWSTR download;
     PCWSTR upload;
     PCWSTR jitter;
+    PCWSTR dataUsed;
     PCWSTR copy;
     PCWSTR copied;
     PCWSTR start;
@@ -166,7 +202,6 @@ struct UiStrings {
     PCWSTR failedHint;
     PCWSTR retry;
     PCWSTR closeName;
-    PCWSTR activate;
     PCWSTR server;
     PCWSTR errConnect;
     PCWSTR errPing;
@@ -179,9 +214,9 @@ struct UiStrings {
 static const UiStrings kStringsIt = {
     L"Pronto", L"Avvio", L"Connessione", L"Completato", L"Annullato",
     L"Arresto\x2026", L"Errore", L"Ping", L"Download", L"Upload", L"Jitter",
-    L"Copia", L"Copiato", L"Avvia", L"Interrompi", L"Ripeti",
+    L"Dati usati", L"Copia", L"Copiato", L"Avvia", L"Interrompi", L"Ripeti",
     L"Andamento del test", L"Test non riuscito",
-    L"Riprova tra qualche istante.", L"Riprova", L"Chiudi", L"Premi", L"Server",
+    L"Riprova tra qualche istante.", L"Riprova", L"Chiudi", L"Server",
     L"Impossibile collegarsi al server.",
     L"Impossibile misurare il ping: richieste fallite.",
     L"Test annullato.",
@@ -193,9 +228,9 @@ static const UiStrings kStringsIt = {
 static const UiStrings kStringsEn = {
     L"Ready", L"Starting", L"Connecting", L"Completed", L"Canceled",
     L"Stopping\x2026", L"Error", L"Ping", L"Download", L"Upload", L"Jitter",
-    L"Copy", L"Copied", L"Start", L"Stop", L"Repeat",
+    L"Data used", L"Copy", L"Copied", L"Start", L"Stop", L"Repeat",
     L"Test progress", L"Test failed",
-    L"Try again in a moment.", L"Retry", L"Close", L"Press", L"Server",
+    L"Try again in a moment.", L"Retry", L"Close", L"Server",
     L"Could not connect to the server.",
     L"Could not measure the ping: requests failed.",
     L"Test canceled.",
@@ -240,24 +275,6 @@ static void SelectLanguage(PCWSTR language) {
     g_str = english ? &kStringsEn : &kStringsIt;
 }
 
-static void Dbg(PCWSTR format, ...) {
-    wchar_t message[1024];
-    va_list args;
-    va_start(args, format);
-    vswprintf(message, 1024, format, args);
-    va_end(args);
-
-    std::wstring line = L"STDBG ";
-    line += std::to_wstring(GetCurrentProcessId());
-    line += L": ";
-    line += message;
-    line += L"\n";
-    OutputDebugStringW(line.c_str());
-    if (g_verboseLogging.load(std::memory_order_relaxed)) {
-        Wh_Log(L"%s", line.c_str());
-    }
-}
-
 static std::vector<std::wstring> SplitPatterns(PCWSTR text) {
     std::vector<std::wstring> result;
     std::wstring current;
@@ -278,9 +295,8 @@ static std::vector<std::wstring> SplitPatterns(PCWSTR text) {
 }
 
 static void LoadSettings() {
-    PCWSTR extra = Wh_GetStringSetting(L"extraPatterns");
-    std::vector<std::wstring> patterns = SplitPatterns(extra);
-    Wh_FreeStringSetting(extra);
+    auto extra = WindhawkUtils::StringSetting::make(L"extraPatterns");
+    std::vector<std::wstring> patterns = SplitPatterns(extra.get());
     AcquireSRWLockExclusive(&g_patternsLock);
     g_patterns.swap(patterns);
     ReleaseSRWLockExclusive(&g_patternsLock);
@@ -290,11 +306,16 @@ static void LoadSettings() {
     g_interceptProcessLaunch.store(
         Wh_GetIntSetting(L"interceptProcessLaunch") != 0,
         std::memory_order_relaxed);
-    g_verboseLogging.store(Wh_GetIntSetting(L"verboseLogging") != 0,
-                           std::memory_order_relaxed);
-    PCWSTR language = Wh_GetStringSetting(L"language");
-    SelectLanguage(language && *language ? language : L"auto");
-    Wh_FreeStringSetting(language);
+    auto autoStart = WindhawkUtils::StringSetting::make(L"autoStart");
+    int startMode = 0;
+    if (wcscmp(autoStart.get(), L"always") == 0) {
+        startMode = 1;
+    } else if (wcscmp(autoStart.get(), L"never") == 0) {
+        startMode = 2;
+    }
+    g_autoStart.store(startMode, std::memory_order_relaxed);
+    auto language = WindhawkUtils::StringSetting::make(L"language");
+    SelectLanguage(*language.get() ? language.get() : L"auto");
 }
 
 // ---------------------------------------------------------------------------
@@ -320,6 +341,16 @@ static bool IsSpeedTestUrl(PCWSTR url) {
         }
     }
 
+    // User-supplied extra patterns only apply to actual web URLs: the hooks
+    // also see file names and command lines (a document, a launcher, ...), and
+    // a file whose name contains a pattern must not be cancelled.
+    if (url[0] != L'\0' && !(url[0] == L'h' || url[0] == L'H')) {
+        return false;
+    }
+    if (!StrStrIW(url, L"://")) {
+        return false;
+    }
+
     bool matched = false;
     AcquireSRWLockShared(&g_patternsLock);
     for (const auto& pattern : g_patterns) {
@@ -336,7 +367,7 @@ static bool IsSpeedTestUrl(PCWSTR url) {
 // Flyout activation across the shell processes
 // ---------------------------------------------------------------------------
 
-static constexpr PCWSTR kFlyoutClass = L"SpeedTestFlyout_Native_v3";
+static constexpr PCWSTR kFlyoutClass = L"SpeedTestFlyout_Native";
 static UINT g_showMessage = 0;
 
 static BOOL CALLBACK FindFlyoutCallback(HWND hwnd, LPARAM param) {
@@ -373,10 +404,19 @@ static bool ShowNativeFlyout() {
         return false;
     }
 
-    HWND hwnd = FindFlyoutHost();
+    DWORD hostPid = 0;
+    HWND hwnd = FindFlyoutHost(&hostPid);
     if (!hwnd) {
         Wh_Log(L"Flyout host window not found");
         return false;
+    }
+    // The foreground grant belongs to the process the click happened in; the
+    // flyout window lives in the host process (usually explorer.exe). Grant it
+    // permission to take the foreground before posting the show request,
+    // otherwise SetForegroundWindow inside the flyout can fail and the window
+    // opens without focus (Esc/Tab dead).
+    if (hostPid) {
+        AllowSetForegroundWindow(hostPid);
     }
     if (!PostMessageW(hwnd, g_showMessage, 0, 0)) {
         Wh_Log(L"Flyout message post failed (error %u)", GetLastError());
@@ -393,7 +433,7 @@ static bool ShowNativeFlyout() {
 static BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* sei) {
     if (sei && IsSpeedTestUrl(sei->lpFile)) {
         Wh_Log(L"ShellExecuteExW url=%s", sei->lpFile ? sei->lpFile : L"(null)");
-        Dbg(L"ShellExecuteExW match url=%s", sei->lpFile ? sei->lpFile : L"(null)");
+        Wh_Log(L"ShellExecuteExW match url=%s", sei->lpFile ? sei->lpFile : L"(null)");
 
         if (ShowNativeFlyout()) {
             if (sei->fMask & SEE_MASK_NOCLOSEPROCESS) {
@@ -909,31 +949,21 @@ struct TestState {
     std::wstring caption;
     std::wstring error;
     std::wstring server = L"Cloudflare";
-    std::wstring ip;
     SYSTEMTIME when = {};
+    // Total bytes moved by the test, warm-up included, across both phases.
+    LONGLONG dataUsed = 0;
     std::vector<Sample> samples;
 };
 
-static CRITICAL_SECTION g_stateLock;
-static bool g_stateLockReady = false;
+static SRWLOCK g_stateLock = SRWLOCK_INIT;
 static TestState g_state;
 static std::atomic<LONG> g_cancelRequested = 0;
 
-static void EnsureStateLock() {
-    if (!g_stateLockReady) {
-        InitializeCriticalSection(&g_stateLock);
-        g_stateLockReady = true;
-    }
-}
-
 static TestState CopyState() {
     TestState copy;
-    if (!g_stateLockReady) {
-        return copy;
-    }
-    EnterCriticalSection(&g_stateLock);
+    AcquireSRWLockShared(&g_stateLock);
     copy = g_state;
-    LeaveCriticalSection(&g_stateLock);
+    ReleaseSRWLockShared(&g_stateLock);
     return copy;
 }
 
@@ -948,68 +978,65 @@ static bool TestRunning() {
 }
 
 static void StateReset() {
-    if (!g_stateLockReady) {
-        return;
-    }
-    EnterCriticalSection(&g_stateLock);
+    AcquireSRWLockExclusive(&g_stateLock);
     g_state = TestState();
-    LeaveCriticalSection(&g_stateLock);
+    ReleaseSRWLockExclusive(&g_stateLock);
 }
 
 static void StateSetPhase(Phase phase, PCWSTR caption) {
-    EnterCriticalSection(&g_stateLock);
+    AcquireSRWLockExclusive(&g_stateLock);
     if (g_state.phase != Phase::Stopping) {
         g_state.phase = phase;
         g_state.caption = caption ? caption : L"";
         g_state.currentMbps = 0;
         g_state.error.clear();
     }
-    LeaveCriticalSection(&g_stateLock);
+    ReleaseSRWLockExclusive(&g_stateLock);
 }
 
 static void StateSetCaption(PCWSTR caption) {
-    EnterCriticalSection(&g_stateLock);
+    AcquireSRWLockExclusive(&g_stateLock);
     if (g_state.phase != Phase::Stopping) {
         g_state.caption = caption ? caption : L"";
     }
-    LeaveCriticalSection(&g_stateLock);
+    ReleaseSRWLockExclusive(&g_stateLock);
 }
 
 static void StateSetCurrent(double mbps) {
-    EnterCriticalSection(&g_stateLock);
+    AcquireSRWLockExclusive(&g_stateLock);
     if (g_state.phase != Phase::Stopping) {
         g_state.currentMbps = mbps;
     }
-    LeaveCriticalSection(&g_stateLock);
+    ReleaseSRWLockExclusive(&g_stateLock);
 }
 
 static void StateSetLatency(double ping, bool hasPing, double jitter, bool hasJitter) {
-    EnterCriticalSection(&g_stateLock);
+    AcquireSRWLockExclusive(&g_stateLock);
     if (g_state.phase != Phase::Stopping) {
         g_state.ping = ping;
         g_state.hasPing = hasPing;
         g_state.jitter = jitter;
         g_state.hasJitter = hasJitter;
     }
-    LeaveCriticalSection(&g_stateLock);
+    ReleaseSRWLockExclusive(&g_stateLock);
 }
 
 static void StateAddSample(double value, bool upload) {
     if (!(value >= 0) || value > 1000000) {
         return;
     }
-    EnterCriticalSection(&g_stateLock);
+    AcquireSRWLockExclusive(&g_stateLock);
     if (g_state.phase != Phase::Stopping) {
         if (g_state.samples.size() >= 240) {
             g_state.samples.erase(g_state.samples.begin());
         }
         g_state.samples.push_back({value, upload});
     }
-    LeaveCriticalSection(&g_stateLock);
+    ReleaseSRWLockExclusive(&g_stateLock);
 }
 
 static void StateSetMeasured(bool upload, double mbps) {
-    EnterCriticalSection(&g_stateLock);
+    AcquireSRWLockExclusive(&g_stateLock);
     if (g_state.phase != Phase::Stopping) {
         if (upload) {
             g_state.upload = mbps;
@@ -1018,24 +1045,31 @@ static void StateSetMeasured(bool upload, double mbps) {
         }
         g_state.currentMbps = mbps;
     }
-    LeaveCriticalSection(&g_stateLock);
+    ReleaseSRWLockExclusive(&g_stateLock);
 }
 
-static void StateSetServer(const std::wstring& server, const std::wstring& ip) {
-    EnterCriticalSection(&g_stateLock);
+// Called from the test thread after each transfer phase: warm-up included,
+// because the user pays for every byte, not just the measured ones.
+static void StateAddDataUsed(LONGLONG bytes) {
+    AcquireSRWLockExclusive(&g_stateLock);
+    g_state.dataUsed += bytes;
+    ReleaseSRWLockExclusive(&g_stateLock);
+}
+
+static void StateSetServer(const std::wstring& server) {
+    AcquireSRWLockExclusive(&g_stateLock);
     g_state.server = server.empty() ? L"Cloudflare" : server;
-    g_state.ip = ip;
-    LeaveCriticalSection(&g_stateLock);
+    ReleaseSRWLockExclusive(&g_stateLock);
 }
 
 static void StateFinish(double download, double upload, double ping, double jitter,
                         bool hasLatency) {
-    EnterCriticalSection(&g_stateLock);
+    AcquireSRWLockExclusive(&g_stateLock);
     if (g_state.phase == Phase::Stopping) {
         g_state.phase = Phase::Canceled;
         g_state.caption = g_str->canceled;
         g_state.currentMbps = 0;
-        LeaveCriticalSection(&g_stateLock);
+        ReleaseSRWLockExclusive(&g_stateLock);
         return;
     }
     g_state.phase = Phase::Done;
@@ -1048,34 +1082,34 @@ static void StateFinish(double download, double upload, double ping, double jitt
     g_state.hasJitter = hasLatency;
     g_state.hasResult = true;
     GetLocalTime(&g_state.when);
-    LeaveCriticalSection(&g_stateLock);
+    ReleaseSRWLockExclusive(&g_stateLock);
 }
 
 static void StateFail(const std::wstring& message) {
-    EnterCriticalSection(&g_stateLock);
+    AcquireSRWLockExclusive(&g_stateLock);
     g_state.phase = Phase::Error;
     g_state.caption = g_str->error;
     g_state.error = message;
-    LeaveCriticalSection(&g_stateLock);
+    ReleaseSRWLockExclusive(&g_stateLock);
 }
 
 static void StateCanceled() {
-    EnterCriticalSection(&g_stateLock);
+    AcquireSRWLockExclusive(&g_stateLock);
     g_state.phase = Phase::Canceled;
     g_state.caption = g_str->canceled;
     g_state.currentMbps = 0;
-    LeaveCriticalSection(&g_stateLock);
+    ReleaseSRWLockExclusive(&g_stateLock);
 }
 
 static void RequestTestCancel() {
     g_cancelRequested.store(1, std::memory_order_relaxed);
-    EnterCriticalSection(&g_stateLock);
+    AcquireSRWLockExclusive(&g_stateLock);
     if (StateRunning(g_state)) {
         g_state.phase = Phase::Stopping;
         g_state.caption = g_str->stopping;
         g_state.currentMbps = 0;
     }
-    LeaveCriticalSection(&g_stateLock);
+    ReleaseSRWLockExclusive(&g_stateLock);
 }
 
 // ---------------------------------------------------------------------------
@@ -1095,6 +1129,17 @@ static bool CancelRequested(const std::atomic<LONG>* stop = nullptr) {
 
 struct TransferCounter {
     std::atomic<LONGLONG> bytes = 0;
+    // Per-phase data budget in bytes (0 = unlimited). Workers stop requesting
+    // new transfers once it is spent; in-flight data still completes and
+    // counts. Full-window measurement is unaffected at or below the budget
+    // line (~340 Mbps); faster lines end the phase early and the result
+    // divides by the actual elapsed time.
+    LONGLONG budget = 0;
+
+    bool BudgetExceeded() const {
+        return budget > 0 &&
+               bytes.load(std::memory_order_relaxed) >= budget;
+    }
 };
 
 static void AddBytes(TransferCounter* counter, long long count) {
@@ -1111,15 +1156,19 @@ public:
 
     bool Open() {
         Close();
-        session_ = WinHttpOpen(L"SpeedTest-Native/3.0",
-                               WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+        session_ = WinHttpOpen(L"NetworkMenuSpeedTest/1.0",
+                               WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
         if (!session_) {
             return false;
         }
-        // Short enough that a cancel or a mod unload can unwind a blocked
-        // worker promptly, long enough for a normal transfer to make progress.
-        if (!WinHttpSetTimeouts(session_, 3000, 3000, 3000, 3000)) {
+        // Resolve/connect stay short so a cancel or a mod unload can unwind a
+        // blocked worker promptly. The send timeout is long because it bounds
+        // WinHttpWriteData when the TCP window is full: with 8 parallel upload
+        // workers on a slow line a 256 KB block can legitimately take tens of
+        // seconds, and a 3 s limit failed the upload incorrectly. Cancellation
+        // is signalled through the stop flag; workers check it between blocks.
+        if (!WinHttpSetTimeouts(session_, 3000, 3000, 30000, 3000)) {
             DWORD error = GetLastError();
             Close();
             SetLastError(error);
@@ -1130,10 +1179,6 @@ public:
     }
 
     void Close() {
-        if (request_) {
-            WinHttpCloseHandle(request_);
-            request_ = nullptr;
-        }
         if (connect_) {
             WinHttpCloseHandle(connect_);
             connect_ = nullptr;
@@ -1155,6 +1200,7 @@ public:
         bool ok = SendAndReceive(request, 0, stop, &status);
         if (ok && connectionInfo) {
             *connectionInfo = {};
+            connectionInfo->cbSize = sizeof(*connectionInfo);
             DWORD size = sizeof(*connectionInfo);
             if (!WinHttpQueryOption(request, WINHTTP_OPTION_CONNECTION_INFO,
                                     connectionInfo, &size)) {
@@ -1181,7 +1227,8 @@ public:
         if (ok) {
             char buffer[64 * 1024];
             for (;;) {
-                if (CancelRequested(stop)) {
+                if (CancelRequested(stop) ||
+                    counter->BudgetExceeded()) {
                     ok = false;
                     break;
                 }
@@ -1221,7 +1268,7 @@ public:
         DWORD sentTotal = 0;
         const DWORD chunk = 256 * 1024;
         while (ok && sentTotal < size) {
-            if (CancelRequested(stop)) {
+            if (CancelRequested(stop) || counter->BudgetExceeded()) {
                 ok = false;
                 break;
             }
@@ -1325,7 +1372,6 @@ private:
 
     HINTERNET session_ = nullptr;
     HINTERNET connect_ = nullptr;
-    HINTERNET request_ = nullptr;
 };
 
 // ---------------------------------------------------------------------------
@@ -1338,6 +1384,18 @@ static constexpr int kDownloadWorkers = 12;
 static constexpr int kUploadWorkers = 8;
 static constexpr int kTransferWarmupMs = 2000;
 static constexpr int kTransferMeasureMs = 10000;
+// Per-direction data budget. Warm-up and measured bytes both count. At or
+// below ~340 Mbps the full 12 s window completes before the budget is spent
+// and measurement is unchanged; faster lines end the phase as soon as the
+// budget is exhausted and report bytes over the actual elapsed time, so the
+// worst case for the whole test stays around 1 GB regardless of line speed.
+static constexpr LONGLONG kTransferBudgetBytes = 512'000'000;
+// Warm-up alone stops well before the full budget so that faster lines keep
+// enough data left for a meaningful measured interval.
+static constexpr LONGLONG kWarmupBudgetBytes = 128'000'000;
+// Even when the budget ends a phase early, keep sampling for at least this
+// long so the reported average is not just the initial ramp.
+static constexpr int kTransferMinMeasureMs = 4000;
 static constexpr int kLatencySamples = 12;
 static constexpr int kLatencyWarmup = 2;
 
@@ -1431,7 +1489,7 @@ static void MeasureLatency(double* pingOut, double* jitterOut) {
     HttpClient client;
     if (!client.Open()) {
         DWORD error = GetLastError();
-        Dbg(L"WinHTTP open failed for latency probe (error %u)", error);
+        Wh_Log(L"WinHTTP open failed for latency probe (error %u)", error);
         throw std::wstring(g_str->errConnect);
     }
 
@@ -1479,7 +1537,7 @@ static void MeasureLatency(double* pingOut, double* jitterOut) {
     }
 
     if (failures > 0) {
-        Dbg(L"%d latency probes failed", failures);
+        Wh_Log(L"%d latency probes failed", failures);
     }
     *pingOut = ping;
     *jitterOut = jitter;
@@ -1512,7 +1570,7 @@ static DWORD WINAPI DownloadWorker(LPVOID parameter) {
         return 0;
     }
 
-    while (!CancelRequested(job->stop)) {
+    while (!CancelRequested(job->stop) && !job->counter->BudgetExceeded()) {
         wchar_t path[96];
         swprintf(path, 96, L"/__down?bytes=%d&r=%u", kDownloadChunk, NextRandom());
         DWORD status = 0;
@@ -1537,7 +1595,7 @@ static DWORD WINAPI UploadWorker(LPVOID parameter) {
         return 0;
     }
 
-    while (!CancelRequested(job->stop)) {
+    while (!CancelRequested(job->stop) && !job->counter->BudgetExceeded()) {
         DWORD status = 0;
         job->requests++;
         bool ok = client.Upload(L"/__up", job->data, job->size, job->counter,
@@ -1573,8 +1631,18 @@ struct WorkerGroup {
     ~WorkerGroup() { Stop(); }
 };
 
+static bool TransferWorkerRunning(HANDLE* workers, int count) {
+    for (int i = 0; i < count; i++) {
+        if (WaitForSingleObject(workers[i], 0) == WAIT_TIMEOUT) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static double MeasureTransfer(bool upload) {
     TransferCounter counter;
+    counter.budget = kTransferBudgetBytes;
     std::atomic<LONG> stop = 0;
 
     const int workerCount = upload ? kUploadWorkers : kDownloadWorkers;
@@ -1611,29 +1679,39 @@ static double MeasureTransfer(bool upload) {
     }
 
     // Warm-up data is counted as it arrives, then excluded by taking a byte
-    // baseline immediately before the measured interval.
+    // baseline immediately before the measured interval. Warm-up also stops
+    // early once its own budget is spent: the workers keep running and the
+    // in-flight data flows into the measured window instead of exhausting the
+    // total budget before it starts.
     ULONGLONG warmupStart = Now();
     while (Now() - warmupStart < kTransferWarmupMs) {
         if (CancelRequested()) {
             workerGroup.Stop();
             throw std::wstring(g_str->errCanceled);
         }
-        bool anyWorkerRunning = false;
-        for (int i = 0; i < workerCount; i++) {
-            if (WaitForSingleObject(workers[i], 0) == WAIT_TIMEOUT) {
-                anyWorkerRunning = true;
+        bool anyWorkerRunning = TransferWorkerRunning(workers, workerCount);
+        if (!anyWorkerRunning) {
+            if (counter.BudgetExceeded()) {
                 break;
             }
-        }
-        if (!anyWorkerRunning) {
             workerGroup.Stop();
             throw std::wstring(upload ? g_str->errUpload : g_str->errDownload);
+        }
+        if (counter.BudgetExceeded() ||
+            counter.bytes.load(std::memory_order_relaxed) >=
+                kWarmupBudgetBytes) {
+            break;
         }
         Sleep(100);
     }
 
     LONGLONG base = counter.bytes.load(std::memory_order_relaxed);
     ULONGLONG measuredStart = Now();
+    // Time of the last byte that arrived: the result divides by the time the
+    // transfer was actually moving data, not by the full window, so a phase
+    // ended early by the budget is not diluted with idle tail time.
+    ULONGLONG lastTraffic = measuredStart;
+    LONGLONG prevTotal = base;
     std::deque<std::pair<ULONGLONG, LONGLONG>> window;
     std::vector<double> speeds;
     double current = 0;
@@ -1647,6 +1725,10 @@ static double MeasureTransfer(bool upload) {
 
         ULONGLONG now = Now();
         LONGLONG total = counter.bytes.load(std::memory_order_relaxed);
+        if (total > prevTotal) {
+            lastTraffic = now;
+            prevTotal = total;
+        }
         window.push_back({now, total});
         while (window.size() > 2 && now - window.front().first > 1000) {
             window.pop_front();
@@ -1665,17 +1747,28 @@ static double MeasureTransfer(bool upload) {
         if (current > 0 && Now() - measuredStart > 500) {
             speeds.push_back(current);
         }
+
+        // The budget can end the phase early on fast lines: once it is spent,
+        // keep sampling while the in-flight transfers drain, and never end
+        // before the minimum window so the average is not just the ramp.
+        if (counter.BudgetExceeded() &&
+            !TransferWorkerRunning(workers, workerCount) &&
+            Now() - measuredStart >= kTransferMinMeasureMs) {
+            break;
+        }
     }
 
     LONGLONG total = counter.bytes.load(std::memory_order_relaxed);
-    ULONGLONG measuredEnd = Now();
     workerGroup.Stop();
 
     if (CancelRequested()) {
         throw std::wstring(g_str->errCanceled);
     }
 
-    double seconds = (measuredEnd - measuredStart) / 1000.0;
+    // Divide by the time the transfer was actually moving data. On the full
+    // 10 s window this is effectively the same; on budget-shortened phases it
+    // excludes the idle tail left after the in-flight transfers drained.
+    double seconds = (lastTraffic - measuredStart) / 1000.0;
     long long bytes = total - base;
     if (bytes <= 0 || seconds <= 0) {
         throw std::wstring(upload
@@ -1687,7 +1780,7 @@ static double MeasureTransfer(bool upload) {
     // window. No percentile uplift and no multiplier, so the figure cannot be
     // inflated. The spread below is only diagnostic.
     double mbps = bytes * 8.0 / seconds / 1'000'000.0;
-    Dbg(L"%s: %.1f Mbps measured avg (spread p10 %.1f / p50 %.1f / p90 %.1f)",
+    Wh_Log(L"%s: %.1f Mbps measured avg (spread p10 %.1f / p50 %.1f / p90 %.1f)",
         upload ? L"upload" : L"download", mbps,
         speeds.empty() ? 0.0 : Percentile(speeds, 10),
         speeds.empty() ? 0.0 : Percentile(speeds, 50),
@@ -1699,12 +1792,13 @@ static double MeasureTransfer(bool upload) {
         requests += upload ? uploadJobs[i].requests : downloadJobs[i].requests;
         failures += upload ? uploadJobs[i].failures : downloadJobs[i].failures;
     }
-    Dbg(L"%s: %u requests, %u failures, %.0f ms each (total window %.0f ms)",
+    Wh_Log(L"%s: %u requests, %u failures, %.0f ms each (total window %.0f ms)",
         upload ? L"upload" : L"download", requests, failures,
         requests ? seconds * 1000.0 * workerCount / requests : 0.0,
         seconds * 1000.0);
 
     StateSetMeasured(upload, mbps);
+    StateAddDataUsed(counter.bytes.load(std::memory_order_relaxed));
     // Do not append the window average to the chart: the chart shows the
     // 100 ms samples, and the average would appear as an artificial last point.
     return mbps;
@@ -1722,7 +1816,7 @@ static void RunTestWorker() {
         ULONG interfaceIndex = 0;
         ADDRESS_FAMILY interfaceFamily = AF_UNSPEC;
         ReadTrace(&server, &ip, &interfaceIndex, &interfaceFamily);
-        StateSetServer(server, ip);
+        StateSetServer(server);
         if (interfaceIndex && g_flyoutHwnd) {
             PostMessageW(g_flyoutHwnd, WM_APP + 4, interfaceIndex,
                          interfaceFamily);
@@ -1803,9 +1897,12 @@ static ID2D1RenderTarget* g_renderTarget = nullptr;
 static ID2D1HwndRenderTarget* g_hwndTarget = nullptr;
 static ID2D1StrokeStyle* g_roundStroke = nullptr;
 
-// DirectComposition path, used when the system transparency setting is on so
-// the DWM Mica backdrop can show through the flyout. When it is off the mod
-// keeps the plain HWND render target and paints a solid background.
+// DirectComposition path. It is always attempted first because the flyout
+// window keeps WS_EX_NOREDIRECTIONBITMAP, so an ID2D1HwndRenderTarget has no
+// redirection surface to present into; the HWND target below is only reached
+// if D3D/DComp is unavailable (e.g. no GPU and no WARP). When the system
+// transparency setting is off, the composition surface is painted with a
+// solid background instead of showing the DWM backdrop through.
 static bool g_composition = false;
 static ID3D11Device* g_d3dDevice = nullptr;
 static IDXGIDevice* g_dxgiDevice = nullptr;
@@ -2669,11 +2766,9 @@ static void DrawGauge(float alpha, const TestState& state) {
 
     std::wstring value = L"\x2014";
     std::wstring unit = L"Mbps";
-    if (state.phase == Phase::Latency || state.phase == Phase::Warmup ||
-        state.phase == Phase::Stopping || state.phase == Phase::Canceled ||
-        state.phase == Phase::Idle) {
-        value = L"\x2014";
-    } else {
+    if (state.phase != Phase::Latency && state.phase != Phase::Warmup &&
+        state.phase != Phase::Stopping && state.phase != Phase::Canceled &&
+        state.phase != Phase::Idle) {
         value = FormatNumber(state.currentMbps);
     }
 
@@ -2808,6 +2903,12 @@ static void DrawResults(float alpha, const TestState& state) {
     DrawMetricLabel(216, 226, L"\xE898", g_palette.upload, g_str->upload, alpha);
     DrawValue(36, 242, true, state.download, L"Mbps", 30, alpha);
     DrawValue(216, 242, true, state.upload, L"Mbps", 30, alpha);
+
+    wchar_t dataText[64];
+    swprintf(dataText, 64, L"%s: %.0f MB",
+             g_str->dataUsed, state.dataUsed / (1024.0 * 1024.0));
+    Text(dataText, Rect(36, 294, 364, 312), 11,
+         WithAlpha(g_palette.secondary, alpha));
 
     DrawLatency(36, 320, g_str->ping, state.hasPing, state.ping, alpha);
     DrawLatency(216, 320, g_str->jitter, state.hasJitter, state.jitter, alpha);
@@ -3104,10 +3205,21 @@ static bool BindCompositionTarget() {
 static bool CreateCompositionTarget(HWND hwnd, UINT width, UINT height) {
     D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_0,
                                   D3D_FEATURE_LEVEL_10_1};
-    if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
-                                 D3D11_CREATE_DEVICE_BGRA_SUPPORT, levels, 2,
-                                 D3D11_SDK_VERSION, &g_d3dDevice, nullptr,
-                                 nullptr))) {
+    // Hardware first; retry with WARP so VMs, RDP sessions and machines
+    // without usable graphics still get the composition surface. Without this
+    // fallback those sessions would fall through to the (in this window
+    // shape invisible) HwndRenderTarget path below.
+    HRESULT d3dHr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+                                   D3D11_CREATE_DEVICE_BGRA_SUPPORT, levels, 2,
+                                   D3D11_SDK_VERSION, &g_d3dDevice, nullptr,
+                                   nullptr);
+    if (FAILED(d3dHr)) {
+        d3dHr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr,
+                               D3D11_CREATE_DEVICE_BGRA_SUPPORT, levels, 2,
+                               D3D11_SDK_VERSION, &g_d3dDevice, nullptr,
+                               nullptr);
+    }
+    if (FAILED(d3dHr)) {
         return false;
     }
     if (FAILED(g_d3dDevice->QueryInterface(__uuidof(IDXGIDevice),
@@ -3206,7 +3318,7 @@ static bool EnsureRenderTarget() {
     // The material needs per-pixel alpha, so the composition surface is the
     // default path; the HWND target stays as a fallback if D3D is unavailable.
     if (CreateCompositionTarget(g_flyoutHwnd, width, height)) {
-        Dbg(L"render target: composition (acrylic) %ux%u", width, height);
+        Wh_Log(L"render target: composition (acrylic) %ux%u", width, height);
         return true;
     }
     ReleaseTargets();
@@ -3236,7 +3348,7 @@ static bool EnsureRenderTarget() {
     }
     g_targetWidth = width;
     g_targetHeight = height;
-    Dbg(L"render target: hwnd %ux%u (translucent %d)", width, height,
+    Wh_Log(L"render target: hwnd %ux%u (translucent %d)", width, height,
         g_translucent ? 1 : 0);
     return true;
 }
@@ -3312,7 +3424,8 @@ static void CopyResult(HWND hwnd, const TestState& state) {
         L"Speedtest \x00B7 " + FormatNumber(state.download) + L" Mbps download \x00B7 " +
         FormatNumber(state.upload) + L" Mbps upload \x00B7 " +
         (state.hasPing ? FormatNumber(state.ping) : L"\x2014") + L" ms ping \x00B7 " +
-        (state.hasJitter ? FormatNumber(state.jitter) : L"\x2014") + L" ms jitter";
+        (state.hasJitter ? FormatNumber(state.jitter) : L"\x2014") + L" ms jitter \x00B7 " +
+        std::to_wstring((state.dataUsed + (1LL << 19)) >> 20) + L" MB data used";
     text += L"\r\n";
     text += state.server + L" \x00B7 " + FormatDate(state.when);
 
@@ -3377,10 +3490,18 @@ static void StartOrCancelTest(HWND hwnd) {
     }
 
     if (g_testThread) {
-        if (WaitForSingleObject(g_testThread, 0) == WAIT_OBJECT_0) {
-            CloseHandle(g_testThread);
-            g_testThread = nullptr;
+        // The previous worker may still be unwinding (it already set
+        // Canceled/Done/Error but has not returned yet). Wait briefly for it
+        // so the handle is not lost and Wh_ModUninit can join it; at that
+        // point the thread only unwinds, so the wait is short. Keep the
+        // bounded wait small: this runs on the UI thread.
+        DWORD wait = WaitForSingleObject(g_testThread, 2000);
+        if (wait != WAIT_OBJECT_0) {
+            Wh_Log(L"Previous test thread wait result %lu (error %u)", wait,
+                   GetLastError());
         }
+        CloseHandle(g_testThread);
+        g_testThread = nullptr;
     }
 
     StateReset();
@@ -3486,6 +3607,32 @@ static void PositionFlyout(HWND hwnd, HMONITOR monitor) {
     ResizeRenderTarget();
 }
 
+// True when Windows reports the current connection as metered (Fixed or
+// Variable cost). Windows knows this from the user's "metered connection"
+// setting or a cellular profile; unknown costs and query failures count as
+// unmetered so a detection problem never blocks the auto path.
+static bool IsConnectionMetered() {
+    INetworkCostManager* costManager = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_NetworkListManager, nullptr, CLSCTX_ALL,
+                                  IID_PPV_ARGS(&costManager));
+    if (FAILED(hr)) {
+        Wh_Log(L"NetworkCostManager unavailable (hr 0x%08X)", (unsigned)hr);
+        return false;
+    }
+    DWORD cost = NLM_CONNECTION_COST_UNKNOWN;
+    hr = costManager->GetCost(&cost, nullptr);
+    costManager->Release();
+    if (FAILED(hr)) {
+        Wh_Log(L"GetCost failed (hr 0x%08X)", (unsigned)hr);
+        return false;
+    }
+    bool metered = (cost & (NLM_CONNECTION_COST_FIXED |
+                            NLM_CONNECTION_COST_VARIABLE |
+                            NLM_CONNECTION_COST_ROAMING)) != 0;
+    Wh_Log(L"connection cost %u -> metered %d", (unsigned)cost, metered);
+    return metered;
+}
+
 static void ShowFlyoutWindow(HWND hwnd) {
     if (!hwnd) {
         return;
@@ -3502,6 +3649,21 @@ static void ShowFlyoutWindow(HWND hwnd) {
         g_pressed = Hot::None;
         g_focus = Hot::None;
         g_network = ReadNetwork();
+
+        // Opening the flyout is the request to measure: no need to press
+        // Start. The preference and the metered-connection flag gate it: with
+        // "auto" a metered connection (Fixed/Variable cost in Windows) opens
+        // the flyout idle so the user starts the transfer consciously, and
+        // "never" always does. The idle view already carries the Start button.
+        int startMode = g_autoStart.load(std::memory_order_relaxed);
+        if (startMode == 0 && IsConnectionMetered()) {
+            startMode = 2;
+        }
+        if (startMode == 2) {
+            StateSetCaption(g_str->ready);
+            g_focus = Hot::Start;
+            startTest = false;
+        }
     }
     g_layoutHeight = ViewHeight(g_view);
     g_heightFrom = g_layoutHeight;
@@ -3539,7 +3701,6 @@ static void ShowFlyoutWindow(HWND hwnd) {
         InvalidateRect(hwnd, nullptr, FALSE);
     }
 
-    // Opening the flyout is the request to measure: no need to press Start.
     if (startTest) {
         StartOrCancelTest(hwnd);
     }
@@ -4195,7 +4356,7 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT message, WPARAM wParam,
                 } else if (FAILED(result)) {
                     static int endDrawFailures = 0;
                     if (endDrawFailures++ < 3) {
-                        Dbg(L"EndDraw failed 0x%08X", (unsigned)result);
+                        Wh_Log(L"EndDraw failed 0x%08X", (unsigned)result);
                     }
                     ReleaseTargets();
                 } else if (g_composition && g_swapChain) {
@@ -4204,7 +4365,7 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT message, WPARAM wParam,
                     // the UI thread inside WM_PAINT.
                     HRESULT present = g_swapChain->Present(0, 0);
                     if (FAILED(present)) {
-                        Dbg(L"Present failed 0x%08X", (unsigned)present);
+                        Wh_Log(L"Present failed 0x%08X", (unsigned)present);
                         ReleaseTargets();
                     }
                 }
@@ -4311,7 +4472,10 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT message, WPARAM wParam,
                 !TestRunning()) {
                 HideFlyoutWindow(hwnd, false);
             }
-            return 0;
+            // Let DefWindowProc run so the click-back focus handling continues;
+            // returning 0 here left the previously active window without
+            // restored focus.
+            break;
 
         case WM_DPICHANGED: {
             UINT dpi = HIWORD(wParam);
@@ -4357,6 +4521,10 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT message, WPARAM wParam,
 
         case WM_DESTROY:
             if (g_accessible) {
+                // A client (Narrator, Inspect, ...) may still hold a
+                // reference; disconnect it from this object's vtable so a
+                // late call after the DLL is unloaded cannot crash the host.
+                CoDisconnectObject(g_accessible, 0);
                 g_accessible->Release();
                 g_accessible = nullptr;
             }
@@ -4403,6 +4571,19 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT message, WPARAM wParam,
 // UI thread and module lifecycle
 // ---------------------------------------------------------------------------
 
+// Returns the module of the calling code (the mod DLL), not the host. Used as
+// the window class instance so registration/unregistration is scoped to the
+// mod's own module, as Windhawk conventions expect.
+static HMODULE GetCurrentModuleHandle() {
+    HMODULE module = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            L"", &module)) {
+        return nullptr;
+    }
+    return module;
+}
+
 static DWORD WINAPI UiThreadProc(LPVOID) {
     HRESULT comResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     bool comInitialized = SUCCEEDED(comResult);
@@ -4417,7 +4598,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     // stays square while DWM clips the material to rounded corners.
     windowClass.style = 0;
     windowClass.lpfnWndProc = FlyoutWndProc;
-    windowClass.hInstance = GetModuleHandleW(nullptr);
+    windowClass.hInstance = GetCurrentModuleHandle();
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     windowClass.hbrBackground = nullptr;
     windowClass.lpszClassName = kFlyoutClass;
@@ -4509,7 +4690,20 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     return 0;
 }
 
-static bool IsExplorerProcess() {
+static bool IsPrimaryShellProcess() {
+    // Every explorer.exe instance (and every process loading the mod) would
+    // otherwise start its own UI thread and register the same flyout class.
+    // With "launch folder windows in a separate process" several explorer
+    // instances coexist; only the one owning the taskbar window should host
+    // the flyout. If the taskbar does not exist yet anywhere (the mod can be
+    // injected very early in the primary explorer), fall back to the process
+    // name so the first explorer still hosts it.
+    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (tray) {
+        DWORD trayPid = 0;
+        GetWindowThreadProcessId(tray, &trayPid);
+        return trayPid == GetCurrentProcessId();
+    }
     wchar_t path[MAX_PATH * 2] = {};
     DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
     if (!length || length >= ARRAYSIZE(path)) {
@@ -4521,16 +4715,15 @@ static bool IsExplorerProcess() {
 }
 
 BOOL Wh_ModInit(void) {
-    EnsureStateLock();
     LoadSettings();
     InterlockedExchange(&g_shutdown, 0);
 
-    g_showMessage = RegisterWindowMessageW(L"SpeedTestFlyout.Show.v3");
+    g_showMessage = RegisterWindowMessageW(L"SpeedTestFlyout.Show");
     if (!g_showMessage) {
         Wh_Log(L"RegisterWindowMessage failed (error %u)", GetLastError());
     }
 
-    if (IsExplorerProcess() && g_showMessage) {
+    if (IsPrimaryShellProcess() && g_showMessage) {
         g_uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0,
                                   &g_uiThreadId);
         if (!g_uiThread) {
@@ -4542,16 +4735,16 @@ BOOL Wh_ModInit(void) {
     if (shell32) {
         auto shellExecuteExW = (ShellExecuteExW_t)GetProcAddress(shell32, "ShellExecuteExW");
         if (shellExecuteExW &&
-            !Wh_SetFunctionHook((void*)shellExecuteExW,
-                                (void*)ShellExecuteExW_Hook,
-                                (void**)&ShellExecuteExW_Original)) {
+            !WindhawkUtils::SetFunctionHook(shellExecuteExW,
+                                            ShellExecuteExW_Hook,
+                                            &ShellExecuteExW_Original)) {
             Wh_Log(L"Unable to hook ShellExecuteExW");
         }
         auto shellExecuteW = (ShellExecuteW_t)GetProcAddress(shell32, "ShellExecuteW");
         if (shellExecuteW &&
-            !Wh_SetFunctionHook((void*)shellExecuteW,
-                                (void*)ShellExecuteW_Hook,
-                                (void**)&ShellExecuteW_Original)) {
+            !WindhawkUtils::SetFunctionHook(shellExecuteW,
+                                            ShellExecuteW_Hook,
+                                            &ShellExecuteW_Original)) {
             Wh_Log(L"Unable to hook ShellExecuteW");
         }
     }
@@ -4563,8 +4756,8 @@ BOOL Wh_ModInit(void) {
                               ? (CreateProcessW_t)GetProcAddress(kernel, "CreateProcessW")
                               : nullptr;
     if (createProcessW &&
-        !Wh_SetFunctionHook((void*)createProcessW, (void*)CreateProcessW_Hook,
-                            (void**)&CreateProcessW_Original)) {
+        !WindhawkUtils::SetFunctionHook(createProcessW, CreateProcessW_Hook,
+                                        &CreateProcessW_Original)) {
         Wh_Log(L"Unable to hook CreateProcessW");
     }
 
