@@ -48,55 +48,56 @@ Include `%file%` (or `%name%`) in any custom label field to dynamically display 
 
 // ==WindhawkModSettings==
 /*
-- enableOpenIcon: true
-  $name: "1. Enable Open Customization"
-  $description: "Enable icon and/or custom label for the top bold Open option."
-- openIconPath: "imageres.dll,-185"
-  $name: "Open Icon Path or DLL Index"
-  $description: "Default is imageres.dll,-185. Leave empty for no icon, or enter a .ico path or DLL index."
-- openCustomText: ""
-  $name: "Open Custom Label (Supports %file%)"
-  $description: "Leave empty for default system name, or enter custom text using %file% (%file% is truncated after 30 chars)."
-
-- enableRunAsIcon: true
-  $name: "2. Enable Run as administrator Customization"
-  $description: "Enable custom icon and/or custom label for Run as administrator."
-- runAsIconPath: ""
-  $name: "Run as administrator Icon Path or DLL Index"
-  $description: "Leave empty to keep the default Windows UAC shield, or enter a .ico path or DLL index (e.g. shell32.dll,44)."
-- runAsCustomText: ""
-  $name: "Run as administrator Custom Label (Supports %file%)"
-  $description: "Leave empty to keep default system name untouched, or enter custom text using %file% (%file% is truncated after 30 chars)."
-
-- enableDeleteIcon: true
-  $name: "3. Enable Delete Customization"
-  $description: "Enable icon and/or custom label for the Delete option."
-- deleteIconPath: "imageres.dll,-54"
-  $name: "Delete Icon Path or DLL Index"
-  $description: "Default is Full Recycle Bin (imageres.dll,-54). Leave empty for no icon, or enter a .ico path or DLL index."
-- deleteCustomText: ""
-  $name: "Delete Custom Label (Supports %file%)"
-  $description: "Leave empty for default system name, or enter custom text using %file% (%file% is truncated after 30 chars)."
-
-- enableRenameIcon: true
-  $name: "4. Enable Rename Customization"
-  $description: "Enable icon and/or custom label for the Rename option."
-- renameIconPath: "shell32.dll,-16763"
-  $name: "Rename Icon Path or DLL Index"
-  $description: "Default is Clipboard (shell32.dll,-16763). Leave empty for no icon, or enter a .ico path or DLL index."
-- renameCustomText: "Rename: '%file%'"
-  $name: "Rename Custom Label (Supports %file%)"
-  $description: "Default is Rename: '%file%'. Leave empty for default system name, or enter custom text (%file% is truncated after 30 chars)."
-
-- enablePropertiesIcon: true
-  $name: "5. Enable Properties Customization"
-  $description: "Enable icon and/or custom label for the bottom Properties option."
-- propertiesIconPath: "imageres.dll,-114"
-  $name: "Properties Icon Path or DLL Index"
-  $description: "Default is imageres.dll,-114. Leave empty for no icon, or enter a .ico path or DLL index."
-- propertiesCustomText: ""
-  $name: "Properties Custom Label (Supports %file%)"
-  $description: "Leave empty for default system name, or enter custom text using %file% (%file% is truncated after 30 chars)."
+- open:
+  - enabled: true
+    $name: Enabled
+  - iconPath: "imageres.dll,-185"
+    $name: Icon path or DLL index
+    $description: Default is imageres.dll,-185. Leave empty for no icon, or enter a .ico path or DLL index (e.g. shell32.dll,44).
+  - customText: ""
+    $name: Custom label
+    $description: Leave empty for the default system name. Supports %file% (truncated after 30 characters).
+  $name: Open
+- runAs:
+  - enabled: true
+    $name: Enabled
+  - iconPath: ""
+    $name: Icon path or DLL index
+    $description: Leave empty to keep the default Windows UAC shield, or enter a .ico path or DLL index (e.g. shell32.dll,44).
+  - customText: ""
+    $name: Custom label
+    $description: Leave empty for the default system name. Supports %file% (truncated after 30 characters).
+  $name: Run as administrator
+- delete:
+  - enabled: true
+    $name: Enabled
+  - iconPath: "imageres.dll,-54"
+    $name: Icon path or DLL index
+    $description: Default is Full Recycle Bin (imageres.dll,-54). Leave empty for no icon, or enter a .ico path or DLL index (e.g. shell32.dll,44).
+  - customText: ""
+    $name: Custom label
+    $description: Leave empty for the default system name. Supports %file% (truncated after 30 characters).
+  $name: Delete
+- rename:
+  - enabled: true
+    $name: Enabled
+  - iconPath: "shell32.dll,-16763"
+    $name: Icon path or DLL index
+    $description: Default is Clipboard (shell32.dll,-16763). Leave empty for no icon, or enter a .ico path or DLL index (e.g. shell32.dll,44).
+  - customText: "Rename: '%file%'"
+    $name: Custom label
+    $description: "Default is Rename: '%file%'. Leave empty for the default system name. Supports %file% (truncated after 30 characters)."
+  $name: Rename
+- properties:
+  - enabled: true
+    $name: Enabled
+  - iconPath: "imageres.dll,-114"
+    $name: Icon path or DLL index
+    $description: Default is imageres.dll,-114. Leave empty for no icon, or enter a .ico path or DLL index (e.g. shell32.dll,44).
+  - customText: ""
+    $name: Custom label
+    $description: Leave empty for the default system name. Supports %file% (truncated after 30 characters).
+  $name: Properties
 */
 // ==/WindhawkModSettings==
 
@@ -127,9 +128,7 @@ struct ItemConfig {
 
 struct ItemBinding {
     ItemConfig* cfg;
-    PCWSTR enableSetting;
-    PCWSTR iconSetting;
-    PCWSTR textSetting;
+    PCWSTR settingsKey;
     LPCWSTR canonicalVerb;
 };
 
@@ -140,11 +139,11 @@ static ItemConfig g_renameCfg;
 static ItemConfig g_propsCfg;
 
 static const ItemBinding g_itemBindings[] = {
-    { &g_openCfg,   L"enableOpenIcon",       L"openIconPath",       L"openCustomText",       L"open" },
-    { &g_runAsCfg,  L"enableRunAsIcon",      L"runAsIconPath",      L"runAsCustomText",      L"runas" },
-    { &g_deleteCfg, L"enableDeleteIcon",     L"deleteIconPath",     L"deleteCustomText",     L"delete" },
-    { &g_renameCfg, L"enableRenameIcon",     L"renameIconPath",     L"renameCustomText",     L"rename" },
-    { &g_propsCfg,  L"enablePropertiesIcon", L"propertiesIconPath", L"propertiesCustomText", L"properties" },
+    { &g_openCfg,   L"open",       L"open" },
+    { &g_runAsCfg,  L"runAs",      L"runas" },
+    { &g_deleteCfg, L"delete",     L"delete" },
+    { &g_renameCfg, L"rename",     L"rename" },
+    { &g_propsCfg,  L"properties", L"properties" },
 };
 
 static SRWLOCK g_configLock = SRWLOCK_INIT;
@@ -599,9 +598,9 @@ static void LoadAllSettings() {
 
     for (size_t i = 0; i < kBindingCount; ++i) {
         const auto& binding = g_itemBindings[i];
-        newConfigs[i].enabled = Wh_GetIntSetting(binding.enableSetting) != 0;
+        newConfigs[i].enabled = Wh_GetIntSetting(L"%s.enabled", binding.settingsKey) != 0;
 
-        auto iconSetting = WindhawkUtils::StringSetting::make(binding.iconSetting);
+        auto iconSetting = WindhawkUtils::StringSetting::make(L"%s.iconPath", binding.settingsKey);
         if (iconSetting.get()[0] != L'\0') {
             newConfigs[i].iconPath = iconSetting.get();
             if (newConfigs[i].enabled) {
@@ -612,7 +611,7 @@ static void LoadAllSettings() {
             }
         }
 
-        auto textSetting = WindhawkUtils::StringSetting::make(binding.textSetting);
+        auto textSetting = WindhawkUtils::StringSetting::make(L"%s.customText", binding.settingsKey);
         if (textSetting.get()[0] != L'\0') {
             newConfigs[i].customText = textSetting.get();
         }
