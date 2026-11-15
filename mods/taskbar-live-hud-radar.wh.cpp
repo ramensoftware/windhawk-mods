@@ -2,7 +2,7 @@
 // @id              taskbar-live-hud-radar
 // @name            Taskbar Live HUD
 // @description     Compact system monitoring widget for the taskbar: CPU, RAM, network speed, optional ping and a working set trimmer
-// @version         1.1
+// @version         1.1.1
 // @author          Lemon
 // @github          https://github.com/lemon-web-stack
 // @homepage        https://github.com/lemon-web-stack
@@ -23,12 +23,13 @@ This is a tool mod: it runs in its own dedicated process instead of being
 injected into `explorer.exe`, so it cannot affect the shell's stability and
 survives Explorer restarts.
 
-![Screenshot](https://i.imgur.com/dDy0BoL.png)
+![Screenshot](https://i.imgur.com/EAyRsCR.png)
 
 ### Features
 - **Real-time monitoring:** CPU load, RAM usage and active network speed (Mbps/Kbps).
 - **Windows 10 & 11 look:** blends with the taskbar, configurable corner style, custom/auto background color and per-pixel background alpha.
-- **Auto-hide:** hides itself when a fullscreen game or application is active.
+- **Auto-hide support:** smoothly follows taskbar auto-hide animations and hides when the taskbar is retracted.
+- **Instant Fullscreen detection:** hides instantly without delay when any app goes fullscreen (e.g. F11 in browsers, video players, or games).
 - **Ping (opt-in, off by default):** measures ICMP latency to the local router (default gateway) roughly every 1.6 seconds. Nothing is sent while it is disabled.
 - **Mini History Graph:** press **Ctrl + Right Click** to open a real-time CPU & RAM history graph.
 - **Process Memory Trimmer (opt-in, off by default):** trims the working sets of user processes upon **Ctrl + Left Click**. Trimmed pages move to the standby list and programs page the data back in when they need it, so this does not free memory in a lasting way and may cause a short slowdown.
@@ -247,6 +248,10 @@ HANDLE g_hStopEvent = NULL;
 HANDLE g_hPingWake = NULL;
 ULONG_PTR g_gdiplusToken = 0;
 
+HWND g_hookedTray = NULL;
+HWINEVENTHOOK g_hHookLoc = NULL;
+HWINEVENTHOOK g_hHookVis = NULL;
+
 std::atomic<bool> g_bRunning(false);
 std::atomic<bool> g_bCleaningRam(false);
 
@@ -325,6 +330,7 @@ void UpdateCachedFonts(UINT dpi) {
 }
 
 void SyncWindowGeometry();
+void FastRepositionOnly();
 void ToggleGraphWindow();
 
 void ShowTempStatus(const wchar_t* text, Gdiplus::Color color = Gdiplus::Color(255, 110, 230, 145), ULONGLONG duration = 1800) {
@@ -662,28 +668,76 @@ void FormatStrings(wchar_t* cpuVal, wchar_t* ramVal, wchar_t* pingVal, wchar_t* 
     }
 }
 
-bool IsFullscreenAppActive(HWND hTaskbar) {
-    QUERY_USER_NOTIFICATION_STATE quns;
-    if (SUCCEEDED(SHQueryUserNotificationState(&quns))) {
-        if (quns == QUNS_BUSY || quns == QUNS_RUNNING_D3D_FULL_SCREEN || quns == QUNS_PRESENTATION_MODE) {
-            HWND hHud = g_hHudWnd;
-            HWND hFg = GetForegroundWindow();
-            if (hFg && hFg != hTaskbar && hFg != hHud) {
-                HMONITOR hMonTray = MonitorFromWindow(hTaskbar ? hTaskbar : hHud, MONITOR_DEFAULTTOPRIMARY);
-                HMONITOR hMonFg = MonitorFromWindow(hFg, MONITOR_DEFAULTTONEAREST);
-                if (hMonTray == hMonFg) {
-                    RECT rcFg;
-                    MONITORINFO mi = { sizeof(mi) };
-                    if (GetWindowRect(hFg, &rcFg) && GetMonitorInfoW(hMonTray, &mi)) {
-                        if (rcFg.left <= mi.rcMonitor.left && rcFg.top <= mi.rcMonitor.top &&
-                            rcFg.right >= mi.rcMonitor.right && rcFg.bottom >= mi.rcMonitor.bottom) {
-                            return true;
-                        }
-                    }
-                }
-            }
+// Determines if the taskbar is retracted by auto-hide or hidden by styling mods
+bool IsTaskbarHiddenOrRetracted(HWND hTray) {
+    if (!hTray || !IsWindowVisible(hTray)) return true;
+
+    if (GetWindowLongPtrW(hTray, GWL_EXSTYLE) & WS_EX_LAYERED) {
+        COLORREF crKey = 0;
+        BYTE bAlpha = 255;
+        DWORD dwFlags = 0;
+        if (GetLayeredWindowAttributes(hTray, &crKey, &bAlpha, &dwFlags)) {
+            if ((dwFlags & LWA_ALPHA) && bAlpha <= 5) return true;
         }
     }
+
+    HMONITOR hMon = MonitorFromWindow(hTray, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO mi = { sizeof(mi) };
+    if (!GetMonitorInfoW(hMon, &mi)) return false;
+
+    RECT rcTray = {};
+    if (!GetWindowRect(hTray, &rcTray)) return true;
+
+    int trayHeight = rcTray.bottom - rcTray.top;
+
+    // Detect if the taskbar is sliding down or retracted
+    if (rcTray.top > mi.rcMonitor.bottom - (trayHeight > 30 ? (trayHeight - 8) : 15)) return true;
+    if (rcTray.bottom < mi.rcMonitor.top + (trayHeight > 30 ? (trayHeight - 8) : 15)) return true;
+    if (rcTray.left > mi.rcMonitor.right - 15) return true;
+    if (rcTray.right < mi.rcMonitor.left + 15) return true;
+
+    return false;
+}
+
+// Instantly detects if any window is running fullscreen (e.g. F11 in browsers, games, media players)
+bool IsFullscreenAppActive(HWND hTaskbar) {
+    HWND hFg = GetForegroundWindow();
+    if (!hFg) return false;
+
+    HWND hHud = g_hHudWnd.load();
+    if (hFg == hTaskbar || hFg == hHud) return false;
+
+    // Do not hide when the desktop itself is focused
+    WCHAR className[32] = {};
+    if (GetClassNameW(hFg, className, 32)) {
+        if (wcscmp(className, L"Progman") == 0 || wcscmp(className, L"WorkerW") == 0) {
+            return false;
+        }
+    }
+
+    // With an auto-hide taskbar the work area is the whole monitor, so a
+    // maximized window's rect (including its invisible resize borders) covers
+    // the monitor too. A maximized window that still has a caption isn't
+    // fullscreen.
+    if (IsZoomed(hFg) &&
+        (GetWindowLongPtrW(hFg, GWL_STYLE) & WS_CAPTION) == WS_CAPTION) {
+        return false;
+    }
+
+    HMONITOR hMonTray = MonitorFromWindow(hTaskbar ? hTaskbar : hHud, MONITOR_DEFAULTTOPRIMARY);
+    HMONITOR hMonFg = MonitorFromWindow(hFg, MONITOR_DEFAULTTONEAREST);
+    if (hMonTray != hMonFg) return false;
+
+    RECT rcFg;
+    MONITORINFO mi = { sizeof(mi) };
+    if (GetWindowRect(hFg, &rcFg) && GetMonitorInfoW(hMonTray, &mi)) {
+        // Fast direct geometry check: window covers or exceeds full monitor bounds (F11)
+        if (rcFg.left <= mi.rcMonitor.left && rcFg.top <= mi.rcMonitor.top &&
+            rcFg.right >= mi.rcMonitor.right && rcFg.bottom >= mi.rcMonitor.bottom) {
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -865,11 +919,11 @@ void ToggleGraphWindow() {
 
     HMONITOR hMon = MonitorFromWindow(hHud, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = { sizeof(mi) };
-    if (GetMonitorInfoW(hMon, &mi)) {
-        if (gx < mi.rcWork.left) gx = mi.rcWork.left;
-        if (gx + gw > mi.rcWork.right) gx = mi.rcWork.right - gw;
-        if (gy < mi.rcWork.top) gy = rcHud.bottom + ScaleDpi(8, dpi);
-    }
+    if (!GetMonitorInfoW(hMon, &mi)) return;
+
+    if (gx < mi.rcWork.left) gx = mi.rcWork.left;
+    if (gx + gw > mi.rcWork.right) gx = mi.rcWork.right - gw;
+    if (gy < mi.rcWork.top) gy = rcHud.bottom + ScaleDpi(8, dpi);
 
     SetWindowPos(hGraph, HWND_TOPMOST, gx, gy, gw, gh, SWP_NOACTIVATE);
     ShowWindow(hGraph, SW_SHOW);
@@ -878,15 +932,83 @@ void ToggleGraphWindow() {
     RenderGraphPopup(hGraph);
 }
 
+bool CalculateHudPosition(HWND hTray, int exactWidth, int height, int& posX, int& posY) {
+    if (!hTray) return false;
+    RECT rcTray = {};
+    if (!GetWindowRect(hTray, &rcTray)) return false;
+
+    UINT dpi = SafeGetWindowDpi(hTray);
+    int trayH = rcTray.bottom - rcTray.top;
+
+    int offsetX;
+    {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        offsetX = settings.offsetX;
+    }
+
+    posX = rcTray.right - exactWidth - ScaleDpi(200, dpi);
+    posY = rcTray.top + (trayH - height) / 2;
+
+    HWND hNotify = FindWindowExW(hTray, NULL, L"TrayNotifyWnd", NULL);
+    if (hNotify && IsWindowVisible(hNotify)) {
+        RECT rcNotify;
+        if (GetWindowRect(hNotify, &rcNotify) && rcNotify.right > rcNotify.left) {
+            posX = rcNotify.left - exactWidth - ScaleDpi(offsetX, dpi);
+            int notifyH = rcNotify.bottom - rcNotify.top;
+            if (notifyH > 0) {
+                posY = rcNotify.top + (notifyH - height) / 2;
+            }
+        }
+    }
+    return true;
+}
+
+void FastRepositionOnly() {
+    HWND hWnd = g_hHudWnd.load();
+    if (!hWnd) return;
+
+    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (!hTray || IsTaskbarHiddenOrRetracted(hTray) || IsFullscreenAppActive(hTray)) {
+        if (IsWindowVisible(hWnd)) ShowWindow(hWnd, SW_HIDE);
+        HWND hGraph = g_hGraphWnd.load();
+        if (hGraph && IsWindowVisible(hGraph)) ShowWindow(hGraph, SW_HIDE);
+        return;
+    }
+
+    RECT rcHud = {};
+    GetWindowRect(hWnd, &rcHud);
+    int exactWidth = rcHud.right - rcHud.left;
+    int height = rcHud.bottom - rcHud.top;
+    if (exactWidth <= 0 || height <= 0) return;
+
+    int posX = 0, posY = 0;
+    if (!CalculateHudPosition(hTray, exactWidth, height, posX, posY)) return;
+
+    // Early return: if already at the target position, avoid unnecessary SetWindowPos
+    if (IsWindowVisible(hWnd) && rcHud.left == posX && rcHud.top == posY) {
+        return;
+    }
+
+    // Reassert topmost when showing from hidden state so it never gets obscured by taskbar
+    if (!IsWindowVisible(hWnd)) {
+        SetWindowPos(hWnd, HWND_TOPMOST, posX, posY, 0, 0,
+                     SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        return;
+    }
+
+    SetWindowPos(hWnd, NULL, posX, posY, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
 // GUI thread only: computes dimensions and paints with per-pixel alpha via UpdateLayeredWindow
 void SyncWindowGeometry() {
     HWND hWnd = g_hHudWnd;
     if (!hWnd) return;
 
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (!hTray || !IsWindowVisible(hTray) || IsFullscreenAppActive(hTray)) {
+    if (!hTray || IsTaskbarHiddenOrRetracted(hTray) || IsFullscreenAppActive(hTray)) {
         if (IsWindowVisible(hWnd)) ShowWindow(hWnd, SW_HIDE);
-        if (g_hGraphWnd && IsWindowVisible(g_hGraphWnd)) ShowWindow(g_hGraphWnd, SW_HIDE);
+        HWND hGraph = g_hGraphWnd.load();
+        if (hGraph && IsWindowVisible(hGraph)) ShowWindow(hGraph, SW_HIDE);
         return;
     }
 
@@ -896,7 +1018,7 @@ void SyncWindowGeometry() {
     }
 
     bool showCpu, showRam, showPing, showNet, showBars, customBg;
-    int offsetX, bgAlpha, cornerPref;
+    int bgAlpha, cornerPref;
     BYTE cr, cg, cb;
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
@@ -905,7 +1027,6 @@ void SyncWindowGeometry() {
         showPing = settings.showPing;
         showNet = settings.showNetSpeed;
         showBars = settings.showMiniBars;
-        offsetX = settings.offsetX;
         bgAlpha = settings.bgAlpha;
         cornerPref = settings.cornerPref;
         customBg = settings.customBgEnabled;
@@ -965,16 +1086,8 @@ void SyncWindowGeometry() {
         height = trayH - ScaleDpi(10, dpi);
     }
 
-    int posX = rcTray.right - exactWidth - ScaleDpi(200, dpi);
-    int posY = rcTray.top + (trayH - height) / 2;
-
-    HWND hNotify = FindWindowExW(hTray, NULL, L"TrayNotifyWnd", NULL);
-    if (hNotify) {
-        RECT rcNotify;
-        if (GetWindowRect(hNotify, &rcNotify)) {
-            posX = rcNotify.left - exactWidth - ScaleDpi(offsetX, dpi);
-        }
-    }
+    int posX = 0, posY = 0;
+    CalculateHudPosition(hTray, exactWidth, height, posX, posY);
 
     HDC memDC = CreateCompatibleDC(screenDC);
     BITMAPINFO bi = {};
@@ -1117,6 +1230,35 @@ void SyncWindowGeometry() {
     ReleaseDC(NULL, screenDC);
 }
 
+// WinEvent hook to follow taskbar slide smoothly
+void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG, DWORD, DWORD) {
+    if (idObject != OBJID_WINDOW || !hwnd) return;
+    HWND hTray = g_hookedTray;
+    if (!hTray) return;
+
+    if (hwnd == hTray || GetAncestor(hwnd, GA_ROOT) == hTray) {
+        FastRepositionOnly();
+    }
+}
+
+// GUI thread only. Hooks Explorer's process so animations from any Explorer thread/mod are caught
+void UpdateTaskbarHooks() {
+    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (hTray == g_hookedTray) return;
+    if (g_hHookLoc) { UnhookWinEvent(g_hHookLoc); g_hHookLoc = NULL; }
+    if (g_hHookVis) { UnhookWinEvent(g_hHookVis); g_hHookVis = NULL; }
+    g_hookedTray = hTray;
+    if (!hTray) return;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hTray, &pid);
+    if (pid != 0) {
+        g_hHookLoc = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE,
+                                     NULL, WinEventProc, pid, 0, WINEVENT_OUTOFCONTEXT);
+        g_hHookVis = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE,
+                                     NULL, WinEventProc, pid, 0, WINEVENT_OUTOFCONTEXT);
+    }
+}
+
 LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_MOUSEACTIVATE:
@@ -1149,7 +1291,7 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     std::lock_guard<std::mutex> lock(g_settingsMutex);
                     settings.offsetX = newOffset;
                 }
-                SyncWindowGeometry();
+                FastRepositionOnly();
             }
             return 0;
         }
@@ -1228,18 +1370,13 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         case WM_TIMER: {
             if (wParam == TIMER_FAST_CHECK) {
+                UpdateTaskbarHooks();
+
                 if (g_statusMessageTime && (GetTickCount64() - g_statusMessageTime >= g_statusDuration)) {
                     g_statusMessageTime = 0;
                     SyncWindowGeometry();
                 } else {
-                    HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", NULL);
-                    bool shouldHide = !hTaskbar || !IsWindowVisible(hTaskbar) || IsFullscreenAppActive(hTaskbar);
-                    if (shouldHide) {
-                        if (IsWindowVisible(hWnd)) ShowWindow(hWnd, SW_HIDE);
-                        if (g_hGraphWnd && IsWindowVisible(g_hGraphWnd)) ShowWindow(g_hGraphWnd, SW_HIDE);
-                    } else if (!shouldHide && !IsWindowVisible(hWnd)) {
-                        SyncWindowGeometry();
-                    }
+                    FastRepositionOnly();
                 }
             }
             return 0;
@@ -1387,7 +1524,8 @@ DWORD WINAPI GuiWorkerThread(LPVOID) {
     if (hGraph) ApplyWindowStyle(hGraph);
 
     SyncWindowGeometry();
-    SetTimer(hWnd, TIMER_FAST_CHECK, 250, NULL);
+    UpdateTaskbarHooks();
+    SetTimer(hWnd, TIMER_FAST_CHECK, 100, NULL);
 
     for (;;) {
         DWORD r = MsgWaitForMultipleObjects(1, &g_hStopEvent, FALSE, INFINITE, QS_ALLINPUT);
@@ -1404,6 +1542,10 @@ DWORD WINAPI GuiWorkerThread(LPVOID) {
         }
     }
 end_loop:
+
+    if (g_hHookLoc) { UnhookWinEvent(g_hHookLoc); g_hHookLoc = NULL; }
+    if (g_hHookVis) { UnhookWinEvent(g_hHookVis); g_hHookVis = NULL; }
+    g_hookedTray = NULL;
 
     KillTimer(hWnd, TIMER_FAST_CHECK);
     g_hHudWnd = NULL;
