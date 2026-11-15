@@ -12819,6 +12819,7 @@ static const BsRowDef kBsRows[] = {
     {BR_ITEM, BV_SEARCH, L"Busca", 0xE721, 0x8E8E93},
     {BR_ITEM, BV_DISK, L"Discos", 0xEDA2, 0x8E8E93, L"Clique para ver os discos e quanto cada um está cheio"},
     {BR_CHOICE, BV_SEARCHTGT, L"A busca abre", 0, 0, L"Siri Plus: a janela padrão dele, no estilo Spotlight"},
+    {BR_ITEM, BV_ISLHIST, L"Notificações (sino)", 0xEA8F, 0xFF375F, L"O sino abre as notificações e os avisos guardados"},
     {BR_ITEM, BV_PRIV, L"Privacidade (microfone e câmera)", 0xE720, 0xFF9F0A, L"Laranja e verde quando um app usa o microfone ou a câmera; clique para ver quem está usando e silenciar o microfone"},
     {BR_HEADER, BV_NONE, L"Barra", 0xE771, 0x0A84FF, L"Idioma, temas, tamanho e comportamento da barra"},
     {BR_GROUP, BV_NONE, L"Idioma da barra", 0, 0},
@@ -12903,7 +12904,7 @@ static const BsRowDef kBsRows[] = {
     {BR_CHOICE, BV_ISLIN, L"Como aparece", 0, 0},
     {BR_CHOICE, BV_ISLOUT, L"Como some", 0, 0},
     {BR_GROUP, BV_NONE, L"Botão de Notificações", 0, 0},
-    {BR_CHOICE, BV_NTFLAYOUT, L"Notificações na barra (sino)", 0, 0, L"Desligado tira o sino da barra; dentro da caixa: tudo num painel só; em cartões soltos: o topo e cada notificação no seu próprio vidro, sem caixa atrás"},
+    {BR_CHOICE, BV_NTFLAYOUT, L"Notificações", 0, 0, L"Flutuante: o topo e cada notificação no seu próprio vidro, sem caixa atrás; dentro da caixa: tudo num painel só"},
     {BR_CHOICE, BV_NTFTEXT, L"Cor do texto das notificações", 0, 0, L"Seguir o tema, ou sempre branco ou preto, em qualquer tema"},
     {BR_SWITCH, BV_ISLHISTNOT, L"No botão, mostrar também os avisos da pílula", 0, 0},
     {BR_CHOICE, BV_NTFSHAPE, L"Formato dos ícones", 0, 0, L"Nas notificações: círculo ou o formato dos ícones do macOS"},
@@ -13183,7 +13184,7 @@ static int BsGet(int val) {
         case BV_G_STYLE: return g_glass.tinted ? 1 : 0;
         case BV_CCCLOSE: return g_settings.ccCloseAnim;
         case BV_NTFSHAPE: return g_settings.ntfIconShape;
-        case BV_NTFLAYOUT: return !g_settings.islHistory ? 0 : g_settings.ntfCards ? 2 : 1;
+        case BV_NTFLAYOUT: return g_settings.ntfCards ? 0 : 1;
         case BV_ISLTEXT: return g_settings.islTextColor;
         case BV_NTFTEXT: return g_settings.ntfTextColor;
         case BV_FONTFAM: {
@@ -13489,13 +13490,10 @@ static void BsSet(int val, int v) {
         return;
     }
     if (val == BV_NTFLAYOUT) {
-        // Desligado (sem o sino na barra), dentro da caixa ou em cartões soltos.
-        BsSet(BV_ISLHIST, v != 0);
-        if (v != 0) {
-            g_settings.ntfCards = v == 2;
-            OvrSetStr(L"ntfLayout", g_settings.ntfCards ? L"cards" : L"box");
-            NtfRefresh();  // painel aberto: muda na hora
-        }
+        // Flutuante (padrão) ou dentro da caixa. (O sino em si é um item da barra.)
+        g_settings.ntfCards = v == 0;
+        OvrSetStr(L"ntfLayout", g_settings.ntfCards ? L"cards" : L"box");
+        NtfRefresh();  // painel aberto: muda na hora
         return;
     }
     if (val == BV_NTFSHAPE) {
@@ -13886,7 +13884,7 @@ static const PCWSTR kBsBarChoicesAll[] = {L"Vidro", L"Transparente", L"Líquido"
                                           L"Claro", L"Escuro", L"OLED", L"Personalizar por monitor"};
 static const PCWSTR kBsGlassStyle[] = {L"Transparente", L"Vidro líquido personalizado"};
 static const PCWSTR kBsNtfShape[] = {L"Círculo", L"Formato macOS"};
-static const PCWSTR kBsNtfLayout[] = {L"Desligado", L"Dentro da caixa", L"Em cartões soltos"};
+static const PCWSTR kBsNtfLayout[] = {L"Flutuante", L"Dentro da caixa"};
 static const PCWSTR kBsTextFollow[] = {L"Seguir o tema", L"Branco", L"Preto"};
 static const PCWSTR kBsTextColor[] = {L"Automático", L"Branco", L"Preto"};
 static const PCWSTR kBsCcClose[] = {L"Cascata", L"Encolher", L"Esmaecer", L"Deslizar para cima", L"Nenhuma"};
@@ -13949,8 +13947,7 @@ static int BsChoiceCount(int val) {
     if (val >= BV_MONSTYLE0 && val < BV_MONTEXT0) return 8;
     if (val >= BV_MONTEXT0 && val < BV_MONEND) return 3;
     switch (val) {
-        case BV_ISLPOS: case BV_WXUNIT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: return 2;
-        case BV_NTFLAYOUT: return 3;
+        case BV_ISLPOS: case BV_WXUNIT: case BV_SEARCHTGT: case BV_G_STYLE: case BV_NTFSHAPE: case BV_NTFLAYOUT: return 2;
         case BV_FONTFAM:
             if (g_bsFonts.empty()) BsFontsRefresh();
             return (int)g_bsFonts.size();
@@ -14782,7 +14779,7 @@ static bool BsRowDisabled(int rowIdx) {
     // Claro, Escuro e OLED: a cor do texto fica no automático (segue o fundo).
     if (d.val == BV_TEXTCOLOR) return g_settings.barStyle >= 5;
     if (d.val >= BV_MONTEXT0 && d.val < BV_MONEND) return BsGet(d.val - 8) >= 5;
-    if (d.val == BV_NTFTEXT) return !g_settings.islHistory;  // sem o sino na barra
+    if (d.val == BV_NTFTEXT || d.val == BV_NTFLAYOUT) return !g_settings.islHistory;  // sem o sino na barra
     if (d.val == BV_HANDLE) return g_settings.hideWhenMaximized;  // bloqueada por "Ocultar com janela maximizada"
     // Com "Ocultar com a alça" ligada, as outras formas de ocultar ficam inativas.
     if (d.val == BV_HIDEFS || d.val == BV_HIDEMAX) return g_settings.autoHide && g_settings.revealHandle;
@@ -22972,7 +22969,7 @@ static void Render(Bar* b) {
                 break;
             case K_NOTIF:
                 // Botão de Notificações: as do Windows e todos os avisos da pílula.
-                if (g_settings.islHistory || g_settings.winNotifs) right.push_back({K_NOTIF, Glyph(0xEA8F), true, 1.0f, L""});
+                if (g_settings.islHistory) right.push_back({K_NOTIF, Glyph(0xEA8F), true, 1.0f, L""});  // o item "Notificações (sino)"
                 break;
         }
     }
@@ -25491,10 +25488,7 @@ const UiTr kUiTr[] = {
     {L"Restaurar o tamanho padrão", L"Restore the default size", L"Restaurar el tamaño predeterminado", L"Restaurer la taille par défaut", L"Standardgröße wiederherstellen", L"Ripristina le dimensioni predefinite", L"恢复默认大小"},
     {L"Altura de 28 px e ícones e fonte de 13 pt", L"28 px high, with 13 pt icons and font", L"28 px de alto, con iconos y fuente de 13 pt", L"28 px de haut, icônes et texte en 13 pt", L"28 px hoch, Symbole und Schrift 13 pt", L"28 px di altezza, icone e carattere a 13 pt", L"高度 28 像素，图标和字体 13 磅"},
     {L"Notificações", L"Notifications", L"Notificaciones", L"Notifications", L"Mitteilungen", L"Notifiche", L"通知"},
-    {L"Notificações na barra (sino)", L"Notifications on the bar (bell)", L"Notificaciones en la barra (campana)", L"Notifications dans la barre (cloche)", L"Mitteilungen in der Leiste (Glocke)", L"Notifiche nella barra (campanella)", L"菜单栏中的通知 (铃铛)"},
-    {L"Desligado tira o sino da barra; dentro da caixa: tudo num painel só; em cartões soltos: o topo e cada notificação no seu próprio vidro, sem caixa atrás", L"Off removes the bell from the bar; in a box: everything in one panel; as separate cards: the top and each notification in its own glass, with no box behind", L"Desactivado quita la campana de la barra; dentro de la caja: todo en un panel; en tarjetas sueltas: la parte superior y cada notificación en su propio vidrio, sin caja detrás", L"Désactivé retire la cloche de la barre ; dans une boîte : tout dans un seul panneau ; en cartes séparées : le haut et chaque notification dans leur propre verre, sans boîte derrière", L"Aus entfernt die Glocke aus der Leiste; in einem Kasten: alles in einem Bereich; als einzelne Karten: der Kopf und jede Mitteilung im eigenen Glas, ohne Kasten dahinter", L"Disattivato toglie la campanella dalla barra; in un riquadro: tutto in un pannello; in schede separate: la parte superiore e ogni notifica nel proprio vetro, senza riquadro dietro", L"关闭会从菜单栏移除铃铛；在框内：全部在一个面板中；独立卡片：顶部和每条通知各自一块玻璃，后面没有框"},
     {L"Dentro da caixa", L"In a box", L"Dentro de la caja", L"Dans une boîte", L"In einem Kasten", L"In un riquadro", L"在框内"},
-    {L"Em cartões soltos", L"As separate cards", L"En tarjetas sueltas", L"En cartes séparées", L"Als einzelne Karten", L"In schede separate", L"独立卡片"},
     {L"O tema Transparente não tem ajustes: a barra fica sem vidro nenhum.", L"The Clear theme has no settings: the bar has no glass at all.", L"El tema Transparente no tiene ajustes: la barra no lleva vidrio.", L"Le thème Transparent n’a pas de réglages : la barre n’a aucun verre.", L"Das Design Klar hat keine Einstellungen: die Leiste hat kein Glas.", L"Il tema Trasparente non ha impostazioni: la barra non ha vetro.", L"透明主题没有设置：菜单栏完全没有玻璃。"},
     {L"Fundo ao vivo", L"Live background", L"Fondo en vivo", L"Arrière-plan en direct", L"Live-Hintergrund", L"Sfondo dal vivo", L"实时背景"},
     {L"Com um estilo de vidro, vídeos e papéis de parede animados continuam aparecendo atrás da pílula", L"With a glass style, videos and animated wallpapers keep showing behind the pill", L"Con un estilo de vidrio, los vídeos y fondos animados siguen viéndose detrás de la píldora", L"Avec un style en verre, les vidéos et fonds animés restent visibles derrière la pastille", L"Mit einem Glasstil bleiben Videos und animierte Hintergründe hinter der Pille sichtbar", L"Con uno stile in vetro, video e sfondi animati restano visibili dietro la pillola", L"使用玻璃样式时，胶囊后面仍会显示视频和动态壁纸"},
@@ -25506,6 +25500,10 @@ const UiTr kUiTr[] = {
     {L"Seguir o tema, ou sempre branco ou preto, em qualquer estilo", L"Follow the theme, or always white or black, in any style", L"Seguir el tema, o siempre blanco o negro, en cualquier estilo", L"Suivre le thème, ou toujours blanc ou noir, quel que soit le style", L"Dem Design folgen oder immer weiß oder schwarz, in jedem Stil", L"Segui il tema, o sempre bianco o nero, in qualsiasi stile", L"跟随主题，或在任何样式中始终为白色或黑色"},
     {L"Seguir o tema, ou sempre branco ou preto, em qualquer tema", L"Follow the theme, or always white or black, in any theme", L"Seguir el tema, o siempre blanco o negro, en cualquier tema", L"Suivre le thème, ou toujours blanc ou noir, quel que soit le thème", L"Dem Design folgen oder immer weiß oder schwarz, in jedem Design", L"Segui il tema, o sempre bianco o nero, in qualsiasi tema", L"跟随主题，或在任何主题中始终为白色或黑色"},
     {L"Seguir o tema", L"Follow the theme", L"Seguir el tema", L"Suivre le thème", L"Dem Design folgen", L"Segui il tema", L"跟随主题"},
+    {L"Notificações (sino)", L"Notifications (bell)", L"Notificaciones (campana)", L"Notifications (cloche)", L"Mitteilungen (Glocke)", L"Notifiche (campanella)", L"通知 (铃铛)"},
+    {L"O sino abre as notificações e os avisos guardados", L"The bell opens notifications and saved notices", L"La campana abre las notificaciones y los avisos guardados", L"La cloche ouvre les notifications et les avis enregistrés", L"Die Glocke öffnet Mitteilungen und gespeicherte Hinweise", L"La campanella apre le notifiche e gli avvisi salvati", L"铃铛打开通知和保存的提示"},
+    {L"Flutuante", L"Floating", L"Flotante", L"Flottant", L"Schwebend", L"Fluttuante", L"浮动"},
+    {L"Flutuante: o topo e cada notificação no seu próprio vidro, sem caixa atrás; dentro da caixa: tudo num painel só", L"Floating: the top and each notification in its own glass, with no box behind; in a box: everything in one panel", L"Flotante: la parte superior y cada notificación en su propio vidrio, sin caja detrás; dentro de la caja: todo en un panel", L"Flottant : le haut et chaque notification dans leur propre verre, sans boîte derrière ; dans une boîte : tout dans un seul panneau", L"Schwebend: der Kopf und jede Mitteilung im eigenen Glas, ohne Kasten dahinter; in einem Kasten: alles in einem Bereich", L"Fluttuante: la parte superiore e ogni notifica nel proprio vetro, senza riquadro dietro; in un riquadro: tutto in un pannello", L"浮动：顶部和每条通知各自一块玻璃，后面没有框；在框内：全部在一个面板中"},
     {L"Acompanhar a barra", L"Match the bar", L"Igual que la barra", L"Comme la barre", L"Wie die Leiste", L"Come la barra", L"跟随菜单栏"},
     {L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro; com Transparente, líquido)", L"Match the bar: the bar’s background (glass with Window color, liquid with Clear)", L"Igual que la barra: el fondo de la barra (vidrio con Color de la ventana, líquido con Transparente)", L"Comme la barre : le fond de la barre (verre avec Couleur de la fenêtre, liquide avec Transparent)", L"Wie die Leiste: ihr Hintergrund (Glas bei Fensterfarbe, flüssig bei Klar)", L"Come la barra: lo sfondo della barra (vetro con Colore della finestra, liquido con Trasparente)", L"跟随菜单栏：与菜单栏相同的背景（窗口颜色时为玻璃，透明时为液态）"},
     {L"Claro", L"Light", L"Claro", L"Clair", L"Hell", L"Chiaro", L"浅色"},
