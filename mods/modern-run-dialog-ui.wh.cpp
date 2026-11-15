@@ -71,7 +71,7 @@ Replaces the classic Win32 **Run (`Win + R`)** dialog with a floating, borderles
   * Type any mathematical expression directly into the Run input bar (e.g., `1+1`, `(25*4)/2`, `sqrt(144)`, `sin(pi/2)`, `2^10`) to evaluate and display the live result at the top of the suggestion card; press `Enter` or click the result row to copy/insert it immediately.
 
 - **Built-in Multi-Language Google Translate (`文A`):**
-  * Click the dedicated **Google Translate (`文A`)** icon button on the input bar (between Run and Settings) to toggle **Translate Mode** with a dynamically expanding multi-line input field, source/target language selector pills (22 languages + Auto Detect) with a one-click swap (`⇄`) button, and a detached translation result card (click the result card to copy translated text to the clipboard).
+  * Click the dedicated **Google Translate (`文A`)** icon button on the input bar (between Run and Settings) to toggle **Translate Mode** with a dynamically expanding multi-line input field, source/target language selector pills (22 languages + Auto Detect) with a one-click swap (`⇄`) button, and press `Enter` to open a compact Google Translate popup window positioned right above (or below) the input bar.
 
 - **Synchronized In-App Quick Settings Menu (`⚙️`):**
   * Pill-styled Liquid Glass / Fluent popup menu featuring 3D **Liquid Glass Toggle Switches** for boolean features (**Compact Mini-Pill Mode** and **Show Command History**, which automatically locks ON and dims when Compact Mode is active) and crisp checkmarks (`✓`) for single-choice submenu options.
@@ -112,8 +112,8 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
 - **Máy tính toán học tức thì (Instant Math Calculator):**
   * Gõ trực tiếp phép tính vào ô nhập Run (ví dụ `1+1`, `(25*4)/2`, `sqrt(144)`, `sin(pi/2)`, `2^10`) để xem ngay kết quả tính toán ở đầu hộp gợi ý; nhấn `Enter` hoặc nhấp chuột vào dòng kết quả để sao chép và điền ngay vào ô nhập.
 
-- **Dịch đa ngôn ngữ trực tiếp bằng Google Dịch (`文A`):**
-  * Nhấn vào nút biểu tượng **Google Dịch (`文A`)** trên thanh nhập (nằm giữa nút Chạy và nút Cài đặt) để chuyển sang **Chế độ Dịch** với ô nhập tự động giãn chiều cao nhiều dòng, thanh chọn ngôn ngữ nguồn/đích (22 ngôn ngữ + Tự động phát hiện) kèm nút đảo chiều (`⇄`) và thẻ hiển thị bản dịch tách rời ngay phía trên thanh nhập (nhấp vào thẻ kết quả để sao chép nhanh).
+- **Dịch đa ngôn ngữ nhanh bằng Google Dịch (`文A`):**
+  * Nhấn vào nút biểu tượng **Google Dịch (`文A`)** trên thanh nhập (nằm giữa nút Chạy và nút Cài đặt) để chuyển sang **Chế độ Dịch** với ô nhập tự động giãn chiều cao nhiều dòng, thanh chọn ngôn ngữ nguồn/đích (22 ngôn ngữ + Tự động phát hiện) kèm nút đảo chiều (`⇄`), và nhấn `Enter` để mở cửa sổ popup Google Dịch nhỏ gọn nằm ngay phía trên (hoặc phía dưới) thanh nhập.
 
 - **Menu Cài đặt nhanh đồng bộ (`⚙️`) với Công tắc Liquid Glass:**
   * Menu cài đặt nhanh bo tròn đồng bộ với thanh nhập, sử dụng **cần gạt bật/tắt (Toggle Switch) hiệu ứng Liquid Glass 3D** cho các tính năng bật/tắt (**Chế độ thu nhỏ** và **Hiển thị lịch sử lệnh** – tự động bật sẵn và làm mờ khóa lại khi đang ở Chế độ thu nhỏ) cùng dấu tích `✓` chuẩn xác cho các mục chọn đơn trong menu con.
@@ -340,8 +340,6 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
 #include <algorithm>
 #include <atomic>
 #include <mutex>
-#include <thread>
-#include <condition_variable>
 
 #include <cstdint>
 #ifndef DWMWA_CLOAKED
@@ -564,8 +562,7 @@ enum ToggleAction : WPARAM {
     kActionRestore = 2,
     kActionToggleWinR = 3,
     kActionReloadSettings = 4,
-    kActionTranslateDone = 5,
-    kActionDeferredInputUpdate = 6
+    kActionDeferredInputUpdate = 5
 };
 
 // Base dimensions at 96 DPI
@@ -576,10 +573,11 @@ constexpr int kBaseListPadTop       = 10;
 constexpr int kBaseListPadBottom    = 10;
 constexpr int kBaseDetachedGap      = 12;
 constexpr int kBaseInputBarHeight   = 54;
-constexpr UINT_PTR kTimerCaret      = 9010;
-constexpr UINT_PTR kTimerLuminance  = 9011;
-constexpr UINT_PTR kTimerOpenAnim   = 9014;
-constexpr UINT_PTR kTimerBgMedia    = 9012;
+constexpr UINT_PTR kTimerCaret              = 9010;
+constexpr UINT_PTR kTimerLuminance          = 9011;
+constexpr UINT_PTR kTimerOpenAnim           = 9014;
+constexpr UINT_PTR kTimerBgMedia            = 9012;
+constexpr UINT_PTR kTimerSnapTranslatePopup = 9015;
 constexpr int kModernEditId         = 9901;
 constexpr size_t kMaxMruEntries     = 20;
 
@@ -722,6 +720,7 @@ static OpticalGlassCache g_menuSubOpticalCache;
 
 extern std::atomic<HWND> g_hActiveGearMenu;
 extern std::atomic<HWND> g_hActiveCustomSizeWnd;
+extern std::atomic<HWND> g_hActiveTranslatePopup;
 
 void ReleaseOpticalCacheBitmap(OpticalGlassCache& c) {
     if (c.pCachedBmp) {
@@ -1418,8 +1417,9 @@ uint64_t GetBackdropWindowTopologySignature(HWND hDlg) {
     }
 
     DWORD selfPid = GetCurrentProcessId();
-    HWND hGearMenu = g_hActiveGearMenu.load();
-    HWND hSizeWnd  = g_hActiveCustomSizeWnd.load();
+    HWND hGearMenu   = g_hActiveGearMenu.load();
+    HWND hSizeWnd    = g_hActiveCustomSizeWnd.load();
+    HWND hTransPopup = g_hActiveTranslatePopup.load();
 
     uint64_t hash = 14695981039346656037ULL;
     auto mixHash = [&](uint64_t v) {
@@ -1428,7 +1428,7 @@ uint64_t GetBackdropWindowTopologySignature(HWND hDlg) {
     };
 
     for (HWND w = GetTopWindow(nullptr); w != nullptr; w = GetWindow(w, GW_HWNDNEXT)) {
-        if (w == hDlg || w == hGearMenu || w == hSizeWnd) continue;
+        if (w == hDlg || w == hGearMenu || w == hSizeWnd || w == hTransPopup) continue;
         if (!IsWindowVisible(w) || IsIconic(w)) continue;
         if (hDlg && GetWindow(w, GW_OWNER) == hDlg) continue;
 
@@ -5365,18 +5365,16 @@ struct RunDialogState {
     bool translateBtnPressed = false;
     std::wstring translateSourceLang = L"auto";
     std::wstring translateTargetLang = L"vi";
-    std::wstring translatedText;
-    std::wstring translatedDetectedLang;
-    bool isTranslating = false;
-    bool translateCopiedFeedback = false;
     bool srcLangHovered = false;
     bool srcLangPressed = false;
     bool swapLangHovered = false;
     bool swapLangPressed = false;
     bool dstLangHovered = false;
     bool dstLangPressed = false;
-    bool transCardHovered = false;
-    bool transCardPressed = false;
+    HWND hTranslatePopup = nullptr;
+    ULONGLONG translatePopupLaunchTick = 0;
+    ULONGLONG translatePopupFirstSeenTick = 0;
+    std::vector<HWND> preLaunchBrowserWindows;
     bool isTriggeringRun = false;
     bool isBrowsingFile = false;
     bool suppressSuggestionUpdate = false;
@@ -5475,6 +5473,7 @@ void StopKeyHookThread() {
 bool ResolveDialogLightContrast(const RunDialogState* state);
 void ApplyWindowAppearance(HWND hDlg, RunDialogState* state);
 void CloseActiveGearMenu();
+void CloseActiveTranslatePopup(RunDialogState* state);
 void CloseRunDialog(HWND hDlg);
 void SyncInputToNativeCombo(RunDialogState* state, const wchar_t* textOverride = nullptr);
 void ExecuteCommandImmediate(RunDialogState* state, const std::wstring& rawCommand);
@@ -5835,6 +5834,7 @@ void ForceFocusModernEdit(HWND hDlg, RunDialogState* state) {
 void MinimizeRunDialog(RunDialogState* state) {
     if (!state || !state->hDlg || !IsWindow(state->hDlg)) return;
     CloseActiveGearMenu();
+    CloseActiveTranslatePopup(state);
     ULONGLONG now = GetTickCount64();
     if (now - g_lastToggleTick.load() < 250) return;
 
@@ -6168,6 +6168,9 @@ void CloseRunDialog(HWND hDlg) {
     if (!hDlg || !IsWindow(hDlg)) return;
     if (GetWindowThreadProcessId(hDlg, nullptr) == GetCurrentThreadId()) {
         auto* state = reinterpret_cast<RunDialogState*>(GetPropW(hDlg, L"WindhawkModernRunState"));
+        if (state) {
+            CloseActiveTranslatePopup(state);
+        }
         if (state && !state->pendingUninit && !g_unloading.load()) {
             PlayDialogCloseAnimationSync(hDlg, state);
         }
@@ -6263,7 +6266,7 @@ std::wstring UrlEncodeUtf8(std::wstring_view input) {
     return encoded;
 }
 
-// --- Multi-Language Translate Mode Engine (22 Languages + Async WinHTTP) ---
+// --- Multi-Language Translate Mode Engine (22 Languages + Compact Browser Popup) ---
 
 struct TranslateLangEntry {
     UINT menuId;
@@ -6327,282 +6330,281 @@ std::wstring GetCompactTranslateLangDisplayName(const std::wstring& code, bool i
     return full;
 }
 
-struct TranslateWorkerTask {
-    HWND hTargetDlg = nullptr;
-    std::wstring rawText;
-    std::wstring srcLang;
-    std::wstring dstLang;
-    uint64_t reqId = 0;
-    bool isVi = false;
-};
+std::wstring GetDefaultBrowserExecutablePath();
 
-static std::mutex g_translateMutex;
-static std::condition_variable g_translateCv;
-[[clang::no_destroy]] static std::optional<std::thread> g_translateWorkerThread;
-static std::optional<TranslateWorkerTask> g_pendingTranslateTask;
-static bool g_translateWorkerStop = false;
-static std::atomic<uint64_t> g_translateReqCounter{0};
-static std::wstring g_pendingTranslateResult;
-
-std::string ParseGoogleTranslateGtxJson(const std::string& json) {
-    size_t pos = 0;
-    auto skipWs = [&]() {
-        while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t' || json[pos] == '\r' || json[pos] == '\n')) ++pos;
+bool IsChromiumAppModeBrowser(const std::wstring& exePath) {
+    if (exePath.empty()) return false;
+    std::wstring fileName = ToLowerString(PathFindFileNameW(exePath.c_str()));
+    static constexpr const wchar_t* kChromiumBrowsers[] = {
+        L"msedge.exe", L"chrome.exe", L"brave.exe", L"vivaldi.exe",
+        L"opera.exe", L"chromium.exe", L"coccoc.exe", L"browser.exe",
+        L"thorium.exe", L"whale.exe", L"arc.exe", L"centbrowser.exe"
     };
-    auto parseJsonString = [&](std::string& out) -> bool {
-        skipWs();
-        if (pos >= json.size() || json[pos] != '"') return false;
-        ++pos;
-        out.clear();
-        while (pos < json.size()) {
-            char c = json[pos++];
-            if (c == '"') return true;
-            if (c == '\\' && pos < json.size()) {
-                char esc = json[pos++];
-                switch (esc) {
-                    case '"':  out.push_back('"'); break;
-                    case '\\': out.push_back('\\'); break;
-                    case '/':  out.push_back('/'); break;
-                    case 'b':  out.push_back('\b'); break;
-                    case 'f':  out.push_back('\f'); break;
-                    case 'n':  out.push_back('\n'); break;
-                    case 'r':  out.push_back('\r'); break;
-                    case 't':  out.push_back('\t'); break;
-                    case 'u': {
-                        if (pos + 4 <= json.size()) {
-                            unsigned int cp = 0;
-                            for (int i = 0; i < 4; ++i) {
-                                char hc = json[pos + i];
-                                cp <<= 4;
-                                if (hc >= '0' && hc <= '9') cp |= (hc - '0');
-                                else if (hc >= 'a' && hc <= 'f') cp |= (hc - 'a' + 10);
-                                else if (hc >= 'A' && hc <= 'F') cp |= (hc - 'A' + 10);
-                            }
-                            pos += 4;
-                            if (cp < 0x80) {
-                                out.push_back((char)cp);
-                            } else if (cp < 0x800) {
-                                out.push_back((char)(0xC0 | (cp >> 6)));
-                                out.push_back((char)(0x80 | (cp & 0x3F)));
-                            } else {
-                                out.push_back((char)(0xE0 | (cp >> 12)));
-                                out.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
-                                out.push_back((char)(0x80 | (cp & 0x3F)));
-                            }
-                        }
-                        break;
-                    }
-                    default: out.push_back(esc); break;
-                }
+    for (const wchar_t* name : kChromiumBrowsers) {
+        if (fileName == name) return true;
+    }
+    return false;
+}
+
+std::wstring ResolveCompactPopupBrowserExe() {
+    std::wstring defBrowser = GetDefaultBrowserExecutablePath();
+    if (IsChromiumAppModeBrowser(defBrowser) && PathFileExistsW(defBrowser.c_str())) {
+        return defBrowser;
+    }
+    wchar_t foundPath[MAX_PATH] = {};
+    const wchar_t* kFallbacks[] = { L"msedge.exe", L"chrome.exe", L"brave.exe" };
+    for (const wchar_t* exeName : kFallbacks) {
+        if (SearchPathW(nullptr, exeName, nullptr, MAX_PATH, foundPath, nullptr) && PathFileExistsW(foundPath)) {
+            return foundPath;
+        }
+        std::wstring regSubKey = std::wstring(L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\") + exeName;
+        DWORD cbData = sizeof(foundPath);
+        if (RegGetValueW(HKEY_LOCAL_MACHINE, regSubKey.c_str(), nullptr, RRF_RT_REG_SZ, nullptr, foundPath, &cbData) == ERROR_SUCCESS ||
+            RegGetValueW(HKEY_CURRENT_USER, regSubKey.c_str(), nullptr, RRF_RT_REG_SZ, nullptr, foundPath, &cbData) == ERROR_SUCCESS) {
+            PathUnquoteSpacesW(foundPath);
+            if (PathFileExistsW(foundPath)) {
+                return foundPath;
+            }
+        }
+    }
+    return L"";
+}
+
+void CloseActiveTranslatePopup(RunDialogState* state) {
+    if (!state) return;
+    if (state->hDlg && IsWindow(state->hDlg)) {
+        KillTimer(state->hDlg, kTimerSnapTranslatePopup);
+    }
+    if (state->hTranslatePopup && IsWindow(state->hTranslatePopup)) {
+        PostMessageW(state->hTranslatePopup, WM_CLOSE, 0, 0);
+    }
+    state->hTranslatePopup = nullptr;
+    g_hActiveTranslatePopup.store(nullptr);
+    state->translatePopupLaunchTick = 0;
+    state->translatePopupFirstSeenTick = 0;
+    state->preLaunchBrowserWindows.clear();
+}
+
+void ComputeTranslatePopupTargetBounds(const RunDialogState* state, int reqVisW, int reqVisH,
+                                       int* outVisX, int* outVisY, int* outVisW, int* outVisH) {
+    UINT dpi = state ? state->dpi : 96;
+    int scalePct = GetDlgScale(state);
+    auto scaleDip = [&](int v) -> int {
+        return DpiScale(v, dpi, scalePct);
+    };
+
+    HMONITOR hMon = (state && state->hDlg && IsWindow(state->hDlg))
+        ? MonitorFromWindow(state->hDlg, MONITOR_DEFAULTTONEAREST)
+        : MonitorFromPoint({ 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO mi = { sizeof(mi) };
+    RECT rcWork = { 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
+    if (hMon && GetMonitorInfoW(hMon, &mi)) {
+        rcWork = mi.rcWork;
+    } else {
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcWork, 0);
+    }
+
+    int margin = scaleDip(12);
+    int gap    = scaleDip(18);
+    int visW   = (reqVisW > 0) ? reqVisW : scaleDip(500);
+    int visH   = (reqVisH > 0) ? reqVisH : scaleDip(450);
+
+    int maxWorkW = (rcWork.right - rcWork.left) - margin * 2;
+    if (visW > maxWorkW) visW = (std::max)(scaleDip(320), maxWorkW);
+
+    int visX = rcWork.left + ((rcWork.right - rcWork.left) - visW) / 2;
+    int visY = rcWork.bottom - visH - scaleDip(90);
+
+    if (state && state->hDlg && IsWindow(state->hDlg)) {
+        RECT rcDlg = {};
+        if (GetWindowRect(state->hDlg, &rcDlg)) {
+            int dlgW = rcDlg.right - rcDlg.left;
+            visX = rcDlg.left + (dlgW - visW) / 2;
+            visX = std::clamp(visX, (int)rcWork.left + margin,
+                              (std::max)((int)rcWork.left + margin, (int)rcWork.right - visW - margin));
+
+            int spaceAbove = (rcDlg.top - gap) - (rcWork.top + margin);
+            int spaceBelow = (rcWork.bottom - margin) - (rcDlg.bottom + gap);
+            bool placeBelow = state->anchoredTop || (spaceAbove < scaleDip(240) && spaceBelow > spaceAbove);
+
+            if (!placeBelow) {
+                visH = std::clamp(visH, scaleDip(240), (std::max)(scaleDip(240), spaceAbove));
+                visY = rcDlg.top - gap - visH;
             } else {
-                out.push_back(c);
+                visH = std::clamp(visH, scaleDip(240), (std::max)(scaleDip(240), spaceBelow));
+                visY = rcDlg.bottom + gap;
             }
         }
+    }
+
+    visX = std::clamp(visX, (int)rcWork.left + margin,
+                      (std::max)((int)rcWork.left + margin, (int)rcWork.right - visW - margin));
+    visY = std::clamp(visY, (int)rcWork.top + margin,
+                      (std::max)((int)rcWork.top + margin, (int)rcWork.bottom - visH - margin));
+
+    if (outVisX) *outVisX = visX;
+    if (outVisY) *outVisY = visY;
+    if (outVisW) *outVisW = visW;
+    if (outVisH) *outVisH = visH;
+}
+
+void PositionTranslatePopupRelativeToDialog(RunDialogState* state) {
+    if (!state || !state->hTranslatePopup || !IsWindow(state->hTranslatePopup)) return;
+    HWND hPopup = state->hTranslatePopup;
+
+    if (IsIconic(hPopup) || IsZoomed(hPopup)) {
+        ShowWindow(hPopup, SW_RESTORE);
+    }
+
+    int visX = 0, visY = 0, visW = 0, visH = 0;
+    ComputeTranslatePopupTargetBounds(state, 0, 0, &visX, &visY, &visW, &visH);
+
+    RECT rcWin = {}, rcExt = {};
+    int padL = 0, padT = 0, padR = 0, padB = 0;
+    if (GetWindowRect(hPopup, &rcWin) &&
+        SUCCEEDED(DwmGetWindowAttribute(hPopup, DWMWA_EXTENDED_FRAME_BOUNDS, &rcExt, sizeof(rcExt)))) {
+        padL = (std::max)(0, (int)(rcExt.left - rcWin.left));
+        padT = (std::max)(0, (int)(rcExt.top - rcWin.top));
+        padR = (std::max)(0, (int)(rcWin.right - rcExt.right));
+        padB = (std::max)(0, (int)(rcWin.bottom - rcExt.bottom));
+    }
+
+    // Step 1: Resize popup to compact target dimensions (browser may clamp to its minimum width)
+    int winX = visX - padL;
+    int winY = visY - padT;
+    int winW = visW + padL + padR;
+    int winH = visH + padT + padB;
+    SetWindowPos(hPopup, HWND_TOP, winX, winY, winW, winH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+
+    // Step 2: Read back actual visible frame bounds after browser minimum-size clamping and re-center perfectly
+    if (GetWindowRect(hPopup, &rcWin) &&
+        SUCCEEDED(DwmGetWindowAttribute(hPopup, DWMWA_EXTENDED_FRAME_BOUNDS, &rcExt, sizeof(rcExt)))) {
+        padL = (std::max)(0, (int)(rcExt.left - rcWin.left));
+        padT = (std::max)(0, (int)(rcExt.top - rcWin.top));
+        int actualVisW = rcExt.right - rcExt.left;
+        int actualVisH = rcExt.bottom - rcExt.top;
+        if (actualVisW > 0 && actualVisH > 0) {
+            int centeredVisX = 0, centeredVisY = 0;
+            ComputeTranslatePopupTargetBounds(state, actualVisW, actualVisH, &centeredVisX, &centeredVisY, nullptr, nullptr);
+            int finalWinX = centeredVisX - padL;
+            int finalWinY = centeredVisY - padT;
+            if (finalWinX != rcWin.left || finalWinY != rcWin.top) {
+                SetWindowPos(hPopup, HWND_TOP, finalWinX, finalWinY, 0, 0,
+                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+    }
+}
+
+bool IsCandidateTranslatePopupWindow(HWND hWnd, const RunDialogState* state) {
+    if (!hWnd || !IsWindow(hWnd) || !IsWindowVisible(hWnd)) return false;
+    if (state && (hWnd == state->hDlg || hWnd == state->hTranslatePopup)) return false;
+    if (hWnd == g_hActiveGearMenu.load() || hWnd == g_hActiveCustomSizeWnd.load()) return false;
+    if (GetWindow(hWnd, GW_OWNER) != nullptr) return false;
+
+    LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+    if ((style & WS_CHILD) != 0 || (style & WS_CAPTION) == 0 ||
+        (style & WS_SYSMENU) == 0 || (style & WS_THICKFRAME) == 0) {
         return false;
-    };
+    }
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    if ((exStyle & WS_EX_TOOLWINDOW) != 0 || (exStyle & WS_EX_NOACTIVATE) != 0) {
+        return false;
+    }
 
-    skipWs();
-    if (pos >= json.size() || json[pos] != '[') return "";
-    ++pos;
-    skipWs();
-    if (pos >= json.size() || json[pos] != '[') return "";
-    ++pos;
+    DWORD cloaked = 0;
+    if (SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked != 0) {
+        return false;
+    }
 
-    std::string fullResult;
-    while (pos < json.size()) {
-        skipWs();
-        if (pos >= json.size() || json[pos] == ']') break;
-        if (json[pos] == ',') { ++pos; continue; }
-        if (json[pos] != '[') break;
-        ++pos;
-        std::string segTrans;
-        if (parseJsonString(segTrans)) {
-            fullResult += segTrans;
-        }
-        int depth = 1;
-        while (pos < json.size() && depth > 0) {
-            if (json[pos] == '"') {
-                std::string dummy;
-                parseJsonString(dummy);
-                continue;
-            }
-            if (json[pos] == '[') ++depth;
-            else if (json[pos] == ']') --depth;
-            ++pos;
+    if (state) {
+        for (HWND oldW : state->preLaunchBrowserWindows) {
+            if (oldW == hWnd) return false;
         }
     }
-    return fullResult;
+
+    wchar_t cls[64] = {};
+    if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return false;
+    if (_wcsicmp(cls, L"Chrome_WidgetWin_1") == 0 || _wcsicmp(cls, L"MozillaWindowClass") == 0) {
+        return true;
+    }
+
+    wchar_t title[256] = {};
+    if (GetWindowTextW(hWnd, title, ARRAYSIZE(title)) > 0) {
+        std::wstring lowTitle = ToLowerString(title);
+        if (lowTitle.find(L"google dịch") != std::wstring::npos ||
+            lowTitle.find(L"google translate") != std::wstring::npos ||
+            lowTitle.find(L"translate.google") != std::wstring::npos) {
+            return true;
+        }
+    }
+    return false;
 }
 
-bool FetchGoogleTranslateViaWinHttp(const std::wstring& text, const std::wstring& srcLang,
-                                    const std::wstring& dstLang, uint64_t reqId, std::wstring* outTranslated) {
-    if (!outTranslated) return false;
-    outTranslated->clear();
-    if (g_unloading.load()) return false;
+bool OpenTranslationInBrowser(const std::wstring& text, const std::wstring& src, const std::wstring& dst,
+                              RunDialogState* state = nullptr) {
+    std::wstring url = L"https://translate.google.com/?sl=" + src + L"&tl=" + dst +
+                       L"&op=translate&text=" + UrlEncodeUtf8(text);
 
-    HMODULE hWinHttp = LoadLibraryW(L"winhttp.dll");
-    if (!hWinHttp) return false;
+    int popupX = 100, popupY = 100, popupW = 600, popupH = 500;
+    ComputeTranslatePopupTargetBounds(state, 0, 0, &popupX, &popupY, &popupW, &popupH);
 
-    using HINTERNET_WH = void*;
-    using WinHttpOpen_t = HINTERNET_WH(WINAPI*)(LPCWSTR, DWORD, LPCWSTR, LPCWSTR, DWORD);
-    using WinHttpSetTimeouts_t = BOOL(WINAPI*)(HINTERNET_WH, int, int, int, int);
-    using WinHttpConnect_t = HINTERNET_WH(WINAPI*)(HINTERNET_WH, LPCWSTR, WORD, DWORD);
-    using WinHttpOpenRequest_t = HINTERNET_WH(WINAPI*)(HINTERNET_WH, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR*, DWORD);
-    using WinHttpSendRequest_t = BOOL(WINAPI*)(HINTERNET_WH, LPCWSTR, DWORD, LPVOID, DWORD, DWORD, DWORD_PTR);
-    using WinHttpReceiveResponse_t = BOOL(WINAPI*)(HINTERNET_WH, LPVOID);
-    using WinHttpReadData_t = BOOL(WINAPI*)(HINTERNET_WH, LPVOID, DWORD, LPDWORD);
-    using WinHttpCloseHandle_t = BOOL(WINAPI*)(HINTERNET_WH);
-
-    auto pOpen = reinterpret_cast<WinHttpOpen_t>(GetProcAddress(hWinHttp, "WinHttpOpen"));
-    auto pSetTimeouts = reinterpret_cast<WinHttpSetTimeouts_t>(GetProcAddress(hWinHttp, "WinHttpSetTimeouts"));
-    auto pConnect = reinterpret_cast<WinHttpConnect_t>(GetProcAddress(hWinHttp, "WinHttpConnect"));
-    auto pOpenReq = reinterpret_cast<WinHttpOpenRequest_t>(GetProcAddress(hWinHttp, "WinHttpOpenRequest"));
-    auto pSendReq = reinterpret_cast<WinHttpSendRequest_t>(GetProcAddress(hWinHttp, "WinHttpSendRequest"));
-    auto pRecvResp = reinterpret_cast<WinHttpReceiveResponse_t>(GetProcAddress(hWinHttp, "WinHttpReceiveResponse"));
-    auto pReadData = reinterpret_cast<WinHttpReadData_t>(GetProcAddress(hWinHttp, "WinHttpReadData"));
-    auto pClose = reinterpret_cast<WinHttpCloseHandle_t>(GetProcAddress(hWinHttp, "WinHttpCloseHandle"));
-
-    bool ok = false;
-    if (pOpen && pConnect && pOpenReq && pSendReq && pRecvResp && pReadData && pClose) {
-        std::wstring encodedQ = UrlEncodeUtf8(text);
-        std::wstring path = L"/translate_a/single?client=gtx&sl=" + srcLang +
-                            L"&tl=" + dstLang + L"&dt=t&q=" + encodedQ;
-
-        HINTERNET_WH hSession = pOpen(L"WindhawkModernRun/5.0", 0, nullptr, nullptr, 0);
-        if (hSession) {
-            if (pSetTimeouts) {
-                pSetTimeouts(hSession, 2500, 2500, 2500, 2500);
+    if (state) {
+        HWND hOldPopup = state->hTranslatePopup;
+        state->hTranslatePopup = nullptr;
+        g_hActiveTranslatePopup.store(nullptr);
+        state->preLaunchBrowserWindows.clear();
+        EnumWindows([](HWND w, LPARAM lParam) -> BOOL {
+            if (IsWindowVisible(w)) {
+                reinterpret_cast<std::vector<HWND>*>(lParam)->push_back(w);
             }
-            HINTERNET_WH hConn = pConnect(hSession, L"translate.googleapis.com", 443, 0);
-            if (hConn) {
-                HINTERNET_WH hReq = pOpenReq(hConn, L"GET", path.c_str(), nullptr, nullptr, nullptr, 0x00800000 /*WINHTTP_FLAG_SECURE*/);
-                if (hReq) {
-                    if (!g_unloading.load() && reqId == g_translateReqCounter.load() &&
-                        pSendReq(hReq, nullptr, 0, nullptr, 0, 0, 0) && pRecvResp(hReq, nullptr)) {
-                        std::string respBody;
-                        char buf[4096];
-                        DWORD dwRead = 0;
-                        while (!g_unloading.load() && reqId == g_translateReqCounter.load() &&
-                               pReadData(hReq, buf, sizeof(buf), &dwRead) && dwRead > 0) {
-                            respBody.append(buf, dwRead);
-                            dwRead = 0;
-                        }
-                        if (!g_unloading.load()) {
-                            std::string utf8Trans = ParseGoogleTranslateGtxJson(respBody);
-                            if (!utf8Trans.empty()) {
-                                int wlen = MultiByteToWideChar(CP_UTF8, 0, utf8Trans.data(), (int)utf8Trans.size(), nullptr, 0);
-                                if (wlen > 0) {
-                                    outTranslated->resize(wlen);
-                                    MultiByteToWideChar(CP_UTF8, 0, utf8Trans.data(), (int)utf8Trans.size(), outTranslated->data(), wlen);
-                                    ok = true;
-                                }
-                            }
-                        }
-                    }
-                    pClose(hReq);
-                }
-                pClose(hConn);
-            }
-            pClose(hSession);
+            return TRUE;
+        }, reinterpret_cast<LPARAM>(&state->preLaunchBrowserWindows));
+
+        if (hOldPopup && IsWindow(hOldPopup)) {
+            PostMessageW(hOldPopup, WM_CLOSE, 0, 0);
         }
     }
-    FreeLibrary(hWinHttp);
-    return ok;
-}
 
-void TranslateWorkerThreadProc() {
-    for (;;) {
-        TranslateWorkerTask task;
-        {
-            std::unique_lock<std::mutex> lock(g_translateMutex);
-            g_translateCv.wait(lock, []() {
-                return g_translateWorkerStop || g_pendingTranslateTask.has_value();
-            });
-            if (g_translateWorkerStop) {
-                break;
-            }
-            task = std::move(*g_pendingTranslateTask);
-            g_pendingTranslateTask.reset();
-        }
+    bool launched = false;
+    std::wstring browserExe = ResolveCompactPopupBrowserExe();
+    if (!browserExe.empty()) {
+        std::wstring params = L"--app=\"" + url + L"\" --window-size=" +
+                              std::to_wstring(popupW) + L"," + std::to_wstring(popupH) +
+                              L" --window-position=" + std::to_wstring(popupX) + L"," + std::to_wstring(popupY);
 
-        if (g_unloading.load()) {
-            break;
-        }
-
-        std::wstring result;
-        bool ok = FetchGoogleTranslateViaWinHttp(task.rawText, task.srcLang, task.dstLang, task.reqId, &result);
-        if (!ok || result.empty()) {
-            result = task.isVi
-                ? L"[Không thể kết nối dịch tự động. Kiểm tra mạng Internet và thử lại.]"
-                : L"[Could not reach translation service. Check your connection and try again.]";
-        }
-        if (g_unloading.load()) {
-            break;
-        }
-        {
-            std::lock_guard<std::mutex> lock(g_translateMutex);
-            if (task.reqId == g_translateReqCounter.load()) {
-                g_pendingTranslateResult = std::move(result);
-            }
-        }
-        if (IsWindow(task.hTargetDlg) && !g_unloading.load()) {
-            PostMessageW(task.hTargetDlg, g_msgToggle, kActionTranslateDone, (LPARAM)task.reqId);
+        SHELLEXECUTEINFOW seiApp = { sizeof(seiApp) };
+        seiApp.fMask = SEE_MASK_DOENVSUBST;
+        seiApp.lpVerb = L"open";
+        seiApp.lpFile = browserExe.c_str();
+        seiApp.lpParameters = params.c_str();
+        seiApp.nShow = SW_SHOWNORMAL;
+        if (ShellExecuteExW(&seiApp)) {
+            launched = true;
         }
     }
-}
 
-void StopTranslateWorkerThread() {
-    {
-        std::lock_guard<std::mutex> lock(g_translateMutex);
-        g_translateWorkerStop = true;
-        g_pendingTranslateTask.reset();
+    if (!launched) {
+        SHELLEXECUTEINFOW sei = { sizeof(sei) };
+        sei.lpVerb = L"open";
+        sei.lpFile = url.c_str();
+        sei.nShow = SW_SHOWNORMAL;
+        launched = (ShellExecuteExW(&sei) != FALSE);
     }
-    g_translateCv.notify_all();
-    if (g_translateWorkerThread.has_value()) {
-        if (g_translateWorkerThread->joinable()) {
-            g_translateWorkerThread->join();
-        }
-        g_translateWorkerThread.reset();
+
+    if (launched && state && state->hDlg && IsWindow(state->hDlg)) {
+        state->translatePopupLaunchTick = GetTickCount64();
+        state->translatePopupFirstSeenTick = 0;
+        SetTimer(state->hDlg, kTimerSnapTranslatePopup, 20, nullptr);
     }
+    return launched;
 }
 
 void TriggerTranslationRequest(RunDialogState* state) {
     if (!state || !state->hDlg || !IsWindow(state->hDlg) || g_unloading.load()) return;
     std::wstring rawText = TrimCommandString(GetEffectiveInputText(state->hModernEdit));
-    if (rawText.empty()) {
-        int oldH = state->totalHeight;
-        state->isTranslating = false;
-        state->translatedText.clear();
-        RecomputeDialogMetrics(state);
-        ResizeDialogPreservingBottomAnchor(state, oldH);
-        InvalidateRect(state->hDlg, nullptr, FALSE);
-        return;
-    }
-
-    int oldH = state->totalHeight;
-    state->isTranslating = true;
-    state->translateCopiedFeedback = false;
-    uint64_t reqId = ++g_translateReqCounter;
-    RecomputeDialogMetrics(state);
-    ResizeDialogPreservingBottomAnchor(state, oldH);
-    InvalidateRect(state->hDlg, nullptr, FALSE);
-    UpdateWindow(state->hDlg);
-
-    {
-        std::lock_guard<std::mutex> lock(g_translateMutex);
-        if (!g_translateWorkerThread.has_value() && !g_translateWorkerStop) {
-            g_translateWorkerThread.emplace(TranslateWorkerThreadProc);
-        }
-        g_pendingTranslateTask = TranslateWorkerTask{
-            state->hDlg,
-            std::move(rawText),
-            state->translateSourceLang,
-            state->translateTargetLang,
-            reqId,
-            IsDialogVietnameseUI(state)
-        };
-    }
-    g_translateCv.notify_one();
+    if (rawText.empty()) return;
+    OpenTranslationInBrowser(rawText, state->translateSourceLang, state->translateTargetLang, state);
 }
 
 // --- Experimental Instant Math Calculator in Run Dialog ---
@@ -8981,6 +8983,7 @@ struct FluentMenuSession {
 
 std::atomic<HWND> g_hActiveGearMenu{nullptr};
 std::atomic<HWND> g_hActiveCustomSizeWnd{nullptr};
+std::atomic<HWND> g_hActiveTranslatePopup{nullptr};
 constexpr UINT_PTR kTimerMenuSubHover = 9501;
 constexpr UINT_PTR kTimerMenuWatchdog = 9502;
 constexpr wchar_t kFluentMenuClassName[] = L"WindhawkModernRunFluentMenuWnd";
@@ -11341,7 +11344,8 @@ void OpenTranslateLanguagePopup(RunDialogState* state, bool isSourceLang) {
             }
         }
         InvalidateRect(hDlg, nullptr, FALSE);
-        if (!state->translatedText.empty() && !TrimCommandString(GetEffectiveInputText(state->hModernEdit)).empty()) {
+        if (state->hTranslatePopup && IsWindow(state->hTranslatePopup) &&
+            !TrimCommandString(GetEffectiveInputText(state->hModernEdit)).empty()) {
             TriggerTranslationRequest(state);
         }
     }
@@ -11441,23 +11445,8 @@ void RecomputeDialogMetrics(RunDialogState* state) {
     int gapH = GetDetachedGap(state);
 
     if (state->translateMode) {
-        if (state->isTranslating || !state->translatedText.empty()) {
-            bool isCompact = state->settings.minimalMode;
-            float availW = (float)(std::max)(DpiScaleS(100, state), GetDlgWidth(state) - DpiScaleS(isCompact ? 32 : 44, state));
-            ExtraLocalizedStrings ex = GetExtraLocalizedStrings(state->settings.language);
-            std::wstring disp = state->isTranslating
-                ? ex.translatingStatus
-                : state->translatedText;
-            int outH = MeasureWrappedTextHeightPx(state, disp, availW, isCompact ? 13.0f : 14.0f);
-            int minCardH = DpiScaleS(isCompact ? 58 : 68, state);
-            int maxCardH = DpiScaleS(isCompact ? 240 : 340, state);
-            int cardH = std::clamp(DpiScaleS(isCompact ? 30 : 34, state) + outH + DpiScaleS(isCompact ? 12 : 16, state),
-                                   minCardH, maxCardH);
-            state->topAreaHeight = cardH + gapH;
-        } else {
-            state->topAreaHeight = 0;
-        }
-        state->totalHeight = state->topAreaHeight + barH;
+        state->topAreaHeight = 0;
+        state->totalHeight = barH;
         return;
     }
 
@@ -11607,9 +11596,11 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 void CleanupDialogState(HWND hWnd, RunDialogState* state) {
     RemoveWindowSubclass(hWnd, RunDlgSubclassProc, 1);
     CloseActiveGearMenu();
+    CloseActiveTranslatePopup(state);
     KillTimer(hWnd, kTimerCaret);
     KillTimer(hWnd, kTimerLuminance);
     KillTimer(hWnd, kTimerBgMedia);
+    KillTimer(hWnd, kTimerSnapTranslatePopup);
     HWND expectedActive = hWnd;
     g_hActiveRunDlg.compare_exchange_strong(expectedActive, nullptr);
     HWND expectedTracked = hWnd;
@@ -11740,20 +11731,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
             case kActionReloadSettings:
                 ApplyReloadedSettingsToDialog(state);
                 break;
-            case kActionTranslateDone: {
-                if (state && state->translateMode && (uint64_t)lParam == g_translateReqCounter.load()) {
-                    int oldH = state->totalHeight;
-                    state->isTranslating = false;
-                    {
-                        std::lock_guard<std::mutex> lock(g_translateMutex);
-                        state->translatedText = g_pendingTranslateResult;
-                    }
-                    RecomputeDialogMetrics(state);
-                    ResizeDialogPreservingBottomAnchor(state, oldH);
-                    InvalidateRect(hWnd, nullptr, FALSE);
-                }
-                break;
-            }
             case kActionDeferredInputUpdate: {
                 state->inputUpdateQueued = false;
                 if (!state->hModernEdit || !IsWindow(state->hModernEdit)) break;
@@ -11761,12 +11738,11 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 std::wstring curText = GetEffectiveInputText(state->hModernEdit);
                 if (state->translateMode) {
                     int oldH = state->totalHeight;
-                    if (TrimCommandString(curText).empty()) {
-                        state->isTranslating = false;
-                        state->translatedText.clear();
-                    }
                     RecomputeDialogMetrics(state);
                     ResizeDialogPreservingBottomAnchor(state, oldH);
+                    if (oldH != state->totalHeight) {
+                        PositionTranslatePopupRelativeToDialog(state);
+                    }
                     InvalidateRect(hWnd, nullptr, FALSE);
                 } else if (!state->suppressSuggestionUpdate) {
                     state->scrollOffset = 0;
@@ -11960,6 +11936,44 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 StepCustomBackgroundAnimation(state);
                 return 0;
             }
+            if (wParam == kTimerSnapTranslatePopup && state) {
+                ULONGLONG now = GetTickCount64();
+                if (state->hTranslatePopup && !IsWindow(state->hTranslatePopup)) {
+                    state->hTranslatePopup = nullptr;
+                    g_hActiveTranslatePopup.store(nullptr);
+                }
+                if (!state->hTranslatePopup) {
+                    struct FindCtx {
+                        RunDialogState* st;
+                        HWND found;
+                    } ctx = { state, nullptr };
+                    EnumWindows([](HWND w, LPARAM lP) -> BOOL {
+                        auto* c = reinterpret_cast<FindCtx*>(lP);
+                        if (IsCandidateTranslatePopupWindow(w, c->st)) {
+                            c->found = w;
+                            return FALSE;
+                        }
+                        return TRUE;
+                    }, reinterpret_cast<LPARAM>(&ctx));
+                    if (ctx.found) {
+                        state->hTranslatePopup = ctx.found;
+                        g_hActiveTranslatePopup.store(ctx.found);
+                        state->translatePopupFirstSeenTick = now;
+                    }
+                }
+                if (state->hTranslatePopup && IsWindow(state->hTranslatePopup)) {
+                    PositionTranslatePopupRelativeToDialog(state);
+                    if (now - state->translatePopupFirstSeenTick < 120) {
+                        ForceFocusModernEdit(hWnd, state);
+                    }
+                    if (now - state->translatePopupFirstSeenTick >= 650) {
+                        KillTimer(hWnd, kTimerSnapTranslatePopup);
+                    }
+                } else if (now - state->translatePopupLaunchTick >= 3500) {
+                    KillTimer(hWnd, kTimerSnapTranslatePopup);
+                }
+                return 0;
+            }
             if (wParam == kTimerOpenAnim && state) {
                 if (IsIconic(hWnd)) {
                     KillTimer(hWnd, kTimerOpenAnim);
@@ -12047,7 +12061,10 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 }
                 g_dlgIsForeground.store(false);
                 CloseActiveGearMenu();
-                if (state && state->settings.closeOnClickOutside &&
+                HWND hActivated = reinterpret_cast<HWND>(lParam);
+                bool activatingTranslatePopup = state && state->hTranslatePopup &&
+                    (hActivated == state->hTranslatePopup || GetForegroundWindow() == state->hTranslatePopup);
+                if (state && state->settings.closeOnClickOutside && !activatingTranslatePopup &&
                     IsWindowVisible(hWnd) && !IsIconic(hWnd) && !state->isTriggeringRun &&
                     (!state->isBrowsingFile || g_hActiveGearMenu.load() != nullptr)) {
                     if (GetTickCount64() - g_openTick.load() > 300) {
@@ -12114,6 +12131,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                     state->normalY = newY;
                     SetWindowPos(hWnd, nullptr, newX, newY, 0, 0,
                                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
+                    PositionTranslatePopupRelativeToDialog(state);
                     InvalidateRect(hWnd, nullptr, FALSE);
                     UpdateWindow(hWnd);
                 }
@@ -12147,10 +12165,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
             bool newSrcHover    = state->translateMode && PtInRect(&layout.rcSrcLang, pt);
             bool newSwapHover   = state->translateMode && PtInRect(&layout.rcSwapLang, pt);
             bool newDstHover    = state->translateMode && PtInRect(&layout.rcDstLang, pt);
-            int cardH           = GetHistoryCardHeight(state);
-            int cardTop         = GetDetachedCardTopY(state);
-            bool newTransCardHv = state->translateMode && cardH > 0 && !state->translatedText.empty() &&
-                                  (pt.y >= cardTop && pt.y < cardTop + cardH && pt.x >= 0 && pt.x < GetDlgWidth(state));
 
             state->mousePt = pt;
             state->hasMousePt = true;
@@ -12164,8 +12178,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 newGearHover != state->gearHovered ||
                 newSrcHover != state->srcLangHovered ||
                 newSwapHover != state->swapLangHovered ||
-                newDstHover != state->dstLangHovered ||
-                newTransCardHv != state->transCardHovered) {
+                newDstHover != state->dstLangHovered) {
                 state->hoveredRow       = newHoverRow;
                 state->scrollbarHovered = newSbHover;
                 state->browseHovered       = newBrowseHover;
@@ -12176,7 +12189,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 state->srcLangHovered   = newSrcHover;
                 state->swapLangHovered  = newSwapHover;
                 state->dstLangHovered   = newDstHover;
-                state->transCardHovered = newTransCardHv;
 
                 TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, hWnd, 0 };
                 TrackMouseEvent(&tme);
@@ -12195,8 +12207,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 state->gearHovered || state->gearPressed ||
                 state->srcLangHovered || state->srcLangPressed ||
                 state->swapLangHovered || state->swapLangPressed ||
-                state->dstLangHovered || state->dstLangPressed ||
-                state->transCardHovered || state->transCardPressed) {
+                state->dstLangHovered || state->dstLangPressed) {
                 state->hoveredRow       = -1;
                 state->pressedRow       = -1;
                 state->hasMousePt       = false;
@@ -12217,8 +12228,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 state->swapLangPressed  = false;
                 state->dstLangHovered   = false;
                 state->dstLangPressed   = false;
-                state->transCardHovered = false;
-                state->transCardPressed = false;
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
             return 0;
@@ -12267,14 +12276,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 }
                 if (PtInRect(&layout.rcDstLang, pt)) {
                     state->dstLangPressed = true;
-                    SetCapture(hWnd);
-                    InvalidateRect(hWnd, nullptr, FALSE);
-                    return 0;
-                }
-                int cardH = GetHistoryCardHeight(state);
-                int cardTop = GetDetachedCardTopY(state);
-                if (cardH > 0 && !state->translatedText.empty() && pt.y >= cardTop && pt.y < cardTop + cardH) {
-                    state->transCardPressed = true;
                     SetCapture(hWnd);
                     InvalidateRect(hWnd, nullptr, FALSE);
                     return 0;
@@ -12383,12 +12384,8 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                         : oldSrc;
                     Wh_SetStringValue(GetUserOverrideKey(L"translateSourceLang").c_str(), state->translateSourceLang.c_str());
                     Wh_SetStringValue(GetUserOverrideKey(L"translateTargetLang").c_str(), state->translateTargetLang.c_str());
-                    if (!state->translatedText.empty() && !state->isTranslating && state->hModernEdit) {
-                        std::wstring prevTrans = state->translatedText;
-                        SetWindowTextW(state->hModernEdit, prevTrans.c_str());
-                        SendMessageW(state->hModernEdit, EM_SETSEL, prevTrans.size(), prevTrans.size());
-                    }
-                    if (!state->translatedText.empty() && !TrimCommandString(GetEffectiveInputText(state->hModernEdit)).empty()) {
+                    if (state->hTranslatePopup && IsWindow(state->hTranslatePopup) &&
+                        !TrimCommandString(GetEffectiveInputText(state->hModernEdit)).empty()) {
                         TriggerTranslationRequest(state);
                     } else {
                         InvalidateRect(hWnd, nullptr, FALSE);
@@ -12403,18 +12400,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 if (PtInRect(&layout.rcDstLang, pt)) {
                     OpenTranslateLanguagePopup(state, false);
                 }
-                return 0;
-            }
-            if (state->transCardPressed) {
-                state->transCardPressed = false;
-                ReleaseCapture();
-                int cardH = GetHistoryCardHeight(state);
-                int cardTop = GetDetachedCardTopY(state);
-                if (cardH > 0 && !state->translatedText.empty() && pt.y >= cardTop && pt.y < cardTop + cardH) {
-                    CopyTextToClipboard(hWnd, state->translatedText);
-                    state->translateCopiedFeedback = true;
-                }
-                InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
             if (state->pressedRow != -1) {
@@ -12445,11 +12430,9 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 if (PtInRect(&layout.rcTranslate, pt)) {
                     int oldH = state->totalHeight;
                     state->translateMode = !state->translateMode;
-                    state->isTranslating = false;
-                    state->translatedText.clear();
-                    state->translateCopiedFeedback = false;
                     std::wstring curText = GetEffectiveInputText(state->hModernEdit);
                     if (!state->translateMode) {
+                        CloseActiveTranslatePopup(state);
                         UpdateAppSuggestionsForQuery(state, curText);
                     } else {
                         state->showingSuggestions = false;
@@ -12770,71 +12753,8 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 
                         ExtraLocalizedStrings ex = GetExtraLocalizedStrings(state->settings.language);
 
-                        // 4. Draw Either Translate Result Card OR History / App Suggestion Rows
-                        if (state->translateMode) {
-                            if (cardH > 0 && (state->isTranslating || !state->translatedText.empty())) {
-                                bool isVi = IsDialogVietnameseUI(state);
-                                bool isCompact = state->settings.minimalMode;
-                                float sidePad = DpiScaleSF(isCompact ? 16.0f : 22.0f, state);
-                                float cTopF = (float)cardTop;
-                                if (state->transCardHovered || state->transCardPressed) {
-                                    float padX = DpiScaleSF(8.0f, state);
-                                    float padY = DpiScaleSF(6.0f, state);
-                                    D2D1_RECT_F rcHl = D2D1::RectF(padX, cTopF + padY, (float)w - padX, cTopF + (float)cardH - padY);
-                                    float hlR = (std::min)(DpiScaleSF(20.0f, state), (rcHl.bottom - rcHl.top) * 0.5f);
-                                    D2D1_COLOR_F rowTint = isLight
-                                        ? D2D1::ColorF(0.0f, 0.0f, 0.0f, state->transCardPressed ? 0.10f : 0.045f)
-                                        : D2D1::ColorF(1.0f, 1.0f, 1.0f, state->transCardPressed ? 0.14f : 0.07f);
-                                    DrawD2DGlassButton(pRT, rcHl, hlR, effectiveDpi, rowTint, state->transCardHovered, state->transCardPressed, isLight);
-                                }
-
-                                std::wstring srcDisp = isCompact
-                                    ? GetCompactTranslateLangDisplayName(state->translateSourceLang, isVi)
-                                    : std::wstring(GetTranslateLangDisplayName(state->translateSourceLang, isVi));
-                                std::wstring dstDisp = isCompact
-                                    ? GetCompactTranslateLangDisplayName(state->translateTargetLang, isVi)
-                                    : std::wstring(GetTranslateLangDisplayName(state->translateTargetLang, isVi));
-                                std::wstring headerStr = srcDisp + L" → " + dstDisp;
-                                if (state->translateCopiedFeedback) {
-                                    headerStr += ex.copiedFeedback;
-                                } else if (!state->isTranslating) {
-                                    headerStr += ex.clickToCopyHint;
-                                }
-
-                                IDWriteTextFormat* pFmtHeader = nullptr;
-                                if (SUCCEEDED(g_pDWriteFactory->CreateTextFormat(
-                                        fluentFont, nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
-                                        DWRITE_FONT_STRETCH_NORMAL, GetFontSizeSF(isCompact ? 11.2f : 12.0f, state), L"", &pFmtHeader)) && pFmtHeader) {
-                                    pFmtHeader->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-                                    pFmtHeader->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
-                                    D2D1_RECT_F rcHdr = D2D1::RectF(sidePad, cTopF + DpiScaleSF(isCompact ? 8.0f : 10.0f, state),
-                                                                    (float)w - sidePad, cTopF + DpiScaleSF(isCompact ? 28.0f : 32.0f, state));
-                                    if (pBrSecondary) {
-                                        pRT->DrawText(headerStr.c_str(), (UINT32)headerStr.size(), pFmtHeader, rcHdr, pBrSecondary, D2D1_DRAW_TEXT_OPTIONS_CLIP);
-                                    }
-                                    pFmtHeader->Release();
-                                }
-
-                                std::wstring bodyStr = state->isTranslating
-                                    ? ex.translatingStatus
-                                    : state->translatedText;
-
-                                IDWriteTextFormat* pFmtTransBody = nullptr;
-                                if (SUCCEEDED(g_pDWriteFactory->CreateTextFormat(
-                                        fluentFont, nullptr, DWRITE_FONT_WEIGHT_REGULAR, DWRITE_FONT_STYLE_NORMAL,
-                                        DWRITE_FONT_STRETCH_NORMAL, GetFontSizeSF(isCompact ? 13.0f : 14.0f, state), L"", &pFmtTransBody)) && pFmtTransBody) {
-                                    pFmtTransBody->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
-                                    D2D1_RECT_F rcBody = D2D1::RectF(sidePad, cTopF + DpiScaleSF(isCompact ? 30.0f : 34.0f, state),
-                                                                     (float)w - sidePad, cTopF + (float)cardH - DpiScaleSF(isCompact ? 10.0f : 12.0f, state));
-                                    if (pBrPrimary) {
-                                        pRT->DrawText(bodyStr.c_str(), (UINT32)bodyStr.size(),
-                                                      pFmtTransBody, rcBody, state->isTranslating ? pBrSecondary : pBrPrimary,
-                                                      D2D1_DRAW_TEXT_OPTIONS_CLIP);
-                                    }
-                                    pFmtTransBody->Release();
-                                }
-                            }
-                        } else {
+                        // 4. Draw History / App Suggestion Rows (when not in Translate Mode)
+                        if (!state->translateMode) {
                             for (int visIdx = 0; visIdx < visRows; ++visIdx) {
                                 int i = state->scrollOffset + visIdx;
                                 if (i < 0 || i >= (int)activeRows.size()) break;
@@ -13701,11 +13621,6 @@ void ReleaseGlobalResources() {
 
 BOOL Wh_ModInit() {
     g_unloading.store(false);
-    {
-        std::lock_guard<std::mutex> lock(g_translateMutex);
-        g_translateWorkerStop = false;
-        g_pendingTranslateTask.reset();
-    }
     g_glassCpuSupported = DetectGlassCpuSupport();
 
     WNDCLASSEXW wc = { sizeof(wc) };
@@ -13781,14 +13696,11 @@ void WaitUntilDialogSubclassRemoved() {
 
 void Wh_ModBeforeUninit() {
     g_unloading.store(true);
-    g_translateReqCounter.fetch_add(1);
     CloseActiveGearMenu();
     WaitUntilDialogSubclassRemoved();
-    StopTranslateWorkerThread();
 }
 
 void Wh_ModUninit() {
     WaitUntilDialogSubclassRemoved();
-    StopTranslateWorkerThread();
     ReleaseGlobalResources();
 }
