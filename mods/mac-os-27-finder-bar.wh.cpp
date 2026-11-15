@@ -20821,6 +20821,7 @@ struct NotifPanel {
     std::vector<NtfGroup> groups;
     std::vector<NtfBlock> blocks;
     bool compact = false;  // vazio: o painel pequeno, num cartão só
+    std::vector<D2D1_RECT_F> glassRects;  // onde está cada vidro do desfoque (para a animação)
     std::set<std::wstring> expanded;
     float contentH = 0, scroll = 0;
     int hover = -1;  // bloco; -2 Limpar, -3 central do Windows
@@ -21104,6 +21105,7 @@ static void NtfGlassShapes() {
     float s = g_ntf.s;
     if (!NtfFloating()) {
         GlassLayerShapes(g_ntf.glass, {{g_ntf.panel, 24 * s}});
+        g_ntf.glassRects.assign(1, g_ntf.panel);
         return;
     }
     std::vector<CcShape> v;
@@ -21132,6 +21134,8 @@ static void NtfGlassShapes() {
         c.radius = std::max(0.0f, c.radius - in);
     }
     GlassLayerShapes(g_ntf.glass, v);
+    g_ntf.glassRects.clear();
+    for (const CcShape& c : v) g_ntf.glassRects.push_back(c.r);
 }
 
 static void NtfReleaseGraphics() {
@@ -21270,7 +21274,10 @@ static void NtfRender() {
         pv.dy = -14 * s * e;
         pv.done = false;
     }
-    GlassLayerAnimate(g_ntf.glass, 0, P, pv, pivot);
+    // Cada vidro do desfoque acompanha a abertura no seu lugar (em flutuante, o
+    // topo e cada cartão; antes o primeiro ia para o canto do painel e sobrava
+    // uma rebarba na ponta da pílula do topo).
+    for (size_t gi = 0; gi < g_ntf.glassRects.size(); gi++) GlassLayerAnimate(g_ntf.glass, gi, g_ntf.glassRects[gi], pv, pivot);
     ID2D1Layer* layer = nullptr;
     rt->CreateLayer(&layer);
     bool anim = layer && !AnimIsIdentity(pv);
