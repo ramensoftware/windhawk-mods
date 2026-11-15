@@ -24,7 +24,7 @@ This is a tool mod: it runs in its own dedicated process instead of being
 injected into `explorer.exe`, so it cannot affect the shell's stability and
 survives Explorer restarts.
 
-![Screenshot](https://i.imgur.com/EAyRsCR.png)
+![Screenshot](https://i.imgur.com/m7OiS0O.png)
 
 ### Features
 - **Real-time monitoring:** CPU load, RAM usage, GPU usage & temperature, CPU temperature, disk R/W/total speed, and active network speed (Mbps/Kbps).
@@ -230,6 +230,7 @@ survives Explorer restarts.
 #include <wbemidl.h>
 #include <oleauto.h>
 #include <cmath>
+#include <cstdlib>
 #include <cwchar>
 #include <cwctype>
 #include <string>
@@ -859,14 +860,17 @@ class PdhMonitor {
 public:
     ~PdhMonitor() { Shutdown(); }
 
-    void Update(bool needDisk, bool needGpu, bool needThermal,
+    void Update(bool needDisk, bool needGpu, bool needThermalCounter, bool readThermal,
                 ULONGLONG& outReadBps, ULONGLONG& outWriteBps, int& outGpuPct, int& outThermalTempC) {
-        if (!needDisk && !needGpu && !needThermal) {
+        if (!needDisk && !needGpu && !needThermalCounter) {
             if (m_initialized) Shutdown();
             return;
         }
+        if (m_initialized && (needDisk != m_disk || needGpu != m_gpu || needThermalCounter != m_thermal)) {
+            Shutdown();
+        }
         if (!m_initialized) {
-            if (!Init()) return;
+            if (!Init(needDisk, needGpu, needThermalCounter)) return;
         }
 
         if (PdhCollectQueryData(m_query) != ERROR_SUCCESS) {
@@ -915,7 +919,7 @@ public:
             }
         }
 
-        if (needThermal && m_hThermalZone) {
+        if (readThermal && m_hThermalZone) {
             DWORD bufSize = 0;
             DWORD itemCount = 0;
             PDH_STATUS status = PdhGetFormattedCounterArrayW(m_hThermalZone, PDH_FMT_DOUBLE, &bufSize, &itemCount, NULL);
@@ -958,19 +962,31 @@ public:
         m_hDiskWrite = NULL;
         m_hGpuEngine = NULL;
         m_hThermalZone = NULL;
+        m_disk = false;
+        m_gpu = false;
+        m_thermal = false;
         m_initialized = false;
     }
 
 private:
-    bool Init() {
+    bool Init(bool needDisk, bool needGpu, bool needThermal) {
         if (PdhOpenQueryW(NULL, 0, &m_query) != ERROR_SUCCESS) {
             m_query = NULL;
             return false;
         }
-        PdhAddEnglishCounterW(m_query, L"\\PhysicalDisk(_Total)\\Disk Read Bytes/sec", 0, &m_hDiskRead);
-        PdhAddEnglishCounterW(m_query, L"\\PhysicalDisk(_Total)\\Disk Write Bytes/sec", 0, &m_hDiskWrite);
-        PdhAddEnglishCounterW(m_query, L"\\GPU Engine(*)\\Utilization Percentage", 0, &m_hGpuEngine);
-        PdhAddEnglishCounterW(m_query, L"\\Thermal Zone Information(*)\\Temperature", 0, &m_hThermalZone);
+        if (needDisk) {
+            PdhAddEnglishCounterW(m_query, L"\\PhysicalDisk(_Total)\\Disk Read Bytes/sec", 0, &m_hDiskRead);
+            PdhAddEnglishCounterW(m_query, L"\\PhysicalDisk(_Total)\\Disk Write Bytes/sec", 0, &m_hDiskWrite);
+        }
+        if (needGpu) {
+            PdhAddEnglishCounterW(m_query, L"\\GPU Engine(*)\\Utilization Percentage", 0, &m_hGpuEngine);
+        }
+        if (needThermal) {
+            PdhAddEnglishCounterW(m_query, L"\\Thermal Zone Information(*)\\Temperature", 0, &m_hThermalZone);
+        }
+        m_disk = needDisk;
+        m_gpu = needGpu;
+        m_thermal = needThermal;
         PdhCollectQueryData(m_query);
         m_initialized = true;
         return true;
@@ -981,6 +997,9 @@ private:
     PDH_HCOUNTER m_hDiskWrite = NULL;
     PDH_HCOUNTER m_hGpuEngine = NULL;
     PDH_HCOUNTER m_hThermalZone = NULL;
+    bool m_disk = false;
+    bool m_gpu = false;
+    bool m_thermal = false;
     bool m_initialized = false;
 };
 
@@ -1654,40 +1673,60 @@ void RenderGraphPopup(HWND hWnd) {
         Gdiplus::Pen borderPen(borderColor, 1.0f);
         g.DrawPath(&borderPen, &bgPath);
 
-        // Header with dynamically calculated duration
-        wchar_t titleBuf[48];
+        // Header with dynamically calculated duration and right-to-left measured legends
+        int headerY = ScaleDpi(6, g_currentDpi);
+        int pad = ScaleDpi(10, g_currentDpi);
+        int legGap = ScaleDpi(8, g_currentDpi);
+        int curRight = width - pad;
+
+        wchar_t ramLeg[24], cpuLeg[24], gpuLeg[24];
+        wsprintfW(ramLeg, L"RAM %d%%", g_ramUsage.load());
+        wsprintfW(cpuLeg, L"CPU %d%%", g_cpuUsage.load());
+        wsprintfW(gpuLeg, L"GPU %d%%", g_gpuUsage.load());
+
+        int ramW = MeasureTextWidth(g, ramLeg, g_pFontSmall);
+        int cpuW = MeasureTextWidth(g, cpuLeg, g_pFontSmall);
+        int gpuW = showGpu ? MeasureTextWidth(g, gpuLeg, g_pFontSmall) : 0;
+
+        Gdiplus::StringFormat legFmt(Gdiplus::StringFormat::GenericTypographic());
+        legFmt.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+
+        curRight -= ramW;
+        if (curRight > pad) {
+            Gdiplus::SolidBrush ramBrush(Gdiplus::Color(255, 175, 130, 255));
+            g.DrawString(ramLeg, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)curRight, (Gdiplus::REAL)headerY), &legFmt, &ramBrush);
+        }
+
+        curRight -= (legGap + cpuW);
+        if (curRight > pad) {
+            Gdiplus::SolidBrush cpuBrush(Gdiplus::Color(255, 75, 175, 255));
+            g.DrawString(cpuLeg, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)curRight, (Gdiplus::REAL)headerY), &legFmt, &cpuBrush);
+        }
+
+        if (showGpu) {
+            int nextRight = curRight - (legGap + gpuW);
+            if (nextRight > pad) {
+                curRight = nextRight;
+                Gdiplus::SolidBrush gpuBrush(Gdiplus::Color(255, 110, 230, 145));
+                g.DrawString(gpuLeg, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)curRight, (Gdiplus::REAL)headerY), &legFmt, &gpuBrush);
+            }
+        }
+
         int totalSec = (int)((MAX_GRAPH_POINTS * interval) / 1000);
-        if (showGpu && width < ScaleDpi(240, g_currentDpi)) {
+        wchar_t titleBuf[48];
+        wsprintfW(titleBuf, L"Activity (Last %ds)", totalSec);
+        int availTitleW = curRight - pad - legGap;
+        if (MeasureTextWidth(g, titleBuf, g_pFontSmall) > availTitleW) {
             wsprintfW(titleBuf, L"%ds", totalSec);
-        } else {
-            wsprintfW(titleBuf, L"Activity (Last %ds)", totalSec);
+        }
+        if (MeasureTextWidth(g, titleBuf, g_pFontSmall) <= availTitleW) {
+            Gdiplus::Color colText = isLight ? Gdiplus::Color(255, 30, 32, 38) : Gdiplus::Color(255, 240, 242, 246);
+            Gdiplus::SolidBrush textBrush(colText);
+            g.DrawString(titleBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)pad, (Gdiplus::REAL)headerY), &legFmt, &textBrush);
         }
 
-        Gdiplus::Color colText = isLight ? Gdiplus::Color(255, 30, 32, 38) : Gdiplus::Color(255, 240, 242, 246);
-        Gdiplus::SolidBrush textBrush(colText);
-        g.DrawString(titleBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)ScaleDpi(10, g_currentDpi), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &textBrush);
-
-        wchar_t legBuf[32];
-        int step = ScaleDpi(56, g_currentDpi);
-        int rightOffset = ScaleDpi(52, g_currentDpi);
-        wsprintfW(legBuf, L"RAM %d%%", g_ramUsage.load());
-        Gdiplus::SolidBrush ramBrush(Gdiplus::Color(255, 175, 130, 255));
-        g.DrawString(legBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)(width - rightOffset), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &ramBrush);
-
-        rightOffset += step;
-        wsprintfW(legBuf, L"CPU %d%%", g_cpuUsage.load());
-        Gdiplus::SolidBrush cpuBrush(Gdiplus::Color(255, 75, 175, 255));
-        g.DrawString(legBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)(width - rightOffset), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &cpuBrush);
-
-        if (showGpu && width >= ScaleDpi(205, g_currentDpi)) {
-            rightOffset += step;
-            wsprintfW(legBuf, L"GPU %d%%", g_gpuUsage.load());
-            Gdiplus::SolidBrush gpuBrush(Gdiplus::Color(255, 110, 230, 145));
-            g.DrawString(legBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)(width - rightOffset), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &gpuBrush);
-        }
-
-        int gx = ScaleDpi(10, g_currentDpi);
-        int gy = ScaleDpi(26, g_currentDpi);
+        int gx = pad;
+        int gy = headerY + ScaleDpi((std::max)(18, g_currentFontSize + 6), g_currentDpi);
         int gw = width - gx * 2;
         int gh = height - gy - ScaleDpi(8, g_currentDpi);
 
@@ -2531,8 +2570,8 @@ DWORD WINAPI StatsWorkerThread(LPVOID) {
         ULONGLONG diskReadBps = 0, diskWriteBps = 0;
         int gpuPct = 0;
         int pdhThermalTemp = TEMP_UNAVAILABLE;
-        bool needPdhThermal = needCpuTemp && (cpuTemp == TEMP_UNAVAILABLE);
-        pdh.Update(needDisk, needGpu, needPdhThermal, diskReadBps, diskWriteBps, gpuPct, pdhThermalTemp);
+        bool readPdhThermal = needCpuTemp && (cpuTemp == TEMP_UNAVAILABLE);
+        pdh.Update(needDisk, needGpu, needCpuTemp, readPdhThermal, diskReadBps, diskWriteBps, gpuPct, pdhThermalTemp);
         if (needDisk) {
             g_diskReadBps = diskReadBps;
             g_diskWriteBps = diskWriteBps;
