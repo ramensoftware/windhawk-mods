@@ -275,10 +275,10 @@ static std::wstring ToLower(const std::wstring &str) {
 
 static bool IsStopWord(const std::wstring &word) {
   static constexpr PCWSTR kStopWords[] = {
-      L"bluetooth",  L"wireless", L"headphones", L"headphone",
-      L"speakers",   L"speaker",  L"headset",    L"earphone",
-      L"earphones",  L"earbuds",  L"audio",      L"device",
-      L"hands",      L"free",     L"stereo",     L"le"};
+      L"bluetooth", L"wireless", L"headphones", L"headphone",
+      L"speakers",  L"speaker",  L"headset",    L"earphone",
+      L"earphones", L"earbuds",  L"audio",      L"device",
+      L"hands",     L"free",     L"stereo",     L"le"};
   for (PCWSTR sw : kStopWords) {
     if (word == sw) {
       return true;
@@ -340,8 +340,7 @@ static bool CheckDeviceMatch(const std::wstring &candidateName,
   for (const auto &rt : rule.tokens) {
     bool tokenMatched = false;
     for (const auto &dt : devTokens) {
-      if (dt == rt ||
-          (rt.length() >= 3 && dt.find(rt) != std::wstring::npos)) {
+      if (dt == rt || (rt.length() >= 3 && dt.find(rt) != std::wstring::npos)) {
         tokenMatched = true;
         break;
       }
@@ -571,8 +570,7 @@ static void LoadSettings() {
   g_settings.toggleOnEveryDeviceConnection =
       Wh_GetIntSetting(L"toggleOnEveryDeviceConnection") != 0;
 
-  g_settings.applyToAllDevices =
-      Wh_GetIntSetting(L"applyToAllDevices") != 0;
+  g_settings.applyToAllDevices = Wh_GetIntSetting(L"applyToAllDevices") != 0;
 
   g_deviceRules.clear();
   for (int i = 0; i < 100; ++i) {
@@ -615,23 +613,22 @@ static void LoadSettings() {
 
   ReleaseSRWLockExclusive(&g_settingsLock);
 
-  Wh_Log(L"Settings: startupState=%s, mode=%s, toggleEveryConn=%d, "
-         L"applyAll=%d, targetRules=%zu, delayAfterConn=%dms, "
-         L"waitTimeout=%ds, startupDelay=%dms, toggleDelay=%dms, onlyOnce=%d",
-         loggedCfg.startupBluetoothState == StartupBluetoothState::Off
-             ? L"off"
-             : (loggedCfg.startupBluetoothState ==
-                        StartupBluetoothState::Unchanged
-                    ? L"unchanged"
-                    : L"on"),
-         loggedCfg.activationMode == ActivationMode::Startup
-             ? L"startup"
-             : L"deviceConnected",
-         (int)loggedCfg.toggleOnEveryDeviceConnection,
-         (int)loggedCfg.applyToAllDevices, rulesCount,
-         loggedCfg.delayAfterDeviceConnectedMs,
-         loggedCfg.deviceWaitTimeoutSec, loggedCfg.startupDelayMs,
-         loggedCfg.toggleDelayMs, (int)loggedCfg.onlyOncePerSession);
+  Wh_Log(
+      L"Settings: startupState=%s, mode=%s, toggleEveryConn=%d, "
+      L"applyAll=%d, targetRules=%zu, delayAfterConn=%dms, "
+      L"waitTimeout=%ds, startupDelay=%dms, toggleDelay=%dms, onlyOnce=%d",
+      loggedCfg.startupBluetoothState == StartupBluetoothState::Off
+          ? L"off"
+          : (loggedCfg.startupBluetoothState == StartupBluetoothState::Unchanged
+                 ? L"unchanged"
+                 : L"on"),
+      loggedCfg.activationMode == ActivationMode::Startup ? L"startup"
+                                                          : L"deviceConnected",
+      (int)loggedCfg.toggleOnEveryDeviceConnection,
+      (int)loggedCfg.applyToAllDevices, rulesCount,
+      loggedCfg.delayAfterDeviceConnectedMs, loggedCfg.deviceWaitTimeoutSec,
+      loggedCfg.startupDelayMs, loggedCfg.toggleDelayMs,
+      (int)loggedCfg.onlyOncePerSession);
 }
 
 static bool GetLogonTime(LONGLONG *logonTime, DWORD *outSessionId) {
@@ -893,7 +890,7 @@ static void PerformBluetoothToggle(bool isManualTest = false,
     std::wstring connectedDeviceName;
     std::vector<std::wstring> skippedNames;
     if (!GetFirstEligibleConnectedBluetoothDevice(connectedDeviceName,
-                                                  &skippedNa  mes)) {
+                                                  &skippedNames)) {
       if (!skippedNames.empty()) {
         Wh_Log(L"Connected Bluetooth device(s) found, but excluded by device "
                L"filter rules. Waiting for an eligible device (timeout: %d "
