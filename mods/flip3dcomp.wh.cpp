@@ -96,22 +96,6 @@ Live window previews follow the original Flip3D carousel layout and timing.
 #include <oaidl.h>
 #include <wincodec.h>
 
-// A keyboard hook can consume the user's Win+Tab input before a window in this
-// process receives it. Windows may then deny SetForegroundWindow/SwitchToThisWindow
-// because this process is not the foreground input owner. Insert a no-op input
-// event immediately before those calls to establish the foreground handoff.
-static void PrepareForegroundActivation()
-{
-    INPUT input{};
-    const UINT inserted = SendInput(1, &input, sizeof(input));
-    if (inserted != 1)
-    {
-        Wh_Log(L"Could not insert the foreground handoff input (sent=%u, error=%lu)",
-            inserted, GetLastError());
-    }
-}
-
-
 struct IDCompositionVisual3Compat : IDCompositionVisualDebug
 {
     virtual HRESULT STDMETHODCALLTYPE SetDepthMode(
@@ -3524,7 +3508,6 @@ void Flip3DCompApp::Update(float dtSeconds)
 
                 if (activationTarget && IsWindow(activationTarget))
                 {
-                    PrepareForegroundActivation();
                     SwitchToThisWindow(activationTarget, TRUE);
                 }
             }
@@ -6779,7 +6762,6 @@ void LaunchSwitcher(bool sticky, bool openingTabHeld)
     ShowWindow(g_app->WindowHandle(), SW_SHOW);
     SetWindowPos(g_app->WindowHandle(), HWND_TOPMOST, 0, 0, 0, 0,
         SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-    PrepareForegroundActivation();
     if (!SetForegroundWindow(g_app->WindowHandle()))
         Wh_Log(L"Switcher could not take foreground focus; navigation remains on the keyboard hook");
     UpdateWindow(g_app->WindowHandle());
@@ -7043,18 +7025,6 @@ void OnRawKeyboard(const RAWKEYBOARD& key)
         {
             g_windowsKeyMask |= bit;
             g_forwardedWindowsKeyMask |= bit;
-            // Our hook suppresses an original Win-down. Seeing it here means
-            // that path was bypassed. Without Explorer's hotkey bridge,
-            // restore the hook before Tab can be consumed as a system hotkey.
-            if (!repeated && !GetShellWindow())
-            {
-                if (g_keyboardHook)
-                    UnhookWindowsHookEx(g_keyboardHook);
-                g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL,
-                    LowLevelKeyboardProc, g_modModule, 0);
-                if (!g_keyboardHook)
-                    Wh_Log(L"Failed to restore the keyboard hook: %lu", GetLastError());
-            }
         }
         else
         {
@@ -7076,10 +7046,12 @@ void OnRawKeyboard(const RAWKEYBOARD& key)
     case VK_TAB:
         g_tabDown = down;
         g_navigationKeysHeld[vk] = down;
-        // Without Explorer there is no shell WM_HOTKEY to forward. Raw input
-        // observes keys the low-level hook did not consume, without reserving
-        // Win+Tab and preventing a restarted Explorer from registering it.
-        if (down && !engaged && g_windowsKeyMask && !GetShellWindow())
+        // Raw Input is the fallback when the shell hotkey bridge is absent or
+        // the low-level hook missed the Windows-key edge. Do not gate this on
+        // GetShellWindow(): that handle is not a reliable indication that the
+        // shell hotkey path actually delivered Win+Tab. QueueKeyboardActivation
+        // atomically suppresses duplicate activation from the low-level hook.
+        if (down && !engaged && g_windowsKeyMask)
         {
             QueueKeyboardActivation(g_controlKeyMask != 0);
             return;
@@ -7418,8 +7390,15 @@ void WhTool_ModUninit()
     g_switcherEngaged = false;
 }
 
+bool InitializeModuleGlobals();
+
 BOOL WhTool_ModInit()
 {
+    if (!InitializeModuleGlobals())
+    {
+        Wh_Log(L"Failed to initialize module identity or activation message");
+        return FALSE;
+    }
     LoadAnimationSettings();
     g_hostInitializationSucceeded = false;
     g_keyboardInitializationSucceeded = false;
@@ -7706,10 +7685,6 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    if (!InitializeModuleGlobals()) {
-        Wh_Log(L"Failed to initialize module identity or activation message");
-        return FALSE;
-    }
     WCHAR exe[MAX_PATH] = {};
     if (!GetModuleFileNameW(nullptr, exe, ARRAYSIZE(exe))) {
         return FALSE;
@@ -7717,6 +7692,10 @@ BOOL Wh_ModInit() {
     const WCHAR* name = wcsrchr(exe, L'\\');
     name = name ? name + 1 : exe;
     if (_wcsicmp(name, L"explorer.exe") == 0) {
+        if (!InitializeModuleGlobals()) {
+            Wh_Log(L"Failed to initialize module identity or activation message");
+            return FALSE;
+        }
         g_isExplorer = true;
         LoadTaskViewSettings();
         if (!HookNativeTaskView() || !HookDwmOrdinal105()) {
@@ -7725,6 +7704,10 @@ BOOL Wh_ModInit() {
         return StartExplorerPart();
     }
     if (_wcsicmp(name, L"rundll32.exe") == 0) {
+        if (!InitializeModuleGlobals()) {
+            Wh_Log(L"Failed to initialize module identity or activation message");
+            return FALSE;
+        }
         g_isRundll32 = true;
         return IsDwmApiOrdinal105Invocation() && HookDwmOrdinal105();
     }
