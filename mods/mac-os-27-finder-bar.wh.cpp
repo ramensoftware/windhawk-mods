@@ -23305,8 +23305,34 @@ static void Render(Bar* b) {
                 // Nota musical + título (cortado).
                 float is = s * g_settings.iconScale;
                 float box = std::round(g_settings.fontSize * 1.15f * 1.35f * is);
-                wchar_t note = g_ext.playing ? 0xEC4F : 0xE769;
-                BarGlyph(b, note, std::round(p.l + ip + box / 2), h / 2, s);
+                {
+                    // Um círculo fino com o estado no meio: play tocando, pausa parado
+                    // (traços e cantos arredondados).
+                    float cx = p.l + ip + box / 2, cy = h / 2;
+                    float rad = 7.2f * is, lw = 1.1f * is;
+                    b->rt->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), rad, rad), b->brush, lw);
+                    if (g_ext.playing) {
+                        ID2D1PathGeometry* tri = nullptr;
+                        ID2D1GeometrySink* sk = nullptr;
+                        float th = 3.4f * is, tl = cx - 1.9f * is, tr2 = cx + 3.2f * is;
+                        if (SUCCEEDED(g_d2d->CreatePathGeometry(&tri)) && SUCCEEDED(tri->Open(&sk))) {
+                            sk->BeginFigure(D2D1::Point2F(tl, cy - th), D2D1_FIGURE_BEGIN_FILLED);
+                            sk->AddLine(D2D1::Point2F(tr2, cy));
+                            sk->AddLine(D2D1::Point2F(tl, cy + th));
+                            sk->EndFigure(D2D1_FIGURE_END_CLOSED);
+                            sk->Close();
+                            b->rt->FillGeometry(tri, b->brush);
+                            b->rt->DrawGeometry(tri, b->brush, 1.3f * is, RoundStroke());  // cantos redondos
+                        }
+                        SafeRelease(sk);
+                        SafeRelease(tri);
+                    } else {
+                        float gx = 1.6f * is, bh = 3.0f * is;
+                        for (float x : {cx - gx, cx + gx})
+                            b->rt->DrawLine(D2D1::Point2F(x, cy - bh), D2D1::Point2F(x, cy + bh), b->brush, 1.5f * is,
+                                            RoundStroke());
+                    }
+                }
                 D2D1_RECT_F tr = D2D1::RectF(p.l + ip + box + 3 * s, 0, p.r - ip + 1, h);
                 float tw = Measure(b->fmtText, p.spec.text);
                 if (tw <= tr.right - tr.left + 0.5f) {
