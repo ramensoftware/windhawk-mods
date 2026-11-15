@@ -2,7 +2,7 @@
 // @id              taskbar-live-hud-radar
 // @name            Taskbar Live HUD
 // @description     Compact system monitoring widget for the taskbar: CPU, RAM, GPU, temperatures, disk speed, network speed, optional ping and a working set trimmer
-// @version         1.2
+// @version         1.2.0
 // @author          Lemon
 // @github          https://github.com/lemon-web-stack
 // @homepage        https://github.com/lemon-web-stack
@@ -46,7 +46,7 @@ survives Explorer restarts.
 ### Known limitations
 - Only the primary taskbar is supported (no secondary monitors).
 - Network speed is the sum of all active hardware adapters.
-- CPU temperature on Windows without a kernel driver relies on ACPI/WMI thermal zones or LibreHardwareMonitor/OpenHardwareMonitor WMI if running; displays `N/A` if no sensor is exposed by the system.
+- CPU temperature on Windows without a kernel driver relies on LibreHardwareMonitor/OpenHardwareMonitor WMI if running, or Windows PDH Thermal Zone counters (which on some desktops report a motherboard/ambient sensor or a static value); displays `N/A` if no sensor is exposed.
 */
 // ==/WindhawkModReadme==
 
@@ -114,14 +114,14 @@ survives Explorer restarts.
   $description: "Text size for HUD metrics (8 to 20, default 12)"
 - widgetMinWidth: 54
   $name: "Widget Minimum Width (px)"
-  $description: "Minimum width of the taskbar widget (0 = auto)"
+  $description: "Minimum width of the taskbar widget in px (24-800, 0 = auto 54 px)"
 - widgetMaxWidth: 0
   $name: "Widget Maximum Width (px)"
   $description: "Maximum width of the taskbar widget (0 = unlimited)"
 - widgetHeight: 0
   $name: "Widget Height (px)"
-  $description: "Custom height of the taskbar widget (0 = auto match taskbar)"
-- graphWidth: 220
+  $description: "Custom height of the taskbar widget in px (16-64, 0 = auto match taskbar)"
+- graphWidth: 250
   $name: "Mini-Graph Popup Width (px)"
   $description: "Width of the history graph popup window (140 to 600)"
 - graphHeight: 125
@@ -533,9 +533,12 @@ Gdiplus::Color g_statusColor(255, 110, 230, 145);
 
 bool g_isHovered = false;
 bool g_isDragging = false;
+bool g_dragPending = false;
+bool g_graphOpenedByHover = false;
 bool g_isTaskbarLight = false;
 POINT g_dragStartPt = {};
 int g_dragStartOffset = 0;
+HudAction g_pendingClickAction = HudAction::None;
 
 Gdiplus::Font* g_pFontLabel = nullptr;
 Gdiplus::Font* g_pFontValue = nullptr;
@@ -592,7 +595,8 @@ void UpdateCachedFonts(UINT dpi, int fontSize) {
 
 void SyncWindowGeometry();
 void FastRepositionOnly();
-void ToggleGraphWindow(bool forceOpen = false);
+void ShowGraphWindow(bool activate);
+void ToggleGraphWindow();
 
 void ShowTempStatus(const wchar_t* text, Gdiplus::Color color = Gdiplus::Color(255, 110, 230, 145), ULONGLONG duration = 1800) {
     g_statusMessage = text;
@@ -680,7 +684,7 @@ void LoadSettings(bool fromSettingsChanged = false) {
     s.widgetHeight = (rawH <= 0) ? 0 : (std::max)(16, (std::min)(64, rawH));
 
     int rawGw = Wh_GetIntSetting(L"graphWidth");
-    if (rawGw <= 0) rawGw = 220;
+    if (rawGw <= 0) rawGw = 250;
     s.graphWidth = (std::max)(140, (std::min)(600, rawGw));
 
     int rawGh = Wh_GetIntSetting(L"graphHeight");
@@ -850,13 +854,14 @@ void UpdateNetSpeed(ULONGLONG elapsedMs) {
     s_prevNetCounters.swap(cur);
 }
 
-// PDH Monitor for Disk Read/Write and GPU Engine Utilization (StatsWorkerThread only)
+// PDH Monitor for Disk Read/Write, GPU Engine Utilization, and Thermal Zone Temperature (StatsWorkerThread only)
 class PdhMonitor {
 public:
     ~PdhMonitor() { Shutdown(); }
 
-    void Update(bool needDisk, bool needGpu, ULONGLONG& outReadBps, ULONGLONG& outWriteBps, int& outGpuPct) {
-        if (!needDisk && !needGpu) {
+    void Update(bool needDisk, bool needGpu, bool needThermal,
+                ULONGLONG& outReadBps, ULONGLONG& outWriteBps, int& outGpuPct, int& outThermalTempC) {
+        if (!needDisk && !needGpu && !needThermal) {
             if (m_initialized) Shutdown();
             return;
         }
@@ -894,12 +899,10 @@ public:
                         }
                         std::wstring engKey = L"default";
                         if (items[i].szName) {
-                            const wchar_t* p = wcsstr(items[i].szName, L"engtype_");
-                            if (p) {
-                                p += 8;
-                                const wchar_t* end = wcschr(p, L'_');
-                                engKey = end ? std::wstring(p, end - p) : std::wstring(p);
-                            }
+                            // Instance format: pid_XXXX_luid_0x..._phys_N_eng_M_engtype_...
+                            // Group per individual engine instance (from luid_ onward) to match Task Manager.
+                            const wchar_t* p = wcsstr(items[i].szName, L"luid_");
+                            engKey = p ? std::wstring(p) : std::wstring(items[i].szName);
                         }
                         engineTotals[engKey] += items[i].FmtValue.doubleValue;
                     }
@@ -908,6 +911,39 @@ public:
                         if (kv.second > maxEngine) maxEngine = kv.second;
                     }
                     outGpuPct = (std::max)(0, (std::min)(100, (int)std::lround(maxEngine)));
+                }
+            }
+        }
+
+        if (needThermal && m_hThermalZone) {
+            DWORD bufSize = 0;
+            DWORD itemCount = 0;
+            PDH_STATUS status = PdhGetFormattedCounterArrayW(m_hThermalZone, PDH_FMT_DOUBLE, &bufSize, &itemCount, NULL);
+            if (status == (PDH_STATUS)PDH_MORE_DATA && bufSize > 0) {
+                std::vector<BYTE> buf(bufSize);
+                PPDH_FMT_COUNTERVALUE_ITEM_W items = (PPDH_FMT_COUNTERVALUE_ITEM_W)buf.data();
+                if (PdhGetFormattedCounterArrayW(m_hThermalZone, PDH_FMT_DOUBLE, &bufSize, &itemCount, items) == ERROR_SUCCESS) {
+                    int bestTemp = TEMP_UNAVAILABLE;
+                    for (DWORD i = 0; i < itemCount; i++) {
+                        if (items[i].FmtValue.CStatus != PDH_CSTATUS_VALID_DATA &&
+                            items[i].FmtValue.CStatus != PDH_CSTATUS_NEW_DATA) {
+                            continue;
+                        }
+                        double raw = items[i].FmtValue.doubleValue;
+                        double c = -999.0;
+                        if (raw > 2000.0 && raw < 4500.0) {
+                            c = (raw / 10.0) - 273.15;
+                        } else if (raw > 200.0 && raw < 450.0) {
+                            c = raw - 273.15;
+                        }
+                        if (c > 0.0 && c < 150.0) {
+                            int ic = (int)std::lround(c);
+                            if (bestTemp == TEMP_UNAVAILABLE || ic > bestTemp) bestTemp = ic;
+                        }
+                    }
+                    if (bestTemp != TEMP_UNAVAILABLE) {
+                        outThermalTempC = bestTemp;
+                    }
                 }
             }
         }
@@ -921,6 +957,7 @@ public:
         m_hDiskRead = NULL;
         m_hDiskWrite = NULL;
         m_hGpuEngine = NULL;
+        m_hThermalZone = NULL;
         m_initialized = false;
     }
 
@@ -933,6 +970,7 @@ private:
         PdhAddEnglishCounterW(m_query, L"\\PhysicalDisk(_Total)\\Disk Read Bytes/sec", 0, &m_hDiskRead);
         PdhAddEnglishCounterW(m_query, L"\\PhysicalDisk(_Total)\\Disk Write Bytes/sec", 0, &m_hDiskWrite);
         PdhAddEnglishCounterW(m_query, L"\\GPU Engine(*)\\Utilization Percentage", 0, &m_hGpuEngine);
+        PdhAddEnglishCounterW(m_query, L"\\Thermal Zone Information(*)\\Temperature", 0, &m_hThermalZone);
         PdhCollectQueryData(m_query);
         m_initialized = true;
         return true;
@@ -942,10 +980,11 @@ private:
     PDH_HCOUNTER m_hDiskRead = NULL;
     PDH_HCOUNTER m_hDiskWrite = NULL;
     PDH_HCOUNTER m_hGpuEngine = NULL;
+    PDH_HCOUNTER m_hThermalZone = NULL;
     bool m_initialized = false;
 };
 
-// NVIDIA NVAPI dynamic loader for GPU Temperature & fallback GPU Usage
+// NVIDIA NVAPI dynamic loader for GPU Temperature
 class NvApiMonitor {
 public:
     ~NvApiMonitor() { Shutdown(); }
@@ -964,13 +1003,19 @@ public:
     }
 
     void Shutdown() {
+        if (m_initialized && m_pUnload) {
+            m_pUnload();
+        }
         if (m_hMod) {
             FreeLibrary(m_hMod);
             m_hMod = NULL;
         }
         m_triedInit = false;
+        m_initialized = false;
         m_ready = false;
         m_gpuCount = 0;
+        m_pUnload = nullptr;
+        m_pGetThermal = nullptr;
     }
 
 private:
@@ -989,6 +1034,7 @@ private:
 
     typedef void* (*NvAPI_QueryInterface_t)(unsigned int offset);
     typedef int (*NvAPI_Initialize_t)();
+    typedef int (*NvAPI_Unload_t)();
     typedef int (*NvAPI_EnumPhysicalGPUs_t)(void* handles[64], unsigned int* count);
     typedef int (*NvAPI_GPU_GetThermalSettings_t)(void* handle, unsigned int sensorIndex, NV_GPU_THERMAL_SETTINGS_V2* thermal);
 
@@ -997,9 +1043,9 @@ private:
         m_triedInit = true;
 
 #ifdef _WIN64
-        m_hMod = LoadLibraryW(L"nvapi64.dll");
+        m_hMod = LoadLibraryExW(L"nvapi64.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 #else
-        m_hMod = LoadLibraryW(L"nvapi.dll");
+        m_hMod = LoadLibraryExW(L"nvapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 #endif
         if (!m_hMod) return false;
 
@@ -1007,10 +1053,13 @@ private:
         if (!query) return false;
 
         auto pInit = (NvAPI_Initialize_t)query(0x0150E828);
+        m_pUnload = (NvAPI_Unload_t)query(0xD22BDD7E);
         auto pEnum = (NvAPI_EnumPhysicalGPUs_t)query(0xE5AC921F);
         m_pGetThermal = (NvAPI_GPU_GetThermalSettings_t)query(0xE3640A56);
 
         if (!pInit || !pEnum || pInit() != 0) return false;
+        m_initialized = true;
+
         if (pEnum(m_gpus, &m_gpuCount) != 0 || m_gpuCount == 0) return false;
 
         m_ready = true;
@@ -1019,9 +1068,11 @@ private:
 
     HMODULE m_hMod = NULL;
     bool m_triedInit = false;
+    bool m_initialized = false;
     bool m_ready = false;
     void* m_gpus[64] = {};
     unsigned int m_gpuCount = 0;
+    NvAPI_Unload_t m_pUnload = nullptr;
     NvAPI_GPU_GetThermalSettings_t m_pGetThermal = nullptr;
 };
 
@@ -1044,7 +1095,7 @@ public:
     }
 
     void Shutdown() {
-        if (m_pDestroy && m_ready) {
+        if (m_pDestroy && m_created) {
             m_pDestroy();
         }
         if (m_hMod) {
@@ -1052,7 +1103,10 @@ public:
             m_hMod = NULL;
         }
         m_triedInit = false;
+        m_created = false;
         m_ready = false;
+        m_pDestroy = nullptr;
+        m_pOverdrive5Temp = nullptr;
     }
 
 private:
@@ -1074,8 +1128,8 @@ private:
         if (m_triedInit) return m_ready;
         m_triedInit = true;
 
-        m_hMod = LoadLibraryW(L"atiadlxx.dll");
-        if (!m_hMod) m_hMod = LoadLibraryW(L"atiadlxy.dll");
+        m_hMod = LoadLibraryExW(L"atiadlxx.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (!m_hMod) m_hMod = LoadLibraryExW(L"atiadlxy.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!m_hMod) return false;
 
         auto pCreate = (ADL_Main_Control_Create_t)GetProcAddress(m_hMod, "ADL_Main_Control_Create");
@@ -1084,6 +1138,8 @@ private:
         m_pOverdrive5Temp = (ADL_Overdrive5_Temperature_Get_t)GetProcAddress(m_hMod, "ADL_Overdrive5_Temperature_Get");
 
         if (!pCreate || !m_pDestroy || !pNumAdapters || pCreate(AdlAlloc, 1) != 0) return false;
+        m_created = true;
+
         int num = 0;
         if (pNumAdapters(&num) != 0 || num <= 0) return false;
 
@@ -1093,13 +1149,14 @@ private:
 
     HMODULE m_hMod = NULL;
     bool m_triedInit = false;
+    bool m_created = false;
     bool m_ready = false;
     int m_adapterIndex = 0;
     ADL_Main_Control_Destroy_t m_pDestroy = nullptr;
     ADL_Overdrive5_Temperature_Get_t m_pOverdrive5Temp = nullptr;
 };
 
-// WMI Thermal Monitor (LibreHardwareMonitor, OpenHardwareMonitor, CIMV2 ThermalZone, root\WMI)
+// WMI Thermal Monitor (LibreHardwareMonitor / OpenHardwareMonitor)
 class WmiThermalMonitor {
 public:
     ~WmiThermalMonitor() { Shutdown(); }
@@ -1107,30 +1164,15 @@ public:
     void QueryTemps(bool needCpu, bool needGpu, int& outCpuTempC, int& outGpuTempC) {
         if (!needCpu && !needGpu) return;
 
-        // 1. Try LibreHardwareMonitor / OpenHardwareMonitor WMI
-        if (needCpu || needGpu) {
-            IWbemServices* pLhm = GetNamespace(L"root\\LibreHardwareMonitor", m_pLhm, m_triedLhm);
-            if (!pLhm) pLhm = GetNamespace(L"root\\OpenHardwareMonitor", m_pOhm, m_triedOhm);
-            if (pLhm) {
-                QueryHardwareMonitor(pLhm, needCpu, needGpu, outCpuTempC, outGpuTempC);
-            }
+        IWbemServices* pSvc = GetNamespace(L"root\\LibreHardwareMonitor", m_pLhm, m_lastLhmTry);
+        bool usingLhm = (pSvc != nullptr);
+        if (!pSvc) {
+            pSvc = GetNamespace(L"root\\OpenHardwareMonitor", m_pOhm, m_lastOhmTry);
         }
-
-        // 2. Fallback for CPU Temp: CIMV2 Win32_PerfFormattedData_Counters_ThermalZoneInformation
-        if (needCpu && outCpuTempC == TEMP_UNAVAILABLE) {
-            IWbemServices* pCim = GetNamespace(L"root\\CIMV2", m_pCimv2, m_triedCimv2);
-            if (pCim) {
-                int t = QueryThermalZone(pCim, L"SELECT Temperature FROM Win32_PerfFormattedData_Counters_ThermalZoneInformation", L"Temperature");
-                if (t != TEMP_UNAVAILABLE) outCpuTempC = t;
-            }
-        }
-
-        // 3. Fallback for CPU Temp: root\WMI MSAcpi_ThermalZoneTemperature
-        if (needCpu && outCpuTempC == TEMP_UNAVAILABLE) {
-            IWbemServices* pWmi = GetNamespace(L"root\\WMI", m_pRootWmi, m_triedRootWmi);
-            if (pWmi) {
-                int t = QueryThermalZone(pWmi, L"SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature", L"CurrentTemperature");
-                if (t != TEMP_UNAVAILABLE) outCpuTempC = t;
+        if (pSvc) {
+            if (!QueryHardwareMonitor(pSvc, needCpu, needGpu, outCpuTempC, outGpuTempC)) {
+                if (usingLhm && m_pLhm) { m_pLhm->Release(); m_pLhm = nullptr; }
+                else if (!usingLhm && m_pOhm) { m_pOhm->Release(); m_pOhm = nullptr; }
             }
         }
     }
@@ -1138,17 +1180,17 @@ public:
     void Shutdown() {
         if (m_pLhm) { m_pLhm->Release(); m_pLhm = nullptr; }
         if (m_pOhm) { m_pOhm->Release(); m_pOhm = nullptr; }
-        if (m_pCimv2) { m_pCimv2->Release(); m_pCimv2 = nullptr; }
-        if (m_pRootWmi) { m_pRootWmi->Release(); m_pRootWmi = nullptr; }
         if (m_pLocator) { m_pLocator->Release(); m_pLocator = nullptr; }
-        m_triedLhm = m_triedOhm = m_triedCimv2 = m_triedRootWmi = false;
+        m_lastLhmTry = 0;
+        m_lastOhmTry = 0;
     }
 
 private:
-    IWbemServices* GetNamespace(const wchar_t* ns, IWbemServices*& cache, bool& tried) {
+    IWbemServices* GetNamespace(const wchar_t* ns, IWbemServices*& cache, ULONGLONG& lastTry) {
         if (cache) return cache;
-        if (tried) return nullptr;
-        tried = true;
+        ULONGLONG now = GetTickCount64();
+        if (lastTry != 0 && (now - lastTry) < 30000ULL) return nullptr;
+        lastTry = now;
 
         if (!m_pLocator) {
             HRESULT hr = CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (LPVOID*)&m_pLocator);
@@ -1170,18 +1212,18 @@ private:
         return cache;
     }
 
-    void QueryHardwareMonitor(IWbemServices* pSvc, bool needCpu, bool needGpu, int& outCpuTempC, int& outGpuTempC) {
+    bool QueryHardwareMonitor(IWbemServices* pSvc, bool needCpu, bool needGpu, int& outCpuTempC, int& outGpuTempC) {
         BSTR bstrWql = SysAllocString(L"WQL");
         BSTR bstrQuery = SysAllocString(L"SELECT Name, Identifier, Value FROM Sensor WHERE SensorType='Temperature'");
         IEnumWbemClassObject* pEnum = nullptr;
         HRESULT hr = pSvc->ExecQuery(bstrWql, bstrQuery, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnum);
         SysFreeString(bstrWql);
         SysFreeString(bstrQuery);
-        if (FAILED(hr) || !pEnum) return;
+        if (FAILED(hr) || !pEnum) return false;
 
         IWbemClassObject* pObj = nullptr;
         ULONG ret = 0;
-        while (pEnum->Next(WBEM_INFINITE, 1, &pObj, &ret) == S_OK) {
+        while (pEnum->Next(1000, 1, &pObj, &ret) == S_OK) {
             VARIANT vtId, vtName, vtVal;
             VariantInit(&vtId); VariantInit(&vtName); VariantInit(&vtVal);
             pObj->Get(L"Identifier", 0, &vtId, 0, 0);
@@ -1213,57 +1255,14 @@ private:
             pObj->Release();
         }
         pEnum->Release();
-    }
-
-    int QueryThermalZone(IWbemServices* pSvc, const wchar_t* wql, const wchar_t* prop) {
-        BSTR bstrWql = SysAllocString(L"WQL");
-        BSTR bstrQuery = SysAllocString(wql);
-        IEnumWbemClassObject* pEnum = nullptr;
-        HRESULT hr = pSvc->ExecQuery(bstrWql, bstrQuery, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnum);
-        SysFreeString(bstrWql);
-        SysFreeString(bstrQuery);
-        if (FAILED(hr) || !pEnum) return TEMP_UNAVAILABLE;
-
-        int bestTemp = TEMP_UNAVAILABLE;
-        IWbemClassObject* pObj = nullptr;
-        ULONG ret = 0;
-        while (pEnum->Next(WBEM_INFINITE, 1, &pObj, &ret) == S_OK) {
-            VARIANT vtVal;
-            VariantInit(&vtVal);
-            if (SUCCEEDED(pObj->Get(prop, 0, &vtVal, 0, 0))) {
-                double raw = 0.0;
-                if (vtVal.vt == VT_UI4) raw = vtVal.ulVal;
-                else if (vtVal.vt == VT_I4) raw = vtVal.lVal;
-                else if (vtVal.vt == VT_UI8) raw = (double)vtVal.ullVal;
-                else if (vtVal.vt == VT_BSTR && vtVal.bstrVal) raw = _wtof(vtVal.bstrVal);
-
-                double c = -999.0;
-                if (raw > 2000.0 && raw < 4500.0) {
-                    c = (raw / 10.0) - 273.15;
-                } else if (raw > 200.0 && raw < 450.0) {
-                    c = raw - 273.15;
-                }
-                if (c > 0.0 && c < 150.0) {
-                    int ic = (int)std::lround(c);
-                    if (bestTemp == TEMP_UNAVAILABLE || ic > bestTemp) bestTemp = ic;
-                }
-            }
-            VariantClear(&vtVal);
-            pObj->Release();
-        }
-        pEnum->Release();
-        return bestTemp;
+        return true;
     }
 
     IWbemLocator* m_pLocator = nullptr;
     IWbemServices* m_pLhm = nullptr;
     IWbemServices* m_pOhm = nullptr;
-    IWbemServices* m_pCimv2 = nullptr;
-    IWbemServices* m_pRootWmi = nullptr;
-    bool m_triedLhm = false;
-    bool m_triedOhm = false;
-    bool m_triedCimv2 = false;
-    bool m_triedRootWmi = false;
+    ULONGLONG m_lastLhmTry = 0;
+    ULONGLONG m_lastOhmTry = 0;
 };
 
 int MeasurePing(unsigned long ip) {
@@ -1364,7 +1363,7 @@ void ExecuteHudAction(HudAction action) {
             TriggerAsyncRamClean();
             break;
         case HudAction::ToggleGraph:
-            ToggleGraphWindow(false);
+            ToggleGraphWindow();
             break;
         case HudAction::None:
         default:
@@ -1630,7 +1629,7 @@ void RenderGraphPopup(HWND hWnd) {
         bool isLight = g_isTaskbarLight;
         Gdiplus::Color bgColor, borderColor;
         if (customBg) {
-            BYTE a = customBgHasAlpha ? cBg.GetAlpha() : (BYTE)bgAlpha;
+            BYTE a = customBgHasAlpha ? (std::max)((BYTE)40, cBg.GetAlpha()) : (BYTE)bgAlpha;
             bgColor = Gdiplus::Color(a, cBg.GetRed(), cBg.GetGreen(), cBg.GetBlue());
             borderColor = Gdiplus::Color(255, (std::min)(255, cBg.GetRed() + 45), (std::min)(255, cBg.GetGreen() + 45), (std::min)(255, cBg.GetBlue() + 45));
         } else if (isLight) {
@@ -1658,25 +1657,30 @@ void RenderGraphPopup(HWND hWnd) {
         // Header with dynamically calculated duration
         wchar_t titleBuf[48];
         int totalSec = (int)((MAX_GRAPH_POINTS * interval) / 1000);
-        wsprintfW(titleBuf, L"Activity (Last %ds)", totalSec);
+        if (showGpu && width < ScaleDpi(240, g_currentDpi)) {
+            wsprintfW(titleBuf, L"%ds", totalSec);
+        } else {
+            wsprintfW(titleBuf, L"Activity (Last %ds)", totalSec);
+        }
 
         Gdiplus::Color colText = isLight ? Gdiplus::Color(255, 30, 32, 38) : Gdiplus::Color(255, 240, 242, 246);
         Gdiplus::SolidBrush textBrush(colText);
         g.DrawString(titleBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)ScaleDpi(10, g_currentDpi), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &textBrush);
 
         wchar_t legBuf[32];
-        int rightOffset = ScaleDpi(55, g_currentDpi);
+        int step = ScaleDpi(56, g_currentDpi);
+        int rightOffset = ScaleDpi(52, g_currentDpi);
         wsprintfW(legBuf, L"RAM %d%%", g_ramUsage.load());
         Gdiplus::SolidBrush ramBrush(Gdiplus::Color(255, 175, 130, 255));
         g.DrawString(legBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)(width - rightOffset), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &ramBrush);
 
-        rightOffset += ScaleDpi(60, g_currentDpi);
+        rightOffset += step;
         wsprintfW(legBuf, L"CPU %d%%", g_cpuUsage.load());
         Gdiplus::SolidBrush cpuBrush(Gdiplus::Color(255, 75, 175, 255));
         g.DrawString(legBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)(width - rightOffset), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &cpuBrush);
 
-        if (showGpu && width >= ScaleDpi(250, g_currentDpi)) {
-            rightOffset += ScaleDpi(60, g_currentDpi);
+        if (showGpu && width >= ScaleDpi(205, g_currentDpi)) {
+            rightOffset += step;
             wsprintfW(legBuf, L"GPU %d%%", g_gpuUsage.load());
             Gdiplus::SolidBrush gpuBrush(Gdiplus::Color(255, 110, 230, 145));
             g.DrawString(legBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)(width - rightOffset), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &gpuBrush);
@@ -1744,11 +1748,13 @@ void RenderGraphPopup(HWND hWnd) {
 LRESULT CALLBACK GraphWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_KILLFOCUS:
+            g_graphOpenedByHover = false;
             ShowWindow(hWnd, SW_HIDE);
             return 0;
 
         case WM_KEYDOWN:
             if (wParam == VK_ESCAPE) {
+                g_graphOpenedByHover = false;
                 ShowWindow(hWnd, SW_HIDE);
                 return 0;
             }
@@ -1763,15 +1769,10 @@ LRESULT CALLBACK GraphWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
     return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
 
-void ToggleGraphWindow(bool forceOpen) {
+void ShowGraphWindow(bool activate) {
     HWND hGraph = g_hGraphWnd;
     HWND hHud = g_hHudWnd;
     if (!hGraph || !hHud) return;
-
-    if (IsWindowVisible(hGraph)) {
-        if (!forceOpen) ShowWindow(hGraph, SW_HIDE);
-        return;
-    }
 
     int cfgW, cfgH;
     {
@@ -1797,11 +1798,26 @@ void ToggleGraphWindow(bool forceOpen) {
     if (gx + gw > mi.rcWork.right) gx = mi.rcWork.right - gw;
     if (gy < mi.rcWork.top) gy = rcHud.bottom + ScaleDpi(8, dpi);
 
-    SetWindowPos(hGraph, HWND_TOPMOST, gx, gy, gw, gh, SWP_NOACTIVATE);
-    ShowWindow(hGraph, SW_SHOW);
-    SetForegroundWindow(hGraph);
-    SetFocus(hGraph);
+    SetWindowPos(hGraph, HWND_TOPMOST, gx, gy, gw, gh, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    if (activate) {
+        SetForegroundWindow(hGraph);
+        SetFocus(hGraph);
+    }
     RenderGraphPopup(hGraph);
+}
+
+void ToggleGraphWindow() {
+    HWND hGraph = g_hGraphWnd;
+    if (!hGraph) return;
+
+    if (IsWindowVisible(hGraph)) {
+        g_graphOpenedByHover = false;
+        ShowWindow(hGraph, SW_HIDE);
+        return;
+    }
+
+    g_graphOpenedByHover = false;
+    ShowGraphWindow(true);
 }
 
 bool CalculateHudPosition(HWND hTray, int exactWidth, int height, int& posX, int& posY) {
@@ -2013,7 +2029,7 @@ void SyncWindowGeometry() {
         Gdiplus::Color bgColor, borderColor;
 
         if (s.customBgEnabled) {
-            BYTE a = s.customBgHasAlpha ? s.customBgColor.GetAlpha() : (BYTE)s.bgAlpha;
+            BYTE a = s.customBgHasAlpha ? (std::max)((BYTE)40, s.customBgColor.GetAlpha()) : (BYTE)s.bgAlpha;
             BYTE r = s.customBgColor.GetRed();
             BYTE gr = s.customBgColor.GetGreen();
             BYTE b = s.customBgColor.GetBlue();
@@ -2267,6 +2283,16 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
                 SyncWindowGeometry();
             }
+            if (g_dragPending && !g_isDragging) {
+                POINT pt;
+                GetCursorPos(&pt);
+                int cxDrag = (std::max)(4, GetSystemMetrics(SM_CXDRAG));
+                int cyDrag = (std::max)(4, GetSystemMetrics(SM_CYDRAG));
+                if (std::abs(pt.x - g_dragStartPt.x) >= cxDrag || std::abs(pt.y - g_dragStartPt.y) >= cyDrag) {
+                    g_isDragging = true;
+                    KillTimer(hWnd, TIMER_HOVER_ACTIVATE);
+                }
+            }
             if (g_isDragging) {
                 POINT pt;
                 GetCursorPos(&pt);
@@ -2286,6 +2312,13 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case WM_MOUSELEAVE: {
             g_isHovered = false;
             KillTimer(hWnd, TIMER_HOVER_ACTIVATE);
+            if (g_graphOpenedByHover) {
+                g_graphOpenedByHover = false;
+                HWND hGraph = g_hGraphWnd.load();
+                if (hGraph && IsWindowVisible(hGraph)) {
+                    ShowWindow(hGraph, SW_HIDE);
+                }
+            }
             SyncWindowGeometry();
             return 0;
         }
@@ -2312,8 +2345,9 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             }
 
             if (IsDragModifierActive(dragMod)) {
-                g_isDragging = true;
-                KillTimer(hWnd, TIMER_HOVER_ACTIVATE);
+                g_dragPending = true;
+                g_isDragging = false;
+                g_pendingClickAction = clickAct;
                 GetCursorPos(&g_dragStartPt);
                 {
                     std::lock_guard<std::mutex> lock(g_settingsMutex);
@@ -2327,23 +2361,33 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
 
         case WM_LBUTTONUP: {
-            if (g_isDragging) {
+            if (g_dragPending) {
+                bool wasDragging = g_isDragging;
+                HudAction clickAct = g_pendingClickAction;
+                g_dragPending = false;
                 g_isDragging = false;
+                g_pendingClickAction = HudAction::None;
                 ReleaseCapture();
 
-                int finalOffset;
-                {
-                    std::lock_guard<std::mutex> lock(g_settingsMutex);
-                    finalOffset = settings.offsetX;
+                if (wasDragging) {
+                    int finalOffset;
+                    {
+                        std::lock_guard<std::mutex> lock(g_settingsMutex);
+                        finalOffset = settings.offsetX;
+                    }
+                    Wh_SetIntValue(L"customOffsetX", finalOffset);
+                    ShowTempStatus(L"Position saved", Gdiplus::Color(255, 130, 210, 255), 1200);
+                } else {
+                    ExecuteHudAction(clickAct);
                 }
-                Wh_SetIntValue(L"customOffsetX", finalOffset);
-                ShowTempStatus(L"Position saved", Gdiplus::Color(255, 130, 210, 255), 1200);
             }
             return 0;
         }
 
         case WM_CAPTURECHANGED: {
+            g_dragPending = false;
             g_isDragging = false;
+            g_pendingClickAction = HudAction::None;
             return 0;
         }
 
@@ -2389,7 +2433,11 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         hoverAct = settings.hoverAction;
                     }
                     if (hoverAct == HudAction::ToggleGraph) {
-                        ToggleGraphWindow(true);
+                        HWND hGraph = g_hGraphWnd.load();
+                        if (hGraph && !IsWindowVisible(hGraph)) {
+                            g_graphOpenedByHover = true;
+                            ShowGraphWindow(false);
+                        }
                     } else {
                         ExecuteHudAction(hoverAct);
                     }
@@ -2468,17 +2516,6 @@ DWORD WINAPI StatsWorkerThread(LPVOID) {
             g_ramUsage = ram;
         }
 
-        ULONGLONG diskReadBps = 0, diskWriteBps = 0;
-        int gpuPct = 0;
-        pdh.Update(needDisk, needGpu, diskReadBps, diskWriteBps, gpuPct);
-        if (needDisk) {
-            g_diskReadBps = diskReadBps;
-            g_diskWriteBps = diskWriteBps;
-        }
-        if (needGpu) {
-            g_gpuUsage = gpuPct;
-        }
-
         int cpuTemp = TEMP_UNAVAILABLE;
         int gpuTemp = TEMP_UNAVAILABLE;
         if (needGpuTemp) {
@@ -2490,8 +2527,25 @@ DWORD WINAPI StatsWorkerThread(LPVOID) {
         if (needCpuTemp || (needGpuTemp && gpuTemp == TEMP_UNAVAILABLE)) {
             wmi.QueryTemps(needCpuTemp, needGpuTemp && (gpuTemp == TEMP_UNAVAILABLE), cpuTemp, gpuTemp);
         }
-        if (needCpuTemp) g_cpuTempC = cpuTemp;
-        if (needGpuTemp) g_gpuTempC = gpuTemp;
+
+        ULONGLONG diskReadBps = 0, diskWriteBps = 0;
+        int gpuPct = 0;
+        int pdhThermalTemp = TEMP_UNAVAILABLE;
+        bool needPdhThermal = needCpuTemp && (cpuTemp == TEMP_UNAVAILABLE);
+        pdh.Update(needDisk, needGpu, needPdhThermal, diskReadBps, diskWriteBps, gpuPct, pdhThermalTemp);
+        if (needDisk) {
+            g_diskReadBps = diskReadBps;
+            g_diskWriteBps = diskWriteBps;
+        }
+        if (needGpu) {
+            g_gpuUsage = gpuPct;
+        }
+        if (needCpuTemp) {
+            g_cpuTempC = (cpuTemp != TEMP_UNAVAILABLE) ? cpuTemp : pdhThermalTemp;
+        }
+        if (needGpuTemp) {
+            g_gpuTempC = gpuTemp;
+        }
 
         {
             std::lock_guard<std::mutex> lock(g_historyMutex);
