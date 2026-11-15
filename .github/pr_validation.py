@@ -1625,6 +1625,37 @@ def is_existing_windows_file_name(name: str):
     return name.lower() in get_existing_windows_file_names()
 
 
+# Non-Windows modules accepted as symbol hook targets in any mod.
+NON_WINDOWS_TARGET_MODULES = {'chrome.dll'}
+
+# Non-Windows modules accepted as symbol hook targets in specific mods.
+MOD_NON_WINDOWS_TARGET_MODULES = {
+    'win7-alttab-loader': {'alttab.dll'},
+    'word-image-resize-anti-flip': {'oart.dll'},
+    'word-mathtype-dark-fix': {'wwlib.dll'},
+    'word-omath-shade-fix': {'wwlib.dll'},
+}
+
+# Mods accepted with noUndecoratedSymbols, with their symbol hook targets.
+# Hooking any other target brings back the manual inspection.
+MOD_NO_UNDECORATED_SYMBOLS_TARGETS = {
+    'chrome-context-menu-items': {'chrome.dll'},
+    'chrome-native-ui-tweaks': {'chrome.dll'},
+    'word-image-resize-anti-flip': {'oart.dll'},
+    'word-mathtype-dark-fix': {'wwlib.dll'},
+    'word-omath-shade-fix': {'wwlib.dll'},
+}
+
+
+def is_known_module(mod_id: str, name: str):
+    name = name.lower()
+    return (
+        name in NON_WINDOWS_TARGET_MODULES
+        or name in MOD_NON_WINDOWS_TARGET_MODULES.get(mod_id, set())
+        or is_existing_windows_file_name(name)
+    )
+
+
 def get_target_module_from_symbol_block_name(symbol_block_name: str):
     p = r'(.*?)_?(exe|dll|cpl)_?hooks?'
     match = re.fullmatch(p, symbol_block_name, flags=re.IGNORECASE)
@@ -1652,9 +1683,9 @@ def get_target_modules_from_previous_line(previous_line: str):
     return names
 
 
-def validate_symbol_hooks(path: Path, mod_source: str):
-    warnings = 0
-
+def get_symbol_hook_blocks(mod_source: str):
+    """Yield (line_num, target_from_name, targets_from_comment) for each symbol
+    hooks variable."""
     mod_source_lines = mod_source.splitlines()
 
     p = r'^[ \t]*(?:(?:static|const)[ \t]+)*(?:WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)'
@@ -1668,6 +1699,36 @@ def validate_symbol_hooks(path: Path, mod_source: str):
         previous_line = mod_source_lines[line_num - 2]
         targets_from_comment = get_target_modules_from_previous_line(previous_line)
 
+        yield line_num, target_from_name, targets_from_comment
+
+
+def is_no_undecorated_symbols_accepted(mod_id: str, mod_source: str):
+    """Whether the mod is accepted with noUndecoratedSymbols and all of its symbol
+    hook targets are known and among the accepted ones."""
+    accepted_targets = MOD_NO_UNDECORATED_SYMBOLS_TARGETS.get(mod_id)
+    if not accepted_targets:
+        return False
+
+    blocks = list(get_symbol_hook_blocks(mod_source))
+    if not blocks:
+        return False
+
+    for _, target_from_name, targets_from_comment in blocks:
+        targets = [x for x in [target_from_name, *targets_from_comment] if x]
+        if not targets or any(x.lower() not in accepted_targets for x in targets):
+            return False
+
+    return True
+
+
+def validate_symbol_hooks(path: Path, mod_source: str):
+    warnings = 0
+
+    mod_id = path.name.removesuffix('.wh.cpp')
+    mod_source_lines = mod_source.splitlines()
+
+    blocks = get_symbol_hook_blocks(mod_source)
+    for line_num, target_from_name, targets_from_comment in blocks:
         if targets_from_comment and line_num > 2:
             line_before_comment = mod_source_lines[line_num - 3].strip()
             if line_before_comment.startswith('//') and line_before_comment.endswith(','):
@@ -1681,7 +1742,7 @@ def validate_symbol_hooks(path: Path, mod_source: str):
             )
             warnings += add_warning(path, line_num, warning_msg)
         elif target_from_name or targets_from_comment:
-            if target_from_name and not is_existing_windows_file_name(target_from_name):
+            if target_from_name and not is_known_module(mod_id, target_from_name):
                 warning_msg = (
                     f'"{target_from_name}" is not recognized as a Windows file name.'
                     ' If the target module name can\'t be represented by a variable'
@@ -1693,7 +1754,7 @@ def validate_symbol_hooks(path: Path, mod_source: str):
                 warnings += add_warning(path, line_num, warning_msg)
 
             for target in targets_from_comment:
-                if not is_existing_windows_file_name(target):
+                if not is_known_module(mod_id, target):
                     warning_msg = f'"{target}" is not recognized as a Windows file name'
                     warnings += add_warning(path, line_num - 1, warning_msg)
             continue
@@ -1759,6 +1820,11 @@ def validate_specific_keywords(path: Path, mod_source: str):
     ]
     # fmt: on
 
+    mod_id = path.name.removesuffix('.wh.cpp')
+    no_undecorated_symbols_accepted = is_no_undecorated_symbols_accepted(
+        mod_id, mod_source
+    )
+
     for line_num, line in enumerate(mod_source_lines, start=1):
         for pattern, word, description in keyword_patterns:
             if re.search(pattern, line):
@@ -1766,6 +1832,9 @@ def validate_specific_keywords(path: Path, mod_source: str):
                 if word in ('GWL_WNDPROC', 'GWLP_WNDPROC') and re.search(
                     r'GetWindowLong(Ptr)?[AW]?\s*\([^,]+,\s*GWLP?_WNDPROC\s*\)', line
                 ):
+                    continue
+
+                if word == 'noUndecoratedSymbols' and no_undecorated_symbols_accepted:
                     continue
 
                 warnings += add_warning(
@@ -1871,6 +1940,81 @@ def validate_line_lengths(path: Path, mod_source: str) -> int:
     return warnings
 
 
+# Assignment, comparison and logical operators. Operators which are also used
+# in other syntax, such as `<`, `*` and `&`, are left out.
+SPACED_OPERATOR_RE = re.compile(
+    r'(?<![<>=!+\-*/%&|^])(?:==|!=|<=|>=|&&|\|\||[+\-*/%&|^]?=)(?!=)'
+)
+
+# Formatted code has almost no operators without spaces around them and few
+# lines with several statements. Compacted code has them throughout the file.
+# Operators without spaces alone are a coding style, which is readable as long
+# as statements are on separate lines.
+COMPACT_CODE_MIN_LINES = 200
+COMPACT_CODE_MAX_UNSPACED_OPERATORS = 0.4
+COMPACT_CODE_MIN_UNSPACED_PACKED_LINES = 50
+COMPACT_CODE_MAX_PACKED_LINES = 0.1
+
+
+def validate_code_compactness(path: Path, mod_source: str) -> int:
+    """Validate that the code isn't compacted, with operators and statements
+    run together throughout the file."""
+    lines = 0
+    operators = 0
+    unspaced_operators = 0
+    packed_lines = 0
+    densest_line_num = 1
+    densest_line_score = 0
+
+    for line_num, line in enumerate(get_code_lines(mod_source), start=1):
+        line = line.strip()
+        if line == '' or line.startswith('#'):
+            continue
+
+        lines += 1
+
+        line_unspaced_operators = 0
+        padded = f' {line} '
+        for match in SPACED_OPERATOR_RE.finditer(padded):
+            operators += 1
+            if padded[match.start() - 1] != ' ' and padded[match.end()] != ' ':
+                line_unspaced_operators += 1
+        unspaced_operators += line_unspaced_operators
+
+        # `case X: f(); break;` is a common idiom, not a packed line.
+        statements = count_statements(line)
+        if statements >= 2 and not re.match(r'(case\b|default\s*:)', line):
+            packed_lines += 1
+
+        if line_unspaced_operators + statements > densest_line_score:
+            densest_line_num = line_num
+            densest_line_score = line_unspaced_operators + statements
+
+    if lines < COMPACT_CODE_MIN_LINES:
+        return 0
+
+    unspaced_ratio = unspaced_operators / operators if operators else 0
+    packed_ratio = packed_lines / lines
+    if not (
+        (
+            unspaced_ratio > COMPACT_CODE_MAX_UNSPACED_OPERATORS
+            and packed_lines >= COMPACT_CODE_MIN_UNSPACED_PACKED_LINES
+        )
+        or packed_ratio > COMPACT_CODE_MAX_PACKED_LINES
+    ):
+        return 0
+
+    return add_warning(
+        path,
+        densest_line_num,
+        'The code is compacted throughout the file, which makes it difficult to'
+        f' review: {unspaced_ratio:.0%} of the operators have no spaces around'
+        f' them and {packed_ratio:.0%} of the lines have several statements,'
+        ' this line is one example. Please format the code, for example with'
+        ' clang-format and the .clang-format file of the repository.',
+    )
+
+
 def normalize_callback_param_types(params: str) -> str:
     """Strip parameter names and normalize whitespace/pointer style in a C parameter list."""
     p = re.sub(r'\s+', ' ', params.strip())
@@ -1964,6 +2108,7 @@ def validate_mod_file(path: Path, pr_author: str, pr_author_id: Optional[int]) -
     warnings += validate_symbol_hooks(path, mod_source)
     warnings += validate_specific_keywords(path, mod_source)
     warnings += validate_line_lengths(path, mod_source)
+    warnings += validate_code_compactness(path, mod_source)
     warnings += validate_callback_signatures(path, mod_source)
 
     return warnings

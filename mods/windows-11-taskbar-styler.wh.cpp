@@ -2,7 +2,7 @@
 // @id              windows-11-taskbar-styler
 // @name            Windows 11 Taskbar Styler
 // @description     Customize the taskbar with themes contributed by others or create your own
-// @version         1.11
+// @version         1.11.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1261,7 +1261,7 @@ const Theme g_themeBubbles = {{
         L"Foreground:=<SolidColorBrush x:Name=\"SearchBoxTextBlock\" Color=\"{ThemeResource SearchPillButtonForeground}\" />",
         L"Margin=0,-1,0,2"}},
     ThemeTargetStyles{L"Grid#ContainerGrid@ > Border#BackgroundBorder", {
-        L"Background@PointerOver:=<SolidColorBrush x:Name=\"SearchBoxTextBlock\" Opacity=\"0.2\" Color=\"{ThemeResource SearchPillButtonForeground}\" />",
+        L"Background@PointerOver:=<SolidColorBrush Color=\"{ThemeResource BubblesPointerOverStrongColor}\" />",
         L"CornerRadius=20",
         L"Margin=-1",
         L"Height=28",
@@ -1269,17 +1269,17 @@ const Theme g_themeBubbles = {{
         L"BorderBrush=Transparent"}},
     ThemeTargetStyles{L"SystemTray.IconView > Grid#ContainerGrid@ > Border#BackgroundBorder", {
         L"CornerRadius=20",
-        L"Background@PointerOver:=<SolidColorBrush x:Name=\"SearchBoxTextBlock\" Opacity=\"0.15\" Color=\"{ThemeResource SearchPillButtonForeground}\" />",
+        L"Background@PointerOver:=<SolidColorBrush Color=\"{ThemeResource BubblesPointerOverColor}\" />",
         L"Height=34",
         L"Width=34"}},
     ThemeTargetStyles{L"SystemTray.OmniButton#NotificationCenterButton > Grid@CommonStates > Border#BackgroundBorder", {
         L"CornerRadius=20",
         L"Width=75",
         L"Margin=-2,1,-2,1",
-        L"Background@PointerOver:=<SolidColorBrush x:Name=\"SearchBoxTextBlock\" Opacity=\"0.15\" Color=\"{ThemeResource SearchPillButtonForeground}\" />"}},
+        L"Background@PointerOver:=<SolidColorBrush Color=\"{ThemeResource BubblesPointerOverColor}\" />"}},
     ThemeTargetStyles{L"SystemTray.OmniButton#ControlCenterButton > Grid@CommonStates > Border#BackgroundBorder", {
         L"CornerRadius=20",
-        L"Background@PointerOver:=<SolidColorBrush x:Name=\"SearchBoxTextBlock\" Opacity=\"0.15\" Color=\"{ThemeResource SearchPillButtonForeground}\" />",
+        L"Background@PointerOver:=<SolidColorBrush Color=\"{ThemeResource BubblesPointerOverColor}\" />",
         L"Margin=1"}},
     ThemeTargetStyles{L"Taskbar.AugmentedEntryPointButton > Taskbar.TaskListButtonPanel@CommonStates", {
         L"Background:=<SolidColorBrush x:Name=\"SystemChromeHigh\" Opacity=\"0.6\" Color=\"{ThemeResource SystemChromeHighColor}\" />",
@@ -1302,6 +1302,11 @@ const Theme g_themeBubbles = {{
         L"CornerRadius=20",
         L"Background:=<SolidColorBrush x:Name=\"SearchBoxTextBlock\" Opacity=\"0.15\" Color=\"{ThemeResource SearchPillButtonForeground}\" />",
         L"BorderBrush:=<SolidColorBrush x:Name=\"SearchBoxTextBlock\" Opacity=\"0.25\" Color=\"{ThemeResource SearchPillButtonForeground}\" />"}},
+}, {}, {
+    L"BubblesPointerOverColor@Dark=#26FFFFFF",
+    L"BubblesPointerOverColor@Light=#22000000",
+    L"BubblesPointerOverStrongColor@Dark=#33FFFFFF",
+    L"BubblesPointerOverStrongColor@Light=#2E000000",
 }};
 
 const Theme g_themeRosePine = {{
@@ -3225,9 +3230,16 @@ const Theme g_themeAeris = {{
     L"taskbarBlurIncreace=0",
     L"taskListMargin=2",
     L"showDesktopWidth=10",
-    L"transparent=<SolidColorBrush Color=\"{ThemeResource TextFillColorPrimary}\" Opacity=\"0\"/>",
-    L"pointerOver=<SolidColorBrush Color=\"{ThemeResource TextFillColorPrimary}\" Opacity=\"0.075\"/>",
-    L"pressed=<SolidColorBrush Color=\"{ThemeResource TextFillColorPrimary}\" Opacity=\"0.05\"/>",
+    L"transparent=<SolidColorBrush Color=\"{ThemeResource AerisTransparentColor}\"/>",
+    L"pointerOver=<SolidColorBrush Color=\"{ThemeResource AerisPointerOverColor}\"/>",
+    L"pressed=<SolidColorBrush Color=\"{ThemeResource AerisPressedColor}\"/>",
+}, {
+    L"AerisTransparentColor@Dark=#00FFFFFF",
+    L"AerisTransparentColor@Light=#00000000",
+    L"AerisPointerOverColor@Dark=#13FFFFFF",
+    L"AerisPointerOverColor@Light=#11000000",
+    L"AerisPressedColor@Dark=#0DFFFFFF",
+    L"AerisPressedColor@Light=#0B000000",
 }};
 
 const Theme g_themePlasma = {{
@@ -3426,7 +3438,6 @@ const Theme g_themeWindowGlass = {{
     ThemeTargetStyles{L"Taskbar.TaskbarFrame", {
         L"MaxWidth={{containerGridWidth>0?min($TaskbarFrameMaxWidth,containerGridWidth):$TaskbarFrameMaxWidth}}",
         L"Width={{taskbarDock==`vertical`?skip():`Auto`}}",
-        L"MinWidth:=100",
         L"Grid.Column=1"}},
     ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid", {
         L"Margin=10,2,0,2",
@@ -3623,8 +3634,7 @@ const Theme g_themeWindowGlass_variant_Split = {{
     ThemeTargetStyles{L"Taskbar.TaskbarFrame", {
         L"Grid.Column=1",
         L"MaxWidth={{containerGridWidth>0?min($TaskbarFrameMaxWidth,containerGridWidth):$TaskbarFrameMaxWidth}}",
-        L"Width={{taskbarDock==`vertical`?skip():`Auto`}}",
-        L"MinWidth:=100"}},
+        L"Width={{taskbarDock==`vertical`?skip():`Auto`}}"}},
     ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid", {
         L"Margin=10,2,3,2",
         L"BorderThickness=$BorderThickness",
@@ -3816,8 +3826,7 @@ const Theme g_themeWindowGlass_variant_FullLength = {{
         L"Tag@DockedRight=vertical",
         L"Tag=>taskbarDock"}},
     ThemeTargetStyles{L"Taskbar.TaskbarFrame", {
-        L"Width={{taskbarDock==`vertical`?skip():`Auto`}}",
-        L"MinWidth:=100"}},
+        L"Width={{taskbarDock==`vertical`?skip():`Auto`}}"}},
     ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid", {
         L"Margin=10,2,10,2",
         L"BorderThickness=$BorderThickness",
@@ -5748,7 +5757,6 @@ const Theme g_themeLiquidGlass2 = {{
     ThemeTargetStyles{L"Taskbar.TaskbarFrame", {
         L"Width={{taskbarDock==`vertical`?skip():`Auto`}}",
         L"HorizontalAlignment=Center",
-        L"MinWidth=100",
         L"MaxWidth={{containerGridWidth>0?max(containerGridWidth-2*(trayWidth+50),100):`Infinity`}}",
         L"Grid.Column=1"}},
     ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid", {
@@ -6287,7 +6295,6 @@ const Theme g_themeLiquidGlass_variant_Alternate = {{
         L"Tag=>taskbarDock"}},
     ThemeTargetStyles{L"Taskbar.TaskbarFrame", {
         L"Width={{taskbarDock==`vertical`?skip():`Auto`}}",
-        L"MinWidth:=100",
         L"MaxWidth:=1200",
         L"HorizontalAlignment=Center"}},
     ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid", {
@@ -6881,7 +6888,6 @@ const Theme g_themeOS26_Liquid_Glass_variant_ClearMacDock = {{
         L"Tag=>taskbarDock"}},
     ThemeTargetStyles{L"Taskbar.TaskbarFrame", {
         L"Width={{taskbarDock==`vertical`?skip():`Auto`}}",
-        L"MinWidth:=100",
         L"MaxWidth={{containerGridWidth>0?containerGridWidth:`Infinity`}}",
         L"Grid.Column=1",
         L"Transitions:=<TransitionCollection><RepositionThemeTransition IsStaggeringEnabled=\"False\"/></TransitionCollection>",
@@ -6891,7 +6897,7 @@ const Theme g_themeOS26_Liquid_Glass_variant_ClearMacDock = {{
     ThemeTargetStyles{L"Grid#IconPanel > Image#Icon, Taskbar.TaskListLabeledButtonPanel#IconPanel > Image#Icon", {
         L"Height=24",
         L"Width=24",
-        L"Margin=5,0,-5,0"}},
+        L"Margin=-1,0,0,0"}},
     ThemeTargetStyles{L"Taskbar.TaskListButtonPanel", {
         L"Width=55",
         L"Height=70"}},
@@ -7159,7 +7165,7 @@ const Theme g_themeOS26_Liquid_Glass_variant_ClearMacDock = {{
         L"Margin=-2",
         L"Height=6",
         L"Width=6",
-        L"Margin=10,0,0,-2",
+        L"Margin=-1,0,0,-2",
         L"Width@ActiveRunningIndicator=12",
         L"Fill@ActiveRunningIndicator=#60CDFF"}},
     ThemeTargetStyles{L"Grid#IconPanel > TextBlock#LabelControl, Taskbar.TaskListLabeledButtonPanel > TextBlock#LabelControl", {
@@ -7231,6 +7237,9 @@ const Theme g_themeOS26_Liquid_Glass_variant_ClearMacDock = {{
 }, {
     L"IconBackground=<ImageBrush ImageSource=\"https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/refs/heads/main/Themes/OS26%20Liquid%20Glass/Assets/tahoeappbg.png\" Stretch=\"UniformtoFill\"/>",
     L"IconBorder= <LinearGradientBrush EndPoint=\"1,1\" StartPoint=\"0,0\"><GradientStop Color=\"#F5ffffff\" Offset=\"0.0\"/><GradientStop Color=\"#40ffffff\" Offset=\"0.4\"/><GradientStop Color=\"#20ffffff\" Offset=\"0.6\"/><GradientStop Color=\"#90ffffff\" Offset=\"1.0\"/></LinearGradientBrush>",
+}, {
+    L"MediumTaskbarButtonExtent=55",
+    L"SmallTaskbarButtonExtent=55",
 }};
 
 const Theme g_themeOS26_Liquid_Glass_variant_ClearMacDockCompact = {{
@@ -7241,7 +7250,6 @@ const Theme g_themeOS26_Liquid_Glass_variant_ClearMacDockCompact = {{
         L"Tag=>taskbarDock"}},
     ThemeTargetStyles{L"Taskbar.TaskbarFrame", {
         L"Width={{taskbarDock==`vertical`?skip():`Auto`}}",
-        L"MinWidth:=100",
         L"MaxWidth={{containerGridWidth>0?containerGridWidth:`Infinity`}}",
         L"Grid.Column=1",
         L"Transitions:=<TransitionCollection><RepositionThemeTransition IsStaggeringEnabled=\"False\"/></TransitionCollection>",
@@ -7250,8 +7258,7 @@ const Theme g_themeOS26_Liquid_Glass_variant_ClearMacDockCompact = {{
         L"HorizontalAlignment=Center"}},
     ThemeTargetStyles{L"Grid#IconPanel > Image#Icon, Taskbar.TaskListLabeledButtonPanel#IconPanel > Image#Icon", {
         L"Height=24",
-        L"Width=24",
-        L"Margin=3,0,-3,0"}},
+        L"Width=24"}},
     ThemeTargetStyles{L"Taskbar.TaskListButtonPanel", {
         L"Width=50",
         L"Height=65",
@@ -7523,7 +7530,7 @@ const Theme g_themeOS26_Liquid_Glass_variant_ClearMacDockCompact = {{
         L"Margin=-2",
         L"Height=4",
         L"Width=4",
-        L"Margin=8,0,0,1",
+        L"Margin=2,0,0,1",
         L"Width@ActiveRunningIndicator=8",
         L"Fill@ActiveRunningIndicator=#60CDFF"}},
     ThemeTargetStyles{L"Grid#IconPanel > TextBlock#LabelControl, Taskbar.TaskListLabeledButtonPanel > TextBlock#LabelControl", {
@@ -7595,6 +7602,9 @@ const Theme g_themeOS26_Liquid_Glass_variant_ClearMacDockCompact = {{
 }, {
     L"IconBackground=<ImageBrush ImageSource=\"https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/refs/heads/main/Themes/OS26%20Liquid%20Glass/Assets/tahoeappbg.png\" Stretch=\"UniformtoFill\"/>",
     L"IconBorder= <LinearGradientBrush EndPoint=\"1,1\" StartPoint=\"0,0\"><GradientStop Color=\"#F5ffffff\" Offset=\"0.0\"/><GradientStop Color=\"#40ffffff\" Offset=\"0.4\"/><GradientStop Color=\"#20ffffff\" Offset=\"0.6\"/><GradientStop Color=\"#90ffffff\" Offset=\"1.0\"/></LinearGradientBrush>",
+}, {
+    L"MediumTaskbarButtonExtent=50",
+    L"SmallTaskbarButtonExtent=50",
 }};
 
 const Theme g_themeOS26_Liquid_Glass_variant_ClearTaskbar = {{
@@ -7607,7 +7617,7 @@ const Theme g_themeOS26_Liquid_Glass_variant_ClearTaskbar = {{
     ThemeTargetStyles{L"Grid#IconPanel > Image#Icon, Taskbar.TaskListLabeledButtonPanel#IconPanel > Image#Icon", {
         L"Height=24",
         L"Width=24",
-        L"Margin=5,0,-5,0"}},
+        L"Margin=-1,0,0,0"}},
     ThemeTargetStyles{L"Taskbar.TaskListButtonPanel", {
         L"Width=55",
         L"Height=70"}},
@@ -7761,7 +7771,7 @@ const Theme g_themeOS26_Liquid_Glass_variant_ClearTaskbar = {{
         L"Margin=-2",
         L"Height=6",
         L"Width=6",
-        L"Margin=10,0,0,-2",
+        L"Margin=-1,0,0,-2",
         L"Width@ActiveRunningIndicator=12",
         L"Fill@ActiveRunningIndicator=#60CDFF"}},
     ThemeTargetStyles{L"Grid#IconPanel > TextBlock#LabelControl, Taskbar.TaskListLabeledButtonPanel > TextBlock#LabelControl", {
@@ -7850,6 +7860,9 @@ const Theme g_themeOS26_Liquid_Glass_variant_ClearTaskbar = {{
 }, {
     L"IconBackground=<ImageBrush ImageSource=\"https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/refs/heads/main/Themes/OS26%20Liquid%20Glass/Assets/tahoeappbg.png\" Stretch=\"UniformtoFill\"/>",
     L"IconBorder= <LinearGradientBrush EndPoint=\"1,1\" StartPoint=\"0,0\"><GradientStop Color=\"#F5ffffff\" Offset=\"0.0\"/><GradientStop Color=\"#40ffffff\" Offset=\"0.4\"/><GradientStop Color=\"#20ffffff\" Offset=\"0.6\"/><GradientStop Color=\"#90ffffff\" Offset=\"1.0\"/></LinearGradientBrush>",
+}, {
+    L"MediumTaskbarButtonExtent=55",
+    L"SmallTaskbarButtonExtent=55",
 }};
 
 const Theme g_themeOS26_Liquid_Glass_variant_DarkMacDock = {{
@@ -7860,7 +7873,6 @@ const Theme g_themeOS26_Liquid_Glass_variant_DarkMacDock = {{
         L"Tag=>taskbarDock"}},
     ThemeTargetStyles{L"Taskbar.TaskbarFrame", {
         L"Width={{taskbarDock==`vertical`?skip():`Auto`}}",
-        L"MinWidth:=100",
         L"MaxWidth={{containerGridWidth>0?containerGridWidth:`Infinity`}}",
         L"Grid.Column=1",
         L"Transitions:=<TransitionCollection><RepositionThemeTransition IsStaggeringEnabled=\"False\"/></TransitionCollection>",
@@ -7870,7 +7882,7 @@ const Theme g_themeOS26_Liquid_Glass_variant_DarkMacDock = {{
     ThemeTargetStyles{L"Grid#IconPanel > Image#Icon, Taskbar.TaskListLabeledButtonPanel#IconPanel > Image#Icon", {
         L"Height=24",
         L"Width=24",
-        L"Margin=5,0,-5,0"}},
+        L"Margin=-1,0,0,0"}},
     ThemeTargetStyles{L"Taskbar.TaskListButtonPanel", {
         L"Width=55",
         L"Height=70"}},
@@ -8138,7 +8150,7 @@ const Theme g_themeOS26_Liquid_Glass_variant_DarkMacDock = {{
         L"Margin=-2",
         L"Height=6",
         L"Width=6",
-        L"Margin=10,0,0,-2",
+        L"Margin=-1,0,0,-2",
         L"Width@ActiveRunningIndicator=12",
         L"Fill@ActiveRunningIndicator=#60CDFF"}},
     ThemeTargetStyles{L"Grid#IconPanel > TextBlock#LabelControl, Taskbar.TaskListLabeledButtonPanel > TextBlock#LabelControl", {
@@ -8210,6 +8222,9 @@ const Theme g_themeOS26_Liquid_Glass_variant_DarkMacDock = {{
 }, {
     L"IconBackground=<LinearGradientBrush StartPoint=\"0.47,-0.29\" EndPoint=\"0.50,1.29\"><GradientStop Offset=\"0.18\" Color=\"#2F2F2F\"/><GradientStop Offset=\"0.3\" Color=\"#292929\"/><GradientStop Offset=\"0.5\" Color=\"#141414\"/><GradientStop Offset=\"0.68\" Color=\"#080808\"/><GradientStop Offset=\"0.81\" Color=\"#000000\"/></LinearGradientBrush>",
     L"IconBorder=<LinearGradientBrush StartPoint=\"0.04,-0.14\" EndPoint=\"1.22,1.10\"><GradientStop Offset=\"0.18\" Color=\"#4FFFFFFF\"/><GradientStop Offset=\"0.34\" Color=\"#661D1D1D\"/><GradientStop Offset=\"0.63\" Color=\"#00000000\"/><GradientStop Offset=\"0.72\" Color=\"#662D2D2D\"/><GradientStop Offset=\"0.84\" Color=\"#4FFFFFFF\"/></LinearGradientBrush>",
+}, {
+    L"MediumTaskbarButtonExtent=55",
+    L"SmallTaskbarButtonExtent=55",
 }};
 
 const Theme g_themeOS26_Liquid_Glass_variant_DarkMacDockCompact = {{
@@ -8220,7 +8235,6 @@ const Theme g_themeOS26_Liquid_Glass_variant_DarkMacDockCompact = {{
         L"Tag=>taskbarDock"}},
     ThemeTargetStyles{L"Taskbar.TaskbarFrame", {
         L"Width={{taskbarDock==`vertical`?skip():`Auto`}}",
-        L"MinWidth:=100",
         L"MaxWidth={{containerGridWidth>0?containerGridWidth:`Infinity`}}",
         L"Grid.Column=1",
         L"Transitions:=<TransitionCollection><RepositionThemeTransition IsStaggeringEnabled=\"False\"/></TransitionCollection>",
@@ -8229,8 +8243,7 @@ const Theme g_themeOS26_Liquid_Glass_variant_DarkMacDockCompact = {{
         L"HorizontalAlignment=Center"}},
     ThemeTargetStyles{L"Grid#IconPanel > Image#Icon, Taskbar.TaskListLabeledButtonPanel#IconPanel > Image#Icon", {
         L"Height=24",
-        L"Width=24",
-        L"Margin=3,0,-3,0"}},
+        L"Width=24"}},
     ThemeTargetStyles{L"Taskbar.TaskListButtonPanel", {
         L"Width=50",
         L"Height=65",
@@ -8502,7 +8515,7 @@ const Theme g_themeOS26_Liquid_Glass_variant_DarkMacDockCompact = {{
         L"Margin=-2",
         L"Height=4",
         L"Width=4",
-        L"Margin=8,0,0,1",
+        L"Margin=2,0,0,1",
         L"Width@ActiveRunningIndicator=8",
         L"Fill@ActiveRunningIndicator=#60CDFF"}},
     ThemeTargetStyles{L"Grid#IconPanel > TextBlock#LabelControl, Taskbar.TaskListLabeledButtonPanel > TextBlock#LabelControl", {
@@ -8574,6 +8587,9 @@ const Theme g_themeOS26_Liquid_Glass_variant_DarkMacDockCompact = {{
 }, {
     L"IconBackground=<LinearGradientBrush StartPoint=\"0.47,-0.29\" EndPoint=\"0.50,1.29\"><GradientStop Offset=\"0.18\" Color=\"#2F2F2F\"/><GradientStop Offset=\"0.3\" Color=\"#292929\"/><GradientStop Offset=\"0.5\" Color=\"#141414\"/><GradientStop Offset=\"0.68\" Color=\"#080808\"/><GradientStop Offset=\"0.81\" Color=\"#000000\"/></LinearGradientBrush>",
     L"IconBorder=<LinearGradientBrush StartPoint=\"0.04,-0.14\" EndPoint=\"1.22,1.10\"><GradientStop Offset=\"0.18\" Color=\"#4FFFFFFF\"/><GradientStop Offset=\"0.34\" Color=\"#661D1D1D\"/><GradientStop Offset=\"0.63\" Color=\"#00000000\"/><GradientStop Offset=\"0.72\" Color=\"#662D2D2D\"/><GradientStop Offset=\"0.84\" Color=\"#4FFFFFFF\"/></LinearGradientBrush>",
+}, {
+    L"MediumTaskbarButtonExtent=50",
+    L"SmallTaskbarButtonExtent=50",
 }};
 
 const Theme g_themeOS26_Liquid_Glass_variant_DarkTaskbar = {{
@@ -8586,7 +8602,7 @@ const Theme g_themeOS26_Liquid_Glass_variant_DarkTaskbar = {{
     ThemeTargetStyles{L"Grid#IconPanel > Image#Icon, Taskbar.TaskListLabeledButtonPanel#IconPanel > Image#Icon", {
         L"Height=24",
         L"Width=24",
-        L"Margin=5,0,-5,0"}},
+        L"Margin=-1,0,0,0"}},
     ThemeTargetStyles{L"Taskbar.TaskListButtonPanel", {
         L"Width=55",
         L"Height=70"}},
@@ -8740,7 +8756,7 @@ const Theme g_themeOS26_Liquid_Glass_variant_DarkTaskbar = {{
         L"Margin=-2",
         L"Height=6",
         L"Width=6",
-        L"Margin=10,0,0,-2",
+        L"Margin=-1,0,0,-2",
         L"Width@ActiveRunningIndicator=12",
         L"Fill@ActiveRunningIndicator=#60CDFF"}},
     ThemeTargetStyles{L"Grid#IconPanel > TextBlock#LabelControl, Taskbar.TaskListLabeledButtonPanel > TextBlock#LabelControl", {
@@ -8829,6 +8845,9 @@ const Theme g_themeOS26_Liquid_Glass_variant_DarkTaskbar = {{
 }, {
     L"IconBackground=<LinearGradientBrush StartPoint=\"0.47,-0.29\" EndPoint=\"0.50,1.29\"><GradientStop Offset=\"0.18\" Color=\"#2F2F2F\"/><GradientStop Offset=\"0.3\" Color=\"#292929\"/><GradientStop Offset=\"0.5\" Color=\"#141414\"/><GradientStop Offset=\"0.68\" Color=\"#080808\"/><GradientStop Offset=\"0.81\" Color=\"#000000\"/></LinearGradientBrush>",
     L"IconBorder=<LinearGradientBrush StartPoint=\"0.25,-0.20\" EndPoint=\"0.99,1.39\"><GradientStop Offset=\"0.11\" Color=\"#50FFFFFF\"/><GradientStop Offset=\"0.3\" Color=\"#631C1C1C\"/><GradientStop Offset=\"0.62\" Color=\"#591C1C1C\"/><GradientStop Offset=\"0.77\" Color=\"#50FFFFFF\"/></LinearGradientBrush>",
+}, {
+    L"MediumTaskbarButtonExtent=55",
+    L"SmallTaskbarButtonExtent=55",
 }};
 
 const Theme g_themeFrostyGlass = {{
@@ -9101,7 +9120,6 @@ const Theme g_themeFrostedAcrylic = {{
         L"Tag=>taskbarDock"}},
     ThemeTargetStyles{L"Taskbar.TaskbarFrame", {
         L"Width={{taskbarDock==`vertical`?skip():`Auto`}}",
-        L"MinWidth:=100",
         L"MaxWidth={{containerGridWidth>0?containerGridWidth:`Infinity`}}",
         L"Margin=0",
         L"Background:=Transparent",
@@ -9109,7 +9127,6 @@ const Theme g_themeFrostedAcrylic = {{
         L"Padding=0"}},
     ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid", {
         L"Width=Auto",
-        L"MinWidth=100",
         L"HorizontalAlignment=Stretch",
         L"Margin=$SideMargin,2,$SideMargin,3",
         L"BorderThickness=$BorderThickness",
@@ -9155,6 +9172,8 @@ const Theme g_themeFrostedAcrylic = {{
         L"Margin=0",
         L"HorizontalAlignment=Center",
         L"VerticalAlignment=Center"}},
+    ThemeTargetStyles{L"Taskbar.TaskListButton > Grid#IconPanel > Border#BackgroundElement, Taskbar.TaskListButton > Taskbar.TaskListLabeledButtonPanel > Border#BackgroundElement", {
+        L"Margin=2,0,2,0"}},
     ThemeTargetStyles{L"Grid#IconPanel > TextBlock, Taskbar.TaskListLabeledButtonPanel > TextBlock, Taskbar.TaskListButtonPanel > Grid > TextBlock, Taskbar.TaskListButtonPanel > TextBlock, SearchUx.SearchUI.SearchIconButton > SearchUx.SearchUI.SearchButtonRootGrid > Grid > TextBlock, SearchUx.SearchUI.SearchIconButton > SearchUx.SearchUI.SearchButtonRootGrid > TextBlock", {
         L"Visibility=Collapsed",
         L"Margin=0"}},
@@ -9296,6 +9315,8 @@ const Theme g_themeFrostedAcrylic = {{
     L"ElementBorderThickness=0.3,0.3,0.3,1",
     L"ElementCornerRadius=12",
     L"TrayPadding=2,4,2,4",
+}, {
+    L"MediumTaskbarButtonExtent=48",
 }};
 
 const Theme g_themePills = {{
@@ -9602,6 +9623,7 @@ const Theme g_themePills = {{
     L"AdaptiveBorder@Dark =#90454545",
     L"AdaptiveIndicator@Light =#000000",
     L"AdaptiveIndicator@Dark =#FFFFFF",
+    L"MediumTaskbarButtonExtent=50",
 }};
 
 const Theme g_themeBlob = {{
@@ -9905,11 +9927,11 @@ const Theme g_themeBlob = {{
 
 const Theme g_themeMinecraft_Hotbar = {{
     ThemeTargetStyles{L"Grid#IconPanel@CommonStates > Image#Icon, Taskbar.TaskListLabeledButtonPanel#IconPanel@CommonStates > Image#Icon", {
-        L"Margin=5.5,0,-5.5,0",
-        L"Margin@ActiveNormal=9,0,-10,0",
-        L"Margin@ActivePointerOver=9,0,-10,0",
-        L"Margin@InactivePointerOver=7,0,-7,0",
-        L"Margin@ActivePressed=9,0,-10,0"}},
+        L"Margin=0",
+        L"Margin@ActiveNormal=3.5,0,-4.5,0",
+        L"Margin@ActivePointerOver=3.5,0,-4.5,0",
+        L"Margin@InactivePointerOver=1.5,0,-1.5,0",
+        L"Margin@ActivePressed=3.5,0,-4.5,0"}},
     ThemeTargetStyles{L"Grid#RootGrid > Taskbar.TaskbarBackground > Grid", {
         L"Background:=transparent"}},
     ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid", {
@@ -9937,7 +9959,6 @@ const Theme g_themeMinecraft_Hotbar = {{
         L"Width={{taskbarDock==`vertical`?skip():`Auto`}}",
         L"MaxWidth={{containerGridWidth>0?containerGridWidth:`Infinity`}}",
         L"Height={{taskbarDock==`vertical`?skip():70}}",
-        L"MinWidth:=100",
         L"Grid.Column=1",
         L"HorizontalAlignment=Center"}},
     ThemeTargetStyles{L"Taskbar.TaskbarFrame > Grid#RootGrid", {
@@ -9971,8 +9992,8 @@ const Theme g_themeMinecraft_Hotbar = {{
         L"Width=4",
         L"Width@ActiveRunningIndicator=8",
         L"Fill@ActiveRunningIndicator=#60CDFF",
-        L"Margin=6,0,-6,0",
-        L"Margin@ActiveRunning=20,0,-20,0"}},
+        L"Margin=0.5,0,-0.5,0",
+        L"Margin@ActiveRunning=14.5,0,-14.5,0"}},
     ThemeTargetStyles{L"Taskbar.ExperienceToggleButton#LaunchListButton[AutomationProperties.AutomationId=StartButton] > Taskbar.TaskListButtonPanel > Grid > Microsoft.UI.Xaml.Controls.AnimatedVisualPlayer#Icon, Taskbar.ExperienceToggleButton#LaunchListButton[AutomationProperties.AutomationId=StartButton] > Taskbar.TaskListButtonPanel > Microsoft.UI.Xaml.Controls.AnimatedVisualPlayer#Icon", {
         L"Visibility=0"}},
     ThemeTargetStyles{L"Border#MultiWindowElement", {
@@ -10185,6 +10206,9 @@ const Theme g_themeMinecraft_Hotbar = {{
 }, {
     L"IconBackground= <ImageBrush Stretch=\"UniformtoFill\" ImageSource=\"https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/refs/heads/main/Themes/Minecraft%20Hotbar/Assets/hotbar.png\" />",
     L"ActiveBackground= <ImageBrush Stretch=\"UniformtoFill\" ImageSource=\"https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/refs/heads/main/Themes/Minecraft%20Hotbar/Assets/hotbaractive.png\" />",
+}, {
+    L"MediumTaskbarButtonExtent=55",
+    L"SmallTaskbarButtonExtent=55",
 }};
 
 const Theme g_themeOne_UI_8_5_variant_Dock = {{
@@ -10709,6 +10733,8 @@ const Theme g_themeOne_UI_8_5_variant_Dock = {{
 }, {
     L"IconBackground=<ImageBrush Stretch=\"Uniform\"> <ImageBrush.ImageSource> <BitmapImage UriSource=\"https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/refs/heads/main/Themes/One%20UI%208.5/Assets/template.png\" DecodePixelType=\"Logical\" DecodePixelWidth=\"64\" DecodePixelHeight=\"64\" /> </ImageBrush.ImageSource> </ImageBrush>",
     L"IconBorder=transparent",
+}, {
+    L"MediumTaskbarButtonExtent=45",
 }};
 
 const Theme g_themeOne_UI_8_5_variant_Taskbar = {{
@@ -11107,6 +11133,8 @@ const Theme g_themeOne_UI_8_5_variant_Taskbar = {{
 }, {
     L"IconBackground=<ImageBrush Stretch=\"Uniform\"> <ImageBrush.ImageSource> <BitmapImage UriSource=\"https://raw.githubusercontent.com/ramensoftware/windows-11-taskbar-styling-guide/refs/heads/main/Themes/One%20UI%208.5/Assets/template.png\" DecodePixelType=\"Logical\" DecodePixelWidth=\"64\" DecodePixelHeight=\"64\" /> </ImageBrush.ImageSource> </ImageBrush>",
     L"IconBorder=transparent",
+}, {
+    L"MediumTaskbarButtonExtent=45",
 }};
 
 // clang-format on
@@ -11217,7 +11245,6 @@ void ApplyCustomizations(ElementId elementId,
                          PCWSTR fallbackClassName);
 void CleanupCustomizations(ElementId elementId);
 void QueueDiagnosticsRelease(InstanceHandle handle);
-void FlushDiagnosticsReleasesIfQuiet();
 
 void HandleClickThroughIslandRoot(
     winrt::Windows::Foundation::IInspectable const& inspectable);
@@ -11515,10 +11542,6 @@ HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation relation, Visu
     {
         Wh_Log(L"Error %08X", winrt::to_hresult());
     }
-
-    // A tree discarded whole is never dismantled, so it reports no removals to
-    // be released by.
-    FlushDiagnosticsReleasesIfQuiet();
 
     if (mutationType == Add)
     {
@@ -11866,8 +11889,9 @@ using PropertyKeyValue =
 using PropertyValuesUnresolved =
     std::vector<std::pair<std::wstring, std::wstring>>;
 using PropertyValues = std::vector<PropertyKeyValue>;
+// Nullopt once resolving has failed, which no element matches.
 using PropertyValuesMaybeUnresolved =
-    std::variant<PropertyValuesUnresolved, PropertyValues>;
+    std::variant<PropertyValuesUnresolved, std::optional<PropertyValues>>;
 
 struct ElementMatcher {
     enum class Kind {
@@ -12251,10 +12275,11 @@ void ResetThreadLocal(T& container) {
 // A handle is an address, so a destroyed element can be replaced by one
 // reporting the same handle, and an entry made for that predecessor must not
 // name the new one. An entry holds its element until the diagnostics are made
-// to release it, which never happens while the mod keeps state for it, and only
-// a weak reference after that. The weak reference isn't relied on any sooner:
-// a XAML one stops resolving once the element's reference count drops to zero,
-// even if the element survives that, as reported elements were seen to do.
+// to release it, which never happens while the mod has state which needs it
+// held, and only a weak reference after that. The weak reference isn't relied
+// on any sooner: a XAML one stops resolving once the element's reference count
+// drops to zero, even if the element survives that, as reported elements were
+// seen to do.
 struct ElementIdEntry {
     ElementId id = ElementId::None;
     wf::IInspectable element{nullptr};
@@ -12278,6 +12303,11 @@ ElementId GetOrCreateElementId(InstanceHandle handle,
 
     auto& entry = g_elementIds[handle];
     if (entry.id == ElementId::None || !ElementIdEntryNames(entry, element)) {
+        // A predecessor the diagnostics released reported no removal.
+        if (entry.id != ElementId::None) {
+            CleanupCustomizations(entry.id);
+        }
+
         entry.id = static_cast<ElementId>(++g_lastElementId);
 
         winrt::weak_ref<wf::IInspectable> weakElement;
@@ -12316,7 +12346,9 @@ void ReleaseElementIdEntry(InstanceHandle handle) {
 
     it->second.element = nullptr;
     if (!it->second.weakElement.get()) {
+        ElementId elementId = it->second.id;
         g_elementIds.erase(it);
+        CleanupCustomizations(elementId);
     }
 }
 
@@ -12439,10 +12471,9 @@ struct StyleVariableConsumer {
 // if they outlive it. std::list keeps a walk over the entries valid when a
 // re-entrant lookup adds one.
 struct StyleVariableState : std::enable_shared_from_this<StyleVariableState> {
-    // Held, so that no other XamlRoot can take its address while the entry
-    // names it. That keeps no elements alive: a tree lets go of them, and of
-    // its XamlRoot, as it shuts down.
-    XamlRoot xamlRoot{nullptr};
+    // Weak: the last reference to a XamlRoot can shut down the XAML core, which
+    // mustn't happen from TLS destructors, under the loader lock.
+    winrt::weak_ref<XamlRoot> xamlRoot;
     std::unordered_map<std::wstring, std::vector<StyleVariableCapture>>
         variables;
     std::unordered_map<std::wstring, std::vector<StyleVariableConsumer>>
@@ -12532,7 +12563,7 @@ StyleVariableState* GetStyleVariableState(XamlRoot const& xamlRoot) {
         return nullptr;
     }
     for (auto& entry : g_styleVariableState) {
-        if (entry->xamlRoot == xamlRoot) {
+        if (entry->xamlRoot.get() == xamlRoot) {
             return entry.get();
         }
     }
@@ -15771,6 +15802,32 @@ std::vector<std::wstring_view> SplitStringView(std::wstring_view s,
     return res;
 }
 
+// Locale-independent std::stof. Skips leading whitespace and a plus sign, and
+// ignores trailing characters. Throws if there's no number to parse.
+float ParseFloatInvariant(std::wstring_view sv) {
+    sv = TrimStringView(sv);
+    if (sv.starts_with(L'+')) {
+        sv.remove_prefix(1);
+    }
+
+    std::string narrow;
+    narrow.reserve(sv.size());
+    for (auto c : sv) {
+        if (c > 127) {
+            break;
+        }
+        narrow.push_back(static_cast<char>(c));
+    }
+
+    float result = 0;
+    auto [ptr, ec] =
+        std::from_chars(narrow.data(), narrow.data() + narrow.size(), result);
+    if (ec != std::errc{}) {
+        throw std::runtime_error("Invalid float value");
+    }
+    return result;
+}
+
 std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
     std::wstring_view stringValue) {
     // Example:
@@ -15929,7 +15986,7 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
             auto valStr = propSubstr.substr(
                 std::size(kTintOpacityPrefix),
                 propSubstr.size() - std::size(kTintOpacityPrefix) - 1);
-            tintOpacity = std::stof(std::wstring(valStr));
+            tintOpacity = ParseFloatInvariant(valStr);
             continue;
         }
 
@@ -15939,7 +15996,7 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
                 std::size(kTintLuminosityOpacityPrefix),
                 propSubstr.size() - std::size(kTintLuminosityOpacityPrefix) -
                     1);
-            tintLuminosityOpacity = std::stof(std::wstring(valStr));
+            tintLuminosityOpacity = ParseFloatInvariant(valStr);
             continue;
         }
 
@@ -15948,7 +16005,7 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
             auto valStr = propSubstr.substr(
                 std::size(kTintSaturationPrefix),
                 propSubstr.size() - std::size(kTintSaturationPrefix) - 1);
-            tintSaturation = std::stof(std::wstring(valStr));
+            tintSaturation = ParseFloatInvariant(valStr);
             continue;
         }
 
@@ -15957,7 +16014,7 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
             auto valStr = propSubstr.substr(
                 std::size(kNoiseOpacityPrefix),
                 propSubstr.size() - std::size(kNoiseOpacityPrefix) - 1);
-            noiseOpacity = std::stof(std::wstring(valStr));
+            noiseOpacity = ParseFloatInvariant(valStr);
             continue;
         }
 
@@ -15966,7 +16023,7 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
             auto valStr = propSubstr.substr(
                 std::size(kNoiseDensityPrefix),
                 propSubstr.size() - std::size(kNoiseDensityPrefix) - 1);
-            noiseDensity = std::stof(std::wstring(valStr));
+            noiseDensity = ParseFloatInvariant(valStr);
             continue;
         }
 
@@ -15975,7 +16032,7 @@ std::optional<PropertyOverrideValue> ParseNonXamlPropertyOverrideValue(
             auto valStr = propSubstr.substr(
                 std::size(kBlurAmountPrefix),
                 propSubstr.size() - std::size(kBlurAmountPrefix) - 1);
-            blurAmount = std::stof(std::wstring(valStr));
+            blurAmount = ParseFloatInvariant(valStr);
             continue;
         }
 
@@ -16328,16 +16385,16 @@ std::optional<PropertyOverrideValue> ResolveExpandedSinglePropertyValue(
     return std::nullopt;
 }
 
-const PropertyValues& GetResolvedPropertyValues(
+const std::optional<PropertyValues>& GetResolvedPropertyValues(
     const std::wstring_view type,
     const std::wstring_view fallbackType,
     PropertyValuesMaybeUnresolved* propertyValuesMaybeUnresolved) {
-    if (const auto* resolved =
-            std::get_if<PropertyValues>(propertyValuesMaybeUnresolved)) {
+    if (const auto* resolved = std::get_if<std::optional<PropertyValues>>(
+            propertyValuesMaybeUnresolved)) {
         return *resolved;
     }
 
-    PropertyValues propertyValues;
+    std::optional<PropertyValues> propertyValues{std::in_place};
 
     try {
         const auto& propertyValuesStr =
@@ -16358,7 +16415,7 @@ const PropertyValues& GetResolvedPropertyValues(
 
             for (size_t i = 0; i < propertyValuesStr.size(); i++) {
                 const auto setter = style.Setters().GetAt(i).as<Setter>();
-                propertyValues.push_back({
+                propertyValues->push_back({
                     setter.Property(),
                     setter.Value(),
                 });
@@ -16366,15 +16423,18 @@ const PropertyValues& GetResolvedPropertyValues(
         }
 
         Wh_Log(L"%.*s: %zu matcher styles", static_cast<int>(type.length()),
-               type.data(), propertyValues.size());
+               type.data(), propertyValues->size());
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        propertyValues.reset();
     } catch (std::exception const& ex) {
         Wh_Log(L"Error: %S", ex.what());
+        propertyValues.reset();
     }
 
     *propertyValuesMaybeUnresolved = std::move(propertyValues);
-    return std::get<PropertyValues>(*propertyValuesMaybeUnresolved);
+    return std::get<std::optional<PropertyValues>>(
+        *propertyValuesMaybeUnresolved);
 }
 
 // https://stackoverflow.com/a/12835139
@@ -16588,11 +16648,16 @@ bool TestElementMatcher(FrameworkElement element,
 
     auto elementDo = element.as<DependencyObject>();
 
-    for (const auto& propertyValue : GetResolvedPropertyValues(
-             matcher.type,
-             fallbackClassName ? fallbackClassName
-                               : winrt::name_of<FrameworkElement>(),
-             &matcher.propertyValues)) {
+    const auto& propertyValues = GetResolvedPropertyValues(
+        matcher.type,
+        fallbackClassName ? fallbackClassName
+                          : winrt::name_of<FrameworkElement>(),
+        &matcher.propertyValues);
+    if (!propertyValues) {
+        return false;
+    }
+
+    for (const auto& propertyValue : *propertyValues) {
         const auto value =
             ReadLocalValueWithWorkaround(elementDo, propertyValue.first);
         if (!value) {
@@ -18131,9 +18196,6 @@ void PropagateStyleVariableChangeCore(StyleVariableState* state,
         auto& elementState = stateIt->second;
 
         auto element = elementState.element;
-        if (!element) {
-            continue;
-        }
 
         // A handful of pointer comparisons against the snapshot above, far
         // cheaper than the re-parse it avoids.
@@ -18440,10 +18502,6 @@ void SetUpCapturesForElement(StyleVariableState* state,
 // ElementCustomizationState entry is erased.
 void RestoreCapturesForElement(FrameworkElement element,
                                const ElementCustomizationState& elementState) {
-    if (!element) {
-        return;
-    }
-
     for (const auto& [property, captureState] :
          elementState.captureCustomizationStates) {
         if (!captureState.propertyChangedToken) {
@@ -18676,9 +18734,6 @@ void ApplyCustomizationsForVisualStateGroup(
                     }
 
                     auto element = elementStateIt->second.element;
-                    if (!element) {
-                        return;
-                    }
 
                     Wh_Log(L"Re-applying all styles for %s",
                            winrt::get_class_name(element).c_str());
@@ -18806,41 +18861,24 @@ void RestoreCustomizationsForVisualStateGroup(
         }
     }
 
-    if (element) {
-        for (const auto& [property, propState] :
-             elementCustomizationStateForVisualStateGroup
-                 .propertyCustomizationStates) {
-            try {
-                element.UnregisterPropertyChangedCallback(
-                    property, propState.propertyChangedToken);
-            } catch (winrt::hresult_error const& ex) {
-                Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
-            }
-
-            if (!propState.variableDependencies.empty()) {
-                UpdateStyleVariableConsumers(state, elementId, property,
-                                             /*fallbackClassName=*/nullptr,
-                                             propState.variableDependencies,
-                                             {});
-            }
-
-            if (propState.originalValue) {
-                RestoreOriginalValue(element, property,
-                                     *propState.originalValue);
-            }
+    for (const auto& [property, propState] :
+         elementCustomizationStateForVisualStateGroup
+             .propertyCustomizationStates) {
+        try {
+            element.UnregisterPropertyChangedCallback(
+                property, propState.propertyChangedToken);
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
         }
-    } else {
-        // Element is gone; still clear consumer entries so a stale (elementId,
-        // property) pair isn't visited during PropagateStyleVariableChange.
-        for (const auto& [property, propState] :
-             elementCustomizationStateForVisualStateGroup
-                 .propertyCustomizationStates) {
-            if (!propState.variableDependencies.empty()) {
-                UpdateStyleVariableConsumers(state, elementId, property,
-                                             /*fallbackClassName=*/nullptr,
-                                             propState.variableDependencies,
-                                             {});
-            }
+
+        if (!propState.variableDependencies.empty()) {
+            UpdateStyleVariableConsumers(state, elementId, property,
+                                         /*fallbackClassName=*/nullptr,
+                                         propState.variableDependencies, {});
+        }
+
+        if (propState.originalValue) {
+            RestoreOriginalValue(element, property, *propState.originalValue);
         }
     }
 }
@@ -19347,10 +19385,10 @@ void EnsureTaskbarSurfaceSubclasses() {
         0);
 }
 
-// Item elements the current virtualization pass recycled, consumed by the
-// matching ElementPrepared. A freshly created element is prepared without ever
-// having been cleared, and its Add mutation already applied the styles, so
-// re-matching it would restore and re-push every value for nothing.
+// Item elements sitting in a recycle pool, consumed by the matching
+// ElementPrepared. A freshly created element is prepared without ever having
+// been in one, and its Add mutation already applied the styles, so re-matching
+// it would restore and re-push every value for nothing.
 thread_local std::unordered_set<ElementId> g_recycledElements;
 
 // The item each element was last matched against, which lets a reuse for that
@@ -19541,9 +19579,6 @@ void RefreshRecycledItemCaptures() {
 
             auto& elementState = it->second;
             auto element = elementState.element;
-            if (!element) {
-                continue;
-            }
 
             bool withdrawn = state.withdrawnCaptureOwners.contains(owner);
             if (IsInRecycledRepeaterItem(element) == withdrawn) {
@@ -19699,8 +19734,7 @@ void HandleVirtualizingRepeater(ElementId elementId, FrameworkElement element) {
 
             // Held across the walk below, so that an item which no weak
             // reference can get back, such as one a source wraps anew on every
-            // read, is never recorded: an entry which could match nothing would
-            // keep the element held for good.
+            // read, is never recorded: such an entry could match nothing.
             wf::IInspectable strongItem;
             if (item) {
                 if (auto* weakItem =
@@ -19743,6 +19777,22 @@ void HandleVirtualizingRepeater(ElementId elementId, FrameworkElement element) {
         });
 }
 
+// An element can be in a recycle pool with no clear ever seen for it, as when
+// the diagnostics attach to a live tree, and its next prepare is a reuse all
+// the same. A freshly created element isn't taken for one: a repeater gives it
+// its index ahead of adding it.
+void MarkIfInRecyclePool(ElementId elementId, FrameworkElement element) {
+    try {
+        auto repeater = Media::VisualTreeHelper::GetParent(element)
+                            .try_as<muxc::ItemsRepeater>();
+        if (repeater && repeater.GetElementIndex(element) < 0) {
+            g_recycledElements.insert(elementId);
+        }
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+}
+
 void MergeResourceVariables();
 void EnsureResourceVariablesMerged();
 
@@ -19766,8 +19816,10 @@ void ApplyCustomizations(ElementId elementId,
     }
 
     // Before the early return below: a repeater rarely has styles of its own,
-    // but its item elements do.
+    // but its item elements do, and one that matches nothing for its current
+    // item can match for the next.
     HandleVirtualizingRepeater(elementId, element);
+    MarkIfInRecyclePool(elementId, element);
 
     // Everything below holds `state` across calls that run arbitrary XAML work
     // and can re-enter, so keep the entry from being reaped underneath it.
@@ -19846,8 +19898,8 @@ void ApplyCustomizations(ElementId elementId,
 // button or a recycled list item is released, but a tree which is discarded
 // whole, Task View for example, is never taken apart that way: dropping its
 // root would destroy it. Holding every element is what stops that destruction,
-// so nothing is ever removed and nothing is ever reported. Elements nothing is
-// keyed by are handed back from here so the teardown can happen.
+// so nothing is ever removed and nothing is ever reported. Elements which don't
+// need to be held are handed back from here so the teardown can happen.
 //
 // Reporting an element recreates the runtime object of its parent, which is why
 // each report queues the parent as well, and why the queue is drained only once
@@ -19864,29 +19916,25 @@ thread_local winrt::Windows::System::DispatcherQueueTimer::Tick_revoker
 // Long enough to sit out a tree being built.
 constexpr ULONGLONG kDiagnosticsReleaseDelay = 200;
 
-// The drain waits on a one-shot timer, which the thread teardown can stop,
-// rather than on a dispatcher item, which it cannot: the module is freed once
-// the mod is uninitialized, and an item still on the dispatcher would call into
-// it. The interval only has to carry the drain out of the report which arms it.
-constexpr ULONGLONG kDiagnosticsReleaseDrainDelay = 1;
-
-// Releasing an element the mod still records something for would strand that
-// recording, since no removal is reported for a handle whose runtime object is
-// gone. Such an element stays held, and its own removal releases it.
+// Releasing an element the mod holds state for would strand that state, since
+// no removal is reported for a handle whose runtime object is gone. Such an
+// element stays held, and its own removal releases it.
 //
 // Which leaves a styled element of a tree discarded whole held for good, and
 // with it everything below it, since a parent holds its children. Rules that
 // match the taskbar match almost nothing of such a tree, so what this retains
 // is small, but a rule written against a bare type would retain much more.
+//
+// Virtualization bookkeeping doesn't count, being weak and torn down once the
+// element is gone. A repeater has to be let go of in any case: it holds its
+// items source, and the taskbar only rebuilds a group's thumbnails, the one way
+// tab changes reach them, once nothing holds the previous list.
 bool ElementHasState(ElementId elementId) {
     if (elementId == ElementId::None) {
         return false;
     }
 
-    if (g_elementsCustomizationState.contains(elementId) ||
-        g_virtualizingRepeaters.contains(elementId) ||
-        g_recycledElements.contains(elementId) ||
-        g_elementMatchedItems.contains(elementId)) {
+    if (g_elementsCustomizationState.contains(elementId)) {
         return true;
     }
 
@@ -19936,28 +19984,11 @@ void FlushDiagnosticsReleases() {
     // walk the reports came from.
     ReapDeadElementIdsIfNeeded();
 
-    // After the teardown above, which can leave entries unreferenced, and
-    // likewise outside the walk: an entry can hold the last reference to its
-    // XamlRoot.
+    // After the teardown above, which can leave entries unreferenced.
     ReapStyleVariableStates();
 }
 
-void QueueDiagnosticsRelease(InstanceHandle handle) {
-    if (!handle) {
-        return;
-    }
-
-    g_pendingDiagnosticsRelease.push_back(handle);
-    g_lastDiagnosticsReleaseQueueTick = GetTickCount64();
-}
-
-// Whether the burst has stopped is decided when this is scheduled: the report
-// which schedules it queues its own handles right afterwards, so the time since
-// the last queue is short again by the time this runs.
-void DrainDiagnosticsReleases() {
-    g_diagnosticsReleaseDrainQueued = false;
-    FlushDiagnosticsReleases();
-}
+void DrainDiagnosticsReleases();
 
 // Reports arrive from inside XAML's own Enter and Leave walks, and a release
 // there re-enters the diagnostics while the tree is being mutated: dropping the
@@ -19965,18 +19996,10 @@ void DrainDiagnosticsReleases() {
 // The drain is therefore armed on the thread's dispatcher, which runs it once
 // the walk has finished.
 //
-// Whether to arm it is decided by the next report rather than by a recurring
-// timer, so that nothing of the mod is left waiting on a thread it does not
-// tear down. A thread which goes quiet therefore holds its last burst until it
-// is used again.
-void FlushDiagnosticsReleasesIfQuiet() {
-    if (g_pendingDiagnosticsRelease.empty() ||
-        g_diagnosticsReleaseDrainQueued ||
-        GetTickCount64() - g_lastDiagnosticsReleaseQueueTick <
-            kDiagnosticsReleaseDelay) {
-        return;
-    }
-
+// It waits on a one-shot timer, which the thread teardown can stop, rather than
+// on a dispatcher item, which it cannot: the module is freed once the mod is
+// uninitialized, and an item still on the dispatcher would call into it.
+void ArmDiagnosticsReleaseDrain(ULONGLONG delay) {
     try {
         if (!g_diagnosticsReleaseDrainTimer) {
             auto dispatcherQueue =
@@ -19990,8 +20013,6 @@ void FlushDiagnosticsReleasesIfQuiet() {
 
             g_diagnosticsReleaseDrainTimer = dispatcherQueue.CreateTimer();
             g_diagnosticsReleaseDrainTimer.IsRepeating(false);
-            g_diagnosticsReleaseDrainTimer.Interval(
-                std::chrono::milliseconds{kDiagnosticsReleaseDrainDelay});
             g_diagnosticsReleaseDrainTimerTickRevoker =
                 g_diagnosticsReleaseDrainTimer.Tick(
                     winrt::auto_revoke,
@@ -20001,10 +20022,37 @@ void FlushDiagnosticsReleasesIfQuiet() {
                     });
         }
 
+        g_diagnosticsReleaseDrainTimer.Interval(
+            std::chrono::milliseconds{delay});
         g_diagnosticsReleaseDrainTimer.Start();
         g_diagnosticsReleaseDrainQueued = true;
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+}
+
+void DrainDiagnosticsReleases() {
+    g_diagnosticsReleaseDrainQueued = false;
+
+    ULONGLONG elapsed = GetTickCount64() - g_lastDiagnosticsReleaseQueueTick;
+    if (elapsed < kDiagnosticsReleaseDelay) {
+        ArmDiagnosticsReleaseDrain(kDiagnosticsReleaseDelay - elapsed);
+        return;
+    }
+
+    FlushDiagnosticsReleases();
+}
+
+void QueueDiagnosticsRelease(InstanceHandle handle) {
+    if (!handle) {
+        return;
+    }
+
+    g_pendingDiagnosticsRelease.push_back(handle);
+    g_lastDiagnosticsReleaseQueueTick = GetTickCount64();
+
+    if (!g_diagnosticsReleaseDrainQueued) {
+        ArmDiagnosticsReleaseDrain(kDiagnosticsReleaseDelay);
     }
 }
 
@@ -20056,12 +20104,9 @@ void CleanupCustomizations(ElementId elementId) {
 
     // After RestoreCapturesForElement so the just-unregistered capture
     // callbacks can't re-seed a variable mid-teardown.
-    std::vector<std::wstring> removedVarNames;
-    if (state) {
-        removedVarNames = WithdrawCapturesForElement(state, elementId,
-                                                     elementCustomizationState);
-        state->withdrawnCaptureOwners.erase(elementId);
-    }
+    auto removedVarNames =
+        WithdrawCapturesForElement(state, elementId, elementCustomizationState);
+    state->withdrawnCaptureOwners.erase(elementId);
 
     for (const auto& [visualStateGroup, stateIter] :
          elementCustomizationState.perVisualStateGroup) {
@@ -20080,8 +20125,7 @@ void CleanupCustomizations(ElementId elementId) {
     // the loops above don't walk state that re-entrant style applies could
     // invalidate. Every removal propagates, not just the one that left a name
     // undefined: dropping one of several captures still changes which one wins
-    // for the consumers that were closest to it. Nothing is collected without a
-    // `state`, and the pin above keeps that entry alive until here.
+    // for the consumers that were closest to it.
     for (const auto& varName : removedVarNames) {
         PropagateStyleVariableChange(state, varName, std::nullopt);
     }

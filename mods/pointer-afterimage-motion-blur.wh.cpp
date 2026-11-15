@@ -2,7 +2,7 @@
 // @id              pointer-afterimage-motion-blur
 // @name            Pointer Afterimage Motion Blur
 // @description     A real motion blur for the mouse pointer, made of fading afterimages of your own cursor
-// @version         1.1
+// @version         1.2
 // @author          sidlikesgrapess
 // @github          https://github.com/sidlikesgrapess
 // @homepage        https://github.com/sidlikesgrapess/CursorMotionBlur
@@ -30,29 +30,26 @@ path, so it looks like a camera motion blur rather than a trail.
 - Runs in its own small Windhawk process, plus a small window in explorer.exe so
   the blur shows above the Start menu.
 
-## Limitation
-- In a few apps (Paint, Photos, File Explorer's address and search bars) the
-  pointer can briefly flicker to the arrow while the blur is drawn. If it gets
-  in the way, increase "Minimum blur speed": slower movements draw no blur.
-
 ## Resource use
-- About 2-3 MB of memory. It draws with plain GDI and its own blending; a GPU
+- About 2-3 MB of memory, and 7-8 MB (more on larger screens) for short bursts
+  while the blur is drawn. It draws with plain GDI and its own blending; a GPU
   (Direct3D) version needed about 24 MB just to load.
 - No CPU while the mouse is still, and almost none while it moves slower than
-  "Minimum blur speed"; about 1-2.5% while it moves faster, more on high-DPI
+  "Minimum blur speed"; about 1-1.5% while it moves faster, more on high-DPI
   screens. With an administrator window or a fullscreen app in front, it
   checks on a light timer instead.
 - Full measurements:
   [benchmarks](https://github.com/sidlikesgrapess/CursorMotionBlur/blob/main/windhawk/BENCHMARKS.md).
 
-![1.1 vs 1.0 benchmarks](https://raw.githubusercontent.com/sidlikesgrapess/CursorMotionBlur/main/assets/benchmark-1.1.png)
+![1.2 vs 1.1 benchmarks](https://raw.githubusercontent.com/sidlikesgrapess/CursorMotionBlur/main/assets/benchmark-1.2.png)
 
 ## Troubleshooting
 - **The cursor stays invisible.** Disable and re-enable the mod, or open
   Settings > Bluetooth & devices > Mouse > Additional mouse settings > Pointers
   and click OK.
-- **The blur is stuck at the wrong size or shape** after changing the pointer
-  size or scheme. Disable and re-enable the mod.
+- **The blur is the wrong size or shape** after changing the pointer size or
+  scheme. A new size is picked up the next time the mouse moves after a short
+  pause; if it still looks wrong, disable and re-enable the mod.
 - **Another tool's custom cursors get reset.** Restoring after hiding reloads
   the Windows cursor scheme, so turn hiding off if you use a tool that swaps
   the system cursors, such as the Shake to Find Cursor or macOS magnifying
@@ -280,6 +277,7 @@ static DWORD WINAPI SampleThread(void*) {
     RECT monRect = {};          // the monitor the cursor is on
     HWND lastFront = nullptr;
     int pointerSize = 0;        // the pointer size set in Windows, at 100% scaling (0: not read yet)
+    POINT lastPt = {LONG_MIN, LONG_MIN};   // where the cursor was at the last look
     UINT mainDpi = 96;
     double mainPxPerCm = 0;     // pixel density of the main monitor (0: not measured yet)
     double hidePxPerCm = 38;    // turns the hide speed (cm/s on the main monitor) into px/s on the monitor in use
@@ -331,7 +329,17 @@ static DWORD WINAPI SampleThread(void*) {
         // Crossing to another monitor (or display or cursor settings changed): measure it here, outside the lock, as
         // some of these calls are slow.
         bool stale = showing && g_monStale.exchange(false);
-        bool newMon = showing && (stale || !PtInRect(&monRect, ci.ptScreenPos));
+        // Windows tells no one when the pointer size changes: look at it again when the mouse moves after a pause.
+        bool resized = false;
+        if (showing && (ci.ptScreenPos.x != lastPt.x || ci.ptScreenPos.y != lastPt.y)) {
+            if (pointerSize && Now() - lastMove >= 1000) {
+                int size = PointerSize();
+                resized = size != pointerSize;
+                pointerSize = size;
+            }
+            lastPt = ci.ptScreenPos;
+        }
+        bool newMon = showing && (stale || resized || !PtInRect(&monRect, ci.ptScreenPos));
         int monCursor = 32;
         if (newMon) {
             HMONITOR mon = MonitorFromPoint(ci.ptScreenPos, MONITOR_DEFAULTTONEAREST);
@@ -341,7 +349,9 @@ static DWORD WINAPI SampleThread(void*) {
             UINT dpi = 96, dy;
             GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dpi, &dy);
             if (stale || !pointerSize) pointerSize = PointerSize();
-            monCursor = MulDiv(pointerSize, dpi, 96);
+            // Windows scales the pointer in steps, not with the monitor's scaling: x1 up to 125%, x1.5 up to 175%, x2 up
+            // to 250%... SM_CXCURSOR is the size-1 pointer at this scaling (32, 48, 64, 96 px).
+            monCursor = MulDiv(pointerSize, GetSystemMetricsForDpi(SM_CXCURSOR, dpi), 32);
             int hz = RefreshRate(mon);
             // The hide speed is set in cm/s as measured on the main monitor. Windows moves the pointer further on a
             // monitor with more scaling (twice the pixels at 200%), so scale it by the DPI to hide at the same hand
@@ -369,9 +379,21 @@ static DWORD WINAPI SampleThread(void*) {
             bool changed = g_histN == 0 || g_hist[g_histN - 1].x != ci.ptScreenPos.x ||
                            g_hist[g_histN - 1].y != ci.ptScreenPos.y;
 
+            // The pointer jumped across a large part of the desktop in one step: not a hand movement (PowerToys Cursor
+            // Wrap sends it from one edge to the other, an app can call SetCursorPos). No hand covers 40% of the
+            // desktop between two mouse reports.
+            bool jumped = false;
+            if (changed && g_histN) {
+                int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN), vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+                int dx = abs(ci.ptScreenPos.x - g_hist[g_histN - 1].x), dy = abs(ci.ptScreenPos.y - g_hist[g_histN - 1].y);
+                jumped = dx * 5 > vw * 2 || dy * 5 > vh * 2;
+            }
+
             if (newMon) {   // drop the trail so it doesn't smear across the gap between monitors
                 g_histN = 0;
                 g_monCursor = monCursor;
+            } else if (jumped) {   // likewise across a jump
+                g_histN = 0;
             }
 
             LONGLONG now = Now();
@@ -661,6 +683,13 @@ static int* g_span;            // per row of g_pic: first and one-past-last visi
 static int g_picId, g_picW, g_picH;
 static bool g_shown;
 
+// Where the window drawn in sits (screen coordinates; g_placed: the window that was put there) and the part of it the
+// last frame drew on (window and canvas coordinates). Windows tells the window under a still pointer about every move or
+// resize of a window above it, as if the mouse had moved, and an app like Office then redraws its hovered menu item
+// over and over. So the window is larger than the blur and stays put while the pointer is still.
+static HWND g_placed;
+static RECT g_win, g_inked;
+
 static void ReleaseCanvas() {
     if (g_dib) {
         SelectObject(g_memDc, g_dibOld);
@@ -668,6 +697,7 @@ static void ReleaseCanvas() {
         g_dib = nullptr;
     }
     g_canvasW = g_canvasH = 0;
+    g_inked = {};
 }
 
 static void EnsureCanvas(int w, int h) {   // grows only, in 128 px steps
@@ -777,20 +807,75 @@ static void ShowTarget(bool show) {
                      (show ? SWP_SHOWWINDOW : SWP_HIDEWINDOW | SWP_NOZORDER));
 }
 
-static bool Draw(const Sprite* sp, int sw, int sh, const Copy* c, int n, int x, int y, int w, int h) {
-    if (!Resize(sp, sw, sh)) return false;
-    EnsureCanvas(w, h);
-    if (!g_dib) return false;
-    for (int r = 0; r < h; r++) memset(g_bits + r * g_canvasW, 0, w * 4);
+// Gives the window the canvas: all of it, or only the dirty part. Position and size are passed even when they stay the
+// same, as Windows ignores the dirty rectangle without them.
+static bool Update(const RECT* dirty) {
+    POINT dst = {g_win.left, g_win.top}, src = {0, 0};
+    SIZE size = {g_win.right - g_win.left, g_win.bottom - g_win.top};
+    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    UPDATELAYEREDWINDOWINFO u = {sizeof(u), nullptr, &dst, &size, g_memDc, &src, 0, &bf, ULW_ALPHA, dirty};
+    return UpdateLayeredWindowIndirect(g_target, &u);
+}
+
+static void Wipe() {   // clears the last frame from the canvas
+    for (int r = g_inked.top; r < g_inked.bottom; r++)
+        memset(g_bits + r * g_canvasW + g_inked.left, 0, (g_inked.right - g_inked.left) * 4);
+    g_inked = {};
+}
+
+// Makes the hidden window 1 x 1, which gives back the memory of its picture.
+static void Shrink() {
+    if (!g_placed || g_placed != g_target || !g_dib || g_shown) return;
+    Wipe();
+    g_win.right = g_win.left + 1;
+    g_win.bottom = g_win.top + 1;
+    if (!Update(nullptr)) g_placed = nullptr;
+}
+
+static bool Paint(int sw, int sh, const Copy* c, int n, int x, int y, int w, int h, POINT at) {
+    RECT box = {x, y, x + w, y + h};
+    // Moved only when the blur doesn't fit in it any more, so never while the pointer is still: the trail then only
+    // shrinks toward the pointer.
+    bool place = !g_dib || g_placed != g_target || box.left < g_win.left || box.top < g_win.top ||
+                 box.right > g_win.right || box.bottom > g_win.bottom;
+    RECT inked = g_inked;
+    if (place) {   // half the monitor's width and height around the pointer, within the monitor
+        MONITORINFO mi = {sizeof(mi)};
+        if (!GetMonitorInfoW(MonitorFromPoint(at, MONITOR_DEFAULTTONEAREST), &mi)) return false;
+        RECT mon = mi.rcMonitor;
+        int hw = (mon.right - mon.left) / 4, hh = (mon.bottom - mon.top) / 4, margin = sw > sh ? sw : sh;
+        RECT win = {at.x - hw, at.y - hh, at.x + hw, at.y + hh};
+        InflateRect(&mon, margin, margin);   // the cursor reaches past the edge of the monitor
+        IntersectRect(&win, &win, &mon);
+        UnionRect(&win, &win, &box);
+        // Moved at the same size, the window can show up at its new place a frame before its new picture, and the blur
+        // jumps ahead; with a new size Windows takes both at once.
+        if (g_placed == g_target && win.right - win.left == g_win.right - g_win.left &&
+            win.bottom - win.top == g_win.bottom - g_win.top)
+            win.right++;
+        EnsureCanvas(win.right - win.left, win.bottom - win.top);
+        if (!g_dib) return false;
+        g_win = win;
+    }
+    Wipe();
+    int ox = x - g_win.left, oy = y - g_win.top;
     for (int i = 0; i < n; i++) {
         int a = (int)(c[i].a * 255 + 0.5f);
-        if (a > 0 && c[i].x >= 0 && c[i].y >= 0 && c[i].x + sw <= w && c[i].y + sh <= h) Blend(a, c[i].x, c[i].y);
+        if (a > 0 && c[i].x >= 0 && c[i].y >= 0 && c[i].x + sw <= w && c[i].y + sh <= h) Blend(a, c[i].x + ox, c[i].y + oy);
     }
-    // The window is resized to every frame: keeping its size and only moving it is a little cheaper, but Windows can then
-    // show the move a frame before the new picture, and the blur jitters.
-    POINT dst = {x, y}, src = {0, 0};
-    SIZE size = {w, h};
-    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    RECT ink = {ox, oy, ox + w, oy + h}, dirty;
+    UnionRect(&dirty, &inked, &ink);
+    g_inked = ink;
+    if (!Update(place ? nullptr : &dirty)) {
+        g_placed = nullptr;
+        return false;
+    }
+    g_placed = g_target;
+    return true;
+}
+
+static bool Draw(const Sprite* sp, int sw, int sh, const Copy* c, int n, int x, int y, int w, int h, POINT at) {
+    if (!Resize(sp, sw, sh)) return false;
     if (!g_shown) {   // a new stretch of movement: draw in explorer's window if it has one
         static HWND watching;
         g_band = FindBand();
@@ -800,15 +885,15 @@ static bool Draw(const Sprite* sp, int sw, int sh, const Copy* c, int n, int x, 
         }
         g_target = g_band ? g_band : g_wnd.load();
     }
-    if (!UpdateLayeredWindow(g_target, nullptr, &dst, &size, g_memDc, &src, 0, &bf, ULW_ALPHA)) {
-        if (g_target != g_band) return false;
+    if (!Paint(sw, sh, c, n, x, y, w, h, at)) {
+        if (g_target != g_band || !g_dib) return false;   // no canvas: not explorer's window's fault
         Wh_Log(L"Drawing in explorer's window failed (%lu), drawing in this process's own", GetLastError());
         if (g_shown) ShowTarget(false);
         g_bandFailed = g_band;
         g_band = nullptr;
         g_target = g_wnd;
         g_shown = false;
-        if (!UpdateLayeredWindow(g_target, nullptr, &dst, &size, g_memDc, &src, 0, &bf, ULW_ALPHA)) return false;
+        if (!Paint(sw, sh, c, n, x, y, w, h, at)) return false;
     }
     if (!g_shown) {
         ShowTarget(true);
@@ -906,7 +991,7 @@ static bool Render() {
         }
     }
     if (!n) return Hide();
-    g_drawFailed = !Draw(sp, sw, sh, copies, n, minX, minY, maxX - minX, maxY - minY);
+    g_drawFailed = !Draw(sp, sw, sh, copies, n, minX, minY, maxX - minX, maxY - minY, {last.x, last.y});
     if (g_drawFailed) return Hide();
     return true;
 }
@@ -988,6 +1073,7 @@ static DWORD WINAPI RenderThread(void*) {
         }
         if (r == WAIT_OBJECT_0) pending = true;
         if (!pending && !g_shown) {   // idle for 1.5 s: give back the memory that can be rebuilt
+            Shrink();
             ReleaseCanvas();
             free(g_pic);
             g_pic = nullptr;
@@ -1002,7 +1088,8 @@ static DWORD WINAPI RenderThread(void*) {
         }
     }
 
-    Hide();   // explorer's window stays, hidden, for the next start
+    Hide();   // explorer's window stays, hidden and small, for the next start
+    Shrink();
     if (g_wnd) {
         DeregisterShellHookWindow(g_wnd);
         ListenToMouse(false);
