@@ -48,7 +48,9 @@ restored to full opacity.
   only), so it uses no CPU while nothing changes. There is no polling timer.
 - The wheel shortcut uses a keyboard hook that only arms a mouse hook while the
   modifier key is held down, so mouse movement isn't intercepted the rest of the
-  time.
+  time. Both hooks run on their own thread that only forwards events, so typing
+  and mouse input never wait on other programs. Over excluded programs, the
+  taskbar and the desktop, modifier + wheel is passed through as usual.
 - Opacity is applied with `WS_EX_LAYERED` + `SetLayeredWindowAttributes`, and
   `WS_EX_LAYERED` is removed again when a window goes back to 100%.
 - The mod runs in its own dedicated `windhawk.exe` process (a "tool mod"), so it
@@ -136,31 +138,18 @@ restored to full opacity.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
+
 #include <windows.h>
 #include <dwmapi.h>
 #include <shellapi.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cwctype>
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-#ifndef DWMWA_CAPTION_BUTTON_BOUNDS
-#define DWMWA_CAPTION_BUTTON_BOUNDS 5
-#endif
-#ifndef EVENT_OBJECT_CLOAKED
-#define EVENT_OBJECT_CLOAKED 0x8017
-#endif
-#ifndef EVENT_OBJECT_UNCLOAKED
-#define EVENT_OBJECT_UNCLOAKED 0x8018
-#endif
-#ifndef EVENT_SYSTEM_CAPTURESTART
-#define EVENT_SYSTEM_CAPTURESTART 0x0008
-#endif
-#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
-#define DWMWA_WINDOW_CORNER_PREFERENCE 33
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // Settings
@@ -184,12 +173,6 @@ struct Settings {
     bool hideOnUnchangeable = true;
     std::vector<std::wstring> excludedProcesses;  // lowercase
 };
-
-static std::wstring TakeString(PCWSTR s) {
-    std::wstring result = s ? s : L"";
-    Wh_FreeStringSetting(s);
-    return result;
-}
 
 static std::wstring Trim(std::wstring s) {
     auto notSpace = [](wchar_t c) { return !iswspace(c); };
@@ -232,19 +215,21 @@ static Settings* LoadSettings() {
     s->buttonWidth = std::clamp(Wh_GetIntSetting(L"buttonWidth"), 8, 200);
     s->buttonHeight = std::clamp(Wh_GetIntSetting(L"buttonHeight"), 8, 100);
     s->buttonOffset = std::clamp(Wh_GetIntSetting(L"buttonOffset"), -300, 300);
-    s->buttonColor = ParseColor(TakeString(Wh_GetStringSetting(L"buttonColor")),
-                                RGB(0x2B, 0x2B, 0x2B));
-    std::wstring text = TakeString(Wh_GetStringSetting(L"buttonText"));
+    s->buttonColor =
+        ParseColor(WindhawkUtils::StringSetting::make(L"buttonColor").get(),
+                   RGB(0x2B, 0x2B, 0x2B));
+    std::wstring text = WindhawkUtils::StringSetting::make(L"buttonText").get();
     s->buttonText = text.empty() ? L"\u25D0" : text;
     s->buttonTextColor =
-        ParseColor(TakeString(Wh_GetStringSetting(L"buttonTextColor")),
+        ParseColor(WindhawkUtils::StringSetting::make(L"buttonTextColor").get(),
                    RGB(0xFF, 0xFF, 0xFF));
     s->buttonFontSize = std::clamp(Wh_GetIntSetting(L"buttonFontSize"), 5, 48);
     s->showIndicator = Wh_GetIntSetting(L"showIndicator") != 0;
     s->wheelEnabled = Wh_GetIntSetting(L"wheelEnabled") != 0;
     s->hideOnUnchangeable = Wh_GetIntSetting(L"hideOnUnchangeable") != 0;
 
-    std::wstring mod = TakeString(Wh_GetStringSetting(L"wheelModifier"));
+    std::wstring mod =
+        WindhawkUtils::StringSetting::make(L"wheelModifier").get();
     if (mod == L"ctrl") {
         s->wheelModifier = Modifier::Ctrl;
     } else if (mod == L"shift") {
@@ -257,7 +242,8 @@ static Settings* LoadSettings() {
 
     for (int i = 0; i < 256; i++) {
         std::wstring name = ToLower(
-            Trim(TakeString(Wh_GetStringSetting(L"excludedProcesses[%d]", i))));
+            Trim(WindhawkUtils::StringSetting::make(L"excludedProcesses[%d]", i)
+                     .get()));
         if (name.empty()) {
             break;
         }
@@ -272,11 +258,16 @@ static Settings* LoadSettings() {
 enum : UINT {
     WM_APP_SETTINGS = WM_APP + 1,  // lParam = Settings*
     WM_APP_QUIT,
-    WM_APP_WHEEL,        // wParam = delta, lParam = point
-    WM_APP_MCLICK,       // lParam = point
+    WM_APP_WHEEL,   // wParam = delta, lParam = point
+    WM_APP_MCLICK,  // lParam = point
     WM_APP_MASK_KEY,
-    WM_APP_ARM_MOUSE,
-    WM_APP_DISARM_MOUSE,
+};
+
+// Thread messages for the hook thread.
+enum : UINT {
+    WM_HK_ARM_MOUSE = WM_APP + 0x40,
+    WM_HK_DISARM_MOUSE,    // wParam = 1 if the modifier was released
+    WM_HK_APPLY_SETTINGS,  // wParam = 1 if the modifier changed
 };
 
 static const ULONG_PTR kInjectedMarker = 0x54424F50;  // "TOBP"
@@ -302,8 +293,21 @@ static HWINEVENTHOOK g_captureHook;
 static HWINEVENTHOOK g_targetLocHook;
 static HWINEVENTHOOK g_targetShowHideHook;
 static HWINEVENTHOOK g_targetCloakHook;
+static HWINEVENTHOOK g_targetMoveSizeHook;
 static DWORD g_targetHookThread;
+static bool g_inMoveSize;
 
+// The low-level keyboard and mouse hooks live on their own thread, which does
+// nothing but pump messages, so input never waits for the worker thread
+// (which talks to other, possibly busy, programs). The hook procs only read
+// these atomic copies of the settings and post messages.
+static HANDLE g_hookThread;
+static std::atomic<DWORD> g_hookThreadId;
+static std::atomic<int> g_hkModifier{(int)Modifier::Alt};
+static std::atomic<bool> g_hkWheelEnabled{true};
+static std::atomic<bool> g_hkHideUnchangeable{true};
+
+// Owned by the hook thread.
 static HHOOK g_kbHook;
 static HHOOK g_mouseHook;
 static bool g_swallowMiddleUp;
@@ -323,8 +327,12 @@ static std::wstring g_tipText;
 static int g_wheelAccum;
 static HWND g_wheelTarget;
 
-// HWND -> whether the window already had WS_EX_LAYERED before we touched it.
-static std::unordered_map<HWND, bool> g_modified;
+// Windows we changed, with their state before we touched them.
+struct ModifiedWindow {
+    bool hadLayered;  // Whether it already had WS_EX_LAYERED.
+    BYTE origAlpha;   // Its own alpha (255 unless it was already layered).
+};
+static std::unordered_map<HWND, ModifiedWindow> g_modified;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Helpers
@@ -359,42 +367,6 @@ static bool IsShellClass(HWND hwnd) {
         }
     }
     return false;
-}
-
-static bool IsProcessExcluded(DWORD pid) {
-    if (pid == GetCurrentProcessId()) {
-        return true;
-    }
-    if (g_settings->excludedProcesses.empty()) {
-        return false;
-    }
-    HANDLE process =
-        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!process) {
-        return false;
-    }
-    WCHAR path[MAX_PATH];
-    DWORD size = ARRAYSIZE(path);
-    bool excluded = false;
-    if (QueryFullProcessImageNameW(process, 0, path, &size)) {
-        PCWSTR name = wcsrchr(path, L'\\');
-        name = name ? name + 1 : path;
-        std::wstring lower = ToLower(name);
-        for (const auto& e : g_settings->excludedProcesses) {
-            if (lower == e) {
-                excluded = true;
-                break;
-            }
-        }
-    }
-    CloseHandle(process);
-    return excluded;
-}
-
-static bool IsWindowExcluded(HWND hwnd) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    return IsProcessExcluded(pid);
 }
 
 static bool IsCloaked(HWND hwnd) {
@@ -485,6 +457,109 @@ static DWORD OwnIntegrityLevel() {
     return level;
 }
 
+// Per-process facts, used by the worker and by the mouse hook (to decide
+// cheaply whether to swallow an event). Entries expire after a few seconds so
+// a reused process ID doesn't keep stale facts.
+struct ProcInfo {
+    bool excluded = false;
+    bool elevated = false;  // Runs above our integrity level (UIPI).
+    ULONGLONG tick = 0;
+};
+static const ULONGLONG kProcCacheTtl = 5000;
+static SRWLOCK g_procLock = SRWLOCK_INIT;
+// Guarded by g_procLock.
+static std::vector<std::wstring> g_procExcludedList;  // lowercase
+static std::unordered_map<DWORD, ProcInfo> g_procCache;
+static unsigned g_procGeneration;
+
+static void SetExcludedProcesses(const std::vector<std::wstring>& list) {
+    AcquireSRWLockExclusive(&g_procLock);
+    g_procExcludedList = list;
+    g_procCache.clear();
+    g_procGeneration++;
+    ReleaseSRWLockExclusive(&g_procLock);
+}
+
+// Called with g_procLock held (shared).
+static ProcInfo QueryProcInfo(DWORD pid) {
+    ProcInfo info;
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+        info.elevated = true;  // Can't even query it, so can't change it.
+        return info;
+    }
+    if (!g_procExcludedList.empty()) {
+        WCHAR path[MAX_PATH];
+        DWORD size = ARRAYSIZE(path);
+        if (QueryFullProcessImageNameW(process, 0, path, &size)) {
+            PCWSTR name = wcsrchr(path, L'\\');
+            name = name ? name + 1 : path;
+            std::wstring lower = ToLower(name);
+            for (const auto& e : g_procExcludedList) {
+                if (lower == e) {
+                    info.excluded = true;
+                    break;
+                }
+            }
+        }
+    }
+    HANDLE token;
+    if (OpenProcessToken(process, TOKEN_QUERY, &token)) {
+        DWORD own = OwnIntegrityLevel();
+        if (own && IntegrityLevelOfToken(token) > own) {
+            info.elevated = true;
+        }
+        CloseHandle(token);
+    } else if (GetLastError() == ERROR_ACCESS_DENIED) {
+        // A normal process can't open the token of an elevated one.
+        info.elevated = true;
+    }
+    CloseHandle(process);
+    return info;
+}
+
+// Thread safe. Doesn't send messages to other threads.
+static ProcInfo GetProcInfo(DWORD pid) {
+    if (pid == GetCurrentProcessId()) {
+        ProcInfo own;
+        own.excluded = true;
+        return own;
+    }
+    ULONGLONG now = GetTickCount64();
+    AcquireSRWLockShared(&g_procLock);
+    auto it = g_procCache.find(pid);
+    if (it != g_procCache.end() && now - it->second.tick < kProcCacheTtl) {
+        ProcInfo cached = it->second;
+        ReleaseSRWLockShared(&g_procLock);
+        return cached;
+    }
+    unsigned generation = g_procGeneration;
+    ProcInfo info = QueryProcInfo(pid);
+    ReleaseSRWLockShared(&g_procLock);
+
+    info.tick = now;
+    AcquireSRWLockExclusive(&g_procLock);
+    if (generation == g_procGeneration) {
+        if (g_procCache.size() > 128) {
+            g_procCache.clear();
+        }
+        g_procCache[pid] = info;
+    }
+    ReleaseSRWLockExclusive(&g_procLock);
+    return info;
+}
+
+static bool IsProcessExcluded(DWORD pid) {
+    return GetProcInfo(pid).excluded;
+}
+
+static bool IsWindowExcluded(HWND hwnd) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    return IsProcessExcluded(pid);
+}
+
 // Whether we can change the window's opacity at all. Windows of programs
 // running at a higher integrity level (as administrator) are protected by
 // UIPI, and per-pixel layered windows draw their own transparency.
@@ -498,25 +573,7 @@ static bool CanChangeWindow(HWND hwnd) {
     if (!pid || pid == GetCurrentProcessId()) {
         return pid != 0;
     }
-    HANDLE process =
-        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!process) {
-        return false;
-    }
-    bool ok = true;
-    HANDLE token;
-    if (OpenProcessToken(process, TOKEN_QUERY, &token)) {
-        DWORD own = OwnIntegrityLevel();
-        if (own && IntegrityLevelOfToken(token) > own) {
-            ok = false;
-        }
-        CloseHandle(token);
-    } else if (GetLastError() == ERROR_ACCESS_DENIED) {
-        // A normal process can't open the token of an elevated one.
-        ok = false;
-    }
-    CloseHandle(process);
-    return ok;
+    return !GetProcInfo(pid).elevated;
 }
 
 static int AlphaToPercent(BYTE alpha) {
@@ -541,7 +598,10 @@ static void PruneModified() {
 // Sets the opacity in percent. Returns false on failure.
 static bool SetOpacityPercent(HWND hwnd, int pct) {
     BYTE cur;
-    if (!IsWindow(hwnd) || !GetOpacityAlpha(hwnd, &cur)) {
+    // Changing the style sends messages to the window's thread and has no
+    // timeout, so leave windows that aren't responding alone.
+    if (!IsWindow(hwnd) || IsHungAppWindow(hwnd) ||
+        !GetOpacityAlpha(hwnd, &cur)) {
         return false;
     }
 
@@ -556,16 +616,19 @@ static bool SetOpacityPercent(HWND hwnd, int pct) {
             }
             return true;
         }
-        bool weAddedLayered = it != g_modified.end() && !it->second;
         if (!SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA)) {
             return false;
         }
-        if (weAddedLayered) {
-            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex & ~WS_EX_LAYERED);
-            Redraw(hwnd);
-        }
         if (it != g_modified.end()) {
-            g_modified.erase(it);
+            if (!it->second.hadLayered) {
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex & ~WS_EX_LAYERED);
+                Redraw(hwnd);
+                g_modified.erase(it);
+            } else if (it->second.origAlpha == 255) {
+                g_modified.erase(it);
+            }
+            // Otherwise keep tracking it, so unloading the mod gives the
+            // window its own alpha back.
         }
         return true;
     }
@@ -589,25 +652,51 @@ static bool SetOpacityPercent(HWND hwnd, int pct) {
 
     if (it == g_modified.end()) {
         PruneModified();
-        // If we just added the style, remember that it wasn't there before.
-        g_modified[hwnd] = hadLayered;
+        // Remember whether the style was there before and the window's own
+        // alpha, so both can be restored.
+        g_modified[hwnd] = ModifiedWindow{hadLayered, cur};
     }
     return true;
 }
 
+static void RestoreWindow(HWND hwnd, const ModifiedWindow& m) {
+    if (!IsWindow(hwnd)) {
+        return;
+    }
+    SetLayeredWindowAttributes(hwnd, 0, m.origAlpha, LWA_ALPHA);
+    if (!m.hadLayered) {
+        if (IsHungAppWindow(hwnd)) {
+            // Removing the style would block until the app responds. It's
+            // fully opaque again already, only the style stays.
+            Wh_Log(L"Window %p isn't responding, leaving WS_EX_LAYERED", hwnd);
+            return;
+        }
+        LONG_PTR ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex & ~WS_EX_LAYERED);
+        Redraw(hwnd);
+    }
+}
+
 static void RestoreAll() {
-    for (const auto& [hwnd, hadLayered] : g_modified) {
-        if (!IsWindow(hwnd)) {
-            continue;
-        }
-        SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
-        if (!hadLayered) {
-            LONG_PTR ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex & ~WS_EX_LAYERED);
-            Redraw(hwnd);
-        }
+    for (const auto& [hwnd, m] : g_modified) {
+        RestoreWindow(hwnd, m);
     }
     g_modified.clear();
+}
+
+// After a settings change: windows of programs that are excluded now get no
+// button and ignore the wheel, so give them their original opacity back.
+static void RestoreExcluded() {
+    for (auto it = g_modified.begin(); it != g_modified.end();) {
+        if (!IsWindow(it->first)) {
+            it = g_modified.erase(it);
+        } else if (IsWindowExcluded(it->first)) {
+            RestoreWindow(it->first, it->second);
+            it = g_modified.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 // Current level expressed as a number of steps below 100%.
@@ -650,7 +739,7 @@ static void ShowIndicator(const std::wstring& text, POINT anchor, int dpi) {
 
     // Keep it on the monitor.
     MONITORINFO mi{};
-        mi.cbSize = sizeof(mi);
+    mi.cbSize = sizeof(mi);
     if (GetMonitorInfoW(MonitorFromPoint(anchor, MONITOR_DEFAULTTONEAREST),
                         &mi)) {
         x = std::clamp(x, (int)mi.rcWork.left, (int)mi.rcWork.right - w);
@@ -748,9 +837,9 @@ static bool IsCaptionButtonHit(LRESULT r) {
 static bool NcHitTest(HWND hwnd, int x, int y, LRESULT* result) {
     DWORD_PTR res = 0;
     if (!SendMessageTimeoutW(hwnd, WM_NCHITTEST, 0,
-                             MAKELPARAM((short)x, (short)y),
-                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 50, &res)) {
-        return false;  // Hung, or blocked (e.g. elevated window).
+                             MAKELPARAM((short)x, (short)y), SMTO_ABORTIFHUNG,
+                             50, &res)) {
+        return false;  // Hung, timed out, or blocked (e.g. elevated window).
     }
     *result = (LRESULT)res;
     return true;
@@ -838,7 +927,15 @@ static bool GetCaptionButtons(HWND hwnd, const RECT& f, int dpi,
     CaptionCache& c = g_captionCache;
     int w = f.right - f.left;
     int h = f.bottom - f.top;
-    if (c.hwnd != hwnd || c.width != w || c.height != h || c.dpi != dpi) {
+    bool stale =
+        c.hwnd != hwnd || c.width != w || c.height != h || c.dpi != dpi;
+    // While the window is being resized, keep the offsets found before (they
+    // are relative to the frame's top right corner) instead of probing on
+    // every location change. It's probed again when the resize ends.
+    if (stale && g_inMoveSize && c.hwnd == hwnd && c.dpi == dpi) {
+        stale = false;
+    }
+    if (stale) {
         c.hwnd = hwnd;
         c.width = w;
         c.height = h;
@@ -976,10 +1073,11 @@ static void ButtonCycle() {
         ShowResult(false, 0, ButtonIndicatorAnchor(), dpi);
         return;
     }
-    int next = 100 - (CurrentStepIndex(AlphaToPercent(alpha)) + 1) *
-                         g_settings->step;
+    int cur = AlphaToPercent(alpha);
+    int next = 100 - (CurrentStepIndex(cur) + 1) * g_settings->step;
     if (next < g_settings->minOpacity) {
-        next = 100;
+        // Land on the minimum once before wrapping back to 100%.
+        next = cur > g_settings->minOpacity ? g_settings->minOpacity : 100;
     }
     bool ok = SetOpacityPercent(h, next);
     ShowResult(ok, next, ButtonIndicatorAnchor(), dpi);
@@ -1092,7 +1190,12 @@ static void UnhookTargetEvents() {
         UnhookWinEvent(g_targetCloakHook);
         g_targetCloakHook = nullptr;
     }
+    if (g_targetMoveSizeHook) {
+        UnhookWinEvent(g_targetMoveSizeHook);
+        g_targetMoveSizeHook = nullptr;
+    }
     g_targetHookThread = 0;
+    g_inMoveSize = false;
 }
 
 static void SetTarget(HWND hwnd) {
@@ -1109,6 +1212,7 @@ static void SetTarget(HWND hwnd) {
 
     if (hwnd != g_target) {
         g_target = hwnd;
+        g_inMoveSize = false;
         g_targetExcluded = hwnd ? IsProcessExcluded(pid) : true;
         bool changeable = hwnd && CanChangeWindow(hwnd);
         if (changeable != g_targetChangeable) {
@@ -1134,6 +1238,10 @@ static void SetTarget(HWND hwnd) {
             // uncloak a moment later.
             g_targetCloakHook = SetWinEventHook(
                 EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED, nullptr,
+                WinEventProc, pid, tid, WINEVENT_OUTOFCONTEXT);
+            // Resize drags: keep the caption offset until the drag ends.
+            g_targetMoveSizeHook = SetWinEventHook(
+                EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND, nullptr,
                 WinEventProc, pid, tid, WINEVENT_OUTOFCONTEXT);
             g_targetHookThread = tid;
         }
@@ -1191,6 +1299,19 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK hook, DWORD event, HWND hwnd,
             }
             break;
 
+        case EVENT_SYSTEM_MOVESIZESTART:
+            if (hwnd == g_target) {
+                g_inMoveSize = true;
+            }
+            break;
+
+        case EVENT_SYSTEM_MOVESIZEEND:
+            if (hwnd == g_target) {
+                g_inMoveSize = false;
+                UpdateButton();  // Probes again if the size changed.
+            }
+            break;
+
         case EVENT_OBJECT_LOCATIONCHANGE:
         case EVENT_OBJECT_SHOW:
         case EVENT_OBJECT_CLOAKED:
@@ -1235,9 +1356,22 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK hook, DWORD event, HWND hwnd,
 
 ////////////////////////////////////////////////////////////////////////////////
 // Modifier + wheel / middle click
+//
+// Everything up to SendMaskKey runs on the hook thread.
+
+static Modifier HookModifier() {
+    return (Modifier)g_hkModifier.load(std::memory_order_relaxed);
+}
+
+static void PostToHookThread(UINT msg, WPARAM wParam = 0) {
+    DWORD id = g_hookThreadId.load();
+    if (id) {
+        PostThreadMessageW(id, msg, wParam, 0);
+    }
+}
 
 static bool IsModifierVk(DWORD vk) {
-    switch (g_settings->wheelModifier) {
+    switch (HookModifier()) {
         case Modifier::Alt:
             return vk == VK_MENU || vk == VK_LMENU || vk == VK_RMENU;
         case Modifier::Ctrl:
@@ -1252,7 +1386,7 @@ static bool IsModifierVk(DWORD vk) {
 
 static bool IsModifierDown() {
     auto down = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
-    switch (g_settings->wheelModifier) {
+    switch (HookModifier()) {
         case Modifier::Alt:
             return down(VK_MENU);
         case Modifier::Ctrl:
@@ -1268,11 +1402,48 @@ static bool IsModifierDown() {
 static void RequestMaskKey() {
     // Releasing Alt/Win after a swallowed wheel would otherwise open the
     // app's menu bar or the Start menu.
-    if (!g_maskSent && (g_settings->wheelModifier == Modifier::Alt ||
-                        g_settings->wheelModifier == Modifier::Win)) {
+    Modifier mod = HookModifier();
+    if (!g_maskSent && (mod == Modifier::Alt || mod == Modifier::Win)) {
         g_maskSent = true;
         PostMessageW(g_ctlWnd, WM_APP_MASK_KEY, 0, 0);
     }
+}
+
+// Whether the worker will act on a wheel / middle click at this point. If not,
+// the event is passed on, so excluded programs, the taskbar, the desktop and
+// windows that can't be changed still get modifier + wheel. Only uses calls
+// that don't send messages to other threads, so it stays cheap.
+static bool WillHandleAt(POINT pt) {
+    HWND h = WindowFromPoint(pt);
+    if (!h) {
+        return false;
+    }
+    HWND root = GetAncestor(h, GA_ROOT);
+    if (!root || root == g_tipWnd) {
+        return false;
+    }
+    if (root == g_btnWnd) {
+        return true;
+    }
+    if (IsShellClass(root)) {
+        return false;
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(root, &pid);
+    if (!pid) {
+        return false;
+    }
+    ProcInfo info = GetProcInfo(pid);
+    if (info.excluded) {
+        return false;
+    }
+    if (g_hkHideUnchangeable.load(std::memory_order_relaxed)) {
+        BYTE alpha;
+        if (info.elevated || !GetOpacityAlpha(root, &alpha)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 static LRESULT CALLBACK MouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
@@ -1281,16 +1452,19 @@ static LRESULT CALLBACK MouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
         LPARAM pt = MAKELPARAM((short)m->pt.x, (short)m->pt.y);
         switch (wParam) {
             case WM_MOUSEWHEEL:
-                if (IsModifierDown()) {
+                if (!IsModifierDown()) {
+                    PostToHookThread(WM_HK_DISARM_MOUSE);
+                    break;
+                }
+                if (WillHandleAt(m->pt)) {
                     PostMessageW(g_ctlWnd, WM_APP_WHEEL,
                                  (WPARAM)(short)HIWORD(m->mouseData), pt);
                     RequestMaskKey();
                     return 1;
                 }
-                PostMessageW(g_ctlWnd, WM_APP_DISARM_MOUSE, 0, 0);
                 break;
             case WM_MBUTTONDOWN:
-                if (IsModifierDown()) {
+                if (IsModifierDown() && WillHandleAt(m->pt)) {
                     g_swallowMiddleUp = true;
                     PostMessageW(g_ctlWnd, WM_APP_MCLICK, 0, pt);
                     RequestMaskKey();
@@ -1301,7 +1475,7 @@ static LRESULT CALLBACK MouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
                 if (g_swallowMiddleUp) {
                     g_swallowMiddleUp = false;
                     if (!IsModifierDown()) {
-                        PostMessageW(g_ctlWnd, WM_APP_DISARM_MOUSE, 0, 0);
+                        PostToHookThread(WM_HK_DISARM_MOUSE);
                     }
                     return 1;
                 }
@@ -1319,12 +1493,12 @@ static LRESULT CALLBACK KeyboardHookProc(int code, WPARAM wParam,
             bool down = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
             if (down) {
                 if (!g_mouseHook) {
-                    PostMessageW(g_ctlWnd, WM_APP_ARM_MOUSE, 0, 0);
+                    PostToHookThread(WM_HK_ARM_MOUSE);
                 }
             } else {
                 // wParam = 1: the modifier was released. The async key state
                 // isn't updated yet while the hook runs, so don't rely on it.
-                PostMessageW(g_ctlWnd, WM_APP_DISARM_MOUSE, 1, 0);
+                PostToHookThread(WM_HK_DISARM_MOUSE, 1);
             }
         }
     }
@@ -1345,10 +1519,11 @@ static void DisarmMouseHook(bool force, bool released = false) {
     UnhookWindowsHookEx(g_mouseHook);
     g_mouseHook = nullptr;
     g_maskSent = false;
+    g_swallowMiddleUp = false;
 }
 
 static void ArmMouseHook() {
-    if (g_mouseHook || !g_settings->wheelEnabled) {
+    if (g_mouseHook || !g_hkWheelEnabled.load()) {
         return;
     }
     g_maskSent = false;
@@ -1356,11 +1531,17 @@ static void ArmMouseHook() {
                                     GetModuleHandleW(nullptr), 0);
 }
 
-static void ApplyWheelSetting() {
-    if (g_settings->wheelEnabled) {
+static void ApplyHookSettings(bool modifierChanged) {
+    if (modifierChanged) {
+        DisarmMouseHook(true);
+    }
+    if (g_hkWheelEnabled.load()) {
         if (!g_kbHook) {
             g_kbHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHookProc,
                                          GetModuleHandleW(nullptr), 0);
+            if (!g_kbHook) {
+                Wh_Log(L"Keyboard hook failed: %u", GetLastError());
+            }
         }
     } else {
         DisarmMouseHook(true);
@@ -1370,6 +1551,56 @@ static void ApplyWheelSetting() {
         }
     }
 }
+
+// Only pumps messages: low-level hook procs are called while it waits in
+// GetMessage, and they never wait on anything themselves.
+static DWORD WINAPI HookThreadProc(LPVOID param) {
+    MSG msg;
+    // Create the message queue before anyone posts to it.
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    g_hookThreadId = GetCurrentThreadId();
+    ApplyHookSettings(false);
+    SetEvent((HANDLE)param);
+
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (msg.hwnd) {
+            DispatchMessageW(&msg);
+            continue;
+        }
+        switch (msg.message) {
+            case WM_HK_ARM_MOUSE:
+                // Posted on modifier key down. Don't check the async key
+                // state here, it may not be updated yet.
+                ArmMouseHook();
+                break;
+            case WM_HK_DISARM_MOUSE:
+                DisarmMouseHook(false, msg.wParam != 0);
+                break;
+            case WM_HK_APPLY_SETTINGS:
+                ApplyHookSettings(msg.wParam != 0);
+                break;
+        }
+    }
+
+    DisarmMouseHook(true);
+    if (g_kbHook) {
+        UnhookWindowsHookEx(g_kbHook);
+        g_kbHook = nullptr;
+    }
+    return 0;
+}
+
+// Runs on the worker (or before any thread starts).
+static void PublishHookSettings(const Settings* s, bool modifierChanged) {
+    SetExcludedProcesses(s->excludedProcesses);
+    g_hkModifier = (int)s->wheelModifier;
+    g_hkWheelEnabled = s->wheelEnabled;
+    g_hkHideUnchangeable = s->hideOnUnchangeable;
+    PostToHookThread(WM_HK_APPLY_SETTINGS, modifierChanged ? 1 : 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Worker side of modifier + wheel / middle click
 
 static void SendMaskKey() {
     INPUT in[2]{};
@@ -1451,11 +1682,6 @@ static void HandleMiddleClick(POINT pt) {
 // Control window and worker thread
 
 static void Shutdown() {
-    DisarmMouseHook(true);
-    if (g_kbHook) {
-        UnhookWindowsHookEx(g_kbHook);
-        g_kbHook = nullptr;
-    }
     UnhookTargetEvents();
     if (g_fgHook) {
         UnhookWinEvent(g_fgHook);
@@ -1500,10 +1726,9 @@ static LRESULT CALLBACK ControlWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             Modifier oldModifier = g_settings->wheelModifier;
             delete g_settings;
             g_settings = s;
-            if (oldModifier != g_settings->wheelModifier) {
-                DisarmMouseHook(true);
-            }
-            ApplyWheelSetting();
+            PublishHookSettings(g_settings,
+                                oldModifier != g_settings->wheelModifier);
+            RestoreExcluded();
             // Re-evaluate the exclusion list for the current window.
             HWND target = g_target;
             g_target = nullptr;
@@ -1523,14 +1748,6 @@ static LRESULT CALLBACK ControlWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return 0;
         case WM_APP_MASK_KEY:
             SendMaskKey();
-            return 0;
-        case WM_APP_ARM_MOUSE:
-            // Posted from the keyboard hook on modifier key down. Don't check
-            // the async key state here, it may not be updated yet.
-            ArmMouseHook();
-            return 0;
-        case WM_APP_DISARM_MOUSE:
-            DisarmMouseHook(false, wParam != 0);
             return 0;
         case WM_TIMER:
             if (wParam == kForegroundRecheckTimer) {
@@ -1595,7 +1812,7 @@ static bool CreateWindows() {
     SetLayeredWindowAttributes(g_tipWnd, 0, 235, LWA_ALPHA);
 
     BOOL disable = TRUE;
-    int corner = 3;  // DWMWCP_ROUNDSMALL (Windows 11)
+    DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUNDSMALL;  // Windows 11
     for (HWND w : {g_btnWnd, g_tipWnd}) {
         DwmSetWindowAttribute(w, DWMWA_TRANSITIONS_FORCEDISABLED, &disable,
                               sizeof(disable));
@@ -1606,8 +1823,6 @@ static bool CreateWindows() {
 }
 
 static DWORD WINAPI ThreadProc(LPVOID) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-
     g_initOk = CreateWindows();
     if (g_initOk) {
         g_fgHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND,
@@ -1629,7 +1844,6 @@ static DWORD WINAPI ThreadProc(LPVOID) {
                                         WinEventProc, 0, 0,
                                         WINEVENT_OUTOFCONTEXT |
                                             WINEVENT_SKIPOWNPROCESS);
-        ApplyWheelSetting();
         SetTarget(GetForegroundWindow());
     } else {
         Wh_Log(L"Failed to create windows: %u", GetLastError());
@@ -1658,6 +1872,7 @@ static DWORD WINAPI ThreadProc(LPVOID) {
 BOOL WhTool_ModInit() {
     Wh_Log(L">");
     g_settings = LoadSettings();
+    PublishHookSettings(g_settings, false);
     g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_readyEvent) {
         return FALSE;
@@ -1675,6 +1890,21 @@ BOOL WhTool_ModInit() {
         g_thread = nullptr;
         return FALSE;
     }
+
+    // Started after the worker created its windows, stopped before they're
+    // destroyed.
+    HANDLE hookReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (hookReady) {
+        g_hookThread =
+            CreateThread(nullptr, 0, HookThreadProc, hookReady, 0, nullptr);
+        if (g_hookThread) {
+            WaitForSingleObject(hookReady, INFINITE);
+        }
+        CloseHandle(hookReady);
+    }
+    if (!g_hookThread) {
+        Wh_Log(L"Failed to start the hook thread, wheel shortcut disabled");
+    }
     return TRUE;
 }
 
@@ -1688,6 +1918,15 @@ void WhTool_ModSettingsChanged() {
 
 void WhTool_ModUninit() {
     Wh_Log(L">");
+    if (g_hookThread) {
+        PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+        if (WaitForSingleObject(g_hookThread, 5000) != WAIT_OBJECT_0) {
+            Wh_Log(L"Hook thread didn't exit in time");
+        }
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+        g_hookThreadId = 0;
+    }
     if (g_thread) {
         if (g_ctlWnd) {
             PostMessageW(g_ctlWnd, WM_APP_QUIT, 0, 0);
