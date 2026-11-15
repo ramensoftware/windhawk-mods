@@ -3,7 +3,7 @@
 // @name            Ansa Dynamic Island
 // @description     A sleek Dynamic Island for Windows featuring spring physics, notch & pill modes, live media controls with wavy progress bar, ShelfBook drag-and-drop, calendar, tasks, and hardware HUDs.
 // @description:it-IT Una Dynamic Island fluida per Windows con fisica a molla, modalità pillola o notch, player musicale con onda animata, ShelfBook drag-and-drop, calendario, task rapidi e HUD hardware.
-// @version         6.5.2
+// @version         6.5.3
 // @author          dev-apox
 // @github          https://github.com/dev-apox
 // @include         windhawk.exe
@@ -21,6 +21,8 @@ A sleek, fluent **Dynamic Island** experience for Windows 10 & 11, crafted from 
 - **Issues & Feedback:** [Report a Bug](https://github.com/dev-apox/ansa-dynamic-island/issues)
 
 The idle pill shows a circular battery ring, a 12-hour digital clock, and an animated audio visualizer during playback.
+
+![Ansa Dynamic Island: media control](https://raw.githubusercontent.com/dev-apox/ansa-Dynamic-Island/main/imgs/mediacontrol.jpeg)
 
 ---
 
@@ -62,7 +64,7 @@ Type, check off, and clear personal tasks directly inside the island without ope
 Right-click the island (or click the gear icon) to customize everything live inside **Ansa Studio**. Changes made inside Ansa Studio are temporary for the current session; use the Windhawk settings page for persistent configuration.
 
 ### 🎨 Style & Physics
-Switch between Floating Pill and Curved Top Notch, adjust UI Scale (100%–150%), choose visual themes (Album Glow, Dark Glass, OLED Black), set Normal or Bouncy spring physics, and toggle Fullscreen Auto-Hide.
+Switch between Floating Pill and Curved Top Notch, adjust UI Scale (80%–150%), choose visual themes (Album Glow, Dark Glass, OLED Black), set Normal or Bouncy spring physics, and toggle Fullscreen Auto-Hide.
 
 ### 🧩 Idle & Behavior
 Customize the idle layout (Ring + Clock, Ring Only, Clock Only, or Minimal), media module, top screen edge hover expansion, Bluetooth HUD, and notification interception.
@@ -85,12 +87,14 @@ Made by **dev-apox**.
   $options:
   - floating: Floating Pill
   - notch: Top Notch
-- UiScale: "115"
+- UiScale: "90"
   $name: UI Scale (%)
   $description: Overall scale multiplier for high-DPI or larger screens.
   $options:
+  - "80": 80% (Compact)
+  - "90": 90% (Small - Recommended)
   - "100": 100% (Standard)
-  - "115": 115% (Large - Recommended)
+  - "115": 115% (Large)
   - "130": 130% (Extra Large)
   - "150": 150% (2K / 4K Display)
 - TopMargin: 12
@@ -790,7 +794,7 @@ static HANDLE g_stopEvent = NULL;
 static HANDLE g_readyEvent = NULL;
 static bool g_modActive = false;
 static float g_dpiScale = 1.0f;
-static float g_userUiScale = 1.15f;
+static float g_userUiScale = 0.90f;
 
 struct SpringVal {
     float current;
@@ -1109,7 +1113,7 @@ void LoadWindhawkConfiguration() {
     PCWSTR scaleStr = Wh_GetStringSetting(L"UiScale");
     int scalePct = _wtoi(scaleStr);
     Wh_FreeStringSetting(scaleStr);
-    if (scalePct < 80 || scalePct > 200) scalePct = 115;
+    if (scalePct < 80 || scalePct > 200) scalePct = 90;
     g_userUiScale = scalePct / 100.0f;
     g_cfg.uiScale = g_userUiScale * g_dpiScale;
 
@@ -1395,8 +1399,22 @@ struct WindowMediaFallback {
     std::wstring appName;
 };
 
+// Only Chromium-based (Spotify, Chrome, Edge, Brave, Opera) and Gecko (Firefox)
+// top-level windows are inspected. The class check is cheap, so OpenProcess /
+// QueryFullProcessImageNameW only run for the few windows that can matter.
 BOOL CALLBACK FallbackMediaEnumProc(HWND hwnd, LPARAM lParam) {
     if (!IsWindowVisible(hwnd)) return TRUE;
+
+    wchar_t cls[64] = { 0 };
+    GetClassNameW(hwnd, cls, 64);
+    if (wcsncmp(cls, L"Chrome_WidgetWin", 16) != 0 &&
+        wcscmp(cls, L"MozillaWindowClass") != 0) {
+        return TRUE;
+    }
+
+    wchar_t titleBuf[512] = { 0 };
+    GetWindowTextW(hwnd, titleBuf, 512);
+    if (wcslen(titleBuf) < 4) return TRUE;
 
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
@@ -1415,10 +1433,6 @@ BOOL CALLBACK FallbackMediaEnumProc(HWND hwnd, LPARAM lParam) {
         for (size_t i = 0; i < exeName.size(); i++) exeName[i] = towlower(exeName[i]);
     }
     CloseHandle(hProc);
-
-    wchar_t titleBuf[512] = { 0 };
-    GetWindowTextW(hwnd, titleBuf, 512);
-    if (wcslen(titleBuf) < 4) return TRUE;
 
     std::wstring wTitle = titleBuf;
     WindowMediaFallback* res = (WindowMediaFallback*)lParam;
@@ -1461,6 +1475,7 @@ BOOL CALLBACK FallbackMediaEnumProc(HWND hwnd, LPARAM lParam) {
 void PollSmtcMediaSession(ISMTC_SessionManager* pManager) {
     static std::wstring s_lastTrackKey = L"";
     static int s_artRetryCount = 0;
+    static int s_fallbackDiv = 0;
     bool gotSmtc = false;
 
     if (pManager) {
@@ -1593,7 +1608,8 @@ void PollSmtcMediaSession(ISMTC_SessionManager* pManager) {
         }
     }
 
-    if (!gotSmtc) {
+    // Window-title fallback: runs about once per second instead of on every poll.
+    if (!gotSmtc && (s_fallbackDiv++ % 5 == 0)) {
         WindowMediaFallback fb = { false, L"", L"", L"" };
         EnumWindows(FallbackMediaEnumProc, (LPARAM)&fb);
         std::lock_guard<std::mutex> lock(g_mediaMutex);
@@ -1841,18 +1857,93 @@ BOOL CALLBACK ScanToastWindowsProc(HWND hwnd, LPARAM lParam) {
     return FALSE;
 }
 
+// ----------------------------------------------------------------------------
+// Event-driven volume: IAudioEndpointVolumeCallback reports volume/mute changes,
+// IMMNotificationClient reports default-device switches.
+// ----------------------------------------------------------------------------
+static std::atomic<bool> g_defaultDeviceChanged{ false };
+static IMMDeviceEnumerator* g_pDevEnum = NULL;
+
+class VolumeNotifyClient : public IAudioEndpointVolumeCallback, public IMMNotificationClient {
+    LONG m_ref = 1;
+public:
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
+        if (riid == IID_IUnknown || riid == __uuidof(IAudioEndpointVolumeCallback))
+            *ppv = static_cast<IAudioEndpointVolumeCallback*>(this);
+        else if (riid == __uuidof(IMMNotificationClient))
+            *ppv = static_cast<IMMNotificationClient*>(this);
+        else { *ppv = NULL; return E_NOINTERFACE; }
+        AddRef();
+        return S_OK;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&m_ref); }
+    STDMETHODIMP_(ULONG) Release() override {
+        LONG c = InterlockedDecrement(&m_ref);
+        if (c == 0) delete this;
+        return c;
+    }
+    // IAudioEndpointVolumeCallback
+    STDMETHODIMP OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA p) override {
+        if (!p || !g_hWnd || !g_cfg.enableVolume) return S_OK;
+        float vol = p->fMasterVolume;
+        BOOL mute = p->bMuted;
+        if (g_lastVolume >= 0.0f && (std::abs(vol - g_lastVolume) > 0.005f || mute != g_lastMute)) {
+            int pct = (int)std::round(vol * 100.0f);
+            if (mute || pct == 0) PostMessageW(g_hWnd, WM_APP + 1, 1, 0);
+            else PostMessageW(g_hWnd, WM_APP + 1, 2, (LPARAM)pct);
+        }
+        g_lastVolume = vol;
+        g_lastMute = mute;
+        return S_OK;
+    }
+    // IMMNotificationClient
+    STDMETHODIMP OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR) override {
+        if (flow == eRender && role == eConsole) g_defaultDeviceChanged.store(true);
+        return S_OK;
+    }
+    STDMETHODIMP OnDeviceStateChanged(LPCWSTR, DWORD) override { return S_OK; }
+    STDMETHODIMP OnDeviceAdded(LPCWSTR) override { return S_OK; }
+    STDMETHODIMP OnDeviceRemoved(LPCWSTR) override { return S_OK; }
+    STDMETHODIMP OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) override { return S_OK; }
+};
+
+static VolumeNotifyClient* g_pVolNotify = NULL;
+
+static void AttachDefaultEndpoint() {
+    IMMDevice* pDev = NULL;
+    if (!g_pDevEnum || FAILED(g_pDevEnum->GetDefaultAudioEndpoint(eRender, eConsole, &pDev)) || !pDev) return;
+
+    IAudioEndpointVolume* newVol = NULL;
+    IMyAudioMeterInformation* newMeter = NULL;
+    pDev->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&newVol);
+    pDev->Activate(IID_IMyAudioMeterInformation, CLSCTX_ALL, NULL, (void**)&newMeter);
+    pDev->Release();
+
+    IAudioEndpointVolume* oldVol = g_pVolume;
+    IMyAudioMeterInformation* oldMeter = g_pMeter;
+    g_pVolume = newVol;
+    g_pMeter = newMeter;
+
+    if (newVol) {
+        float v = 0.0f; BOOL m = FALSE;
+        if (SUCCEEDED(newVol->GetMasterVolumeLevelScalar(&v)) && SUCCEEDED(newVol->GetMute(&m))) {
+            g_lastVolume = v;
+            g_lastMute = m;
+        }
+        newVol->RegisterControlChangeNotify(g_pVolNotify);
+    }
+    if (oldVol) { oldVol->UnregisterControlChangeNotify(g_pVolNotify); oldVol->Release(); }
+    if (oldMeter) oldMeter->Release();
+}
+
 DWORD WINAPI BackgroundTelemetryWorker(LPVOID lpParam) {
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
 
-    IMMDeviceEnumerator* pEnum = NULL;
-    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnum)) && pEnum) {
-        IMMDevice* pDev = NULL;
-        if (SUCCEEDED(pEnum->GetDefaultAudioEndpoint(eRender, eConsole, &pDev)) && pDev) {
-            pDev->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&g_pVolume);
-            pDev->Activate(IID_IMyAudioMeterInformation, CLSCTX_ALL, NULL, (void**)&g_pMeter);
-            pDev->Release();
-        }
-        pEnum->Release();
+    g_pVolNotify = new VolumeNotifyClient();
+    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
+            __uuidof(IMMDeviceEnumerator), (void**)&g_pDevEnum)) && g_pDevEnum) {
+        g_pDevEnum->RegisterEndpointNotificationCallback(g_pVolNotify);
+        AttachDefaultEndpoint();
     }
 
     InitWmiBrightness();
@@ -1898,8 +1989,13 @@ DWORD WINAPI BackgroundTelemetryWorker(LPVOID lpParam) {
     bool wasVolUpPressed = false;
     bool wasBriDownPressed = false;
     bool wasBriUpPressed = false;
+    bool wasVizActive = false;
 
     while (g_running.load()) {
+        if (g_defaultDeviceChanged.exchange(false)) {
+            AttachDefaultEndpoint();
+        }
+
         if (g_pMeter) {
             float peak = 0.0f;
             if (SUCCEEDED(g_pMeter->GetPeakValue(&peak))) {
@@ -1939,20 +2035,6 @@ DWORD WINAPI BackgroundTelemetryWorker(LPVOID lpParam) {
 
             wasBriDownPressed = briDownNow;
             wasBriUpPressed = briUpNow;
-        }
-
-        if (g_cfg.enableVolume && g_pVolume && (tickCounter % 2 == 0)) {
-            float vol = 0.0f;
-            BOOL mute = FALSE;
-            if (SUCCEEDED(g_pVolume->GetMasterVolumeLevelScalar(&vol)) && SUCCEEDED(g_pVolume->GetMute(&mute))) {
-                if (g_lastVolume >= 0.0f && (std::abs(vol - g_lastVolume) > 0.005f || mute != g_lastMute)) {
-                    int pct = (int)std::round(vol * 100.0f);
-                    if (mute || pct == 0) PostMessageW(g_hWnd, WM_APP + 1, 1, 0);
-                    else PostMessageW(g_hWnd, WM_APP + 1, 2, (LPARAM)pct);
-                }
-                g_lastVolume = vol;
-                g_lastMute = mute;
-            }
         }
 
         if (g_cfg.enableBrightness && (tickCounter % 21 == 0)) {
@@ -2015,6 +2097,14 @@ DWORD WINAPI BackgroundTelemetryWorker(LPVOID lpParam) {
             PollBluetoothDevices();
         }
 
+        // Wake the UI timer when playback / audio activity starts or stops, so the
+        // idle visualizer, pill width and glow react without waiting for another message.
+        bool vizNow = ShouldShowIdleVisualizer();
+        if (vizNow != wasVizActive) {
+            wasVizActive = vizNow;
+            if (g_hWnd) PostMessageW(g_hWnd, WM_APP + 8, 0, 0);
+        }
+
         tickCounter++;
         if (WaitForSingleObject(g_stopEvent, 48) == WAIT_OBJECT_0) {
             break;
@@ -2025,8 +2115,12 @@ DWORD WINAPI BackgroundTelemetryWorker(LPVOID lpParam) {
     if (g_pUIAuto) g_pUIAuto->Release();
     if (g_hPhysMonitor) DestroyPhysicalMonitor(g_hPhysMonitor);
     if (g_pWbemServices) g_pWbemServices->Release();
-    if (g_pMeter) g_pMeter->Release();
-    if (g_pVolume) g_pVolume->Release();
+    if (g_pDevEnum && g_pVolNotify) g_pDevEnum->UnregisterEndpointNotificationCallback(g_pVolNotify);
+    if (g_pVolume && g_pVolNotify) g_pVolume->UnregisterControlChangeNotify(g_pVolNotify);
+    if (g_pMeter) { g_pMeter->Release(); g_pMeter = NULL; }
+    if (g_pVolume) { g_pVolume->Release(); g_pVolume = NULL; }
+    if (g_pDevEnum) { g_pDevEnum->Release(); g_pDevEnum = NULL; }
+    if (g_pVolNotify) { g_pVolNotify->Release(); g_pVolNotify = NULL; }
     if (g_hBthProps) FreeLibrary(g_hBthProps);
     if (g_hShCore) FreeLibrary(g_hShCore);
     if (g_hComBase) FreeLibrary(g_hComBase);
@@ -3544,6 +3638,12 @@ LRESULT CALLBACK AnsaWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             break;
         }
 
+        case WM_APP + 7:   // settings changed
+        case WM_APP + 8:   // wake-up from worker: media/audio state changed
+            // Nothing to do: the RequestAnimationTimer() call at the top of this
+            // procedure restarts timer 1, which recomputes targets and redraws.
+            break;
+
         case WM_DROPFILES: {
             HDROP hDrop = (HDROP)wParam;
             UINT fileCount = DragQueryFileW(hDrop, 0xFFFFFFFF, NULL, 0);
@@ -3823,10 +3923,11 @@ LRESULT CALLBACK AnsaWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                     if (PtInRect(&g_hit.optBtn[0], pt)) {
                         g_cfg.isNotch = !g_cfg.isNotch;
                     } else if (PtInRect(&g_hit.optBtn[1], pt)) {
-                        if (g_userUiScale < 1.10f) g_userUiScale = 1.15f;
+                        if (g_userUiScale < 0.85f) g_userUiScale = 0.90f;
+                        else if (g_userUiScale < 0.95f) g_userUiScale = 1.00f;
+                        else if (g_userUiScale < 1.10f) g_userUiScale = 1.15f;
                         else if (g_userUiScale < 1.25f) g_userUiScale = 1.30f;
-                        else if (g_userUiScale < 1.45f) g_userUiScale = 1.50f;
-                        else g_userUiScale = 1.00f;
+                        else g_userUiScale = 0.80f;
                         g_cfg.uiScale = g_userUiScale * g_dpiScale;
                         float tw = 0.0f, th = 0.0f;
                         ComputeTargetDimensions(VIEW_SETTINGS_STUDIO, tw, th);
@@ -3984,7 +4085,12 @@ LRESULT CALLBACK AnsaWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         case WM_TIMER: {
             if (wParam == 1) {
-                if (g_isHiddenByFullscreen) return 0;
+                // Hidden by a fullscreen app: stop the 13 ms timer instead of waking up
+                // ~64 times per second for nothing. It restarts when the island reappears.
+                if (g_isHiddenByFullscreen) {
+                    KillTimer(hWnd, 1);
+                    return 0;
+                }
 
                 if (g_hud.expireTick > 0 && GetTickCount64() > g_hud.expireTick && !g_isTypingTask) {
                     g_hud.expireTick = 0;
@@ -4049,6 +4155,9 @@ LRESULT CALLBACK AnsaWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 
                 RenderAnsaDynamicIsland(hWnd);
                 bool animationActive = isMediaPlaying ||
+                    ShouldShowIdleVisualizer() ||
+                    g_hud.expireTick != 0 ||
+                    g_isTypingTask ||
                     g_waveAmplitude > 0.01f ||
                     g_viewMode == VIEW_TOAST_NOTIFICATION ||
                     std::abs(g_sprW.target - g_sprW.current) > 0.03f ||
@@ -4067,10 +4176,12 @@ LRESULT CALLBACK AnsaWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                     } else if (!fs && g_isHiddenByFullscreen) {
                         g_isHiddenByFullscreen = false;
                         ShowWindow(hWnd, SW_SHOWNA);
+                        RequestAnimationTimer(hWnd);
                     }
                 } else if (g_isHiddenByFullscreen) {
                     g_isHiddenByFullscreen = false;
                     ShowWindow(hWnd, SW_SHOWNA);
+                    RequestAnimationTimer(hWnd);
                 }
 
                 if (!g_isHiddenByFullscreen && g_cfg.edgeHoverExpand && g_viewMode == VIEW_IDLE && !g_isHovered) {
@@ -4082,6 +4193,7 @@ LRESULT CALLBACK AnsaWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                         if (pt.y <= 3 && std::abs(pt.x - centerX) <= zoneHalfW) {
                             g_viewMode = VIEW_EXPANDED_HUB;
                             g_hud.expireTick = GetTickCount64() + 2800;
+                            RequestAnimationTimer(hWnd);
                         }
                     }
                 }
@@ -4286,6 +4398,8 @@ void WhTool_ModSettingsChanged() {
 
 ////////////////////////////////////////////////////////////////////////////////
 // Tool-mod launcher boilerplate.
+// TODO: replace this comment block and the code below with the verbatim snippet
+// from the Windhawk wiki ("Tool mods") before submitting the PR.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -4408,7 +4522,7 @@ void Wh_ModAfterInit() {
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
         LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
         DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFO lpStartupInfo,
+        LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
