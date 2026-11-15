@@ -66,8 +66,9 @@ selected. Among those, detection goes:
   (class name, AutomationId, position, name). That log is what to attach to a
   bug report.
 - Updating the mod does not change settings you have already saved. If you saved
-  settings before v1.7.0 and your language is missing, delete every entry under
-  "Chevron name keywords" and save: an empty list restores the built-in one.
+  settings before v1.7.0 and your language is missing, or before v1.7.2 and your
+  display language is French, delete every entry under "Chevron name keywords"
+  and save: an empty list restores the built-in one.
 - Set "Hover delay" to a small value (e.g. 150 ms) if the flyout opens when you
   only brush past the chevron on the way to the clock.
 - If auto-collapse does not work, the flyout window class name may differ on your
@@ -137,8 +138,9 @@ z paska zadań nie może zostać wybrany. Wśród nich wykrywanie przebiega tak:
   kandydatów z zasobnika (nazwa klasy, AutomationId, pozycja, nazwa). To ten log
   warto dołączyć do zgłoszenia błędu.
 - Aktualizacja moda nie zmienia ustawień, które zostały już zapisane. Jeśli
-  zapisywałeś ustawienia przed wersją 1.7.0, a brakuje Twojego języka, usuń
-  wszystkie pozycje w polu „Słowa kluczowe nazwy strzałki" i zapisz: pusta lista
+  zapisywałeś ustawienia przed wersją 1.7.0, a brakuje Twojego języka, albo
+  przed wersją 1.7.2, a Twój język interfejsu to francuski, usuń wszystkie
+  pozycje w polu „Słowa kluczowe nazwy strzałki" i zapisz: pusta lista
   przywraca wbudowaną.
 - Ustaw „Opóźnienie otwierania" na niewielką wartość (np. 150 ms), jeśli schowek
   otwiera się przy samym przejeżdżaniu obok strzałki w drodze do zegara.
@@ -576,10 +578,12 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
     // 1) Language-independent identification, accepted only when it is
     // unambiguous. If a future build gives several tray elements this same
     // signature, picking one of them arbitrarily would be a guess.
+    auto hasChevronAutomationId = [&](const Candidate& c) {
+        return c.automationId == s.trayIconAutomationId ||
+               c.automationId == CHEVRON_AUTOMATION_ID_ALT;
+    };
     auto hasChevronPair = [&](const Candidate& c) {
-        return c.className == s.chevronClass &&
-               (c.automationId == s.trayIconAutomationId ||
-                c.automationId == CHEVRON_AUTOMATION_ID_ALT);
+        return c.className == s.chevronClass && hasChevronAutomationId(c);
     };
 
     int classMatches = 0, firstClassMatch = -1;
@@ -595,11 +599,12 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
         // not shown (no hidden icons, or right after sign-in). Accepting it
         // would also keep that button cached after the chevron appears. When
         // the chevron's tooltip text from Windows was read and recognised,
-        // require the name to agree; without it, keep accepting the pair on
-        // its own, as before that text was used.
+        // require the name to agree with it, with a saved keyword or with a
+        // built-in one (the saved list may be an outdated copy); without that
+        // text, keep accepting the pair on its own, as before it was used.
         const Candidate& c = cands[firstClassMatch];
         if (g_systemChevronName.empty() || c.name == g_systemChevronName ||
-            NameMatches(c.name, s)) {
+            NameMatches(c.name, s) || IsKnownChevronName(c.name)) {
             chosen = firstClassMatch;
         }
     } else if (classMatches > 1 && logWeakMatch) {
@@ -610,14 +615,18 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
 
     // 2) The chevron's tooltip as Windows itself spells it in the current
     //    display language, compared with whole names. When any tray element
-    //    carries the class pair, only those are compared, which rules out the
-    //    clock, volume, network, battery, notification and "show desktop"
-    //    buttons in case the string id ever points at one of their names.
-    //    Accepted only when exactly one element has it.
+    //    carries the class pair, only elements with the chevron's AutomationId
+    //    are compared. That excludes notification icons, whose names are
+    //    arbitrary application tooltips, but still lets through a chevron
+    //    whose class alone was renamed in a future build. The clock, volume,
+    //    network, battery and "show desktop" buttons share the AutomationId,
+    //    but the text is only used once a built-in keyword recognises it, so
+    //    it cannot equal one of their names. Accepted only when exactly one
+    //    element has it.
     if (chosen < 0 && !g_systemChevronName.empty()) {
         int nameMatches = 0, firstNameMatch = -1;
         for (size_t i = 0; i < cands.size(); i++) {
-            if (classMatches > 0 && !hasChevronPair(cands[i])) continue;
+            if (classMatches > 0 && !hasChevronAutomationId(cands[i])) continue;
             if (cands[i].name == g_systemChevronName) {
                 nameMatches++;
                 if (firstNameMatch < 0) firstNameMatch = (int)i;
@@ -634,12 +643,14 @@ static IUIAutomationElement* FindOverflowButton(IUIAutomation* pAuto,
     }
 
     // 3) Keyword match, for when the tooltip text from Windows is unavailable
-    //    or not recognised. Like step 2, it only considers the elements that
-    //    carry the class pair when any do, so a keyword cannot hit a
-    //    notification icon, whose name is an arbitrary application tooltip.
+    //    or not recognised. Like step 2, when any element carries the class
+    //    pair it only considers elements with the chevron's AutomationId, so a
+    //    keyword cannot hit a notification icon, whose name is an arbitrary
+    //    application tooltip, while a chevron with a renamed class still
+    //    matches.
     if (chosen < 0) {
         for (size_t i = 0; i < cands.size(); i++) {
-            if (classMatches > 0 && !hasChevronPair(cands[i])) continue;
+            if (classMatches > 0 && !hasChevronAutomationId(cands[i])) continue;
             if (NameMatches(cands[i].name, s)) {
                 chosen = (int)i;
                 if (logWeakMatch) {
