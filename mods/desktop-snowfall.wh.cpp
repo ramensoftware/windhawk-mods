@@ -2378,7 +2378,10 @@ RunResult Overlay::Run() {
 
     for (;;) {
         double now = clock();
-        if (!waitingForFrame && (g_wake.windows || g_wake.cursor)) {
+        // Wakes up snow that lies still. In the calm pace the next step is
+        // close anyway, and waking it sooner would raise the calm frame rate.
+        if (!waitingForFrame && m_pace == Pace::Still &&
+            (g_wake.windows || g_wake.cursor)) {
             nextStep = std::min(nextStep, lastStep + 1.0 / fastFps);
         }
 
