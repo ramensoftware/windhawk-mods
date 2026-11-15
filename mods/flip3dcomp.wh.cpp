@@ -7695,16 +7695,7 @@ bool InitializeModuleGlobals()
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
-// The mod will load and run in a dedicated windhawk.exe process.
-//
-// Paste the code below as part of the mod code, and use these callbacks:
-// * WhTool_ModInit
-// * WhTool_ModSettingsChanged
-// * WhTool_ModUninit
-//
-// Currently, other callbacks are not supported.
-//
-// This mod also targets explorer.exe and rundll32.exe: there, each callback calls the explorer and rundll32 part instead.
+// The mod will load and run in a dedicated windhawk.exe process, while targetting explorer.exe and rundll32.exe: there, each callback calls the explorer and rundll32 part instead.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
