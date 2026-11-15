@@ -55,7 +55,7 @@ The **Start the test automatically** setting defaults to `auto`: the test
 starts when the flyout opens, except when Windows reports the connection as
 metered - then the flyout opens idle and waits for a click on Start.
 
-**Coexistence**: the mod [perform-speedtest-redirect](https://github.com/ramensoftware/windhawk-mods)
+**Coexistence**: the mod [perform-speedtest-redirect](https://windhawk.net/mods/perform-speedtest-redirect)
 intercepts the same URL launches. If both are enabled, whichever mod hooks
 the launch first wins - disable the other one to keep this mod's flyout.
 
@@ -343,8 +343,9 @@ static bool IsSpeedTestUrl(PCWSTR url) {
 
     // User-supplied extra patterns only apply to actual web URLs: the hooks
     // also see file names and command lines (a document, a launcher, ...), and
-    // a file whose name contains a pattern must not be cancelled.
-    if (url[0] != L'\0' && !(url[0] == L'h' || url[0] == L'H')) {
+    // a file whose name contains a pattern must not be cancelled. The empty
+    // check above already returned, so only the scheme matters here.
+    if (!(url[0] == L'h' || url[0] == L'H')) {
         return false;
     }
     if (!StrStrIW(url, L"://")) {
@@ -432,7 +433,6 @@ static bool ShowNativeFlyout() {
 
 static BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* sei) {
     if (sei && IsSpeedTestUrl(sei->lpFile)) {
-        Wh_Log(L"ShellExecuteExW url=%s", sei->lpFile ? sei->lpFile : L"(null)");
         Wh_Log(L"ShellExecuteExW match url=%s", sei->lpFile ? sei->lpFile : L"(null)");
 
         if (ShowNativeFlyout()) {
@@ -1130,10 +1130,11 @@ static bool CancelRequested(const std::atomic<LONG>* stop = nullptr) {
 struct TransferCounter {
     std::atomic<LONGLONG> bytes = 0;
     // Per-phase data budget in bytes (0 = unlimited). Workers stop requesting
-    // new transfers once it is spent; in-flight data still completes and
-    // counts. Full-window measurement is unaffected at or below the budget
-    // line (~340 Mbps); faster lines end the phase early and the result
-    // divides by the actual elapsed time.
+    // new transfers once it is spent, and read/write loops cut in-flight
+    // transfers short when they notice; the partial bytes still count, so the
+    // total never overshoots the budget by much. Full-window measurement is
+    // unaffected at or below the budget line (~340 Mbps); faster lines end the
+    // phase early and the result divides by the actual elapsed time.
     LONGLONG budget = 0;
 
     bool BudgetExceeded() const {
@@ -1266,7 +1267,7 @@ public:
                                      WINHTTP_NO_REQUEST_DATA, 0, size, 0) != FALSE;
 
         DWORD sentTotal = 0;
-        const DWORD chunk = 256 * 1024;
+        const DWORD chunk = 32 * 1024;
         while (ok && sentTotal < size) {
             if (CancelRequested(stop) || counter->BudgetExceeded()) {
                 ok = false;
@@ -1408,8 +1409,7 @@ static std::wstring Widen(const std::string& text) {
     return result;
 }
 
-static void ReadTrace(std::wstring* server, std::wstring* ip,
-                      ULONG* interfaceIndex,
+static void ReadTrace(std::wstring* server, ULONG* interfaceIndex,
                       ADDRESS_FAMILY* interfaceFamily) {
     if (interfaceIndex) {
         *interfaceIndex = 0;
@@ -1431,7 +1431,7 @@ static void ReadTrace(std::wstring* server, std::wstring* ip,
             connectionInfo.LocalAddress, interfaceFamily);
     }
 
-    std::wstring colo, loc, addr;
+    std::wstring colo, loc;
     size_t start = 0;
     while (start < body.size()) {
         size_t end = body.find(L'\n', start);
@@ -1447,8 +1447,6 @@ static void ReadTrace(std::wstring* server, std::wstring* ip,
                 colo = value;
             } else if (key == L"loc") {
                 loc = value;
-            } else if (key == L"ip") {
-                addr = value;
             }
         }
         start = end + 1;
@@ -1457,7 +1455,6 @@ static void ReadTrace(std::wstring* server, std::wstring* ip,
     if (!colo.empty()) {
         *server = loc.empty() ? colo : (colo + L" (" + loc + L")");
     }
-    *ip = addr;
 }
 
 // Time a small uncached request through WinHTTP so the latency probe follows
@@ -1577,6 +1574,11 @@ static DWORD WINAPI DownloadWorker(LPVOID parameter) {
         job->requests++;
         bool ok = client.Download(path, job->counter, job->stop, &status);
         if (!ok && !CancelRequested(job->stop)) {
+            // A transfer cut short by the data budget is not a failure: the
+            // request would have succeeded.
+            if (job->counter->BudgetExceeded()) {
+                break;
+            }
             job->failures++;
             Sleep(status == 429 ? 500 : 250);
         }
@@ -1601,6 +1603,11 @@ static DWORD WINAPI UploadWorker(LPVOID parameter) {
         bool ok = client.Upload(L"/__up", job->data, job->size, job->counter,
                                 job->stop, &status);
         if (!ok && !CancelRequested(job->stop)) {
+            // A transfer cut short by the data budget is not a failure: the
+            // request would have succeeded.
+            if (job->counter->BudgetExceeded()) {
+                break;
+            }
             job->failures++;
             Sleep(status == 429 ? 500 : 250);
         }
@@ -1715,6 +1722,10 @@ static double MeasureTransfer(bool upload) {
     std::deque<std::pair<ULONGLONG, LONGLONG>> window;
     std::vector<double> speeds;
     double current = 0;
+    // Once the budget is spent the display stops updating: the tail after the
+    // in-flight transfers drain is idle time and would otherwise paint a
+    // meaningless drop toward zero on the gauge and the chart.
+    bool budgetSpent = counter.BudgetExceeded();
 
     while (Now() - measuredStart < kTransferMeasureMs) {
         if (CancelRequested()) {
@@ -1729,6 +1740,9 @@ static double MeasureTransfer(bool upload) {
             lastTraffic = now;
             prevTotal = total;
         }
+        if (!budgetSpent && counter.BudgetExceeded()) {
+            budgetSpent = true;
+        }
         window.push_back({now, total});
         while (window.size() > 2 && now - window.front().first > 1000) {
             window.pop_front();
@@ -1741,11 +1755,13 @@ static double MeasureTransfer(bool upload) {
             }
         }
 
-        StateSetCurrent(current);
-        StateSetCaption(upload ? g_str->upload : g_str->download);
-        StateAddSample(current, upload);
-        if (current > 0 && Now() - measuredStart > 500) {
-            speeds.push_back(current);
+        if (!budgetSpent) {
+            StateSetCurrent(current);
+            StateSetCaption(upload ? g_str->upload : g_str->download);
+            StateAddSample(current, upload);
+            if (current > 0 && Now() - measuredStart > 500) {
+                speeds.push_back(current);
+            }
         }
 
         // The budget can end the phase early on fast lines: once it is spent,
@@ -1812,10 +1828,9 @@ static void RunTestWorker() {
         StateSetPhase(Phase::Warmup, g_str->connecting);
 
         std::wstring server = L"Cloudflare";
-        std::wstring ip;
         ULONG interfaceIndex = 0;
         ADDRESS_FAMILY interfaceFamily = AF_UNSPEC;
-        ReadTrace(&server, &ip, &interfaceIndex, &interfaceFamily);
+        ReadTrace(&server, &interfaceIndex, &interfaceFamily);
         StateSetServer(server);
         if (interfaceIndex && g_flyoutHwnd) {
             PostMessageW(g_flyoutHwnd, WM_APP + 4, interfaceIndex,
@@ -2906,7 +2921,7 @@ static void DrawResults(float alpha, const TestState& state) {
 
     wchar_t dataText[64];
     swprintf(dataText, 64, L"%s: %.0f MB",
-             g_str->dataUsed, state.dataUsed / (1024.0 * 1024.0));
+             g_str->dataUsed, state.dataUsed / 1'000'000.0);
     Text(dataText, Rect(36, 294, 364, 312), 11,
          WithAlpha(g_palette.secondary, alpha));
 
@@ -3425,7 +3440,7 @@ static void CopyResult(HWND hwnd, const TestState& state) {
         FormatNumber(state.upload) + L" Mbps upload \x00B7 " +
         (state.hasPing ? FormatNumber(state.ping) : L"\x2014") + L" ms ping \x00B7 " +
         (state.hasJitter ? FormatNumber(state.jitter) : L"\x2014") + L" ms jitter \x00B7 " +
-        std::to_wstring((state.dataUsed + (1LL << 19)) >> 20) + L" MB data used";
+        std::to_wstring((state.dataUsed + 500000) / 1000000) + L" MB data used";
     text += L"\r\n";
     text += state.server + L" \x00B7 " + FormatDate(state.when);
 
@@ -4574,15 +4589,9 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT message, WPARAM wParam,
 // Returns the module of the calling code (the mod DLL), not the host. Used as
 // the window class instance so registration/unregistration is scoped to the
 // mod's own module, as Windhawk conventions expect.
-static HMODULE GetCurrentModuleHandle() {
-    HMODULE module = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                            L"", &module)) {
-        return nullptr;
-    }
-    return module;
-}
+// The module handle of the mod image: the class name then belongs to the
+// mod and disappears with it, not with the host.
+extern "C" IMAGE_DOS_HEADER __ImageBase;
 
 static DWORD WINAPI UiThreadProc(LPVOID) {
     HRESULT comResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -4598,7 +4607,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     // stays square while DWM clips the material to rounded corners.
     windowClass.style = 0;
     windowClass.lpfnWndProc = FlyoutWndProc;
-    windowClass.hInstance = GetCurrentModuleHandle();
+    windowClass.hInstance = (HINSTANCE)&__ImageBase;
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     windowClass.hbrBackground = nullptr;
     windowClass.lpszClassName = kFlyoutClass;
@@ -4731,22 +4740,17 @@ BOOL Wh_ModInit(void) {
         }
     }
 
-    HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
-    if (shell32) {
-        auto shellExecuteExW = (ShellExecuteExW_t)GetProcAddress(shell32, "ShellExecuteExW");
-        if (shellExecuteExW &&
-            !WindhawkUtils::SetFunctionHook(shellExecuteExW,
-                                            ShellExecuteExW_Hook,
-                                            &ShellExecuteExW_Original)) {
-            Wh_Log(L"Unable to hook ShellExecuteExW");
-        }
-        auto shellExecuteW = (ShellExecuteW_t)GetProcAddress(shell32, "ShellExecuteW");
-        if (shellExecuteW &&
-            !WindhawkUtils::SetFunctionHook(shellExecuteW,
-                                            ShellExecuteW_Hook,
-                                            &ShellExecuteW_Original)) {
-            Wh_Log(L"Unable to hook ShellExecuteW");
-        }
+    // Import-form hooks: referencing ShellExecuteExW/ShellExecuteW makes the
+    // mod import shell32 (a KnownDLL, so it is loaded with the mod), and the
+    // two hooks can no longer be silently missing in a host that loads
+    // shell32 later.
+    if (!WindhawkUtils::SetFunctionHook(ShellExecuteExW, ShellExecuteExW_Hook,
+                                        &ShellExecuteExW_Original)) {
+        Wh_Log(L"Unable to hook ShellExecuteExW");
+    }
+    if (!WindhawkUtils::SetFunctionHook(ShellExecuteW, ShellExecuteW_Hook,
+                                        &ShellExecuteW_Original)) {
+        Wh_Log(L"Unable to hook ShellExecuteW");
     }
 
     HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
