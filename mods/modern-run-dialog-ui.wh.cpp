@@ -71,7 +71,7 @@ Replaces the classic Win32 **Run (`Win + R`)** dialog with a floating, borderles
   * Type any mathematical expression directly into the Run input bar (e.g., `1+1`, `(25*4)/2`, `sqrt(144)`, `sin(pi/2)`, `2^10`) to evaluate and display the live result at the top of the suggestion card; press `Enter` or click the result row to copy/insert it immediately.
 
 - **Built-in Multi-Language Google Translate (`文A`):**
-  * Click the dedicated **Google Translate (`文A`)** icon button on the input bar (between Run and Settings) to toggle **Translate Mode** with a dynamically expanding multi-line input field, source/target language selector pills (22 languages + Auto Detect) with a one-click swap (`⇄`) button, and press `Enter` to open a compact Google Translate popup window positioned right above (or below) the input bar.
+  * Click the dedicated **Google Translate (`文A`)** icon button on the input bar (between Run and Settings) to toggle **Translate Mode** with a dynamically expanding multi-line input field, source/target language selector pills (22 languages + Auto Detect) with a one-click swap (`⇄`) button, and press `Enter` to open the translation in a compact Google Translate popup window positioned right above (or below) the input bar.
 
 - **Synchronized In-App Quick Settings Menu (`⚙️`):**
   * Pill-styled Liquid Glass / Fluent popup menu featuring 3D **Liquid Glass Toggle Switches** for boolean features (**Compact Mini-Pill Mode** and **Show Command History**, which automatically locks ON and dims when Compact Mode is active) and crisp checkmarks (`✓`) for single-choice submenu options.
@@ -113,7 +113,7 @@ Thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng g
   * Gõ trực tiếp phép tính vào ô nhập Run (ví dụ `1+1`, `(25*4)/2`, `sqrt(144)`, `sin(pi/2)`, `2^10`) để xem ngay kết quả tính toán ở đầu hộp gợi ý; nhấn `Enter` hoặc nhấp chuột vào dòng kết quả để sao chép và điền ngay vào ô nhập.
 
 - **Dịch đa ngôn ngữ nhanh bằng Google Dịch (`文A`):**
-  * Nhấn vào nút biểu tượng **Google Dịch (`文A`)** trên thanh nhập (nằm giữa nút Chạy và nút Cài đặt) để chuyển sang **Chế độ Dịch** với ô nhập tự động giãn chiều cao nhiều dòng, thanh chọn ngôn ngữ nguồn/đích (22 ngôn ngữ + Tự động phát hiện) kèm nút đảo chiều (`⇄`), và nhấn `Enter` để mở cửa sổ popup Google Dịch nhỏ gọn nằm ngay phía trên (hoặc phía dưới) thanh nhập.
+  * Nhấn vào nút biểu tượng **Google Dịch (`文A`)** trên thanh nhập (nằm giữa nút Chạy và nút Cài đặt) để chuyển sang **Chế độ Dịch** với ô nhập tự động giãn chiều cao nhiều dòng, thanh chọn ngôn ngữ nguồn/đích (22 ngôn ngữ + Tự động phát hiện) kèm nút đảo chiều (`⇄`), và nhấn `Enter` để mở bản dịch trong cửa sổ popup Google Dịch nhỏ gọn nằm ngay phía trên (hoặc phía dưới) thanh nhập.
 
 - **Menu Cài đặt nhanh đồng bộ (`⚙️`) với Công tắc Liquid Glass:**
   * Menu cài đặt nhanh bo tròn đồng bộ với thanh nhập, sử dụng **cần gạt bật/tắt (Toggle Switch) hiệu ứng Liquid Glass 3D** cho các tính năng bật/tắt (**Chế độ thu nhỏ** và **Hiển thị lịch sử lệnh** – tự động bật sẵn và làm mờ khóa lại khi đang ở Chế độ thu nhỏ) cùng dấu tích `✓` chuẩn xác cho các mục chọn đơn trong menu con.
@@ -720,7 +720,6 @@ static OpticalGlassCache g_menuSubOpticalCache;
 
 extern std::atomic<HWND> g_hActiveGearMenu;
 extern std::atomic<HWND> g_hActiveCustomSizeWnd;
-extern std::atomic<HWND> g_hActiveTranslatePopup;
 
 void ReleaseOpticalCacheBitmap(OpticalGlassCache& c) {
     if (c.pCachedBmp) {
@@ -1417,9 +1416,8 @@ uint64_t GetBackdropWindowTopologySignature(HWND hDlg) {
     }
 
     DWORD selfPid = GetCurrentProcessId();
-    HWND hGearMenu   = g_hActiveGearMenu.load();
-    HWND hSizeWnd    = g_hActiveCustomSizeWnd.load();
-    HWND hTransPopup = g_hActiveTranslatePopup.load();
+    HWND hGearMenu = g_hActiveGearMenu.load();
+    HWND hSizeWnd  = g_hActiveCustomSizeWnd.load();
 
     uint64_t hash = 14695981039346656037ULL;
     auto mixHash = [&](uint64_t v) {
@@ -1428,7 +1426,7 @@ uint64_t GetBackdropWindowTopologySignature(HWND hDlg) {
     };
 
     for (HWND w = GetTopWindow(nullptr); w != nullptr; w = GetWindow(w, GW_HWNDNEXT)) {
-        if (w == hDlg || w == hGearMenu || w == hSizeWnd || w == hTransPopup) continue;
+        if (w == hDlg || w == hGearMenu || w == hSizeWnd) continue;
         if (!IsWindowVisible(w) || IsIconic(w)) continue;
         if (hDlg && GetWindow(w, GW_OWNER) == hDlg) continue;
 
@@ -5473,7 +5471,6 @@ void StopKeyHookThread() {
 bool ResolveDialogLightContrast(const RunDialogState* state);
 void ApplyWindowAppearance(HWND hDlg, RunDialogState* state);
 void CloseActiveGearMenu();
-void CloseActiveTranslatePopup(RunDialogState* state);
 void CloseRunDialog(HWND hDlg);
 void SyncInputToNativeCombo(RunDialogState* state, const wchar_t* textOverride = nullptr);
 void ExecuteCommandImmediate(RunDialogState* state, const std::wstring& rawCommand);
@@ -5834,7 +5831,6 @@ void ForceFocusModernEdit(HWND hDlg, RunDialogState* state) {
 void MinimizeRunDialog(RunDialogState* state) {
     if (!state || !state->hDlg || !IsWindow(state->hDlg)) return;
     CloseActiveGearMenu();
-    CloseActiveTranslatePopup(state);
     ULONGLONG now = GetTickCount64();
     if (now - g_lastToggleTick.load() < 250) return;
 
@@ -6168,9 +6164,6 @@ void CloseRunDialog(HWND hDlg) {
     if (!hDlg || !IsWindow(hDlg)) return;
     if (GetWindowThreadProcessId(hDlg, nullptr) == GetCurrentThreadId()) {
         auto* state = reinterpret_cast<RunDialogState*>(GetPropW(hDlg, L"WindhawkModernRunState"));
-        if (state) {
-            CloseActiveTranslatePopup(state);
-        }
         if (state && !state->pendingUninit && !g_unloading.load()) {
             PlayDialogCloseAnimationSync(hDlg, state);
         }
@@ -6346,45 +6339,6 @@ bool IsChromiumAppModeBrowser(const std::wstring& exePath) {
     return false;
 }
 
-std::wstring ResolveCompactPopupBrowserExe() {
-    std::wstring defBrowser = GetDefaultBrowserExecutablePath();
-    if (IsChromiumAppModeBrowser(defBrowser) && PathFileExistsW(defBrowser.c_str())) {
-        return defBrowser;
-    }
-    wchar_t foundPath[MAX_PATH] = {};
-    const wchar_t* kFallbacks[] = { L"msedge.exe", L"chrome.exe", L"brave.exe" };
-    for (const wchar_t* exeName : kFallbacks) {
-        if (SearchPathW(nullptr, exeName, nullptr, MAX_PATH, foundPath, nullptr) && PathFileExistsW(foundPath)) {
-            return foundPath;
-        }
-        std::wstring regSubKey = std::wstring(L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\") + exeName;
-        DWORD cbData = sizeof(foundPath);
-        if (RegGetValueW(HKEY_LOCAL_MACHINE, regSubKey.c_str(), nullptr, RRF_RT_REG_SZ, nullptr, foundPath, &cbData) == ERROR_SUCCESS ||
-            RegGetValueW(HKEY_CURRENT_USER, regSubKey.c_str(), nullptr, RRF_RT_REG_SZ, nullptr, foundPath, &cbData) == ERROR_SUCCESS) {
-            PathUnquoteSpacesW(foundPath);
-            if (PathFileExistsW(foundPath)) {
-                return foundPath;
-            }
-        }
-    }
-    return L"";
-}
-
-void CloseActiveTranslatePopup(RunDialogState* state) {
-    if (!state) return;
-    if (state->hDlg && IsWindow(state->hDlg)) {
-        KillTimer(state->hDlg, kTimerSnapTranslatePopup);
-    }
-    if (state->hTranslatePopup && IsWindow(state->hTranslatePopup)) {
-        PostMessageW(state->hTranslatePopup, WM_CLOSE, 0, 0);
-    }
-    state->hTranslatePopup = nullptr;
-    g_hActiveTranslatePopup.store(nullptr);
-    state->translatePopupLaunchTick = 0;
-    state->translatePopupFirstSeenTick = 0;
-    state->preLaunchBrowserWindows.clear();
-}
-
 void ComputeTranslatePopupTargetBounds(const RunDialogState* state, int reqVisW, int reqVisH,
                                        int* outVisX, int* outVisY, int* outVisW, int* outVisH) {
     UINT dpi = state ? state->dpi : 96;
@@ -6469,14 +6423,12 @@ void PositionTranslatePopupRelativeToDialog(RunDialogState* state) {
         padB = (std::max)(0, (int)(rcWin.bottom - rcExt.bottom));
     }
 
-    // Step 1: Resize popup to compact target dimensions (browser may clamp to its minimum width)
     int winX = visX - padL;
     int winY = visY - padT;
     int winW = visW + padL + padR;
     int winH = visH + padT + padB;
     SetWindowPos(hPopup, HWND_TOP, winX, winY, winW, winH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
-    // Step 2: Read back actual visible frame bounds after browser minimum-size clamping and re-center perfectly
     if (GetWindowRect(hPopup, &rcWin) &&
         SUCCEEDED(DwmGetWindowAttribute(hPopup, DWMWA_EXTENDED_FRAME_BOUNDS, &rcExt, sizeof(rcExt)))) {
         padL = (std::max)(0, (int)(rcExt.left - rcWin.left));
@@ -6525,8 +6477,8 @@ bool IsCandidateTranslatePopupWindow(HWND hWnd, const RunDialogState* state) {
 
     wchar_t cls[64] = {};
     if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return false;
-    if (_wcsicmp(cls, L"Chrome_WidgetWin_1") == 0 || _wcsicmp(cls, L"MozillaWindowClass") == 0) {
-        return true;
+    if (_wcsicmp(cls, L"Chrome_WidgetWin_1") != 0 && _wcsicmp(cls, L"MozillaWindowClass") != 0) {
+        return false;
     }
 
     wchar_t title[256] = {};
@@ -6546,13 +6498,11 @@ bool OpenTranslationInBrowser(const std::wstring& text, const std::wstring& src,
     std::wstring url = L"https://translate.google.com/?sl=" + src + L"&tl=" + dst +
                        L"&op=translate&text=" + UrlEncodeUtf8(text);
 
-    int popupX = 100, popupY = 100, popupW = 600, popupH = 500;
+    int popupX = 100, popupY = 100, popupW = 500, popupH = 450;
     ComputeTranslatePopupTargetBounds(state, 0, 0, &popupX, &popupY, &popupW, &popupH);
 
     if (state) {
-        HWND hOldPopup = state->hTranslatePopup;
         state->hTranslatePopup = nullptr;
-        g_hActiveTranslatePopup.store(nullptr);
         state->preLaunchBrowserWindows.clear();
         EnumWindows([](HWND w, LPARAM lParam) -> BOOL {
             if (IsWindowVisible(w)) {
@@ -6560,15 +6510,11 @@ bool OpenTranslationInBrowser(const std::wstring& text, const std::wstring& src,
             }
             return TRUE;
         }, reinterpret_cast<LPARAM>(&state->preLaunchBrowserWindows));
-
-        if (hOldPopup && IsWindow(hOldPopup)) {
-            PostMessageW(hOldPopup, WM_CLOSE, 0, 0);
-        }
     }
 
     bool launched = false;
-    std::wstring browserExe = ResolveCompactPopupBrowserExe();
-    if (!browserExe.empty()) {
+    std::wstring defBrowser = GetDefaultBrowserExecutablePath();
+    if (IsChromiumAppModeBrowser(defBrowser) && PathFileExistsW(defBrowser.c_str())) {
         std::wstring params = L"--app=\"" + url + L"\" --window-size=" +
                               std::to_wstring(popupW) + L"," + std::to_wstring(popupH) +
                               L" --window-position=" + std::to_wstring(popupX) + L"," + std::to_wstring(popupY);
@@ -6576,7 +6522,7 @@ bool OpenTranslationInBrowser(const std::wstring& text, const std::wstring& src,
         SHELLEXECUTEINFOW seiApp = { sizeof(seiApp) };
         seiApp.fMask = SEE_MASK_DOENVSUBST;
         seiApp.lpVerb = L"open";
-        seiApp.lpFile = browserExe.c_str();
+        seiApp.lpFile = defBrowser.c_str();
         seiApp.lpParameters = params.c_str();
         seiApp.nShow = SW_SHOWNORMAL;
         if (ShellExecuteExW(&seiApp)) {
@@ -6595,7 +6541,7 @@ bool OpenTranslationInBrowser(const std::wstring& text, const std::wstring& src,
     if (launched && state && state->hDlg && IsWindow(state->hDlg)) {
         state->translatePopupLaunchTick = GetTickCount64();
         state->translatePopupFirstSeenTick = 0;
-        SetTimer(state->hDlg, kTimerSnapTranslatePopup, 20, nullptr);
+        SetTimer(state->hDlg, kTimerSnapTranslatePopup, 25, nullptr);
     }
     return launched;
 }
@@ -8983,7 +8929,6 @@ struct FluentMenuSession {
 
 std::atomic<HWND> g_hActiveGearMenu{nullptr};
 std::atomic<HWND> g_hActiveCustomSizeWnd{nullptr};
-std::atomic<HWND> g_hActiveTranslatePopup{nullptr};
 constexpr UINT_PTR kTimerMenuSubHover = 9501;
 constexpr UINT_PTR kTimerMenuWatchdog = 9502;
 constexpr wchar_t kFluentMenuClassName[] = L"WindhawkModernRunFluentMenuWnd";
@@ -11344,10 +11289,6 @@ void OpenTranslateLanguagePopup(RunDialogState* state, bool isSourceLang) {
             }
         }
         InvalidateRect(hDlg, nullptr, FALSE);
-        if (state->hTranslatePopup && IsWindow(state->hTranslatePopup) &&
-            !TrimCommandString(GetEffectiveInputText(state->hModernEdit)).empty()) {
-            TriggerTranslationRequest(state);
-        }
     }
     if (state->hModernEdit && IsWindow(state->hModernEdit)) {
         SetFocus(state->hModernEdit);
@@ -11596,7 +11537,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 void CleanupDialogState(HWND hWnd, RunDialogState* state) {
     RemoveWindowSubclass(hWnd, RunDlgSubclassProc, 1);
     CloseActiveGearMenu();
-    CloseActiveTranslatePopup(state);
     KillTimer(hWnd, kTimerCaret);
     KillTimer(hWnd, kTimerLuminance);
     KillTimer(hWnd, kTimerBgMedia);
@@ -11940,7 +11880,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 ULONGLONG now = GetTickCount64();
                 if (state->hTranslatePopup && !IsWindow(state->hTranslatePopup)) {
                     state->hTranslatePopup = nullptr;
-                    g_hActiveTranslatePopup.store(nullptr);
                 }
                 if (!state->hTranslatePopup) {
                     struct FindCtx {
@@ -11957,19 +11896,15 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                     }, reinterpret_cast<LPARAM>(&ctx));
                     if (ctx.found) {
                         state->hTranslatePopup = ctx.found;
-                        g_hActiveTranslatePopup.store(ctx.found);
                         state->translatePopupFirstSeenTick = now;
                     }
                 }
                 if (state->hTranslatePopup && IsWindow(state->hTranslatePopup)) {
                     PositionTranslatePopupRelativeToDialog(state);
-                    if (now - state->translatePopupFirstSeenTick < 120) {
-                        ForceFocusModernEdit(hWnd, state);
-                    }
-                    if (now - state->translatePopupFirstSeenTick >= 650) {
+                    if (now - state->translatePopupFirstSeenTick >= 500) {
                         KillTimer(hWnd, kTimerSnapTranslatePopup);
                     }
-                } else if (now - state->translatePopupLaunchTick >= 3500) {
+                } else if (now - state->translatePopupLaunchTick >= 3000) {
                     KillTimer(hWnd, kTimerSnapTranslatePopup);
                 }
                 return 0;
@@ -12061,10 +11996,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 }
                 g_dlgIsForeground.store(false);
                 CloseActiveGearMenu();
-                HWND hActivated = reinterpret_cast<HWND>(lParam);
-                bool activatingTranslatePopup = state && state->hTranslatePopup &&
-                    (hActivated == state->hTranslatePopup || GetForegroundWindow() == state->hTranslatePopup);
-                if (state && state->settings.closeOnClickOutside && !activatingTranslatePopup &&
+                if (state && state->settings.closeOnClickOutside &&
                     IsWindowVisible(hWnd) && !IsIconic(hWnd) && !state->isTriggeringRun &&
                     (!state->isBrowsingFile || g_hActiveGearMenu.load() != nullptr)) {
                     if (GetTickCount64() - g_openTick.load() > 300) {
@@ -12131,7 +12063,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                     state->normalY = newY;
                     SetWindowPos(hWnd, nullptr, newX, newY, 0, 0,
                                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
-                    PositionTranslatePopupRelativeToDialog(state);
                     InvalidateRect(hWnd, nullptr, FALSE);
                     UpdateWindow(hWnd);
                 }
@@ -12384,12 +12315,7 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                         : oldSrc;
                     Wh_SetStringValue(GetUserOverrideKey(L"translateSourceLang").c_str(), state->translateSourceLang.c_str());
                     Wh_SetStringValue(GetUserOverrideKey(L"translateTargetLang").c_str(), state->translateTargetLang.c_str());
-                    if (state->hTranslatePopup && IsWindow(state->hTranslatePopup) &&
-                        !TrimCommandString(GetEffectiveInputText(state->hModernEdit)).empty()) {
-                        TriggerTranslationRequest(state);
-                    } else {
-                        InvalidateRect(hWnd, nullptr, FALSE);
-                    }
+                    InvalidateRect(hWnd, nullptr, FALSE);
                 }
                 return 0;
             }
@@ -12432,7 +12358,6 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                     state->translateMode = !state->translateMode;
                     std::wstring curText = GetEffectiveInputText(state->hModernEdit);
                     if (!state->translateMode) {
-                        CloseActiveTranslatePopup(state);
                         UpdateAppSuggestionsForQuery(state, curText);
                     } else {
                         state->showingSuggestions = false;
