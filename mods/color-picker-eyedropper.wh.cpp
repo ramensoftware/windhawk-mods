@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              color-picker-eyedropper
 // @name            Color Picker / Eyedropper Tool
-// @description     System-wide color picker overlay
+// @description     System-wide color picker overlay. Activated by a customizable hotkey (default: Win + Alt + C), it allows you to select any pixel on your screen and copy its color value in HEX, RGB, HSL, and CMYK formats.
 // @version         1.0.2
 // @author          Naeru
 // @github          https://github.com/nathanaeru
