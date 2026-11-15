@@ -1,3 +1,10 @@
+## 1.6.1 ([Nov 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/85ecb1ac17afbd692ef530313a3e17e85385f181/mods/wintips-osd.wh.cpp))
+
+* Added a solo-Shift inference fallback for the input language tip: third-party IMEs that never answer WM_IME_CONTROL now get their Chinese/English mode tracked by the classic solo Shift press-and-release gesture. A 350 ms grace window gives the system read a chance to report the toggle first; odd numbers of solo Shift releases flip the cached mode, even numbers settle silently, and Shift+letter, Alt+Shift and Ctrl+Shift all drop out of the gesture on their own. The inference only applies to Chinese IME layouts.
+* Caps Lock now opens the language watch as well, so IMEs that toggle Chinese/English with it (Weasel's default, Sogou's option) report the mode on the language card.
+* Copy, paste and cut tips no longer fire when Win is held: Win+Ctrl+V opens the Volume Mixer and Win+Ctrl+C toggles color filters. Ctrl+Shift+V stays a paste.
+* Updated the readme.
+
 ## 1.6.0 ([Nov 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/67d017e02ad5ad872c23b0a820ca8cd83a655120/mods/wintips-osd.wh.cpp))
 
 * Switched text rendering to DirectWrite for smooth, subpixel-positioned text like the native Windows 11 OSD (fixes #6977)

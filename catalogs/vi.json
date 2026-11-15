@@ -6626,7 +6626,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 0, 1, 24],
         "ratingUsers": 25,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 47.7,
         "updated": 1794380630000,
         "users": 477
@@ -8371,19 +8371,19 @@
         "ratingUsers": 3,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1783671867000,
+        "updated": 1794765755000,
         "users": 87
       },
       "metadata": {
         "author": "Anixx",
         "compilerOptions": "-lgdi32 -lcomctl32 -luxtheme",
-        "description": "Fixes black background on the checkbox in the file conflict dialog (Classic Theme)",
+        "description": "Fixes black backgrounds in shell dialogs (Classic Theme) under Win 11 24H2+",
         "github": "https://github.com/Anixx",
         "include": [
           "*"
         ],
-        "name": "Fix File Conflict Dialog Checkbox Background",
-        "version": "1.0"
+        "name": "Fix file dialogs for Classic theme",
+        "version": "2.0"
       }
     },
     "fix-darkmode-listviews": {
@@ -16142,7 +16142,7 @@
         "ratingUsers": 89,
         "reviews": 0,
         "trendingSorting": 4.211570776108563,
-        "updated": 1787740130000,
+        "updated": 1794765744000,
         "users": 3108
       },
       "metadata": {
@@ -16150,8 +16150,8 @@
           "x86-64"
         ],
         "author": "Ender",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
-        "description": "Replace the Windows 11 Start button icon with a custom PNG, JPG or GIF image",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lcomctl32",
+        "description": "Replace the Windows 11 Start button icon with a custom SVG, PNG, JPG or GIF image",
         "github": "https://github.com/EnderDragonEP",
         "include": [
           "explorer.exe"
@@ -16159,7 +16159,7 @@
         "license": "GPL-3.0-only",
         "name": "Start Button Replacer",
         "twitter": "https://twitter.com/NoobieNoodle89",
-        "version": "0.12.4"
+        "version": "1.0.0"
       }
     },
     "start-everything": {
@@ -23905,7 +23905,7 @@
         "ratingUsers": 35,
         "reviews": 0,
         "trendingSorting": 9.58110108739784,
-        "updated": 1794592937000,
+        "updated": 1794765749000,
         "users": 554
       },
       "metadata": {
@@ -23919,7 +23919,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "WinTips OSD",
-        "version": "1.6.0"
+        "version": "1.6.1"
       }
     },
     "winui-context-menu-animation": {

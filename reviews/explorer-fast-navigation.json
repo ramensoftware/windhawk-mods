@@ -1,0 +1,14 @@
+{
+  "modId": "explorer-fast-navigation",
+  "reviews": [
+    {
+      "authorName": "Max",
+      "content": "It makes opening Windows Explorer way faster with the price of breaking the address bar. \nMost of the time if I click the address bar it just shows an empty address or some random folder in previous history.",
+      "id": 122,
+      "modVersion": "1.0.0",
+      "parentId": null,
+      "timestamp": 1794701042,
+      "votes": 0
+    }
+  ]
+}

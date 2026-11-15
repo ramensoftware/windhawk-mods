@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-15T00:01:31.000Z</updated>
+    <updated>2026-11-15T18:02:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fix file dialogs for Classic theme 2.0]]></title>
+        <id>https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg#efdfb5f5c7cc20e512d3c2bfbc50485374121a69</id>
+        <link href="https://windhawk.net/mods/fix-conflict-dialog-checkbox-bg"/>
+        <updated>2026-11-15T18:02:35.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix more dialogs</li>
+</ul>
+]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[WinTips OSD 1.6.1]]></title>
+        <id>https://windhawk.net/mods/wintips-osd#85ecb1ac17afbd692ef530313a3e17e85385f181</id>
+        <link href="https://windhawk.net/mods/wintips-osd"/>
+        <updated>2026-11-15T18:02:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a solo-Shift inference fallback for the input language tip: third-party IMEs that never answer WM_IME_CONTROL now get their Chinese/English mode tracked by the classic solo Shift press-and-release gesture. A 350 ms grace window gives the system read a chance to report the toggle first; odd numbers of solo Shift releases flip the cached mode, even numbers settle silently, and Shift+letter, Alt+Shift and Ctrl+Shift all drop out of the gesture on their own. The inference only applies to Chinese IME layouts.</li>
+<li>Caps Lock now opens the language watch as well, so IMEs that toggle Chinese/English with it (Weasel's default, Sogou's option) report the mode on the language card.</li>
+<li>Copy, paste and cut tips no longer fire when Win is held: Win+Ctrl+V opens the Volume Mixer and Win+Ctrl+C toggles color filters. Ctrl+Shift+V stays a paste.</li>
+<li>Updated the readme.</li>
+</ul>
+]]></content>
+        <author>
+            <name>DoYouNatureQ</name>
+            <uri>https://github.com/DoYouNatureQ</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Start Button Replacer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/start-button-replacer#dabac878f1673e94f3af838f639d82dbb81b48ac</id>
+        <link href="https://windhawk.net/mods/start-button-replacer"/>
+        <updated>2026-11-15T18:02:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added SVG support for all image sources (local files and HTTP/HTTPS URLs ending in <code>.svg</code>). Only static SVG content is rendered.</li>
+<li>Added optional <strong>Dark mode images</strong> that replace the main images while Windows is in dark mode. Blank fields use the main images, and images switch automatically when the Windows mode changes.</li>
+<li>Image load warnings now show which settings group the failed image belongs to.</li>
+<li>Added a Credits section to the readme. Thanks to <a href="https://github.com/Asteski">Asteski</a> for SVG support and dark mode images.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ender</name>
+            <uri>https://github.com/EnderDragonEP</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Window Centralizer 1.2.0]]></title>
         <id>https://windhawk.net/mods/window-centralizer#55d92d44a3b17f6a8309e1acb201173dcdbca218</id>
@@ -419,66 +467,6 @@ leaves full screen so the bar and the window controls come back.</li>
         <author>
             <name>hsb5</name>
             <uri>https://github.com/hsb5</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Unlock "Folder In Use" 1.1.0]]></title>
-        <id>https://windhawk.net/mods/unlock-folder-in-use#5d7506d753a4a65ec7ee938a0b9fcb6c165476e1</id>
-        <link href="https://windhawk.net/mods/unlock-folder-in-use"/>
-        <updated>2026-11-14T02:01:47.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Replaced the standard Windows task dialog with a custom prompt window that follows the Windows app theme (dark mode), uses the system accent color, scales with per-monitor DPI and supports keyboard navigation.</li>
-<li>Added the &quot;Expand details by default&quot; setting. The details list (matched items, processes and windows) now starts expanded, and can be set to start collapsed.</li>
-<li>Removed the &quot;modernDialogs&quot; setting and the message box fallback, as the new prompt no longer depends on the task dialog.</li>
-<li>Updated the readme with before/after screenshots.</li>
-</ul>
-]]></content>
-        <author>
-            <name>LyricsPortal</name>
-            <uri>https://github.com/LyricsPortal</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Chrome Native UI Tweaks 1.1]]></title>
-        <id>https://windhawk.net/mods/chrome-native-ui-tweaks#3a5b441745636377c69b8ba61657604b6850fb87</id>
-        <link href="https://windhawk.net/mods/chrome-native-ui-tweaks"/>
-        <updated>2026-11-14T02:01:42.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed tab close button hiding and icon/title spacing on Chrome 157 by supporting updated tab layout constants.</li>
-<li>Added font size customization for Find in page (Ctrl+F), with live updates and restoration of Chrome's original font.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Dron007</name>
-            <uri>https://github.com/Dron007</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinKlok 1.2.0]]></title>
-        <id>https://windhawk.net/mods/winklok#56b8c34918bf9700281471ec588be57c86dc697a</id>
-        <link href="https://windhawk.net/mods/winklok"/>
-        <updated>2026-11-14T02:01:37.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>New features :</strong></p>
-<ul>
-<li>Calendar events with Local + Google Calendar support</li>
-<li>Two-way Google Calendar sync and calendar import-export</li>
-<li>Top-positioned taskbar support</li>
-<li>Drag-and-drop tab reordering</li>
-<li>Week number visibility toggle</li>
-<li>Panel horizontal positioning</li>
-<li>Notification icon placement and visibility options</li>
-</ul>
-<p><strong>Bug fixes &amp; Improvements :</strong></p>
-<ul>
-<li>More organized Settings section</li>
-<li>Improved Calendar UI</li>
-<li>Improved Panel and Notification positioning</li>
-<li>Improved notification system</li>
-</ul>
-]]></content>
-        <author>
-            <name>Shifting Whistler</name>
-            <uri>https://github.com/shifting-whistler</uri>
         </author>
     </entry>
 </feed>
