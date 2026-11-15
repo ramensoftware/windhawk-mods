@@ -8,7 +8,7 @@
 // @github          https://github.com/igoredm
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -ldwmapi -lshell32 -lshlwapi -lshcore -lpropsys
+// @compilerOptions -lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -ldwmapi -lshell32 -lshlwapi -lshcore -lpropsys -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -20,12 +20,12 @@ Replaces the Windows taskbar with a light dock, one per monitor, with its own St
 * Floating dock or full-width bar; 4 looks (Névoa, Cristal, Grafite, Aurora).
 * macOS-like zoom (or Lift / Focus), live window previews (hover a thumbnail to peek), drag icons to reorder, pin and unpin.
 * Its own Start: pinned apps, all apps, app search, files (with [Everything](https://www.voidtools.com) or Windows Search) and Windows Settings pages. Compact or wide search.
-* The Windows key opens Nimbus' Start over any window (administrator ones too) and in games. Ctrl+Esc still opens Windows' Start; Alt+Space also opens Nimbus'.
+* The Windows key opens Nimbus' Start over any window (administrator ones too) and in games. Ctrl+Esc still opens Windows' Start. An optional shortcut (Alt+Space or Ctrl+Space) can open it too.
 * Per-monitor settings: format, auto-hide, what shows, only that monitor's windows.
 * The dock runs in its own Windhawk process and hides when a game or video is in full screen. Explorer only gets one small hook, for the Windows key.
-* Turning the mod off brings the Windows taskbar back. If something ever hangs and it doesn't come back, restart Explorer.
+* The text is in English, or in Portuguese when Windows is in Portuguese.
 
-**Goes well with** [Mac Island & Dock](https://windhawk.net/mods/mac-island-dock), for the clock, tray, media and notifications in an island at the top of the screen. In its settings, set "Taskbar" to "Windows taskbar, unchanged" and use only its island: Nimbus handles the dock.
+**What it changes in Windows.** With "Hide the Windows taskbar" on (the default), the whole Windows taskbar is hidden, so its tray, clock and quick settings are gone too: use another mod or app for those if you need them. To stop the hidden taskbar from reserving screen space, the mod turns on the taskbar's own "Automatically hide the taskbar" option, which Windows saves in your profile. The mod remembers your original choice and puts it back when it's turned off, also after a crash or a shutdown with the mod on. If the Windows taskbar ever stays hidden, turn the mod off or restart Explorer.
 
 ---
 
@@ -36,12 +36,12 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
 * Dock flutuante ou barra fixa; 4 visuais (Névoa, Cristal, Grafite, Aurora).
 * Zoom como no macOS (ou Elevar / Foco), prévia das janelas ao vivo (parar o mouse na miniatura mostra a janela), arrastar ícones pra reorganizar, fixar e desafixar.
 * Iniciar próprio: fixados, todos os apps, busca de apps, arquivos (com o [Everything](https://www.voidtools.com) ou a busca do Windows) e telas das Configurações do Windows. Busca compacta ou larga.
-* A tecla Windows abre o Iniciar do Nimbus em qualquer janela (até de administrador) e em jogos. Ctrl+Esc continua abrindo o Iniciar do Windows; Alt+Espaço também abre o do Nimbus.
+* A tecla Windows abre o Iniciar do Nimbus em qualquer janela (até de administrador) e em jogos. Ctrl+Esc continua abrindo o Iniciar do Windows. Um atalho opcional (Alt+Espaço ou Ctrl+Espaço) também pode abrir.
 * Ajustes por monitor: formato, esconder sozinha, o que aparece, só as janelas daquele monitor.
 * A dock roda num processo próprio do Windhawk e some quando um jogo ou vídeo está em tela cheia. No Explorador entra só um gancho pequeno, o da tecla Windows.
-* Ao desligar o mod, a barra do Windows volta. Se algo travar e ela não voltar, reinicie o Explorador.
+* Os textos ficam em inglês, ou em português quando o Windows está em português.
 
-**Combina com** o [Ilha e Dock estilo Mac](https://windhawk.net/mods/mac-island-dock), pra ter relógio, bandeja, mídia e notificações numa ilha no topo da tela. Nos ajustes dele, ponha "Barra de tarefas" em "Barra do Windows sem mudanças" e use só a ilha: a dock fica por conta do Nimbus.
+**O que muda no Windows.** Com "Esconder a barra do Windows" ligado (o padrão), a barra do Windows some inteira, então a bandeja, o relógio e as configurações rápidas somem junto: use outro mod ou app pra isso se precisar. Pra barra escondida não reservar espaço na tela, o mod liga a opção "Ocultar automaticamente a barra de tarefas" do próprio Windows, que fica salva no seu perfil. O mod guarda a sua escolha original e devolve quando é desligado, até depois de um travamento ou de desligar o PC com o mod ligado. Se a barra do Windows ficar escondida, desligue o mod ou reinicie o Explorador.
 */
 // ==/WindhawkModReadme==
 
@@ -105,11 +105,13 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
   $options:pt-BR:
   - nevoa: Iniciar do Nimbus
   - windows: Iniciar do Windows
-- startHotkey: altSpace
-  $name: Shortcut for Nimbus' Start
-  $name:pt-BR: Atalho do Iniciar do Nimbus
-  $description: Works over any window, administrator ones too, without listening to the keyboard
-  $description:pt-BR: Funciona em qualquer janela, até de administrador, sem ficar ouvindo o teclado
+- startHotkey: none
+  $name: Extra shortcut for Nimbus' Start
+  $name:pt-BR: Atalho extra do Iniciar do Nimbus
+  $description: >-
+    The Windows key already opens it. Each shortcut is taken from every app while the mod runs: Alt+Space replaces the window menu (Move, Size, Minimize, Close), Ctrl+Space the input method switch and many editors' autocomplete
+  $description:pt-BR: >-
+    A tecla Windows já abre. O atalho deixa de funcionar em todos os apps enquanto o mod roda: Alt+Espaço substitui o menu da janela (Mover, Tamanho, Minimizar, Fechar), Ctrl+Espaço a troca de método de entrada e o autocompletar de muitos editores
   $options:
   - altSpace: Alt + Space
   - ctrlSpace: Ctrl + Space
@@ -175,6 +177,8 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
 - hideWindowsTaskbar: true
   $name: Hide the Windows taskbar
   $name:pt-BR: Esconder a barra do Windows
+  $description: Also turns on its auto-hide while the mod runs, so it doesn't reserve screen space (your original choice comes back when the mod is turned off)
+  $description:pt-BR: Também liga o ocultar automático dela enquanto o mod roda, pra não reservar espaço na tela (sua escolha original volta quando o mod é desligado)
 - monPrimary:
   - enabled: true
     $name: Show the bar on this monitor
@@ -363,6 +367,7 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
 #include <wincodec.h>
 #include <shellscalingapi.h>
 #include <wrl/client.h>
+#include <sddl.h>
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -393,7 +398,7 @@ struct Settings {
     bool fixedBar = false;              // format: fixa
     bool nevoaStart = true;             // startMenu: nevoa
     bool winKey = false;                // winKeyMode: nevoa (the Windows key opens Nimbus' Start)
-    std::wstring startHotkey = L"altSpace";  // altSpace | ctrlSpace | none
+    std::wstring startHotkey = L"none";  // altSpace | ctrlSpace | none
     std::wstring fileSearch = L"everything";  // everything | windows | off
     bool wideSearch = false;            // searchLayout: larga
     std::wstring animation = L"zoom";   // zoom | elevar | foco | nenhuma
@@ -441,15 +446,53 @@ static void BuildTheme() {
 
 static int Clamp(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
-// Windhawk's own log (shown when logging is enabled for the mod).
-static void Log(const wchar_t* fmt, ...) {
-    wchar_t buf[1024];
-    va_list ap;
-    va_start(ap, fmt);
-    _vsnwprintf_s(buf, ARRAYSIZE(buf), _TRUNCATE, fmt, ap);
-    va_end(ap);
-    Wh_Log(L"%s", buf);
+#define Log(...) Wh_Log(__VA_ARGS__)
+
+// ---------------------------------------------------------------------------
+// Text shown by the mod: English, or Portuguese when Windows' display language is Portuguese.
+// ---------------------------------------------------------------------------
+
+enum StrId {
+    S_Start, S_BarSettings, S_TaskManager, S_NewWindow, S_PinDock, S_UnpinDock, S_CloseAll, S_CloseWindow,
+    S_PinStart, S_UnpinStart, S_SearchHint, S_Lock, S_Sleep, S_Restart, S_ShutDown, S_KeysHint, S_TabPinned,
+    S_TabAll, S_CountPinned, S_CountApps, S_PinHint, S_Apps, S_NoApps, S_BestMatch, S_FilesFolders,
+    S_SearchFilesPre, S_SearchFilesPost, S_OpenEverything, S_ExplorerSearch, S_GetEverything, S_TypeMore,
+    S_NoFiles, S_Settings, S_KindSetting, S_KindFolder, S_KindFile, S_KindApp, S_Open, S_OpenLocation,
+    S_Count
+};
+
+static const wchar_t* const kStrEn[S_Count] = {
+    L"Start", L"Dock settings (Windhawk)", L"Task Manager", L"Open new window", L"Pin to dock",
+    L"Unpin from dock", L"Close all windows", L"Close window", L"Pin to Start", L"Unpin from Start",
+    L"Search apps and files", L"Lock", L"Sleep", L"Restart", L"Shut down",
+    L"↑ ↓ to choose     Enter opens     Esc clears the search", L"Pinned", L"All apps", L"%d pinned",
+    L"%d apps", L"Right-click an app in \"All apps\" to pin it here", L"Apps", L"No app with that name",
+    L"Best match", L"Files and folders", L"Search files for “", L"” (File Explorer)",
+    L"Open Everything to search files", L"Search files with File Explorer",
+    L"Get Everything (free, instant search)", L"Type at least 2 letters", L"No files", L"Settings",
+    L"Windows Settings", L"Folder", L"File", L"App", L"Open", L"Open file location",
+};
+
+static const wchar_t* const kStrPt[S_Count] = {
+    L"Iniciar", L"Configurações da barra (Windhawk)", L"Gerenciador de Tarefas", L"Abrir nova janela",
+    L"Fixar na barra", L"Desafixar da barra", L"Fechar todas as janelas", L"Fechar janela", L"Fixar no Iniciar",
+    L"Desafixar do Iniciar", L"Buscar apps e arquivos", L"Bloquear", L"Suspender", L"Reiniciar", L"Desligar",
+    L"↑ ↓ pra escolher     Enter abre     Esc limpa a busca", L"Fixados", L"Todos os apps",
+    L"%d fixados", L"%d apps", L"Clique com o botão direito num app em \"Todos os apps\" pra fixar aqui", L"Apps",
+    L"Nenhum app com esse nome", L"Melhor resultado", L"Arquivos e pastas", L"Buscar “",
+    L"” nos arquivos (Explorador)", L"Abrir o Everything pra buscar arquivos",
+    L"Buscar nos arquivos pelo Explorador", L"Baixar o Everything (grátis, busca na hora)",
+    L"Digite pelo menos 2 letras", L"Nenhum arquivo", L"Configurações", L"Configurações do Windows", L"Pasta",
+    L"Arquivo", L"App", L"Abrir", L"Abrir o local do arquivo",
+};
+
+static bool IsPortugueseUi() {
+    static int pt = -1;
+    if (pt < 0) pt = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_PORTUGUESE;
+    return pt == 1;
 }
+
+static const wchar_t* Tr(StrId id) { return (IsPortugueseUi() ? kStrPt : kStrEn)[id]; }
 
 void LoadSettings() {
     g_set.iconSize = Clamp(Wh_GetIntSetting(L"iconSize"), 24, 128);
@@ -461,40 +504,27 @@ void LoadSettings() {
     g_set.tintOpacity = Clamp(Wh_GetIntSetting(L"tintOpacity"), 0, 100);
     g_set.hideTaskbar = Wh_GetIntSetting(L"hideWindowsTaskbar") != 0;
     g_set.showStart = Wh_GetIntSetting(L"showStart") != 0;
-    PCWSTR style = Wh_GetStringSetting(L"style");
-    g_set.style = style && *style ? style : L"nevoa";
-    if (style) Wh_FreeStringSetting(style);
-    PCWSTR format = Wh_GetStringSetting(L"format");
-    g_set.fixedBar = format && !wcscmp(format, L"fixa");
-    if (format) Wh_FreeStringSetting(format);
-    PCWSTR sm = Wh_GetStringSetting(L"startMenu");
-    g_set.nevoaStart = !(sm && !wcscmp(sm, L"windows"));
-    if (sm) Wh_FreeStringSetting(sm);
-    PCWSTR wk = Wh_GetStringSetting(L"winKeyMode");
-    g_set.winKey = wk && !wcscmp(wk, L"nevoa");
-    if (wk) Wh_FreeStringSetting(wk);
-    PCWSTR hk = Wh_GetStringSetting(L"startHotkey");
-    g_set.startHotkey = hk && *hk ? hk : L"altSpace";
-    if (hk) Wh_FreeStringSetting(hk);
-    PCWSTR fs = Wh_GetStringSetting(L"fileSearch");
-    g_set.fileSearch = fs && *fs ? fs : L"everything";
-    if (fs) Wh_FreeStringSetting(fs);
-    PCWSTR sl = Wh_GetStringSetting(L"searchLayout");
-    g_set.wideSearch = sl && !wcscmp(sl, L"larga");
-    if (sl) Wh_FreeStringSetting(sl);
-    PCWSTR anim = Wh_GetStringSetting(L"animation");
-    g_set.animation = anim && *anim ? anim : L"zoom";
-    if (anim) Wh_FreeStringSetting(anim);
-    PCWSTR tint = Wh_GetStringSetting(L"tintColor");
+    using WindhawkUtils::StringSetting;
+    auto str = [](const wchar_t* name, const wchar_t* def) {
+        auto s = StringSetting::make(name);
+        return std::wstring(*s.get() ? s.get() : def);
+    };
+    g_set.style = str(L"style", L"nevoa");
+    g_set.fixedBar = str(L"format", L"dock") == L"fixa";
+    g_set.nevoaStart = str(L"startMenu", L"nevoa") != L"windows";
+    g_set.winKey = str(L"winKeyMode", L"nevoa") == L"nevoa";
+    g_set.startHotkey = str(L"startHotkey", L"none");
+    g_set.fileSearch = str(L"fileSearch", L"everything");
+    g_set.wideSearch = str(L"searchLayout", L"larga") == L"larga";
+    g_set.animation = str(L"animation", L"zoom");
+    std::wstring tint = str(L"tintColor", L"");
     g_set.customTint = false;
-    if (tint) {
-        const wchar_t* s = tint[0] == L'#' ? tint + 1 : tint;
-        if (wcslen(s) == 6) {
-            unsigned long v = wcstoul(s, nullptr, 16);
-            g_set.tint = RGB((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF);
-            g_set.customTint = true;
-        }
-        Wh_FreeStringSetting(tint);
+    const wchar_t* s = tint.c_str();
+    if (s[0] == L'#') s++;
+    if (wcslen(s) == 6) {
+        unsigned long v = wcstoul(s, nullptr, 16);
+        g_set.tint = RGB((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF);
+        g_set.customTint = true;
     }
     BuildTheme();
 }
@@ -712,7 +742,7 @@ static App MakeStartApp() {
     App a;
     a.start = true;
     a.key = L"#start";
-    a.label = L"Iniciar";
+    a.label = Tr(S_Start);
     return a;
 }
 
@@ -784,7 +814,7 @@ void RebuildApps() {
     g_apps.swap(next);
 }
 
-static ComPtr<IWICBitmapSource> LoadIcon(App& a) {
+static ComPtr<IWICBitmapSource> LoadAppIcon(App& a) {
     ComPtr<IShellItem> item;
     if (!a.lnk.empty()) SHCreateItemFromParsingName(a.lnk.c_str(), nullptr, IID_PPV_ARGS(&item));
     if (!item && !a.aumid.empty()) {
@@ -861,18 +891,72 @@ static std::vector<std::wstring> TaskbarPinnedLinks() {
     return files;
 }
 
-void LoadPins() {
-    g_pins.clear();
-    std::vector<wchar_t> buf(65536);
-    size_t n = Wh_GetStringValue(L"pins", buf.data(), buf.size());
-    wchar_t init[8] = {};
-    Wh_GetStringValue(L"pinsInit", init, ARRAYSIZE(init));
-    if (n == 0 && init[0] != L'1') {
-        for (auto& f : TaskbarPinnedLinks()) g_pins.push_back({L"lnk", f});
-        SavePins();
-        Wh_SetStringValue(L"pinsInit", L"1");
-        return;
+// Mod storage is shared by every user of the PC (and is an INI file in portable Windhawk), so each
+// value name starts with the user's SID and lists are stored one value per item, with a count.
+static const std::wstring& UserPrefix() {
+    static std::wstring prefix;
+    if (prefix.empty()) {
+        HANDLE token;
+        if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+            BYTE buf[256];
+            DWORD len = 0;
+            if (GetTokenInformation(token, TokenUser, buf, sizeof(buf), &len)) {
+                LPWSTR sid = nullptr;
+                if (ConvertSidToStringSidW(((TOKEN_USER*)buf)->User.Sid, &sid)) {
+                    prefix = std::wstring(sid) + L"_";
+                    LocalFree(sid);
+                }
+            }
+            CloseHandle(token);
+        }
+        if (prefix.empty()) prefix = L"user_";
     }
+    return prefix;
+}
+
+static std::wstring UKey(const wchar_t* fmt, int i = 0) {
+    wchar_t name[64];
+    swprintf_s(name, fmt, i);
+    return UserPrefix() + name;
+}
+
+static std::wstring GetStr(const std::wstring& key) {
+    wchar_t buf[2048] = {};
+    Wh_GetStringValue(key.c_str(), buf, ARRAYSIZE(buf));
+    return buf;
+}
+
+// Pairs of strings saved as <SID>_<list>Count, <SID>_<list>%dA, <SID>_<list>%dB.
+static void SaveList(const wchar_t* list, const std::vector<std::pair<std::wstring, std::wstring>>& items) {
+    std::wstring l = list;
+    int old = Wh_GetIntValue(UKey((l + L"Count").c_str()).c_str(), 0);
+    for (int i = 0; i < (int)items.size(); i++) {
+        Wh_SetStringValue(UKey((l + L"%dA").c_str(), i).c_str(), items[i].first.c_str());
+        Wh_SetStringValue(UKey((l + L"%dB").c_str(), i).c_str(), items[i].second.c_str());
+    }
+    for (int i = (int)items.size(); i < old; i++) {
+        Wh_DeleteValue(UKey((l + L"%dA").c_str(), i).c_str());
+        Wh_DeleteValue(UKey((l + L"%dB").c_str(), i).c_str());
+    }
+    Wh_SetIntValue(UKey((l + L"Count").c_str()).c_str(), (int)items.size());
+}
+
+// Returns false when the list was never saved for this user.
+static bool LoadList(const wchar_t* list, std::vector<std::pair<std::wstring, std::wstring>>& items) {
+    std::wstring l = list;
+    int count = Wh_GetIntValue(UKey((l + L"Count").c_str()).c_str(), -1);
+    if (count < 0) return false;
+    for (int i = 0; i < count; i++) {
+        std::wstring a = GetStr(UKey((l + L"%dA").c_str(), i)), b = GetStr(UKey((l + L"%dB").c_str(), i));
+        if (!a.empty() && !b.empty()) items.push_back({a, b});
+    }
+    return true;
+}
+
+// Version 1.0.0 before the review kept each list as one string ("a\tb\n..."), without the SID.
+static bool LoadLegacyList(const wchar_t* name, std::vector<std::pair<std::wstring, std::wstring>>& items) {
+    std::vector<wchar_t> buf(65536);
+    if (!Wh_GetStringValue(name, buf.data(), buf.size())) return false;
     std::wstring all(buf.data());
     size_t start = 0;
     while (start < all.size()) {
@@ -880,25 +964,45 @@ void LoadPins() {
         if (end == std::wstring::npos) end = all.size();
         std::wstring line = all.substr(start, end - start);
         size_t tab = line.find(L'\t');
-        if (tab != std::wstring::npos) g_pins.push_back({line.substr(0, tab), line.substr(tab + 1)});
+        if (tab != std::wstring::npos) items.push_back({line.substr(0, tab), line.substr(tab + 1)});
         start = end + 1;
     }
+    Wh_DeleteValue(name);
+    return true;
+}
+
+void LoadPins() {
+    g_pins.clear();
+    std::vector<std::pair<std::wstring, std::wstring>> items;
+    if (!LoadList(L"pin", items)) {
+        if (!LoadLegacyList(L"pins", items)) {
+            for (auto& f : TaskbarPinnedLinks()) items.push_back({L"lnk", f});
+        }
+        Wh_DeleteValue(L"pinsInit");
+        for (auto& it : items) g_pins.push_back({it.first, it.second});
+        SavePins();
+        return;
+    }
+    for (auto& it : items) g_pins.push_back({it.first, it.second});
 }
 
 void SavePins() {
-    std::wstring all;
-    for (auto& p : g_pins) {
-        all += p.kind + L"\t" + p.value + L"\n";
-    }
-    Wh_SetStringValue(L"pins", all.c_str());
+    std::vector<std::pair<std::wstring, std::wstring>> items;
+    for (auto& p : g_pins) items.push_back({p.kind, p.value});
+    SaveList(L"pin", items);
 }
 
 // ---------------------------------------------------------------------------
 // Windows taskbar
 // ---------------------------------------------------------------------------
 
+// Hiding the Windows taskbar: its windows are hidden, and its auto-hide is turned on so that it stops
+// reserving screen space (maximized windows would stop above an invisible bar otherwise). Explorer
+// saves auto-hide in the user's profile, so the original state is kept in mod storage the first time
+// it is changed (<SID>_autoHideOrig) and given back when the mod stops, also after an unclean exit:
+// by the next start of the bar, or by the explorer.exe part when the mod is turned off.
+
 bool g_taskbarHidden = false;
-UINT g_prevAbState = 0;
 
 static void ForEachTaskbar(void (*fn)(HWND)) {
     HWND h = FindWindowW(L"Shell_TrayWnd", nullptr);
@@ -907,29 +1011,46 @@ static void ForEachTaskbar(void (*fn)(HWND)) {
     while ((s = FindWindowExW(nullptr, s, L"Shell_SecondaryTrayWnd", nullptr)) != nullptr) fn(s);
 }
 
+static void TurnOnTaskbarAutoHide() {
+    APPBARDATA abd = {sizeof(abd)};
+    UINT state = (UINT)SHAppBarMessage(ABM_GETSTATE, &abd);
+    if (state & ABS_AUTOHIDE) return;  // already on (by the user, or by us before an unclean exit)
+    std::wstring key = UKey(L"autoHideOrig");
+    if (Wh_GetIntValue(key.c_str(), -1) < 0) Wh_SetIntValue(key.c_str(), (int)state);
+    abd.lParam = state | ABS_AUTOHIDE;
+    SHAppBarMessage(ABM_SETSTATE, &abd);
+}
+
+// Gives the taskbar back its own auto-hide setting, if this mod changed it. Safe to call from any
+// process of the user and more than once.
+static void RestoreTaskbarAutoHide() {
+    std::wstring key = UKey(L"autoHideOrig");
+    int orig = Wh_GetIntValue(key.c_str(), -1);
+    if (orig < 0) return;
+    APPBARDATA abd = {sizeof(abd)};
+    abd.lParam = (LPARAM)orig;
+    SHAppBarMessage(ABM_SETSTATE, &abd);
+    Wh_DeleteValue(key.c_str());
+}
+
+static void ShowTaskbarWindows() {
+    ForEachTaskbar([](HWND h) { ShowWindowAsync(h, SW_SHOWNA); });
+}
+
 void HideTaskbars() {
     if (!g_taskbarHidden) {
-        APPBARDATA abd = {sizeof(abd)};
-        g_prevAbState = (UINT)SHAppBarMessage(ABM_GETSTATE, &abd);
-        if (!(g_prevAbState & ABS_AUTOHIDE)) {
-            abd.lParam = g_prevAbState | ABS_AUTOHIDE;
-            SHAppBarMessage(ABM_SETSTATE, &abd);
-        }
+        TurnOnTaskbarAutoHide();
         g_taskbarHidden = true;
     }
     ForEachTaskbar([](HWND h) {
-        if (IsWindowVisible(h)) ShowWindow(h, SW_HIDE);
+        if (IsWindowVisible(h)) ShowWindowAsync(h, SW_HIDE);
     });
 }
 
 void RestoreTaskbars() {
     if (!g_taskbarHidden) return;
-    ForEachTaskbar([](HWND h) { ShowWindow(h, SW_SHOWNA); });
-    if (!(g_prevAbState & ABS_AUTOHIDE)) {
-        APPBARDATA abd = {sizeof(abd)};
-        abd.lParam = g_prevAbState;
-        SHAppBarMessage(ABM_SETSTATE, &abd);
-    }
+    ShowTaskbarWindows();
+    RestoreTaskbarAutoHide();
     g_taskbarHidden = false;
 }
 
@@ -1215,7 +1336,7 @@ static ID2D1Bitmap* IconBitmap(Dock& d, App& a) {
     auto it = d.bmps.find(a.key);
     if (it != d.bmps.end()) return it->second.Get();
     if (!a.iconTried) {
-        a.icon = LoadIcon(a);
+        a.icon = LoadAppIcon(a);
         a.iconTried = true;
     }
     ComPtr<ID2D1Bitmap> bmp;
@@ -1618,18 +1739,35 @@ static void OpenWindhawk() {
     ShellExecuteW(nullptr, L"open", path, nullptr, nullptr, SW_SHOWNORMAL);
 }
 
-// Menu of the dock itself (Start button or empty part of the dock).
-static void ShowDockMenu(Dock& d, POINT screen) {
-    HMENU m = CreatePopupMenu();
-    AppendMenuW(m, MF_STRING, 1, L"Configurações da barra (Windhawk)");
-    AppendMenuW(m, MF_STRING, 2, L"Gerenciador de Tarefas");
+// A dock menu runs a modal loop that still handles display changes, Explorer restarts and settings
+// changes. Rebuilding the docks then would free the Dock the menu belongs to, so CreateDocks waits
+// until the menu returns.
+int g_dockMenuDepth = 0;
+bool g_docksPending = false;
+
+static int TrackDockMenu(Dock& d, HMENU m, POINT screen) {
     d.menuOpen = true;
     RenderDock(d);
     SetForegroundWindow(d.content);
+    g_dockMenuDepth++;
     int cmd = TrackPopupMenuEx(m, TPM_RETURNCMD | TPM_BOTTOMALIGN | TPM_CENTERALIGN | TPM_NONOTIFY, screen.x,
                                screen.y, d.content, nullptr);
+    g_dockMenuDepth--;
     DestroyMenu(m);
     d.menuOpen = false;
+    if (!g_dockMenuDepth && g_docksPending) {
+        g_docksPending = false;
+        SetTimer(g_msgWnd, TIMER_DOCKS, 1, nullptr);
+    }
+    return cmd;
+}
+
+// Menu of the dock itself (Start button or empty part of the dock).
+static void ShowDockMenu(Dock& d, POINT screen) {
+    HMENU m = CreatePopupMenu();
+    AppendMenuW(m, MF_STRING, 1, Tr(S_BarSettings));
+    AppendMenuW(m, MF_STRING, 2, Tr(S_TaskManager));
+    int cmd = TrackDockMenu(d, m, screen);
     if (cmd == 1) OpenWindhawk();
     if (cmd == 2) ShellExecuteW(nullptr, L"open", L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL);
     d.outsideSince = GetTickCount();
@@ -1641,20 +1779,14 @@ static void ShowMenu(Dock& d, int elem, POINT screen) {
     if (a.start) { ShowDockMenu(d, screen); return; }
     std::wstring key = a.key;
     HMENU m = CreatePopupMenu();
-    AppendMenuW(m, MF_STRING, 1, L"Abrir nova janela");
-    AppendMenuW(m, MF_STRING, 2, a.pinned ? L"Desafixar da barra" : L"Fixar na barra");
+    AppendMenuW(m, MF_STRING, 1, Tr(S_NewWindow));
+    AppendMenuW(m, MF_STRING, 2, a.pinned ? Tr(S_UnpinDock) : Tr(S_PinDock));
     std::vector<HWND> wins = DockWins(d, a);
     if (!wins.empty()) {
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(m, MF_STRING, 3, wins.size() > 1 ? L"Fechar todas as janelas" : L"Fechar janela");
+        AppendMenuW(m, MF_STRING, 3, wins.size() > 1 ? Tr(S_CloseAll) : Tr(S_CloseWindow));
     }
-    d.menuOpen = true;
-    RenderDock(d);
-    SetForegroundWindow(d.content);
-    int cmd = TrackPopupMenuEx(m, TPM_RETURNCMD | TPM_BOTTOMALIGN | TPM_CENTERALIGN | TPM_NONOTIFY, screen.x,
-                               screen.y, d.content, nullptr);
-    DestroyMenu(m);
-    d.menuOpen = false;
+    int cmd = TrackDockMenu(d, m, screen);
     for (auto& x : g_apps) {
         if (x.key != key) continue;
         if (cmd == 1) Launch(x);
@@ -1735,7 +1867,7 @@ constexpr UINT_PTR TIMER_PEEK = 12;
 using PeekFn = HRESULT(WINAPI*)(UINT, HWND, HWND, UINT, UINT_PTR);
 static PeekFn GetPeek() {
     static PeekFn fn = []() -> PeekFn {
-        HMODULE m = LoadLibraryW(L"dwmapi.dll");
+        HMODULE m = GetModuleHandleW(L"dwmapi.dll");
         return m ? (PeekFn)GetProcAddress(m, (LPCSTR)113) : nullptr;
     }();
     return fn;
@@ -2088,55 +2220,57 @@ constexpr DWORD kStartWideMs = 170;
 std::vector<StartItem> g_settingsItems;
 static void LoadSettingsItems() {
     if (!g_settingsItems.empty()) return;
-    static const wchar_t* table[][3] = {
-        {L"Tela", L"ms-settings:display", L"monitor resolução escala brilho hdr"},
-        {L"Luz noturna", L"ms-settings:nightlight", L"filtro azul noite"},
-        {L"Gráficos", L"ms-settings:display-advancedgraphics", L"gpu placa de vídeo jogos desempenho"},
-        {L"Som", L"ms-settings:sound", L"áudio volume microfone fone alto-falante"},
-        {L"Mixer de volume", L"ms-settings:apps-volume", L"volume por app áudio"},
-        {L"Notificações", L"ms-settings:notifications", L"avisos alertas"},
-        {L"Modo de foco", L"ms-settings:quiethours", L"não perturbe concentração"},
-        {L"Energia", L"ms-settings:powersleep", L"bateria suspensão desligar tela plano"},
-        {L"Armazenamento", L"ms-settings:storagesense", L"disco espaço limpeza"},
-        {L"Multitarefa", L"ms-settings:multitasking", L"janelas snap área de trabalho"},
-        {L"Área de transferência", L"ms-settings:clipboard", L"copiar colar histórico"},
-        {L"Sobre", L"ms-settings:about", L"sistema pc nome especificações"},
-        {L"Bluetooth e dispositivos", L"ms-settings:bluetooth", L"fone controle dispositivo"},
-        {L"Impressoras", L"ms-settings:printers", L"impressora scanner"},
-        {L"Mouse", L"ms-settings:mousetouchpad", L"cursor ponteiro sensibilidade"},
-        {L"Teclado e digitação", L"ms-settings:typing", L"teclado digitar correção"},
-        {L"Rede e Internet", L"ms-settings:network", L"internet ethernet conexão"},
-        {L"Wi-Fi", L"ms-settings:network-wifi", L"wifi rede sem fio"},
-        {L"VPN", L"ms-settings:network-vpn", L"vpn rede"},
-        {L"Proxy", L"ms-settings:network-proxy", L"proxy rede"},
-        {L"Personalização", L"ms-settings:personalization", L"visual tema aparência"},
-        {L"Plano de fundo", L"ms-settings:personalization-background", L"papel de parede wallpaper"},
-        {L"Cores", L"ms-settings:colors", L"modo escuro claro cor de destaque transparência"},
-        {L"Temas", L"ms-settings:themes", L"tema"},
-        {L"Tela de bloqueio", L"ms-settings:lockscreen", L"bloqueio"},
-        {L"Fontes", L"ms-settings:fonts", L"fonte letra"},
-        {L"Barra de tarefas", L"ms-settings:taskbar", L"barra"},
-        {L"Aplicativos instalados", L"ms-settings:appsfeatures", L"desinstalar programas apps"},
-        {L"Aplicativos padrão", L"ms-settings:defaultapps", L"navegador padrão abrir com"},
-        {L"Inicialização", L"ms-settings:startupapps", L"iniciar com o windows apps"},
-        {L"Contas", L"ms-settings:accounts", L"usuário conta email"},
-        {L"Opções de entrada", L"ms-settings:signinoptions", L"senha pin windows hello"},
-        {L"Data e hora", L"ms-settings:dateandtime", L"hora relógio fuso horário data"},
-        {L"Idioma e região", L"ms-settings:regionlanguage", L"idioma região formato"},
-        {L"Modo de jogo", L"ms-settings:gaming-gamemode", L"jogos game"},
-        {L"Acessibilidade", L"ms-settings:easeofaccess", L"lupa narrador contraste"},
-        {L"Privacidade e segurança", L"ms-settings:privacy", L"privacidade permissões câmera localização"},
-        {L"Segurança do Windows", L"windowsdefender:", L"antivírus defender proteção vírus"},
-        {L"Windows Update", L"ms-settings:windowsupdate", L"atualização update atualizar"},
-        {L"Recuperação", L"ms-settings:recovery", L"restaurar redefinir reset"},
+    // English name, Portuguese name, page, other words (both languages: a search in either finds it).
+    static const wchar_t* table[][4] = {
+        {L"Display", L"Tela", L"ms-settings:display", L"monitor resolution scale brightness hdr resolução escala brilho"},
+        {L"Night light", L"Luz noturna", L"ms-settings:nightlight", L"blue light night filtro azul noite"},
+        {L"Graphics", L"Gráficos", L"ms-settings:display-advancedgraphics", L"gpu graphics card games performance placa de vídeo jogos desempenho"},
+        {L"Sound", L"Som", L"ms-settings:sound", L"audio volume microphone headphones speakers áudio microfone fone alto-falante"},
+        {L"Volume mixer", L"Mixer de volume", L"ms-settings:apps-volume", L"app volume audio volume por app áudio"},
+        {L"Notifications", L"Notificações", L"ms-settings:notifications", L"alerts avisos alertas"},
+        {L"Focus", L"Modo de foco", L"ms-settings:quiethours", L"do not disturb não perturbe concentração"},
+        {L"Power", L"Energia", L"ms-settings:powersleep", L"battery sleep screen off plan bateria suspensão desligar tela plano"},
+        {L"Storage", L"Armazenamento", L"ms-settings:storagesense", L"disk space cleanup disco espaço limpeza"},
+        {L"Multitasking", L"Multitarefa", L"ms-settings:multitasking", L"windows snap desktops janelas área de trabalho"},
+        {L"Clipboard", L"Área de transferência", L"ms-settings:clipboard", L"copy paste history copiar colar histórico"},
+        {L"About", L"Sobre", L"ms-settings:about", L"system pc name specs sistema nome especificações"},
+        {L"Bluetooth & devices", L"Bluetooth e dispositivos", L"ms-settings:bluetooth", L"headphones controller device fone controle dispositivo"},
+        {L"Printers", L"Impressoras", L"ms-settings:printers", L"printer scanner impressora"},
+        {L"Mouse", L"Mouse", L"ms-settings:mousetouchpad", L"cursor pointer sensitivity ponteiro sensibilidade"},
+        {L"Typing", L"Teclado e digitação", L"ms-settings:typing", L"keyboard autocorrect teclado digitar correção"},
+        {L"Network & internet", L"Rede e Internet", L"ms-settings:network", L"internet ethernet connection conexão"},
+        {L"Wi-Fi", L"Wi-Fi", L"ms-settings:network-wifi", L"wifi wireless network rede sem fio"},
+        {L"VPN", L"VPN", L"ms-settings:network-vpn", L"vpn network rede"},
+        {L"Proxy", L"Proxy", L"ms-settings:network-proxy", L"proxy network rede"},
+        {L"Personalization", L"Personalização", L"ms-settings:personalization", L"look theme appearance visual tema aparência"},
+        {L"Background", L"Plano de fundo", L"ms-settings:personalization-background", L"wallpaper papel de parede"},
+        {L"Colors", L"Cores", L"ms-settings:colors", L"dark light mode accent color transparency modo escuro claro cor de destaque transparência"},
+        {L"Themes", L"Temas", L"ms-settings:themes", L"theme tema"},
+        {L"Lock screen", L"Tela de bloqueio", L"ms-settings:lockscreen", L"lock bloqueio"},
+        {L"Fonts", L"Fontes", L"ms-settings:fonts", L"font typeface fonte letra"},
+        {L"Taskbar", L"Barra de tarefas", L"ms-settings:taskbar", L"taskbar barra"},
+        {L"Installed apps", L"Aplicativos instalados", L"ms-settings:appsfeatures", L"uninstall programs apps desinstalar programas"},
+        {L"Default apps", L"Aplicativos padrão", L"ms-settings:defaultapps", L"default browser open with navegador padrão abrir com"},
+        {L"Startup apps", L"Inicialização", L"ms-settings:startupapps", L"startup run at sign-in iniciar com o windows apps"},
+        {L"Accounts", L"Contas", L"ms-settings:accounts", L"user account email usuário conta"},
+        {L"Sign-in options", L"Opções de entrada", L"ms-settings:signinoptions", L"password pin windows hello senha"},
+        {L"Date & time", L"Data e hora", L"ms-settings:dateandtime", L"time clock time zone date hora relógio fuso horário data"},
+        {L"Language & region", L"Idioma e região", L"ms-settings:regionlanguage", L"language region format idioma região formato"},
+        {L"Game Mode", L"Modo de jogo", L"ms-settings:gaming-gamemode", L"games gaming jogos game"},
+        {L"Accessibility", L"Acessibilidade", L"ms-settings:easeofaccess", L"magnifier narrator contrast lupa narrador contraste"},
+        {L"Privacy & security", L"Privacidade e segurança", L"ms-settings:privacy", L"privacy permissions camera location privacidade permissões câmera localização"},
+        {L"Windows Security", L"Segurança do Windows", L"windowsdefender:", L"antivirus defender protection virus antivírus proteção vírus"},
+        {L"Windows Update", L"Windows Update", L"ms-settings:windowsupdate", L"update updates atualização atualizar"},
+        {L"Recovery", L"Recuperação", L"ms-settings:recovery", L"restore reset restaurar redefinir"},
     };
+    bool pt = IsPortugueseUi();
     for (auto& row : table) {
         StartItem s;
         s.setting = true;
-        s.name = row[0];
-        s.launch = row[1];
-        s.keywords = row[2];
-        s.path = L"Configurações";
+        s.name = pt ? row[1] : row[0];
+        s.launch = row[2];
+        s.keywords = std::wstring(pt ? row[0] : row[1]) + L" " + row[3];
+        s.path = Tr(S_Settings);
         g_settingsItems.push_back(std::move(s));
     }
 }
@@ -2204,58 +2338,52 @@ static void LoadAllApps() {
         if (!s.name.empty() && !s.launch.empty()) g_allApps.push_back(std::move(s));
     }
     std::sort(g_allApps.begin(), g_allApps.end(), [](const StartItem& a, const StartItem& b) {
-        return CompareStringEx(L"pt-BR", LINGUISTIC_IGNORECASE | LINGUISTIC_IGNOREDIACRITIC, a.name.c_str(), -1,
+        return CompareStringEx(LOCALE_NAME_USER_DEFAULT, LINGUISTIC_IGNORECASE | LINGUISTIC_IGNOREDIACRITIC, a.name.c_str(), -1,
                                b.name.c_str(), -1, nullptr, nullptr, 0) == CSTR_LESS_THAN;
     });
     g_allAppsLoaded = true;
 }
 
 static void SaveStartPins() {
-    std::wstring all;
-    for (auto& p : g_startPins) all += p.name + L"\t" + p.launch + L"\n";
-    Wh_SetStringValue(L"startPins", all.c_str());
+    std::vector<std::pair<std::wstring, std::wstring>> items;
+    for (auto& p : g_startPins) items.push_back({p.name, p.launch});
+    SaveList(L"startPin", items);
 }
 
 static void LoadStartPins() {
     g_startPins.clear();
-    std::vector<wchar_t> buf(65536);
-    size_t n = Wh_GetStringValue(L"startPins", buf.data(), buf.size());
-    wchar_t init[8] = {};
-    Wh_GetStringValue(L"startPinsInit", init, ARRAYSIZE(init));
-    if (n == 0 && init[0] != L'1') {
-        // First time: the same apps pinned on the taskbar.
-        for (auto& lnk : TaskbarPinnedLinks()) {
-            ComPtr<IShellItem> item;
-            if (FAILED(SHCreateItemFromParsingName(lnk.c_str(), nullptr, IID_PPV_ARGS(&item)))) continue;
-            StartItem s;
-            s.name = ItemName(item.Get());
-            s.launch = lnk;
-            if (!s.name.empty()) g_startPins.push_back(std::move(s));
+    std::vector<std::pair<std::wstring, std::wstring>> items;
+    if (!LoadList(L"startPin", items)) {
+        if (!LoadLegacyList(L"startPins", items)) {
+            // First time: the same apps pinned on the taskbar.
+            for (auto& lnk : TaskbarPinnedLinks()) {
+                ComPtr<IShellItem> item;
+                if (FAILED(SHCreateItemFromParsingName(lnk.c_str(), nullptr, IID_PPV_ARGS(&item)))) continue;
+                std::wstring name = ItemName(item.Get());
+                if (!name.empty()) items.push_back({name, lnk});
+            }
         }
-        SaveStartPins();
-        Wh_SetStringValue(L"startPinsInit", L"1");
-        return;
-    }
-    std::wstring all(buf.data());
-    size_t start = 0;
-    while (start < all.size()) {
-        size_t end = all.find(L'\n', start);
-        if (end == std::wstring::npos) end = all.size();
-        std::wstring line = all.substr(start, end - start);
-        size_t tab = line.find(L'\t');
-        if (tab != std::wstring::npos) {
+        Wh_DeleteValue(L"startPinsInit");
+        for (auto& it : items) {
             StartItem s;
-            s.name = line.substr(0, tab);
-            s.launch = line.substr(tab + 1);
+            s.name = it.first;
+            s.launch = it.second;
             g_startPins.push_back(std::move(s));
         }
-        start = end + 1;
+        SaveStartPins();
+        return;
+    }
+    for (auto& it : items) {
+        StartItem s;
+        s.name = it.first;
+        s.launch = it.second;
+        g_startPins.push_back(std::move(s));
     }
 }
 
 static bool Contains(const std::wstring& hay, const std::wstring& needle) {
     if (needle.empty()) return true;
-    return FindNLSStringEx(L"pt-BR", FIND_FROMSTART | LINGUISTIC_IGNORECASE | LINGUISTIC_IGNOREDIACRITIC, hay.c_str(),
+    return FindNLSStringEx(LOCALE_NAME_USER_DEFAULT, FIND_FROMSTART | LINGUISTIC_IGNORECASE | LINGUISTIC_IGNOREDIACRITIC, hay.c_str(),
                            (int)hay.size(), needle.c_str(), (int)needle.size(), nullptr, nullptr, nullptr, 0) >= 0;
 }
 
@@ -2362,6 +2490,17 @@ static void RunStartAction(int action) {
     }
 }
 
+// Any process of this user can send this message: a string must end inside the data.
+static bool ReplyString(const COPYDATASTRUCT* cds, DWORD off, std::wstring& out) {
+    if (off >= cds->cbData || (off & 1)) return false;
+    size_t maxChars = (cds->cbData - off) / sizeof(wchar_t);
+    const wchar_t* p = (const wchar_t*)((const BYTE*)cds->lpData + off);
+    size_t n = wcsnlen(p, maxChars);
+    if (n == maxChars) return false;
+    out.assign(p, n);
+    return true;
+}
+
 static void OnEverythingReply(const COPYDATASTRUCT* cds) {
     if (!g_start.open || !cds->lpData || cds->cbData < sizeof(DWORD) * 7) return;
     const BYTE* base = (const BYTE*)cds->lpData;
@@ -2372,12 +2511,10 @@ static void OnEverythingReply(const COPYDATASTRUCT* cds) {
     g_start.files.clear();
     for (DWORD i = 0; i < num && i < 8; i++) {
         if ((const BYTE*)(items + i + 1) > base + cds->cbData) break;
-        if (items[i].nameOffset >= cds->cbData || items[i].pathOffset >= cds->cbData) break;
         StartItem f;
         f.file = true;
         f.folder = (items[i].flags & 1) != 0;
-        f.name = (const wchar_t*)(base + items[i].nameOffset);
-        f.path = (const wchar_t*)(base + items[i].pathOffset);
+        if (!ReplyString(cds, items[i].nameOffset, f.name) || !ReplyString(cds, items[i].pathOffset, f.path)) break;
         f.launch = f.path + L"\\" + f.name;
         g_start.files.push_back(std::move(f));
     }
@@ -2475,7 +2612,7 @@ static void Power(int which) {
             break;
         case 1: {
             using Fn = BOOLEAN(WINAPI*)(BOOLEAN, BOOLEAN, BOOLEAN);
-            if (HMODULE m = LoadLibraryW(L"powrprof.dll"))
+            if (HMODULE m = LoadLibraryExW(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32))
                 if (auto fn = (Fn)GetProcAddress(m, "SetSuspendState")) fn(FALSE, FALSE, FALSE);
             break;
         }
@@ -2483,7 +2620,7 @@ static void Power(int which) {
             ShellExecuteW(nullptr, L"open", L"shutdown.exe", L"/r /t 0", nullptr, SW_HIDE);
             break;
         case 3:
-            ShellExecuteW(nullptr, L"open", L"shutdown.exe", L"/s /t 0", nullptr, SW_HIDE);
+            ShellExecuteW(nullptr, L"open", L"shutdown.exe", L"/s /hybrid /t 0", nullptr, SW_HIDE);
             break;
     }
 }
@@ -2577,7 +2714,7 @@ static void RenderStart() {
     rt->DrawTextW(L"", 1, s.glyphs.Get(), D2D1::RectF(sr.left + SS(16), sr.top, sr.left + SS(40), sr.bottom), sub.Get());
     D2D1_RECT_F tr = D2D1::RectF(sr.left + SS(44), sr.top, sr.right - SS(16), sr.bottom);
     if (s.query.empty()) {
-        rt->DrawTextW(L"Buscar apps e arquivos", 22, s.font.Get(), tr, sub.Get());
+        rt->DrawTextW(Tr(S_SearchHint), (UINT32)wcslen(Tr(S_SearchHint)), s.font.Get(), tr, sub.Get());
     } else {
         ComPtr<IDWriteTextLayout> lay;
         g_dw->CreateTextLayout(s.query.c_str(), (UINT32)s.query.size(), s.font.Get(), tr.right - tr.left, tr.bottom - tr.top, &lay);
@@ -2611,7 +2748,7 @@ static void RenderStart() {
         rt->DrawTextW(pg[i], 1, s.glyphs.Get(), b, text.Get());
         s.glyphs->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
     }
-    static const wchar_t* pn[] = {L"Bloquear", L"Suspender", L"Reiniciar", L"Desligar"};
+    const wchar_t* pn[] = {Tr(S_Lock), Tr(S_Sleep), Tr(S_Restart), Tr(S_ShutDown)};
     for (size_t i = 0; i < s.rows.size(); i++) {
         if (s.rows[i].kind == RowPower && s.hover == (int)i) {
             rt->DrawTextW(pn[s.rows[i].power], (UINT32)wcslen(pn[s.rows[i].power]), s.small.Get(),
@@ -2620,7 +2757,7 @@ static void RenderStart() {
     }
 
     if (!showPower) {
-        const wchar_t* hints = L"↑ ↓ pra escolher     Enter abre     Esc limpa a busca";
+        const wchar_t* hints = Tr(S_KeysHint);
         rt->DrawTextW(hints, (UINT32)wcslen(hints), s.small.Get(), D2D1::RectF(pad, footTop, W - pad, footTop + SS(40)), sub.Get());
     }
 
@@ -2669,7 +2806,7 @@ static void RenderStart() {
         // Tabs.
         D2D1_RECT_F tabs = D2D1::RectF(pad, listTop, pad + SS(236), listTop + SS(36));
         rt->FillRoundedRectangle(D2D1::RoundedRect(tabs, SS(10), SS(10)), card.Get());
-        const wchar_t* names[] = {L"Fixados", L"Todos os apps"};
+        const wchar_t* names[] = {Tr(S_TabPinned), Tr(S_TabAll)};
         float tx = tabs.left + SS(3);
         for (int i = 0; i < 2; i++) {
             float tw = i == 0 ? SS(92) : SS(138);
@@ -2683,7 +2820,7 @@ static void RenderStart() {
         }
         std::vector<StartItem>& list = s.tab == 0 ? g_startPins : g_allApps;
         wchar_t count[64];
-        swprintf_s(count, s.tab == 0 ? L"%d fixados" : L"%d apps", (int)list.size());
+        swprintf_s(count, s.tab == 0 ? Tr(S_CountPinned) : Tr(S_CountApps), (int)list.size());
         s.small->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
         rt->DrawTextW(count, (UINT32)wcslen(count), s.small.Get(), D2D1::RectF(W / 2, listTop, W - pad, listTop + SS(36)), sub.Get());
         s.small->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
@@ -2702,7 +2839,7 @@ static void RenderStart() {
         }
         rt->PopAxisAlignedClip();
         if (list.empty() && s.tab == 0) {
-            const wchar_t* hint = L"Clique com o botão direito num app em \"Todos os apps\" pra fixar aqui";
+            const wchar_t* hint = Tr(S_PinHint);
             rt->DrawTextW(hint, (UINT32)wcslen(hint), s.small.Get(), D2D1::RectF(pad, gridTop, W - pad, gridTop + SS(40)), sub.Get());
         }
     } else {
@@ -2716,15 +2853,15 @@ static void RenderStart() {
             y += SS(24);
         };
         if (s.appHits.empty()) {
-            sectionTitle(L"Apps");
-            rt->DrawTextW(L"Nenhum app com esse nome", 24, s.small.Get(), D2D1::RectF(pad + SS(4), y, listRight, y + SS(24)), sub.Get());
+            sectionTitle(Tr(S_Apps));
+            rt->DrawTextW(Tr(S_NoApps), (UINT32)wcslen(Tr(S_NoApps)), s.small.Get(), D2D1::RectF(pad + SS(4), y, listRight, y + SS(24)), sub.Get());
             y += SS(30);
         }
         for (size_t i = 0; i < s.appHits.size(); i++) {
-            if (i == 0) sectionTitle(wideNow ? L"Melhor resultado" : L"Apps");
+            if (i == 0) sectionTitle(wideNow ? Tr(S_BestMatch) : Tr(S_Apps));
             if (i == 1 && wideNow) {
                 y += SS(4);
-                sectionTitle(L"Apps");
+                sectionTitle(Tr(S_Apps));
             }
             if (y + SS(48) > listBottom) break;
             drawRow(*s.appHits[i], D2D1::RectF(pad, y, listRight, y + SS(46)), k == s.sel, false, k);
@@ -2733,7 +2870,7 @@ static void RenderStart() {
         }
         y += SS(6);
         if (y + SS(30) < listBottom && g_set.fileSearch != L"off") {
-            sectionTitle(L"Arquivos e pastas");
+            sectionTitle(Tr(S_FilesFolders));
             if (g_set.fileSearch == L"windows") {
                 // Windows' own search only opens in Explorer: one row that does it.
                 D2D1_RECT_F r = D2D1::RectF(pad, y, listRight, y + SS(42));
@@ -2741,7 +2878,7 @@ static void RenderStart() {
                 s.rows.push_back({r, RowAction, nullptr, ActExplorerSearch});
                 rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(14), SS(14)), (s.hover == idx || k == s.sel) ? cardHi.Get() : card.Get());
                 rt->DrawTextW(L"", 1, s.glyphs.Get(), D2D1::RectF(r.left + SS(16), r.top, r.left + SS(40), r.bottom), sub.Get());
-                std::wstring label = L"Buscar “" + s.query + L"” nos arquivos (Explorador)";
+                std::wstring label = Tr(S_SearchFilesPre) + s.query + Tr(S_SearchFilesPost);
                 rt->DrawTextW(label.c_str(), (UINT32)label.size(), s.font.Get(),
                               D2D1::RectF(r.left + SS(48), r.top, r.right - SS(12), r.bottom), text.Get(),
                               D2D1_DRAW_TEXT_OPTIONS_CLIP);
@@ -2759,13 +2896,13 @@ static void RenderStart() {
                     y += SS(46);
                 };
                 if (s.ev == EvClosed) {
-                    actionRow(L"Abrir o Everything pra buscar arquivos", L"", ActOpenEverything);
+                    actionRow(Tr(S_OpenEverything), L"", ActOpenEverything);
                 } else {
-                    actionRow(L"Buscar nos arquivos pelo Explorador", L"", ActExplorerSearch);
-                    actionRow(L"Baixar o Everything (grátis, busca na hora)", L"", ActGetEverything);
+                    actionRow(Tr(S_ExplorerSearch), L"", ActExplorerSearch);
+                    actionRow(Tr(S_GetEverything), L"", ActGetEverything);
                 }
             } else if (s.files.empty()) {
-                const wchar_t* m = s.query.size() < 2 ? L"Digite pelo menos 2 letras" : L"Nenhum arquivo";
+                const wchar_t* m = s.query.size() < 2 ? Tr(S_TypeMore) : Tr(S_NoFiles);
                 rt->DrawTextW(m, (UINT32)wcslen(m), s.small.Get(), D2D1::RectF(pad + SS(4), y, W - pad, y + SS(24)), sub.Get());
             }
             for (auto& f : s.files) {
@@ -2778,7 +2915,7 @@ static void RenderStart() {
         // Wide search: Windows Settings pages.
         if (wideNow && !s.setHits.empty() && y + SS(80) < listBottom) {
             y += SS(6);
-            sectionTitle(L"Configurações");
+            sectionTitle(Tr(S_Settings));
             for (auto* st : s.setHits) {
                 if (y + SS(48) > listBottom) break;
                 drawRow(*st, D2D1::RectF(pad, y, listRight, y + SS(46)), k == s.sel, false, k);
@@ -2798,7 +2935,7 @@ static void RenderStart() {
                 s.small->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                 rt->DrawTextW(it->name.c_str(), (UINT32)it->name.size(), s.font.Get(),
                               D2D1::RectF(pr.left + SS(12), ty, pr.right - SS(12), ty + SS(26)), text.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
-                const wchar_t* kind = it->setting ? L"Configurações do Windows" : it->folder ? L"Pasta" : it->file ? L"Arquivo" : L"App";
+                const wchar_t* kind = it->setting ? Tr(S_KindSetting) : it->folder ? Tr(S_KindFolder) : it->file ? Tr(S_KindFile) : Tr(S_KindApp);
                 rt->DrawTextW(kind, (UINT32)wcslen(kind), s.small.Get(),
                               D2D1::RectF(pr.left + SS(12), ty + SS(24), pr.right - SS(12), ty + SS(44)), sub.Get());
                 s.font->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
@@ -2826,14 +2963,14 @@ static void RenderStart() {
                     }
                     by += SS(44);
                 };
-                button(L"Abrir", ActOpenSel, true);
+                button(Tr(S_Open), ActOpenSel, true);
                 std::wstring id = it->launch.rfind(L"shell:AppsFolder\\", 0) == 0 ? it->launch.substr(17) : L"";
                 bool pinnable = (!id.empty() && id.find(L'\\') == std::wstring::npos) ||
                                 (it->file && !it->folder &&
                                  (EqI(PathFindExtensionW(it->launch.c_str()), L".exe") ||
                                   EqI(PathFindExtensionW(it->launch.c_str()), L".lnk")));
-                if (pinnable) button(L"Fixar na barra", ActPinSel, false);
-                if (it->file) button(L"Abrir o local do arquivo", ActLocationSel, false);
+                if (pinnable) button(Tr(S_PinDock), ActPinSel, false);
+                if (it->file) button(Tr(S_OpenLocation), ActLocationSel, false);
                 s.small->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
             }
         }
@@ -2853,27 +2990,16 @@ static void RenderStart() {
     UpdateLayeredWindow(s.hwnd, nullptr, &dst, &size, s.memDC, &src, 0, &bf, ULW_ALPHA);
 }
 
-// Windows may refuse our window the foreground (the click went to a no-activate dock, or the key to
-// a hook): without it, typing goes elsewhere and clicking outside doesn't close the Iniciar.
+// Bring the Start to the front. Every way of opening it already has the foreground right (a click on
+// the dock, the hotkey, or Explorer's AllowSetForegroundWindow for the Windows key); an empty
+// SendInput covers the rest.
 static void ForceForeground(HWND hwnd) {
-    HWND fg = GetForegroundWindow();
-    DWORD fgThread = fg ? GetWindowThreadProcessId(fg, nullptr) : 0, me = GetCurrentThreadId();
-    bool attached = fgThread && fgThread != me && AttachThreadInput(me, fgThread, TRUE);
-    SetForegroundWindow(hwnd);
-    BringWindowToTop(hwnd);
-    SetFocus(hwnd);
-    if (attached) AttachThreadInput(me, fgThread, FALSE);
-    if (GetForegroundWindow() != hwnd) {
-        // Last resort, the classic one: an Alt tap lets a process take the foreground.
-        INPUT in[2] = {};
-        in[0].type = in[1].type = INPUT_KEYBOARD;
-        in[0].ki.wVk = VK_MENU;
-        in[1].ki.wVk = VK_MENU;
-        in[1].ki.dwFlags = KEYEVENTF_KEYUP;
-        SendInput(2, in, sizeof(INPUT));
+    if (!SetForegroundWindow(hwnd)) {
+        INPUT input{};
+        SendInput(1, &input, sizeof(INPUT));
         SetForegroundWindow(hwnd);
-        SetFocus(hwnd);
     }
+    SetFocus(hwnd);
 }
 
 // While the Iniciar is open: a click anywhere else closes it (also when it never got the foreground).
@@ -3057,10 +3183,10 @@ static void StartItemMenu(StartItem& it, POINT pt) {
     if (it.file) return;
     bool pinned = std::any_of(g_startPins.begin(), g_startPins.end(), [&](const StartItem& p) { return EqI(p.launch, it.launch); });
     HMENU m = CreatePopupMenu();
-    AppendMenuW(m, MF_STRING, 1, pinned ? L"Desafixar do Iniciar" : L"Fixar no Iniciar");
+    AppendMenuW(m, MF_STRING, 1, pinned ? Tr(S_UnpinStart) : Tr(S_PinStart));
     std::wstring id = it.launch.rfind(L"shell:AppsFolder\\", 0) == 0 ? it.launch.substr(17) : L"";
     bool uwp = !id.empty() && id.find(L'\\') == std::wstring::npos;
-    if (uwp) AppendMenuW(m, MF_STRING, 2, L"Fixar na barra");
+    if (uwp) AppendMenuW(m, MF_STRING, 2, Tr(S_PinDock));
     g_start.menuOpen = true;
     int cmd = TrackPopupMenuEx(m, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, g_start.hwnd, nullptr);
     g_start.menuOpen = false;
@@ -3474,6 +3600,10 @@ void DestroyDocks() {
 }
 
 void CreateDocks() {
+    if (g_dockMenuDepth) {
+        g_docksPending = true;  // rebuilt when the menu returns (see TrackDockMenu)
+        return;
+    }
     DestroyDocks();
     EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR mon, HDC, LPRECT, LPARAM) WINAPI -> BOOL {
         MONITORINFO mi = {sizeof(mi)};
@@ -3607,7 +3737,8 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg) {
-        if (g_set.hideTaskbar) SetTimer(hwnd, TIMER_DOCKS, 1500, nullptr);
+        // Always rebuild: a fixed bar must register its app bar again with the new Explorer.
+        SetTimer(hwnd, TIMER_DOCKS, 1500, nullptr);
         return 0;
     }
     switch (msg) {
@@ -3694,16 +3825,7 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
-extern HANDLE g_toolModProcessMutex;
-
 DWORD WINAPI UiThread(LPVOID) {
-    // One bar at a time: wait for a previous instance that is still closing.
-    DWORD w = WaitForSingleObject(g_toolModProcessMutex, 20000);
-    if (w != WAIT_OBJECT_0 && w != WAIT_ABANDONED) {
-        Wh_Log(L"Previous instance did not close");
-        ExitProcess(1);
-    }
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, g_d2d.GetAddressOf());
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown**)g_dw.GetAddressOf());
@@ -3732,7 +3854,7 @@ DWORD WINAPI UiThread(LPVOID) {
     wc.lpfnWndProc = StartProc;
     wc.lpszClassName = L"NimbusMenu_Start";
     RegisterClassExW(&wc);
-    g_start.hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST, L"NimbusMenu_Start", L"Iniciar",
+    g_start.hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST, L"NimbusMenu_Start", Tr(S_Start),
                                    WS_POPUP, 0, 0, 10, 10, nullptr, nullptr, g_module, nullptr);
     for (int b = 0; b < 1 + 2 * kBandSteps; b++) {
         g_start.bands.push_back(CreateBand());
@@ -3772,7 +3894,24 @@ DWORD WINAPI UiThread(LPVOID) {
         DispatchMessageW(&m);
     }
 
+    // Release every COM/D2D object here, on this thread, before CoUninitialize (not at ExitProcess).
     g_apps.clear();
+    g_allApps.clear();
+    g_startPins.clear();
+    g_settingsItems.clear();
+    g_start.appHits.clear();
+    g_start.setHits.clear();
+    g_start.rows.clear();
+    g_start.files.clear();
+    g_start.bmps.clear();
+    g_start.font.Reset();
+    g_start.small.Reset();
+    g_start.section.Reset();
+    g_start.glyphs.Reset();
+    g_start.dc.Reset();
+    g_start.rt.Reset();
+    g_prev.font.Reset();
+    g_prev.rt.Reset();
     g_d2d.Reset();
     g_dw.Reset();
     g_wic.Reset();
@@ -3787,6 +3926,13 @@ DWORD WINAPI UiThread(LPVOID) {
 // ---------------------------------------------------------------------------
 
 bool g_isExplorer;
+
+static bool IsExplorerProcess() {
+    WCHAR path[MAX_PATH];
+    DWORD n = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    const WCHAR* name = n ? wcsrchr(path, L'\\') : nullptr;
+    return name && _wcsicmp(name + 1, L"explorer.exe") == 0;
+}
 
 static HWND BarWantingKey() {
     HWND bar = FindWindowW(L"NimbusMenu_Msg", nullptr);
@@ -3838,23 +3984,47 @@ long __cdecl ShowStartView_hook(void* self, int method, int flags) {
     return ShowStartView_orig(self, method, flags);
 }
 
+// Folder windows can run in their own explorer.exe processes, where Start never opens.
+static bool IsFolderWindowsProcess() {
+    std::wstring cmd = Lower(GetCommandLineW());
+    return cmd.find(L"/factory") != std::wstring::npos || cmd.find(L"-embedding") != std::wstring::npos ||
+           cmd.find(L"/separate") != std::wstring::npos;
+}
+
 static BOOL ExplorerInit() {
+    if (IsFolderWindowsProcess()) return FALSE;
     HMODULE twinui = LoadLibraryExW(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!twinui) {
         Wh_Log(L"twinui.pcshell.dll not loaded");
         return FALSE;
     }
-    // twinui.pcshell.dll
+    // twinui.pcshell.dll. Recent builds (seen on 26200) go through XamlLauncherState; other builds have
+    // only XamlLauncher::ShowStartView.
     WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
         {{L"public: virtual long __cdecl XamlLauncherState::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum "
           L"IMMERSIVELAUNCHERSHOWFLAGS)"},
          (void**)&ShowStartView_orig, (void*)ShowStartView_hook, false},
     };
-    if (!WindhawkUtils::HookSymbols(twinui, twinuiPcshellDllHooks, ARRAYSIZE(twinuiPcshellDllHooks))) {
-        Wh_Log(L"ShowStartView not found: the Windows key keeps opening Windows' Start");
-        return FALSE;
-    }
-    return TRUE;
+    if (WindhawkUtils::HookSymbols(twinui, twinuiPcshellDllHooks, ARRAYSIZE(twinuiPcshellDllHooks))) return TRUE;
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllFallbackHooks[] = {
+        {{L"public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum "
+          L"IMMERSIVELAUNCHERSHOWFLAGS)"},
+         (void**)&ShowStartView_orig, (void*)ShowStartView_hook, false},
+    };
+    if (WindhawkUtils::HookSymbols(twinui, twinuiPcshellDllFallbackHooks, ARRAYSIZE(twinuiPcshellDllFallbackHooks)))
+        return TRUE;
+    Wh_Log(L"ShowStartView not found: the Windows key keeps opening Windows' Start");
+    return FALSE;
+}
+
+// The mod is being turned off (or updated): once the bar's process is gone, make sure the Windows
+// taskbar is back, also when that process crashed or was ended before it could restore it.
+static void ExplorerUninit() {
+    for (int i = 0; i < 100 && FindWindowW(L"NimbusMenu_Msg", nullptr); i++) Sleep(50);
+    if (FindWindowW(L"NimbusMenu_Msg", nullptr)) return;  // still running: it restores the taskbar itself
+    RestoreTaskbarAutoHide();
+    ShowTaskbarWindows();
 }
 
 // ---------------------------------------------------------------------------
@@ -3862,6 +4032,8 @@ static BOOL ExplorerInit() {
 // ---------------------------------------------------------------------------
 
 BOOL WhTool_ModInit() {
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&WhTool_ModInit, &g_module);
     LoadSettings();
     g_uiThread = CreateThread(nullptr, 0, UiThread, nullptr, 0, nullptr);
     return g_uiThread != nullptr;
@@ -3883,6 +4055,18 @@ void WhTool_ModUninit() {
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+//
+// Nimbus Menu: the only change is the explorer.exe dispatch at the top of each
+// callback (the Windows key hook, see ExplorerInit).
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -3893,21 +4077,14 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       (LPCWSTR)&Wh_ModInit, &g_module);
-
-    {
-        WCHAR path[MAX_PATH];
-        DWORD n = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
-        const WCHAR* name = n ? wcsrchr(path, L'\\') : nullptr;
-        if (name && _wcsicmp(name + 1, L"explorer.exe") == 0) {
-            g_isExplorer = true;
-            return ExplorerInit();
-        }
+    if (IsExplorerProcess()) {
+        g_isExplorer = true;
+        return ExplorerInit();
     }
 
     DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
         return FALSE;
     }
 
@@ -3915,18 +4092,21 @@ BOOL Wh_ModInit() {
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
+
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0 || wcscmp(argv[i], L"-service-start") == 0 ||
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
             wcscmp(argv[i], L"-service-stop") == 0) {
             isExcluded = true;
             break;
         }
     }
+
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
@@ -3936,6 +4116,7 @@ BOOL Wh_ModInit() {
             break;
         }
     }
+
     LocalFree(argv);
 
     if (isExcluded) {
@@ -3943,21 +4124,30 @@ BOOL Wh_ModInit() {
     }
 
     if (isCurrentToolModProcess) {
-        // Not owned yet: when the mod is turned off and on quickly, the previous process may still
-        // be closing. The UI thread waits for it to go (see UiThread) instead of giving up, which
-        // left the bar off until it was toggled again.
-        g_toolModProcessMutex = CreateMutexW(nullptr, FALSE, L"windhawk-tool-mod_" WH_MOD_ID);
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
         if (!WhTool_ModInit()) {
             ExitProcess(1);
         }
-        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
@@ -3971,24 +4161,32 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    if (g_isExplorer || !g_isToolModProcessLauncher) {
+    if (g_isExplorer) {
+        return;
+    }
+
+    if (!g_isToolModProcessLauncher) {
         return;
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileNameW(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
             return;
     }
 
-    WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
+        kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
             Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
@@ -3996,41 +4194,59 @@ void Wh_ModAfterInit() {
     }
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine, LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment,
-        LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    STARTUPINFOW si{.cb = sizeof(STARTUPINFOW), .dwFlags = STARTF_FORCEOFFFEEDBACK};
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
     PROCESS_INFORMATION pi;
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine, nullptr, nullptr, FALSE,
-                                 NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr)) {
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
         Wh_Log(L"CreateProcess failed");
         return;
     }
+
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    // (Explorer reads the bar's choice on every key press: nothing to reload there.)
-    if (g_isExplorer || g_isToolModProcessLauncher) {
+    if (g_isExplorer) {
         return;
     }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
     WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    // Never ExitProcess in Explorer: Windhawk removes the hook by itself.
-    if (g_isExplorer || g_isToolModProcessLauncher) {
+    if (g_isExplorer) {
+        ExplorerUninit();
         return;
     }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
     WhTool_ModUninit();
     ExitProcess(0);
 }
