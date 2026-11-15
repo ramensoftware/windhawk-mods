@@ -3,7 +3,7 @@
 // @name            !Net — Per-App Kill Switch
 // @description     A panel to manage per app internet connection.
 // @author          Ashix
-// @version         1.2026.1410
+// @version         1.2026.1510
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
 // @donateUrl       https://ko-fi.com/kashix
@@ -48,8 +48,9 @@
 - **System / Excluded:** View Windows system processes or restore excluded apps.
 
 ## Permissions & Safety
-- **Administrator Rights:** Modifying WFP session filters requires elevation (via Windhawk's elevated tool host).
-- Critical Windows processes (`svchost.exe`, `lsass.exe`, `services.exe`, `csrss.exe`, `winlogon.exe`, `dwm.exe`, `windhawk.exe`, DNS/Firewall services) are locked by default.
+- **Administrator Rights:** Modifying WFP session filters requires elevation (via `windhawk-mod-elevated.exe` on Windhawk 2.0, or on-demand UAC elevation of `windhawk.exe -tool-mod` on Windhawk 1.7.3).
+- **Immutable Security & Core OS Protection:** Core Windows processes (`svchost.exe`, `lsass.exe`, `services.exe`, `csrss.exe`, `winlogon.exe`, `smss.exe`, `wininit.exe`), Windhawk hosts (`windhawk.exe`, `windhawk-mod.exe`, `windhawk-mod-elevated.exe`), Windows Defender / SmartScreen (`MsMpEng.exe`, `NisSrv.exe`, `MpCmdRun.exe`, `MpDefenderCoreService.exe`, `SecurityHealthService.exe`, `SmartScreen.exe`), and major third-party AV/EDR processes are permanently protected even if **Lock system-critical processes** is turned off.
+- **Session & User Isolation:** Session 0 services (`SessionId == 0`) and processes belonging only to other Windows user accounts are isolated, locked, and hidden from **Running / Allowed** by default so `!Net` only manages the active interactive user's session processes.
 - Warns before blocking remote desktop or VPN clients when an active remote session or VPN process is detected.
 */
 // ==/WindhawkModReadme==
@@ -149,6 +150,7 @@
 - Safety:
   - lockSystemProcesses: true
     $name: Lock system-critical processes
+    $description: Lock non-essential shell/system helpers (core OS, Windhawk, Defender/SmartScreen, and AV/EDR executables are always protected).
   - warnOnVpnOrRemote: true
     $name: Warn on VPN or Remote Desktop block
 - Hotkeys:
@@ -379,7 +381,9 @@ struct AppEntry {
     bool hasVisibleWindow = false;
     bool hasLiveNetwork = false;
     bool isSystemApp = false;
+    bool isImmutableLocked = false;
     bool isCriticalLocked = false;
+    bool isOtherSessionOrUser = false;
     bool isVpnOrRemote = false;
     bool isExcluded = false;
     bool exeExists = true;
@@ -731,16 +735,54 @@ static void LogAudit(const std::wstring& msg) {
 // Safety Classification
 // ============================================================================
 
+static bool IsImmutableProtectedExe(const std::wstring& lowerExePath) {
+    std::wstring name = GetFileNameOnly(lowerExePath);
+    static const wchar_t* kImmutable[] = {
+        // Core OS kernel & session managers
+        L"svchost.exe", L"lsass.exe", L"services.exe", L"csrss.exe",
+        L"winlogon.exe", L"smss.exe", L"wininit.exe", L"system", L"ntoskrnl.exe",
+        // Windhawk hosts (1.7.3 & 2.0)
+        L"windhawk.exe", L"windhawk-mod.exe", L"windhawk-mod-elevated.exe", L"windhawk-mod-uiaccess.exe",
+        // Microsoft Defender & SmartScreen
+        L"msmpeng.exe", L"nissrv.exe", L"mpcmdrun.exe", L"mpdefendercoreservice.exe",
+        L"securityhealthservice.exe", L"securityhealthsystray.exe", L"smartscreen.exe",
+        // Kaspersky
+        L"avp.exe", L"avpui.exe",
+        // Bitdefender
+        L"vsserv.exe", L"bdservicehost.exe", L"bdagent.exe", L"updatesrv.exe",
+        // ESET
+        L"ekrn.exe", L"egui.exe", L"eguiproxy.exe",
+        // Malwarebytes
+        L"mbamservice.exe", L"mbam.exe", L"mbamtray.exe",
+        // Avast / AVG
+        L"avastsvc.exe", L"avastui.exe", L"afwserv.exe", L"avgsvc.exe", L"avgui.exe",
+        // McAfee / Trellix
+        L"mcshield.exe", L"mfemms.exe", L"mfevtps.exe", L"masvc.exe",
+        // Trend Micro
+        L"coreframeworkhost.exe", L"coreserviceshell.exe", L"ntrtscan.exe", L"tmccsf.exe",
+        // Sophos
+        L"sophosfs.exe", L"sophoshealth.exe", L"sophosnetfilter.exe", L"sspservice.exe", L"savservice.exe",
+        // Norton / Symantec
+        L"nortonsecurity.exe", L"ns.exe", L"ccsvchst.exe", L"symcorpui.exe",
+        // CrowdStrike Falcon & SentinelOne
+        L"csfalconservice.exe", L"csfalconcontainer.exe",
+        L"sentinelagent.exe", L"sentinelservicehost.exe", L"sentinelstaticengine.exe", L"sentinelui.exe"
+    };
+    for (auto* item : kImmutable) {
+        if (name == item) return true;
+    }
+    return false;
+}
+
 static bool IsCriticalSystemExe(const std::wstring& lowerExePath) {
+    if (IsImmutableProtectedExe(lowerExePath)) return true;
     std::wstring name = GetFileNameOnly(lowerExePath);
     static const wchar_t* kCritical[] = {
-        L"svchost.exe", L"lsass.exe", L"services.exe", L"csrss.exe",
-        L"winlogon.exe", L"dwm.exe", L"smss.exe", L"wininit.exe",
-        L"system", L"ntoskrnl.exe", L"wuauclt.exe", L"usoclient.exe",
-        L"windhawk.exe", L"audiodg.exe", L"fontdrvhost.exe", L"sihost.exe",
+        L"dwm.exe", L"wuauclt.exe", L"usoclient.exe",
+        L"audiodg.exe", L"fontdrvhost.exe", L"sihost.exe",
         L"conhost.exe", L"ctfmon.exe", L"wlanext.exe", L"dashost.exe",
         L"searchhost.exe", L"startmenuexperiencehost.exe", L"shellexperiencehost.exe",
-        L"msmpeng.exe", L"nissrv.exe", L"smartscreen.exe", L"taskmgr.exe"
+        L"taskmgr.exe"
     };
     for (auto* c : kCritical) {
         if (name == c) return true;
@@ -798,10 +840,87 @@ static std::wstring QueryProcessExePath(DWORD pid) {
     return result;
 }
 
+static std::vector<BYTE> ExtractProcessUserSidBytes(HANDLE hProc) {
+    std::vector<BYTE> out;
+    if (!hProc) return out;
+    HANDLE hTok = nullptr;
+    if (!OpenProcessToken(hProc, TOKEN_QUERY, &hTok)) return out;
+    DWORD len = 0;
+    GetTokenInformation(hTok, TokenUser, nullptr, 0, &len);
+    if (len > 0) {
+        std::vector<BYTE> buf(len);
+        if (GetTokenInformation(hTok, TokenUser, buf.data(), len, &len)) {
+            auto* tu = reinterpret_cast<TOKEN_USER*>(buf.data());
+            if (tu->User.Sid && IsValidSid(tu->User.Sid)) {
+                DWORD sidLen = GetLengthSid(tu->User.Sid);
+                out.assign(reinterpret_cast<BYTE*>(tu->User.Sid),
+                           reinterpret_cast<BYTE*>(tu->User.Sid) + sidLen);
+            }
+        }
+    }
+    CloseHandle(hTok);
+    return out;
+}
+
+static const std::vector<BYTE>& GetCurrentUserSidBytes() {
+    static std::vector<BYTE> s_sid = []() {
+        return ExtractProcessUserSidBytes(GetCurrentProcess());
+    }();
+    return s_sid;
+}
+
+static std::vector<BYTE> GetInteractiveShellUserSidBytes() {
+    HWND hShell = GetShellWindow();
+    if (!hShell) return {};
+    DWORD shellPid = 0;
+    GetWindowThreadProcessId(hShell, &shellPid);
+    if (!shellPid) return {};
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, shellPid);
+    if (!hProc) return {};
+    std::vector<BYTE> sid = ExtractProcessUserSidBytes(hProc);
+    CloseHandle(hProc);
+    return sid;
+}
+
+static bool IsProcessInCurrentUserSession(DWORD pid) {
+    if (pid == 0 || pid == 4) return false;
+    static DWORD s_selfSession = []() {
+        DWORD sid = 0;
+        ProcessIdToSessionId(GetCurrentProcessId(), &sid);
+        return sid;
+    }();
+    DWORD procSession = 0;
+    if (!ProcessIdToSessionId(pid, &procSession)) return false;
+    if (procSession == 0 || procSession != s_selfSession) return false;
+
+    const auto& selfSid = GetCurrentUserSidBytes();
+    if (selfSid.empty()) return true;
+
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProc) return false;
+    std::vector<BYTE> procSid = ExtractProcessUserSidBytes(hProc);
+    CloseHandle(hProc);
+    if (procSid.empty()) return false;
+
+    if (EqualSid(reinterpret_cast<PSID>(const_cast<BYTE*>(selfSid.data())),
+                 reinterpret_cast<PSID>(procSid.data()))) {
+        return true;
+    }
+    // Support Over-the-Shoulder UAC where a Standard desktop user elevates !Net with a separate Admin account
+    std::vector<BYTE> shellSid = GetInteractiveShellUserSidBytes();
+    if (!shellSid.empty() &&
+        EqualSid(reinterpret_cast<PSID>(shellSid.data()),
+                 reinterpret_cast<PSID>(procSid.data()))) {
+        return true;
+    }
+    return false;
+}
+
 struct ProcessSnapshotItem {
     DWORD pid = 0;
     DWORD parentPid = 0;
     std::wstring exePath;
+    bool isCurrentUserSession = false;
 };
 
 static std::vector<ProcessSnapshotItem> CaptureProcessSnapshot() {
@@ -814,12 +933,33 @@ static std::vector<ProcessSnapshotItem> CaptureProcessSnapshot() {
         do {
             std::wstring path = QueryProcessExePath(pe.th32ProcessID);
             if (!path.empty()) {
-                out.push_back({pe.th32ProcessID, pe.th32ParentProcessID, path});
+                bool inCurSession = IsProcessInCurrentUserSession(pe.th32ProcessID);
+                out.push_back({pe.th32ProcessID, pe.th32ParentProcessID, path, inCurSession});
             }
         } while (Process32NextW(snap, &pe));
     }
     CloseHandle(snap);
     return out;
+}
+
+static bool IsExeOnlyInOtherSessionOrUser(const std::wstring& lowerExePath,
+                                          const std::vector<ProcessSnapshotItem>* optSnap = nullptr) {
+    if (lowerExePath.empty()) return false;
+    std::vector<ProcessSnapshotItem> localSnap;
+    const auto* snapPtr = optSnap;
+    if (!snapPtr) {
+        localSnap = CaptureProcessSnapshot();
+        snapPtr = &localSnap;
+    }
+    bool hasCurrentUser = false;
+    bool hasOther = false;
+    for (const auto& item : *snapPtr) {
+        if (ToLower(item.exePath) == lowerExePath) {
+            if (item.isCurrentUserSession) hasCurrentUser = true;
+            else hasOther = true;
+        }
+    }
+    return hasOther && !hasCurrentUser;
 }
 
 static std::vector<std::wstring> CollectChildExePathsFromSnap(const std::wstring& parentLowerPath,
@@ -830,6 +970,7 @@ static std::vector<std::wstring> CollectChildExePathsFromSnap(const std::wstring
     std::unordered_map<DWORD, std::wstring> pidToPath;
 
     for (const auto& item : snap) {
+        if (!item.isCurrentUserSession) continue;
         std::wstring low = ToLower(item.exePath);
         pidToPath[item.pid] = low;
         childrenMap[item.parentPid].push_back(item.pid);
@@ -841,7 +982,9 @@ static std::vector<std::wstring> CollectChildExePathsFromSnap(const std::wstring
     std::unordered_set<DWORD> visited;
     std::vector<DWORD> stack(rootPids.begin(), rootPids.end());
     std::unordered_set<std::wstring> uniqueExes;
-    uniqueExes.insert(parentLowerPath);
+    if (!IsImmutableProtectedExe(parentLowerPath)) {
+        uniqueExes.insert(parentLowerPath);
+    }
 
     size_t slashPos = parentLowerPath.find_last_of(L"\\/");
     std::wstring rootDir = (slashPos != std::wstring::npos) ? parentLowerPath.substr(0, slashPos + 1) : L"";
@@ -866,7 +1009,7 @@ static std::vector<std::wstring> CollectChildExePathsFromSnap(const std::wstring
         stack.pop_back();
         if (!visited.insert(cur).second) continue;
         auto itPath = pidToPath.find(cur);
-        if (itPath != pidToPath.end() && !IsCriticalSystemExe(itPath->second)) {
+        if (itPath != pidToPath.end() && !IsImmutableProtectedExe(itPath->second) && !IsCriticalSystemExe(itPath->second)) {
             const std::wstring& cp = itPath->second;
             bool inRoot = !rootDir.empty() && cp.size() >= rootDir.size() &&
                           cp.compare(0, rootDir.size(), rootDir) == 0;
@@ -1341,6 +1484,10 @@ static bool ApplyBlock(std::wstring exePath, Direction dir, bool includeChildren
         g_statusBanner = L"App is excluded from !Net.";
         return false;
     }
+    if (IsImmutableProtectedExe(low)) {
+        g_statusBanner = L"Core OS & security software cannot be blocked.";
+        return false;
+    }
     bool lockCrit = true;
     bool warnVpn = true;
     {
@@ -1350,6 +1497,10 @@ static bool ApplyBlock(std::wstring exePath, Direction dir, bool includeChildren
     }
     if (lockCrit && IsCriticalSystemExe(low)) {
         g_statusBanner = L"System-critical process is locked.";
+        return false;
+    }
+    if (IsExeOnlyInOtherSessionOrUser(low)) {
+        g_statusBanner = L"Session 0 / other-user process is isolated and locked.";
         return false;
     }
     if (warnVpn && askUser && IsVpnOrRemoteExe(low)) {
@@ -1364,10 +1515,12 @@ static bool ApplyBlock(std::wstring exePath, Direction dir, bool includeChildren
         targets = CollectChildExePaths(low);
     }
     if (targets.empty()) targets.push_back(low);
-    if (lockCrit) {
-        targets.erase(std::remove_if(targets.begin(), targets.end(),
-            [](const std::wstring& t) { return IsCriticalSystemExe(t); }), targets.end());
-    }
+    targets.erase(std::remove_if(targets.begin(), targets.end(),
+        [lockCrit](const std::wstring& t) {
+            return IsImmutableProtectedExe(t) ||
+                   (lockCrit && IsCriticalSystemExe(t)) ||
+                   IsExeOnlyInOtherSessionOrUser(t);
+        }), targets.end());
     if (targets.empty()) return false;
 
     std::lock_guard<std::mutex> lk(g_engineMtx);
@@ -1711,6 +1864,14 @@ static bool StartCycleForApp(std::wstring exePath, const CycleConfig& cfg, std::
     }
     if (g_excludedExes.count(low)) {
         outErr = L"App is excluded from !Net.";
+        return false;
+    }
+    if (IsImmutableProtectedExe(low)) {
+        outErr = L"Core OS & security software is permanently protected.";
+        return false;
+    }
+    if (IsExeOnlyInOtherSessionOrUser(low)) {
+        outErr = L"Session 0 / other-user process cannot be cycled.";
         return false;
     }
     {
@@ -2218,9 +2379,15 @@ static void RefreshAppList() {
     }
 
     std::unordered_map<std::wstring, AppEntry> mapEntries;
+    std::unordered_set<std::wstring> hasCurrentUserPid;
+    std::unordered_set<std::wstring> hasOtherSessionPid;
+
     for (const auto& p : snap) {
         std::wstring low = ToLower(p.exePath);
         if (low.empty()) continue;
+        if (p.isCurrentUserSession) hasCurrentUserPid.insert(low);
+        else hasOtherSessionPid.insert(low);
+
         auto& e = mapEntries[low];
         if (e.exePath.empty()) {
             e.exePath = low;
@@ -2228,6 +2395,7 @@ static void RefreshAppList() {
             e.name = GetFileNameOnly(p.exePath);
             e.primaryPid = p.pid;
             e.isSystemApp = IsSystemPath(low);
+            e.isImmutableLocked = IsImmutableProtectedExe(low);
             e.isCriticalLocked = IsCriticalSystemExe(low);
             e.isVpnOrRemote = IsVpnOrRemoteExe(low);
             e.isExcluded = g_excludedExes.count(low) > 0;
@@ -2242,9 +2410,16 @@ static void RefreshAppList() {
             e.block.direction = (itDir != g_pendingDirs.end()) ? itDir->second : defDir;
         }
         e.pids.push_back(p.pid);
-        if (low == fgExe) e.isForeground = true;
-        if (winCtx.visiblePids.count(p.pid)) e.hasVisibleWindow = true;
-        if (netPids.count(p.pid)) e.hasLiveNetwork = true;
+        if (p.isCurrentUserSession) {
+            if (low == fgExe) e.isForeground = true;
+            if (winCtx.visiblePids.count(p.pid)) e.hasVisibleWindow = true;
+            if (netPids.count(p.pid)) e.hasLiveNetwork = true;
+        }
+    }
+
+    for (auto& kv : mapEntries) {
+        kv.second.isOtherSessionOrUser =
+            (hasCurrentUserPid.count(kv.first) == 0 && hasOtherSessionPid.count(kv.first) > 0);
     }
 
     {
@@ -2256,6 +2431,7 @@ static void RefreshAppList() {
                 e.displayPath = kv.first;
                 e.name = GetFileNameOnly(kv.first);
                 e.isSystemApp = IsSystemPath(kv.first);
+                e.isImmutableLocked = IsImmutableProtectedExe(kv.first);
                 e.isCriticalLocked = IsCriticalSystemExe(kv.first);
                 e.isVpnOrRemote = IsVpnOrRemoteExe(kv.first);
                 e.isExcluded = g_excludedExes.count(kv.first) > 0;
@@ -2281,6 +2457,7 @@ static void RefreshAppList() {
                 e.displayPath = kv.first;
                 e.name = GetFileNameOnly(kv.first);
                 e.isSystemApp = IsSystemPath(kv.first);
+                e.isImmutableLocked = IsImmutableProtectedExe(kv.first);
                 e.isCriticalLocked = IsCriticalSystemExe(kv.first);
                 e.isVpnOrRemote = IsVpnOrRemoteExe(kv.first);
                 e.isExcluded = g_excludedExes.count(kv.first) > 0;
@@ -2300,6 +2477,8 @@ static void RefreshAppList() {
             e.name = GetFileNameOnly(ex);
             e.isExcluded = true;
             e.isSystemApp = IsSystemPath(ex);
+            e.isImmutableLocked = IsImmutableProtectedExe(ex);
+            e.isCriticalLocked = IsCriticalSystemExe(ex);
             e.exeExists = FileExistsW(ex);
             mapEntries[ex] = std::move(e);
         }
@@ -2324,12 +2503,13 @@ static void RefreshAppList() {
             }
         } else {
             if (e.isExcluded) continue;
-            bool isNonActionable = e.isExternalBlocked || (!e.block.blocked && e.isCriticalLocked && lockCritSetting);
+            bool isLockedEntry = e.isImmutableLocked || e.isOtherSessionOrUser || (e.isCriticalLocked && lockCritSetting);
+            bool isNonActionable = e.isExternalBlocked || (!e.block.blocked && isLockedEntry);
             if (g_activeFilter == AppFilter::Allowed) {
-                if (isNonActionable || e.block.blocked || !isOpenOrNet) continue;
+                if (isNonActionable || e.isOtherSessionOrUser || e.block.blocked || !isOpenOrNet) continue;
             }
             if (g_activeFilter == AppFilter::UserApps) {
-                if (e.isSystemApp) continue;
+                if (e.isSystemApp || e.isOtherSessionOrUser) continue;
                 if (!showNonActionable && isNonActionable) continue;
                 if (g_userRunningOnly && !isOpenOrNet && !e.block.blocked) continue;
                 if (!g_userRunningOnly && !isRunning && !e.block.blocked) continue;
@@ -2348,8 +2528,8 @@ static void RefreshAppList() {
         bool aBlk = a.block.blocked || a.isExternalBlocked;
         bool bBlk = b.block.blocked || b.isExternalBlocked;
         if (aBlk != bBlk) return aBlk > bBlk;
-        bool aLocked = !aBlk && a.isCriticalLocked && lockCritSetting;
-        bool bLocked = !bBlk && b.isCriticalLocked && lockCritSetting;
+        bool aLocked = !aBlk && (a.isImmutableLocked || a.isOtherSessionOrUser || (a.isCriticalLocked && lockCritSetting));
+        bool bLocked = !bBlk && (b.isImmutableLocked || b.isOtherSessionOrUser || (b.isCriticalLocked && lockCritSetting));
         if (aLocked != bLocked) return aLocked < bLocked;
         if (a.hasVisibleWindow != b.hasVisibleWindow) return a.hasVisibleWindow > b.hasVisibleWindow;
         return ToLower(a.name) < ToLower(b.name);
@@ -3085,7 +3265,8 @@ static void PaintFloatingWindow(HWND hwnd) {
                     std::lock_guard<std::mutex> lk(g_settingsMtx);
                     lockCrit = g_settings.lockSystemProcesses;
                 }
-                bool critProtected = !app.block.blocked && !app.isExternalBlocked && app.isCriticalLocked && lockCrit;
+                bool critProtected = !app.block.blocked && !app.isExternalBlocked &&
+                                     (app.isImmutableLocked || app.isOtherSessionOrUser || (app.isCriticalLocked && lockCrit));
                 int rightCtrlW = (app.isExcluded || critProtected) ? DpiScale(90, dpi)
                                : (app.isExternalBlocked ? DpiScale(142, dpi) : DpiScale(182, dpi));
                 int textW = std::max<int>(40, (int)rw - DpiScale(38, dpi) - rightCtrlW);
@@ -3129,7 +3310,11 @@ static void PaintFloatingWindow(HWND hwnd) {
                         sub = !app.externalRuleName.empty()
                             ? (std::wstring(L"Rule: ") + app.externalRuleName + L" (" + dirTxt + L")")
                             : (std::wstring(L"Blocked by Windows Firewall (") + dirTxt + L")");
-                    } else if (critProtected) sub += L" · Protected";
+                    } else if (critProtected) {
+                        if (app.isImmutableLocked) sub += L" · Core / Security Protected";
+                        else if (app.isOtherSessionOrUser) sub += L" · Session 0 / Other User";
+                        else sub += L" · Protected";
+                    }
                     else if (app.isVpnOrRemote) sub += L" · VPN / Remote";
                 }
                 Gdiplus::RectF subRf((Gdiplus::REAL)textX, (Gdiplus::REAL)(rowRc.top + DpiScale(24, dpi)),
@@ -3172,7 +3357,12 @@ static void PaintFloatingWindow(HWND hwnd) {
                     Gdiplus::RectF togRf((Gdiplus::REAL)togRc.left, (Gdiplus::REAL)togRc.top, (Gdiplus::REAL)togW, (Gdiplus::REAL)ctlH);
                     g.DrawString(L"Locked", -1, &smallFont, togRf, &sfCenter, &mutedBr);
                     if (togRc.top >= listTop && togRc.bottom <= listBottom) {
-                        g_hitRects.push_back({togRc, 1000 + idx * 4, idx, L"System-critical process is locked (Safety settings)", HitRect::RowToggle});
+                        const wchar_t* lockTip = app.isImmutableLocked
+                            ? L"Core OS or security software is permanently protected"
+                            : (app.isOtherSessionOrUser
+                                ? L"Session 0 or other-user process is isolated and locked"
+                                : L"System-critical process is locked (Safety settings)");
+                        g_hitRects.push_back({togRc, 1000 + idx * 4, idx, lockTip, HitRect::RowToggle});
                     }
                 } else {
                     int exSz = DpiScale(24, dpi);
@@ -5054,6 +5244,16 @@ static void OpenCyclePopupForApp(const AppEntry& app) {
         RequestRepaint();
         return;
     }
+    if (app.isImmutableLocked || IsImmutableProtectedExe(app.exePath)) {
+        g_statusBanner = L"Core OS & security software is permanently protected.";
+        RequestRepaint();
+        return;
+    }
+    if (app.isOtherSessionOrUser || IsExeOnlyInOtherSessionOrUser(app.exePath)) {
+        g_statusBanner = L"Session 0 / other-user process is isolated and locked.";
+        RequestRepaint();
+        return;
+    }
     {
         std::lock_guard<std::mutex> lk(g_settingsMtx);
         if (g_settings.lockSystemProcesses && app.isCriticalLocked) {
@@ -5178,6 +5378,8 @@ static bool g_hasPendingNavigateCycle = false;
 static bool IsExeEligibleForCycle(const std::wstring& exeLower) {
     if (exeLower.empty()) return false;
     if (g_excludedExes.count(exeLower)) return false;
+    if (IsImmutableProtectedExe(exeLower)) return false;
+    if (IsExeOnlyInOtherSessionOrUser(exeLower)) return false;
     bool lockCrit = true;
     {
         std::lock_guard<std::mutex> lk(g_settingsMtx);
@@ -5296,7 +5498,9 @@ static void OpenCycleTargetFromWidget(const CycleStatusSnapshot* activeSnap) {
         targetApp.displayPath = g_lastFgExe;
         targetApp.name = GetFileNameOnly(g_lastFgExe);
         targetApp.isExcluded = g_excludedExes.count(g_lastFgExe) > 0;
+        targetApp.isImmutableLocked = IsImmutableProtectedExe(g_lastFgExe);
         targetApp.isCriticalLocked = IsCriticalSystemExe(g_lastFgExe);
+        targetApp.isOtherSessionOrUser = IsExeOnlyInOtherSessionOrUser(g_lastFgExe);
         auto extFw = GetCachedExternalFirewallBlocks();
         auto itExt = extFw.find(g_lastFgExe);
         if (itExt != extFw.end() && itExt->second.dirMask != 0) targetApp.isExternalBlocked = true;
