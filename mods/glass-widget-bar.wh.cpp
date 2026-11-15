@@ -8,9 +8,8 @@
 // @author          TheRealAlperN
 // @github          https://github.com/TheRealAlperN
 // @license         GPL-3.0
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lgdiplus -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -ladvapi32 -lruntimeobject
+// @include         windhawk.exe
+// @compilerOptions -lgdiplus -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -ladvapi32 -lruntimeobject -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -43,9 +42,14 @@ Right-to-left languages are not supported yet. The translations are
 machine-assisted, corrections are welcome.
 
 ## Notes
-- The default layer is the **desktop**: windows cover the bar. Press
-  **Ctrl+Alt+W** to bring it to the front (press again to send it back), or
-  set "Always on top" in the settings.
+- The default layer is the **desktop**: windows cover the bar. Press the
+  hotkey (default **Ctrl+Alt+W**) to bring it to the front (press again to
+  send it back), or set "Always on top" in the settings.
+- The hotkey, its modifier keys and its key can be changed or turned off in
+  the settings. Windows reports AltGr as Ctrl+Alt, so if your keyboard layout
+  types characters with AltGr, pick a combination without Alt. If another app
+  already owns the combination it cannot be registered; the Windhawk log then
+  says so.
 - Works on the primary monitor only. A picture wallpaper is expected.
 - The defaults of the frame (opacity 15, blur 10) match the dock mod this
   frame comes from. If your wallpaper is very bright, raise the opacity.
@@ -154,12 +158,36 @@ released under **GPL-3.0** as well.
 - blur: 10
   $name: Frame blur (0-100, dock default 10)
   $name:tr-TR: Çerçeve bulanıklığı (0-100, dock varsayılanı 10)
+- hotkeyEnabled: true
+  $name: Enable the "bring to front" hotkey
+  $name:tr-TR: "Öne getir" kısayolunu etkinleştir
+  $description: Turn this off if the key combination is needed by another app. A hotkey that another app already owns cannot be registered; the reason is written to the Windhawk log.
+  $description:tr-TR: Tuş birleşimi başka bir uygulamada gerekiyorsa kapatın. Başka bir uygulamanın kullandığı kısayol kaydedilemez; sebep Windhawk günlüğüne yazılır.
+- hotkeyModifiers: ctrl_alt
+  $name: Hotkey modifier keys
+  $name:tr-TR: Kısayol değiştirici tuşları
+  $description: Windows reports AltGr as Ctrl+Alt. If your keyboard layout types characters with AltGr, pick a combination without Alt.
+  $description:tr-TR: Windows, AltGr tuşunu Ctrl+Alt olarak bildirir. Klavye düzeniniz AltGr ile karakter yazıyorsa Alt içermeyen bir birleşim seçin.
+  $options:
+  - ctrl_alt: Ctrl + Alt
+  - ctrl_shift: Ctrl + Shift
+  - ctrl_alt_shift: Ctrl + Alt + Shift
+  - win_shift: Win + Shift
+  $options:tr-TR:
+  - ctrl_alt: Ctrl + Alt
+  - ctrl_shift: Ctrl + Shift
+  - ctrl_alt_shift: Ctrl + Alt + Shift
+  - win_shift: Win + Shift
+- hotkeyKey: W
+  $name: Hotkey key (a letter A-Z or a digit 0-9)
+  $name:tr-TR: Kısayol tuşu (A-Z arası harf veya 0-9 arası rakam)
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
 #include <shellapi.h>
+#include <shellscalingapi.h>
 #include <objidl.h>
 #include <gdiplus.h>
 
@@ -182,6 +210,8 @@ released under **GPL-3.0** as well.
 using namespace Gdiplus;
 namespace wmc = winrt::Windows::Media::Control;
 namespace wss = winrt::Windows::Storage::Streams;
+
+extern "C" IMAGE_DOS_HEADER __ImageBase;  // this mod's own module
 
 namespace {
 
@@ -311,6 +341,9 @@ struct Settings {
     int margin = 16;
     int opacity = 15;
     int blur = 10;
+    bool hotkeyOn = true;
+    UINT hotkeyMods = MOD_CONTROL | MOD_ALT;
+    UINT hotkeyVk = 'W';
 } g_set;
 
 void LoadSettings() {
@@ -329,6 +362,27 @@ void LoadSettings() {
     g_set.opacity = std::clamp(Wh_GetIntSetting(L"opacity"), 0, 100);
     g_set.blur = std::clamp(Wh_GetIntSetting(L"blur"), 0, 100);
 
+    g_set.hotkeyOn = Wh_GetIntSetting(L"hotkeyEnabled") != 0;
+
+    PCWSTR mods = Wh_GetStringSetting(L"hotkeyModifiers");
+    g_set.hotkeyMods = MOD_CONTROL | MOD_ALT;
+    if (mods) {
+        if (wcscmp(mods, L"ctrl_shift") == 0) g_set.hotkeyMods = MOD_CONTROL | MOD_SHIFT;
+        else if (wcscmp(mods, L"ctrl_alt_shift") == 0)
+            g_set.hotkeyMods = MOD_CONTROL | MOD_ALT | MOD_SHIFT;
+        else if (wcscmp(mods, L"win_shift") == 0) g_set.hotkeyMods = MOD_WIN | MOD_SHIFT;
+    }
+    Wh_FreeStringSetting(mods);
+
+    PCWSTR key = Wh_GetStringSetting(L"hotkeyKey");
+    g_set.hotkeyVk = 'W';
+    if (key) {
+        wchar_t c = key[0];
+        if (c >= L'a' && c <= L'z') c = (wchar_t)(c - L'a' + L'A');
+        if ((c >= L'A' && c <= L'Z') || (c >= L'0' && c <= L'9')) g_set.hotkeyVk = (UINT)c;
+    }
+    Wh_FreeStringSetting(key);
+
     PCWSTR lang = Wh_GetStringSetting(L"language");
     SelectLanguage(lang);
     Wh_FreeStringSetting(lang);
@@ -339,9 +393,9 @@ enum { C_CLOCK, C_CAL, C_MUSIC, C_COUNT };
 const float kCellW[C_COUNT] = {116, 236, 290};
 enum { B_PREV, B_PLAY, B_NEXT, B_COUNT };
 
-HWND g_hwnd = nullptr;
+std::atomic<HWND> g_hwnd{nullptr};
+HANDLE g_uiReady = nullptr;  // manual-reset event: set once the window exists
 HANDLE g_thread = nullptr;
-HANDLE g_mutex = nullptr;
 ULONG_PTR g_gdiTok = 0;
 
 float S = 1.0f;       // DPI scale
@@ -378,7 +432,9 @@ struct MediaState {
 };
 MediaState g_media;
 std::mutex g_mediaMx;
-wmc::GlobalSystemMediaTransportControlsSession g_session{nullptr};
+// A global strong reference to an out-of-process WinRT object: never destroyed at
+// process exit (releasing the proxy during shutdown can hang).
+[[clang::no_destroy]] wmc::GlobalSystemMediaTransportControlsSession g_session{nullptr};
 HANDLE g_mediaThread = nullptr;
 HANDLE g_mediaEvt = nullptr;
 
@@ -763,8 +819,12 @@ void BuildWeekdayInitials() {
 }
 
 void Layout() {
-    UINT dpi = GetDpiForSystem();
-    S = dpi / 96.0f;
+    // The bar lives on the primary monitor: use that monitor's current scale, so a
+    // change of the display scaling (or of the primary monitor) is followed.
+    HMONITOR hm = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    UINT dpiX = 96, dpiY = 96;
+    if (FAILED(GetDpiForMonitor(hm, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) || dpiX == 0) dpiX = 96;
+    S = dpiX / 96.0f;
     M = 8 * S;
     float pad = 20 * S, gap = 36 * S;
     float barH = 148 * S;
@@ -790,7 +850,6 @@ void Layout() {
             g_btn[i] = RectF(cx + off[i] - bs / 2, cy - bs / 2, bs, bs);
     }
 
-    HMONITOR hm = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
     MONITORINFO mi = {sizeof(mi)};
     GetMonitorInfoW(hm, &mi);
     g_mon = mi.rcMonitor;
@@ -851,6 +910,18 @@ void MediaCommand(int which) {
     }
 }
 
+// Waits for a WinRT async operation for a bounded time so that the stop event is
+// looked at regularly even when the media service or the playing app does not answer.
+template <typename Op>
+auto AwaitWithTimeout(const Op& op) {
+    if (op.wait_for(std::chrono::seconds(3)) ==
+        winrt::Windows::Foundation::AsyncStatus::Started) {
+        op.Cancel();
+        throw winrt::hresult_error(HRESULT_FROM_WIN32(ERROR_TIMEOUT));
+    }
+    return op.GetResults();
+}
+
 DWORD WINAPI MediaThread(LPVOID) {
     try { winrt::init_apartment(winrt::apartment_type::multi_threaded); } catch (...) {}
     wmc::GlobalSystemMediaTransportControlsSessionManager mgr{nullptr};
@@ -860,11 +931,13 @@ DWORD WINAPI MediaThread(LPVOID) {
 
     do {
         try {
-            if (!mgr) mgr = wmc::GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
+            if (!mgr)
+                mgr = AwaitWithTimeout(
+                    wmc::GlobalSystemMediaTransportControlsSessionManager::RequestAsync());
             auto s = mgr.GetCurrentSession();
             MediaState ns;
             if (s) {
-                auto props = s.TryGetMediaPropertiesAsync().get();
+                auto props = AwaitWithTimeout(s.TryGetMediaPropertiesAsync());
                 ns.title = props.Title().c_str();
                 ns.artist = props.Artist().c_str();
                 std::wstring key = ns.title + L"\x1f" + ns.artist + L"\x1f" + props.AlbumTitle().c_str();
@@ -881,11 +954,11 @@ DWORD WINAPI MediaThread(LPVOID) {
                     try {
                         auto thumb = props.Thumbnail();
                         if (thumb) {
-                            auto st = thumb.OpenReadAsync().get();
+                            auto st = AwaitWithTimeout(thumb.OpenReadAsync());
                             uint64_t size = st.Size();
                             if (size > 0 && size < 8u * 1024 * 1024) {
                                 wss::DataReader dr(st);
-                                dr.LoadAsync((uint32_t)size).get();
+                                AwaitWithTimeout(dr.LoadAsync((uint32_t)size));
                                 art.resize((size_t)size);
                                 dr.ReadBytes(winrt::array_view<uint8_t>(art.data(), art.data() + art.size()));
                                 artGen++;
@@ -1269,6 +1342,19 @@ void ApplyZOrder() {
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 }
 
+// (Re)registers the "bring to front" hotkey from the settings; does nothing when it is off.
+void ApplyHotkey(HWND hwnd) {
+    UnregisterHotKey(hwnd, 1);
+    if (!g_set.hotkeyOn) {
+        g_peek = false;
+        return;
+    }
+    if (!RegisterHotKey(hwnd, 1, g_set.hotkeyMods | MOD_NOREPEAT, g_set.hotkeyVk)) {
+        Wh_Log(L"RegisterHotKey failed (error %lu): the key combination is probably used by another app",
+               GetLastError());
+    }
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_TIMER: {
@@ -1347,11 +1433,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         case WM_DISPLAYCHANGE:
+        case WM_DPICHANGED:
             Layout();
             Render();
             return 0;
         case WM_APP + 1:  // settings changed
             LoadSettings();
+            ApplyHotkey(hwnd);
             Layout();
             ApplyZOrder();
             Render();
@@ -1369,15 +1457,28 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 DWORD WINAPI UiThread(LPVOID) {
+    // The scale is read per monitor in Layout(), so this thread must be per-monitor DPI
+    // aware; otherwise Windows would virtualize the coordinates and scale the bar.
+    if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
+        using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+        auto setContext = (SetThreadDpiAwarenessContext_t)GetProcAddress(
+            user32, "SetThreadDpiAwarenessContext");
+        if (setContext) setContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
+
     GdiplusStartupInput in;
     if (GdiplusStartup(&g_gdiTok, &in, nullptr) != Ok) return 1;
 
     WNDCLASSW wc = {};
     wc.lpfnWndProc = WndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hInstance = (HINSTANCE)&__ImageBase;
     wc.lpszClassName = L"GlassWidgetBar";
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    RegisterClassW(&wc);
+    if (!RegisterClassW(&wc)) {
+        Wh_Log(L"RegisterClassW failed: %lu", GetLastError());
+        GdiplusShutdown(g_gdiTok);
+        return 1;
+    }
 
     LoadSettings();
     Layout();
@@ -1388,12 +1489,13 @@ DWORD WINAPI UiThread(LPVOID) {
                                 nullptr, nullptr, wc.hInstance, nullptr);
     if (hwnd) {
         g_hwnd = hwnd;
+        if (g_uiReady) SetEvent(g_uiReady);
         Render();
         ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         ApplyZOrder();
         Render();
         SetTimer(hwnd, 1, 100, nullptr);
-        RegisterHotKey(hwnd, 1, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'W');
+        ApplyHotkey(hwnd);
 
         MSG m;
         while (GetMessageW(&m, nullptr, 0, 0) > 0) {
@@ -1420,40 +1522,40 @@ DWORD WINAPI UiThread(LPVOID) {
 
 }  // namespace
 
-BOOL Wh_ModInit() {
-    // only the explorer.exe that runs the shell (desktop / taskbar)
-    HWND shell = GetShellWindow();
-    if (shell) {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(shell, &pid);
-        if (pid != GetCurrentProcessId()) return TRUE;
-    }
-    g_mutex = CreateMutexW(nullptr, TRUE, L"Local\\GlassWidgetBar");
-    if (g_mutex && GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(g_mutex);
-        g_mutex = nullptr;
-        return TRUE;
-    }
+BOOL WhTool_ModInit() {
     g_mediaEvt = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_uiReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_mediaEvt || !g_uiReady) {
+        Wh_Log(L"CreateEventW failed: %lu", GetLastError());
+        if (g_mediaEvt) CloseHandle(g_mediaEvt);
+        if (g_uiReady) CloseHandle(g_uiReady);
+        g_mediaEvt = g_uiReady = nullptr;
+        return FALSE;
+    }
     g_mediaThread = CreateThread(nullptr, 0, MediaThread, nullptr, 0, nullptr);
     g_thread = CreateThread(nullptr, 0, UiThread, nullptr, 0, nullptr);
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     if (g_hwnd) PostMessageW(g_hwnd, WM_APP + 1, 0, 0);
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     if (g_mediaEvt) SetEvent(g_mediaEvt);
-    if (g_hwnd) PostMessageW(g_hwnd, WM_CLOSE, 0, 0);
     if (g_thread) {
-        WaitForSingleObject(g_thread, 5000);
+        // Wait until the window exists, or until the thread has ended on its own
+        // (startup failure); only then is it safe to ask it to close.
+        HANDLE waits[] = {g_uiReady, g_thread};
+        WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+        if (HWND hwnd = g_hwnd) PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
     if (g_mediaThread) {
-        WaitForSingleObject(g_mediaThread, 5000);
+        // The blocking WinRT calls in the thread have a time limit, so this ends.
+        WaitForSingleObject(g_mediaThread, INFINITE);
         CloseHandle(g_mediaThread);
         g_mediaThread = nullptr;
     }
@@ -1461,8 +1563,187 @@ void Wh_ModUninit() {
         CloseHandle(g_mediaEvt);
         g_mediaEvt = nullptr;
     }
-    if (g_mutex) {
-        CloseHandle(g_mutex);
-        g_mutex = nullptr;
+    if (g_uiReady) {
+        CloseHandle(g_uiReady);
+        g_uiReady = nullptr;
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
