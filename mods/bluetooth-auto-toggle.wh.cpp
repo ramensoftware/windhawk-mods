@@ -49,8 +49,10 @@ Bluetooth service (`bthserv`) or adapter driver is still initializing during
 Windows boot.
 - **State-Safe Cycling:** Only toggles radios that are already powered ON
 (leaving radios in Airplane mode or turned off alone).
-- **Safe Power Restoration:** Minimizes the off window and ensures radios are
-commanded back on with retries even if the mod is unloaded mid-cycle.
+- **Safe Power Restoration & Crash Recovery:** Minimizes the off window, ensures
+radios are commanded back on with retries even if the mod is unloaded mid-cycle,
+and persistently tracks in-progress cycles to restore power upon next launch if
+interrupted.
 - **Session-Safe:** Remembers the current Windows logon session across tool
 process restarts using Windows Terminal Services (WTS) logon timestamps.
 - **Graceful Lifecycle & Live Testing:** Responsive to settings updates, mod
@@ -66,6 +68,10 @@ devices or excluding unwanted peripherals.
 allow/exclude toggles evaluated top-to-bottom.
   - Updated startup device detection and the `DeviceWatcher` event monitor to
 respect per-device filter rules and avoid triggering on excluded peripherals.
+  - Added crash and interruption recovery tracking (`cycleInProgress`) to
+automatically restore Bluetooth radios back to ON if a cycle is ever interrupted.
+  - Added 60-second expiration to dropped-device tracking so subsequent
+reconnections are never permanently absorbed.
 - **v1.3.0**
   - Added `toggleOnEveryDeviceConnection` setting to continuously monitor and
 power-cycle Bluetooth on every newly connected Bluetooth device throughout the
@@ -97,7 +103,7 @@ restarts.
 /*
 - startupBluetoothState: unchanged
   $name: Startup Bluetooth State
-  $description: Choose whether Bluetooth should be forced ON or OFF when Windows starts (regardless of state before shutdown).
+  $description: Choose whether Bluetooth should be forced ON or OFF when Windows starts (Windows persists radio states globally across reboots even if mod is disabled).
   $options:
   - unchanged: Keep previous Windows state (do not force ON or OFF)
   - on: Turn Bluetooth ON at startup
@@ -116,7 +122,7 @@ restarts.
 
 - applyToAllDevices: true
   $name: Apply to all devices by default
-  $description: If enabled, any connected Bluetooth device without a matching rule can initiate the auto-toggle. Disable this to only trigger for enabled devices in Target Devices List.
+  $description: If enabled, any connected Bluetooth device without a matching rule can initiate the auto-toggle in device-connected mode or continuous monitoring. Disable this to only trigger for enabled devices in Target Devices List.
 
 - targetDevices:
   - - name: ""
@@ -124,7 +130,7 @@ restarts.
     - enabled: true
       $name: Enable Auto-Toggle
   $name: Target Devices List
-  $description: Filter specific Bluetooth devices by name or keyword (e.g. Sony, AirPods, WH-1000XM4). Rules are evaluated top-to-bottom and the first matching rule wins.
+  $description: Filter specific Bluetooth devices by name or keyword (e.g. Sony, AirPods, WH-1000XM4) for device-connected mode and continuous monitoring. Rules are evaluated top-to-bottom and the first matching rule wins.
 
 - delayAfterDeviceConnectedMs: 2000
   $name: Delay After Device Found (ms)
@@ -226,12 +232,11 @@ static HANDLE g_hWakeEvent = NULL;
 static std::atomic<bool> g_forceNextRun{false};
 static std::atomic<bool> g_isCycling{false};
 static std::atomic<bool> g_isInitialRun{true};
-static std::atomic<DWORD> g_lastCycleCompletedTick{0};
 
 static std::unordered_set<std::wstring> g_knownConnectedDeviceIds;
 static SRWLOCK g_connectedDevicesLock = SRWLOCK_INIT;
 
-static std::unordered_set<std::wstring> g_droppedByCycle;
+static std::unordered_map<std::wstring, DWORD> g_droppedByCycle;
 static SRWLOCK g_droppedByCycleLock = SRWLOCK_INIT;
 
 static std::vector<std::wstring> g_pendingConnectedDeviceIds;
@@ -239,8 +244,8 @@ static std::vector<std::wstring> g_pendingDisconnectedDeviceIds;
 static std::unordered_map<std::wstring, std::wstring> g_deviceNamesById;
 static SRWLOCK g_pendingDevicesLock = SRWLOCK_INIT;
 
-static DeviceWatcher g_classicWatcher{nullptr};
-static DeviceWatcher g_leWatcher{nullptr};
+[[clang::no_destroy]] static DeviceWatcher g_classicWatcher{nullptr};
+[[clang::no_destroy]] static DeviceWatcher g_leWatcher{nullptr};
 
 static std::wstring TrimWhitespace(const std::wstring &str) {
   size_t first = 0;
@@ -287,13 +292,15 @@ static bool IsStopWord(const std::wstring &word) {
   return false;
 }
 
-static std::vector<std::wstring> GetTokens(const std::wstring &strLower) {
+static std::vector<std::wstring> GetTokens(const std::wstring &strLower,
+                                           bool filterStopWords = true) {
   std::vector<std::wstring> tokens;
   std::wstring cur;
   bool hasDigit = false;
   auto flushToken = [&]() {
     if (!cur.empty()) {
-      if ((cur.length() >= 2 || hasDigit) && !IsStopWord(cur)) {
+      if ((cur.length() >= 2 || hasDigit) &&
+          (!filterStopWords || !IsStopWord(cur))) {
         tokens.push_back(cur);
       }
       cur.clear();
@@ -314,13 +321,12 @@ static std::vector<std::wstring> GetTokens(const std::wstring &strLower) {
   return tokens;
 }
 
-static bool CheckDeviceMatch(const std::wstring &candidateName,
+static bool CheckDeviceMatch(const std::wstring &candidateLower,
+                             const std::vector<std::wstring> &devTokens,
                              const DeviceFilterRule &rule) {
-  if (candidateName.empty() || rule.nameLower.empty()) {
+  if (candidateLower.empty() || rule.nameLower.empty()) {
     return false;
   }
-
-  std::wstring candidateLower = ToLower(candidateName);
 
   // 1. Direct substring match: device name contains the rule keyword or phrase
   if (candidateLower.find(rule.nameLower) != std::wstring::npos) {
@@ -328,12 +334,7 @@ static bool CheckDeviceMatch(const std::wstring &candidateName,
   }
 
   // 2. Token match: every meaningful rule token must match a device token
-  if (rule.tokens.empty()) {
-    return false;
-  }
-
-  auto devTokens = GetTokens(candidateLower);
-  if (devTokens.empty()) {
+  if (rule.tokens.empty() || devTokens.empty()) {
     return false;
   }
 
@@ -369,8 +370,11 @@ static bool ShouldDeviceInitiateToggle(const std::wstring &deviceName,
   }
 
   if (!deviceName.empty()) {
+    std::wstring candidateLower = ToLower(deviceName);
+    std::vector<std::wstring> devTokens = GetTokens(candidateLower, true);
+
     for (const auto &rule : rules) {
-      if (CheckDeviceMatch(deviceName, rule)) {
+      if (CheckDeviceMatch(candidateLower, devTokens, rule)) {
         if (outMatchedRule) {
           *outMatchedRule = true;
         }
@@ -392,33 +396,15 @@ static DeviceWatcher StartConnectionWatcher(winrt::hstring const &selector) {
         std::vector<winrt::hstring>{L"System.Devices.Aep.IsConnected"},
         DeviceInformationKind::AssociationEndpoint);
 
-    auto enumCompleted = std::make_shared<std::atomic<bool>>(false);
-
-    watcher.Added([enumCompleted](DeviceWatcher const &,
-                                  DeviceInformation const &info) {
+    watcher.Added([](DeviceWatcher const &,
+                     DeviceInformation const &info) {
       try {
         std::wstring id = info.Id().c_str();
         std::wstring name = info.Name().c_str();
-        bool trigger = false;
-        if (enumCompleted->load()) {
-          auto value =
-              info.Properties().TryLookup(L"System.Devices.Aep.IsConnected");
-          if (value && winrt::unbox_value<bool>(value)) {
-            trigger = true;
-          }
-        }
-
-        AcquireSRWLockExclusive(&g_pendingDevicesLock);
         if (!name.empty()) {
-          g_deviceNamesById[id] = name;
-        }
-        if (trigger) {
-          g_pendingConnectedDeviceIds.push_back(id);
-        }
-        ReleaseSRWLockExclusive(&g_pendingDevicesLock);
-
-        if (trigger && g_hWakeEvent) {
-          SetEvent(g_hWakeEvent);
+          AcquireSRWLockExclusive(&g_pendingDevicesLock);
+          g_deviceNamesById[id] = std::move(name);
+          ReleaseSRWLockExclusive(&g_pendingDevicesLock);
         }
       } catch (...) {
       }
@@ -434,11 +420,6 @@ static DeviceWatcher StartConnectionWatcher(winrt::hstring const &selector) {
             ReleaseSRWLockExclusive(&g_pendingDevicesLock);
           } catch (...) {
           }
-        });
-
-    watcher.EnumerationCompleted(
-        [enumCompleted](DeviceWatcher const &, auto const &) {
-          enumCompleted->store(true);
         });
 
     watcher.Updated([](DeviceWatcher const &,
@@ -542,37 +523,37 @@ static void UnsubscribeRadioStateChanged() {
 }
 
 static void LoadSettings() {
-  AcquireSRWLockExclusive(&g_settingsLock);
+  Settings newSettings{};
 
   WindhawkUtils::StringSetting state =
       WindhawkUtils::StringSetting::make(L"startupBluetoothState");
   if (wcscmp(state, L"on") == 0) {
-    g_settings.startupBluetoothState = StartupBluetoothState::On;
+    newSettings.startupBluetoothState = StartupBluetoothState::On;
   } else if (wcscmp(state, L"off") == 0) {
-    g_settings.startupBluetoothState = StartupBluetoothState::Off;
+    newSettings.startupBluetoothState = StartupBluetoothState::Off;
   } else {
-    g_settings.startupBluetoothState = StartupBluetoothState::Unchanged;
+    newSettings.startupBluetoothState = StartupBluetoothState::Unchanged;
   }
 
   WindhawkUtils::StringSetting mode =
       WindhawkUtils::StringSetting::make(L"activationMode");
   if (wcscmp(mode, L"startup") == 0) {
-    g_settings.activationMode = ActivationMode::Startup;
+    newSettings.activationMode = ActivationMode::Startup;
   } else if (wcscmp(mode, L"deviceConnected") == 0) {
-    g_settings.activationMode = ActivationMode::DeviceConnected;
+    newSettings.activationMode = ActivationMode::DeviceConnected;
   } else {
-    g_settings.activationMode =
+    newSettings.activationMode =
         (Wh_GetIntSetting(L"onlyWhenDeviceConnected") == 0)
             ? ActivationMode::Startup
             : ActivationMode::DeviceConnected;
   }
 
-  g_settings.toggleOnEveryDeviceConnection =
+  newSettings.toggleOnEveryDeviceConnection =
       Wh_GetIntSetting(L"toggleOnEveryDeviceConnection") != 0;
 
-  g_settings.applyToAllDevices = Wh_GetIntSetting(L"applyToAllDevices") != 0;
+  newSettings.applyToAllDevices = Wh_GetIntSetting(L"applyToAllDevices") != 0;
 
-  g_deviceRules.clear();
+  std::vector<DeviceFilterRule> localRules;
   for (int i = 0; i < 100; ++i) {
     WindhawkUtils::StringSetting ruleName =
         WindhawkUtils::StringSetting::make(L"targetDevices[%d].name", i);
@@ -584,51 +565,53 @@ static void LoadSettings() {
     DeviceFilterRule rule;
     rule.originalName = trimmedName;
     rule.nameLower = ToLower(trimmedName);
-    rule.tokens = GetTokens(rule.nameLower);
+    rule.tokens = GetTokens(rule.nameLower, false);
     rule.enabled = Wh_GetIntSetting(L"targetDevices[%d].enabled", i) != 0;
-    g_deviceRules.push_back(std::move(rule));
+    localRules.push_back(std::move(rule));
   }
 
-  g_settings.delayAfterDeviceConnectedMs =
+  newSettings.delayAfterDeviceConnectedMs =
       std::max(Wh_GetIntSetting(L"delayAfterDeviceConnectedMs"), 0);
 
-  g_settings.deviceWaitTimeoutSec =
+  newSettings.deviceWaitTimeoutSec =
       std::max(Wh_GetIntSetting(L"deviceWaitTimeoutSec"), 0);
 
-  g_settings.startupDelayMs = std::max(Wh_GetIntSetting(L"startupDelayMs"), 0);
+  newSettings.startupDelayMs = std::max(Wh_GetIntSetting(L"startupDelayMs"), 0);
 
-  g_settings.toggleDelayMs = std::max(Wh_GetIntSetting(L"toggleDelayMs"), 50);
+  newSettings.toggleDelayMs = std::max(Wh_GetIntSetting(L"toggleDelayMs"), 50);
 
-  g_settings.maxRetries = std::max(Wh_GetIntSetting(L"maxRetries"), 1);
+  newSettings.maxRetries = std::max(Wh_GetIntSetting(L"maxRetries"), 1);
 
-  g_settings.retryIntervalMs =
+  newSettings.retryIntervalMs =
       std::max(Wh_GetIntSetting(L"retryIntervalMs"), 50);
 
-  g_settings.onlyOncePerSession = Wh_GetIntSetting(L"onlyOncePerSession") != 0;
-  g_settings.forceToggleOnSettingsChange =
+  newSettings.onlyOncePerSession = Wh_GetIntSetting(L"onlyOncePerSession") != 0;
+  newSettings.forceToggleOnSettingsChange =
       Wh_GetIntSetting(L"forceToggleOnSettingsChange") != 0;
 
-  Settings loggedCfg = g_settings;
-  size_t rulesCount = g_deviceRules.size();
+  size_t rulesCount = localRules.size();
 
+  AcquireSRWLockExclusive(&g_settingsLock);
+  g_settings = newSettings;
+  g_deviceRules = std::move(localRules);
   ReleaseSRWLockExclusive(&g_settingsLock);
 
   Wh_Log(
       L"Settings: startupState=%s, mode=%s, toggleEveryConn=%d, "
       L"applyAll=%d, targetRules=%zu, delayAfterConn=%dms, "
       L"waitTimeout=%ds, startupDelay=%dms, toggleDelay=%dms, onlyOnce=%d",
-      loggedCfg.startupBluetoothState == StartupBluetoothState::Off
+      newSettings.startupBluetoothState == StartupBluetoothState::Off
           ? L"off"
-          : (loggedCfg.startupBluetoothState == StartupBluetoothState::Unchanged
+          : (newSettings.startupBluetoothState == StartupBluetoothState::Unchanged
                  ? L"unchanged"
                  : L"on"),
-      loggedCfg.activationMode == ActivationMode::Startup ? L"startup"
-                                                          : L"deviceConnected",
-      (int)loggedCfg.toggleOnEveryDeviceConnection,
-      (int)loggedCfg.applyToAllDevices, rulesCount,
-      loggedCfg.delayAfterDeviceConnectedMs, loggedCfg.deviceWaitTimeoutSec,
-      loggedCfg.startupDelayMs, loggedCfg.toggleDelayMs,
-      (int)loggedCfg.onlyOncePerSession);
+      newSettings.activationMode == ActivationMode::Startup ? L"startup"
+                                                            : L"deviceConnected",
+      (int)newSettings.toggleOnEveryDeviceConnection,
+      (int)newSettings.applyToAllDevices, rulesCount,
+      newSettings.delayAfterDeviceConnectedMs, newSettings.deviceWaitTimeoutSec,
+      newSettings.startupDelayMs, newSettings.toggleDelayMs,
+      (int)newSettings.onlyOncePerSession);
 }
 
 static bool GetLogonTime(LONGLONG *logonTime, DWORD *outSessionId) {
@@ -799,6 +782,18 @@ static void PerformBluetoothToggle(bool isManualTest = false,
     return;
   }
 
+  if (Wh_GetIntValue(L"cycleInProgress", 0)) {
+    Wh_Log(L"Previous cycle was interrupted, restoring Bluetooth radios to ON "
+           L"state...");
+    for (const auto &radio : targetRadios) {
+      try {
+        radio.SetStateAsync(RadioState::On).get();
+      } catch (...) {
+      }
+    }
+    Wh_DeleteValue(L"cycleInProgress");
+  }
+
   if (!isManualTest && !HasSessionMarker(L"startupStateLogon")) {
     if (cfg.startupBluetoothState == StartupBluetoothState::On) {
       for (const auto &radio : targetRadios) {
@@ -891,6 +886,16 @@ static void PerformBluetoothToggle(bool isManualTest = false,
     std::vector<std::wstring> skippedNames;
     if (!GetFirstEligibleConnectedBluetoothDevice(connectedDeviceName,
                                                   &skippedNames)) {
+      if (!cfg.applyToAllDevices) {
+        AcquireSRWLockShared(&g_settingsLock);
+        bool hasRules = !g_deviceRules.empty();
+        ReleaseSRWLockShared(&g_settingsLock);
+        if (!hasRules) {
+          Wh_Log(L"Warning: 'applyToAllDevices' is disabled and no target "
+                 L"device rules are configured. No devices will match.");
+        }
+      }
+
       if (!skippedNames.empty()) {
         Wh_Log(L"Connected Bluetooth device(s) found, but excluded by device "
                L"filter rules. Waiting for an eligible device (timeout: %d "
@@ -926,7 +931,10 @@ static void PerformBluetoothToggle(bool isManualTest = false,
           }
         }
 
-        if (WaitForSingleObject(g_hStopEvent, 1000) == WAIT_OBJECT_0) {
+        HANDLE waitStartupHandles[] = {g_hStopEvent, g_hWakeEvent};
+        DWORD waitRes =
+            WaitForMultipleObjects(2, waitStartupHandles, FALSE, 1000);
+        if (waitRes == WAIT_OBJECT_0) {
           return;
         }
       }
@@ -947,12 +955,14 @@ static void PerformBluetoothToggle(bool isManualTest = false,
   }
 
   g_isCycling.store(true);
+  Wh_SetIntValue(L"cycleInProgress", 1);
 
   std::vector<std::pair<std::wstring, std::wstring>> connectedNow;
   if (GetConnectedBluetoothDevices(connectedNow)) {
+    DWORD now = GetTickCount();
     AcquireSRWLockExclusive(&g_droppedByCycleLock);
     for (const auto &[id, name] : connectedNow) {
-      g_droppedByCycle.insert(id);
+      g_droppedByCycle[id] = now;
     }
     ReleaseSRWLockExclusive(&g_droppedByCycleLock);
   }
@@ -1017,12 +1027,13 @@ static void PerformBluetoothToggle(bool isManualTest = false,
     }
   }
 
+  Wh_DeleteValue(L"cycleInProgress");
+
   if (!isManualTest) {
     SetSessionMarker(L"toggledLogon");
     UnsubscribeRadioStateChanged();
   }
 
-  g_lastCycleCompletedTick.store(GetTickCount());
   g_isCycling.store(false);
   Wh_Log(L"Bluetooth automatic toggle cycle completed successfully.");
 }
@@ -1116,11 +1127,17 @@ static DWORD WINAPI BluetoothWorkerThread(LPVOID lpParam) {
       AcquireSRWLockExclusive(&g_droppedByCycleLock);
       AcquireSRWLockExclusive(&g_connectedDevicesLock);
 
+      DWORD now = GetTickCount();
       for (const auto &id : connectedPending) {
-        // If this device was dropped by our own cycle, absorb the reconnect
-        if (g_droppedByCycle.erase(id)) {
-          g_knownConnectedDeviceIds.insert(id);
-          continue;
+        // If this device was dropped by our own cycle recently (within 60s), absorb reconnect
+        auto it = g_droppedByCycle.find(id);
+        if (it != g_droppedByCycle.end()) {
+          DWORD elapsed = now - it->second;
+          g_droppedByCycle.erase(it);
+          if (elapsed <= 60000) {
+            g_knownConnectedDeviceIds.insert(id);
+            continue;
+          }
         }
 
         // If already known as connected, ignore
@@ -1451,7 +1468,7 @@ void Wh_ModAfterInit() {
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
         LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
         DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFO lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+        LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
@@ -1461,8 +1478,8 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFO si{
-        .cb = sizeof(STARTUPINFO),
+    STARTUPINFOW si{
+        .cb = sizeof(STARTUPINFOW),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
     PROCESS_INFORMATION pi;
