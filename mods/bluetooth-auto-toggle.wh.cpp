@@ -278,29 +278,13 @@ static std::wstring ToLower(const std::wstring &str) {
   return result;
 }
 
-static bool IsStopWord(const std::wstring &word) {
-  static constexpr PCWSTR kStopWords[] = {
-      L"bluetooth", L"wireless", L"headphones", L"headphone",
-      L"speakers",  L"speaker",  L"headset",    L"earphone",
-      L"earphones", L"earbuds",  L"audio",      L"device",
-      L"hands",     L"free",     L"stereo",     L"le"};
-  for (PCWSTR sw : kStopWords) {
-    if (word == sw) {
-      return true;
-    }
-  }
-  return false;
-}
-
-static std::vector<std::wstring> GetTokens(const std::wstring &strLower,
-                                           bool filterStopWords = true) {
+static std::vector<std::wstring> GetTokens(const std::wstring &strLower) {
   std::vector<std::wstring> tokens;
   std::wstring cur;
   bool hasDigit = false;
   auto flushToken = [&]() {
     if (!cur.empty()) {
-      if ((cur.length() >= 2 || hasDigit) &&
-          (!filterStopWords || !IsStopWord(cur))) {
+      if (cur.length() >= 2 || hasDigit) {
         tokens.push_back(cur);
       }
       cur.clear();
@@ -371,7 +355,7 @@ static bool ShouldDeviceInitiateToggle(const std::wstring &deviceName,
 
   if (!deviceName.empty()) {
     std::wstring candidateLower = ToLower(deviceName);
-    std::vector<std::wstring> devTokens = GetTokens(candidateLower, true);
+    std::vector<std::wstring> devTokens = GetTokens(candidateLower);
 
     for (const auto &rule : rules) {
       if (CheckDeviceMatch(candidateLower, devTokens, rule)) {
@@ -565,7 +549,7 @@ static void LoadSettings() {
     DeviceFilterRule rule;
     rule.originalName = trimmedName;
     rule.nameLower = ToLower(trimmedName);
-    rule.tokens = GetTokens(rule.nameLower, false);
+    rule.tokens = GetTokens(rule.nameLower);
     rule.enabled = Wh_GetIntSetting(L"targetDevices[%d].enabled", i) != 0;
     localRules.push_back(std::move(rule));
   }
@@ -707,13 +691,13 @@ static void PerformBluetoothToggle(bool isManualTest = false,
 
   bool isInitial = g_isInitialRun.exchange(false);
 
-  if (!isManualTest && cfg.onlyOncePerSession &&
-      HasSessionMarker(L"toggledLogon")) {
-    if (isInitial || !cfg.toggleOnEveryDeviceConnection) {
-      Wh_Log(L"Bluetooth has already been toggled in this logon session. "
-             L"Skipping.");
-      return;
-    }
+  bool skipForSession = !isManualTest && cfg.onlyOncePerSession &&
+                        HasSessionMarker(L"toggledLogon") &&
+                        (isInitial || !cfg.toggleOnEveryDeviceConnection);
+  if (skipForSession && !Wh_GetIntValue(L"cycleInProgress", 0)) {
+    Wh_Log(L"Bluetooth has already been toggled in this logon session. "
+           L"Skipping.");
+    return;
   }
 
   if (isConnectionTriggered && cfg.delayAfterDeviceConnectedMs > 0) {
@@ -792,6 +776,12 @@ static void PerformBluetoothToggle(bool isManualTest = false,
       }
     }
     Wh_DeleteValue(L"cycleInProgress");
+  }
+
+  if (skipForSession) {
+    Wh_Log(L"Bluetooth has already been toggled in this logon session. "
+           L"Skipping.");
+    return;
   }
 
   if (!isManualTest && !HasSessionMarker(L"startupStateLogon")) {
@@ -994,6 +984,7 @@ static void PerformBluetoothToggle(bool isManualTest = false,
   }
 
   if (cycledRadios.empty()) {
+    Wh_DeleteValue(L"cycleInProgress");
     g_isCycling.store(false);
     Wh_Log(L"No active Bluetooth radios to cycle.");
     return;
@@ -1478,8 +1469,8 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFOW si{
-        .cb = sizeof(STARTUPINFOW),
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
     PROCESS_INFORMATION pi;
