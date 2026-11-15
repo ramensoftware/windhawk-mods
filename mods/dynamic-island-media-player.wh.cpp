@@ -3941,9 +3941,21 @@ LRESULT CALLBACK CaptureKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     // even if capture mode ended between its key-down and key-up messages.
     if (up && g_suppressedHotkeyKeys[vk]) {
         g_suppressedHotkeyKeys[vk] = false;
-        // The hook must remain installed until every swallowed key has been
-        // released. Ask its owner thread to remove it as soon as that is safe.
-        if (!g_captureHotkey.load()) RequestKeyboardHookUpdate();
+        if (g_captureHotkey.load()) {
+            // Low-level hooks report left/right-specific modifier VKs.
+            // Update the captured modifier state even though this release
+            // is swallowed and does not reach the normal capture switch.
+            switch (vk) {
+                case VK_LCONTROL: case VK_RCONTROL: g_capCtrl = false; break;
+                case VK_LMENU: case VK_RMENU: g_capAlt = false; break;
+                case VK_LSHIFT: case VK_RSHIFT: g_capShift = false; break;
+                case VK_LWIN: case VK_RWIN: g_capWin = false; break;
+            }
+        } else {
+            // The hook must remain installed until every swallowed key has
+            // been released. Ask its owner thread to remove it as soon as safe.
+            RequestKeyboardHookUpdate();
+        }
         return 1;
     }
 
@@ -4766,8 +4778,10 @@ BOOL CALLBACK CloseThreadModalDialogs(HWND window, LPARAM parameter) {
 LRESULT CALLBACK SettingsMenuOwnerProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     if (message == WM_CANCELMODE) {
         EndMenu();
-        EnumThreadWindows(GetCurrentThreadId(), CloseThreadModalDialogs,
-                          reinterpret_cast<LPARAM>(hwnd));
+        if (g_settingsMenuStopping.load()) {
+            EnumThreadWindows(GetCurrentThreadId(), CloseThreadModalDialogs,
+                              reinterpret_cast<LPARAM>(hwnd));
+        }
         return 0;
     }
     if (message == WM_TIMER && wParam == 1) {
