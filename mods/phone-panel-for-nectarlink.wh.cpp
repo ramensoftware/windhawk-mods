@@ -93,10 +93,13 @@ what this mod works with.
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <ctime>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -241,6 +244,9 @@ static DWORD HttpRequest(const ApiConfig& cfg, PCWSTR method, PCWSTR path, const
                                               WINHTTP_DEFAULT_ACCEPT_TYPES, 0)
                          : nullptr;
     if (req) {
+        // Never follow redirects: requests must only ever go to 127.0.0.1.
+        DWORD noRedirects = WINHTTP_DISABLE_REDIRECTS;
+        WinHttpSetOption(req, WINHTTP_OPTION_DISABLE_FEATURE, &noRedirects, sizeof(noRedirects));
         std::wstring headers = L"Authorization: Bearer " + cfg.token + L"\r\n";
         if (!body.empty()) headers += L"Content-Type: application/json\r\n";
         if (WinHttpSendRequest(req, headers.c_str(), (DWORD)-1L, body.empty() ? WINHTTP_NO_REQUEST_DATA : (LPVOID)body.data(),
@@ -306,6 +312,11 @@ ULONGLONG g_flashUntil = 0;
 std::atomic<bool> g_statusDirty{true};
 std::atomic<bool> g_takeOverAllowed{false};  // may we replace Phone Link's panel?
 
+static HANDLE g_stopEvent = nullptr;  // set when the mod is stopping
+static bool StopRequested() {
+    return g_stopEvent && WaitForSingleObject(g_stopEvent, 0) != WAIT_TIMEOUT;
+}
+
 static void Flash(const std::wstring& msg) {
     {
         std::lock_guard<std::mutex> lock(g_statusMutex);
@@ -359,7 +370,7 @@ static PhoneStatus FetchStatus() {
         }
     }
 
-    if (g_settings.recentCount > 0) {
+    if (g_settings.recentCount > 0 && !StopRequested()) {
         std::wstring path = L"/v1/timeline?limit=" + std::to_wstring(g_settings.recentCount);
         json::JsonObject t{nullptr};
         if (GetJson(cfg, path.c_str(), t) && IsType(t, L"items", json::JsonValueType::Array)) {
@@ -379,7 +390,7 @@ static PhoneStatus FetchStatus() {
         }
     }
 
-    if (g_settings.clipCount > 0) {
+    if (g_settings.clipCount > 0 && !StopRequested()) {
         json::JsonObject c{nullptr};
         if (GetJson(cfg, L"/v1/clipboard", c) && IsType(c, L"history", json::JsonValueType::Array)) {
             for (auto const& v : c.GetNamedArray(L"history")) {
@@ -482,28 +493,42 @@ static void RunTask(const std::wstring& task) {
     ShellOpen(ResolveExe(), task.empty() ? L"" : L"--task " + task);
 }
 
-std::atomic<int> g_actionsRunning{0};
+// API actions (Scan doc, Play on phone) are queued here and sent by the worker thread, so
+// there is no thread that can outlive the mod.
+static std::mutex g_actionMutex;
+static std::vector<std::pair<std::wstring, std::string>> g_pendingActions;
+static HANDLE g_actionEvent = nullptr;  // auto-reset; wakes the worker
 
-// POST to the Local API on a background thread; shows a short message on failure.
 static void PostAction(std::wstring path, std::string body) {
-    g_actionsRunning++;
-    std::thread([path, body] {
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    {
+        std::lock_guard<std::mutex> lock(g_actionMutex);
+        g_pendingActions.emplace_back(std::move(path), std::move(body));
+    }
+    if (g_actionEvent) SetEvent(g_actionEvent);
+}
+
+// Worker thread: POST to the Local API; shows a short message on failure.
+static void RunPendingActions() {
+    std::vector<std::pair<std::wstring, std::string>> actions;
+    {
+        std::lock_guard<std::mutex> lock(g_actionMutex);
+        actions.swap(g_pendingActions);
+    }
+    for (auto& [path, body] : actions) {
+        if (StopRequested()) return;
         ApiConfig cfg;
         std::wstring problem;
         if (!LoadApiConfig(cfg, problem)) {
             Flash(problem);
-        } else {
-            std::string out;
-            DWORD code = HttpRequest(cfg, L"POST", path.c_str(), body, out);
-            if (code == 0) Flash(L"NectarLink isn't running.");
-            else if (out.find("nothing_playing") != std::string::npos) Flash(L"Nothing is playing on this PC.");
-            else if (out.find("no_phone") != std::string::npos || code == 409) Flash(L"Your phone isn't connected.");
-            else if (code != 200) Flash(L"That didn't work (error " + std::to_wstring(code) + L").");
+            continue;
         }
-        winrt::uninit_apartment();
-        g_actionsRunning--;
-    }).detach();
+        std::string out;
+        DWORD code = HttpRequest(cfg, L"POST", path.c_str(), body, out);
+        if (code == 0) Flash(L"NectarLink isn't running.");
+        else if (out.find("nothing_playing") != std::string::npos) Flash(L"Nothing is playing on this PC.");
+        else if (out.find("no_phone") != std::string::npos || code == 409) Flash(L"Your phone isn't connected.");
+        else if (code != 200) Flash(L"That didn't work (error " + std::to_wstring(code) + L").");
+    }
 }
 
 // Files from the phone open directly only if they're a plain media or document type.
@@ -528,6 +553,10 @@ static bool IsSafeToOpen(const std::wstring& path) {
 static void OpenRecent(const RecentItem& r) {
     std::wstring target = r.target.substr(0, r.target.find(L'\n'));  // several paths are newline-separated
     while (!target.empty() && (target.back() == L'\r' || target.back() == L' ')) target.pop_back();
+    if (target.rfind(L"\\\\", 0) == 0) {  // network share or device path: never touch it from Start
+        RunTask(L"open-timeline");
+        return;
+    }
     if (target.rfind(L"http://", 0) == 0 || target.rfind(L"https://", 0) == 0) {
         ShellOpen(target);
         return;
@@ -581,7 +610,7 @@ static const wchar_t kNs[] =
     L" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"";
 static const wchar_t kIconFont[] = L"Segoe Fluent Icons,Segoe MDL2 Assets";
 
-static std::wstring BuildContentXaml(bool withNs) {
+static std::wstring BuildPanelXaml() {
     std::wstring font = kIconFont;
     std::wstring tiles;
     for (int i = 0; i < (int)ARRAYSIZE(kActions); i++) {
@@ -595,7 +624,7 @@ static std::wstring BuildContentXaml(bool withNs) {
                  L"TextTrimming=\"CharacterEllipsis\"/>"
                  L"</StackPanel></Button>";
     }
-    return L"<Grid" + std::wstring(withNs ? kNs : L"") + LR"xaml( Background="Transparent">
+    return L"<Grid" + std::wstring(kNs) + LR"xaml( Background="Transparent">
   <Grid.RowDefinitions>
     <RowDefinition Height="*"/>
     <RowDefinition Height="Auto"/>
@@ -662,10 +691,6 @@ static std::wstring BuildContentXaml(bool withNs) {
 </Grid>)xaml";
 }
 
-static std::wstring BuildPanelXaml() {
-    return BuildContentXaml(true);
-}
-
 // One row of Recent (tile with icon) or Clipboard (small icon, button background).
 static std::wstring ItemXaml(bool clip) {
     std::wstring font = kIconFont;
@@ -701,6 +726,9 @@ struct UiState {
     wux::FrameworkElement root{nullptr};
     winrt::weak_ref<wuxc::Grid> companionHost;
     winrt::weak_ref<wux::FrameworkElement> hiddenContent;
+    wux::Visibility hiddenPrev = wux::Visibility::Visible;  // what hiddenContent was before we collapsed it
+    ULONGLONG nextSearch = 0;   // don't look for Start's phone panel again before this tick count
+    DWORD searchDelay = 500;    // grows after each miss, up to 30 s
     wuxc::TextBlock nameText{nullptr}, statusText{nullptr}, hintText{nullptr}, battText{nullptr};
     wuxc::FontIcon battIcon{nullptr}, phoneIcon{nullptr};
     wuxc::StackPanel recentSection{nullptr}, recentList{nullptr}, clipSection{nullptr}, clipList{nullptr};
@@ -754,11 +782,6 @@ static wchar_t KindGlyph(const std::wstring& kind) {
     return 0xE8EA;
 }
 
-// Neutral tile background on purpose; the accent color goes on the icons and the Open button.
-static winrt::Windows::UI::Color KindTint(const std::wstring&) {
-    return {0x40, 0x80, 0x80, 0x80};
-}
-
 static wuxc::Button MakeItem(bool clip, wchar_t glyph, const std::wstring& title, const std::wstring& detail) {
     auto b = wux::Markup::XamlReader::Load(ItemXaml(clip)).as<wuxc::Button>();
     wchar_t g[2] = {glyph, 0};
@@ -800,7 +823,9 @@ static void RebuildRecent(const PhoneStatus& s) {
     for (size_t i = 0; i < s.recent.size(); i++) {
         auto& r = s.recent[i];
         auto b = MakeItem(false, KindGlyph(r.kind), rows[i].first, rows[i].second);
-        Named<wuxc::Border>(b, L"Tile").Background(wuxm::SolidColorBrush(KindTint(r.kind)));
+        // Neutral tile background on purpose; the accent color goes on the icons and the Open button.
+        Named<wuxc::Border>(b, L"Tile").Background(
+            wuxm::SolidColorBrush(winrt::Windows::UI::Color{0x40, 0x80, 0x80, 0x80}));
         RecentItem copy = r;
         OnClick(b, [copy] { OpenRecent(copy); });
         g_ui->recentList.Children().Append(b);
@@ -930,8 +955,14 @@ static void DetachRoot() {
 
 static void RestorePhoneLink() {
     if (!g_ui) return;
-    if (auto mc = g_ui->hiddenContent.get()) mc.Visibility(wux::Visibility::Visible);
+    if (auto mc = g_ui->hiddenContent.get()) mc.Visibility(g_ui->hiddenPrev);
     g_ui->hiddenContent = {};
+}
+
+// Remember Phone Link's content and what its visibility was, so it can be put back exactly.
+static void TrackPhoneLinkContent(wux::FrameworkElement const& mc) {
+    g_ui->hiddenContent = winrt::make_weak(mc);
+    g_ui->hiddenPrev = mc.Visibility();
 }
 
 // Put the panel inside Start's phone panel, in place of Phone Link's content.
@@ -948,6 +979,9 @@ static void TickPanel() {
     auto host = g_ui->companionHost.get();
     if (!host || !host.IsLoaded()) {
         host = nullptr;
+        // Searching walks Start's whole visual tree, so back off after each miss.
+        ULONGLONG now = GetTickCount64();
+        if (now < g_ui->nextSearch) return;
         auto window = wux::Window::Current();
         auto content = window ? window.Content() : nullptr;
         wux::FrameworkElement companion{nullptr};
@@ -957,6 +991,8 @@ static void TickPanel() {
         }
         if (companion) host = FindByName(companion, L"CompanionRoot", 0).try_as<wuxc::Grid>();
         if (!host) {
+            g_ui->searchDelay = std::min<DWORD>(g_ui->searchDelay * 2, 30000);
+            g_ui->nextSearch = now + g_ui->searchDelay;
             if (!g_ui->dumped && content) {
                 g_ui->dumped = true;
                 Wh_Log(L"Start's phone panel (RightCompanion) not found yet. Is \"Show mobile device in Start\" on? "
@@ -966,6 +1002,7 @@ static void TickPanel() {
             }
             return;
         }
+        g_ui->searchDelay = 500;
         RestorePhoneLink();
         DetachRoot();
         host.Children().Append(g_ui->root);
@@ -973,7 +1010,7 @@ static void TickPanel() {
         wuxc::Grid::SetColumnSpan(g_ui->root, 99);
         g_ui->root.Margin(wux::Thickness{1, 1, 1, 1});
         g_ui->companionHost = winrt::make_weak(host);
-        if (auto mc = FindByName(companion, L"MainContent", 0)) g_ui->hiddenContent = winrt::make_weak(mc);
+        if (auto mc = FindByName(companion, L"MainContent", 0)) TrackPhoneLinkContent(mc);
         Wh_Log(L"Attached to Start's phone panel");
     }
     // Start can recreate Phone Link's MainContent while our host stays loaded. Our root is
@@ -981,7 +1018,7 @@ static void TickPanel() {
     auto mc = g_ui->hiddenContent.get();
     if (!mc) {
         mc = FindByName(host, L"MainContent", 0);
-        if (mc) g_ui->hiddenContent = winrt::make_weak(mc);
+        if (mc) TrackPhoneLinkContent(mc);
     }
     if (mc && mc.Visibility() != wux::Visibility::Collapsed) mc.Visibility(wux::Visibility::Collapsed);
 }
@@ -1073,8 +1110,9 @@ static void WINAPI UninitUi(PVOID) {
 // Worker: wait for Start's window, create the panel, then poll NectarLink
 // ---------------------------------------------------------------------------
 
-static HANDLE g_stopEvent = nullptr;
-static std::thread g_worker;
+// The worker is an optional that is never destroyed at process exit: Windhawk doesn't call
+// Wh_ModUninit when Start itself exits, and destroying a joinable std::thread would abort.
+[[clang::no_destroy]] static std::optional<std::thread> g_worker;
 
 static void Worker() {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
@@ -1089,7 +1127,7 @@ static void Worker() {
         if (WaitForSingleObject(g_stopEvent, 1000) != WAIT_TIMEOUT) goto done;
     }
 
-    do {
+    while (true) {
         PhoneStatus s;
         try {
             s = FetchStatus();
@@ -1105,7 +1143,13 @@ static void Worker() {
         bool installed = GetFileAttributesW(ResolveExe().c_str()) != INVALID_FILE_ATTRIBUTES;
         bool unpaired = g_status.apiOk && !g_status.hasDevice;
         g_takeOverAllowed = g_settings.takeOverAlways || (installed && !unpaired);
-    } while (WaitForSingleObject(g_stopEvent, g_settings.refreshSeconds * 1000) == WAIT_TIMEOUT);
+
+        // Sleep until the next refresh; wake early to stop, or to send a queued action.
+        HANDLE events[] = {g_stopEvent, g_actionEvent};
+        DWORD r = WaitForMultipleObjects(2, events, FALSE, g_settings.refreshSeconds * 1000);
+        if (r == WAIT_OBJECT_0) break;
+        if (r == WAIT_OBJECT_0 + 1) RunPendingActions();
+    }
 
 done:
     winrt::uninit_apartment();
@@ -1113,15 +1157,19 @@ done:
 
 static void StartMod() {
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_worker = std::thread(Worker);
+    g_actionEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_worker.emplace(Worker);
 }
 
 static void StopMod() {
     if (g_stopEvent) SetEvent(g_stopEvent);
-    if (g_worker.joinable()) g_worker.join();
+    if (g_worker && g_worker->joinable()) g_worker->join();
+    g_worker.reset();
     if (g_coreWnd && IsWindow(g_coreWnd)) RunFromWindowThread(g_coreWnd, UninitUi, nullptr);
-    for (int i = 0; i < 50 && g_actionsRunning > 0; i++) Sleep(100);  // let running API calls finish
+    if (g_actionEvent) { CloseHandle(g_actionEvent); g_actionEvent = nullptr; }
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
+    std::lock_guard<std::mutex> lock(g_actionMutex);
+    g_pendingActions.clear();
 }
 
 BOOL Wh_ModInit() {
