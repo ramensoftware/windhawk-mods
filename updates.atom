@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-15T20:00:27.000Z</updated>
+    <updated>2026-11-15T22:03:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar System Utilities 1.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-system-utilities#ab22480f9d59785b176354b0441c4b4da4945d74</id>
+        <link href="https://windhawk.net/mods/taskbar-system-utilities"/>
+        <updated>2026-11-15T22:03:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Custom Menu Items</strong>: Added support for launching custom programs, files, folders, scripts, URLs, <code>ms-settings:</code> pages, and <code>shell:</code> locations directly from the Windows 11 taskbar context menu (includes <strong>Terminal</strong> and <strong>Control Panel</strong> by default).</li>
+<li><strong>Rich Item Customization</strong>: Each custom entry supports environment variable expansion (e.g., <code>%USERPROFILE%</code>), optional command-line arguments, Segoe Fluent Icons hex glyphs or emojis, <strong>Run as administrator</strong> (UAC elevation), <strong>Hide window</strong>, separator lines (<code>-</code>), and disabled section headings (items without a command).</li>
+<li><strong>Flexible Menu Layout &amp; Submenus</strong>: Added options to place custom items below built-in items (<code>bottom</code>), above them (<code>top</code>), or inside the <strong>System Utilities</strong> submenu (<code>submenu</code>), group custom items into their own dedicated submenu with a custom name and icon, and choose top or bottom placement for System Utilities.</li>
+<li><strong>Improved Unload Lifecycle</strong>: Added weak-reference tracking for injected menu items and click handlers to cleanly detach and hide elements when the mod is unloaded or updated.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Marco Petrucci</name>
+            <uri>https://github.com/marco00petrucci</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Background Dimmer 1.1.1]]></title>
         <id>https://windhawk.net/mods/background-dimmer#4448165feff7f0a5beb2b4865643312557e0431d</id>
@@ -461,27 +478,6 @@ on disk.</li>
         <author>
             <name>DavidHiFi</name>
             <uri>https://github.com/DavidHiFi</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Chrome Context Menu Items 1.1.0]]></title>
-        <id>https://windhawk.net/mods/chrome-context-menu-items#4f5de75424636c368c4578baee30b02f9487e6c4</id>
-        <link href="https://windhawk.net/mods/chrome-context-menu-items"/>
-        <updated>2026-11-14T18:04:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add {url}, {page}, {title}, {selection}, {src} and {frame} placeholders for custom commands. Values are URL-encoded inside URLs and escaped for the command line in arguments.</li>
-<li>Show entries that use {url}, {selection} or {src} only when the right-clicked item provides a value.</li>
-<li>Allow placeholders in the program only inside a URL, or as the whole program for http and https links, and don't run entries that pass placeholders to batch files or shells.</li>
-<li>Add a per-item &quot;Show only on pages&quot; setting with wildcard address patterns.</li>
-<li>Add a shortcut, Ctrl+Shift by default and configurable, that shows Chrome's original page menu while held (on by default).</li>
-<li>Add a toggle to hide Back, Forward and Reload, and opt-in toggles for Search Google for, Copy link to highlight, Open link in new / incognito window, Open link in another profile, Picture in picture, Loop / Show controls, Emoji, Spell check / Writing direction, Password manager / Autofill and Inspect.</li>
-<li>Anti-alias rounded menu item backgrounds.</li>
-<li>Check the layout of Chrome's context menu data on every menu, and turn off the features that depend on it if the layout doesn't match.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DanRotaru</name>
-            <uri>https://github.com/DanRotaru</uri>
         </author>
     </entry>
 </feed>

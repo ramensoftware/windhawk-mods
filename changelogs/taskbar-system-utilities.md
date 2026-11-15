@@ -1,3 +1,10 @@
+## 1.3 ([Nov 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ab22480f9d59785b176354b0441c4b4da4945d74/mods/taskbar-system-utilities.wh.cpp))
+
+- **Custom Menu Items**: Added support for launching custom programs, files, folders, scripts, URLs, `ms-settings:` pages, and `shell:` locations directly from the Windows 11 taskbar context menu (includes **Terminal** and **Control Panel** by default).
+- **Rich Item Customization**: Each custom entry supports environment variable expansion (e.g., `%USERPROFILE%`), optional command-line arguments, Segoe Fluent Icons hex glyphs or emojis, **Run as administrator** (UAC elevation), **Hide window**, separator lines (`-`), and disabled section headings (items without a command).
+- **Flexible Menu Layout & Submenus**: Added options to place custom items below built-in items (`bottom`), above them (`top`), or inside the **System Utilities** submenu (`submenu`), group custom items into their own dedicated submenu with a custom name and icon, and choose top or bottom placement for System Utilities.
+- **Improved Unload Lifecycle**: Added weak-reference tracking for injected menu items and click handlers to cleanly detach and hide elements when the mod is unloaded or updated.
+
 ## 1.2 ([Nov 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/15d44b0108ad149dc9432402390eff99e05a1950/mods/taskbar-system-utilities.wh.cpp))
 
 * Added support for grouping taskbar utilities into a customizable dropdown submenu (`MenuFlyoutSubItem`) to reduce root menu clutter.
