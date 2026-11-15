@@ -4,7 +4,7 @@
 // @name:zh-CN      悬浮任务栏
 // @description     Turns the Windows 11 taskbar into a floating rounded bar with configurable width, height, spacing, corners, colors and gradients. Blank areas click through; tray menus and Quick Settings follow the bar.
 // @description:zh-CN 将 Windows 11 任务栏变为独立的悬浮圆角条，可调整长度、区域高度、悬浮间距、圆角与背景颜色/渐变；空白区域点击穿透，托盘菜单和快速设置面板对齐悬浮条右端。
-// @version         2.1.13
+// @version         2.1.14
 // @author          chaochenzhudian
 // @github          https://github.com/chaochenzhudian
 // @include         explorer.exe
@@ -104,7 +104,7 @@ enable setting.
     $name:zh-CN: 任务栏圆角半径
     $description: Corner radius of the floating bar in physical pixels.
     $description:zh-CN: 悬浮条的圆角半径，单位为物理像素。
-  - hoverCornerRadius: 20
+  - hoverCornerRadius: 10
     $name: Hover highlight corner radius
     $name:zh-CN: 任务栏待选框圆角半径
     $description: >-
@@ -263,8 +263,8 @@ std::atomic<int> g_settingTaskbarWidth{0};
 std::atomic<int> g_settingTaskbarAreaHeight{0};
 std::atomic<int> g_settingFloatMargin{0};
 std::atomic<int> g_settingCornerRadius{0};
-std::atomic<int> g_settingHoverCornerRadius{20};
-std::atomic<double> g_hoverRadiusDip{16.0};
+std::atomic<int> g_settingHoverCornerRadius{10};
+std::atomic<double> g_hoverRadiusDip{8.0};
 std::atomic<double> g_systemTaskbarContentHeightDip{0.0};
 std::mutex g_settingsMutex;
 BackgroundSettings g_backgroundSettings;
@@ -309,6 +309,7 @@ using RefCountDecref_t = void(WINAPI*)(void* pThis);
 RefCountDecref_t RefCountDecref_Original = nullptr;
 
 enum class HoverShapeKind {
+    Control,
     Border,
     Grid,
     ContentPresenter,
@@ -855,6 +856,11 @@ CornerRadius GetHoverShapeRadius(FrameworkElement const& element,
                                  HoverShapeKind kind) {
     try {
         switch (kind) {
+        case HoverShapeKind::Control:
+            if (auto control = element.try_as<Control>()) {
+                return control.CornerRadius();
+            }
+            break;
         case HoverShapeKind::Border:
             if (auto border = element.try_as<Border>()) {
                 return border.CornerRadius();
@@ -881,6 +887,11 @@ void SetHoverShapeRadius(FrameworkElement const& element,
                          CornerRadius radius) {
     try {
         switch (kind) {
+        case HoverShapeKind::Control:
+            if (auto control = element.try_as<Control>()) {
+                control.CornerRadius(radius);
+            }
+            break;
         case HoverShapeKind::Border:
             if (auto border = element.try_as<Border>()) {
                 border.CornerRadius(radius);
@@ -1072,6 +1083,8 @@ void RestoreTaskbarToolTipCornerRadiiOnCurrentThread() {
 
 DependencyProperty GetHoverShapeRadiusProperty(HoverShapeKind kind) {
     switch (kind) {
+    case HoverShapeKind::Control:
+        return Control::CornerRadiusProperty();
     case HoverShapeKind::Border:
         return Border::CornerRadiusProperty();
     case HoverShapeKind::Grid:
@@ -1230,6 +1243,28 @@ void SaveAndApplyTrayHoverBoxLayout(SavedHoverShape& saved,
 bool IsHoverBackgroundElement(FrameworkElement const& element) {
     return ElementNameEquals(element, L"BackgroundElement") ||
            ElementNameEquals(element, L"BackgroundBorder");
+}
+
+// Some taskbar and tray highlights expose CornerRadius directly on their
+// owning Control instead of using a named BackgroundElement/BackgroundBorder.
+// Treat both representations as the same visual card so they cannot drift
+// apart when Explorer changes its template.
+bool IsDirectHoverShapeHost(FrameworkElement const& element) {
+    try {
+        auto className = winrt::get_class_name(element);
+        return ClassNameEquals(className, L"SystemTray.ChevronIconView") ||
+               ClassNameEquals(className, L"SystemTray.IconView") ||
+               ClassNameEquals(className, L"SystemTray.NotifyIconView") ||
+               ClassNameEquals(className, L"SystemTray.OmniButton") ||
+               ClassNameEquals(className, L"SystemTray.SystemTrayFrame");
+    } catch (...) {
+        return false;
+    }
+}
+
+bool IsHoverShapeTarget(FrameworkElement const& element) {
+    return IsHoverBackgroundElement(element) ||
+           IsDirectHoverShapeHost(element);
 }
 
 void HideMultiWindowHighlight(AppliedTaskbarState& record,
@@ -1811,10 +1846,14 @@ void ApplyHoverShapesRecursive(FrameworkElement const& root,
         return;
     }
 
-    if (IsHoverBackgroundElement(root)) {
+    if (IsHoverShapeTarget(root)) {
+        const bool namedBackground = IsHoverBackgroundElement(root);
         HoverShapeKind kind;
         bool supported = false;
-        if (root.try_as<Border>()) {
+        if (root.try_as<Control>()) {
+            kind = HoverShapeKind::Control;
+            supported = true;
+        } else if (root.try_as<Border>()) {
             kind = HoverShapeKind::Border;
             supported = true;
         } else if (root.try_as<Grid>()) {
@@ -1826,7 +1865,7 @@ void ApplyHoverShapesRecursive(FrameworkElement const& root,
         }
 
         if (supported) {
-            if (!trayContext) {
+            if (namedBackground && !trayContext) {
                 // The left taskbar row keeps its existing behavior. Its
                 // auto-sized highlight must not be forced visible.
                 SaveAndApplyVerticalLayout(
@@ -1883,7 +1922,7 @@ void ApplyHoverShapesRecursive(FrameworkElement const& root,
                 savedShape = &record.savedHoverShapes.back();
             }
 
-            if (trayContext) {
+            if (namedBackground && trayContext) {
                 double hoverHeight =
                     std::max(1.0,
                              GetSystemTaskbarContentHeightDip() - 14.0);
