@@ -22,7 +22,7 @@ A sleek, fluent **Dynamic Island** experience for Windows 10 & 11, crafted from 
 
 The idle pill shows a circular battery ring, a 12-hour digital clock, and an animated audio visualizer during playback.
 
-![Ansa Dynamic Island: media control](https://raw.githubusercontent.com/dev-apox/ansa-Dynamic-Island/main/imgs/mediacontrol.jpeg)
+![Ansa Dynamic Island: media control](https://raw.githubusercontent.com/dev-apox/ansa-Dynamic-Island/main/imgs/mediacontrol.jpg)
 
 ---
 
