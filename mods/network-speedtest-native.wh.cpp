@@ -197,7 +197,7 @@ struct UiStrings {
     PCWSTR start;
     PCWSTR stop;
     PCWSTR repeat;
-    PCWSTR chartTitle;
+    PCWSTR resultsTitle;
     PCWSTR failedTitle;
     PCWSTR failedHint;
     PCWSTR retry;
@@ -215,7 +215,7 @@ static const UiStrings kStringsIt = {
     L"Pronto", L"Avvio", L"Connessione", L"Completato", L"Annullato",
     L"Arresto\x2026", L"Errore", L"Ping", L"Download", L"Upload", L"Jitter",
     L"Dati usati", L"Copia", L"Copiato", L"Avvia", L"Interrompi", L"Ripeti",
-    L"Andamento del test", L"Test non riuscito",
+    L"Risultati del test", L"Test non riuscito",
     L"Riprova tra qualche istante.", L"Riprova", L"Chiudi", L"Server",
     L"Impossibile collegarsi al server.",
     L"Impossibile misurare il ping: richieste fallite.",
@@ -229,7 +229,7 @@ static const UiStrings kStringsEn = {
     L"Ready", L"Starting", L"Connecting", L"Completed", L"Canceled",
     L"Stopping\x2026", L"Error", L"Ping", L"Download", L"Upload", L"Jitter",
     L"Data used", L"Copy", L"Copied", L"Start", L"Stop", L"Repeat",
-    L"Test progress", L"Test failed",
+    L"Test results", L"Test failed",
     L"Try again in a moment.", L"Retry", L"Close", L"Server",
     L"Could not connect to the server.",
     L"Could not measure the ping: requests failed.",
@@ -801,9 +801,69 @@ static PIP_ADAPTER_ADDRESSES GetAdapterAddressesList(
     return nullptr;
 }
 
+// Profile name for the footline: on Wi-Fi this is the SSID, on Ethernet the
+// user-visible connection name - what the Windows network flyout shows. The
+// Network List Manager knows it; the match to the adapter is by interface
+// GUID. An empty result means the caller falls back to the adapter
+// description.
+static std::wstring NetworkProfileName(PIP_ADAPTER_ADDRESSES adapter) {
+    INetworkListManager* manager = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_NetworkListManager, nullptr,
+                                  CLSCTX_ALL, IID_PPV_ARGS(&manager));
+    if (FAILED(hr)) {
+        return L"";
+    }
+
+    std::wstring name;
+    // IP_ADAPTER_ADDRESSES::AdapterName is the interface GUID as an ANSI
+    // string, e.g. "{B49A9A0D-...}".
+    wchar_t adapterName[64] = {};
+    GUID adapterGuid = {};
+    if (adapter->AdapterName &&
+        MultiByteToWideChar(CP_ACP, 0, adapter->AdapterName, -1, adapterName,
+                            64) > 0 &&
+        SUCCEEDED(CLSIDFromString(adapterName, &adapterGuid))) {
+        IEnumNetworkConnections* enumerator = nullptr;
+        if (SUCCEEDED(manager->GetNetworkConnections(&enumerator))) {
+            INetworkConnection* connection = nullptr;
+            while (enumerator->Next(1, &connection, nullptr) == S_OK) {
+                VARIANT_BOOL connected = VARIANT_FALSE;
+                GUID id = {};
+                if (connection->get_IsConnected(&connected) == S_OK &&
+                    connected != VARIANT_FALSE &&
+                    connection->GetAdapterId(&id) == S_OK &&
+                    IsEqualGUID(id, adapterGuid)) {
+                    INetwork* network = nullptr;
+                    BSTR connectionName = nullptr;
+                    if (connection->GetNetwork(&network) == S_OK && network) {
+                        if (network->GetName(&connectionName) == S_OK &&
+                            connectionName) {
+                            name = connectionName;
+                        }
+                        if (connectionName) {
+                            SysFreeString(connectionName);
+                        }
+                        network->Release();
+                    }
+                }
+                connection->Release();
+                if (!name.empty()) {
+                    break;
+                }
+            }
+            enumerator->Release();
+        }
+    }
+    manager->Release();
+    return name;
+}
+
 static NetworkInfo NetworkInfoFromAdapter(PIP_ADAPTER_ADDRESSES adapter) {
     NetworkInfo info;
-    info.name = adapter->Description ? adapter->Description : L"";
+    info.name = NetworkProfileName(adapter);
+    if (info.name.empty()) {
+        info.name = adapter->Description ? adapter->Description : L"";
+    }
     info.glyph =
         adapter->IfType == IF_TYPE_IEEE80211 ? L"\xE701" : L"\xE839";
     return info;
@@ -2093,12 +2153,20 @@ static void StrokeRounded(D2D1_RECT_F rect, float radius, D2D1_COLOR_F color,
     brush->Release();
 }
 
-// WinUI focus visual: a 2 px ring around the control, offset by 1 px so it
-// never sits on the control's own border.
+// WinUI focus visual: a 2 px neutral ring around the control, offset by 1 px
+// so it never sits on the control's own border, plus a 1 px inner stroke in
+// the opposite tone, as in the system focus visuals. The ring is deliberately
+// neutral (light-on-dark / dark-on-light), not the accent color.
 static void DrawFocusRing(D2D1_RECT_F rect, float radius, float alpha) {
-    StrokeRounded(Rect(rect.left - 3.0f, rect.top - 3.0f, rect.right + 3.0f,
-                       rect.bottom + 3.0f),
-                  radius + 3.0f, WithAlpha(g_palette.accent, alpha), 2.0f);
+    D2D1_RECT_F outer = Rect(rect.left - 3.0f, rect.top - 3.0f,
+                             rect.right + 3.0f, rect.bottom + 3.0f);
+    D2D1_COLOR_F ring = WithAlpha(g_palette.text, alpha);
+    D2D1_COLOR_F inner = g_systemLight ? Col(0xFFFFFF, alpha)
+                                       : Col(0x000000, alpha);
+    StrokeRounded(outer, radius + 3.0f, ring, 2.0f);
+    StrokeRounded(Rect(outer.left + 1.0f, outer.top + 1.0f, outer.right - 1.0f,
+                       outer.bottom - 1.0f),
+                  radius + 2.0f, inner, 1.0f);
 }
 
 static void FillRect(D2D1_RECT_F rect, D2D1_COLOR_F color) {
@@ -2305,8 +2373,9 @@ static float BaselineOffset(float size, int family = 0) {
 }
 
 // Fits a single line of text into maxWidth, appending an ellipsis only when the
-// full string does not fit: adapter names can be much longer than the footline
-// and cutting them at a fixed character count would hide part of the model.
+// full string does not fit: SSIDs and adapter descriptions can be longer than
+// the footline, and cutting them at a fixed character count would hide part of
+// the name.
 static std::wstring Ellipsize(const std::wstring& text, float maxWidth, float size,
                               DWRITE_FONT_WEIGHT weight, int family = 0) {
     if (text.empty() || MeasureWidth(text, size, weight, family) <= maxWidth) {
@@ -2905,28 +2974,30 @@ static void DrawResults(float alpha, const TestState& state) {
     FillRounded(kCardRect, 8, WithAlpha(g_palette.cardFill, alpha));
     StrokeRounded(kCardRect, 8, WithAlpha(g_palette.cardStroke, alpha));
 
-    Text(g_str->chartTitle, Rect(36, 62, 260, 82), 13,
+    Text(g_str->resultsTitle, Rect(36, 62, 260, 82), 13,
          WithAlpha(g_palette.text, alpha), DWRITE_FONT_WEIGHT_SEMI_BOLD);
     DrawCopyButton(alpha);
 
     DrawChart(state.samples, Rect(36, 94, 364, 198), alpha);
 
+    // Caption row: server and time on the left, data used on the right.
     std::wstring caption = std::wstring(g_str->server) + L" " + state.server + L" \x00B7 " + FormatClock(state.when);
-    Text(caption, Rect(36, 204, 364, 220), 11, WithAlpha(g_palette.secondary, alpha));
-
-    DrawMetricLabel(36, 226, L"\xE896", g_palette.download, g_str->download, alpha);
-    DrawMetricLabel(216, 226, L"\xE898", g_palette.upload, g_str->upload, alpha);
-    DrawValue(36, 242, true, state.download, L"Mbps", 30, alpha);
-    DrawValue(216, 242, true, state.upload, L"Mbps", 30, alpha);
+    Text(caption, Rect(36, 214, 248, 230), 11, WithAlpha(g_palette.secondary, alpha));
 
     wchar_t dataText[64];
     swprintf(dataText, 64, L"%s: %.0f MB",
              g_str->dataUsed, state.dataUsed / 1'000'000.0);
-    Text(dataText, Rect(36, 294, 364, 312), 11,
-         WithAlpha(g_palette.secondary, alpha));
+    Text(std::wstring(dataText), Rect(248, 214, 364, 230), 11,
+         WithAlpha(g_palette.secondary, alpha), DWRITE_FONT_WEIGHT_NORMAL,
+         DWRITE_TEXT_ALIGNMENT_TRAILING);
 
-    DrawLatency(36, 320, g_str->ping, state.hasPing, state.ping, alpha);
-    DrawLatency(216, 320, g_str->jitter, state.hasJitter, state.jitter, alpha);
+    DrawMetricLabel(36, 236, L"\xE896", g_palette.download, g_str->download, alpha);
+    DrawMetricLabel(216, 236, L"\xE898", g_palette.upload, g_str->upload, alpha);
+    DrawValue(36, 252, true, state.download, L"Mbps", 30, alpha);
+    DrawValue(216, 252, true, state.upload, L"Mbps", 30, alpha);
+
+    DrawLatency(36, 310, g_str->ping, state.hasPing, state.ping, alpha);
+    DrawLatency(216, 310, g_str->jitter, state.hasJitter, state.jitter, alpha);
 }
 
 static void DrawError(float alpha, const TestState& state) {
