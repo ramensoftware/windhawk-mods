@@ -48,7 +48,7 @@ Live window previews follow the original Flip3D carousel layout and timing.
 
 ## Mod disclosure
 
-- Unlike to the other alr existing mods on the windhawk store, this mod instead of recreating/replicating Flip3D, this is a reimplementation of the original Windows Vista Flip3D but using DirectComposition as its base.
+- Unlike the existing Flip 3D mods in the Windhawk catalog, this mod is a reimplementation of the original Windows Vista Flip 3D, built on DirectComposition.
 
 */
 // ==/WindhawkModReadme==
@@ -7703,6 +7703,8 @@ bool InitializeModuleGlobals()
 // * WhTool_ModUninit
 //
 // Currently, other callbacks are not supported.
+//
+// This mod also targets explorer.exe and rundll32.exe: there, each callback calls the explorer and rundll32 part instead.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
