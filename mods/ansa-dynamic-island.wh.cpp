@@ -14,7 +14,7 @@
 /*
 # Ansa Dynamic Island
 
-A sleek, fluent **Dynamic Island** experience for Windows 10 & 11, crafted from scratch by **dev-apox**. Built with native GDI+ vector rendering, damped spring physics, and deep Windows integration.
+A sleek, fluent **Dynamic Island** experience for Windows 10 & 11, built as an enhanced adaptation featuring custom fluid animations for volume, brightness, and Wi-Fi.
 
 - **GitHub Repository:** [github.com/dev-apox/ansa-dynamic-island](https://github.com/dev-apox/ansa-dynamic-island)
 - **Releases & Changelog:** [View Releases](https://github.com/dev-apox/ansa-dynamic-island/releases)
@@ -28,8 +28,9 @@ The idle pill shows a circular battery ring, a 12-hour digital clock, and an ani
 
 ## ✨ Features
 
-### 🎵 Live Media Control & One UI 9.0 Wavy Bar
-Real-time album artwork extraction, adaptive ambient glow matching the cover art, playback controls, and an interactive One UI 9.0 wavy progress bar with click-to-seek.
+### 🎵 Live Media Control & Wavy Bar
+Real-time album artwork extraction, adaptive ambient glow matching the cover art, playback controls, and an interactive wavy progress bar with click-to-seek.
+
 ### 📁 ShelfBook (Drag & Drop File Staging)
 Drop files or folders directly onto the island to stage them with color-coded type badges, and drag them out anytime into any browser, chat, or Explorer window.
 
@@ -39,10 +40,15 @@ Quick-glance date card paired with an interactive 7-day strip right at the top o
 ### ✅ Inline Things To Do
 Type, check off, and clear personal tasks directly inside the island without opening any external app.
 
-### ⚡ Additional Capabilities
-- **Adaptive Hardware HUDs:** Instant visual feedback for **Volume & Mute**, **Screen Brightness** (with scroll-wheel adjustment), **Battery & Charging**, **Bluetooth** connect/disconnect events, and **Wi-Fi** status.
+### ⚡ Unique Custom Animations & HUDs
+- **Volume Animation & HUD:** Custom smooth transition and visual feedback for Volume & Mute control.
+- **Brightness Animation & HUD:** Fluid screen brightness adjustment with custom scroll-wheel feedback.
+- **Wi-Fi Status HUD:** Dedicated animation and status indicator for wireless network connections.
+
 - **Toast Notification Interceptor:** Captures Windows toast banners and renders them inside the island with a pulsing accent glow.
+
 - **Fluid Spring Physics Engine:** Smooth, interruptible spring animations with selectable *Normal* and *Bouncy* presets and micro-recoil feedback.
+
 - **Smart Fullscreen Auto-Hide:** Automatically hides when games, videos, or fullscreen apps are active.
 
 ---
@@ -71,7 +77,6 @@ Customize the idle layout (Ring + Clock, Ring Only, Clock Only, or Minimal), med
 
 ### 🌈 Accent Theme
 Pick your live system accent color from six curated presets: iOS Blue, Indigo, Emerald, Amber, Crimson, and Pure Silver.
-
 ---
 
 ## 👤 Author
