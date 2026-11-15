@@ -62,8 +62,6 @@ https://windhawk.net/mods/taskbar-tray-system-icon-tweaks
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.UI.Core.h>
-#include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -581,7 +579,9 @@ void ApplySettings() {
         [](void* pParam) {
             ApplySettingsParam& param = *(ApplySettingsParam*)pParam;
 
-            g_autoRevokerList->clear();
+            if (g_autoRevokerList) {
+                g_autoRevokerList->clear();
+            }
 
             if (auto mainStackInnerTextBlock =
                     g_mainStackInnerTextBlock.get()) {
@@ -607,7 +607,7 @@ void ApplySettings() {
 }
 
 bool HookSystemTraySymbols(HMODULE module) {
-    // SystemTray.dll, Taskbar.View.dll
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
@@ -740,6 +740,10 @@ HANDLE g_hMonitorThread = NULL;
 
 constexpr DWORD kFallbackRescanMs = 30000;
 
+#ifndef AUDCLNT_S_NO_SINGLE_PROCESS
+#define AUDCLNT_S_NO_SINGLE_PROCESS ((HRESULT)0x0889000D)
+#endif
+
 void SetHideMicrophoneIcon(bool hide) {
     if (g_unloading) {
         return;
@@ -859,13 +863,14 @@ class CaptureSessionWatcher {
     }
 
     // Register before reading state, so no change in between is missed.
-    void Rescan(std::vector<std::wstring>& activeApps) {
+    // Returns false if the capture sessions couldn't be read.
+    bool Rescan(std::vector<std::wstring>& activeApps) {
         ClearRegistrations();
 
         winrt::com_ptr<IMMDeviceCollection> devices;
         if (FAILED(m_enumerator->EnumAudioEndpoints(
                 eCapture, DEVICE_STATE_ACTIVE, devices.put()))) {
-            return;
+            return false;
         }
 
         UINT deviceCount = 0;
@@ -874,14 +879,14 @@ class CaptureSessionWatcher {
         for (UINT i = 0; i < deviceCount; i++) {
             winrt::com_ptr<IMMDevice> device;
             if (FAILED(devices->Item(i, device.put()))) {
-                continue;
+                return false;
             }
 
             winrt::com_ptr<IAudioSessionManager2> manager;
             if (FAILED(device->Activate(__uuidof(IAudioSessionManager2),
                                         CLSCTX_ALL, nullptr,
                                         manager.put_void()))) {
-                continue;
+                return false;
             }
 
             if (SUCCEEDED(
@@ -892,7 +897,7 @@ class CaptureSessionWatcher {
             // Also required for session-created notifications to start.
             winrt::com_ptr<IAudioSessionEnumerator> sessions;
             if (FAILED(manager->GetSessionEnumerator(sessions.put()))) {
-                continue;
+                return false;
             }
 
             int sessionCount = 0;
@@ -901,7 +906,7 @@ class CaptureSessionWatcher {
             for (int j = 0; j < sessionCount; j++) {
                 winrt::com_ptr<IAudioSessionControl> control;
                 if (FAILED(sessions->GetSession(j, control.put()))) {
-                    continue;
+                    return false;
                 }
 
                 if (SUCCEEDED(control->RegisterAudioSessionNotification(
@@ -910,36 +915,47 @@ class CaptureSessionWatcher {
                 }
 
                 AudioSessionState state;
-                if (FAILED(control->GetState(&state)) ||
-                    state != AudioSessionStateActive) {
+                if (FAILED(control->GetState(&state))) {
+                    return false;
+                }
+                if (state != AudioSessionStateActive) {
                     continue;
                 }
 
                 auto control2 = control.try_as<IAudioSessionControl2>();
-                if (!control2) {
+                if (control2 && control2->IsSystemSoundsSession() == S_OK) {
                     continue;
                 }
 
-                if (control2->IsSystemSoundsSession() == S_OK) {
-                    continue;
-                }
-
-                DWORD pid = 0;
-                if (FAILED(control2->GetProcessId(&pid)) || pid == 0) {
-                    continue;
-                }
-
-                std::wstring name = GetProcessExeName(pid);
-                if (name.empty()) {
-                    name = L"pid:" + std::to_wstring(pid);
-                }
-
-                activeApps.push_back(std::move(name));
+                activeApps.push_back(GetSessionAppName(control2));
             }
         }
+
+        return true;
     }
 
    private:
+    // A session that can't be attributed to a single process is reported as
+    // "unknown", which is never whitelisted.
+    static std::wstring GetSessionAppName(
+        const winrt::com_ptr<IAudioSessionControl2>& control2) {
+        if (!control2) {
+            return L"unknown";
+        }
+
+        DWORD pid = 0;
+        HRESULT hr = control2->GetProcessId(&pid);
+        if (FAILED(hr) || hr == AUDCLNT_S_NO_SINGLE_PROCESS || pid == 0) {
+            return L"unknown";
+        }
+
+        std::wstring name = GetProcessExeName(pid);
+        if (name.empty()) {
+            name = L"pid:" + std::to_wstring(pid);
+        }
+        return name;
+    }
+
     void ClearRegistrations() {
         for (auto& session : m_sessions) {
             session->UnregisterAudioSessionNotification(m_listener.get());
@@ -992,8 +1008,13 @@ DWORD WINAPI MonitorThreadProc(LPVOID lpParam) {
 
             while (true) {
                 std::vector<std::wstring> activeApps;
-                watcher.Rescan(activeApps);
-                UpdateMicrophoneIcon(std::move(activeApps), lastLogged);
+                if (watcher.Rescan(activeApps)) {
+                    UpdateMicrophoneIcon(std::move(activeApps), lastLogged);
+                } else {
+                    Wh_Log(
+                        L"Failed to read capture sessions, showing the icon");
+                    SetHideMicrophoneIcon(false);
+                }
 
                 DWORD result =
                     WaitForMultipleObjects(ARRAYSIZE(waitHandles), waitHandles,
@@ -1017,11 +1038,15 @@ DWORD WINAPI MonitorThreadProc(LPVOID lpParam) {
 void StartMonitor() {
     g_hShutdownEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     g_hChangeEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
-    if (!g_hShutdownEvent || !g_hChangeEvent) {
-        Wh_Log(L"Failed to create monitor events");
-        return;
+    if (g_hShutdownEvent && g_hChangeEvent) {
+        g_hMonitorThread =
+            CreateThread(NULL, 0, MonitorThreadProc, NULL, 0, NULL);
     }
-    g_hMonitorThread = CreateThread(NULL, 0, MonitorThreadProc, NULL, 0, NULL);
+
+    if (!g_hMonitorThread) {
+        Wh_Log(L"Failed to start microphone monitoring, showing the icon");
+        SetHideMicrophoneIcon(false);
+    }
 }
 
 void StopMonitor() {
