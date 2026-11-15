@@ -2,12 +2,80 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-15T19:03:56.000Z</updated>
+    <updated>2026-11-15T20:00:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Background Dimmer 1.1.1]]></title>
+        <id>https://windhawk.net/mods/background-dimmer#4448165feff7f0a5beb2b4865643312557e0431d</id>
+        <link href="https://windhawk.net/mods/background-dimmer"/>
+        <updated>2026-11-15T20:00:27.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Hotkeys now need Win plus at least one of Ctrl, Alt or Shift, so a hotkey can't take over typing keys (Shift+letter) or the Win+letter keys Windows uses. Saved hotkeys that don't follow this stop working and must be set again.</li>
+</ul>
+]]></content>
+        <author>
+            <name>3DDinosaur</name>
+            <uri>https://github.com/3DDinosaur</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Active Window Highlight 0.1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-active-window-highlight#0356ef6ca8c046c0c8146151495dc3c217b0368d</id>
+        <link href="https://windhawk.net/mods/taskbar-active-window-highlight"/>
+        <updated>2026-11-15T20:00:21.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Active Window Highlight</h1>
+<p>When an app has several windows, Windows 11's thumbnail preview gives no hint
+about which one is active. This mod adds an accent-colored highlight to the
+active window's card. The taskbar button keeps Windows' native indicator.</p>
+<p>Requires the Windows 11 taskbar's XAML thumbnail previews (tested on Windows 11
+build 26300). With the classic thumbnails, or with StartAllBack or
+ExplorerPatcher, the mod has no effect.</p>
+<p><img src="https://raw.githubusercontent.com/EphremTil17/taskbar-active-window-highlight/main/screenshots/preview.png" alt="Active window highlighted in the thumbnail preview"></p>
+<h2>How it works</h2>
+<p>The mod does not track focus itself. It reads the state Explorer already keeps:</p>
+<ul>
+<li>The taskbar's active task item (<code>TaskbarAppsList.ActiveItem</code>), which names
+the active window. The mod follows Explorer's own change notifications.</li>
+<li>Each thumbnail card's view model, which names the window the card shows.</li>
+</ul>
+<p>The highlight is a separate element placed right above the card's own
+background, below the title, icon and preview image. Its size and corner
+radius are bound to that background, so it follows themes such as
+Windows 11 Taskbar Styler.</p>
+<p>Clicking the taskbar or a preview list briefly moves focus to the taskbar
+itself. By default the last active window stays highlighted until another
+window or the desktop takes focus, or the window is minimized or closed.</p>
+<h2>How it differs from Taskbar Recent Focus Highlight</h2>
+<p><a href="https://windhawk.net/mods/taskbar-recent-focus-highlight">Taskbar Recent Focus Highlight</a>
+ranks apps and windows by recent use, from its own focus history. This mod
+answers a narrower question, which window is active right now, by reading
+Explorer's own active task item, with no focus tracking of its own. While
+another app has focus it marks nothing in this app's preview, and it also
+marks single-window previews.</p>
+<h2>Performance and footprint</h2>
+<ul>
+<li><strong>Event-driven only.</strong> No background thread, timers, polling or focus
+tracking. The mod runs only when Explorer reports a new active window or
+binds a preview card to a window.</li>
+<li><strong>Nothing on hover or layout.</strong> Moving the mouse over the taskbar or
+previews runs no mod code.</li>
+<li><strong>Under 1 ms, usually about 0.01 ms.</strong> Measured in normal use: typical
+0.004–0.013 ms per event, worst case 0.67 ms (the first time a card's
+highlight is created).</li>
+<li><strong>One element per card</strong>, created once and then only shown or hidden.</li>
+<li><strong>Safe to unload.</strong> No event handlers are left in Explorer, so disabling the
+mod cleanly removes it.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ephrem T.</name>
+            <uri>https://github.com/EphremTil17</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[1 Letter Language Indicator 1.0]]></title>
         <id>https://windhawk.net/mods/one-letter-language-indicator#b4d2a8ee55b15e05776a0a38fe0c22d62c08a931</id>
@@ -414,52 +482,6 @@ on disk.</li>
         <author>
             <name>DanRotaru</name>
             <uri>https://github.com/DanRotaru</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Compact Notifications 1.2]]></title>
-        <id>https://windhawk.net/mods/compact-notifications#06bb6df5b1aebfa91ab73c3e16ec5c616d71d794</id>
-        <link href="https://windhawk.net/mods/compact-notifications"/>
-        <updated>2026-11-14T18:04:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Cards come straight from the notification database, so toasts that arrive in a row show together, and an app updating a shown toast updates its card.</li>
-<li>Replies are typed on the card itself and sent with the app's button (or Enter).</li>
-<li>Copy button for one-time codes (in the Windows language, or English via a setting).</li>
-<li>Mute button (moon, on hover): mutes an app for 15 min, 1 h, 8 h, 24 h or for good (∞); a new setting unmutes the apps muted for good.</li>
-<li>Do not disturb on Windows 11 is respected.</li>
-<li>Cards stay while the mouse is over them; a card goes as soon as one of its buttons is pressed.</li>
-<li>Animations follow the monitor's refresh rate; new optional playful style.</li>
-<li>Chat text formatting (bold, italic, underline, strike, code) can be turned off.</li>
-<li>Sound plays when the card shows instead of when Windows gets to the banner later; new Sound settings (when the card shows, as Windows plays it, or none) and your own .wav file.</li>
-<li>Fixes: a closed card no longer comes back, the card limit keeps reminders, alarms and calls, cards go when the app takes its toast back (e.g. a call answered in the app).</li>
-</ul>
-]]></content>
-        <author>
-            <name>Wheatlay</name>
-            <uri>https://github.com/Wheatlay</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Lock Screen Live Wallpaper 1.1.0]]></title>
-        <id>https://windhawk.net/mods/lock-screen-live-wallpaper#589c9d0677cb6e995c3f1070e40f2e3aea7822fb</id>
-        <link href="https://windhawk.net/mods/lock-screen-live-wallpaper"/>
-        <updated>2026-11-14T18:04:35.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Preview window: check fit, colors and speed without locking the PC. Open it from the settings, an optional hotkey (off by default) or an optional tray icon. It can also draw the real clock, date and status icons over the video (optional, off by default).</li>
-<li>Animated GIF support, alone or inside a folder.</li>
-<li>Low battery saver: lower the frame rate or the render width, or freeze on a still frame.</li>
-<li>Dim setting to darken the video.</li>
-<li>Folder order: random, sequential or fixed.</li>
-<li>Audio fade in and out.</li>
-<li>Still frame duration after boot is now a setting.</li>
-<li>Cached first frames older than 30 days are deleted, and only the 5 newest others are kept.</li>
-<li>Faster color processing when only brightness, contrast, gamma or dim change.</li>
-<li>Fixes: padded decoder frame height (for example 1088 for 1080), audio restarting together with the video on every loop, crash guard no longer counts quick unlocks as failed starts.</li>
-</ul>
-]]></content>
-        <author>
-            <name>grn15RenS</name>
-            <uri>https://github.com/grn15RenS</uri>
         </author>
     </entry>
 </feed>

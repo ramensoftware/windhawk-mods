@@ -1,3 +1,7 @@
+## 1.1.1 ([Nov 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4448165feff7f0a5beb2b4865643312557e0431d/mods/background-dimmer.wh.cpp))
+
+* Hotkeys now need Win plus at least one of Ctrl, Alt or Shift, so a hotkey can't take over typing keys (Shift+letter) or the Win+letter keys Windows uses. Saved hotkeys that don't follow this stop working and must be set again.
+
 ## 1.1.0 ([Nov 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2e774e506b47ba68e529a535f0ed50ac9b4d7152/mods/background-dimmer.wh.cpp))
 
 * Taskbar, Start, Alt+Tab and notification center now count as focused: while one of them has focus, every regular window is dimmed. Previously they left the layer where it was, so the last active window stayed lit behind them.

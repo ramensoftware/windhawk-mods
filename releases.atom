@@ -2,12 +2,66 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-15T19:03:56.000Z</updated>
+    <updated>2026-11-15T20:00:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Active Window Highlight 0.1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-active-window-highlight#0356ef6ca8c046c0c8146151495dc3c217b0368d</id>
+        <link href="https://windhawk.net/mods/taskbar-active-window-highlight"/>
+        <updated>2026-11-15T20:00:21.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Active Window Highlight</h1>
+<p>When an app has several windows, Windows 11's thumbnail preview gives no hint
+about which one is active. This mod adds an accent-colored highlight to the
+active window's card. The taskbar button keeps Windows' native indicator.</p>
+<p>Requires the Windows 11 taskbar's XAML thumbnail previews (tested on Windows 11
+build 26300). With the classic thumbnails, or with StartAllBack or
+ExplorerPatcher, the mod has no effect.</p>
+<p><img src="https://raw.githubusercontent.com/EphremTil17/taskbar-active-window-highlight/main/screenshots/preview.png" alt="Active window highlighted in the thumbnail preview"></p>
+<h2>How it works</h2>
+<p>The mod does not track focus itself. It reads the state Explorer already keeps:</p>
+<ul>
+<li>The taskbar's active task item (<code>TaskbarAppsList.ActiveItem</code>), which names
+the active window. The mod follows Explorer's own change notifications.</li>
+<li>Each thumbnail card's view model, which names the window the card shows.</li>
+</ul>
+<p>The highlight is a separate element placed right above the card's own
+background, below the title, icon and preview image. Its size and corner
+radius are bound to that background, so it follows themes such as
+Windows 11 Taskbar Styler.</p>
+<p>Clicking the taskbar or a preview list briefly moves focus to the taskbar
+itself. By default the last active window stays highlighted until another
+window or the desktop takes focus, or the window is minimized or closed.</p>
+<h2>How it differs from Taskbar Recent Focus Highlight</h2>
+<p><a href="https://windhawk.net/mods/taskbar-recent-focus-highlight">Taskbar Recent Focus Highlight</a>
+ranks apps and windows by recent use, from its own focus history. This mod
+answers a narrower question, which window is active right now, by reading
+Explorer's own active task item, with no focus tracking of its own. While
+another app has focus it marks nothing in this app's preview, and it also
+marks single-window previews.</p>
+<h2>Performance and footprint</h2>
+<ul>
+<li><strong>Event-driven only.</strong> No background thread, timers, polling or focus
+tracking. The mod runs only when Explorer reports a new active window or
+binds a preview card to a window.</li>
+<li><strong>Nothing on hover or layout.</strong> Moving the mouse over the taskbar or
+previews runs no mod code.</li>
+<li><strong>Under 1 ms, usually about 0.01 ms.</strong> Measured in normal use: typical
+0.004–0.013 ms per event, worst case 0.67 ms (the first time a card's
+highlight is created).</li>
+<li><strong>One element per card</strong>, created once and then only shown or hidden.</li>
+<li><strong>Safe to unload.</strong> No event handlers are left in Explorer, so disabling the
+mod cleanly removes it.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ephrem T.</name>
+            <uri>https://github.com/EphremTil17</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[1 Letter Language Indicator 1.0]]></title>
         <id>https://windhawk.net/mods/one-letter-language-indicator#b4d2a8ee55b15e05776a0a38fe0c22d62c08a931</id>
@@ -1642,62 +1696,6 @@ zlib license notice in the source.</p>
         <author>
             <name>Ar4ujo_009</name>
             <uri>https://github.com/Ar4ujo009</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Icons Proximity Reveal 1.0.3]]></title>
-        <id>https://windhawk.net/mods/desktop-icons-proximity#b8e1961b145ff09548ed49cb1b1500a788d3887d</id>
-        <link href="https://windhawk.net/mods/desktop-icons-proximity"/>
-        <updated>2026-11-12T07:02:56.000Z</updated>
-        <content type="html"><![CDATA[<h1>Desktop Icons Proximity Reveal</h1>
-<p><img src="https://raw.githubusercontent.com/CTabdul15/windhawk-mods/assets/desktop-icons-proximity-preview.gif" alt="Desktop Icons Proximity Reveal demo"></p>
-<p>Hide desktop icons when you are not using them. Hover near an icon or over a
-custom area to fade them back in.</p>
-<p>Features:</p>
-<ul>
-<li>Draw up to 32 reveal areas around your icons.</li>
-<li>Reveal each group separately, or show all icons together.</li>
-<li>Adjust fade speed, hide delay, and hover padding.</li>
-<li>Preview your areas and save them between sessions.</li>
-<li>Keep new folders and shortcuts visible while naming them, then hide them after
-an outside click or a configurable timeout (15 seconds by default).</li>
-<li>Selected icons stay visible until deselected; press <strong>Ctrl+A</strong> to reveal all.
-Disable <strong>Keep selected icons visible</strong> to turn this off.</li>
-<li>Keep icons permanently visible using <strong>Always-visible icons (whitelist)</strong>.
-Enter desktop names separated by semicolons, such as <code>Recycle Bin; Steam; Discord</code>.
-Names ignore case; <code>*</code> and <code>?</code> wildcards are supported.</li>
-</ul>
-<h2>Setup</h2>
-<ol>
-<li>Enable <strong>Show box editor panel</strong> in Settings and apply.</li>
-<li>Click <strong>Edit boxes</strong>. All icons appear, including those outside saved areas.
-Drag around your icons to add areas.</li>
-<li>Click <strong>Save &amp; apply</strong> or <strong>Cancel</strong> to restore normal hiding.
-Switch the panel setting off to close it.</li>
-</ol>
-<p>The panel stays closed at startup. If its setting is already on, switch it off
-and on again to reopen it.</p>
-<p>Separate groups are enabled by default. Without active areas, hovering near any icon
-shows all icons. Recycle Bin and folders work too.</p>
-<h2>How this differs from other mods</h2>
-<p><a href="https://windhawk.net/mods/desktop-icon-section-autohide">Desktop Icon Section Auto-Hide</a>
-uses a single section or box. This mod adds up to 32 separately animated areas,
-a drag-to-draw editor, and temporary visibility for newly created items.
-<a href="https://windhawk.net/mods/flashlight-desktop-icons">Flashlight Desktop Icons</a> and
-<a href="https://windhawk.net/mods/transparent-desktop-icons-spotlight">Spotlight</a> reveal
-icons near the cursor rather than inside saved groups.
-<a href="https://windhawk.net/mods/smooth-desktop-icons-auto-hide">Smooth Desktop Icons Auto-Hide</a>
-and <a href="https://windhawk.net/mods/zen-desktop-toggle-icons">ZenDesktop</a> focus on hiding
-and restoring the desktop as a whole.</p>
-<p><strong>Note:</strong> Requires Windows 10/11 x64. Keep Windows' <strong>Show desktop icons</strong> enabled.
-Hidden icons retain their Windows click targets; icons outside all boxes stay
-hidden unless selected, whitelisted, temporarily revealed, or accessed by keyboard.
-Redraw areas after changing monitors; avoid running other icon hiding mods.</p>
-<p>Rendering hooks adapted from <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-icons-transparency.wh.cpp">Desktop Icons Transparency by zed712969-crypto</a>.</p>
-]]></content>
-        <author>
-            <name>CTabdul15</name>
-            <uri>https://github.com/CTabdul15</uri>
         </author>
     </entry>
 </feed>

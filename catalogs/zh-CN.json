@@ -1166,7 +1166,7 @@
         "ratingUsers": 16,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794160825000,
+        "updated": 1794772827000,
         "users": 65
       },
       "metadata": {
@@ -1180,7 +1180,7 @@
           "windhawk.exe"
         ],
         "name": "Background Dimmer",
-        "version": "1.1.0"
+        "version": "1.1.1"
       }
     },
     "balloon-sound-fix": {
@@ -16821,6 +16821,33 @@
         ],
         "name": "Task View Customizer",
         "version": "1.0.0"
+      }
+    },
+    "taskbar-active-window-highlight": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794772821000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794772821000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Ephrem T.",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "Highlights the active window's card in the taskbar thumbnail preview",
+        "github": "https://github.com/EphremTil17",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Taskbar Active Window Highlight",
+        "version": "0.1.1"
       }
     },
     "taskbar-ai-quota": {
