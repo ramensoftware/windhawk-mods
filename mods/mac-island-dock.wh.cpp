@@ -36242,7 +36242,8 @@ DWORD WINAPI IslandCrashNoticeThreadProc(LPVOID parameter) {
     }
     using TaskDialogIndirect_t =
         HRESULT(WINAPI*)(const TASKDIALOGCONFIG*, int*, int*, BOOL*);
-    const HMODULE comctl = LoadLibrary(L"comctl32.dll");
+    const HMODULE comctl = LoadLibraryEx(L"comctl32.dll", nullptr,
+                                         LOAD_LIBRARY_SEARCH_SYSTEM32);
     const auto taskDialog =
         comctl ? (TaskDialogIndirect_t)GetProcAddress(comctl,
                                                       "TaskDialogIndirect")
@@ -142627,7 +142628,8 @@ void Island::CheckAlarms() {
 // g_alarmsMinute's key), kept while the island restarts: a minute again (the
 // clock going back, or a settings reload) doesn't run anything twice. -1
 // before the first look, which counts its own minute unless a command ran in
-// it before a restart (stored as commandsMinute).
+// it before a restart (stored as commandsMinute, per account like the
+// commands).
 long long g_commandsMinute = -1;
 // The same minute in UTC (-1 none): the clock jumping forward in one real
 // minute (summer time) is told from a gap (see CommandMinutesDue).
@@ -142686,8 +142688,8 @@ void Island::CheckScheduledCommands() {
     // ran in it before a restart.)
     const long long last =
         g_commandsMinute >= 0 ? g_commandsMinute
-        : Wh_GetIntValue(L"commandsMinute", 0) == minuteKey ? minuteKey
-                                                            : minuteKey - 1;
+        : GetUserIntValue(L"commandsMinute", 0) == minuteKey ? minuteKey
+                                                             : minuteKey - 1;
     const long long lastUtc = g_commandsUtcMinute;
     g_commandsUtcMinute = utcKey;
     if (minuteKey <= last) {
@@ -142710,7 +142712,7 @@ void Island::CheckScheduledCommands() {
         for (const auto& command : commands) {
             if (CommandDueAt(command, minute, weekday)) {
                 // (Noted: a restart in this minute doesn't run it again.)
-                Wh_SetIntValue(L"commandsMinute", (int)minuteKey);
+                SetUserIntValue(L"commandsMinute", (int)minuteKey);
                 RunReportedCommand(command);
             }
         }
