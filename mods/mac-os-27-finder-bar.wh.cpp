@@ -12854,6 +12854,7 @@ enum BsVal {
     BV_NTFLAYOUT,                                          // painel do sino: caixa ou cartões
     BV_THEMECLEAR,                                         // Personalizar tema: Transparente
     BV_ISLLIVE,                                            // pílulas de aviso: fundo ao vivo
+    BV_CLEARMENUS,                                         // Personalizar tema: os menus do Transparente
     BV_FONTFAM,                                            // fonte da barra e dos painéis
     BV_ISLTEXT, BV_NTFTEXT,                                // cor do texto: pílulas, notificações
     BV_SIZERESET,                                          // Tamanho da barra: restaurar
@@ -12953,6 +12954,7 @@ static const BsRowDef kBsRows[] = {
     {BR_HEADER, BV_NONE, L"Personalizar tema", 0xE790, 0x5AC8FA, L"Ajusta o tema escolhido em Fundo da barra; vale também para os menus, a Central, os painéis e as pílulas"},
     {BR_GROUP, BV_THEMEHEAD, L"Tema", 0, 0},
     {BR_NOTE, BV_THEMENONE, L"Claro, Escuro e OLED são cores sólidas, sem ajustes de vidro.", 0, 0},
+    {BR_CHOICE, BV_CLEARMENUS, L"Tema dos menus", 0, 0, L"Com a barra Transparente: o tema dos menus, da Central e dos painéis; os ajustes abaixo personalizam esse tema"},
     {BR_NOTE, BV_THEMECLEAR, L"No tema Transparente a barra fica sem vidro; estes ajustes valem para o vidro líquido dos painéis.", 0, 0},
     {BR_SLIDER, BV_G_TINT, L"Transparente ↔ fosco", 0, 0, L"À esquerda o vidro limpo; à direita, mais fosco"},
     {BR_SLIDER, BV_G_REFRACT, L"Refração nas bordas", 0, 0},
@@ -13266,6 +13268,10 @@ static int BsGet(int val) {
         }
         case BV_TEXTCOLOR: return g_settings.barStyle >= 5 ? 0 : g_settings.theme;  // sólidos: sempre automático
         case BV_PANELLOOK: return g_settings.panelLookCustom ? 1 : 0;
+        case BV_CLEARMENUS: {
+            static const int kIdx[] = {1, 1, 2, 3, 1, 4, 5, 6};  // 0 = o vidro líquido transparente
+            return g_settings.panelLookCustom ? kIdx[std::clamp(g_settings.panelLookStyle, 0, 7)] : 0;
+        }
         case BV_PANELSTYLE: {
             static const int kIdx[] = {0, 0, 1, 2, 0, 3, 4, 5};  // tema → posição na lista
             return kIdx[std::clamp(g_settings.panelLookStyle, 0, 7)];
@@ -13510,6 +13516,20 @@ static void BsSet(int val, int v) {
         g_settings.barMonitor = want;
         OvrSetStr(L"barMonitor", want);
         RequestReload(1);  // refaz as barras nos monitores escolhidos
+        return;
+    }
+    if (val == BV_CLEARMENUS) {
+        // A mesma escolha de "Tema dos painéis", vista de Personalizar tema.
+        g_settings.panelLookCustom = v > 0;
+        OvrSetStr(L"panelLook", v > 0 ? L"custom" : L"follow");
+        if (v > 0) {
+            static const int kTheme[] = {0, 2, 3, 5, 6, 7};
+            static const PCWSTR kNames[] = {L"glass", L"liquid", L"tinted", L"light", L"dark", L"oled"};
+            int k = std::clamp(v - 1, 0, 5);
+            g_settings.panelLookStyle = kTheme[k];
+            OvrSetStr(L"panelLookStyle", kNames[k]);
+        }
+        TintApply();
         return;
     }
     if (val == BV_PANELLOOK || val == BV_PANELSTYLE) {
@@ -13814,18 +13834,25 @@ static std::wstring BsFold(std::wstring s) {
 // monitor", uma para cada monitor ligado) e a cor do texto de todos (sem ele).
 // Os temas em uso (bit a bit): o de todos, ou os de cada monitor.
 static bool IslSolid();  // a pílula de aviso num estilo sólido (mais abaixo)
-static unsigned BsThemesInUse() {
-    // (O tema próprio dos painéis também se personaliza aqui.)
-    unsigned panel = g_settings.panelLookCustom ? 1u << g_settings.panelLookStyle : 0;
-    if (!g_settings.barPerMon) return (1u << g_settings.barStyle) | panel;
-    unsigned m = panel;
+static unsigned BsBarThemes() {
+    if (!g_settings.barPerMon) return 1u << g_settings.barStyle;
+    unsigned m = 0;
     for (int k = 0; k < 8; k++) {
         MonChoice c;
         if (!BsMonAt(k, &c)) break;
         int st = MonMapGet(g_settings.barStyleMon, c.device, 7);
         m |= 1u << (st >= 0 ? st : g_settings.barStyle);
     }
-    return m != panel ? m : m | 1u << g_settings.barStyle;
+    return m ? m : 1u << g_settings.barStyle;
+}
+static unsigned BsThemesInUse() {
+    // (O tema próprio dos painéis também se personaliza aqui.)
+    unsigned panel = g_settings.panelLookCustom ? 1u << g_settings.panelLookStyle : 0;
+    unsigned bar = BsBarThemes();
+    // A barra Transparente não tem vidro: com os menus num tema próprio, o que se
+    // personaliza é o tema deles.
+    if (panel) bar &= ~0x02u;
+    return bar | panel;
 }
 // O tema de vidro sendo personalizado: o tema da barra (o primeiro de vidro em
 // uso: 0 vidro, 1 transparente, 2 líquido, 3 personalizado, 4 cor da janela).
@@ -13844,6 +13871,7 @@ static bool BsRowShown(const BsRowDef& d) {
     if (BvIsMon(d.val)) return g_settings.barPerMon && BsMonAt(BvMonIndex(d.val), nullptr);
     if (d.val == BV_TEXTCOLOR) return !g_settings.barPerMon;
     if (d.val == BV_PANELSTYLE) return g_settings.panelLookCustom;
+    if (d.val == BV_CLEARMENUS) return (BsBarThemes() & 0x02) != 0;  // a barra (ou um monitor) no Transparente
     if (d.val == BV_ISLLIVE) return !IslSolid();  // só com um estilo de vidro
     unsigned t = BsThemesInUse(), e = (t & kThemeGlass) ? 1u << ThemeEdit() : 0;
     switch (d.val) {
@@ -13962,6 +13990,8 @@ static const PCWSTR kBsCcClose[] = {L"Cascata", L"Encolher", L"Esmaecer", L"Desl
 static const PCWSTR kBsLookChoices[] = {L"Desfoque", L"Líquido", L"Transparente"};
 static const PCWSTR kBsPanelLook[] = {L"Acompanhar o tema da barra", L"Personalizar"};
 static const PCWSTR kBsPanelStyle[] = {L"Vidro", L"Líquido", L"Vidro líquido personalizado", L"Claro", L"Escuro", L"OLED"};
+static const PCWSTR kBsClearMenus[] = {L"Vidro líquido transparente", L"Vidro", L"Líquido", L"Vidro líquido personalizado",
+                                       L"Claro", L"Escuro", L"OLED"};
 static const PCWSTR kBsIslStyle[] = {L"Acompanhar a barra", L"Vidro", L"Líquido",
                                      L"Vidro líquido personalizado", L"Claro", L"Escuro", L"OLED"};
 static const PCWSTR kBsIslIn[] = {L"Expandir", L"Círculo", L"Descer", L"Esmaecer"};
@@ -13989,6 +14019,7 @@ static const PCWSTR* BsChoiceLabels(int val) {
         case BV_BSSTYLE: return kBsLookChoices;
         case BV_PANELLOOK: return kBsPanelLook;
         case BV_PANELSTYLE: return kBsPanelStyle;
+        case BV_CLEARMENUS: return kBsClearMenus;
         case BV_ISLSTYLE: return kBsIslStyle;
         case BV_ISLIN: return kBsIslIn;
         case BV_ISLOUT: return kBsIslOut;
@@ -14026,6 +14057,7 @@ static int BsChoiceCount(int val) {
         case BV_BARSTYLE: return 9;
         case BV_PANELLOOK: return 2;
         case BV_PANELSTYLE: return 6;
+        case BV_CLEARMENUS: return 7;
         case BV_ISLSTYLE: return 7;
         case BV_LANG: return (int)ARRAYSIZE(kBsLang);
         case BV_ISLIN: return 4;
@@ -25600,6 +25632,8 @@ const UiTr kUiTr[] = {
     {L"Volta os ajustes acima aos valores de quando o mod foi instalado", L"Puts the settings above back to their values when the mod was installed", L"Devuelve los ajustes de arriba a sus valores de cuando se instaló el mod", L"Remet les réglages ci-dessus à leurs valeurs d’installation du mod", L"Setzt die Einstellungen oben auf die Werte bei der Installation zurück", L"Riporta le impostazioni qui sopra ai valori di quando la mod è stata installata", L"将上面的设置恢复为安装模组时的值"},
     {L"Tema dos painéis", L"Panel theme", L"Tema de los paneles", L"Thème des panneaux", L"Design der Bereiche", L"Tema dei pannelli", L"面板主题"},
     {L"Menus, Central de Controle e painéis: o tema da barra ou um tema próprio", L"Menus, Control Center and panels: the bar’s theme or their own", L"Menús, Centro de control y paneles: el tema de la barra o uno propio", L"Menus, Centre de contrôle et panneaux : le thème de la barre ou le leur", L"Menüs, Kontrollzentrum und Bereiche: das Design der Leiste oder ein eigenes", L"Menu, Centro di Controllo e pannelli: il tema della barra o uno proprio", L"菜单、控制中心和面板：使用菜单栏主题或单独的主题"},
+    {L"Com a barra Transparente: o tema dos menus, da Central e dos painéis; os ajustes abaixo personalizam esse tema", L"With the Clear bar: the theme of the menus, Control Center and panels; the settings below customize that theme", L"Con la barra Transparente: el tema de los menús, el Centro de control y los paneles; los ajustes de abajo personalizan ese tema", L"Avec la barre Transparente : le thème des menus, du Centre de contrôle et des panneaux ; les réglages ci-dessous personnalisent ce thème", L"Mit der Leiste Klar: das Design der Menüs, des Kontrollzentrums und der Bereiche; die Einstellungen unten passen dieses Design an", L"Con la barra Trasparente: il tema dei menu, del Centro di controllo e dei pannelli; le impostazioni sotto personalizzano quel tema", L"透明菜单栏时：菜单、控制中心和面板的主题；下方设置用于自定义该主题"},
+    {L"Vidro líquido transparente", L"Clear liquid glass", L"Vidrio líquido transparente", L"Verre liquide transparent", L"Klares Flüssigglas", L"Vetro liquido trasparente", L"透明液态玻璃"},
     {L"Tema dos menus", L"Menu theme", L"Tema de los menús", L"Thème des menus", L"Design der Menüs", L"Tema dei menu", L"菜单主题"},
     {L"Acompanhar o tema da barra", L"Match the bar’s theme", L"Igual que el tema de la barra", L"Comme le thème de la barre", L"Wie das Design der Leiste", L"Come il tema della barra", L"跟随菜单栏主题"},
     {L"Personalizar", L"Customize", L"Personalizar", L"Personnaliser", L"Anpassen", L"Personalizza", L"自定义"},
