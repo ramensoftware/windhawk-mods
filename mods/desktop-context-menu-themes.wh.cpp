@@ -20,7 +20,7 @@ Replaces only the context menu opened on the empty Windows desktop. Folder, file
 and desktop-icon menus keep their native Windows appearance. The desktop menu is
 self-rendered and supports editable themes, colors, blur, layout, and animations.
 
-![Desktop Context Menu Themes preview](https://raw.githubusercontent.com/ramensoftware/windhawk-mods/main/mods/desktop-context-menu-themes-preview.png)
+![Desktop Context Menu Themes preview](https://raw.githubusercontent.com/miguelelesbaocampos-cmyk/windhawk-mods/178f3580a984f2f48948a692501097907f2378e5/mods/desktop-context-menu-themes-preview.png)
 
 The native menu is slow because every registered shell extension is loaded
 synchronously before it can be shown. This mod shows a cached menu right away
