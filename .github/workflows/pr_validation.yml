@@ -20,6 +20,7 @@ jobs:
     name: Test changed files
     outputs:
       review-item-count: ${{ steps.validate.outputs.review_item_count }}
+      review-items: ${{ steps.validate.outputs.review_items }}
     steps:
       # The test merge commit and its parents, which are diffed to list the
       # changed files.
@@ -72,11 +73,15 @@ jobs:
     runs-on: ubuntu-latest
     name: Manual review
     steps:
+      # The review items are annotation commands, each on a single line, which
+      # are printed to attach the annotations to this job.
       - name: Check for review items
         env:
           REVIEW_ITEM_COUNT: ${{ needs.run.outputs.review-item-count }}
+          REVIEW_ITEMS: ${{ needs.run.outputs.review-items }}
         run: |
           if [ "$REVIEW_ITEM_COUNT" -gt 0 ]; then
-            echo "::error::Got $REVIEW_ITEM_COUNT review items, which require manual inspection by a reviewer. See the warnings of the \"Test changed files\" job."
+            printf '%s\n' "$REVIEW_ITEMS"
+            echo "::error::Got $REVIEW_ITEM_COUNT review items, which require manual inspection by a reviewer."
             exit 1
           fi

@@ -11,6 +11,7 @@ import json
 import math
 import os
 import re
+import secrets
 import subprocess
 import sys
 import time
@@ -121,7 +122,7 @@ URL_PATTERN = (
 )
 
 
-def print_annotation(level: str, file: Path, line: int, message: str):
+def format_annotation(level: str, file: Path, line: int, message: str) -> str:
     # https://github.com/orgs/community/discussions/26736
     def escape_data(s: str) -> str:
         return s.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
@@ -135,28 +136,27 @@ def print_annotation(level: str, file: Path, line: int, message: str):
             .replace(',', '%2C')
         )
 
-    print(
+    return (
         f'::{level} file={escape_property(str(file))},'
         f'line={line}::{escape_data(message)}'
     )
 
 
 # Errors block the merge until they're fixed. Review items are left for a
-# reviewer to inspect, and don't block the merge by themselves.
+# reviewer to inspect, and don't block the merge by themselves. They're shown by
+# a separate job, so they're collected instead of printed.
 error_count = 0
-review_item_count = 0
+review_item_annotations: list[str] = []
 
 
 def add_error(file: Path, line: int, message: str):
     global error_count
     error_count += 1
-    print_annotation('error', file, line, message)
+    print(format_annotation('error', file, line, message))
 
 
 def add_review_item(file: Path, line: int, message: str):
-    global review_item_count
-    review_item_count += 1
-    print_annotation('warning', file, line, message)
+    review_item_annotations.append(format_annotation('warning', file, line, message))
 
 
 ModPropertyKey = Tuple[str, Optional[str]]  # (key_name, language)
@@ -2104,8 +2104,13 @@ def test_run():
     pr_author = sys.argv[2]
     pr_author_id = int(sys.argv[3]) if len(sys.argv) == 4 else None
     validate_mod_file(path, pr_author, pr_author_id)
-    if error_count > 0 or review_item_count > 0:
-        print(f'Got {error_count} errors and {review_item_count} review items')
+    for annotation in review_item_annotations:
+        print(annotation)
+    if error_count > 0 or review_item_annotations:
+        print(
+            f'Got {error_count} errors and {len(review_item_annotations)} review'
+            ' items'
+        )
 
 
 def validate_pr_changelog(pr_body: str):
@@ -2154,8 +2159,11 @@ def validate_pr_changelog(pr_body: str):
 
 
 def set_github_output(name: str, value: str):
+    # A random delimiter, so that a value which quotes the mod source can't
+    # contain it.
+    delimiter = f'EOF_{secrets.token_hex(16)}'
     with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as f:
-        f.write(f'{name}={value}\n')
+        f.write(f'{name}<<{delimiter}\n{value}\n{delimiter}\n')
 
 
 def get_pr_changes() -> list[tuple[str, Path]]:
@@ -2235,12 +2243,14 @@ def main():
                     path, 1, 'Failed to extract symbols, manual inspection required'
                 )
 
+    review_item_count = len(review_item_annotations)
     set_github_output('review_item_count', str(review_item_count))
+    set_github_output('review_items', '\n'.join(review_item_annotations))
 
     if review_item_count > 0:
         print(
             f'Got {review_item_count} review items, which require manual inspection'
-            ' by a reviewer'
+            ' by a reviewer, see the "Manual review" job'
         )
     if error_count > 0:
         sys.exit(f'Got {error_count} errors, which must be fixed')
