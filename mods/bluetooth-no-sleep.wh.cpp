@@ -106,8 +106,8 @@ to the active audio endpoint:
 #include <algorithm>
 #include <cwctype>
 
-#define REFTIMES_PER_SEC       10000000
-#define BUFFER_DURATION_HNS    (REFTIMES_PER_SEC / 5) // 200 ms buffer
+constexpr REFERENCE_TIME REFTIMES_PER_SEC = 10000000;
+constexpr REFERENCE_TIME BUFFER_DURATION_HNS = (REFTIMES_PER_SEC / 5); // 200 ms buffer
 
 enum class TargetMode {
     DefaultDevice,
@@ -976,10 +976,6 @@ void WhTool_ModUninit() {
 //
 // Currently, other callbacks are not supported.
 
-#ifndef WH_MOD_ID
-#define WH_MOD_ID L"bluetooth-no-sleep"
-#endif
-
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
@@ -999,7 +995,7 @@ BOOL Wh_ModInit() {
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR *argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
@@ -1047,14 +1043,15 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        IMAGE_DOS_HEADER *dosHeader = (IMAGE_DOS_HEADER *)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS *ntHeaders =
-            (IMAGE_NT_HEADERS *)((BYTE *)dosHeader + dosHeader->e_lfanew);
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void *entryPoint = (BYTE *)dosHeader + entryPointRVA;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
-        Wh_SetFunctionHook(entryPoint, (void *)EntryPoint_Hook, nullptr);
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
@@ -1074,14 +1071,15 @@ void Wh_ModAfterInit() {
     WCHAR currentProcessPath[MAX_PATH];
     switch (GetModuleFileName(nullptr, currentProcessPath,
                               ARRAYSIZE(currentProcessPath))) {
-    case 0:
-    case ARRAYSIZE(currentProcessPath):
-        Wh_Log(L"GetModuleFileName failed");
-        return;
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
     }
 
     WCHAR commandLine[MAX_PATH + 2 +
-                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) -
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") /
+                       sizeof(WCHAR)) -
                       1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
@@ -1110,8 +1108,8 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFOW si{
-        .cb = sizeof(STARTUPINFOW),
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
     PROCESS_INFORMATION pi;
