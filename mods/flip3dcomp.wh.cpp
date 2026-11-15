@@ -7367,6 +7367,7 @@ bool HookNativeTaskView()
         LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (module)
     {
+        // twinui.pcshell.dll
         const WindhawkUtils::SYMBOL_HOOK TWINUI_PCSHELL_HOOKS[] = {
             {
                 {
