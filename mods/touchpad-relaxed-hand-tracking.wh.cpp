@@ -46,7 +46,7 @@ Right after installing, before anything is learned, the glide uses a default spe
 
 ## Diagnostics overlay
 
-Off by default. Set **Diagnostics overlay hotkey** (for example Ctrl+Alt+Shift+F) and press it to show how the mod reads each finger: green steers the pointer (bigger, more weight), gray rests, dark gray is the thumb, yellow may still tap, blue scrolls, orange holds, and a red ring is a palm. The dotted rectangle is the pad's edge band and the line across is the top of the thumb zone. Drag it anywhere; the X closes it.
+Off by default. Set a **Diagnostics overlay hotkey** to open a window that shows how the mod reads each finger: green steers the pointer (bigger, more weight), gray rests, dark gray is the thumb, yellow may still tap, blue scrolls, orange holds, and a red ring is a palm. The dotted lines separate the pad's safety edge band and thumb zone, both for filtering and increased precision.
 
 ## Limitations
 
@@ -109,7 +109,7 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
   - touch: Touch
 - diagHotkey: ""
   $name: Diagnostics overlay hotkey
-  $description: Shows how the mod reads each finger, for troubleshooting. Win + Ctrl, Alt, Shift + key, like Win+Shift+F. Empty for none.
+  $description: Shows how the mod reads each finger, for troubleshooting. Win + Ctrl, Alt, Shift + key, like Win+Shift+F.
 */
 // ==/WindhawkModSettings==
 
