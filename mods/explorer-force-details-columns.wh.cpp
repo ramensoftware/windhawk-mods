@@ -2,7 +2,7 @@
 // @id              explorer-force-details-columns
 // @name            Explorer Details View Columns
 // @description     Forces a fixed set of columns, and optionally sorting, in File Explorer Details view. Columns and their order are configurable. Has no effect on other view modes.
-// @version         1.4
+// @version         1.5
 // @author          ernisn
 // @github          https://github.com/ernisn
 // @include         explorer.exe
@@ -38,8 +38,9 @@ For a full list of available Shell property names, see: https://learn.microsoft.
 - If "Sort By" is set, manual sorting changes stay temporary, e.g. manual width changes of forced-width columns.
 - By default, virtual folders that have their own specialized columns (such as the Recycle Bin with _Original Location_ and _Date Deleted_) are not affected. Turn off "Exclude virtual folders" to force the columns there as well.
 
-**Issues Related to Minimum Width:**
-- Columns other than _Name_ can't go below Windows' own minimum width. On Windows 11, there is an unreasonable minimum column width limit when a non-custom scaling is set for the display instead of a custom scaling (under "Advanced Scaling Settings"). This is a known issue and smaller widths set here will be ignored by Explorer.
+**Minimum Column Width:**
+- Windows doesn't allow a column to be narrower than about 10 characters (around 90 logical pixels on Windows 11), neither when forced here nor when dragged manually. "Minimum Column Width" lowers that limit, so that smaller widths take effect and columns can be dragged narrower. Set it to 0 to keep the Windows limit.
+- The lowered limit applies to all folders in File Explorer, including the virtual folders that are excluded from the forced columns.
 
 */
 // ==/WindhawkModReadme==
@@ -66,6 +67,9 @@ For a full list of available Shell property names, see: https://learn.microsoft.
     - width: 60
   $name: Columns
   $description: "Columns to show in order in Details view. Width is in logical pixels at 100% DPI scaling."
+- min_width: 20
+  $name: Minimum Column Width
+  $description: Lowers the narrowest width Windows allows for a column (about 90 logical pixels by default), for forced widths as well as manual dragging. In logical pixels at 100% DPI scaling. Set to 0 to keep the Windows limit.
 - sort_property: ""
   $name: Sort By
   $description: Shell property name to sort by, e.g. System.DateModified. Leave empty to not enforce sorting.
@@ -88,6 +92,7 @@ For a full list of available Shell property names, see: https://learn.microsoft.
 #include <commctrl.h>
 #include <wrl/client.h>
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <mutex>
 #include <unordered_set>
@@ -118,6 +123,7 @@ static PROPERTYKEY              g_sortKey;
 static bool                     g_sortEnabled;
 static bool                     g_sortDescending;
 static bool                     g_excludeVirtualFolders;
+static std::atomic<int>         g_minColumnWidth;  // logical px at 96 DPI; 0 = Windows limit
 
 static std::mutex               g_subclassedMutex;
 static std::unordered_set<HWND> g_subclassed;
@@ -127,6 +133,7 @@ static void LoadSettings() {
 
     g_excludeVirtualFolders = Wh_GetIntSetting(L"exclude_virtual");
     g_sortDescending = Wh_GetIntSetting(L"sort_descending");
+    g_minColumnWidth = std::max(0, Wh_GetIntSetting(L"min_width"));
 
     PCWSTR sortProp = Wh_GetStringSetting(L"sort_property");
     g_sortEnabled =
@@ -311,7 +318,33 @@ static bool ApplyForcedColumns(IUnknown* view, bool subclassForDpi) {
 // Apply to all currently open Explorer windows
 // ---------------------------------------------------------------------------
 
-static void ApplyToAllOpenWindows() {
+// The header keeps the minimum widths it read when its columns were last updated, re-setting the widths makes it read the current ones
+static void RefreshMinimumWidths(IShellView* view) {
+    ComPtr<IFolderView2> folderView;
+    ComPtr<IColumnManager> columnManager;
+    FOLDERVIEWMODE viewMode = FVM_AUTO;
+    int iconSize;
+    UINT count = 0;
+    if (FAILED(view->QueryInterface(IID_PPV_ARGS(&folderView))) ||
+        FAILED(view->QueryInterface(IID_PPV_ARGS(&columnManager))) ||
+        FAILED(folderView->GetViewModeAndIconSize(&viewMode, &iconSize)) ||
+        viewMode != FVM_DETAILS ||
+        FAILED(columnManager->GetColumnCount(CM_ENUM_VISIBLE, &count)) ||
+        !count)
+        return;
+
+    std::vector<PROPERTYKEY> keys(count);
+    if (FAILED(columnManager->GetColumns(CM_ENUM_VISIBLE, keys.data(), count)))
+        return;
+
+    for (const auto& key : keys) {
+        CM_COLUMNINFO ci = {sizeof(ci), CM_MASK_WIDTH};
+        if (SUCCEEDED(columnManager->GetColumnInfo(key, &ci)))
+            columnManager->SetColumnInfo(key, &ci);
+    }
+}
+
+static void ApplyToAllOpenWindows(bool minWidthChanged) {
     HRESULT hrInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     {
         ComPtr<IShellWindows> shellWindows;
@@ -347,14 +380,17 @@ static void ApplyToAllOpenWindows() {
             ComPtr<IServiceProvider> services;
             ComPtr<IShellBrowser> shellBrowser;
             ComPtr<IShellView> shellView;
-            if (SUCCEEDED(browser.As(&services)) &&
-                SUCCEEDED(services->QueryService(SID_STopLevelBrowser,
-                                                 IID_PPV_ARGS(&shellBrowser))) &&
-                SUCCEEDED(shellBrowser->QueryActiveShellView(&shellView)) &&
-                // shellView may be a proxy, don't retain it for the subclass
-                ApplyForcedColumns(shellView.Get(), false)) {
+            if (FAILED(browser.As(&services)) ||
+                FAILED(services->QueryService(SID_STopLevelBrowser,
+                                              IID_PPV_ARGS(&shellBrowser))) ||
+                FAILED(shellBrowser->QueryActiveShellView(&shellView)))
+                continue;
+
+            // shellView may be a proxy, don't retain it for the subclass
+            if (ApplyForcedColumns(shellView.Get(), false))
                 shellView->Refresh();
-            }
+            if (minWidthChanged)
+                RefreshMinimumWidths(shellView.Get());
         }
     }
     if (SUCCEEDED(hrInit))
@@ -386,6 +422,21 @@ HRESULT __thiscall CDefView_SetCurrentViewMode_hook(void* pThis,
     if (SUCCEEDED(hr) && viewMode == FVM_DETAILS)
         ApplyForcedColumns((IUnknown*)pThis, true);
     return hr;
+}
+
+// ---------------------------------------------------------------------------
+// Hooks: CViewSettings (windows.storage.dll)
+// ---------------------------------------------------------------------------
+
+using CViewSettings_GetMinimumColumnWidth_t = UINT(__thiscall*)(void*, UINT);
+CViewSettings_GetMinimumColumnWidth_t CViewSettings_GetMinimumColumnWidth_orig;
+
+// Every width, forced or dragged, is raised to this minimum, which is otherwise up to 10 average characters. In logical px at 96 DPI
+UINT __thiscall CViewSettings_GetMinimumColumnWidth_hook(void* pThis,
+                                                         UINT column) {
+    UINT width = CViewSettings_GetMinimumColumnWidth_orig(pThis, column);
+    int minWidth = g_minColumnWidth;
+    return minWidth > 0 ? std::min(width, (UINT)minWidth) : width;
 }
 
 // ---------------------------------------------------------------------------
@@ -431,11 +482,35 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Failed to hook CDefView symbols");
         return FALSE;
     }
+
+    // windows.storage.dll
+    const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
+        {
+            {
+                L"private: unsigned int __cdecl CViewSettings::_GetMinimumColumnWidth(unsigned int)",
+                L"unsigned int __cdecl CViewSettings::_GetMinimumColumnWidth(unsigned int)",
+                L"private: unsigned int __thiscall CViewSettings::_GetMinimumColumnWidth(unsigned int)",
+                L"unsigned int __thiscall CViewSettings::_GetMinimumColumnWidth(unsigned int)",
+            },
+            &CViewSettings_GetMinimumColumnWidth_orig,
+            CViewSettings_GetMinimumColumnWidth_hook,
+        },
+    };
+
+    // Not essential, columns just keep the Windows minimum width without it
+    HMODULE windowsStorage = LoadLibraryExW(L"windows.storage.dll", nullptr,
+                                            LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!windowsStorage ||
+        !WindhawkUtils::HookSymbols(windowsStorage, windowsStorageHooks,
+                                    ARRAYSIZE(windowsStorageHooks))) {
+        Wh_Log(L"Failed to hook CViewSettings symbols, minimum column width "
+               L"can't be lowered");
+    }
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    ApplyToAllOpenWindows();
+    ApplyToAllOpenWindows(g_minColumnWidth > 0);
 }
 
 void Wh_ModUninit() {
@@ -453,6 +528,7 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
+    int oldMinColumnWidth = g_minColumnWidth;
     LoadSettings();
-    ApplyToAllOpenWindows();
+    ApplyToAllOpenWindows(g_minColumnWidth != oldMinColumnWidth);
 }
