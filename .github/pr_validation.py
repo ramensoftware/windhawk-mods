@@ -2117,6 +2117,11 @@ def test_run():
         )
 
 
+PR_DESCRIPTION_RERUN_HINT = (
+    ' The validation runs again after the PR description is edited.'
+)
+
+
 def validate_pr_changelog(pr_body: str):
     """Mod updates must describe the changes in the PR description."""
     start_marker_re = re.compile(r'<!--\s*changelog:start\s*-->', re.IGNORECASE)
@@ -2131,6 +2136,7 @@ def validate_pr_changelog(pr_body: str):
     template_hint = (
         ' See the pull request template'
         ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1).'
+        + PR_DESCRIPTION_RERUN_HINT
     )
 
     starts = list(start_marker_re.finditer(pr_body))
@@ -2222,7 +2228,8 @@ def main():
             ' pull request template'
             ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1)'
             ' in the PR description, so reviewers know how the mod was authored.'
-            ' Please restore that section and fill it in.',
+            ' Please restore that section and fill it in.'
+            + PR_DESCRIPTION_RERUN_HINT,
         )
 
     if modified_count != 0:

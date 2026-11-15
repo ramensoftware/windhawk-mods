@@ -364,7 +364,7 @@ async function getValidationVerdict({ github, owner, repo, pullRequest }) {
     reason:
       `the [validation](${checkRun.html_url}) of the current commit reported errors, which have to be fixed first:\n\n` +
       `${fence}text\n${text}\n${fence}\n\n` +
-      `Push a fix, then comment \`${AI_REVIEW_COMMAND}\`.`,
+      `Push a fix, or edit the PR description for errors in it, then comment \`${AI_REVIEW_COMMAND}\`.`,
   };
 }
 
