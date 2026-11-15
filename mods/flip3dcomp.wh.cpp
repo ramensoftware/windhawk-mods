@@ -7367,7 +7367,7 @@ bool HookNativeTaskView()
         LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (module)
     {
-        const WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        const WindhawkUtils::SYMBOL_HOOK TWINUI_PCSHELL_HOOKS[] = {
             {
                 {
                     L"public: virtual long __cdecl CAllUpViewService::ToggleAllUpView(struct HMONITOR__ *,enum ALL_UP_VIEW_FLAGS)"
@@ -7377,7 +7377,7 @@ bool HookNativeTaskView()
                 true
             }
         };
-        if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks)))
+        if (!WindhawkUtils::HookSymbols(module, TWINUI_PCSHELL_HOOKS, ARRAYSIZE(TWINUI_PCSHELL_HOOKS)))
             return false;
     }
 #endif
