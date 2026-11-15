@@ -92,6 +92,16 @@ Choose individual Start options instead of a preset.
 2. Choose a skin preset in the mod settings.
 3. Restart the mod after changing settings that require it.
 
+## Recommended companion mods
+
+For a more complete classic Windows experience, consider these optional Windhawk mods:
+
+- [Windows 7 Network Flyout Recreation](https://windhawk.net/mods/win7-network-flyout-recreation)
+- [Windows 7/8.1 Action Center Recreation](https://windhawk.net/mods/win7-action-center-recreation)
+- [Classic Taskbar and Start Menu Properties](https://windhawk.net/mods/classic-taskbar-properties)
+
+Compatibility with the integrated tray and other shell mods can vary by Windows build and configuration.
+
 ## Settings
 
 The mod settings control the skin, Start button, taskbar layout, notification
@@ -135,12 +145,11 @@ The integrated primary taskbar follows the Windows taskbar auto-hide setting usi
 
 ## Credits
 
-- Windows Server 2008 R2 classic is an approximation of the supplied reference for the mod's taskbar. It does not change the desktop background, system theme or external Start menu.
 - RetroBar Windows 2000 theme (dremin and contributors, Apache-2.0): classic colors and bevel reference; https://github.com/dremin/RetroBar/blob/master/LICENSE
 - RetroBar and ManagedShell contributors (Apache-2.0): experimental auto-hide behavior adapted from Taskbar.xaml.cs and AppBarWindow.cs; https://github.com/cairoshell/ManagedShell/blob/master/LICENSE
-- Win7Taskbar contributors: Aero Basic taskbar texture and theme reference (GPL-3.0-or-later).
 - WinBoeing777 - Testing on Windows 10 22H2 and Suggestions
 - Cips - Testing on Windows 11 25H2
+- MLC_YT - Suggestions and Providing feedback
 - Kiyaku - Suggestions and Testing
 
 ## Disclaimer
@@ -12836,8 +12845,21 @@ struct T81AutoHideState {
     float fraction = 0.0f;
     float from = 0.0f, target = 0.0f;
     ULONGLONG animStart = 0, idleSince = 0;
+    UINT timerInterval = 0;
 };
 static T81AutoHideState t81AutoHide;
+// Called only on the taskbar UI thread. Avoid resetting an already-running
+// timer, which would otherwise postpone the next tick on each refresh.
+static void T81SetAutoHideTimer(UINT interval) {
+    if (!s || !s->bar || t81AutoHide.timerInterval == interval)
+        return;
+    if (!interval) {
+        KillTimer(s->bar, TIMER_T81_AUTOHIDE);
+        t81AutoHide.timerInterval = 0;
+    } else if (SetTimer(s->bar, TIMER_T81_AUTOHIDE, interval, nullptr)) {
+        t81AutoHide.timerInterval = interval;
+    }
+}
 static void T81AutoHideRevealNow() {
     if (!s || !s->bar || !autoHideIntegratedBar.load() || !t81AutoHide.valid)
         return;
@@ -14427,6 +14449,10 @@ static DWORD DesktopShellPid();
 static void StopPrivateTray() {
     if (!s)
         return;
+    // Restore our bar before disabling its timer and returning to the native
+    // tray.
+    T81AutoHideRevealNow();
+    T81SetAutoHideTimer(0);
     // Stop the independent guard before queuing any restoration requests.
     if (g_t81Recovery) {
         InterlockedExchange(&g_t81Recovery->guardEnabled, 0);
@@ -28479,7 +28505,8 @@ static int T81ReadPersistedAutoHide() {
     return (flags & ABS_AUTOHIDE) ? 1 : 0;
 }
 static int T81ReadLiveAutoHide() {
-    if (!s || !IsExpectedNativeTray(s->native) || s->native == s->privateHost)
+    if (!s || !s->privateActive || !IsExpectedNativeTray(s->native) ||
+        s->native == s->privateHost)
         return -1;
     // Shell32 routes ABM_GETSTATE as WM_COPYDATA/dwData 0. Ask the already
     // validated real Shell_TrayWnd directly, not our private proxy. GETSTATE
@@ -28502,6 +28529,11 @@ static void T81SyncSystemAutoHide() {
     static bool liveKnown = false;
     static int lastLogged = -2;
     static bool warned = false;
+    if (!s || !s->bar || !s->privateActive) {
+        t81AppbarObservedState.store(-1);
+        T81SetAutoHideTimer(0);
+        return;
+    }
     int observed = t81AppbarObservedState.exchange(-1);
     int state = observed >= 0 ? observed : T81ReadLiveAutoHide();
     const wchar_t* source =
@@ -28514,6 +28546,10 @@ static void T81SyncSystemAutoHide() {
         source = L"registry-fallback";
     }
     if (state < 0) {
+        // On takeover/recovery retain the last known state even if the first
+        // live query times out, and resume its timer when appropriate.
+        if (autoHideIntegratedBar.load() && !t81AutoHide.timerInterval)
+            T81SetAutoHideTimer(100);
         if (!warned && s && s->privateActive) {
             Wh_Log(L"[T81-AUTOHIDE] live query unavailable; retaining state");
             warned = true;
@@ -28521,6 +28557,14 @@ static void T81SyncSystemAutoHide() {
         return;
     }
     bool previous = autoHideIntegratedBar.exchange(state != 0);
+    if (state) {
+        if (!t81AutoHide.timerInterval)
+            T81SetAutoHideTimer(100);
+    } else {
+        T81SetAutoHideTimer(0);
+        t81AutoHide.fraction = t81AutoHide.target = t81AutoHide.from = 0;
+        t81AutoHide.idleSince = 0;
+    }
     if (state != lastLogged || previous != (state != 0)) {
         Wh_Log(L"[T81-AUTOHIDE] source=%ls state=%d previous=%d", source, state,
                previous ? 1 : 0);
@@ -28530,7 +28574,7 @@ static void T81SyncSystemAutoHide() {
         UpdatePlacement();
 }
 static void T81AutoHideTick() {
-    if (!s || !s->bar || !t81AutoHide.valid)
+    if (!s || !s->bar)
         return;
     if (!autoHideIntegratedBar.load() || !s->privateActive) {
         if (t81AutoHide.fraction > 0) {
@@ -28541,10 +28585,14 @@ static void T81AutoHideTick() {
             InvalidateRect(s->bar, nullptr, FALSE);
         }
         t81AutoHide.idleSince = 0;
+        T81SetAutoHideTimer(0);
         return;
     }
-    if (!IsWindowVisible(s->bar))
-        return;  // fullscreen/arranging owns visibility
+    if (!t81AutoHide.valid || !IsWindowVisible(s->bar)) {
+        // Fullscreen/arranging owns visibility; no animation is in progress.
+        T81SetAutoHideTimer(100);
+        return;
+    }
     ULONGLONG now = GetTickCount64();
     POINT cursor{};
     RECT current{};
@@ -28598,6 +28646,8 @@ static void T81AutoHideTick() {
     }
     float duration = wanted > 0 ? 300.0f : 150.0f;
     float t = std::min(1.0f, (float)(now - t81AutoHide.animStart) / duration);
+    T81SetAutoHideTimer(
+        t < 1.0f && t81AutoHide.from != t81AutoHide.target ? 16 : 100);
     // Sine ease-in, like ManagedShell's default SineEase.
     float eased = 1.0f - std::cos(t * 1.57079632679f);
     float next =
@@ -35664,7 +35714,6 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             InvalidateRect(h, nullptr, FALSE);
             return 0;
         case WM_CREATE:
-            SetTimer(h, TIMER_T81_AUTOHIDE, 16, nullptr);
             SetTimer(h, TIMER_REFRESH, 1000, nullptr);
             SetTimer(h, TIMER_Z_GUARD, 100, nullptr);
             return 0;
@@ -36052,15 +36101,6 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                 return 0;
             }
             if (wp == TIMER_T81_AUTOHIDE) {
-                // TraySettings broadcasts can arrive before Explorer has
-                // persisted its value. A bounded periodic reread also covers
-                // writers which do not broadcast a setting-change message.
-                static ULONGLONG lastRead = 0;
-                ULONGLONG now = GetTickCount64();
-                if (!lastRead || now - lastRead >= 1000) {
-                    lastRead = now;
-                    T81SyncSystemAutoHide();
-                }
                 T81AutoHideTick();
                 return 0;
             }
@@ -36163,6 +36203,15 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                     PeekOff(false);
                 RefreshNativeLabelPreference();
                 if (s->privateActive) {
+                    // Slow fallback for settings changes that weren't
+                    // broadcast. The immediate event paths use
+                    // TIMER_T81_AUTOHIDE_REFRESH.
+                    static ULONGLONG lastAutoHideRead = 0;
+                    ULONGLONG now = GetTickCount64();
+                    if (!lastAutoHideRead || now - lastAutoHideRead >= 5000) {
+                        lastAutoHideRead = now;
+                        T81SyncSystemAutoHide();
+                    }
                     RefreshLanguageIndicator();
                     RefreshVolume();
                     RefreshBattery();
@@ -36223,6 +36272,8 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                     try {
                         if (StartPrivateTray()) {
                             s->nativeRecoveryPending = false;
+                            SetTimer(h, TIMER_T81_AUTOHIDE_REFRESH, 150,
+                                     nullptr);
                             StartResourceWorker();
                             RefreshVolume();
                             RefreshBattery();
@@ -36437,7 +36488,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         case WM_DISPLAYCHANGE:
         case WM_SETTINGCHANGE:
         case WM_DPICHANGED:
-            if (m == WM_SETTINGCHANGE)
+            if (m == WM_SETTINGCHANGE && s->privateActive)
                 SetTimer(h, TIMER_T81_AUTOHIDE_REFRESH, 150, nullptr);
             SetTimer(h, TIMER_T81_BLUR_REAPPLY, 300, nullptr);
             s->buttonTransitions.clear();
@@ -37326,7 +37377,7 @@ LRESULT BarProcImpl(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         }
         case WM_DESTROY:
             T81BalloonCleanup();
-            KillTimer(h, TIMER_T81_AUTOHIDE);
+            T81SetAutoHideTimer(0);
             KillTimer(h, TIMER_T81_AUTOHIDE_REFRESH);
             KillTimer(h, TIMER_T81_START_RECONCILE);
             T81StopForcedWinRecovery();
@@ -37599,6 +37650,8 @@ DWORD WINAPI UIThread(LPVOID) {
                     local.legacyAlphaReady ? 1 : 0, readyForTray ? 1 : 0);
                 if (enablePrivateTray.load() && readyForTray &&
                     StartPrivateTray()) {
+                    SetTimer(local.bar, TIMER_T81_AUTOHIDE_REFRESH, 150,
+                             nullptr);
                     StartResourceWorker();
                     RefreshVolume();
                     PublishCniSystemIcon(HIT_VOLUME);
