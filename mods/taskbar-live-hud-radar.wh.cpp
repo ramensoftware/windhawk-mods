@@ -1,13 +1,13 @@
 // ==WindhawkMod==
 // @id              taskbar-live-hud-radar
 // @name            Taskbar Live HUD
-// @description     Compact system monitoring widget for the taskbar: CPU, RAM, network speed, optional ping and a working set trimmer
-// @version         1.1.1
+// @description     Compact system monitoring widget for the taskbar: CPU, RAM, GPU, temperatures, disk speed, network speed, optional ping and a working set trimmer
+// @version         1.2
 // @author          Lemon
 // @github          https://github.com/lemon-web-stack
 // @homepage        https://github.com/lemon-web-stack
 // @include         windhawk.exe
-// @compilerOptions -luser32 -lgdi32 -liphlpapi -lpsapi -ldwmapi -lshell32 -lgdiplus -ladvapi32
+// @compilerOptions -luser32 -lgdi32 -liphlpapi -lpsapi -ldwmapi -lshell32 -lgdiplus -ladvapi32 -lpdh -lole32 -loleaut32 -lwbemuuid
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -16,7 +16,8 @@
 # Taskbar Live HUD
 
 A compact system monitoring widget for the Windows 10 & 11 taskbar.
-Displays real-time CPU usage, RAM load, network traffic (in Mbps/Kbps), and optional router latency,
+Displays real-time CPU usage, RAM load, GPU usage & temperature, CPU temperature,
+disk read/write speed, network traffic (in Mbps/Kbps), and optional router latency,
 with an optional process memory trimmer and real-time mini-graph.
 
 This is a tool mod: it runs in its own dedicated process instead of being
@@ -26,22 +27,26 @@ survives Explorer restarts.
 ![Screenshot](https://i.imgur.com/EAyRsCR.png)
 
 ### Features
-- **Real-time monitoring:** CPU load, RAM usage and active network speed (Mbps/Kbps).
-- **Windows 10 & 11 look:** blends with the taskbar, configurable corner style, custom/auto background color and per-pixel background alpha.
+- **Real-time monitoring:** CPU load, RAM usage, GPU usage & temperature, CPU temperature, disk R/W/total speed, and active network speed (Mbps/Kbps).
+- **Temperature units:** Choose between Celsius (°C) and Fahrenheit (°F).
+- **Windows 10 & 11 look:** blends with the taskbar, configurable corner style, custom/auto background, border, and metric colors with full RGBA / HEX opacity support.
+- **Configurable sizes & font:** customize font size, widget min/max width, widget height, and mini-graph popup dimensions.
+- **Customizable shortcuts & hover:** remap or disable Left/Right/Ctrl+Click actions, drag modifier, and optional mouse-hover activation with custom delay.
 - **Auto-hide support:** smoothly follows taskbar auto-hide animations and hides when the taskbar is retracted.
 - **Instant Fullscreen detection:** hides instantly without delay when any app goes fullscreen (e.g. F11 in browsers, video players, or games).
 - **Ping (opt-in, off by default):** measures ICMP latency to the local router (default gateway) roughly every 1.6 seconds. Nothing is sent while it is disabled.
-- **Mini History Graph:** press **Ctrl + Right Click** to open a real-time CPU & RAM history graph.
-- **Process Memory Trimmer (opt-in, off by default):** trims the working sets of user processes upon **Ctrl + Left Click**. Trimmed pages move to the standby list and programs page the data back in when they need it, so this does not free memory in a lasting way and may cause a short slowdown.
+- **Mini History Graph:** press **Ctrl + Right Click** (default) to open a real-time CPU, RAM & GPU history graph.
+- **Process Memory Trimmer (opt-in, off by default):** trims the working sets of user processes upon **Ctrl + Left Click** (default). Trimmed pages move to the standby list and programs page the data back in when they need it, so this does not free memory in a lasting way and may cause a short slowdown.
 
-### Controls
+### Default Controls (Customizable in Settings)
 - **Ctrl + Left Click:** trim memory (only if enabled in settings).
-- **Ctrl + Right Click:** toggle real-time CPU & RAM mini-graph popup.
+- **Ctrl + Right Click:** toggle real-time mini-graph popup.
 - **Alt + Left Click and drag:** adjust the horizontal position on the taskbar.
 
 ### Known limitations
 - Only the primary taskbar is supported (no secondary monitors).
 - Network speed is the sum of all active hardware adapters.
+- CPU temperature on Windows without a kernel driver relies on ACPI/WMI thermal zones or LibreHardwareMonitor/OpenHardwareMonitor WMI if running; displays `N/A` if no sensor is exposed by the system.
 */
 // ==/WindhawkModReadme==
 
@@ -52,16 +57,48 @@ survives Explorer restarts.
   $description: "Sensor polling frequency in milliseconds (from 300 to 5000)"
 - bgAlpha: 200
   $name: "Background Opacity (40-255)"
-  $description: "Widget background transparency level (text stays crisp and fully opaque)"
+  $description: "Widget background transparency level when using Auto or #RRGGBB color (text stays crisp)"
 - bgColorMode: auto
   $name: "Background Color Mode"
-  $description: "Choose between following Windows taskbar theme or custom HEX color"
+  $description: "Choose between following Windows taskbar theme or custom color"
   $options:
     - auto: "Automatic (Follows Taskbar Theme)"
     - custom: "Custom Color"
 - customBgColor: "#14151a"
-  $name: "Custom Background Color (HEX)"
-  $description: "RGB hex string used when Custom Color mode is selected, e.g. #14151a, #000000, #1e1e2e"
+  $name: "Custom Background Color (HEX / RGBA)"
+  $description: "Supports #RRGGBB, #RRGGBBAA, rgb(r,g,b), or rgba(r,g,b,a), e.g. #14151a, rgba(20, 21, 26, 0.8)"
+- borderColorMode: auto
+  $name: "Border Color Mode"
+  $description: "Choose between automatic theme border or custom border color"
+  $options:
+    - auto: "Automatic (Follows Theme)"
+    - custom: "Custom Color"
+- customBorderColor: "rgba(95, 150, 225, 0.7)"
+  $name: "Custom Border Color (HEX / RGBA)"
+  $description: "Supports #RRGGBB, #RRGGBBAA, rgb(r,g,b), or rgba(r,g,b,a)"
+- metricsColorMode: auto
+  $name: "Metrics Color Mode"
+  $description: "Automatic uses dynamic load colors (normal/warn/alert); Custom lets you set each color"
+  $options:
+    - auto: "Automatic (Dynamic Load Colors)"
+    - custom: "Custom Colors"
+- customLabelColor: "#8c919b"
+  $name: "Custom Label Color (HEX / RGBA)"
+  $description: "Color for metric labels (e.g. CPU, RAM, GPU)"
+- customCpuColor: "#f5f6fa"
+  $name: "Custom CPU Color (HEX / RGBA)"
+- customRamColor: "#f5f6fa"
+  $name: "Custom RAM Color (HEX / RGBA)"
+- customGpuColor: "#6ee691"
+  $name: "Custom GPU Color (HEX / RGBA)"
+- customTempColor: "#ffbe32"
+  $name: "Custom Temperature Color (HEX / RGBA)"
+- customNetColor: "#73d7ff"
+  $name: "Custom Network Speed Color (HEX / RGBA)"
+- customDiskColor: "#c8a0ff"
+  $name: "Custom Disk Speed Color (HEX / RGBA)"
+- customPingColor: "#7deb9b"
+  $name: "Custom Ping Color (HEX / RGBA)"
 - cornerStyle: round
   $name: "Corner Style"
   $description: "Window corner shape of the widget"
@@ -71,25 +108,108 @@ survives Explorer restarts.
     - square: "Square"
 - offsetX: 6
   $name: "Horizontal Offset (px)"
-  $description: "Distance from the system tray (adjustable via Alt + Drag)"
+  $description: "Distance from the system tray (adjustable via Drag)"
+- fontSize: 12
+  $name: "Font Size (px)"
+  $description: "Text size for HUD metrics (8 to 20, default 12)"
+- widgetMinWidth: 54
+  $name: "Widget Minimum Width (px)"
+  $description: "Minimum width of the taskbar widget (0 = auto)"
+- widgetMaxWidth: 0
+  $name: "Widget Maximum Width (px)"
+  $description: "Maximum width of the taskbar widget (0 = unlimited)"
+- widgetHeight: 0
+  $name: "Widget Height (px)"
+  $description: "Custom height of the taskbar widget (0 = auto match taskbar)"
+- graphWidth: 220
+  $name: "Mini-Graph Popup Width (px)"
+  $description: "Width of the history graph popup window (140 to 600)"
+- graphHeight: 125
+  $name: "Mini-Graph Popup Height (px)"
+  $description: "Height of the history graph popup window (80 to 400)"
 - showCpu: true
   $name: "Show CPU Usage"
   $description: "Display current processor load percentage"
+- showCpuTemp: false
+  $name: "Show CPU Temperature"
+  $description: "Display CPU temperature (via ACPI/WMI or LibreHardwareMonitor)"
 - showRam: true
   $name: "Show RAM Usage"
   $description: "Display current memory load percentage"
+- showGpu: false
+  $name: "Show GPU Usage"
+  $description: "Display current GPU utilization percentage"
+- showGpuTemp: false
+  $name: "Show GPU Temperature"
+  $description: "Display GPU temperature (NVIDIA NVAPI, AMD ADL, or LibreHardwareMonitor)"
+- tempUnit: celsius
+  $name: "Temperature Unit"
+  $description: "Unit for CPU and GPU temperatures"
+  $options:
+    - celsius: "Celsius (°C)"
+    - fahrenheit: "Fahrenheit (°F)"
 - showMiniBars: true
   $name: "Show Mini-Bars"
-  $description: "Display progress bars under CPU and RAM indicators"
+  $description: "Display progress bars under CPU, RAM, and GPU indicators"
+- diskSpeedMode: off
+  $name: "Show Disk Speed"
+  $description: "Display physical disk Read, Write, or Total speed"
+  $options:
+    - off: "Off"
+    - total: "Total Speed (Read + Write)"
+    - rw: "Read & Write Separately"
+    - read: "Read Speed Only"
+    - write: "Write Speed Only"
 - showNetSpeed: true
   $name: "Show Network Speed"
   $description: "Display active download and upload traffic speed in Mbps/Kbps"
 - enableRamClean: false
-  $name: "Enable Process Memory Trimmer (Ctrl + Click)"
-  $description: "Allows pressing Ctrl + Left Click to trim working set memory of user processes"
+  $name: "Enable Process Memory Trimmer"
+  $description: "Allows triggering working set memory trim via the configured shortcut"
 - showPing: false
   $name: "Show Ping to Local Router (Opt-in)"
   $description: "Measure ICMP latency to the local default gateway (a request is sent about every 1.6 seconds)"
+- leftClickAction: none
+  $name: "Left Click Action"
+  $options:
+    - none: "Disabled"
+    - toggleGraph: "Toggle Mini-Graph"
+    - trimRam: "Trim Memory"
+- ctrlLeftClickAction: trimRam
+  $name: "Ctrl + Left Click Action"
+  $options:
+    - trimRam: "Trim Memory"
+    - toggleGraph: "Toggle Mini-Graph"
+    - none: "Disabled"
+- rightClickAction: none
+  $name: "Right Click Action"
+  $options:
+    - none: "Disabled"
+    - toggleGraph: "Toggle Mini-Graph"
+    - trimRam: "Trim Memory"
+- ctrlRightClickAction: toggleGraph
+  $name: "Ctrl + Right Click Action"
+  $options:
+    - toggleGraph: "Toggle Mini-Graph"
+    - trimRam: "Trim Memory"
+    - none: "Disabled"
+- dragModifier: alt
+  $name: "Drag Position Modifier (with Left Click)"
+  $options:
+    - alt: "Alt + Left Drag (Default)"
+    - ctrl: "Ctrl + Left Drag"
+    - shift: "Shift + Left Drag"
+    - none: "Left Drag (No Modifier)"
+    - disabled: "Disabled"
+- hoverAction: none
+  $name: "Mouse Hover Action"
+  $description: "Automatically trigger an action when hovering over the widget"
+  $options:
+    - none: "Disabled"
+    - toggleGraph: "Show Mini-Graph on Hover"
+- hoverDelayMs: 400
+  $name: "Mouse Hover Delay (ms)"
+  $description: "Delay in milliseconds before the hover action activates (100 to 3000)"
 */
 // ==/WindhawkModSettings==
 
@@ -105,10 +225,17 @@ survives Explorer restarts.
 #include <psapi.h>
 #include <tlhelp32.h>
 #include <gdiplus.h>
+#include <pdh.h>
+#include <pdhmsg.h>
+#include <wbemidl.h>
+#include <oleauto.h>
 #include <cmath>
+#include <cwchar>
+#include <cwctype>
 #include <string>
 #include <vector>
 #include <deque>
+#include <map>
 #include <atomic>
 #include <algorithm>
 #include <mutex>
@@ -118,6 +245,7 @@ survives Explorer restarts.
 #define WM_HUD_APPLY_SETTINGS   (WM_USER + 103)
 #define WM_HUD_UPDATE_GRAPH     (WM_USER + 104)
 #define TIMER_FAST_CHECK        1
+#define TIMER_HOVER_ACTIVATE    2
 
 #ifndef DWMWA_WINDOW_CORNER_PREFERENCE
 #define DWMWA_WINDOW_CORNER_PREFERENCE 33
@@ -127,8 +255,9 @@ survives Explorer restarts.
 #define NET_TYPE_LOOPBACK 24
 #endif
 
-static const int PING_ERROR   = -1;
-static const int PING_PENDING = -2;
+static const int PING_ERROR       = -1;
+static const int PING_PENDING     = -2;
+static const int TEMP_UNAVAILABLE = -999;
 
 typedef struct _LOCAL_IF_ROW2 {
     ULONG64 InterfaceLuid;
@@ -195,18 +324,80 @@ static inline unsigned long MakeIpv4(unsigned char a, unsigned char b, unsigned 
     return (unsigned long)(a | (b << 8) | (c << 16) | (d << 24));
 }
 
-bool ParseHexColor(PCWSTR str, BYTE& r, BYTE& g, BYTE& b) {
+// Parses #RRGGBB, #RRGGBBAA, rgb(r,g,b), or rgba(r,g,b,a)
+bool ParseColorString(PCWSTR str, Gdiplus::Color& outColor, BYTE defaultAlpha = 255, bool* outHasExplicitAlpha = nullptr) {
+    if (outHasExplicitAlpha) *outHasExplicitAlpha = false;
     if (!str) return false;
-    if (str[0] == L'#') str++;
-    if (lstrlenW(str) != 6) return false;
-    wchar_t* end = nullptr;
-    unsigned long val = wcstoul(str, &end, 16);
-    if (end && *end == L'\0') {
-        r = (BYTE)((val >> 16) & 0xFF);
-        g = (BYTE)((val >> 8) & 0xFF);
-        b = (BYTE)(val & 0xFF);
-        return true;
+
+    std::wstring s(str);
+    while (!s.empty() && iswspace(s.front())) s.erase(s.begin());
+    while (!s.empty() && iswspace(s.back())) s.pop_back();
+    if (s.empty()) return false;
+
+    if (s[0] == L'#') {
+        std::wstring hex = s.substr(1);
+        if (hex.size() == 6 || hex.size() == 8) {
+            wchar_t* end = nullptr;
+            unsigned long long val = wcstoull(hex.c_str(), &end, 16);
+            if (end && *end == L'\0') {
+                if (hex.size() == 6) {
+                    BYTE r = (BYTE)((val >> 16) & 0xFF);
+                    BYTE g = (BYTE)((val >> 8) & 0xFF);
+                    BYTE b = (BYTE)(val & 0xFF);
+                    outColor = Gdiplus::Color(defaultAlpha, r, g, b);
+                } else {
+                    BYTE r = (BYTE)((val >> 24) & 0xFF);
+                    BYTE g = (BYTE)((val >> 16) & 0xFF);
+                    BYTE b = (BYTE)((val >> 8) & 0xFF);
+                    BYTE a = (BYTE)(val & 0xFF);
+                    outColor = Gdiplus::Color(a, r, g, b);
+                    if (outHasExplicitAlpha) *outHasExplicitAlpha = true;
+                }
+                return true;
+            }
+        }
+        return false;
     }
+
+    // Check rgb(...) or rgba(...)
+    std::wstring lower = s;
+    for (wchar_t& ch : lower) ch = (wchar_t)towlower(ch);
+    bool isRgba = (lower.rfind(L"rgba(", 0) == 0);
+    bool isRgb = !isRgba && (lower.rfind(L"rgb(", 0) == 0);
+    if ((isRgba || isRgb) && lower.back() == L')') {
+        size_t start = isRgba ? 5 : 4;
+        std::wstring inner = s.substr(start, s.size() - start - 1);
+        double vals[4] = { 0, 0, 0, (double)defaultAlpha };
+        int count = 0;
+        size_t pos = 0;
+        while (pos < inner.size() && count < 4) {
+            size_t comma = inner.find(L',', pos);
+            std::wstring part = (comma == std::wstring::npos) ? inner.substr(pos) : inner.substr(pos, comma - pos);
+            wchar_t* end = nullptr;
+            double v = wcstod(part.c_str(), &end);
+            if (end == part.c_str()) return false;
+            vals[count++] = v;
+            if (comma == std::wstring::npos) break;
+            pos = comma + 1;
+        }
+        if ((isRgb && count == 3) || (isRgba && count == 4)) {
+            BYTE r = (BYTE)(std::max)(0, (std::min)(255, (int)std::lround(vals[0])));
+            BYTE g = (BYTE)(std::max)(0, (std::min)(255, (int)std::lround(vals[1])));
+            BYTE b = (BYTE)(std::max)(0, (std::min)(255, (int)std::lround(vals[2])));
+            BYTE a = defaultAlpha;
+            if (isRgba) {
+                if (vals[3] <= 1.0 && vals[3] >= 0.0) {
+                    a = (BYTE)(std::max)(0, (std::min)(255, (int)std::lround(vals[3] * 255.0)));
+                } else {
+                    a = (BYTE)(std::max)(0, (std::min)(255, (int)std::lround(vals[3])));
+                }
+                if (outHasExplicitAlpha) *outHasExplicitAlpha = true;
+            }
+            outColor = Gdiplus::Color(a, r, g, b);
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -220,19 +411,81 @@ unsigned long GetDefaultGatewayIp() {
     return 0;
 }
 
+enum class DiskSpeedMode {
+    Off = 0,
+    Total,
+    RW,
+    ReadOnly,
+    WriteOnly
+};
+
+enum class TempUnit {
+    Celsius = 0,
+    Fahrenheit
+};
+
+enum class HudAction {
+    None = 0,
+    TrimRam,
+    ToggleGraph
+};
+
+enum class DragModifier {
+    Alt = 0,
+    Ctrl,
+    Shift,
+    None,
+    Disabled
+};
+
 struct ModSettings {
     int updateInterval;
     int bgAlpha;
     int cornerPref;
     int offsetX;
+    int fontSize;
+    int widgetMinWidth;
+    int widgetMaxWidth;
+    int widgetHeight;
+    int graphWidth;
+    int graphHeight;
+
     bool showCpu;
+    bool showCpuTemp;
     bool showRam;
+    bool showGpu;
+    bool showGpuTemp;
+    TempUnit tempUnit;
     bool showMiniBars;
+    DiskSpeedMode diskSpeedMode;
     bool showNetSpeed;
     bool enableRamClean;
     bool showPing;
+
     bool customBgEnabled;
-    BYTE customR, customG, customB;
+    Gdiplus::Color customBgColor;
+    bool customBgHasAlpha;
+
+    bool customBorderEnabled;
+    Gdiplus::Color customBorderColor;
+
+    bool customMetricsEnabled;
+    Gdiplus::Color customLabelColor;
+    Gdiplus::Color customCpuColor;
+    Gdiplus::Color customRamColor;
+    Gdiplus::Color customGpuColor;
+    Gdiplus::Color customTempColor;
+    Gdiplus::Color customNetColor;
+    Gdiplus::Color customDiskColor;
+    Gdiplus::Color customPingColor;
+
+    HudAction leftClickAction;
+    HudAction ctrlLeftClickAction;
+    HudAction rightClickAction;
+    HudAction ctrlRightClickAction;
+    DragModifier dragModifier;
+    HudAction hoverAction;
+    int hoverDelayMs;
 };
 
 ModSettings settings = {};
@@ -256,16 +509,22 @@ std::atomic<bool> g_bRunning(false);
 std::atomic<bool> g_bCleaningRam(false);
 
 std::atomic<int> g_cpuUsage(0);
+std::atomic<int> g_cpuTempC(TEMP_UNAVAILABLE);
 std::atomic<int> g_ramUsage(0);
+std::atomic<int> g_gpuUsage(0);
+std::atomic<int> g_gpuTempC(TEMP_UNAVAILABLE);
 std::atomic<int> g_pingMs(PING_PENDING);
 std::atomic<DWORD> g_netDownKbps(0);
 std::atomic<DWORD> g_netUpKbps(0);
+std::atomic<ULONGLONG> g_diskReadBps(0);
+std::atomic<ULONGLONG> g_diskWriteBps(0);
 
 // History buffer for mini-graph
 std::mutex g_historyMutex;
 static const size_t MAX_GRAPH_POINTS = 50;
 std::deque<int> g_cpuHistory;
 std::deque<int> g_ramHistory;
+std::deque<int> g_gpuHistory;
 
 std::wstring g_statusMessage = L"";
 ULONGLONG g_statusMessageTime = 0;
@@ -282,6 +541,7 @@ Gdiplus::Font* g_pFontLabel = nullptr;
 Gdiplus::Font* g_pFontValue = nullptr;
 Gdiplus::Font* g_pFontSmall = nullptr;
 UINT g_currentDpi = 96;
+int g_currentFontSize = 12;
 
 UINT SafeGetWindowDpi(HWND hWnd) {
     typedef UINT(WINAPI* GetDpiForWindow_t)(HWND);
@@ -308,14 +568,15 @@ bool ReadTaskbarLightTheme() {
     return false;
 }
 
-void UpdateCachedFonts(UINT dpi) {
+void UpdateCachedFonts(UINT dpi, int fontSize) {
     if (g_pFontLabel) { delete g_pFontLabel; g_pFontLabel = nullptr; }
     if (g_pFontValue) { delete g_pFontValue; g_pFontValue = nullptr; }
     if (g_pFontSmall) { delete g_pFontSmall; g_pFontSmall = nullptr; }
     g_currentDpi = dpi;
+    g_currentFontSize = fontSize;
 
-    Gdiplus::REAL fontHeight = (Gdiplus::REAL)ScaleDpi(12, dpi);
-    Gdiplus::REAL smallFontHeight = (Gdiplus::REAL)ScaleDpi(10, dpi);
+    Gdiplus::REAL fontHeight = (Gdiplus::REAL)ScaleDpi(fontSize, dpi);
+    Gdiplus::REAL smallFontHeight = (Gdiplus::REAL)ScaleDpi((std::max)(8, fontSize - 2), dpi);
 
     // Support Windows 11 (Segoe UI Variable) and Windows 10 (Segoe UI fallback)
     Gdiplus::FontFamily familyVar(L"Segoe UI Variable Text");
@@ -331,7 +592,7 @@ void UpdateCachedFonts(UINT dpi) {
 
 void SyncWindowGeometry();
 void FastRepositionOnly();
-void ToggleGraphWindow();
+void ToggleGraphWindow(bool forceOpen = false);
 
 void ShowTempStatus(const wchar_t* text, Gdiplus::Color color = Gdiplus::Color(255, 110, 230, 145), ULONGLONG duration = 1800) {
     g_statusMessage = text;
@@ -351,6 +612,22 @@ void ApplyWindowStyle(HWND hWnd) {
     DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corners, sizeof(corners));
 }
 
+HudAction ParseHudAction(PCWSTR str, HudAction def) {
+    if (!str) return def;
+    if (lstrcmpiW(str, L"trimRam") == 0) return HudAction::TrimRam;
+    if (lstrcmpiW(str, L"toggleGraph") == 0) return HudAction::ToggleGraph;
+    if (lstrcmpiW(str, L"none") == 0) return HudAction::None;
+    return def;
+}
+
+Gdiplus::Color LoadColorSetting(PCWSTR name, Gdiplus::Color fallback, BYTE defaultAlpha = 255, bool* outExplicitAlpha = nullptr) {
+    PCWSTR str = Wh_GetStringSetting(name);
+    Gdiplus::Color col = fallback;
+    ParseColorString(str, col, defaultAlpha, outExplicitAlpha);
+    Wh_FreeStringSetting(str);
+    return col;
+}
+
 void LoadSettings(bool fromSettingsChanged = false) {
     ModSettings s = {};
 
@@ -364,10 +641,24 @@ void LoadSettings(bool fromSettingsChanged = false) {
     s.customBgEnabled = (lstrcmpiW(bgModeStr, L"custom") == 0);
     Wh_FreeStringSetting(bgModeStr);
 
-    s.customR = 20; s.customG = 21; s.customB = 26;
-    PCWSTR hexStr = Wh_GetStringSetting(L"customBgColor");
-    ParseHexColor(hexStr, s.customR, s.customG, s.customB);
-    Wh_FreeStringSetting(hexStr);
+    s.customBgColor = LoadColorSetting(L"customBgColor", Gdiplus::Color((BYTE)s.bgAlpha, 20, 21, 26), (BYTE)s.bgAlpha, &s.customBgHasAlpha);
+
+    PCWSTR borderModeStr = Wh_GetStringSetting(L"borderColorMode");
+    s.customBorderEnabled = (lstrcmpiW(borderModeStr, L"custom") == 0);
+    Wh_FreeStringSetting(borderModeStr);
+    s.customBorderColor = LoadColorSetting(L"customBorderColor", Gdiplus::Color(180, 95, 150, 225), 255);
+
+    PCWSTR metricsModeStr = Wh_GetStringSetting(L"metricsColorMode");
+    s.customMetricsEnabled = (lstrcmpiW(metricsModeStr, L"custom") == 0);
+    Wh_FreeStringSetting(metricsModeStr);
+    s.customLabelColor = LoadColorSetting(L"customLabelColor", Gdiplus::Color(255, 140, 145, 155), 255);
+    s.customCpuColor   = LoadColorSetting(L"customCpuColor",   Gdiplus::Color(255, 245, 246, 250), 255);
+    s.customRamColor   = LoadColorSetting(L"customRamColor",   Gdiplus::Color(255, 245, 246, 250), 255);
+    s.customGpuColor   = LoadColorSetting(L"customGpuColor",   Gdiplus::Color(255, 110, 230, 145), 255);
+    s.customTempColor  = LoadColorSetting(L"customTempColor",  Gdiplus::Color(255, 255, 190, 50),  255);
+    s.customNetColor   = LoadColorSetting(L"customNetColor",   Gdiplus::Color(255, 115, 215, 255), 255);
+    s.customDiskColor  = LoadColorSetting(L"customDiskColor",  Gdiplus::Color(255, 200, 160, 255), 255);
+    s.customPingColor  = LoadColorSetting(L"customPingColor",  Gdiplus::Color(255, 125, 235, 155), 255);
 
     s.cornerPref = 2;
     PCWSTR cornerStr = Wh_GetStringSetting(L"cornerStyle");
@@ -375,12 +666,82 @@ void LoadSettings(bool fromSettingsChanged = false) {
     else if (lstrcmpiW(cornerStr, L"small") == 0) s.cornerPref = 3;
     Wh_FreeStringSetting(cornerStr);
 
+    int rawFontSize = Wh_GetIntSetting(L"fontSize");
+    if (rawFontSize <= 0) rawFontSize = 12;
+    s.fontSize = (std::max)(8, (std::min)(20, rawFontSize));
+
+    int rawMinW = Wh_GetIntSetting(L"widgetMinWidth");
+    s.widgetMinWidth = (rawMinW <= 0) ? 54 : (std::max)(24, (std::min)(800, rawMinW));
+
+    int rawMaxW = Wh_GetIntSetting(L"widgetMaxWidth");
+    s.widgetMaxWidth = (rawMaxW <= 0) ? 0 : (std::max)(s.widgetMinWidth, (std::min)(1200, rawMaxW));
+
+    int rawH = Wh_GetIntSetting(L"widgetHeight");
+    s.widgetHeight = (rawH <= 0) ? 0 : (std::max)(16, (std::min)(64, rawH));
+
+    int rawGw = Wh_GetIntSetting(L"graphWidth");
+    if (rawGw <= 0) rawGw = 220;
+    s.graphWidth = (std::max)(140, (std::min)(600, rawGw));
+
+    int rawGh = Wh_GetIntSetting(L"graphHeight");
+    if (rawGh <= 0) rawGh = 125;
+    s.graphHeight = (std::max)(80, (std::min)(400, rawGh));
+
     s.showCpu = (Wh_GetIntSetting(L"showCpu") != 0);
+    s.showCpuTemp = (Wh_GetIntSetting(L"showCpuTemp") != 0);
     s.showRam = (Wh_GetIntSetting(L"showRam") != 0);
+    s.showGpu = (Wh_GetIntSetting(L"showGpu") != 0);
+    s.showGpuTemp = (Wh_GetIntSetting(L"showGpuTemp") != 0);
+
+    PCWSTR tempUnitStr = Wh_GetStringSetting(L"tempUnit");
+    s.tempUnit = (lstrcmpiW(tempUnitStr, L"fahrenheit") == 0) ? TempUnit::Fahrenheit : TempUnit::Celsius;
+    Wh_FreeStringSetting(tempUnitStr);
+
     s.showMiniBars = (Wh_GetIntSetting(L"showMiniBars") != 0);
+
+    PCWSTR diskModeStr = Wh_GetStringSetting(L"diskSpeedMode");
+    s.diskSpeedMode = DiskSpeedMode::Off;
+    if (lstrcmpiW(diskModeStr, L"total") == 0) s.diskSpeedMode = DiskSpeedMode::Total;
+    else if (lstrcmpiW(diskModeStr, L"rw") == 0) s.diskSpeedMode = DiskSpeedMode::RW;
+    else if (lstrcmpiW(diskModeStr, L"read") == 0) s.diskSpeedMode = DiskSpeedMode::ReadOnly;
+    else if (lstrcmpiW(diskModeStr, L"write") == 0) s.diskSpeedMode = DiskSpeedMode::WriteOnly;
+    Wh_FreeStringSetting(diskModeStr);
+
     s.showNetSpeed = (Wh_GetIntSetting(L"showNetSpeed") != 0);
     s.enableRamClean = (Wh_GetIntSetting(L"enableRamClean") != 0);
     s.showPing = (Wh_GetIntSetting(L"showPing") != 0);
+
+    PCWSTR actStr = Wh_GetStringSetting(L"leftClickAction");
+    s.leftClickAction = ParseHudAction(actStr, HudAction::None);
+    Wh_FreeStringSetting(actStr);
+
+    actStr = Wh_GetStringSetting(L"ctrlLeftClickAction");
+    s.ctrlLeftClickAction = ParseHudAction(actStr, HudAction::TrimRam);
+    Wh_FreeStringSetting(actStr);
+
+    actStr = Wh_GetStringSetting(L"rightClickAction");
+    s.rightClickAction = ParseHudAction(actStr, HudAction::None);
+    Wh_FreeStringSetting(actStr);
+
+    actStr = Wh_GetStringSetting(L"ctrlRightClickAction");
+    s.ctrlRightClickAction = ParseHudAction(actStr, HudAction::ToggleGraph);
+    Wh_FreeStringSetting(actStr);
+
+    PCWSTR dragStr = Wh_GetStringSetting(L"dragModifier");
+    s.dragModifier = DragModifier::Alt;
+    if (lstrcmpiW(dragStr, L"ctrl") == 0) s.dragModifier = DragModifier::Ctrl;
+    else if (lstrcmpiW(dragStr, L"shift") == 0) s.dragModifier = DragModifier::Shift;
+    else if (lstrcmpiW(dragStr, L"none") == 0) s.dragModifier = DragModifier::None;
+    else if (lstrcmpiW(dragStr, L"disabled") == 0) s.dragModifier = DragModifier::Disabled;
+    Wh_FreeStringSetting(dragStr);
+
+    actStr = Wh_GetStringSetting(L"hoverAction");
+    s.hoverAction = ParseHudAction(actStr, HudAction::None);
+    Wh_FreeStringSetting(actStr);
+
+    int rawHoverDelay = Wh_GetIntSetting(L"hoverDelayMs");
+    if (rawHoverDelay <= 0) rawHoverDelay = 400;
+    s.hoverDelayMs = (std::max)(100, (std::min)(3000, rawHoverDelay));
 
     int settingOffsetX = Wh_GetIntSetting(L"offsetX");
     int lastSettingOffsetX = Wh_GetIntValue(L"lastSettingOffsetX", -9999);
@@ -489,6 +850,422 @@ void UpdateNetSpeed(ULONGLONG elapsedMs) {
     s_prevNetCounters.swap(cur);
 }
 
+// PDH Monitor for Disk Read/Write and GPU Engine Utilization (StatsWorkerThread only)
+class PdhMonitor {
+public:
+    ~PdhMonitor() { Shutdown(); }
+
+    void Update(bool needDisk, bool needGpu, ULONGLONG& outReadBps, ULONGLONG& outWriteBps, int& outGpuPct) {
+        if (!needDisk && !needGpu) {
+            if (m_initialized) Shutdown();
+            return;
+        }
+        if (!m_initialized) {
+            if (!Init()) return;
+        }
+
+        if (PdhCollectQueryData(m_query) != ERROR_SUCCESS) {
+            return;
+        }
+
+        if (needDisk) {
+            PDH_FMT_COUNTERVALUE valRead = {}, valWrite = {};
+            if (m_hDiskRead && PdhGetFormattedCounterValue(m_hDiskRead, PDH_FMT_LARGE, NULL, &valRead) == ERROR_SUCCESS) {
+                outReadBps = (valRead.largeValue > 0) ? (ULONGLONG)valRead.largeValue : 0;
+            }
+            if (m_hDiskWrite && PdhGetFormattedCounterValue(m_hDiskWrite, PDH_FMT_LARGE, NULL, &valWrite) == ERROR_SUCCESS) {
+                outWriteBps = (valWrite.largeValue > 0) ? (ULONGLONG)valWrite.largeValue : 0;
+            }
+        }
+
+        if (needGpu && m_hGpuEngine) {
+            DWORD bufSize = 0;
+            DWORD itemCount = 0;
+            PDH_STATUS status = PdhGetFormattedCounterArrayW(m_hGpuEngine, PDH_FMT_DOUBLE, &bufSize, &itemCount, NULL);
+            if (status == (PDH_STATUS)PDH_MORE_DATA && bufSize > 0) {
+                std::vector<BYTE> buf(bufSize);
+                PPDH_FMT_COUNTERVALUE_ITEM_W items = (PPDH_FMT_COUNTERVALUE_ITEM_W)buf.data();
+                if (PdhGetFormattedCounterArrayW(m_hGpuEngine, PDH_FMT_DOUBLE, &bufSize, &itemCount, items) == ERROR_SUCCESS) {
+                    std::map<std::wstring, double> engineTotals;
+                    for (DWORD i = 0; i < itemCount; i++) {
+                        if (items[i].FmtValue.CStatus != PDH_CSTATUS_VALID_DATA &&
+                            items[i].FmtValue.CStatus != PDH_CSTATUS_NEW_DATA) {
+                            continue;
+                        }
+                        std::wstring engKey = L"default";
+                        if (items[i].szName) {
+                            const wchar_t* p = wcsstr(items[i].szName, L"engtype_");
+                            if (p) {
+                                p += 8;
+                                const wchar_t* end = wcschr(p, L'_');
+                                engKey = end ? std::wstring(p, end - p) : std::wstring(p);
+                            }
+                        }
+                        engineTotals[engKey] += items[i].FmtValue.doubleValue;
+                    }
+                    double maxEngine = 0.0;
+                    for (const auto& kv : engineTotals) {
+                        if (kv.second > maxEngine) maxEngine = kv.second;
+                    }
+                    outGpuPct = (std::max)(0, (std::min)(100, (int)std::lround(maxEngine)));
+                }
+            }
+        }
+    }
+
+    void Shutdown() {
+        if (m_query) {
+            PdhCloseQuery(m_query);
+            m_query = NULL;
+        }
+        m_hDiskRead = NULL;
+        m_hDiskWrite = NULL;
+        m_hGpuEngine = NULL;
+        m_initialized = false;
+    }
+
+private:
+    bool Init() {
+        if (PdhOpenQueryW(NULL, 0, &m_query) != ERROR_SUCCESS) {
+            m_query = NULL;
+            return false;
+        }
+        PdhAddEnglishCounterW(m_query, L"\\PhysicalDisk(_Total)\\Disk Read Bytes/sec", 0, &m_hDiskRead);
+        PdhAddEnglishCounterW(m_query, L"\\PhysicalDisk(_Total)\\Disk Write Bytes/sec", 0, &m_hDiskWrite);
+        PdhAddEnglishCounterW(m_query, L"\\GPU Engine(*)\\Utilization Percentage", 0, &m_hGpuEngine);
+        PdhCollectQueryData(m_query);
+        m_initialized = true;
+        return true;
+    }
+
+    PDH_HQUERY m_query = NULL;
+    PDH_HCOUNTER m_hDiskRead = NULL;
+    PDH_HCOUNTER m_hDiskWrite = NULL;
+    PDH_HCOUNTER m_hGpuEngine = NULL;
+    bool m_initialized = false;
+};
+
+// NVIDIA NVAPI dynamic loader for GPU Temperature & fallback GPU Usage
+class NvApiMonitor {
+public:
+    ~NvApiMonitor() { Shutdown(); }
+
+    int GetGpuTempC() {
+        if (!EnsureInit()) return TEMP_UNAVAILABLE;
+        if (!m_pGetThermal || m_gpuCount == 0) return TEMP_UNAVAILABLE;
+
+        NV_GPU_THERMAL_SETTINGS_V2 thermal = {};
+        thermal.version = (2U << 16) | (unsigned int)sizeof(NV_GPU_THERMAL_SETTINGS_V2);
+        if (m_pGetThermal(m_gpus[0], 15 /* ALL */, &thermal) == 0 && thermal.count > 0) {
+            int t = thermal.sensor[0].currentTemp;
+            if (t > 0 && t < 150) return t;
+        }
+        return TEMP_UNAVAILABLE;
+    }
+
+    void Shutdown() {
+        if (m_hMod) {
+            FreeLibrary(m_hMod);
+            m_hMod = NULL;
+        }
+        m_triedInit = false;
+        m_ready = false;
+        m_gpuCount = 0;
+    }
+
+private:
+    struct NV_GPU_THERMAL_SENSOR {
+        int controller;
+        int defaultMinTemp;
+        int defaultMaxTemp;
+        int currentTemp;
+        int target;
+    };
+    struct NV_GPU_THERMAL_SETTINGS_V2 {
+        unsigned int version;
+        unsigned int count;
+        NV_GPU_THERMAL_SENSOR sensor[3];
+    };
+
+    typedef void* (*NvAPI_QueryInterface_t)(unsigned int offset);
+    typedef int (*NvAPI_Initialize_t)();
+    typedef int (*NvAPI_EnumPhysicalGPUs_t)(void* handles[64], unsigned int* count);
+    typedef int (*NvAPI_GPU_GetThermalSettings_t)(void* handle, unsigned int sensorIndex, NV_GPU_THERMAL_SETTINGS_V2* thermal);
+
+    bool EnsureInit() {
+        if (m_triedInit) return m_ready;
+        m_triedInit = true;
+
+#ifdef _WIN64
+        m_hMod = LoadLibraryW(L"nvapi64.dll");
+#else
+        m_hMod = LoadLibraryW(L"nvapi.dll");
+#endif
+        if (!m_hMod) return false;
+
+        auto query = (NvAPI_QueryInterface_t)GetProcAddress(m_hMod, "nvapi_QueryInterface");
+        if (!query) return false;
+
+        auto pInit = (NvAPI_Initialize_t)query(0x0150E828);
+        auto pEnum = (NvAPI_EnumPhysicalGPUs_t)query(0xE5AC921F);
+        m_pGetThermal = (NvAPI_GPU_GetThermalSettings_t)query(0xE3640A56);
+
+        if (!pInit || !pEnum || pInit() != 0) return false;
+        if (pEnum(m_gpus, &m_gpuCount) != 0 || m_gpuCount == 0) return false;
+
+        m_ready = true;
+        return true;
+    }
+
+    HMODULE m_hMod = NULL;
+    bool m_triedInit = false;
+    bool m_ready = false;
+    void* m_gpus[64] = {};
+    unsigned int m_gpuCount = 0;
+    NvAPI_GPU_GetThermalSettings_t m_pGetThermal = nullptr;
+};
+
+// AMD ADL dynamic loader for GPU Temperature
+class AdlMonitor {
+public:
+    ~AdlMonitor() { Shutdown(); }
+
+    int GetGpuTempC() {
+        if (!EnsureInit()) return TEMP_UNAVAILABLE;
+        if (!m_pOverdrive5Temp) return TEMP_UNAVAILABLE;
+
+        ADLTemperature temp = {};
+        temp.iSize = sizeof(ADLTemperature);
+        if (m_pOverdrive5Temp(m_adapterIndex, 0, &temp) == 0) {
+            int c = temp.iTemperature / 1000;
+            if (c > 0 && c < 150) return c;
+        }
+        return TEMP_UNAVAILABLE;
+    }
+
+    void Shutdown() {
+        if (m_pDestroy && m_ready) {
+            m_pDestroy();
+        }
+        if (m_hMod) {
+            FreeLibrary(m_hMod);
+            m_hMod = NULL;
+        }
+        m_triedInit = false;
+        m_ready = false;
+    }
+
+private:
+    struct ADLTemperature {
+        int iSize;
+        int iTemperature;
+    };
+    typedef void* (__stdcall* ADL_MAIN_MALLOC_CALLBACK)(int);
+    typedef int (*ADL_Main_Control_Create_t)(ADL_MAIN_MALLOC_CALLBACK, int);
+    typedef int (*ADL_Main_Control_Destroy_t)();
+    typedef int (*ADL_Adapter_NumberOfAdapters_Get_t)(int*);
+    typedef int (*ADL_Overdrive5_Temperature_Get_t)(int, int, ADLTemperature*);
+
+    static void* __stdcall AdlAlloc(int iSize) {
+        return malloc((size_t)iSize);
+    }
+
+    bool EnsureInit() {
+        if (m_triedInit) return m_ready;
+        m_triedInit = true;
+
+        m_hMod = LoadLibraryW(L"atiadlxx.dll");
+        if (!m_hMod) m_hMod = LoadLibraryW(L"atiadlxy.dll");
+        if (!m_hMod) return false;
+
+        auto pCreate = (ADL_Main_Control_Create_t)GetProcAddress(m_hMod, "ADL_Main_Control_Create");
+        m_pDestroy = (ADL_Main_Control_Destroy_t)GetProcAddress(m_hMod, "ADL_Main_Control_Destroy");
+        auto pNumAdapters = (ADL_Adapter_NumberOfAdapters_Get_t)GetProcAddress(m_hMod, "ADL_Adapter_NumberOfAdapters_Get");
+        m_pOverdrive5Temp = (ADL_Overdrive5_Temperature_Get_t)GetProcAddress(m_hMod, "ADL_Overdrive5_Temperature_Get");
+
+        if (!pCreate || !m_pDestroy || !pNumAdapters || pCreate(AdlAlloc, 1) != 0) return false;
+        int num = 0;
+        if (pNumAdapters(&num) != 0 || num <= 0) return false;
+
+        m_ready = true;
+        return true;
+    }
+
+    HMODULE m_hMod = NULL;
+    bool m_triedInit = false;
+    bool m_ready = false;
+    int m_adapterIndex = 0;
+    ADL_Main_Control_Destroy_t m_pDestroy = nullptr;
+    ADL_Overdrive5_Temperature_Get_t m_pOverdrive5Temp = nullptr;
+};
+
+// WMI Thermal Monitor (LibreHardwareMonitor, OpenHardwareMonitor, CIMV2 ThermalZone, root\WMI)
+class WmiThermalMonitor {
+public:
+    ~WmiThermalMonitor() { Shutdown(); }
+
+    void QueryTemps(bool needCpu, bool needGpu, int& outCpuTempC, int& outGpuTempC) {
+        if (!needCpu && !needGpu) return;
+
+        // 1. Try LibreHardwareMonitor / OpenHardwareMonitor WMI
+        if (needCpu || needGpu) {
+            IWbemServices* pLhm = GetNamespace(L"root\\LibreHardwareMonitor", m_pLhm, m_triedLhm);
+            if (!pLhm) pLhm = GetNamespace(L"root\\OpenHardwareMonitor", m_pOhm, m_triedOhm);
+            if (pLhm) {
+                QueryHardwareMonitor(pLhm, needCpu, needGpu, outCpuTempC, outGpuTempC);
+            }
+        }
+
+        // 2. Fallback for CPU Temp: CIMV2 Win32_PerfFormattedData_Counters_ThermalZoneInformation
+        if (needCpu && outCpuTempC == TEMP_UNAVAILABLE) {
+            IWbemServices* pCim = GetNamespace(L"root\\CIMV2", m_pCimv2, m_triedCimv2);
+            if (pCim) {
+                int t = QueryThermalZone(pCim, L"SELECT Temperature FROM Win32_PerfFormattedData_Counters_ThermalZoneInformation", L"Temperature");
+                if (t != TEMP_UNAVAILABLE) outCpuTempC = t;
+            }
+        }
+
+        // 3. Fallback for CPU Temp: root\WMI MSAcpi_ThermalZoneTemperature
+        if (needCpu && outCpuTempC == TEMP_UNAVAILABLE) {
+            IWbemServices* pWmi = GetNamespace(L"root\\WMI", m_pRootWmi, m_triedRootWmi);
+            if (pWmi) {
+                int t = QueryThermalZone(pWmi, L"SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature", L"CurrentTemperature");
+                if (t != TEMP_UNAVAILABLE) outCpuTempC = t;
+            }
+        }
+    }
+
+    void Shutdown() {
+        if (m_pLhm) { m_pLhm->Release(); m_pLhm = nullptr; }
+        if (m_pOhm) { m_pOhm->Release(); m_pOhm = nullptr; }
+        if (m_pCimv2) { m_pCimv2->Release(); m_pCimv2 = nullptr; }
+        if (m_pRootWmi) { m_pRootWmi->Release(); m_pRootWmi = nullptr; }
+        if (m_pLocator) { m_pLocator->Release(); m_pLocator = nullptr; }
+        m_triedLhm = m_triedOhm = m_triedCimv2 = m_triedRootWmi = false;
+    }
+
+private:
+    IWbemServices* GetNamespace(const wchar_t* ns, IWbemServices*& cache, bool& tried) {
+        if (cache) return cache;
+        if (tried) return nullptr;
+        tried = true;
+
+        if (!m_pLocator) {
+            HRESULT hr = CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (LPVOID*)&m_pLocator);
+            if (FAILED(hr) || !m_pLocator) return nullptr;
+        }
+
+        BSTR bstrNs = SysAllocString(ns);
+        if (!bstrNs) return nullptr;
+        HRESULT hr = m_pLocator->ConnectServer(bstrNs, NULL, NULL, 0, 0, 0, 0, &cache);
+        SysFreeString(bstrNs);
+
+        if (FAILED(hr) || !cache) {
+            cache = nullptr;
+            return nullptr;
+        }
+
+        CoSetProxyBlanket(cache, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, NULL,
+                          RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE);
+        return cache;
+    }
+
+    void QueryHardwareMonitor(IWbemServices* pSvc, bool needCpu, bool needGpu, int& outCpuTempC, int& outGpuTempC) {
+        BSTR bstrWql = SysAllocString(L"WQL");
+        BSTR bstrQuery = SysAllocString(L"SELECT Name, Identifier, Value FROM Sensor WHERE SensorType='Temperature'");
+        IEnumWbemClassObject* pEnum = nullptr;
+        HRESULT hr = pSvc->ExecQuery(bstrWql, bstrQuery, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnum);
+        SysFreeString(bstrWql);
+        SysFreeString(bstrQuery);
+        if (FAILED(hr) || !pEnum) return;
+
+        IWbemClassObject* pObj = nullptr;
+        ULONG ret = 0;
+        while (pEnum->Next(WBEM_INFINITE, 1, &pObj, &ret) == S_OK) {
+            VARIANT vtId, vtName, vtVal;
+            VariantInit(&vtId); VariantInit(&vtName); VariantInit(&vtVal);
+            pObj->Get(L"Identifier", 0, &vtId, 0, 0);
+            pObj->Get(L"Name", 0, &vtName, 0, 0);
+            pObj->Get(L"Value", 0, &vtVal, 0, 0);
+
+            double valC = -999.0;
+            if (vtVal.vt == VT_R4) valC = vtVal.fltVal;
+            else if (vtVal.vt == VT_R8) valC = vtVal.dblVal;
+
+            if (valC > 0.0 && valC < 150.0) {
+                std::wstring id = (vtId.vt == VT_BSTR && vtId.bstrVal) ? vtId.bstrVal : L"";
+                std::wstring name = (vtName.vt == VT_BSTR && vtName.bstrVal) ? vtName.bstrVal : L"";
+                for (wchar_t& c : id) c = (wchar_t)towlower(c);
+                for (wchar_t& c : name) c = (wchar_t)towlower(c);
+
+                if (needCpu && outCpuTempC == TEMP_UNAVAILABLE &&
+                    (id.find(L"cpu") != std::wstring::npos || name.find(L"cpu") != std::wstring::npos ||
+                     name.find(L"package") != std::wstring::npos || name.find(L"tctl") != std::wstring::npos)) {
+                    outCpuTempC = (int)std::lround(valC);
+                }
+                if (needGpu && outGpuTempC == TEMP_UNAVAILABLE &&
+                    (id.find(L"gpu") != std::wstring::npos || name.find(L"gpu") != std::wstring::npos)) {
+                    outGpuTempC = (int)std::lround(valC);
+                }
+            }
+
+            VariantClear(&vtId); VariantClear(&vtName); VariantClear(&vtVal);
+            pObj->Release();
+        }
+        pEnum->Release();
+    }
+
+    int QueryThermalZone(IWbemServices* pSvc, const wchar_t* wql, const wchar_t* prop) {
+        BSTR bstrWql = SysAllocString(L"WQL");
+        BSTR bstrQuery = SysAllocString(wql);
+        IEnumWbemClassObject* pEnum = nullptr;
+        HRESULT hr = pSvc->ExecQuery(bstrWql, bstrQuery, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnum);
+        SysFreeString(bstrWql);
+        SysFreeString(bstrQuery);
+        if (FAILED(hr) || !pEnum) return TEMP_UNAVAILABLE;
+
+        int bestTemp = TEMP_UNAVAILABLE;
+        IWbemClassObject* pObj = nullptr;
+        ULONG ret = 0;
+        while (pEnum->Next(WBEM_INFINITE, 1, &pObj, &ret) == S_OK) {
+            VARIANT vtVal;
+            VariantInit(&vtVal);
+            if (SUCCEEDED(pObj->Get(prop, 0, &vtVal, 0, 0))) {
+                double raw = 0.0;
+                if (vtVal.vt == VT_UI4) raw = vtVal.ulVal;
+                else if (vtVal.vt == VT_I4) raw = vtVal.lVal;
+                else if (vtVal.vt == VT_UI8) raw = (double)vtVal.ullVal;
+                else if (vtVal.vt == VT_BSTR && vtVal.bstrVal) raw = _wtof(vtVal.bstrVal);
+
+                double c = -999.0;
+                if (raw > 2000.0 && raw < 4500.0) {
+                    c = (raw / 10.0) - 273.15;
+                } else if (raw > 200.0 && raw < 450.0) {
+                    c = raw - 273.15;
+                }
+                if (c > 0.0 && c < 150.0) {
+                    int ic = (int)std::lround(c);
+                    if (bestTemp == TEMP_UNAVAILABLE || ic > bestTemp) bestTemp = ic;
+                }
+            }
+            VariantClear(&vtVal);
+            pObj->Release();
+        }
+        pEnum->Release();
+        return bestTemp;
+    }
+
+    IWbemLocator* m_pLocator = nullptr;
+    IWbemServices* m_pLhm = nullptr;
+    IWbemServices* m_pOhm = nullptr;
+    IWbemServices* m_pCimv2 = nullptr;
+    IWbemServices* m_pRootWmi = nullptr;
+    bool m_triedLhm = false;
+    bool m_triedOhm = false;
+    bool m_triedCimv2 = false;
+    bool m_triedRootWmi = false;
+};
+
 int MeasurePing(unsigned long ip) {
     if (ip == 0 || ip == 0xFFFFFFFF) return PING_ERROR;
 
@@ -581,6 +1358,20 @@ void TriggerAsyncRamClean() {
     }
 }
 
+void ExecuteHudAction(HudAction action) {
+    switch (action) {
+        case HudAction::TrimRam:
+            TriggerAsyncRamClean();
+            break;
+        case HudAction::ToggleGraph:
+            ToggleGraphWindow(false);
+            break;
+        case HudAction::None:
+        default:
+            break;
+    }
+}
+
 void AddRoundedRect(Gdiplus::GraphicsPath& path, int x, int y, int width, int height, int radius) {
     if (radius <= 0) {
         path.AddRectangle(Gdiplus::Rect(x, y, width, height));
@@ -645,9 +1436,59 @@ void DrawTextSeg(Gdiplus::Graphics& g, int& x, int y, const wchar_t* text, Gdipl
     x += (int)std::ceil(bound.Width);
 }
 
-void FormatStrings(wchar_t* cpuVal, wchar_t* ramVal, wchar_t* pingVal, wchar_t* netVal) {
+void FormatTempString(int tempC, TempUnit unit, wchar_t* buf, size_t bufLen) {
+    if (tempC == TEMP_UNAVAILABLE) {
+        wcscpy_s(buf, bufLen, L"N/A");
+        return;
+    }
+    if (unit == TempUnit::Fahrenheit) {
+        int f = (int)std::lround(tempC * 9.0 / 5.0 + 32.0);
+        swprintf_s(buf, bufLen, L"%d\u00B0F", f);
+    } else {
+        swprintf_s(buf, bufLen, L"%d\u00B0C", tempC);
+    }
+}
+
+void FormatBytesRate(ULONGLONG bps, wchar_t* buf, size_t bufLen) {
+    if (bps >= 1024ULL * 1024ULL) {
+        ULONGLONG tenths = (bps * 10ULL) / (1024ULL * 1024ULL);
+        swprintf_s(buf, bufLen, L"%llu.%llu MB/s", tenths / 10ULL, tenths % 10ULL);
+    } else {
+        ULONGLONG kb = bps / 1024ULL;
+        swprintf_s(buf, bufLen, L"%llu KB/s", kb);
+    }
+}
+
+void FormatDiskString(DiskSpeedMode mode, ULONGLONG readBps, ULONGLONG writeBps, wchar_t* buf, size_t bufLen) {
+    wchar_t rBuf[24], wBuf[24];
+    switch (mode) {
+        case DiskSpeedMode::Total:
+            FormatBytesRate(readBps + writeBps, rBuf, 24);
+            swprintf_s(buf, bufLen, L"D:%s", rBuf);
+            break;
+        case DiskSpeedMode::ReadOnly:
+            FormatBytesRate(readBps, rBuf, 24);
+            swprintf_s(buf, bufLen, L"R:%s", rBuf);
+            break;
+        case DiskSpeedMode::WriteOnly:
+            FormatBytesRate(writeBps, wBuf, 24);
+            swprintf_s(buf, bufLen, L"W:%s", wBuf);
+            break;
+        case DiskSpeedMode::RW:
+            FormatBytesRate(readBps, rBuf, 24);
+            FormatBytesRate(writeBps, wBuf, 24);
+            swprintf_s(buf, bufLen, L"R:%s W:%s", rBuf, wBuf);
+            break;
+        default:
+            buf[0] = L'\0';
+            break;
+    }
+}
+
+void FormatStrings(wchar_t* cpuVal, wchar_t* ramVal, wchar_t* gpuVal, wchar_t* pingVal, wchar_t* netVal) {
     wsprintfW(cpuVal, L"%d%%", g_cpuUsage.load());
     wsprintfW(ramVal, L"%d%%", g_ramUsage.load());
+    wsprintfW(gpuVal, L"%d%%", g_gpuUsage.load());
 
     int p = g_pingMs.load();
     if (p == PING_PENDING) wcscpy_s(pingVal, 24, L"...");
@@ -741,7 +1582,7 @@ bool IsFullscreenAppActive(HWND hTaskbar) {
     return false;
 }
 
-// Renders the mini-graph popup on Ctrl + Right Click
+// Renders the mini-graph popup on Ctrl + Right Click (or configured shortcut/hover)
 void RenderGraphPopup(HWND hWnd) {
     RECT rc;
     GetClientRect(hWnd, &rc);
@@ -771,28 +1612,37 @@ void RenderGraphPopup(HWND hWnd) {
         g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
 
         int bgAlpha, cornerPref, interval;
-        bool customBg;
-        BYTE cr, cg, cb;
+        bool customBg, customBgHasAlpha, customBorder, showGpu;
+        Gdiplus::Color cBg, cBorder;
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             bgAlpha = settings.bgAlpha;
             cornerPref = settings.cornerPref;
             interval = settings.updateInterval;
             customBg = settings.customBgEnabled;
-            cr = settings.customR; cg = settings.customG; cb = settings.customB;
+            customBgHasAlpha = settings.customBgHasAlpha;
+            cBg = settings.customBgColor;
+            customBorder = settings.customBorderEnabled;
+            cBorder = settings.customBorderColor;
+            showGpu = settings.showGpu;
         }
 
         bool isLight = g_isTaskbarLight;
         Gdiplus::Color bgColor, borderColor;
         if (customBg) {
-            bgColor = Gdiplus::Color(bgAlpha, cr, cg, cb);
-            borderColor = Gdiplus::Color(255, (std::min)(255, cr + 45), (std::min)(255, cg + 45), (std::min)(255, cb + 45));
+            BYTE a = customBgHasAlpha ? cBg.GetAlpha() : (BYTE)bgAlpha;
+            bgColor = Gdiplus::Color(a, cBg.GetRed(), cBg.GetGreen(), cBg.GetBlue());
+            borderColor = Gdiplus::Color(255, (std::min)(255, cBg.GetRed() + 45), (std::min)(255, cBg.GetGreen() + 45), (std::min)(255, cBg.GetBlue() + 45));
         } else if (isLight) {
             bgColor = Gdiplus::Color(bgAlpha, 245, 246, 250);
             borderColor = Gdiplus::Color(255, 180, 185, 195);
         } else {
             bgColor = Gdiplus::Color(bgAlpha, 22, 24, 30);
             borderColor = Gdiplus::Color(255, 60, 65, 78);
+        }
+
+        if (customBorder) {
+            borderColor = cBorder;
         }
 
         int radius = (cornerPref == 1) ? 0 : (cornerPref == 3 ? ScaleDpi(3, g_currentDpi) : ScaleDpi(6, g_currentDpi));
@@ -815,54 +1665,69 @@ void RenderGraphPopup(HWND hWnd) {
         g.DrawString(titleBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)ScaleDpi(10, g_currentDpi), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &textBrush);
 
         wchar_t legBuf[32];
-        wsprintfW(legBuf, L"CPU %d%%", g_cpuUsage.load());
-        Gdiplus::SolidBrush cpuBrush(Gdiplus::Color(255, 75, 175, 255));
-        g.DrawString(legBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)(width - ScaleDpi(115, g_currentDpi)), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &cpuBrush);
-
+        int rightOffset = ScaleDpi(55, g_currentDpi);
         wsprintfW(legBuf, L"RAM %d%%", g_ramUsage.load());
         Gdiplus::SolidBrush ramBrush(Gdiplus::Color(255, 175, 130, 255));
-        g.DrawString(legBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)(width - ScaleDpi(55, g_currentDpi)), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &ramBrush);
+        g.DrawString(legBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)(width - rightOffset), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &ramBrush);
+
+        rightOffset += ScaleDpi(60, g_currentDpi);
+        wsprintfW(legBuf, L"CPU %d%%", g_cpuUsage.load());
+        Gdiplus::SolidBrush cpuBrush(Gdiplus::Color(255, 75, 175, 255));
+        g.DrawString(legBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)(width - rightOffset), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &cpuBrush);
+
+        if (showGpu && width >= ScaleDpi(250, g_currentDpi)) {
+            rightOffset += ScaleDpi(60, g_currentDpi);
+            wsprintfW(legBuf, L"GPU %d%%", g_gpuUsage.load());
+            Gdiplus::SolidBrush gpuBrush(Gdiplus::Color(255, 110, 230, 145));
+            g.DrawString(legBuf, -1, g_pFontSmall, Gdiplus::PointF((Gdiplus::REAL)(width - rightOffset), (Gdiplus::REAL)ScaleDpi(6, g_currentDpi)), &gpuBrush);
+        }
 
         int gx = ScaleDpi(10, g_currentDpi);
         int gy = ScaleDpi(26, g_currentDpi);
         int gw = width - gx * 2;
         int gh = height - gy - ScaleDpi(8, g_currentDpi);
 
-        Gdiplus::Pen gridPen(isLight ? Gdiplus::Color(70, 180, 185, 195) : Gdiplus::Color(60, 255, 255, 255), 1.0f);
-        g.DrawLine(&gridPen, gx, gy, gx + gw, gy);
-        g.DrawLine(&gridPen, gx, gy + gh / 2, gx + gw, gy + gh / 2);
-        g.DrawLine(&gridPen, gx, gy + gh, gx + gw, gy + gh);
+        if (gw > 10 && gh > 10) {
+            Gdiplus::Pen gridPen(isLight ? Gdiplus::Color(70, 180, 185, 195) : Gdiplus::Color(60, 255, 255, 255), 1.0f);
+            g.DrawLine(&gridPen, gx, gy, gx + gw, gy);
+            g.DrawLine(&gridPen, gx, gy + gh / 2, gx + gw, gy + gh / 2);
+            g.DrawLine(&gridPen, gx, gy + gh, gx + gw, gy + gh);
 
-        std::vector<int> cpuPts, ramPts;
-        {
-            std::lock_guard<std::mutex> lock(g_historyMutex);
-            cpuPts.assign(g_cpuHistory.begin(), g_cpuHistory.end());
-            ramPts.assign(g_ramHistory.begin(), g_ramHistory.end());
-        }
-
-        auto DrawGraphLine = [&](const std::vector<int>& pts, Gdiplus::Color lineColor, Gdiplus::Color areaColor) {
-            if (pts.size() < 2) return;
-            std::vector<Gdiplus::PointF> poly;
-            poly.reserve(pts.size());
-            for (size_t i = 0; i < pts.size(); i++) {
-                float px = gx + ((float)i / (float)(MAX_GRAPH_POINTS - 1)) * gw;
-                int val = (std::max)(0, (std::min)(100, pts[i]));
-                float py = (gy + gh) - ((float)val / 100.0f) * gh;
-                poly.emplace_back(px, py);
+            std::vector<int> cpuPts, ramPts, gpuPts;
+            {
+                std::lock_guard<std::mutex> lock(g_historyMutex);
+                cpuPts.assign(g_cpuHistory.begin(), g_cpuHistory.end());
+                ramPts.assign(g_ramHistory.begin(), g_ramHistory.end());
+                gpuPts.assign(g_gpuHistory.begin(), g_gpuHistory.end());
             }
 
-            std::vector<Gdiplus::PointF> fillPoly = poly;
-            fillPoly.emplace_back(poly.back().X, (Gdiplus::REAL)(gy + gh));
-            fillPoly.emplace_back(poly.front().X, (Gdiplus::REAL)(gy + gh));
-            Gdiplus::SolidBrush areaBrush(areaColor);
-            g.FillPolygon(&areaBrush, fillPoly.data(), (INT)fillPoly.size());
+            auto DrawGraphLine = [&](const std::vector<int>& pts, Gdiplus::Color lineColor, Gdiplus::Color areaColor) {
+                if (pts.size() < 2) return;
+                std::vector<Gdiplus::PointF> poly;
+                poly.reserve(pts.size());
+                for (size_t i = 0; i < pts.size(); i++) {
+                    float px = gx + ((float)i / (float)(MAX_GRAPH_POINTS - 1)) * gw;
+                    int val = (std::max)(0, (std::min)(100, pts[i]));
+                    float py = (gy + gh) - ((float)val / 100.0f) * gh;
+                    poly.emplace_back(px, py);
+                }
 
-            Gdiplus::Pen strokePen(lineColor, 1.6f);
-            g.DrawLines(&strokePen, poly.data(), (INT)poly.size());
-        };
+                std::vector<Gdiplus::PointF> fillPoly = poly;
+                fillPoly.emplace_back(poly.back().X, (Gdiplus::REAL)(gy + gh));
+                fillPoly.emplace_back(poly.front().X, (Gdiplus::REAL)(gy + gh));
+                Gdiplus::SolidBrush areaBrush(areaColor);
+                g.FillPolygon(&areaBrush, fillPoly.data(), (INT)fillPoly.size());
 
-        DrawGraphLine(ramPts, Gdiplus::Color(255, 175, 130, 255), Gdiplus::Color(45, 175, 130, 255));
-        DrawGraphLine(cpuPts, Gdiplus::Color(255, 75, 175, 255), Gdiplus::Color(55, 75, 175, 255));
+                Gdiplus::Pen strokePen(lineColor, 1.6f);
+                g.DrawLines(&strokePen, poly.data(), (INT)poly.size());
+            };
+
+            if (showGpu) {
+                DrawGraphLine(gpuPts, Gdiplus::Color(255, 110, 230, 145), Gdiplus::Color(35, 110, 230, 145));
+            }
+            DrawGraphLine(ramPts, Gdiplus::Color(255, 175, 130, 255), Gdiplus::Color(45, 175, 130, 255));
+            DrawGraphLine(cpuPts, Gdiplus::Color(255, 75, 175, 255), Gdiplus::Color(55, 75, 175, 255));
+        }
     }
 
     POINT ptSrc = { 0, 0 };
@@ -898,22 +1763,29 @@ LRESULT CALLBACK GraphWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
     return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
 
-void ToggleGraphWindow() {
+void ToggleGraphWindow(bool forceOpen) {
     HWND hGraph = g_hGraphWnd;
     HWND hHud = g_hHudWnd;
     if (!hGraph || !hHud) return;
 
     if (IsWindowVisible(hGraph)) {
-        ShowWindow(hGraph, SW_HIDE);
+        if (!forceOpen) ShowWindow(hGraph, SW_HIDE);
         return;
+    }
+
+    int cfgW, cfgH;
+    {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        cfgW = settings.graphWidth;
+        cfgH = settings.graphHeight;
     }
 
     RECT rcHud;
     GetWindowRect(hHud, &rcHud);
     UINT dpi = g_currentDpi;
 
-    int gw = ScaleDpi(220, dpi);
-    int gh = ScaleDpi(125, dpi);
+    int gw = ScaleDpi(cfgW, dpi);
+    int gh = ScaleDpi(cfgH, dpi);
     int gx = rcHud.left + (rcHud.right - rcHud.left - gw) / 2;
     int gy = rcHud.top - gh - ScaleDpi(8, dpi);
 
@@ -1012,33 +1884,38 @@ void SyncWindowGeometry() {
         return;
     }
 
-    UINT dpi = SafeGetWindowDpi(hTray);
-    if (dpi != g_currentDpi || !g_pFontLabel) {
-        UpdateCachedFonts(dpi);
-    }
-
-    bool showCpu, showRam, showPing, showNet, showBars, customBg;
-    int bgAlpha, cornerPref;
-    BYTE cr, cg, cb;
+    ModSettings s;
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
-        showCpu = settings.showCpu;
-        showRam = settings.showRam;
-        showPing = settings.showPing;
-        showNet = settings.showNetSpeed;
-        showBars = settings.showMiniBars;
-        bgAlpha = settings.bgAlpha;
-        cornerPref = settings.cornerPref;
-        customBg = settings.customBgEnabled;
-        cr = settings.customR; cg = settings.customG; cb = settings.customB;
+        s = settings;
     }
 
-    if (!showCpu && !showRam && !showPing && !showNet) {
+    UINT dpi = SafeGetWindowDpi(hTray);
+    if (dpi != g_currentDpi || s.fontSize != g_currentFontSize || !g_pFontLabel) {
+        UpdateCachedFonts(dpi, s.fontSize);
+    }
+
+    bool showCpu = s.showCpu;
+    bool showCpuTemp = s.showCpuTemp;
+    bool showRam = s.showRam;
+    bool showGpu = s.showGpu;
+    bool showGpuTemp = s.showGpuTemp;
+    bool showDisk = (s.diskSpeedMode != DiskSpeedMode::Off);
+    bool showPing = s.showPing;
+    bool showNet = s.showNetSpeed;
+    bool showBars = s.showMiniBars;
+
+    if (!showCpu && !showCpuTemp && !showRam && !showGpu && !showGpuTemp && !showDisk && !showPing && !showNet) {
         showCpu = true;
     }
 
-    wchar_t cpuVal[16], ramVal[16], pingVal[24], netVal[32];
-    FormatStrings(cpuVal, ramVal, pingVal, netVal);
+    wchar_t cpuVal[16], ramVal[16], gpuVal[16], pingVal[24], netVal[32];
+    FormatStrings(cpuVal, ramVal, gpuVal, pingVal, netVal);
+
+    wchar_t cpuTempVal[16], gpuTempVal[16], diskVal[48];
+    FormatTempString(g_cpuTempC.load(), s.tempUnit, cpuTempVal, 16);
+    FormatTempString(g_gpuTempC.load(), s.tempUnit, gpuTempVal, 16);
+    FormatDiskString(s.diskSpeedMode, g_diskReadBps.load(), g_diskWriteBps.load(), diskVal, 48);
 
     HDC screenDC = GetDC(NULL);
     HDC tempDC = CreateCompatibleDC(screenDC);
@@ -1050,18 +1927,33 @@ void SyncWindowGeometry() {
     {
         Gdiplus::Graphics measureGraphics(tempDC);
         int sepW = MeasureTextWidth(measureGraphics, L"  ", g_pFontLabel);
+        int spaceW = MeasureTextWidth(measureGraphics, L" ", g_pFontLabel);
         int items = 0;
 
         if (inStatus) {
             textW = MeasureTextWidth(measureGraphics, g_statusMessage.c_str(), g_pFontValue) + ScaleDpi(8, dpi);
         } else {
-            if (showCpu) {
+            if (showCpu || showCpuTemp) {
                 if (items++ > 0) textW += sepW;
-                textW += MeasureTextWidth(measureGraphics, L"CPU ", g_pFontLabel) + MeasureTextWidth(measureGraphics, cpuVal, g_pFontValue);
+                textW += MeasureTextWidth(measureGraphics, L"CPU ", g_pFontLabel);
+                if (showCpu) textW += MeasureTextWidth(measureGraphics, cpuVal, g_pFontValue);
+                if (showCpu && showCpuTemp) textW += spaceW;
+                if (showCpuTemp) textW += MeasureTextWidth(measureGraphics, cpuTempVal, g_pFontValue);
             }
             if (showRam) {
                 if (items++ > 0) textW += sepW;
                 textW += MeasureTextWidth(measureGraphics, L"RAM ", g_pFontLabel) + MeasureTextWidth(measureGraphics, ramVal, g_pFontValue);
+            }
+            if (showGpu || showGpuTemp) {
+                if (items++ > 0) textW += sepW;
+                textW += MeasureTextWidth(measureGraphics, L"GPU ", g_pFontLabel);
+                if (showGpu) textW += MeasureTextWidth(measureGraphics, gpuVal, g_pFontValue);
+                if (showGpu && showGpuTemp) textW += spaceW;
+                if (showGpuTemp) textW += MeasureTextWidth(measureGraphics, gpuTempVal, g_pFontValue);
+            }
+            if (showDisk) {
+                if (items++ > 0) textW += sepW;
+                textW += MeasureTextWidth(measureGraphics, diskVal, g_pFontValue);
             }
             if (showNet) {
                 if (items++ > 0) textW += sepW;
@@ -1075,15 +1967,23 @@ void SyncWindowGeometry() {
     }
     DeleteDC(tempDC);
 
-    int minW = ScaleDpi(54, dpi);
+    int minW = ScaleDpi(s.widgetMinWidth, dpi);
     int exactWidth = (std::max)(minW, textW + padX * 2);
-    int height = ScaleDpi(32, dpi);
+    if (s.widgetMaxWidth > 0) {
+        int maxW = ScaleDpi(s.widgetMaxWidth, dpi);
+        exactWidth = (std::min)(exactWidth, maxW);
+    }
 
-    RECT rcTray = {};
-    GetWindowRect(hTray, &rcTray);
-    int trayH = rcTray.bottom - rcTray.top;
-    if (trayH >= ScaleDpi(28, dpi) && trayH <= ScaleDpi(64, dpi)) {
-        height = trayH - ScaleDpi(10, dpi);
+    int height = ScaleDpi(32, dpi);
+    if (s.widgetHeight > 0) {
+        height = ScaleDpi(s.widgetHeight, dpi);
+    } else {
+        RECT rcTray = {};
+        GetWindowRect(hTray, &rcTray);
+        int trayH = rcTray.bottom - rcTray.top;
+        if (trayH >= ScaleDpi(28, dpi) && trayH <= ScaleDpi(64, dpi)) {
+            height = trayH - ScaleDpi(10, dpi);
+        }
     }
 
     int posX = 0, posY = 0;
@@ -1112,22 +2012,30 @@ void SyncWindowGeometry() {
         bool isLight = g_isTaskbarLight;
         Gdiplus::Color bgColor, borderColor;
 
-        if (customBg) {
-            bgColor = g_isHovered ? Gdiplus::Color(bgAlpha, (std::min)(255, cr + 15), (std::min)(255, cg + 15), (std::min)(255, cb + 15))
-                                  : Gdiplus::Color(bgAlpha, cr, cg, cb);
+        if (s.customBgEnabled) {
+            BYTE a = s.customBgHasAlpha ? s.customBgColor.GetAlpha() : (BYTE)s.bgAlpha;
+            BYTE r = s.customBgColor.GetRed();
+            BYTE gr = s.customBgColor.GetGreen();
+            BYTE b = s.customBgColor.GetBlue();
+            bgColor = g_isHovered ? Gdiplus::Color(a, (std::min)(255, r + 15), (std::min)(255, gr + 15), (std::min)(255, b + 15))
+                                  : Gdiplus::Color(a, r, gr, b);
             borderColor = g_isHovered ? Gdiplus::Color(255, 95, 150, 225)
-                                      : Gdiplus::Color(180, (std::min)(255, cr + 35), (std::min)(255, cg + 35), (std::min)(255, cb + 35));
+                                      : Gdiplus::Color(180, (std::min)(255, r + 35), (std::min)(255, gr + 35), (std::min)(255, b + 35));
         } else if (isLight) {
-            bgColor = g_isHovered ? Gdiplus::Color(bgAlpha, 225, 228, 235) : Gdiplus::Color(bgAlpha, 242, 243, 247);
+            bgColor = g_isHovered ? Gdiplus::Color(s.bgAlpha, 225, 228, 235) : Gdiplus::Color(s.bgAlpha, 242, 243, 247);
             borderColor = g_isHovered ? Gdiplus::Color(255, 100, 145, 220) : Gdiplus::Color(180, 180, 185, 195);
         } else {
-            bgColor = g_isHovered ? Gdiplus::Color(bgAlpha, 32, 34, 42) : Gdiplus::Color(bgAlpha, 20, 21, 26);
+            bgColor = g_isHovered ? Gdiplus::Color(s.bgAlpha, 32, 34, 42) : Gdiplus::Color(s.bgAlpha, 20, 21, 26);
             borderColor = g_isHovered ? Gdiplus::Color(255, 95, 150, 225) : Gdiplus::Color(180, 50, 54, 64);
         }
 
+        if (s.customBorderEnabled) {
+            borderColor = s.customBorderColor;
+        }
+
         int radius = 0;
-        if (cornerPref == 2) radius = ScaleDpi(6, dpi);
-        else if (cornerPref == 3) radius = ScaleDpi(3, dpi);
+        if (s.cornerPref == 2) radius = ScaleDpi(6, dpi);
+        else if (s.cornerPref == 3) radius = ScaleDpi(3, dpi);
 
         Gdiplus::GraphicsPath bgPath;
         AddRoundedRect(bgPath, 0, 0, exactWidth - 1, height - 1, radius);
@@ -1138,6 +2046,9 @@ void SyncWindowGeometry() {
         Gdiplus::Pen borderPen(borderColor, 1.0f);
         g.DrawPath(&borderPen, &bgPath);
 
+        // Clip inner content so custom max width never overflows the rounded border
+        g.SetClip(Gdiplus::Rect(ScaleDpi(4, dpi), 0, (std::max)(0, exactWidth - ScaleDpi(8, dpi)), height));
+
         if (inStatus) {
             Gdiplus::StringFormat sf;
             sf.SetAlignment(Gdiplus::StringAlignmentCenter);
@@ -1147,7 +2058,10 @@ void SyncWindowGeometry() {
             g.DrawString(g_statusMessage.c_str(), -1, g_pFontValue, layoutRect, &sf, &statusBrush);
         } else {
             int cpu = g_cpuUsage.load();
+            int cpuTemp = g_cpuTempC.load();
             int ram = g_ramUsage.load();
+            int gpu = g_gpuUsage.load();
+            int gpuTemp = g_gpuTempC.load();
             int ping = g_pingMs.load();
 
             Gdiplus::Color colLabel = isLight ? (g_isHovered ? Gdiplus::Color(255, 90, 95, 105) : Gdiplus::Color(255, 115, 120, 130))
@@ -1158,29 +2072,55 @@ void SyncWindowGeometry() {
 
             Gdiplus::Color cpuCol = (cpu > 80) ? colAlert : (cpu > 55 ? colWarn : colNormal);
             Gdiplus::Color ramCol = (ram > 85) ? colAlert : (ram > 70 ? colWarn : colNormal);
+            Gdiplus::Color gpuCol = (gpu > 85) ? colAlert : (gpu > 60 ? colWarn : (isLight ? Gdiplus::Color(255, 30, 160, 70) : Gdiplus::Color(255, 110, 230, 145)));
+            Gdiplus::Color cpuTempCol = (cpuTemp == TEMP_UNAVAILABLE) ? colLabel : ((cpuTemp >= 85) ? colAlert : ((cpuTemp >= 70) ? colWarn : colNormal));
+            Gdiplus::Color gpuTempCol = (gpuTemp == TEMP_UNAVAILABLE) ? colLabel : ((gpuTemp >= 85) ? colAlert : ((gpuTemp >= 70) ? colWarn : colNormal));
+            Gdiplus::Color netCol = isLight ? Gdiplus::Color(255, 20, 140, 220) : Gdiplus::Color(255, 115, 215, 255);
+            Gdiplus::Color diskCol = isLight ? Gdiplus::Color(255, 130, 70, 210) : Gdiplus::Color(255, 200, 160, 255);
+
             Gdiplus::Color pingCol;
             if (ping == PING_PENDING) pingCol = colLabel;
             else if (ping < 0 || ping > 130) pingCol = colAlert;
             else if (ping > 75) pingCol = colWarn;
             else pingCol = isLight ? Gdiplus::Color(255, 30, 160, 70) : Gdiplus::Color(255, 125, 235, 155);
 
-            bool drawBars = showBars && (showCpu || showRam);
+            if (s.customMetricsEnabled) {
+                colLabel   = s.customLabelColor;
+                cpuCol     = s.customCpuColor;
+                ramCol     = s.customRamColor;
+                gpuCol     = s.customGpuColor;
+                cpuTempCol = s.customTempColor;
+                gpuTempCol = s.customTempColor;
+                netCol     = s.customNetColor;
+                diskCol    = s.customDiskColor;
+                pingCol    = s.customPingColor;
+            }
+
+            bool drawBars = showBars && (showCpu || showRam || showGpu);
+            int lineH = ScaleDpi(s.fontSize + 4, dpi);
             int barOffset = drawBars ? ScaleDpi(2, dpi) : 0;
-            int yPos = (height - ScaleDpi(16, dpi)) / 2 - barOffset;
+            int yPos = (height - lineH) / 2 - barOffset;
+            int barY = yPos + lineH;
             int xPos = ScaleDpi(11, dpi);
             int curItem = 0;
 
-            if (showCpu) {
+            if (showCpu || showCpuTemp) {
                 if (curItem++ > 0) DrawTextSeg(g, xPos, yPos, L"  ", colLabel, g_pFontLabel);
                 int cpuStartX = xPos;
                 DrawTextSeg(g, xPos, yPos, L"CPU ", colLabel, g_pFontLabel);
-                DrawTextSeg(g, xPos, yPos, cpuVal, cpuCol, g_pFontValue);
+                if (showCpu) {
+                    DrawTextSeg(g, xPos, yPos, cpuVal, cpuCol, g_pFontValue);
+                }
                 int cpuEndX = xPos;
+                if (showCpu && showCpuTemp) DrawTextSeg(g, xPos, yPos, L" ", colLabel, g_pFontLabel);
+                if (showCpuTemp) {
+                    DrawTextSeg(g, xPos, yPos, cpuTempVal, cpuTempCol, g_pFontValue);
+                }
 
-                if (showBars) {
-                    Gdiplus::Color barCol = (cpu > 80) ? Gdiplus::Color(255, 255, 85, 85) :
-                                           ((cpu > 55) ? Gdiplus::Color(255, 255, 190, 50) : Gdiplus::Color(255, 75, 175, 255));
-                    DrawRoundedMiniBarGDIPlus(g, cpuStartX, yPos + ScaleDpi(16, dpi), cpuEndX - cpuStartX, ScaleDpi(3, dpi), cpu, barCol);
+                if (showBars && showCpu) {
+                    Gdiplus::Color barCol = s.customMetricsEnabled ? cpuCol :
+                                           ((cpu > 80) ? colAlert : ((cpu > 55) ? colWarn : Gdiplus::Color(255, 75, 175, 255)));
+                    DrawRoundedMiniBarGDIPlus(g, cpuStartX, barY, cpuEndX - cpuStartX, ScaleDpi(3, dpi), cpu, barCol);
                 }
             }
 
@@ -1192,15 +2132,39 @@ void SyncWindowGeometry() {
                 int ramEndX = xPos;
 
                 if (showBars) {
-                    Gdiplus::Color barCol = (ram > 85) ? Gdiplus::Color(255, 255, 85, 85) :
-                                           ((ram > 70) ? Gdiplus::Color(255, 255, 190, 50) : Gdiplus::Color(255, 165, 130, 255));
-                    DrawRoundedMiniBarGDIPlus(g, ramStartX, yPos + ScaleDpi(16, dpi), ramEndX - ramStartX, ScaleDpi(3, dpi), ram, barCol);
+                    Gdiplus::Color barCol = s.customMetricsEnabled ? ramCol :
+                                           ((ram > 85) ? colAlert : ((ram > 70) ? colWarn : Gdiplus::Color(255, 165, 130, 255)));
+                    DrawRoundedMiniBarGDIPlus(g, ramStartX, barY, ramEndX - ramStartX, ScaleDpi(3, dpi), ram, barCol);
                 }
+            }
+
+            if (showGpu || showGpuTemp) {
+                if (curItem++ > 0) DrawTextSeg(g, xPos, yPos, L"  ", colLabel, g_pFontLabel);
+                int gpuStartX = xPos;
+                DrawTextSeg(g, xPos, yPos, L"GPU ", colLabel, g_pFontLabel);
+                if (showGpu) {
+                    DrawTextSeg(g, xPos, yPos, gpuVal, gpuCol, g_pFontValue);
+                }
+                int gpuEndX = xPos;
+                if (showGpu && showGpuTemp) DrawTextSeg(g, xPos, yPos, L" ", colLabel, g_pFontLabel);
+                if (showGpuTemp) {
+                    DrawTextSeg(g, xPos, yPos, gpuTempVal, gpuTempCol, g_pFontValue);
+                }
+
+                if (showBars && showGpu) {
+                    Gdiplus::Color barCol = s.customMetricsEnabled ? gpuCol :
+                                           ((gpu > 85) ? colAlert : ((gpu > 60) ? colWarn : Gdiplus::Color(255, 110, 230, 145)));
+                    DrawRoundedMiniBarGDIPlus(g, gpuStartX, barY, gpuEndX - gpuStartX, ScaleDpi(3, dpi), gpu, barCol);
+                }
+            }
+
+            if (showDisk) {
+                if (curItem++ > 0) DrawTextSeg(g, xPos, yPos, L"  ", colLabel, g_pFontLabel);
+                DrawTextSeg(g, xPos, yPos, diskVal, diskCol, g_pFontValue);
             }
 
             if (showNet) {
                 if (curItem++ > 0) DrawTextSeg(g, xPos, yPos, L"  ", colLabel, g_pFontLabel);
-                Gdiplus::Color netCol = isLight ? Gdiplus::Color(255, 20, 140, 220) : Gdiplus::Color(255, 115, 215, 255);
                 DrawTextSeg(g, xPos, yPos, netVal, netCol, g_pFontValue);
             }
 
@@ -1259,6 +2223,17 @@ void UpdateTaskbarHooks() {
     }
 }
 
+bool IsDragModifierActive(DragModifier mod) {
+    switch (mod) {
+        case DragModifier::Alt:      return (GetKeyState(VK_MENU) & 0x8000) != 0;
+        case DragModifier::Ctrl:     return (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        case DragModifier::Shift:    return (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        case DragModifier::None:     return true;
+        case DragModifier::Disabled:
+        default:                     return false;
+    }
+}
+
 LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_MOUSEACTIVATE:
@@ -1278,6 +2253,18 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 g_isHovered = true;
                 TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, hWnd, 0 };
                 TrackMouseEvent(&tme);
+
+                HudAction hoverAct;
+                int hoverDelay;
+                {
+                    std::lock_guard<std::mutex> lock(g_settingsMutex);
+                    hoverAct = settings.hoverAction;
+                    hoverDelay = settings.hoverDelayMs;
+                }
+                if (hoverAct != HudAction::None) {
+                    SetTimer(hWnd, TIMER_HOVER_ACTIVATE, (UINT)hoverDelay, NULL);
+                }
+
                 SyncWindowGeometry();
             }
             if (g_isDragging) {
@@ -1298,28 +2285,43 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         case WM_MOUSELEAVE: {
             g_isHovered = false;
+            KillTimer(hWnd, TIMER_HOVER_ACTIVATE);
             SyncWindowGeometry();
             return 0;
         }
 
         case WM_RBUTTONUP: {
-            if (GetKeyState(VK_CONTROL) & 0x8000) {
-                ToggleGraphWindow();
+            bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            HudAction act;
+            {
+                std::lock_guard<std::mutex> lock(g_settingsMutex);
+                act = ctrl ? settings.ctrlRightClickAction : settings.rightClickAction;
             }
+            ExecuteHudAction(act);
             return 0;
         }
 
         case WM_LBUTTONDOWN: {
-            if (GetKeyState(VK_MENU) & 0x8000) {
+            DragModifier dragMod;
+            HudAction clickAct;
+            bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            {
+                std::lock_guard<std::mutex> lock(g_settingsMutex);
+                dragMod = settings.dragModifier;
+                clickAct = ctrl ? settings.ctrlLeftClickAction : settings.leftClickAction;
+            }
+
+            if (IsDragModifierActive(dragMod)) {
                 g_isDragging = true;
+                KillTimer(hWnd, TIMER_HOVER_ACTIVATE);
                 GetCursorPos(&g_dragStartPt);
                 {
                     std::lock_guard<std::mutex> lock(g_settingsMutex);
                     g_dragStartOffset = settings.offsetX;
                 }
                 SetCapture(hWnd);
-            } else if (GetKeyState(VK_CONTROL) & 0x8000) {
-                TriggerAsyncRamClean();
+            } else {
+                ExecuteHudAction(clickAct);
             }
             return 0;
         }
@@ -1378,6 +2380,20 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 } else {
                     FastRepositionOnly();
                 }
+            } else if (wParam == TIMER_HOVER_ACTIVATE) {
+                KillTimer(hWnd, TIMER_HOVER_ACTIVATE);
+                if (g_isHovered && !g_isDragging) {
+                    HudAction hoverAct;
+                    {
+                        std::lock_guard<std::mutex> lock(g_settingsMutex);
+                        hoverAct = settings.hoverAction;
+                    }
+                    if (hoverAct == HudAction::ToggleGraph) {
+                        ToggleGraphWindow(true);
+                    } else {
+                        ExecuteHudAction(hoverAct);
+                    }
+                }
             }
             return 0;
         }
@@ -1416,6 +2432,13 @@ DWORD WINAPI PingWorkerThread(LPVOID) {
 }
 
 DWORD WINAPI StatsWorkerThread(LPVOID) {
+    HRESULT hrCom = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+
+    PdhMonitor pdh;
+    NvApiMonitor nvapi;
+    AdlMonitor adl;
+    WmiThermalMonitor wmi;
+
     ULONGLONG lastTick = GetTickCount64();
 
     while (g_bRunning) {
@@ -1424,11 +2447,15 @@ DWORD WINAPI StatsWorkerThread(LPVOID) {
         lastTick = now;
 
         int interval;
-        bool needNet;
+        bool needNet, needGpu, needGpuTemp, needCpuTemp, needDisk;
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             interval = settings.updateInterval;
             needNet = settings.showNetSpeed;
+            needGpu = settings.showGpu;
+            needGpuTemp = settings.showGpuTemp;
+            needCpuTemp = settings.showCpuTemp;
+            needDisk = (settings.diskSpeedMode != DiskSpeedMode::Off);
         }
 
         int cpu = GetCpuUsage();
@@ -1441,12 +2468,39 @@ DWORD WINAPI StatsWorkerThread(LPVOID) {
             g_ramUsage = ram;
         }
 
+        ULONGLONG diskReadBps = 0, diskWriteBps = 0;
+        int gpuPct = 0;
+        pdh.Update(needDisk, needGpu, diskReadBps, diskWriteBps, gpuPct);
+        if (needDisk) {
+            g_diskReadBps = diskReadBps;
+            g_diskWriteBps = diskWriteBps;
+        }
+        if (needGpu) {
+            g_gpuUsage = gpuPct;
+        }
+
+        int cpuTemp = TEMP_UNAVAILABLE;
+        int gpuTemp = TEMP_UNAVAILABLE;
+        if (needGpuTemp) {
+            gpuTemp = nvapi.GetGpuTempC();
+            if (gpuTemp == TEMP_UNAVAILABLE) {
+                gpuTemp = adl.GetGpuTempC();
+            }
+        }
+        if (needCpuTemp || (needGpuTemp && gpuTemp == TEMP_UNAVAILABLE)) {
+            wmi.QueryTemps(needCpuTemp, needGpuTemp && (gpuTemp == TEMP_UNAVAILABLE), cpuTemp, gpuTemp);
+        }
+        if (needCpuTemp) g_cpuTempC = cpuTemp;
+        if (needGpuTemp) g_gpuTempC = gpuTemp;
+
         {
             std::lock_guard<std::mutex> lock(g_historyMutex);
             g_cpuHistory.push_back(cpu);
             g_ramHistory.push_back(ram);
+            g_gpuHistory.push_back(gpuPct);
             while (g_cpuHistory.size() > MAX_GRAPH_POINTS) g_cpuHistory.pop_front();
             while (g_ramHistory.size() > MAX_GRAPH_POINTS) g_ramHistory.pop_front();
+            while (g_gpuHistory.size() > MAX_GRAPH_POINTS) g_gpuHistory.pop_front();
         }
 
         if (needNet) {
@@ -1468,6 +2522,15 @@ DWORD WINAPI StatsWorkerThread(LPVOID) {
         if (WaitForSingleObject(g_hStopEvent, (DWORD)interval) == WAIT_OBJECT_0) {
             break;
         }
+    }
+
+    wmi.Shutdown();
+    adl.Shutdown();
+    nvapi.Shutdown();
+    pdh.Shutdown();
+
+    if (SUCCEEDED(hrCom)) {
+        CoUninitialize();
     }
     return 0;
 }
@@ -1493,7 +2556,7 @@ DWORD WINAPI GuiWorkerThread(LPVOID) {
     }
 
     g_isTaskbarLight = ReadTaskbarLightTheme();
-    UpdateCachedFonts(96);
+    UpdateCachedFonts(96, 12);
 
     HWND hWnd = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_NOACTIVATE,
@@ -1548,6 +2611,7 @@ end_loop:
     g_hookedTray = NULL;
 
     KillTimer(hWnd, TIMER_FAST_CHECK);
+    KillTimer(hWnd, TIMER_HOVER_ACTIVATE);
     g_hHudWnd = NULL;
     if (g_hGraphWnd) {
         DestroyWindow(g_hGraphWnd);
