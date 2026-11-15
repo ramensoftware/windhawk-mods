@@ -2429,11 +2429,12 @@ void UnhookWinEvents() {
     g_winEventHooks.clear();
 }
 
-// Registers the WinEvent ranges the current settings need. Minimize,
-// restore, show, hide and cloaking always; foreground changes only when the
-// foreground window is treated specially; title changes only when the title
-// fallback is in use (they are frequent, and with the view model a title
-// change doesn't change which windows a button has).
+// Registers the WinEvent ranges the current settings need. None at all with
+// both underlines off; otherwise minimize, restore, show, hide and cloaking
+// always; foreground changes only when the foreground window is treated
+// specially; title changes only when the title fallback is in use (they are
+// frequent, and with the view model a title change doesn't change which
+// windows a button has).
 void HookWinEvents() {
     UnhookWinEvents();
 
@@ -2441,6 +2442,16 @@ void HookWinEvents() {
     // explorer.exe has no taskbar at all (e.g. "Launch folder windows in a
     // separate process"). RegisterRoot asks for a re-run once a tree exists.
     if (!g_treeKnown) {
+        return;
+    }
+
+    // Nothing depends on window state with both underlines off. Hiding the
+    // running indicator doesn't need these events: the UpdateVisualStates
+    // hook re-hides it on every button the taskbar updates, and turning the
+    // option on runs a pass. Wh_ModSettingsChanged re-runs this function, so
+    // the hooks come back as soon as either underline is turned on again.
+    if (!g_settings.labelUnderlineEnabled &&
+        !g_settings.iconUnderline.enabled) {
         return;
     }
 
