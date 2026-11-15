@@ -35,15 +35,19 @@ DISALLOWED_AUTHORS = [
 ]
 
 
-# A reviewer adds this label to a pull request once they've confirmed that the
-# X (Twitter) account and the GitHub account belong to the same person.
-TWITTER_VERIFIED_LABEL = 'twitter-verified'
-
-
 @cache
-def get_pr_labels() -> set[str]:
-    """Labels that are on the pull request, as passed in by the workflow."""
-    return set(json.loads(os.environ.get('PR_LABELS', '[]')))
+def get_verified_twitter_urls() -> set[str]:
+    """
+    X (Twitter) URLs that the maintainer confirmed belong to the pull request
+    author, each with a "Verified <url>" line in one of their comments on the
+    pull request, as passed in by the workflow.
+    """
+    comments = os.environ.get('PR_MAINTAINER_COMMENTS', '')
+    return {
+        match.group(1)
+        for line in comments.splitlines()
+        if (match := re.fullmatch(r'Verified\s+(\S+)', line.strip()))
+    }
 
 
 ALLOWED_AUTHOR_NAME_CHANGES = {
@@ -712,7 +716,7 @@ class ModMetadataValidator:
             else:
                 # Not used by anyone else, so it takes a manual check that the
                 # same person owns both accounts.
-                if TWITTER_VERIFIED_LABEL not in get_pr_labels():
+                if prop.value not in get_verified_twitter_urls():
                     prop.add_review_item(
                         '@@ requires manual verification\n\n'
                         'To verify your X (Twitter) account, please send me'
