@@ -2,147 +2,88 @@
 // @id              desktop-context-menu-themes
 // @name            Desktop Context Menu Themes
 // @description     Replaces only the Windows desktop background context menu with a customizable menu, including themes, colors, layout, and animations.
-// @version         1.3.1
+// @version         1.0.6
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -lshlwapi -luuid -lcomctl32 -ladvapi32 -lgdi32 -luxtheme -lversion -ld3d11 -ld2d1 -ldwrite -ldcomp
 // @license         MIT
 // @author          Miguel
 // @github          https://github.com/miguelelesbaocampos-cmyk
+// @name:pt-BR Temas do menu de contexto da área de trabalho
+// @description:pt-BR Substitui somente o menu de contexto do fundo da área de trabalho do Windows; inclui temas, cores, layout e animações.
+// @name:pt-PT Temas do menu de contexto da área de trabalho
+// @description:pt-PT Substitui apenas o menu de contexto do fundo do ambiente de trabalho; inclui temas, cores, esquema e animações.
 // ==/WindhawkMod==
-// Desktop-only adaptation and added themes by Codex; original source by BOLT under MIT.
+// Maintained by Miguel; AI-assisted adaptation by Codex. Original source by BOLT-Scripts (MIT): https://github.com/Bolt-Scripts/custom-cached-context-menu.
 
 // ==WindhawkModReadme==
 /*
 # Desktop Context Menu Themes
 
-Replaces only the context menu opened on the empty Windows desktop. Folder, file,
-and desktop-icon menus keep their native Windows appearance. The desktop menu is
-self-rendered and supports editable themes, colors, blur, layout, and animations.
+A Windhawk mod for the empty background of the Windows desktop. Menus for
+desktop icons, files, folders, File Explorer and the navigation pane pass through
+to Windows unchanged.
 
-![Desktop Context Menu Themes preview](https://raw.githubusercontent.com/ramensoftware/windhawk-mods/main/mods/desktop-context-menu-themes-preview.png)
+![Minimal Blue desktop background menu](../screenshots/10-minimal-blue.png)
 
-The native menu is slow because every registered shell extension is loaded
-synchronously before it can be shown. This mod shows a cached menu right away
-and discovers extension items in the background, so repeated opens are instant.
+## Features
 
-## Highlights
-
-- **Instant, cached menus** — the first open of a context discovers and caches
-  the shell's items; later opens render from the cache, and common contexts are
-  pre-built in the background at startup.
-- **Custom rendering** — the menu is drawn with Direct2D: rounded corners,
-  blur, shadows, per-item icons, hover feedback, and animations, instead of the
-  classic owner-drawn menu.
-- **Themes** — bundled themes (Windows 11/10 dark and light, Nord, Dracula,
-  Solarized, Gruvbox, One Dark, Cyberpunk, Synthwave, Terminal Green, Amber
-  CRT, Tokyo Night, AMOLED Black, High Contrast) plus full `menu.ini` control.
-  Each theme is a self-contained file you can edit or copy.
-- **Animations** — combinable open/close effects (`fade`, `slide`, `scale`,
-  `dissolve`, `crt`, `unfold`) with easing, timing, direction, and optional
-  submenu animation.
-- **Overlays** — combinable effects drawn over the menu content (`noise`,
-  `plasma`, `hue`, `glow`, `scanlines`, `vignette`) with intensity, animation
-  speed, size, and frame interval.
-  `overlayAnimate` keeps them moving while the menu stays open (off by
-  default); otherwise they animate only during the open/close. The Terminal
-  Green and Amber CRT themes ship with scanlines.
-- **Settings menu** — in the advanced ("More options") submenu, or via the
-  optional global hotkey. Appearance is edited live (sliders with typed values,
-  a color picker, a font-face field with installed-font validation, instant
-  preview) and written back to the active theme file or `menu.ini`.
-- **No code needed** — `menu.ini` supports rules (`hide`/`keep`/`move`),
-  custom commands, custom submenus, per-item overrides, and an icon library.
-- **36 languages** — the menu and the in-menu settings follow the Windows
-  display language, with an override in the settings; the Windhawk settings
-  page follows Windhawk's own language. Shell-extension labels stay in their
-  own language.
+- Six additional themes: Minimal Blue, Nebula Purple, Emerald Green, Rose
+  Quartz, Solar Amber, and Graphite.
+- Editable colors, transparency, blur, borders, fonts, layout and animations.
+- Normal and Compact menu sizes in Custom mode.
+- Starts in English; other supported languages can be selected in Windhawk
+  settings.
+- Caches only the desktop background menu. When background pre-build is on,
+  only that menu's handlers are loaded during startup.
 
 ## Settings
 
 | Setting | Default | Description |
 |---|---|---|
-| Bypass keys | on | On the empty desktop, hold Shift to use the native classic menu or Ctrl to use the untouched modern menu. |
-| Menu mode | Custom (recommended) | Custom draws the self-rendered menu and falls back to the classic menu after repeated failures; Classic always uses the owner-drawn menu. |
-| Language | Automatic | Menu and in-menu settings language. Automatic follows the Windows display language and falls back to English; the Windhawk settings page follows Windhawk's own language. |
-| Theme | Azul Minimalista | Includes Azul Minimalista, Roxo Nebulosa, Verde Esmeralda, Rosa Quartzo, Âmbar Solar, and Grafite, plus the bundled themes. Edit colors and effects in the theme settings. |
-| Show classic menu item | on | Adds a "Show classic menu" entry at the bottom of the menu. |
-| Top action bar | off | Moves Cut, Copy, Paste, Rename and Delete into an icon bar on the side of the menu nearest the cursor, like the Windows 11 menu. Custom menu mode only. |
-| Background pre-build | on | Warms common menus at startup so their first open is instant. Off keeps the stock menu's exposure: handlers load only for menus that open, and each first open builds on demand. |
-| Warm-up extensions | common list | Comma-separated file types pre-built at Explorer startup. |
-| Warm-up delay | 5 s | Delay before background warm-up starts. |
-| Clear cache | off | Turn on to delete cached models; they rebuild on next use. |
-| Debug logging | off | Logs timings and diagnostics. |
-| Instant menu open | on | Shows native fallback menus without the system open animation. |
-| Submenu open delay | 150 ms | Hover delay before a submenu opens; 0 = instant, -1 = keep the Windows setting. |
-| Move Windows extras | on | Moves the configured Windows extras into the More options submenu. |
-| Move third-party handlers | on | Moves third-party shell extension entries into the More options submenu. |
-| Keep in the main menu | empty | Comma-separated labels or verbs that stay in the main menu. |
-| More options submenu label | `More options` | Label of that submenu. |
-| Windows items to move | common list | Comma-separated labels or verbs of Windows items to move into the submenu. Verbs (e.g. `setdesktopwallpaper`) match on every language; labels match the menu's display language. GUID-verb commands accept aliases: `openterminal`, `editwithphotos`, `editwithpaint`, `editwithnotepad`. |
-| Settings hotkey | empty | Optional global hotkey that opens the settings menu (for example `Ctrl+Alt+M`). |
+| Language | English | Menu and in-menu settings start in English. |
+| Theme | Minimal Blue | Choose a bundled theme or customize its appearance. |
+| Menu size | Normal | Compact reduces row height, font size, icons and spacing in Custom menu mode. |
+| Background pre-build | on | Pre-builds only the empty desktop background menu. Turn it off to load handlers on first use. |
+| Warm-up delay | 5 s | Delay before the desktop menu is pre-built. |
+| Top action bar | off | Shows eligible menu actions as icons when the desktop menu provides them. |
+| Bypass keys | on | Hold Shift for the stock classic menu or Ctrl for the stock modern menu. |
+| More options | on | Keeps a classic-menu entry available in the custom menu. |
+| Settings hotkey | empty | Optional shortcut for opening the in-menu appearance editor. |
 
-## Configuration
+## Compatibility
 
-`menu.ini` lives in the mod's storage directory (Windhawk → the mod's details →
-Storage). It is created on first run as a fully commented settings list, with
-the range and meaning of every key next to it. Invalid values never stop the
-file from loading: they are clamped or fall back to defaults, logged as
-`menu.ini:<line>: warning: <message>`, and the corrected file is rewritten.
-
-Themes are complete `[appearance]` blocks under `themes\<name>.ini`; they never
-inherit from `menu.ini`, so a theme is always self-contained. Edit one directly,
-or use the in-menu settings browser.
+Do not enable this mod at the same time as Custom Cached Context Menu.
+Both mods hook the same Explorer menu functions.
 
 ## Limitations
 
-- Targets explorer.exe and replaces only the empty desktop background menu; folder, file, and desktop-icon menus pass through.
-- Menus that contain owner-drawn items, and non-filesystem namespaces, fall
-  back to the native menu.
-- The custom menu is not exposed to UI Automation; use the classic menu mode
-  with a screen reader.
-- Tall menus do not scroll; they are capped to the work area.
-- Nav-pane menus are cached per tree node for the session and refresh after
-  use, so the first open of each node pays the shell's population cost.
-- The menu is localized; cached extension labels come from the shell and stay
-  in the language the extension supplies. Labels that embed the selected
-  file's name (for example "Extract to \"<name>\"") are re-rendered with the
-  current name.
-- Native fallback menus apply the configured submenu delay through the system
-  `MenuShowDelay` value while the menu is open (restored on close); Windows
-  has no per-menu delay API.
-- Context-menu handlers run inside Explorer, so a faulty third-party shell
-  extension can crash it (the background pre-build loads every registered
-  handler). If Explorer crashes when a menu opens, disable the offending
-  extension, for example with ShellExView.
+- Only an empty area of the desktop is replaced. Desktop icons and all
+  File Explorer menus keep their Windows menus.
+- A shell extension with owner-drawn content may require the native fallback.
+- Shell handlers run inside Explorer. A faulty handler can still make Explorer
+  unstable; background pre-build is limited to desktop-menu handlers.
+- The custom menu is not exposed to UI Automation.
 
-## Languages
+## Screenshots
 
-Arabic, Azerbaijani, Bengali, Czech, Danish, German, Greek, English, Spanish,
-Persian, French, Hindi, Croatian, Haitian Creole, Hungarian, Indonesian,
-Italian, Japanese, Korean, Norwegian, Dutch, Odia, Polish, Portuguese
-(Brazil and Portugal), Romanian, Russian, Swedish, Tamil, Thai, Turkish,
-Ukrainian, Uzbek, Vietnamese, Chinese (Simplified and Traditional).
+See the screenshots/ gallery in the repository for the bundled desktop-menu
+themes.
 
-The menu follows the Windows display language by default; the **Language**
-setting can override it. The mod's own strings are machine-translated and
-native corrections are welcome. Third-party shell-extension labels remain in
-the language their extension supplies.
+## Maintainer and credits
 
-## Feedback
+Maintained by Miguel: https://github.com/miguelelesbaocampos-cmyk
 
-Source code, issues, and the full configuration guide:
-<https://github.com/Bolt-Scripts/custom-cached-context-menu>
+Adapted from Custom Cached Context Menu by BOLT-Scripts under MIT:
+https://github.com/Bolt-Scripts/custom-cached-context-menu
 
-## License
-
-MIT
+The adaptation was AI-assisted with Codex.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- theme: "Azul Minimalista"
+- theme: "Minimal Blue"
   $name: Theme
   $name:ar: الموضوع
   $name:az: Mövzu
@@ -233,12 +174,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: High Contrast
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:ar:
   - Custom (menu.ini): مخصص (menu.ini)
   - Windows 11 Dark: Windows 11 الظلام
@@ -257,12 +198,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: التباين العالي
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:az:
   - Custom (menu.ini): Fərdi (menu.ini)
   - Windows 11 Dark: Windows 11 Qaranlıq
@@ -281,12 +222,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Yüksək Kontrast
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:bn:
   - Custom (menu.ini): কাস্টম (menu.ini)
   - Windows 11 Dark: Windows 11 অন্ধকার
@@ -305,12 +246,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: উচ্চ বৈসাদৃশ্য
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:cs:
   - Custom (menu.ini): Vlastní (menu.ini)
   - Windows 11 Dark: Windows 11 Tmavý
@@ -329,12 +270,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Vysoký kontrast
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:da:
   - Custom (menu.ini): Brugerdefineret (menu.ini)
   - Windows 11 Dark: Windows 11 Mørk
@@ -353,12 +294,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Høj kontrast
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:de-DE:
   - Custom (menu.ini): Benutzerdefiniert (menu.ini)
   - Windows 11 Dark: Windows 11 Dunkel
@@ -377,12 +318,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Hoher Kontrast
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:el:
   - Custom (menu.ini): Προσαρμοσμένο (menu.ini)
   - Windows 11 Dark: Windows 11 Σκούρο
@@ -401,12 +342,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Υψηλή Αντίθεση
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:es-ES:
   - Custom (menu.ini): Personalizado (menu.ini)
   - Windows 11 Dark: Windows 11 Oscuro
@@ -425,12 +366,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Alto contraste
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:fa:
   - Custom (menu.ini): سفارشی (menu.ini)
   - Windows 11 Dark: Windows 11 تیره
@@ -449,12 +390,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: کنتراست بالا
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:fr-FR:
   - Custom (menu.ini): Personnalisé (menu.ini)
   - Windows 11 Dark: Windows 11 sombre
@@ -473,12 +414,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Contraste élevé
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:hi:
   - Custom (menu.ini): कस्टम (menu.ini)
   - Windows 11 Dark: Windows 11 डार्क
@@ -497,12 +438,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: उच्च कंट्रास्ट
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:hr:
   - Custom (menu.ini): Prilagođeno (menu.ini)
   - Windows 11 Dark: Windows 11 Tamno
@@ -521,12 +462,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Visoki kontrast
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:ht:
   - Custom (menu.ini): Custom (menu.ini)
   - Windows 11 Dark: Windows 11 nwa
@@ -545,12 +486,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Segondè kontras
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:hu:
   - Custom (menu.ini): Egyéni (menu.ini)
   - Windows 11 Dark: Windows 11 Sötét
@@ -569,12 +510,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Magas kontraszt
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:id-ID:
   - Custom (menu.ini): Kustom (menu.ini)
   - Windows 11 Dark: Windows 11 Gelap
@@ -593,12 +534,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Kontras Tinggi
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:it-IT:
   - Custom (menu.ini): Personalizzato (menu.ini)
   - Windows 11 Dark: Windows 11 Scuro
@@ -617,12 +558,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Contrasto elevato
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:ja-JP:
   - Custom (menu.ini): カスタム (menu.ini)
   - Windows 11 Dark: Windows 11 ダーク
@@ -641,12 +582,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: ハイコントラスト
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:ko-KR:
   - Custom (menu.ini): 커스텀(menu.ini)
   - Windows 11 Dark: Windows 11 다크
@@ -665,12 +606,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: 고대비
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:nb:
   - Custom (menu.ini): Egendefinert (menu.ini)
   - Windows 11 Dark: Windows 11 Mørk
@@ -689,12 +630,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Høy kontrast
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:nl-NL:
   - Custom (menu.ini): Aangepast (menu.ini)
   - Windows 11 Dark: Windows 11 Donker
@@ -713,12 +654,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Hoog contrast
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:or:
   - Custom (menu.ini): କଷ୍ଟମ୍ (menu.ini)
   - Windows 11 Dark: Windows 11 ଅନ୍ଧାର
@@ -737,12 +678,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: ଉଚ୍ଚ କଣ୍ଟ୍ରାସ୍
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:pl-PL:
   - Custom (menu.ini): Niestandardowe (menu.ini)
   - Windows 11 Dark: Windows 11 Ciemny
@@ -761,12 +702,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Wysoki kontrast
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:pt-BR:
   - Custom (menu.ini): Personalizado (menu.ini)
   - Windows 11 Dark: Windows 11 Escuro
@@ -785,12 +726,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Alto contraste
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Azul Minimalista
+  - Nebula Purple: Roxo Nebulosa
+  - Emerald Green: Verde Esmeralda
+  - Rose Quartz: Rosa Quartzo
+  - Solar Amber: Âmbar Solar
+  - Graphite: Grafite
   $options:pt-PT:
   - Custom (menu.ini): Personalizado (menu.ini)
   - Windows 11 Dark: Windows 11 Escuro
@@ -809,12 +750,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Alto contraste
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Azul Minimalista
+  - Nebula Purple: Roxo Nebulosa
+  - Emerald Green: Verde Esmeralda
+  - Rose Quartz: Rosa Quartzo
+  - Solar Amber: Âmbar Solar
+  - Graphite: Grafite
   $options:ro:
   - Custom (menu.ini): Personalizat (menu.ini)
   - Windows 11 Dark: Windows 11 Întunecat
@@ -833,12 +774,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Contrast ridicat
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:ru-RU:
   - Custom (menu.ini): Пользовательский (menu.ini)
   - Windows 11 Dark: Windows 11 Темный
@@ -857,12 +798,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Высокая контрастность
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:sv:
   - Custom (menu.ini): Anpassad (menu.ini)
   - Windows 11 Dark: Windows 11 Mörk
@@ -881,12 +822,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Hög kontrast
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:ta:
   - Custom (menu.ini): தனிப்பயன் (menu.ini)
   - Windows 11 Dark: Windows 11 டார்க்
@@ -905,12 +846,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: உயர் மாறுபாடு
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:th:
   - Custom (menu.ini): กำหนดเอง (menu.ini)
   - Windows 11 Dark: Windows 11 เข้ม
@@ -929,12 +870,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: คอนทราสต์สูง
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:tr-TR:
   - Custom (menu.ini): Özel (menu.ini)
   - Windows 11 Dark: Windows 11 Koyu
@@ -953,12 +894,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Yüksek Kontrast
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:uk-UA:
   - Custom (menu.ini): Спеціальний (menu.ini)
   - Windows 11 Dark: Windows 11 Темний
@@ -977,12 +918,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Високий контраст
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:uz:
   - Custom (menu.ini): Maxsus (menu.ini)
   - Windows 11 Dark: Windows 11 To'q
@@ -1001,12 +942,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Yuqori kontrast
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:vi-VN:
   - Custom (menu.ini): Tùy chỉnh (menu.ini)
   - Windows 11 Dark: Windows 11 Tối
@@ -1025,12 +966,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: Độ tương phản cao
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:zh-CN:
   - Custom (menu.ini): 定制（menu.ini）
   - Windows 11 Dark: Windows 11 深色
@@ -1049,12 +990,12 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: 高对比度
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
   $options:zh-TW:
   - Custom (menu.ini): 客製化（menu.ini）
   - Windows 11 Dark: Windows 11 深色
@@ -1073,12 +1014,28 @@ MIT
   - Tokyo Night: Tokyo Night
   - AMOLED Black: AMOLED Black
   - High Contrast: 高對比度
-  - Azul Minimalista: Azul Minimalista
-  - Roxo Nebulosa: Roxo Nebulosa
-  - Verde Esmeralda: Verde Esmeralda
-  - Rosa Quartzo: Rosa Quartzo
-  - Âmbar Solar: Âmbar Solar
-  - Grafite: Grafite
+  - Minimal Blue: Minimal Blue
+  - Nebula Purple: Nebula Purple
+  - Emerald Green: Emerald Green
+  - Rose Quartz: Rose Quartz
+  - Solar Amber: Solar Amber
+  - Graphite: Graphite
+- menuDensity: "normal"
+  $name: Menu size
+  $name:pt-BR: Tamanho do menu
+  $name:pt-PT: Tamanho do menu
+  $description: Normal keeps the active theme's layout. Compact reduces row height, font size, icons, and spacing in Custom menu mode.
+  $description:pt-BR: Normal mantém o layout do tema atual. No modo Personalizado, Compacto reduz a altura das linhas, o tamanho da fonte, os ícones e o espaçamento.
+  $description:pt-PT: Normal mantém o esquema do tema atual. No modo Personalizado, Compacto reduz a altura das linhas, o tamanho do tipo de letra, os ícones e o espaçamento.
+  $options:
+  - normal: Normal
+  - compact: Compact
+  $options:pt-BR:
+  - normal: Normal
+  - compact: Compacto
+  $options:pt-PT:
+  - normal: Normal
+  - compact: Compacto
 - menuMode: "custom"
   $name: Menu mode
   $name:ar: وضع القائمة
@@ -1260,7 +1217,7 @@ MIT
   $options:zh-TW:
   - custom: 客製化（建議）
   - classic: 經典業主手繪
-- language: auto
+- language: en
   $name: Language
   $name:ar: اللغة
   $name:az: Dil
@@ -2957,42 +2914,9 @@ MIT
   $name:vi-VN: Thanh hành động hàng đầu
   $name:zh-CN: 顶部操作栏
   $name:zh-TW: 頂部操作欄
-  $description: Moves Cut, Copy, Paste, Rename and Delete into an icon bar on the side of the menu nearest the cursor, like the Windows 11 menu. Custom menu mode only.
-  $description:ar: ينقل القص والنسخ واللصق وإعادة التسمية والحذف إلى شريط الرموز الموجود على جانب القائمة الأقرب للمؤشر، مثل قائمة Windows 11. وضع القائمة المخصصة فقط.
-  $description:az: Windows 11 menyusu kimi, kursora ən yaxın menyunun yan tərəfindəki nişanlar çubuğuna Kəs, Kopyalayın, Yapışdırın, Adını dəyişdirin və Silin. Yalnız fərdi menyu rejimi.
-  $description:bn: Windows 11 মেনুর মতো কার্সারের কাছাকাছি মেনুর পাশের একটি আইকন বারে কাট, কপি, পেস্ট, পুনঃনামকরণ এবং মুছুন। শুধুমাত্র কাস্টম মেনু মোড।
-  $description:cs: Přesune Vyjmout, Kopírovat, Vložit, Přejmenovat a Odstranit do lišty ikon na straně nabídky nejblíže kurzoru, jako je nabídka Windows 11. Pouze režim vlastní nabídky.
-  $description:da: Flytter Klip, Kopier, Indsæt, Omdøb og Slet til en ikonlinje på siden af menuen nærmest markøren, som Windows 11-menuen. Kun brugerdefineret menutilstand.
-  $description:de-DE: Verschiebt Ausschneiden, Kopieren, Einfügen, Umbenennen und Löschen in eine Symbolleiste auf der Seite des Menüs, die dem Cursor am nächsten liegt, wie das Windows 11-Menü. Nur benutzerdefinierter Menümodus.
-  $description:el: Μετακινεί Αποκοπή, Αντιγραφή, Επικόλληση, Μετονομασία και Διαγραφή σε μια γραμμή εικονιδίων στο πλάι του μενού που βρίσκεται πιο κοντά στον κέρσορα, όπως το μενού Windows 11. Μόνο λειτουργία προσαρμοσμένου μενού.
-  $description:es-ES: Mueve Cortar, Copiar, Pegar, Cambiar nombre y Eliminar a una barra de iconos en el lado del menú más cercano al cursor, como el menú Windows 11. Solo modo de menú personalizado.
-  $description:fa: برش، کپی، چسباندن، تغییر نام و حذف را به یک نوار نماد در کنار منو نزدیک ترین مکان نما، مانند منوی Windows 11، منتقل می کند. فقط حالت منوی سفارشی
-  $description:fr-FR: Déplace Couper, Copier, Coller, Renommer et Supprimer dans une barre d'icônes sur le côté du menu le plus proche du curseur, comme le menu Windows 11. Mode menu personnalisé uniquement.
-  $description:hi: कट, कॉपी, पेस्ट, नाम बदलें और हटाएं को Windows 11 मेनू की तरह, कर्सर के निकटतम मेनू के किनारे एक आइकन बार में ले जाता है। केवल कस्टम मेनू मोड.
-  $description:hr: Premješta Izreži, Kopiraj, Zalijepi, Preimenuj i Izbriši u traku s ikonama na strani izbornika najbližoj pokazivaču, poput Windows 11 izbornika. Samo način prilagođenog izbornika.
-  $description:ht: Deplase Koupe, Kopi, Kole, Chanje non ak Efase nan yon ba icon sou bò meni ki pi pre kurseur la, tankou meni Windows 11 la. Mòd meni Custom sèlman.
-  $description:hu: A kivágást, másolást, beillesztést, átnevezést és törlést a menü kurzorhoz legközelebbi oldalán lévő ikonsávba helyezi, például a Windows 11 menüt. Csak egyéni menü mód.
-  $description:id-ID: Memindahkan Potong, Salin, Tempel, Ganti Nama, dan Hapus ke dalam bilah ikon di sisi menu yang paling dekat dengan kursor, seperti menu Windows 11. Hanya mode menu khusus.
-  $description:it-IT: Sposta Taglia, Copia, Incolla, Rinomina ed Elimina in una barra delle icone sul lato del menu più vicino al cursore, come il menu Windows 11. Solo modalità menu personalizzato.
-  $description:ja-JP: カット、コピー、ペースト、名前変更、および削除を、Windows 11 メニューのように、カーソルに最も近いメニューの横にあるアイコン バーに移動します。カスタムメニューモードのみ。
-  $description:ko-KR: Windows 11 메뉴와 같이 커서에 가장 가까운 메뉴 측면의 아이콘 표시줄로 잘라내기, 복사하기, 붙여넣기, 이름 바꾸기 및 삭제를 이동합니다. 사용자 정의 메뉴 모드에만 해당됩니다.
-  $description:nb: Flytter Klipp ut, Kopier, Lim inn, Gi nytt navn og Slett til en ikonlinje på siden av menyen nærmest markøren, som Windows 11-menyen. Kun tilpasset menymodus.
-  $description:nl-NL: Verplaatst Knippen, Kopiëren, Plakken, Hernoemen en Verwijderen naar een pictogrammenbalk aan de kant van het menu die zich het dichtst bij de cursor bevindt, zoals het Windows 11-menu. Alleen aangepaste menumodus.
-  $description:or: Windows 11 ମେନୁ ପରି କର୍ସର୍ ନିକଟ ମେନୁ ପାର୍ଶ୍ୱରେ ଥିବା ଏକ ଆଇକନ୍ ବାର୍ ରେ କଟ୍, କପି, ଲେପନ, ପୁନଃନାମ ଏବଂ ଡିଲିଟ୍ କୁ ଘୁଞ୍ଚାଏ | କେବଳ କଷ୍ଟମ୍ ମେନୁ ମୋଡ୍
-  $description:pl-PL: Przenosi polecenie Wytnij, Kopiuj, Wklej, Zmień nazwę i Usuń na pasek ikon z boku menu najbliżej kursora, np. menu Windows 11. Tylko tryb menu niestandardowego.
-  $description:pt-BR: Move Recortar, Copiar, Colar, Renomear e Excluir em uma barra de ícones na lateral do menu mais próxima do cursor, como o menu Windows 11. Somente modo de menu personalizado.
-  $description:pt-PT: Move Recortar, Copiar, Colar, Renomear e Apagar numa barra de ícones na lateral do menu mais próxima do cursor, como o menu Windows 11. Apenas modo de menu personalizado.
-  $description:ro: Mută Cut, Copy, Paste, Redenumire și Delete într-o bară de pictograme pe partea laterală a meniului cea mai apropiată de cursor, cum ar fi meniul Windows 11. Numai modul meniu personalizat.
-  $description:ru-RU: Перемещает команды «Вырезать», «Копировать», «Вставить», «Переименовать» и «Удалить» на панель значков на стороне меню, ближайшей к курсору, например меню Windows 11. Только режим пользовательского меню.
-  $description:sv: Flyttar Klipp ut, Kopiera, Klistra in, Byt namn och Ta bort till en ikonrad på sidan av menyn närmast markören, som Windows 11-menyn. Endast anpassat menyläge.
-  $description:ta: Windows 11 மெனு போன்ற கர்சருக்கு அருகில் உள்ள மெனுவின் பக்கத்தில் உள்ள ஐகான் பட்டியில் வெட்டு, நகலெடுக்க, ஒட்டுதல், மறுபெயரிடுதல் மற்றும் நீக்குதல் ஆகியவற்றை நகர்த்துகிறது. தனிப்பயன் மெனு பயன்முறை மட்டும்.
-  $description:th: ย้ายการตัด คัดลอก วาง เปลี่ยนชื่อ และลบลงในแถบไอคอนที่ด้านข้างของเมนูที่อยู่ใกล้เคอร์เซอร์มากที่สุด เช่น เมนู Windows 11 โหมดเมนูแบบกำหนดเองเท่านั้น
-  $description:tr-TR: Kes, Kopyala, Yapıştır, Yeniden Adlandır ve Sil'i, Windows 11 menüsü gibi menünün imlece en yakın tarafındaki simge çubuğuna taşır. Yalnızca özel menü modu.
-  $description:uk-UA: Переміщує «Вирізати», «Копіювати», «Вставити», «Перейменувати» та «Видалити» на панель значків збоку від меню, найближчого до курсору, як-от меню Windows 11. Лише режим спеціального меню.
-  $description:uz: Kesish, Nusxalash, joylashtirish, nomini o'zgartirish va o'chirishni Windows 11 menyusi kabi kursorga eng yaqin menyuning yon tomonidagi piktogramma satriga o'tkazadi. Faqat shaxsiy menyu rejimi.
-  $description:vi-VN: Di chuyển Cắt, Sao chép, Dán, Đổi tên và Xóa vào thanh biểu tượng ở bên cạnh menu gần con trỏ nhất, chẳng hạn như menu Windows 11. Chỉ có chế độ menu tùy chỉnh.
-  $description:zh-CN: 将剪切、复制、粘贴、重命名和删除移动到最靠近光标的菜单一侧的图标栏中，如 Windows 11 菜单。仅自定义菜单模式。
-  $description:zh-TW: 將剪下、複製、貼上、重新命名和刪除移至最靠近遊標的選單一側的圖示列中，如 Windows 11 選單。僅自訂選單模式。
+  $description: Moves eligible commands from the empty desktop menu into an icon bar near the cursor. The desktop menu may not contain commands to move.
+  $description:pt-BR: Move os comandos disponíveis no menu do fundo vazio da área de trabalho para uma barra de ícones próxima ao cursor. O menu pode não ter comandos compatíveis.
+  $description:pt-PT: Move os comandos disponíveis no menu do fundo vazio do ambiente de trabalho para uma barra de ícones junto ao cursor. O menu pode não ter comandos compatíveis.
 - submenuDelayMs: 150
   $name: Submenu open delay
   $name:ar: تأخير فتح القائمة الفرعية
@@ -3687,115 +3611,9 @@ MIT
   $name:vi-VN: Xây dựng trước nền
   $name:zh-CN: 后台预构建
   $name:zh-TW: 後台預建
-  $description: Warms common menus shortly after Explorer starts so their first open is instant. Turning it off skips loading every registered context-menu handler at startup (the stock menu's exposure), which avoids startup crashes from faulty third-party extensions; the first open of each context then builds on demand, like the stock menu. A handler that would crash the stock menu still crashes.
-  $description:ar: يقوم بتدفئة القوائم الشائعة بعد وقت قصير من بدء تشغيل Explorer بحيث يكون أول فتح لها فوريًا. يؤدي إيقاف تشغيله إلى تخطي تحميل كل معالج قائمة السياق المسجل عند بدء التشغيل (عرض قائمة الأسهم)، مما يتجنب تعطل بدء التشغيل من ملحقات الطرف الثالث الخاطئة؛ يتم بناء أول فتح لكل سياق على الطلب، مثل قائمة الأسهم. لا يزال المعالج الذي قد يؤدي إلى تعطل قائمة الأسهم يتعطل.
-  $description:az: Explorer başladıqdan qısa müddət sonra ümumi menyuları qızdırır, beləliklə onların ilk açılması ani olur. Onu söndürmək başlanğıcda hər bir qeydiyyatdan keçmiş kontekst-menyu işləyicisini yükləməyi atlayır (birja menyusunun ifşası), bu da səhv üçüncü tərəf uzantılarından başlanğıc qəzalarının qarşısını alır; hər bir kontekstin ilk açılışı sonra fond menyusu kimi tələb əsasında qurulur. Fond menyusunu pozacaq bir işləyici hələ də çökür.
-  $description:bn: Explorer শুরু হওয়ার কিছুক্ষণ পরেই সাধারণ মেনুগুলিকে উষ্ণ করে যাতে তাদের প্রথম খোলা তাত্ক্ষণিক হয়। এটি বন্ধ করলে স্টার্টআপে প্রতিটি নিবন্ধিত প্রসঙ্গ-মেনু হ্যান্ডলার লোড করা যায় না (স্টক মেনুর এক্সপোজার), যা ত্রুটিপূর্ণ তৃতীয় পক্ষের এক্সটেনশন থেকে স্টার্টআপ ক্র্যাশ এড়ায়; প্রতিটি প্রসঙ্গের প্রথম ওপেন তারপর চাহিদা অনুযায়ী তৈরি করে, যেমন স্টক মেনু। একটি হ্যান্ডলার যা স্টক মেনু ক্র্যাশ করবে এখনও ক্র্যাশ করে।
-  $description:cs: Ohřeje běžné nabídky krátce po spuštění Explorer, takže jejich první otevření je okamžité. Vypnutím přeskočíte načítání všech registrovaných obslužných rutin kontextové nabídky při spuštění (zobrazení nabídky akcií), což zabrání zhroucení spouštění z chybných rozšíření třetích stran; první otevření každého kontextu pak staví na požádání, jako je nabídka akcií. Obslužná rutina, která by zhroutila nabídku akcií, stále padá.
-  $description:da: Opvarmer almindelige menuer kort efter, at Explorer starter, så deres første åbning er øjeblikkelig. Deaktivering springer over at indlæse alle registrerede kontekstmenuhandlere ved opstart (aktiemenuens eksponering), hvilket undgår startnedbrud fra defekte tredjepartsudvidelser; den første åbning af hver kontekst bygger derefter på efterspørgsel, som aktiemenuen. En handler, der ville gå ned i aktiemenuen, går stadig ned.
-  $description:de-DE: Erwärmt allgemeine Menüs kurz nach dem Start von Explorer, sodass sie sofort zum ersten Mal geöffnet werden können. Wenn Sie es deaktivieren, wird das Laden aller registrierten Kontextmenü-Handler beim Start (die Anzeige des Standardmenüs) übersprungen, wodurch Startabstürze durch fehlerhafte Erweiterungen von Drittanbietern vermieden werden. Das erste Öffnen jedes Kontexts baut sich dann bei Bedarf auf, wie das Aktienmenü. Ein Handler, der das Aktienmenü zum Absturz bringen würde, stürzt immer noch ab.
-  $description:el: Ζεσταίνει τα κοινά μενού λίγο μετά την έναρξη του Explorer, ώστε το πρώτο τους άνοιγμα να είναι άμεσο. Η απενεργοποίησή του παρακάμπτει τη φόρτωση κάθε εγγεγραμμένου προγράμματος χειρισμού του μενού περιβάλλοντος κατά την εκκίνηση (έκθεση του μενού στοκ), γεγονός που αποφεύγει τα σφάλματα εκκίνησης από ελαττωματικές επεκτάσεις τρίτων. το πρώτο άνοιγμα κάθε περιβάλλοντος στη συνέχεια βασίζεται σε ζήτηση, όπως το μενού μετοχών. Ένας χειριστής που θα έσκαγε το μενού μετοχών εξακολουθεί να κολλάει.
-  $description:es-ES: Calienta los menús comunes poco después de que se inicia Explorer para que su primera apertura sea instantánea. Al desactivarlo se omite la carga de todos los controladores de menú contextual registrados al inicio (la exposición del menú de valores), lo que evita fallas de inicio debido a extensiones defectuosas de terceros; la primera apertura de cada contexto se basa en la demanda, como el menú de acciones. Un controlador que bloquearía el menú de valores todavía falla.
-  $description:fa: منوهای رایج را اندکی پس از شروع Explorer گرم می کند تا اولین باز شدن آنها فورا باشد. با خاموش کردن آن از بارگیری هر کنترل کننده منوی زمینه ثبت شده در هنگام راه اندازی پرش می شود (نمایش منوی سهام)، که از خرابی راه اندازی توسط برنامه های افزودنی شخص ثالث معیوب جلوگیری می کند. اولین باز از هر زمینه و سپس بر اساس تقاضا ایجاد می شود، مانند منوی سهام. کنترل کننده ای که منوی سهام را خراب می کند همچنان خراب می شود.
-  $description:fr-FR: Réchauffe les menus communs peu de temps après le démarrage d'Explorer afin que leur première ouverture soit instantanée. Le désactiver ignore le chargement de chaque gestionnaire de menu contextuel enregistré au démarrage (l'exposition du menu d'origine), ce qui évite les plantages de démarrage dus à des extensions tierces défectueuses ; la première ouverture de chaque contexte se construit ensuite à la demande, comme le menu d'origine. Un gestionnaire qui ferait planter le menu d'origine plante toujours.
-  $description:hi: Explorer शुरू होने के तुरंत बाद आम मेनू को गर्म करता है ताकि उनका पहला ओपन तुरंत हो। इसे बंद करने से स्टार्टअप (स्टॉक मेनू का एक्सपोज़र) पर प्रत्येक पंजीकृत संदर्भ-मेनू हैंडलर को लोड करना बंद हो जाता है, जो दोषपूर्ण तृतीय-पक्ष एक्सटेंशन से स्टार्टअप क्रैश से बचाता है; प्रत्येक संदर्भ का पहला ओपन स्टॉक मेनू की तरह, मांग पर आधारित होता है। एक हैंडलर जो स्टॉक मेनू को क्रैश कर देगा वह अभी भी क्रैश हो जाता है।
-  $description:hr: Zagrijava uobičajene izbornike ubrzo nakon pokretanja Explorer tako da je njihovo prvo otvaranje trenutno. Isključivanjem se preskače učitavanje svakog registriranog rukovatelja kontekstnim izbornikom pri pokretanju (izloženost izbornika dionica), čime se izbjegavaju rušenja pri pokretanju zbog neispravnih proširenja trećih strana; prvo otvaranje svakog konteksta zatim se nadograđuje na zahtjev, poput izbornika dionica. Rukovatelj koji bi srušio dionički izbornik i dalje se ruši.
-  $description:ht: Chofe meni komen yon ti tan apre Explorer kòmanse pou premye louvri yo se enstantane. Fè li sote chaje chak moun ki okipe meni kontèks anrejistre nan demaraj (ekspozisyon meni stock la), ki evite aksidan demaraj soti nan ekstansyon defo twazyèm pati; premye louvri nan chak kontèks Lè sa a, bati sou demann, tankou meni an stock. Yon moun k ap okipe meni aksyon an ap fè aksidan toujou.
-  $description:hu: Röviddel a Explorer indulása után felmelegíti a gyakori menüket, így azok első megnyitása azonnal megtörténik. A kikapcsolása kihagyja az összes regisztrált helyi menükezelő betöltését indításkor (a készletmenü megjelenítése), ami elkerüli a hibás, külső féltől származó bővítmények indítási összeomlását; az egyes kontextusok első megnyitása azután igény szerint épül fel, mint például a készletmenü. Az a kezelő, amely összeomolná a készletmenüt, továbbra is összeomlik.
-  $description:id-ID: Menghangatkan menu umum segera setelah Explorer dimulai sehingga pembukaan pertamanya terjadi secara instan. Mematikannya akan melompati pemuatan setiap pengendali menu konteks yang terdaftar saat startup (paparan menu stok), yang menghindari crash startup karena ekstensi pihak ketiga yang salah; pembukaan pertama setiap konteks kemudian dibangun berdasarkan permintaan, seperti menu stok. Penangan yang akan membuat crash menu stok masih crash.
-  $description:it-IT: Riscalda i menu comuni subito dopo l'avvio di Explorer, quindi la loro prima apertura è immediata. Disattivandolo si salta il caricamento di ogni gestore di menu contestuale registrato all'avvio (l'esposizione del menu Stock), evitando arresti anomali all'avvio dovuti a estensioni di terze parti difettose; la prima apertura di ciascun contesto si basa quindi su richiesta, come il menu delle scorte. Un gestore che causerebbe l'arresto anomalo del menu Stock continua a bloccarsi.
-  $description:ja-JP: Explorer の開始直後に共通メニューをウォームアップするため、最初に開くのは即座に完了します。これをオフにすると、起動時に登録されているすべてのコンテキスト メニュー ハンドラーの読み込み (ストック メニューの露出) がスキップされ、欠陥のあるサードパーティ拡張機能による起動クラッシュが回避されます。各コンテキストの最初のオープンは、ストック メニューのようにオンデマンドで構築されます。ストック メニューをクラッシュさせるハンドラーは依然としてクラッシュします。
-  $description:ko-KR: Explorer가 시작된 직후에 공통 메뉴를 따뜻하게 하여 첫 번째 메뉴가 즉각적으로 열리도록 합니다. 이 기능을 끄면 시작 시 등록된 모든 컨텍스트 메뉴 핸들러 로드(스톡 메뉴 노출)를 건너뛰어 잘못된 타사 확장으로 인한 시작 충돌을 방지합니다. 각 컨텍스트를 처음 열면 재고 메뉴처럼 수요에 따라 구축됩니다. 스톡 메뉴를 충돌시키는 핸들러는 여전히 충돌합니다.
-  $description:nb: Varmer opp vanlige menyer kort tid etter at Explorer starter, slik at de åpnes umiddelbart. Hvis du slår den av, hopper du over lasting av alle registrerte kontekstmenybehandlere ved oppstart (aksjemenyens eksponering), noe som unngår oppstartskrasj fra defekte tredjepartsutvidelser; den første åpningen i hver kontekst bygger deretter på etterspørsel, som aksjemenyen. En behandler som ville krasje aksjemenyen krasjer fortsatt.
-  $description:nl-NL: Verwarmt algemene menu's kort nadat de Explorer is gestart, zodat ze direct voor het eerst worden geopend. Als u dit uitschakelt, wordt het laden van elke geregistreerde contextmenu-handler bij het opstarten overgeslagen (de weergave van het aandelenmenu), waardoor opstartcrashes door defecte extensies van derden worden vermeden; de eerste opening van elke context bouwt vervolgens voort op aanvraag, zoals het aandelenmenu. Een handler die het aandelenmenu zou laten crashen, crasht nog steeds.
-  $description:or: Explorer ଆରମ୍ଭ ହେବାର କିଛି ସମୟ ପରେ ସାଧାରଣ ମେନୁ ଗରମ କରେ ତେଣୁ ସେମାନଙ୍କର ପ୍ରଥମ ଖୋଲା ତତକ୍ଷଣାତ୍ | ଏହାକୁ ଷ୍ଟାର୍ଟଅପ୍ ରେ ପ୍ରତ୍ୟେକ ପଞ୍ଜୀକୃତ ପ୍ରସଙ୍ଗ-ମେନୁ ହ୍ୟାଣ୍ଡେଲର୍ ଲୋଡ୍ କରିବା ବନ୍ଦ କରିଦିଏ (ଷ୍ଟକ୍ ମେନୁର ଏକ୍ସପୋଜର୍), ଯାହା ତ୍ରୁଟିପୂର୍ଣ୍ଣ ତୃତୀୟ-ପକ୍ଷ ବିସ୍ତାରରୁ ଷ୍ଟାର୍ଟଅପ୍ କ୍ରାସ୍କୁ ଏଡାଇଥାଏ | ପ୍ରତ୍ୟେକ ପ୍ରସଙ୍ଗର ପ୍ରଥମ ଖୋଲା ତା’ପରେ ଷ୍ଟକ୍ ମେନୁ ପରି ଚାହିଦା ଉପରେ ନିର୍ଭର କରେ | ଏକ ହ୍ୟାଣ୍ଡଲର୍ ଯାହା ଷ୍ଟକ୍ ମେନୁକୁ କ୍ରାସ୍ କରିବ ତଥାପି କ୍ରାସ୍
-  $description:pl-PL: Ogrzewa popularne menu wkrótce po uruchomieniu Explorer, dzięki czemu ich pierwsze otwarcie jest natychmiastowe. Wyłączenie tej opcji powoduje pominięcie ładowania każdego zarejestrowanego modułu obsługi menu kontekstowego podczas uruchamiania (ekspozycja menu podstawowego), co pozwala uniknąć awarii uruchamiania spowodowanych wadliwymi rozszerzeniami innych firm; pierwsze otwarcie każdego kontekstu jest następnie tworzone na żądanie, podobnie jak menu akcji. Program obsługi, który spowodowałby awarię menu podstawowego, nadal ulega awarii.
-  $description:pt-BR: Aquece menus comuns logo após o início do Explorer, para que sua primeira abertura seja instantânea. Desligá-lo ignora o carregamento de todos os manipuladores de menu de contexto registrados na inicialização (a exposição do menu de ações), o que evita travamentos de inicialização causados por extensões de terceiros defeituosas; a primeira abertura de cada contexto é construída conforme a demanda, como o menu de estoque. Um manipulador que travaria o menu de ações ainda trava.
-  $description:pt-PT: Aquece os menus comuns logo após o início do Explorer, para que a sua primeira abertura seja instantânea. Desligá-lo ignora o carregamento de todos os manipuladores de menus de contexto registados no arranque (a exposição do menu de ações), o que evita falhas de arranque causados por extensões de terceiros defeituosas; a primeira abertura de cada contexto é construída consoante a procura, como o menu de stock. Um manipulador que iria bloquear o menu de ações ainda bloqueia.
-  $description:ro: Încălzește meniurile comune la scurt timp după pornirea Explorer, astfel încât prima lor deschidere să fie instantanee. Dezactivarea acesteia omite încărcarea fiecărui handler de meniu contextual înregistrat la pornire (expunerea meniului stoc), ceea ce evită blocările la pornire de la extensiile terțe defecte; prima deschidere a fiecărui context se construiește apoi la cerere, cum ar fi meniul stoc. Un handler care ar bloca meniul stoc încă se blochează.
-  $description:ru-RU: Разогревает общие меню вскоре после запуска Explorer, поэтому их первое открытие происходит мгновенно. Его отключение позволяет пропустить загрузку каждого зарегистрированного обработчика контекстного меню при запуске (доступ к стандартному меню), что позволяет избежать сбоев при запуске из-за неисправных сторонних расширений; первое открытие каждого контекста затем создается по требованию, как стандартное меню. Обработчик, который приводил к сбою стандартного меню, все равно дает сбой.
-  $description:sv: Värmer upp vanliga menyer strax efter att Explorer startar så att de öppnas omedelbart. Om du stänger av den hoppar du över alla registrerade kontextmenyhanterare vid start (aktiemenyns exponering), vilket undviker startkrascher från felaktiga tredjepartstillägg; den första öppningen i varje sammanhang bygger sedan på efterfrågan, som aktiemenyn. En hanterare som skulle krascha aktiemenyn kraschar fortfarande.
-  $description:ta: Explorer தொடங்கிய சிறிது நேரத்திலேயே பொதுவான மெனுக்களை வெப்பமாக்குகிறது, எனவே அவற்றின் முதல் திறந்திருக்கும். அதை முடக்குவது, தொடக்கத்தில் பதிவுசெய்யப்பட்ட ஒவ்வொரு சூழல்-மெனு ஹேண்ட்லரையும் ஏற்றுவதைத் தவிர்க்கிறது (பங்கு மெனுவின் வெளிப்பாடு), இது தவறான மூன்றாம் தரப்பு நீட்டிப்புகளிலிருந்து தொடக்க செயலிழப்புகளைத் தவிர்க்கிறது; ஒவ்வொரு சூழலின் முதல் திறந்த பின்னர் பங்கு மெனு போன்ற தேவையை உருவாக்குகிறது. பங்கு மெனுவை செயலிழக்கச் செய்யும் ஹேண்ட்லர் இன்னும் செயலிழக்கிறது.
-  $description:th: อุ่นเมนูทั่วไปทันทีหลังจากที่ Explorer เริ่มทำงาน เพื่อให้เปิดเมนูแรกได้ทันที การปิดจะข้ามการโหลดตัวจัดการเมนูบริบทที่ลงทะเบียนไว้ทุกตัวเมื่อเริ่มต้น (การเปิดเผยของเมนูสต็อก) ซึ่งจะช่วยหลีกเลี่ยงปัญหาการเริ่มต้นระบบจากส่วนขยายของบุคคลที่สามที่ผิดพลาด การเปิดแต่ละบริบทครั้งแรก จากนั้นจะสร้างตามความต้องการ เช่น เมนูสต็อก ตัวจัดการที่จะขัดข้องเมนูสต็อกยังคงขัดข้อง
-  $description:tr-TR: Explorer başladıktan kısa bir süre sonra ortak menüleri ısıtır, böylece ilk açılmaları anında gerçekleşir. Bunu kapatmak, başlangıçta kayıtlı her içerik menüsü işleyicisinin yüklenmesini atlar (stok menüsünün ortaya çıkması), bu da hatalı üçüncü taraf uzantılardan kaynaklanan başlangıç çökmelerini önler; Her bağlamın ilk açılışı, stok menüsü gibi isteğe bağlı olarak oluşturulur. Stok menüsünü çökerten bir işleyici yine de çöküyor.
-  $description:uk-UA: Розігріває загальні меню незабаром після запуску Explorer, тому їх перше відкриття відбувається миттєво. Якщо вимкнути його, пропускається завантаження кожного зареєстрованого обробника контекстного меню під час запуску (розкриття основного меню), що дозволяє уникнути збоїв під час запуску через несправні розширення сторонніх розробників; перше відкриття кожного контексту потім будується на вимогу, як і фондове меню. Обробник, який призведе до збою меню запасів, все одно виходить з ладу.
-  $description:uz: Explorer ishga tushirilgandan so'ng qisqa vaqt ichida umumiy menyularni isitadi, shuning uchun ular bir zumda ochiladi. Uni o'chirib qo'yish ishga tushirilganda ro'yxatdan o'tgan har bir kontekst menyusi ishlovchisini yuklashni o'tkazib yuboradi (birja menyusi ko'rinishi), bu noto'g'ri uchinchi tomon kengaytmalari tufayli ishga tushishning ishdan chiqishini oldini oladi; Har bir kontekstning birinchi ochilishi, so'ngra stok menyusi kabi talab asosida tuziladi. Birja menyusini buzadigan ishlov beruvchi hali ham ishdan chiqadi.
-  $description:vi-VN: Làm ấm các menu phổ biến ngay sau khi Explorer khởi động để lần mở đầu tiên của chúng diễn ra ngay lập tức. Việc tắt tính năng này sẽ bỏ qua việc tải mọi trình xử lý menu ngữ cảnh đã đăng ký khi khởi động (hiển thị của menu gốc), điều này tránh được sự cố khởi động do các tiện ích mở rộng bị lỗi của bên thứ ba; lần mở đầu tiên của mỗi bối cảnh sau đó được xây dựng theo yêu cầu, giống như menu chứng khoán. Trình xử lý có thể làm hỏng menu chứng khoán vẫn gặp sự cố.
-  $description:zh-CN: Explorer 启动后不久就会加热常用菜单，因此它们的第一次打开是即时的。关闭它会在启动时跳过加载每个已注册的上下文菜单处理程序（库存菜单的曝光），从而避免因错误的第三方扩展而导致启动崩溃；然后，每个上下文的第一次打开都会根据需要进行构建，例如库存菜单。会使库存菜单崩溃的处理程序仍然会崩溃。
-  $description:zh-TW: Explorer 啟動後不久就會加熱常用選單，因此它們的第一次開啟是即時的。關閉它會在啟動時跳過加載每個已註冊的上下文選單處理程序（庫存選單的曝光），從而避免因錯誤的第三方擴展而導致啟動崩潰；然後，每個上下文的第一次打開都會根據需要進行構建，例如庫存選單。會使庫存選單崩潰的處理程序仍然會崩潰。
-- warmupExtensions: ".txt, .pdf, .zip, .rar, .7z, .jpg, .png, .mp4, .mp3, .docx, .xlsx, .exe, .lnk"
-  $name: Warm-up extensions
-  $name:ar: تمديدات الاحماء
-  $name:az: İstiləşmə uzantıları
-  $name:bn: ওয়ার্ম আপ এক্সটেনশন
-  $name:cs: Zahřívací nástavce
-  $name:da: Opvarmningsudvidelser
-  $name:de-DE: Aufwärmverlängerungen
-  $name:el: Προεκτάσεις προθέρμανσης
-  $name:es-ES: Extensiones de calentamiento
-  $name:fa: پسوندهای گرم کننده
-  $name:fr-FR: Extensions à préchauffer
-  $name:hi: वार्म-अप एक्सटेंशन
-  $name:hr: Nastavci za zagrijavanje
-  $name:ht: Ekstansyon chofe
-  $name:hu: Bemelegítő hosszabbítások
-  $name:id-ID: Ekstensi pemanasan
-  $name:it-IT: Estensioni di riscaldamento
-  $name:ja-JP: ウォームアップ延長
-  $name:ko-KR: 워밍업 연장
-  $name:nb: Oppvarmingsforlengelser
-  $name:nl-NL: Opwarmextensies
-  $name:or: ୱାର୍ମ ଅପ୍ ଏକ୍ସଟେନ୍ସନ୍
-  $name:pl-PL: Przedłużenia rozgrzewkowe
-  $name:pt-BR: Extensões de aquecimento
-  $name:pt-PT: Extensões de aquecimento
-  $name:ro: Extensii de încălzire
-  $name:ru-RU: Расширения для разминки
-  $name:sv: Uppvärmningsförlängningar
-  $name:ta: சூடான நீட்டிப்புகள்
-  $name:th: ส่วนขยายการวอร์มอัพ
-  $name:tr-TR: Isınma uzatmaları
-  $name:uk-UA: Розминка розтяжок
-  $name:uz: Isitish kengaytmalari
-  $name:vi-VN: Phần mở rộng khởi động
-  $name:zh-CN: 热身延伸
-  $name:zh-TW: 熱身延伸
-  $description: Comma-separated file types whose menus are pre-built at Explorer startup.
-  $description:ar: أنواع الملفات المفصولة بفواصل والتي تم إنشاء قوائمها مسبقًا عند بدء تشغيل Explorer.
-  $description:az: Menyuları Explorer başlanğıcında əvvəlcədən qurulmuş vergüllə ayrılmış fayl növləri.
-  $description:bn: কমা-বিভক্ত ফাইল প্রকার যার মেনুগুলি Explorer স্টার্টআপে প্রাক-বিল্ট।
-  $description:cs: Typy souborů oddělených čárkami, jejichž nabídky jsou předem vytvořeny při spuštění Explorer.
-  $description:da: Kommaseparerede filtyper, hvis menuer er forudbygget ved opstart af Explorer.
-  $description:de-DE: Durch Kommas getrennte Dateitypen, deren Menüs beim Start von Explorer vorgefertigt sind.
-  $description:el: Τύποι αρχείων διαχωρισμένων με κόμματα των οποίων τα μενού είναι προκατασκευασμένα κατά την εκκίνηση του Explorer.
-  $description:es-ES: Tipos de archivos separados por comas cuyos menús están prediseñados al iniciar Explorer.
-  $description:fa: انواع فایل جدا شده با کاما که منوهای آنها در راه اندازی Explorer از قبل ساخته شده است.
-  $description:fr-FR: Types de fichiers séparés par des virgules dont les menus sont prédéfinis au démarrage d'Explorer.
-  $description:hi: अल्पविराम से अलग किए गए फ़ाइल प्रकार जिनके मेनू Explorer स्टार्टअप पर पूर्व-निर्मित होते हैं।
-  $description:hr: Vrste datoteka odvojenih zarezima čiji su izbornici unaprijed ugrađeni pri pokretanju Explorer.
-  $description:ht: Kalite fichye ki separe ak vigil ki gen meni yo prekonstwi nan demaraj Explorer.
-  $description:hu: Vesszővel elválasztott fájltípusok, amelyek menüi előre be vannak építve a Explorer indításakor.
-  $description:id-ID: Jenis file yang dipisahkan koma yang menunya sudah dibuat sebelumnya saat startup Explorer.
-  $description:it-IT: Tipi di file separati da virgole i cui menu sono precostruiti all'avvio di Explorer.
-  $description:ja-JP: Explorer の起動時にメニューが事前に構築されているカンマ区切りのファイル タイプ。
-  $description:ko-KR: Explorer 시작 시 메뉴가 사전 구축된 쉼표로 구분된 파일 형식입니다.
-  $description:nb: Kommaseparerte filtyper hvis menyer er forhåndsbygd ved oppstart av Explorer.
-  $description:nl-NL: Door komma's gescheiden bestandstypen waarvan de menu's vooraf zijn gebouwd bij het opstarten van de Explorer.
-  $description:or: କମା ଦ୍ୱାରା ପୃଥକ ଫାଇଲ୍ ପ୍ରକାର ଯାହାର ମେନୁଗୁଡ଼ିକ Explorer ପ୍ରାରମ୍ଭରେ ପୂର୍ବରୁ ନିର୍ମିତ
-  $description:pl-PL: Typy plików oddzielonych przecinkami, których menu są wstępnie tworzone podczas uruchamiania Explorer.
-  $description:pt-BR: Tipos de arquivos separados por vírgula cujos menus são pré-construídos na inicialização do Explorer.
-  $description:pt-PT: Tipos de ficheiros separados por vírgula cujos menus são pré-construídos no arranque do Explorer.
-  $description:ro: Tipuri de fișiere separate prin virgulă ale căror meniuri sunt pre-construite la pornirea Explorer.
-  $description:ru-RU: Типы файлов, разделенные запятыми, меню которых предварительно создаются при запуске Explorer.
-  $description:sv: Kommaseparerade filtyper vars menyer är förbyggda vid Explorer-start.
-  $description:ta: Explorer தொடக்கத்தில் மெனுக்கள் முன்பே கட்டமைக்கப்பட்ட காற்புள்ளியால் பிரிக்கப்பட்ட கோப்பு வகைகள்.
-  $description:th: ประเภทไฟล์ที่คั่นด้วยเครื่องหมายจุลภาคซึ่งมีเมนูที่สร้างไว้ล่วงหน้าเมื่อเริ่มต้น Explorer
-  $description:tr-TR: Menüleri Explorer başlangıcında önceden oluşturulmuş olan virgülle ayrılmış dosya türleri.
-  $description:uk-UA: Розділені комами типи файлів, меню яких попередньо створено під час запуску Explorer.
-  $description:uz: Menyulari Explorer ishga tushirilganda oldindan tuzilgan vergul bilan ajratilgan fayl turlari.
-  $description:vi-VN: Các loại tệp được phân tách bằng dấu phẩy có menu được tạo sẵn khi khởi động Explorer.
-  $description:zh-CN: 逗号分隔的文件类型，其菜单是在 Explorer 启动时预先构建的。
-  $description:zh-TW: 逗號分隔的檔案類型，其選單是在 Explorer 啟動時預先建立的。
+  $description: Pre-builds only the empty desktop background menu after Explorer starts. This loads handlers for that menu; turn it off to load them only when you right-click the desktop.
+  $description:pt-BR: Pré-carrega somente o menu do fundo vazio da área de trabalho após iniciar o Explorer. Isso carrega os manipuladores desse menu; desative para carregá-los apenas quando clicar com o botão direito na área de trabalho.
+  $description:pt-PT: Pré-carrega apenas o menu do fundo vazio do ambiente de trabalho depois de iniciar o Explorer. Isto carrega os handlers desse menu; desative para os carregar apenas quando clicar com o botão direito no ambiente de trabalho.
 - warmupDelaySeconds: 5
   $name: Warm-up delay
   $name:ar: تأخير الاحماء
@@ -3949,8 +3767,9 @@ struct Settings {
     std::wstring theme = L"Custom (menu.ini)";
     int themeIndex = 0;
     std::wstring settingsHotkey;
-    std::wstring language = L"auto";
+    std::wstring language = L"en";
     int menuMode = 0;
+    bool compactMenu = false;
     bool showMoreOptionsItem = true;
     bool topBar = false;
     int submenuDelayMs = 150;
@@ -4077,6 +3896,16 @@ void LoadSettings() {
     WindhawkUtils::StringSetting theme =
         WindhawkUtils::StringSetting::make(L"theme");
     next.theme = theme.get()[0] ? theme.get() : L"Custom (menu.ini)";
+    if (_wcsicmp(next.theme.c_str(), L"Azul Minimalista") == 0) next.theme = L"Minimal Blue";
+    if (_wcsicmp(next.theme.c_str(), L"Roxo Nebulosa") == 0) next.theme = L"Nebula Purple";
+    if (_wcsicmp(next.theme.c_str(), L"Verde Esmeralda") == 0) next.theme = L"Emerald Green";
+    if (_wcsicmp(next.theme.c_str(), L"Rosa Quartzo") == 0) next.theme = L"Rose Quartz";
+    if (_wcsicmp(next.theme.c_str(), L"Âmbar Solar") == 0) next.theme = L"Solar Amber";
+    if (_wcsicmp(next.theme.c_str(), L"Grafite") == 0) next.theme = L"Graphite";
+
+    WindhawkUtils::StringSetting menuDensity =
+        WindhawkUtils::StringSetting::make(L"menuDensity");
+    next.compactMenu = _wcsicmp(menuDensity.get(), L"compact") == 0;
 
     WindhawkUtils::StringSetting hotkey =
         WindhawkUtils::StringSetting::make(L"settingsHotkey");
@@ -4084,7 +3913,7 @@ void LoadSettings() {
 
     WindhawkUtils::StringSetting language =
         WindhawkUtils::StringSetting::make(L"language");
-    next.language = language.get()[0] ? language.get() : L"auto";
+    next.language = language.get()[0] ? language.get() : L"en";
     next.themeIndex = ThemeIndexFromName(next.theme);
 
     WindhawkUtils::StringSetting menuMode =
@@ -4343,12 +4172,12 @@ const LocalizationKey kLocalizationKeys[] = {
     {L"New %s", L"New %s"},
     {L"New folder", L"New folder"},
     {L"New shortcut", L"New shortcut"},
-    {L"@theme:Azul Minimalista", L"Azul Minimalista"},
-    {L"@theme:Roxo Nebulosa", L"Roxo Nebulosa"},
-    {L"@theme:Verde Esmeralda", L"Verde Esmeralda"},
-    {L"@theme:Rosa Quartzo", L"Rosa Quartzo"},
-    {L"@theme:Âmbar Solar", L"Âmbar Solar"},
-    {L"@theme:Grafite", L"Grafite"},
+    {L"@theme:Minimal Blue", L"Minimal Blue"},
+    {L"@theme:Nebula Purple", L"Nebula Purple"},
+    {L"@theme:Emerald Green", L"Emerald Green"},
+    {L"@theme:Rose Quartz", L"Rose Quartz"},
+    {L"@theme:Solar Amber", L"Solar Amber"},
+    {L"@theme:Graphite", L"Graphite"},
 };
 
 const LocalizationLanguage kLocalizationLanguages[] = {
@@ -7959,7 +7788,7 @@ CanonicalSource SplitConfigForCanonical(const std::wstring& text) {
 // preserved, and a fresh [meta] version.
 std::wstring EmitCanonicalConfig(const CanonicalSource& source, int toVersion) {
     std::wstring out;
-    out += L"; Custom Cached Context Menu configuration (schema ";
+    out += L"; Desktop Context Menu Themes configuration (schema ";
     out += std::to_wstring(toVersion);
     out += L")\n";
     out += L"; UTF-8. Reloaded when a menu opens. Settings are active; edit the values.\n";
@@ -9674,7 +9503,7 @@ font = Segoe UI, 11
 animationOpen = none
 animationClose = none
 )INI"},
-    {L"Azul Minimalista",
+    {L"Minimal Blue",
      LR"INI([appearance]
 background = 11, 27, 73, 208
 border = 78, 137, 248, 150
@@ -9710,7 +9539,7 @@ animationClose = fade
 animationDuration = 125
 animationEasing = easeOut
 )INI"},
-    {L"Roxo Nebulosa",
+    {L"Nebula Purple",
      LR"INI([appearance]
 background = 48, 31, 73, 220
 border = 205, 157, 255, 230
@@ -9733,7 +9562,7 @@ animationClose = fade
 animationDuration = 170
 animationEasing = easeOut
 )INI"},
-    {L"Verde Esmeralda",
+    {L"Emerald Green",
      LR"INI([appearance]
 background = 22, 57, 49, 218
 border = 130, 216, 184, 230
@@ -9756,7 +9585,7 @@ animationClose = fade
 animationDuration = 150
 animationEasing = easeOut
 )INI"},
-    {L"Rosa Quartzo",
+    {L"Rose Quartz",
      LR"INI([appearance]
 background = 68, 34, 54, 220
 border = 255, 167, 202, 230
@@ -9779,7 +9608,7 @@ animationClose = fade
 animationDuration = 165
 animationEasing = easeOut
 )INI"},
-    {L"Âmbar Solar",
+    {L"Solar Amber",
      LR"INI([appearance]
 background = 70, 50, 20, 220
 border = 255, 211, 106, 230
@@ -9802,7 +9631,7 @@ animationClose = fade
 animationDuration = 155
 animationEasing = easeOut
 )INI"},
-    {L"Grafite",
+    {L"Graphite",
      LR"INI([appearance]
 background = 35, 42, 53, 224
 border = 158, 173, 191, 225
@@ -11311,7 +11140,21 @@ Appearance ResolveAppearance(const RulesConfig& config, bool darkTheme) {
 // The active theme wins over menu.ini's appearance while it is selected.
 Appearance EffectiveAppearance(const RulesConfig& config, bool darkTheme) {
     const std::shared_ptr<const Appearance> theme = g_themeStore.Snapshot();
-    return theme ? *theme : ResolveAppearance(config, darkTheme);
+    Appearance appearance = theme ? *theme : ResolveAppearance(config, darkTheme);
+    if (g_settings->compactMenu) {
+        appearance.itemHeight = std::max(1, appearance.itemHeight - 4);
+        appearance.iconSize = std::max(1, appearance.iconSize - 2);
+        appearance.padding = std::max(0, appearance.padding - 1);
+        if (appearance.itemPadding >= 0) {
+            appearance.itemPadding = std::max(0, appearance.itemPadding - 2);
+        }
+        appearance.verticalPadding =
+            std::max(0, appearance.verticalPadding - 1);
+        appearance.separatorSpacing =
+            std::max(0, appearance.separatorSpacing - 1);
+        appearance.fontSize = std::max(1.0f, appearance.fontSize - 1.0f);
+    }
+    return appearance;
 }
 
 int BlurPasses(int amount) {
@@ -12191,6 +12034,7 @@ struct LayoutKey {
     uint32_t dpi = 96;
     bool darkTheme = false;
     bool topBarAtBottom = false;
+    bool compactMenu = false;
     bool rtl = false;
     uint64_t modelFingerprint = 0;
 
@@ -12204,6 +12048,7 @@ struct LayoutKey {
         hash = HashCombine(hash, dpi);
         hash = HashCombine(hash, darkTheme ? 1 : 0);
         hash = HashCombine(hash, topBarAtBottom ? 1 : 0);
+        hash = HashCombine(hash, compactMenu ? 1 : 0);
         hash = HashCombine(hash, rtl ? 1 : 0);
         hash = HashCombine(hash, modelFingerprint);
         return hash;
@@ -12220,6 +12065,7 @@ LayoutKey MakeLayoutKey(const ContextSignature& sig, const RulesConfig& config,
     key.themeRevision = themeRevision;
     key.dpi = dpi;
     key.darkTheme = darkTheme;
+    key.compactMenu = g_settings->compactMenu;
     key.rtl = IsRtlLanguage();
     key.modelFingerprint = ModelFingerprint(model.items);
     return key;
@@ -20026,21 +19872,17 @@ bool ShiftBypassHeld() {
            (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
 }
 
-// Only main popup menus are deferred. CMF_DEFAULTONLY is the default-verb
-// resolution used by double-click/open; CMF_NOVERBS builds submenus such as
-// Send to; CMF_VERBSONLY builds verb-only menus; CMF_OPTIMIZEFORINVOKE marks
-// a menu built only to resolve and invoke a command without displaying it
-// (for example middle-click's "Open in new tab"). Those never show a popup we
-// could replace and must reach the shell untouched. The bypass states are
-// passed in so this stays a pure predicate: non-popup calls cannot arm the
-// Ctrl bypass window (only the Windows 11 suppression hooks do).
+// Only the empty desktop background is intercepted. CMF_EXPLORE identifies
+// Explorer view menus, and CMF_ITEMMENU identifies menus for selected items;
+// both must pass through. The private popup bit is present on displayed
+// desktop menus but absent from verb-state queries and submenu population.
 bool ShouldDeferContextMenu(UINT flags, bool shiftBypassActive,
                             bool ctrlBypassActive) {
     if (flags & (CMF_DEFAULTONLY | CMF_NOVERBS | CMF_VERBSONLY |
-                 CMF_OPTIMIZEFORINVOKE)) {
+                 CMF_OPTIMIZEFORINVOKE | CMF_EXPLORE | CMF_ITEMMENU)) {
         return false;
     }
-    if ((flags & (CMF_EXPLORE | kCmfPopupMenu)) == 0) {
+    if ((flags & kCmfPopupMenu) == 0) {
         return false;
     }
     return !shiftBypassActive && !ctrlBypassActive;
@@ -24729,39 +24571,8 @@ inline Perf g_perf;
 // ===========================================================================
 namespace cmo {
 
-std::vector<std::wstring> BuildWarmupTypes(
-    std::span<const std::wstring> configuredExtensions) {
-    std::vector<std::wstring> types;
-
-    auto addUnique = [&](std::wstring value) {
-        if (std::find(types.begin(), types.end(), value) == types.end()) {
-            types.push_back(std::move(value));
-        }
-    };
-
-    addUnique(L"*");
-    addUnique(L"Directory");
-    addUnique(L"Directory\\Background");
-    addUnique(L"Desktop");
-    addUnique(L"Drive");
-
-    for (const std::wstring& raw : configuredExtensions) {
-        const size_t begin = raw.find_first_not_of(L" \t");
-        if (begin == std::wstring::npos) {
-            continue;
-        }
-        const size_t end = raw.find_last_not_of(L" \t");
-        std::wstring extension = raw.substr(begin, end - begin + 1);
-        if (extension.empty()) {
-            continue;
-        }
-        if (extension[0] != L'.') {
-            extension.insert(extension.begin(), L'.');
-        }
-        CharLowerBuffW(extension.data(), static_cast<DWORD>(extension.size()));
-        addUnique(std::move(extension));
-    }
-    return types;
+std::vector<std::wstring> BuildWarmupTypes() {
+    return {L"Desktop"};
 }
 
 // Creates a shell context menu object for a path on the warm-up thread.
@@ -24794,7 +24605,7 @@ IContextMenu* CreateContextMenuForPath(const std::wstring& path, bool background
 }
 
 const wchar_t* WarmupMutexName() {
-    return L"Local\\ContextMenuOverhaulWarmup";
+    return L"Local\\DesktopContextMenuThemesWarmup";
 }
 
 // Small per-process jitter so a cold start with many Explorer processes does
@@ -24923,28 +24734,7 @@ private:
             return;
         }
 
-        std::vector<std::wstring> configured;
-        WindhawkUtils::StringSetting warmupList =
-            WindhawkUtils::StringSetting::make(L"warmupExtensions");
-        const std::wstring text = warmupList.get();
-        if (!text.empty()) {
-            size_t pos = 0;
-            while (pos <= text.size()) {
-                const size_t comma = text.find(L',', pos);
-                const std::wstring item = TrimWhitespace(
-                    comma == std::wstring::npos
-                        ? text.substr(pos)
-                        : text.substr(pos, comma - pos));
-                if (!item.empty()) {
-                    configured.push_back(item);
-                }
-                if (comma == std::wstring::npos) {
-                    break;
-                }
-                pos = comma + 1;
-            }
-        }
-        const std::vector<std::wstring> types = BuildWarmupTypes(configured);
+        const std::vector<std::wstring> types = BuildWarmupTypes();
 
         wchar_t storagePath[MAX_PATH] = {};
         if (!Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
@@ -24969,7 +24759,6 @@ private:
 
         // Rebuild the SendTo entries off the UI thread (also after handler
         // registry invalidation).
-        RebuildSendToChildren();
 
         // The worker never pumps messages, so it must use the MTA; an STA
         // without a message loop is exactly the thread that gets stuck in
@@ -25067,7 +24856,7 @@ private:
             if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_DESKTOP, nullptr, 0,
                                            desktopPath))) {
                 return WarmPathIfMissing(
-                    desktopPath, false,
+                    desktopPath, true,
                     ContextSignature{Scope::Desktop, L"*", Shape::Single,
                                      Variant::Normal});
             }
@@ -25233,12 +25022,7 @@ private:
     // cannot storm when unrelated shell activity touches these keys.
     static uint64_t ComputeRegistryFingerprint() {
         static const wchar_t* kKeys[] = {
-            L"*\\shellex\\ContextMenuHandlers",
-            L"AllFilesystemObjects\\shellex\\ContextMenuHandlers",
-            L"Directory\\shellex\\ContextMenuHandlers",
             L"Directory\\Background\\shellex\\ContextMenuHandlers",
-            L"Folder\\shellex\\ContextMenuHandlers",
-            L"Drive\\shellex\\ContextMenuHandlers",
             L"DesktopBackground\\shellex\\ContextMenuHandlers",
         };
         constexpr DWORD kKeyCount = ARRAYSIZE(kKeys);
@@ -25289,17 +25073,10 @@ private:
 
     void InvalidateNow(const wchar_t* reason) {
         g_cache.Clear();
-        InvalidateSendToChildren();
-        // The warm-up thread rebuilds the SendTo entries and pre-built models.
-        // Never restart it once the mod is unloading.
+        // Never restart warm-up once the mod is unloading.
         if (!g_unloading.load()) {
             g_warmup.Stop();
             g_warmup.Start();
-            if (!g_settings->warmup) {
-                // With no warm-up thread, rebuild the Send to entries here;
-                // this runs off the UI thread.
-                RebuildSendToChildren();
-            }
         }
         Wh_Log(L"%s; cache invalidated", reason);
     }
@@ -25374,18 +25151,22 @@ namespace cmo {
 
 enum class MenuPath : uint8_t { Ours, NativeBypass, Passthrough };
 
-// Decides which menu a popup owner gets. A held Shift normally bypasses the
-// replacement before the menu is built (ShouldDeferContextMenu), so the
-// NativeBypass branch only covers the rare case of Shift being pressed after
-// the menu was already deferred; it shows the retained native menu.
-bool IsDesktopBackgroundContext(HWND owner, ShellViewKind kind) {
+bool IsDesktopBackgroundContext(HWND owner, ShellViewKind kind,
+                                SelectionInfo* selectionOut = nullptr) {
     if (kind != ShellViewKind::Desktop) {
         return false;
     }
-    const SelectionInfo selection = GetSelection(owner, kind);
-    return selection.folderIsFilesystem && selection.paths.empty();
+    SelectionInfo selection = GetSelection(owner, kind);
+    const bool isBackground =
+        selection.folderIsFilesystem && selection.paths.empty();
+    if (isBackground && selectionOut) {
+        *selectionOut = std::move(selection);
+    }
+    return isBackground;
 }
 
+// Decides which menu a popup owner gets. Shift normally bypasses interception
+// before the menu is built, so NativeBypass covers only a late Shift press.
 MenuPath DecidePath(bool shiftHeld, ShellViewKind kind, bool desktopBackground,
                     bool hasPendingCapture, bool enableShiftBypass) {
     if (!hasPendingCapture || !IsReplaceableKind(kind) || !desktopBackground) {
@@ -25416,7 +25197,7 @@ std::wstring SelectionDirectory(const std::vector<std::wstring>& paths,
     return DirectoryOfPath(paths.front());
 }
 
-bool ShowReplacementMenu(PendingCapture& capture, ShellViewKind kind, HWND owner, POINT pt) {
+bool ShowReplacementMenu(PendingCapture& capture, ShellViewKind kind, HWND owner, POINT pt, SelectionInfo info) {
     UiBusyScope uiBusy;
     g_perf.MarkOpenPathStart();
     // Handler changes are checked while menus are used, not on a timer.
@@ -25428,7 +25209,6 @@ bool ShowReplacementMenu(PendingCapture& capture, ShellViewKind kind, HWND owner
         Wh_Log(L"Control window unavailable; native menus only");
     }
 
-    SelectionInfo info = GetSelection(owner, kind);
     std::vector<std::wstring>& paths = info.paths;
     Shape shape = paths.size() > 1 ? Shape::Multi : Shape::Single;
 
@@ -25758,8 +25538,9 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
     const bool hasPending =
         g_pending->TakeForMenu(hMenu, pending, kind == ShellViewKind::NavPane);
     const bool shiftHeld = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    SelectionInfo desktopSelection;
     const bool desktopBackground =
-        hasPending && IsDesktopBackgroundContext(hWnd, kind);
+        hasPending && IsDesktopBackgroundContext(hWnd, kind, &desktopSelection);
     const MenuPath path =
         DecidePath(shiftHeld, kind, desktopBackground, hasPending,
                    g_settings->enableShiftBypass);
@@ -25767,7 +25548,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
     if (path == MenuPath::Ours && hasPending) {
         if (g_settings->debugLogging) Wh_Log(L"Replacing context menu: kind=%d", static_cast<int>(kind));
         pending.owner = hWnd;
-        ShowReplacementMenu(pending, kind, hWnd, POINT{x, y});
+        ShowReplacementMenu(pending, kind, hWnd, POINT{x, y}, std::move(desktopSelection));
         ReleaseCapture(pending);
         return 0;
     }
@@ -25791,7 +25572,9 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hMenu, UINT uFlags, int x, int y, HWND h
     }
     {
         UiBusyScope uiBusy;
-        EnsureControlWindow();
+        if (hasPending) {
+            EnsureControlWindow();
+        }
         return TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
     }
 }
@@ -25804,8 +25587,9 @@ BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y, int nRes
     const bool hasPending =
         g_pending->TakeForMenu(hMenu, pending, kind == ShellViewKind::NavPane);
     const bool shiftHeld = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    SelectionInfo desktopSelection;
     const bool desktopBackground =
-        hasPending && IsDesktopBackgroundContext(hWnd, kind);
+        hasPending && IsDesktopBackgroundContext(hWnd, kind, &desktopSelection);
     const MenuPath path =
         DecidePath(shiftHeld, kind, desktopBackground, hasPending,
                    g_settings->enableShiftBypass);
@@ -25813,7 +25597,7 @@ BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y, int nRes
     if (path == MenuPath::Ours && hasPending) {
         if (g_settings->debugLogging) Wh_Log(L"Replacing context menu: kind=%d", static_cast<int>(kind));
         pending.owner = hWnd;
-        ShowReplacementMenu(pending, kind, hWnd, POINT{x, y});
+        ShowReplacementMenu(pending, kind, hWnd, POINT{x, y}, std::move(desktopSelection));
         ReleaseCapture(pending);
         return 0;
     }
@@ -25837,18 +25621,16 @@ BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y, int nRes
     }
     {
         UiBusyScope uiBusy;
-        EnsureControlWindow();
+        if (hasPending) {
+            EnsureControlWindow();
+        }
         return TrackPopupMenu_Original(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
     }
 }
 
-// --- Windows 11 modern menu suppression ------------------------------------
-// Technique adapted from the explorer-context-menu-classic mod by m417z
-// (MIT-licensed Windhawk mod collection): fail the presenter lookup so
-// Explorer falls back to the classic IContextMenu path, and block the
-// navigation pane's mini menu, whose tree control makes its own decision
-// that never goes through the presenter lookup. The Shift key opts out,
-// matching stock behavior.
+// --- Desktop modern-menu suppression ---------------------------------------
+// On Windows 11, fail the presenter lookup only for an empty desktop
+// background. File, folder, icon and navigation-pane menus stay native.
 
 bool IsWindows11OrGreater() {
     static const bool isWin11 = [] {
@@ -25885,83 +25667,62 @@ inline IUnknown_QueryService_t IUnknown_QueryService_Original = nullptr;
 
 HRESULT WINAPI IUnknown_QueryService_Hook(IUnknown* punk, REFGUID guidService,
                                           REFIID riid, void** ppvOut) {
-    if (IsEqualGUID(guidService, kContextMenuPresenterService) &&
+    const bool asksForPresenter =
+        IsEqualGUID(guidService, kContextMenuPresenterService) &&
         (IsEqualGUID(riid, kContextMenuPresenterIid) ||
-         IsEqualGUID(riid, kContextMenuPresenterIid24H2))) {
-        if (ArmCtrlBypass() || ShiftBypassHeld()) {
-            // Ctrl: let the untouched modern menu through and keep the sticky
-            // window armed for its "Show more options". Shift: let the stock
-            // Shift behavior (the classic menu) through untouched.
-            return IUnknown_QueryService_Original(punk, guidService, riid, ppvOut);
-        }
-        // Suppressed otherwise so the classic path (and our replacement) is
-        // used by default.
-        if (g_settings->debugLogging) Wh_Log(L"Blocking modern context menu presenter");
-        if (ppvOut) {
-            *ppvOut = nullptr;
-        }
-        return E_FAIL;
+         IsEqualGUID(riid, kContextMenuPresenterIid24H2));
+    if (!asksForPresenter) {
+        return IUnknown_QueryService_Original(punk, guidService, riid, ppvOut);
     }
-    return IUnknown_QueryService_Original(punk, guidService, riid, ppvOut);
-}
 
-using ShouldShowMiniMenu_t = bool(WINAPI*)(void*, void*);
-inline ShouldShowMiniMenu_t ShouldShowMiniMenu_Original = nullptr;
+    HWND owner = nullptr;
+    const bool desktopBackground =
+        punk && SUCCEEDED(IUnknown_GetWindow(punk, &owner)) && owner &&
+        IsDesktopBackgroundContext(owner, ClassifyOwner(owner));
+    if (!desktopBackground) {
+        return IUnknown_QueryService_Original(punk, guidService, riid, ppvOut);
+    }
 
-bool WINAPI ShouldShowMiniMenu_Hook(void* pThis, void* param) {
     if (ArmCtrlBypass() || ShiftBypassHeld()) {
-        // Ctrl: let the untouched mini menu through. Shift: stock behavior.
-        return ShouldShowMiniMenu_Original
-                   ? ShouldShowMiniMenu_Original(pThis, param)
-                   : true;
+        // Keep the stock Windows 11 menu when the user requests a bypass.
+        return IUnknown_QueryService_Original(punk, guidService, riid, ppvOut);
     }
-    // Suppressed otherwise so the classic path (and our replacement) always
-    // handles navigation pane menus.
-    if (g_settings->debugLogging) Wh_Log(L"Blocking modern navigation pane mini menu");
-    return false;
+
+    // Suppress the modern presenter only for an empty desktop background.
+    if (g_settings->debugLogging) {
+        Wh_Log(L"Blocking modern desktop-background menu presenter");
+    }
+    if (ppvOut) {
+        *ppvOut = nullptr;
+    }
+    return E_FAIL;
 }
 
-void InstallWin11Suppression() {
+void InstallDesktopModernMenuSuppression() {
     if (!IsWindows11OrGreater()) {
         return;
     }
 
     // shcore.dll is a KnownDLL and is already loaded.
     HMODULE shcore = GetModuleHandleW(L"shcore.dll");
-    if (shcore) {
-        auto queryService =
-            (IUnknown_QueryService_t)GetProcAddress(shcore, "IUnknown_QueryService");
-        if (queryService) {
-            if (!WindhawkUtils::SetFunctionHook(queryService,
-                                                IUnknown_QueryService_Hook,
-                                                &IUnknown_QueryService_Original)) {
-                Wh_Log(L"Failed to hook IUnknown_QueryService");
-            }
-        }
-    } else {
-        Wh_Log(L"Failed to load shcore.dll");
+    if (!shcore) {
+        Wh_Log(L"Failed to find shcore.dll");
+        return;
     }
 
-    HMODULE explorerFrame =
-        LoadLibraryExW(L"explorerframe.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (explorerFrame) {
-        WindhawkUtils::SYMBOL_HOOK explorerFrameDllHooks[] = {
-            {
-                {LR"(private: bool __cdecl CNscTree::ShouldShowMiniMenu(struct _TREEITEM *))"},
-                (void**)&ShouldShowMiniMenu_Original,
-                (void*)ShouldShowMiniMenu_Hook,
-                false,
-            },
-        };
-        if (!WindhawkUtils::HookSymbols(explorerFrame, explorerFrameDllHooks,
-                                        ARRAYSIZE(explorerFrameDllHooks))) {
-            Wh_Log(L"Failed to hook CNscTree::ShouldShowMiniMenu");
-        }
-    } else {
-        Wh_Log(L"Failed to load explorerframe.dll");
+    auto queryService =
+        (IUnknown_QueryService_t)GetProcAddress(shcore, "IUnknown_QueryService");
+    if (!queryService) {
+        Wh_Log(L"Failed to find IUnknown_QueryService");
+        return;
+    }
+
+    if (!WindhawkUtils::SetFunctionHook(queryService,
+                                        IUnknown_QueryService_Hook,
+                                        &IUnknown_QueryService_Original)) {
+        Wh_Log(L"Failed to hook IUnknown_QueryService");
     }
 }
-
 }  // namespace cmo
 
 // ===========================================================================
@@ -25973,7 +25734,7 @@ bool g_populationHookDeferred = false;
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Custom Cached Context Menu init");
+    Wh_Log(L"Initializing");
 
     if (!WindhawkUtils::SetFunctionHook(TrackPopupMenuEx,
                                         cmo::TrackPopupMenuEx_Hook,
@@ -26016,12 +25777,11 @@ BOOL Wh_ModInit() {
     }
     cmo::g_invalidation.Start();
     cmo::g_warmup.Start();
-    cmo::RebuildSendToChildren();
 
     if (cmo::InstallPopulationHook()) {
         Wh_Log(L"Population hook installed");
-        // Only hide the modern menu once the replacement can actually run.
-        cmo::InstallWin11Suppression();
+        // Suppress the desktop presenter only after the replacement hook is ready.
+        cmo::InstallDesktopModernMenuSuppression();
     } else {
         Wh_Log(L"Population hook deferred to Wh_ModAfterInit");
         g_populationHookDeferred = true;
@@ -26035,14 +25795,14 @@ void Wh_ModAfterInit() {
         g_populationHookDeferred = false;
         // Register every hook before applying: operations registered after
         // Wh_ModInit returns are not applied automatically.
-        cmo::InstallWin11Suppression();
+        cmo::InstallDesktopModernMenuSuppression();
         Wh_ApplyHookOperations();
         Wh_Log(L"Population hook installed after init");
     }
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"Custom Cached Context Menu uninit");
+    Wh_Log(L"Uninitializing");
     cmo::g_unloading.store(true);
 
     // Workers use the caches and the render device; stop them before anything
@@ -26131,7 +25891,7 @@ void Wh_ModSettingsChanged() {
     if (cmo::g_unloading.load()) {
         return;
     }
-    Wh_Log(L"Custom Cached Context Menu settings changed");
+    Wh_Log(L"Settings changed");
     cmo::LoadSettings();
     cmo::g_hotkeyHost.SettingsChanged();
 
