@@ -836,9 +836,13 @@ static bool IsCaptionButtonHit(LRESULT r) {
 
 static bool NcHitTest(HWND hwnd, int x, int y, LRESULT* result) {
     DWORD_PTR res = 0;
+    // SMTO_BLOCK: don't handle incoming sent messages or WinEvent callbacks
+    // while waiting, so the probe can't be re-entered (e.g. by a foreground
+    // change that retargets the button mid-probe). The low-level input hooks
+    // run on their own thread, so blocking here doesn't delay input.
     if (!SendMessageTimeoutW(hwnd, WM_NCHITTEST, 0,
-                             MAKELPARAM((short)x, (short)y), SMTO_ABORTIFHUNG,
-                             50, &res)) {
+                             MAKELPARAM((short)x, (short)y),
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 50, &res)) {
         return false;  // Hung, timed out, or blocked (e.g. elevated window).
     }
     *result = (LRESULT)res;
@@ -936,12 +940,17 @@ static bool GetCaptionButtons(HWND hwnd, const RECT& f, int dpi,
         stale = false;
     }
     if (stale) {
+        int pFromRight = 0, pTop = 0, pHeight = 0;
+        bool found =
+            ProbeCaptionButtons(hwnd, f, dpi, &pFromRight, &pTop, &pHeight);
         c.hwnd = hwnd;
         c.width = w;
         c.height = h;
         c.dpi = dpi;
-        c.found = ProbeCaptionButtons(hwnd, f, dpi, &c.fromRight, &c.top,
-                                      &c.buttonsHeight);
+        c.found = found;
+        c.fromRight = pFromRight;
+        c.top = pTop;
+        c.buttonsHeight = pHeight;
     }
     if (!c.found) {
         return false;
