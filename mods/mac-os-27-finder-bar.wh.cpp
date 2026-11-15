@@ -454,6 +454,10 @@ static void SaveThemeGlass() {
         out += one;
     }
     Wh_SetStringValue(L"glassTheme", out.c_str());
+    wchar_t live[24];
+    swprintf(live, ARRAYSIZE(live), L"%d,%d,%d,%d,%d", g_themeGlass[0].live, g_themeGlass[1].live, g_themeGlass[2].live,
+             g_themeGlass[3].live, g_themeGlass[4].live);
+    Wh_SetStringValue(L"glassLive", live);
 }
 static void LoadGlassPrefs() {
     wchar_t buf[128] = {};
@@ -485,6 +489,19 @@ static void LoadGlassPrefs() {
         const wchar_t* bar = wcschr(p, L'|');
         if (!bar) break;
         p = bar + 1;
+    }
+    // "Ao vivo" de cada tema: o Vidro e a Cor da janela (o desfoque do Windows)
+    // começam ao vivo, como sempre foram.
+    g_themeGlass[0].live = g_themeGlass[4].live = true;
+    wchar_t lb[32] = {};
+    Wh_GetStringValue(L"glassLive", lb, ARRAYSIZE(lb));
+    int l0, l1, l2, l3, l4;
+    if (swscanf(lb, L"%d,%d,%d,%d,%d", &l0, &l1, &l2, &l3, &l4) == 5) {
+        g_themeGlass[0].live = l0 != 0;
+        g_themeGlass[1].live = l1 != 0;
+        g_themeGlass[2].live = l2 != 0;
+        g_themeGlass[3].live = l3 != 0;
+        g_themeGlass[4].live = l4 != 0;
     }
 }
 
@@ -1518,20 +1535,25 @@ static int PanelTheme() {
 static int g_glassThemeCtx = -1;
 static bool g_glassRaw = false;
 static const int* g_glassTranspSaved = nullptr;
+static int CtxTheme() { return g_glassThemeCtx >= 0 ? g_glassThemeCtx : PanelTheme(); }
 static const ThemeGlass& CtxGlass() {
     static const ThemeGlass kDefault;  // Transparente: sem ajustes, sempre o padrão
-    int t = g_glassThemeCtx >= 0 ? g_glassThemeCtx : PanelTheme();
+    int t = CtxTheme();
     if (t == 1) return kDefault;
     return g_themeGlass[t >= 0 && t <= 4 ? t : 0];
 }
 static int GlassT() { return g_glassRaw || g_glassTranspSaved ? g_glass.transparency : CtxGlass().transparency; }
-static int GlassR() { return g_glassRaw ? g_glass.refraction : CtxGlass().refraction; }
+// Vidro e Cor da janela sem "ao vivo": uma foto do fundo bem desfocada, sem
+// refração, no lugar do desfoque do Windows (que sempre acompanha o fundo).
+static bool CtxFrost() { return !g_glassRaw && (CtxTheme() == 0 || CtxTheme() == 4); }
+static int GlassR() { return g_glassRaw ? g_glass.refraction : CtxFrost() ? 0 : CtxGlass().refraction; }
 static int GlassB() { return g_glassRaw ? g_glass.blur : CtxGlass().blur; }
 static int g_glassLiveOverride = -1;  // a pílula de aviso: o "Fundo ao vivo" dela
 static bool GlassLive() {
     if (g_glassLiveOverride >= 0) return g_glassLiveOverride != 0;
     return g_glassRaw ? g_glass.live : CtxGlass().live;
 }
+static bool FrostSnapshot() { return CtxFrost() && !GlassLive(); }
 struct GlassThemeCtx {
     int saved;
     explicit GlassThemeCtx(int t) : saved(g_glassThemeCtx) { g_glassThemeCtx = t; }
@@ -1592,7 +1614,7 @@ static void ApplyGlass(Bar* b) {
     DwmExtendFrameIntoClientArea(b->hwnd, &m);
 
     if (!pSWCA) return;
-    if (BarStyleOf(b) != 0) {
+    if (BarStyleOf(b) != 0 || !g_themeGlass[0].live) {  // (o Vidro sem "ao vivo" é desenhado pela barra)
         // Transparente / vidro líquido: nenhum efeito do Windows (nem desfoque);
         // o que aparece é o fundo de verdade (papéis de parede animados continuam).
         ACCENT_POLICY clear = {0 /*DISABLED*/, 0, 0x00000000, 0};
@@ -6248,7 +6270,7 @@ static bool LqCapture(LiquidSurface& l, RECT rc, bool hideBars = true, const REC
 // Foto para um painel que vai aparecer em `pos` (W×H). Sem o modo ao vivo a
 // foto desce até o fim do monitor, porque os menus podem crescer para baixo.
 static LiquidSurface* LqCreate(POINT pos, int W, int H, bool force = false) {
-    if (!GlassLiquid() && !force) return nullptr;
+    if (!GlassLiquid() && !FrostSnapshot() && !force) return nullptr;
     LiquidSurface* l = new LiquidSurface();
     l->live = GlassLive();
     RECT rc = {pos.x, pos.y, pos.x + W, pos.y + H};
@@ -6426,7 +6448,7 @@ static bool LqDraw(ID2D1RenderTarget* rt, LiquidSurface& l, const D2D1_RECT_F& r
                 rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip), nullptr);
                 float band = std::min(std::min(w, h) * 0.42f, 30 * s);
                 float depth = animating ? 0 : band * GlassR() / 100.0f * 1.6f;
-                float sigma = std::pow(GlassB() / 100.0f, 2.0f) * 4 * s;
+                float sigma = CtxFrost() ? 22 * s : std::pow(GlassB() / 100.0f, 2.0f) * 4 * s;
                 l.src->SetInput(0, l.snap);
                 l.src->SetValue(D2D1_2DAFFINETRANSFORM_PROP_TRANSFORM_MATRIX,
                                 D2D1::Matrix3x2F::Translation((float)(l.rc.left - wr.left), (float)(l.rc.top - wr.top)));
@@ -12759,7 +12781,7 @@ enum BsVal {
     BV_THEMEHEAD, BV_TGROUP, BV_THEMENONE, BV_THEMERESET,  // Personalizar tema
     BV_PANELLOOK, BV_PANELSTYLE,                           // Tema dos painéis
     BV_NTFLAYOUT,                                          // painel do sino: caixa ou cartões
-    BV_THEMECLEAR, BV_G_LIVEFIXED,                         // Personalizar tema: Transparente; Vidro sempre ao vivo
+    BV_THEMECLEAR,                                         // Personalizar tema: Transparente
     BV_ISLLIVE,                                            // pílulas de aviso: fundo ao vivo
     BV_FONTFAM,                                            // fonte da barra e dos painéis
     BV_ISLTEXT, BV_NTFTEXT,                                // cor do texto: pílulas, notificações
@@ -12864,7 +12886,6 @@ static const BsRowDef kBsRows[] = {
     {BR_SLIDER, BV_G_REFRACT, L"Refração nas bordas", 0, 0},
     {BR_SLIDER, BV_G_BLUR, L"Desfoque do fundo", 0, 0},
     {BR_SWITCH, BV_G_LIVE, L"Acompanhar o fundo ao vivo", 0, 0, L"Vídeos e papéis de parede animados continuam aparecendo atrás do vidro"},
-    {BR_SWITCH, BV_G_LIVEFIXED, L"Acompanhar o fundo ao vivo", 0, 0, L"No Vidro, o desfoque do Windows sempre acompanha o fundo ao vivo"},
     {BR_GROUP, BV_TGROUP, L"Vidro líquido personalizado", 0, 0},
     {BR_SLIDER, BV_TLEVEL, L"Força da cor no topo", 0, 0, L"100 = sólida no topo; menos deixa o fundo aparecer também na parte colorida"},
     {BR_SLIDER, BV_TREACH, L"Até onde a cor desce", 0, 0, L"Valores baixos mantêm a cor perto do topo; altos a trazem para baixo"},
@@ -13172,7 +13193,6 @@ static int BsGet(int val) {
                 if (_wcsicmp(g_bsFonts[i].c_str(), g_settings.fontFamily.c_str()) == 0) return (int)i;
             return 0;
         }
-        case BV_G_LIVEFIXED: return 1;  // o desfoque do Windows é sempre ao vivo
         case BV_TEXTCOLOR: return g_settings.barStyle >= 5 ? 0 : g_settings.theme;  // sólidos: sempre automático
         case BV_PANELLOOK: return g_settings.panelLookCustom ? 1 : 0;
         case BV_PANELSTYLE: {
@@ -13554,6 +13574,7 @@ static void BsSet(int val, int v) {
         default: return;
     }
     SaveThemeGlass();
+    if (val == BV_G_LIVE && ThemeEdit() == 0) BarsRestyle();  // Vidro: desfoque do Windows ↔ foto desfocada
     TintApply();  // a barra (o Vidro do Windows e o véu) e os painéis abertos mudam na hora
 }
 
@@ -13757,8 +13778,8 @@ static bool BsRowShown(const BsRowDef& d) {
         // Transparente (1) não tem ajustes; Vidro e Cor da janela (0, 4) são o
         // desfoque do Windows, sempre ao vivo; Líquido e personalizado (2, 3), tudo.
         case BV_G_TINT: return (e & 0x1D) != 0;
-        case BV_G_REFRACT: case BV_G_BLUR: case BV_G_LIVE: return (e & 0x0C) != 0;
-        case BV_G_LIVEFIXED: return (e & 0x11) != 0;
+        case BV_G_REFRACT: case BV_G_BLUR: return (e & 0x0C) != 0;
+        case BV_G_LIVE: return (e & 0x1D) != 0;  // vidro, líquido, personalizado e cor da janela
         case BV_TGROUP: case BV_TCOLOR: case BV_TLEVEL: case BV_TREACH: return (e & kThemeTinted) != 0;
         case BV_THEMENONE: return (t & kThemeGlass) == 0;
         case BV_THEMECLEAR: return e == 0x02;
@@ -14625,15 +14646,18 @@ static void BsDrawWindow() {
 // caixas de seleção dela (desfoque, líquido ou transparente, com a sua
 // transparência), não o tema da barra.
 struct BsLookScope {
-    int savedOverride;
+    int savedOverride, savedLive;
     bool savedNoBlur;
     GlassTranspScope transp;
-    BsLookScope() : savedOverride(g_panelThemeOverride), savedNoBlur(g_glassNoBlur), transp(g_bsTransp) {
+    BsLookScope()
+        : savedOverride(g_panelThemeOverride), savedLive(g_glassLiveOverride), savedNoBlur(g_glassNoBlur), transp(g_bsTransp) {
         g_panelThemeOverride = g_bsStyle == 1 ? 2 : 0;  // líquido, ou vidro
         g_glassNoBlur = g_bsStyle == 2;                  // transparente: sem desfoque
+        if (g_bsStyle == 0) g_glassLiveOverride = 1;     // desfoque: o do Windows
     }
     ~BsLookScope() {
         g_panelThemeOverride = savedOverride;
+        g_glassLiveOverride = savedLive;
         g_glassNoBlur = savedNoBlur;
     }
 };
@@ -14754,7 +14778,6 @@ static bool BsRowDisabled(int rowIdx) {
     // Claro, Escuro e OLED: a cor do texto fica no automático (segue o fundo).
     if (d.val == BV_TEXTCOLOR) return g_settings.barStyle >= 5;
     if (d.val >= BV_MONTEXT0 && d.val < BV_MONEND) return BsGet(d.val - 8) >= 5;
-    if (d.val == BV_G_LIVEFIXED) return true;  // só mostra: no Vidro é sempre ao vivo
     if (d.val == BV_HANDLE) return g_settings.hideWhenMaximized;  // bloqueada por "Ocultar com janela maximizada"
     // Com "Ocultar com a alça" ligada, as outras formas de ocultar ficam inativas.
     if (d.val == BV_HIDEFS || d.val == BV_HIDEMAX) return g_settings.autoHide && g_settings.revealHandle;
@@ -22528,16 +22551,19 @@ static void BarLiquidTick() {
 
 // Prepara a barra para o estilo escolhido (chamado ao criar).
 static void BarSetupStyle(Bar* b) {
-    if (BarStyleOf(b) == 2 || BarStyleOf(b) == 3) {
+    // Líquido, personalizado, e o Vidro sem "ao vivo" (a foto desfocada).
+    if (BarStyleOf(b) == 2 || BarStyleOf(b) == 3 || (BarStyleOf(b) == 0 && !g_themeGlass[0].live)) {
         b->lq = new LiquidSurface();
         b->lq->live = true;
         b->lq->wnd = b->hwnd;
         // Fora das capturas: a barra não aparece na própria foto (nem em prints).
         SetWindowDisplayAffinity(b->hwnd, WDA_EXCLUDEFROMCAPTURE);
-        b->shadow = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST |
-                                        WS_EX_NOACTIVATE,
-                                    kShadowClass, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, g_hInst, nullptr);
-        if (b->shadow) SetWindowDisplayAffinity(b->shadow, WDA_EXCLUDEFROMCAPTURE);
+        if (BarStyleOf(b) != 0) {  // (o Vidro fica sem sombra, como com o desfoque do Windows)
+            b->shadow = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST |
+                                            WS_EX_NOACTIVATE,
+                                        kShadowClass, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, g_hInst, nullptr);
+            if (b->shadow) SetWindowDisplayAffinity(b->shadow, WDA_EXCLUDEFROMCAPTURE);
+        }
         if (g_owner) SetTimer(g_owner, TIMER_BARLIQUID, 50, nullptr);  // ~20 quadros/s
     }
 }
@@ -23049,6 +23075,15 @@ static void Render(Bar* b) {
             b->brush->SetColor(g_light ? D2D1::ColorF(1, 1, 1, a) : D2D1::ColorF(0.05f, 0.05f, 0.06f, a));
             b->rt->FillRectangle(D2D1::RectF(0, 0, w, h), b->brush);
         }
+    }
+    if (bst == 0 && b->lq && !b->peekColorOn) {
+        // Vidro sem "ao vivo": a foto do fundo desfocada e a tinta do Vidro.
+        LqDraw(b->rt, *b->lq, D2D1::RectF(0, 0, w, h), 0, s);
+        DWORD argb = g_light ? g_settings.tintLight : g_settings.tintDark;
+        D2D1_COLOR_F c = Argb(argb | 0xFF000000);
+        c.a = std::clamp((100 - GlassT()) * 4, 0, 255) / 255.0f;
+        b->brush->SetColor(c);
+        b->rt->FillRectangle(D2D1::RectF(0, 0, w, h), b->brush);
     }
     if (see && (bst == 2 || bst == 3) && b->lq) DrawBarLiquid(b, w, h, s);
     if (see && bst == 3) DrawBarTint(b, w, h, s, b->lq != nullptr);
@@ -25457,7 +25492,6 @@ const UiTr kUiTr[] = {
     {L"Dentro da caixa", L"In a box", L"Dentro de la caja", L"Dans une boîte", L"In einem Kasten", L"In un riquadro", L"在框内"},
     {L"Em cartões soltos", L"As separate cards", L"En tarjetas sueltas", L"En cartes séparées", L"Als einzelne Karten", L"In schede separate", L"独立卡片"},
     {L"O tema Transparente não tem ajustes: a barra fica sem vidro nenhum.", L"The Clear theme has no settings: the bar has no glass at all.", L"El tema Transparente no tiene ajustes: la barra no lleva vidrio.", L"Le thème Transparent n’a pas de réglages : la barre n’a aucun verre.", L"Das Design Klar hat keine Einstellungen: die Leiste hat kein Glas.", L"Il tema Trasparente non ha impostazioni: la barra non ha vetro.", L"透明主题没有设置：菜单栏完全没有玻璃。"},
-    {L"No Vidro, o desfoque do Windows sempre acompanha o fundo ao vivo", L"With Glass, the Windows blur always follows the background live", L"En Vidrio, el desenfoque de Windows siempre sigue el fondo en vivo", L"Avec Verre, le flou de Windows suit toujours l’arrière-plan en direct", L"Bei Glas folgt die Windows-Unschärfe dem Hintergrund immer live", L"Con Vetro, la sfocatura di Windows segue sempre lo sfondo in tempo reale", L"在“玻璃”中，Windows 模糊始终实时跟随背景"},
     {L"Fundo ao vivo", L"Live background", L"Fondo en vivo", L"Arrière-plan en direct", L"Live-Hintergrund", L"Sfondo dal vivo", L"实时背景"},
     {L"Com um estilo de vidro, vídeos e papéis de parede animados continuam aparecendo atrás da pílula", L"With a glass style, videos and animated wallpapers keep showing behind the pill", L"Con un estilo de vidrio, los vídeos y fondos animados siguen viéndose detrás de la píldora", L"Avec un style en verre, les vidéos et fonds animés restent visibles derrière la pastille", L"Mit einem Glasstil bleiben Videos und animierte Hintergründe hinter der Pille sichtbar", L"Con uno stile in vetro, video e sfondi animati restano visibili dietro la pillola", L"使用玻璃样式时，胶囊后面仍会显示视频和动态壁纸"},
     {L"Fonte", L"Font", L"Fuente", L"Police", L"Schrift", L"Carattere", L"字体"},
