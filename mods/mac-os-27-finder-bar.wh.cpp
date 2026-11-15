@@ -42,7 +42,7 @@ Available in English, Português, Español, Français, Deutsch, Italiano and 中
 - **Display**: dark mode, night light, projection modes
 - Keyboard layout (when there is more than one), emoji, on-screen keyboard
 - **Battery** (percentage, charging, time remaining), **Wi-Fi** (current network, available and known networks), **Bluetooth** and **Sound** (scroll on the icon to change the volume, right-click to mute, switch output and input)
-- **Now Playing**: the song name scrolls across the bar when it doesn't fit; the panel has a large-cover, compact or full-cover layout (the cover fills the panel, with glass buttons on top) and a progress bar drawn as a line, a colored line or a wave
+- **Now Playing**: the song name scrolls across the bar when it doesn't fit; its bar icon is a thin circle with a rounded play or pause sign; the panel has a large-cover, compact or full-cover layout (the cover fills the panel, with glass buttons on top, white ones in light glass themes) and a progress bar drawn as a line, a colored line or a wave
 - **Focus** (when Do Not Disturb is on), **Search** (Windows Search or Siri Plus Launchpad), **microphone and camera** (the icons turn orange and green while an app uses them, as on the Mac; click to see which apps use them and mute the microphone), **Weather** (Open-Meteo, MET Norway or wttr.in, no account needed; the widget is colored, liquid glass or plain glass, and its animations can be turned off) and the **Notifications** button
 - **Clock**: the calendar and your agenda from your own .ics files, imported right from the settings window. Date and time formats are configurable
 - An arrow collapses the icons that don't fit; each icon can be turned on or off in the settings
@@ -59,13 +59,13 @@ Wi-Fi, Bluetooth, media playing, dark mode, Do Not Disturb, brightness, sound an
 
 ## Notice pills
 
-Small glass pills drop from the bar for headphones, audio output, low battery, charger, Focus, Caps Lock, USB devices and drives, finished downloads, copy and cut, screenshots and screen recordings. Pills you can act on (open and edit a screenshot or recording, open a download, reply to a message) stay 2.5 times longer and are kept in the bell panel; the rest only show in the pill. Volume, brightness and Bluetooth changes can show as floating pills too. The pill's style (the bar's background, glass, liquid glass, custom liquid glass, light, dark or OLED), size, position, duration and opening and closing animations are all configurable.
+Small glass pills drop from the bar for headphones, audio output, low battery, charger, Focus, Caps Lock, USB devices and drives, finished downloads, copy and cut, screenshots and screen recordings. Pills you can act on (open and edit a screenshot or recording, open a download, reply to a message) stay 2.5 times longer and are kept in the bell panel; the rest only show in the pill. Volume, brightness and Bluetooth changes can show as floating pills too. The pill's style (the bar's background, glass, liquid glass, custom liquid glass, light, dark or OLED), text color (the theme's, white or black), live background for the glass styles, size, position, duration and opening and closing animations are all configurable.
 
 ## Notifications
 
 Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Notice pills** (off by default) and the bar shows your apps' notifications:
 
-- in the pill and in the bell panel, grouped by app; with liquid glass on, each notification is its own glass card in the Control Center's style
+- in the pill and in the bell panel, grouped by app. The panel is **Floating** (default: the top and each notification in its own glass card, in the Control Center's style) or **Inside the box** (one panel); with nothing to show it's always the small panel. The text color follows the theme or is always white or black. The bell itself is one of the bar items
 - a round picture on each notification: the sender's photo when the app saves it on the PC with the notification (with the app's icon in the corner), otherwise the app's icon. Photos sent as web links (WhatsApp does this) aren't downloaded
 - **reply** to messages (like WhatsApp) right from the pill or from the Reply button in the panel, when the app supports replies. Your replies stay in the card until you clear it
 - new messages from the same conversation (same app and sender or group) go into the card that's already there, in order, instead of a new one
@@ -75,9 +75,9 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 ## Bar and glass
 
 - Bar background: fully transparent (default), Windows blur glass, liquid glass (experimental), custom liquid glass, "Window color", or solid light, dark or OLED black; one background for all displays, or **Customize per display** to give each connected display its own background and text color
-- **Live glass**: panels blur what's behind them in real time, with an experimental liquid glass with edge refraction (on by default)
-- **Custom liquid glass** (the theme from Siri Plus Launchpad): your color at the top, fading to clear glass at the bottom, with a fine line of light along the bottom edge. For the panels and pills, the bar's background or both; color, strength and how far down the color goes are set in Menu Bar Settings
-- **One glass for everything**: the Control Center, menus, panels and pills share the same glass settings (style, tint, liquid glass, refraction, blur, live)
+- **One theme for everything**: the bar's theme also styles the menus, the Control Center, the panels and the pills. **Panel theme** can give the menus a theme of their own instead (with the Clear bar, this choice is also in Customize theme)
+- **Customize theme**: adjusts the bar's theme; each glass theme keeps its own settings (transparent ↔ frosted, plus edge refraction and background blur for the liquid ones), with **Restore defaults** for that theme. **Live** keeps videos and animated wallpapers moving behind the glass; without it, the glass uses a still, blurred picture of the background
+- **Custom liquid glass** (the theme from Siri Plus Launchpad): your color at the top, fading to clear glass at the bottom, with a fine line of light along the bottom edge; color, strength and how far down the color goes are set in Menu Bar Settings
 - "Window color" bar background: transparent over the desktop, and the color of the title bar of the maximized window on that display (it stays while a menu, search or another window is in front)
 - Bar text and icons in white, black or automatic (following the Windows theme, or the solid background)
 - Clicking the album cover (Control Center or Now Playing) brings the playing app's window to the front
@@ -86,7 +86,7 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 - Choose where the bar shows: all displays, the main one, or a specific display (listed by name); if that display is disconnected, the bar moves to the main one
 - **Disks** (optional): its menu lists every local and removable disk with a usage bar and opens it in Explorer
 - Bar icons share one size: each icon is measured and scaled to the same height, and icons and text grow together with one size setting; the bar height is set on its own
-- Nine selection colors: one for the bar, the menus and their switches; and the font
+- Nine selection colors: one for the bar, the menus and their switches; and the font of the bar and panels, picked in the settings window
 - Hides with full-screen apps (optional)
 
 ## Settings
@@ -126,7 +126,7 @@ The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so
 ## Known limitations
 
 - Apps without a classic menu bar use ready-made menus based on keyboard shortcuts.
-- Bluetooth lists the connected classic (non-BLE) devices; connecting and disconnecting a paired device opens Settings. New devices can be found and paired in the bar's Bluetooth pill, except devices that ask you to type a code, which need Settings.
+- Bluetooth lists the connected classic (non-BLE) devices; connecting and disconnecting a paired device opens Settings. New devices can be found and paired in the bar's Bluetooth pill (a pairing code shows in the pill, to confirm or to type on the device), except devices that ask you to type a PIN on the PC, which need Settings.
 - Power mode and energy saver use undocumented Windows functions; if Windows refuses, the tile opens the matching Settings page.
 - Screen recording uses Win+Shift+R and needs an up-to-date Snipping Tool.
 - Replying from the pill works with apps that register a notification activator with Windows; otherwise the pill opens the app and copies your text.
@@ -12955,7 +12955,7 @@ static const BsRowDef kBsRows[] = {
     {BR_GROUP, BV_THEMEHEAD, L"Tema", 0, 0},
     {BR_NOTE, BV_THEMENONE, L"Claro, Escuro e OLED são cores sólidas, sem ajustes de vidro.", 0, 0},
     {BR_CHOICE, BV_CLEARMENUS, L"Tema dos menus", 0, 0, L"Com a barra Transparente: o tema dos menus, da Central e dos painéis; os ajustes abaixo personalizam esse tema"},
-    {BR_NOTE, BV_THEMECLEAR, L"No tema Transparente a barra fica sem vidro; estes ajustes valem para o vidro líquido dos painéis.", 0, 0},
+    {BR_NOTE, BV_THEMECLEAR, L"No tema Transparente a barra fica sem vidro (puxando para fosco, ganha só um véu); os outros ajustes valem para o vidro líquido dos painéis.", 0, 0},
     {BR_SLIDER, BV_G_TINT, L"Transparente ↔ fosco", 0, 0, L"À esquerda o vidro limpo; à direita, mais fosco"},
     {BR_SLIDER, BV_G_REFRACT, L"Refração nas bordas", 0, 0},
     {BR_SLIDER, BV_G_BLUR, L"Desfoque do fundo", 0, 0},
@@ -13865,7 +13865,6 @@ static int ThemeEdit() {
 }
 // Personalizar tema: só os ajustes que valem para o tema escolhido.
 static const unsigned kThemeGlass = 0x1F;    // vidro, transparente, líquido, personalizado, cor da janela
-static const unsigned kThemeLiquid = 0x0E;   // transparente, líquido, personalizado (vidro líquido nos painéis)
 static const unsigned kThemeTinted = 0x08;   // personalizado
 static bool BsRowShown(const BsRowDef& d) {
     if (BvIsMon(d.val)) return g_settings.barPerMon && BsMonAt(BvMonIndex(d.val), nullptr);
@@ -22655,7 +22654,7 @@ static void BarLiquidTick() {
         bool justShown = !b->lqShown;
         b->lqShown = true;
         ULONGLONG now = GetTickCount64();
-        if (!(BarStyleOf(b) == 1 ? ThemeGlass().live : g_themeGlass[std::clamp(BarStyleOf(b), 0, 4)].live) && !justShown && b->lq->w && now - b->lqShot < 5000) continue;
+        if (!g_themeGlass[std::clamp(BarStyleOf(b), 0, 4)].live && !justShown && b->lq->w && now - b->lqShot < 5000) continue;
         b->lqShot = now;
         RECT wr;
         if (!GetWindowRect(b->hwnd, &wr)) continue;
@@ -25641,7 +25640,7 @@ const UiTr kUiTr[] = {
     {L"Altura de 28 px e ícones e fonte de 13 pt", L"28 px high, with 13 pt icons and font", L"28 px de alto, con iconos y fuente de 13 pt", L"28 px de haut, icônes et texte en 13 pt", L"28 px hoch, Symbole und Schrift 13 pt", L"28 px di altezza, icone e carattere a 13 pt", L"高度 28 像素，图标和字体 13 磅"},
     {L"Notificações", L"Notifications", L"Notificaciones", L"Notifications", L"Mitteilungen", L"Notifiche", L"通知"},
     {L"Dentro da caixa", L"In a box", L"Dentro de la caja", L"Dans une boîte", L"In einem Kasten", L"In un riquadro", L"在框内"},
-    {L"No tema Transparente a barra fica sem vidro; estes ajustes valem para o vidro líquido dos painéis.", L"With the Clear theme the bar has no glass; these settings apply to the panels’ liquid glass.", L"Con el tema Transparente la barra no lleva vidrio; estos ajustes valen para el vidrio líquido de los paneles.", L"Avec le thème Transparent la barre n’a pas de verre ; ces réglages s’appliquent au verre liquide des panneaux.", L"Mit dem Design Klar hat die Leiste kein Glas; diese Einstellungen gelten für das flüssige Glas der Bereiche.", L"Con il tema Trasparente la barra non ha vetro; queste impostazioni valgono per il vetro liquido dei pannelli.", L"透明主题下菜单栏没有玻璃；这些设置用于面板的液态玻璃。"},
+    {L"No tema Transparente a barra fica sem vidro (puxando para fosco, ganha só um véu); os outros ajustes valem para o vidro líquido dos painéis.", L"With the Clear theme the bar has no glass (toward frosted it only gets a veil); the other settings apply to the panels’ liquid glass.", L"Con el tema Transparente la barra no lleva vidrio (hacia esmerilado solo gana un velo); los demás ajustes valen para el vidrio líquido de los paneles.", L"Avec le thème Transparent la barre n’a pas de verre (vers dépoli, elle ne prend qu’un voile) ; les autres réglages s’appliquent au verre liquide des panneaux.", L"Mit dem Design Klar hat die Leiste kein Glas (Richtung matt bekommt sie nur einen Schleier); die anderen Einstellungen gelten für das flüssige Glas der Bereiche.", L"Con il tema Trasparente la barra non ha vetro (verso smerigliato riceve solo un velo); le altre impostazioni valgono per il vetro liquido dei pannelli.", L"透明主题下菜单栏没有玻璃（调向磨砂只会加一层薄纱）；其他设置用于面板的液态玻璃。"},
     {L"Fundo ao vivo", L"Live background", L"Fondo en vivo", L"Arrière-plan en direct", L"Live-Hintergrund", L"Sfondo dal vivo", L"实时背景"},
     {L"Com um estilo de vidro, vídeos e papéis de parede animados continuam aparecendo atrás da pílula", L"With a glass style, videos and animated wallpapers keep showing behind the pill", L"Con un estilo de vidrio, los vídeos y fondos animados siguen viéndose detrás de la píldora", L"Avec un style en verre, les vidéos et fonds animés restent visibles derrière la pastille", L"Mit einem Glasstil bleiben Videos und animierte Hintergründe hinter der Pille sichtbar", L"Con uno stile in vetro, video e sfondi animati restano visibili dietro la pillola", L"使用玻璃样式时，胶囊后面仍会显示视频和动态壁纸"},
     {L"Fonte", L"Font", L"Fuente", L"Police", L"Schrift", L"Carattere", L"字体"},
