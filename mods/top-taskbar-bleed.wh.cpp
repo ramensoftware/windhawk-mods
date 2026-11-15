@@ -2162,14 +2162,12 @@ std::shared_ptr<Island> FindIslandByFrameId(void* frameId) {
     return nullptr;
 }
 
-// The panel's background is a horizontal LinearGradientBrush: stops at 20/40/
-// 60/80% carry the sampled points and the stops at 0% and 100% repeat the outer
-// ones, so the gradient continues flat to the edges. Only the stop colors are
-// ever touched. No animations: brush and opacity are plain local values. (A
-// storyboard's held value would override local sets, so none are ever used.)
-// A horizontal LinearGradientBrush with kGradientPoints + 2 stops: the four
-// points at 20/40/60/80%, and copies of the outer two at 0 and 100% so the
-// gradient runs flat to the edges. The stops are kept for recoloring.
+// The panel's background (and the separator's stroke) is a horizontal
+// LinearGradientBrush with kGradientPoints + 2 stops: the four points at
+// 20/40/60/80%, and copies of the outer two at 0 and 100% so the gradient
+// runs flat to the edges. Only the stop colors are ever touched, and they
+// are plain local values, no animations (a storyboard's held value would
+// override local sets). The stops are kept for recoloring.
 wuxm::LinearGradientBrush MakeGradientBrush(std::vector<wuxm::GradientStop>& stops) {
     wuxm::LinearGradientBrush brush;
     brush.StartPoint(wf::Point{0, 0});
@@ -2230,11 +2228,6 @@ Rgb SeparatorColor(Rgb c, int contrast) {
     return Rgb{mix(c.r), mix(c.g), mix(c.b)};
 }
 
-// Places the line along the window-facing edge of the panel's cell. The edge
-// is found in the panel's own coordinates: a vertical taskbar's frame may be
-// rotated (vertical-taskbar mods), so XAML +x/+y are mapped to root space
-// through TransformToVisual and the edge whose outward side points at the
-// window is taken.
 // Pixel settings are physical pixels: XAML units are scaled by the
 // rasterization scale, so a 1px line at 150% would be 1.5 units wide and
 // straddle two pixel rows. One over the scale is one physical pixel.
@@ -2248,11 +2241,18 @@ double PixelUnit(Island& isl) try {
     return 1.0;
 }
 
+// Places the line along the window-facing edge of the panel's cell. The edge
+// is found in the panel's own coordinates: a vertical taskbar's frame may be
+// rotated (vertical-taskbar mods), so XAML +x/+y are mapped to root space
+// through TransformToVisual and the edge whose outward side points at the
+// window is taken. The stroke width is set here too, from the same scaled
+// thickness as the position, so a display-scale change keeps them in step.
 void LayoutSeparator(Island& isl) try {
     if (!isl.separator || !isl.panel) return;
     double w = isl.panel.ActualWidth(), h = isl.panel.ActualHeight();
     double t = isl.separatorStyle.thickness * PixelUnit(isl);
     if (w <= 0 || h <= 0) return;
+    isl.separator.StrokeThickness(t);  // a no-op when unchanged
     // The line shares the panel's cell but not its Margin (a Styler style):
     // the panel's edges in the line's own coordinates.
     double ox = 0, oy = 0;
@@ -2309,7 +2309,6 @@ void LayoutSeparator(Island& isl) try {
 void StyleSeparator(Island& isl, const Settings::Separator& st) try {
     if (!isl.separator) return;
     isl.separatorStyle = st;
-    isl.separator.StrokeThickness(st.thickness * PixelUnit(isl));
     isl.separator.StrokeDashCap(wuxm::PenLineCap::Flat);
     isl.separator.StrokeStartLineCap(wuxm::PenLineCap::Flat);
     isl.separator.StrokeEndLineCap(wuxm::PenLineCap::Flat);
@@ -2339,22 +2338,27 @@ void StyleSeparator(Island& isl, const Settings::Separator& st) try {
 }
 
 // The Windows accent color (Settings > Personalization > Colors), via
-// UISettings. Read once and refreshed where the accent can change (the
-// color-change messages, the health check), not on every commit. Taskbar
-// thread only.
+// UISettings. Read when an accent-colored line is drawn and the cached value
+// is stale; marked stale where the accent can change (the color-change
+// messages, the health check), so nothing is read while no such line is
+// showing. Taskbar thread only.
 Rgb g_accentColor{0, 120, 212};
 bool g_accentKnown = false;
 
-void RefreshAccentColor() try {
-    auto c = winrt::Windows::UI::ViewManagement::UISettings().GetColorValue(
-        winrt::Windows::UI::ViewManagement::UIColorType::Accent);
-    g_accentColor = Rgb{c.R, c.G, c.B};
-    g_accentKnown = true;
-} catch (...) {
+void InvalidateAccentColor() {
+    g_accentKnown = false;
 }
 
 Rgb AccentColor() {
-    if (!g_accentKnown) RefreshAccentColor();
+    if (!g_accentKnown) {
+        try {
+            auto c = winrt::Windows::UI::ViewManagement::UISettings().GetColorValue(
+                winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+            g_accentColor = Rgb{c.R, c.G, c.B};
+            g_accentKnown = true;
+        } catch (...) {
+        }
+    }
     return g_accentColor;
 }
 
@@ -2542,7 +2546,7 @@ void OnColorChangeMessage() {
         std::lock_guard lock(g_islandsMutex);
         if (g_islands) islands.assign(g_islands->begin(), g_islands->end());
     }
-    RefreshAccentColor();
+    InvalidateAccentColor();
     for (auto& isl : islands) {
         if (isl->forcedTheme != ThemeNone) PinBackgroundTheme(*isl, true);
         if (isl->shown) ApplySeparator(*isl);  // an accent-colored line follows the accent
@@ -3088,7 +3092,7 @@ void VerifyIsland(Island& isl) try {
 // in the tracker section): re-attach what is detached, repair what is left.
 void WINAPI IslandHealthCheck(void* param) {
     if (g_unloading) return;
-    RefreshAccentColor();
+    InvalidateAccentColor();
     AttachAllTaskbars(param);
     std::vector<std::shared_ptr<Island>> live;
     {
