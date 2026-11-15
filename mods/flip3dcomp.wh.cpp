@@ -96,6 +96,21 @@ Live window previews follow the original Flip3D carousel layout and timing.
 #include <oaidl.h>
 #include <wincodec.h>
 
+// A keyboard hook can consume the user's Win+Tab input before a window in this
+// process receives it. Windows may then deny SetForegroundWindow/SwitchToThisWindow
+// because this process is not the foreground input owner. Insert a no-op input
+// event immediately before those calls to establish the foreground handoff.
+static void PrepareForegroundActivation()
+{
+    INPUT input{};
+    const UINT inserted = SendInput(1, &input, sizeof(input));
+    if (inserted != 1)
+    {
+        Wh_Log(L"Could not insert the foreground handoff input (sent=%u, error=%lu)",
+            inserted, GetLastError());
+    }
+}
+
 struct IDCompositionVisual3Compat : IDCompositionVisualDebug
 {
     virtual HRESULT STDMETHODCALLTYPE SetDepthMode(
@@ -3508,6 +3523,7 @@ void Flip3DCompApp::Update(float dtSeconds)
 
                 if (activationTarget && IsWindow(activationTarget))
                 {
+                    PrepareForegroundActivation();
                     SwitchToThisWindow(activationTarget, TRUE);
                 }
             }
@@ -6762,6 +6778,7 @@ void LaunchSwitcher(bool sticky, bool openingTabHeld)
     ShowWindow(g_app->WindowHandle(), SW_SHOW);
     SetWindowPos(g_app->WindowHandle(), HWND_TOPMOST, 0, 0, 0, 0,
         SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    PrepareForegroundActivation();
     if (!SetForegroundWindow(g_app->WindowHandle()))
         Wh_Log(L"Switcher could not take foreground focus; navigation remains on the keyboard hook");
     UpdateWindow(g_app->WindowHandle());
@@ -7669,12 +7686,76 @@ bool InitializeModuleGlobals()
         reinterpret_cast<LPCWSTR>(&InitializeModuleGlobals), &g_modModule);
 }
 
+enum class ExplorerRundll32InitResult
+{
+    NotApplicable,
+    Success,
+    Failure,
+};
+
+ExplorerRundll32InitResult InitializeExplorerOrRundll32Part()
+{
+    WCHAR exe[MAX_PATH] = {};
+    if (!GetModuleFileNameW(nullptr, exe, ARRAYSIZE(exe)))
+    {
+        Wh_Log(L"GetModuleFileName failed");
+        return ExplorerRundll32InitResult::Failure;
+    }
+
+    const WCHAR* name = wcsrchr(exe, L'\\');
+    name = name ? name + 1 : exe;
+
+    if (_wcsicmp(name, L"explorer.exe") == 0)
+    {
+        if (!InitializeModuleGlobals())
+        {
+            Wh_Log(L"Failed to initialize module identity or activation message");
+            return ExplorerRundll32InitResult::Failure;
+        }
+
+        g_isExplorer = true;
+        LoadTaskViewSettings();
+        if (!HookNativeTaskView() || !HookDwmOrdinal105())
+            return ExplorerRundll32InitResult::Failure;
+
+        return StartExplorerPart()
+            ? ExplorerRundll32InitResult::Success
+            : ExplorerRundll32InitResult::Failure;
+    }
+
+    if (_wcsicmp(name, L"rundll32.exe") == 0)
+    {
+        if (!InitializeModuleGlobals())
+        {
+            Wh_Log(L"Failed to initialize module identity or activation message");
+            return ExplorerRundll32InitResult::Failure;
+        }
+
+        g_isRundll32 = true;
+        return IsDwmApiOrdinal105Invocation() && HookDwmOrdinal105()
+            ? ExplorerRundll32InitResult::Success
+            : ExplorerRundll32InitResult::Failure;
+    }
+
+    return ExplorerRundll32InitResult::NotApplicable;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
-// The mod will load and run in a dedicated windhawk.exe process, while targetting explorer.exe and rundll32.exe: there, each callback calls the explorer and rundll32 part instead.
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+//
+// This mod also targets explorer.exe and rundll32.exe: there, each callback calls that process's part instead (the lines marked "explorer.exe/rundll32.exe part").
+//
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -7685,32 +7766,13 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    WCHAR exe[MAX_PATH] = {};
-    if (!GetModuleFileNameW(nullptr, exe, ARRAYSIZE(exe))) {
-        return FALSE;
+    // explorer.exe/rundll32.exe part.
+    const ExplorerRundll32InitResult processInitResult =
+        InitializeExplorerOrRundll32Part();
+    if (processInitResult != ExplorerRundll32InitResult::NotApplicable) {
+        return processInitResult == ExplorerRundll32InitResult::Success;
     }
-    const WCHAR* name = wcsrchr(exe, L'\\');
-    name = name ? name + 1 : exe;
-    if (_wcsicmp(name, L"explorer.exe") == 0) {
-        if (!InitializeModuleGlobals()) {
-            Wh_Log(L"Failed to initialize module identity or activation message");
-            return FALSE;
-        }
-        g_isExplorer = true;
-        LoadTaskViewSettings();
-        if (!HookNativeTaskView() || !HookDwmOrdinal105()) {
-            return FALSE;
-        }
-        return StartExplorerPart();
-    }
-    if (_wcsicmp(name, L"rundll32.exe") == 0) {
-        if (!InitializeModuleGlobals()) {
-            Wh_Log(L"Failed to initialize module identity or activation message");
-            return FALSE;
-        }
-        g_isRundll32 = true;
-        return IsDwmApiOrdinal105Invocation() && HookDwmOrdinal105();
-    }
+
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
@@ -7790,9 +7852,6 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    if (g_isExplorer || g_isRundll32) {
-        return;
-    }
     if (!g_isToolModProcessLauncher) {
         return;
     }
@@ -7854,6 +7913,7 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
+    // explorer.exe/rundll32.exe part.
     if (g_isExplorer || g_isRundll32) {
         LoadTaskViewSettings();
         if (g_isExplorer && g_TaskViewOverride
@@ -7870,6 +7930,7 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
+    // explorer.exe/rundll32.exe part.
     if (g_isExplorer || g_isRundll32) {
         StopExplorerPart();
         return;
