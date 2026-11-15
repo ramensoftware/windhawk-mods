@@ -7362,7 +7362,7 @@ void LoadTaskViewSettings()
 
 bool HookNativeTaskView()
 {
-#if defined(_M_X64) || defined(__x86_64__)
+#if defined(_M_X64)
     HMODULE module = LoadLibraryExW(L"twinui.pcshell.dll", nullptr,
         LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (module)
