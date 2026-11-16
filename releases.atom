@@ -2,12 +2,87 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-15T20:00:21.000Z</updated>
+    <updated>2026-11-16T05:02:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[macOS Gestures - Mission Control 1.3.1]]></title>
+        <id>https://windhawk.net/mods/macos-gestures-mission-control#a7e0fd466e314ed06abf79ae5cd877daa644a62d</id>
+        <link href="https://windhawk.net/mods/macos-gestures-mission-control"/>
+        <updated>2026-11-16T05:02:39.000Z</updated>
+        <content type="html"><![CDATA[<h1>macOS Gestures - Mission Control</h1>
+<p><img src="https://i.imgur.com/9ONH63E.gif" alt="macOS Gestures for Windows"></p>
+<p>Mission Control for Windows. A <strong>three-finger swipe up</strong> on a precision touchpad opens a
+live, animated overview of all your windows; the overview <strong>follows your fingers</strong> the whole
+way, and springs into place when you let go. Swipe back down, press Esc, or pick a window to
+leave.</p>
+<h2>What you get</h2>
+<ul>
+<li>Live window previews (the same technology the taskbar and Alt+Tab use, so videos keep
+playing) laid out in a clean grid, with the app icon and title under each window.</li>
+<li>Minimized windows are shown too, and dialogs are drawn on top of the window they belong to.</li>
+<li>The taskbar slides out of the screen with your fingers and comes back when you pick a window.</li>
+<li>A <strong>virtual desktops bar</strong> flush with the bottom edge: see your desktops, switch to one or
+create a new one. It fades in with the swipe.</li>
+<li>A close button on the window under the mouse (also the middle mouse button and the Delete
+key), with the remaining windows gliding to their new places.</li>
+<li>Keyboard: Esc closes, arrow keys / Tab move the selection, Enter or Space picks it.</li>
+<li>Spring physics with the finger speed carried over; pushing further up when everything is
+already open stretches the grid with rubber-band resistance.</li>
+<li>Respects the Windows &quot;Animation effects&quot; setting, and is switched off over fullscreen
+apps and games.</li>
+</ul>
+<h2>Three-finger left / right</h2>
+<p>Windows only lets a program take over <em>all</em> three-finger swipes at once, so the mod performs
+the Alt+Tab itself: swipe right for Alt+Tab, left for Alt+Shift+Tab, and keep swiping to keep
+cycling. It can also be set to do nothing.</p>
+<h2>Requirements</h2>
+<ul>
+<li>Windows 11 with the touchpad gestures API (<code>TouchpadGesturesController</code>) and a precision
+touchpad. On builds without that API the mod stays idle and the log says
+&quot;TouchpadGesturesController not supported&quot;.</li>
+<li>The mod runs only in the shell's <code>explorer.exe</code> (not in folder windows opened in a separate
+process, nor in Explorer's COM helper processes).</li>
+</ul>
+<h2>What changes in Windows</h2>
+<ul>
+<li>While the mod runs it takes over <strong>all</strong> three-finger swipes, so Windows' own three-finger
+actions are off: swipe up (Task View) and swipe down (show desktop) have no Windows
+replacement while Mission Control is closed. Turning the mod off gives them back.</li>
+<li>The left/right swipe sends Alt+Tab as keystrokes. When an app running as administrator has
+the focus, Windows blocks those keystrokes, so that swipe does nothing there. The desktops
+bar uses Windows' Win+Ctrl shortcuts the same way and has the same limit.</li>
+</ul>
+<h2>Conflicts</h2>
+<ul>
+<li><strong>CoverTabby</strong> with its touchpad option turned on also takes over three-finger swipes. Use
+only one of the two for touchpad gestures.</li>
+</ul>
+<h2>Settings</h2>
+<p>Everything above can be changed from the <strong>Settings</strong> tab: background material (Mica, Mica
+Alt, Acrylic, live blur, blurred wallpaper), swipe distance, which parts to show, and the
+animation tuning (speed, bounce, stretch, background fade).</p>
+<h2>Notes</h2>
+<ul>
+<li>The live previews use private DWM functions, which Windows updates can change. If they stop
+working the mod falls back to the classic thumbnails on its own.</li>
+<li>Other mods that animate windows closing (like <em>Windows Animations</em>) are kept from playing
+their animation in front of Mission Control: a window is hidden just before it is closed.
+Keep that mod's option to animate hidden windows turned off. If the window is still there a
+moment later (it asked &quot;Save changes?&quot;, or it closes to the tray), it is shown again.</li>
+<li>Mission Control shows up to 24 windows.</li>
+<li>If the mod does not start at logon, turn on logging in the mod's <strong>Advanced</strong> tab in
+Windhawk and check the log output: the start-up steps are logged there.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Frixed</name>
+            <uri>https://github.com/frixed</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Active Window Highlight 0.1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-active-window-highlight#0356ef6ca8c046c0c8146151495dc3c217b0368d</id>
@@ -1678,24 +1753,6 @@ zlib license notice in the source.</p>
         <author>
             <name>Proponent</name>
             <uri>https://github.com/JJProponent</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Middle Click Minimize 1.1.3]]></title>
-        <id>https://windhawk.net/mods/middle-click-minimize#e2e99f8ff147a915abf7e8d2c72cdbb43bfacb4e</id>
-        <link href="https://windhawk.net/mods/middle-click-minimize"/>
-        <updated>2026-11-12T08:05:05.000Z</updated>
-        <content type="html"><![CDATA[<h1>Middle Click Minimize</h1>
-<p>This mod allows you to minimize windows by middle-clicking (using the scroll wheel) directly on the title bar.</p>
-<h2>Exclusions and Conflicts</h2>
-<ul>
-<li><strong>How to exclude programs:</strong> To disable the mod for a specific program (e.g., <code>steam.exe</code> or <code>vivaldi.exe</code>), add it to the custom process exclusion list in the mod's <strong>Advanced</strong> tab in Windhawk.</li>
-<li><strong>Known conflicts:</strong> If you use the &quot;Middle-Click New Tab Chrome/Edge/Brave&quot; mod, middle-clicking the empty tab-strip might minimize the browser instead of opening a new tab. You can add your browser to the exclusion list in the Advanced tab to prevent this.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Ar4ujo_009</name>
-            <uri>https://github.com/Ar4ujo009</uri>
         </author>
     </entry>
 </feed>

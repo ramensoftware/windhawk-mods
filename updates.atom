@@ -2,12 +2,142 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-16T03:00:12.000Z</updated>
+    <updated>2026-11-16T05:02:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[macOS Gestures - Mission Control 1.3.1]]></title>
+        <id>https://windhawk.net/mods/macos-gestures-mission-control#a7e0fd466e314ed06abf79ae5cd877daa644a62d</id>
+        <link href="https://windhawk.net/mods/macos-gestures-mission-control"/>
+        <updated>2026-11-16T05:02:39.000Z</updated>
+        <content type="html"><![CDATA[<h1>macOS Gestures - Mission Control</h1>
+<p><img src="https://i.imgur.com/9ONH63E.gif" alt="macOS Gestures for Windows"></p>
+<p>Mission Control for Windows. A <strong>three-finger swipe up</strong> on a precision touchpad opens a
+live, animated overview of all your windows; the overview <strong>follows your fingers</strong> the whole
+way, and springs into place when you let go. Swipe back down, press Esc, or pick a window to
+leave.</p>
+<h2>What you get</h2>
+<ul>
+<li>Live window previews (the same technology the taskbar and Alt+Tab use, so videos keep
+playing) laid out in a clean grid, with the app icon and title under each window.</li>
+<li>Minimized windows are shown too, and dialogs are drawn on top of the window they belong to.</li>
+<li>The taskbar slides out of the screen with your fingers and comes back when you pick a window.</li>
+<li>A <strong>virtual desktops bar</strong> flush with the bottom edge: see your desktops, switch to one or
+create a new one. It fades in with the swipe.</li>
+<li>A close button on the window under the mouse (also the middle mouse button and the Delete
+key), with the remaining windows gliding to their new places.</li>
+<li>Keyboard: Esc closes, arrow keys / Tab move the selection, Enter or Space picks it.</li>
+<li>Spring physics with the finger speed carried over; pushing further up when everything is
+already open stretches the grid with rubber-band resistance.</li>
+<li>Respects the Windows &quot;Animation effects&quot; setting, and is switched off over fullscreen
+apps and games.</li>
+</ul>
+<h2>Three-finger left / right</h2>
+<p>Windows only lets a program take over <em>all</em> three-finger swipes at once, so the mod performs
+the Alt+Tab itself: swipe right for Alt+Tab, left for Alt+Shift+Tab, and keep swiping to keep
+cycling. It can also be set to do nothing.</p>
+<h2>Requirements</h2>
+<ul>
+<li>Windows 11 with the touchpad gestures API (<code>TouchpadGesturesController</code>) and a precision
+touchpad. On builds without that API the mod stays idle and the log says
+&quot;TouchpadGesturesController not supported&quot;.</li>
+<li>The mod runs only in the shell's <code>explorer.exe</code> (not in folder windows opened in a separate
+process, nor in Explorer's COM helper processes).</li>
+</ul>
+<h2>What changes in Windows</h2>
+<ul>
+<li>While the mod runs it takes over <strong>all</strong> three-finger swipes, so Windows' own three-finger
+actions are off: swipe up (Task View) and swipe down (show desktop) have no Windows
+replacement while Mission Control is closed. Turning the mod off gives them back.</li>
+<li>The left/right swipe sends Alt+Tab as keystrokes. When an app running as administrator has
+the focus, Windows blocks those keystrokes, so that swipe does nothing there. The desktops
+bar uses Windows' Win+Ctrl shortcuts the same way and has the same limit.</li>
+</ul>
+<h2>Conflicts</h2>
+<ul>
+<li><strong>CoverTabby</strong> with its touchpad option turned on also takes over three-finger swipes. Use
+only one of the two for touchpad gestures.</li>
+</ul>
+<h2>Settings</h2>
+<p>Everything above can be changed from the <strong>Settings</strong> tab: background material (Mica, Mica
+Alt, Acrylic, live blur, blurred wallpaper), swipe distance, which parts to show, and the
+animation tuning (speed, bounce, stretch, background fade).</p>
+<h2>Notes</h2>
+<ul>
+<li>The live previews use private DWM functions, which Windows updates can change. If they stop
+working the mod falls back to the classic thumbnails on its own.</li>
+<li>Other mods that animate windows closing (like <em>Windows Animations</em>) are kept from playing
+their animation in front of Mission Control: a window is hidden just before it is closed.
+Keep that mod's option to animate hidden windows turned off. If the window is still there a
+moment later (it asked &quot;Save changes?&quot;, or it closes to the tray), it is shown again.</li>
+<li>Mission Control shows up to 24 windows.</li>
+<li>If the mod does not start at logon, turn on logging in the mod's <strong>Advanced</strong> tab in
+Windhawk and check the log output: the start-up steps are logged there.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Frixed</name>
+            <uri>https://github.com/frixed</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Mac OS 27 Finder Bar 1.1.0]]></title>
+        <id>https://windhawk.net/mods/mac-os-27-finder-bar#ecdb02582e9b7ac40ba466ebce21381d4249e2dc</id>
+        <link href="https://windhawk.net/mods/mac-os-27-finder-bar"/>
+        <updated>2026-11-16T05:02:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New <strong>Custom liquid glass</strong> theme (from Siri Plus Launchpad): your color at the top, fading into clear glass, with a fine line of light along the bottom edge. It works for the panels, the bar's background or both. The color (presets or any color), the strength and how far down the color goes are set in Menu Bar Settings.</li>
+<li>New <strong>Light</strong>, <strong>Dark</strong> and <strong>OLED</strong> solid themes.</li>
+<li>Themes everywhere: the bar's theme also styles the menus, the Control Center, the panels and the pills. New <strong>Panel theme</strong> option gives the menus a theme of their own (with the Clear bar, this choice is also in Customize theme).</li>
+<li>New <strong>Customize theme</strong> section (replaces &quot;Glass&quot;): it adjusts the bar's theme, and each glass theme keeps its own settings (transparent ↔ frosted, edge refraction, background blur, live), with a button to restore that theme's defaults. Without &quot;live&quot;, Glass and &quot;Window color&quot; use a still, blurred picture of the background.</li>
+<li>Bar background per display: <strong>Customize per display</strong> gives each connected display its own background and text color.</li>
+<li>Notice pills: style follows the bar, or glass, liquid glass, custom liquid glass, light, dark or OLED; text color (theme, white or black); &quot;Live background&quot; for the glass styles.</li>
+<li>Control Center: the cascade opening now slides each row out from under the row above.</li>
+<li>Control Center: new &quot;When the Control Center closes&quot; option: cascade, shrink, fade, slide up or none.</li>
+<li>Notifications: new <strong>Notifications</strong> choice: <strong>Floating</strong> (default: the top and each notification in its own glass card, in the Control Center's style, following the theme) or <strong>Inside the box</strong>. Text color: theme, white or black. The bell is now one of the bar items.</li>
+<li>Notifications: a round picture on each card. It's the sender's photo when the app saves it on the PC (with the app's icon in the corner), otherwise the app's icon. Icon shape: circle or the macOS icon shape.</li>
+<li>Notifications: a Reply button on the card for apps that support replies. Clicking a card opens it in the app.</li>
+<li>Notifications: your replies stay in the card until you clear it, and new messages from the same conversation go into the same card, in order.</li>
+<li>The volume and brightness pill shows the percentage.</li>
+<li>Bluetooth: the Bluetooth pill can search for new devices and pair them, without opening Settings. The pairing code shows in the pill (confirm it, or type it on the device), and a failed pairing shows the reason code. Devices that ask you to type a PIN on the PC still need Settings.</li>
+<li>Now Playing: it stays in the bar and the Control Center while the music is paused, with the cover, and Play resumes it.</li>
+<li>While the bar's volume indicator is on, Windows' own volume pill is hidden, including the newer pill that the keyboard volume keys show on recent Windows 11 versions. It comes back when the indicator or the mod is turned off.</li>
+<li>New <strong>Disks</strong> item (optional): its menu lists the local and removable disks with a usage bar each, and opens them in Explorer.</li>
+<li>Bar text and icons: automatic (Windows theme, or the solid background), white or black, in Menu Bar Settings.</li>
+<li>&quot;Show the bar on&quot;: all displays, the main one, or a chosen display (listed by name). If that display is disconnected, the bar moves to the main one.</li>
+<li>Now Playing: clicking the album cover (Control Center or Now Playing) brings the playing app's window to the front.</li>
+<li>Now Playing: new &quot;Full cover&quot; layout. The cover fills the panel, the text and progress bar sit on a dark gradient at the bottom, and the controls are round glass buttons like the Control Center's, with the cover magnified under each one.</li>
+<li>Bar icons now share one size: each one is scaled to the same height, and icons and text grow together with one size setting. The bar height is set on its own, with a button to restore the default size.</li>
+<li>One selection color for the bar, the menus and their switches.</li>
+<li>The font is picked in Menu Bar Settings (it left Windhawk's settings page).</li>
+<li>Menu Bar Settings reorganized (bar language, font, themes, size and behavior); its drop-down lists use the window's own glass, and a row reacts only to clicks on its control.</li>
+<li>Now Playing: the bar icon is a thin round play or pause sign. In the &quot;Full cover&quot; layout, the buttons are white in light glass themes.</li>
+<li>Menu Bar Settings: the window can be moved from any empty spot and opens where it was left.</li>
+<li>Notifications: with no notifications, a small &quot;No notifications&quot; pill, like &quot;Edit Controls&quot;.</li>
+<li>Status pills (Caps Lock, Focus, audio output...) show the latest state: a new one of the same kind replaces the text of the one on screen instead of queuing behind it.</li>
+<li>New option: hide the bar while a window is maximized on its display. The window gets the whole height, and the bar comes back by itself when the window is restored or minimized, or on the desktop.</li>
+<li>New &quot;Hide with the handle&quot; option: a thin pill at the top center; a click shows the bar and windows move down for it (with the &quot;Window color&quot; background, the bar also takes the color of the active window's title bar); another click hides it. It's invisible while the bar is shown, until you point at it, and grows with a spring animation. While it's on, the other ways of hiding are off; &quot;Hide while maximized&quot; turns it off, since the bar comes back on its own. Hiding when the pointer touches the top was removed.</li>
+<li>New <strong>Window color</strong> bar background: transparent over the desktop, and the color of the title bar of the maximized window on that display; the color stays while a menu, Start, search or another window is in front. It replaces &quot;Solid background with a maximized window&quot;.</li>
+<li>Weather: a plain glass look for the widget, and a switch to turn off its animations.</li>
+<li>Fix: with &quot;Follow the background live&quot;, Now Playing and the Notifications panel follow the background too.</li>
+<li>Fix: after an update or recompile, the bar comes back on its own (before, the mod had to be turned off and on).</li>
+<li>Fix: with liquid glass, a panel that had just closed (Control Center, calendar, weather, tray) no longer shows up inside the next panel's background.</li>
+<li>Fix: opening Notifications no longer highlights the camera icon; the bar's highlight stays on the right item.</li>
+<li>Fix: with liquid glass, panels at the edge of the screen no longer show a clear strip along that edge.</li>
+<li>Fix: with the liquid bar, the bar no longer reflects the title bar of a maximized window below it.</li>
+<li>Fix: floating notifications with Glass or &quot;Window color&quot; and live on no longer show glass slivers at the ends of the top pill.</li>
+<li>Cleanup: removed unused code and translations.</li>
+<li>README: new demo with zoom on each feature (animated WebP, plus the full-quality MP4).</li>
+</ul>
+]]></content>
+        <author>
+            <name>Thiago Silva</name>
+            <uri>https://github.com/brideinflame-rgb</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Touchpad Relaxed Hand Tracking 1.1.0]]></title>
         <id>https://windhawk.net/mods/touchpad-relaxed-hand-tracking#ce1a605b853f4a015dffaef8ea6c6447bf6fcbfc</id>
@@ -460,96 +590,6 @@ File Explorer's setting.</li>
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar AI Quota 2.21.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-ai-quota#f5ea1a16e2eaa9677ded54fae897752525e0a323</id>
-        <link href="https://windhawk.net/mods/taskbar-ai-quota"/>
-        <updated>2026-11-14T20:03:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add a chart for Anthropic extra usage to the details flyout, with its monthly reset time, pace and projected limit time.</li>
-<li>Add an Extra usage chart setting to chart it over the month or the weekly window, or keep the bar.</li>
-<li>Add the pace mark to the Anthropic extra usage bar, and the reset time and projection to its notifications.</li>
-<li>Improve the Gauge % tile style to show a gauge for each quota.</li>
-<li>Improve the details flyout to list Anthropic's free resets by kind, each with its count and next expiry.</li>
-<li>Improve reset times a week or more ahead to show the date instead of the weekday.</li>
-<li>Fix Claude's renamed Max and Ultra plans showing their old names.</li>
-<li>Fix settings being replaced by defaults when they fail to load.</li>
-<li>Fix the details flyout opening on another screen, cut off or away from its bars near an end of the taskbar.</li>
-<li>Fix taskbar buttons' right-click menus opening too far left with the bars on the Left side.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Cleroth</name>
-            <uri>https://github.com/Cleroth</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Item Pins 1.1.5]]></title>
-        <id>https://windhawk.net/mods/explorer-item-pins#43b8a9cd94e699082b09c6c054278f680f583ffd</id>
-        <link href="https://windhawk.net/mods/explorer-item-pins"/>
-        <updated>2026-11-14T20:03:16.000Z</updated>
-        <content type="html"><![CDATA[<h1>Explorer Item Pins</h1>
-<p><strong>English</strong> · <a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/Explorer_Item_Pins/README.ru.md">Русский</a></p>
-<p>Explorer Item Pins keeps selected files and folders at the top of their parent folder in Windows File Explorer. Each folder has its own pins.</p>
-<h2>Features</h2>
-<table>
-<thead>
-<tr>
-<th style="text-align:center"><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Explorer_Item_Pins/Assets/Screenshots/Dark_Large_Icons.png" alt="Dark theme with large icons and the Pin command"></th>
-<th style="text-align:center"><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Explorer_Item_Pins/Assets/Screenshots/Light_Small_Icons.png" alt="Light theme with the Unpin command and its toolbar tooltip"></th>
-</tr>
-</thead>
-</table>
-<ul>
-<li><strong>Two ways to pin.</strong> Use the modern context menu or the pin button between <strong>Share</strong> and <strong>Delete</strong> on the command bar.</li>
-<li><strong>Sort and group.</strong> Pins stay at the top in either sort direction. With grouping on, they appear in the first group, <strong>Pinned</strong>. Explorer's sorting still applies within the group.</li>
-<li><strong>Pin indicator.</strong> A pushpin appears at the upper-right corner of the file or folder icon. It follows the icon size and works with thumbnails, lists, details, tiles and content view.</li>
-<li><strong>Interface languages.</strong> English, Russian, Spanish, German, Brazilian Portuguese, and Simplified Chinese.</li>
-</ul>
-<h2>Platforms</h2>
-<p>Requires Windows 11 x64 or ARM64 with the tabbed File Explorer.</p>
-<h2>Data exchange</h2>
-<p>Pins are stored separately for each Windows account. Uninstalling the mod removes its pins. Replacing a file under the same name keeps its pin. A rename within the same folder can keep the pin when the mod can identify the original file. Copying or moving an item to another folder does not carry its pin with it.</p>
-<h2>Usage</h2>
-<ol>
-<li>Select a file or folder and choose <strong>Pin in item pane</strong> in its context menu, or click the pin on the command bar.</li>
-<li>To remove the pin, select the item and choose <strong>Unpin from item pane</strong> or click the crossed-out pin on the command bar. The item returns to its usual position in the folder.</li>
-</ol>
-<p>In Windhawk, open the mod's <strong>Settings</strong> to control these options independently. All three are enabled by default.</p>
-<p>If the pin commands are missing from a File Explorer window that was already open when the mod was enabled or updated, reopen that window.</p>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Controls</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Context menu command</td>
-<td>Pin and unpin in the context menu</td>
-</tr>
-<tr>
-<td>Command bar button</td>
-<td>Pin and unpin on the File Explorer command bar</td>
-</tr>
-<tr>
-<td>Pinned item indicator</td>
-<td>The pushpin on pinned file and folder icons</td>
-</tr>
-</tbody>
-</table>
-<h2>Links</h2>
-<ul>
-<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/tree/main/Explorer_Item_Pins">Explorer Item Pins on GitHub</a></li>
-<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/README.md">DSN Windhawk Mods</a></li>
-</ul>
-]]></content>
-        <author>
-            <name>CTravkin</name>
-            <uri>https://github.com/CTravkin</uri>
         </author>
     </entry>
 </feed>
