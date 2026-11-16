@@ -74,7 +74,7 @@ Keep your apps on the **left or right side** of the Windows 11 taskbar. Each app
 - **Saved layout:** Keep your app positions after restarting Explorer or your PC.
 - **Custom layout:** Adjust spacing and the size of icons on the right.
 - **Multiple monitors:** Each compatible taskbar calculates its own usable area.
-- **Reliable widget reservations:** Automatically reserves space for Taskbar System Info and supports optional named widgets without treating icon decorations as obstacles.
+- **Widget-aware layout:** Keep app icons clear of supported taskbar widgets without moving the widgets themselves.
 
 ## How to use
 
@@ -83,23 +83,25 @@ Keep your apps on the **left or right side** of the Windows 11 taskbar. Each app
 3. Drag icons within the same zone to reorder them.
 4. Open the mod settings to adjust the layout.
 
+## Optional widget reservations
+
+If a widget needs its own space, you can add its exact XAML `Name` under **Additional reserved widget names (advanced)**. Separate names with commas or semicolons (up to 12). You can leave this setting empty.
+
+A named widget must be visible inside the taskbar's `RootGrid`, outside the app list and system tray. Its width must be between 8 DIP and the smaller of 650 DIP or 60% of the taskbar width. It must fit before the tray. Do not add names of icon decorations or overlays.
+
 ## Notes
 
 - Your Windows pinned apps are not changed.
-- The mod only reserves space for known widgets and elements listed in the optional settings. Unknown decorations are ignored to prevent false gaps. Mods that reposition the same app buttons may still conflict.
+- Other tools that move the same taskbar buttons or reserve their space may conflict with this mod.
 - If the taskbar is too crowded to fit both zones, Windows' normal layout is used until space is available again.
 - Secondary monitors show only the app buttons that Windows puts on each taskbar.
-- Taskbar System Info can move itself. Taskbar Zones respects its measured
-  position rather than forcing it to the right. If both mods are active,
-  keep Taskbar System Info's **Reserve taskbar space** option disabled to
-  avoid both mods trying to move the app button group.
 - Windows updates may affect compatibility.
 
 ## Credits
 
-**Taskbar Zones** is maintained by **Luiz Bizzio**. It is a separate, modified version of [Taskbar Split by Arkadiusz (Artllex)](https://github.com/Artllex/taskbar-split), with persistent per-app zones, cross-zone dragging and secondary taskbar support.
+**Taskbar Zones** is maintained by **Luiz Bizzio** and builds on earlier open-source taskbar work.
 
-Licensed under **GPL-3.0**. Additional code credits and copyright notices are in the source file.
+Licensed under **GPL-3.0**. Full source attribution and copyright notices are retained in the code.
 */
 // ==/WindhawkModReadme==
 
@@ -126,7 +128,7 @@ Licensed under **GPL-3.0**. Additional code credits and copyright notices are in
   $description: Put Start, Search, Widgets and Task View at the left edge. Recommended for the intended split layout.
 - extraReservedWidgets: ""
   $name: Additional reserved widget names (advanced)
-  $description: Comma-separated exact XAML Name values of widgets with real occupied rectangles. Leave empty unless needed. Never enter icon overlay names.
+  $description: Up to 12 comma- or semicolon-separated XAML Name values. Widgets must be visible in RootGrid, outside the app list and tray, 8 to 650 DIP wide (max 60% of taskbar width), and inside the area before the tray. Do not list icon overlays. Leave empty if unsure.
 */
 // ==/WindhawkModSettings==
 
@@ -216,10 +218,9 @@ void LoadSettings() {
     g_settings.systemButtonsLeft =
         Wh_GetIntSetting(L"systemButtonsLeft") != 0;
 
-    // The Windhawk settings API owns this buffer; release after copying.
-    LPCWSTR rawNames = Wh_GetStringSetting(L"extraReservedWidgets");
-    std::wstring names = rawNames ? rawNames : L"";
-    if (rawNames) Wh_FreeStringSetting(rawNames);
+    // The RAII helper releases the Windhawk setting string after copying.
+    std::wstring names =
+        WindhawkUtils::StringSetting::make(L"extraReservedWidgets").get();
     std::vector<std::wstring> parsed;
     size_t start = 0;
     while (start < names.size() && parsed.size() < 12) {
@@ -797,6 +798,8 @@ struct BoundaryWatch {
     ULONGLONG lastGoodTick = 0;
     ULONGLONG lastScanTick = 0;
     std::vector<HorizontalSpan> spans;
+    // Weak XAML references are confined to their owning taskbar UI thread.
+    std::unordered_map<std::wstring, winrt::weak_ref<FrameworkElement>> namedWidgets;
     ULONGLONG lastBoundaryLog = 0;
 };
 [[clang::no_destroy]] thread_local std::unordered_map<HWND, BoundaryWatch>
@@ -1083,6 +1086,61 @@ bool IsUsableReservedWidget(FrameworkElement const& element,
     return false;
 }
 
+// An advanced widget name must never resolve inside a task button template
+// or the system tray. Also reject decorative overlays which have no reserved
+// taskbar space. Keep searching after an unusable name match: another valid
+// element with the same Name may be inserted later in RootGrid.
+FrameworkElement FindReservedWidgetByName(
+        FrameworkElement const& node, FrameworkElement const& root,
+        std::wstring const& requested, double maxWidth, double maxHeight,
+        int depth = 0) {
+    if (!node || depth > 16) return nullptr;
+    auto name = node.Name();
+    if (name == L"TaskbarFrameRepeater" || name == L"SystemTrayFrame" ||
+        name == L"BlobShape" || name == L"WindhawkDotStack" ||
+        winrt::get_class_name(node) == L"SystemTray.SystemTrayFrame")
+        return nullptr;
+    if (node != root && name == requested.c_str() &&
+        IsUsableReservedWidget(node, root, maxWidth, maxHeight))
+        return node;
+    int count = media::VisualTreeHelper::GetChildrenCount(node);
+    for (int i = 0; i < count; ++i) {
+        auto child = media::VisualTreeHelper::GetChild(node, i)
+                         .try_as<FrameworkElement>();
+        if (auto match = FindReservedWidgetByName(
+                child, root, requested, maxWidth, maxHeight, depth + 1))
+            return match;
+    }
+    return nullptr;
+}
+
+// Cache only verified named widgets. Invalid, detached, or renamed elements
+// are removed and rediscovered, so rebuilding one monitor can't reuse the
+// widget from another monitor or from an obsolete XAML subtree.
+FrameworkElement CachedReservedWidgetByName(
+        FrameworkElement const& content, FrameworkElement const& root,
+        std::wstring const& name, double maxWidth, double maxHeight) {
+    BoundaryWatch* watch = nullptr;
+    auto owner = g_boundaryWatches.find(g_activeTaskbarWindow);
+    if (owner != g_boundaryWatches.end() &&
+        owner->second.content.get() == content)
+        watch = &owner->second;
+    if (watch) {
+        auto cached = watch->namedWidgets.find(name);
+        if (cached != watch->namedWidgets.end()) {
+            auto element = cached->second.get();
+            if (element && element.Name() == name &&
+                IsUsableReservedWidget(element, root, maxWidth, maxHeight))
+                return element;
+            watch->namedWidgets.erase(cached);
+        }
+    }
+    auto element = FindReservedWidgetByName(
+        root, root, name, maxWidth, maxHeight);
+    if (watch && element) watch->namedWidgets[name] = element;
+    return element;
+}
+
 std::vector<HorizontalSpan> CollectExternalSpans(FrameworkElement const& content) {
     std::vector<HorizontalSpan> spans;
     if (!content) return spans;
@@ -1121,10 +1179,22 @@ std::vector<HorizontalSpan> CollectExternalSpans(FrameworkElement const& content
         std::lock_guard<std::mutex> lock(g_reservedWidgetNamesMutex);
         customNames = g_reservedWidgetNames;
     }
+    // Drop names removed in settings so the per-window cache stays bounded.
+    if (auto watch = g_boundaryWatches.find(g_activeTaskbarWindow);
+        watch != g_boundaryWatches.end() && watch->second.content.get() == content) {
+        for (auto it = watch->second.namedWidgets.begin();
+             it != watch->second.namedWidgets.end();) {
+            if (std::find(customNames.begin(), customNames.end(), it->first) ==
+                customNames.end())
+                it = watch->second.namedWidgets.erase(it);
+            else
+                ++it;
+        }
+    }
     for (auto const& name : customNames) {
-        auto element = FindNamedDescendant(root, name.c_str(), 0);
-        if (!IsUsableReservedWidget(element, root,
-                std::min(650.0, width * 0.60), height)) continue;
+        auto element = CachedReservedWidgetByName(content, root, name,
+            std::min(650.0, width * 0.60), height);
+        if (!element) continue;
         try {
             double x = ElementX(element, content);
             double w = element.ActualWidth();
@@ -3019,7 +3089,7 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND window, UINT message, WPARAM wParam,
         // A previous monitor's widget sizes must not survive a resize,
         // reconnection, or DPI change into the current layout.
         RemoveBoundaryWatch(window);
-        PollBoundaryGeometry(window);
+        // The next arrange pass recreates the watch with fresh geometry.
         // Taskbar windows may be added or removed when displays change.
         // Windows will arrange each new secondary taskbar; the layout hook
         // installs its subclass when that taskbar becomes ready.
