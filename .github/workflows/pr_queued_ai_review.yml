@@ -1,0 +1,98 @@
+name: PR flow queued AI review
+
+on:
+  workflow_run:
+    workflows:
+      - PR mod validation
+    types:
+      - completed
+
+# Everything in the flow is done with the windhawk-reviewer app token, so the
+# workflow token only needs to look up the pull request and to check out the
+# default branch.
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # The pull request number is needed for the concurrency group of the next job,
+  # and workflow_run doesn't list the pull requests of a run from a fork, so the
+  # pull request is looked up by its head.
+  find-pr:
+    # Forks don't have the app's private key.
+    if: github.repository == 'ramensoftware/windhawk-mods'
+    runs-on: ubuntu-latest
+    outputs:
+      pr-number: ${{ steps.find.outputs.pr-number }}
+    steps:
+      - name: Find the pull request
+        id: find
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            if (!run.head_repository) {
+              core.info('The head repository of the run is gone');
+              return;
+            }
+
+            const { data: pullRequests } = await github.rest.pulls.list({
+              ...context.repo,
+              state: 'open',
+              head: `${run.head_repository.owner.login}:${run.head_branch}`,
+              per_page: 100,
+            });
+
+            // A run for an older commit is skipped, and the run for the head
+            // commit follows it.
+            const pullRequest = pullRequests.find((pr) => pr.head.sha === run.head_sha);
+            if (pullRequest) {
+              core.setOutput('pr-number', pullRequest.number);
+            } else {
+              core.info(`No open pull request has ${run.head_sha} as its head`);
+            }
+
+  run:
+    needs: find-pr
+    if: needs.find-pr.outputs.pr-number != ''
+    # The group is shared with pr_labels.yml and pr_commands.yml. The label is
+    # checked inside the group, so that a command that queues the review while
+    # the validation completes is either seen here or sees the completed
+    # validation itself.
+    concurrency:
+      group: pr-flow-labels-${{ needs.find-pr.outputs.pr-number }}
+      cancel-in-progress: false
+      queue: max
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Only the flow script is needed, so the mod sources are skipped.
+          sparse-checkout: .github
+
+      - name: Generate an app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          # The windhawk-reviewer app.
+          app-id: '4425681'
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
+      - name: Run the queued AI review
+        uses: actions/github-script@v9
+        env:
+          PR_NUMBER: ${{ needs.find-pr.outputs.pr-number }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          # A transient 5xx would otherwise fail the run halfway through a label
+          # change. 4xx codes stay exempt, so removeLabels still sees its 404.
+          retries: 3
+          script: |
+            const flow = require('${{ github.workspace }}/.github/pr_flow.cjs');
+            await flow.handleValidationCompleted({
+              github,
+              context,
+              core,
+              prNumber: Number(process.env.PR_NUMBER),
+            });

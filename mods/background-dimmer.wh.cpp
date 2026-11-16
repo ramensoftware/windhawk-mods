@@ -2,7 +2,7 @@
 // @id              background-dimmer
 // @name            Background Dimmer
 // @description     Dims unfocused windows with a solid tint, pattern or image, tuned live in a secondary configuration window
-// @version         1.1.0
+// @version         1.1.1
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
 // @include         windhawk-mod-uiaccess.exe
@@ -60,7 +60,7 @@ Brightness and contrast set the two pattern tones as *brightness ± contrast / 2
 /*
 - configHotkey: Win+Ctrl+Alt+D
   $name: Configuration window hotkey
-  $description: Opens the live configuration window. Modifiers (Ctrl, Alt, Shift, Win) and one key, joined with + (Win+Ctrl+Alt+D). If empty and the tray icon is off, the configuration window opens whenever these settings are saved.
+  $description: Opens the live configuration window. Win + Ctrl, Alt, Shift + key, like Win+Ctrl+Alt+D. If empty and the tray icon is off, the configuration window opens whenever these settings are saved.
 - toggleHotkey: ""
   $name: On/off hotkey
   $description: Turns the dimming on and off, same format as above.
@@ -252,7 +252,8 @@ UINT KeyFromName(const wchar_t* name) {
     return 0;
 }
 
-/// Parses "Ctrl+Alt+K" into MOD_* modifiers and a virtual key. False if empty or invalid.
+/// Parses "Win+Ctrl+K" into MOD_* modifiers and a virtual key. False if empty, invalid, or not Win plus another
+/// modifier: without Win it would take over typing keys (Shift+letter), and Windows uses most Win+letter keys.
 bool ParseHotkey(const wchar_t* text, UINT* mods, UINT* vk) {
     *mods = 0;
     *vk = 0;
@@ -278,7 +279,7 @@ bool ParseHotkey(const wchar_t* text, UINT* mods, UINT* vk) {
         else if (*vk || !(*vk = KeyFromName(tok)))
             return false;
     }
-    return *vk != 0;
+    return *vk != 0 && (*mods & MOD_WIN) && (*mods & (MOD_CONTROL | MOD_ALT | MOD_SHIFT));
 }
 
 bool RegisterHotkeyText(int id, const wchar_t* text) {
@@ -287,7 +288,7 @@ bool RegisterHotkeyText(int id, const wchar_t* text) {
         return false;
     UINT mods, vk;
     if (!ParseHotkey(text, &mods, &vk)) {
-        Wh_Log(L"Invalid hotkey: %s", text);
+        Wh_Log(L"Invalid hotkey (needs Win, Ctrl/Alt/Shift and one key): %s", text);
         return false;
     }
     if (!RegisterHotKey(g_hwndMain, id, mods | MOD_NOREPEAT, vk)) {

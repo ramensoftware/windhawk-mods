@@ -16,6 +16,13 @@ concurrency:
   group: deploy-static-content
   cancel-in-progress: true
 
+# The workflow token pushes the pages branch, and reads the pull requests and
+# their comments for the external catalog.
+permissions:
+  contents: write
+  issues: read
+  pull-requests: read
+
 env:
   PYTHONUTF8: '1'
 
