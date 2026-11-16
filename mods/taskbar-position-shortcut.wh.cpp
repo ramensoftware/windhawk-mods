@@ -4,7 +4,7 @@
 // @description     Add a native taskbar-position submenu with per-app rules, exclusions, maximized-window rules, and a configurable switching delay.
 // @version         0.0.1
 // @author          Oji
-// @github          eliogos
+// https://github.com/          eliogos
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -ladvapi32
