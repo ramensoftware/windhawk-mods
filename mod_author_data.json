@@ -1253,6 +1253,14 @@
     "githubId": 26241275,
     "homepages": []
   },
+  "https://github.com/judecjz": {
+    "author": "JudeCJz",
+    "github": "https://github.com/JudeCJz",
+    "githubId": 166135712,
+    "homepages": [
+      "https://github.com/JudeCJz/confetti-spawner"
+    ]
+  },
   "https://github.com/jvlasek": {
     "author": "Jakub Vlášek",
     "github": "https://github.com/jvlasek",
@@ -1721,6 +1729,12 @@
     "homepages": [
       "https://narayanchetri.dev"
     ]
+  },
+  "https://github.com/nathanaeru": {
+    "author": "Naeru",
+    "github": "https://github.com/nathanaeru",
+    "githubId": 192281218,
+    "homepages": []
   },
   "https://github.com/nehoray-bitan": {
     "author": "Nehoray-Bitan",

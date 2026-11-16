@@ -28,65 +28,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/11a970f47dad9320ed50ceb9c856452657328192/mods/bluetooth-no-sleep.wh.cpp"
       }
     },
-    "color-picker-eyedropper": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794796718242,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794796718242,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Naeru",
-        "compilerOptions": "-lgdi32 -lmsimg32 -ldwmapi -luxtheme -lshcore",
-        "description": "System-wide color picker overlay. Activated by a customizable hotkey (default: Win + Alt + C), it allows you to select any pixel on your screen and copy its color value in HEX, RGB, HSL, and CMYK formats.",
-        "github": "https://github.com/nathanaeru",
-        "include": [
-          "windhawk.exe"
-        ],
-        "license": "MIT",
-        "name": "Color Picker / Eyedropper Tool",
-        "version": "1.0.2"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7423",
-      "source": {
-        "sha256": "10de7f27a4c88b7f1232b752e009115b6da2108d77675b536183e7cd649ef1c0",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c12e3ddeedb0301e9d6352f4018f3f0707e2b326/mods/color-picker-eyedropper.wh.cpp"
-      }
-    },
-    "confetti-spawner": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794796718242,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794796718242,
-        "users": 0
-      },
-      "metadata": {
-        "author": "JudeCJz",
-        "compilerOptions": "-ld2d1 -ldwrite -lgdi32 -luser32 -lole32 -lshell32 -lwinmm",
-        "description": "Hold a hotkey to fire confetti or emoji across your screen",
-        "github": "https://github.com/JudeCJz",
-        "homepage": "https://github.com/JudeCJz/confetti-spawner",
-        "include": [
-          "windhawk.exe"
-        ],
-        "license": "MIT",
-        "name": "Confetti Spawner",
-        "version": "1.4.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7409",
-      "source": {
-        "sha256": "c657d27d35f1f85a6eb5f0dd8fab352436e3613ce8b8e77900ae4fa475561b3b",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6471a3b24694ce03a53de2b22e8ae0e27d843859/mods/confetti-spawner.wh.cpp"
-      }
-    },
     "explorer-core-context-menu-customizer": {
       "details": {
         "defaultSorting": 0,
@@ -336,6 +277,35 @@
       "source": {
         "sha256": "3a1e0f10e7ab714ec4af3fa6483030de22d2e1f6b1e1e511e9eadda818e44445",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3b284d718598ae924d4af8f3af3959f4e5c46d47/mods/titlebar-opacity-button.wh.cpp"
+      }
+    },
+    "win10-ime-tray-icon-fix": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794812695613,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794812695613,
+        "users": 0
+      },
+      "metadata": {
+        "author": "yumeyao",
+        "compilerOptions": "-lcomctl32",
+        "description": "Moves the input indicator to the left of the notification area so its width change cannot shift the tray icons. Alternative modes provided.",
+        "github": "https://github.com/yumeyao",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Windows 10 IME Tray Icon Fix",
+        "version": "1.1"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7447",
+      "source": {
+        "sha256": "90bea635c35324ff5f60874238e851695eddfadc9c2b0957cebe459388615876",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/5534e0993449597f18415c36c16e24b6ee0f73c1/mods/win10-ime-tray-icon-fix.wh.cpp"
       }
     },
     "windows-11-lock-screen-styler": {

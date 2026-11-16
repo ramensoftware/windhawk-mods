@@ -3527,6 +3527,31 @@
         "version": "1.0.0"
       }
     },
+    "color-picker-eyedropper": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794812474000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794812474000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Naeru",
+        "compilerOptions": "-lgdi32 -lmsimg32 -ldwmapi -luxtheme -lshcore",
+        "description": "System-wide color picker overlay. Activated by a customizable hotkey (default: Win + Alt + C), it allows you to select any pixel on your screen and copy its color value in HEX, RGB, HSL, and CMYK formats.",
+        "github": "https://github.com/nathanaeru",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Color Picker / Eyedropper Tool",
+        "version": "1.0.2"
+      }
+    },
     "command-on-window-focus": {
       "details": {
         "defaultSorting": 110,
@@ -3681,6 +3706,32 @@
         "license": "MIT",
         "name": "Compiz Desktop Cube for Windows 11",
         "version": "5.9.0"
+      }
+    },
+    "confetti-spawner": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794812469000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1794812469000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "JudeCJz",
+        "compilerOptions": "-ld2d1 -ldwrite -lgdi32 -luser32 -lole32 -lshell32 -lwinmm",
+        "description": "Hold a hotkey to fire confetti or emoji across your screen",
+        "github": "https://github.com/JudeCJz",
+        "homepage": "https://github.com/JudeCJz/confetti-spawner",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Confetti Spawner",
+        "version": "1.4.0"
       }
     },
     "confirm-closing-multiple-explorer-tabs": {
@@ -11890,13 +11941,13 @@
         "ratingUsers": 13,
         "reviews": 0,
         "trendingSorting": 11.9,
-        "updated": 1794175291000,
+        "updated": 1794812463000,
         "users": 119
       },
       "metadata": {
         "author": "DpakB",
         "compilerOptions": "-luser32 -lgdi32 -lshell32 -ladvapi32 -lole32 -lwinmm",
-        "description": "An all-in-one toolkit flyout for musicians, containing a chord library, a metronome, a tuner, a tap tempo calculator, a strumming pattern builder, an interactive circle of fifths and a timed note trainer for guitar, ukulele and piano.",
+        "description": "An all-in-one toolkit flyout for musicians: a chord library, a metronome, a tuner, a tap tempo calculator, a strumming pattern builder, the circle of fifths and a timed note trainer for guitar, ukulele and piano.",
         "donateUrl": "https://buymeacoffee.com/dpakb",
         "github": "https://github.com/DeepakBalaraman",
         "homepage": "https://dpakb.com",
@@ -11906,7 +11957,7 @@
         "license": "MIT",
         "name": "Musician's Toolkit",
         "twitter": "https://twitter.com/dpakb_",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "mute-focused-window": {
