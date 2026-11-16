@@ -1,0 +1,433 @@
+// ==WindhawkMod==
+// @id              kill-appframe-uwp
+// @name            Remove UWP titlebars (RE-UPLOAD, READ DESC)
+// @description     Remove the UWP titlebars defined by Windows 10.
+// @version         0.3
+// @author          Powernatureslol
+// @github          https://github.com/Erizur
+// @include         ApplicationFrameHost.exe
+// @include         explorer.exe
+// @architecture    x86-64
+// @compilerOptions -lcomdlg32 -luser32
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# What mod this is?
+This mod is suppose to expose the win32 titlebar on UWP apps, for classic theme
+or other themes. This mod was NOT made by me, but rather Erizur who made this mod.
+https://github.com/Erizur
+
+## Why a re-upload?
+The other current windhawk mod has issues where it breaks easily, and has general massive issues
+after a update.
+
+## what are the issues?
+Issues after testing includes:
+ - broken winaero with UWP
+ - broken borders 
+ - system instability
+ - random graphical issues with classic theme.
+
+## will this be ever updated?
+
+simply put it, Never, This mod was never made by me, and theres little to no need to 
+update it.
+
+## should i keep it?
+
+Running older versions of windows (10 21H2 - 11 24H2) will work with this mod as i tested it.
+but any testing with 26H2 and above has NOT been done and i do not recommend it.
+
+i would suggest using the other current windhawk mod as that has been fixed for 26H2.
+*/
+// ==/WindhawkModReadme==
+
+#include <libloaderapi.h>
+#include <minwindef.h>
+#include <windef.h>
+#include <windhawk_api.h>
+#include <windhawk_utils.h>
+#include <cstddef>
+#include <dcomp.h>
+#include <winnt.h>
+#include <winuser.h>
+#include <windows.h>
+
+typedef INT64 (* CTitleBar__CreateTitleBarWindow_t)(void *);
+CTitleBar__CreateTitleBarWindow_t CTitleBar__CreateTitleBarWindow_orig;
+INT64 __fastcall CTitleBar__CreateTitleBarWindow_hook(
+    void *pThis
+)
+{
+    return 0;
+}
+
+typedef INT64 (* CTitleBar__PaintButton_t)(INT64, INT64, INT64, UINT, int *, DWORD);
+CTitleBar__PaintButton_t CTitleBar__PaintButton_orig;
+INT64 __fastcall CTitleBar__PaintButton_hook(
+    INT64 a1,
+    INT64 a2,
+    INT64 a3,
+    UINT a4,
+    int *a5,
+    DWORD a6
+){
+    return 0;
+}
+
+typedef __int64 (* CTitleBar_ShowTitleBar_t)(void *, INT64, INT64, float);
+CTitleBar_ShowTitleBar_t CTitleBar_ShowTitleBar_orig;
+__int64 __fastcall CTitleBar_ShowTitleBar_hook(
+    void *pThis,
+    INT64 a2,
+    INT64 a3,
+    float a4
+)
+{
+    return 0;
+}
+
+typedef bool (* CTitleBar_HandleTitleBarMessage_t)(void *, HWND, UINT, WPARAM, LPARAM, INT64);
+CTitleBar_HandleTitleBarMessage_t CTitleBar_HandleTitleBarMessage_orig;
+bool __fastcall CTitleBar_HandleTitleBarMessage_hook(
+    void *pThis,
+    HWND hWnd,
+    UINT msg,
+    WPARAM wParam,
+    LPARAM lParam,
+    INT64 a6
+){
+    return false;
+}
+
+typedef void (* CTitleBar__UpdateDwmFrameInset_t)(void *);
+CTitleBar__UpdateDwmFrameInset_t CTitleBar__UpdateDwmFrameInset_orig;
+void __fastcall CTitleBar__UpdateDwmFrameInset_hook(
+    void *pThis
+){
+    return;
+}
+
+typedef INT64 (* CTitleBar__PlaceVisuals_t)(void *, RECT *, char);
+CTitleBar__PlaceVisuals_t CTitleBar__PlaceVisuals_orig;
+INT64 __fastcall CTitleBar__PlaceVisuals_hook(
+    void *pThis,
+    RECT *rct,
+    char a3
+){
+    return 0;
+}
+
+typedef INT64 (* CApplicationFrame__CreateFrameWindow_t)(void *);
+CApplicationFrame__CreateFrameWindow_t CApplicationFrame__CreateFrameWindow_orig;
+INT64 __fastcall CApplicationFrame__CreateFrameWindow_hook(
+    void *pThis
+){
+    CApplicationFrame__CreateFrameWindow_orig(pThis);
+
+    SetWindowLongPtr(*((HWND *)pThis + 3), GWL_STYLE, WS_OVERLAPPEDWINDOW | WS_DLGFRAME);
+
+    RemovePropW((HWND)*((INT64 *)pThis + 3), L"UIA_WindowPatternEnabled");
+    RemovePropW(*((HWND *)pThis + 3), L"UIA_HasOwnNonClientUIATree");
+    return 0;
+}
+
+typedef HWND (* CreateWindowInBandEx_t)(DWORD, LPCWSTR, LPCWSTR, DWORD,int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID, DWORD, DWORD);
+CreateWindowInBandEx_t CreateWindowInBandEx_orig;
+HWND WINAPI CreateWindowInBandEx_hook(
+    DWORD dwExStyle,
+    LPCWSTR lpClassName,
+    LPCWSTR lpWindowName,
+    DWORD dwStyle,
+    int x,
+    int y,
+    int nWidth,
+    int nHeight,
+    HWND hWndParent,
+    HMENU hMenu,
+    HINSTANCE hInstance,
+    LPVOID lpParam,
+    DWORD dwBand,
+    DWORD dwTypeFlags
+)
+{
+    if((dwExStyle & 0x00200000L) != 0) dwExStyle &= ~0x00200000L;
+
+    return CreateWindowInBandEx_orig(
+        dwExStyle,
+        lpClassName,
+        lpWindowName,
+        dwStyle,
+        x,
+        y,
+        nWidth,
+        nHeight,
+        hWndParent,
+        hMenu,
+        hInstance,
+        lpParam,
+        dwBand,
+        dwTypeFlags
+    );
+}
+
+typedef bool (* CTitleBar__UpdateBorderVisibilityAndMargins_t)(void *);
+CTitleBar__UpdateBorderVisibilityAndMargins_t CTitleBar__UpdateBorderVisibilityAndMargins_orig;
+bool __fastcall CTitleBar__UpdateBorderVisibilityAndMargins_hook(
+    void *pThis
+){
+    return 0;
+}
+
+typedef void (* CTitleBar__ShowHideTopBorder_t)(void *);
+CTitleBar__ShowHideTopBorder_t CTitleBar__ShowHideTopBorder_orig;
+void __fastcall CTitleBar__ShowHideTopBorder_hook(
+    void *pThis
+){
+    return;
+}
+
+typedef void (* CTitleBar__UpdateCurrentRestoreGlyph_t)(void *);
+CTitleBar__UpdateCurrentRestoreGlyph_t CTitleBar__UpdateCurrentRestoreGlyph_orig;
+void __fastcall CTitleBar__UpdateCurrentRestoreGlyph_hook(
+    void *pThis
+){
+    return;
+}
+
+typedef void (* CApplicationFrame__ReconcileWindowStyles_t)(void *, INT64);
+CApplicationFrame__ReconcileWindowStyles_t CApplicationFrame__ReconcileWindowStyles_orig;
+void __fastcall CApplicationFrame__ReconcileWindowStyles_hook(
+    void *pThis,
+    INT64 a2
+){
+    return;
+}
+
+typedef void (* CApplicationFrame_NotifyVisibleButtonsChange_t)(void *, UINT);
+CApplicationFrame_NotifyVisibleButtonsChange_t CApplicationFrame_NotifyVisibleButtonsChange_orig;
+void __fastcall CApplicationFrame_NotifyVisibleButtonsChange_hook(
+    void *pThis,
+    UINT a2
+){
+    return;
+}
+
+typedef INT64 (* CApplicationFrame__UpdateChildRootVisual_t)(void *);
+CApplicationFrame__UpdateChildRootVisual_t CApplicationFrame__UpdateChildRootVisual_orig;
+INT64 __fastcall CApplicationFrame__UpdateChildRootVisual_hook(
+    void *pThis
+){
+    return 0;
+}
+
+typedef INT64 (* CApplicationFrame__UpdateDwmAttributes_t)(void *);
+CApplicationFrame__UpdateDwmAttributes_t CApplicationFrame__UpdateDwmAttributes_orig;
+INT64 __fastcall CApplicationFrame__UpdateDwmAttributes_hook(
+    void *pThis
+){
+    return 0;
+}
+
+typedef INT64 (* CApplicationFrame__UpdateSystemVisualSize_t)(void *, void *);
+CApplicationFrame__UpdateSystemVisualSize_t CApplicationFrame__UpdateSystemVisualSize_orig;
+INT64 __fastcall CApplicationFrame__UpdateSystemVisualSize_hook(
+    void *pThis,
+    void *a2
+){
+    return 0;
+}
+
+void LoadSettings() {
+    //not yet!
+}
+
+// The mod is being initialized, load settings, hook functions, and do other
+// initialization stuff if required.
+BOOL Wh_ModInit() {
+    Wh_Log(L"Init");
+
+    LoadSettings();
+
+    HMODULE hAppFrameModule = LoadLibraryW(L"ApplicationFrame.dll");
+    HMODULE hUserModule = GetModuleHandleW(L"user32.dll");
+    if(!hAppFrameModule) {
+        Wh_Log(L"Failed to load ApplicationFrame.dll");
+        return FALSE;
+    }
+    if(!hUserModule) {
+        Wh_Log(L"Failed to load ApplicationFrame.dll");
+        return FALSE;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {
+                L"private: long __cdecl CTitleBar::_ShowTitleBar(void)"
+            },
+            (void **)&CTitleBar_ShowTitleBar_orig,
+            (void *)CTitleBar_ShowTitleBar_hook,
+            false
+        },
+        {
+            {
+                L"public: virtual bool __cdecl CTitleBar::HandleTitleBarMessage(struct HWND__ *,unsigned int,unsigned __int64,__int64,__int64 *)"
+            },
+            (void **)&CTitleBar_HandleTitleBarMessage_orig,
+            (void *)CTitleBar_HandleTitleBarMessage_hook,
+            false
+        },
+        {
+            {
+                L"private: long __cdecl CTitleBar::_CreateTitleBarWindow(void)"
+            },
+            (void **)&CTitleBar__CreateTitleBarWindow_orig,
+            (void *)CTitleBar__CreateTitleBarWindow_hook,
+            false
+        },
+        {
+            {
+                L"private: long __cdecl CTitleBar::_PaintButton(struct IDCompositionSurface *,enum CTitleBar::TitleBarControl,enum TITLE_BAR_BITMAP_TYPE,struct tagRECT const &,struct tagRECT const &)"
+            },
+            (void **)&CTitleBar__PaintButton_orig,
+            (void *)CTitleBar__PaintButton_hook,
+            false
+        },
+        {
+            {
+                L"private: void __cdecl CTitleBar::_UpdateDwmFrameInset(void)"
+            },
+            (void **)&CTitleBar__UpdateDwmFrameInset_orig,
+            (void *)CTitleBar__UpdateDwmFrameInset_hook,
+            false
+        },
+        {
+            {
+                L"private: long __cdecl CTitleBar::_PlaceVisuals(struct tagRECT const *,bool)"
+            },
+            (void **)&CTitleBar__PlaceVisuals_orig,
+            (void *)CTitleBar__PlaceVisuals_hook,
+            false
+        },
+        {
+            {
+                L"private: long __cdecl CApplicationFrame::_CreateFrameWindow(void)"
+            },
+            (void **)&CApplicationFrame__CreateFrameWindow_orig,
+            (void *)CApplicationFrame__CreateFrameWindow_hook,
+            false
+        },
+        {
+            {
+                L"private: bool __cdecl CTitleBar::UpdateBorderVisibilityAndMargins(void)"
+            },
+            (void **)&CTitleBar__UpdateBorderVisibilityAndMargins_orig,
+            (void *)CTitleBar__UpdateBorderVisibilityAndMargins_hook,
+            false
+        },
+        {
+            {
+                L"private: void __cdecl CTitleBar::_ShowHideTopBorder(void)"
+            },
+            (void **)&CTitleBar__ShowHideTopBorder_orig,
+            (void *)CTitleBar__ShowHideTopBorder_hook,
+            false
+        },
+        {
+            {
+                L"private: void __cdecl CTitleBar::_UpdateCurrentRestoreGlyph(void)"
+            },
+            (void **)&CTitleBar__UpdateCurrentRestoreGlyph_orig,
+            (void *)CTitleBar__UpdateCurrentRestoreGlyph_hook,
+            false
+        },
+        {
+            {
+                L"private: void __cdecl CApplicationFrame::_ReconcileWindowStyles(void)"
+            },
+            (void **)&CApplicationFrame__ReconcileWindowStyles_orig,
+            (void *)CApplicationFrame__ReconcileWindowStyles_hook,
+            false
+        },
+        {
+            {
+                L"public: virtual void __cdecl CApplicationFrame::NotifyVisibleButtonsChange(void)"
+            },
+            (void **)&CApplicationFrame_NotifyVisibleButtonsChange_orig,
+            (void *)CApplicationFrame_NotifyVisibleButtonsChange_hook,
+            false
+        },
+        {
+            {
+                L"private: long __cdecl CApplicationFrame::_UpdateChildRootVisual(void)"
+            },
+            (void **)&CApplicationFrame__UpdateChildRootVisual_orig,
+            (void *)CApplicationFrame__UpdateChildRootVisual_hook,
+            false
+        },
+        {
+            {
+                L"private: long __cdecl CApplicationFrame::_UpdateDwmAttributes(void)"
+            },
+            (void **)&CApplicationFrame__UpdateDwmAttributes_orig,
+            (void *)CApplicationFrame__UpdateDwmAttributes_hook,
+            false
+        },
+        {
+            {
+                L"private: void __cdecl CApplicationFrame::_UpdateSystemVisualSize(void *)"
+            },
+            (void **)&CApplicationFrame__UpdateSystemVisualSize_orig,
+            (void *)CApplicationFrame__UpdateSystemVisualSize_hook,
+            false
+        },
+        /*{
+            {
+                L"__imp_CreateWindowInBandEx"
+            },
+            (void **)CreateWindowInBandEx_orig,
+            (void *)CreateWindowInBandEx_hook,
+            false
+        }*/
+    };
+
+    WindhawkUtils::SYMBOL_HOOK userHooks[] = {
+        {
+            {
+                L"CreateWindowInBandEx"
+            },
+            (void **)&CreateWindowInBandEx_orig,
+            (void *)CreateWindowInBandEx_hook,
+            false
+        }
+    };
+
+    if (!WindhawkUtils::HookSymbols(
+        hAppFrameModule,
+        hooks,
+        ARRAYSIZE(hooks)
+    ) || !WindhawkUtils::HookSymbols(
+        hUserModule, 
+        userHooks,
+        ARRAYSIZE(userHooks)
+    ))
+    {
+        Wh_Log(L"Failed to hook, oh noes!");
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+// The mod is being unloaded, free all allocated resources.
+void Wh_ModUninit() {
+    Wh_Log(L"Uninit");
+}
+
+// The mod setting were changed, reload them.
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"SettingsChanged");
+
+    //LoadSettings();
+}
