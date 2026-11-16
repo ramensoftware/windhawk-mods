@@ -147,7 +147,8 @@ Cooldowns survive reloads; the flyout keeps the last reading and shows the next 
   * Notifications register
     `HKCU\Software\Classes\AppUserModelId\Windhawk.TaskbarAiUsage` while they
     are on. The mod deletes it when it unloads, when you turn notifications off,
-    and at start if notifications are off. After the first notification Windows
+    and at start if notifications are off. The key is volatile, so Windows also
+    discards it when you sign out. After the first notification Windows
     keeps its own entry in Settings > System > Notifications, which may remain
     after the mod is removed.
 
@@ -9157,9 +9158,12 @@ static PCWSTR ToastDisplayName() { return Tr(Str::NotificationAppName); }
 static std::atomic<bool> g_toastAumidWritten{false};
 // Serializes the registration writes and removals.
 static std::mutex g_toastAumidMutex;
+// True if this process created the AppUserModelId parent key. Guarded by g_toastAumidMutex.
+static bool g_toastAumidParentCreated = false;
 
+static constexpr PCWSTR kToastAumidParentKey = L"Software\\Classes\\AppUserModelId";
 static std::wstring ToastAumidKeyPath() {
-    return std::wstring(L"Software\\Classes\\AppUserModelId\\") + kToastAumid;
+    return std::wstring(kToastAumidParentKey) + L"\\" + kToastAumid;
 }
 
 enum class ToastResult {
@@ -9175,6 +9179,12 @@ static void RemoveToastAumidRegistration() {
     LONG rc = RegDeleteTreeW(HKEY_CURRENT_USER, ToastAumidKeyPath().c_str());
     if (rc != ERROR_SUCCESS && rc != ERROR_FILE_NOT_FOUND) {
         Wh_Log(L"Toast AUMID key removal failed: %ld", rc);
+    }
+    // The parent goes too if this process created it. RegDeleteKeyW fails while another app
+    // has a registration under it, which leaves it in place.
+    if (g_toastAumidParentCreated) {
+        RegDeleteKeyW(HKEY_CURRENT_USER, kToastAumidParentKey);
+        g_toastAumidParentCreated = false;
     }
     g_toastAumidWritten.store(false);
 }
@@ -9260,13 +9270,33 @@ static bool EnsureToastIconFile(std::wstring* path) {
 // creates (if missing or different) HKCU\Software\Classes\AppUserModelId\<AUMID> with DisplayName
 // and IconUri. It runs on the fetch thread right before a toast, and only while notifications are
 // enabled. The key is removed when the mod unloads, when notifications are turned off, and at
-// startup if a previous session ended without unloading and notifications are off.
+// startup if a previous session ended without unloading and notifications are off. It is volatile,
+// so Windows discards it at sign-out even if the mod never gets to remove it.
 static bool EnsureToastAumidRegistered() {
     std::lock_guard<std::mutex> lock(g_toastAumidMutex);
     std::wstring keyPath = ToastAumidKeyPath();
+    LONG rc = ERROR_SUCCESS;
+    if (!g_toastAumidWritten.load()) {
+        // The parent stays non-volatile: other apps keep persistent entries under it, and those
+        // can't be created under a volatile key.
+        HKEY parent = nullptr;
+        DWORD disposition = 0;
+        rc = RegCreateKeyExW(HKEY_CURRENT_USER, kToastAumidParentKey, 0, nullptr,
+                             REG_OPTION_NON_VOLATILE, KEY_QUERY_VALUE, nullptr, &parent,
+                             &disposition);
+        if (rc != ERROR_SUCCESS) {
+            Wh_Log(L"Toast AUMID parent key failed: %ld", rc);
+            return false;
+        }
+        RegCloseKey(parent);
+        if (disposition == REG_CREATED_NEW_KEY) g_toastAumidParentCreated = true;
+        // REG_OPTION_VOLATILE is ignored for a key that already exists, so a key left by an
+        // earlier session (possibly non-volatile) is removed first.
+        RegDeleteTreeW(HKEY_CURRENT_USER, keyPath.c_str());
+    }
     HKEY key = nullptr;
-    LONG rc = RegCreateKeyExW(HKEY_CURRENT_USER, keyPath.c_str(), 0, nullptr, 0,
-                              KEY_QUERY_VALUE | KEY_SET_VALUE, nullptr, &key, nullptr);
+    rc = RegCreateKeyExW(HKEY_CURRENT_USER, keyPath.c_str(), 0, nullptr, REG_OPTION_VOLATILE,
+                         KEY_QUERY_VALUE | KEY_SET_VALUE, nullptr, &key, nullptr);
     if (rc != ERROR_SUCCESS) {
         Wh_Log(L"Toast AUMID key failed: %ld", rc);
         return false;
