@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              no-click-touchpad-tap-and-hold
 // @name            No-Click Touchpad: Tap & Hold
-// @description     Tap a corner to right-click, hold two fingers to drag, and a ring around the pointer shows when the drag is on. For touchpads that no longer click.
+// @description     Tap a corner to right-click and hold two fingers to drag, with a ring around the pointer while the drag is on. For touchpads that no longer click.
 // @version         1.0
 // @author          mario0318
 // @github          https://github.com/mario0318
@@ -57,6 +57,9 @@ events are dropped for the duration of the drag. Apps that scroll with the touch
 directly instead of with scroll events (browsers, File Explorer and most newer apps)
 can still scroll a little while you drag.
 
+The ring is a small always-on-top window that clicks pass straight through. It only
+exists on screen while a drag is on, and follows the pointer until you lift.
+
 It runs as a Windhawk tool mod in its own background process, and doesn't inject into
 or change any other program. On Windhawk 2.0 that process runs with UIAccess, so the
 mod also works over windows of apps running as administrator. On Windhawk 1.x it
@@ -88,7 +91,7 @@ doesn't, so neither the corner tap nor the drag works over those windows.
   $description: Hold two fingers still, then move them, to drag
 - holdMs: 350
   $name: Hold time before drag (ms)
-  $description: Longer avoids starting a drag when you rest two fingers before scrolling
+  $description: 100 to 5000. Longer avoids starting a drag when you rest two fingers before scrolling
 - dragSpeed: 130
   $name: Drag pointer speed (%)
   $description: At 100, moving across the whole width of the touchpad moves the pointer across the whole width of the screen
@@ -204,7 +207,7 @@ static void LoadSettings() {
 
     s.maxTapMs = Clamp(Wh_GetIntSetting(L"maxTapMs"), 100, 1500);
     s.twoFingerDrag = Wh_GetIntSetting(L"twoFingerDrag") != 0;
-    s.holdMs = Clamp(Wh_GetIntSetting(L"holdMs"), 100, 2000);
+    s.holdMs = Clamp(Wh_GetIntSetting(L"holdMs"), 100, 5000);
     s.dragSpeed = Clamp(Wh_GetIntSetting(L"dragSpeed"), 20, 500) / 100.0;
 
     s.ring = wcscmp(WindhawkUtils::StringSetting::make(L"dragIndicator"), L"none") != 0;
@@ -225,9 +228,10 @@ static void LoadSettings() {
         }
     }
     g_s = s;
-    Wh_Log(L"Settings: corner %s %.2fx%.2f, cornerTap %d, twoFingerDrag %d, hold %u ms",
+    Wh_Log(L"Settings: corner %s %.2fx%.2f, cornerTap %d, twoFingerDrag %d, hold %u ms, "
+           L"ring %d #%02X%02X%02X",
            s.bottomLeft ? L"bottomLeft" : L"bottomRight", s.zoneW, s.zoneH, s.cornerTap,
-           s.twoFingerDrag, s.holdMs);
+           s.twoFingerDrag, s.holdMs, s.ring, s.ringR, s.ringG, s.ringB);
 }
 
 // ---------------------------------------------------------------------------
