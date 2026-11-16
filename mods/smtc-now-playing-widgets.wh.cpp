@@ -2,7 +2,7 @@
 // @id              smtc-now-playing-widgets
 // @name            SMTC Now Playing Desktop Widgets
 // @description     Multi-instance, multi-monitor Windows 11 Acrylic Now Playing widgets powered natively by SMTC with Standard, Album, Cardstock, and Simplified themes.
-// @version         1.0.7
+// @version         1.0.8
 // @author          minster586
 // @github          https://github.com/minster586
 // @homepage        https://links.smartcraft.me/@minster586
@@ -146,6 +146,7 @@ Displays up to 5 customizable, multi-monitor Now Playing widgets on your Windows
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -1443,8 +1444,7 @@ static LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
 
         case WM_LBUTTONUP: {
             if (pWs && pWs->isDragging) {
-                pWs->isDragging = false;
-                ReleaseCapture();
+                ReleaseCapture(); // WM_CAPTURECHANGED clears isDragging and saves position.
             }
             return 0;
         }
@@ -1694,10 +1694,10 @@ static void ClearMediaState() {
 
 static void RefreshFromSession(
     const GlobalSystemMediaTransportControlsSession& session,
-    std::wstring& lastTrackKey)
+    std::wstring& lastArtKey)
 {
     if (!session) {
-        lastTrackKey.clear();
+        lastArtKey.clear();
         ClearMediaState();
         return;
     }
@@ -1733,7 +1733,7 @@ static void RefreshFromSession(
             if (playing && lastUpdated.time_since_epoch().count() > 0) {
                 auto elapsedSinceUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(
                     winrt::clock::now() - lastUpdated).count();
-                if (elapsedSinceUpdate > 0 && elapsedSinceUpdate < 3600 * 1000) {
+                if (elapsedSinceUpdate > 0) {
                     relPos += elapsedSinceUpdate;
                     if (dur > 0 && relPos > dur) relPos = dur;
                 }
@@ -1743,37 +1743,64 @@ static void RefreshFromSession(
         auto props = session.TryGetMediaPropertiesAsync().get();
         std::wstring newTitle = L"No Data";
         std::wstring newArtist;
+        bool hasThumb = false;
         if (props) {
             newTitle = props.Title().c_str();
             newArtist = props.Artist().c_str();
             if (newTitle.empty()) newTitle = L"No Data";
+            hasThumb = (props.Thumbnail() != nullptr);
         }
 
-        std::wstring trackKey = newTitle + L"\n" + newArtist + L"\n" + std::to_wstring(dur);
-        bool trackChanged = (trackKey != lastTrackKey);
+        std::wstring artKey = newTitle + L"\n" + newArtist + L"\n" + std::to_wstring(dur) + (hasThumb ? L"\n1" : L"\n0");
+        bool artStateChanged = (artKey != lastArtKey);
         std::vector<uint8_t> newArt;
 
-        if (trackChanged && props) {
-            auto thumbRef = props.Thumbnail();
-            if (thumbRef) {
-                auto stream = thumbRef.OpenReadAsync().get();
-                if (stream) {
-                    uint64_t size = stream.Size();
-                    if (size > 0 && size < 15 * 1024 * 1024) {
-                        DataReader reader(stream.GetInputStreamAt(0));
-                        reader.LoadAsync(static_cast<uint32_t>(size)).get();
-                        newArt.resize(static_cast<size_t>(size));
-                        reader.ReadBytes(newArt);
-                        reader.Close();
+        if (artStateChanged) {
+            lastArtKey = artKey;
+            if (hasThumb && props) {
+                try {
+                    auto thumbRef = props.Thumbnail();
+                    if (thumbRef) {
+                        auto stream = thumbRef.OpenReadAsync().get();
+                        if (stream) {
+                            uint64_t size = stream.Size();
+                            if (size > 0 && size < 15 * 1024 * 1024) {
+                                DataReader reader(stream.GetInputStreamAt(0));
+                                reader.LoadAsync(static_cast<uint32_t>(size)).get();
+                                newArt.resize(static_cast<size_t>(size));
+                                reader.ReadBytes(newArt);
+                                reader.Close();
+                            }
+                            stream.Close();
+                        }
                     }
-                    stream.Close();
-                }
+                } catch (const winrt::hresult_error& ex) {
+                    Wh_Log(L"SMTC thumbnail read error: 0x%08X", ex.code().value);
+                } catch (...) {}
             }
-            lastTrackKey = trackKey;
         }
 
+        bool uiChanged = false;
         {
             std::lock_guard<std::mutex> lock(g_mediaMutex);
+            auto now = std::chrono::steady_clock::now();
+            int64_t prevExpectedPos = g_media.positionMs;
+            if (g_media.isPlaying && g_media.durationMs > 0) {
+                prevExpectedPos += std::chrono::duration_cast<std::chrono::milliseconds>(now - g_media.lastTimelineSync).count();
+                if (prevExpectedPos > g_media.durationMs) prevExpectedPos = g_media.durationMs;
+            }
+
+            if (g_media.title != newTitle ||
+                g_media.artist != newArtist ||
+                g_media.isPlaying != playing ||
+                g_media.isShuffleActive != shuffle ||
+                g_media.repeatMode != rep ||
+                g_media.durationMs != dur ||
+                std::llabs(relPos - prevExpectedPos) > 750 ||
+                artStateChanged) {
+                uiChanged = true;
+            }
+
             g_media.title = std::move(newTitle);
             g_media.artist = std::move(newArtist);
             g_media.isPlaying = playing;
@@ -1781,13 +1808,15 @@ static void RefreshFromSession(
             g_media.repeatMode = rep;
             g_media.positionMs = relPos;
             g_media.durationMs = dur;
-            g_media.lastTimelineSync = std::chrono::steady_clock::now();
-            if (trackChanged) {
+            g_media.lastTimelineSync = now;
+            if (artStateChanged) {
                 g_media.artBytes = std::move(newArt);
                 g_media.artVersion++;
             }
         }
-        NotifyUiMediaUpdated();
+        if (uiChanged) {
+            NotifyUiMediaUpdated();
+        }
     } catch (const winrt::hresult_error& ex) {
         Wh_Log(L"SMTC refresh error: 0x%08X (%s)", ex.code().value, ex.message().c_str());
     } catch (...) {
@@ -1825,7 +1854,7 @@ static DWORD WINAPI SmtcWorkerProc(LPVOID) {
         winrt::event_token tokMedia{};
         winrt::event_token tokPlayback{};
         winrt::event_token tokTimeline{};
-        std::wstring lastTrackKey;
+        std::wstring lastArtKey;
 
         auto bindSession = [&](const GlobalSystemMediaTransportControlsSession& newSess) {
             if (activeSession == newSess) return;
@@ -1837,7 +1866,7 @@ static DWORD WINAPI SmtcWorkerProc(LPVOID) {
                 } catch (...) {}
             }
             activeSession = newSess;
-            lastTrackKey.clear();
+            lastArtKey.clear();
             if (activeSession) {
                 tokMedia = activeSession.MediaPropertiesChanged([](auto&&, auto&&) { SignalSmtcRefresh(); });
                 tokPlayback = activeSession.PlaybackInfoChanged([](auto&&, auto&&) { SignalSmtcRefresh(); });
@@ -1849,11 +1878,11 @@ static DWORD WINAPI SmtcWorkerProc(LPVOID) {
         auto tokSessions = mgr.SessionsChanged([](auto&&, auto&&) { SignalSmtcRefresh(); });
 
         bindSession(ResolveBestSession(mgr));
-        RefreshFromSession(activeSession, lastTrackKey);
+        RefreshFromSession(activeSession, lastArtKey);
 
         HANDLE waitHandles[3] = {g_smtcStopEvent, g_cmdEvent, g_smtcRefreshEvent};
         while (true) {
-            DWORD waitRes = WaitForMultipleObjects(3, waitHandles, FALSE, 500);
+            DWORD waitRes = WaitForMultipleObjects(3, waitHandles, FALSE, INFINITE);
             if (waitRes == WAIT_OBJECT_0) {
                 break;
             }
@@ -1914,7 +1943,7 @@ static DWORD WINAPI SmtcWorkerProc(LPVOID) {
             }
 
             bindSession(ResolveBestSession(mgr));
-            RefreshFromSession(activeSession, lastTrackKey);
+            RefreshFromSession(activeSession, lastArtKey);
         }
 
         mgr.CurrentSessionChanged(tokCurrent);
@@ -1939,6 +1968,8 @@ static DWORD WINAPI SmtcWorkerProc(LPVOID) {
 // ============================================================================
 // Windhawk Tool Entry Points
 // ============================================================================
+void WhTool_ModUninit();
+
 BOOL WhTool_ModInit() {
     g_hInstance = GetModuleHandleW(nullptr);
 
@@ -1947,8 +1978,21 @@ BOOL WhTool_ModInit() {
     g_smtcRefreshEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_cmdEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
 
+    if (!g_uiReadyEvent || !g_smtcStopEvent || !g_smtcRefreshEvent || !g_cmdEvent) {
+        if (g_uiReadyEvent) { CloseHandle(g_uiReadyEvent); g_uiReadyEvent = nullptr; }
+        if (g_smtcStopEvent) { CloseHandle(g_smtcStopEvent); g_smtcStopEvent = nullptr; }
+        if (g_smtcRefreshEvent) { CloseHandle(g_smtcRefreshEvent); g_smtcRefreshEvent = nullptr; }
+        if (g_cmdEvent) { CloseHandle(g_cmdEvent); g_cmdEvent = nullptr; }
+        return FALSE;
+    }
+
     g_uiThreadHandle = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, nullptr);
     g_smtcThreadHandle = CreateThread(nullptr, 0, SmtcWorkerProc, nullptr, 0, nullptr);
+
+    if (!g_uiThreadHandle || !g_smtcThreadHandle) {
+        WhTool_ModUninit();
+        return FALSE;
+    }
 
     return TRUE;
 }
@@ -1987,9 +2031,20 @@ void WhTool_ModSettingsChanged() {
     }
 }
 
-// ============================================================================
-// Windhawk Tool Mod Boilerplate (Launching the Mod as a Standalone Tool)
-// ============================================================================
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
@@ -1999,6 +2054,12 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
     bool isService = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
@@ -2010,7 +2071,7 @@ BOOL Wh_ModInit() {
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
+        if (wcsncmp(argv[i], L"-service", sizeof("-service") - 1) == 0) {
             isService = true;
             break;
         }
@@ -2034,9 +2095,9 @@ BOOL Wh_ModInit() {
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutexW failed");
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
@@ -2050,7 +2111,7 @@ BOOL Wh_ModInit() {
         }
 
         IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
@@ -2075,11 +2136,11 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileNameW(nullptr, currentProcessPath,
-                               ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
-            Wh_Log(L"GetModuleFileNameW failed");
+            Wh_Log(L"GetModuleFileName failed");
             return;
     }
 
@@ -2089,10 +2150,13 @@ void Wh_ModAfterInit() {
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernel32.dll");
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        Wh_Log(L"GetModuleHandleW failed");
-        return;
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
     }
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
@@ -2107,12 +2171,12 @@ void Wh_ModAfterInit() {
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
                                                  "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
-        Wh_Log(L"GetProcAddress failed");
+        Wh_Log(L"CreateProcessInternalW not found");
         return;
     }
 
-    STARTUPINFOW si{
-        .cb = sizeof(STARTUPINFOW),
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
     PROCESS_INFORMATION pi;
