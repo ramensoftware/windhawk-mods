@@ -2,7 +2,7 @@
 // @id              explorer-extras
 // @name            Explorer Extras
 // @description     Beta. Additions for File Explorer, one switch per area: a Columns layout (Miller columns) and a details and preview pane for PDF, text, Markdown, images, video and sound.
-// @version         0.63.2
+// @version         0.66.1
 // @author          AristideBH
 // @github          https://github.com/AristideBH
 // @donateUrl       https://ko-fi.com/aristidebh
@@ -18,7 +18,7 @@
 
 ![Columns, the View menu and the details pane in File Explorer](https://raw.githubusercontent.com/AristideBH/windhawk-lib/3422bd28aa32f126030284b602fe06e1ddfceceb/explorer-extras/assets/captures/hero.png)
 
-Additions for File Explorer. The mod has several areas, each with its own page and switch in a settings window, so you use only what you like. Open the settings window from **Extras** at the bottom of the toolbar's ... menu.
+Additions for File Explorer. The mod has several areas, each with its own section and switch on this page, so you use only what you like.
 
 > **Beta, and vibe-coded.** This mod is in public beta. It is built largely with AI assistance and tested by hand by its author, without an independent code audit. Use it at your own judgment, and please report anything odd.
 
@@ -40,15 +40,15 @@ One pane in place of Explorer's Details and Preview panes, in Columns and in eve
 - The details of what is selected, by type. A folder's size and contents are counted in the background.
 - A fanned stack of thumbnails when several items are selected.
 - Alt+P, the View menu and the toolbar button show and hide it.
-- Each kind of preview can be switched off, and has a size limit, in the settings.
+- Each kind of preview can be switched off, and has a size limit, in the settings (Limits).
 
 Works with QuickLook.
 
 A short video tour: https://github.com/user-attachments/assets/14dddb22-8866-4082-aede-a6f5ed995bea
 
-Tested on Windows 11 24H2, on ARM64 and x86-64, in French and English. Needs Windhawk to download the symbols of FileExplorerExtensions.dll.
+Tested daily on Windows 11 24H2 on ARM64, in French and English; x86-64 was tested up to 0.55. Needs Windhawk to download the symbols of FileExplorerExtensions.dll.
 
-Bug reports and ideas: https://github.com/AristideBH/windhawk-lib/issues (the issue forms ask for the mod's version and diagnostics).
+Bug reports and ideas: https://github.com/AristideBH/windhawk-lib/issues (the issue forms ask for the mod's version and the log).
 
 If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh
 */
@@ -60,100 +60,104 @@ If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh
   - enabled: true
     $name: Enable Columns
     $description: Adds Columns to the View menu. Off removes it.
-  - restoreOnOpen: true
-    $name: Open new windows in Columns
-    $description: New Explorer windows open in Columns if it was your last layout. Picking another layout turns this off.
-  - desktopRealOnly: false
-    $name: Desktop column shows real items only
-    $description: Hides virtual items (This PC, Recycle Bin, Control Panel…) from the Desktop column.
-  - remoteMarks: true
-    $name: Mark remote items
-    $description: Shows a small icon on cloud-only files and on items on a network or a phone.
-  - rememberSort: true
-    $name: Remember sort and grouping
-    $description: Each folder keeps its own sort and grouping. When off, every column uses the first folder’s.
-  - rememberWidth: true
-    $name: Remember column widths
-    $description: A column you resize reopens at that width.
-  - rememberLayout: true
-    $name: Remember Columns per folder
-    $description: Each folder remembers whether it was left in Columns. Opening it turns Columns on or off to match.
-  - springLoad: true
-    $name: Open folders while dragging
-    $description: Hold dragged items on a folder for about 0.7 s to open it in the next column.
-  - lastEdge: false
-    $name: Border after the last column
-    $description: Draws a separator line on the right of the last column.
-  - staleAccent: true
-    $name: Accent badge on the path chevron
-    $description: The chevron of the folder you came from sits in a round accent badge, instead of a muted one.
-  - oddRows: false
-    $name: Alternate row shading
-    $description: Every other row is a shade apart, to follow a line across a wide column.
-  - foldersFirst: true
-    $name: Folders first
-    $description: Folders are listed before files in each column, whatever the sort.
-  - harmonizeWidths: true
-    $name: Shift + double-click to even widths
-    $description: Shift + double-click a column border gives all columns the same width. They stay so until a border is double-clicked alone.
-  - keepStale: true
-    $name: Keep columns after choosing a file
-    $description: Columns to the right stay, dimmed, when you choose a file or several items. Off closes them.
-  - headerKeyboard: false
-    $name: Keyboard on group headers
-    $description: Arrow keys reach group headers. Left, Right and Enter collapse and expand them.
-  - doubleClickUp: false
-    $name: Double-click empty space to go up
-    $description: Goes up one folder. In the first column, the parent folder is added in front.
-  - focusRect: true
-    $name: Show the focus outline
-    $description: Draws an outline around the item under the keyboard cursor. The selection highlight always shows.
-  - background: explorer
-    $name: Panel background
-    $description: Explorer uses its own file list colour. Theme uses the standard dark or light colour.
-    $options:
-    - explorer: Explorer colour
-    - theme: Theme colour
-  - sidebarRoot: false
-    $name: Sidebar sets the first column
-    $description: Clicking Home, Gallery, OneDrive or a pinned folder makes it the first column. The tree (This PC, drives, Network) still follows the columns.
-  - minWidth: 160
-    $name: Minimum column width
-  - maxWidth: 420
-    $name: Maximum column width
-    $description: Columns fit their longest name up to this width. Longer names are shortened.
-  - maxItems: 5000
-    $name: Maximum items per column
+  - behaviour:
+    - restoreOnOpen: true
+      $name: Open new windows in Columns
+      $description: New Explorer windows open in Columns if it was your last layout. Picking another layout turns this off.
+    - keepStale: true
+      $name: Keep columns after choosing a file
+      $description: Columns to the right stay, dimmed, when you choose a file or several items. Off closes them.
+    - headerKeyboard: false
+      $name: Keyboard on group headers
+      $description: Arrow keys reach group headers. Left, Right and Enter collapse and expand them.
+    - doubleClickUp: false
+      $name: Double-click empty space to go up
+      $description: Goes up one folder. In the first column, the parent folder is added in front.
+    $name: Behaviour
+  - content:
+    - foldersFirst: true
+      $name: Folders first
+      $description: Folders are listed before files in each column, whatever the sort.
+    - desktopRealOnly: false
+      $name: Desktop column shows real items only
+      $description: Hides virtual items (This PC, Recycle Bin, Control Panel…) from the Desktop column.
+    $name: Content
+  - layout:
+    - minWidth: 160
+      $name: Minimum column width
+      $description: Columns fit their longest name, but not below this width (in pixels).
+    - maxWidth: 420
+      $name: Maximum column width
+      $description: Columns fit their longest name up to this width (in pixels). Longer names are shortened.
+    - harmonizeWidths: true
+      $name: Shift + double-click to even widths
+      $description: Shift + double-click a column border gives all columns the same width. They stay so until a border is double-clicked alone.
+    - focusRect: true
+      $name: Show the focus outline
+      $description: Draws an outline around the item under the keyboard cursor. The selection highlight always shows.
+    - background: explorer
+      $name: Panel background
+      $description: Explorer uses its own file list colour. Theme uses the standard dark or light colour.
+      $options:
+      - explorer: Explorer colour
+      - theme: Theme colour
+    - staleAccent: true
+      $name: Accent badge on the path chevron
+      $description: The chevron of the folder you came from sits in a round accent badge, instead of a muted one.
+    - oddRows: false
+      $name: Alternate row shading
+      $description: Every other row is a shade apart, to follow a line across a wide column.
+    $name: Layout
+  - memory:
+    - rememberSort: true
+      $name: Remember sort and grouping
+      $description: Each folder keeps its own sort and grouping. When off, every column uses the first folder’s.
+    - rememberWidth: true
+      $name: Remember column widths
+      $description: A column you resize reopens at that width.
+    - rememberLayout: true
+      $name: Remember Columns per folder
+      $description: Each folder remembers whether it was left in Columns. Opening it turns Columns on or off to match.
+    $name: Memory
   $name: Columns
 - details:
-  - autoPreview: true
-    $name: Open previews by themselves
-    $description: When off, a button on the preview opens it, and switches back to the thumbnail.
   - detailsPane: true
     $name: Details pane
-    $description: Replaces Explorer’s Details pane with a preview and the details of what is selected.
-  - previewRedirect: true
-    $name: Preview pane opens this pane
-    $description: Choosing Explorer’s Preview pane (Alt+P) shows this pane instead.
-  - paneAnimation: true
-    $name: Animate the pane
-    $description: The content slides and fades in when the selection changes.
-  - previewImages: true
-    $name: Preview images
-    $description: Shows pictures at full size in the pane, with zoom and pan.
-  - previewMedia: true
-    $name: Preview video and sound
-    $description: Plays video and sound files in the pane.
+    $description: Replaces Explorer’s Details and Preview panes with one pane that holds a preview and the details of what is selected.
+  - pane:
+    - previewRedirect: true
+      $name: Preview pane opens this pane
+      $description: When Explorer’s Preview pane is turned on (Alt+P or the View menu), this pane opens in its place.
+    - paneAnimation: true
+      $name: Animate the pane
+      $description: The content slides and fades in when the selection changes.
+    - autoPreview: true
+      $name: Open previews by themselves
+      $description: When off, a button on the preview opens it, and switches back to the thumbnail.
+    $name: Pane
+  - previews:
+    - livePreview: true
+      $name: Preview documents and code
+      $description: Shows PDF, text, Markdown and Office files in the pane.
+    - previewImages: true
+      $name: Preview images
+      $description: Shows pictures at full size in the pane, with zoom and pan.
+    - previewMedia: true
+      $name: Preview video and sound
+      $description: Plays video and sound files in the pane.
+    $name: Previews
+  $name: Details pane
+- limits:
+  - maxItems: 5000
+    $name: Maximum items per column
+    $description: A column lists at most this many items. A bigger folder shows the first ones in the sort order.
   - previewMaxMb: 60
     $name: Largest document to preview (MB)
     $description: Bigger PDFs and Office files keep the thumbnail.
   - previewMaxMp: 40
     $name: Largest image to open at once (megapixels)
     $description: Bigger pictures wait for a click on the card's button.
-  - livePreview: true
-    $name: Preview documents and code
-    $description: Shows PDF, text, Markdown and Office files in the pane.
-  $name: Details pane
+  $name: Limits
 */
 // ==/WindhawkModSettings==
 
@@ -232,6 +236,14 @@ namespace mud = winrt::Microsoft::UI::Dispatching;
 namespace {
 
 std::atomic<bool> g_unloading{false};
+
+// A log line that is only for a test build (build.py --debug defines EXTRAS_VERBOSE): lines that
+// come with every click, selection or drag would bury the ones that matter.
+#ifdef EXTRAS_VERBOSE
+#define Wh_LogV(...) Wh_Log(__VA_ARGS__)
+#else
+#define Wh_LogV(...) ((void)0)
+#endif
 
 // The handle of the mod's own image. GetModuleHandleW(nullptr) is explorer.exe, which outlives the mod.
 HINSTANCE ModHandle() {
@@ -324,6 +336,15 @@ struct CoroutineGuard {
     ~CoroutineGuard() { g_coroutines--; }
 };
 
+// A call of the shell that runs a message loop of its own (a menu command, a delete with its
+// confirmation, Properties, a drag) can be on this thread's stack when the cleanup comes. The cleanup
+// must not delete what those frames use: it waits until the count is back to zero.
+thread_local int t_modalDepth = 0;
+struct ModalScope {
+    ModalScope() { t_modalDepth++; }
+    ~ModalScope() { t_modalDepth--; }
+};
+
 std::atomic<bool> g_follow{true};
 std::atomic<bool> g_detailsPane{true};     // The merged details pane.
 std::atomic<bool> g_previewRedirect{true};  // The Preview pane shows the merged pane.
@@ -332,10 +353,10 @@ std::atomic<bool> g_paneAnim{true};         // The content of the pane slides an
 ULONGLONG g_paneLeaveUntil = 0;  // While the details pane slides out, the Columns panel stays behind it.
 std::atomic<bool> g_enabled{true};
 std::atomic<bool> g_restore{true};
-std::atomic<bool> g_sidebarRoot{false};
+std::atomic<bool> g_sidebarRoot{true};   // Fixed: a click in the navigation pane makes its folder the first column.
 std::atomic<bool> g_focusRect{true};
 std::atomic<bool> g_doubleClickUp{false};
-std::atomic<bool> g_lastEdge{false};
+std::atomic<bool> g_lastEdge{false};      // Fixed: no line on the right of the last column.
 std::atomic<bool> g_headerKeyboard{false};
 std::atomic<bool> g_keepStale{true};
 std::atomic<bool> g_foldersFirst{true};
@@ -349,11 +370,11 @@ std::atomic<bool> g_paneMuted{false};
 std::atomic<bool> g_staleAccent{true};  // The chevron of the folder you came from sits in an accent badge.
 std::atomic<bool> g_autoPreview{true};  // The real preview opens by itself; otherwise a button opens it.
 std::atomic<bool> g_harmonize{true};
-std::atomic<bool> g_springLoad{true};
+std::atomic<bool> g_springLoad{true};     // Fixed: a folder held under a drag opens.
 std::atomic<bool> g_rememberSort{true};
 std::atomic<bool> g_rememberWidth{true};
 std::atomic<bool> g_rememberLayout{true};
-std::atomic<bool> g_remoteMarks{true};
+std::atomic<bool> g_remoteMarks{true};   // Fixed: the marks of cloud, network and device items.
 std::atomic<bool> g_desktopRealOnly{false};
 std::atomic<int> g_backgroundMode{0};  // 0 Explorer, 1 theme
 std::atomic<int> g_styleVersion{0};
@@ -545,227 +566,62 @@ struct Entry {
 
 // ---- Settings ----
 //
-// Every setting is declared once in settings.schema.json. build.py writes the
-// block Windhawk reads and the table below from it. The rest of the mod reads a
-// setting by its id, never by Windhawk's key, so the window that comes next can put
-// its own value in front of Windhawk's in one place.
+// Every setting is declared once in settings.schema.json. build.py writes the block Windhawk reads
+// (with the groups and sub-groups of its page) and the table below from it. The rest of the mod reads
+// a setting by its id, never by Windhawk's key. (The mod had a settings window of its own until 0.65;
+// see docs/settings-window-notes.md.)
 
 enum class SettingKind { Bool, Int, Enum, String };
 
 struct SettingInfo {
-    const wchar_t* id;            // "dragOut".
-    const wchar_t* key;           // Windhawk's name for it: "columns.dragOut", "debugLog".
+    const wchar_t* id;            // "restoreOnOpen".
+    const wchar_t* key;           // Windhawk's name for it: "columns.behaviour.restoreOnOpen".
     SettingKind kind;
     int defaultInt;               // Bool and Int.
     const wchar_t* defaultText;   // Enum and String.
     int minValue;                 // Int: the limits, both 0 for none.
     int maxValue;
-    const wchar_t* name;
-    const wchar_t* description;
-    const wchar_t* page;          // "home", "columns", or "" for none.
-    const wchar_t* card;          // The card of the page it sits in.
-    bool windhawkOnly;            // Not shown in the settings window.
-    const wchar_t* options;       // Enum: "value=Label|value=Label".
     bool rebuild;                 // A change needs the columns read or fitted again.
 };
 
-struct SettingCard {
-    const wchar_t* id;
-    const wchar_t* name;
-};
-
-// A text of the mod's own windows and menus, by id. English now; the table is where
-// translations will come in.
+// A text of the mod's own menus, by id, in English and in French.
 struct StringInfo {
     const wchar_t* id;
     const wchar_t* text;
 };
 
-// The texts of a setting in French (the other languages are not done): its title and its description.
-struct SettingText {
-    const wchar_t* id;
-    const wchar_t* name;
-    const wchar_t* description;
-};
-
 constexpr SettingInfo kSettings[] = {
-    {L"enabled", L"columns.enabled", SettingKind::Bool, 1, L"", 0, 0,
-     L"Enable Columns",
-     L"Adds Columns to the View menu. Off removes it.",
-     L"home", L"feature", false, L"", false},
-    {L"restoreOnOpen", L"columns.restoreOnOpen", SettingKind::Bool, 1, L"", 0, 0,
-     L"Open new windows in Columns",
-     L"New Explorer windows open in Columns if it was your last layout. Picking another layout turns this off.",
-     L"columns", L"behaviour", false, L"", false},
-    {L"desktopRealOnly", L"columns.desktopRealOnly", SettingKind::Bool, 0, L"", 0, 0,
-     L"Desktop column shows real items only",
-     L"Hides virtual items (This PC, Recycle Bin, Control Panel\u2026) from the Desktop column.",
-     L"columns", L"content", false, L"", true},
-    {L"remoteMarks", L"columns.remoteMarks", SettingKind::Bool, 1, L"", 0, 0,
-     L"Mark remote items",
-     L"Shows a small icon on cloud-only files and on items on a network or a phone.",
-     L"columns", L"content", false, L"", true},
-    {L"rememberSort", L"columns.rememberSort", SettingKind::Bool, 1, L"", 0, 0,
-     L"Remember sort and grouping",
-     L"Each folder keeps its own sort and grouping. When off, every column uses the first folder\u2019s.",
-     L"columns", L"dragmemory", false, L"", false},
-    {L"rememberWidth", L"columns.rememberWidth", SettingKind::Bool, 1, L"", 0, 0,
-     L"Remember column widths",
-     L"A column you resize reopens at that width.",
-     L"columns", L"dragmemory", false, L"", false},
-    {L"rememberLayout", L"columns.rememberLayout", SettingKind::Bool, 1, L"", 0, 0,
-     L"Remember Columns per folder",
-     L"Each folder remembers whether it was left in Columns. Opening it turns Columns on or off to match.",
-     L"columns", L"dragmemory", false, L"", false},
-    {L"springLoad", L"columns.springLoad", SettingKind::Bool, 1, L"", 0, 0,
-     L"Open folders while dragging",
-     L"Hold dragged items on a folder for about 0.7 s to open it in the next column.",
-     L"columns", L"dragmemory", false, L"", false},
-    {L"lastEdge", L"columns.lastEdge", SettingKind::Bool, 0, L"", 0, 0,
-     L"Border after the last column",
-     L"Draws a separator line on the right of the last column.",
-     L"columns", L"layout", false, L"", true},
-    {L"staleAccent", L"columns.staleAccent", SettingKind::Bool, 1, L"", 0, 0,
-     L"Accent badge on the path chevron",
-     L"The chevron of the folder you came from sits in a round accent badge, instead of a muted one.",
-     L"columns", L"layout", false, L"", true},
-    {L"oddRows", L"columns.oddRows", SettingKind::Bool, 0, L"", 0, 0,
-     L"Alternate row shading",
-     L"Every other row is a shade apart, to follow a line across a wide column.",
-     L"columns", L"layout", false, L"", true},
-    {L"autoPreview", L"details.autoPreview", SettingKind::Bool, 1, L"", 0, 0,
-     L"Open previews by themselves",
-     L"When off, a button on the preview opens it, and switches back to the thumbnail.",
-     L"details", L"pane", false, L"", false},
-    {L"foldersFirst", L"columns.foldersFirst", SettingKind::Bool, 1, L"", 0, 0,
-     L"Folders first",
-     L"Folders are listed before files in each column, whatever the sort.",
-     L"columns", L"content", false, L"", true},
-    {L"harmonizeWidths", L"columns.harmonizeWidths", SettingKind::Bool, 1, L"", 0, 0,
-     L"Shift + double-click to even widths",
-     L"Shift + double-click a column border gives all columns the same width. They stay so until a border is double-clicked alone.",
-     L"columns", L"layout", false, L"", true},
-    {L"keepStale", L"columns.keepStale", SettingKind::Bool, 1, L"", 0, 0,
-     L"Keep columns after choosing a file",
-     L"Columns to the right stay, dimmed, when you choose a file or several items. Off closes them.",
-     L"columns", L"behaviour", false, L"", false},
-    {L"headerKeyboard", L"columns.headerKeyboard", SettingKind::Bool, 0, L"", 0, 0,
-     L"Keyboard on group headers",
-     L"Arrow keys reach group headers. Left, Right and Enter collapse and expand them.",
-     L"columns", L"behaviour", false, L"", false},
-    {L"doubleClickUp", L"columns.doubleClickUp", SettingKind::Bool, 0, L"", 0, 0,
-     L"Double-click empty space to go up",
-     L"Goes up one folder. In the first column, the parent folder is added in front.",
-     L"columns", L"behaviour", false, L"", false},
-    {L"focusRect", L"columns.focusRect", SettingKind::Bool, 1, L"", 0, 0,
-     L"Show the focus outline",
-     L"Draws an outline around the item under the keyboard cursor. The selection highlight always shows.",
-     L"columns", L"layout", false, L"", true},
-    {L"background", L"columns.background", SettingKind::Enum, 0, L"explorer", 0, 0,
-     L"Panel background",
-     L"Explorer uses its own file list colour. Theme uses the standard dark or light colour.",
-     L"columns", L"layout", false, L"explorer=Explorer colour|theme=Theme colour", true},
-    {L"sidebarRoot", L"columns.sidebarRoot", SettingKind::Bool, 0, L"", 0, 0,
-     L"Sidebar sets the first column",
-     L"Clicking Home, Gallery, OneDrive or a pinned folder makes it the first column. The tree (This PC, drives, Network) still follows the columns.",
-     L"columns", L"behaviour", false, L"", false},
-    {L"minWidth", L"columns.minWidth", SettingKind::Int, 160, L"", 80, 800,
-     L"Minimum column width",
-     L"",
-     L"columns", L"layout", false, L"", true},
-    {L"maxWidth", L"columns.maxWidth", SettingKind::Int, 420, L"", 80, 1200,
-     L"Maximum column width",
-     L"Columns fit their longest name up to this width. Longer names are shortened.",
-     L"columns", L"layout", false, L"", true},
-    {L"maxItems", L"columns.maxItems", SettingKind::Int, 5000, L"", 50, 20000,
-     L"Maximum items per column",
-     L"",
-     L"columns", L"content", false, L"", true},
-    {L"detailsPane", L"details.detailsPane", SettingKind::Bool, 1, L"", 0, 0,
-     L"Details pane",
-     L"Replaces Explorer\u2019s Details pane with a preview and the details of what is selected.",
-     L"home", L"feature", false, L"", false},
-    {L"previewRedirect", L"details.previewRedirect", SettingKind::Bool, 1, L"", 0, 0,
-     L"Preview pane opens this pane",
-     L"Choosing Explorer\u2019s Preview pane (Alt+P) shows this pane instead.",
-     L"details", L"pane", false, L"", false},
-    {L"paneAnimation", L"details.paneAnimation", SettingKind::Bool, 1, L"", 0, 0,
-     L"Animate the pane",
-     L"The content slides and fades in when the selection changes.",
-     L"details", L"pane", false, L"", false},
-    {L"previewImages", L"details.previewImages", SettingKind::Bool, 1, L"", 0, 0,
-     L"Preview images",
-     L"Shows pictures at full size in the pane, with zoom and pan.",
-     L"details", L"types", false, L"", false},
-    {L"previewMedia", L"details.previewMedia", SettingKind::Bool, 1, L"", 0, 0,
-     L"Preview video and sound",
-     L"Plays video and sound files in the pane.",
-     L"details", L"types", false, L"", false},
-    {L"previewMaxMb", L"details.previewMaxMb", SettingKind::Int, 60, L"", 1, 1024,
-     L"Largest document to preview (MB)",
-     L"Bigger PDFs and Office files keep the thumbnail.",
-     L"details", L"types", false, L"", false},
-    {L"previewMaxMp", L"details.previewMaxMp", SettingKind::Int, 40, L"", 4, 400,
-     L"Largest image to open at once (megapixels)",
-     L"Bigger pictures wait for a click on the card's button.",
-     L"details", L"types", false, L"", false},
-    {L"livePreview", L"details.livePreview", SettingKind::Bool, 1, L"", 0, 0,
-     L"Preview documents and code",
-     L"Shows PDF, text, Markdown and Office files in the pane.",
-     L"details", L"pane", false, L"", false},
-};
-
-constexpr SettingCard kCards[] = {
-    {L"layout", L"Layout and look"},
-    {L"behaviour", L"Behaviour"},
-    {L"dragmemory", L"Drag and drop and memory"},
-    {L"content", L"Content and advanced"},
-    {L"pane", L"Details pane"},
-    {L"types", L"Previews"},
-};
-
-constexpr const wchar_t* kWhatsNew[] = {
-    L"Extras in the View menu opens this window. Settings apply at once, and Reset goes back to Windhawk\u2019s values.",
-    L"Hold Shift and double-click a column border to give every column the same width.",
-    L"Drag rows to another window, the desktop, the navigation pane or the tab strip. Hold them on a folder to open it.",
-    L"Archives can be dragged out of, and a phone\u2019s folders and OneDrive syncing show their own marks.",
-    L"The toolbar\u2019s Select all, Invert selection and Select none reach the columns.",
+    {L"enabled", L"columns.enabled", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"restoreOnOpen", L"columns.behaviour.restoreOnOpen", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"keepStale", L"columns.behaviour.keepStale", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"headerKeyboard", L"columns.behaviour.headerKeyboard", SettingKind::Bool, 0, L"", 0, 0, false},
+    {L"doubleClickUp", L"columns.behaviour.doubleClickUp", SettingKind::Bool, 0, L"", 0, 0, false},
+    {L"foldersFirst", L"columns.content.foldersFirst", SettingKind::Bool, 1, L"", 0, 0, true},
+    {L"desktopRealOnly", L"columns.content.desktopRealOnly", SettingKind::Bool, 0, L"", 0, 0, true},
+    {L"minWidth", L"columns.layout.minWidth", SettingKind::Int, 160, L"", 80, 800, true},
+    {L"maxWidth", L"columns.layout.maxWidth", SettingKind::Int, 420, L"", 80, 1200, true},
+    {L"harmonizeWidths", L"columns.layout.harmonizeWidths", SettingKind::Bool, 1, L"", 0, 0, true},
+    {L"focusRect", L"columns.layout.focusRect", SettingKind::Bool, 1, L"", 0, 0, true},
+    {L"background", L"columns.layout.background", SettingKind::Enum, 0, L"explorer", 0, 0, true},
+    {L"staleAccent", L"columns.layout.staleAccent", SettingKind::Bool, 1, L"", 0, 0, true},
+    {L"oddRows", L"columns.layout.oddRows", SettingKind::Bool, 0, L"", 0, 0, true},
+    {L"rememberSort", L"columns.memory.rememberSort", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"rememberWidth", L"columns.memory.rememberWidth", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"rememberLayout", L"columns.memory.rememberLayout", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"detailsPane", L"details.detailsPane", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"previewRedirect", L"details.pane.previewRedirect", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"paneAnimation", L"details.pane.paneAnimation", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"autoPreview", L"details.pane.autoPreview", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"livePreview", L"details.previews.livePreview", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"previewImages", L"details.previews.previewImages", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"previewMedia", L"details.previews.previewMedia", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"maxItems", L"limits.maxItems", SettingKind::Int, 5000, L"", 50, 20000, true},
+    {L"previewMaxMb", L"limits.previewMaxMb", SettingKind::Int, 60, L"", 1, 1024, false},
+    {L"previewMaxMp", L"limits.previewMaxMp", SettingKind::Int, 40, L"", 4, 400, false},
 };
 
 constexpr StringInfo kStrings[] = {
-    {L"window.title", L"Explorer Extras"},
-    {L"menu.extras", L"Extras"},
     {L"menu.columns", L"Columns"},
-    {L"page.home", L"Explorer Extras"},
-    {L"home.title", L"Explorer Extras"},
-    {L"home.subtitle", L"Optional additions to File Explorer, each one with its own page and switch."},
-    {L"tip.title", L"Tip"},
-    {L"tip.body", L"Choose Columns in the View menu of a File Explorer window. The Extras entry at the bottom of the ... menu on the toolbar opens this window."},
-    {L"tip.gotit", L"Got it"},
-    {L"card.features", L"Features"},
-    {L"card.status", L"Status"},
-    {L"card.actions", L"Quick actions"},
-    {L"card.about", L"About"},
-    {L"about.creator", L"Made by AristideBH"},
-    {L"about.detail", L"Explorer Extras is free and open source. Bug reports and ideas are welcome on GitHub."},
-    {L"about.link", L"Source code on GitHub"},
-    {L"status.version", L"Version"},
-    {L"status.windows", L"Windows"},
-    {L"status.hooks", L"Hooks"},
-    {L"status.hooks.detail", L"The Explorer extension the mod hooks into."},
-    {L"status.found", L"Found"},
-    {L"status.notfound", L"Not found"},
-    {L"action.copy", L"Copy diagnostics"},
-    {L"action.copy.detail", L"Version, settings and state, as text, to paste in a message."},
-    {L"action.copy.done", L"Copied"},
-    {L"action.copy.fail", L"Could not copy"},
-    {L"action.reset", L"Reset to Windhawk\u2019s settings"},
-    {L"action.reset.detail", L"Every setting goes back to what Windhawk\u2019s page for the mod says."},
-    {L"columns.title", L"Columns"},
-    {L"columns.subtitle", L"A Columns layout in the View menu: Miller columns drawn with Explorer\u2019s own controls."},
-    {L"columns.note", L"Changes apply at once. The mod keeps them in front of Windhawk\u2019s page, and a later edit on that page for the same setting wins. Reset on the Explorer Extras page goes back to Windhawk\u2019s values."},
-    {L"details.title", L"Details pane"},
-    {L"details.subtitle", L"One pane for the preview and the details of what is selected, in place of Explorer\u2019s Details and Preview panes."},
     {L"pane.open", L"Open"},
     {L"pane.copypath", L"Copy path"},
     {L"pane.copypaths", L"Copy paths"},
@@ -778,7 +634,6 @@ constexpr StringInfo kStrings[] = {
     {L"pane.files", L"Files"},
     {L"pane.totalsize", L"Total size"},
     {L"pane.contains", L"Contains"},
-    {L"pane.location", L"Location"},
     {L"pane.types", L"Types"},
     {L"pane.clicktocopy", L"Click to copy"},
     {L"pane.more", L"More details"},
@@ -792,39 +647,7 @@ constexpr StringInfo kStrings[] = {
 };
 
 constexpr StringInfo kStringsFr[] = {
-    {L"window.title", L"Explorer Extras"},
-    {L"menu.extras", L"Extras"},
     {L"menu.columns", L"Colonnes"},
-    {L"page.home", L"Explorer Extras"},
-    {L"home.title", L"Explorer Extras"},
-    {L"home.subtitle", L"Ajouts facultatifs \u00E0 l\u2019Explorateur de fichiers, chacun avec sa page et son interrupteur."},
-    {L"tip.title", L"Astuce"},
-    {L"tip.body", L"Choisissez Colonnes dans le menu Affichage d\u2019une fen\u00EAtre de l\u2019Explorateur. L\u2019entr\u00E9e Extras en bas du menu \u2026 de la barre d\u2019outils ouvre cette fen\u00EAtre."},
-    {L"tip.gotit", L"Compris"},
-    {L"card.features", L"Fonctionnalit\u00E9s"},
-    {L"card.status", L"\u00C9tat"},
-    {L"card.actions", L"Actions rapides"},
-    {L"card.about", L"\u00C0 propos"},
-    {L"about.creator", L"Cr\u00E9\u00E9 par AristideBH"},
-    {L"about.detail", L"Explorer Extras est libre et open source. Les rapports de bugs et les id\u00E9es sont les bienvenus sur GitHub."},
-    {L"about.link", L"Code source sur GitHub"},
-    {L"status.version", L"Version"},
-    {L"status.windows", L"Windows"},
-    {L"status.hooks", L"Crochets"},
-    {L"status.hooks.detail", L"L\u2019extension de l\u2019Explorateur sur laquelle le mod s\u2019accroche."},
-    {L"status.found", L"Trouv\u00E9e"},
-    {L"status.notfound", L"Introuvable"},
-    {L"action.copy", L"Copier les diagnostics"},
-    {L"action.copy.detail", L"Version, r\u00E9glages et \u00E9tat, en texte, \u00E0 coller dans un message."},
-    {L"action.copy.done", L"Copi\u00E9"},
-    {L"action.copy.fail", L"Copie impossible"},
-    {L"action.reset", L"Revenir aux r\u00E9glages de Windhawk"},
-    {L"action.reset.detail", L"Chaque r\u00E9glage reprend la valeur de la page du mod dans Windhawk."},
-    {L"columns.title", L"Colonnes"},
-    {L"columns.subtitle", L"Une disposition en colonnes dans le menu Affichage : des colonnes de Miller dessin\u00E9es avec les contr\u00F4les de l\u2019Explorateur."},
-    {L"columns.note", L"Les changements s\u2019appliquent tout de suite. Le mod les garde devant la page de Windhawk, et une modification ult\u00E9rieure du m\u00EAme r\u00E9glage sur cette page l\u2019emporte. \u00AB Revenir aux r\u00E9glages de Windhawk \u00BB sur la page Explorer Extras r\u00E9tablit les valeurs de Windhawk."},
-    {L"details.title", L"Volet des d\u00E9tails"},
-    {L"details.subtitle", L"Un seul volet pour l\u2019aper\u00E7u et les d\u00E9tails de la s\u00E9lection, \u00E0 la place des volets D\u00E9tails et Aper\u00E7u de l\u2019Explorateur."},
     {L"pane.open", L"Ouvrir"},
     {L"pane.copypath", L"Copier le chemin"},
     {L"pane.copypaths", L"Copier les chemins"},
@@ -837,7 +660,6 @@ constexpr StringInfo kStringsFr[] = {
     {L"pane.files", L"Fichiers"},
     {L"pane.totalsize", L"Taille totale"},
     {L"pane.contains", L"Contient"},
-    {L"pane.location", L"Emplacement"},
     {L"pane.types", L"Types"},
     {L"pane.clicktocopy", L"Cliquer pour copier"},
     {L"pane.more", L"Plus de d\u00E9tails"},
@@ -849,52 +671,7 @@ constexpr StringInfo kStringsFr[] = {
     {L"pane.showpreview", L"Afficher l\u2019aper\u00E7u"},
     {L"pane.showthumb", L"Afficher la miniature"},
 };
-
-constexpr SettingCard kCardsFr[] = {
-    {L"layout", L"Disposition et apparence"},
-    {L"behaviour", L"Comportement"},
-    {L"dragmemory", L"Glisser-d\u00E9poser et m\u00E9moire"},
-    {L"content", L"Contenu et options avanc\u00E9es"},
-    {L"pane", L"Volet des d\u00E9tails"},
-    {L"types", L"Aper\u00E7us"},
-};
-
-constexpr SettingText kSettingsFr[] = {
-    {L"enabled", L"Activer les colonnes", L"Ajoute Colonnes au menu Affichage. D\u00E9sactiv\u00E9, l\u2019entr\u00E9e dispara\u00EEt."},
-    {L"restoreOnOpen", L"Ouvrir les nouvelles fen\u00EAtres en colonnes", L"Les nouvelles fen\u00EAtres s\u2019ouvrent en colonnes si c\u2019\u00E9tait votre derni\u00E8re disposition. Choisir une autre disposition d\u00E9sactive ce r\u00E9glage."},
-    {L"desktopRealOnly", L"La colonne Bureau n\u2019affiche que les vrais \u00E9l\u00E9ments", L"Masque les \u00E9l\u00E9ments virtuels (Ce PC, Corbeille, Panneau de configuration\u2026) de la colonne Bureau."},
-    {L"remoteMarks", L"Marquer les \u00E9l\u00E9ments distants", L"Affiche une petite ic\u00F4ne sur les fichiers cloud non t\u00E9l\u00E9charg\u00E9s et sur les \u00E9l\u00E9ments d\u2019un r\u00E9seau ou d\u2019un t\u00E9l\u00E9phone."},
-    {L"rememberSort", L"M\u00E9moriser le tri et le regroupement", L"Chaque dossier garde son tri et son regroupement. D\u00E9sactiv\u00E9, toutes les colonnes reprennent ceux du premier dossier."},
-    {L"rememberWidth", L"M\u00E9moriser les largeurs de colonne", L"Une colonne que vous redimensionnez se rouvre \u00E0 cette largeur."},
-    {L"rememberLayout", L"M\u00E9moriser les colonnes par dossier", L"Chaque dossier retient s\u2019il a \u00E9t\u00E9 quitt\u00E9 en colonnes. L\u2019ouvrir active ou d\u00E9sactive les colonnes en cons\u00E9quence."},
-    {L"springLoad", L"Ouvrir les dossiers pendant un glissement", L"Maintenez les \u00E9l\u00E9ments gliss\u00E9s sur un dossier environ 0,7 s pour l\u2019ouvrir dans la colonne suivante."},
-    {L"lastEdge", L"Bordure apr\u00E8s la derni\u00E8re colonne", L"Trace un trait de s\u00E9paration \u00E0 droite de la derni\u00E8re colonne."},
-    {L"staleAccent", L"Pastille d\u2019accent sur le chevron du chemin", L"Le chevron du dossier d\u2019o\u00F9 vous venez est dans une pastille ronde de la couleur d\u2019accentuation, au lieu d\u2019une pastille discr\u00E8te."},
-    {L"oddRows", L"Lignes altern\u00E9es", L"Une ligne sur deux est l\u00E9g\u00E8rement teint\u00E9e, pour suivre une ligne dans une colonne large."},
-    {L"autoPreview", L"Ouvrir les aper\u00E7us automatiquement", L"D\u00E9sactiv\u00E9, un bouton sur l\u2019aper\u00E7u l\u2019ouvre et permet de revenir \u00E0 la miniature."},
-    {L"foldersFirst", L"Dossiers en premier", L"Les dossiers sont list\u00E9s avant les fichiers dans chaque colonne, quel que soit le tri."},
-    {L"harmonizeWidths", L"Maj + double-clic pour \u00E9galiser les largeurs", L"Maj + double-clic sur une bordure de colonne donne la m\u00EAme largeur \u00E0 toutes les colonnes. Elles le restent jusqu\u2019\u00E0 un double-clic seul sur une bordure."},
-    {L"keepStale", L"Garder les colonnes apr\u00E8s le choix d\u2019un fichier", L"Les colonnes de droite restent, estomp\u00E9es, quand vous choisissez un fichier ou plusieurs \u00E9l\u00E9ments. D\u00E9sactiv\u00E9, elles se ferment."},
-    {L"headerKeyboard", L"Clavier sur les en-t\u00EAtes de groupe", L"Les fl\u00E8ches atteignent les en-t\u00EAtes de groupe. Gauche, Droite et Entr\u00E9e les replient et les d\u00E9plient."},
-    {L"doubleClickUp", L"Double-clic sur le vide pour remonter", L"Remonte d\u2019un dossier. Dans la premi\u00E8re colonne, le dossier parent est ajout\u00E9 devant."},
-    {L"focusRect", L"Afficher le contour de focus", L"Trace un contour autour de l\u2019\u00E9l\u00E9ment sous le curseur du clavier. La s\u00E9lection reste toujours visible."},
-    {L"background", L"Arri\u00E8re-plan du panneau", L"L\u2019Explorateur utilise la couleur de sa liste de fichiers. Th\u00E8me utilise la couleur standard sombre ou claire."},
-    {L"sidebarRoot", L"La barre lat\u00E9rale d\u00E9finit la premi\u00E8re colonne", L"Cliquer sur Accueil, Galerie, OneDrive ou un dossier \u00E9pingl\u00E9 en fait la premi\u00E8re colonne. L\u2019arborescence (Ce PC, lecteurs, R\u00E9seau) suit toujours les colonnes."},
-    {L"minWidth", L"Largeur minimale des colonnes", L""},
-    {L"maxWidth", L"Largeur maximale des colonnes", L"Les colonnes s\u2019ajustent \u00E0 leur nom le plus long jusqu\u2019\u00E0 cette largeur. Les noms plus longs sont raccourcis."},
-    {L"maxItems", L"Nombre maximal d\u2019\u00E9l\u00E9ments par colonne", L""},
-    {L"detailsPane", L"Volet des d\u00E9tails", L"Remplace le volet D\u00E9tails de l\u2019Explorateur par un aper\u00E7u et les d\u00E9tails de la s\u00E9lection."},
-    {L"previewRedirect", L"Le volet Aper\u00E7u ouvre ce volet", L"Choisir le volet Aper\u00E7u de l\u2019Explorateur (Alt+P) affiche ce volet \u00E0 la place."},
-    {L"paneAnimation", L"Animer le volet", L"Le contenu glisse et s\u2019estompe \u00E0 chaque changement de s\u00E9lection."},
-    {L"previewImages", L"Aper\u00E7u des images", L"Affiche les images en taille r\u00E9elle dans le volet, avec zoom et d\u00E9placement."},
-    {L"previewMedia", L"Aper\u00E7u des vid\u00E9os et des sons", L"Lit les fichiers vid\u00E9o et audio dans le volet."},
-    {L"previewMaxMb", L"Document le plus gros \u00E0 pr\u00E9visualiser (Mo)", L"Les PDF et fichiers Office plus gros gardent la miniature."},
-    {L"previewMaxMp", L"Image la plus grande \u00E0 ouvrir d\u2019embl\u00E9e (m\u00E9gapixels)", L"Les images plus grandes attendent un clic sur le bouton de la carte."},
-    {L"livePreview", L"Aper\u00E7u des documents et du code", L"Affiche les PDF, le texte, le Markdown et les fichiers Office dans le volet."},
-};
 constexpr size_t kSettingCount = sizeof(kSettings) / sizeof(kSettings[0]);
-constexpr size_t kCardCount = sizeof(kCards) / sizeof(kCards[0]);
-constexpr size_t kWhatsNewCount = sizeof(kWhatsNew) / sizeof(kWhatsNew[0]);
 constexpr size_t kStringCount = sizeof(kStrings) / sizeof(kStrings[0]);
 
 // The language of Windows' display: French has its own table, every other language is English.
@@ -923,40 +700,6 @@ const wchar_t* Str(const wchar_t* id) {
     return id;
 }
 
-// The title and the description of a setting, in the language of the display.
-std::wstring SettingName(SettingInfo const& info) {
-    if (FrenchUi()) {
-        for (auto const& text : kSettingsFr) {
-            if (wcscmp(text.id, info.id) == 0) {
-                return text.name;
-            }
-        }
-    }
-    return info.name;
-}
-
-std::wstring SettingDescription(SettingInfo const& info) {
-    if (FrenchUi()) {
-        for (auto const& text : kSettingsFr) {
-            if (wcscmp(text.id, info.id) == 0) {
-                return text.description;
-            }
-        }
-    }
-    return info.description;
-}
-
-std::wstring CardName(size_t index) {
-    if (FrenchUi()) {
-        for (auto const& card : kCardsFr) {
-            if (wcscmp(card.id, kCards[index].id) == 0) {
-                return card.name;
-            }
-        }
-    }
-    return kCards[index].name;
-}
-
 const SettingInfo* FindSetting(const wchar_t* id) {
     for (size_t i = 0; i < kSettingCount; i++) {
         if (wcscmp(kSettings[i].id, id) == 0) {
@@ -966,84 +709,12 @@ const SettingInfo* FindSetting(const wchar_t* id) {
     return nullptr;
 }
 
-// ---- Where a value comes from ----
-//
-// Windhawk's page holds the default. The settings window writes an override, kept
-// in the mod's own storage as text under "ui.<id>", together with the value
-// Windhawk's page had at that moment under "ui.seen.<id>". The value in use is the
-// override, unless Windhawk's page has been edited since: that difference is a new
-// edit on the page, and it wins and clears the override.
-
-std::wstring WindhawkValueText(const SettingInfo* info) {
-    if (info->kind == SettingKind::Bool || info->kind == SettingKind::Int) {
-        return std::to_wstring(Wh_GetIntSetting(info->key));
-    }
-    std::wstring result = info->defaultText;
-    auto value = WindhawkUtils::StringSetting::make(info->key);
-    if (value.get()) {
-        result = value.get();
-    }
-    return result;
-}
-
-bool ReadStored(const std::wstring& name, std::wstring* out) {
-    wchar_t buffer[256];
-    size_t length = Wh_GetStringValue(name.c_str(), buffer, ARRAYSIZE(buffer));
-    if (!length) {
-        return false;
-    }
-    *out = buffer;
-    return true;
-}
-
-std::wstring EffectiveText(const SettingInfo* info) {
-    std::wstring windhawk = WindhawkValueText(info);
-    std::wstring override;
-    if (ReadStored(std::wstring(L"ui.") + info->id, &override)) {
-        std::wstring seen;
-        if (ReadStored(std::wstring(L"ui.seen.") + info->id, &seen) && seen != windhawk) {
-            Wh_DeleteValue((std::wstring(L"ui.") + info->id).c_str());
-            Wh_DeleteValue((std::wstring(L"ui.seen.") + info->id).c_str());
-            return windhawk;  // Edited on Windhawk's page since: the page wins.
-        }
-        return override;
-    }
-    return windhawk;
-}
-
-bool SettingIsOverridden(const SettingInfo* info) {
-    std::wstring stored;
-    return ReadStored(std::wstring(L"ui.") + info->id, &stored);
-}
-
-// The window's choice. The same as Windhawk's value needs no override, and the
-// override that was there goes.
-void WriteSettingOverride(const SettingInfo* info, const std::wstring& text) {
-    std::wstring name = std::wstring(L"ui.") + info->id;
-    std::wstring seenName = std::wstring(L"ui.seen.") + info->id;
-    std::wstring windhawk = WindhawkValueText(info);
-    if (text == windhawk) {
-        Wh_DeleteValue(name.c_str());
-        Wh_DeleteValue(seenName.c_str());
-        return;
-    }
-    Wh_SetStringValue(name.c_str(), text.c_str());
-    Wh_SetStringValue(seenName.c_str(), windhawk.c_str());
-}
-
-void ClearAllOverrides() {
-    for (size_t i = 0; i < kSettingCount; i++) {
-        Wh_DeleteValue((std::wstring(L"ui.") + kSettings[i].id).c_str());
-        Wh_DeleteValue((std::wstring(L"ui.seen.") + kSettings[i].id).c_str());
-    }
-}
-
 int SettingInt(const wchar_t* id) {
     const SettingInfo* info = FindSetting(id);
     if (!info) {
         return 0;
     }
-    int value = _wtoi(EffectiveText(info).c_str());
+    int value = Wh_GetIntSetting(info->key);
     if (info->minValue || info->maxValue) {
         value = std::clamp(value, info->minValue, info->maxValue);
     }
@@ -1056,7 +727,30 @@ bool SettingBool(const wchar_t* id) {
 
 std::wstring SettingText(const wchar_t* id) {
     const SettingInfo* info = FindSetting(id);
-    return info ? EffectiveText(info) : std::wstring();
+    if (!info) {
+        return std::wstring();
+    }
+    std::wstring result = info->defaultText;
+    auto value = WindhawkUtils::StringSetting::make(info->key);
+    if (value.get()) {
+        result = value.get();
+    }
+    return result;
+}
+
+// A number that changes when a setting changes that needs the columns read or fitted again.
+unsigned long long RebuildSignature() {
+    unsigned long long signature = 1469598103934665603ULL;
+    for (size_t i = 0; i < kSettingCount; i++) {
+        if (!kSettings[i].rebuild) {
+            continue;
+        }
+        unsigned long long value = kSettings[i].kind == SettingKind::Int || kSettings[i].kind == SettingKind::Bool
+                                       ? (unsigned long long)SettingInt(kSettings[i].id)
+                                       : (unsigned long long)std::hash<std::wstring>()(SettingText(kSettings[i].id));
+        signature = (signature ^ value) * 1099511628211ULL;
+    }
+    return signature;
 }
 // ---- Who navigates Explorer's view? ----
 //
@@ -1192,8 +886,7 @@ void InstallBrowseTrace(IShellBrowser* browser) {
     // RemoveMenusSB, SetStatusTextSB, EnableModelessSB, TranslateAcceleratorSB,
     // and BrowseObject at slot 11.
     void* target = vtable[11];
-    BOOL ok = Wh_SetFunctionHook(target, (void*)BrowseObject_Hook,
-                                 (void**)&BrowseObject_Original);
+    BOOL ok = WindhawkUtils::SetFunctionHook((BrowseObject_t)target, BrowseObject_Hook, &BrowseObject_Original);
     if (ok) {
         Wh_ApplyHookOperations();
     }
@@ -1599,7 +1292,7 @@ void GroupFallback(IShellFolder* folder, const SortSpec& spec,
     IShellFolder2* folder2 = nullptr;
     folder->QueryInterface(IID_PPV_ARGS(&folder2));
     if (!folder2) {
-        Wh_Log(L"group fallback: no IShellFolder2");
+        Wh_LogV(L"group fallback: no IShellFolder2");
         return;
     }
     size_t count = result->entries.size();
@@ -1711,7 +1404,7 @@ void GroupFallback(IShellFolder* folder, const SortSpec& spec,
     for (auto& value : values) {
         VariantClear(&value);
     }
-    Wh_Log(L"group fallback: key pid=%lu, first value type=%d", key.pid, firstType);
+    Wh_LogV(L"group fallback: key pid=%lu, first value type=%d", key.pid, firstType);
     folder2->Release();
 
     // The groups that occur, in display order.
@@ -1744,11 +1437,11 @@ void GroupFallback(IShellFolder* folder, const SortSpec& spec,
         names.push_back(id >= 0 && id < (int)texts.size() ? texts[id] : L"");
     }
     if (names.size() == 1 && names[0] == L"Unspecified") {
-        Wh_Log(L"group fallback: the key gives no values here, not grouping");
+        Wh_LogV(L"group fallback: the key gives no values here, not grouping");
         return;
     }
     ApplyGroups(result, ids, order, names);
-    Wh_Log(L"group fallback: %d groups, date=%d size=%d name=%d column=%d",
+    Wh_LogV(L"group fallback: %d groups, date=%d size=%d name=%d column=%d",
         (int)order.size(), isDate ? 1 : 0, isSize ? 1 : 0, isName ? 1 : 0,
         column);
 }
@@ -1775,7 +1468,7 @@ void GroupEntries(IShellFolder* folder, const SortSpec& spec,
         }
         static std::atomic<int> logged{0};
         if (logged++ < 6) {
-            Wh_Log(L"group: key pid=%lu, CanCategorizeOnSCID=0x%08lX GetCategoryForSCID=0x%08lX CreateCategory=0x%08lX",
+            Wh_LogV(L"group: key pid=%lu, CanCategorizeOnSCID=0x%08lX GetCategoryForSCID=0x%08lX CreateCategory=0x%08lX",
                 spec.groupKey.pid, can, forScid, create);
         }
         provider->Release();
@@ -1978,7 +1671,7 @@ void LoadFolder(PCIDLIST_ABSOLUTE folderPidl, const SortSpec& spec,
             int column = ColumnForKey(folder2, sortColumn.propkey);
             static std::atomic<int> logged{0};
             if (logged++ < 8) {
-                Wh_Log(L"sort: key pid=%lu maps to column %d, direction %d",
+                Wh_LogV(L"sort: key pid=%lu maps to column %d, direction %d",
                     sortColumn.propkey.pid, column, (int)sortColumn.direction);
             }
             if (column >= 0) {
@@ -2146,7 +1839,8 @@ HWND CreateNotifyWindow(ULONGLONG* due) {
             windowClass.lpfnWndProc = NotifyProc;
             windowClass.hInstance = instance;
             windowClass.lpszClassName = kNotifyClass;
-            if (RegisterClassW(&windowClass) || GetLastError() == ERROR_CLASS_ALREADY_EXISTS) {
+            // "Already exists" can only be a class an earlier load left behind, still pointing at its code.
+            if (RegisterClassW(&windowClass)) {
                 g_notifyClassRegistered = true;
             } else {
                 Wh_Log(L"notify window: the class could not be registered, gle=%lu", GetLastError());
@@ -2214,6 +1908,7 @@ void OpenItem(HWND owner, PCIDLIST_ABSOLUTE pidl) {
         info.fMask = SEE_MASK_IDLIST | SEE_MASK_FLAG_NO_UI;
         info.lpIDList = (void*)pidl;
     }
+    ModalScope modal;
     bool ok = ShellExecuteExW(&info);
     Wh_Log(L"OpenItem %s: %s, gle=%lu, hInstApp=%llu", byPath ? L"by path" : L"by pidl",
         ok ? L"ok" : L"failed", ok ? 0 : GetLastError(), (unsigned long long)(ULONG_PTR)info.hInstApp);
@@ -2825,7 +2520,6 @@ struct WindowState {
     // View menu entry.
     ItemsVector menuItems{nullptr};
     muxc::RadioMenuFlyoutItem menuItem{nullptr};
-    muxc::AppBarButton settingsItem{nullptr};  // "Extras", last in the toolbar's "..." menu.
     muxc::CommandBar overflowBar{nullptr};     // The toolbar that holds it.
     winrt::event_token settingsClickToken{};
     // The View button of the toolbar: while Columns shows, its icon is ours.
@@ -3190,7 +2884,10 @@ void LoadIcons(PCIDLIST_ABSOLUTE folderPidl, std::vector<Pidl>& children,
         IShellItemImageFactory* factory = nullptr;
         if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(&factory))) && factory) {
             HBITMAP bitmap = nullptr;
-            HRESULT got = factory->GetImage(SIZE{32, 32}, cachedOnly ? SIIGBF_INCACHEONLY : 0, &bitmap);
+            // A row's icon is 20 DIP: the picture is asked for at that size on this screen, 32 px at least.
+            LONG side = MulDiv(20, (int)GetDpiForSystem(), 96);
+            side = side < 32 ? 32 : side;
+            HRESULT got = factory->GetImage(SIZE{side, side}, cachedOnly ? SIIGBF_INCACHEONLY : 0, &bitmap);
             if (SUCCEEDED(got) && bitmap) {
                 IconBits bits;
                 bits.index = indices[i];
@@ -5378,7 +5075,7 @@ void AddColumn(WindowState* state, Pidl folder, bool atFront = false, bool archi
                         scroller.VerticalScrollMode(mode);
                         static int logged = 0;
                         if (logged++ < 6) {
-                            Wh_Log(L"a press stops the scroll of a list, offset %.1f", offset);
+                            Wh_LogV(L"a press stops the scroll of a list, offset %.1f", offset);
                         }
                     }
                 }
@@ -5390,7 +5087,7 @@ void AddColumn(WindowState* state, Pidl folder, bool atFront = false, bool archi
     column->releaseToken = list.PointerReleased(
         [](Inspectable const& sender, mux::Input::PointerRoutedEventArgs const& relArgs) {
             if (relArgs.Pointer().PointerDeviceType() != winrt::Microsoft::UI::Input::PointerDeviceType::Mouse) {
-                Wh_Log(L"touch: pointer released, device=%d id=%u", (int)relArgs.Pointer().PointerDeviceType(),
+                Wh_LogV(L"touch: pointer released, device=%d id=%u", (int)relArgs.Pointer().PointerDeviceType(),
                     relArgs.Pointer().PointerId());
                 if (WindowState* releaseState = StateForThisThread(false)) {
                     TouchTrack(releaseState, relArgs, true);
@@ -5417,7 +5114,7 @@ void AddColumn(WindowState* state, Pidl folder, bool atFront = false, bool archi
                                 contact = lostArgs.GetCurrentPoint(list).IsInContact();
                             } catch (...) {
                             }
-                            Wh_Log(L"touch: capture lost in a rectangle, xaml contact=%d", contact ? 1 : 0);
+                            Wh_LogV(L"touch: capture lost in a rectangle, xaml contact=%d", contact ? 1 : 0);
                             if (contact && band.recaptures++ < 5) {
                                 try {
                                     list.CapturePointer(lostArgs.Pointer());
@@ -5435,7 +5132,7 @@ void AddColumn(WindowState* state, Pidl folder, bool atFront = false, bool archi
                     POINTER_INFO win32Info{};
                     bool win32Ok = GetPointerInfo(drag.pointerId, &win32Info) != 0;
                     if (drag.active || drag.armed) {
-                        Wh_Log(L"touch: capture lost in a drag, xaml contact=%d, GetPointerInfo=%d (err %lu, flags 0x%lX)",
+                        Wh_LogV(L"touch: capture lost in a drag, xaml contact=%d, GetPointerInfo=%d (err %lu, flags 0x%lX)",
                             xamlContact ? 1 : 0, win32Ok ? 1 : 0, win32Ok ? 0ul : GetLastError(),
                             (unsigned long)win32Info.pointerFlags);
                     }
@@ -5461,7 +5158,7 @@ void AddColumn(WindowState* state, Pidl folder, bool atFront = false, bool archi
         });
     // Touch, for the log: a hold, and a pointer that the system takes away (a pan).
     Keep(list, list.Holding(winrt::auto_revoke, [](Inspectable const& sender, mux::Input::HoldingRoutedEventArgs const& args) {
-        Wh_Log(L"touch: holding state=%d device=%d", (int)args.HoldingState(), (int)args.PointerDeviceType());
+        Wh_LogV(L"touch: holding state=%d device=%d", (int)args.HoldingState(), (int)args.PointerDeviceType());
         if ((int)args.HoldingState() == 0 && (int)args.PointerDeviceType() == 0) {
             WindowState* holdState = StateForThisThread(false);
             if (auto list = sender.try_as<muxc::ListView>(); list && holdState && holdState->on && !g_unloading) {
@@ -5470,12 +5167,12 @@ void AddColumn(WindowState* state, Pidl folder, bool atFront = false, bool archi
         }
     }));
     Keep(list, list.PointerCanceled(winrt::auto_revoke, [](Inspectable const&, mux::Input::PointerRoutedEventArgs const& args) {
-        Wh_Log(L"touch: the pointer was cancelled, device=%d id=%u", (int)args.Pointer().PointerDeviceType(),
+        Wh_LogV(L"touch: the pointer was cancelled, device=%d id=%u", (int)args.Pointer().PointerDeviceType(),
             args.Pointer().PointerId());
     }));
     Keep(list, list.PointerCaptureLost(winrt::auto_revoke, [](Inspectable const&, mux::Input::PointerRoutedEventArgs const& args) {
         if (args.Pointer().PointerDeviceType() != winrt::Microsoft::UI::Input::PointerDeviceType::Mouse) {
-            Wh_Log(L"touch: the pointer capture was lost, device=%d id=%u", (int)args.Pointer().PointerDeviceType(),
+            Wh_LogV(L"touch: the pointer capture was lost, device=%d id=%u", (int)args.Pointer().PointerDeviceType(),
                 args.Pointer().PointerId());
         }
     }));
@@ -5922,7 +5619,7 @@ void RebuildFromExplorer(WindowState* state) {
         if (ReadSortSpec(browser, &fresh)) {
             state->spec = fresh;
             RememberFolderSpec(PathOf(current.get()), fresh);
-            Wh_Log(L"rebuild: spec %d sort columns, grouped=%d", (int)fresh.columns.size(),
+            Wh_LogV(L"rebuild: spec %d sort columns, grouped=%d", (int)fresh.columns.size(),
                 fresh.grouped ? 1 : 0);
         }
     }
@@ -6650,6 +6347,7 @@ HRESULT RestoreFromRecycleBin(WindowState* state,
                 invoke.hwnd = state->topLevel;
                 invoke.lpVerb = "undelete";
                 invoke.nShow = SW_SHOWNORMAL;
+                ModalScope modal;
                 hr = menu->InvokeCommand(&invoke);
             }
             DestroyMenu(hmenu);
@@ -6741,6 +6439,7 @@ bool RedoLast(WindowState* state) {
         op.wFunc = FO_DELETE;
         op.pFrom = names.c_str();
         op.fFlags = FOF_ALLOWUNDO;
+        ModalScope modal;
         int result = SHFileOperationW(&op);
         hr = result == 0 && !op.fAnyOperationsAborted ? S_OK : E_FAIL;
         Wh_Log(L"Redo delete of %d item(s): result %d", (int)entry.paths.size(), result);
@@ -7240,6 +6939,7 @@ void RunContextCommand(UINT id) {
                     invoke.nShow = SW_SHOWNORMAL;
                     invoke.fMask = CMIC_MASK_UNICODE | CMIC_MASK_PTINVOKE;
                     GetCursorPos(&invoke.ptInvoke);
+                    ModalScope modal;
                     HRESULT hr = context->menu->InvokeCommand(
                         (CMINVOKECOMMANDINFO*)&invoke);
                     Wh_Log(L"context menu command %u (%s) -> hr=0x%08lX", id, verb, hr);
@@ -7442,6 +7142,7 @@ void NewFolderWithSelection(WindowState* state, Column* column,
     op.pFrom = names.c_str();
     op.pTo = target.c_str();
     op.fFlags = FOF_ALLOWUNDO;
+    ModalScope modal;
     int result = SHFileOperationW(&op);
     Wh_Log(L"new folder \"%s\" with %d item(s): result %d", candidate.c_str(), (int)from.size(), result);
 
@@ -7461,7 +7162,51 @@ void NewFolderWithSelection(WindowState* state, Column* column,
     RequestLoad(state, column);
 }
 
-// Opens a folder in a new tab of this window: the folder's "opennewtab" verb makes the tab, and once
+// The "add tab" button of the window's tab strip (AutomationId "AddButton"), found in the XAML tree.
+mux::FrameworkElement FindAddTabButton(mux::DependencyObject const& node, int depth, int* visited) {
+    if (!node || depth > 40 || ++*visited > 6000) {
+        return nullptr;
+    }
+    if (auto element = node.try_as<mux::FrameworkElement>()) {
+        if (element.Name() == L"AddButton") {
+            return element;
+        }
+    }
+    int count = mux::Media::VisualTreeHelper::GetChildrenCount(node);
+    for (int i = 0; i < count; i++) {
+        if (auto found = FindAddTabButton(mux::Media::VisualTreeHelper::GetChild(node, i), depth + 1, visited)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+// Presses it as a click would, with no key sent.
+bool PressAddTabButton(WindowState* state) {
+    try {
+        if (!state->xamlRoot) {
+            return false;
+        }
+        auto content = state->xamlRoot.Content().try_as<mux::DependencyObject>();
+        int visited = 0;
+        auto button = FindAddTabButton(content, 0, &visited);
+        if (!button) {
+            Wh_Log(L"open in a new tab: the tab strip's add button was not found (%d elements looked at)", visited);
+            return false;
+        }
+        auto peer = mux::Automation::Peers::FrameworkElementAutomationPeer::CreatePeerForElement(button);
+        if (auto invoke = peer.GetPattern(mux::Automation::Peers::PatternInterface::Invoke)
+                              .try_as<mux::Automation::Provider::IInvokeProvider>()) {
+            invoke.Invoke();
+            return true;
+        }
+    } catch (...) {
+        LogHresult(L"the tab strip's add button");
+    }
+    return false;
+}
+
+// Opens a folder in a new tab of this window: the tab strip's add button makes the tab, and once
 // Explorer has built it, the folder is shown in it.
 void OpenFolderInNewTab(WindowState* state, PCIDLIST_ABSOLUTE folder) {
     if (!folder || FolderGone(folder)) {
@@ -7470,11 +7215,11 @@ void OpenFolderInNewTab(WindowState* state, PCIDLIST_ABSOLUTE folder) {
     state->openTabFolder.reset(ILClone(folder));
     state->openTabUntil = GetTickCount64() + 4000;
     state->newTab = nullptr;
-    // The folder's own "Open in new tab" verb makes the tab. No key is sent: a key goes to whichever
-    // window has the focus at that moment.
-    HRESULT verb = InvokeVerbOnFolder(state, folder, "opennewtab");
-    if (FAILED(verb)) {
-        Wh_Log(L"open in a new tab: the folder has no such verb, hr=0x%08lX", (unsigned long)verb);
+    // The tab strip's own add button makes the tab. No key is sent: a key goes to whichever window has the
+    // focus at that moment. (The folder's "opennewtab" verb was tried: it opens a window of its own.)
+    if (!PressAddTabButton(state)) {
+        state->openTabFolder.reset();
+        state->openTabUntil = 0;
         return;
     }
     Wh_Log(L"open in a new tab: \"%s\"", PathOf(folder).c_str());
@@ -7559,6 +7304,7 @@ void ExtractHere(WindowState* state, Column* column, size_t entryIndex, bool nam
             list->Release();
         }
         if (copied > 0) {
+            ModalScope modal;
             hr = operation->PerformOperations();
         }
     }
@@ -7669,6 +7415,7 @@ void ExtractSelected(WindowState* state, Column* column, std::vector<size_t> con
             }
         }
         if (copied > 0) {
+            ModalScope modal;
             hr = operation->PerformOperations();
         }
     }
@@ -8473,10 +8220,14 @@ struct MenuBuilder {
             // Like a cascading menu: beside the row, top aligned with it.
             spec.submenu.Placement(muxc::Primitives::FlyoutPlacementMode::RightEdgeAlignedTop);
             auto sub = spec.submenu;
-            Keep(spec.submenu, spec.submenu.Opened(winrt::auto_revoke, [sub](Inspectable const&, Inspectable const&) {
+            // Weak: a handler that holds the element it is on keeps both alive for as long as the window.
+            auto weakSub = winrt::make_weak(sub);
+            auto weakButton = winrt::make_weak(button);
+            Keep(spec.submenu, spec.submenu.Opened(winrt::auto_revoke, [weakSub](Inspectable const&, Inspectable const&) {
                 WindowState* open = StateForThisThread(false);
-                if (open && open->context) {
-                    open->context->openSub = sub;
+                auto strong = weakSub.get();
+                if (open && open->context && strong) {
+                    open->context->openSub = strong;
                 }
             }));
             Keep(spec.submenu, spec.submenu.Closed(winrt::auto_revoke, [](Inspectable const&, Inspectable const&) {
@@ -8491,10 +8242,14 @@ struct MenuBuilder {
                 }
             }));
             // Right arrow opens it from the keyboard.
-            Keep(button, button.KeyDown(winrt::auto_revoke, [sub, button](Inspectable const&, mux::Input::KeyRoutedEventArgs const& keyArgs) {
+            Keep(button, button.KeyDown(winrt::auto_revoke, [weakSub, weakButton](Inspectable const&, mux::Input::KeyRoutedEventArgs const& keyArgs) {
                 if (keyArgs.Key() == winrt::Windows::System::VirtualKey::Right) {
                     try {
-                        sub.ShowAt(button);
+                        auto strongSub = weakSub.get();
+                        auto strongButton = weakButton.get();
+                        if (strongSub && strongButton) {
+                            strongSub.ShowAt(strongButton);
+                        }
                     } catch (...) {
                     }
                     keyArgs.Handled(true);
@@ -8505,9 +8260,11 @@ struct MenuBuilder {
         // after a short moment if the pointer stays.
         {
             auto hovering = std::make_shared<bool>(false);
-            auto sub = spec.submenu;
-            Keep(button, button.PointerEntered(winrt::auto_revoke, [hovering, sub, button](Inspectable const&, mux::Input::PointerRoutedEventArgs const&) {
+            auto weakSub = winrt::make_weak(spec.submenu);
+            auto weakButton = winrt::make_weak(button);
+            Keep(button, button.PointerEntered(winrt::auto_revoke, [hovering, weakSub, weakButton](Inspectable const&, mux::Input::PointerRoutedEventArgs const&) {
                 *hovering = true;
+                auto sub = weakSub.get();
                 WindowState* st = StateForThisThread(false);
                 if (!st || !st->context || !st->queue || g_unloading) {
                     return;
@@ -8529,10 +8286,12 @@ struct MenuBuilder {
                     ctx.hover = timer;
                     timer.Interval(std::chrono::milliseconds(200));
                     timer.IsRepeating(false);
-                    Keep(timer, timer.Tick(winrt::auto_revoke, [hovering, sub, button](mud::DispatcherQueueTimer const& sender, Inspectable const&) {
+                    Keep(timer, timer.Tick(winrt::auto_revoke, [hovering, weakSub, weakButton](mud::DispatcherQueueTimer const& sender, Inspectable const&) {
                         sender.Stop();
                         WindowState* now = StateForThisThread(false);
-                        if (!*hovering || !now || !now->context || g_unloading || now->context->openSub == sub) {
+                        auto sub = weakSub.get();
+                        auto button = weakButton.get();
+                        if (!*hovering || !now || !now->context || g_unloading || !sub || !button || now->context->openSub == sub) {
                             return;
                         }
                         try {
@@ -9091,7 +8850,7 @@ void ShowBackgroundMenu(WindowState* state, Column* column,
 void OnRowRightTapped(muxc::ListView const& list,
                       mux::Input::RightTappedRoutedEventArgs const& args) {
     if (args.PointerDeviceType() != winrt::Microsoft::UI::Input::PointerDeviceType::Mouse) {
-        Wh_Log(L"touch: a right tap, device=%d", (int)args.PointerDeviceType());
+        Wh_LogV(L"touch: a right tap, device=%d", (int)args.PointerDeviceType());
     }
     WindowState* state = StateForThisThread(false);
     if (!state || !state->on || g_unloading) {
@@ -9227,6 +8986,7 @@ HRESULT InvokeVerbOnItems(WindowState* state, Column* column,
         if (GetKeyState(VK_SHIFT) & 0x8000) {
             invoke.fMask |= CMIC_MASK_SHIFT_DOWN;
         }
+        ModalScope modal;
         hr = menu->InvokeCommand(&invoke);
     }
     DestroyMenu(hmenu);
@@ -9260,6 +9020,7 @@ HRESULT InvokeVerbOnFolder(WindowState* state, PCIDLIST_ABSOLUTE folder,
         invoke.hwnd = state->topLevel;
         invoke.lpVerb = verb;
         invoke.nShow = SW_SHOWNORMAL;
+        ModalScope modal;
         hr = menu->InvokeCommand(&invoke);
     }
     DestroyMenu(hmenu);
@@ -9753,7 +9514,7 @@ void OnBandPressed(muxc::ListView const& list, mux::Input::PointerRoutedEventArg
                 state->band.column->list.ReleasePointerCaptures();
             }
             EndBand(state, false);
-            Wh_Log(L"touch: a second finger, the rectangle is given up for the two-finger scroll");
+            Wh_LogV(L"touch: a second finger, the rectangle is given up for the two-finger scroll");
             return;
         }
         // The middle button on a folder opens it in a new tab.
@@ -9858,7 +9619,7 @@ void OnBandPressed(muxc::ListView const& list, mux::Input::PointerRoutedEventArg
                 }
             }
             list.CapturePointer(args.Pointer());
-            Wh_Log(L"touch: pressed on the empty space of column %d, a rectangle may start (scrollers locked=%d)", index + 1,
+            Wh_LogV(L"touch: pressed on the empty space of column %d, a rectangle may start (scrollers locked=%d)", index + 1,
                 (int)band.locked.size());
         }
     } catch (...) {
@@ -9914,7 +9675,7 @@ bool OnBandMoved(WindowState* state, Column* column, muxc::ListView const& list,
             band.panLastAt = GetTickCount64();
             band.panVelocity = 0;
             list.CapturePointer(args.Pointer());
-            Wh_Log(L"touch: a sideways drag on the empty space, the columns scroll");
+            Wh_LogV(L"touch: a sideways drag on the empty space, the columns scroll");
             return true;
         }
         // A drag: take the pointer, remember the rows, start from the selection
@@ -9922,7 +9683,7 @@ bool OnBandMoved(WindowState* state, Column* column, muxc::ListView const& list,
         band.pending = false;
         band.active = true;
         if (band.touch) {
-            Wh_Log(L"touch: the finger moved, the rectangle starts");
+            Wh_LogV(L"touch: the finger moved, the rectangle starts");
         }
         list.CapturePointer(args.Pointer());
         auto scroller = FindListScroller(list);
@@ -10680,9 +10441,18 @@ void OnColumnKey(muxc::ListView const& list,
         // alone.
         int code = (int)key;
         wchar_t typedChar = 0;
-        if ((code >= 0x30 && code <= 0x39) || (code >= 0x41 && code <= 0x5A)) {
-            typedChar = (wchar_t)code;
-        } else if (code >= 0x60 && code <= 0x69) {
+        {
+            // The character this key makes on the layout in use (an accented letter, a digit that needs
+            // Shift on AZERTY), not the virtual-key code, which is the same for every layout.
+            BYTE keyboard[256] = {};
+            wchar_t made[4] = {};
+            if (GetKeyboardState(keyboard) &&
+                ToUnicodeEx((UINT)code, args.KeyStatus().ScanCode, keyboard, made, 4, 4, GetKeyboardLayout(0)) == 1 &&
+                (iswalnum(made[0]) || made[0] == L'_')) {
+                typedChar = made[0];
+            }
+        }
+        if (!typedChar && code >= 0x60 && code <= 0x69) {
             typedChar = (wchar_t)(L'0' + (code - 0x60));
         }
         if (typedChar && !(GetKeyState(VK_CONTROL) & 0x8000) &&
@@ -10821,12 +10591,10 @@ void HidePanel(WindowState* state, const wchar_t* why) {
 // already destroyed the panel's window along with it, and closing or
 // releasing the panel's XAML objects at that point crashes Explorer. So they
 // are let go without being released: a small leak, once per closed window.
-void CloseSettingsWindowOfThread();
 
 void AbandonWindow(WindowState* state) {
     Wh_Log(L"window closed with the panel on, letting its objects go");
     AbandonDetails(state);
-    CloseSettingsWindowOfThread();
     state->on = false;
     (void)state->context.release();  // Never destroyed, like the columns.
     (void)state->rename.release();
@@ -11312,7 +11080,7 @@ void SyncSelectionFromExplorer(WindowState* state) {
             }
         }
         state->building = false;
-        Wh_Log(L"the toolbar changed Explorer's selection: %d items now selected in column %d", (int)wanted.size(),
+        Wh_LogV(L"the toolbar changed Explorer's selection: %d items now selected in column %d", (int)wanted.size(),
             state->active + 1);
         OnRowSelected(column->list);
     } catch (...) {
@@ -11420,7 +11188,7 @@ void OnTick() {
                              SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 static int logged = 0;
                 if (logged++ < 8) {
-                    Wh_Log(L"the panel was covered by a sibling window, raised again");
+                    Wh_LogV(L"the panel was covered by a sibling window, raised again");
                 }
             }
         }
@@ -11787,16 +11555,25 @@ void OnTick() {
                 state->watchEditUntil = 0;
             } else if (HWND edit = FindNativeRenameBox(state->topLevel)) {
                 state->watchEditUntil = 0;
+                // The name in the box is the item that was just made (a New folder, a New file): it is
+                // what the column renames once it lists it. The box is closed with its name kept.
+                wchar_t made[MAX_PATH] = L"";
+                GetWindowTextW(edit, made, MAX_PATH);
                 SendMessageW(edit, WM_KEYDOWN, VK_ESCAPE, 0);
                 SendMessageW(edit, WM_KEYUP, VK_ESCAPE, 0);
                 if (state->active >= 0 && state->active < (int)state->columns.size() &&
                     !state->rename) {
                     Column* column = state->columns[state->active].get();
-                    std::vector<size_t> picked = SelectedEntries(column, column->list);
-                    Wh_Log(L"Explorer's own rename box found, renaming in the column instead (%d selected)",
-                        (int)picked.size());
-                    if (!picked.empty()) {
-                        BeginMultiRename(state, column, picked);
+                    if (made[0]) {
+                        Wh_Log(L"Explorer's own rename box found, \"%s\" is renamed in the column once it is listed", made);
+                        state->renameName = made;
+                        state->renameColumn = column;
+                        RequestLoad(state, column);
+                    } else {
+                        std::vector<size_t> picked = SelectedEntries(column, column->list);
+                        if (!picked.empty()) {
+                            BeginMultiRename(state, column, picked);
+                        }
                     }
                 }
             }
@@ -11820,7 +11597,7 @@ void OnTick() {
             // brings it into view, which cut the centring short.
             if (known && panel && !inside && now >= state->scrollQuietUntil) {
                 state->focusColumn->list.Focus(mux::FocusState::Programmatic);
-                Wh_Log(L"focus taken back from Explorer's view");
+                Wh_LogV(L"focus taken back from Explorer's view");
             }
         } else {
             state->focusColumn = nullptr;
@@ -12434,7 +12211,7 @@ void TouchTrack(WindowState* state, mux::Input::PointerRoutedEventArgs const& ar
         g_touchY = screen.y;
         g_touchDown = down;
         if (g_outPointerId && g_touchEvents++ < 12) {
-            Wh_Log(L"touch: finger event during the drag out, down=%d at %ld,%ld", down ? 1 : 0, screen.x, screen.y);
+            Wh_LogV(L"touch: finger event during the drag out, down=%d at %ld,%ld", down ? 1 : 0, screen.x, screen.y);
         }
     } catch (...) {
     }
@@ -12464,7 +12241,7 @@ LRESULT CALLBACK TouchSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
             if (g_touchLogs++ < 30) {
                 wchar_t cls[64] = L"";
                 GetClassNameW(hwnd, cls, 64);
-                Wh_Log(L"touch: win32 message 0x%04X id=%u ok=%d at %ld,%ld hwnd=%p %s", msg, id, ok ? 1 : 0,
+                Wh_LogV(L"touch: win32 message 0x%04X id=%u ok=%d at %ld,%ld hwnd=%p %s", msg, id, ok ? 1 : 0,
                     ok ? info.ptPixelLocation.x : 0L, ok ? info.ptPixelLocation.y : 0L, hwnd, cls);
             }
         }
@@ -12492,7 +12269,7 @@ void InstallTouchHook(WindowState* state) {
                 g_touchHooked.push_back(hwnd);
             }
         }
-        Wh_Log(L"touch: listening to the finger on %d window(s)", (int)g_touchHooked.size());
+        Wh_LogV(L"touch: listening to the finger on %d window(s)", (int)g_touchHooked.size());
     } catch (...) {
         LogHresult(L"InstallTouchHook");
     }
@@ -12540,6 +12317,21 @@ struct TouchPrep {
 };
 [[clang::no_destroy]] thread_local TouchPrep g_touchPrep;
 
+// The operations a touch-drag coroutine is waiting on, so the unload can cancel them.
+[[clang::no_destroy]] thread_local winrt::Windows::Foundation::IAsyncInfo g_prepOp{nullptr};
+[[clang::no_destroy]] thread_local winrt::Windows::Foundation::IAsyncInfo g_dragOp{nullptr};
+
+void CancelTouchDragOps() {
+    for (auto* held : {&g_prepOp, &g_dragOp}) {
+        try {
+            if (*held) {
+                held->Cancel();
+            }
+        } catch (...) {
+        }
+    }
+}
+
 winrt::fire_and_forget TouchDragPrepare(std::vector<std::wstring> paths, std::shared_ptr<std::vector<uint8_t>> cida) {
     CoroutineGuard counted;
     namespace st = winrt::Windows::Storage;
@@ -12551,14 +12343,18 @@ winrt::fire_and_forget TouchDragPrepare(std::vector<std::wstring> paths, std::sh
         for (auto const& path : paths) {
             DWORD attributes = GetFileAttributesW(path.c_str());
             if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY)) {
-                items.push_back(co_await st::StorageFolder::GetFolderFromPathAsync(path));
+                auto op = st::StorageFolder::GetFolderFromPathAsync(path);
+                g_prepOp = op.as<winrt::Windows::Foundation::IAsyncInfo>();
+                items.push_back(co_await op);
             } else {
-                items.push_back(co_await st::StorageFile::GetFileFromPathAsync(path));
+                auto op = st::StorageFile::GetFileFromPathAsync(path);
+                g_prepOp = op.as<winrt::Windows::Foundation::IAsyncInfo>();
+                items.push_back(co_await op);
             }
         }
     } catch (...) {
         items.clear();
-        Wh_Log(L"touch: the files of the drag could not be opened, only the shell items go");
+        Wh_LogV(L"touch: the files of the drag could not be opened, only the shell items go");
     }
     // The label of the panel's own drag, drawn once into a bitmap: the system's drag shows that
     // instead of a snapshot of the row. It is built off screen, then taken away.
@@ -12583,14 +12379,14 @@ winrt::fire_and_forget TouchDragPrepare(std::vector<std::wstring> paths, std::sh
                         pixels, winrt::Windows::Graphics::Imaging::BitmapPixelFormat::Bgra8, width, height,
                         winrt::Windows::Graphics::Imaging::BitmapAlphaMode::Premultiplied);
                 }
-                Wh_Log(L"touch: the label was drawn for the drag, %d x %d", width, height);
+                Wh_LogV(L"touch: the label was drawn for the drag, %d x %d", width, height);
             }
             if (WindowState* after = StateForThisThread(false)) {
                 RemoveGhost(after);
             }
         }
     } catch (...) {
-        Wh_Log(L"touch: the label could not be drawn, the row's picture will do");
+        Wh_LogV(L"touch: the label could not be drawn, the row's picture will do");
         if (WindowState* after = StateForThisThread(false)) {
             RemoveGhost(after);
         }
@@ -12600,7 +12396,7 @@ winrt::fire_and_forget TouchDragPrepare(std::vector<std::wstring> paths, std::sh
         g_touchPrep.cida = cida;
         g_touchPrep.picture = picture;
         g_touchPrep.ready = true;
-        Wh_Log(L"touch: the drag's items are ready (%d file(s))", (int)g_touchPrep.items.size());
+        Wh_LogV(L"touch: the drag's items are ready (%d file(s))", (int)g_touchPrep.items.size());
     }
 }
 
@@ -12626,7 +12422,7 @@ winrt::fire_and_forget TouchDragRun(mux::UIElement list, decltype(DragState::tou
                 } catch (...) {
                 }
             }
-            Wh_Log(L"touch: the system's drag is starting with %d file(s) and %d byte(s) of shell items", (int)items.size(),
+            Wh_LogV(L"touch: the system's drag is starting with %d file(s) and %d byte(s) of shell items", (int)items.size(),
                 cida ? (int)cida->size() : 0);
             if (!items.empty()) {
                 args.Data().SetStorageItems(items);
@@ -12678,7 +12474,7 @@ winrt::fire_and_forget TouchDragRun(mux::UIElement list, decltype(DragState::tou
                     POINT cursor{};
                     GetCursorPos(&cursor);
                     if (overLogs++ < 16) {
-                        Wh_Log(L"touch: over the panel at %.0f,%.0f (host), the cursor is at %ld,%ld", where.X, where.Y,
+                        Wh_LogV(L"touch: over the panel at %.0f,%.0f (host), the cursor is at %ld,%ld", where.X, where.Y,
                             cursor.x, cursor.y);
                     }
                 }
@@ -12706,7 +12502,7 @@ winrt::fire_and_forget TouchDragRun(mux::UIElement list, decltype(DragState::tou
                 }
                 auto where = args.GetPosition(now->rootGrid);
                 DragRefreshTarget(now, where);
-                Wh_Log(L"touch: dropped in the panel, target column %d entry %d ok=%d",
+                Wh_LogV(L"touch: dropped in the panel, target column %d entry %d ok=%d",
                     now->drag.targetColumn ? ColumnIndexOfList(now, now->drag.targetColumn->list) + 1 : 0,
                     now->drag.targetEntry, now->drag.targetOk ? 1 : 0);
                 now->drag.platformDrag = false;
@@ -12716,16 +12512,19 @@ winrt::fire_and_forget TouchDragRun(mux::UIElement list, decltype(DragState::tou
             });
             dropHooked = true;
         }
-        Wh_Log(L"touch: asking the system to drag %d item(s)", (int)items.size());
-        auto result = co_await list.StartDragAsync(*point);
-        Wh_Log(L"touch: the system's drag ended, operation %d", (int)result);
+        Wh_LogV(L"touch: asking the system to drag %d item(s)", (int)items.size());
+        auto dragOp = list.StartDragAsync(*point);
+        g_dragOp = dragOp.as<winrt::Windows::Foundation::IAsyncInfo>();
+        auto result = co_await dragOp;
+        g_dragOp = nullptr;
+        Wh_LogV(L"touch: the system's drag ended, operation %d", (int)result);
     } catch (winrt::hresult_error const& error) {
-        Wh_Log(L"touch: the system's drag failed, hr=0x%08lX %s", (unsigned long)error.code().value, error.message().c_str());
+        Wh_LogV(L"touch: the system's drag failed, hr=0x%08lX %s", (unsigned long)error.code().value, error.message().c_str());
         if (WindowState* state = StateForThisThread(false)) {
             state->drag.platformDrag = false;  // The shell's drag takes over at the first move.
         }
     } catch (...) {
-        Wh_Log(L"touch: the system's drag failed");
+        Wh_LogV(L"touch: the system's drag failed");
         if (WindowState* state = StateForThisThread(false)) {
             state->drag.platformDrag = false;
         }
@@ -12793,7 +12592,7 @@ void OnDragHold(WindowState* state, muxc::ListView const& list) {
     } catch (...) {
         LogHresult(L"arming a touch drag");
     }
-    Wh_Log(L"touch: held, the drag is armed, scrollers locked=%d", (int)d.locked.size());
+    Wh_LogV(L"touch: held, the drag is armed, scrollers locked=%d", (int)d.locked.size());
     // The system's drag, for what is on disk.
     try {
         std::vector<size_t> picked = SelectedEntries(d.column, list);
@@ -12833,7 +12632,7 @@ void OnDragHold(WindowState* state, muxc::ListView const& list) {
         if (!kids.empty() && d.touchPoint) {
             TouchDragPrepare(std::move(paths), cida);  // The drag itself starts at the first move.
         } else {
-            Wh_Log(L"touch: nothing on disk to hand to the system's drag, the shell's drag will do");
+            Wh_LogV(L"touch: nothing on disk to hand to the system's drag, the shell's drag will do");
         }
     } catch (...) {
         LogHresult(L"starting the system's drag");
@@ -12875,13 +12674,13 @@ void OnDragPressed(WindowState* state, muxc::ListView const& list, muxc::ListVie
     }
     if (d.deviceType != 2) {
         auto point = args.GetCurrentPoint(list);
-        Wh_Log(L"touch: a press on a row, device=%d id=%u left=%d inContact=%d pressure=%.2f", d.deviceType,
+        Wh_LogV(L"touch: a press on a row, device=%d id=%u left=%d inContact=%d pressure=%.2f", d.deviceType,
             args.Pointer().PointerId(), point.Properties().IsLeftButtonPressed() ? 1 : 0, point.IsInContact() ? 1 : 0,
             point.Properties().Pressure());
     }
     static int logged = 0;
     if (logged++ < 6) {
-        Wh_Log(L"drag may start: pressed on row %d (entry %d) of column %d", rowIndex, entry, at + 1);
+        Wh_LogV(L"drag may start: pressed on row %d (entry %d) of column %d", rowIndex, entry, at + 1);
     }
 }
 
@@ -13211,7 +13010,7 @@ bool OnDragMoved(WindowState* state, Column* column, muxc::ListView const& list,
     auto at = point.Position();
     if (d.deviceType != 2 && d.movesLogged < 8) {
         d.movesLogged++;
-        Wh_Log(L"touch: move %d at %.0f,%.0f, left=%d inContact=%d, pending=%d active=%d", d.movesLogged, at.X, at.Y,
+        Wh_LogV(L"touch: move %d at %.0f,%.0f, left=%d inContact=%d, pending=%d active=%d", d.movesLogged, at.X, at.Y,
             point.Properties().IsLeftButtonPressed() ? 1 : 0, point.IsInContact() ? 1 : 0, d.pending ? 1 : 0, d.active ? 1 : 0);
     }
     if (d.pending) {
@@ -13227,7 +13026,7 @@ bool OnDragMoved(WindowState* state, Column* column, muxc::ListView const& list,
             if (!g_touchPrep.ready || !d.pressedRow) {
                 return false;
             }
-            Wh_Log(L"touch: moved after the hold, starting the system's drag");
+            Wh_LogV(L"touch: moved after the hold, starting the system's drag");
             decltype(DragState::touchPoint) now = args.GetCurrentPoint(d.pressedRow);
             TouchDragRun(d.pressedRow.as<mux::UIElement>(), now, g_touchPrep.items, g_touchPrep.cida, g_touchPrep.picture);
             return true;
@@ -13396,7 +13195,7 @@ struct OutDropSource : IDropSource {
             g_dropSourceLogs++;
             POINT where;
             GetCursorPos(&where);
-            Wh_Log(L"touch: the drag loop asks, keys=0x%lX escape=%d, cursor %ld,%ld, left button %s", (unsigned long)keys,
+            Wh_LogV(L"touch: the drag loop asks, keys=0x%lX escape=%d, cursor %ld,%ld, left button %s", (unsigned long)keys,
                 escape ? 1 : 0, where.x, where.y, (GetAsyncKeyState(VK_LBUTTON) & 0x8000) ? L"down" : L"up");
         }
         if (g_outPointerId) {
@@ -13705,12 +13504,13 @@ void DoOutDrag(WindowState* state, Pidl sourceFolder, std::vector<Pidl> children
     nudger.Start(GetCurrentThreadId(), g_outPointerId);
     state->outDragActive = true;
     ULONGLONG outStarted = GetTickCount64();
+    ModalScope modal;
     hr = SHDoDragDrop(state->topLevel, data, dropSource,
                       state->outFromArchive ? DROPEFFECT_COPY : (DROPEFFECT_COPY | DROPEFFECT_MOVE | DROPEFFECT_LINK),
                       &effect);
     state->outDragActive = false;
     if (g_outDevice != 2) {
-        Wh_Log(L"touch: the shell's drag ran for %d ms, hr=0x%08lX, effect %lu", (int)(GetTickCount64() - outStarted), hr,
+        Wh_LogV(L"touch: the shell's drag ran for %d ms, hr=0x%08lX, effect %lu", (int)(GetTickCount64() - outStarted), hr,
             (unsigned long)effect);
     }
     g_outDevice = 2;
@@ -13887,7 +13687,7 @@ void StartOutDrag(WindowState* state) {
     if (g_outDevice != 2) {
         POINT where;
         GetCursorPos(&where);
-        Wh_Log(L"touch: the drag leaves the panel, device=%d, the cursor is at %ld,%ld, the left button is %s", g_outDevice,
+        Wh_LogV(L"touch: the drag leaves the panel, device=%d, the cursor is at %ld,%ld, the left button is %s", g_outDevice,
             where.x, where.y, (GetAsyncKeyState(VK_LBUTTON) & 0x8000) ? L"down" : L"up");
     }
     g_keepCapture = g_outPointerId != 0;
@@ -14473,7 +14273,6 @@ muxc::IconElement MakeColumnsIcon() {
         .as<muxc::IconElement>();
 }
 
-void OpenSettingsWindow(WindowState* state);
 
 // The last layout the user chose, kept by Windhawk across restarts.
 bool LastLayoutWasColumns() {
@@ -14484,6 +14283,29 @@ void RememberColumns(bool on) {
     Wh_SetIntValue(L"lastLayoutColumns", on ? 1 : 0);
 }
 
+// Only the Columns entry of the View menu: Columns is switched off, the rest stays.
+void RemoveColumnsEntry(WindowState* state) {
+    try {
+        for (auto& sibling : state->siblings) {
+            if (sibling.item) {
+                sibling.item.Click(sibling.token);
+            }
+        }
+        state->siblings.clear();
+        if (state->menuItem) {
+            state->menuItem.Click(state->menuClickToken);
+            uint32_t index = 0;
+            if (state->menuItems && state->menuItems.IndexOf(state->menuItem, index)) {
+                state->menuItems.RemoveAt(index);
+            }
+        }
+    } catch (...) {
+        LogHresult(L"RemoveColumnsEntry");
+    }
+    state->menuItem = nullptr;
+    state->menuItems = nullptr;
+}
+
 void RemoveMenuEntry(WindowState* state) {
     try {
         for (auto& sibling : state->siblings) {
@@ -14492,15 +14314,6 @@ void RemoveMenuEntry(WindowState* state) {
             }
         }
         state->siblings.clear();
-        if (state->settingsItem) {
-            state->settingsItem.Click(state->settingsClickToken);
-            uint32_t at = 0;
-            if (state->overflowBar && state->overflowBar.SecondaryCommands().IndexOf(state->settingsItem, at)) {
-                state->overflowBar.SecondaryCommands().RemoveAt(at);
-            }
-            state->settingsItem = nullptr;
-            state->overflowBar = nullptr;
-        }
         if (state->menuItem) {
             state->menuItem.Click(state->menuClickToken);
             uint32_t index = 0;
@@ -14679,54 +14492,6 @@ muxc::CommandBar FindCommandBar(mux::DependencyObject const& node, int depth, in
     return nullptr;
 }
 
-void AddOverflowEntry(WindowState* state, mux::DependencyObject const& root) {
-    try {
-        muxc::CommandBar bar = state->overflowBar;
-        if (!bar) {
-            int visited = 0;
-            bar = FindCommandBar(root, 0, visited);
-        }
-        if (!bar) {
-            return;
-        }
-        auto commands = bar.SecondaryCommands();
-        uint32_t at = 0;
-        if (state->settingsItem && state->overflowBar == bar && commands.IndexOf(state->settingsItem, at)) {
-            return;  // Already there.
-        }
-        if (!state->settingsItem) {
-            muxc::AppBarButton item;
-            item.Label(Str(L"menu.extras"));
-            muxc::FontIcon icon;
-            icon.FontFamily(mux::Media::FontFamily(L"Segoe Fluent Icons"));
-            icon.Glyph(L"");  // ExploitProtection.
-            item.Icon(icon);
-            item.Name(L"WindhawkSettingsItem");
-            state->settingsClickToken = item.Click([](Inspectable const&, mux::RoutedEventArgs const&) {
-                WindowState* now = StateForThisThread(false);
-                if (!now || g_unloading || !now->queue) {
-                    return;
-                }
-                // After the menu has closed and the click has been handled.
-                try {
-                    now->queue.TryEnqueue([]() {
-                        WindowState* later = StateForThisThread(false);
-                        if (later && !g_unloading) {
-                            OpenSettingsWindow(later);
-                        }
-                    });
-                } catch (...) {
-                }
-            });
-            state->settingsItem = item;
-        }
-        commands.Append(state->settingsItem);
-        state->overflowBar = bar;
-        Wh_Log(L"the Extras entry is in the \"...\" menu, window=%p", state->topLevel);
-    } catch (...) {
-        LogHresult(L"AddOverflowEntry");
-    }
-}
 
 void PaneToolbarSetup(WindowState* state, mux::DependencyObject const& node);  // 10d
 
@@ -14802,7 +14567,6 @@ void OnCommandBarPointer(Inspectable const& sender, bool force = false) {
                 }
             }
         }
-        AddOverflowEntry(state, root);
         PaneToolbarSetup(state, node);
     } catch (...) {
         LogHresult(L"OnCommandBarPointer");
@@ -15051,52 +14815,11 @@ void UpdateLastEdge(WindowState* state) {
     }
 }
 
+// ---- Helpers that stayed when the settings window went (see docs/settings-window-notes.md) ----
 
-// ---- The settings window ----
-//
-// A top level window on the UI thread of the Explorer window that opened it, with
-// a XAML island over it: a sidebar of pages on the left, a scrolling page on the
-// right with a header, a description and cards of options. Mica behind it, as in
-// Windows Settings. One window only. Spec: SPEC-settings-shell.md.
-//
-// In this version the Columns page is read only: it shows the settings as they are.
-
-extern bool g_hooked;  // Defined with the hooks, later.
-void LoadSettings();
-void CloseEverything();
 void ReloadAll(WindowState* state);
 
-constexpr wchar_t kSettingsClass[] = L"ExplorerExtrasSettingsWindow";
-
-struct SettingsUi {
-    mux::Hosting::DesktopWindowXamlSource source{nullptr};
-    winrt::Microsoft::UI::Content::DesktopChildSiteBridge bridge{nullptr};
-    muxc::Grid root{nullptr};
-    muxc::ListView nav{nullptr};
-    muxc::ScrollViewer content{nullptr};
-    int page = 0;
-    int navCount = 0;  // The pages in the sidebar.
-    // Narrow window: the sidebar is a rail of icons, opened over the page by its button.
-    muxc::ColumnDefinition sidebarColumn{nullptr};
-    muxc::Grid navHost{nullptr};
-    muxc::Button navToggle{nullptr};
-    mux::Media::Brush overlayBrush{nullptr};
-    std::vector<muxc::TextBlock> navLabels;
-    std::vector<std::wstring> navNames;
-    bool compact = false;
-    bool expanded = false;
-    bool abandon = false;  // Let the XAML objects go without releasing them.
-};
-
-HWND g_settingsWindow = nullptr;
-DWORD g_settingsThread = 0;
-SettingsUi* g_settingsUi = nullptr;
-bool g_settingsClassMade = false;
-std::atomic<bool> g_settingsAbandon{false};  // The window or the mod is going.
-void DrainUi(mud::DispatcherQueue const& queue);  // 11-window
-std::atomic<bool> g_settingsUnload{false};   // The mod is unloading: the XAML objects are released, not left.
-bool g_settingsBuilding = false;  // A page is being built: its controls change nothing.
-
+// XAML written as text, for the controls of the pane.
 constexpr wchar_t kXamlNs[] = L"xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'";
 
 winrt::Windows::Foundation::IInspectable LoadXaml(std::wstring const& markup) {
@@ -15117,46 +14840,6 @@ muxc::TextBlock MakeText(std::wstring const& text, double size, bool semibold, b
     }
     return block;
 }
-
-muxc::Border MakeCard() {
-    return LoadXaml(std::wstring(L"<Border ") + kXamlNs +
-                    L" Background='{ThemeResource CardBackgroundFillColorDefaultBrush}'"
-                    L" BorderBrush='{ThemeResource CardStrokeColorDefaultBrush}'"
-                    L" BorderThickness='1' CornerRadius='8' Padding='16,12'/>")
-        .as<muxc::Border>();
-}
-
-// A line of a card: a name with its description on the left, a control on the right.
-muxc::Grid MakeSettingRow(std::wstring const& name, std::wstring const& description,
-                          mux::UIElement const& control) {
-    muxc::Grid row;
-    muxc::ColumnDefinition textColumn, controlColumn;
-    textColumn.Width(mux::GridLength{1, mux::GridUnitType::Star});
-    controlColumn.Width(mux::GridLength{0, mux::GridUnitType::Auto});
-    row.ColumnDefinitions().Append(textColumn);
-    row.ColumnDefinitions().Append(controlColumn);
-    row.ColumnSpacing(24);
-    row.Padding(mux::Thickness{0, 8, 0, 8});
-    muxc::StackPanel texts;
-    texts.VerticalAlignment(mux::VerticalAlignment::Center);
-    texts.Children().Append(MakeText(name, 14, false, false));
-    if (!description.empty()) {
-        auto detail = MakeText(description, 12, false, true);
-        detail.Margin(mux::Thickness{0, 2, 0, 0});
-        texts.Children().Append(detail);
-    }
-    muxc::Grid::SetColumn(texts, 0);
-    row.Children().Append(texts);
-    if (control) {
-        auto frame = control.as<mux::FrameworkElement>();
-        frame.VerticalAlignment(mux::VerticalAlignment::Center);
-        muxc::Grid::SetColumn(frame, 1);
-        row.Children().Append(control);
-    }
-    return row;
-}
-
-// ---- Applying a setting chosen in the window ----
 
 // What a window does when a setting changed that affects columns already built:
 // the widths the user has not set are fitted again, and the folders are read again.
@@ -15220,188 +14903,6 @@ void RebuildEverywhere() {
     }
 }
 
-// Switched off from the window: every window is cleaned up from another thread, since
-// the cleanup waits for this one to run its part.
-void TurnColumnsOffEverywhere() {
-    StartModThread([]() { CloseEverything(); });
-}
-
-void ApplySettingChanged(const SettingInfo& info) {
-    LoadSettings();
-    Wh_Log(L"setting \"%s\" changed in the settings window, now \"%s\"", info.id, EffectiveText(&info).c_str());
-    if (!g_enabled) {
-        TurnColumnsOffEverywhere();
-    } else if (info.rebuild) {
-        RebuildEverywhere();
-    }
-}
-
-void CommitSetting(std::wstring const& id, std::wstring const& text) {
-    if (g_settingsBuilding || g_unloading) {
-        return;
-    }
-    const SettingInfo* info = FindSetting(id.c_str());
-    if (!info || EffectiveText(info) == text) {
-        return;
-    }
-    WriteSettingOverride(info, text);
-    ApplySettingChanged(*info);
-}
-
-void ShowSettingsPage(SettingsUi* ui, int page);
-
-void ResetSettingsToWindhawk() {
-    ClearAllOverrides();
-    LoadSettings();
-    Wh_Log(L"settings reset to Windhawk's page");
-    if (!g_enabled) {
-        TurnColumnsOffEverywhere();
-    } else {
-        RebuildEverywhere();
-    }
-    if (g_settingsUi) {
-        ShowSettingsPage(g_settingsUi, g_settingsUi->page);
-    }
-}
-
-// The control of a setting: it shows the value in use and writes the user's choice.
-mux::UIElement MakeSettingControl(SettingInfo const& info) {
-    switch (info.kind) {
-        case SettingKind::Bool: {
-            muxc::ToggleSwitch toggle;
-            toggle.OnContent(winrt::box_value(L""));
-            toggle.OffContent(winrt::box_value(L""));
-            toggle.MinWidth(0);
-            toggle.IsOn(SettingBool(info.id));
-            std::wstring id = info.id;
-            Keep(toggle, toggle.Toggled(winrt::auto_revoke, [id](Inspectable const& sender, mux::RoutedEventArgs const&) {
-                if (auto changed = sender.try_as<muxc::ToggleSwitch>()) {
-                    CommitSetting(id, changed.IsOn() ? L"1" : L"0");
-                }
-            }));
-            return toggle;
-        }
-        case SettingKind::Int: {
-            muxc::NumberBox box;
-            box.Minimum(info.minValue);
-            box.Maximum(info.maxValue ? info.maxValue : 1000000);
-            box.Value(SettingInt(info.id));
-            box.Width(140);
-            box.SpinButtonPlacementMode(muxc::NumberBoxSpinButtonPlacementMode::Compact);
-            box.ValidationMode(muxc::NumberBoxValidationMode::InvalidInputOverwritten);
-            std::wstring id = info.id;
-            Keep(box, box.ValueChanged(winrt::auto_revoke, [id](muxc::NumberBox const&, muxc::NumberBoxValueChangedEventArgs const& args) {
-                double value = args.NewValue();
-                if (value == value) {  // Not a number while the box is cleared.
-                    CommitSetting(id, std::to_wstring((int)value));
-                }
-            }));
-            return box;
-        }
-        case SettingKind::Enum: {
-            muxc::ComboBox combo;
-            std::wstring options = info.options;
-            std::wstring current = SettingText(info.id);
-            int selected = 0, index = 0;
-            size_t at = 0;
-            while (at <= options.size() && !options.empty()) {
-                size_t end = options.find(L'|', at);
-                std::wstring pair = options.substr(at, end == std::wstring::npos ? std::wstring::npos : end - at);
-                size_t equals = pair.find(L'=');
-                if (equals != std::wstring::npos) {
-                    combo.Items().Append(winrt::box_value(winrt::hstring{pair.substr(equals + 1)}));
-                    if (pair.substr(0, equals) == current) {
-                        selected = index;
-                    }
-                    index++;
-                }
-                if (end == std::wstring::npos) {
-                    break;
-                }
-                at = end + 1;
-            }
-            combo.SelectedIndex(selected);
-            combo.MinWidth(220);
-            std::wstring id = info.id;
-            std::wstring choices = info.options;
-            Keep(combo, combo.SelectionChanged(winrt::auto_revoke, [id, choices](Inspectable const& sender, muxc::SelectionChangedEventArgs const&) {
-                auto box = sender.try_as<muxc::ComboBox>();
-                int index = box ? box.SelectedIndex() : -1;
-                if (index < 0) {
-                    return;
-                }
-                size_t at = 0;
-                for (int i = 0;; i++) {
-                    size_t end = choices.find(L'|', at);
-                    std::wstring pair = choices.substr(at, end == std::wstring::npos ? std::wstring::npos : end - at);
-                    if (i == index) {
-                        size_t equals = pair.find(L'=');
-                        if (equals != std::wstring::npos) {
-                            CommitSetting(id, pair.substr(0, equals));
-                        }
-                        return;
-                    }
-                    if (end == std::wstring::npos) {
-                        return;
-                    }
-                    at = end + 1;
-                }
-            }));
-            return combo;
-        }
-        default:
-            break;
-    }
-    muxc::TextBlock text;
-    text.Text(SettingText(info.id));
-    return text;
-}
-
-muxc::StackPanel MakePageHeader(std::wstring const& title, std::wstring const& description) {
-    muxc::StackPanel header;
-    header.Spacing(4);
-    header.Margin(mux::Thickness{0, 0, 0, 12});
-    header.Children().Append(MakeText(title, 28, true, false));
-    if (!description.empty()) {
-        header.Children().Append(MakeText(description, 14, false, true));
-    }
-    return header;
-}
-
-std::wstring WindowsBuildText() {
-    typedef LONG(WINAPI * RtlGetVersion_t)(OSVERSIONINFOW*);
-    OSVERSIONINFOW info = {};
-    info.dwOSVersionInfoSize = sizeof(info);
-    if (HMODULE ntdll = GetModuleHandleW(L"ntdll.dll")) {
-        if (auto get = (RtlGetVersion_t)GetProcAddress(ntdll, "RtlGetVersion")) {
-            get(&info);
-        }
-    }
-    return L"Windows build " + std::to_wstring(info.dwBuildNumber);
-}
-
-// ---- Quick actions ----
-
-std::wstring DiagnosticsText() {
-    std::wstring text = L"Explorer Extras ";
-    text += WH_MOD_VERSION;
-    text += L"\r\n" + WindowsBuildText() + L"\r\n";
-    text += g_hooked ? L"Hooks: found\r\n" : L"Hooks: not found\r\n";
-    {
-        std::lock_guard<std::mutex> lock(g_statesMutex);
-        text += L"Explorer windows known: " + std::to_wstring(g_states.size()) + L"\r\n";
-    }
-    text += L"Settings (an asterisk marks one set in the settings window):\r\n";
-    for (size_t i = 0; i < kSettingCount; i++) {
-        auto const& info = kSettings[i];
-        text += L"  ";
-        text += SettingIsOverridden(&info) ? L"* " : L"  ";
-        text += info.id;
-        text += L" = " + EffectiveText(&info) + L"\r\n";
-    }
-    return text;
-}
-
 bool CopyTextToClipboard(HWND owner, std::wstring const& text) {
     if (!OpenClipboard(owner)) {
         return false;
@@ -15421,758 +14922,6 @@ bool CopyTextToClipboard(HWND owner, std::wstring const& text) {
     }
     CloseClipboard();
     return done;
-}
-
-// What's new and the tip.
-bool TipDismissed() {
-    return Wh_GetIntValue(L"ui.tipDismissed", 0) != 0;
-}
-
-enum class QuickAction { Copy, Reset };
-
-mux::UIElement BuildHomePage() {
-    muxc::StackPanel page;
-    page.Spacing(8);
-    page.Children().Append(MakePageHeader(Str(L"home.title"), Str(L"home.subtitle")));
-
-    // A tip, until it is dismissed.
-    if (!TipDismissed()) {
-        auto card = MakeCard();
-        muxc::Grid line;
-        muxc::ColumnDefinition textColumn, buttonColumn;
-        textColumn.Width(mux::GridLength{1, mux::GridUnitType::Star});
-        buttonColumn.Width(mux::GridLength{0, mux::GridUnitType::Auto});
-        line.ColumnDefinitions().Append(textColumn);
-        line.ColumnDefinitions().Append(buttonColumn);
-        line.ColumnSpacing(16);
-        muxc::StackPanel texts;
-        texts.Children().Append(MakeText(Str(L"tip.title"), 14, true, false));
-        auto body = MakeText(Str(L"tip.body"), 13, false, true);
-        body.Margin(mux::Thickness{0, 2, 0, 0});
-        texts.Children().Append(body);
-        muxc::Grid::SetColumn(texts, 0);
-        line.Children().Append(texts);
-        muxc::Button gotIt;
-        gotIt.Content(winrt::box_value(winrt::hstring{Str(L"tip.gotit")}));
-        gotIt.VerticalAlignment(mux::VerticalAlignment::Center);
-        Keep(gotIt, gotIt.Click(winrt::auto_revoke, [card](Inspectable const&, mux::RoutedEventArgs const&) {
-            Wh_SetIntValue(L"ui.tipDismissed", 1);
-            card.Visibility(mux::Visibility::Collapsed);
-        }));
-        muxc::Grid::SetColumn(gotIt, 1);
-        line.Children().Append(gotIt);
-        card.Child(line);
-        page.Children().Append(card);
-    }
-
-    // The features.
-    {
-        auto title = MakeText(Str(L"card.features"), 14, true, false);
-        title.Margin(mux::Thickness{0, 8, 0, 0});
-        page.Children().Append(title);
-        auto card = MakeCard();
-        const SettingInfo* enabled = FindSetting(L"enabled");
-        muxc::ToggleSwitch toggle;
-        toggle.OnContent(winrt::box_value(L""));
-        toggle.OffContent(winrt::box_value(L""));
-        toggle.MinWidth(0);
-        toggle.IsOn(SettingBool(L"enabled"));
-        Keep(toggle, toggle.Toggled(winrt::auto_revoke, [](Inspectable const& sender, mux::RoutedEventArgs const&) {
-            if (auto changed = sender.try_as<muxc::ToggleSwitch>()) {
-                CommitSetting(L"enabled", changed.IsOn() ? L"1" : L"0");
-            }
-        }));
-        muxc::StackPanel featureRows;
-        featureRows.Spacing(2);
-        featureRows.Children().Append(MakeSettingRow(Str(L"columns.title"), enabled ? SettingDescription(*enabled) : std::wstring(), toggle));
-        const SettingInfo* paneInfo = FindSetting(L"detailsPane");
-        if (paneInfo) {
-            featureRows.Children().Append(MakeSettingRow(Str(L"details.title"), SettingDescription(*paneInfo), MakeSettingControl(*paneInfo)));
-        }
-        card.Child(featureRows);
-        page.Children().Append(card);
-    }
-    // Status and version.
-    {
-        auto title = MakeText(Str(L"card.status"), 14, true, false);
-        title.Margin(mux::Thickness{0, 12, 0, 0});
-        page.Children().Append(title);
-        auto card = MakeCard();
-        muxc::StackPanel rows;
-        rows.Spacing(2);
-        rows.Children().Append(MakeSettingRow(Str(L"status.version"), L"", MakeText(WH_MOD_VERSION, 14, false, true)));
-        rows.Children().Append(MakeSettingRow(Str(L"status.windows"), L"", MakeText(WindowsBuildText(), 14, false, true)));
-        rows.Children().Append(MakeSettingRow(Str(L"status.hooks"), Str(L"status.hooks.detail"),
-                                              MakeText(g_hooked ? Str(L"status.found") : Str(L"status.notfound"), 14, false, true)));
-        card.Child(rows);
-        page.Children().Append(card);
-    }
-    // Quick actions.
-    {
-        auto title = MakeText(Str(L"card.actions"), 14, true, false);
-        title.Margin(mux::Thickness{0, 12, 0, 0});
-        page.Children().Append(title);
-        auto card = MakeCard();
-        muxc::StackPanel rows;
-        for (QuickAction action : {QuickAction::Copy, QuickAction::Reset}) {
-            muxc::Button button;
-            const wchar_t* label = action == QuickAction::Copy ? Str(L"action.copy") : Str(L"action.reset");
-            const wchar_t* detail = action == QuickAction::Copy ? Str(L"action.copy.detail") : Str(L"action.reset.detail");
-            button.Content(winrt::box_value(winrt::hstring{label}));
-            button.MinWidth(180);
-            if (action == QuickAction::Reset) {
-                Keep(button, button.Click(winrt::auto_revoke, [](Inspectable const&, mux::RoutedEventArgs const&) { ResetSettingsToWindhawk(); }));
-            } else {
-                Keep(button, button.Click(winrt::auto_revoke, [](Inspectable const& sender, mux::RoutedEventArgs const&) {
-                    bool copied = CopyTextToClipboard(g_settingsWindow, DiagnosticsText());
-                    if (auto clicked = sender.try_as<muxc::Button>()) {
-                        clicked.Content(winrt::box_value(winrt::hstring{copied ? Str(L"action.copy.done") : Str(L"action.copy.fail")}));
-                    }
-                }));
-            }
-            rows.Children().Append(MakeSettingRow(label, detail, button));
-        }
-        card.Child(rows);
-        page.Children().Append(card);
-    }
-    // About: who made it, and where the code is.
-    {
-        auto title = MakeText(Str(L"card.about"), 14, true, false);
-        title.Margin(mux::Thickness{0, 12, 0, 0});
-        page.Children().Append(title);
-        auto card = MakeCard();
-        muxc::HyperlinkButton link;
-        link.Content(winrt::box_value(winrt::hstring{Str(L"about.link")}));
-        link.Padding(mux::Thickness{0, 0, 0, 0});
-        Keep(link, link.Click(winrt::auto_revoke, [](Inspectable const&, mux::RoutedEventArgs const&) {
-            ShellExecuteW(nullptr, L"open", L"https://github.com/AristideBH/windhawk-lib", nullptr, nullptr, SW_SHOWNORMAL);
-        }));
-        card.Child(MakeSettingRow(Str(L"about.creator"), Str(L"about.detail"), link));
-        page.Children().Append(card);
-    }
-    return page;
-}
-
-mux::UIElement BuildSettingsPage(const wchar_t* pageId, const wchar_t* title, const wchar_t* subtitle, bool withNote) {
-    muxc::StackPanel page;
-    page.Spacing(8);
-    page.Children().Append(MakePageHeader(title, subtitle));
-    if (withNote) {
-        auto note = MakeCard();
-        note.Child(MakeText(Str(L"columns.note"), 12, false, true));
-        page.Children().Append(note);
-    }
-    for (size_t c = 0; c < kCardCount; c++) {
-        bool any = false;
-        for (size_t i = 0; i < kSettingCount; i++) {
-            any = any || (!kSettings[i].windhawkOnly && wcscmp(kSettings[i].page, pageId) == 0 &&
-                          wcscmp(kSettings[i].card, kCards[c].id) == 0);
-        }
-        if (!any) {
-            continue;
-        }
-        auto title = MakeText(CardName(c), 14, true, false);
-        title.Margin(mux::Thickness{0, 12, 0, 0});
-        page.Children().Append(title);
-        auto card = MakeCard();
-        muxc::StackPanel rows;
-        rows.Spacing(2);
-        for (size_t i = 0; i < kSettingCount; i++) {
-            auto const& info = kSettings[i];
-            if (info.windhawkOnly || wcscmp(info.page, pageId) != 0 || wcscmp(info.card, kCards[c].id) != 0) {
-                continue;
-            }
-            rows.Children().Append(MakeSettingRow(SettingName(info), SettingDescription(info), MakeSettingControl(info)));
-        }
-        card.Child(rows);
-        page.Children().Append(card);
-    }
-    return page;
-}
-
-// Explorer Extras (the overview), Columns and the details pane.
-int SettingsPageCount() {
-    return 3;
-}
-
-void ShowSettingsPage(SettingsUi* ui, int page) {
-    ui->page = page;
-    g_settingsBuilding = true;
-    mux::UIElement content{nullptr};
-    try {
-        content = page == 1   ? BuildSettingsPage(L"columns", Str(L"columns.title"), Str(L"columns.subtitle"), true)
-                  : page == 2 ? BuildSettingsPage(L"details", Str(L"details.title"), Str(L"details.subtitle"), false)
-                              : BuildHomePage();
-    } catch (...) {
-        g_settingsBuilding = false;
-        throw;
-    }
-    ui->content.Content(content);
-    g_settingsBuilding = false;
-    ui->content.ChangeView(nullptr, 0.0, nullptr, true);
-}
-
-// The sidebar: its pages, as the flag has them.
-void ApplyNavMode(SettingsUi* ui);
-
-void FillNav(SettingsUi* ui) {
-    auto items = ui->nav.Items();
-    items.Clear();
-    ui->navLabels.clear();
-    ui->navNames.clear();
-    int count = SettingsPageCount();
-    for (int i = 0; i < count; i++) {
-        muxc::ListViewItem item;
-        muxc::StackPanel line;
-        line.Orientation(muxc::Orientation::Horizontal);
-        line.Spacing(12);
-        const wchar_t* name = nullptr;
-        if (i == 1) {
-            auto icon = MakeColumnsIcon();
-            icon.as<mux::FrameworkElement>().VerticalAlignment(mux::VerticalAlignment::Center);
-            line.Children().Append(icon);
-            name = Str(L"columns.title");
-        } else if (i == 2) {
-            muxc::FontIcon icon;
-            icon.FontFamily(mux::Media::FontFamily(L"Segoe Fluent Icons"));
-            icon.Glyph(L"");  // Info.
-            icon.FontSize(16);
-            line.Children().Append(icon);
-            name = Str(L"details.title");
-        } else {
-            muxc::FontIcon icon;
-            icon.FontFamily(mux::Media::FontFamily(L"Segoe Fluent Icons"));
-            icon.Glyph(L"");
-            icon.FontSize(16);
-            line.Children().Append(icon);
-            name = Str(L"page.home");
-        }
-        auto label = MakeText(name, 14, false, false);
-        label.VerticalAlignment(mux::VerticalAlignment::Center);
-        line.Children().Append(label);
-        ui->navLabels.push_back(label);
-        ui->navNames.push_back(name);
-        item.Content(line);
-        item.Height(40);
-        items.Append(item);
-    }
-    ui->navCount = count;
-    if (ui->page >= count) {
-        ui->page = 0;
-    }
-    ui->nav.SelectedIndex(ui->page);
-    ApplyNavMode(ui);
-}
-
-// The sidebar's look for the window's width: full names, or a rail of icons (with the names
-// as tooltips) that a button opens over the page.
-void ApplyNavMode(SettingsUi* ui) {
-    if (!ui->navHost || !ui->sidebarColumn) {
-        return;
-    }
-    bool rail = ui->compact && !ui->expanded;
-    ui->sidebarColumn.Width(mux::GridLength{ui->compact ? 56.0 : 248.0, mux::GridUnitType::Pixel});
-    ui->navHost.Width(rail ? 56.0 : 248.0);
-    // Opened over the page, the sidebar spans both columns: a child wider than its cell is clipped to it.
-    muxc::Grid::SetColumnSpan(ui->navHost, ui->compact && ui->expanded ? 2 : 1);
-    ui->navHost.Background(ui->compact && ui->expanded ? ui->overlayBrush : mux::Media::Brush{nullptr});
-    ui->navToggle.Visibility(ui->compact ? mux::Visibility::Visible : mux::Visibility::Collapsed);
-    for (auto const& label : ui->navLabels) {
-        label.Visibility(rail ? mux::Visibility::Collapsed : mux::Visibility::Visible);
-    }
-    // A rail item holds only its icon, centred in the item with no side padding, so nothing is cut.
-    ui->nav.Margin(rail ? mux::Thickness{4, 8, 4, 8} : mux::Thickness{8, 8, 8, 8});
-    muxc::ScrollViewer::SetHorizontalScrollBarVisibility(ui->nav, muxc::ScrollBarVisibility::Disabled);
-    auto items = ui->nav.Items();
-    for (uint32_t i = 0; i < items.Size() && i < ui->navNames.size(); i++) {
-        if (auto item = items.GetAt(i).try_as<muxc::ListViewItem>()) {
-            item.MinWidth(0);  // A list item is 88 wide at least, which is wider than the rail.
-            item.Padding(rail ? mux::Thickness{0, 0, 0, 0} : mux::Thickness{12, 0, 12, 0});
-            item.HorizontalContentAlignment(rail ? mux::HorizontalAlignment::Center : mux::HorizontalAlignment::Left);
-            muxc::ToolTipService::SetToolTip(item, rail ? winrt::box_value(winrt::hstring{ui->navNames[i]})
-                                                        : Inspectable{nullptr});
-        }
-    }
-    ui->content.Padding(ui->compact ? mux::Thickness{16, 16, 16, 24} : mux::Thickness{32, 24, 32, 32});
-}
-
-
-// The icon of the window and the taskbar: the ExploitProtection glyph of Segoe Fluent
-// Icons, drawn into a bitmap in the colour the caption text has, with its shape as
-// the alpha. Made again when the theme changes.
-HICON g_settingsIconSmall = nullptr;
-HICON g_settingsIconBig = nullptr;
-
-HICON IconFromGlyph(wchar_t glyph, int size, COLORREF colour) {
-    BITMAPINFO info = {};
-    info.bmiHeader.biSize = sizeof(info.bmiHeader);
-    info.bmiHeader.biWidth = size;
-    info.bmiHeader.biHeight = -size;  // Top-down.
-    info.bmiHeader.biPlanes = 1;
-    info.bmiHeader.biBitCount = 32;
-    info.bmiHeader.biCompression = BI_RGB;
-    HDC screen = GetDC(nullptr);
-    HDC dc = CreateCompatibleDC(screen);
-    void* pixels = nullptr;
-    HBITMAP colourBitmap = CreateDIBSection(screen, &info, DIB_RGB_COLORS, &pixels, nullptr, 0);
-    ReleaseDC(nullptr, screen);
-    HICON icon = nullptr;
-    if (dc && colourBitmap && pixels) {
-        HGDIOBJ oldBitmap = SelectObject(dc, colourBitmap);
-        memset(pixels, 0, (size_t)size * size * 4);
-        HFONT font = CreateFontW(-(size * 9 / 10), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                                 OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH,
-                                 L"Segoe Fluent Icons");
-        HGDIOBJ oldFont = SelectObject(dc, font);
-        SetBkMode(dc, TRANSPARENT);
-        SetTextColor(dc, RGB(255, 255, 255));
-        RECT box = {0, 0, size, size};
-        wchar_t text[2] = {glyph, 0};
-        DrawTextW(dc, text, 1, &box, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
-        SelectObject(dc, oldFont);
-        DeleteObject(font);
-        // White on black: the brightness is the shape.
-        uint8_t* data = (uint8_t*)pixels;
-        for (int i = 0; i < size * size; i++) {
-            uint8_t* px = data + i * 4;
-            unsigned alpha = std::max(px[0], std::max(px[1], px[2]));
-            px[0] = (uint8_t)(GetBValue(colour) * alpha / 255);
-            px[1] = (uint8_t)(GetGValue(colour) * alpha / 255);
-            px[2] = (uint8_t)(GetRValue(colour) * alpha / 255);
-            px[3] = (uint8_t)alpha;
-        }
-        SelectObject(dc, oldBitmap);
-        HBITMAP mask = CreateBitmap(size, size, 1, 1, nullptr);
-        ICONINFO made = {TRUE, 0, 0, mask, colourBitmap};
-        icon = CreateIconIndirect(&made);
-        DeleteObject(mask);
-    }
-    if (colourBitmap) {
-        DeleteObject(colourBitmap);
-    }
-    if (dc) {
-        DeleteDC(dc);
-    }
-    return icon;
-}
-
-void UpdateSettingsWindowIcon(HWND window, bool dark) {
-    UINT dpi = GetDpiForWindow(window);
-    int small = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
-    int big = GetSystemMetricsForDpi(SM_CXICON, dpi);
-    COLORREF colour = dark ? RGB(235, 235, 235) : RGB(32, 32, 32);
-    HICON newSmall = IconFromGlyph(L'', small, colour);
-    HICON newBig = IconFromGlyph(L'', big, colour);
-    if (newSmall) {
-        SendMessageW(window, WM_SETICON, ICON_SMALL, (LPARAM)newSmall);
-    }
-    if (newBig) {
-        SendMessageW(window, WM_SETICON, ICON_BIG, (LPARAM)newBig);
-    }
-    if (g_settingsIconSmall) {
-        DestroyIcon(g_settingsIconSmall);
-    }
-    if (g_settingsIconBig) {
-        DestroyIcon(g_settingsIconBig);
-    }
-    g_settingsIconSmall = newSmall;
-    g_settingsIconBig = newBig;
-}
-
-// The window's backdrop and caption follow the theme of its content.
-void ApplySettingsWindowTheme(HWND window, SettingsUi* ui) {
-    HMODULE dwm = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!dwm) {
-        return;
-    }
-    typedef HRESULT(WINAPI * Set_t)(HWND, DWORD, const void*, DWORD);
-    struct FrameMargins {
-        int left, right, top, bottom;
-    };
-    typedef HRESULT(WINAPI * Extend_t)(HWND, const FrameMargins*);
-    auto set = (Set_t)GetProcAddress(dwm, "DwmSetWindowAttribute");
-    auto extend = (Extend_t)GetProcAddress(dwm, "DwmExtendFrameIntoClientArea");
-    if (set) {
-        BOOL dark = ui && ui->root && ui->root.ActualTheme() == mux::ElementTheme::Dark;
-        UpdateSettingsWindowIcon(window, dark != FALSE);
-        set(window, 20, &dark, sizeof(dark));          // DWMWA_USE_IMMERSIVE_DARK_MODE
-        int backdrop = 2;                              // DWMSBT_MAINWINDOW: Mica
-        set(window, 38, &backdrop, sizeof(backdrop));  // DWMWA_SYSTEMBACKDROP_TYPE
-    }
-    if (extend) {
-        FrameMargins margins = {-1, -1, -1, -1};
-        extend(window, &margins);
-    }
-    FreeLibrary(dwm);
-}
-
-void RememberSettingsWindow(HWND window) {
-    if (!g_settingsUi || IsIconic(window) || IsZoomed(window)) {
-        return;
-    }
-    RECT box;
-    if (GetWindowRect(window, &box)) {
-        wchar_t text[96];
-        swprintf(text, 96, L"%ld,%ld,%ld,%ld,%d", box.left, box.top, box.right - box.left, box.bottom - box.top,
-                 g_settingsUi->page);
-        Wh_SetStringValue(L"ui.window", text);
-    }
-}
-
-// Ends the window. A window closed by the user is released properly; one whose
-// owner is going (the Explorer window, or the mod) is let go without releasing,
-// as the panel is, since releasing XAML objects there crashes Explorer.
-void DestroySettingsUi(bool abandon) {
-    SettingsUi* ui = g_settingsUi;
-    g_settingsUi = nullptr;
-    if (!ui) {
-        return;
-    }
-    if (abandon) {
-        (void)winrt::detach_abi(ui->source);
-        (void)winrt::detach_abi(ui->bridge);
-        (void)winrt::detach_abi(ui->root);
-        (void)winrt::detach_abi(ui->nav);
-        (void)winrt::detach_abi(ui->content);
-        return;  // The struct itself is let go with them.
-    }
-    try {
-        ui->nav = nullptr;
-        ui->content = nullptr;
-        ui->navHost = nullptr;
-        ui->navToggle = nullptr;
-        ui->sidebarColumn = nullptr;
-        ui->overlayBrush = nullptr;
-        ui->navLabels.clear();
-        if (ui->source) {
-            ui->source.Content(nullptr);
-            ui->source.Close();
-        }
-    } catch (...) {
-        LogHresult(L"closing the settings window");
-    }
-    ui->source = nullptr;
-    ui->bridge = nullptr;
-    ui->root = nullptr;
-    delete ui;
-}
-
-LRESULT CALLBACK SettingsWindowProc(HWND window, UINT message, WPARAM wparam, LPARAM lparam) {
-    switch (message) {
-        case WM_ERASEBKGND:
-            return 1;
-        case WM_SIZE:
-            if (g_settingsUi && g_settingsUi->bridge && wparam != SIZE_MINIMIZED) {
-                try {
-                    RECT client;
-                    GetClientRect(window, &client);
-                    g_settingsUi->bridge.MoveAndResize(winrt::Windows::Graphics::RectInt32{
-                        0, 0, client.right - client.left, client.bottom - client.top});
-                } catch (...) {
-                }
-            }
-            return 0;
-        case WM_GETMINMAXINFO: {
-            auto* limits = (MINMAXINFO*)lparam;
-            UINT dpi = GetDpiForWindow(window);
-            limits->ptMinTrackSize.x = MulDiv(440, dpi, 96);
-            limits->ptMinTrackSize.y = MulDiv(520, dpi, 96);
-            return 0;
-        }
-        case WM_DPICHANGED: {
-            auto* suggested = (RECT*)lparam;
-            SetWindowPos(window, nullptr, suggested->left, suggested->top, suggested->right - suggested->left,
-                         suggested->bottom - suggested->top, SWP_NOZORDER | SWP_NOACTIVATE);
-            return 0;
-        }
-        case WM_EXITSIZEMOVE:
-            RememberSettingsWindow(window);
-            return 0;
-        case WM_CLOSE:
-            RememberSettingsWindow(window);
-            if (!g_settingsAbandon) {
-                // Closing only hides it: the XAML island lives on, so opening again is
-                // instant and nothing is created or released while Explorer runs.
-                ShowWindow(window, SW_HIDE);
-                return 0;
-            }
-            // At unload the objects are released while the window still exists, as the pane's are.
-            if (g_settingsUnload) {
-                RevokeAllHandlers();
-            }
-            DestroySettingsUi(!g_settingsUnload);
-            DestroyWindow(window);
-            if (g_settingsUnload) {
-                // XAML frees the window's objects on later turns, and their delegates are the mod's code.
-                try {
-                    DrainUi(winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread());
-                } catch (...) {
-                }
-            }
-            return 0;
-        case WM_DESTROY:
-            if (g_settingsWindow == window) {
-                g_settingsWindow = nullptr;
-            }
-            if (g_settingsIconSmall) {
-                DestroyIcon(g_settingsIconSmall);
-                g_settingsIconSmall = nullptr;
-            }
-            if (g_settingsIconBig) {
-                DestroyIcon(g_settingsIconBig);
-                g_settingsIconBig = nullptr;
-            }
-            DestroySettingsUi(true);  // A window destroyed another way: nothing is released.
-            return 0;
-        default:
-            break;
-    }
-    return DefWindowProcW(window, message, wparam, lparam);
-}
-
-// Opens the window, or brings it forward. Called on the UI thread of an Explorer window.
-void OpenSettingsWindow(WindowState* state) {
-    if (g_unloading) {
-        return;
-    }
-    if (g_settingsWindow && IsWindow(g_settingsWindow)) {
-        // The XAML objects belong to the thread that made them: only that thread
-        // reads the settings into the page again.
-        if (g_settingsThread == GetCurrentThreadId() && g_settingsUi) {
-            try {
-                if (g_settingsUi->navCount != SettingsPageCount()) {
-                    FillNav(g_settingsUi);
-                }
-                ShowSettingsPage(g_settingsUi, g_settingsUi->page);
-            } catch (...) {
-                LogHresult(L"refreshing the settings window");
-            }
-        }
-        ShowWindow(g_settingsWindow, IsIconic(g_settingsWindow) ? SW_RESTORE : SW_SHOW);
-        SetForegroundWindow(g_settingsWindow);
-        RedrawWindow(g_settingsWindow, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
-        return;
-    }
-    try {
-        if (!g_settingsClassMade) {
-            WNDCLASSEXW cls = {};
-            cls.cbSize = sizeof(cls);
-            cls.lpfnWndProc = SettingsWindowProc;
-            cls.hInstance = ModHandle();
-            cls.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-            cls.lpszClassName = kSettingsClass;
-            if (!RegisterClassExW(&cls)) {
-                Wh_Log(L"settings window: the class could not be registered, gle=%lu", GetLastError());
-                return;
-            }
-            g_settingsClassMade = true;
-        }
-        // The last place and page, if they are still on a screen.
-        int x = CW_USEDEFAULT, y = CW_USEDEFAULT;
-        UINT dpi = GetDpiForSystem();
-        int width = MulDiv(980, dpi, 96), height = MulDiv(700, dpi, 96);
-        int page = 0;
-        {
-            wchar_t saved[96] = L"";
-            Wh_GetStringValue(L"ui.window", saved, ARRAYSIZE(saved));
-            long sx, sy, sw, sh;
-            int sp;
-            if (swscanf(saved, L"%ld,%ld,%ld,%ld,%d", &sx, &sy, &sw, &sh, &sp) == 5 && sw > 300 && sh > 300) {
-                RECT box = {sx, sy, sx + sw, sy + sh};
-                if (MonitorFromRect(&box, MONITOR_DEFAULTTONULL)) {
-                    x = sx;
-                    y = sy;
-                    width = sw;
-                    height = sh;
-                }
-                page = 0;  // It always opens on the first section.
-                (void)sp;
-            }
-        }
-        HWND window = CreateWindowExW(0, kSettingsClass, Str(L"window.title"), WS_OVERLAPPEDWINDOW, x, y, width, height,
-                                      nullptr, nullptr, ModHandle(), nullptr);
-        if (!window) {
-            Wh_Log(L"settings window: could not be created, gle=%lu", GetLastError());
-            return;
-        }
-        g_settingsWindow = window;
-        g_settingsThread = GetCurrentThreadId();
-        {
-            // No icon and no title drawn in the title bar (the window keeps its name for the taskbar).
-            if (HMODULE theme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32)) {
-                struct Options {
-                    DWORD flags;
-                    DWORD mask;
-                } options = {3, 3};  // WTNCA_NODRAWCAPTION | WTNCA_NODRAWICON
-                auto setAttribute = (HRESULT(WINAPI*)(HWND, int, void*, DWORD))GetProcAddress(theme, "SetWindowThemeAttribute");
-                if (setAttribute) {
-                    setAttribute(window, 1 /* WTA_NONCLIENT */, &options, sizeof(options));
-                }
-                FreeLibrary(theme);
-            }
-        }
-        auto* ui = new SettingsUi();
-        g_settingsUi = ui;
-
-        ui->source = mux::Hosting::DesktopWindowXamlSource();
-        ui->source.Initialize(winrt::Microsoft::UI::WindowId{(uint64_t)window});
-        ui->bridge = ui->source.SiteBridge();
-
-        // The layout: a sidebar of pages, a page that scrolls.
-        // The island paints its own opaque background: with a transparent root, a white
-        // rectangle of the island's first size showed through over the Mica backdrop.
-        auto root = LoadXaml(std::wstring(L"<Grid ") + kXamlNs +
-                             L" Background='{ThemeResource SolidBackgroundFillColorBaseBrush}'/>")
-                        .as<muxc::Grid>();
-        muxc::ColumnDefinition sidebarColumn, pageColumn;
-        sidebarColumn.Width(mux::GridLength{248, mux::GridUnitType::Pixel});
-        pageColumn.Width(mux::GridLength{1, mux::GridUnitType::Star});
-        root.ColumnDefinitions().Append(sidebarColumn);
-        root.ColumnDefinitions().Append(pageColumn);
-        ui->root = root;
-        ui->sidebarColumn = sidebarColumn;
-
-        muxc::ListView nav;
-        nav.Margin(mux::Thickness{8, 8, 8, 8});
-        nav.SelectionMode(muxc::ListViewSelectionMode::Single);
-        ui->nav = nav;
-
-        // The sidebar sits in a host that can be wider than its column: on a narrow window it
-        // is a rail of icons, and the button at its top opens it over the page.
-        auto host = LoadXaml(std::wstring(L"<Grid ") + kXamlNs +
-                             L" HorizontalAlignment='Left' Background='{ThemeResource SolidBackgroundFillColorSecondaryBrush}'>"
-                             L"<Grid.RowDefinitions><RowDefinition Height='Auto'/><RowDefinition Height='*'/></Grid.RowDefinitions>"
-                             L"</Grid>")
-                        .as<muxc::Grid>();
-        ui->overlayBrush = host.Background();
-        host.Background(nullptr);
-        muxc::Button toggle;
-        toggle.Margin(mux::Thickness{8, 12, 8, 0});
-        toggle.Width(40);
-        toggle.Height(36);
-        toggle.Padding(mux::Thickness{0, 0, 0, 0});
-        toggle.Background(mux::Media::SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0}));
-        toggle.BorderThickness(mux::Thickness{0, 0, 0, 0});
-        muxc::FontIcon bars;
-        bars.FontFamily(mux::Media::FontFamily(L"Segoe Fluent Icons"));
-        bars.Glyph(L"\uE700");
-        bars.FontSize(16);
-        toggle.Content(bars);
-        toggle.Visibility(mux::Visibility::Collapsed);
-        muxc::ToolTipService::SetToolTip(toggle, winrt::box_value(winrt::hstring{L"Menu"}));
-        muxc::Grid::SetRow(toggle, 0);
-        muxc::Grid::SetRow(nav, 1);
-        host.Children().Append(toggle);
-        host.Children().Append(nav);
-        muxc::Grid::SetColumn(host, 0);
-        muxc::Canvas::SetZIndex(host, 10);
-        root.Children().Append(host);
-        ui->navHost = host;
-        ui->navToggle = toggle;
-        Keep(toggle, toggle.Click(winrt::auto_revoke, [](Inspectable const&, mux::RoutedEventArgs const&) {
-            SettingsUi* now = g_settingsUi;
-            if (now) {
-                now->expanded = !now->expanded;
-                ApplyNavMode(now);
-            }
-        }));
-
-        muxc::ScrollViewer content;
-        content.VerticalScrollBarVisibility(muxc::ScrollBarVisibility::Auto);
-        content.Padding(mux::Thickness{32, 24, 32, 32});
-        muxc::Grid::SetColumn(content, 1);
-        root.Children().Append(content);
-        ui->content = content;
-        // A press on the page closes the sidebar that was opened over it.
-        AddRouted(content, mux::UIElement::PointerPressedEvent(),
-                           winrt::box_value(mux::Input::PointerEventHandler(
-                               [](Inspectable const&, mux::Input::PointerRoutedEventArgs const&) {
-                                   SettingsUi* now = g_settingsUi;
-                                   if (now && now->compact && now->expanded) {
-                                       now->expanded = false;
-                                       ApplyNavMode(now);
-                                   }
-                               })));
-        // The width decides: below 760 px the sidebar is a rail.
-        Keep(root, root.SizeChanged(winrt::auto_revoke, [](Inspectable const&, mux::SizeChangedEventArgs const& sizeArgs) {
-            SettingsUi* now = g_settingsUi;
-            if (!now) {
-                return;
-            }
-            bool narrow = sizeArgs.NewSize().Width < 760;
-            if (narrow != now->compact) {
-                now->compact = narrow;
-                now->expanded = false;
-                ApplyNavMode(now);
-            }
-        }));
-
-        Keep(nav, nav.SelectionChanged(winrt::auto_revoke, [](Inspectable const&, muxc::SelectionChangedEventArgs const&) {
-            SettingsUi* now = g_settingsUi;
-            if (now && now->nav) {
-                int selected = now->nav.SelectedIndex();
-                if (selected >= 0 && selected != now->page) {
-                    ShowSettingsPage(now, selected);
-                }
-                if (now->compact && now->expanded) {
-                    now->expanded = false;
-                    ApplyNavMode(now);
-                }
-            }
-        }));
-        Keep(root, root.ActualThemeChanged(winrt::auto_revoke, [window](mux::FrameworkElement const&, Inspectable const&) {
-            ApplySettingsWindowTheme(window, g_settingsUi);
-            RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
-        }));
-        ui->source.Content(root);
-
-        ui->page = page;
-        FillNav(ui);
-        ShowSettingsPage(ui, ui->page);
-        ApplySettingsWindowTheme(window, ui);
-        RECT client;
-        GetClientRect(window, &client);
-        ui->bridge.MoveAndResize(winrt::Windows::Graphics::RectInt32{0, 0, client.right, client.bottom});
-        ui->bridge.Show();
-        ShowWindow(window, SW_SHOW);
-        SetForegroundWindow(window);
-        RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
-        Wh_Log(L"settings window opened, window=%p, dpi=%u, client %ldx%ld", window, GetDpiForWindow(window),
-            client.right, client.bottom);
-    } catch (...) {
-        LogHresult(L"OpenSettingsWindow");
-        if (g_settingsWindow) {
-            DestroyWindow(g_settingsWindow);
-        }
-    }
-}
-
-// The Explorer window that owns the settings window is going: the window goes with it,
-// its XAML objects let go.
-void CloseSettingsWindowOfThread() {
-    if (g_settingsWindow && g_settingsThread == GetCurrentThreadId() && IsWindow(g_settingsWindow)) {
-        Wh_Log(L"the settings window goes with its Explorer window");
-        g_settingsAbandon = true;
-        DestroyWindow(g_settingsWindow);
-        g_settingsAbandon = false;
-    }
-}
-
-// The mod is unloading: ask the window to close, on its own thread, and let the class go.
-void CloseSettingsWindowAtUnload() {
-    g_settingsAbandon = true;
-    g_settingsUnload = true;
-    if (g_settingsWindow && IsWindow(g_settingsWindow)) {
-        // Sent, not posted: the window is gone and its objects released when this returns.
-        SendMessageW(g_settingsWindow, WM_CLOSE, 0, 0);
-    }
-    if (g_settingsClassMade) {
-        if (UnregisterClassW(kSettingsClass, ModHandle())) {
-            g_settingsClassMade = false;
-        } else {
-            Wh_Log(L"settings window: the class is still in use, gle=%lu", GetLastError());
-        }
-    }
 }
 // ---- The details pane ----
 //
@@ -17267,6 +16016,7 @@ mux::UIElement PaneBuild(PaneData const& data, DetailsPane* pane) {
                                  info.lpVerb = L"properties";
                                  info.lpIDList = (void*)pane->shownItems[0].get();
                                  info.nShow = SW_SHOW;
+                                 ModalScope modal;
                                  ShellExecuteExW(&info);
                              }});
         }
@@ -17412,8 +16162,9 @@ void PaneStopMedia(DetailsPane* pane) {
 
 // The wheel over the preview is sent to the window under the mouse by the pane itself: the
 // handler's window is in another process, and the wheel did not scroll it by itself.
-static HHOOK g_wheelHook = nullptr;
-static HWND g_wheelHost = nullptr;
+// A low-level hook runs on the thread that installed it, so each window thread has its own.
+static thread_local HHOOK g_wheelHook = nullptr;
+static thread_local HWND g_wheelHost = nullptr;
 
 LRESULT CALLBACK PaneWheelProc(int code, WPARAM wParam, LPARAM lParam) {
     if (code == HC_ACTION && wParam == WM_MOUSEWHEEL && g_wheelHost && IsWindowVisible(g_wheelHost)) {
@@ -17433,6 +16184,15 @@ LRESULT CALLBACK PaneWheelProc(int code, WPARAM wParam, LPARAM lParam) {
         }
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+// On while the pointer is over the preview: every mouse event of the system goes through this
+// thread's message loop while it is on.
+void PaneWheelOn(HWND host) {
+    g_wheelHost = host;
+    if (!g_wheelHook) {
+        g_wheelHook = SetWindowsHookExW(WH_MOUSE_LL, PaneWheelProc, ModHandle(), 0);
+    }
 }
 
 void PaneWheelOff(HWND host) {
@@ -18678,10 +17438,6 @@ void PaneOpenPreview(WindowState* state, DetailsPane* pane, PaneData const& data
         return;
     }
     pane->handler = handler;
-    g_wheelHost = pane->host;
-    if (!g_wheelHook) {
-        g_wheelHook = SetWindowsHookExW(WH_MOUSE_LL, PaneWheelProc, ModHandle(), 0);
-    }
     Wh_Log(L"preview: %s loading, started in %llu ms", data.previewPath.c_str(), GetTickCount64() - started);
     static const wchar_t* const heavy[] = {L".pdf", L".doc", L".docx", L".xls", L".xlsx", L".ppt", L".pptx", L".odt", L".htm", L".html"};
     const wchar_t* dot = wcsrchr(data.previewPath.c_str(), L'.');
@@ -18714,7 +17470,7 @@ void PaneAnimateIn(WindowState* state, DetailsPane* pane, float dx, float dy, mu
     if (!body || !inner) {
         return;
     }
-    Wh_Log(L"details pane: content in, dx=%.0f dy=%.0f", dx, dy);
+    Wh_LogV(L"details pane: content in, dx=%.0f dy=%.0f", dx, dy);
     if (!g_paneAnim) {
         for (mux::UIElement e : {mux::UIElement(body), mux::UIElement(inner)}) {
             e.TranslationTransition(nullptr);
@@ -18841,7 +17597,7 @@ bool PaneHandleAltP(HWND hwnd, LPMSG msg) {
     if (msg->message == WM_SYSKEYDOWN && !(msg->lParam & (1 << 30))) {  // Not an auto-repeat.
         // No hold on the buttons: nothing flips them here (a click does), so they follow the pane at once.
         state->details->shortcutAt = GetTickCount64();
-        Wh_Log(L"details pane: Alt+P");
+        Wh_LogV(L"details pane: Alt+P");
     }
     return true;
 }
@@ -19579,7 +18335,7 @@ bool PaneReadSelection(WindowState* state, DetailsPane* pane, std::wstring* key)
     swprintf(tail, ARRAYSIZE(tail), L"|%d|%llx", (int)children.size(), hash);
     std::wstring next = PathOf(folder.get()) + tail;
     if (next != pane->wantedKey) {
-        Wh_Log(L"details pane: Explorer's selection is now %d item(s) in \"%s\"", (int)children.size(), PathOf(folder.get()).c_str());
+        Wh_LogV(L"details pane: Explorer's selection is now %d item(s) in \"%s\"", (int)children.size(), PathOf(folder.get()).c_str());
         pane->wantedKey = next;
         PaneClosePreview(pane);
         pane->wantedSince = GetTickCount64();
@@ -19781,6 +18537,7 @@ void PaneStep(WindowState* state, DetailsPane* pane) {
         GetWindowRect(pane->host, &hostRect);
         bool over = IsWindowVisible(pane->host) && PtInRect(&hostRect, cursor);
         if (over) {
+            PaneWheelOn(pane->host);
             pane->overTicks++;
             if (!pane->previewFocused && pane->overTicks >= 3 && !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
                 // The handler is asked to take the focus itself: its window may be in another process,
@@ -19790,6 +18547,7 @@ void PaneStep(WindowState* state, DetailsPane* pane) {
                 pane->previewFocused = true;
             }
         } else {
+            PaneWheelOff(pane->host);
             pane->overTicks = 0;
             if (pane->previewFocused) {
                 pane->previewFocused = false;
@@ -20497,7 +19255,7 @@ void DrainUi(mud::DispatcherQueue const& queue) {
             }
             MsgWaitForMultipleObjects(0, nullptr, FALSE, 10, QS_ALLINPUT);
         }
-        Wh_Log(L"window cleanup: the queue was run, round %d, %s after %llu ms", round + 1,
+        Wh_LogV(L"window cleanup: the queue was run, round %d, %s after %llu ms", round + 1,
             *ran ? L"marker reached" : L"timed out", GetTickCount64() - began);
     }
 }
@@ -20505,18 +19263,45 @@ void DrainUi(mud::DispatcherQueue const& queue) {
 // The touch-drag coroutines resume on the thread that started them. Until they have ended, their
 // thread's messages are handled, so they can run to their end while the mod is still mapped.
 void WaitForCoroutines() {
+    // Their operations are cancelled (a drag that is still held, a file on a slow network): they end
+    // with an error that they handle. Then each is waited for as long as it takes.
     ULONGLONG began = GetTickCount64();
-    while (g_coroutines > 0 && GetTickCount64() - began < 3000) {
+    ULONGLONG cancelledAt = 0;
+    while (g_coroutines > 0) {
+        if (GetTickCount64() - cancelledAt >= 500) {
+            CancelTouchDragOps();
+            cancelledAt = GetTickCount64();
+        }
         MSG msg;
-        while (GetTickCount64() - began < 3000 && PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
         MsgWaitForMultipleObjects(0, nullptr, FALSE, 10, QS_ALLINPUT);
+        if (GetTickCount64() - began == 10000) {
+            Wh_Log(L"%d coroutine(s) of the mod are still waiting after 10 s", g_coroutines.load());
+        }
     }
-    if (g_coroutines > 0) {
-        Wh_Log(L"%d coroutine(s) of the mod were still waiting after 3 s", g_coroutines.load());
+}
+
+// Work for a window's thread that must not run inside a message loop of the mod's own (see ModalScope):
+// it waits, by a one-shot timer, until none is on the stack.
+void RunOutsideModal(mud::DispatcherQueue const& queue, std::shared_ptr<std::function<void()>> const& work) {
+    if (t_modalDepth == 0) {
+        (*work)();
+        return;
     }
+    static int logged = 0;
+    if (logged++ < 3) {
+        Wh_Log(L"window cleanup waits: a dialog or a drag of the mod is open on this thread");
+    }
+    auto timer = queue.CreateTimer();
+    timer.Interval(std::chrono::milliseconds(100));
+    Keep(timer, timer.Tick(winrt::auto_revoke, [queue, work](mud::DispatcherQueueTimer const& sender, Inspectable const&) {
+        sender.Stop();
+        RunOutsideModal(queue, work);
+    }));
+    timer.Start();
 }
 
 void CloseEverything() {
@@ -20531,7 +19316,8 @@ void CloseEverything() {
         bool queued = false;
         try {
             if (state->queue) {
-                queued = state->queue.TryEnqueue([state, done]() {
+                mud::DispatcherQueue windowQueue = state->queue;
+                auto work = std::make_shared<std::function<void()>>([state, done]() {
                     mud::DispatcherQueue queue = state->queue;
                     if (state->topLevel && IsWindow(state->topLevel)) {
                         RemoveWindowSubclass(state->topLevel, CloseSubclassProc, kCloseSubclassId);
@@ -20556,6 +19342,7 @@ void CloseEverything() {
                         SetEvent(done);
                     }
                 });
+                queued = windowQueue.TryEnqueue([windowQueue, work]() { RunOutsideModal(windowQueue, work); });
             }
         } catch (...) {
             LogHresult(L"CloseEverything");
@@ -20579,6 +19366,45 @@ void CloseEverything() {
             if (done) {
                 CloseHandle(done);
             }
+        }
+    }
+}
+
+// Columns is switched off while the details pane stays: the panel and the Columns entry go from every
+// window, and the windows' state, pane and entries stay.
+void ColumnsOffEverywhere() {
+    std::vector<mud::DispatcherQueue> queues;
+    {
+        std::lock_guard<std::mutex> lock(g_statesMutex);
+        for (auto& state : g_states) {
+            if (state->queue) {
+                queues.push_back(state->queue);
+            }
+        }
+    }
+    for (auto& queue : queues) {
+        HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        bool queued = false;
+        try {
+            auto work = std::make_shared<std::function<void()>>([done]() {
+                if (WindowState* now = StateForThisThread(false)) {
+                    HidePanel(now, L"Columns switched off");
+                    RemoveColumnsEntry(now);
+                }
+                if (done) {
+                    SetEvent(done);
+                }
+            });
+            queued = queue.TryEnqueue([queue, work]() { RunOutsideModal(queue, work); });
+        } catch (...) {
+            LogHresult(L"ColumnsOffEverywhere");
+        }
+        if (queued && done) {
+            while (WaitForSingleObject(done, 1000) == WAIT_TIMEOUT) {
+            }
+        }
+        if (done) {
+            CloseHandle(done);
         }
     }
 }
@@ -20612,10 +19438,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
 void LoadSettings() {
     g_enabled = SettingBool(L"enabled");
     g_restore = SettingBool(L"restoreOnOpen");
-    g_sidebarRoot = SettingBool(L"sidebarRoot");
     g_focusRect = SettingBool(L"focusRect");
     g_doubleClickUp = SettingBool(L"doubleClickUp");
-    g_lastEdge = SettingBool(L"lastEdge");
     g_headerKeyboard = SettingBool(L"headerKeyboard");
     g_keepStale = SettingBool(L"keepStale");
     g_harmonize = SettingBool(L"harmonizeWidths");
@@ -20629,11 +19453,9 @@ void LoadSettings() {
     g_paneMuted = Wh_GetIntValue(L"ui.paneMuted", 0) != 0;
     g_staleAccent = SettingBool(L"staleAccent");
     g_autoPreview = SettingBool(L"autoPreview");
-    g_springLoad = SettingBool(L"springLoad");
     g_rememberSort = SettingBool(L"rememberSort");
     g_rememberWidth = SettingBool(L"rememberWidth");
     g_rememberLayout = SettingBool(L"rememberLayout");
-    g_remoteMarks = SettingBool(L"remoteMarks");
     g_desktopRealOnly = SettingBool(L"desktopRealOnly");
     {
         std::wstring mode = SettingText(L"background");
@@ -20668,7 +19490,7 @@ BOOL Wh_ModInit() {
 #else
     const wchar_t* arch = L"x86";
 #endif
-    Wh_Log(L"explorer-extras v0.63.2 start, compiled as %s, pid=%lu, columns=%d width=%d..%d follow=%d",
+    Wh_Log(L"explorer-extras v0.66.1 start, compiled as %s, pid=%lu, columns=%d width=%d..%d follow=%d",
         arch, GetCurrentProcessId(), g_enabled ? 1 : 0, g_minWidth.load(),
         g_maxWidth.load(), g_follow ? 1 : 0);
 
@@ -20695,14 +19517,21 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModSettingsChanged() {
+    static unsigned long long rebuildSignature = RebuildSignature();
     LoadSettings();
-    Wh_Log(L"settings changed: columns=%d width=%d..%d follow=%d maxItems=%d",
-        g_enabled ? 1 : 0, g_minWidth.load(), g_maxWidth.load(),
-        g_follow ? 1 : 0, g_maxItems.load());
+    Wh_Log(L"settings changed: columns=%d details=%d width=%d..%d maxItems=%d",
+        g_enabled ? 1 : 0, g_detailsPane ? 1 : 0, g_minWidth.load(), g_maxWidth.load(), g_maxItems.load());
     if (!g_enabled) {
-        // Off means gone: take the entry and the panel out of every window.
-        CloseEverything();
+        // Off means gone: the Columns entry and the panel go from every window. The details pane stays.
+        if (g_detailsPane) {
+            ColumnsOffEverywhere();
+        } else {
+            CloseEverything();
+        }
+    } else if (unsigned long long now = RebuildSignature(); now != rebuildSignature) {
+        RebuildEverywhere();  // Widths, shading, names or limits changed: the columns are fitted and read again.
     }
+    rebuildSignature = RebuildSignature();
 }
 
 void Wh_ModBeforeUninit() {
@@ -20714,7 +19543,6 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
-    CloseSettingsWindowAtUnload();
     UnregisterNotifyClass();
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
