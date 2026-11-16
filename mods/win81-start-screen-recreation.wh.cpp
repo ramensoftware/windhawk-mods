@@ -10,7 +10,7 @@
 // @description:es  Este mod recrea la pantalla de inicio de Windows 8.1 en Windows 10 y Windows 11
 // @description:fr  Ce mod recrée l'écran d'accueil de Windows 8.1 sur Windows 10 et Windows 11
 // @description:pt  Este mod recria a Tela Inicial do Windows 8.1 no Windows 10 e no Windows 11
-// @version         1.2.0
+// @version         1.3.0
 // @license         GPL-3.0-or-later
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
@@ -92,9 +92,9 @@ The mod does **not** replace system files.
   the space back when the pointer touches the bottom edge of the screen. The horizontal scroll
   bar and the buttons in the two bottom corners move up by the same amount, so they never
   overlap the taskbar and stay usable, and a click on the taskbar closes the Start screen.
-  Nothing of the shell is touched: the bottom strip of the Start window is clipped away with
-  `SetWindowRgn` and restored as soon as the pointer leaves it. It can be turned off in the
-  settings.
+  Nothing of the shell is touched: Start clips its own bottom strip, or resizes its own window
+  when Windows 8.1 Taskbar Recreation is detected, and restores it when the pointer leaves.
+  It can be turned off in the settings.
 - **Layout kept across updates**: tiles, sizes, group names and groups are saved in
   Windhawk's per-mod storage (`Wh_GetModStoragePath`, one file per user account), which
   survives mod updates and a mod reinstall and is only removed with the mod itself. The
@@ -138,6 +138,9 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
 
 ## Credits
 
+- **Track41** - Custom tile and app-specific tile colour suggestions.
+- **Microsoft** - [TileSize documentation](https://learn.microsoft.com/en-us/uwp/api/windows.ui.startscreen.tilesize).
+
 - **AdmnistratoX** - for the original Windows 8 (8045) Start Screen mod on which this
   mod is based.
 - **WinBoeing 777** - Testing on Windows 10 22H2
@@ -149,19 +152,128 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
 - For problems, please report an issue on GitHub.
 */
 // ==/WindhawkModReadme==
+// Reviewer notes (changes relative to the 1.2.0 source):
+// - Adds an optional desktop tile color sampled from the application icon.
+// - Adds eight target-keyed custom tile definitions with local icon and size-specific images.
+// - Custom styling is reapplied from Windhawk settings; the original layout format is retained.
+// - New fields apply after the mod is restarted. No custom image is copied to disk.
+// - Image size and path validation is best effort; behavior and visual fidelity need real Windows testing.
+// - When the Windows 8.1 taskbar recreation is detected on the active monitor,
+//   the Start window gives it priority without moving or hiding shell windows.
+// - Existing implementation, attribution, and GPL-3.0-or-later license are retained.
+//
 // ==WindhawkModSettings==
 /*
+- appTileColors: false
+  $name: "Use app-specific tile colors (sampled from the app icon)"
+  $name:it: "Usa colori specifici delle app (campionati dall'icona)"
+  $name:es: "Usar colores específicos de cada aplicación (muestreados del icono)"
+  $name:fr: "Utiliser les couleurs propres aux applications (prélevées sur leur icône)"
+  $name:pt: "Usar cores específicas dos aplicativos (extraídas do ícone)"
+  $description: "This setting optionally uses a color sampled from the application icon for desktop tiles. Simulated and packaged tiles keep their own artwork and color."
+  $description:it: "Questa impostazione usa facoltativamente il colore campionato dall'icona dell'app per i riquadri desktop. I riquadri simulati e delle app in pacchetto conservano immagini e colori propri."
+  $description:es: "Esta configuración usa opcionalmente un color tomado del icono de la aplicación para los mosaicos de escritorio. Los mosaicos simulados y de aplicaciones empaquetadas conservan sus imágenes y colores."
+  $description:fr: "Ce paramètre utilise éventuellement une couleur prélevée sur l'icône de l'application pour les vignettes de bureau. Les vignettes simulées et celles des applications packagées conservent leurs images et leurs couleurs."
+  $description:pt: "Esta configuração usa opcionalmente uma cor extraída do ícone do aplicativo nos blocos de desktop. Os blocos simulados e de aplicativos empacotados mantêm suas imagens e cores."
+- customTile1: ""
+  $name: "Custom tile 1"
+  $name:it: "Riquadro personalizzato 1"
+  $name:es: "Mosaico personalizado 1"
+  $name:fr: "Vignette personnalisée 1"
+  $name:pt: "Bloco personalizado 1"
+  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
+  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
+  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
+  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
+  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
+- customTile2: ""
+  $name: "Custom tile 2"
+  $name:it: "Riquadro personalizzato 2"
+  $name:es: "Mosaico personalizado 2"
+  $name:fr: "Vignette personnalisée 2"
+  $name:pt: "Bloco personalizado 2"
+  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
+  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
+  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
+  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
+  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
+- customTile3: ""
+  $name: "Custom tile 3"
+  $name:it: "Riquadro personalizzato 3"
+  $name:es: "Mosaico personalizado 3"
+  $name:fr: "Vignette personnalisée 3"
+  $name:pt: "Bloco personalizado 3"
+  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
+  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
+  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
+  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
+  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
+- customTile4: ""
+  $name: "Custom tile 4"
+  $name:it: "Riquadro personalizzato 4"
+  $name:es: "Mosaico personalizado 4"
+  $name:fr: "Vignette personnalisée 4"
+  $name:pt: "Bloco personalizado 4"
+  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
+  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
+  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
+  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
+  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
+- customTile5: ""
+  $name: "Custom tile 5"
+  $name:it: "Riquadro personalizzato 5"
+  $name:es: "Mosaico personalizado 5"
+  $name:fr: "Vignette personnalisée 5"
+  $name:pt: "Bloco personalizado 5"
+  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
+  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
+  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
+  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
+  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
+- customTile6: ""
+  $name: "Custom tile 6"
+  $name:it: "Riquadro personalizzato 6"
+  $name:es: "Mosaico personalizado 6"
+  $name:fr: "Vignette personnalisée 6"
+  $name:pt: "Bloco personalizado 6"
+  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
+  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
+  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
+  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
+  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
+- customTile7: ""
+  $name: "Custom tile 7"
+  $name:it: "Riquadro personalizzato 7"
+  $name:es: "Mosaico personalizado 7"
+  $name:fr: "Vignette personnalisée 7"
+  $name:pt: "Bloco personalizado 7"
+  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
+  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
+  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
+  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
+  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
+- customTile8: ""
+  $name: "Custom tile 8"
+  $name:it: "Riquadro personalizzato 8"
+  $name:es: "Mosaico personalizado 8"
+  $name:fr: "Vignette personnalisée 8"
+  $name:pt: "Bloco personalizado 8"
+  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
+  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
+  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
+  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
+  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
 - taskbarOnBottomHover: true
   $name: "Taskbar back when the pointer touches the bottom of Start"
   $name:it: "Barra delle applicazioni quando il puntatore tocca il fondo di Start"
   $name:es: "Barra de tareas cuando el puntero toca la parte inferior de Inicio"
   $name:fr: "Barre des tâches quand le pointeur touche le bas de l'accueil"
   $name:pt: "Barra de tarefas quando o ponteiro toca a parte inferior da Tela Inicial"
-  $description: "This is what Windows 8.1 Update 1 does: the Start screen covers the taskbar, and the taskbar comes back when the pointer touches the bottom edge of the screen. The bottom chrome of the Start screen (the horizontal scroll bar and the buttons in the two corners) moves up by the same amount, so the two never overlap and both stay usable, and a click on the taskbar closes the Start screen. Nothing of the shell is touched: the bottom strip of the Start window is clipped away and restored as soon as the pointer leaves it. This setting can also be turned off, and the taskbar then stays covered for as long as the Start screen is open."
-  $description:it: "È quello che fa Windows 8.1 Update 1: la schermata Start copre la barra delle applicazioni, e la barra torna visibile quando il puntatore tocca il bordo inferiore dello schermo. Gli elementi in basso della schermata Start (la barra di scorrimento orizzontale e i pulsanti nei due angoli) si spostano in alto della stessa misura, così le due cose non si sovrappongono mai e restano entrambe utilizzabili, e un clic sulla barra chiude la schermata Start. Nulla della shell viene modificato: la striscia inferiore della finestra di Start viene ritagliata e ripristinata appena il puntatore si allontana. Questa impostazione può anche essere disattivata, e allora la barra resta coperta finché la schermata Start è aperta."
-  $description:es: "Es lo que hace Windows 8.1 Update 1: la pantalla de inicio cubre la barra de tareas y la barra vuelve cuando el puntero toca el borde inferior de la pantalla. Los elementos inferiores de la pantalla de inicio (la barra de desplazamiento horizontal y los botones de las dos esquinas) suben la misma cantidad, así que nunca se superponen y ambos siguen siendo utilizables, y un clic en la barra cierra la pantalla de inicio. No se toca nada del shell: la franja inferior de la ventana de inicio se recorta y se restaura en cuanto el puntero se aleja. Esta configuración también se puede desactivar, y entonces la barra queda cubierta mientras la pantalla de inicio esté abierta."
-  $description:fr: "C'est ce que fait Windows 8.1 Update 1 : l'écran d'accueil couvre la barre des tâches, et la barre revient quand le pointeur touche le bord inférieur de l'écran. Les éléments du bas de l'écran d'accueil (la barre de défilement horizontale et les boutons des deux coins) remontent de la même hauteur, ainsi les deux ne se chevauchent jamais et restent utilisables, et un clic sur la barre ferme l'écran d'accueil. Rien du shell n'est modifié : la bande inférieure de la fenêtre d'accueil est rognée puis restaurée dès que le pointeur s'en éloigne. Ce paramètre peut aussi être désactivé, et la barre reste alors couverte tant que l'écran d'accueil est ouvert."
-  $description:pt: "É o que o Windows 8.1 Update 1 faz: a Tela Inicial cobre a barra de tarefas e a barra volta quando o ponteiro toca a borda inferior da tela. Os elementos de baixo da Tela Inicial (a barra de rolagem horizontal e os botões dos dois cantos) sobem a mesma medida, assim os dois nunca se sobrepõem e ambos continuam utilizáveis, e um clique na barra fecha a Tela Inicial. Nada do shell é alterado: a faixa inferior da janela da Tela Inicial é recortada e restaurada assim que o ponteiro se afasta. Esta configuração também pode ser desativada, e então a barra fica coberta enquanto a Tela Inicial estiver aberta."
+  $description: "This setting reveals the taskbar when the pointer touches the bottom of Start, giving priority to Windows 8.1 Taskbar Recreation when detected on that monitor. The Start screen gives up space by clipping or resizing its own window; other windows are not moved or hidden. Turn it off to keep the taskbar covered."
+  $description:it: "Questa impostazione mostra la barra quando il puntatore tocca il bordo inferiore di Start, dando priorità a Windows 8.1 Taskbar Recreation quando viene rilevata sul monitor. Start libera spazio ritagliando o ridimensionando la propria finestra, senza spostare o nascondere le altre finestre. Disattivala per mantenere coperta la barra."
+  $description:es: "Esta configuración muestra la barra al tocar el borde inferior de Inicio con el puntero y da prioridad a Windows 8.1 Taskbar Recreation si se detecta en el monitor. Inicio libera espacio recortando o redimensionando su propia ventana, sin mover ni ocultar otras ventanas. Desactívala para mantener cubierta la barra."
+  $description:fr: "Ce paramètre affiche la barre lorsque le pointeur touche le bas de l'écran d'accueil et donne la priorité à Windows 8.1 Taskbar Recreation si elle est détectée sur le moniteur. L'accueil libère de l'espace en rognant ou redimensionnant sa propre fenêtre, sans déplacer ni masquer les autres fenêtres. Désactivez-le pour garder la barre couverte."
+  $description:pt: "Esta configuração mostra a barra quando o ponteiro toca a borda inferior da Tela Inicial e dá prioridade ao Windows 8.1 Taskbar Recreation quando detectado no monitor. A Tela Inicial libera espaço recortando ou redimensionando sua própria janela, sem mover ou ocultar outras janelas. Desative para manter a barra coberta."
 - winKey: true
   $name: "Open with the Windows key and the Start button"
   $name:it: "Apri con il tasto Windows e il pulsante Start"
@@ -323,22 +435,22 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $name:es: "Degradado de los iconos estilo Windows 8/8.1"
   $name:fr: "Dégradés des vignettes façon Windows 8/8.1"
   $name:pt: "Gradientes dos blocos no estilo Windows 8/8.1"
-  $description: "Windows 8 and 8.1 never drew flat tiles: the tile colour is lighter towards the top and darker towards the bottom. Windows 10 and 11 replaced that with a flat fill, which is why the UWP apps, the 8.x Metro style apps and the tiles whose colour is sampled from the app icon look like Windows 10. Turning this on derives the Windows 8.1 gradient from the colour of every tile, including the BackgroundColor that packaged apps declare in their manifest. Turning it off restores the flat 1.0.0 look."
-  $description:it: "Windows 8 e 8.1 non disegnavano mai tile piatte: il colore della tile è più chiaro in alto e più scuro in basso. Windows 10 e 11 l'hanno sostituito con un riempimento pieno, ed è per questo che le app UWP, le app in stile Metro di Windows 8.x e le tile il cui colore è campionato dall'icona sembrano di Windows 10. Attivando questa opzione la sfumatura di Windows 8.1 viene ricavata dal colore di ogni tile, incluso il BackgroundColor che le app in pacchetto dichiarano nel loro manifesto. Disattivandola si torna all'aspetto piatto della 1.0.0."
-  $description:es: "Windows 8 y 8.1 nunca dibujaban iconos planos: el color del icono es más claro arriba y más oscuro abajo. Windows 10 y 11 lo sustituyeron por un relleno plano, y por eso las aplicaciones UWP, las aplicaciones estilo Metro de 8.x y los iconos cuyo color se muestrea del icono de la aplicación parecen de Windows 10. Al activarlo, el degradado de Windows 8.1 se obtiene del color de cada icono, incluido el BackgroundColor que las aplicaciones empaquetadas declaran en su manifiesto. Al desactivarlo se recupera el aspecto plano de la 1.0.0."
-  $description:fr: "Windows 8 et 8.1 ne dessinaient jamais de vignettes unies : la couleur de la vignette est plus claire en haut et plus sombre en bas. Windows 10 et 11 l'ont remplacée par un fond uni, et c'est pourquoi les applications UWP, les applications de style Metro 8.x et les vignettes dont la couleur est échantillonnée depuis l'icône ressemblent à Windows 10. En activant ce paramètre, le dégradé de Windows 8.1 est calculé à partir de la couleur de chaque vignette, y compris le BackgroundColor que les applications packagées déclarent dans leur manifeste. Le désactiver restaure l'aspect uni de la 1.0.0."
-  $description:pt: "O Windows 8 e 8.1 nunca desenhavam blocos lisos: a cor do bloco é mais clara em cima e mais escura em baixo. O Windows 10 e 11 substituíram isso por um preenchimento liso, e é por isso que os apps UWP, os apps no estilo Metro do 8.x e os blocos cuja cor é amostrada do ícone parecem do Windows 10. Ao ativar esta opção, o gradiente do Windows 8.1 é obtido a partir da cor de cada bloco, incluindo o BackgroundColor que os apps empacotados declaram no manifesto. Ao desativá-la, volta o aspecto liso da 1.0.0."
+  $description: "This setting concerns the following. Windows 8 and 8.1 never drew flat tiles: the tile colour is lighter towards the top and darker towards the bottom. Windows 10 and 11 replaced that with a flat fill, which is why the UWP apps, the 8.x Metro style apps and the tiles whose colour is sampled from the app icon look like Windows 10. Turning this on derives the Windows 8.1 gradient from the colour of every tile, including the BackgroundColor that packaged apps declare in their manifest. Turning it off restores the flat 1.0.0 look."
+  $description:it: "Questa impostazione riguarda quanto segue. Windows 8 e 8.1 non disegnavano mai tile piatte: il colore della tile è più chiaro in alto e più scuro in basso. Windows 10 e 11 l'hanno sostituito con un riempimento pieno, ed è per questo che le app UWP, le app in stile Metro di Windows 8.x e le tile il cui colore è campionato dall'icona sembrano di Windows 10. Attivando questa opzione la sfumatura di Windows 8.1 viene ricavata dal colore di ogni tile, incluso il BackgroundColor che le app in pacchetto dichiarano nel loro manifesto. Disattivandola si torna all'aspetto piatto della 1.0.0."
+  $description:es: "Esta configuración se refiere a lo siguiente. Windows 8 y 8.1 nunca dibujaban iconos planos: el color del icono es más claro arriba y más oscuro abajo. Windows 10 y 11 lo sustituyeron por un relleno plano, y por eso las aplicaciones UWP, las aplicaciones estilo Metro de 8.x y los iconos cuyo color se muestrea del icono de la aplicación parecen de Windows 10. Al activarlo, el degradado de Windows 8.1 se obtiene del color de cada icono, incluido el BackgroundColor que las aplicaciones empaquetadas declaran en su manifiesto. Al desactivarlo se recupera el aspecto plano de la 1.0.0."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Windows 8 et 8.1 ne dessinaient jamais de vignettes unies : la couleur de la vignette est plus claire en haut et plus sombre en bas. Windows 10 et 11 l'ont remplacée par un fond uni, et c'est pourquoi les applications UWP, les applications de style Metro 8.x et les vignettes dont la couleur est échantillonnée depuis l'icône ressemblent à Windows 10. En activant ce paramètre, le dégradé de Windows 8.1 est calculé à partir de la couleur de chaque vignette, y compris le BackgroundColor que les applications packagées déclarent dans leur manifeste. Le désactiver restaure l'aspect uni de la 1.0.0."
+  $description:pt: "Esta configuração refere-se ao seguinte. O Windows 8 e 8.1 nunca desenhavam blocos lisos: a cor do bloco é mais clara em cima e mais escura em baixo. O Windows 10 e 11 substituíram isso por um preenchimento liso, e é por isso que os apps UWP, os apps no estilo Metro do 8.x e os blocos cuja cor é amostrada do ícone parecem do Windows 10. Ao ativar esta opção, o gradiente do Windows 8.1 é obtido a partir da cor de cada bloco, incluindo o BackgroundColor que os apps empacotados declaram no manifesto. Ao desativá-la, volta o aspecto liso da 1.0.0."
 - tileGradientStrength: subtle
   $name: "Gradient strength"
   $name:it: "Intensità della sfumatura"
   $name:es: "Intensidad del degradado"
   $name:fr: "Intensité du dégradé"
   $name:pt: "Intensidade do gradiente"
-  $description: "How pronounced the Windows 8/8.1 gradient is. Subtle (the default) is closest to the Windows 8 start screen, Normal matches Windows 8.1, Strong is more visible. Changes apply immediately."
-  $description:it: "Quanto è marcata la sfumatura di Windows 8/8.1. Sobria è la più vicina alla schermata Start di Windows 8, Normale corrisponde a Windows 8.1, Forte è più visibile. Le modifiche si applicano subito."
-  $description:es: "Cómo de marcado es el degradado de Windows 8/8.1. Sutil es el más cercano a la pantalla de inicio de Windows 8, Normal corresponde a Windows 8.1 y Fuerte es más visible. Los cambios se aplican al momento."
-  $description:fr: "L'intensité du dégradé Windows 8/8.1. Subtil est le plus proche de l'écran d'accueil de Windows 8, Normal correspond à Windows 8.1 et Fort est plus visible. Les changements s'appliquent immédiatement."
-  $description:pt: "O quão marcado é o gradiente do Windows 8/8.1. Sutil é o mais próximo da Tela Inicial do Windows 8, Normal corresponde ao Windows 8.1 e Forte é mais visível. As mudanças valem na hora."
+  $description: "This setting concerns the following. How pronounced the Windows 8/8.1 gradient is. Subtle (the default) is closest to the Windows 8 start screen, Normal matches Windows 8.1, Strong is more visible. Changes apply immediately."
+  $description:it: "Questa impostazione riguarda quanto segue. Quanto è marcata la sfumatura di Windows 8/8.1. Sobria è la più vicina alla schermata Start di Windows 8, Normale corrisponde a Windows 8.1, Forte è più visibile. Le modifiche si applicano subito."
+  $description:es: "Esta configuración se refiere a lo siguiente. Cómo de marcado es el degradado de Windows 8/8.1. Sutil es el más cercano a la pantalla de inicio de Windows 8, Normal corresponde a Windows 8.1 y Fuerte es más visible. Los cambios se aplican al momento."
+  $description:fr: "Ce paramètre concerne les éléments suivants. L'intensité du dégradé Windows 8/8.1. Subtil est le plus proche de l'écran d'accueil de Windows 8, Normal correspond à Windows 8.1 et Fort est plus visible. Les changements s'appliquent immédiatement."
+  $description:pt: "Esta configuração refere-se ao seguinte. O quão marcado é o gradiente do Windows 8/8.1. Sutil é o mais próximo da Tela Inicial do Windows 8, Normal corresponde ao Windows 8.1 e Forte é mais visível. As mudanças valem na hora."
   $options:
   - subtle: "Subtle (closest to the Windows 8 tiles)"
   - normal: "Normal (Windows 8.1 look)"
@@ -365,22 +477,22 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $name:es: "Mantener el degradado sobre la ilustración de la aplicación"
   $name:fr: "Conserver le dégradé par-dessus l'illustration de l'application"
   $name:pt: "Manter o gradiente sobre a arte do aplicativo"
-  $description: "Windows 10/11 packaged apps usually ship artwork that covers the whole tile, so the gradient behind it would never be visible. This draws the Windows 8.1 gradient over the artwork as well, which is what makes those tiles match the Windows 8/8.1 apps. Turn it off to keep the artwork untouched."
-  $description:it: "Le app in pacchetto di Windows 10/11 di solito hanno una grafica che copre tutta la tile, quindi la sfumatura sotto non si vedrebbe. Questa opzione disegna la sfumatura di Windows 8.1 anche sopra la grafica, ed è ciò che fa somigliare queste tile a quelle di Windows 8/8.1. Disattivala per lasciare intatta la grafica."
-  $description:es: "Las aplicaciones empaquetadas de Windows 10/11 suelen incluir una ilustración que cubre todo el icono, así que el degradado de debajo nunca se vería. Esta opción dibuja el degradado de Windows 8.1 también sobre la ilustración, que es lo que hace que esos iconos se parezcan a los de Windows 8/8.1. Desactívala para dejar la ilustración intacta."
-  $description:fr: "Les applications packagées de Windows 10/11 fournissent souvent une illustration qui couvre toute la vignette, si bien que le dégradé placé dessous ne serait jamais visible. Ce paramètre dessine aussi le dégradé Windows 8.1 par-dessus l'illustration, ce qui rapproche ces vignettes de celles de Windows 8/8.1. Désactivez-le pour laisser l'illustration intacte."
-  $description:pt: "Os apps empacotados do Windows 10/11 costumam trazer uma arte que cobre todo o bloco, então o gradiente por baixo nunca apareceria. Esta opção desenha o gradiente do Windows 8.1 também sobre a arte, e é isso que faz esses blocos se parecerem com os do Windows 8/8.1. Desative para deixar a arte intacta."
+  $description: "This setting concerns the following. Windows 10/11 packaged apps usually ship artwork that covers the whole tile, so the gradient behind it would never be visible. This draws the Windows 8.1 gradient over the artwork as well, which is what makes those tiles match the Windows 8/8.1 apps. Turn it off to keep the artwork untouched."
+  $description:it: "Questa impostazione riguarda quanto segue. Le app in pacchetto di Windows 10/11 di solito hanno una grafica che copre tutta la tile, quindi la sfumatura sotto non si vedrebbe. Questa opzione disegna la sfumatura di Windows 8.1 anche sopra la grafica, ed è ciò che fa somigliare queste tile a quelle di Windows 8/8.1. Disattivala per lasciare intatta la grafica."
+  $description:es: "Esta configuración se refiere a lo siguiente. Las aplicaciones empaquetadas de Windows 10/11 suelen incluir una ilustración que cubre todo el icono, así que el degradado de debajo nunca se vería. Esta opción dibuja el degradado de Windows 8.1 también sobre la ilustración, que es lo que hace que esos iconos se parezcan a los de Windows 8/8.1. Desactívala para dejar la ilustración intacta."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Les applications packagées de Windows 10/11 fournissent souvent une illustration qui couvre toute la vignette, si bien que le dégradé placé dessous ne serait jamais visible. Ce paramètre dessine aussi le dégradé Windows 8.1 par-dessus l'illustration, ce qui rapproche ces vignettes de celles de Windows 8/8.1. Désactivez-le pour laisser l'illustration intacte."
+  $description:pt: "Esta configuração refere-se ao seguinte. Os apps empacotados do Windows 10/11 costumam trazer uma arte que cobre todo o bloco, então o gradiente por baixo nunca apareceria. Esta opção desenha o gradiente do Windows 8.1 também sobre a arte, e é isso que faz esses blocos se parecerem com os do Windows 8/8.1. Desative para deixar a arte intacta."
 - shellCompat: auto
   $name: "Compatibility with StartAllBack and ExplorerPatcher"
   $name:it: "Compatibilità con StartAllBack ed ExplorerPatcher"
   $name:es: "Compatibilidad con StartAllBack y ExplorerPatcher"
   $name:fr: "Compatibilité avec StartAllBack et ExplorerPatcher"
   $name:pt: "Compatibilidade com o StartAllBack e o ExplorerPatcher"
-  $description: "StartAllBack and ExplorerPatcher patch the shell while Explorer starts, in the same phase in which Windhawk loads this mod. In this mode the mod leaves the shell completely alone until the taskbar exists, and then waits for the delay below, so that the patched taskbar can be created first. Auto detects StartAllBack and ExplorerPatcher. Always on applies the delay in every case, Always off never does (the 1.0.0 behaviour). Read at sign-in and when Explorer starts."
-  $description:it: "StartAllBack ed ExplorerPatcher modificano la shell mentre Explorer si avvia, nella stessa fase in cui Windhawk carica questa mod. In questa modalità la mod non tocca per nulla la shell finché la barra delle applicazioni non esiste, e poi attende il ritardo indicato sotto, così la barra modificata può essere creata per prima. Auto rileva StartAllBack ed ExplorerPatcher. Attiva applica sempre il ritardo, Disattiva mai (comportamento della 1.0.0). Viene letta all'accesso e all'avvio di Explorer."
-  $description:es: "StartAllBack y ExplorerPatcher modifican el shell mientras Explorer se inicia, en la misma fase en la que Windhawk carga esta mod. En este modo la mod no toca el shell hasta que existe la barra de tareas y después espera el retraso de abajo, para que la barra modificada pueda crearse primero. Auto detecta StartAllBack y ExplorerPatcher. Activada aplica siempre el retraso, Desactivada nunca (comportamiento de la 1.0.0). Se lee al iniciar sesión y al arrancar Explorer."
-  $description:fr: "StartAllBack et ExplorerPatcher modifient le shell pendant le démarrage d'Explorer, dans la même phase où Windhawk charge ce mod. Dans ce mode, le mod ne touche pas au shell tant que la barre des tâches n'existe pas, puis attend le délai ci-dessous, afin que la barre modifiée puisse être créée en premier. Auto détecte StartAllBack et ExplorerPatcher. Activé applique toujours le délai, Désactivé jamais (comportement de la 1.0.0). Ce paramètre est lu à l'ouverture de session et au démarrage d'Explorer."
-  $description:pt: "O StartAllBack e o ExplorerPatcher modificam o shell enquanto o Explorer inicia, na mesma fase em que o Windhawk carrega esta mod. Neste modo a mod não toca no shell até a barra de tarefas existir e depois espera o atraso abaixo, para que a barra modificada possa ser criada primeiro. Auto detecta o StartAllBack e o ExplorerPatcher. Ativada aplica sempre o atraso, Desativada nunca (comportamento da 1.0.0). É lida ao entrar e quando o Explorer inicia."
+  $description: "This setting concerns the following. StartAllBack and ExplorerPatcher patch the shell while Explorer starts, in the same phase in which Windhawk loads this mod. In this mode the mod leaves the shell completely alone until the taskbar exists, and then waits for the delay below, so that the patched taskbar can be created first. Auto detects StartAllBack and ExplorerPatcher. Always on applies the delay in every case, Always off never does (the 1.0.0 behaviour). Read at sign-in and when Explorer starts."
+  $description:it: "Questa impostazione riguarda quanto segue. StartAllBack ed ExplorerPatcher modificano la shell mentre Explorer si avvia, nella stessa fase in cui Windhawk carica questa mod. In questa modalità la mod non tocca per nulla la shell finché la barra delle applicazioni non esiste, e poi attende il ritardo indicato sotto, così la barra modificata può essere creata per prima. Auto rileva StartAllBack ed ExplorerPatcher. Attiva applica sempre il ritardo, Disattiva mai (comportamento della 1.0.0). Viene letta all'accesso e all'avvio di Explorer."
+  $description:es: "Esta configuración se refiere a lo siguiente. StartAllBack y ExplorerPatcher modifican el shell mientras Explorer se inicia, en la misma fase en la que Windhawk carga esta mod. En este modo la mod no toca el shell hasta que existe la barra de tareas y después espera el retraso de abajo, para que la barra modificada pueda crearse primero. Auto detecta StartAllBack y ExplorerPatcher. Activada aplica siempre el retraso, Desactivada nunca (comportamiento de la 1.0.0). Se lee al iniciar sesión y al arrancar Explorer."
+  $description:fr: "Ce paramètre concerne les éléments suivants. StartAllBack et ExplorerPatcher modifient le shell pendant le démarrage d'Explorer, dans la même phase où Windhawk charge ce mod. Dans ce mode, le mod ne touche pas au shell tant que la barre des tâches n'existe pas, puis attend le délai ci-dessous, afin que la barre modifiée puisse être créée en premier. Auto détecte StartAllBack et ExplorerPatcher. Activé applique toujours le délai, Désactivé jamais (comportement de la 1.0.0). Ce paramètre est lu à l'ouverture de session et au démarrage d'Explorer."
+  $description:pt: "Esta configuração refere-se ao seguinte. O StartAllBack e o ExplorerPatcher modificam o shell enquanto o Explorer inicia, na mesma fase em que o Windhawk carrega esta mod. Neste modo a mod não toca no shell até a barra de tarefas existir e depois espera o atraso abaixo, para que a barra modificada possa ser criada primeiro. Auto detecta o StartAllBack e o ExplorerPatcher. Ativada aplica sempre o atraso, Desativada nunca (comportamento da 1.0.0). É lida ao entrar e quando o Explorer inicia."
   $options:
   - auto: "Auto (on when StartAllBack or ExplorerPatcher is detected)"
   - always: "Always on"
@@ -407,33 +519,33 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $name:es: "Retraso antes de crear la ventana de la pantalla de inicio (milisegundos)"
   $name:fr: "Délai avant de créer la fenêtre de l'écran d'accueil (millisecondes)"
   $name:pt: "Atraso antes de criar a janela da Tela Inicial (milissegundos)"
-  $description: "Used only when the compatibility mode above is active. After the taskbar appears the mod waits this long before it creates its window, its buffers and its keyboard hook, so that StartAllBack and ExplorerPatcher can finish. Allowed range 0 to 60000; default 4000. Raise it to 8000 or 10000 if the taskbar still comes back in the classic style."
-  $description:it: "Usato solo quando la modalità di compatibilità qui sopra è attiva. Dopo la comparsa della barra delle applicazioni la mod attende questo tempo prima di creare la propria finestra, i propri buffer e l'hook da tastiera, così StartAllBack ed ExplorerPatcher possono finire. Intervallo consentito da 0 a 60000; predefinito 4000. Alzalo a 8000 o 10000 se la barra continua a tornare in stile classico."
-  $description:es: "Se usa solo cuando el modo de compatibilidad de arriba está activo. Tras aparecer la barra de tareas, la mod espera este tiempo antes de crear su ventana, sus búferes y su enlace de teclado, para que StartAllBack y ExplorerPatcher puedan terminar. Rango permitido de 0 a 60000; predeterminado 4000. Auméntalo a 8000 o 10000 si la barra sigue volviendo al estilo clásico."
-  $description:fr: "Utilisé uniquement lorsque le mode de compatibilité ci-dessus est actif. Une fois la barre des tâches apparue, le mod attend ce délai avant de créer sa fenêtre, ses tampons et son hook clavier, afin que StartAllBack et ExplorerPatcher puissent terminer. Plage autorisée de 0 à 60000 ; défaut 4000. Passez à 8000 ou 10000 si la barre revient encore au style classique."
-  $description:pt: "Usado apenas quando o modo de compatibilidade acima está ativo. Depois de a barra de tarefas aparecer, a mod espera este tempo antes de criar sua janela, seus buffers e seu hook de teclado, para que o StartAllBack e o ExplorerPatcher possam terminar. Faixa permitida de 0 a 60000; padrão 4000. Aumente para 8000 ou 10000 se a barra continuar voltando ao estilo clássico."
+  $description: "This setting concerns the following. Used only when the compatibility mode above is active. After the taskbar appears the mod waits this long before it creates its window, its buffers and its keyboard hook, so that StartAllBack and ExplorerPatcher can finish. Allowed range 0 to 60000; default 4000. Raise it to 8000 or 10000 if the taskbar still comes back in the classic style."
+  $description:it: "Questa impostazione riguarda quanto segue. Usato solo quando la modalità di compatibilità qui sopra è attiva. Dopo la comparsa della barra delle applicazioni la mod attende questo tempo prima di creare la propria finestra, i propri buffer e l'hook da tastiera, così StartAllBack ed ExplorerPatcher possono finire. Intervallo consentito da 0 a 60000; predefinito 4000. Alzalo a 8000 o 10000 se la barra continua a tornare in stile classico."
+  $description:es: "Esta configuración se refiere a lo siguiente. Se usa solo cuando el modo de compatibilidad de arriba está activo. Tras aparecer la barra de tareas, la mod espera este tiempo antes de crear su ventana, sus búferes y su enlace de teclado, para que StartAllBack y ExplorerPatcher puedan terminar. Rango permitido de 0 a 60000; predeterminado 4000. Auméntalo a 8000 o 10000 si la barra sigue volviendo al estilo clásico."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Utilisé uniquement lorsque le mode de compatibilité ci-dessus est actif. Une fois la barre des tâches apparue, le mod attend ce délai avant de créer sa fenêtre, ses tampons et son hook clavier, afin que StartAllBack et ExplorerPatcher puissent terminer. Plage autorisée de 0 à 60000 ; défaut 4000. Passez à 8000 ou 10000 si la barre revient encore au style classique."
+  $description:pt: "Esta configuração refere-se ao seguinte. Usado apenas quando o modo de compatibilidade acima está ativo. Depois de a barra de tarefas aparecer, a mod espera este tempo antes de criar sua janela, seus buffers e seu hook de teclado, para que o StartAllBack e o ExplorerPatcher possam terminar. Faixa permitida de 0 a 60000; padrão 4000. Aumente para 8000 ou 10000 se a barra continuar voltando ao estilo clássico."
 - deferStartHook: true
   $name: "Let Windows load the Start menu code"
   $name:it: "Lascia che Windows carichi il codice del menu Start"
   $name:es: "Dejar que Windows cargue el código del menú Inicio"
   $name:fr: "Laisser Windows charger le code du menu Démarrer"
   $name:pt: "Deixar o Windows carregar o código do menu Iniciar"
-  $description: "The mod opens this Start screen by hooking XamlLauncher::ShowStartView in twinui.pcshell.dll. Loading that DLL during Explorer start-up is what used to disturb StartAllBack and ExplorerPatcher, so the mod now waits for Windows to load it and hooks it from a background thread. The forced load is kept as a fallback, done 15 seconds after the shell has settled; turn this off to go back to loading the DLL immediately at sign-in. Read when the mod starts."
-  $description:it: "La mod apre questa schermata Start agganciando XamlLauncher::ShowStartView in twinui.pcshell.dll. Caricare quella DLL durante l'avvio di Explorer è ciò che disturbava StartAllBack ed ExplorerPatcher, quindi ora la mod aspetta che la carichi Windows e la aggancia da un thread in background. Il caricamento forzato resta come riserva, 15 secondi dopo che la shell si è stabilizzata; disattiva questa opzione per tornare a caricare la DLL subito all'accesso. Viene letta all'avvio della mod."
-  $description:es: "La mod abre esta pantalla de inicio enganchando XamlLauncher::ShowStartView en twinui.pcshell.dll. Cargar esa DLL durante el inicio de Explorer es lo que molestaba a StartAllBack y ExplorerPatcher, así que ahora la mod espera a que la cargue Windows y la engancha desde un hilo en segundo plano. La carga forzada se mantiene como reserva, 15 segundos después de que el shell se estabilice; desactiva esta opción para volver a cargar la DLL al iniciar sesión. Se lee al arrancar la mod."
-  $description:fr: "Le mod ouvre cet écran d'accueil en ancrant XamlLauncher::ShowStartView dans twinui.pcshell.dll. Charger cette DLL pendant le démarrage d'Explorer est ce qui perturbait StartAllBack et ExplorerPatcher ; le mod attend donc maintenant que Windows la charge et l'ancre depuis un thread d'arrière-plan. Le chargement forcé reste en secours, 15 secondes après la stabilisation du shell ; désactivez ce paramètre pour revenir au chargement immédiat à l'ouverture de session. Lu au démarrage du mod."
-  $description:pt: "A mod abre esta Tela Inicial ancorando XamlLauncher::ShowStartView em twinui.pcshell.dll. Carregar essa DLL durante o início do Explorer é o que incomodava o StartAllBack e o ExplorerPatcher, então agora a mod espera que o Windows a carregue e a ancora a partir de uma thread em segundo plano. O carregamento forçado continua como reserva, 15 segundos depois de o shell se estabilizar; desative para voltar a carregar a DLL logo ao entrar. É lida quando a mod inicia."
+  $description: "This setting concerns the following. The mod opens this Start screen by hooking XamlLauncher::ShowStartView in twinui.pcshell.dll. Loading that DLL during Explorer start-up is what used to disturb StartAllBack and ExplorerPatcher, so the mod now waits for Windows to load it and hooks it from a background thread. The forced load is kept as a fallback, done 15 seconds after the shell has settled; turn this off to go back to loading the DLL immediately at sign-in. Read when the mod starts."
+  $description:it: "Questa impostazione riguarda quanto segue. La mod apre questa schermata Start agganciando XamlLauncher::ShowStartView in twinui.pcshell.dll. Caricare quella DLL durante l'avvio di Explorer è ciò che disturbava StartAllBack ed ExplorerPatcher, quindi ora la mod aspetta che la carichi Windows e la aggancia da un thread in background. Il caricamento forzato resta come riserva, 15 secondi dopo che la shell si è stabilizzata; disattiva questa opzione per tornare a caricare la DLL subito all'accesso. Viene letta all'avvio della mod."
+  $description:es: "Esta configuración se refiere a lo siguiente. La mod abre esta pantalla de inicio enganchando XamlLauncher::ShowStartView en twinui.pcshell.dll. Cargar esa DLL durante el inicio de Explorer es lo que molestaba a StartAllBack y ExplorerPatcher, así que ahora la mod espera a que la cargue Windows y la engancha desde un hilo en segundo plano. La carga forzada se mantiene como reserva, 15 segundos después de que el shell se estabilice; desactiva esta opción para volver a cargar la DLL al iniciar sesión. Se lee al arrancar la mod."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Le mod ouvre cet écran d'accueil en ancrant XamlLauncher::ShowStartView dans twinui.pcshell.dll. Charger cette DLL pendant le démarrage d'Explorer est ce qui perturbait StartAllBack et ExplorerPatcher ; le mod attend donc maintenant que Windows la charge et l'ancre depuis un thread d'arrière-plan. Le chargement forcé reste en secours, 15 secondes après la stabilisation du shell ; désactivez ce paramètre pour revenir au chargement immédiat à l'ouverture de session. Lu au démarrage du mod."
+  $description:pt: "Esta configuração refere-se ao seguinte. A mod abre esta Tela Inicial ancorando XamlLauncher::ShowStartView em twinui.pcshell.dll. Carregar essa DLL durante o início do Explorer é o que incomodava o StartAllBack e o ExplorerPatcher, então agora a mod espera que o Windows a carregue e a ancora a partir de uma thread em segundo plano. O carregamento forçado continua como reserva, 15 segundos depois de o shell se estabilizar; desative para voltar a carregar a DLL logo ao entrar. É lida quando a mod inicia."
 - startButtonHook: true
   $name: "Open with the StartAllBack Start button"
   $name:it: "Apri con il pulsante Start di StartAllBack"
   $name:es: "Abrir con el botón Inicio de StartAllBack"
   $name:fr: "Ouvrir avec le bouton Démarrer de StartAllBack"
   $name:pt: "Abrir com o botão Iniciar do StartAllBack"
-  $description: "StartAllBack draws its own Start button, which the Windows key setting can't catch. With this on, clicking it opens this Start screen instead of the Windows 11 Start menu. Only used while StartAllBack is running. Turn this off if you want StartAllBack's own Start menu back."
-  $description:it: "StartAllBack disegna un proprio pulsante Start, che l'opzione del tasto Windows non può intercettare. Con questa opzione attiva, facendo clic su di esso si apre questa schermata Start invece del menu Start di Windows 11. Viene usata solo quando StartAllBack è in esecuzione. Disattivala se vuoi riavere il menu Start di StartAllBack."
-  $description:es: "StartAllBack dibuja su propio botón Inicio, que la opción de la tecla Windows no puede capturar. Con esta opción activada, al hacer clic en él se abre esta pantalla de inicio en lugar del menú Inicio de Windows 11. Solo se usa mientras StartAllBack está en ejecución. Desactívala si quieres recuperar el menú Inicio de StartAllBack."
-  $description:fr: "StartAllBack dessine son propre bouton Démarrer, que l'option de la touche Windows ne peut pas capturer. Avec cette option active, cliquer dessus ouvre cet écran d'accueil au lieu du menu Démarrer de Windows 11. Utilisée uniquement quand StartAllBack est en cours d'exécution. Désactivez-la pour retrouver le menu Démarrer de StartAllBack."
-  $description:pt: "O StartAllBack desenha seu próprio botão Iniciar, que a opção da tecla Windows não consegue capturar. Com esta opção ativa, clicar nele abre esta Tela Inicial em vez do menu Iniciar do Windows 11. Só é usada enquanto o StartAllBack está em execução. Desative-a se quiser o menu Iniciar do StartAllBack de volta."
+  $description: "This setting concerns the following. StartAllBack draws its own Start button, which the Windows key setting can't catch. With this on, clicking it opens this Start screen instead of the Windows 11 Start menu. Only used while StartAllBack is running. Turn this off if you want StartAllBack's own Start menu back."
+  $description:it: "Questa impostazione riguarda quanto segue. StartAllBack disegna un proprio pulsante Start, che l'opzione del tasto Windows non può intercettare. Con questa opzione attiva, facendo clic su di esso si apre questa schermata Start invece del menu Start di Windows 11. Viene usata solo quando StartAllBack è in esecuzione. Disattivala se vuoi riavere il menu Start di StartAllBack."
+  $description:es: "Esta configuración se refiere a lo siguiente. StartAllBack dibuja su propio botón Inicio, que la opción de la tecla Windows no puede capturar. Con esta opción activada, al hacer clic en él se abre esta pantalla de inicio en lugar del menú Inicio de Windows 11. Solo se usa mientras StartAllBack está en ejecución. Desactívala si quieres recuperar el menú Inicio de StartAllBack."
+  $description:fr: "Ce paramètre concerne les éléments suivants. StartAllBack dessine son propre bouton Démarrer, que l'option de la touche Windows ne peut pas capturer. Avec cette option active, cliquer dessus ouvre cet écran d'accueil au lieu du menu Démarrer de Windows 11. Utilisée uniquement quand StartAllBack est en cours d'exécution. Désactivez-la pour retrouver le menu Démarrer de StartAllBack."
+  $description:pt: "Esta configuração refere-se ao seguinte. O StartAllBack desenha seu próprio botão Iniciar, que a opção da tecla Windows não consegue capturar. Com esta opção ativa, clicar nele abre esta Tela Inicial em vez do menu Iniciar do Windows 11. Só é usada enquanto o StartAllBack está em execução. Desative-a se quiser o menu Iniciar do StartAllBack de volta."
 - seedStartLayout: false
   $name: "Populate Start with a Windows 8.1 style layout from installed apps"
   $name:it: "Popola Start con un layout stile Windows 8.1 dalle app installate"
@@ -462,33 +574,33 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $name:es: "Abrir la pantalla de inicio en el monitor donde está el puntero"
   $name:fr: "Ouvrir l'écran d'accueil sur le moniteur du pointeur"
   $name:pt: "Abrir a Tela Inicial no monitor onde está o ponteiro"
-  $description: "On: the screen opens on whichever monitor the mouse pointer is on, which is what this mod has always done. Off: it always opens on the primary monitor. The position is decided when the screen opens, so no reload is needed."
-  $description:it: "Attiva: la schermata si apre sul monitor dove sta il puntatore del mouse, cioè quello che il mod ha sempre fatto. Disattiva: si apre sempre sul monitor principale. La posizione viene decisa all'apertura della schermata, quindi non serve ricaricare il mod."
-  $description:es: "Activada: la pantalla se abre en el monitor donde está el puntero del ratón, que es lo que la mod ha hecho siempre. Desactivada: se abre siempre en el monitor principal."
-  $description:fr: "Activé : l'écran s'ouvre sur le moniteur où se trouve le pointeur de la souris, ce que le mod a toujours fait. Désactivé : il s'ouvre toujours sur le moniteur principal."
-  $description:pt: "Ativado: a tela abre no monitor onde está o ponteiro do mouse, que é o que o mod sempre fez. Desativado: abre sempre no monitor principal."
+  $description: "This setting concerns the following. On: the screen opens on whichever monitor the mouse pointer is on, which is what this mod has always done. Off: it always opens on the primary monitor. The position is decided when the screen opens, so no reload is needed."
+  $description:it: "Questa impostazione riguarda quanto segue. Attiva: la schermata si apre sul monitor dove sta il puntatore del mouse, cioè quello che il mod ha sempre fatto. Disattiva: si apre sempre sul monitor principale. La posizione viene decisa all'apertura della schermata, quindi non serve ricaricare il mod."
+  $description:es: "Esta configuración se refiere a lo siguiente. Activada: la pantalla se abre en el monitor donde está el puntero del ratón, que es lo que la mod ha hecho siempre. Desactivada: se abre siempre en el monitor principal."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Activé : l'écran s'ouvre sur le moniteur où se trouve le pointeur de la souris, ce que le mod a toujours fait. Désactivé : il s'ouvre toujours sur le moniteur principal."
+  $description:pt: "Esta configuração refere-se ao seguinte. Ativado: a tela abre no monitor onde está o ponteiro do mouse, que é o que o mod sempre fez. Desativado: abre sempre no monitor principal."
 - allAppsAtSignIn: false
   $name: "Open the list of all apps once at sign-in"
   $name:it: "Apri l'elenco di tutte le app una volta all'accesso"
   $name:es: "Abrir la lista de todas las aplicaciones una vez al iniciar sesión"
   $name:fr: "Ouvrir la liste de toutes les applications une fois à l'ouverture de session"
   $name:pt: "Abrir a lista de todos os apps uma vez ao entrar"
-  $description: "With 'Open Start once at sign-in' on, the screen opens on the list of all apps instead of the tiles. It only affects that automatic opening: pressing the Windows key later still shows the tiles first."
-  $description:it: "Con 'Apri Start una volta all'accesso' attivo, la schermata si apre sull'elenco di tutte le app invece che sulle tile. Vale solo per quell'apertura automatica: premendo il tasto Windows più tardi si vedono comunque le tile."
-  $description:es: "Con 'Abrir Inicio una vez al iniciar sesión' activo, la pantalla se abre en la lista de todas las aplicaciones en lugar de los iconos."
-  $description:fr: "Avec 'Ouvrir l'écran d'accueil une fois à l'ouverture de session', l'écran s'ouvre sur la liste de toutes les applications au lieu des vignettes."
-  $description:pt: "Com 'Abrir a Tela Inicial uma vez ao entrar' ativado, a tela abre na lista de todos os apps em vez dos blocos."
+  $description: "This setting concerns the following. With 'Open Start once at sign-in' on, the screen opens on the list of all apps instead of the tiles. It only affects that automatic opening: pressing the Windows key later still shows the tiles first."
+  $description:it: "Questa impostazione riguarda quanto segue. Con 'Apri Start una volta all'accesso' attivo, la schermata si apre sull'elenco di tutte le app invece che sulle tile. Vale solo per quell'apertura automatica: premendo il tasto Windows più tardi si vedono comunque le tile."
+  $description:es: "Esta configuración se refiere a lo siguiente. Con 'Abrir Inicio una vez al iniciar sesión' activo, la pantalla se abre en la lista de todas las aplicaciones en lugar de los iconos."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Avec 'Ouvrir l'écran d'accueil une fois à l'ouverture de session', l'écran s'ouvre sur la liste de toutes les applications au lieu des vignettes."
+  $description:pt: "Esta configuração refere-se ao seguinte. Com 'Abrir a Tela Inicial uma vez ao entrar' ativado, a tela abre na lista de todos os apps em vez dos blocos."
 - desktopAppsFirstInCategories: false
   $name: "Desktop programs before Store apps in the list of all apps"
   $name:it: "Programmi desktop prima delle app dello Store nell'elenco di tutte le app"
   $name:es: "Programas de escritorio antes que las apps de la Store en la lista de todas las aplicaciones"
   $name:fr: "Programmes de bureau avant les applications du Store dans la liste de toutes les applications"
   $name:pt: "Programas de desktop antes dos apps da Store na lista de todos os apps"
-  $description: "This only matters with the 'by category' sort of the list of all apps. On: desktop programs are listed before the Store apps. Off: the Store apps come first, as in the Windows 8.1 Start screen and in this mod."
-  $description:it: "Conta solo con l'ordinamento 'per categoria' dell'elenco di tutte le app. Attiva: i programmi desktop sono elencati prima delle app dello Store. Disattiva: prima le app dello Store, come nella schermata Start di Windows 8.1 e come fa questo mod."
-  $description:es: "Solo cuenta con el orden 'por categoría' de la lista de todas las aplicaciones. Activada: los programas de escritorio van antes que las apps de la Store. Desactivada: las apps van primero, como en Windows 8.1."
-  $description:fr: "Ne compte qu'avec le tri 'par catégorie' de la liste de toutes les applications. Activé : les programmes de bureau passent avant les applications du Store. Désactivé : les applications passent en premier, comme sous Windows 8.1."
-  $description:pt: "Só conta com a ordenação 'por categoria' da lista de todos os apps. Ativado: os programas de desktop vêm antes dos apps da Store. Desativado: os apps vêm primeiro, como no Windows 8.1."
+  $description: "This setting concerns the following. This only matters with the 'by category' sort of the list of all apps. On: desktop programs are listed before the Store apps. Off: the Store apps come first, as in the Windows 8.1 Start screen and in this mod."
+  $description:it: "Questa impostazione riguarda quanto segue. Conta solo con l'ordinamento 'per categoria' dell'elenco di tutte le app. Attiva: i programmi desktop sono elencati prima delle app dello Store. Disattiva: prima le app dello Store, come nella schermata Start di Windows 8.1 e come fa questo mod."
+  $description:es: "Esta configuración se refiere a lo siguiente. Solo cuenta con el orden 'por categoría' de la lista de todas las aplicaciones. Activada: los programas de escritorio van antes que las apps de la Store. Desactivada: las apps van primero, como en Windows 8.1."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Ne compte qu'avec le tri 'par catégorie' de la liste de toutes les applications. Activé : les programmes de bureau passent avant les applications du Store. Désactivé : les applications passent en premier, comme sous Windows 8.1."
+  $description:pt: "Esta configuração refere-se ao seguinte. Só conta com a ordenação 'por categoria' da lista de todos os apps. Ativado: os programas de desktop vêm antes dos apps da Store. Desativado: os apps vêm primeiro, como no Windows 8.1."
 */
 // ==/WindhawkModSettings==
 
@@ -898,6 +1010,11 @@ struct Tile {
     float px = 0.0f, py = 0.0f, tx = 0.0f, ty = 0.0f;
     COLORREF appC = 0;
     bool hasAppC = false;
+    bool customTile = false;
+    COLORREF customColor = RGB(70, 23, 180);
+    std::wstring customIcon;
+    std::wstring customLabel;
+    std::wstring customImage[4];
     // A tile drawn with the Windows 8.1 shortcut look: the flat blue of the desktop programs with
     // the program's own icon on it. mg is -1 for these tiles; this only decides how they are painted.
     bool mpShortcut = false;
@@ -2068,18 +2185,17 @@ static void BlendFillGdi(HDC dc, int l, int t, int r, int b, COLORREF c, BYTE a)
 }
 
 // --- the taskbar of Windows 8.1 inside the Start screen ------------------------------------
-// In Windows 8.1 the Start screen covers the taskbar, and the taskbar comes back when the pointer
-// touches the bottom edge of the screen. The window of this mod is created in a z-band above the
-// taskbar, so the taskbar cannot be raised over it without touching a window of the shell; the
-// Start window gives the space back instead. SetWindowRgn clips the bottom strip of the window
-// away and, as its documentation says, "the system does not display any portion of a window that
-// lies outside of the window region": what is under the strip - the taskbar - becomes visible
-// again, and the clicks there go to it instead of to this window. Nothing of the shell is
-// modified, and the region is removed again as soon as the pointer leaves the strip.
+// The Start window gives space to the taskbar at the bottom edge. The ordinary
+// taskbar uses a window region; the companion observes the actual window bounds
+// and requires resizing the Start window itself. Neither path changes shell windows.
 static volatile bool g_trayRevealOn = true;   // the taskbarOnBottomHover setting
 static volatile bool g_trayReveal = false;    // the strip is given back (or is being given back)
 static volatile LONG g_trayRevealH = 0;       // pixels of the window clipped away right now
 static volatile LONG g_trayBarH = 0;          // height of the taskbar of this monitor
+static HWND g_trayCompanion = NULL;            // detected recreation, never modified
+static bool g_trayCompanionMode = false;       // resize our window instead of a region
+static bool g_trayCompanionWaiting = false;
+static ULONGLONG g_trayWaitSince = 0, g_trayReadySince = 0;
 static bool g_trayRegionSet = false;          // a region is currently set on the window
 static bool g_trayHookOn = false;             // the mouse hook watches the strip
 static bool g_trayArmed = false;              // the pointer left the bottom edge since Start opened
@@ -3728,7 +3844,12 @@ static Gdiplus::Bitmap* IconToGpBitmap(HICON ico) {
 // name in the bottom left corner. Drawn with GDI+ so the icon keeps its transparency, then the
 // caption goes on with the same font the other tiles use.
 static void DrawProgramShortcutTile(HDC tdc, const Tile& t, int w, int h, bool hover) {
-    FillDesktopProgramTile(tdc, w, h);
+    if (InterlockedCompareExchange(&g_appTileColors, 0, 0) && t.hasAppC && t.mg < 0) {
+        HBRUSH brush = CreateSolidBrush(t.appC);
+        RECT rect = {0, 0, w, h};
+        if (brush) { FillRect(tdc, &rect, brush); DeleteObject(brush); }
+        else FillDesktopProgramTile(tdc, w, h);
+    } else FillDesktopProgramTile(tdc, w, h);
     HICON icon = t.icon;
     if (icon) {
         // Measured on the Windows 8.1 tiles of the desktop programs: the icon takes about 36% of
@@ -3789,6 +3910,49 @@ static void BuildOneTile(int i, HDC screenDC) {
             }
             ReleaseSRWLockShared(&g_artLock);
         }
+        if (t.customTile) {
+            HBRUSH br = CreateSolidBrush(t.customColor);
+            RECT r = {0, 0, w, h};
+            if (br) { FillRect(tdc, &r, br); DeleteObject(br); }
+            auto drawLocal = [&](const std::wstring& path, bool full) -> bool {
+                if (path.empty() || PathIsRelativeW(path.c_str()) || PathIsUNCW(path.c_str())) return false;
+                WIN32_FILE_ATTRIBUTE_DATA attr = {};
+                if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &attr) ||
+                    (attr.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) ||
+                    attr.nFileSizeHigh || attr.nFileSizeLow > 8 * 1024 * 1024) return false;
+                Gdiplus::Image img(path.c_str(), FALSE);
+                if (img.GetLastStatus() != Gdiplus::Ok || !img.GetWidth() || !img.GetHeight() ||
+                    img.GetWidth() > 8192 || img.GetHeight() > 8192) return false;
+                Gdiplus::Graphics g(tdc);
+                g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                int dw = full ? w : std::max(1, (int)(std::min(w, h) * .44f));
+                int dh = full ? h : dw;
+                return g.DrawImage(&img, (w-dw)/2, (h-dh)/2, dw, dh) == Gdiplus::Ok;
+            };
+            bool artDrawn = t.cw >= 0 && t.cw < 4 && drawLocal(t.customImage[t.cw], true);
+            bool iconDrawn = false;
+            if (!artDrawn && !t.customIcon.empty() && !PathIsRelativeW(t.customIcon.c_str()) &&
+                !PathIsUNCW(t.customIcon.c_str())) {
+                WIN32_FILE_ATTRIBUTE_DATA attr = {};
+                if (GetFileAttributesExW(t.customIcon.c_str(), GetFileExInfoStandard, &attr) &&
+                    !(attr.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) &&
+                    !attr.nFileSizeHigh && attr.nFileSizeLow <= 8 * 1024 * 1024) {
+                    int side = std::max(1, (int)(std::min(w, h) * .44f));
+                    HICON ico = (HICON)LoadImageW(NULL, t.customIcon.c_str(), IMAGE_ICON, side, side, LR_LOADFROMFILE);
+                    if (ico) { iconDrawn = DrawIconEx(tdc, (w-side)/2, (h-side)/2, ico, side, side, 0, NULL, DI_NORMAL) != FALSE; DestroyIcon(ico); }
+                }
+                if (!iconDrawn) iconDrawn = drawLocal(t.customIcon, false);
+            }
+            if (!artDrawn && !iconDrawn) {
+                if (t.icon) {
+                    int side = std::max(1, (int)(std::min(w, h) * .44f));
+                    DrawIconEx(tdc, (w-side)/2, (h-side)/2, t.icon, side, side, 0, NULL, DI_NORMAL);
+                }
+            }
+            if (t.cw != TS_SMALL) DrawModernTileCaption(tdc, t.customLabel.c_str(), w, h);
+            if (hover) DrawTileHover(tdc, w, h);
+            continue;
+        }
         // A desktop program: the Windows 8.1 shortcut tile, and nothing else to paint.
         if (t.mpShortcut) {
             DrawProgramShortcutTile(tdc, t, w, h, variant != 0);
@@ -3801,7 +3965,11 @@ static void BuildOneTile(int i, HDC screenDC) {
         const bool shaded = TileGradientPair(base, &topColor, &bottomColor);
         // A tile of a desktop program keeps the Windows 8.1 blue: its light gradient is drawn
         // across the tile, not shaded top to bottom like the other tiles.
-        const bool desktopTheme = t.mg < 0 && t.style != PINNED_APP &&
+        const bool sampledDesktop = t.mg < 0 && t.style != PINNED_APP &&
+                                    t.style != DESKTOP_REFERENCE && t.hasAppC &&
+                                    InterlockedCompareExchange(&g_appTileColors, 0, 0);
+        if (sampledDesktop) c1 = c2 = base;
+        const bool desktopTheme = !sampledDesktop && t.mg < 0 && t.style != PINNED_APP &&
                                   t.c1 == kDesktopTileLeft && t.c2 == kDesktopTileRight;
         if (shaded && t.style == DESKTOP_REFERENCE) {
             // The desktop tile is a live wallpaper preview: keep its own dark-to-light shading.
@@ -8794,7 +8962,10 @@ static COLORREF SystemAccentColor() {
 }
 
 static HICON g_stockAppIcon = NULL;
-[[clang::no_destroy]] static std::optional<
+#ifdef __clang__
+[[clang::no_destroy]]
+#endif
+static std::optional<
     std::unordered_map<HICON, std::unique_ptr<Gdiplus::Bitmap>>>
     g_iconBitmapCache{std::in_place};
 
@@ -11758,30 +11929,57 @@ static void CaptureDesktop() {
 // pixels of this window, or 0 when there is none to give the space back to (taskbar on another
 // edge, automatic hide, another shell). Only the windows of this process are looked at, as
 // everywhere else in this mod.
-static int TrayBarHeight() {
-    static const wchar_t* const kBars[] = { L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd" };
-    const DWORD self = GetCurrentProcessId();
+static int TrayFindBar(const wchar_t* const* classes, int count, bool requireVisible, HWND* result) {
     const int bottom = g_monY + g_sh;
-    for (const wchar_t* cls : kBars) {
+    POINT pt = {g_monX + g_sw / 2, g_monY + g_sh / 2};
+    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    for (int k = 0; k < count; ++k) {
         HWND bar = NULL;
-        for (int guard = 0; guard < 8 && (bar = FindWindowExW(NULL, bar, cls, NULL)) != NULL; ++guard) {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(bar, &pid);
-            if (pid != self) continue;
-            RECT rc;
-            if (!GetWindowRect(bar, &rc)) continue;
-            if (rc.bottom != bottom) continue;                              // not at this bottom edge
-            if (rc.right <= g_monX || rc.left >= g_monX + g_sw) continue;   // not on this monitor
-            const int h = rc.bottom - rc.top;
-            if (h >= 8 && h <= g_sh / 2) return h;
+        for (int guard = 0; guard < 32 && (bar = FindWindowExW(NULL, bar, classes[k], NULL)); ++guard) {
+            RECT rc = {};
+            if (requireVisible && !IsWindowVisible(bar)) continue;
+            if (!GetWindowRect(bar, &rc) || MonitorFromWindow(bar, MONITOR_DEFAULTTONEAREST) != monitor) continue;
+            if (rc.bottom != bottom || rc.right <= g_monX || rc.left >= g_monX + g_sw) continue;
+            int h = rc.bottom - rc.top;
+            if (h < ScI(8) || h > g_sh / 2) continue;
+            if (result) *result = bar;
+            return h;
         }
     }
     return 0;
+}
+static int TrayBarHeight() {
+    static const wchar_t* const recreated[] = { L"WH_Taskbar81_GDILab", L"WH_Taskbar81Secondary" };
+    static const wchar_t* const native[] = { L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd" };
+    g_trayCompanion = NULL;
+    int height = TrayFindBar(recreated, ARRAYSIZE(recreated), false, &g_trayCompanion);
+    if (height) return height; // even if hidden in fullscreen, never choose the native bar instead
+    return TrayFindBar(native, ARRAYSIZE(native), true, NULL);
+}
+static bool NativeBarAtBottom() {
+    static const wchar_t* const native[] = { L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd" };
+    return TrayFindBar(native, ARRAYSIZE(native), true, NULL) > 0;
 }
 // Clip the bottom strip of the window away, or give it back when the strip has closed again.
 static void TrayApplyRegion() {
     if (!g_wnd) return;
     int h = (int)g_trayRevealH;
+    if (g_trayCompanionMode) {
+        // SetWindowRgn does not change GetWindowRect; the recreated taskbar would
+        // continue to see a fullscreen window. Resize only our own Start window.
+        if (g_trayRegionSet) { SetWindowRgn(g_wnd, NULL, TRUE); g_trayRegionSet = false; }
+        if (!SetWindowPos(g_wnd, NULL, 0, 0, g_sw, std::max(1, g_sh - h),
+                          SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE)) {
+            Wh_Log(L"[START-TRAY] resize failed: %lu", GetLastError());
+            g_trayReveal = false; g_trayDisabled = true;
+            g_trayRevealH = 0;
+            SetWindowPos(g_wnd, NULL, 0, 0, g_sw, g_sh,
+                         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+            g_trayCompanionMode = g_trayCompanionWaiting = false;
+            g_trayCompanion = NULL;
+        }
+        return;
+    }
     if (h <= 0) {
         if (g_trayRegionSet) { SetWindowRgn(g_wnd, NULL, TRUE); g_trayRegionSet = false; }
         return;
@@ -11807,9 +12005,44 @@ static void TrayApplyRegion() {
 // Tick, which is what keeps the frames coming for as long as the strip moves.
 static bool TrayRevealTick(float dt) {
     if (!g_wnd) return false;
-    const int want = g_trayReveal ? (int)g_trayBarH : 0;
+    int want = g_trayReveal ? (int)g_trayBarH : 0;
     int h = (int)g_trayRevealH;
-    if (h == want) return false;
+    if (g_trayCompanionMode && g_trayReveal) {
+        ULONGLONG now = GetTickCount64();
+        bool companionVisible = g_trayCompanion && IsWindow(g_trayCompanion) && IsWindowVisible(g_trayCompanion);
+        bool nativeVisible = NativeBarAtBottom();
+        if (!g_trayCompanionWaiting && (!companionVisible || nativeVisible)) {
+            g_trayCompanionWaiting = true;
+            g_trayWaitSince = now; g_trayReadySince = 0;
+            Wh_Log(L"[START-TRAY] companion no longer ready; retracting");
+        }
+        if (g_trayCompanionWaiting) {
+            if (companionVisible && !nativeVisible) {
+                if (!g_trayReadySince) g_trayReadySince = now;
+                if (now - g_trayReadySince >= 250) {
+                    g_trayCompanionWaiting = false;
+                    Wh_Log(L"[START-TRAY] companion ready");
+                }
+            } else g_trayReadySince = 0;
+            if (g_trayCompanionWaiting && now - g_trayWaitSince >= 2000) {
+                Wh_Log(L"[START-TRAY] companion unavailable; reveal cancelled");
+                g_trayReveal = false; g_trayArmed = false;
+                g_trayCompanionWaiting = false; want = 0;
+            }
+            if (g_trayCompanionWaiting) {
+                // Only the probe pixel is exposed, including when the native
+                // taskbar reappears after the animation has already begun.
+                if (h != 1) { g_trayRevealH = 1; TrayApplyRegion(); return true; }
+                return true;
+            }
+        }
+    }
+    if (h == want) {
+        if (!h && !g_trayReveal && g_trayCompanionMode) {
+            g_trayCompanionMode = false; g_trayCompanion = NULL;
+        }
+        return false;
+    }
     int step = (int)((float)(want > h ? want : h) * dt * 1000.0f / kTrayMs) + 1;
     if (h < want) { h += step; if (h > want) h = want; }
     else { h -= step; if (h < want) h = want; }
@@ -11822,10 +12055,13 @@ static void TrayRevealReset() {
     g_trayReveal = false;
     g_trayArmed = false;
     SetTrayMouseHook(false);
-    if (g_trayRevealH != 0) {
+    if (g_trayRevealH != 0 || g_trayCompanionMode) {
         g_trayRevealH = 0;
         TrayApplyRegion();
     }
+    g_trayCompanion = NULL;
+    g_trayCompanionMode = g_trayCompanionWaiting = false;
+    g_trayWaitSince = g_trayReadySince = 0;
 }
 // The strip must not open while something else owns the bottom of the screen or the pointer: the
 // scroll bar being dragged, a tile being dragged, the app bar, the search charm, a menu, the zoom
@@ -11860,6 +12096,10 @@ static void TrayEdgeHover(int mx, int my) {
     const int h = TrayBarHeight();
     if (h <= 0) return;               // nothing at the bottom of this monitor to give space to
     g_trayBarH = h;
+    g_trayCompanionMode = g_trayCompanion != NULL;
+    g_trayCompanionWaiting = g_trayCompanionMode;
+    g_trayWaitSince = GetTickCount64(); g_trayReadySince = 0;
+    Wh_Log(L"[START-TRAY] open companion=%d height=%d", g_trayCompanionMode ? 1 : 0, h);
     g_trayReveal = true;
     SetTrayMouseHook(true);
     // The pointer is about to be over the taskbar: nothing of the Start screen stays lit, and the
@@ -13467,6 +13707,62 @@ static void ApplyStartColourRevision() {
     Wh_SetIntValue(L"tileColours81", 1);
 }
 
+// Custom styling is keyed by launch target, never written into the upstream v7
+// layout. It is reapplied from Windhawk settings after loading the user's layout.
+static void InitCustomTiles() {
+    for (int slot = 1; slot <= 8; ++slot) {
+        wchar_t key[32]; swprintf_s(key, L"customTile%d", slot);
+        WindhawkUtils::StringSetting setting(WindhawkUtils::StringSetting::make(key));
+        std::wstring spec = setting.get() ? setting.get() : L"";
+        if (spec.empty()) continue;
+        if (spec.size() > 8192 || spec.find_first_of(L"\r\n\t") != std::wstring::npos) {
+            Wh_Log(L"Custom tile %d: invalid record", slot); continue;
+        }
+        std::vector<std::wstring> fields;
+        size_t start = 0;
+        for (;;) {
+            size_t end = spec.find(L'|', start);
+            fields.push_back(spec.substr(start, end == std::wstring::npos ? end : end - start));
+            if (end == std::wstring::npos) break;
+            start = end + 1;
+        }
+        if (fields.size() != 8 || fields[0].empty() || fields[1].empty() ||
+            fields[2].size() != 7 || fields[2][0] != L'#' ||
+            fields[2].find_first_not_of(L"0123456789abcdefABCDEF", 1) != std::wstring::npos) {
+            Wh_Log(L"Custom tile %d: expected Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large", slot);
+            continue;
+        }
+        int idx = FindPinned(fields[1].c_str());
+        if (idx < 0) {
+            for (int i = 0; i < g_tileCount; ++i) if (!g_tiles[i].alive) { idx = i; break; }
+            if (idx < 0) { if (g_tileCount >= MAX_TILES) { Wh_Log(L"Custom tile limit reached"); continue; } idx = g_tileCount++; }
+            if (g_orderCount >= MAX_TILES) continue;
+            Tile t = {};
+            t.label = DupW(fields[0].c_str());
+            t.target = DupW(fields[1].c_str());
+            if (!t.label || !t.target) { free((void*)t.label); free((void*)t.target); continue; }
+            t.owned = t.alive = true;
+            t.kind = 1;
+            t.style = IsPackagedAppTarget(t.target) ? PINNED_APP : TOP_APP;
+            t.cw = TS_MEDIUM;
+            t.c1 = t.c2 = RGB(70,23,180);
+            g_tiles[idx] = std::move(t);
+            g_order[g_orderCount++] = idx;
+            g_tileScale[idx] = 1.0f;
+            g_tileGroup[idx] = g_orderCount > 1 ? g_tileGroup[g_order[g_orderCount - 2]] : 0;
+            LoadPinIcon(g_tiles[idx]);
+        }
+        Tile& t = g_tiles[idx];
+        unsigned long rgb = wcstoul(fields[2].c_str()+1, NULL, 16);
+        t.customTile = true;
+        t.customColor = RGB((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255);
+        t.customIcon = fields[3];
+        t.customLabel = fields[0];
+        for (int size = 0; size < 4; ++size) t.customImage[size] = fields[size + 4];
+    }
+    Relayout(false);
+}
+
 static void InitTiles() {
     g_tileCount = g_orderCount = 0;
     if (!LoadLayout()) {
@@ -13529,6 +13825,8 @@ static void InitTiles() {
     // After the saved layout, so the simulated tiles always land at the end of the screen and are
     // only added when they are actually wanted (see SyncMetroTiles).
     SyncMetroTiles(true);
+    InitCustomTiles();
+    for (int i = 0; i < g_tileCount; ++i) g_committedGroup[i] = g_tileGroup[i];
 }
 
 static void UiRun() {
