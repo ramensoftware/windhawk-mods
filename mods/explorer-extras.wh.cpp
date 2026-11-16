@@ -2,7 +2,7 @@
 // @id              explorer-extras
 // @name            Explorer Extras
 // @description     Beta. Additions for File Explorer, one switch per area: a Columns layout (Miller columns) and a details and preview pane for PDF, text, Markdown, images, video and sound.
-// @version         0.55.2
+// @version         0.55.3
 // @author          AristideBH
 // @github          https://github.com/AristideBH
 // @donateUrl       https://ko-fi.com/aristidebh
@@ -90,13 +90,6 @@ If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh
   - oddRows: false
     $name: Alternate row shading
     $description: Every other row is a shade apart, to follow a line across a wide column.
-  $name: Columns
-- details:
-  - autoPreview: true
-    $name: Open previews by themselves
-    $description: When off, a button on the preview opens it, and switches back to the thumbnail.
-  $name: Details pane
-- columns:
   - foldersFirst: true
     $name: Folders first
     $description: Folders are listed before files in each column, whatever the sort.
@@ -133,6 +126,9 @@ If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh
     $name: Maximum items per column
   $name: Columns
 - details:
+  - autoPreview: true
+    $name: Open previews by themselves
+    $description: When off, a button on the preview opens it, and switches back to the thumbnail.
   - detailsPane: true
     $name: Details pane
     $description: Replaces Explorer’s Details pane with a preview and the details of what is selected.
@@ -193,7 +189,6 @@ If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh
 #include <thread>
 #include <vector>
 
-#ifndef MOD_NO_WINRT
 #include <windhawk_utils.h>
 
 #include <winrt/Microsoft.UI.Composition.h>
@@ -235,7 +230,6 @@ If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh
 namespace mux = winrt::Microsoft::UI::Xaml;
 namespace muxc = winrt::Microsoft::UI::Xaml::Controls;
 namespace mud = winrt::Microsoft::UI::Dispatching;
-#endif
 
 namespace {
 
@@ -2505,7 +2499,6 @@ void RememberFolderColumns(std::wstring const& path, int columns) {
 int RememberedColumns(std::wstring const& path) {
     return GetFolderMemory(path).columns;
 }
-#ifndef MOD_NO_WINRT
 
 // ---------------------------------------------------------------------------
 // The panel and the menu entry. One WindowState per Explorer window, used only
@@ -20405,16 +20398,6 @@ void CloseEverything() {
     }
 }
 
-#else  // MOD_NO_WINRT: stand-ins for a compile check without WinRT headers
-
-bool g_hooked = false;
-void HookExtensions(HMODULE) {}
-void CloseEverything() {}
-void CloseSettingsWindowAtUnload() {}
-void StartWorker() {}
-void StopWorker() {}
-
-#endif
 
 // Explorer can start this mod before it has loaded the module the mod hooks.
 // In that case, wait for the module and hook it when it arrives.
@@ -20520,7 +20503,7 @@ BOOL Wh_ModInit() {
 #else
     const wchar_t* arch = L"x86";
 #endif
-    Out(L"explorer-extras v0.55.2 start, compiled as %s, pid=%lu, columns=%d width=%d..%d follow=%d",
+    Out(L"explorer-extras v0.55.3 start, compiled as %s, pid=%lu, columns=%d width=%d..%d follow=%d",
         arch, GetCurrentProcessId(), g_enabled ? 1 : 0, g_minWidth.load(),
         g_maxWidth.load(), g_follow ? 1 : 0);
 
