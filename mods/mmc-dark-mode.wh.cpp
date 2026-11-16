@@ -36,7 +36,10 @@ Services, Event Viewer, Task Scheduler and Disk Management. Existing menus and
 toolbars remain available. Some embedded content draws itself and is not themed.
 
 Switching the mod off restores native styles, colours and painting without
-altering the system-wide colour table.
+altering the system-wide colour table. If every view of an embedded host class
+(such as `AtlAxWinEx`) was already closed before unloading, no live window of
+that class remains to reset its background brush, so newly opened views of that
+host keep the dark background until MMC restarts.
 
 ## Known limits
 
@@ -1913,12 +1916,17 @@ void RemoveAllSubclasses() {
         g_wizardColourAdding.clear();
         subclassed.swap(g_subclassed);
         g_adding.clear();
-        g_styleFixes.clear();
         g_pendingThreads.clear();
     }
     const DWORD tid = GetCurrentThreadId();
+    const auto logLeftover = [tid](PCWSTR kind, HWND w) {
+        const DWORD ownerTid = GetWindowThreadProcessId(w, nullptr);
+        Wh_Log(L"leftover %s subclass on window %p (owner tid=%u, current tid=%u)",
+               kind, w, ownerTid, tid);
+    };
     for (HWND w : shellViews) {
         if (!IsWindow(w)) continue;
+        logLeftover(L"ShellView", w);
         KillTimer(w, kWebCurtainTimer);
         ShowWebView(w);
         if (GetWindowThreadProcessId(w, nullptr) == tid) {
@@ -1934,6 +1942,7 @@ void RemoveAllSubclasses() {
     for (const auto& entry : webCurtains) {
         HWND w = entry.first;
         if (!IsWindow(w)) continue;
+        logLeftover(L"WebCurtain", w);
         KillTimer(w, kWebCurtainTimer);
         RevealParentShellDocView(w);
         ShowWebView(w);
@@ -1942,25 +1951,49 @@ void RemoveAllSubclasses() {
         }
         ClearAllTrackedProps(w);
     }
-    const auto cleanupAux = [tid](const std::unordered_set<HWND>& set, SUBCLASSPROC proc) {
+    const auto cleanupAux = [tid, &logLeftover](PCWSTR kind,
+                                                const std::unordered_set<HWND>& set,
+                                                SUBCLASSPROC proc) {
         for (HWND w : set) {
             if (!IsWindow(w)) continue;
+            logLeftover(kind, w);
             if (GetWindowThreadProcessId(w, nullptr) == tid) {
                 RemoveWindowSubclass(w, proc, kAuxSubclassId);
             }
             ClearAllTrackedProps(w);
         }
     };
-    cleanupAux(dividers, WizardDividerSubclass);
-    cleanupAux(labels, WizardLabelSubclass);
-    cleanupAux(colourPages, WizardColourSubclass);
+    cleanupAux(L"WizardDivider", dividers, WizardDividerSubclass);
+    cleanupAux(L"WizardLabel", labels, WizardLabelSubclass);
+    cleanupAux(L"WizardColourPage", colourPages, WizardColourSubclass);
     for (HWND w : subclassed) {
         if (!IsWindow(w)) continue;
+        logLeftover(L"Mod", w);
         RestoreRemovedStyles(w);
         if (GetWindowThreadProcessId(w, nullptr) == tid) {
             RemoveWindowSubclass(w, ModSubclassProc, kModSubclassId);
         }
         ClearAllTrackedProps(w);
+    }
+    std::unordered_map<HWND, StyleFix> remainingStyles;
+    {
+        std::lock_guard<std::mutex> lock(g_stateLock);
+        remainingStyles.swap(g_styleFixes);
+    }
+    for (const auto& entry : remainingStyles) {
+        HWND w = entry.first;
+        if (!IsWindow(w)) continue;
+        LONG_PTR styleBits = entry.second.styleBits;
+        LONG_PTR exStyleBits = entry.second.exStyleBits;
+        if (styleBits) {
+            SetWindowLongPtrW(w, GWL_STYLE, GetWindowLongPtrW(w, GWL_STYLE) | styleBits);
+        }
+        if (exStyleBits) {
+            SetWindowLongPtrW(w, GWL_EXSTYLE, GetWindowLongPtrW(w, GWL_EXSTYLE) | exStyleBits);
+        }
+        if (styleBits || exStyleBits) {
+            RefreshFrame(w);
+        }
     }
 }
 
