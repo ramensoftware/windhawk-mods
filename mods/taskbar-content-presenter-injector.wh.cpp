@@ -66,6 +66,9 @@ std::mutex g_panelMutex;
 std::vector<PendingHook> g_pendingHooks;
 std::vector<winrt::weak_ref<FrameworkElement>> g_scannedFrames;
 std::mutex g_pendingMutex;
+std::atomic<bool> g_unloading{false};
+// Release with `g_dispatcher = nullptr;` in Wh_ModUninit.
+[[clang::no_destroy]] winrt::Windows::UI::Core::CoreDispatcher g_dispatcher{nullptr};
 
 constexpr std::wstring_view c_TargetPanelLabeled  = L"Taskbar.TaskListLabeledButtonPanel";
 constexpr std::wstring_view c_TargetPanelIconGrid = L"Windows.UI.Xaml.Controls.Grid";
@@ -182,7 +185,7 @@ void InjectContentPresenterIntoPanel(FrameworkElement targetPanel) {
         *tokenHolder = targetPanel.SizeChanged(
             [weakPanel, tokenHolder, pAbi](winrt::Windows::Foundation::IInspectable const&,
                                            winrt::Windows::UI::Xaml::SizeChangedEventArgs const&) {
-                
+                if (g_unloading) return;
                 auto p = weakPanel.get();
                 if (!p) return; 
 
@@ -193,6 +196,7 @@ void InjectContentPresenterIntoPanel(FrameworkElement targetPanel) {
                     auto weakP2 = winrt::make_weak(p);
                     
                     dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [weakP2, pAbi]() {
+                        if (g_unloading) return;
                         auto p_inner = weakP2.get();
                         if (!p_inner) return;
 
@@ -275,6 +279,11 @@ void InjectForElement(void* pThis) {
             auto dispatcher = elem.Dispatcher();
             if (!dispatcher) return;
 
+            {
+                std::lock_guard<std::mutex> lock(g_pendingMutex);
+                if (!g_dispatcher) g_dispatcher = dispatcher;
+            }
+
             t_scanPending = true;
             auto weakElem = winrt::make_weak(elem);
 
@@ -282,6 +291,7 @@ void InjectForElement(void* pThis) {
                 winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
                 [weakElem]() {
                     t_scanPending = false;
+                    if (g_unloading) return;
                     auto elem = weakElem.get();
                     if (!elem) return;
 
@@ -347,7 +357,7 @@ void WINAPI ExperienceToggleButton_UpdateVisualStates_Hook(void* pThis) {
 // Init / Uninit
 // -------------------------------------------------------------------------
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
@@ -397,6 +407,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing Taskbar Injector Mod");
+    g_unloading = false;
 
     if (HMODULE m = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
@@ -411,6 +422,17 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing Taskbar Injector Mod");
+    g_unloading = true;
+
+    winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
+    {
+        std::lock_guard<std::mutex> lock(g_pendingMutex);
+        dispatcher = std::exchange(g_dispatcher, nullptr);
+    }
+    if (dispatcher) {
+        // Runs after every Low-priority scan queued before the hooks were removed.
+        try { dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [] {}).get(); } catch (...) {}
+    }
 
     std::vector<PendingHook> localHooks;
     {
