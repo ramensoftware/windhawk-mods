@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
-// @description     Shows the master volume percentage in the Windows 11 system tray volume icon
+// @description     Customizes the Windows 11 taskbar volume indicator with real-time percentage, custom colors, and styles
 // @version         1.11.0
 // @author          gilnett
 // @github          https://github.com/gilnett
@@ -16,8 +16,9 @@
 /*
 # Taskbar Volume Percentage Indicator
 
-Replaces the Windows 11 system tray volume icon with the current master volume
-level, updated in real time.
+Customizes the appearance of the Windows 11 taskbar volume indicator with the current volume level in real time.
+
+Choose to display the volume as a percentage, a number, with a prefix, or alongside the native speaker icon, with full control over colors, fonts, and mute styling.
 
 ![Taskbar Volume Percentage Preview 1](https://i.imgur.com/vjwali8.png)
 ![Taskbar Volume Percentage Preview 2](https://i.imgur.com/rbVvlEg.png)
@@ -2480,7 +2481,16 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
 }
 
 bool WalkAndSetupVolumeIcon(FrameworkElement const& element) {
-    if (!element) {
+    if (!element || g_unloading) {
+        return false;
+    }
+
+    bool hasVolumeState = false;
+    {
+        std::lock_guard<std::mutex> lock(g_volumeStateMutex);
+        hasVolumeState = g_hasVolumeState;
+    }
+    if (!hasVolumeState || !g_systemTrayModuleHooked) {
         return false;
     }
 
@@ -2601,9 +2611,21 @@ void Wh_ModAfterInit() {
 
                 if (HookSystemTraySymbols(systemTrayModule)) {
                     Wh_ApplyHookOperations();
+                } else {
+                    g_systemTrayModuleHooked = false;
                 }
             }
         }
+    }
+
+    bool hasVolumeState = false;
+    {
+        std::lock_guard<std::mutex> lock(g_volumeStateMutex);
+        hasVolumeState = g_hasVolumeState;
+    }
+
+    if (!hasVolumeState || !g_systemTrayModuleHooked) {
+        return;
     }
 
     RunFromTaskbarThread([](void*) {
