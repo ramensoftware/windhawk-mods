@@ -11,6 +11,7 @@ import json
 import math
 import os
 import re
+import secrets
 import subprocess
 import sys
 import time
@@ -34,15 +35,19 @@ DISALLOWED_AUTHORS = [
 ]
 
 
-# A reviewer adds this label to a pull request once they've confirmed that the
-# X (Twitter) account and the GitHub account belong to the same person.
-TWITTER_VERIFIED_LABEL = 'twitter-verified'
-
-
 @cache
-def get_pr_labels() -> set[str]:
-    """Labels that are on the pull request, as passed in by the workflow."""
-    return set(json.loads(os.environ.get('PR_LABELS', '[]')))
+def get_verified_twitter_urls() -> set[str]:
+    """
+    X (Twitter) URLs that the maintainer confirmed belong to the pull request
+    author, each with a "Verified <url>" line in one of their comments on the
+    pull request, as passed in by the workflow.
+    """
+    comments = os.environ.get('PR_MAINTAINER_COMMENTS', '')
+    return {
+        match.group(1)
+        for line in comments.splitlines()
+        if (match := re.fullmatch(r'Verified\s+(\S+)', line.strip()))
+    }
 
 
 ALLOWED_AUTHOR_NAME_CHANGES = {
@@ -121,7 +126,7 @@ URL_PATTERN = (
 )
 
 
-def add_warning(file: Path, line: int, message: str):
+def format_annotation(level: str, file: Path, line: int, message: str) -> str:
     # https://github.com/orgs/community/discussions/26736
     def escape_data(s: str) -> str:
         return s.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
@@ -135,11 +140,27 @@ def add_warning(file: Path, line: int, message: str):
             .replace(',', '%2C')
         )
 
-    print(
-        f'::warning file={escape_property(str(file))},'
+    return (
+        f'::{level} file={escape_property(str(file))},'
         f'line={line}::{escape_data(message)}'
     )
-    return 1
+
+
+# Errors block the merge until they're fixed. Review items are left for a
+# reviewer to inspect, and don't block the merge by themselves. They're shown by
+# a separate job, so they're collected instead of printed.
+error_count = 0
+review_item_annotations: list[str] = []
+
+
+def add_error(file: Path, line: int, message: str):
+    global error_count
+    error_count += 1
+    print(format_annotation('error', file, line, message))
+
+
+def add_review_item(file: Path, line: int, message: str):
+    review_item_annotations.append(format_annotation('warning', file, line, message))
 
 
 ModPropertyKey = Tuple[str, Optional[str]]  # (key_name, language)
@@ -147,8 +168,8 @@ ModPropertyValue = Tuple[str, int]  # (value, line_number)
 
 
 def get_mod_file_metadata(
-    file: TextIO, warn_callback: Optional[Callable[[int, str], int]] = None
-) -> Tuple[dict[ModPropertyKey, ModPropertyValue], int]:
+    file: TextIO, warn_callback: Optional[Callable[[int, str], None]] = None
+) -> dict[ModPropertyKey, ModPropertyValue]:
     """
     Parse mod metadata from file content.
 
@@ -157,16 +178,12 @@ def get_mod_file_metadata(
         warn_callback: Optional callback(line_number, message) for warnings
 
     Returns:
-        Tuple of (properties dict, warning count)
+        Properties dict
     """
-    warnings = 0
 
     def warn(line_number: int, message: str):
-        nonlocal warnings
         if warn_callback:
-            warnings += warn_callback(line_number, message)
-        else:
-            warnings += 1
+            warn_callback(line_number, message)
 
     properties: dict[ModPropertyKey, ModPropertyValue] = {}
 
@@ -227,7 +244,7 @@ def get_mod_file_metadata(
     if inside_metadata_block:
         warn(1, 'Metadata block must be closed')
 
-    return properties, warnings
+    return properties
 
 
 FETCH_ATTEMPTS = 3
@@ -290,7 +307,7 @@ def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
         content = fetch_url(url).decode('utf-8')
 
         # Use existing robust metadata parser (no warnings needed for existing mods)
-        properties, _ = get_mod_file_metadata(StringIO(content), warn_callback=None)
+        properties = get_mod_file_metadata(StringIO(content), warn_callback=None)
 
         # Convert to simple dict with only non-localized single values
         metadata = {}
@@ -308,7 +325,8 @@ def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
 
 @cache
 def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
-    """Fetch list of existing versions for a mod, or None if mod doesn't exist."""
+    """Fetch list of existing versions for a mod, oldest first, or None if mod
+    doesn't exist."""
     try:
         url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{urllib.parse.quote(mod_id)}/versions.json'
         data = json.loads(fetch_url(url))
@@ -319,27 +337,33 @@ def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
         raise
 
 
+def parse_version(version: str) -> tuple[int, ...]:
+    """Parse a version of numbers and dots into a tuple that compares
+    numerically. Trailing zeros are dropped, so that 1.2 and 1.2.0 are equal."""
+    parts = [int(x) for x in version.split('.')]
+    while len(parts) > 1 and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)
+
+
 def at(key_name: str) -> str:
     """Format property name with Zero Width Non-Joiner to prevent GitHub tagging."""
     return f'@\u200c{key_name}'
 
 
 class ValidationContext:
-    """Manages validation state and warning count."""
+    """Reports the findings of a file."""
 
     def __init__(self, path: Path):
         self.path = path
-        self.__warning_count = 0
 
-    def warn(self, message: str, line_number: Optional[int] = None) -> None:
-        """Add a warning to the context."""
-        line = line_number if line_number is not None else 1
-        add_warning(self.path, line, message)
-        self.__warning_count += 1
+    def add_error(self, message: str, line_number: Optional[int] = None) -> None:
+        add_error(self.path, line_number if line_number is not None else 1, message)
 
-    def warning_count(self) -> int:
-        """Get total number of warnings."""
-        return self.__warning_count
+    def add_review_item(self, message: str, line_number: Optional[int] = None) -> None:
+        add_review_item(
+            self.path, line_number if line_number is not None else 1, message
+        )
 
 
 class PropertyValidator:
@@ -353,40 +377,47 @@ class PropertyValidator:
         self.value = value
         self.line_number = line_number
 
-    def warn(self, message: str) -> 'PropertyValidator':
-        """Add a warning for this property. Use @@ as placeholder for property name."""
+    def add_error(self, message: str) -> 'PropertyValidator':
+        """Add an error for this property. Use @@ as placeholder for property name."""
         message = message.replace('@@', at(self.key_name))
-        self.ctx.warn(message, self.line_number)
+        self.ctx.add_error(message, self.line_number)
+        return self
+
+    def add_review_item(self, message: str) -> 'PropertyValidator':
+        """Add a review item for this property. Use @@ as placeholder for property
+        name."""
+        message = message.replace('@@', at(self.key_name))
+        self.ctx.add_review_item(message, self.line_number)
         return self
 
     def validate_match(self, pattern: str, error_msg: str) -> 'PropertyValidator':
         """Validate value matches regex pattern."""
         if not re.fullmatch(pattern, self.value):
-            self.warn(error_msg)
+            self.add_error(error_msg)
         return self
 
     def validate_url_format(self) -> 'PropertyValidator':
         """Validate value is a well-formed http(s) URL."""
         if not re.match(r'https?://', self.value):
-            self.warn('@@ must start with "http://" or "https://"')
+            self.add_error('@@ must start with "http://" or "https://"')
             return self
 
         disallowed = set(re.findall(f'[^{URL_ALLOWED_CHARS}]', self.value))
         if disallowed:
             chars = ', '.join(f'U+{ord(c):04X}' for c in sorted(disallowed))
-            self.warn(
+            self.add_error(
                 f'@@ contains characters which are not allowed in a URL ({chars}),'
                 ' they must be percent-encoded'
             )
         elif not re.fullmatch(URL_PATTERN, self.value):
-            self.warn(f'@@ is not a valid URL: "{self.value}"')
+            self.add_error(f'@@ is not a valid URL: "{self.value}"')
 
         return self
 
     def validate_no_tabs(self) -> 'PropertyValidator':
         """Validate value contains no tab characters."""
         if '\t' in self.value:
-            self.warn('@@ must not contain tab characters')
+            self.add_error('@@ must not contain tab characters')
         return self
 
 
@@ -463,7 +494,7 @@ class ModMetadataValidator:
             value, line_number = self.properties[key]
             return PropertyValidator(self.ctx, key_name, value, line_number)
         if warn_if_missing:
-            self.ctx.warn(f'Missing {at(key_name)}')
+            self.ctx.add_error(f'Missing {at(key_name)}')
         return None
 
     def property_variants(self, key_name: str) -> list[PropertyValidator]:
@@ -479,8 +510,8 @@ class ModMetadataValidator:
             if key == key_name
         ]
 
-    def validate_all(self) -> int:
-        """Run all validations and return warning count."""
+    def validate_all(self):
+        """Run all validations."""
         self.validate_github()
         self.validate_id()
         self.validate_version()
@@ -495,8 +526,6 @@ class ModMetadataValidator:
         self.validate_architecture()
         self.validate_tool_mod()
 
-        return self.ctx.warning_count()
-
     def validate_github(self):
         """Validate GitHub URL."""
         prop = self.property('github', warn_if_missing=True)
@@ -506,7 +535,7 @@ class ModMetadataValidator:
         # Check if mod already exists - github must not change
         if self.existing_metadata and 'github' in self.existing_metadata:
             if prop.value != self.existing_metadata['github']:
-                prop.warn(
+                prop.add_error(
                     '@@ cannot be changed for existing mods. Expected'
                     f' "{self.existing_metadata["github"]}", got "{prop.value}"\n'
                     'Note that only the original author of the mod is allowed to'
@@ -520,15 +549,15 @@ class ModMetadataValidator:
 
         expected = f'https://github.com/{self.expected_author}'
         if not prop.value.startswith('https://github.com/'):
-            prop.warn('@@ must start with https://github.com/')
+            prop.add_error('@@ must start with https://github.com/')
         elif prop.value != expected and prop.value.lower() == expected.lower():
-            prop.warn(f'Expected @@ to be {expected} (case-sensitive)')
+            prop.add_error(f'Expected @@ to be {expected} (case-sensitive)')
         elif prop.value == expected + '/':
-            prop.warn(f'Expected @@ to be {expected} (no trailing slash)')
+            prop.add_error(f'Expected @@ to be {expected} (no trailing slash)')
         elif prop.value.startswith(expected + '/'):
-            prop.warn(f'Expected @@ to be {expected} (user profile URL only)')
+            prop.add_error(f'Expected @@ to be {expected} (user profile URL only)')
         elif prop.value != expected:
-            prop.warn(
+            prop.add_error(
                 f'Expected @@ ({prop.value}) to match the pull request author'
                 f' ({expected}).\n'
                 'Note that only the original author of the mod is allowed to submit'
@@ -540,7 +569,7 @@ class ModMetadataValidator:
                 + self.renamed_account_note()
             )
         elif self.renamed_from_github and not self.author_data:
-            prop.warn(
+            prop.add_review_item(
                 f'@@ ({prop.value}) has no previous submissions.'
                 + self.renamed_account_note()
             )
@@ -558,12 +587,12 @@ class ModMetadataValidator:
 
         github_id = self.author_data.get('githubId')
         if github_id is None:
-            prop.warn(
+            prop.add_review_item(
                 f'No GitHub user id is on record for {prop.value}, manual'
                 ' verification is required'
             )
         elif github_id != self.expected_author_id:
-            prop.warn(
+            prop.add_error(
                 'The GitHub user id of the pull request author'
                 f' ({self.expected_author_id}) doesn\'t match the one on record for'
                 f' {prop.value} ({github_id}).\n'
@@ -581,14 +610,16 @@ class ModMetadataValidator:
         # Check if mod already exists - id must not change
         if self.existing_metadata and 'id' in self.existing_metadata:
             if prop.value != self.existing_metadata['id']:
-                prop.warn(
+                prop.add_error(
                     '@@ cannot be changed for existing mods. Expected'
                     f' "{self.existing_metadata["id"]}", got "{prop.value}"'
                 )
 
         expected = self.ctx.path.name.removesuffix('.cpp').removesuffix('.wh')
         if prop.value != expected:
-            prop.warn(f'Expected @@ ({prop.value}) to match the file name ({expected})')
+            prop.add_error(
+                f'Expected @@ ({prop.value}) to match the file name ({expected})'
+            )
 
         prop.validate_match(
             r'([0-9a-z]+-)*[0-9a-z]+',
@@ -598,25 +629,46 @@ class ModMetadataValidator:
         min_len = 6
         max_len = 48
         if len(prop.value) < min_len or len(prop.value) > max_len:
-            prop.warn(f'@@ must be between {min_len} and {max_len} characters')
+            prop.add_error(f'@@ must be between {min_len} and {max_len} characters')
 
     def validate_version(self):
-        """Validate version format."""
+        """Validate version format, and that it's newer than the latest
+        version."""
         prop = self.property('version', warn_if_missing=True)
         if not prop:
             return
 
-        prop.validate_match(
-            r'([0-9]+\.)*[0-9]+',
-            '@@ must contain only numbers and dots',
-        )
+        version_pattern = r'([0-9]+\.)*[0-9]+'
+        if not re.fullmatch(version_pattern, prop.value):
+            prop.add_error('@@ must contain only numbers and dots')
+            return
 
-        # Check if version is already used
-        if self.existing_versions and prop.value in self.existing_versions:
-            prop.warn(
+        if not self.existing_versions:
+            return
+
+        previous_versions = ', '.join(self.existing_versions)
+
+        if prop.value in self.existing_versions:
+            prop.add_error(
                 f'@@ "{prop.value}" is already used. Please use a new, unused'
                 ' version.\n'
-                f'Previous versions: {", ".join(self.existing_versions)}'
+                f'Previous versions: {previous_versions}'
+            )
+            return
+
+        # Prerelease versions, such as 1.0-beta, are skipped.
+        release_versions = [
+            v for v in self.existing_versions if re.fullmatch(version_pattern, v)
+        ]
+        if not release_versions:
+            return
+
+        latest_version = release_versions[-1]
+        if parse_version(prop.value) <= parse_version(latest_version):
+            prop.add_error(
+                f'@@ "{prop.value}" must be newer than the latest version'
+                f' "{latest_version}".\n'
+                f'Previous versions: {previous_versions}'
             )
 
     def validate_author(self):
@@ -634,7 +686,7 @@ class ModMetadataValidator:
                 ALLOWED_AUTHOR_NAME_CHANGES.get(self.existing_metadata['author'])
                 != prop.value
             ):
-                prop.warn(
+                prop.add_error(
                     '@@ cannot be changed for existing mods. Expected'
                     f' "{self.existing_metadata["author"]}", got "{prop.value}"'
                 )
@@ -642,14 +694,14 @@ class ModMetadataValidator:
         if self.author_data:
             # Existing author - must match exactly
             if prop.value != self.author_data['author']:
-                prop.warn(
+                prop.add_error(
                     f'Expected @@ to be "{self.author_data["author"]}" based on'
                     f' previous submissions for {self.github_url}'
                 )
         else:
             for other_github, other_data in self.mod_author_data.items():
                 if other_data['author'].lower() == prop.value.lower():
-                    prop.warn(
+                    prop.add_error(
                         f'Author name "{prop.value}" is already used by {other_github}.'
                     )
                     break
@@ -657,7 +709,7 @@ class ModMetadataValidator:
         min_len = 3
         max_len = 28
         if len(prop.value) < min_len or len(prop.value) > max_len:
-            prop.warn(f'@@ must be between {min_len} and {max_len} characters')
+            prop.add_error(f'@@ must be between {min_len} and {max_len} characters')
 
     def validate_twitter(self):
         """Validate Twitter handle."""
@@ -668,7 +720,7 @@ class ModMetadataValidator:
         # Check if mod already exists - twitter must not change
         if self.existing_metadata and 'twitter' in self.existing_metadata:
             if prop.value != self.existing_metadata['twitter']:
-                prop.warn(
+                prop.add_error(
                     '@@ cannot be changed for existing mods. Expected'
                     f' "{self.existing_metadata["twitter"]}", got "{prop.value}"'
                 )
@@ -676,7 +728,7 @@ class ModMetadataValidator:
         if self.author_data and 'twitter' in self.author_data:
             # Existing author with twitter - must match exactly
             if prop.value != self.author_data['twitter']:
-                prop.warn(
+                prop.add_error(
                     f'Expected @@ to be "{self.author_data["twitter"]}" based on'
                     f' previous submissions for {self.github_url}'
                 )
@@ -687,7 +739,7 @@ class ModMetadataValidator:
                     'twitter' in other_data
                     and other_data['twitter'].lower() == prop.value.lower()
                 ):
-                    prop.warn(
+                    prop.add_error(
                         f'Twitter account "{prop.value}" is already used by'
                         f' {other_github}.'
                     )
@@ -695,8 +747,8 @@ class ModMetadataValidator:
             else:
                 # Not used by anyone else, so it takes a manual check that the
                 # same person owns both accounts.
-                if TWITTER_VERIFIED_LABEL not in get_pr_labels():
-                    prop.warn(
+                if prop.value not in get_verified_twitter_urls():
+                    prop.add_review_item(
                         '@@ requires manual verification\n\n'
                         'To verify your X (Twitter) account, please send me'
                         ' (https://x.com/m417z) a direct message with the following'
@@ -709,9 +761,11 @@ class ModMetadataValidator:
         prop.validate_url_format()
 
         if not re.match(r'https://(x|twitter)\.com/', prop.value):
-            prop.warn('@@ must start with https://x.com/ or https://twitter.com/')
+            prop.add_error('@@ must start with https://x.com/ or https://twitter.com/')
         elif not re.match(r'https://(x|twitter)\.com/[^/]+$', prop.value):
-            prop.warn('@@ must be an X (Twitter) profile URL with no extra slashes')
+            prop.add_error(
+                '@@ must be an X (Twitter) profile URL with no extra slashes'
+            )
 
     def validate_homepage(self):
         """Validate homepage URL."""
@@ -734,7 +788,7 @@ class ModMetadataValidator:
                     if prop.value.lower() in [
                         h.lower() for h in other_data.get('homepages', [])
                     ]:
-                        prop.warn(
+                        prop.add_error(
                             f'Homepage "{prop.value}" is already used by'
                             f' {other_github}.'
                         )
@@ -773,7 +827,9 @@ class ModMetadataValidator:
         options = prop.value.split()
         disallowed_options = [opt for opt in options if not is_allowed_option(opt)]
         if disallowed_options:
-            prop.warn(f'@@ require manual verification: {" ".join(disallowed_options)}')
+            prop.add_review_item(
+                f'@@ require manual verification: {" ".join(disallowed_options)}'
+            )
 
     def validate_license(self):
         """Validate license identifier."""
@@ -782,7 +838,7 @@ class ModMetadataValidator:
             return
 
         if not is_valid_license_identifier(prop.value):
-            prop.warn(
+            prop.add_error(
                 f'Unknown license identifier "{prop.value}". The license must be'
                 ' a valid SPDX identifier from https://spdx.org/licenses/.'
             )
@@ -799,7 +855,7 @@ class ModMetadataValidator:
         min_len = 6
         max_len = 68
         if len(prop.value) < min_len or len(prop.value) > max_len:
-            prop.warn(f'@@ must be between {min_len} and {max_len} characters')
+            prop.add_error(f'@@ must be between {min_len} and {max_len} characters')
 
         # Check for duplicate names across existing mods
         filename_mod_id = self.ctx.path.name.removesuffix('.cpp').removesuffix('.wh')
@@ -809,7 +865,9 @@ class ModMetadataValidator:
                 other_mod_id != filename_mod_id
                 and other_name.lower() == prop.value.lower()
             ):
-                prop.warn(f'@@ "{prop.value}" is already used by mod "{other_mod_id}"')
+                prop.add_error(
+                    f'@@ "{prop.value}" is already used by mod "{other_mod_id}"'
+                )
                 break
 
     def validate_description(self):
@@ -824,7 +882,7 @@ class ModMetadataValidator:
         min_len = 30
         max_len = 250
         if len(prop.value) < min_len or len(prop.value) > max_len:
-            prop.warn(f'@@ must be between {min_len} and {max_len} characters')
+            prop.add_error(f'@@ must be between {min_len} and {max_len} characters')
 
     def validate_architecture(self):
         """Validate architecture values."""
@@ -832,20 +890,23 @@ class ModMetadataValidator:
         if not prop:
             return
 
-        msg = ''
+        unknown_msg = ''
+        uncommon_msg = ''
         for arch in prop.value.split('\n'):
             if arch.strip() == '':
                 pass
             elif arch not in {'x86', 'x86-64', 'amd64', 'arm64'}:
-                msg += f'Unknown architecture "{arch}"\n'
+                unknown_msg += f'Unknown architecture "{arch}"\n'
             elif arch not in {'x86', 'x86-64'}:
-                msg += (
+                uncommon_msg += (
                     f'Architecture "{arch}" isn\'t commonly used, manual verification'
                     ' is required\n'
                 )
 
-        if msg:
-            prop.warn(msg.rstrip('\n'))
+        if unknown_msg:
+            prop.add_error(unknown_msg.rstrip('\n'))
+        if uncommon_msg:
+            prop.add_review_item(uncommon_msg.rstrip('\n'))
 
     def validate_tool_mod(self):
         """Validate the metadata of a tool mod: one that targets windhawk.exe
@@ -874,13 +935,13 @@ class ModMetadataValidator:
             return
 
         if windhawk_includes not in [set(x) for x in TOOL_MOD_ALLOWED_INCLUDES]:
-            prop.warn(
+            prop.add_error(
                 'Tool mods must @@ exactly one of the following combinations of'
                 ' Windhawk processes:\n'
                 + '\n'.join(f'* {", ".join(x)}' for x in TOOL_MOD_ALLOWED_INCLUDES)
             )
         elif windhawk_includes == {'windhawk.exe'} and not defines_tool_mod_init:
-            prop.warn(
+            prop.add_error(
                 'Tool mods which @@ only windhawk.exe must define'
                 ' WhTool_ModInit, use the tool mod template:'
                 ' https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process'
@@ -888,7 +949,7 @@ class ModMetadataValidator:
 
         arch_prop = self.property('architecture')
         if arch_prop:
-            arch_prop.warn('@@ must not be specified for tool mods')
+            arch_prop.add_error('@@ must not be specified for tool mods')
 
 
 def validate_metadata(
@@ -896,26 +957,23 @@ def validate_metadata(
     mod_source: str,
     expected_author: str,
     expected_author_id: Optional[int],
-) -> int:
-    properties, initial_warnings = get_mod_file_metadata(
+):
+    properties = get_mod_file_metadata(
         StringIO(mod_source),
-        warn_callback=lambda line, msg: add_warning(path, line, msg),
+        warn_callback=lambda line, msg: add_error(path, line, msg),
     )
 
     # Validate metadata properties
     validator = ModMetadataValidator(
         path, properties, expected_author, expected_author_id, mod_source
     )
-    metadata_warnings = validator.validate_all()
+    validator.validate_all()
 
     # Validate file path
-    file_warnings = 0
     if not path.name.endswith('.wh.cpp'):
-        file_warnings += add_warning(path, 1, 'Filename should end with .wh.cpp')
+        add_error(path, 1, 'Filename should end with .wh.cpp')
     if path.parent != Path('mods'):
-        file_warnings += add_warning(path, 1, 'File is not placed in the mods folder')
-
-    return initial_warnings + metadata_warnings + file_warnings
+        add_error(path, 1, 'File is not placed in the mods folder')
 
 
 def validate_marker_block(
@@ -925,19 +983,16 @@ def validate_marker_block(
     label: str,
     *,
     required: bool,
-) -> int:
+):
     """Validate a `// ==X== \\n /* ... */ \\n // ==/X==` block in a mod source.
 
     Args:
-        path: source file path (used in warning output).
+        path: source file path (used in error output).
         source: full file contents.
         marker_name: the marker text without `==` decoration, e.g.
             `WindhawkModReadme`.
-        label: human-friendly name used in warning messages, e.g. `README`.
-        required: if True, warn when the block is absent.
-
-    Returns:
-        Total number of warnings emitted.
+        label: human-friendly name used in error messages, e.g. `README`.
+        required: if True, report an error when the block is absent.
     """
     open_marker = f'=={marker_name}=='
     close_marker = f'==/{marker_name}=='
@@ -952,8 +1007,6 @@ def validate_marker_block(
     )
     match = block_re.search(source)
 
-    warnings = 0
-
     def line_of(pos: int) -> int:
         return source.count('\n', 0, pos) + 1
 
@@ -963,7 +1016,7 @@ def validate_marker_block(
             yield pos
             start = pos + len(needle)
 
-    # Stray-marker scan: warn about any line that looks like a marker comment
+    # Stray-marker scan: report any line that looks like a marker comment
     # line but isn't the one consumed by the matched block. The pattern is
     # intentionally more permissive than block_re (it tolerates leading
     # whitespace) so improperly indented marker lines are still caught, while
@@ -990,25 +1043,21 @@ def validate_marker_block(
     for m in open_marker_line_re.finditer(source):
         if m.start() <= matched_open_pos < m.end():
             continue
-        warnings += add_warning(
-            path, line_of(m.start()), f'Unexpected extra "{open_marker}" marker'
-        )
+        add_error(path, line_of(m.start()), f'Unexpected extra "{open_marker}" marker')
 
     for m in close_marker_line_re.finditer(source):
         if m.start() <= matched_close_pos < m.end():
             continue
-        warnings += add_warning(
-            path, line_of(m.start()), f'Unexpected extra "{close_marker}" marker'
-        )
+        add_error(path, line_of(m.start()), f'Unexpected extra "{close_marker}" marker')
 
     if match is None:
         if required:
-            warnings += add_warning(
+            add_error(
                 path,
                 1,
                 f'Mod source must contain a {label} block ({open_marker})',
             )
-        return warnings
+        return
 
     body = match.group(1)
     body_start = match.start(1)
@@ -1017,7 +1066,7 @@ def validate_marker_block(
     # The body must not contain another */ - that would actually terminate the
     # comment block at that point in C/C++.
     for idx in find_all(body, '*/'):
-        warnings += add_warning(
+        add_error(
             path,
             line_of(body_start + idx),
             f'{label} body must not contain an additional "*/"',
@@ -1026,28 +1075,21 @@ def validate_marker_block(
     # /* must be followed by a newline and */ must be preceded by one
     # (trailing/leading spaces or tabs on those lines are tolerated).
     if not re.match(r'[ \t]*\n', body):
-        warnings += add_warning(
-            path, open_line, f'{label} /* must be followed by a newline'
-        )
+        add_error(path, open_line, f'{label} /* must be followed by a newline')
     if not re.search(r'\n[ \t]*\Z', body):
-        warnings += add_warning(
-            path, open_line, f'{label} */ must be preceded by a newline'
-        )
+        add_error(path, open_line, f'{label} */ must be preceded by a newline')
 
     # The body must contain non-whitespace content.
     if body.strip() == '':
-        warnings += add_warning(path, open_line, f'{label} block must not be empty')
-
-    return warnings
+        add_error(path, open_line, f'{label} block must not be empty')
 
 
-def validate_readme(path: Path, mod_source: str) -> int:
+def validate_readme(path: Path, mod_source: str):
     """Validate the mod's README block."""
-    warnings = validate_marker_block(
+    validate_marker_block(
         path, mod_source, 'WindhawkModReadme', 'README', required=True
     )
-    warnings += validate_readme_images(path, mod_source)
-    return warnings
+    validate_readme_images(path, mod_source)
 
 
 # Must match the patterns in scripts/archive_mod_images.py, which archives the
@@ -1163,21 +1205,20 @@ def get_archived_original_hashes() -> dict[str, str]:
     return json.loads(data) if data is not None else {}
 
 
-def validate_readme_images(path: Path, mod_source: str) -> int:
+def validate_readme_images(path: Path, mod_source: str):
     """Validate that the README images can be archived, and that the already
     archived ones are unchanged."""
     readme_match = re.search(ARCHIVED_README_PATTERN, mod_source, re.MULTILINE)
     if not readme_match:
-        return 0
+        return
 
     readme = readme_match.group(1)
-    warnings = 0
 
     def line_of(pos: int) -> int:
         return mod_source.count('\n', 0, readme_match.start(1) + pos) + 1
 
     for match in re.finditer(r'<img\b', readme, re.IGNORECASE):
-        warnings += add_warning(
+        add_error(
             path,
             line_of(match.start()),
             'HTML <img> tags are not supported in the README, use Markdown'
@@ -1189,7 +1230,7 @@ def validate_readme_images(path: Path, mod_source: str) -> int:
     image_starts = {match.start() for match in image_matches}
     for match in re.finditer(r'!\[', readme):
         if match.start() not in image_starts:
-            warnings += add_warning(
+            add_error(
                 path,
                 line_of(match.start()),
                 'Malformed Markdown image, expected: ![description](url)',
@@ -1201,7 +1242,7 @@ def validate_readme_images(path: Path, mod_source: str) -> int:
         line = line_of(match.start(1))
 
         if not any(url.startswith(f'https://{host}/') for host in ARCHIVED_IMAGE_HOSTS):
-            warnings += add_warning(
+            add_error(
                 path,
                 line,
                 f'Image host is not supported, images must be hosted on one of:'
@@ -1210,22 +1251,18 @@ def validate_readme_images(path: Path, mod_source: str) -> int:
             continue
 
         if not re.fullmatch(URL_PATTERN, url):
-            warnings += add_warning(path, line, f'Invalid image URL: "{url}"')
+            add_error(path, line, f'Invalid image URL: "{url}"')
             continue
 
         image_path = urllib.parse.unquote(url.removeprefix('https://'))
         if error := get_archived_image_path_error(image_path):
-            warnings += add_warning(
-                path, line, f'Image URL can\'t be archived, {error}: "{url}"'
-            )
+            add_error(path, line, f'Image URL can\'t be archived, {error}: "{url}"')
             continue
 
         try:
             image = fetch_url(url, headers={'User-Agent': 'Mozilla/5.0'})
         except urllib.error.HTTPError as e:
-            warnings += add_warning(
-                path, line, f'Image URL returned HTTP {e.code}: "{url}"'
-            )
+            add_error(path, line, f'Image URL returned HTTP {e.code}: "{url}"')
             continue
 
         if url.startswith(DIRECTLY_SERVED_IMAGE_URL_PREFIX):
@@ -1242,10 +1279,10 @@ def validate_readme_images(path: Path, mod_source: str) -> int:
             changed = archived and archived_image != image
 
         if not archived and (large_image_warning := get_large_image_warning(image)):
-            warnings += add_warning(path, line, f'{large_image_warning}: "{url}"')
+            add_review_item(path, line, f'{large_image_warning}: "{url}"')
 
         if changed:
-            warnings += add_warning(
+            add_error(
                 path,
                 line,
                 'Image differs from its archived copy. Images are archived once'
@@ -1253,16 +1290,13 @@ def validate_readme_images(path: Path, mod_source: str) -> int:
                 f' different URL: "{url}"',
             )
 
-    return warnings
 
-
-def validate_settings(path: Path, mod_source: str) -> int:
+def validate_settings(path: Path, mod_source: str):
     """Validate the mod's settings block, if present."""
-    warnings = validate_marker_block(
+    validate_marker_block(
         path, mod_source, 'WindhawkModSettings', 'Settings', required=False
     )
-    warnings += validate_settings_yaml(path, mod_source)
-    return warnings
+    validate_settings_yaml(path, mod_source)
 
 
 class SettingsYamlLoader(yaml.SafeLoader):
@@ -1546,7 +1580,7 @@ class SettingsSchemaChecker:
                 )
 
 
-def validate_settings_yaml(path: Path, mod_source: str) -> int:
+def validate_settings_yaml(path: Path, mod_source: str):
     """Validate that the settings block parses as the structure Windhawk expects.
 
     Mirrors Windhawk's extraction (windhawk-vscode modSourceUtils.ts,
@@ -1568,7 +1602,7 @@ def validate_settings_yaml(path: Path, mod_source: str) -> int:
     )
     match = block_re.search(mod_source)
     if match is None:
-        return 0
+        return
 
     body = match.group(1)
     body_start_line = mod_source.count('\n', 0, match.start(1)) + 1
@@ -1577,7 +1611,8 @@ def validate_settings_yaml(path: Path, mod_source: str) -> int:
     try:
         node = loader.get_single_node()
         if node is None:
-            return add_warning(path, body_start_line, 'Settings must be a YAML array')
+            add_error(path, body_start_line, 'Settings must be a YAML array')
+            return
         # Constructing the whole document reports duplicate keys and bad tags,
         # and caches every node's value for the checker to read.
         loader.construct_object(node, deep=True)
@@ -1588,13 +1623,11 @@ def validate_settings_yaml(path: Path, mod_source: str) -> int:
         if mark is not None:
             # problem_mark.line is 0-based and relative to the parsed body.
             line = body_start_line + mark.line
-        return add_warning(path, line, f'Settings block is not valid YAML: {e}')
+        add_error(path, line, f'Settings block is not valid YAML: {e}')
     except SettingsSchemaError as e:
-        return add_warning(path, body_start_line + e.node.start_mark.line, str(e))
+        add_error(path, body_start_line + e.node.start_mark.line, str(e))
     finally:
         loader.dispose()
-
-    return 0
 
 
 @cache
@@ -1604,7 +1637,7 @@ def get_all_mod_names() -> dict[str, str]:
     for path in Path('mods').glob('*.wh.cpp'):
         mod_id = path.name.removesuffix('.wh.cpp')
         with path.open(encoding='utf-8') as f:
-            properties, _ = get_mod_file_metadata(f)
+            properties = get_mod_file_metadata(f)
         name_prop = properties.get(('name', None))
         if name_prop:
             result[mod_id] = name_prop[0]
@@ -1722,8 +1755,6 @@ def is_no_undecorated_symbols_accepted(mod_id: str, mod_source: str):
 
 
 def validate_symbol_hooks(path: Path, mod_source: str):
-    warnings = 0
-
     mod_id = path.name.removesuffix('.wh.cpp')
     mod_source_lines = mod_source.splitlines()
 
@@ -1733,14 +1764,14 @@ def validate_symbol_hooks(path: Path, mod_source: str):
             line_before_comment = mod_source_lines[line_num - 3].strip()
             if line_before_comment.startswith('//') and line_before_comment.endswith(','):
                 warning_msg = 'List all target modules in a single comment line'
-                warnings += add_warning(path, line_num - 1, warning_msg)
+                add_error(path, line_num - 1, warning_msg)
 
         if target_from_name and targets_from_comment:
             warning_msg = (
                 'Use either a comment or a variable name, not both. For example, you'
                 ' can rename the variable from "user32DllHooks" to "user32Hooks".'
             )
-            warnings += add_warning(path, line_num, warning_msg)
+            add_error(path, line_num, warning_msg)
         elif target_from_name or targets_from_comment:
             if target_from_name and not is_known_module(mod_id, target_from_name):
                 warning_msg = (
@@ -1751,12 +1782,12 @@ def validate_symbol_hooks(path: Path, mod_source: str):
                     '// Taskbar.View.dll\n'
                     'WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {...};'
                 )
-                warnings += add_warning(path, line_num, warning_msg)
+                add_review_item(path, line_num, warning_msg)
 
             for target in targets_from_comment:
                 if not is_known_module(mod_id, target):
                     warning_msg = f'"{target}" is not recognized as a Windows file name'
-                    warnings += add_warning(path, line_num - 1, warning_msg)
+                    add_review_item(path, line_num - 1, warning_msg)
             continue
 
         warning_msg = (
@@ -1772,9 +1803,7 @@ def validate_symbol_hooks(path: Path, mod_source: str):
             '// explorer.exe, taskbar.dll\n'
             'WindhawkUtils::SYMBOL_HOOK hooks[] = {...};'
         )
-        warnings += add_warning(path, line_num, warning_msg)
-
-    return warnings
+        add_error(path, line_num, warning_msg)
 
 
 def validate_encoding(path: Path):
@@ -1784,20 +1813,15 @@ def validate_encoding(path: Path):
     try:
         raw.decode('utf-8')
     except UnicodeDecodeError as e:
-        return add_warning(path, 1, f'File is not valid UTF-8: {e}')
-
-    warnings = 0
+        add_error(path, 1, f'File is not valid UTF-8: {e}')
+        return
 
     if raw.startswith(b'\xef\xbb\xbf'):
-        warnings += add_warning(path, 1, 'File must not start with a UTF-8 BOM')
-
-    return warnings
+        add_error(path, 1, 'File must not start with a UTF-8 BOM')
 
 
 def validate_specific_keywords(path: Path, mod_source: str):
     """Check for specific keywords in mod source code."""
-    warnings = 0
-
     # Split on newlines only; splitlines() would also split on vertical tab,
     # form feed and similar, hiding them from the control character check.
     mod_source_lines = mod_source.split('\n')
@@ -1837,7 +1861,7 @@ def validate_specific_keywords(path: Path, mod_source: str):
                 if word == 'noUndecoratedSymbols' and no_undecorated_symbols_accepted:
                     continue
 
-                warnings += add_warning(
+                add_review_item(
                     path,
                     line_num,
                     f'Line requires manual inspection for "{word}": {description}',
@@ -1851,7 +1875,7 @@ def validate_specific_keywords(path: Path, mod_source: str):
         ]
         if hidden_ws:
             chars = ', '.join(f'U+{ord(c):04X}' for c in sorted(set(hidden_ws)))
-            warnings += add_warning(
+            add_review_item(
                 path,
                 line_num,
                 f'Line contains {len(hidden_ws)} non-standard whitespace characters'
@@ -1863,14 +1887,12 @@ def validate_specific_keywords(path: Path, mod_source: str):
         ]
         if control_chars:
             chars = ', '.join(f'U+{ord(c):04X}' for c in sorted(set(control_chars)))
-            warnings += add_warning(
+            add_error(
                 path,
                 line_num,
                 f'Line contains {len(control_chars)} control characters ({chars}),'
                 ' which are not allowed',
             )
-
-    return warnings
 
 
 MAX_LINE_LENGTH = 4096
@@ -1910,13 +1932,11 @@ def count_statements(code_line: str) -> int:
     return statements
 
 
-def validate_line_lengths(path: Path, mod_source: str) -> int:
+def validate_line_lengths(path: Path, mod_source: str):
     """Validate that lines, and the code in them, aren't overly long."""
-    warnings = 0
-
     for line_num, line in enumerate(mod_source.split('\n'), start=1):
         if len(line) > MAX_LINE_LENGTH:
-            warnings += add_warning(
+            add_error(
                 path,
                 line_num,
                 f'Line is {len(line)} characters long, lines must not be longer'
@@ -1929,15 +1949,13 @@ def validate_line_lengths(path: Path, mod_source: str) -> int:
             statements >= DENSE_CODE_LINE_MIN_STATEMENTS
             and len(line) > DENSE_CODE_LINE_MAX_LENGTH
         ):
-            warnings += add_warning(
+            add_error(
                 path,
                 line_num,
                 f'Line packs {statements} statements into {len(line)} characters'
                 ' of code, which makes it difficult to review, please split it into'
                 f' multiple lines.',
             )
-
-    return warnings
 
 
 # Assignment, comparison and logical operators. Operators which are also used
@@ -1956,7 +1974,7 @@ COMPACT_CODE_MIN_UNSPACED_PACKED_LINES = 50
 COMPACT_CODE_MAX_PACKED_LINES = 0.1
 
 
-def validate_code_compactness(path: Path, mod_source: str) -> int:
+def validate_code_compactness(path: Path, mod_source: str):
     """Validate that the code isn't compacted, with operators and statements
     run together throughout the file."""
     lines = 0
@@ -1991,7 +2009,7 @@ def validate_code_compactness(path: Path, mod_source: str) -> int:
             densest_line_score = line_unspaced_operators + statements
 
     if lines < COMPACT_CODE_MIN_LINES:
-        return 0
+        return
 
     unspaced_ratio = unspaced_operators / operators if operators else 0
     packed_ratio = packed_lines / lines
@@ -2002,9 +2020,9 @@ def validate_code_compactness(path: Path, mod_source: str) -> int:
         )
         or packed_ratio > COMPACT_CODE_MAX_PACKED_LINES
     ):
-        return 0
+        return
 
-    return add_warning(
+    add_error(
         path,
         densest_line_num,
         'The code is compacted throughout the file, which makes it difficult to'
@@ -2040,8 +2058,6 @@ def normalize_return_type(return_type: str) -> str:
 
 def validate_callback_signatures(path: Path, mod_source: str):
     """Validate signatures of well-known Windhawk mod callback functions."""
-    warnings = 0
-
     for callback_name, expected_signatures in CALLBACK_SIGNATURES.items():
         # Parse expected signatures once: (return_type, normalized_param_types).
         expected = []
@@ -2068,7 +2084,7 @@ def validate_callback_signatures(path: Path, mod_source: str):
             specifiers, return_type, params = match.groups()
 
             if specifiers:
-                warnings += add_warning(
+                add_error(
                     path,
                     line_num,
                     f'Unexpected "{" ".join(specifiers.split())}" before'
@@ -2085,7 +2101,7 @@ def validate_callback_signatures(path: Path, mod_source: str):
                 continue
 
             expected_list = ' or '.join(f'"{s}"' for s in expected_signatures)
-            warnings += add_warning(
+            add_error(
                 path,
                 line_num,
                 f'Unexpected {callback_name} signature:'
@@ -2093,25 +2109,21 @@ def validate_callback_signatures(path: Path, mod_source: str):
                 f' Expected: {expected_list}',
             )
 
-    return warnings
 
-
-def validate_mod_file(path: Path, pr_author: str, pr_author_id: Optional[int]) -> int:
+def validate_mod_file(path: Path, pr_author: str, pr_author_id: Optional[int]):
     mod_source = path.read_text(encoding='utf-8', errors='ignore').removeprefix(
         '\ufeff'
     )
 
-    warnings = validate_encoding(path)
-    warnings += validate_metadata(path, mod_source, pr_author, pr_author_id)
-    warnings += validate_readme(path, mod_source)
-    warnings += validate_settings(path, mod_source)
-    warnings += validate_symbol_hooks(path, mod_source)
-    warnings += validate_specific_keywords(path, mod_source)
-    warnings += validate_line_lengths(path, mod_source)
-    warnings += validate_code_compactness(path, mod_source)
-    warnings += validate_callback_signatures(path, mod_source)
-
-    return warnings
+    validate_encoding(path)
+    validate_metadata(path, mod_source, pr_author, pr_author_id)
+    validate_readme(path, mod_source)
+    validate_settings(path, mod_source)
+    validate_symbol_hooks(path, mod_source)
+    validate_specific_keywords(path, mod_source)
+    validate_line_lengths(path, mod_source)
+    validate_code_compactness(path, mod_source)
+    validate_callback_signatures(path, mod_source)
 
 
 def test_run():
@@ -2126,12 +2138,22 @@ def test_run():
     path = Path(sys.argv[1])
     pr_author = sys.argv[2]
     pr_author_id = int(sys.argv[3]) if len(sys.argv) == 4 else None
-    warnings = validate_mod_file(path, pr_author, pr_author_id)
-    if warnings > 0:
-        print(f'Got {warnings} warnings')
+    validate_mod_file(path, pr_author, pr_author_id)
+    for annotation in review_item_annotations:
+        print(annotation)
+    if error_count > 0 or review_item_annotations:
+        print(
+            f'Got {error_count} errors and {len(review_item_annotations)} review'
+            ' items'
+        )
 
 
-def validate_pr_changelog(pr_body: str) -> int:
+PR_DESCRIPTION_RERUN_HINT = (
+    ' The validation runs again after the PR description is edited.'
+)
+
+
+def validate_pr_changelog(pr_body: str):
     """Mod updates must describe the changes in the PR description."""
     start_marker_re = re.compile(r'<!--\s*changelog:start\s*-->', re.IGNORECASE)
     end_marker_re = re.compile(r'<!--\s*changelog:end\s*-->', re.IGNORECASE)
@@ -2145,12 +2167,13 @@ def validate_pr_changelog(pr_body: str) -> int:
     template_hint = (
         ' See the pull request template'
         ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1).'
+        + PR_DESCRIPTION_RERUN_HINT
     )
 
     starts = list(start_marker_re.finditer(pr_body))
     ends = list(end_marker_re.finditer(pr_body))
     if len(starts) != 1 or len(ends) != 1 or starts[0].end() > ends[0].start():
-        return add_warning(
+        add_error(
             Path('.github/pull_request_template.md'),
             1,
             'Mod updates must have a changelog in the PR description, between a single'
@@ -2158,11 +2181,12 @@ def validate_pr_changelog(pr_body: str) -> int:
             f' marker after it, found {len(starts)} start and {len(ends)} end markers.'
             + template_hint,
         )
+        return
 
     changelog = pr_body[starts[0].end() : ends[0].start()]
     changelog = placeholder_item_re.sub('', changelog).strip()
     if changelog == '':
-        return add_warning(
+        add_error(
             Path('.github/pull_request_template.md'),
             1,
             'The changelog between the "<!-- changelog:start -->" and'
@@ -2170,9 +2194,17 @@ def validate_pr_changelog(pr_body: str) -> int:
             ' please describe the changes of this mod update.'
             + template_hint,
         )
+        return
 
     print(f'Changelog:\n{changelog}')
-    return 0
+
+
+def set_github_output(name: str, value: str):
+    # A random delimiter, so that a value which quotes the mod source can't
+    # contain it.
+    delimiter = f'EOF_{secrets.token_hex(16)}'
+    with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as f:
+        f.write(f'{name}<<{delimiter}\n{value}\n{delimiter}\n')
 
 
 def get_pr_changes() -> list[tuple[str, Path]]:
@@ -2199,8 +2231,6 @@ def main():
     if pr_author in DISALLOWED_AUTHORS:
         sys.exit(f'Submissions from {pr_author} are not allowed')
 
-    warnings = 0
-
     changes = get_pr_changes()
     if len(changes) == 0:
         sys.exit('No files changed')
@@ -2211,7 +2241,7 @@ def main():
     all_count = len(changes)
 
     if (added_count, modified_count, all_count) not in [(1, 0, 1), (0, 1, 1)]:
-        warnings += add_warning(
+        add_error(
             changes[0][1],
             1,
             'Must be one added or one modified file, got '
@@ -2222,18 +2252,19 @@ def main():
     pr_body = os.environ.get('PR_BODY', '').replace('\r\n', '\n')
 
     if added_count != 0 and '## Mod authorship' not in pr_body:
-        warnings += add_warning(
+        add_error(
             Path('.github/pull_request_template.md'),
             1,
             'New mod submissions must keep the "## Mod authorship" section from the'
             ' pull request template'
             ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1)'
             ' in the PR description, so reviewers know how the mod was authored.'
-            ' Please restore that section and fill it in.',
+            ' Please restore that section and fill it in.'
+            + PR_DESCRIPTION_RERUN_HINT,
         )
 
     if modified_count != 0:
-        warnings += validate_pr_changelog(pr_body)
+        validate_pr_changelog(pr_body)
 
     for status, path in changes:
         if status == 'D':
@@ -2241,21 +2272,30 @@ def main():
 
         print(f'Checking {path=}')
 
-        path_warnings = validate_mod_file(path, pr_author, pr_author_id)
-        warnings += path_warnings
+        errors_before = error_count
+        validate_mod_file(path, pr_author, pr_author_id)
 
-        if path_warnings == 0:
+        if error_count == errors_before:
             try:
                 mod_symbols = get_mod_symbols(path, [])
                 print('Extracted symbols:\n' + json.dumps(mod_symbols, indent=2))
             except Exception as e:
                 print(f'Symbol extraction error: {e}')
-                warnings += add_warning(
+                add_review_item(
                     path, 1, 'Failed to extract symbols, manual inspection required'
                 )
 
-    if warnings > 0:
-        sys.exit(f'Got {warnings} warnings, please inspect the PR')
+    review_item_count = len(review_item_annotations)
+    set_github_output('review_item_count', str(review_item_count))
+    set_github_output('review_items', '\n'.join(review_item_annotations))
+
+    if review_item_count > 0:
+        print(
+            f'Got {review_item_count} review items, which require manual inspection'
+            ' by a reviewer, see the "Manual review" job'
+        )
+    if error_count > 0:
+        sys.exit(f'Got {error_count} errors, which must be fixed')
 
 
 if __name__ == '__main__':

@@ -1,14 +1,14 @@
 // ==WindhawkMod==
 // @id              start-button-replacer
 // @name            Start Button Replacer
-// @description     Replace the Windows 11 Start button icon with a custom PNG, JPG or GIF image
-// @version         0.12.4
+// @description     Replace the Windows 11 Start button icon with a custom SVG, PNG, JPG or GIF image
+// @version         1.0.0
 // @author          Ender
 // @github          https://github.com/EnderDragonEP
 // @twitter         https://twitter.com/NoobieNoodle89
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lcomctl32
 // @license         GPL-3.0-only
 // ==/WindhawkMod==
 
@@ -22,21 +22,21 @@
 //   * Keeps all original Start button behavior intact.
 //   * Makes the stock Start icon transparent.
 //   * Inserts two layered Windows.UI.Xaml.Controls.Image elements.
-//   * Supports PNG/JPG/GIF.
+//   * Supports SVG/PNG/JPG/GIF.
 //   * Supports local absolute paths, environment variables and HTTP/HTTPS URLs.
 //   * Supports animated GIF playback.
 //   * Supports crossfading normal, hover and pressed images.
 //   * Supports hover/press scale, rotation and opacity effects.
+//   * Supports separate images for Windows dark mode.
 
 // ==WindhawkModReadme==
 /*
 # Start Button Replacer
 
-Replaces the icon inside the Windows 11 Start button with a custom PNG, JPG or GIF image. Animated GIF playback and hover/pressed effects are optional features.
+Replaces the icon inside the Windows 11 Start button with a custom SVG, PNG, JPG or GIF image. Animated GIF playback and hover/pressed effects are optional features.
 
 ![preview](https://raw.githubusercontent.com/EnderDragonEP/asset/7ae3c6659e0237bf98cc67f52576ebaff8d9fd44/windhawk-mods/start-button-replacer/preview-1.gif)
 
-Only the icon is replaced. Windows continues to handle clicking, keyboard navigation, accessibility and Start menu activation.
 
 ## Image sources
 
@@ -51,6 +51,10 @@ Environment variables are supported:
 HTTP/HTTPS URLs are also supported:
 
     https://example.com/start.gif
+
+## SVG images
+
+Use a local `.svg` file or an HTTP/HTTPS URL whose path ends in `.svg` (query strings and fragments are supported). A source without a known image extension, such as a URL with no file name, is tried as SVG if it can't be loaded as a bitmap. Every image source supports SVG. Windows renders static SVG content only; SVG scripts, interactions and animations are not supported. Use explicit colors in SVG artwork. Scale, rotation, opacity and crossfade effects still apply.
 
 ## Animated GIF playback
 
@@ -71,9 +75,19 @@ While the Start menu is shown, pressing the button temporarily uses the pressed 
 
 State images crossfade whenever their applicable duration is greater than zero. Hover transitions use the hover duration; pressed and activated transitions use the pressed duration. Set a duration to `0` to switch instantly.
 
+## Dark mode images
+
+The main **Images** are used in light mode. To use different images while Windows is in dark mode, fill in **Dark mode images**. Blank fields use the corresponding image from **Images**, and the fallback rules above still apply. If the dark mode **Image source** can't be loaded, the main images are used in dark mode too. The main **Image source** is always required: if it's blank or can't be loaded, the stock Start icon is shown in both modes, even when a dark mode image is set.
+
+Both image sets are loaded up front, so images switch immediately when you change **Choose your mode** in Settings > Personalization > Colors. The mod follows the Windows mode (which the taskbar uses), not the app mode. Icon size, effects and animation settings are shared between modes.
+
 ## Notes
 
 For crisp results, use a square image with transparency. Keep animated GIFs reasonably small, such as 64x64 or 128x128. The displayed size is independent from the source image resolution. XAML loads and decodes image sources asynchronously. XAML also caches images by source URI, so after replacing a file at the same path, reload the mod if the previous image remains visible.
+
+## Credits
+
+- [Asteski](https://github.com/Asteski) - SVG support and dark mode images
 */
 // ==/WindhawkModReadme==
 
@@ -83,7 +97,7 @@ For crisp results, use a square image with transparency. Keep animated GIFs reas
   - imageSource: "https://raw.githubusercontent.com/EnderDragonEP/asset/be76faf00be2a45cb166a4971e67eb32afd4b1fb/windhawk-mods/start-button-replacer/gecko/normal-hover.gif"
     $name: Image source (required)
     $description: >-
-      Absolute file path, path containing environment variables, or HTTP/HTTPS URL. Supports PNG, JPG and animated GIF. This is the normal image and the final fallback for every other state.
+      Absolute file path, path containing environment variables, or HTTP/HTTPS URL. Supports SVG, PNG, JPG and animated GIF. This is the normal image and the final fallback for every other state.
   - hoverImageSource: ""
     $name: Hover image source
     $description: >-
@@ -101,7 +115,27 @@ For crisp results, use a square image with transparency. Keep animated GIFs reas
     $description: >-
       Displayed size in device-independent pixels, from 8 to 128. The default is 34.
   $name: Images
-  $description: Configure the replacement images and their displayed size.
+  $description: Configure the replacement images and their displayed size. These images are also used in dark mode unless Dark mode images are set.
+
+- darkModeImages:
+  - imageSource: ""
+    $name: Image source
+    $description: >-
+      Normal image used while Windows is in dark mode. Leave blank to use the main image source.
+  - hoverImageSource: ""
+    $name: Hover image source
+    $description: >-
+      Hover image used while Windows is in dark mode. Leave blank to use the main hover image source.
+  - pressedImageSource: ""
+    $name: Pressed image source
+    $description: >-
+      Pressed image used while Windows is in dark mode. Leave blank to use the main pressed image source.
+  - activatedImageSource: ""
+    $name: Activated image source
+    $description: >-
+      Activated image used while Windows is in dark mode. Leave blank to use the main activated image source.
+  $name: Dark mode images
+  $description: Optional images used instead of the main images while Windows is in dark mode.
 
 - imageAnimation:
   - gifPlayback: hover
@@ -190,7 +224,9 @@ For crisp results, use a square image with transparency. Keep animated GIFs reas
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
+#include <cwctype>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -264,12 +300,18 @@ enum class IconState : size_t {
 
 constexpr size_t kIconStateCount = static_cast<size_t>(IconState::Count);
 
-struct ModSettings {
-    std::wstring imageSource;
+// Every state has one image slot per image set: the main images, followed by
+// the dark mode images.
+constexpr size_t kImageSetCount = 2;
+constexpr size_t kImageSlotCount = kIconStateCount * kImageSetCount;
 
-    std::wstring hoverImageSource;
-    std::wstring pressedImageSource;
-    std::wstring activatedImageSource;
+struct ModSettings {
+    // Main image sources, indexed by IconState. The normal one is required.
+    std::array<std::wstring, kIconStateCount> imageSources;
+
+    // Optional dark mode overrides, indexed by IconState. Blank entries
+    // inherit the corresponding main image source.
+    std::array<std::wstring, kIconStateCount> darkModeImages;
 
     int hoverFadeDuration = 120;
     int pressedFadeDuration = 80;
@@ -312,18 +354,31 @@ std::atomic<bool> g_imageFailureMessageCancelRequested = false;
 // -----------------------------------------------------------------------------
 
 struct ImageResource {
+    // The source assigned to Image layers. It's either the bitmap (PNG, JPG,
+    // GIF) or the SVG source below; the other one stays null.
+    wuxm::ImageSource source{nullptr};
     wuxmi::BitmapImage bitmap{nullptr};
+    wuxmi::SvgImageSource svg{nullptr};
 
-    // Assigning the bitmap to an Image connected to the XAML tree starts URI
+    // Assigning the source to an Image connected to the XAML tree starts URI
     // retrieval. The visible layers aren't assigned until ImageOpened so the
     // stock icon remains visible while loading.
     wuxc::Image loadTarget{nullptr};
 
-    winrt::event_token imageOpenedToken{};
-    winrt::event_token imageFailedToken{};
+    wuxmi::BitmapImage::ImageOpened_revoker bitmapOpenedRevoker;
+    wuxmi::BitmapImage::ImageFailed_revoker bitmapFailedRevoker;
+    wuxmi::SvgImageSource::Opened_revoker svgOpenedRevoker;
+    wuxmi::SvgImageSource::OpenFailed_revoker svgOpenFailedRevoker;
 
-    bool imageOpenedAttached = false;
-    bool imageFailedAttached = false;
+    // A bitmap which failed to load before the source was retried as SVG. It's
+    // kept until detach so its handlers aren't removed while one of them runs.
+    wuxmi::BitmapImage retiredBitmap{nullptr};
+    bool svgFallbackTried = false;
+
+    // The source as configured, and as the URI passed to XAML.
+    std::wstring configuredSource;
+    std::wstring resolvedUri;
+
     bool opened = false;
     bool failed = false;
     bool reportableFailure = false;
@@ -343,12 +398,20 @@ struct StartIconInstance {
 
     double originalStockOpacity = 1.0;
 
-    std::array<ImageResource, kIconStateCount> imageResources;
+    // Indexed by image slot; see ImageSlotIndex.
+    std::array<ImageResource, kImageSlotCount> imageResources;
 
-    // Multiple logical states can share one decoded image resource when their
-    // configured sources are identical.
-    std::array<size_t, kIconStateCount> imageResourceIndexByState{0, 1, 2, 3};
+    // Multiple image slots can share one decoded image resource when their
+    // sources are identical. A dark mode slot without an override shares the
+    // resource of the corresponding main image.
+    std::array<size_t, kImageSlotCount> imageResourceIndexBySlot{};
     bool imageLoadingSetupComplete = false;
+
+    // Whether dark mode images are configured (and therefore loaded), and
+    // whether Windows currently uses dark mode. Both image sets stay loaded so
+    // a theme change only switches the displayed image.
+    bool darkImageSetLoaded = false;
+    bool darkMode = false;
 
     size_t activeImageIndex = 0;
     bool activeImageSet = false;
@@ -382,6 +445,13 @@ struct StartIconInstance {
     wf::IInspectable pointerCaptureLostHandler{nullptr};
 
     bool pointerEventsAttached = false;
+
+    // SVG images are rasterized for the display scale, so they're rasterized
+    // again when the taskbar moves to a monitor with another scale or the
+    // scale setting changes.
+    wux::XamlRoot::Changed_revoker xamlRootChangedRevoker;
+    double rasterizationScale = 0.0;
+
     bool detached = false;
 };
 
@@ -401,7 +471,7 @@ std::mutex g_instancesMutex;
 std::wstring GetStringSetting(const wchar_t* name) {
     auto value = WindhawkUtils::StringSetting::make(name);
 
-    return value.get() ? value.get() : L"";
+    return value.get();
 }
 
 bool EqualsIgnoreCase(const std::wstring& a, const wchar_t* b) {
@@ -484,16 +554,23 @@ std::wstring MakeFileUri(const std::wstring& path) {
 ModSettings LoadSettings() {
     ModSettings settings;
 
-    settings.imageSource = GetStringSetting(L"images.imageSource");
+    // Order matches IconState.
+    constexpr const wchar_t* kImageKeys[] = {
+        L"imageSource",
+        L"hoverImageSource",
+        L"pressedImageSource",
+        L"activatedImageSource",
+    };
 
-    settings.hoverImageSource =
-        GetStringSetting(L"images.hoverImageSource");
+    static_assert(ARRAYSIZE(kImageKeys) == kIconStateCount);
 
-    settings.pressedImageSource =
-        GetStringSetting(L"images.pressedImageSource");
+    for (size_t i = 0; i < kIconStateCount; i++) {
+        settings.imageSources[i] = GetStringSetting(
+            (std::wstring(L"images.") + kImageKeys[i]).c_str());
 
-    settings.activatedImageSource =
-        GetStringSetting(L"images.activatedImageSource");
+        settings.darkModeImages[i] = GetStringSetting(
+            (std::wstring(L"darkModeImages.") + kImageKeys[i]).c_str());
+    }
 
     settings.hoverFadeDuration =
         std::clamp(Wh_GetIntSetting(L"imageAnimation.hoverFadeDuration"), 0,
@@ -581,6 +658,87 @@ ModSettings GetSettingsSnapshot(uint64_t* generation = nullptr) {
     }
 
     return g_settings;
+}
+
+// -----------------------------------------------------------------------------
+// Dark mode images
+// -----------------------------------------------------------------------------
+
+bool HasDarkModeImages(const ModSettings& settings) {
+    for (size_t i = 0; i < kIconStateCount; i++) {
+        if (!IsBlank(settings.darkModeImages[i])) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Reads the Windows mode, which the taskbar follows. Returns nullopt if the
+// value can't be read.
+std::optional<bool> IsSystemLightTheme() {
+    DWORD lightTheme = 0;
+    DWORD size = sizeof(lightTheme);
+
+    LSTATUS status = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &lightTheme,
+        &size);
+
+    if (status != ERROR_SUCCESS) {
+        return std::nullopt;
+    }
+
+    return lightTheme != 0;
+}
+
+size_t ImageSlotIndex(bool darkSet, IconState state) {
+    return (darkSet ? kIconStateCount : 0) + static_cast<size_t>(state);
+}
+
+bool IsDarkImageSlot(size_t slotIndex) {
+    return slotIndex >= kIconStateCount;
+}
+
+IconState ImageSlotState(size_t slotIndex) {
+    return static_cast<IconState>(slotIndex % kIconStateCount);
+}
+
+const wchar_t* ImageSlotName(size_t slotIndex) {
+    constexpr const wchar_t* kNames[] = {
+        L"normal",           L"hover",
+        L"pressed",          L"activated",
+        L"dark mode normal", L"dark mode hover",
+        L"dark mode pressed", L"dark mode activated",
+    };
+
+    static_assert(ARRAYSIZE(kNames) == kImageSlotCount);
+
+    return slotIndex < kImageSlotCount ? kNames[slotIndex] : L"unknown";
+}
+
+// Whether the slot has a setting of its own, as opposed to a dark mode slot
+// which inherits the main image.
+bool ImageSlotConfigured(const ModSettings& settings, size_t slotIndex) {
+    size_t stateIndex = slotIndex % kIconStateCount;
+
+    return IsDarkImageSlot(slotIndex)
+               ? !IsBlank(settings.darkModeImages[stateIndex])
+               : !settings.imageSources[stateIndex].empty();
+}
+
+// Returns the image source which a slot displays.
+const std::wstring& GetImageSourceForSlot(const ModSettings& settings,
+                                          size_t slotIndex) {
+    size_t stateIndex = slotIndex % kIconStateCount;
+
+    if (IsDarkImageSlot(slotIndex) &&
+        !IsBlank(settings.darkModeImages[stateIndex])) {
+        return settings.darkModeImages[stateIndex];
+    }
+
+    return settings.imageSources[stateIndex];
 }
 
 // -----------------------------------------------------------------------------
@@ -753,6 +911,7 @@ const wchar_t* IconStateSettingName(IconState state) {
 
 struct ImageFailureDetail {
     IconState state = IconState::Normal;
+    bool darkModeSetting = false;
 };
 
 std::wstring BuildImageFailureMessage(
@@ -761,7 +920,8 @@ std::wstring BuildImageFailureMessage(
         return L"";
     }
 
-    bool mainImageFailed = failures.front().state == IconState::Normal;
+    bool mainImageFailed = failures.front().state == IconState::Normal &&
+                           !failures.front().darkModeSetting;
     bool multipleFailures = failures.size() > 1;
 
     std::wstring message = multipleFailures
@@ -770,6 +930,9 @@ std::wstring BuildImageFailureMessage(
 
     for (size_t i = 0; i < failures.size(); i++) {
         message += L"- ";
+        message += failures[i].darkModeSetting ? L"Dark mode images"
+                                               : L"Images";
+        message += L" > ";
         message += IconStateSettingName(failures[i].state);
         message += L"\n";
     }
@@ -1021,29 +1184,8 @@ IconState GetCurrentIconState(
     return IconState::Normal;
 }
 
-std::wstring GetImageSourceForState(const ModSettings& settings,
-                                    IconState state) {
-    if (state == IconState::Normal) {
-        return settings.imageSource;
-    }
-
-    switch (state) {
-        case IconState::Hover:
-            return settings.hoverImageSource;
-
-        case IconState::Pressed:
-            return settings.pressedImageSource;
-
-        case IconState::Activated:
-            return settings.activatedImageSource;
-
-        default:
-            return L"";
-    }
-}
-
 bool ImageResourceAvailable(const ImageResource& resource) {
-    return resource.bitmap && resource.opened && !resource.failed;
+    return resource.source && resource.opened && !resource.failed;
 }
 
 wuxc::Image GetImageLayer(const std::shared_ptr<StartIconInstance>& instance,
@@ -1239,10 +1381,12 @@ bool UpdateDisplayedImage(const std::shared_ptr<StartIconInstance>& instance) {
 
     IconState desiredState = GetCurrentIconState(instance);
 
-    size_t normalIndex = IconStateIndex(IconState::Normal);
+    auto resourceIndexFor = [&](bool darkSet, IconState state) {
+        return instance->imageResourceIndexBySlot[ImageSlotIndex(darkSet,
+                                                                 state)];
+    };
 
-    size_t normalResourceIndex =
-        instance->imageResourceIndexByState[normalIndex];
+    size_t normalResourceIndex = resourceIndexFor(false, IconState::Normal);
 
     // The main image is required. Keep the stock icon visible until it has
     // opened successfully, and never display optional state images if it fails.
@@ -1251,12 +1395,37 @@ bool UpdateDisplayedImage(const std::shared_ptr<StartIconInstance>& instance) {
         return useStockIcon();
     }
 
+    bool darkSet = instance->darkImageSetLoaded && instance->darkMode;
+
+    if (darkSet) {
+        const auto& darkNormalResource =
+            instance->imageResources[resourceIndexFor(true,
+                                                      IconState::Normal)];
+
+        if (darkNormalResource.failed) {
+            // The dark mode normal image is unavailable. Use the main images.
+            darkSet = false;
+        } else if (!ImageResourceAvailable(darkNormalResource)) {
+            // Still loading. Keep the stock icon at startup instead of showing
+            // the main image first; after a theme change, keep displaying the
+            // main images until the dark mode image opens.
+            if (!instance->activeImageSet) {
+                return useStockIcon();
+            }
+
+            darkSet = false;
+        }
+    }
+
+    if (darkSet) {
+        normalResourceIndex = resourceIndexFor(true, IconState::Normal);
+    }
+
     size_t selectedIndex = normalResourceIndex;
     IconState selectedState = IconState::Normal;
 
     auto selectIfAvailable = [&](IconState state) {
-        size_t stateIndex =
-            instance->imageResourceIndexByState[IconStateIndex(state)];
+        size_t stateIndex = resourceIndexFor(darkSet, state);
 
         if (!ImageResourceAvailable(instance->imageResources[stateIndex])) {
             return false;
@@ -1282,14 +1451,17 @@ bool UpdateDisplayedImage(const std::shared_ptr<StartIconInstance>& instance) {
     bool selectionChanged = !instance->requestedStateSet ||
                             instance->requestedState != desiredState ||
                             !instance->displayedStateSet ||
-                            instance->displayedState != selectedState;
+                            instance->displayedState != selectedState ||
+                            (instance->activeImageSet &&
+                             instance->activeImageIndex != selectedIndex);
 
     instance->requestedState = desiredState;
     instance->requestedStateSet = true;
 
     if (selectionChanged) {
-        Wh_Log(L"Start icon state: requested=%s selected=%s",
-               IconStateName(desiredState), IconStateName(selectedState));
+        Wh_Log(L"Start icon state: requested=%s selected=%s images=%s",
+               IconStateName(desiredState), IconStateName(selectedState),
+               darkSet ? L"dark mode" : L"main");
     }
 
     if (!ImageResourceAvailable(selectedResource)) {
@@ -1306,7 +1478,7 @@ bool UpdateDisplayedImage(const std::shared_ptr<StartIconInstance>& instance) {
 
     try {
         if (!instance->activeImageSet) {
-            firstLayer.Source(selectedResource.bitmap);
+            firstLayer.Source(selectedResource.source);
 
             SetImageLayerOpacity(firstLayer, 1.0f);
             SetImageLayerOpacity(secondLayer, 0.0f);
@@ -1319,7 +1491,7 @@ bool UpdateDisplayedImage(const std::shared_ptr<StartIconInstance>& instance) {
             auto outgoingLayer = GetImageLayer(instance, outgoingLayerIndex);
             auto incomingLayer = GetImageLayer(instance, incomingLayerIndex);
 
-            incomingLayer.Source(selectedResource.bitmap);
+            incomingLayer.Source(selectedResource.source);
 
             int fadeDuration =
                 GetStateCrossfadeDuration(instance, selectedState);
@@ -1377,13 +1549,8 @@ void LogGifAnimationStatus(const std::shared_ptr<StartIconInstance>& instance,
     instance->loggedGifResourceIndex = instance->activeImageIndex;
     instance->gifStatusLogged = true;
 
-    IconState resourceState =
-        instance->activeImageIndex < kIconStateCount
-            ? static_cast<IconState>(instance->activeImageIndex)
-            : IconState::Normal;
-
     Wh_Log(L"Icon Status: state=%s resource=%s mode=%s status=%s",
-           IconStateName(state), IconStateName(resourceState),
+           IconStateName(state), ImageSlotName(instance->activeImageIndex),
            GifPlaybackModeName(instance->settings.gifPlayback),
            GifAnimationStatusName(status));
 }
@@ -1393,7 +1560,7 @@ void UpdateGifPlayback(const std::shared_ptr<StartIconInstance>& instance) {
         return;
     }
 
-    for (size_t i = 0; i < kIconStateCount; i++) {
+    for (size_t i = 0; i < kImageSlotCount; i++) {
         auto& resource = instance->imageResources[i];
 
         if (!resource.bitmap ||
@@ -1418,7 +1585,9 @@ void UpdateGifPlayback(const std::shared_ptr<StartIconInstance>& instance) {
     }
 
     try {
-        if (!activeResource.bitmap.IsAnimatedBitmap()) {
+        // SVG sources are never animated.
+        if (!activeResource.bitmap ||
+            !activeResource.bitmap.IsAnimatedBitmap()) {
             LogGifAnimationStatus(instance, GifAnimationStatus::NotAnimated);
             return;
         }
@@ -2041,37 +2210,24 @@ void DetachInstance(const std::shared_ptr<StartIconInstance>& instance) {
         instance->pointerEventsAttached = false;
     }
 
-    for (size_t i = 0; i < kIconStateCount; i++) {
+    try {
+        instance->xamlRootChangedRevoker.revoke();
+    } catch (...) {
+    }
+
+    for (size_t i = 0; i < kImageSlotCount; i++) {
         auto& resource = instance->imageResources[i];
 
-        if (resource.bitmap && resource.imageOpenedAttached) {
-            try {
-                resource.bitmap.ImageOpened(resource.imageOpenedToken);
-            } catch (const winrt::hresult_error& e) {
-                Wh_Log(L"Removing %s ImageOpened handler failed: 0x%08X %s",
-                       IconStateName(static_cast<IconState>(i)), e.code().value,
-                       e.message().c_str());
-            } catch (...) {
-                Wh_Log(L"Removing %s ImageOpened handler failed",
-                       IconStateName(static_cast<IconState>(i)));
-            }
-
-            resource.imageOpenedAttached = false;
-        }
-
-        if (resource.bitmap && resource.imageFailedAttached) {
-            try {
-                resource.bitmap.ImageFailed(resource.imageFailedToken);
-            } catch (const winrt::hresult_error& e) {
-                Wh_Log(L"Removing %s ImageFailed handler failed: 0x%08X %s",
-                       IconStateName(static_cast<IconState>(i)), e.code().value,
-                       e.message().c_str());
-            } catch (...) {
-                Wh_Log(L"Removing %s ImageFailed handler failed",
-                       IconStateName(static_cast<IconState>(i)));
-            }
-
-            resource.imageFailedAttached = false;
+        try {
+            resource.bitmapOpenedRevoker.revoke();
+            resource.bitmapFailedRevoker.revoke();
+            resource.svgOpenedRevoker.revoke();
+            resource.svgOpenFailedRevoker.revoke();
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"Removing %s image handlers failed: 0x%08X %s",
+                   ImageSlotName(i), e.code().value, e.message().c_str());
+        } catch (...) {
+            Wh_Log(L"Removing %s image handlers failed", ImageSlotName(i));
         }
 
         try {
@@ -2089,7 +2245,10 @@ void DetachInstance(const std::shared_ptr<StartIconInstance>& instance) {
         }
 
         resource.loadTarget = nullptr;
+        resource.source = nullptr;
         resource.bitmap = nullptr;
+        resource.retiredBitmap = nullptr;
+        resource.svg = nullptr;
         resource.opened = false;
         resource.failed = false;
     }
@@ -2154,7 +2313,102 @@ void DetachInstance(const std::shared_ptr<StartIconInstance>& instance) {
     instance->transitionImage = {};
 }
 
+// -----------------------------------------------------------------------------
+// Theme change notifications
+//
+// Windows broadcasts WM_SETTINGCHANGE with "ImmersiveColorSet" to top-level
+// windows when the Windows mode changes. While dark mode images are
+// configured, the taskbar windows are subclassed to receive it on the taskbar
+// UI thread, which also owns the Start button XAML.
+// -----------------------------------------------------------------------------
+
+LRESULT CALLBACK TaskbarThemeSubclassProc(HWND hWnd,
+                                          UINT uMsg,
+                                          WPARAM wParam,
+                                          LPARAM lParam,
+                                          DWORD_PTR refData);
+
+std::mutex g_themeWindowsMutex;
+std::vector<HWND> g_themeWindows;
+
+bool IsTaskbarWindowClass(HWND window) {
+    wchar_t className[64]{};
+
+    if (!GetClassNameW(window, className, ARRAYSIZE(className))) {
+        return false;
+    }
+
+    return _wcsicmp(className, L"Shell_TrayWnd") == 0 ||
+           _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0;
+}
+
+// Must be called on a taskbar UI thread.
+void SubclassTaskbarWindowsForThemeChanges() {
+    std::vector<HWND> windows;
+
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND window, LPARAM param) -> BOOL {
+            if (IsTaskbarWindowClass(window)) {
+                reinterpret_cast<std::vector<HWND>*>(param)->push_back(window);
+            }
+
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&windows));
+
+    for (HWND window : windows) {
+        {
+            std::lock_guard<std::mutex> lock(g_themeWindowsMutex);
+
+            if (std::find(g_themeWindows.begin(), g_themeWindows.end(),
+                          window) != g_themeWindows.end()) {
+                continue;
+            }
+        }
+
+        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+                window, TaskbarThemeSubclassProc, 0)) {
+            Wh_Log(L"Subclassing a taskbar window for theme changes failed");
+            continue;
+        }
+
+        std::lock_guard<std::mutex> lock(g_themeWindowsMutex);
+        g_themeWindows.push_back(window);
+    }
+}
+
+// Removes the subclass from this thread's taskbar windows, or from every
+// subclassed window if allThreads is true (used as a final unload pass).
+void RemoveThemeSubclasses(bool allThreads) {
+    DWORD threadId = GetCurrentThreadId();
+    std::vector<HWND> windows;
+
+    {
+        std::lock_guard<std::mutex> lock(g_themeWindowsMutex);
+
+        std::erase_if(g_themeWindows, [&](HWND window) {
+            if (!allThreads &&
+                GetWindowThreadProcessId(window, nullptr) != threadId) {
+                return false;
+            }
+
+            windows.push_back(window);
+            return true;
+        });
+    }
+
+    for (HWND window : windows) {
+        if (IsWindow(window)) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                window, TaskbarThemeSubclassProc);
+        }
+    }
+}
+
 void DetachAllForCurrentThread() {
+    RemoveThemeSubclasses(false);
+
     DWORD threadId = GetCurrentThreadId();
     std::vector<std::shared_ptr<StartIconInstance>> instances;
 
@@ -2245,17 +2499,15 @@ void MaybeShowImageFailureMessageImpl(
         return;
     }
 
-    size_t normalIndex = IconStateIndex(IconState::Normal);
-    size_t normalResourceIndex =
-        instance->imageResourceIndexByState[normalIndex];
-    const auto& normalResource =
-        instance->imageResources[normalResourceIndex];
+    const auto& normalResource = instance->imageResources
+        [instance->imageResourceIndexBySlot[ImageSlotIndex(false,
+                                                           IconState::Normal)]];
 
     // A failed main image decides the result for every state, so report only
     // that required setting without waiting for optional images.
     if (normalResource.reportableFailure) {
         ShowImageFailureMessage(instance->settingsGeneration,
-                                {{IconState::Normal}});
+                                {{IconState::Normal, false}});
         return;
     }
 
@@ -2266,17 +2518,18 @@ void MaybeShowImageFailureMessageImpl(
 
     std::vector<ImageFailureDetail> failures;
 
-    for (size_t stateIndex = 1; stateIndex < kIconStateCount; stateIndex++) {
-        IconState state = static_cast<IconState>(stateIndex);
-        std::wstring source = GetImageSourceForState(instance->settings, state);
+    for (size_t slotIndex = 1; slotIndex < kImageSlotCount; slotIndex++) {
+        bool darkSlot = IsDarkImageSlot(slotIndex);
 
-        if (source.empty()) {
+        // Dark mode slots without an override share a main image, which is
+        // reported under its own setting.
+        if ((darkSlot && !instance->darkImageSetLoaded) ||
+            !ImageSlotConfigured(instance->settings, slotIndex)) {
             continue;
         }
 
-        size_t resourceIndex =
-            instance->imageResourceIndexByState[stateIndex];
-        const auto& resource = instance->imageResources[resourceIndex];
+        const auto& resource = instance->imageResources
+            [instance->imageResourceIndexBySlot[slotIndex]];
 
         // Wait for every configured optional resource to reach a terminal
         // state so one dialog can list all unavailable settings.
@@ -2285,7 +2538,7 @@ void MaybeShowImageFailureMessageImpl(
         }
 
         if (resource.reportableFailure) {
-            failures.push_back({state});
+            failures.push_back({ImageSlotState(slotIndex), darkSlot});
         }
     }
 
@@ -2305,127 +2558,399 @@ void MaybeShowImageFailureMessage(
     }
 }
 
+// Returns the extension of a path or URL in lower case, without the dot.
+std::wstring GetSourceExtension(const std::wstring& source) {
+    // Only URLs have query/fragment delimiters; '#' is valid in file names.
+    size_t end = source.size();
+
+    if (IsHttpUrl(source)) {
+        end = source.find_first_of(L"?#");
+
+        if (end == std::wstring::npos) {
+            end = source.size();
+        }
+    }
+
+    // Allow trailing whitespace in configured local paths.
+    while (end > 0 && iswspace(source[end - 1])) {
+        end--;
+    }
+
+    size_t nameStart = source.find_last_of(L"/\\", end ? end - 1 : 0);
+    nameStart = nameStart == std::wstring::npos ? 0 : nameStart + 1;
+
+    size_t dot = source.rfind(L'.', end ? end - 1 : 0);
+
+    if (dot == std::wstring::npos || dot < nameStart || dot + 1 >= end) {
+        return L"";
+    }
+
+    std::wstring extension = source.substr(dot + 1, end - dot - 1);
+
+    for (wchar_t& c : extension) {
+        c = towlower(c);
+    }
+
+    return extension;
+}
+
+bool IsSvgSource(const std::wstring& source) {
+    return GetSourceExtension(source) == L"svg";
+}
+
+// Sources with one of these extensions aren't retried as SVG when they fail
+// to load as a bitmap.
+bool IsKnownBitmapSource(const std::wstring& source) {
+    constexpr const wchar_t* kExtensions[] = {
+        L"png", L"jpg", L"jpeg", L"jpe", L"jfif", L"gif",
+        L"bmp", L"ico", L"tif",  L"tiff", L"webp", L"jxr",
+    };
+
+    std::wstring extension = GetSourceExtension(source);
+
+    for (const wchar_t* known : kExtensions) {
+        if (extension == known) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+const wchar_t* SvgLoadStatusName(wuxmi::SvgImageSourceLoadStatus status) {
+    switch (status) {
+        case wuxmi::SvgImageSourceLoadStatus::Success:
+            return L"success";
+
+        case wuxmi::SvgImageSourceLoadStatus::NetworkError:
+            return L"network error";
+
+        case wuxmi::SvgImageSourceLoadStatus::InvalidFormat:
+            return L"invalid SVG format";
+
+        default:
+            return L"unknown error";
+    }
+}
+
+// XAML rasterizes an SVG for the size of the Image which displays it. The
+// hover and pressed effects then scale that bitmap, which would look soft, so
+// rasterize for the largest size the icon is displayed at.
+void SetSvgRasterizeSize(const std::shared_ptr<StartIconInstance>& instance,
+                         const wuxmi::SvgImageSource& svg) {
+    double scale = std::max({1.0, instance->settings.hoverScale,
+                             instance->settings.pressedScale});
+
+    try {
+        // Account for the display scale of the monitor showing this taskbar.
+        if (auto startButton = instance->startButton.get()) {
+            if (auto xamlRoot = startButton.XamlRoot()) {
+                scale *= std::max(1.0, xamlRoot.RasterizationScale());
+            }
+        }
+    } catch (...) {
+    }
+
+    double pixels = std::ceil(instance->settings.iconSize * scale);
+
+    svg.RasterizePixelWidth(pixels);
+    svg.RasterizePixelHeight(pixels);
+}
+
+void OnXamlRootChanged(const std::weak_ptr<StartIconInstance>& weakInstance,
+                       const wux::XamlRoot& xamlRoot) {
+    auto instance = weakInstance.lock();
+
+    if (!instance || instance->detached || g_unloading) {
+        return;
+    }
+
+    double scale = 0.0;
+
+    try {
+        scale = xamlRoot.RasterizationScale();
+    } catch (...) {
+        return;
+    }
+
+    // XamlRoot.Changed also fires for size and visibility changes.
+    if (scale == instance->rasterizationScale) {
+        return;
+    }
+
+    instance->rasterizationScale = scale;
+
+    for (size_t i = 0; i < kImageSlotCount; i++) {
+        auto& resource = instance->imageResources[i];
+
+        if (!resource.svg) {
+            continue;
+        }
+
+        try {
+            // Setting the raster size again makes XAML rasterize the already
+            // loaded SVG for the new scale.
+            SetSvgRasterizeSize(instance, resource.svg);
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"Rasterizing the %s SVG for scale %.2f failed: 0x%08X %s",
+                   ImageSlotName(i), scale, e.code().value,
+                   e.message().c_str());
+        } catch (...) {
+        }
+    }
+}
+
+void TrackRasterizationScale(const std::shared_ptr<StartIconInstance>& instance,
+                             const wux::FrameworkElement& startButton) {
+    try {
+        auto xamlRoot = startButton.XamlRoot();
+
+        if (!xamlRoot) {
+            return;
+        }
+
+        instance->rasterizationScale = xamlRoot.RasterizationScale();
+
+        std::weak_ptr<StartIconInstance> weakInstance = instance;
+
+        instance->xamlRootChangedRevoker = xamlRoot.Changed(
+            winrt::auto_revoke,
+            [weakInstance](const wux::XamlRoot& sender,
+                           const wux::XamlRootChangedEventArgs&) {
+                OnXamlRootChanged(weakInstance, sender);
+            });
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Tracking the display scale failed: 0x%08X %s",
+               e.code().value, e.message().c_str());
+    } catch (...) {
+    }
+}
+
+void OnImageOpened(const std::weak_ptr<StartIconInstance>& weakInstance,
+                   size_t slotIndex) {
+    auto instance = weakInstance.lock();
+
+    if (!instance || instance->detached || g_unloading) {
+        return;
+    }
+
+    auto& resource = instance->imageResources[slotIndex];
+
+    resource.opened = true;
+    resource.failed = false;
+    resource.reportableFailure = false;
+
+    Wh_Log(L"Custom Start %s image loaded", ImageSlotName(slotIndex));
+
+    // Apply both the image and the current transform. The pointer might
+    // already be hovering or pressed when decoding finishes.
+    ApplyCurrentState(instance, 0);
+    MaybeShowImageFailureMessage(instance);
+}
+
+void OnImageFailed(const std::weak_ptr<StartIconInstance>& weakInstance,
+                   size_t slotIndex,
+                   const wchar_t* error) {
+    auto instance = weakInstance.lock();
+
+    if (!instance || instance->detached || g_unloading) {
+        return;
+    }
+
+    auto& resource = instance->imageResources[slotIndex];
+
+    resource.opened = false;
+    resource.failed = true;
+    resource.reportableFailure = true;
+
+    Wh_Log(L"Custom Start %s image failed: %s; source: %s",
+           ImageSlotName(slotIndex), error, resource.configuredSource.c_str());
+
+    if (slotIndex == ImageSlotIndex(false, IconState::Normal)) {
+        Wh_Log(L"The main image is unavailable; keeping the stock Start icon "
+               L"and ignoring optional state images");
+    }
+
+    UpdateDisplayedImage(instance);
+    UpdateGifPlayback(instance);
+    MaybeShowImageFailureMessage(instance);
+}
+
+bool RetryImageAsSvg(const std::weak_ptr<StartIconInstance>& weakInstance,
+                     size_t slotIndex,
+                     const wchar_t* bitmapError);
+
+// Creates the XAML image source of a resource and starts loading
+// resource.resolvedUri. Completion is reported by OnImageOpened or
+// OnImageFailed. Can throw.
+void BeginImageLoad(const std::shared_ptr<StartIconInstance>& instance,
+                    size_t slotIndex,
+                    bool asSvg) {
+    auto& resource = instance->imageResources[slotIndex];
+
+    std::weak_ptr<StartIconInstance> weakInstance = instance;
+
+    resource.opened = false;
+    resource.failed = false;
+    resource.reportableFailure = false;
+
+    if (asSvg) {
+        wuxmi::SvgImageSource svg;
+
+        SetSvgRasterizeSize(instance, svg);
+
+        resource.svg = svg;
+        resource.source = svg;
+
+        resource.svgOpenedRevoker = svg.Opened(
+            winrt::auto_revoke,
+            [weakInstance, slotIndex](
+                const wuxmi::SvgImageSource&,
+                const wuxmi::SvgImageSourceOpenedEventArgs&) {
+                OnImageOpened(weakInstance, slotIndex);
+            });
+
+        resource.svgOpenFailedRevoker = svg.OpenFailed(
+            winrt::auto_revoke,
+            [weakInstance, slotIndex](
+                const wuxmi::SvgImageSource&,
+                const wuxmi::SvgImageSourceFailedEventArgs& args) {
+                OnImageFailed(weakInstance, slotIndex,
+                              SvgLoadStatusName(args.Status()));
+            });
+
+        // UriSource lets XAML retrieve and decode the image asynchronously.
+        svg.UriSource(wf::Uri(resource.resolvedUri));
+        return;
+    }
+
+    wuxmi::BitmapImage bitmap;
+
+    // Only the currently displayed GIF should run. Playback is updated after
+    // every state change and when decoding completes.
+    bitmap.AutoPlay(false);
+
+    resource.bitmap = bitmap;
+    resource.source = bitmap;
+
+    resource.bitmapOpenedRevoker = bitmap.ImageOpened(
+        winrt::auto_revoke,
+        [weakInstance, slotIndex](const wf::IInspectable&,
+                                  const wux::RoutedEventArgs&) {
+            OnImageOpened(weakInstance, slotIndex);
+        });
+
+    resource.bitmapFailedRevoker = bitmap.ImageFailed(
+        winrt::auto_revoke,
+        [weakInstance, slotIndex](const wf::IInspectable&,
+                                  const wux::ExceptionRoutedEventArgs& args) {
+            auto error = args.ErrorMessage();
+
+            if (RetryImageAsSvg(weakInstance, slotIndex, error.c_str())) {
+                return;
+            }
+
+            OnImageFailed(weakInstance, slotIndex, error.c_str());
+        });
+
+    bitmap.UriSource(wf::Uri(resource.resolvedUri));
+}
+
+// An SVG which isn't recognizable by its extension, such as one served from a
+// URL without a file name, fails to decode as a bitmap. Try it once as SVG.
+// Returns false if the bitmap failure is final.
+bool RetryImageAsSvg(const std::weak_ptr<StartIconInstance>& weakInstance,
+                     size_t slotIndex,
+                     const wchar_t* bitmapError) {
+    auto instance = weakInstance.lock();
+
+    if (!instance || instance->detached || g_unloading) {
+        return false;
+    }
+
+    auto& resource = instance->imageResources[slotIndex];
+
+    if (resource.svgFallbackTried || !resource.loadTarget ||
+        IsKnownBitmapSource(resource.configuredSource)) {
+        return false;
+    }
+
+    resource.svgFallbackTried = true;
+
+    Wh_Log(L"Custom Start %s image failed as a bitmap: %s; retrying as SVG",
+           ImageSlotName(slotIndex), bitmapError);
+
+    try {
+        // This runs inside the bitmap's ImageFailed handler, so keep the
+        // bitmap and its handlers alive until detach.
+        resource.retiredBitmap = resource.bitmap;
+        resource.bitmap = nullptr;
+
+        BeginImageLoad(instance, slotIndex, true);
+        resource.loadTarget.Source(resource.source);
+
+        return true;
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Retrying the %s image as SVG failed: 0x%08X %s",
+               ImageSlotName(slotIndex), e.code().value, e.message().c_str());
+    } catch (...) {
+        Wh_Log(L"Retrying the %s image as SVG failed",
+               ImageSlotName(slotIndex));
+    }
+
+    return false;
+}
+
 bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
-                       IconState state,
+                       size_t slotIndex,
                        const std::wstring& source) {
     if (!instance || source.empty()) {
         return false;
     }
 
-    size_t stateIndex = IconStateIndex(state);
-
-    auto& resource = instance->imageResources[stateIndex];
+    auto& resource = instance->imageResources[slotIndex];
     bool sourceUriConstructionInProgress = false;
 
+    resource.configuredSource = source;
+    resource.opened = false;
+    resource.failed = false;
+    resource.reportableFailure = false;
+
     try {
-        wuxmi::BitmapImage bitmap;
-
-        // Only the currently displayed GIF should run. Playback is updated
-        // after every state change and when decoding completes.
-        bitmap.AutoPlay(false);
-
-        resource.bitmap = bitmap;
-        resource.opened = false;
-        resource.failed = false;
-        resource.reportableFailure = false;
-
-        std::weak_ptr<StartIconInstance> weakInstance = instance;
-
-        resource.imageOpenedToken = bitmap.ImageOpened(
-            [weakInstance, stateIndex](const wf::IInspectable&,
-                                       const wux::RoutedEventArgs&) {
-                auto instance = weakInstance.lock();
-
-                if (!instance || instance->detached || g_unloading) {
-                    return;
-                }
-
-                auto& resource = instance->imageResources[stateIndex];
-
-                resource.opened = true;
-                resource.failed = false;
-                resource.reportableFailure = false;
-
-                auto state = static_cast<IconState>(stateIndex);
-
-                Wh_Log(L"Custom Start %s image loaded", IconStateName(state));
-
-                // Apply both the image and the current transform. The pointer
-                // might already be hovering or pressed when decoding finishes.
-                ApplyCurrentState(instance, 0);
-                MaybeShowImageFailureMessage(instance);
-            });
-
-        resource.imageOpenedAttached = true;
-
-        resource.imageFailedToken = bitmap.ImageFailed(
-            [weakInstance, stateIndex,
-             configuredSource = std::wstring(source)](
-                                   const wf::IInspectable&,
-                                   const wux::ExceptionRoutedEventArgs& args) {
-                auto instance = weakInstance.lock();
-
-                if (!instance || instance->detached || g_unloading) {
-                    return;
-                }
-
-                auto& resource = instance->imageResources[stateIndex];
-
-                resource.opened = false;
-                resource.failed = true;
-                resource.reportableFailure = true;
-
-                auto state = static_cast<IconState>(stateIndex);
-
-                Wh_Log(L"Custom Start %s image failed: %s; source: %s",
-                       IconStateName(state), args.ErrorMessage().c_str(),
-                       configuredSource.c_str());
-
-                if (state == IconState::Normal) {
-                    Wh_Log(L"The main image is unavailable; keeping the stock "
-                           L"Start icon and ignoring optional state images");
-                }
-
-                UpdateDisplayedImage(instance);
-                UpdateGifPlayback(instance);
-                MaybeShowImageFailureMessage(instance);
-            });
-
-        resource.imageFailedAttached = true;
-
         // Preserve URLs exactly, including percent-encoded content. Local paths
         // need environment expansion followed by conversion to an escaped file
         // URI so characters such as '#' and '%' remain part of the filename.
-        std::wstring resolvedSource;
+        std::wstring expandedSource;
 
         if (IsHttpUrl(source)) {
-            resolvedSource = source;
+            expandedSource = source;
+            resource.resolvedUri = source;
         } else {
-            std::wstring expandedPath = ExpandPath(source);
+            expandedSource = ExpandPath(source);
 
-            if (expandedPath.empty()) {
+            if (expandedSource.empty()) {
                 resource.failed = true;
                 resource.reportableFailure = true;
                 Wh_Log(L"Custom Start %s image path couldn't be expanded: %s",
-                       IconStateName(state), source.c_str());
+                       ImageSlotName(slotIndex), source.c_str());
                 return false;
             }
 
-            resolvedSource = MakeFileUri(expandedPath);
+            resource.resolvedUri = MakeFileUri(expandedSource);
         }
 
-        if (resolvedSource.empty()) {
+        if (resource.resolvedUri.empty()) {
             resource.failed = true;
             resource.reportableFailure = true;
             Wh_Log(L"Custom Start %s image URI couldn't be created: %s",
-                   IconStateName(state), source.c_str());
+                   ImageSlotName(slotIndex), source.c_str());
             return false;
         }
 
-        // UriSource lets XAML retrieve and decode the image asynchronously.
-        // ImageOpened and ImageFailed above report completion.
+        // Creating the URI fails for a malformed source, which is worth
+        // reporting to the user.
         sourceUriConstructionInProgress = true;
-        bitmap.UriSource(wf::Uri(resolvedSource));
+        BeginImageLoad(instance, slotIndex, IsSvgSource(expandedSource));
         sourceUriConstructionInProgress = false;
 
         auto imageHost = instance->customImageHost.get();
@@ -2447,16 +2972,17 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
 
         // Keep the target in the live tree for the lifetime of the resource.
         // It stays fully transparent; only customImage and transitionImage are
-        // used to render the selected state.
+        // used to render the selected state. Assigning the source starts the
+        // retrieval.
         imageHost.Children().Append(loadTarget);
-        loadTarget.Source(bitmap);
+        loadTarget.Source(resource.source);
 
         return true;
     } catch (const winrt::hresult_error& e) {
         resource.failed = true;
 
         Wh_Log(L"Loading %s image failed: 0x%08X %s; source: %s",
-               IconStateName(state), e.code().value, e.message().c_str(),
+               ImageSlotName(slotIndex), e.code().value, e.message().c_str(),
                source.c_str());
 
         if (sourceUriConstructionInProgress) {
@@ -2466,7 +2992,7 @@ bool LoadImageResource(const std::shared_ptr<StartIconInstance>& instance,
         resource.failed = true;
 
         Wh_Log(L"Loading %s image failed with unknown exception; source: %s",
-               IconStateName(state), source.c_str());
+               ImageSlotName(slotIndex), source.c_str());
 
         if (sourceUriConstructionInProgress) {
             resource.reportableFailure = true;
@@ -2483,44 +3009,44 @@ bool LoadImages(const std::shared_ptr<StartIconInstance>& instance) {
 
     instance->imageLoadingSetupComplete = false;
 
-    std::array<std::wstring, kIconStateCount> sources;
+    std::array<std::wstring, kImageSlotCount> sources;
 
-    for (size_t i = 0; i < kIconStateCount; i++) {
-        instance->imageResourceIndexByState[i] = i;
+    for (size_t i = 0; i < kImageSlotCount; i++) {
+        instance->imageResourceIndexBySlot[i] = i;
 
-        sources[i] = GetImageSourceForState(instance->settings,
-                                            static_cast<IconState>(i));
+        // Without dark mode images, the dark mode slots stay empty.
+        if (!IsDarkImageSlot(i) || instance->darkImageSetLoaded) {
+            sources[i] = GetImageSourceForSlot(instance->settings, i);
+        }
     }
 
-    if (!LoadImageResource(instance, IconState::Normal,
-                           sources[IconStateIndex(IconState::Normal)])) {
+    size_t normalSlot = ImageSlotIndex(false, IconState::Normal);
+
+    if (!LoadImageResource(instance, normalSlot, sources[normalSlot])) {
         instance->imageLoadingSetupComplete = true;
         MaybeShowImageFailureMessage(instance);
         return false;
     }
 
-    for (size_t stateIndex = 1; stateIndex < kIconStateCount; stateIndex++) {
-        IconState state = static_cast<IconState>(stateIndex);
-
-        if (sources[stateIndex].empty()) {
+    for (size_t slotIndex = 1; slotIndex < kImageSlotCount; slotIndex++) {
+        if (sources[slotIndex].empty()) {
             continue;
         }
 
         bool reusedResource = false;
 
-        for (size_t previousIndex = 0; previousIndex < stateIndex;
+        for (size_t previousIndex = 0; previousIndex < slotIndex;
              previousIndex++) {
-            if (!ImageSourcesEqual(sources[stateIndex],
+            if (!ImageSourcesEqual(sources[slotIndex],
                                    sources[previousIndex])) {
                 continue;
             }
 
-            instance->imageResourceIndexByState[stateIndex] =
-                instance->imageResourceIndexByState[previousIndex];
+            instance->imageResourceIndexBySlot[slotIndex] =
+                instance->imageResourceIndexBySlot[previousIndex];
 
             Wh_Log(L"The %s image reuses the %s image resource",
-                   IconStateName(state),
-                   IconStateName(static_cast<IconState>(previousIndex)));
+                   ImageSlotName(slotIndex), ImageSlotName(previousIndex));
 
             reusedResource = true;
             break;
@@ -2530,9 +3056,9 @@ bool LoadImages(const std::shared_ptr<StartIconInstance>& instance) {
             continue;
         }
 
-        if (!LoadImageResource(instance, state, sources[stateIndex])) {
+        if (!LoadImageResource(instance, slotIndex, sources[slotIndex])) {
             Wh_Log(L"The %s image is unavailable; using its fallback",
-                   IconStateName(state));
+                   ImageSlotName(slotIndex));
         }
     }
 
@@ -2791,6 +3317,77 @@ void AttachPointerEvents(const std::shared_ptr<StartIconInstance>& instance,
 // Install replacement into a Start button
 // -----------------------------------------------------------------------------
 
+void ApplyThemeChange(const std::shared_ptr<StartIconInstance>& instance) {
+    if (!instance || instance->detached || g_unloading ||
+        !instance->darkImageSetLoaded) {
+        return;
+    }
+
+    auto lightTheme = IsSystemLightTheme();
+
+    // Keep the current images after a transient read failure.
+    if (!lightTheme || *lightTheme == !instance->darkMode) {
+        return;
+    }
+
+    instance->darkMode = !*lightTheme;
+
+    Wh_Log(L"Windows mode changed to %s", *lightTheme ? L"light" : L"dark");
+
+    // Both image sets are already loaded, so this only switches (and
+    // crossfades) the displayed image.
+    ApplyCurrentState(instance, 0);
+}
+
+void ApplyThemeChangeForCurrentThread() {
+    DWORD threadId = GetCurrentThreadId();
+    std::vector<std::shared_ptr<StartIconInstance>> instances;
+
+    {
+        std::lock_guard<std::mutex> lock(g_instancesMutex);
+
+        if (!g_instances) {
+            return;
+        }
+
+        for (const auto& instance : *g_instances) {
+            if (instance && instance->threadId == threadId) {
+                instances.push_back(instance);
+            }
+        }
+    }
+
+    for (const auto& instance : instances) {
+        try {
+            ApplyThemeChange(instance);
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"Applying dark mode images failed: 0x%08X %s",
+                   e.code().value, e.message().c_str());
+        } catch (...) {
+            Wh_Log(L"Applying dark mode images failed");
+        }
+    }
+}
+
+LRESULT CALLBACK TaskbarThemeSubclassProc(HWND hWnd,
+                                          UINT uMsg,
+                                          WPARAM wParam,
+                                          LPARAM lParam,
+                                          DWORD_PTR refData) {
+    if (uMsg == WM_SETTINGCHANGE && lParam && !g_unloading &&
+        wcscmp(reinterpret_cast<PCWSTR>(lParam), L"ImmersiveColorSet") == 0) {
+        // Every taskbar window on this thread receives the broadcast. The
+        // first one applies the change; the rest find nothing to do.
+        ApplyThemeChangeForCurrentThread();
+    } else if (uMsg == WM_NCDESTROY) {
+        // The subclass is removed automatically when the window is destroyed.
+        std::lock_guard<std::mutex> lock(g_themeWindowsMutex);
+        std::erase(g_themeWindows, hWnd);
+    }
+
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
 bool AttachToStartButton(const wux::FrameworkElement& startButton) {
     if (!startButton || g_unloading) {
         return false;
@@ -2799,7 +3396,7 @@ bool AttachToStartButton(const wux::FrameworkElement& startButton) {
     uint64_t settingsGeneration = 0;
     ModSettings settings = GetSettingsSnapshot(&settingsGeneration);
 
-    if (IsBlank(GetImageSourceForState(settings, IconState::Normal))) {
+    if (IsBlank(settings.imageSources[IconStateIndex(IconState::Normal)])) {
         // An earlier build or an interrupted hot reload might have left the
         // stock element transparent. Remove any tracked replacement first,
         // then explicitly make the vanilla icon visible.
@@ -2924,6 +3521,24 @@ bool AttachToStartButton(const wux::FrameworkElement& startButton) {
         hostPanel.Children().Append(imageHost);
 
         AttachPointerEvents(instance, startButton);
+        TrackRasterizationScale(instance, startButton);
+
+        instance->darkImageSetLoaded = HasDarkModeImages(instance->settings);
+
+        if (instance->darkImageSetLoaded) {
+            auto lightTheme = IsSystemLightTheme();
+
+            if (!lightTheme) {
+                Wh_Log(L"Windows mode unavailable; using the XAML theme");
+
+                lightTheme =
+                    startButton.ActualTheme() == wux::ElementTheme::Light;
+            }
+
+            instance->darkMode = !*lightTheme;
+
+            SubclassTaskbarWindowsForThemeChanges();
+        }
 
         if (!LoadImages(instance)) {
             UnregisterInstance(instance);
@@ -3714,7 +4329,8 @@ BOOL Wh_ModInit() {
     uint64_t settingsGeneration = StoreSettings(LoadSettings());
     ResetReportedImageFailures(settingsGeneration);
 
-    if (IsBlank(GetSettingsSnapshot().imageSource)) {
+    if (IsBlank(GetSettingsSnapshot()
+                    .imageSources[IconStateIndex(IconState::Normal)])) {
         Wh_Log(L"No image source is configured; leaving the stock Start icon "
                L"unchanged");
 
@@ -3807,6 +4423,10 @@ void Wh_ModBeforeUninit() {
         Wh_Log(L"Critical: %zu Start icon instance(s) couldn't be detached",
                remainingInstances);
     }
+
+    // Normally removed by the owner-thread passes above. Remove any left over,
+    // for example on a thread whose instances were already gone.
+    RemoveThemeSubclasses(true);
 }
 
 void Wh_ModUninit() {
