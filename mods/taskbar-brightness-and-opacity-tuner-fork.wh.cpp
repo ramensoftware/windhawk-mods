@@ -8,7 +8,7 @@
 // @author          Gianluca Giangreco
 // @homepage        https://github.com/Gatware/taskbar-oled-tuner
 // @license         GPL-3.0
-// @github          Gatware
+// @github          https://github.com/Gatware
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject
