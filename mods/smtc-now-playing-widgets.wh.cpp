@@ -2,11 +2,11 @@
 // @id              smtc-now-playing-widgets
 // @name            SMTC Now Playing Desktop Widgets
 // @description     Multi-instance, multi-monitor Windows 11 Acrylic Now Playing widgets powered natively by SMTC with Standard, Album, Cardstock, and Simplified themes.
-// @version         1.0.6
+// @version         1.0.7
 // @author          minster586
 // @github          https://github.com/minster586
 // @homepage        https://links.smartcraft.me/@minster586
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -lgdi32 -lole32 -loleaut32 -ld2d1 -ldwrite -lwindowscodecs -ldwmapi -lshcore -lruntimeobject -luuid
 // ==/WindhawkMod==
 
@@ -15,6 +15,8 @@
 # SMTC Now Playing Desktop Widgets
 
 Displays up to 5 customizable, multi-monitor Now Playing widgets on your Windows 11 desktop using the native Windows System Media Transport Controls (SMTC) API.
+
+![SMTC Now Playing Desktop Widgets Preview](https://raw.githubusercontent.com/minster586/windhawk-assets/main/Screenshot%202026-11-16%20170854.png)
 
 ## Themes
 - **Standard**: Wide horizontal Acrylic card with rounded album art, bold track/artist text, 5 outlined playback controls, and a progress bar with timestamps.
@@ -56,6 +58,7 @@ Displays up to 5 customizable, multi-monitor Now Playing widgets on your Windows
       - simplified: Simplified
   - ScalePercent: 100
     $name: Scale (%)
+    $description: Widget scale percentage (50 to 250).
   - DisableControls: false
     $name: Disable Playback Controls (Display-Only)
   - LockPosition: false
@@ -71,6 +74,7 @@ Displays up to 5 customizable, multi-monitor Now Playing widgets on your Windows
       - simplified: Simplified
   - ScalePercent: 100
     $name: Scale (%)
+    $description: Widget scale percentage (50 to 250).
   - DisableControls: true
     $name: Disable Playback Controls (Display-Only)
   - LockPosition: false
@@ -86,6 +90,7 @@ Displays up to 5 customizable, multi-monitor Now Playing widgets on your Windows
       - simplified: Simplified
   - ScalePercent: 100
     $name: Scale (%)
+    $description: Widget scale percentage (50 to 250).
   - DisableControls: true
     $name: Disable Playback Controls (Display-Only)
   - LockPosition: false
@@ -101,6 +106,7 @@ Displays up to 5 customizable, multi-monitor Now Playing widgets on your Windows
       - simplified: Simplified
   - ScalePercent: 100
     $name: Scale (%)
+    $description: Widget scale percentage (50 to 250).
   - DisableControls: false
     $name: Disable Playback Controls (Display-Only)
   - LockPosition: false
@@ -116,12 +122,15 @@ Displays up to 5 customizable, multi-monitor Now Playing widgets on your Windows
       - simplified: Simplified
   - ScalePercent: 100
     $name: Scale (%)
+    $description: Widget scale percentage (50 to 250).
   - DisableControls: false
     $name: Disable Playback Controls (Display-Only)
   - LockPosition: false
     $name: Lock Widget Position (Disable Dragging)
 */
 // ==/WindhawkModSettings==
+
+#include <windhawk_utils.h>
 
 #include <windows.h>
 #include <windowsx.h>
@@ -140,7 +149,6 @@ Displays up to 5 customizable, multi-monitor Now Playing widgets on your Windows
 #include <cstring>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <vector>
 
 using winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession;
@@ -242,7 +250,6 @@ struct WidgetWindowState {
 struct MediaState {
     std::wstring title = L"No Data";
     std::wstring artist = L"";
-    bool hasActiveSession = false;
     bool isPlaying = false;
     bool isShuffleActive = false;
     int repeatMode = 0; // 0 = None, 1 = Track, 2 = List
@@ -269,14 +276,14 @@ static ID2D1Factory* g_d2dFactory = nullptr;
 static IDWriteFactory* g_dwriteFactory = nullptr;
 static IWICImagingFactory* g_wicFactory = nullptr;
 
-static HWND g_uiThreadHwnd = nullptr;
-static std::thread g_uiThread;
-static std::atomic<bool> g_uiRunning{false};
+static std::atomic<HWND> g_uiThreadHwnd{nullptr};
+static HANDLE g_uiThreadHandle = nullptr;
+static HANDLE g_uiReadyEvent = nullptr;
 static WidgetWindowState g_widgetWindows[5];
 
-static std::thread g_smtcThread;
-static std::atomic<bool> g_smtcRunning{false};
+static HANDLE g_smtcThreadHandle = nullptr;
 static HANDLE g_smtcStopEvent = nullptr;
+static HANDLE g_smtcRefreshEvent = nullptr;
 
 enum class PendingCommandType {
     TogglePlayPause,
@@ -302,6 +309,7 @@ static HANDLE g_cmdEvent = nullptr;
 #define TIMER_INTERPOLATE_ID   1001
 
 static const wchar_t* kWindowClassName = L"WindhawkSMTCWidgetClass_v2";
+static const wchar_t* kControllerClassName = L"WindhawkSMTCController_v2";
 
 // ============================================================================
 // Helpers: Color & Formatting
@@ -359,29 +367,26 @@ static void LoadAllSettings() {
 
     g_settings.alwaysOnTop = Wh_GetIntSetting(L"AlwaysOnTop") != 0;
 
-    PCWSTR tintStr = Wh_GetStringSetting(L"AccentTintHex");
-    g_settings.tintBGR = ParseHexRGBtoBGR(tintStr, 0x2C190B);
-    Wh_FreeStringSetting(tintStr);
+    auto tintStr = WindhawkUtils::StringSetting::make(L"AccentTintHex");
+    g_settings.tintBGR = ParseHexRGBtoBGR(tintStr.get(), 0x2C190B);
 
     int alpha = Wh_GetIntSetting(L"AcrylicOpacity");
     if (alpha < 0) alpha = 0;
     if (alpha > 255) alpha = 255;
     g_settings.acrylicAlpha = static_cast<BYTE>(alpha);
 
-    PCWSTR progStr = Wh_GetStringSetting(L"ProgressFillHex");
-    g_settings.progressFill = ParseHexRGBtoD2D(progStr, D2D1::ColorF(0.584f, 0.835f, 0.608f, 1.0f));
-    Wh_FreeStringSetting(progStr);
+    auto progStr = WindhawkUtils::StringSetting::make(L"ProgressFillHex");
+    g_settings.progressFill = ParseHexRGBtoD2D(progStr.get(), D2D1::ColorF(0.584f, 0.835f, 0.608f, 1.0f));
 
     for (int i = 0; i < 5; i++) {
         wchar_t key[64];
         swprintf_s(key, L"Widget%d.Theme", i + 1);
-        PCWSTR tStr = Wh_GetStringSetting(key);
-        g_settings.widgets[i].theme = ParseThemeName(tStr);
-        Wh_FreeStringSetting(tStr);
+        auto tStr = WindhawkUtils::StringSetting::make(key);
+        g_settings.widgets[i].theme = ParseThemeName(tStr.get());
 
         swprintf_s(key, L"Widget%d.ScalePercent", i + 1);
         int sc = Wh_GetIntSetting(key);
-        if (sc < 50) sc = 100;
+        if (sc < 50) sc = 50;
         if (sc > 250) sc = 250;
         g_settings.widgets[i].scalePercent = sc;
 
@@ -827,12 +832,13 @@ static void DrawTransportIcons(
     if (activeBrush) activeBrush->Release();
 }
 
-static void DrawTextLeft(
+static void DrawTextAligned(
     ID2D1RenderTarget* rt,
     const std::wstring& text,
     D2D1_RECT_F rect,
     float fontSize,
     DWRITE_FONT_WEIGHT weight,
+    DWRITE_TEXT_ALIGNMENT alignment,
     D2D1_COLOR_F color)
 {
     if (!g_dwriteFactory || text.empty()) return;
@@ -842,7 +848,7 @@ static void DrawTextLeft(
         L"Segoe UI", nullptr, weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
         fontSize, L"en-US", &fmt);
     if (SUCCEEDED(hrFmt) && fmt) {
-        fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+        fmt->SetTextAlignment(alignment);
         fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
         fmt->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
 
@@ -853,72 +859,6 @@ static void DrawTextLeft(
             fmt->SetTrimming(&trim, ellipsis);
             ellipsis->Release();
         }
-
-        ID2D1SolidColorBrush* brush = nullptr;
-        HRESULT hrBrush = rt->CreateSolidColorBrush(color, &brush);
-        if (SUCCEEDED(hrBrush) && brush) {
-            rt->DrawText(text.c_str(), static_cast<UINT32>(text.size()), fmt, rect, brush);
-            brush->Release();
-        }
-        fmt->Release();
-    }
-}
-
-static void DrawTextCenter(
-    ID2D1RenderTarget* rt,
-    const std::wstring& text,
-    D2D1_RECT_F rect,
-    float fontSize,
-    DWRITE_FONT_WEIGHT weight,
-    D2D1_COLOR_F color)
-{
-    if (!g_dwriteFactory || text.empty()) return;
-
-    IDWriteTextFormat* fmt = nullptr;
-    HRESULT hrFmt = g_dwriteFactory->CreateTextFormat(
-        L"Segoe UI", nullptr, weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-        fontSize, L"en-US", &fmt);
-    if (SUCCEEDED(hrFmt) && fmt) {
-        fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-        fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        fmt->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
-
-        DWRITE_TRIMMING trim = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
-        IDWriteInlineObject* ellipsis = nullptr;
-        HRESULT hrEllip = g_dwriteFactory->CreateEllipsisTrimmingSign(fmt, &ellipsis);
-        if (SUCCEEDED(hrEllip) && ellipsis) {
-            fmt->SetTrimming(&trim, ellipsis);
-            ellipsis->Release();
-        }
-
-        ID2D1SolidColorBrush* brush = nullptr;
-        HRESULT hrBrush = rt->CreateSolidColorBrush(color, &brush);
-        if (SUCCEEDED(hrBrush) && brush) {
-            rt->DrawText(text.c_str(), static_cast<UINT32>(text.size()), fmt, rect, brush);
-            brush->Release();
-        }
-        fmt->Release();
-    }
-}
-
-static void DrawTextRight(
-    ID2D1RenderTarget* rt,
-    const std::wstring& text,
-    D2D1_RECT_F rect,
-    float fontSize,
-    DWRITE_FONT_WEIGHT weight,
-    D2D1_COLOR_F color)
-{
-    if (!g_dwriteFactory || text.empty()) return;
-
-    IDWriteTextFormat* fmt = nullptr;
-    HRESULT hrFmt = g_dwriteFactory->CreateTextFormat(
-        L"Segoe UI", nullptr, weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-        fontSize, L"en-US", &fmt);
-    if (SUCCEEDED(hrFmt) && fmt) {
-        fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
-        fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        fmt->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
 
         ID2D1SolidColorBrush* brush = nullptr;
         HRESULT hrBrush = rt->CreateSolidColorBrush(color, &brush);
@@ -950,13 +890,13 @@ static void RenderTheme_Standard(
     const float textLeft = pad + artSize + 16.0f;
     const float textRight = 252.0f;
     if (media.artist.empty()) {
-        DrawTextLeft(rt, media.title, D2D1::RectF(textLeft, 36.0f, textRight, 68.0f),
-                     18.0f, DWRITE_FONT_WEIGHT_BOLD, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.96f));
+        DrawTextAligned(rt, media.title, D2D1::RectF(textLeft, 36.0f, textRight, 68.0f),
+                        18.0f, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.96f));
     } else {
-        DrawTextLeft(rt, media.title, D2D1::RectF(textLeft, 24.0f, textRight, 52.0f),
-                     18.0f, DWRITE_FONT_WEIGHT_BOLD, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.96f));
-        DrawTextLeft(rt, media.artist, D2D1::RectF(textLeft, 53.0f, textRight, 78.0f),
-                     14.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.68f));
+        DrawTextAligned(rt, media.title, D2D1::RectF(textLeft, 24.0f, textRight, 52.0f),
+                        18.0f, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.96f));
+        DrawTextAligned(rt, media.artist, D2D1::RectF(textLeft, 53.0f, textRight, 78.0f),
+                        14.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.68f));
     }
 
     const float rightCenterX = 415.0f;
@@ -981,10 +921,10 @@ static void RenderTheme_Standard(
 
     std::wstring elapsedStr = FormatTimeMs(currentPosMs);
     std::wstring totalStr = FormatTimeMs(media.durationMs);
-    DrawTextRight(rt, elapsedStr, D2D1::RectF(barRect.left - 54.0f, barY - 10.0f, barRect.left - 8.0f, barY + 10.0f),
-                  12.5f, DWRITE_FONT_WEIGHT_BOLD, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.90f));
-    DrawTextLeft(rt, totalStr, D2D1::RectF(barRect.right + 8.0f, barY - 10.0f, barRect.right + 54.0f, barY + 10.0f),
-                 12.5f, DWRITE_FONT_WEIGHT_BOLD, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.90f));
+    DrawTextAligned(rt, elapsedStr, D2D1::RectF(barRect.left - 54.0f, barY - 10.0f, barRect.left - 8.0f, barY + 10.0f),
+                    12.5f, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_TRAILING, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.90f));
+    DrawTextAligned(rt, totalStr, D2D1::RectF(barRect.right + 8.0f, barY - 10.0f, barRect.right + 54.0f, barY + 10.0f),
+                    12.5f, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.90f));
 }
 
 static void RenderTheme_Album(
@@ -1009,21 +949,21 @@ static void RenderTheme_Album(
     }
 
     if (media.artist.empty()) {
-        DrawTextCenter(rt, media.title, D2D1::RectF(16.0f, 180.0f, W - 16.0f, 212.0f),
-                       18.5f, DWRITE_FONT_WEIGHT_BOLD, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.96f));
+        DrawTextAligned(rt, media.title, D2D1::RectF(16.0f, 180.0f, W - 16.0f, 212.0f),
+                        18.5f, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.96f));
     } else {
-        DrawTextCenter(rt, media.title, D2D1::RectF(16.0f, 168.0f, W - 16.0f, 198.0f),
-                       18.5f, DWRITE_FONT_WEIGHT_BOLD, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.96f));
-        DrawTextCenter(rt, media.artist, D2D1::RectF(16.0f, 196.0f, W - 16.0f, 222.0f),
-                       15.0f, DWRITE_FONT_WEIGHT_BOLD, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.72f));
+        DrawTextAligned(rt, media.title, D2D1::RectF(16.0f, 168.0f, W - 16.0f, 198.0f),
+                        18.5f, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.96f));
+        DrawTextAligned(rt, media.artist, D2D1::RectF(16.0f, 196.0f, W - 16.0f, 222.0f),
+                        15.0f, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.72f));
     }
 
     std::wstring elapsedStr = FormatTimeMs(currentPosMs);
     std::wstring totalStr = FormatTimeMs(media.durationMs);
-    DrawTextLeft(rt, elapsedStr, D2D1::RectF(14.0f, 232.0f, 80.0f, 250.0f),
-                 12.5f, DWRITE_FONT_WEIGHT_BOLD, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.92f));
-    DrawTextRight(rt, totalStr, D2D1::RectF(W - 80.0f, 232.0f, W - 14.0f, 250.0f),
-                  12.5f, DWRITE_FONT_WEIGHT_BOLD, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.92f));
+    DrawTextAligned(rt, elapsedStr, D2D1::RectF(14.0f, 232.0f, 80.0f, 250.0f),
+                    12.5f, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.92f));
+    DrawTextAligned(rt, totalStr, D2D1::RectF(W - 80.0f, 232.0f, W - 14.0f, 250.0f),
+                    12.5f, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_TRAILING, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.92f));
 
     const float ratio = (media.durationMs > 0) ? (static_cast<float>(currentPosMs) / static_cast<float>(media.durationMs)) : 0.0f;
     D2D1_RECT_F barRect = D2D1::RectF(4.0f, H - 5.5f, W - 4.0f, H - 2.0f);
@@ -1051,13 +991,13 @@ static void RenderTheme_Cardstock(
 
     const float titleTop = pad + artSize + 18.0f;
     if (media.artist.empty()) {
-        DrawTextCenter(rt, media.title, D2D1::RectF(16.0f, titleTop + 10.0f, W - 16.0f, titleTop + 38.0f),
-                       17.5f, DWRITE_FONT_WEIGHT_BOLD, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.96f));
+        DrawTextAligned(rt, media.title, D2D1::RectF(16.0f, titleTop + 10.0f, W - 16.0f, titleTop + 38.0f),
+                        17.5f, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.96f));
     } else {
-        DrawTextCenter(rt, media.title, D2D1::RectF(16.0f, titleTop, W - 16.0f, titleTop + 26.0f),
-                       17.5f, DWRITE_FONT_WEIGHT_BOLD, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.96f));
-        DrawTextCenter(rt, media.artist, D2D1::RectF(16.0f, titleTop + 24.0f, W - 16.0f, titleTop + 46.0f),
-                       14.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.72f));
+        DrawTextAligned(rt, media.title, D2D1::RectF(16.0f, titleTop, W - 16.0f, titleTop + 26.0f),
+                        17.5f, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.96f));
+        DrawTextAligned(rt, media.artist, D2D1::RectF(16.0f, titleTop + 24.0f, W - 16.0f, titleTop + 46.0f),
+                        14.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.72f));
     }
 
     const float barY = titleTop + 56.0f;
@@ -1072,10 +1012,10 @@ static void RenderTheme_Cardstock(
 
     std::wstring elapsedStr = FormatTimeMs(currentPosMs);
     std::wstring totalStr = FormatTimeMs(media.durationMs);
-    DrawTextLeft(rt, elapsedStr, D2D1::RectF(pad + 2.0f, barY + 5.0f, pad + 65.0f, barY + 22.0f),
-                 12.0f, DWRITE_FONT_WEIGHT_BOLD, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.90f));
-    DrawTextRight(rt, totalStr, D2D1::RectF(W - pad - 65.0f, barY + 5.0f, W - pad - 2.0f, barY + 22.0f),
-                  12.0f, DWRITE_FONT_WEIGHT_BOLD, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.90f));
+    DrawTextAligned(rt, elapsedStr, D2D1::RectF(pad + 2.0f, barY + 5.0f, pad + 65.0f, barY + 22.0f),
+                    12.0f, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.90f));
+    DrawTextAligned(rt, totalStr, D2D1::RectF(W - pad - 65.0f, barY + 5.0f, W - pad - 2.0f, barY + 22.0f),
+                    12.0f, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_TRAILING, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.90f));
 
     if (!cfg.disableControls) {
         DrawTransportIcons(
@@ -1103,13 +1043,13 @@ static void RenderTheme_Simplified(
     const float textLeft = pad + artSize + 14.0f;
     const float textRight = 232.0f;
     if (media.artist.empty()) {
-        DrawTextLeft(rt, media.title, D2D1::RectF(textLeft, 24.0f, textRight, 50.0f),
-                     15.5f, DWRITE_FONT_WEIGHT_REGULAR, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.94f));
+        DrawTextAligned(rt, media.title, D2D1::RectF(textLeft, 24.0f, textRight, 50.0f),
+                        15.5f, DWRITE_FONT_WEIGHT_REGULAR, DWRITE_TEXT_ALIGNMENT_LEADING, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.94f));
     } else {
-        DrawTextLeft(rt, media.title, D2D1::RectF(textLeft, 14.0f, textRight, 38.0f),
-                     15.5f, DWRITE_FONT_WEIGHT_REGULAR, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.94f));
-        DrawTextLeft(rt, media.artist, D2D1::RectF(textLeft, 37.0f, textRight, 60.0f),
-                     14.5f, DWRITE_FONT_WEIGHT_REGULAR, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.65f));
+        DrawTextAligned(rt, media.title, D2D1::RectF(textLeft, 14.0f, textRight, 38.0f),
+                        15.5f, DWRITE_FONT_WEIGHT_REGULAR, DWRITE_TEXT_ALIGNMENT_LEADING, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.94f));
+        DrawTextAligned(rt, media.artist, D2D1::RectF(textLeft, 37.0f, textRight, 60.0f),
+                        14.5f, DWRITE_FONT_WEIGHT_REGULAR, DWRITE_TEXT_ALIGNMENT_LEADING, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.65f));
     }
 
     if (!cfg.disableControls) {
@@ -1259,12 +1199,22 @@ static void RenderWidget(WidgetWindowState& ws) {
     if (!EnsureWicRenderTarget(ws, pxW, pxH)) return;
 
     MediaState mediaSnapshot;
+    std::vector<uint8_t> newArtBytes;
     bool needArtUpdate = false;
     {
         std::lock_guard<std::mutex> lock(g_mediaMutex);
-        mediaSnapshot = g_media;
+        mediaSnapshot.title = g_media.title;
+        mediaSnapshot.artist = g_media.artist;
+        mediaSnapshot.isPlaying = g_media.isPlaying;
+        mediaSnapshot.isShuffleActive = g_media.isShuffleActive;
+        mediaSnapshot.repeatMode = g_media.repeatMode;
+        mediaSnapshot.positionMs = g_media.positionMs;
+        mediaSnapshot.durationMs = g_media.durationMs;
+        mediaSnapshot.lastTimelineSync = g_media.lastTimelineSync;
+        mediaSnapshot.artVersion = g_media.artVersion;
         if (ws.cachedArtVersion != g_media.artVersion) {
             needArtUpdate = true;
+            newArtBytes = g_media.artBytes;
         }
     }
 
@@ -1273,7 +1223,7 @@ static void RenderWidget(WidgetWindowState& ws) {
             ws.cachedArtBitmap->Release();
             ws.cachedArtBitmap = nullptr;
         }
-        ws.cachedArtBitmap = CreateD2DBitmapFromBytes(ws.renderTarget, mediaSnapshot.artBytes);
+        ws.cachedArtBitmap = CreateD2DBitmapFromBytes(ws.renderTarget, newArtBytes);
         ws.cachedArtVersion = mediaSnapshot.artVersion;
     }
 
@@ -1403,6 +1353,9 @@ static LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         case WM_ERASEBKGND:
             return 1;
 
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
+
         case WM_MOUSEMOVE: {
             if (!pWs) break;
             int x = GET_X_LPARAM(lParam);
@@ -1492,6 +1445,13 @@ static LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             if (pWs && pWs->isDragging) {
                 pWs->isDragging = false;
                 ReleaseCapture();
+            }
+            return 0;
+        }
+
+        case WM_CAPTURECHANGED: {
+            if (pWs && pWs->isDragging) {
+                pWs->isDragging = false;
                 RECT winRc;
                 GetWindowRect(hwnd, &winRc);
                 SaveWidgetPos(pWs->index, winRc.left, winRc.top);
@@ -1555,7 +1515,7 @@ static void SyncWidgetWindowsWithSettings() {
 
         if (!ws.hwnd) {
             POINT pt = LoadSavedWidgetPos(i);
-            DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_LAYERED;
+            DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_NOACTIVATE;
             if (gs.alwaysOnTop) exStyle |= WS_EX_TOPMOST;
 
             ws.hwnd = CreateWindowExW(
@@ -1627,6 +1587,7 @@ static LRESULT CALLBACK HiddenControllerWndProc(HWND hwnd, UINT msg, WPARAM wPar
                     g_widgetWindows[i].hwnd = nullptr;
                 }
             }
+            g_uiThreadHwnd.store(nullptr);
             DestroyWindow(hwnd);
             PostQuitMessage(0);
             return 0;
@@ -1634,8 +1595,8 @@ static LRESULT CALLBACK HiddenControllerWndProc(HWND hwnd, UINT msg, WPARAM wPar
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-static void UiThreadMain() {
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+static DWORD WINAPI UiThreadProc(LPVOID) {
+    HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_d2dFactory);
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(&g_dwriteFactory));
@@ -1647,21 +1608,39 @@ static void UiThreadMain() {
     wc.hInstance = g_hInstance;
     wc.lpszClassName = kWindowClassName;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    RegisterClassExW(&wc);
+    ATOM atomWidget = RegisterClassExW(&wc);
 
     WNDCLASSEXW ctrlWc = {};
     ctrlWc.cbSize = sizeof(ctrlWc);
     ctrlWc.lpfnWndProc = HiddenControllerWndProc;
     ctrlWc.hInstance = g_hInstance;
-    ctrlWc.lpszClassName = L"WindhawkSMTCController_v2";
-    RegisterClassExW(&ctrlWc);
+    ctrlWc.lpszClassName = kControllerClassName;
+    ATOM atomCtrl = RegisterClassExW(&ctrlWc);
 
-    g_uiThreadHwnd = CreateWindowExW(
-        0, ctrlWc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, g_hInstance, nullptr);
+    HWND ctrlHwnd = nullptr;
+    if (atomWidget && atomCtrl && g_d2dFactory && g_dwriteFactory && g_wicFactory) {
+        ctrlHwnd = CreateWindowExW(
+            0, kControllerClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, g_hInstance, nullptr);
+    }
+
+    if (!ctrlHwnd) {
+        Wh_Log(L"Failed to initialize UI thread window/factories");
+        if (atomWidget) UnregisterClassW(kWindowClassName, g_hInstance);
+        if (atomCtrl) UnregisterClassW(kControllerClassName, g_hInstance);
+        if (g_wicFactory) { g_wicFactory->Release(); g_wicFactory = nullptr; }
+        if (g_dwriteFactory) { g_dwriteFactory->Release(); g_dwriteFactory = nullptr; }
+        if (g_d2dFactory) { g_d2dFactory->Release(); g_d2dFactory = nullptr; }
+        if (SUCCEEDED(hrCom)) CoUninitialize();
+        if (g_uiReadyEvent) SetEvent(g_uiReadyEvent);
+        return 1;
+    }
+
+    g_uiThreadHwnd.store(ctrlHwnd);
+    if (g_uiReadyEvent) SetEvent(g_uiReadyEvent);
 
     LoadAllSettings();
     SyncWidgetWindowsWithSettings();
-    SetTimer(g_uiThreadHwnd, TIMER_INTERPOLATE_ID, 250, nullptr);
+    SetTimer(ctrlHwnd, TIMER_INTERPOLATE_ID, 250, nullptr);
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -1669,83 +1648,60 @@ static void UiThreadMain() {
         DispatchMessageW(&msg);
     }
 
+    g_uiThreadHwnd.store(nullptr);
     UnregisterClassW(kWindowClassName, g_hInstance);
-    UnregisterClassW(L"WindhawkSMTCController_v2", g_hInstance);
+    UnregisterClassW(kControllerClassName, g_hInstance);
 
     if (g_wicFactory) { g_wicFactory->Release(); g_wicFactory = nullptr; }
     if (g_dwriteFactory) { g_dwriteFactory->Release(); g_dwriteFactory = nullptr; }
     if (g_d2dFactory) { g_d2dFactory->Release(); g_d2dFactory = nullptr; }
 
-    g_uiThreadHwnd = nullptr;
-    CoUninitialize();
+    if (SUCCEEDED(hrCom)) CoUninitialize();
+    return 0;
 }
 
 // ============================================================================
-// WinRT SMTC Listener & Control Thread (MTA to prevent .get() deadlocks)
+// WinRT SMTC Listener & Control Thread (MTA, zero-capture callbacks)
 // ============================================================================
 static void NotifyUiMediaUpdated() {
-    if (g_uiThreadHwnd) {
-        PostMessageW(g_uiThreadHwnd, WM_APP_MEDIA_UPDATED, 0, 0);
+    HWND hwnd = g_uiThreadHwnd.load();
+    if (hwnd) {
+        PostMessageW(hwnd, WM_APP_MEDIA_UPDATED, 0, 0);
     }
 }
 
-static void ReadMediaPropertiesFromSession(const GlobalSystemMediaTransportControlsSession& session) {
-    if (!session) {
+static void ClearMediaState() {
+    bool changed = false;
+    {
         std::lock_guard<std::mutex> lock(g_mediaMutex);
-        g_media.hasActiveSession = false;
-        g_media.isPlaying = false;
-        g_media.isShuffleActive = false;
-        g_media.repeatMode = 0;
-        g_media.title = L"No Data";
-        g_media.artist = L"";
-        g_media.positionMs = 0;
-        g_media.durationMs = 0;
-        g_media.artBytes.clear();
-        g_media.artVersion++;
+        if (g_media.title != L"No Data" || !g_media.artist.empty() || g_media.isPlaying || !g_media.artBytes.empty()) {
+            g_media.isPlaying = false;
+            g_media.isShuffleActive = false;
+            g_media.repeatMode = 0;
+            g_media.title = L"No Data";
+            g_media.artist = L"";
+            g_media.positionMs = 0;
+            g_media.durationMs = 0;
+            g_media.artBytes.clear();
+            g_media.artVersion++;
+            changed = true;
+        }
+    }
+    if (changed) {
         NotifyUiMediaUpdated();
+    }
+}
+
+static void RefreshFromSession(
+    const GlobalSystemMediaTransportControlsSession& session,
+    std::wstring& lastTrackKey)
+{
+    if (!session) {
+        lastTrackKey.clear();
+        ClearMediaState();
         return;
     }
 
-    try {
-        auto props = session.TryGetMediaPropertiesAsync().get();
-        if (!props) return;
-
-        std::wstring newTitle = props.Title().c_str();
-        std::wstring newArtist = props.Artist().c_str();
-        if (newTitle.empty()) newTitle = L"No Data";
-
-        std::vector<uint8_t> newArt;
-        auto thumbRef = props.Thumbnail();
-        if (thumbRef) {
-            auto stream = thumbRef.OpenReadAsync().get();
-            if (stream) {
-                uint64_t size = stream.Size();
-                if (size > 0 && size < 15 * 1024 * 1024) {
-                    DataReader reader(stream.GetInputStreamAt(0));
-                    reader.LoadAsync(static_cast<uint32_t>(size)).get();
-                    newArt.resize(static_cast<size_t>(size));
-                    reader.ReadBytes(newArt);
-                    reader.Close();
-                }
-                stream.Close();
-            }
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(g_mediaMutex);
-            g_media.hasActiveSession = true;
-            g_media.title = std::move(newTitle);
-            g_media.artist = std::move(newArtist);
-            g_media.artBytes = std::move(newArt);
-            g_media.artVersion++;
-        }
-        NotifyUiMediaUpdated();
-    } catch (...) {
-    }
-}
-
-static void ReadPlaybackAndTimelineFromSession(const GlobalSystemMediaTransportControlsSession& session) {
-    if (!session) return;
     try {
         auto pb = session.GetPlaybackInfo();
         bool playing = false;
@@ -1772,20 +1728,70 @@ static void ReadPlaybackAndTimelineFromSession(const GlobalSystemMediaTransportC
 
             dur = (endMs - startMs > 0) ? (endMs - startMs) : 0;
             relPos = (posMs - startMs > 0) ? (posMs - startMs) : 0;
+
+            auto lastUpdated = tl.LastUpdatedTime();
+            if (playing && lastUpdated.time_since_epoch().count() > 0) {
+                auto elapsedSinceUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    winrt::clock::now() - lastUpdated).count();
+                if (elapsedSinceUpdate > 0 && elapsedSinceUpdate < 3600 * 1000) {
+                    relPos += elapsedSinceUpdate;
+                    if (dur > 0 && relPos > dur) relPos = dur;
+                }
+            }
+        }
+
+        auto props = session.TryGetMediaPropertiesAsync().get();
+        std::wstring newTitle = L"No Data";
+        std::wstring newArtist;
+        if (props) {
+            newTitle = props.Title().c_str();
+            newArtist = props.Artist().c_str();
+            if (newTitle.empty()) newTitle = L"No Data";
+        }
+
+        std::wstring trackKey = newTitle + L"\n" + newArtist + L"\n" + std::to_wstring(dur);
+        bool trackChanged = (trackKey != lastTrackKey);
+        std::vector<uint8_t> newArt;
+
+        if (trackChanged && props) {
+            auto thumbRef = props.Thumbnail();
+            if (thumbRef) {
+                auto stream = thumbRef.OpenReadAsync().get();
+                if (stream) {
+                    uint64_t size = stream.Size();
+                    if (size > 0 && size < 15 * 1024 * 1024) {
+                        DataReader reader(stream.GetInputStreamAt(0));
+                        reader.LoadAsync(static_cast<uint32_t>(size)).get();
+                        newArt.resize(static_cast<size_t>(size));
+                        reader.ReadBytes(newArt);
+                        reader.Close();
+                    }
+                    stream.Close();
+                }
+            }
+            lastTrackKey = trackKey;
         }
 
         {
             std::lock_guard<std::mutex> lock(g_mediaMutex);
-            g_media.hasActiveSession = true;
+            g_media.title = std::move(newTitle);
+            g_media.artist = std::move(newArtist);
             g_media.isPlaying = playing;
             g_media.isShuffleActive = shuffle;
             g_media.repeatMode = rep;
             g_media.positionMs = relPos;
             g_media.durationMs = dur;
             g_media.lastTimelineSync = std::chrono::steady_clock::now();
+            if (trackChanged) {
+                g_media.artBytes = std::move(newArt);
+                g_media.artVersion++;
+            }
         }
         NotifyUiMediaUpdated();
+    } catch (const winrt::hresult_error& ex) {
+        Wh_Log(L"SMTC refresh error: 0x%08X (%s)", ex.code().value, ex.message().c_str());
     } catch (...) {
+        Wh_Log(L"SMTC refresh unknown error");
     }
 }
 
@@ -1803,20 +1809,26 @@ static GlobalSystemMediaTransportControlsSession ResolveBestSession(
     return nullptr;
 }
 
-static void SmtcWorkerMain() {
+static void SignalSmtcRefresh() {
+    if (g_smtcRefreshEvent) {
+        SetEvent(g_smtcRefreshEvent);
+    }
+}
+
+static DWORD WINAPI SmtcWorkerProc(LPVOID) {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
 
     try {
         auto mgr = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
 
-        std::mutex sessMutex;
         GlobalSystemMediaTransportControlsSession activeSession{nullptr};
         winrt::event_token tokMedia{};
         winrt::event_token tokPlayback{};
         winrt::event_token tokTimeline{};
+        std::wstring lastTrackKey;
 
-        auto attachSession = [&](const GlobalSystemMediaTransportControlsSession& newSess) {
-            std::lock_guard<std::mutex> lock(sessMutex);
+        auto bindSession = [&](const GlobalSystemMediaTransportControlsSession& newSess) {
+            if (activeSession == newSess) return;
             if (activeSession) {
                 try {
                     activeSession.MediaPropertiesChanged(tokMedia);
@@ -1825,72 +1837,55 @@ static void SmtcWorkerMain() {
                 } catch (...) {}
             }
             activeSession = newSess;
+            lastTrackKey.clear();
             if (activeSession) {
-                tokMedia = activeSession.MediaPropertiesChanged([](const auto& s, const auto&) {
-                    ReadMediaPropertiesFromSession(s);
-                });
-                tokPlayback = activeSession.PlaybackInfoChanged([](const auto& s, const auto&) {
-                    ReadPlaybackAndTimelineFromSession(s);
-                });
-                tokTimeline = activeSession.TimelinePropertiesChanged([](const auto& s, const auto&) {
-                    ReadPlaybackAndTimelineFromSession(s);
-                });
-                ReadMediaPropertiesFromSession(activeSession);
-                ReadPlaybackAndTimelineFromSession(activeSession);
-            } else {
-                ReadMediaPropertiesFromSession(nullptr);
+                tokMedia = activeSession.MediaPropertiesChanged([](auto&&, auto&&) { SignalSmtcRefresh(); });
+                tokPlayback = activeSession.PlaybackInfoChanged([](auto&&, auto&&) { SignalSmtcRefresh(); });
+                tokTimeline = activeSession.TimelinePropertiesChanged([](auto&&, auto&&) { SignalSmtcRefresh(); });
             }
         };
 
-        auto tokCurrent = mgr.CurrentSessionChanged([&](const auto& m, const auto&) {
-            attachSession(ResolveBestSession(m));
-        });
+        auto tokCurrent = mgr.CurrentSessionChanged([](auto&&, auto&&) { SignalSmtcRefresh(); });
+        auto tokSessions = mgr.SessionsChanged([](auto&&, auto&&) { SignalSmtcRefresh(); });
 
-        auto tokSessions = mgr.SessionsChanged([&](const auto& m, const auto&) {
-            attachSession(ResolveBestSession(m));
-        });
+        bindSession(ResolveBestSession(mgr));
+        RefreshFromSession(activeSession, lastTrackKey);
 
-        attachSession(ResolveBestSession(mgr));
-
-        HANDLE waitHandles[2] = {g_smtcStopEvent, g_cmdEvent};
-        while (g_smtcRunning.load()) {
-            DWORD waitRes = WaitForMultipleObjects(2, waitHandles, FALSE, 500);
+        HANDLE waitHandles[3] = {g_smtcStopEvent, g_cmdEvent, g_smtcRefreshEvent};
+        while (true) {
+            DWORD waitRes = WaitForMultipleObjects(3, waitHandles, FALSE, 500);
             if (waitRes == WAIT_OBJECT_0) {
                 break;
-            } else if (waitRes == WAIT_OBJECT_0 + 1) {
+            }
+
+            if (waitRes == WAIT_OBJECT_0 + 1) {
                 std::vector<PendingCommand> cmds;
                 {
                     std::lock_guard<std::mutex> lock(g_cmdMutex);
                     cmds.swap(g_cmdQueue);
                 }
 
-                GlobalSystemMediaTransportControlsSession sessCopy{nullptr};
-                {
-                    std::lock_guard<std::mutex> lock(sessMutex);
-                    sessCopy = activeSession;
-                }
-
-                if (sessCopy) {
+                if (activeSession) {
                     for (const auto& c : cmds) {
                         try {
                             switch (c.type) {
                                 case PendingCommandType::TogglePlayPause:
-                                    sessCopy.TryTogglePlayPauseAsync().get();
+                                    activeSession.TryTogglePlayPauseAsync().get();
                                     break;
                                 case PendingCommandType::Next:
-                                    sessCopy.TrySkipNextAsync().get();
+                                    activeSession.TrySkipNextAsync().get();
                                     break;
                                 case PendingCommandType::Previous:
-                                    sessCopy.TrySkipPreviousAsync().get();
+                                    activeSession.TrySkipPreviousAsync().get();
                                     break;
                                 case PendingCommandType::ToggleShuffle: {
-                                    auto pb = sessCopy.GetPlaybackInfo();
+                                    auto pb = activeSession.GetPlaybackInfo();
                                     bool cur = pb.IsShuffleActive() ? pb.IsShuffleActive().Value() : false;
-                                    sessCopy.TryChangeShuffleActiveAsync(!cur).get();
+                                    activeSession.TryChangeShuffleActiveAsync(!cur).get();
                                     break;
                                 }
                                 case PendingCommandType::CycleRepeat: {
-                                    auto pb = sessCopy.GetPlaybackInfo();
+                                    auto pb = activeSession.GetPlaybackInfo();
                                     auto cur = pb.AutoRepeatMode()
                                         ? pb.AutoRepeatMode().Value()
                                         : winrt::Windows::Media::MediaPlaybackAutoRepeatMode::None;
@@ -1899,74 +1894,252 @@ static void SmtcWorkerMain() {
                                         nextMode = winrt::Windows::Media::MediaPlaybackAutoRepeatMode::Track;
                                     else if (cur == winrt::Windows::Media::MediaPlaybackAutoRepeatMode::Track)
                                         nextMode = winrt::Windows::Media::MediaPlaybackAutoRepeatMode::None;
-                                    sessCopy.TryChangeAutoRepeatModeAsync(nextMode).get();
+                                    activeSession.TryChangeAutoRepeatModeAsync(nextMode).get();
                                     break;
                                 }
                                 case PendingCommandType::SeekToRatio: {
-                                    auto tl = sessCopy.GetTimelineProperties();
+                                    auto tl = activeSession.GetTimelineProperties();
                                     int64_t startTicks = tl.StartTime().count();
                                     int64_t endTicks = tl.EndTime().count();
                                     int64_t targetTicks = startTicks + static_cast<int64_t>((endTicks - startTicks) * c.seekRatio);
-                                    sessCopy.TryChangePlaybackPositionAsync(targetTicks).get();
+                                    activeSession.TryChangePlaybackPositionAsync(targetTicks).get();
                                     break;
                                 }
                             }
+                        } catch (const winrt::hresult_error& ex) {
+                            Wh_Log(L"SMTC command error: 0x%08X", ex.code().value);
                         } catch (...) {}
                     }
                 }
             }
+
+            bindSession(ResolveBestSession(mgr));
+            RefreshFromSession(activeSession, lastTrackKey);
         }
 
         mgr.CurrentSessionChanged(tokCurrent);
         mgr.SessionsChanged(tokSessions);
-        {
-            std::lock_guard<std::mutex> lock(sessMutex);
-            if (activeSession) {
+        if (activeSession) {
+            try {
                 activeSession.MediaPropertiesChanged(tokMedia);
                 activeSession.PlaybackInfoChanged(tokPlayback);
                 activeSession.TimelinePropertiesChanged(tokTimeline);
-            }
+            } catch (...) {}
         }
+    } catch (const winrt::hresult_error& ex) {
+        Wh_Log(L"SMTC worker init error: 0x%08X (%s)", ex.code().value, ex.message().c_str());
     } catch (...) {
+        Wh_Log(L"SMTC worker unknown error");
     }
 
     winrt::uninit_apartment();
+    return 0;
 }
 
 // ============================================================================
-// Windhawk Mod Entry Points
+// Windhawk Tool Entry Points
 // ============================================================================
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     g_hInstance = GetModuleHandleW(nullptr);
 
+    g_uiReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_smtcStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_smtcRefreshEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_cmdEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
 
-    g_uiRunning = true;
-    g_uiThread = std::thread(UiThreadMain);
-
-    g_smtcRunning = true;
-    g_smtcThread = std::thread(SmtcWorkerMain);
+    g_uiThreadHandle = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, nullptr);
+    g_smtcThreadHandle = CreateThread(nullptr, 0, SmtcWorkerProc, nullptr, 0, nullptr);
 
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    g_smtcRunning = false;
+void WhTool_ModUninit() {
     if (g_smtcStopEvent) SetEvent(g_smtcStopEvent);
-    if (g_smtcThread.joinable()) g_smtcThread.join();
-
-    if (g_uiThreadHwnd) {
-        PostMessageW(g_uiThreadHwnd, WM_APP_DESTROY_UI, 0, 0);
+    if (g_smtcThreadHandle) {
+        WaitForSingleObject(g_smtcThreadHandle, INFINITE);
+        CloseHandle(g_smtcThreadHandle);
+        g_smtcThreadHandle = nullptr;
     }
-    if (g_uiThread.joinable()) g_uiThread.join();
 
+    if (g_uiReadyEvent && g_uiThreadHandle) {
+        HANDLE waits[2] = {g_uiReadyEvent, g_uiThreadHandle};
+        WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+    }
+    if (HWND hwnd = g_uiThreadHwnd.load()) {
+        PostMessageW(hwnd, WM_APP_DESTROY_UI, 0, 0);
+    }
+    if (g_uiThreadHandle) {
+        WaitForSingleObject(g_uiThreadHandle, INFINITE);
+        CloseHandle(g_uiThreadHandle);
+        g_uiThreadHandle = nullptr;
+    }
+
+    if (g_uiReadyEvent) { CloseHandle(g_uiReadyEvent); g_uiReadyEvent = nullptr; }
     if (g_smtcStopEvent) { CloseHandle(g_smtcStopEvent); g_smtcStopEvent = nullptr; }
+    if (g_smtcRefreshEvent) { CloseHandle(g_smtcRefreshEvent); g_smtcRefreshEvent = nullptr; }
     if (g_cmdEvent) { CloseHandle(g_cmdEvent); g_cmdEvent = nullptr; }
 }
 
-void Wh_ModSettingsChanged() {
-    if (g_uiThreadHwnd) {
-        PostMessageW(g_uiThreadHwnd, WM_APP_RELOAD_SETTINGS, 0, 0);
+void WhTool_ModSettingsChanged() {
+    HWND hwnd = g_uiThreadHwnd.load();
+    if (hwnd) {
+        PostMessageW(hwnd, WM_APP_RELOAD_SETTINGS, 0, 0);
     }
+}
+
+// ============================================================================
+// Windhawk Tool Mod Boilerplate (Launching the Mod as a Standalone Tool)
+// ============================================================================
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    bool isService = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0) {
+            isService = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isService) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutexW failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileNameW(nullptr, currentProcessPath,
+                               ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileNameW failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandleW(L"kernel32.dll");
+    if (!kernelModule) {
+        Wh_Log(L"GetModuleHandleW failed");
+        return;
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"GetProcAddress failed");
+        return;
+    }
+
+    STARTUPINFOW si{
+        .cb = sizeof(STARTUPINFOW),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcessInternalW failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
