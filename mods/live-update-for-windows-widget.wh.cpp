@@ -4,9 +4,9 @@
 // @name:vi-VN      Live Update for Windows 11
 // @description     Live taskbar activities: media, Windows Clock, battery, tasks, recording, displays, hotspot, privacy and lunar almanac
 // @description:vi-VN Widget đa năng: Phương tiện, Đồng hồ, Pin, Tiến trình, Quay OBS, Trình chiếu, Quyền riêng tư, Âm lịch & Tử vi
-// @version         2.0.206
-// @author          caotu2k5
-// @github          https://github.com/caotu2k5
+// @version         2.0.207
+// @author          caotu2005
+// @github          https://github.com/caotu2005
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lgdi32 -luser32 -lwindowscodecs -luuid -ladvapi32 -lshell32 -lversion -lsetupapi -lpowrprof
@@ -53,16 +53,8 @@ Overview: Wi-Fi Hotspot
 - **Privacy Activity:** Passively monitors active Microphone (Core Audio), Camera (Media Foundation sensor monitor), and Location usage and lists the reporting applications.
 - **Task Progress:** Passively observes taskbar progress (`ITaskbarList3`) for File Explorer, browsers, and archivers to display ongoing transfers in one place.
 - **Displays & Wi-Fi Hotspot:** Shows active external monitors/projection mode (`QueryDisplayConfig`) and Windows Mobile Hotspot status/connected client count (`NetworkOperatorTetheringManager`).
-- **System Alerts (RAM & Storage on by default; Temperature optional, off by default):**
-  - **RAM & Storage (enabled by default):** Alerts when physical RAM crosses 80%/90%/95% or when any fixed drive has less than 10% free space (listing the low-space volumes).
-  - **CPU/GPU Temperature (optional, off by default):** Alerts when CPU/GPU temperatures from a local LibreHardwareMonitor web server (`http://127.0.0.1:<port>/data.json`) cross 70/80/90 °C.
 - **OBS Studio Recording (optional, off by default):** Connects to local OBS WebSocket v5 (`ws://127.0.0.1:<port>`) when OBS is running to display recording elapsed time and Pause/Resume/Stop buttons.
-
-## Quick toggles, positioning & notes
-
-- **Taskbar position (`root_left` on centered taskbar, automatic `tray_left` on left-aligned taskbar):** By default (`root_left`), when the Windows 11 taskbar is centered, the widget sits on the left side of the taskbar right after the native Windows Widgets button (or at the left edge if Widgets is turned off in Windows Settings). You can optionally enable **Hide Windows Widgets button in left corner** (`appearance.hideWidgetsButton`, off by default) to collapse the native Widgets button while using `root_left` and restore its original state when disabled. Whenever the taskbar is left-aligned (`TaskbarAl = 0`), `root_left` automatically falls back to the system tray (`tray_left`) so the Start button and app icons are never covered.
-- **Right-click quick toggles vs. Windhawk settings:** Toggles in the widget's right-click context menu save quick runtime overrides (`ui.*`) that take precedence over the Windhawk settings tab. Saving settings in Windhawk (or choosing **Reset to Windhawk settings** in the context menu) clears all runtime overrides.
-- **OBS WebSocket password:** The `obs.password` field is stored as a standard Windhawk mod setting, so it is included in Windhawk settings exports.
+- **RAM & Temperature Alerts (optional, off by default):** Shows an alert when physical RAM crosses 80%/90%/95% or when CPU/GPU temperatures from a local LibreHardwareMonitor web server (`http://127.0.0.1:<port>/data.json`) cross 70/80/90 °C.
 
 ## Optional local integrations setup
 
@@ -92,15 +84,7 @@ Overview: Wi-Fi Hotspot
 - **Quyền riêng tư:** Hiển thị ứng dụng đang sử dụng Micro, Camera hoặc Vị trí.
 - **Tiến trình tác vụ:** Theo dõi trạng thái tiến độ trên taskbar của File Explorer, trình duyệt và phần mềm giải nén.
 - **Trình chiếu & Điểm phát sóng Wi-Fi:** Hiển thị màn hình phụ đang kết nối và trạng thái Mobile Hotspot cùng danh sách thiết bị.
-- **Cảnh báo hệ thống (RAM & Bộ nhớ bật mặc định; Nhiệt độ tùy chọn, tắt mặc định):**
-  - **RAM & Ổ đĩa (bật mặc định):** Cảnh báo khi RAM vượt 80%/90%/95% hoặc khi ổ đĩa cố định còn dưới 10% dung lượng trống (hiển thị rõ tên ổ đĩa bị đầy).
-  - **Nhiệt độ CPU/GPU (tùy chọn, tắt mặc định):** Cảnh báo khi nhiệt độ CPU/GPU đọc từ LibreHardwareMonitor Remote Web Server (`http://127.0.0.1:<port>/data.json`) vượt 70/80/90 °C.
-- **Quay màn hình OBS (tùy chọn, tắt mặc định):** Kết nối cục bộ (`127.0.0.1`) với OBS WebSocket v5 khi bật trong cài đặt để hiển thị thời lượng quay và nút Tạm dừng/Tiếp tục/Dừng.
-
-### Lưu ý về vị trí, menu chuột phải & mật khẩu OBS
-- **Vị trí mặc định (`root_left` khi taskbar căn giữa, tự động về `tray_left` khi taskbar căn trái):** Mặc định khi thanh taskbar Windows 11 căn giữa, widget nằm ở góc trái (`root_left`) ngay sau nút Các tiện ích (Widgets) của Windows để không chồng lấp (hoặc sát mép trái nếu bạn đã tắt Widgets trong cài đặt Windows). Bạn có thể bật tùy chọn **Ẩn nút Các tiện ích (Widgets) ở góc trái** (`appearance.hideWidgetsButton`, tắt mặc định) nếu muốn ẩn nút Widgets gốc khi dùng `root_left` (tự khôi phục đúng trạng thái ban đầu khi tắt). Khi thanh taskbar được căn trái (`TaskbarAl = 0`), mod sẽ tự động chuyển vị trí về khay hệ thống (`tray_left`) để không bao giờ đè lên nút Start và các biểu tượng ứng dụng.
-- **Menu chuột phải và cài đặt Windhawk:** Các tùy chọn bật/tắt nhanh trong menu chuột phải lưu trạng thái ghi đè tạm thời (`ui.*`) và được ưu tiên hơn trang cài đặt Windhawk. Khi bạn bấm Lưu trong trang cài đặt Windhawk (hoặc chọn **Khôi phục theo cài đặt Windhawk** trong menu chuột phải), các ghi đè tạm thời này sẽ được xóa.
-- **Mật khẩu OBS WebSocket:** Trường `obs.password` là cài đặt thông thường của Windhawk nên sẽ được bao gồm khi xuất (export) cài đặt Windhawk.
+- **Quay màn hình OBS & Cảnh báo Nhiệt độ / RAM (tùy chọn):** Kết nối cục bộ (`127.0.0.1`) với OBS WebSocket v5 và LibreHardwareMonitor Remote Web Server khi người dùng bật trong cài đặt.
 */
 // ==/WindhawkModReadme==
 
@@ -119,47 +103,35 @@ Overview: Wi-Fi Hotspot
   $name:vi-VN: Bật widget Live Update
 
 - autoSelectActivity: true
+  #! $showIf: enableTaskbarWidget
   $name: Automatically select newly started activities
   $name:vi-VN: Tự chọn hoạt động mới bắt đầu
-  #! $showIf: {enableTaskbarWidget: true}
 
 - batteryAutoPopupSeconds: 4
+  #! $showIf: enableTaskbarWidget
   $name: Automatic preview duration (3–5 seconds)
   $name:vi-VN: Thời gian hiện preview tự động (3–5 giây)
-  #! $min: 3
-  #! $max: 5
-  #! $showIf: {enableTaskbarWidget: true}
 
 - appearance:
   - position: root_left
     $name: Taskbar position
     $name:vi-VN: Vị trí trên taskbar
     $options:
-    - root_left: Left corner (auto tray_left if taskbar is left-aligned)
     - tray_left: Tray · Leftmost
     - tray_before_clock: Tray · Before clock
     - tray_after_clock: Tray · After clock
     - tray_right: Tray · Rightmost
+    - root_left: Left overlay (root_left)
   - widgetLeftOffset: 12
+    #! $showIf: appearance.position == 'root_left'
     $name: Left overlay offset (0–2500 DIP)
     $name:vi-VN: Lề trái khi đặt đè (0–2500 DIP)
-    #! $min: 0
-    #! $max: 2500
-    #! $showIf: {position: root_left}
-  - hideWidgetsButton: false
-    $name: Hide Windows Widgets button in left corner
-    $name:vi-VN: Ẩn nút Các tiện ích (Widgets) ở góc trái
-    #! $showIf: {position: root_left}
   - widgetWidth: 270
     $name: Compact widget width (140–480 DIP)
     $name:vi-VN: Chiều rộng widget thu gọn (140–480 DIP)
-    #! $min: 140
-    #! $max: 480
   - expandedWidth: 540
     $name: Popup width (320–640 DIP)
     $name:vi-VN: Chiều rộng popup (320–640 DIP)
-    #! $min: 320
-    #! $max: 640
   - popupTheme: glass
     $name: Surface theme
     $name:vi-VN: Giao diện bề mặt
@@ -177,157 +149,155 @@ Overview: Wi-Fi Hotspot
   - collapsedTaskbar: false
     $name: Collapsed taskbar mode (icon + activity count)
     $name:vi-VN: Chế độ thu gọn trên taskbar (biểu tượng + số hoạt động)
+  #! $showIf: enableTaskbarWidget
   $name: Appearance & Layout
   $name:vi-VN: Giao diện & Bố cục
   $description: Position, dimensions, surface material, and progress bar style.
   $description:vi-VN: Vị trí trên taskbar, kích thước, hiệu ứng nền và kiểu thanh tiến trình.
-  #! $showIf: {enableTaskbarWidget: true}
 
 - lunar:
-  - enabled: auto
+  - enabled: -1
     $name: Enable Lunar calendar & Almanac
     $name:vi-VN: Bật Âm lịch & Tử vi
     $options:
-    - auto: Auto (Vietnam region only)
-    - always: Always on
-    - disabled: Off
+    - -1: Auto (Vietnam region only)
+    - 1: Always on
+    - 0: Off
   - enableCultureWidget: true
+    #! $showIf: lunar.enabled != 0
     $name: Enable Vietnamese culture topic index
     $name:vi-VN: Bật danh mục chủ đề Văn hóa Việt
-    #! $showIf: {enabled: [auto, always]}
+  #! $showIf: enableTaskbarWidget
   $name: Lunar Calendar & Almanac
   $name:vi-VN: Âm lịch & Tử vi
-  #! $showIf: {enableTaskbarWidget: true}
 
 - media:
   - enabled: true
     $name: Enable Media activity
     $name:vi-VN: Bật hoạt động Phương tiện
+  #! $showIf: enableTaskbarWidget
   $name: Media
   $name:vi-VN: Phương tiện
-  #! $showIf: {enableTaskbarWidget: true}
 
 - clock:
   - enabled: true
     $name: Enable Windows Clock reader (Stopwatch, Timer, Alarm)
     $name:vi-VN: Bật đọc Đồng hồ Windows (Bấm giờ, Hẹn giờ, Báo thức)
   - autoPopup: true
+    #! $showIf: clock.enabled
     $name: Automatic previews & 15-minute alarm reminder
     $name:vi-VN: Tự mở preview & nhắc báo thức trước 15 phút
-    #! $showIf: {enabled: true}
+  #! $showIf: enableTaskbarWidget
   $name: Windows Clock
   $name:vi-VN: Đồng hồ Windows
-  #! $showIf: {enableTaskbarWidget: true}
 
 - battery:
   - enabled: true
     $name: Enable Battery activity
     $name:vi-VN: Bật hoạt động Pin
   - alwaysShow: false
+    #! $showIf: battery.enabled
     $name: Always show battery (even when discharging above 20%)
     $name:vi-VN: Luôn hiển thị pin (kể cả khi dùng pin trên 20%)
-    #! $showIf: {enabled: true}
   - autoPopup: true
+    #! $showIf: battery.enabled
     $name: Automatic preview on charging / low battery
     $name:vi-VN: Tự mở preview khi cắm sạc / pin yếu
-    #! $showIf: {enabled: true}
   - bluetoothBattery: true
+    #! $showIf: battery.enabled
     $name: Show connected Bluetooth device batteries
     $name:vi-VN: Hiển thị pin thiết bị Bluetooth đã kết nối
-    #! $showIf: {enabled: true}
+  #! $showIf: enableTaskbarWidget
   $name: Battery & Bluetooth
   $name:vi-VN: Pin & Bluetooth
-  #! $showIf: {enableTaskbarWidget: true}
 
 - privacy:
   - enabled: true
     $name: Enable Microphone, Camera & Location activity
     $name:vi-VN: Bật theo dõi Micro, Camera & Vị trí
   - autoPopup: true
+    #! $showIf: privacy.enabled
     $name: Automatic preview on new sensor use
     $name:vi-VN: Tự mở preview khi có truy cập mới
-    #! $showIf: {enabled: true}
+  #! $showIf: enableTaskbarWidget
   $name: Privacy Activity
   $name:vi-VN: Quyền riêng tư
-  #! $showIf: {enableTaskbarWidget: true}
 
 - taskProgress:
   - enabled: true
     $name: Enable Task progress monitor
     $name:vi-VN: Bật theo dõi tiến trình tác vụ
   - autoPopup: true
+    #! $showIf: taskProgress.enabled
     $name: Automatic preview on new/completed tasks
     $name:vi-VN: Tự mở preview khi có tác vụ mới/hoàn tất
-    #! $showIf: {enabled: true}
   - explorer: true
+    #! $showIf: taskProgress.enabled
     $name: File Explorer (explorer.exe)
     $name:vi-VN: File Explorer (explorer.exe)
-    #! $showIf: {enabled: true}
   - chrome: true
+    #! $showIf: taskProgress.enabled
     $name: Google Chrome (chrome.exe)
     $name:vi-VN: Google Chrome (chrome.exe)
-    #! $showIf: {enabled: true}
   - edge: true
+    #! $showIf: taskProgress.enabled
     $name: Microsoft Edge (msedge.exe)
     $name:vi-VN: Microsoft Edge (msedge.exe)
-    #! $showIf: {enabled: true}
   - firefox: false
+    #! $showIf: taskProgress.enabled
     $name: Mozilla Firefox (firefox.exe)
     $name:vi-VN: Mozilla Firefox (firefox.exe)
-    #! $showIf: {enabled: true}
   - sevenZip: false
+    #! $showIf: taskProgress.enabled
     $name: 7-Zip (7zfm.exe / 7zg.exe)
     $name:vi-VN: 7-Zip (7zfm.exe / 7zg.exe)
-    #! $showIf: {enabled: true}
   - otherApps: ""
+    #! $showIf: taskProgress.enabled
     $name: Additional executables (separated by ;)
     $name:vi-VN: Ứng dụng khác (cách nhau bởi dấu ;)
-    #! $showIf: {enabled: true}
+  #! $showIf: enableTaskbarWidget
   $name: Task Progress
   $name:vi-VN: Tiến trình tác vụ
-  #! $showIf: {enableTaskbarWidget: true}
 
 - display:
   - enabled: true
     $name: Enable Displays & projection activity
     $name:vi-VN: Bật hoạt động Màn hình & Trình chiếu
   - autoPopup: true
+    #! $showIf: display.enabled
     $name: Automatic preview on display changes
     $name:vi-VN: Tự mở preview khi thay đổi kết nối màn hình
-    #! $showIf: {enabled: true}
+  #! $showIf: enableTaskbarWidget
   $name: Displays & Projection
   $name:vi-VN: Màn hình & Trình chiếu
-  #! $showIf: {enableTaskbarWidget: true}
 
 - hotspot:
   - enabled: true
     $name: Enable Wi-Fi hotspot activity
     $name:vi-VN: Bật hoạt động Điểm phát sóng Wi-Fi
   - autoPopup: true
+    #! $showIf: hotspot.enabled
     $name: Automatic preview on hotspot/client changes
     $name:vi-VN: Tự mở preview khi bật/tắt hoặc đổi số thiết bị
-    #! $showIf: {enabled: true}
+  #! $showIf: enableTaskbarWidget
   $name: Wi-Fi Hotspot
   $name:vi-VN: Điểm phát sóng Wi-Fi
-  #! $showIf: {enableTaskbarWidget: true}
 
 - obs:
   - enabled: false
     $name: Enable OBS WebSocket recording monitor
     $name:vi-VN: Bật theo dõi quay OBS qua WebSocket
   - port: 4455
+    #! $showIf: obs.enabled
     $name: Local WebSocket port (127.0.0.1)
     $name:vi-VN: Cổng WebSocket cục bộ (127.0.0.1)
-    #! $min: 1024
-    #! $max: 65535
-    #! $showIf: {enabled: true}
   - password: ""
+    #! $showIf: obs.enabled
     $name: WebSocket password
     $name:vi-VN: Mật khẩu WebSocket
-    #! $showIf: {enabled: true}
+  #! $showIf: enableTaskbarWidget
   $name: OBS Studio Recording
   $name:vi-VN: Quay màn hình OBS Studio
-  #! $showIf: {enableTaskbarWidget: true}
 
 - alerts:
   - memoryAlerts: true
@@ -340,14 +310,12 @@ Overview: Wi-Fi Hotspot
     $name: CPU/GPU temperature alerts at 70, 80, 90 °C (requires LibreHardwareMonitor)
     $name:vi-VN: Cảnh báo nhiệt độ CPU/GPU ở 70, 80, 90 °C (cần LibreHardwareMonitor)
   - temperaturePort: 8085
+    #! $showIf: alerts.temperatureAlerts
     $name: LibreHardwareMonitor local web server port
     $name:vi-VN: Cổng máy chủ cục bộ LibreHardwareMonitor
-    #! $min: 1
-    #! $max: 65535
-    #! $showIf: {temperatureAlerts: true}
+  #! $showIf: enableTaskbarWidget
   $name: System Alerts (RAM, ROM & Temperature)
   $name:vi-VN: Cảnh báo hệ thống (RAM, ROM & Nhiệt độ)
-  #! $showIf: {enableTaskbarWidget: true}
 */
 // ==/WindhawkModSettings==
 
@@ -363,6 +331,7 @@ Overview: Wi-Fi Hotspot
 #include <shellapi.h>
 #include <propsys.h>
 #include <propkey.h>
+#include <intrin.h>
 #include <cstring>
 #include <wincodec.h>
 #include <powrprof.h>
@@ -455,39 +424,60 @@ std::atomic<bool> g_shuttingDown{false};
 
 enum class ModLanguage { Auto, English, Vietnamese };
 
-bool SupportedTaskbarBuild(unsigned major, unsigned build) {
-    return major == 10 && build >= 22000;
-}
-
-bool HasSupportedWindowsVersion() {
-    using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW*);
-    auto getVersion = reinterpret_cast<RtlGetVersion_t>(
-        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion"));
-    OSVERSIONINFOW version{};
-    version.dwOSVersionInfoSize = sizeof(version);
-    if (!getVersion || getVersion(&version) != 0) {
-        return false;
+bool GlassCpuAllowed(std::string_view vendor, unsigned family, unsigned model, std::string brand) {
+    for (auto& ch : brand) if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
+    if (vendor == "AuthenticAMD") return family == 0x17 || family == 0x19 || family == 0x1A;
+    if (vendor != "GenuineIntel") return false;
+    if (brand.find("core") != std::string::npos) {
+        if (brand.find("ultra") != std::string::npos) return true;
+        for (auto marker : {"i3-", "i5-", "i7-", "i9-"}) {
+            auto at = brand.find(marker); if (at == std::string::npos) continue;
+            at += 3; size_t end = at;
+            while (end < brand.size() && brand[end] >= '0' && brand[end] <= '9') ++end;
+            auto digits = brand.substr(at, end - at);
+            if (digits.empty()) return false;
+            if (digits.size() == 3) return false; // First-generation Core i.
+            if (digits.size() == 1) return digits[0] >= '7'; // e.g. i7-7Y75 / i7-6Y75.
+            unsigned generation = digits[0] - '0';
+            if (digits.size() >= 5 || (digits.size() == 4 && end < brand.size() && brand[end] == 'g'))
+                generation = generation * 10 + digits[1] - '0';
+            return generation >= 7;
+        }
     }
-    return SupportedTaskbarBuild(version.dwMajorVersion, version.dwBuildNumber);
+    if (family != 6) return false;
+    // Recognized post-Skylake client models; unknown CPUs use the blur fallback.
+    switch (model) {
+        case 0x8E: case 0x9E: case 0x66: case 0x7D: case 0x7E:
+        case 0xA5: case 0xA6: case 0x8C: case 0x8D: case 0xA7:
+        case 0x97: case 0x9A: case 0xB7: case 0xBA: case 0xBF:
+        case 0xAA: case 0xAC: case 0xC5: case 0xC6: case 0xBD: return true;
+        default: return false;
+    }
 }
-
-std::atomic<bool> g_taskbarLeftAligned{false};
-
-void RefreshTaskbarAlignment() {
-    DWORD alignment = 1; // Windows 11 default is 1 (centered).
-    DWORD size = sizeof(alignment);
-    bool leftAligned =
-        RegGetValueW(
-            HKEY_CURRENT_USER,
-            L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-            L"TaskbarAl", RRF_RT_REG_DWORD, nullptr, &alignment,
-            &size) == ERROR_SUCCESS &&
-        alignment == 0;
-    g_taskbarLeftAligned.store(leftAligned);
+bool DetectGlassCpuSupport() {
+#if defined(_M_X64) || defined(__x86_64__)
+    int info[4]{}; __cpuid(info,0);
+    if (info[0] < 1) return false;
+    char vendor[13]{};std::memcpy(vendor,&info[1],4);std::memcpy(vendor+4,&info[3],4);std::memcpy(vendor+8,&info[2],4);
+    __cpuid(info,1);unsigned signature=static_cast<unsigned>(info[0]);
+    unsigned baseFamily=(signature>>8)&15, family=baseFamily, model=(signature>>4)&15;
+    if(baseFamily==15)family+=(signature>>20)&255;
+    if(baseFamily==6 || baseFamily==15)model|=((signature>>16)&15)<<4;
+    char brand[49]{};__cpuid(info,static_cast<int>(0x80000000u));
+    if(static_cast<unsigned>(info[0])>=0x80000004u)for(unsigned i=0;i<3;++i){__cpuid(info,static_cast<int>(0x80000002u+i));std::memcpy(brand+i*16,info,16);}
+    return GlassCpuAllowed(vendor,family,model,brand);
+#else
+    return false;
+#endif
 }
-
-bool IsTaskbarLeftAligned() {
-    return g_taskbarLeftAligned.load();
+bool g_glassCpuSupported = false;
+bool SupportedTaskbarBuild(unsigned major,unsigned build) {return major==10 && build>=22000;}
+bool HasSupportedWindowsVersion() {
+    using RtlGetVersion_t=LONG(WINAPI*)(OSVERSIONINFOW*);
+    auto getVersion=reinterpret_cast<RtlGetVersion_t>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"),"RtlGetVersion"));
+    OSVERSIONINFOW version{};version.dwOSVersionInfoSize=sizeof(version);
+    if (!getVersion || getVersion(&version)!=0) return false;
+    return SupportedTaskbarBuild(version.dwMajorVersion,version.dwBuildNumber);
 }
 
 struct ModSettings {
@@ -495,7 +485,6 @@ struct ModSettings {
     bool enableTaskbarWidget = true;
     std::wstring position = L"root_left";
     int widgetLeftOffset = 12;
-    bool hideWidgetsButton = false;
     int widgetWidth = 270;
     int expandedWidth = 540;
     std::wstring progressStyle = L"capsule";
@@ -506,6 +495,9 @@ struct ModSettings {
     bool temperatureAlerts = false;
     int temperaturePort = 8085;
     bool collapsedTaskbar = false;
+    bool settingsBlur = true;
+    bool remoteAlerts = false;
+    bool browserDownloadNames = false;
     bool enableDisplayWidget = true;
     bool displayAutoPopup = true;
     bool enableHotspotWidget = true;
@@ -523,6 +515,7 @@ struct ModSettings {
     bool progressSevenZip = false;
     std::wstring progressOtherApps;
     bool enableCultureWidget = true;
+    std::wstring cultureCatalogUrl;
     bool enableClockWidget = true;
     bool clockAutoPopup = true;
     bool enableMediaWidget = true;
@@ -534,13 +527,6 @@ struct ModSettings {
     bool batteryAutoPopup = true;
     int batteryAutoPopupSeconds = 4;
 };
-
-std::wstring EffectiveTaskbarPosition(ModSettings const& settings) {
-    if (settings.position == L"root_left" && IsTaskbarLeftAligned()) {
-        return L"tray_left";
-    }
-    return settings.position;
-}
 
 std::mutex g_settingsMutex;
 ModSettings g_settings;
@@ -611,14 +597,14 @@ bool ReadUiOverrideFlag(PCWSTR key, bool fallback) {
 
 void ClearUiOverrides() {
     for (PCWSTR key : {
-             L"collapsedTaskbar", L"popupTheme", L"position", L"hideWidgetsButton",
-             L"progressStyle", L"enableLunarWidget", L"enableCultureWidget",
-             L"enableMediaWidget", L"enableClockWidget", L"enableBatteryWidget",
-             L"bluetoothBattery", L"enablePrivacyWidget", L"enableTaskProgress",
-             L"display.enabled", L"hotspot.enabled", L"enableObsWidget"
+             L"collapsedTaskbar", L"popupTheme", L"position", L"progressStyle",
+             L"enableLunarWidget", L"enableCultureWidget", L"enableMediaWidget",
+             L"enableClockWidget", L"enableBatteryWidget", L"bluetoothBattery",
+             L"enablePrivacyWidget", L"enableTaskProgress", L"display.enabled",
+             L"hotspot.enabled", L"enableObsWidget"
          }) {
         std::wstring fullKey = std::wstring(L"ui.") + key;
-        Wh_DeleteValue(fullKey.c_str());
+        Wh_SetStringValue(fullKey.c_str(), L"");
     }
 }
 
@@ -626,7 +612,6 @@ void LoadSettings(bool resetQuickOverrides = false) {
     if (resetQuickOverrides) {
         ClearUiOverrides();
     }
-    RefreshTaskbarAlignment();
 
     ModSettings s;
     std::wstring lang = WindhawkUtils::StringSetting::make(L"language").get();
@@ -637,11 +622,8 @@ void LoadSettings(bool resetQuickOverrides = false) {
     WCHAR region[16]{};
     bool vietnamRegion = GetUserDefaultGeoName(region, ARRAYSIZE(region)) > 0 &&
                          _wcsicmp(region, L"VN") == 0;
-    std::wstring lunarMode = WindhawkUtils::StringSetting::make(L"lunar.enabled").get();
-    int lunarPref = lunarMode == L"always" ? 1
-                  : lunarMode == L"disabled" ? 0
-                  : -1;
-    bool baseLunar = ResolveLunarEnabled(lunarPref, vietnamRegion);
+    bool baseLunar = ResolveLunarEnabled(
+        ClampVal(Wh_GetIntSetting(L"lunar.enabled"), -1, 1), vietnamRegion);
     s.enableLunarWidget = ReadUiOverrideFlag(L"enableLunarWidget", baseLunar);
     s.enableCultureWidget = ReadUiOverrideFlag(
         L"enableCultureWidget", Wh_GetIntSetting(L"lunar.enableCultureWidget") != 0);
@@ -664,8 +646,6 @@ void LoadSettings(bool resetQuickOverrides = false) {
 
     s.widgetLeftOffset =
         ClampVal(Wh_GetIntSetting(L"appearance.widgetLeftOffset"), 0, 2500);
-    s.hideWidgetsButton = ReadUiOverrideFlag(
-        L"hideWidgetsButton", Wh_GetIntSetting(L"appearance.hideWidgetsButton") != 0);
     s.widgetWidth =
         ClampVal(Wh_GetIntSetting(L"appearance.widgetWidth"), 140, 480);
     s.expandedWidth =
@@ -795,7 +775,7 @@ HMODULE ThisModule() {
 }
 
 // Live providers publish value-only snapshots. No XAML object leaves the UI thread.
-enum class ActivityKind { None, Lunar, Media, Battery, Privacy, Culture, Download, Obs, Display, Hotspot, Memory, Clock };
+enum class ActivityKind { None, Lunar, Media, Battery, Privacy, Culture, Download, Obs, Display, Hotspot, Memory, Remote, Clock };
 enum class MediaAction { None, PlayPause, Previous, Next, Seek };
 enum class BatteryAlert { None, Charging, Low20, Low10, Low5 };
 int64_t SeekTargetTicks(int64_t start, int64_t minimum, int64_t maximum, int64_t seconds) {
@@ -945,23 +925,19 @@ struct MemoryApplication {
 struct MemorySnapshot {
     bool valid = false;
     unsigned percent = 0;
-    uint64_t total = 0, available = 0, sampledAt = 0;
+    uint64_t total = 0, available = 0, explorerWorkingSet = 0;
+    uint64_t settingsWorkingSet = 0, sampledAt = 0;
     std::vector<MemoryApplication> top;
 };
 struct MemoryAlerts {
-    bool initialized = false;
     unsigned fired = 0;
     int Observe(unsigned percent) {
         int level = 0;
         constexpr unsigned levels[] = {80, 90, 95};
         for (unsigned i = 0; i < 3; ++i) {
             if (percent + 3 < levels[i]) fired &= ~(1u << i);
-            if (percent >= levels[i] && !(fired & (1u << i))) {
-                fired |= 1u << i;
-                if (initialized) level = levels[i];
-            }
+            if (percent >= levels[i] && !(fired & (1u << i))) { fired |= 1u << i; level = levels[i]; }
         }
-        initialized = true;
         return level;
     }
 };
@@ -970,57 +946,29 @@ struct TemperatureSnapshot {
     bool operator==(TemperatureSnapshot const&) const = default;
 };
 struct TemperatureAlerts {
-    bool initialized = false;
     unsigned fired = 0;
     int Observe(int value) {
         if (value < 0) return 0;
-        int level = 0;
-        constexpr int levels[] = {70, 80, 90};
-        for (unsigned i = 0; i < 3; ++i) {
-            if (value <= levels[i] - 5) fired &= ~(1u << i);
-            if (value >= levels[i] && !(fired & (1u << i))) {
-                fired |= 1u << i;
-                if (initialized) level = levels[i];
-            }
+        int level=0; constexpr int levels[]={70,80,90};
+        for(unsigned i=0;i<3;++i) {
+            if(value <= levels[i]-5) fired &= ~(1u<<i);
+            if(value >= levels[i] && !(fired&(1u<<i))) {fired|=1u<<i;level=levels[i];}
         }
-        initialized = true;
         return level;
     }
 };
 std::wstring TemperatureText(TemperatureSnapshot const& t, bool vi) {
-    auto value = [&](int v) {
-        return v < 0 ? std::wstring(PickText(vi, L"Chưa có dữ liệu", L"Unavailable"))
-                     : std::to_wstring(v) + L" °C";
-    };
-    return L"CPU: " + value(t.cpu) + L" · GPU: " + value(t.gpu);
+    auto value=[&](int v){return v < 0 ? std::wstring(PickText(vi,L"Chưa có dữ liệu",L"Unavailable")) : std::to_wstring(v)+L" °C";};
+    return L"CPU: "+value(t.cpu)+L" · GPU: "+value(t.gpu);
 }
 struct StorageVolume {
     std::wstring root, label;
     uint64_t total = 0, free = 0;
-    bool operator==(StorageVolume const&) const = default;
 };
-struct StorageAlerts {
-    bool initialized = false;
-    std::set<std::wstring> alerted;
-    bool Observe(std::vector<StorageVolume> const& volumes) {
-        if (volumes.empty()) return false;
-        bool triggered = false;
-        std::set<std::wstring> seen;
-        for (auto const& v : volumes) {
-            if (v.total == 0) continue;
-            seen.insert(v.root);
-            // Hysteresis: reset alert once free space recovers to >= 12%.
-            if (v.free * 100 >= v.total * 12) {
-                alerted.erase(v.root);
-            }
-            if (v.free * 10 < v.total && alerted.insert(v.root).second) {
-                if (initialized) triggered = true;
-            }
-        }
-        std::erase_if(alerted, [&](auto const& root) { return !seen.contains(root); });
-        initialized = true;
-        return triggered;
-    }
+struct RemoteSnapshot {
+    uint64_t serial = 0, observedAt = 0;
+    bool incoming = false, active = false;
+    std::vector<std::wstring> peers;
 };
 enum class ClockKind { Stopwatch, Timer, Alarm };
 enum class ClockRunState { Unknown, Paused, Running };
@@ -1115,17 +1063,10 @@ struct ClockTracker {
             state.noticeUntil = 0; state.noticeLabel.clear(); state.noticeKey.clear();
             return;
         }
-        // Filter out an idle/reset stopwatch (00:00:00) BEFORE pruning so any existing
-        // running stopwatch entry in state.entries is immediately removed when reset.
-        std::erase_if(observations, [](auto const& entry) {
-            return entry.kind == ClockKind::Stopwatch &&
-                   entry.run != ClockRunState::Running &&
-                   entry.milliseconds <= 0;
-        });
         if (!observations.empty()) state.sampledAt = now;
 
-        // When a specific Clock page is currently visible (0: Stopwatch, 1: Timer, 2: Alarm),
-        // immediately prune entries for that page that were deleted or reset to 00:00:00 in the UI:
+        // Nếu đang nhìn thấy trực tiếp một trang trên ứng dụng Đồng hồ (0: Bấm giờ, 1: Hẹn giờ, 2: Báo thức),
+        // những mục thuộc trang đó mà đã bị xóa hoặc đưa về 00:00:00 trên giao diện sẽ bị loại bỏ ngay:
         if (appOpen && observedPage >= 0) {
             ClockKind activePageKind = static_cast<ClockKind>(observedPage);
             std::erase_if(state.entries, [&](auto const& existing) {
@@ -1139,6 +1080,10 @@ struct ClockTracker {
 
         std::vector<std::wstring> used;
         for (auto entry : observations) {
+            // Bỏ qua Bấm giờ đang nằm ở 00:00:00 và không chạy
+            if (entry.kind == ClockKind::Stopwatch && entry.run != ClockRunState::Running && entry.milliseconds <= 0) {
+                continue;
+            }
             auto sourceKey = entry.key;
             auto old = std::find_if(state.entries.begin(), state.entries.end(), [&](auto const& e) {
                 return e.sourceKey == sourceKey && e.kind == entry.kind;
@@ -1174,25 +1119,13 @@ struct ClockTracker {
                     const auto elapsed = now >= old->observedAt ? now - old->observedAt : 0;
                     const int64_t movement = entry.kind == ClockKind::Timer ?
                         old->milliseconds - entry.milliseconds : entry.milliseconds - old->milliseconds;
-                    if (elapsed <= 4000 && movement > 0 && movement <= static_cast<int64_t>(elapsed) + 2000) {
+                    if (elapsed <= 4000 && movement > 0 && movement <= static_cast<int64_t>(elapsed) + 2000)
                         entry.run = ClockRunState::Running;
-                    } else if (old->run == ClockRunState::Running &&
-                               entry.milliseconds == old->milliseconds &&
-                               now >= old->sampledAt && now - old->sampledAt <= 1200) {
+                    else if (old->run == ClockRunState::Running && entry.milliseconds == old->milliseconds)
                         entry.run = ClockRunState::Running;
-                    } else {
-                        entry.run = ClockRunState::Paused;
-                    }
                 }
                 if (previous && entry.run == ClockRunState::Running && old->run == entry.run &&
-                    old->milliseconds == entry.milliseconds) {
-                    if (now >= old->sampledAt && now - old->sampledAt > 1500) {
-                        // Readout on the visible Clock page has been stationary for > 1.5s -> paused.
-                        entry.run = ClockRunState::Paused;
-                    } else {
-                        entry.sampledAt = old->sampledAt;
-                    }
-                }
+                    old->milliseconds == entry.milliseconds) entry.sampledAt = old->sampledAt;
                 if (entry.kind == ClockKind::Timer && entry.milliseconds == 0 && previous &&
                     (old->run == ClockRunState::Running || old->finished)) entry.finished = true;
                 if (entry.finished) {
@@ -1224,11 +1157,11 @@ struct ClockTracker {
             }
         }
 
-        // Automatically prune:
-        // 1. Alarms that are disabled or have already passed.
-        // 2. Finished timers once the 4-second notification window expires.
-        // 3. Paused stopwatches/timers when the Clock app is closed/minimized,
-        //    or stopwatches reset to 00:00:00.
+        // Tự động loại bỏ:
+        // 1. Báo thức đã qua hoặc đã tắt.
+        // 2. Bộ đếm đã hết giờ (finished) sau khi hết thời gian thông báo 4 giây.
+        // 3. Bấm giờ / Hẹn giờ đang Tạm dừng (không chạy) khi người dùng đã tắt ứng dụng Đồng hồ,
+        //    hoặc Bấm giờ đang ở 00:00:00.
         std::erase_if(state.entries, [&](auto const& entry) {
             if (entry.kind == ClockKind::Alarm) {
                 return !entry.enabled || entry.alarmUtc < utc - 60000;
@@ -1239,11 +1172,11 @@ struct ClockTracker {
             if (entry.kind == ClockKind::Stopwatch && entry.milliseconds <= 0 && entry.run != ClockRunState::Running) {
                 return true;
             }
-            // When the Clock app is closed or minimized, retain only actively running counters:
+            // Khi ứng dụng Đồng hồ đã đóng/thu nhỏ, chỉ giữ lại Bấm giờ / Hẹn giờ ĐANG CHẠY:
             if (!appOpen && entry.run != ClockRunState::Running) {
                 return true;
             }
-            // Even while the app is open, drop paused counters if another tab has been active for over 4 seconds:
+            // Ngay cả khi mở app nhưng chuyển sang tab khác quá 4 giây, mục đang tạm dừng cũng không giữ trên taskbar:
             if (entry.run != ClockRunState::Running && !ClockEntryFresh(entry, now)) {
                 return true;
             }
@@ -1274,6 +1207,7 @@ struct LiveSnapshot {
     TaskNotice taskNotice;
     MemorySnapshot memory;
     std::vector<StorageVolume> storage;
+    RemoteSnapshot remote;
     TemperatureSnapshot temperature;
 };
 
@@ -1343,6 +1277,9 @@ std::vector<ActivityKind> AvailableActivities(LiveSnapshot const& state, ModSett
         result.push_back(ActivityKind::Display);
     if (settings.enableHotspotWidget && (state.hotspot.on || (keepSelected && selected == ActivityKind::Hotspot)))
         result.push_back(ActivityKind::Hotspot);
+    if (settings.remoteAlerts && state.remote.serial &&
+        (state.remote.active || GetTickCount64() - state.remote.observedAt < 4500 || (keepSelected && selected == ActivityKind::Remote)))
+        result.push_back(ActivityKind::Remote);
     bool lowStorage = settings.storageAlerts && std::any_of(state.storage.begin(), state.storage.end(), [](auto const& v) {
         return v.total > 0 && v.free * 10 < v.total;
     });
@@ -1365,11 +1302,13 @@ BluetoothSnapshot g_bluetoothSnapshot;
 TaskNotice g_taskNotice;
 MemorySnapshot g_memorySnapshot;
 std::vector<StorageVolume> g_storageVolumes;
+RemoteSnapshot g_remoteSnapshot;
 TemperatureSnapshot g_temperatureSnapshot;
 HANDLE g_temperatureThread = nullptr;
+std::atomic<DWORD> g_settingsHostPid{0};
+std::atomic<bool> g_memoryDetailsRequested{false};
 std::atomic<uint64_t> g_settingsRevision{1};
 std::atomic<bool> g_bluetoothDirty{true};
-std::atomic<bool> g_storageDirty{true};
 std::map<uint64_t, TaskControlState> g_taskControls;
 HANDLE g_systemWake = nullptr, g_systemThread = nullptr, g_taskControlWake = nullptr, g_taskControlThread = nullptr;
 HANDLE g_bluetoothWake = nullptr, g_bluetoothThread = nullptr;
@@ -1399,7 +1338,7 @@ int64_t ObsElapsedMilliseconds(ObsSnapshot const& state, uint64_t now) {
 }
 LiveSnapshot ReadLiveSnapshot() {
     std::lock_guard<std::mutex> lock(g_liveMutex);
-    auto result = g_liveSnapshot; result.obs = g_obsSnapshot; result.clock = g_clockSnapshot;
+    auto result = g_liveSnapshot; result.obs = g_obsSnapshot; result.clock=g_clockSnapshot;
     result.obs.elapsedSeconds = ObsElapsedMilliseconds(result.obs, GetTickCount64()) / 1000;
     result.display = g_displaySnapshot;
     result.hotspot = g_hotspotSnapshot;
@@ -1407,6 +1346,7 @@ LiveSnapshot ReadLiveSnapshot() {
     result.taskNotice = g_taskNotice;
     result.memory = g_memorySnapshot;
     result.storage = g_storageVolumes;
+    result.remote = g_remoteSnapshot;
     result.temperature = g_temperatureSnapshot;
     std::vector<TaskProgress> detailed;
     for (auto task : result.tasks) {
@@ -1894,7 +1834,26 @@ public:
     }
 };
 
+struct PowerModeSnapshot {
+    int ac = -1, dc = -1;
+    DWORD error = 0;
+    bool operator==(PowerModeSnapshot const&) const = default;
+};
+struct AppUsage { std::wstring app; uint64_t milliseconds = 0; };
+struct UsageSnapshot {
+    std::vector<AppUsage> apps;
+    bool onBattery = false;
+    uint64_t measuredSince = 0, revision = 0;
+};
+PowerModeSnapshot g_powerModes;
+UsageSnapshot g_usageSnapshot;
+std::atomic<int> g_powerModeRequest{-1};
 std::atomic<bool> g_batteryPageOpen{false};
+std::atomic<bool> g_usageForegroundChanged{false};
+class BatteryTools {
+public:
+    void Tick(bool, bool) {}
+};
 
 // Explorer's taskband message protocol; observed passively, never consumed or redirected.
 // Protocol: cairoshell/ManagedShell, TasksService.cs (WM_USER + 64 / + 65).
@@ -2210,6 +2169,7 @@ void RunLiveProviderLoop(bool winrtReady) {
     PrivacySnapshot privacy;
     CaptureMonitor capture(wake);
     CameraMonitor camera(wake);
+    BatteryTools batteryTools;
     std::vector<TaskProgress> tasks;
     BatteryEstimateState batteryEstimate;
     ULONGLONG nextRetry = 0, nextRefresh = 0, nextPrivacy = 0, nextDevices = 0, nextMediaPoll = 0, nextSessionScan = 0;
@@ -2261,6 +2221,7 @@ void RunLiveProviderLoop(bool winrtReady) {
         const auto now = GetTickCount64();
         unsigned changes = wake->flags.exchange(0);
         bool forcePower = g_forcePowerRefresh.exchange(false);
+        batteryTools.Tick(settings.enableTaskbarWidget && settings.enableBatteryWidget, forcePower);
         if (forcePower || changes & (kBatteryState | kEffects) || now >= nextRefresh) {
             battery = settings.enableTaskbarWidget && settings.enableBatteryWidget
                 ? ReadBatterySnapshot(winrtReady, batteryEstimate) : BatterySnapshot{};
@@ -2274,13 +2235,8 @@ void RunLiveProviderLoop(bool winrtReady) {
             nextRefresh = now + 10000; // Recovery if a provider misses an event.
         }
         if (settings.enableTaskbarWidget && settings.enablePrivacyWidget && winrtReady) {
-            if (!capture.Ready() || forcePower || (changes & kCaptureDevices) ||
-                (!camera.Ready() && now >= nextDevices)) {
-                if (!capture.Ready() || forcePower || (changes & kCaptureDevices)) {
-                    capture.Rebuild();
-                }
-                camera.Start();
-                nextDevices = now + 30000;
+            if (forcePower || now >= nextDevices || (changes & kCaptureDevices)) {
+                capture.Rebuild(); camera.Start(); nextDevices = now + 30000;
                 static int lastCaptureStatus = -1;
                 if (lastCaptureStatus != int(capture.Ready())) {
                     lastCaptureStatus = int(capture.Ready());
@@ -2328,7 +2284,7 @@ void RunLiveProviderLoop(bool winrtReady) {
                     return std::tie(a.capability, a.app) < std::tie(b.capability, b.app);
                 });
             }
-            nextPrivacy = now + (capture.Ready() && camera.Ready() ? 15000 : 5000);
+            nextPrivacy = now + 2000; // Recovery for providers that do not update ConsentStore notifications.
         }
         tasks = ReadTaskProgress(settings, now);
         if (!settings.enableTaskbarWidget || !settings.enableMediaWidget || !winrtReady) {
@@ -2544,8 +2500,9 @@ void RunLiveProviderLoop(bool winrtReady) {
         if (taskControlsChanged && g_taskControlWake) SetEvent(g_taskControlWake);
         if (changed) NotifyLiveUi();
         HANDLE events[] = {g_liveStopEvent, g_liveWakeEvent, wake->event, privacyEvent};
-        DWORD timeout = managerRequest || propertiesRequest || actionRequest ? 20 : 1000;
-        // Event-driven wake handles immediate changes; the 1s tick interpolates playback and provides recovery.
+        DWORD timeout = managerRequest || propertiesRequest || actionRequest ? 20 :
+            settings.enablePrivacyWidget && settings.enableTaskbarWidget ? 250 : 1000;
+        // The 1s tick only interpolates elapsed playback and provides recovery.
         MsgWaitForMultipleObjects(privacyEvent ? 4 : 3, events, FALSE, timeout, QS_ALLINPUT);
     }
     playbackToken.revoke(); metadataToken.revoke(); timelineToken.revoke(); managerToken.revoke(); sessionsToken.revoke();
@@ -2616,39 +2573,50 @@ DWORD WINAPI ArtworkThreadProc(void*) {
     return 0;
 }
 
-struct CultureTopic {
-    std::wstring id, title, category;
+// Culture is fetched on demand; only the currently displayed page is retained.
+struct CultureTopic { std::wstring id, title, category, articleUrl; };
+struct CultureArticle {
+    std::wstring id, title, text, source, imageSource, error;
+    std::shared_ptr<ImagePixels> image;
 };
 struct CultureState {
     std::vector<CultureTopic> topics;
+    CultureArticle article;
+    bool loading = false, catalogLoading = false;
+    std::wstring error;
     uint64_t revision = 0;
 };
 std::mutex g_cultureMutex;
 CultureState g_culture;
+std::wstring g_cultureRequest, g_cultureCatalogUrl;
+std::atomic<uint64_t> g_cultureRequestId{0};
+thread_local uint64_t t_cultureRequestId = 0;
+HANDLE g_cultureWake = nullptr, g_cultureThread = nullptr;
+std::mutex g_cultureThreadMutex;
 std::vector<CultureTopic> BuiltinCultureTopics(bool vi) {
     std::vector<CultureTopic> topics{
-        {L"Áo dài", L"Áo dài", L"Trang phục"},
-        {L"Áo tứ thân", L"Áo tứ thân", L"Trang phục"},
-        {L"Nón lá", L"Nón lá", L"Trang phục"},
-        {L"Tết Nguyên Đán", L"Tết Nguyên Đán", L"Lễ Tết"},
-        {L"Tết Trung thu", L"Tết Trung thu", L"Lễ Tết"},
-        {L"Tết Đoan ngọ", L"Tết Đoan ngọ", L"Lễ Tết"},
-        {L"Giỗ Tổ Hùng Vương", L"Giỗ Tổ Hùng Vương", L"Lễ Tết"},
-        {L"Vu-lan", L"Vu Lan", L"Lễ Tết"},
-        {L"Táo quân", L"Ông Công, ông Táo", L"Phong tục"},
-        {L"Tín ngưỡng thờ cúng tổ tiên", L"Thờ cúng tổ tiên", L"Phong tục"},
-        {L"Trầu cau", L"Trầu cau", L"Phong tục"},
-        {L"Quan họ", L"Quan họ", L"Nghệ thuật"},
-        {L"Ca trù", L"Ca trù", L"Nghệ thuật"},
-        {L"Nhã nhạc cung đình Huế", L"Nhã nhạc cung đình Huế", L"Nghệ thuật"},
-        {L"Múa rối nước", L"Múa rối nước", L"Nghệ thuật"},
-        {L"Đờn ca tài tử", L"Đờn ca tài tử", L"Nghệ thuật"},
-        {L"Tranh Đông Hồ", L"Tranh Đông Hồ", L"Làng nghề"},
-        {L"Gốm Bát Tràng", L"Gốm Bát Tràng", L"Làng nghề"},
-        {L"Bánh chưng", L"Bánh chưng", L"Ẩm thực"},
-        {L"Bánh giầy", L"Bánh giầy", L"Ẩm thực"},
-        {L"Phở", L"Phở", L"Ẩm thực"},
-        {L"Cốm", L"Cốm", L"Ẩm thực"}
+        {L"Áo dài", L"Áo dài", L"Trang phục", L""},
+        {L"Áo tứ thân", L"Áo tứ thân", L"Trang phục", L""},
+        {L"Nón lá", L"Nón lá", L"Trang phục", L""},
+        {L"Tết Nguyên Đán", L"Tết Nguyên Đán", L"Lễ Tết", L""},
+        {L"Tết Trung thu", L"Tết Trung thu", L"Lễ Tết", L""},
+        {L"Tết Đoan ngọ", L"Tết Đoan ngọ", L"Lễ Tết", L""},
+        {L"Giỗ Tổ Hùng Vương", L"Giỗ Tổ Hùng Vương", L"Lễ Tết", L""},
+        {L"Vu-lan", L"Vu Lan", L"Lễ Tết", L""},
+        {L"Táo quân", L"Ông Công, ông Táo", L"Phong tục", L""},
+        {L"Tín ngưỡng thờ cúng tổ tiên", L"Thờ cúng tổ tiên", L"Phong tục", L""},
+        {L"Trầu cau", L"Trầu cau", L"Phong tục", L""},
+        {L"Quan họ", L"Quan họ", L"Nghệ thuật", L""},
+        {L"Ca trù", L"Ca trù", L"Nghệ thuật", L""},
+        {L"Nhã nhạc cung đình Huế", L"Nhã nhạc cung đình Huế", L"Nghệ thuật", L""},
+        {L"Múa rối nước", L"Múa rối nước", L"Nghệ thuật", L""},
+        {L"Đờn ca tài tử", L"Đờn ca tài tử", L"Nghệ thuật", L""},
+        {L"Tranh Đông Hồ", L"Tranh Đông Hồ", L"Làng nghề", L""},
+        {L"Gốm Bát Tràng", L"Gốm Bát Tràng", L"Làng nghề", L""},
+        {L"Bánh chưng", L"Bánh chưng", L"Ẩm thực", L""},
+        {L"Bánh giầy", L"Bánh giầy", L"Ẩm thực", L""},
+        {L"Phở", L"Phở", L"Ẩm thực", L""},
+        {L"Cốm", L"Cốm", L"Ẩm thực", L""}
     };
     if (!vi) {
         static const PCWSTR titles[] = {
@@ -2712,6 +2680,10 @@ void RequestCulture(std::wstring const& id) {
     {
         std::lock_guard<std::mutex> lock(g_cultureMutex);
         g_culture.topics = BuiltinCultureTopics(vi);
+        g_culture.article = {};
+        g_culture.error.clear();
+        g_culture.loading = false;
+        g_culture.catalogLoading = false;
         ++g_culture.revision;
     }
     NotifyLiveUi();
@@ -3202,7 +3174,16 @@ struct BluetoothAlertTracker {
     }
 };
 
-std::vector<StorageVolume> SampleStorageVolumes() {
+// Supported Windhawk 2 CLI sync. Never writes the engine's registry/INI files
+// and never requests elevation. Windhawk 1.x retains local preferences instead.
+MemorySnapshot SampleMemory(bool detail) {
+    (void)detail;
+    MemorySnapshot result;
+    MEMORYSTATUSEX status{};
+    status.dwLength = sizeof(status);
+    if (!GlobalMemoryStatusEx(&status)) {
+        return result;
+    }
     std::vector<StorageVolume> volumes;
     DWORD drives = GetLogicalDrives();
     for (int i = 0; i < 26; ++i) {
@@ -3216,15 +3197,9 @@ std::vector<StorageVolume> SampleStorageVolumes() {
             volumes.push_back({ std::wstring(root, 2), label, totalBytes.QuadPart, freeBytes.QuadPart });
         }
     }
-    return volumes;
-}
-
-MemorySnapshot SampleMemory() {
-    MemorySnapshot result;
-    MEMORYSTATUSEX status{};
-    status.dwLength = sizeof(status);
-    if (!GlobalMemoryStatusEx(&status)) {
-        return result;
+    {
+        std::lock_guard<std::mutex> lock(g_liveMutex);
+        g_storageVolumes = std::move(volumes);
     }
     result.valid = true;
     result.percent = status.dwMemoryLoad;
@@ -3304,29 +3279,6 @@ std::wstring MemoryTopText(MemorySnapshot const& state) {
             text += L"\n";
         }
         text += app.name + L"  ·  " + MemorySize(app.workingSet);
-    }
-    return text;
-}
-
-std::wstring LowStorageText(std::vector<StorageVolume> const& storage, bool vi, bool compact) {
-    std::wstring text;
-    for (auto const& v : storage) {
-        if (v.total == 0 || v.free * 10 >= v.total) continue;
-        unsigned freePct = static_cast<unsigned>((v.free * 100) / v.total);
-        if (!text.empty()) {
-            text += compact ? L" · " : L"\n";
-        }
-        if (compact) {
-            text += v.root + L" (" + MemorySize(v.free) + PickText(vi, L" trống, ", L" free, ") +
-                    std::to_wstring(freePct) + L"%)";
-        } else {
-            text += PickText(vi, L"Ổ đĩa sắp đầy: ", L"Low disk space: ") + v.root;
-            if (!v.label.empty()) {
-                text += L" (" + v.label + L")";
-            }
-            text += L" — " + MemorySize(v.free) + PickText(vi, L" trống / ", L" free / ") +
-                    MemorySize(v.total) + L" (" + std::to_wstring(freePct) + L"%)";
-        }
     }
     return text;
 }
@@ -3467,6 +3419,28 @@ DWORD WINAPI BluetoothProviderThreadProc(void*) {
     return 0;
 }
 
+std::wstring RemoteConnectionText(RemoteSnapshot const& remote, bool vi) {
+    if (!remote.active) {
+        return PickText(vi, L"Đã ngắt kết nối", L"Disconnected");
+    }
+    return remote.incoming
+        ? PickText(vi, L"Máy này đang được điều khiển",
+                   L"This PC is being controlled")
+        : PickText(vi, L"Đang điều khiển máy từ xa",
+                   L"Controlling a remote PC");
+}
+
+std::wstring RemotePeerText(RemoteSnapshot const& remote) {
+    std::wstring text;
+    for (auto const& peer : remote.peers) {
+        if (!text.empty()) {
+            text += L"\n";
+        }
+        text += peer;
+    }
+    return text;
+}
+
 DWORD WINAPI SystemActivityThreadProc(void*) {
     bool initialized = false;
     try {
@@ -3497,21 +3471,20 @@ DWORD WINAPI SystemActivityThreadProc(void*) {
         {
             HotspotReader hotspot;
             bool hotspotCommandFailed = false;
-            uint64_t displayRead = 0, memoryRead = 0, storageRead = 0;
+            uint64_t displayRead = 0, memoryRead = 0;
             DisplaySnapshot display;
             while (WaitForSingleObject(g_liveStopEvent, 0) != WAIT_OBJECT_0) {
                 auto settings = GetSettings();
                 auto now = GetTickCount64();
-                bool notifyStorageOrMem = false;
-                if (settings.enableTaskbarWidget && settings.memoryAlerts) {
+                if (settings.enableTaskbarWidget && (settings.memoryAlerts || settings.storageAlerts)) {
                     if (!memoryRead || now - memoryRead >= 5000) {
-                        auto memory = SampleMemory();
+                        auto memory = SampleMemory(false);
                         memoryRead = now;
                         {
                             std::lock_guard<std::mutex> lock(g_liveMutex);
                             g_memorySnapshot = std::move(memory);
                         }
-                        notifyStorageOrMem = true;
+                        NotifyLiveUi();
                     }
                 } else if (memoryRead) {
                     memoryRead = 0;
@@ -3519,32 +3492,6 @@ DWORD WINAPI SystemActivityThreadProc(void*) {
                         std::lock_guard<std::mutex> lock(g_liveMutex);
                         g_memorySnapshot = {};
                     }
-                    notifyStorageOrMem = true;
-                }
-
-                if (settings.enableTaskbarWidget && settings.storageAlerts) {
-                    if (g_storageDirty.exchange(false) || !storageRead || now - storageRead >= 60000) {
-                        auto volumes = SampleStorageVolumes();
-                        storageRead = now;
-                        {
-                            std::lock_guard<std::mutex> lock(g_liveMutex);
-                            if (g_storageVolumes != volumes) {
-                                g_storageVolumes = std::move(volumes);
-                                notifyStorageOrMem = true;
-                            }
-                        }
-                    }
-                } else if (storageRead) {
-                    storageRead = 0;
-                    {
-                        std::lock_guard<std::mutex> lock(g_liveMutex);
-                        if (!g_storageVolumes.empty()) {
-                            g_storageVolumes.clear();
-                            notifyStorageOrMem = true;
-                        }
-                    }
-                }
-                if (notifyStorageOrMem) {
                     NotifyLiveUi();
                 }
 
@@ -4082,891 +4029,405 @@ DWORD WINAPI TaskControlThreadProc(void*) {
 }
 
 int TemperatureDevice(std::wstring const& id) {
-    if (id.starts_with(L"/intelcpu/") || id.starts_with(L"/amdcpu/")) {
-        return 1;
-    }
-    if (id.starts_with(L"/gpu-nvidia/") || id.starts_with(L"/gpu-amd/") ||
-        id.starts_with(L"/gpu-intel/") || id.starts_with(L"/nvidiagpu/") ||
-        id.starts_with(L"/atigpu/")) {
-        return 2;
-    }
+    if(id.starts_with(L"/intelcpu/") || id.starts_with(L"/amdcpu/")) return 1;
+    if(id.starts_with(L"/gpu-nvidia/") || id.starts_with(L"/gpu-amd/") || id.starts_with(L"/gpu-intel/") || id.starts_with(L"/nvidiagpu/") || id.starts_with(L"/atigpu/")) return 2;
     return 0;
 }
-
-template <class Operation, class T>
-bool WaitTemperature(Operation const& op, T& result, DWORD milliseconds) {
-    auto deadline = GetTickCount64() + milliseconds;
+template<class Operation,class T>
+bool WaitTemperature(Operation const& op,T& result,DWORD milliseconds) {
+    auto deadline=GetTickCount64()+milliseconds;
     try {
-        while (op.Status() == wf::AsyncStatus::Started) {
-            if (WaitForSingleObject(g_liveStopEvent, 20) == WAIT_OBJECT_0 ||
-                GetTickCount64() >= deadline) {
-                op.Cancel();
-                return false;
-            }
+        while(op.Status()==wf::AsyncStatus::Started) {
+            if(WaitForSingleObject(g_liveStopEvent,20)==WAIT_OBJECT_0 || GetTickCount64()>=deadline) {op.Cancel();return false;}
         }
-        if (op.Status() != wf::AsyncStatus::Completed) {
-            return false;
-        }
-        result = op.GetResults();
-        return true;
-    } catch (...) {
-        return false;
-    }
+        if(op.Status()!=wf::AsyncStatus::Completed) return false;
+        result=op.GetResults();return true;
+    } catch(...) {return false;}
 }
-
-TemperatureSnapshot ReadTemperature(
-    winrt::Windows::Web::Http::HttpClient const& client, int port) {
+TemperatureSnapshot ReadTemperature(winrt::Windows::Web::Http::HttpClient const& client,int port) {
     using namespace winrt::Windows::Web::Http;
     using namespace winrt::Windows::Storage::Streams;
     using namespace winrt::Windows::Data::Json;
     HttpResponseMessage response{nullptr};
-    if (!WaitTemperature(
-            client.GetAsync(
-                wf::Uri(L"http://127.0.0.1:" + std::to_wstring(port) + L"/data.json"),
-                HttpCompletionOption::ResponseHeadersRead),
-            response, 700) ||
-        !response.IsSuccessStatusCode()) {
-        return {};
-    }
-    constexpr size_t limit = 256 * 1024;
-    auto length = response.Content().Headers().ContentLength();
-    if (length && length.Value() > limit) {
-        return {};
-    }
+    if(!WaitTemperature(client.GetAsync(wf::Uri(L"http://127.0.0.1:"+std::to_wstring(port)+L"/data.json"),HttpCompletionOption::ResponseHeadersRead),response,700) || !response.IsSuccessStatusCode()) return {};
+    constexpr size_t limit=256*1024;
+    auto length=response.Content().Headers().ContentLength();
+    if(length && length.Value()>limit) return {};
     IInputStream stream{nullptr};
-    if (!WaitTemperature(response.Content().ReadAsInputStreamAsync(), stream, 400)) {
-        return {};
+    if(!WaitTemperature(response.Content().ReadAsInputStreamAsync(),stream,400)) return {};
+    DataReader reader(stream);reader.InputStreamOptions(InputStreamOptions::Partial);
+    std::vector<uint8_t> data;bool complete=false;auto deadline=GetTickCount64()+800;
+    while(GetTickCount64()<deadline) {
+        uint32_t loaded=0;if(!WaitTemperature(reader.LoadAsync(8192),loaded,200)) break;
+        if(!loaded){complete=true;break;}
+        if(data.size()+loaded>limit) break;
+        auto start=data.size();data.resize(start+loaded);
+        reader.ReadBytes(winrt::array_view<uint8_t>(data.data()+start,data.data()+data.size()));
     }
-    DataReader reader(stream);
-    reader.InputStreamOptions(InputStreamOptions::Partial);
-    std::vector<uint8_t> data;
-    bool complete = false;
-    auto deadline = GetTickCount64() + 800;
-    while (GetTickCount64() < deadline) {
-        uint32_t loaded = 0;
-        if (!WaitTemperature(reader.LoadAsync(8192), loaded, 200)) {
-            break;
-        }
-        if (!loaded) {
-            complete = true;
-            break;
-        }
-        if (data.size() + loaded > limit) {
-            break;
-        }
-        auto start = data.size();
-        data.resize(start + loaded);
-        reader.ReadBytes(
-            winrt::array_view<uint8_t>(data.data() + start, data.data() + data.size()));
-    }
-    reader.Close();
-    response.Close();
-    if (!complete || data.empty()) {
-        return {};
-    }
-    auto root = JsonObject::Parse(winrt::to_hstring(
-        std::string_view(reinterpret_cast<char const*>(data.data()), data.size())));
-    TemperatureSnapshot result;
-    std::vector<JsonObject> nodes{root};
-    for (size_t i = 0; i < nodes.size() && i < 2048; ++i) {
-        auto const node = nodes[i];
-        if (node.GetNamedString(L"Type", L"") == L"Temperature") {
-            auto device = TemperatureDevice(
-                LowerText(std::wstring(node.GetNamedString(L"SensorId", L""))));
-            double value = -1;
-            auto raw = node.GetNamedValue(L"RawValue", nullptr);
-            if (raw && raw.ValueType() == JsonValueType::Number) {
-                value = raw.GetNumber();
-            } else {
-                std::wstring formatted = node.GetNamedString(L"Value", L"").c_str();
-                std::replace(formatted.begin(), formatted.end(), L',', L'.');
-                if (formatted.find(L"°C") != std::wstring::npos) {
-                    value = wcstod(formatted.c_str(), nullptr);
-                }
-            }
-            if (device && std::isfinite(value) && value > 0 && value <= 150) {
-                int& target = device == 1 ? result.cpu : result.gpu;
-                target = std::max(target, static_cast<int>(std::lround(value)));
+    reader.Close();response.Close();
+    if(!complete || data.empty()) return {};
+    auto root=JsonObject::Parse(winrt::to_hstring(std::string_view(reinterpret_cast<char const*>(data.data()),data.size())));
+    TemperatureSnapshot result;std::vector<JsonObject> nodes{root};
+    for(size_t i=0;i<nodes.size() && i<2048;++i) {
+        auto const node=nodes[i];
+        if(node.GetNamedString(L"Type",L"")==L"Temperature") {
+            auto device=TemperatureDevice(LowerText(std::wstring(node.GetNamedString(L"SensorId",L""))));
+            double value=-1;auto raw=node.GetNamedValue(L"RawValue",nullptr);
+            if(raw && raw.ValueType()==JsonValueType::Number) value=raw.GetNumber();
+            else {std::wstring formatted=node.GetNamedString(L"Value",L"").c_str();std::replace(formatted.begin(),formatted.end(),L',',L'.');
+                if(formatted.find(L"°C")!=std::wstring::npos) value=wcstod(formatted.c_str(),nullptr);}
+            if(device && std::isfinite(value) && value>0 && value<=150) {
+                int& target=device==1 ? result.cpu : result.gpu;target=std::max(target,static_cast<int>(std::lround(value)));
             }
         }
-        auto children = node.GetNamedArray(L"Children", nullptr);
-        if (children) {
-            for (auto const& child : children) {
-                if (child.ValueType() == JsonValueType::Object && nodes.size() < 2048) {
-                    nodes.push_back(child.GetObject());
-                }
-            }
-        }
+        auto children=node.GetNamedArray(L"Children",nullptr);
+        if(children) for(auto const& child:children) if(child.ValueType()==JsonValueType::Object && nodes.size()<2048) nodes.push_back(child.GetObject());
     }
     return result;
 }
-
 DWORD WINAPI TemperatureThreadProc(void*) {
-    bool initialized = false;
+    bool initialized=false;
     try {
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
-        initialized = true;
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);initialized=true;
         {
-            using namespace winrt::Windows::Web::Http;
-            using namespace winrt::Windows::Web::Http::Filters;
-            HttpBaseProtocolFilter filter;
-            filter.AllowAutoRedirect(false);
-            filter.AllowUI(false);
-            filter.UseProxy(false);
+            using namespace winrt::Windows::Web::Http;using namespace winrt::Windows::Web::Http::Filters;
+            HttpBaseProtocolFilter filter;filter.AllowAutoRedirect(false);filter.AllowUI(false);filter.UseProxy(false);
             filter.CookieUsageBehavior(HttpCookieUsageBehavior::NoCookies);
-            filter.CacheControl().ReadBehavior(HttpCacheReadBehavior::NoCache);
-            filter.CacheControl().WriteBehavior(HttpCacheWriteBehavior::NoCache);
-            HttpClient client(filter);
-            uint64_t next = 0;
-            int lastPort = 0;
-            while (WaitForSingleObject(g_liveStopEvent, 0) != WAIT_OBJECT_0) {
-                auto settings = GetSettings();
-                auto now = GetTickCount64();
-                bool enabled = settings.enableTaskbarWidget && settings.temperatureAlerts;
-                if (lastPort != settings.temperaturePort) {
-                    next = 0;
-                    lastPort = settings.temperaturePort;
-                }
-                if (!enabled || now >= next) {
+            filter.CacheControl().ReadBehavior(HttpCacheReadBehavior::NoCache);filter.CacheControl().WriteBehavior(HttpCacheWriteBehavior::NoCache);
+            HttpClient client(filter);uint64_t next=0;int lastPort=0;
+            while(WaitForSingleObject(g_liveStopEvent,0)!=WAIT_OBJECT_0) {
+                auto settings=GetSettings();auto now=GetTickCount64();bool enabled = settings.enableTaskbarWidget && settings.temperatureAlerts;
+                if(lastPort!=settings.temperaturePort){next=0;lastPort=settings.temperaturePort;}
+                if(!enabled || now>=next) {
                     TemperatureSnapshot value;
-                    if (enabled) {
-                        try {
-                            value = ReadTemperature(client, settings.temperaturePort);
-                        } catch (...) {}
-                    }
+                    if(enabled) try {value=ReadTemperature(client,settings.temperaturePort);}catch(...){}
                     bool changed;
-                    {
-                        std::lock_guard<std::mutex> lock(g_liveMutex);
-                        changed = !(g_temperatureSnapshot == value);
-                        g_temperatureSnapshot = value;
-                    }
-                    if (changed) {
-                        NotifyLiveUi();
-                    }
-                    next = now + (value.cpu < 0 && value.gpu < 0 ? 30000 : 5000);
+                    {std::lock_guard<std::mutex> lock(g_liveMutex);changed=!(g_temperatureSnapshot==value);g_temperatureSnapshot=value;}
+                    if(changed)NotifyLiveUi();
+                    next=now+(value.cpu<0 && value.gpu<0 ? 30000 : 5000);
                 }
-                if (WaitForSingleObject(g_liveStopEvent, enabled ? 1000 : 5000) == WAIT_OBJECT_0) {
-                    break;
-                }
+                if(WaitForSingleObject(g_liveStopEvent, enabled ? 1000 : 5000)==WAIT_OBJECT_0)break;
             }
         }
-    } catch (...) {}
-    if (initialized) {
-        winrt::uninit_apartment();
-    }
-    return 0;
+    }catch(...){}
+    if(initialized)winrt::uninit_apartment();return 0;
 }
 
-int64_t ClockUtcMilliseconds() {
-    FILETIME ft{};
-    GetSystemTimeAsFileTime(&ft);
-    return static_cast<int64_t>(FileTimeValue(ft) / 10000);
-}
-
-struct ClockWindow {
-    HWND element = nullptr, top = nullptr;
-    DWORD pid = 0;
-};
-
+int64_t ClockUtcMilliseconds(){FILETIME ft{};GetSystemTimeAsFileTime(&ft);return static_cast<int64_t>(FileTimeValue(ft)/10000);}
+struct ClockWindow {HWND element=nullptr,top=nullptr;DWORD pid=0;};
 bool IsWindowsClockProcess(DWORD pid) {
-    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!process) {
-        return false;
-    }
-    WCHAR family[256]{};
-    UINT32 size = ARRAYSIZE(family);
-    LONG status = GetPackageFamilyName(process, &size, family);
-    CloseHandle(process);
-    return status == ERROR_SUCCESS &&
-           _wcsicmp(family, L"Microsoft.WindowsAlarms_8wekyb3d8bbwe") == 0;
+    HANDLE process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,pid);if(!process)return false;
+    WCHAR family[256]{};UINT32 size=ARRAYSIZE(family);
+    LONG status=GetPackageFamilyName(process,&size,family);CloseHandle(process);
+    return status==ERROR_SUCCESS && _wcsicmp(family,L"Microsoft.WindowsAlarms_8wekyb3d8bbwe")==0;
 }
-
 ClockWindow FindWindowsClock() {
-    struct Scan {
-        ClockWindow found;
-        std::map<DWORD, bool> processes;
-        unsigned windows = 0;
-    } scan;
-    EnumWindows([](HWND window, LPARAM data) -> BOOL {
-        auto& scan = *reinterpret_cast<Scan*>(data);
-        if (++scan.windows > 512) {
-            return FALSE;
-        }
-        if (!IsWindowVisible(window)) {
-            return TRUE;
-        }
-        WCHAR type[64]{};
-        if (!GetClassNameW(window, type, ARRAYSIZE(type))) {
-            return TRUE;
-        }
-        // Only inspect UWP ApplicationFrameWindow or WinUI DesktopWindowSiteBridge containers;
-        // avoid calling OpenProcess on every ordinary Win32 window.
-        if (_wcsicmp(type, L"ApplicationFrameWindow") != 0 &&
-            _wcsicmp(type, L"WinUIDesktopWin32WindowClass") != 0) {
-            return TRUE;
-        }
-        DWORD pid = 0;
-        GetWindowThreadProcessId(window, &pid);
-        auto [it, inserted] = scan.processes.try_emplace(pid, false);
-        if (inserted) {
-            it->second = IsWindowsClockProcess(pid);
-        }
-        if (it->second) {
-            scan.found = {window, window, pid};
-            return FALSE;
-        }
-        struct Children {
-            Scan* scan;
-            HWND top;
-            unsigned count = 0;
-        } children{&scan, window};
-        EnumChildWindows(window, [](HWND child, LPARAM data) -> BOOL {
-            auto& c = *reinterpret_cast<Children*>(data);
-            if (++c.count > 64) {
-                return FALSE;
-            }
-            DWORD pid = 0;
-            GetWindowThreadProcessId(child, &pid);
-            auto [it, inserted] = c.scan->processes.try_emplace(pid, false);
-            if (inserted) {
-                it->second = IsWindowsClockProcess(pid);
-            }
-            if (it->second) {
-                c.scan->found = {child, c.top, pid};
-                return FALSE;
-            }
-            return TRUE;
-        }, reinterpret_cast<LPARAM>(&children));
-        return scan.found.element ? FALSE : TRUE;
-    }, reinterpret_cast<LPARAM>(&scan));
+    struct Scan {ClockWindow found;std::map<DWORD,bool> processes;unsigned windows=0;} scan;
+    EnumWindows([](HWND window,LPARAM data)->BOOL {
+        auto& scan=*reinterpret_cast<Scan*>(data);if(++scan.windows>512)return FALSE;
+        if(!IsWindowVisible(window))return TRUE;
+        DWORD pid=0;GetWindowThreadProcessId(window,&pid);
+        auto [it,inserted]=scan.processes.try_emplace(pid,false);if(inserted)it->second=IsWindowsClockProcess(pid);
+        if(it->second){scan.found={window,window,pid};return FALSE;}
+        WCHAR type[64]{};GetClassNameW(window,type,ARRAYSIZE(type));
+        if(_wcsicmp(type,L"ApplicationFrameWindow")!=0)return TRUE;
+        struct Children {Scan* scan;HWND top;unsigned count=0;} children{&scan,window};
+        EnumChildWindows(window,[](HWND child,LPARAM data)->BOOL {
+            auto& c=*reinterpret_cast<Children*>(data);if(++c.count>64)return FALSE;
+            DWORD pid=0;GetWindowThreadProcessId(child,&pid);
+            auto [it,inserted]=c.scan->processes.try_emplace(pid,false);if(inserted)it->second=IsWindowsClockProcess(pid);
+            if(it->second){c.scan->found={child,c.top,pid};return FALSE;}return TRUE;
+        },reinterpret_cast<LPARAM>(&children));
+        return scan.found.element?FALSE:TRUE;
+    },reinterpret_cast<LPARAM>(&scan));
     return scan.found;
 }
-
 // Plain snapshots only: UI Automation references never reach the taskbar thread.
 struct ClockNode {
-    std::wstring id, name, value, runtimeKey;
-    int parent = -1, type = 0, toggle = -1;
-    bool selected = false, enabled = false, offscreen = true;
+    std::wstring id,name,value,runtimeKey;
+    int parent=-1,type=0,toggle=-1;
+    bool selected=false,enabled=false,offscreen=true;
     RECT rect{};
 };
-
-int ClockIntProperty(IUIAutomationElement* element, PROPERTYID property) {
-    VARIANT value{};
-    VariantInit(&value);
-    int result = -1;
-    if (SUCCEEDED(element->GetCachedPropertyValue(property, &value))) {
-        if (value.vt == VT_BOOL) {
-            result = value.boolVal != VARIANT_FALSE;
-        } else if (value.vt == VT_I4) {
-            result = value.lVal;
+int ClockIntProperty(IUIAutomationElement* element,PROPERTYID property) {
+    VARIANT value{};VariantInit(&value);int result=-1;
+    if(SUCCEEDED(element->GetCachedPropertyValue(property,&value))) {
+        if(value.vt==VT_BOOL)result=value.boolVal!=VARIANT_FALSE;
+        else if(value.vt==VT_I4)result=value.lVal;
+    }
+    VariantClear(&value);return result;
+}
+std::wstring ClockStringProperty(IUIAutomationElement* element,PROPERTYID property) {
+    VARIANT value{};VariantInit(&value);std::wstring result;
+    if(SUCCEEDED(element->GetCachedPropertyValue(property,&value))) {
+        if(value.vt==VT_BSTR && value.bstrVal)result.assign(value.bstrVal,std::min<UINT>(SysStringLen(value.bstrVal),512));
+        else if(value.vt==(VT_ARRAY|VT_I4) && value.parray && SafeArrayGetDim(value.parray)==1) {
+            LONG begin=0,end=-1;
+            if(SUCCEEDED(SafeArrayGetLBound(value.parray,1,&begin)) && SUCCEEDED(SafeArrayGetUBound(value.parray,1,&end)) && end-begin<24)
+                for(LONG i=begin;i<=end;++i){LONG part=0;if(SUCCEEDED(SafeArrayGetElement(value.parray,&i,&part)))result+=std::to_wstring(part)+L".";}
         }
     }
-    VariantClear(&value);
-    return result;
+    VariantClear(&value);return result;
 }
-
-std::wstring ClockStringProperty(IUIAutomationElement* element, PROPERTYID property) {
-    VARIANT value{};
-    VariantInit(&value);
-    std::wstring result;
-    if (SUCCEEDED(element->GetCachedPropertyValue(property, &value))) {
-        if (value.vt == VT_BSTR && value.bstrVal) {
-            result.assign(value.bstrVal, std::min<UINT>(SysStringLen(value.bstrVal), 512));
-        } else if (value.vt == (VT_ARRAY | VT_I4) && value.parray &&
-                   SafeArrayGetDim(value.parray) == 1) {
-            LONG begin = 0, end = -1;
-            if (SUCCEEDED(SafeArrayGetLBound(value.parray, 1, &begin)) &&
-                SUCCEEDED(SafeArrayGetUBound(value.parray, 1, &end)) &&
-                end - begin < 24) {
-                for (LONG i = begin; i <= end; ++i) {
-                    LONG part = 0;
-                    if (SUCCEEDED(SafeArrayGetElement(value.parray, &i, &part))) {
-                        result += std::to_wstring(part) + L".";
-                    }
-                }
-            }
-        }
-    }
-    VariantClear(&value);
-    return result;
-}
-
-std::vector<ClockNode> ReadClockNodes(IUIAutomation2* automation, HWND window) {
-    std::vector<ClockNode> nodes;
-    if (!automation || !window) {
-        return nodes;
-    }
-    g_automationDeadline = GetTickCount64() + 1500;
+std::vector<ClockNode> ReadClockNodes(IUIAutomation2* automation,HWND window) {
+    std::vector<ClockNode> nodes;if(!automation || !window)return nodes;
+    g_automationDeadline=GetTickCount64()+1500;
     winrt::com_ptr<IUIAutomationCacheRequest> cache;
-    if (FAILED(automation->CreateCacheRequest(cache.put()))) {
-        return nodes;
-    }
-    for (auto property : {
-             UIA_NamePropertyId, UIA_AutomationIdPropertyId,
-             UIA_ControlTypePropertyId, UIA_IsOffscreenPropertyId,
-             UIA_IsEnabledPropertyId, UIA_BoundingRectanglePropertyId,
-             UIA_SelectionItemIsSelectedPropertyId, UIA_ToggleToggleStatePropertyId,
-             UIA_ValueValuePropertyId, UIA_RuntimeIdPropertyId}) {
-        cache->AddProperty(property);
-    }
+    if(FAILED(automation->CreateCacheRequest(cache.put())))return nodes;
+    for(auto property:{UIA_NamePropertyId,UIA_AutomationIdPropertyId,UIA_ControlTypePropertyId,UIA_IsOffscreenPropertyId,
+        UIA_IsEnabledPropertyId,UIA_BoundingRectanglePropertyId,UIA_SelectionItemIsSelectedPropertyId,
+        UIA_ToggleToggleStatePropertyId,UIA_ValueValuePropertyId,UIA_RuntimeIdPropertyId})cache->AddProperty(property);
     cache->put_TreeScope(TreeScope_Element);
     winrt::com_ptr<IUIAutomationCondition> rawCondition;
-    if (SUCCEEDED(automation->get_RawViewCondition(rawCondition.put())) && rawCondition) {
+    if(SUCCEEDED(automation->get_RawViewCondition(rawCondition.put())) && rawCondition)
         cache->put_TreeFilter(rawCondition.get());
-    }
     winrt::com_ptr<IUIAutomationElement> root;
-    if (FAILED(automation->ElementFromHandleBuildCache(window, cache.get(), root.put())) || !root) {
-        return nodes;
-    }
+    if(FAILED(automation->ElementFromHandleBuildCache(window,cache.get(),root.put())) || !root)return nodes;
     // Raw view includes custom readouts and digit TextBlocks omitted by ControlView.
-    winrt::com_ptr<IUIAutomationTreeWalker> walker;
-    automation->get_RawViewWalker(walker.put());
-    if (!walker) {
-        return nodes;
-    }
-    struct Pending {
-        winrt::com_ptr<IUIAutomationElement> element;
-        int parent;
-        unsigned depth;
-    };
-    std::vector<Pending> pending;
-    pending.push_back({std::move(root), -1, 0});
-    bool complete = true;
-    for (size_t i = 0; i < pending.size() && i < 512 && !AutomationBudgetExpired(); ++i) {
-        auto current = pending[i];
-        ClockNode node;
-        node.parent = current.parent;
-        auto element = current.element.get();
-        node.name = ClockStringProperty(element, UIA_NamePropertyId);
-        node.id = LowerText(ClockStringProperty(element, UIA_AutomationIdPropertyId));
-        node.value = ClockStringProperty(element, UIA_ValueValuePropertyId);
-        node.runtimeKey = ClockStringProperty(element, UIA_RuntimeIdPropertyId);
-        node.type = ClockIntProperty(element, UIA_ControlTypePropertyId);
-        node.offscreen = ClockIntProperty(element, UIA_IsOffscreenPropertyId) != 0;
-        node.enabled = ClockIntProperty(element, UIA_IsEnabledPropertyId) == 1;
-        node.selected = ClockIntProperty(element, UIA_SelectionItemIsSelectedPropertyId) == 1;
-        node.toggle = ClockIntProperty(element, UIA_ToggleToggleStatePropertyId);
+    winrt::com_ptr<IUIAutomationTreeWalker> walker;automation->get_RawViewWalker(walker.put());if(!walker)return nodes;
+    struct Pending {winrt::com_ptr<IUIAutomationElement> element;int parent;unsigned depth;};
+    std::vector<Pending> pending;pending.push_back({std::move(root),-1,0});bool complete=true;
+    for(size_t i=0;i<pending.size() && i<512 && !AutomationBudgetExpired();++i) {
+        auto current=pending[i];ClockNode node;node.parent=current.parent;
+        auto element=current.element.get();
+        node.name=ClockStringProperty(element,UIA_NamePropertyId);node.id=LowerText(ClockStringProperty(element,UIA_AutomationIdPropertyId));
+        node.value=ClockStringProperty(element,UIA_ValueValuePropertyId);node.runtimeKey=ClockStringProperty(element,UIA_RuntimeIdPropertyId);
+        node.type=ClockIntProperty(element,UIA_ControlTypePropertyId);
+        node.offscreen=ClockIntProperty(element,UIA_IsOffscreenPropertyId)!=0;
+        node.enabled=ClockIntProperty(element,UIA_IsEnabledPropertyId)==1;
+        node.selected=ClockIntProperty(element,UIA_SelectionItemIsSelectedPropertyId)==1;
+        node.toggle=ClockIntProperty(element,UIA_ToggleToggleStatePropertyId);
         element->get_CachedBoundingRectangle(&node.rect);
-        bool omit = node.id.find(L"lapsandsplits") != std::wstring::npos ||
-                    node.id.find(L"laplist") != std::wstring::npos;
-        int index = static_cast<int>(nodes.size());
-        nodes.push_back(std::move(node));
-        if (omit || (i && nodes.back().offscreen)) {
-            continue;
-        }
-        if (current.depth >= 24) {
-            complete = false;
-            continue;
-        }
+        bool omit=node.id.find(L"lapsandsplits")!=std::wstring::npos || node.id.find(L"laplist")!=std::wstring::npos;
+        int index=static_cast<int>(nodes.size());nodes.push_back(std::move(node));
+        if(omit || (i && nodes.back().offscreen))continue;
+        if(current.depth>=24){complete=false;continue;}
         winrt::com_ptr<IUIAutomationElement> child;
-        if (FAILED(walker->GetFirstChildElementBuildCache(element, cache.get(), child.put()))) {
-            complete = false;
-            continue;
-        }
-        while (child && pending.size() < 512 && !AutomationBudgetExpired()) {
-            pending.push_back({child, index, current.depth + 1});
+        if(FAILED(walker->GetFirstChildElementBuildCache(element,cache.get(),child.put()))){complete=false;continue;}
+        while(child && pending.size()<512 && !AutomationBudgetExpired()) {
+            pending.push_back({child,index,current.depth+1});
             winrt::com_ptr<IUIAutomationElement> next;
-            if (FAILED(walker->GetNextSiblingElementBuildCache(child.get(), cache.get(), next.put()))) {
-                complete = false;
-                break;
-            }
-            child = std::move(next);
+            if(FAILED(walker->GetNextSiblingElementBuildCache(child.get(),cache.get(),next.put()))){complete=false;break;}
+            child=std::move(next);
         }
-        if (child) {
-            complete = false;
-        }
+        if(child)complete=false;
     }
-    if (!complete || AutomationBudgetExpired() || nodes.size() != pending.size()) {
-        nodes.clear();
-    }
+    if(!complete || AutomationBudgetExpired() || nodes.size()!=pending.size())nodes.clear();
     return nodes;
 }
 
-bool ClockNodeUnder(std::vector<ClockNode> const& nodes, int child, int parent) {
-    for (int i = child, depth = 0;
-         i >= 0 && i < static_cast<int>(nodes.size()) && depth < 32;
-         i = nodes[i].parent, ++depth) {
-        if (i == parent) {
-            return true;
-        }
-    }
+bool ClockNodeUnder(std::vector<ClockNode> const& nodes,int child,int parent) {
+    for(int i=child,depth=0;i>=0 && i<static_cast<int>(nodes.size()) && depth<32;i=nodes[i].parent,++depth)if(i==parent)return true;
     return false;
 }
-
-bool ClockTextHas(std::wstring const& text, std::initializer_list<PCWSTR> words) {
-    return std::any_of(words.begin(), words.end(), [&](auto word) {
-        return text.find(word) != std::wstring::npos;
-    });
+bool ClockTextHas(std::wstring const& text,std::initializer_list<PCWSTR> words) {
+    return std::any_of(words.begin(),words.end(),[&](auto word){return text.find(word)!=std::wstring::npos;});
 }
-
-bool ClockLap(std::vector<ClockNode> const& nodes, int index) {
-    for (int i = index; i >= 0; i = nodes[i].parent) {
-        if (ClockTextHas(nodes[i].id, {L"lapsandsplits", L"laplist", L"laptime", L"splittime", L"lapitem"})) {
-            return true;
-        }
-    }
+bool ClockLap(std::vector<ClockNode> const& nodes,int index) {
+    for(int i=index;i>=0;i=nodes[i].parent)if(ClockTextHas(nodes[i].id,{L"lapsandsplits",L"laplist",L"laptime",L"splittime",L"lapitem"}))return true;
     return false;
 }
-
 int ClockPage(std::vector<ClockNode> const& nodes) {
-    for (auto const& node : nodes) {
-        if (!node.offscreen && (node.selected || node.toggle == 1)) {
-            auto name = LowerText(node.name);
-            if (ClockTextHas(name, {L"stopwatch", L"bấm giờ"}) ||
-                node.id.find(L"stopwatch") != std::wstring::npos) {
-                return 0;
-            }
-            if (ClockTextHas(name, {L"timer", L"hẹn giờ"}) || node.id == L"timerbutton") {
-                return 1;
-            }
-            if (ClockTextHas(name, {L"alarm", L"báo thức"}) || node.id == L"alarmbutton") {
-                return 2;
-            }
-        }
+    for(auto const& node:nodes)if(!node.offscreen && (node.selected || node.toggle==1)) {
+        auto name=LowerText(node.name);
+        if(ClockTextHas(name,{L"stopwatch",L"bấm giờ"}) || node.id.find(L"stopwatch")!=std::wstring::npos)return 0;
+        if(ClockTextHas(name,{L"timer",L"hẹn giờ"}) || node.id==L"timerbutton")return 1;
+        if(ClockTextHas(name,{L"alarm",L"báo thức"}) || node.id==L"alarmbutton")return 2;
     }
-    for (auto const& n : nodes) {
-        if (!n.offscreen) {
-            if (ClockTextHas(n.id, {L"stopwatchtimer", L"stopwatchdisplay", L"stopwatchplaypause", L"stopwatchreset"})) {
-                return 0;
-            }
-            if (ClockTextHas(n.id, {L"timertime", L"countdown", L"timerdisplay", L"timercontrol", L"timerplaypause", L"timerpause"})) {
-                return 1;
-            }
-            if (ClockTextHas(n.id, {L"alarmtime", L"alarmtoggleswitch"})) {
-                return 2;
-            }
-        }
+    for(auto const& n:nodes)if(!n.offscreen) {
+        if(ClockTextHas(n.id,{L"stopwatchtimer",L"stopwatchdisplay",L"stopwatchplaypause",L"stopwatchreset"}))return 0;
+        if(ClockTextHas(n.id,{L"timertime",L"countdown",L"timerdisplay",L"timercontrol",L"timerplaypause",L"timerpause"}))return 1;
+        if(ClockTextHas(n.id,{L"alarmtime",L"alarmtoggleswitch"}))return 2;
     }
     return -1;
 }
-
 bool ClockTransport(ClockNode const& n) {
-    if (n.offscreen || !n.enabled ||
-        (n.type != UIA_ButtonControlTypeId && n.type != UIA_CheckBoxControlTypeId &&
-         n.type != UIA_CustomControlTypeId)) {
-        return false;
-    }
-    auto name = LowerText(n.name);
-    return ClockTextHas(n.id, {L"playpause", L"pausebutton", L"startbutton", L"resumebutton"}) ||
-           ClockTextHas(name, {L"pause", L"resume", L"tạm dừng", L"tiếp tục", L"bắt đầu"}) ||
-           name == L"start" || name == L"stop" || name == L"dừng";
+    if(n.offscreen || !n.enabled || (n.type!=UIA_ButtonControlTypeId && n.type!=UIA_CheckBoxControlTypeId && n.type!=UIA_CustomControlTypeId))return false;
+    auto name=LowerText(n.name);
+    return ClockTextHas(n.id,{L"playpause",L"pausebutton",L"startbutton",L"resumebutton"}) ||
+        ClockTextHas(name,{L"pause",L"resume",L"tạm dừng",L"tiếp tục",L"bắt đầu"}) || name==L"start" || name==L"stop" || name==L"dừng";
 }
-
-int ClockRow(std::vector<ClockNode> const& nodes, int index, int page) {
-    if (page == 0) {
-        return 0;
-    }
-    for (int p = index, depth = 0; p >= 0 && depth < 24; p = nodes[p].parent, ++depth) {
-        if (nodes[p].type == UIA_ListItemControlTypeId ||
-            nodes[p].type == UIA_DataItemControlTypeId ||
-            ClockTextHas(nodes[p].id, {L"timercard", L"alarmcard", L"timeritem", L"alarmitem", L"timercontrol"})) {
-            return p;
-        }
-    }
-    if (page == 1) {
-        for (int p = index, depth = 0; p >= 0 && depth < 24; p = nodes[p].parent, ++depth) {
-            for (int c = 0; c < static_cast<int>(nodes.size()); ++c) {
-                if (ClockTransport(nodes[c]) && ClockNodeUnder(nodes, c, p)) {
-                    return p;
-                }
-            }
-        }
-    }
+int ClockRow(std::vector<ClockNode> const& nodes,int index,int page) {
+    if(page==0)return 0;
+    for(int p=index,depth=0;p>=0 && depth<24;p=nodes[p].parent,++depth)
+        if(nodes[p].type==UIA_ListItemControlTypeId || nodes[p].type==UIA_DataItemControlTypeId ||
+            ClockTextHas(nodes[p].id,{L"timercard",L"alarmcard",L"timeritem",L"alarmitem",L"timercontrol"}))return p;
+    if(page==1)for(int p=index,depth=0;p>=0 && depth<24;p=nodes[p].parent,++depth)
+        for(int c=0;c<static_cast<int>(nodes.size());++c)
+            if(ClockTransport(nodes[c]) && ClockNodeUnder(nodes,c,p))return p;
     return -1;
 }
-
-ClockRunState ClockRowRun(std::vector<ClockNode> const& nodes, int row) {
-    bool pause = false, start = false;
-    bool specificPause = false, specificStart = false;
-    for (int i = 0; i < static_cast<int>(nodes.size()); ++i) {
-        auto const& n = nodes[i];
-        if (!ClockTransport(n) || !ClockNodeUnder(nodes, i, row)) {
-            continue;
-        }
-        auto name = LowerText(n.name);
-        bool isPrimaryPlayPause = ClockTextHas(n.id, {
-            L"stopwatchplaypause", L"timerplaypause", L"playpausebutton"
-        });
-        bool namedPause = ClockTextHas(name, {L"pause", L"tạm dừng"}) || name == L"stop" || name == L"dừng";
-        bool namedStart = ClockTextHas(name, {L"start", L"resume", L"bắt đầu", L"tiếp tục"});
-        if (!namedPause && !namedStart && isPrimaryPlayPause && n.toggle >= 0) {
-            namedPause = (n.toggle == ToggleState_On);
-            namedStart = (n.toggle == ToggleState_Off);
-        }
-        if (isPrimaryPlayPause && (namedPause || namedStart)) {
-            specificPause |= namedPause;
-            specificStart |= namedStart;
-        }
-        if (namedPause || namedStart) {
-            pause |= namedPause;
-            start |= namedStart;
-            continue;
-        }
+ClockRunState ClockRowRun(std::vector<ClockNode> const& nodes,int row) {
+    bool pause=false,start=false;
+    for(int i=0;i<static_cast<int>(nodes.size());++i) {
+        auto const& n=nodes[i];if(!ClockTransport(n) || !ClockNodeUnder(nodes,i,row))continue;
+        auto name=LowerText(n.name);
+        bool namedPause=ClockTextHas(name,{L"pause",L"tạm dừng"}) || name==L"stop" || name==L"dừng";
+        bool namedStart=ClockTextHas(name,{L"start",L"resume",L"bắt đầu",L"tiếp tục"});
+        if(namedPause || namedStart){pause|=namedPause;start|=namedStart;continue;}
         // A combined PlayPause automation ID alone does not indicate its state.
-        if (n.id.find(L"playpause") == std::wstring::npos) {
-            pause |= ClockTextHas(n.id, {L"pausebutton"});
-            start |= ClockTextHas(n.id, {L"startbutton", L"resumebutton"});
+        if(n.id.find(L"playpause")==std::wstring::npos) {
+            pause|=ClockTextHas(n.id,{L"pausebutton"});start|=ClockTextHas(n.id,{L"startbutton",L"resumebutton"});
         }
     }
-    if (specificPause != specificStart) {
-        return specificPause ? ClockRunState::Running : ClockRunState::Paused;
-    }
-    return pause == start ? ClockRunState::Unknown
-         : pause          ? ClockRunState::Running
-                          : ClockRunState::Paused;
+    return pause==start?ClockRunState::Unknown:pause?ClockRunState::Running:ClockRunState::Paused;
 }
-
-bool ParseClockDuration(std::wstring text, int64_t& milliseconds) {
-    ParsedClockTime time;
-    if (ParseClockTime(text, time)) {
-        milliseconds = ClockDurationMs(time);
-        return true;
+bool ParseClockDuration(std::wstring text,int64_t& milliseconds) {
+    ParsedClockTime time;if(ParseClockTime(text,time)){milliseconds=ClockDurationMs(time);return true;}
+    text=LowerText(text);int64_t total=0;bool found=false;unsigned units=0;
+    for(size_t pos=0;pos<text.size();) {
+        if(text[pos]<L'0' || text[pos]>L'9'){++pos;continue;}
+        size_t begin=pos;int64_t whole=0;while(pos<text.size() && text[pos]>=L'0' && text[pos]<=L'9') {
+            if(pos-begin>6)return false;whole=whole*10+text[pos++]-L'0';
+        }
+        int fraction=0,place=100;
+        if(pos<text.size() && (text[pos]==L',' || text[pos]==L'.') && pos+1<text.size() && iswdigit(text[pos+1])) {
+            ++pos;while(pos<text.size() && iswdigit(text[pos])) {if(place){fraction+=(text[pos]-L'0')*place;place/=10;}++pos;}
+        }
+        while(pos<text.size() && iswspace(text[pos]))++pos;
+        size_t wordStart=pos;while(pos<text.size() && (iswalpha(text[pos]) || (text[pos]>=0x80 && !iswspace(text[pos]))))++pos;
+        auto unit=text.substr(wordStart,pos-wordStart);int64_t scale=0;unsigned bit=0;
+        if(unit==L"hour" || unit==L"hours" || unit==L"hr" || unit==L"hrs" || unit==L"giờ"){scale=3600000;bit=1;}
+        else if(unit==L"minute" || unit==L"minutes" || unit==L"min" || unit==L"mins" || unit==L"phút"){scale=60000;bit=2;}
+        else if(unit==L"second" || unit==L"seconds" || unit==L"sec" || unit==L"secs" || unit==L"giây"){scale=1000;bit=4;}
+        else if(unit==L"millisecond" || unit==L"milliseconds" || unit==L"ms"){scale=1;bit=8;}
+        else continue;
+        if(units&bit)return false;units|=bit;found=true;total+=whole*scale+fraction*scale/1000;
     }
-    text = LowerText(text);
-    int64_t total = 0;
-    bool found = false;
-    unsigned units = 0;
-    for (size_t pos = 0; pos < text.size();) {
-        if (text[pos] < L'0' || text[pos] > L'9') {
-            ++pos;
-            continue;
-        }
-        size_t begin = pos;
-        int64_t whole = 0;
-        while (pos < text.size() && text[pos] >= L'0' && text[pos] <= L'9') {
-            if (pos - begin > 6) {
-                return false;
-            }
-            whole = whole * 10 + text[pos++] - L'0';
-        }
-        int fraction = 0, place = 100;
-        if (pos < text.size() && (text[pos] == L',' || text[pos] == L'.') &&
-            pos + 1 < text.size() && iswdigit(text[pos + 1])) {
-            ++pos;
-            while (pos < text.size() && iswdigit(text[pos])) {
-                if (place) {
-                    fraction += (text[pos] - L'0') * place;
-                    place /= 10;
-                }
-                ++pos;
-            }
-        }
-        while (pos < text.size() && iswspace(text[pos])) {
-            ++pos;
-        }
-        size_t wordStart = pos;
-        while (pos < text.size() && (iswalpha(text[pos]) || (text[pos] >= 0x80 && !iswspace(text[pos])))) {
-            ++pos;
-        }
-        auto unit = text.substr(wordStart, pos - wordStart);
-        int64_t scale = 0;
-        unsigned bit = 0;
-        if (unit == L"hour" || unit == L"hours" || unit == L"hr" || unit == L"hrs" || unit == L"giờ") {
-            scale = 3600000;
-            bit = 1;
-        } else if (unit == L"minute" || unit == L"minutes" || unit == L"min" || unit == L"mins" || unit == L"phút") {
-            scale = 60000;
-            bit = 2;
-        } else if (unit == L"second" || unit == L"seconds" || unit == L"sec" || unit == L"secs" || unit == L"giây") {
-            scale = 1000;
-            bit = 4;
-        } else if (unit == L"millisecond" || unit == L"milliseconds" || unit == L"ms") {
-            scale = 1;
-            bit = 8;
-        } else {
-            continue;
-        }
-        if (units & bit) {
-            return false;
-        }
-        units |= bit;
-        found = true;
-        total += whole * scale + fraction * scale / 1000;
-    }
-    if (!found || total > 999LL * 3600000) {
-        return false;
-    }
-    milliseconds = total;
-    return true;
+    if(!found || total>999LL*3600000)return false;milliseconds=total;return true;
 }
-
-std::wstring ClockReadout(std::vector<ClockNode> const& nodes, int index) {
-    auto const& node = nodes[index];
-    if (!node.value.empty()) {
-        return node.value;
-    }
-    int64_t ignored;
-    if (ParseClockDuration(node.name, ignored)) {
-        return node.name;
-    }
+std::wstring ClockReadout(std::vector<ClockNode> const& nodes,int index) {
+    auto const& node=nodes[index];
+    if(!node.value.empty())return node.value;
+    int64_t ignored;if(ParseClockDuration(node.name,ignored))return node.name;
     // A custom readout may expose separate hour/minute/second TextBlocks.
-    std::wstring joined;
-    unsigned count = 0;
-    for (int i = 0; i < static_cast<int>(nodes.size()); ++i) {
-        auto const& part = nodes[i];
-        if (part.offscreen || part.parent != index || part.type != UIA_TextControlTypeId) {
-            continue;
-        }
-        auto text = part.value.empty() ? part.name : part.value;
-        bool fragment = !text.empty() && std::all_of(text.begin(), text.end(), [](wchar_t c) {
-            return iswdigit(c) || iswspace(c) || c == L':' || c == L'：' ||
-                   c == L'.' || c == L',' || c == 0x200e || c == 0x200f;
-        });
-        if (!fragment || ++count > 12) {
-            return node.name;
-        }
-        joined += text;
+    std::wstring joined;unsigned count=0;
+    for(int i=0;i<static_cast<int>(nodes.size());++i) {
+        auto const& part=nodes[i];if(part.offscreen || part.parent!=index || part.type!=UIA_TextControlTypeId)continue;
+        auto text=part.value.empty()?part.name:part.value;
+        bool fragment=!text.empty() && std::all_of(text.begin(),text.end(),[](wchar_t c){return iswdigit(c)||iswspace(c)||c==L':'||c==L'：'||c==L'.'||c==L','||c==0x200e||c==0x200f;});
+        if(!fragment)return node.name;
+        if(++count>12)return node.name;
+        joined+=text;
     }
-    return count >= 3 ? joined : node.name;
+    return count>=3?joined:node.name;
 }
-
-bool ClockEndTimeOrLabel(std::vector<ClockNode> const& nodes, int index, int row) {
-    for (int p = index, depth = 0; p >= 0 && p != row && depth < 24; p = nodes[p].parent, ++depth) {
-        if (ClockTextHas(nodes[p].id, {
-                L"timername", L"alarmname", L"durationlabel", L"originalduration",
-                L"initialduration", L"endtime", L"finishtime", L"completiontime",
-                L"targettime", L"timeofcompletion", L"timeofend"})) {
-            return true;
-        }
+bool ClockEndTimeOrLabel(std::vector<ClockNode> const& nodes,int index,int row) {
+    for(int p=index,depth=0;p>=0 && p!=row && depth<24;p=nodes[p].parent,++depth) {
+        if(ClockTextHas(nodes[p].id,{L"timername",L"alarmname",L"durationlabel",L"originalduration",L"initialduration",
+            L"endtime",L"finishtime",L"completiontime",L"targettime",L"timeofcompletion",L"timeofend"}))return true;
     }
-    auto name = LowerText(nodes[index].name);
-    return ClockTextHas(name, {
-        L"ends at", L"finishes at", L"finish at", L"complete at",
-        L"kết thúc lúc", L"kết thúc vào", L"hết giờ lúc", L"hết giờ vào"});
+    auto name=LowerText(nodes[index].name);
+    return ClockTextHas(name,{L"ends at",L"finishes at",L"finish at",L"complete at",L"kết thúc lúc",L"kết thúc vào",L"hết giờ lúc",L"hết giờ vào"});
 }
-
 bool ClockDurationHint(ClockNode const& node) {
-    return ClockTextHas(node.id, {L"remaining", L"countdown", L"stopwatchtime", L"stopwatchdisplay"}) ||
-           ClockTextHas(LowerText(node.name), {L"remaining", L"còn lại"});
+    return ClockTextHas(node.id,{L"remaining",L"countdown",L"stopwatchtime",L"stopwatchdisplay"}) ||
+        ClockTextHas(LowerText(node.name),{L"remaining",L"còn lại"});
 }
-
-std::wstring ClockRowText(std::vector<ClockNode> const& nodes, int row) {
+std::wstring ClockRowText(std::vector<ClockNode> const& nodes,int row) {
     std::wstring text;
-    for (int i = 0; i < static_cast<int>(nodes.size()); ++i) {
-        if (!nodes[i].offscreen && ClockNodeUnder(nodes, i, row) &&
-            (nodes[i].type == UIA_TextControlTypeId || i == row)) {
-            if (text.size() > 4096) {
-                break;
-            }
-            text += nodes[i].name + L" ";
-        }
-    }
+    for(int i=0;i<static_cast<int>(nodes.size());++i)if(!nodes[i].offscreen && ClockNodeUnder(nodes,i,row) &&
+        (nodes[i].type==UIA_TextControlTypeId || i==row)) {if(text.size()>4096)break;text+=nodes[i].name+L" ";}
     return LowerText(text);
 }
 
-int64_t NextObservedAlarm(ParsedClockTime time, std::wstring const& text, int64_t now) {
-    if (time.secondsPresent || time.hours > 23) {
-        return 0;
-    }
-    bool pm = ClockTextHas(text, {L" pm", L" p.m.", L" ch"});
-    bool am = ClockTextHas(text, {L" am", L" a.m.", L" sa"});
-    if (pm && am) {
-        return 0;
-    }
-    if (pm || am) {
-        if (time.hours < 1 || time.hours > 12) {
-            return 0;
-        }
-        time.hours = time.hours % 12 + (pm ? 12 : 0);
-    }
-    unsigned days = 0;
-    const std::array<std::initializer_list<PCWSTR>, 7> labels = {{
-        {L"sunday", L" sun", L"chủ nhật"},
-        {L"monday", L" mon", L"thứ hai"},
-        {L"tuesday", L" tue", L"thứ ba"},
-        {L"wednesday", L" wed", L"thứ tư"},
-        {L"thursday", L" thu", L"thứ năm"},
-        {L"friday", L" fri", L"thứ sáu"},
-        {L"saturday", L" sat", L"thứ bảy"},
-    }};
-    for (unsigned i = 0; i < 7; ++i) {
-        if (ClockTextHas(L" " + text, labels[i])) {
-            days |= 1u << i;
-        }
-    }
-    if (ClockTextHas(text, {L"every day", L"daily", L"hàng ngày", L"hằng ngày", L"mỗi ngày"})) {
-        days = 127;
-    }
-    bool tomorrow = ClockTextHas(text, {L"tomorrow", L"ngày mai"});
-    bool today = ClockTextHas(text, {L"today", L"hôm nay"});
-    bool once = ClockTextHas(text, {L"once", L"one time", L"một lần", L"không lặp", L"never"});
+int64_t NextObservedAlarm(ParsedClockTime time,std::wstring const& text,int64_t now) {
+    if(time.secondsPresent || time.hours>23)return 0;
+    bool pm=ClockTextHas(text,{L" pm",L" p.m.",L" ch"});
+    bool am=ClockTextHas(text,{L" am",L" a.m.",L" sa"});
+    if(pm && am)return 0;
+    if(pm || am){if(time.hours<1 || time.hours>12)return 0;time.hours=time.hours%12+(pm?12:0);}
+    unsigned days=0;
+    const std::array<std::initializer_list<PCWSTR>,7> labels={{{L"sunday",L" sun",L"chủ nhật"},{L"monday",L" mon",L"thứ hai"},
+        {L"tuesday",L" tue",L"thứ ba"},{L"wednesday",L" wed",L"thứ tư"},{L"thursday",L" thu",L"thứ năm"},
+        {L"friday",L" fri",L"thứ sáu"},{L"saturday",L" sat",L"thứ bảy"}}};
+    for(unsigned i=0;i<7;++i)if(ClockTextHas(L" "+text,labels[i]))days|=1u<<i;
+    if(ClockTextHas(text,{L"every day",L"daily",L"hàng ngày",L"hằng ngày",L"mỗi ngày"}))days=127;
+    bool tomorrow=ClockTextHas(text,{L"tomorrow",L"ngày mai"});
+    bool today=ClockTextHas(text,{L"today",L"hôm nay"});
+    bool once=ClockTextHas(text,{L"once",L"one time",L"một lần",L"không lặp",L"never"});
     // Do not guess an unsupported locale's repeat schedule from the clock face.
-    if (!days && !tomorrow && !today && !once) {
-        return 0;
-    }
-    SYSTEMTIME local{};
-    GetLocalTime(&local);
-    local.wHour = local.wMinute = local.wSecond = local.wMilliseconds = 0;
-    FILETIME midnight{};
-    if (!SystemTimeToFileTime(&local, &midnight)) {
-        return 0;
-    }
-    auto midnightValue = FileTimeValue(midnight);
-    for (unsigned offset = 0; offset <= 7; ++offset) {
-        if (!days && tomorrow && offset != 1) {
-            continue;
-        }
-        if (!days && today && !tomorrow && offset != 0) {
-            continue;
-        }
-        uint64_t ticks = midnightValue + offset * 864000000000ULL;
-        FILETIME ft{static_cast<DWORD>(ticks), static_cast<DWORD>(ticks >> 32)};
-        SYSTEMTIME date{}, utc{};
-        if (!FileTimeToSystemTime(&ft, &date)) {
-            continue;
-        }
-        if (days && !(days & (1u << date.wDayOfWeek))) {
-            continue;
-        }
-        date.wHour = static_cast<WORD>(time.hours);
-        date.wMinute = static_cast<WORD>(time.minutes);
-        if (!TzSpecificLocalTimeToSystemTime(nullptr, &date, &utc) ||
-            !SystemTimeToFileTime(&utc, &ft)) {
-            continue;
-        }
-        int64_t due = static_cast<int64_t>(FileTimeValue(ft) / 10000);
-        if (due > now) {
-            return due;
-        }
+    if(!days && !tomorrow && !today && !once)return 0;
+    SYSTEMTIME local{};GetLocalTime(&local);local.wHour=local.wMinute=local.wSecond=local.wMilliseconds=0;
+    FILETIME midnight{};if(!SystemTimeToFileTime(&local,&midnight))return 0;
+    auto midnightValue=FileTimeValue(midnight);
+    for(unsigned offset=0;offset<=7;++offset) {
+        if(!days && tomorrow && offset!=1)continue;
+        if(!days && today && !tomorrow && offset!=0)continue;
+        uint64_t ticks=midnightValue+offset*864000000000ULL;
+        FILETIME ft{static_cast<DWORD>(ticks),static_cast<DWORD>(ticks>>32)};
+        SYSTEMTIME date{},utc{};if(!FileTimeToSystemTime(&ft,&date))continue;
+        if(days && !(days&(1u<<date.wDayOfWeek)))continue;
+        date.wHour=static_cast<WORD>(time.hours);date.wMinute=static_cast<WORD>(time.minutes);
+        if(!TzSpecificLocalTimeToSystemTime(nullptr,&date,&utc) || !SystemTimeToFileTime(&utc,&ft))continue;
+        int64_t due=static_cast<int64_t>(FileTimeValue(ft)/10000);
+        if(due>now)return due;
     }
     return 0;
 }
-
-std::vector<ClockEntry> DecodeClockNodes(
-    std::vector<ClockNode> const& nodes, int64_t utcNow, uint64_t now) {
-    std::vector<ClockEntry> result;
-    int page = ClockPage(nodes);
-    if (page < 0) {
-        return result;
-    }
-    for (auto const& n : nodes) {
-        if (!n.offscreen && n.type == UIA_ButtonControlTypeId &&
-            ClockTextHas(n.id, {L"savealarm", L"alarmsave", L"savetimer", L"timersave", L"savebutton"})) {
-            return result;
-        }
-    }
-    struct Candidate {
-        int node;
-        ParsedClockTime time;
-        int64_t duration;
-        long long score;
-    };
-    std::map<int, Candidate> rows;
-    for (int i = 0; i < static_cast<int>(nodes.size()); ++i) {
-        auto const& n = nodes[i];
-        if (n.offscreen || ClockLap(nodes, i)) {
-            continue;
-        }
-        if (n.type != UIA_TextControlTypeId && n.type != UIA_CustomControlTypeId &&
-            n.type != UIA_GroupControlTypeId && n.type != UIA_PaneControlTypeId &&
-            n.type != UIA_ListItemControlTypeId && n.type != UIA_DataItemControlTypeId) {
-            continue;
-        }
-        int row = ClockRow(nodes, i, page);
-        if (row < 0) {
-            continue;
-        }
-        if (page != 2 && ClockEndTimeOrLabel(nodes, i, row)) {
-            continue;
-        }
-        auto text = ClockReadout(nodes, i);
-        ParsedClockTime time;
-        int64_t duration = 0;
-        bool colon = ParseClockTime(text, time);
-        if (page == 2 ? (!colon || time.secondsPresent) : !ParseClockDuration(text, duration)) {
-            continue;
-        }
-        const bool durationHint = ClockDurationHint(n);
+std::vector<ClockEntry> DecodeClockNodes(std::vector<ClockNode> const& nodes,int64_t utcNow,uint64_t now) {
+    std::vector<ClockEntry> result;int page=ClockPage(nodes);if(page<0)return result;
+    for(auto const& n:nodes)if(!n.offscreen && n.type==UIA_ButtonControlTypeId &&
+        ClockTextHas(n.id,{L"savealarm",L"alarmsave",L"savetimer",L"timersave",L"savebutton"}))return result;
+    struct Candidate {int node;ParsedClockTime time;int64_t duration;long long score;};std::map<int,Candidate> rows;
+    for(int i=0;i<static_cast<int>(nodes.size());++i) {
+        auto const& n=nodes[i];if(n.offscreen || ClockLap(nodes,i))continue;
+        if(n.type!=UIA_TextControlTypeId && n.type!=UIA_CustomControlTypeId && n.type!=UIA_GroupControlTypeId &&
+            n.type!=UIA_PaneControlTypeId && n.type!=UIA_ListItemControlTypeId && n.type!=UIA_DataItemControlTypeId)continue;
+        int row=ClockRow(nodes,i,page);if(row<0)continue;
+        if(page!=2 && ClockEndTimeOrLabel(nodes,i,row))continue;
+        auto text=ClockReadout(nodes,i);ParsedClockTime time;int64_t duration=0;
+        bool colon=ParseClockTime(text,time);
+        if(page==2 ? (!colon || time.secondsPresent) : !ParseClockDuration(text,duration))continue;
+        const bool durationHint=ClockDurationHint(n);
         // A bare hh:mm badge is the timer's ending wall-clock time. Accept mm:ss
         // only from a positively identified remaining-time/stopwatch readout.
-        if (page == 1 && colon && !time.secondsPresent && !durationHint) {
-            continue;
-        }
-        long long score = std::min<long long>(
-            99999,
-            std::max(0L, n.rect.right - n.rect.left) *
-                static_cast<long long>(std::max(0L, n.rect.bottom - n.rect.top)));
-        if (page != 2) {
-            const bool secondsUnit = ClockTextHas(LowerText(text), {L"second", L" sec", L"giây"});
+        if(page==1 && colon && !time.secondsPresent && !durationHint)continue;
+        long long score=std::min<long long>(99999,std::max(0L,n.rect.right-n.rect.left)*static_cast<long long>(std::max(0L,n.rect.bottom-n.rect.top)));
+        if(page!=2) {
+            const bool secondsUnit=ClockTextHas(LowerText(text),{L"second",L" sec",L"giây"});
             // Time format outranks Value and automation-ID hints: a 3-part
             // duration must beat a 2-part completion label even with Value set.
-            score += (colon && time.secondsPresent ? 8 : !colon && secondsUnit ? 8 : colon ? 4 : 1) * 1000000LL;
-            if (!colon && !secondsUnit && !durationHint) {
-                bool hasChildren = false;
-                for (auto const& child : nodes) {
-                    hasChildren |= child.parent == i && !child.offscreen;
-                }
-                if (hasChildren || i == row) {
-                    continue;
-                }
+            score+=(colon && time.secondsPresent?8:!colon && secondsUnit?8:colon?4:1)*1000000LL;
+            if(!colon && !secondsUnit && !durationHint) {
+                bool hasChildren=false;
+                for(auto const& child:nodes)hasChildren|=child.parent==i && !child.offscreen;
+                if(hasChildren || i==row)continue;
                 // Never interpret a card title such as "3 minutes" as a readout.
-                bool label = false;
-                for (auto const& child : nodes) {
-                    if (child.parent == row && ClockTextHas(child.id, {L"timername", L"alarmname"})) {
-                        label |= child.name == text;
-                    }
-                }
-                if (label) {
-                    continue;
-                }
+                bool label=false;
+                for(auto const& child:nodes)if(child.parent==row && ClockTextHas(child.id,{L"timername",L"alarmname"}))label|=child.name==text;
+                if(label)continue;
             }
         }
-        if (!n.value.empty()) {
-            score += 100000;
-        }
-        if (durationHint || ClockTextHas(n.id, {L"timertext", L"timedisplay", L"readout"})) {
-            score += 200000;
-        }
-        auto found = rows.find(row);
-        if (found == rows.end() || found->second.score < score) {
-            rows.insert_or_assign(row, Candidate{i, time, duration, score});
-        }
+        if(!n.value.empty())score+=100000;
+        if(durationHint || ClockTextHas(n.id,{L"timertext",L"timedisplay",L"readout"}))score+=200000;
+        auto found=rows.find(row);if(found==rows.end() || found->second.score<score)rows.insert_or_assign(row,Candidate{i,time,duration,score});
     }
-    for (auto const& [row, candidate] : rows) {
-        if (result.size() >= 16) {
-            break;
-        }
-        ClockEntry entry;
-        entry.kind = static_cast<ClockKind>(page);
-        entry.sampledAt = entry.observedAt = now;
+    for(auto const& [row,candidate]:rows) {
+        if(result.size()>=16)break;
+        ClockEntry entry;entry.kind=static_cast<ClockKind>(page);entry.sampledAt=entry.observedAt=now;
         std::wstring label;
-        for (int i = 0; i < static_cast<int>(nodes.size()); ++i) {
-            if (!nodes[i].offscreen && ClockNodeUnder(nodes, i, row) &&
-                ClockTextHas(nodes[i].id, {L"alarmname", L"timername"}) &&
-                nodes[i].type == UIA_TextControlTypeId) {
-                label = nodes[i].name.substr(0, 100);
-                break;
+        for(int i=0;i<static_cast<int>(nodes.size());++i)if(!nodes[i].offscreen && ClockNodeUnder(nodes,i,row) &&
+            ClockTextHas(nodes[i].id,{L"alarmname",L"timername"}) && nodes[i].type==UIA_TextControlTypeId){label=nodes[i].name.substr(0,100);break;}
+        entry.label=label;
+        auto identity=page==0?std::wstring(L"stopwatch"):!nodes[row].runtimeKey.empty()?nodes[row].runtimeKey:
+            nodes[row].id+L":"+label+L":"+std::to_wstring(row);
+        entry.key=std::to_wstring(page)+L":"+identity;
+        if(page==2) {
+            bool on=false,off=false;
+            for(int i=0;i<static_cast<int>(nodes.size());++i)if(ClockNodeUnder(nodes,i,row) && !nodes[i].offscreen && nodes[i].toggle>=0) {
+                on|=nodes[i].toggle==ToggleState_On;off|=nodes[i].toggle==ToggleState_Off;
             }
-        }
-        entry.label = label;
-        auto identity = page == 0                  ? std::wstring(L"stopwatch")
-                      : !nodes[row].runtimeKey.empty() ? nodes[row].runtimeKey
-                                                   : nodes[row].id + L":" + label + L":" + std::to_wstring(row);
-        entry.key = std::to_wstring(page) + L":" + identity;
-        if (page == 2) {
-            bool on = false, off = false;
-            for (int i = 0; i < static_cast<int>(nodes.size()); ++i) {
-                if (ClockNodeUnder(nodes, i, row) && !nodes[i].offscreen && nodes[i].toggle >= 0) {
-                    on |= nodes[i].toggle == ToggleState_On;
-                    off |= nodes[i].toggle == ToggleState_Off;
-                }
-            }
-            if (!on && !off) {
-                continue;
-            }
-            entry.enabled = on && !off;
-            entry.alarmUtc = NextObservedAlarm(candidate.time, ClockRowText(nodes, row), utcNow);
-            if (entry.enabled && !entry.alarmUtc) {
-                continue;
-            }
-            entry.key += L":" + std::to_wstring(candidate.time.hours) + L":" + std::to_wstring(candidate.time.minutes);
+            if(!on && !off)continue;
+            entry.enabled=on && !off;
+            entry.alarmUtc=NextObservedAlarm(candidate.time,ClockRowText(nodes,row),utcNow);
+            if(entry.enabled && !entry.alarmUtc)continue;
+            entry.key+=L":"+std::to_wstring(candidate.time.hours)+L":"+std::to_wstring(candidate.time.minutes);
         } else {
-            entry.milliseconds = candidate.duration;
-            entry.run = ClockRowRun(nodes, row);
+            entry.milliseconds=candidate.duration;entry.run=ClockRowRun(nodes,row);
             // A future badge such as "hết giờ lúc 18:46" is not a completion.
-            entry.finished = page == 1 && candidate.duration == 0 &&
-                             ClockTextHas(ClockRowText(nodes, row),
-                                          {L"time's up", L"timer finished", L"hết giờ", L"đã hết giờ"});
+            entry.finished=page==1 && candidate.duration==0 &&
+                ClockTextHas(ClockRowText(nodes,row),{L"time's up",L"timer finished",L"hết giờ",L"đã hết giờ"});
         }
         result.push_back(std::move(entry));
     }
@@ -4974,39 +4435,26 @@ std::vector<ClockEntry> DecodeClockNodes(
 }
 
 DWORD WINAPI ClockProviderThreadProc(void*) {
-    bool initialized = false;
+    bool initialized=false;
     try {
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
-        initialized = true;
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);initialized=true;
         {
             winrt::com_ptr<IUIAutomation2> automation;
-            if (SUCCEEDED(CoCreateInstance(__uuidof(CUIAutomation8), nullptr,
-                                           CLSCTX_INPROC_SERVER,
-                                           __uuidof(IUIAutomation2),
-                                           automation.put_void()))) {
-                automation->put_ConnectionTimeout(200);
-                automation->put_TransactionTimeout(200);
-                automation->put_AutoSetFocus(FALSE);
+            if(SUCCEEDED(CoCreateInstance(__uuidof(CUIAutomation8),nullptr,CLSCTX_INPROC_SERVER,__uuidof(IUIAutomation2),automation.put_void()))) {
+                automation->put_ConnectionTimeout(200);automation->put_TransactionTimeout(200);automation->put_AutoSetFocus(FALSE);
             }
-            ClockTracker tracker;
-            ClockWindow cachedWindow;
-            uint64_t nextDiscovery = 0;
-            int lastDiagnostic = -999;
-            while (WaitForSingleObject(g_liveStopEvent, 0) != WAIT_OBJECT_0) {
-                auto settings = GetSettings();
-                uint64_t now = GetTickCount64();
-                int64_t utc = ClockUtcMilliseconds();
+            ClockTracker tracker;ClockWindow cachedWindow;uint64_t nextDiscovery=0;
+            int lastDiagnostic=-999;
+            while(WaitForSingleObject(g_liveStopEvent,0)!=WAIT_OBJECT_0) {
+                auto settings=GetSettings();uint64_t now=GetTickCount64();int64_t utc=ClockUtcMilliseconds();
                 ClockWindow window;
-                if (settings.enableTaskbarWidget && settings.enableClockWidget) {
-                    if (now >= nextDiscovery ||
-                        (cachedWindow.element && !IsWindow(cachedWindow.element))) {
-                        cachedWindow = FindWindowsClock();
-                        nextDiscovery = now + (cachedWindow.element ? 3000 : 5000);
+                if(settings.enableTaskbarWidget && settings.enableClockWidget) {
+                    if(now>=nextDiscovery || (cachedWindow.element && !IsWindow(cachedWindow.element))) {
+                        cachedWindow=FindWindowsClock();nextDiscovery=now+3000;
                     }
-                    window = cachedWindow;
+                    window=cachedWindow;
                 }
-                if (window.element &&
-                    (!IsWindow(window.element) || !IsWindowVisible(window.top))) {
+                if (window.element && (!IsWindow(window.element) || !IsWindowVisible(window.top))) {
                     cachedWindow = {};
                     nextDiscovery = 0;
                     window = {};
@@ -5014,81 +4462,44 @@ DWORD WINAPI ClockProviderThreadProc(void*) {
                 std::vector<ClockEntry> entries;
                 int observedPage = -1;
                 bool appVisible = window.element && !IsIconic(window.top);
-                if (appVisible) {
-                    try {
-                        DWORD pid = 0;
-                        GetWindowThreadProcessId(window.element, &pid);
-                        if (pid == window.pid) {
-                            auto nodes = ReadClockNodes(automation.get(), window.element);
-                            observedPage = ClockPage(nodes);
-                            now = GetTickCount64();
-                            utc = ClockUtcMilliseconds();
-                            entries = DecodeClockNodes(nodes, utc, now);
-                            int diagnostic = observedPage * 1000 + static_cast<int>(entries.size());
-                            if (diagnostic != lastDiagnostic) {
-                                Wh_Log(L"Windows Clock: page=%d, nodes=%zu, activities=%zu",
-                                       observedPage, nodes.size(), entries.size());
-                                lastDiagnostic = diagnostic;
-                            }
-                        } else {
-                            cachedWindow = {};
-                            nextDiscovery = 0;
-                            window = {};
-                            appVisible = false;
+                if (appVisible) try {
+                    DWORD pid = 0; GetWindowThreadProcessId(window.element, &pid);
+                    if (pid == window.pid) {
+                        auto nodes = ReadClockNodes(automation.get(), window.element);
+                        observedPage = ClockPage(nodes);
+                        now = GetTickCount64(); utc = ClockUtcMilliseconds();
+                        entries = DecodeClockNodes(nodes, utc, now);
+                        int diagnostic = observedPage * 1000 + static_cast<int>(entries.size());
+                        if (diagnostic != lastDiagnostic) {
+                            Wh_Log(L"Windows Clock: page=%d, nodes=%zu, activities=%zu", observedPage, nodes.size(), entries.size());
+                            lastDiagnostic = diagnostic;
                         }
-                    } catch (...) {}
-                }
+                    } else { cachedWindow = {}; nextDiscovery = 0; window = {}; appVisible = false; }
+                } catch (...) {}
                 auto const previous = tracker.state;
-                for (auto& entry : entries) {
-                    entry.key = std::to_wstring(window.pid) + L":" +
-                                std::to_wstring(reinterpret_cast<uintptr_t>(window.element)) +
-                                L":" + entry.key;
-                }
+                for (auto& entry : entries) entry.key = std::to_wstring(window.pid) + L":" +
+                    std::to_wstring(reinterpret_cast<uintptr_t>(window.element)) + L":" + entry.key;
                 tracker.state.window = reinterpret_cast<uintptr_t>(window.top);
                 tracker.Update(std::move(entries), now, utc,
                                settings.enableTaskbarWidget && settings.enableClockWidget,
                                appVisible, observedPage);
-                auto const& next = tracker.state;
-                bool sameEntries =
-                    next.entries.size() == previous.entries.size() &&
-                    std::equal(
-                        next.entries.begin(), next.entries.end(),
-                        previous.entries.begin(),
-                        [&](auto const& a, auto const& b) {
-                            return a.key == b.key && a.label == b.label &&
-                                   a.kind == b.kind && a.run == b.run &&
-                                   a.finished == b.finished &&
-                                   a.finishedEstimated == b.finishedEstimated &&
-                                   a.alarmUtc == b.alarmUtc &&
-                                   a.milliseconds / 1000 == b.milliseconds / 1000 &&
-                                   ClockEntryFresh(a, now) == ClockEntryFresh(b, now);
-                        });
-                const bool changed = !sameEntries || next.window != previous.window ||
-                                     next.noticeSerial != previous.noticeSerial;
-                {
-                    std::lock_guard<std::mutex> lock(g_liveMutex);
-                    g_clockSnapshot = next;
-                }
-                if (changed) {
-                    NotifyLiveUi();
-                }
+                auto const& next=tracker.state;
+                bool sameEntries=next.entries.size()==previous.entries.size() && std::equal(next.entries.begin(),next.entries.end(),previous.entries.begin(),[&](auto const& a,auto const& b) {
+                    return a.key==b.key && a.label==b.label && a.kind==b.kind && a.run==b.run && a.finished==b.finished &&
+                        a.finishedEstimated==b.finishedEstimated && a.alarmUtc==b.alarmUtc && a.milliseconds/1000==b.milliseconds/1000 &&
+                        ClockEntryFresh(a,now)==ClockEntryFresh(b,now);
+                });
+                const bool changed=!sameEntries || next.window!=previous.window || next.noticeSerial!=previous.noticeSerial;
+                {std::lock_guard<std::mutex> lock(g_liveMutex);g_clockSnapshot=next;}
+                if(changed)NotifyLiveUi();
                 // No UIA work while minimized/closed; anchors still advance. The
                 // existing taskbar UI timer repaints values once per second.
-                const DWORD delay = window.element && !IsIconic(window.top)
-                                  ? 500
-                                  : next.entries.empty() ? 5000 : 1000;
-                if (WaitForSingleObject(g_liveStopEvent, delay) == WAIT_OBJECT_0) {
-                    break;
-                }
+                const DWORD delay=window.element && !IsIconic(window.top)?500:next.entries.empty()?3000:1000;
+                if(WaitForSingleObject(g_liveStopEvent,delay)==WAIT_OBJECT_0)break;
             }
         }
-    } catch (...) {
-        Wh_Log(L"Windows Clock provider unavailable.");
-    }
-    if (initialized) {
-        winrt::uninit_apartment();
-    }
-    return 0;
+    }catch(...){Wh_Log(L"Windows Clock provider unavailable.");}
+    if(initialized)winrt::uninit_apartment();return 0;
 }
 
 void StartLiveProviders() {
@@ -5097,14 +4508,15 @@ void StartLiveProviders() {
     g_systemWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_bluetoothWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_taskControlWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (g_liveStopEvent) g_clockThread = CreateThread(nullptr, 0, ClockProviderThreadProc, nullptr, 0, nullptr);
-    if (g_liveStopEvent) g_temperatureThread = CreateThread(nullptr, 0, TemperatureThreadProc, nullptr, 0, nullptr);
+    if(g_liveStopEvent)g_clockThread=CreateThread(nullptr,0,ClockProviderThreadProc,nullptr,0,nullptr);
+    if (g_liveStopEvent) g_temperatureThread=CreateThread(nullptr,0,TemperatureThreadProc,nullptr,0,nullptr);
     if (g_liveStopEvent && g_systemWake) g_systemThread = CreateThread(nullptr, 0, SystemActivityThreadProc, nullptr, 0, nullptr);
     if (g_liveStopEvent && g_bluetoothWake) g_bluetoothThread = CreateThread(nullptr, 0, BluetoothProviderThreadProc, nullptr, 0, nullptr);
     if (g_liveStopEvent && g_taskControlWake) g_taskControlThread = CreateThread(nullptr, 0, TaskControlThreadProc, nullptr, 0, nullptr);
     g_obsWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (g_liveStopEvent && g_obsWake) g_obsThread = CreateThread(nullptr, 0, ObsThreadProc, nullptr, 0, nullptr);
     g_artWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_cultureWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (g_liveStopEvent && g_artWake) g_artThread = CreateThread(nullptr, 0, ArtworkThreadProc, nullptr, 0, nullptr);
 
     if (g_liveStopEvent && g_liveWakeEvent)
@@ -5114,8 +4526,8 @@ void StartLiveProviders() {
 
 void StopLiveProviders() {
     if (g_liveStopEvent) SetEvent(g_liveStopEvent);
-    if (g_clockThread) { WaitForSingleObject(g_clockThread, INFINITE); CloseHandle(g_clockThread); g_clockThread = nullptr; }
-    if (g_temperatureThread) { WaitForSingleObject(g_temperatureThread, INFINITE); CloseHandle(g_temperatureThread); g_temperatureThread = nullptr; }
+    if(g_clockThread){WaitForSingleObject(g_clockThread,INFINITE);CloseHandle(g_clockThread);g_clockThread=nullptr;}
+    if(g_temperatureThread){WaitForSingleObject(g_temperatureThread,INFINITE);CloseHandle(g_temperatureThread);g_temperatureThread=nullptr;}
     if (g_systemThread) { WaitForSingleObject(g_systemThread, INFINITE); CloseHandle(g_systemThread); g_systemThread = nullptr; }
     if (g_bluetoothThread) { WaitForSingleObject(g_bluetoothThread, INFINITE); CloseHandle(g_bluetoothThread); g_bluetoothThread = nullptr; }
     if (g_taskControlThread) { WaitForSingleObject(g_taskControlThread, INFINITE); CloseHandle(g_taskControlThread); g_taskControlThread = nullptr; }
@@ -5138,7 +4550,8 @@ void ReleaseLiveProviderHandles() {
     if (g_obsWake) CloseHandle(g_obsWake);
     g_obsWake = nullptr;
     if (g_artWake) CloseHandle(g_artWake);
-    g_artWake = nullptr;
+    if (g_cultureWake) CloseHandle(g_cultureWake);
+    g_artWake = g_cultureWake = nullptr;
     if (g_liveWakeEvent) CloseHandle(g_liveWakeEvent);
     if (g_liveStopEvent) CloseHandle(g_liveStopEvent);
     g_liveWakeEvent = g_liveStopEvent = nullptr;
@@ -6115,16 +5528,11 @@ std::wstring LocationAppsFromLabel(std::wstring label, bool locationElement) {
 }
 void RefreshNativeLocationLabel(HWND taskbar) {
     static uint64_t next = 0;
-    auto now = GetTickCount64();
-    if (now < next) return;
-    next = now + 1000;
+    auto now = GetTickCount64(); if (now < next) return; next = now + 1000;
     std::wstring apps;
     try {
         auto settings = GetSettings();
-        bool activeLocation = settings.enablePrivacyWidget &&
-                              settings.enableTaskbarWidget &&
-                              ReadLocationUseSignal() == 1;
-        auto root = activeLocation ? GetTaskbarXamlRoot(taskbar) : nullptr;
+        auto root = settings.enablePrivacyWidget && settings.enableTaskbarWidget ? GetTaskbarXamlRoot(taskbar) : nullptr;
         auto content = root ? root.Content().try_as<wux::FrameworkElement>() : nullptr;
         auto tray = content ? FindVisualElement(content, L"SystemTray.SystemTrayFrame", true, 16) : nullptr;
         if (!tray && content) tray = FindChildByName(content, L"SystemTrayFrame", 16);
@@ -6281,53 +5689,9 @@ void LogTrayLookupFailure(wux::FrameworkElement const& root, PCWSTR position) {
     dump(dump, root, 0);
 }
 
-bool IsNativeWidgetsElement(wux::FrameworkElement const& fe) {
-    if (!fe || fe.Name() == L"WindhawkVnLunarTaskbarWidget") return false;
-    auto name = std::wstring(fe.Name());
-    if (name == L"WidgetsButton" || name == L"AugmentedEntryPointButton" ||
-        name == L"WidgetsButtonGrid") {
-        return true;
-    }
-    auto autoId = std::wstring(wux::Automation::AutomationProperties::GetAutomationId(fe));
-    if (autoId == L"WidgetsButton" || autoId == L"AugmentedEntryPointButton") {
-        return true;
-    }
-    auto className = std::wstring(winrt::get_class_name(fe));
-    if (className.find(L"AugmentedEntryPoint") != std::wstring::npos ||
-        className.find(L"WidgetsButton") != std::wstring::npos) {
-        return true;
-    }
-    return false;
-}
-
-std::vector<wux::FrameworkElement> FindNativeWidgetsButtons(wux::FrameworkElement const& root) {
-    std::vector<wux::FrameworkElement> results;
-    if (!root) return results;
-    std::vector<wux::DependencyObject> pending{root};
-    for (size_t i = 0; i < pending.size() && i < 512; ++i) {
-        auto node = pending[i];
-        if (auto fe = node.try_as<wux::FrameworkElement>()) {
-            if (fe.Name() == L"WindhawkVnLunarTaskbarWidget") {
-                continue;
-            }
-            if (IsNativeWidgetsElement(fe)) {
-                results.push_back(fe);
-                continue; // Do not collapse inner children of an already matched button.
-            }
-        }
-        int children = 0;
-        try { children = wuxm::VisualTreeHelper::GetChildrenCount(node); } catch (...) {}
-        for (int c = 0; c < children && pending.size() < 512; ++c) {
-            try { pending.push_back(wuxm::VisualTreeHelper::GetChild(node, c)); } catch (...) {}
-        }
-    }
-    return results;
-}
-
 InjectionTarget ResolveInjectionTarget(wux::FrameworkElement const& root,
                                        ModSettings const& settings) {
-    std::wstring effectivePos = EffectiveTaskbarPosition(settings);
-    if (effectivePos != L"root_left") {
+    if (settings.position != L"root_left") {
         auto panel = FindSystemTrayPanel(root);
         if (!panel) return {};
 
@@ -6335,14 +5699,14 @@ InjectionTarget ResolveInjectionTarget(wux::FrameworkElement const& root,
         // StackPanel. Its child order drives layout; Grid.Column is ignored.
         if (auto stack = panel.try_as<wuxc::StackPanel>()) {
             int index = -1;
-            if (effectivePos == L"tray_left") {
+            if (settings.position == L"tray_left") {
                 index = 0;
-            } else if (effectivePos == L"tray_right") {
+            } else if (settings.position == L"tray_right") {
                 index = static_cast<int>(stack.Children().Size());
-            } else if (effectivePos == L"tray_before_clock" ||
-                       effectivePos == L"tray_after_clock") {
+            } else if (settings.position == L"tray_before_clock" ||
+                       settings.position == L"tray_after_clock") {
                 index = GetPanelChildIndex(panel, FindTrayClock(panel));
-                if (index >= 0 && effectivePos == L"tray_after_clock") ++index;
+                if (index >= 0 && settings.position == L"tray_after_clock") ++index;
             }
             if (index >= 0) return {panel, -1, index, false};
             return {};
@@ -6350,15 +5714,15 @@ InjectionTarget ResolveInjectionTarget(wux::FrameworkElement const& root,
 
         if (auto trayGrid = panel.try_as<wuxc::Grid>()) {
             int col = -1;
-            if (effectivePos == L"tray_left") {
+            if (settings.position == L"tray_left") {
                 col = 0;
-            } else if (effectivePos == L"tray_right") {
+            } else if (settings.position == L"tray_right") {
                 col = std::max(1, static_cast<int>(trayGrid.ColumnDefinitions().Size()));
-            } else if (effectivePos == L"tray_before_clock" ||
-                       effectivePos == L"tray_after_clock") {
+            } else if (settings.position == L"tray_before_clock" ||
+                       settings.position == L"tray_after_clock") {
                 if (auto clock = FindTrayClock(panel)) {
                     col = wuxc::Grid::GetColumn(clock);
-                    if (effectivePos == L"tray_after_clock")
+                    if (settings.position == L"tray_after_clock")
                         col += std::max(1, wuxc::Grid::GetColumnSpan(clock));
                 }
             }
@@ -6399,141 +5763,7 @@ struct ShiftedTrayChild {
 };
 // Contains only weak UI references; automatic destruction is safe at process exit.
 std::vector<ShiftedTrayChild> g_shiftedTrayChildren;
-struct SavedNativeWidgetsButtonState {
-    winrt::weak_ref<wux::FrameworkElement> element;
-    wux::Visibility visibility = wux::Visibility::Visible;
-    double opacity = 1.0;
-    bool isHitTestVisible = true;
-};
-std::vector<SavedNativeWidgetsButtonState> g_hiddenNativeWidgetsButtons;
-std::vector<winrt::weak_ref<wux::FrameworkElement>> g_cachedNativeWidgetsButtons;
-struct WatchedNativeWidgetsButton {
-    winrt::weak_ref<wux::FrameworkElement> element;
-    winrt::event_token sizeChangedToken{};
-};
-std::vector<WatchedNativeWidgetsButton> g_watchedNativeWidgetsButtons;
-bool g_nativeWidgetsButtonsLookedUp = false;
-ULONGLONG g_lastNativeWidgetsScanTick = 0;
-
-void UnwatchNativeWidgetsButtons() {
-    for (auto const& watched : g_watchedNativeWidgetsButtons) {
-        if (auto btn = watched.element.get()) {
-            try { btn.SizeChanged(watched.sizeChangedToken); } catch (...) {}
-        }
-    }
-    g_watchedNativeWidgetsButtons.clear();
-}
-
-void RestoreNativeWidgetsButton() {
-    for (auto const& saved : g_hiddenNativeWidgetsButtons) {
-        if (auto btn = saved.element.get()) {
-            try {
-                btn.IsHitTestVisible(saved.isHitTestVisible);
-                btn.Opacity(saved.opacity);
-                btn.Visibility(saved.visibility);
-            } catch (...) {}
-        }
-    }
-    g_hiddenNativeWidgetsButtons.clear();
-}
-
-bool HasAliveNativeWidgetsButton() {
-    for (auto const& weakBtn : g_cachedNativeWidgetsButtons) {
-        if (auto btn = weakBtn.get()) {
-            try {
-                if (btn.XamlRoot() != nullptr &&
-                    wuxm::VisualTreeHelper::GetParent(btn) != nullptr) {
-                    return true;
-                }
-            } catch (...) {}
-        }
-    }
-    g_nativeWidgetsButtonsLookedUp = false;
-    return false;
-}
-
 [[clang::no_destroy]] wuxc::Border g_playerGrid{nullptr}; // The compact taskbar widget root border
-
-void CacheNativeWidgetsButtons(wux::FrameworkElement const& root);
-
-bool EnsureNativeWidgetsButtonsCached(bool throttle) {
-    if (HasAliveNativeWidgetsButton()) {
-        return true;
-    }
-    ULONGLONG now = GetTickCount64();
-    if (throttle && g_lastNativeWidgetsScanTick != 0 &&
-        now - g_lastNativeWidgetsScanTick < 3000) {
-        return false;
-    }
-    g_lastNativeWidgetsScanTick = now;
-    if (g_playerGrid && g_playerGrid.XamlRoot()) {
-        CacheNativeWidgetsButtons(
-            g_playerGrid.XamlRoot().Content().try_as<wux::FrameworkElement>());
-    }
-    return g_nativeWidgetsButtonsLookedUp;
-}
-
-void ApplyNativeWidgetsButtonState(ModSettings const& settings,
-                                   std::wstring const& effectivePos) {
-    if (effectivePos != L"root_left" || !settings.hideWidgetsButton) {
-        RestoreNativeWidgetsButton();
-        return;
-    }
-    EnsureNativeWidgetsButtonsCached(false);
-    for (auto const& weakBtn : g_cachedNativeWidgetsButtons) {
-        auto btn = weakBtn.get();
-        if (!btn) continue;
-        try {
-            bool alreadyTracked = std::any_of(
-                g_hiddenNativeWidgetsButtons.begin(),
-                g_hiddenNativeWidgetsButtons.end(),
-                [&](auto const& saved) { return saved.element.get() == btn; });
-            if (!alreadyTracked) {
-                g_hiddenNativeWidgetsButtons.push_back({
-                    winrt::make_weak(btn),
-                    btn.Visibility(),
-                    btn.Opacity(),
-                    btn.IsHitTestVisible(),
-                });
-                btn.IsHitTestVisible(false);
-                btn.Opacity(0.0);
-                btn.Visibility(wux::Visibility::Collapsed);
-            }
-        } catch (...) {}
-    }
-}
-
-double ComputeRootLeftOffsetDip(ModSettings const& settings) {
-    double baseOffset = static_cast<double>(settings.widgetLeftOffset);
-    if (settings.hideWidgetsButton) {
-        return baseOffset;
-    }
-    double shiftAfterWidgets = baseOffset;
-    for (auto const& weakBtn : g_cachedNativeWidgetsButtons) {
-        auto btn = weakBtn.get();
-        if (!btn) continue;
-        try {
-            if (btn.Visibility() != wux::Visibility::Visible) continue;
-            double width = btn.ActualWidth();
-            double height = btn.ActualHeight();
-            if (width <= 0.0 || height <= 0.0) continue;
-            if (g_injectedParentPanel) {
-                auto bounds = btn.TransformToVisual(g_injectedParentPanel).TransformBounds({
-                    0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)
-                });
-                // Only offset past a native Widgets button situated on the left side of the taskbar.
-                if (bounds.X >= 0.0f && bounds.X < 300.0f) {
-                    shiftAfterWidgets = std::max(
-                        shiftAfterWidgets,
-                        static_cast<double>(bounds.X + bounds.Width) + baseOffset);
-                }
-            } else {
-                shiftAfterWidgets = std::max(shiftAfterWidgets, width + baseOffset);
-            }
-        } catch (...) {}
-    }
-    return shiftAfterWidgets;
-}
 [[clang::no_destroy]] wuxc::Border g_widgetBadgeBorder{nullptr};
 [[clang::no_destroy]] wuxc::TextBlock g_widgetZodiacText{nullptr};
 [[clang::no_destroy]] wuxc::TextBlock g_widgetLine1Text{nullptr};
@@ -6604,9 +5834,6 @@ LiveSnapshot g_uiLive;
 BatteryAlertTracker g_batteryAlertTracker;
 BatteryAlert g_batteryNotice = BatteryAlert::None;
 BluetoothAlertTracker g_bluetoothAlerts;
-TemperatureAlerts g_cpuTempAlerts, g_gpuTempAlerts;
-MemoryAlerts g_memoryAlerts;
-StorageAlerts g_storageAlerts;
 BluetoothDeviceBattery g_bluetoothNotice;
 uint64_t g_bluetoothNoticeUntil = 0;
 std::map<ActivityKind, std::wstring> g_hiddenActivities;
@@ -6642,23 +5869,6 @@ bool g_renderedBatteryAttention = false;
 [[clang::no_destroy]] wuxc::Button g_popupMediaNext{nullptr};
 
 void RefreshTaskbarWidgetData();
-
-void CacheNativeWidgetsButtons(wux::FrameworkElement const& root) {
-    if (HasAliveNativeWidgetsButton() || !root) return;
-    UnwatchNativeWidgetsButtons();
-    g_cachedNativeWidgetsButtons.clear();
-    auto buttons = FindNativeWidgetsButtons(root);
-    for (auto const& btn : buttons) {
-        g_cachedNativeWidgetsButtons.push_back(winrt::make_weak(btn));
-        try {
-            auto token = btn.SizeChanged([](auto const&, auto const&) {
-                if (!g_shuttingDown) RefreshTaskbarWidgetData();
-            });
-            g_watchedNativeWidgetsButtons.push_back({winrt::make_weak(btn), token});
-        } catch (...) {}
-    }
-    g_nativeWidgetsButtonsLookedUp = !g_cachedNativeWidgetsButtons.empty();
-}
 void RefreshExpandedPopupData();
 void RequestPopupRefresh() { NotifyLiveUi(); }
 void BeginCloseExpandedPopup(HWND hwnd);
@@ -6689,6 +5899,7 @@ int g_renderedMonth = -1, g_renderedMonthSelection = -1, g_renderedMonthStyle = 
 uint64_t g_renderedCultureRevision = ~0ULL;
 int g_renderedCultureLanguage = -1;
 int g_renderedCultureTheme = -1;
+std::wstring g_cultureSelectedId;
 bool g_activityObserved = false, g_previousPlaying = false, g_previousPlugged = false;
 uint64_t g_previousMediaGeneration = 0;
 std::vector<PrivacyUse> g_previousPrivacyUses;
@@ -6744,10 +5955,11 @@ winrt::Windows::UI::Color SystemAccentColor() {
     catch (...) { return {255, 0, 120, 215}; }
 }
 [[clang::no_destroy]] wuxc::ControlTemplate g_glassButtonTemplate{nullptr};
-bool g_glassTemplateFailed = false;
-bool UseGlassSurfaces() {
-    return g_effectsAllowed.load() && GetSettings().popupTheme == L"glass";
+bool g_glassTemplateFailed=false;
+std::wstring EffectivePopupTheme(ModSettings const& settings) {
+    return settings.popupTheme==L"glass" && !g_glassCpuSupported ? L"blur" : settings.popupTheme;
 }
+bool UseGlassSurfaces() {return g_effectsAllowed.load() && EffectivePopupTheme(GetSettings())==L"glass";}
 wuxm::LinearGradientBrush GlassEdgeBrush() {
     wuxm::LinearGradientBrush edge;edge.StartPoint({0,0});edge.EndPoint({1,1});
     for(auto [offset,color]:{std::pair{0.0,winrt::Windows::UI::Color{220,255,255,255}},
@@ -7039,13 +6251,11 @@ std::atomic<bool> g_culturePageOpen{false};
 
 void ReleaseCulturePage() {
     g_culturePageOpen = false;
-    {
-        std::lock_guard<std::mutex> lock(g_cultureMutex);
-        g_culture = {};
-    }
+    { std::lock_guard<std::mutex> lock(g_cultureMutex);
+      ++g_cultureRequestId; g_culture = {}; g_cultureRequest.clear(); }
     if (g_cultureResults) g_cultureResults.Children().Clear();
     if (g_cultureSearch) g_cultureSearch.Text(L"");
-    g_renderedCultureRevision = ~0ULL;
+    g_cultureSelectedId.clear(); g_renderedCultureRevision = ~0ULL;
 }
 void QueueSeek() {
     if (!g_mediaSeek || !g_uiLive.media.canSeek || g_seekGeneration != g_uiLive.media.generation) return;
@@ -7222,13 +6432,20 @@ std::wstring FormatPlaybackTime(int64_t seconds);
 [[clang::no_destroy]] wuxc::Button g_obsPause{nullptr};
 [[clang::no_destroy]] wuxc::Button g_obsStop{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_batteryTools{nullptr};
-[[clang::no_destroy]] wuxc::Button g_powerSettingsButton{nullptr};
+[[clang::no_destroy]] wuxc::ComboBox g_powerAcCombo{nullptr};
+[[clang::no_destroy]] wuxc::ComboBox g_powerDcCombo{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_powerModeStatus{nullptr};
+[[clang::no_destroy]] wuxc::Button g_usageButton{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_usageList{nullptr};
 [[clang::no_destroy]] wuxc::Border g_compactNotice{nullptr};
 [[clang::no_destroy]] wuxc::TextBlock g_noticeText{nullptr};
 std::wstring g_selectedPrivacy = L"microphone";
 std::vector<PrivacyUse> g_renderedPrivacy;
 std::wstring g_renderedPrivacySelection;
-int g_renderedPrivacyLanguage = -1;
+int g_renderedPrivacyLanguage = -1, g_powerControlLanguage = -1;
+bool g_showUsage = false, g_updatingPowerModes = false;
+uint64_t g_renderedUsageRevision = ~0ULL;
+int g_renderedUsageLanguage = -1;
 
 struct PlaybackTimeConverter : winrt::implements<PlaybackTimeConverter, wux::Data::IValueConverter> {
     wf::IInspectable Convert(wf::IInspectable const& value, wux::Interop::TypeName const&,
@@ -7318,7 +6535,7 @@ void ScrollActivityTabs(int direction) {
 void RefreshBluetoothList(bool vi) {
     if (!g_bluetoothList) return;
     auto const& devices = g_uiLive.bluetooth.devices;
-    g_bluetoothList.Visibility(GetSettings().bluetoothBattery ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    g_bluetoothList.Visibility(!g_showUsage && GetSettings().bluetoothBattery ? wux::Visibility::Visible : wux::Visibility::Collapsed);
     if (devices == g_renderedBluetooth && g_renderedBluetoothLanguage == int(vi)) return;
     g_renderedBluetooth = devices; g_renderedBluetoothLanguage = int(vi);
     g_bluetoothList.Children().Clear();
@@ -7342,15 +6559,60 @@ void RefreshBluetoothList(bool vi) {
         card.Child(row); g_bluetoothList.Children().Append(card);
     }
 }
-
 void RefreshBatteryTools(bool vi) {
     RefreshBluetoothList(vi);
-    if (g_powerSettingsButton) {
-        g_powerSettingsButton.Content(winrt::box_value(
-            PickText(vi, L"Cài đặt nguồn & pin", L"Power & battery settings")));
+    UsageSnapshot usage;
+    {
+        std::lock_guard<std::mutex> lock(g_liveMutex);
+        if (g_showUsage) usage = g_usageSnapshot;
+    }
+    if (g_usageButton) {
+        g_usageButton.Content(winrt::box_value(g_showUsage
+            ? PickText(vi, L"← Quay lại", L"← Back")
+            : PickText(vi, L"Cài đặt nguồn & pin", L"Power & battery settings")));
+    }
+    if (g_usageList) {
+        g_usageList.Visibility(g_showUsage ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    }
+    if (!g_showUsage) return;
+    if (usage.revision == g_renderedUsageRevision && g_renderedUsageLanguage == int(vi)) return;
+    g_renderedUsageRevision = usage.revision;
+    g_renderedUsageLanguage = int(vi);
+    g_usageList.Children().Clear();
+    auto scope = PickText(vi, usage.onBattery ? L"Phiên dùng pin" : L"Phiên máy hiện tại",
+                          usage.onBattery ? L"Battery session" : L"Current PC session");
+    uint64_t elapsed = GetTickCount64() >= usage.measuredSince ? GetTickCount64() - usage.measuredSince : 0;
+    std::wstring note = std::wstring(scope) + PickText(vi, L" · Đã theo dõi ", L" · Observed for ") + FormatPlaybackTime(elapsed / 1000);
+    auto summary = WrappedText(note, 12);
+    wuxc::ToolTipService::SetToolTip(summary, winrt::box_value(PickText(vi,
+        L"Chỉ tính thời gian tương tác từ lúc bật mod; bỏ qua ngủ, khóa máy và không thao tác quá 1 phút.",
+        L"Measured since enabling the mod. Sleep, lock and idle over one minute are excluded.")));
+    g_usageList.Children().Append(summary);
+    if (usage.apps.empty()) {
+        g_usageList.Children().Append(WrappedText(PickText(vi, L"Chưa có dữ liệu sử dụng.", L"No usage data yet."), 12));
+    }
+    for (auto const& item : usage.apps) {
+        wuxc::Border row;
+        row.Padding({12, 10, 12, 10});
+        row.CornerRadius({8, 8, 8, 8});
+        row.Background(wuxm::SolidColorBrush({18, 128, 128, 128}));
+        wuxc::Grid grid;
+        wuxc::ColumnDefinition nameColumn, timeColumn;
+        nameColumn.Width(wux::GridLengthHelper::FromValueAndType(1, wux::GridUnitType::Star));
+        timeColumn.Width(wux::GridLengthHelper::Auto());
+        grid.ColumnDefinitions().Append(nameColumn);
+        grid.ColumnDefinitions().Append(timeColumn);
+        auto name = WrappedText(FriendlyAppName(item.app), 13);
+        auto time = WrappedText(FormatPlaybackTime(item.milliseconds / 1000), 13);
+        time.Margin({12, 0, 0, 0});
+        time.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+        wuxc::Grid::SetColumn(time, 1);
+        grid.Children().Append(name);
+        grid.Children().Append(time);
+        row.Child(grid);
+        g_usageList.Children().Append(row);
     }
 }
-
 void ReleaseAdaptiveControls() {
     if (g_quickMenu) { try { g_quickMenu.Hide(); } catch (...) {} }
     g_quickMenu = nullptr; g_quickMenuOpen = false;
@@ -7358,9 +6620,10 @@ void ReleaseAdaptiveControls() {
     g_renderedBluetooth.clear(); g_renderedBluetoothLanguage = -1;
     g_tabsHost = nullptr; g_tabsPrevious = nullptr; g_tabsNext = nullptr; g_popupHeader = nullptr; g_popupDivider = nullptr;
     g_cultureButton = nullptr; g_privacySelector = nullptr; g_privacyAppList = nullptr; g_batteryTools = nullptr;
-    g_powerSettingsButton = nullptr;
+    g_powerAcCombo = nullptr; g_powerDcCombo = nullptr; g_powerModeStatus = nullptr; g_usageButton = nullptr; g_usageList = nullptr;
     g_compactNotice = nullptr; g_noticeText = nullptr; g_renderedPrivacy.clear(); g_renderedPrivacySelection.clear();
-    g_renderedPrivacyLanguage = -1; g_batteryPageOpen = false;
+    g_renderedPrivacyLanguage = -1; g_powerControlLanguage = -1; g_showUsage = false; g_batteryPageOpen = false;
+    g_renderedUsageRevision = ~0ULL; g_renderedUsageLanguage = -1;
 }
 
 [[clang::no_destroy]] wuxc::StackPanel g_systemDetails{nullptr};
@@ -7540,50 +6803,71 @@ void ReleaseNewControls() {
 
 void RefreshCultureResults() {
     if (!g_cultureResults || !g_culturePageOpen) return;
-    auto state = ReadCultureState();
-    bool vi = UseVietnameseLabels(GetSettings());
+    auto state = ReadCultureState(); bool vi = UseVietnameseLabels(GetSettings());
     g_cultureResults.Children().Clear();
     auto add = [&](std::wstring const& value, double size = 12) {
-        auto block = WrappedText(value, size);
-        block.Margin({0, 4, 0, 8});
-        g_cultureResults.Children().Append(block);
+        auto block = WrappedText(value, size); block.Margin({0, 4, 0, 8}); g_cultureResults.Children().Append(block);
     };
-    std::wstring query = g_cultureSearch ? std::wstring(g_cultureSearch.Text()) : L"";
-    std::transform(query.begin(), query.end(), query.begin(), towlower);
-    bool any = false;
-    for (auto const& topic : state.topics) {
-        std::wstring search = topic.title + L" " + topic.category;
-        std::transform(search.begin(), search.end(), search.begin(), towlower);
-        if (!query.empty() && search.find(query) == std::wstring::npos) continue;
-        wuxc::Button button;
-        button.MinWidth(0);
-        button.CornerRadius({7, 7, 7, 7});
-        button.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
-        button.HorizontalContentAlignment(wux::HorizontalAlignment::Left);
-        button.Content(WrappedText(
-            topic.title + (topic.category.empty() ? L"" : L" · " + topic.category), 13));
-        button.Click([id = topic.id](auto const&, auto const&) { RequestCulture(id); });
-        g_cultureResults.Children().Append(button);
-        any = true;
+    auto makeButton = [](PCWSTR title, auto handler) { wuxc::Button button; button.Content(winrt::box_value(title));
+        button.CornerRadius({7, 7, 7, 7}); button.Click(handler); return button; };
+    if (!g_cultureSelectedId.empty()) {
+        g_cultureResults.Children().Append(makeButton(PickText(vi, L"‹ Danh mục", L"‹ Topics"), [](auto const&, auto const&) {
+            g_cultureSelectedId.clear(); RequestCulture(L""); g_renderedCultureRevision = ~0ULL; RefreshExpandedPopupData();
+        }));
     }
-    if (!any) {
-        add(PickText(vi, L"Không có chủ đề phù hợp.", L"No matching topics."));
+    if (state.loading || state.catalogLoading) { add(PickText(vi, L"Đang tải…", L"Loading…")); return; }
+    if (!state.error.empty()) {
+        add(PickText(vi, L"Không tải được nội dung. Kiểm tra kết nối và thử lại.", L"Unable to load content. Check your connection and retry."));
+        g_cultureResults.Children().Append(makeButton(PickText(vi, L"Thử lại", L"Retry"), [](auto const&, auto const&) { RequestCulture(g_cultureSelectedId); }));
+        return;
     }
-    add(PickText(
-        vi,
-        L"Chọn chủ đề để mở bài viết tham khảo trên Wikipedia trong trình duyệt mặc định.",
-        L"Select a topic to open its Wikipedia reference article in your default browser."),
-        11);
+    if (g_cultureSelectedId.empty()) {
+        std::wstring query = g_cultureSearch ? std::wstring(g_cultureSearch.Text()) : L"";
+        std::transform(query.begin(), query.end(), query.begin(), towlower);
+        bool any = false;
+        for (auto const& topic : state.topics) {
+            std::wstring search = topic.title + L" " + topic.category;
+            std::transform(search.begin(), search.end(), search.begin(), towlower);
+            if (!query.empty() && search.find(query) == std::wstring::npos) continue;
+            wuxc::Button button; button.MinWidth(0); button.CornerRadius({7, 7, 7, 7});
+            button.HorizontalAlignment(wux::HorizontalAlignment::Stretch); button.HorizontalContentAlignment(wux::HorizontalAlignment::Left);
+            button.Content(WrappedText(topic.title + (topic.category.empty() ? L"" : L" · " + topic.category), 13));
+            button.Click([id = topic.id](auto const&, auto const&) { RequestCulture(id); });
+            g_cultureResults.Children().Append(button); any = true;
+        }
+        if (!any) add(PickText(vi, L"Không có chủ đề phù hợp.", L"No matching topics."));
+        add(GetSettings().cultureCatalogUrl.empty()
+            ? PickText(vi, L"Bài viết trực tuyến từ Wikipedia tiếng Việt. Nội dung cộng đồng biên soạn; xem nguồn và lịch sử sửa đổi tại bài gốc.",
+                L"Online articles from English Wikipedia. Community-written content; consult the source and revision history.")
+            : PickText(vi, L"Nội dung từ danh mục trực tuyến đã cấu hình.", L"Content from your configured online catalog."), 11);
+    } else {
+        auto const& article = state.article;
+        add(article.title, 19);
+        if (article.image) {
+            wuxc::Image image; image.Source(BitmapFromPixels(article.image)); image.MaxHeight(160);
+            image.Stretch(wuxm::Stretch::Uniform); image.HorizontalAlignment(wux::HorizontalAlignment::Left);
+            g_cultureResults.Children().Append(image);
+        }
+        add(article.text, 13);
+        auto link = [&](std::wstring const& url, PCWSTR title) {
+            if (url.rfind(L"https://", 0) != 0) return;
+            wuxc::HyperlinkButton button; button.Content(winrt::box_value(title)); button.NavigateUri(wf::Uri(url));
+            g_cultureResults.Children().Append(button);
+        };
+        link(article.source, PickText(vi, L"Nguồn · Bài đầy đủ và lịch sử sửa đổi", L"Source · Full article and revision history"));
+        if (article.image) link(article.imageSource, PickText(vi, L"Nguồn ảnh và giấy phép", L"Image source and licensing"));
+        if (GetSettings().cultureCatalogUrl.empty()) {
+            add(PickText(vi, L"Văn bản: Wikipedia, CC BY-SA 4.0; bản trích có thể được rút ngắn. Ảnh có giấy phép riêng tại nguồn.",
+                L"Text: Wikipedia, CC BY-SA 4.0; excerpt may be shortened. Images have separate licenses at the source."), 10);
+            link(L"https://creativecommons.org/licenses/by-sa/4.0/", L"CC BY-SA 4.0");
+        }
+    }
 }
-
 void RefreshCulturePage(bool vi) {
     if (!g_cultureScroll) return;
     bool show = g_selectedActivity == ActivityKind::Culture && g_popupMode == PopupMode::Manual;
     int theme = g_popupRootCard ? static_cast<int>(g_popupRootCard.RequestedTheme()) : 0;
-    if (g_renderedCultureTheme != theme) {
-        g_renderedCultureTheme = theme;
-        g_renderedCultureRevision = ~0ULL;
-    }
+    if (g_renderedCultureTheme != theme) { g_renderedCultureTheme = theme; g_renderedCultureRevision = ~0ULL; }
     g_cultureScroll.Visibility(show ? wux::Visibility::Visible : wux::Visibility::Collapsed);
     if (!show || g_popupMode == PopupMode::Hidden) {
         if (g_culturePageOpen) ReleaseCulturePage();
@@ -7591,52 +6875,28 @@ void RefreshCulturePage(bool vi) {
     }
     g_culturePageOpen = true;
     g_popupTitleSolar.Text(PickText(vi, L"Văn hóa Việt", L"Vietnamese culture"));
-    g_popupTitleLunar.Text(PickText(
-        vi, L"Trang phục · Lễ Tết · Nghệ thuật · Phong tục",
-        L"Clothing · Festivals · Arts · Traditions"));
-    g_popupZodiacText.Text(L"📖");
-    g_popupZodiacText.Visibility(wux::Visibility::Visible);
-    {
-        std::lock_guard<std::mutex> lock(g_cultureMutex);
-        if (g_renderedCultureRevision == g_culture.revision &&
-            g_renderedCultureLanguage == int(vi)) {
-            return;
-        }
-    }
+    g_popupTitleLunar.Text(PickText(vi, L"Trang phục · Lễ Tết · Nghệ thuật · Phong tục", L"Clothing · Festivals · Arts · Traditions"));
+    g_popupZodiacText.Text(L"📖"); g_popupZodiacText.Visibility(wux::Visibility::Visible);
+    { std::lock_guard<std::mutex> lock(g_cultureMutex);
+      if (g_renderedCultureRevision == g_culture.revision && g_renderedCultureLanguage == int(vi)) return; }
 
     auto state = ReadCultureState();
-    if (state.topics.empty()) {
-        RequestCulture(L"");
-        state = ReadCultureState();
+    if (state.topics.empty() && !state.catalogLoading && !state.loading && state.error.empty() && g_cultureSelectedId.empty()) {
+        RequestCulture(L""); state = ReadCultureState();
     }
-    g_cultureSearch.Visibility(wux::Visibility::Visible);
-    g_cultureSearch.PlaceholderText(
-        PickText(vi, L"Tìm chủ đề hoặc nhóm văn hóa…", L"Search topics or categories…"));
-    if (g_renderedCultureRevision != state.revision ||
-        g_renderedCultureLanguage != int(vi)) {
-        g_renderedCultureRevision = state.revision;
-        g_renderedCultureLanguage = int(vi);
-        RefreshCultureResults();
-        ResetPopupScrollPosition(g_cultureScroll);
+    g_cultureSearch.Visibility(g_cultureSelectedId.empty() ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    g_cultureSearch.PlaceholderText(PickText(vi, L"Tìm chủ đề hoặc nhóm văn hóa…", L"Search topics or categories…"));
+    if (g_renderedCultureRevision != state.revision || g_renderedCultureLanguage != int(vi)) {
+        g_renderedCultureRevision = state.revision; g_renderedCultureLanguage = int(vi);
+        RefreshCultureResults(); ResetPopupScrollPosition(g_cultureScroll);
     }
 }
-
 void ReleaseExtendedControls() {
-    ReleaseCulturePage();
-    ReleaseNewControls();
-    g_monthScroll = nullptr;
-    g_monthBody = nullptr;
-    g_monthButton = nullptr;
-    g_cultureScroll = nullptr;
-    g_cultureBody = nullptr;
-    g_cultureSearch = nullptr;
-    g_cultureResults = nullptr;
-    g_popupTabsScroll = nullptr;
-    g_playPauseIcon = nullptr;
-    g_mediaBitmap = nullptr;
-    g_renderedArtwork.reset();
-    g_renderedMonth = -1;
-    g_renderedCultureRevision = ~0ULL;
+    ReleaseCulturePage(); ReleaseNewControls();
+    g_monthScroll = nullptr; g_monthBody = nullptr; g_monthButton = nullptr;
+    g_cultureScroll = nullptr; g_cultureBody = nullptr; g_cultureSearch = nullptr; g_cultureResults = nullptr;
+    g_popupTabsScroll = nullptr; g_playPauseIcon = nullptr; g_mediaBitmap = nullptr; g_renderedArtwork.reset();
+    g_renderedMonth = -1; g_renderedCultureRevision = ~0ULL;
 }
 
 std::wstring ActivityLabel(ActivityKind kind, bool vi) {
@@ -7646,11 +6906,12 @@ std::wstring ActivityLabel(ActivityKind kind, bool vi) {
         case ActivityKind::Privacy: return PickText(vi, L"Quyền riêng tư", L"Privacy");
         case ActivityKind::Culture: return PickText(vi, L"Văn hóa Việt", L"Vietnamese culture");
         case ActivityKind::None: return L"";
-        case ActivityKind::Clock: return PickText(vi, L"Đồng hồ", L"Clock");
+        case ActivityKind::Clock: return PickText(vi,L"Đồng hồ",L"Clock");
         case ActivityKind::Obs: return PickText(vi, L"Quay màn hình", L"Recording");
         case ActivityKind::Display: return PickText(vi, L"Trình chiếu", L"Displays");
         case ActivityKind::Hotspot: return PickText(vi, L"Điểm phát sóng", L"Hotspot");
         case ActivityKind::Download: return PickText(vi, L"Tiến trình", L"Tasks");
+        case ActivityKind::Remote: return L"UltraViewer";
         case ActivityKind::Memory: return PickText(vi, L"Thiết bị", L"Device");
         default: return PickText(vi, L"Âm lịch & Tử vi", L"Lunar & Almanac");
     }
@@ -7810,15 +7071,9 @@ std::wstring ActivityEventKey(ActivityKind kind) {
             if (HasTaskNotice(s)) key += L"notice:" + std::to_wstring(s.taskNotice.serial);
             return key;
         }
-        case ActivityKind::Clock: return std::to_wstring(s.clock.activitySerial) + L":" + std::to_wstring(s.clock.noticeSerial);
-        case ActivityKind::Memory: {
-            std::wstring key = std::to_wstring(s.memory.percent >= 95 ? 95 : s.memory.percent >= 90 ? 90 : s.memory.percent >= 80 ? 80 : 0) +
-                               L":" + std::to_wstring(std::max(s.temperature.cpu, s.temperature.gpu) / 10);
-            for (auto const& v : s.storage) {
-                if (v.total > 0 && v.free * 10 < v.total) key += L":" + v.root;
-            }
-            return key;
-        }
+        case ActivityKind::Clock: return std::to_wstring(s.clock.activitySerial)+L":"+std::to_wstring(s.clock.noticeSerial);
+        case ActivityKind::Remote: return std::to_wstring(s.remote.serial);
+        case ActivityKind::Memory: return std::to_wstring(s.memory.percent >= 95 ? 95 : s.memory.percent >= 90 ? 90 : s.memory.percent >= 80 ? 80 : 0)+L":"+std::to_wstring(std::max(s.temperature.cpu,s.temperature.gpu)/10);
         case ActivityKind::Obs: return s.obs.recording ? std::to_wstring(s.obs.generation) : L"";
         case ActivityKind::Display: {
             std::wstring key;
@@ -7850,13 +7105,23 @@ void WakeSettingsProviders() {
     if (g_taskControlWake) SetEvent(g_taskControlWake);
     RequestPopupRefresh();
 }
+// Settings is a separate, on-demand WPF process. The script is embedded in this
+// source and passed through stdin; no .ps1, helper executable or configuration file
+// is installed. Only the authenticated child can use the local pipe.
+HANDLE g_settingsHostThread = nullptr;
+std::mutex g_settingsHostMutex;
+constexpr UINT kApplyRemoteSettings = WM_APP + 0x497;
+constexpr UINT kRestoreHiddenActivities = WM_APP + 0x498;
+PCWSTR SettingsSectionName(int section, bool vi) {
+    static constexpr PCWSTR en[] = {L"General", L"Appearance & layout", L"Live activities", L"Task progress", L"OBS recording", L"Lunar & Almanac", L"Device management"};
+    static constexpr PCWSTR vn[] = {L"Chung", L"Giao diện & Bố cục", L"Hoạt động trực tiếp", L"Tiến trình tác vụ", L"Quay màn hình OBS", L"Âm lịch & Tử vi", L"Quản lý thiết bị"};
+    return vi ? vn[ClampVal(section, 0, 6)] : en[ClampVal(section, 0, 6)];
+}
 
 void SetQuickOption(PCWSTR key,std::wstring const& value) {
     std::wstring uiKey = std::wstring(L"ui.") + key;
     Wh_SetStringValue(uiKey.c_str(), value.c_str());
     LoadSettings();
-    auto settings = GetSettings();
-    ApplyNativeWidgetsButtonState(settings, EffectiveTaskbarPosition(settings));
     ++g_settingsRevision;
     g_popupBackdropDirty = true;
     WakeSettingsProviders();
@@ -7947,16 +7212,6 @@ void ShowTaskbarContextMenu(wux::FrameworkElement const& anchor) {
         });
         positions.Items().Append(item);
     }
-    positions.Items().Append(wuxc::MenuFlyoutSeparator());
-    wuxc::ToggleMenuFlyoutItem hideWidgetsItem;
-    hideWidgetsItem.Text(PickText(
-        vi, L"Ẩn nút Các tiện ích ở góc trái", L"Hide Widgets button in left corner"));
-    hideWidgetsItem.IsChecked(settings.hideWidgetsButton);
-    std::wstring nextHideWidgets = settings.hideWidgetsButton ? L"0" : L"1";
-    hideWidgetsItem.Click([nextHideWidgets](auto const&, auto const&) {
-        try { SetQuickOption(L"hideWidgetsButton", nextHideWidgets); } catch (...) {}
-    });
-    positions.Items().Append(hideWidgetsItem);
     g_quickMenu.Items().Append(positions);
 
     wuxc::MenuFlyoutSubItem styles;
@@ -7992,9 +7247,6 @@ void ShowTaskbarContextMenu(wux::FrameworkElement const& anchor) {
         try {
             g_hiddenActivities.clear();
             LoadSettings(true);
-            auto currentSettings = GetSettings();
-            ApplyNativeWidgetsButtonState(
-                currentSettings, EffectiveTaskbarPosition(currentSettings));
             ++g_settingsRevision;
             g_popupBackdropDirty = true;
             WakeSettingsProviders();
@@ -8027,6 +7279,9 @@ void ShowQuickSettings() {
         ShowTaskbarContextMenu(g_playerGrid);
     }
 }
+
+void StopSettingsHost() {}
+void RefreshSettingsWindow() { ++g_settingsRevision; }
 
 std::vector<ActivityKind> CurrentActivities(ModSettings const& settings) {
     RefreshHiddenActivities();
@@ -8062,6 +7317,7 @@ void SelectActivity(ActivityKind kind) {
     if (kind != ActivityKind::Culture && g_culturePageOpen) ReleaseCulturePage();
     g_selectedActivity = kind;
     g_lastUserActivity = kind == ActivityKind::Culture ? ActivityKind::Lunar : kind; g_lastManualSwitch = GetTickCount64();
+    g_showUsage = false;
     if (kind == ActivityKind::Battery) g_batteryNeedsAttention = false;
     RequestPopupRefresh();
 }
@@ -8251,45 +7507,20 @@ void RefreshLivePopupPage(bool vi, bool light) {
             g_popupLiveStatus.Text(g_uiLive.taskNotice.filename + (g_uiLive.taskNotice.filename.empty() ? L"" : L" · ") + TaskNoticeText(g_uiLive.taskNotice, vi));
             if (g_uiLive.tasks.empty()) g_popupLiveTitle.Text(L"");
         }
+    } else if (g_selectedActivity == ActivityKind::Remote) {
+        SetActivityGlyph(g_popupZodiacText,L"\uE7F4");
+        g_popupTitleLunar.Text(RemoteConnectionText(g_uiLive.remote,vi));
+        g_popupLiveTitle.Text(L""); g_popupLiveDetail.Text(RemotePeerText(g_uiLive.remote));
+        g_popupLiveProgress.Visibility(wux::Visibility::Collapsed); g_popupLiveStatus.Text(L"");
     } else if (g_selectedActivity == ActivityKind::Memory) {
         auto const& m = g_uiLive.memory;
-        auto settings = GetSettings();
-        std::wstring lowStorage = settings.storageAlerts
-            ? LowStorageText(g_uiLive.storage, vi, false)
-            : L"";
         SetActivityGlyph(g_popupZodiacText, L"\uE950");
-        if (m.valid) {
-            g_popupTitleLunar.Text(
-                m.percent >= 95 ? PickText(vi, L"RAM gần đầy", L"Memory nearly full")
-              : !lowStorage.empty() ? PickText(vi, L"Cảnh báo dung lượng ổ đĩa & RAM", L"Storage & memory status")
-                                    : PickText(vi, L"Mức sử dụng RAM", L"Memory usage"));
-            g_popupLiveTitle.Text(std::to_wstring(m.percent) + L"%");
-            g_popupLiveDetail.Text(
-                MemorySize(m.total - m.available) + L" / " + MemorySize(m.total));
-            UpdateProgressView(g_popupLiveProgress, m.percent, m.percent >= 90 ? 4 : 2);
-            g_popupLiveProgress.Visibility(wux::Visibility::Visible);
-        } else {
-            g_popupTitleLunar.Text(!lowStorage.empty()
-                ? PickText(vi, L"Cảnh báo dung lượng ổ đĩa", L"Low storage space")
-                : PickText(vi, L"Trạng thái thiết bị", L"Device status"));
-            g_popupLiveTitle.Text(L"");
-            g_popupLiveDetail.Text(L"");
-            g_popupLiveProgress.Visibility(wux::Visibility::Collapsed);
-        }
-        std::wstring status;
-        if (!lowStorage.empty()) {
-            status += lowStorage;
-        }
-        if (settings.temperatureAlerts || g_uiLive.temperature.cpu >= 0 || g_uiLive.temperature.gpu >= 0) {
-            if (!status.empty()) status += L"\n";
-            status += TemperatureText(g_uiLive.temperature, vi);
-        }
-        std::wstring topApps = MemoryTopText(m);
-        if (!topApps.empty()) {
-            if (!status.empty()) status += L"\n";
-            status += topApps;
-        }
-        g_popupLiveStatus.Text(status);
+        g_popupTitleLunar.Text(m.percent >= 95 ? PickText(vi,L"RAM gần đầy",L"Memory nearly full") : PickText(vi,L"Mức sử dụng RAM",L"Memory usage"));
+        g_popupLiveTitle.Text(std::to_wstring(m.percent) + L"%");
+        g_popupLiveDetail.Text(MemorySize(m.total-m.available) + L" / " + MemorySize(m.total));
+        UpdateProgressView(g_popupLiveProgress,m.percent);
+        g_popupLiveProgress.Visibility(wux::Visibility::Visible);
+        g_popupLiveStatus.Text(TemperatureText(g_uiLive.temperature,vi)+L"\n"+MemoryTopText(m));
     } else if (g_selectedActivity == ActivityKind::Privacy) {
         PrivacyGlyph(g_popupZodiacText);
         g_popupTitleLunar.Text(L"");
@@ -8311,8 +7542,12 @@ void RefreshLivePopupPage(bool vi, bool light) {
         g_popupLiveStatus.Text(status);
         RefreshBatteryTools(vi);
         UpdateProgressView(g_popupLiveProgress, b.percent);
-        g_popupLiveProgress.Visibility(b.valid && b.present && b.percent >= 0
+        g_popupLiveProgress.Visibility(!g_showUsage && b.valid && b.present && b.percent >= 0
             ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+        if (g_showUsage) {
+            g_popupTitleSolar.Text(PickText(vi, L"Cài đặt nguồn & pin", L"Power & battery settings"));
+            g_popupLiveTitle.Text(L""); g_popupLiveDetail.Text(L""); g_popupLiveStatus.Text(L"");
+        }
     }
 }
 
@@ -8485,10 +7720,8 @@ void RefreshTaskbarWidgetData() {
         g_playerGrid.MaxWidth(settingsOnly ? 42 : collapsed ? 140 : static_cast<double>(settings.widgetWidth));
         if (g_widgetBadgeBorder) g_widgetBadgeBorder.Margin({0, 0, settingsOnly ? 0.0 : 8.0, 0});
         if (g_widgetLine2Text) g_widgetLine2Text.Visibility(settingsOnly || collapsed ? wux::Visibility::Collapsed : wux::Visibility::Visible);
-        if (EffectiveTaskbarPosition(settings) == L"root_left") {
-            EnsureNativeWidgetsButtonsCached(true);
-            ApplyNativeWidgetsButtonState(settings, L"root_left");
-            g_playerGrid.Margin({ComputeRootLeftOffsetDip(settings), 0.0, 0.0, 0.0});
+        if (settings.position == L"root_left") {
+            g_playerGrid.Margin({static_cast<double>(settings.widgetLeftOffset), 0.0, 0.0, 0.0});
         } else {
             g_playerGrid.Margin({4.0, 0.0, 4.0, 0.0});
         }
@@ -8546,26 +7779,14 @@ void RefreshTaskbarWidgetData() {
         } else if (g_selectedActivity == ActivityKind::Display) {
             isHoliday = false; SetActivityGlyph(g_widgetZodiacText, L"\uE7F4");
             line1 = DisplayModeText(g_uiLive.display, vi); line2 = DisplayNames(g_uiLive.display, vi);
+        } else if (g_selectedActivity == ActivityKind::Remote) {
+            line1=g_uiLive.remote.active && !g_uiLive.remote.peers.empty() ? g_uiLive.remote.peers.front() : L"UltraViewer";line2=RemoteConnectionText(g_uiLive.remote,vi);
+            SetActivityGlyph(g_widgetZodiacText,L"\uE7F4");
         } else if (g_selectedActivity == ActivityKind::Memory) {
-            std::wstring lowStorage = settings.storageAlerts
-                ? LowStorageText(g_uiLive.storage, vi, true)
-                : L"";
-            isHoliday = (g_uiLive.memory.valid && g_uiLive.memory.percent >= 90) || !lowStorage.empty();
-            SetActivityGlyph(g_widgetZodiacText, L"\uE950");
-            if (std::max(g_uiLive.temperature.cpu, g_uiLive.temperature.gpu) >= 70) {
-                line1 = PickText(vi, L"Nhiệt độ cao", L"High temperature");
-                line2 = TemperatureText(g_uiLive.temperature, vi);
-            } else if (!lowStorage.empty() && (!g_uiLive.memory.valid || g_uiLive.memory.percent < 80)) {
-                line1 = PickText(vi, L"Ổ đĩa sắp đầy", L"Low disk space");
-                line2 = lowStorage;
-            } else {
-                line1 = L"RAM · " + std::to_wstring(g_uiLive.memory.percent) + L"%";
-                line2 = MemorySize(g_uiLive.memory.total - g_uiLive.memory.available) +
-                        L" / " + MemorySize(g_uiLive.memory.total);
-                if (!lowStorage.empty()) {
-                    line2 += L" · " + lowStorage;
-                }
-            }
+            isHoliday = g_uiLive.memory.percent >= 90; SetActivityGlyph(g_widgetZodiacText,L"\uE950");
+            line1 = L"RAM · " + std::to_wstring(g_uiLive.memory.percent) + L"%";
+            line2 = MemorySize(g_uiLive.memory.total-g_uiLive.memory.available) + L" / " + MemorySize(g_uiLive.memory.total);
+            if(std::max(g_uiLive.temperature.cpu,g_uiLive.temperature.gpu)>=70) {line1=PickText(vi,L"Nhiệt độ cao",L"High temperature");line2=TemperatureText(g_uiLive.temperature,vi);}
         } else if (g_selectedActivity == ActivityKind::Hotspot) {
             isHoliday = false; SetActivityGlyph(g_widgetZodiacText, L"\uEC15");
             line1 = PickText(vi, L"Điểm phát sóng Wi-Fi", L"Wi-Fi hotspot");
@@ -8740,32 +7961,18 @@ void ApplyPopupPresentation(bool vi) {
     } else if (g_selectedActivity == ActivityKind::Obs) {
         g_popupTitleSolar.Text(PickText(vi, g_uiLive.obs.recording ? L"Đang quay màn hình" : L"Đã dừng quay màn hình", g_uiLive.obs.recording ? L"Screen recording" : L"Screen recording stopped"));
         g_popupTitleLunar.Text(L"OBS Studio");
+    } else if (g_selectedActivity == ActivityKind::Remote) {
+        g_popupTitleSolar.Text(L"UltraViewer");
+        g_popupTitleLunar.Text(RemoteConnectionText(g_uiLive.remote,vi));
+        message=RemotePeerText(g_uiLive.remote);
     } else if (g_selectedActivity == ActivityKind::Memory) {
-        auto settings = GetSettings();
-        std::wstring lowStorage = settings.storageAlerts
-            ? LowStorageText(g_uiLive.storage, vi, false)
-            : L"";
-        if (std::max(g_uiLive.temperature.cpu, g_uiLive.temperature.gpu) >= 70) {
-            g_popupTitleSolar.Text(PickText(vi, L"Nhiệt độ thiết bị cao", L"High device temperature"));
-            g_popupTitleLunar.Text(TemperatureText(g_uiLive.temperature, vi));
-        } else if (!lowStorage.empty() && (!g_uiLive.memory.valid || g_uiLive.memory.percent < 80)) {
-            g_popupTitleSolar.Text(PickText(vi, L"Dung lượng ổ đĩa thấp", L"Low disk space"));
-            g_popupTitleLunar.Text(LowStorageText(g_uiLive.storage, vi, true));
-        } else {
-            g_popupTitleSolar.Text(g_uiLive.memory.percent >= 95
-                ? PickText(vi, L"RAM gần đầy", L"Memory nearly full")
-                : PickText(vi, L"RAM đang sử dụng cao", L"High memory usage"));
-            g_popupTitleLunar.Text(
-                std::to_wstring(g_uiLive.memory.percent) + L"% · " +
-                MemorySize(g_uiLive.memory.total - g_uiLive.memory.available) + L" / " +
-                MemorySize(g_uiLive.memory.total));
+        g_popupTitleSolar.Text(g_uiLive.memory.percent >= 95 ? PickText(vi,L"RAM gần đầy",L"Memory nearly full") : PickText(vi,L"RAM đang sử dụng cao",L"High memory usage"));
+        g_popupTitleLunar.Text(std::to_wstring(g_uiLive.memory.percent)+L"% · "+MemorySize(g_uiLive.memory.total-g_uiLive.memory.available)+L" / "+MemorySize(g_uiLive.memory.total));
+        if(std::max(g_uiLive.temperature.cpu,g_uiLive.temperature.gpu)>=70) {
+            g_popupTitleSolar.Text(PickText(vi,L"Nhiệt độ thiết bị cao",L"High device temperature"));
+            g_popupTitleLunar.Text(TemperatureText(g_uiLive.temperature,vi));
         }
-        message = lowStorage;
-        std::wstring topApps = MemoryTopText(g_uiLive.memory);
-        if (!topApps.empty()) {
-            if (!message.empty()) message += L"\n";
-            message += topApps;
-        }
+        message = MemoryTopText(g_uiLive.memory);
     } else if (g_selectedActivity == ActivityKind::Display) {
         g_popupTitleSolar.Text(DisplayModeText(g_uiLive.display, vi));
         g_popupTitleLunar.Text(DisplayNames(g_uiLive.display, vi));
@@ -8802,7 +8009,7 @@ int DesiredPopupHeight(int width) {
         } else body = MeasurePopupElement(content, inner - 16);
         body += 4;
         if (scroll == g_popupHolidayScroll || scroll == g_cultureScroll ||
-            g_selectedActivity == ActivityKind::Download || g_selectedActivity == ActivityKind::Clock) {
+                   (g_selectedActivity == ActivityKind::Battery && g_showUsage) || g_selectedActivity == ActivityKind::Download || g_selectedActivity==ActivityKind::Clock) {
             body = std::min(body, 460.0f);
         }
         break;
@@ -8816,7 +8023,7 @@ void CapturePopupSourceGeometry(int& outCardWidthDip, int& outCardHeightDip) {
     RECT taskbar{};
     GetWindowRect(g_taskbarWnd, &taskbar);
     if (!GetElementScreenRect(g_playerGrid, g_popupSourceRect)) {
-        int leftPx = PopupDipToPx(ComputeRootLeftOffsetDip(settings), g_taskbarWnd);
+        int leftPx = PopupDipToPx(settings.widgetLeftOffset, g_taskbarWnd);
         g_popupSourceRect = {
             taskbar.left + leftPx, taskbar.top,
             taskbar.left + leftPx + PopupDipToPx(settings.widgetWidth, g_taskbarWnd),
@@ -8892,282 +8099,151 @@ struct IVnGraphicsEffectD2DInterop : IUnknown {
     virtual HRESULT STDMETHODCALLTYPE GetSourceCount(UINT*) = 0;
 };
 __CRT_UUID_DECL(IVnGraphicsEffectD2DInterop,0x2fc57384,0xa068,0x44d7,0xa3,0x31,0x30,0x98,0x2f,0xcf,0x71,0x77);
-struct GlassLensEffect : winrt::implements<
-                             GlassLensEffect,
-                             winrt::Windows::Graphics::Effects::IGraphicsEffect,
-                             winrt::Windows::Graphics::Effects::IGraphicsEffectSource,
-                             IVnGraphicsEffectD2DInterop> {
+struct GlassLensEffect : winrt::implements<GlassLensEffect,
+        winrt::Windows::Graphics::Effects::IGraphicsEffect,
+        winrt::Windows::Graphics::Effects::IGraphicsEffectSource,IVnGraphicsEffectD2DInterop> {
     winrt::hstring name{L"Refraction"};
     winrt::Windows::Graphics::Effects::IGraphicsEffectSource source{nullptr};
-
     winrt::hstring Name() { return name; }
-    void Name(winrt::hstring const& value) { name = value; }
-
+    void Name(winrt::hstring const& value) { name=value; }
     HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override {
-        if (!id) return E_POINTER;
-        *id = CLSID_D2D12DAffineTransform;
-        return S_OK;
+        if(!id)return E_POINTER; *id=CLSID_D2D12DAffineTransform;return S_OK;
     }
-
-    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(
-        PCWSTR property, UINT* index, UINT* mapping) noexcept override {
-        if (!property || !index || !mapping) return E_POINTER;
-        if (wcscmp(property, L"TransformMatrix") != 0) return E_INVALIDARG;
-        *index = 2;
-        *mapping = 1;
-        return S_OK;
+    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(PCWSTR property,UINT* index,UINT* mapping) noexcept override {
+        if(!property||!index||!mapping)return E_POINTER;
+        if(wcscmp(property,L"TransformMatrix"))return E_INVALIDARG;
+        *index=2;*mapping=1;return S_OK;
     }
-
-    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override {
-        if (!count) return E_POINTER;
-        *count = 4;
-        return S_OK;
+    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override {if(!count)return E_POINTER;*count=4;return S_OK;}
+    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override {if(!count)return E_POINTER;*count=1;return S_OK;}
+    HRESULT STDMETHODCALLTYPE GetSource(UINT index,::IInspectable** value) noexcept override {
+        if(!value)return E_POINTER;*value=nullptr;if(index)return E_INVALIDARG;
+        winrt::copy_to_abi(source,*reinterpret_cast<void**>(value));return S_OK;
     }
-
-    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override {
-        if (!count) return E_POINTER;
-        *count = 1;
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE GetSource(UINT index, ::IInspectable** value) noexcept override {
-        if (!value) return E_POINTER;
-        *value = nullptr;
-        if (index != 0) return E_INVALIDARG;
-        winrt::copy_to_abi(source, *reinterpret_cast<void**>(value));
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE GetProperty(UINT index, ::IInspectable** value) noexcept override {
-        if (!value) return E_POINTER;
-        *value = nullptr;
+    HRESULT STDMETHODCALLTYPE GetProperty(UINT index,::IInspectable** value) noexcept override {
+        if(!value)return E_POINTER;*value=nullptr;
         try {
             wf::IInspectable property{nullptr};
-            if (index == 0) {
-                property = wf::PropertyValue::CreateUInt32(1); // linear interpolation
-            } else if (index == 1) {
-                property = wf::PropertyValue::CreateUInt32(1); // hard border
-            } else if (index == 2) {
-                const float matrix[] = {1.035f, 0, 0, 1.035f, -8.0f, -5.0f};
-                property = wf::PropertyValue::CreateSingleArray(matrix);
-            } else if (index == 3) {
-                property = wf::PropertyValue::CreateSingle(0);
-            } else {
-                return E_INVALIDARG;
-            }
+            if(index==0)property=wf::PropertyValue::CreateUInt32(1); // linear interpolation
+            else if(index==1)property=wf::PropertyValue::CreateUInt32(1); // hard border
+            else if(index==2) { const float matrix[]={1.035f,0,0,1.035f,-8.0f,-5.0f};property=wf::PropertyValue::CreateSingleArray(matrix); }
+            else if(index==3)property=wf::PropertyValue::CreateSingle(0);
+            else return E_INVALIDARG;
             auto boxed = property.as<wf::IPropertyValue>();
-            winrt::copy_to_abi(boxed, *reinterpret_cast<void**>(value));
-            return S_OK;
-        } catch (...) {
-            return winrt::to_hresult();
-        }
+            winrt::copy_to_abi(boxed,*reinterpret_cast<void**>(value));return S_OK;
+        } catch(...) {return winrt::to_hresult();}
     }
 };
-
 // Gaussian blur samples only the layer BEHIND this visual, never the widget text.
-struct WidgetBlurEffect : winrt::implements<
-                              WidgetBlurEffect,
-                              winrt::Windows::Graphics::Effects::IGraphicsEffect,
-                              winrt::Windows::Graphics::Effects::IGraphicsEffectSource,
-                              IVnGraphicsEffectD2DInterop> {
+struct WidgetBlurEffect : winrt::implements<WidgetBlurEffect,
+        winrt::Windows::Graphics::Effects::IGraphicsEffect,
+        winrt::Windows::Graphics::Effects::IGraphicsEffectSource,IVnGraphicsEffectD2DInterop> {
     winrt::hstring name{L"WidgetBlur"};
     winrt::Windows::Graphics::Effects::IGraphicsEffectSource source{nullptr};
-    float amount = 12.0f;
-
-    winrt::hstring Name() { return name; }
-    void Name(winrt::hstring const& value) { name = value; }
-
-    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override {
-        if (!id) return E_POINTER;
-        *id = CLSID_D2D1GaussianBlur;
-        return S_OK;
+    float amount=12;
+    winrt::hstring Name(){return name;}
+    void Name(winrt::hstring const& value){name=value;}
+    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override {if(!id)return E_POINTER;*id=CLSID_D2D1GaussianBlur;return S_OK;}
+    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(PCWSTR property,UINT* index,UINT* mapping) noexcept override {
+        if(!property||!index||!mapping)return E_POINTER;
+        if(wcscmp(property,L"BlurAmount"))return E_INVALIDARG;*index=0;*mapping=1;return S_OK;
     }
-
-    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(
-        PCWSTR property, UINT* index, UINT* mapping) noexcept override {
-        if (!property || !index || !mapping) return E_POINTER;
-        if (wcscmp(property, L"BlurAmount") != 0) return E_INVALIDARG;
-        *index = 0;
-        *mapping = 1;
-        return S_OK;
+    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override {if(!count)return E_POINTER;*count=3;return S_OK;}
+    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override {if(!count)return E_POINTER;*count=1;return S_OK;}
+    HRESULT STDMETHODCALLTYPE GetSource(UINT index,::IInspectable** value) noexcept override {
+        if(!value)return E_POINTER;*value=nullptr;if(index)return E_INVALIDARG;
+        winrt::copy_to_abi(source,*reinterpret_cast<void**>(value));return S_OK;
     }
-
-    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override {
-        if (!count) return E_POINTER;
-        *count = 3;
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override {
-        if (!count) return E_POINTER;
-        *count = 1;
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE GetSource(UINT index, ::IInspectable** value) noexcept override {
-        if (!value) return E_POINTER;
-        *value = nullptr;
-        if (index != 0) return E_INVALIDARG;
-        winrt::copy_to_abi(source, *reinterpret_cast<void**>(value));
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE GetProperty(UINT index, ::IInspectable** value) noexcept override {
-        if (!value) return E_POINTER;
-        *value = nullptr;
+    HRESULT STDMETHODCALLTYPE GetProperty(UINT index,::IInspectable** value) noexcept override {
+        if(!value)return E_POINTER;*value=nullptr;
         try {
             wf::IInspectable property{nullptr};
-            if (index == 0) {
-                property = wf::PropertyValue::CreateSingle(amount);
-            } else if (index == 1) {
-                property = wf::PropertyValue::CreateUInt32(1); // balanced optimization
-            } else if (index == 2) {
-                property = wf::PropertyValue::CreateUInt32(1); // hard border
-            } else {
-                return E_INVALIDARG;
-            }
-            winrt::copy_to_abi(property.as<wf::IPropertyValue>(), *reinterpret_cast<void**>(value));
-            return S_OK;
-        } catch (...) {
-            return winrt::to_hresult();
-        }
+            if(index==0)property=wf::PropertyValue::CreateSingle(amount);
+            else if(index==1)property=wf::PropertyValue::CreateUInt32(1); // balanced optimization
+            else if(index==2)property=wf::PropertyValue::CreateUInt32(1); // hard border
+            else return E_INVALIDARG;
+            winrt::copy_to_abi(property.as<wf::IPropertyValue>(),*reinterpret_cast<void**>(value));return S_OK;
+        }catch(...){return winrt::to_hresult();}
     }
 };
-
 [[clang::no_destroy]] wcomp::ContainerVisual g_widgetMaterialVisual{nullptr};
 [[clang::no_destroy]] wcomp::CompositionRoundedRectangleGeometry g_widgetMaterialClip{nullptr};
-int g_widgetMaterialStyle = -1;
-
-float WidgetBackgroundOpacity(bool hover, bool pressed, bool open) {
-    return pressed || open ? 1.0f : hover ? 0.30f : 0.0f;
-}
-
+int g_widgetMaterialStyle=-1;
+float WidgetBackgroundOpacity(bool hover,bool pressed,bool open){return pressed||open?1.0f:hover?0.30f:0.0f;}
 void SizeWidgetMaterial() {
-    if (!g_widgetBackdropLayer || !g_widgetMaterialVisual || !g_widgetMaterialClip) {
-        return;
-    }
-    auto width = std::max(0.0f, static_cast<float>(g_widgetBackdropLayer.ActualWidth()));
-    auto height = std::max(0.0f, static_cast<float>(g_widgetBackdropLayer.ActualHeight()));
-    g_widgetMaterialClip.Size({width, height});
-    float radius = std::min({6.0f, width * 0.5f, height * 0.5f});
-    g_widgetMaterialClip.CornerRadius({radius, radius});
+    if(!g_widgetBackdropLayer || !g_widgetMaterialVisual || !g_widgetMaterialClip)return;
+    auto width=std::max(0.f,static_cast<float>(g_widgetBackdropLayer.ActualWidth()));
+    auto height=std::max(0.f,static_cast<float>(g_widgetBackdropLayer.ActualHeight()));
+    g_widgetMaterialClip.Size({width,height});
+    float radius=std::min({6.f,width*.5f,height*.5f});g_widgetMaterialClip.CornerRadius({radius,radius});
 }
-
 void ReleaseWidgetMaterial() {
-    if (g_widgetBackdropLayer) {
-        try {
-            wuxh::ElementCompositionPreview::SetElementChildVisual(g_widgetBackdropLayer, nullptr);
-        } catch (...) {}
-    }
-    g_widgetMaterialVisual = nullptr;
-    g_widgetMaterialClip = nullptr;
-    g_widgetBackdropLayer = nullptr;
-    g_widgetMaterialRim = nullptr;
-    g_widgetMaterialStyle = -1;
-    g_widgetPressed = false;
+    if(g_widgetBackdropLayer)try{wuxh::ElementCompositionPreview::SetElementChildVisual(g_widgetBackdropLayer,nullptr);}catch(...){}
+    g_widgetMaterialVisual=nullptr;g_widgetMaterialClip=nullptr;
+    g_widgetBackdropLayer=nullptr;g_widgetMaterialRim=nullptr;
+    g_widgetMaterialStyle=-1;g_widgetPressed=false;
 }
-
-void UpdateWidgetMaterial(bool light, bool open) {
-    if (!g_widgetBackdropLayer || !g_widgetMaterialRim) {
-        return;
-    }
-    bool allowed = g_effectsAllowed.load();
-    bool glass = allowed && GetSettings().popupTheme == L"glass";
-    int style = (light ? 1 : 0) | (glass ? 2 : 0) | (allowed ? 4 : 0);
-    if (style != g_widgetMaterialStyle) {
-        wuxh::ElementCompositionPreview::SetElementChildVisual(g_widgetBackdropLayer, nullptr);
-        g_widgetMaterialVisual = nullptr;
-        g_widgetMaterialClip = nullptr;
-        auto tint = light ? winrt::Windows::UI::Color{255, 241, 241, 246}
-                          : winrt::Windows::UI::Color{255, 33, 34, 40};
+void UpdateWidgetMaterial(bool light,bool open) {
+    if(!g_widgetBackdropLayer || !g_widgetMaterialRim)return;
+    bool allowed=g_effectsAllowed.load();
+    bool glass=allowed && g_glassCpuSupported && GetSettings().popupTheme==L"glass";
+    int style=(light?1:0)|(glass?2:0)|(allowed?4:0);
+    if(style!=g_widgetMaterialStyle) {
+        wuxh::ElementCompositionPreview::SetElementChildVisual(g_widgetBackdropLayer,nullptr);
+        g_widgetMaterialVisual=nullptr;g_widgetMaterialClip=nullptr;
+        auto tint=light?winrt::Windows::UI::Color{255,241,241,246}:winrt::Windows::UI::Color{255,33,34,40};
         g_widgetBackdropLayer.Background(wuxm::SolidColorBrush(tint));
-        g_widgetMaterialRim.BorderBrush(
-            glass ? GlassEdgeBrush().as<wuxm::Brush>()
-                  : wuxm::SolidColorBrush(
-                        light ? winrt::Windows::UI::Color{40, 0, 0, 0}
-                              : winrt::Windows::UI::Color{65, 255, 255, 255})
-                        .as<wuxm::Brush>());
-        if (allowed) {
-            try {
-                auto compositor =
-                    wuxh::ElementCompositionPreview::GetElementVisual(g_widgetBackdropLayer)
-                        .Compositor();
-                auto container = compositor.CreateContainerVisual();
-                container.RelativeSizeAdjustment({1.0f, 1.0f});
-                auto source = wcomp::CompositionEffectSourceParameter(L"Background");
-                auto blur = winrt::make_self<WidgetBlurEffect>();
-                blur->source = source;
-                blur->amount = glass ? 3.0f : 12.0f;
-                winrt::Windows::Graphics::Effects::IGraphicsEffect graph =
-                    blur.as<winrt::Windows::Graphics::Effects::IGraphicsEffect>();
-                if (glass) {
-                    auto lens = winrt::make_self<GlassLensEffect>();
-                    lens->source =
-                        graph.as<winrt::Windows::Graphics::Effects::IGraphicsEffectSource>();
-                    graph = lens.as<winrt::Windows::Graphics::Effects::IGraphicsEffect>();
-                }
-                auto brush = compositor.CreateEffectFactory(graph).CreateBrush();
-                brush.SetSourceParameter(L"Background", compositor.CreateBackdropBrush());
-                auto backdrop = compositor.CreateSpriteVisual();
-                backdrop.RelativeSizeAdjustment({1.0f, 1.0f});
-                backdrop.Brush(brush);
-                container.Children().InsertAtBottom(backdrop);
-                auto overlay = compositor.CreateSpriteVisual();
-                overlay.RelativeSizeAdjustment({1.0f, 1.0f});
-                tint.A = static_cast<uint8_t>(glass ? (light ? 55 : 65) : (light ? 150 : 135));
-                overlay.Brush(compositor.CreateColorBrush(tint));
-                container.Children().InsertAtTop(overlay);
-                if (glass) {
-                    auto sheen = compositor.CreateSpriteVisual();
-                    sheen.RelativeSizeAdjustment({1.0f, 1.0f});
-                    auto gradient = compositor.CreateLinearGradientBrush();
-                    gradient.StartPoint({0.0f, 0.0f});
-                    gradient.EndPoint({1.0f, 1.0f});
-                    gradient.ColorStops().Append(
-                        compositor.CreateColorGradientStop(0.0f, {70, 255, 255, 255}));
-                    gradient.ColorStops().Append(
-                        compositor.CreateColorGradientStop(0.5f, {0, 255, 255, 255}));
-                    gradient.ColorStops().Append(
-                        compositor.CreateColorGradientStop(1.0f, {25, 255, 255, 255}));
-                    sheen.Brush(gradient);
-                    container.Children().InsertAtTop(sheen);
-                }
-                g_widgetMaterialClip = compositor.CreateRoundedRectangleGeometry();
-                container.Clip(compositor.CreateGeometricClip(g_widgetMaterialClip));
-                g_widgetMaterialVisual = container;
-                wuxh::ElementCompositionPreview::SetElementChildVisual(
-                    g_widgetBackdropLayer, container);
-                g_widgetBackdropLayer.Background(wuxm::SolidColorBrush({0, 0, 0, 0}));
-                SizeWidgetMaterial();
-            } catch (...) {
-                try {
-                    wuxh::ElementCompositionPreview::SetElementChildVisual(
-                        g_widgetBackdropLayer, nullptr);
-                } catch (...) {}
-                g_widgetMaterialVisual = nullptr;
-                g_widgetMaterialClip = nullptr;
-                // Native Acrylic is the fallback for Blur and popup-theme Off alike.
-                try {
-                    wuxm::AcrylicBrush acrylic;
-                    acrylic.BackgroundSource(wuxm::AcrylicBackgroundSource::Backdrop);
-                    tint.A = 255;
-                    acrylic.TintColor(tint);
-                    acrylic.TintOpacity(0.60);
-                    acrylic.FallbackColor(tint);
-                    g_widgetBackdropLayer.Background(acrylic);
-                } catch (...) {}
+        g_widgetMaterialRim.BorderBrush(glass?GlassEdgeBrush().as<wuxm::Brush>():wuxm::SolidColorBrush(light?
+            winrt::Windows::UI::Color{40,0,0,0}:winrt::Windows::UI::Color{65,255,255,255}).as<wuxm::Brush>());
+        if(allowed)try {
+            auto compositor=wuxh::ElementCompositionPreview::GetElementVisual(g_widgetBackdropLayer).Compositor();
+            auto container=compositor.CreateContainerVisual();container.RelativeSizeAdjustment({1,1});
+            auto source=wcomp::CompositionEffectSourceParameter(L"Background");
+            auto blur=winrt::make_self<WidgetBlurEffect>();blur->source=source;blur->amount=glass?3.f:12.f;
+            winrt::Windows::Graphics::Effects::IGraphicsEffect graph=blur.as<winrt::Windows::Graphics::Effects::IGraphicsEffect>();
+            if(glass) {
+                auto lens=winrt::make_self<GlassLensEffect>();lens->source=graph.as<winrt::Windows::Graphics::Effects::IGraphicsEffectSource>();
+                graph=lens.as<winrt::Windows::Graphics::Effects::IGraphicsEffect>();
             }
-        } else {
-            COLORREF color = GetSysColor(COLOR_WINDOW);
-            g_widgetBackdropLayer.Background(wuxm::SolidColorBrush(
-                {255, GetRValue(color), GetGValue(color), GetBValue(color)}));
+            auto brush=compositor.CreateEffectFactory(graph).CreateBrush();
+            brush.SetSourceParameter(L"Background",compositor.CreateBackdropBrush());
+            auto backdrop=compositor.CreateSpriteVisual();backdrop.RelativeSizeAdjustment({1,1});backdrop.Brush(brush);
+            container.Children().InsertAtBottom(backdrop);
+            auto overlay=compositor.CreateSpriteVisual();overlay.RelativeSizeAdjustment({1,1});
+            tint.A = static_cast<uint8_t>(glass ? (light ? 55 : 65) : (light ? 150 : 135));
+            overlay.Brush(compositor.CreateColorBrush(tint));
+            container.Children().InsertAtTop(overlay);
+            if(glass) {
+                auto sheen=compositor.CreateSpriteVisual();sheen.RelativeSizeAdjustment({1,1});
+                auto gradient=compositor.CreateLinearGradientBrush();gradient.StartPoint({0,0});gradient.EndPoint({1,1});
+                gradient.ColorStops().Append(compositor.CreateColorGradientStop(0,{70,255,255,255}));
+                gradient.ColorStops().Append(compositor.CreateColorGradientStop(.5f,{0,255,255,255}));
+                gradient.ColorStops().Append(compositor.CreateColorGradientStop(1,{25,255,255,255}));
+                sheen.Brush(gradient);container.Children().InsertAtTop(sheen);
+            }
+            g_widgetMaterialClip=compositor.CreateRoundedRectangleGeometry();
+            container.Clip(compositor.CreateGeometricClip(g_widgetMaterialClip));g_widgetMaterialVisual=container;
+            wuxh::ElementCompositionPreview::SetElementChildVisual(g_widgetBackdropLayer,container);
+            g_widgetBackdropLayer.Background(wuxm::SolidColorBrush({0,0,0,0}));SizeWidgetMaterial();
+        }catch(...) {
+            try{wuxh::ElementCompositionPreview::SetElementChildVisual(g_widgetBackdropLayer,nullptr);}catch(...){}
+            g_widgetMaterialVisual=nullptr;g_widgetMaterialClip=nullptr;
+            // Native Acrylic is the fallback for Blur and popup-theme Off alike.
+            try {
+                wuxm::AcrylicBrush acrylic;acrylic.BackgroundSource(wuxm::AcrylicBackgroundSource::Backdrop);
+                tint.A=255;acrylic.TintColor(tint);acrylic.TintOpacity(.60);acrylic.FallbackColor(tint);
+                g_widgetBackdropLayer.Background(acrylic);
+            }catch(...){}
         }
-        g_widgetMaterialStyle = style;
+        else {
+            COLORREF color=GetSysColor(COLOR_WINDOW);
+            g_widgetBackdropLayer.Background(wuxm::SolidColorBrush({255,GetRValue(color),GetGValue(color),GetBValue(color)}));
+        }
+        g_widgetMaterialStyle=style;
     }
-    float opacity = WidgetBackgroundOpacity(g_widgetHovered, g_widgetPressed, open);
+    float opacity=WidgetBackgroundOpacity(g_widgetHovered,g_widgetPressed,open);
     // Opacity belongs to the background siblings, not to the root or text.
-    g_widgetBackdropLayer.Opacity(opacity);
-    g_widgetMaterialRim.Opacity(opacity);
+    g_widgetBackdropLayer.Opacity(opacity);g_widgetMaterialRim.Opacity(opacity);
 }
 
 [[clang::no_destroy]] wcomp::CompositionEffectBrush g_glassLens{nullptr};
@@ -9261,7 +8337,7 @@ bool SetPopupCompositionBackdrop(bool light) {
 
 void ApplyPopupBackdrop(bool light) {
     if (!g_popupRootCard || !g_expandedPopup) return;
-    auto theme = GetSettings().popupTheme;
+    auto theme = EffectivePopupTheme(GetSettings());
     bool glass = theme == L"glass";
     bool allowed = g_effectsAllowed.load() && theme != L"solid";
     int state = int(light) | (allowed ? 2 : 0) | (glass ? 4 : 0);
@@ -9354,7 +8430,9 @@ void AnimatePageIfChanged() {
     if (g_selectedActivity == ActivityKind::Lunar)
         key += L":" + std::to_wstring(g_showingMonth) + L":" + std::to_wstring(g_popupShowingHolidays) +
             L":" + std::to_wstring(g_popupDayOffset) + L":" + std::to_wstring(g_monthOffset);
+    if (g_selectedActivity == ActivityKind::Battery) key += L":" + std::to_wstring(g_showUsage);
     if (g_selectedActivity == ActivityKind::Privacy) key += L":" + g_selectedPrivacy;
+    if (g_selectedActivity == ActivityKind::Culture) key += L":" + g_cultureSelectedId;
     if (g_selectedActivity == ActivityKind::Media) key += L":" + std::to_wstring(g_uiLive.media.sessionId);
     static ActivityKind lastActivity = ActivityKind::None;
     bool activityChanged = lastActivity != ActivityKind::None && lastActivity != g_selectedActivity;
@@ -9873,12 +8951,13 @@ bool InitializePopupXamlHost(HWND hwnd) {
         g_privacyAppList = wuxc::StackPanel(); g_privacyAppList.Spacing(6);
         liveBody.Children().Append(g_privacyAppList); liveBody.Children().Append(g_privacySelector);
         g_batteryTools = wuxc::StackPanel(); g_batteryTools.Spacing(0);
-        g_powerSettingsButton = wuxc::Button(); g_powerSettingsButton.CornerRadius({6, 6, 6, 6}); g_powerSettingsButton.Margin({0, 0, 0, 8});
-        g_powerSettingsButton.Click([](auto const&, auto const&) {
+        g_usageButton = wuxc::Button(); g_usageButton.CornerRadius({6, 6, 6, 6}); g_usageButton.Margin({0, 0, 0, 8});
+        g_usageButton.Click([](auto const&, auto const&) {
             ShellExecuteW(nullptr, L"open", L"ms-settings:powersleep", nullptr, nullptr, SW_SHOWNORMAL);
             if (g_liveWakeEvent) SetEvent(g_liveWakeEvent); RequestPopupRefresh();
         });
-        g_batteryTools.Children().Append(g_powerSettingsButton);
+        g_batteryTools.Children().Append(g_usageButton);
+        g_usageList = wuxc::StackPanel(); g_usageList.Spacing(6); g_batteryTools.Children().Append(g_usageList);
         g_obsControls = wuxc::StackPanel(); g_obsControls.Orientation(wuxc::Orientation::Horizontal);
         g_obsControls.Spacing(10); g_obsControls.Margin({0, 12, 0, 8});
         g_obsControls.HorizontalAlignment(wux::HorizontalAlignment::Center);
@@ -10109,6 +9188,7 @@ void HideExpandedPopupImmediately(HWND hwnd) {
 
     if (g_culturePageOpen) ReleaseCulturePage();
     if (g_selectedActivity == ActivityKind::Culture) g_selectedActivity = ActivityKind::Lunar;
+    g_showUsage = false;
     g_popupMode = PopupMode::Hidden;
     g_popupAutoDeadline = 0;
     if (hwnd && IsWindow(hwnd)) ShowWindow(hwnd, SW_HIDE);
@@ -10152,11 +9232,11 @@ void PollPopupInteraction(HWND hwnd) {
         POINT point{};
         RECT popup{}, widget{};
         if (GetCursorPos(&point) && GetWindowRect(hwnd, &popup)) {
-            if (PtInRect(&popup, point)) {
-                PromotePopupToManual();
-            } else if (!(GetElementScreenRect(g_playerGrid, widget) && PtInRect(&widget, point))) {
+            if (PtInRect(&popup, point)) PromotePopupToManual();
+            else if (!(g_powerAcCombo && g_powerAcCombo.IsDropDownOpen()) &&
+                     !(g_powerDcCombo && g_powerDcCombo.IsDropDownOpen()) &&
+                     !(GetElementScreenRect(g_playerGrid, widget) && PtInRect(&widget, point)))
                 BeginCloseExpandedPopup(hwnd);
-            }
         }
     }
     g_popupLastPrimaryDown = down;
@@ -10178,7 +9258,7 @@ void ProcessLiveActivityAlerts() {
         if (settings.enableTaskProgress && ready && announcedTasks.insert(task.id).second) newTask = true;
     }
     std::erase_if(announcedTasks, [&](auto id) {
-        return std::none_of(g_uiLive.tasks.begin(), g_uiLive.tasks.end(), [&](auto const& task) { return task.id == id; });
+        return std::none_of(g_uiLive.tasks.begin(),g_uiLive.tasks.end(),[&](auto const& task){return task.id==id;});
     });
     g_alertPrivacyUses = g_uiLive.privacy.uses; g_alertTasks = g_uiLive.tasks;
     auto alert = settings.enableBatteryWidget ? g_batteryAlertTracker.Observe(g_uiLive.battery) : BatteryAlert::None;
@@ -10203,36 +9283,22 @@ void ProcessLiveActivityAlerts() {
     if (alert != BatteryAlert::None && settings.batteryAutoPopup) show = ActivityKind::Battery;
     if (!bluetoothAlert.id.empty() && settings.batteryAutoPopup) show = ActivityKind::Battery;
     if (newPrivacy && settings.privacyAutoPopup) show = ActivityKind::Privacy;
-    static uint64_t lastClockNotice = 0;
-    if (settings.enableClockWidget && settings.clockAutoPopup &&
-        g_uiLive.clock.noticeSerial != lastClockNotice &&
-        GetTickCount64() < g_uiLive.clock.noticeUntil) {
-        show = ActivityKind::Clock;
-    }
-    lastClockNotice = g_uiLive.clock.noticeSerial;
+    static uint64_t lastClockNotice=0;
+    if(settings.enableClockWidget && settings.clockAutoPopup && g_uiLive.clock.noticeSerial!=lastClockNotice && GetTickCount64()<g_uiLive.clock.noticeUntil)
+        show=ActivityKind::Clock;
+    lastClockNotice=g_uiLive.clock.noticeSerial;
     static uint64_t announcedObsStop = 0;
     bool stoppedObs = settings.enableObsWidget && g_uiLive.obs.stoppedSerial != announcedObsStop && GetTickCount64() < g_uiLive.obs.stoppedUntil;
     announcedObsStop = g_uiLive.obs.stoppedSerial;
     if (stoppedObs) show = ActivityKind::Obs;
-    if (settings.temperatureAlerts &&
-        (g_cpuTempAlerts.Observe(g_uiLive.temperature.cpu) |
-         g_gpuTempAlerts.Observe(g_uiLive.temperature.gpu))) {
-        show = ActivityKind::Memory;
-    } else if (!settings.temperatureAlerts) {
-        g_cpuTempAlerts = {};
-        g_gpuTempAlerts = {};
+    static uint64_t lastRemote = 0;
+    if(settings.remoteAlerts && g_uiLive.remote.serial && g_uiLive.remote.serial != lastRemote) {
+        lastRemote=g_uiLive.remote.serial; show=ActivityKind::Remote;
     }
-    if (settings.memoryAlerts && g_uiLive.memory.valid &&
-        g_memoryAlerts.Observe(g_uiLive.memory.percent)) {
-        show = ActivityKind::Memory;
-    } else if (!settings.memoryAlerts) {
-        g_memoryAlerts = {};
-    }
-    if (settings.storageAlerts && g_storageAlerts.Observe(g_uiLive.storage)) {
-        show = ActivityKind::Memory;
-    } else if (!settings.storageAlerts) {
-        g_storageAlerts = {};
-    }
+    static TemperatureAlerts cpuAlerts,gpuAlerts;
+    if(settings.temperatureAlerts && (cpuAlerts.Observe(g_uiLive.temperature.cpu) | gpuAlerts.Observe(g_uiLive.temperature.gpu))) show=ActivityKind::Memory;
+    static MemoryAlerts memoryAlerts;
+    if (settings.memoryAlerts && g_uiLive.memory.valid && memoryAlerts.Observe(g_uiLive.memory.percent)) show = ActivityKind::Memory;
     if (show != ActivityKind::None) g_hiddenActivities.erase(show);
     bool manual = g_popupMode == PopupMode::Manual && g_expandedPopup && IsWindowVisible(g_expandedPopup);
     if (manual && !(stoppedObs && g_selectedActivity == ActivityKind::Obs)) { if (show != ActivityKind::None) RefreshExpandedPopupData(); return; }
@@ -10276,6 +9342,7 @@ LRESULT CALLBACK ExpandedPopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             case WM_TIMER:
                 if (wParam == kPopupActivityTimerId) {
                     PollPopupInteraction(hwnd);
+                    if(IsWindowVisible(hwnd) && SamplePopupContrast()) RefreshExpandedPopupData();
                     return 0;
                 }
                 if (wParam == kPopupCloseTimerId) {
@@ -10337,14 +9404,13 @@ void OpenExpandedPopup(bool automatic) {
     if (g_shuttingDown) return;
     if (automatic) {
         auto state = ReadLiveSnapshot();
-        if ((g_selectedActivity == ActivityKind::Clock && GetTickCount64() >= state.clock.noticeUntil) ||
+        if ((g_selectedActivity==ActivityKind::Clock && GetTickCount64()>=state.clock.noticeUntil) ||
             (g_selectedActivity == ActivityKind::Download && state.tasks.empty() && !HasTaskNotice(state)) ||
             (g_selectedActivity == ActivityKind::Privacy && state.privacy.uses.empty()) ||
             (g_selectedActivity == ActivityKind::Obs && (state.obs.recording || GetTickCount64() >= state.obs.stoppedUntil)) ||
-            (g_selectedActivity != ActivityKind::Clock && g_selectedActivity != ActivityKind::Obs &&
-             g_selectedActivity != ActivityKind::Download && g_selectedActivity != ActivityKind::Privacy &&
+            (g_selectedActivity != ActivityKind::Clock && g_selectedActivity != ActivityKind::Obs && g_selectedActivity != ActivityKind::Download && g_selectedActivity != ActivityKind::Privacy &&
              g_selectedActivity != ActivityKind::Battery && g_selectedActivity != ActivityKind::Display &&
-             g_selectedActivity != ActivityKind::Hotspot && g_selectedActivity != ActivityKind::Memory)) return;
+             g_selectedActivity != ActivityKind::Hotspot && g_selectedActivity != ActivityKind::Memory && g_selectedActivity != ActivityKind::Remote)) return;
     }
     const bool wasVisible = g_expandedPopup && IsWindowVisible(g_expandedPopup);
     if (!g_expandedPopup || !IsWindow(g_expandedPopup)) {
@@ -10468,13 +9534,7 @@ void RemoveInjectedTaskbarWidget() {
         } catch (...) {}
     }
 
-    UnwatchNativeWidgetsButtons();
-    RestoreNativeWidgetsButton();
-    g_cachedNativeWidgetsButtons.clear();
-    g_nativeWidgetsButtonsLookedUp = false;
-    g_lastNativeWidgetsScanTick = 0;
-    g_glassButtonTemplate = nullptr;
-    g_glassTemplateFailed = false;
+    g_glassButtonTemplate = nullptr;g_glassTemplateFailed=false;
     g_playerGrid = nullptr;
     g_widgetBadgeBorder = nullptr;
     g_widgetZodiacText = nullptr;
@@ -10682,8 +9742,16 @@ rootBorder.PointerPressed([](wf::IInspectable const&, wuxi::PointerRoutedEventAr
         args.Handled(true);
     });
 
-    rootBorder.PointerReleased([](wf::IInspectable const&, wuxi::PointerRoutedEventArgs const&) {
+    rootBorder.PointerReleased([](wf::IInspectable const&, wuxi::PointerRoutedEventArgs const& args) {
         if (g_shuttingDown) return;
+        auto pt = args.GetCurrentPoint(g_playerGrid);
+        if (pt.Properties().PointerUpdateKind() == winrt::Windows::UI::Input::PointerUpdateKind::RightButtonReleased) {
+            g_widgetPressed = false;
+            UpdateWidgetHoverVisual();
+            args.Handled(true);
+            try { ShowTaskbarContextMenu(g_playerGrid); } catch (...) {}
+            return;
+        }
         g_widgetPressed = false;
         UpdateWidgetHoverVisual();
     });
@@ -10718,6 +9786,15 @@ rootBorder.PointerPressed([](wf::IInspectable const&, wuxi::PointerRoutedEventAr
 LRESULT CALLBACK LiveUiWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
     try {
         if (message == WM_TIMER && wParam == kObsClockTimerId) { RefreshObsClock(); return 0; }
+        if (message == kRestoreHiddenActivities) { g_hiddenActivities.clear(); RequestPopupRefresh(); return 0; }
+        if (message == kApplyRemoteSettings) {
+            HideExpandedPopupImmediately(g_expandedPopup);
+            g_popupBackdropDirty = true; g_renderedTabLanguage = -1;
+            g_renderedBluetoothLanguage = -1; g_renderedPrivacyLanguage = -1;
+            g_renderedMonth = -1; g_renderedCultureLanguage = -1; ++g_progressVisualRevision;
+            { std::lock_guard<std::mutex> lock(g_cultureMutex); ++g_cultureRequestId; g_culture = {}; }
+            EnsureTaskbarWidgetInjectedOnThread(); return 0;
+        }
         if (message == kLiveUpdateMessage) {
             g_liveUiQueued = false;
             if (!g_shuttingDown) {
@@ -10726,20 +9803,15 @@ LRESULT CALLBACK LiveUiWindowProc(HWND window, UINT message, WPARAM wParam, LPAR
             return 0;
         }
         if (message == WM_DISPLAYCHANGE || message == WM_DEVICECHANGE) {
-            g_displayDirty = true; g_bluetoothDirty = true; g_storageDirty = true;
-            if (g_systemWake) SetEvent(g_systemWake);
+            g_displayDirty = true; g_bluetoothDirty = true; if (g_systemWake) SetEvent(g_systemWake);
             if (g_bluetoothWake) SetEvent(g_bluetoothWake);
         }
         if (message == WM_SETTINGCHANGE || message == WM_THEMECHANGED || message == WM_DWMCOMPOSITIONCHANGED) {
-            if (message == WM_SETTINGCHANGE) {
-                RefreshTaskbarAlignment();
-            }
             ++g_settingsRevision;
             ++g_progressVisualRevision;
             g_renderedTabLanguage = -1; g_renderedPrivacyLanguage = -1; g_renderedMediaSelection = 0; g_renderedMonth = -1;
             g_popupBackdropDirty = true; g_forcePowerRefresh = true;
             if (g_liveWakeEvent) SetEvent(g_liveWakeEvent);
-            if (!g_shuttingDown) EnsureTaskbarWidgetInjectedOnThread();
         }
     } catch (...) { g_liveUiQueued = false; Wh_Log(L"Live UI refresh failed; waiting for next update"); }
     return DefWindowProcW(window, message, wParam, lParam);
@@ -10762,7 +9834,6 @@ void EnsureTaskbarWidgetInjectedOnThread() {
     } ensureGuard;
 
     ModSettings settings = GetSettings();
-    std::wstring effectivePos = EffectiveTaskbarPosition(settings);
 
     if (!g_taskbarWnd || !IsWindow(g_taskbarWnd)) {
         g_taskbarTimerStarted = false;
@@ -10785,11 +9856,6 @@ void EnsureTaskbarWidgetInjectedOnThread() {
         if (!g_taskbarTimerStarted) Wh_Log(L"SetTimer failed: %lu", GetLastError());
     }
 
-    if (!settings.enableTaskbarWidget) {
-        RemoveInjectedTaskbarWidget();
-        return;
-    }
-
     RefreshNativeLocationLabel(g_taskbarWnd);
     g_uiLive = ReadLiveSnapshot();
     ObserveActivitySelection(settings);
@@ -10798,7 +9864,7 @@ void EnsureTaskbarWidgetInjectedOnThread() {
     if (CurrentActivities(settings).empty()) g_selectedActivity = ActivityKind::None;
     if (g_playerGrid && g_injectedParentPanel) {
         try {
-            if (g_currentInjectedPosition != effectivePos) {
+            if (g_currentInjectedPosition != settings.position) {
                 RemoveInjectedTaskbarWidget();
             } else {
                 uint32_t idx = 0;
@@ -10840,7 +9906,7 @@ void EnsureTaskbarWidgetInjectedOnThread() {
         InjectionTarget target = ResolveInjectionTarget(rootElement, settings);
         if (!target.panel) {
             ReportWidgetStatus(L"Waiting for the requested TaskbarFrame.RootGrid or system-tray target.");
-            LogTrayLookupFailure(rootElement, effectivePos.c_str());
+            LogTrayLookupFailure(rootElement, settings.position.c_str());
             return;
         }
 
@@ -10848,15 +9914,11 @@ void EnsureTaskbarWidgetInjectedOnThread() {
         // Set ownership before mutation so an exception can roll back insertion.
         g_playerGrid = widget;
         g_injectedParentPanel = target.panel;
-        if (effectivePos == L"root_left") {
-            CacheNativeWidgetsButtons(rootElement);
-        }
-        ApplyNativeWidgetsButtonState(settings, effectivePos);
         auto targetGrid = target.panel.try_as<wuxc::Grid>();
 
         if (target.overlay) {
             widget.HorizontalAlignment(wux::HorizontalAlignment::Left);
-            widget.Margin({ComputeRootLeftOffsetDip(settings), 0.0, 0.0, 0.0});
+            widget.Margin({static_cast<double>(settings.widgetLeftOffset), 0.0, 0.0, 0.0});
             wuxc::Grid::SetColumn(widget, 0);
             wuxc::Grid::SetColumnSpan(widget, std::max(1, static_cast<int>(targetGrid.ColumnDefinitions().Size())));
             wuxc::Grid::SetRow(widget, 0);
@@ -10913,11 +9975,11 @@ void EnsureTaskbarWidgetInjectedOnThread() {
 
         g_playerGrid = widget;
         g_injectedParentPanel = target.panel;
-        g_currentInjectedPosition = effectivePos;
+        g_currentInjectedPosition = settings.position;
 
         RefreshTaskbarWidgetData();
         Wh_Log(L"Injected: position=%s, parent=%s, column=%d, childIndex=%d, width=%d DIP",
-               effectivePos.c_str(), winrt::get_class_name(target.panel).c_str(),
+               settings.position.c_str(), winrt::get_class_name(target.panel).c_str(),
                target.column, target.childIndex, settings.widgetWidth);
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"Injection failed: 0x%08X - %s",
@@ -11102,10 +10164,12 @@ bool InstallHook(HMODULE module, PCSTR functionName, Prototype* hook, Prototype*
 }
 
 BOOL Wh_ModInit() {
-    if (!HasSupportedWindowsVersion()) {
+    if(!HasSupportedWindowsVersion()) {
         Wh_Log(L"This mod requires Windows 11 x64 (build 22000 or later) with the native XAML taskbar. Windows 10 is not supported.");
         return FALSE;
     }
+    g_glassCpuSupported=DetectGlassCpuSupport();
+    if(!g_glassCpuSupported)Wh_Log(L"Liquid Glass CPU policy: using Windows blur fallback.");
     Wh_Log(L"Initializing taskbar widget.");
     g_shuttingDown = false;
 
@@ -11140,6 +10204,7 @@ void Wh_ModBeforeUninit() {
     // Detach widget/popup handlers and timers on their owning UI thread.
     g_shuttingDown = true;
     StopLiveProviders();
+    StopSettingsHost();
     if (HWND hTrayWnd = FindCurrentProcessTaskbarWnd()) {
         RunFromWindowThread(
             hTrayWnd,
@@ -11155,31 +10220,25 @@ void Wh_ModBeforeUninit() {
 void Wh_ModSettingsChanged() {
     LoadSettings(true);
     if (g_obsWake) SetEvent(g_obsWake);
-    g_displayDirty = true; g_bluetoothDirty = true; g_storageDirty = true;
+    g_displayDirty = true; g_bluetoothDirty = true;
     if (g_bluetoothWake) SetEvent(g_bluetoothWake);
     if (g_systemWake) SetEvent(g_systemWake);
     if (g_taskControlWake) SetEvent(g_taskControlWake);
     g_forcePowerRefresh = true;
-    {
-        std::lock_guard<std::mutex> lock(g_cultureMutex);
-        g_culture = {};
-    }
+    { std::lock_guard<std::mutex> lock(g_cultureMutex);
+      ++g_cultureRequestId; g_culture = {}; }
     if (g_liveWakeEvent) SetEvent(g_liveWakeEvent);
     if (HWND hTrayWnd = FindCurrentProcessTaskbarWnd()) {
         RunFromWindowThread(
             hTrayWnd,
             [](PVOID) {
                 HideExpandedPopupImmediately(g_expandedPopup);
-                ++g_settingsRevision;
+                RefreshSettingsWindow();
                 g_batteryAlertTracker = {}; g_bluetoothAlerts = {}; g_hiddenActivities.clear();
-                g_cpuTempAlerts = {}; g_gpuTempAlerts = {}; g_memoryAlerts = {}; g_storageAlerts = {};
                 g_alertPrivacyUses.clear(); g_alertTasks.clear(); g_privacyAlerts = {}; g_systemAlerts = {};
                 g_pendingSystemAlert = g_systemNoticeActivity = ActivityKind::None; g_systemNoticeUntil = 0;
-                g_renderedCultureRevision = ~0ULL;
+                g_cultureSelectedId.clear(); g_renderedCultureRevision = ~0ULL;
                 g_batteryNeedsAttention = false;
-                auto currentSettings = GetSettings();
-                ApplyNativeWidgetsButtonState(
-                    currentSettings, EffectiveTaskbarPosition(currentSettings));
                 EnsureTaskbarWidgetInjectedOnThread();
                 if (g_expandedPopup && IsWindowVisible(g_expandedPopup)) {
                     RefreshExpandedPopupData();
