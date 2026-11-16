@@ -3782,7 +3782,12 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             HidePreview();
             SetAccent(g_prev.hwnd, true, true);
             RebuildApps();
-            if (g_set.hideTaskbar) HideTaskbars(); else RestoreTaskbars();
+            if (g_set.hideTaskbar) {
+                HideTaskbars();
+            } else {
+                RestoreTaskbars();
+                RestoreTaskbarAutoHide();  // also when this process never hid it (see UiThread)
+            }
             CreateDocks();
             return 0;
         case WM_APP_WINKEY: {
@@ -3882,7 +3887,14 @@ DWORD WINAPI UiThread(LPVOID) {
     RebuildApps();
     Log(L"start: pins=%d apps=%d", (int)g_pins.size(), (int)g_apps.size());
     for (auto& a : g_apps) Log(L"  app key=%s wins=%d pinned=%d", a.key.c_str(), (int)a.wins.size(), a.pinned);
-    if (g_set.hideTaskbar) HideTaskbars();
+    if (g_set.hideTaskbar) {
+        HideTaskbars();
+    } else {
+        // The option may have been turned off while the bar wasn't running (after a crash): give the
+        // taskbar back its own auto-hide and show it. Nothing happens if this mod never changed it.
+        RestoreTaskbarAutoHide();
+        ShowTaskbarWindows();
+    }
     CreateDocks();
     SetTimer(g_msgWnd, TIMER_POLL, 100, nullptr);
     RegisterStartHotkey();
@@ -3993,29 +4005,33 @@ static bool IsFolderWindowsProcess() {
 
 static BOOL ExplorerInit() {
     if (IsFolderWindowsProcess()) return FALSE;
+    // Stays loaded even when the hook can't be set, so that ExplorerUninit always runs and can give the
+    // taskbar back (see RestoreTaskbarAutoHide).
     HMODULE twinui = LoadLibraryExW(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!twinui) {
-        Wh_Log(L"twinui.pcshell.dll not loaded");
-        return FALSE;
+        Wh_Log(L"twinui.pcshell.dll not loaded: the Windows key keeps opening Windows' Start");
+        return TRUE;
     }
-    // twinui.pcshell.dll. Recent builds (seen on 26200) go through XamlLauncherState; other builds have
-    // only XamlLauncher::ShowStartView.
+    // Both resolved in one call (HookSymbols caches per module); recent builds (seen on 26200) go through
+    // XamlLauncherState, others have only XamlLauncher::ShowStartView.
+    void* xamlLauncherState = nullptr;
+    void* xamlLauncher = nullptr;
+    // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
         {{L"public: virtual long __cdecl XamlLauncherState::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum "
           L"IMMERSIVELAUNCHERSHOWFLAGS)"},
-         (void**)&ShowStartView_orig, (void*)ShowStartView_hook, false},
-    };
-    if (WindhawkUtils::HookSymbols(twinui, twinuiPcshellDllHooks, ARRAYSIZE(twinuiPcshellDllHooks))) return TRUE;
-    // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllFallbackHooks[] = {
+         &xamlLauncherState, nullptr, true},
         {{L"public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum "
           L"IMMERSIVELAUNCHERSHOWFLAGS)"},
-         (void**)&ShowStartView_orig, (void*)ShowStartView_hook, false},
+         &xamlLauncher, nullptr, true},
     };
-    if (WindhawkUtils::HookSymbols(twinui, twinuiPcshellDllFallbackHooks, ARRAYSIZE(twinuiPcshellDllFallbackHooks)))
-        return TRUE;
-    Wh_Log(L"ShowStartView not found: the Windows key keeps opening Windows' Start");
-    return FALSE;
+    WindhawkUtils::HookSymbols(twinui, twinuiPcshellDllHooks, ARRAYSIZE(twinuiPcshellDllHooks));
+    if (void* target = xamlLauncherState ? xamlLauncherState : xamlLauncher) {
+        Wh_SetFunctionHook(target, (void*)ShowStartView_hook, (void**)&ShowStartView_orig);
+    } else {
+        Wh_Log(L"ShowStartView not found: the Windows key keeps opening Windows' Start");
+    }
+    return TRUE;
 }
 
 // The mod is being turned off (or updated): once the bar's process is gone, make sure the Windows
