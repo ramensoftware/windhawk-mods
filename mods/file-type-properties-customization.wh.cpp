@@ -68,8 +68,9 @@ The file is not watched automatically.
 ## Refresh and limitations
 
 * Refresh Explorer when mappings change is off by default. Enabling it may redraw
-  windows and reload thumbnails after changed mappings are saved. Startup and
-  shutdown do not request a refresh.
+  windows and reload thumbnails after changed mappings are saved, including the
+  first or last rule. An empty configuration stays loaded without hooks while
+  this option is on. Startup and shutdown do not request a refresh.
 * Reopen affected windows or menus if they still show cached values.
 * Prefer local icon files. First use of a slow or disconnected network resource
   can block the requesting window until Windows finishes trying to load it.
@@ -111,7 +112,7 @@ The file is not watched automatically.
   $description: Absolute path, used only when Load INI preset is enabled. Re-enable the mod after editing the file, or save a changed mod setting.
 - refreshExplorer: false
   $name: Refresh Explorer when mappings change
-  $description: Request a global cache refresh after changed mappings are saved. May redraw windows and reload thumbnails. Usually leave off.
+  $description: Refresh cached icons and type names after saving changed mappings, including the first or last rule. May redraw windows and reload thumbnails. Keeps the mod loaded without hooks when no rules are configured. Usually leave off.
 */
 // ==/WindhawkModSettings==
 
@@ -164,6 +165,8 @@ struct ActiveFeatures {
     bool operator==(const ActiveFeatures&) const = default;
 };
 ActiveFeatures g_activeFeatures;
+bool g_refreshAfterInit = false;
+bool g_emptyRefreshListener = false;
 thread_local bool g_inHook = false;
 struct HookGuard {
     HookGuard() { g_inHook = true; }
@@ -1126,11 +1129,52 @@ void ReleaseHookModules() {
     for (HMODULE module : g_hookModules.modules) FreeLibrary(module);
     g_hookModules.modules.clear();
 }
-void NotifyShell() {
+bool IsTaskbarOwner() {
     HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     DWORD owner = 0;
-    if (!taskbar || !GetWindowThreadProcessId(taskbar, &owner) || owner != GetCurrentProcessId()) return;
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    return taskbar && GetWindowThreadProcessId(taskbar, &owner) && owner == GetCurrentProcessId();
+}
+void NotifyShell() {
+    if (IsTaskbarOwner()) SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+}
+
+// Windhawk unloads the DLL during a requested reload. Only the taskbar owner
+// writes/consumes this one-shot request in Windhawk's mod storage. Session keys
+// keep simultaneous logins separate; process creation time rejects PID reuse
+// and stale requests after Explorer or Windows restarts.
+struct RefreshRequest {
+    DWORD processId;
+    FILETIME creationTime;
+};
+std::optional<std::pair<std::wstring, RefreshRequest>> CurrentRefreshRequest() {
+    if (!IsTaskbarOwner()) return std::nullopt;
+    RefreshRequest request{};
+    request.processId = GetCurrentProcessId();
+    DWORD session = 0;
+    FILETIME exit{}, kernel{}, user{};
+    if (!ProcessIdToSessionId(request.processId, &session) ||
+        !GetProcessTimes(GetCurrentProcess(), &request.creationTime, &exit, &kernel, &user)) return std::nullopt;
+    return std::pair{L"pendingExplorerRefresh." + std::to_wstring(session), request};
+}
+void QueueRefreshAfterReload() {
+    auto current = CurrentRefreshRequest();
+    if (current && !Wh_SetBinaryValue(current->first.c_str(), &current->second, sizeof(RefreshRequest)))
+        Wh_Log(L"Could not defer the requested Explorer refresh; reopen affected windows");
+}
+bool TakeRefreshAfterReload() {
+    auto current = CurrentRefreshRequest();
+    if (!current) return false;
+    RefreshRequest pending{};
+    if (Wh_GetBinaryValue(current->first.c_str(), &pending, sizeof(pending)) != sizeof(pending) ||
+        pending.processId != current->second.processId ||
+        CompareFileTime(&pending.creationTime, &current->second.creationTime) != 0) return false;
+    // Consume before hook initialization: failed initialization must not leave
+    // a request that a later unrelated load could accidentally replay.
+    if (!Wh_DeleteValue(current->first.c_str())) {
+        Wh_Log(L"Could not consume the pending Explorer refresh; skipping it");
+        return false;
+    }
+    return true;
 }
 
 bool InstallHooks() {
@@ -1357,11 +1401,18 @@ bool InstallHooks() {
 } // namespace
 
 BOOL Wh_ModInit() {
+    g_emptyRefreshListener = false;
+    g_refreshAfterInit = TakeRefreshAfterReload();
+    bool refresh = Wh_GetIntSetting(L"refreshExplorer") != 0;
+    g_refreshAfterInit = g_refreshAfterInit && refresh;
     g_enableIcons = Wh_GetIntSetting(L"enableIcons") != 0;
     g_enableDescriptions = Wh_GetIntSetting(L"enableDescriptions") != 0;
     LoadSettings();
     g_activeFeatures = GetActiveFeatures();
     if (!g_activeFeatures.icons && !g_activeFeatures.descriptions) {
+        // An opt-in, hook-free listener is needed to observe the first rule.
+        // Otherwise Windhawk retries initialization without a settings callback.
+        if (refresh) { g_emptyRefreshListener = true; return TRUE; }
         Wh_Log(L"No active mappings; waiting for settings changes");
         return FALSE;
     }
@@ -1369,21 +1420,33 @@ BOOL Wh_ModInit() {
     if (!ok) Wh_Log(L"Required Shell symbols or hooks unavailable; mod will not load");
     return ok;
 }
+void Wh_ModAfterInit() {
+    if (std::exchange(g_refreshAfterInit, false) && Wh_GetIntSetting(L"refreshExplorer")) NotifyShell();
+}
 BOOL Wh_ModSettingsChanged(BOOL* reload) {
-    if ((Wh_GetIntSetting(L"enableIcons") != 0) != g_enableIcons ||
-        (Wh_GetIntSetting(L"enableDescriptions") != 0) != g_enableDescriptions) {
-        *reload = TRUE;
-        return TRUE;
-    }
+    bool icons = Wh_GetIntSetting(L"enableIcons") != 0;
+    bool descriptions = Wh_GetIntSetting(L"enableDescriptions") != 0;
+    bool switchesChanged = icons != g_enableIcons || descriptions != g_enableDescriptions;
+    g_enableIcons = icons;
+    g_enableDescriptions = descriptions;
     bool changed = LoadSettings();
-    if (GetActiveFeatures() != g_activeFeatures) {
+    auto active = GetActiveFeatures();
+    bool empty = !active.icons && !active.descriptions;
+    bool refresh = Wh_GetIntSetting(L"refreshExplorer") != 0;
+    if (switchesChanged || active != g_activeFeatures || (g_emptyRefreshListener && !refresh)) {
+        if (changed && refresh) {
+            if (empty) NotifyShell(); // The published empty snapshot already passes through.
+            else QueueRefreshAfterReload(); // New hooks must be active before refreshing.
+        }
         *reload = TRUE;
         return TRUE;
     }
-    if (changed && Wh_GetIntSetting(L"refreshExplorer")) NotifyShell();
+    if (changed && refresh) NotifyShell();
     return TRUE;
 }
 void Wh_ModUninit() {
+    g_refreshAfterInit = false;
+    g_emptyRefreshListener = false;
     g_activeFeatures = {};
     std::atomic_store(&g_configuration, std::make_shared<const Configuration>());
     { std::lock_guard lock(Descriptions::g_newMenusMutex); Descriptions::g_newMenus.clear(); }
