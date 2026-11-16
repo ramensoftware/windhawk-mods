@@ -1,3 +1,9 @@
+## 1.4.0 ([Nov 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1d512f6e35e6a0d48b334dd1dfee5856f149d9f3/mods/bluetooth-auto-toggle.wh.cpp))
+
+1, Mod Metadata & Settings
+2. Device Name Matching Engine
+3. Filter-Aware Startup & Event Watcher
+
 ## 1.3.0 ([Nov 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/be32b2a231e9fe3a4047845117ac1dba414903dc/mods/bluetooth-auto-toggle.wh.cpp))
 
 - Changed Default Value

@@ -1,3 +1,10 @@
+## 1.1.0 ([Nov 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/87f4f812edb83933de2b471578fe6f03ab1dd669/mods/smart-process-priority-ram-optimizer.wh.cpp))
+
+- Support custom power plan GUID and Ultimate Performance with strict AC check
+- Add live settings transition logging for key configuration toggles
+- Add minimize delay guard with cancellation on restore via WinEvent hooks
+- Complete and update documentation and schema for all 27 configuration settings
+
 ## 1.0.3 ([Nov 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/568f435119377c2e880191bb82cffe0d5498f2ce/mods/smart-process-priority-ram-optimizer.wh.cpp))
 
 - add WASAPI capture-endpoint audio scanning (microphones/line-in) with 5-second silence hysteresis

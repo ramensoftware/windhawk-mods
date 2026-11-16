@@ -2,12 +2,137 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-16T07:01:14.000Z</updated>
+    <updated>2026-11-16T19:05:26.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Live HUD 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-live-hud-radar#fd84d413a1340b4f4f306423e127368d8518757b</id>
+        <link href="https://windhawk.net/mods/taskbar-live-hud-radar"/>
+        <updated>2026-11-16T19:05:26.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added GPU utilization (%) via Windows PDH (<code>\GPU Engine(*)\Utilization Percentage</code>).</li>
+<li>Added GPU temperature (NVIDIA NVAPI, AMD ADL, and LibreHardwareMonitor/OpenHardwareMonitor WMI fallback).</li>
+<li>Added CPU temperature (LibreHardwareMonitor/OpenHardwareMonitor WMI and Windows ACPI/ThermalZone WMI fallback).</li>
+<li>Added temperature unit option (<code>°C</code> / <code>°F</code>).</li>
+<li>Added physical disk Read, Write, and Total speed modes via Windows PDH.</li>
+<li>Added GPU % line to the mini-graph popup when GPU monitoring is enabled.</li>
+<li>Added RGBA and <code>#RRGGBBAA</code> opacity support for background, border, and metric colors.</li>
+<li>Added custom border color and per-metric custom colors.</li>
+<li>Added configurable font size, taskbar widget min/max width &amp; height, and mini-graph popup dimensions.</li>
+<li>Added customizable mouse click actions (Left, Ctrl+Left, Right, Ctrl+Right), drag modifier, and mouse-hover activation with configurable delay.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Lemon</name>
+            <uri>https://github.com/lemon-web-stack</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Glass Widget Bar 0.3.0]]></title>
+        <id>https://windhawk.net/mods/glass-widget-bar#e15fbd5849181300898fa85c39f855e0e977562c</id>
+        <link href="https://windhawk.net/mods/glass-widget-bar"/>
+        <updated>2026-11-16T19:05:21.000Z</updated>
+        <content type="html"><![CDATA[<h1>Glass Widget Bar</h1>
+<p>A desktop widget bar that sits in a frosted-glass frame: the blurred wallpaper
+shows through a soft, dark-tinted rounded panel with thin light edges. The
+widgets have no glass of their own; they are drawn straight onto the frame and
+separated by thin dividers.</p>
+<p><img src="https://raw.githubusercontent.com/TheRealAlperN/glass-widget-bar/main/screenshots/glass-widget-bar.gif" alt="Glass Widget Bar in English, Turkish, German and Japanese"></p>
+<table>
+<thead>
+<tr>
+<th>Widget</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Clock</strong></td>
+<td>Analog clock with an orange second hand</td>
+</tr>
+<tr>
+<td><strong>Calendar</strong></td>
+<td>Weekday, large day number, month grid; today is highlighted in red</td>
+</tr>
+<tr>
+<td><strong>Music</strong></td>
+<td>The track that is playing right now (Spotify, browser, Media Player...), cover art, progress and ⏮ ⏯ ⏭ buttons</td>
+</tr>
+</tbody>
+</table>
+<h2>Languages</h2>
+<p>Labels, day names and month names follow your <strong>Windows display language</strong>
+automatically. You can also pick a language in the settings.</p>
+<p>English, Türkçe, Deutsch, Français, Español, Italiano, Português (Brasil),
+Nederlands, Polski, Русский, Українська, Čeština, Svenska, Dansk, Norsk bokmål,
+Suomi, Ελληνικά, Magyar, Română, Български, Bahasa Indonesia, Tiếng Việt, ไทย,
+हिन्दी, 日本語, 한국어, 简体中文, 繁體中文.</p>
+<p>Other display languages fall back to English. The first day of the week in
+the calendar follows your Windows regional format (or the chosen language).
+Right-to-left languages are not supported yet. The translations are
+machine-assisted, corrections are welcome.</p>
+<h2>Notes</h2>
+<ul>
+<li>The default layer is the <strong>desktop</strong>: windows cover the bar. Press the
+hotkey (default <strong>Ctrl+Alt+W</strong>) to bring it to the front (press again to
+send it back), or set &quot;Always on top&quot; in the settings.</li>
+<li>The hotkey, its modifier keys and its key can be changed or turned off in
+the settings. Windows reports AltGr as Ctrl+Alt, so if your keyboard layout
+types characters with AltGr, pick a combination without Alt. If another app
+already owns the combination it cannot be registered; the Windhawk log then
+says so.</li>
+<li>Works on the primary monitor only. A picture wallpaper is expected.</li>
+<li>The defaults of the frame (opacity 15, blur 10) match the dock mod this
+frame comes from. If your wallpaper is very bright, raise the opacity.</li>
+<li>The music widget reads the Windows media session, so every app that
+publishes one is shown.</li>
+<li>Developed on Windows 11 (64-bit).</li>
+</ul>
+<h2>Credits and license</h2>
+<p>The frame (rounded &quot;squircle&quot; corners, edge glow and edge lines) is ported
+from <strong>MacOS Style Dock</strong> by Zach Vaughn (GPL-3.0). This mod is therefore
+released under <strong>GPL-3.0</strong> as well.</p>
+]]></content>
+        <author>
+            <name>TheRealAlperN</name>
+            <uri>https://github.com/TheRealAlperN</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Bluetooth Auto Toggle 1.4.0]]></title>
+        <id>https://windhawk.net/mods/bluetooth-auto-toggle#1d512f6e35e6a0d48b334dd1dfee5856f149d9f3</id>
+        <link href="https://windhawk.net/mods/bluetooth-auto-toggle"/>
+        <updated>2026-11-16T19:05:15.000Z</updated>
+        <content type="html"><![CDATA[<p>1, Mod Metadata &amp; Settings
+2. Device Name Matching Engine
+3. Filter-Aware Startup &amp; Event Watcher</p>
+]]></content>
+        <author>
+            <name>Dev-StudioCode</name>
+            <uri>https://github.com/Dev-StudioCode</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Smart Process Priority & RAM Optimizer 1.1.0]]></title>
+        <id>https://windhawk.net/mods/smart-process-priority-ram-optimizer#87f4f812edb83933de2b471578fe6f03ab1dd669</id>
+        <link href="https://windhawk.net/mods/smart-process-priority-ram-optimizer"/>
+        <updated>2026-11-16T19:05:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Support custom power plan GUID and Ultimate Performance with strict AC check</li>
+<li>Add live settings transition logging for key configuration toggles</li>
+<li>Add minimize delay guard with cancellation on restore via WinEvent hooks</li>
+<li>Complete and update documentation and schema for all 27 configuration settings</li>
+</ul>
+]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Color Picker / Eyedropper Tool 1.0.2]]></title>
         <id>https://windhawk.net/mods/color-picker-eyedropper#be471af902a3370c41251653153ce4d94c170b81</id>
@@ -680,70 +805,6 @@ SystemTray.AdaptiveTextBlock#LanguageInnerTextBlock &gt; TextBlock#InnerTextBloc
         <author>
             <name>DoYouNatureQ</name>
             <uri>https://github.com/DoYouNatureQ</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start Button Replacer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/start-button-replacer#dabac878f1673e94f3af838f639d82dbb81b48ac</id>
-        <link href="https://windhawk.net/mods/start-button-replacer"/>
-        <updated>2026-11-15T18:02:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added SVG support for all image sources (local files and HTTP/HTTPS URLs ending in <code>.svg</code>). Only static SVG content is rendered.</li>
-<li>Added optional <strong>Dark mode images</strong> that replace the main images while Windows is in dark mode. Blank fields use the main images, and images switch automatically when the Windows mode changes.</li>
-<li>Image load warnings now show which settings group the failed image belongs to.</li>
-<li>Added a Credits section to the readme. Thanks to <a href="https://github.com/Asteski">Asteski</a> for SVG support and dark mode images.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Ender</name>
-            <uri>https://github.com/EnderDragonEP</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Centralizer 1.2.0]]></title>
-        <id>https://windhawk.net/mods/window-centralizer#55d92d44a3b17f6a8309e1acb201173dcdbca218</id>
-        <link href="https://windhawk.net/mods/window-centralizer"/>
-        <updated>2026-11-15T00:01:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Windows shown with <code>SetWindowPlacement</code> are now centered. Programs that restore a saved position this way (7-Zip's file manager) were left where they were, whatever the size limit.</li>
-<li>New option, <strong>Center on the unrelated launcher window</strong> (Parent mode only): a program started from another one, such as from Explorer's context menu or an archive opened from a folder, opens centered on the window it was started from (if inside the window size limit target). That window is the one in the foreground when the new process starts, and it must belong to the launching program (any Explorer process counts), so programs started from Start or the taskbar still open at the center of the monitor.</li>
-<li>Hotkeys now require Win, at least one more modifier (Ctrl, Alt or Shift) and a key; other combinations are rejected, so a hotkey such as Shift+letter can't catch ordinary typing.</li>
-</ul>
-]]></content>
-        <author>
-            <name>3DDinosaur</name>
-            <uri>https://github.com/3DDinosaur</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Task Manager Pause Button 1.1.0]]></title>
-        <id>https://windhawk.net/mods/task-manager-pause-button#8f97906d3b28a9424b1558a18768c1c739d8f4fa</id>
-        <link href="https://windhawk.net/mods/task-manager-pause-button"/>
-        <updated>2026-11-15T00:01:26.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Keeps Pause active when switching between Processes and Details, and resumes Task Manager updates when opening other pages.</li>
-<li>Restores direct support for opening Task Manager on Details, using the available navigation symbols while avoiding duplicate hooks for shared function addresses.</li>
-<li>Adds <code>Frame.Navigated</code> handling as a fallback for page detection and refresh-state changes.</li>
-<li>Improves command-bar detection and retries button insertion when the toolbar is not ready.</li>
-<li>Keeps the Pause/Resume button usable with its text label if the native icon cannot be created.</li>
-<li>Improves cleanup of button and navigation event handlers when disabling the mod.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Luiz Bizzio</name>
-            <uri>https://github.com/luizbizzio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Winstant 1.6]]></title>
-        <id>https://windhawk.net/mods/winstant#dc8ad91cc70df48de6f92ab75023be43feba1721</id>
-        <link href="https://windhawk.net/mods/winstant"/>
-        <updated>2026-11-14T21:00:27.000Z</updated>
-        <content type="html"><![CDATA[<p>-there’s a new setting, “Open the panel by hovering the minimize button” (Panel group). Turn it off and the panel opens only with the hotkey or key taps. The mouse wheel on the minimize button keeps its own option.</p>
-]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>

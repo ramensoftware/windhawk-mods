@@ -182,39 +182,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/e3ef8a050dc7f8823ee212576df0a8056dd4ca4b/mods/fluent-radial-menu.wh.cpp"
       }
     },
-    "glass-widget-bar": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1794796718242,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1794796718242,
-        "users": 0
-      },
-      "metadata": {
-        "author": "TheRealAlperN",
-        "compilerOptions": "-lgdiplus -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -ladvapi32 -lruntimeobject -lshcore",
-        "description": "Buzlu cam görünümlü masaüstü barı: analog saat, takvim ve müzik denetimi",
-        "github": "https://github.com/TheRealAlperN",
-        "include": [
-          "windhawk.exe"
-        ],
-        "license": "GPL-3.0",
-        "name": "Cam Widget Barı",
-        "version": "0.3.0"
-      },
-      "metadataEnglish": {
-        "description": "A frosted-glass desktop bar with an analog clock, a calendar and music controls",
-        "name": "Glass Widget Bar"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7463",
-      "source": {
-        "sha256": "92e9527c446655ca18148b52a82820240c3956b423803a88365f1c158e7c96ec",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/76571164550e4b962bfd98b9fbcdad08c8158a29/mods/glass-widget-bar.wh.cpp"
-      }
-    },
     "lockscreen-background": {
       "details": {
         "defaultSorting": 0,

@@ -2,12 +2,83 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-16T07:01:14.000Z</updated>
+    <updated>2026-11-16T19:05:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Glass Widget Bar 0.3.0]]></title>
+        <id>https://windhawk.net/mods/glass-widget-bar#e15fbd5849181300898fa85c39f855e0e977562c</id>
+        <link href="https://windhawk.net/mods/glass-widget-bar"/>
+        <updated>2026-11-16T19:05:21.000Z</updated>
+        <content type="html"><![CDATA[<h1>Glass Widget Bar</h1>
+<p>A desktop widget bar that sits in a frosted-glass frame: the blurred wallpaper
+shows through a soft, dark-tinted rounded panel with thin light edges. The
+widgets have no glass of their own; they are drawn straight onto the frame and
+separated by thin dividers.</p>
+<p><img src="https://raw.githubusercontent.com/TheRealAlperN/glass-widget-bar/main/screenshots/glass-widget-bar.gif" alt="Glass Widget Bar in English, Turkish, German and Japanese"></p>
+<table>
+<thead>
+<tr>
+<th>Widget</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Clock</strong></td>
+<td>Analog clock with an orange second hand</td>
+</tr>
+<tr>
+<td><strong>Calendar</strong></td>
+<td>Weekday, large day number, month grid; today is highlighted in red</td>
+</tr>
+<tr>
+<td><strong>Music</strong></td>
+<td>The track that is playing right now (Spotify, browser, Media Player...), cover art, progress and ⏮ ⏯ ⏭ buttons</td>
+</tr>
+</tbody>
+</table>
+<h2>Languages</h2>
+<p>Labels, day names and month names follow your <strong>Windows display language</strong>
+automatically. You can also pick a language in the settings.</p>
+<p>English, Türkçe, Deutsch, Français, Español, Italiano, Português (Brasil),
+Nederlands, Polski, Русский, Українська, Čeština, Svenska, Dansk, Norsk bokmål,
+Suomi, Ελληνικά, Magyar, Română, Български, Bahasa Indonesia, Tiếng Việt, ไทย,
+हिन्दी, 日本語, 한국어, 简体中文, 繁體中文.</p>
+<p>Other display languages fall back to English. The first day of the week in
+the calendar follows your Windows regional format (or the chosen language).
+Right-to-left languages are not supported yet. The translations are
+machine-assisted, corrections are welcome.</p>
+<h2>Notes</h2>
+<ul>
+<li>The default layer is the <strong>desktop</strong>: windows cover the bar. Press the
+hotkey (default <strong>Ctrl+Alt+W</strong>) to bring it to the front (press again to
+send it back), or set &quot;Always on top&quot; in the settings.</li>
+<li>The hotkey, its modifier keys and its key can be changed or turned off in
+the settings. Windows reports AltGr as Ctrl+Alt, so if your keyboard layout
+types characters with AltGr, pick a combination without Alt. If another app
+already owns the combination it cannot be registered; the Windhawk log then
+says so.</li>
+<li>Works on the primary monitor only. A picture wallpaper is expected.</li>
+<li>The defaults of the frame (opacity 15, blur 10) match the dock mod this
+frame comes from. If your wallpaper is very bright, raise the opacity.</li>
+<li>The music widget reads the Windows media session, so every app that
+publishes one is shown.</li>
+<li>Developed on Windows 11 (64-bit).</li>
+</ul>
+<h2>Credits and license</h2>
+<p>The frame (rounded &quot;squircle&quot; corners, edge glow and edge lines) is ported
+from <strong>MacOS Style Dock</strong> by Zach Vaughn (GPL-3.0). This mod is therefore
+released under <strong>GPL-3.0</strong> as well.</p>
+]]></content>
+        <author>
+            <name>TheRealAlperN</name>
+            <uri>https://github.com/TheRealAlperN</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Color Picker / Eyedropper Tool 1.0.2]]></title>
         <id>https://windhawk.net/mods/color-picker-eyedropper#be471af902a3370c41251653153ce4d94c170b81</id>
@@ -1605,53 +1676,6 @@ to <code>0</code> (&quot;Don't Change&quot;) to prevent conflicts between the tw
         <author>
             <name>JER-10000</name>
             <uri>https://github.com/JER-10000</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Task Manager Pause Button 1.0.0]]></title>
-        <id>https://windhawk.net/mods/task-manager-pause-button#b8a64f42f5edc941234424f16894123290e733b4</id>
-        <link href="https://windhawk.net/mods/task-manager-pause-button"/>
-        <updated>2026-11-12T08:05:22.000Z</updated>
-        <content type="html"><![CDATA[<h1>Task Manager Pause Button</h1>
-<p>Add a native <strong>Pause / Resume</strong> button next to <strong>Run new task</strong> in the
-Windows 11 Task Manager on the Processes and Details pages.</p>
-<p><img src="https://raw.githubusercontent.com/luizbizzio/task-manager-pause-button/main/assets/task-manager-pause-button-cover.png" alt="Task Manager Pause Button"></p>
-<h2>How to use</h2>
-<ol>
-<li>Open Task Manager and select <strong>Processes</strong> or <strong>Details</strong>.</li>
-<li>Click <strong>Pause</strong> to stop the list from updating.</li>
-<li>Click <strong>Resume</strong> to start updating again.</li>
-</ol>
-<p>The button controls Task Manager's refresh hold on Processes and Details.
-The mod does not suspend apps, stop Windows processes, or change the
-Real time update speed setting.</p>
-<h2>Compatibility and limitations</h2>
-<ul>
-<li>Works with the Windows 11 Task Manager XAML interface. Windows updates may
-change private Task Manager functions or controls.</li>
-<li>Uses Task Manager's Ctrl-key refresh hold through <code>GetKeyState</code> calls made
-directly by <code>Taskmgr.exe</code>. While paused, some Task Manager keyboard actions
-may behave as if Ctrl is held, including Run new task (Ctrl+click can open
-Command Prompt instead of the normal dialog). This does not affect other apps.</li>
-<li>Recognizes the tested Task Manager command-bar layout independently of
-display language: one command bar with four native buttons, with Run new
-task in the first position. Falls back to English/Portuguese labels or
-recognizable control identifiers on other layouts. Other Windows versions
-can have different layouts, so all languages/builds are not guaranteed.</li>
-<li>Pause/Resume labels are in English regardless of the Task Manager language.</li>
-<li>Keeps Pause active when moving between Processes and Details. Automatically
-resumes when navigating to another page if the navigation-exit symbol is
-available on your Windows build.</li>
-<li>If the button is missing, close and reopen Task Manager with the mod enabled.</li>
-<li>No settings or background applications are needed.</li>
-</ul>
-<h2>Source and feedback</h2>
-<p><a href="https://github.com/luizbizzio/task-manager-pause-button">GitHub</a></p>
-<p>Author: Luiz Bizzio. License: Apache-2.0.</p>
-]]></content>
-        <author>
-            <name>Luiz Bizzio</name>
-            <uri>https://github.com/luizbizzio</uri>
         </author>
     </entry>
 </feed>
