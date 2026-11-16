@@ -93,7 +93,7 @@ The mod does **not** replace system files.
   bar and the buttons in the two bottom corners move up by the same amount, so they never
   overlap the taskbar and stay usable, and a click on the taskbar closes the Start screen.
   Nothing of the shell is touched: Start clips its own bottom strip, or resizes its own window
-  when Windows 8.1 Taskbar Recreation is detected, and restores it when the pointer leaves.
+  when Windows 7/8/8.1 Taskbar Recreation is detected, and restores it when the pointer leaves.
   It can be turned off in the settings.
 - **Layout kept across updates**: tiles, sizes, group names and groups are saved in
   Windhawk's per-mod storage (`Wh_GetModStoragePath`, one file per user account), which
@@ -152,16 +152,6 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
 - For problems, please report an issue on GitHub.
 */
 // ==/WindhawkModReadme==
-// Reviewer notes (changes relative to the 1.2.0 source):
-// - Adds an optional desktop tile color sampled from the application icon.
-// - Adds eight target-keyed custom tile definitions with local icon and size-specific images.
-// - Custom styling is reapplied from Windhawk settings; the original layout format is retained.
-// - New fields apply after the mod is restarted. No custom image is copied to disk.
-// - Image size and path validation is best effort; behavior and visual fidelity need real Windows testing.
-// - When the Windows 8.1 taskbar recreation is detected on the active monitor,
-//   the Start window gives it priority without moving or hiding shell windows.
-// - Existing implementation, attribution, and GPL-3.0-or-later license are retained.
-//
 // ==WindhawkModSettings==
 /*
 - appTileColors: false
@@ -175,105 +165,116 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $description:es: "Esta configuración usa opcionalmente un color tomado del icono de la aplicación para los mosaicos de escritorio. Los mosaicos simulados y de aplicaciones empaquetadas conservan sus imágenes y colores."
   $description:fr: "Ce paramètre utilise éventuellement une couleur prélevée sur l'icône de l'application pour les vignettes de bureau. Les vignettes simulées et celles des applications packagées conservent leurs images et leurs couleurs."
   $description:pt: "Esta configuração usa opcionalmente uma cor extraída do ícone do aplicativo nos blocos de desktop. Os blocos simulados e de aplicativos empacotados mantêm suas imagens e cores."
-- customTile1: ""
-  $name: "Custom tile 1"
-  $name:it: "Riquadro personalizzato 1"
-  $name:es: "Mosaico personalizado 1"
-  $name:fr: "Vignette personnalisée 1"
-  $name:pt: "Bloco personalizado 1"
-  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
-  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
-  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
-  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
-  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
-- customTile2: ""
-  $name: "Custom tile 2"
-  $name:it: "Riquadro personalizzato 2"
-  $name:es: "Mosaico personalizado 2"
-  $name:fr: "Vignette personnalisée 2"
-  $name:pt: "Bloco personalizado 2"
-  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
-  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
-  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
-  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
-  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
-- customTile3: ""
-  $name: "Custom tile 3"
-  $name:it: "Riquadro personalizzato 3"
-  $name:es: "Mosaico personalizado 3"
-  $name:fr: "Vignette personnalisée 3"
-  $name:pt: "Bloco personalizado 3"
-  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
-  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
-  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
-  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
-  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
-- customTile4: ""
-  $name: "Custom tile 4"
-  $name:it: "Riquadro personalizzato 4"
-  $name:es: "Mosaico personalizado 4"
-  $name:fr: "Vignette personnalisée 4"
-  $name:pt: "Bloco personalizado 4"
-  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
-  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
-  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
-  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
-  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
-- customTile5: ""
-  $name: "Custom tile 5"
-  $name:it: "Riquadro personalizzato 5"
-  $name:es: "Mosaico personalizado 5"
-  $name:fr: "Vignette personnalisée 5"
-  $name:pt: "Bloco personalizado 5"
-  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
-  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
-  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
-  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
-  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
-- customTile6: ""
-  $name: "Custom tile 6"
-  $name:it: "Riquadro personalizzato 6"
-  $name:es: "Mosaico personalizado 6"
-  $name:fr: "Vignette personnalisée 6"
-  $name:pt: "Bloco personalizado 6"
-  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
-  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
-  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
-  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
-  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
-- customTile7: ""
-  $name: "Custom tile 7"
-  $name:it: "Riquadro personalizzato 7"
-  $name:es: "Mosaico personalizado 7"
-  $name:fr: "Vignette personnalisée 7"
-  $name:pt: "Bloco personalizado 7"
-  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
-  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
-  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
-  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
-  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
-- customTile8: ""
-  $name: "Custom tile 8"
-  $name:it: "Riquadro personalizzato 8"
-  $name:es: "Mosaico personalizado 8"
-  $name:fr: "Vignette personnalisée 8"
-  $name:pt: "Bloco personalizado 8"
-  $description: "This setting defines a custom tile as Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large. Use local image paths; image fields may be empty. Restart the mod after editing."
-  $description:it: "Questa impostazione definisce un riquadro personalizzato come Nome|Destinazione|#RRGGBB|Icona|Piccolo|Medio|Largo|Grande. Usa percorsi locali per le immagini; i campi immagine possono essere vuoti. Riavvia la mod dopo le modifiche."
-  $description:es: "Esta configuración define un mosaico personalizado como Nombre|Destino|#RRGGBB|Icono|Pequeño|Mediano|Ancho|Grande. Usa rutas locales para las imágenes; sus campos pueden quedar vacíos. Reinicia la mod tras editarla."
-  $description:fr: "Ce paramètre définit une vignette personnalisée sous la forme Nom|Cible|#RRGGBB|Icône|Petite|Moyenne|Large|Grande. Utilisez des chemins locaux pour les images ; leurs champs peuvent être vides. Redémarrez le mod après modification."
-  $description:pt: "Esta configuração define um bloco personalizado como Nome|Destino|#RRGGBB|Ícone|Pequeno|Médio|Largo|Grande. Use caminhos locais para as imagens; os campos de imagem podem ficar vazios. Reinicie a mod após editar."
+- customTiles:
+  - - name: ""
+      $name: "Name"
+      $name:it: "Nome"
+      $name:es: "Nombre"
+      $name:fr: "Nom"
+      $name:pt: "Nome"
+      $description: "This setting specifies the tile's display name."
+      $description:it: "Questa impostazione specifica il nome visualizzato nel riquadro."
+      $description:es: "Esta configuración especifica el nombre visible del mosaico."
+      $description:fr: "Ce paramètre définit le nom affiché sur la vignette."
+      $description:pt: "Esta configuração especifica o nome exibido no bloco."
+    - target: ""
+      $name: "Target"
+      $name:it: "Destinazione"
+      $name:es: "Destino"
+      $name:fr: "Cible"
+      $name:pt: "Destino"
+      $description: "This setting specifies the file, shortcut, URL or shell target to open. Leave it empty to end the list."
+      $description:it: "Questa impostazione specifica il file, collegamento, URL o destinazione shell da aprire. Lasciala vuota per terminare l'elenco."
+      $description:es: "Esta configuración especifica el archivo, acceso directo, URL o destino del shell que se abrirá. Déjala vacía para terminar la lista."
+      $description:fr: "Ce paramètre indique le fichier, raccourci, URL ou cible du shell à ouvrir. Laissez-le vide pour terminer la liste."
+      $description:pt: "Esta configuração especifica o arquivo, atalho, URL ou destino do shell a abrir. Deixe vazio para terminar a lista."
+    - color: "#4617B4"
+      $name: "Tile color (#RRGGBB)"
+      $name:it: "Colore del riquadro (#RRGGBB)"
+      $name:es: "Color del mosaico (#RRGGBB)"
+      $name:fr: "Couleur de la vignette (#RRGGBB)"
+      $name:pt: "Cor do bloco (#RRGGBB)"
+      $description: "This setting chooses the background color when no size-specific image is available."
+      $description:it: "Questa impostazione sceglie il colore di sfondo quando non è disponibile un'immagine per la dimensione scelta."
+      $description:es: "Esta configuración elige el color de fondo cuando no hay una imagen para el tamaño seleccionado."
+      $description:fr: "Ce paramètre choisit la couleur de fond si aucune image n'est disponible pour la taille choisie."
+      $description:pt: "Esta configuração escolhe a cor de fundo quando não há imagem para o tamanho escolhido."
+    - icon: ""
+      $name: "Icon file"
+      $name:it: "File dell'icona"
+      $name:es: "Archivo del icono"
+      $name:fr: "Fichier de l'icône"
+      $name:pt: "Arquivo do ícone"
+      $description: "This setting specifies an optional local icon or image file."
+      $description:it: "Questa impostazione specifica un file locale facoltativo per l'icona o l'immagine."
+      $description:es: "Esta configuración especifica un archivo local opcional de icono o imagen."
+      $description:fr: "Ce paramètre indique un fichier local facultatif d'icône ou d'image."
+      $description:pt: "Esta configuração especifica um arquivo local opcional de ícone ou imagem."
+    - smallImage: ""
+      $name: "Small image"
+      $name:it: "Immagine piccolo"
+      $name:es: "Imagen pequeño"
+      $name:fr: "Image petite"
+      $name:pt: "Imagem pequeno"
+      $description: "This setting specifies an optional local image for this tile size."
+      $description:it: "Questa impostazione specifica un'immagine locale facoltativa per questa dimensione del riquadro."
+      $description:es: "Esta configuración especifica una imagen local opcional para este tamaño de mosaico."
+      $description:fr: "Ce paramètre indique une image locale facultative pour cette taille de vignette."
+      $description:pt: "Esta configuração especifica uma imagem local opcional para este tamanho do bloco."
+    - mediumImage: ""
+      $name: "Medium image"
+      $name:it: "Immagine medio"
+      $name:es: "Imagen mediano"
+      $name:fr: "Image moyenne"
+      $name:pt: "Imagem médio"
+      $description: "This setting specifies an optional local image for this tile size."
+      $description:it: "Questa impostazione specifica un'immagine locale facoltativa per questa dimensione del riquadro."
+      $description:es: "Esta configuración especifica una imagen local opcional para este tamaño de mosaico."
+      $description:fr: "Ce paramètre indique une image locale facultative pour cette taille de vignette."
+      $description:pt: "Esta configuração especifica uma imagem local opcional para este tamanho do bloco."
+    - wideImage: ""
+      $name: "Wide image"
+      $name:it: "Immagine largo"
+      $name:es: "Imagen ancho"
+      $name:fr: "Image large"
+      $name:pt: "Imagem largo"
+      $description: "This setting specifies an optional local image for this tile size."
+      $description:it: "Questa impostazione specifica un'immagine locale facoltativa per questa dimensione del riquadro."
+      $description:es: "Esta configuración especifica una imagen local opcional para este tamaño de mosaico."
+      $description:fr: "Ce paramètre indique une image locale facultative pour cette taille de vignette."
+      $description:pt: "Esta configuração especifica uma imagem local opcional para este tamanho do bloco."
+    - largeImage: ""
+      $name: "Large image"
+      $name:it: "Immagine grande"
+      $name:es: "Imagen grande"
+      $name:fr: "Image grande"
+      $name:pt: "Imagem grande"
+      $description: "This setting specifies an optional local image for this tile size."
+      $description:it: "Questa impostazione specifica un'immagine locale facoltativa per questa dimensione del riquadro."
+      $description:es: "Esta configuración especifica una imagen local opcional para este tamaño de mosaico."
+      $description:fr: "Ce paramètre indique une image locale facultative pour cette taille de vignette."
+      $description:pt: "Esta configuração especifica uma imagem local opcional para este tamanho do bloco."
+  $name: "Custom tiles"
+  $name:it: "Riquadri personalizzati"
+  $name:es: "Mosaicos personalizados"
+  $name:fr: "Vignettes personnalisées"
+  $name:pt: "Blocos personalizados"
+  $description: "This setting defines custom tiles. Changes reload the mod. Each tile must have a name, a target and a #RRGGBB color. Image files must be local and at most 8 MiB."
+  $description:it: "Questa impostazione definisce riquadri personalizzati. Le modifiche ricaricano la mod. Ogni riquadro deve avere nome, destinazione e colore #RRGGBB. I file immagine devono essere locali e non superare 8 MiB."
+  $description:es: "Esta configuración define mosaicos personalizados. Los cambios recargan la mod. Cada mosaico debe tener nombre, destino y color #RRGGBB. Las imágenes deben ser locales y no superar 8 MiB."
+  $description:fr: "Ce paramètre définit des vignettes personnalisées. Les modifications rechargent le mod. Chaque vignette doit avoir un nom, une cible et une couleur #RRGGBB. Les images doivent être locales et ne pas dépasser 8 Mio."
+  $description:pt: "Esta configuração define blocos personalizados. As alterações recarregam a mod. Cada bloco deve ter nome, destino e cor #RRGGBB. As imagens devem ser locais e não ultrapassar 8 MiB."
 - taskbarOnBottomHover: true
   $name: "Taskbar back when the pointer touches the bottom of Start"
   $name:it: "Barra delle applicazioni quando il puntatore tocca il fondo di Start"
   $name:es: "Barra de tareas cuando el puntero toca la parte inferior de Inicio"
   $name:fr: "Barre des tâches quand le pointeur touche le bas de l'accueil"
   $name:pt: "Barra de tarefas quando o ponteiro toca a parte inferior da Tela Inicial"
-  $description: "This setting reveals the taskbar when the pointer touches the bottom of Start, giving priority to Windows 8.1 Taskbar Recreation when detected on that monitor. The Start screen gives up space by clipping or resizing its own window; other windows are not moved or hidden. Turn it off to keep the taskbar covered."
-  $description:it: "Questa impostazione mostra la barra quando il puntatore tocca il bordo inferiore di Start, dando priorità a Windows 8.1 Taskbar Recreation quando viene rilevata sul monitor. Start libera spazio ritagliando o ridimensionando la propria finestra, senza spostare o nascondere le altre finestre. Disattivala per mantenere coperta la barra."
-  $description:es: "Esta configuración muestra la barra al tocar el borde inferior de Inicio con el puntero y da prioridad a Windows 8.1 Taskbar Recreation si se detecta en el monitor. Inicio libera espacio recortando o redimensionando su propia ventana, sin mover ni ocultar otras ventanas. Desactívala para mantener cubierta la barra."
-  $description:fr: "Ce paramètre affiche la barre lorsque le pointeur touche le bas de l'écran d'accueil et donne la priorité à Windows 8.1 Taskbar Recreation si elle est détectée sur le moniteur. L'accueil libère de l'espace en rognant ou redimensionnant sa propre fenêtre, sans déplacer ni masquer les autres fenêtres. Désactivez-le pour garder la barre couverte."
-  $description:pt: "Esta configuração mostra a barra quando o ponteiro toca a borda inferior da Tela Inicial e dá prioridade ao Windows 8.1 Taskbar Recreation quando detectado no monitor. A Tela Inicial libera espaço recortando ou redimensionando sua própria janela, sem mover ou ocultar outras janelas. Desative para manter a barra coberta."
+  $description: "This setting reveals the taskbar when the pointer touches the bottom of Start, giving priority to Windows 7/8/8.1 Taskbar Recreation when detected on that monitor. The Start screen gives up space by clipping or resizing its own window; other windows are not moved or hidden. Turn it off to keep the taskbar covered."
+  $description:it: "Questa impostazione mostra la barra quando il puntatore tocca il bordo inferiore di Start, dando priorità a Windows 7/8/8.1 Taskbar Recreation quando viene rilevata sul monitor. Start libera spazio ritagliando o ridimensionando la propria finestra, senza spostare o nascondere le altre finestre. Disattivala per mantenere coperta la barra."
+  $description:es: "Esta configuración muestra la barra al tocar el borde inferior de Inicio con el puntero y da prioridad a Windows 7/8/8.1 Taskbar Recreation si se detecta en el monitor. Inicio libera espacio recortando o redimensionando su propia ventana, sin mover ni ocultar otras ventanas. Desactívala para mantener cubierta la barra."
+  $description:fr: "Ce paramètre affiche la barre lorsque le pointeur touche le bas de l'écran d'accueil et donne la priorité à Windows 7/8/8.1 Taskbar Recreation si elle est détectée sur le moniteur. L'accueil libère de l'espace en rognant ou redimensionnant sa propre fenêtre, sans déplacer ni masquer les autres fenêtres. Désactivez-le pour garder la barre couverte."
+  $description:pt: "Esta configuração mostra a barra quando o ponteiro toca a borda inferior da Tela Inicial e dá prioridade ao Windows 7/8/8.1 Taskbar Recreation quando detectado no monitor. A Tela Inicial libera espaço recortando ou redimensionando sua própria janela, sem mover ou ocultar outras janelas. Desative para manter a barra coberta."
 - winKey: true
   $name: "Open with the Windows key and the Start button"
   $name:it: "Apri con il tasto Windows e il pulsante Start"
@@ -1518,6 +1519,7 @@ static void BlitIconGdi(HDC dc, const UiIcon& ic, const RECT& r, bool hover, BYT
 static void IconDestRect(const RECT& hit, RECT* out);
 static int UserTextWidth();
 static void DrawAppIconOrFallback(HDC dc, HICON icon, int x, int y, int size);
+static void UpdateTileAppColor(Tile& t);
 static void UpdateTileAppColors();
 static void SetBr(COLORREF c, float a);
 static void FillRc(float l, float t, float r, float b, COLORREF c, float a = 1.0f);
@@ -4506,8 +4508,10 @@ static bool InitGpu() {
         D2D1_RENDER_TARGET_TYPE_HARDWARE,
         D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_UNKNOWN),
         96.0f, 96.0f);
+    RECT client = {};
+    if (!GetClientRect(g_wnd, &client) || client.right <= 0 || client.bottom <= 0) return false;
     D2D1_HWND_RENDER_TARGET_PROPERTIES hp = D2D1::HwndRenderTargetProperties(
-        g_wnd, D2D1::SizeU((UINT32)g_sw, (UINT32)g_sh), D2D1_PRESENT_OPTIONS_NONE);
+        g_wnd, D2D1::SizeU((UINT32)client.right, (UINT32)client.bottom), D2D1_PRESENT_OPTIONS_NONE);
     HRESULT hr = g_d2dFactory->CreateHwndRenderTarget(p, hp, &g_rt);
     if (FAILED(hr)) { ReleaseGpuTarget(); return false; }
     g_rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
@@ -7782,6 +7786,7 @@ static void SyncMetroTiles(bool create) {
                 if (t.icon) { DestroyIcon(t.icon); t.icon = NULL; }
                 if (t.pinBmp) { DeleteObject(t.pinBmp); t.pinBmp = NULL; }
                 LoadPinIcon(t);
+                UpdateTileAppColor(t);
                 coloursDirty = true;
                 RebuildTile(i);
                 changed = true;
@@ -7813,6 +7818,7 @@ static void SyncMetroTiles(bool create) {
                 if (t.icon) { DestroyIcon(t.icon); t.icon = NULL; }
                 if (t.pinBmp) { DeleteObject(t.pinBmp); t.pinBmp = NULL; }
                 LoadPinIcon(t);
+                UpdateTileAppColor(t);
                 RebuildTile(i);
                 changed = true;
             }
@@ -7873,6 +7879,7 @@ static void SyncMetroTiles(bool create) {
                 if (t.icon) { DestroyIcon(t.icon); t.icon = NULL; }
                 if (t.pinBmp) { DeleteObject(t.pinBmp); t.pinBmp = NULL; }
                 LoadPinIcon(t);
+                UpdateTileAppColor(t);
                 RebuildTile(i);
                 changed = true;
             }
@@ -11514,6 +11521,7 @@ static void ShowMenuFor(HWND owner, RECT anchor, int kind) {
             if (t.icon) { DestroyIcon(t.icon); t.icon = NULL; }
             if (t.pinBmp) { DeleteObject(t.pinBmp); t.pinBmp = NULL; }
             LoadPinIcon(t);
+            UpdateTileAppColor(t);
             RebuildTile(g_ctxTile);
             SaveLayout();
             RepaintNow();
@@ -11927,8 +11935,8 @@ static void CaptureDesktop() {
 
 // The height of the taskbar that sits at the bottom of the monitor the Start screen is on, in the
 // pixels of this window, or 0 when there is none to give the space back to (taskbar on another
-// edge, automatic hide, another shell). Only the windows of this process are looked at, as
-// everywhere else in this mod.
+// edge, automatic hide, another shell). Native windows are checked against the
+// shell process when available; a recreated secondary bar can have a different PID.
 static int TrayFindBar(const wchar_t* const* classes, int count, bool requireVisible, HWND* result) {
     const int bottom = g_monY + g_sh;
     POINT pt = {g_monX + g_sw / 2, g_monY + g_sh / 2};
@@ -11938,6 +11946,14 @@ static int TrayFindBar(const wchar_t* const* classes, int count, bool requireVis
         for (int guard = 0; guard < 32 && (bar = FindWindowExW(NULL, bar, classes[k], NULL)); ++guard) {
             RECT rc = {};
             if (requireVisible && !IsWindowVisible(bar)) continue;
+            if (!_wcsnicmp(classes[k], L"Shell_", 6)) {
+                DWORD pid = 0; GetWindowThreadProcessId(bar, &pid);
+                HWND shell = GetShellWindow(); DWORD shellPid = 0;
+                if (shell) GetWindowThreadProcessId(shell, &shellPid);
+                // Secondary tray may live in the same shell; if shell is absent,
+                // retain the previous conservative class/monitor check.
+                if (shellPid && pid != shellPid) continue;
+            }
             if (!GetWindowRect(bar, &rc) || MonitorFromWindow(bar, MONITOR_DEFAULTTONEAREST) != monitor) continue;
             if (rc.bottom != bottom || rc.right <= g_monX || rc.left >= g_monX + g_sw) continue;
             int h = rc.bottom - rc.top;
@@ -12467,6 +12483,22 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         EndPaint(h, &ps);
         return 0;
     }
+    case WM_SIZE: {
+        // Resize is in physical pixels, matching the current HWND client area.
+        // WM_SIZE also covers restoration, DPI/monitor moves and reveal failure.
+        if (g_rt && wp != SIZE_MINIMIZED) {
+            RECT client = {};
+            if (GetClientRect(h, &client) && client.right > 0 && client.bottom > 0) {
+                HRESULT hr = g_rt->Resize(D2D1::SizeU((UINT32)client.right, (UINT32)client.bottom));
+                if (FAILED(hr)) {
+                    Wh_Log(L"[START-TRAY] Direct2D resize failed: 0x%08X; using GDI", (unsigned)hr);
+                    ReleaseGpuTarget();
+                }
+            }
+        }
+        InvalidateRect(h, NULL, FALSE);
+        return 0;
+    }
     case WM_ERASEBKGND: return 1;
     case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
     case WM_SETCURSOR:
@@ -12745,13 +12777,6 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         // An icon of the catalog is ready. The rows of the charm that were drawn without it are
         // drawn again, from scratch, so that every visible row shows its icon.
         if (g_charmOpen) { CharmInvalidatePanel(); CharmRender(g_charmCont); }
-        // Tile accent colours are the only thing that depends on icons; skip the
-        // rebuild entirely when appTileColors is off.
-        if (g_appTileColors) {
-            UpdateTileAppColors();
-            if (g_open && !g_closing)
-                PostMessageW(g_wnd, WM_APP_REBUILD_BG, 0, 0);
-        }
         if (g_open && (g_view == VIEW_SEARCH || g_charmOpen)) RepaintNow();
         return 0;
     case WM_APP_PACKAGE_ART:
@@ -13653,28 +13678,25 @@ static void LoadTileIcons() {
     }
 }
 
-static void UpdateTileAppColors() {
-    for (int i = 0; i < g_tileCount; ++i) {
-        Tile& t = g_tiles[i];
-        t.hasAppC = false;
-        t.appC = t.c1;
-        if (!t.alive) continue;
-        // A simulated tile keeps its Windows 8/8.1 colour: the accent colour of a Windows 10/11 icon
-        // is the modern one and must not replace it.
-        if (t.mg >= 0) continue;
-        bool found = false;
-        COLORREF c = t.c1;
-        if (t.icon) {
-            c = GetIconAccentColor(t.icon, t.c1, &found);
-        } else if (t.pinBmp) {
-            BYTE* px = NULL; int w = 0, h = 0;
-            if (BitmapToPixels(t.pinBmp, &px, &w, &h) && px) {
-                c = AccentFromPremulBgra(px, w, h, t.c1, &found);
-                delete[] px;
-            }
+static void UpdateTileAppColor(Tile& t) {
+    t.hasAppC = false;
+    t.appC = t.c1;
+    if (!t.alive || t.mg >= 0) return;
+    bool found = false;
+    COLORREF c = t.c1;
+    if (t.icon) {
+        c = GetIconAccentColor(t.icon, t.c1, &found);
+    } else if (t.pinBmp) {
+        BYTE* px = NULL; int w = 0, h = 0;
+        if (BitmapToPixels(t.pinBmp, &px, &w, &h) && px) {
+            c = AccentFromPremulBgra(px, w, h, t.c1, &found);
+            delete[] px;
         }
-        if (found) { t.appC = c; t.hasAppC = true; }
     }
+    if (found) { t.appC = c; t.hasAppC = true; }
+}
+static void UpdateTileAppColors() {
+    for (int i = 0; i < g_tileCount; ++i) UpdateTileAppColor(g_tiles[i]);
 }
 
 // True only if the Microsoft Store package is actually registered for this user. The Store tile
@@ -13707,36 +13729,49 @@ static void ApplyStartColourRevision() {
     Wh_SetIntValue(L"tileColours81", 1);
 }
 
-// Custom styling is keyed by launch target, never written into the upstream v7
-// layout. It is reapplied from Windhawk settings after loading the user's layout.
+// Configuration is read on each reload. The tile capacity is the natural limit,
+// even if the Windhawk array contains more entries. An empty target ends the list.
+struct CustomTileConfig { std::wstring fields[8]; };
+static std::vector<CustomTileConfig> ReadCustomTiles() {
+    std::vector<CustomTileConfig> configs;
+    static const wchar_t* const names[] = { L"name", L"target", L"color", L"icon",
+                                            L"smallImage", L"mediumImage", L"wideImage", L"largeImage" };
+    for (int i = 0; i < MAX_TILES; ++i) {
+        CustomTileConfig cfg;
+        for (int k = 0; k < 8; ++k) {
+            WindhawkUtils::StringSetting value(WindhawkUtils::StringSetting::make(L"customTiles[%d].%s", i, names[k]));
+            cfg.fields[k] = value.get();
+        }
+        if (cfg.fields[1].empty()) break;
+        configs.push_back(std::move(cfg));
+    }
+    return configs;
+}
+static std::vector<std::wstring> CustomTileSnapshot() {
+    std::vector<std::wstring> snapshot;
+    for (const auto& cfg : ReadCustomTiles())
+        for (const auto& field : cfg.fields) snapshot.push_back(field);
+    return snapshot;
+}
+static SRWLOCK g_customSnapshotLock = SRWLOCK_INIT;
+static std::vector<std::wstring> g_customSnapshot;
 static void InitCustomTiles() {
-    for (int slot = 1; slot <= 8; ++slot) {
-        wchar_t key[32]; swprintf_s(key, L"customTile%d", slot);
-        WindhawkUtils::StringSetting setting(WindhawkUtils::StringSetting::make(key));
-        std::wstring spec = setting.get() ? setting.get() : L"";
-        if (spec.empty()) continue;
-        if (spec.size() > 8192 || spec.find_first_of(L"\r\n\t") != std::wstring::npos) {
-            Wh_Log(L"Custom tile %d: invalid record", slot); continue;
-        }
-        std::vector<std::wstring> fields;
-        size_t start = 0;
-        for (;;) {
-            size_t end = spec.find(L'|', start);
-            fields.push_back(spec.substr(start, end == std::wstring::npos ? end : end - start));
-            if (end == std::wstring::npos) break;
-            start = end + 1;
-        }
-        if (fields.size() != 8 || fields[0].empty() || fields[1].empty() ||
-            fields[2].size() != 7 || fields[2][0] != L'#' ||
-            fields[2].find_first_not_of(L"0123456789abcdefABCDEF", 1) != std::wstring::npos) {
-            Wh_Log(L"Custom tile %d: expected Name|Target|#RRGGBB|Icon|Small|Medium|Wide|Large", slot);
-            continue;
-        }
+    const auto configs = ReadCustomTiles();
+    int slot = 0;
+    for (const auto& cfg : configs) {
+        ++slot;
+        const auto& fields = cfg.fields;
+        bool invalid = fields[0].empty() || fields[0].size() > 1024 || fields[1].size() > 4096 ||
+                       fields[2].size() != 7 || fields[2][0] != L'#' ||
+                       fields[2].find_first_not_of(L"0123456789abcdefABCDEF", 1) != std::wstring::npos;
+        for (const auto& field : fields)
+            invalid = invalid || field.size() > 4096 || field.find_first_of(L"\r\n\t") != std::wstring::npos;
+        if (invalid) { Wh_Log(L"Custom tile %d: invalid name, target, color or path", slot); continue; }
         int idx = FindPinned(fields[1].c_str());
         if (idx < 0) {
             for (int i = 0; i < g_tileCount; ++i) if (!g_tiles[i].alive) { idx = i; break; }
-            if (idx < 0) { if (g_tileCount >= MAX_TILES) { Wh_Log(L"Custom tile limit reached"); continue; } idx = g_tileCount++; }
             if (g_orderCount >= MAX_TILES) continue;
+            if (idx < 0) { if (g_tileCount >= MAX_TILES) { Wh_Log(L"Custom tile limit reached"); continue; } idx = g_tileCount++; }
             Tile t = {};
             t.label = DupW(fields[0].c_str());
             t.target = DupW(fields[1].c_str());
@@ -13809,6 +13844,7 @@ static void InitTiles() {
         if (t.icon) { DestroyIcon(t.icon); t.icon = NULL; }
         if (t.pinBmp) { DeleteObject(t.pinBmp); t.pinBmp = NULL; }
         LoadPinIcon(t);
+        UpdateTileAppColor(t);
         RebuildTile(i);
     }
     // The Windows 8.1 shortcut look is worked out again here for every tile of the saved layout,
@@ -14162,9 +14198,17 @@ static void LoadSettings() {
 // Mod entry points
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     const bool oldKeyboardOnly = g_keyboardOnly;
-    RunGuarded(L"ModSettingsChanged", [] { LoadSettings(); });
-    // The hook set depends on interceptMode, so a change needs a reload.
-    if (bReload && g_keyboardOnly != oldKeyboardOnly) *bReload = TRUE;
+    bool customChanged = false;
+    RunGuarded(L"ModSettingsChanged", [&] {
+        auto current = CustomTileSnapshot();
+        AcquireSRWLockExclusive(&g_customSnapshotLock);
+        customChanged = current != g_customSnapshot;
+        g_customSnapshot.swap(current);
+        ReleaseSRWLockExclusive(&g_customSnapshotLock);
+        LoadSettings();
+    });
+    // Recreate the UI thread to apply custom tile additions, removals and edits.
+    if (bReload && (g_keyboardOnly != oldKeyboardOnly || customChanged)) *bReload = TRUE;
     return TRUE;
 }
 
@@ -14196,6 +14240,12 @@ BOOL Wh_ModInit() {
         }
         InterlockedExchange(&g_shellPatch, DetectThirdPartyShell());
         LoadSettings();
+        {
+            auto current = CustomTileSnapshot();
+            AcquireSRWLockExclusive(&g_customSnapshotLock);
+            g_customSnapshot.swap(current);
+            ReleaseSRWLockExclusive(&g_customSnapshotLock);
+        }
         if (g_shellPatch) Wh_Log(L"Third-party shell present (mask 0x%X): compatibility mode is %ls",
                                 (unsigned)g_shellPatch,
                                 ShellCompatActive() ? L"active" : L"inactive");
