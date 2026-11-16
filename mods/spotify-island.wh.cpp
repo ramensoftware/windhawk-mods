@@ -4,6 +4,7 @@
 // @description     Dynamic-Island style now-playing pill: album art, art-colored side glow, liquid notch animation, audio-reactive bars, media controls.
 // @version         2.4.1
 // @author          you
+// @github LOKPIYT
 // @include         explorer.exe
 // @compilerOptions -lgdiplus -lgdi32 -luser32 -lole32 -loleaut32 -lruntimeobject -lshlwapi -lshell32 -lshcore
 // ==/WindhawkMod==
