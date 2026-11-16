@@ -10734,13 +10734,13 @@
         "ratingUsers": 927,
         "reviews": 7,
         "trendingSorting": 22.161376215095817,
-        "updated": 1794391382000,
+        "updated": 1794794658000,
         "users": 23003
       },
       "metadata": {
         "author": "caliberda",
-        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -lcomctl32 -lgdi32 -lmsimg32 -ld2d1 -ldwrite -lwlanapi -luuid -lversion -lbthprops -ldxva2 -lshlwapi -lwinhttp -lwinmm -liphlpapi -lshcore -lcomdlg32 -limm32 -lsetupapi -lcfgmgr32 -luserenv",
-        "description": "An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -lcomctl32 -lgdi32 -lmsimg32 -ld2d1 -ldwrite -lwlanapi -luuid -lversion -lbthprops -ldxva2 -lshlwapi -lwinhttp -lwinmm -liphlpapi -lshcore -lcomdlg32 -limm32 -lsetupapi -lcfgmgr32 -luserenv -lbcrypt",
+        "description": "Une île en haut de l'écran comme la barre de menus de macOS et la Dynamic Island de l'iPhone (horloge, centre de contrôle, notifications, lecture en cours, icônes de la zone de notification), et un dock façon macOS à la place de la barre des tâches (ou la barre des tâches Windows, transparente ou telle quelle)",
         "donateUrl": "https://github.com/sponsors/cesarkali",
         "github": "https://github.com/cesarkali",
         "homepage": "https://island.caliberda.com.br",
@@ -10750,7 +10750,10 @@
         ],
         "license": "GPL-3.0",
         "name": "Mac Island & Dock",
-        "version": "3.1.1"
+        "version": "3.2.0"
+      },
+      "metadataEnglish": {
+        "description": "An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)"
       }
     },
     "mac-magnifying-cursor": {
