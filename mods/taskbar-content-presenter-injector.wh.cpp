@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-content-presenter-injector
 // @name            Taskbar ContentPresenter Injector
-// @description     Injects a ContentPresenter into Taskbar.TaskListLabeledButtonPanel and Taskbar.TaskListButtonPanel
-// @version         1.4.1
+// @description     Injects a ContentPresenter into Taskbar.TaskListLabeledButtonPanel, Grid#IconPanel, and Taskbar.TaskListButtonPanel
+// @version         1.4.2
 // @author          Lockframe
 // @github          https://github.com/Lockframe
 // @include         explorer.exe
@@ -14,11 +14,13 @@
 /*
 # Taskbar ContentPresenter Injector
 
-This mod acts as an addon to the [Windows 11 Taskbar Styler mod](https://windhawk.net/mods/windows-11-taskbar-styler), enabling deeper customization of the taskbar, such as replacing icons with glyphs, by injecting a `ContentPresenter` named `CustomInjectedPresenter` into every `Taskbar.TaskListLabeledButtonPanel`, `Taskbar.TaskListButtonPanel` and `SearchUx.SearchUI.SearchButtonRootGrid`.
+This mod acts as an addon to the [Windows 11 Taskbar Styler mod](https://windhawk.net/mods/windows-11-taskbar-styler), enabling deeper customization of the taskbar, such as replacing icons with glyphs, by injecting a `ContentPresenter` named `CustomInjectedPresenter` into every `Taskbar.TaskListLabeledButtonPanel` (or `Grid#IconPanel` on newer Windows 11 builds), `Taskbar.TaskListButtonPanel` and `SearchUx.SearchUI.SearchButtonRootGrid`.
 
 ## Path to the injected element:
 
-```Taskbar.TaskListButton > Taskbar.TaskListLabeledButtonPanel > Windows.UI.Xaml.Controls.ContentPresenter#CustomInjectedPresenter```
+```Taskbar.TaskListButton > Grid#IconPanel > Windows.UI.Xaml.Controls.ContentPresenter#CustomInjectedPresenter```
+
+(Older Windows 11 builds: ```Taskbar.TaskListButton > Taskbar.TaskListLabeledButtonPanel > Windows.UI.Xaml.Controls.ContentPresenter#CustomInjectedPresenter```)
 
 ```Taskbar.ExperienceToggleButton > Taskbar.TaskListButtonPanel > Windows.UI.Xaml.Controls.ContentPresenter#CustomInjectedPresenter```
 
@@ -66,6 +68,8 @@ std::vector<winrt::weak_ref<FrameworkElement>> g_scannedFrames;
 std::mutex g_pendingMutex;
 
 constexpr std::wstring_view c_TargetPanelLabeled  = L"Taskbar.TaskListLabeledButtonPanel";
+constexpr std::wstring_view c_TargetPanelIconGrid = L"Windows.UI.Xaml.Controls.Grid";
+constexpr std::wstring_view c_TargetPanelIconName = L"IconPanel";
 constexpr std::wstring_view c_TargetPanelButton   = L"Taskbar.TaskListButtonPanel";
 constexpr std::wstring_view c_TargetSearchBar     = L"SearchUx.SearchUI.SearchButtonRootGrid";
 constexpr std::wstring_view c_RootFrameName       = L"Taskbar.TaskbarFrame";
@@ -229,7 +233,10 @@ void ScanAndInjectRecursive(FrameworkElement element) {
     if (!element) return;
 
     auto className = winrt::get_class_name(element);
-    if (className == c_TargetPanelLabeled || className == c_TargetPanelButton || className == c_TargetSearchBar) {
+    if (className == c_TargetPanelLabeled ||
+        (className == c_TargetPanelIconGrid && element.Name() == c_TargetPanelIconName) ||
+        className == c_TargetPanelButton ||
+        className == c_TargetSearchBar) {
         InjectContentPresenterIntoPanel(element);
         return;
     }
