@@ -2,7 +2,7 @@
 // @id              fluent-radial-menu
 // @name            Fluent Radial Menu
 // @description     Launch apps, files, folders, links, and shortcuts from a customizable radial menu on Windows 11.
-// @version         0.8.4
+// @version         0.9.0
 // @author          Fenryr
 // @github          https://github.com/soldier93HUN
 // @include         windhawk.exe
@@ -14,7 +14,7 @@
 # Fluent Radial Menu
 
 Fluent Radial Menu adds a circular launcher to Windows 11. It comes with
-three pages of apps, folders, and Windows shortcuts and a built-in editor.
+three pages of apps, folders, Windows shortcuts, and screen capture tools.
 
 ![Fluent Radial Menu in action](https://i.imgur.com/fj0r5vV.gif)
 
@@ -29,10 +29,25 @@ three pages of apps, folders, and Windows shortcuts and a built-in editor.
 3. Press **F2** while the wheel is open, or right-click it and choose
    **Edit radial menu**, to open the built-in editor.
 
+The wheel stays closed while the foreground app is fullscreen.
+
+## Screen capture tools
+
+Choose **Color picker** on the first page to open the capture toolbar at the
+top center of the display under the pointer. Use the toolbar to switch to
+**Copy text from screen**. In the color picker, the magnifier shows the exact pixel
+under the pointer, its **#RRGGBB** value, and its screen coordinates. Click
+to copy that color, or drag around text in the text tool. A confirmation
+appears after copying. Press **Esc** to cancel. Text recognition runs locally
+using Windows OCR and the recognition languages installed for your account.
+
+To add either tool to an existing layout, select a wedge in **Actions** and
+choose it from **Action type**.
+
 ## Make it yours
 
 - **Actions** lets you choose an installed app, folder, file, website,
-  Windows settings page, keyboard shortcut, or command. Select **Custom…**
+  Windows settings page, keyboard shortcut, command, or capture tool. Select **Custom…**
   to browse for a local target. Choose the original app icon, a built-in
   symbol, or an icon file. Drag a wedge in the preview to move or swap it.
 - **Pages** lets you add, rename, reorder, or duplicate up to eight pages
@@ -91,7 +106,9 @@ as System32 paths so the same profile works in the 64-bit host.
 #include <sddl.h>
 #include <servprov.h>
 #include <roapi.h>
+#include <robuffer.h>
 #include <windows.data.json.h>
+#include <windows.graphics.imaging.h>
 #include <wincodec.h>
 #include <wrl/client.h>
 #include <wrl/wrappers/corewrappers.h>
@@ -131,6 +148,7 @@ constexpr wchar_t kPointerClass[] = L"Windhawk.FluentRadialMenu.Pointer";
 constexpr int kHotkey = 1;
 constexpr UINT kFrameTimer = 1;
 constexpr UINT kPopupStopTimer = 2;
+constexpr UINT kFullscreenTimer = 3;
 constexpr UINT kIconsReady = WM_APP + 2;
 constexpr UINT kPointer = WM_APP + 3;
 constexpr UINT kDismiss = WM_APP + 4;
@@ -333,10 +351,18 @@ std::optional<Chord> ParseChord(std::wstring_view text) {
     return {};
 }
 
-enum class Action { Empty, Open, Command, Shortcut };
-enum class ActionCategory { Empty, App, Folder, Link, File, Settings, Keys, Command, Unspecified };
+enum class Action { Empty, Open, Command, Shortcut, PickColor, CopyText };
+enum class ActionCategory { Empty, App, Folder, Link, File, Settings, Keys, Command, PickColor, CopyText, Unspecified };
 enum class Theme { System, Light, Dark };
 enum class PageTransition { Instant, Crossfade, Rotate };
+
+bool IsCaptureAction(Action action) {
+    return action == Action::PickColor || action == Action::CopyText;
+}
+
+wchar_t CaptureGlyph(Action action) {
+    return action == Action::PickColor ? L'\uEF3C' : action == Action::CopyText ? L'\uF683' : 0;
+}
 
 struct Slot {
     std::wstring name, target, arguments, icon;
@@ -344,8 +370,15 @@ struct Slot {
     ActionCategory category = ActionCategory::Unspecified;
     wchar_t glyph = 0;
     bool operator==(const Slot&) const = default;
-    bool Active() const { return action != Action::Empty && !target.empty(); }
-    const std::wstring& Label() const { return name.empty() ? target : name; }
+    bool Active() const { return IsCaptureAction(action) || (action != Action::Empty && !target.empty()); }
+    const std::wstring& Label() const {
+        static const std::wstring colorLabel = L"Color picker";
+        static const std::wstring textLabel = L"Copy text from screen";
+        if (!name.empty()) return name;
+        if (action == Action::PickColor) return colorLabel;
+        if (action == Action::CopyText) return textLabel;
+        return target;
+    }
 };
 
 struct ActionCategoryInfo {
@@ -362,6 +395,8 @@ constexpr ActionCategoryInfo kActionCategories[] = {
     {L"settings", L"Windows settings", L"Settings page", L"Settings URI", Action::Open},
     {L"keys", L"Send keys", L"Keyboard shortcut", L"Key chord", Action::Shortcut},
     {L"command", L"Run command", L"Command", L"Executable", Action::Command},
+    {L"colorPicker", L"Color picker", L"", L"", Action::PickColor},
+    {L"copyText", L"Copy text from screen", L"", L"", Action::CopyText},
 };
 
 const ActionCategoryInfo& CategoryInfo(ActionCategory category) {
@@ -372,6 +407,8 @@ ActionCategory InferCategory(const Slot& slot) {
     if (slot.action == Action::Empty) return ActionCategory::Empty;
     if (slot.action == Action::Command) return ActionCategory::Command;
     if (slot.action == Action::Shortcut) return ActionCategory::Keys;
+    if (slot.action == Action::PickColor) return ActionCategory::PickColor;
+    if (slot.action == Action::CopyText) return ActionCategory::CopyText;
     const wchar_t* target = slot.target.c_str();
     if (_wcsnicmp(target, L"ms-settings:", 12) == 0) return ActionCategory::Settings;
     constexpr wchar_t appsFolder[] = L"shell:AppsFolder\\";
@@ -417,6 +454,14 @@ std::wstring ReadString(PCWSTR path) {
     return value ? value.get() : L"";
 }
 
+const Slot& SnippingToolSlot() {
+    static const Slot slot{L"Snipping Tool", L"Win+Shift+S", L"", L"glyph:E8C8",
+                           Action::Shortcut, ActionCategory::Unspecified, L'\uE8C8'};
+    return slot;
+}
+
+constexpr int kDefaultColorSlot = 5;
+
 Settings DefaultSettings() {
     Settings settings{};
     settings.transparency = settings.blur = 18;
@@ -440,7 +485,7 @@ Settings DefaultSettings() {
         {L"Task Manager", L"%WINDIR%\\System32\\Taskmgr.exe", L"", L"glyph:E9D9", Action::Open},
         {L"Calculator", L"%WINDIR%\\System32\\calc.exe", L"", L"glyph:E8EF", Action::Open},
         {L"Notepad", L"%WINDIR%\\System32\\notepad.exe", L"", L"glyph:E70B", Action::Open},
-        {L"Snipping Tool", L"Win+Shift+S", L"", L"glyph:E8C8", Action::Shortcut},
+        {.action = Action::PickColor},
         {L"Terminal", L"wt.exe", L"", L"glyph:E756", Action::Open},
         {L"Task View", L"Win+Tab", L"", L"glyph:E7C4", Action::Shortcut},
         {L"Home Folder", L"%USERPROFILE%", L"", L"glyph:E80F", Action::Open},
@@ -468,6 +513,35 @@ Settings DefaultSettings() {
         settings.pageNames.push_back(L"Page " + std::to_wstring(settings.pages.size()));
     }
     return settings;
+}
+
+void UpdateDefaultCaptureSlots(Settings& settings) {
+    auto& first = settings.pages.front();
+    auto& oldSnip = first[kDefaultColorSlot];
+    if (oldSnip.action != Action::Shortcut || oldSnip.name != L"Snipping Tool" ||
+        oldSnip.target != SnippingToolSlot().target) return;
+    const auto oldCaptureShortcut = [](const Slot& slot) {
+        return slot.action == Action::Shortcut && slot.name == L"Screen capture" &&
+               slot.target == SnippingToolSlot().target;
+    };
+    if (first[0].action == Action::PickColor || oldCaptureShortcut(first[0])) {
+        Slot picker = first[0].action == Action::PickColor ? std::move(first[0]) : Slot{.action = Action::PickColor};
+        first[0] = std::exchange(oldSnip, std::move(picker));
+        for (auto& page : settings.pages) {
+            for (auto& slot : page) {
+                if (oldCaptureShortcut(slot)) slot = {};
+            }
+        }
+        return;
+    }
+
+    // Move the stock Snipping Tool only when an existing Capture page can hold it.
+    if (settings.pageNames.front() != L"Page 1" || oldSnip != SnippingToolSlot()) return;
+    const auto capture = std::find(settings.pageNames.begin(), settings.pageNames.end(), L"Capture");
+    if (capture == settings.pageNames.end()) return;
+    auto& top = settings.pages[capture - settings.pageNames.begin()][0];
+    if (top != Slot{.action = Action::PickColor}) return;
+    top = std::exchange(oldSnip, Slot{.action = Action::PickColor});
 }
 
 constexpr wchar_t kProfileFile[] = L"\\editor.json";
@@ -733,7 +807,9 @@ void SlotFields(IO& io, S& slot, T& type) {
     io.String(L"icon", slot.icon, 1024);
 }
 
-constexpr std::array<PCWSTR, 4> kActionNames = {L"empty", L"open", L"command", L"shortcut"};
+constexpr std::array<PCWSTR, 6> kActionNames = {
+    L"empty", L"open", L"command", L"shortcut", L"pickColor", L"copyText",
+};
 
 void AppendProfile(std::wstring& json, const Settings& settings) {
     wchar_t accent[8]{};
@@ -859,7 +935,9 @@ std::optional<Settings> ParseProfile(const std::wstring& text, std::wstring& err
             }
             slot.target = Trim(slot.target);
             if (slot.action == Action::Shortcut && !ParseChord(slot.target)) reader.Invalid(L"slot shortcut");
-            if (slot.action != Action::Empty && slot.target.empty()) reader.Invalid(L"slot target");
+            if (slot.action != Action::Empty && !slot.Active()) reader.Invalid(L"slot target");
+            if (IsCaptureAction(slot.action) && (!slot.target.empty() || !slot.arguments.empty()))
+                reader.Invalid(L"capture action target or arguments");
             ResolveGlyph(slot);
             if (slot.icon.starts_with(L"glyph:") && !slot.glyph) reader.Invalid(L"slot glyph");
             if (slot.icon.starts_with(L"asset:")) reader.Invalid(L"slot icon");
@@ -1631,6 +1709,911 @@ IconPixels CaptureBackdrop(const Geometry& geometry, int strength) {
 
 
 
+bool ForegroundIsFullscreen() {
+    HWND foreground = GetForegroundWindow();
+    if (!foreground || foreground == GetDesktopWindow() || foreground == GetShellWindow() ||
+        !IsWindowVisible(foreground) || IsIconic(foreground)) return false;
+
+    QUERY_USER_NOTIFICATION_STATE state{};
+    if (SUCCEEDED(SHQueryUserNotificationState(&state)) && state == QUNS_RUNNING_D3D_FULL_SCREEN)
+        return true;
+
+    const auto style = GetWindowLongPtrW(foreground, GWL_STYLE);
+    if ((style & WS_MAXIMIZE) && (style & WS_CAPTION) == WS_CAPTION) return false;
+    wchar_t windowClass[64]{};
+    GetClassNameW(foreground, windowClass, ARRAYSIZE(windowClass));
+    const std::wstring_view name(windowClass);
+    if (name == L"Progman" || name == L"WorkerW" || name == L"Shell_TrayWnd" ||
+        name == L"Shell_SecondaryTrayWnd") return false;
+
+    DWORD cloaked = 0;
+    if (SUCCEEDED(DwmGetWindowAttribute(foreground, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+        cloaked) return false;
+    RECT bounds{};
+    if (FAILED(DwmGetWindowAttribute(foreground, DWMWA_EXTENDED_FRAME_BOUNDS, &bounds,
+                                     sizeof(bounds))) && !GetWindowRect(foreground, &bounds)) return false;
+    MONITORINFO monitor{};
+    monitor.cbSize = sizeof(monitor);
+    if (!GetMonitorInfoW(MonitorFromWindow(foreground, MONITOR_DEFAULTTONULL), &monitor)) return false;
+    const auto& screen = monitor.rcMonitor;
+    return bounds.left <= screen.left && bounds.top <= screen.top &&
+           bounds.right >= screen.right && bounds.bottom >= screen.bottom;
+}
+
+bool CopyToClipboard(HWND owner, std::wstring_view value) {
+    HGLOBAL data = GlobalAlloc(GMEM_MOVEABLE, (value.size() + 1) * sizeof(wchar_t));
+    if (!data) return false;
+    auto* buffer = static_cast<wchar_t*>(GlobalLock(data));
+    if (!buffer) {
+        GlobalFree(data);
+        return false;
+    }
+    std::copy(value.begin(), value.end(), buffer);
+    buffer[value.size()] = L'\0';
+    GlobalUnlock(data);
+
+    bool copied = false;
+    if (OpenClipboard(owner)) {
+        copied = EmptyClipboard() && SetClipboardData(CF_UNICODETEXT, data);
+        CloseClipboard();
+    }
+    if (!copied) GlobalFree(data);
+    return copied;
+}
+
+// Windows.Media.Ocr is a public WinRT API. The Windhawk compiler ships the
+// imaging and buffer headers, so only the missing OCR ABI is declared here.
+// https://learn.microsoft.com/uwp/api/windows.media.ocr.ocrengine
+namespace Ocr {
+using namespace ABI::Windows::Graphics::Imaging;
+
+constexpr GUID kEngineStatics = {0x5bffa85a, 0x3384, 0x3540, {0x99, 0x40, 0x69, 0x91, 0x20, 0xd4, 0x28, 0xa8}};
+constexpr GUID kAsyncInfo = {0x00000036, 0, 0, {0xc0, 0, 0, 0, 0, 0, 0, 0x46}};
+
+struct Result : IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_Lines(IInspectable**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_TextAngle(IInspectable**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_Text(HSTRING*) = 0;
+};
+
+struct Operation : IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE put_Completed(IUnknown*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_Completed(IUnknown**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetResults(Result**) = 0;
+};
+
+struct Engine : IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE RecognizeAsync(ISoftwareBitmap*, Operation**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_RecognizerLanguage(IInspectable**) = 0;
+};
+
+struct EngineStatics : IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_MaxImageDimension(UINT32*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_AvailableRecognizerLanguages(IInspectable**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE IsLanguageSupported(IInspectable*, boolean*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE TryCreateFromLanguage(IInspectable*, Engine**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE TryCreateFromUserProfileLanguages(Engine**) = 0;
+};
+
+ComPtr<ISoftwareBitmap> MakeBitmap(const Surface& snapshot, const RECT& region,
+                                  UINT32 maxDimension) {
+    const auto width = static_cast<int>(region.right - region.left);
+    const auto height = static_cast<int>(region.bottom - region.top);
+    const auto longest = std::max(width, height);
+    if (width < 2 || height < 2 || !maxDimension) return {};
+    const auto scale = std::min(1.0, static_cast<double>(maxDimension) / longest);
+    const int outWidth = std::max(1, static_cast<int>(width * scale));
+    const int outHeight = std::max(1, static_cast<int>(height * scale));
+    Surface resized;
+    if (!resized.Resize(outWidth, outHeight)) return {};
+    SetStretchBltMode(resized.Dc(), HALFTONE);
+    SetBrushOrgEx(resized.Dc(), 0, 0, nullptr);
+    if (!StretchBlt(resized.Dc(), 0, 0, outWidth, outHeight, snapshot.Dc(),
+                    region.left, region.top, width, height, SRCCOPY)) return {};
+    GdiFlush();
+
+    namespace Streams = ABI::Windows::Storage::Streams;
+    ComPtr<Streams::IBufferFactory> bufferFactory;
+    ComPtr<Streams::IBuffer> buffer;
+    ComPtr<Windows::Storage::Streams::IBufferByteAccess> access;
+    ComPtr<ISoftwareBitmapStatics> bitmapFactory;
+    ComPtr<ISoftwareBitmap> bitmap;
+    const auto size = static_cast<UINT32>(outWidth * outHeight * 4);
+    BYTE* pixels = nullptr;
+    if (FAILED(RoGetActivationFactory(HStringReference(L"Windows.Storage.Streams.Buffer").Get(),
+                                      IID_PPV_ARGS(&bufferFactory))) ||
+        FAILED(bufferFactory->Create(size, &buffer)) ||
+        FAILED(buffer.As(&access)) || FAILED(access->Buffer(&pixels)) ||
+        FAILED(buffer->put_Length(size)) ||
+        FAILED(RoGetActivationFactory(HStringReference(L"Windows.Graphics.Imaging.SoftwareBitmap").Get(),
+                                      IID_PPV_ARGS(&bitmapFactory)))) return {};
+    std::memcpy(pixels, resized.Bits(), size);
+    if (FAILED(bitmapFactory->CreateCopyWithAlphaFromBuffer(buffer.Get(), BitmapPixelFormat_Bgra8,
+                               outWidth, outHeight, BitmapAlphaMode_Ignore, &bitmap))) return {};
+    return bitmap;
+}
+}  // namespace Ocr
+
+class ScreenCapture {
+public:
+    HWND Window() const { return window_; }
+
+    bool Show(HINSTANCE instance, HWND owner, Action mode, Theme theme, bool animate) {
+        if (window_) return false;
+        if (feedback_) {
+            DismissFeedback();
+            DwmFlush();
+        }
+        if (!registered_) {
+            WNDCLASSW klass{};
+            klass.hInstance = instance;
+            klass.lpszClassName = kClass;
+            klass.lpfnWndProc = WindowProc;
+            klass.hCursor = LoadCursorW(nullptr, IDC_CROSS);
+            if (!RegisterClassW(&klass)) return false;
+            klass.lpszClassName = kFeedbackClass;
+            klass.lpfnWndProc = FeedbackProc;
+            klass.hCursor = nullptr;
+            if (!RegisterClassW(&klass)) {
+                UnregisterClassW(kClass, instance);
+                return false;
+            }
+            instance_ = instance;
+            registered_ = true;
+        }
+
+        POINT cursor;
+        MONITORINFO monitor{};
+        monitor.cbSize = sizeof(monitor);
+        if (!GetCursorPos(&cursor) ||
+            !GetMonitorInfoW(MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST), &monitor)) return false;
+        const RECT bounds = monitor.rcMonitor;
+        width_ = bounds.right - bounds.left;
+        height_ = bounds.bottom - bounds.top;
+        if (width_ <= 0 || height_ <= 0 || static_cast<int64_t>(width_) * height_ > 40000000 ||
+            !snapshot_.Resize(width_, height_)) return false;
+
+        HDC desktop = GetDC(nullptr);
+        if (!desktop) {
+            snapshot_.Reset();
+            return false;
+        }
+        const BOOL captured = BitBlt(snapshot_.Dc(), 0, 0, width_, height_, desktop,
+                                    bounds.left, bounds.top, SRCCOPY | CAPTUREBLT);
+        GdiFlush();
+        ReleaseDC(nullptr, desktop);
+        if (!captured) {
+            snapshot_.Reset();
+            return false;
+        }
+
+        mode_ = mode;
+        animate_ = animate;
+        workArea_ = monitor.rcWork;
+        origin_ = {bounds.left, bounds.top};
+        point_ = {cursor.x - bounds.left, cursor.y - bounds.top};
+        status_ = L"";
+        ThemeColors(theme);
+        window_ = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, kClass, L"Screen capture",
+                                  WS_POPUP | WS_CLIPCHILDREN, bounds.left, bounds.top,
+                                  width_, height_, owner, nullptr, instance_, this);
+        if (!window_ || !BuildToolbar(monitor.rcWork.top - bounds.top)) {
+            Close();
+            return false;
+        }
+        ShowWindow(window_, SW_SHOW);
+        SetForegroundWindow(window_);
+        SetFocus(window_);
+        SendMessageW(window_, WM_CHANGEUISTATE, MAKEWPARAM(UIS_SET, UISF_HIDEFOCUS), 0);
+        return true;
+    }
+
+    void Close() {
+        if (window_) DestroyWindow(window_);
+        chrome_ = {};
+        chromeLabels_.Reset();
+        chromeGlyphs_.Reset();
+        snapshot_.Reset();
+        toolbar_.Reset();
+        buffer_.Reset();
+        statusBuffer_.Reset();
+        buttonBuffer_.Reset();
+        lens_ = {};
+    }
+
+    void Uninit() {
+        Close();
+        DismissFeedback();
+        if (registered_) {
+            UnregisterClassW(kClass, instance_);
+            UnregisterClassW(kFeedbackClass, instance_);
+        }
+        registered_ = false;
+    }
+
+private:
+    static constexpr wchar_t kClass[] = L"Windhawk.FluentRadialMenu.Capture";
+    static constexpr wchar_t kFeedbackClass[] = L"Windhawk.FluentRadialMenu.CaptureFeedback";
+    static constexpr UINT_PTR kOcrTimer = 1;
+    static constexpr UINT_PTR kFeedbackTimer = 1;
+    static constexpr int kLensCells = 13;
+    enum ButtonId { Pick = 1, Text, Cancel };
+
+    struct ChromeTarget {
+        ComPtr<ID2D1DCRenderTarget> target;
+        ComPtr<ID2D1SolidColorBrush> brush;
+
+        bool Init(ID2D1Factory* factory, D2D1_ALPHA_MODE alpha = D2D1_ALPHA_MODE_IGNORE) {
+            const auto properties = D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_SOFTWARE,
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, alpha), 96, 96);
+            return SUCCEEDED(factory->CreateDCRenderTarget(&properties, &target)) &&
+                   SUCCEEDED(target->CreateSolidColorBrush(D2D1::ColorF(0), &brush));
+        }
+
+        bool Begin(HDC dc, const RECT& area) {
+            if (FAILED(target->BindDC(dc, &area))) return false;
+            target->BeginDraw();
+            target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+            return true;
+        }
+    };
+
+    static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
+        if (message == WM_NCCREATE) {
+            auto* self = static_cast<ScreenCapture*>(reinterpret_cast<CREATESTRUCTW*>(lp)->lpCreateParams);
+            SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
+            self->window_ = window;
+        }
+        auto* self = reinterpret_cast<ScreenCapture*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+        return self ? self->OnMessage(window, message, wp, lp) : DefWindowProcW(window, message, wp, lp);
+    }
+
+    static LRESULT CALLBACK ToolbarButtonProc(HWND button, UINT message, WPARAM wp, LPARAM lp,
+                                              UINT_PTR, DWORD_PTR ref) {
+        auto& self = *reinterpret_cast<ScreenCapture*>(ref);
+        if (message == WM_MOUSEMOVE && self.hoveredButton_ != button) {
+            if (const HWND previous = std::exchange(self.hoveredButton_, button))
+                InvalidateRect(previous, nullptr, FALSE);
+            TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, button, 0};
+            TrackMouseEvent(&track);
+            InvalidateRect(button, nullptr, FALSE);
+        } else if (message == WM_MOUSELEAVE && self.hoveredButton_ == button) {
+            self.hoveredButton_ = nullptr;
+            InvalidateRect(button, nullptr, FALSE);
+        } else if (message == WM_LBUTTONDOWN) {
+            SendMessageW(self.window_, WM_CHANGEUISTATE, MAKEWPARAM(UIS_SET, UISF_HIDEFOCUS), 0);
+        }
+        return DefSubclassProc(button, message, wp, lp);
+    }
+
+    int Px(int dip) const { return MulDiv(dip, dpi_, 96); }
+
+    void ThemeColors(Theme theme) {
+        HIGHCONTRASTW contrast{};
+        contrast.cbSize = sizeof(contrast);
+        highContrast_ = SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
+                        (contrast.dwFlags & HCF_HIGHCONTRASTON);
+        if (highContrast_) {
+            panel_ = GetSysColor(COLOR_WINDOW);
+            text_ = GetSysColor(COLOR_WINDOWTEXT);
+            accent_ = GetSysColor(COLOR_HIGHLIGHT);
+            border_ = text_;
+            return;
+        }
+        DWORD light = 1, size = sizeof(light);
+        if (theme == Theme::System) {
+            RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                         L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
+        } else {
+            light = theme == Theme::Light;
+        }
+        panel_ = light ? RGB(246, 247, 250) : RGB(28, 27, 41);
+        text_ = light ? RGB(24, 27, 33) : RGB(247, 248, 251);
+        accent_ = light ? RGB(0, 89, 181) : RGB(97, 158, 255);
+        border_ = light ? RGB(171, 185, 207) : RGB(89, 94, 120);
+    }
+
+    bool BuildToolbar(int top) {
+        dpi_ = GetDpiForWindow(window_);
+        if (!dpi_) dpi_ = 96;
+        const int width = std::min(width_, Px(350));
+        const int height = Px(56), gap = Px(8), cancelWidth = Px(62), inset = Px(4);
+        if (width < Px(240) || height + Px(50) > height_) return false;
+        const int groupWidth = width - gap - cancelWidth;
+        const int left = (width_ - width) / 2;
+        top = std::clamp(top + Px(14), 0, height_ - height - Px(50));
+        bar_ = {left, top, left + width, top + height};
+        const int statusWidth = std::min(width_, Px(420));
+        statusBar_ = {(width_ - statusWidth) / 2, bar_.bottom + Px(8),
+                      (width_ - statusWidth) / 2 + statusWidth, bar_.bottom + Px(44)};
+        if (!InitToolbarGraphics() || !toolbar_.Resize(width, height)) return false;
+        const RECT area{0, 0, width, height};
+        // Share the two composited panels with the owner-drawn buttons.
+        BitBlt(toolbar_.Dc(), 0, 0, width, height, snapshot_.Dc(), left, top, SRCCOPY);
+        if (!chrome_.Begin(toolbar_.Dc(), area)) return false;
+        DrawPanel(chrome_, D2D1::RectF(0, 0, groupWidth, height));
+        DrawPanel(chrome_, D2D1::RectF(groupWidth + gap, 0, width, height));
+        if (FAILED(chrome_.target->EndDraw())) return false;
+
+        const int tileWidth = groupWidth - inset * 3, textWidth = tileWidth * 57 / 100;
+        struct Tile {
+            ButtonId id;
+            PCWSTR label;
+            int left;
+            int width;
+        };
+        const Tile tiles[] = {
+            {Text, L"Copy text from screen", inset, textWidth},
+            {Pick, L"Color picker", textWidth + 2 * inset, tileWidth - textWidth},
+            {Cancel, L"Cancel (Esc)", groupWidth + gap + inset, cancelWidth - 2 * inset},
+        };
+        for (const auto& tile : tiles) {
+            const auto button = CreateWindowExW(0, L"BUTTON", tile.label,
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, left + tile.left, top + inset,
+                tile.width, height - 2 * inset, window_,
+                reinterpret_cast<HMENU>(static_cast<INT_PTR>(tile.id)), instance_, nullptr);
+            if (!button || !SetWindowSubclass(button, ToolbarButtonProc, 1, reinterpret_cast<DWORD_PTR>(this)))
+                return false;
+        }
+        lens_ = LensBounds();
+        return true;
+    }
+
+    bool InitToolbarGraphics() {
+        ComPtr<ID2D1Factory> factory;
+        ComPtr<IDWriteFactory> write;
+        if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, factory.GetAddressOf())) ||
+            FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+                reinterpret_cast<IUnknown**>(write.GetAddressOf())))) return false;
+        const auto format = [&](PCWSTR family, int size, DWRITE_FONT_WEIGHT weight, IDWriteTextFormat** out) {
+            if (FAILED(write->CreateTextFormat(family, nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
+                    DWRITE_FONT_STRETCH_NORMAL, static_cast<float>(Px(size)), L"", out))) return false;
+            (*out)->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            (*out)->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+            (*out)->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+            return true;
+        };
+        return chrome_.Init(factory.Get()) &&
+               format(L"Segoe UI Variable Text", 12, DWRITE_FONT_WEIGHT_SEMI_BOLD, &chromeLabels_) &&
+               format(L"Segoe Fluent Icons", 17, DWRITE_FONT_WEIGHT_NORMAL, &chromeGlyphs_);
+    }
+
+    static D2D1_COLOR_F ChromeColor(COLORREF color, float opacity = 1.f) {
+        return D2D1::ColorF(GetRValue(color) / 255.f, GetGValue(color) / 255.f, GetBValue(color) / 255.f, opacity);
+    }
+
+    void DrawPanel(const ChromeTarget& canvas, const D2D1_RECT_F& area) {
+        const float radius = Px(14);
+        const auto panel = D2D1::RoundedRect(area, radius, radius);
+        canvas.brush->SetColor(ChromeColor(panel_, highContrast_ ? 1.f : 0.93f));
+        canvas.target->FillRoundedRectangle(panel, canvas.brush.Get());
+        if (highContrast_) {
+            canvas.brush->SetColor(ChromeColor(border_));
+            canvas.target->DrawRoundedRectangle(panel, canvas.brush.Get(), std::max(1, Px(1)));
+        }
+    }
+
+    void ChromeText(const ChromeTarget& canvas, std::wstring_view text, IDWriteTextFormat* format,
+                    const D2D1_RECT_F& area, const D2D1_COLOR_F& color) {
+        canvas.brush->SetColor(color);
+        canvas.target->DrawTextW(text.data(), static_cast<UINT32>(text.size()), format, area, canvas.brush.Get(),
+                                 D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
+
+    void DrawSwatch(const ChromeTarget& canvas, int left, int height, COLORREF color) {
+        const float top = (height - Px(16)) / 2.f;
+        const float radius = Px(4);
+        const auto swatch = D2D1::RoundedRect(D2D1::RectF(left, top, left + Px(16), top + Px(16)), radius, radius);
+        canvas.brush->SetColor(ChromeColor(color));
+        canvas.target->FillRoundedRectangle(swatch, canvas.brush.Get());
+        canvas.brush->SetColor(ChromeColor(text_, highContrast_ ? 1.f : 0.55f));
+        canvas.target->DrawRoundedRectangle(swatch, canvas.brush.Get(), std::max(1, Px(1)));
+    }
+
+    static void Outline(HDC dc, const RECT& area, COLORREF color, int corner) {
+        auto pen = CreatePen(PS_SOLID, 1, color);
+        auto oldPen = SelectObject(dc, pen);
+        auto oldBrush = SelectObject(dc, GetStockObject(NULL_BRUSH));
+        if (corner) RoundRect(dc, area.left, area.top, area.right, area.bottom, corner, corner);
+        else Rectangle(dc, area.left, area.top, area.right, area.bottom);
+        SelectObject(dc, oldBrush);
+        SelectObject(dc, oldPen);
+        DeleteObject(pen);
+    }
+
+    static void Fill(HDC dc, const RECT& area, COLORREF color) {
+        SetDCBrushColor(dc, color);
+        FillRect(dc, &area, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+    }
+
+    COLORREF Pixel(POINT point) const {
+        const int x = std::clamp<int>(point.x, 0, width_ - 1);
+        const int y = std::clamp<int>(point.y, 0, height_ - 1);
+        const size_t offset = (static_cast<size_t>(y) * width_ + x) * 4;
+        const auto* pixel = snapshot_.Bits() + offset;
+        return RGB(pixel[2], pixel[1], pixel[0]);
+    }
+
+    static std::wstring HexColor(COLORREF color) {
+        wchar_t label[8];
+        swprintf_s(label, L"#%02X%02X%02X", static_cast<unsigned>(GetRValue(color)),
+                   static_cast<unsigned>(GetGValue(color)), static_cast<unsigned>(GetBValue(color)));
+        return label;
+    }
+
+    POINT Point(LPARAM lp) const {
+        return {std::clamp<int>(GET_X_LPARAM(lp), 0, width_ - 1),
+                std::clamp<int>(GET_Y_LPARAM(lp), 0, height_ - 1)};
+    }
+
+    RECT Region() const {
+        return {std::min(start_.x, point_.x), std::min(start_.y, point_.y),
+                std::max(start_.x, point_.x) + 1, std::max(start_.y, point_.y) + 1};
+    }
+
+    int LensCell() const { return std::max(4, Px(11)); }
+
+    bool OverToolbar(POINT point) const {
+        return PtInRect(&bar_, point) || (!status_.empty() && PtInRect(&statusBar_, point));
+    }
+
+    RECT LensBounds() const {
+        if (mode_ != Action::PickColor || OverToolbar(point_)) return {};
+        const int width = kLensCells * LensCell() + 2;
+        const int height = width + Px(44);
+        const int margin = Px(8), offset = Px(24);
+        if (width + 2 * margin > width_ || height + 2 * margin > height_) return {};
+        int left = point_.x + offset;
+        int top = point_.y + offset;
+        if (left + width + margin > width_) left = point_.x - offset - width;
+        if (top + height + margin > height_) top = point_.y - offset - height;
+        left = std::clamp(left, margin, width_ - width - margin);
+        top = std::clamp(top, margin, height_ - height - margin);
+        RECT lens{left, top, left + width, top + height}, overlap{};
+        RECT toolbar = bar_;
+        if (!status_.empty()) UnionRect(&toolbar, &bar_, &statusBar_);
+        InflateRect(&toolbar, margin, margin);
+        if (IntersectRect(&overlap, &toolbar, &lens) && toolbar.bottom + height + margin <= height_) {
+            OffsetRect(&lens, 0, toolbar.bottom - lens.top);
+        }
+        return lens;
+    }
+
+    void MoveLens() {
+        const RECT next = LensBounds();
+        if (!IsRectEmpty(&lens_)) InvalidateRect(window_, &lens_, FALSE);
+        lens_ = next;
+        if (!IsRectEmpty(&lens_)) InvalidateRect(window_, &lens_, FALSE);
+    }
+
+    void PaintLens(HDC dc) {
+        const int cell = LensCell();
+        const int side = lens_.right - lens_.left;
+        const int height = lens_.bottom - lens_.top;
+        const auto frame = buffer_.Dc();
+        BitBlt(frame, 0, 0, side, height, snapshot_.Dc(), lens_.left, lens_.top, SRCCOPY);
+        const RECT grid{0, 0, side, side};
+        const int saved = SaveDC(frame);
+        const auto shape = CreateRoundRectRgn(0, 0, side, side, Px(14), Px(14));
+        if (saved && shape) ExtSelectClipRgn(frame, shape, RGN_AND);
+        if (shape) DeleteObject(shape);
+
+        const int radius = kLensCells / 2;
+        for (int row = 0; row < kLensCells; ++row) {
+            for (int col = 0; col < kLensCells; ++col) {
+                const int x = 1 + col * cell, y = 1 + row * cell;
+                const auto color = Pixel({point_.x + col - radius, point_.y + row - radius});
+                const int r = GetRValue(color), g = GetGValue(color), b = GetBValue(color);
+                const int shade = std::max({r, g, b}) < 48 ? 112 : 0;
+                const auto line = RGB((r * 3 + shade) / 4, (g * 3 + shade) / 4, (b * 3 + shade) / 4);
+                Fill(frame, {x, y, x + cell, y + cell}, line);
+                Fill(frame, {x, y, x + cell - 1, y + cell - 1}, color);
+            }
+        }
+        const int center = 1 + radius * cell, crosshair = center + cell / 2;
+        const COLORREF guide = RGB(228, 232, 239);
+        Fill(frame, {crosshair, 0, crosshair + 1, center}, guide);
+        Fill(frame, {crosshair, center + cell, crosshair + 1, side}, guide);
+        Fill(frame, {0, crosshair, center, crosshair + 1}, guide);
+        Fill(frame, {center + cell, crosshair, side, crosshair + 1}, guide);
+        Outline(frame, {center - 1, center - 1, center + cell + 1, center + cell + 1}, RGB(0, 0, 0), 0);
+        Outline(frame, {center, center, center + cell, center + cell}, RGB(255, 255, 255), 0);
+        if (saved) RestoreDC(frame, saved);
+        Outline(frame, grid, guide, Px(14));
+
+        const RECT footer{0, side + Px(6), side, height};
+        if (chrome_.Begin(frame, footer)) {
+            const int footerHeight = footer.bottom - footer.top;
+            DrawPanel(chrome_, D2D1::RectF(0, 0, side, footerHeight));
+            const auto color = Pixel(point_);
+            DrawSwatch(chrome_, Px(12), footerHeight, color);
+            const std::wstring position = std::to_wstring(origin_.x + point_.x) +
+                                          L", " + std::to_wstring(origin_.y + point_.y);
+            ChromeText(chrome_, HexColor(color), chromeLabels_.Get(),
+                       D2D1::RectF(Px(33), Px(3), side - Px(7), Px(20)), ChromeColor(text_));
+            ChromeText(chrome_, position, chromeLabels_.Get(),
+                       D2D1::RectF(Px(33), Px(19), side - Px(7), footerHeight - Px(3)),
+                       ChromeColor(text_, highContrast_ ? 1.f : 0.74f));
+            chrome_.target->EndDraw();
+        }
+        BitBlt(dc, lens_.left, lens_.top, side, height, frame, 0, 0, SRCCOPY);
+    }
+
+    void Paint() {
+        PAINTSTRUCT paint{};
+        HDC dc = BeginPaint(window_, &paint);
+        const auto& dirty = paint.rcPaint;
+        RECT intersection{};
+        const bool lensVisible = IntersectRect(&intersection, &dirty, &lens_) &&
+                                 buffer_.Resize(lens_.right - lens_.left, lens_.bottom - lens_.top);
+        const bool statusVisible = !status_.empty() && IntersectRect(&intersection, &dirty, &statusBar_) &&
+                                   ComposeStatus();
+        const int saved = SaveDC(dc);
+        if (saved) {
+            // These regions get one finished blit each, without first exposing the raw screenshot.
+            ExcludeClipRect(dc, bar_.left, bar_.top, bar_.right, bar_.bottom);
+            if (statusVisible) ExcludeClipRect(dc, statusBar_.left, statusBar_.top, statusBar_.right, statusBar_.bottom);
+            if (lensVisible) ExcludeClipRect(dc, lens_.left, lens_.top, lens_.right, lens_.bottom);
+        }
+        BitBlt(dc, dirty.left, dirty.top, dirty.right - dirty.left, dirty.bottom - dirty.top,
+               snapshot_.Dc(), dirty.left, dirty.top, SRCCOPY);
+        if (dragging_) {
+            const auto region = Region();
+            auto pen = CreatePen(PS_SOLID, Px(2), accent_);
+            const auto oldPen = SelectObject(dc, pen);
+            const auto oldBrush = SelectObject(dc, GetStockObject(NULL_BRUSH));
+            Rectangle(dc, region.left, region.top, region.right, region.bottom);
+            SelectObject(dc, oldBrush);
+            SelectObject(dc, oldPen);
+            DeleteObject(pen);
+        }
+        if (saved) RestoreDC(dc, saved);
+        if (lensVisible) PaintLens(dc);
+        if (IntersectRect(&intersection, &dirty, &bar_)) {
+            BitBlt(dc, bar_.left, bar_.top, bar_.right - bar_.left, bar_.bottom - bar_.top,
+                   toolbar_.Dc(), 0, 0, SRCCOPY);
+        }
+        if (statusVisible) {
+            BitBlt(dc, statusBar_.left, statusBar_.top, statusBar_.right - statusBar_.left,
+                   statusBar_.bottom - statusBar_.top, statusBuffer_.Dc(), 0, 0, SRCCOPY);
+        }
+        EndPaint(window_, &paint);
+    }
+
+    bool ComposeStatus() {
+        const int width = statusBar_.right - statusBar_.left, height = statusBar_.bottom - statusBar_.top;
+        if (!statusBuffer_.Resize(width, height)) return false;
+        const auto dc = statusBuffer_.Dc();
+        BitBlt(dc, 0, 0, width, height, snapshot_.Dc(), statusBar_.left, statusBar_.top, SRCCOPY);
+        const RECT area{0, 0, width, height};
+        if (!chrome_.Begin(dc, area)) return false;
+        DrawPanel(chrome_, D2D1::RectF(0, 0, width, height));
+        ChromeText(chrome_, status_, chromeLabels_.Get(), D2D1::RectF(Px(8), 0, width - Px(8), height),
+                   ChromeColor(text_));
+        return SUCCEEDED(chrome_.target->EndDraw());
+    }
+
+    void PaintButton(const DRAWITEMSTRUCT& item) {
+        const bool selected = (item.CtlID == Pick && mode_ == Action::PickColor) ||
+                              (item.CtlID == Text && mode_ == Action::CopyText);
+        const int width = item.rcItem.right - item.rcItem.left;
+        const int height = item.rcItem.bottom - item.rcItem.top;
+        if (!buttonBuffer_.Resize(width, height)) return;
+        const auto dc = buttonBuffer_.Dc();
+        POINT origin{};
+        MapWindowPoints(item.hwndItem, window_, &origin, 1);
+        BitBlt(dc, 0, 0, width, height, toolbar_.Dc(), origin.x - bar_.left, origin.y - bar_.top, SRCCOPY);
+        const RECT area{0, 0, width, height};
+        if (!chrome_.Begin(dc, area)) return;
+        const bool pressed = item.itemState & ODS_SELECTED;
+        const bool focused = (item.itemState & ODS_FOCUS) && !(item.itemState & ODS_NOFOCUSRECT);
+        const bool hovered = item.hwndItem == hoveredButton_;
+        const float radius = Px(10);
+        const auto tile = D2D1::RoundedRect(D2D1::RectF(0.5f, 0.5f, width - 0.5f, height - 0.5f), radius, radius);
+        if (!highContrast_ && (selected || pressed || hovered)) {
+            chrome_.brush->SetColor(ChromeColor(selected ? accent_ : text_, pressed ? 0.26f : selected ? 0.16f : 0.07f));
+            chrome_.target->FillRoundedRectangle(tile, chrome_.brush.Get());
+        }
+        if (selected || focused) {
+            chrome_.brush->SetColor(ChromeColor(focused && !selected ? text_ : accent_));
+            chrome_.target->DrawRoundedRectangle(tile, chrome_.brush.Get(), std::max(1, Px(1)));
+        }
+        const wchar_t glyph = item.CtlID == Pick ? CaptureGlyph(Action::PickColor) :
+                              item.CtlID == Text ? CaptureGlyph(Action::CopyText) : L'\uE711';
+        const auto labelColor = ChromeColor(text_);
+        if (item.CtlID == Cancel) {
+            ChromeText(chrome_, std::wstring_view(&glyph, 1), chromeGlyphs_.Get(),
+                       D2D1::RectF(0, 0, Px(27), height), labelColor);
+            ChromeText(chrome_, L"Esc", chromeLabels_.Get(), D2D1::RectF(Px(24), 0, width, height), labelColor);
+        } else {
+            ChromeText(chrome_, std::wstring_view(&glyph, 1), chromeGlyphs_.Get(),
+                       D2D1::RectF(0, Px(4), width, Px(27)), labelColor);
+            wchar_t label[48]{};
+            const int length = GetWindowTextW(item.hwndItem, label, ARRAYSIZE(label));
+            ChromeText(chrome_, std::wstring_view(label, length), chromeLabels_.Get(),
+                       D2D1::RectF(Px(4), Px(24), width - Px(4), height - Px(3)), labelColor);
+        }
+        if (SUCCEEDED(chrome_.target->EndDraw())) {
+            BitBlt(item.hDC, item.rcItem.left, item.rcItem.top, width, height, dc, 0, 0, SRCCOPY);
+        }
+    }
+
+    void SetStatus(PCWSTR status) {
+        const bool wasEmpty = status_.empty();
+        status_ = status;
+        if (wasEmpty && status_.empty()) return;
+        if (wasEmpty != status_.empty()) MoveLens();
+        InvalidateRect(window_, &statusBar_, FALSE);
+    }
+
+    static LRESULT CALLBACK FeedbackProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
+        if (message == WM_NCCREATE) {
+            const auto* create = reinterpret_cast<const CREATESTRUCTW*>(lp);
+            SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(create->lpCreateParams));
+        }
+        auto* self = reinterpret_cast<ScreenCapture*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+        if (self) {
+            switch (message) {
+                case WM_TIMER:
+                    if (wp == kFeedbackTimer) self->UpdateFeedback();
+                    return 0;
+                case WM_ERASEBKGND: return 1;
+                case WM_NCHITTEST: return HTTRANSPARENT;
+                case WM_NCDESTROY:
+                    self->feedback_ = nullptr;
+                    break;
+            }
+        }
+        return DefWindowProcW(window, message, wp, lp);
+    }
+
+    void DismissFeedback() {
+        if (feedback_) DestroyWindow(feedback_);
+        feedbackFrame_.Reset();
+    }
+
+    bool ComposeFeedback(int width, int height, std::wstring_view label, std::optional<COLORREF> swatch) {
+        ComPtr<ID2D1Factory> factory;
+        chrome_.target->GetFactory(&factory);
+        ChromeTarget canvas;
+        const RECT area{0, 0, width, height};
+        if (!feedbackFrame_.Resize(width, height) ||
+            !canvas.Init(factory.Get(), D2D1_ALPHA_MODE_PREMULTIPLIED) ||
+            !canvas.Begin(feedbackFrame_.Dc(), area)) return false;
+        canvas.target->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
+        DrawPanel(canvas, D2D1::RectF(0, 0, width, height));
+        ChromeText(canvas, L"\uE73E", chromeGlyphs_.Get(), D2D1::RectF(Px(6), 0, Px(34), height),
+                   ChromeColor(highContrast_ ? text_ : accent_));
+        ChromeText(canvas, label, chromeLabels_.Get(),
+                   D2D1::RectF(Px(34), 0, width - Px(swatch ? 34 : 10), height), ChromeColor(text_));
+        if (swatch) DrawSwatch(canvas, width - Px(27), height, *swatch);
+        return SUCCEEDED(canvas.target->EndDraw());
+    }
+
+    void FinishCopy(std::wstring label, std::optional<COLORREF> swatch = std::nullopt) {
+        const HWND owner = GetWindow(window_, GW_OWNER);
+        const int width = std::min<int>(Px(swatch ? 174 : 138), workArea_.right - workArea_.left);
+        const int height = Px(38);
+        const bool ready = ComposeFeedback(width, height, label, swatch);
+        Close();
+        if (!ready) {
+            DismissFeedback();
+            return;
+        }
+        const int left = workArea_.left + (workArea_.right - workArea_.left - width) / 2;
+        const int top = workArea_.top + Px(14);
+        feedback_ = CreateWindowExW(WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT |
+                                    WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+                                    kFeedbackClass, label.c_str(), WS_POPUP, left, top, width, height,
+                                    owner, nullptr, instance_, this);
+        feedbackStart_ = Clock::now();
+        if (!feedback_ || !SetTimer(feedback_, kFeedbackTimer, animate_ ? 15 : 1500, nullptr)) {
+            DismissFeedback();
+            return;
+        }
+        UpdateFeedback();
+        if (feedback_) ShowWindow(feedback_, SW_SHOWNOACTIVATE);
+    }
+
+    void UpdateFeedback() {
+        const float elapsed = std::chrono::duration<float, std::milli>(Clock::now() - feedbackStart_).count();
+        const float fadeStart = 1140.0f;
+        if (elapsed >= (animate_ ? 1440.0f : 1500.0f)) {
+            DismissFeedback();
+            return;
+        }
+        const float enter = EaseOut(std::clamp(elapsed / 185.0f, 0.0f, 1.0f));
+        const float exit = std::clamp((elapsed - fadeStart) / 300.0f, 0.0f, 1.0f);
+        const float opacity = animate_ ? std::max(0.08f, enter) * (1.0f - exit) : 1.0f;
+        RECT rect{};
+        GetWindowRect(feedback_, &rect);
+        const int top = workArea_.top + Px(14);
+        POINT destination{rect.left, animate_ ? top + std::lround(Px(10) * (1.0f - enter - exit)) : top};
+        SIZE size{rect.right - rect.left, rect.bottom - rect.top};
+        POINT source{};
+        BLENDFUNCTION blend{AC_SRC_OVER, 0, static_cast<BYTE>(std::lround(255.0f * opacity)), AC_SRC_ALPHA};
+        if (!UpdateLayeredWindow(feedback_, nullptr, &destination, &size, feedbackFrame_.Dc(),
+                                 &source, 0, &blend, ULW_ALPHA)) DismissFeedback();
+    }
+
+    void StartOcr(const RECT& region) {
+        ComPtr<Ocr::EngineStatics> statics;
+        ComPtr<Ocr::Engine> engine;
+        UINT32 limit = 0;
+        if (FAILED(RoGetActivationFactory(HStringReference(L"Windows.Media.Ocr.OcrEngine").Get(),
+                                      Ocr::kEngineStatics, reinterpret_cast<void**>(statics.GetAddressOf()))) ||
+            FAILED(statics->TryCreateFromUserProfileLanguages(&engine)) || !engine ||
+            FAILED(statics->get_MaxImageDimension(&limit))) {
+            SetStatus(L"Install a Windows OCR language to copy text.");
+            return;
+        }
+        auto bitmap = Ocr::MakeBitmap(snapshot_, region, limit);
+        if (!bitmap || FAILED(engine->RecognizeAsync(bitmap.Get(), &operation_)) || !operation_ ||
+            FAILED(operation_->QueryInterface(Ocr::kAsyncInfo, reinterpret_cast<void**>(async_.GetAddressOf()))) ||
+            !SetTimer(window_, kOcrTimer, 50, nullptr)) {
+            StopOcr();
+            SetStatus(L"Couldn't read this selection. Try a different area.");
+            return;
+        }
+        deadline_ = Clock::now() + 15s;
+        SetStatus(L"Reading text…");
+    }
+
+    void StopOcr() {
+        if (window_) KillTimer(window_, kOcrTimer);
+        if (async_) {
+            AsyncStatus status = Started;
+            if (SUCCEEDED(async_->get_Status(&status))) {
+                if (status == Started) async_->Cancel();
+                else async_->Close();
+            }
+        }
+        async_.Reset();
+        operation_.Reset();
+    }
+
+    void PollOcr() {
+        if (!async_) return;
+        AsyncStatus status = Started;
+        if (FAILED(async_->get_Status(&status))) status = Error;
+        if (status == Started && Clock::now() < deadline_) return;
+        ComPtr<Ocr::Result> result;
+        HString text;
+        const bool recognized = status == Completed && SUCCEEDED(operation_->GetResults(&result)) &&
+                                result && SUCCEEDED(result->get_Text(text.GetAddressOf()));
+        StopOcr();
+        if (!recognized) {
+            SetStatus(L"Couldn't read this selection. Try a different area.");
+            return;
+        }
+        UINT32 length = 0;
+        const auto* value = text.GetRawBuffer(&length);
+        if (!length || Trim(std::wstring_view(value, length)).empty()) {
+            SetStatus(L"No text found. Try another selection.");
+            return;
+        }
+        if (CopyToClipboard(window_, std::wstring_view(value, length))) FinishCopy(L"Text copied");
+        else SetStatus(L"Clipboard is busy. Select the text again.");
+    }
+
+    LRESULT OnMessage(HWND window, UINT message, WPARAM wp, LPARAM lp) {
+        switch (message) {
+            case WM_PAINT: Paint(); return 0;
+            case WM_ERASEBKGND: return 1;
+            case WM_DRAWITEM: PaintButton(*reinterpret_cast<DRAWITEMSTRUCT*>(lp)); return TRUE;
+            case WM_SETCURSOR: {
+                POINT cursor{};
+                if (GetCursorPos(&cursor) && ScreenToClient(window, &cursor) && OverToolbar(cursor)) {
+                    if (!IsRectEmpty(&lens_)) {
+                        point_ = cursor;
+                        MoveLens();
+                    }
+                    SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+                    return TRUE;
+                }
+                break;
+            }
+            case WM_CLOSE:
+            case WM_DISPLAYCHANGE:
+            case WM_RBUTTONUP: Close(); return 0;
+            case WM_ACTIVATE:
+                if (LOWORD(wp) == WA_INACTIVE) PostMessageW(window, WM_CLOSE, 0, 0);
+                return 0;
+            case WM_TIMER: if (wp == kOcrTimer) PollOcr(); return 0;
+            case WM_COMMAND:
+                if (HIWORD(wp) == BN_CLICKED) {
+                    if (LOWORD(wp) == Cancel) Close();
+                    else if (LOWORD(wp) == Pick || LOWORD(wp) == Text) {
+                        StopOcr();
+                        mode_ = LOWORD(wp) == Pick ? Action::PickColor : Action::CopyText;
+                        MoveLens();
+                        SetStatus(L"");
+                        InvalidateRect(GetDlgItem(window, Pick), nullptr, FALSE);
+                        InvalidateRect(GetDlgItem(window, Text), nullptr, FALSE);
+                    }
+                }
+                return 0;
+            case WM_MOUSEMOVE: {
+                const auto nextPoint = Point(lp);
+                if (point_.x == nextPoint.x && point_.y == nextPoint.y) return 0;
+                auto dirty = Region();
+                point_ = nextPoint;
+                if (dragging_) {
+                    const auto next = Region();
+                    UnionRect(&dirty, &dirty, &next);
+                    InflateRect(&dirty, Px(3), Px(3));
+                    InvalidateRect(window, &dirty, FALSE);
+                } else if (mode_ == Action::PickColor) MoveLens();
+                return 0;
+            }
+            case WM_LBUTTONDOWN:
+                point_ = Point(lp);
+                if (mode_ == Action::PickColor) MoveLens();
+                if (!async_ && !OverToolbar(point_)) {
+                    start_ = point_;
+                    pressed_ = true;
+                    dragging_ = mode_ == Action::CopyText;
+                    SetCapture(window);
+                }
+                return 0;
+            case WM_LBUTTONUP: {
+                if (!pressed_) return 0;
+                point_ = Point(lp);
+                const bool text = dragging_;
+                pressed_ = dragging_ = false;
+                ReleaseCapture();
+                if (text) {
+                    InvalidateRect(window, nullptr, FALSE);
+                    const auto region = Region();
+                    if (region.right - region.left > 3 && region.bottom - region.top > 3) StartOcr(region);
+                    else SetStatus(L"Drag around the text to copy it.");
+                } else if (!OverToolbar(point_)) {
+                    const auto color = Pixel(point_);
+                    const auto hex = HexColor(color);
+                    if (CopyToClipboard(window_, hex)) FinishCopy(hex + L" copied", color);
+                    else {
+                        MoveLens();
+                        SetStatus(L"Clipboard is busy. Click the color again.");
+                    }
+                } else MoveLens();
+                return 0;
+            }
+            case WM_CAPTURECHANGED:
+                if (dragging_) InvalidateRect(window, nullptr, FALSE);
+                pressed_ = dragging_ = false;
+                return 0;
+            case WM_DESTROY:
+                StopOcr();
+                pressed_ = dragging_ = false;
+                hoveredButton_ = nullptr;
+                return 0;
+            case WM_NCDESTROY:
+                window_ = nullptr;
+                return DefWindowProcW(window, message, wp, lp);
+        }
+        return DefWindowProcW(window, message, wp, lp);
+    }
+
+    HWND window_ = nullptr;
+    HWND feedback_ = nullptr;
+    HWND hoveredButton_ = nullptr;
+    HINSTANCE instance_ = nullptr;
+    bool registered_ = false, pressed_ = false, dragging_ = false;
+    bool highContrast_ = false, animate_ = false;
+    int width_ = 0, height_ = 0, dpi_ = 96;
+    COLORREF panel_{}, text_{}, accent_{}, border_{};
+    RECT bar_{}, statusBar_{}, lens_{}, workArea_{};
+    POINT start_{}, point_{}, origin_{};
+    Action mode_ = Action::PickColor;
+    std::wstring status_;
+    Surface snapshot_, toolbar_, buffer_, statusBuffer_, buttonBuffer_, feedbackFrame_;
+    ChromeTarget chrome_;
+    ComPtr<IDWriteTextFormat> chromeLabels_, chromeGlyphs_;
+    ComPtr<Ocr::Operation> operation_;
+    ComPtr<IAsyncInfo> async_;
+    Time deadline_{}, feedbackStart_{};
+};
+
 struct PreviewDrag {
     int source = -1, destination = -1;
     POINT pointer{};
@@ -1932,8 +2915,10 @@ private:
                 }
             }
         }
-        const wchar_t glyph = slot.glyph ? slot.glyph : slot.action == Action::Shortcut ? L'\uE765'
-            : slot.target.find(L"://") != std::wstring::npos ? L'\uE71B' : L'\uE7B8';
+        const auto captureGlyph = CaptureGlyph(slot.action);
+        const wchar_t glyph = slot.glyph ? slot.glyph : captureGlyph ? captureGlyph :
+            slot.action == Action::Shortcut ? L'\uE765' :
+            slot.target.find(L"://") != std::wstring::npos ? L'\uE71B' : L'\uE7B8';
         D2D1_MATRIX_3X2_F old;
         target_->GetTransform(&old);
         target_->SetTransform(D2D1::Matrix3x2F::Scale(size / 32, size / 32) *
@@ -2076,7 +3061,7 @@ constexpr EditorPreset kEditorPresets[] = {
     {ActionCategory::Keys, L"Show desktop", L"Win+D"},
     {ActionCategory::Keys, L"Search", L"Win+S"},
     {ActionCategory::Keys, L"Quick settings", L"Win+A"},
-    {ActionCategory::Keys, L"Screen capture", L"Win+Shift+S"},
+    {ActionCategory::Keys, L"Snipping Tool", L"Win+Shift+S"},
     {ActionCategory::Keys, L"Emoji panel", L"Win+Period"},
     {ActionCategory::Keys, L"Clipboard history", L"Win+V"},
     {ActionCategory::Command, L"Command Prompt", L"%WINDIR%\\System32\\cmd.exe"},
@@ -2509,9 +3494,10 @@ private:
                 const UINT textMessage = item->CtlID == Pages ? LB_GETTEXT : CB_GETLBTEXT;
                 std::wstring label(SendMessageW(item->hwndItem,lengthMessage,item->itemID,0)+1,L'\0');
                 label.resize(SendMessageW(item->hwndItem,textMessage,item->itemID,reinterpret_cast<LPARAM>(label.data())));
-                const float left = item->CtlID == IconLibrary || item->CtlID == AccentId ? 42.f : 14.f;
+                float left = item->CtlID == IconLibrary || item->CtlID == AccentId ? 42.f : 14.f;
                 if (item->CtlID == IconLibrary) PaintIconChoice(c, item->itemID, h);
                 if (item->CtlID == AccentId) PaintAccentChoice(c, item->itemID, h);
+                if (item->CtlID == Type && PaintCaptureChoice(c, item->itemID, h)) left = 42;
                 c.Text(label,{left,0,w-8,h},textColor_,13,selected);
                 if (item->itemState & ODS_FOCUS) c.Box({2,2,w-2,h-2},accentColor_,6,true);
                 return TRUE;
@@ -2724,6 +3710,8 @@ private:
                                 textLeft = 42;
                             } else if (id == AccentId) {
                                 self.PaintAccentChoice(c, static_cast<int>(index), h);
+                                textLeft = 42;
+                            } else if (id == Type && self.PaintCaptureChoice(c, index, h)) {
                                 textLeft = 42;
                             }
                         }
@@ -2994,6 +3982,15 @@ private:
         return library >= 0 ? kFirstLibraryIcon + library : kCustomIcon;
     }
 
+    bool PaintCaptureChoice(Canvas& canvas, size_t index, float height) {
+        if (index >= ARRAYSIZE(kActionCategories)) return false;
+        const auto glyph = CaptureGlyph(kActionCategories[index].action);
+        if (!glyph) return false;
+        canvas.Text(std::wstring_view(&glyph, 1), {12, 0, 34, height}, textColor_, 17,
+                    false, true, L"Segoe Fluent Icons");
+        return true;
+    }
+
     void PaintIconChoice(Canvas& canvas, int index, float height) {
         const auto& slot = SelectedSlot();
         wchar_t glyph = L'\uE7B8';
@@ -3006,6 +4003,7 @@ private:
                 }
             }
             if (index == kCustomIcon) glyph = slot.glyph ? slot.glyph : L'\uEB9F';
+            else if (const auto captureGlyph = CaptureGlyph(slot.action)) glyph = captureGlyph;
             else if (slot.action == Action::Shortcut) glyph = L'\uE765';
             else if (SlotCategory(slot) == ActionCategory::Link) glyph = L'\uE71B';
         } else if (index == kBrowseIcon) {
@@ -3066,8 +4064,10 @@ private:
             SendMessageW(Get(Type), CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(entry.title));
         SendMessageW(Get(Type), CB_SETCURSEL, static_cast<int>(category), 0);
         if (category != ActionCategory::Empty) {
-            Choice(info.picker, Preset, {}, 0);
-            FillPresets();
+            if (!IsCaptureAction(slot.action)) {
+                Choice(info.picker, Preset, {}, 0);
+                FillPresets();
+            }
             const int iconSelection = IconSelection(slot);
             Choice(L"Choose an icon", IconLibrary, {L"Automatic", L"Browse…"}, kAutomaticIcon);
             HWND icons = Get(IconLibrary);
@@ -3077,7 +4077,7 @@ private:
                 SendMessageW(icons, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Current custom icon"));
             SendMessageW(icons, CB_SETCURSEL, iconSelection, 0);
             Edit(L"Display name", Name, slot.name, 200);
-            Edit(info.targetLabel, Target, slot.target, 2048);
+            if (!IsCaptureAction(slot.action)) Edit(info.targetLabel, Target, slot.target, 2048);
             if (category == ActionCategory::Command || category == ActionCategory::App || !slot.arguments.empty())
                 Edit(L"Arguments", Arguments, slot.arguments, 4096);
         }
@@ -3739,7 +4739,7 @@ private:
             ReadFields();
             if (draft_ == baseline_) return;
             if (error_.empty() && tab_ == 0 && SelectedSlot().action != Action::Empty &&
-                SelectedSlot().target.empty()) error_ = L"Choose a preset or enter a target for this action.";
+                !SelectedSlot().Active()) error_ = L"Choose a preset or enter a target for this action.";
             if (error_.empty() && saved_(draft_, error_)) baseline_ = draft_;
             Status(error_.empty() ? L"Applied to the desktop menu." : error_);
         } else if (id >= AddPage && id <= Undo && notification == BN_CLICKED) {
@@ -4009,6 +5009,14 @@ public:
                             editor && (message.hwnd == editor || IsChild(editor, message.hwnd))) {
                             if (IsDialogMessageW(editor, &message)) continue;
                         }
+                        if (HWND capture = capture_.Window();
+                            capture && (message.hwnd == capture || IsChild(capture, message.hwnd))) {
+                            if (message.message == WM_KEYDOWN && message.wParam == VK_ESCAPE) {
+                                capture_.Close();
+                                continue;
+                            }
+                            if (IsDialogMessageW(capture, &message)) continue;
+                        }
                         TranslateMessage(&message);
                         DispatchMessageW(&message);
                         if (WaitForSingleObject(stop, 0) == WAIT_OBJECT_0) {
@@ -4022,6 +5030,7 @@ public:
                 Wh_Log(L"Could not initialize radial menu (error %lu)", GetLastError());
             }
             if (window_) {
+                capture_.Uninit();
                 Hide();
                 editor_.Close();
                 if (hotkey_) UnregisterHotKey(window_, hotkeyId_);
@@ -4042,10 +5051,49 @@ public:
 private:
     static LRESULT CALLBACK PointerWindowProc(HWND window, UINT message, WPARAM wParam,
                                                LPARAM lParam) {
-        if (message == WM_MOUSEACTIVATE) return MA_NOACTIVATE;
+        if (message == WM_NCCREATE) {
+            const auto* create = reinterpret_cast<const CREATESTRUCTW*>(lParam);
+            SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(create->lpCreateParams));
+        }
+        auto* self = reinterpret_cast<Menu*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+        if (message == WM_MOUSEACTIVATE) {
+            if (self && self->inputActive_) {
+                self->RememberForeground();
+                return MA_ACTIVATE;
+            }
+            return MA_NOACTIVATE;
+        }
         if (message == WM_SETCURSOR) {
             SetCursor(LoadCursorW(nullptr, IDC_ARROW));
             return TRUE;
+        }
+        if (self && self->inputActive_) {
+            switch (message) {
+                case WM_MOUSEMOVE: case WM_LBUTTONDOWN: case WM_LBUTTONUP:
+                case WM_RBUTTONDOWN: case WM_RBUTTONUP: case WM_MBUTTONDOWN: case WM_XBUTTONDOWN: {
+                    POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                    ClientToScreen(window, &point);
+                    if (!self->OnMouse(message, point)) break;
+                    if ((message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN) &&
+                        GetForegroundWindow() == window) SetCapture(window);
+                    if ((message == WM_LBUTTONUP || message == WM_RBUTTONUP) &&
+                        GetCapture() == window) ReleaseCapture();
+                    return 0;
+                }
+                case WM_CAPTURECHANGED:
+                    self->leftPressedInside_ = self->rightPressedInside_ = false;
+                    break;
+                case WM_MOUSEWHEEL:
+                    if (self->OnMouse(message, {}, GET_WHEEL_DELTA_WPARAM(wParam))) return 0;
+                    break;
+                case WM_KEYDOWN: case WM_KEYUP: case WM_SYSKEYDOWN: case WM_SYSKEYUP:
+                    if (GetMessageExtraInfo() != kSyntheticKeys && self->OnKey(message, wParam)) return 0;
+                    break;
+                case WM_ACTIVATE:
+                    if (LOWORD(wParam) == WA_INACTIVE && self->previousForeground_)
+                        PostMessageW(self->window_, kDismiss, 0, 0);
+                    break;
+            }
         }
         return DefWindowProcW(window, message, wParam, lParam);
     }
@@ -4060,7 +5108,7 @@ private:
         if (!RegisterClassW(&windowClass)) return false;
         pointerWindow_ = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
                                          WS_EX_TOPMOST, kPointerClass, L"",
-                                         WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, instance_, nullptr);
+                                         WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, instance_, this);
         // A nonzero alpha lets this window own the cursor. The rendered menu
         // sits above it and can keep its click-through shadow.
         return pointerWindow_ && SetLayeredWindowAttributes(pointerWindow_, 0, 1, LWA_ALPHA);
@@ -4079,6 +5127,41 @@ private:
         return SetWindowPos(pointerWindow_, HWND_TOPMOST, geometry_.origin.x + inset,
                             geometry_.origin.y + inset, diameter, diameter,
                             SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
+
+    static std::optional<DWORD> IntegrityLevel(HANDLE process) {
+        HANDLE token;
+        if (!OpenProcessToken(process, TOKEN_QUERY, &token)) return {};
+        const FileHandle tokenHandle(token, CloseHandle);
+        alignas(TOKEN_MANDATORY_LABEL) BYTE buffer[sizeof(TOKEN_MANDATORY_LABEL) + SECURITY_MAX_SID_SIZE];
+        DWORD size;
+        if (!GetTokenInformation(tokenHandle.get(), TokenIntegrityLevel, buffer, sizeof(buffer), &size)) return {};
+        const auto sid = reinterpret_cast<const TOKEN_MANDATORY_LABEL*>(buffer)->Label.Sid;
+        return *GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1);
+    }
+
+    static bool ForegroundInputRestricted() {
+        DWORD pid = 0;
+        if (!GetWindowThreadProcessId(GetForegroundWindow(), &pid) || pid == GetCurrentProcessId()) return false;
+        const FileHandle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid), CloseHandle);
+        const auto foreground = process ? IntegrityLevel(process.get()) : std::nullopt;
+        return !foreground || *foreground > IntegrityLevel(GetCurrentProcess()).value_or(SECURITY_MANDATORY_MEDIUM_RID);
+    }
+
+    void RememberForeground() {
+        if (const HWND foreground = GetForegroundWindow(); foreground && foreground != pointerWindow_)
+            previousForeground_ = foreground;
+    }
+
+    bool FocusPointerWindow() {
+        RememberForeground();
+        return SetForegroundWindow(pointerWindow_) && GetForegroundWindow() == pointerWindow_;
+    }
+
+    void HidePointerWindow() {
+        const HWND previous = std::exchange(previousForeground_, nullptr);
+        if (previous && GetForegroundWindow() == pointerWindow_) SetForegroundWindow(previous);
+        if (pointerWindow_) ShowWindow(pointerWindow_, SW_HIDE);
     }
 
     bool StartShell() {
@@ -4109,8 +5192,12 @@ private:
                 if (wParam == static_cast<WPARAM>(hotkeyId_) && hotkey_ &&
                     (LOWORD(lParam) & ~MOD_NOREPEAT) == hotkey_->modifiers &&
                     HIWORD(lParam) == hotkey_->key) {
+                    if (capture_.Window()) {
+                        capture_.Close();
+                        return 0;
+                    }
                     if (inputActive_) {
-                        if (desktopPreview_ || !settings_.holdToSelect) Close(now);
+                        if (!holdActive_) Close(now);
                     } else {
                         Open(now);
                     }
@@ -4152,7 +5239,7 @@ private:
                 if (inputActive_) Navigate(static_cast<UINT>(wParam), now);
                 return 0;
             case kHoldRelease:
-                if (inputActive_ && !desktopPreview_ && settings_.holdToSelect) {
+                if (inputActive_ && holdActive_) {
                     if (!keyboardSelection_) UpdatePointer(now);
                     Activate(now, true);
                 }
@@ -4166,6 +5253,7 @@ private:
             case WM_TIMER:
                 if (wParam == kFrameTimer) Frame(now);
                 if (wParam == kPopupStopTimer && WaitForSingleObject(stop_, 0) == WAIT_OBJECT_0) EndMenu();
+                if (wParam == kFullscreenTimer && inputActive_ && ForegroundIsFullscreen()) Hide();
                 return 0;
             case WM_DWMCOMPOSITIONCHANGED:
             case WM_DWMCOLORIZATIONCOLORCHANGED:
@@ -4205,6 +5293,7 @@ private:
             auto bytes = ReadProfileBytes(profileRoot_ + kProfileFile, error, true);
             if (error.empty() && bytes != profileBytes_) {
                 if (auto updated = ParseProfileBytes(bytes, error)) {
+                    UpdateDefaultCaptureSlots(*updated);
                     profileBytes_ = std::move(bytes);
                     ApplySettings(std::move(*updated));
                     return;
@@ -4365,11 +5454,13 @@ private:
 
     bool Open(Time now, bool preview = false) {
         if (visible_) Hide();
+        if (capture_.Window() || ForegroundIsFullscreen()) return false;
         pendingKeys_.reset();
         POINT pointer;
         if (!GetCursorPos(&pointer) || !Locate(pointer)) return false;
-        const bool hold = settings_.holdToSelect && !preview;
-        if (hold && !ActivationHeld()) return false;
+        const bool restrictedInput = !preview && ForegroundInputRestricted();
+        holdActive_ = settings_.holdToSelect && !preview;
+        if (holdActive_ && !restrictedInput && !ActivationHeld()) return false;
         desktopPreview_ = preview;
         RefreshMotion();
         const Palette palette = ReadPalette(settings_);
@@ -4391,18 +5482,25 @@ private:
         visible_ = true;
         keyboardSelection_ = false;
         UpdateSelection(geometry_.Hit(pointer), now);
-        if ((hold && !ActivationHeld()) || !InstallHooks() ||
-            !renderer_.Draw(window_, settings_, state_, *shell_, now)) {
+        if (!renderer_.Draw(window_, settings_, state_, *shell_, now)) {
             Hide();
             return false;
         }
-        if (!ShowPointerWindow()) {
+        if (!ShowPointerWindow() || !SetTimer(window_, kFullscreenTimer, 200, nullptr)) {
             Wh_Log(L"Could not show the radial menu input window (error %lu)", GetLastError());
             Hide();
             return false;
         }
         SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+        // Install the global listeners after rendering. The pointer window also handles
+        // input directly when the listeners cannot observe the foreground application.
+        InstallHooks();
+        if ((restrictedInput || !keyboard_) && !FocusPointerWindow() && restrictedInput) holdActive_ = false;
+        if (holdActive_ && !ActivationHeld()) {
+            Hide();
+            return false;
+        }
         if (GetCursorPos(&pointer) && geometry_.Hit(pointer) != -2) {
             SetCursor(LoadCursorW(nullptr, IDC_ARROW));
         }
@@ -4412,8 +5510,9 @@ private:
 
     void Close(Time now) {
         inputActive_ = false;
+        KillTimer(window_, kFullscreenTimer);
         RemoveHooks();
-        ShowWindow(pointerWindow_, SW_HIDE);
+        HidePointerWindow();
         state_.visibility.To(0, now, Duration(140));
         state_.scale.To(0.965f, now, Duration(140));
         if (!animate_) Hide();
@@ -4423,9 +5522,10 @@ private:
     void Hide() {
         desktopPreview_ = false;
         inputActive_ = false;
+        KillTimer(window_, kFullscreenTimer);
         visible_ = false;
         RemoveHooks();
-        if (pointerWindow_) ShowWindow(pointerWindow_, SW_HIDE);
+        HidePointerWindow();
         ShowWindow(window_, SW_HIDE);
         renderer_.ReleaseSurface();
         backdrop_ = {};
@@ -4513,13 +5613,24 @@ private:
     }
 
     void Activate(Time now, bool release = false) {
+        if (ForegroundIsFullscreen()) {
+            Hide();
+            return;
+        }
         if (state_.selected < 0) {
             if (release) Close(now);
             return;
         }
         const Slot& slot = settings_.pages[state_.page][state_.selected];
         const bool preview = desktopPreview_;
-        if (settings_.holdToSelect || settings_.closeAfterSelection) Close(now);
+        if (!preview && IsCaptureAction(slot.action)) {
+            Hide();
+            DwmFlush();
+            if (!capture_.Show(instance_, window_, slot.action, settings_.theme, animate_))
+                Wh_Log(L"Could not open the screen capture tools.");
+            return;
+        }
+        if (holdActive_ || settings_.closeAfterSelection) Close(now);
         if (preview) return;
         if (slot.action == Action::Shortcut) {
             if (auto chord = ParseChord(slot.target)) {
@@ -4594,7 +5705,7 @@ private:
         }
     }
 
-    bool InstallHooks() {
+    void InstallHooks() {
         current_ = this;
         HMODULE module = nullptr;
         GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -4602,10 +5713,7 @@ private:
                            reinterpret_cast<PCWSTR>(&MouseProc), &module);
         mouse_ = SetWindowsHookExW(WH_MOUSE_LL, MouseProc, module, 0);
         keyboard_ = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardProc, module, 0);
-        if (mouse_ && keyboard_) return true;
-        Wh_Log(L"Could not register radial menu input hooks (error %lu)", GetLastError());
-        RemoveHooks();
-        return false;
+        if (!mouse_ || !keyboard_) Wh_Log(L"Some global radial menu input hooks are unavailable.");
     }
 
     void RemoveHooks() {
@@ -4627,33 +5735,33 @@ private:
 
     static LRESULT CALLBACK MouseProc(int code, WPARAM message, LPARAM payload) {
         if (code == HC_ACTION && current_ && current_->inputActive_) {
-            Menu& menu = *current_;
             const auto& mouse = *reinterpret_cast<MSLLHOOKSTRUCT*>(payload);
-            if (message == WM_MOUSEMOVE && !menu.pointerPosted_) {
-                menu.pointerPosted_ = PostMessageW(menu.window_, kPointer, 0, 0);
-            } else if (message == WM_MOUSEWHEEL) {
-                if (PostMessageW(menu.window_, kWheel, HIWORD(mouse.mouseData), 0)) return 1;
-            } else if (message == WM_LBUTTONUP && std::exchange(menu.leftPressedInside_, false)) {
-                const int hit = menu.geometry_.Hit(mouse.pt);
-                if (hit >= 0) PostMessageW(menu.window_, kSelect, 1, hit);
-                return 1;
-            } else if (message == WM_RBUTTONUP && std::exchange(menu.rightPressedInside_, false)) {
-                PostMessageW(menu.window_, kEditMenu, 0, 0);
-                return 1;
-            } else if ((message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN ||
-                        message == WM_MBUTTONDOWN || message == WM_XBUTTONDOWN)) {
-                if (menu.geometry_.Hit(mouse.pt) == -2) {
-                    PostMessageW(menu.window_, kDismiss, 0, 0);
-                } else if (message == WM_LBUTTONDOWN) {
-                    menu.leftPressedInside_ = true;
-                    return 1;
-                } else if (message == WM_RBUTTONDOWN) {
-                    menu.rightPressedInside_ = true;
-                    return 1;
-                }
-            }
+            if (current_->OnMouse(message, mouse.pt, static_cast<short>(HIWORD(mouse.mouseData)))) return 1;
         }
         return CallNextHookEx(nullptr, code, message, payload);
+    }
+
+    bool OnMouse(UINT message, POINT point, short wheelDelta = 0) {
+        if (message == WM_MOUSEMOVE && !pointerPosted_) {
+            pointerPosted_ = PostMessageW(window_, kPointer, 0, 0);
+        } else if (message == WM_MOUSEWHEEL) {
+            return PostMessageW(window_, kWheel, static_cast<WPARAM>(wheelDelta), 0);
+        } else if (message == WM_LBUTTONUP && std::exchange(leftPressedInside_, false)) {
+            const int hit = geometry_.Hit(point);
+            if (hit >= 0) PostMessageW(window_, kSelect, 1, hit);
+            return true;
+        } else if (message == WM_RBUTTONUP && std::exchange(rightPressedInside_, false)) {
+            if (geometry_.Hit(point) != -2) PostMessageW(window_, kEditMenu, 0, 0);
+            return true;
+        } else if (message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN ||
+                   message == WM_MBUTTONDOWN || message == WM_XBUTTONDOWN) {
+            if (geometry_.Hit(point) == -2) PostMessageW(window_, kDismiss, 0, 0);
+            else if (message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN) {
+                (message == WM_LBUTTONDOWN ? leftPressedInside_ : rightPressedInside_) = true;
+                return true;
+            }
+        }
+        return false;
     }
 
     static LRESULT CALLBACK KeyboardProc(int code, WPARAM message, LPARAM payload) {
@@ -4666,7 +5774,7 @@ private:
 
     bool OnKey(WPARAM message, DWORD key) {
         const bool up = message == WM_KEYUP || message == WM_SYSKEYUP;
-        if (up && !desktopPreview_ && settings_.holdToSelect && hotkey_) {
+        if (up && holdActive_ && hotkey_) {
             UINT modifier = 0;
             if (key == VK_LCONTROL || key == VK_RCONTROL || key == VK_CONTROL) modifier = MOD_CONTROL;
             if (key == VK_LSHIFT || key == VK_RSHIFT || key == VK_SHIFT) modifier = MOD_SHIFT;
@@ -4699,13 +5807,13 @@ private:
 
     inline static Menu* current_ = nullptr;
     HWND window_ = nullptr;
-    HWND pointerWindow_ = nullptr;
+    HWND pointerWindow_ = nullptr, previousForeground_ = nullptr;
     HINSTANCE instance_ = nullptr;
     HHOOK mouse_ = nullptr, keyboard_ = nullptr;
     bool visible_ = false, inputActive_ = false, frameTimer_ = false;
     bool pointerPosted_ = false, keyboardSelection_ = false, animate_ = false;
     bool leftPressedInside_ = false;
-    bool rightPressedInside_ = false, desktopPreview_ = false;
+    bool rightPressedInside_ = false, desktopPreview_ = false, holdActive_ = false;
     int hotkeyId_ = kHotkey;
     HANDLE watcher_ = INVALID_HANDLE_VALUE, stop_ = nullptr;
     FileHandle profileDirectory_{nullptr, CloseHandle};
@@ -4719,6 +5827,7 @@ private:
     VisualState state_;
     Renderer renderer_;
     MenuEditor editor_;
+    ScreenCapture capture_;
     IconPixels backdrop_;
     std::shared_ptr<ShellWorker> shell_;
 };
