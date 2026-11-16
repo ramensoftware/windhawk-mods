@@ -2,7 +2,7 @@
 // @id              smtc-now-playing-widgets
 // @name            SMTC Now Playing Desktop Widgets
 // @description     Multi-instance, multi-monitor Windows 11 Acrylic Now Playing widgets powered natively by SMTC with Standard, Album, Cardstock, and Simplified themes.
-// @version         1.0.8
+// @version         1.0.9
 // @author          minster586
 // @github          https://github.com/minster586
 // @homepage        https://links.smartcraft.me/@minster586
@@ -146,7 +146,7 @@ Displays up to 5 customizable, multi-monitor Now Playing widgets on your Windows
 
 #include <atomic>
 #include <chrono>
-#include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -2060,19 +2060,21 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    bool isService = false;
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcsncmp(argv[i], L"-service", sizeof("-service") - 1) == 0) {
-            isService = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
@@ -2089,7 +2091,7 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isService) {
+    if (isExcluded) {
         return FALSE;
     }
 
@@ -2159,7 +2161,7 @@ void Wh_ModAfterInit() {
         }
     }
 
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+    using CreateProcessInternalW_t = WINBOOL(WINAPI*)(
         HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
         LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles,
@@ -2171,7 +2173,7 @@ void Wh_ModAfterInit() {
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
                                                  "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
-        Wh_Log(L"CreateProcessInternalW not found");
+        Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
@@ -2183,7 +2185,7 @@ void Wh_ModAfterInit() {
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
                                  nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcessInternalW failed");
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
