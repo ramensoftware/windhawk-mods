@@ -65,7 +65,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1794796718242,
+        "updated": 1794840456805,
         "users": 0
       },
       "metadata": {
@@ -88,7 +88,40 @@
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7339",
       "source": {
         "sha256": "6c7a224521ad24cf68e5727ba14d065ff19b358ad77ef18d89def18a845fe664",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/a9c4b0714970835ed7543640f8dedf626ac8c5c6/mods/explorer-default-folder.wh.cpp"
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6b19ead230c08403dab28d1d30bcfd28e2abb0e2/mods/explorer-default-folder.wh.cpp"
+      }
+    },
+    "file-type-properties-customization": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794840456805,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794840456805,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86",
+          "x86-64"
+        ],
+        "author": "Momo",
+        "compilerOptions": "-lshell32 -lshlwapi -lole32 -loleaut32 -lpropsys -luuid",
+        "description": "Customize file icons and type descriptions by extension while preserving system thumbnails",
+        "github": "https://github.com/FreshP-0325",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "File Type Properties Customization",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7505",
+      "source": {
+        "sha256": "078d3786e775037ae1000b817164122a5d6926500b24b079d06b98e1e5daf96a",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/293fcb80a08279a7d156bd852c1b1b8204d58d58/mods/file-type-properties-customization.wh.cpp"
       }
     },
     "flip3dcomp": {
@@ -119,6 +152,34 @@
       "source": {
         "sha256": "1a306f44c392d7aae51ac34e612f4d1b26ceca606634c329311733c6e2646146",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/87870a9f982244a62787b28719b22ebd76f1401b/mods/flip3dcomp.wh.cpp"
+      }
+    },
+    "fluent-radial-menu": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794840456805,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794840456805,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Fenryr",
+        "compilerOptions": "-ld2d1 -ldwrite -ldwmapi -lgdi32 -lole32 -loleaut32 -lshell32 -ladvapi32 -lwindowscodecs -luuid -lruntimeobject -lmsimg32 -lcomctl32 -lcomdlg32",
+        "description": "Launch apps, files, folders, links, and shortcuts from a customizable radial menu on Windows 11.",
+        "github": "https://github.com/soldier93HUN",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Fluent Radial Menu",
+        "version": "0.9.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7432",
+      "source": {
+        "sha256": "a2b608376697d5dae20a91b76cad2f2bacd5cec98d96ef73f8341cd7f90a42fd",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/e3ef8a050dc7f8823ee212576df0a8056dd4ca4b/mods/fluent-radial-menu.wh.cpp"
       }
     },
     "glass-widget-bar": {
@@ -214,6 +275,36 @@
       "source": {
         "sha256": "321821e0a2aa7fac641a74568496ae1a52a0d7d3c9a5895cb42be166e4a23b2c",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4cb99f2b4c27e618215f22784d8c4bc35e761c65/mods/nimbus-menu.wh.cpp"
+      }
+    },
+    "no-click-touchpad-tap-and-hold": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1794840456805,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1794840456805,
+        "users": 0
+      },
+      "metadata": {
+        "author": "mario0318",
+        "compilerOptions": "-lhid -lshcore -lgdi32 -lwtsapi32",
+        "description": "Tap a corner to right-click and hold two fingers to drag, with a ring around the pointer while the drag is on. For touchpads that no longer click.",
+        "github": "https://github.com/mario0318",
+        "include": [
+          "windhawk.exe",
+          "windhawk-mod.exe",
+          "windhawk-mod-uiaccess.exe"
+        ],
+        "name": "No-Click Touchpad: Tap & Hold",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7443",
+      "source": {
+        "sha256": "62723f9879a6058c51eb54be1ea997a3d2ec3d14a555e9380fb5301cc00b0797",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/7bcddad73b5441e93d24ec279e9d0b0f70972dd4/mods/no-click-touchpad-tap-and-hold.wh.cpp"
       }
     },
     "phone-panel-for-nectarlink": {
