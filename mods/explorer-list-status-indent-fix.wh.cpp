@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              explorer-list-status-indent-fix
-// @name            File Explorer spacing fixes: List view indent, even gaps, tidy navigation pane
-// @description     Removes the empty space before every item in the List, Small icons and Content views of File Explorer, evens out the gaps around items, icons and names in all views, and tidies up the navigation pane: even padding, a thin divider, longer separators, no pin icons
+// @name            File Explorer spacing fixes: List view indent, navigation pane, etc
+// @description     Removes the empty space before every item in the List, Small icons and Content views of File Explorer, evens out the gaps around items, icons and names, and tidies up the navigation pane: even padding, thin divider, longer separators, no pin icons
 // @version         1.0
 // @author          NDruce
 // @github          https://github.com/NDruce
@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# File Explorer spacing fixes: List view indent, even gaps, tidy navigation pane
+# File Explorer spacing fixes: List view indent, navigation pane
 
 Starting with Windows 11 version 22H2, File Explorer reserves a 28 pixels wide
 area to the left of **every** item in the **List**, **Small icons** and
