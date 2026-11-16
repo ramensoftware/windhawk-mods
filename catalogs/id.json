@@ -20163,12 +20163,12 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794078012000,
+        "updated": 1794798012000,
         "users": 29
       },
       "metadata": {
         "author": "3DDinosaur",
-        "compilerOptions": "-lhid -lwtsapi32",
+        "compilerOptions": "-lhid -lwtsapi32 -lgdi32",
         "description": "Enables 5-2 fingers mouse pointer tracking for improved hand ergonomics (admin windows need Windhawk 2)",
         "github": "https://github.com/3DDinosaur",
         "include": [
@@ -20178,7 +20178,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Touchpad Relaxed Hand Tracking",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "touhou-kbd-binds": {

@@ -2,12 +2,34 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-16T02:04:18.000Z</updated>
+    <updated>2026-11-16T03:00:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Touchpad Relaxed Hand Tracking 1.1.0]]></title>
+        <id>https://windhawk.net/mods/touchpad-relaxed-hand-tracking#ce1a605b853f4a015dffaef8ea6c6447bf6fcbfc</id>
+        <link href="https://windhawk.net/mods/touchpad-relaxed-hand-tracking"/>
+        <updated>2026-11-16T03:00:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Improved movement precision:</strong> slow movements no longer lose distance, resting fingers drop out of the movement, and a single finger moving on its own leads, for precise positioning.</li>
+<li><strong>Speed reset:</strong> the multipliers are back to 1.5 for 5-3 fingers and 1.0 for 2-1. If you changed them, check your values.</li>
+<li><strong>Fewer accidental clicks:</strong> touches at the pad's edge, a finger flickering back where it just left, and the thumb no longer click.</li>
+<li><strong>Steadier near the pad's edge:</strong> a finger at the edge, which the touchpad reads poorly, rests while fingers further in steer.</li>
+<li><strong>Thumb recognition:</strong> with the new Hand setting (right or left), the thumb is the touch farthest inside the hand on the lower part of the pad, or, with the whole hand down, anywhere. The pinky is never taken for it, and recognition holds when the index crosses over the thumb, a finger slips off the pad and comes back, or the pad reports a flat thumb as two touches.</li>
+<li><strong>The thumb is left out of the more-fingers glide for better movement precision:</strong> it only rests, helps start the glide and counts as a finger for the speed multiplier. It never moves the pointer or clicks while other fingers touch the pad, even when the pad reports it as two touches.</li>
+<li><strong>Diagnostics overlay:</strong> a configurable hotkey shows how the mod reads each finger: which ones steer, rest, may tap, scroll or hold, and which one is the thumb. It can be dragged and closed, and records nothing while hidden.</li>
+<li><strong>Mouse wheel is now the default scroll output.</strong> More precise vertical and horizontal scrolling. Touch scrolling is still available in the settings.</li>
+<li><strong>Tap and hold feedback (optional):</strong> a small dot shows beside the pointer on each tap, and stays while a hold drags or a scroll runs, Windows' own taps and scroll included. The pointer itself doesn't change.</li>
+</ul>
+]]></content>
+        <author>
+            <name>3DDinosaur</name>
+            <uri>https://github.com/3DDinosaur</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mac Island & Dock 3.2.0]]></title>
         <id>https://windhawk.net/mods/mac-island-dock#873e5103302d05e0e0292d0cf57ffeb710c7b535</id>
@@ -528,22 +550,6 @@ File Explorer's setting.</li>
         <author>
             <name>CTravkin</name>
             <uri>https://github.com/CTravkin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Top Taskbar Bleed 1.2.1]]></title>
-        <id>https://windhawk.net/mods/top-taskbar-bleed#098da0cadd3d85ce8a87e9a7d8021e0547a3a615</id>
-        <link href="https://windhawk.net/mods/top-taskbar-bleed"/>
-        <updated>2026-11-14T19:01:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>A Windows mode or accent change while a bleed is showing no longer leaves the taskbar with a background computed for the previous theme: the taskbar’s background element is kept on the Windows mode’s theme while the mod forces the panel’s theme on the rest of the bar</li>
-<li>The background element’s theme is left alone when it already has an explicit RequestedTheme of its own (a Taskbar Styler style); a local Default, which the taskbar leaves there and which inherits like an unset value, is pinned over and put back when the mod releases it</li>
-<li>README theme note updated</li>
-</ul>
-]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
         </author>
     </entry>
 </feed>
