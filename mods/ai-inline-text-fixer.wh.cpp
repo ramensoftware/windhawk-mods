@@ -17,7 +17,7 @@ Transform, polish, or rewrite your text anywhere in Windows simply by typing a q
 
 Works across chat apps, emails, web browsers, documents, social media, and forms.
 
-![AI Text Assistant Demo](https://raw.githubusercontent.com/NarayanChetri/Files/main/ff.gif)
+![AI Text Assistant Demo](https://raw.githubusercontent.com/NarayanChetri/Files/main/AI%20assistant.gif)
 
 ---
 
