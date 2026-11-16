@@ -841,6 +841,7 @@ static void ResetTouch() {
     g_frame.clear();
     g_frameExpected = 0;
     g_activeDev = nullptr;
+    g_graceTapDown = false;
     if (g_haveSession && !g_sessionEnded) {
         g_sessionEnded = true;
         g_consumed = true;  // a cut-off touch is never a tap
@@ -1123,10 +1124,13 @@ static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam) {
         }
 
         // With the fingers lifted mid-drag, a one-finger tap drops the item. Its
-        // release is swallowed too, even if the drag carried on in between.
-        if (wParam == WM_LBUTTONDOWN && g_twoMode == 4) {
-            g_graceTapDown = true;
-            return 1;
+        // release is swallowed too, even if the drag carried on in between. Every
+        // left press resets the flag, so a release that never arrived (a lock
+        // between press and release) can't make a later click lose its release.
+        if (wParam == WM_LBUTTONDOWN) {
+            g_graceTapDown = g_twoMode == 4;
+            if (g_graceTapDown)
+                return 1;
         }
         if (wParam == WM_LBUTTONUP && g_graceTapDown) {
             g_graceTapDown = false;
