@@ -54,8 +54,8 @@
 // @description:el-GR Επαναφέρετε κλειστές καρτέλες/παράθυρα με Ctrl+Shift+T και ανοίξτε τον πίνακα ιστορικού WinUI 3 με Shift+Tab (υποστηρίζει Win11 & Win10)
 // @description:he-IL שחזר כרטיסיות או חלונות שנסגרו בסייר הקבצים עם Ctrl+Shift+T ופתח טבלת היסטוריה מודרנית בסגנון WinUI 3 עם Shift+Tab (נתמך ב-Win11 ו-Win10)
 // @version         2.0.202
-// @author          caotu2k5
-// @github          https://github.com/caotu2k5
+// @author          caotu2005
+// @github          https://github.com/caotu2005
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdi32 -lgdiplus -ldwmapi -luxtheme -limm32
