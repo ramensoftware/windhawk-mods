@@ -7849,6 +7849,8 @@ void UpdateAppSuggestionsForQuery(RunDialogState* state, const std::wstring& raw
 }
 
 void LoadHistoryItems(RunDialogState* state) {
+    state->selectedRow = -1;
+    state->hoveredRow = -1;
     for (auto& item : state->history) {
         if (item.hIcon && item.ownsIcon) DestroyIcon(item.hIcon);
     }
@@ -11481,6 +11483,7 @@ LRESULT CALLBACK ModernEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             const auto& activeRows = GetActiveRowItems(state);
             if (!activeRows.empty()) {
                 int n = (int)activeRows.size();
+                if (state->selectedRow >= n) state->selectedRow = -1;
                 int step = (wParam == VK_PRIOR || wParam == VK_NEXT) ? (std::max)(1, GetVisibleRowCount(state) - 1) : 1;
                 if (wParam == VK_UP || wParam == VK_PRIOR) {
                     if (state->selectedRow <= 0) {
@@ -12361,6 +12364,8 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
                 if (PtInRect(&layout.rcTranslate, pt)) {
                     int oldH = state->totalHeight;
                     state->translateMode = !state->translateMode;
+                    state->selectedRow = -1;
+                    state->hoveredRow = -1;
                     std::wstring curText = GetEffectiveInputText(state->hModernEdit);
                     if (!state->translateMode) {
                         UpdateAppSuggestionsForQuery(state, curText);
@@ -13307,6 +13312,7 @@ void TransformRunDialog(HWND hDlg) {
     state->hOrigClassIconSmall = reinterpret_cast<HICON>(GetClassLongPtrW(hDlg, GCLP_HICONSM));
     state->hOrigClassIconBig   = reinterpret_cast<HICON>(GetClassLongPtrW(hDlg, GCLP_HICON));
 
+    g_hTrackedRunDlg.store(hDlg);
     g_dialogSubclassInstalled.store(true, std::memory_order_release);
     SetWindowSubclass(hDlg, RunDlgSubclassProc, 1, (DWORD_PTR)state);
     RefreshDialogRunIcons(state);
